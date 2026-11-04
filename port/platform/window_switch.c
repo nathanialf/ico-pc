@@ -35,6 +35,13 @@
 #include "settings.h"
 #include "window_switch.h"
 
+/* the switch's watch (ico_diag_watchdog_switch): this long without a
+   step, a shader or a pipeline made ends the run with the report; a cold
+   driver's longest single pipeline batch is about 12 s (the 10 s
+   pipeline lines), one OpenGL shader compile is held to the GPU hang
+   limit (15 s by default) before the switch goes back */
+#define SWITCH_WATCH_S 60u
+
 extern int mpegPlay;
 /* ico2/seki/src/GifPacket.c: the placeholder textures it made */
 extern void gif_HostForgetTextures(void);
@@ -263,11 +270,20 @@ int ico_window_switch_pump(void)
     snprintf(oldAdapter, sizeof(oldAdapter), "%s", rhi_adapter_name());
     s_sw.want[0] = '\0';
     const Uint64 t0 = SDL_GetTicksNS();
-    /* the device's start and the pipeline set are not a hang of the game
-       (the device-lost box's way) */
-    ico_diag_watchdog_pause(1);
+    /* the device's start and the pipeline set are not a hang of the game,
+       but a step that never ends is one: the switch's own watch
+       (diag_host.h ico_diag_watchdog_switch) in place of a pause without a
+       limit, so a hang inside the driver ends with the report and the main
+       thread's stack instead of a window that says "Not Responding" for
+       good (the rc2 report: the watchdog paused, the log ending there) */
+    {
+        char what[96];
+
+        snprintf(what, sizeof(what), "switching the renderer from %s to %s", old, want);
+        ico_diag_watchdog_switch(SWITCH_WATCH_S, what);
+    }
     const int r = ico_window_switch_backend(want, wantAdapter, s_sw.why == UI_GFX_WHY_APPLY);
-    ico_diag_watchdog_pause(0);
+    ico_diag_watchdog_switch(0, NULL);
     const double secs = (double)(SDL_GetTicksNS() - t0) / 1e9;
     const char *how = s_sw.why == UI_GFX_WHY_TIMEOUT ? "not kept in 10 s" : "reverted";
     /* what changed: the renderer, the card it runs on (or both) */

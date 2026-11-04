@@ -381,20 +381,45 @@ static void progress_child(int progress)
    buffered: host_config.c), a buffered line, the step (ico_diag_step), a
    second buffered line, then a stub step that never returns; the parent
    kills the child, and the log must hold the first line, then the step's,
-   and not the second (the buffer a kill loses). */
+   and not the second (the buffer a kill loses);
+   "switchhang": the switch's watch (2 s) on, a step, then nothing moves:
+   the watchdog ends the run naming the switch and the step, the main
+   thread's stack sampled, and not by the game's own later limit (1 s);
+   "switchok": the same watch while shaders and pipelines are made
+   (ico_diag_switch_progress) for 4 s, past both limits: no end; the watch
+   ended, the run exits 0. */
 static void switch_child(const char *mode, const char *log)
 {
-    (void)mode;
-    if (freopen(log, "a", stderr) == NULL) {
-        exit(2);
+    int i;
+    if (strcmp(mode, "step") == 0) {
+        if (freopen(log, "a", stderr) == NULL) {
+            exit(2);
+        }
+        setvbuf(stderr, NULL, _IOFBF, 64 * 1024);
+        fprintf(stderr, "window: a buffered line before the step\n");
+        ico_diag_step("window: switch to opengl: a stub step that never returns");
+        fprintf(stderr, "window: a buffered line after the step\n");
+        for (;;) {
+            pause_ms(1000);
+        }
     }
-    setvbuf(stderr, NULL, _IOFBF, 64 * 1024);
-    fprintf(stderr, "window: a buffered line before the step\n");
-    ico_diag_step("window: switch to opengl: a stub step that never returns");
-    fprintf(stderr, "window: a buffered line after the step\n");
-    for (;;) {
-        pause_ms(1000);
+    fake_ticks = 1;
+    ico_diag_start(0, 1);
+    ico_diag_watchdog_switch(2, "switching the renderer from vulkan to opengl (test)");
+    if (strcmp(mode, "switchhang") == 0) {
+        ico_diag_step("window: switch to opengl: a stub step that never returns");
+        pause_ms(10000);
+        exit(0);
     }
+    ico_diag_step("window: switch to opengl: starting the renderer (the device and its shaders)");
+    for (i = 0; i < 16; i++) {
+        pause_ms(250);
+        ico_diag_switch_progress();
+    }
+    ico_diag_watchdog_switch(0, NULL);
+    ico_diag_log("test: switch done");
+    pause_ms(300);
+    exit(0);
 }
 
 /* A present (ico_diag_present_enter/leave) against a limit.
@@ -1156,7 +1181,8 @@ static void run_child(const char *mode, const char *log)
         fn = segv_thread;
     } else if (strcmp(mode, "abort") == 0) {
         fn = abort_thread;
-    } else if (strcmp(mode, "step") == 0) {
+    } else if (strcmp(mode, "step") == 0 || strcmp(mode, "switchhang") == 0 ||
+               strcmp(mode, "switchok") == 0) {
         switch_child(mode, log);
     } else if (strcmp(mode, "watchdog") == 0) {
         fn = spin_thread;
@@ -1579,7 +1605,8 @@ static void benign_cases(void)
 
 #if !defined(_WIN32)
 
-/* diag_test --switch (ctest diag_switch): the step lines (switch_child) */
+/* diag_test --switch (ctest diag_switch): the step lines and the switch's
+   watch (switch_child) */
 static int switch_cases(const char *self)
 {
     char log[256];
@@ -1597,12 +1624,33 @@ static int switch_cases(const char *self)
     /* the hazard the step's own write avoids: a buffered line is lost */
     CHECK(strstr(s, "a buffered line after the step") == NULL);
 
+    r = run(self, "switchhang", log);
+    s = read_file(log);
+    CHECK(r == 4);
+    CHECK(strstr(s, "ico_pc: diagnostics: watchdog: switching the renderer from vulkan to opengl "
+                    "(test); its limit is 2 s") != NULL);
+    CHECK(strstr(s, "WATCHDOG: switching the renderer from vulkan to opengl (test): nothing moved "
+                    "for 2 s (the last step: window: switch to opengl: a stub step that never "
+                    "returns)") != NULL);
+    CHECK(strstr(s, "no new Main tick") == NULL);
+    CHECK(strstr(s, "ico_pc: the main thread was at ") != NULL);
+    CHECK(strstr(s, "ico_pc: the last step: window: switch to opengl: a stub step") != NULL);
+    /* the heartbeat went on during the switch, naming it */
+    CHECK(strstr(s, "| switching the renderer from vulkan to opengl (test) for ") != NULL);
+
+    r = run(self, "switchok", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "test: switch done") != NULL);
+    CHECK(strstr(s, "WATCHDOG") == NULL);
+    CHECK(strstr(s, "watchdog: switching the renderer from vulkan to opengl (test) over after ") !=
+          NULL);
     remove(log);
     if (fails != 0) {
         printf("diag_test --switch: %d check(s) failed\n", fails);
         return 1;
     }
-    printf("diag_test --switch: the step lines passed\n");
+    printf("diag_test --switch: the step lines and the switch's watch passed\n");
     return 0;
 }
 

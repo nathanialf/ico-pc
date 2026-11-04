@@ -150,8 +150,10 @@ if(NOT APPLE AND NOT WIN32)
 endif()
 if(ICO_RUN_TESTS)
     set_tests_properties(diag PROPERTIES SKIP_RETURN_CODE 77)
-    # the switch's step lines (ico_diag_step): a killed child's log names
-    # the step (diag_test --switch; POSIX only, 77 elsewhere)
+    # the switch's step lines (ico_diag_step) and its watch
+    # (ico_diag_watchdog_switch): a killed child's log names the step, a
+    # hung step ends the run with the report naming it, steady progress does
+    # not (diag_test --switch; POSIX only, 77 elsewhere)
     add_test(NAME diag_switch COMMAND diag_test --switch)
     set_tests_properties(diag_switch PROPERTIES SKIP_RETURN_CODE 77)
 endif()
