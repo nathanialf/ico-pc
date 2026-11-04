@@ -207,25 +207,40 @@ static void testStart(void)
 
     /* eligible + auto + vsync off: FIFO from the start */
     CHECK(ico_present_fallback_qualcomm_own(qcom, k_qcom));
-    CHECK(ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, qcom, k_qcom));
+    CHECK(ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, k_qcom));
     /* the reporter's A/B: off keeps mailbox for the whole run */
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_OFF, 0, qcom, k_qcom));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_OFF, 1, 0, qcom, k_qcom));
     /* fifo is FIFO from the start by its own path, not this one */
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_FIFO, 0, qcom, k_qcom));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_FIFO, 1, 0, qcom, k_qcom));
     /* vsync on: unchanged */
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, qcom, k_qcom));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 1, qcom, k_qcom));
     /* Mesa's and Turnip's drivers on the same vendor id keep mailbox */
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, qcom, "turnip Mesa driver"));
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, qcom, "Mesa 25.1.0"));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, "turnip Mesa driver"));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, "Mesa 25.1.0"));
     CHECK(!ico_present_fallback_qualcomm_own(qcom, "TURNIP"));
     /* other vendors keep mailbox and the blocks' fallback */
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0x13b5u, "ARM Mali driver"));
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0x1002u, "AMD proprietary"));
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0x10deu, NULL));
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0u, k_qcom));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0x13b5u, "ARM Mali driver"));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0x1002u, "AMD proprietary"));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0x10deu, NULL));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0u, k_qcom));
     /* a Qualcomm device with no driver text is the stock driver (the rule
        that exists: only Mesa's and Turnip's texts are excluded) */
-    CHECK(ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, qcom, NULL));
+    CHECK(ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, NULL));
+    /* phones only: Windows on Snapdragon (the same vendor id, Qualcomm's
+       own Vulkan driver, a surface offering immediate) is never asked, so
+       its Vsync Off stays immediate */
+    CHECK(ico_present_fallback_start_asked(ICO_PRESENT_FALLBACK_AUTO, 1));
+    CHECK(!ico_present_fallback_start_asked(ICO_PRESENT_FALLBACK_AUTO, 0));
+    CHECK(!ico_present_fallback_start_asked(ICO_PRESENT_FALLBACK_OFF, 1));
+    CHECK(!ico_present_fallback_start_asked(ICO_PRESENT_FALLBACK_FIFO, 1));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0, qcom, k_qcom));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0, qcom, NULL));
+    /* the build's own platform */
+#ifdef __ANDROID__
+    CHECK(ICO_PRESENT_FALLBACK_ANDROID == 1);
+#else
+    CHECK(ICO_PRESENT_FALLBACK_ANDROID == 0);
+#endif
     ico_present_fallback_start_line(line, sizeof line);
     CHECK_STR(line, "window: present fifo (Qualcomm's own driver: FIFO from the start; [dev] "
                     "present_fallback = off keeps mailbox)");

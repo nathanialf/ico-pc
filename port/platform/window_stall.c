@@ -10,6 +10,7 @@
 #include "gpu_sysfs.h"
 #include "ico_thread.h"
 #include "present_hist.h"
+#include "rhi.h"
 #include "thermal_text.h"
 #ifdef __ANDROID__
 #include "gpu_sysfs_android.h"
@@ -28,7 +29,7 @@ static void stall_rec(const RdPerfRecord *r, PresentStallRec *o)
     memset(o, 0, sizeof(*o));
     o->replay = r->replay;
     o->presentMs = r->presentMs;
-    o->split = r->presentSplit != 0;
+    o->split = r->presentSplit; /* 0, 1 or 2 (no present call made) */
     o->lockMs = r->presentLockMs;
     o->callMs = r->presentCallMs;
     o->pollMs = r->presentPollMs;
@@ -44,7 +45,7 @@ static void stall_rec(const RdPerfRecord *r, PresentStallRec *o)
 
 const char *window_stall_split(const RdPerfRecord *r, unsigned blockGpuN, double blockGpuMs)
 {
-    static char text[320];
+    static char text[384];
     PresentStallRec o;
 
     stall_rec(r, &o);
@@ -74,7 +75,7 @@ static double s_gpuBlockMs = -1.0; /* the last block line's time, ico_thread_now
 
 static void around_queue(const RdPerfRecord *r)
 {
-    if (!s_gpuOn || !(r->presentEndMs > 0.0)) {
+    if (!s_gpuOn || !(r->presentEndMs > 0.0) || !present_stall_lines(r->presentMs)) {
         return;
     }
     if (s_around.n == AROUND_MAX) {
@@ -137,15 +138,22 @@ void window_stall_gpu_open(void)
     GpuSysfsInfo info;
     char text[512];
 
+    gpu_sysfs_android_start(&info); /* the sampler thread (again after a close) */
     if (s_said) {
         return;
     }
     s_said = 1;
-    gpu_sysfs_android_start(&info);
     gpu_sysfs_open_text(&info, text, sizeof(text));
     fprintf(stderr, "window: %s\n", text);
     s_gpuOn = gpu_sysfs_any_readable(&info);
     s_gpuBlockMs = ico_thread_now_ms();
+#endif
+}
+
+void window_stall_gpu_close(void)
+{
+#ifdef __ANDROID__
+    gpu_sysfs_android_stop();
 #endif
 }
 
@@ -181,10 +189,15 @@ void window_stall_blocked(const RdPerfRecord *r)
     s_after.pending = 1;
     s_after.replay = r->replay;
     s_after.ms = r->presentMs;
-    if (rd_perf_passes_arm(true)) {
+    /* only where the record carries the present split (the Vulkan
+       backend): on OpenGL an armed replay's stamps would each read the GL
+       clock, which may hold the CPU (rd.h rd_perf_passes_arm_backend) */
+    if (rd_perf_passes_arm_backend(rhi_backend(), r->presentSplit != 0) &&
+        rd_perf_passes_arm(true)) {
         char text[256];
 
-        rd_perf_passes_arm_text(r->replay, r->presentMs, text, sizeof(text));
+        rd_perf_passes_arm_text(r->replay, r->presentMs, rhi_backend_kind_name(rhi_backend()), text,
+                                sizeof(text));
         fprintf(stderr, "window: %s\n", text);
     }
 }
@@ -198,9 +211,11 @@ void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap)
         return;
     }
     s_after.pending = 0;
-    stall_rec(r, &o);
-    present_after_text(s_after.replay, s_after.ms, &o, text, sizeof(text));
-    ico_log_limited("window: after the present that blocked", "window: %s", text);
+    if (present_stall_lines(s_after.ms)) {
+        stall_rec(r, &o);
+        present_after_text(s_after.replay, s_after.ms, &o, text, sizeof(text));
+        ico_log_limited("window: after the present that blocked", "window: %s", text);
+    }
     if (r->gpuGapValid) {
         pace_gpu_gap_stall(gap, r->gpuGapNs);
     }
@@ -211,7 +226,7 @@ void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const 
 {
     char text[1024];
 
-    if (!r->presented || !(r->presentMs > WINDOW_STALL_MS)) {
+    if (!r->presented || !present_stall_lines(r->presentMs)) {
         return;
     }
     rd_perf_pass_grow_text(agg, p, n, r->replay, r->presentMs, r->gpuValid, r->gpuMs,

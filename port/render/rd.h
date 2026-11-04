@@ -2294,7 +2294,8 @@ typedef struct RdPerfRecord {
         readbackMs;
     double fenceWaitMs; /* the backend's blocked time on GPU completion (inside wait, readback) */
     /* presentMs timed apart (rhi.h rhi_present_split, Vulkan; presentSplit
-     * 0 elsewhere): the swapchain lock's wait, the driver's present call
+     * 0 elsewhere, 1 with the driver's call, 2 the lock's wait only, no
+     * present call made): the swapchain lock's wait, the driver's present call
      * (vkQueuePresentKHR), the surface poll after it; presentEndMs the
      * present's end on rd's monotonic ms clock (startMs's), 0 when nothing
      * was presented.  The window's lines on a present that blocked (issue
@@ -2704,14 +2705,23 @@ bool rd_perf_passes_mode(void);
 /* Issue 123: every replay timed piece by piece from now on (on: the
  * window's first present that blocked, so the next stall's replay is
  * timed; ~47 more bottom-of-pipe stamps a replay, no CSV), or back to one
- * every 250 ms (off).  True when that changed something: timestamps exist
- * and it was not so already (never on iOS, where pass timing is off).
- * Any thread; the render thread reads it at its next replay. */
+ * every 250 ms (off).  True when that changed something: timestamps exist,
+ * the backend is one rd_perf_passes_arm_backend allows (on only) and it
+ * was not so already (never on iOS, where pass timing is off).  Any
+ * thread; the render thread reads it at its next replay. */
 bool rd_perf_passes_arm(bool on);
-/* "every replay timed pass by pass from here (a present blocked 359 ms at
- * replay 2941): the next stalled replay's passes are compared with the
- * block's" (the window's line, once) */
-int rd_perf_passes_arm_text(uint32_t replay, double presentMs, char *buf, size_t n);
+/* Whether a present that blocked arms rd_perf_passes_arm: only when its
+ * record carries the present split (presentSplit, the Vulkan backend's)
+ * on Vulkan (MoltenVK included; kind an rhi.h RhiBackendKind); never on
+ * OpenGL, where each armed stamp's issue-time read may hold the CPU, nor
+ * on Direct3D (pure) */
+bool rd_perf_passes_arm_backend(int kind, bool presentSplit);
+/* "every replay timed pass by pass from here on Vulkan (a present blocked
+ * 359 ms at replay 2941): the next stalled replay's passes are compared
+ * with the block's" (the window's line, once; backend: the armed
+ * backend's name, rhi_backend_kind_name) */
+int rd_perf_passes_arm_text(uint32_t replay, double presentMs, const char *backend, char *buf,
+                            size_t n);
 
 /* The CSV of the pieces (the window's ico-pc-passes.csv): the header line
  * and one piece's line, each with its newline; the length written, as

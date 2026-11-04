@@ -684,7 +684,8 @@ bool rd_perf_passes_arm(bool on)
     (void)on;
     return false;
 #else
-    if (!g_rd.hasDevice || !rhi_timestamps_supported() || s_passesMode) {
+    if (!g_rd.hasDevice || !rhi_timestamps_supported() || s_passesMode ||
+        (on && !rd_perf_passes_arm_backend(rhi_backend(), true))) {
         return false;
     }
     return __atomic_exchange_n(&s_passesArmed, on, __ATOMIC_RELAXED) != on;
@@ -998,14 +999,14 @@ void rd__perf_submit_times(const RdSubmitJob *j)
 void rd__present_split_take(RdSubmitJob *j, bool presented)
 {
     RhiPresentSplit sp;
-    j->presentSplit = false;
+    j->presentSplit = 0;
     j->presentLockMs = j->presentCallMs = j->presentPollMs = j->presentEndMs = 0.0;
     if (!presented) {
         return;
     }
     j->presentEndMs = rd__now_ms();
     if (g_rd.hasDevice && rhi_present_split(&sp)) {
-        j->presentSplit = true;
+        j->presentSplit = sp.called ? 1u : 2u; /* 2: the lock only, no present call made */
         j->presentLockMs = (double)sp.lockNs / 1e6;
         j->presentCallMs = (double)sp.callNs / 1e6;
         j->presentPollMs = (double)sp.pollNs / 1e6;
@@ -1587,12 +1588,23 @@ int rd_perf_pass_grow_text(const RdPerfPassAgg *a, const RdPerfPass *p, uint32_t
     return (int)strlen(buf);
 }
 
-int rd_perf_passes_arm_text(uint32_t replay, double presentMs, char *buf, size_t n)
+bool rd_perf_passes_arm_backend(int kind, bool presentSplit)
+{
+    /* Vulkan (MoltenVK's too): its stamps are written by the GPU and the
+       record carries the present split the stall lines are for.  OpenGL
+       reads each armed stamp's issue time with glGetInteger64v, which may
+       hold the CPU (rhi.h RHI_TIMESTAMP_ISSUE_TIME): never there, nor on
+       Direct3D, which has no split either */
+    return presentSplit && (kind == RHI_BACKEND_VULKAN || kind == RHI_BACKEND_METAL);
+}
+
+int rd_perf_passes_arm_text(uint32_t replay, double presentMs, const char *backend, char *buf,
+                            size_t n)
 {
     return snprintf(buf, n,
-                    "every replay timed pass by pass from here (a present blocked %.0f ms at "
-                    "replay %u): the next stalled replay's passes are compared with the block's",
-                    presentMs, replay);
+                    "every replay timed pass by pass from here on %s (a present blocked %.0f ms "
+                    "at replay %u): the next stalled replay's passes are compared with the block's",
+                    backend ? backend : "?", presentMs, replay);
 }
 
 int rd_perf_pass_kinds_text(const double kinds[RD_PERF_PASS_KIND_COUNT],

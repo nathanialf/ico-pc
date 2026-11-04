@@ -989,11 +989,20 @@ static void checkPassTexts(void)
     memset(small, 'x', sizeof(small));
     const int g = rd_perf_pass_grow_text(&agg, q, 5, 2941, 352.0, 1, 71.3, 27.0, 3, small, 20);
     CHECK(g == 19 && small[19] == '\0' && small[20] == 'x', "stalled replay cut: %d", g);
-    rd_perf_passes_arm_text(2941, 359.4, buf, sizeof(buf));
-    CHECK(strcmp(buf, "every replay timed pass by pass from here (a present blocked 359 ms at "
-                      "replay 2941): the next stalled replay's passes are compared with the "
-                      "block's") == 0,
+    rd_perf_passes_arm_text(2941, 359.4, "Vulkan", buf, sizeof(buf));
+    CHECK(strcmp(buf, "every replay timed pass by pass from here on Vulkan (a present blocked "
+                      "359 ms at replay 2941): the next stalled replay's passes are compared "
+                      "with the block's") == 0,
           "arm line: %s", buf);
+    /* the arm's backend gate: Vulkan (and MoltenVK) with a present split
+       only; never OpenGL (each armed stamp reads the GL clock) or Direct3D */
+    CHECK(rd_perf_passes_arm_backend(RHI_BACKEND_VULKAN, true), "arm: Vulkan with a split");
+    CHECK(rd_perf_passes_arm_backend(RHI_BACKEND_METAL, true), "arm: MoltenVK with a split");
+    CHECK(!rd_perf_passes_arm_backend(RHI_BACKEND_VULKAN, false), "arm: Vulkan without a split");
+    CHECK(!rd_perf_passes_arm_backend(RHI_BACKEND_OPENGL, true), "arm: OpenGL never");
+    CHECK(!rd_perf_passes_arm_backend(RHI_BACKEND_OPENGL, false), "arm: OpenGL never (no split)");
+    CHECK(!rd_perf_passes_arm_backend(RHI_BACKEND_D3D11, true), "arm: D3D11 never");
+    CHECK(!rd_perf_passes_arm_backend(RHI_BACKEND_D3D12, true), "arm: D3D12 never");
 }
 
 /* ------------------------------------------------ the pieces on the device */

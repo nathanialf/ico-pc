@@ -1946,6 +1946,7 @@ open_window:
         if (window_fallback_backend(backendExplicit, retry, blendExplicit, &backend)) {
             goto open_window;
         }
+        window_stall_gpu_close(); /* a sampler a failed open started */
         SDL_Quit();
         return -1;
     }
@@ -2080,6 +2081,7 @@ open_window:
                                  s_window);
         SDL_DestroyWindow(s_window);
         s_window = NULL;
+        window_stall_gpu_close(); /* a sampler a failed open started */
         SDL_Quit();
         return -3;
     }
@@ -2131,6 +2133,7 @@ open_window:
         if (window_fallback_backend(backendExplicit, retry, blendExplicit, &backend)) {
             goto open_window;
         }
+        window_stall_gpu_close(); /* a sampler a failed open started */
         SDL_Quit();
 #ifdef __ANDROID__
         return -2; /* the player chose Quit, or a driver package for the next
@@ -4706,7 +4709,7 @@ static void perf_log(void)
     if (s_perf.gpuGap.n) {
         /* whether the spans overlap (the step rule's GPU time a picture
            over the GPU's own) or the GPU waited between replays */
-        char gap[384];
+        char gap[PACE_GPU_GAP_TEXT_MAX];
 
         pace_gpu_gap_text(&s_perf.gpuGap, gap, sizeof(gap));
         fprintf(stderr, "window: GPU between replays: %s\n", gap);
@@ -5337,6 +5340,7 @@ void ico_window_close(void)
     s_open = 0;
     ico_render_thread_stop(); /* every picture handed over finished, the thread ended */
     window_display_rate_stop(s_window);
+    window_stall_gpu_close(); /* Android: the kernel GPU driver's sampler joined */
     /* a clean exit: a lazy run keeps the start-up activity file, so the
        next start of this version is lazy too; any other deletes it
        (diag_host.h) */

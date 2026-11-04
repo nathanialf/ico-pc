@@ -957,7 +957,11 @@ wait, the screen changing its refresh rate is the cause. On a Qualcomm
 graphics chip the lines `window: kernel GPU driver ...` say how fast the
 graphics chip ran and how busy it was in each 10 second block and just
 before and after each such wait, and the lines `window: thermal: ...` say how
-warm the phone was and whether the screen was being recorded. With **Frame
+warm the phone was and whether the screen was being recorded. With
+**Vsync** off, phones with a Qualcomm graphics driver send pictures to the
+screen one after another from the start, as the chip maker advises, instead
+of switching to that only after a few held-back pictures; this is not
+expected to remove the stutter. With **Frame
 rate** set to a number the game asks the phone to hold one rate
 ([the details](ANDROID.md#a-fixed-refresh-rate-for-a-frame-rate-you-set)).
 On a tablet, a high **Resolution** with Vsync off and Frame rate

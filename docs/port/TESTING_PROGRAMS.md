@@ -853,7 +853,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   timed replays (`testGpuGap`, `PaceGpuGap`: the idle floor of 0.05 ms, an overlap capped at the
   span, the `window: GPU between replays` part word for word, a short buffer; issue 123: gaps
   timed across untimed replays counted, the gaps after the presents that blocked listed, one
-  stall, the first 8 of 11 kept) (`pace_policy`).
+  stall, the first 8 of 11 kept; the longest text fits the window's `PACE_GPU_GAP_TEXT_MAX` buffer
+  whole) (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
 - `present_fallback_test.c`: the FIFO fallback's decision (`present_fallback.h`): the stock
@@ -864,8 +865,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   present_fallback=off` keeps mailbox with its line once; a count reached with vsync on switches at
   the next block once eligible; the driver texts and the `[dev]` values (`present_fallback`); FIFO from the first swapchain
   (`testStart`): Qualcomm's own driver (0x5143, text neither Mesa nor turnip) with auto and vsync
-  off yes; off, fifo, vsync on, Mesa and turnip texts and other vendors no; the start line word for
-  word. `pace_policy_test`'s `testFifoFromStart`: vsync off with a FIFO swapchain keeps the
+  off on Android yes; off, fifo, vsync on, Mesa and turnip texts, other vendors and any platform
+  but Android (Windows on Snapdragon: `ico_present_fallback_start_asked`) no; the start line word
+  for word. `pace_policy_test`'s `testFifoFromStart`: vsync off with a FIFO swapchain keeps the
   as-made rule, the paced allowance and the back-to-back gap.
 - `display_rate_test.c`: the refresh rate's log lines and the Android frame rate pin's decisions
   (`display_rate.h`, issue 123): the watch (first rate noted, 59.94 against 59.95 not a change, an
@@ -890,9 +892,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   word, an empty block's empty text, a small buffer cut, negative and NaN times not counted;
   the lines around a present that blocked (issue 123), word for word: the blocked line's split
   (`present_split_text`: a reporter's stall of 359 ms with a 67.9 ms GPU span against the block's
-  26.7, the block's first timed replay, a gap under 0, the call not timed apart, no gap, no GPU
-  span) and the after line (`present_after_text`: the replay after the stall, its gap across one
-  and two untimed replays, no GPU span, a short buffer cut) (`present_hist`).
+  26.7, with its `other` time, the block's first timed replay, the lock without a present call, `other`
+  never under 0, a gap under 0, the call not timed apart, no gap, no GPU span) and the after line (`present_after_text`: the replay after the stall, its gap across one
+  and two untimed replays, no GPU span, a short buffer cut); the stall lines' threshold
+  (`present_stall_lines`: from 250 ms on, never from 50 to 250 ms nor for NaN) (`present_hist`).
 - `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
   (`sched`).
@@ -1887,7 +1890,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   issue 123's stalled replay against the block's (`rd_perf_pass_grow_text`: a piece 3.1x its
   mean, one 1.3x, one under 0.05 ms, one new to the block, one not timed; an empty block; every
   piece over; no GPU span; a cut), the block's mean of a piece (`rd_perf_pass_agg_mean`) and the
-  arm line, a failure of these counted without a device (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
+  arm line with its backend, the arm's backend gate (`rd_perf_passes_arm_backend`: Vulkan and MoltenVK
+  with a present split only, never OpenGL or Direct3D), a failure of these counted without a device (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`). Its pipelines case holds the reachable set under
   `RD_PIPELINE_REACHABLE_MAX` with both blends, the tile-based GPU's set too (its profile with

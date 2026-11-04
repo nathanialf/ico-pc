@@ -349,7 +349,8 @@ bindings' like any other source before the stick fix, the mirror and the quantis
   copy of the layout only (`ico_touch_scene_alpha`; the mapper, the Hidden rule and the menu-tap
   failsafe read the unfaded layout, and the Frame rate counter re-places itself through the
   alpha > 0 rule). Logged: `touch: scene begins/ends` and `touch: Start-only fade out/in`, the
-  first 8 then every 100th. `touch_opacity` scales the drawing.
+  first 8 then every 100th (`ico_log_limited`, so the end-of-run summary counts them; `ico_input`
+  links `ico_platform` for it in the window build). `touch_opacity` scales the drawing.
 
 `input_sdl.c` wires it: the finger events, cancel on focus loss and backgrounding, the step once a
 vsync (`ico_touch_update`), the layout from the output's size, safe area, density and fold that

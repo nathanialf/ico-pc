@@ -576,14 +576,28 @@ ThermalState ico_host_thermal(const char **why)
 {
     static jmethodID s_midHeadroom, s_midStatus;
     static int s_failedHeadroom, s_failedStatus;
+    /* the headroom asked at most once a second: PowerManager answers NaN
+       when asked more often, and one drain can write several around lines
+       and the block line together; the answer kept is reused between */
+    static Uint64 s_headroomAskedMs;
+    static int s_headroomAsked;
+    static double s_headroom = NAN;
+    const Uint64 nowMs = SDL_GetTicks();
     ThermalState t = thermal_state_none();
     float f = 0.0f;
     int st = -1;
 
-    if (call_thermal("thermalHeadroom", "()F", &s_midHeadroom, &s_failedHeadroom, 0, &f, NULL) &&
-        !isnan(f) && f >= 0.0f) {
-        t.headroom = (double)f;
+    if (!s_headroomAsked || nowMs - s_headroomAskedMs >= 1000u) {
+        s_headroomAsked = 1;
+        s_headroomAskedMs = nowMs;
+        s_headroom = NAN;
+        if (call_thermal("thermalHeadroom", "()F", &s_midHeadroom, &s_failedHeadroom, 0, &f,
+                         NULL) &&
+            !isnan(f) && f >= 0.0f) {
+            s_headroom = (double)f;
+        }
     }
+    t.headroom = s_headroom;
     if (call_thermal("thermalStatus", "()I", &s_midStatus, &s_failedStatus, 1, NULL, &st) &&
         st >= 0) {
         t.status = st;

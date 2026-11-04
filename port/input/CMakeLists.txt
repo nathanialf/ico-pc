@@ -31,6 +31,9 @@ target_link_libraries(ico_input PRIVATE ico_host_fs)
 if(NOT ICO_HEADLESS AND TARGET SDL3::SDL3)
     target_sources(ico_input PRIVATE input_sdl.c)
     target_link_libraries(ico_input PUBLIC SDL3::SDL3)
+    # input_sdl.c's rate-limited lines (diag_host.h ico_log_limited), so
+    # they join the end-of-run summary's counts
+    target_link_libraries(ico_input PRIVATE ico_platform)
 endif()
 
 # binding resolution, quantisation, the stick fix, merging, the libpad buffer

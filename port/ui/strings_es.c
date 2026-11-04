@@ -34,7 +34,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "Para una partida menos estresante. Algunas escenas guionizadas siguen mostrando el secuestro.",
     [UI_STR_OPT_PIT_TIME] = "Tiempo para rescatar a Yorda",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "Segundos desde que una sombra empieza a hundirse con Yorda hasta que se la lleva. La fila de Yorda de arriba lo impide por completo.",
+        "Segundos desde que una sombra se hunde con Yorda hasta que se la lleva; menos en algunas escenas, en proporción. La fila Yorda lo impide.",
     [UI_STR_OPT_SHADOW_SPEED] = "Velocidad de las sombras",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "Qué tan rápido caminan, corren y vuelan las sombras. No cambia la frecuencia con que atacan.",

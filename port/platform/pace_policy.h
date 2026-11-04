@@ -91,6 +91,10 @@ void pace_gpu_gap_stall(PaceGpuGap *g, int64_t gapNs);
  * first 8 of the 11 stalls"; a gap under 0 reads as its negative); the
  * length snprintf would write */
 int pace_gpu_gap_text(const PaceGpuGap *g, char *out, unsigned len);
+/* The buffer the window gives pace_gpu_gap_text (window_host.c perf_log):
+   the longest text, every count at 10 digits and 8 stalls of -60 s, fits
+   (pace_policy_test testGpuGap) */
+#define PACE_GPU_GAP_TEXT_MAX 768u
 
 /* ------------------------------------------------------------------------
  * The present allowance (docs/port/DISPLAY.md "Pacing"): the presents of a
