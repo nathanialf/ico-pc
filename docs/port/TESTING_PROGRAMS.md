@@ -640,7 +640,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   long waiting for the disc drops nothing, each counted in `discExcused`), and the render thread's
   asynchronous present (`testAsyncLock`: under the lock at 60 Hz a 5 ms step with a 12.5 ms
   present on the game thread falls behind, the same present split 9 ms on the game thread and
-  3.5 ms on the render thread keeps every step on time, one present a step; `testAsyncRates`: the
+  3.5 ms on the render thread keeps every step on time, one present a step; `testRoomOffGame`:
+  the lock at 60 Hz with Direct3D 11's wait for room in the present queue on the render thread (the
+  render thread's whole job modelled: 1.5 ms of interpolation, 0.5 ms more of reads, 0.3 ms of
+  submit and present, the wait ending at the next vblank, a full FIFO queue; a 3 ms step whose
+  first renderer call waits for the picture's reads): made after the present, at the end of the
+  picture, it is 13.5-15 ms a picture with no read wait, the next present waiting 0.3-1.2 ms for
+  it as the display's wait, one present a step, no step past the next due time, no drop, skip or
+  resync, the alphas exact; made in the acquire, inside the reads, every step carries 3.5-5 ms of
+  read waits (issue 126, PACEEVAL's finding 3); `testAsyncRates`: the
   timer path paced by the GPU's time with the presents handed over, 9, 12, 17, 20 and 25 ms
   pictures give about a period over the picture time presents a step and 30 ms every new frame, a
   9 ms present with a 3 ms step two presents a step against one; `testRenderThreadPlan`: the
@@ -2058,7 +2066,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   timeline sync), so each replay's walk runs while the submit thread ends and submits the one
   before (RHI.md "Frame slots and the submit thread"): the race check for that partition. `threadSync`: in the sync mode a picture is
   waited for and not counted as handed over (`rd_submit_async` false), with the thread on it is
-  until the drain (not on OpenGL). It is the render thread's program to run under
+  until the drain (not on OpenGL). `threadRoomAhead` (not on OpenGL; with
+  `ICO_RD_SUBMIT_THREAD=0`, the output given a size so the pictures present; run last): the
+  display's wait ahead through `rd__thread_room_hook` in place of `rhi_wait_present_room`, a
+  picture handed over that presented ends by making the next one's wait for room; held there, the
+  test's `rd_update_texture` and `rdtex_find` make no read wait; the next picture takes it (none
+  inside its reads), a picture after one that made none is counted inside; the 10 s clause's
+  text; SCENE byte for byte across the pictures; with `ICO_RD_ACQUIRE_AHEAD=0` the seam is never
+  asked. It is the render thread's program to run under
   ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
   build folder of its own (`build-host/linux-x64-tsan`), `--target rd_tex_test`, run with
   `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`; a report is a failure.
@@ -2144,7 +2159,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   next frame, 2064 for marks 512, 2050 and 1000 in one frame, and all 8192 of a buffer never noted,
   each read back byte for byte; the video memory fields of `RhiStats` on WARP: a budget, no more
   to reserve than the budget, two reads inside 250 ms equal; the hardware adapter, the swapchain on
-  a hidden window, Vulkan for comparison), the cells' shaders compiled at run time from
+  a hidden window, after each present the frame latency wait made ahead of the acquire
+  (`rhi_wait_present_room`) asked twice with the same answer and false with a backbuffer acquired,
+  Vulkan for comparison), the cells' shaders compiled at run time from
   `rhi_test_hlsl.h`; a Windows GUI program that writes `rhi_d3d11_test.log` and shows a message box
   (`rhi_d3d11`, registered on a native Windows build only). The `win-x64` and `win-x64-clang`
   cross builds build it; CI's `windows` job runs it with `--console` on WARP

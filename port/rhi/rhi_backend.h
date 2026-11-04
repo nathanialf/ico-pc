@@ -34,6 +34,7 @@
     X(acquire_backbuffer)                                                                          \
     X(present)                                                                                     \
     X(present_shown)                                                                               \
+    X(wait_present_room)                                                                           \
     X(release_surface)                                                                             \
     X(recreate_surface)                                                                            \
     X(create_buffer)                                                                               \

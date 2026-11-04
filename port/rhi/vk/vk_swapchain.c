@@ -1466,6 +1466,13 @@ bool rhi_present_shown(void)
     return __atomic_load_n(&s_presentShown, __ATOMIC_RELAXED);
 }
 
+/* rhi.h: the acquire's wait (vkAcquireNextImageKHR's) is the acquire's
+ * own: nothing to make ahead of it */
+bool rhi_wait_present_room(void)
+{
+    return false;
+}
+
 /* The slot whose image the present shows: the oldest acquired (with the
  * submit thread, the picture before the one the render thread acquired
  * since; vkr_acquire_backbuffer adopts an image given up, so an older one
