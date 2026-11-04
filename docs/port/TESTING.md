@@ -308,9 +308,10 @@ draw: ...`, [RHI.md](RHI.md#direct3d-11)) and its last 150 lines. A test's exit 
 device") is a failure here, since WARP is always there, and so is a `SKIP:` line or any debug-layer
 error or corruption line in a test's log, whatever its exit status (the runtime drops the call the
 error names, so a program can pass its own checks while drawing less than it should); a test runs
-at most 2400 s. One more row, `d3d11_shader_warnings`, fails the job when any log holds a
-`rhi_d3d11: shader compiler warnings` line: FXC compiles every shader at run time and the backend
-logs what it warned about, so the gate covers the whole shader set the suite draws.
+at most 2400 s. One more row, `d3d11_shader_warnings`, fails the job when any log holds an FXC
+warning line other than the `X3556` and `X4000` hints ([SHADERS.md](SHADERS.md#integer-forms)): FXC
+compiles every shader at run time and the backend logs each distinct warning text once, so the gate
+covers the whole shader set the suite draws.
 
 Not run there: the variants whose environment holds a Vulkan fake (`ICO_VK_FAKE_*`,
 `ICO_VK_ATTACHMENT_READ`: Direct3D 11 ignores them), the variants whose expected results name a

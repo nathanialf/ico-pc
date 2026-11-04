@@ -318,11 +318,21 @@ run() {
     run_test rd_video "$DIR/rd_video_test.exe"
 
     # the whole D3D11 shader set: FXC compiles every shader at run time and
-    # warns in its own words (X3092 on yuv.hlsl's unsigned hex literals was the
-    # purple movie); the backend logs "rhi_d3d11: shader compiler warnings"
-    # for any shader that draws one, so one such line in any log fails the job
-    local warned
-    warned=$(grep -a -H "rhi_d3d11: shader compiler warnings" "$LOGS"/*.log 2> /dev/null | head -n 10 || true)
+    # warns in its own words; the backend logs each distinct warning text
+    # once ("rhi_d3d11: shader compiler warnings"). Any FXC warning fails the
+    # job but two FXC-only hints the WARP picture tests prove harmless: X3556
+    # (an integer divide or modulus "may be much slower": the GS arithmetic
+    # is signed by design) and X4000 ("potentially uninitialized" on a
+    # function that returns from every branch; DXC's -WX covers real cases).
+    # X3092/X3203 (an unsigned hex literal in signed arithmetic: the purple
+    # movie) stay fatal.
+    local warned hints
+    warned=$(grep -a -h -E 'warning X[0-9]{4}' "$LOGS"/*.log 2> /dev/null |
+        grep -a -v -E 'warning X(3556|4000):' |
+        sed -e 's/^.*rhi_d3d11: shader compiler warnings ([^)]*): //' -e 's/^[A-Za-z]:[^ ]*[\\/]//' |
+        sort -u | head -n 20 || true)
+    hints=$(grep -a -h -E 'warning X(3556|4000):' "$LOGS"/*.log 2> /dev/null | sort -u | wc -l || true)
+    echo "d3d11_shader_warnings: $hints distinct X3556/X4000 hint lines (not failures)"
     NAMES+=("d3d11_shader_warnings")
     if [ -n "$warned" ]; then
         echo "== d3d11_shader_warnings: FAILED"

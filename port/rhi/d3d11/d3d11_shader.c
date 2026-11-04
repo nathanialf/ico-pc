@@ -499,8 +499,9 @@ static bool d3d11s_fail(const RhiShaderDesc *d, char *err, size_t errn, const ch
 static INIT_ONCE s_loadOnce = INIT_ONCE_STATIC_INIT;
 static pD3DCompile s_d3dCompile;
 static char s_compilerVersion[48];
-static uint32_t s_warned;   /* the first warning text logged */
-static uint32_t s_cacheBad; /* the unwritable cache dir logged */
+static uint32_t s_warnedHash[32]; /* the warning texts logged, by FNV-1a hash (0 = free) */
+static uint32_t s_warnedMore;     /* the table was full: said once */
+static uint32_t s_cacheBad;       /* the unwritable cache dir logged */
 
 /* the module's file version from its VS_VERSIONINFO resource (the
  * VS_FIXEDFILEINFO after its 0xFEEF04BD signature), without version.dll */
@@ -603,6 +604,35 @@ static ID3DIncludeVtbl s_includeVtbl = {.Open = d3d11s_inc_open, .Close = d3d11s
 
 /* the compiler's message blob as text in out (it is NUL-terminated by the
  * compiler, but not trusted to be) */
+/* true the first time a warning text is seen: its hash claims a free slot
+ * (an atomic exchange, the workers compile together); a full table claims
+ * nothing and says so once, so a 33rd distinct text is not logged */
+static bool d3d11s_warning_new(const char *text)
+{
+    uint32_t h = 2166136261u;
+    for (const unsigned char *p = (const unsigned char *)text; *p; p++) {
+        h = (h ^ *p) * 16777619u;
+    }
+    h = h ? h : 1u;
+    for (size_t i = 0; i < sizeof(s_warnedHash) / sizeof(s_warnedHash[0]); i++) {
+        uint32_t seen = __atomic_load_n(&s_warnedHash[i], __ATOMIC_ACQUIRE);
+        if (seen == 0) {
+            if (__atomic_compare_exchange_n(&s_warnedHash[i], &seen, h, false, __ATOMIC_ACQ_REL,
+                                            __ATOMIC_ACQUIRE)) {
+                return true;
+            }
+        }
+        if (seen == h) {
+            return false;
+        }
+    }
+    if (__atomic_exchange_n(&s_warnedMore, 1u, __ATOMIC_RELAXED) == 0) {
+        D3D11S_LOG("shader compiler warnings: more shaders warned with other texts than the 32 "
+                   "shown");
+    }
+    return false;
+}
+
 static void d3d11s_blob_text(ID3DBlob *b, char *out, size_t n)
 {
     if (!out || !n) {
@@ -702,15 +732,13 @@ bool d3d11_shader_compile(const RhiShaderDesc *d, const char *cacheDir, const ch
         return d3d11s_fail(d, err, errn, why);
     }
     if (msgs) {
-        /* warnings: the first text once, so a compiler that warns where DXC
-         * did not is visible without a line per shader */
-        if (__atomic_exchange_n(&s_warned, 1u, __ATOMIC_RELAXED) == 0) {
-            char text[1024];
-            d3d11s_blob_text(msgs, text, sizeof(text));
-            if (text[0]) {
-                D3D11S_LOG("shader compiler warnings (first shader with any, %s): %s",
-                           d3d11s_name(d), text);
-            }
+        /* warnings: each distinct text once, with the first shader that drew
+         * it, so a compiler that warns where DXC did not is visible without
+         * a line per shader (tools/ci_d3d11_warp.sh fails on the lines) */
+        char text[1024];
+        d3d11s_blob_text(msgs, text, sizeof(text));
+        if (text[0] && d3d11s_warning_new(text)) {
+            D3D11S_LOG("shader compiler warnings (%s): %s", d3d11s_name(d), text);
         }
         ID3D10Blob_Release(msgs);
     }

@@ -484,7 +484,7 @@ float4 vu_matm(uint at, float4 v, float w)
 int vu_ftoi(float x)
 {
     int r = (int)x;
-    r = x >= 2147483648.0 ? 0x7FFFFFFF : r;
+    r = x >= 2147483648.0 ? 2147483647 : r;
     r = x >= -2147483648.0 ? r : (int)0x80000000u;
     return r;
 }
@@ -582,8 +582,8 @@ VuVtx vu_vtx_init()
 // writes); 1 or 0 (VuVtx.gsOk, vu_has_gs_position).
 uint vu_gs_ok(float w, int gx, int gy, int gz)
 {
-    return w > 0.0 && gz >= 0 && gz != 0x7FFFFFFF && gx != 0x7FFFFFFF &&
-                   gx != (int)0x80000000u && gy != 0x7FFFFFFF && gy != (int)0x80000000u
+    return w > 0.0 && gz >= 0 && gz != 2147483647 && gx != 2147483647 &&
+                   gx != (int)0x80000000u && gy != 2147483647 && gy != (int)0x80000000u
                ? 1u
                : 0u;
 }
@@ -690,8 +690,8 @@ float4 vu_gs_position(int gx, int gy, int gz, bool wrap)
 {
     int x = gx, y = gy;
     if (wrap) {
-        x = gx & 0xFFFF;
-        y = gy & 0xFFFF;
+        x = gx & 65535;
+        y = gy & 65535;
     }
     return float4(vu_ndc(float2(x, y) * (1.0 / 16.0)), gs_depth(asuint(gz)), 1.0);
 }
@@ -802,11 +802,11 @@ float4 vu_cut_position(VuVtx v)
 // every state.
 float4 vu_corner_cut_position(VuVtx v, float4 vtx)
 {
-    uint xyOk = v.gx != 0x7FFFFFFF && v.gx != (int)0x80000000u && v.gy != 0x7FFFFFFF &&
+    uint xyOk = v.gx != 2147483647 && v.gx != (int)0x80000000u && v.gy != 2147483647 &&
                         v.gy != (int)0x80000000u
                     ? 1u
                     : 0u;
-    uint snap = (vu_draw.z & VU_F_EXTENDED) != 0u && v.h.w > 0.0 && v.gz == 0x7FFFFFFF &&
+    uint snap = (vu_draw.z & VU_F_EXTENDED) != 0u && v.h.w > 0.0 && v.gz == 2147483647 &&
                         (v.clipf & 0x30u) == 0u
                     ? xyOk
                     : 0u;
@@ -1755,10 +1755,10 @@ VuVSOut vu_triangle_out_pos(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode, uint
         // reflection pass, 38) would fail or pass GEQUAL wholesale as the
         // camera moves.  A vertex whose X or Y the 16-bit wrap would change
         // keeps the wrapped GS value.
-        at = (me.gx & 0xFFFF) != me.gx || (me.gy & 0xFFFF) != me.gy ? 3u : 1u;
-        exact = (a.gx & 0xFFFF) == a.gx && (a.gy & 0xFFFF) == a.gy && (b.gx & 0xFFFF) == b.gx &&
-                        (b.gy & 0xFFFF) == b.gy && (c.gx & 0xFFFF) == c.gx &&
-                        (c.gy & 0xFFFF) == c.gy
+        at = (me.gx & 65535) != me.gx || (me.gy & 65535) != me.gy ? 3u : 1u;
+        exact = (a.gx & 65535) == a.gx && (a.gy & 65535) == a.gy && (b.gx & 65535) == b.gx &&
+                        (b.gy & 65535) == b.gy && (c.gx & 65535) == c.gx &&
+                        (c.gy & 65535) == c.gy
                     ? 1u
                     : 0u;
     } else if (mode == VU_CLIP_REGION) {

@@ -407,8 +407,13 @@ multiply with a logical shift under FXC, whose product of about 2^26 saturates a
 movie, `yuv.hlsl`; FXC says `X3092: unary negate of unsigned value is still unsigned`). A constant
 that is negated, multiplied by a signed value or shifted right is written as a signed decimal, the
 hex in a comment. A search of `port/shaders` found no other such use. Masks and bit patterns of
-`uint` values may stay hex. `tools/ci_d3d11_warp.sh` fails the job on any `rhi_d3d11: shader
-compiler warnings` line in a test's log.
+`uint` values may stay hex; a hex literal compared with or masked into an `int` (`gx != 0x7FFFFFFF`,
+`gx & 0xFFFF`) draws `X3203: signed/unsigned mismatch` and is written as a decimal too. The backend
+logs each distinct FXC warning text once, and `tools/ci_d3d11_warp.sh` fails the job on any FXC
+warning in a test's log except two FXC-only hints the WARP picture tests prove harmless: `X3556`
+(an integer divide or modulus "may be much slower": the GS arithmetic is signed by design) and
+`X4000` ("potentially uninitialized" on a function that returns from every branch; DXC's `-WX`
+covers real cases).
 
 Integer division and remainder by a value that is not a compile-time constant (`OpSDiv`, `OpSRem`,
 `OpUDiv`, `OpUMod`) have no instruction on the GPUs the port runs on: the driver expands each into
@@ -750,7 +755,7 @@ search; `InitOnceExecuteOnce`), resolves `hlslFile` among the sources, and calls
 that text with the target `vs_5_0` or `ps_5_0`, `D3DCOMPILE_OPTIMIZATION_LEVEL3`, the entry's
 macros plus `ICO_D3D11=1`, and an `ID3DInclude` written as a C vtable whose `Open` hands out the
 embedded text of the file named (by name, else by its last path component) and whose `Close` does
-nothing. Warnings do not fail the compile; the first warning text is logged once. The DXBC is
+nothing. Warnings do not fail the compile; each distinct warning text is logged once (32 at most). The DXBC is
 `malloc`'d for the caller.
 
 **The cache.** One file per shader, `<dir>/<key>.dxbc` (16 hex digits), read before compiling (a
@@ -782,7 +787,7 @@ that is not a DXBC container is a miss, and the compile writes over it
 | `rhi_d3d11: d3dcompiler_47.dll not found or without D3DCompile (error <n>): the Direct3D 11 renderer cannot compile its shaders` | once, instead |
 | `rhi_d3d11: shader <name>: <file> <entry> (<target>) failed to compile (HRESULT 0x...): <compiler message>` | the first eight failures (a shader with no source or malformed macros says so instead) |
 | `rhi_d3d11: <n> shaders failed so far` | every 100th failure after them |
-| `rhi_d3d11: shader compiler warnings (first shader with any, <name>): <text>` | once |
+| `rhi_d3d11: shader compiler warnings (<name>): <text>` | once per distinct text, with the first shader that drew it; 32 at most, then `more shaders warned with other texts than the 32 shown` once |
 | `rhi_d3d11: shader cache <dir> could not be written: the shaders are compiled at every start` | once |
 | `rhi_d3d11: shader cache <dir>: <n> hits, <m> compiles, <k> failed` | `d3d11_shader_stats(dir, &stats, true)`, for the backend to call after the start-up set and at shutdown |
 
