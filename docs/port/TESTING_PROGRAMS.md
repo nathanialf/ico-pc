@@ -613,7 +613,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   is on, from `config.toml` and then from `ico_host_set_second_card`, an explicit `saves2`
   winning, no folder made), portable mode, the `[dev]`
   keys exported as environment switches (`ico_dev_env_value`, `test_dev_env`; `present_fallback`
-  auto, off or fifo; `glow_fold` as `ICO_RD_GLOW_FOLD`), a restart's
+  auto, off or fifo; `glow_fold` as `ICO_RD_GLOW_FOLD`; `submit_thread` as `ICO_RD_SUBMIT_THREAD`,
+  off and false as 0, true as 1, its ini name), a restart's
   `ICO_RD_BLEND` and `ICO_RD_VU_PREPASS` over the ini's (`test_retry_blend`,
   `test_retry_prepass`), the disc choice's rules in order (`ico_host_choose_disc`,
   `test_choose_disc`), the logs folder set by `ico_host_set_logs_dir` (`test_logs_override`), and
@@ -850,7 +851,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   word, a block with no ask, a hold before the rule with no trace, a short buffer cut; the frame
   slots apart, the submit thread's job 0 with `submitOn`, not behind), and the GPU's time between
   timed replays (`testGpuGap`, `PaceGpuGap`: the idle floor of 0.05 ms, an overlap capped at the
-  span, the `window: GPU between replays` part word for word, a short buffer) (`pace_policy`).
+  span, the `window: GPU between replays` part word for word, a short buffer; issue 123: gaps
+  timed across untimed replays counted, the gaps after the presents that blocked listed, one
+  stall, the first 8 of 11 kept) (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
 - `present_fallback_test.c`: the FIFO fallback's decision (`present_fallback.h`): the stock
@@ -874,11 +877,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   again, a new native window or a resume forgetting the ask and the next set made again
   (`DISPLAY_PIN_SET_AGAIN`; none wanted then: nothing asked or said), the pin's lines
   (`display_rate`).
+- `gpu_sysfs_test.c`: the kernel GPU driver's nodes, the pure part (`gpu_sysfs.h`, issue 123): the nodes' texts parsed (`905000000`, `42 %`, leading blanks, a sign, empty, no digit first, a 4 KB text, a buffer read to its length only, digits past a long long's room), Hz to MHz rounded; the ring of 64 (70 samples, the oldest dropped); the 10 s block (the clock's range and mean, busy's mean, the resets in the block against the last before it and from the ring's start, the thermal level's highest, a temperature, only busy read, a steady clock, an empty block); around a present (the sample before, the ones during, the one after, samples exactly at its start and end, none before, none after, nothing read); the open line (the usual readable set, every node denied, the directory missing, nothing present, only the once nodes with errnos named), the block and around lines word for word, a short buffer cut (`gpu_sysfs`).
 - `present_hist_test.c`: the 10 s histogram of the driver's present call (`present_hist.h`): a
   limit is not over itself, a call is counted in every row it is over, issue 123's block
   (750 presents of 9 to 15 ms and five of 344 to 365 ms: 5 in every row), the line word for
-  word, an empty block's empty text, a small buffer cut, negative and NaN times not counted
-  (`present_hist`).
+  word, an empty block's empty text, a small buffer cut, negative and NaN times not counted;
+  the lines around a present that blocked (issue 123), word for word: the blocked line's split
+  (`present_split_text`: a reporter's stall of 359 ms with a 67.9 ms GPU span against the block's
+  26.7, the block's first timed replay, a gap under 0, the call not timed apart, no gap, no GPU
+  span) and the after line (`present_after_text`: the replay after the stall, its gap across one
+  and two untimed replays, no GPU span, a short buffer cut) (`present_hist`).
 - `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
   (`sched`).
@@ -1869,8 +1877,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   every replay counts one upload and one present; without the list and effect stamps
   (`rd__set_perf_list_stamps`) the lists' times are 0, the GPU total is there and the pieces add
   up to it; before any device, the CSV header and line,
-  the top-passes text (with a cut to a short buffer) and the passes-by-kind text, to the byte
-  (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
+  the top-passes text (with a cut to a short buffer) and the passes-by-kind text, to the byte;
+  issue 123's stalled replay against the block's (`rd_perf_pass_grow_text`: a piece 3.1x its
+  mean, one 1.3x, one under 0.05 ms, one new to the block, one not timed; an empty block; every
+  piece over; no GPU span; a cut), the block's mean of a piece (`rd_perf_pass_agg_mean`) and the
+  arm line, a failure of these counted without a device (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`). Its pipelines case holds the reachable set under
   `RD_PIPELINE_REACHABLE_MAX` with both blends, the tile-based GPU's set too (its profile with
@@ -2007,7 +2018,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `rd__enumerate_reachable`; the test fails on a key the set lacks, which on a device is one
   first-use stall (`firstUseLine`), never a wrong picture. The union of the asked keys is left in
   `rd_replay_tool_keys/keys-<config>-<size>.txt` (`rd_replay_tool_keys`).
-- `rd_submit_queue_test.c`: the submit thread's queue (`port/render/rd_submit_queue.h`): jobs run in the order posted, numbered from 1, an empty one refused; at most `RD_SUBMIT_DEPTH` queued and running, the running job counted until it finishes (one at a time, a third post refused meanwhile); the finished jobs' times taken oldest first, once, the oldest dropped and counted past the depth; the longest present since the last take, once (1 ns for a 0 ms present, 0 for a job that presents nothing); the block's means, longest, depth, waits by the render thread and the others, lists submitted on the render thread, cleared by the take with the depth carried for the jobs still queued; the jobs queued and running of each frame slot (a running job counted until it finishes, the other slot's queued job not counted for this one) and the pictures begun beside the other slot's job (`testSlots`) (`rd_submit_queue`).
+- `rd_perf_gap_test.c`: the GPU's time between two timed replays (`port/render/rd_perf_gap.h`, issue 123): the first timed replay has none; a consecutive one's gap; a 340 ms idle GPU across a stall kept; 1.5 s kept with nothing skipped; two replays without timestamps between kept and counted (skipped 2); 61 s and 60 s refused (the replay the last all the same), just under 60 s kept; a first stamp before the one before ended (under 0) kept; a replay number not after the last (a restart) without one, measured from it after (`rd_perf_gap`).
+- `rd_submit_queue_test.c`: the submit thread's queue (`port/render/rd_submit_queue.h`): jobs run in the order posted, numbered from 1, an empty one refused; at most `RD_SUBMIT_DEPTH` queued and running, the running job counted until it finishes (one at a time, a third post refused meanwhile); the finished jobs' times taken oldest first, once, the oldest dropped and counted past the depth, the present timed apart (`presentSplit`, the lock, the driver's call, the poll, the end: issue 123) with them; the longest present since the last take, once (1 ns for a 0 ms present, 0 for a job that presents nothing); the block's means, longest, depth, waits by the render thread and the others, lists submitted on the render thread, cleared by the take with the depth carried for the jobs still queued; the jobs queued and running of each frame slot (a running job counted until it finishes, the other slot's queued job not counted for this one) and the pictures begun beside the other slot's job (`testSlots`) (`rd_submit_queue`).
 - `rd_pipe_finish_test.c`: the background finisher's choices (`rd_pipe_finish.h`): a set of 1196 keys stopped after 33 gives its batches from key 33 in the set's order, 32 a batch, the keys made meanwhile and the failed ones skipped, a batch never mixing keys with and without a destination read (the other kind's key starts the next), every key not made taken exactly once, 37 batches for 1163 keys of one kind (the last of 11), none past the end; the step after a picture: a batch in flight waits, then is taken whatever the memory or a hold; the system's signal ends the finisher, no key left ends it, a hold (late step, slow picture) and a reading under the floor wait until their time, the memory is read only when nothing else holds the batch, then a batch begins; every step's words (`rd_pipe_finish`).
 - `rd_cache_name_test.c`: the Vulkan pipeline cache file's name (`rd_cache_name.h`): two builds' tables of the same modules, each in its own memory, name the same file (no build in the name); one byte of a module changed (its first, a middle one, its last), a module a word longer or shorter, renamed, its stage changed, two swapped, one dropped or added, or `RD_PIPELINE_CACHE_FORMAT` raised each name another; names joined differently do not collide; the form `pipelines-<16 hex digits>.vkcache` (34 characters), a 35-byte buffer taken, 34 and NULL refused; an empty table still names a file (`rd_cache_name`).
 - `rd_bisect_plan_test.c`: the loss bisect's second-level planner against oracles: a draw that

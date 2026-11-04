@@ -103,6 +103,13 @@ bool rhi_present_shown(void)
     return g_gl.presentShown;
 }
 
+/* rhi.h: the present is not timed apart here */
+bool rhi_present_split(RhiPresentSplit *out)
+{
+    memset(out, 0, sizeof(*out));
+    return false;
+}
+
 /* rhi.h: the acquire does not wait (the swap returns at once; FIFO's full
  * queue is waited for in the next frame slot's fence, gl_device.c
  * gl_wait_sync) */

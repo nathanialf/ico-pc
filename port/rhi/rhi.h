@@ -975,6 +975,21 @@ void rhi_present(void);
  * DXGI_STATUS_OCCLUDED (the window minimised or covered: the present did
  * not wait for a vblank). */
 bool rhi_present_shown(void);
+
+/* Where the calling thread's last rhi_present spent its time (issue 123: a
+ * present that blocks for 350 ms on Qualcomm's driver), in ns: lockNs the
+ * wait for the backend's swapchain lock (the window thread's acquire or
+ * rebuild holding it), callNs the driver's present call itself
+ * (vkQueuePresentKHR), pollNs the surface-size poll after it.  Per thread
+ * (the submit thread's or the render thread's present, read right after it
+ * on that thread).  False, *out zeroed: the backend does not time them
+ * apart (OpenGL, Direct3D 11 and 12), or the calling thread's last present
+ * made no call (no swapchain, nothing acquired). */
+typedef struct RhiPresentSplit {
+    uint64_t lockNs, callNs, pollNs;
+} RhiPresentSplit;
+
+bool rhi_present_split(RhiPresentSplit *out);
 /* The wait for room in the present queue that the next
  * rhi_acquire_backbuffer would make, made now: Direct3D 11's frame latency
  * wait (the waitable swap chain, d3d11_swapchain.c; up to 50 ms, as the
@@ -1417,7 +1432,7 @@ void rhi_get_stats(RhiStats *out);
  * that do not wait: rhi_limits, rhi_backend, the adapter calls,
  * rhi_device_lost, rhi_gpu_progress, rhi_frame_slot, rhi_swapchain_format,
  * rhi_swapchain_size, rhi_present_mailbox, rhi_present_mode_name,
- * rhi_present_shown, rhi_present_timing, rhi_present_last_id,
+ * rhi_present_shown, rhi_present_split, rhi_present_timing, rhi_present_last_id,
  * rhi_present_timing_next, rhi_present_statistics (the display line's
  * counts: a present's last, at worst one present old), rhi_present_fifo_fallback_on,
  * rhi_timestamps_supported, rhi_occlusion_supported,

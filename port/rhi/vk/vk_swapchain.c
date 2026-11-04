@@ -1508,6 +1508,21 @@ static VkrFrame *vkr_present_slot(void)
     return best;
 }
 
+/* The calling thread's last present timed apart (rhi.h rhi_present_split):
+ * the lock's wait, vkQueuePresentKHR and the surface poll after it; valid
+ * once the call was made */
+static _Thread_local RhiPresentSplit t_split;
+static _Thread_local bool t_splitValid;
+
+bool rhi_present_split(RhiPresentSplit *out)
+{
+    *out = t_split;
+    if (!t_splitValid) {
+        memset(out, 0, sizeof(*out));
+    }
+    return t_splitValid;
+}
+
 /* defer: the submit thread's present (rhi_slot_guard_worker with the
  * slots apart): what would make the swapchain or the surface again is left
  * to the next acquire (vkr_take_deferred) */
@@ -1543,7 +1558,9 @@ static void vkr_present(bool defer)
     }
     const uint64_t t0 = vkr_now_ns();
     VkResult r = vkQueuePresentKHR(g_vkr.queue, &pi);
-    vkr_late_add(&g_vkr.late.presentNs, vkr_now_ns() - t0);
+    t_split.callNs = vkr_now_ns() - t0;
+    t_splitValid = true;
+    vkr_late_add(&g_vkr.late.presentNs, t_split.callNs);
     vkr_late_add(&g_vkr.late.presents, 1u);
     f->acq.acquired = false;
     f->acq.signalled = false;
@@ -1603,7 +1620,9 @@ static void vkr_present(bool defer)
         vkr_pw_posted(presentId);
     }
     if (!rebuild && (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)) {
+        const uint64_t p0 = vkr_now_ns();
         vkr_poll_surface(defer); /* a size change the present did not report */
+        t_split.pollNs = vkr_now_ns() - p0;
     }
 }
 
@@ -1612,7 +1631,11 @@ static void vkr_present(bool defer)
  * asks for waits for the next acquire */
 void rhi_present(void)
 {
+    const uint64_t l0 = vkr_now_ns();
     vkr_swap_lock();
+    memset(&t_split, 0, sizeof(t_split));
+    t_splitValid = false;
+    t_split.lockNs = vkr_now_ns() - l0;
     vkr_present(g_vkr.slotOverlap && rhi_slot_guard_worker());
     vkr_swap_unlock();
 }

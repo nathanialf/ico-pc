@@ -59,21 +59,37 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
  * write) included */
 #define PACE_GPU_IDLE_NS 50000ll
 
+/* Issue 123: the gaps of the replays right after a present that blocked
+ * (the GPU's time across the stall itself), the first PACE_GPU_GAP_STALLS
+ * of a block kept */
+#define PACE_GPU_GAP_STALLS 8u
+
 typedef struct PaceGpuGap {
     unsigned n;       /* replays with a gap */
     unsigned idle;    /* of them, after an idle GPU */
     unsigned overlap; /* of them, begun before the one before ended */
+    unsigned across;  /* of them, timed across replays without timestamps */
     uint64_t idleNs, idleMaxNs, overlapNs, spanNs;
+    unsigned stalls; /* pace_gpu_gap_stall's, every one counted */
+    int64_t stallNs[PACE_GPU_GAP_STALLS];
 } PaceGpuGap;
 
-/* One replay's span and gap into the block's sums */
-void pace_gpu_gap_add(PaceGpuGap *g, uint64_t spanNs, int64_t gapNs);
+/* One replay's span and gap into the block's sums; skipped: the replays
+   without timestamps between it and the timed one before
+   (RdPerfRecord.gpuGapSkipped; the gap holds their GPU work too) */
+void pace_gpu_gap_add(PaceGpuGap *g, uint64_t spanNs, int64_t gapNs, unsigned skipped);
+/* The gap of the replay after a present that blocked (window_stall.c) */
+void pace_gpu_gap_stall(PaceGpuGap *g, int64_t gapNs);
 
 /* "N timed replays after the one before: the GPU idle before I of them (A
  * ms on average, the longest L ms), K begun before the one before ended
  * (by O ms on average: their spans count that end too); the GPU's time a
- * replay past the one before's end E ms, its span S ms" ("" with none);
- * the length snprintf would write */
+ * replay past the one before's end E ms, its span S ms" ("" with none),
+ * then "; C of them timed across untimed replays" when C is above 0 and
+ * "; across the 3 stalls: the GPU was idle 301.2, 298.0, 310.5 ms before
+ * the next replay" when stalls were noted (past PACE_GPU_GAP_STALLS: "the
+ * first 8 of the 11 stalls"; a gap under 0 reads as its negative); the
+ * length snprintf would write */
 int pace_gpu_gap_text(const PaceGpuGap *g, char *out, unsigned len);
 
 /* ------------------------------------------------------------------------

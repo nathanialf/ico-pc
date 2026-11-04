@@ -59,7 +59,8 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/backup_host.c`, `backup_host.h` | the two rows' host in the window build: the file dialogs, the work on its own thread, the end of the run after a restore (not on iOS) |
 | `port/platform/steam_shortcut.c`, `steam_shortcut.h` | Settings > Extras > Add to Steam (Windows and Linux; not offered on macOS) |
 | `port/platform/gpu_driver.c`, `gpu_driver.h` | Android graphics driver packages (pure C, tested everywhere) |
-| `port/platform/android/` | `main_android.c`, `host_android.c`, `android_paths.c`, `iso_import.c`, `gpu_driver_android.c` |
+| `port/platform/gpu_sysfs.c`, `gpu_sysfs.h` | the kernel GPU driver's nodes for the log, the pure part: the parser, the sample ring, the block and around reductions, the lines (tested everywhere) |
+| `port/platform/android/` | `main_android.c`, `host_android.c`, `android_paths.c`, `iso_import.c`, `gpu_driver_android.c`, `gpu_sysfs_android.c` |
 | `port/platform/ios/main_ios.c`, `ios/Info.plist.in` | the iOS entry point and bundle |
 | `port/platform/macos/Info.plist.in` | the macOS bundle |
 | `port/platform/win/` | the Windows manifest and resource script (`ico_pc.manifest`, `ico_pc.rc`) |
@@ -534,10 +535,16 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   picture's bytes do not change. The queue holds at most two (`RD_SUBMIT_DEPTH`; with the rule
   above one) pictures submitted and not presented, so the GPU's backlog stays the present
   allowance's. A job's submit and present times go into its replay's record when a thread that
-  waited for it takes them (`rd__perf_submit_times`): the replays line keeps its columns, one
+  waited for it takes them (`rd__perf_submit_times`, with the present timed apart: the lock, the
+  driver's call, the poll, its end; issue 123): the replays line keeps its columns, one
   picture late. The thread runs at SDL's high priority (`RdThreadHost.submitBegin`). OpenGL and
-  Direct3D 11 have none (`RhiLimits.singleThreadCommands`); `ICO_RD_SUBMIT_THREAD=0` turns it off
-  for the tests' other arm; `[dev] render_thread = off` or `sync` has none either. Park waits for
+  Direct3D 11 have none (`RhiLimits.singleThreadCommands`); `[dev] submit_thread = false`
+  (`ICO_RD_SUBMIT_THREAD=0`, [CONFIG.md](CONFIG.md)) turns it off, for the tests' other arm and for
+  issue 123's A/B (the presents on the render thread, one picture fewer queued between the walk
+  and the screen, against `[dev] render_thread = off`, everything on the game thread with no slot
+  overlap: a present stall whose length or spacing changes with either is in the port's queue of
+  pictures, one that does not is below the port); `[dev] render_thread = off` or `sync` has none
+  either. Park waits for
   it after the render thread parks (the surface goes after the last present), the stop ends it
   with the host, and the heartbeat counts its job as the last picture's when the render thread has
   none in progress (a present that hangs there ends the run through the GPU hang's path).
@@ -609,7 +616,7 @@ window: render thread: on (interpolation, walk, submit and present off the game 
 window: render thread: on (...; OpenGL, [dev] render_thread = auto; every graphics call on the render thread)
 window: render thread: sync (interpolation, walk, submit and present on the render thread, [dev] render_thread = sync: the game thread waits for each picture)
 window: render thread: off ([dev] render_thread = off)
-rd: submit thread: on (the pictures handed to the render thread are submitted and presented on a thread of their own, Vulkan; ICO_RD_SUBMIT_THREAD=0 keeps them on the render thread)
+rd: submit thread: on (the pictures handed to the render thread are submitted and presented on a thread of their own, Vulkan; [dev] submit_thread = false (ICO_RD_SUBMIT_THREAD=0) keeps them on the render thread)
 rd: submit thread: off (this graphics API takes every call on one thread: the render thread submits and presents its pictures)
 rd: submit thread: the frame slots apart (the render thread's next picture records while the one before is submitted and presented, and waits only for its own slot's picture two before; ICO_RD_SUBMIT_OVERLAP=0 keeps the submit thread's work and the render thread's graphics calls one at a time)
 rd: submit thread: the frame slots one at a time (this graphics API keys its frame slot on one index: the render thread's next picture's first graphics call waits for the submit thread)
@@ -2078,6 +2085,18 @@ other progress for twice that; a movie notes each picture as progress, time insi
 excused for an effects program, and the first limit is doubled when one is loaded
 (`port/platform/diag_host.h` (`ico_diag_start`, `ico_diag_note_progress`);
 `port/platform/main_host.c` (`start_watchdog`)).
+
+The same thread runs a sampler at each of its 250 ms polls while the main thread lives and
+nothing fatal is under way (`ico_diag_set_poll_hook`): on Android the kernel GPU driver's nodes
+under `/sys/class/kgsl/kgsl-3d0/` (the clock from `gpuclk`, `clock_mhz` or the devfreq node's
+`cur_freq`, `gpu_busy_percentage`, `reset_count`, `thermal_pwrlevel`, `temp`), each read by open,
+read and close as `ico_diag_device_memory` reads `/proc/meminfo`, into a ring of 64 samples on the
+monotonic clock the renderer's records use (issue 123; `port/platform/android/gpu_sysfs_android.c`,
+`port/platform/gpu_sysfs.h`). The window probes the nodes once at its open, writes which were
+readable (some devices' SELinux policy denies apps these nodes: `not readable (EACCES)`), and sets
+the hook only when a sampled node is readable; it reads the ring on its own thread under a lock held
+for the copy. The lines are in [DISPLAY.md](DISPLAY.md#the-stats-lines). Nothing is sampled
+elsewhere.
 
 **A wait the system holds.** The hang verdict applies to the game's own code only. The window build
 marks the main thread's calls into the system that run none of the game's code (`SDL_PollEvent`, and

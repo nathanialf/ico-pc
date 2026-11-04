@@ -2293,6 +2293,14 @@ typedef struct RdPerfRecord {
     double totalMs, interpMs, waitMs, acquireMs, uploadMs, walkMs, bindMs, submitMs, presentMs,
         readbackMs;
     double fenceWaitMs; /* the backend's blocked time on GPU completion (inside wait, readback) */
+    /* presentMs timed apart (rhi.h rhi_present_split, Vulkan; presentSplit
+     * 0 elsewhere): the swapchain lock's wait, the driver's present call
+     * (vkQueuePresentKHR), the surface poll after it; presentEndMs the
+     * present's end on rd's monotonic ms clock (startMs's), 0 when nothing
+     * was presented.  The window's lines on a present that blocked (issue
+     * 123, window_stall.c) */
+    uint8_t presentSplit;
+    double presentLockMs, presentCallMs, presentPollMs, presentEndMs;
     uint32_t buffersCreated, buffersDestroyed, texturesCreated, texturesDestroyed;
     uint32_t memoryAllocs, memoryFrees, bindGroups, pipelineBinds, bindGroupBinds;
     /* the binds and state sets the RHI's bind cache found already in force
@@ -2613,16 +2621,18 @@ typedef struct RdPerfRecord {
      * gpuMs counts both) */
     uint8_t gpuBusyValid;
     double gpuBusyMs;
-    /* gpuGapValid: the replay before's record came just before this one
-     * with its timestamps; gpuGapNs this replay's first stamp less that
-     * one's last (the same GPU clock): over 0 the GPU idle between them
-     * (waiting for this replay's submit), under 0 this replay's first
-     * stamp written before the one before ended, so gpuMs counts that end
-     * too (the window's 10 s 'GPU between replays' line, pace_policy.h
-     * PaceGpuGap; the step rule's GPU time a picture is the median of
-     * gpuMs) */
+    /* gpuGapValid: a timed replay came before this one (within 60 s,
+     * rd_perf_gap.h); gpuGapNs this replay's first stamp less that one's
+     * last (the same GPU clock): over 0 the GPU idle between them (waiting
+     * for this replay's submit), under 0 this replay's first stamp written
+     * before the one before ended, so gpuMs counts that end too (the
+     * window's 10 s 'GPU between replays' line, pace_policy.h PaceGpuGap;
+     * the step rule's GPU time a picture is the median of gpuMs);
+     * gpuGapSkipped the replays without timestamps between (their GPU work
+     * is inside the gap then) */
     uint8_t gpuGapValid;
     int64_t gpuGapNs;
+    uint32_t gpuGapSkipped;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
@@ -2691,6 +2701,18 @@ uint32_t rd_perf_passes_of(uint32_t replay, const RdPerfPass **out);
  * piece (the window writes ico-pc-passes.csv) */
 bool rd_perf_passes_mode(void);
 
+/* Issue 123: every replay timed piece by piece from now on (on: the
+ * window's first present that blocked, so the next stall's replay is
+ * timed; ~47 more bottom-of-pipe stamps a replay, no CSV), or back to one
+ * every 250 ms (off).  True when that changed something: timestamps exist
+ * and it was not so already (never on iOS, where pass timing is off).
+ * Any thread; the render thread reads it at its next replay. */
+bool rd_perf_passes_arm(bool on);
+/* "every replay timed pass by pass from here (a present blocked 359 ms at
+ * replay 2941): the next stalled replay's passes are compared with the
+ * block's" (the window's line, once) */
+int rd_perf_passes_arm_text(uint32_t replay, double presentMs, char *buf, size_t n);
+
 /* The CSV of the pieces (the window's ico-pc-passes.csv): the header line
  * and one piece's line, each with its newline; the length written, as
  * snprintf */
@@ -2739,6 +2761,34 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n);
  * where the pieces bound some); the length of the text in buf (cut to fit
  * n) */
 int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_t n);
+/* The block's mean GPU time of one piece like p (same kind, target, list,
+ * effect and size: rd_perf_pass_agg_add's entry), ms a piece; false when
+ * the block has none like it */
+bool rd_perf_pass_agg_mean(const RdPerfPassAgg *a, const RdPerfPass *p, double *ms);
+/* Issue 123: a timed replay whose present blocked against the block's
+ * timed replays before it (a, without it), the window's line:
+ *   "stalled replay 2941 (present 352 ms, GPU 71.3 ms against the block's
+ *   27.0): the first pass 52.1 ms (the block's 1.2: it waits for the
+ *   display's image), the other 46 timed passes 27.0 ms (the block's 25.8);
+ *   list 0 SCENE 3048x2032 52.1 ms (the block's 1.2), ...; 31 of 47
+ *   passes over 2x their block mean, the rest within 1.3x (16 timed
+ *   replays in the block so far)"
+ * first its first render pass apart (the GPU's wait for the display's
+ * image lands inside it: grown alone, the display held the image) and the
+ * other timed pieces summed against the sum of their block means; then
+ * its `top` most expensive pieces, each with the block's mean of one like
+ * it ("(new to the block)" for one the block has none like), then of its
+ * pieces the block has a mean of 0.05 ms or more for, how many took over
+ * twice that mean and the largest ratio of the rest ("; 12 under 0.05 ms
+ * left out", "; 2 new to the block", "; 1 not timed" for the others).  No
+ * timed replay in the block before it (a empty): the pieces without the
+ * block's means and "no timed replay in the block before it to compare".
+ * gpuValid 0: "GPU not timed"; blockGpuMs under 0 (no GPU span in the
+ * block before it): "GPU 71.3 ms, the block's first". The length of the
+ * text in buf (cut to fit n) */
+int rd_perf_pass_grow_text(const RdPerfPassAgg *a, const RdPerfPass *p, uint32_t count,
+                           uint32_t replay, double presentMs, int gpuValid, double gpuMs,
+                           double blockGpuMs, unsigned top, char *buf, size_t n);
 /* "47.0: render passes 32.0 (lists 9.0, fog 1.0, glow 17.0, ...), DATE
  * snapshot 1.5, ...": RdPerfRecord.passKinds and passEffects summed over
  * `replays` replays, as means (kinds and effects never begun left out); the

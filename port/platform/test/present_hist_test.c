@@ -9,7 +9,13 @@
  *            9-15 ms, five of 344-365 ms: over 20/50/100/300 is 5 each;
  *   text     the line's words, "" for an empty block, a small buffer cut;
  *   bad      negative and NaN times are not counted;
- *   reset    a reset block is empty.
+ *   reset    a reset block is empty;
+ *   split    the blocked line's split (present_split_text) and the after
+ *            line (present_after_text), word for word: a reporter's log's
+ *            stall (replay 2941, 359 ms, GPU 67.9 ms against 26.7 ms), the
+ *            call not timed apart, no GPU span, the block's first timed
+ *            replay, a gap under 0, a gap across untimed replays, no gap,
+ *            a short buffer.
  */
 #include <math.h>
 #include <stdio.h>
@@ -24,6 +30,94 @@ static int failures;
             failures++;                                                                            \
         }                                                                                          \
     } while (0)
+
+static int text_is(const char *got, const char *want)
+{
+    if (strcmp(got, want) != 0) {
+        printf("got:  %s\nwant: %s\n", got, want);
+        return 0;
+    }
+    return 1;
+}
+
+static void split_texts(void)
+{
+    char line[400];
+    PresentStallRec r;
+
+    memset(&r, 0, sizeof r);
+    r.replay = 2941;
+    r.presentMs = 358.8;
+    r.split = 1;
+    r.callMs = 358.6;
+    r.lockMs = 0.02;
+    r.pollMs = 0.04;
+    r.gpuValid = 1;
+    r.gpuMs = 67.9;
+    r.gapValid = 1;
+    r.gapMs = 0.4;
+    present_split_text(&r, 300, 26.7, line, sizeof line);
+    CHECK(text_is(line, "inside vkQueuePresentKHR 358.6 ms, the swapchain lock 0.0 ms, the surface "
+                        "poll 0.0 ms; the replay's GPU span 67.9 ms against the block's 26.7 ms so "
+                        "far, the GPU idle 0.4 ms before it"));
+    /* the block's first timed replay; a gap under 0 */
+    r.gapMs = -1.3;
+    present_split_text(&r, 0, 0.0, line, sizeof line);
+    CHECK(text_is(line, "inside vkQueuePresentKHR 358.6 ms, the swapchain lock 0.0 ms, the surface "
+                        "poll 0.0 ms; the replay's GPU span 67.9 ms (the block's first timed "
+                        "replay), begun 1.3 ms before the one before ended"));
+    /* not timed apart, no gap */
+    r.split = 0;
+    r.gapValid = 0;
+    present_split_text(&r, 12, 30.0, line, sizeof line);
+    CHECK(text_is(line, "the call not timed apart on this graphics API; the replay's GPU span 67.9 "
+                        "ms against the block's 30.0 ms so far, the GPU's time before it not "
+                        "measured"));
+    /* no GPU span: no gap words either */
+    r.gpuValid = 0;
+    r.gapValid = 1;
+    present_split_text(&r, 12, 30.0, line, sizeof line);
+    CHECK(text_is(line, "the call not timed apart on this graphics API; the replay's GPU span not "
+                        "timed"));
+
+    /* the after line: the replay after it, its acquire holding the stall */
+    memset(&r, 0, sizeof r);
+    r.replay = 2942;
+    r.waitMs = 0.3;
+    r.fenceMs = 0.2;
+    r.acquireMs = 298.7;
+    r.gpuValid = 1;
+    r.gpuMs = 26.9;
+    r.gapValid = 1;
+    r.gapMs = 301.2;
+    present_after_text(2941, 352.0, &r, line, sizeof line);
+    CHECK(text_is(line,
+                  "after the present that blocked (replay 2941, 352 ms): replay 2942 waited "
+                  "0.3 ms for its frame slot (fence 0.2), acquired its image in 298.7 ms, GPU "
+                  "span 26.9 ms, the GPU idle 301.2 ms before it"));
+    r.gapSkipped = 1;
+    present_after_text(2941, 352.0, &r, line, sizeof line);
+    CHECK(text_is(line,
+                  "after the present that blocked (replay 2941, 352 ms): replay 2942 waited "
+                  "0.3 ms for its frame slot (fence 0.2), acquired its image in 298.7 ms, GPU "
+                  "span 26.9 ms, the GPU idle 301.2 ms before it (across 1 untimed replay)"));
+    r.gapSkipped = 2;
+    r.gpuValid = 0;
+    present_after_text(2941, 352.0, &r, line, sizeof line);
+    CHECK(text_is(line,
+                  "after the present that blocked (replay 2941, 352 ms): replay 2942 waited "
+                  "0.3 ms for its frame slot (fence 0.2), acquired its image in 298.7 ms, GPU "
+                  "span not timed"));
+    r.gpuValid = 1;
+    present_after_text(2941, 352.0, &r, line, sizeof line);
+    CHECK(strstr(line, "(across 2 untimed replays)") != NULL);
+    /* a short buffer: cut and terminated, the whole length returned */
+    {
+        char small[16];
+        const int n = present_after_text(2941, 352.0, &r, small, sizeof small);
+        CHECK(n > 16 && strlen(small) == 15);
+    }
+}
 
 int main(void)
 {
@@ -81,6 +175,7 @@ int main(void)
         present_hist_text(&h, small, sizeof small);
         CHECK(strlen(small) == 11 && strncmp(small, "present cal", 11) == 0);
     }
+    split_texts();
     printf("present_hist_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

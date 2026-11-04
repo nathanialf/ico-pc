@@ -61,6 +61,7 @@
 #include "window_present.h"
 #include "render_thread.h"
 #include "window_present_fallback.h"
+#include "window_stall.h"
 #include "window_disc.h"
 #include "window_blended.h"
 #include "window_sweep.h"
@@ -1729,6 +1730,7 @@ static void window_attach(int mode)
     /* the window system's answer before the size is read */
     SDL_SyncWindow(s_window);
     window_display_rate_start(s_window); /* the refresh rate in the log (issue 123) */
+    window_stall_gpu_open();             /* Android: the kernel GPU driver's nodes (issue 123) */
     s_fullscreen = window_fullscreen();
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
     if (mode == ICO_WINDOW_BORDERLESS) {
@@ -4340,6 +4342,9 @@ static void perf_passes_add(const RdPerfRecord *r)
     if (n == 0) {
         return;
     }
+    /* a stalled replay against the block's before it joins (window_stall.c) */
+    window_stall_passes(r, &s_perf.passAgg, p, n, s_perf.gpuN,
+                        s_perf.gpuN ? s_perf.gpu / s_perf.gpuN : 0.0);
     rd_perf_pass_agg_add(&s_perf.passAgg, p, n);
     if (!s_perf.passCsvTried) {
         perf_pass_csv_open();
@@ -4420,7 +4425,8 @@ static void slow_replay_longest(void)
 
 /* A present over 50 ms in the driver's present call (RdPerfRecord.presentMs):
    the 10 s count; the line and the FIFO fallback's count in
-   window_present_fallback.c */
+   window_present_fallback.c, the lines around it in window_stall.c (the
+   block's GPU spans so far: this record's not yet added) */
 static void present_blocked(const RdPerfRecord *r)
 {
     char fr[16];
@@ -4428,8 +4434,10 @@ static void present_blocked(const RdPerfRecord *r)
     s_perf.presentBlocked++;
     s_perf.presentBlockedMaxMs =
         r->presentMs > s_perf.presentBlockedMaxMs ? r->presentMs : s_perf.presentBlockedMaxMs;
-    window_fifo_note(r->presentMs, r->replay,
-                     ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)));
+    window_fifo_note(
+        r->presentMs, r->replay, ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)),
+        window_stall_split(r, s_perf.gpuN, s_perf.gpuN ? s_perf.gpu / s_perf.gpuN : 0.0));
+    window_stall_blocked(r);
 }
 
 /* The finished records into the block's sums and the CSV */
@@ -4439,6 +4447,7 @@ static void perf_drain(void)
     double refreshMs = -1.0; /* the slow-replay threshold, read at the first record */
 
     window_video_memory_watch();
+    window_stall_poll(); /* the kernel GPU driver around the presents that blocked */
     while (rd_perf_pop(&r)) {
         auto_res_sample(&r);
         if (r.presented && r.gpuValid) {
@@ -4450,7 +4459,8 @@ static void perf_drain(void)
         if (r.presented) {
             present_hist_add(&s_perf.presentHist, r.presentMs);
         }
-        if (r.presented && r.presentMs > 50.0) {
+        window_stall_after(&r, &s_perf.gpuGap); /* the record after a present that blocked */
+        if (r.presented && r.presentMs > WINDOW_STALL_MS) {
             present_blocked(&r);
         }
 #ifdef ICO_IOS
@@ -4508,7 +4518,8 @@ static void perf_drain(void)
             }
             s_perf.gpuPostPartial += r.gpuPostPartial;
             if (r.gpuGapValid) {
-                pace_gpu_gap_add(&s_perf.gpuGap, (uint64_t)(r.gpuMs * 1e6), r.gpuGapNs);
+                pace_gpu_gap_add(&s_perf.gpuGap, (uint64_t)(r.gpuMs * 1e6), r.gpuGapNs,
+                                 r.gpuGapSkipped);
             }
         }
         s_perf.draws += r.draws;
@@ -4663,6 +4674,7 @@ static void perf_log(void)
         if (present_hist_text(&s_perf.presentHist, hist, sizeof(hist)) > 0) {
             fprintf(stderr, "window: %s\n", hist);
         }
+        window_stall_gpu_block(); /* Android: the kernel GPU driver's block */
         window_display_rate_line(s_window);
     }
     if (s_perf.gpuN) {

@@ -646,6 +646,11 @@ static const struct {
        as before) or sync (on, the game thread waiting for each picture: the
        A/B; port/platform/render_thread.c, frame_mailbox.c fm_mode_choose) */
     {"dev.render_thread", "render_thread"},
+    /* false: the render thread submits and presents its pictures itself
+       instead of handing them to the submit thread (issue 123's A/B: the
+       pictures' queue one shorter; port/render/rd_submit_thread.c
+       rd__submit_thread_start) */
+    {"dev.submit_thread", "submit_thread"},
     /* false: on Android the render thread and the submit thread are left
        where the system places them instead of kept to the faster cores (a
        diagnostic escape, not a performance switch; port/platform/
@@ -769,6 +774,9 @@ static const struct {
     /* port/platform/window_display_rate.c: auto or off (display_rate.h
        display_pin_mode) */
     {"frame_rate_pin", "ICO_FRAME_RATE_PIN"},
+    /* port/render/rd_submit_thread.c rd__submit_thread_start: 0 submits and
+       presents on the render thread */
+    {"submit_thread", "ICO_RD_SUBMIT_THREAD"},
     /* port/platform/window_host.c: "lazy" skips the start-up set,
        "careful" makes it under the careful policy */
     {"pipeline_set", "ICO_PIPELINE_SET"},

@@ -92,16 +92,18 @@ const char *window_fifo_words(void)
     return words;
 }
 
-void window_fifo_note(double presentMs, unsigned replay, const char *framerateName)
+void window_fifo_note(double presentMs, unsigned replay, const char *framerateName,
+                      const char *split)
 {
     if (presentMs > 250.0) {
         const RhiLimits *l = rhi_limits();
         ico_log_limited("window: present blocked",
                         "window: a present blocked %.0f ms in the driver's present call (replay "
-                        "%u; %s on %s, %s; present %s, framerate %s)",
+                        "%u; %s on %s, %s; present %s, framerate %s)%s%s",
                         presentMs, replay, rhi_backend_kind_name(rhi_backend()), rhi_adapter_name(),
                         l && l->driverText ? l->driverText : "driver unknown",
-                        rhi_present_mode_name(), framerateName);
+                        rhi_present_mode_name(), framerateName, split && split[0] ? ": " : "",
+                        split ? split : "");
     }
     const int got = ico_present_fallback_note(&s_fallback, SDL_GetTicksNS(), presentMs, gate());
     char line[512];

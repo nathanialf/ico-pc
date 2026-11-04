@@ -11,6 +11,7 @@ target_sources(ico_platform PRIVATE
     frame_mailbox.c
     game_data_range.c
     gpu_hang.c
+    gpu_sysfs.c
     hotkeys.c
     kernel_host.c
     pace_policy.c
@@ -125,6 +126,9 @@ endif()
 # decisions (display_rate.c, issue 123)
 # present_hist: the 10 s block's histogram of the driver's present call
 # (present_hist.c, issue 123)
+# gpu_sysfs: the kernel GPU driver's nodes, the pure part (gpu_sysfs.c, issue
+# 123): the parser over the nodes' texts, the ring, the block and around
+# reductions, the three lines word for word
 # present_fallback: the FIFO fallback's decision over a log's present blocks
 # under mailbox, the driver's eligibility, the [dev] value and the lines
 # (present_fallback.c)
@@ -134,7 +138,7 @@ endif()
 # numbers under a fake clock, the [dev] render_thread mode
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
           gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
-          present_fallback frame_mailbox display_rate present_hist)
+          present_fallback frame_mailbox display_rate present_hist gpu_sysfs)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
