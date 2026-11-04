@@ -1403,8 +1403,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   folder>`, machine-local: six corpus dumps at the gate's Enhanced 2x 4:3 against
   `build-host/tmp/v095/after/w3/pd`, and five of the PowerVR phone's frames at its Resolution Auto,
   2364x1080 at 2.189 under its profile's fakes, against `build-host/tmp/v098/evidence/cheap/base-phone`)
-  replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0` (the
-  baselines' own): the stats line says `crack fill on: P passes` (P 0 where the fill was the
+  replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+  ICO_RD_CULL=off` (the baselines' own: they replayed every draw, and the draws the visibility
+  test leaves out keep every pixel but take their copies with them, so the phone's copy count is
+  the baseline's minus one only with every draw replayed; the culler's own gate is `rd_cull_ab`):
+  the stats line says `crack fill on: P passes` (P 0 where the fill was the
   first draw of the aura's paste pass, else 1) and `1 fills after lists 4-6`,
   or, on a dump with no fog of SCENE above 1x (`0 passes, 0 pixels filled (0 replays counted;
   scale 0x0, ...; 0 fogged replays above 1x not filled; 0 fills after lists 4-6`: the v3086 and
