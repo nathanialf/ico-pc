@@ -18,3 +18,4 @@
 - Русский (bob-ttz): 59 more rows translated.
 - With Language set to a translation by players, the game's own menu words (New Game, Continue, the saves' places) now follow the Menu language like the rest of the menus (fix by cobra838).
 - The Russian "Continue" on the title screen fits its row (fix by cobra838).
+- With Shadow speed above Original, the shadows turn as quickly as they move, so they no longer circle a portal before entering it.
