@@ -757,6 +757,7 @@ static void dx_fill_limits(void)
     o->stencilGather = false; /* X32_TYPELESS_G8X24_UINT: no gather (as D3D11) */
     o->vuFallbackPlain = NULL;
     o->carefulPipelines = NULL;
+    o->serialPipelines = NULL;
     o->compilerVersion = NULL;
 }
 

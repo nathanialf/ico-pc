@@ -2257,7 +2257,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (the bind cache off, [RHI.md](RHI.md#the-bind-cache)): the bind cache cell then wants no skip,
   the repeats' pipeline binds recorded (6 more) and the group binds the same, the same exact
   pictures; the dynamic state cell's repeats send every command again (none counted) and the
-  dual-source leftover cell counts 3 commands and no leftover.
+  dual-source leftover cell counts 3 commands and no leftover. `rhi_vk_serial` runs them under
+  `ICO_VK_FAKE_SERIAL=1` (one compile at a time, issue 188): `RhiLimits.serialPipelines` set, the
+  batch and the background set on one thread each, and a pipeline made on the test's thread while
+  the background set compiles (the lock taken by both).
 - `rhi_d3d12_plan_test.c`: the D3D12 backend's state and barrier bookkeeping on the CPU
   (`rhi_d3d12_plan`).
 - `rhi_d3d11_shader_plan_test.c`: the Direct3D 11 backend's shader route on the CPU
@@ -2294,7 +2297,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   issue 163 tablet's `Mesa 26.3.0-devel (git-a995eaeda4)` as devel, a release, a distribution's `25.0.7-2`
   as no devel, a release candidate (`-rc` with a number), `mesa-25.1`, `MESA v24.2.8-DEVEL`, a bare version under a Mesa name, a Mesa word with
   no number then one with it; Qualcomm's compiler text, NVIDIA's version, empty, a lone major and NULL give
-  none; a short buffer) and `rhi_text_one_line` (Qualcomm's driver text with newlines on one line, issue 123) (`rhi_driver_version`).
+  none; a short buffer), `rhi_text_one_line` (Qualcomm's driver text with newlines on one line, issue 123) and
+  `rhi_driver_compiler_serial` (issue 188: the issue 188 log's PowerVR B-Series text at Vulkan 1.1
+  and the driver name alone at 1.3 give `PowerVR B-Series`, a Rogue text at 1.1 `PowerVR, Vulkan
+  1.1`; the D-Series DXT-48's text at 1.4, an unknown version, Qualcomm naming a B-Series and Mali
+  give none) (`rhi_driver_version`).
  `rhi_adapter_match_test.c`: the `[video] adapter` rules (`port/rhi/rhi_adapter.c`): the exact
   name's index, the first of two equal names, no match for another case, a part of a name, a
   longer name, `""`, NULL or a NULL entry; the device-list text with and without scores, the

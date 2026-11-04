@@ -760,6 +760,13 @@ typedef struct RhiLimits {
      * rd_set_pipeline_policy (small batches on one thread, the cache written
      * after each, the set stopped past a memory budget; port/render/rd.h). */
     const char *carefulPipelines;
+    /* Why this device's pipelines are compiled one at a time ("PowerVR
+     * B-Series": the driver's compiler is not thread-safe, issue 188;
+     * rhi_driver_version.h rhi_driver_compiler_serial), NULL otherwise:
+     * Vulkan then compiles on one thread, under one lock with shader module
+     * creation, and the window's pre-game pipeline limit is 60 s
+     * (port/platform/gpu_hang.h ico_pipe_stall_limit_s). */
+    const char *serialPipelines;
     /* Indexed draws: the largest index value a draw may use (Vulkan
      * maxDrawIndexedIndexValue: 2^32 - 1 with fullDrawIndexUint32, at
      * least 2^24 - 1 without; D3D12 every 32-bit value), and whether the

@@ -143,6 +143,11 @@ workers' own times (`RhiPipelineBatch.ms`): `pipelines: the slowest: <s> s <key>
 slowest compiles) and `pipelines: compile time by vertex shader: <entry> <s> s, ...` (summed over
 the threads, the largest first) (`port/render/rd.h` (`rd_precreate_pipelines`,
 `RdPipelineProgressFn`, `rd_precreate_longest_ms`); `port/render/rd_pipeline.c` (`preTimesLog`)).
+On a PowerVR B-Series driver (and any PowerVR below Vulkan 1.3) the batches compile on one thread
+and every module and pipeline creation, the background finisher's and a first use's included,
+takes one lock (`RhiLimits.serialPipelines`, `rhi_vk: pipelines: one at a time (PowerVR B-Series:
+the driver's compiler is not thread-safe)`; issue 188; [RHI.md](RHI.md#the-interface), **One
+compile at a time**), so the line reads `compiled on 1 thread`.
 At start the renderer logs the embedded modules' count and the largest, `shaders: <n> modules,
 largest <entry> <words> words`: a driver's compile time grows with a module's size, which
 `spirv_check` holds to a budget ([SHADERS.md](SHADERS.md#the-envelope); `port/render/rd_replay.c`).
