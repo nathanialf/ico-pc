@@ -246,9 +246,10 @@ since the projection does not change with the width. What the port then draws of
    test](#the-card-test), `vu_strip_card`). A wall whose strip passes or is joined is drawn; an
    artist's card parked at the picture's edge stays out.
 6. A vertex behind the eye and reaching into the picture: not drawn in any state.
-7. The side bands (issue 29), last, on every triangle steps 4 to 6 drop (after the card test and,
-   between two ticks, the ticks' rescue): on a frame wider than the camera's picture, a triangle
-   that faces the eye is drawn clipped as in step 3, but only beside the picture
+7. The side bands (issue 29), last, on every triangle steps 4 and 6 drop at the draw's own camera
+   (after, between two ticks, the ticks' rescue; not a card, step 5's drop: below): on a frame
+   wider than the camera's picture, a triangle that faces the eye is drawn clipped as in step 3,
+   but only beside the picture
    (`VU_RULE_CLIP_BESIDE`, `vu_rule_beside`): `VuVSOut.plane.y` is 1 on it and `vu_pixel_tests`
    discards its pixels in the picture's columns (`vu_pixel_in_picture`: the half-open range of
    the 4:3 frame's own columns; the exact viewport puts a GS integer coordinate on a texel's
@@ -259,7 +260,14 @@ since the projection does not change with the width. What the port then draws of
    at 48:9: water at the old bridge, walls beside the camera; no 48:9 capture has yet confirmed that
    a given spot is this case, [DIVERGENCES.md](DIVERGENCES.md)). A triangle that faces away keeps the
    drop everywhere (the opening's cliff `st26a_p1` is expected to show the eye its back faces from
-   inside the rock; not yet checked on a capture). Facing (`vu_front_facing`; CPU mirror
+   inside the rock; not yet checked on a capture). A card keeps the drop beside the picture too:
+   the cards the rule drops are overlays held in front of the camera, which the PS2 never drew in
+   its picture, and drawn only beside it they showed as bars with an edge at the picture's (issue
+   189: near stage 32's exit three triangles of the mist quads `wf_smoke1`, list 5, drawn beside
+   a 16:10 picture left the sides 7 levels lighter; `vu_rule_beside` reads the verdict at the
+   draw's own camera, `own` from `vu_region_rule`, and `vu1ref_region_draw` mirrors it). A drop at
+   the draw's camera (a vertex behind the eye) that a tick sends to the card test is no card there
+   and keeps step 7, as `vu1ref_region_between` has it. Facing (`vu_front_facing`; CPU mirror
    `vu1ref_region_facing`): the sign of the homogeneous determinant of the three corners' h centred
    on GS 2048 (rows `x - 2048 w`, `y - 2048 w`, `w`), which is the eye's side of the triangle's plane
    times the sign of the matrix h is made with and stays exact across `w = 0`; turned by
@@ -303,8 +311,8 @@ than 512, or a scene scale above 1) and `VU_F_BEHIND_EYE` from the frame camera'
 before the lists, by the record stages, with the FrameCB its draws bind: `vu_tri_rule_pre_vs`
 steps 1 to 6 up to the tick cameras (the cut only for a triangle not wholly inside), the card
 test's condition and step 7's (`VU_TF_BESIDE`: the draw has side bands, the frame is wider than the
-picture and the triangle faces the eye, stored where the verdict up to the ticks is a drop or the
-card test), `vu_tri_tick_pre_vs` one tick's `vu_tick_shown` a draw where the blended
+picture and the triangle faces the eye, stored where the verdict up to the ticks is a drop, not
+where it is the card test: a card keeps the drop beside the picture), `vu_tri_tick_pre_vs` one tick's `vu_tick_shown` a draw where the blended
 verdict can be `VU_RULE_DROP` (not under the card test with every corner in front of the eye); the
 triangle's draws
 then resolve the stored verdicts as integers in each corner (`vu_main_vs`: a tick that showed it
@@ -505,8 +513,8 @@ of the x, y and w rows of the draw's model-to-GS matrix (VU memory 16..18, the c
 negative where the projection mirrors the model). The draw line reads `L:I mesh|skinned|grid NAME
 tris T: exact E clip C strip S drop D (behind-eye B, out-of-box X, card K; rescued at a tick R),
 beside N (behind-eye b, out-of-box x, card k) det -|+[; hidden H]; beside N, dropped back D[ (no
-side bands)]`: drop counts the triangles that stay dropped (facing away or edge-on, or the draw has
-no side bands), beside the front-facing drops (`vu1ref_region_facing` with the draw's det sign as
+side bands)]`: drop counts the triangles that stay dropped (facing away or edge-on, a card, or the
+draw has no side bands), beside the front-facing drops other than cards (so its `card k` is 0) (`vu1ref_region_facing` with the draw's det sign as
 `ICO_VU_MIRROR` and the kick's `ICO_VU_MARK_FLIP`). A draw has side bands when the replay's frame is
 wider than 4:3, the bound target's frame is wider than the camera's picture, its mesh's winding
 marks came from normals (`RdMeshRec.facingFrom` not none; never a grid) and `ICO_RD_VU_BESIDE` is
@@ -805,7 +813,7 @@ shaders, every pixel within 1 LSB; and the port's rule over the VU (`vu1ref_regi
 handed to the shader as `doVuDraw` hands them; the CPU's card test (`vu1ref_region_inside`,
 `vu1ref_strip_card`) must agree with the reference on every vertex and strip. The side bands
 (step 7): part a's rule rows (a vertex behind the eye facing the eye and away, out of the box, a
-card, the same at 4:3), the rule between two ticks with a drop beside the picture, and the facing
+card facing the eye, dropped, the same at 4:3), the rule between two ticks with a drop beside the picture, and the facing
 (`vu1ref_region_facing`: winding, a corner at another w, a corner behind the eye, `MIRROR`, `FLIP`,
 edge-on) and the matrix's sign (`vu1ref_region_mirror`); part b's `DEPART_EYE_EDGE` cases (the
 target across the picture's right edge, GS 2272..2336, a vertex behind the eye, normal_c and
@@ -821,7 +829,8 @@ geometry at native widths 512, 688, 1376, 2048 and 2560, in Original 1x and Enha
 checks that the 4:3 columns equal the 512-wide render byte for byte, that a narrower frame is the
 centre of a wider one, that SCENE has no step across either edge of the 4:3 band, the strip test (a
 wall drawn as the PS2 out of the box and clipped in every other state; a card and a behind-the-eye
-strip adding nothing; a card joined to a passing strip or through another packet of its part drawn
+strip adding nothing, and a card facing the eye across the picture's left edge adding nothing beside
+it either (issue 189); a card joined to a passing strip or through another packet of its part drawn
 as the wall; the side bands: a behind-the-eye strip across the picture's left edge with the EE's
 facing table turned to the eye adds pixels beside the picture at W 688 and 2048 and none inside it
 or at 512, turned away none; without a table none, its draw counted in the replay's

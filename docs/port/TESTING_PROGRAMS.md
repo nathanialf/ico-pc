@@ -1336,8 +1336,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rd_sideband_ab.cmake` (issue 29; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule), step 7):
   the region rule's side bands against the PS2's drop on the wide dumps of the machine-local list
   `tools/sideband_dumps.txt` (a path and the dump's own aspect a line: the PowerVR phone's 2.189
-  frames, issue 179's 16:9 frame, issue 182's 16:10 frame, the phone's one 4:3 frame as the
-  control, and the issue-29 48:9 and 16:9 captures when they arrive under
+  frames, issue 179's 16:9 frame, issue 182's 16:10 frame, issue 189's 16:10 frame, the phone's
+  one 4:3 frame as the control, and the issue-29 48:9 and 16:9 captures when they arrive under
   `/primary/dev/ico-dumps/29/`). Every dump at its own aspect, Original 1x and Enhanced 2x:
   `rd_replay_tool --pass-dump` with `ICO_RD_VU_BESIDE=0` (every VU draw keeps the PS2's drop) and
   without, then `tools/cmp_dirs_band.py A B --gs-width W --band-files SCENE.png --fog-from-a`, W the
@@ -1350,6 +1350,22 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rd_sideband_ab`). The dumps from before dump version 15 carry no EE facing table, so their
   prelit meshes have no side bands: only their lit and skinned drops can change there; the fresh
   captures carry the table.
+- `rd_sideband_cards.cmake` (issue 189; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule), step
+  7): the reporter's frame near stage 32's exit (machine-local,
+  `/primary/dev/ico-dumps/189/frame-20261104-120509-v130039.rddump`, GS 624x448 at 16:10), whose
+  only triangles the region rule drops are three of the mist quads' (`wf_smoke1`, draws 5:11 and
+  5:22), cards. At Original 4:3, Enhanced 4:3 2x, Enhanced 16:10 1x and the reporter's settings
+  (Enhanced 16:10 at 1920x1200, full height, Full pixel): `rd_replay_tool --pass-dump` with
+  `ICO_RD_VU_BESIDE=0` and with the side bands, every target and the present byte for byte the same
+  (a card keeps the drop beside the picture; with the cards drawn beside it, the mist there changes
+  SCENE, AA0, DISPLAY and the present even at 4:3, since the dump's frame stays 624 GS pixels wide
+  there and the softening's work buffer reads across the picture's edge); `--stats`'s `side bands: N
+  draws with cards` at least 1; `--region-stats`'s frame line `drop 3 (behind-eye 0, out-of-box 0,
+  card 3; ...)` and `beside 0 (behind-eye 0, out-of-box 0, card 0)`; and on the two 16:10 presents
+  `tools/band_seam.py` (the mean luminance step across each edge of the picture, outside less
+  inside, the edge's own column left out) within 1.5 levels (7.3 and 7.2 with the cards drawn
+  beside the picture; 0.1 with the drop kept, the picture's own column-to-column step). No dump or no device: SKIP. TIMEOUT 900
+  (`rd_sideband_cards`).
 - `rd_vumerge_ab_pixel`, `rd_vufuse_ab_pixel` and `rd_vustage_ab_pixel`: the two scripts above and
   `rd_vustage_ab.cmake` on the frames `rd_pixel`
   leaves (fixture `rd_dump`; the list `rd_pixel_vu_dumps.txt` in the build folder):
@@ -1885,7 +1901,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `rd_native_test.c`: the native frame's centre rule on a synthetic frame at five widths, and in
   case s the region rule's strip test with the side bands (a behind-the-eye strip with the EE's
   facing table turned to the eye: pixels beside the 4:3 picture at W 688 and 2048, the picture's
-  columns the frame without it, nothing at 512; turned away: nothing) (`rd_native`).
+  columns the frame without it, nothing at 512; turned away: nothing; a card across the picture's
+  left edge turned to the eye: nothing at any width, issue 189) (`rd_native`).
 - `rd_perf_test.c`: the renderer's CPU cost per replay and its steady state, and the start-up set
   through `rhi_create_pipelines`: its progress calls (from 0, never back, the total once at the
   end), a stop after the first batch and the rest made by the next call; last, the background
@@ -2392,7 +2409,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   case's sprites through `vu_particle_pre_vs`, and its probe and pictures through `vu_main_vs` or
   `vu_particle_main_vs` and `vu_ps` byte for byte the program entry's (with the same `vu_ps`), the
   probe within the CPU reference's bounds, the mesh, particle and tick-camera cases counted (part
-  b (4)); the side bands (part a's rule, between-ticks and facing rows; part b's `DEPART_EYE_EDGE`
+  b (4)); the side bands (part a's rule, between-ticks and facing rows, a card keeping the drop
+  beside the picture; part b's `DEPART_EYE_EDGE`
   cases at the picture's right edge, turned to the eye and away; every other case drawn with
   `ICO_VU_NO_BESIDE`); the pictures use the plain mapping (no exact viewport), so the planes stay
   the GPU's there (`vu1`, `vu1_mali`).
