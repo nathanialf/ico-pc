@@ -19,6 +19,7 @@ void window_pipe_floor_driver(void)
 
     ico_diag_set_memory_floor_driver(l != NULL ? l->vendorId : 0u,
                                      l != NULL ? l->driverText : NULL);
+    ico_diag_set_pipe_compiler_serial(l != NULL ? l->serialPipelines : NULL);
 }
 
 void window_pipe_finish_start(void)

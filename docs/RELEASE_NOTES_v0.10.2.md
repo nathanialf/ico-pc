@@ -7,3 +7,4 @@
 
 - On phones with a Qualcomm graphics driver and Vsync off, pictures now go to the screen one after another from the start, as the chip maker advises, instead of switching to that only after a few held-back pictures; this is not expected to remove the stutter some of these phones report.
 - Options > Gameplay > Time to rescue Yorda is now set in seconds and changes the whole pull-in; before, only its last moment changed.
+- On phones with an older PowerVR graphics driver (Motorola with a MediaTek Dimensity 7020, for one) the game no longer stops before it starts: the first picture it prepares was a text effect the phone does not need, and the preparing screen now shows while the driver works.

@@ -37,6 +37,7 @@
 #include <string.h>
 #include "fiber.h"
 #include "gpu_hang.h"
+#include "pipeline_skip.h"
 #include "memory_floor.h"
 #include "host_fs.h"
 #include "rd_bisect_plan.h"
@@ -2247,6 +2248,31 @@ static volatile int bg_signal_level;
 void ico_diag_set_memory_floor_driver(unsigned vendor_id, const char *driver_text)
 {
     floor_driver = ico_memory_floor_driver(vendor_id, driver_text);
+}
+
+/* issue 188: the driver's compiles one at a time (the longer pipeline limit
+   before the game starts), and the self-tests in progress */
+static char pipe_serial_why[64];
+static volatile int pipe_serial;
+static volatile int in_selftest;
+
+void ico_diag_set_pipe_compiler_serial(const char *why)
+{
+    const int on = why != NULL && why[0] != '\0';
+    if (on && (!pipe_serial || strcmp(pipe_serial_why, why) != 0)) {
+        snprintf(pipe_serial_why, sizeof pipe_serial_why, "%s", why);
+#ifdef __ANDROID__ /* the limit is the Android watchdog's */
+        ico_diag_log("ico_pc: the pipeline limit before the game starts: %.0f s (%s: its compiles "
+                     "run one at a time), %.0f s in play",
+                     ico_pipe_stall_limit_s(0, 1), pipe_serial_why, ico_pipe_stall_limit_s(1, 1));
+#endif
+    }
+    pipe_serial = on;
+}
+
+void ico_diag_set_selftest(int on)
+{
+    in_selftest = on != 0;
 }
 
 int ico_diag_memory_floor_driver(void)
@@ -5207,13 +5233,40 @@ static const char *os_wait_name(void)
    (window_host.c window_pipeline_skip), and the stall mark makes every
    start of this version take the VU programs' plain entries
    (act_stall_path).  The longest creation any log has shown is 3.4 s (a VU
-   pipeline on a PowerVR phone).  The limit is PIPE_STALL_START_S before the
-   first Main tick (the start-up set) and PIPE_STALL_PLAY_S in play (a lazy
+   pipeline on a PowerVR phone).  The limit is ICO_PIPE_STALL_START_S before the
+   first Main tick (the start-up set) and ICO_PIPE_STALL_PLAY_S in play (a lazy
    run's first-use creation: a Vulkan 1.0-era compiler may take longer than
-   10 s on a VU merge shader; review finding 2). */
-#define PIPE_STALL_START_S 10.0
-#define PIPE_STALL_PLAY_S 30.0
+   10 s on a VU merge shader; review finding 2); before the game starts 60 s
+   on a driver whose compiles run one at a time (issue 188, a PowerVR
+   B-Series driver: ico_diag_set_pipe_compiler_serial), gpu_hang.h
+   ico_pipe_stall_limit_s.  On every driver the limit does not count while
+   the process's memory grew by 2 MB or more since the last heartbeat (the
+   compiler at work, gpu_hang.h ico_pipe_mem_moving: the issue 188 phone
+   went 147, 251, 275, 296 MB before it stood still). */
 static volatile int pipe_stall;
+/* the heartbeat's memory rule (watchdog thread): the last heartbeat's
+   resident KB, whether it grew past the rule's step, by how much, and the
+   times a creation was held by it (the line's first 8, then every 100th) */
+static long pipe_mem_prev_kb = -1;
+static int pipe_mem_moving;
+static long pipe_mem_grew_kb;
+static unsigned pipe_mem_beat, pipe_mem_logged_beat, pipe_mem_holds;
+/* whether the next start prepares the graphics another way (watchdog_fire's
+   box), set with pipe_stall */
+static int pipe_stall_differs = 1;
+
+/* at each heartbeat (the watchdog's thread) */
+static void pipe_mem_heartbeat(void)
+{
+    long rss = -1, peak = -1;
+    if (ico_diag_process_memory(&rss, &peak) != 0) {
+        rss = -1;
+    }
+    pipe_mem_moving = ico_pipe_mem_moving(pipe_mem_prev_kb, rss);
+    pipe_mem_grew_kb = rss >= 0 && pipe_mem_prev_kb >= 0 ? rss - pipe_mem_prev_kb : 0;
+    pipe_mem_prev_kb = rss;
+    pipe_mem_beat++;
+}
 
 /* the stall mark written (the watchdog's thread; the main thread is inside
    the driver) */
@@ -5238,8 +5291,20 @@ static double pipe_stall_step(double now, int counted, const IcoDiagGpu *g)
 {
     static IcoPipeStallWatch w;
     const int creating = act_mode != 0 && ico_pipe_note_creating(activity, g->bg_pipes_left);
-    return ico_pipe_stall_step(&w, now, creating, counted, gpu_hang_limit_ms != 0, activity_seq,
-                               pipes_done, g->bg_pipes_done);
+    if (creating && pipe_mem_moving && pipe_mem_logged_beat != pipe_mem_beat &&
+        gpu_hang_limit_ms != 0) {
+        /* the compiler at work: the limit waits (issue 188) */
+        pipe_mem_logged_beat = pipe_mem_beat;
+        pipe_mem_holds++;
+        if (pipe_mem_holds <= 8 || pipe_mem_holds % 100 == 0) {
+            ico_diag_log("ico_pc: a pipeline creation in progress, the process grew %ld MB since "
+                         "the last heartbeat (the driver's compiler at work): the pipeline limit "
+                         "waits (%u times)",
+                         pipe_mem_grew_kb / 1024, pipe_mem_holds);
+        }
+    }
+    return ico_pipe_stall_step(&w, now, creating, counted && !pipe_mem_moving,
+                               gpu_hang_limit_ms != 0, activity_seq, pipes_done, g->bg_pipes_done);
 }
 #endif
 
@@ -5378,14 +5443,18 @@ static void watchdog_fire(const char *reason)
         const char *note = hang && notefn != NULL ? notefn() : NULL;
 
         snprintf(box, sizeof box, "%s%s%s",
-                 pipe_stall ? "The graphics driver stopped while preparing the graphics, so the "
-                              "game has to close.\n\nStart the game again: it prepares them "
-                              "another way."
-                 : hang     ? "The graphics driver stopped responding while the game was drawing, "
-                              "so the game has to close.\n\nStart the game again. If this "
-                              "happens every time at the same place, please report it at "
-                              "github.com/nathanialf/ico-pc/issues."
-                            : "ICO stopped responding, so it has to close.",
+                 pipe_stall && pipe_stall_differs
+                     ? "The graphics driver stopped while preparing the graphics, so the "
+                       "game has to close.\n\nStart the game again: it prepares them "
+                       "another way."
+                 : pipe_stall ? "The graphics driver stopped while preparing the graphics, so "
+                                "the game has to close.\n\nIf this happens at every start, "
+                                "please report it at github.com/nathanialf/ico-pc/issues."
+                 : hang ? "The graphics driver stopped responding while the game was drawing, "
+                          "so the game has to close.\n\nStart the game again. If this "
+                          "happens every time at the same place, please report it at "
+                          "github.com/nathanialf/ico-pc/issues."
+                        : "ICO stopped responding, so it has to close.",
                  note != NULL && note[0] != '\0' ? "\n\n" : "", note != NULL ? note : "");
         if (note != NULL && note[0] != '\0') {
             flog("ico_pc: the box names the graphics driver route (the device's own Qualcomm "
@@ -5612,6 +5681,9 @@ static void watchdog_loop(void)
         if (now - last_beat >= HEARTBEAT_S) {
             last_beat = now;
             heartbeat(0);
+#ifdef __ANDROID__
+            pipe_mem_heartbeat(); /* the pipeline limit's memory rule */
+#endif
         }
         /* alive while either moves: a Main tick, or the progress a long
            stretch inside one Main tick reports (a movie plays whole inside
@@ -5724,15 +5796,30 @@ static void watchdog_loop(void)
             IcoDiagGpu bg;
             (void)gpu_state(&bg);
             const double stalled = pipe_stall_step(now, poll_counted, &bg);
-            const double stall_lim = ticks == 0 ? PIPE_STALL_START_S : PIPE_STALL_PLAY_S;
+            const double stall_lim = ico_pipe_stall_limit_s(ticks != 0, pipe_serial);
             if (stalled >= stall_lim) {
+                /* the box's "another way" only when the next start does
+                   something else (issue 188: the self-test's pipeline came
+                   first at every start, and every start ended the same) */
+                const int lazyRun = act_mode == ICO_DIAG_ACTIVITY_LAZY;
+                const int skipFam = pipeline_skip_family_of_note(activity) != PIPELINE_SKIP_NONE;
+                const int vuNote = strstr(activity, "vu_") != NULL;
+                pipe_stall_differs = ico_pipe_stall_next_differs(in_selftest, lazyRun, skipFam,
+                                                                 vuNote, act_prev_stall);
                 ico_diag_log("ico_pc: the graphics driver has not returned from creating a "
                              "pipeline for %.0f s (pipelines %u of %u; the background set's "
-                             "compiles: %u returned, %u not; the limit %.0f s %s): the run ends "
-                             "now, in order, so the next start can prepare the graphics another "
-                             "way",
+                             "compiles: %u returned, %u not; the limit %.0f s %s%s%s%s): the run "
+                             "ends now, in order, %s",
                              stalled, pipes_done, pipes_total, bg.bg_pipes_done, bg.bg_pipes_left,
-                             stall_lim, ticks == 0 ? "before the game starts" : "in play");
+                             stall_lim, ticks == 0 ? "before the game starts" : "in play",
+                             pipe_serial ? ", " : "", pipe_serial ? pipe_serial_why : "",
+                             in_selftest ? "; inside the start's self-tests" : "",
+                             pipe_stall_differs
+                                 ? "so the next start can prepare the graphics another way"
+                             : lazyRun ? "and the next start prepares them the same way (this "
+                                         "run made them on first use already)"
+                                       : "and the next start prepares them the same way (the "
+                                         "self-tests run first at every start)");
                 snprintf(reason, sizeof reason,
                          "a pipeline creation has not returned for %.0f s (limit %.0f s)", stalled,
                          stall_lim);

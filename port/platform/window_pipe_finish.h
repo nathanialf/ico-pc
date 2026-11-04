@@ -9,9 +9,11 @@
 #ifndef ICO_PLATFORM_WINDOW_PIPE_FINISH_H
 #define ICO_PLATFORM_WINDOW_PIPE_FINISH_H
 
-/* After rd_init made the device, before the start-up set: the floor's
-   driver class from the device (rhi_limits' vendor id and driver text;
-   diag_host.h ico_diag_set_memory_floor_driver) */
+/* After rd_init made the device, before the self-tests and the start-up
+   set: the floor's driver class from the device (rhi_limits' vendor id and
+   driver text; diag_host.h ico_diag_set_memory_floor_driver), and whether
+   its compiles run one at a time (RhiLimits.serialPipelines; diag_host.h
+   ico_diag_set_pipe_compiler_serial: the longer pipeline limit, issue 188) */
 void window_pipe_floor_driver(void);
 /* After the start-up set and ico_diag_startup_activity_budget_stop: a set
    that stopped at the free-memory floor (not at the system's signal) on

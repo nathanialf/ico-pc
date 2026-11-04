@@ -2236,6 +2236,41 @@ line, the report's `the graphics driver stopped responding (the render thread's 
 finished after a W s wait)`, the box) is the GPU hang's (`port/platform/diag_host.c`
 (`watchdog_loop`, `watchdog_fire`, `render_hang`)).
 
+**The pipeline limit (Android).** A pipeline creation that does not return (issue 161: the
+Retroid Pocket 6's Adreno 740 stayed in one for 18 s while the device's memory fell) ends the run
+in order, with the GPU hang limit on: while the activity note names a creation in progress and
+neither the note, the set's count nor the background set's returned compiles move, the watchdog's
+thread counts the time (`port/platform/gpu_hang.h` (`ico_pipe_stall_step`)), and at the limit logs
+`ico_pc: the graphics driver has not returned from creating a pipeline for N s (pipelines D of T;
+the background set's compiles: R returned, L not; the limit X s before the game starts|in play[,
+<serial reason>][; inside the start's self-tests]): the run ends now, in order, <next>`, writes
+the report, the stall mark (the plain VU shaders for every later start of the version) and the box,
+and exits; the activity file keeps the note, so the next start counts the end (the careful set,
+then the set on first use, [PIPELINES.md](PIPELINES.md#the-start-up-set); a family the note alone
+names left out, `[dev] pipeline_skip`). The limit (`ico_pipe_stall_limit_s`): 10 s before the game
+starts (the self-tests and the start-up set), 60 s there on a driver whose compiles run one at a
+time (`RhiLimits.serialPipelines`, a PowerVR B-Series driver, issue 188, set by the window with the
+floor's driver class, `ico_diag_set_pipe_compiler_serial`, logged once: `ico_pc: the pipeline limit
+before the game starts: 60 s (PowerVR B-Series: its compiles run one at a time), 30 s in play`),
+30 s in play on every driver. On every driver the time does not count while the process's
+resident memory grew by 2 MB or more since the last heartbeat (`ico_pipe_mem_moving`: the
+compiler at work; the issue 188 phone went 147, 251, 275 and 296 MB at its heartbeats before it
+stood still), with a line while a creation is held so (`ico_pc: a pipeline creation in progress,
+the process grew N MB since the last heartbeat (the driver's compiler at work): the pipeline limit
+waits (K times)`, the first 8, then every 100th); the free-memory floor and the system's
+low-memory signal still stop a compiler that grows without end. `<next>` and the box say the next
+start prepares the graphics another way only when it does (`ico_pipe_stall_next_differs`): not
+when the creation was inside the blend and VU pre-pass self-tests, which run first at every start
+whatever the set (the window tells the watchdog, `ico_diag_set_selftest`), nor on a run already
+making its pipelines on first use, unless the note names only a family the renderer can leave out
+or a VU shader while the plain VU shaders are not yet in force: then `and the next start prepares
+them the same way (the self-tests run first at every start)` or `(this run made them on first use
+already)`, and the box asks for a report if it happens at every start (issue 188: every start
+ended the same way inside the self-test while the box promised another way). The window
+shows the start-up screen (`Preparing graphics`) before the self-tests in every branch, the set's,
+the lazy start's and Apply's switch, so a slow first compile is not a black screen
+(`port/platform/window_host.c` (`selftests_screen`)).
+
 The window build logs a stats block every 10 s. A host step longer than `[dev] slow_step_ms`
 (default 8, 0 off) logs a slow-step line ([DISPLAY.md](DISPLAY.md#pacing);
 `port/platform/window_host.c` (`slow_step`); `port/platform/host_loop.h` (`IcoStepProfile`)).

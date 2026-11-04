@@ -437,7 +437,12 @@ set. The family line's last part says which way each went, with the scales. A sc
 makes the key then. At 1080 output lines the overlay's popups draw at 3x, so a 1080p phone keeps
 the overlay's 4 keys while its menus at Resolution Auto (2x) are baked. `rd_state_test`
 `testSheetSet` asserts the counts on a tile-based and a desktop profile at 1x, 2x and 3x and at
-448, 720, 1008 and 1080 output lines, and the line's words. `rd_state_test` `testTilerSet` asserts the families sum to the set's
+448, 720, 1008 and 1080 output lines, and the line's words. The blend self-test, which the window runs before the set behind the start-up
+screen, draws its glyph through `font_sheet_baked_ps` unless `font_sheet_ps` is what it checks
+([RENDER.md](RENDER.md#destination-reads-and-blend-paths), **The blend self-test**), so no start
+compiles `font_sheet_ps` where the set leaves it out. A creation that does not return before the
+game starts ends the run after 10 s, 60 s on a driver whose compiles run one at a time, the time
+held while the process grows ([PLATFORM.md](PLATFORM.md#diagnostics), **The pipeline limit**). `rd_state_test` `testTilerSet` asserts the families sum to the set's
 count and to the count without local read, and prints them for each mode.
 `rd_replay_tool --keys` compares the set with what a replay asks for: the keys the replay names
 (`rd__pipeline_gather`, rounds as the loss bisect's `bisectPipelines`), one line each with its

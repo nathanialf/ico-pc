@@ -588,7 +588,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   from 0; time not counted, paused or asleep, does not add; a limit of 0 never fires), and the
   render thread's watch (`ico_render_hang_step`: a picture that makes 60 pipelines of 250 ms each
   is no hang, nor one inside a single creation for 20 s; with no creation a picture fires once at
-  15 s, counted from the last creation; between pictures nothing counts); pure (`gpu_hang`).
+  15 s, counted from the last creation; between pictures nothing counts), and the pipeline
+  limit's issue 188 rules (`ico_pipe_stall_limit_s`: 10 s before the game starts, 60 s on a driver
+  whose compiles run one at a time, 30 s in play; `ico_pipe_mem_moving` over the issue 188 log's
+  heartbeats: a creation from 4 s fires at 21.75 s under 10 s and 71.75 s under 60 s, counted
+  from the heartbeat after the last growth; `ico_pipe_stall_next_differs`: the self-tests and a
+  lazy run the same way unless a skippable family or a VU shader before the plain ones);
+  pure (`gpu_hang`).
 - `gpu_driver_test.c`: the Android driver packages: `meta.json`, refusals, installs from zips made
   here, the trial marker, the ELF page-size check (`test_pages`: two synthetic ELF64 headers, 4 KB and 16 KB
   aligned, and one with a single 4 KB segment, on a 4 KB and a 16 KB phone; what cannot be read is not
