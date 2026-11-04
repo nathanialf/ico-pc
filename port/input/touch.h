@@ -84,8 +84,16 @@ enum { ICO_TOUCH_SMALL = 0, ICO_TOUCH_MEDIUM = 1, ICO_TOUCH_LARGE = 2 };
 
 /* the Touch controls setting ([input] touch_mode): Off never maps or
    draws; Auto draws with the fades and drops the touches while a gamepad
-   is connected; Always draws at full opacity and maps with a gamepad too */
-enum { ICO_TOUCH_MODE_OFF = 0, ICO_TOUCH_MODE_AUTO = 1, ICO_TOUCH_MODE_ALWAYS = 2 };
+   is connected; Always draws at full opacity and maps with a gamepad too;
+   Always, Start only in scenes is Always, but while a scene or a movie plays
+   only the controls that press Start stay drawn (ico_touch_scene_alpha) */
+enum {
+    ICO_TOUCH_MODE_OFF = 0,
+    ICO_TOUCH_MODE_AUTO = 1,
+    ICO_TOUCH_MODE_ALWAYS = 2,
+    ICO_TOUCH_MODE_ALWAYS_SCENES = 3,
+    ICO_TOUCH_MODE_COUNT
+};
 
 /* the button zones; IcoTouchLayout.button[] and the
    pressed mask (bit 1 << zone) use these */
@@ -439,5 +447,25 @@ int ico_touch_update(IcoTouchState *t, const IcoTouchLayout *l, int mode, int ga
 /* The overlay's opacity for a mode, before the user's opacity setting: 0
    for Off, 1 for Always, ico_touch_opacity for Auto. */
 float ico_touch_mode_opacity(const IcoTouchState *t, int mode, int gamepads, uint64_t nowNs);
+
+/* The Always, Start only in scenes fade: hide is how far the controls other
+   than Start have faded (0 shown, 1 gone; zero-initialised is shown), moved
+   toward its target over ICO_TOUCH_FADE_NS like the Auto fades. */
+typedef struct IcoTouchSceneFade {
+    float hide;
+    uint64_t lastNs;
+    int started; /* the first call has set hide with no fade */
+} IcoTouchSceneFade;
+
+/* Applied to the overlay's copy of the layout (never the mapper's): in mode
+   ICO_TOUCH_MODE_ALWAYS_SCENES with scene set, every control whose pad bits
+   lack ICO_PAD_START (the D-pad, the faces, the shoulders, Select, the stick
+   and the look pad) has its alpha scaled by the fade, so it ends at 0 (not
+   drawn, still mapped); the controls with the Start bit keep their alpha, a
+   Hidden one included (alpha 0 stays 0). Any other mode or scene 0 fades
+   back in. The first call starts at the target without a fade. Returns the
+   fade's hide value after the step. */
+float ico_touch_scene_alpha(IcoTouchLayout *l, IcoTouchSceneFade *f, int mode, int scene,
+                            uint64_t nowNs);
 
 #endif /* ICO_PORT_INPUT_TOUCH_H */

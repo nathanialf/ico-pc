@@ -106,6 +106,8 @@ static int s_touchW, s_touchH;
 static int s_safeX, s_safeY, s_safeW, s_safeH; /* s_safeW 0: the whole output */
 static IcoTouchEnv s_touchEnv;                 /* zero: unknown density, no fold */
 static IcoTouchOverlay s_touchSnap;
+static IcoTouchSceneFade s_sceneFade; /* Always, Start only in scenes */
+static int s_touchScene;              /* a scene or a movie plays (window_host.c, once a pump) */
 /* the layout editor (touch_edit.h) while the Edit layout page is open: the
    fingers go to it, not to s_touch.  Everything here runs on the window
    thread: the events (ico_window_pump -> ico_input_sdl_event), the vsync
@@ -420,7 +422,7 @@ static void touch_found(const char *how)
     s_touch.look_decay = s_bind.mouse_decay;
     ico_touch_set_gamepads(&s_touch, open_pads(), SDL_GetTicksNS());
     fprintf(stderr, "input: touch screen (%s); touch controls %s\n", how,
-            ico_touch_mode_names[s_bind.touch_mode >= 0 && s_bind.touch_mode <= 2
+            ico_touch_mode_names[s_bind.touch_mode >= 0 && s_bind.touch_mode <= 3
                                      ? s_bind.touch_mode
                                      : ICO_TOUCH_MODE_AUTO]);
 }
@@ -839,6 +841,22 @@ void ico_input_sdl_event(const SDL_Event *e)
     }
 }
 
+void ico_input_sdl_set_touch_scene(int scene)
+{
+    scene = scene != 0;
+    if (scene != s_touchScene) {
+        static int s_logged;
+
+        if (++s_logged <= 8 || s_logged % 100 == 0) {
+            fprintf(stderr, "touch: scene %s (touch controls %s)\n", scene ? "begins" : "ends",
+                    ico_touch_mode_names[s_bind.touch_mode >= 0 && s_bind.touch_mode <= 3
+                                             ? s_bind.touch_mode
+                                             : ICO_TOUCH_MODE_AUTO]);
+        }
+    }
+    s_touchScene = scene;
+}
+
 void ico_input_sdl_set_capture(int mode)
 {
     if (mode == s_capture) {
@@ -1050,6 +1068,22 @@ static void touch_step(IcoVirtualPad *v)
                      v, now);
     pct = pct < 0 ? 0 : pct > 100 ? 100 : pct;
     s_touchSnap.layout = s_touchLayout;
+    if (!editing) {
+        /* the overlay's copy only: the mapper and the menu-tap failsafe read
+           s_touchLayout, so a faded control still works */
+        const float was = s_sceneFade.hide;
+        const float after =
+            ico_touch_scene_alpha(&s_touchSnap.layout, &s_sceneFade, mode, s_touchScene, now);
+
+        if ((was == 0.0f) != (after == 0.0f) || (was == 1.0f) != (after == 1.0f)) {
+            static int s_fadeLogged;
+
+            if (++s_fadeLogged <= 8 || s_fadeLogged % 100 == 0) {
+                fprintf(stderr, "touch: Start-only fade %s (%.2f)\n", after > was ? "out" : "in",
+                        (double)after);
+            }
+        }
+    }
     if (editing) {
         /* every control at full strength, nothing pressed or lit */
         memset(&s_touchSnap.info, 0, sizeof(s_touchSnap.info));

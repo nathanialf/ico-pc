@@ -154,6 +154,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_TOUCH_SIZE] = "Dimensione comandi",
     [UI_STR_OPT_TOUCH_OPACITY] = "Opacità comandi",
     [UI_STR_VAL_ALWAYS] = "Sempre",
+    [UI_STR_VAL_ALWAYS_SCENES] = "Sempre, Start solo nelle scene",
     [UI_STR_VAL_SMALL] = "Piccola",
     [UI_STR_VAL_MEDIUM] = "Media",
     [UI_STR_VAL_LARGE] = "Grande",

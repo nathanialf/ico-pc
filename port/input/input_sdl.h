@@ -64,6 +64,10 @@
 void ico_input_sdl_init(const char *config_path);
 void ico_input_sdl_event(const SDL_Event *e);
 void ico_input_sdl_set_capture(int mode);
+/* a scene (la_game_demo) or a movie plays now: Touch controls "Always, Start
+   only in scenes" hides every control but Start while it is set; called once a
+   pump by window_host.c */
+void ico_input_sdl_set_touch_scene(int scene);
 void ico_input_escape(int down, const IcoCaptureState *s);
 void ico_input_sdl_update(void);
 void ico_input_sdl_shutdown(void);

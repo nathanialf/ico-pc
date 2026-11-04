@@ -342,7 +342,14 @@ bindings' like any other source before the stick fix, the mirror and the quantis
   is held for one step; up to 10 fingers at once.
 - **Visibility**: `touch_mode` Off never maps or draws; Auto hides the overlay while a gamepad is
   connected (and drops the touches) and 5 s after the last finger event, with 300 ms fades; Always
-  draws at full opacity and maps with a gamepad too. `touch_opacity` scales the drawing.
+  draws at full opacity and maps with a gamepad too; `always_scenes` is Always, and while the scene
+  flag is set (`ico_input_sdl_set_touch_scene`: `current_layout_id` is the region's `layout_scene`,
+  or `mpegPlay`; `window_host.c` sets it once a pump) every control whose `pad` lacks `ICO_PAD_START`
+  (selected by the bit, so a remapped Start follows) fades to alpha 0 over 300 ms on the overlay's
+  copy of the layout only (`ico_touch_scene_alpha`; the mapper, the Hidden rule and the menu-tap
+  failsafe read the unfaded layout, and the Frame rate counter re-places itself through the
+  alpha > 0 rule). Logged: `touch: scene begins/ends` and `touch: Start-only fade out/in`, the
+  first 8 then every 100th. `touch_opacity` scales the drawing.
 
 `input_sdl.c` wires it: the finger events, cancel on focus loss and backgrounding, the step once a
 vsync (`ico_touch_update`), the layout from the output's size, safe area, density and fold that

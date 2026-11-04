@@ -334,7 +334,7 @@ static int parse_choice(const char *v, const char *const *names, int n)
     return -1;
 }
 
-const char *const ico_touch_mode_names[3] = {"off", "auto", "always"};
+const char *const ico_touch_mode_names[4] = {"off", "auto", "always", "always_scenes"};
 const char *const ico_touch_size_names[3] = {"small", "medium", "large"};
 
 /* Bind `value` to a row of a table; type 0 keys, 1 mouse, 2 gamepad. */
@@ -419,7 +419,7 @@ int ico_bindings_set(IcoBindings *b, const char *key, const char *value)
         } else if (strcmp(key, "mouse_decay") == 0 && parse_float(value, 0.0f, 0.99f, &f) == 0) {
             b->mouse_decay = f;
         } else if (strcmp(key, "touch_mode") == 0 &&
-                   (on = parse_choice(value, ico_touch_mode_names, 3)) >= 0) {
+                   (on = parse_choice(value, ico_touch_mode_names, 4)) >= 0) {
             b->touch_mode = on;
         } else if (strcmp(key, "touch_size") == 0 &&
                    (on = parse_choice(value, ico_touch_size_names, 3)) >= 0) {

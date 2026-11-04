@@ -155,6 +155,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_TOUCH_SIZE] = "觸控大小",
     [UI_STR_OPT_TOUCH_OPACITY] = "觸控不透明度",
     [UI_STR_VAL_ALWAYS] = "一律顯示",
+    [UI_STR_VAL_ALWAYS_SCENES] = "一律顯示，場景中僅開始鍵",
     [UI_STR_VAL_SMALL] = "小",
     [UI_STR_VAL_MEDIUM] = "中",
     [UI_STR_VAL_LARGE] = "大",

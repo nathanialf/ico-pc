@@ -323,7 +323,7 @@ The bindings and the input switches, applied over the defaults at start
 | `mouse_camera_speed` | float | `1.0` | 0.5..10 |
 | `mouse_full_range` | bool | `false` | |
 | `mouse_return` | bool | `true` | |
-| `touch_mode` | string | `"auto"` | `off`, `auto`, `always` |
+| `touch_mode` | string | `"auto"` | `off`, `auto`, `always`, `always_scenes` |
 | `touch_size` | string | `"medium"` | `small`, `medium`, `large` |
 | `touch_opacity` | number | `75` | 10..100 |
 
