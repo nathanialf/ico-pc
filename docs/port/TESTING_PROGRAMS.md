@@ -1992,7 +1992,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `RD_PIPELINE_REACHABLE_MAX` with both blends, the tile-based GPU's set too (its profile with
   local read and the fx plan, the pre-pass off, every state static, Enhanced at 2.8125 x 2.41071:
   1153 keys), that one also inside the RHI's pipeline pool
-  less its headroom (`testPipelines`). Its DATE case replays one frame through the stencil bit
+  less its headroom, and every pipeline the run made in that set (a `font_sheet_ps` key in the set
+  `[dev] sheet_shader` makes: the sheet case draws its 1x frame through it under the switch; the
+  failure names the key's pixel shader) (`testPipelines`). Its DATE case replays one frame through the stencil bit
   and through the snapshot (where the device has local read): one DATE command of two overlapping
   sprites over cells of alpha 0x80 and 0, SCENE the same bytes both ways and the snapshot's
   semantics within the draw (`testDateStencil`; it skips under `ICO_RD_BLEND=storage` and prints
