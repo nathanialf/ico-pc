@@ -48,6 +48,17 @@ int display_rate_text(const DisplayRateWatch *w, int width, int height, const ch
 /* the change's line without "window: " (oldHz and newHz as noted) */
 int display_rate_change_text(double oldHz, double newHz, int width, int height, double runSeconds,
                              unsigned change, char *buf, size_t size);
+/* The 10 s poll on the main thread (SDL's display calls are main-thread
+   calls, and Android posts the display event from its Java thread, so the
+   event watch only counts the events and keeps the last one's run time):
+   hz the rate read now, events the mode-change events SDL posted since the
+   last poll, eventSeconds the run time of the last of them.  Notes hz;
+   returns 1 with a line in buf (without "window: ") when it changed: the
+   change's line at the event's run time when SDL announced one, else
+   "display refresh changed without an event from SDL: B Hz"; 0 (buf "")
+   otherwise. */
+int display_rate_poll(DisplayRateWatch *w, double hz, unsigned events, double eventSeconds,
+                      int width, int height, char *buf, size_t size);
 
 /* --- the pin ------------------------------------------------------------ */
 
@@ -62,19 +73,32 @@ DisplayPinMode display_pin_mode(const char *value);
 int display_pin_rate(int framerate, DisplayPinMode mode);
 
 typedef struct DisplayPin {
-    int asked; /* the rate asked of the system now, 0 none */
+    int asked;           /* the rate asked of the system now, 0 none */
+    const void *surface; /* the native window the ask was made on */
+    int again;           /* the ask was lost with its surface: the next SET says so */
 } DisplayPin;
 
 typedef enum DisplayPinAct {
     DISPLAY_PIN_NOTHING = 0, /* the system already has this ask */
     DISPLAY_PIN_SET,         /* ask for want Hz */
-    DISPLAY_PIN_RELEASE      /* ask for none (the rate was pinned) */
+    DISPLAY_PIN_RELEASE,     /* ask for none (the rate was pinned) */
+    DISPLAY_PIN_SET_AGAIN    /* ask for want Hz again: the surface that held it is gone */
 } DisplayPinAct;
+
+/* The ask is a vote on the Surface: Android destroys the SurfaceView's
+   surface when the app goes to the background and the foreground brings a
+   new native window with no vote.  Before display_pin_next: surface is the
+   native window now (SDL's), resumed true when the app has just come back
+   (the pointer may be reused); a changed surface or a resume forgets the
+   ask (the next display_pin_next asks again, DISPLAY_PIN_SET_AGAIN when a
+   rate had been asked).  Returns 1 when an ask was lost. */
+int display_pin_surface(DisplayPin *p, const void *surface, int resumed);
 
 /* What to do when the ask should be `want` (display_pin_rate) and whether
    the device offers the call; the state is updated as if the call was made
    (display_pin_failed for a call that failed).  A device without
-   the call is never asked. */
+   the call is never asked.  A SET after display_pin_surface lost the ask is
+   DISPLAY_PIN_SET_AGAIN. */
 DisplayPinAct display_pin_next(DisplayPin *p, int want, int deviceOffers);
 /* The system refused the ask (the call's return was not 0): the state keeps
    none, so the next change tries again */

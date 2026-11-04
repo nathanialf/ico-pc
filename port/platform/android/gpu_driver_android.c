@@ -120,9 +120,12 @@ static char s_active[160];  /* its folder */
 /* a driver package was opened for this start (kept after the trial ends),
    and when its first present was (SDL_GetTicks ms, 0 before any): a device
    loss soon after counts like a crash inside it
-   (ico_gpu_driver_android_device_lost) */
-static volatile int s_custom;
-static volatile Uint64 s_firstPresentMs;
+   (ico_gpu_driver_android_device_lost, which the watchdog's thread can
+   call while the main thread presents: SDL atomics; the first present's
+   time in 32 bits of SDL_GetTicks ms, the difference taken modulo 2^32,
+   right for any loss within 49 days of it) */
+static SDL_AtomicInt s_custom;
+static SDL_AtomicU32 s_firstPresentMs;
 
 /* a Java exception from the last call, cleared: 1 when there was one */
 static int clear_exception(JNIEnv *env)
@@ -257,8 +260,8 @@ int ico_gpu_driver_android_start(void)
     rhi_set_vulkan_loader(NULL);
     s_trial = 0;
     s_presents = 0;
-    s_custom = 0;
-    s_firstPresentMs = 0;
+    SDL_SetAtomicInt(&s_custom, 0);
+    SDL_SetAtomicU32(&s_firstPresentMs, 0);
     if (!ico_gpu_driver_android_supported()) {
         /* issue 158: Android 8 (API 26 and 27); the choice is kept for a
            newer system, nothing is written */
@@ -339,7 +342,7 @@ int ico_gpu_driver_android_start(void)
     }
     rhi_set_vulkan_loader(gipa);
     s_trial = 1;
-    s_custom = 1;
+    SDL_SetAtomicInt(&s_custom, 1);
     return 1;
 }
 
@@ -353,8 +356,9 @@ void ico_gpu_driver_android_init_failed(void)
 
 void ico_gpu_driver_android_presented(void)
 {
-    if (s_custom && s_firstPresentMs == 0) {
-        s_firstPresentMs = SDL_GetTicks() | 1u; /* never 0 once set */
+    if (SDL_GetAtomicInt(&s_custom) && SDL_GetAtomicU32(&s_firstPresentMs) == 0) {
+        /* never 0 once set; the first one wins */
+        (void)SDL_CompareAndSwapAtomicU32(&s_firstPresentMs, 0, (Uint32)SDL_GetTicks() | 1u);
     }
     if (!s_trial || ++s_presents < TRIAL_PRESENTS) {
         return;
@@ -374,15 +378,15 @@ void ico_gpu_driver_android_presented(void)
    either way; once a run. */
 void ico_gpu_driver_android_device_lost(void)
 {
-    static int s_done;
+    static SDL_AtomicInt s_done; /* once a run, whichever thread comes first */
     const char *root = driver_root();
 
-    if (!s_custom || s_done) {
+    if (!SDL_GetAtomicInt(&s_custom) || !SDL_CompareAndSwapAtomicInt(&s_done, 0, 1)) {
         return;
     }
-    s_done = 1;
-    const Uint64 first = s_firstPresentMs;
-    const unsigned long long since = first != 0 ? (unsigned long long)(SDL_GetTicks() - first) : 0;
+    const Uint32 first = SDL_GetAtomicU32(&s_firstPresentMs);
+    const unsigned long long since =
+        first != 0 ? (unsigned long long)(Uint32)((Uint32)SDL_GetTicks() - first) : 0;
     if (!ico_gpu_driver_loss_counts(1, since)) {
         fprintf(stderr,
                 "gpu driver: the graphics device was lost %llu ms after the first present under "

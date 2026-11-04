@@ -2122,6 +2122,18 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   no target, a payload or a layout the test does not read, or a bound not finite; lists 11 and 12;
   a pass window (the bisect's and the tool's `--passes`: the passes as recorded) and a frame never
   recorded (number 0: the self-tests' frames).
+- *Under MSAA.* With samples in force (`rd_aa_samples(rd__aa_mode()) > 1`) a draw whose state could
+  close [the MSAA epoch](MSAA.md#where-the-epoch-closes) where the replay of every draw closes it is replayed as
+  recorded (`rd__vis_msaa_may_close`; the reason `kept: may close the MSAA epoch` in the tool's
+  `cull why`): DATE on (the snapshot reads SCENE), a texture that is a view of SCENE (texturing on
+  or off), or a colour and depth pair touching SCENE other than SCENE's own pair (SCENE's colour with
+  another depth, SCENE's depth with another colour). A NOP has no pass and no transition, so
+  skipping such a draw would keep the epoch open past it and multisample the draws up to the real
+  close, which the replay of every draw draws single-sampled (other edge pixels after the
+  covered-majority resolve). The rule holds whether the epoch is open at that draw or not
+  (conservative). `rd_vis` checks it on a recorded frame; `rd_cull_ab` compares byte for byte under
+  MSAA 4x on the first dump and on the dumps of `tools/cull_msaa_dumps.txt`, chosen where the epoch
+  closes inside lists 0 to 2.
 - *The shadow frame.* The skipped commands are left out as the replay tool's `--nop` leaves them:
   the type becomes `RDC_NOP` and every other field, every index and so every ordinal
   (`g_rdStoreOrd`, the pre-pass entries' commands) stays. `rd__vis_frame` returns a copy of the

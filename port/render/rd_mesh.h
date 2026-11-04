@@ -113,6 +113,13 @@ typedef struct RdVuMeshDesc {
      * ICO_VU_MARK_FLIP; the region rule's side bands are off for it) */
     const uint8_t *facing;
     uint32_t facingCount;
+    /* The desc's identity (rd_vu_mesh_desc_hash) when the caller already
+     * has it: rd_vu_facing_attach sets it (the packet's stream hashed once
+     * for the facing store, the model pack's lookup and the record).  0:
+     * rd_create_vu_mesh and rd_create_vu_mesh_replacement compute it.  It
+     * must be the hash of qw as it is when the mesh is made: a caller that
+     * changes the stream after the attach sets it to 0 or attaches again. */
+    uint64_t hash;
 } RdVuMeshDesc;
 
 /* Builds, once:
@@ -157,14 +164,16 @@ bool rd_update_vu_mesh(RdMesh m, const float (*qw)[4]);
  * under d's mesh hash (rd_vu_mesh_desc_hash), so a mesh built again later
  * from the same packet (an eviction, a morph copy, a model pack refusal)
  * finds it; d->facing and d->facingCount are set from the table kept under
- * d's hash (none: left as they are).  A hash two different tables were
+ * d's hash (none: left as they are).  Returns d's hash, also set in
+ * d->hash (0 for a desc rd_create_vu_mesh would refuse), so the caller's
+ * model pack lookup and the mesh's record do not hash the stream again.  A hash two different tables were
  * kept under has none (counted and logged).  The tables live until the
  * process ends (about a bit a vertex of every packet built: the whole
  * disc's geometry is about half a megabyte; the store is emptied past
  * 32 MiB, logged). */
 void rd_vu_facing_begin(void);
 void rd_vu_facing_vertex(int stripFirst, const float *pos, const float *nrm);
-void rd_vu_facing_attach(RdVuMeshDesc *d);
+uint64_t rd_vu_facing_attach(RdVuMeshDesc *d);
 void rd_destroy_vu_mesh(RdMesh m);
 bool rd_vu_mesh_valid(RdMesh m);
 

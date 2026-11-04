@@ -3301,6 +3301,7 @@ void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, co
         snprintf(out->why, sizeof(out->why), "on this device (%s)", lim->vuFallbackPlain);
         out->kind = "plain set by the device table";
         out->brief = lim->vuFallbackPlain;
+        out->noBeside = true;
     } else if (rd__driver_is_turnip(lim)) {
         /* The shape of a gate on the Mesa version (lim->mesa, parsed from the
          * driver's driverInfo, logged in the profile line's "turnip:" note):
@@ -3328,6 +3329,10 @@ void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, co
                  "there, issue 163; [dev] vu_set = extended asks for the extended one)");
         out->kind = "plain set";
         out->brief = "Turnip driver, issue 163";
+        /* the side bands would draw those dropped triangles again, clipped
+         * beside the 4:3 picture (a phone's frame is always wider): the
+         * sliver of a skinned draw would come back there (vuBesideOn) */
+        out->noBeside = true;
     } else if (envPlain) {
         snprintf(out->why, sizeof(out->why),
                  "(vu_set = plain: ICO_RD_VU_SET=plain or ICO_RD_VU_PLAIN=1)");
@@ -3342,6 +3347,7 @@ void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, co
     if (out->plain && envExtended) {
         out->plain = false;
         out->overridden = true;
+        out->noBeside = false;
         out->kind = "extended set by [dev] (vu_set = extended, ICO_RD_VU_SET=extended or "
                     "ICO_RD_VU_EXTENDED=1)";
         out->brief = "";
@@ -3427,6 +3433,10 @@ bool rd__vu_policy_init(const RhiLimits *lim)
     }
     g_rd.vuFallbackPlain = plain;
     g_rd.vuPlainBrief = plain ? choice.brief : NULL;
+    /* the device's plain set (issue 163): no side bands on any VU draw (the
+     * record path, where it is asked for on such a device, included); the
+     * profile line says so */
+    g_rd.vuNoBeside = plain && choice.noBeside;
     for (uint8_t v = RD_VS_VU_PRELIT; v <= RD_VS_VU_PARTICLE; v++) {
         g_rd.vsFallback[v] = plain && g_rd.vsPlain[v].id ? g_rd.vsPlain[v] : g_rd.vs[v];
     }

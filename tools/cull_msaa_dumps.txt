@@ -1,0 +1,18 @@
+# Dump list for the rd_cull_ab ctest's MSAA runs (port/render/test/rd_cull_ab.cmake,
+# -DMSAA_LIST): each dump here is compared byte for byte with every scene draw replayed and
+# with the visibility test, at Enhanced 4:3 2x under --aa msaa4, beside the first dump of the
+# corpus.  Chosen where the MSAA epoch closes inside a list by a read of SCENE (a texture read
+# or a DATE snapshot, rd_replay.c rd__transition), not by the shadow count's pass at a list's
+# start: the visibility test must keep a draw that could close the epoch (rd_vis.c
+# rd__vis_msaa_may_close; docs/port/RENDER.md "Culling", "Under MSAA").  Over the 2026-11-04
+# corpus (tools/occlusion_corpus.txt, tools/native_frame_dumps.txt and the v0.10.1 evidence)
+# no dump closes the epoch inside lists 0 to 2: every gameplay frame closes at list 3 (the
+# shadow count's pass, or a read there), the phone dumps of the GL cull fix at list 12 or never.
+# MACHINE-LOCAL: paths on the maintainer's machine; the dumps are never committed.  Missing
+# files are reported and skipped.  Relative paths are relative to this file; '*' globs are
+# allowed.
+#
+# issue 182's frame (the MSAA report): the epoch closes at list 3 by a read of SCENE
+/primary/dev/ico-pc/build-host/tmp/v0101/evidence/182/frame-20261103-163115-v3225.rddump
+# issue 102's frame (v0.7.9): the epoch closes at list 3 by a read of SCENE
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump

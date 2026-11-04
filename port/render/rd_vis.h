@@ -130,6 +130,14 @@ void rd__vis_init(void);
 int rd__vis_mode(void);
 const char *rd__vis_mode_name(int mode);
 void rd__vis_set_mode(int mode);
+/* A test's MSAA state for the walk (1: as with samples in force, 0: as
+ * without, -1: rd__aa_mode's again) */
+void rd__vis_set_msaa(int on);
+/* Whether st's draw could close the MSAA epoch (MSAA_EPOCH above): DATE
+ * on, a texture that is a view of SCENE (texturing on or off: conservative),
+ * or a pair touching SCENE (colour or depth) other than SCENE's own (SCENE's
+ * colour with SCENE's depth or none) */
+bool rd__vis_msaa_may_close(const RdStateBlock *st);
 
 /* The frame the replay walks (rd_replay.c replayFrame): f itself when the
  * mode is off, a pass window is set (the bisect and the tool's --passes
@@ -183,7 +191,13 @@ void rd__vis_counts(RdVisCounts *out);
  *     KEEP_SCISSOR (a mesh under the scissor code), KEEP_MESH_N (a mesh draw
  *     of several batches), KEEP_MESH_1 (one batch), KEEP_NONE (a mesh or grid
  *     under code 34: never skipped by the frustum test, whose X and Y wrap,
- *     only a candidate for the occlusion test). */
+ *     only a candidate for the occlusion test);
+ *   exempt under MSAA: MSAA_EPOCH (anti-aliasing with samples in force: a
+ *     draw whose state could close the MSAA epoch where the replay of every
+ *     draw would close it: DATE on, a texture that is a view of SCENE, or
+ *     a colour and depth pair touching SCENE that is not SCENE's own pair;
+ *     a NOP's pass and transitions never happen, so skipping it would move
+ *     the close and the edges of every draw up to the real close). */
 enum {
     RD_VIS_WHY_SKIP_WHOLE = 0,
     RD_VIS_WHY_SKIP_RANGE,
@@ -204,6 +218,7 @@ enum {
     RD_VIS_WHY_KEEP_MESH_1,
     RD_VIS_WHY_KEEP_NONE,
     RD_VIS_WHY_OCCLUDED,
+    RD_VIS_WHY_MSAA_EPOCH,
     RD_VIS_WHY_COUNT
 };
 

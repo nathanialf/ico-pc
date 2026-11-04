@@ -9,7 +9,10 @@
  *            changes, counted;
  *   lines    the block's line (the rate, the size, the display's name, the
  *            run time, "1 change"/"2 changes"), a rate not known, the
- *            change's line; a small buffer cut;
+ *            change's line; a small buffer cut; the 10 s poll
+ *            (display_rate_poll): no change nothing, an event without a
+ *            change nothing, a change SDL announced at the event's time, one
+ *            it did not with its own line, an unknown rate nothing;
  *   mode     [dev] frame_rate_pin: auto for NULL, "", "auto" and a value not
  *            read; off for off, false, 0, no in any case;
  *   rate     the Frame rate row 60, 120, 144 asks that rate; Original (0)
@@ -18,9 +21,14 @@
  *   pin      the sequence 60 (set) -> 60 (nothing) -> 120 (set) -> Uncapped
  *            (release) -> Uncapped (nothing); a device without the call is
  *            never asked and its state stays; a refused ask is asked again
- *            at the next change of the call;
+ *            at the next change of the call; the surface: a new native
+ *            window pointer or a resume (the pointer reused) forgets the
+ *            ask, the next set is DISPLAY_PIN_SET_AGAIN; a resume with no
+ *            rate asked, or the row turned to Uncapped before the next call,
+ *            asks and says nothing; a device without the call is never asked;
  *   text     the pin's line for a set (rate, row, call, return, "(refused)"
- *            for a return other than 0) and a release.
+ *            for a return other than 0), a set again for a new surface and
+ *            a release.
  */
 #include <stdio.h>
 #include <string.h>
@@ -70,6 +78,23 @@ static void testWatch(void)
         display_rate_text(&w, 1, 1, NULL, 0.0, small, sizeof small);
         CHECK(strlen(small) == 9);
     }
+    /* the 10 s poll (the event watch only counts): a change SDL announced
+       is written at the event's time, one it did not as before, none
+       nothing */
+    {
+        DisplayRateWatch p = {0};
+
+        CHECK(display_rate_poll(&p, 144.0, 0, 0.0, 3048, 2032, line, sizeof line) == 0);
+        CHECK_STR(line, "");
+        CHECK(display_rate_poll(&p, 144.0, 1, 12.0, 3048, 2032, line, sizeof line) == 0);
+        CHECK(display_rate_poll(&p, 60.0, 2, 85.2, 3048, 2032, line, sizeof line) == 1);
+        CHECK_STR(line, "display refresh changed: 144.00 Hz -> 60.00 Hz, 3048x2032 (run time "
+                        "85.2 s, change 1 of this run)");
+        CHECK(display_rate_poll(&p, 120.0, 0, 85.2, 3048, 2032, line, sizeof line) == 1);
+        CHECK_STR(line, "display refresh changed without an event from SDL: 120.00 Hz");
+        CHECK(p.changes == 2 && p.hz == 120.0);
+        CHECK(display_rate_poll(&p, 0.0, 1, 90.0, 3048, 2032, line, sizeof line) == 0);
+    }
 }
 
 static void testPin(void)
@@ -110,6 +135,41 @@ static void testPin(void)
     CHECK(p.asked == 0);
     CHECK(display_pin_next(&p, 60, 1) == DISPLAY_PIN_SET);
 
+    /* the surface: a new native window holds no vote (the app came back) */
+    {
+        DisplayPin q = {0};
+        int a = 1, b = 2;
+
+        CHECK(display_pin_surface(&q, &a, 0) == 0); /* the first surface: nothing asked yet */
+        CHECK(display_pin_next(&q, 60, 1) == DISPLAY_PIN_SET && q.asked == 60);
+        CHECK(display_pin_surface(&q, &a, 0) == 0 && q.asked == 60); /* the same: kept */
+        CHECK(display_pin_next(&q, 60, 1) == DISPLAY_PIN_NOTHING);
+        /* a new pointer: the ask lost, made again and said so */
+        CHECK(display_pin_surface(&q, &b, 0) == 1 && q.asked == 0);
+        CHECK(display_pin_next(&q, 60, 1) == DISPLAY_PIN_SET_AGAIN && q.asked == 60);
+        CHECK(display_pin_next(&q, 60, 1) == DISPLAY_PIN_NOTHING);
+        /* a resume with the pointer reused: asked again all the same */
+        CHECK(display_pin_surface(&q, &b, 1) == 1 && q.asked == 0);
+        CHECK(display_pin_next(&q, 60, 1) == DISPLAY_PIN_SET_AGAIN);
+        /* a resume with no rate asked: nothing to ask, nothing said */
+        CHECK(display_pin_next(&q, 0, 1) == DISPLAY_PIN_RELEASE && q.asked == 0);
+        CHECK(display_pin_surface(&q, &a, 1) == 0);
+        CHECK(display_pin_next(&q, 0, 1) == DISPLAY_PIN_NOTHING && q.again == 0);
+        CHECK(display_pin_next(&q, 120, 1) == DISPLAY_PIN_SET); /* a plain ask after */
+        /* lost, then the row turned to Uncapped before the next call: no
+           release on the new surface, and the later ask is a plain one */
+        CHECK(display_pin_surface(&q, &b, 1) == 1);
+        CHECK(display_pin_next(&q, 0, 1) == DISPLAY_PIN_NOTHING && q.again == 0);
+        CHECK(display_pin_next(&q, 60, 1) == DISPLAY_PIN_SET);
+        /* a device without the call: lost, never asked */
+        CHECK(display_pin_surface(&q, &a, 1) == 1);
+        CHECK(display_pin_next(&q, 60, 0) == DISPLAY_PIN_NOTHING && q.asked == 0);
+    }
+
+    display_pin_text(DISPLAY_PIN_SET_AGAIN, 60, 60, "ANativeWindow_setFrameRate", 0, line,
+                     sizeof line);
+    CHECK_STR(line, "frame rate pin: asked again for a new surface: 60 Hz (fixed source; the "
+                    "Frame rate row is 60) with ANativeWindow_setFrameRate: returned 0");
     display_pin_text(DISPLAY_PIN_SET, 60, 60, "ANativeWindow_setFrameRate", 0, line, sizeof line);
     CHECK_STR(line, "frame rate pin: asked 60 Hz (fixed source; the Frame rate row is 60) with "
                     "ANativeWindow_setFrameRate: returned 0");

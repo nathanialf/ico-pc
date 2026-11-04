@@ -87,7 +87,19 @@
  * largest within the budget); then the walk keeps the record of list 0's
  * depth as it goes (hizCommand, hizDraw): each draw of list 0 the frustum
  * test keeps is tested against what the draws before it wrote, then its
- * own triangles go in, and whatever may lower the depth resets it. */
+ * own triangles go in, and whatever may lower the depth resets it.
+ *
+ * Under MSAA (rd_aa_samples(rd__aa_mode()) > 1) the replay draws SCENE's
+ * passes into SCENE_MS until the first command that touches SCENE's own
+ * colour or depth outside such a pass closes the epoch (rd_replay.c
+ * rd__transition: a DATE snapshot, a texture read of SCENE; msaaPass: a
+ * pass on SCENE's colour with another depth, or SCENE's depth with another
+ * colour).  A NOP has no pass and no transition, so a skipped draw that
+ * would have closed it moves the close later and the draws between are
+ * multisampled where the replay of every draw drew them single-sampled
+ * (different edge pixels after the covered-majority resolve).  The walk
+ * keeps every such draw under MSAA (rd__vis_msaa_may_close; MSAA_EPOCH),
+ * whether or not the epoch is open there: conservative. */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -493,7 +505,30 @@ static struct {
     int whyCur;                     /* the command being decided */
     uint32_t hz[RD_VIS_HZ_COUNT];   /* the occlusion test's reasons, the last walk's */
     bool range;                     /* the batch-range box (ICO_RD_CULL_RANGE) */
-} s_vis = {.forced = -1, .range = true};
+    int msaaForced;                 /* rd__vis_set_msaa's, -1 none */
+    bool msaa;                      /* the walk's: samples in force (MSAA_EPOCH) */
+} s_vis = {.forced = -1, .range = true, .msaaForced = -1};
+
+void rd__vis_set_msaa(int on)
+{
+    s_vis.msaaForced = on < 0 ? -1 : on != 0;
+}
+
+bool rd__vis_msaa_may_close(const RdStateBlock *st)
+{
+    if (st->ds.test.date != RD_DATE_OFF) {
+        return true; /* the DATE snapshot reads the target (SCENE's colour) */
+    }
+    const uint32_t scene = RD_TARGET_SCENE + 1u;
+    const RdTexRec *t = st->tex ? rd__tex_rec(st->tex) : NULL;
+    if (t && t->kind == RD_TEXKIND_TARGET && t->target == scene) {
+        return true; /* a texture read of SCENE's colour or depth */
+    }
+    const bool cScene = st->color == scene, dScene = st->depth == scene;
+    /* rd_replay.c msaaPass: SCENE's colour with SCENE's depth or none
+     * opens or keeps the epoch; any other pair touching SCENE closes it */
+    return (cScene || dScene) && !(cScene && (st->depth == 0 || dScene));
+}
 
 static const char *const s_whyNames[RD_VIS_WHY_COUNT] = {"skipped by the stream's box",
                                                          "skipped by the batches' box",
@@ -513,7 +548,8 @@ static const char *const s_whyNames[RD_VIS_WHY_COUNT] = {"skipped by the stream'
                                                          "mesh of batches reaches",
                                                          "one-batch mesh reaches",
                                                          "code 34 reaches",
-                                                         "occluded"};
+                                                         "occluded",
+                                                         "kept: may close the MSAA epoch"};
 
 static const char *const s_hzNames[RD_VIS_HZ_COUNT] = {
     "occluder used",
@@ -833,6 +869,14 @@ static int cmdVerdict(VisWalk *w, int l, const RdCmd *c, const RdStateBlock *st,
     if (!tc) {
         w->n.exempt++;
         s_vis.whyCur = RD_VIS_WHY_NO_TARGET;
+        return RD_VIS_KEEP;
+    }
+    if (s_vis.msaa && rd__vis_msaa_may_close(st)) {
+        /* replayed as recorded: its pass or its reads may close the MSAA
+         * epoch where the replay of every draw closes it (the head
+         * comment's last paragraph) */
+        w->n.exempt++;
+        s_vis.whyCur = RD_VIS_WHY_MSAA_EPOCH;
         return RD_VIS_KEEP;
     }
     const uint64_t after = sizeof(RdVuPayload) + sizeof(RdVuBlock);
@@ -1411,6 +1455,7 @@ const RdFrame *rd__vis_frame(const RdFrame *f, int keep)
     }
     memset(s_vis.why, 0, sizeof(s_vis.why));
     memset(s_vis.hz, 0, sizeof(s_vis.hz));
+    s_vis.msaa = s_vis.msaaForced >= 0 ? s_vis.msaaForced != 0 : rd_aa_samples(rd__aa_mode()) > 1u;
     const double t0 = rd__now_ms();
     VisWalk w;
     memset(&w, 0, sizeof(w));

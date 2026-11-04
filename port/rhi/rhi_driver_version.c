@@ -170,13 +170,21 @@ char *rhi_text_one_line(char *s)
             gap = 1;
             continue;
         }
-        if (gap && w > 0) {
-            s[w++] = ' ';
+        if (gap) {
+            /* one space for the gap, whatever spaces sit beside it ("a\n b",
+               "a \nb", "a \r\n  b": "a b"): the spaces after it skipped,
+               none added after a space */
+            if (ch == ' ') {
+                continue;
+            }
+            gap = 0;
+            if (w > 0 && s[w - 1] != ' ') {
+                s[w++] = ' ';
+            }
         }
         if (ch == ' ' && w == 0) {
             continue;
         }
-        gap = 0;
         s[w++] = (char)ch;
     }
     while (w > 0 && s[w - 1] == ' ') {

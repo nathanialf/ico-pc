@@ -192,10 +192,14 @@ static void pac_hostBuild(PacHeader *pk, const char *name, const PacHostIdent *i
     }
     /* the triangles' facing from the p2o normals (pac_hostFacing): the
        table pac_makeStrip just made, kept under the stream's hash, or the
-       one kept for this stream before */
-    rd_vu_facing_attach(&d);
-    /* no hash without a pack, dumping or a shot; a morph part is never replaced */
-    h = modelpack_hash_wanted() && (id == 0 || !id->morph) ? rd_vu_mesh_desc_hash(&d, 0, 0) : 0;
+       one kept for this stream before; the hash it returns (d.hash too) is
+       the model pack's key and the mesh's record, so the stream is hashed
+       once */
+    h = rd_vu_facing_attach(&d);
+    /* no lookup without a pack, dumping or a shot; a morph part is never replaced */
+    if (!modelpack_hash_wanted() || (id != 0 && id->morph)) {
+        h = 0;
+    }
     e = h != 0 ? modelpack_lookup(h) : -1;
     if (e >= 0) {
         if (d.qwPerVertex != RD_VU_QW_SKIN || (id != 0 && id->bones > 0)) {

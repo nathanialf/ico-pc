@@ -870,6 +870,9 @@ typedef struct RdMeshRec {
      * and skinned) or the EE's table (rd_mesh.h RdVuMeshDesc.facing,
      * Packet.c, every program: the p2o strip records' normals) */
     uint8_t facingFrom;
+    /* why facingFrom is none (RD_VU_NOFACE_*, rd.h; 0 otherwise): the 10 s
+     * line counts the draws without side bands by it */
+    uint8_t facingWhy;
     uint32_t indexCount;
     RdVuBatchRec *batches;
     uint32_t lastUsed;   /* g_rd.frameCounter of the last draw recorded */
@@ -1021,6 +1024,11 @@ enum { RD_MESH_FACING_NONE = 0, RD_MESH_FACING_NORMALS = 1, RD_MESH_FACING_TABLE
  * false (nothing changed) when count is not m's vertex count, m is not a
  * strip mesh (prelit, lit or skinned) or memory runs out */
 bool rd__mesh_set_facing(RdMeshRec *m, const uint8_t *bits, uint32_t count);
+/* rd_mesh.c: the prelit packets rd_vu_facing_attach saw built again without
+ * strip records and without a table kept for their stream (a save state
+ * loaded into a fresh run, a morphed stream; its "VU facing: mesh ... built
+ * again without its strip records" line, the first 8 then every 100th) */
+uint32_t rd__vu_facing_misses(void);
 /* The table rd__mesh_set_facing takes, back from m's marks (bit v set
  * when kick v carries ICO_VU_MARK_FLIP; the dump's writer: rd_dump.c) into
  * out[(m->vertexCount + 7) / 8]; false when m's marks are not the table's */
@@ -2009,10 +2017,17 @@ bool rd__vu_policy_init(const RhiLimits *lim);
  * any of them back to the extended set (overridden, the reason it overrode
  * kept in why).  kind and why are the start line's words ("plain set" and
  * "(Turnip driver: ...)"), brief the summary's reason ("Turnip driver, issue
- * 163"); both empty for the extended set without a reason. */
+ * 163"); both empty for the extended set without a reason.  noBeside: the
+ * plain set is the device's (a device-table row or Turnip), where it hides a
+ * stray vertex the extended set's clipped triangles showed (issue 163), so
+ * the region rule's side bands, which draw the dropped front-facing
+ * triangles clipped beside the 4:3 picture, stay off too (rd_replay_vu.c
+ * vuBesideOn); false for the [dev] and lost-start reasons and when
+ * overridden. */
 typedef struct RdVuSetChoice {
     bool plain;
     bool overridden;
+    bool noBeside;
     const char *kind;
     const char *brief;
     char why[160];
@@ -3136,6 +3151,10 @@ typedef struct RdContext {
     bool vuFallbackPlain;
     char vuPlainWhy[160];
     const char *vuPlainBrief; /* the summary's reason (RdVuSetChoice.brief) */
+    /* the side bands off for every VU draw: the device's plain set is in
+     * force (RdVuSetChoice.noBeside, issue 163; rd_replay_vu.c vuBesideOn,
+     * the profile line's "side bands:" words) */
+    bool vuNoBeside;
     /* the dynamic state in force (rd__vu_policy_init from
      * RhiLimits.dynamicDepth / dynamicBlend; rd__key_dynamic_normalise,
      * rd__set_pipeline) */

@@ -96,12 +96,23 @@ long ico_memory_floor_setting(const char *text);
    system's own signal): the "MB available of" figures after the line's
    words */
 int ico_memory_floor_line_is_floor(const char *line);
+/* The mark a retried start's stop line ends with (diag_host.c: the line's
+   "(N MB available of T MB, floor F MB)" then this), so the start after it
+   does not retry again: at most one retry in a row */
+#define ICO_MEMORY_FLOOR_RETRIED_MARK " after a retry"
+/* Whether an activity-file stop line carries that mark */
+int ico_memory_floor_line_retried(const char *line);
 /* The retry's decision: 1 only when the previous start stopped at the
-   floor (prev_floor_stop), the driver is Qualcomm's own, and the cache file
-   holds cache_bytes > 0 (a file that is not there or empty: a negative or
-   0 figure).  why: the decision's words for the log, either way (may be
-   NULL). */
-int ico_memory_floor_retry(int prev_floor_stop, int driver, long long cache_bytes, char *why,
-                           size_t size);
+   floor (prev_floor_stop) and was not itself a retry (prev_retried: its
+   line carries ICO_MEMORY_FLOOR_RETRIED_MARK; a retry that stops again
+   goes lazy as before the retry existed), the driver is Qualcomm's own,
+   the cache file holds cache_bytes > 0 (a file that is not there or empty:
+   a negative or 0 figure) and the renderer loaded it this start
+   (cache_loaded, rhi_pipeline_cache_loaded: a file the driver refused,
+   another driver after a system update or another shader set, answers
+   nothing, so the compiler would run).  why: the decision's words for the
+   log, either way (may be NULL). */
+int ico_memory_floor_retry(int prev_floor_stop, int prev_retried, int driver, long long cache_bytes,
+                           int cache_loaded, char *why, size_t size);
 
 #endif /* ICO_MEMORY_FLOOR_H */

@@ -345,8 +345,15 @@ froze the whole device compiling the extended ones; Mesa's Turnip driver, where 
 drew a stray vertex as a sliver; or `[dev] vu_set = plain`) draws every state with the plain
 variant: there a triangle that reaches into the picture and fails the region test is not drawn
 inside the picture in any state (no card test: the wide picture's edge at the old 4:3 border may
-open), but one facing the eye is drawn beside it as everywhere (step 7), and the pictures between
-two ticks take the blended camera's rule alone ([RENDER.md](PIPELINES.md#the-fallback-entries)).
+open), and the pictures between two ticks take the blended camera's rule alone
+([RENDER.md](PIPELINES.md#the-fallback-entries)). The side bands (step 7) follow the reason: where
+the device keeps the plain set (the table's Adreno 740 row, Turnip) they are off on every VU draw
+(`g_rd.vuNoBeside`, `ICO_VU_NO_BESIDE`; `rd_replay_vu.c` `vuBesideOn`), because they would draw the
+dropped triangles clipped again beside the 4:3 picture, and a phone's frame is always wider than
+4:3: the stray vertex of issue 163 would come back in the bands. The profile line then ends with
+"side bands: off on this device's plain set (issue 163)". With `[dev] vu_set = plain` or after a
+lost start a front-facing dropped triangle is drawn beside the picture as everywhere. The cut is the
+draw's flag, not the plain modules: the modules stay one build for every reason.
 
 ## The card test
 
@@ -441,8 +448,17 @@ normals for every program:
   packet's table (logged); a hash two different tables were kept under has none (logged). The store
   lives in the port's memory, not the game's, so a save state does not carry it: a state loaded into
   a fresh run builds its meshes from packets this run never made, whose prelit meshes have no table
-  (lit and skinned ones use their normals). Dumps carry the table from version 15
-  (`port/render/rd_dump.c`), so a prelit mesh replays with its facing.
+  (lit and skinned ones use their normals). This is a known limit: after a save state is loaded into
+  a fresh run, walls and water (prelit) draw without side bands until the next stage load builds
+  their packets again. The log says so: `VU facing: mesh NAME (HASH) built again without its strip
+  records and no table kept for its stream (REASON; N so far)` (the first 8, then every 100th;
+  `rd__vu_facing_misses`), and the 10 s line counts the draws on a frame wider than 4:3 that had no
+  side bands for want of facing data, by why (`side bands: N draws without facing data (A prelit
+  rebuilt without the EE's table: a save state or a morph, B model pack replacements, C copies, D
+  other)`; `RdMeshRec.facingWhy`, `RD_VU_NOFACE_*`, `RdPerfRecord.vuBesideNoFacing`). Carrying the
+  tables in the save state's port block, or in a cache file keyed by mesh hash, is left for later.
+  Dumps carry the table from version 15 (`port/render/rd_dump.c`), so a prelit mesh replays with its
+  facing.
 - **without a table**, a lit or skinned stream's own normals (the same numbers: the stream's normal
   qword is the record's; `markWinding`, `RD_MESH_FACING_NORMALS`); a prelit stream has no marks and
   no facing (`RD_MESH_FACING_NONE`): its draws carry `VU_F_NO_BESIDE`, the PS2's drop.
@@ -808,7 +824,8 @@ wall drawn as the PS2 out of the box and clipped in every other state; a card an
 strip adding nothing; a card joined to a passing strip or through another packet of its part drawn
 as the wall; the side bands: a behind-the-eye strip across the picture's left edge with the EE's
 facing table turned to the eye adds pixels beside the picture at W 688 and 2048 and none inside it
-or at 512, turned away none), and the attribute planes' anchor (`port/render/test/rd_native_test.c`, header
+or at 512, turned away none; without a table none, its draw counted in the replay's
+`vuBesideNoFacing` as no-table on a wider frame), and the attribute planes' anchor (`port/render/test/rd_native_test.c`, header
 comment). Running the tests is [TESTING.md](TESTING.md).
 
 `rd_mesh` (`port/render/test/rd_mesh_test.c`) checks the winding marks on synthetic strips (a
@@ -817,7 +834,8 @@ back for the dump, a table of another vertex count refused, a copy taking the ma
 source; a lit strip wound one way, one of mixed normals, a morph keeping the creation's marks, a
 table replacing a lit stream's own marks; the EE's builder over a strip, the table kept under the
 stream's hash and found again, a vertex without a normal voiding it, two tables under one hash
-leaving none) and, with the disc image, measures the disc's winding and the EE's table's agreement
+leaving none; the reasons a mesh has no facing: a prelit stream built again without its strip
+records counted as a miss, a prelit replacement, a copy of another index list) and, with the disc image, measures the disc's winding and the EE's table's agreement
 with the normals ([The winding mark](#the-winding-mark)). `rd_region_stats`
 (`port/render/test/rd_region_stats.cmake`) runs `rd_replay_tool --region-stats` on the first two
 dumps of `tools/occlusion_corpus.txt` at Original 4:3 1x and Enhanced 4:3 2x: the lines' shapes,

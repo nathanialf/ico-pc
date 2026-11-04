@@ -1357,9 +1357,14 @@ rate, so the next log carries it (`port/platform/display_rate.h`, `window_displa
 - `window: display refresh: 144.00 Hz, 3048x2032 "<display>" (run time 85.2 s, N changes this run)`
   at the start and in every 10 s block (SDL's `SDL_GetCurrentDisplayMode`; the rate from its
   numerator and denominator where it gives them), `window: display refresh changed: A Hz -> B Hz,
-  WxH (run time T s, change N of this run)` at each `SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED`, and
-  `window: display refresh changed without an event from SDL: B Hz` when the block's poll finds a
-  change no event announced. A change is more than 0.05 Hz.
+  WxH (run time T s, change N of this run)` for a change SDL announced
+  (`SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED`), and `window: display refresh changed without an event
+  from SDL: B Hz` for one no event announced. A change is more than 0.05 Hz. SDL posts the event
+  from its own thread (Android's Java thread), and `SDL_GetCurrentDisplayMode` and
+  `SDL_GetDisplayName` are main-thread calls, so the event watch only counts the events and keeps
+  the last one's run time; the 10 s block's poll on the main thread reads the mode and writes the
+  change's line with T the event's run time (`display_rate_poll`, pure; `display_rate_test`). The
+  line can come up to 10 s after the change; its run time is the change's.
 - `window: present calls: N timed (over 20 ms a, over 50 ms b, over 100 ms c, over 300 ms d), longest
   M ms, total T ms` in every 10 s block, on every platform: each presented replay's present time
   (the submit thread's own timing of its present call, `RdPerfRecord.presentMs`) in every row it
@@ -1378,7 +1383,13 @@ rate, so the next log carries it (`port/platform/display_rate.h`, `window_displa
   `window: frame rate pin: asked 60 Hz (fixed source; the Frame rate row is 60) with <call>:
   returned 0` (`(refused)` after a return other than 0, tried again at the next change), and
   `window: frame rate pin: released (the Frame rate row is Uncapped) with <call>: returned 0`.
-  Nothing runs on any other platform. It is a hint to the system's refresh rate governor: it does not
+  The ask is a vote on the Surface: going to the background destroys the SurfaceView's surface and
+  the foreground brings a new native window with no vote. The pin keeps the native window it asked
+  on (`DisplayPin.surface`); a call with another one, or the pump's `resume_recheck` after the app
+  came back (`window_frame_rate_pin_resumed`: the pointer may be reused), forgets the ask
+  (`display_pin_surface`) and asks again: `window: frame rate pin: asked again for a new surface:
+  60 Hz (fixed source; the Frame rate row is 60) with <call>: returned 0`. A new surface with no
+  rate wanted asks and says nothing. Nothing runs on any other platform. It is a hint to the system's refresh rate governor: it does not
   change the game's own pacing, and nothing about it is measured on a device yet.
 
 ### Downsampling

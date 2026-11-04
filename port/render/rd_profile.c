@@ -528,7 +528,7 @@ void rd__profile_init(void)
         "profile: %s: blend %s%s; fog local %s%s; DATE %s%s; depth stores %s%s; blur fold "
         "%s%s; robust access %s; local read %s; uint views %s%s; alpha plan %s%s; fx plan "
         "%s%s; fx local read %s%s; VU planes %s%s; shadow count %s%s; shadow edges: %s%s; "
-        "pipelines the start-up set%s%s%s; %s; %s; %s%s",
+        "pipelines the start-up set%s%s%s; %s; %s; %s%s%s",
         p->cls, exact ? rd__blend_exact_name(asked) : "fixed-function", exact ? exactMark : "",
         p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
         p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL), storeWords(p),
@@ -546,7 +546,10 @@ void rd__profile_init(void)
         mark(p, RD_PROFILE_VU_PLANES), shadowWords(p), mark(p, RD_PROFILE_SHADOW_ONE), edgeWords(p),
         mark(p, RD_PROFILE_SHADOW_BSPLINE), p->carefulSet ? " (careful)" : "",
         p->localWords[0] ? "; desktop local read " : "", p->localWords, rd__uber_profile_words(),
-        rd__aura_box_profile_words(), rd__pass_area_profile_words(), turnip);
+        rd__aura_box_profile_words(), rd__pass_area_profile_words(), turnip,
+        /* the device's plain VU set keeps the side bands off
+         * (rd_pipeline.c rd__vu_policy_init, before this line) */
+        g_rd.vuNoBeside ? "; side bands: off on this device's plain set (issue 163)" : "");
     if (notHere) {
         rd__log("profile: %s: not on this device, the flag stays off", notHere);
     }
