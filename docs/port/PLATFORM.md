@@ -1924,7 +1924,7 @@ without a loss ends it. So the second in a row is a loss in the robust start its
 start after it, with robust access off again: it writes `[dev] gpu_robust = true` and logs `ico_pc:
 the graphics device was lost in two starts in a row; this start and every start after it check the
 bounds of every buffer and image read ([dev] gpu_robust = true in <path>); delete that line to turn
-it off again`. With `gpu_robust` set by the player (the variable already in the environment)
+it off again`; the game takes it off again itself (`robust_persist.h`: the mark `[dev] gpu_robust_by`, 3 clean starts in a row or a new version, each start's `ico_pc: robust access on (set by the game after 2 lost starts on <version>): N clean starts of 3 before it turns off` line). With `gpu_robust` set by the player (the variable already in the environment)
 nothing is written and the row is cleared (`ico_pc: the previous start lost the graphics device;
 nothing is counted or written to <path>: robust access is as the settings say ([dev]
 gpu_robust)`). A restart after a crash or a loss (desktop) counts nothing. The rest of the row's

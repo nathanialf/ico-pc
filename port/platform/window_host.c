@@ -56,6 +56,7 @@
 #include "window_host.h"
 #include "window_lines.h"
 #include "window_pipeline_skip.h"
+#include "window_robust.h"
 #include "window_display_rate.h"
 #include "window_pipe_finish.h"
 #include "window_present.h"
@@ -1611,7 +1612,7 @@ static int pipeline_set_persist_lazy(void)
    diag_host.h ICO_DIAG_END_LOSS): 0 when written */
 static int gpu_robust_persist(void)
 {
-    return ico_config_set_bool("dev.gpu_robust", 1) == 0 && ico_config_save() == 0 ? 0 : -1;
+    return window_robust_persist();
 }
 #endif
 
@@ -1814,6 +1815,9 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         }
     }
     const char *cfgName = ico_config_toml_path() ? ico_config_toml_path() : "config.toml";
+    /* [dev] gpu_robust the game wrote turns itself off after clean starts
+       (robust_persist.h); before the device reads ICO_GPU_ROBUST */
+    window_robust_start(cfgName);
     /* a start that ended without a word inside a batch or pipeline of the
        VU vertex pre-pass or of the record path that draws from it
        (startup_retry.h startup_retry_note_has_vu_pre; the largest VU
@@ -2326,6 +2330,7 @@ open_window:
         } else {
             ico_diag_startup_activity_record(0);
         }
+        window_robust_reached();
         /* a stop at the free-memory floor: the rest in the background */
         window_pipe_finish_start();
         /* the set in the pipeline cache file now, not only at a clean exit:
