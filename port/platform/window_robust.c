@@ -80,8 +80,11 @@ void window_robust_start(const char *cfgName)
     RobustStep step;
     char line[512];
     const int lost = ico_diag_startup_end_count(ICO_DIAG_END_LOSS) > 0;
+    /* an end while preparing the graphics, or a watchdog end (the game
+       stopped responding; a GPU hang is a loss above): not clean */
     const int ended = ico_diag_startup_end_count(ICO_DIAG_END_PIPELINES) > 0 ||
-                      ico_diag_startup_end_count(ICO_DIAG_END_VU_PRE) > 0;
+                      ico_diag_startup_end_count(ICO_DIAG_END_VU_PRE) > 0 ||
+                      ico_diag_startup_prev_watchdog();
 
     if (mark_read(&old) != 0) {
         return;

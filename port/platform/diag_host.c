@@ -1802,6 +1802,10 @@ static char act_bg_path[1024 + 16];
    (ico_diag_startup_stall_end); a start of another version deletes it */
 static char act_stall_path[1024 + 16];
 static int act_prev_stall;
+/* "-watchdog.txt": the mark of a run the watchdog ended with the main
+   thread not waiting for the GPU (ico_diag_startup_prev_watchdog) */
+static char act_wd_path[1024 + 16];
+static int act_prev_wd;
 static char act_prev_stall_note[sizeof activity];
 /* the previous run's mark (ico_diag_startup_activity_begin) */
 static int act_prev_background;
@@ -2554,6 +2558,43 @@ int ico_diag_startup_stall_end(void)
     return act_prev_stall;
 }
 
+/* ico_diag_startup_activity_begin: the watchdog mark read and deleted */
+static void watchdog_mark_read(void)
+{
+    char buf[sizeof act_version + 1 + 256];
+    char *nl;
+    size_t k;
+    FILE *f = act_wd_path[0] != '\0' ? ico_fopen(act_wd_path, "rb") : NULL;
+    if (f == NULL) {
+        return;
+    }
+    k = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[k] = '\0';
+    (void)ico_remove(act_wd_path);
+    nl = strchr(buf, '\n');
+    act_prev_wd = 1;
+    ico_diag_log("ico_pc: the previous run (version %.*s) was ended by the watchdog: %.*s",
+                 nl != NULL ? (int)(nl - buf) : (int)strcspn(buf, "\r"), buf,
+                 nl != NULL ? (int)strcspn(nl + 1, "\r\n") : 0, nl != NULL ? nl + 1 : "");
+}
+
+int ico_diag_startup_prev_watchdog(void)
+{
+    return act_prev_wd;
+}
+
+/* the watchdog mark written (the watchdog's thread, a main-thread end) */
+static void watchdog_mark_write(const char *reason)
+{
+    FILE *f;
+    if (act_wd_path[0] == '\0' || (f = ico_fopen(act_wd_path, "wb")) == NULL) {
+        return;
+    }
+    fprintf(f, "%s\n%.200s\n", act_version, reason != NULL ? reason : "");
+    (void)fclose(f);
+}
+
 const char *ico_diag_startup_activity_prev(void)
 {
     return act_prev;
@@ -2594,6 +2635,8 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_bg_path[0] = '\0';
     act_stall_path[0] = '\0';
     act_prev_stall = 0;
+    act_wd_path[0] = '\0';
+    act_prev_wd = 0;
     if (path == NULL || strlen(path) >= sizeof act_path) {
         return 0;
     }
@@ -2602,6 +2645,8 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_sibling(act_bg_path, sizeof act_bg_path, "-background.txt");
     act_sibling(act_stall_path, sizeof act_stall_path, "-stall.txt");
     stall_read();
+    act_sibling(act_wd_path, sizeof act_wd_path, "-watchdog.txt");
+    watchdog_mark_read();
     /* the previous run's background mark: its line, and the system's lines
        that came there (logged below unless the activity file has them) */
     static char bgbuf[ACT_BG_TEXT];
@@ -5456,6 +5501,8 @@ static void watchdog_fire(const char *reason)
                      gpu.waiting_for, gpu.waiting_s);
         } else {
             snprintf(what, sizeof what, "the watchdog: %s", reason);
+            /* not a clean start for the robust step (review 2 N5) */
+            watchdog_mark_write(reason);
         }
         report_file(what, 1);
     }

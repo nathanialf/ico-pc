@@ -57,7 +57,10 @@
  *               ended while"), deletes it and is lazy; a lazy run keeps its
  *               notes and a line between them, and keeps the file at a
  *               clean exit (the next start is lazy); a normal end of the
- *               set deletes it; the creation limit's stall mark (review
+ *               set deletes it; the watchdog's mark (review 2 N5: a
+ *               spinning child ended by the watchdog writes it, the next
+ *               start reads it, says so and deletes it); the creation
+ *               limit's stall mark (review
  *               finding 2) makes every start of its version take the plain
  *               VU entries, and a start of another version deletes it;
  *               a restart after a driver crash logs it but
@@ -951,6 +954,10 @@ static void activity_child(const char *mode, const char *log)
         /* review finding 2: the stall mark read at the start */
         ico_diag_log("test: stall end %d", ico_diag_startup_stall_end());
         child_quit(0);
+    } else if (strcmp(mode, "actwd") == 0) {
+        /* review 2 N5: the watchdog mark read at the start */
+        ico_diag_log("test: watchdog end %d", ico_diag_startup_prev_watchdog());
+        child_quit(0);
     } else if (strcmp(mode, "actclean") == 0) {
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_set_activity("creating the start-up pipelines (1 of 9)");
@@ -1196,6 +1203,15 @@ static void run_child(const char *mode, const char *log)
                strcmp(mode, "switchok") == 0) {
         switch_child(mode, log);
     } else if (strcmp(mode, "watchdog") == 0) {
+        fn = spin_thread;
+        ico_diag_start(1, 2);
+    } else if (strcmp(mode, "wdmark") == 0) {
+        /* review 2 N5: the watchdog's end with the activity file's path
+           known writes its mark beside it */
+        char path[300];
+        act_path(path, sizeof path, log);
+        ico_diag_set_version("test 1");
+        (void)ico_diag_startup_activity_begin(path, 0);
         fn = spin_thread;
         ico_diag_start(1, 2);
     } else if (strcmp(mode, "progress") == 0 || strcmp(mode, "stall") == 0) {
@@ -2427,6 +2443,37 @@ int main(int argc, char **argv)
             }
             r = run(argv[0], "actstall", log);
             CHECK(strstr(read_file(log), "test: stall end 0\n") != NULL);
+            remove(act);
+        }
+        /* review 2 N5: a run the watchdog ended (the game stopped
+           responding, no GPU wait) leaves its mark; the next start reads
+           it (the robust step counts it as an unclean end), says so and
+           deletes it */
+        {
+            char wd[320];
+            FILE *f;
+            snprintf(wd, sizeof wd, "%s-watchdog.txt", act);
+            remove(wd);
+            r = run(argv[0], "wdmark", log);
+            CHECK(r == 4);
+            f = fopen(wd, "rb");
+            CHECK(f != NULL);
+            if (f != NULL) {
+                fclose(f);
+            }
+            r = run(argv[0], "actwd", log);
+            s = read_file(log);
+            CHECK(r == 0);
+            CHECK(strstr(s, "test: watchdog end 1\n") != NULL);
+            CHECK(strstr(s, "ico_pc: the previous run (version test 1) was ended by the "
+                            "watchdog: no Main tick 1 s after boot started") != NULL);
+            f = fopen(wd, "rb");
+            CHECK(f == NULL);
+            if (f != NULL) {
+                fclose(f);
+            }
+            r = run(argv[0], "actwd", log);
+            CHECK(strstr(read_file(log), "test: watchdog end 0\n") != NULL);
             remove(act);
         }
         /* a lazy run's clean exit keeps the file: the next start of the
