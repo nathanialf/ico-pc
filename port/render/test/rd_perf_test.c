@@ -915,6 +915,77 @@ static void checkPassTexts(void)
     memset(small, 'x', sizeof(small));
     const int n = rd_perf_pass_agg_text(&agg, 5, small, 20);
     CHECK(n == 19 && small[19] == '\0' && small[20] == 'x', "top passes cut: %d", n);
+
+    /* issue 123: a stalled replay's pieces against the block's before it
+       (rd_perf_pass_grow_text, rd_perf_pass_agg_mean): the block's two
+       timed replays of three pieces, the stalled one's list 0 3.1x its
+       mean, the glow 1.3x, the DATE snapshot under 0.05 ms, a piece new to
+       the block and one whose stamp was missing */
+    const RdPerfPass b[3] = {
+        {.kind = RD_PERF_PASS_RENDER,
+         .target = RD_TARGET_SCENE,
+         .list = 0,
+         .post = -1,
+         .w = 848,
+         .h = 448,
+         .gpuUs = 4000.0f},
+        {.kind = RD_PERF_PASS_RENDER,
+         .target = RD_TARGET_WORK1,
+         .list = 7,
+         .post = RD_PERF_POST_GLOW,
+         .w = 256,
+         .h = 128,
+         .gpuUs = 1000.0f},
+        {.kind = RD_PERF_PASS_DATE,
+         .target = RD_TARGET_SCENE,
+         .list = 3,
+         .post = -1,
+         .w = 848,
+         .h = 448,
+         .gpuUs = 30.0f},
+    };
+    RdPerfPass q[5] = {b[0], b[1], b[2], b[1], b[1]};
+    q[0].gpuUs = 12400.0f;
+    q[1].gpuUs = 1300.0f;
+    q[2].gpuUs = 90.0f;
+    q[3].target = RD_TARGET_WORK0;
+    q[3].list = 2;
+    q[3].post = -1;
+    q[3].w = q[3].h = 64;
+    q[3].gpuUs = 500.0f;
+    q[4].gpuUs = -1.0f;
+    rd_perf_pass_agg_reset(&agg);
+    rd_perf_pass_grow_text(&agg, q, 5, 7, 60.0, 1, 30.0, -1.0, 1, buf, sizeof(buf));
+    CHECK(strcmp(buf, "stalled replay 7 (present 60 ms, GPU 30.0 ms, the block's first): list 0 "
+                      "SCENE 848x448 12.4 ms; no timed replay in the block before it to "
+                      "compare") == 0,
+          "stalled replay, empty block: %s", buf);
+    rd_perf_pass_agg_add(&agg, b, 3);
+    rd_perf_pass_agg_add(&agg, b, 3);
+    double mean = 0.0;
+    CHECK(rd_perf_pass_agg_mean(&agg, &b[0], &mean) && mean == 4.0, "block mean: %f", mean);
+    CHECK(!rd_perf_pass_agg_mean(&agg, &q[3], &mean), "a piece new to the block has no mean");
+    rd_perf_pass_grow_text(&agg, q, 5, 2941, 352.0, 1, 71.3, 27.0, 3, buf, sizeof(buf));
+    CHECK(strcmp(buf, "stalled replay 2941 (present 352 ms, GPU 71.3 ms against the block's 27.0): "
+                      "list 0 SCENE 848x448 12.4 ms (the block's 4.0), glow WORK1 256x128 1.3 ms "
+                      "(the block's 1.0), list 2 WORK0 64x64 0.5 ms (new to the block); 1 of 2 "
+                      "passes over 2x their block mean, the rest within 1.3x; 1 under 0.05 ms "
+                      "left out; 1 new to the block; 1 not timed (2 timed replays in the block so "
+                      "far)") == 0,
+          "stalled replay: %s", buf);
+    rd_perf_pass_grow_text(&agg, q, 1, 2941, 352.0, 0, 0.0, 27.0, 1, buf, sizeof(buf));
+    CHECK(strcmp(buf, "stalled replay 2941 (present 352 ms, GPU not timed): list 0 SCENE 848x448 "
+                      "12.4 ms (the block's 4.0); 1 of 1 passes over 2x their block mean (2 timed "
+                      "replays in the block so far)") == 0,
+          "stalled replay, every piece over: %s", buf);
+    memset(small, 'x', sizeof(small));
+    const int g = rd_perf_pass_grow_text(&agg, q, 5, 2941, 352.0, 1, 71.3, 27.0, 3, small, 20);
+    CHECK(g == 19 && small[19] == '\0' && small[20] == 'x', "stalled replay cut: %d", g);
+    rd_perf_passes_arm_text(2941, 359.4, buf, sizeof(buf));
+    CHECK(strcmp(buf, "every replay timed pass by pass from here (a present blocked 359 ms at "
+                      "replay 2941): the next stalled replay's passes are compared with the "
+                      "block's") == 0,
+          "arm line: %s", buf);
 }
 
 /* ------------------------------------------------ the pieces on the device */
@@ -1482,7 +1553,7 @@ int main(int argc, char **argv)
     if (argc > 1) {
         return dumpMode(argc, argv);
     }
-    checkPassTexts(); /* pure: before any device */
+    checkPassTexts(); /* pure: before any device; its failures count without one */
     /* the shadow volumes in their own pass and the count target cleared
      * (rd_shadow_merge.c, on on the tile-based classes: rd_perf_mali's):
      * the barrier and pass counts below are those of that frame; the merge
@@ -1490,6 +1561,11 @@ int main(int argc, char **argv)
     rd__shadow_merge_force(0);
     const int rc = synthetic();
     if (rc != 0) {
+        if (s_fail) {
+            /* the pure checks failed: a failure, not a skip without a device */
+            printf("rd_perf: %d failure(s)\n", s_fail);
+            return 1;
+        }
         return rc;
     }
     if (s_fail) {

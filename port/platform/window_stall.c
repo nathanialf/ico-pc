@@ -32,6 +32,7 @@ static void stall_rec(const RdPerfRecord *r, PresentStallRec *o)
     o->gpuMs = r->gpuMs;
     o->gapValid = r->gpuGapValid != 0;
     o->gapMs = (double)r->gpuGapNs / 1e6;
+    o->gapSkipped = r->gpuGapSkipped;
 }
 
 const char *window_stall_split(const RdPerfRecord *r, unsigned blockGpuN, double blockGpuMs)
@@ -49,9 +50,15 @@ void window_stall_blocked(const RdPerfRecord *r)
     s_after.pending = 1;
     s_after.replay = r->replay;
     s_after.ms = r->presentMs;
+    if (rd_perf_passes_arm(true)) {
+        char text[256];
+
+        rd_perf_passes_arm_text(r->replay, r->presentMs, text, sizeof(text));
+        fprintf(stderr, "window: %s\n", text);
+    }
 }
 
-void window_stall_after(const RdPerfRecord *r)
+void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap)
 {
     char text[320];
     PresentStallRec o;
@@ -63,4 +70,20 @@ void window_stall_after(const RdPerfRecord *r)
     stall_rec(r, &o);
     present_after_text(s_after.replay, s_after.ms, &o, text, sizeof(text));
     ico_log_limited("window: after the present that blocked", "window: %s", text);
+    if (r->gpuGapValid) {
+        pace_gpu_gap_stall(gap, r->gpuGapNs);
+    }
+}
+
+void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const RdPerfPass *p,
+                         uint32_t n, unsigned blockGpuN, double blockGpuMs)
+{
+    char text[1024];
+
+    if (!r->presented || !(r->presentMs > WINDOW_STALL_MS)) {
+        return;
+    }
+    rd_perf_pass_grow_text(agg, p, n, r->replay, r->presentMs, r->gpuValid, r->gpuMs,
+                           blockGpuN ? blockGpuMs : -1.0, 5, text, sizeof(text));
+    ico_log_limited("window: stalled replay", "window: %s", text);
 }

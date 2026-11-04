@@ -3148,17 +3148,19 @@ static void testStepTrace(void)
    idle floor), and a third whose first stamp came 3.0 ms before the one
    before ended (a driver that writes its first stamp early: its 10.0 ms
    span counts 3.0 ms of the one before); an overlap past the span counts
-   the span alone */
+   the span alone.  Issue 123: gaps timed across untimed replays counted,
+   the gaps after the presents that blocked listed (the first 8 kept, every
+   one counted) */
 static void testGpuGap(void)
 {
     PaceGpuGap g;
-    char text[384];
+    char text[768];
 
     memset(&g, 0, sizeof g);
     CHECK(pace_gpu_gap_text(&g, text, sizeof text) == 0 && text[0] == '\0');
-    pace_gpu_gap_add(&g, 21200000ull, 4000000ll);
-    pace_gpu_gap_add(&g, 8200000ull, 20000ll);
-    pace_gpu_gap_add(&g, 10000000ull, -3000000ll);
+    pace_gpu_gap_add(&g, 21200000ull, 4000000ll, 0);
+    pace_gpu_gap_add(&g, 8200000ull, 20000ll, 0);
+    pace_gpu_gap_add(&g, 10000000ull, -3000000ll, 0);
     CHECK(g.n == 3 && g.idle == 1 && g.overlap == 1);
     CHECK(g.idleNs == 4000000ull && g.idleMaxNs == 4000000ull && g.overlapNs == 3000000ull);
     CHECK(g.spanNs == 39400000ull);
@@ -3167,10 +3169,44 @@ static void testGpuGap(void)
                        "ms on average, the longest 4.0 ms), 1 begun before the one before ended "
                        "(by 3.0 ms on average: their spans count that end too); the GPU's time a "
                        "replay past the one before's end 12.13 ms, its span 13.13 ms"));
-    pace_gpu_gap_add(&g, 2000000ull, -5000000ll);
+    pace_gpu_gap_add(&g, 2000000ull, -5000000ll, 0);
     CHECK(g.overlap == 2 && g.overlapNs == 5000000ull && g.spanNs == 41400000ull);
     /* a short buffer: cut, the whole length returned */
     CHECK(pace_gpu_gap_text(&g, text, 16) > 16 && strlen(text) == 15);
+
+    /* issue 123: a reporter's block with three stalls, the replay after
+       each one 301.2, 298.0 and 310.5 ms behind (the first across one
+       untimed replay) */
+    memset(&g, 0, sizeof g);
+    pace_gpu_gap_add(&g, 27000000ull, 1000000ll, 0);
+    pace_gpu_gap_add(&g, 27000000ull, 301200000ll, 1);
+    pace_gpu_gap_stall(&g, 301200000ll);
+    pace_gpu_gap_add(&g, 27000000ull, 298000000ll, 0);
+    pace_gpu_gap_stall(&g, 298000000ll);
+    pace_gpu_gap_add(&g, 27000000ull, 310500000ll, 0);
+    pace_gpu_gap_stall(&g, 310500000ll);
+    CHECK(g.n == 4 && g.across == 1 && g.stalls == 3);
+    pace_gpu_gap_text(&g, text, sizeof text);
+    CHECK(textIs(text, "4 timed replays after the one before: the GPU idle before 4 of them (227.7 "
+                       "ms on average, the longest 310.5 ms), 0 begun before the one before ended "
+                       "(by 0.0 ms on average: their spans count that end too); the GPU's time a "
+                       "replay past the one before's end 27.00 ms, its span 27.00 ms; 1 of them "
+                       "timed across untimed replays; across the 3 stalls: the GPU was idle 301.2, "
+                       "298.0, 310.5 ms before the next replay"));
+    /* one stall; then past the 8 kept */
+    memset(&g, 0, sizeof g);
+    pace_gpu_gap_add(&g, 27000000ull, -400000ll, 0);
+    pace_gpu_gap_stall(&g, -400000ll);
+    pace_gpu_gap_text(&g, text, sizeof text);
+    CHECK(strstr(text, "its span 27.00 ms; across the 1 stall: the GPU was idle -0.4 ms before the "
+                       "next replay") != NULL);
+    for (int i = 0; i < 10; i++) {
+        pace_gpu_gap_stall(&g, (int64_t)(i + 1) * 1000000ll);
+    }
+    CHECK(g.stalls == 11 && g.stallNs[7] == 7000000ll);
+    pace_gpu_gap_text(&g, text, sizeof text);
+    CHECK(strstr(text, "; across the first 8 of the 11 stalls: the GPU was idle -0.4, 1.0, 2.0, "
+                       "3.0, 4.0, 5.0, 6.0, 7.0 ms before the next replay") != NULL);
 }
 
 int main(void)

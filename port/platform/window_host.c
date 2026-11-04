@@ -4333,6 +4333,9 @@ static void perf_passes_add(const RdPerfRecord *r)
     if (n == 0) {
         return;
     }
+    /* a stalled replay against the block's before it joins (window_stall.c) */
+    window_stall_passes(r, &s_perf.passAgg, p, n, s_perf.gpuN,
+                        s_perf.gpuN ? s_perf.gpu / s_perf.gpuN : 0.0);
     rd_perf_pass_agg_add(&s_perf.passAgg, p, n);
     if (!s_perf.passCsvTried) {
         perf_pass_csv_open();
@@ -4446,7 +4449,7 @@ static void perf_drain(void)
         if (r.presented) {
             present_hist_add(&s_perf.presentHist, r.presentMs);
         }
-        window_stall_after(&r); /* the record after a present that blocked */
+        window_stall_after(&r, &s_perf.gpuGap); /* the record after a present that blocked */
         if (r.presented && r.presentMs > WINDOW_STALL_MS) {
             present_blocked(&r);
         }
@@ -4505,7 +4508,8 @@ static void perf_drain(void)
             }
             s_perf.gpuPostPartial += r.gpuPostPartial;
             if (r.gpuGapValid) {
-                pace_gpu_gap_add(&s_perf.gpuGap, (uint64_t)(r.gpuMs * 1e6), r.gpuGapNs);
+                pace_gpu_gap_add(&s_perf.gpuGap, (uint64_t)(r.gpuMs * 1e6), r.gpuGapNs,
+                                 r.gpuGapSkipped);
             }
         }
         s_perf.draws += r.draws;

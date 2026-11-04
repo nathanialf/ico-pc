@@ -27,6 +27,7 @@
 #include "ico_thread.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
+#include "rd_perf_gap.h"
 
 RdPerfRecord g_rdPerf;
 
@@ -671,6 +672,25 @@ bool rd_perf_passes_mode(void)
     return s_passesMode;
 }
 
+#ifndef ICO_IOS
+/* rd_perf_passes_arm's: every replay timed (no CSV); set on the window's
+   thread, read at each replay's start on the render thread */
+static bool s_passesArmed;
+#endif
+
+bool rd_perf_passes_arm(bool on)
+{
+#ifdef ICO_IOS
+    (void)on;
+    return false;
+#else
+    if (!g_rd.hasDevice || !rhi_timestamps_supported() || s_passesMode) {
+        return false;
+    }
+    return __atomic_exchange_n(&s_passesArmed, on, __ATOMIC_RELAXED) != on;
+#endif
+}
+
 static uint16_t clamp16(uint32_t v)
 {
     return v > 65535u ? (uint16_t)65535u : (uint16_t)v;
@@ -834,9 +854,14 @@ uint32_t rd_perf_passes_of(uint32_t replay, const RdPerfPass **out)
     return n;
 }
 
+/* the last timed record's last timestamp and its replay, for the next
+   one's gpuGapNs (rd_perf_gap.h; a new device's clock starts again) */
+static RdPerfGap s_gap;
+
 void rd__perf_reset(void)
 {
     s_head = s_count = 0;
+    memset(&s_gap, 0, sizeof(s_gap));
     memset(s_pendingValid, 0, sizeof(s_pendingValid));
     memset(s_pendingStamps, 0, sizeof(s_pendingStamps));
     s_haveLast = false;
@@ -926,7 +951,8 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
     s_passOn = false;
 #ifndef ICO_IOS
     if (g_rd.hasDevice && rhi_timestamps_supported() &&
-        (s_passesMode || s_t0 - s_passLastMs >= RD_PERF_PASS_EVERY_MS)) {
+        (s_passesMode || __atomic_load_n(&s_passesArmed, __ATOMIC_RELAXED) ||
+         s_t0 - s_passLastMs >= RD_PERF_PASS_EVERY_MS)) {
         s_passOn = true;
         s_passLastMs = s_t0;
     }
@@ -986,26 +1012,20 @@ void rd__present_split_take(RdSubmitJob *j, bool presented)
     }
 }
 
-/* the last record's last timestamp and its replay, for the next one's
-   gpuGapNs (0: none, or the last record had no timestamps) */
-static uint64_t s_gapLastNs;
-static uint32_t s_gapLastReplay;
-
-/* the GPU's time between this replay and the one before (rd.h
-   RdPerfRecord.gpuGapNs): only for the replay right after it, both timed,
-   within a second (a clock that jumped is no gap) */
+/* the GPU's time between this replay and the timed one before (rd.h
+   RdPerfRecord.gpuGapNs): across the untimed replays between (counted in
+   gpuGapSkipped: a stall's neighbours are the ones that come without
+   stamps), within 60 s (a clock that jumped is no gap) */
 static void gpuGap(RdPerfRecord *r, uint64_t t0, uint64_t last)
 {
-    if (s_gapLastReplay != 0 && r->replay == s_gapLastReplay + 1u) {
-        const int64_t gap = (int64_t)(t0 - s_gapLastNs);
+    int64_t gap;
+    uint32_t skipped;
 
-        if (gap > -1000000000ll && gap < 1000000000ll) {
-            r->gpuGapNs = gap;
-            r->gpuGapValid = 1;
-        }
+    if (rd_perf_gap_step(&s_gap, r->replay, t0, last, &gap, &skipped)) {
+        r->gpuGapNs = gap;
+        r->gpuGapSkipped = skipped;
+        r->gpuGapValid = 1;
     }
-    s_gapLastNs = last;
-    s_gapLastReplay = r->replay;
 }
 
 /* timestamps of the slot just recycled: the replay RHI_FRAMES_IN_FLIGHT ago */
@@ -1072,9 +1092,9 @@ void rd__perf_collect_gpu(void)
             r->gpuBusyMs = (double)(busy[lastIndex] - busy[RD_PERF_TS_BEGIN]) / 1e6;
             r->gpuBusyValid = 1;
         }
-    } else {
-        s_gapLastReplay = 0; /* no stamps: the next record has no gap */
     }
+    /* no stamps: the next timed record's gap is measured across this one
+       (gpuGapSkipped) */
     if (r->passTimed) {
         passFinish(&s_passPending[slot], ts, n, busy, nb);
     }
@@ -1412,6 +1432,129 @@ int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_
                  busy);
     }
     return (int)strlen(buf);
+}
+
+bool rd_perf_pass_agg_mean(const RdPerfPassAgg *a, const RdPerfPass *p, double *ms)
+{
+    for (uint32_t i = 0; i < a->count; i++) {
+        const RdPerfPassAggEntry *c = &a->e[i];
+        if (c->kind == p->kind && c->target == p->target && c->list == p->list &&
+            c->post == p->post && c->w == p->w && c->h == p->h && c->passes != 0) {
+            *ms = c->gpuMs / (double)c->passes;
+            return true;
+        }
+    }
+    return false;
+}
+
+int rd_perf_pass_grow_text(const RdPerfPassAgg *a, const RdPerfPass *p, uint32_t count,
+                           uint32_t replay, double presentMs, int gpuValid, double gpuMs,
+                           double blockGpuMs, unsigned top, char *buf, size_t n)
+{
+    if (n == 0) {
+        return 0;
+    }
+    buf[0] = '\0';
+    if (count > RD_PERF_PASS_MAX) {
+        count = RD_PERF_PASS_MAX;
+    }
+    char gpu[96];
+    if (!gpuValid) {
+        snprintf(gpu, sizeof(gpu), "GPU not timed");
+    } else if (blockGpuMs < 0.0) {
+        snprintf(gpu, sizeof(gpu), "GPU %.1f ms, the block's first", gpuMs);
+    } else {
+        snprintf(gpu, sizeof(gpu), "GPU %.1f ms against the block's %.1f", gpuMs, blockGpuMs);
+    }
+    size_t at = 0;
+    int w = snprintf(buf, n, "stalled replay %u (present %.0f ms, %s): ", replay, presentMs, gpu);
+#define ADD(...)                                                                                   \
+    do {                                                                                           \
+        if (w < 0 || (size_t)w >= n - at) {                                                        \
+            return (int)strlen(buf);                                                               \
+        }                                                                                          \
+        at += (size_t)w;                                                                           \
+        w = snprintf(buf + at, n - at, __VA_ARGS__);                                               \
+    } while (0)
+    /* the most expensive pieces, each with the block's mean of one like it */
+    bool used[RD_PERF_PASS_MAX];
+    memset(used, 0, sizeof(used));
+    for (unsigned k = 0; k < top; k++) {
+        int best = -1;
+        for (uint32_t i = 0; i < count; i++) {
+            if (!used[i] && p[i].gpuUs >= 0.0f && (best < 0 || p[i].gpuUs > p[best].gpuUs)) {
+                best = (int)i;
+            }
+        }
+        if (best < 0) {
+            break;
+        }
+        used[best] = true;
+        const RdPerfPass *q = &p[best];
+        char label[32], mean[40] = "";
+        double m;
+        rd_perf_pass_label(q, label, sizeof(label));
+        if (a->replays != 0) {
+            if (rd_perf_pass_agg_mean(a, q, &m)) {
+                snprintf(mean, sizeof(mean), " (the block's %.1f)", m);
+            } else {
+                snprintf(mean, sizeof(mean), " (new to the block)");
+            }
+        }
+        ADD("%s%s %s %ux%u %.1f ms%s", k ? ", " : "", label, rd_perf_target_name(q->target),
+            (unsigned)q->w, (unsigned)q->h, (double)q->gpuUs / 1e3, mean);
+    }
+    if (a->replays == 0) {
+        ADD("; no timed replay in the block before it to compare");
+        ADD("%s", "");
+        return (int)strlen(buf);
+    }
+    /* the pieces against their block means */
+    unsigned compared = 0, over = 0, small = 0, fresh = 0, untimed = 0;
+    double restMax = 0.0;
+    for (uint32_t i = 0; i < count; i++) {
+        double m;
+        if (p[i].gpuUs < 0.0f) {
+            untimed++;
+        } else if (!rd_perf_pass_agg_mean(a, &p[i], &m)) {
+            fresh++;
+        } else if (m * 1e3 < (double)RD_PERF_PASS_SMALL_US) {
+            small++;
+        } else {
+            const double ratio = (double)p[i].gpuUs / 1e3 / m;
+            compared++;
+            if (ratio > 2.0) {
+                over++;
+            } else if (ratio > restMax) {
+                restMax = ratio;
+            }
+        }
+    }
+    ADD("; %u of %u passes over 2x their block mean", over, compared);
+    if (over < compared) {
+        ADD(", the rest within %.1fx", restMax);
+    }
+    if (small) {
+        ADD("; %u under 0.05 ms left out", small);
+    }
+    if (fresh) {
+        ADD("; %u new to the block", fresh);
+    }
+    if (untimed) {
+        ADD("; %u not timed", untimed);
+    }
+    ADD(" (%u timed replays in the block so far)", a->replays);
+    ADD("%s", "");
+#undef ADD
+    return (int)strlen(buf);
+}
+
+int rd_perf_passes_arm_text(uint32_t replay, double presentMs, char *buf, size_t n)
+{
+    return snprintf(buf, n,
+                    "every replay timed pass by pass from here (a present blocked %.0f ms at "
+                    "replay %u): the next stalled replay's passes are compared with the block's",
+                    presentMs, replay);
 }
 
 int rd_perf_pass_kinds_text(const double kinds[RD_PERF_PASS_KIND_COUNT],
