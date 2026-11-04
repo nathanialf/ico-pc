@@ -191,6 +191,26 @@ GS_FN uint gs_fog_channel(uint lo, uint hi, uint f, uint mul, uint b)
 #define VK_DUAL(n, i)
 #endif
 
+// A choice between two values both computed, and a logical and of two
+// booleans both computed, without a branch.  HLSL 2021 (DXC's default)
+// short-circuits && and || and evaluates only the chosen side of ?:, so DXC
+// emits each as a conditional branch, a merge block and an OpPhi; select()
+// and and() are its forms that evaluate both sides, one OpSelect or
+// OpLogicalAnd.  A chain of them in a shader called many times over is the
+// difference between a few thousand basic blocks and a few dozen
+// (font_sheet_ps: 5,337 blocks, 70,549 words before, docs/port/SHADERS.md,
+// "Branches from && and ?:").  FXC (Direct3D 11, shader model 5.0) has
+// neither intrinsic and evaluates both sides of ?: and && anyway (a movc),
+// so it keeps the operators.  Both sides must be safe to evaluate: no
+// division by a value that may be 0 (divide by max(d, 1) and select).
+#if defined(__HLSL_VERSION) && __HLSL_VERSION >= 2021
+#define ICO_SELECT(c, a, b) select((c), (a), (b))
+#define ICO_AND(a, b) and((a), (b))
+#else
+#define ICO_SELECT(c, a, b) ((c) ? (a) : (b))
+#define ICO_AND(a, b) ((a) && (b))
+#endif
+
 // ---------------------------------------------------------------- FrameCB
 // Group 0, slot 0. 336 bytes (shader_consts.h IcoFrameCB, asserted there).
 // Matrices are column-major float[16] (element

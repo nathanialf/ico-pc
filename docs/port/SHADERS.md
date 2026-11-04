@@ -241,8 +241,9 @@ uniform, so no key of its own) (`port/shaders/common.hlsli`).
 **Functions.** Vector forms of the GS arithmetic (`gs_texture_function`, `gs_texa_expand`,
 `gs_bilerp`, `gs_texa_texture`: the GS's bilinear filter with TEXA applied per texel first,
 `gs_blend_int`); GS mipmapping (`gs_lod`, `gs_sample_lod_nearest`, `gs_sample`); DATE
-(`gs_date_discard`). **Outputs**: `gs_dual_out` fills `DualOut` with the colour and the stored GS
-alpha and, on the second output, the blend factor As/128 or FIX/128 in all four lanes; a factor
+(`gs_date_discard`). `ICO_SELECT(c, a, b)` and `ICO_AND(a, b)` choose and join without a branch
+([Branches from && and ?:](#branches-from--and-)). **Outputs**: `gs_dual_out` fills `DualOut`
+with the colour and the stored GS alpha and, on the second output, the blend factor As/128 or FIX/128 in all four lanes; a factor
 above 1.0 does not survive the blender, so `DF_PREMUL` moves the multiply into the shader for the
 additive and subtractive forms. **The destination read** (`gs_dst_pixel`, `gs_dst_out`): the GS's
 `((A - B) * C >> 7) + D` computed exactly from the fragment's own pixel, with COLCLAMP, PABE, FBA
@@ -325,8 +326,7 @@ texel is past the rim's reach, so it is every texel beyond. `font_sheet_baked_ps
 texels around the sample, its read clamped to the texture, and blends them with `font_sheet_ps`'s
 float lerp and `floor(m + 0.5)`, so its output is `font_sheet_ps`'s at scale 1 byte for byte, for
 four loads where `font_sheet_ps` gathers a 14 x 10 coverage grid and runs the dilation per pixel
-(about 40 ms a picture of menu text on a Mali-G52 at 1x, issue 173; `font_sheet_ps_nodual` is the
-largest pixel shader). A change uploads the changed rectangle grown by the apron, a style change
+(about 40 ms a picture of menu text on a Mali-G52 at 1x, issue 173). A change uploads the changed rectangle grown by the apron, a style change
 the whole page (`port/render/rd_upload.c` (`rd__upload_dirty_textures`)); `ICO_RD_SHEET_SHADER=1`
 (`[dev] sheet_shader = true`) draws every scale through `font_sheet_ps` instead, the A/B
 (`port/render/rd_core.c` (`rd_init`)).
@@ -454,6 +454,49 @@ the code and a CPU sweep against the plain operator in `gs_math_test`:
   (`fx_sprite_ps`'s coverage, `fp / ts` at scale 1): the reciprocal of 1.0 is 1.0 and `x * 1.0`
   is `x`.
 
+## Branches from && and ?:
+
+DXC compiles HLSL 2021 (its default, and the build's): `&&` and `||` short-circuit and `?:`
+evaluates only the side it chooses, so each becomes an `OpBranchConditional`, a block per side, an
+`OpSelectionMerge` and an `OpPhi`, even between two constants and even inside a loop that `[unroll]`
+writes out (the branches are made before the unrolling and stay after it). `font_sheet_ps` had
+them in its hottest helpers: `sheet_cov4`'s bounds test (`q.x >= 0 && q.x < size.x`, four per
+gather) and its four `in0x && in0y ? c.x : 0u`, 35 gathers a pixel; `sheet_wx`/`sheet_wy`'s `?:`
+chains, one for each of the dilation's 296 weights (10 rows x 2 columns x 13 taps across, 4 x 9
+down), which therefore never became constants; `sheet_threshold`'s `if (dither == 0)` and its row
+chain; `sheet_texel`'s `a != 0u ? (...) / a : 0u`. Issue 188: a PowerVR BXM-8-256 (driver
+1.15@6133110) did not finish compiling `font_sheet_ps_nodual` written with
+those operators, 70,549 words in 5,337 blocks, within the pre-game limit of 10 s (1.3 to 1.5 s on a PowerVR DXT-48, 0.5 s on an RTX 3090).
+
+The forms that evaluate both sides are `select(c, a, b)` (one `OpSelect`) and `and(a, b)` /
+`or(a, b)` (one `OpLogicalAnd` / `OpLogicalOr`), HLSL 2021 intrinsics. `common.hlsli` wraps them as
+`ICO_SELECT(c, a, b)` and `ICO_AND(a, b)`: under HLSL 2018 (FXC for Direct3D 11, and the
+`shaders_d3d11_check` target's `-HV 2018`) neither intrinsic exists and the macros are the
+operators, which FXC evaluates on both sides anyway (a `movc`). Both sides run, so neither may
+divide by a value that can be 0 (integer division by 0 is undefined in SPIR-V): `sheet_texel`
+divides by `max(a, 1u)` and selects 0 where `a` is 0. A range test `0 <= v && v < n` with `n >= 0`
+is one unsigned comparison, `(uint)v < (uint)n` (a negative `v` wraps above any such `n`). A
+`style.x != 0u ? max(c, (r * style.x + 32u) / 64u) : c` whose other side is already the value
+when the condition fails (`(r * 0 + 32) / 64` is 0) needs no choice at all. Each rewrite is the
+same integer or float on every input, so the pixels are the same bytes (`rd_pixel`, `rd_sheet_bake`
+and the menu text tests compare them against `sheet_ref.c` and the baked shader).
+
+The text sheet entries (DXC v1.9.2609, the build's flags; `tools/check_spirv.py --sizes`; GLSL is
+`tools/spirv_to_glsl.py`'s translation, the OpenGL backend's text):
+
+| module | with `&&` and `?:`: words / instructions / blocks / phis | with `ICO_SELECT` | GLSL bytes, the two forms |
+| --- | --- | --- | --- |
+| `font_sheet_ps` | 70,468 / 19,533 / 5,331 / 1,829 | 20,811 / 4,052 / 63 / 21 | 487,712 / 59,418 |
+| `font_sheet_ps_nodual` | 70,549 / 19,556 / 5,337 / 1,830 | 20,892 / 4,075 / 69 / 22 | 488,272 / 59,957 |
+| `font_sheet_ps_dstrov` | 71,441 / 19,799 / 5,395 / 1,853 | 21,784 / 4,318 / 127 / 45 | 494,998 / 66,269 |
+| `font_sheet_ps_dstatt` | 71,497 / 19,815 / 5,399 / 1,852 | 21,840 / 4,334 / 131 / 44 | none (input attachment) |
+| `font_sheet_baked_ps` (and its three variants) | 2,255 to 3,276 | the same bytes | the same |
+
+Most of what remains is the 1x path written out (35 gathers, 296 multiplies and maxima); the
+scaled path (`sheet_scaled`, scales 2 to 4) is about 5,500 words of it: without it
+`font_sheet_ps_nodual` measures 15,397 words. The macros change no other module: every other
+one of the 181 is the same bytes either way (`tools/spirv_header_diff.py`).
+
 ## Integer lanes: never through a float load
 
 The VU kept integers in its float registers, and the port's buffers mix the two the same way: the
@@ -564,8 +607,10 @@ is 1,073 instructions without a branch; the corner-array form with a loop over t
 
 **The size.** Each module has a budget in 32-bit words, `VS_BUDGET` (56,000, a tripwire about a
 tenth above the largest) for a vertex shader, `VS_PLAIN_BUDGET` (25,700) for a VU vertex shader's
-plain variant ([The variants](#the-variants)) and `PS_BUDGET` (78,560, the largest pixel shader's
-71,418 and a tenth) for a pixel shader, and `spirv_check` fails a module over it; `--sizes` prints
+plain variant ([The variants](#the-variants)), `PS_BUDGET` (52,392, the largest pixel shader,
+`yuv_ps`'s 47,629, and a tenth) for a pixel shader and `SHEET_BUDGET` (24,024, `font_sheet_ps_dstatt`'s 21,840 and a tenth) for the
+sheet text entries `font_sheet_*` ([Branches from && and ?:](#branches-from--and-)), and
+`spirv_check` fails a module over it; `--sizes` prints
 each module's words, instructions, basic blocks, phis, loops, dot products, vector comparisons,
 boolean selects and `any()`. A phone's driver compiles the start-up set in a time about
 proportional to the modules' size (the renderer logs the largest at start and the compile time per
@@ -863,7 +908,7 @@ the same way into `rhi_test_glsl.h`.
 | `shaders_table` (`port/shaders/test/shaders_table_test.c`) | every embedded entry: SPIR-V with its magic, DXIL a signed DXBC container (none with `ICO_SHADERS_DXIL=OFF`), a known stage and entry, unique names, the expected names present, and with GLSL on a zlib stream for every entry but the 17 of `expectedNoGlsl` |
 | `gs_math` (`gs_math_test.c`) | `gs_math.hlsli` as C against `port/test/gs_blend_test.c`'s formulas and the GS rules for TEXA, the alpha test and the Z mapping: exhaustive where the domain is small; the shared constants pinned; the [integer forms](#integer-forms) against the operators they replace |
 | `shaders_pixel` (`shaders_pixel_test.c`) | `sprite.hlsl`, `blit.hlsl` and `blend_int.hlsl` through the Vulkan RHI, texel by texel against `gs_math.hlsli` as C: untextured, modulate, the alpha test, dual-source lerps, additive with `DF_PREMUL`, PABE, FBA, tinted blits, three integer blends; `shaders_pixel_nodual` (`--nodual`, `ICO_VK_FAKE_NO_DUAL=1`) the two-pass fallback; `shaders_pixel_mali` under `ICO_VK_FAKE_LIMITS=mali` |
-| `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget (a VU vertex shader's plain variant, a pre-pass entry or record stage `_pre_vs` and a main shader `_main_vs` within the plain one), every mesh program's entry with its `vu_X_plain_vs` (`PROGRAM_ENTRIES`), the largest module of each budget class printed last, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |
+| `spirv_check` (`tools/check_spirv.py --sizes`) | every compiled SPIR-V module under the build's `shaders/`: a vertex shader without a vector of booleans, `OpAny`/`OpAll` or a boolean select, its opcodes inside the envelope's set (`OpLoopMerge`, `OpDot`, `OpLogicalNotEqual`, `OpUndef` named), every module within its size budget (a VU vertex shader's plain variant, a pre-pass entry or record stage `_pre_vs` and a main shader `_main_vs` within the plain one, the sheet text entries `font_sheet_*` within `SHEET_BUDGET`), every mesh program's entry with its `vu_X_plain_vs` (`PROGRAM_ENTRIES`), the largest module of each budget class printed last, no array-typed value (OpLoad, OpStore, OpCompositeConstruct, OpCompositeInsert, OpPhi, OpSelect, OpCopyObject, OpCopyLogical of an array type) and no local array in a vertex shader ([The envelope](#the-envelope)); the sizes and the shape census printed; the module's binary form decoded in Python, no SPIR-V tool needed |
 | `shaders_d3d11_check` (a build target, `cmake/IcoShaders.cmake`) | every entry compiled by DXC under `ICO_D3D11=1` and HLSL 2018 ([Direct3D 11: run-time compile](#direct3d-11-run-time-compile)) |
 | `rhi_gl_glsl` (`port/rhi/test/rhi_gl_glsl_test.c`) | the OpenGL backend's GLSL inflate: a miniz-deflated text round-trips NUL-terminated, a wrong text length, a corrupt, truncated or missing stream give none |
 | `rhi_d3d11_shader_plan` (`port/rhi/test/rhi_d3d11_shader_plan_test.c`) | the Direct3D 11 route's portable part: macros, include lookup, the flat-register rule over the game's sources and the RHI test shader, the cache key over every table entry, the cache file |
