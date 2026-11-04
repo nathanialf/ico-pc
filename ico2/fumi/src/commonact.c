@@ -425,6 +425,7 @@ static int ChangeMailInLadder(GObj *self, int mail)
 
 /* PC port: port/game/options.c: [gameplay] shadow_speed, the factor 0.75 to 1.5 */
 extern float ico_opt_shadow_speed_factor(void);
+extern float ico_opt_shadow_turn_limit(int kind, int motion, float s);
 /* motionOrientManager.h declares none of the motion tables */
 extern MotionDef motionKind[];
 
@@ -6888,6 +6889,9 @@ static int SetMotionDirectionSmooze_ntsc(GObj *self, float *dir, float s)
     if ((int)(sub->flags20.ll >> 20) & 1) {
         s = ((ActWork *)sub->work)->lockedMaxRotate;
     }
+    /* PC port: [gameplay] shadow_speed turns a shadow's locomotion as quickly as it moves,
+       so its circle stays the original's size (ico_opt_shadow_turn_limit) */
+    s = ico_opt_shadow_turn_limit(self->kind, GOBJ_SUB(self)->ctrl.motion, s);
     r = _RotyGV(test_CURRENTORIENT(self), dir);
     if ((float)(r < 0 ? -r : r) < s) {
         ret = 1;
@@ -6926,6 +6930,9 @@ static int SetMotionDirectionSmooze_aug6jun26(GObj *self, float *dir, float s)
             s = 30.0f;
         }
     }
+    /* PC port: [gameplay] shadow_speed turns a shadow's locomotion as quickly as it moves,
+       so its circle stays the original's size (ico_opt_shadow_turn_limit) */
+    s = ico_opt_shadow_turn_limit(self->kind, GOBJ_SUB(self)->ctrl.motion, s);
     r = _RotyGV(test_CURRENTORIENT(self), dir);
     if ((float)(r < 0 ? -r : r) < s) {
         ret = 1;
@@ -6972,6 +6979,9 @@ int SetMotionDirectionSmooze(GObj *self, float *dir, float s)
     if ((int)(sub->flags20.ll >> 33) & 1) {
         s = ((ActWork *)sub->work)->lockedMaxRotate;
     }
+    /* PC port: [gameplay] shadow_speed turns a shadow's locomotion as quickly as it moves,
+       so its circle stays the original's size (ico_opt_shadow_turn_limit) */
+    s = ico_opt_shadow_turn_limit(self->kind, GOBJ_SUB(self)->ctrl.motion, s);
     r = _RotyGV(test_CURRENTORIENT(self), dir);
     if ((float)(r < 0 ? -r : r) < s) {
         ret = 1;
