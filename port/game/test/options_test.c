@@ -730,6 +730,25 @@ static void test_shadow_speed(void)
     remove(logpath);
     ico_opt_set_shadow_speed(ICO_SPEED_ORIGINAL);
 
+    /* the turn limit follows the factor on a shadow's locomotion motion only, and the factor 1
+       leaves it (pal: 838 is the fly, 834 the stand, 911 an attack) */
+    {
+        const char *mine = ico_region_cur()->slug;
+
+        CHECK(ico_region_select("pal") == 0);
+        for (v = 0; v < ICO_SPEED_COUNT; v++) {
+            ico_opt_set_shadow_speed(v);
+            CHECK(ico_opt_shadow_turn_limit(4, 838, 3.0f) == 3.0f * factor[v]);
+            CHECK(ico_opt_shadow_turn_limit(4, 841, 7.5f) == 7.5f * factor[v]);
+            CHECK(ico_opt_shadow_turn_limit(4, 834, 3.0f) == 3.0f);
+            CHECK(ico_opt_shadow_turn_limit(4, 911, 3.0f) == 3.0f);
+            CHECK(ico_opt_shadow_turn_limit(0, 838, 3.0f) == 3.0f);
+        }
+        ico_opt_set_shadow_speed(ICO_SPEED_ORIGINAL);
+        CHECK(ico_opt_shadow_turn_limit(4, 838, 3.0f) == 3.0f);
+        CHECK(ico_region_select(mine) == 0);
+    }
+
     /* the hook: the multiplier in the one place that resolves the ratio, for enemies, not on
        the freeze, only on this disc's locomotion motions */
     text = read_source(ICO_ACT_GAME_SRC);
@@ -748,6 +767,11 @@ static void test_shadow_speed(void)
     CHECK(text != NULL);
     if (text != NULL) {
         CHECK(count_of(text, "v.f[2] *= ico_opt_shadow_speed_factor();") == 3);
+        /* the turn limit: once in each of the three SetMotionDirectionSmooze copies */
+        CHECK(count_of(
+                  text,
+                  "s = ico_opt_shadow_turn_limit(self->kind, GOBJ_SUB(self)->ctrl.motion, s);") ==
+              3);
         free(text);
     }
     /* the simulation keys name it (the pad recording's header and a save

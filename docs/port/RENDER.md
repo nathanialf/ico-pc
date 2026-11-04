@@ -596,7 +596,14 @@ page) that was not made, that the device refused, or that found the ring full is
 the log, `rd: text: a menu texture could not be uploaded (...)` (`port/render/rd_tex.c`
 (`rdtex_text_upload_failed`), from `rd_create_texture_sheet` and `rd__upload_dirty_textures`; a
 glyph page `rd_create_texture_r8` could not make logs the same words with `ui:`,
-`port/ui/font.c` (`pageTexture`)).
+`port/ui/font.c` (`pageTexture`)). Menu text pages are baked on the CPU into RGBA8 at strip
+scale 1 on every class and at scale 2 on the tile-based classes only (`RdProfile.sheetBake2x`,
+`rd__sheet_bake_scale`, `port/render/rd_tex.c`): elsewhere `font_sheet_ps` draws the 2x coverage,
+which costs no picture time one can see, where the 4 to 18 MB bake upload on the render thread
+held a picture back for 10 to 111 ms whenever new text appeared (issue 126, a GTX 750 Ti on
+Direct3D 11). The start line says which (`rd: text: menu text baked at 1x and 2x ...` or `rd:
+text: menu text baked at 1x; 2x through the sheet shader ...`); the bytes are the same either way
+(`ctest rd_pixel`, `rd_sheet_bake`).
 
 **Bind groups.** Bind groups are valid only in the [frame slot](ARCHITECTURE.md#terms) they were
 made in, so their caches are tagged with an epoch every `rhi_wait_frame` of the renderer starts anew

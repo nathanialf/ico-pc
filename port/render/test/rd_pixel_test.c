@@ -2306,6 +2306,22 @@ static void testSheetBakedTexels(RdTex sheet, const char *mode)
            mode);
 }
 
+static void testSheetScaledOne(int S, const char *dir, int bake);
+
+/* 2x with the profile's bake on (a tile-based class) and off (any other,
+ * issue 126), then the profile as it was; 4x once */
+static void testSheetScaled(int S, const char *dir)
+{
+    const int was = g_rd.profile.sheetBake2x;
+    if (S == 2) {
+        testSheetScaledOne(S, dir, 1);
+        testSheetScaledOne(S, dir, 0);
+    } else {
+        testSheetScaledOne(S, dir, was);
+    }
+    rd__set_sheet_bake_2x(was != 0);
+}
+
 static void testSheetText(const char *mode, int scale, const char *dir)
 {
     for (int y = 0; y < SHEET_H; y++) {
@@ -2559,8 +2575,12 @@ static uint8_t scaledCov(int x, int y, int S)
     return sheetCov(sx, sy);
 }
 
-static void testSheetScaled(int S, const char *dir)
+/* a scaled sheet with the 2x bake in the state `bake` (the tile-based
+ * classes' profile, or the others'): 2x baked or drawn by font_sheet_ps,
+ * the SCENE the same either way */
+static void testSheetScaledOne(int S, const char *dir, int bake)
 {
+    rd__set_sheet_bake_2x(bake != 0);
     const int W = SHEET_W * S, H = SHEET_H * S;
     for (int y = 0; y < H; y++) {
         for (int x = 0; x < W; x++) {
@@ -2626,9 +2646,10 @@ static void testSheetScaled(int S, const char *dir)
     uint8_t *img = NULL, *viaShader = NULL;
     for (int pass = 0; pass < 2; pass++) {
         if (pass == 1) {
-            CHECK(sr && sr->sheetBaked == (S == 2),
-                  "scaled sheet %d: the device texture holds %s (sheetBaked %d)", S,
-                  S == 2 ? "the baked texels" : "the coverage", sr ? sr->sheetBaked : -1);
+            const int want = S == 2 && bake;
+            CHECK(sr && sr->sheetBaked == want,
+                  "scaled sheet %d, 2x bake %d: the device texture holds %s (sheetBaked %d)", S,
+                  bake, want ? "the baked texels" : "the coverage", sr ? sr->sheetBaked : -1);
             rd__set_sheet_shader(true);
         }
         sheetFrameBegin();
@@ -2802,9 +2823,17 @@ static void testSheetScaled(int S, const char *dir)
         }
         snprintf(path, sizeof(path), "%s/rd_pixel_sheet_s%d.rddump", dir, S);
         CHECK(rd_dump_frame(path), "rd_dump_frame (scaled sheet %d)", S);
+        /* the loaded dumps stay live: the 2x sheet runs twice (bake on, off),
+         * so count what this load added */
+        int before = 0;
+        for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
+            const RdTexRec *t = &g_rd.textures[i];
+            before += t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&
+                      t->w == (uint32_t)W && t->sheetScale == S && strcmp(t->name, "dump") == 0;
+        }
         RdFrame f;
         if (rd__load_frame(path, &f)) {
-            int sheets = 0;
+            int sheets = -before;
             for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
                 const RdTexRec *t = &g_rd.textures[i];
                 sheets += t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&

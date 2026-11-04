@@ -1522,7 +1522,7 @@ words as sheet text (`ui_draw_menu_text`): the fades fold does not take that lis
 layout is drawn after the fade, [RENDER_POST.md](RENDER_POST.md#the-fades-fold)), and the 1x bake did not
 cover it, because the phone's scene is 2.109 times the PS2's height and its strips are at scale 2
 (`mfScale`: `ceil(2.109 - 0.25)`), which `font_sheet_ps` rebuilt per pixel (a gather, nine loads,
-about sixteen integer divisions). 2x pages are now baked too, byte for byte
+about sixteen integer divisions). 2x pages are now baked too (on the tile-based classes only, issue 126), byte for byte
 ([SHADERS.md](SHADERS.md#sheet_texthlsli), **The 2x bake**); the phone's menu pictures should lose
 most of the difference to the game's 1.15 ms, unmeasured until the phone shows it (the same 10 s
 lines with the pause menu up; `[dev] sheet_shader = true` draws them as before, the A/B).

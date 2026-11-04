@@ -397,6 +397,10 @@ void rd__profile_init(void)
      * classes, where their own pass loaded and stored the scene's depth
      * (rd_shadow_merge.c reads ICO_RD_SHADOW_MERGE over it, the tests') */
     p->shadowMerge = tile;
+    /* scale 2 menu text baked on the tile-based classes only (rd_tex.c
+     * rd__sheet_bake_scale; issue 126: on the others the bake's upload held
+     * a picture back) */
+    p->sheetBake2x = tile;
 
     /* the [dev] keys, through the host's environment */
     const char *notHere = NULL; /* a [dev] key asked for what the device lacks */

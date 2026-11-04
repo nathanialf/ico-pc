@@ -826,6 +826,9 @@ void rd__sheet_bake_grow(const RdTexRec *t, uint32_t dw, uint32_t dh, uint32_t *
  * marked for upload again (its RHI texture is made in the other layout at
  * the next replay) */
 void rd__set_sheet_shader(bool on);
+/* g_rd.profile.sheetBake2x for tests, the sheets' pages made again (as
+ * rd__set_sheet_shader does) */
+void rd__set_sheet_bake_2x(bool on);
 
 /* --------------------------------------------------------------- meshes
  * rd_mesh.c.  A VU mesh keeps its vertex stream (the
@@ -1237,6 +1240,14 @@ typedef struct RdProfile {
      * off on the immediate-mode ones (no key: the same picture;
      * ICO_RD_SHADOW_MERGE=0|1 is the tests' way) */
     bool shadowMerge;
+    /* strips of scale 2 baked on the CPU (rd_tex.c rd__sheet_bake_scale): on
+     * on the tile-based classes (the phone's text shader costs a tile-based
+     * GPU 40 ms and more a picture of menu text), off on the others, whose
+     * font_sheet_ps draws the 2x coverage at no cost one sees, where a bake
+     * is a 4 to 18 MB upload on the render thread whenever new text appears
+     * (issue 126).  No [dev] key: [dev] sheet_shader turns every bake off;
+     * rd__set_sheet_bake_2x is the tests' */
+    bool sheetBake2x;
     /* rd_profile.c: the device class's name for the lines; per flag
      * (RD_PROFILE_*) whether a [dev] key set it and whether a self-test
      * turned it off (rd__profile_self_test_off) */
