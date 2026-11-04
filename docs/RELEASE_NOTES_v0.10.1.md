@@ -9,6 +9,7 @@
 
 ## Fixed
 
+- On computers, new text (subtitles, menus, pop-ups) no longer holds a picture back for a moment; the text is the same.
 - Walls and water right beside the camera no longer vanish at the sides of wide screens; the 4:3 picture is unchanged.
 - Turning on MSAA anti-aliasing now works out shadows in the same steps as without it, which is meant to stop the game restarting on NVIDIA graphics cards.
 - With Graphics API set to Direct3D 11, the shadows are worked out in a way every graphics card supports.

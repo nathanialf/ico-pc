@@ -501,8 +501,8 @@ void rd__upload_dirty_textures(void)
             continue;
         }
         const uint8_t levels = texLevels(t);
-        /* a sheet's texels baked at 1x and 2x (rd__sheet_baked), its
-         * coverage at 3x and 4x */
+        /* a sheet's texels baked at 1x, and 2x on the tile-based
+         * classes (rd__sheet_baked), its coverage above */
         const uint8_t baked = (uint8_t)rd__sheet_baked(t);
         if (t->rhi.id && (t->mipLevels != levels || t->sheetBaked != baked)) {
             /* the filter option changed, or a sheet's layout (its scale,

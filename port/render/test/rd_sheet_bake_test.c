@@ -41,7 +41,7 @@
  *            menu_font.c placeCoverage places it (its coverage and rim
  *            rectangles) and baked over rd__sheet_bake_grow's rectangle
  *            gives a fresh bake's page; scale 3 (6ths, which round) and
- *            the device rule (rd__sheet_bake_scale: 1 and 2 only) refused.
+ *            the device rule (rd__sheet_bake_scale: 1, and 2 on the tile-based profile) refused.
  */
 #include <math.h>
 #include <stdio.h>
@@ -815,9 +815,18 @@ static void testScaled(void)
           "scaled: scale 3 refused, nothing written");
     CHECK(rd__sheet_bake_scaled_rect(cov, 2, 8, sb, 1, 0, 0, 1, 1, px, 4) == 0,
           "scaled: scale 1 is the 1x bake's");
+    /* the device rule: 1x always, 2x on the tile-based classes' profile only
+       (RdProfile.sheetBake2x, issue 126), 3x and 4x never; the profile is
+       zero here (no rd_init), the immediate-mode classes' */
+    rd__set_sheet_bake_2x(false);
+    CHECK(rd__sheet_bake_scale(0) && rd__sheet_bake_scale(1) && !rd__sheet_bake_scale(2) &&
+              !rd__sheet_bake_scale(3) && !rd__sheet_bake_scale(4),
+          "scaled: an immediate-mode profile bakes 1x only");
+    rd__set_sheet_bake_2x(true);
     CHECK(rd__sheet_bake_scale(0) && rd__sheet_bake_scale(1) && rd__sheet_bake_scale(2) &&
               !rd__sheet_bake_scale(3) && !rd__sheet_bake_scale(4),
-          "scaled: the device bakes 1x and 2x");
+          "scaled: a tile-based profile bakes 1x and 2x");
+    rd__set_sheet_bake_2x(false);
 }
 
 int main(int argc, char **argv)
