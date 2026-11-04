@@ -14,6 +14,11 @@
  *     2-6; an 8-core 4+3+1 phone 7 and 4-6; no split with two fastest
  *     cores, with the fastest the only one faster than the slowest, with
  *     one speed, or with none known;
+ *   the placement rule (cpu_place_plan): 2 faster of 8 (6 x 1.8 GHz, 2 x
+ *     2.0 GHz) gives the game and render threads both cores and the submit
+ *     thread none; 3 and 4 faster keep render and submit (game free), the
+ *     prime-core phone its split; 1 faster the render thread alone; one
+ *     speed or none known nothing;
  *   the masks' text: runs, single cores, none;
  *   the 10 s part word for word: three threads, a thread with no samples,
  *     one with no core known, the slowest-core shares, S left out;
@@ -191,6 +196,55 @@ static void testSplit(void)
     CHECK(!cpu_place_split(&c, &r, &s) && r == 0 && s == 0);
 }
 
+/* the placement rule (cpu_place_plan): who keeps to which cores */
+static void testPlan(void)
+{
+    static const unsigned g85[] = {1800, 1800, 1800, 1800, 1800, 1800, 2000, 2000};
+    static const unsigned three[] = {1800, 1800, 1800, 1800, 1800, 2600, 2600, 2600};
+    static const unsigned four[] = {1800, 1800, 1800, 1800, 2600, 2600, 2600, 2600};
+    static const unsigned rc9[] = {2200, 2200, 3100, 3100, 3100, 3100, 3100, 3800};
+    static const unsigned oneFast[] = {1800, 1800, 1800, 1800, 1800, 1800, 1800, 3100};
+    static const unsigned flat[] = {2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000};
+    CpuPlan p;
+    CpuClasses c;
+
+    /* two faster of eight: the game and render threads take them, the
+       submit thread is free */
+    classesOf(&c, g85, 8);
+    cpu_place_plan(&c, &p);
+    CHECK(p.kind == CPU_PLAN_TWO_FAST && p.fastCount == 2 && p.coreCount == 8);
+    CHECK(p.game == 0xc0u && p.render == 0xc0u && p.submit == 0 && !p.split);
+    /* three faster (one speed): as before, render and submit kept, the game thread
+       free (the top speed three cores': no split) */
+    classesOf(&c, three, 8);
+    cpu_place_plan(&c, &p);
+    CHECK(p.kind == CPU_PLAN_MANY_FAST && p.fastCount == 3);
+    CHECK(p.game == 0 && p.render == 0xe0u && p.submit == 0xe0u && !p.split);
+    /* four faster, one speed */
+    classesOf(&c, four, 8);
+    cpu_place_plan(&c, &p);
+    CHECK(p.kind == CPU_PLAN_MANY_FAST && p.fastCount == 4);
+    CHECK(p.game == 0 && p.render == 0xf0u && p.submit == 0xf0u && !p.split);
+    /* the prime-core phone: its split stays */
+    classesOf(&c, rc9, 8);
+    cpu_place_plan(&c, &p);
+    CHECK(p.kind == CPU_PLAN_MANY_FAST && p.fastCount == 6 && p.split);
+    CHECK(p.game == 0 && p.render == 0x80u && p.submit == 0x7cu);
+    /* one faster: the render thread alone on it, the others free */
+    classesOf(&c, oneFast, 8);
+    cpu_place_plan(&c, &p);
+    CHECK(p.kind == CPU_PLAN_ONE_FAST && p.fastCount == 1);
+    CHECK(p.game == 0 && p.render == 0x80u && p.submit == 0);
+    /* all equal, and none known: nothing kept */
+    classesOf(&c, flat, 8);
+    cpu_place_plan(&c, &p);
+    CHECK(p.kind == CPU_PLAN_NONE && p.fastCount == 0 && p.game == 0 && p.render == 0 &&
+          p.submit == 0);
+    memset(&c, 0, sizeof(c));
+    cpu_place_plan(&c, &p);
+    CHECK(p.kind == CPU_PLAN_NONE && p.coreCount == 0);
+}
+
 static void testText(void)
 {
     char s[256];
@@ -326,6 +380,7 @@ int main(int argc, char **argv)
     (void)argv;
 #endif
     testSplit();
+    testPlan();
     testText();
     testThread();
     testPinResult();

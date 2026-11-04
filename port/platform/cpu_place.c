@@ -251,6 +251,32 @@ bool cpu_place_split(const CpuClasses *c, uint64_t *render, uint64_t *submit)
     return true;
 }
 
+void cpu_place_plan(const CpuClasses *c, CpuPlan *out)
+{
+    const uint64_t fast = cpu_place_fast_mask(c);
+    int n = 0, known = 0;
+
+    memset(out, 0, sizeof(*out));
+    for (int i = 0; i < c->count && i < CPU_PLACE_MAX; i++) {
+        n += (int)((fast >> i) & 1u);
+        known += c->khz[i] != 0;
+    }
+    out->fastCount = n;
+    out->coreCount = known;
+    if (n == 0) {
+        out->kind = CPU_PLAN_NONE;
+    } else if (n == 1) {
+        out->kind = CPU_PLAN_ONE_FAST;
+        out->render = fast;
+    } else if (n == 2) {
+        out->kind = CPU_PLAN_TWO_FAST;
+        out->game = out->render = fast;
+    } else {
+        out->kind = CPU_PLAN_MANY_FAST;
+        out->split = cpu_place_split(c, &out->render, &out->submit);
+    }
+}
+
 size_t cpu_place_mask_text(uint64_t mask, char *out, size_t cap)
 {
     size_t len = 0;
