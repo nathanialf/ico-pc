@@ -2,8 +2,13 @@
 # docs/port/RENDER_POST.md, "Crack filling above 1x"; docs/port/DIVERGENCES.md VD-20)
 # against pass dumps of the build that drew it before the fog.  Each line of the list
 # (tools/crack_late_dumps.txt: "<setting> <dump> <baseline folder>") is replayed with
-# rd_replay_tool --pass-dump --stats under ICO_RD_BLEND=fixed and ICO_RD_FADES_FOLD=0
-# (the baselines' own; the fades fold has its own A/B, rd_fades_fold_ab) at the setting:
+# rd_replay_tool --pass-dump --stats under ICO_RD_BLEND=fixed, ICO_RD_FADES_FOLD=0 and
+# ICO_RD_CULL=off (the baselines' own: the fades fold has its own A/B, rd_fades_fold_ab;
+# the baselines replayed every draw, and the visibility test (rd_vis.c) leaves draws out
+# of the replay, which keeps every pixel but drops their texture and buffer copies, so the
+# phone's copy count below is the baseline's minus one only with every draw replayed: at
+# the default frustum v4103 makes 237 copies against 274 with the culler off, the same
+# PNGs byte for byte; the culler's own gate is rd_cull_ab) at the setting:
 #   enh2x43  Enhanced 2x at 4:3, presented at 1280x960 (the pass-dump gate's);
 #   phone    the PowerVR phone's Resolution Auto (2364x1080, Full height, Full pixel,
 #            aspect 2.189, presented at 2364x1080) under its profile's fakes (the local
@@ -111,8 +116,8 @@ foreach(run IN LISTS runs)
   file(REMOVE_RECURSE "${dir}")
   file(MAKE_DIRECTORY "${dir}")
   execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
-                          ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dir}" --stats
-                          ${args_${s}}
+                          ICO_RD_CULL=off ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dir}"
+                          --stats ${args_${s}}
                   RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
   if(rc EQUAL 77)
     message(STATUS "SKIP: no device: ${err}")
@@ -140,8 +145,8 @@ foreach(run IN LISTS runs)
     file(REMOVE_RECURSE "${pin}")
     file(MAKE_DIRECTORY "${pin}")
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
-                            ${env_${s}} ICO_RD_CRACK_PLACE=7 "${TOOL}" "${dump}" - --pass-dump
-                            "${pin}" --stats ${args_${s}}
+                            ICO_RD_CULL=off ${env_${s}} ICO_RD_CRACK_PLACE=7 "${TOOL}" "${dump}" -
+                            --pass-dump "${pin}" --stats ${args_${s}}
                     RESULT_VARIABLE rcPin OUTPUT_VARIABLE outPin ERROR_VARIABLE errPin)
     string(REPLACE ";" "," flatPin "${outPin}")
     if(NOT rcPin EQUAL 0 OR NOT flatPin MATCHES "${countRe}" OR NOT flat MATCHES "${countRe}")
@@ -250,8 +255,8 @@ foreach(run IN LISTS runs)
   file(REMOVE_RECURSE "${nofill}")
   file(MAKE_DIRECTORY "${nofill}")
   execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
-                          ${env_${s}} ICO_RD_CRACK_FILL=0 "${TOOL}" "${dump}" - --pass-dump
-                          "${nofill}" --stats ${args_${s}}
+                          ICO_RD_CULL=off ${env_${s}} ICO_RD_CRACK_FILL=0 "${TOOL}" "${dump}" -
+                          --pass-dump "${nofill}" --stats ${args_${s}}
                   RESULT_VARIABLE rcNo OUTPUT_VARIABLE outNo ERROR_VARIABLE errNo)
   set(maskSame 1)
   if(rcNo EQUAL 0 AND EXISTS "${dir}/${MASK_TARGET}" AND EXISTS "${nofill}/${MASK_TARGET}")
