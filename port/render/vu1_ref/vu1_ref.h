@@ -251,6 +251,22 @@ int vu1ref_region_draw(int extended, int freeCamera, int insideA, int insideB, i
  * tick shows a triangle only when the rule there gives EXACT or CLIPPED
  * (never BESIDE: compute shownPrev and shownCur with wide 0). */
 int vu1ref_region_between(int drawT, int cardT, int shownPrev, int shownCur);
+/* The camera rule ([dev] region_rule = camera, the default; ICO_VU_CAMERA;
+ * vu_common.hlsli vu_region_rule_cut, vu_rule_beside, vu_drop_fate): the
+ * camera decides what is drawn, in every preset and state, so the verdict
+ * takes no preset and no card test.  hide: never drawn.  All three corners
+ * inside: exact.  The free camera, or what the GPU draws of it lies wholly
+ * beside the camera's picture (reaches 0): clipped.  Else (the PS2's rule
+ * drops it: out of range, a corner behind the eye, a card): clipped when a
+ * tick showed it on a picture between two ticks (shown: vu1ref_region_camera
+ * at that tick's camera's positions with shown 0 and facing 0 draws it and
+ * what the GPU draws of it there reaches the frame; 0 for a tick's own
+ * picture) or when it faces the eye (facing: vu1ref_region_facing; 1 for
+ * a two-sided draw, a grid: ICO_VU_TWO_SIDED); else not drawn (the one
+ * exception: a back face keeps the PS2's drop, the inside of a cliff the
+ * camera clips into). */
+int vu1ref_region_camera(int freeCamera, int insideA, int insideB, int insideC, int hide,
+                         int reaches, int shown, int facing);
 /* Whether a triangle of the strip of static kick k passes the region test
  * (the card test, rd_mesh.h RdVuCards, vu_common.hlsli vu_strip_card): the
  * strip is the run of static kicks (vu1ref_static_kicks; stw and

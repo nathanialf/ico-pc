@@ -12,6 +12,9 @@ typedef struct RdRegionOpts {
     const char *png;  /* --region-png: the dropped triangles painted (NULL: none) */
     const char *out;  /* --region-out: the --nop spec of the draws that draw nothing */
     const char *mesh; /* --mesh: only that mesh's draws get a line (NULL: every one) */
+    /* --region-mask: where the PS2's rule and the camera rule draw
+     * differently, painted (NULL: none) */
+    const char *mask;
 } RdRegionOpts;
 
 /* Prints the lines for frame f (the frame the replay draws: with --interp

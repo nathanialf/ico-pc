@@ -392,6 +392,22 @@ uint4 vu_stream_u(uint qw)
 // rule drops stays dropped (VU_RULE_CLIP_BESIDE off): a frame not wider
 // than 4:3, a draw without winding marks, a _dstrov pass
 #define VU_F_NO_BESIDE 8192u
+// The camera rule ([dev] region_rule = camera, the default; shader_consts.h
+// ICO_VU_CAMERA, rd_replay_vu.c vuSource): the camera decides what is drawn,
+// in every preset and state.  A triangle the PS2's region rule drops (out
+// of range, a corner behind the eye, a card) is drawn, clipped by the GPU
+// at the native frustum, over the whole frame when it faces the eye
+// (vu_rule_beside); one facing away keeps the drop (the one exception: the
+// inside of a cliff the camera clips into).  No card test under it
+// (vu_region_rule_cut), and a sprite the VU skips for its x/y window is
+// drawn whole (vu_particle_vs).  Clear: the PS2's drops ([dev] region_rule
+// = ps2), with the side bands where VU_F_NO_BESIDE is clear
+#define VU_F_CAMERA 16384u
+// Under VU_F_CAMERA: the draw has no facing data to read and its surfaces
+// are open (a grid, Mesh3D: its strips wind both ways, and its back is
+// what the camera sees of it): a triangle the PS2 drops is drawn whatever
+// way it faces (vu_rule_beside)
+#define VU_F_TWO_SIDED 32768u
 // The marks of a triangle k-2, k-1, k (shader_consts.h ICO_VU_MARK_*,
 // rd_mesh.c RdMeshRec.kickMark): a byte a kick after the mesh's vertices
 // in the stream, where vu_mark says.
@@ -1461,6 +1477,18 @@ VuVSOut vu_plane_out(VuVSOut o, VuPlaneTri t, uint kick, uint me)
 //   drop (the opening's cliff, filmed from inside the rock, shows the eye
 //   its back faces).  Not at 4:3 (the frame is the picture), not for a
 //   draw without winding marks (VU_F_NO_BESIDE).
+// The steps above are the PS2's rule with the port's side bands: the
+// escape, [dev] region_rule = ps2.  By default the camera decides
+// (VU_F_CAMERA, in every preset and state, out of the box included): the
+// drops of steps 4 to 6 (a vertex out of range, a card, a corner behind
+// the eye) are the VU's limits, not the camera's, so a triangle they drop
+// is drawn, clipped by the GPU at the native frustum, over the whole frame,
+// when it faces the eye (vu_rule_beside, vu_camera_draws; a grid, with no
+// facing data and open surfaces, whatever way it faces: VU_F_TWO_SIDED).
+// No card test (vu_region_rule_cut), so the verdict is the same in every
+// preset at a given frame.  The one exception: a triangle facing away
+// keeps the drop (ICO never culls back faces, and without the drop the
+// inside of a cliff the camera clips into would cover the view).
 // A drawn triangle with a vertex outside takes code 36's corner rule
 // (vu_corner_cut_position: the GS position where the vertex has one, the
 // homogeneous form of h where it is behind the eye, its X or Y saturated
@@ -1490,7 +1518,9 @@ uint vu_region_rule_cut(VuVtx a, VuVtx b, VuVtx c, VuCutZ z, float4 pic)
         return VU_RULE_CLIP;
     }
 #ifndef ICO_VU_PLAIN
-    if ((vu_draw.z & VU_F_EXTENDED) != 0u && vu_strip.y != 0u &&
+    // the card test: the PS2's rule outside out of the box (not under the
+    // camera rule, where a dropped card that faces the eye is drawn)
+    if ((vu_draw.z & (VU_F_EXTENDED | VU_F_CAMERA)) == VU_F_EXTENDED && vu_strip.y != 0u &&
         min(a.h.w, min(b.h.w, c.h.w)) > 0.0) {
         return VU_RULE_STRIP;
     }
@@ -1716,26 +1746,40 @@ uint vu_front_facing(VuVtx a, VuVtx b, VuVtx c, uint marks)
     return (neg + mirror + flip) & nz; // odd: front (no exclusive or in the envelope)
 }
 
-// Whether a triangle the rule drops is drawn beside the picture, 1 or 0:
-// the draw has side bands (no VU_F_NO_BESIDE), the frame is wider than the
-// picture, the triangle faces the eye
-uint vu_beside(VuVtx a, VuVtx b, VuVtx c, uint marks)
+// What becomes of a triangle the PS2's rule drops, given whether it faces
+// the eye at the draw's own camera (front, vu_front_facing, computed once
+// for both): 2 drawn clipped over the whole frame by the camera rule
+// (VU_F_CAMERA: front, or a two-sided draw, VU_F_TWO_SIDED: a grid), 1
+// drawn beside the picture by the side bands (no VU_F_CAMERA: the draw
+// has side bands, no VU_F_NO_BESIDE, and the frame is wider than the
+// picture, vu_frame_wider), 0 dropped
+uint vu_drop_fate(uint front)
 {
+    if ((vu_draw.z & VU_F_CAMERA) != 0u) {
+        const uint two = (vu_draw.z & VU_F_TWO_SIDED) != 0u ? 1u : 0u;
+        return (front | two) != 0u ? 2u : 0u;
+    }
     if ((vu_draw.z & VU_F_NO_BESIDE) != 0u) {
         return 0u;
     }
-    return vu_frame_wider() & vu_front_facing(a, b, c, marks);
+    return vu_frame_wider() & front;
 }
 
-// The rule's last step on its final verdict (after vu_rule_card); own:
-// the verdict at the draw's own camera (vu_region_rule), the card test's
-// (VU_RULE_STRIP) keeping the drop
+// The rule's last step on its final verdict (after vu_rule_card and,
+// between two ticks, the ticks' rescue).  Under the camera rule
+// (VU_F_CAMERA) a final drop is drawn clipped over the whole frame when
+// vu_camera_draws says so, else it stays dropped (the inside of a cliff the
+// camera clips into: the one exception).  Else the side bands (the PS2's
+// drops, [dev] region_rule = ps2); own: the verdict at the draw's own
+// camera (vu_region_rule), the card test's (VU_RULE_STRIP) keeping the
+// drop
 uint vu_rule_beside(uint rule, uint own, VuVtx a, VuVtx b, VuVtx c, uint marks)
 {
-    if (rule != VU_RULE_DROP || own == VU_RULE_STRIP) {
+    if (rule != VU_RULE_DROP || ((vu_draw.z & VU_F_CAMERA) == 0u && own == VU_RULE_STRIP)) {
         return rule;
     }
-    return vu_beside(a, b, c, marks) != 0u ? VU_RULE_CLIP_BESIDE : VU_RULE_DROP;
+    const uint fate = vu_drop_fate(vu_front_facing(a, b, c, marks));
+    return fate == 2u ? VU_RULE_CLIP : (fate == 1u ? VU_RULE_CLIP_BESIDE : VU_RULE_DROP);
 }
 
 // The triangle k-2, k-1, k: what the GS draws of it (vu_triangle_out),
@@ -2083,7 +2127,8 @@ VuPreOut vu_pre_out(uint id, VuVtx v)
 #define VU_TF_GSPOS 4096u   // every corner at its GS position (vu_has_gs_position)
 #define VU_TF_WRAP 8192u    // clip mode none: no corner's X or Y changed by the 16-bit wrap
 #define VU_TF_KEPT 16384u   // a sprite the port draws (vu_particle_vs's drop verdict)
-#define VU_TF_BESIDE 32768u // a drop would be drawn beside the picture (vu_beside; region mode)
+#define VU_TF_BESIDE 32768u // a drop would be drawn beside the picture (vu_drop_fate 1; region mode)
+#define VU_TF_CAMERA 65536u // a drop the camera rule draws (vu_drop_fate 2; region mode)
 
 // A record stage's point: texel t of the three planes (vu_pre_out's mapping)
 VuPreOut vu_rec_point_out(uint t, uint4 r0, uint4 r1, uint4 r2)

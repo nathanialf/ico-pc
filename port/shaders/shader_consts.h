@@ -493,12 +493,21 @@ enum {
                               * and z columns below 0: a reflection camera, a mirrored model;
                               * rd_replay_vu.c vuSource), so a triangle's facing on screen is
                               * read the other way (vu_common.hlsli vu_front_facing) */
-    ICO_VU_NO_BESIDE = 8192  /* region test: no side bands, a triangle the rule drops stays
+    ICO_VU_NO_BESIDE = 8192, /* region test: no side bands, a triangle the rule drops stays
                               * dropped as on the PS2 (VU_RULE_CLIP_BESIDE off): a frame not
                               * wider than 4:3, a draw without facing (a grid, a mesh without
                               * winding marks: RdMeshRec.facingFrom), a pass whose pixel
                               * shader writes depth before it runs (the exact blend's _dstrov
                               * builds), ICO_RD_VU_BESIDE=0 */
+    ICO_VU_CAMERA = 16384,   /* region test and particle window: the camera rule ([dev]
+                              * region_rule = camera, the default; rd_replay_vu.c vuSource): a
+                              * triangle the PS2's rule drops is drawn, GPU-clipped over the
+                              * whole frame, when it faces the eye (one facing away keeps the
+                              * drop), no card test, a sprite outside its x/y window drawn
+                              * whole, in every preset and state (vu_common.hlsli
+                              * vu_drop_fate) */
+    ICO_VU_TWO_SIDED = 32768 /* with ICO_VU_CAMERA: a draw without facing data whose surfaces
+                              * are open (a grid): its drops drawn whatever way they face */
 };
 
 /* The native frame's constants (port/include/ico_frame.h ICO_FRAME_BASE_W,

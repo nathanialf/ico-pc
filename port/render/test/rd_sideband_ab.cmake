@@ -15,6 +15,9 @@
 # colour (A's most common side colour); every other target reported, not
 # held (the post effects read across the band's edge).  A missing list or
 # dump is named and skipped; none here, or no device (77): SKIP.
+# Both replays run under the PS2's region rule (ICO_RD_REGION_RULE=ps2: the
+# side bands are its; the camera rule, the default, has none and is
+# rd_region_camera_ab's).
 # -DTOOL=<rd_replay_tool> -DPYTHON=<python3> -DCMP=<tools/cmp_dirs_band.py>
 # -DLIST=<dump list> -DOUT=<a folder the test may write>
 if(NOT EXISTS "${LIST}")
@@ -65,7 +68,7 @@ foreach(i RANGE ${last})
     set(dirA "${OUT}/${i}-${s}-drop")
     set(dirB "${OUT}/${i}-${s}-beside")
     file(MAKE_DIRECTORY "${dirA}" "${dirB}")
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_VU_BESIDE=0
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_VU_BESIDE=0 ICO_RD_REGION_RULE=ps2
                             "${TOOL}" "${dump}" - --pass-dump "${dirA}" --aspect ${aspect}
                             ${args_${s}}
                     RESULT_VARIABLE rcA OUTPUT_VARIABLE outA ERROR_VARIABLE errA)
@@ -76,7 +79,8 @@ foreach(i RANGE ${last})
     if(NOT rcA EQUAL 0)
       message(FATAL_ERROR "${dump} (${s}): the drop's replay exit ${rcA}:\n${outA}\n${errA}")
     endif()
-    execute_process(COMMAND "${TOOL}" "${dump}" - --pass-dump "${dirB}" --aspect ${aspect}
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_REGION_RULE=ps2
+                            "${TOOL}" "${dump}" - --pass-dump "${dirB}" --aspect ${aspect}
                             ${args_${s}}
                     RESULT_VARIABLE rcB OUTPUT_VARIABLE outB ERROR_VARIABLE errB)
     if(NOT rcB EQUAL 0)

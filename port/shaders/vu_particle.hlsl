@@ -176,10 +176,11 @@ VuVSOut vu_particle_vs(uint vid : SV_VertexID)
     // wholly beside it, under photo mode's free camera, and in any other
     // state (VU_F_EXTENDED: a sprite is an effect, never a card
     // parked at the picture's edge; the shown test keeps it in front of the
-    // eye). Out of the box between two ticks (VU_F_TICKS): drawn whole
+    // eye), and in every state under the camera rule (VU_F_CAMERA: the
+    // camera decides, not the VU's window). Out of the box between two ticks (VU_F_TICKS): drawn whole
     // when a tick showed it (vu_particle_tick_shown), as a triangle the
     // region rule drops at the blended camera is (vu_region_rule).
-    if (!s.drawn && (vu_draw.z & (VU_F_BEHIND_EYE | VU_F_EXTENDED)) == 0u) {
+    if (!s.drawn && (vu_draw.z & (VU_F_BEHIND_EYE | VU_F_EXTENDED | VU_F_CAMERA)) == 0u) {
         float2 p0 = vu_ndc(float2(int2(s.c0x, s.c0y)) * (1.0 / 16.0));
         float2 p1 = vu_ndc(float2(int2(s.c1x, s.c1y)) * (1.0 / 16.0));
 #ifdef ICO_VU_PLAIN
@@ -229,7 +230,8 @@ VuPreOut vu_particle_pre_vs(uint vid : SV_VertexID)
     VuSprite s = vu_particle(id);
     uint kept = s.shown ? 1u : 0u;
     // vu_particle_vs's drop
-    if (kept != 0u && !s.drawn && (vu_draw.z & (VU_F_BEHIND_EYE | VU_F_EXTENDED)) == 0u) {
+    if (kept != 0u && !s.drawn &&
+        (vu_draw.z & (VU_F_BEHIND_EYE | VU_F_EXTENDED | VU_F_CAMERA)) == 0u) {
         float2 p0 = vu_ndc(float2(int2(s.c0x, s.c0y)) * (1.0 / 16.0));
         float2 p1 = vu_ndc(float2(int2(s.c1x, s.c1y)) * (1.0 / 16.0));
         if (vu_rect_reaches_picture(min(p0, p1), max(p0, p1)) &&

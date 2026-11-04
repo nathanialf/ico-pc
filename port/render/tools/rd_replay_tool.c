@@ -178,6 +178,16 @@
  *   --region-out FILE     (implies --region-stats) writes the draws that draw
  *                         nothing as a --nop spec ("none" for none): replayed
  *                         with --nop @FILE the pass dumps are the same
+ *   --region-mask FILE    (implies --region-stats) where the PS2's rule
+ *                         ([dev] region_rule = ps2) and the camera rule draw
+ *                         differently, whichever is in force, on black at
+ *                         the native frame's GS size: red a triangle the
+ *                         PS2's drops (or draws beside the picture only)
+ *                         and the camera's draws, green one the PS2's card
+ *                         test draws and the camera's drops (a back face),
+ *                         blue a sprite the PS2 drops out of the box;
+ *                         tools/region_camera_report.py holds every pixel
+ *                         the two rules' pictures differ in to it
  *   --dump-textures DIR   writes every image texture of the dump to
  *                         DIR/tex-<id>-<w>x<h>.png as decoded (RGBA8, the
  *                         alpha byte as stored: GS 0x80 = 1.0; an R8
@@ -1884,7 +1894,7 @@ int main(int argc, char **argv)
                 "[--nop L:A[-B][,...]|@FILE] [--occlusion [--occlusion-out FILE] "
                 "[--occlusion-csv FILE]] [--cull off|frustum|full] "
                 "[--gpu-repeat K] "
-                "[--region-stats] [--region-png FILE] [--region-out FILE] "
+                "[--region-stats] [--region-png FILE] [--region-out FILE] [--region-mask FILE] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
                 "[--time N] [--keys] "
                 "[--pass-dump DIR] "
@@ -1911,7 +1921,7 @@ int main(int argc, char **argv)
     const char *occlusionCsv = NULL; /* --occlusion-csv FILE */
     bool occFailed = false;          /* the spec could not be written */
     bool regionStats = false;        /* --region-stats (rd_replay_region.c) */
-    RdRegionOpts regionOpts = {NULL, NULL, NULL};
+    RdRegionOpts regionOpts = {NULL, NULL, NULL, NULL};
     bool regionFailed = false; /* its picture or spec could not be written */
     bool noDevice = false, aspectGiven = false;
     bool keysCheck = false;
@@ -2189,6 +2199,9 @@ int main(int argc, char **argv)
         } else if (strcmp(argv[i], "--region-out") == 0 && i + 1 < argc) {
             regionStats = true;
             regionOpts.out = argv[++i];
+        } else if (strcmp(argv[i], "--region-mask") == 0 && i + 1 < argc) {
+            regionStats = true;
+            regionOpts.mask = argv[++i];
         } else if (strcmp(argv[i], "--gpu-repeat") == 0 && i + 1 < argc) {
             char *end = NULL;
             const long n = strtol(argv[++i], &end, 10);
@@ -2692,17 +2705,29 @@ int main(int argc, char **argv)
                dump, g_rd.vuPrepass ? "on" : "off", pr->vuPrePasses, pr->vuPreVertices,
                pr->vuPreDraws, pr->vuPreFallbacks, pr->vuPreSprites, pr->vuTriSlots,
                pr->vuTickDraws);
-        /* the side bands (rd_replay_vu.c vuBesideOn, vuSource): the draws
-         * that had them and carried card verdicts, whose cards stay off the
-         * sides (issue 189), and those without for want of facing data */
+        /* the region rule's mode: under region_rule = ps2 the side bands
+         * (rd_replay_vu.c vuDropMode, vuSource): the draws that had them and
+         * carried card verdicts, whose cards stay off the sides (issue
+         * 189); under the camera rule its draws; and those without either
+         * for want of facing data */
         {
             uint32_t nf = 0;
             for (int k = 0; k < RD_VU_NOFACE_COUNT; k++) {
                 nf += pr->vuBesideNoFacing[k];
             }
-            printf("%s: stats: side bands: %u draws with cards (kept off the sides), %u draws "
-                   "without facing data\n",
-                   dump, pr->vuBesideCards, nf);
+            if (rd__region_camera()) {
+                /* the camera rule ([dev] region_rule = camera): the draws
+                 * that drew the PS2's drops facing the eye
+                 * (RdPerfRecord.vuCameraDraws); the triangles are
+                 * --region-stats' "drawn by the camera rule" */
+                printf("%s: stats: region rule: the camera's: %u VU draws drawn by the camera "
+                       "rule, %u draws without facing data (the PS2's drops kept)\n",
+                       dump, pr->vuCameraDraws, nf);
+            } else {
+                printf("%s: stats: side bands: %u draws with cards (kept off the sides), %u "
+                       "draws without facing data\n",
+                       dump, pr->vuBesideCards, nf);
+            }
         }
         /* the draw-merge count (rd_replay_vu.c vuMergeNote): how many VU
          * draws could join the draw before them (same pipeline, textures,

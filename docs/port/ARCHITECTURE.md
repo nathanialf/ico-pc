@@ -444,14 +444,19 @@ The one glossary of `docs/port/`. Other documents link here and do not redefine 
   [DISPLAY.md](DISPLAY.md#the-native-frame)).
 - **preset**: `[video] preset`, `original`, `enhanced` or `custom`: a shortcut over the display
   options (`port/game/video_options.h`).
-- **out of the box**: the Original preset on the 4:3 frame at 1x, the PS2's picture. In this state
-  the renderer reproduces the PS2's behaviour; any other state draws what a game made for that
+- **out of the box**: the Original preset on the 4:3 frame at 1x. Its picture is the camera's:
+  the console's except inside triangles the console dropped ([DIVERGENCES.md](DIVERGENCES.md)
+  VD-29; byte for byte the console's under `[dev] region_rule = ps2`). In this state the renderer
+  reproduces the PS2's behaviour otherwise; any other state draws what a game made for that
   picture would draw (`ico2/seki/src/GifPacket.c` (`gif_HostExtended`);
   `port/game/video_options.h` (`ico_video_original`)).
 - **region rule**: what the port draws of a VU1 triangle with a vertex outside the GS region: the
-  PS2 drops such a triangle; out of the box the port drops it too, and otherwise draws it clipped
-  unless it belongs to an artist's card at the picture's edge (`port/shaders/vu_common.hlsli`
-  (`vu_region_rule`)).
+  PS2 drops such a triangle. By default the camera decides, in every preset and state: the
+  triangle is drawn clipped when it faces the eye, dropped when it faces away (`[dev] region_rule
+  = camera`). `[dev] region_rule = ps2` keeps the PS2's rule: out of the box the drop, otherwise
+  drawn clipped unless it belongs to an artist's card at the picture's edge, with the side bands
+  beside a wide picture (`port/shaders/vu_common.hlsli` (`vu_region_rule`, `vu_drop_fate`);
+  [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule)).
 - **scene scale**: the factor between the scene's texture and the native frame's GS size
   (`port/render/rd.h` (`RdSettings.sceneScale`)).
 - **.rddump**: a file holding one recorded rd frame, written by F12 or `dump_every`

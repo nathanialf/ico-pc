@@ -3546,6 +3546,14 @@ static void testAuraBox(RdPipeKeyInt *keys)
 
 int main(int argc, char **argv)
 {
+    /* the PS2's region rule ([dev] region_rule = ps2): this test's
+       pictures and counts are its drops' (the camera rule's are vu1's,
+       rd_native's and rd_region_camera_ab's) */
+#ifdef _WIN32
+    _putenv_s("ICO_RD_REGION_RULE", "ps2");
+#else
+    setenv("ICO_RD_REGION_RULE", "ps2", 1);
+#endif
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
     const char *dir = argc > 1 ? argv[1] : ".";
     if (!rd__init_record_only(512, 512)) {

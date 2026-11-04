@@ -41,6 +41,12 @@ ICO_REPLAY_LOCK) so two runs never compete for the GPU/CPU.
 gates run on that renderer (vulkan, opengl; the build's default without it); an opengl run
 sets LIBGL_ALWAYS_SOFTWARE=1 and SDL_VIDEO_DRIVER=offscreen unless they are already set.
 
+The replays run under the PS2's region rule (ICO_RD_REGION_RULE=ps2, set unless the
+environment names a rule): the manifest is the console's picture, and the camera rule (the
+renderer's default, [dev] region_rule = camera) differs from it only inside triangles the PS2
+dropped, which tools/region_camera_report.py measures and holds (docs/port/DIVERGENCES.md VD-29).
+With ICO_RD_REGION_RULE=camera gate-a reports the camera rule's targets that differ.
+
 Exit: 0 pass, 1 mismatch or error, 2 usage, 77 skipped (nothing to run).
 Needs Python 3 and Pillow.  Run it as `python3 -I tools/native_frame_check.py`.
 """
@@ -171,8 +177,11 @@ def backend_args():
 
 
 def tool_env():
-    """The environment of a tool run: Mesa's software GL on SDL's offscreen driver for opengl."""
+    """The environment of a tool run: Mesa's software GL on SDL's offscreen driver for opengl;
+    the PS2's region rule unless ICO_RD_REGION_RULE says otherwise (the manifest holds its
+    pictures; tools/region_camera_report.py measures the camera rule against it)."""
     env = os.environ.copy()
+    env.setdefault("ICO_RD_REGION_RULE", "ps2")
     if BACKEND in ("opengl", "gl"):
         env.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
         env.setdefault("SDL_VIDEO_DRIVER", "offscreen")

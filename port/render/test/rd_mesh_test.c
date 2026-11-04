@@ -4377,6 +4377,14 @@ static const IcoShardCase k_cases[] = {
 
 int main(int argc, char **argv)
 {
+    /* the PS2's region rule ([dev] region_rule = ps2): this test's
+       pictures and counts are its drops' (the camera rule's are vu1's,
+       rd_native's and rd_region_camera_ab's) */
+#ifdef _WIN32
+    _putenv_s("ICO_RD_REGION_RULE", "ps2");
+#else
+    setenv("ICO_RD_REGION_RULE", "ps2", 1);
+#endif
     if (ico_shard_start(argc, argv, k_cases, ICO_SHARD_COUNT(k_cases))) {
         return ico_shard_exit();
     }

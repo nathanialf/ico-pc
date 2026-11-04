@@ -2558,15 +2558,21 @@ typedef struct RdPerfRecord {
      * (the state's ABE on, or the alpha plan's blending off); vuFuseKept
      * the others, by reason (RD_VU_FUSE_*) */
     uint32_t vuFusePairs, vuFuseSame, vuFuseKept[RD_VU_FUSE_WHY_COUNT];
-    /* The VU draws on a frame wider than 4:3, with the side bands not
-     * turned off for the whole run, that had none because their mesh has no
-     * facing data, by why (RD_VU_NOFACE_*; rd_replay_vu.c vuBesideOn) */
+    /* The VU draws that kept the PS2's drops because their mesh has no
+     * facing data, by why (RD_VU_NOFACE_*; rd_replay_vu.c vuDropMode):
+     * under the camera rule every such draw, under region_rule = ps2 those
+     * on a frame wider than 4:3 with the side bands not turned off */
     uint32_t vuBesideNoFacing[RD_VU_NOFACE_COUNT];
     /* The VU draws with side bands that carry the card test's verdicts (a
      * strip of the draw a card at either tick; rd_replay_vu.c vuSource):
      * their cards' triangles keep the drop beside the picture as inside it
      * (vu_common.hlsli vu_rule_beside; issue 189's mist quads) */
     uint32_t vuBesideCards;
+    /* The VU draws under the camera rule (ICO_VU_CAMERA; rd_replay_vu.c
+     * vuSource; [dev] region_rule = camera): their triangles the PS2's rule
+     * drops are drawn clipped when they face the eye, their sprites outside
+     * the VU's window drawn whole */
+    uint32_t vuCameraDraws;
     /* The visibility test (rd_vis.c rd__vis_frame; [dev] cull): the VU draw
      * commands of the replayed lists (cullDraws), those turned into NOPs
      * (cullSkipped: by the frustum test, cullFrustum, or by occlusion,

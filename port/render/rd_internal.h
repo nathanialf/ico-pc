@@ -1148,6 +1148,13 @@ uint32_t rd__vu_sheet_end(const RdMeshRec *m, uint32_t end, bool extended);
  * region rule, vu_common.hlsli vu_region_rule): the Enhanced preset, a frame
  * wider than 4:3 or a scene scale above 1 (rd_replay.c) */
 bool rd__vu_extended(void);
+/* Whether the camera decides what the VU draws ([dev] region_rule = camera,
+ * the default; ICO_RD_REGION_RULE): a triangle the PS2's region rule drops
+ * is drawn, clipped, when it faces the eye, in every preset and state
+ * (ICO_VU_CAMERA, rd_replay_vu.c vuSource; docs/port/VU1_PROGRAMS.md "The
+ * region rule").  False under region_rule = ps2: the PS2's drops (with the
+ * side bands).  Read once a run (rd_pipeline.c) */
+bool rd__region_camera(void);
 /* Whether the device's driver is Mesa's Turnip: its text (RhiLimits.driverText,
  * "turnip Mesa driver" or "Turnip Mesa 26.3.0") has the word in any case;
  * Qualcomm's own driver does not (rd_profile.c) */
@@ -2047,8 +2054,9 @@ bool rd__vu_policy_init(const RhiLimits *lim);
  * plain set is the device's (a device-table row or Turnip), where it hides a
  * stray vertex the extended set's clipped triangles showed (issue 163), so
  * the region rule's side bands, which draw the dropped front-facing
- * triangles clipped beside the 4:3 picture, stay off too (rd_replay_vu.c
- * vuBesideOn); false for the [dev] and lost-start reasons and when
+ * triangles clipped beside the 4:3 picture, and the camera rule, which
+ * draws them clipped over the whole frame, stay off too (rd_replay_vu.c
+ * vuDropMode); false for the [dev] and lost-start reasons and when
  * overridden. */
 typedef struct RdVuSetChoice {
     bool plain;
@@ -3184,8 +3192,8 @@ typedef struct RdContext {
     bool vuFallbackPlain;
     char vuPlainWhy[160];
     const char *vuPlainBrief; /* the summary's reason (RdVuSetChoice.brief) */
-    /* the side bands off for every VU draw: the device's plain set is in
-     * force (RdVuSetChoice.noBeside, issue 163; rd_replay_vu.c vuBesideOn,
+    /* the side bands and the camera rule off for every VU draw (the PS2's
+     * drops): the device's plain set is in force (RdVuSetChoice.noBeside, issue 163; rd_replay_vu.c vuDropMode,
      * the profile line's "side bands:" words) */
     bool vuNoBeside;
     /* the dynamic state in force (rd__vu_policy_init from

@@ -228,17 +228,35 @@ GS region: X and Y in 0..4094 exclusive and `0 < w < 16777214` (cluster: against
 The particle program skips a sprite whose corners or w fall outside its windows.
 
 **In the port.** The test is the program's own on the position as computed, at every aspect,
-since the projection does not change with the width. What the port then draws of a triangle
-([the region rule](ARCHITECTURE.md#terms)), in this order (`port/shaders/vu_common.hlsli`
-(`vu_region_rule`, `vu_region_rule_cut`); CPU mirror `port/render/vu1_ref/vu1_ref.h`
-(`vu1ref_region_draw`)):
+since the projection does not change with the width. What the port then draws of a triangle the
+test fails is one of two rules ([the region rule](ARCHITECTURE.md#terms)), chosen by `[dev]
+region_rule` (`ICO_RD_REGION_RULE`, read at each renderer start: `port/render/rd_pipeline.c`
+(`rd__region_camera`); [CONFIG.md](CONFIG.md)):
+
+- **the camera rule** (`camera`, the default): the camera, its eye and its projection, is the
+  only authority on what is visible, in every preset and state, out of the box included. The
+  PS2's drops (steps 4 to 6 below: a vertex out of range, a card, a corner behind the eye) are
+  the VU's limits, not the camera's, and they are what made walls, water and mist vanish close
+  to the camera (issues 9, 29 and 189). So a triangle the PS2's rule drops is drawn, clipped by
+  the GPU at the native frustum, over the whole frame, inside the 4:3 picture as beside it, when
+  it faces the eye ([The camera rule](#the-camera-rule)). The one exception kept on purpose: a
+  triangle facing away keeps the drop. ICO never culls back faces (`port/rhi/rhi.h`
+  `cullNone`), and without the drop the inside of a cliff the camera clips into would cover the
+  view (the opening's `st26a_p1`). The picture is the camera's: the console's except inside
+  triangles the console dropped ([DIVERGENCES.md](DIVERGENCES.md) VD-29);
+- **the PS2's rule** (`ps2`, the escape and the A/B): the steps below, the console's drops with
+  the side bands of step 7.
+
+The PS2's rule, in this order (`port/shaders/vu_common.hlsli` (`vu_region_rule`,
+`vu_region_rule_cut`); CPU mirror `port/render/vu1_ref/vu1_ref.h` (`vu1ref_region_draw`)):
 
 1. All three vertices inside: drawn exactly, on the ftoi4 grid.
 2. Photo mode's free camera (`VU_F_BEHIND_EYE`): drawn, clipped by the GPU at the native frustum.
 3. Its GPU-clipped extent lies wholly beside the camera's picture (GS 2048 -+ 256 across, by the
    native height): drawn, clipped. This happens only on a frame wider than 4:3.
 4. It reaches into the picture, [out of the box](ARCHITECTURE.md#terms) (`VU_F_EXTENDED` clear): not
-   drawn, as the PS2 does not draw it. At 4:3 the frame is the picture, so the picture is the PS2's.
+   drawn, as the PS2 does not draw it. At 4:3 the frame is the picture, so under this rule the
+   picture is the PS2's byte for byte.
 5. It reaches into the picture in any other state (the Enhanced [preset](ARCHITECTURE.md#terms), a
    wider [native frame](ARCHITECTURE.md#terms) or a [scene scale](ARCHITECTURE.md#terms) above 1),
    every vertex in front of the eye: drawn, clipped, unless it belongs to a card, a free-standing
@@ -277,7 +295,7 @@ since the projection does not change with the width. What the port then draws of
    frame wider than the picture: `vu_frame_wider` (the bound target's GS extent, a Full pixel
    target's less its left-out texels, against GS 2048 -+ the picture's half-width). Off
    (`VU_F_NO_BESIDE`, `rd_replay_vu.c` `vuBesideOn` and `vuDraw`) on a frame not wider than 4:3
-   (the picture is the frame: the 4:3 picture is the PS2's by construction), for a grid (no winding
+   (the picture is the frame: under this rule the 4:3 picture is the PS2's by construction), for a grid (no winding
    marks: its strips wind both ways), for a mesh without winding marks (`RdMeshRec.facingFrom`
    none), for a pass whose pixel shader is a `_dstrov` build (the exact blend's storage read writes
    depth before the shader runs, so a discarded pixel would leave its depth: the PS2's drop there),
@@ -345,8 +363,9 @@ picture) are hidden by the content table ([RENDER.md](RENDER.md#content-tables))
 
 **The two variants** (issue 107). Each VU vertex shader is built with the whole rule (`vu_X_vs`,
 the extended variant) and without the two steps out of the box never takes, the card test and the
-tick cameras (`vu_X_plain_vs`, `ICO_VU_PLAIN`). Both have step 7, the side bands (the largest plain
-module, `vu_lit_merge_plain_vs`, is 24,871 words with them, under `tools/check_spirv.py`'s 25,700).
+tick cameras (`vu_X_plain_vs`, `ICO_VU_PLAIN`). Both have step 7, the side bands, and the camera
+rule's last step (the largest plain module, `vu_lit_merge_plain_vs`, is 25,020 words with them,
+under `tools/check_spirv.py`'s 25,700: 680 words of room left).
 A draw with neither `VU_F_EXTENDED` nor `VU_F_TICKS` takes the plain one and gets the same picture.
 A device the renderer keeps to the plain ones (the Adreno 740 on Qualcomm's driver, whose driver
 froze the whole device compiling the extended ones; Mesa's Turnip driver, where the extended ones
@@ -363,9 +382,62 @@ dropped triangles clipped again beside the 4:3 picture, and a phone's frame is a
 lost start a front-facing dropped triangle is drawn beside the picture as everywhere. The cut is the
 draw's flag, not the plain modules: the modules stay one build for every reason.
 
+## The camera rule
+
+`[dev] region_rule = camera`, the default (`ICO_VU_CAMERA`, `VU_F_CAMERA` in
+`port/shaders/vu_common.hlsli`; `port/render/rd_replay_vu.c` (`vuDropMode`, `vuSource`)). The
+steps of the PS2's rule run as above up to the final verdict, with two changes, and then its
+last step is the camera's:
+
+1. No card test (step 5): `vu_region_rule_cut` returns no `VU_RULE_STRIP` under `VU_F_CAMERA`
+   and `vu_tri_tick_pre_vs` asks the ticks for every drop, so the verdict reads no preset: at
+   one frame it is the same under the Original preset and Enhanced (the card test was the PS2's
+   rule's one step that depended on the state). The draws carry no card verdicts.
+2. Between two ticks the ticks' rescue is as above (a triangle the blended camera drops is drawn
+   clipped when a tick showed it, exactly or wholly beside its picture, on the frame), without
+   the card test at the ticks; the facing below is read at the draw's own camera, as
+   `vu1ref_region_between`'s parity structure has it.
+3. The last step on a final drop (`vu_rule_beside`, `vu_drop_fate`; the pre-pass's
+   `VU_TF_CAMERA`, resolved by `vu_main_vs`): drawn as `VU_RULE_CLIP`, clipped by the GPU at the
+   native frustum over the whole frame (no pixel discarded: `VuVSOut.plane.y` stays 0), when it
+   faces the eye (`vu_front_facing`, [The winding mark](#the-winding-mark)); a grid, which has no
+   winding marks and whose surfaces are open (water: what the camera sees of its back is its
+   back), whatever way it faces (`ICO_VU_TWO_SIDED`); else dropped (a back face: the exception).
+
+A draw the camera rule cannot take keeps the PS2's rule: a mesh without winding marks
+(`RdMeshRec.facingFrom` none: a prelit stream the EE gave no table, a save state loaded into a
+fresh run; counted by why in the 10 s line, below) and every VU draw on a device that keeps the
+plain set (`g_rd.vuNoBeside`: the Adreno 740 row, Turnip; issue 163: the plain set hides the
+stray vertex the extended set's clipped triangles showed, and drawing the drops clipped would
+bring it back), whose start line says "off on this device's plain set". A sprite the VU skips
+for its x/y window is drawn whole in every state, as outside out of the box (`vu_particle_vs`,
+`vu1ref_particle_draw` with the state's flag or `VU_F_CAMERA`). The EE's strips
+(`gif_DrawStripF`) keep their rule ([CPU strips](#the-region-rule)). The plain shader set has
+the camera rule too (its rule has no card test and no tick cameras as before; the last step is
+the same function). The `_dstrov` passes keep it (it discards nothing). `ICO_RD_VU_BESIDE` has
+no effect under it. The CPU mirror is `vu1ref_region_camera` (`port/render/vu1_ref/vu1_ref.h`).
+
+**The lines.** The start line names the rule: `rd: region rule: the camera decides (triangles
+the PS2 drops are drawn clipped when they face the eye; [dev] region_rule = ps2 keeps the PS2's
+drops)` (or `rd: region rule: the PS2's ([dev] region_rule = ps2: ...)`). The 10 s line counts
+the draws under it, `region rule: the camera's: N VU draws a replay drawn by the camera rule`,
+and `camera rule: N draws without facing data (A prelit rebuilt without the EE's table, ...)`
+for the draws that kept the PS2's drops for want of facing (`RdPerfRecord.vuCameraDraws`,
+`vuBesideNoFacing`; `port/render/rd_perf.c`). The GPU decides each triangle, so the line counts
+draws; the triangles are `rd_replay_tool --region-stats`' (`drawn by the camera rule N`,
+[Region statistics](#region-statistics)), and `--stats` prints `stats: region rule: the camera's:
+N VU draws drawn by the camera rule, M draws without facing data`.
+
+**The measure.** `tools/region_camera_report.py` replays a dump under both rules and holds every
+SCENE pixel the camera rule changes to `rd_replay_tool --region-mask`'s mask of the triangles the
+two rules draw differently ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md), ctest
+`rd_region_camera_ab`). Under the Enhanced preset the camera rule also drops what the PS2's rule
+drew: a back face of a joined or passing strip the card test drew clipped (the mask's green);
+out of the box the PS2's rule drew none of those, so there the camera rule only adds.
+
 ## The card test
 
-Rule 5's card test is decided on the CPU, once per [tick](ARCHITECTURE.md#terms), and the vertex
+Rule 5's card test (the PS2's rule only: the camera rule has none) is decided on the CPU, once per [tick](ARCHITECTURE.md#terms), and the vertex
 shaders read the verdicts: a walk over the strip in every vertex (two scans of the stream for its
 ends, then up to 1,024 vertex transforms, in loops) has no place in a vertex shader inside the
 envelope ([SHADERS.md](SHADERS.md#the-envelope)).
@@ -510,12 +582,20 @@ the picture), clipped by the card test, dropped with the step that dropped them 
 eye, step 6; out of the box, step 4; a card, step 5), and rescued by a tick's camera, the drops
 drawn beside the picture by step 7 by the step that dropped them, and the sign of the determinant
 of the x, y and w rows of the draw's model-to-GS matrix (VU memory 16..18, the cluster's 4..6:
-negative where the projection mirrors the model). The draw line reads `L:I mesh|skinned|grid NAME
-tris T: exact E clip C strip S drop D (behind-eye B, out-of-box X, card K; rescued at a tick R),
-beside N (behind-eye b, out-of-box x, card k) det -|+[; hidden H]; beside N, dropped back D[ (no
-side bands)]`: drop counts the triangles that stay dropped (facing away or edge-on, a card, or the
+negative where the projection mirrors the model). The counts follow the rule in force
+(`ICO_RD_REGION_RULE`, [The camera rule](#the-camera-rule); a `region: rule: ...` line names it).
+The draw line reads `L:I mesh|skinned|grid NAME
+tris T: exact E clip C strip S drop D (behind-eye B, out-of-box X, card K; rescued at a tick R;
+back faces the card test drew F), beside N (behind-eye b, out-of-box x, card k), drawn by the
+camera rule M (behind-eye b, out-of-box x, card k) det -|+[; hidden H]; beside N, dropped back
+D[ (no side bands)]; drawn by the camera rule M`. Under the camera rule `drawn by the camera rule`
+counts the PS2's drops it draws (facing the eye, or a grid's), by the reason the PS2's rule
+dropped them (`card` there: a free-standing strip outside out of the box), `strip` the ones the
+card test draws too (the same picture), `drop` the back faces it keeps dropped and `back faces
+the card test drew` those of them the PS2's rule drew (a joined or passing strip outside out of
+the box); `beside` is 0. Under the PS2's rule: drop counts the triangles that stay dropped (facing away or edge-on, a card, or the
 draw has no side bands), beside the front-facing drops other than cards (so its `card k` is 0) (`vu1ref_region_facing` with the draw's det sign as
-`ICO_VU_MIRROR` and the kick's `ICO_VU_MARK_FLIP`). A draw has side bands when the replay's frame is
+`ICO_VU_MIRROR` and the kick's `ICO_VU_MARK_FLIP`), and the camera rule's group is 0. A draw has side bands when the replay's frame is
 wider than 4:3, the bound target's frame is wider than the camera's picture, its mesh's winding
 marks came from normals (`RdMeshRec.facingFrom` not none; never a grid) and `ICO_RD_VU_BESIDE` is
 not 0; the `_dstrov` passes' drop is not modelled. Totals per list and for the frame (the same
@@ -523,9 +603,18 @@ beside group), which also names the draws that draw nothing as a `--nop` spec (`
 writes it; a beside triangle draws). `--region-png FILE` paints the dropped triangles of the frame
 camera's draws as the GPU would have drawn them (red behind the eye, yellow out of the box, cyan a
 card, magenta the whole cut polygon of a drop drawn beside the picture, whose part in the band the
-GPU discards) on the native frame, the 4:3 band outlined. The cliff: `rd_replay_tool DUMP
+GPU discards; under the camera rule a drop it draws, whole; dark blue a back face the card test
+drew that the camera rule drops) on the native frame, the 4:3 band outlined. `--region-mask FILE`
+paints, whichever rule is in force, where the two rules draw differently, on black at the native
+frame's GS size with no outline: red the whole cut polygon of a triangle the PS2's rule drops (or
+draws beside the picture only) that the camera rule draws, green one the PS2's rule draws that the
+camera rule drops, blue the quad of a sprite the PS2's rule drops out of the box (the ticks'
+rescue of a sprite not modelled: a superset), every draw on a target of the frame's size (a
+reflection camera's included); its line `region: mask: N triangles ... (red), M ... (green), K
+sprites (blue)`, and `region: sprites: K outside the VU's window reaching the picture out of the
+box` counts the sprites (`regionSprites`). The cliff: `rd_replay_tool DUMP
 --region-stats --mesh st26a_p1` on an opening capture at a wide aspect prints `beside 0` on every
-`st26a_p1` draw when its faces turn away from the eye there. A triangle on the picture's edge to a rounding can take the other verdict than
+`st26a_p1` draw when its faces turn away from the eye there (and `drawn by the camera rule 0`). A triangle on the picture's edge to a rounding can take the other verdict than
 the shader's; the `rd_region_stats` test checks the draws the stats say draw nothing against the
 replay ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
@@ -820,7 +909,17 @@ target across the picture's right edge, GS 2272..2336, a vertex behind the eye, 
 normal_l, both presets) with the kicks' `FLIP` marks of a surface turned to the eye (its drops drawn
 beside the picture: pixels right of the edge, none left of it, by coverage against the cut polygons
 outside the picture's columns) and away from it (none drawn); every other case draws with
-`VU_F_NO_BESIDE`. Part c: `RdVuCommon` against
+`VU_F_NO_BESIDE`. The camera rule ([The camera rule](#the-camera-rule)): part a's
+`vu1ref_region_camera` rows (out of range, behind the eye or a card facing the eye: clipped;
+facing away: dropped; wholly beside, the free camera, a tick's rescue, HIDE; and the PS2's rule's
+card drop in both presets, which the camera rule leaves out); part b's `Case.camera` cases, drawn
+with `VU_F_CAMERA` through every entry (the program's, its plain build, the record's
+`vu_main_vs`): a vertex behind the eye out of the box and Enhanced, a vertex below the window out of
+the box, a card (Enhanced), the 48:9 edge case (drawn on both sides of the edge), behind the eye at
+both ticks, with the kicks' `FLIP` marks turning them to the eye (every drop drawn clipped, by
+coverage against the cut polygons) or away (dropped); a grid card out of the box (two-sided:
+drawn); a sprite past its window out of the box (drawn whole). Every other case keeps the PS2's
+rule. Part c: `RdVuCommon` against
 the VU parameter block and the `VuCB` mirror. Exit 77 when parts a and c pass and there is no Vulkan
 device (`port/shaders/test/vu1_test.c`, header comment).
 
@@ -834,7 +933,13 @@ it either (issue 189); a card joined to a passing strip or through another packe
 as the wall; the side bands: a behind-the-eye strip across the picture's left edge with the EE's
 facing table turned to the eye adds pixels beside the picture at W 688 and 2048 and none inside it
 or at 512, turned away none; without a table none, its draw counted in the replay's
-`vuBesideNoFacing` as no-table on a wider frame), and the attribute planes' anchor (`port/render/test/rd_native_test.c`, header
+`vuBesideNoFacing` as no-table on a wider frame), all of it under the PS2's rule
+(`ICO_RD_REGION_RULE=ps2`, as every check of the test but the next); the camera rule
+(`checkStripCamera`, at W 512 out of the box, 512 and 688 and 2048 Enhanced, 688 Original): the
+wall's failing triangle, a card, the card across the picture's left edge and the behind-the-eye
+strip across it, each with the EE's table turning it to the eye, drawn clipped inside the picture
+and beside it, turned away dropped, without a table dropped and counted no-table at every width;
+and the attribute planes' anchor (`port/render/test/rd_native_test.c`, header
 comment). Running the tests is [TESTING.md](TESTING.md).
 
 `rd_mesh` (`port/render/test/rd_mesh_test.c`) checks the winding marks on synthetic strips (a
@@ -847,9 +952,14 @@ leaving none; the reasons a mesh has no facing: a prelit stream built again with
 records counted as a miss, a prelit replacement, a copy of another index list) and, with the disc image, measures the disc's winding and the EE's table's agreement
 with the normals ([The winding mark](#the-winding-mark)). `rd_region_stats`
 (`port/render/test/rd_region_stats.cmake`) runs `rd_replay_tool --region-stats` on the first two
-dumps of `tools/occlusion_corpus.txt` at Original 4:3 1x and Enhanced 4:3 2x: the lines' shapes,
-and every pass dump the same with the draws the stats say draw nothing left out
-([Region statistics](#region-statistics)).
+dumps of `tools/occlusion_corpus.txt` at Original 4:3 1x and Enhanced 4:3 2x, under each rule: the
+lines' shapes, and every pass dump the same with the draws the stats say draw nothing left out
+([Region statistics](#region-statistics)). `rd_region_camera_ab`
+(`port/render/test/rd_region_camera_ab.cmake`) replays the dumps of `tools/sideband_dumps.txt` at
+their own aspect under both rules (`tools/region_camera_report.py`, Original 1x and Enhanced 2x):
+every SCENE pixel the camera rule changes lies in `--region-mask`'s mask, every target the same
+where the mask is empty; and the camera rule's verdicts (drawn, dropped, rescued) the same under the
+Original preset and Enhanced at 1x ([The camera rule](#the-camera-rule)).
 
 `rd_vubatch_ab` (`port/render/test/rd_vubatch_ab.cmake`) replays the dumps of
 `tools/vustage_dumps.txt` through the record one draw an entry (`ICO_RD_VU_PREPASS_BATCH=0`) and in

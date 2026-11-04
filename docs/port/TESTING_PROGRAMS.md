@@ -952,6 +952,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 
 ## port/render/test
 
+The tests whose pictures or counts are golden or are about something other than the region rule
+(`rd_interp_test.c`, `rd_pixel_test.c`, `rd_filter_test.c`, `rd_state_test.c`, `rd_mesh_test.c`,
+`rd_display_change_test.c`, and `rd_native_test.c` but for `checkStripCamera`) set
+`ICO_RD_REGION_RULE=ps2` first: they hold the PS2's region rule's pictures. The camera rule, the
+default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`,
+`rd_region_camera_ab` and `rd_sideband_cards`' camera half ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)).
+
 - `fog_lut_test.c`: the depth fog's game side, the same on every compiler (`fog_lut`;
   `fog_lut_arm64` under qemu).
 - `gltf_test.c`: the glTF reader and writer, bit-exact round trips, GLB, a Blender-style file,
@@ -1332,8 +1339,29 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   spec with `--no-device` (`rd_region_stats`). The frame and draw lines' patterns include the side
   bands' group (`, beside N (behind-eye b, out-of-box x, card k)` after the drop's parenthesis) and
   the draw line's closing `; beside N, dropped back M`; at the test's 4:3 settings beside is always
-  0. SKIP without the list, a dump of it or a device.
+  0. The patterns also hold `; back faces the card test drew F` inside the drop's
+  parenthesis, the camera rule's group (`, drawn by the camera rule M (behind-eye b, out-of-box x,
+  card k)`) and the draw line's closing `; drawn by the camera rule M`, and every step runs under
+  each region rule (`ICO_RD_REGION_RULE` ps2 and camera: the camera rule's drawn drops make their
+  draws draw, so each rule's spec is its own). SKIP without the list, a dump of it or a device.
+- `rd_region_camera_ab.cmake` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule),
+  [DIVERGENCES.md](DIVERGENCES.md) VD-29): the camera rule against the PS2's region rule on the
+  dumps of `tools/sideband_dumps.txt` at their own aspect. 1. `tools/region_camera_report.py` at
+  the Original preset 1x and Enhanced 2x (presented at 1280x960): `rd_replay_tool --pass-dump`
+  under `ICO_RD_REGION_RULE=ps2` with `--region-mask` and under `camera` with `--stats`; every PNG
+  compared; SCENE's differing pixels must all lie in the mask scaled to SCENE and grown by one GS
+  pixel (red the triangles the PS2's rule drops, or draws beside the picture only, that the camera
+  rule draws; green the back faces the card test drew that it drops; blue the sprites out of the
+  box), and with an empty mask every target must be byte for byte the same; the other targets
+  reported with how many of their changed pixels lie in the mask; the report in the build
+  folder's `region_camera_ab/report.md`. 2. `--region-stats` under the camera rule at the Original
+  preset 1x and Enhanced 1x, at the dump's aspect: the frame line's drawn (strip plus drawn by the
+  camera rule), dropped and rescued counts the same in both presets. A missing list or dump, or no
+  device: SKIP (77). TIMEOUT 3600 (`rd_region_camera_ab`). Under the PS2's rule these dumps drop
+  nothing but issue 189's three cards (`--region-stats` at their own aspect, both presets; the
+  phone frames' card test draws 0 to 2 triangles a frame).
 - `rd_sideband_ab.cmake` (issue 29; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule), step 7):
+  under the PS2's region rule (`ICO_RD_REGION_RULE=ps2` on both replays: the side bands are its),
   the region rule's side bands against the PS2's drop on the wide dumps of the machine-local list
   `tools/sideband_dumps.txt` (a path and the dump's own aspect a line: the PowerVR phone's 2.189
   frames, issue 179's 16:9 frame, issue 182's 16:10 frame, issue 189's 16:10 frame, the phone's
@@ -1364,7 +1392,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   card 3; ...)` and `beside 0 (behind-eye 0, out-of-box 0, card 0)`; and on the two 16:10 presents
   `tools/band_seam.py` (the mean luminance step across each edge of the picture, outside less
   inside, the edge's own column left out) within 1.5 levels (7.3 and 7.2 with the cards drawn
-  beside the picture; 0.1 with the drop kept, the picture's own column-to-column step). No dump or no device: SKIP. TIMEOUT 900
+  beside the picture; 0.1 with the drop kept, the picture's own column-to-column step), all of
+  it under `ICO_RD_REGION_RULE=ps2`. Then the camera rule at each setting: `--pass-dump --stats
+  --region-stats` with `ICO_RD_REGION_RULE=camera`, the frame line `drop 0 (` and `drawn by the
+  camera rule 3 (behind-eye 0, out-of-box 0, card 3)` (the mist's cards face the eye: drawn over the
+  whole frame), `--stats`'s `region rule: the camera's: N VU draws` with N at least 1, and on the
+  16:10 presents `band_seam.py` within 1.5 levels again (the mist inside the picture and beside it
+  alike). No dump or no device: SKIP. TIMEOUT 900
   (`rd_sideband_cards`).
 - `rd_vumerge_ab_pixel`, `rd_vufuse_ab_pixel` and `rd_vustage_ab_pixel`: the two scripts above and
   `rd_vustage_ab.cmake` on the frames `rd_pixel`
@@ -1902,7 +1936,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   case s the region rule's strip test with the side bands (a behind-the-eye strip with the EE's
   facing table turned to the eye: pixels beside the 4:3 picture at W 688 and 2048, the picture's
   columns the frame without it, nothing at 512; turned away: nothing; a card across the picture's
-  left edge turned to the eye: nothing at any width, issue 189) (`rd_native`).
+  left edge turned to the eye: nothing at any width, issue 189), all under the PS2's region rule
+  (`ICO_RD_REGION_RULE=ps2`, as every check but the next, the hashes included); the camera rule
+  (`checkStripCamera`, `ICO_RD_REGION_RULE=camera`, at W 512 out of the box and Enhanced, 688
+  Enhanced and Original, 2048 Enhanced): the wall's triangle with a vertex above the window, the
+  card, the card across the picture's left edge and the behind-the-eye strip across it, each with
+  the EE's table turning it to the eye, drawn clipped inside the picture and (wider than 4:3)
+  beside it; turned away, nothing; without a table nothing, counted no-table at every width
+  (`rd_native`).
 - `rd_perf_test.c`: the renderer's CPU cost per replay and its steady state, and the start-up set
   through `rhi_create_pipelines`: its progress calls (from 0, never back, the total once at the
   end), a stop after the first batch and the rest made by the next call; last, the background
@@ -2412,7 +2453,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   b (4)); the side bands (part a's rule, between-ticks and facing rows, a card keeping the drop
   beside the picture; part b's `DEPART_EYE_EDGE`
   cases at the picture's right edge, turned to the eye and away; every other case drawn with
-  `ICO_VU_NO_BESIDE`); the pictures use the plain mapping (no exact viewport), so the planes stay
+  `ICO_VU_NO_BESIDE`); the camera rule (part a's `vu1ref_region_camera` rows; part b's
+  `Case.camera` cases drawn with `ICO_VU_CAMERA`: behind the eye out of the box and Enhanced, out of
+  range out of the box, a card, the 48:9 edge, between two ticks, turned to the eye drawn clipped
+  and away dropped; a grid card out of the box two-sided, drawn; a sprite past its window out of
+  the box, drawn whole); the pictures use the plain mapping (no exact viewport), so the planes stay
   the GPU's there (`vu1`, `vu1_mali`).
 
 ## port/test

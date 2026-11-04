@@ -726,6 +726,15 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("cull", "occlusion") == NULL);
     CHECK(ico_dev_env_value("cull", "") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.cull"), "cull") == 0);
+    /* region_rule: the camera decides or the PS2's drops (port/render/
+       rd_pipeline.c rd__region_camera reads ICO_RD_REGION_RULE) */
+    CHECK(strcmp(ico_dev_env_name("region_rule"), "ICO_RD_REGION_RULE") == 0);
+    CHECK(strcmp(ico_dev_env_value("region_rule", "camera"), "camera") == 0);
+    CHECK(strcmp(ico_dev_env_value("region_rule", "ps2"), "ps2") == 0);
+    CHECK(ico_dev_env_value("region_rule", "true") == NULL);
+    CHECK(ico_dev_env_value("region_rule", "0") == NULL);
+    CHECK(ico_dev_env_value("region_rule", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.region_rule"), "region_rule") == 0);
     /* constant_reads: a cleared source read as its colour, the A/B switch
        (port/render/rd_const_read.c rd__const_reads_on) */
     CHECK(strcmp(ico_dev_env_name("constant_reads"), "ICO_RD_CONSTANT_READS") == 0);
@@ -977,6 +986,15 @@ static void test_dev_env(void)
     ico_ini_parse(&ini, "[dev]\ncull = maybe\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
     CHECK(env_is("ICO_RD_CULL", NULL));
+    /* ... and region_rule as its word (rd_pipeline.c reads it) */
+    unset_env("ICO_RD_REGION_RULE");
+    ico_ini_parse(&ini, "[dev]\nregion_rule = ps2\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_REGION_RULE", "ps2"));
+    unset_env("ICO_RD_REGION_RULE");
+    ico_ini_parse(&ini, "[dev]\nregion_rule = sometimes\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_REGION_RULE", NULL));
     /* blend=attachment and attachment_read=true (config.toml's [dev]) */
     ico_ini_parse(&ini, "[dev]\nblend = attachment\nattachment_read = true\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);

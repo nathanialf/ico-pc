@@ -14,6 +14,8 @@
 #   3. at the orig setting with --no-device the same frame line and spec
 #      (the stats need no device; the record-only renderer takes no
 #      display options, so the enh2x43 state is not its).
+# Each under both region rules (ICO_RD_REGION_RULE ps2 and camera: the
+# camera rule's drawn drops make a draw draw, so its spec is its own).
 # A missing list or dump, or no device (77): SKIP.
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 if(NOT EXISTS "${LIST}")
@@ -55,13 +57,17 @@ file(REMOVE_RECURSE "${OUT}")
 
 set(settings_orig --aspect 4:3 --present 640x480)
 set(settings_enh2x43 --enhanced --aspect 4:3 --resolution 2x --present 1280x960)
-set(frameRe "region: frame [0-9]+, [0-9]+x[0-9]+, (extended|out of the box), free camera (on|off), [0-9]+ draws with the ticks' cameras; lists 0-6: ([0-9]+) draws under the region rule \\([0-9]+ VU draws not\\), tris ([0-9]+): exact [0-9]+ clip [0-9]+ strip [0-9]+ drop ([0-9]+) \\(behind-eye [0-9]+, out-of-box [0-9]+, card [0-9]+; rescued at a tick [0-9]+\\), beside [0-9]+ \\(behind-eye [0-9]+, out-of-box [0-9]+, card [0-9]+\\); hidden [0-9]+; det - in [0-9]+ draws; drawing nothing: ([0-9]+) draws: ([^\n]+)")
-set(drawRe "region: [0-6]:[0-9]+ (mesh|skinned|grid) [^ ]+ tris [0-9]+: exact [0-9]+ clip [0-9]+ strip [0-9]+ drop [0-9]+ \\(behind-eye [0-9]+, out-of-box [0-9]+, card [0-9]+; rescued at a tick [0-9]+\\), beside [0-9]+ \\(behind-eye [0-9]+, out-of-box [0-9]+, card [0-9]+\\) det [-+][^\n]*; beside [0-9]+, dropped back [0-9]+")
+set(frameRe "region: frame [0-9]+, [0-9]+x[0-9]+, (extended|out of the box), free camera (on|off), [0-9]+ draws with the ticks' cameras; lists 0-6: ([0-9]+) draws under the region rule \\([0-9]+ VU draws not\\), tris ([0-9]+): exact [0-9]+ clip [0-9]+ strip [0-9]+ drop ([0-9]+) \\(behind-eye [0-9]+, out-of-box [0-9]+, card [0-9]+; rescued at a tick [0-9]+; back faces the card test drew [0-9]+\\), beside [0-9]+ \\(behind-eye [0-9]+, out-of-box [0-9]+, card [0-9]+\\), drawn by the camera rule [0-9]+ \\(behind-eye [0-9]+, out-of-box [0-9]+, card [0-9]+\\); hidden [0-9]+; det - in [0-9]+ draws; drawing nothing: ([0-9]+) draws: ([^\n]+)")
+set(drawRe "region: [0-6]:[0-9]+ (mesh|skinned|grid) [^ ]+ tris [0-9]+: exact [0-9]+ clip [0-9]+ strip [0-9]+ drop [0-9]+ \\(behind-eye [0-9]+, out-of-box [0-9]+, card [0-9]+; rescued at a tick [0-9]+; back faces the card test drew [0-9]+\\), beside [0-9]+ \\(behind-eye [0-9]+, out-of-box [0-9]+, card [0-9]+\\), drawn by the camera rule [0-9]+ \\(behind-eye [0-9]+, out-of-box [0-9]+, card [0-9]+\\) det [-+][^\n]*; beside [0-9]+, dropped back [0-9]+")
 set(n 0)
 foreach(dump IN LISTS dumps)
   math(EXPR n "${n} + 1")
-  foreach(setting orig enh2x43)
-    set(dir "${OUT}/${n}-${setting}")
+  foreach(rs IN ITEMS ps2-orig ps2-enh2x43 camera-orig camera-enh2x43)
+    string(REPLACE "-" ";" rsl "${rs}")
+    list(GET rsl 0 rule)
+    list(GET rsl 1 setting)
+    set(ENV{ICO_RD_REGION_RULE} "${rule}")
+    set(dir "${OUT}/${n}-${rule}-${setting}")
     file(MAKE_DIRECTORY "${dir}/plain" "${dir}/nop")
     set(spec "${dir}/nothing.txt")
     execute_process(COMMAND "${TOOL}" "${dump}" - --pass-dump "${dir}/plain" ${settings_${setting}}
@@ -144,7 +150,7 @@ foreach(dump IN LISTS dumps)
                             "draw nothing left out (${s})")
       endif()
     endforeach()
-    message(STATUS "rd_region_stats: ${dump} (${setting}): ${draws} draws, ${tris} triangles, "
+    message(STATUS "rd_region_stats: ${dump} (${setting}, ${rule}): ${draws} draws, ${tris} triangles, "
                    "${drop} dropped, ${k} draws drawing nothing; ${npng} pass dumps equal "
                    "without them")
   endforeach()

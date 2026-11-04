@@ -58,11 +58,13 @@ VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
         if ((marks & VU_MARK_JOINED) == 0u && vu_strip_card(kick)) {
             f |= VU_TF_CARD;
         }
-        // the side bands' conditions (vu_beside) where the camera's own
-        // verdict is a drop (a card keeps it: vu_rule_beside): vu_main_vs
-        // applies them to the final one
-        if (r == VU_RULE_DROP && vu_beside(a, b, c, marks) != 0u) {
-            f |= VU_TF_BESIDE;
+        // vu_rule_beside's conditions where the camera's own verdict is a
+        // drop (vu_main_vs applies them to the final one): the camera rule's
+        // (VU_F_CAMERA: no card test there, so every final drop is one
+        // here), else the side bands' (a card keeps the drop): vu_drop_fate
+        if (r == VU_RULE_DROP) {
+            const uint fate = vu_drop_fate(vu_front_facing(a, b, c, marks));
+            f |= fate == 2u ? VU_TF_CAMERA : (fate == 1u ? VU_TF_BESIDE : 0u);
         }
     } else if (mode == VU_CLIP_NONE) {
         // vu_triangle_out_pos's exact for clip mode none
@@ -123,7 +125,7 @@ VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
 // verdict can drop, else 0; vu_main_vs reads it only where that verdict
 // (slot A) is VU_RULE_DROP.  Can drop: not wholly inside, not
 // VU_F_BEHIND_EYE, and not under the card test with every corner in front
-// of the eye (VU_F_EXTENDED, vu_strip.y, every h.w > 0: vu_region_rule_cut
+// of the eye (VU_F_EXTENDED without VU_F_CAMERA, vu_strip.y, every h.w > 0: vu_region_rule_cut
 // then gives VU_RULE_CLIP or VU_RULE_STRIP whatever the cut says; NaN
 // fails a comparison, so such a corner keeps the test), the conditions
 // alone, without the cut (in a wide frame most of the triangles beside the
@@ -136,8 +138,8 @@ VuPreOut vu_tri_tick_pre_vs(uint vid : SV_VertexID)
     VuVtx b = vu_rec_vertex(kick - 1u);
     VuVtx c = vu_rec_vertex(kick);
     uint s = 0u;
-    bool strip = (vu_draw.z & VU_F_EXTENDED) != 0u && vu_strip.y != 0u && a.h.w > 0.0 &&
-                 b.h.w > 0.0 && c.h.w > 0.0;
+    bool strip = (vu_draw.z & (VU_F_EXTENDED | VU_F_CAMERA)) == VU_F_EXTENDED &&
+                 vu_strip.y != 0u && a.h.w > 0.0 && b.h.w > 0.0 && c.h.w > 0.0;
     if ((vu_rec.w & VU_CLIP_MASK) == VU_CLIP_REGION && (a.inside & b.inside & c.inside) == 0u &&
         (vu_draw.z & VU_F_BEHIND_EYE) == 0u && (vu_draw.z & VU_F_TICKS) != 0u && !strip) {
         float4 pic = vu_picture_ndc();
@@ -214,6 +216,11 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
         if (r == VU_RULE_STRIP) {
             // vu_rule_card
             r = (f & VU_TF_CARD) != 0u ? VU_RULE_DROP : VU_RULE_CLIP;
+        }
+        if (r == VU_RULE_DROP && (f & VU_TF_CAMERA) != 0u) {
+            // vu_rule_beside under the camera rule: drawn clipped over the
+            // whole frame (the flag is set only under VU_F_CAMERA)
+            r = VU_RULE_CLIP;
         }
         if (r == VU_RULE_DROP && (f & VU_TF_BESIDE) != 0u && (vu_draw.z & VU_F_NO_BESIDE) == 0u) {
             // vu_rule_beside (the draw's flag again: a _dstrov pass sets it

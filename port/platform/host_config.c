@@ -606,6 +606,12 @@ static const struct {
        the opaque draws before it wrote, port/render/rd_vis_hiz.c) or off
        (port/render/rd_vis.c) */
     {"dev.cull", "cull"},
+    /* what the VU draws of a triangle its region test fails: camera (the
+       default: the camera decides; a triangle the PS2 drops is drawn
+       clipped when it faces the eye, in every preset) or ps2 (the PS2's
+       drops, the side bands beside a wide picture: the A/B and the escape;
+       port/render/rd_pipeline.c rd__region_camera) */
+    {"dev.region_rule", "region_rule"},
     /* false: the Vulkan swapchain keeps identity on a surface the system
        shows turned (an Android phone held sideways), the compositor turning
        every image, instead of being made in the surface's own turn with the
@@ -752,6 +758,8 @@ static const struct {
     {"vu_fuse", "ICO_RD_VU_FUSE"},
     /* port/render/rd_vis.c rd__vis_init: off, frustum or full */
     {"cull", "ICO_RD_CULL"},
+    /* port/render/rd_pipeline.c rd__region_camera: camera or ps2 */
+    {"region_rule", "ICO_RD_REGION_RULE"},
     /* port/render/rd_const_read.c rd__const_reads_on: 0 reads a cleared
        source as before */
     {"constant_reads", "ICO_RD_CONSTANT_READS"},
@@ -845,6 +853,7 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const vuSets[] = {"auto", "plain", "extended", NULL};
     static const char *const auraKernels[] = {"box", "gs", NULL};
     static const char *const culls[] = {"off", "frustum", "full", NULL};
+    static const char *const regionRules[] = {"camera", "ps2", NULL};
 
     if (key == NULL || value == NULL || ico_dev_env_name(key) == NULL) {
         return NULL;
@@ -893,6 +902,10 @@ const char *ico_dev_env_value(const char *key, const char *value)
     if (strcmp(key, "vu_set") == 0) {
         /* auto, plain or extended as they are (no boolean form) */
         return value_is(value, vuSets) ? value : NULL;
+    }
+    if (strcmp(key, "region_rule") == 0) {
+        /* camera or ps2 as they are (no boolean form) */
+        return value_is(value, regionRules) ? value : NULL;
     }
     if (strcmp(key, "cull") == 0) {
         /* off, frustum or full as they are; false/0/no is off, true/1/on/yes
