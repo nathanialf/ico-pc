@@ -4698,6 +4698,9 @@ static void perf_drain(void)
 }
 
 /* A new block's sums (the CSVs stay open) */
+/* The block's steps' time by the game's layout (window_scene.h) */
+static SceneShare s_sceneShare;
+
 static void perf_reset(void)
 {
     FILE *csv = s_perf.csv, *passCsv = s_perf.passCsv;
@@ -4710,6 +4713,9 @@ static void perf_reset(void)
     s_perf.passCsvTried = passTried;
     s_pres.stepSumMs = s_pres.stepMaxMs = 0.0;
     s_pres.stepCount = 0;
+    /* the layout shares start with the block's steps (stepSumMs), not at
+       the last layout line (review 2 N6) */
+    window_scene_reset(&s_sceneShare);
     rd_vu_card_counts(&s_pres.cardStrips, &s_pres.cardTris, &s_pres.cardMs);
 }
 
@@ -5088,9 +5094,6 @@ static void disp_block_reset(void)
     s_disp.shown.shown = s_disp.shown.refreshes = s_disp.shown.repeats = 0;
     s_disp.statsSeen = 0;
 }
-
-/* The block's steps' time by the game's layout (window_scene.h) */
-static SceneShare s_sceneShare;
 
 static void scene_note_step(double ms)
 {
