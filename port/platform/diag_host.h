@@ -599,6 +599,17 @@ int ico_diag_low_memory_stop(char *why, size_t size);
 void ico_diag_set_memory_floor_driver(unsigned vendor_id, const char *driver_text);
 /* The class set (IcoMemoryFloorDriver) */
 int ico_diag_memory_floor_driver(void);
+/* Issue 188: the driver's compiles run one at a time (rhi.h
+   RhiLimits.serialPipelines: why, "PowerVR B-Series"; NULL none), set by the
+   window with the floor's driver class: the pipeline limit before the game
+   starts is then 60 s, not 10 (gpu_hang.h ico_pipe_stall_limit_s), logged
+   once when set.  ico_diag_set_selftest: 1 while the window runs the blend
+   and VU pre-pass self-tests (which run first at every start, whatever the
+   set), 0 after; an end by the pipeline limit inside them does not tell the
+   player the next start prepares the graphics another way
+   (gpu_hang.h ico_pipe_stall_next_differs). */
+void ico_diag_set_pipe_compiler_serial(const char *why);
+void ico_diag_set_selftest(int on);
 /* 1 when the start-up set stopped at the free-memory floor and no
    low-memory signal has come (the window's background finisher may run),
    else 0 */

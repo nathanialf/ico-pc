@@ -92,4 +92,41 @@ typedef struct IcoPipeStallWatch {
 double ico_pipe_stall_step(IcoPipeStallWatch *w, double now, int creating, int counted, int on,
                            unsigned seq, unsigned done, unsigned bg_done);
 
+/* The pipeline limit's length (diag_host.c, issues 161 and 188): before the
+   game starts (in_play 0: the self-tests and the start-up set) 10 s, or 60 s
+   on a driver whose compiles run one at a time (serial_compiler: rhi.h
+   RhiLimits.serialPipelines, a PowerVR B-Series driver: Imagination's own
+   thread on that driver has a set taking 84 s without its cache, and the
+   issue 188 phone's did not return within 10 s from a 70k-word shader,
+   slow or hung, the log cannot tell); in play 30 s on every driver. */
+#define ICO_PIPE_STALL_START_S 10.0
+#define ICO_PIPE_STALL_START_SERIAL_S 60.0
+#define ICO_PIPE_STALL_PLAY_S 30.0
+double ico_pipe_stall_limit_s(int in_play, int serial_compiler);
+
+/* The heartbeat's memory rule (diag_host.c, issue 188): the process's
+   resident memory at this heartbeat against the last one's (KB, -1
+   unknown); 1 when it grew by ICO_PIPE_MEM_MOVING_KB or more, the driver's
+   compiler at work (the issue 188 phone: 147, 251, 275, 296 MB at the
+   heartbeats while its compile ran), so the pipeline limit does not count
+   that heartbeat's time; an unknown reading never moves.  The free-memory
+   floor and the system's low-memory signal (issue 161) still stop a
+   compiler that grows without end. */
+#define ICO_PIPE_MEM_MOVING_KB 2048L
+int ico_pipe_mem_moving(long prev_kb, long now_kb);
+
+/* Whether the next start prepares the graphics another way after the
+   pipeline limit ended this one (the box's and the line's words, issue
+   188): a note naming only a family the renderer can draw another way
+   (skip_family: pipeline_skip.h pipeline_skip_family_of_note), or a VU
+   shader (vu_note) while the plain VU shaders are not in force yet
+   (vu_plain_already: the stall mark of an earlier end), changes what it
+   makes; else the next start's set policy does (careful, then on first
+   use), except where nothing of it runs before the creation that stalled:
+   the self-tests run first at every start whatever the set (in_selftest),
+   and a run already on first use has no later step (lazy_run).  1: another
+   way. */
+int ico_pipe_stall_next_differs(int in_selftest, int lazy_run, int skip_family, int vu_note,
+                                int vu_plain_already);
+
 #endif /* ICO_PLATFORM_GPU_HANG_H */

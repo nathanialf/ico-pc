@@ -76,8 +76,12 @@
  *              one snapshot each (rd__date_retake)
  *   pipelines  the reachable screen and post set is under 400 keys (the
  *              sprite_texa_ps twins and the triangle planes included), with the VU program families
- *              under RD_PIPELINE_REACHABLE_MAX; font_sheet_ps and
- *              font_sheet_baked_ps have font_ps's 10 keys each; the VU keys: 242 program-entry keys without the
+ *              under RD_PIPELINE_REACHABLE_MAX; font_sheet_ps (with
+ *              [dev] sheet_shader) and font_sheet_baked_ps have font_ps's
+ *              10 keys each; font_sheet_ps's only where a scale the bake
+ *              does not take is drawn (testSheetSet, issue 188: none on a
+ *              tile-based profile at 1x and 2x, the frame's at 3x, the
+ *              overlay's at a 1080-line output); the VU keys: 242 program-entry keys without the
  *              pre-pass (16 a shader and the 6 of a material TEST's
  *              RGB_ONLY half), 38 + 38 + 10 + 5 with it (printed with the
  *              2D part)
@@ -2487,6 +2491,100 @@ static void testUberSet(RdPipeKeyInt *keys)
     g_rd.sceneSy = keepSy;
 }
 
+/* font_sheet_ps's keys in a set only where a scale the bake does not take
+ * is drawn (rd_tex.c rd__sheet_shader_in_scene/_in_overlay, issue 188): the
+ * menus at the scene's scale, the overlay at the output's height / 448,
+ * mfScale's rounding (2.41 is 3, 2.25 is 2).  On a tile-based profile (the
+ * 2x bake) at 1x and 2x and a 1008-line output none; at a 3x scene the
+ * frame's 8, at a 1080-line output (the reporter's phone) the overlay's 4,
+ * every scale with [dev] sheet_shader (10: the overlay's RGBA8 two are the
+ * frame's); on a desktop profile (1x baked only) a 2x scene, or a 720-line
+ * output's overlay, draws through it.  font_sheet_baked_ps's 10 stay in every set,
+ * and the family line's words say which way each went. */
+static uint32_t countSheetKeys(uint32_t *depthKeys)
+{
+    static RdPipeKeyInt k[RD_PIPELINE_REACHABLE_MAX];
+    const uint32_t n = rd__enumerate_reachable(k, RD_PIPELINE_REACHABLE_MAX);
+    uint32_t c = 0, d = 0, baked = 0;
+    for (uint32_t i = 0; i < n && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+        c += k[i].fs == RD_FS_FONT_SHEET;
+        d += k[i].fs == RD_FS_FONT_SHEET && k[i].depthFmt != RHI_FMT_UNKNOWN;
+        baked += k[i].fs == RD_FS_FONT_SHEET_BAKED;
+    }
+    CHECK(baked == 10, "font_sheet_baked_ps keys %u (10 in every set)", baked);
+    if (depthKeys) {
+        *depthKeys = d;
+    }
+    return c;
+}
+
+static void testSheetSet(void)
+{
+    const RdProfile keepProfile = g_rd.profile;
+    const float keepSx = g_rd.sceneSx, keepSy = g_rd.sceneSy;
+    const uint32_t keepOutH = g_rd.settings.outputHeight;
+    const bool keepSheet = g_rd.sheetShader;
+
+    static const struct {
+        bool tiler;
+        float scale;
+        uint32_t outH;
+        bool sheet;
+        bool scene, overlay;
+    } kCase[] = {
+        {true, 1.0f, 448u, false, false, false}, {true, 2.11f, 1008u, false, false, false},
+        {true, 3.0f, 1008u, false, true, false}, {true, 2.11f, 1080u, false, false, true},
+        {true, 1.0f, 448u, true, true, true},    {false, 1.0f, 448u, false, false, false},
+        {false, 2.0f, 448u, false, true, false}, {false, 1.0f, 720u, false, false, true},
+    };
+
+    for (size_t c = 0; c < sizeof(kCase) / sizeof(kCase[0]); c++) {
+        memset(&g_rd.profile, 0, sizeof(g_rd.profile));
+        g_rd.profile.tiler = kCase[c].tiler;
+        g_rd.profile.sheetBake2x = kCase[c].tiler;
+        g_rd.sceneSx = g_rd.sceneSy = kCase[c].scale;
+        g_rd.settings.outputHeight = kCase[c].outH;
+        g_rd.sheetShader = kCase[c].sheet;
+        uint32_t depth = 0;
+        const uint32_t n = countSheetKeys(&depth);
+        /* the overlay's RGBA8 two are the frame's depthless mask F ones */
+        const uint32_t want = kCase[c].scene && kCase[c].overlay ? 10u
+                              : kCase[c].scene                   ? 8u
+                              : kCase[c].overlay                 ? 4u
+                                                                 : 0u;
+        char words[160];
+        rd__sheet_set_words(words, sizeof(words));
+        printf("  sheet set: %s, scene %.2f, output %u lines%s: %u font_sheet_ps keys (%s)\n",
+               kCase[c].tiler ? "tile-based" : "desktop", (double)kCase[c].scale, kCase[c].outH,
+               kCase[c].sheet ? ", [dev] sheet_shader" : "", n, words);
+        CHECK(rd__sheet_shader_in_scene() == kCase[c].scene &&
+                  rd__sheet_shader_in_overlay() == kCase[c].overlay,
+              "case %zu: in the scene %d, in the overlay %d", c, rd__sheet_shader_in_scene(),
+              rd__sheet_shader_in_overlay());
+        /* the overlay's 4 are depthless; the frame's 8 hold its 4 with depth */
+        CHECK(n == want && depth == (kCase[c].scene ? 4u : 0u),
+              "case %zu: %u font_sheet_ps keys (%u with depth), %u expected", c, n, depth, want);
+        char wantScene[64], wantOverlay[64];
+        snprintf(wantScene, sizeof(wantScene), "the menus' text at %ux %s",
+                 rd__sheet_scale_for(kCase[c].scale),
+                 kCase[c].scene ? "in the set" : "baked (not in the set)");
+        snprintf(wantOverlay, sizeof(wantOverlay), "the overlay's at %ux %s",
+                 rd__sheet_scale_for((float)kCase[c].outH / 448.0f),
+                 kCase[c].overlay ? "in the set" : "baked (not in the set)");
+        CHECK(strstr(words, wantScene) != NULL && strstr(words, wantOverlay) != NULL,
+              "case %zu: the line's words: %s (want \"%s\", \"%s\")", c, words, wantScene,
+              wantOverlay);
+    }
+    CHECK(rd__sheet_scale_for(2.41f) == 3u && rd__sheet_scale_for(2.25f) == 2u &&
+              rd__sheet_scale_for(0.5f) == 1u && rd__sheet_scale_for(4.8f) == 4u,
+          "mfScale's rounding");
+    g_rd.profile = keepProfile;
+    g_rd.sceneSx = keepSx;
+    g_rd.sceneSy = keepSy;
+    g_rd.settings.outputHeight = keepOutH;
+    g_rd.sheetShader = keepSheet;
+}
+
 static void testEnumeration(void)
 {
     static RdPipeKeyInt keys[RD_PIPELINE_REACHABLE_MAX];
@@ -2506,21 +2604,30 @@ static void testEnumeration(void)
                   keys[i].gs.afailSplit == 0 && keys[i].gs.date == 0,
               "key %u normalised", i);
     }
-    /* font_sheet_ps has font_ps's keys: the overlay's two
-     * blends on the two outputs and the frame's text, two blends, with and
-     * without depth, colour mask F and 7 (the overlay's RGBA8 keys are the
-     * frame's depthless mask F ones: 10 in all) */
-    uint32_t font = 0, sheet = 0, baked = 0;
-    for (uint32_t i = 0; i < n && i < 512; i++) {
-        font += keys[i].fs == RD_FS_FONT;
-        sheet += keys[i].fs == RD_FS_FONT_SHEET;
-        baked += keys[i].fs == RD_FS_FONT_SHEET_BAKED;
+    /* font_sheet_ps has font_ps's keys where every scale is drawn through
+     * it ([dev] sheet_shader): the overlay's two blends on the two outputs
+     * and the frame's text, two blends, with and without depth, colour mask
+     * F and 7 (the overlay's RGBA8 keys are the frame's depthless mask F
+     * ones: 10 in all) */
+    {
+        static RdPipeKeyInt all[RD_PIPELINE_REACHABLE_MAX];
+        const bool keepSheet = g_rd.sheetShader;
+        g_rd.sheetShader = true;
+        const uint32_t na = rd__enumerate_reachable(all, RD_PIPELINE_REACHABLE_MAX);
+        g_rd.sheetShader = keepSheet;
+        uint32_t font = 0, sheet = 0, baked = 0;
+        for (uint32_t i = 0; i < na && i < RD_PIPELINE_REACHABLE_MAX; i++) {
+            font += all[i].fs == RD_FS_FONT;
+            sheet += all[i].fs == RD_FS_FONT_SHEET;
+            baked += all[i].fs == RD_FS_FONT_SHEET_BAKED;
+        }
+        printf("  font_ps keys %u, font_sheet_ps keys %u, font_sheet_baked_ps keys %u\n", font,
+               sheet, baked);
+        CHECK(font == 10 && sheet == 10 && baked == 10,
+              "font_ps keys %u, font_sheet_ps keys %u, font_sheet_baked_ps keys %u (10 each)", font,
+              sheet, baked);
     }
-    printf("  font_ps keys %u, font_sheet_ps keys %u, font_sheet_baked_ps keys %u\n", font, sheet,
-           baked);
-    CHECK(font == 10 && sheet == 10 && baked == 10,
-          "font_ps keys %u, font_sheet_ps keys %u, font_sheet_baked_ps keys %u (10 each)", font,
-          sheet, baked);
+    testSheetSet();
     testEnumerationVu(keys);
     testDynamicNormalise(keys);
     testTilerSet(keys);

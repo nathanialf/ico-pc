@@ -588,7 +588,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   from 0; time not counted, paused or asleep, does not add; a limit of 0 never fires), and the
   render thread's watch (`ico_render_hang_step`: a picture that makes 60 pipelines of 250 ms each
   is no hang, nor one inside a single creation for 20 s; with no creation a picture fires once at
-  15 s, counted from the last creation; between pictures nothing counts); pure (`gpu_hang`).
+  15 s, counted from the last creation; between pictures nothing counts), and the pipeline
+  limit's issue 188 rules (`ico_pipe_stall_limit_s`: 10 s before the game starts, 60 s on a driver
+  whose compiles run one at a time, 30 s in play; `ico_pipe_mem_moving` over the issue 188 log's
+  heartbeats: a creation from 4 s fires at 21.75 s under 10 s and 71.75 s under 60 s, counted
+  from the heartbeat after the last growth; `ico_pipe_stall_next_differs`: the self-tests and a
+  lazy run the same way unless a skippable family or a VU shader before the plain ones);
+  pure (`gpu_hang`).
 - `gpu_driver_test.c`: the Android driver packages: `meta.json`, refusals, installs from zips made
   here, the trial marker, the ELF page-size check (`test_pages`: two synthetic ELF64 headers, 4 KB and 16 KB
   aligned, and one with a single 4 KB segment, on a 4 KB and a 16 KB phone; what cannot be read is not
@@ -600,7 +606,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   bad folder, a damaged file, neither file listing as a driver) and the loss window (`test_loss`: a loss under a
   package at 0, 12 s and 29.999 s counts, at 30 s and later or on the phone's own driver does not; the marker
   written again makes the next start see a crash), and `test_list_zips` (`ico_gpu_driver_list_zips`: `a.zip`, `B.ZIP`, `incoming.*`, a text file, a hidden zip and a folder named `.zip` give two names in byte order, the cap and a missing folder) (`gpu_driver`).
-  The Android file picker ([PLATFORM.md](PLATFORM.md#the-file-picker): `IcoActivity.pickFile`,
+  The Android file picker ([PLATFORM.md](ANDROID_DRIVERS.md#the-file-picker): `IcoActivity.pickFile`,
   `ico_android_pick_file`, `nativePickDone`) has no case: it is Java and JNI, and nothing here runs
   either. It is checked on a phone: `adb logcat -s ico-pc SDL` while pressing Add a driver shows
   the `ico_pc: file picker: pick N:` lines and the picker; `adb shell pm disable-user --user 0
@@ -1149,7 +1155,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   opaque cell drawn after the blended draws and read at an even and an odd texel column (`after
   cell, even column`, `after cell, odd column` in a failure line), which a driver that keeps a
   dual-source equation with blending off fails, and the overlap of two sprites of one LERP command
-  (`one draw, second over first`: the read's rasterization order inside a draw). Under GS state as
+  (`one draw, second over first`: the read's rasterization order inside a draw). The glyph's
+  shader is matched on both lines (`-DGLYPH`, issue 188): the 1x bake's `font_sheet_baked_ps` by
+  default (`rd_blend_selftest`), `font_sheet_ps` under an exact mode asked
+  (`rd_blend_selftest_blend_attachment`) and with `[dev] sheet_shader`
+  (`rd_blend_selftest_sheet_shader`, `ICO_RD_SHEET_SHADER=1`). Under GS state as
   shader data (`ICO_RD_UBER=on`): the attachment read taken for it and kept
   (`rd_blend_selftest_uber`, the profile line's and the start line's words), kept when sabotaged
   (`rd_blend_selftest_uber_sabotage`: `[dev] uber = on` keeps it as `[dev] blend` does), and
@@ -2087,7 +2097,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   a tie: N = 3 level texels), some texels differing; the |d| histogram printed (`checkEdges2x`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-edges-above-1x)).
 - `rd_state_test.c`: the recording half of rd without a GPU: the payload arena's alignment gap
-  zeroed over a reused buffer's bytes (`testPayloadPad`), the VU fallback's set
+  zeroed over a reused buffer's bytes (`testPayloadPad`), the sheet shader's keys in the set
+  (`testSheetSet`, issue 188: no `font_sheet_ps` key on a tile-based profile at 1x and 2x with a
+  1008-line output, the frame's 8 at a 3x scene, the overlay's 4 at 1080 lines, 10 with `[dev]
+  sheet_shader`, a desktop profile's at 2x; `font_sheet_baked_ps`'s 10 in each; the family line's
+  words), the VU fallback's set
   (`rd__vu_set_choose`, `testVuSetPolicy`: the stock Adreno 740's table row and two Turnip driver
   texts take the plain set with the start line's words, Qualcomm's driver without a row, lavapipe,
   RADV and NVIDIA the extended one, `[dev] vu_set = plain` (`ICO_RD_VU_SET=plain` or
@@ -2261,7 +2275,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (the bind cache off, [RHI.md](RHI.md#the-bind-cache)): the bind cache cell then wants no skip,
   the repeats' pipeline binds recorded (6 more) and the group binds the same, the same exact
   pictures; the dynamic state cell's repeats send every command again (none counted) and the
-  dual-source leftover cell counts 3 commands and no leftover.
+  dual-source leftover cell counts 3 commands and no leftover. `rhi_vk_serial` runs them under
+  `ICO_VK_FAKE_SERIAL=1` (one compile at a time, issue 188): `RhiLimits.serialPipelines` set, the
+  batch and the background set on one thread each, and a pipeline made on the test's thread while
+  the background set compiles (the lock taken by both).
 - `rhi_d3d12_plan_test.c`: the D3D12 backend's state and barrier bookkeeping on the CPU
   (`rhi_d3d12_plan`).
 - `rhi_d3d11_shader_plan_test.c`: the Direct3D 11 backend's shader route on the CPU
@@ -2298,7 +2315,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   issue 163 tablet's `Mesa 26.3.0-devel (git-a995eaeda4)` as devel, a release, a distribution's `25.0.7-2`
   as no devel, a release candidate (`-rc` with a number), `mesa-25.1`, `MESA v24.2.8-DEVEL`, a bare version under a Mesa name, a Mesa word with
   no number then one with it; Qualcomm's compiler text, NVIDIA's version, empty, a lone major and NULL give
-  none; a short buffer) and `rhi_text_one_line` (Qualcomm's driver text with newlines on one line, issue 123) (`rhi_driver_version`).
+  none; a short buffer), `rhi_text_one_line` (Qualcomm's driver text with newlines on one line, issue 123) and
+  `rhi_driver_compiler_serial` (issue 188: the issue 188 log's PowerVR B-Series text at Vulkan 1.1
+  and the driver name alone at 1.3 give `PowerVR B-Series`, a Rogue text at 1.1 `PowerVR, Vulkan
+  1.1`; the D-Series DXT-48's text at 1.4, an unknown version, Qualcomm naming a B-Series and Mali
+  give none) (`rhi_driver_version`).
  `rhi_adapter_match_test.c`: the `[video] adapter` rules (`port/rhi/rhi_adapter.c`): the exact
   name's index, the first of two equal names, no match for another case, a part of a name, a
   longer name, `""`, NULL or a NULL entry; the device-list text with and without scores, the

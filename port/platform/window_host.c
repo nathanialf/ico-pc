@@ -1133,6 +1133,28 @@ static int display_progress(void *ctx, uint32_t done, uint32_t total);
 static int progress_present_notes(const char *title, const char *phase, int pct, int allowCancel,
                                   const char *note0, const char *note1);
 
+/* Issue 188: the start-up screen before the blend and VU pre-pass
+   self-tests, in every branch (the set, the lazy start, Apply's switch):
+   their pipelines are compiled on this thread before the set, and on a
+   PowerVR B-Series phone the first did not return for 10 s with nothing on
+   the screen.  One picture, drawn now (the set's own screen waits 250 ms
+   and then moves with the count); the watchdog told the self-tests run
+   (diag_host.h ico_diag_set_selftest) until selftests_done */
+static void selftests_screen(void)
+{
+    const char *once = NULL;
+#ifdef __ANDROID__
+    once = "This happens once after an update that changes the graphics";
+#endif
+    (void)progress_present_notes(s_pipeTitle, "Preparing graphics", -1, 0, NULL, once);
+    ico_diag_set_selftest(1);
+}
+
+static void selftests_done(void)
+{
+    ico_diag_set_selftest(0);
+}
+
 #ifdef __ANDROID__
 static const char k_driver_next_start[] =
     "The game will use the driver package at the next start. Please close and open ICO again.";
@@ -2259,8 +2281,10 @@ open_window:
         /* the blend checked on this GPU (rd.h rd_blend_selftest), then the
            VU vertex pre-pass (rd_vuprepass_selftest) */
         ico_diag_step("window: start: the blend and VU pre-pass self-tests");
+        selftests_screen();
         rd_blend_selftest();
         rd_vuprepass_selftest();
+        selftests_done();
     } else {
         /* the careful policy: on a device of the table, by the settings, or
            after the full set's end (for this start only) */
@@ -2300,6 +2324,7 @@ open_window:
            set is made so the set is the chosen way's; logged ("blend: ...
            (self-test: ...)"). A crash in it is noted as the set's would be */
         ico_diag_step("window: start: the blend and VU pre-pass self-tests");
+        selftests_screen();
         rd_blend_selftest();
         /* whether the VU vertex pre-pass draws right on this GPU, tried
            before the set so the set holds the pre-pass's keys or the
@@ -2307,6 +2332,7 @@ open_window:
            it is noted as the set's would be (its pipeline's " pre" or
            vu_tri note: startup_retry.h's noprepass step) */
         rd_vuprepass_selftest();
+        selftests_done();
         static PipeScreen screen;
 
         /* a start with a cold driver cache can take many seconds (a phone,
@@ -2572,9 +2598,13 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
     ico_diag_set_startup_retry((int)s_retry, window_have_d3d12(), backendExplicit, s_blendExplicit,
                                backend);
     ico_diag_step("window: switch to %s: the blend self-test", backend);
+    s_pipeTitle = "Changing the graphics";
+    selftests_screen();
+    s_pipeTitle = "Starting ICO";
     rd_blend_selftest();
     ico_diag_step("window: switch to %s: the VU pre-pass self-test", backend);
     rd_vuprepass_selftest();
+    selftests_done();
     if (reopen_lost(backend)) {
         return 0;
     }

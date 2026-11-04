@@ -590,6 +590,7 @@ static void d11_fill_limits(void)
     o->stencilGather = false;
     o->vuFallbackPlain = NULL;
     o->carefulPipelines = NULL;
+    o->serialPipelines = NULL;
     o->compilerVersion = NULL;
 }
 

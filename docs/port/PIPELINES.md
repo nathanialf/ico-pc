@@ -143,6 +143,11 @@ workers' own times (`RhiPipelineBatch.ms`): `pipelines: the slowest: <s> s <key>
 slowest compiles) and `pipelines: compile time by vertex shader: <entry> <s> s, ...` (summed over
 the threads, the largest first) (`port/render/rd.h` (`rd_precreate_pipelines`,
 `RdPipelineProgressFn`, `rd_precreate_longest_ms`); `port/render/rd_pipeline.c` (`preTimesLog`)).
+On a PowerVR B-Series driver (and any PowerVR below Vulkan 1.3) the batches compile on one thread
+and every module and pipeline creation, the background finisher's and a first use's included,
+takes one lock (`RhiLimits.serialPipelines`, `rhi_vk: pipelines: one at a time (PowerVR B-Series:
+the driver's compiler is not thread-safe)`; issue 188; [RHI.md](RHI.md#the-interface), **One
+compile at a time**), so the line reads `compiled on 1 thread`.
 At start the renderer logs the embedded modules' count and the largest, `shaders: <n> modules,
 largest <entry> <words> words`: a driver's compile time grows with a module's size, which
 `spirv_check` holds to a budget ([SHADERS.md](SHADERS.md#the-envelope); `port/render/rd_replay.c`).
@@ -413,10 +418,31 @@ and the next line splits the set by family (`port/render/rd_pipeline.c` (`rd__pi
 a key holds, not by the enumerator that listed it: a DATE twin of a VU or screen key counts as DATE,
 the water's states as 2D):
 
-    rd: pipelines: the start-up set by family: 2D <n>, VU <n>, VU point <n>, shadow <n>, fog <n>, CRT <n>, fx <n>, DATE <n>
+    rd: pipelines: the start-up set by family: 2D <n>, VU <n>, VU point <n>, shadow <n>, fog <n>, CRT <n>, fx <n>, DATE <n>; font_sheet_ps: the menus' text at <s>x in the set|baked (not in the set), the overlay's at <o>x in the set|baked (not in the set)[ ([dev] sheet_shader)]
 
 (a key is in one family, the first that holds of DATE, VU point, VU,
-shadow, fog, CRT, fx, 2D). `rd_state_test` `testTilerSet` asserts the families sum to the set's
+shadow, fog, CRT, fx, 2D).
+
+**The sheet shader's keys.** `font_sheet_ps` (the menus' text above the bake's scales, 70k words
+with its two-pass twin `font_sheet_ps_nodual`) is in the set only where a strip of a scale the bake
+does not take can be drawn (`port/render/rd_tex.c` (`rd__sheet_shader_in_scene`,
+`rd__sheet_shader_in_overlay`); issue 188: a PowerVR B-Series driver did not return from compiling
+it, on a phone whose menus are baked): the frame's 8 text keys when the menus' scale
+(`rd__sheet_scale_for` of the scene's texels a GS line, `port/ui/menu_font.c` (`mfScale`)'s
+rounding: 2.11 is 2, 2.41 is 3) is not baked (`rd__sheet_bake_scale`: 1, and 2 on the tile-based
+classes), the overlay's 4 when the output's height / 448 (the overlay's box is at most the output's
+height) is not, and all of them with `[dev] sheet_shader`; `font_sheet_baked_ps`'s 10 stay in every
+set. The family line's last part says which way each went, with the scales. A scale reached later
+(Apply's resolution: the display change's set, `rd__display_pipelines`; a larger window: first use)
+makes the key then. At 1080 output lines the overlay's popups draw at 3x, so a 1080p phone keeps
+the overlay's 4 keys while its menus at Resolution Auto (2x) are baked. `rd_state_test`
+`testSheetSet` asserts the counts on a tile-based and a desktop profile at 1x, 2x and 3x and at
+448, 720, 1008 and 1080 output lines, and the line's words. The blend self-test, which the window runs before the set behind the start-up
+screen, draws its glyph through `font_sheet_baked_ps` unless `font_sheet_ps` is what it checks
+([RENDER.md](RENDER.md#destination-reads-and-blend-paths), **The blend self-test**), so no start
+compiles `font_sheet_ps` where the set leaves it out. A creation that does not return before the
+game starts ends the run after 10 s, 60 s on a driver whose compiles run one at a time, the time
+held while the process grows ([PLATFORM.md](PLATFORM.md#diagnostics), **The pipeline limit**). `rd_state_test` `testTilerSet` asserts the families sum to the set's
 count and to the count without local read, and prints them for each mode.
 `rd_replay_tool --keys` compares the set with what a replay asks for: the keys the replay names
 (`rd__pipeline_gather`, rounds as the loss bisect's `bisectPipelines`), one line each with its

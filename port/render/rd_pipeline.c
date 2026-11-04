@@ -2900,7 +2900,9 @@ uint32_t rd_precreate_pipelines(void)
                                      rd__pipe_family_name((RdKeyFamily)f), fam[f]);
             at += put > 0 ? (size_t)put : 0;
         }
-        rd__log("pipelines: the start-up set by family: %s", w);
+        char sh[160];
+        rd__sheet_set_words(sh, sizeof(sh));
+        rd__log("pipelines: the start-up set by family: %s; %s", w, sh);
     }
     rd__uber_set_line(n); /* GS state as shader data: the set it replaces */
     if (n > m) {
@@ -4225,6 +4227,10 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
      * TEST 0x30000, no Z write, ALPHA 0x44 or 0x48; UI_KEEP_STATE keeps the
      * layout packet's, which differs only in the alpha test, a uniform)
      * through font_ps, with and without the depth target */
+    /* font_sheet_ps only where a scale the bake does not take is drawn
+     * (rd__sheet_shader_in_scene, issue 188: 70k words, the phone's driver
+     * stopped compiling it) */
+    const bool sheetScene = rd__sheet_shader_in_scene();
     for (size_t b = 0; b < 2; b++) {
         for (size_t dz = 0; dz < 2; dz++) {
             RdStateBlock s;
@@ -4240,6 +4246,9 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
                 /* the menus' sheet text (font_sheet_ps, and
                  * font_sheet_baked_ps at 1x) in the same states */
                 for (int sh = 0; sh < 3; sh++) {
+                    if (sh == 1 && !sheetScene) {
+                        continue;
+                    }
                     dp[i].key.fs = sh == 2   ? RD_FS_FONT_SHEET_BAKED
                                    : sh == 1 ? RD_FS_FONT_SHEET
                                              : RD_FS_FONT;
@@ -4282,6 +4291,7 @@ uint32_t rd__enumerate_reachable_overlay(RdPipeKeyInt *out, uint32_t max, uint32
 {
     static const uint8_t kOverlayBlends[] = {RD_BLEND_LERP_AS, RD_BLEND_CS_AS_ADD_CD};
     static const RhiFormat kOutFormats[] = {RHI_FMT_RGBA8_UNORM, RHI_FMT_BGRA8_UNORM};
+    const bool sheet = rd__sheet_shader_in_overlay(); /* issue 188 */
     for (size_t f = 0; f < 2; f++) {
         for (size_t b = 0; b < 2; b++) {
             RdStateBlock s;
@@ -4295,9 +4305,12 @@ uint32_t rd__enumerate_reachable_overlay(RdPipeKeyInt *out, uint32_t max, uint32
                 dp[i].key.fs = RD_FS_FONT;
                 n = rd__add_pipe_key(out, max, n, &dp[i].key);
                 /* the popups' and the photo panel's sheet text
-                 * (font_sheet_ps; font_sheet_baked_ps at 1x) */
-                dp[i].key.fs = RD_FS_FONT_SHEET;
-                n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                 * (font_sheet_ps above the bake's scales; font_sheet_baked_ps
+                 * at 1x, and 2x on the tile-based classes) */
+                if (sheet) {
+                    dp[i].key.fs = RD_FS_FONT_SHEET;
+                    n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                }
                 dp[i].key.fs = RD_FS_FONT_SHEET_BAKED;
                 n = rd__add_pipe_key(out, max, n, &dp[i].key);
             }

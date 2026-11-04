@@ -2,6 +2,7 @@
  * pipelines for the Vulkan backend. */
 #include "vk_internal.h"
 #include "rhi_vk.h"
+#include "../rhi_driver_version.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -24,6 +25,81 @@
 #endif
 
 #define VKR_H(x) ((uint64_t)(x))
+
+/* --------------------------------------------- one compile at a time
+ * Issue 188 (Moto G54, PowerVR BXM-8-256, B-Series driver 1.15@6133110):
+ * Imagination's answer on that driver is that its compiler is not
+ * thread-safe, so shader module and pipeline creation must not run on two
+ * threads at once.  Where rhi_driver_compiler_serial names the driver, the
+ * start-up set, the careful set and the background finisher compile on one
+ * thread (vkr_pipe_threads_for), and every vkCreateShaderModule and
+ * vkCreateGraphicsPipelines takes s_compileLock, so a first-use creation on
+ * the drawing thread waits for a background compile in flight rather than
+ * running beside it.  Kept across nothing: made at rhi_init, gone at
+ * rhi_shutdown. */
+#ifdef ICO_RHI_HAVE_SDL
+static SDL_Mutex *s_compileLock;
+#endif
+static char s_serialWhy[64];
+
+void vkr_compile_serial_init(void)
+{
+    RhiLimits *o = &g_vkr.limits;
+    const char *why =
+        rhi_driver_compiler_serial(o->vendorId, o->driverText, o->apiMajor, o->apiMinor);
+    const char *fake = getenv("ICO_VK_FAKE_SERIAL");
+    if (why == NULL && fake != NULL && fake[0] == '1') {
+        why = "ICO_VK_FAKE_SERIAL"; /* tests: the rule on any device */
+    }
+    o->serialPipelines = NULL;
+    s_serialWhy[0] = '\0';
+    if (why == NULL) {
+        return;
+    }
+    snprintf(s_serialWhy, sizeof s_serialWhy, "%s", why);
+    o->serialPipelines = s_serialWhy;
+#ifdef ICO_RHI_HAVE_SDL
+    if (s_compileLock == NULL) {
+        s_compileLock = SDL_CreateMutex();
+    }
+    if (s_compileLock == NULL) {
+        VKR_LOG("pipelines: one at a time (%s: the driver's compiler is not thread-safe), but no "
+                "lock could be made (%s): one compile thread only",
+                s_serialWhy, SDL_GetError());
+        return;
+    }
+#endif
+    VKR_LOG("pipelines: one at a time (%s: the driver's compiler is not thread-safe)", s_serialWhy);
+}
+
+void vkr_compile_serial_shutdown(void)
+{
+#ifdef ICO_RHI_HAVE_SDL
+    if (s_compileLock != NULL) {
+        SDL_DestroyMutex(s_compileLock);
+        s_compileLock = NULL;
+    }
+#endif
+    s_serialWhy[0] = '\0';
+}
+
+void vkr_compile_lock(void)
+{
+#ifdef ICO_RHI_HAVE_SDL
+    if (s_compileLock != NULL) {
+        SDL_LockMutex(s_compileLock);
+    }
+#endif
+}
+
+void vkr_compile_unlock(void)
+{
+#ifdef ICO_RHI_HAVE_SDL
+    if (s_compileLock != NULL) {
+        SDL_UnlockMutex(s_compileLock);
+    }
+#endif
+}
 
 /* ------------------------------------------------------ the pipeline cache
  * rhi_set_pipeline_cache_path (rhi.h).  Kept across rhi_init, which clears
@@ -1202,10 +1278,14 @@ static void vkr_pipe_compile(VkrPipeJob *j)
     if (!j->id) {
         return;
     }
+    /* the lock only on a driver of the serial rule (vkr_compile_lock); the
+       time is the compile's own, not the wait for the lock */
+    vkr_compile_lock();
     const uint64_t t0 = vkr_now_ns();
     j->result =
         vkCreateGraphicsPipelines(g_vkr.device, g_vkr.pipelineCache, 1, &j->ci, NULL, &j->pipeline);
     j->ms = (float)((double)(vkr_now_ns() - t0) / 1e6);
+    vkr_compile_unlock();
 }
 
 static RhiPipeline vkr_pipe_finish(const RhiPipelineDesc *d, VkrPipeJob *j)
@@ -1318,6 +1398,9 @@ static int SDLCALL vkr_pipe_worker(void *arg)
 
 static uint32_t vkr_pipe_threads_for(uint32_t jobs)
 {
+    if (g_vkr.limits.serialPipelines != NULL) {
+        return 1u; /* the driver's compiler is not thread-safe (issue 188) */
+    }
     int cores = SDL_GetNumLogicalCPUCores();
     uint32_t t = cores > 1 ? (uint32_t)cores - 1u : 1u;
     if (t > RHI_PIPELINE_THREADS_MAX) {

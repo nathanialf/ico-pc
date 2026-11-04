@@ -866,6 +866,17 @@ void vkr_release_all_objects(void);
  * saved to the file and destroyed before the device goes */
 void vkr_pipeline_cache_init(void);
 void vkr_pipeline_cache_shutdown(void);
+/* vk_pipeline.c, issue 188: on a driver whose compiler is not thread-safe
+ * (rhi_driver_version.h rhi_driver_compiler_serial, RhiLimits.
+ * serialPipelines) one compile thread and one lock that
+ * vkCreateShaderModule and vkCreateGraphicsPipelines take (vkr_compile_lock,
+ * any thread; nothing where the rule does not hold).  vkr_compile_serial_init
+ * after the limits are filled (rhi_init; logs the line), _shutdown after the
+ * device is gone. */
+void vkr_compile_serial_init(void);
+void vkr_compile_serial_shutdown(void);
+void vkr_compile_lock(void);
+void vkr_compile_unlock(void);
 /* vk_pipeline.c: the background sets' compiles (rhi.h RhiGpuProgress
  * bgPipesDone, bgPipesLeft); any thread */
 void vkr_pipe_background_progress(uint32_t *done, uint32_t *left);

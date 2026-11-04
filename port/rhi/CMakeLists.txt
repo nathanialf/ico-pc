@@ -528,6 +528,16 @@ if(_ico_have_vk)
         set(_ico_vk_nodual_env ${_ico_vk_test_env} "ICO_VK_FAKE_NO_DUAL=1")
         set_tests_properties(rhi_vk_nodual PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_nodual_env}")
+        # the cells under the rule of one compile at a time
+        # (ICO_VK_FAKE_SERIAL=1, vk_pipeline.c, issue 188): one compile
+        # thread, the lock around module and pipeline creation, a creation on
+        # the test's thread beside the background set
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/serial")
+        add_test(NAME rhi_vk_serial COMMAND rhi_vk_test
+                 WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/serial")
+        set(_ico_vk_serial_env ${_ico_vk_test_env} "ICO_VK_FAKE_SERIAL=1")
+        set_tests_properties(rhi_vk_serial PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_serial_env}")
         # the cells with the bind cache off (ICO_RHI_BIND_CACHE=0,
         # rhi_bind_cache.c): every bind recorded as given, the same pictures,
         # no skip counted (rhi_test_common.c bindCacheCell, dynamicCell)

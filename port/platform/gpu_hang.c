@@ -84,3 +84,25 @@ double ico_pipe_stall_step(IcoPipeStallWatch *w, double now, int creating, int c
     }
     return now - w->since;
 }
+
+double ico_pipe_stall_limit_s(int in_play, int serial_compiler)
+{
+    if (in_play) {
+        return ICO_PIPE_STALL_PLAY_S;
+    }
+    return serial_compiler ? ICO_PIPE_STALL_START_SERIAL_S : ICO_PIPE_STALL_START_S;
+}
+
+int ico_pipe_mem_moving(long prev_kb, long now_kb)
+{
+    return prev_kb >= 0 && now_kb >= 0 && now_kb - prev_kb >= ICO_PIPE_MEM_MOVING_KB;
+}
+
+int ico_pipe_stall_next_differs(int in_selftest, int lazy_run, int skip_family, int vu_note,
+                                int vu_plain_already)
+{
+    if (skip_family || (vu_note && !vu_plain_already)) {
+        return 1;
+    }
+    return !in_selftest && !lazy_run;
+}

@@ -245,6 +245,22 @@ careful start-up set taking 1 ([RENDER.md](PIPELINES.md#the-start-up-set)). `rhi
 (`port/rhi/rhi.h` (`rhi_create_pipelines`); `port/rhi/vk/vk_pipeline.c`,
 `port/rhi/d3d12/d3d12_pipeline.c`).
 
+**One compile at a time.** On a driver whose compiler is not thread-safe
+(`rhi_driver_compiler_serial` in `port/rhi/rhi_driver_version.c`: Imagination's PowerVR, vendor
+0x1010, whose driver text names the B-Series, or any PowerVR used at Vulkan 1.2 or below; issue 188,
+Moto G54 with a BXM-8-256 on driver 1.15@6133110, where Imagination's answer on that driver is to
+keep shader module and pipeline creation off two threads at once) Vulkan compiles on one thread
+(`vkr_pipe_threads_for`: the start-up set, the careful set and the background finisher alike) and
+holds one SDL mutex around every `vkCreateShaderModule` (`vk_resource.c`) and
+`vkCreateGraphicsPipelines` (`vk_pipeline.c` `vkr_pipe_compile`), so a pipeline a draw makes on
+first use on its own thread waits for a background compile in flight instead of running beside
+it; the compile time logged is the call's own, not the wait. `RhiLimits.serialPipelines` names the
+reason (NULL elsewhere and on the other backends), and the device's start logs `rhi_vk: pipelines:
+one at a time (PowerVR B-Series: the driver's compiler is not thread-safe)`; the window then gives
+the driver 60 s per creation before the game starts ([PLATFORM.md](PLATFORM.md#diagnostics)).
+`ICO_VK_FAKE_SERIAL=1` takes the rule on any Vulkan device (`rhi_vk_serial`). The D-Series DXT-48
+(driver 26.1, Vulkan 1.4) keeps the parallel compiles.
+
 **Several pipelines while the caller goes on.** `rhi_create_pipelines_begin(descs, n, maxThreads,
 lowPriority)` makes on the calling thread what `rhi_create_pipelines` makes there before its workers
 start, starts the workers (at most `maxThreads`, each at `SDL_THREAD_PRIORITY_LOW` with
@@ -279,8 +295,9 @@ bound) on D3D12 and Vulkan, under MoltenVK the Apple GPU's Metal implicit image 
 reasons (Vulkan, `kVuPlainOnly` in `port/rhi/vk/vk_device.c`; NULL elsewhere and on D3D12):
 `vuFallbackPlain`, why the renderer's VU fallback takes the plain program entries on this device,
 and `carefulPipelines`, why its start-up set is made under the careful policy
-([RENDER.md](PIPELINES.md#the-fallback-entries), [RENDER.md](PIPELINES.md#the-start-up-set))
-(`port/rhi/rhi.h` (`RhiLimits`)).
+([RENDER.md](PIPELINES.md#the-fallback-entries), [RENDER.md](PIPELINES.md#the-start-up-set)),
+and `serialPipelines`, why its compiles run one at a time (Vulkan, `rhi_driver_compiler_serial`;
+**One compile at a time**, above) (`port/rhi/rhi.h` (`RhiLimits`)).
 
 **Device and swapchain.** Each Vulkan swapchain creation that changes the mode, image count or size logs one `rhi_vk: swapchain` line (extent, images asked and got, present mode, surface format and colour space, composite alpha, pre-transform, the window's pixel size, SDL's video driver) and the first also a `rhi_vk: surface formats` line, so a driver-side mismatch reads from a log alone; the device report keeps the latest of the swapchain line. `rhi_init` takes an `SDL_Window` (NULL: headless, no swapchain),
 [vsync](ARCHITECTURE.md#terms), debug layers and the app name. `rhi_device_lost` turns true once the
