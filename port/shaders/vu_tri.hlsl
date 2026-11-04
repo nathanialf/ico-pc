@@ -68,9 +68,9 @@ VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
         }
     } else if (mode == VU_CLIP_NONE) {
         // vu_triangle_out_pos's exact for clip mode none
-        uint wrap = (a.gx & 0xFFFF) == a.gx && (a.gy & 0xFFFF) == a.gy && (b.gx & 0xFFFF) == b.gx &&
-                            (b.gy & 0xFFFF) == b.gy && (c.gx & 0xFFFF) == c.gx &&
-                            (c.gy & 0xFFFF) == c.gy
+        uint wrap = (a.gx & 65535) == a.gx && (a.gy & 65535) == a.gy && (b.gx & 65535) == b.gx &&
+                            (b.gy & 65535) == b.gy && (c.gx & 65535) == c.gx &&
+                            (c.gy & 65535) == c.gy
                         ? 1u
                         : 0u;
         f |= wrap != 0u ? VU_TF_WRAP | VU_TF_EXACT : 0u;
@@ -204,7 +204,7 @@ VuVSOut vu_main_vs(uint vid : SV_VertexID)
     uint exact = 0u;
     uint beside = 0u;
     if (mode == VU_CLIP_NONE) {
-        at = (me.gx & 0xFFFF) != me.gx || (me.gy & 0xFFFF) != me.gy ? 3u : 1u;
+        at = (me.gx & 65535) != me.gx || (me.gy & 65535) != me.gy ? 3u : 1u;
         exact = (f & VU_TF_EXACT) != 0u ? 1u : 0u;
     } else if (mode == VU_CLIP_REGION) {
         uint r = f & VU_TF_RULE_MASK;
