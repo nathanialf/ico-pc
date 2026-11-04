@@ -33,7 +33,9 @@
  *           picture, the mesh's winding marks came from normals
  *           (RdMeshRec.facingFrom; never a grid), ICO_RD_VU_BESIDE not 0
  *           (rd_replay_vu.c's ICO_VU_NO_BESIDE; the exact blend's storage
- *           read, which also keeps the drop, is not modelled)
+ *           read, which also keeps the drop, is not modelled); never a
+ *           card (the card test's drop at the draw's own camera keeps
+ *           it: issue 189's mist quads), so beside's "card k" is 0
  * and a HIDE triangle (the content table) is counted apart.  The cut is
  * made in double precision in GS pixels (a corner with a GS position at
  * it, w = 1, as vu_cut_position takes it; one without in the homogeneous
@@ -636,9 +638,11 @@ static void regionCmd(void *user, int l, uint32_t idx, const RdCmd *c, const RdS
         const int why = !front ? R_EYE : !w->extended ? R_BOX : R_CARD;
         /* VU_RULE_CLIP_BESIDE, the rule's last step on a final drop: facing the eye
            (vu1ref_region_facing: the corners' determinant, the matrix's sign, the kick's
-           ICO_VU_MARK_FLIP) on a wide frame, drawn beside the picture */
-        const int beside = wide && vu1ref_region_facing(a->h, b->h, cc->h, det < 0,
-                                                        (marks & ICO_VU_MARK_FLIP) != 0u);
+           ICO_VU_MARK_FLIP) on a wide frame, drawn beside the picture; a card keeps the
+           drop (vu_rule_beside: the camera's own verdict the card test's) */
+        const int beside =
+            wide && why != R_CARD &&
+            vu1ref_region_facing(a->h, b->h, cc->h, det < 0, (marks & ICO_VU_MARK_FLIP) != 0u);
         d.n[beside ? why - R_EYE + R_BESIDE_EYE : why]++;
         if (paint) {
             regionPaint(w, (const double (*)[4])zp, n, beside ? kBeside : kRgb[why - R_EYE]);

@@ -201,6 +201,8 @@ static double s_cullMs, s_cullHizMs;
 /* the VU draws without side bands for want of facing data, by why
  * (RdPerfRecord.vuBesideNoFacing, RD_VU_NOFACE_*) */
 static uint64_t s_besideNoFacing[RD_VU_NOFACE_COUNT];
+/* the VU draws with side bands and card verdicts (RdPerfRecord.vuBesideCards) */
+static uint64_t s_besideCards;
 /* the store plan's (RdPerfRecord storePasses, storeDepthDropped,
  * storeColorDropped) and the replays it planned */
 static uint64_t s_storePasses, s_storeDepth, s_storeColor;
@@ -251,6 +253,7 @@ bool rd_perf_pop(RdPerfRecord *out)
     for (int k = 0; k < RD_VU_NOFACE_COUNT; k++) {
         s_besideNoFacing[k] += s_queue[s_head].vuBesideNoFacing[k];
     }
+    s_besideCards += s_queue[s_head].vuBesideCards;
     s_fuseSame += s_queue[s_head].vuFuseSame;
     for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
         s_fuseKept[k] += s_queue[s_head].vuFuseKept[k];
@@ -452,6 +455,16 @@ const char *rd_perf_backend_text(void)
             (unsigned long long)s_besideNoFacing[RD_VU_NOFACE_OTHER]);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
+    if (s_besideCards) {
+        /* the side bands' draws with card verdicts (rd_replay_vu.c
+           vuSource): their cards stay off the sides of the picture as off
+           its middle (issue 189: a mist quad the PS2 dropped, drawn only
+           beside the picture, showed as bars) */
+        const int k = snprintf(s_text + at, sizeof(s_text) - at,
+                               "; side bands: %llu draws with cards (kept off the sides)",
+                               (unsigned long long)s_besideCards);
+        at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
+    }
     uint64_t kept = 0;
     for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
         kept += s_fuseKept[k];
@@ -576,6 +589,7 @@ const char *rd_perf_backend_text(void)
     s_cullDraws = s_cullSkipped = s_cullFrustum = s_cullOccluded = 0;
     s_cullMs = s_cullHizMs = 0.0;
     memset(s_besideNoFacing, 0, sizeof(s_besideNoFacing));
+    s_besideCards = 0;
     s_cutCarried = s_cutSkipped = s_cutLast = 0;
     memset(s_cutLastWhy, 0, sizeof(s_cutLastWhy));
     s_smMerged = s_smArmed = s_smResets = s_smClears = 0;

@@ -2692,6 +2692,18 @@ int main(int argc, char **argv)
                dump, g_rd.vuPrepass ? "on" : "off", pr->vuPrePasses, pr->vuPreVertices,
                pr->vuPreDraws, pr->vuPreFallbacks, pr->vuPreSprites, pr->vuTriSlots,
                pr->vuTickDraws);
+        /* the side bands (rd_replay_vu.c vuBesideOn, vuSource): the draws
+         * that had them and carried card verdicts, whose cards stay off the
+         * sides (issue 189), and those without for want of facing data */
+        {
+            uint32_t nf = 0;
+            for (int k = 0; k < RD_VU_NOFACE_COUNT; k++) {
+                nf += pr->vuBesideNoFacing[k];
+            }
+            printf("%s: stats: side bands: %u draws with cards (kept off the sides), %u draws "
+                   "without facing data\n",
+                   dump, pr->vuBesideCards, nf);
+        }
         /* the draw-merge count (rd_replay_vu.c vuMergeNote): how many VU
          * draws could join the draw before them (same pipeline, textures,
          * DrawCB bytes, scissor and FrameCB, one pass, no DATE stencil,

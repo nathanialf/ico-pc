@@ -2562,6 +2562,11 @@ typedef struct RdPerfRecord {
      * turned off for the whole run, that had none because their mesh has no
      * facing data, by why (RD_VU_NOFACE_*; rd_replay_vu.c vuBesideOn) */
     uint32_t vuBesideNoFacing[RD_VU_NOFACE_COUNT];
+    /* The VU draws with side bands that carry the card test's verdicts (a
+     * strip of the draw a card at either tick; rd_replay_vu.c vuSource):
+     * their cards' triangles keep the drop beside the picture as inside it
+     * (vu_common.hlsli vu_rule_beside; issue 189's mist quads) */
+    uint32_t vuBesideCards;
     /* The visibility test (rd_vis.c rd__vis_frame; [dev] cull): the VU draw
      * commands of the replayed lists (cullDraws), those turned into NOPs
      * (cullSkipped: by the frustum test, cullFrustum, or by occlusion,

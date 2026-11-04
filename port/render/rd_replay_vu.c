@@ -1213,12 +1213,16 @@ typedef struct VuSource {
     /* the side bands off because the mesh has no facing data:
      * RD_VU_NOFACE_* + 1 (0: on, or off for another reason; vuBesideOn) */
     uint8_t noFacing;
+    /* 1: the draw has side bands and card verdicts, whose cards keep the
+     * drop beside the picture (RdPerfRecord.vuBesideCards) */
+    uint8_t besideCards;
 } VuSource;
 
 /* The region rule's side bands (vu_common.hlsli VU_RULE_CLIP_BESIDE,
  * docs/port/VU1_PROGRAMS.md "The region rule", step 7): a triangle the
  * rule drops that faces the eye is drawn clipped beside the 4:3 picture on
- * a wider frame.  Off (ICO_VU_NO_BESIDE) where the draw cannot say which
+ * a wider frame, unless the card test dropped it (a card stays off the
+ * sides as off the picture: issue 189).  Off (ICO_VU_NO_BESIDE) where the draw cannot say which
  * side faces the eye or where nothing lies beside the picture: a frame
  * not wider than 4:3 (the picture is the frame: the PS2's, byte for
  * byte), a grid (no winding marks: its strips wind both ways), a mesh
@@ -1239,7 +1243,8 @@ static bool vuBesideOn(const RdCmd *c, const RdMeshRec *m, uint8_t *noFacing)
         const char *e = getenv("ICO_RD_VU_BESIDE");
         s_besideEnv = !(e && e[0] == '0' && e[1] == 0);
         rd__log("VU side bands: %s (a front-facing triangle the region rule drops is drawn "
-                "beside the 4:3 picture on a wider frame; ICO_RD_VU_BESIDE=0 turns them off)",
+                "beside the 4:3 picture on a wider frame, a card's kept off as inside it; "
+                "ICO_RD_VU_BESIDE=0 turns them off)",
                 s_besideEnv ? "on" : "off (ICO_RD_VU_BESIDE=0)");
     }
     if (!s_besideEnv || g_rd.vuNoBeside || g_rd.gsW <= ICO_SH_FRAME_BASE_W || c->type == RDC_GRID ||
@@ -1427,6 +1432,9 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
         }
         if (!vuBesideOn(c, m, &s->noFacing)) {
             vcb.draw[2] |= ICO_VU_NO_BESIDE;
+        } else {
+            /* its cards keep the drop beside the picture (vu_rule_beside) */
+            s->besideCards = withCards ? 1u : 0u;
         }
     }
     if (m && m->kickMark) {
@@ -2831,6 +2839,7 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
         /* no side bands: its mesh has no facing data (vuBesideOn) */
         g_rdPerf.vuBesideNoFacing[src->noFacing - 1u]++;
     }
+    g_rdPerf.vuBesideCards += src->besideCards;
     DrawSetup ds;
     if (!rd__replay_prepare_draw(r, &ds, NULL)) {
         return;

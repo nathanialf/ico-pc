@@ -2714,12 +2714,9 @@ static void rgPart(const StagePart *sp, const char *name, int part, const double
             continue;
         }
         if (front) {
-            /* step 5: a card; no tick shows it.  Facing the eye on a wide frame: beside */
-            if (v == VU1REF_DRAW_BESIDE) {
-                beside++;
-            } else {
-                card++;
-            }
+            /* step 5: a card; no tick shows it, and it keeps the drop beside the picture
+               too (vu1ref_region_draw never gives a card VU1REF_DRAW_BESIDE) */
+            card++;
             continue;
         }
         behindRaw++;
