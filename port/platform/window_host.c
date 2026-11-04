@@ -2359,7 +2359,6 @@ open_window:
         } else {
             ico_diag_startup_activity_record(0);
         }
-        window_robust_reached();
         /* a stop at the free-memory floor: the rest in the background */
         window_pipe_finish_start();
         /* the set in the pipeline cache file now, not only at a clean exit:
@@ -2373,6 +2372,13 @@ open_window:
             (void)rhi_pipeline_cache_save();
         }
     }
+    /* this start reached the game, whichever way it prepares the
+       pipelines: after the set (full or careful) or after the self-tests
+       of a run that makes them on first use (lazy: by the settings, after
+       an end while preparing them, after a low-memory stop, a restart);
+       the next start counts it as a clean start when it ended without a
+       loss (window_robust.h, robust_persist.h) */
+    window_robust_reached();
     /* a device loss from here takes the loss order's lossnoprepass step
        first when the run draws with the VU vertex pre-pass (its self-test
        above may have turned it off) */

@@ -19,7 +19,8 @@ void window_robust_start(const char *cfgName);
    start that lost the device twice in a row (window_host.c
    gpu_robust_persist); 0 when written */
 int window_robust_persist(void);
-/* This start reached the game (the start-up set made): the mark says so,
+/* This start reached the game (the start-up set made, or the self-tests
+   done on a run that makes its pipelines on first use): the mark says so,
    for the next start to judge */
 void window_robust_reached(void);
 
