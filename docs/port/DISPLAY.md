@@ -290,9 +290,15 @@ backend, adapter and options (`window mode M` among them, as in the summary line
 then `window: present mode M` (`port/platform/window_host.c` (`ico_window_open`, `window_flags`,
 `log_summary`)). Before `rd_init` it sets the renderer's wait hooks
 (`ico_window_switch_wait_hooks`, [RHI.md](RHI.md#wait-hooks)): OpenGL's shader compiles then run on
-a thread of their own while the window takes its events, so the window stays responsive (black,
-with no progress screen: nothing can be drawn before the device's shaders exist), and one compile
-is held to the GPU hang limit. Each step of the start and of Options > Graphics > Apply's switch
+a thread of their own while the window takes its events, so the window stays responsive, and one
+compile is held to the GPU hang limit. The renderer's "Preparing graphics" screen cannot be drawn
+while the device's own shaders are made (it draws with them), so OpenGL draws a screen of its own
+there with no shader at all: "Preparing graphics for OpenGL: N of M shaders" over the same bar,
+from scissored clears ([RHI.md](RHI.md#opengl), `port/rhi/gl/gl_start_screen.c`), counted against
+the renderer's plan of the set (`rhi_plan_shaders`, `port/render/rd_shader_plan.c`); the
+renderer's own screen takes over at the pipeline set. The made hook writes the set's steps
+(`window: shaders: the start-up set begins, 1 of M`, a line at each quarter, `the start-up set is
+over, N made in S s`; `ico_diag_shader_set`) on every backend. Each step of the start and of Options > Graphics > Apply's switch
 writes its line at once (`ico_diag_step`), and the switch runs under its own watchdog limit
 ([PLATFORM.md](PLATFORM.md#the-renderer-switched-from-the-menu), the in-process switch and its log lines).
 

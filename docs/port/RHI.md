@@ -39,6 +39,7 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/gl/gl_loader.h`, `gl_loader.c` | the OpenGL entry points, fetched through `SDL_GL_GetProcAddress` |
 | `port/rhi/gl/gl_device.c` | the context, the version and extension checks, the debug output, limits, frames, timestamps, the stats entry points |
 | `port/rhi/gl/gl_compile.c` | the shader compiles: the compile thread with a context of the device's share group, the window's pump between the waits, the limit and the abandoned compile, the parallel-compile poll |
+| `port/rhi/gl/gl_start_screen.c` | the progress screen while the start-up shaders compile: scissored clears of the window's framebuffer, no shader, its block letters |
 | `port/rhi/gl/gl_sync_wait.h`, `gl_sync_wait.c` | the fence wait held to a limit in slices, apart from GL for its test |
 | `port/rhi/gl/gl_resource.c` | buffers, textures, samplers, separable programs, bind group layouts and bind groups, deferred deletes, readback |
 | `port/rhi/gl/gl_swapchain.c` | the backbuffer texture, its blit to the window and the swap |
@@ -693,6 +694,21 @@ take none), `stalled` keeps the shader's name for the switch's box, `made` is pr
 switch's watchdog limit ([PLATFORM.md](PLATFORM.md#diagnostics)), and `limitNs` is the GPU hang
 limit (`ico_diag_gpu_hang_limit`: half `watchdog=`, 15 s by default, 0 none). The tests and tools
 set none, so their OpenGL compiles run on the calling thread.
+
+**The start-up shader set** (`rhi_plan_shaders`, `rhi_plan_progress`, `rhi_plan_end`; the
+dispatcher's). `rhi_init` starts a device with no plan. The renderer counts the shaders
+`rd__gpu_init` is about to make before its loops (`port/render/rd_shader_plan.c` `rd__shader_plan`:
+the vertex entries, the fragment entries with their `_nodual` and destination-read twins, each name
+`rd__make_shader` would hand over in this backend's form) and adds the parts decided later (the VU
+policy's ten plain modules, the pre-pass's batch builds, the draw merge's modules) where they are
+decided; `rd_init` ends the set after `rd__gpu_init` (`rhi_plan_end`), and the first
+`rhi_begin_commands` ends one left open. While it is open the dispatcher numbers each
+`rhi_create_shader` (`RhiShaderDesc.planIndex` from 1, `planTotal` the count so far, never below
+the number made) for the backend's progress screen (OpenGL's, below), and `rhi_plan_progress`
+gives the window's made hook the count (its `window: shaders:` steps, [DISPLAY.md](DISPLAY.md)).
+The end calls the made hook once more with the count at 0 and 0. A count apart from the number made
+writes `rhi: the start-up shader set ended with N made of the M planned (...)`: only the screens
+counted wrong.
 
 ### Choosing the device
 
@@ -1526,6 +1542,34 @@ ends`; at `rhi_shutdown` `rhi_gl: shaders: N compiled in N s, the longest <name>
 compile thread)`. Not verified on NVIDIA (nothing here runs on it); the window build's switch test
 runs the thread on llvmpipe ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
+**The start screen** (`port/rhi/gl/gl_start_screen.c`). A report: the switch to OpenGL on
+an RTX 3090 finished after a long while (NVIDIA's compiler is slow on the set, not stuck), the
+window black for the whole compile, which reads as a hang. The renderer's "Preparing graphics"
+screen draws with its own shaders and pipelines (`sprite_ui_vs`, `sprite_ps`, `font_ps`), which are
+among those being made, and a frame needs the rest of `rd_init`, so the backend draws one of its own
+with no shader: the window's framebuffer 0 cleared black, the bar of the renderer's screen at its
+place on the 4:3 layout grid (120..520 x 250..266) in its frame, track and fill colours, and the
+line `Preparing graphics for OpenGL: N of M shaders` above it in 5 x 7 block letters, every shape a
+scissored `glClearBufferfv` (the scissor box kept, the colour mask opened through the command code's
+cache, framebuffer 0 left bound as the present leaves it), then `SDL_GL_SwapWindow`. N is the set's
+shaders made, M its size (the dispatcher's numbering above). Drawn when a shader of the set begins
+and between the compile's 50 ms slices, the first after 250 ms of the set, then at most every
+100 ms (the renderer's screen's timing); only with the hooks set, a surface, no stalled compile,
+and before the first command list or pipeline (`gl_start_screen_end`). A draw during a compile that
+takes 250 ms or more (a driver whose clear waits for the compile on the other context) turns the
+draws during compiles off for the rest of the set, so the pump keeps running; between compiles the
+screen still moves. Without a compile thread or the parallel poll it moves between compiles only.
+`ICO_GL_START_SCREEN=0` turns it off. Lines (direct): `rhi_gl: start screen: drawn after N s at
+shader N of M (WxH; scissored clears, no shader: ...); then every 0.1 s at most, between compiles
+and during one|between compiles only (each compile blocks the window)`; `rhi_gl: start screen: a
+draw during the compile of shader N took N s (the driver held it for the compile): drawn between
+compiles only for the rest of the set`; `rhi_gl: start screen: over at shader N of M after N s, N
+screens drawn (the slowest N ms[, between compiles only after a slow one]); the renderer's own
+screen from here on`; or `rhi_gl: start screen: not drawn (N shaders in N s: under 0.25 s, or no
+window to draw in)`; `rhi_gl: start screen: off (ICO_GL_START_SCREEN=0) ...`. Not verified on any
+hardware: whether a clear and a swap on the device's context during a compile on the shared
+context waits on NVIDIA or Windows drivers is what the slow-draw line would show.
+
 **Frames** (`gl_device.c`). Command lists execute while they are recorded; `rhi_submit` places the
 slot's fence (`gl_frame_fence`: `glFenceSync`, then `glFlush`). `rhi_wait_frame` moves to the next
 slot, waits for its fence (`glClientWaitSync`, counted into `fenceWaits` and `fenceWaitNs` when it
@@ -1708,6 +1752,7 @@ shader storage blocks N (3 needed), texture units N (21 needed); the draws that 
 | `ICO_GL_FAKE_NO_DST` | 1 reports no fragment interlock |
 | `ICO_GL_FAKE_NO_MSAA` | 1 reports single sampling only |
 | `ICO_GL_FAKE_NO_TIMESTAMPS` | 1 turns GPU timestamps off |
+| `ICO_GL_START_SCREEN` | 0: no start screen while the start-up shaders compile, the window black as before ([The start screen](#opengl)) |
 | `ICO_GL_COMPILE_THREAD` | 0 makes no compile thread with the window's hooks set: the parallel-compile poll where offered, else the compile blocks ([Shader compiles](#opengl)) |
 
 The debug output counts the driver's errors and undefined-behaviour messages

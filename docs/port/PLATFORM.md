@@ -2724,7 +2724,11 @@ Log lines (stderr, one per event):
   old device's end)`, `... destroying the old window`, `... creating the window (windowed|full
   screen)`, `... attaching the window (its mode and display)`, `... starting the renderer (the
   device and its shaders)` (then `rd: starting the device and making its shaders (the backend's
-  lines follow)` and the backend's own start lines, OpenGL's written at once), `... the blend
+  lines follow)`, the backend's own start lines, OpenGL's written at once, and the start-up
+  shader set's steps from the made hook: `window: shaders: the start-up set begins, 1 of M (the
+  progress screen counts them)`, `window: shaders: N of M made in S s` at each quarter,
+  `window: shaders: the start-up set is over, N made in S s`; OpenGL's own progress screen
+  meanwhile, [RHI.md](RHI.md#opengl)), `... the blend
   self-test`, `... the VU pre-pass self-test`, `... the pipeline set`, `... the fog self-test`,
   `... starting the render thread`, `... up in <s> s`; a revert `window: switch: <new> did not
   start; back to <old>`, then the old renderer's steps; the start's own: `ico_pc: start: the log is
