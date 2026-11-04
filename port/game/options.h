@@ -13,7 +13,7 @@
  *   [gameplay] stick_fix   false  the stick fix (off on every platform)
  *   [gameplay] yorda_safe  false  the shadows never take Yorda
  *   [gameplay] pit_time    "original"  the time a shadow takes to pull Yorda
- *                                 into a pit (half..triple)
+ *                                 into a pit (4..30 seconds)
  *   [gameplay] shadow_speed "original"  how fast shadows walk, run and fly
  *                                 (slower..fastest)
  *   [gameplay] shadows_together
@@ -98,21 +98,44 @@ int ico_opt_stick_fix_default(void);
 int ico_opt_yorda_safe(void);
 void ico_opt_set_yorda_safe(int on);
 /* [gameplay] pit_time (default "original"): how long a shadow takes to pull
-   Yorda into a pit.  The names are half, original, longer, double, triple
-   (ICO_PIT_*); the time factors 0.5, 1, 1.5, 2, 3.  The dive's play speed is
-   1/factor (ico2/fumi/src/enemy_act.c actEnemyKidnapEnd).  Logs
-   "gameplay: pit time <name> (x<factor>)" at load and on change. */
-#define ICO_PIT_HALF 0
-#define ICO_PIT_ORIGINAL 1
-#define ICO_PIT_LONGER 2
-#define ICO_PIT_DOUBLE 3
-#define ICO_PIT_TRIPLE 4
-#define ICO_PIT_COUNT 5
+   Yorda into a pit, in whole seconds ICO_PIT_MIN_SECONDS..ICO_PIT_MAX_SECONDS
+   (an integer in the file), or "original" (the disc's own time).  The pull-in
+   is the five SINK motions A to E the shadow plays one after the other
+   (ico2/fumi/src/enemy_act.c actEnemyKidnapEnd); the disc's own length is
+   ico_opt_pit_chain_ticks() game ticks at 30 a second (25 at 50 Hz, each
+   moving the motions on 1.2 frames: the same seconds), 15.4 s on the
+   released discs.  The time factor is the seconds over that length (1 for
+   Original); the five motions' play speed is 1/factor.  A value equal to the
+   whole-second base (ico_opt_pit_base_seconds, 15) reads as Original.  The
+   words of the earlier versions still read: half, longer, double, triple are
+   1/2, 1.5, 2 and 3 times the disc's own time in whole seconds, held to the
+   range.  Logs "gameplay: pit time <value> (...)" with the disc's length and
+   the factor at load and on change. */
+#define ICO_PIT_ORIGINAL 0
+#define ICO_PIT_MIN_SECONDS 4
+#define ICO_PIT_MAX_SECONDS 30
+/* 0 (ICO_PIT_ORIGINAL) or the seconds set */
 int ico_opt_pit_time(void);
-void ico_opt_set_pit_time(int v);
+/* 0, or the base: Original; else the seconds, held to the range */
+void ico_opt_set_pit_time(int seconds);
+/* the seconds the row shows: the value, or the base for Original */
+int ico_opt_pit_seconds(void);
+/* the disc's own pull-in in game ticks (SINK_A..D played to their last frame,
+   SINK_E to frame 51, where the game takes Yorda): 462 on the released discs,
+   463 on the June 2001 demo (port/game/test/pit_dive_base_test.c reads both
+   from each disc); for a region slug, and for the disc in use */
+int ico_opt_pit_chain_ticks_for(const char *slug);
+int ico_opt_pit_chain_ticks(void);
+/* that time in whole seconds, rounded (15 on every disc) */
+int ico_opt_pit_base_seconds(void);
+/* the value text reads in the file ("original", "8", or an earlier version's
+   word) as ico_opt_pit_time keeps it, for a pull-in of ticks; *note set when
+   the text was not one (reads Original) or was held to the range */
+int ico_opt_pit_parse(const char *text, int ticks, int *note);
 float ico_opt_pit_time_factor(void);
 /* the dive's play-speed ratio actEnemyKidnapEnd reserves: 1/factor, or 2/factor
-   under a stage camera effect (the game's own 2x) */
+   under a stage camera effect (the game's own 2x; the game's 5 s timeout there
+   is scaled by the factor too) */
 float ico_opt_pit_dive_ratio(int camera);
 /* [gameplay] shadow_speed (default "original"): how fast shadows walk, run and fly.
    The names are slower, original, faster, fastest (ICO_SPEED_*); the factors 0.75, 1,

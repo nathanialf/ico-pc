@@ -41,10 +41,6 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_OPT_PIT_TIME] = "Время на спасение Йорды",
     [UI_STR_OPT_PIT_TIME_NOTE] =
         "Сколько времени требуется тени, чтобы затянуть Йорду в яму. При включении опции выше процесс прекращается.",
-    [UI_STR_VAL_PIT_HALF] = "1/2",
-    [UI_STR_VAL_PIT_LONGER] = "Дольше",
-    [UI_STR_VAL_PIT_DOUBLE] = "x2",
-    [UI_STR_VAL_PIT_TRIPLE] = "x3",
     [UI_STR_OPT_SHADOW_SPEED] = "Скорость теней",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "Как быстро тени перемещаются. Это не влияет на частоту их атак.",

@@ -31,9 +31,10 @@
 
 /* port/game/options.c: [gameplay] yorda_safe */
 extern int ico_opt_yorda_safe(void);
-/* PC port: port/game/options.c: [gameplay] pit_time.  The time factor (0.5 to 3) and
-   the dive's play-speed ratio with it applied (2x under a stage camera effect, else 1x,
-   divided by the factor); actEnemyKidnapEnd uses both. */
+/* PC port: port/game/options.c: [gameplay] pit_time.  The time factor (the seconds set
+   over the disc's own pull-in time, 1 for Original) and the dive's play-speed ratio with
+   it applied (2x under a stage camera effect, else 1x, divided by the factor);
+   actEnemyKidnapEnd uses both. */
 extern float ico_opt_pit_time_factor(void);
 extern float ico_opt_pit_dive_ratio(int camera);
 /* PC port: port/game/options.c: [gameplay] shadows_together.  1: the Shadow waits its
@@ -1801,9 +1802,11 @@ static void actEnemyKidnapEnd_jun26(GObj *volatile self)
             }
         }
         /* PC port: [gameplay] pit_time slows or speeds the dive (the shadow pulling Yorda
-           into the pit) by reserving the play speed over the game's own at the same priority;
+           into the pit: the five SINK motions A to E, one after the other, all of them in
+           this action) by reserving the play speed over the game's own at the same priority;
            a frozen shadow keeps the freeze above */
-        if (GOBJ_SUB(self)->ctrl.motion == 938 && ico_opt_pit_time_factor() != 1.0f &&
+        if (GOBJ_SUB(self)->ctrl.motion >= 934 && GOBJ_SUB(self)->ctrl.motion <= 938 &&
+            ico_opt_pit_time_factor() != 1.0f &&
             (((int)((long long)sub->flags20.ll >> 5)) & 1) == 0) {
             ACTGame_SetMotionPlaySpeedRatio_Reserve(self, ico_opt_pit_dive_ratio(0), 0);
         }
@@ -1918,9 +1921,11 @@ static void actEnemyKidnapEnd_aug6(GObj *volatile self)
             }
         }
         /* PC port: [gameplay] pit_time slows or speeds the dive (the shadow pulling Yorda
-           into the pit) by reserving the play speed over the game's own at the same priority;
+           into the pit: the five SINK motions A to E, one after the other, all of them in
+           this action) by reserving the play speed over the game's own at the same priority;
            a frozen shadow keeps the freeze above */
-        if (GOBJ_SUB(self)->ctrl.motion == 905 && ico_opt_pit_time_factor() != 1.0f &&
+        if (GOBJ_SUB(self)->ctrl.motion >= 901 && GOBJ_SUB(self)->ctrl.motion <= 905 &&
+            ico_opt_pit_time_factor() != 1.0f &&
             (((int)((long long)sub->flags20.ll >> 7)) & 1) == 0) {
             ACTGame_SetMotionPlaySpeedRatio_Reserve(
                 self, ico_opt_pit_dive_ratio(GetEfStageCameraTargetID() != 0), 0);
@@ -2051,9 +2056,11 @@ static void actEnemyKidnapEnd_ntsc(GObj *volatile self)
             }
         }
         /* PC port: [gameplay] pit_time slows or speeds the dive (the shadow pulling Yorda
-           into the pit) by reserving the play speed over the game's own at the same priority;
+           into the pit: the five SINK motions A to E, one after the other, all of them in
+           this action) by reserving the play speed over the game's own at the same priority;
            a frozen shadow keeps the freeze above */
-        if (GOBJ_SUB(self)->ctrl.motion == 903 && ico_opt_pit_time_factor() != 1.0f &&
+        if (GOBJ_SUB(self)->ctrl.motion >= 899 && GOBJ_SUB(self)->ctrl.motion <= 903 &&
+            ico_opt_pit_time_factor() != 1.0f &&
             (((int)((long long)sub->flags20.ll >> 10)) & 1) == 0) {
             ACTGame_SetMotionPlaySpeedRatio_Reserve(
                 self, ico_opt_pit_dive_ratio(GetEfStageCameraTargetID() != 0), 0);
@@ -2210,9 +2217,11 @@ void actEnemyKidnapEnd(GObj *volatile self)
             }
         }
         /* PC port: [gameplay] pit_time slows or speeds the dive (the shadow pulling Yorda
-           into the pit) by reserving the play speed over the game's own at the same priority;
+           into the pit: the five SINK motions A to E, one after the other, all of them in
+           this action) by reserving the play speed over the game's own at the same priority;
            a frozen shadow keeps the freeze above */
-        if (GOBJ_SUB(self)->ctrl.motion == 952 && ico_opt_pit_time_factor() != 1.0f &&
+        if (GOBJ_SUB(self)->ctrl.motion >= 948 && GOBJ_SUB(self)->ctrl.motion <= 952 &&
+            ico_opt_pit_time_factor() != 1.0f &&
             (((int)((long long)sub->flags20.ll >> 21)) & 1) == 0) {
             ACTGame_SetMotionPlaySpeedRatio_Reserve(
                 self, ico_opt_pit_dive_ratio(GetEfStageCameraTargetID() != 0), 0);

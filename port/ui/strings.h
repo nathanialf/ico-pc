@@ -122,14 +122,10 @@ typedef enum UiStrId {
     UI_STR_OPT_VIBRATION,
     /* Gameplay */
     UI_STR_OPT_STICK_FIX,
-    UI_STR_OPT_YORDA,         /* [gameplay] yorda_safe */
-    UI_STR_OPT_YORDA_NOTE,    /* its explanation */
-    UI_STR_OPT_PIT_TIME,      /* [gameplay] pit_time: the Time to rescue Yorda row */
-    UI_STR_OPT_PIT_TIME_NOTE, /* its explanation */
-    UI_STR_VAL_PIT_HALF,      /* its values (Original is UI_STR_VAL_ORIGINAL) */
-    UI_STR_VAL_PIT_LONGER,
-    UI_STR_VAL_PIT_DOUBLE,
-    UI_STR_VAL_PIT_TRIPLE,
+    UI_STR_OPT_YORDA,             /* [gameplay] yorda_safe */
+    UI_STR_OPT_YORDA_NOTE,        /* its explanation */
+    UI_STR_OPT_PIT_TIME,          /* [gameplay] pit_time: the Time to rescue Yorda row */
+    UI_STR_OPT_PIT_TIME_NOTE,     /* its explanation (its value is "%d s", no words) */
     UI_STR_OPT_SHADOW_SPEED,      /* [gameplay] shadow_speed: the Shadow speed row */
     UI_STR_OPT_SHADOW_SPEED_NOTE, /* its explanation */
     UI_STR_VAL_SPEED_SLOWER,      /* its values (Original is UI_STR_VAL_ORIGINAL) */

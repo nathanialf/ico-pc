@@ -36,11 +36,7 @@ const char *const
                 "Pour une partie moins stressante. Quelques scènes scriptées montrent encore l’enlèvement.",
             [UI_STR_OPT_PIT_TIME] = "Temps pour sauver Yorda",
             [UI_STR_OPT_PIT_TIME_NOTE] =
-                "Le temps qu’une ombre met à entraîner Yorda dans un gouffre. La ligne Yorda ci-dessus l’empêche complètement.",
-            [UI_STR_VAL_PIT_HALF] = "Moitié",
-            [UI_STR_VAL_PIT_LONGER] = "Plus long",
-            [UI_STR_VAL_PIT_DOUBLE] = "Double",
-            [UI_STR_VAL_PIT_TRIPLE] = "Triple",
+                "Les secondes avant qu’une ombre qui s’enfonce avec Yorda l’emporte. La ligne Yorda ci-dessus l’empêche.",
             [UI_STR_OPT_SHADOW_SPEED] = "Vitesse des ombres",
             [UI_STR_OPT_SHADOW_SPEED_NOTE] =
                 "La vitesse à laquelle les ombres marchent, courent et volent. Cela ne change pas la fréquence de leurs attaques.",

@@ -6,10 +6,12 @@
 #include "options.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "appearance.h"
 #include "config.h"
+#include "pit_time.h"
 #include "region.h" /* port/core: the per-disc keys (ico_region_key_prefixed) */
 #include "variants.h"
 
@@ -83,53 +85,139 @@ void ico_opt_set_yorda_safe(int on)
     s_yorda_safe = on != 0;
 }
 
-/* [gameplay] pit_time (options.h): -1 not read yet, else ICO_PIT_* */
+/* [gameplay] pit_time (options.h): -1 not read yet, else ICO_PIT_ORIGINAL or the seconds */
 static int s_pit_time = -1;
-static const char *const kPitNames[ICO_PIT_COUNT] = {"half", "original", "longer", "double",
-                                                     "triple"};
-static const float kPitFactors[ICO_PIT_COUNT] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f};
+
+/* the ticks a second the pull-in's length is counted in (pit_time.h) */
+#define PIT_TICK_HZ ICO_PIT_TICK_HZ
+
+int ico_opt_pit_chain_ticks_for(const char *slug)
+{
+    return ico_pit_chain_ticks_for(slug);
+}
+
+int ico_opt_pit_chain_ticks(void)
+{
+    return ico_opt_pit_chain_ticks_for(ico_region_cur()->slug);
+}
+
+static int pit_base_for(int ticks)
+{
+    return (ticks + PIT_TICK_HZ / 2) / PIT_TICK_HZ;
+}
+
+int ico_opt_pit_base_seconds(void)
+{
+    return pit_base_for(ico_opt_pit_chain_ticks());
+}
+
+/* seconds held to the range; the base itself is Original */
+static int pit_hold(int seconds, int ticks, int *note)
+{
+    if (seconds < ICO_PIT_MIN_SECONDS || seconds > ICO_PIT_MAX_SECONDS) {
+        seconds = seconds < ICO_PIT_MIN_SECONDS ? ICO_PIT_MIN_SECONDS : ICO_PIT_MAX_SECONDS;
+        if (note != NULL) {
+            *note = 1;
+        }
+    }
+    return seconds == pit_base_for(ticks) ? ICO_PIT_ORIGINAL : seconds;
+}
+
+int ico_opt_pit_parse(const char *text, int ticks, int *note)
+{
+    /* the earlier versions' words: that many times the disc's own time */
+    static const struct {
+        const char *word;
+        int num, den;
+    } kWords[] = {{"half", 1, 2}, {"longer", 3, 2}, {"double", 2, 1}, {"triple", 3, 1}};
+
+    char *end = NULL;
+    long v;
+    size_t i;
+
+    if (note != NULL) {
+        *note = 0;
+    }
+    if (text == NULL || strcmp(text, "original") == 0) {
+        return ICO_PIT_ORIGINAL;
+    }
+    for (i = 0; i < sizeof(kWords) / sizeof(kWords[0]); i++) {
+        if (strcmp(text, kWords[i].word) == 0) {
+            const int t = ticks * kWords[i].num / kWords[i].den;
+            return pit_hold((t + PIT_TICK_HZ / 2) / PIT_TICK_HZ, ticks, note);
+        }
+    }
+    v = strtol(text, &end, 10);
+    if (end == text || *end != '\0') {
+        if (note != NULL) {
+            *note = 1;
+        }
+        return ICO_PIT_ORIGINAL;
+    }
+    return pit_hold(v < 0 ? 0 : v > 1000 ? 1000 : (int)v, ticks, note);
+}
 
 static void log_pit_time(int v)
 {
-    fprintf(stderr, "gameplay: pit time %s (x%.1f)\n", kPitNames[v], (double)kPitFactors[v]);
+    const int ticks = ico_opt_pit_chain_ticks();
+    char value[16];
+
+    if (v == ICO_PIT_ORIGINAL) {
+        snprintf(value, sizeof(value), "original");
+    } else {
+        snprintf(value, sizeof(value), "%d s", v);
+    }
+    fprintf(stderr,
+            "gameplay: pit time %s (this disc's pull-in %d ticks = %.1f s, shown as %d s; "
+            "x%.3f)\n",
+            value, ticks, (double)ticks / PIT_TICK_HZ, pit_base_for(ticks),
+            (double)ico_opt_pit_time_factor());
 }
 
 int ico_opt_pit_time(void)
 {
     if (s_pit_time < 0) {
         const char *v = ico_config_get_string("gameplay.pit_time", "original");
-        int i;
+        int note = 0;
 
-        s_pit_time = ICO_PIT_ORIGINAL;
-        for (i = 0; v != NULL && i < ICO_PIT_COUNT; i++) {
-            if (strcmp(v, kPitNames[i]) == 0) {
-                s_pit_time = i;
-                break;
-            }
-        }
-        if (v != NULL && i == ICO_PIT_COUNT) {
+        s_pit_time = ico_opt_pit_parse(v, ico_opt_pit_chain_ticks(), &note);
+        if (note) {
             fprintf(stderr,
-                    "options: [gameplay] pit_time = \"%s\" is not one of half, original, longer, "
-                    "double, triple\n",
-                    v);
+                    "options: [gameplay] pit_time = \"%s\" is not \"original\" or %d to %d "
+                    "seconds: read as %d s\n",
+                    v, ICO_PIT_MIN_SECONDS, ICO_PIT_MAX_SECONDS,
+                    s_pit_time != ICO_PIT_ORIGINAL ? s_pit_time : ico_opt_pit_base_seconds());
         }
         log_pit_time(s_pit_time);
     }
     return s_pit_time;
 }
 
-void ico_opt_set_pit_time(int v)
+void ico_opt_set_pit_time(int seconds)
 {
-    v = v >= 0 && v < ICO_PIT_COUNT ? v : ICO_PIT_ORIGINAL;
+    const int v = seconds == ICO_PIT_ORIGINAL ? ICO_PIT_ORIGINAL
+                                              : pit_hold(seconds, ico_opt_pit_chain_ticks(), NULL);
+
     if (v != s_pit_time) {
+        s_pit_time = v;
         log_pit_time(v);
     }
-    s_pit_time = v;
+}
+
+int ico_opt_pit_seconds(void)
+{
+    const int v = ico_opt_pit_time();
+
+    return v != ICO_PIT_ORIGINAL ? v : ico_opt_pit_base_seconds();
 }
 
 float ico_opt_pit_time_factor(void)
 {
-    return kPitFactors[ico_opt_pit_time()];
+    const int v = ico_opt_pit_time();
+
+    /* the seconds over the disc's own length: 8 s on a 462-tick pull-in is 240/462 */
+    return v == ICO_PIT_ORIGINAL ? 1.0f
+                                 : (float)(v * PIT_TICK_HZ) / (float)ico_opt_pit_chain_ticks();
 }
 
 float ico_opt_pit_dive_ratio(int camera)

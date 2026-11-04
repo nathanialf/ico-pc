@@ -170,12 +170,18 @@ static void test_defaults(void)
     CHECK(ico_opt_yorda_safe() == 1);
     ico_opt_set_yorda_safe(0);
     CHECK(ico_opt_yorda_safe() == 0);
-    ico_opt_set_pit_time(ICO_PIT_TRIPLE);
-    CHECK(ico_opt_pit_time() == ICO_PIT_TRIPLE && ico_opt_pit_time_factor() == 3.0f);
-    ico_opt_set_pit_time(ICO_PIT_HALF);
-    CHECK(ico_opt_pit_time_factor() == 0.5f);
-    ico_opt_set_pit_time(99); /* out of range reads original */
-    CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL);
+    ico_opt_set_pit_time(30);
+    CHECK(ico_opt_pit_time() == 30 && ico_opt_pit_seconds() == 30);
+    ico_opt_set_pit_time(8);
+    CHECK(ico_opt_pit_time() == 8 && ico_opt_pit_seconds() == 8);
+    ico_opt_set_pit_time(99); /* held to the range */
+    CHECK(ico_opt_pit_time() == ICO_PIT_MAX_SECONDS);
+    ico_opt_set_pit_time(1);
+    CHECK(ico_opt_pit_time() == ICO_PIT_MIN_SECONDS);
+    ico_opt_set_pit_time(ico_opt_pit_base_seconds()); /* the base is Original */
+    CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL && ico_opt_pit_time_factor() == 1.0f);
+    ico_opt_set_pit_time(ICO_PIT_ORIGINAL);
+    CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL && ico_opt_pit_seconds() == 15);
     ico_opt_set_stick_fix(1);
     ico_opt_set_mirror(1);
     CHECK(ico_opt_stick_fix() == 1 && ico_opt_mirror() == 1);
@@ -245,14 +251,16 @@ static void test_config(const char *dir)
     ico_opt_set_yorda_safe(0); /* the run-time value wins until a reload */
     CHECK(ico_opt_yorda_safe() == 0);
     remove(path);
-    /* pit_time: each name reads its factor; an unknown word reads original */
+    /* pit_time: seconds, "original", the earlier words (that many times the disc's 15.4 s,
+       in whole seconds, held to 4..30), an unknown word reads original */
     {
-        static const char *const names[] = {"half",   "original", "longer",
-                                            "double", "triple",   "bogus"};
-        static const float want[] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f, 1.0f};
+        static const char *const names[] = {"half",  "original", "longer", "double", "triple",
+                                            "bogus", "8",        "4",      "30",     "2",
+                                            "45",    "15",       "8x"};
+        static const int want[] = {8, 0, 23, 30, 30, 0, 8, 4, 30, 4, 30, 0, 0};
         int i;
 
-        for (i = 0; i < 6; i++) {
+        for (i = 0; i < 13; i++) {
             f = fopen(path, "wb");
             if (f == NULL) {
                 failures++;
@@ -262,7 +270,18 @@ static void test_config(const char *dir)
             fclose(f);
             ico_config_reset(path, "/nonexistent/options_test.ini");
             ico_opt_reload();
-            CHECK(ico_opt_pit_time_factor() == want[i]);
+            CHECK(ico_opt_pit_time() == want[i]);
+        }
+        /* an integer in the file, as the Settings menu writes it */
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fprintf(f, "[gameplay]\npit_time = 8\n");
+            fclose(f);
+            ico_config_reset(path, "/nonexistent/options_test.ini");
+            ico_opt_reload();
+            CHECK(ico_opt_pit_time() == 8);
+        } else {
+            failures++;
         }
         remove(path);
     }
@@ -537,28 +556,65 @@ static int count_of(const char *text, const char *needle)
 
 static void test_pit_time(void)
 {
-    static const float factor[ICO_PIT_COUNT] = {0.5f, 1.0f, 1.5f, 2.0f, 3.0f};
     const char *slug = ico_region_cur()->slug;
     char *text = NULL;
     FILE *f = fopen(ICO_ENEMY_ACT_SRC, "rb");
     long n = 0;
-    char hook[96];
-    int motion;
+    char hook[160];
+    int first;
     int v;
+    int note;
 
-    /* the ratio reserved: 1/factor, 2/factor under a camera effect, on every disc */
-    for (v = 0; v < ICO_PIT_COUNT; v++) {
+    /* the disc's own pull-in: 462 ticks (15.4 s) on the released discs, 463 on the June
+       2001 demo; 15 s in whole seconds on both (pit_dive_base_test reads them off each
+       disc) */
+    CHECK(ico_opt_pit_chain_ticks_for("pal") == 462 && ico_opt_pit_chain_ticks_for("jpn") == 462 &&
+          ico_opt_pit_chain_ticks_for("kor") == 462 && ico_opt_pit_chain_ticks_for("cn") == 462 &&
+          ico_opt_pit_chain_ticks_for("ntsc") == 462 &&
+          ico_opt_pit_chain_ticks_for("aug6") == 462 &&
+          ico_opt_pit_chain_ticks_for("jun26") == 463);
+    CHECK(ico_opt_pit_chain_ticks() == ico_opt_pit_chain_ticks_for(slug));
+    CHECK(ico_opt_pit_base_seconds() == 15);
+    /* the parser, for each length */
+    CHECK(ico_opt_pit_parse("half", 462, &note) == 8 && note == 0);    /* 231 ticks: 7.7 s */
+    CHECK(ico_opt_pit_parse("longer", 462, &note) == 23 && note == 0); /* 693: 23.1 s */
+    CHECK(ico_opt_pit_parse("double", 462, &note) == 30 && note == 1); /* 30.8 s, held */
+    CHECK(ico_opt_pit_parse("triple", 463, &note) == 30 && note == 1);
+    CHECK(ico_opt_pit_parse("original", 463, &note) == ICO_PIT_ORIGINAL && note == 0);
+    CHECK(ico_opt_pit_parse("15", 463, &note) == ICO_PIT_ORIGINAL && note == 0);
+    CHECK(ico_opt_pit_parse("16", 462, &note) == 16 && note == 0);
+    CHECK(ico_opt_pit_parse("dive", 462, &note) == ICO_PIT_ORIGINAL && note == 1);
+    CHECK(ico_opt_pit_parse("", 462, &note) == ICO_PIT_ORIGINAL && note == 1);
+    CHECK(ico_opt_pit_parse(NULL, 462, &note) == ICO_PIT_ORIGINAL && note == 0);
+    CHECK(ico_opt_pit_parse("-3", 462, NULL) == ICO_PIT_MIN_SECONDS);
+
+    /* the factor: the seconds over the disc's own length, so the whole pull-in (the
+       length divided by the play speed 1/factor) lasts the seconds set; the ratio
+       reserved: 1/factor, 2/factor under a camera effect, on every disc */
+    for (v = ICO_PIT_MIN_SECONDS; v <= ICO_PIT_MAX_SECONDS; v++) {
+        const float want = (float)(v * 30) / (float)ico_opt_pit_chain_ticks();
+        float secs;
+
         ico_opt_set_pit_time(v);
-        CHECK(ico_opt_pit_time_factor() == factor[v]);
-        CHECK(ico_opt_pit_dive_ratio(0) == 1.0f / factor[v]);
-        CHECK(ico_opt_pit_dive_ratio(1) == 2.0f / factor[v]);
+        if (v == ico_opt_pit_base_seconds()) {
+            CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL && ico_opt_pit_time_factor() == 1.0f);
+            continue;
+        }
+        CHECK(ico_opt_pit_time() == v && ico_opt_pit_seconds() == v);
+        CHECK(ico_opt_pit_time_factor() == want);
+        CHECK(ico_opt_pit_dive_ratio(0) == 1.0f / want);
+        CHECK(ico_opt_pit_dive_ratio(1) == 2.0f / want);
+        secs = (float)ico_opt_pit_chain_ticks() / ico_opt_pit_dive_ratio(0) / 30.0f;
+        CHECK(secs > (float)v - 0.01f && secs < (float)v + 0.01f);
     }
     ico_opt_set_pit_time(ICO_PIT_ORIGINAL);
     /* original: the game's own values, bit for bit */
+    CHECK(ico_opt_pit_time_factor() == 1.0f);
     CHECK(ico_opt_pit_dive_ratio(0) == 1.0f && ico_opt_pit_dive_ratio(1) == 2.0f);
 
-    /* the source: one hook in each of the four loops, this disc's motion among
-       them, the three camera timeouts scaled, the frame-50 test untouched */
+    /* the source: one hook in each of the four loops over that copy's five SINK motions
+       (A to E), this disc's among them, the three camera timeouts scaled, the frame-50
+       test untouched */
     if (f == NULL) {
         fprintf(stderr, "cannot read %s\n", ICO_ENEMY_ACT_SRC);
         failures++;
@@ -579,11 +635,17 @@ static void test_pit_time(void)
     CHECK(count_of(text, "ico_opt_pit_dive_ratio(") == 4 + 1 /* the declaration */);
     CHECK(count_of(text, "* 5 * ico_opt_pit_time_factor() <") == 3);
     CHECK(count_of(text, "50.0f < GOBJ_SUB(self)->ctrl.animFrame") >= 4);
-    motion = strcmp(slug, "jun26") == 0  ? 938
-             : strcmp(slug, "aug6") == 0 ? 905
-             : strcmp(slug, "ntsc") == 0 ? 903
-                                         : 952;
-    snprintf(hook, sizeof(hook), "ctrl.motion == %d && ico_opt_pit_time_factor() != 1.0f", motion);
+    CHECK(count_of(text, "ico_opt_pit_time_factor() != 1.0f &&") == 4);
+    /* the old one-motion hook is gone */
+    CHECK(count_of(text, "ctrl.motion == 952 && ico_opt_pit_time_factor()") == 0);
+    first = strcmp(slug, "jun26") == 0  ? 934
+            : strcmp(slug, "aug6") == 0 ? 901
+            : strcmp(slug, "ntsc") == 0 ? 899
+                                        : 948;
+    snprintf(hook, sizeof(hook),
+             "ctrl.motion >= %d && GOBJ_SUB(self)->ctrl.motion <= %d &&\n"
+             "            ico_opt_pit_time_factor() != 1.0f &&",
+             first, first + 4);
     CHECK(count_of(text, hook) == 1);
     free(text);
 }
