@@ -299,16 +299,17 @@ they are. `frame_rate_pin = off` under `[dev]` in `config.toml` never asks.
 The log shows what happened:
 
 - `window: frame rate pin: asked 60 Hz (fixed source; the Frame rate row is
-  60) with ANativeWindow_setFrameRateWithChangeStrategy: returned 0` (a
-  return other than 0 says the phone refused it), and `window: frame rate pin:
-  released ...` after Uncapped. The first line of the run says whether the
+  60) with ...: returned 0` (the name after "with" is the system call the
+  game used; a return other than 0 says the phone refused it), and `window:
+  frame rate pin: released ...` after Uncapped. The first line of the run says whether the
   phone offers the call at all. The phone forgets the request when the game
   goes to the background, so the game asks again when you come back:
   `window: frame rate pin: asked again for a new surface: 60 Hz ...`.
 - `window: display refresh: 144.00 Hz, 3048x2032 "..." (run time 85.2 s, 2
   changes this run)` in every 10 second block, and `window: display refresh
-  changed: 144.00 Hz -> 60.00 Hz ...` the moment the phone reports the screen
-  changed its rate. With the pin working, a Frame rate of 60 should show the
+  changed: 144.00 Hz -> 60.00 Hz ...` when the phone reports the screen
+  changed its rate (written with the next 10 second block, its run time the
+  moment of the change). With the pin working, a Frame rate of 60 should show the
   screen at 60 Hz.
 - `window: present calls: 755 timed (over 20 ms 5, over 50 ms 5, over 100 ms 5,
   over 300 ms 5), longest 365 ms, total ...` in every block: how many times the
