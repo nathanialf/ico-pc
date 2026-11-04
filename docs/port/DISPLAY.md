@@ -1410,11 +1410,32 @@ the window's side, called from `port/platform/window_host.c` (`video_settings`, 
 - The start's `window: present mode ...` line and the summary end `, FIFO fallback armed` where the
   switch can be taken, `, FIFO fallback taken after N blocks` once taken, `, FIFO fallback set by
   [dev] present_fallback=fifo` under that value.
-- `[dev] present_fallback` ([CONFIG.md](CONFIG.md#dev)): `auto` (the default) as above; `off` keeps
+- `[dev] present_fallback` ([CONFIG.md](CONFIG.md#dev)): `auto` (the default) as above, and FIFO from
+  the start on Qualcomm's own driver (below); `off` keeps
   mailbox and writes `window: present blocked 3 times over 200 ms in N s under mailbox: mailbox kept
   ([dev] present_fallback=off)` once; `fifo` presents FIFO from the start.
 
-The first two or three stutters (20 to 30 s) still happen before the switch.
+The first two or three stutters (20 to 30 s) still happen before the switch, except on Qualcomm's
+own driver, which starts FIFO:
+
+- **FIFO from the start on Qualcomm's own driver.** With `[dev] present_fallback` unset or `auto`,
+  vsync off, the Vulkan backend and `vendorId` 0x5143 with a driver text naming neither `Mesa` nor
+  `turnip` (`ico_present_fallback_qualcomm_own`, `ico_present_fallback_start`), the first swapchain
+  is FIFO at the surface's fewest images, as the fallback's own swapchain is, so no mailbox to FIFO
+  switch happens mid-run and the GPU draws nothing that is never shown. The window hands the
+  rhi the question before the device exists (`window_fifo_set` -> `rhi_present_fifo_start`); the
+  swapchain asks it with the device's ids when it is made (`vk_swapchain.c`), only with vsync off,
+  and its `rhi_vk: swapchain` line ends `, fifo from the start`. The start line is `window: present
+  fifo (Qualcomm's own driver: FIFO from the start; [dev] present_fallback = off keeps mailbox)`
+  once, before the `window: present mode fifo` line, and the summary's present word is `, FIFO from
+  the start (Qualcomm's own driver)`. `off` keeps mailbox for the whole run (the A/B); `fifo` is
+  unchanged; every other device and vsync on are unchanged. The gate sees a FIFO swapchain, so no
+  switch is counted or taken after it. The reason is Qualcomm's Adreno best-practices guide (FIFO
+  with a minimum image count of 3; mailbox "can sometimes help with frame pacing/latency, but often
+  can cost significant battery and generate significant heat for no benefit"). It is not the fix
+  for issue 123: the stalls continued under FIFO in three logs. Pacing is the fallback's after its
+  switch: vsync off keeps the uncapped rules and the paced allowance whatever the present mode
+  (`pace_rt_as_made`, `pace_budget_paced_mode`; `pace_policy_test` (`testFifoFromStart`)).
 
 ### The refresh rate and the frame rate pin
 
@@ -1704,7 +1725,7 @@ one's pixels: for a measurement, not for play.
 | --- | --- |
 | `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), the present allowance with the fence (`test120Budget`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`); the render thread's further presents: the step-deadline rule's rates and vsync off's pictures as made (`testStepRule`); the lock with Direct3D 11's wait for room in the present queue on the render thread, made after the picture before's present (`testRoomOffGame`) |
 | `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`), the timer path's unbound start (`testBudgetUnbound`), the reporters' sequences (`testBudgetHitch130`, `testBudgetSustained`, `testBudgetGlWait126`), the window's allowance and clock words (`testBudgetLines`), the timer path with a GPU queue (`testBudgetTimerLoop`) and paced by the GPU (`testBudgetPaced`, `testBudgetPacedLoop`), vsync off under the FIFO fallback at 120 Hz (`testBudgetFifo120`), the step-deadline rule's arithmetic, its back-off, the reads' prediction and the as-made line (`testStepRule`) |
-| `port/platform/test/present_fallback_test.c` | the FIFO fallback's decision over the stock driver's blocks (the third within 30 s switches, never a second time), blocks too far apart or too short, Turnip's driver text, `[dev] present_fallback=off`, the lines word for word |
+| `port/platform/test/present_fallback_test.c` | the FIFO fallback's decision over the stock driver's blocks (the third within 30 s switches, never a second time), blocks too far apart or too short, Turnip's driver text, `[dev] present_fallback=off`, FIFO from the start on Qualcomm's own driver (auto yes; off, fifo, vsync on, Mesa or Turnip text, other vendors no), the lines word for word |
 | `port/platform/test/perf_block_test.c` | a block's sums and maxima, the replays over the threshold, the longest-phase text, a reset |
 | `port/platform/test/window_video_test.c` | the window mode requests and their readback on SDL's offscreen driver (77 without one): fullscreen at the desktop's size, Borderless, Windowed back at 960 x 720; Fullscreen through `ico_window_video_mode` holds the desktop's mode (its size and refresh rate) or, where the driver takes none, no mode, and `ico_window_video_desktop_mode` returns which. Whether the display goes exclusive and the swapchain's `VK_EXT_full_screen_exclusive` request are the window system's and a Windows driver's: no test here sees them (lavapipe has no such extension) |
 | `port/platform/test/hotkeys_test.c` | F11, F12, the stats period, F12's file names |

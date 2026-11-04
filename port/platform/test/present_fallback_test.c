@@ -19,6 +19,11 @@
  *            block once the gate is YES;
  *   driver   eligibility: Qualcomm's text yes, Mesa's and Turnip's no (any
  *            case), no device no;
+ *   start    FIFO from the first swapchain: Qualcomm's own driver (vendor
+ *            0x5143, text neither Mesa nor turnip) with auto and vsync off
+ *            yes; off, fifo (its own path), vsync on, Mesa/turnip texts
+ *            and other vendors no; the start line word for word and the
+ *            mode suffix;
  *   mode     the [dev] value: unset/auto auto, off/0/false/no off, fifo
  *            FIFO; the mode suffix's armed and dev-fifo words.
  */
@@ -50,7 +55,7 @@ static void testLog(void)
                     "(Qualcomm Technologies Inc. Adreno Vulkan Driver Driver Build: bad34dcf83, "
                     "I1064ae0a1f, 1764326394) under mailbox (vsync off, 6 images): presents now "
                     "FIFO for this run ([dev] present_fallback=off keeps mailbox)");
-    ico_present_fallback_mode_suffix(&f, ICO_PRESENT_FALLBACK_AUTO, 1, line, sizeof line);
+    ico_present_fallback_mode_suffix(&f, ICO_PRESENT_FALLBACK_AUTO, 1, 0, line, sizeof line);
     CHECK_STR(line, ", FIFO fallback taken after 3 blocks");
     /* never a second time, whatever follows */
     CHECK(ico_present_fallback_note(&f, S(121), 380.0, yes) == 0);
@@ -124,7 +129,7 @@ static void testTurnip(void)
     CHECK(!f.taken && !f.kept);
     ico_present_fallback_block_suffix(&f, S(16), line, sizeof line);
     CHECK_STR(line, "");
-    ico_present_fallback_mode_suffix(&f, ICO_PRESENT_FALLBACK_AUTO, 0, line, sizeof line);
+    ico_present_fallback_mode_suffix(&f, ICO_PRESENT_FALLBACK_AUTO, 0, 0, line, sizeof line);
     CHECK_STR(line, "");
 }
 
@@ -183,12 +188,47 @@ static void testMode(void)
     CHECK(ico_present_fallback_mode("false") == ICO_PRESENT_FALLBACK_OFF);
     CHECK(ico_present_fallback_mode("no") == ICO_PRESENT_FALLBACK_OFF);
     CHECK(ico_present_fallback_mode("fifo") == ICO_PRESENT_FALLBACK_FIFO);
-    ico_present_fallback_mode_suffix(NULL, ICO_PRESENT_FALLBACK_AUTO, 1, line, sizeof line);
+    ico_present_fallback_mode_suffix(NULL, ICO_PRESENT_FALLBACK_AUTO, 1, 0, line, sizeof line);
     CHECK_STR(line, ", FIFO fallback armed");
-    ico_present_fallback_mode_suffix(NULL, ICO_PRESENT_FALLBACK_FIFO, 0, line, sizeof line);
+    ico_present_fallback_mode_suffix(NULL, ICO_PRESENT_FALLBACK_FIFO, 0, 0, line, sizeof line);
     CHECK_STR(line, ", FIFO fallback set by [dev] present_fallback=fifo");
-    ico_present_fallback_mode_suffix(NULL, ICO_PRESENT_FALLBACK_OFF, 0, line, sizeof line);
+    ico_present_fallback_mode_suffix(NULL, ICO_PRESENT_FALLBACK_OFF, 0, 0, line, sizeof line);
     CHECK_STR(line, "");
+    /* FIFO from the start wins over armed (the gate is NO under FIFO anyway) */
+    ico_present_fallback_mode_suffix(NULL, ICO_PRESENT_FALLBACK_AUTO, 0, 1, line, sizeof line);
+    CHECK_STR(line, ", FIFO from the start (Qualcomm's own driver)");
+}
+
+/* FIFO from the first swapchain on Qualcomm's own driver (issue 123) */
+static void testStart(void)
+{
+    char line[160];
+    const unsigned qcom = 0x5143u;
+
+    /* eligible + auto + vsync off: FIFO from the start */
+    CHECK(ico_present_fallback_qualcomm_own(qcom, k_qcom));
+    CHECK(ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, qcom, k_qcom));
+    /* the reporter's A/B: off keeps mailbox for the whole run */
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_OFF, 0, qcom, k_qcom));
+    /* fifo is FIFO from the start by its own path, not this one */
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_FIFO, 0, qcom, k_qcom));
+    /* vsync on: unchanged */
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, qcom, k_qcom));
+    /* Mesa's and Turnip's drivers on the same vendor id keep mailbox */
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, qcom, "turnip Mesa driver"));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, qcom, "Mesa 25.1.0"));
+    CHECK(!ico_present_fallback_qualcomm_own(qcom, "TURNIP"));
+    /* other vendors keep mailbox and the blocks' fallback */
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0x13b5u, "ARM Mali driver"));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0x1002u, "AMD proprietary"));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0x10deu, NULL));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0u, k_qcom));
+    /* a Qualcomm device with no driver text is the stock driver (the rule
+       that exists: only Mesa's and Turnip's texts are excluded) */
+    CHECK(ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, qcom, NULL));
+    ico_present_fallback_start_line(line, sizeof line);
+    CHECK_STR(line, "window: present fifo (Qualcomm's own driver: FIFO from the start; [dev] "
+                    "present_fallback = off keeps mailbox)");
 }
 
 int main(void)
@@ -201,5 +241,6 @@ int main(void)
     testLate();
     testDriver();
     testMode();
+    testStart();
     return ico_check_summary("present_fallback_test");
 }

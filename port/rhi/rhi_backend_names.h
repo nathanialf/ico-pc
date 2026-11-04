@@ -99,6 +99,7 @@
 #define rhi_present_mailbox      RHI__NAME(present_mailbox)
 #define rhi_present_fifo_fallback RHI__NAME(present_fifo_fallback)
 #define rhi_present_fifo_fallback_on RHI__NAME(present_fifo_fallback_on)
+#define rhi_present_fifo_start RHI__NAME(present_fifo_start)
 #define rhi_set_exclusive_fullscreen RHI__NAME(set_exclusive_fullscreen)
 #define rhi_present_shown        RHI__NAME(present_shown)
 #define rhi_present_split        RHI__NAME(present_split)

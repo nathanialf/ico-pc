@@ -321,6 +321,12 @@ The log shows what happened:
   changed its rate (written with the next 10 second block, its run time the
   moment of the change). With the pin working, a Frame rate of 60 should show the
   screen at 60 Hz.
+- On phones with a Qualcomm graphics driver the game shows pictures in the
+  order they are drawn from the start (the log says `window: present fifo
+  (Qualcomm's own driver ...`), as the chip maker advises. This is not
+  expected to remove a stutter every few seconds; the log measures what the
+  phone does in detail. `present_fallback = off` under `[dev]` in
+  `config.toml` goes back to the older way, for comparing two logs.
 - `window: present calls: 755 timed (over 20 ms 5, over 50 ms 5, over 100 ms 5,
   over 300 ms 5), longest 365 ms, total ...` in every block: how many times the
   phone's graphics driver held up a picture, and for how long. A few over 300
