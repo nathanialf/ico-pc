@@ -1541,9 +1541,12 @@ four alpha loads, the alpha test, the fill; `fx_frame_ps` with `FXF_GLOW_MASK`):
 nor the mask is drawn, and WORK2 holds no mask; where the sun's fans drew into WORK2 the fill and
 the fans are drawn, the mask alone is not, and the reduction loads WORK2 where the mask keeps a
 texel (`FXF_GLOW_KEPT`) ([The glow's mask in its
-reduction](RENDER_POST.md#the-glows-mask-in-its-reduction); `[dev] glow_fold`). The expected
-saving on the phone is the WORK2 pass (2.9 ms in a glow replay, about 1.3 ms a replay over the
-phone's capture) less the reduction's extra loads (four SCENE alpha loads a WORK2 tap). The pass
+reduction](RENDER_POST.md#the-glows-mask-in-its-reduction); `[dev] glow_fold`). That is the
+default on the immediate-mode GPUs only: on the PowerVR phone the saving expected (the WORK2
+pass, 2.9 ms in a glow replay) was lost several times over to the reduction's extra work (the mask
+and its four SCENE alpha loads at every one of about 70 taps a WORK0 texel): `glow WORK0` went
+from 2.3-3.3 ms to 10.4-11.4 ms a glow replay, so every tile-based GPU draws the mask's pass by
+default (the profile's `glowFold`, [RENDER.md](RENDER.md#the-device-profile)). The pass
 dump's WORK2.png is the mask only where the fold is off (the replay tool's `--pass-dump` keeps it off
 unless `ICO_RD_GLOW_FOLD=1`).
 
