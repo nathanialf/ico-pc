@@ -47,7 +47,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/window_switch.c`, `window_switch.h` | Options > Graphics > Apply: the renderer switched to another backend or graphics card in the process, the Graphics page's host and its card names |
 | `port/platform/window_lifecycle.c`, `window_lifecycle.h` | the steps run when a mobile system moves the app |
 | `port/platform/ico_thread.c`, `ico_thread.h` | one OS thread, mutex and condition wrapper (pthreads, Win32) for code that must not need SDL; the achievements file writer, the texture decode pool, the VFS's per-mount mutex and the disc reader thread ([DATA.md](DATA.md#the-disc-reader-thread)) use it (`ico_thread_test.c`) |
-| `port/platform/cpu_place.c`, `cpu_place.h` | which core a thread runs on (one sample a step, a picture or a submit job, for the 10 s line's cores), the cores' top speeds (Linux and Android), the calling thread's priority and allowed cores, keeping a thread to some cores (Android's render and submit threads, `[dev] big_cores`); in `ico_thread`'s library, which the renderer links ([The render thread](#the-render-thread); `cpu_place_test.c`) |
+| `port/platform/cpu_place.c`, `cpu_place.h` | which core a thread runs on (one sample a step, a picture or a submit job, for the 10 s line's cores), the cores' top speeds (Linux and Android), the calling thread's priority and allowed cores, keeping a thread to some cores and who keeps to which (`cpu_place_plan`: Android's game, render and submit threads, `[dev] big_cores`); in `ico_thread`'s library, which the renderer links ([The render thread](#the-render-thread); `cpu_place_test.c`) |
 | `port/platform/pump_watch.c`, `pump_watch.h` | the event pump's recent window messages and SDL events, the controllers that came and went (name, GUID, SDL driver), SDL's own log ring, and the names of the messages (pure C, tested everywhere) |
 | `port/platform/window_pump_win.c`, `window_pump_win.h` | Windows: the window's messages recorded for the slow-pump lines, the display and the computer kept awake |
 | `port/platform/pace_policy.c`, `pace_policy.h` | the pacing decisions, free of SDL: the vsync lock, slow presents, the gap between presents |
@@ -764,6 +764,15 @@ alone: the system said yes and keeps it to cores 2-7; kept to the faster cores 2
 refused call names its errno (`could not be kept to ... (errno 22: Invalid argument)`). Core 7 is
 not pursued further: an app cannot overrule the kernel's placement, and the gain would be the
 prime core's 20 % clock on 14-20 ms of CPU a picture, about 3 ms.
+With exactly two cores faster than the slowest (a Helio G85: `0-5 1.8 GHz, 6-7 2.0 GHz`, whose
+game thread, saturated, ran on the slow cores in 15-62 % of the samples while the render and
+submit threads held both fast ones) the game thread and the render thread both keep to those two
+cores and the submit thread is not kept to any (`cpu_place_plan`, `CPU_PLAN_TWO_FAST`); with one
+faster core the render thread keeps to it alone and the other two are left to the system. A start
+line says which: `window: big cores: 2 fast of 8: game and render threads on them (6-7), the submit
+thread free; the game thread kept` (or `NOT kept: the system keeps it to cores ...`, or the
+refused call's errno); with three or more the line reads `big cores: N fast of M: render and submit
+threads on them, the game thread free`. The 10 s line's cores per thread are unchanged.
 `[dev] big_cores = false` leaves them where the system puts them. It is a
 diagnostic escape, not a performance switch; `window: render thread: the game thread took the OpenGL context for its own calls (N
 times; ...)` (the first 8, then every 100th) counts OpenGL's take-overs, and `... could not be
@@ -1915,7 +1924,7 @@ without a loss ends it. So the second in a row is a loss in the robust start its
 start after it, with robust access off again: it writes `[dev] gpu_robust = true` and logs `ico_pc:
 the graphics device was lost in two starts in a row; this start and every start after it check the
 bounds of every buffer and image read ([dev] gpu_robust = true in <path>); delete that line to turn
-it off again`. With `gpu_robust` set by the player (the variable already in the environment)
+it off again`; the game takes it off again itself (`robust_persist.h`: the mark `[dev] gpu_robust_by`, 3 clean starts in a row or a new version, each start's `ico_pc: robust access on (set by the game after 2 lost starts on <version>): N clean starts of 3 before it turns off` line). With `gpu_robust` set by the player (the variable already in the environment)
 nothing is written and the row is cleared (`ico_pc: the previous start lost the graphics device;
 nothing is counted or written to <path>: robust access is as the settings say ([dev]
 gpu_robust)`). A restart after a crash or a loss (desktop) counts nothing. The rest of the row's

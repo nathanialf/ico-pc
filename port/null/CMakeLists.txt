@@ -55,3 +55,14 @@ if(ICO_RUN_TESTS)
     add_test(NAME host_config_portable COMMAND host_config_portable_test
              WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/portable")
 endif()
+# robust_persist: the port's own [dev] gpu_robust turning itself off
+# (robust_persist.c, ico_platform): the rule over start sequences, the marker
+# written and read through the config text (host_config.c's TOML helpers,
+# compiled here as host_config_test does), the key's removal, the lines
+add_executable(robust_persist_test ../platform/test/robust_persist_test.c ../platform/host_config.c)
+target_include_directories(robust_persist_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(robust_persist_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(robust_persist_test PRIVATE ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME robust_persist COMMAND robust_persist_test)
+endif()

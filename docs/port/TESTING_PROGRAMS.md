@@ -775,7 +775,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`cpu_place_split`: `0-1 2.2 GHz, 2-6 3.1 GHz, 7 3.8 GHz` gives the render thread core 7
   alone and the submit thread 2-6, a 4+3+1 phone 7 and 4-6, a core of unknown speed in neither; no
   split with two fastest cores, with the fastest the only one above the slowest, with one speed
-  or none known), and the calling
+  or none known), the placement rule (`cpu_place_plan`: 2 faster of 8 gives the game and render
+  threads both cores and the submit thread none; 3 and 4 faster keep render and submit with the
+  game thread free; one faster the render thread alone; all equal or none known nothing), and the calling
   thread (its core inside the cores it may run on, the priority text's `nice`, a pin to no core
   refused, a pin to the cores already allowed taken), and a pin's result by the cores read back
   (`cpu_place_pin_result`: core 7 asked, the call's yes and 2-7 read back is other cores; the same
@@ -896,6 +898,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   never under 0, a gap under 0, the call not timed apart, no gap, no GPU span) and the after line (`present_after_text`: the replay after the stall, its gap across one
   and two untimed replays, no GPU span, a short buffer cut); the stall lines' threshold
   (`present_stall_lines`: from 250 ms on, never from 50 to 250 ms nor for NaN) (`present_hist`).
+- `robust_persist_test.c`: the port's own `[dev] gpu_robust` turning itself off (`robust_persist.h`): the mark `gpu_robust_by` written and read back and a hand-written value never taken for it, the rule over sequences of starts (three clean starts in a row turn it off; a loss or an end while preparing resets the count; a start that never reached the game leaves it; another version turns it off at once; no mark does nothing), the mark through the config text, the removal of both `[dev]` keys leaving every other line (a `gpu_robust` in another section included), the three log lines word for word (`robust_persist`).
 - `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
   (`sched`); the longest single switch (`ico_sched_switch_max`: a 30 ms thread against a 1 ms

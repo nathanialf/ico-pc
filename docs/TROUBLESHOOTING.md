@@ -687,9 +687,13 @@ driver** and used from the next start (see the driver note above). Start the gam
 That start has the graphics driver check every read it makes, for that
 start only, which can keep it from stopping (the game may run a little
 slower). If the graphics driver stops again in that start or in the one
-after it, the game keeps the checks on from then on and writes
-`gpu_robust = true` into `config.toml`; delete that line to turn them off
-again. If it happens every time at the same place, report it and attach
+after it, the game keeps the checks on and writes `gpu_robust = true`
+(with a `gpu_robust_by` line beside it) into `config.toml`. The game turns
+them off again by itself, and removes both lines, after three starts in a
+row that end without the graphics driver stopping, or at once after an
+update; the log says how many of the three have passed. A `gpu_robust`
+line you wrote yourself, without the `gpu_robust_by` line, is never
+removed; delete the lines yourself to turn the checks off sooner. If it happens every time at the same place, report it and attach
 the newest file in `logs` that starts with `report-` (the message names
 it; it shows what was being drawn) and say which disc you play, the
 European or the Japanese.
@@ -724,6 +728,7 @@ afterwards:
   game asks for. The game may run a little slower with it. It is off unless
   you turn it on; on a phone the game turns it on by itself for one start
   after the graphics driver stopped responding (see above), and
+  turns it off again after three clean starts or an update;
   `gpu_robust=false` keeps it off.
 
 ## The game closes by itself

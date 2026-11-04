@@ -561,6 +561,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
     target_sources(ico_pc PRIVATE port/platform/window_host.c port/platform/window_switch.c
                                   port/platform/window_video.c port/platform/window_lines.c
                                   port/platform/window_pipeline_skip.c
+                                  port/platform/window_robust.c
                                   port/platform/window_pipe_finish.c
                                   port/platform/window_display_rate.c
                                   port/platform/window_present_fallback.c
