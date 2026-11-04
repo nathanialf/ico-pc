@@ -1022,6 +1022,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
     if (count == 0) {
         return;
     }
+    g_rdPerf.vuDraws++;
+    g_rdPerf.vuTris += count / 3u;
     const bool indexed = ix->buf.id != 0;
     const bool recorded = vs == RD_VS_VU_MAIN || vs == RD_VS_VU_PARTICLE_MAIN;
     if (g_rd.vuPrepass && !recorded && (rd__vu_pre_vs(progVs) || progVs == RD_VS_VU_PARTICLE)) {

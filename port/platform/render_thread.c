@@ -92,9 +92,54 @@ static struct {
     CpuClasses classes;
     uint64_t slowMask, fastMask, renderMask, submitMask;
     bool pin, split;
+    CpuPlan plan;
+    bool pinSubmit; /* the submit thread is kept too (not with two or fewer faster cores) */
     const char *noPin;
     CpuPlaceHist game, render;
 } s_place;
+
+/* the game thread's own pin when the rule keeps it (two faster cores: it
+   and the render thread take them), the cores read back, one line; the
+   start line says why a phone's threads are where they are */
+static void place_game_pin(void)
+{
+    const CpuPlan *p = &s_place.plan;
+    char fast[96], got[96], why[128], gotText[96];
+
+    if (!s_place.pin || p->kind == CPU_PLAN_NONE) {
+        return;
+    }
+    (void)cpu_place_mask_text(p->kind == CPU_PLAN_TWO_FAST ? p->game : p->render, fast,
+                              sizeof(fast));
+    if (p->kind == CPU_PLAN_MANY_FAST) {
+        fprintf(stderr,
+                "window: big cores: %d fast of %d: render and submit threads on them, "
+                "the game thread free\n",
+                p->fastCount, p->coreCount);
+    } else if (p->kind == CPU_PLAN_ONE_FAST) {
+        fprintf(stderr,
+                "window: big cores: 1 fast of %d: the render thread alone on it (%s), "
+                "the game and the submit thread free\n",
+                p->coreCount, fast);
+    } else {
+        uint64_t read = 0;
+        const CpuPinResult res = cpu_place_pin_checked(p->game, &read, why, sizeof(why));
+
+        (void)cpu_place_mask_text(read, gotText, sizeof(gotText));
+        snprintf(got, sizeof(got), "%s",
+                 res == CPU_PIN_KEPT      ? "kept"
+                 : res == CPU_PIN_UNKNOWN ? "kept (the cores could not be read back)"
+                                          : "NOT kept");
+        fprintf(stderr,
+                "window: big cores: 2 fast of %d: game and render threads on them (%s), the "
+                "submit thread free; the game thread %s%s%s\n",
+                p->coreCount, fast, got,
+                res == CPU_PIN_OTHER     ? ": the system keeps it to cores "
+                : res == CPU_PIN_REFUSED ? ": "
+                                         : "",
+                res == CPU_PIN_OTHER ? gotText : (res == CPU_PIN_REFUSED ? why : ""));
+    }
+}
 
 /* the cores' speeds and the placement rule, once (the game thread, before
    the render thread starts) */
@@ -109,7 +154,10 @@ static void place_init(void)
     (void)cpu_place_classes_read(NULL, &s_place.classes);
     s_place.slowMask = cpu_place_slow_mask(&s_place.classes);
     s_place.fastMask = cpu_place_fast_mask(&s_place.classes);
-    s_place.split = cpu_place_split(&s_place.classes, &s_place.renderMask, &s_place.submitMask);
+    cpu_place_plan(&s_place.classes, &s_place.plan);
+    s_place.split = s_place.plan.split;
+    s_place.renderMask = s_place.plan.render;
+    s_place.submitMask = s_place.plan.submit;
 #if defined(__ANDROID__)
     if (!ico_config_get_bool("dev.big_cores", 1)) {
         s_place.noPin = "[dev] big_cores = false";
@@ -117,6 +165,7 @@ static void place_init(void)
         s_place.noPin = "the cores are of one speed, or their speeds are not known";
     } else {
         s_place.pin = true;
+        s_place.pinSubmit = s_place.plan.submit != 0;
     }
 #else
     s_place.noPin = "only on Android";
@@ -127,7 +176,15 @@ static void place_init(void)
     (void)cpu_place_mask_text(s_place.renderMask, rm, sizeof(rm));
     (void)cpu_place_mask_text(s_place.submitMask, sm, sizeof(sm));
     split[0] = '\0';
-    if (s_place.pin) {
+    if (s_place.pin && s_place.plan.kind != CPU_PLAN_MANY_FAST) {
+        snprintf(split, sizeof(split),
+                 s_place.plan.kind == CPU_PLAN_TWO_FAST
+                     ? "; the game and the render thread to the two faster cores %s, the submit "
+                       "thread left to the system"
+                     : "; the render thread to the one faster core %s alone, the game and the "
+                       "submit thread left to the system",
+                 rm);
+    } else if (s_place.pin) {
         snprintf(split, sizeof(split),
                  s_place.split ? "; the render thread to the fastest core %s alone, the submit "
                                  "thread to the next faster cores %s, the game thread left to "
@@ -140,6 +197,7 @@ static void place_init(void)
     fprintf(stderr, "window: cores: %s; the game thread %s%s%s, may run on cores %s%s\n", cls,
             pr[0] ? "at " : "at its priority as made", pr, pr[0] ? " (not changed)" : "",
             cpu_place_allowed() != 0 ? allowed : "not known", split);
+    place_game_pin();
 }
 
 /* a thread the pictures wait on (the render thread, the submit thread), at
@@ -151,16 +209,20 @@ static void place_thread_begin(const char *who, bool render)
     const uint64_t mask = render ? s_place.renderMask : s_place.submitMask;
     /* which cores (cpu_place_split): the fastest alone, the next ones, or
        the faster ones */
-    const char *what = !s_place.split ? "the faster cores"
-                       : render       ? "the fastest core"
-                                      : "the next faster cores";
+    const bool mine = render || s_place.pinSubmit;
+    const char *what = s_place.plan.kind == CPU_PLAN_TWO_FAST   ? "the two faster cores"
+                       : s_place.plan.kind == CPU_PLAN_ONE_FAST ? "the one faster core"
+                       : !s_place.split                         ? "the faster cores"
+                       : render                                 ? "the fastest core"
+                                                                : "the next faster cores";
     char err[160], pr[64], fast[96], cores[160], allowed[96], why[128], place[768];
 
     snprintf(err, sizeof(err), "%s", granted ? "" : SDL_GetError());
     (void)cpu_place_priority_text(pr, sizeof(pr));
     (void)cpu_place_mask_text(mask, fast, sizeof(fast));
-    snprintf(cores, sizeof(cores), "%s %s%s", what, fast, s_place.split && render ? " alone" : "");
-    if (s_place.pin) {
+    snprintf(cores, sizeof(cores), "%s %s%s", what, fast,
+             (s_place.split || s_place.plan.kind == CPU_PLAN_ONE_FAST) && render ? " alone" : "");
+    if (s_place.pin && mine) {
         /* the cores read back after the call, not the call's answer alone:
            a phone's kernel may say yes and keep the thread elsewhere
            (cpu_place.h CpuPinResult) */
@@ -203,7 +265,9 @@ static void place_thread_begin(const char *who, bool render)
         }
     } else {
         snprintf(place, sizeof(place), "placed by the system (%s)",
-                 s_place.noPin != NULL ? s_place.noPin : "no rule");
+                 s_place.noPin != NULL ? s_place.noPin
+                 : !mine               ? "the game and render threads have the two faster cores"
+                                       : "no rule");
     }
     (void)cpu_place_mask_text(cpu_place_allowed(), allowed, sizeof(allowed));
     fprintf(stderr, "window: %s thread: the high priority %s%s%s%s%s; %s; may run on cores %s\n",

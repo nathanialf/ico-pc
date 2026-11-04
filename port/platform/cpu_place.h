@@ -74,6 +74,34 @@ uint64_t cpu_place_fast_mask(const CpuClasses *c);
    one faster than the slowest (the submit thread is not put on the
    slowest cores, nor two threads on one core) */
 bool cpu_place_split(const CpuClasses *c, uint64_t *render, uint64_t *submit);
+
+/* Who keeps to which cores (the Android window's rule, a pure function of
+   the cores' speeds).  Masks of 0: that thread is not kept to any.
+   With 3 or more faster cores: cpu_place_split's masks for the render and
+   the submit thread, the game thread free (CPU_PLAN_MANY_FAST).  With two
+   faster cores (the Helio G85: 6 x 1.8 GHz and 2 x 2.0 GHz, where the
+   game's own step, saturated, ran on the slow cores 15-62 % of the samples
+   while the render and submit threads held the two): the game thread and
+   the render thread both keep to those two cores, the submit thread free
+   (CPU_PLAN_TWO_FAST).  With one faster core: the render thread alone on
+   it, the game and submit threads free (CPU_PLAN_ONE_FAST; two threads
+   would share the core).  No faster core: nothing kept (CPU_PLAN_NONE). */
+typedef enum CpuPlanKind {
+    CPU_PLAN_NONE = 0,
+    CPU_PLAN_ONE_FAST,
+    CPU_PLAN_TWO_FAST,
+    CPU_PLAN_MANY_FAST
+} CpuPlanKind;
+
+typedef struct CpuPlan {
+    CpuPlanKind kind;
+    int fastCount; /* the cores faster than the slowest */
+    int coreCount; /* the cores with a speed known */
+    bool split;    /* MANY_FAST only: cpu_place_split's answer */
+    uint64_t game, render, submit;
+} CpuPlan;
+
+void cpu_place_plan(const CpuClasses *c, CpuPlan *out);
 /* "0-3, 7"; "none" for 0; the length written */
 size_t cpu_place_mask_text(uint64_t mask, char *out, size_t cap);
 

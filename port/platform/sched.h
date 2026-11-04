@@ -127,6 +127,11 @@ void ico_sched_interrupt_end(void);
 int ico_sched_in_interrupt(void);
 /* Context switches into fibers so far (statistics). */
 unsigned long ico_sched_switch_count(void);
+/* The longest single switch (a fiber resumed until it next yields, in ns)
+   since the last reset and the thread id that ran it (0 with none); the
+   slow-step line's "longest Main 171.2 ms".  Two clock reads a switch. */
+void ico_sched_switch_max_reset(void);
+unsigned long long ico_sched_switch_max(int *id);
 
 /* --- From a game thread ----------------------------------------------------- */
 
