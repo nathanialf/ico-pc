@@ -14,6 +14,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "config.h"
+#include "cpu_place.h"
 #include "diag_host.h"
 #include "gpu_driver.h"
 #include "host_android.h"
@@ -464,6 +465,8 @@ static void install_done(int result)
 static int SDLCALL install_thread(void *user)
 {
     (void)user;
+    /* the process's cores, not its creator's (cpu_place.h cpu_place_thread_free) */
+    (void)cpu_place_thread_free();
     char tmp[1200], zip[1200], folder[160], why[256];
     const char *root = s_root;
 

@@ -1512,6 +1512,16 @@ void rhi_set_slot_guard(const RhiSlotGuard *guard);
 /* The slot guard's answers for a backend (false with none) */
 bool rhi_slot_guard_pending(uint32_t slot);
 bool rhi_slot_guard_worker(void);
+/* The window's rule for a thread a backend makes (Vulkan's pipeline
+ * workers and its present-wait thread, OpenGL's compile thread): fn runs
+ * at the thread's entry, on it.  The Android window puts such a thread
+ * back on the process's cores there (port/platform/cpu_place.h
+ * cpu_place_thread_free): a new thread starts with its creator's cores,
+ * and the game or render thread that makes it may be kept to the faster
+ * ones.  NULL: nothing (the tests and tools).  rhi_thread_begin is the
+ * backend's call. */
+void rhi_set_thread_begin(void (*fn)(void));
+void rhi_thread_begin(void);
 /* The counters now, for rhi_get_stats while the guard is busy: called by
  * the recording thread right before it hands work over, the other thread
  * idle */

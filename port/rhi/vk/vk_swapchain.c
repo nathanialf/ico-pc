@@ -162,6 +162,7 @@ static void vkr_pw_free(VkrPw *p)
 static int SDLCALL vkr_pw_thread(void *u)
 {
     VkrPw *p = u;
+    rhi_thread_begin(); /* the process's cores (rhi.h rhi_set_thread_begin) */
     SDL_LockMutex(p->lock);
     while (!p->quit) {
         if (p->pause || p->failed || !p->swapchain || p->next == 0 || p->next > p->posted) {

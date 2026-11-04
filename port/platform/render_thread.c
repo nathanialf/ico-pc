@@ -141,6 +141,13 @@ static void place_game_pin(void)
     }
 }
 
+/* rhi_set_thread_begin's hook: a backend's thread (the pipeline workers,
+   the present-wait thread) back on the process's cores */
+static void place_rhi_thread_begin(void)
+{
+    (void)cpu_place_thread_free();
+}
+
 /* the cores' speeds and the placement rule, once (the game thread, before
    the render thread starts) */
 static void place_init(void)
@@ -197,6 +204,26 @@ static void place_init(void)
     fprintf(stderr, "window: cores: %s; the game thread %s%s%s, may run on cores %s%s\n", cls,
             pr[0] ? "at " : "at its priority as made", pr, pr[0] ? " (not changed)" : "",
             cpu_place_allowed() != 0 ? allowed : "not known", split);
+    if (s_place.pin && cpu_place_allowed() != 0) {
+        /* the process's cores, kept before any pin: a thread made by a
+           kept thread starts with its creator's cores (pthread_create(3)),
+           so every thread the rule leaves free (the submit thread under
+           the two-core rule, the texture decode pool, the pipeline
+           workers, the pack loader, the save-state writers) puts itself
+           back on these at its entry (cpu_place.h cpu_place_thread_free;
+           ico_thread_create's threads in ico_thread.c, the RHI's through
+           rhi_thread_begin) */
+        cpu_place_keep_free(cpu_place_allowed());
+        rhi_set_thread_begin(place_rhi_thread_begin);
+        fprintf(stderr,
+                "window: big cores: kept to the faster cores: %s; every other thread the "
+                "game makes runs on every core it may (%s)\n",
+                s_place.plan.kind == CPU_PLAN_TWO_FAST   ? "the game and the render thread"
+                : s_place.plan.kind == CPU_PLAN_ONE_FAST ? "the render thread"
+                : s_place.pinSubmit                      ? "the render and the submit thread"
+                                                         : "the render thread",
+                allowed);
+    }
     place_game_pin();
 }
 
@@ -263,11 +290,23 @@ static void place_thread_begin(const char *who, bool render)
         } else {
             snprintf(place, sizeof(place), "could not be kept to %s (%s)%s", cores, why, fb);
         }
+    } else if (s_place.noPin == NULL && !mine) {
+        /* left free: on the process's cores, not the game thread's two
+           (ico_thread.c has already put it back at its entry; said here) */
+        const CpuFreeResult fr = cpu_place_thread_free();
+        char keep[96];
+
+        (void)cpu_place_mask_text(cpu_place_free_mask(), keep, sizeof(keep));
+        snprintf(place, sizeof(place), "free (%s): %s cores %s",
+                 s_place.plan.kind == CPU_PLAN_TWO_FAST
+                     ? "the game and render threads have the two faster cores"
+                     : "the render thread has the one faster core",
+                 fr == CPU_FREE_FAILED ? "could not be put back on the process's"
+                                       : "on the process's",
+                 keep);
     } else {
         snprintf(place, sizeof(place), "placed by the system (%s)",
-                 s_place.noPin != NULL ? s_place.noPin
-                 : !mine               ? "the game and render threads have the two faster cores"
-                                       : "no rule");
+                 s_place.noPin != NULL ? s_place.noPin : "no rule");
     }
     (void)cpu_place_mask_text(cpu_place_allowed(), allowed, sizeof(allowed));
     fprintf(stderr, "window: %s thread: the high priority %s%s%s%s%s; %s; may run on cores %s\n",
@@ -898,7 +937,7 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
     RdSubmitBlock sb;
     unsigned closes;
     double closeMs, closeMaxMs;
-    char rt[1536], st[384], cores[320];
+    char rt[1536], st[384], cores[400];
     CpuPlaceHist gc, rc, sc;
 
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
@@ -914,6 +953,16 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
     rd_thread_submit_take_cores(&sc);
     (void)cpu_place_part(cores, sizeof(cores), &gc, &rc, rd_thread_submit_on() ? &sc : NULL,
                          s_place.slowMask);
+    if (cpu_place_free_mask() != 0) {
+        /* the threads made by a kept thread and put back on every core at
+           their entry since the start (cpu_place_thread_free) */
+        unsigned resets, failures;
+        const size_t at = strlen(cores);
+
+        cpu_place_free_counts(&resets, &failures);
+        snprintf(cores + at, sizeof(cores) - at,
+                 ", threads put back on every core %u (%u could not be)", resets, failures);
+    }
     rd_thread_block_take(&tb);
     rd_thread_submit_block_take(&sb);
     rd_frame_close_take(&closes, &closeMs, &closeMaxMs);

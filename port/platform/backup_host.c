@@ -32,6 +32,7 @@
 #include "../core/region.h"
 #include "backup.h"
 #include "cdvd_host.h"
+#include "cpu_place.h"
 #include "diag_host.h"
 #include "host_config.h"
 #include "host_fs.h"
@@ -220,6 +221,8 @@ static int copy_to_fd(const char *from, int fd, char *why, size_t n)
 
 static int SDLCALL write_thread(void *u)
 {
+    /* the process's cores, not its creator's (cpu_place.h cpu_place_thread_free) */
+    (void)cpu_place_thread_free();
     const IcoBackupInfo info = {ICO_VERSION_LABEL, ICO_BUILD_COMMIT, ico_state_platform_tag(),
                                 s_disc, (long long)time(NULL)};
     IcoBackupReport rep;
@@ -263,6 +266,8 @@ static int SDLCALL write_thread(void *u)
 
 static int SDLCALL inspect_thread(void *u)
 {
+    /* the process's cores, not its creator's (cpu_place.h cpu_place_thread_free) */
+    (void)cpu_place_thread_free();
     IcoBackupReport rep;
     IcoBackupResult r;
     (void)u;
@@ -336,6 +341,8 @@ static int SDLCALL inspect_thread(void *u)
 
 static int SDLCALL restore_thread(void *u)
 {
+    /* the process's cores, not its creator's (cpu_place.h cpu_place_thread_free) */
+    (void)cpu_place_thread_free();
     IcoBackupReport rep;
     IcoBackupManifest m;
     (void)u;

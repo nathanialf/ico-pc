@@ -1381,6 +1381,8 @@ static void vkr_pipe_compile_hooked(VkrPipeWork *w, uint32_t i)
 static int SDLCALL vkr_pipe_worker(void *arg)
 {
     VkrPipeWork *w = arg;
+    /* the process's cores, not the creator's (rhi.h rhi_set_thread_begin) */
+    rhi_thread_begin();
     if (w->lowPriority) {
         (void)SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_LOW);
     }

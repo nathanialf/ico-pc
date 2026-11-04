@@ -20,6 +20,7 @@
 #include <string.h>
 
 #include "../core/region.h" /* the selected disc's pack folder */
+#include "cpu_place.h"
 #include "host_fs.h"
 #include "rd_internal.h"
 #include "rd_tex.h"
@@ -604,6 +605,8 @@ static int loaderStep(void)
 static int SDLCALL loaderThread(void *arg)
 {
     (void)arg;
+    /* the process's cores, not its creator's (cpu_place.h cpu_place_thread_free) */
+    (void)cpu_place_thread_free();
     lockTp();
     while (!s_tp.quit) {
         if (!loaderStep()) {

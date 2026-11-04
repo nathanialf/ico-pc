@@ -788,7 +788,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   refused, a pin to the cores already allowed taken), and a pin's result by the cores read back
   (`cpu_place_pin_result`: core 7 asked, the call's yes and 2-7 read back is other cores; the same
   mask kept; a refused call; nothing read back; on Linux the checked pin to the cores allowed
-  kept, a core the system lacks refused with its errno) (`cpu_place`).
+  kept, a core the system lacks refused with its errno), and a thread made after a pin (Linux,
+  two or more cores allowed: the test thread kept to one core, an `ico_thread` made then has
+  that one core with no mask kept and every allowed core once `cpu_place_keep_free` kept them;
+  `cpu_place_thread_free` resets the kept thread itself, then finds it already there, and does
+  nothing with no mask kept) (`cpu_place`).
 - `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
   the first second, 50 presents a second give 50 at every whole second, a second that ran 1.5 s long
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays

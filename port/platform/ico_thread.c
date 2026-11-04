@@ -1,6 +1,8 @@
 /* ico_thread.h */
 #include "ico_thread.h"
 
+#include "cpu_place.h"
+
 #include <stdlib.h>
 
 #ifdef _WIN32
@@ -182,6 +184,9 @@ static void *thread_main(void *p)
 {
     IcoThread *t = (IcoThread *)p;
 
+    /* the process's cores, not the ones a kept creator passed on
+       (cpu_place.h cpu_place_keep_free) */
+    (void)cpu_place_thread_free();
     t->fn(t->arg);
     return NULL;
 }

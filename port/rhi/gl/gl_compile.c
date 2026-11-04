@@ -85,6 +85,7 @@ enum { GL_COMPILE_IDLE, GL_COMPILE_POSTED, GL_COMPILE_DONE, GL_COMPILE_QUIT };
 static int SDLCALL gl_compile_main(void *arg)
 {
     GlCompiler *c = arg;
+    rhi_thread_begin(); /* the process's cores (rhi.h rhi_set_thread_begin) */
     /* without a surface where SDL allows it (EGL with
        KHR_surfaceless_context), else on the game's window */
     bool noSurface = SDL_GL_MakeCurrent(NULL, c->ctx);

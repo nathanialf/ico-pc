@@ -15,10 +15,11 @@
  *
  * cpu_place_pin keeps the calling thread to a set of cores
  * (sched_setaffinity; Linux and Android only: elsewhere it does nothing and
- * says so).  The window uses it on Android only, for the render thread and
- * the submit thread (the render thread alone on a single fastest core, the
- * submit thread on the next ones: cpu_place_split), with [dev] big_cores =
- * false as the diagnostic escape.
+ * says so).  The window uses it on Android only (cpu_place_plan: the game
+ * and render threads, or the render and submit threads), with [dev]
+ * big_cores = false as the diagnostic escape; the threads it leaves free
+ * are put back on the process's cores at their entry
+ * (cpu_place_thread_free).
  */
 #ifndef ICO_CPU_PLACE_H
 #define ICO_CPU_PLACE_H
@@ -137,6 +138,35 @@ CpuPinResult cpu_place_pin_result(bool called, uint64_t asked, uint64_t readBack
 /* cpu_place_pin, then the cores read back into *got (0: not known) and
    the result; why as cpu_place_pin's on CPU_PIN_REFUSED */
 CpuPinResult cpu_place_pin_checked(uint64_t mask, uint64_t *got, char *why, size_t cap);
+/* The cores a thread the rule leaves free runs on.  A new thread starts
+   with its creator's cores (pthread_create(3): "inherits ... CPU affinity
+   mask"; bionic's pthread_create goes through clone(2), which copies it
+   the same way): once the game thread is kept to the two faster cores,
+   every thread it makes afterwards (the submit thread, the texture decode
+   pool, the pipeline workers, the pack loader, the save-state writers)
+   would be kept there with it.  The window keeps the process's cores
+   (cpu_place_allowed on the game thread before any pin) with
+   cpu_place_keep_free; every long-lived worker calls cpu_place_thread_free
+   at its entry (ico_thread_create's threads do it in ico_thread.c; the
+   SDL-made ones at their own entry, the RHI's through rhi_thread_begin).
+   0 forgets (nothing is reset); the mask kept, 0 with none */
+void cpu_place_keep_free(uint64_t mask);
+uint64_t cpu_place_free_mask(void);
+
+typedef enum CpuFreeResult {
+    CPU_FREE_NONE = 0, /* no mask kept (no pin in this process), or not Linux */
+    CPU_FREE_ALREADY,  /* the calling thread already has the kept cores */
+    CPU_FREE_RESET,    /* it was kept to fewer and now has the kept cores */
+    CPU_FREE_FAILED    /* the call failed or the cores read back differ */
+} CpuFreeResult;
+
+/* the calling thread back on the kept cores when it has other ones; the
+   resets and the failures are counted (cpu_place_free_counts), the first 8
+   failures and then every 100th said on stderr ("cpu: a worker thread
+   could not be put back on cores ...") */
+CpuFreeResult cpu_place_thread_free(void);
+void cpu_place_free_counts(unsigned *resets, unsigned *failures);
+
 /* the calling thread's scheduling as the system has it: "nice -10" on
    Linux and Android (with ", real-time" under a real-time policy), "" where
    not known; the length written */

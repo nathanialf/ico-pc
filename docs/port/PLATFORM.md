@@ -743,7 +743,7 @@ high priority it asked for (`SDL_SetCurrentThreadPriority(HIGH)`) and what the k
 big_cores = false leaves the placement to the system); may run on cores 4-7`, or `refused (...)`,
 or `placed by the system (only on Android)`). Both threads ask for it: the render thread's next
 picture waits on the submit thread; the texture decode workers keep their priority as made and the
-background pipeline workers ask for the low one. On Android the two threads keep themselves to the
+background pipeline workers ask for the low one (both run on every core: see below). On Android the two threads keep themselves to the
 cores faster than the slowest (`sched_setaffinity`), since a priority alone does not move a thread
 off a little core there. Where the fastest speed is one core's alone and other cores are faster
 than the slowest (a phone with `0-1 2.2 GHz, 2-6 3.1 GHz, 7 3.8 GHz`, whose log had core 7 used by no thread),
@@ -772,7 +772,24 @@ faster core the render thread keeps to it alone and the other two are left to th
 line says which: `window: big cores: 2 fast of 8: game and render threads on them (6-7), the submit
 thread free; the game thread kept` (or `NOT kept: the system keeps it to cores ...`, or the
 refused call's errno); with three or more the line reads `big cores: N fast of M: render and submit
-threads on them, the game thread free`. The 10 s line's cores per thread are unchanged.
+threads on them, the game thread free`. A new thread starts with the cores of the thread that
+makes it (pthread_create(3): it "inherits ... CPU affinity mask"; bionic's `pthread_create` goes
+through clone(2), which copies it the same way), so a pin on the game thread would hold the
+submit thread and every worker the game thread makes afterwards to the same two cores, and a pin
+on the render thread (alone on a prime core) every worker it makes to that one core. Before any
+pin the game thread keeps the process's cores (`cpu_place_keep_free`), and every thread the rule
+leaves free puts itself back on them at its entry (`cpu_place_thread_free`): every
+`ico_thread_create` thread in `ico_thread.c` (the submit thread, the texture decode pool, the
+save-state writers, the achievements writer, the disc reader), the RHI's threads through
+`rhi_set_thread_begin` (Vulkan's pipeline workers and present-wait thread, OpenGL's compile
+thread), and the SDL-made pack loader, texture export, backup, GPU sysfs sampler and driver
+install threads. The start line says it: `window: big cores: kept to the faster cores: the game
+and the render thread; every other thread the game makes runs on every core it may (0-7)`; the
+submit thread's line under the two-core rule reads `free (the game and render threads have the
+two faster cores): on the process's cores 0-7`; the 10 s line's cores part ends `, threads put
+back on every core N (M could not be)`, and a failed reset says `cpu: a worker thread could not
+be put back on cores ...` (the first 8, then every 100th). The 10 s line's cores per thread are
+unchanged.
 `[dev] big_cores = false` leaves them where the system puts them. It is a
 diagnostic escape, not a performance switch; `window: render thread: the game thread took the OpenGL context for its own calls (N
 times; ...)` (the first 8, then every 100th) counts OpenGL's take-overs, and `... could not be

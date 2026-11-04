@@ -473,3 +473,66 @@ size_t cpu_place_priority_text(char *out, size_t cap)
 #endif
     return done(out, cap, len);
 }
+
+/* the process's cores kept before the first pin (cpu_place_keep_free);
+   the resets and the failures since the start */
+static uint64_t s_freeMask;
+static unsigned s_freeResets, s_freeFailures;
+
+void cpu_place_keep_free(uint64_t mask)
+{
+    __atomic_store_n(&s_freeMask, mask, __ATOMIC_RELEASE);
+}
+
+uint64_t cpu_place_free_mask(void)
+{
+    return __atomic_load_n(&s_freeMask, __ATOMIC_ACQUIRE);
+}
+
+CpuFreeResult cpu_place_thread_free(void)
+{
+    const uint64_t keep = cpu_place_free_mask();
+    uint64_t now;
+    uint64_t got = 0;
+    char why[128];
+    CpuPinResult res;
+
+    if (keep == 0) {
+        return CPU_FREE_NONE;
+    }
+    now = cpu_place_allowed();
+    if (now == 0) {
+        return CPU_FREE_NONE; /* not Linux, or nothing read */
+    }
+    if (now == keep) {
+        return CPU_FREE_ALREADY;
+    }
+    res = cpu_place_pin_checked(keep, &got, why, sizeof(why));
+    if (res == CPU_PIN_KEPT || res == CPU_PIN_UNKNOWN) {
+        (void)__atomic_fetch_add(&s_freeResets, 1u, __ATOMIC_RELAXED);
+        return CPU_FREE_RESET;
+    }
+    {
+        const unsigned n = __atomic_add_fetch(&s_freeFailures, 1u, __ATOMIC_RELAXED);
+
+        if (n <= 8 || n % 100 == 0) {
+            char want[96], had[96], gotText[96];
+
+            (void)cpu_place_mask_text(keep, want, sizeof(want));
+            (void)cpu_place_mask_text(now, had, sizeof(had));
+            (void)cpu_place_mask_text(got, gotText, sizeof(gotText));
+            fprintf(stderr,
+                    "cpu: a worker thread could not be put back on cores %s (it had %s from the "
+                    "thread that made it; %s%s) [%u so far]\n",
+                    want, had, res == CPU_PIN_OTHER ? "the system keeps it to cores " : "",
+                    res == CPU_PIN_OTHER ? gotText : why, n);
+        }
+    }
+    return CPU_FREE_FAILED;
+}
+
+void cpu_place_free_counts(unsigned *resets, unsigned *failures)
+{
+    *resets = __atomic_load_n(&s_freeResets, __ATOMIC_RELAXED);
+    *failures = __atomic_load_n(&s_freeFailures, __ATOMIC_RELAXED);
+}
