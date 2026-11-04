@@ -95,9 +95,9 @@ uint32_t rhi_metal_color_bytes(const char *deviceName);
 /* Why this driver's pipeline compiles run one at a time, or NULL for any
  * other (issue 188): Imagination's PowerVR (vendor 0x1010) whose driver text
  * (RhiLimits.driverText or driverName: "PowerVR B-Series Vulkan Driver
- * 1.15@6133110") names the B-Series, "PowerVR B-Series", or any PowerVR
- * used at a Vulkan version below 1.3 (apiMajor.apiMinor), "PowerVR,
- * Vulkan 1.1".  Imagination's own answer on the reporter's driver (Moto
+ * 1.15@6133110") names the B-Series, "PowerVR B-Series"; the Vulkan
+ * version (apiMajor.apiMinor) is not used: no source says an older
+ * PowerVR below Vulkan 1.3 has the fault.  Imagination's own answer on the reporter's driver (Moto
  * G54, BXM-8-256, 1.15@6133110): its compiler is not thread-safe, so shader
  * module and pipeline creation must not run at the same time on two
  * threads; the D-Series DXT-48 on driver 26.1 at Vulkan 1.4 compiles the

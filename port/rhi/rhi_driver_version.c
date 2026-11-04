@@ -197,16 +197,17 @@ char *rhi_text_one_line(char *s)
 const char *rhi_driver_compiler_serial(uint32_t vendorId, const char *driverText, uint32_t apiMajor,
                                        uint32_t apiMinor)
 {
-    static char why[48];
+    /* the B-Series text only: Imagination's statement is about that driver;
+       nothing says an older Rogue driver below Vulkan 1.3 has the fault,
+       and one compile thread for the whole first-start set costs those
+       phones (review 2 N4) */
+    (void)apiMajor;
+    (void)apiMinor;
     if (vendorId != RHI_VENDOR_IMGTEC) {
         return NULL;
     }
     if (driverText != NULL && findNoCase(driverText, "b-series") != NULL) {
         return "PowerVR B-Series";
-    }
-    if (apiMajor == 1u && apiMinor < 3u) {
-        snprintf(why, sizeof why, "PowerVR, Vulkan %u.%u", (unsigned)apiMajor, (unsigned)apiMinor);
-        return why;
     }
     return NULL;
 }

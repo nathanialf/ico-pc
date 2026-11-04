@@ -2332,9 +2332,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   no number then one with it; Qualcomm's compiler text, NVIDIA's version, empty, a lone major and NULL give
   none; a short buffer), `rhi_text_one_line` (Qualcomm's driver text with newlines on one line, issue 123) and
   `rhi_driver_compiler_serial` (issue 188: the issue 188 log's PowerVR B-Series text at Vulkan 1.1
-  and the driver name alone at 1.3 give `PowerVR B-Series`, a Rogue text at 1.1 `PowerVR, Vulkan
-  1.1`; the D-Series DXT-48's text at 1.4, an unknown version, Qualcomm naming a B-Series and Mali
-  give none) (`rhi_driver_version`).
+  and the driver name alone at 1.3 give `PowerVR B-Series`; a Rogue text at 1.1, the D-Series
+  DXT-48's text at 1.4, an unknown version, Qualcomm naming a B-Series and Mali give none)
+  (`rhi_driver_version`).
  `rhi_adapter_match_test.c`: the `[video] adapter` rules (`port/rhi/rhi_adapter.c`): the exact
   name's index, the first of two equal names, no match for another case, a part of a name, a
   longer name, `""`, NULL or a NULL entry; the device-list text with and without scores, the

@@ -247,7 +247,7 @@ careful start-up set taking 1 ([RENDER.md](PIPELINES.md#the-start-up-set)). `rhi
 
 **One compile at a time.** On a driver whose compiler is not thread-safe
 (`rhi_driver_compiler_serial` in `port/rhi/rhi_driver_version.c`: Imagination's PowerVR, vendor
-0x1010, whose driver text names the B-Series, or any PowerVR used at Vulkan 1.2 or below; issue 188,
+0x1010, whose driver text names the B-Series, at any Vulkan version; issue 188,
 Moto G54 with a BXM-8-256 on driver 1.15@6133110, where Imagination's answer on that driver is to
 keep shader module and pipeline creation off two threads at once) Vulkan compiles on one thread
 (`vkr_pipe_threads_for`: the start-up set, the careful set and the background finisher alike) and
