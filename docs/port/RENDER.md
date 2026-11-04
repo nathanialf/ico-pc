@@ -2230,7 +2230,7 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   test is far smaller and costs more: after the alpha proof of the occluders (a texture not
   uploaded yet is scanned from the CPU copy), the replay tool's second replay on this machine
   (lavapipe, x86) found 0 to 1 draw hidden a dump, at 0.5 to 2.3 ms a picture, above the 0.4 ms a
-  phone's big core can spare. The default is nevertheless `full` from v0.10.1 (the user's call: the occlusion test
+  phone's big core can spare. The default is nevertheless `full` (the maintainer's call: the occlusion test
   ships on, and the phone's rc logs decide whether it stays). If it must pay, the next steps are
   a union rule over adjacent triangles (a cell is covered today only by one triangle whole, so the
   cells on a wall's internal diagonals never count) and the occludee's box per batch.
