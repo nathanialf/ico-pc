@@ -2522,6 +2522,12 @@ static void preBatchInit(void)
         s_preBatchWhy[0] = '\0';
         return;
     }
+    /* counted into the start-up set's progress (rd_shader_plan.c) */
+    uint32_t planned = 0;
+    for (int v = 0; v < RD_VS_COUNT; v++) {
+        planned += rd__vs_is_vu_pre((uint8_t)v) || rd__vs_is_vu_stage((uint8_t)v) ? 1u : 0u;
+    }
+    rhi_plan_shaders(planned);
     bool ok = true;
     for (int v = 0; v < RD_VS_COUNT && ok; v++) {
         if (!rd__vs_is_vu_pre((uint8_t)v) && !rd__vs_is_vu_stage((uint8_t)v)) {
@@ -2676,6 +2682,7 @@ static void vuMergeInit(void)
                  "off ([dev] vu_merge = false, ICO_RD_VU_MERGE=0): one GPU draw a VU draw");
     } else {
         bool ok = true;
+        rhi_plan_shaders((uint32_t)sizeof(kMergeVs)); /* the start-up set's progress */
         for (size_t i = 0; i < sizeof(kMergeVs) && ok; i++) {
             const uint8_t v = kMergeVs[i];
             char name[64];

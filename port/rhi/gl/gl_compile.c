@@ -330,6 +330,7 @@ static void gl_compile_tick(const char *name, uint64_t heldNs, bool *said)
         snprintf(what, sizeof(what), "shader %s", name);
         g_gl.waits.pump(g_gl.waits.ctx, what, heldNs);
     }
+    gl_start_screen_wait(); /* the progress screen moves (gl_start_screen.c) */
 }
 
 /* the link status and log of a program made on this thread */

@@ -1149,6 +1149,38 @@ void ico_diag_switch_progress(void)
     sw_progress++;
 }
 
+void ico_diag_shader_set(unsigned made, unsigned total, double secs)
+{
+    /* the set's last made count and the last quarter written */
+    static unsigned s_made, s_quarter;
+    unsigned q;
+
+    if (total == 0) {
+        if (s_made != 0) {
+            ico_diag_step("window: shaders: the start-up set is over, %u made in %.1f s", s_made,
+                          secs);
+        }
+        s_made = s_quarter = 0;
+        return;
+    }
+    if (made == s_made || made == 0) {
+        return; /* a pipeline made, or none of the set yet */
+    }
+    s_made = made;
+    if (made == 1) {
+        s_quarter = 0;
+        ico_diag_step("window: shaders: the start-up set begins, 1 of %u (the progress screen "
+                      "counts them)",
+                      total);
+        return;
+    }
+    q = (unsigned)((unsigned long long)made * 4u / total);
+    if (made < total && q > s_quarter) {
+        s_quarter = q;
+        ico_diag_step("window: shaders: %u of %u made in %.1f s", made, total, secs);
+    }
+}
+
 double ico_diag_gpu_hang_limit(void)
 {
     return (double)gpu_hang_limit_ms / 1000.0;

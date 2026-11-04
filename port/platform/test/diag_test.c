@@ -387,7 +387,12 @@ static void progress_child(int progress)
    thread's stack sampled, and not by the game's own later limit (1 s);
    "switchok": the same watch while shaders and pipelines are made
    (ico_diag_switch_progress) for 4 s, past both limits: no end; the watch
-   ended, the run exits 0. */
+   ended, the run exits 0.  The shaders as the start-up set the window's
+   made hook reports (ico_diag_shader_set: 16 planned, a pipeline's call in
+   between with the same count, the set's end with total 0) and then the
+   pipeline set's step: the log holds the progress phases' lines in order,
+   the set's first, its three quarters, its end, the pipeline set, and no
+   line for the shaders between the quarters. */
 static void switch_child(const char *mode, const char *log)
 {
     int i;
@@ -415,7 +420,13 @@ static void switch_child(const char *mode, const char *log)
     for (i = 0; i < 16; i++) {
         pause_ms(250);
         ico_diag_switch_progress();
+        ico_diag_shader_set((unsigned)i + 1u, 16u, 0.25 * (i + 1));
+        /* a pipeline made: the same count again, no line */
+        ico_diag_shader_set((unsigned)i + 1u, 16u, 0.25 * (i + 1));
     }
+    ico_diag_shader_set(0u, 0u, 4.0);
+    ico_diag_shader_set(0u, 0u, 4.1); /* after the end: nothing more */
+    ico_diag_step("window: switch to opengl: the pipeline set");
     ico_diag_watchdog_switch(0, NULL);
     ico_diag_log("test: switch done");
     pause_ms(300);
@@ -1605,6 +1616,17 @@ static void benign_cases(void)
 
 #if !defined(_WIN32)
 
+/* how many times needle is in s */
+static int count_of(const char *s, const char *needle)
+{
+    int n = 0;
+    while (s != NULL && (s = strstr(s, needle)) != NULL) {
+        n++;
+        s += strlen(needle);
+    }
+    return n;
+}
+
 /* diag_test --switch (ctest diag_switch): the step lines and the switch's
    watch (switch_child) */
 static int switch_cases(const char *self)
@@ -1645,6 +1667,39 @@ static int switch_cases(const char *self)
     CHECK(strstr(s, "WATCHDOG") == NULL);
     CHECK(strstr(s, "watchdog: switching the renderer from vulkan to opengl (test) over after ") !=
           NULL);
+    {
+        /* the progress phases, in order */
+        static const char *const phases[] = {
+            "\nwindow: switch to opengl: starting the renderer (the device and its shaders)\n",
+            ("\nwindow: shaders: the start-up set begins, 1 of 16 (the progress screen counts "
+             "them)\n"),
+            "\nwindow: shaders: 4 of 16 made in 1.0 s\n",
+            "\nwindow: shaders: 8 of 16 made in 2.0 s\n",
+            "\nwindow: shaders: 12 of 16 made in 3.0 s\n",
+            "\nwindow: shaders: the start-up set is over, 16 made in 4.0 s\n",
+            "\nwindow: switch to opengl: the pipeline set\n",
+            "\ntest: switch done\n"};
+        const char *at = s;
+        size_t k;
+        for (k = 0; k < sizeof(phases) / sizeof(phases[0]); k++) {
+            const char *p = at != NULL ? strstr(at, phases[k]) : NULL;
+            if (p == NULL) {
+                printf("diag_test --switch: phase line %u missing or out of order: %s", (unsigned)k,
+                       phases[k]);
+            }
+            CHECK(p != NULL);
+            /* its own newline is the next line's start */
+            at = p != NULL ? p + strlen(phases[k]) - 1 : NULL;
+        }
+        /* the first, three quarters and the end, nothing for the shaders
+           between the quarters (a pipeline's call, the count again); each
+           at a line's start (the heartbeat repeats the last step inside its
+           own line) */
+        CHECK(count_of(s, "\nwindow: shaders: ") == 5);
+        CHECK(count_of(s, "\nwindow: shaders: the start-up set begins") == 1);
+        CHECK(count_of(s, "\nwindow: shaders: the start-up set is over") == 1);
+        CHECK(strstr(s, "\nwindow: shaders: 2 of 16") == NULL);
+    }
     remove(log);
     if (fails != 0) {
         printf("diag_test --switch: %d check(s) failed\n", fails);

@@ -548,13 +548,18 @@ and `rhi_gl:`) with your graphics card and driver.
 
 **The window goes black and "Not Responding" after switching the Graphics API to OpenGL.**
 Some graphics drivers take a very long time, or never finish, getting OpenGL's graphics ready.
-The game now keeps its window responding meanwhile. If the driver gives no answer for about 15
+The game now keeps its window responding meanwhile, and from the first second it shows a screen
+that says "Preparing graphics for OpenGL" with how many of the graphics are ready and a bar that
+fills; then the usual "Preparing graphics" screen finishes the job. On some graphics cards (NVIDIA
+among them) the first switch to OpenGL can take a long time: as long as the count moves, the game
+is working. If the driver gives no answer for about 15
 seconds, the game goes back to the Graphics API you had before and shows a message that says
 "OpenGL could not start: the graphics driver stalled compiling ...". Keep the Graphics API you
 had, or update the graphics driver and try again. If the game stops responding during a switch
 for a whole minute, it closes itself with a message and writes a report file. Either way the log
 says how far the switch got: its last lines start with `window: switch` and name each step, and
-a line with `compiling for` in it names what the driver was busy with. Send the
+a line with `compiling for` in it names what the driver was busy with, and the lines with
+`start-up set` in them say how far it got. Send the
 newest file in `logs` that starts with `report-` (or `ico-pc.log`) with your graphics card and
 driver.
 

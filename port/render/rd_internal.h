@@ -1146,6 +1146,11 @@ bool rd__driver_is_turnip(const RhiLimits *lim);
  * version RhiLimits.mesa holds, from the driver's driverInfo) or "; turnip:
  * Mesa version not named by the driver"; "" for any other driver */
 void rd__turnip_note(const RhiLimits *lim, char *out, size_t n);
+/* The number of shaders rd__gpu_init's loops hand to rhi_create_shader
+ * (the vertex entries, the fragment entries with their _nodual and
+ * destination-read twins; dstStorage and dstAttach as it decides them),
+ * for rhi_plan_shaders: the progress screens' count (rd_shader_plan.c) */
+uint32_t rd__shader_plan(const RhiLimits *lim, bool dstStorage, bool dstAttach);
 /* A vertex shader's embedded name (RD_VS_*; rd_replay.c s_vsNames) */
 const char *rd__vs_name(uint8_t vs);
 /* A fragment shader's embedded name (RD_FS_*; rd_replay.c s_fsNames) */

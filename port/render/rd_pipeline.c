@@ -3411,7 +3411,11 @@ bool rd__vu_policy_init(const RhiLimits *lim)
     }
     /* the ten mesh entries' plain modules (vu_X_vs's is vu_X_plain_vs;
      * rd_replay.c rd__gpu_shutdown destroys them), made only when the
-     * fallback takes them; one missing keeps the extended ones */
+     * fallback takes them; one missing keeps the extended ones (counted
+     * into the start-up set's progress, rd_shader_plan.c) */
+    if (plain) {
+        rhi_plan_shaders((uint32_t)(RD_VS_VU_GRID_SPEC - RD_VS_VU_PRELIT + 1));
+    }
     for (uint8_t v = RD_VS_VU_PRELIT; plain && v <= RD_VS_VU_GRID_SPEC; v++) {
         char name[64];
         const char *e = rd__vs_name(v);

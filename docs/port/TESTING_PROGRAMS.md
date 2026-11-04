@@ -436,7 +436,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   over a step that never returns ends the run with exit 4, the WATCHDOG line naming the switch and
   the step, the main thread's place, `the last step:` and the heartbeat's switch part, not the
   game's 1 s later limit; 4 s of steady progress under the same watch and limit end in exit 0
-  with the watch's `over after` line.
+  with the watch's `over after` line, and the progress phases' lines in order at their lines'
+  starts: the renderer's start step, the start-up shader set's first (`window: shaders: the
+  start-up set begins, 1 of 16`), its quarters (4, 8, 12 of 16, once each; none for the shaders
+  between them nor for a pipeline's call with the same count), its end (`the start-up set is
+  over, 16 made in 4.0 s`, once), the pipeline set's step (`ico_diag_shader_set`).
 - `share_report_test.c`: an rc build's Share a bug report's files over a fake logs and dumps
   folder: the log, the run before's when there, the newest dump zip by modification time (a loss
   zip included, an `.rddump` left out), the newest `-present.png`, the newest `report-*.zip` (not

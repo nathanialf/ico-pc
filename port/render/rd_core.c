@@ -1803,7 +1803,9 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
         rd__log("starting the device and making its shaders (the backend's lines follow)");
         fflush(stderr);
     }
-    if (!rd__gpu_init(sdlWindow)) {
+    const bool gpuUp = rd__gpu_init(sdlWindow);
+    rhi_plan_end(); /* its shaders made: the progress screens' set (rd_shader_plan.c) */
+    if (!gpuUp) {
         rd__gpu_shutdown();
         free(g_rd.textures);
         free(g_rd.meshes);

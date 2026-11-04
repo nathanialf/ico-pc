@@ -298,6 +298,12 @@ typedef struct RhiShaderDesc {
     const char *defines;
     const RhiShaderSource *sources;
     unsigned sourceCount;
+    /* Filled in by the dispatcher (callers leave them 0): this shader's
+     * number in the device's start-up set (1 the first) and the set's size,
+     * as the renderer planned it (rhi_plan_shaders); 0 and 0 outside the
+     * set.  OpenGL draws its own progress screen from them while it
+     * compiles (gl_start_screen.c); the other backends ignore them. */
+    uint32_t planIndex, planTotal;
 } RhiShaderDesc;
 
 /* --------------------------------------------------------- bind groups
@@ -862,6 +868,24 @@ typedef struct RhiDeviceDesc {
  * and tools set none, and their OpenGL shaders compile on the calling
  * thread as before. */
 void rhi_set_wait_hooks(const RhiWaitHooks *hooks);
+
+/* The device's start-up shader set, as the renderer is about to make it
+ * (port/render/rd_replay.c rd__gpu_init, rd_shader_plan.c): count more
+ * shaders of the set to come; rhi_init starts the device with none.  The
+ * dispatcher numbers each rhi_create_shader against it (RhiShaderDesc.
+ * planIndex, planTotal; the size grows with a later count, and never
+ * reads below the number made) until rhi_plan_end or the first
+ * rhi_begin_commands, which end it (a line when the count was not the
+ * number made).  rhi_plan_progress: the set's shaders made so far and its
+ * size (0 and 0 when none is planned or once it ended), for the window's
+ * lines from RhiWaitHooks.made.  Dispatcher-only (rhi_backend.c), on the
+ * thread that makes the shaders. */
+void rhi_plan_shaders(uint32_t count);
+void rhi_plan_progress(uint32_t *made, uint32_t *total);
+/* The set over (port/render/rd_core.c after rd__gpu_init): the made hook
+ * runs once more with rhi_plan_progress at 0 and 0, so the window writes
+ * the set's last line. */
+void rhi_plan_end(void);
 
 typedef enum RhiBackendKind {
     RHI_BACKEND_VULKAN = 0,
