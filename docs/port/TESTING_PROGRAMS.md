@@ -775,7 +775,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`cpu_place_split`: `0-1 2.2 GHz, 2-6 3.1 GHz, 7 3.8 GHz` gives the render thread core 7
   alone and the submit thread 2-6, a 4+3+1 phone 7 and 4-6, a core of unknown speed in neither; no
   split with two fastest cores, with the fastest the only one above the slowest, with one speed
-  or none known), and the calling
+  or none known), the placement rule (`cpu_place_plan`: 2 faster of 8 gives the game and render
+  threads both cores and the submit thread none; 3 and 4 faster keep render and submit with the
+  game thread free; one faster the render thread alone; all equal or none known nothing), and the calling
   thread (its core inside the cores it may run on, the priority text's `nice`, a pin to no core
   refused, a pin to the cores already allowed taken), and a pin's result by the cores read back
   (`cpu_place_pin_result`: core 7 asked, the call's yes and 2-7 read back is other cores; the same
