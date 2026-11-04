@@ -345,8 +345,15 @@ froze the whole device compiling the extended ones; Mesa's Turnip driver, where 
 drew a stray vertex as a sliver; or `[dev] vu_set = plain`) draws every state with the plain
 variant: there a triangle that reaches into the picture and fails the region test is not drawn
 inside the picture in any state (no card test: the wide picture's edge at the old 4:3 border may
-open), but one facing the eye is drawn beside it as everywhere (step 7), and the pictures between
-two ticks take the blended camera's rule alone ([RENDER.md](PIPELINES.md#the-fallback-entries)).
+open), and the pictures between two ticks take the blended camera's rule alone
+([RENDER.md](PIPELINES.md#the-fallback-entries)). The side bands (step 7) follow the reason: where
+the device keeps the plain set (the table's Adreno 740 row, Turnip) they are off on every VU draw
+(`g_rd.vuNoBeside`, `ICO_VU_NO_BESIDE`; `rd_replay_vu.c` `vuBesideOn`), because they would draw the
+dropped triangles clipped again beside the 4:3 picture, and a phone's frame is always wider than
+4:3: the stray vertex of issue 163 would come back in the bands. The profile line then ends with
+"side bands: off on this device's plain set (issue 163)". With `[dev] vu_set = plain` or after a
+lost start a front-facing dropped triangle is drawn beside the picture as everywhere. The cut is the
+draw's flag, not the plain modules: the modules stay one build for every reason.
 
 ## The card test
 

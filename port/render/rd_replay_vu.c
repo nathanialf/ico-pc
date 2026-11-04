@@ -1218,8 +1218,12 @@ typedef struct VuSource {
  * not wider than 4:3 (the picture is the frame: the PS2's, byte for
  * byte), a grid (no winding marks: its strips wind both ways), a mesh
  * without winding marks (RdMeshRec.facingFrom none: a prelit stream the
- * EE gave no table, an older dump's prelit meshes), and ICO_RD_VU_BESIDE=0
- * (the before/after compare, rd_sideband_ab).  vuDraw adds it for a pass
+ * EE gave no table, an older dump's prelit meshes), the device's plain set
+ * (g_rd.vuNoBeside: a device-table row or Turnip, issue 163: the plain set
+ * hides the stray vertex the extended set's clipped triangles showed there,
+ * and the side bands would draw those triangles clipped again beside the
+ * picture; the profile line says "side bands: off ...") and
+ * ICO_RD_VU_BESIDE=0 (the before/after compare, rd_sideband_ab).  vuDraw adds it for a pass
  * whose pixel shader writes depth before it runs (_dstrov). */
 static int s_besideEnv = -1;
 
@@ -1232,8 +1236,8 @@ static bool vuBesideOn(const RdCmd *c, const RdMeshRec *m)
                 "beside the 4:3 picture on a wider frame; ICO_RD_VU_BESIDE=0 turns them off)",
                 s_besideEnv ? "on" : "off (ICO_RD_VU_BESIDE=0)");
     }
-    return s_besideEnv && g_rd.gsW > ICO_SH_FRAME_BASE_W && c->type != RDC_GRID && m &&
-           m->facingFrom != RD_MESH_FACING_NONE;
+    return s_besideEnv && !g_rd.vuNoBeside && g_rd.gsW > ICO_SH_FRAME_BASE_W &&
+           c->type != RDC_GRID && m && m->facingFrom != RD_MESH_FACING_NONE;
 }
 
 static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)

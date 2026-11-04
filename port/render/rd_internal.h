@@ -2009,10 +2009,17 @@ bool rd__vu_policy_init(const RhiLimits *lim);
  * any of them back to the extended set (overridden, the reason it overrode
  * kept in why).  kind and why are the start line's words ("plain set" and
  * "(Turnip driver: ...)"), brief the summary's reason ("Turnip driver, issue
- * 163"); both empty for the extended set without a reason. */
+ * 163"); both empty for the extended set without a reason.  noBeside: the
+ * plain set is the device's (a device-table row or Turnip), where it hides a
+ * stray vertex the extended set's clipped triangles showed (issue 163), so
+ * the region rule's side bands, which draw the dropped front-facing
+ * triangles clipped beside the 4:3 picture, stay off too (rd_replay_vu.c
+ * vuBesideOn); false for the [dev] and lost-start reasons and when
+ * overridden. */
 typedef struct RdVuSetChoice {
     bool plain;
     bool overridden;
+    bool noBeside;
     const char *kind;
     const char *brief;
     char why[160];
@@ -3136,6 +3143,10 @@ typedef struct RdContext {
     bool vuFallbackPlain;
     char vuPlainWhy[160];
     const char *vuPlainBrief; /* the summary's reason (RdVuSetChoice.brief) */
+    /* the side bands off for every VU draw: the device's plain set is in
+     * force (RdVuSetChoice.noBeside, issue 163; rd_replay_vu.c vuBesideOn,
+     * the profile line's "side bands:" words) */
+    bool vuNoBeside;
     /* the dynamic state in force (rd__vu_policy_init from
      * RhiLimits.dynamicDepth / dynamicBlend; rd__key_dynamic_normalise,
      * rd__set_pipeline) */
