@@ -114,7 +114,15 @@ def read_list(path):
         if not line or line.startswith("#"):
             continue
         parts = line.split()
-        p = parts[0] if os.path.isabs(parts[0]) else os.path.join(base, parts[0])
+        p = parts[0]
+        if not os.path.isabs(p):
+            # a relative path is the list's folder's, else the repo's (the
+            # pass-dump corpus list names its dumps from the repo root, as
+            # gate.sh reads it), else the working folder's
+            for cand in (os.path.join(base, p), os.path.join(ROOT, p), p):
+                if os.path.exists(cand):
+                    p = cand
+                    break
         out.append((p, parts[1] if len(parts) > 1 else None))
     return out
 
