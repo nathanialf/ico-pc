@@ -427,13 +427,16 @@ Every row here plays as the original until you change it, on a phone too.
 
 - **Shadows never take Yorda** makes the game gentler. A few scenes in the
   story still show her being taken.
-- **Time to rescue Yorda** sets how long a shadow takes to pull Yorda into a
-  pit once it has her there: **Half**, **Original**, **Longer** (one and a
-  half times), **Double** or **Triple**. The time is the shadow's dive with her
-  (where the game's camera shows her in danger, its hard limit scales too),
-  and Ico taking her hand still ends it, so a longer
-  time gives you more of a chance to get to her. The row above, Shadows never
-  take Yorda, stops it altogether.
+- **Time to rescue Yorda** sets how many seconds a shadow takes to pull Yorda
+  into a pit, from the moment it starts to sink into the ground with her until
+  she is gone: from 4 to 30 seconds, one second a press. It starts at
+  **15 s (Original)**, the game's own time (15.4 seconds). The whole pull-in
+  speeds up or slows down evenly, so a short time leaves less time to reach
+  her at every point of it, and a long one more. Ico taking her hand still
+  pulls her back out. Where the game shows the pit with a camera of its own,
+  the original takes her sooner (after 5 of its 15 seconds); that part scales
+  in the same proportion. The row above, Shadows never take Yorda, stops it
+  altogether.
 - **Shadow speed** sets how fast shadows walk, run and fly: **Slower** (three
   quarters of the original speed), **Original**, **Faster** (a quarter faster)
   or **Fastest** (half as fast again). Only their walking, running and flying
