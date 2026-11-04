@@ -16,6 +16,9 @@
  *                                 into a pit (half..triple)
  *   [gameplay] shadow_speed "original"  how fast shadows walk, run and fly
  *                                 (slower..fastest)
+ *   [gameplay] shadows_together
+ *                          false  no turns: a shadow attacks while another
+ *                                 does (enemy_act.c EnemyUtil_isOtherStatus)
  *   [gameplay] door_fix    false  holding hands, an arrival does not send
  *                                 Ico and Yorda straight back through the
  *                                 door they came in by (door_grace.h)
@@ -71,7 +74,8 @@
  * under #ifdef ICO_HOST only; door_fix is read by door_grace.c, which the
  * game's exit check calls; natural_chains by seki/src/BgAnimation.c under
  * #ifdef ICO_RD (the window build); skip_opening by common/src/kanbanBoot.c
- * and script/src/op.c.
+ * and script/src/op.c; shadows_together by fumi/src/enemy_act.c
+ * (ico_opt_shadow_waits).
  */
 #ifndef ICO_PORT_GAME_OPTIONS_H
 #define ICO_PORT_GAME_OPTIONS_H
@@ -137,6 +141,25 @@ float ico_opt_shadow_speed_factor(void);
    North American: 790, 792, 795-800, 888, 889; August 2001: 792, 794, 797-802, 890, 891;
    June 2001: 823, 825, 828-833, 923, 924, 942, 944, 955. */
 int ico_opt_shadow_speed_motion(int motion);
+/* [gameplay] shadows_together (default false): Shadows attack together.  The game
+   holds a Shadow back from its attack while another Shadow is in its attack (act mode
+   15) or has its attack mail out (ico2/fumi/src/enemy_act.c EnemyUtil_isOtherStatus:
+   the change to the ATTACK brain, the ATTACK brain's mails, the swipe on the way to
+   Yorda), so they take turns; with the option on none is held back.  Their approach,
+   waits, attack chances, dodges and the kidnap are the game's either way, and one
+   Shadow carries Yorda at a time (she has one carrier).  Logs "gameplay: shadows attack
+   together: 1 at once (the game's turns)" or "...: all at once (no turns)" at the first
+   read and on a change. */
+int ico_opt_shadows_together(void);
+void ico_opt_set_shadows_together(int on);
+/* The hook's answer: 1 when a Shadow waits (other_attacking and the option off), else
+   0.  Each 0 given for other_attacking (a turn the option skipped) is counted, and
+   logged the first 8 times, then every 100th:
+   "gameplay: shadows attack together: a shadow did not wait for another's attack (N
+   this run)". */
+int ico_opt_shadow_waits(int other_attacking);
+/* the turns skipped this run (the count of that log line) */
+unsigned long ico_opt_shadows_together_went(void);
 /* [gameplay] door_fix (default false): the doorway fix of door_grace.h */
 int ico_opt_door_fix(void);
 void ico_opt_set_door_fix(int on);
