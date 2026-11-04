@@ -30,6 +30,7 @@
     X(resize_swapchain)                                                                            \
     X(swapchain_format)                                                                            \
     X(swapchain_size)                                                                              \
+    X(swapchain_rotation)                                                                          \
     X(surface_poll_restart)                                                                        \
     X(acquire_backbuffer)                                                                          \
     X(present)                                                                                     \

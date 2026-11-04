@@ -237,6 +237,12 @@ void rhi_surface_poll_restart(void)
     /* D3D12 learns a size change from DXGI; nothing to poll */
 }
 
+/* rhi.h: the images are never turned here (the desktop's surfaces are not) */
+uint32_t rhi_swapchain_rotation(void)
+{
+    return 0;
+}
+
 /* the last present reached the display (rhi_present_shown) */
 static bool s_presentShown;
 

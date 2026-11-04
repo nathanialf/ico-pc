@@ -32,6 +32,7 @@ are [RHI.md](RHI.md).
 | `port/platform/perf_block.h`, `perf_block.c` | a 10 s block of replays by phase (the replays line and its maxima) |
 | `port/platform/hotkeys.h`, `hotkeys.c` | F11, F12, Shift+F12 and the stats period |
 | `port/render/rd_present.c` | DISPLAY to the output: the box, line doubling, the overlay, the display options as scales |
+| `port/render/rd_prerotate.c` | the present into a swapchain made in the surface's own turn ([The turned swapchain](#the-turned-swapchain)) |
 | `port/render/rd_interp.c` | presenting between ticks; the present clock |
 | `port/render/rd_crt.c`, `port/shaders/crt.hlsl` | the CRT filter |
 | `port/platform/fps_counter.h`, `fps_counter.c` | the Frame rate counter's presents per second, free of SDL and rd ([UI.md](UI.md#the-frame-rate-counter)) |
@@ -1426,6 +1427,69 @@ default 2, puts the wait for the display in the replay's "acquire" phase). `ICO_
 gives the lock its SHOWN clock. A vsync change idles the device and rebuilds the swapchain
 (`port/render/rd_present.c` (`rd__apply_display`)).
 
+### The turned swapchain
+
+An Android phone held sideways shows the game's surface turned: the surface's current transform is
+ROTATE_90 (or 270 held the other way round; issue 179's Mali-G52 and issue 188's PowerVR logs:
+`surface transform 0x2 (offered 0x1ff)`), its extent the window's own, landscape (1612x720,
+2400x1080). A swapchain made with the identity transform has the compositor turn every image on
+the GPU before showing it, work that preempts the game's own (Google,
+"Handling device orientation efficiently in Vulkan with pre-rotation",
+android-developers.googleblog.com, February 2020: 1-3 ms a frame and a 40 % higher GPU clock on a
+Pixel 4 XL; Arm's `surface_rotation` sample the same). So the swapchain is made with the current
+transform as its preTransform and its images the extent turned (720x1612), as the spec asks of a
+pre-rotated swapchain, and the compositor shows each image as it is (`port/rhi/vk/vk_swapchain.c`
+(`vkr_swapchain_create`), the choice `vkr_prerotate_turns` in `port/rhi/vk/vk_present_mode.c`).
+The renderer draws everything it drew into the backbuffer (the box blit, the CRT filter, the
+deferred text, the overlay with the touch controls and the frame rate corner, the films, the blank
+start-up frames) into a texture of the window's own size and orientation, exactly as before, and
+one last pass turns that texture into the swapchain image (`port/render/rd_prerotate.c`:
+`blit_vs` with `DrawCB.aux1.w` the quarter turns, the full-screen triangle reading the source at
+the turned position, one texel a pixel, nearest, the bytes unchanged). `rhi_swapchain_size` stays
+the window's size, so every target, every dump, the box, the touch coordinates (window pixels) and
+the captures (F12's `-present.png`, photo mode and the save state's picture, taken from that
+texture) are as they were; the picture on the screen is the same, and only the image the
+compositor gets is turned.
+
+The turn, from the spec (`VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR`: the image content is rotated
+90 degrees clockwise), in the image's 0..1 position (U, V), V down, for the picture's (u, v): 90
+(V, 1 - U), the picture's top-left at the image's top-right; 180 (1 - U, 1 - V); 270 (1 - V, U).
+Android's present reports suboptimal whenever the swapchain's preTransform is not the surface's
+transform (AOSP `frameworks/native/vulkan/libvulkan/swapchain.cpp`, `QueuePresentKHR`): with
+identity on a turned surface at every present, which changes nothing and is ignored as before;
+pre-rotated, when the phone is turned over (90 to 270), and then the swapchain is made again in the
+new turn (`vkr_swap_differs`; the surface poll asks the same).
+
+Where it does not apply: identity and the mirrored transforms (the desktop's surfaces are always
+identity), a turn the surface does not offer, a quarter turn whose images would pass the surface's
+largest image (Android's is 4096 x 4096 at least), and `[dev] prerotate = false`
+(`ICO_VK_PREROTATE=0`), the escape, which keeps identity and the compositor's turn
+([CONFIG.md](CONFIG.md)). Direct3D and OpenGL never turn (`rhi_swapchain_rotation` is 0).
+
+The cost: the picture is drawn into its own texture and read once more by the turn, a full-screen
+pass of the window's size (about 2 x 10 MB of memory traffic a picture at 2400x1080) and one more
+texture of the window's size. It replaces the compositor's own full-screen turn of every image;
+whether the trade pays on a given phone (a compositor that turns in the display hardware costs
+nothing, and there the extra pass is a cost) shows in the GPU span and the frame rate of the 10 s
+lines against a run with `[dev] prerotate = false`.
+
+The lines: at a swapchain made in a new turn `rhi_vk: swapchain 2400x1080 pre-rotated 90 (the
+surface's transform 0x2; the compositor no longer rotates): images 1080x2400, the present turns
+the picture into them (turn change 1)`, back to identity
+`rhi_vk: swapchain WxH no longer pre-rotated (...)`; a swapchain made again for a turn alone `rhi_vk: the surface turned (90 to 270
+degrees) at a suboptimal present: the swapchain made again (N times so far)` (the first 8, then
+every 100th); the renderer's first picture in a turn `rd: present: the 2400x1080 picture turned 90
+degrees into the swapchain's 1080x2400 images in one pass (pre-rotated: the compositor shows them
+as they are)`; with the escape, the old `rhi_vk: surface transform 0x2 (offered 0x1ff): presenting
+with identity, the compositor rotates ([dev] prerotate = false, ICO_VK_PREROTATE=0)`.
+
+**The twin.** A headless device has no swapchain to turn, so the tests use a twin: under
+`ICO_VK_FAKE_TRANSFORM=90`, `180` or `270` a headless Vulkan device answers that turn
+(`rhi_swapchain_rotation`), the present draws its picture as always and then turns it, in the same
+pass, into a texture of the turned size, and `rd_read_presented` reads that texture back and turns
+it back on the CPU by the table above (`rd__prerotate_twin_read`); `rd_replay_tool_prerotate`
+holds the result to the identity present byte for byte ([Tests](#tests)).
+
 ### The FIFO fallback
 
 With vsync off a surface without immediate mode (Android) presents in mailbox mode with one image
@@ -1783,11 +1847,13 @@ one's pixels: for a measurement, not for play.
 | `port/render/test/rd_interp_test.c` | blending two synthetic frames: the ends, half way, the snaps, ordinals, grids, meshes, particles, shadows, the present clock |
 | `port/render/test/rd_crt_test.c` | the CRT keys, the modes' table and overrides, and each mode's hash at two sizes on a Vulkan device |
 | `port/render/test/rd_boot_present_test.c` | a saved start-up through the presenter, present by present, with DISPLAY's probe points |
-| `port/rhi/test/rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` (mailbox, FIFO latest ready, FIFO, immediate, and FIFO under the FIFO fallback over every set) and `vkr_present_wait_wanted` |
+| `port/rhi/test/rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` (mailbox, FIFO latest ready, FIFO, immediate, and FIFO under the FIFO fallback over every set), `vkr_present_wait_wanted` and `vkr_prerotate_turns` (the turned swapchain's choice: 90, 180, 270; identity, a mirrored turn, a turn not offered, `[dev] prerotate = false` and images past the surface's largest keep identity) |
+| `port/render/test/rd_replay_tool_prerotate.cmake` | the turned present's twin (`ICO_VK_FAKE_TRANSFORM=90`, `180`, `270`) read back turned back is the identity present byte for byte: rd_pixel's dump plain, wide (1280x720), with the overlay test pattern and under the CRT filter, and the dumps of `tools/prerotate_dumps.txt` that are here at 640x480 and 2400x1080; each turned run must name its twin |
 
 The ctest names are the file names without `_test`: `pace_loop`, `pace_policy`, `perf_block`,
 `window_video`, `hotkeys` (`port/platform/CMakeLists.txt`), `rd_present`, `rd_interp`, `rd_crt`,
-`rd_boot_present` (`port/render/CMakeLists.txt`), `rhi_vk_present_mode` (`port/rhi/CMakeLists.txt`).
+`rd_boot_present`, `rd_replay_tool_prerotate` (`port/render/CMakeLists.txt`), `rhi_vk_present_mode`
+(`port/rhi/CMakeLists.txt`).
 A pacing change runs ([BUILDING.md](../BUILDING.md#building-a-few-targets)):
 
 ```sh

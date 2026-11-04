@@ -547,7 +547,42 @@ static uint32_t s_outW, s_outH;
 
 static bool s_window;
 
+/* the swapchain's turn (rd_prerotate.c; rhi_swapchain_rotation): with a
+ * window and s_turns, the present draws into s_pic (the window's size and
+ * orientation) and turns it into the backbuffer last; headless, a turn is
+ * the tests' twin (ICO_VK_FAKE_TRANSFORM), drawn after the picture */
+static uint32_t s_turns;
+static RhiTexture s_pic;
+static RhiState *s_picState;
+
 static bool presentAcquire(void);
+
+/* the texture the present's passes draw into, and its state */
+static RhiTexture outTex(void)
+{
+    return !s_window ? g_rd.presentOut : s_turns ? s_pic : s_backbuffer;
+}
+
+static RhiState *outStateOf(void)
+{
+    return !s_window ? &g_rd.presentOutState : s_turns ? s_picState : &s_backbufferState;
+}
+
+/* the present's end: the picture turned into the backbuffer and the
+ * backbuffer ready for the display (with a window), or the twin of a turned
+ * swapchain drawn (headless, under ICO_VK_FAKE_TRANSFORM) */
+static void outFinish(RhiCommandList cl)
+{
+    if (s_window) {
+        if (s_turns) {
+            rd__prerotate_record(cl, s_pic, s_picState, s_outW, s_outH, s_backbuffer,
+                                 &s_backbufferState, s_outFormat, s_turns);
+        }
+        rd__transition(cl, s_backbuffer, &s_backbufferState, RHI_STATE_PRESENT);
+    } else if (s_turns) {
+        rd__prerotate_twin(cl, g_rd.presentOut, &g_rd.presentOutState, s_outW, s_outH, s_turns);
+    }
+}
 
 bool rd__present_acquire(void)
 {
@@ -563,6 +598,8 @@ static bool presentAcquire(void)
     rd__submit_drain_acquire(); /* the last picture's present reads what this sets (rd_submit.h) */
     s_backbuffer = (RhiTexture){0};
     s_window = rhi_swapchain_format() != RHI_FMT_UNKNOWN;
+    s_turns = 0;
+    rd__prerotate_twin_clear(); /* rd_read_presented reads the twin of this present only */
     if (s_window) {
         s_backbuffer = rhi_acquire_backbuffer();
         if (!s_backbuffer.id) {
@@ -578,6 +615,13 @@ static bool presentAcquire(void)
         s_outFormat = rhi_swapchain_format();
         s_outW = g_rd.settings.outputWidth;
         s_outH = g_rd.settings.outputHeight;
+        /* a swapchain in the surface's turn: the picture at the window's
+         * size first (rd_prerotate.c); none made, the picture is skipped
+         * (the image is the turned size, which no pass here draws at) */
+        s_turns = rd__prerotate_turns();
+        if (s_turns && !rd__prerotate_target(s_outW, s_outH, s_outFormat, &s_pic, &s_picState)) {
+            return false;
+        }
         return s_outW && s_outH;
     }
     const uint32_t w = g_rd.settings.outputWidth, h = g_rd.settings.outputHeight;
@@ -598,6 +642,7 @@ static bool presentAcquire(void)
     s_outFormat = RHI_FMT_RGBA8_UNORM;
     s_outW = w;
     s_outH = h;
+    s_turns = rd__prerotate_turns(); /* the twin's (ICO_VK_FAKE_TRANSFORM), else 0 */
     return g_rd.presentOut.id != 0;
 }
 
@@ -2284,16 +2329,13 @@ static void blankRecord(RhiCommandList cl, RhiTexture out, RhiState *outState)
     RhiRect box;
     outputBox(s_outW, s_outH, &box);
     overlayRecord(cl, out, &box, false, false);
-    if (s_window) {
-        rd__transition(cl, out, outState, RHI_STATE_PRESENT);
-    }
+    outFinish(cl);
 }
 
 void rd__present_record(RhiCommandList cl)
 {
     if (s_blank) {
-        blankRecord(cl, s_window ? s_backbuffer : g_rd.presentOut,
-                    s_window ? &s_backbufferState : &g_rd.presentOutState);
+        blankRecord(cl, outTex(), outStateOf());
         return;
     }
     RdTargetRec *disp = rd__target_rec(RD_TARGET_DISPLAY + 1);
@@ -2301,8 +2343,8 @@ void rd__present_record(RhiCommandList cl)
         return;
     }
     const RdPresentPreset *pr = &s_present;
-    RhiTexture out = s_window ? s_backbuffer : g_rd.presentOut;
-    RhiState *outState = s_window ? &s_backbufferState : &g_rd.presentOutState;
+    RhiTexture out = outTex();
+    RhiState *outState = outStateOf();
 
     RhiTexture src = disp->color;
     uint32_t sw = disp->tw, sh = disp->th;
@@ -2446,9 +2488,7 @@ void rd__present_record(RhiCommandList cl)
     if (open) {
         rhi_cmd_end_render_pass(cl);
     }
-    if (s_window) {
-        rd__transition(cl, out, outState, RHI_STATE_PRESENT);
-    }
+    outFinish(cl);
 }
 
 void rd__present_finish(void)
@@ -2465,6 +2505,10 @@ bool rd__present_will_show(void)
 
 void rd__present_shutdown(void)
 {
+    rd__prerotate_shutdown();
+    s_pic = (RhiTexture){0};
+    s_picState = NULL;
+    s_turns = 0;
     if (g_rd.presentLines.id) {
         rhi_destroy_texture(g_rd.presentLines);
     }
@@ -2569,7 +2613,19 @@ bool rd_read_presented(void *dst, uint32_t *w, uint32_t *h)
     if (!g_rd.hasDevice || !dst || s_window || rhi_swapchain_format() != RHI_FMT_UNKNOWN) {
         return false;
     }
-    return rd__read_present(dst, (size_t)g_rd.presentOutW * g_rd.presentOutH * 4, w, h);
+    const size_t size = (size_t)g_rd.presentOutW * g_rd.presentOutH * 4;
+    if (rd__prerotate_twin_pending()) {
+        /* ICO_VK_FAKE_TRANSFORM: the turned twin read back and turned back,
+         * the picture a turned swapchain's screen shows (rd_prerotate.c) */
+        if (w) {
+            *w = g_rd.presentOutW;
+        }
+        if (h) {
+            *h = g_rd.presentOutH;
+        }
+        return rd__prerotate_twin_read(dst, size, g_rd.presentOutW, g_rd.presentOutH);
+    }
+    return rd__read_present(dst, size, w, h);
 }
 
 /* the output size in the settings and the pending settings (both, so a

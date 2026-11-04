@@ -1,5 +1,6 @@
 /* vk_present_mode.c: the swapchain's present mode from what the surface
- * offers, and whether the display's timing of presents is used.  Pure: no
+ * offers, whether the display's timing of presents is used, and the turn its
+ * images are made in (vkr_prerotate_turns).  Pure: no
  * device and no Vulkan call, so test/rhi_vk_present_mode_test.c compiles it
  * on its own. */
 #include "vk_internal.h"
@@ -78,4 +79,32 @@ bool vkr_present_wait_wanted(bool offered, const char *asked, bool canThread)
     const bool on = asked != NULL && asked[0] != '\0' && !(asked[0] == '0' && asked[1] == '\0');
 
     return on && offered && canThread;
+}
+
+uint32_t vkr_prerotate_turns(uint32_t currentTransform, uint32_t supportedTransforms, uint32_t w,
+                             uint32_t h, uint32_t maxW, uint32_t maxH, bool on)
+{
+    uint32_t turns = 0;
+    switch (currentTransform) {
+    case VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR:
+        turns = 1;
+        break;
+    case VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR:
+        turns = 2;
+        break;
+    case VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR:
+        turns = 3;
+        break;
+    default:
+        return 0; /* identity, a mirror or a mix: the compositor's as before */
+    }
+    if (!on || !(supportedTransforms & currentTransform) || w == 0 || h == 0) {
+        return 0;
+    }
+    /* a quarter turn makes the images h x w: within the surface's limits
+     * (Android's are 4096 at least, and at least the current extent) */
+    if ((turns & 1u) && (h > maxW || w > maxH)) {
+        return 0;
+    }
+    return turns;
 }

@@ -606,6 +606,12 @@ static const struct {
        the opaque draws before it wrote, port/render/rd_vis_hiz.c) or off
        (port/render/rd_vis.c) */
     {"dev.cull", "cull"},
+    /* false: the Vulkan swapchain keeps identity on a surface the system
+       shows turned (an Android phone held sideways), the compositor turning
+       every image, instead of being made in the surface's own turn with the
+       present turning the picture (port/rhi/vk/vk_swapchain.c,
+       port/render/rd_prerotate.c) */
+    {"dev.prerotate", "prerotate"},
     /* false: a post sprite whose source target holds only its last clear
        reads the target as before instead of being drawn in the clear's
        colour (an A/B; port/render/rd_const_read.c) */
@@ -705,6 +711,7 @@ static const struct {
        blend static, 0 as the device offers */
     {"dynamic_state", "ICO_VK_FAKE_NO_DYNAMIC"},
     {"bind_cache", "ICO_RHI_BIND_CACHE"},          /* port/rhi/rhi_bind_cache.c: 1 (on), 0 */
+    {"prerotate", "ICO_VK_PREROTATE"},             /* port/rhi/vk/vk_swapchain.c: 1 (on), 0 */
     {"gpu_checkpoints", "ICO_GPU_CHECKPOINTS"},    /* port/rhi vk_device.c, d3d12_device.c */
     {"gpu_robust", "ICO_GPU_ROBUST"},              /* port/rhi/vk/vk_device.c */
     {"pass_split", "ICO_RD_PASS_SPLIT"},           /* port/render/rd_replay_vu.c passSplit */

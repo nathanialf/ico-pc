@@ -2651,6 +2651,12 @@ closed: [DISPLAY.md](DISPLAY.md#the-native-frame)) (`port/platform/window_host.c
 (`resume_recheck`)). A picture that changes after leaving the app and coming back (issue 129) then
 shows in the log as a size that changed with it.
 
+The swapchain made again on coming back takes the surface's turn at that moment: an Android phone
+held sideways gets a swapchain in its own turn and the present turns the picture into it, and a
+phone turned over while the game runs (90 to 270 degrees) gets one made again in the new turn at
+its next suboptimal present; the window's size, the touch coordinates and the box do not change
+with the turn ([DISPLAY.md](DISPLAY.md#the-turned-swapchain)).
+
 ## The renderer switched from the menu
 
 Options > Graphics > Apply switches the backend, or the graphics card it runs on, without ending

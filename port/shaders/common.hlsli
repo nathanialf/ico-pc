@@ -290,7 +290,8 @@ cbuffer DrawCB : ICO_REG(b1, 1)
     float4 g_param;
     float4 g_scale;
     // (shader_consts.h IcoDrawCB.aux0, aux1): spare blocks of the
-    // folded blur pair and of the pixel cuts' per-draw constants
+    // folded blur pair and of the pixel cuts' per-draw constants; aux1.w
+    // in blit_vs the present's quarter turns (blit.hlsl), else 0
     uint4 g_aux0;
     uint4 g_aux1;
 };

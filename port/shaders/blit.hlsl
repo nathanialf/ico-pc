@@ -23,6 +23,21 @@ BlitVSOut blit_vs(uint id : SV_VertexID)
     BlitVSOut o;
     float2 t;
     fullscreen_triangle(id, o.pos, t);
+    // The present into a pre-rotated swapchain (port/render/rd_prerotate.c):
+    // g_aux1.w quarter turns clockwise, 0 in every other blit.  t is the
+    // image's own 0..1 position (U, V), V down; the source is read where
+    // the unturned picture has that pixel: 1 (V, 1 - U), 2 (1 - U, 1 - V),
+    // 3 (1 - V, U) (VkSurfaceTransformFlagBitsKHR: ROTATE_90 turns the
+    // content 90 degrees clockwise).  An affine map of t, so the vertices'
+    // values interpolate to it at every pixel
+    const uint q = g_aux1.w;
+    if (q == 1u) {
+        t = float2(t.y, 1.0 - t.x);
+    } else if (q == 2u) {
+        t = float2(1.0, 1.0) - t;
+    } else if (q == 3u) {
+        t = float2(1.0 - t.y, t.x);
+    }
     o.uv = (g_uvRect.xy + t * (g_uvRect.zw - g_uvRect.xy)) * g_tex.zw;
     return o;
 }

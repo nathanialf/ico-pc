@@ -121,6 +121,48 @@ static void latestReady(void)
     }
 }
 
+/* the swapchain's turn (vkr_prerotate_turns): Android's surface at issue
+   179's Mali-G52 phone's 1612x720 (its logs: current transform 0x2,
+   offered 0x1ff; Android's largest image is 4096 x 4096 at least) is made
+   a quarter turn round, 720x1612 images; 270 three; 180 two at the same size; identity, a mirrored
+   transform, a transform the surface does not offer, [dev] prerotate =
+   false and a quarter turn past the surface's largest image keep identity */
+static void prerotate(void)
+{
+    const uint32_t r90 = VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR,
+                   r180 = VK_SURFACE_TRANSFORM_ROTATE_180_BIT_KHR,
+                   r270 = VK_SURFACE_TRANSFORM_ROTATE_270_BIT_KHR,
+                   id = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR,
+                   mirror90 = VK_SURFACE_TRANSFORM_HORIZONTAL_MIRROR_ROTATE_90_BIT_KHR;
+
+    const struct {
+        const char *what;
+        uint32_t current, offered, w, h, maxW, maxH;
+        bool on;
+        uint32_t want;
+    } c[] = {
+        {"the phone held sideways", r90, 0x1ffu, 1612, 720, 4096, 4096, true, 1},
+        {"the phone turned over", r270, 0x1ffu, 1612, 720, 4096, 4096, true, 3},
+        {"upside down", r180, 0x1ffu, 1612, 720, 4096, 4096, true, 2},
+        {"identity", id, 0x1ffu, 1612, 720, 4096, 4096, true, 0},
+        {"a mirrored turn", mirror90, 0x1ffu, 1612, 720, 4096, 4096, true, 0},
+        {"[dev] prerotate = false", r90, 0x1ffu, 1612, 720, 4096, 4096, false, 0},
+        {"a turn the surface does not offer", r90, id, 1612, 720, 4096, 4096, true, 0},
+        {"the turned images past the largest", r90, 0x1ffu, 3000, 720, 4096, 2048, true, 0},
+        {"180 needs no swap of the limits", r180, 0x1ffu, 3000, 720, 4096, 2048, true, 2},
+        {"no extent", r90, 0x1ffu, 0, 0, 4096, 4096, true, 0},
+    };
+
+    for (uint32_t i = 0; i < COUNT_OF(c); i++) {
+        const uint32_t got = vkr_prerotate_turns(c[i].current, c[i].offered, c[i].w, c[i].h,
+                                                 c[i].maxW, c[i].maxH, c[i].on);
+        if (got != c[i].want) {
+            printf("FAIL prerotate, %s: %u turns, want %u\n", c[i].what, got, c[i].want);
+            s_failures++;
+        }
+    }
+}
+
 int main(void)
 {
     latestReady();
@@ -216,6 +258,8 @@ int main(void)
             s_failures++;
         }
     }
+
+    prerotate();
 
     if (s_failures) {
         printf("rhi_vk_present_mode_test: %d failures\n", s_failures);

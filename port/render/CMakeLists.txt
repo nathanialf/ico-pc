@@ -217,6 +217,7 @@ add_library(ico_render STATIC
     rd_png.c
     rd_post.c
     rd_present.c
+    rd_prerotate.c # the present turned into a swapchain made in the surface's own turn
     rd_present_info.c # rd_last_present_info's record: what the last present drew
     rd_replay.c
     rd_replay_tiler.c # the replay's tiler passes: DATE through the stencil bit, the blur fold
@@ -1057,6 +1058,19 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_pass_split.cmake")
     set_tests_properties(rd_replay_tool_pass_split PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                               FIXTURES_REQUIRED rd_dump TIMEOUT 300)
+    # the present turned into a pre-rotated swapchain's headless twin
+    # (ICO_VK_FAKE_TRANSFORM=90, 180, 270; rd_prerotate.c) and read back turned
+    # back is the identity present byte for byte: rd_pixel's dump plain, wide,
+    # with the overlay test pattern and under the CRT filter, and the dumps of
+    # tools/prerotate_dumps.txt that are here
+    add_test(NAME rd_replay_tool_prerotate
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/prerotate_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_prerotate"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_prerotate.cmake")
+    set_tests_properties(rd_replay_tool_prerotate PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                             FIXTURES_REQUIRED rd_dump TIMEOUT 1200)
     # the storage pass merge (issue 103): under ICO_RD_BLEND=storage the
     # replay draws ICO_RD_PASS_MERGE=0's DISPLAY picture byte for byte, at 1x
     # and 2x, with no more pass switches; skips without the storage read

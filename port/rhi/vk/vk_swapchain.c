@@ -713,6 +713,23 @@ static void vkr_drain_acquire_wait(void)
     }
 }
 
+/* [dev] prerotate (exported as ICO_VK_PREROTATE): anything but "0" (unset
+ * too) makes a swapchain in the surface's own turn where the surface is
+ * shown turned; "0" keeps identity, the compositor turning every image */
+static bool vkr_prerotate_on(void)
+{
+    const char *e = getenv("ICO_VK_PREROTATE");
+    return !(e != NULL && e[0] == '0' && e[1] == '\0');
+}
+
+/* the turns a swapchain made for these capabilities at w x h would have */
+static uint32_t vkr_turns_for(const VkSurfaceCapabilitiesKHR *caps, uint32_t w, uint32_t h)
+{
+    return vkr_prerotate_turns(
+        (uint32_t)caps->currentTransform, (uint32_t)caps->supportedTransforms, w, h,
+        caps->maxImageExtent.width, caps->maxImageExtent.height, vkr_prerotate_on());
+}
+
 bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
 {
     /* a rebuild the submit thread's present left is this one (the device
@@ -823,25 +840,41 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
     VkPresentModeKHR *modes = vkr_surface_present_modes(fse, &nModes);
     char offered[128];
     vkr_present_mode_list(offered, sizeof(offered), modes, nModes);
-    /* the compositor turns the picture (an Android phone held sideways
-     * reports a rotated current transform); presenting in the window's own
-     * orientation keeps every pass and the readbacks unrotated.  The
-     * current transform only where identity is not offered. */
+    /* An Android phone held sideways reports a turned current transform
+     * (ROTATE_90 or 270; the extent is the window's own, landscape).
+     * Presented with identity, the compositor turns every image on the GPU
+     * before it shows it, and that work preempts the game's (Google's
+     * "Handling device orientation efficiently in Vulkan with
+     * pre-rotation", android-developers.googleblog.com, 2020-02: 1-3 ms a
+     * frame and a 40 % higher GPU clock on a Pixel 4 XL).  Made with the
+     * current transform as preTransform, the images are the extent turned
+     * (w and h swapped at a quarter turn, as Google's sample and Arm's
+     * surface_rotation sample make them) and the compositor shows them as
+     * they are: the renderer draws its picture at w x h as before, then
+     * turns it into the image in its last pass (port/render/rd_prerotate.c;
+     * rhi_swapchain_rotation).  [dev] prerotate = false
+     * (ICO_VK_PREROTATE=0) keeps identity.  Otherwise identity, or the
+     * current transform where identity is not offered */
+    const uint32_t turns = vkr_turns_for(&caps, w, h);
     VkSurfaceTransformFlagBitsKHR pre = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-    if (!(caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)) {
+    if (turns != 0 || !(caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)) {
         pre = caps.currentTransform;
     }
+    const uint32_t imageW = (turns & 1u) ? h : w, imageH = (turns & 1u) ? w : h;
     {
         static bool s_transformLogged;
-        if (!s_transformLogged &&
+        if (!s_transformLogged && turns == 0 &&
             (pre != VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR ||
              caps.currentTransform != VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)) {
             s_transformLogged = true;
             VKR_LOG("surface transform 0x%x (offered 0x%x): presenting with %s",
                     (unsigned)caps.currentTransform, (unsigned)caps.supportedTransforms,
-                    pre == VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
-                        ? "identity, the compositor rotates"
-                        : "the current transform (identity is not offered)");
+                    pre != VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+                        ? "the current transform (identity is not offered)"
+                    : !vkr_prerotate_on()
+                        ? "identity, the compositor rotates ([dev] prerotate = false, "
+                          "ICO_VK_PREROTATE=0)"
+                        : "identity, the compositor rotates");
         }
     }
     VkSwapchainKHR old = g_vkr.swapchain;
@@ -853,7 +886,7 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
         .minImageCount = count,
         .imageFormat = pick.format,
         .imageColorSpace = pick.colorSpace,
-        .imageExtent = {w, h},
+        .imageExtent = {imageW, imageH},
         .imageArrayLayers = 1,
         .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                       VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
@@ -908,6 +941,7 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
     g_vkr.presentMode = ci.presentMode;
     g_vkr.swapWidth = w;
     g_vkr.swapHeight = h;
+    g_vkr.swapTurns = turns;
     g_vkr.vsync = vsync;
 
     /* the implementation may create more images than minImageCount asks
@@ -926,8 +960,8 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
     VkSemaphoreCreateInfo sci = {.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO};
     bool semaphoresMade = true;
     for (uint32_t i = 0; i < n; i++) {
-        g_vkr.swapTextures[i] =
-            vkr_register_swapchain_image(images[i], pick.format, g_vkr.swapRhiFormat, w, h);
+        g_vkr.swapTextures[i] = vkr_register_swapchain_image(images[i], pick.format,
+                                                             g_vkr.swapRhiFormat, imageW, imageH);
         if (!VKR_CHECK(vkCreateSemaphore(g_vkr.device, &sci, NULL, &g_vkr.renderDone[i]))) {
             g_vkr.renderDone[i] = VK_NULL_HANDLE;
             semaphoresMade = false;
@@ -985,6 +1019,29 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
                 offered, (int)pick.format, (int)pick.colorSpace,
                 pickedFirst ? "first" : "not first", found ? "wanted" : "fallback",
                 (unsigned)ci.compositeAlpha, (unsigned)ci.preTransform, count, n, winW, winH, drv);
+    }
+    {
+        /* a line at every change of the turn (the first turned swapchain,
+         * the phone turned over: 90 to 270, prerotate's escape) */
+        static uint32_t s_loggedTurns;
+        static uint64_t s_turnChanges;
+        if (turns != s_loggedTurns) {
+            s_loggedTurns = turns;
+            s_turnChanges++;
+            if (turns != 0) {
+                VKR_LOG("swapchain %ux%u pre-rotated %u (the surface's transform 0x%x; the "
+                        "compositor no longer rotates): images %ux%u, the present turns the "
+                        "picture into them (turn change %llu)",
+                        w, h, turns * 90u, (unsigned)caps.currentTransform, imageW, imageH,
+                        (unsigned long long)s_turnChanges);
+            } else {
+                VKR_LOG("swapchain %ux%u no longer pre-rotated (surface transform 0x%x%s; turn "
+                        "change %llu)",
+                        w, h, (unsigned)caps.currentTransform,
+                        vkr_prerotate_on() ? "" : ", [dev] prerotate = false",
+                        (unsigned long long)s_turnChanges);
+            }
+        }
     }
     {
         static bool s_formatsLogged;
@@ -1128,8 +1185,9 @@ static void vkr_surface_lost(const char *where)
 }
 
 /* The size a swapchain made now would have: the surface's current extent
- * when it has one, else the window's pixel size */
-static bool vkr_swap_target_size(uint32_t *w, uint32_t *h)
+ * when it has one, else the window's pixel size; and its turn
+ * (vkr_turns_for: the surface's transform now, else the swapchain's) */
+static bool vkr_swap_target(uint32_t *w, uint32_t *h, uint32_t *turns)
 {
     int ww = (int)g_vkr.swapWidth, wh = (int)g_vkr.swapHeight;
 #ifdef ICO_RHI_HAVE_SDL
@@ -1137,14 +1195,41 @@ static bool vkr_swap_target_size(uint32_t *w, uint32_t *h)
 #endif
     *w = ww > 0 ? (uint32_t)ww : 0;
     *h = wh > 0 ? (uint32_t)wh : 0;
+    *turns = g_vkr.swapTurns;
     VkSurfaceCapabilitiesKHR caps;
     if (g_vkr.surface &&
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_vkr.phys, g_vkr.surface, &caps) == VK_SUCCESS &&
-        caps.currentExtent.width != UINT32_MAX) {
-        *w = caps.currentExtent.width;
-        *h = caps.currentExtent.height;
+        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(g_vkr.phys, g_vkr.surface, &caps) == VK_SUCCESS) {
+        if (caps.currentExtent.width != UINT32_MAX) {
+            *w = caps.currentExtent.width;
+            *h = caps.currentExtent.height;
+        }
+        *turns = vkr_turns_for(&caps, *w, *h);
     }
     return *w != 0 && *h != 0;
+}
+
+/* a swapchain made now would differ from this one: another size, or
+ * another turn (an Android phone turned over, 90 to 270: the same size,
+ * and Android's present reports suboptimal until the swapchain follows) */
+static bool vkr_swap_differs(uint32_t w, uint32_t h, uint32_t turns)
+{
+    return w != g_vkr.swapWidth || h != g_vkr.swapHeight || turns != g_vkr.swapTurns;
+}
+
+/* how many swapchains were made again for a turn alone (the log's count) */
+static uint64_t s_turnRebuilds;
+
+static void vkr_note_turn_rebuild(uint32_t w, uint32_t h, uint32_t turns, const char *where)
+{
+    if (w != g_vkr.swapWidth || h != g_vkr.swapHeight || turns == g_vkr.swapTurns) {
+        return;
+    }
+    const uint64_t n = ++s_turnRebuilds;
+    if (n <= 8u || n % 100u == 0u) {
+        VKR_LOG("the surface turned (%u to %u degrees) at %s: the swapchain made again (%llu "
+                "times so far)",
+                g_vkr.swapTurns * 90u, turns * 90u, where, (unsigned long long)n);
+    }
 }
 
 static bool vkr_resize_swapchain(uint32_t width, uint32_t height, bool vsync)
@@ -1220,6 +1305,36 @@ bool rhi_swapchain_size(uint32_t *w, uint32_t *h)
     return true;
 }
 
+uint32_t rhi_swapchain_rotation(void)
+{
+    if (g_vkr.swapchain) {
+        return g_vkr.swapTurns;
+    }
+    if (g_vkr.window || !g_vkr.device) {
+        return 0; /* a window between swapchains, or no device */
+    }
+    /* headless: the tests' twin of a turned present (rd_prerotate.c draws
+     * the picture turned into a texture of its own and reads it back
+     * turned back); 90, 180 or 270 */
+    static int s_fake = -1;
+    if (s_fake < 0) {
+        const char *e = getenv("ICO_VK_FAKE_TRANSFORM");
+        s_fake = 0;
+        if (e != NULL) {
+            s_fake = strcmp(e, "90") == 0    ? 1
+                     : strcmp(e, "180") == 0 ? 2
+                     : strcmp(e, "270") == 0 ? 3
+                                             : 0;
+        }
+        if (s_fake != 0) {
+            VKR_LOG("ICO_VK_FAKE_TRANSFORM=%s: the headless present is turned %d degrees and "
+                    "read back turned back (the twin of a pre-rotated swapchain)",
+                    e, s_fake * 90);
+        }
+    }
+    return (uint32_t)s_fake;
+}
+
 /* Android, or ICO_VK_POLL_SURFACE=1 (the tests) */
 static bool vkr_poll_surface_on(void)
 {
@@ -1240,7 +1355,7 @@ static bool vkr_poll_surface_on(void)
  * applied) while the driver goes on returning VK_SUCCESS and SDL's size
  * event comes late or never; the compositor then scales and offsets the old
  * size's image.  The surface's current extent (else the window's pixel
- * size, as vkr_swap_target_size) is asked at every present for the first 15 s
+ * size, as vkr_swap_target) is asked at every present for the first 15 s
  * after a swapchain is made, then once a second; a different size rebuilds
  * the swapchain as a suboptimal present with a size change does, and the
  * renderer's output follows it at the next acquire
@@ -1251,12 +1366,13 @@ void rhi_surface_poll_restart(void)
     s_swapMadeNs = vkr_now_ns();
 }
 
-/* the poll's rebuild at the size it found */
-static void vkr_poll_resize(uint32_t w, uint32_t h)
+/* the poll's rebuild at the size (and turn) it found */
+static void vkr_poll_resize(uint32_t w, uint32_t h, uint32_t turns)
 {
-    if (w == g_vkr.swapWidth && h == g_vkr.swapHeight) {
+    if (!vkr_swap_differs(w, h, turns)) {
         return;
     }
+    vkr_note_turn_rebuild(w, h, turns, "the surface poll");
     const uint32_t ow = g_vkr.swapWidth, oh = g_vkr.swapHeight;
     if (!rhi_resize_swapchain(w, h, g_vkr.vsync)) {
         return; /* the next acquire finds no swapchain and rd_present retries */
@@ -1282,8 +1398,8 @@ static void vkr_poll_surface(bool defer)
         return;
     }
     s_pollNs = now;
-    uint32_t w = 0, h = 0;
-    if (!vkr_swap_target_size(&w, &h) || (w == g_vkr.swapWidth && h == g_vkr.swapHeight)) {
+    uint32_t w = 0, h = 0, turns = 0;
+    if (!vkr_swap_target(&w, &h, &turns) || !vkr_swap_differs(w, h, turns)) {
         return;
     }
     if (w == s_pollStuckW && h == s_pollStuckH && g_vkr.swapWidth == s_pollMadeW &&
@@ -1294,9 +1410,10 @@ static void vkr_poll_surface(bool defer)
         g_vkr.deferred |= VKR_DEFER_POLL;
         g_vkr.deferW = w;
         g_vkr.deferH = h;
+        g_vkr.deferTurns = turns;
         return;
     }
-    vkr_poll_resize(w, h);
+    vkr_poll_resize(w, h, turns);
 }
 
 /* The swapchain's work a present on the submit thread left (VkrState.
@@ -1333,14 +1450,15 @@ static void vkr_take_deferred(void)
         return;
     }
     if (d & VKR_DEFER_SIZE) {
-        uint32_t w = 0, h = 0;
-        if (vkr_swap_target_size(&w, &h) && (w != g_vkr.swapWidth || h != g_vkr.swapHeight)) {
+        uint32_t w = 0, h = 0, turns = 0;
+        if (vkr_swap_target(&w, &h, &turns) && vkr_swap_differs(w, h, turns)) {
+            vkr_note_turn_rebuild(w, h, turns, "a suboptimal present");
             rhi_resize_swapchain(w, h, g_vkr.vsync);
         }
         return;
     }
     if (d & VKR_DEFER_POLL) {
-        vkr_poll_resize(g_vkr.deferW, g_vkr.deferH);
+        vkr_poll_resize(g_vkr.deferW, g_vkr.deferH, g_vkr.deferTurns);
     }
 }
 
@@ -1593,14 +1711,18 @@ static void vkr_present(bool defer)
         }
     } else if (r == VK_SUBOPTIMAL_KHR) {
         /* Android only: the image was shown.  Recreated only when the size
-         * changed: with the identity transform on a rotated Android display
-         * the driver reports suboptimal at every present, and a recreation
-         * would change nothing */
-        uint32_t w = 0, h = 0;
-        if (vkr_swap_target_size(&w, &h) && (w != g_vkr.swapWidth || h != g_vkr.swapHeight)) {
+         * or the turn changed: Android reports suboptimal at every present
+         * whose swapchain's preTransform is not the surface's transform, so
+         * with identity on a turned display ([dev] prerotate = false, or a
+         * turn the images could not take) at every present, where a
+         * recreation would change nothing; pre-rotated, when the phone is
+         * turned over (90 to 270), which a swapchain in the new turn ends */
+        uint32_t w = 0, h = 0, turns = 0;
+        if (vkr_swap_target(&w, &h, &turns) && vkr_swap_differs(w, h, turns)) {
             if (defer) {
                 g_vkr.deferred |= VKR_DEFER_SIZE;
             } else {
+                vkr_note_turn_rebuild(w, h, turns, "a suboptimal present");
                 rhi_resize_swapchain(w, h, g_vkr.vsync);
             }
         }

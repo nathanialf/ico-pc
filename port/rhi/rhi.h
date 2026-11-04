@@ -964,6 +964,20 @@ RhiFormat rhi_swapchain_format(void);
  * *w, *h left alone) when there is no swapchain (headless, the surface
  * released). */
 bool rhi_swapchain_size(uint32_t *w, uint32_t *h);
+/* The quarter turns clockwise (0 to 3) the picture is drawn with into the
+ * swapchain's images: Vulkan on a surface the system shows turned (an
+ * Android phone held sideways reports VkSurfaceCapabilitiesKHR.
+ * currentTransform ROTATE_90, 180 or 270) makes its swapchain with that
+ * transform as preTransform, so the compositor shows the images as they are
+ * instead of turning each one on the GPU; the images are then
+ * rhi_swapchain_size's size turned (width and height swapped at 1 and 3),
+ * and the renderer draws its picture at rhi_swapchain_size's size and turns
+ * it into the image last (port/render/rd_prerotate.c).  0 on every other
+ * surface and backend, and with ICO_VK_PREROTATE=0 ([dev] prerotate =
+ * false).  A headless Vulkan device answers ICO_VK_FAKE_TRANSFORM's 90, 180
+ * or 270 as 1, 2 or 3 (the tests' twin of the turned present, which has no
+ * swapchain to turn), else 0. */
+uint32_t rhi_swapchain_rotation(void);
 /* The surface-size poll runs at every present again for a
  * while (as it does after a swapchain is made); called at the first game
  * frame, which can come long after the window opened (the disc import and

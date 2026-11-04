@@ -304,7 +304,11 @@ and `serialPipelines`, why its compiles run one at a time (Vulkan, `rhi_driver_c
 device is gone; the backend logs the reason and its [loss report](#device-loss) once and the window
 ends the session.
 `rhi_resize_swapchain`, `rhi_swapchain_size` (the backend rebuilds on its own at the surface's size,
-and the renderer follows it at each acquire), `rhi_acquire_backbuffer` (id 0: rebuild needed),
+and the renderer follows it at each acquire), `rhi_swapchain_rotation` (the quarter turns the
+images are in: Vulkan on a surface the system shows turned makes its swapchain in that turn, the
+images `rhi_swapchain_size` turned, and the renderer turns its picture into them last; 0 on every
+other surface and backend; a headless Vulkan device answers `ICO_VK_FAKE_TRANSFORM`'s for the
+tests; [DISPLAY.md](DISPLAY.md#the-turned-swapchain)), `rhi_acquire_backbuffer` (id 0: rebuild needed),
 `rhi_present`, `rhi_present_shown` (false after a [present](ARCHITECTURE.md#terms) that did nothing
 or a D3D12 present the OS reported occluded), `rhi_wait_present_room` (the wait for room in the
 present queue the next acquire would make, made now: Direct3D 11's frame latency wait, which the
@@ -859,12 +863,18 @@ can run the thread.
 
 **Swapchain** (`port/rhi/vk/vk_swapchain.c`). BGRA8 UNORM (else RGBA8) in sRGB-nonlinear colour
 space, so the game's colours are written as they are; `minImageCount + 1` images, held to the
-surface's maximum; the identity transform where offered (the compositor rotates). A rebuild keeps
+surface's maximum; on a surface whose current transform is ROTATE_90, 180 or 270 (an Android phone
+held sideways) that transform as the preTransform, the images the extent turned and
+`VkrState.swapTurns` the quarter turns (`vkr_prerotate_turns`; `[dev] prerotate = false`,
+`ICO_VK_PREROTATE=0`, keeps identity), else the identity transform where offered (the compositor
+rotates; [DISPLAY.md](DISPLAY.md#the-turned-swapchain)). A rebuild keeps
 the old swapchain until the first present on the new one succeeds, so the screen keeps its last
 picture (`vkr_swapchain_create`). An out-of-date acquire returns id 0 and the presenter rebuilds; a
 lost surface makes a new surface and swapchain. On Android (or with `ICO_VK_POLL_SURFACE=1`) the
 surface's size is polled at every present for 15 s after a swapchain is made, then once a second,
-since the driver can go on returning success while the surface changes size (`vkr_poll_surface`).
+since the driver can go on returning success while the surface changes size (`vkr_poll_surface`); the
+poll and Android's suboptimal present also rebuild when the surface's turn changed (the phone turned
+over, `vkr_swap_differs`).
 
 **The present-wait thread.** With `ICO_VK_PRESENT_WAIT=1` a thread waits on each present's id in
 turn (`vkWaitForPresentKHR`, 4 ms a wait) and notes when it returned on `SDL_GetTicksNS`'s clock in

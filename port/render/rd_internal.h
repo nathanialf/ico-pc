@@ -3805,6 +3805,30 @@ void rd__present_finish(void);
  * submit thread's job presents it (rd_submit_thread.c) */
 bool rd__present_will_show(void);
 void rd__present_shutdown(void);
+/* rd_prerotate.c: the present into a swapchain made in the surface's own
+ * turn (rhi_swapchain_rotation; docs/port/DISPLAY.md "The turned
+ * swapchain").  rd__prerotate_turns: the quarter turns clockwise (0 to 3)
+ * the backbuffer's images are in now (headless: the tests' twin under
+ * ICO_VK_FAKE_TRANSFORM).  rd__prerotate_target: the texture (w x h, fmt;
+ * made or remade on a change) the present's passes draw into in the
+ * backbuffer's place while the images are turned; false: none.
+ * rd__prerotate_record: src (w x h) turned into dst (the swapchain image,
+ * the turned size) in one pass, src left in RHI_STATE_SHADER_READ, dst in
+ * RHI_STATE_RENDER_TARGET.  The twin: rd__prerotate_twin draws the headless
+ * picture turned into a texture of its own; rd_read_presented then reads it
+ * back turned back (rd__prerotate_twin_read, while rd__prerotate_twin_
+ * pending: from that present to the next acquire, rd__prerotate_twin_clear) */
+uint32_t rd__prerotate_turns(void);
+bool rd__prerotate_target(uint32_t w, uint32_t h, RhiFormat fmt, RhiTexture *tex, RhiState **state);
+void rd__prerotate_record(RhiCommandList cl, RhiTexture src, RhiState *srcState, uint32_t w,
+                          uint32_t h, RhiTexture dst, RhiState *dstState, RhiFormat dstFmt,
+                          uint32_t turns);
+void rd__prerotate_twin(RhiCommandList cl, RhiTexture src, RhiState *srcState, uint32_t w,
+                        uint32_t h, uint32_t turns);
+void rd__prerotate_twin_clear(void);
+bool rd__prerotate_twin_pending(void);
+bool rd__prerotate_twin_read(void *dst, size_t dstSize, uint32_t w, uint32_t h);
+void rd__prerotate_shutdown(void);
 
 /* A uniform block in the ring and the group that reads it: the
  * group is its layout's one group of the replay (a dynamic uniform slot),

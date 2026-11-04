@@ -572,6 +572,15 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("bind_cache", "off"), "0") == 0);
     CHECK(ico_dev_env_value("bind_cache", "sometimes") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.bind_cache"), "bind_cache") == 0);
+    /* prerotate: the Vulkan swapchain in the surface's own turn
+       (port/rhi/vk/vk_swapchain.c vkr_prerotate_on), true (the default) or
+       false; the default branch's 1 / 0 */
+    CHECK(strcmp(ico_dev_env_name("prerotate"), "ICO_VK_PREROTATE") == 0);
+    CHECK(strcmp(ico_dev_env_value("prerotate", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("prerotate", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("prerotate", "no"), "0") == 0);
+    CHECK(ico_dev_env_value("prerotate", "sideways") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.prerotate"), "prerotate") == 0);
     /* the switches: on and off words, anything else nothing */
     CHECK(strcmp(ico_dev_env_value("gpu_checkpoints", "true"), "1") == 0);
     CHECK(strcmp(ico_dev_env_value("gpu_checkpoints", "1"), "1") == 0);

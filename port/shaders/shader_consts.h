@@ -79,8 +79,10 @@ typedef struct IcoDrawCB {
      * texel sizes (fx_sprite.hlsl).  The reduction's sprite with the fades
      * fold (port/render/rd_fades_fold.c): aux0 the fold's four steps, in
      * fx_sprite_ps (FXF_FOLD) with the fold's other words in blend.xyz
-     * (no blend there), in sprite_ps (ICO_DF_FOLD) in aux1.xyz.  Zero in
-     * every other draw. */
+     * (no blend there), in sprite_ps (ICO_DF_FOLD) in aux1.xyz.  The
+     * present's turn into a pre-rotated swapchain (port/render/
+     * rd_prerotate.c): aux1.w the quarter turns clockwise blit_vs reads its
+     * source at (blit.hlsl).  Zero in every other draw. */
     uint32_t aux0[4];
     uint32_t aux1[4];
 } IcoDrawCB;

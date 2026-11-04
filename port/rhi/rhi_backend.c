@@ -349,6 +349,11 @@ bool rhi_swapchain_size(uint32_t *w, uint32_t *h)
     return be()->swapchain_size(w, h);
 }
 
+uint32_t rhi_swapchain_rotation(void)
+{
+    return be()->swapchain_rotation();
+}
+
 void rhi_surface_poll_restart(void)
 {
     RHI_GUARD();
