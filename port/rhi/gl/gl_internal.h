@@ -392,6 +392,26 @@ typedef struct GlState {
      * points, and the fence waits */
     RhiStats counts;
     uint64_t fenceWaits, fenceWaitNs;
+
+    /* the window's wait hooks (rhi.h RhiWaitHooks, RhiDeviceDesc.waits),
+     * copied at rhi_init; hasWaits false for the tests and tools */
+    RhiWaitHooks waits;
+    bool hasWaits;
+    /* a frame's fence not signalled within the limit (gl_wait_sync): the
+     * device counts as lost (rhi_device_lost), no wait is made again */
+    bool lost;
+    /* the shader compiles (gl_compile.c): the compile thread, NULL when the
+     * compiles run on the calling thread; KHR_parallel_shader_compile used
+     * there instead; a compile the driver stalled in (the device's start
+     * fails: every later compile returns none) and its name; the count and
+     * the longest */
+    struct GlCompiler *compiler;
+    bool parallelKhr;
+    bool compileStalled;
+    char stalledName[96];
+    uint32_t compiles;
+    uint64_t compileNs, compileLongestNs;
+    char compileLongestName[96];
 } GlState;
 
 extern GlState g_gl;
@@ -497,6 +517,22 @@ GLenum gl_compare(RhiCompare c);
 GLenum gl_stencil_op(RhiStencilOp op);
 
 /* gl_swapchain.c */
+/* gl_compile.c: the shader compiles.  gl_compile_init at the end of
+ * rhi_init (the device's context current, on the window): with the window's
+ * wait hooks a compile thread with a context of the same share group, else
+ * KHR_parallel_shader_compile where offered, else nothing (the calling
+ * thread compiles, as the tests and tools do); its line says which.
+ * gl_compile_shutdown in rhi_shutdown before the context goes (an
+ * abandoned thread is left as it is).  gl_compile_program makes a separable
+ * program of one stage from text (taken: freed here) and returns it (0
+ * none), *linked its link status and log its info log when not linked; a
+ * compile past the hooks' limit is abandoned (gl_compile.c) and every
+ * later call returns 0 at once. */
+void gl_compile_init(void);
+void gl_compile_shutdown(void);
+GLuint gl_compile_program(GLenum type, char *text, const char *name, GLint *linked, char *log,
+                          size_t logSize);
+
 bool gl_swapchain_create(uint32_t w, uint32_t h, bool vsync);
 void gl_swapchain_destroy(void);
 

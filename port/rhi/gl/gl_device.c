@@ -6,6 +6,7 @@
 #include "rhi_gl.h"
 #include "../rhi_backend.h"
 #include "../rhi_bind_cache.h"
+#include "gl_sync_wait.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -438,10 +439,62 @@ void gl_frame_fence(void)
     glf.Flush(); /* the fence reaches the GPU without a wait's flush */
 }
 
+/* gl_sync_wait.h's slice: one glClientWaitSync on the fence */
+static GlswSlice gl_sync_slice(void *user, uint64_t timeoutNs)
+{
+    const GLenum r = glf.ClientWaitSync((GLsync)user, GL_SYNC_FLUSH_COMMANDS_BIT, timeoutNs);
+    return r == GL_TIMEOUT_EXPIRED ? GLSW_SLICE_TIMEOUT
+           : r == GL_WAIT_FAILED   ? GLSW_SLICE_FAILED
+                                   : GLSW_SLICE_SIGNALED;
+}
+
+static uint64_t gl_sync_now(void *user)
+{
+    (void)user;
+    return gl_now_ns();
+}
+
+static void gl_sync_pump(void *user, uint64_t heldNs)
+{
+    (void)user;
+    if (g_gl.hasWaits && g_gl.waits.pump) {
+        g_gl.waits.pump(g_gl.waits.ctx, "a frame's fence", heldNs);
+    }
+}
+
+static void gl_sync_slow(void *user, uint64_t heldNs)
+{
+    (void)user;
+    GL_LOG_DIRECT("a frame's fence has not signalled after %.1f s; still waiting",
+                  (double)heldNs / 1e9);
+}
+
+/* the time one fence wait may take: the window's (the GPU hang limit), else
+ * ICO_GPU_HANG_LIMIT's seconds where set (port/platform/main_host.c sets it
+ * for the game), else none (the tests and tools) */
+static uint64_t gl_wait_limit_ns(void)
+{
+    if (g_gl.hasWaits && g_gl.waits.limitNs) {
+        return g_gl.waits.limitNs;
+    }
+    const char *v = getenv("ICO_GPU_HANG_LIMIT");
+    const double s = v && v[0] ? atof(v) : 0.0;
+    return s > 0.0 ? (uint64_t)(s * 1e9) : 0u;
+}
+
 /* Waits for a fence; the time blocked counts (RhiStats.fenceWaitNs).  No
- * fence (its creation failed): glFinish. */
+ * fence (its creation failed): glFinish.  The wait is held to the GPU hang
+ * limit (gl_wait_limit_ns; it used to loop on 1 s waits with no end): past
+ * it the device counts as lost (rhi_device_lost: the window's loss path,
+ * or the switch going back), the line says so, and no later wait blocks.
+ * In 50 ms slices with the window's pump between them where the window set
+ * its hooks (the self-tests' readbacks inside a switch run on its thread),
+ * else 1 s slices as before. */
 static void gl_wait_sync(GLsync s)
 {
+    if (!s && g_gl.lost) {
+        return;
+    }
     if (!s) {
         const uint64_t t0 = gl_now_ns();
         glf.Finish();
@@ -449,19 +502,29 @@ static void gl_wait_sync(GLsync s)
         g_gl.fenceWaits++;
         return;
     }
+    if (g_gl.lost) {
+        return;
+    }
     GLenum r = glf.ClientWaitSync(s, GL_SYNC_FLUSH_COMMANDS_BIT, 0);
     if (r == GL_TIMEOUT_EXPIRED) {
-        const uint64_t t0 = gl_now_ns();
-        bool logged = false;
-        do {
-            r = glf.ClientWaitSync(s, GL_SYNC_FLUSH_COMMANDS_BIT, 1000000000ull);
-            if (r == GL_TIMEOUT_EXPIRED && !logged && gl_now_ns() - t0 > 2000000000ull) {
-                logged = true;
-                GL_LOG("a frame's fence has not signalled after 2 s; still waiting");
-            }
-        } while (r == GL_TIMEOUT_EXPIRED);
-        g_gl.fenceWaitNs += gl_now_ns() - t0;
+        const GlswOps ops = {(void *)s, gl_sync_slice, gl_sync_now, gl_sync_pump, gl_sync_slow};
+        const uint64_t limit = gl_wait_limit_ns();
+        uint64_t held = 0;
+        const GlswResult w = gl_sync_wait_limited(
+            &ops, limit, g_gl.hasWaits && g_gl.waits.pump ? 50000000ull : 1000000000ull, &held,
+            NULL);
+        g_gl.fenceWaitNs += held;
         g_gl.fenceWaits++;
+        if (w == GLSW_LIMIT) {
+            g_gl.lost = true;
+            GL_LOG_DIRECT(
+                "a frame's fence has not signalled after %.1f s (the limit %.1f s, the GPU "
+                "hang limit): the GPU or its driver stopped; the device counts as lost "
+                "from now on (replay %u, frame %u)",
+                (double)held / 1e9, (double)limit / 1e9, g_gl.tagReplay, g_gl.tagFrame);
+            return;
+        }
+        r = w == GLSW_FAILED ? GL_WAIT_FAILED : GL_CONDITION_SATISFIED;
     }
     if (r == GL_WAIT_FAILED) {
         static uint32_t s_failed;
@@ -589,7 +652,9 @@ void rhi_wait_idle(void)
     }
     g_gl.counts.waitIdles++;
     const uint64_t t0 = gl_now_ns();
-    glf.Finish();
+    if (!g_gl.lost) {
+        glf.Finish(); /* not on a device that stopped (gl_wait_sync): it may not return */
+    }
     g_gl.fenceWaitNs += gl_now_ns() - t0;
     /* the other slots' deletes are safe now; the current frame's are not
      * (a bind group made this frame may still be bound) */
@@ -871,6 +936,10 @@ bool rhi_init(const RhiDeviceDesc *desc)
     memset(&g_gl, 0, sizeof(g_gl));
     s_debugErrors = 0;
     s_debugActive = false;
+    if (desc && desc->waits) {
+        g_gl.waits = *desc->waits;
+        g_gl.hasWaits = true;
+    }
     const bool debug = gl_debug_wanted(desc);
     if (!gl_create_context(desc, debug)) {
         rhi_shutdown();
@@ -941,15 +1010,19 @@ bool rhi_init(const RhiDeviceDesc *desc)
                "needed); the draws that use them will fail",
                ssboBindings, vertexSsbos, units);
     }
+    gl_compile_init(); /* the shaders' compile thread (gl_compile.c) */
     gl_check("rhi_init");
     return true;
 }
 
 void rhi_shutdown(void)
 {
+    gl_compile_shutdown(); /* before the contexts go (gl_compile.c) */
     const bool loaded = glf.GetString != NULL;
     if (loaded && g_gl.context) {
-        glf.Finish();
+        if (!g_gl.lost) {
+            glf.Finish();
+        }
         if (g_gl.initialised) {
             gl_cmd_shutdown();
         }
@@ -1035,10 +1108,11 @@ void rhi_set_adapter_wanted(const char *name)
     (void)name;
 }
 
-/* A context reset (ARB_robustness) is not asked for: no loss to report */
+/* A context reset (ARB_robustness) is not asked for; a fence not signalled
+ * within the GPU hang limit counts as a loss (gl_wait_sync) */
 bool rhi_device_lost(void)
 {
-    return false;
+    return g_gl.lost;
 }
 
 /* The counts the Vulkan backend keeps, at the same points (g_gl.counts:

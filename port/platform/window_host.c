@@ -2051,6 +2051,9 @@ open_window:
 #endif
     ico_diag_step("window: start: starting the renderer on %s (the device and its shaders)",
                   backend);
+    /* a long driver call takes the window's events and is held to the GPU
+       hang limit (window_switch.h ico_window_switch_wait_hooks) */
+    ico_window_switch_wait_hooks();
     bool up = rd_init(gsW, gsH, &rs, s_window);
 #ifdef __ANDROID__
     /* not after a bisect that lost the device: the player's driver did not
@@ -2455,6 +2458,26 @@ open_window:
     return 0;
 }
 
+/* an OpenGL device lost inside its start in the switch (a fence past the
+   GPU hang limit: port/rhi/gl/gl_device.c gl_wait_sync): the renderer is
+   taken down again and the switch fails as a device that did not start
+   (it goes back); 1 when that happened. The other backends' losses keep
+   their path (the pump's loss box) */
+static int reopen_lost(const char *backend)
+{
+    if (rhi_backend() != RHI_BACKEND_OPENGL || !rhi_device_lost()) {
+        return 0;
+    }
+    fprintf(stderr,
+            "window: the %s device stopped while it started (the lines above say why); the "
+            "switch goes back\n",
+            backend);
+    rd_suspend();
+    SDL_DestroyWindow(s_window);
+    s_window = NULL;
+    return 1;
+}
+
 /* Options > Graphics > Apply (window_switch.h): the renderer made again on
    backend in the process, the game's state kept (rd_suspend, rd_resume).
    The window is made again (Vulkan, OpenGL and Direct3D windows differ,
@@ -2538,6 +2561,9 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
     rd_blend_selftest();
     ico_diag_step("window: switch to %s: the VU pre-pass self-test", backend);
     rd_vuprepass_selftest();
+    if (reopen_lost(backend)) {
+        return 0;
+    }
     if (!rd_pipelines_lazy_on()) {
         static PipeScreen screen;
 
@@ -2556,6 +2582,9 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
     ico_diag_set_vu_prepass(rd_vu_prepass_on());
     ico_diag_step("window: switch to %s: the fog self-test", backend);
     rd_fog_selftest();
+    if (reopen_lost(backend)) {
+        return 0;
+    }
     if (s_captured != ICO_CAPTURE_OFF) {
         SDL_SetWindowRelativeMouseMode(s_window, true);
     }

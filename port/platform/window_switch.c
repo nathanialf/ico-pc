@@ -58,6 +58,11 @@ static struct {
     char endText[512];
 } s_sw;
 
+/* the call the driver stalled in during the switch (RhiWaitHooks.stalled:
+   "sprite_aa1_ps", "" none) and how long it had held */
+static char s_stalled[128];
+static double s_stalledS;
+
 /* the start's choice (ico_window_switch_started), Keep's after it: the
    crash and loss steps' explicit flag and backend for a switch back; and
    the renderer Automatic started this run ("" when the player chose one) */
@@ -209,6 +214,7 @@ int ico_window_switch_backend(const char *name, const char *adapter, int trial)
     if (strcmp(name, old) == 0 && adapterRunning(adapter)) {
         return 0;
     }
+    s_stalled[0] = '\0';
     /* each step's line goes to the log at once (diag_host.h ico_diag_step;
        the rest of the switch's lines sit in stderr's buffer on Windows
        until the host loop's next flush): a hang leaves the step named */
@@ -248,6 +254,25 @@ int ico_window_switch_backend(const char *name, const char *adapter, int trial)
     if (ico_window_reopen(old, trial ? explicitFor(old) : true)) {
         rd_resume_frame();
         installAdapters();
+        if (s_stalled[0] != '\0') {
+            /* the driver stalled in a compile (rc2: NVIDIA's GLSL compiler
+               on sprite_aa1_ps): the player is told, and the switch is
+               back where it was; the box's time is not a hang */
+            char text[640];
+
+            snprintf(text, sizeof(text),
+                     "%s could not start: the graphics driver stalled compiling %s (no answer "
+                     "in %.0f s).\n\nThe game went back to %s. The log in the logs folder "
+                     "says more.",
+                     properName(name), s_stalled, s_stalledS, properName(old));
+            fprintf(stderr,
+                    "window: Graphics API %s: the driver stalled compiling %s; the box "
+                    "says so\n",
+                    name, s_stalled);
+            ico_diag_watchdog_pause(1);
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "ICO PC", text, NULL);
+            ico_diag_watchdog_pause(0);
+        }
         return -1;
     }
     fprintf(stderr, "window: Graphics API %s did not start again either; the game ends\n", old);
@@ -328,6 +353,48 @@ int ico_window_switch_pump(void)
 const char *ico_window_switch_end_text(void)
 {
     return s_sw.ended ? s_sw.endText : NULL;
+}
+
+/* --- the renderer's wait hooks (rhi.h RhiWaitHooks) --------------------- */
+
+/* a long driver call in progress: the window's events taken, when the
+   thread waiting is the window's (the render thread's waits take none) */
+static void waitPump(void *ctx, const char *what, uint64_t heldNs)
+{
+    (void)ctx;
+    (void)what;
+    (void)heldNs;
+    if (SDL_IsMainThread()) {
+        SDL_PumpEvents();
+    }
+}
+
+/* a call given up on past the limit (the backend's line says which) */
+static void waitStalled(void *ctx, const char *what, uint64_t heldNs)
+{
+    (void)ctx;
+    snprintf(s_stalled, sizeof(s_stalled), "%s", what != NULL ? what : "a shader");
+    s_stalledS = (double)heldNs / 1e9;
+}
+
+/* a shader or pipeline made: the switch's watch moves (any thread) */
+static void waitMade(void *ctx)
+{
+    (void)ctx;
+    ico_diag_switch_progress();
+}
+
+void ico_window_switch_wait_hooks(void)
+{
+    const double limit = ico_diag_gpu_hang_limit();
+    RhiWaitHooks h;
+
+    memset(&h, 0, sizeof(h));
+    h.pump = waitPump;
+    h.stalled = waitStalled;
+    h.made = waitMade;
+    h.limitNs = limit > 0.0 ? (uint64_t)(limit * 1e9) : 0u;
+    rhi_set_wait_hooks(&h);
 }
 
 /* --- the Graphics page's host (settings.h UiGraphicsHost) --------------- */
