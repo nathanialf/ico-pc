@@ -2577,9 +2577,17 @@ step. That frame goes with the renderer; `rd_resume_frame` opens one again after
 the rest of the next tick records into a frame (its `rd_temp_target` slots are freed with it and
 nothing is logged as outside a frame), and that frame is closed without a picture (`rd_end_frame`
 discards it, `RdContext.discardOpen`), since its start went with the old renderer. So the tick
-of the switch has no picture: the new window shows nothing until the tick after it presents. The
-watchdog is paused around the switch (`ico_diag_watchdog_pause`, as the device-lost box does): the
-device's start and a cold pipeline set can take longer than its later limit. The switch
+of the switch has no picture: the new window shows nothing until the tick after it presents.
+The switch runs under its own watchdog limit instead of the game's
+(`ico_diag_watchdog_switch(60, "switching the renderer from <old> to <new>")`, `SWITCH_WATCH_S`):
+the device's start and a cold pipeline set can take longer than the game's later limit, but a
+step that never ends is a hang. While it is on the game's limits do not count; 60 s without a
+step line, a shader or pipeline made (`RhiWaitHooks.made`, every backend) or a pipeline of the set
+finished ends the run with the watchdog's report (below), the main thread sampled where it
+stands, inside the graphics driver when it hung there. Each step writes its line at once before it runs (`ico_diag_step`: stdout and stderr flushed
+first, then the diagnostics' unbuffered handle; stderr is fully buffered on Windows and the switch
+runs inside one pump, so its lines sat in the buffer), so a kill leaves the step it was in as the
+log's last line. The switch
 (`ico_window_switch_backend(name, adapter, trial)`; `trial` is Apply's, a switch back is not):
 
 1. Refused, `-2`, nothing touched: a build with one renderer (unless name is the backend running:
@@ -2615,8 +2623,14 @@ device's start and a cold pipeline set can take longer than its later limit. The
    mode, the touch zones, the display clock started again, `video_apply(1)` and
    `window_size_recheck`. The time goes into `pausePendingNs`, a pause of the host as a
    swapchain rebuild's is.
-4. The new backend did not start (no window, or `rd_resume` failed): `ico_window_reopen` on the
-   backend that ran with the card asked for before (`rhi_set_adapter_wanted` back to it), `-1`. That failing too ends the run, `-3`: the pump returns 0 and
+4. The new backend did not start (no window, or `rd_resume` failed; on OpenGL also a shader
+   compile past the GPU hang limit, which fails `rd_init`, or a fence past it during the
+   self-tests, `reopen_lost`, which takes the renderer down again): `ico_window_reopen` on the
+   backend that ran with the card asked for before (`rhi_set_adapter_wanted` back to it), `-1`.
+   When the driver stalled in a compile (`RhiWaitHooks.stalled`) a box says so after the switch
+   back, the watchdog paused while it is open: "OpenGL could not start: the graphics driver
+   stalled compiling <shader> (no answer in N s). The game went back to <previous>. ..."
+   ([RHI.md](RHI.md#opengl), "Shader compiles"). That failing too ends the run, `-3`: the pump returns 0 and
    `main_host.c` shows a box naming both renderers (`ico_window_switch_end_text`), writes a
    report, logs the exit reason "no renderer started after Options > Graphics > Apply" and saves
    nothing (`ui_settings_save_on_quit` is not called).
@@ -2666,13 +2680,49 @@ Log lines (stderr, one per event):
 - `ico_pc: the graphics card stopped responding on the <name> renderer applied from the menu and
   not kept yet: the game does not start again; the next start uses the renderer the settings
   name`
-- `ico_pc: diagnostics: watchdog paused` and `... running again` around each switch
+- `ico_pc: diagnostics: watchdog: switching the renderer from <old> to <new>; its limit is 60 s
+  without a step, a shader or a pipeline made (the game's own limits wait)` before, `ico_pc:
+  diagnostics: watchdog: switching ... over after <s> s; the game's limits count again` after;
+  the heartbeat meanwhile ends `| switching the renderer from <old> to <new> for N s, last step:
+  <step>`; a hang: `ico_pc: WATCHDOG: switching the renderer from <old> to <new>: nothing moved
+  for 60 s (the last step: <step>)`, the main thread's place and stack, `ico_pc: the last step:
+  <step>`, the threads, the report file, exit code 4
+- the steps, each written at once before it runs: `window: switch: <old> -> <new>[ on <card>]
+  begins`; `window: switch to <new>: stopping the render thread`, `... suspending the renderer (the
+  old device's end)`, `... destroying the old window`, `... creating the window (windowed|full
+  screen)`, `... attaching the window (its mode and display)`, `... starting the renderer (the
+  device and its shaders)` (then `rd: starting the device and making its shaders (the backend's
+  lines follow)` and the backend's own start lines, OpenGL's written at once), `... the blend
+  self-test`, `... the VU pre-pass self-test`, `... the pipeline set`, `... the fog self-test`,
+  `... starting the render thread`, `... up in <s> s`; a revert `window: switch: <new> did not
+  start; back to <old>`, then the old renderer's steps; the start's own: `ico_pc: start: the log is
+  open; next the settings, the game data and the window` (right after `ico_diag_init`), `ico_pc:
+  start: the game data is ready; opening the window and the renderer`, `window: start: creating the
+  <backend> window`, `window: start: starting the renderer on <backend> (the device and its
+  shaders)`, `window: start: the blend and VU pre-pass self-tests`, `window: start: the pipeline
+  set`, `window: start: the fog self-test`. The crash and watchdog reports repeat the last one
+  (`ico_pc: the last step: <line>`)
+- `window: Graphics API <new>: the driver stalled compiling <shader>; the box says so`
+- `window: the opengl device stopped while it started (the lines above say why); the switch goes
+  back`
 - after each window: `window: video driver ...` (`window_attach`) and
   `window: <w>x<h> pixels, <backend> on <adapter>, present mode <mode>`
 - the page's own: `settings: Graphics API back to <value|automatic> (reverted|not kept in 10 s)`
   and, after a FAILED Apply, `settings: Graphics API back to <value|automatic> (<name> did not
   start)`; for the card `settings: Graphics card back to <name|automatic> (...)` in the same two
   forms
+
+**The window build's switch test.** `[dev] backend_switch_test = "opengl,vulkan"` (ini
+`backend_switch_test`) runs the listed renderers in turn from the event pump through the page's own
+calls (`hostBegin` with Apply's reason, the pump's switch under its watch, then Keep), the first
+300 pumps after the start and each next one 120 pumps after the last returned, waiting while the
+opening's movie refuses it (`port/platform/window_switch.c` (`selftestPoll`)). Its lines are steps:
+`window: backend switch test: opengl,vulkan, from vulkan, the first after 300 pumps`, `window:
+backend switch test: vulkan -> opengl: applied and kept in <s> s` (or `FAILED (refused|did not
+start|done on another renderer; running <name>) after <s> s`), `window: backend switch test: done,
+N switches, F failed`. ctest `backend_switch_window` (label `window`) runs it on the Linux window
+build: Vulkan on lavapipe, OpenGL on llvmpipe, SDL's offscreen driver
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 Not verified: no switch has run anywhere (the game is not run in the container; a switch of the
 card alone has not run on a computer with two cards either); the swap was

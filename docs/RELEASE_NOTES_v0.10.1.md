@@ -1,5 +1,3 @@
-**Please note:** this release has had only limited testing: automated checks and one Android phone. The part that draws walls and water beside the camera on wide screens (32:9 and 48:9) has not been looked at on a real wide screen yet, and the MSAA change has not been tried on an NVIDIA graphics card. If something looks, plays or runs wrong, keep the previous version and send the game's report file (the newest file in the `logs` folder that starts with `report-`, or `ico-pc.log`) with a short description of what you saw.
-
 ## New
 
 - Scenery that lies wholly outside the picture, or wholly behind what was already drawn in front of it, is no longer sent to the graphics chip. This saves work on phones and weak graphics chips; the picture is the same.
@@ -20,3 +18,4 @@
 - With Language set to a translation by players, the game's own menu words (New Game, Continue, the saves' places) now follow the Menu language like the rest of the menus (fix by cobra838).
 - The Russian "Continue" on the title screen fits its row (fix by cobra838).
 - With Shadow speed above Original, the shadows turn as quickly as they move, so they no longer circle a portal before entering it.
+- Switching the Graphics API to OpenGL no longer leaves a black, unresponsive window if the graphics driver stalls; the game goes back to the previous API and says so.

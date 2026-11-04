@@ -2445,6 +2445,10 @@ static int host_main(int argc, char **argv)
     /* crash handlers and the unbuffered diagnostics writer, first thing;
        no log file when none was opened */
     ico_diag_init(log_file());
+    /* the first direct line (diag_host.h ico_diag_step): a start that hangs
+       before the host loop flushes stderr still names where it is */
+    ico_diag_step("ico_pc: start: the log is open; next the settings, the game data and the "
+                  "window");
     /* what starting the program again needs, ready before any crash */
     ico_diag_prepare_relaunch(argc, argv);
 #ifdef __ANDROID__
@@ -2680,6 +2684,7 @@ static int host_main(int argc, char **argv)
 #endif
 #ifndef ICO_HEADLESS
 #ifndef ICO_ANDROID_UI
+    ico_diag_step("ico_pc: start: the game data is ready; opening the window and the renderer");
     (void)open_window(); /* exits on failure (the 1 is Android's) */
 #endif
     open_texture_pack(exe_dir);

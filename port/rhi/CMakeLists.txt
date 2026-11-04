@@ -128,6 +128,17 @@ if(ICO_RUN_TESTS)
     add_test(NAME rhi_gl_glsl COMMAND rhi_gl_glsl_test)
 endif()
 
+# --- The OpenGL backend's fence wait with a limit (CPU only, every target) -----
+# gl/gl_sync_wait.c: gl_device.c's gl_wait_sync held to the GPU hang limit
+# in slices with the window's pump between them, on a stub fence and a fake
+# clock (rhi_gl_sync_wait_test.c).
+add_executable(rhi_gl_sync_wait_test test/rhi_gl_sync_wait_test.c gl/gl_sync_wait.c)
+target_include_directories(rhi_gl_sync_wait_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(rhi_gl_sync_wait_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME rhi_gl_sync_wait COMMAND rhi_gl_sync_wait_test)
+endif()
+
 # --- The driver version text (CPU only, every target) -----------------------
 # rhi_driver_version.c: a Vulkan driverVersion as the vendor writes it (the
 # adapter line of vk_device.c).
@@ -369,12 +380,14 @@ if(_ico_have_gl)
     set(_ico_gl_sources
         rhi_bind_cache.c
         gl/gl_cmd.c
+        gl/gl_compile.c
         gl/gl_device.c
         gl/gl_glsl.c
         gl/gl_loader.c
         gl/gl_pipeline.c
         gl/gl_resource.c
         gl/gl_swapchain.c
+        gl/gl_sync_wait.c
         d3d12/d3d12_plan.c)
     add_library(ico_rhi_opengl STATIC ${_ico_gl_sources})
     target_include_directories(ico_rhi_opengl PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")

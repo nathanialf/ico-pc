@@ -288,7 +288,13 @@ pipeline format's, not the build's: [RHI.md](RHI.md#vulkan)), creates the whole 
 pipeline set before the first frame, runs the fog's self-test and logs one start-up line with the
 backend, adapter and options (`window mode M` among them, as in the summary line),
 then `window: present mode M` (`port/platform/window_host.c` (`ico_window_open`, `window_flags`,
-`log_summary`)).
+`log_summary`)). Before `rd_init` it sets the renderer's wait hooks
+(`ico_window_switch_wait_hooks`, [RHI.md](RHI.md#wait-hooks)): OpenGL's shader compiles then run on
+a thread of their own while the window takes its events, so the window stays responsive (black,
+with no progress screen: nothing can be drawn before the device's shaders exist), and one compile
+is held to the GPU hang limit. Each step of the start and of Options > Graphics > Apply's switch
+writes its line at once (`ico_diag_step`), and the switch runs under its own watchdog limit
+([PLATFORM.md](PLATFORM.md#the-renderer-switched-from-the-menu), the in-process switch and its log lines).
 
 **The window modes** (`port/platform/window_video.c` (`ico_window_video_mode`,
 `ico_window_video_desktop_mode`)). Three distinct modes, as in other games:
