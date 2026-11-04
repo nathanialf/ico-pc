@@ -55,6 +55,25 @@ int display_rate_change_text(double oldHz, double newHz, int width, int height, 
                     oldHz, newHz, width, height, runSeconds, change);
 }
 
+int display_rate_poll(DisplayRateWatch *w, double hz, unsigned events, double eventSeconds,
+                      int width, int height, char *buf, size_t size)
+{
+    const double old = w->hz;
+
+    if (size > 0) {
+        buf[0] = '\0';
+    }
+    if (!display_rate_note(w, hz)) {
+        return 0;
+    }
+    if (events > 0) {
+        display_rate_change_text(old, hz, width, height, eventSeconds, w->changes, buf, size);
+    } else {
+        snprintf(buf, size, "display refresh changed without an event from SDL: %.2f Hz", hz);
+    }
+    return 1;
+}
+
 static int same_word(const char *a, const char *b)
 {
     for (; *a != '\0' && *b != '\0'; a++, b++) {

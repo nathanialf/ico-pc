@@ -11,7 +11,8 @@
 #include <SDL3/SDL.h>
 
 /* After the window exists: notes the display's rate, writes the first
-   line, and watches SDL's display mode changes (a line at each) */
+   line, and watches SDL's display mode changes (counted on SDL's thread;
+   the 10 s line's poll writes the change's line at the event's time) */
 void window_display_rate_start(SDL_Window *window);
 /* The 10 s block's refresh line (the display's mode now) */
 void window_display_rate_line(SDL_Window *window);

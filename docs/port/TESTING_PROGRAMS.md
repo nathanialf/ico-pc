@@ -821,7 +821,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `display_rate_test.c`: the refresh rate's log lines and the Android frame rate pin's decisions
   (`display_rate.h`, issue 123): the watch (first rate noted, 59.94 against 59.95 not a change, an
   unknown rate not one, 144 -> 60 -> 120 two changes), the block's line and the change's line word
-  for word, `[dev] frame_rate_pin` (auto, off, false, 0, no, any case), the rate asked for each
+  for word, the 10 s poll (`display_rate_poll`: a change SDL announced written at the event's run
+  time, one it did not with its own line, no change and an unknown rate nothing), `[dev] frame_rate_pin` (auto, off, false, 0, no, any case), the rate asked for each
   Frame rate row (60, 120, 144; Original, Uncapped, off and above 1000 none), the sequence set,
   nothing, set, release, nothing, a device without the call never asked, a refused ask tried
   again, a new native window or a resume forgetting the ask and the next set made again

@@ -48,6 +48,17 @@ int display_rate_text(const DisplayRateWatch *w, int width, int height, const ch
 /* the change's line without "window: " (oldHz and newHz as noted) */
 int display_rate_change_text(double oldHz, double newHz, int width, int height, double runSeconds,
                              unsigned change, char *buf, size_t size);
+/* The 10 s poll on the main thread (SDL's display calls are main-thread
+   calls, and Android posts the display event from its Java thread, so the
+   event watch only counts the events and keeps the last one's run time):
+   hz the rate read now, events the mode-change events SDL posted since the
+   last poll, eventSeconds the run time of the last of them.  Notes hz;
+   returns 1 with a line in buf (without "window: ") when it changed: the
+   change's line at the event's run time when SDL announced one, else
+   "display refresh changed without an event from SDL: B Hz"; 0 (buf "")
+   otherwise. */
+int display_rate_poll(DisplayRateWatch *w, double hz, unsigned events, double eventSeconds,
+                      int width, int height, char *buf, size_t size);
 
 /* --- the pin ------------------------------------------------------------ */
 

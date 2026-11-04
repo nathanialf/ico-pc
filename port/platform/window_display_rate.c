@@ -14,12 +14,16 @@
 #include <dlfcn.h>
 #endif
 
+/* the main thread's (start, the 10 s poll, stop) */
 static DisplayRateWatch s_watch;
-static SDL_Mutex *s_lock;
 static int s_w, s_h;
 static char s_name[96];
 static Uint64 s_startNs;
 static int s_watching;
+/* the event watch's (SDL's posting thread: Android's Java thread): the
+   mode-change events since the last poll and the last one's run time in ms */
+static SDL_AtomicInt s_events;
+static SDL_AtomicU32 s_eventMs;
 
 static double run_seconds(void)
 {
@@ -49,30 +53,18 @@ static double read_mode(SDL_DisplayID display)
     return hz;
 }
 
-/* SDL's display mode change, on whatever thread SDL posts it from */
+/* SDL's display mode change, on whatever thread SDL posts it from: only
+   counted with its time (SDL_GetCurrentDisplayMode and SDL_GetDisplayName
+   are main-thread calls); the 10 s poll reads the mode and writes the
+   change's line at the event's run time (display_rate_poll) */
 static bool SDLCALL display_watch(void *userdata, SDL_Event *e)
 {
     (void)userdata;
     if (e->type != SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED) {
         return true;
     }
-    if (s_lock != NULL) {
-        SDL_LockMutex(s_lock);
-    }
-    {
-        const double old = s_watch.hz;
-        const double hz = read_mode(e->display.displayID);
-        char line[256];
-
-        if (display_rate_note(&s_watch, hz)) {
-            display_rate_change_text(old, hz, s_w, s_h, run_seconds(), s_watch.changes, line,
-                                     sizeof line);
-            fprintf(stderr, "window: %s\n", line);
-        }
-    }
-    if (s_lock != NULL) {
-        SDL_UnlockMutex(s_lock);
-    }
+    SDL_SetAtomicU32(&s_eventMs, (Uint32)((SDL_GetTicksNS() - s_startNs) / 1000000u));
+    (void)SDL_AddAtomicInt(&s_events, 1);
     return true;
 }
 
@@ -82,9 +74,8 @@ void window_display_rate_start(SDL_Window *window)
     const double hz = read_mode(window != NULL ? SDL_GetDisplayForWindow(window) : 0);
 
     s_startNs = SDL_GetTicksNS();
-    if (s_lock == NULL) {
-        s_lock = SDL_CreateMutex();
-    }
+    SDL_SetAtomicInt(&s_events, 0);
+    SDL_SetAtomicU32(&s_eventMs, 0);
     s_watch = (DisplayRateWatch){0};
     (void)display_rate_note(&s_watch, hz);
     display_rate_text(&s_watch, s_w, s_h, s_name, 0.0, line, sizeof line);
@@ -97,20 +88,18 @@ void window_display_rate_start(SDL_Window *window)
 void window_display_rate_line(SDL_Window *window)
 {
     char line[256];
-    double hz;
+    const double hz = read_mode(window != NULL ? SDL_GetDisplayForWindow(window) : 0);
+    /* the events SDL posted since the last poll (the count taken, set to 0) */
+    const int events = SDL_SetAtomicInt(&s_events, 0);
+    const double eventSeconds = (double)SDL_GetAtomicU32(&s_eventMs) / 1000.0;
 
-    if (s_lock != NULL) {
-        SDL_LockMutex(s_lock);
-    }
-    hz = read_mode(window != NULL ? SDL_GetDisplayForWindow(window) : 0);
-    /* a change SDL did not report is still one */
-    if (display_rate_note(&s_watch, hz)) {
-        fprintf(stderr, "window: display refresh changed without an event from SDL: %.2f Hz\n", hz);
+    /* a change SDL announced, at the event's time; one it did not report is
+       still one */
+    if (display_rate_poll(&s_watch, hz, events > 0 ? (unsigned)events : 0u, eventSeconds, s_w, s_h,
+                          line, sizeof line)) {
+        fprintf(stderr, "window: %s\n", line);
     }
     display_rate_text(&s_watch, s_w, s_h, s_name, run_seconds(), line, sizeof line);
-    if (s_lock != NULL) {
-        SDL_UnlockMutex(s_lock);
-    }
     fprintf(stderr, "window: %s\n", line);
 }
 
@@ -242,9 +231,5 @@ void window_display_rate_stop(SDL_Window *window)
     if (s_watching) {
         SDL_RemoveEventWatch(display_watch, NULL);
         s_watching = 0;
-    }
-    if (s_lock != NULL) {
-        SDL_DestroyMutex(s_lock);
-        s_lock = NULL;
     }
 }

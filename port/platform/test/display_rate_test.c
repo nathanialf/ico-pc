@@ -9,7 +9,10 @@
  *            changes, counted;
  *   lines    the block's line (the rate, the size, the display's name, the
  *            run time, "1 change"/"2 changes"), a rate not known, the
- *            change's line; a small buffer cut;
+ *            change's line; a small buffer cut; the 10 s poll
+ *            (display_rate_poll): no change nothing, an event without a
+ *            change nothing, a change SDL announced at the event's time, one
+ *            it did not with its own line, an unknown rate nothing;
  *   mode     [dev] frame_rate_pin: auto for NULL, "", "auto" and a value not
  *            read; off for off, false, 0, no in any case;
  *   rate     the Frame rate row 60, 120, 144 asks that rate; Original (0)
@@ -74,6 +77,23 @@ static void testWatch(void)
         char small[10];
         display_rate_text(&w, 1, 1, NULL, 0.0, small, sizeof small);
         CHECK(strlen(small) == 9);
+    }
+    /* the 10 s poll (the event watch only counts): a change SDL announced
+       is written at the event's time, one it did not as before, none
+       nothing */
+    {
+        DisplayRateWatch p = {0};
+
+        CHECK(display_rate_poll(&p, 144.0, 0, 0.0, 3048, 2032, line, sizeof line) == 0);
+        CHECK_STR(line, "");
+        CHECK(display_rate_poll(&p, 144.0, 1, 12.0, 3048, 2032, line, sizeof line) == 0);
+        CHECK(display_rate_poll(&p, 60.0, 2, 85.2, 3048, 2032, line, sizeof line) == 1);
+        CHECK_STR(line, "display refresh changed: 144.00 Hz -> 60.00 Hz, 3048x2032 (run time "
+                        "85.2 s, change 1 of this run)");
+        CHECK(display_rate_poll(&p, 120.0, 0, 85.2, 3048, 2032, line, sizeof line) == 1);
+        CHECK_STR(line, "display refresh changed without an event from SDL: 120.00 Hz");
+        CHECK(p.changes == 2 && p.hz == 120.0);
+        CHECK(display_rate_poll(&p, 0.0, 1, 90.0, 3048, 2032, line, sizeof line) == 0);
     }
 }
 
