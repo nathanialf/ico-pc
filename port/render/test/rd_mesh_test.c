@@ -3995,7 +3995,10 @@ static void joinedStripChecks(void)
  *     zig-zag's six vertices with +z normals give bits 2 and 4; attach
  *     keeps them under the desc's hash and hands them to the desc; a
  *     second desc of the same stream after a fresh begin (nothing built)
- *     finds them; a build with a vertex without a normal keeps nothing; a
+ *     finds them; attach returns the desc's hash (rd_vu_mesh_desc_hash's)
+ *     and keeps it in the desc, and the mesh's record and a replacement's
+ *     take it (the stream hashed once); a build with a vertex without a
+ *     normal keeps nothing; a
  *     second, different table under the same hash leaves the hash none
  *   - why a mesh has no facing (RdMeshRec.facingWhy, the 10 s line's
  *     reasons): a prelit stream without a table NO_TABLE; a prelit stream
@@ -4232,7 +4235,11 @@ static void windingMarkChecks(void)
     for (int k = 0; k < 6; k++) {
         rd_vu_facing_vertex(k == 0, pos[k], up);
     }
-    rd_vu_facing_attach(&zd);
+    const uint64_t zh = rd_vu_facing_attach(&zd);
+    /* the stream hashed once: the attach's hash is the desc's identity,
+     * kept in the desc for the pack's lookup and the mesh's record */
+    CHECK(zh != 0 && zh == zd.hash && zh == rd_vu_mesh_desc_hash(&zd, NULL, NULL),
+          "winding marks: the attach returns the desc's hash and keeps it in the desc");
     CHECK(zd.facing && zd.facingCount == 6 && zd.facing[0] == 0x14u,
           "winding marks: the EE's builder marks k - s = 2 and 4 of a +z zig-zag (%02x, %u)",
           zd.facing ? zd.facing[0] : 0xEEu, zd.facingCount);
@@ -4245,6 +4252,8 @@ static void windingMarkChecks(void)
           "winding marks: a stream built again finds the table kept under its hash");
     const RdMesh zm = rd_create_vu_mesh(&again);
     const RdMeshRec *z = rd__mesh_rec(zm.id);
+    CHECK(z && again.hash == zh && z->hash == zh,
+          "winding marks: the mesh's record takes the attach's hash");
     CHECK(z && flipAt(z, 2) == 1 && flipAt(z, 3) == 0 && flipAt(z, 4) == 1 && flipAt(z, 5) == 0 &&
               z->facingFrom == RD_MESH_FACING_TABLE,
           "winding marks: a prelit mesh from the EE's table is marked as the lit one");
@@ -4315,7 +4324,7 @@ static void windingMarkChecks(void)
     const RdMesh rm = rd_create_vu_mesh_replacement(&zd, &rep, "winding replacement");
     const RdMeshRec *r = rd__mesh_rec(rm.id);
     CHECK(r && r->replaced && r->facingFrom == RD_MESH_FACING_NONE &&
-              r->facingWhy == RD_VU_NOFACE_REPLACED,
+              r->facingWhy == RD_VU_NOFACE_REPLACED && r->hash == zh,
           "winding marks: a prelit replacement has no facing, why %d (want replaced)",
           r ? (int)r->facingWhy : -1);
     rd_destroy_vu_mesh(rm);

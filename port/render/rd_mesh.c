@@ -1545,11 +1545,14 @@ static void facingKeep(uint64_t hash, uint32_t nv)
     }
 }
 
-void rd_vu_facing_attach(RdVuMeshDesc *d)
+uint64_t rd_vu_facing_attach(RdVuMeshDesc *d)
 {
     FacingBuild *b = &s_facingBuild;
     uint32_t nv = 0;
     const uint64_t hash = d ? rd_vu_mesh_desc_hash(d, &nv, NULL) : 0;
+    if (d) {
+        d->hash = hash; /* the stream hashed once (rd_mesh.h RdVuMeshDesc.hash) */
+    }
     if (hash != 0 && b->count != 0) {
         if (b->ok && b->count == nv) {
             facingKeep(hash, nv);
@@ -1593,6 +1596,7 @@ void rd_vu_facing_attach(RdVuMeshDesc *d)
                     s_facingMiss);
         }
     }
+    return hash;
 }
 
 uint64_t rd__mesh_join_part(RdMeshRec *const *ms, uint32_t n, uint64_t sig)
@@ -2168,7 +2172,8 @@ RdMesh rd_create_vu_mesh(const RdVuMeshDesc *d)
     if (m) {
         m->materialCount = d->materialCount;
         m->srcQw = d->qwCount;
-        m->hash = xxh3_64(buf, bytes);
+        /* the caller's hash of this desc (rd_vu_facing_attach) or ours */
+        m->hash = d->hash ? d->hash : xxh3_64(buf, bytes);
         if (d->facing) {
             /* the EE's facing table (Packet.c): the marks of every program */
             (void)rd__mesh_set_facing(m, d->facing, d->facingCount);
@@ -2201,7 +2206,7 @@ RdMesh rd_create_vu_mesh_replacement(const RdVuMeshDesc *orig, const RdVuReplace
     if (total >= (1u << 30)) {
         return (RdMesh){0};
     }
-    const uint64_t hash = rd_vu_mesh_desc_hash(orig, NULL, NULL);
+    const uint64_t hash = orig->hash ? orig->hash : rd_vu_mesh_desc_hash(orig, NULL, NULL);
     const uint32_t nv = (uint32_t)total;
     float (*stream)[4] = malloc((size_t)(nv ? nv : 1) * qpv * 16);
     uint32_t *index = malloc((size_t)(nv ? nv : 1) * 3 * 4);
