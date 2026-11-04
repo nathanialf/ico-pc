@@ -953,7 +953,10 @@ before it could be shown: the game was not slow, the driver or the screen
 held the picture. The line `window: present calls: ...` in every 10
 second block counts those waits by size, and `window: display refresh: ...`
 says what rate the screen ran at; if the rate changes just before such a
-wait, the screen changing its refresh rate is the cause. With **Frame
+wait, the screen changing its refresh rate is the cause. On a Qualcomm
+graphics chip the lines `window: kernel GPU driver ...` say how fast the
+graphics chip ran and how busy it was in each 10 second block and just
+before and after each such wait. With **Frame
 rate** set to a number the game asks the phone to hold one rate
 ([the details](ANDROID.md#a-fixed-refresh-rate-for-a-frame-rate-you-set)).
 On a tablet, a high **Resolution** with Vsync off and Frame rate

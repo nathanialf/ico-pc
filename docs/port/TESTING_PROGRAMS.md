@@ -598,7 +598,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   is on, from `config.toml` and then from `ico_host_set_second_card`, an explicit `saves2`
   winning, no folder made), portable mode, the `[dev]`
   keys exported as environment switches (`ico_dev_env_value`, `test_dev_env`; `present_fallback`
-  auto, off or fifo; `glow_fold` as `ICO_RD_GLOW_FOLD`), a restart's
+  auto, off or fifo; `glow_fold` as `ICO_RD_GLOW_FOLD`; `submit_thread` as `ICO_RD_SUBMIT_THREAD`,
+  off and false as 0, true as 1, its ini name), a restart's
   `ICO_RD_BLEND` and `ICO_RD_VU_PREPASS` over the ini's (`test_retry_blend`,
   `test_retry_prepass`), the disc choice's rules in order (`ico_host_choose_disc`,
   `test_choose_disc`), the logs folder set by `ico_host_set_logs_dir` (`test_logs_override`), and

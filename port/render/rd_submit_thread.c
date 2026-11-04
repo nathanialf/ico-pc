@@ -193,8 +193,8 @@ bool rd__submit_thread_start(void (*begin)(void *user), void *user)
         return false;
     }
     rd__log("submit thread: on (the pictures handed to the render thread are submitted and "
-            "presented on a thread of their own, %s; ICO_RD_SUBMIT_THREAD=0 keeps them on the "
-            "render thread)",
+            "presented on a thread of their own, %s; [dev] submit_thread = false "
+            "(ICO_RD_SUBMIT_THREAD=0) keeps them on the render thread)",
             rhi_backend_kind_name(rhi_backend()));
     if (s_st.apart) {
         static const RhiSlotGuard guard = {NULL, slotFree, slotPending, slotWorker};

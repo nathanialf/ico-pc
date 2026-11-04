@@ -535,10 +535,16 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   picture's bytes do not change. The queue holds at most two (`RD_SUBMIT_DEPTH`; with the rule
   above one) pictures submitted and not presented, so the GPU's backlog stays the present
   allowance's. A job's submit and present times go into its replay's record when a thread that
-  waited for it takes them (`rd__perf_submit_times`): the replays line keeps its columns, one
+  waited for it takes them (`rd__perf_submit_times`, with the present timed apart: the lock, the
+  driver's call, the poll, its end; issue 123): the replays line keeps its columns, one
   picture late. The thread runs at SDL's high priority (`RdThreadHost.submitBegin`). OpenGL and
-  Direct3D 11 have none (`RhiLimits.singleThreadCommands`); `ICO_RD_SUBMIT_THREAD=0` turns it off
-  for the tests' other arm; `[dev] render_thread = off` or `sync` has none either. Park waits for
+  Direct3D 11 have none (`RhiLimits.singleThreadCommands`); `[dev] submit_thread = false`
+  (`ICO_RD_SUBMIT_THREAD=0`, [CONFIG.md](CONFIG.md)) turns it off, for the tests' other arm and for
+  issue 123's A/B (the presents on the render thread, one picture fewer queued between the walk
+  and the screen, against `[dev] render_thread = off`, everything on the game thread with no slot
+  overlap: a present stall whose length or spacing changes with either is in the port's queue of
+  pictures, one that does not is below the port); `[dev] render_thread = off` or `sync` has none
+  either. Park waits for
   it after the render thread parks (the surface goes after the last present), the stop ends it
   with the host, and the heartbeat counts its job as the last picture's when the render thread has
   none in progress (a present that hangs there ends the run through the GPU hang's path).
@@ -610,7 +616,7 @@ window: render thread: on (interpolation, walk, submit and present off the game 
 window: render thread: on (...; OpenGL, [dev] render_thread = auto; every graphics call on the render thread)
 window: render thread: sync (interpolation, walk, submit and present on the render thread, [dev] render_thread = sync: the game thread waits for each picture)
 window: render thread: off ([dev] render_thread = off)
-rd: submit thread: on (the pictures handed to the render thread are submitted and presented on a thread of their own, Vulkan; ICO_RD_SUBMIT_THREAD=0 keeps them on the render thread)
+rd: submit thread: on (the pictures handed to the render thread are submitted and presented on a thread of their own, Vulkan; [dev] submit_thread = false (ICO_RD_SUBMIT_THREAD=0) keeps them on the render thread)
 rd: submit thread: off (this graphics API takes every call on one thread: the render thread submits and presents its pictures)
 rd: submit thread: the frame slots apart (the render thread's next picture records while the one before is submitted and presented, and waits only for its own slot's picture two before; ICO_RD_SUBMIT_OVERLAP=0 keeps the submit thread's work and the render thread's graphics calls one at a time)
 rd: submit thread: the frame slots one at a time (this graphics API keys its frame slot on one index: the render thread's next picture's first graphics call waits for the submit thread)

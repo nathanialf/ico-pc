@@ -797,6 +797,15 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("frame_rate_pin", "true") == NULL);
     CHECK(ico_dev_env_value("frame_rate_pin", "60") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.frame_rate_pin"), "frame_rate_pin") == 0);
+    /* submit_thread: the submit thread on (true, the default) or off, the
+       render thread submitting and presenting (rd_submit_thread.c reads
+       ICO_RD_SUBMIT_THREAD=0; issue 123's A/B) */
+    CHECK(strcmp(ico_dev_env_name("submit_thread"), "ICO_RD_SUBMIT_THREAD") == 0);
+    CHECK(strcmp(ico_dev_env_value("submit_thread", "off"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("submit_thread", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("submit_thread", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("submit_thread", "auto") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.submit_thread"), "submit_thread") == 0);
     /* render_thread: the window's render thread, read through the store
        (render_thread.c), not exported */
     CHECK(strcmp(ico_config_ini_key("dev.render_thread"), "render_thread") == 0);
