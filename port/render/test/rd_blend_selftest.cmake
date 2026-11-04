@@ -10,10 +10,14 @@
 #   DENY: the device line "destination read: ... attachment read off on
 #   this driver (Qualcomm driver ...)" (the fake Adreno);
 #   EXTRA, EXTRA2: any other lines the log must hold (unflattened: write
-#   "." for a ";").
+#   "." for a ";");
+#   GLYPH: the shader both blend lines name for the glyph cell ("(the
+#   glyph through <GLYPH>)": font_sheet_ps or font_sheet_baked_ps, issue
+#   188).
 # -DTOOL=<rd_blend_selftest_test> -DMODE=<attachment|storage|fixed>
 # -DNAME=<the blend's log name, a regex> -DRESULTS=<regex of the results>
 # [-DFAIL=<regex>] [-DDENY=1] [-DEXTRA=<regex>] [-DEXTRA2=<regex>]
+# [-DGLYPH=<shader name>]
 # (rd_blend_selftest_moltenvk_storage: ICO_VK_FAKE_LIMITS=moltenvk, skipped
 # on a device without the interlock)
 execute_process(COMMAND "${TOOL}" "${MODE}" RESULT_VARIABLE rc OUTPUT_VARIABLE out
@@ -35,6 +39,14 @@ string(REGEX MATCHALL "blend: ${NAME} \\(self-test: ${RESULTS}\\)[^\n]* in [0-9.
 list(LENGTH lines n)
 if(NOT n EQUAL 2)
   message(FATAL_ERROR "${n} \"blend: ${NAME} (self-test: ${RESULTS})\" lines, 2 expected:\n${err}")
+endif()
+if(GLYPH)
+  string(REGEX MATCHALL "blend: ${NAME} \\(self-test: ${RESULTS}\\)[^\n]* texels \\(the glyph through ${GLYPH}\\) in [0-9.]+ ms"
+         glyphs "${flat}")
+  list(LENGTH glyphs ng)
+  if(NOT ng EQUAL 2)
+    message(FATAL_ERROR "${ng} blend lines with \"(the glyph through ${GLYPH})\", 2 expected:\n${err}")
+  endif()
 endif()
 if(FAIL)
   if(NOT err MATCHES "blend: self-test: ${FAIL} at [a-z ,]+[0-9]* \\(texel [0-9]+,[0-9]+\\): ")

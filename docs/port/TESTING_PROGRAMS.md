@@ -1137,7 +1137,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   opaque cell drawn after the blended draws and read at an even and an odd texel column (`after
   cell, even column`, `after cell, odd column` in a failure line), which a driver that keeps a
   dual-source equation with blending off fails, and the overlap of two sprites of one LERP command
-  (`one draw, second over first`: the read's rasterization order inside a draw). Under GS state as
+  (`one draw, second over first`: the read's rasterization order inside a draw). The glyph's
+  shader is matched on both lines (`-DGLYPH`, issue 188): the 1x bake's `font_sheet_baked_ps` by
+  default (`rd_blend_selftest`), `font_sheet_ps` under an exact mode asked
+  (`rd_blend_selftest_blend_attachment`) and with `[dev] sheet_shader`
+  (`rd_blend_selftest_sheet_shader`, `ICO_RD_SHEET_SHADER=1`). Under GS state as
   shader data (`ICO_RD_UBER=on`): the attachment read taken for it and kept
   (`rd_blend_selftest_uber`, the profile line's and the start line's words), kept when sabotaged
   (`rd_blend_selftest_uber_sabotage`: `[dev] uber = on` keeps it as `[dev] blend` does), and
@@ -2075,7 +2079,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   a tie: N = 3 level texels), some texels differing; the |d| histogram printed (`checkEdges2x`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-edges-above-1x)).
 - `rd_state_test.c`: the recording half of rd without a GPU: the payload arena's alignment gap
-  zeroed over a reused buffer's bytes (`testPayloadPad`), the VU fallback's set
+  zeroed over a reused buffer's bytes (`testPayloadPad`), the sheet shader's keys in the set
+  (`testSheetSet`, issue 188: no `font_sheet_ps` key on a tile-based profile at 1x and 2x with a
+  1008-line output, the frame's 8 at a 3x scene, the overlay's 4 at 1080 lines, 10 with `[dev]
+  sheet_shader`, a desktop profile's at 2x; `font_sheet_baked_ps`'s 10 in each; the family line's
+  words), the VU fallback's set
   (`rd__vu_set_choose`, `testVuSetPolicy`: the stock Adreno 740's table row and two Turnip driver
   texts take the plain set with the start line's words, Qualcomm's driver without a row, lavapipe,
   RADV and NVIDIA the extended one, `[dev] vu_set = plain` (`ICO_RD_VU_SET=plain` or
