@@ -43,6 +43,11 @@
  *           them and with scale.w 0 (the steps from the pixel's
  *           footprint): within 2 levels of each other (sprite.hlsl
  *           sprite_above1x; the count of differing pixels printed)
+ *   turns   blit_vs's quarter turns (DrawCB.aux1.w: the present into a
+ *           pre-rotated swapchain, port/render/rd_prerotate.c): a 3x2
+ *           picture turned 90, 180 and 270 degrees, every pixel against
+ *           an image written out by hand from the Vulkan spec's ROTATE_90
+ *           and Google's pre-rotation sample (checkTurns)
  *
  * --nodual (ctest shaders_pixel_nodual): sprite_ps_nodual (and
  * sprite_ps_planes_nodual for the planes pass),
@@ -708,6 +713,186 @@ static void checkAbove1xSteps(RhiBindGroupLayout l0, RhiBindGroupLayout l1, RhiB
     }
 }
 
+/* ------------------------------------------------------------ the turn */
+
+/* blit_vs's quarter turns (DrawCB.aux1.w, port/render/rd_prerotate.c, the
+ * present into a pre-rotated swapchain), pinned to corners written out by
+ * hand, not to the table rd_prerotate.c's twin read-back follows (that twin
+ * turns back by the same table as the shader, so a 90 swapped with a 270 on
+ * both sides passes there; here it fails).
+ *
+ * The direction, from two sources:
+ *   - the Vulkan spec, VkSurfaceTransformFlagBitsKHR:
+ *     "VK_SURFACE_TRANSFORM_ROTATE_90_BIT_KHR specifies that image content
+ *     is rotated 90 degrees clockwise", and VkSwapchainCreateInfoKHR::
+ *     preTransform is "the transform, relative to the presentation engine's
+ *     natural orientation, applied to the image content prior to
+ *     presentation": the app draws its picture turned 90 degrees clockwise
+ *     into the image;
+ *   - Google's pre-rotation sample (android-developers.googleblog.com,
+ *     "Handling device orientation efficiently in Vulkan with
+ *     pre-rotation", February 2020): for ROTATE_90 the clip space is turned
+ *     glm::rotate(mat4(1), radians(90), vec3(0, 0, 1)), (x, y) -> (-y, x);
+ *     in Vulkan's clip space, y down, the picture's top-left (-1, -1) lands
+ *     at (1, -1), the image's top-right; top-right (1, -1) at (1, 1), the
+ *     bottom-right; bottom-right at the bottom-left; bottom-left at the
+ *     top-left.  180: each corner at the opposite one.  270 (rotate by 270,
+ *     (x, y) -> (y, -x)): top-left at the bottom-left, top-right at the
+ *     top-left, bottom-right at the top-right, bottom-left at the
+ *     bottom-right.
+ * The picture: 3x2 texels, top row R M1 G, bottom row B M2 W (the corners
+ * red, green, blue, white).  Turned 90 or 270 the image is 2x3, turned 180
+ * 3x2; nearest sampling, each image pixel on one picture texel. */
+#define TURN_W 3
+#define TURN_H 2
+
+static void checkTurns(RhiBindGroupLayout l0, RhiBindGroupLayout l1, RhiBindGroupLayout l2a,
+                       RhiPipeline blit)
+{
+    enum { R, M1, G, B, M2, WH, NC };
+
+    static const uint8_t kCol[NC][4] = {{255, 0, 0, 255}, {10, 20, 30, 255}, {0, 255, 0, 255},
+                                        {0, 0, 255, 255}, {40, 50, 60, 255}, {255, 255, 255, 255}};
+    /* the picture, row by row */
+    static const int kPic[TURN_H][TURN_W] = {{R, M1, G}, {B, M2, WH}};
+
+    /* the image each turn must give, row by row, written out from the
+     * corners above (not computed): 90: the top row R M1 G down the right
+     * column, the bottom row B M2 W down the left; 180: both rows
+     * reversed and swapped; 270: the top row up the left column, the
+     * bottom row up the right */
+    static const struct {
+        uint32_t turns, w, h;
+        int px[3][3]; /* [y][x], w x h used */
+    } kWant[3] = {
+        {1, 2, 3, {{B, R}, {M2, M1}, {WH, G}}},
+        {2, 3, 2, {{WH, M2, B}, {G, M1, R}}},
+        {3, 2, 3, {{G, WH}, {M1, M2}, {R, B}}},
+    };
+
+    const uint64_t offTex = 0, offU = 1024;
+    const uint64_t size = offU + 5 * 512;
+    RhiBuffer ring = rhi_create_buffer(
+        &(RhiBufferDesc){size, RHI_BUF_UNIFORM | RHI_BUF_COPY_SRC, RHI_MEM_UPLOAD, "turn ring"});
+    uint8_t *map = rhi_map_buffer(ring);
+    RhiTexture tex = rhi_create_texture(&(RhiTextureDesc){
+        TURN_W, TURN_H, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST, "turn pic", 0});
+    RhiTexture rt[3];
+    for (int i = 0; i < 3; i++) {
+        rt[i] = rhi_create_texture(&(RhiTextureDesc){kWant[i].w, kWant[i].h, 1, RHI_FMT_RGBA8_UNORM,
+                                                     RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC,
+                                                     "turn image", 0});
+    }
+    RhiSampler smp = rhi_create_sampler(&(RhiSamplerDesc){RHI_FILTER_NEAREST, RHI_FILTER_NEAREST,
+                                                          RHI_FILTER_NEAREST, RHI_WRAP_CLAMP,
+                                                          RHI_WRAP_CLAMP, 1.0f, 0.0f, 0.0f, 0.0f});
+    if (!ring.id || !map || !tex.id || !rt[0].id || !rt[1].id || !rt[2].id || !smp.id) {
+        printf("FAIL turns: resources\n");
+        failures++;
+        return;
+    }
+    for (int y = 0; y < TURN_H; y++) {
+        for (int x = 0; x < TURN_W; x++) {
+            memcpy(map + offTex + ((size_t)y * TURN_W + (size_t)x) * 4, kCol[kPic[y][x]], 4);
+        }
+    }
+    IcoFrameCB fcb;
+    memset(&fcb, 0, sizeof(fcb));
+    memcpy(map + offU, &fcb, sizeof(fcb));
+    RhiBinding fb = {0};
+    fb.slot = 0;
+    fb.type = RHI_BIND_UNIFORM_BUFFER;
+    fb.buffer = ring;
+    fb.offset = offU;
+    fb.size = sizeof(IcoFrameCB);
+    RhiBindGroup g0 = rhi_create_bind_group(&(RhiBindGroupDesc){l0, &fb, 1});
+    RhiBinding tb[3] = {{0}, {0}, {0}};
+    tb[0].slot = 1;
+    tb[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    tb[0].texture = tex;
+    tb[1].slot = 1;
+    tb[1].type = RHI_BIND_SAMPLER;
+    tb[1].sampler = smp;
+    tb[2].slot = 2;
+    tb[2].type = RHI_BIND_SAMPLED_TEXTURE;
+    tb[2].texture = tex;
+    RhiBindGroup g2 = rhi_create_bind_group(&(RhiBindGroupDesc){l2a, tb, 3});
+    RhiBindGroup g1[3];
+    for (int i = 0; i < 3; i++) {
+        /* the present's turn as rd_prerotate.c draws it: the whole
+         * picture, untinted (0x80), aux1.w the quarter turns */
+        IcoDrawCB cb;
+        memset(&cb, 0, sizeof(cb));
+        setTex(&cb, TURN_W, TURN_H);
+        cb.mode[0] = ICO_DF_TEXTURED | ICO_DF_TCC_RGBA;
+        cb.uvRect[2] = TURN_W;
+        cb.uvRect[3] = TURN_H;
+        for (int k = 0; k < 4; k++) {
+            cb.col[k] = 0x80;
+        }
+        cb.aux1[3] = kWant[i].turns;
+        const uint64_t at = offU + (uint64_t)(1 + i) * 512;
+        memcpy(map + at, &cb, sizeof(cb));
+        RhiBinding b = {0};
+        b.slot = 1;
+        b.type = RHI_BIND_UNIFORM_BUFFER;
+        b.buffer = ring;
+        b.offset = at;
+        b.size = sizeof(IcoDrawCB);
+        g1[i] = rhi_create_bind_group(&(RhiBindGroupDesc){l1, &b, 1});
+    }
+    RhiCommandList cl = rhi_begin_commands();
+    if (!cl.id || !g0.id || !g2.id || !g1[0].id || !g1[1].id || !g1[2].id) {
+        printf("FAIL turns: setup\n");
+        failures++;
+        return;
+    }
+    RhiTextureBarrier up = {tex, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST};
+    rhi_cmd_barrier(cl, &up, 1);
+    rhi_cmd_copy_buffer_to_texture(cl, ring, offTex, TURN_W * 4, tex, 0,
+                                   (RhiRect){0, 0, TURN_W, TURN_H});
+    RhiTextureBarrier rd = {tex, RHI_STATE_COPY_DST, RHI_STATE_SHADER_READ};
+    rhi_cmd_barrier(cl, &rd, 1);
+    for (int i = 0; i < 3; i++) {
+        RhiTextureBarrier b = {rt[i], RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+        rhi_cmd_barrier(cl, &b, 1);
+        RhiRenderPassDesc rp = {0};
+        rp.color[0] = (RhiColorAttachment){rt[i], RHI_LOAD_CLEAR, {0}, RHI_STORE_STORE, false};
+        rp.colorCount = 1;
+        rp.width = kWant[i].w;
+        rp.height = kWant[i].h;
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_set_pipeline(cl, blit);
+        rhi_cmd_set_bind_group(cl, 0, g0);
+        rhi_cmd_set_bind_group(cl, 1, g1[i]);
+        rhi_cmd_set_bind_group(cl, 2, g2);
+        rhi_cmd_draw(cl, 3, 0, 1);
+        rhi_cmd_end_render_pass(cl);
+        RhiTextureBarrier a = {rt[i], RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC};
+        rhi_cmd_barrier(cl, &a, 1);
+    }
+    rhi_end_commands(cl);
+    rhi_submit(cl);
+    for (int i = 0; i < 3; i++) {
+        uint8_t img[3 * 3 * 4];
+        uint32_t pitch = 0;
+        char what[64];
+        if (!rhi_readback_texture(rt[i], RHI_ASPECT_COLOR, img, sizeof(img), &pitch)) {
+            printf("FAIL turns: readback\n");
+            failures++;
+            return;
+        }
+        snprintf(what, sizeof(what), "blit_vs turned %u degrees", kWant[i].turns * 90u);
+        for (uint32_t y = 0; y < kWant[i].h; y++) {
+            for (uint32_t x = 0; x < kWant[i].w; x++) {
+                const uint8_t *c = kCol[kWant[i].px[y][x]];
+                expect(what, img, pitch, (int)x, (int)y, c[0], c[1], c[2], c[3], 0);
+            }
+        }
+    }
+    printf("  turns: blit_vs at 90, 180 and 270 degrees against the corners written out\n");
+}
+
 int main(int argc, char **argv)
 {
     const int nodual = argc > 1 && strcmp(argv[1], "--nodual") == 0;
@@ -1219,6 +1404,7 @@ int main(int argc, char **argv)
     }
     if (!nodual) {
         checkAbove1xSteps(l0, l1, l2a, sp.opaque);
+        checkTurns(l0, l1, l2a, pBlit);
     }
     if (rhi_vk_validation_error_count() != 0) {
         printf("FAIL %u validation errors\n", (unsigned)rhi_vk_validation_error_count());

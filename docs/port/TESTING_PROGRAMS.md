@@ -2379,7 +2379,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   axes and the separable combine, and the fog's `gs_fog_channel` (`checkAbove1xKernels`); on the
   device, `sprite_ps` above 1x over a magnified, a decimated and a mixed noise texture with the
   steps from `DrawCB.scale[3]` against the steps from the pixel's footprint, at most 2 levels apart
-  (`checkAbove1xSteps`).
+  (`checkAbove1xSteps`); and `blit_vs`'s quarter turns (`DrawCB.aux1.w`, the present into a
+  pre-rotated swapchain): a 3x2 picture with four coloured corners turned 90, 180 and 270 degrees,
+  every pixel against an image written out by hand from the Vulkan spec's `ROTATE_90` ("rotated 90
+  degrees clockwise") and Google's pre-rotation sample's `glm::rotate` by +90 degrees about Z, so a
+  90 and a 270 swapped in the shader fails here even when the twin's CPU table is swapped with it
+  (`checkTurns`).
 - `vu1_test.c`: the [VU1](ARCHITECTURE.md#terms) program shaders against their CPU references and
   hand traces, the card verdicts handed over as the renderer does, and the CPU's card test against
   the reference; the record: every mesh case's vertices through its pre-pass entry and its

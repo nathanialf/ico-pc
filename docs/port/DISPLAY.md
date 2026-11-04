@@ -1492,7 +1492,12 @@ presented in its place (N times)` says so (the first 8, then every 100th).
 (`rhi_swapchain_rotation`), the present draws its picture as always and then turns it, in the same
 pass, into a texture of the turned size, and `rd_read_presented` reads that texture back and turns
 it back on the CPU by the table above (`rd__prerotate_twin_read`); `rd_replay_tool_prerotate`
-holds the result to the identity present byte for byte ([Tests](#tests)).
+holds the result to the identity present byte for byte ([Tests](#tests)). The twin turns back by
+the shader's own table, so it cannot tell a 90 from a 270 swapped on both sides; the direction
+itself is pinned in `shaders_pixel` (`checkTurns` in `port/shaders/test/shaders_pixel_test.c`):
+`blit_vs` turning a 3x2 picture 90, 180 and 270 degrees against images written out by hand from
+the spec's words and Google's sample (the picture's top-left at the image's top-right at 90).
+Only a phone shows whether the spec's reading is the device's.
 
 ### The FIFO fallback
 
