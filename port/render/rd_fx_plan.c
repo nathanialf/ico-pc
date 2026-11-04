@@ -200,7 +200,8 @@ static bool fxPassReadable(const Replay *r, const RdFxDraw *x)
  * (nothing recorded: doBlurSpriteDraw draws it); true when drawn or when
  * the scissor leaves nothing to draw. */
 static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32_t set,
-                   uint32_t clear, const uint8_t *col, int local, int kind, const uint32_t *words)
+                   uint32_t clear, const uint8_t *col, int local, int kind, const uint32_t *words,
+                   RdTargetRec *t2)
 {
     RhiPipeline pipe = rd__get_pipeline(key);
     if (!pipe.id || (local && !fxPassReadable(r, x))) {
@@ -218,6 +219,12 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
         }
         srcTex = x->src->color;
     }
+    if (t2 && t2->colorState != RHI_STATE_SHADER_READ) {
+        /* the glow fold's WORK2 (t2: fx_glow_mask's kept texels), made
+         * readable as the source is */
+        rd__replay_end_pass_for(r, t2->color.id);
+        rd__transition(rd__replay_cl(), t2->color, &t2->colorState, RHI_STATE_SHADER_READ);
+    }
     DrawSetup ds;
     memset(&ds, 0, sizeof(ds));
     ds.tc = x->tc;
@@ -227,7 +234,7 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
     ds.tdId = key->depthFmt != RHI_FMT_UNKNOWN ? r->st.depth : 0;
     ds.depthFmt = (RhiFormat)key->depthFmt;
     ds.tex = local ? g_rd.dummy : srcTex;
-    ds.dateTex = g_rd.dummy;
+    ds.dateTex = t2 ? t2->color : g_rd.dummy;
     ds.tw = x->tw;
     ds.th = x->th;
     ds.textured = x->textured;
@@ -418,7 +425,8 @@ static int fxConstantDraw(Replay *r, const RdFxDraw *x)
     if (attached) {
         fxDepthAttached(&k);
     }
-    if (fxDraw(r, x, &k, 0, RD_FXF_ABE | RD_FXF_DST | RD_FXF_PABE, rgb, 0, FX_CONSTANT, NULL)) {
+    if (fxDraw(r, x, &k, 0, RD_FXF_ABE | RD_FXF_DST | RD_FXF_PABE, rgb, 0, FX_CONSTANT, NULL,
+               NULL)) {
         if (attached) {
             fxAttachedNote(r);
         }
@@ -479,8 +487,8 @@ bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x)
 static bool fxGlowFold(Replay *r, const RdFxDraw *x)
 {
     uint32_t words[RD_GLOW_FOLD_WORDS];
-    RdTargetRec *scene = NULL;
-    if (!rd__glow_fold_due(r, x, words, &scene)) {
+    RdTargetRec *scene = NULL, *kept = NULL;
+    if (!rd__glow_fold_due(r, x, words, &scene, &kept)) {
         return false;
     }
     RdFxDraw y = *x;
@@ -489,7 +497,8 @@ static bool fxGlowFold(Replay *r, const RdFxDraw *x)
     RdPipeKeyInt k = *x->key;
     k.fs = RD_FS_FX_FRAME; /* the alpha alone's key (rd__fx_enumerate) */
     if (g_rd.fs[RD_FS_FX_FRAME].id &&
-        fxDraw(r, &y, &k, RD_FXF_GLOW_MASK, 0, NULL, 0, FX_GLOW, words)) {
+        fxDraw(r, &y, &k, RD_FXF_GLOW_MASK | (kept ? RD_FXF_GLOW_KEPT : 0u), 0, NULL, 0, FX_GLOW,
+               words, kept)) {
         rd__glow_fold_drawn();
         return true;
     }
@@ -526,14 +535,14 @@ static bool fxPlanDraw(Replay *r, const RdFxDraw *x)
             k.fs = RD_FS_FX_FRAME;
             k.gs.blend = form == 1 ? RD_BLEND_CS_AS_ADD_CD : RD_BLEND_CD_SUB_CS_AS;
             if (fxDraw(r, x, &k, RD_FXF_OUT_PREMUL, RD_FXF_ABE | RD_FXF_DST, NULL, 0, FX_ADDITIVE,
-                       NULL)) {
+                       NULL, NULL)) {
                 return true;
             }
         }
         if (g_rd.profile.fxDstLocal && g_rd.fs[RD_FS_FX_LOCAL].id && g_rd.layoutLocal.id) {
             RdPipeKeyInt k = *x->key;
             k.fs = RD_FS_FX_LOCAL;
-            return fxDraw(r, x, &k, 0, 0, NULL, 1, FX_LOCAL, NULL);
+            return fxDraw(r, x, &k, 0, 0, NULL, 1, FX_LOCAL, NULL, NULL);
         }
         return false;
     }
@@ -544,7 +553,7 @@ static bool fxPlanDraw(Replay *r, const RdFxDraw *x)
         g_rd.fs[RD_FS_FX_FRAME].id) {
         RdPipeKeyInt k = *x->key;
         k.fs = RD_FS_FX_FRAME;
-        return fxDraw(r, x, &k, RD_FXF_ALPHA_ONLY, 0, NULL, 0, FX_ALPHA, NULL);
+        return fxDraw(r, x, &k, RD_FXF_ALPHA_ONLY, 0, NULL, 0, FX_ALPHA, NULL, NULL);
     }
     return false;
 }
