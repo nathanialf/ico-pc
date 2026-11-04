@@ -1140,8 +1140,12 @@ int rd__sheet_bake_scale(uint32_t scale)
        the shader's.  4 is exact too but not baked: its pages are 4096 x
        2048 (8 MB of coverage, 34 MB baked), a 4K desktop's, whose card
        draws the shader anyway; 2 is the phone's (a scene 2.1 times the PS2's
-       height at Resolution Auto or 2x, port/ui/menu_font.c mfScale) */
-    return scale <= 1u || scale == 2u;
+       height at Resolution Auto or 2x, port/ui/menu_font.c mfScale), baked
+       on the tile-based device classes only (RdProfile.sheetBake2x): where
+       the shader is cheap the bake is a 4 to 18 MB upload on the render
+       thread whenever new text appears, 10 to 111 ms a picture on a GTX 750
+       Ti (issue 126), for the same bytes */
+    return scale <= 1u || (scale == 2u && g_rd.profile.sheetBake2x);
 }
 
 int rd__sheet_baked(const RdTexRec *t)
@@ -1496,6 +1500,21 @@ void rd__set_sheet_shader(bool on)
         RdTexRec *t = &g_rd.textures[i];
         if (t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&
             rd__sheet_bake_scale(t->sheetScale)) {
+            sheetDirtyAll(t);
+        }
+    }
+}
+
+void rd__set_sheet_bake_2x(bool on)
+{
+    if (g_rd.profile.sheetBake2x == on) {
+        return;
+    }
+    g_rd.profile.sheetBake2x = on;
+    for (uint32_t i = 0; g_rd.textures && i < RD_MAX_TEXTURES; i++) {
+        RdTexRec *t = &g_rd.textures[i];
+        if (t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&
+            t->sheetScale == 2u) {
             sheetDirtyAll(t);
         }
     }

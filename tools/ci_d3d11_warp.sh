@@ -47,6 +47,7 @@ PROGRAMS=(
     port/render/rd_msaa_test.exe
     port/render/rd_crt_test.exe
     port/render/rd_mirror_test.exe
+    port/fmv/rd_video_test.exe
 )
 
 stage() {
@@ -311,6 +312,27 @@ run() {
     run_test rd_msaa "$DIR/rd_msaa_test.exe"
     run_test rd_crt "$DIR/rd_crt_test.exe" "$(winpath "$WORK")"
     run_test rd_mirror "$DIR/rd_mirror_test.exe"
+    # the movie's colour conversion (yuv.hlsl) against the CPU's, flat and
+    # ramp among the cases: FXC read the conversion's hex constants as
+    # unsigned and the movies were purple on Direct3D 11
+    run_test rd_video "$DIR/rd_video_test.exe"
+
+    # the whole D3D11 shader set: FXC compiles every shader at run time and
+    # warns in its own words (X3092 on yuv.hlsl's unsigned hex literals was the
+    # purple movie); the backend logs "rhi_d3d11: shader compiler warnings"
+    # for any shader that draws one, so one such line in any log fails the job
+    local warned
+    warned=$(grep -a -H "rhi_d3d11: shader compiler warnings" "$LOGS"/*.log 2> /dev/null | head -n 10 || true)
+    NAMES+=("d3d11_shader_warnings")
+    if [ -n "$warned" ]; then
+        echo "== d3d11_shader_warnings: FAILED"
+        echo "$warned"
+        RESULTS+=("FAILED (the shader compiler warned: see the logs' rhi_d3d11 lines)")
+        FAILED=1
+    else
+        echo "== d3d11_shader_warnings: passed"
+        RESULTS+=("passed")
+    fi
 
     # the summary: the device line once (the first log that has one) and
     # whether the debug layer was there, then the verdicts

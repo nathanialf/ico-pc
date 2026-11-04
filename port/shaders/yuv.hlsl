@@ -157,15 +157,18 @@ int field_sample(int x, int y, int x0, int r0, int pw, int n)
 }
 
 // The IPU's CSC of one Y, Cb, Cr sample.
+// The coefficients are signed decimals (0x95 0xCC -0x68 -0x32 0x102 in the
+// IPU): FXC reads a hex literal as unsigned, so -0x68 * Cr turned into an
+// unsigned multiply and a logical shift and saturated every negative term.
 int3 ipu_csc_sample(int Y, int Cb, int Cr)
 {
     Cb -= 128;
     Cr -= 128;
-    int lum = (0x95 * max(0, Y - 16)) >> 6;
-    int rcr = (0xCC * Cr) >> 6;
-    int gcr = (-0x68 * Cr) >> 6;
-    int gcb = (-0x32 * Cb) >> 6;
-    int bcb = (0x102 * Cb) >> 6;
+    int lum = (149 * max(0, Y - 16)) >> 6;
+    int rcr = (204 * Cr) >> 6;
+    int gcr = (-104 * Cr) >> 6;
+    int gcb = (-50 * Cb) >> 6;
+    int bcb = (258 * Cb) >> 6;
     return int3(clamp((lum + rcr + 1) >> 1, 0, 255), clamp((lum + gcr + gcb + 1) >> 1, 0, 255),
                 clamp((lum + bcb + 1) >> 1, 0, 255));
 }
@@ -190,11 +193,11 @@ int3 ipu_csc(int x, int y)
     int Y = plane_texel(x, y);
     int Cb = plane_texel(x >> 1, ch0 + (y >> 1)) - 128;
     int Cr = plane_texel(cw + (x >> 1), ch0 + (y >> 1)) - 128;
-    int lum = (0x95 * max(0, Y - 16)) >> 6;
-    int rcr = (0xCC * Cr) >> 6;
-    int gcr = (-0x68 * Cr) >> 6;
-    int gcb = (-0x32 * Cb) >> 6;
-    int bcb = (0x102 * Cb) >> 6;
+    int lum = (149 * max(0, Y - 16)) >> 6;
+    int rcr = (204 * Cr) >> 6;
+    int gcr = (-104 * Cr) >> 6;
+    int gcb = (-50 * Cb) >> 6;
+    int bcb = (258 * Cb) >> 6;
     return int3(clamp((lum + rcr + 1) >> 1, 0, 255), clamp((lum + gcr + gcb + 1) >> 1, 0, 255),
                 clamp((lum + bcb + 1) >> 1, 0, 255));
 }
