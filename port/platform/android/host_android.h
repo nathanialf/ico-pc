@@ -11,6 +11,7 @@
 
 #include <stddef.h>
 #include "android_paths.h"
+#include "thermal_text.h"
 
 /* The logcat tag of every line the program writes there. */
 #define ICO_ANDROID_LOG_TAG "ico-pc"
@@ -69,6 +70,17 @@ int ico_android_message_box_buttons(void *window, const char *text, const char *
    (the host loop's), the thread SDL_GetAndroidJNIEnv answers for. Does
    nothing when the phone has no vibrator or the call is not available. */
 void ico_host_vibrate(int amplitude, int ms);
+
+/* The phone's thermal state and screen recording (IcoActivity.thermalHeadroom,
+   thermalStatus and the two listeners' last pushes, issue 123;
+   thermal_text.h): the headroom and status asked of the Java side now, the
+   status from the last push when it cannot be asked, the recording state
+   from the last push (-1 never). Anything not reported is thermal_text.h's
+   "none". *why, when not NULL, gets the words for the block line's "not
+   available (...)". Must be called on SDL's main thread, as
+   ico_host_vibrate. A Java side without the methods costs one failed
+   lookup, then nothing. */
+ThermalState ico_host_thermal(const char **why);
 
 /* The screen as the activity last reported it (IcoActivity.sendScreen,
    from the system's window-layout callbacks and every configuration

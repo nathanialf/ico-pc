@@ -10,8 +10,10 @@
 #include "gpu_sysfs.h"
 #include "ico_thread.h"
 #include "present_hist.h"
+#include "thermal_text.h"
 #ifdef __ANDROID__
 #include "gpu_sysfs_android.h"
+#include "host_android.h"
 #endif
 
 /* the present that blocked, waiting for the record after it */
@@ -86,11 +88,19 @@ static void around_queue(const RdPerfRecord *r)
 }
 
 /* what follows the around line's samples: the app's own words on the
-   device's thermal state and screen recording where it reports them ("" so
-   far) */
+   device's thermal state and screen recording where it reports them ("" on
+   Android when it reports none, and everywhere else) */
 static const char *around_suffix(void)
 {
+#ifdef __ANDROID__
+    static char text[160];
+    ThermalState t = ico_host_thermal(NULL);
+
+    thermal_around_text(&t, text, sizeof text);
+    return text;
+#else
     return "";
+#endif
 }
 
 void window_stall_poll(void)
@@ -143,15 +153,25 @@ void window_stall_gpu_block(void)
 {
 #ifdef __ANDROID__
     const double now = ico_thread_now_ms();
+    static int s_thermalSaid;
+    const char *why = "";
+    ThermalState t;
     GpuSysfsBlock b;
     char text[256];
 
-    if (!s_gpuOn || !gpu_sysfs_android_block(s_gpuBlockMs, &b)) {
-        return;
+    if (s_gpuOn && gpu_sysfs_android_block(s_gpuBlockMs, &b)) {
+        s_gpuBlockMs = now;
+        gpu_sysfs_block_text(&b, text, sizeof(text));
+        fprintf(stderr, "window: %s\n", text);
     }
-    s_gpuBlockMs = now;
-    gpu_sysfs_block_text(&b, text, sizeof(text));
-    fprintf(stderr, "window: %s\n", text);
+    /* the thermal line each block, after the driver's; "not available"
+       only once */
+    t = ico_host_thermal(&why);
+    if (thermal_state_any(&t) || !s_thermalSaid) {
+        thermal_block_text(&t, why, text, sizeof(text));
+        fprintf(stderr, "window: %s\n", text);
+        s_thermalSaid = 1;
+    }
 #endif
 }
 
