@@ -837,7 +837,9 @@ static void traceRegion(void)
      * (wide), the triangle facing the eye (facing) -> what the port draws.
      * The side bands' five cases: a vertex behind the eye facing the eye
      * (beside) and facing away (the cliff: dropped), out of the box
-     * (beside), a card (beside), and the same on a 4:3 frame (dropped) */
+     * (beside), a card (dropped: issue 189's mist quads, drawn only beside
+     * the picture, lit the sides as bars), and the same on a 4:3 frame
+     * (dropped) */
     static const struct {
         int ext, free, a, b, c, hide, reach, front, joined, strip, wide, facing, want;
     } kRule[] = {
@@ -859,7 +861,8 @@ static void traceRegion(void)
         {1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 1, VU1REF_DRAW_BESIDE}, /* behind the eye, facing it */
         {1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 1, 0, VU1REF_DRAW_NONE},   /* behind the eye, the cliff */
         {0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, VU1REF_DRAW_BESIDE}, /* out of the box */
-        {1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, VU1REF_DRAW_BESIDE}, /* a card */
+        {1, 0, 0, 1, 1, 0, 1, 1, 0, 0, 1, 1, VU1REF_DRAW_NONE},   /* a card: the drop */
+        {1, 0, 1, 0, 0, 0, 1, 1, 0, 0, 1, 1, VU1REF_DRAW_NONE},   /* a card, one corner in */
         {1, 0, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1, VU1REF_DRAW_NONE},   /* 4:3: the PS2's */
         {0, 0, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, VU1REF_DRAW_NONE},
         {1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, VU1REF_DRAW_NONE},    /* HIDE: nowhere */
@@ -881,7 +884,8 @@ static void traceRegion(void)
     /* between two ticks: the blended camera's verdict, whether it was the
      * card test's, the ticks' -> drawn.  The ticks come first: a drop
      * beside the picture a tick showed is drawn whole; one no tick showed
-     * stays beside (or dropped); a card stays as the blended camera has it */
+     * stays beside (or dropped); a card stays as the blended camera has it
+     * (dropped: vu1ref_region_draw never gives a card BESIDE) */
     static const struct {
         int d, card, s0, s1, want;
     } kBetween[] = {
@@ -892,7 +896,7 @@ static void traceRegion(void)
         {VU1REF_DRAW_BESIDE, 0, 0, 0, VU1REF_DRAW_BESIDE}, /* behind the eye, facing it */
         {VU1REF_DRAW_BESIDE, 0, 1, 0, VU1REF_DRAW_CLIPPED},
         {VU1REF_DRAW_BESIDE, 0, 0, 1, VU1REF_DRAW_CLIPPED},
-        {VU1REF_DRAW_BESIDE, 1, 1, 1, VU1REF_DRAW_BESIDE}, /* a card */
+        {VU1REF_DRAW_NONE, 1, 0, 1, VU1REF_DRAW_NONE}, /* a card, a tick showing it */
         {VU1REF_DRAW_CLIPPED, 0, 0, 0, VU1REF_DRAW_CLIPPED},
         {VU1REF_DRAW_EXACT, 0, 0, 0, VU1REF_DRAW_EXACT},
     };

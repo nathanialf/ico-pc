@@ -179,9 +179,10 @@ int vu1ref_region_draw(int extended, int freeCamera, int insideA, int insideB, i
     if (freeCamera || !reaches) {
         return VU1REF_DRAW_CLIPPED;
     }
-    /* VU_RULE_STRIP: not a card */
-    if (extended && front && (joined || stripPasses)) {
-        return VU1REF_DRAW_CLIPPED;
+    /* VU_RULE_STRIP: the card test; a card keeps the drop beside the picture too
+       (vu_rule_beside's own verdict) */
+    if (extended && front) {
+        return joined || stripPasses ? VU1REF_DRAW_CLIPPED : VU1REF_DRAW_NONE;
     }
     /* VU_RULE_CLIP_BESIDE: the last step, on a final drop */
     return wide && facing ? VU1REF_DRAW_BESIDE : VU1REF_DRAW_NONE;

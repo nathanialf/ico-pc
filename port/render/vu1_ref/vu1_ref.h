@@ -221,12 +221,14 @@ int vu1ref_region_mirror(const float c0[4], const float c1[4], const float c2[4]
  * carries ICO_VU_MARK_JOINED, rd_mesh.c markJoinedStrips) or a triangle
  * of its strip passes the region test (stripPasses, vu1ref_strip_passes);
  * else not drawn.  hide: the triangle carries ICO_VU_MARK_HIDE (never
- * drawn).  A triangle the steps above do not draw (not a hidden one) is
- * drawn beside the picture (VU1REF_DRAW_BESIDE) when the frame is wider
- * than the picture (wide: vu_frame_ndc beyond vu_picture_ndc, the draw
- * without ICO_VU_NO_BESIDE) and it faces the eye (facing:
- * vu1ref_region_facing); else not drawn (the cliff filmed from inside, and
- * every 4:3 picture: the PS2's). */
+ * drawn).  A triangle the steps above do not draw (not a hidden one, not
+ * a card) is drawn beside the picture (VU1REF_DRAW_BESIDE) when the frame
+ * is wider than the picture (wide: vu_frame_ndc beyond vu_picture_ndc, the
+ * draw without ICO_VU_NO_BESIDE) and it faces the eye (facing:
+ * vu1ref_region_facing); else not drawn (the cliff filmed from inside, a
+ * card, which the PS2 never drew in its picture and which drawn only
+ * beside it showed as bars (issue 189's mist quads), and every 4:3
+ * picture: the PS2's). */
 int vu1ref_region_draw(int extended, int freeCamera, int insideA, int insideB, int insideC,
                        int hide, int reaches, int front, int joined, int stripPasses, int wide,
                        int facing);

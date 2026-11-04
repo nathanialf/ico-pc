@@ -776,7 +776,8 @@ later bias applies (`vu_later_out`'s condition under the mark), bit 9 the conten
 position, bit 13 no corner's X or Y changed by clip mode none's 16-bit wrap, bit 14 a sprite the
 port draws, bit 15 a drop of the triangle is drawn beside the picture (`VU_TF_BESIDE`, the region
 rule's side bands: the draw has them, the frame is wider than the picture and the triangle faces
-the eye, set where the verdict up to the ticks is a drop or the card test; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule),
+the eye, set where the verdict up to the ticks is a drop, not the card test: a card keeps the drop
+beside the picture; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule),
 step 7). A tick's verdict is `vu_tick_shown`'s (0 not shown, 1 through the card test, 2
 drawn). The values a plane word holds are those `vu_attr_planes` and `vu_plane_out` (a sprite:
 `vu_attr_planes_at`) compute; the anchor's colour is a whole number 0..255 a channel, so its bytes

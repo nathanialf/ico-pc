@@ -26,6 +26,9 @@
 /primary/dev/ico-pc/build-host/tmp/v0101/evidence/179/frame-20261103-125544-v2915.rddump 16:9
 # issue 182 (RTX 4060 laptop, GS 624x448 at 16:10)
 /primary/dev/ico-pc/build-host/tmp/v0101/evidence/182/frame-20261103-163115-v3225.rddump 16:10
+# issue 189 (RTX 4060 laptop, GS 624x448 at 16:10): stage 32's exit, the
+# mist quads' cards (wf_smoke1), which keep the drop beside the picture
+/primary/dev/ico-dumps/189/frame-20261104-120509-v130039.rddump 16:10
 # issue 29: the user's 48:9 captures (old bridge water, trolley 2 wall,
 # chandelier hall) and 16:9 ones (Goblan's rooms) go under
 # /primary/dev/ico-dumps/29/ when they arrive, one line each at 48:9 or 16:9

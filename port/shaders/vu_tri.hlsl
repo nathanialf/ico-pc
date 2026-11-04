@@ -58,9 +58,10 @@ VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
         if ((marks & VU_MARK_JOINED) == 0u && vu_strip_card(kick)) {
             f |= VU_TF_CARD;
         }
-        // the side bands' conditions (vu_beside) where the final verdict
-        // can be a drop: vu_main_vs applies them to it
-        if ((r == VU_RULE_DROP || r == VU_RULE_STRIP) && vu_beside(a, b, c, marks) != 0u) {
+        // the side bands' conditions (vu_beside) where the camera's own
+        // verdict is a drop (a card keeps it: vu_rule_beside): vu_main_vs
+        // applies them to the final one
+        if (r == VU_RULE_DROP && vu_beside(a, b, c, marks) != 0u) {
             f |= VU_TF_BESIDE;
         }
     } else if (mode == VU_CLIP_NONE) {

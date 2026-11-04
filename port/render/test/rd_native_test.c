@@ -68,7 +68,9 @@
  *      Enhanced 2x, Original at W 688); a card (a free-standing 2-triangle
  *      strip both of whose triangles fail, the opening's tree card) and a
  *      strip whose failing triangle has a vertex behind the eye add nothing
- *      in any state; the same card's strip joined to a passing strip (a
+ *      in any state, and so does a card facing the eye across the
+ *      picture's left edge (kCardSide, with the EE's facing table: the
+ *      side bands leave a card dropped, issue 189); the same card's strip joined to a passing strip (a
  *      plank's face, rd_mesh.c markJoinedStrips) is drawn as the wall is,
  *      and so is the card joined through another packet of its part (the
  *      keys' object and part; rd_replay.c joinParts), not through
@@ -862,6 +864,41 @@ static const StripMesh kEyeSide = {"behind the eye, across the edge",
                                     {-2500, -2050, 1006000, -1}},
                                    {200, 200, 60}};
 
+/* a card across the picture's left edge (issue 189: stage 32's mist
+ * quads, wf_smoke1): a free-standing strip both of whose triangles have a
+ * vertex above the window (GS y -100, x 4000 inside it) and reach the
+ * picture (the long edge from (4000, -100) to (1500, 2200) crosses its top
+ * row, 1824, at X 1909, right of its left edge, 1792), both reaching left
+ * of the picture into the band beside it at a wider frame (W 688:
+ * 1704..1792; GS (1750, 2100) lies in the second), made with the EE's
+ * facing table turning both to the eye (cardFacing) */
+static const StripMesh kCardSide = {"card across the edge",
+                                    4,
+                                    0,
+                                    0,
+                                    {{1500, -100, 1000000, 1},
+                                     {4000, -100, 1000000, 1},
+                                     {1500, 2200, 1000000, 1},
+                                     {4000, 2200, 1000000, 1}},
+                                    {60, 200, 200}};
+
+/* the EE's facing table of a strip drawn with triDraw's identity matrix
+ * (h = the vertex): bit k set for every triangle kicked at k whose corners
+ * wind away from the eye, so that every triangle faces it; each checked
+ * against the oracle (vu1ref_region_facing with the bit as its flip) */
+static uint8_t cardFacing(const StripMesh *m)
+{
+    uint8_t bits = 0;
+    for (int k = 2; k < m->n && k < 8; k++) {
+        if (!vu1ref_region_facing(m->v[k - 2], m->v[k - 1], m->v[k], 0, 0)) {
+            bits |= (uint8_t)(1u << k);
+        }
+        CHECK(vu1ref_region_facing(m->v[k - 2], m->v[k - 1], m->v[k], 0, (bits >> k) & 1u),
+              "%s: the triangle kicked at %d faces the eye with its facing bit", m->what, k);
+    }
+    return bits;
+}
+
 /* the EE's facing table of the first n vertices of an eye strip (the eye
  * matrix's h = (x, y, Z w, w)) whose failing triangle 3 faces the eye
  * (front 1) or not: bit 3 from the oracle's facing of the corners as
@@ -1180,6 +1217,22 @@ static void checkStripRule(void)
             }
             CHECK(sameImg(&card, &none) && !drawnAt(&card, W, 1860, 1950),
                   "strip rule, %s, W %d: the card is not drawn", cfg->name, W);
+            /* a card facing the eye across the picture's edge keeps the
+             * drop beside the picture too (vu_rule_beside: issue 189's mist
+             * quads, drawn only beside the picture, lit the sides as bars) */
+            Img cardSide = {0};
+            const uint8_t cardF = cardFacing(&kCardSide);
+            if (renderStripFacing(cfg, W, &kCardSide, 4, &cardF, &cardSide) != R_OK) {
+                CHECK(0, "strip rule, %s, W %d: the card across the edge could not be rendered",
+                      cfg->name, W);
+            } else {
+                CHECK(sameImg(&cardSide, &none) &&
+                          (W == BAND || !drawnAt(&cardSide, W, 1750, 2100)),
+                      "strip rule, %s, W %d: a card facing the eye across the picture's edge is "
+                      "not drawn, beside the picture either",
+                      cfg->name, W);
+            }
+            free(cardSide.px);
             /* the card's strip joined to a passing strip: a plank's face */
             if (kStates[i].extended) {
                 CHECK(drawnAt(&joined7, W, 1860, 1950) && !drawnAt(&joined3, W, 1860, 1950),

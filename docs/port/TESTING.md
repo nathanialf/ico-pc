@@ -23,6 +23,7 @@ tests a change needs. Every test program, by area, is
 | `tools/coverage_check.py`, `tools/coverage_corpus.txt` | the regression renders and their corpus |
 | `tools/sweep_cameras.txt`, `tools/sweep_baseline.txt` | the disc-wide cull sweep's cameras (machine-local dump paths) and its stored counts (`gsb_cull_sweep`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `tools/sideband_dumps.txt`, `tools/cmp_dirs_band.py` | the wide dumps (machine-local paths and their aspects) the side bands' before/after compare replays, and the compare: the 4:3 band byte for byte, the side columns reported, a side pixel changed only over the fog (`rd_sideband_ab`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
+| `tools/band_seam.py` | the mean luminance step across each edge of the 4:3 picture on a wide present, against a bound (`rd_sideband_cards`, issue 189, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `port/render/tools/rd_replay_tool.c` | the replay tool |
 | `tools/vu_variant_diff.py`, `tools/vu_variant_equiv.py`, `tools/test/vu1/` | the June 2001 demo's VU1 programs against the retail ones: the diff, its per-hunk table, the symbolic comparison |
 | `port/platform/hotkeys.h`, `port/platform/dump_zip.h`, `port/render/rd_dump.c` | F12, the aspect sweep, the dump format |
@@ -105,7 +106,9 @@ one with them on: the centre 512-texel band (the 4:3 picture) must be identical 
 the side columns are reported, and a side pixel that changed must be one the picture without the
 bands left at the fog colour (never lose what was drawn). The ctest `rd_sideband_ab` runs it over
 `tools/sideband_dumps.txt`, which also takes each fresh issue-29 capture (dump version 15 or later:
-older dumps carry no facing for prelit meshes, so only lit and skinned drops can change). The
+older dumps carry no facing for prelit meshes, so only lit and skinned drops can change).
+`rd_sideband_cards` holds issue 189's frame, whose only drops are cards, byte for byte with the side
+bands off and on, and its picture's edges within 1.5 levels by `tools/band_seam.py`. The
 disc-wide sweep `gsb_cull_sweep.*` (`gsb_cull_test --sweep`, main only, it needs the disc image)
 counts per stage and aspect the triangles the box cull, the blend span and the region rule leave
 out, against the stored counts of `tools/sweep_baseline.txt`; a count above its line fails, and the

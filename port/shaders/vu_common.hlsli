@@ -1397,9 +1397,10 @@ VuVSOut vu_plane_out(VuVSOut o, VuPlaneTri t, uint kick, uint me)
 // card, a free-standing strip (no VU_MARK_JOINED) none of whose
 // triangles passes the region test (vu_strip_card), else VU_RULE_CLIP
 #define VU_RULE_STRIP 3u
-// The side bands (vu_rule_beside): a triangle the rule drops, on a frame
-// wider than the picture, facing the eye: GPU-clipped as VU_RULE_CLIP and
-// drawn only beside the picture (VuVSOut.plane.y 1, vu_pixel_tests)
+// The side bands (vu_rule_beside): a triangle the rule drops at the draw's
+// own camera (not a card), on a frame wider than the picture, facing the
+// eye: GPU-clipped as VU_RULE_CLIP and drawn only beside the picture
+// (VuVSOut.plane.y 1, vu_pixel_tests)
 #define VU_RULE_CLIP_BESIDE 4u
 
 // The region rule (docs/port/VU1_PROGRAMS.md, "The region rule").
@@ -1570,18 +1571,23 @@ uint vu_tick_shown(VuVtx a, VuVtx b, VuVtx c, uint k, float4 lo, float4 hi, floa
 // a still camera) and under the free camera.  The two ticks are written
 // out (k = 0, then 1, only on this path), each tick's z cut shared by its
 // picture and frame tests (vu_tick_shown).  vu1_ref.h
-// vu1ref_region_between is the CPU mirror.
-uint vu_region_rule(VuVtx a, VuVtx b, VuVtx c, float4 lo, float4 hi)
+// vu1ref_region_between is the CPU mirror.  own: the verdict at the
+// draw's own camera, before the ticks' tail (the side bands read it:
+// vu_rule_beside).
+uint vu_region_rule(VuVtx a, VuVtx b, VuVtx c, float4 lo, float4 hi, out uint own)
 {
+    own = VU_RULE_EXACT;
     if ((a.inside & b.inside & c.inside) != 0u) {
         return VU_RULE_EXACT;
     }
+    own = VU_RULE_CLIP;
     if ((vu_draw.z & VU_F_BEHIND_EYE) != 0u) {
         return VU_RULE_CLIP;
     }
     float4 pic = vu_picture_ndc();
     VuCutZ z = vu_cut_z(vu_cut_position(a), vu_cut_position(b), vu_cut_position(c));
     uint r = vu_region_rule_cut(a, b, c, z, pic);
+    own = r;
     if (r != VU_RULE_DROP || (vu_draw.z & VU_F_TICKS) == 0u) {
         return r;
     }
@@ -1643,8 +1649,8 @@ uint vu_rule_card(uint rule, uint marks, uint kick)
 // ------------------------------------------------------- the side bands
 // The region rule's last step (docs/port/VU1_PROGRAMS.md "The region
 // rule", step 7; vu1_ref.h vu1ref_region_draw's wide and facing): a
-// triangle every step above drops (behind the eye, out of the box, a card)
-// is drawn, GPU-clipped as VU_RULE_CLIP, but only beside the camera's
+// triangle the rule drops at the draw's own camera (behind the eye, out of
+// the box) is drawn, GPU-clipped as VU_RULE_CLIP, but only beside the camera's
 // picture (VU_RULE_CLIP_BESIDE: VuVSOut.plane.y 1, its pixels in the
 // picture's columns discarded by vu_pixel_tests) when the frame is wider
 // than the picture and the triangle faces the eye.  Inside the picture
@@ -1652,7 +1658,14 @@ uint vu_rule_card(uint rule, uint marks, uint kick)
 // nothing, and a dropped wall or sea there left a hole on a wide frame
 // (issue 29).  A triangle facing away keeps the drop everywhere: the
 // opening's cliff, filmed from inside the rock (st26a_p1), shows its back
-// faces to the eye.  At 4:3 the frame is the picture: never.
+// faces to the eye.  At 4:3 the frame is the picture: never.  A card (the
+// card test's drop at that camera) keeps the drop beside the picture too:
+// the cards the rule drops are the game's screen-sized overlays, mist
+// quads held in front of the camera (stage 32's exit, wf_smoke1, issue
+// 189), which the PS2 never drew in its picture, so drawn only beside it
+// they lit the sides as bars with an edge at the picture's.  A triangle
+// the draw's camera drops and a tick sends to the card test is no card
+// at that camera: beside as before (vu1_ref.h vu1ref_region_between).
 
 // Whether the frame the bound target shows is wider than the camera's
 // picture, 1 or 0: vu_frame_ndc beyond vu_picture_ndc on a side, compared
@@ -1714,10 +1727,12 @@ uint vu_beside(VuVtx a, VuVtx b, VuVtx c, uint marks)
     return vu_frame_wider() & vu_front_facing(a, b, c, marks);
 }
 
-// The rule's last step on its final verdict (after vu_rule_card)
-uint vu_rule_beside(uint rule, VuVtx a, VuVtx b, VuVtx c, uint marks)
+// The rule's last step on its final verdict (after vu_rule_card); own:
+// the verdict at the draw's own camera (vu_region_rule), the card test's
+// (VU_RULE_STRIP) keeping the drop
+uint vu_rule_beside(uint rule, uint own, VuVtx a, VuVtx b, VuVtx c, uint marks)
 {
-    if (rule != VU_RULE_DROP) {
+    if (rule != VU_RULE_DROP || own == VU_RULE_STRIP) {
         return rule;
     }
     return vu_beside(a, b, c, marks) != 0u ? VU_RULE_CLIP_BESIDE : VU_RULE_DROP;
@@ -1945,8 +1960,9 @@ VuVSOut vu_mesh_out(VuVtx a, VuVtx b, VuVtx c, uint kick, uint corner, uint mark
     VuVtx me = vu_pick(a, b, c, corner);
     uint rule = VU_RULE_EXACT;
     if (mode == VU_CLIP_REGION) {
-        rule = vu_rule_beside(vu_rule_card(vu_region_rule(a, b, c, lo, hi), marks, kick), a, b, c,
-                              marks);
+        uint own;
+        rule = vu_region_rule(a, b, c, lo, hi, own);
+        rule = vu_rule_beside(vu_rule_card(rule, marks, kick), own, a, b, c, marks);
     }
     uint exact;
     VuVSOut o = vu_triangle_out_pos(a, b, c, me, mode, rule, exact);
