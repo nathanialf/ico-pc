@@ -187,6 +187,7 @@ __declspec(dllimport) void __stdcall RaiseException(unsigned long code, unsigned
 
 #include <dirent.h>
 #include <pthread.h>
+#include <signal.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
@@ -371,6 +372,53 @@ static void progress_child(int progress)
         ico_diag_log("test: progress kept it alive (%u)", ico_diag_progress());
     }
     pause_ms(5000);
+    exit(0);
+}
+
+/* The renderer's switch (Options > Graphics > Apply), with diag_test
+   --switch (ctest diag_switch):
+   "step": stderr as the window build has it on Windows (the log, fully
+   buffered: host_config.c), a buffered line, the step (ico_diag_step), a
+   second buffered line, then a stub step that never returns; the parent
+   kills the child, and the log must hold the first line, then the step's,
+   and not the second (the buffer a kill loses);
+   "switchhang": the switch's watch (2 s) on, a step, then nothing moves:
+   the watchdog ends the run naming the switch and the step, the main
+   thread's stack sampled, and not by the game's own later limit (1 s);
+   "switchok": the same watch while shaders and pipelines are made
+   (ico_diag_switch_progress) for 4 s, past both limits: no end; the watch
+   ended, the run exits 0. */
+static void switch_child(const char *mode, const char *log)
+{
+    int i;
+    if (strcmp(mode, "step") == 0) {
+        if (freopen(log, "a", stderr) == NULL) {
+            exit(2);
+        }
+        setvbuf(stderr, NULL, _IOFBF, 64 * 1024);
+        fprintf(stderr, "window: a buffered line before the step\n");
+        ico_diag_step("window: switch to opengl: a stub step that never returns");
+        fprintf(stderr, "window: a buffered line after the step\n");
+        for (;;) {
+            pause_ms(1000);
+        }
+    }
+    fake_ticks = 1;
+    ico_diag_start(0, 1);
+    ico_diag_watchdog_switch(2, "switching the renderer from vulkan to opengl (test)");
+    if (strcmp(mode, "switchhang") == 0) {
+        ico_diag_step("window: switch to opengl: a stub step that never returns");
+        pause_ms(10000);
+        exit(0);
+    }
+    ico_diag_step("window: switch to opengl: starting the renderer (the device and its shaders)");
+    for (i = 0; i < 16; i++) {
+        pause_ms(250);
+        ico_diag_switch_progress();
+    }
+    ico_diag_watchdog_switch(0, NULL);
+    ico_diag_log("test: switch done");
+    pause_ms(300);
     exit(0);
 }
 
@@ -1133,6 +1181,9 @@ static void run_child(const char *mode, const char *log)
         fn = segv_thread;
     } else if (strcmp(mode, "abort") == 0) {
         fn = abort_thread;
+    } else if (strcmp(mode, "step") == 0 || strcmp(mode, "switchhang") == 0 ||
+               strcmp(mode, "switchok") == 0) {
+        switch_child(mode, log);
     } else if (strcmp(mode, "watchdog") == 0) {
         fn = spin_thread;
         ico_diag_start(1, 2);
@@ -1173,6 +1224,44 @@ static char *read_file(const char *path)
     buf[n] = '\0';
     fclose(f);
     return buf;
+}
+
+/* a child left running until its log holds `until` (at most 5 s), then
+   killed (SIGKILL: no exit handler, no stdio flush, as Task Manager's end
+   of a hung game) */
+static int run_killed(const char *self, const char *mode, const char *log, const char *until)
+{
+    pid_t pid;
+    int st, i;
+    remove(log);
+    pid = fork();
+    if (pid == 0) {
+        execl(self, self, mode, log, (char *)NULL);
+        _exit(99);
+    }
+    if (pid < 0) {
+        return -1;
+    }
+    for (i = 0; i < 100; i++) {
+        FILE *f = fopen(log, "rb");
+        char buf[4096];
+        size_t n = 0;
+        if (f != NULL) {
+            n = fread(buf, 1, sizeof buf - 1, f);
+            fclose(f);
+        }
+        buf[n] = '\0';
+        if (strstr(buf, until) != NULL) {
+            break;
+        }
+        usleep(50 * 1000);
+    }
+    usleep(200 * 1000);
+    kill(pid, SIGKILL);
+    if (waitpid(pid, &st, 0) != pid) {
+        return -1;
+    }
+    return WIFSIGNALED(st) ? 128 + WTERMSIG(st) : WEXITSTATUS(st);
 }
 
 static int run(const char *self, const char *mode, const char *log)
@@ -1514,11 +1603,66 @@ static void benign_cases(void)
     CHECK(!ico_diag_benign_exception(0));
 }
 
+#if !defined(_WIN32)
+
+/* diag_test --switch (ctest diag_switch): the step lines and the switch's
+   watch (switch_child) */
+static int switch_cases(const char *self)
+{
+    char log[256];
+    char *s;
+    const char *a, *b;
+    int r;
+
+    snprintf(log, sizeof log, "diag_switch_%d.log", (int)getpid());
+    r = run_killed(self, "step", log, "a stub step that never returns");
+    s = read_file(log);
+    CHECK(r == 128 + SIGKILL);
+    a = strstr(s, "window: a buffered line before the step\n");
+    b = strstr(s, "window: switch to opengl: a stub step that never returns\n");
+    CHECK(a != NULL && b != NULL && a < b);
+    /* the hazard the step's own write avoids: a buffered line is lost */
+    CHECK(strstr(s, "a buffered line after the step") == NULL);
+
+    r = run(self, "switchhang", log);
+    s = read_file(log);
+    CHECK(r == 4);
+    CHECK(strstr(s, "ico_pc: diagnostics: watchdog: switching the renderer from vulkan to opengl "
+                    "(test); its limit is 2 s") != NULL);
+    CHECK(strstr(s, "WATCHDOG: switching the renderer from vulkan to opengl (test): nothing moved "
+                    "for 2 s (the last step: window: switch to opengl: a stub step that never "
+                    "returns)") != NULL);
+    CHECK(strstr(s, "no new Main tick") == NULL);
+    CHECK(strstr(s, "ico_pc: the main thread was at ") != NULL);
+    CHECK(strstr(s, "ico_pc: the last step: window: switch to opengl: a stub step") != NULL);
+    /* the heartbeat went on during the switch, naming it */
+    CHECK(strstr(s, "| switching the renderer from vulkan to opengl (test) for ") != NULL);
+
+    r = run(self, "switchok", log);
+    s = read_file(log);
+    CHECK(r == 0);
+    CHECK(strstr(s, "test: switch done") != NULL);
+    CHECK(strstr(s, "WATCHDOG") == NULL);
+    CHECK(strstr(s, "watchdog: switching the renderer from vulkan to opengl (test) over after ") !=
+          NULL);
+    remove(log);
+    if (fails != 0) {
+        printf("diag_test --switch: %d check(s) failed\n", fails);
+        return 1;
+    }
+    printf("diag_test --switch: the step lines and the switch's watch passed\n");
+    return 0;
+}
+
+#endif
+
 int main(int argc, char **argv)
 {
 #if defined(_WIN32)
-    (void)argc;
-    (void)argv;
+    if (argc == 2 && strcmp(argv[1], "--switch") == 0) {
+        printf("diag_test --switch: skipped (POSIX only: fork)\n");
+        return 77;
+    }
     benign_cases();
     {
         /* the thread-name exception with the handlers installed returns and
@@ -1546,6 +1690,9 @@ int main(int argc, char **argv)
     if (argc == 3) {
         run_child(argv[1], argv[2]);
         return 0;
+    }
+    if (argc == 2 && strcmp(argv[1], "--switch") == 0) {
+        return switch_cases(argv[0]);
     }
     benign_cases();
     snprintf(log, sizeof log, "diag_test_%d.log", (int)getpid());

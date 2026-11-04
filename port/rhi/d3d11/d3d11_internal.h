@@ -491,6 +491,10 @@ typedef struct D11State {
     HANDLE frameLatencyEvent;
     bool frameLatencyTimeoutLogged;
     bool frameLatencySkipWait;
+    /* the frame latency wait made ahead of the next acquire
+     * (rhi_wait_present_room): that acquire does not wait again; cleared by
+     * it and by a new waitable object */
+    bool frameLatencyWaited;
     bool frameStatsValid;
     uint64_t frameStatsPresent, frameStatsRefresh, frameStatsSyncRefresh, frameStatsSyncNs;
     /* RhiStats: presents and the time in Present, waits that blocked and

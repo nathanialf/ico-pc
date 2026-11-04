@@ -375,6 +375,34 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   `rd: render thread: the next picture's frame slot is waited for at the end of the picture before,
   outside the hand-over (...)` (with `ICO_RD_SLOT_AHEAD=0`: `the next picture waits for its frame
   slot inside its reads (...)`).
+- The display's wait ahead. With no submit thread (Direct3D 11, OpenGL) the acquire ran inside the
+  hand-over, and on Direct3D 11 the acquire is the waitable swap chain's frame latency wait for room
+  in the present queue: the game thread's calls waited through the display as read waits, which the
+  vsync lock's step rule does not excuse (it excuses the present's own display wait only,
+  `port/platform/pace_policy.c` (`pace_budget_step`)). Issue 126's GTX 750 Ti at the capsule escape:
+  `read waits 301 (4238.7 ms)` in 10 s, the slow replay `interp 1.08`, `acquire 10.05`, `walk 2.73`,
+  the game step 8.5 ms mean against 1.1-1.7 ms with the replays on the game thread (`build-host/tmp/v0101/evidence/126/analysis.md`
+  section 3). Now a picture handed over that presented ends its job, after its submit and present
+  (made in that job with no submit thread) and the slot ahead, by making the next acquire's wait
+  (`port/render/rd_thread.c` (`roomAhead`), `rhi_wait_present_room`: once a present, the acquire
+  after it then does not wait, [RHI.md](RHI.md#direct3d-11)). The game thread's calls go on
+  meanwhile; the next post's drain waits for what is left of it, the present's own wait, which
+  `present_once` counts as the display's (`rd_submit_waited_ns`), so the lock's excuse applies to
+  it as it did before the render thread. The pictures' bytes are unchanged (the same calls, the
+  wait earlier). `rd__room_ahead_take` (`rd__present_acquire`) takes the record and counts a picture
+  handed over whose acquire found none made where the backend has the wait. Not done: with the
+  submit thread on (Vulkan, Direct3D 12: the present is that thread's, after the job), for a picture
+  that presented nothing, for the pictures that wait, and under `ICO_RD_ACQUIRE_AHEAD=0` (`[dev]
+  acquire_ahead = false`). Vulkan's acquire is the wait itself and OpenGL's acquire makes none (its
+  FIFO wait is in the next frame slot's fence, which the slot ahead already waits outside the
+  reads): `rhi_wait_present_room` answers false there and nothing changes. The lines: at each start
+  `rd: render thread: the next picture's wait for room in the present queue (Direct3D 11's frame
+  latency wait) is made at the end of the picture before, after its present, outside the hand-over
+  (...)` (with the switch: `the next picture waits for room in the present queue inside its reads
+  (...)`); the first such wait on a host `rd: render thread: the display's wait for room in the
+  present queue made at the end of a picture, after its present (X ms): ...`; the 10 s line's
+  clause below. `pace_loop`'s `testRoomOffGame` models it at 60 Hz (about 14 ms a picture off the
+  game thread, the period kept), `rd_tex`'s `threadRoomAhead` checks the threading.
 - Further presents held only when a step would miss its period (the step-deadline rule;
   [DISPLAY.md](DISPLAY.md#further-presents-and-the-game-step) has it in words). On the timer path
   a further present of a frame already shown is held when it would make a game step miss its own
@@ -608,7 +636,11 @@ its frame slot's fence N (X ms), the acquire N (X ms), the ring and the uploads 
 N (X ms)` (`rd_thread_read_waits_text`; the phase set at the hand-over and by `rd__thread_phase`
 in `rd__wait_frame`, `rd__present_acquire` and at the walk's start), and the slot ahead's `; the
 next picture's frame slot waited for at the end of the one before N times (X ms in all, longest Y
-ms), P pictures waited for their slot inside their reads`), then the render thread's CPU time a picture (the replays line's), its share of the
+ms), P pictures waited for their slot inside their reads`, and where the backend has a display's
+wait to make ahead (Direct3D 11 with no submit thread) the display's share: `; the display's wait for
+room in the present queue made at the end of the picture before N times (X ms in all, longest Y ms;
+the presents waited for it D times, Z ms, as the display's wait), P pictures waited for it inside
+their reads`), then the render thread's CPU time a picture (the replays line's), its share of the
 block with no picture to do, its longest wait for one, its longest picture (the heartbeat's
 longest gap), and per picture its interpolation, its uploads and walk, its submit and present and
 the GPU's and the display's waits inside them, the textures it destroyed for the game thread, and
@@ -2577,9 +2609,17 @@ step. That frame goes with the renderer; `rd_resume_frame` opens one again after
 the rest of the next tick records into a frame (its `rd_temp_target` slots are freed with it and
 nothing is logged as outside a frame), and that frame is closed without a picture (`rd_end_frame`
 discards it, `RdContext.discardOpen`), since its start went with the old renderer. So the tick
-of the switch has no picture: the new window shows nothing until the tick after it presents. The
-watchdog is paused around the switch (`ico_diag_watchdog_pause`, as the device-lost box does): the
-device's start and a cold pipeline set can take longer than its later limit. The switch
+of the switch has no picture: the new window shows nothing until the tick after it presents.
+The switch runs under its own watchdog limit instead of the game's
+(`ico_diag_watchdog_switch(60, "switching the renderer from <old> to <new>")`, `SWITCH_WATCH_S`):
+the device's start and a cold pipeline set can take longer than the game's later limit, but a
+step that never ends is a hang. While it is on the game's limits do not count; 60 s without a
+step line, a shader or pipeline made (`RhiWaitHooks.made`, every backend) or a pipeline of the set
+finished ends the run with the watchdog's report (below), the main thread sampled where it
+stands, inside the graphics driver when it hung there. Each step writes its line at once before it runs (`ico_diag_step`: stdout and stderr flushed
+first, then the diagnostics' unbuffered handle; stderr is fully buffered on Windows and the switch
+runs inside one pump, so its lines sat in the buffer), so a kill leaves the step it was in as the
+log's last line. The switch
 (`ico_window_switch_backend(name, adapter, trial)`; `trial` is Apply's, a switch back is not):
 
 1. Refused, `-2`, nothing touched: a build with one renderer (unless name is the backend running:
@@ -2615,8 +2655,14 @@ device's start and a cold pipeline set can take longer than its later limit. The
    mode, the touch zones, the display clock started again, `video_apply(1)` and
    `window_size_recheck`. The time goes into `pausePendingNs`, a pause of the host as a
    swapchain rebuild's is.
-4. The new backend did not start (no window, or `rd_resume` failed): `ico_window_reopen` on the
-   backend that ran with the card asked for before (`rhi_set_adapter_wanted` back to it), `-1`. That failing too ends the run, `-3`: the pump returns 0 and
+4. The new backend did not start (no window, or `rd_resume` failed; on OpenGL also a shader
+   compile past the GPU hang limit, which fails `rd_init`, or a fence past it during the
+   self-tests, `reopen_lost`, which takes the renderer down again): `ico_window_reopen` on the
+   backend that ran with the card asked for before (`rhi_set_adapter_wanted` back to it), `-1`.
+   When the driver stalled in a compile (`RhiWaitHooks.stalled`) a box says so after the switch
+   back, the watchdog paused while it is open: "OpenGL could not start: the graphics driver
+   stalled compiling <shader> (no answer in N s). The game went back to <previous>. ..."
+   ([RHI.md](RHI.md#opengl), "Shader compiles"). That failing too ends the run, `-3`: the pump returns 0 and
    `main_host.c` shows a box naming both renderers (`ico_window_switch_end_text`), writes a
    report, logs the exit reason "no renderer started after Options > Graphics > Apply" and saves
    nothing (`ui_settings_save_on_quit` is not called).
@@ -2666,13 +2712,49 @@ Log lines (stderr, one per event):
 - `ico_pc: the graphics card stopped responding on the <name> renderer applied from the menu and
   not kept yet: the game does not start again; the next start uses the renderer the settings
   name`
-- `ico_pc: diagnostics: watchdog paused` and `... running again` around each switch
+- `ico_pc: diagnostics: watchdog: switching the renderer from <old> to <new>; its limit is 60 s
+  without a step, a shader or a pipeline made (the game's own limits wait)` before, `ico_pc:
+  diagnostics: watchdog: switching ... over after <s> s; the game's limits count again` after;
+  the heartbeat meanwhile ends `| switching the renderer from <old> to <new> for N s, last step:
+  <step>`; a hang: `ico_pc: WATCHDOG: switching the renderer from <old> to <new>: nothing moved
+  for 60 s (the last step: <step>)`, the main thread's place and stack, `ico_pc: the last step:
+  <step>`, the threads, the report file, exit code 4
+- the steps, each written at once before it runs: `window: switch: <old> -> <new>[ on <card>]
+  begins`; `window: switch to <new>: stopping the render thread`, `... suspending the renderer (the
+  old device's end)`, `... destroying the old window`, `... creating the window (windowed|full
+  screen)`, `... attaching the window (its mode and display)`, `... starting the renderer (the
+  device and its shaders)` (then `rd: starting the device and making its shaders (the backend's
+  lines follow)` and the backend's own start lines, OpenGL's written at once), `... the blend
+  self-test`, `... the VU pre-pass self-test`, `... the pipeline set`, `... the fog self-test`,
+  `... starting the render thread`, `... up in <s> s`; a revert `window: switch: <new> did not
+  start; back to <old>`, then the old renderer's steps; the start's own: `ico_pc: start: the log is
+  open; next the settings, the game data and the window` (right after `ico_diag_init`), `ico_pc:
+  start: the game data is ready; opening the window and the renderer`, `window: start: creating the
+  <backend> window`, `window: start: starting the renderer on <backend> (the device and its
+  shaders)`, `window: start: the blend and VU pre-pass self-tests`, `window: start: the pipeline
+  set`, `window: start: the fog self-test`. The crash and watchdog reports repeat the last one
+  (`ico_pc: the last step: <line>`)
+- `window: Graphics API <new>: the driver stalled compiling <shader>; the box says so`
+- `window: the opengl device stopped while it started (the lines above say why); the switch goes
+  back`
 - after each window: `window: video driver ...` (`window_attach`) and
   `window: <w>x<h> pixels, <backend> on <adapter>, present mode <mode>`
 - the page's own: `settings: Graphics API back to <value|automatic> (reverted|not kept in 10 s)`
   and, after a FAILED Apply, `settings: Graphics API back to <value|automatic> (<name> did not
   start)`; for the card `settings: Graphics card back to <name|automatic> (...)` in the same two
   forms
+
+**The window build's switch test.** `[dev] backend_switch_test = "opengl,vulkan"` (ini
+`backend_switch_test`) runs the listed renderers in turn from the event pump through the page's own
+calls (`hostBegin` with Apply's reason, the pump's switch under its watch, then Keep), the first
+300 pumps after the start and each next one 120 pumps after the last returned, waiting while the
+opening's movie refuses it (`port/platform/window_switch.c` (`selftestPoll`)). Its lines are steps:
+`window: backend switch test: opengl,vulkan, from vulkan, the first after 300 pumps`, `window:
+backend switch test: vulkan -> opengl: applied and kept in <s> s` (or `FAILED (refused|did not
+start|done on another renderer; running <name>) after <s> s`), `window: backend switch test: done,
+N switches, F failed`. ctest `backend_switch_window` (label `window`) runs it on the Linux window
+build: Vulkan on lavapipe, OpenGL on llvmpipe, SDL's offscreen driver
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 Not verified: no switch has run anywhere (the game is not run in the container; a switch of the
 card alone has not run on a computer with two cards either); the swap was

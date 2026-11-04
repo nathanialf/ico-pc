@@ -429,7 +429,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `arena_test.c`: the EE RAM [arena](ARCHITECTURE.md#terms): alignment, zero fill, address mapping,
   heap statistics (`arena`).
 - `diag_test.c`: the crash report (also from a worker thread under a batch's pipeline note), assert, watchdog, progress (with the heartbeat's start-up set count), start-up activity file (the batch notes; a start ended inside a 2D batch: the next start is lazy for that start only, nothing written, and logs the line and the last finished batch with its memory; that lazy start ended inside a pipeline: the start after writes `[dev] pipeline_set = "lazy"` through a stubbed config write, for any version (another version's line then leaves the policy to the count), with a failed write (this start only, its lazy run saying so, and the count kept so the next end writes it); a count file that cannot be written, logged; the "for this start only" run's clean exit and its end between two creations, each with its own line: the next start tries the set again and the row starts over; not after a restart or with the setting already `lazy`; an end in the background, by the lifecycle's event or `onTrimMemory(20)` (the mark set and logged once when both come), or with the app in the background before the recording began, is not counted, its mark written, logged and deleted, and back in the foreground the mark is gone and the end counts; a lazy run ended in the background between two creations, its mark logged; on a device the table makes lazy the first end promises nothing and its lazy run is not "for this start only", the second writes nothing, both clearing the row; the first end of a full set: the next start is careful, once, and the file reads `set: careful` after the note; a careful start that finishes clears the row and the start after it is full again; a careful start's own end makes the next start lazy; `pipeline_set = "careful"` and a careful end; the careful set's budget stop (`creating pipeline fog test` and `set: careful` in the file; its clean exit is "for that start only", then `pipeline_set = "careful"` is kept); the signals that stop the set (`actlowstop`: not `onTrimMemory` 5, not 10 before the set's first batch, 10 past it, 15 over 10) and the memory text with the device's; the set stopped at the system's low-memory signal (`set: stopped at the system's low-memory signal (running critical)` after `set: careful` in the file through the lazy run's clean exit, the batches' and the system's lines kept, the row cleared), the next start of the version lazy from it (pipeline set 7, nothing written, its own file keeping the line), that start's end inside a first-use pipeline stepping to lazy for one start (pipeline set 4), the stopped run's end between two creations (lazy from the file) and inside one (lazy for one start), another version trying the set again; a stop at the free-memory floor (its figures in the line) read as a floor stop, and one whose line ends with ` after a retry` read as a retry that stopped again (`ico_diag_startup_prev_floor_retried`: no second retry in a row); a note of the retired extended variants counted as the pipelines' kind; a VU vertex pre-pass batch's end (a `vu_main_vs` batch among them): no pre-pass for that start only, the next such end writes `[dev] vu_prepass = false`, a run that built its pipelines and finished clears the row, the low-memory signal's line at once and as the file's `system: ` line, in the set and in a lazy run, the level-80 one marking the background) cases, Android's start after a device loss (`actlossnext`: robust access for that start, the second loss in a row writing `[dev] gpu_robust = true`, a loss in the robust start itself counting as the second, a start without a loss that did not run robust breaking the row, a failed write keeping the count, the player's `gpu_robust` ruling, a relaunch counting nothing), device-loss restart and loss bisect (the loss noted in the activity file, the bisect stubbed: once, before the game, never again after a start ended inside it; the restart's steps robust 7, blend 8, backend 9: `lossrobust`, `lossstep`, `lossbackend`; a loss on the renderer Options > Graphics > Apply switched to and not kept yet, `losstrial`: its line, restart 0 and no relaunch; the same kept, `losskept`: `blend:opengl`) cases, the loss bisect's second level (its state file, the step stubbed: the draw found in 4 starts of at most 3 lost steps each, draw 1 with its classes in 5 starts, killed at step 3 and continued at 4, a renderer that did not start, the step and start bounds, the time budget, files that do not parse) cases, the watchdog and a wait the system holds (the event pump held past the limit without an end, a stall in the game's code after it ended, the bound for one wait, that bound with no limit in force), a GPU hang with the backend's progress faked (`hang`: the WATCHDOG block's driver and wait lines, the heartbeat's wait, the dump before the report, report.txt's end, the device loss's box on Linux, the hang's own loss line in the activity file, which the next start counts, with Android's robust step, and does not bisect; `hangnodump`: the hang's line without a dump, still counted; `hangnot`: no wait in progress, a freeze with the GPU's line and no loss; `hanglimit`: the GPU hang limit, 2 s, ends the run before the later limit of 60 s, its WATCHDOG line naming the submission and the limit, the rest the hang's), the program a restart starts (`relaunchexe`: the AppImage file when `APPIMAGE` is trusted, the program itself when it is not or is unset), each in a child process
-  whose log is read back; the symbolizer (`symmap.h`) on a small GNU ld map of an ELF program (a wrapped function section, a static function in an object, an anchor not at the module's start), a Windows map excerpt, an nm table and its gzip form past inflate's 32 KB window, a cut gzip member and a map without the anchor; the crash's and the watchdog's symbol lines from `diag_test.map`, linked beside the test as `ico_pc.map` is beside the program; their report zips (`report.h`) read back with miniz (report.txt's end, summary and report block with its symbol lines, the log; the crash's report.txt kept as `diag_test_report.txt`, an example); the prune keeping the newest five; `ico_log_limited` (250 calls: the first 8, the 100th and 200th, the end summary's count; `ico_log_limited_n` with SDL's error bounds, the first 64) (`diag`).
+  whose log is read back; the symbolizer (`symmap.h`) on a small GNU ld map of an ELF program (a wrapped function section, a static function in an object, an anchor not at the module's start), a Windows map excerpt, an nm table and its gzip form past inflate's 32 KB window, a cut gzip member and a map without the anchor; the crash's and the watchdog's symbol lines from `diag_test.map`, linked beside the test as `ico_pc.map` is beside the program; their report zips (`report.h`) read back with miniz (report.txt's end, summary and report block with its symbol lines, the log; the crash's report.txt kept as `diag_test_report.txt`, an example); the prune keeping the newest five; `ico_log_limited` (250 calls: the first 8, the 100th and 200th, the end summary's count; `ico_log_limited_n` with SDL's error bounds, the first 64) (`diag`). `diag_test --switch` (`diag_switch`): the renderer switch's steps and
+  watch: a child with stderr fully buffered into its log as on Windows writes a line, a step
+  (`ico_diag_step`) and a second line, then hangs and is killed with SIGKILL: the log holds the
+  first line before the step's and not the second; a 2 s switch watch (`ico_diag_watchdog_switch`)
+  over a step that never returns ends the run with exit 4, the WATCHDOG line naming the switch and
+  the step, the main thread's place, `the last step:` and the heartbeat's switch part, not the
+  game's 1 s later limit; 4 s of steady progress under the same watch and limit end in exit 0
+  with the watch's `over after` line.
 - `share_report_test.c`: an rc build's Share a bug report's files over a fake logs and dumps
   folder: the log, the run before's when there, the newest dump zip by modification time (a loss
   zip included, an `.rddump` left out), the newest `-present.png`, the newest `report-*.zip` (not
@@ -648,7 +655,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   long waiting for the disc drops nothing, each counted in `discExcused`), and the render thread's
   asynchronous present (`testAsyncLock`: under the lock at 60 Hz a 5 ms step with a 12.5 ms
   present on the game thread falls behind, the same present split 9 ms on the game thread and
-  3.5 ms on the render thread keeps every step on time, one present a step; `testAsyncRates`: the
+  3.5 ms on the render thread keeps every step on time, one present a step; `testRoomOffGame`:
+  the lock at 60 Hz with Direct3D 11's wait for room in the present queue on the render thread (the
+  render thread's whole job modelled: 1.5 ms of interpolation, 0.5 ms more of reads, 0.3 ms of
+  submit and present, the wait ending at the next vblank, a full FIFO queue; a 3 ms step whose
+  first renderer call waits for the picture's reads): made after the present, at the end of the
+  picture, it is 13.5-15 ms a picture with no read wait, the next present waiting 0.3-1.2 ms for
+  it as the display's wait, one present a step, no step past the next due time, no drop, skip or
+  resync, the alphas exact; made in the acquire, inside the reads, every step carries 3.5-5 ms of
+  read waits (issue 126, PACEEVAL's finding 3); `testAsyncRates`: the
   timer path paced by the GPU's time with the presents handed over, 9, 12, 17, 20 and 25 ms
   pictures give about a period over the picture time presents a step and 30 ms every new frame, a
   9 ms present with a 3 ms step two presents a step against one; `testRenderThreadPlan`: the
@@ -853,6 +868,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the duplicate check, `loginusers.vdf`, and the recorded program path: the AppImage file when
   `APPIMAGE` names one and the program lies under `APPDIR`, else the program itself
   (`test_self_exe`) (`steam_shortcut`).
+- `backend_switch.cmake` (window build, the disc image; skipped without it): Options > Graphics >
+  Apply through the program itself, `[dev] backend_switch_test = "opengl,vulkan"` from a portable
+  folder on SDL's offscreen driver, Vulkan on lavapipe, OpenGL on llvmpipe: both switches applied
+  and kept through `ico_window_switch_backend` and `ico_window_reopen`, `done, 2 switches, 0
+  failed`, OpenGL's compile-thread line, the switch steps through `up in`, the switch's watchdog
+  line, the run's last tick, no WATCHDOG, CRASH or FAILED (`backend_switch_window`, labels
+  `platform` and `window`, run alone, 1500 s). It starts the game: the orchestrator's gate, not a
+  package's.
 - `window_video_test.c`: fullscreen and mode requests on SDL's offscreen driver (`window_video`),
   Fullscreen holding the desktop's mode (its size and refresh rate) or no mode where the driver
   takes none, as `ico_window_video_desktop_mode` returns. The swapchain's
@@ -967,14 +990,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rd_blur_glow_fold_test.inc`) runs the seven post modes without the shine into WORK2 at
   Original, Enhanced 2x, the phone's 2364 x 1080 with the full height, and the phone's 848-pixel
   frame (NTSC, aspect 2.189) at 2364 x 1080 with Full pixel (WORK2's crop printed), each frame
-  drawn with the glow's mask folded into its reduction (`rd__glow_fold_force(1)`) and the same
+  drawn without and with the sun's fans drawn into WORK2 before the mask (the test's fan stub, `s_fanWork2`), each with the glow's mask folded into its reduction (`rd__glow_fold_force(1)`) and the same
   frame replayed with it off: every target but WORK2 the same bytes both ways, at Original and 2x
   every target the CPU model's both ways (WORK2 too with the fold off), the fold counted in every
   frame that draws the glow and none kept, (e)'s frame with the shine kept for the lamps' reason,
   every pipeline created enumerated (`checkGlowFold`; [RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction));
   the recording part plans the chain without a device (`rd__glow_fold_plan` on post mode 7: the
-  fill, the mask and the reduction in order, the fill's colour, the mask's test; the shine frame
-  kept, `checkGlowFoldPlan`). In every shard a replay that folded the mask leaves WORK2 out of
+  fill, the mask and the reduction in order, the fill's colour, the mask's test; with the fans the
+  mask alone; the shine frame kept, `checkGlowFoldPlan`). In every shard a replay that folded the mask leaves WORK2 out of
   `compareAll` (the fold does not draw it; WORK0, its reduction, is compared).
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
@@ -1411,8 +1434,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   folder>`, machine-local: six corpus dumps at the gate's Enhanced 2x 4:3 against
   `build-host/tmp/v095/after/w3/pd`, and five of the PowerVR phone's frames at its Resolution Auto,
   2364x1080 at 2.189 under its profile's fakes, against `build-host/tmp/v098/evidence/cheap/base-phone`)
-  replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0` (the
-  baselines' own): the stats line says `crack fill on: P passes` (P 0 where the fill was the
+  replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+  ICO_RD_CULL=off` (the baselines' own: they replayed every draw, and the draws the visibility
+  test leaves out keep every pixel but take their copies with them, so the phone's copy count is
+  the baseline's minus one only with every draw replayed; the culler's own gate is `rd_cull_ab`):
+  the stats line says `crack fill on: P passes` (P 0 where the fill was the
   first draw of the aura's paste pass, else 1) and `1 fills after lists 4-6`,
   or, on a dump with no fog of SCENE above 1x (`0 passes, 0 pixels filled (0 replays counted;
   scale 0x0, ...; 0 fogged replays above 1x not filled; 0 fills after lists 4-6`: the v3086 and
@@ -1492,7 +1518,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`ICO_RD_GLOW_FOLD=1`, into `<name>-<setting>-fold`): every PNG but `WORK2.png` (which the fold
   leaves undrawn) the same bytes as the run without it, `PRESENT.png` too at the phone's setting;
   a run whose stats say `glow: WORK2 fold on: 1 folded` has at least one glow pass fewer, a kept
-  one (the sun's fans or the lamps drawn into WORK2) as many; at each setting that ran, at least
+  one (only the lamps drawn into WORK2 after the mask may keep it: any other reason fails) as
+  many; the folds reading the sun's fans' WORK2 counted; at each setting that ran, at least
   one run folded ([RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction)).
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
@@ -2062,7 +2089,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   timeline sync), so each replay's walk runs while the submit thread ends and submits the one
   before (RHI.md "Frame slots and the submit thread"): the race check for that partition. `threadSync`: in the sync mode a picture is
   waited for and not counted as handed over (`rd_submit_async` false), with the thread on it is
-  until the drain (not on OpenGL). It is the render thread's program to run under
+  until the drain (not on OpenGL). `threadRoomAhead` (not on OpenGL; with
+  `ICO_RD_SUBMIT_THREAD=0`, the output given a size so the pictures present; run last): the
+  display's wait ahead through `rd__thread_room_hook` in place of `rhi_wait_present_room`, a
+  picture handed over that presented ends by making the next one's wait for room; held there, the
+  test's `rd_update_texture` and `rdtex_find` make no read wait; the next picture takes it (none
+  inside its reads), a picture after one that made none is counted inside; the 10 s clause's
+  text; SCENE byte for byte across the pictures; with `ICO_RD_ACQUIRE_AHEAD=0` the seam is never
+  asked. It is the render thread's program to run under
   ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
   build folder of its own (`build-host/linux-x64-tsan`), `--target rd_tex_test`, run with
   `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`; a report is a failure.
@@ -2148,7 +2182,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   next frame, 2064 for marks 512, 2050 and 1000 in one frame, and all 8192 of a buffer never noted,
   each read back byte for byte; the video memory fields of `RhiStats` on WARP: a budget, no more
   to reserve than the budget, two reads inside 250 ms equal; the hardware adapter, the swapchain on
-  a hidden window, Vulkan for comparison), the cells' shaders compiled at run time from
+  a hidden window, after each present the frame latency wait made ahead of the acquire
+  (`rhi_wait_present_room`) asked twice with the same answer and false with a backbuffer acquired,
+  Vulkan for comparison), the cells' shaders compiled at run time from
   `rhi_test_hlsl.h`; a Windows GUI program that writes `rhi_d3d11_test.log` and shows a message box
   (`rhi_d3d11`, registered on a native Windows build only). The `win-x64` and `win-x64-clang`
   cross builds build it; CI's `windows` job runs it with `--console` on WARP
@@ -2190,6 +2226,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`LIBGL_ALWAYS_SOFTWARE=1`, `SDL_VIDEO_DRIVER=offscreen`); they skip (77) without an OpenGL
   context. On llvmpipe the destination-read cells skip (no fragment shader interlock; GLSL has no
   attachment read).
+- `rhi_gl_sync_wait_test.c`: the OpenGL backend's fence wait with a limit on the CPU
+  (`port/rhi/gl/gl_sync_wait.c`, `gl_device.c` `gl_wait_sync`) over a stub fence and a fake clock: one
+  that never signals ends at the 15 s limit in 300 slices of 50 ms, the pump between them, the 2 s
+  line once; one signalling in the third slice returns with neither; a failed wait returns failed;
+  no limit waits out a 100 s fence in 1 s slices (`rhi_gl_sync_wait`).
 - `rhi_gl_glsl_test.c`: the OpenGL backend's GLSL inflate on the CPU (`port/rhi/gl/gl_glsl.c`, miniz):
   a deflated text round-trips NUL-terminated; a wrong text length, a corrupt or truncated stream and
   no stream give none (`rhi_gl_glsl`).

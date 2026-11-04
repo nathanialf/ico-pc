@@ -132,6 +132,16 @@ static volatile int movie_playing;
 static char activity[640];
 /* ico_diag_set_pipelines: the start-up set's count and its longest compile */
 static volatile unsigned int pipes_done, pipes_total, pipes_longest_ms;
+/* ico_diag_step: the last step's line (the switch's and the start's), and
+   the switch's watch (ico_diag_watchdog_switch): its limit in seconds (0
+   off), its progress count (steps, shaders and pipelines made), what it
+   switches to, and the uptime it began; written by the main thread (the
+   progress count by any), read by the watchdog's */
+static char step_line[256];
+static volatile unsigned int sw_limit_s;
+static volatile unsigned int sw_progress;
+static char sw_what[96];
+static volatile double sw_since;
 /* ico_diag_present_enter/leave (diag_host.h): when the main thread entered
    the present it is in (0 = not inside one), and the capped time of the
    presents that finished, both in ico_diag_now_ns */
@@ -1050,7 +1060,7 @@ static unsigned int same_beats;
 static void heartbeat(int fatal_path)
 {
     static char body[1024];
-    static char mem[288];
+    static char mem[640];
     IcoDiagGpu gpu;
     heartbeat_body(body, sizeof body);
     if (strcmp(body, last_body) == 0) {
@@ -1072,6 +1082,16 @@ static void heartbeat(int fatal_path)
             const size_t n = strlen(mem);
             snprintf(mem + n, sizeof mem - n, " | in %s %.0f s", os_wait_name(), cur);
         }
+    }
+    if (sw_limit_s != 0) {
+        /* the renderer's switch in progress (ico_diag_watchdog_switch), and
+           its last step, outside the comparison too */
+        char st[sizeof step_line];
+        const size_t n = strlen(mem);
+        memcpy(st, step_line, sizeof st);
+        st[sizeof st - 1] = '\0';
+        snprintf(mem + n, sizeof mem - n, " | %s for %.0f s, last step: %s", sw_what,
+                 ico_diag_uptime() - sw_since, st);
     }
     if (gpu_state(&gpu) && gpu.waiting_for != 0 && gpu.waiting_s >= 1.0) {
         /* a wait for the GPU (the watchdog's GPU hang), outside the
@@ -1101,6 +1121,37 @@ static void prefix(char *out, size_t size)
     snprintf(out, size, "[%.3f s, vsync %u, tick %u, #%d %s]", ico_diag_uptime(),
              vsyncs_fn != NULL ? vsyncs_fn() : 0u, ticks_fn != NULL ? ticks_fn() : 0u, cur,
              thread_name(cur, tmp, sizeof tmp));
+}
+
+void ico_diag_step(const char *fmt, ...)
+{
+    char msg[sizeof step_line];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof msg, fmt, ap);
+    va_end(ap);
+    /* what stdout and stderr hold goes first, so the log keeps its order
+       (Windows: fully buffered, host_config.c; a no-op where unbuffered) */
+    fflush(stdout);
+    fflush(stderr);
+    ico_diag_log("%s", msg);
+    memcpy(step_line, msg, sizeof step_line);
+    sw_progress++;
+}
+
+const char *ico_diag_last_step(void)
+{
+    return step_line;
+}
+
+void ico_diag_switch_progress(void)
+{
+    sw_progress++;
+}
+
+double ico_diag_gpu_hang_limit(void)
+{
+    return (double)gpu_hang_limit_ms / 1000.0;
 }
 
 void ico_diag_milestone(const char *fmt, ...)
@@ -4688,6 +4739,9 @@ static void report_crash_block(void)
     if (activity[0] != '\0') {
         flog("ico_pc: while: %s", activity);
     }
+    if (step_line[0] != '\0') {
+        flog("ico_pc: the last step: %s", step_line);
+    }
     if (crash.fault_kind >= 0) {
         flog("ico_pc: the faulting access: %s address 0x%llx",
              crash.fault_kind == 1   ? "writing"
@@ -5234,6 +5288,9 @@ static void watchdog_fire(const char *reason)
     if (activity[0] != '\0') {
         flog("ico_pc: while: %s", activity);
     }
+    if (step_line[0] != '\0') {
+        flog("ico_pc: the last step: %s", step_line);
+    }
     if (failure[0] != '\0') {
         flog("ico_pc: last failure message: %s", failure);
     }
@@ -5333,6 +5390,24 @@ void ico_diag_watchdog_pause(int paused)
     ico_diag_log("ico_pc: diagnostics: watchdog %s", paused ? "paused" : "running again");
 }
 
+void ico_diag_watchdog_switch(unsigned int seconds, const char *what)
+{
+    if (seconds != 0) {
+        snprintf(sw_what, sizeof sw_what, "%s", what != NULL ? what : "a switch");
+        sw_since = ico_diag_uptime();
+        sw_progress++;
+        ico_diag_log("ico_pc: diagnostics: watchdog: %s; its limit is %u s without a step, a "
+                     "shader or a pipeline made (the game's own limits wait)",
+                     sw_what, seconds);
+        sw_limit_s = seconds;
+    } else if (sw_limit_s != 0) {
+        sw_limit_s = 0;
+        ico_diag_log("ico_pc: diagnostics: watchdog: %s over after %.1f s; the game's limits "
+                     "count again",
+                     sw_what, ico_diag_uptime() - sw_since);
+    }
+}
+
 void ico_diag_main_thread_end(void)
 {
 #ifndef _WIN32
@@ -5380,6 +5455,11 @@ static void watchdog_loop(void)
        render thread's picture it counts the same way */
     IcoGpuHangWatch hang_watch;
     IcoRenderHangWatch render_watch;
+    /* the switch's watch (ico_diag_watchdog_switch): on, the progress and
+       pipeline counts last seen, when either last moved */
+    int sw_on = 0;
+    unsigned int sw_seen = 0, sw_pipes = 0;
+    double sw_alive = start;
     memset(&hang_watch, 0, sizeof hang_watch);
     memset(&render_watch, 0, sizeof render_watch);
     for (;;) {
@@ -5394,6 +5474,7 @@ static void watchdog_loop(void)
         double poll_dt;
         int poll_counted;
         unsigned int hang_ms;
+        unsigned int sw_lim;
         if (epoch != __atomic_load_n(&wd_epoch, __ATOMIC_ACQUIRE)) {
             /* the limits were just set (ico_diag_start): both count from now */
             epoch = __atomic_load_n(&wd_epoch, __ATOMIC_ACQUIRE);
@@ -5427,8 +5508,22 @@ static void watchdog_loop(void)
             os_gap = 0.0;
         }
         poll_dt = now - last_poll;
-        poll_counted = poll_dt <= SUSPEND_GAP_S && !wd_paused;
-        if (now - last_poll > SUSPEND_GAP_S || wd_paused) {
+        sw_lim = sw_limit_s;
+        poll_counted = poll_dt <= SUSPEND_GAP_S && !wd_paused && sw_lim == 0;
+        if (sw_lim != 0 && !sw_on) {
+            /* a switch begins: its own clock from now */
+            sw_on = 1;
+            sw_seen = sw_progress;
+            sw_pipes = pipes_done;
+            sw_alive = now;
+        } else if (sw_lim == 0) {
+            sw_on = 0;
+        }
+        if (sw_on && (now - last_poll > SUSPEND_GAP_S || wd_paused)) {
+            /* the system slept, or a box paused the watchdog: not the switch's time */
+            sw_alive += now - last_poll;
+        }
+        if (now - last_poll > SUSPEND_GAP_S || wd_paused || sw_on) {
             /* the clock jumped between two polls: the system slept (Windows'
                GetTickCount64 counts sleep and hibernation) or the process was
                stopped (a debugger, SIGSTOP); or the watchdog is paused (the
@@ -5447,6 +5542,34 @@ static void watchdog_loop(void)
         last_poll = now;
         if (wd_paused) {
             last_beat = now;
+            continue;
+        }
+        if (sw_on) {
+            /* Options > Graphics > Apply's switch (ico_diag_watchdog_switch):
+               neither of the game's limits counts (the device's start is not
+               a hang of the game), but the switch's own does: no step, no
+               shader and no pipeline made for its time ends the run with the
+               report, the main thread's stack sampled where it stands
+               (inside the driver, when it hung there); only while a limit
+               is in force, as the GPU hang limit */
+            if (sw_progress != sw_seen || pipes_done != sw_pipes) {
+                sw_seen = sw_progress;
+                sw_pipes = pipes_done;
+                sw_alive = now;
+            }
+            if (now - last_beat >= HEARTBEAT_S) {
+                last_beat = now;
+                heartbeat(0);
+            }
+            if ((first_s != 0 || later_s != 0) && now - sw_alive >= (double)sw_lim) {
+                char st[sizeof step_line];
+                memcpy(st, step_line, sizeof st);
+                st[sizeof st - 1] = '\0';
+                snprintf(reason, sizeof reason,
+                         "%.60s: nothing moved for %u s (the last step: %.90s)", sw_what, sw_lim,
+                         st);
+                watchdog_fire(reason);
+            }
             continue;
         }
         if (now - last_beat >= HEARTBEAT_S) {

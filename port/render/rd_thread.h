@@ -161,7 +161,15 @@ typedef enum RdReadPhase {
 /* aheads: the pictures whose job ended by waiting for the next picture's
  * frame slot (the slot ahead, rd__slot_ahead_take: outside the hand-over), with the waits' sum
  * and longest in ms; fenceInside: the pictures handed over that waited for
- * their own slot inside their reads (no slot waited for ahead) */
+ * their own slot inside their reads (no slot waited for ahead).
+ * roomAheads: the pictures whose job ended by making the next picture's
+ * wait for room in the present queue (the display's wait ahead,
+ * rd__room_ahead_take: Direct3D 11's frame latency wait), with the waits'
+ * sum and longest in ms; roomDrains: the game thread's presents whose
+ * drain waited for one (the part of the drain inside it, summed in ms:
+ * the present's own wait, counted as the display's); roomInside: the
+ * pictures handed over whose acquire found none made ahead where the
+ * backend has the wait (it waited inside their reads) */
 typedef struct RdThreadBlock {
     unsigned pictures;
     double interpMs, walkMs, submitMs, waitMs;
@@ -174,6 +182,8 @@ typedef struct RdThreadBlock {
     double freshWaitMs, furtherWaitMs;
     unsigned aheads, fenceInside;
     double aheadMs, aheadMaxMs;
+    unsigned roomAheads, roomDrains, roomInside;
+    double roomAheadMs, roomAheadMaxMs, roomDrainMs;
 } RdThreadBlock;
 
 void rd_thread_block_take(RdThreadBlock *out);
@@ -182,7 +192,12 @@ void rd_thread_block_take(RdThreadBlock *out);
  * clause after "read waits N (...)": "; the render thread as each began: the hand-over N
  * (X ms), ...; the next picture's frame slot waited for at the end of the
  * one before N times (...), N pictures waited for their slot inside their
- * reads" (the split left out with no read wait); out always terminated */
+ * reads" (the split left out with no read wait), then where the backend
+ * has a display's wait made ahead "; the display's wait for room in the
+ * present queue made at the end of the picture before N times (X ms in
+ * all, longest Y ms; the presents waited for it N times, X ms, as the
+ * display's wait), N pictures waited for it inside their reads" (left out
+ * with none of those); out always terminated */
 void rd_thread_read_waits_text(const RdThreadBlock *b, char *out, size_t cap);
 
 /* The render thread, after a picture's job: how long the picture held the
@@ -252,6 +267,21 @@ void rd__thread_phase(RdReadPhase phase);
  * one waited for ahead, its fence and its jobs then done; false: wait as
  * before. */
 bool rd__slot_ahead_take(void);
+/* The display's wait ahead: the render thread, at the end of a picture's
+ * job handed over that presented (after the slot ahead), makes the next
+ * picture's wait for room in the present queue (rhi_wait_present_room:
+ * Direct3D 11's frame latency wait), so the next picture's reads begin
+ * without the display's wait inside them; the game thread's next present
+ * waits for what is left of it in its drain, as the display's wait.  Not
+ * with the submit thread on, not under ICO_RD_ACQUIRE_AHEAD=0 ([dev]
+ * acquire_ahead = false).  rd__room_ahead_take (rd__present_acquire, any
+ * thread): the record taken, and on the render thread in a picture's
+ * reads where the backend has the wait and none was made ahead, counted
+ * as a wait inside the reads (the backend's acquire then waits itself). */
+void rd__room_ahead_take(void);
+/* The tests' seam (rd_tex_test): fn() in place of rhi_wait_present_room
+ * in the display's wait ahead (its answer the backend's); NULL: none */
+void rd__thread_room_hook(bool (*fn)(void));
 /* The tests' seam (rd_tex_test): fn(at) on the render thread inside a
  * picture's open hand-over as it enters phase `at` (RdReadPhase), and with
  * at = RD_READ_PHASES in the slot ahead before its wait; NULL: none */

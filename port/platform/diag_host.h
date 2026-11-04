@@ -257,6 +257,33 @@ void ico_diag_start_reporter(void);
    background), 0 when it runs again: while paused neither watchdog limit
    counts and the heartbeat is quiet. Any thread. */
 void ico_diag_watchdog_pause(int paused);
+/* Options > Graphics > Apply's switch of the renderer (window_switch.c), in
+   place of a pause: seconds not 0 starts the switch's own limit, what names
+   it ("switching the renderer from d3d11 to opengl"); 0 ends it.  While it
+   is on neither of the game's limits counts (the device's start is not a
+   hang of the game) and the heartbeat goes on with "<what> for N s, last
+   step: <the last ico_diag_step line>"; when nothing moves for `seconds` (no
+   ico_diag_step, no ico_diag_switch_progress: a shader or a pipeline made,
+   rhi.h RhiWaitHooks.made; no pipeline of the set finished) the run ends
+   with the watchdog's report "WATCHDOG: <what>: nothing moved for N s (the
+   last step: ...)", the main thread's stack sampled where it stands (inside
+   the graphics driver when it hung there), exit code 4.  Only while a limit
+   is in force (ico_diag_start with a limit not 0), as the GPU hang limit;
+   ico_diag_watchdog_pause wins over it (a box). Main thread. */
+void ico_diag_watchdog_switch(unsigned int seconds, const char *what);
+/* A shader or pipeline made: progress for the switch's limit only. Any thread. */
+void ico_diag_switch_progress(void);
+/* A step of the start or of the switch, one line written to the log at
+   once (what stdout and stderr hold flushed first, so the log keeps its
+   order): a hang or a kill inside the step leaves the line naming it.  The
+   crash and watchdog reports repeat it ("ico_pc: the last step: <line>"),
+   and it is progress for the switch's limit. Main thread. */
+void ico_diag_step(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);
+/* The last ico_diag_step line ("" before the first; tests). */
+const char *ico_diag_last_step(void);
+/* The GPU hang limit in seconds (ico_diag_set_gpu_hang_limit; 0 off): the
+   window's limit for one OpenGL shader compile (rhi.h RhiWaitHooks). */
+double ico_diag_gpu_hang_limit(void);
 /* The thread that called ico_diag_init is about to end (Android: Quit,
    with the process possibly kept): from now on the watchdog neither
    samples nor signals it. */

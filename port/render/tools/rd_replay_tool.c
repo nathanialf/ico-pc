@@ -408,6 +408,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <process.h> /* _getpid: the zip's temporary dump */
+#else
+#include <unistd.h> /* getpid: the zip's temporary dump */
+#endif
 #include "../../include/ico_endian.h"
 #include "dump_zip.h" /* port/platform: the F12 zip */
 #include "rd_internal.h"
@@ -935,8 +940,19 @@ static bool unzipDump(const char **dump, int nth)
     if (dir == NULL) {
         dir = "/tmp";
     }
-    snprintf(tmp, sizeof(s_zipTemps[0]), "%s/rd_replay_%u_%d.rddump", dir,
-             (unsigned)(uintptr_t)data & 0xFFFFFFu, nth);
+    /* named by the process: no two live tools share a name.  The name was the
+       low 24 bits of the extracted copy's address, which ASLR leaves 12 random
+       bits of (a page-aligned mmap chunk), so two replays run side by side
+       (ctest -j: rd_fades_fold_ab and rd_crack_late_ab both replay the phone's
+       v4657.zip) could pick one name: the first to exit removed the other's
+       dump before it was read ("rd: load: cannot open", exit 1), or one
+       overwrote the other's with a different frame */
+#ifdef _WIN32
+    const unsigned pid = (unsigned)_getpid();
+#else
+    const unsigned pid = (unsigned)getpid();
+#endif
+    snprintf(tmp, sizeof(s_zipTemps[0]), "%s/rd_replay_%u_%d.rddump", dir, pid, nth);
     FILE *fp = fopen(tmp, "wb");
     const bool ok = fp != NULL && fwrite(data, 1, size, fp) == size;
 
@@ -2623,10 +2639,11 @@ int main(int argc, char **argv)
         printf("%s: stats: fades fold %s: %u sprites folded into the reduction\n", dump,
                rd__fades_fold_on() ? "on" : "off", pr->fadesFolded);
         /* the glow's mask computed in its reduction (rd_glow_fold.c) */
-        printf("%s: stats: glow: WORK2 fold %s: %u folded, %u kept%s%s%s\n", dump,
-               rd__glow_fold_on() ? "on" : "off", pr->glowFolded, pr->glowKept,
-               pr->glowKept ? " (" : "", pr->glowKept ? rd_glow_fold_why_text(pr->glowWhy) : "",
-               pr->glowKept ? ")" : "");
+        printf("%s: stats: glow: WORK2 fold %s: %u folded (%u reading the sun's fans' WORK2), %u "
+               "kept%s%s%s\n",
+               dump, rd__glow_fold_on() ? "on" : "off", pr->glowFolded, pr->glowFoldRead,
+               pr->glowKept, pr->glowKept ? " (" : "",
+               pr->glowKept ? rd_glow_fold_why_text(pr->glowWhy) : "", pr->glowKept ? ")" : "");
         /* the aura's read in two passes (rd_aura_box.c) */
         printf("%s: stats: aura box %s: %u feedback reads in two passes\n", dump,
                rd__aura_box_on() ? "on" : "off", pr->auraBoxDraws);

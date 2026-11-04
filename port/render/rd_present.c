@@ -552,6 +552,7 @@ static bool presentAcquire(void);
 bool rd__present_acquire(void)
 {
     rd__thread_phase(RD_READ_ACQUIRE); /* the read waits' split (rd_thread.h) */
+    rd__room_ahead_take();             /* the display's wait made ahead, or inside (rd_thread.h) */
     const bool ok = presentAcquire();
     rd__thread_phase(RD_READ_UPLOAD);
     return ok;

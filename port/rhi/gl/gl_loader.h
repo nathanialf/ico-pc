@@ -169,11 +169,13 @@
     X(1, PFNGLPOPDEBUGGROUPPROC, PopDebugGroup)                                          \
     X(1, PFNGLOBJECTLABELPROC, ObjectLabel)                                              \
     /* later than 4.3: ARB_clip_control and ARB_texture_barrier (4.5),                   \
-     * ARB_buffer_storage (4.4); gl_device.c checks them */                              \
+     * ARB_buffer_storage (4.4), KHR_parallel_shader_compile; gl_device.c                \
+     * and gl_compile.c check them */                                                    \
     X(0, PFNGLCLIPCONTROLPROC, ClipControl)                                              \
     X(0, PFNGLBUFFERSTORAGEPROC, BufferStorage)                                          \
     X(0, PFNGLTEXTUREBARRIERPROC, TextureBarrier)                                        \
-    X(0, PFNGLBINDBUFFERSRANGEPROC, BindBuffersRange)
+    X(0, PFNGLBINDBUFFERSRANGEPROC, BindBuffersRange)                                    \
+    X(0, PFNGLMAXSHADERCOMPILERTHREADSKHRPROC, MaxShaderCompilerThreadsKHR)
 /* clang-format on */
 
 #define GL__FIELD(req, type, name) type name;

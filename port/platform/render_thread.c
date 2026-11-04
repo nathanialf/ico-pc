@@ -928,8 +928,9 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
        walk; rd_thread.h) */
     const unsigned byPresents = tb.freshWaits + tb.furtherWaits;
     /* the read waits by what the render thread was doing as each began,
-       and the frame slots it waited for outside the hand-over (rd_thread.h) */
-    char rw[640];
+       the frame slots it waited for outside the hand-over and the
+       display's waits it made there (rd_thread.h) */
+    char rw[1024];
 
     rd_thread_read_waits_text(&tb, rw, sizeof(rw));
     fprintf(stderr,

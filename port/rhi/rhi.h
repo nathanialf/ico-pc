@@ -818,13 +818,50 @@ typedef struct RhiLimits {
     bool slotOverlap;
 } RhiLimits;
 
+/* The window's part in a driver call that may take long (rhi_set_wait_hooks):
+ *   pump(ctx, what, heldNs)  about every 50 ms while the calling thread waits
+ *                            for the call (what: its name, "shader
+ *                            sprite_aa1_ps"; heldNs: the time so far), on the
+ *                            calling thread; the window takes its events
+ *                            there when that is its own thread;
+ *   stalled(ctx, what, heldNs) once, when the call passed limitNs and the
+ *                            backend gave up on it (the object is not made,
+ *                            the device's start fails);
+ *   made(ctx)                after each rhi_create_shader and
+ *                            rhi_create_pipeline returned (made or not): a
+ *                            sign the device's start moves (the switch's
+ *                            watchdog, port/platform/diag_host.h);
+ *   limitNs                  how long one such call may take, 0 no limit.
+ * Any pointer may be NULL.  Only OpenGL waits this way (its shader compiles
+ * on a worker thread with a context of the same share group, gl_compile.c,
+ * and its fence waits, gl_device.c gl_wait_sync); the dispatcher calls made
+ * for every backend. */
+typedef struct RhiWaitHooks {
+    void (*pump)(void *ctx, const char *what, uint64_t heldNs);
+    void (*stalled)(void *ctx, const char *what, uint64_t heldNs);
+    void (*made)(void *ctx);
+    void *ctx;
+    uint64_t limitNs;
+} RhiWaitHooks;
+
 typedef struct RhiDeviceDesc {
     void *sdlWindow; /* SDL_Window*: the backend creates its surface/swapchain from it.
                       * NULL = headless (no swapchain; tests, tools/verify replay). */
     bool vsync;
     bool debugLayers;
     const char *appName;
+    /* the hooks of rhi_set_wait_hooks, filled in by the dispatcher's rhi_init
+     * when the caller leaves it NULL (a backend copies what it keeps) */
+    const RhiWaitHooks *waits;
 } RhiDeviceDesc;
+
+/* The wait hooks every later rhi_init hands the backend (RhiDeviceDesc.waits),
+ * copied; NULL clears them.  Kept by the dispatcher (rhi_backend.c) across
+ * rhi_create_backend, as rhi_set_adapter_wanted is.  The window sets them
+ * once before its first rhi_init (port/platform/window_switch.c); the tests
+ * and tools set none, and their OpenGL shaders compile on the calling
+ * thread as before. */
+void rhi_set_wait_hooks(const RhiWaitHooks *hooks);
 
 typedef enum RhiBackendKind {
     RHI_BACKEND_VULKAN = 0,
@@ -914,6 +951,19 @@ void rhi_present(void);
  * DXGI_STATUS_OCCLUDED (the window minimised or covered: the present did
  * not wait for a vblank). */
 bool rhi_present_shown(void);
+/* The wait for room in the present queue that the next
+ * rhi_acquire_backbuffer would make, made now: Direct3D 11's frame latency
+ * wait (the waitable swap chain, d3d11_swapchain.c; up to 50 ms, as the
+ * acquire's).  The render thread makes it at the end of a picture, after
+ * that picture's present, so the next picture's reads do not hold it
+ * (port/render/rd_thread.c, the display's wait ahead).  The acquire after
+ * it then does not wait again: one wait a present, whichever call makes
+ * it.  Its time counts as the acquire's (RhiStats.acquireNs).  True: that
+ * wait is behind the next acquire (made now, or already); false: the
+ * backend has no such wait (Vulkan, Direct3D 12, OpenGL), no swapchain, a
+ * backbuffer still acquired, or a present that queued nothing (nothing to
+ * wait for). */
+bool rhi_wait_present_room(void);
 /* The window's surface (the Android lifecycle).
  * rhi_release_surface waits for the GPU, destroys the swapchain and the
  * surface and keeps the device and everything made on it: the app goes to

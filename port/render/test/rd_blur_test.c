@@ -360,10 +360,15 @@ void CopyVector(float *d, float *s)
     memcpy(d, s, 16);
 }
 
-/* the sun fans: Primitive.c is not linked; they draw nothing here */
+/* the sun fans: Primitive.c is not linked; they draw nothing here, but
+   with s_fanWork2 (case (k), the glow fold) each draws an untextured
+   sprite of its colour and radius over the frame's centre into WORK2, the
+   target dispSun draws them into, between the glow's fill and its mask */
 static Fan2D s_fan;
 
-static int s_fanDraws;
+static int s_fanDraws, s_fanWork2;
+static float s_fanR;
+static unsigned int s_fanCol;
 
 Fan2D *prim_InitFan2D(int n, float r, float *pos, unsigned int cc, unsigned int rc)
 {
@@ -373,13 +378,41 @@ Fan2D *prim_InitFan2D(int n, float r, float *pos, unsigned int cc, unsigned int 
 
 void prim_SetFan2D(Fan2D *f, float r, float *pos, unsigned int cc, unsigned int rc)
 {
-    (void)f, (void)r, (void)pos, (void)cc, (void)rc;
+    (void)f, (void)pos, (void)rc;
+    s_fanR = r;
+    s_fanCol = cc;
 }
 
 void prim_DispFan2D(Fan2D *f, int mode)
 {
     (void)f, (void)mode;
     s_fanDraws++;
+    if (!s_fanWork2) {
+        return;
+    }
+    rd_set_target(rd_target(RD_TARGET_WORK2), rd_target(RD_TARGET_SCENE), (uint32_t)gsFrame.w,
+                  (uint32_t)ScreenHeight, 0);
+    rd_test_gs(0x30000);
+    rd_z_write(0);
+    rd_abe(0);
+    rd_fba(0);
+    rd_pabe(0);
+    rd_texture_off();
+    rd_gouraud(0);
+    RdPostParams p;
+    memset(&p, 0, sizeof(p));
+    const float r16 = s_fanR * 16.0f;
+    p.rect[0] = 32768.0f - r16;
+    p.rect[1] = 32768.0f - r16;
+    p.rect[2] = 32768.0f + r16;
+    p.rect[3] = 32768.0f + r16;
+    p.rgba[0] = (uint8_t)(s_fanCol >> 24);
+    p.rgba[1] = (uint8_t)(s_fanCol >> 16);
+    p.rgba[2] = (uint8_t)(s_fanCol >> 8);
+    p.rgba[3] = (uint8_t)s_fanCol;
+    p.scalar[0] = p.scalar[1] = 1024.0f;
+    p.scalar[2] = 1.0f;
+    rd_post(RD_POST_FLARE, &p);
 }
 
 /* the EE word arena (eeword.h) */
@@ -4049,7 +4082,7 @@ static const IcoShardCase k_cases[] = {
     {"effects_scaled", 4},
     {"motion_blur_smooth_scaled", 2},
     {"aura_box", 30},
-    {"glow_fold", 20},
+    {"glow_fold", 40},
 };
 
 int main(int argc, char **argv)

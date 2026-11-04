@@ -47,8 +47,8 @@
  *                   layouts, bind groups, readback_texture
  *   gl_swapchain.c  resize_swapchain, swapchain_format, swapchain_size,
  *                   surface_poll_restart, acquire_backbuffer, present,
- *                   present_shown, release_surface, recreate_surface,
- *                   present_mode_name, present_statistics
+ *                   present_shown, wait_present_room, release_surface,
+ *                   recreate_surface, present_mode_name, present_statistics
  *   gl_pipeline.c   create_pipeline, create_pipelines, destroy_pipeline
  *   gl_cmd.c        begin_commands, end_commands, submit, and every other
  *                   rhi_cmd_* entry point
@@ -392,6 +392,26 @@ typedef struct GlState {
      * points, and the fence waits */
     RhiStats counts;
     uint64_t fenceWaits, fenceWaitNs;
+
+    /* the window's wait hooks (rhi.h RhiWaitHooks, RhiDeviceDesc.waits),
+     * copied at rhi_init; hasWaits false for the tests and tools */
+    RhiWaitHooks waits;
+    bool hasWaits;
+    /* a frame's fence not signalled within the limit (gl_wait_sync): the
+     * device counts as lost (rhi_device_lost), no wait is made again */
+    bool lost;
+    /* the shader compiles (gl_compile.c): the compile thread, NULL when the
+     * compiles run on the calling thread; KHR_parallel_shader_compile used
+     * there instead; a compile the driver stalled in (the device's start
+     * fails: every later compile returns none) and its name; the count and
+     * the longest */
+    struct GlCompiler *compiler;
+    bool parallelKhr;
+    bool compileStalled;
+    char stalledName[96];
+    uint32_t compiles;
+    uint64_t compileNs, compileLongestNs;
+    char compileLongestName[96];
 } GlState;
 
 extern GlState g_gl;
@@ -400,6 +420,17 @@ extern GlState g_gl;
     do {                                                                                           \
         fprintf(stderr, "rhi_gl: " __VA_ARGS__);                                                   \
         fputc('\n', stderr);                                                                       \
+    } while (0)
+
+/* GL_LOG written out at once: stderr is fully buffered on Windows
+ * (port/platform/host_config.c ico_host_redirect_output) and flushed by the
+ * host loop once a vsync, so a hang inside the driver (a context's start, a
+ * shader compile) would keep the line in the buffer; the start lines and
+ * the compile's lines go this way. */
+#define GL_LOG_DIRECT(...)                                                                         \
+    do {                                                                                           \
+        GL_LOG(__VA_ARGS__);                                                                       \
+        fflush(stderr);                                                                            \
     } while (0)
 
 /* A rate for repeated failure lines: true for the first 8 of a counter,
@@ -486,6 +517,22 @@ GLenum gl_compare(RhiCompare c);
 GLenum gl_stencil_op(RhiStencilOp op);
 
 /* gl_swapchain.c */
+/* gl_compile.c: the shader compiles.  gl_compile_init at the end of
+ * rhi_init (the device's context current, on the window): with the window's
+ * wait hooks a compile thread with a context of the same share group, else
+ * KHR_parallel_shader_compile where offered, else nothing (the calling
+ * thread compiles, as the tests and tools do); its line says which.
+ * gl_compile_shutdown in rhi_shutdown before the context goes (an
+ * abandoned thread is left as it is).  gl_compile_program makes a separable
+ * program of one stage from text (taken: freed here) and returns it (0
+ * none), *linked its link status and log its info log when not linked; a
+ * compile past the hooks' limit is abandoned (gl_compile.c) and every
+ * later call returns 0 at once. */
+void gl_compile_init(void);
+void gl_compile_shutdown(void);
+GLuint gl_compile_program(GLenum type, char *text, const char *name, GLint *linked, char *log,
+                          size_t logSize);
+
 bool gl_swapchain_create(uint32_t w, uint32_t h, bool vsync);
 void gl_swapchain_destroy(void);
 

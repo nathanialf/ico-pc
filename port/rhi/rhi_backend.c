@@ -38,6 +38,9 @@ static bool s_up; /* rhi_init succeeded and rhi_shutdown has not run */
 /* [video] adapter (rhi_set_adapter_wanted): handed to the backend at each
    rhi_init, whichever backend is selected then */
 static char s_adapterWanted[256];
+/* rhi_set_wait_hooks (rhi.h): copied, handed to every rhi_init */
+static RhiWaitHooks s_waits;
+static bool s_waitsOn;
 
 static bool nameEq(const char *a, const char *b)
 {
@@ -220,8 +223,32 @@ bool rhi_init(const RhiDeviceDesc *desc)
         return true;
     }
     be()->set_adapter_wanted(s_adapterWanted);
-    s_up = be()->init(desc);
+    if (desc && !desc->waits && s_waitsOn) {
+        RhiDeviceDesc d = *desc;
+        d.waits = &s_waits;
+        s_up = be()->init(&d);
+    } else {
+        s_up = be()->init(desc);
+    }
     return s_up;
+}
+
+void rhi_set_wait_hooks(const RhiWaitHooks *hooks)
+{
+    s_waitsOn = hooks != NULL;
+    if (hooks) {
+        s_waits = *hooks;
+    } else {
+        memset(&s_waits, 0, sizeof(s_waits));
+    }
+}
+
+/* the device's start moves (RhiWaitHooks.made) */
+static void noteMade(void)
+{
+    if (s_waitsOn && s_waits.made) {
+        s_waits.made(s_waits.ctx);
+    }
 }
 
 void rhi_shutdown(void)
@@ -368,7 +395,9 @@ void rhi_destroy_sampler(RhiSampler s)
 RhiShader rhi_create_shader(const RhiShaderDesc *desc)
 {
     RHI_GUARD();
-    return be()->create_shader(desc);
+    const RhiShader s = be()->create_shader(desc);
+    noteMade();
+    return s;
 }
 
 void rhi_destroy_shader(RhiShader s)
@@ -398,7 +427,9 @@ RhiBindGroup rhi_create_bind_group(const RhiBindGroupDesc *desc)
 RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *desc)
 {
     RHI_GUARD();
-    return be()->create_pipeline(desc);
+    const RhiPipeline p = be()->create_pipeline(desc);
+    noteMade();
+    return p;
 }
 
 uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipeline *out,
@@ -689,6 +720,12 @@ void rhi_prefer_mailbox(bool on)
 bool rhi_present_shown(void)
 {
     return be()->present_shown();
+}
+
+bool rhi_wait_present_room(void)
+{
+    RHI_GUARD();
+    return be()->wait_present_room();
 }
 
 bool rhi_present_mailbox(void)

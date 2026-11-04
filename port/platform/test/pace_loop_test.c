@@ -77,7 +77,15 @@
  *   testAsyncLock, the lock at 60 Hz with a 5 ms step and a 12.5 ms present
  *   on the game thread falls behind and skips, the same present split 9 ms
  *   on the game thread and 3.5 ms on the render thread keeps every step on
- *   time, one present a step, the alphas on the grid; testAsyncRates, the
+ *   time, one present a step, the alphas on the grid; testRoomOffGame, the
+ *   lock at 60 Hz with Direct3D 11's wait for room in the present queue on
+ *   the render thread (a full FIFO queue: it ends at the next vblank):
+ *   made at the end of the picture, after its present, it is about 14 ms a
+ *   picture with no read wait in the step, the next present waiting about
+ *   0.67 ms for it as the display's wait, the period kept (one present a
+ *   step, no step past the next due time, nothing dropped, the alphas
+ *   exact); made in the acquire, inside the reads, it puts about 4.2 ms of
+ *   read waits in every step; testAsyncRates, the
  *   timer path paced by the GPU's time (vsync off or mailbox) with the
  *   presents handed over: pictures of 9, 12, 17, 20 and 25 ms give about a
  *   period over the picture time presents a step, never more than the GPU
@@ -203,6 +211,23 @@ typedef struct Fake {
        waits for it first (rd__wait_frame); rFree: when it is done */
     int async;
     uint64_t rcost, rFree;
+    /* the render thread's display wait (testRoomOffGame: Direct3D 11 with
+       the render thread submitting and presenting itself): a picture's job
+       from the hand-over is its interpolation rInterp, the rest of its
+       reads rRest, then its submit and present rPresent; its wait for room
+       in the present queue ends at the next vblank (a full FIFO queue, a
+       picture taken each refresh), made inside the reads after the
+       interpolation (room 1: the acquire's) or after the present (room 2:
+       at the end of the picture, outside the reads); the job's end is
+       rFree.  readsEnd: when its reads end; the step's first renderer call
+       waits for it (a read wait).  From countFrom: the waits for room, the
+       read waits, the presents' waits for the render thread (the display's
+       wait as the window counts it) and the steps that ended past the next
+       step's due time */
+    int room;
+    uint64_t rInterp, rRest, rPresent, readsEnd;
+    unsigned roomWaits, readWaits, presentWaits, periodMisses;
+    uint64_t roomWaitNs, readWaitNs, presentWaitNs;
 } Fake;
 
 static uint64_t f_now(void *u)
@@ -308,9 +333,12 @@ static uint64_t f_cost(Fake *f)
     return f->nCosts ? f->costs[f->costAt++ % f->nCosts] : f->cost;
 }
 
+static uint64_t f_vblank_at(const Fake *f, uint64_t t);
+
 static void f_present_mailbox(Fake *f)
 {
     uint64_t handWait = 0;
+    const bool counted = f->now >= f->countFrom;
 
     if (f->async && f->rFree > f->now) {
         /* the picture before's submit and present, on the render thread */
@@ -329,6 +357,10 @@ static void f_present_mailbox(Fake *f)
         }
     }
     f->displayWait = f->now - acquire + handWait; /* as present_once counts it */
+    if (f->room != 0 && counted && handWait != 0) {
+        f->presentWaits++;
+        f->presentWaitNs += handWait;
+    }
     f->fenceWait = 0;
     if (f->fence && f->nextId >= 2) {
         /* the picture two before the one made now (ids from 1) */
@@ -341,7 +373,34 @@ static void f_present_mailbox(Fake *f)
     f_display_to(f, f->now);
     uint64_t submitAt = f->now;
 
-    if (f->async) {
+    if (f->room != 0) {
+        /* the picture's whole job on the render thread, from the hand-over */
+        uint64_t t = f->now + f->rInterp;
+
+        if (f->room == 1) {
+            const uint64_t v = f_vblank_at(f, t); /* the acquire: room at the vblank */
+
+            if (counted) {
+                f->roomWaits++;
+                f->roomWaitNs += v - t;
+            }
+            t = v;
+        }
+        t += f->rRest;
+        f->readsEnd = t;
+        t += f->rPresent;
+        submitAt = t;
+        if (f->room == 2) {
+            const uint64_t v = f_vblank_at(f, t); /* the next picture's room, made now */
+
+            if (counted) {
+                f->roomWaits++;
+                f->roomWaitNs += v - t;
+            }
+            t = v;
+        }
+        f->rFree = t;
+    } else if (f->async) {
         /* handed over: submitted and presented on the render thread */
         f->rFree = f->now + f->rcost;
         submitAt = f->rFree;
@@ -692,7 +751,19 @@ static Run run(Fake *f, const Opt *o)
             r.lateSteps++;
         }
         lastBig = vsync == o->bigAt || (o->bigEvery != 0 && vsync % o->bigEvery == 0);
+        if (f->readsEnd > f->now) {
+            /* the step's first renderer call waits for the picture's reads
+               (rd_thread.h rd__texlock_wait) */
+            if (counting) {
+                f->readWaits++;
+                f->readWaitNs += f->readsEnd - f->now;
+            }
+            f->now = f->readsEnd;
+        }
         f->now += lastBig ? o->bigStep : o->step + (o->stepJitter ? f_rand(f) % o->stepJitter : 0);
+        if (f->room != 0 && counting && f->now > due + (uint64_t)(L->slotNs * (double)o->n)) {
+            f->periodMisses++; /* past the next step's due time */
+        }
         newFrame = vsync % 2 == 0; /* a frame every two steps */
     }
     f_display_to(f, f->now);
@@ -2018,6 +2089,74 @@ static void testAsyncLock(void)
             CHECK(r.alphaBad == 0);
         } else {
             CHECK(r.lateMaxFrom >= MS / 2 || r.skippedFrom > 0 || r.L.skippedLate > 0);
+        }
+    }
+}
+
+/* The lock at 60 Hz with a FIFO wait off the game thread (issue 126's
+   Direct3D 11 path: the render thread submits and presents itself, the
+   frame latency wait for room in the present queue ending at the next
+   vblank, a full queue; the vblanks 3.67 ms after the due times, the
+   fake's phase).  A present hands the picture over after 0.2 ms of the
+   game thread's; the render thread's job is 1.5 ms of interpolation, 0.5
+   ms more of reads, 0.3 ms of submit and present; the game's step 3 ms,
+   its first renderer call waiting for the picture's reads.
+   The wait at the end of the picture, after its present (room 2, rd_thread.c
+   roomAhead): about 14 ms a picture on the render thread, none of it in
+   the step (no read wait); the next present waits about 0.67 ms for the
+   render thread, which the window counts as the display's wait; the step's
+   period kept, one present a step, no step past the next one's due time,
+   nothing dropped or skipped, the alphas exact.
+   The wait in the acquire, inside the reads (room 1, as v0.10.0 ran): the
+   steps carry about 4.2 ms of read waits each (the display's: the acquire
+   ends at the vblank after the step's due time), 11.5 ms waits for room. */
+static void testRoomOffGame(void)
+{
+    for (int room = 1; room <= 2; room++) {
+        Fake f = fake(D60);
+        Opt o = opt(1, R60, 30.0);
+        Run r;
+
+        f.async = 1;
+        f.room = room;
+        f.cost = 200000ull;
+        f.rInterp = 1500000ull;
+        f.rRest = 500000ull;
+        f.rPresent = 300000ull;
+        f.gpu = 8 * MS;
+        o.step = 3 * MS;
+        o.fifo = true;
+        o.budget = true;
+        o.gpuNs = 8 * MS;
+        r = run(&f, &o);
+        const double roomMs = f.roomWaits ? (double)f.roomWaitNs / 1e6 / (double)f.roomWaits : 0.0;
+        const double readMs = f.readWaits ? (double)f.readWaitNs / 1e6 / (double)f.readWaits : 0.0;
+        const double presMs =
+            f.presentWaits ? (double)f.presentWaitNs / 1e6 / (double)f.presentWaits : 0.0;
+
+        printf("the display's wait %s: %.2f presents a step after 1 s, %u waits for room of "
+               "%.2f ms, %u read waits of %.2f ms in %u steps, %u presents that waited for the "
+               "render thread %.2f ms (the display's wait), %u steps past the next due time, %u "
+               "skipped, %u late skips, %u drops, %u resyncs\n",
+               room == 2 ? "at the end of the picture (outside the reads)"
+                         : "in the acquire (inside the reads)",
+               (double)r.presentsFrom / (double)r.stepsFrom, f.roomWaits, roomMs, f.readWaits,
+               readMs, r.stepsFrom, f.presentWaits, presMs, f.periodMisses, r.skippedFrom,
+               r.L.skippedLate, r.L.budget.drops, r.resyncs);
+        CHECK(r.alphaOffGrid == 0 && r.alphaBad == 0);
+        CHECK(r.resyncs == 0 && r.skippedFrom == 0 && r.L.skippedLate == 0);
+        CHECK(r.L.budget.drops == 0 && f.periodMisses == 0);
+        CHECK(r.presentsFrom * 100 >= r.stepsFrom * 99 && r.presentsFrom <= r.stepsFrom + 1);
+        CHECK(f.roomWaits * 100 >= r.stepsFrom * 99);
+        if (room == 2) {
+            /* off the game thread: 14.17 ms a picture, the step without it */
+            CHECK(f.readWaits == 0);
+            CHECK(roomMs >= 13.5 && roomMs <= 15.0);
+            CHECK(f.presentWaits * 100 >= r.stepsFrom * 99 && presMs >= 0.3 && presMs <= 1.2);
+        } else {
+            /* in the step: 4.17 ms of each step the display's */
+            CHECK(f.readWaits * 100 >= r.stepsFrom * 99 && readMs >= 3.5 && readMs <= 5.0);
+            CHECK(roomMs >= 10.5 && roomMs <= 12.5);
         }
     }
 }
@@ -4064,6 +4203,7 @@ int main(void)
     testDiscWait126();
     testVblankClockLeft();
     testAsyncLock();
+    testRoomOffGame();
     testAsyncRates();
     testRenderThreadPlan();
     testRenderThreadBehind();

@@ -103,6 +103,14 @@ bool rhi_present_shown(void)
     return g_gl.presentShown;
 }
 
+/* rhi.h: the acquire does not wait (the swap returns at once; FIFO's full
+ * queue is waited for in the next frame slot's fence, gl_device.c
+ * gl_wait_sync) */
+bool rhi_wait_present_room(void)
+{
+    return false;
+}
+
 RhiTexture rhi_acquire_backbuffer(void)
 {
     RhiTexture out = {0};

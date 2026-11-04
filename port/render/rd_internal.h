@@ -2310,6 +2310,10 @@ typedef struct RdGlowFoldPlan {
     const RdCmd *fillCmd, *maskCmd, *reductionCmd;
     uint32_t fill, rectX, rectY, duv, test, flags;
     float texW, texH;
+    /* 1: something drew on WORK2 between the fill and the mask (the sun's
+     * fans): the fill and those are drawn, only the mask is not, and the
+     * reduction reads WORK2 where the mask keeps a texel */
+    int maskOnly;
 } RdGlowFoldPlan;
 
 bool rd__glow_fold_on(void);
@@ -3082,7 +3086,10 @@ enum {
     /* fx_frame_ps: the glow's reduction with SCENE as t1, WORK2's texels
      * computed as the mask left them (rd_glow_fold.c, fx_sprite.hlsl
      * fx_glow_texel) */
-    RD_FXF_GLOW_MASK = 131072
+    RD_FXF_GLOW_MASK = 131072,
+    /* with RD_FXF_GLOW_MASK: the texels the mask keeps read from t2 (WORK2
+     * as the fill and the sun's fans left it), not the fill's colour */
+    RD_FXF_GLOW_KEPT = 262144
 };
 
 /* The steps at which fx_sprite_ps leaves the GS's own filter above 1x, in

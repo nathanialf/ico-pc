@@ -234,11 +234,12 @@ static struct {
        kept (rd.h RdPerfRecord.constReads, constKept) */
     uint64_t constReads, constKept, fadesFolded;
     /* the glow's mask folded into its reduction: the replays that folded it
-       and the glow replays that drew it into WORK2, with the last one's
-       reason (rd.h RdPerfRecord.glowFolded, glowKept, glowWhy;
+       (of them those reading WORK2 as the sun's fans left it) and the glow
+       replays that drew it into WORK2, by reason (rd.h
+       RdPerfRecord.glowFolded, glowFoldRead, glowKept, glowWhy;
        rd_glow_fold.c) */
-    uint64_t glowFolded, glowKept;
-    uint32_t glowWhy;
+    uint64_t glowFolded, glowFoldRead, glowKept;
+    uint64_t glowWhyN[RD_GLOW_FOLD_WHY_COUNT];
     /* the passes with a render area, their tiles, their targets' tiles and
        those ended early (rd.h RdPerfRecord.passAreas ..., rd_pass_area.c) */
     uint64_t passAreas, passAreaTiles, passAreaTargetTiles, passAreaEnds;
@@ -1931,6 +1932,7 @@ open_window:
        after: SDL's X11 backend then writes _NET_WM_STATE before the window
        is mapped, which KWin and gamescope honour (borderless at the desktop
        resolution; no exclusive mode) */
+    ico_diag_step("window: start: creating the %s window", backend);
     s_window = window_create(start.windowMode, WINDOW_W, WINDOW_H, SDL_WINDOWPOS_UNDEFINED,
                              SDL_WINDOWPOS_UNDEFINED);
     if (start.windowMode != ICO_WINDOW_WINDOWED) {
@@ -2048,6 +2050,11 @@ open_window:
        start-up set between two batches; desktops never send it */
     rd_set_low_memory_fn(ico_diag_low_memory_stop);
 #endif
+    ico_diag_step("window: start: starting the renderer on %s (the device and its shaders)",
+                  backend);
+    /* a long driver call takes the window's events and is held to the GPU
+       hang limit (window_switch.h ico_window_switch_wait_hooks) */
+    ico_window_switch_wait_hooks();
     bool up = rd_init(gsW, gsH, &rs, s_window);
 #ifdef __ANDROID__
     /* not after a bisect that lost the device: the player's driver did not
@@ -2239,6 +2246,7 @@ open_window:
         rd_pipelines_lazy(why);
         /* the blend checked on this GPU (rd.h rd_blend_selftest), then the
            VU vertex pre-pass (rd_vuprepass_selftest) */
+        ico_diag_step("window: start: the blend and VU pre-pass self-tests");
         rd_blend_selftest();
         rd_vuprepass_selftest();
     } else {
@@ -2279,6 +2287,7 @@ open_window:
         /* which way of blending draws right on this GPU, tried before the
            set is made so the set is the chosen way's; logged ("blend: ...
            (self-test: ...)"). A crash in it is noted as the set's would be */
+        ico_diag_step("window: start: the blend and VU pre-pass self-tests");
         rd_blend_selftest();
         /* whether the VU vertex pre-pass draws right on this GPU, tried
            before the set so the set holds the pre-pass's keys or the
@@ -2297,6 +2306,7 @@ open_window:
            window "Not Responding" (Windows does after 5 s, Android asks
            whether to close the app) and a close asked meanwhile stops the
            set after the batch in flight and ends the run */
+        ico_diag_step("window: start: the pipeline set");
         rd_set_pipeline_progress(pipeline_progress, &screen);
         rd_precreate_pipelines();
         rd_set_pipeline_progress(NULL, NULL);
@@ -2330,6 +2340,7 @@ open_window:
     ico_diag_set_vu_prepass(rd_vu_prepass_on());
     /* which way of reading the depth gives the fog its distances on this
        GPU, tried on the real scene size; logged ("fog: depth path") */
+    ico_diag_step("window: start: the fog self-test");
     rd_fog_selftest();
     {
         IcoVideoOptions o;
@@ -2448,6 +2459,26 @@ open_window:
     return 0;
 }
 
+/* an OpenGL device lost inside its start in the switch (a fence past the
+   GPU hang limit: port/rhi/gl/gl_device.c gl_wait_sync): the renderer is
+   taken down again and the switch fails as a device that did not start
+   (it goes back); 1 when that happened. The other backends' losses keep
+   their path (the pump's loss box) */
+static int reopen_lost(const char *backend)
+{
+    if (rhi_backend() != RHI_BACKEND_OPENGL || !rhi_device_lost()) {
+        return 0;
+    }
+    fprintf(stderr,
+            "window: the %s device stopped while it started (the lines above say why); the "
+            "switch goes back\n",
+            backend);
+    rd_suspend();
+    SDL_DestroyWindow(s_window);
+    s_window = NULL;
+    return 1;
+}
+
 /* Options > Graphics > Apply (window_switch.h): the renderer made again on
    backend in the process, the game's state kept (rd_suspend, rd_resume).
    The window is made again (Vulkan, OpenGL and Direct3D windows differ,
@@ -2480,11 +2511,17 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
             s_re.mode == ICO_WINDOW_WINDOWED && SDL_GetWindowPosition(s_window, &s_re.x, &s_re.y);
         s_re.clock = s_disp.clock == 1;
         s_re.disp = SDL_GetDisplayForWindow(s_window);
+        /* each step's line is written at once (diag_host.h ico_diag_step):
+           a hang in one leaves its name as the log's last line */
+        ico_diag_step("window: switch to %s: stopping the render thread", backend);
         ico_render_thread_stop(); /* the renderer on this thread alone (render_thread.h) */
+        ico_diag_step("window: switch to %s: suspending the renderer (the old device's end)",
+                      backend);
         rd_suspend();
         if (s_disp.clock != 0) {
             window_disp_clock_stop();
         }
+        ico_diag_step("window: switch to %s: destroying the old window", backend);
         SDL_DestroyWindow(s_window);
         s_window = NULL;
     }
@@ -2492,17 +2529,22 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
         return 0; /* rhi said why */
     }
     const int at = (int)SDL_WINDOWPOS_CENTERED_DISPLAY(s_re.disp);
+    ico_diag_step("window: switch to %s: creating the window (%s)", backend,
+                  s_re.mode == ICO_WINDOW_WINDOWED ? "windowed" : "full screen");
     s_window = window_create(s_re.mode, s_re.w, s_re.h, s_re.place ? s_re.x : at,
                              s_re.place ? s_re.y : at);
     if (s_window == NULL) {
         fprintf(stderr, "window: SDL_CreateWindow: %s\n", SDL_GetError());
         return 0;
     }
+    ico_diag_step("window: switch to %s: attaching the window (its mode and display)", backend);
     window_attach(s_re.mode);
     SDL_GetWindowSizeInPixels(s_window, &w, &h);
     WINDOW_PIX_NOTE(w, h);
     video_settings(&rs, w, h);
     rd_set_activity_fn(window_activity);
+    ico_diag_step("window: switch to %s: starting the renderer (the device and its shaders)",
+                  backend);
     if (!rd_resume(&rs, s_window)) {
         fprintf(stderr,
                 "window: no usable %s device (rd_init failed; the rhi lines above say why)\n",
@@ -2516,11 +2558,17 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
     window_pipe_floor_driver(); /* the free-memory floor's rule (memory_floor.h) */
     ico_diag_set_startup_retry((int)s_retry, window_have_d3d12(), backendExplicit, s_blendExplicit,
                                backend);
+    ico_diag_step("window: switch to %s: the blend self-test", backend);
     rd_blend_selftest();
+    ico_diag_step("window: switch to %s: the VU pre-pass self-test", backend);
     rd_vuprepass_selftest();
+    if (reopen_lost(backend)) {
+        return 0;
+    }
     if (!rd_pipelines_lazy_on()) {
         static PipeScreen screen;
 
+        ico_diag_step("window: switch to %s: the pipeline set", backend);
         s_pipeTitle = "Changing the graphics";
         rd_set_pipeline_progress(pipeline_progress, &screen);
         rd_precreate_pipelines();
@@ -2533,7 +2581,11 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
         }
     }
     ico_diag_set_vu_prepass(rd_vu_prepass_on());
+    ico_diag_step("window: switch to %s: the fog self-test", backend);
     rd_fog_selftest();
+    if (reopen_lost(backend)) {
+        return 0;
+    }
     if (s_captured != ICO_CAPTURE_OFF) {
         SDL_SetWindowRelativeMouseMode(s_window, true);
     }
@@ -2547,8 +2599,11 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
     window_size_recheck("after the renderer was switched");
     fprintf(stderr, "window: %dx%d pixels, %s on %s, present mode %s\n", w, h,
             rhi_backend_kind_name(rhi_backend()), rhi_adapter_name(), rhi_present_mode_name());
+    ico_diag_step("window: switch to %s: starting the render thread", backend);
     (void)ico_render_thread_start(); /* the new backend's (render_thread.h) */
     s_pres.pausePendingNs += SDL_GetTicksNS() - t0;
+    ico_diag_step("window: switch to %s: up in %.1f s", backend,
+                  (double)(SDL_GetTicksNS() - t0) / 1e9);
     return 1;
 }
 
@@ -4488,8 +4543,9 @@ static void perf_drain(void)
         s_perf.fadesFolded += r.fadesFolded;
         s_perf.glowFolded += r.glowFolded;
         s_perf.glowKept += r.glowKept;
-        if (r.glowKept) {
-            s_perf.glowWhy = r.glowWhy;
+        s_perf.glowFoldRead += r.glowFoldRead;
+        if (r.glowKept && r.glowWhy < RD_GLOW_FOLD_WHY_COUNT) {
+            s_perf.glowWhyN[r.glowWhy]++;
         }
         s_perf.passAreas += r.passAreas;
         s_perf.passAreaTiles += r.passAreaTiles;
@@ -4712,13 +4768,28 @@ static void perf_log(void)
             s_perf.fadesFolded / n);
     if (s_perf.glowFolded || s_perf.glowKept) {
         /* the glow's mask computed in its reduction (one full-frame pass
-           fewer each) or drawn into WORK2, and why the last kept one was
-           (rd_glow_fold.c: the sun's fans or the lamps into WORK2, ...) */
-        fprintf(stderr, "window: glow: WORK2 fold: %llu folded, %llu kept%s%s%s\n",
-                (unsigned long long)s_perf.glowFolded, (unsigned long long)s_perf.glowKept,
-                s_perf.glowKept ? " (" : "",
-                s_perf.glowKept ? rd_glow_fold_why_text(s_perf.glowWhy) : "",
-                s_perf.glowKept ? ")" : "");
+           fewer each; of them those that read WORK2 as the sun's fans left
+           it) or drawn into WORK2, the kept ones counted by reason
+           (rd_glow_fold.c: the lamps into WORK2, ...) */
+        char why[512] = "";
+        size_t at = 0;
+        for (int k = 0; k < RD_GLOW_FOLD_WHY_COUNT; k++) {
+            if (!s_perf.glowWhyN[k]) {
+                continue;
+            }
+            const int m = snprintf(why + at, sizeof(why) - at, "%s%llu %s", at ? ", " : " (",
+                                   (unsigned long long)s_perf.glowWhyN[k],
+                                   rd_glow_fold_why_text((uint32_t)k));
+            if (m < 0 || (size_t)m >= sizeof(why) - at) {
+                break;
+            }
+            at += (size_t)m;
+        }
+        fprintf(stderr,
+                "window: glow: WORK2 fold: %llu folded (%llu reading the sun's fans' WORK2), %llu "
+                "kept%s%s\n",
+                (unsigned long long)s_perf.glowFolded, (unsigned long long)s_perf.glowFoldRead,
+                (unsigned long long)s_perf.glowKept, why, at ? ")" : "");
     }
     window_pipeline_skip_line();
     if (s_perf.msaaSamples) {

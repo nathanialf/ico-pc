@@ -89,6 +89,7 @@ static void d11_frame_latency_open(void)
     d11_frame_latency_close();
     g_d11.frameLatencyTimeoutLogged = false;
     g_d11.frameLatencySkipWait = false;
+    g_d11.frameLatencyWaited = false; /* a new object: its own count */
     if (!g_d11.frameLatency || !g_d11.swapchain2) {
         return;
     }
@@ -229,6 +230,38 @@ bool rhi_present_shown(void)
     return s_presentShown;
 }
 
+/* the waitable swap chain's wait for room in the queue (as
+ * d3d12_swapchain.c, 50 ms at most), counted as the acquire's */
+static void d11_frame_latency_wait(void)
+{
+    const uint64_t t0 = d11_now_ns();
+    const DWORD r = WaitForSingleObjectEx(g_d11.frameLatencyEvent, 50, TRUE);
+    g_d11.acquireNs += d11_now_ns() - t0;
+    if (r == WAIT_TIMEOUT && !g_d11.frameLatencyTimeoutLogged) {
+        g_d11.frameLatencyTimeoutLogged = true;
+        D11_LOG("the frame latency wait took over 50 ms: going on without it (once)");
+    }
+}
+
+/* rhi.h: the wait the next acquire would make, made now (the render
+ * thread, after a picture's present).  The object is a count, one for each
+ * picture the queue lets go: one wait a present, so a wait made here is
+ * the acquire's, which then skips its own (frameLatencyWaited); none after
+ * a Present that queued nothing (frameLatencySkipWait, the acquire's rule)
+ * or with a backbuffer still acquired (its wait was made) */
+bool rhi_wait_present_room(void)
+{
+    if (!g_d11.swapchain || !g_d11.swapTexture || !g_d11.frameLatencyEvent || g_d11.swapAcquired ||
+        g_d11.frameLatencySkipWait) {
+        return false;
+    }
+    if (!g_d11.frameLatencyWaited) {
+        d11_frame_latency_wait();
+        g_d11.frameLatencyWaited = true;
+    }
+    return true;
+}
+
 RhiTexture rhi_acquire_backbuffer(void)
 {
     RhiTexture out = {0};
@@ -238,18 +271,13 @@ RhiTexture rhi_acquire_backbuffer(void)
     }
     if (!g_d11.swapAcquired) {
         /* the waitable swap chain: wait before the replay for room in the
-         * queue (as d3d12_swapchain.c, 50 ms at most; not after a Present
-         * that queued nothing) */
-        if (g_d11.frameLatencyEvent && !g_d11.frameLatencySkipWait) {
-            const uint64_t t0 = d11_now_ns();
-            const DWORD r = WaitForSingleObjectEx(g_d11.frameLatencyEvent, 50, TRUE);
-            g_d11.acquireNs += d11_now_ns() - t0;
-            if (r == WAIT_TIMEOUT && !g_d11.frameLatencyTimeoutLogged) {
-                g_d11.frameLatencyTimeoutLogged = true;
-                D11_LOG("the frame latency wait took over 50 ms: going on without it (once)");
-            }
+         * queue (not after a Present that queued nothing, nor again after
+         * rhi_wait_present_room made the wait) */
+        if (g_d11.frameLatencyEvent && !g_d11.frameLatencySkipWait && !g_d11.frameLatencyWaited) {
+            d11_frame_latency_wait();
         }
         g_d11.frameLatencySkipWait = false;
+        g_d11.frameLatencyWaited = false;
         g_d11.swapAcquired = true;
     }
     out.id = g_d11.swapTexture;

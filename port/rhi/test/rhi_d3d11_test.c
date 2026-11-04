@@ -24,7 +24,12 @@
  *   2. the cells on the default hardware adapter (skipped when there is
  *      none: the default is then WARP again)
  *   3. the swapchain on a hidden SDL window: six frames of clear, readback
- *      and present, with a resize (hardware adapter, or WARP)
+ *      and present, with a resize (hardware adapter, or WARP); after each
+ *      present the frame latency wait made ahead (rhi_wait_present_room,
+ *      the render thread's display wait at the end of a picture): asked
+ *      twice it answers the same (the second makes no wait of its own),
+ *      and with a backbuffer acquired it answers false (the acquire made
+ *      the wait)
  *   4. for comparison, the same cells on Vulkan when a Vulkan driver is
  *      installed (a skip is not a failure)
  *
@@ -93,7 +98,7 @@ static int runSwapchain(void)
         return 77;
     }
     int failures = 0;
-    RhiDeviceDesc dd = {win, true, true, "rhi_d3d11_test swapchain"};
+    RhiDeviceDesc dd = {win, true, true, "rhi_d3d11_test swapchain", NULL};
     if (!rhi_create_backend("d3d11") || !rhi_init(&dd)) {
         rhi_test_log("FAIL swapchain: rhi_init with a window failed (see above)\n");
         SDL_DestroyWindow(win);
@@ -108,6 +113,7 @@ static int runSwapchain(void)
         failures++;
     }
     static uint8_t px[128 * 96 * 4];
+    unsigned roomAhead = 0;
     for (int frame = 0; frame < 6 && !failures; frame++) {
         uint32_t w = frame < 3 ? 64u : 128u, h = frame < 3 ? 48u : 96u;
         if (frame == 3) {
@@ -125,6 +131,12 @@ static int runSwapchain(void)
             rhi_test_log("FAIL frame %d: no backbuffer\n", frame);
             failures++;
             break;
+        }
+        if (rhi_wait_present_room()) {
+            rhi_test_log("FAIL frame %d: the frame latency wait made ahead with a backbuffer "
+                         "acquired\n",
+                         frame);
+            failures++;
         }
         RhiCommandList cl = rhi_begin_commands();
         RhiTextureBarrier b0 = {bb, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
@@ -165,7 +177,21 @@ static int runSwapchain(void)
         rhi_cmd_barrier(cl2, &b2, 1);
         rhi_submit(cl2);
         rhi_present();
+        /* the display's wait ahead of the next acquire: the same answer
+           twice (one wait a present), the next frame's acquire then
+           without a wait of its own */
+        const bool room = rhi_wait_present_room();
+        if (rhi_wait_present_room() != room) {
+            rhi_test_log("FAIL frame %d: the frame latency wait ahead answered %d, then %d\n",
+                         frame, (int)room, (int)!room);
+            failures++;
+        }
+        roomAhead += room ? 1u : 0u;
     }
+    rhi_test_log("swapchain: the frame latency wait made ahead of the acquire after %u of the "
+                 "presents (none: no waitable object, or presents that queued nothing on a "
+                 "hidden window)\n",
+                 roomAhead);
     bool debugOn = rhi_d3d11_debug_layer_active();
     rhi_wait_idle();
     rhi_shutdown();
@@ -244,7 +270,7 @@ static int runVideoMemory(void)
         rhi_test_log("SKIP video memory: no Direct3D 11 backend in this build\n");
         return 77;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test video memory"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test video memory", NULL};
     if (!rhi_init(&dd)) {
         rhi_test_log("SKIP video memory: no usable device (see messages above)\n");
         return 77;
@@ -284,7 +310,7 @@ static int runWrittenMark(void)
         rhi_test_log("SKIP written mark: no Direct3D 11 backend in this build\n");
         return 77;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test written mark"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test written mark", NULL};
     if (!rhi_init(&dd)) {
         rhi_test_log("SKIP written mark: no usable device (see messages above)\n");
         return 77;
@@ -392,7 +418,7 @@ static int runTwoViews(void)
         rhi_test_log("SKIP two views: no Direct3D 11 backend in this build\n");
         return 77;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test two views"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test two views", NULL};
     if (!rhi_init(&dd)) {
         rhi_test_log("SKIP two views: no usable device (see messages above)\n");
         return 77;
@@ -681,7 +707,7 @@ static int runRecordCopy(void)
         rhi_test_log("SKIP record copy: no Direct3D 11 backend in this build\n");
         return 77;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test record copy"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test record copy", NULL};
     if (!rhi_init(&dd)) {
         rhi_test_log("SKIP record copy: no usable device (see messages above)\n");
         return 77;
