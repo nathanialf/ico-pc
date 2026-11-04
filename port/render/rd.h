@@ -2455,8 +2455,10 @@ typedef struct RdPerfRecord {
     /* The glow's mask folded into its reduction (rd_glow_fold.c): glowFolded
      * 1 when this replay's reduction computed the mask in its box (WORK2
      * neither drawn nor read), glowKept 1 when a glow frame drew the mask
-     * into WORK2 instead, glowWhy why (RD_GLOW_FOLD_WHY_*) */
-    uint32_t glowFolded, glowKept, glowWhy;
+     * into WORK2 instead, glowWhy why (RD_GLOW_FOLD_WHY_*); glowFoldRead 1
+     * when the fold read WORK2 as the fill and the sun's fans left it (only
+     * the mask's pass gone) */
+    uint32_t glowFolded, glowKept, glowWhy, glowFoldRead;
     /* The aura's read of SCENE into FEED128 in two passes (rd_aura_box.c):
      * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
      * a replay; none while the game is paused) */
@@ -2640,7 +2642,8 @@ void rd_perf_why_text(char *buf, size_t size, int which, const uint64_t *counts,
 
 /* RdPerfRecord.glowWhy (rd_glow_fold.c): why a glow frame drew its mask into
  * WORK2 (docs/port/RENDER_POST.md, "The glow's mask in its reduction"):
- * FANS a draw into WORK2 between the fill and the mask (the sun's fans),
+ * FANS not given (the sun's fans between the fill and the mask fold the
+ * mask alone, RdPerfRecord.glowFoldRead),
  * LAMPS a draw into WORK2 between the mask and the reduction (the lamps'
  * meshes), SCENE a draw into SCENE between them, OTHER WORK2 drawn or read
  * elsewhere in the frame, FORM the fill,

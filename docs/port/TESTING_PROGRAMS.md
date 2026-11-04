@@ -967,14 +967,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rd_blur_glow_fold_test.inc`) runs the seven post modes without the shine into WORK2 at
   Original, Enhanced 2x, the phone's 2364 x 1080 with the full height, and the phone's 848-pixel
   frame (NTSC, aspect 2.189) at 2364 x 1080 with Full pixel (WORK2's crop printed), each frame
-  drawn with the glow's mask folded into its reduction (`rd__glow_fold_force(1)`) and the same
+  drawn without and with the sun's fans drawn into WORK2 before the mask (the test's fan stub, `s_fanWork2`), each with the glow's mask folded into its reduction (`rd__glow_fold_force(1)`) and the same
   frame replayed with it off: every target but WORK2 the same bytes both ways, at Original and 2x
   every target the CPU model's both ways (WORK2 too with the fold off), the fold counted in every
   frame that draws the glow and none kept, (e)'s frame with the shine kept for the lamps' reason,
   every pipeline created enumerated (`checkGlowFold`; [RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction));
   the recording part plans the chain without a device (`rd__glow_fold_plan` on post mode 7: the
-  fill, the mask and the reduction in order, the fill's colour, the mask's test; the shine frame
-  kept, `checkGlowFoldPlan`). In every shard a replay that folded the mask leaves WORK2 out of
+  fill, the mask and the reduction in order, the fill's colour, the mask's test; with the fans the
+  mask alone; the shine frame kept, `checkGlowFoldPlan`). In every shard a replay that folded the mask leaves WORK2 out of
   `compareAll` (the fold does not draw it; WORK0, its reduction, is compared).
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
@@ -1411,8 +1411,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   folder>`, machine-local: six corpus dumps at the gate's Enhanced 2x 4:3 against
   `build-host/tmp/v095/after/w3/pd`, and five of the PowerVR phone's frames at its Resolution Auto,
   2364x1080 at 2.189 under its profile's fakes, against `build-host/tmp/v098/evidence/cheap/base-phone`)
-  replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0` (the
-  baselines' own): the stats line says `crack fill on: P passes` (P 0 where the fill was the
+  replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+  ICO_RD_CULL=off` (the baselines' own: they replayed every draw, and the draws the visibility
+  test leaves out keep every pixel but take their copies with them, so the phone's copy count is
+  the baseline's minus one only with every draw replayed; the culler's own gate is `rd_cull_ab`):
+  the stats line says `crack fill on: P passes` (P 0 where the fill was the
   first draw of the aura's paste pass, else 1) and `1 fills after lists 4-6`,
   or, on a dump with no fog of SCENE above 1x (`0 passes, 0 pixels filled (0 replays counted;
   scale 0x0, ...; 0 fogged replays above 1x not filled; 0 fills after lists 4-6`: the v3086 and
@@ -1492,7 +1495,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`ICO_RD_GLOW_FOLD=1`, into `<name>-<setting>-fold`): every PNG but `WORK2.png` (which the fold
   leaves undrawn) the same bytes as the run without it, `PRESENT.png` too at the phone's setting;
   a run whose stats say `glow: WORK2 fold on: 1 folded` has at least one glow pass fewer, a kept
-  one (the sun's fans or the lamps drawn into WORK2) as many; at each setting that ran, at least
+  one (only the lamps drawn into WORK2 after the mask may keep it: any other reason fails) as
+  many; the folds reading the sun's fans' WORK2 counted; at each setting that ran, at least
   one run folded ([RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction)).
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no

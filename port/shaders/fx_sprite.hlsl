@@ -113,6 +113,7 @@
 #define FXF_OUT_PREMUL 32768u
 #define FXF_FOLD 65536u
 #define FXF_GLOW_MASK 131072u
+#define FXF_GLOW_KEPT 262144u
 
 #define AFAIL_KEEP 0u
 #define AFAIL_FB_ONLY 1u
@@ -442,7 +443,10 @@ uint fx_alpha_only(int su, int sv, uint a, uint flags)
 // (the CPU's conditions), so fx_src_scale (the mask pass's g_z.yz and the
 // mask's g_scale.xy), fx_src_crop16, g_tex.zw and g_aux1.zw are the
 // mask's own.  The rest is in DrawCB words the reduction does not read:
-//   g_aux0   x the fill, R | G << 8 | B << 16 | A << 24 (FBA's MSB in A);
+//   g_aux0   x the fill, R | G << 8 | B << 16 | A << 24 (FBA's MSB in A;
+//            unused with FXF_GLOW_KEPT, where t2 is WORK2 as drawn before
+//            the mask: the fill and the sun's fans, whose texels the mask
+//            keeps are loaded as the reduction would have loaded them);
 //            y the mask's rect x0 | x1 << 16, z y0 | y1 << 16 (12.4);
 //            w WORK2's XYOFFSET in sixteenths, x | y << 16 (the mask
 //            pass's g_origin times 16: whole numbers)
@@ -486,11 +490,21 @@ uint fx_glow_alpha(int su, int sv, uint a, uint flags)
     return min((ta * a) >> 7, 255u);
 }
 
+// WORK2's texel c before the mask: the fill's colour, or with
+// FXF_GLOW_KEPT WORK2 itself (t2, bound as the destination's slot: the fill
+// and the sun's fans drawn as ever, read where the mask keeps the texel)
+uint4 fx_glow_kept(int2 c)
+{
+    [branch] if ((g_mode.x & FXF_GLOW_KEPT) != 0u) {
+        return fx_load(g_dest, c);
+    }
+    const uint fill = g_aux0.x;
+    return uint4(fill & 255u, (fill >> 8) & 255u, (fill >> 16) & 255u, fill >> 24);
+}
+
 // WORK2's texel c (in its texels) as the mask left it
 uint4 fx_glow_mask(int2 c)
 {
-    const uint fill = g_aux0.x;
-    const uint4 kept = uint4(fill & 255u, (fill >> 8) & 255u, (fill >> 16) & 255u, fill >> 24);
     // fx_sprite_ps's first lines at the mask's fragment of the texel, in
     // WORK2's FrameCB (ts its scale, the vpo.z its crop's)
     const float2 ts = fx_src_scale();
@@ -507,7 +521,7 @@ uint4 fx_glow_mask(int2 c)
     const int x0 = int(g_aux0.y & 0xFFFFu), x1 = int(g_aux0.y >> 16);
     const int y0 = int(g_aux0.z & 0xFFFFu), y1 = int(g_aux0.z >> 16);
     if (ox + gb.x < x0 || ox + gb.x >= x1 || oy + gb.y < y0 || oy + gb.y >= y1) {
-        return kept; // outside the sprite: the fill
+        return fx_glow_kept(c); // outside the sprite: the texel as it was
     }
     // U(X) = u0 + (X - x0) with X = ox + gp.x; the UV in t1's texels, 12.4
     const int du = asint(g_blend.x << 16) >> 16, dv = asint(g_blend.x) >> 16;
@@ -521,7 +535,7 @@ uint4 fx_glow_mask(int2 c)
     if (((t >> 20) & 1u) != 0u && !gs_alpha_pass((t >> 16) & 15u, (t >> 8) & 255u, a)) {
         const uint afail = (t >> 24) & 3u;
         if (afail == AFAIL_KEEP || afail == AFAIL_ZB_ONLY) {
-            return kept;
+            return fx_glow_kept(c);
         }
     }
     return uint4(0u, 0u, 0u, a | ((mflags & FXF_FBA) != 0u ? 0x80u : 0u));

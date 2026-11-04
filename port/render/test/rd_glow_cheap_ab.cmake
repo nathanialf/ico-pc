@@ -62,9 +62,11 @@
 #     setting presents) but WORK2.png the same bytes with it (WORK2 is what
 #     the fold leaves undrawn: not compared);
 #   - its stats' "glow: WORK2 fold on: N folded, M kept (why)": a folded run
-#     has at least one glow pass fewer than the run without it, a kept one
-#     as many (the sun's fans or the lamps' meshes draw into WORK2 in 9 of
-#     the 14 frames);
+#     has at least one glow pass fewer than the run without it (with the
+#     sun's fans, 6 of the 14 frames, the mask alone is folded and WORK2
+#     read where it keeps a texel), a kept one as many, and only for the
+#     lamps' reason (their meshes draw into WORK2 after the mask in 3 of
+#     the 14 frames): any other reason fails;
 #   - at least one run folded at each setting where any was compared.
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DBASE_PHONE=<dir> -DBASE_DESK=<dir>
 # -DBASE_REFRESH=<dir> -DPY=<python3> -DDIFF=<png_level_diff.py>
@@ -117,7 +119,7 @@ set(env_enh2x43 "")
 set(glowRe "glow ([0-9]+) passes")
 set(lateRe "stats: crack fill on: [01] passes, [0-9]+ pixels filled \\([^)]*, 1 fills after lists 4-6,")
 set(alphaRe ", 1 fills after the glow's alpha\\)")
-set(foldRe "glow: WORK2 fold on: ([0-9]+) folded, ([0-9]+) kept")
+set(foldRe "glow: WORK2 fold on: ([0-9]+) folded \\(([0-9]+) reading the sun's fans' WORK2\\), ([0-9]+) kept")
 set(diffRe "png_level_diff: [0-9]+ x [0-9]+, [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, [0-9]+ more \\(largest ([0-9]+)\\), ([0-9]+) pixels differ")
 set(failures 0)
 set(compared 0)
@@ -126,6 +128,7 @@ set(fewer 0)
 set(folded 0)
 set(foldedIn "")
 set(foldRan "")
+set(foldedRead 0)
 set(kept 0)
 foreach(dump IN LISTS dumps)
   # gate-wave.sh's name: the dump's folder, '-', its name without .rddump,
@@ -284,14 +287,18 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     set(nFolded "${CMAKE_MATCH_1}")
+    set(nRead "${CMAKE_MATCH_2}")
+    set(nKept "${CMAKE_MATCH_3}")
     list(APPEND foldRan "${s}")
-    set(nKept "${CMAKE_MATCH_2}")
     set(foldWhy "")
-    if(fflat MATCHES "glow: WORK2 fold on: [0-9]+ folded, [0-9]+ kept \\(([^)]*)\\)")
+    if(fflat MATCHES "WORK2\\), [0-9]+ kept \\(([^)]*)\\)")
       set(foldWhy " (${CMAKE_MATCH_1})")
     endif()
     if(nFolded GREATER 0)
       math(EXPR folded "${folded} + 1")
+      if(nRead GREATER 0)
+        math(EXPR foldedRead "${foldedRead} + 1")
+      endif()
       list(APPEND foldedIn "${s}")
       math(EXPR most "${glowNew} - 1")
       if(glowFold GREATER most)
@@ -301,6 +308,14 @@ foreach(dump IN LISTS dumps)
       endif()
     else()
       math(EXPR kept "${kept} + 1")
+      # the corpus keeps the chain only where the lamps draw into WORK2 after
+      # the mask (the issue 163 rooms); any other reason is a refusal the
+      # fold was not meant to have
+      if(NOT foldWhy MATCHES "the lamps")
+        message(SEND_ERROR "${name} ${s} fold: kept${foldWhy}: only the lamps' frames keep the "
+                           "chain")
+        math(EXPR failures "${failures} + 1")
+      endif()
       if(NOT glowFold EQUAL glowNew)
         message(SEND_ERROR "${name} ${s} fold: kept${foldWhy}, but glow ${glowFold} passes "
                            "against ${glowNew} drawn")
@@ -331,7 +346,7 @@ foreach(dump IN LISTS dumps)
       message(SEND_ERROR "${name} ${s} fold: ${png} differs from the chain drawn: ${dout}${derr}")
       math(EXPR failures "${failures} + 1")
     endforeach()
-    message(STATUS "${name} ${s} fold: ${nFolded} folded, ${nKept} kept${foldWhy}; glow "
+    message(STATUS "${name} ${s} fold: ${nFolded} folded (${nRead} reading the fans' WORK2), ${nKept} kept${foldWhy}; glow "
                    "${glowNew} -> ${glowFold} passes; ${fn} targets but WORK2 compared, "
                    "${fdiffer} differ")
   endforeach()
@@ -343,8 +358,12 @@ if(compared EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} had a baseline to compare")
   return()
 endif()
+# list(FIND), not if(IN_LIST): a cmake -P script runs under the old policies
+# (CMP0057), where IN_LIST is not an operator
 foreach(s IN LISTS settings)
-  if(s IN_LIST foldRan AND NOT s IN_LIST foldedIn)
+  list(FIND foldRan "${s}" ran)
+  list(FIND foldedIn "${s}" did)
+  if(ran GREATER -1 AND did EQUAL -1)
     message(SEND_ERROR "rd_glow_cheap_ab: no run folded the glow's mask at ${s}")
     math(EXPR failures "${failures} + 1")
   endif()
@@ -354,4 +373,5 @@ if(failures GREATER 0)
 endif()
 message(STATUS "rd_glow_cheap_ab: ${compared} targets within ${BOUND} levels in ${runs} runs over "
                "${ndumps} dumps, ${fewer} runs with fewer glow passes; the glow fold: ${folded} "
-               "runs folded, ${kept} kept, every target but WORK2 the same bytes")
+               "runs folded (${foldedRead} reading the sun's fans' WORK2), ${kept} kept, every target but "
+               "WORK2 the same bytes")

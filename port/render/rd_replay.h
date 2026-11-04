@@ -476,8 +476,10 @@ bool rd__fades_fold_exact(int mode, uint32_t usage, bool rgba8);
  * rd__glow_fold_skip   rd_blur_border.c blurPostSprite: the planned fill or
  *                      mask, not drawn (its state kept); true: skip it
  * rd__glow_fold_due    rd_fx_plan.c rd__fx_plan_draw: the planned reduction
- *                      x takes the fold: fx_glow_mask's words and SCENE's
- *                      record; false otherwise (where it was planned but
+ *                      x takes the fold: fx_glow_mask's words, SCENE's
+ *                      record and, where WORK2 was drawn between the fill and
+ *                      the mask (the sun's fans), WORK2's (*kept, else NULL:
+ *                      the texels the mask keeps read from it); false otherwise (where it was planned but
  *                      cannot take it, the fill and the mask are drawn
  *                      first: rd__glow_fold_undo)
  * rd__glow_fold_drawn  the reduction drawn with the fold (counted, logged
@@ -493,7 +495,7 @@ void rd__glow_fold_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock
 void rd__glow_fold_scan_end(void);
 bool rd__glow_fold_skip(Replay *r, const RdFrame *f, const RdCmd *c);
 bool rd__glow_fold_due(Replay *r, const RdFxDraw *x, uint32_t words[RD_GLOW_FOLD_WORDS],
-                       RdTargetRec **scene);
+                       RdTargetRec **scene, RdTargetRec **kept);
 void rd__glow_fold_drawn(void);
 void rd__glow_fold_undo(Replay *r, const char *why);
 void rd__glow_fold_end(void);
