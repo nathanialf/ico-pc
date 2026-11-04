@@ -208,6 +208,26 @@ int ico_opt_shadow_speed_motion(int motion)
     return 0;
 }
 
+float ico_opt_shadow_turn_limit(int kind, int motion, float s)
+{
+    static unsigned scaled;
+    float f;
+
+    if (kind != 4 || !ico_opt_shadow_speed_motion(motion)) {
+        return s;
+    }
+    f = ico_opt_shadow_speed_factor();
+    if (f == 1.0f) {
+        return s;
+    }
+    /* counted for the 10 s summaries: how often a shadow's turn limit was scaled */
+    if (++scaled <= 8 || scaled % 100 == 0) {
+        fprintf(stderr, "gameplay: shadow turn x%.2f (%.1f -> %.1f degrees a tick, %u)\n",
+                (double)f, (double)s, (double)(s * f), scaled);
+    }
+    return s * f;
+}
+
 int ico_opt_door_fix(void)
 {
     return get(&s_door_fix, "gameplay.door_fix");

@@ -118,9 +118,9 @@ float ico_opt_pit_dive_ratio(int camera);
    The names are slower, original, faster, fastest (ICO_SPEED_*); the factors 0.75, 1,
    1.25, 1.5.  Walking and running scale by the play speed of the shadow's motion
    (ico2/fumi/src/act-game.c ACTGame_SetMotionPlaySpeedRatio_Exec), flying by the forward
-   push of flyCoreLoop (ico2/fumi/src/commonact.c).  Only the locomotion motions take the
+   push of flyCoreLoop (ico2/fumi/src/commonact.c); the turn per tick of those motions scales too (ico_opt_shadow_turn_limit).  Only the locomotion motions take the
    factor (ico_opt_shadow_speed_motion): attacks, grabs, hits, the dissolve, the pit dive
-   (pit_time owns it) and the turns keep the game's play speed, so the AI's tick-counted
+   (pit_time owns it) keep the game's play speed, so the AI's tick-counted
    waits stay in step with them (review finding 15); not a frozen shadow, not how often
    they attack.  Logs "gameplay: shadow speed <name> (x<factor>)" at load and on change. */
 #define ICO_SPEED_SLOWER 0
@@ -131,6 +131,11 @@ float ico_opt_pit_dive_ratio(int camera);
 int ico_opt_shadow_speed(void);
 void ico_opt_set_shadow_speed(int v);
 float ico_opt_shadow_speed_factor(void);
+/* SetMotionDirectionSmooze's turn limit s (degrees a tick) for an actor of GObj kind and
+   ctrl.motion: a shadow (kind 4) on a locomotion motion turns by s times the speed factor,
+   so its path is the original's path played faster (the same circle); anything else, and
+   the factor 1, return s unchanged.  Logs the first 8 and every 100th scaled turn. */
+float ico_opt_shadow_turn_limit(int kind, int motion, float s);
 /* 1 when motion (a motionKind index, a shadow's ctrl.motion) is one of this disc's
    shadow locomotion motions, by their names in the disc's motion table (the decomp's
    generated motion-def.c): "EN1 FLY", "EN1 CARRY_FLY", "EN1 WALKLOOP1/2",
