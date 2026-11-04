@@ -254,7 +254,12 @@ keep shader module and pipeline creation off two threads at once) Vulkan compile
 holds one SDL mutex around every `vkCreateShaderModule` (`vk_resource.c`) and
 `vkCreateGraphicsPipelines` (`vk_pipeline.c` `vkr_pipe_compile`), so a pipeline a draw makes on
 first use on its own thread waits for a background compile in flight instead of running beside
-it; the compile time logged is the call's own, not the wait. `RhiLimits.serialPipelines` names the
+it; the compile time logged is the call's own, not the wait. The pipeline cache object is the
+compiles' too, so its reads (`vkGetPipelineCacheData` in `rhi_pipeline_cache_save`, the exit's write
+and `rhi_pipeline_cache_size`) take the same lock when it is free and are left out when a compile
+holds it, never waiting for one (the lazy tick and the set's end save again; the size is the last
+one read): `rhi_vk: pipeline cache: not written now, a pipeline is being compiled (one at a time
+on this driver; N times)`, the first 8, then every 100th. `RhiLimits.serialPipelines` names the
 reason (NULL elsewhere and on the other backends), and the device's start logs `rhi_vk: pipelines:
 one at a time (PowerVR B-Series: the driver's compiler is not thread-safe)`; the window then gives
 the driver 60 s per creation before the game starts ([PLATFORM.md](PLATFORM.md#diagnostics)).

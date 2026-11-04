@@ -883,6 +883,9 @@ void vkr_pipeline_cache_shutdown(void);
 void vkr_compile_serial_init(void);
 void vkr_compile_serial_shutdown(void);
 void vkr_compile_lock(void);
+/* the lock taken when free (true; always true where the rule does not
+ * hold), false while a compile holds it: the pipeline cache's reads */
+bool vkr_compile_trylock(void);
 void vkr_compile_unlock(void);
 /* vk_pipeline.c: the background sets' compiles (rhi.h RhiGpuProgress
  * bgPipesDone, bgPipesLeft); any thread */

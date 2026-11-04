@@ -92,6 +92,16 @@ void vkr_compile_lock(void)
 #endif
 }
 
+bool vkr_compile_trylock(void)
+{
+#ifdef ICO_RHI_HAVE_SDL
+    if (s_compileLock != NULL) {
+        return SDL_TryLockMutex(s_compileLock);
+    }
+#endif
+    return true;
+}
+
 void vkr_compile_unlock(void)
 {
 #ifdef ICO_RHI_HAVE_SDL
@@ -371,6 +381,9 @@ static bool vkr_rename_over(const char *from, const char *to)
  * the write).  sync: the bytes onto the disk before the move (the writes
  * during a run, which a device that freezes or a start the system ends
  * may follow); the exit's write leaves that to the system */
+/* the saves left out because a compile held the lock (vkr_cache_write) */
+static unsigned s_cacheSaveBusy;
+
 static size_t vkr_cache_write(bool skipSame, bool *same, bool sync)
 {
     size_t size = 0;
@@ -381,8 +394,24 @@ static size_t vkr_cache_write(bool skipSame, bool *same, bool sync)
     if (!g_vkr.pipelineCache || !s_cachePath[0] || g_vkr.deviceLost) {
         return 0;
     }
+    /* the cache object is the compile's too: on a driver whose compiler is
+     * not thread-safe (the serial rule) its data is read under the compile
+     * lock, and a save while a compile holds it (a background set's, or a
+     * driver call that does not return) is left out, never waited for: the
+     * lazy tick and the set's end save again (issue 188, review 2 N1).
+     * Elsewhere the lock is none and this always goes on */
+    if (!vkr_compile_trylock()) {
+        s_cacheSaveBusy++;
+        if (s_cacheSaveBusy <= 8 || s_cacheSaveBusy % 100 == 0) {
+            VKR_LOG("pipeline cache: not written now, a pipeline is being compiled (one at a "
+                    "time on this driver; %u times)",
+                    s_cacheSaveBusy);
+        }
+        return 0;
+    }
     if (vkGetPipelineCacheData(g_vkr.device, g_vkr.pipelineCache, &size, NULL) == VK_SUCCESS &&
         skipSame && size == s_cacheFileSize) {
+        vkr_compile_unlock();
         if (same) {
             *same = true;
         }
@@ -396,6 +425,7 @@ static size_t vkr_cache_write(bool skipSame, bool *same, bool sync)
             blob = NULL;
         }
     }
+    vkr_compile_unlock();
     if (!blob) {
         return 0;
     }
@@ -438,12 +468,22 @@ bool rhi_pipeline_cache_save(void)
 
 uint64_t rhi_pipeline_cache_size(void)
 {
+    /* the last size read, when a compile holds the lock (vkr_cache_write) */
+    static uint64_t last;
     size_t size = 0;
-    if (!g_vkr.pipelineCache || g_vkr.deviceLost ||
-        vkGetPipelineCacheData(g_vkr.device, g_vkr.pipelineCache, &size, NULL) != VK_SUCCESS) {
+    if (!g_vkr.pipelineCache || g_vkr.deviceLost) {
         return 0;
     }
-    return (uint64_t)size;
+    if (!vkr_compile_trylock()) {
+        return last;
+    }
+    const VkResult r = vkGetPipelineCacheData(g_vkr.device, g_vkr.pipelineCache, &size, NULL);
+    vkr_compile_unlock();
+    if (r != VK_SUCCESS) {
+        return 0;
+    }
+    last = (uint64_t)size;
+    return last;
 }
 
 void vkr_pipeline_cache_shutdown(void)
