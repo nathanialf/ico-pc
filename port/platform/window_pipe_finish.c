@@ -61,7 +61,9 @@ int window_pipe_floor_retry(int pipePolicy)
     if (pipePolicy != ICO_DIAG_PIPESET_LAZY_LOW_MEMORY || !ico_diag_startup_prev_floor_stop()) {
         return pipePolicy;
     }
-    retry = ico_memory_floor_retry(1, ico_diag_memory_floor_driver(), bytes, why, sizeof why);
+    retry = ico_memory_floor_retry(1, ico_diag_startup_prev_floor_retried(),
+                                   ico_diag_memory_floor_driver(), bytes,
+                                   rhi_pipeline_cache_loaded() ? 1 : 0, why, sizeof why);
     fprintf(stderr,
             "window: pipelines: the previous start stopped at the free-memory floor; %s (%s, %lld "
             "bytes, loaded by the renderer: %s): %s\n",

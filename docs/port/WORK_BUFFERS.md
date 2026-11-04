@@ -1676,9 +1676,15 @@ driver's compiler held about 3.1 GB, and the 1.4 MB cache file the stop had writ
 without the compiler. So the start after a floor stop (not after the system's signal: the file's
 line carries the floor's figures, `ico_memory_floor_line_is_floor`) makes the set again when the
 driver is Qualcomm's own and this shader set's cache file (`pipelines-<key>.vkcache`, the window's
-`ico_diag_pipeline_cache_path`) exists and is not empty (`ico_memory_floor_retry`, called by
-`window_pipe_floor_retry` in `port/platform/window_pipe_finish.c` after the device is made). If the
-set stops at the floor again the stop is written as before and the next start decides again. One
+`ico_diag_pipeline_cache_path`) exists and is not empty and the renderer loaded it at this start
+(`rhi_pipeline_cache_loaded`: a file the driver refused, another driver after a system update or
+another shader set, answers nothing, so the compiler would run) (`ico_memory_floor_retry`, called
+by `window_pipe_floor_retry` in `port/platform/window_pipe_finish.c` after the device is made). At
+most one retry in a row: a retried start that stops at the floor again writes its stop line with
+the mark ` after a retry` after the floor's figures (`ICO_MEMORY_FLOOR_RETRIED_MARK`,
+`ico_memory_floor_line_retried`, `ico_diag_startup_prev_floor_retried`), and the next start makes
+no set, as before the retry existed (its lazy run's file keeps the marked line, so the starts after
+it stay lazy too). One
 line says which way and why, whenever the previous start stopped at the floor: `window: pipelines:
 the previous start stopped at the free-memory floor; this start makes the set again (the
 pipeline cache file for this shader set is on disk, N bytes, loaded by the renderer: yes): <path>`,

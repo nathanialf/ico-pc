@@ -170,6 +170,7 @@
 #include <string.h>
 #include <eekernel.h>
 #include "diag_host.h"
+#include "memory_floor.h"
 #include "miniz.h"
 #include "rd_bisect_plan.h"
 #include "report.h"
@@ -861,6 +862,7 @@ static void activity_child(const char *mode, const char *log)
         ico_diag_log("test: vu prepass %d", pre);
         ico_diag_log("test: pipeline set %d", set);
         ico_diag_log("test: prev floor stop %d", ico_diag_startup_prev_floor_stop());
+        ico_diag_log("test: prev floor retried %d", ico_diag_startup_prev_floor_retried());
         pipeset_then(set);
         child_quit(0);
     } else if (strcmp(mode, "actlossnext") == 0) {
@@ -2865,6 +2867,30 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "test: pipeline set 7\n") != NULL);
         CHECK(strstr(s, "test: prev floor stop 1\n") != NULL);
+        CHECK(strstr(s, "test: prev floor retried 0\n") != NULL);
+        remove(act);
+        /* ... a start that was itself the retry and stopped at the floor
+           again (its line's mark): a floor stop, and no second retry in a
+           row (window_pipe_finish.c gives ico_memory_floor_retry the mark) */
+        remove(ends);
+        {
+            FILE *f = fopen(act, "wb");
+            CHECK(f != NULL);
+            if (f != NULL) {
+                fputs("test 1\nexited with the pipelines created as the frames needed them\n"
+                      "set: stopped at the system's low-memory signal (1940 MB available of 11453 "
+                      "MB, floor 1947 MB)" ICO_MEMORY_FLOOR_RETRIED_MARK,
+                      f);
+                fclose(f);
+            }
+        }
+        setenv("ICO_TEST_THEN", "clean", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 7\n") != NULL);
+        CHECK(strstr(s, "test: prev floor stop 1\n") != NULL);
+        CHECK(strstr(s, "test: prev floor retried 1\n") != NULL);
         remove(act);
         /* ... another version tries the set again */
         remove(ends);

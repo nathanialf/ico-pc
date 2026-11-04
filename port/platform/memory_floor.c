@@ -115,19 +115,30 @@ int ico_memory_floor_line_is_floor(const char *line)
            strstr(line, ", floor ") != NULL;
 }
 
-int ico_memory_floor_retry(int prev_floor_stop, int driver, long long cache_bytes, char *why,
-                           size_t size)
+int ico_memory_floor_line_retried(const char *line)
+{
+    return line != NULL && strstr(line, ")" ICO_MEMORY_FLOOR_RETRIED_MARK) != NULL;
+}
+
+int ico_memory_floor_retry(int prev_floor_stop, int prev_retried, int driver, long long cache_bytes,
+                           int cache_loaded, char *why, size_t size)
 {
     const char *words;
     int retry = 0;
 
     if (!prev_floor_stop) {
         words = "the previous start did not stop at the free-memory floor";
+    } else if (prev_retried) {
+        words = "the previous start was already a retry that stopped at the floor again (at most "
+                "one retry in a row)";
     } else if (driver != ICO_MEMORY_FLOOR_DRIVER_QUALCOMM) {
         words = "not Qualcomm's own driver";
     } else if (cache_bytes <= 0) {
         words = "the pipeline cache file for this shader set is missing or empty (the driver's "
                 "compiler would run)";
+    } else if (!cache_loaded) {
+        words = "the renderer did not load the pipeline cache file (the driver refused it: another "
+                "driver or shader set; the driver's compiler would run)";
     } else {
         words = "the pipeline cache file for this shader set is on disk";
         retry = 1;

@@ -36,8 +36,10 @@
  *            not read;
  *   retry    issue 123 (ico_memory_floor_retry): the next start's set again
  *            only after a stop at the floor, on Qualcomm's own driver, with a
- *            cache file that is not empty; the activity line told from the
- *            system's own signal by its floor figures; the reporter's
+ *            cache file that is not empty and that the renderer loaded,
+ *            and not after a start that was itself a retry (the stop line's
+ *            mark); the activity line told from the system's own signal by
+ *            its floor figures, the retried line by its mark; the reporter's
  *            1940 MB of 11453 MB against the floor of 1947 MB.
  */
 #include <stdio.h>
@@ -189,25 +191,51 @@ static void testRetry(void)
     CHECK(!ico_memory_floor_line_is_floor(NULL));
     /* the reporter: floor stop, Qualcomm's own, the 1.4 MB cache file */
     CHECK(ico_memory_floor_stops(1940, 11453, -1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM));
-    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 1400000, why, sizeof why) ==
-          1);
+    CHECK(ico_memory_floor_retry(1, 0, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 1400000, 1, why,
+                                 sizeof why) == 1);
     CHECK(strstr(why, "on disk") != NULL);
     /* no file, an empty file */
-    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, -1, why, sizeof why) == 0);
+    CHECK(ico_memory_floor_retry(1, 0, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, -1, 1, why, sizeof why) ==
+          0);
     CHECK(strstr(why, "missing or empty") != NULL);
-    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 0, why, sizeof why) == 0);
+    CHECK(ico_memory_floor_retry(1, 0, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 0, 1, why, sizeof why) ==
+          0);
     /* the system's own signal, another driver, a driver not known */
-    CHECK(ico_memory_floor_retry(0, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 1400000, why, sizeof why) ==
-          0);
+    CHECK(ico_memory_floor_retry(0, 0, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 1400000, 1, why,
+                                 sizeof why) == 0);
     CHECK(strstr(why, "did not stop") != NULL);
-    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_OTHER, 1400000, why, sizeof why) == 0);
+    CHECK(ico_memory_floor_retry(1, 0, ICO_MEMORY_FLOOR_DRIVER_OTHER, 1400000, 1, why,
+                                 sizeof why) == 0);
     CHECK(strstr(why, "not Qualcomm") != NULL);
-    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_UNKNOWN, 1400000, why, sizeof why) ==
-          0);
+    CHECK(ico_memory_floor_retry(1, 0, ICO_MEMORY_FLOOR_DRIVER_UNKNOWN, 1400000, 1, why,
+                                 sizeof why) == 0);
     /* no words wanted; a small buffer cuts */
-    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 5, NULL, 0) == 1);
-    CHECK(ico_memory_floor_retry(1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 5, why, 8) == 1);
+    CHECK(ico_memory_floor_retry(1, 0, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 5, 1, NULL, 0) == 1);
+    CHECK(ico_memory_floor_retry(1, 0, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 5, 1, why, 8) == 1);
     CHECK(strlen(why) == 7);
+    /* the cache file on disk but refused by the renderer (another driver
+       after a system update, another shader set): no retry */
+    CHECK(ico_memory_floor_retry(1, 0, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 1400000, 0, why,
+                                 sizeof why) == 0);
+    CHECK(strstr(why, "did not load") != NULL);
+    /* at most one retry in a row: the previous start was a retry that
+       stopped at the floor again */
+    CHECK(ico_memory_floor_retry(1, 1, ICO_MEMORY_FLOOR_DRIVER_QUALCOMM, 1400000, 1, why,
+                                 sizeof why) == 0);
+    CHECK(strstr(why, "already a retry") != NULL);
+    /* the mark on the stop line (diag_host.c writes it after the floor's
+       figures on a retried start) */
+    {
+        const char *retried = "set: stopped at the system's low-memory signal (1940 MB available "
+                              "of 11453 MB, floor 1947 MB)" ICO_MEMORY_FLOOR_RETRIED_MARK;
+
+        CHECK(ico_memory_floor_line_is_floor(retried));
+        CHECK(ico_memory_floor_line_retried(retried));
+        CHECK(!ico_memory_floor_line_retried(floorLine));
+        CHECK(!ico_memory_floor_line_retried(sigLine));
+        CHECK(!ico_memory_floor_line_retried(NULL));
+        CHECK(strlen(retried) < 160); /* diag_host.c act_low_memory */
+    }
 }
 
 int main(void)

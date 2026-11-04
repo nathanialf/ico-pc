@@ -807,6 +807,10 @@ int ico_diag_startup_prev_floor_stop(void);
 /* the window took the retry: this start's file does not carry the
    previous start's "stopped" line (the set stopping again writes it) */
 void ico_diag_startup_floor_retry(void);
+/* the previous start was itself such a retry and stopped at the floor
+   again (its line ends with ICO_MEMORY_FLOOR_RETRIED_MARK): this start
+   does not retry (at most one in a row) */
+int ico_diag_startup_prev_floor_retried(void);
 /* Captures what starting the program again needs (Windows: the module
    path, GetCommandLineW and the environment block; Linux and macOS: the
    executable's path, argv and the environment's pointers), so the crash

@@ -1383,6 +1383,11 @@ static char act_low_memory[160];
 static const char act_set_low_memory[] = "set: stopped at the system's low-memory signal";
 static int act_prev_low_memory;
 static char act_prev_low_memory_line[sizeof act_low_memory];
+/* this start retries the set after the previous one stopped at the
+   free-memory floor (ico_diag_startup_floor_retry): a stop line it writes
+   ends with ICO_MEMORY_FLOOR_RETRIED_MARK, so the next start does not retry
+   again */
+static int act_floor_retried;
 static const char act_loss_none[] = "graphics device lost, no loss dump";
 /* a GPU hang's loss (watchdog_fire, loss_hang set): its own line, counted
    as a loss (loss_count_prev) and its dump attached to a report, but never
@@ -2465,6 +2470,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_low_memory[0] = '\0';
     act_prev_low_memory = 0;
     act_prev_low_memory_line[0] = '\0';
+    act_floor_retried = 0;
     act_saw_vu_pre = 0;
     act_unsynced = 0;
     act_end_n[0] = act_end_n[1] = act_end_n[2] = 0;
@@ -2811,8 +2817,15 @@ int ico_diag_startup_prev_floor_stop(void)
 void ico_diag_startup_floor_retry(void)
 {
     /* this start makes the set again: its file does not say "stopped"
-       until it stops (ico_diag_startup_activity_budget_stop) */
+       until it stops (ico_diag_startup_activity_budget_stop), and then
+       says it was a retry */
     act_low_memory[0] = '\0';
+    act_floor_retried = 1;
+}
+
+int ico_diag_startup_prev_floor_retried(void)
+{
+    return act_prev_low_memory && ico_memory_floor_line_retried(act_prev_low_memory_line);
 }
 
 int ico_diag_startup_vu_prepass(void)
@@ -3015,7 +3028,8 @@ void ico_diag_startup_activity_budget_stop(void)
         if (!ico_diag_low_memory_stop(lv, sizeof lv)) {
             snprintf(lv, sizeof lv, "a level not named");
         }
-        snprintf(act_low_memory, sizeof act_low_memory, "%s (%s)", act_set_low_memory, lv);
+        snprintf(act_low_memory, sizeof act_low_memory, "%s (%s)%s", act_set_low_memory, lv,
+                 act_floor_retried && floor_why[0] != '\0' ? ICO_MEMORY_FLOOR_RETRIED_MARK : "");
         act_once = 0;
         ico_diag_log(
             "ico_pc: the start-up set stopped at %s (%s); the next start makes the "
