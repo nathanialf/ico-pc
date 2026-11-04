@@ -35,7 +35,13 @@
  *          asked reads through it (the sheet kept off the bake,
  *          RdTexRec.sheetShader: the pixels the baked 1x path draws), else
  *          through the bake's font_sheet_baked_ps (issue 188: a phone's
- *          driver did not return from compiling font_sheet_ps here);
+ *          driver did not return from compiling font_sheet_ps here).
+ *          Accepted as designed (review 2 N8): a phone that does draw
+ *          font_sheet_ps (the overlay's sheet text at 3x on a 1080-line
+ *          window) does not have its glyph checked here; the fixed-function
+ *          decision depends on the blend, not on the shader's output,
+ *          and rd_pixel holds font_sheet_ps to sheet_ref.c, so the cell
+ *          now matches the 1x shader, not the largest one;
  *   row 2  x 0..64: the after cell, opaque (ABE 0), drawn after every
  *          blended draw: it must be its own colour on an even and an odd
  *          texel column (a driver that keeps the LERP's dual-source

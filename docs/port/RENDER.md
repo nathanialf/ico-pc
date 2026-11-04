@@ -1117,7 +1117,11 @@ is checked: `[dev] sheet_shader` draws every scale through it, or an exact mode 
 pixel behind through its `_dstatt` twin, the largest destination-read shader; everywhere else
 through the 1x bake's `font_sheet_baked_ps` (2.3k words), the shader a 1x sheet draws with (issue
 188: a PowerVR B-Series driver did not return from compiling `font_sheet_ps_nodual`, 70k words,
-here, on a phone that never draws it; the comparison with the reference is the same either way).
+here; the comparison with the reference is the same either way). So the cell matches the 1x
+shader, not the largest one: a phone that draws `font_sheet_ps` (the overlay's sheet text at 3x
+on a 1080-line window) does not have that shader's glyph checked here, which is accepted, since
+the fixed-function decision depends on the blend, not on the shader's output, and `rd_pixel` holds
+`font_sheet_ps` to `sheet_ref.c`.
 The window runs it before the start-up pipeline set, behind the start-up screen, and again whenever
 SCENE is made at a new size. One line names the blend in force, every result and the glyph's
 shader:

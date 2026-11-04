@@ -610,7 +610,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   bad folder, a damaged file, neither file listing as a driver) and the loss window (`test_loss`: a loss under a
   package at 0, 12 s and 29.999 s counts, at 30 s and later or on the phone's own driver does not; the marker
   written again makes the next start see a crash), and `test_list_zips` (`ico_gpu_driver_list_zips`: `a.zip`, `B.ZIP`, `incoming.*`, a text file, a hidden zip and a folder named `.zip` give two names in byte order, the cap and a missing folder) (`gpu_driver`).
-  The Android file picker ([PLATFORM.md](ANDROID_DRIVERS.md#the-file-picker): `IcoActivity.pickFile`,
+  The Android file picker ([ANDROID_DRIVERS.md](ANDROID_DRIVERS.md#the-file-picker): `IcoActivity.pickFile`,
   `ico_android_pick_file`, `nativePickDone`) has no case: it is Java and JNI, and nothing here runs
   either. It is checked on a phone: `adb logcat -s ico-pc SDL` while pressing Add a driver shows
   the `ico_pc: file picker: pick N:` lines and the picker; `adb shell pm disable-user --user 0
