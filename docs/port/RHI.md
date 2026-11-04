@@ -387,7 +387,7 @@ D3D11 and OpenGL ignore it). The window sets it when presents keep blocking unde
 ([DISPLAY.md](DISPLAY.md#the-fifo-fallback)). `rhi_present_fifo_start(fn)` gives the Vulkan
 backend a question (`fn(vendorId, driverText)`, kept across `rhi_init`, NULL asks nothing): with
 vsync off a swapchain whose device answers yes is FIFO at the fewest images from the first one
-(Qualcomm's own driver; the other backends ignore it). `RhiStats.swapImages` is the current swapchain's
+(Qualcomm's own driver; the window asks only on Android; the other backends ignore it). `RhiStats.swapImages` is the current swapchain's
 image count (Vulkan; 0 elsewhere). `rhi_present_timing`, `rhi_present_timing_use`, `rhi_present_last_id` and
 `rhi_present_timing_next` are the display's timing of presents (Vulkan's present wait, below; D3D12:
 false, nothing, 0, -1).

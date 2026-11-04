@@ -32,7 +32,7 @@
 /* [dev] present_fallback (ICO_PRESENT_FALLBACK, host_config.c) */
 typedef enum IcoPresentFallbackMode {
     ICO_PRESENT_FALLBACK_AUTO = 0, /* the default: FIFO after the blocks, and from the start on
-                                      Qualcomm's own driver with vsync off */
+                                      Qualcomm's own Android driver with vsync off */
     ICO_PRESENT_FALLBACK_OFF,      /* mailbox kept whatever the blocks */
     ICO_PRESENT_FALLBACK_FIFO      /* FIFO from the start */
 } IcoPresentFallbackMode;
@@ -79,16 +79,32 @@ int ico_present_fallback_driver_eligible(unsigned vendorId, const char *driverTe
    (rhi_present_fifo_start) when it makes a swapchain, before any present. */
 int ico_present_fallback_qualcomm_own(unsigned vendorId, const char *driverText);
 
+/* 1 in the Android build (the phones FIFO from the start is for), 0
+   elsewhere: the platform argument below */
+#ifdef __ANDROID__
+#define ICO_PRESENT_FALLBACK_ANDROID 1
+#else
+#define ICO_PRESENT_FALLBACK_ANDROID 0
+#endif
+
+/* Whether the window hands the rhi the driver question
+   (rhi_present_fifo_start with ico_present_fallback_qualcomm_own): mode
+   auto on Android only.  Windows on Snapdragon reports the same vendor id
+   with Qualcomm's own Vulkan driver, and there the surface offers
+   immediate mode, so Vsync Off was immediate; FIFO from the start would
+   make it act as on */
+int ico_present_fallback_start_asked(IcoPresentFallbackMode mode, int android);
+
 /* Whether the first swapchain presents FIFO at the driver's fewest images:
-   mode auto (not off, which keeps mailbox for the whole run; fifo is FIFO
-   from the start whatever the driver, a path of its own), vsync off, and
-   Qualcomm's own driver.  Qualcomm's Adreno guide advises FIFO with the
+   the question asked (mode auto on Android: not off, which keeps mailbox
+   for the whole run; fifo is FIFO from the start whatever the driver, a
+   path of its own), vsync off, and Qualcomm's own driver.  Qualcomm's Adreno guide advises FIFO with the
    minimum image count and says mailbox costs battery and heat for no
    benefit; with it no mailbox to FIFO switch happens mid-run and the GPU
    draws nothing that is never shown.  It is not known to remove the
    stalls issue 123 reports (they continued under FIFO in three logs). */
-int ico_present_fallback_start(IcoPresentFallbackMode mode, int vsync, unsigned vendorId,
-                               const char *driverText);
+int ico_present_fallback_start(IcoPresentFallbackMode mode, int android, int vsync,
+                               unsigned vendorId, const char *driverText);
 
 /* The start line, once, after the first swapchain when
    ico_present_fallback_start said yes: "window: present fifo (Qualcomm's

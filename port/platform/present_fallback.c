@@ -49,10 +49,15 @@ int ico_present_fallback_qualcomm_own(unsigned vendorId, const char *driverText)
            ico_present_fallback_driver_eligible(vendorId, driverText);
 }
 
-int ico_present_fallback_start(IcoPresentFallbackMode mode, int vsync, unsigned vendorId,
-                               const char *driverText)
+int ico_present_fallback_start_asked(IcoPresentFallbackMode mode, int android)
 {
-    return mode == ICO_PRESENT_FALLBACK_AUTO && !vsync &&
+    return mode == ICO_PRESENT_FALLBACK_AUTO && android;
+}
+
+int ico_present_fallback_start(IcoPresentFallbackMode mode, int android, int vsync,
+                               unsigned vendorId, const char *driverText)
+{
+    return ico_present_fallback_start_asked(mode, android) && !vsync &&
            ico_present_fallback_qualcomm_own(vendorId, driverText);
 }
 
