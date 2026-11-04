@@ -2293,6 +2293,14 @@ typedef struct RdPerfRecord {
     double totalMs, interpMs, waitMs, acquireMs, uploadMs, walkMs, bindMs, submitMs, presentMs,
         readbackMs;
     double fenceWaitMs; /* the backend's blocked time on GPU completion (inside wait, readback) */
+    /* presentMs timed apart (rhi.h rhi_present_split, Vulkan; presentSplit
+     * 0 elsewhere): the swapchain lock's wait, the driver's present call
+     * (vkQueuePresentKHR), the surface poll after it; presentEndMs the
+     * present's end on rd's monotonic ms clock (startMs's), 0 when nothing
+     * was presented.  The window's lines on a present that blocked (issue
+     * 123, window_stall.c) */
+    uint8_t presentSplit;
+    double presentLockMs, presentCallMs, presentPollMs, presentEndMs;
     uint32_t buffersCreated, buffersDestroyed, texturesCreated, texturesDestroyed;
     uint32_t memoryAllocs, memoryFrees, bindGroups, pipelineBinds, bindGroupBinds;
     /* the binds and state sets the RHI's bind cache found already in force

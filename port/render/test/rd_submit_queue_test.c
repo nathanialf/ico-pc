@@ -10,7 +10,9 @@
  *            it finishes (the queue is not idle while it runs), and a
  *            second next while one runs takes nothing;
  *   times    the finished jobs' times are taken oldest first, once; past
- *            RD_SUBMIT_DEPTH unread the oldest is dropped and counted;
+ *            RD_SUBMIT_DEPTH unread the oldest is dropped and counted; the
+ *            present timed apart (the lock, the driver's call, the poll,
+ *            the end: issue 123) comes with them;
  *   present  the longest present of the jobs finished since the last take,
  *            once; a job that presents nothing leaves it 0;
  *   block    the jobs' means, the longest, the depth, the waits by the
@@ -90,12 +92,26 @@ static void testOrderDepth(void)
     CHECK(rd__sq_post(&q, &c) == 3);
     RdSubmitJob ran;
     CHECK(runOne(&q, 2.0, 0.0, &ran) && ran.cl == 12 && ran.seq == 2);
-    CHECK(runOne(&q, 4.0, 1.5, &ran) && ran.cl == 13 && ran.seq == 3);
+    {
+        /* the present timed apart, as rd_submit_thread.c tail fills it */
+        RdSubmitJob j;
+        CHECK(rd__sq_next(&q, &j) && j.cl == 13 && j.seq == 3);
+        j.submitMs = 4.0;
+        j.presentMs = 1.5;
+        j.presentSplit = true;
+        j.presentLockMs = 0.25;
+        j.presentCallMs = 1.125;
+        j.presentPollMs = 0.0625;
+        j.presentEndMs = 123456.5;
+        rd__sq_finish(&q, &j);
+    }
     CHECK(rd__sq_idle(&q) && q.done == 3 && !runOne(&q, 0.0, 0.0, NULL));
     /* the times: the depth's newest two kept, the oldest dropped */
     RdSubmitJob f;
     CHECK(rd__sq_take_finished(&q, &f) && f.seq == 2 && f.submitMs == 2.0 && f.replay == 102);
     CHECK(rd__sq_take_finished(&q, &f) && f.seq == 3 && f.presentMs == 1.5 && f.replay == 103);
+    CHECK(f.presentSplit && f.presentLockMs == 0.25 && f.presentCallMs == 1.125 &&
+          f.presentPollMs == 0.0625 && f.presentEndMs == 123456.5);
     CHECK(!rd__sq_take_finished(&q, &f));
     /* the longest present since the last take: 1.5 ms, then none */
     CHECK(rd__sq_take_present_ns(&q) == 1500000u);

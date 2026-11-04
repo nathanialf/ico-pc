@@ -230,6 +230,13 @@ bool rhi_present_shown(void)
     return s_presentShown;
 }
 
+/* rhi.h: the present is not timed apart here */
+bool rhi_present_split(RhiPresentSplit *out)
+{
+    memset(out, 0, sizeof(*out));
+    return false;
+}
+
 /* the waitable swap chain's wait for room in the queue (as
  * d3d12_swapchain.c, 50 ms at most), counted as the acquire's */
 static void d11_frame_latency_wait(void)

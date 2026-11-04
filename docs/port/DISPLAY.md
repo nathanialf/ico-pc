@@ -21,7 +21,8 @@ are [RHI.md](RHI.md).
 | `port/platform/window_present_fallback.h`, `window_present_fallback.c` | the window's side of the FIFO fallback: the gate, the switch, the lines |
 | `port/platform/display_rate.h`, `display_rate.c` | the refresh rate's log lines and the frame rate pin's decisions, free of SDL ([The refresh rate and the frame rate pin](#the-refresh-rate-and-the-frame-rate-pin)) |
 | `port/platform/window_display_rate.h`, `window_display_rate.c` | the window's side: SDL's display mode in the log, the Android pin through the NDK |
-| `port/platform/present_hist.h`, `present_hist.c` | the 10 s block's histogram of the driver's present call (over 20, 50, 100 and 300 ms) |
+| `port/platform/present_hist.h`, `present_hist.c` | the 10 s block's histogram of the driver's present call (over 20, 50, 100 and 300 ms); the texts of the lines around a present that blocked (its split, the replay after it) |
+| `port/platform/window_stall.h`, `window_stall.c` | the window's lines around a present that blocked (issue 123), from the replays' records as they pop |
 | `port/platform/window_disc.h`, `window_disc.c` | the window's side of the disc reader: the step's disc wait for the present allowance, the 10 s disc line |
 | `port/platform/window_blended.h`, `window_blended.c` | F12's blended present's frame: the arm after F12's zip (a result still to collect collected first) and the move into it |
 | `port/platform/display_clock.h` | the vblank clock's interface |
@@ -475,7 +476,25 @@ X)` (`perf_log`; issue 123: the Adreno 740 on Qualcomm's driver spent 363-583 ms
 `vkQueuePresentKHR`). Both read the replay records' present time (`perf_drain`); nothing new is
 timed. Under mailbox with vsync off the 10 s line ends with the [FIFO fallback](#the-fifo-fallback)'s
 count, `; k of 3 over 200 ms in 30 s toward FIFO`, and after its switch with `; K since presents went
-FIFO N s ago` (K: the presents over 50 ms since). A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
+FIFO N s ago` (K: the presents over 50 ms since).
+
+The blocked line goes on past its parenthesis with the present timed apart (issue 123;
+`rhi_present_split`, Vulkan; `RdPerfRecord.presentLockMs`, `presentCallMs`, `presentPollMs`,
+carried from the submit thread's job, `RdSubmitJob`) and the replay's GPU numbers: `: inside
+vkQueuePresentKHR 351.6 ms, the swapchain lock 0.0 ms, the surface poll 0.0 ms; the replay's GPU
+span 71.3 ms against the block's 27.0 ms so far, the GPU idle 0.4 ms before it`
+(`present_split_text`). Elsewhere the first part reads `the call not timed apart on this graphics
+API`; a replay without timestamps `the replay's GPU span not timed`; the first timed replay of a
+block `(the block's first timed replay)`; a first stamp written before the replay before ended
+`begun X ms before the one before ended`. The record popped after any present over 50 ms writes
+`window: after the present that blocked (replay N, 352 ms): replay N+1 waited 0.3 ms for its frame
+slot (fence 0.2), acquired its image in 298.7 ms, GPU span 26.9 ms, the GPU idle 301.2 ms before
+it` (the first 8, then every 100th; `present_after_text`, `port/platform/window_stall.c`). Read
+together: the call holding the whole time with the lock and the poll near 0 puts the wait inside
+the driver; a stalled replay's GPU span far over the block's is the GPU running slow while the
+present waited (a clock drop, another GPU client); a GPU idle about as long as the stall before the
+next replay is the queue draining behind the present, the driver waiting on something other than
+this replay's work. A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
 is above the display's X Hz: presenting once a refresh (mailbox)` once after each settings change
 (`port/platform/window_present.c` (`pace`)).
 

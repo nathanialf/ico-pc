@@ -61,6 +61,7 @@
 #include "window_present.h"
 #include "render_thread.h"
 #include "window_present_fallback.h"
+#include "window_stall.h"
 #include "window_disc.h"
 #include "window_blended.h"
 #include "window_sweep.h"
@@ -4412,7 +4413,8 @@ static void slow_replay_longest(void)
 
 /* A present over 50 ms in the driver's present call (RdPerfRecord.presentMs):
    the 10 s count; the line and the FIFO fallback's count in
-   window_present_fallback.c */
+   window_present_fallback.c, the lines around it in window_stall.c (the
+   block's GPU spans so far: this record's not yet added) */
 static void present_blocked(const RdPerfRecord *r)
 {
     char fr[16];
@@ -4420,8 +4422,10 @@ static void present_blocked(const RdPerfRecord *r)
     s_perf.presentBlocked++;
     s_perf.presentBlockedMaxMs =
         r->presentMs > s_perf.presentBlockedMaxMs ? r->presentMs : s_perf.presentBlockedMaxMs;
-    window_fifo_note(r->presentMs, r->replay,
-                     ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)));
+    window_fifo_note(
+        r->presentMs, r->replay, ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)),
+        window_stall_split(r, s_perf.gpuN, s_perf.gpuN ? s_perf.gpu / s_perf.gpuN : 0.0));
+    window_stall_blocked(r);
 }
 
 /* The finished records into the block's sums and the CSV */
@@ -4442,7 +4446,8 @@ static void perf_drain(void)
         if (r.presented) {
             present_hist_add(&s_perf.presentHist, r.presentMs);
         }
-        if (r.presented && r.presentMs > 50.0) {
+        window_stall_after(&r); /* the record after a present that blocked */
+        if (r.presented && r.presentMs > WINDOW_STALL_MS) {
             present_blocked(&r);
         }
 #ifdef ICO_IOS

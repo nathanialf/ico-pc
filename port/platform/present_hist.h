@@ -37,4 +37,54 @@ double present_hist_limit(int row);
    timed.  Returns snprintf's count */
 int present_hist_text(const PresentHist *h, char *buf, size_t size);
 
+/* ------------------------------------------------------------------------
+ * The lines around a present that blocked (issue 123; window_stall.c writes
+ * them from the replays' records, rd.h RdPerfRecord, as they pop):
+ *
+ * present_split_text: what follows the "a present blocked N ms in the
+ * driver's present call (replay N; ...)" line's parenthesis (after ": "):
+ *     inside vkQueuePresentKHR 351.6 ms, the swapchain lock 0.0 ms, the
+ *     surface poll 0.0 ms; the replay's GPU span 71.3 ms against the
+ *     block's 27.0 ms so far, the GPU idle 0.4 ms before it
+ * The call not timed apart (no split: OpenGL, Direct3D) reads "the call
+ * not timed apart on this graphics API"; no GPU span "the replay's GPU
+ * span not timed"; none in the block before it "(the block's first timed
+ * replay)"; the gap: "the GPU idle X ms before it", "begun X ms before the
+ * one before ended" (under 0) or "the GPU's time before it not measured",
+ * with " (across K untimed replays)" when replays without timestamps came
+ * between (rd_perf_gap.h).
+ *
+ * present_after_text: the record popped next, the replay after the one
+ * that blocked ("window: " before it):
+ *     after the present that blocked (replay 2941, 352 ms): replay 2942
+ *     waited 0.3 ms for its frame slot (fence 0.2), acquired its image in
+ *     298.7 ms, GPU span 26.9 ms, the GPU idle 301.2 ms before it
+ *
+ * Both return snprintf's count; a short buffer is cut and terminated.  The
+ * decision they serve (docs/port/DISPLAY.md "The stats lines"): a call
+ * that holds the whole time with the lock and the poll at 0 is the
+ * driver's; a GPU span far over the block's is the GPU running slow (the
+ * clock, another client); an idle GPU of about the stall's length before
+ * the next replay is a queue draining.
+ */
+typedef struct PresentStallRec {
+    unsigned replay;
+    double presentMs;
+    int split; /* lockMs, callMs, pollMs valid */
+    double lockMs, callMs, pollMs;
+    double waitMs, fenceMs, acquireMs; /* the frame slot's wait, of it the fence, the acquire */
+    int gpuValid;
+    double gpuMs;
+    int gapValid;        /* gapMs measured (rd.h RdPerfRecord.gpuGapValid) */
+    double gapMs;        /* the GPU idle before it; under 0 begun before the one before ended */
+    unsigned gapSkipped; /* replays without timestamps between (rd.h RdPerfRecord.gpuGapSkipped) */
+} PresentStallRec;
+
+/* blockGpuN, blockGpuMs: the block's timed replays before this one and
+   their mean GPU span */
+int present_split_text(const PresentStallRec *r, unsigned blockGpuN, double blockGpuMs, char *buf,
+                       size_t size);
+int present_after_text(unsigned blockedReplay, double blockedMs, const PresentStallRec *r,
+                       char *buf, size_t size);
+
 #endif /* ICO_PLATFORM_PRESENT_HIST_H */

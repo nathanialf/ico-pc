@@ -51,6 +51,14 @@ typedef struct RdSubmitJob {
     uint64_t seq;     /* rd__sq_post's number */
     double submitMs;  /* the end and the submit (rhi_end_commands, rhi_submit) */
     double presentMs; /* the present (rhi_present) */
+    /* the present timed apart (rhi.h rhi_present_split; presentSplit false
+       where the backend does not): the swapchain lock's wait, the driver's
+       present call, the surface poll after it; and presentEndMs the
+       present's end on rd's monotonic ms clock (rd__now_ms: the window's
+       kernel GPU driver samples are on the same clock), 0 when nothing was
+       presented (issue 123) */
+    bool presentSplit;
+    double presentLockMs, presentCallMs, presentPollMs, presentEndMs;
 } RdSubmitJob;
 
 /* the 10 s block (rd__sq_block_take): the jobs finished and their means in

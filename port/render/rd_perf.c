@@ -933,14 +933,27 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
 #endif
 }
 
-void rd__perf_submit_times(uint32_t replay, double submitMs, double presentMs)
+/* a submit job's present split into a record (rd.h RdPerfRecord.presentSplit ...) */
+static void presentSplitInto(RdPerfRecord *r, const RdSubmitJob *j)
 {
+    r->presentSplit = (uint8_t)j->presentSplit;
+    r->presentLockMs = j->presentLockMs;
+    r->presentCallMs = j->presentCallMs;
+    r->presentPollMs = j->presentPollMs;
+    r->presentEndMs = j->presentEndMs;
+}
+
+void rd__perf_submit_times(const RdSubmitJob *j)
+{
+    const uint32_t replay = j->replay;
+    const double submitMs = j->submitMs, presentMs = j->presentMs;
     if (replay == 0) {
         return;
     }
     if (g_rdPerf.replay == replay) {
         g_rdPerf.submitMs = submitMs;
         g_rdPerf.presentMs = presentMs;
+        presentSplitInto(&g_rdPerf, j);
         if (!s_recOpen) {
             g_rdPerf.totalMs += submitMs + presentMs; /* rd_last_replay_ms */
         }
@@ -950,8 +963,26 @@ void rd__perf_submit_times(uint32_t replay, double submitMs, double presentMs)
             /* rd__perf_end left it here: the submit's times were not in it */
             s_pending[i].submitMs = submitMs;
             s_pending[i].presentMs = presentMs;
+            presentSplitInto(&s_pending[i], j);
             s_pending[i].totalMs += submitMs + presentMs;
         }
+    }
+}
+
+void rd__present_split_take(RdSubmitJob *j, bool presented)
+{
+    RhiPresentSplit sp;
+    j->presentSplit = false;
+    j->presentLockMs = j->presentCallMs = j->presentPollMs = j->presentEndMs = 0.0;
+    if (!presented) {
+        return;
+    }
+    j->presentEndMs = rd__now_ms();
+    if (g_rd.hasDevice && rhi_present_split(&sp)) {
+        j->presentSplit = true;
+        j->presentLockMs = (double)sp.lockNs / 1e6;
+        j->presentCallMs = (double)sp.callNs / 1e6;
+        j->presentPollMs = (double)sp.pollNs / 1e6;
     }
 }
 

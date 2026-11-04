@@ -775,6 +775,11 @@ bool rhi_present_shown(void)
     return be()->present_shown();
 }
 
+bool rhi_present_split(RhiPresentSplit *out)
+{
+    return be()->present_split(out);
+}
+
 bool rhi_wait_present_room(void)
 {
     RHI_GUARD();

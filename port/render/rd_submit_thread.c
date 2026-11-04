@@ -62,13 +62,14 @@ static void tail(RdSubmitJob *j)
         rhi_present();
     }
     j->presentMs = rd__now_ms() - t1;
+    rd__present_split_take(j, j->present);
 }
 
 /* a finished job's times into its replay's record and the render thread's
    block (on the thread that waited for it) */
 static void apply(const RdSubmitJob *j)
 {
-    rd__perf_submit_times(j->replay, j->submitMs, j->presentMs);
+    rd__perf_submit_times(j);
     rd__thread_note_submit(j->submitMs + j->presentMs);
 }
 
