@@ -3924,12 +3924,17 @@ static void testPipelines(void)
                     found |= passEnumerated(&dp[i], keys, ns, mine, nMine);
                     CHECK(prim || found,
                           "font draw under colour mask 7 (depth %d) is not enumerated", dz);
-                    /* the menus' sheet text in the same state */
+                    /* the menus' sheet text in the same state: in the set only
+                       where a scale the bake does not cover is reachable
+                       (rd__sheet_shader_in_scene, issue 188); at this test's
+                       scale the 1x bake serves it, so the key is left out */
                     dp[i].key.fs = RD_FS_FONT_SHEET;
                     found = 0;
                     found |= passEnumerated(&dp[i], keys, ns, mine, nMine);
-                    CHECK(prim || found,
-                          "sheet text draw under colour mask 7 (depth %d) is not enumerated", dz);
+                    CHECK(prim || (found != 0) == rd__sheet_shader_in_scene(),
+                          "sheet text draw under colour mask 7 (depth %d): enumerated %d, the "
+                          "sheet rule says %d",
+                          dz, found, rd__sheet_shader_in_scene());
                     /* and a 1x sheet's (font_sheet_baked_ps) */
                     dp[i].key.fs = RD_FS_FONT_SHEET_BAKED;
                     found = 0;
