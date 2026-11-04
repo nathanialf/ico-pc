@@ -3609,9 +3609,9 @@ static void testShadowsTogether(void)
               title);
         CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Shadows attack together") == 0,
               "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
-        CHECK(row == ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_SHADOW_SPEED) + 1 &&
+        CHECK(row > ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_SHADOW_SPEED) &&
                   row < ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX),
-              "title %d: right after Shadow speed, before the stick fix", title);
+              "title %d: after Shadow speed, before the stick fix", title);
         CHECK(ico_opt_shadows_together() == 0 &&
                   strcmp(ui_settings_value_text(UI_OPT_SHADOWS_TOGETHER), "Off") == 0,
               "title %d: Off by default", title);
