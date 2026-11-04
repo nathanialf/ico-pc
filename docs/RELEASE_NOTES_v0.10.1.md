@@ -20,5 +20,4 @@
 - With Language set to a translation by players, the game's own menu words (New Game, Continue, the saves' places) now follow the Menu language like the rest of the menus (fix by cobra838).
 - The Russian "Continue" on the title screen fits its row (fix by cobra838).
 - With Shadow speed above Original, the shadows turn as quickly as they move, so they no longer circle a portal before entering it.
-- Switching the Graphics API to OpenGL no longer leaves a black, unresponsive window if the graphics driver stalls; the game goes back to the previous API and says so.
 - Switching the Graphics API to OpenGL no longer leaves a black, unresponsive window: the game shows its progress while OpenGL prepares its graphics, and if the graphics driver stalls, the game goes back to the previous API and says so.
