@@ -56,11 +56,14 @@
 #include "window_host.h"
 #include "window_lines.h"
 #include "window_pipeline_skip.h"
+#include "window_robust.h"
 #include "window_display_rate.h"
 #include "window_pipe_finish.h"
 #include "window_present.h"
 #include "render_thread.h"
 #include "window_present_fallback.h"
+#include "cpu_place.h"
+#include "window_scene.h"
 #include "window_stall.h"
 #include "window_disc.h"
 #include "window_blended.h"
@@ -226,6 +229,7 @@ static struct {
     /* the VU vertex pre-pass's vertices, draws and the mesh and grid draws
        drawn the old way (rd.h RdPerfRecord.vuPre*) */
     uint64_t vuPreVerts, vuPreDraws, vuPreFallbacks;
+    uint64_t vuDraws, vuTris; /* the VU draws and their triangles (rd.h RdPerfRecord) */
     /* the pixel diet's draws: the alpha/blend planner's one-pass and
        opaque draws, the frame-size plan's constant, additive and local-read
        sprites, the VU passes without the planes (rd.h RdPerfRecord) */
@@ -1129,6 +1133,28 @@ static int display_progress(void *ctx, uint32_t done, uint32_t total);
 static int progress_present_notes(const char *title, const char *phase, int pct, int allowCancel,
                                   const char *note0, const char *note1);
 
+/* Issue 188: the start-up screen before the blend and VU pre-pass
+   self-tests, in every branch (the set, the lazy start, Apply's switch):
+   their pipelines are compiled on this thread before the set, and on a
+   PowerVR B-Series phone the first did not return for 10 s with nothing on
+   the screen.  One picture, drawn now (the set's own screen waits 250 ms
+   and then moves with the count); the watchdog told the self-tests run
+   (diag_host.h ico_diag_set_selftest) until selftests_done */
+static void selftests_screen(void)
+{
+    const char *once = NULL;
+#ifdef __ANDROID__
+    once = "This happens once after an update that changes the graphics";
+#endif
+    (void)progress_present_notes(s_pipeTitle, "Preparing graphics", -1, 0, NULL, once);
+    ico_diag_set_selftest(1);
+}
+
+static void selftests_done(void)
+{
+    ico_diag_set_selftest(0);
+}
+
 #ifdef __ANDROID__
 static const char k_driver_next_start[] =
     "The game will use the driver package at the next start. Please close and open ICO again.";
@@ -1611,7 +1637,7 @@ static int pipeline_set_persist_lazy(void)
    diag_host.h ICO_DIAG_END_LOSS): 0 when written */
 static int gpu_robust_persist(void)
 {
-    return ico_config_set_bool("dev.gpu_robust", 1) == 0 && ico_config_save() == 0 ? 0 : -1;
+    return window_robust_persist();
 }
 #endif
 
@@ -1814,6 +1840,9 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
         }
     }
     const char *cfgName = ico_config_toml_path() ? ico_config_toml_path() : "config.toml";
+    /* [dev] gpu_robust the game wrote turns itself off after clean starts
+       (robust_persist.h); before the device reads ICO_GPU_ROBUST */
+    window_robust_start(cfgName);
     /* a start that ended without a word inside a batch or pipeline of the
        VU vertex pre-pass or of the record path that draws from it
        (startup_retry.h startup_retry_note_has_vu_pre; the largest VU
@@ -2252,8 +2281,10 @@ open_window:
         /* the blend checked on this GPU (rd.h rd_blend_selftest), then the
            VU vertex pre-pass (rd_vuprepass_selftest) */
         ico_diag_step("window: start: the blend and VU pre-pass self-tests");
+        selftests_screen();
         rd_blend_selftest();
         rd_vuprepass_selftest();
+        selftests_done();
     } else {
         /* the careful policy: on a device of the table, by the settings, or
            after the full set's end (for this start only) */
@@ -2293,6 +2324,7 @@ open_window:
            set is made so the set is the chosen way's; logged ("blend: ...
            (self-test: ...)"). A crash in it is noted as the set's would be */
         ico_diag_step("window: start: the blend and VU pre-pass self-tests");
+        selftests_screen();
         rd_blend_selftest();
         /* whether the VU vertex pre-pass draws right on this GPU, tried
            before the set so the set holds the pre-pass's keys or the
@@ -2300,6 +2332,7 @@ open_window:
            it is noted as the set's would be (its pipeline's " pre" or
            vu_tri note: startup_retry.h's noprepass step) */
         rd_vuprepass_selftest();
+        selftests_done();
         static PipeScreen screen;
 
         /* a start with a cold driver cache can take many seconds (a phone,
@@ -2326,6 +2359,7 @@ open_window:
         } else {
             ico_diag_startup_activity_record(0);
         }
+        window_robust_reached();
         /* a stop at the free-memory floor: the rest in the background */
         window_pipe_finish_start();
         /* the set in the pipeline cache file now, not only at a clean exit:
@@ -2564,9 +2598,13 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
     ico_diag_set_startup_retry((int)s_retry, window_have_d3d12(), backendExplicit, s_blendExplicit,
                                backend);
     ico_diag_step("window: switch to %s: the blend self-test", backend);
+    s_pipeTitle = "Changing the graphics";
+    selftests_screen();
+    s_pipeTitle = "Starting ICO";
     rd_blend_selftest();
     ico_diag_step("window: switch to %s: the VU pre-pass self-test", backend);
     rd_vuprepass_selftest();
+    selftests_done();
     if (reopen_lost(backend)) {
         return 0;
     }
@@ -4550,6 +4588,8 @@ static void perf_drain(void)
         s_perf.snapSwaps += r.snapSwaps;
         s_perf.a1xDraws += r.a1xDraws;
         s_perf.vuPreVerts += r.vuPreVertices;
+        s_perf.vuDraws += r.vuDraws;
+        s_perf.vuTris += r.vuTris;
         s_perf.vuPreDraws += r.vuPreDraws;
         s_perf.vuPreFallbacks += r.vuPreFallbacks;
         s_perf.alphaOnePass += r.alphaOnePass;
@@ -4661,6 +4701,14 @@ static void perf_log(void)
             s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0, s_pres.stepMaxMs,
             (double)(cardStrips - s_pres.cardStrips) / steps,
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
+    {
+        /* the VU work of a replay: where the vertex shader's time goes */
+        char vu[160];
+
+        (void)window_scene_vu_text(vu, sizeof(vu), s_perf.vuDraws, s_perf.vuTris, s_perf.vuPreVerts,
+                                   b->n, rd_vu_prepass_on());
+        fprintf(stderr, "window: %s\n", vu);
+    }
     if (s_perf.presentBlocked != 0) {
         char fr[16];
 
@@ -4985,6 +5033,20 @@ static void disp_block_reset(void)
     s_disp.statsSeen = 0;
 }
 
+/* The block's steps' time by the game's layout (window_scene.h) */
+static SceneShare s_sceneShare;
+
+static void scene_note_step(double ms)
+{
+    const IcoRegionInfo *ri = ico_region_cur();
+    const SceneIds ids = {ri->layout_play,      ri->layout_scene, ri->layout_title_continue,
+                          ri->layout_title_new, ri->layout_pause, ri->layout_options,
+                          ri->layout_key_config};
+
+    window_scene_note(&s_sceneShare, window_scene_kind(&ids, current_layout_id, mpegPlay != 0),
+                      (uint64_t)(ms * 1e6));
+}
+
 /* Presents and frames per second, every 10 s of real time, in both
    presentation modes. "game frames" counts the frames shown (closed
    frames the pace saw); "frame numbers" also counts the ones the game
@@ -5140,6 +5202,14 @@ void window_pace_log(Uint64 now)
         dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate : 0.0,
         pw, ph, window_fullscreen() ? " fullscreen" : "", (double)s_pres.lateMaxNs / 1e6,
         s_pres.pumpMaxMs, lock);
+    {
+        /* which part of the game the block's steps were in */
+        char layouts[160];
+
+        (void)window_scene_text(&s_sceneShare, layouts, sizeof(layouts));
+        fprintf(stderr, "window: %s\n", layouts);
+        window_scene_reset(&s_sceneShare);
+    }
     window_hold_block(s_pres.stepSumMs, s_pres.stepCount, s_pres.stepMaxMs, s_pres.paceHz,
                       s_perf.ph.total, s_perf.ph.n, !rd_interpolation_active(), fr);
     /* the game thread's parts and the render thread's (render_thread.h) */
@@ -5230,15 +5300,20 @@ static void slow_step(double ms)
     uint64_t cardStrips, cardTris;
     double cardMs;
     rd_vu_card_counts(&cardStrips, &cardTris, &cardMs);
+    /* the longest fiber switch and the core the game thread ended on */
+    char threads[160], tmp[80];
+
+    window_scene_threads_text(threads, sizeof(threads), p.threadsMs, p.switches, p.longestMs,
+                              ico_diag_thread_name(p.longestId, tmp, sizeof(tmp)), cpu_place_now());
     fprintf(
         stderr,
         "window: slow step %.1f ms at vsync %u (Main tick %u, stage %d%s): step %.1f "
-        "(vsync callbacks %.1f, audio %.1f, game threads %.1f in %lu switches, strip verdicts "
+        "(vsync callbacks %.1f, audio %.1f, %s, strip verdicts "
         "%llu strips, %llu triangles, %.2f ms, achievements "
         "%.1f), pump %.1f (events %.1f in %u, settings %.1f, input %.1f), other %.1f; %u "
         "disc reads (%u sectors), disc wait %.1f ms, %u texture decodes, %u pipelines created, memory card %s\n",
         ms, ico_host_vsync_count(), ico_host_main_ticks(), p.stage, p.loading ? ", loading" : "",
-        p.totalMs, p.hooksMs, p.audioMs, p.threadsMs, p.switches,
+        p.totalMs, p.hooksMs, p.audioMs, threads,
         (unsigned long long)(cardStrips - s_pres.stepCardStrips),
         (unsigned long long)(cardTris - s_pres.stepCardTris), cardMs - s_pres.stepCardMs, p.achMs,
         s_pres.pumpMs, s_pres.pumpEventsMs, s_pres.pumpEvents, s_pres.pumpSettingsMs,
@@ -5282,6 +5357,7 @@ void ico_window_pace(int hz)
         s_pres.stepSumMs += ms;
         s_pres.stepMaxMs = ms > s_pres.stepMaxMs ? ms : s_pres.stepMaxMs;
         s_pres.stepCount++;
+        scene_note_step(ms);
         ico_render_thread_note_game_core(); /* the 10 s line's cores */
         if (s_pres.slowMs > 0.0 && ms > s_pres.slowMs) {
             slow_step(ms);

@@ -30,7 +30,21 @@
  *            limit; a background compile that does not return for 30 s
  *            is, at 30 s; a first-use creation that does not return is,
  *            whatever the background set does after its batch; the time
- *            not counted, or the limit off, never stalls.
+ *            not counted, or the limit off, never stalls;
+ *   188      issue 188: the limit before the game starts is 10 s, 60 s
+ *            on a driver whose compiles run one at a time, 30 s in play
+ *            on both (ico_pipe_stall_limit_s); the heartbeat's memory rule
+ *            (ico_pipe_mem_moving: 2 MB or more of growth, an unknown
+ *            reading never) over the issue 188 phone's heartbeats (147,
+ *            251, 275, 296, 295, 293 MB at 4 to 14 s, a creation in
+ *            progress from 4 s): the limit counts from the heartbeat after
+ *            the last growth (12 s), so 10 s fires at 21.75 s, not 14 s,
+ *            and 60 s at 71.75 s; the words of
+ *            the next start (ico_pipe_stall_next_differs): inside the
+ *            self-tests or on a lazy run the same way, unless the note
+ *            names a family the renderer can leave out or a VU shader
+ *            before the plain ones are in force; the set of a full or
+ *            careful run another way.
  */
 #include <stdio.h>
 #include "gpu_hang.h"
@@ -274,6 +288,60 @@ static void testStall(void)
     CHECK(stallFor(&p, &t, BG_NOTE, 9, &done, stuck, 1, 120.0, 1, 0, 30.0, NULL) == 0);
 }
 
+static void test188(void)
+{
+    CHECK(ico_pipe_stall_limit_s(0, 0) == 10.0);
+    CHECK(ico_pipe_stall_limit_s(0, 1) == 60.0);
+    CHECK(ico_pipe_stall_limit_s(1, 0) == 30.0);
+    CHECK(ico_pipe_stall_limit_s(1, 1) == 30.0);
+
+    CHECK(ico_pipe_mem_moving(147L * 1024, 251L * 1024));
+    CHECK(ico_pipe_mem_moving(1000, 1000 + ICO_PIPE_MEM_MOVING_KB));
+    CHECK(!ico_pipe_mem_moving(1000, 1000 + ICO_PIPE_MEM_MOVING_KB - 1));
+    CHECK(!ico_pipe_mem_moving(296L * 1024, 295L * 1024));
+    CHECK(!ico_pipe_mem_moving(-1, 251L * 1024));
+    CHECK(!ico_pipe_mem_moving(251L * 1024, -1));
+
+    /* the issue 188 log's heartbeats, 2 s apart: 147 MB at 4 s, 251, 275
+       and 296 MB at 6, 8 and 10 s, 295 and 293 MB at 12 and 14 s; a
+       creation in progress from 4 s; polled every 250 ms, each heartbeat's
+       verdict held until the next */
+    static const long kMb[] = {147, 147, 147, 251, 275, 296, 295, 293};
+    for (int serial = 0; serial < 2; serial++) {
+        const double lim = ico_pipe_stall_limit_s(0, serial);
+        IcoPipeStallWatch w = {0, 0, 0, 0.0};
+        long prev = -1;
+        int moving = 0;
+        double firedAt = -1.0;
+        for (int q = 0; q <= 90 * 4 && firedAt < 0.0; q++) {
+            const double t = q * 0.25;
+            if (q % 8 == 0) {
+                const int beat = q / 8;
+                const long mb = kMb[beat < 8 ? beat : 7];
+                moving = ico_pipe_mem_moving(prev, mb * 1024);
+                prev = mb * 1024;
+            }
+            const int creating = t >= 4.0;
+            const double st = ico_pipe_stall_step(&w, t, creating, !moving, 1, 7, 0, 0);
+            if (st >= lim) {
+                firedAt = t;
+            }
+        }
+        printf("  issue 188: limit %.0f s fired at %.2f s\n", lim, firedAt);
+        /* the 10 s heartbeat's growth holds the count until the 12 s one:
+           the last poll not counted is 11.75 s */
+        CHECK(firedAt == 11.75 + lim);
+    }
+
+    CHECK(!ico_pipe_stall_next_differs(1, 0, 0, 0, 0)); /* issue 188 */
+    CHECK(!ico_pipe_stall_next_differs(0, 1, 0, 0, 0));
+    CHECK(!ico_pipe_stall_next_differs(1, 1, 0, 1, 1));
+    CHECK(ico_pipe_stall_next_differs(0, 0, 0, 0, 0));
+    CHECK(ico_pipe_stall_next_differs(1, 0, 1, 0, 0));
+    CHECK(ico_pipe_stall_next_differs(0, 1, 0, 1, 0));
+    CHECK(ico_pipe_stall_next_differs(1, 1, 0, 1, 0));
+}
+
 int main(void)
 {
     testLimit();
@@ -285,6 +353,7 @@ int main(void)
     testRender();
     testNote();
     testStall();
+    test188();
     printf("gpu_hang_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

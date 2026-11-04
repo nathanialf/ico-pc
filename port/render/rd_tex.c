@@ -1148,6 +1148,54 @@ int rd__sheet_bake_scale(uint32_t scale)
     return scale <= 1u || (scale == 2u && g_rd.profile.sheetBake2x);
 }
 
+/* port/ui/menu_font.c mfScale's rounding: k texels (or output pixels) a GS
+   line to whole strip texels a sheet texel, rounded up from a quarter past,
+   1 .. ICO_SHEET_SCALE_MAX */
+uint32_t rd__sheet_scale_for(float k)
+{
+    const float c = ceilf(k - 0.25f);
+    if (!(c >= 1.0f)) {
+        return 1u;
+    }
+    if (c >= (float)ICO_SHEET_SCALE_MAX) {
+        return (uint32_t)ICO_SHEET_SCALE_MAX;
+    }
+    return (uint32_t)c;
+}
+
+/* Issue 188: font_sheet_ps (70k words, its two-pass twin among them) is in
+   a set only where a strip of a scale that is not baked can be drawn: the
+   game's menus at the scene's scale (mfScale: rd_get_scene_scale's height),
+   the overlay's popups and the touch controls' labels at the output's
+   pixels a y unit (the overlay's box is at most the output's height: the
+   bound), or every scale with [dev] sheet_shader.  A scale reached later
+   (Apply's resolution, a larger window) makes its pipeline on first use or
+   in the display change's set (rd__display_pipelines). */
+bool rd__sheet_shader_in_scene(void)
+{
+    float k = 1.0f;
+    rd_get_scene_scale(NULL, &k);
+    return g_rd.sheetShader || !rd__sheet_bake_scale(rd__sheet_scale_for(k));
+}
+
+bool rd__sheet_shader_in_overlay(void)
+{
+    const float k = (float)g_rd.settings.outputHeight / 448.0f;
+    return g_rd.sheetShader || !rd__sheet_bake_scale(rd__sheet_scale_for(k));
+}
+
+void rd__sheet_set_words(char *out, size_t size)
+{
+    float k = 1.0f;
+    rd_get_scene_scale(NULL, &k);
+    const uint32_t sc = rd__sheet_scale_for(k);
+    const uint32_t so = rd__sheet_scale_for((float)g_rd.settings.outputHeight / 448.0f);
+    snprintf(out, size, "font_sheet_ps: the menus' text at %ux %s, the overlay's at %ux %s%s", sc,
+             rd__sheet_shader_in_scene() ? "in the set" : "baked (not in the set)", so,
+             rd__sheet_shader_in_overlay() ? "in the set" : "baked (not in the set)",
+             g_rd.sheetShader ? " ([dev] sheet_shader)" : "");
+}
+
 int rd__sheet_baked(const RdTexRec *t)
 {
     return t && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&

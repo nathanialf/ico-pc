@@ -2280,6 +2280,24 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
     const uint32_t batchMade = rhi_create_pipelines(batchDesc, 8, batchPipe, &batch);
     rhi_test_log("%s: rhi_create_pipelines: %u of 8 on %u threads, %u waits\n", s_label, batchMade,
                  batch.threads, bw.calls);
+    /* one compile at a time where the driver's compiler is not thread-safe
+       (RhiLimits.serialPipelines, issue 188; ICO_VK_FAKE_SERIAL=1 on any
+       Vulkan device): one thread, the batch made as anywhere */
+    const char *serial = rhi_limits()->serialPipelines;
+    const char *fakeSerial = getenv("ICO_VK_FAKE_SERIAL");
+    if (rhi_backend() == RHI_BACKEND_VULKAN && fakeSerial != NULL && fakeSerial[0] == '1' &&
+        serial == NULL) {
+        rhi_test_log("FAIL ICO_VK_FAKE_SERIAL=1: RhiLimits.serialPipelines not set\n");
+        failures++;
+    }
+    if (serial != NULL) {
+        rhi_test_log("%s: pipelines one at a time (%s)\n", s_label, serial);
+        if (batch.threads != 1) {
+            rhi_test_log("FAIL rhi_create_pipelines: %u threads under the serial rule (%s)\n",
+                         batch.threads, serial);
+            failures++;
+        }
+    }
     if (batchMade != 7 || batchPipe[4].id != 0 || batch.threads < 1 ||
         batch.threads > RHI_PIPELINE_THREADS_MAX || bw.backwards || bw.last > 8) {
         rhi_test_log("FAIL rhi_create_pipelines: %u made, the failed one %u, %u threads, "
@@ -2322,6 +2340,18 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
             rhi_test_log("FAIL rhi_create_pipelines_begin: not offered on Vulkan\n");
             failures++;
         } else {
+            if (serial != NULL) {
+                /* a first-use creation on this thread while the background
+                   compiles run: it waits for the lock, then is made */
+                const RhiPipeline mid = rhi_create_pipeline(&batchDesc[0]);
+                if (!mid.id) {
+                    rhi_test_log("FAIL rhi_create_pipeline beside the background set under the "
+                                 "serial rule: not made\n");
+                    failures++;
+                } else {
+                    rhi_destroy_pipeline(mid);
+                }
+            }
             /* not waited: false while a compile goes on, then the end */
             while (!rhi_create_pipelines_end(jobs, false, bgPipe, bgMs, &bgThreads) &&
                    polls < 1000000u) {
@@ -2355,7 +2385,7 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
                 failures++;
             }
             if (bgMade != 7 || bgPipe[4].id != 0 || bgThreads < 1 || bgThreads > 2 ||
-                bgMs[4] != 0.0f) {
+                (serial != NULL && bgThreads != 1) || bgMs[4] != 0.0f) {
                 rhi_test_log("FAIL rhi_create_pipelines_end: %u made, the failed one %u, %u "
                              "threads\n",
                              bgMade, bgPipe[4].id, bgThreads);

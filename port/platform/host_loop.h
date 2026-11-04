@@ -51,6 +51,8 @@ int ico_host_vsync_hz(void);
 typedef struct IcoStepProfile {
     double totalMs, hooksMs, audioMs, threadsMs, achMs;
     unsigned long switches;
+    double longestMs; /* the longest single switch in the step */
+    int longestId;    /* and its thread (diag_host.h ico_diag_thread_name) */
     unsigned int cdReads, cdSectors;
     double cdWaitMs;
     unsigned int cdHits;

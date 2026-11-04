@@ -830,6 +830,15 @@ void rd__set_sheet_shader(bool on);
 /* g_rd.profile.sheetBake2x for tests, the sheets' pages made again (as
  * rd__set_sheet_shader does) */
 void rd__set_sheet_bake_2x(bool on);
+/* Whether font_sheet_ps can draw (rd_tex.c, issue 188): the menus at the
+ * scene's scale, the overlay at the output's height / 448, through
+ * rd__sheet_scale_for (menu_font.c mfScale's rounding) and
+ * rd__sheet_bake_scale, or [dev] sheet_shader; the start-up and overlay
+ * sets hold its keys only then.  rd__sheet_set_words: the set line's words */
+uint32_t rd__sheet_scale_for(float k);
+bool rd__sheet_shader_in_scene(void);
+bool rd__sheet_shader_in_overlay(void);
+void rd__sheet_set_words(char *out, size_t size);
 
 /* --------------------------------------------------------------- meshes
  * rd_mesh.c.  A VU mesh keeps its vertex stream (the

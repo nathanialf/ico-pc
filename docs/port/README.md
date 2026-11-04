@@ -12,7 +12,8 @@ In reading order.
 | File | What it answers |
 | --- | --- |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | What runs, what stands in for each PS2 component, and the Terms glossary. |
-| [PLATFORM.md](PLATFORM.md) | Entry points, fibers and the scheduler, the host loop, the arena, the game data ranges, save states, folders, diagnostics, Android graphics driver packages and the Steam shortcut. |
+| [PLATFORM.md](PLATFORM.md) | Entry points, fibers and the scheduler, the host loop, the arena, the game data ranges, save states, folders, diagnostics and the Steam shortcut. |
+| [ANDROID_DRIVERS.md](ANDROID_DRIVERS.md) | Android graphics driver packages: the picker, the drivers folder, the driver page, the fallback to the phone's own driver. |
 | [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md) | Android's log diagnostics: the kernel GPU driver's sampler on its own thread, the thermal state and screen recording from the Java side. |
 | [GAME_CODE.md](GAME_CODE.md) | How `ico2/` is compiled: the sources, options, host paths, layout asserts and audits. |
 | [CONVENTIONS.md](CONVENTIONS.md) | The pre-commit hook, formatting, names, log lines, tests and scripts. |

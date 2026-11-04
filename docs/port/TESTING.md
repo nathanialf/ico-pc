@@ -425,6 +425,7 @@ switches the tests and their registrations use:
 | `ICO_VK_FAKE_NO_MSAA` | `vk_device.c` | single sampling only |
 | `ICO_VK_FAKE_NO_INTERLOCK` | `vk_device.c` | the fragment shader interlock off, the attachment read kept (the `rd_blend_selftest*` ctests: lavapipe has the interlock from Mesa 25.2, their expectations are a device without it) |
 | `ICO_VK_FAKE_LIMITS=moltenvk` | `vk_device.c` | MoltenVK: `RhiLimits.moltenvk` set, no attachment read, the interlock the device's own (`rd_blend_selftest_moltenvk_storage`: `ICO_RD_BLEND=storage` keeps the interlock; run without `ICO_VK_FAKE_NO_INTERLOCK`; it skips on a device without the interlock, as Mesa before 25.2's lavapipe) |
+| `ICO_VK_FAKE_SERIAL` | `vk_pipeline.c` | 1 takes the rule of one compile at a time (one compile thread, the lock around module and pipeline creation; a PowerVR B-Series driver's, issue 188) on any device (`rhi_vk_serial`) |
 | `ICO_VK_FAKE_ADRENO` | `vk_device.c` | Qualcomm's Adreno driver: the attachment read not offered (`rd_blend_selftest_adreno`) |
 | `ICO_VK_ATTACHMENT_READ` | `vk_device.c` | 1 offers the attachment read under `ICO_VK_FAKE_ADRENO` too (`rd_blend_selftest_adreno_forced`) |
 | `ICO_VK_VALIDATION` | `vk_device.c` | the validation layer; the render and RHI tests set it with `VK_ADD_LAYER_PATH` when the layer is in the toolchain |
@@ -702,7 +703,8 @@ FXC's X4000 "potentially uninitialized variable" error class; that shows in a Wi
 (`<build>/shaders/*.spv`): a vertex shader has no vector of booleans, no `any()`/`all()` and no
 boolean select, and uses only the opcodes of the envelope's set (a loop, `dot()`, a
 logical-not-equal or an undefined value named), every module stays within its stage's size budget
-in words, no module carries an array as a value (a whole-array load, store, construct, insert,
+in words (the sheet text entries `font_sheet_*` within their own, a tenth above their largest:
+[SHADERS.md](SHADERS.md#branches-from--and-)), no module carries an array as a value (a whole-array load, store, construct, insert,
 phi, select or copy), no vertex shader keeps a local array
 ([SHADERS.md](SHADERS.md#the-envelope)) and every module's header is SPIR-V 1.0 (the Vulkan 1.0
 target, [SHADERS.md](SHADERS.md)); the log lists each module's words, instructions, blocks,

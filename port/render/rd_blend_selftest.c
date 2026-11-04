@@ -29,10 +29,13 @@
  *          the texel's;
  *          x 64..160: a cell, then two LERP draws, A over 64..128 and B over
  *          96..160: where they overlap B must blend over A's result;
- *          x 160..256: a cell, then one glyph quad through the text sheet's
- *          shader, font_sheet_ps, the largest destination-read shader (a
- *          1x sheet kept off the bake, RdTexRec.sheetShader: the pixels
- *          the baked 1x path draws);
+ *          x 160..256: a cell, then one glyph quad of a 1x text sheet:
+ *          through font_sheet_ps, the largest destination-read shader,
+ *          where the device draws it ([dev] sheet_shader) or an exact mode
+ *          asked reads through it (the sheet kept off the bake,
+ *          RdTexRec.sheetShader: the pixels the baked 1x path draws), else
+ *          through the bake's font_sheet_baked_ps (issue 188: a phone's
+ *          driver did not return from compiling font_sheet_ps here);
  *   row 2  x 0..64: the after cell, opaque (ABE 0), drawn after every
  *          blended draw: it must be its own colour on an even and an odd
  *          texel column (a driver that keeps the LERP's dual-source
@@ -63,7 +66,8 @@
  *
  *   blend: fixed-function (self-test: fixed-function ok 1; exact modes not
  *     asked for: [dev] blend = attachment|storage tries one) on SCENE
- *     640x448 at 1920x1344 texels in T ms
+ *     640x448 at 1920x1344 texels (the glyph through font_sheet_baked_ps)
+ *     in T ms
  *   blend: exact (attachment read) (self-test: attachment ok 1,
  *     fixed-function ok 1; kept by [dev] blend) on SCENE ...
  *   blend: fixed-function (self-test: fixed-function fail N -> two-pass
@@ -561,8 +565,18 @@ static bool runSelftest(void)
     const RdTex leaf = rd_create_texture(2, 1, kLeafTex, RD_TEXA_80_80, "rd blend self-test leaf");
     const RdTex sheet =
         rd_create_texture_sheet(SHEET_W, SHEET_H, cov, NULL, "rd blend self-test glyph");
-    {
-        /* through font_sheet_ps, not the 1x bake (before its first upload) */
+    /* the glyph through the sheet shader the device draws: font_sheet_ps
+       with [dev] sheet_shader, or under an exact mode asked, whose read of
+       the pixel behind (font_sheet_ps_dstatt, the largest destination-read
+       shader) is what the cell checks; else the 1x bake's
+       font_sheet_baked_ps (2.3k words).  Issue 188: a PowerVR B-Series
+       driver did not return from compiling font_sheet_ps_nodual (70k words)
+       here, before the start-up screen, on a phone that never draws it.
+       The comparison is against the fixed-function run of the same glyph
+       either way */
+    const bool glyphShader = g_rd.sheetShader || asked > 0;
+    if (glyphShader) {
+        /* (before its first upload: the bake is not made) */
         RdTexRec *gr = rd__tex_rec(sheet.id);
         if (gr) {
             gr->sheetShader = 1;
@@ -666,8 +680,10 @@ static bool runSelftest(void)
                                           "attachment|storage tries one";
     snprintf(g_rdSumBlend, sizeof g_rdSumBlend, "%s (self-test: %s%s)",
              rd__blend_exact_name(chosen), res, askedEntry >= 0 ? why : "");
-    rd__log("blend: %s (self-test: %s%s) on SCENE %ux%u at %ux%u texels in %.1f ms",
-            rd__blend_exact_name(chosen), res, why, t->w, t->h, t->tw, t->th, rd__now_ms() - t0);
+    rd__log("blend: %s (self-test: %s%s) on SCENE %ux%u at %ux%u texels (the glyph through %s) "
+            "in %.1f ms",
+            rd__blend_exact_name(chosen), res, why, t->w, t->h, t->tw, t->th,
+            glyphShader ? "font_sheet_ps" : "font_sheet_baked_ps", rd__now_ms() - t0);
     for (int e = 0; e < E_COUNT; e++) {
         /* a failing entry's worst sample, and a passing one's when it is not
            exact (the blender's rounding, or a driver near the limit) */

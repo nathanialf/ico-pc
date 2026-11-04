@@ -4,7 +4,9 @@
  * NVIDIA GPU (the Vulkan packing), Intel's Windows driver, and the Vulkan
  * packing of everyone else; the Qualcomm and MoltenVK rules; the colour
  * bytes a pixel of the Apple GPUs MoltenVK names (rhi_metal_color_bytes); the
- * Mesa version of a Mesa driver's driverInfo (rhi_mesa_version_parse).
+ * Mesa version of a Mesa driver's driverInfo (rhi_mesa_version_parse); the
+ * PowerVR rule of one compile at a time (rhi_driver_compiler_serial, issue
+ * 188) over driver texts.
  * Exit 0 on success, 1 on a failure. */
 #include "rhi_driver_version.h"
 #include "../../test/ico_check.h"
@@ -155,6 +157,33 @@ int main(void)
         char same[16] = "NVIDIA 581.57";
         CHECK_STR(rhi_text_one_line(same), "NVIDIA 581.57");
         CHECK(rhi_text_one_line(NULL) == NULL);
+    }
+    {
+        /* one compile at a time (issue 188): the reporter's B-Series text at
+           Vulkan 1.1 (the issue 188 log's device line, its driver part), the
+           driver name alone at 1.3, a Rogue at 1.1 (a made-up text of the
+           same shape); not the D-Series DXT-48 at 1.4 (the user's phone's
+           log), not another vendor naming a B-Series, not an unknown
+           version */
+        const char *g54 = "device 1010:35010101; driver PowerVR B-Series Vulkan Driver "
+                          "1.15@6133110, version 1.473.1398";
+        CHECK_STR(rhi_driver_compiler_serial(RHI_VENDOR_IMGTEC, g54, 1, 1), "PowerVR B-Series");
+        CHECK_STR(
+            rhi_driver_compiler_serial(RHI_VENDOR_IMGTEC, "PowerVR B-Series Vulkan Driver", 1, 3),
+            "PowerVR B-Series");
+        CHECK_STR(rhi_driver_compiler_serial(RHI_VENDOR_IMGTEC,
+                                             "device 1010:22104218; driver PowerVR Rogue "
+                                             "Vulkan Driver 1.13@5776728",
+                                             1, 1),
+                  "PowerVR, Vulkan 1.1");
+        CHECK(rhi_driver_compiler_serial(RHI_VENDOR_IMGTEC,
+                                         "device 1010:71061212; driver PowerVR D-Series Vulkan "
+                                         "Driver 26.1@7036548, version 1.693.3716",
+                                         1, 4) == NULL);
+        CHECK(rhi_driver_compiler_serial(RHI_VENDOR_IMGTEC, NULL, 1, 4) == NULL);
+        CHECK(rhi_driver_compiler_serial(RHI_VENDOR_IMGTEC, NULL, 0, 0) == NULL);
+        CHECK(rhi_driver_compiler_serial(RHI_VENDOR_QUALCOMM, "B-Series", 1, 1) == NULL);
+        CHECK(rhi_driver_compiler_serial(0x13B5u, "Mali-G52 r40p0", 1, 1) == NULL);
     }
     return ico_check_summary("rhi_driver_version");
 }

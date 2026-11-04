@@ -135,6 +135,7 @@ void ico_host_step(void)
     profile.audioMs = ms_since(&t);
     /* the audio push is an SDL call */
     ico_fpenv_sim_enter();
+    ico_sched_switch_max_reset();
     ico_sched_run();
     profile.threadsMs = ms_since(&t);
     /* the port's achievements: once per new Main tick, after the threads
@@ -146,6 +147,7 @@ void ico_host_step(void)
     profile.achMs = ms_since(&t);
     profile.totalMs = (double)(t - start) / 1e6;
     profile.switches = ico_sched_switch_count() - switches;
+    profile.longestMs = (double)ico_sched_switch_max(&profile.longestId) / 1e6;
     ico_cdvd_host_stats(&cd1);
     profile.cdReads = cd1.reads - cd0.reads;
     profile.cdSectors = cd1.sectors - cd0.sectors;

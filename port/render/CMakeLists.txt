@@ -1594,7 +1594,7 @@ if(ICO_RUN_TESTS)
     set(_bst_kept "fixed-function ok [0-2], kept by \\[dev\\] blend")
     add_test(NAME rd_blend_selftest
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
-                     "-DNAME=${_bst_fix}" "-DRESULTS=${_bst_ok}"
+                     "-DNAME=${_bst_fix}" "-DRESULTS=${_bst_ok}" -DGLYPH=font_sheet_baked_ps
                      "-DEXTRA=rd: blend: fixed-function \\(the default. \\[dev\\] blend = attachment\\|storage opts into an exact mode\\)"
                      "-DEXTRA2=rd: profile: immediate-mode GPU \\(Mesa, Vulkan\\): blend fixed-function. "
                      -P "${_bst}")
@@ -1619,6 +1619,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_blend_selftest_blend_attachment
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
                      "-DNAME=${_bst_att}" "-DRESULTS=attachment fail [0-9]+, ${_bst_kept}"
+                     -DGLYPH=font_sheet_ps
                      "-DFAIL=attachment fail [0-9]+" -P "${_bst}")
     add_test(NAME rd_blend_selftest_blend_exact
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=attachment
@@ -1662,14 +1663,25 @@ if(ICO_RUN_TESTS)
                      "-DNAME=${_bst_fix}" "-DRESULTS=${_bst_ok}"
                      "-DEXTRA=rd: pipelines: GS state as shader data: off \\(\\[dev\\] blend = fixed\\)"
                      -P "${_bst}")
+    # the glyph cell through the sheet shader where the device draws it
+    # ([dev] sheet_shader, ICO_RD_SHEET_SHADER=1); the default above takes
+    # the 1x bake's font_sheet_baked_ps, an exact mode asked font_sheet_ps
+    # (issue 188)
+    add_test(NAME rd_blend_selftest_sheet_shader
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_blend_selftest_test> -DMODE=fixed
+                     "-DNAME=${_bst_fix}" "-DRESULTS=${_bst_ok}" -DGLYPH=font_sheet_ps
+                     -P "${_bst}")
     set(_bst_tests rd_blend_selftest rd_blend_selftest_sabotage rd_blend_selftest_adreno
                    rd_blend_selftest_adreno_forced rd_blend_selftest_no_dst
                    rd_blend_selftest_blend_attachment rd_blend_selftest_blend_exact
                    rd_blend_selftest_blend_storage rd_blend_selftest_blend_fixed
                    rd_blend_selftest_moltenvk_storage rd_blend_selftest_uber
-                   rd_blend_selftest_uber_sabotage rd_blend_selftest_uber_blend_fixed)
+                   rd_blend_selftest_uber_sabotage rd_blend_selftest_uber_blend_fixed
+                   rd_blend_selftest_sheet_shader)
     set_tests_properties(${_bst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     set_tests_properties(rd_blend_selftest PROPERTIES ENVIRONMENT "${_bst_env}")
+    set_tests_properties(rd_blend_selftest_sheet_shader
+                         PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_SHEET_SHADER=1")
     set_tests_properties(rd_blend_selftest_sabotage
                          PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_BLEND_SABOTAGE=fixed")
     set_tests_properties(rd_blend_selftest_adreno PROPERTIES ENVIRONMENT "${_bst_env};ICO_VK_FAKE_ADRENO=1")

@@ -685,7 +685,33 @@ arrive two replays late, so the vsync is the one the record was drained at
 renderer's `rd: slow walk` line ([RENDER.md](PIPELINES.md#the-start-up-set)). `[dev] slow_step_ms`
 (default 8, 0 off) logs up to 5 `slow step` lines a block for simulation steps over it, split into
 the step's parts and the pump's, with the step's own card verdicts next to the game threads' time
-(`slow_step`).
+(`slow_step`). The game threads' part names where that time went: `game threads 199.3 in 39
+switches (longest Main 171.2 ms; on core 2)` is the longest single fiber switch of the step (one
+resume of a game thread until it next yields, the thread named as the thread lines name it: Main,
+the sound thread, the stage's), its time, and the core the game thread was on at the step's end
+(`ico_sched_switch_max`: two clock reads a switch in `ico_sched_run`; the core left out where it is not
+known). A step with the usual 38 or 39 switches and one long switch is script or disc work on that
+thread; many switches and none long, or a long one on a thread that waits, with a picture whose GPU
+span and present blocked beside it, is the system holding the whole process (issue 179). The
+words are `window_scene.c` (`window_scene_threads_text`).
+
+**The layout line** (`window: layout: play 6.2 s, scene 3.1 s, pause 0.7 s`), after the first
+line: the block's simulation steps' time by the game's layout when each step ended: `play` (the
+game's play layout), `scene` (a scene's empty layout, or any layout while a movie plays), `title`
+(the two title layouts), `pause` (the pause menu), `settings` (the game's options and button
+configuration) and `other` (the port's pages, the memory card's), those with any time only, in that
+order, in seconds (`window: layout: no steps` when the game did not run). The layout ids are the
+running disc's (`port/core/region.h`: `layout_play`, `layout_scene`, `layout_title_*`,
+`layout_pause`, `layout_options`, `layout_key_config`). It reads a cutscene out of one log: the
+blocks with `scene` time are the scene, whatever the stage (`window_scene.c`, `scene_note_step`).
+
+**The VU line** (`window: VU: 1182 draws, 61k triangles, 550k vertex invocations (pre-pass off: 9 a
+triangle)`), right after the `N replays:` line: a replay's average of the VU draws the walk issued
+(`vuDraw`, before any merge: the cut and the kick of a fan count one each), the triangles in them
+(index lists in threes) and the vertex invocations the picture costs: with the vertex pre-pass off
+(tilers) 9 a triangle (every triangle shades 3 corners, three times each, no index reuse), with it
+on the vertices it recorded (`pre-pass: each vertex once`). The title's pictures are 250 to 340
+draws, the cutscenes of issue 179 1182 to 1473 (`RdPerfRecord.vuDraws`, `vuTris`).
 
 ## Pacing
 

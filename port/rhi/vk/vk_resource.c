@@ -940,7 +940,12 @@ RhiShader rhi_create_shader(const RhiShaderDesc *desc)
         .codeSize = desc->bytecodeSize,
         .pCode = desc->bytecode,
     };
-    if (!VKR_CHECK(vkCreateShaderModule(g_vkr.device, &ci, NULL, &s->module))) {
+    /* under the compile lock where the driver's compiler is not
+       thread-safe (vk_pipeline.c vkr_compile_lock, issue 188) */
+    vkr_compile_lock();
+    const VkResult r = vkCreateShaderModule(g_vkr.device, &ci, NULL, &s->module);
+    vkr_compile_unlock();
+    if (!vkr_check(r, "vkCreateShaderModule", __FILE__, __LINE__)) {
         vkr_pool_release(&g_vkr.shaders, id);
         return out;
     }

@@ -68,12 +68,15 @@ uint4 sheet_cov4(int2 q, int2 size)
     const float4 v = g_atlas.GatherRed(g_sampler, (float2(q) + 1.0) / float2(size));
     // Gather's order: x (0, 1), y (1, 1), z (1, 0), w (0, 0)
     uint4 c = uint4(floor(float4(v.w, v.z, v.x, v.y) * 255.0 + 0.5));
-    const bool in0x = q.x >= 0 && q.x < size.x, in1x = q.x + 1 >= 0 && q.x + 1 < size.x;
-    const bool in0y = q.y >= 0 && q.y < size.y, in1y = q.y + 1 >= 0 && q.y + 1 < size.y;
-    c.x = in0x && in0y ? c.x : 0u;
-    c.y = in1x && in0y ? c.y : 0u;
-    c.z = in0x && in1y ? c.z : 0u;
-    c.w = in1x && in1y ? c.w : 0u;
+    // 0 <= v < n as one unsigned comparison (n >= 0: a negative v wraps
+    // above it), the choices without a branch (common.hlsli ICO_SELECT: 35
+    // calls of this in font_sheet_ps)
+    const bool in0x = (uint)q.x < (uint)size.x, in1x = (uint)(q.x + 1) < (uint)size.x;
+    const bool in0y = (uint)q.y < (uint)size.y, in1y = (uint)(q.y + 1) < (uint)size.y;
+    c.x = ICO_SELECT(ICO_AND(in0x, in0y), c.x, 0u);
+    c.y = ICO_SELECT(ICO_AND(in1x, in0y), c.y, 0u);
+    c.z = ICO_SELECT(ICO_AND(in0x, in1y), c.z, 0u);
+    c.w = ICO_SELECT(ICO_AND(in1x, in1y), c.w, 0u);
     return c;
 }
 
@@ -95,8 +98,9 @@ void sheet_scaled(int2 p0, int2 size, uint4 style, uint dither, uint s, out floa
     // the coverage of the four texels, 0 outside the top half (the gather
     // addresses the whole texture)
     uint4 c = sheet_cov4(p0, size);
-    const bool in0 = p0.y >= 0 && p0.y < hh, in1 = p0.y + 1 >= 0 && p0.y + 1 < hh;
-    c = uint4(in0 ? c.xy : uint2(0u, 0u), in1 ? c.zw : uint2(0u, 0u));
+    const bool in0 = (uint)p0.y < (uint)hh, in1 = (uint)(p0.y + 1) < (uint)hh;
+    c = uint4(ICO_SELECT(in0, c.x, 0u), ICO_SELECT(in0, c.y, 0u), ICO_SELECT(in1, c.z, 0u),
+              ICO_SELECT(in1, c.w, 0u));
     const uint cc[2][2] = {{c.x, c.y}, {c.z, c.w}};
     // texel p's centre in sheet texels is (p + 0.5) / s - 0.5, in 2s-ths
     // 2p + 1 - s; the four texels' blends read sheet texels qa .. qa + 2
@@ -108,11 +112,11 @@ void sheet_scaled(int2 p0, int2 size, uint4 style, uint dither, uint s, out floa
         [unroll] for (int i = 0; i < 3; i++) {
             const int2 q = qa + int2(i, j);
             const int2 t = q * si;
-            const bool inside = t.x >= 0 && t.x < size.x && t.y >= 0 && t.y < hh;
+            const bool inside = ICO_AND((uint)t.x < (uint)size.x, (uint)t.y < (uint)hh);
             // the load's address clamped (it is made whether or not used)
             const int2 tc = clamp(t, int2(0, 0), int2(size.x - 1, hh - 1));
             const float rv = g_atlas.Load(int3(tc.x, hh + tc.y, 0)).r;
-            const uint r = inside ? (uint)floor(rv * 255.0 + 0.5) : 0u;
+            const uint r = ICO_SELECT(inside, (uint)floor(rv * 255.0 + 0.5), 0u);
             const uint l = sheet_rim_level(r, style, sheet_threshold(q, dither));
             rq[j][i] = (float)l;
             ra[j][i] = (float)((l * 128u + 127u) / 255u);

@@ -193,3 +193,20 @@ char *rhi_text_one_line(char *s)
     s[w] = '\0';
     return s;
 }
+
+const char *rhi_driver_compiler_serial(uint32_t vendorId, const char *driverText, uint32_t apiMajor,
+                                       uint32_t apiMinor)
+{
+    static char why[48];
+    if (vendorId != RHI_VENDOR_IMGTEC) {
+        return NULL;
+    }
+    if (driverText != NULL && findNoCase(driverText, "b-series") != NULL) {
+        return "PowerVR B-Series";
+    }
+    if (apiMajor == 1u && apiMinor < 3u) {
+        snprintf(why, sizeof why, "PowerVR, Vulkan %u.%u", (unsigned)apiMajor, (unsigned)apiMinor);
+        return why;
+    }
+    return NULL;
+}

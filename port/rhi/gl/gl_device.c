@@ -393,6 +393,7 @@ static void gl_fill_limits(void)
     o->vuFallbackPlain = NULL;
     o->compilerVersion = NULL;
     o->carefulPipelines = NULL;
+    o->serialPipelines = NULL;
     GLint64 maxIndex = 0;
     glf.GetInteger64v(GL_MAX_ELEMENT_INDEX, &maxIndex);
     o->maxDrawIndexedIndexValue =

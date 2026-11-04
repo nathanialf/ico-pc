@@ -1105,19 +1105,26 @@ block in its middle: eight cells of PCSX2's forest pixels under the forest's tin
 (the leaf case), two overlapping LERP draws (the second must blend over the first's result), one
 LERP command of two overlapping sprites (the second must blend over the first's result inside the
 one draw: the read's rasterization order, which the draw merge and GS state as shader data rely
-on) and a glyph through the text sheet's shader, then an opaque cell read at an even and an odd
+on) and a glyph of a 1x text sheet, then an opaque cell read at an even and an odd
 texel column (a dual-source equation kept with blending off, [RHI.md](RHI.md#dynamic-state)). 22
 samples are read back (one readback; its pipelines are keys of the start-up set). The fixed-function
 blend runs first, the reference, within 2 levels of the GS arithmetic; if it fails, the two-pass
 fallback (`rd_set_no_dual`) is tried and kept when it passes. Then, only when `[dev] blend` opted
 into an exact mode the device has (`rd__dst_asked`), that mode runs, within 1 level of the GS
-arithmetic and of the reference's glyph, and is kept whatever its result. The window runs it
-before the start-up pipeline set and again whenever SCENE is made at a new size. One line names the
-blend in force and every result:
+arithmetic and of the reference's glyph, and is kept whatever its result. The glyph goes through
+`font_sheet_ps` (the sheet kept off the bake, `RdTexRec.sheetShader`) only where that shader is what
+is checked: `[dev] sheet_shader` draws every scale through it, or an exact mode asked reads the
+pixel behind through its `_dstatt` twin, the largest destination-read shader; everywhere else
+through the 1x bake's `font_sheet_baked_ps` (2.3k words), the shader a 1x sheet draws with (issue
+188: a PowerVR B-Series driver did not return from compiling `font_sheet_ps_nodual`, 70k words,
+here, on a phone that never draws it; the comparison with the reference is the same either way).
+The window runs it before the start-up pipeline set, behind the start-up screen, and again whenever
+SCENE is made at a new size. One line names the blend in force, every result and the glyph's
+shader:
 
 ```
-rd: blend: fixed-function (self-test: fixed-function ok 1; exact modes not asked for: [dev] blend = attachment|storage tries one) on SCENE 640x448 at 1920x1344 texels in T ms
-rd: blend: exact (attachment read) (self-test: attachment ok 1, fixed-function ok 1; kept by [dev] blend) on SCENE 640x448 at 1920x1344 texels in T ms
+rd: blend: fixed-function (self-test: fixed-function ok 1; exact modes not asked for: [dev] blend = attachment|storage tries one) on SCENE 640x448 at 1920x1344 texels (the glyph through font_sheet_baked_ps) in T ms
+rd: blend: exact (attachment read) (self-test: attachment ok 1, fixed-function ok 1; kept by [dev] blend) on SCENE 640x448 at 1920x1344 texels (the glyph through font_sheet_ps) in T ms
 rd: blend: fixed-function (self-test: fixed-function fail N -> two-pass ok 1; exact modes not asked for: [dev] blend = attachment|storage tries one) on SCENE ...
 ```
 
