@@ -14,7 +14,8 @@
  *            line (present_after_text), word for word: a reporter's log's
  *            stall (replay 2941, 359 ms, GPU 67.9 ms against 26.7 ms), the
  *            call not timed apart, no GPU span, the block's first timed
- *            replay, a gap under 0, a gap across untimed replays, no gap,
+ *            replay, the lock without a present call, "other" never under 0,
+ *            a gap under 0, a gap across untimed replays, no gap,
  *            a short buffer;
  *   lines    the stall lines' threshold (present_stall_lines): a present
  *            gets the after, around and stalled-replay lines from 250 ms
@@ -62,14 +63,32 @@ static void split_texts(void)
     r.gapMs = 0.4;
     present_split_text(&r, 300, 26.7, line, sizeof line);
     CHECK(text_is(line, "inside vkQueuePresentKHR 358.6 ms, the swapchain lock 0.0 ms, the surface "
-                        "poll 0.0 ms; the replay's GPU span 67.9 ms against the block's 26.7 ms so "
-                        "far, the GPU idle 0.4 ms before it"));
+                        "poll 0.0 ms, other 0.1 ms; the replay's GPU span 67.9 ms against the "
+                        "block's 26.7 ms so far, the GPU idle 0.4 ms before it"));
     /* the block's first timed replay; a gap under 0 */
     r.gapMs = -1.3;
     present_split_text(&r, 0, 0.0, line, sizeof line);
     CHECK(text_is(line, "inside vkQueuePresentKHR 358.6 ms, the swapchain lock 0.0 ms, the surface "
-                        "poll 0.0 ms; the replay's GPU span 67.9 ms (the block's first timed "
-                        "replay), begun 1.3 ms before the one before ended"));
+                        "poll 0.0 ms, other 0.1 ms; the replay's GPU span 67.9 ms (the block's "
+                        "first timed replay), begun 1.3 ms before the one before ended"));
+    /* the lock taken, no present call made (no slot, or the present-signal
+       submit failed): the lock's wait kept, the rest as other */
+    r.split = 2;
+    r.presentMs = 352.0;
+    r.lockMs = 351.5;
+    r.callMs = 0.0;
+    r.pollMs = 0.0;
+    present_split_text(&r, 0, 0.0, line, sizeof line);
+    CHECK(text_is(line, "no present call made: the swapchain lock 351.5 ms, other 0.5 ms; the "
+                        "replay's GPU span 67.9 ms (the block's first timed replay), begun 1.3 ms "
+                        "before the one before ended"));
+    /* other never under 0 (the parts timed apart past the whole) */
+    r.split = 1;
+    r.presentMs = 10.0;
+    r.callMs = 10.2;
+    r.lockMs = 0.0;
+    present_split_text(&r, 0, 0.0, line, sizeof line);
+    CHECK(strstr(line, "the surface poll 0.0 ms, other 0.0 ms;") != NULL);
     /* not timed apart, no gap */
     r.split = 0;
     r.gapValid = 0;

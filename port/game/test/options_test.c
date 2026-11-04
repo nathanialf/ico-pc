@@ -578,8 +578,11 @@ static void test_pit_time(void)
     /* the parser, for each length */
     CHECK(ico_opt_pit_parse("half", 462, &note) == 8 && note == 0);    /* 231 ticks: 7.7 s */
     CHECK(ico_opt_pit_parse("longer", 462, &note) == 23 && note == 0); /* 693: 23.1 s */
-    CHECK(ico_opt_pit_parse("double", 462, &note) == 30 && note == 1); /* 30.8 s, held */
-    CHECK(ico_opt_pit_parse("triple", 463, &note) == 30 && note == 1);
+    /* 30.8 s and 46.3 s: a known word held to 30 (note 2, its own line),
+       not a bad value */
+    CHECK(ico_opt_pit_parse("double", 462, &note) == 30 && note == 2);
+    CHECK(ico_opt_pit_parse("triple", 463, &note) == 30 && note == 2);
+    CHECK(ico_opt_pit_parse("31", 462, &note) == 30 && note == 1); /* a number held */
     CHECK(ico_opt_pit_parse("original", 463, &note) == ICO_PIT_ORIGINAL && note == 0);
     CHECK(ico_opt_pit_parse("15", 463, &note) == ICO_PIT_ORIGINAL && note == 0);
     CHECK(ico_opt_pit_parse("16", 462, &note) == 16 && note == 0);

@@ -982,11 +982,14 @@ bool rhi_present_shown(void);
  * rebuild holding it), callNs the driver's present call itself
  * (vkQueuePresentKHR), pollNs the surface-size poll after it.  Per thread
  * (the submit thread's or the render thread's present, read right after it
- * on that thread).  False, *out zeroed: the backend does not time them
- * apart (OpenGL, Direct3D 11 and 12), or the calling thread's last present
- * made no call (no swapchain, nothing acquired). */
+ * on that thread).  called: the driver's call was made; without it (no
+ * present slot, the present-signal submit failed) lockNs is still the
+ * lock's wait and callNs, pollNs are 0.  False, *out zeroed: the backend
+ * does not time them apart (OpenGL, Direct3D 11 and 12), or the calling
+ * thread has not presented. */
 typedef struct RhiPresentSplit {
     uint64_t lockNs, callNs, pollNs;
+    bool called;
 } RhiPresentSplit;
 
 bool rhi_present_split(RhiPresentSplit *out);

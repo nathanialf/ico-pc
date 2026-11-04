@@ -78,13 +78,19 @@ static void gap_words(const PresentStallRec *r, char *buf, size_t size)
 int present_split_text(const PresentStallRec *r, unsigned blockGpuN, double blockGpuMs, char *buf,
                        size_t size)
 {
-    char split[128], gpu[96], gap[96];
+    char split[192], gpu[96], gap[96];
+    double other = r->presentMs - r->lockMs - r->callMs - r->pollMs;
 
-    if (r->split) {
+    other = other > 0.0 ? other : 0.0;
+    if (r->split == 2) {
+        snprintf(split, sizeof split,
+                 "no present call made: the swapchain lock %.1f ms, other %.1f ms", r->lockMs,
+                 other);
+    } else if (r->split) {
         snprintf(split, sizeof split,
                  "inside vkQueuePresentKHR %.1f ms, the swapchain lock %.1f ms, the surface poll "
-                 "%.1f ms",
-                 r->callMs, r->lockMs, r->pollMs);
+                 "%.1f ms, other %.1f ms",
+                 r->callMs, r->lockMs, r->pollMs, other);
     } else {
         snprintf(split, sizeof split, "the call not timed apart on this graphics API");
     }

@@ -129,8 +129,9 @@ int ico_opt_pit_chain_ticks(void);
 /* that time in whole seconds, rounded (15 on every disc) */
 int ico_opt_pit_base_seconds(void);
 /* the value text reads in the file ("original", "8", or an earlier version's
-   word) as ico_opt_pit_time keeps it, for a pull-in of ticks; *note set when
-   the text was not one (reads Original) or was held to the range */
+   word) as ico_opt_pit_time keeps it, for a pull-in of ticks; *note 1 when
+   the text was not one (reads Original) or a number held to the range, 2
+   when an earlier version's word was held to it ("double", "triple": 30) */
 int ico_opt_pit_parse(const char *text, int ticks, int *note);
 float ico_opt_pit_time_factor(void);
 /* the dive's play-speed ratio actEnemyKidnapEnd reserves: 1/factor, or 2/factor

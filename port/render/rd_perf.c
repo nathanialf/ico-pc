@@ -999,14 +999,14 @@ void rd__perf_submit_times(const RdSubmitJob *j)
 void rd__present_split_take(RdSubmitJob *j, bool presented)
 {
     RhiPresentSplit sp;
-    j->presentSplit = false;
+    j->presentSplit = 0;
     j->presentLockMs = j->presentCallMs = j->presentPollMs = j->presentEndMs = 0.0;
     if (!presented) {
         return;
     }
     j->presentEndMs = rd__now_ms();
     if (g_rd.hasDevice && rhi_present_split(&sp)) {
-        j->presentSplit = true;
+        j->presentSplit = sp.called ? 1u : 2u; /* 2: the lock only, no present call made */
         j->presentLockMs = (double)sp.lockNs / 1e6;
         j->presentCallMs = (double)sp.callNs / 1e6;
         j->presentPollMs = (double)sp.pollNs / 1e6;

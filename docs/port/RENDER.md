@@ -1622,7 +1622,8 @@ without timestamps came between (`gpuGapSkipped`: a record whose slot was recycl
 were read is queued without them, and those are the stall's neighbours); the gap is kept across
 them, then holding their GPU work too, and refused only past 60 s either way (`rd_perf_gap_step`,
 `port/render/rd_perf_gap.h`; a new device starts it again). The present is timed apart where the
-backend can (`presentSplit`, `presentLockMs`, `presentCallMs`, `presentPollMs`: the swapchain
+backend can (`presentSplit`: 1 with the driver's call, 2 the lock's wait only, no present call
+made; `presentLockMs`, `presentCallMs`, `presentPollMs`: the swapchain
 lock's wait, `vkQueuePresentKHR`, the surface poll, `rhi_present_split` on Vulkan) with its end on
 the renderer's monotonic clock (`presentEndMs`, the clock of `startMs` and of the window's kernel
 GPU driver samples), carried from the submit thread's job (`RdSubmitJob`, `rd__perf_submit_times`)

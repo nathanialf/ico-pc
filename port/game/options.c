@@ -144,7 +144,13 @@ int ico_opt_pit_parse(const char *text, int ticks, int *note)
     for (i = 0; i < sizeof(kWords) / sizeof(kWords[0]); i++) {
         if (strcmp(text, kWords[i].word) == 0) {
             const int t = ticks * kWords[i].num / kWords[i].den;
-            return pit_hold((t + PIT_TICK_HZ / 2) / PIT_TICK_HZ, ticks, note);
+            int held = 0;
+            const int r = pit_hold((t + PIT_TICK_HZ / 2) / PIT_TICK_HZ, ticks, &held);
+
+            if (note != NULL && held) {
+                *note = 2; /* a known word, held to the range: not a bad value */
+            }
+            return r;
         }
     }
     v = strtol(text, &end, 10);
@@ -181,12 +187,17 @@ int ico_opt_pit_time(void)
         int note = 0;
 
         s_pit_time = ico_opt_pit_parse(v, ico_opt_pit_chain_ticks(), &note);
-        if (note) {
+        const int secs = s_pit_time != ICO_PIT_ORIGINAL ? s_pit_time : ico_opt_pit_base_seconds();
+
+        if (note == 2) {
+            fprintf(stderr,
+                    "options: [gameplay] pit_time = \"%s\" is past %d seconds: held to %d s\n", v,
+                    ICO_PIT_MAX_SECONDS, secs);
+        } else if (note) {
             fprintf(stderr,
                     "options: [gameplay] pit_time = \"%s\" is not \"original\" or %d to %d "
                     "seconds: read as %d s\n",
-                    v, ICO_PIT_MIN_SECONDS, ICO_PIT_MAX_SECONDS,
-                    s_pit_time != ICO_PIT_ORIGINAL ? s_pit_time : ico_opt_pit_base_seconds());
+                    v, ICO_PIT_MIN_SECONDS, ICO_PIT_MAX_SECONDS, secs);
         }
         log_pit_time(s_pit_time);
     }

@@ -29,7 +29,7 @@ static void stall_rec(const RdPerfRecord *r, PresentStallRec *o)
     memset(o, 0, sizeof(*o));
     o->replay = r->replay;
     o->presentMs = r->presentMs;
-    o->split = r->presentSplit != 0;
+    o->split = r->presentSplit; /* 0, 1 or 2 (no present call made) */
     o->lockMs = r->presentLockMs;
     o->callMs = r->presentCallMs;
     o->pollMs = r->presentPollMs;
@@ -45,7 +45,7 @@ static void stall_rec(const RdPerfRecord *r, PresentStallRec *o)
 
 const char *window_stall_split(const RdPerfRecord *r, unsigned blockGpuN, double blockGpuMs)
 {
-    static char text[320];
+    static char text[384];
     PresentStallRec o;
 
     stall_rec(r, &o);

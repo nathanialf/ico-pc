@@ -1510,7 +1510,7 @@ static VkrFrame *vkr_present_slot(void)
 
 /* The calling thread's last present timed apart (rhi.h rhi_present_split):
  * the lock's wait, vkQueuePresentKHR and the surface poll after it; valid
- * once the call was made */
+ * once the lock was taken (called: the call made too) */
 static _Thread_local RhiPresentSplit t_split;
 static _Thread_local bool t_splitValid;
 
@@ -1559,7 +1559,7 @@ static void vkr_present(bool defer)
     const uint64_t t0 = vkr_now_ns();
     VkResult r = vkQueuePresentKHR(g_vkr.queue, &pi);
     t_split.callNs = vkr_now_ns() - t0;
-    t_splitValid = true;
+    t_split.called = true;
     vkr_late_add(&g_vkr.late.presentNs, t_split.callNs);
     vkr_late_add(&g_vkr.late.presents, 1u);
     f->acq.acquired = false;
@@ -1634,8 +1634,8 @@ void rhi_present(void)
     const uint64_t l0 = vkr_now_ns();
     vkr_swap_lock();
     memset(&t_split, 0, sizeof(t_split));
-    t_splitValid = false;
     t_split.lockNs = vkr_now_ns() - l0;
+    t_splitValid = true; /* the lock's wait kept even when no call follows */
     vkr_present(g_vkr.slotOverlap && rhi_slot_guard_worker());
     vkr_swap_unlock();
 }

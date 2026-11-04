@@ -2294,7 +2294,8 @@ typedef struct RdPerfRecord {
         readbackMs;
     double fenceWaitMs; /* the backend's blocked time on GPU completion (inside wait, readback) */
     /* presentMs timed apart (rhi.h rhi_present_split, Vulkan; presentSplit
-     * 0 elsewhere): the swapchain lock's wait, the driver's present call
+     * 0 elsewhere, 1 with the driver's call, 2 the lock's wait only, no
+     * present call made): the swapchain lock's wait, the driver's present call
      * (vkQueuePresentKHR), the surface poll after it; presentEndMs the
      * present's end on rd's monotonic ms clock (startMs's), 0 when nothing
      * was presented.  The window's lines on a present that blocked (issue

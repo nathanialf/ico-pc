@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../core/region.h" /* ico_region_cur: the disc's confirm */
+#include "diag_host.h"      /* ico_log_limited */
 #include "host_config.h"
 #include "input.h"
 #include "input_sdl.h"
@@ -845,14 +846,12 @@ void ico_input_sdl_set_touch_scene(int scene)
 {
     scene = scene != 0;
     if (scene != s_touchScene) {
-        static int s_logged;
-
-        if (++s_logged <= 8 || s_logged % 100 == 0) {
-            fprintf(stderr, "touch: scene %s (touch controls %s)\n", scene ? "begins" : "ends",
-                    ico_touch_mode_names[s_bind.touch_mode >= 0 && s_bind.touch_mode <= 3
-                                             ? s_bind.touch_mode
-                                             : ICO_TOUCH_MODE_AUTO]);
-        }
+        /* the first 8, then every 100th; counted in the end-of-run summary */
+        ico_log_limited("touch: scene", "touch: scene %s (touch controls %s)",
+                        scene ? "begins" : "ends",
+                        ico_touch_mode_names[s_bind.touch_mode >= 0 && s_bind.touch_mode <= 3
+                                                 ? s_bind.touch_mode
+                                                 : ICO_TOUCH_MODE_AUTO]);
     }
     s_touchScene = scene;
 }
@@ -1076,12 +1075,8 @@ static void touch_step(IcoVirtualPad *v)
             ico_touch_scene_alpha(&s_touchSnap.layout, &s_sceneFade, mode, s_touchScene, now);
 
         if ((was == 0.0f) != (after == 0.0f) || (was == 1.0f) != (after == 1.0f)) {
-            static int s_fadeLogged;
-
-            if (++s_fadeLogged <= 8 || s_fadeLogged % 100 == 0) {
-                fprintf(stderr, "touch: Start-only fade %s (%.2f)\n", after > was ? "out" : "in",
-                        (double)after);
-            }
+            ico_log_limited("touch: Start-only fade", "touch: Start-only fade %s (%.2f)",
+                            after > was ? "out" : "in", (double)after);
         }
     }
     if (editing) {

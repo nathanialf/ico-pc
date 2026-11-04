@@ -44,10 +44,14 @@ int present_hist_text(const PresentHist *h, char *buf, size_t size);
  * present_split_text: what follows the "a present blocked N ms in the
  * driver's present call (replay N; ...)" line's parenthesis (after ": "):
  *     inside vkQueuePresentKHR 351.6 ms, the swapchain lock 0.0 ms, the
- *     surface poll 0.0 ms; the replay's GPU span 71.3 ms against the
- *     block's 27.0 ms so far, the GPU idle 0.4 ms before it
- * The call not timed apart (no split: OpenGL, Direct3D) reads "the call
- * not timed apart on this graphics API"; no GPU span "the replay's GPU
+ *     surface poll 0.0 ms, other 0.2 ms; the replay's GPU span 71.3 ms
+ *     against the block's 27.0 ms so far, the GPU idle 0.4 ms before it
+ * "other" is the present's time outside the three (presentMs less them:
+ * the present-signal submit, a retired swapchain's destruction, a rebuild).
+ * The lock taken but no call made (split 2) reads "no present call made:
+ * the swapchain lock 351.5 ms, other 0.5 ms"; the call not timed apart
+ * (no split: OpenGL, Direct3D) reads "the call not timed apart on this
+ * graphics API"; no GPU span "the replay's GPU
  * span not timed"; none in the block before it "(the block's first timed
  * replay)"; the gap: "the GPU idle X ms before it", "begun X ms before the
  * one before ended" (under 0) or "the GPU's time before it not measured",
@@ -70,7 +74,7 @@ int present_hist_text(const PresentHist *h, char *buf, size_t size);
 typedef struct PresentStallRec {
     unsigned replay;
     double presentMs;
-    int split; /* lockMs, callMs, pollMs valid */
+    int split; /* 1: lockMs, callMs, pollMs valid; 2: lockMs only, no present call made; 0 none */
     double lockMs, callMs, pollMs;
     double waitMs, fenceMs, acquireMs; /* the frame slot's wait, of it the fence, the acquire */
     int gpuValid;

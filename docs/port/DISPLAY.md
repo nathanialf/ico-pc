@@ -482,10 +482,13 @@ FIFO N s ago` (K: the presents over 50 ms since).
 The blocked line goes on past its parenthesis with the present timed apart (issue 123;
 `rhi_present_split`, Vulkan; `RdPerfRecord.presentLockMs`, `presentCallMs`, `presentPollMs`,
 carried from the submit thread's job, `RdSubmitJob`) and the replay's GPU numbers: `: inside
-vkQueuePresentKHR 351.6 ms, the swapchain lock 0.0 ms, the surface poll 0.0 ms; the replay's GPU
-span 71.3 ms against the block's 27.0 ms so far, the GPU idle 0.4 ms before it`
-(`present_split_text`). Elsewhere the first part reads `the call not timed apart on this graphics
-API`; a replay without timestamps `the replay's GPU span not timed`; the first timed replay of a
+vkQueuePresentKHR 351.6 ms, the swapchain lock 0.0 ms, the surface poll 0.0 ms, other 0.2 ms; the
+replay's GPU span 71.3 ms against the block's 27.0 ms so far, the GPU idle 0.4 ms before it`
+(`present_split_text`; `other` is the present's time outside the three: the present-signal submit,
+a retired swapchain's destruction, a rebuild). When the lock was taken but no present call followed
+(no slot, or the present-signal submit failed: `RhiPresentSplit.called` false, `presentSplit` 2) it
+reads `no present call made: the swapchain lock 351.5 ms, other 0.5 ms`, so a lock stall still
+shows. Elsewhere the first part reads `the call not timed apart on this graphics API`; a replay without timestamps `the replay's GPU span not timed`; the first timed replay of a
 block `(the block's first timed replay)`; a first stamp written before the replay before ended
 `begun X ms before the one before ended`. The record popped after a present of 250 ms or more
 writes `window: after the present that blocked (replay N, 352 ms): replay N+1 waited 0.3 ms for its frame
