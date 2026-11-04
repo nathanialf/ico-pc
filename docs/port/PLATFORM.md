@@ -2300,10 +2300,17 @@ making its pipelines on first use, unless the note names only a family the rende
 or a VU shader while the plain VU shaders are not yet in force: then `and the next start prepares
 them the same way (the self-tests run first at every start)` or `(this run made them on first use
 already)`, and the box asks for a report if it happens at every start (issue 188: every start
-ended the same way inside the self-test while the box promised another way). The window
-shows the start-up screen (`Preparing graphics`) before the self-tests in every branch, the set's,
-the lazy start's and Apply's switch, so a slow first compile is not a black screen
-(`port/platform/window_host.c` (`selftests_screen`)).
+ended the same way inside the self-test while the box promised another way). At a start the
+self-tests keep the set's rule for the start-up screen (`Preparing graphics`): nothing is drawn
+while they are quick (every desktop start, a warm phone start), and the screen is drawn between
+the blend and the VU pre-pass self-tests once they have run 250 ms (the window's thread is inside
+the driver while a self-test's pipeline compiles, so it cannot draw sooner, and never inside a
+self-test, whose frames hold the renderer's state under test); Apply's switch draws it at once
+(`Changing the graphics`: the old picture is gone there). On Android its note `This happens once
+after an update that changes the graphics` is shown only before a set (the careful or full start),
+not on a lazy start or a switch. The line `window: start: the blend and VU pre-pass self-tests
+took N ms; the start-up screen drawn|not drawn (the blend self-test took under 250 ms)` says
+which (`port/platform/window_host.c` (`selftests_screen`, `selftests_between`)).
 
 The window build logs a stats block every 10 s. A host step longer than `[dev] slow_step_ms`
 (default 8, 0 off) logs a slow-step line ([DISPLAY.md](DISPLAY.md#pacing);
