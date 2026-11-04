@@ -2823,9 +2823,17 @@ static void testSheetScaledOne(int S, const char *dir, int bake)
         }
         snprintf(path, sizeof(path), "%s/rd_pixel_sheet_s%d.rddump", dir, S);
         CHECK(rd_dump_frame(path), "rd_dump_frame (scaled sheet %d)", S);
+        /* the loaded dumps stay live: the 2x sheet runs twice (bake on, off),
+         * so count what this load added */
+        int before = 0;
+        for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
+            const RdTexRec *t = &g_rd.textures[i];
+            before += t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&
+                      t->w == (uint32_t)W && t->sheetScale == S && strcmp(t->name, "dump") == 0;
+        }
         RdFrame f;
         if (rd__load_frame(path, &f)) {
-            int sheets = 0;
+            int sheets = -before;
             for (uint32_t i = 0; i < RD_MAX_TEXTURES; i++) {
                 const RdTexRec *t = &g_rd.textures[i];
                 sheets += t->live && t->kind == RD_TEXKIND_IMAGE && t->format == RD_TEXEL_SHEET &&
