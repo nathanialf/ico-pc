@@ -15,6 +15,11 @@ void present_hist_reset(PresentHist *h)
     memset(h, 0, sizeof *h);
 }
 
+int present_stall_lines(double presentMs)
+{
+    return presentMs >= PRESENT_STALL_LINE_MS;
+}
+
 double present_hist_limit(int row)
 {
     return row >= 0 && row < PRESENT_HIST_ROWS ? s_limits[row] : 0.0;

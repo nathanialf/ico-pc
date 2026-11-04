@@ -8,16 +8,20 @@
  *   - the blocked line's split (window_fifo_note writes it past 250 ms):
  *     the driver's call, the swapchain lock, the surface poll, the
  *     replay's GPU span against the block's, the GPU idle before it;
- *   - the record popped next: "window: after the present that blocked
- *     (replay N, 352 ms): replay N+1 waited ... for its frame slot,
- *     acquired its image in ..., GPU span ..., the GPU idle ... before it"
+ *   - the record popped next (its line from a present of 250 ms on,
+ *     present_hist.h PRESENT_STALL_LINE_MS, as the around and
+ *     stalled-replay lines: each the first 8 then every 100th, which the
+ *     50-250 ms presents would otherwise spend; its gap from 50 ms on):
+ *     "window: after the present that blocked (replay N, 352 ms): replay
+ *     N+1 waited ... for its frame slot, acquired its image in ..., GPU
+ *     span ..., the GPU idle ... before it"
  *     (the first 8, then every 100th), its gap kept for the 10 s
  *     'GPU between replays' line ("across the 3 stalls: the GPU was idle
  *     ... before the next replay");
  *   - from the first stall on Vulkan (a record with the present split)
- *     every replay timed pass by pass, and a
- *     stalled replay's passes against the block's: "window: stalled
- *     replay N (present ..., GPU ... against the block's ...): ...";
+ *     every replay timed pass by pass, and a stalled replay's passes
+ *     against the block's: "window: stalled replay N (present ..., GPU
+ *     ... against the block's ...): ...";
  *   - on Android, the kernel GPU driver's clock, load, resets and thermal
  *     level sampled every 250 ms (gpu_sysfs.h): which nodes were readable
  *     at the open, the 10 s block's line, and the samples before, during
@@ -49,19 +53,23 @@
    call */
 const char *window_stall_split(const RdPerfRecord *r, unsigned blockGpuN, double blockGpuMs);
 /* r's present blocked (over WINDOW_STALL_MS): the next record popped gets
-   the after line; the first one with a present split (the Vulkan backend,
-   rd_perf_passes_arm_backend) also times every replay pass by pass from
-   here (rd_perf_passes_arm, its line once naming the backend), so the next
-   stall's replay has its passes */
+   the after line (from PRESENT_STALL_LINE_MS on) and its gap noted, and
+   its around line is queued (from PRESENT_STALL_LINE_MS on); the first one
+   with a present split (the Vulkan backend, rd_perf_passes_arm_backend)
+   also times every replay pass by pass from here (rd_perf_passes_arm, its
+   line once naming the backend), so the next stall's replay has its
+   passes */
 void window_stall_blocked(const RdPerfRecord *r);
 /* Every popped record, before window_stall_blocked of the same record:
-   when the record before it blocked, the after line, and its gap into the
+   when the record before it blocked, the after line (from
+   PRESENT_STALL_LINE_MS on), and its gap into the
    block's stall gaps (pace_gpu_gap_stall: the 10 s 'GPU between replays'
    line's "across the N stalls") */
 void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap);
 /* A timed replay's pieces p (n) before they join the block's agg: when its
-   present blocked, "window: stalled replay N (present ..., GPU ... against
-   the block's ...): <its top passes against the block's means>; ..."
+   present blocked PRESENT_STALL_LINE_MS or more, "window: stalled replay
+   N (present ..., GPU ... against the block's ...): <its top passes
+   against the block's means>; ..."
    (rd.h rd_perf_pass_grow_text; the first 8, then every 100th).
    blockGpuN, blockGpuMs as window_stall_split's */
 void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const RdPerfPass *p,

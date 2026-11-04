@@ -487,10 +487,14 @@ span 71.3 ms against the block's 27.0 ms so far, the GPU idle 0.4 ms before it`
 (`present_split_text`). Elsewhere the first part reads `the call not timed apart on this graphics
 API`; a replay without timestamps `the replay's GPU span not timed`; the first timed replay of a
 block `(the block's first timed replay)`; a first stamp written before the replay before ended
-`begun X ms before the one before ended`. The record popped after any present over 50 ms writes
-`window: after the present that blocked (replay N, 352 ms): replay N+1 waited 0.3 ms for its frame
+`begun X ms before the one before ended`. The record popped after a present of 250 ms or more
+writes `window: after the present that blocked (replay N, 352 ms): replay N+1 waited 0.3 ms for its frame
 slot (fence 0.2), acquired its image in 298.7 ms, GPU span 26.9 ms, the GPU idle 301.2 ms before
-it` (the first 8, then every 100th; `present_after_text`, `port/platform/window_stall.c`). Read
+it` (the first 8, then every 100th; `present_after_text`, `port/platform/window_stall.c`). The
+after, around and stalled-replay lines start at 250 ms (`PRESENT_STALL_LINE_MS`,
+`present_stall_lines`), the blocked line's own size, so the presents of 50 to 250 ms (17 in 110 s of
+a reporter's log) do not spend each line's first 8 before the real stalls; a present over 50 ms
+still arms the per-pass timing, counts in the 10 s lines and adds its gap to the stall gaps. Read
 together: the call holding the whole time with the lock and the poll near 0 puts the wait inside
 the driver; a stalled replay's GPU span far over the block's is the GPU running slow while the
 present waited (a clock drop, another GPU client); a GPU idle about as long as the stall before the
@@ -506,7 +510,7 @@ sampled every 250 ms`, or `... kgsl-3d0: not readable (EACCES)` (every node deni
 sampled) or `... kgsl-3d0 not present` (not a Qualcomm GPU). Each 10 s block, after the `present
 calls` line: `window: kernel GPU driver: clock 285-905 MHz (average 612) over 40 samples, busy 71 %
 on average, resets 0 in the block (3 in all), thermal power level at most 0` (a temperature where
-`temp` is readable). For every present that blocked over 50 ms, once the sample after it came (or a
+`temp` is readable). For every present that blocked 250 ms or more, once the sample after it came (or a
 second passed): `window: kernel GPU driver around the present that blocked (replay N): 0.12 s
 before: clock 905 MHz, busy 74 %, resets 3, thermal power level 0; 1 during: clock 285 MHz, busy 9
 %, resets 3; 0.03 s after: clock 285 MHz, busy 12 %, resets 3, thermal power level 0` (the first 8,

@@ -1749,7 +1749,7 @@ window: passes per replay 47.0: render passes 32.0 (lists 9.0, reduction 1.0, fo
 window: CPU walk ms per replay by list 0-12: 1.10 0.05 ... 0.20; uploaded KB per replay: textures 57, meshes 27 (interpolated 20), uniform blocks 820, VU streams 30, other 61
 ```
 
-(the numbers show the fields, not a measurement). A timed replay whose present blocked over 50 ms
+(the numbers show the fields, not a measurement). A timed replay whose present blocked 250 ms or more
 also gets, before its pieces join the block's, `window: stalled replay 2941 (present 352 ms, GPU
 71.3 ms against the block's 27.0): the first pass 52.1 ms (the block's 1.2: it waits for the
 display's image), the other 46 timed passes 27.0 ms (the block's 25.8); list 0 SCENE 3048x2032 52.1

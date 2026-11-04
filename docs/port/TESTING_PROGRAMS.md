@@ -893,7 +893,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`present_split_text`: a reporter's stall of 359 ms with a 67.9 ms GPU span against the block's
   26.7, the block's first timed replay, a gap under 0, the call not timed apart, no gap, no GPU
   span) and the after line (`present_after_text`: the replay after the stall, its gap across one
-  and two untimed replays, no GPU span, a short buffer cut) (`present_hist`).
+  and two untimed replays, no GPU span, a short buffer cut); the stall lines' threshold
+  (`present_stall_lines`: from 250 ms on, never from 50 to 250 ms nor for NaN) (`present_hist`).
 - `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
   (`sched`).

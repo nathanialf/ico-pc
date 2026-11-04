@@ -15,7 +15,11 @@
  *            stall (replay 2941, 359 ms, GPU 67.9 ms against 26.7 ms), the
  *            call not timed apart, no GPU span, the block's first timed
  *            replay, a gap under 0, a gap across untimed replays, no gap,
- *            a short buffer.
+ *            a short buffer;
+ *   lines    the stall lines' threshold (present_stall_lines): a present
+ *            gets the after, around and stalled-replay lines from 250 ms
+ *            on, never from 50 to 250 ms (a reporter's 57-250 ms presents
+ *            spent half of each line's first 8) nor for NaN.
  */
 #include <math.h>
 #include <stdio.h>
@@ -176,6 +180,11 @@ int main(void)
         CHECK(strlen(small) == 11 && strncmp(small, "present cal", 11) == 0);
     }
     split_texts();
+    /* the stall lines' threshold */
+    CHECK(PRESENT_STALL_LINE_MS == 250.0);
+    CHECK(!present_stall_lines(50.5) && !present_stall_lines(57.0) && !present_stall_lines(249.9));
+    CHECK(present_stall_lines(250.0) && present_stall_lines(337.0) && present_stall_lines(365.0));
+    CHECK(!present_stall_lines(NAN) && !present_stall_lines(-1.0));
     printf("present_hist_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

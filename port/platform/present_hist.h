@@ -87,4 +87,17 @@ int present_split_text(const PresentStallRec *r, unsigned blockGpuN, double bloc
 int present_after_text(unsigned blockedReplay, double blockedMs, const PresentStallRec *r,
                        char *buf, size_t size);
 
+/* The present time from which a present that blocked gets its own lines
+ * (the after line, the kernel GPU driver's around line, the stalled
+ * replay's passes; window_stall.c): 250 ms, the blocked line's own size.
+ * The presents over 50 ms still arm the per-pass timing, count in the 10 s
+ * lines and add their gap to the stall gaps; only the lines, each the
+ * first 8 then every 100th, wait for a present this long, so the 50-250 ms
+ * presents (17 in 110 s of a reporter's log, half of each line's 8) do not
+ * spend them before the real stalls */
+#define PRESENT_STALL_LINE_MS 250.0
+/* 1 when a present of presentMs gets those lines (at PRESENT_STALL_LINE_MS
+   or more; never for NaN) */
+int present_stall_lines(double presentMs);
+
 #endif /* ICO_PLATFORM_PRESENT_HIST_H */

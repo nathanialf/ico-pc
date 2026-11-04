@@ -75,7 +75,7 @@ static double s_gpuBlockMs = -1.0; /* the last block line's time, ico_thread_now
 
 static void around_queue(const RdPerfRecord *r)
 {
-    if (!s_gpuOn || !(r->presentEndMs > 0.0)) {
+    if (!s_gpuOn || !(r->presentEndMs > 0.0) || !present_stall_lines(r->presentMs)) {
         return;
     }
     if (s_around.n == AROUND_MAX) {
@@ -204,9 +204,11 @@ void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap)
         return;
     }
     s_after.pending = 0;
-    stall_rec(r, &o);
-    present_after_text(s_after.replay, s_after.ms, &o, text, sizeof(text));
-    ico_log_limited("window: after the present that blocked", "window: %s", text);
+    if (present_stall_lines(s_after.ms)) {
+        stall_rec(r, &o);
+        present_after_text(s_after.replay, s_after.ms, &o, text, sizeof(text));
+        ico_log_limited("window: after the present that blocked", "window: %s", text);
+    }
     if (r->gpuGapValid) {
         pace_gpu_gap_stall(gap, r->gpuGapNs);
     }
@@ -217,7 +219,7 @@ void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const 
 {
     char text[1024];
 
-    if (!r->presented || !(r->presentMs > WINDOW_STALL_MS)) {
+    if (!r->presented || !present_stall_lines(r->presentMs)) {
         return;
     }
     rd_perf_pass_grow_text(agg, p, n, r->replay, r->presentMs, r->gpuValid, r->gpuMs,
