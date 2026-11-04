@@ -47,6 +47,7 @@ PROGRAMS=(
     port/render/rd_msaa_test.exe
     port/render/rd_crt_test.exe
     port/render/rd_mirror_test.exe
+    port/fmv/rd_video_test.exe
 )
 
 stage() {
@@ -311,6 +312,10 @@ run() {
     run_test rd_msaa "$DIR/rd_msaa_test.exe"
     run_test rd_crt "$DIR/rd_crt_test.exe" "$(winpath "$WORK")"
     run_test rd_mirror "$DIR/rd_mirror_test.exe"
+    # the movie's colour conversion (yuv.hlsl) against the CPU's, flat and
+    # ramp among the cases: FXC read the conversion's hex constants as
+    # unsigned and the movies were purple on Direct3D 11
+    run_test rd_video "$DIR/rd_video_test.exe"
 
     # the summary: the device line once (the first log that has one) and
     # whether the debug layer was there, then the verdicts

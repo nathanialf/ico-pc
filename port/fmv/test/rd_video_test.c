@@ -617,7 +617,7 @@ int main(void)
     s.outputHeight = OH;
     s.aspect = 4.0f / 3.0f;
     if (!rd_init(512, 512, &s, NULL)) {
-        printf("SKIP rd_video_test: no usable Vulkan device\n");
+        printf("SKIP rd_video_test: no usable device\n");
         return 77;
     }
     printf("rd_video_test: adapter %s\n", rhi_adapter_name());
@@ -630,8 +630,12 @@ int main(void)
     testField();
     testOverlay();
     rd_video_shutdown();
-    const uint32_t verr = rhi_vk_validation_error_count();
-    CHECK(verr == 0, "%u validation errors", verr);
+    if (rhi_backend() == RHI_BACKEND_VULKAN) {
+        /* the Vulkan layer's count; the other backends have their own (the
+         * D3D11 debug layer's errors fail ci_d3d11_warp.sh's run) */
+        const uint32_t verr = rhi_vk_validation_error_count();
+        CHECK(verr == 0, "%u validation errors", verr);
+    }
     rd_shutdown();
     if (failures) {
         printf("rd_video_test: %d failures\n", failures);
