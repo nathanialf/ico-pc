@@ -1,7 +1,10 @@
 /* rd_glow_fold.c: the glow's mask folded into the reduction that reads it
- * (docs/port/RENDER_POST.md, "The glow's mask in its reduction"; on every
- * device and backend that presents, [dev] glow_fold = true|false and
- * ICO_RD_GLOW_FOLD=1|0 the A/B).
+ * (docs/port/RENDER_POST.md, "The glow's mask in its reduction"; by
+ * default on the immediate-mode device classes that present, off on the
+ * tile-based ones (RdProfile.glowFold, rd_profile.c: there the mask's
+ * pass costs less than the folded reduction, the PowerVR phone's 8 ms a
+ * glow picture); [dev] glow_fold = true|false and ICO_RD_GLOW_FOLD=1|0
+ * set it either way, the A/B).
  *
  * List 7's glow (staticBlur.c makeFullScreenFlareBefore/After) fills WORK2
  * (fillWork2: one untextured sprite over the frame), draws the mask into it
@@ -167,17 +170,21 @@ bool rd__glow_fold_on(void)
     static int env = -1;
     if (env < 0) {
         /* [dev] glow_fold (port/platform/host_config.c): 1 on, 0 off; not
-           set: on where the renderer presents.  Without an output (the
-           tests, rd_replay_tool's --target and --pass-dump) its caller
-           reads the targets, WORK2 among them, which the fold leaves
-           undrawn: off there unless asked for (the A/B) */
+           set: the device profile's default (RdProfile.glowFold: on on the
+           immediate-mode classes, off on the tile-based ones, whose
+           full-frame mask pass is cheaper than the mask's arithmetic at
+           every tap of the reduction) where the renderer presents.
+           Without an output (the tests, rd_replay_tool's --target and
+           --pass-dump) its caller reads the targets, WORK2 among them,
+           which the fold leaves undrawn: off there unless asked for (the
+           A/B) */
         const char *e = getenv("ICO_RD_GLOW_FOLD");
         env = e && e[0] == '1' ? 1 : e && e[0] == '0' ? 0 : 2;
     }
     if (env != 2) {
         return env == 1;
     }
-    return g_rd.settings.outputWidth > 0 && g_rd.settings.outputHeight > 0;
+    return g_rd.profile.glowFold && g_rd.settings.outputWidth > 0 && g_rd.settings.outputHeight > 0;
 }
 
 /* ------------------------------------------------------------- the scan */

@@ -1184,6 +1184,27 @@ if(ICO_RUN_TESTS)
                                                                            "${_env}")
         set_tests_properties(${rd_blur_SHARDS} PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_blur's glow fold case (k) alone on the tile class's fake
+    # (ICO_VK_FAKE_LIMITS=moltenvk: the Apple row of the device profile):
+    # the profile's glow fold off by default there (rd_profile.c, the
+    # PowerVR phone's 8 ms a glow picture), so post mode 7 not forced draws
+    # the mask's pass; _on with [dev] glow_fold = true (ICO_RD_GLOW_FOLD=1)
+    # folds it.  The same bytes either way, and every forced frame as in
+    # the shards
+    set(_gft "${CMAKE_CURRENT_BINARY_DIR}/glow_fold_tile")
+    file(MAKE_DIRECTORY "${_gft}")
+    add_test(NAME rd_blur_glow_fold_tile
+             COMMAND rd_blur_test --only glow_fold --glow-fold-default off
+             WORKING_DIRECTORY "${_gft}")
+    add_test(NAME rd_blur_glow_fold_tile_on
+             COMMAND rd_blur_test --only glow_fold --glow-fold-default on
+             WORKING_DIRECTORY "${_gft}")
+    set_tests_properties(rd_blur_glow_fold_tile rd_blur_glow_fold_tile_on
+                         PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+    set_tests_properties(rd_blur_glow_fold_tile PROPERTIES
+                         ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
+    set_tests_properties(rd_blur_glow_fold_tile_on PROPERTIES
+                         ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_GLOW_FOLD=1")
     # the same tests and expectations in the two-pass blend
     # fallback (ICO_RD_NO_DUAL=1: lavapipe has dualSrcBlend, so it is forced)
     set(_env_nodual ${_env} "ICO_RD_NO_DUAL=1")

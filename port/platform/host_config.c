@@ -638,8 +638,10 @@ static const struct {
     /* true: every between-tick present draws the glow's chain again instead
        of pasting the tick's (an A/B; port/render/rd_glow_hold.c) */
     {"dev.glow_redraw", "glow_redraw"},
-    /* false: the glow's mask drawn into WORK2 and read by its reduction, as
-       before (an A/B; port/render/rd_glow_fold.c rd__glow_fold_on) */
+    /* false: the glow's mask drawn into WORK2 and read by its reduction (the
+       tile-based GPUs' default); true: computed in the reduction (the
+       immediate-mode ones'); an A/B either way (port/render/rd_profile.c
+       glowFold, rd_glow_fold.c rd__glow_fold_on) */
     {"dev.glow_fold", "glow_fold"},
     /* false: SDL's DirectInput controller scan off (issue 105; window_host.c
        joystick_scan_hints) */
