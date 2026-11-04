@@ -1481,7 +1481,11 @@ degrees) at a suboptimal present: the swapchain made again (N times so far)` (th
 every 100th); the renderer's first picture in a turn `rd: present: the 2400x1080 picture turned 90
 degrees into the swapchain's 1080x2400 images in one pass (pre-rotated: the compositor shows them
 as they are)`; with the escape, the old `rhi_vk: surface transform 0x2 (offered 0x1ff): presenting
-with identity, the compositor rotates ([dev] prerotate = false, ICO_VK_PREROTATE=0)`.
+with identity, the compositor rotates ([dev] prerotate = false, ICO_VK_PREROTATE=0)`. When the
+texture before the turn cannot be made after an image was acquired, the image is cleared at its
+own size and presented (`rd__prerotate_blank`: an acquired image is never left unpresented, the
+films' rule), and `rd: present: no WxH texture for the picture before the turn; a blank image is
+presented in its place (N times)` says so (the first 8, then every 100th).
 
 **The twin.** A headless device has no swapchain to turn, so the tests use a twin: under
 `ICO_VK_FAKE_TRANSFORM=90`, `180` or `270` a headless Vulkan device answers that turn

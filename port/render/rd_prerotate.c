@@ -96,9 +96,12 @@ bool rd__prerotate_target(uint32_t w, uint32_t h, RhiFormat fmt, RhiTexture *tex
         s_pic.h = h;
         s_pic.fmt = fmt;
         if (!s_pic.tex.id) {
-            rd__log("present: no %ux%u texture for the picture before the turn; the "
-                    "picture is skipped",
-                    w, h);
+            static unsigned fails;
+            if (++fails <= 8 || fails % 100 == 0) {
+                rd__log("present: no %ux%u texture for the picture before the turn; a blank "
+                        "image is presented in its place (%u times)",
+                        w, h, fails);
+            }
             s_pic.w = s_pic.h = 0;
             return false;
         }
@@ -169,6 +172,25 @@ void rd__prerotate_record(RhiCommandList cl, RhiTexture src, RhiState *srcState,
                 w, h, turns * 90u, (turns & 1u) ? h : w, (turns & 1u) ? w : h);
     }
     turnPass(cl, src, srcState, w, h, dst, dstState, dstFmt, turns);
+}
+
+void rd__prerotate_blank(RhiCommandList cl, RhiTexture image, RhiState *state, uint32_t w,
+                         uint32_t h, uint32_t turns)
+{
+    /* a swapchain image acquired must be presented (rd_video.c's rule: the
+     * next acquire would otherwise have to adopt it); with no picture to
+     * turn into it, the image cleared at its own (turned) size */
+    rd__transition(cl, image, state, RHI_STATE_RENDER_TARGET);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = image;
+    p.color[0].load = RHI_LOAD_CLEAR;
+    p.colorCount = 1;
+    p.width = (turns & 1u) ? h : w;
+    p.height = (turns & 1u) ? w : h;
+    rhi_cmd_begin_render_pass(cl, &p);
+    rhi_cmd_end_render_pass(cl);
+    rd__transition(cl, image, state, RHI_STATE_PRESENT);
 }
 
 void rd__prerotate_twin(RhiCommandList cl, RhiTexture src, RhiState *srcState, uint32_t w,
