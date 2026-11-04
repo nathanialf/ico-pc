@@ -85,6 +85,13 @@ _Static_assert(ICO_SCHED_MAX_THREADS == ICO_FIBER_POOL_SLOTS, "a thread id is it
 
 static int dispatching;
 
+/* The longest single switch (one resume of a fiber to its next yield, host
+   calls it asked for included) since ico_sched_switch_max_reset, and the
+   thread it was: window_host.c's slow-step line names it.  Host-side, not in
+   SchedTables (a save state does not carry it) */
+static unsigned long long switch_max_ns;
+static int switch_max_id;
+
 static int interrupt_depth;
 
 static void (*fiber_start_hook)(void);
@@ -706,6 +713,7 @@ int ico_sched_run(void)
         }
         tab.current_id = tab.last_id = id;
         tab.switch_count++;
+        const unsigned long long switchT0 = ico_diag_now_ns();
         if (ico_fiber_resume(t->fiber) != 0) {
             fatal("cannot resume a thread's fiber");
         }
@@ -722,6 +730,14 @@ int ico_sched_run(void)
             }
         }
         tab.current_id = 0;
+        {
+            const unsigned long long took = ico_diag_now_ns() - switchT0;
+
+            if (took > switch_max_ns) {
+                switch_max_ns = took;
+                switch_max_id = id;
+            }
+        }
         if (t->reap) {
             ico_fiber_destroy(t->fiber);
             t->fiber = NULL;
@@ -731,6 +747,20 @@ int ico_sched_run(void)
             }
         }
     }
+}
+
+void ico_sched_switch_max_reset(void)
+{
+    switch_max_ns = 0;
+    switch_max_id = 0;
+}
+
+unsigned long long ico_sched_switch_max(int *id)
+{
+    if (id != NULL) {
+        *id = switch_max_id;
+    }
+    return switch_max_ns;
 }
 
 void ico_sched_vsync_advance(void)

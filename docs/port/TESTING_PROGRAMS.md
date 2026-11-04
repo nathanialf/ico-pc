@@ -898,7 +898,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`present_stall_lines`: from 250 ms on, never from 50 to 250 ms nor for NaN) (`present_hist`).
 - `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
-  (`sched`).
+  (`sched`); the longest single switch (`ico_sched_switch_max`: a 30 ms thread against a 1 ms
+  one names the long one, its time at least 30 ms, the reset empties it, a NULL id).
+- `window_scene_test.c`: the window's scene lines (`window_scene.h`, issue 179): the layout kinds
+  of the European disc's ids (a movie over any layout is a scene, the title's two, the pause menu,
+  the options and button configuration, anything else `other`), the block's layout share over a
+  sequence of steps (`layout: play 6.2 s, scene 3.1 s, pause 0.7 s, other 0.0 s`, the empty block,
+  a kind out of range ignored, a reset, a cut buffer), the slow step's game threads part (`game
+  threads 199.3 in 39 switches (longest Main 171.2 ms; on core 2)`, the core or the longest switch
+  left out, no name) and the VU line (pre-pass off 9 a triangle, on the recorded vertices, the k and
+  M words, no replays, a cut buffer), word for word (`window_scene`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the
   crash chain to the box, the variable and the relaunch environment, the `dst` field of a
   pipeline's or a start-up batch's note, its VU vertex pre-pass keys and modules, and the chains
