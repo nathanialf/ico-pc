@@ -3207,6 +3207,34 @@ static void testGpuGap(void)
     pace_gpu_gap_text(&g, text, sizeof text);
     CHECK(strstr(text, "; across the first 8 of the 11 stalls: the GPU was idle -0.4, 1.0, 2.0, "
                        "3.0, 4.0, 5.0, 6.0, 7.0 ms before the next replay") != NULL);
+
+    /* the window's buffer (PACE_GPU_GAP_TEXT_MAX, window_host.c perf_log;
+       v0.10.2's first build gave it 384 and cut the stall list): the
+       longest text fits whole: counts far past any 10 s block's (10 digits
+       where the sums allow, a million idle and overlapped replays at the
+       60 s refusal's mean, rd_perf_gap.h), the longest gap 59999.9 ms and
+       8 kept stalls each -59999.9 ms */
+    {
+        char big[PACE_GPU_GAP_TEXT_MAX];
+
+        memset(&g, 0, sizeof g);
+        g.n = g.across = g.stalls = 4000000000u;
+        g.idle = g.overlap = 1000000u;
+        g.idleNs = g.overlapNs = 1000000ull * 59999900000ull;
+        g.idleMaxNs = 59999900000ull;
+        g.spanNs = 18000000000000000000ull;
+        for (unsigned i = 0; i < PACE_GPU_GAP_STALLS; i++) {
+            g.stallNs[i] = -59999900000ll;
+        }
+        const int w = pace_gpu_gap_text(&g, big, sizeof big);
+        CHECK(w > 0 && (unsigned)w < sizeof big && strlen(big) == (size_t)w);
+        CHECK(strstr(big, "; across the first 8 of the 4000000000 stalls: the GPU was idle "
+                          "-59999.9, -59999.9, -59999.9, -59999.9, -59999.9, -59999.9, -59999.9, "
+                          "-59999.9 ms before the next replay") != NULL);
+        /* a reporter's block (review S1): 3 stalls and the across part
+           were past 383 bytes */
+        CHECK(w > 383);
+    }
 }
 
 /* FIFO from the first swapchain on Qualcomm's own driver (QCOMFIX): vsync

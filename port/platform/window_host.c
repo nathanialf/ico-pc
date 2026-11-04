@@ -4706,7 +4706,7 @@ static void perf_log(void)
     if (s_perf.gpuGap.n) {
         /* whether the spans overlap (the step rule's GPU time a picture
            over the GPU's own) or the GPU waited between replays */
-        char gap[384];
+        char gap[PACE_GPU_GAP_TEXT_MAX];
 
         pace_gpu_gap_text(&s_perf.gpuGap, gap, sizeof(gap));
         fprintf(stderr, "window: GPU between replays: %s\n", gap);

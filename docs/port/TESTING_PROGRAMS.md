@@ -853,7 +853,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   timed replays (`testGpuGap`, `PaceGpuGap`: the idle floor of 0.05 ms, an overlap capped at the
   span, the `window: GPU between replays` part word for word, a short buffer; issue 123: gaps
   timed across untimed replays counted, the gaps after the presents that blocked listed, one
-  stall, the first 8 of 11 kept) (`pace_policy`).
+  stall, the first 8 of 11 kept; the longest text fits the window's `PACE_GPU_GAP_TEXT_MAX` buffer
+  whole) (`pace_policy`).
 - `perf_block_test.c`: a block of replays by phase: sums, maxes, the replays over a threshold, the
   longest phase (`perf_block`).
 - `present_fallback_test.c`: the FIFO fallback's decision (`present_fallback.h`): the stock
