@@ -1631,19 +1631,19 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
                         int n, bool present)
 {
     enum {
-        P_TOTAL,
-        P_INTERP,
-        P_WAIT,
-        P_ACQUIRE,
-        P_UPLOAD,
-        P_WALK,
-        P_BIND,
-        P_SUBMIT,
-        P_PRESENT,
-        P_COUNT
+        TP_TOTAL,
+        TP_INTERP,
+        TP_WAIT,
+        TP_ACQUIRE,
+        TP_UPLOAD,
+        TP_WALK,
+        TP_BIND,
+        TP_SUBMIT,
+        TP_PRESENT,
+        TP_COUNT
     };
 
-    double sum[P_COUNT] = {0}, low[P_COUNT] = {0};
+    double sum[TP_COUNT] = {0}, low[TP_COUNT] = {0};
     double ring = 0.0, uniform = 0.0, interp = 0.0, draws = 0.0, pipes = 0.0, groups = 0.0;
     double skipPipes = 0.0, skipGroups = 0.0, skipStates = 0.0; /* the bind cache's */
     double d3d11 = 0.0;    /* RdPerfRecord.backendWriteBytes (Direct3D 11 only) */
@@ -1673,9 +1673,9 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
         }
         const RdPerfRecord r = g_rdPerf; /* the record the replay just closed */
         while (rd_perf_pop(NULL)) {}
-        const double v[P_COUNT] = {r.totalMs, r.interpMs, r.waitMs,   r.acquireMs, r.uploadMs,
-                                   r.walkMs,  r.bindMs,   r.submitMs, r.presentMs};
-        for (int p = 0; p < P_COUNT; p++) {
+        const double v[TP_COUNT] = {r.totalMs, r.interpMs, r.waitMs,   r.acquireMs, r.uploadMs,
+                                    r.walkMs,  r.bindMs,   r.submitMs, r.presentMs};
+        for (int p = 0; p < TP_COUNT; p++) {
             sum[p] += v[p];
             low[p] = k == 0 || v[p] < low[p] ? v[p] : low[p];
         }
@@ -1708,12 +1708,12 @@ static bool timeReplays(const char *dump, const RdFrame *pf, const RdFrame *f, c
                "(%.3f), walk %.3f (%.3f), bind %.3f (%.3f), submit %.3f (%.3f), present %.3f "
                "(%.3f); per replay: ring %.1f KB, uniform %.1f KB, interp %.1f KB, %.1f draws, "
                "%.1f pipeline binds, %.1f bind group binds\n",
-               dump, n, sum[P_TOTAL] / m, low[P_TOTAL], sum[P_INTERP] / m, low[P_INTERP],
-               sum[P_WAIT] / m, low[P_WAIT], sum[P_ACQUIRE] / m, low[P_ACQUIRE], sum[P_UPLOAD] / m,
-               low[P_UPLOAD], sum[P_WALK] / m, low[P_WALK], sum[P_BIND] / m, low[P_BIND],
-               sum[P_SUBMIT] / m, low[P_SUBMIT], sum[P_PRESENT] / m, low[P_PRESENT],
-               ring / m / 1024.0, uniform / m / 1024.0, interp / m / 1024.0, draws / m, pipes / m,
-               groups / m);
+               dump, n, sum[TP_TOTAL] / m, low[TP_TOTAL], sum[TP_INTERP] / m, low[TP_INTERP],
+               sum[TP_WAIT] / m, low[TP_WAIT], sum[TP_ACQUIRE] / m, low[TP_ACQUIRE],
+               sum[TP_UPLOAD] / m, low[TP_UPLOAD], sum[TP_WALK] / m, low[TP_WALK], sum[TP_BIND] / m,
+               low[TP_BIND], sum[TP_SUBMIT] / m, low[TP_SUBMIT], sum[TP_PRESENT] / m,
+               low[TP_PRESENT], ring / m / 1024.0, uniform / m / 1024.0, interp / m / 1024.0,
+               draws / m, pipes / m, groups / m);
         printf("%s: time: bind cache: %.1f pipeline, %.1f bind group and %.1f state repeats "
                "skipped a replay\n",
                dump, skipPipes / m, skipGroups / m, skipStates / m);
