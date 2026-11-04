@@ -258,7 +258,10 @@ pause menu's Options.
 
 **Gamepads.** A Bluetooth or USB gamepad works, with rumble if it has it.
 While one is connected, the touch buttons go away. Change that in
-**Options > Controls > Touch screen > Touch controls**.
+**Options > Controls > Touch screen > Touch controls**. The choice
+**Always, Start only in scenes** keeps the buttons like Always, but
+during a scene or a movie only the Start button stays, so it can be
+skipped.
 
 **Keyboards.** A keyboard works too, with the same keys as on a PC
 ([the table](CONTROLS.md#play-with-a-gamepad-a-keyboard-or-a-mouse)).

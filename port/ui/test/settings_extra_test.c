@@ -4194,7 +4194,21 @@ static void testTouchPage(void)
     ico_toml_free(t);
     CHECK(b->touch_mode == 2 && b->touch_size == 2 && b->touch_opacity == 100,
           "reloaded after the save: always, large, 100");
-    /* around: Right from Always is Off, from Large Small, from 100 % 25 % */
+    /* Right from Always is Always, Start only in scenes: saved as its own
+       word and read back */
+    ui_settings_step(UI_OPT_TOUCH_MODE, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_TOUCH_MODE), "Always, Start only in scenes") == 0 &&
+              b->touch_mode == ICO_TOUCH_MODE_ALWAYS_SCENES,
+          "Right: Always, Start only in scenes (%s)", ui_settings_value_text(UI_OPT_TOUCH_MODE));
+    CHECK(ui_settings_save() == 0, "save the fourth mode");
+    t = ico_toml_load(p);
+    CHECK(t && ico_toml_get(t, "input.touch_mode") &&
+              strcmp(ico_toml_get(t, "input.touch_mode"), "always_scenes") == 0,
+          "saved: touch_mode = always_scenes");
+    ico_toml_free(t);
+    CHECK(b->touch_mode == ICO_TOUCH_MODE_ALWAYS_SCENES,
+          "reloaded after the save: the fourth mode");
+    /* around: Right from the fourth is Off, from Large Small, from 100 % 25 % */
     ui_settings_step(UI_OPT_TOUCH_MODE, 1);
     ui_settings_step(UI_OPT_TOUCH_SIZE, 1);
     ui_settings_step(UI_OPT_TOUCH_OPACITY, 1);
@@ -4217,7 +4231,12 @@ static void testTouchPage(void)
     ui_settings_step(UI_OPT_TOUCH_OPACITY, 1);
     CHECK(b->touch_opacity == 75, "60 %% Right: 75 %% (%d)", b->touch_opacity);
     ui_settings_step(UI_OPT_TOUCH_MODE, -1);
-    CHECK(b->touch_mode == 2, "Off Left: Always");
+    CHECK(b->touch_mode == ICO_TOUCH_MODE_ALWAYS_SCENES, "Off Left: Always, Start only in scenes");
+    /* the fourth word reads back */
+    useConfig("version = 1\n[input]\ntouch_mode = \"always_scenes\"\n");
+    ico_input_reload_bindings(b);
+    CHECK(b->touch_mode == ICO_TOUCH_MODE_ALWAYS_SCENES, "always_scenes reads back (%d)",
+          b->touch_mode);
     /* a bad value keeps the default */
     useConfig("version = 1\n[input]\ntouch_mode = \"sometimes\"\ntouch_opacity = 5\n");
     ico_input_reload_bindings(b);

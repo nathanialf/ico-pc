@@ -158,6 +158,7 @@ const char *const
             [UI_STR_OPT_TOUCH_SIZE] = "Taille des commandes",
             [UI_STR_OPT_TOUCH_OPACITY] = "Opacité des commandes",
             [UI_STR_VAL_ALWAYS] = "Toujours",
+            [UI_STR_VAL_ALWAYS_SCENES] = "Toujours, Start seul dans les scènes",
             [UI_STR_VAL_SMALL] = "Petite",
             [UI_STR_VAL_MEDIUM] = "Moyenne",
             [UI_STR_VAL_LARGE] = "Grande",

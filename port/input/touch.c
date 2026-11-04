@@ -1323,7 +1323,8 @@ IcoTouchDrawInfo ico_touch_draw_info(const IcoTouchState *t, const IcoTouchLayou
 
 int ico_touch_accepts(int mode, int gamepads)
 {
-    return mode == ICO_TOUCH_MODE_ALWAYS || (mode == ICO_TOUCH_MODE_AUTO && gamepads <= 0);
+    return mode == ICO_TOUCH_MODE_ALWAYS || mode == ICO_TOUCH_MODE_ALWAYS_SCENES ||
+           (mode == ICO_TOUCH_MODE_AUTO && gamepads <= 0);
 }
 
 int ico_touch_effective_mode(int mode, int gamepads, int phone)
@@ -1349,11 +1350,44 @@ int ico_touch_update(IcoTouchState *t, const IcoTouchLayout *l, int mode, int ga
 
 float ico_touch_mode_opacity(const IcoTouchState *t, int mode, int gamepads, uint64_t nowNs)
 {
-    if (mode == ICO_TOUCH_MODE_ALWAYS) {
+    if (mode == ICO_TOUCH_MODE_ALWAYS || mode == ICO_TOUCH_MODE_ALWAYS_SCENES) {
         return 1.0f;
     }
     if (mode != ICO_TOUCH_MODE_AUTO) {
         return 0.0f;
     }
     return ico_touch_opacity(t, gamepads, nowNs);
+}
+
+float ico_touch_scene_alpha(IcoTouchLayout *l, IcoTouchSceneFade *f, int mode, int scene,
+                            uint64_t nowNs)
+{
+    const float target = (mode == ICO_TOUCH_MODE_ALWAYS_SCENES && scene) ? 1.0f : 0.0f;
+    int i;
+
+    if (!f->started) {
+        f->started = 1;
+        f->hide = target;
+    } else if (nowNs > f->lastNs) {
+        const float step = (float)(nowNs - f->lastNs) / (float)ICO_TOUCH_FADE_NS;
+
+        if (f->hide < target) {
+            f->hide = f->hide + step < target ? f->hide + step : target;
+        } else if (f->hide > target) {
+            f->hide = f->hide - step > target ? f->hide - step : target;
+        }
+    }
+    f->lastNs = nowNs;
+    if (f->hide > 0.0f) {
+        const float keep = 1.0f - f->hide;
+
+        for (i = 0; i < ICO_TOUCH_BUTTONS; i++) {
+            if (!(l->button[i].pad & ICO_PAD_START)) {
+                l->button[i].alpha *= keep;
+            }
+        }
+        l->stickAlpha *= keep;
+        l->lookAlpha *= keep;
+    }
+    return f->hide;
 }

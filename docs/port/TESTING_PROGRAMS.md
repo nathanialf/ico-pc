@@ -396,6 +396,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   420 dpi: with the disc's confirm (Cross, or Circle) Off a point in the look pad's area and one in
   the stick's area are taken by the mapper but do not block the menus' click, the stick's does
   while the confirm works (the D-pad Off), and a working or Hidden button always blocks (`touch`).
+- `touch_scene_test.c`: Touch controls "Always, Start only in scenes" (`touch.c`
+  `ico_touch_scene_alpha`, [INPUT.md](INPUT.md)): the other modes and a scene-free fourth mode
+  leave every alpha, the scene fades every control without the Start bit (D-pad, faces, shoulders,
+  Select, stick, look pad) to 0 over 300 ms both ways and keeps Start (a Hidden Start stays 0, a
+  dimmer one keeps its alpha, selection is by the pad bit), the original layout is untouched, the
+  mode maps and draws like Always, and the Frame rate counter's place on the faded copy equals
+  that with the other controls dropped (`touch_scene`).
 - `touch_gap_test.c`: the Frame rate counter's place among the player's actual touch controls
   (`touch_gap.c`, [UI.md](UI.md#the-frame-rate-counter)): the default layout's old place, Start at
   the top-left drawn, Hidden and Off, every control Off, no room on the row, the stick's resting
