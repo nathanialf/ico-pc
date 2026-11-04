@@ -1002,7 +1002,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   folding), the effects depth or a depth read by a later frame (the bars drawn, a fade after them
   folds), a draw into SCENE in list 12, MSAA, a factor above 0x80 (`rd_fades_fold`).
 - `rd_vis_test.c`: the scene draws' visibility test ([RENDER.md](RENDER.md#culling)) on the CPU,
-  without a device (also the reason counts `rd__vis_why` of the frame case, summing to the draws
+  without a device (also the MSAA epoch, `checkMsaaEpoch`: `rd__vis_msaa_may_close` true for DATE,
+  a texture of SCENE's depth (texturing off too), SCENE's colour with another depth and SCENE's
+  depth with another colour, false for SCENE's own pair, SCENE without a depth and another target's
+  pair; on a recorded frame of off-screen draws under `rd__vis_set_msaa(1)` the four that may close
+  the epoch replayed (`MSAA_EPOCH`) and the plain one skipped, under `rd__vis_set_msaa(0)` all five
+  skipped; also the reason counts `rd__vis_why` of the frame case, summing to the draws
   walked, and a two-batch mesh drawn by batch ranges: the draw of the batch left of the frame
   skipped by its own box and counted `SKIP_RANGE`, the draws of the other batch and of both kept,
   the moved stream measured again): `rd__vis_box` over synthetic prelit, lit (with a sheet's tiles past its own
@@ -1338,7 +1343,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (the missing ones named and skipped) under `ICO_RD_BLEND=fixed` with `--pass-dump --stats`
   three times, `ICO_RD_CULL=off`, `frustum` and `full`, at Original 4:3 presented at 640x480,
   Enhanced 4:3 2x, Enhanced 2x at the dump's own aspect where `--no-device --list` says it is wider
-  than 4:3, and on the first dump once with `--aa msaa4`: every named target's PNG (and
+  than 4:3, and with `--aa msaa4` (Enhanced 4:3 2x) on the first dump and on the dumps of
+  `tools/cull_msaa_dumps.txt` (`-DMSAA_LIST`: frames whose MSAA epoch closes inside a list by a
+  read of SCENE; one the corpus lists do not name runs that setting only): every named target's PNG (and
   `PRESENT.png`) of the frustum and the full runs byte for byte the off run's, the off run's `cull
   off: 0 of 0`, the frustum run's `cull frustum: N of M` with N at most M, the full run's `cull
   full: N of M (F frustum, O occluded)` with the frustum run's M, F its N and N = F + O, and draws

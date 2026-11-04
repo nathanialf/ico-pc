@@ -2144,14 +2144,16 @@ if(ICO_RUN_TESTS)
     # dumps of tools/occlusion_corpus.txt and tools/native_frame_dumps.txt that
     # exist, under ICO_RD_BLEND=fixed, with ICO_RD_CULL=off, frustum and full, through
     # --pass-dump --stats at Original 4:3 640x480, Enhanced 4:3 2x, Enhanced
-    # 2x at the dump's own aspect where it is wider than 4:3, and one MSAA 4x
-    # run: every target's PNG equal, the stats line read, draws skipped over
-    # the corpus; SKIP as rd_vustage_ab
+    # 2x at the dump's own aspect where it is wider than 4:3, and MSAA 4x on
+    # the first dump and on tools/cull_msaa_dumps.txt's (the epoch closed
+    # inside a list by a read of SCENE): every target's PNG equal, the stats
+    # line read, draws skipped over the corpus; SKIP as rd_vustage_ab
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/cull_ab")
     add_test(NAME rd_cull_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DLIST=${CMAKE_SOURCE_DIR}/tools/occlusion_corpus.txt"
                      "-DEXTRA=${CMAKE_SOURCE_DIR}/tools/native_frame_dumps.txt"
+                     "-DMSAA_LIST=${CMAKE_SOURCE_DIR}/tools/cull_msaa_dumps.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/cull_ab"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_cull_ab.cmake")
     set_tests_properties(rd_cull_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 5400)

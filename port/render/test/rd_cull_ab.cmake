@@ -11,7 +11,9 @@
 #   enh2x43  Enhanced 4:3 2x;
 #   wide     Enhanced 2x at the dump's own aspect, for a dump drawn wider than
 #            4:3 (its aspect read from --no-device --list);
-# and once, on the first dump, msaa (Enhanced 4:3 2x with --aa msaa4).
+# and msaa (Enhanced 4:3 2x with --aa msaa4) on the first dump and on every dump of
+# MSAA_LIST (tools/cull_msaa_dumps.txt: dumps whose MSAA epoch closes inside a list by a
+# read of SCENE; one the corpus lists do not name runs the msaa setting only).
 # Every named target's PNG of the frustum and the full runs must equal the off
 # run's byte for byte; the off run's stats line must say "cull off: 0 of 0",
 # the frustum run's "cull frustum: N of M" with N <= M, the full run's "cull
@@ -20,8 +22,10 @@
 # total is reported, 0 allowed).  Each run's counts are printed.  No dump read, or no device: SKIP
 # (77).  -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DEXTRA=<a second list>
 # -DOUT=<a folder the test may write> [-DMAX_DUMPS=<n>: the first n dumps only]
+# [-DMSAA_LIST=<the msaa dumps' list>]
 set(dumps "")
-foreach(list IN ITEMS "${LIST}" "${EXTRA}")
+set(msaaList "")
+foreach(list IN ITEMS "${LIST}" "${EXTRA}" "${MSAA_LIST}")
   if(list STREQUAL "" OR NOT EXISTS "${list}")
     message(STATUS "${list}: no dump list, skipped")
     continue()
@@ -36,18 +40,22 @@ foreach(list IN ITEMS "${LIST}" "${EXTRA}")
     if(NOT IS_ABSOLUTE "${l}")
       set(l "${listDir}/${l}")
     endif()
+    set(matched "")
     if(l MATCHES "[*]")
       file(GLOB matched "${l}")
       list(SORT matched)
-      if(matched)
-        list(APPEND dumps ${matched})
-      else()
+      if(NOT matched)
         message(STATUS "${l}: no dump matches, skipped")
       endif()
     elseif(EXISTS "${l}")
-      list(APPEND dumps "${l}")
+      set(matched "${l}")
     else()
       message(STATUS "${l}: no such dump, skipped")
+    endif()
+    if(matched AND NOT "${MSAA_LIST}" STREQUAL "" AND list STREQUAL "${MSAA_LIST}")
+      list(APPEND msaaList ${matched})
+    elseif(matched)
+      list(APPEND dumps ${matched})
     endif()
   endforeach()
 endforeach()
@@ -58,6 +66,17 @@ if(DEFINED MAX_DUMPS AND MAX_DUMPS GREATER 0)
     list(SUBLIST dumps 0 ${MAX_DUMPS} dumps)
   endif()
 endif()
+# the msaa list's dumps: after the corpus's, the msaa setting only unless a
+# corpus list names them too
+set(msaaOnly "")
+foreach(d IN LISTS msaaList)
+  list(FIND dumps "${d}" at)
+  list(FIND msaaOnly "${d}" seen)
+  if(at EQUAL -1 AND seen EQUAL -1)
+    list(APPEND msaaOnly "${d}")
+  endif()
+endforeach()
+list(APPEND dumps ${msaaOnly})
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
   message(STATUS "SKIP: no dump of ${LIST} or ${EXTRA} is here")
@@ -79,22 +98,29 @@ set(drawsTotal 0)
 set(index 0)
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
-  # the dump's own aspect (the wide setting runs where it is wider than 4:3)
-  execute_process(COMMAND "${TOOL}" "${dump}" - --no-device --list
-                  RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
-  set(settings "orig43" "enh2x43")
-  if(rc EQUAL 0 AND out MATCHES "${aspectRe}")
-    # the tool prints it with four decimals (%.4f): 4:3 is 1.3333, and a
-    # dump before version 10 says so too; the digits as one number
-    string(REPLACE "." "" aspectDigits "${CMAKE_MATCH_1}")
-    if(aspectDigits GREATER 13400)
-      list(APPEND settings "wide")
-    endif()
+  list(FIND msaaOnly "${dump}" onlyAt)
+  list(FIND msaaList "${dump}" msaaAt)
+  if(NOT onlyAt EQUAL -1)
+    # a dump of MSAA_LIST alone: the msaa setting only
+    set(settings "msaa")
   else()
-    message(STATUS "${dump}: its aspect not read (exit ${rc}); the wide setting not run")
-  endif()
-  if(index EQUAL 1)
-    list(APPEND settings "msaa")
+    # the dump's own aspect (the wide setting runs where it is wider than 4:3)
+    execute_process(COMMAND "${TOOL}" "${dump}" - --no-device --list
+                    RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+    set(settings "orig43" "enh2x43")
+    if(rc EQUAL 0 AND out MATCHES "${aspectRe}")
+      # the tool prints it with four decimals (%.4f): 4:3 is 1.3333, and a
+      # dump before version 10 says so too; the digits as one number
+      string(REPLACE "." "" aspectDigits "${CMAKE_MATCH_1}")
+      if(aspectDigits GREATER 13400)
+        list(APPEND settings "wide")
+      endif()
+    else()
+      message(STATUS "${dump}: its aspect not read (exit ${rc}); the wide setting not run")
+    endif()
+    if(index EQUAL 1 OR NOT msaaAt EQUAL -1)
+      list(APPEND settings "msaa")
+    endif()
   endif()
   foreach(s IN LISTS settings)
     set(skipped FALSE)

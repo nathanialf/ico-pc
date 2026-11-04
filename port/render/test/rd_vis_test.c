@@ -61,7 +61,15 @@
  *             wall under ATE GREATER 0x40 whose As is 127 throughout (the
  *             alpha plan's range); the budget (none, one triangle); a
  *             wall whose texture is not uploaded yet (dirty) proven opaque
- *             by the scan the upload will make, a cut-out one not. */
+ *             by the scan the upload will make, a cut-out one not.
+ *   msaa      the MSAA epoch (rd__vis_msaa_may_close; rd__vis_set_msaa):
+ *             the state's test on its own (DATE on; a texture of SCENE's
+ *             depth; SCENE's colour with another depth, SCENE's depth with
+ *             another colour: true; SCENE's own pair, SCENE without a
+ *             depth, another target's pair: false); on a recorded frame of
+ *             off-screen draws, with samples in force the draws whose state
+ *             could close the epoch replayed (MSAA_EPOCH) and the plain one
+ *             skipped, without samples every one skipped. */
 #include <fenv.h>
 #include <math.h>
 #include <stdio.h>
@@ -1824,6 +1832,112 @@ static void checkHizPendingTexture(void)
            "upload will make\n");
 }
 
+/* a TARGET command with its own depth (pushTarget binds the colour's) */
+static void pushTargetPair(RdFrame *f, int l, uint32_t color, uint32_t depth)
+{
+    RdCmd *c = rd__st_push(f, l, RDC_TARGET);
+    c->u[0] = color;
+    c->u[1] = depth;
+    c->u[2] = 512u | (448u << 16);
+    c->b[0] = 1;
+}
+
+static void checkMsaaEpoch(void)
+{
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
+    const uint32_t work = rd_target(RD_TARGET_WORK1).id;
+    CHECK(scene == RD_TARGET_SCENE + 1u && work != 0 && work != scene, "msaa: the targets' ids");
+    const RdTex sceneDepth = rd_target_texture(rd_target(RD_TARGET_SCENE), RD_VIEW_DEPTH);
+    CHECK(sceneDepth.id != 0, "msaa: a texture of SCENE's depth");
+
+    /* the state on its own */
+    RdStateBlock st;
+    rd__reset_state_block(&st);
+    st.color = scene;
+    st.depth = scene;
+    CHECK(!rd__vis_msaa_may_close(&st), "msaa: SCENE's own pair does not close the epoch");
+    st.depth = 0;
+    CHECK(!rd__vis_msaa_may_close(&st), "msaa: SCENE without a depth does not close it");
+    st.depth = work;
+    CHECK(rd__vis_msaa_may_close(&st), "msaa: SCENE's colour with another depth closes it");
+    st.color = work;
+    st.depth = scene;
+    CHECK(rd__vis_msaa_may_close(&st), "msaa: SCENE's depth with another colour closes it");
+    st.depth = work;
+    CHECK(!rd__vis_msaa_may_close(&st), "msaa: another target's pair does not close it");
+    st.color = st.depth = scene;
+    st.ds.test = rd_test_from_gs(RD_TEST_RGBONLY_DATE1);
+    CHECK(rd__vis_msaa_may_close(&st), "msaa: DATE closes it (the snapshot)");
+    st.ds.test = rd_test_from_gs(RD_TEST_Z_GEQUAL);
+    st.tex = sceneDepth.id;
+    st.ds.texEnabled = 0;
+    CHECK(rd__vis_msaa_may_close(&st), "msaa: a texture of SCENE closes it (texturing off too)");
+
+    /* a recorded frame: every draw left of the frame (skipped without
+     * MSAA); 0 plain, 1 under DATE, 2 SCENE's colour with WORK1's depth,
+     * 3 WORK1's colour with SCENE's depth, 4 a texture of SCENE's depth */
+    const float leftLo[3] = {1000, 2000, 1}, leftHi[3] = {1100, 2100, 2};
+    const uint32_t mLeft = makeMesh(4, leftLo, leftHi, "msaa left");
+    CHECK(mLeft != 0, "msaa: the mesh made");
+    static RdFrame f;
+    memset(&f, 0, sizeof(f));
+    rd__reset_state_block(&f.startState);
+    f.number = 13;
+    uint32_t at[5];
+    pushTarget(&f, 0, scene);
+    rd__st_test(&f, 0, RD_TEST_Z_GEQUAL);
+    pushVu(&f, 0, RDC_MESH, mLeft, RD_PROG_LIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    at[0] = f.lists[0].count - 1;
+    rd__st_test(&f, 0, RD_TEST_RGBONLY_DATE1);
+    pushVu(&f, 0, RDC_MESH, mLeft, RD_PROG_LIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    at[1] = f.lists[0].count - 1;
+    rd__st_test(&f, 0, RD_TEST_Z_GEQUAL);
+    pushTargetPair(&f, 0, scene, work);
+    pushVu(&f, 0, RDC_MESH, mLeft, RD_PROG_LIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    at[2] = f.lists[0].count - 1;
+    pushTargetPair(&f, 0, work, scene);
+    pushVu(&f, 0, RDC_MESH, mLeft, RD_PROG_LIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    at[3] = f.lists[0].count - 1;
+    pushTarget(&f, 0, scene);
+    RdCmd *tc = rd__st_push(&f, 0, RDC_TEXTURE);
+    tc->u[0] = sceneDepth.id;
+    tc->b[0] = RD_TEXFN_MODULATE;
+    tc->b[1] = RD_TCC_RGBA;
+    pushVu(&f, 0, RDC_MESH, mLeft, RD_PROG_LIT, RD_VU_CLIP_REGION, kOrtho, NULL, 0, 0);
+    at[4] = f.lists[0].count - 1;
+    f.closed = 1;
+
+    rd__vis_set_mode(RD_VIS_FRUSTUM);
+    rd__vis_set_msaa(1);
+    const RdFrame *s = rd__vis_frame(&f, 0);
+    uint32_t why[RD_VIS_WHY_COUNT];
+    rd__vis_why(why);
+    CHECK(s != &f && s->lists[0].cmds[at[0]].type == RDC_NOP &&
+              s->lists[0].cmds[at[1]].type == RDC_MESH &&
+              s->lists[0].cmds[at[2]].type == RDC_MESH &&
+              s->lists[0].cmds[at[3]].type == RDC_MESH && s->lists[0].cmds[at[4]].type == RDC_MESH,
+          "msaa: with samples the plain draw skipped, the four that may close the epoch "
+          "replayed");
+    CHECK(why[RD_VIS_WHY_MSAA_EPOCH] == 4u && why[RD_VIS_WHY_SKIP_WHOLE] == 1u,
+          "msaa: reasons: may close the epoch %u, skipped %u", why[RD_VIS_WHY_MSAA_EPOCH],
+          why[RD_VIS_WHY_SKIP_WHOLE]);
+    CHECK(rd__vis_why_name(RD_VIS_WHY_MSAA_EPOCH)[0] != '?', "msaa: the reason's name");
+    rd__vis_set_msaa(0);
+    s = rd__vis_frame(&f, 0);
+    rd__vis_why(why);
+    bool all = s != &f;
+    for (int k = 0; k < 5 && all; k++) {
+        all = s->lists[0].cmds[at[k]].type == RDC_NOP;
+    }
+    CHECK(all && why[RD_VIS_WHY_MSAA_EPOCH] == 0u,
+          "msaa: without samples every off-screen draw skipped (epoch reason %u)",
+          why[RD_VIS_WHY_MSAA_EPOCH]);
+    rd__vis_set_msaa(-1);
+    rd__vis_set_mode(-1);
+    rd__vis_init();
+    rd__frame_free(&f);
+}
+
 int main(void)
 {
     checkBounds();
@@ -1844,6 +1958,7 @@ int main(void)
     checkHizFrame();
     checkHizPendingTexture();
     checkHizNone();
+    checkMsaaEpoch();
     rd_shutdown();
     return ico_check_summary("rd_vis_test");
 }
