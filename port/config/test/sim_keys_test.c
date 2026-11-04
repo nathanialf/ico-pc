@@ -71,6 +71,7 @@ static void test_list(void)
     CHECK(n >= 20);
     CHECK(listed("gameplay.mirror"));
     CHECK(listed("gameplay.shadow_speed"));
+    CHECK(listed("gameplay.shadows_together"));
     CHECK(listed("variants.one_hit"));
     CHECK(listed("video.video_mode"));
 }
@@ -211,6 +212,18 @@ static void test_defaults(const char *dir)
     CHECK(k != NULL && strcmp(k, "gameplay.yorda_trips") == 0 &&
           strcmp(out, "gameplay.yorda_trips=(absent) (now true)") == 0);
     CHECK(ico_config_set_string("gameplay.yorda_trips", "") == 0);
+    /* a state saved before gameplay.shadows_together existed: loads with the
+       option off (the game's turns), is refused with it on */
+    CHECK(strcmp(ico_sim_key_default("gameplay.shadows_together"), "false") == 0);
+    drop_line(t, "gameplay.shadows_together", older, sizeof older);
+    CHECK(strstr(older, "gameplay.shadows_together=") == NULL && strlen(older) < strlen(t));
+    CHECK(ico_config_set_bool("gameplay.shadows_together", 0) == 0);
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
+    CHECK(ico_config_set_bool("gameplay.shadows_together", 1) == 0);
+    k = ico_sim_keys_first_diff(older, out, sizeof out);
+    CHECK(k != NULL && strcmp(k, "gameplay.shadows_together") == 0 &&
+          strcmp(out, "gameplay.shadows_together=(absent) (now true)") == 0);
+    CHECK(ico_config_set_string("gameplay.shadows_together", "") == 0);
     /* a key without one fixed default, absent, set now: differs */
     drop_line(t, "variants.barrier_hits", older, sizeof older);
     CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
@@ -238,6 +251,7 @@ static void test_defaults(const char *dir)
         }
     }
     CHECK(ico_config_get_string("gameplay.yorda_trips", NULL) != NULL);
+    CHECK(ico_config_get_string("gameplay.shadows_together", NULL) != NULL);
     remove(toml);
 }
 

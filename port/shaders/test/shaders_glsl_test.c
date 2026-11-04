@@ -38,7 +38,7 @@ int main(int argc, char **argv)
         printf("SKIP shaders_glsl: the OpenGL backend is not linked into this build\n");
         return 77;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "shaders_glsl_test"};
+    RhiDeviceDesc dd = {NULL, false, true, "shaders_glsl_test", NULL};
     if (!rhi_init(&dd)) {
         printf("SKIP shaders_glsl: no OpenGL context (see messages above)\n");
         return 77;

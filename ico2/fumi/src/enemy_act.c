@@ -36,6 +36,10 @@ extern int ico_opt_yorda_safe(void);
    divided by the factor); actEnemyKidnapEnd uses both. */
 extern float ico_opt_pit_time_factor(void);
 extern float ico_opt_pit_dive_ratio(int camera);
+/* PC port: port/game/options.c: [gameplay] shadows_together.  1: the Shadow waits its
+   turn (another Shadow is attacking and the option is off), 0: it may go; counts and
+   logs each time the option lets one go (EnemyUtil_isOtherStatus) */
+extern int ico_opt_shadow_waits(int other_attacking);
 
 /* port/game/gamestate.c: achievement signals */
 #include "ico_gamestate.h"
@@ -4235,7 +4239,12 @@ static inline ICO_WORD_PTR(GObj *) EnemyUtil_isOtherStatus_jun26(GObj *self, int
     return 0;
 }
 
-inline ICO_WORD_PTR(GObj *) EnemyUtil_isOtherStatus(GObj *self, int mode)
+/* The game's turn rule: another Shadow (object kind 4) in its attack (act mode 15) or
+   with its attack mail out (the flag enemyDodgeSendMail sets), else 0.  Every caller
+   holds a Shadow back while it is non-zero: the change to the ATTACK brain
+   (subEnemyBrain_ToBoy's three arms), the attack mails of the ATTACK brain and of the
+   swipe on the way to Yorda (enemyDodgeSendMail) */
+static inline ICO_WORD_PTR(GObj *) EnemyUtil_isOtherStatus_disc(GObj *self, int mode)
 {
     if (ICO_JUN26) {
         return EnemyUtil_isOtherStatus_jun26(self, mode);
@@ -4257,6 +4266,17 @@ inline ICO_WORD_PTR(GObj *) EnemyUtil_isOtherStatus(GObj *self, int mode)
         }
     }
     return 0;
+}
+
+/* PC port ([gameplay] shadows_together, Options > Gameplay > Shadows attack together):
+   with the option on, no other Shadow's attack holds this one back, so every Shadow
+   follows its own approach, wait and attack chance at once; the rule's scan still runs
+   so the log can count the turns the option skipped.  Off: the game's value. */
+inline ICO_WORD_PTR(GObj *) EnemyUtil_isOtherStatus(GObj *self, int mode)
+{
+    ICO_WORD_PTR(GObj *) other = EnemyUtil_isOtherStatus_disc(self, mode);
+
+    return ico_opt_shadow_waits(other != 0) ? other : 0;
 }
 
 static int GetFlyPosition(float *out, float *me, float *tgt)

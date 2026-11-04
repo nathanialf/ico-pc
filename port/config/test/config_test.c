@@ -492,6 +492,9 @@ static void test_first_run(void)
     CHECK(text != NULL && strstr(text, "pit_time = \"original\"") != NULL);
     CHECK_STR(ico_config_get_string("gameplay.shadow_speed", "?"), "original");
     CHECK(text != NULL && strstr(text, "shadow_speed = \"original\"") != NULL);
+    /* Shadows attack together, off: they take turns, as the original */
+    CHECK(ico_config_get_bool("gameplay.shadows_together", 1) == 0);
+    CHECK(text != NULL && strstr(text, "shadows_together = false") != NULL);
     CHECK(ico_config_get_string("gameplay.hold_type_chosen", NULL) == NULL); /* not chosen */
     /* the game variants: every line the game as shipped; the barrier's
        number is left out (the disc's own) */

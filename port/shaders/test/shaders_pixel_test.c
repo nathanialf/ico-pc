@@ -716,7 +716,7 @@ int main(int argc, char **argv)
     if (failures) {
         return 1;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "shaders_pixel_test"};
+    RhiDeviceDesc dd = {NULL, false, true, "shaders_pixel_test", NULL};
     if (!rhi_init(&dd)) {
         printf("SKIP shaders_pixel_test: no usable Vulkan device\n");
         return 77;

@@ -3589,6 +3589,71 @@ static void testSecondCard(void)
     gFlagGameClear = 0;
 }
 
+/* Options > Gameplay > Shadows attack together ([gameplay] shadows_together):
+   after Shadow speed on the title's and the pause menu's Gameplay page, Off by
+   default; Right turns it on at once (options.h ico_opt_shadows_together, read
+   at each Shadow's turn check) and sets the key, which the save writes; its
+   note under the cursor; Left turns it off again */
+static void testShadowsTogether(void)
+{
+    char p[1100];
+
+    gFlagGameClear = 0;
+    ico_opt_set_shadows_together(0);
+    for (int title = 1; title >= 0; title--) {
+        stage_no = title ? 1 : 11;
+        const int mainL = enterMain(title);
+        openPage(mainL, 5, UI_PAGE_GAMEPLAY);
+        const int row = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_SHADOWS_TOGETHER);
+        CHECK(row >= 0 && ui_settings_row_shown(row), "title %d: the Shadows attack together row",
+              title);
+        CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Shadows attack together") == 0,
+              "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
+        CHECK(row > ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_SHADOW_SPEED) &&
+                  row < ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX),
+              "title %d: after Shadow speed, before the stick fix", title);
+        CHECK(ico_opt_shadows_together() == 0 &&
+                  strcmp(ui_settings_value_text(UI_OPT_SHADOWS_TOGETHER), "Off") == 0,
+              "title %d: Off by default", title);
+        press(0x10);
+        CHECK(settle(mainL, 60), "Gameplay: back");
+    }
+
+    gFlagGameClear = 1;
+    stage_no = 11;
+    const int mainL = enterMain(0);
+    const int gameL = openPage(mainL, 5, UI_PAGE_GAMEPLAY);
+    checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (cleared, with Shadows attack together)");
+    const int row = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_SHADOWS_TOGETHER);
+    lt_ext_layout(gameL)->curItem = row;
+    press(0x2000);
+    CHECK(ico_opt_shadows_together() == 1 &&
+              strcmp(ui_settings_value_text(UI_OPT_SHADOWS_TOGETHER), "On") == 0 &&
+              ico_config_get_bool("gameplay.shadows_together", 0) == 1,
+          "Right: Shadows attack together On and the key set");
+    CHECK(ico_opt_shadow_waits(1) == 0, "On: a Shadow does not wait for another's attack");
+    const int note = noteStarting(UI_PAGE_GAMEPLAY, "Off: as the original, the shadows take turns");
+    CHECK(note >= 0 && !lt_ext_prop(note)->masked,
+          "the Shadows attack together note on the cursor");
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get_bool(t, "gameplay.shadows_together", 0) == 1,
+          "saved: gameplay.shadows_together = true");
+    if (t != NULL) {
+        ico_toml_free(t);
+    }
+    press(0x8000);
+    CHECK(ico_opt_shadows_together() == 0 &&
+              ico_config_get_bool("gameplay.shadows_together", 1) == 0 &&
+              ico_opt_shadow_waits(1) == 1,
+          "Left: Off again, the game's turns");
+    press(0x10);
+    CHECK(settle(mainL, 60), "Gameplay: back");
+    ico_opt_set_shadows_together(0);
+    gFlagGameClear = 0;
+}
+
 /* Skip the opening at the boot (ico2/script/src/op.c actOpDemo01, GL-14) on
    the real layout_texture.c, with the disc's fade times (texLayout, the same
    on the three discs): the boot's layout (PAL 7, la_boot_memory_card_check:
@@ -5192,6 +5257,7 @@ int main(int argc, char **argv)
     testSkipOpeningTitle("pal");
     /* Gameplay > Second memory card */
     testSecondCard();
+    testShadowsTogether();
     /* Extras > Game variants */
     testVariants();
     /* the version in the Options menu */

@@ -98,7 +98,7 @@ static int runSwapchain(void)
         return 77;
     }
     int failures = 0;
-    RhiDeviceDesc dd = {win, true, true, "rhi_d3d11_test swapchain"};
+    RhiDeviceDesc dd = {win, true, true, "rhi_d3d11_test swapchain", NULL};
     if (!rhi_create_backend("d3d11") || !rhi_init(&dd)) {
         rhi_test_log("FAIL swapchain: rhi_init with a window failed (see above)\n");
         SDL_DestroyWindow(win);
@@ -270,7 +270,7 @@ static int runVideoMemory(void)
         rhi_test_log("SKIP video memory: no Direct3D 11 backend in this build\n");
         return 77;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test video memory"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test video memory", NULL};
     if (!rhi_init(&dd)) {
         rhi_test_log("SKIP video memory: no usable device (see messages above)\n");
         return 77;
@@ -310,7 +310,7 @@ static int runWrittenMark(void)
         rhi_test_log("SKIP written mark: no Direct3D 11 backend in this build\n");
         return 77;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test written mark"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test written mark", NULL};
     if (!rhi_init(&dd)) {
         rhi_test_log("SKIP written mark: no usable device (see messages above)\n");
         return 77;
@@ -418,7 +418,7 @@ static int runTwoViews(void)
         rhi_test_log("SKIP two views: no Direct3D 11 backend in this build\n");
         return 77;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test two views"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test two views", NULL};
     if (!rhi_init(&dd)) {
         rhi_test_log("SKIP two views: no usable device (see messages above)\n");
         return 77;
@@ -707,7 +707,7 @@ static int runRecordCopy(void)
         rhi_test_log("SKIP record copy: no Direct3D 11 backend in this build\n");
         return 77;
     }
-    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test record copy"};
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_d3d11_test record copy", NULL};
     if (!rhi_init(&dd)) {
         rhi_test_log("SKIP record copy: no usable device (see messages above)\n");
         return 77;

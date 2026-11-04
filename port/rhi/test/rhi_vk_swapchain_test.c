@@ -404,7 +404,7 @@ static int pollSize(SDL_Window *win, RhiFormat fmt)
 
 static int run(SDL_Window *win)
 {
-    RhiDeviceDesc dd = {win, true, true, "rhi_vk_swapchain_test"};
+    RhiDeviceDesc dd = {win, true, true, "rhi_vk_swapchain_test", NULL};
     if (!rhi_init(&dd)) {
         printf("SKIP rhi_vk_swapchain_test: rhi_init with an offscreen window failed\n");
         return 77;
@@ -550,7 +550,7 @@ static int timingNotes(uint64_t *lastId, unsigned *notes, unsigned *timed)
    that is made again or destroyed meanwhile, and stops at rhi_shutdown */
 static int presentTiming(SDL_Window *win)
 {
-    RhiDeviceDesc dd = {win, true, true, "rhi_vk_swapchain_test"};
+    RhiDeviceDesc dd = {win, true, true, "rhi_vk_swapchain_test", NULL};
     uint64_t lastId = 0;
     unsigned notes = 0, timed = 0;
     int failures = 0;
@@ -637,7 +637,7 @@ static int presentTiming(SDL_Window *win)
    presented meanwhile, not held until the wait ends */
 static int presentWaitHang(SDL_Window *win)
 {
-    RhiDeviceDesc dd = {win, true, true, "rhi_vk_swapchain_test"};
+    RhiDeviceDesc dd = {win, true, true, "rhi_vk_swapchain_test", NULL};
     int failures = 0;
 
     SDL_SetWindowSize(win, 64, 48);

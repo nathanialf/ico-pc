@@ -785,6 +785,118 @@ static void test_shadow_speed(void)
     }
 }
 
+/* --- shadows_together: the game's turn rule and the hook --------------------
+   The game holds a Shadow back while another is attacking (enemy_act.c
+   EnemyUtil_isOtherStatus, its eleven callers); the option lets it go, and
+   counts and logs each turn it skipped. */
+static void test_shadows_together(const char *dir)
+{
+    char path[512];
+    char logpath[512];
+    char line[160];
+    char *text;
+    FILE *f;
+    int got = 0;
+
+    /* the default is the game's: a Shadow waits while another attacks */
+    snprintf(path, sizeof(path), "%s/options_shadows_together.toml", dir);
+    remove(path);
+    ico_config_reset(path, "no-such.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_shadows_together() == 0);
+    CHECK(ico_opt_shadow_waits(1) == 1 && ico_opt_shadow_waits(0) == 0);
+    CHECK(ico_opt_shadows_together_went() == 0);
+    /* from the file */
+    f = fopen(path, "wb");
+    CHECK(f != NULL);
+    if (f != NULL) {
+        fputs("[gameplay]\nshadows_together = true\n", f);
+        fclose(f);
+    }
+    ico_config_reset(path, "no-such.ini");
+    ico_opt_reload();
+    CHECK(ico_opt_shadows_together() == 1);
+    ico_opt_set_shadows_together(0); /* the run-time value wins until a reload */
+    CHECK(ico_opt_shadows_together() == 0 && ico_opt_shadow_waits(1) == 1);
+    remove(path);
+
+    /* on: no Shadow waits; each skipped turn is counted (none when no other
+       attacks); the log lines: the change, the first 8 turns, then every 100th */
+    {
+        const char *tmp = getenv("TMPDIR");
+        int saved, fd, i;
+
+        snprintf(logpath, sizeof(logpath), "%s/ico_shadows_together_%d.log",
+                 tmp != NULL ? tmp : "/tmp", (int)getpid());
+        fd = open(logpath, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        saved = dup(2);
+        if (fd < 0 || saved < 0) {
+            failures++;
+            return;
+        }
+        dup2(fd, 2);
+        close(fd);
+        ico_opt_set_shadows_together(1);
+        ico_opt_set_shadows_together(1); /* no change: no line */
+        for (i = 0; i < 200; i++) {
+            CHECK(ico_opt_shadow_waits(1) == 0);
+            CHECK(ico_opt_shadow_waits(0) == 0);
+        }
+        ico_opt_set_shadows_together(0);
+        CHECK(ico_opt_shadow_waits(1) == 1); /* off again: the game's turn, not counted */
+        fflush(stderr);
+        dup2(saved, 2);
+        close(saved);
+    }
+    CHECK(ico_opt_shadows_together_went() == 200);
+    f = fopen(logpath, "rb");
+    while (f != NULL && fgets(line, sizeof(line), f) != NULL) {
+        char want[160];
+
+        got++;
+        if (got == 1) {
+            CHECK(strcmp(line, "gameplay: shadows attack together: all at once (no turns)\n") == 0);
+        } else if (got <= 11) {
+            const unsigned long n = got <= 9 ? (unsigned long)(got - 1) : got == 10 ? 100UL : 200UL;
+            snprintf(want, sizeof(want),
+                     "gameplay: shadows attack together: a shadow did not wait for another's "
+                     "attack (%lu this run)\n",
+                     n);
+            CHECK(strcmp(line, want) == 0);
+        } else {
+            CHECK(strcmp(line,
+                         "gameplay: shadows attack together: 1 at once (the game's turns)\n") == 0);
+        }
+    }
+    CHECK(got == 12);
+    if (f != NULL) {
+        fclose(f);
+    }
+    remove(logpath);
+
+    /* the hook: the game's rule under its own name, called once, by the
+       wrapper the eleven callers keep calling; the option's answer decides */
+    text = read_source(ICO_ENEMY_ACT_SRC);
+    CHECK(text != NULL);
+    if (text != NULL) {
+        CHECK(count_of(text, "EnemyUtil_isOtherStatus(self, 0)") == 11);
+        CHECK(count_of(text, "EnemyUtil_isOtherStatus_disc(") == 2);
+        CHECK(count_of(text, "ico_opt_shadow_waits(") == 1 + 1 /* the declaration */);
+        CHECK(count_of(text, "    ICO_WORD_PTR(GObj *) other = EnemyUtil_isOtherStatus_disc(self, "
+                             "mode);\n\n"
+                             "    return ico_opt_shadow_waits(other != 0) ? other : 0;\n") == 1);
+        free(text);
+    }
+    text = read_source(ICO_SIM_KEYS_SRC);
+    CHECK(text != NULL);
+    if (text != NULL) {
+        CHECK(count_of(text, "\"gameplay.shadows_together\",") == 1);
+        free(text);
+    }
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_opt_reload();
+}
+
 /* --- yorda_trips: the hooks in the game's sources -------------------------
    Each actGirlHand copy calls the tick where it sets her run-pulled bit,
    with its disc's sit-down mail (the gate script's, st04a.c
@@ -2196,6 +2308,7 @@ int main(int argc, char **argv)
     test_shadow_speed();
     test_shadow_speed_motions();
     test_yorda_trips();
+    test_shadows_together(argc > 1 ? argv[1] : ".");
     test_brain();
     test_ui_language(argc > 1 ? argv[1] : ".");
     test_text_language(argc > 1 ? argv[1] : ".");

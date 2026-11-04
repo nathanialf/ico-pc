@@ -584,8 +584,10 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_SKIP_OPENING] = "Pular a abertura",
     [UI_STR_OPT_SKIP_OPENING_NOTE] =
         "O jogo inicia diretamente na tela de título, sem exibir o logotipo da Sony nem a cena de abertura. A alteração entra em vigor na próxima inicialização.",
-    [UI_STR_OPT_SECOND_CARD] = NULL,      /* newer than the CSV: English */
-    [UI_STR_OPT_SECOND_CARD_NOTE] = NULL, /* newer than the CSV: English */
+    [UI_STR_OPT_SECOND_CARD] = NULL,           /* newer than the CSV: English */
+    [UI_STR_OPT_SECOND_CARD_NOTE] = NULL,      /* newer than the CSV: English */
+    [UI_STR_OPT_SHADOWS_TOGETHER] = NULL,      /* newer than the CSV: English */
+    [UI_STR_OPT_SHADOWS_TOGETHER_NOTE] = NULL, /* newer than the CSV: English */
     [UI_STR_OPT_AA] = "Antisserrilhado",
     [UI_STR_OPT_AA_NOTE] =
         "Suaviza as bordas serrilhadas. A superamostragem renderiza 4 vezes (2×) ou 16 vezes (4×) mais pixels. Reduza se o contador de FPS chegar a 30.", /* [cobra838] */

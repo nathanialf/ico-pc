@@ -74,7 +74,7 @@ static int runSwapchain(void)
         return 77;
     }
     int failures = 0;
-    RhiDeviceDesc dd = {win, true, true, "rhi_d3d12_test swapchain"};
+    RhiDeviceDesc dd = {win, true, true, "rhi_d3d12_test swapchain", NULL};
     if (!rhi_create_backend("d3d12") || !rhi_init(&dd)) {
         rhi_test_log("FAIL swapchain: rhi_init with a window failed (see above)\n");
         SDL_DestroyWindow(win);
