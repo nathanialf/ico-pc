@@ -532,8 +532,11 @@ static void texSummary(uint32_t id)
  * and Y do not (vu1_ref.h vu1ref_region_z_saturated, the shaders' own
  * transform): the corners vu_common.hlsli vu_corner_cut_position keeps at
  * their GS position when a GPU-clipped triangle has them, in a state other
- * than out of the box.  *drawsOut: the draws with one or more */
-static uint64_t satZVertices(const RdFrame *f, uint32_t *drawsOut)
+ * than out of the box.  clip RD_VU_CLIP_SCISSOR counts code 36's draws
+ * instead: a triangle with such a corner past the guard band is GPU-clipped
+ * with it at its true depth (vu_triangle_out_pos), as the PS2's cut has it.
+ * *drawsOut: the draws with one or more */
+static uint64_t satZVertices(const RdFrame *f, int clip, uint32_t *drawsOut)
 {
     static float bones[240][4];
     uint64_t n = 0;
@@ -567,7 +570,7 @@ static uint64_t satZVertices(const RdFrame *f, uint32_t *drawsOut)
                 kind = -1;
                 break;
             }
-            if (kind < 0 || p.clip != RD_VU_CLIP_REGION ||
+            if (kind < 0 || p.clip != clip ||
                 (kind == VU1REF_CARD_CLUSTER) != (c->type == RDC_SKINNED)) {
                 continue;
             }
@@ -2828,11 +2831,15 @@ int main(int argc, char **argv)
             printf("\n");
         }
         uint32_t satDraws = 0;
-        const uint64_t sat = satZVertices(rf, &satDraws);
+        const uint64_t sat = satZVertices(rf, RD_VU_CLIP_REGION, &satDraws);
         printf("%s: stats: VU corners with a saturated GS Z: %llu vertices of region-mode meshes "
                "in %u draws (in a GPU-clipped triangle at their GS position: %s)\n",
                dump, (unsigned long long)sat, satDraws,
                rd__vu_extended() ? "yes, not out of the box" : "no, out of the box");
+        const uint64_t sat36 = satZVertices(rf, RD_VU_CLIP_SCISSOR, &satDraws);
+        printf("%s: stats: VU corners with a saturated GS Z: %llu vertices of code 36's meshes in "
+               "%u draws (one with a scissor flag: GPU-clipped at its true depth)\n",
+               dump, (unsigned long long)sat36, satDraws);
     }
     if (replayed && passDir) {
         /* One frame, every target: the renderer keeps each target's contents

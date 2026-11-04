@@ -1440,7 +1440,8 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
     if (rd__vu_extended()) {
         /* a triangle the region test drops is clipped unless it belongs
          * to a card (vu_region_rule); a clipped triangle's corner whose GS
-         * Z alone saturated keeps its GS position (vu_corner_cut_position) */
+         * Z alone saturated keeps its GS position when it has no scissor
+         * clip flag (vu_corner_cut_position) */
         vcb.draw[2] |= ICO_VU_EXTENDED;
         static bool logged; /* once a run (rd__log_once's flags are full) */
         if (!logged) {
@@ -1448,7 +1449,8 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
             rd__log("VU corners: not out of the box (Enhanced, wider than 4:3 or above 1x): a "
                     "triangle the region test drops is drawn clipped unless it is a card, and a "
                     "clipped triangle's corner whose GS Z saturated (within about 8 units of the "
-                    "eye) keeps its GS position, as the exact triangle beside it has it");
+                    "eye) keeps its GS position, as the exact triangle beside it has it, unless "
+                    "code 36's scissor flagged it (clipped at its true depth, as the PS2's cut)");
         }
     }
     if (c->type != RDC_PARTICLES) {

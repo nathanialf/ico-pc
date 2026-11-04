@@ -794,9 +794,10 @@ float4 vu_cut_position(VuVtx v)
 // vu_cut_position): vu_cut_position_of, except that in a state other than
 // out of the box (VU_F_EXTENDED) a corner in front of the eye (w > 0)
 // whose ftoi4 X and Y are not saturated, whose ftoi4 Z saturated
-// (0x7FFFFFFF), and which has no z clip flag (clipf bits 4 and 5: a
-// scissor program's corner beyond its z planes, which the PS2's
-// SCISSOR_COMMON clips away; 0 in the other programs) takes its GS
+// (0x7FFFFFFF), and which has no clip flag (clipf bits 0 to 5: a scissor
+// program's corner beyond one of its six planes, which the PS2's
+// SCISSOR_COMMON clips away, so no picture of the PS2 has its saturated
+// Z; 0 in the other programs) takes its GS
 // position vtx: the 12.4 X and Y and gs_depth(0x7FFFFFFF), 2^31 * g_z.x
 // (0.5 on D24S8, 0.25 on a float depth buffer), what a triangle drawn
 // exactly gives the same vertex (the region test does not test Z, so a
@@ -823,7 +824,7 @@ float4 vu_corner_cut_position(VuVtx v, float4 vtx)
                     ? 1u
                     : 0u;
     uint snap = (vu_draw.z & VU_F_EXTENDED) != 0u && v.h.w > 0.0 && v.gz == 2147483647 &&
-                        (v.clipf & 0x30u) == 0u
+                        v.clipf == 0u
                     ? xyOk
                     : 0u;
     if ((vu_has_gs_position(v) | snap) != 0u) {
@@ -1847,6 +1848,17 @@ VuVSOut vu_triangle_out_pos(VuVtx a, VuVtx b, VuVtx c, VuVtx me, uint mode, uint
             // z = -w: that would need SV_ClipDistance)
             at = 2u;
             exact = gsPos;
+        } else if (gsPos == 0u) {
+            // only x/y flags, a corner without its GS position (its ftoi4 Z
+            // saturated, within about 8 units of the eye): the VU cuts the
+            // triangle at its guard band, so the PS2's fans have that
+            // corner's true depth, not 0x7FFFFFFF, which drawn as it is
+            // pulled the triangle's depth far behind the true one (the
+            // main gate's bottom rail beside the 48:9 picture lost to the
+            // stone sill behind it); the GPU clips it, the corner in the
+            // homogeneous form (vu_corner_cut_position: a flagged corner
+            // is never snapped)
+            at = 2u;
         } else {
             // only x/y flags: the VU clips to its guard band (the 1500 unit
             // clip window, wider than any target), the GS scissor does the

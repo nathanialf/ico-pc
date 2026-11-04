@@ -2027,7 +2027,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   a matrix each, none in any mode; S5 a code-32 triangle the region test drops, drawn clipped
   beside an exact one, their shared vertex's GS Z saturated and its X and Y off the 1/16 grid:
   none above Original 1x, where the clipped triangle is drawn, and at Original 1x not drawn
-  (`vu_corner_cut_position`).
+  (`vu_corner_cut_position`). S6 (the main gate's bottom rail beside the 48:9 picture) draws a
+  code-36 triangle with an x flag only and a corner whose GS Z saturates, then a GIF triangle at a
+  depth between the cut's true depth and the saturated one: the VU's surface wins at the probe in
+  every mode (`vu_triangle_out_pos`: such a triangle is GPU-clipped with the corner in the
+  homogeneous form, where it was drawn as it is at Z 0x7FFFFFFF).
   Its present case (`testPresent`: the presenter's output pixel at the centre between its two
   DISPLAY neighbours) runs right after the reduction, before `testReductionUint` makes the
   targets again: a target made again holds whatever the driver's memory held until the next
