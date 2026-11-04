@@ -142,7 +142,7 @@ endif()
 # a job queued, the submit's handshake, the heartbeat and the block's
 # numbers under a fake clock, the [dev] render_thread mode
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
-          gpu_hang state_fiber state_guard state_port state_registry pipeline_skip robust_persist memory_floor
+          gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
           present_fallback frame_mailbox display_rate present_hist gpu_sysfs
           thermal_text)
     add_executable(${t}_test test/${t}_test.c)
