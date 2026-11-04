@@ -125,13 +125,33 @@ enum { COMPAT_DEFAULT = 0, COMPAT_FIXED_SOURCE = 1, STRATEGY_ONLY_IF_SEAMLESS = 
 static DisplayPin s_pin;
 static int s_pinResumed; /* window_frame_rate_pin_resumed's call */
 
+/* the two calls, looked up once a run (the library stays loaded: the
+   system keeps libandroid.so for the process anyway); the pin runs on the
+   main thread only */
+static int s_pinLooked;
+static SetRateStrategyFn s_withStrategy;
+static SetRateFn s_plain;
+
+static void pin_lookup(void)
+{
+    void *lib;
+
+    if (s_pinLooked) {
+        return;
+    }
+    s_pinLooked = 1;
+    lib = dlopen("libandroid.so", RTLD_NOW);
+    if (lib != NULL) {
+        s_withStrategy =
+            (SetRateStrategyFn)dlsym(lib, "ANativeWindow_setFrameRateWithChangeStrategy");
+        s_plain = (SetRateFn)dlsym(lib, "ANativeWindow_setFrameRate");
+    }
+}
+
 static int pin_call(void *nw, int rate, const char **call)
 {
-    void *lib = dlopen("libandroid.so", RTLD_NOW);
-    SetRateStrategyFn withStrategy =
-        lib != NULL ? (SetRateStrategyFn)dlsym(lib, "ANativeWindow_setFrameRateWithChangeStrategy")
-                    : NULL;
-    SetRateFn plain = lib != NULL ? (SetRateFn)dlsym(lib, "ANativeWindow_setFrameRate") : NULL;
+    const SetRateStrategyFn withStrategy = s_withStrategy;
+    const SetRateFn plain = s_plain;
     const int8_t compat = rate > 0 ? COMPAT_FIXED_SOURCE : COMPAT_DEFAULT;
 
     /* only a seamless switch: a mode change that blinks the screen is not
@@ -162,11 +182,9 @@ void window_frame_rate_pin(SDL_Window *window, int framerate)
     int ret;
 
     /* does the device offer the call (api 30 and later)? */
+    pin_lookup();
     {
-        void *lib = dlopen("libandroid.so", RTLD_NOW);
-        const int offers = nw != NULL && lib != NULL &&
-                           (dlsym(lib, "ANativeWindow_setFrameRateWithChangeStrategy") != NULL ||
-                            dlsym(lib, "ANativeWindow_setFrameRate") != NULL);
+        const int offers = nw != NULL && (s_withStrategy != NULL || s_plain != NULL);
 
         if (!told) {
             told = 1;
