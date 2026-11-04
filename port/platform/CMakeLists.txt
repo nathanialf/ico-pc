@@ -24,6 +24,7 @@ target_sources(ico_platform PRIVATE
     present_fallback.c
     pump_watch.c
     report.c
+    robust_persist.c
     sched.c
     startup_retry.c
     state_check.c
@@ -108,6 +109,9 @@ endif()
 # pipeline_skip: the record of a pipeline family a device's driver stopped in
 # (pipeline_skip.c, issue 161): the note's family, the value written and read
 # back, the device and driver match, the [dev] clear
+# robust_persist: the port's own [dev] gpu_robust turning itself off (robust_persist.c):
+# the rule over sequences of starts, the mark written and read back through the
+# config text, the key removal, the log lines word for word
 # gpu_hang: the GPU hang limit's arithmetic and its watch (gpu_hang.c, issue 123)
 # state_fiber: save states' fiber pool, a suspended fiber saved and restored
 # into a second pool, the dead frames under its stack pointer kept, and the
@@ -138,7 +142,7 @@ endif()
 # a job queued, the submit's handshake, the heartbeat and the block's
 # numbers under a fake clock, the [dev] render_thread mode
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
-          gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
+          gpu_hang state_fiber state_guard state_port state_registry pipeline_skip robust_persist memory_floor
           present_fallback frame_mailbox display_rate present_hist gpu_sysfs
           thermal_text)
     add_executable(${t}_test test/${t}_test.c)
