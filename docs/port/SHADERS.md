@@ -398,6 +398,15 @@ positions.
 
 ## Integer forms
 
+**Never a hex literal in signed arithmetic.** FXC (Direct3D 11) types `0x68` as `uint`, DXC as `int`:
+`(-0x68 * Cr) >> 6` is an arithmetic shift of a negative product under DXC (Vulkan) and an unsigned
+multiply with a logical shift under FXC, whose product of about 2^26 saturates a channel (the purple
+movie, `yuv.hlsl`; FXC says `X3092: unary negate of unsigned value is still unsigned`). A constant
+that is negated, multiplied by a signed value or shifted right is written as a signed decimal, the
+hex in a comment. A search of `port/shaders` found no other such use. Masks and bit patterns of
+`uint` values may stay hex. `tools/ci_d3d11_warp.sh` fails the job on any `rhi_d3d11: shader
+compiler warnings` line in a test's log.
+
 Integer division and remainder by a value that is not a compile-time constant (`OpSDiv`, `OpSRem`,
 `OpUDiv`, `OpUMod`) have no instruction on the GPUs the port runs on: the driver expands each into
 a reciprocal and correction steps, tens of instructions. A pixel shader on a hot path writes them
