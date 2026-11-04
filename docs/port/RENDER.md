@@ -1317,7 +1317,8 @@ vertices and triangles come first and are unchanged; the tiles are drawn with th
 matrices and UV offset, and take the region test as the sheet does. Out of the box (the Original
 preset at 4:3 and 1x, `vuExtended`) a draw of a listed sheet stops at the game's own triangles
 (`rd__vu_sheet_end`, `RdMeshRec.tiledIndexFrom`), so the appended tiles are never drawn there,
-wherever the sheet is placed, and the picture is the PS2's; in every other state they are drawn,
+wherever the sheet is placed, and the picture holds none (the camera's: the console's except inside
+triangles it dropped, [DIVERGENCES.md](DIVERGENCES.md) VD-29); in every other state they are drawn,
 clipped by the GPU at the frame. This is decided per draw, so an Options change needs no new mesh
 (`port/render/rd_replay_vu.c` (`doVuDraw`); `port/render/rd_interp.c` (`scratchFor`) carries the
 counts to a blended copy). A dump stores a listed sheet as the game made it, its own vertices,
@@ -1516,7 +1517,9 @@ ripples' STs move with their vertices ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-rip
 
 **Payloads of two sizes.** A VU draw's payload carries its card section
 ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)) only under the region rule (`port/render/rd_mesh.c`
-(`cardKind`: clip mode REGION, in a state other than out of the box, `rd__vu_extended`)), and the
+(`cardKind`: clip mode REGION, in a state other than out of the box, `rd__vu_extended`); the
+camera rule, the default, records it too but has no card test and binds none:
+[VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)), and the
 game switches a packet from the region code (32) to the scissor code (36) when its box crosses the
 screen's edge (`ico2/seki/src/RegistPacket.c` (`reg_clipPacketBoundingBox`)), so a part of the
 world along the picture's edge gains or loses the section between ticks. `blendVu` reads both
@@ -2193,6 +2196,13 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   (conservative). `rd_vis` checks it on a recorded frame; `rd_cull_ab` compares byte for byte under
   MSAA 4x on the first dump and on the dumps of `tools/cull_msaa_dumps.txt`, chosen where the epoch
   closes inside lists 0 to 2.
+- *Under either region rule.* The argument above is about what the GPU draws of a triangle,
+  exactly or clipped, so it holds for the triangles the camera rule draws where the PS2 dropped
+  them ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)): they are clipped triangles of the same
+  draw, and a draw wholly beyond a side of its target or behind the eye draws none of them. The
+  occlusion test's occluders are the exactly drawn triangles alone, which the rule does not change.
+  The game's own box cull (above) is the camera's frustum and stays the visibility authority of
+  whole objects and parts under either rule.
 - *The shadow frame.* The skipped commands are left out as the replay tool's `--nop` leaves them:
   the type becomes `RDC_NOP` and every other field, every index and so every ordinal
   (`g_rdStoreOrd`, the pre-pass entries' commands) stays. `rd__vis_frame` returns a copy of the
@@ -2340,8 +2350,9 @@ slug (`pal`, `jpn` or `kor`), version 12; an older dump is the European disc's),
 13 lists, the payload, the textures and temporary targets it references, its VU meshes and tick
 cameras, and (version 15) the EE's facing tables of the meshes that have one, a bit a vertex,
 which a prelit stream cannot rebuild (no normals in it; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-winding-mark)):
-a version 3 to 14 dump's prelit meshes load without facing, so the region rule's side bands are
-off for their draws. Target
+a version 3 to 14 dump's prelit meshes load without facing, so their draws keep the PS2's drops
+under either region rule (no side bands under `[dev] region_rule = ps2`, no camera rule under the
+default). Target
 contents are not written: a frame that reads a retained target replays from what the loading
 context holds. Loading creates the textures and targets anew and rewrites every id, and gives the VU
 draws recorded without card verdicts theirs ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)), so
@@ -2396,8 +2407,8 @@ The options:
 | `--nop SPEC` | turns commands into NOPs, to find the draw behind a pixel; SPEC is `L:A[-B]`, several separated by commas (`0:12-14,0:40`), or `@FILE` for a spec in a file; the state commands in a range stay |
 | `--occlusion` | the hidden-draw measurement of list 0 ([Culling](#culling)): `<dump>: occlusion: hidden N of M list-0 draws, T of U triangles (index count / 3); hidden commands: SPEC` (SPEC a `--nop` spec, `none` when empty), then `<dump>: occlusion: H of K draw commands hidden; P % of the draws, Q % of the triangles; Q queries, X without a count, Y draws past the 8192 queries; Z draws of other commands not counted; measured under ...`; it sets `ICO_RD_VU_MERGE=0` and `ICO_RD_BLEND=fixed` and turns the screen-prim runs off (the `note:` line says so); Vulkan only (exit 77 elsewhere); not with `--presents`, `--loss-bisect`, `--keys` or `--no-device` |
 | `--occlusion-out FILE`, `--occlusion-csv FILE` | with `--occlusion`: the spec written to FILE (for `--nop @FILE`); a line a command of list 0 that made a GPU draw, `cmd,type,draws,counted,triangles,samples` |
-| `--region-stats` | the region rule's verdict on every triangle of the VU draws of lists 0-6 under it, on the CPU ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics); `port/render/tools/rd_replay_region.c`): a line a draw, `<dump>: region: L:I mesh NAME tris T: exact E clip C strip S drop D (behind-eye B, out-of-box X, card K; rescued at a tick R), beside N (behind-eye b, out-of-box x, card k) det -\|+; beside N, dropped back D`, drop the triangles that stay dropped and beside the front-facing drops the side bands draw beside the 4:3 picture, never a card's (a card keeps the drop there, issue 189: beside's `card k` is 0) (` (no side bands)` after a draw without them), a line a list, and the frame's, which ends in the draws that draw nothing as a `--nop` spec; with `--mesh NAME` only that mesh's draws get a line; with `--interp` at the blended camera and the ticks'; also with `--no-device` (the Original preset at 1x there) |
-| `--region-png FILE`, `--region-out FILE` | imply `--region-stats`: the dropped triangles of the frame camera's draws painted as the GPU would draw them on the native frame (red a vertex behind the eye, yellow out of the box, cyan a card, magenta a drop drawn beside the picture, whose part in the band the GPU discards; the 4:3 band outlined in green); the draws that draw nothing written to FILE as a `--nop` spec (`none` for none) |
+| `--region-stats` | the region rule's verdict on every triangle of the VU draws of lists 0-6 under it, on the CPU ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics); `port/render/tools/rd_replay_region.c`): a line a draw, `<dump>: region: L:I mesh NAME tris T: exact E clip C strip S drop D (behind-eye B, out-of-box X, card K; rescued at a tick R; back faces the card test drew F), beside N (behind-eye b, out-of-box x, card k), drawn by the camera rule M (behind-eye b, out-of-box x, card k) det -\|+; beside N, dropped back D; drawn by the camera rule M`, under the rule in force (`ICO_RD_REGION_RULE`; a `region: rule:` line names it): drop the triangles that stay dropped, beside the front-facing drops the side bands draw beside the 4:3 picture under `ps2`, never a card's (a card keeps the drop there, issue 189: beside's `card k` is 0) (` (no side bands)` after a draw without them), and under the camera rule the drops it draws (facing the eye, a grid's) and the back faces of the card test's strips it drops, a line a list, and the frame's, which ends in the draws that draw nothing as a `--nop` spec; with `--mesh NAME` only that mesh's draws get a line; with `--interp` at the blended camera and the ticks'; also with `--no-device` (the Original preset at 1x there) |
+| `--region-png FILE`, `--region-out FILE`, `--region-mask FILE` | imply `--region-stats`: the dropped triangles of the frame camera's draws painted as the GPU would draw them on the native frame (red a vertex behind the eye, yellow out of the box, cyan a card, magenta a drop drawn beside the picture, whose part in the band the GPU discards, or under the camera rule drawn whole; dark blue a back face the card test drew that the camera rule drops; the 4:3 band outlined in green); the draws that draw nothing written to FILE as a `--nop` spec (`none` for none); `--region-mask` where the PS2's rule and the camera rule draw differently, whichever is in force, at the frame's GS size (red triangles the camera rule adds, green those it drops, blue sprites; `tools/region_camera_report.py` holds a replay's changed SCENE pixels to it; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) |
 | `--gpu-repeat K` | with `--stats`: RHI_FRAMES_IN_FLIGHT + 1 + K replays after the picture and, after the `gpu:` line, `<dump>: gpu median of R replays: total X ms, list 0 Y ms, VU pre-pass Z ms` over the warm records that came back (the first replay after the picture left out) |
 | `--mesh NAME` | a VU mesh vertex by vertex, with the kick, overlap and joined marks |
 | `--dump-textures DIR` | every image texture as decoded |

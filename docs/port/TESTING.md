@@ -23,6 +23,7 @@ tests a change needs. Every test program, by area, is
 | `tools/coverage_check.py`, `tools/coverage_corpus.txt` | the regression renders and their corpus |
 | `tools/sweep_cameras.txt`, `tools/sweep_baseline.txt` | the disc-wide cull sweep's cameras (machine-local dump paths) and its stored counts (`gsb_cull_sweep`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `tools/sideband_dumps.txt`, `tools/cmp_dirs_band.py` | the wide dumps (machine-local paths and their aspects) the side bands' before/after compare replays, and the compare: the 4:3 band byte for byte, the side columns reported, a side pixel changed only over the fog (`rd_sideband_ab`, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
+| `tools/region_camera_report.py` | the camera rule against the PS2's region rule on saved frames: both rules' pass dumps, every SCENE pixel the camera rule changes held to `rd_replay_tool --region-mask`, a markdown report and the camera rule's baselines (`rd_region_camera_ab`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)) |
 | `tools/band_seam.py` | the mean luminance step across each edge of the 4:3 picture on a wide present, against a bound (`rd_sideband_cards`, issue 189, [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)) |
 | `port/render/tools/rd_replay_tool.c` | the replay tool |
 | `tools/vu_variant_diff.py`, `tools/vu_variant_equiv.py`, `tools/test/vu1/` | the June 2001 demo's VU1 programs against the retail ones: the diff, its per-hunk table, the symbolic comparison |
@@ -100,7 +101,19 @@ file is reported and skipped, and every gate exits 77 when it has nothing to run
   of R pixels at each edge of the 4:3 picture (ctest `native_frame_gate_b`).
 - `selftest` checks the gate-b logic on synthetic pictures (ctest `native_frame_check_selftest`).
 
-Two more gates cover the wide frame's side bands (issue 29). `tools/cmp_dirs_band.py` compares two
+The pictures these gates hold are the PS2's region rule's: `native_frame_check.py` replays under
+`ICO_RD_REGION_RULE=ps2` unless the environment names a rule, so gate-a's manifest stays the
+console's picture. The camera rule, the renderer's default ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule),
+[DIVERGENCES.md](DIVERGENCES.md) VD-29), differs from it only inside the triangles the PS2 dropped:
+`tools/region_camera_report.py --tool T --out DIR --list LIST --report FILE [--keep-camera DIR]
+[--setting NAME=ARGS]...` replays each dump under both rules and holds every SCENE pixel that
+changes to the CPU oracle's mask (`rd_replay_tool --region-mask`), every target byte for byte
+where the mask is empty, and writes the per-dump report; ctest `rd_region_camera_ab` runs it over
+`tools/sideband_dumps.txt` and checks the camera rule's verdicts are the same under the Original
+preset and Enhanced. With `ICO_RD_REGION_RULE=camera` gate-a lists the camera rule's changed
+targets (a report, not a gate).
+
+Two more gates cover the wide frame's side bands (issue 29), under `ICO_RD_REGION_RULE=ps2`. `tools/cmp_dirs_band.py` compares two
 folders of the same dumps' pictures, one drawn with the side bands off (`ICO_RD_VU_BESIDE=0`) and
 one with them on: the centre 512-texel band (the 4:3 picture) must be identical byte for byte, hard;
 the side columns are reported, and a side pixel that changed must be one the picture without the
@@ -108,10 +121,12 @@ bands left at the fog colour (never lose what was drawn). The ctest `rd_sideband
 `tools/sideband_dumps.txt`, which also takes each fresh issue-29 capture (dump version 15 or later:
 older dumps carry no facing for prelit meshes, so only lit and skinned drops can change).
 `rd_sideband_cards` holds issue 189's frame, whose only drops are cards, byte for byte with the side
-bands off and on, and its picture's edges within 1.5 levels by `tools/band_seam.py`. The
+bands off and on, and its picture's edges within 1.5 levels by `tools/band_seam.py`; under the
+camera rule the three cards drawn over the whole frame and the edges again within 1.5 levels. The
 disc-wide sweep `gsb_cull_sweep.*` (`gsb_cull_test --sweep`, main only, it needs the disc image)
-counts per stage and aspect the triangles the box cull, the blend span and the region rule leave
-out, against the stored counts of `tools/sweep_baseline.txt`; a count above its line fails, and the
+counts per stage and aspect the triangles the box cull, the blend span and the PS2's region rule
+leave out (the CPU oracle's `vu1ref_region_draw`: the camera rule is not swept; its drops are the
+back faces alone), against the stored counts of `tools/sweep_baseline.txt`; a count above its line fails, and the
 run prints "baseline can be lowered" when it falls ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 The list is `tools/native_frame_dumps.txt`, or the list or folder `ICO_DUMPS` names; the ctests

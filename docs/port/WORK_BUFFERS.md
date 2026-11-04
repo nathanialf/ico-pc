@@ -114,7 +114,8 @@ target's pixel 0: its rect `{o, y0, x0, y1}` (pixels `0 .. n - 1`, `n = ceil((x0
 U `u0 = u1 =` the U the sprite has at pixel n, its rows and V the sprite's. In the GS model each
 strip pixel reads the texels pass 1's column n reads at the same weights, so WORK1's columns
 `0 .. n - 1` are column n's bytes and pass 2 reads this frame's glow there. No sprite of a 4:3
-frame qualifies (s is 0), so 4:3 is the PS2's picture byte for byte; the rest of a wide frame's
+frame qualifies (s is 0), so 4:3 is unchanged by it (the camera's picture: the console's except
+inside triangles it dropped, [DIVERGENCES.md](DIVERGENCES.md) VD-29); the rest of a wide frame's
 WORK1 is untouched, and its 4:3 columns are as before. The strip is drawn through
 `rd__replay_blur_sprite_draw` with a record of its own, in pass 1's state, so the recorded frame
 and a dump of it hold the game's sprites alone and an old dump replays with the strip. One line

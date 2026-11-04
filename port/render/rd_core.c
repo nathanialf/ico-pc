@@ -2309,8 +2309,11 @@ static void logDerived(void)
             dropped                     ? "dropped (vu_np_ps)"
             : g_rd.profile.vuPlanesFrac ? "kept"
                                         : "kept (every scale)",
-            rd__vu_extended() ? "extended" : "the PS2's", (unsigned)g_rd.filterUpgrade,
-            g_rd.vuPrepass ? "on" : "off", (unsigned)g_rd.fogPath, rd__profile_text());
+            rd__region_camera() ? (rd__vu_extended() ? "the camera's (extended)" : "the camera's")
+            : rd__vu_extended() ? "extended"
+                                : "the PS2's",
+            (unsigned)g_rd.filterUpgrade, g_rd.vuPrepass ? "on" : "off", (unsigned)g_rd.fogPath,
+            rd__profile_text());
 }
 
 typedef struct ReplayCall {

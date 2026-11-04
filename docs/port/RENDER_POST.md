@@ -138,8 +138,9 @@ monitor's or a 2532 x 1170 phone's window holds texels of columns 0 and 1, which
 `columnTexel(2) <= 0` nothing is), and the border closed on a frame wider than 512 GS pixels
 (`RD_BORDER_CLOSED` at 2340 x 1080 or 48:9 with Full pixel off: the reduction shows black there,
 the glow reads SCENE). Only the closed border of the 4:3 frame (512, the GS's own DISPLAY with its
-border) leaves SCENE as the game drew it, the PS2's picture, which the native-frame gate's 4:3
-hashes hold. The strips stay with it: the
+border) leaves SCENE as the game drew it (the camera's picture: the console's except inside
+triangles it dropped, [DIVERGENCES.md](DIVERGENCES.md) VD-29), which the native-frame gate's 4:3
+hashes hold under `[dev] region_rule = ps2`. The strips stay with it: the
 reduction's column 2 blends a quarter of column 3 (the PS2's +0.75), so DISPLAY's outer columns
 drawn from SCENE's repeat alone would be column 2 without that quarter, not DISPLAY's column 2.
 One line the first time, `rd: border: the frame's outer two columns a side repeat columns 2 and

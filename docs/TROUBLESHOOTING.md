@@ -374,6 +374,28 @@ see such lines:
    rate showed the lines and where in the game you were. On a phone, a short
    screen recording of the lines helps.
 
+## Something close to the camera looks wrong
+
+On the PlayStation 2, walls, water and mist that come very close to the
+camera vanish all at once. The game now draws them to the edge of the
+picture instead, in every preset. If something close to the camera looks
+wrong since (a shape that should not be there, a surface seen from the
+wrong side), you can bring back the PlayStation 2's way to compare: close
+the game, open `config.toml` from the folder with your saves
+([where that is](PORTABLE_MODE.md#where-your-saves-are)) in a text editor
+and add these two lines at the end (if the file already has a `[dev]`
+line, add only the second line under it):
+
+```toml
+[dev]
+region_rule = "ps2"
+```
+
+If that changes what you saw, say so in the report with a picture of the
+spot both ways ([save a picture of a problem](#save-a-picture-of-a-problem));
+the log's line with `region rule:` in it says which way the game
+ran. To go back, delete the line.
+
 ## A program that adds frames or scales the game (Lossless Scaling) does not work
 
 Programs that scale the game's window, add frames to it or draw over it,

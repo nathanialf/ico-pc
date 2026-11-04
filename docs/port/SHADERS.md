@@ -662,7 +662,10 @@ which only the fallback draws through, have two (issue 107): the extended one, `
 as it reads, and the plain one, `vu_X_plain_vs`, the same entry compiled with `ICO_VU_PLAIN=1`
 (`port/shaders/CMakeLists.txt`, the ten mesh entries only), which leaves out the card test's step
 of the region rule (`vu_region_rule_cut`'s `VU_F_EXTENDED` branch) and the two tick cameras
-(`vu_tick_shown`). The renderer takes the plain ones for the fallback on a device of the table and
+(`vu_tick_shown`). Both have the region rule's last step (`vu_rule_beside`, `vu_drop_fate`: the
+camera rule, `VU_F_CAMERA`, and the side bands), so under the camera rule
+([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)), which has no card test either, the plain and
+the extended set give the same verdict on a draw without the tick cameras. The renderer takes the plain ones for the fallback on a device of the table and
 under Mesa's Turnip driver, and the extended ones everywhere else, once a run
 ([RENDER.md](PIPELINES.md#the-fallback-entries));
 `vu_particle_vs` has the one build. The cut against the camera's picture stays in
@@ -684,7 +687,9 @@ sets' vertex cost on a device without a row (the PowerVR phone draws the extende
 
 What the plain set hides (issues 163 and 164): a triangle that fails the region test and reaches
 into the picture is dropped by the plain set (`VU_RULE_DROP`), as on the PS2, and drawn clipped by
-the extended one (`VU_RULE_STRIP`) unless it is a card. So a vertex placed far off the screen, in
+the extended one (`VU_RULE_STRIP`) unless it is a card, under `[dev] region_rule = ps2`; under the
+camera rule both sets draw it when it faces the eye, which is why such a device keeps the PS2's
+drops (`g_rd.vuNoBeside`: no camera rule and no side bands on it). So a vertex placed far off the screen, in
 front of the eye, by anything the two sets share (the program's arithmetic, the stream, VuCB,
 VuBoneCB) is invisible through the plain set and drawn as a long sliver through the extended one;
 a clean picture through the plain set does not place a fault in the extended-only code. The

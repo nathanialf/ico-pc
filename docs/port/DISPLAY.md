@@ -82,7 +82,8 @@ open border's outer columns). The glow reads SCENE before the reduction, so a fo
 has those columns repeated from columns 2 and W - 3 first, wherever the border is open or the
 frame cropped (issue 26: the same band at 16:9, where the present leaves the columns out but the
 glow had spread them about ten GS pixels in); with the border closed (Full pixel off at 4:3 and
-48:9) SCENE stays the game's, the PS2's picture ([RENDER_POST.md](RENDER_POST.md#post-passes), SCENE's outer
+48:9) SCENE stays the game's (the camera's: the console's except inside triangles it dropped,
+VD-29) ([RENDER_POST.md](RENDER_POST.md#post-passes), SCENE's outer
 columns). The rows the reduction's scissor kept black at the top and bottom show what SCENE
 holds.
 Without it the picture is the same: the same box, scale, crop and replay (the host sets
@@ -105,7 +106,7 @@ box. The mask and the open border apply only on a cropped frame (`rd__frame_crop
 512 and `wExact` under it, as at 16:9, 688 over 682.67, where the crop cuts the game's own border
 away); at 4:3 and at aspects where the frame is exactly the picture's width (48:9 at 2048), Full
 pixel off is the game's own border as before, the reduction's recorded scissor and no mask, so the
-Original preset at 4:3 is the PS2's picture byte for byte (`port/render/rd_present.c`
+Original preset at 4:3 is the camera's: the console's except inside triangles it dropped, [DIVERGENCES.md](DIVERGENCES.md) VD-29; byte for byte the PS2's under `[dev] region_rule = ps2` (`port/render/rd_present.c`
 (`rd__frame_cropped`), `port/render/rd_replay.c` (`borderOpen`)). The `rd: display:` line ends
 with the frame as the options give it, `frame W GS wide (exact E: cropped|exact width), border
 open (its outer two columns a side repeat their neighbours)|open (its columns left out at
@@ -238,7 +239,8 @@ DXT-48 phone's log, below):
   scale, GS levels at Original, the crack fill's reach) are read from the settings at each draw
   or set by `rd__apply_display`; a change of scale or preset logs them in one line, `rd: display
   change: derived: preset P, frame W GS wide, scene SxS (whole|fractional), VU planes kept|dropped
-  (vu_np_ps), VU region rule the PS2's|extended, texture filter F, VU pre-pass on|off, fog path N;
+  (vu_np_ps), VU region rule the camera's[ (extended)]|the PS2's|extended (the camera's under the
+  default `[dev] region_rule = camera`, [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)), texture filter F, VU pre-pass on|off, fog path N;
   profile ...`, so a reporter's log after a change compares with a fresh start's lines.
 - **The pipelines** (`port/render/rd_pipeline.c` (`rd__display_pipelines`)): after the settings
   apply (and after a frame-width reset, `rd_reset_scene`), the reachable set of the new state
@@ -750,8 +752,8 @@ with a fake clock and swapchain; the window only supplies its I/O (`port/platfor
    so that present never waits for the display inside the step; FIFO only without mailbox
    (Direct3D 11 and 12, OpenGL, some surfaces), where a wait for the display shows as a late step
    and the next frame's replay is the one left out. A replayed frame draws the same picture as
-   before (the gate decides only whether it is replayed: Original at 4:3 1x stays the PS2's
-   picture byte for byte); the tools and tests set no gate and replay every frame. Since the gate
+   before (the gate decides only whether it is replayed: Original at 4:3 1x stays the camera's
+   picture, the console's except inside triangles it dropped, VD-29); the tools and tests set no gate and replay every frame. Since the gate
    skips the replay itself, not only the present (the timer path's skip still replays), an effect
    that reads the previous picture (a motion blur's history, an after-image pass) advances once per
    drawn picture, not once per game step, on a GPU too slow for every picture, and a skipped

@@ -778,7 +778,10 @@ port draws, bit 15 a drop of the triangle is drawn beside the picture (`VU_TF_BE
 rule's side bands: the draw has them, the frame is wider than the picture and the triangle faces
 the eye, set where the verdict up to the ticks is a drop, not the card test: a card keeps the drop
 beside the picture; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-region-rule),
-step 7). A tick's verdict is `vu_tick_shown`'s (0 not shown, 1 through the card test, 2
+step 7), bit 16 a drop of the triangle the camera rule draws (`VU_TF_CAMERA`: the draw has
+`ICO_VU_CAMERA` and the triangle faces the eye or the draw is two-sided, `vu_drop_fate`; set where
+the verdict up to the ticks is a drop, which under the camera rule is every final drop: it has no
+card test; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-camera-rule)). A tick's verdict is `vu_tick_shown`'s (0 not shown, 1 through the card test, 2
 drawn). The values a plane word holds are those `vu_attr_planes` and `vu_plane_out` (a sprite:
 `vu_attr_planes_at`) compute; the anchor's colour is a whole number 0..255 a channel, so its bytes
 carry it exactly. Each stage takes whole halves of the gradient basis (`vu_grad_basis`): a lane
@@ -867,6 +870,7 @@ it reads its corner's vertex record (three loads), slot A's first texel (one: th
 where the blended verdict is `VU_RULE_DROP` under the tick cameras, slot C (one); resolves the rule as
 `vu_region_rule`'s tail and `vu_rule_card` do (a tick that drew the triangle clips it, one that
 sent it to the card test sends it there, the card test's verdict decides `VU_RULE_STRIP`, a final
+drop with `VU_TF_CAMERA` is drawn clipped over the whole frame (the camera rule), a final
 drop with `VU_TF_BESIDE` under a draw without `ICO_VU_NO_BESIDE` is drawn clipped beside the
 picture with `VuVSOut.plane.y` 1, the side bands' discard's mark), applies the scissor draw's `ICO_VU_CUT_ONLY` / `ICO_VU_KICK_ONLY` to the stored corner code, chooses the
 position value by value as `vu_triangle_out_pos` does (`vu_corner_position`: the GS position, the
