@@ -47,8 +47,8 @@
  *                   layouts, bind groups, readback_texture
  *   gl_swapchain.c  resize_swapchain, swapchain_format, swapchain_size,
  *                   surface_poll_restart, acquire_backbuffer, present,
- *                   present_shown, release_surface, recreate_surface,
- *                   present_mode_name, present_statistics
+ *                   present_shown, wait_present_room, release_surface,
+ *                   recreate_surface, present_mode_name, present_statistics
  *   gl_pipeline.c   create_pipeline, create_pipelines, destroy_pipeline
  *   gl_cmd.c        begin_commands, end_commands, submit, and every other
  *                   rhi_cmd_* entry point

@@ -691,6 +691,12 @@ bool rhi_present_shown(void)
     return be()->present_shown();
 }
 
+bool rhi_wait_present_room(void)
+{
+    RHI_GUARD();
+    return be()->wait_present_room();
+}
+
 bool rhi_present_mailbox(void)
 {
     return be()->present_mailbox();

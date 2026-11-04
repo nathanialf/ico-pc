@@ -245,6 +245,13 @@ bool rhi_present_shown(void)
     return s_presentShown;
 }
 
+/* rhi.h: the frame latency wait stays in the acquire (the submit thread
+ * presents here, port/render/rd_submit_thread.h) */
+bool rhi_wait_present_room(void)
+{
+    return false;
+}
+
 static RhiTexture dx_acquire_backbuffer_locked(void)
 {
     RhiTexture out = {0};
