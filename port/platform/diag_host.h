@@ -82,12 +82,6 @@ void ico_diag_set_pipelines(unsigned int done, unsigned int total, unsigned int 
 /* Run on a fatal end (crash, abort, watchdog) after the report, to write
    the run's summary. Must not take locks the main thread may hold. */
 void ico_diag_set_exit_hook(void (*fn)(const char *reason));
-/* Run on the watchdog thread at each of its polls (every 250 ms) while the
-   main thread lives and nothing fatal is under way: a cheap sampler of the
-   device's state (the kernel GPU driver's nodes, gpu_sysfs.h; issue 123).
-   It must not block or take locks the main thread holds for long. NULL
-   stops it. Any thread. */
-void ico_diag_set_poll_hook(void (*fn)(void));
 /* Android: a crash or the watchdog there ends the run with no
    window of its own, and the system shows nothing. box shows the player a
    message and returns when it is dismissed; flush writes into the log what
@@ -263,6 +257,10 @@ void ico_diag_start_reporter(void);
    background), 0 when it runs again: while paused neither watchdog limit
    counts and the heartbeat is quiet. Any thread. */
 void ico_diag_watchdog_pause(int paused);
+/* Whether ico_diag_watchdog_pause holds it paused: the kernel GPU
+   driver's sampler (android/gpu_sysfs_android.c) reads nothing then.
+   Any thread. */
+int ico_diag_watchdog_paused(void);
 /* Options > Graphics > Apply's switch of the renderer (window_switch.c), in
    place of a pause: seconds not 0 starts the switch's own limit, what names
    it ("switching the renderer from d3d11 to opengl"); 0 ends it.  While it

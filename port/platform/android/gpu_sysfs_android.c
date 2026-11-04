@@ -4,7 +4,11 @@
  * The kernel GPU driver's nodes read on Android (gpu_sysfs_android.h).
  * Each read is open, read and close, as diag_host.c reads /proc/meminfo
  * (ico_diag_device_memory): a node's value is made at the read, and a file
- * kept open would return the first value again.
+ * kept open would return the first value again.  The reads run on a small
+ * thread of their own ("ico-gpu-sysfs"), never on the watchdog's: a node
+ * that blocks (a KGSL or devfreq node behind a lock the driver holds
+ * through a fault's recovery, the moments the sampler is there to watch)
+ * must not stop the GPU hang limit, nor be taken for system sleep.
  */
 #include "gpu_sysfs_android.h"
 
@@ -15,6 +19,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <SDL3/SDL.h>
 #include "diag_host.h"
 #include "ico_thread.h"
 
@@ -25,6 +30,12 @@ static int s_started;   /* the probe made (main thread) */
 static int s_sampling;  /* a sampled node readable: the hook set */
 static int s_clockNode; /* the node the clock is read from, -1 none */
 static char s_paths[GPU_SYSFS_NODES][160];
+/* the sampler thread (main thread starts and joins it); s_stop under
+   s_waitLock, s_wake wakes it to stop */
+static SDL_Thread *s_thread;
+static SDL_Mutex *s_waitLock;
+static SDL_Condition *s_wake;
+static int s_stop;
 
 /* the node's first integer: 0, or the errno of the open or the read (a
    read of nothing or no digit: EINVAL) */
@@ -89,7 +100,7 @@ static int32_t value_of(int node, long long v)
     return v < 0 ? -1 : v > 2147483647ll ? 2147483647 : (int32_t)v;
 }
 
-/* the watchdog thread's poll: one sample of the readable nodes */
+/* the sampler thread's step: one sample of the readable nodes */
 static void sample(void)
 {
     GpuSysfsSample s;
@@ -118,10 +129,67 @@ static void sample(void)
     pthread_mutex_unlock(&s_lock);
 }
 
+/* every GPU_SYSFS_PERIOD_MS until gpu_sysfs_android_stop; nothing read
+   while the app is in the background (the watchdog paused, diag_host.h
+   ico_diag_watchdog_paused) */
+static int sampler_main(void *u)
+{
+    (void)u;
+    SDL_LockMutex(s_waitLock);
+    while (!s_stop) {
+        SDL_WaitConditionTimeout(s_wake, s_waitLock, (Sint32)GPU_SYSFS_PERIOD_MS);
+        if (s_stop) {
+            break;
+        }
+        SDL_UnlockMutex(s_waitLock);
+        if (!ico_diag_watchdog_paused()) {
+            sample();
+        }
+        SDL_LockMutex(s_waitLock);
+    }
+    SDL_UnlockMutex(s_waitLock);
+    return 0;
+}
+
+/* the sampler thread started when a node is sampled and it is not running */
+static void sampler_start(void)
+{
+    if (!s_sampling || s_thread != NULL) {
+        return;
+    }
+    if (s_waitLock == NULL) {
+        s_waitLock = SDL_CreateMutex();
+        s_wake = SDL_CreateCondition();
+    }
+    if (s_waitLock == NULL || s_wake == NULL) {
+        fprintf(stderr, "window: kernel GPU driver: no sampler (SDL: %s)\n", SDL_GetError());
+        return;
+    }
+    s_stop = 0;
+    s_thread = SDL_CreateThread(sampler_main, "ico-gpu-sysfs", NULL);
+    if (s_thread == NULL) {
+        fprintf(stderr, "window: kernel GPU driver: no sampler thread (SDL: %s)\n", SDL_GetError());
+    }
+}
+
+void gpu_sysfs_android_stop(void)
+{
+    if (s_thread == NULL) {
+        return;
+    }
+    SDL_LockMutex(s_waitLock);
+    s_stop = 1;
+    SDL_SignalCondition(s_wake);
+    SDL_UnlockMutex(s_waitLock);
+    SDL_WaitThread(s_thread, NULL);
+    s_thread = NULL;
+}
+
 void gpu_sysfs_android_start(GpuSysfsInfo *info)
 {
     if (s_started) {
         *info = s_info;
+        sampler_start(); /* a window opened again after a stop */
         return;
     }
     s_started = 1;
@@ -166,7 +234,7 @@ void gpu_sysfs_android_start(GpuSysfsInfo *info)
     if (gpu_sysfs_any_readable(&s_info)) {
         gpu_sysfs_ring_reset(&s_ring);
         s_sampling = 1;
-        ico_diag_set_poll_hook(sample);
+        sampler_start();
     }
 }
 

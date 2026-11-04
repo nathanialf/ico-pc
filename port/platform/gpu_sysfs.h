@@ -13,7 +13,8 @@
  * these nodes; the open line says which were readable.
  *
  * The Android reader (android/gpu_sysfs_android.c) reads them every 250 ms
- * on the watchdog thread (diag_host.h ico_diag_set_poll_hook) into a ring
+ * on a thread of its own (started with the window, joined at its close,
+ * idle while the app is in the background) into a ring
  * of GPU_SYSFS_RING samples on the monotonic ms clock (ico_thread_now_ms,
  * the clock of the renderer's rd__now_ms and RdPerfRecord.presentEndMs);
  * the window reads the ring on its own thread: the 10 s block's line, and

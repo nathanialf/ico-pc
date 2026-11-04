@@ -78,9 +78,11 @@ void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const 
 /* The kernel GPU driver's nodes (gpu_sysfs.h; Android only, nothing
    elsewhere): at the window's open, once a run, the line saying which were
    readable ("window: kernel GPU driver: /sys/class/kgsl/kgsl-3d0: readable
-   ..." or "... not readable (EACCES)") and the sampling started on the
-   watchdog thread when any is */
+   ..." or "... not readable (EACCES)") and, when any is, the sampler's
+   own thread started (again at each later open) */
 void window_stall_gpu_open(void);
+/* The window's close: the sampler's thread stopped and joined (Android) */
+void window_stall_gpu_close(void);
 /* The 10 s block's line ("window: kernel GPU driver: clock A-B MHz ..."),
    when a node is sampled */
 void window_stall_gpu_block(void);

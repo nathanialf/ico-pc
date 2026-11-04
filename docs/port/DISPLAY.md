@@ -23,7 +23,7 @@ are [RHI.md](RHI.md).
 | `port/platform/window_display_rate.h`, `window_display_rate.c` | the window's side: SDL's display mode in the log, the Android pin through the NDK |
 | `port/platform/present_hist.h`, `present_hist.c` | the 10 s block's histogram of the driver's present call (over 20, 50, 100 and 300 ms); the texts of the lines around a present that blocked (its split, the replay after it) |
 | `port/platform/window_stall.h`, `window_stall.c` | the window's lines around a present that blocked (issue 123), from the replays' records as they pop; the kernel GPU driver's lines on Android |
-| `port/platform/gpu_sysfs.h`, `gpu_sysfs.c` | the kernel GPU driver's nodes, the pure part: the parser, the ring of samples, the block and around reductions, the lines ([PLATFORM.md](PLATFORM.md#diagnostics) has the sampler) |
+| `port/platform/gpu_sysfs.h`, `gpu_sysfs.c` | the kernel GPU driver's nodes, the pure part: the parser, the ring of samples, the block and around reductions, the lines ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md) has the sampler) |
 | `port/platform/window_disc.h`, `window_disc.c` | the window's side of the disc reader: the step's disc wait for the present allowance, the 10 s disc line |
 | `port/platform/window_blended.h`, `window_blended.c` | F12's blended present's frame: the arm after F12's zip (a result still to collect collected first) and the move into it |
 | `port/platform/display_clock.h` | the vblank clock's interface |
@@ -501,7 +501,7 @@ present waited (a clock drop, another GPU client); a GPU idle about as long as t
 next replay is the queue draining behind the present, the driver waiting on something other than
 this replay's work.
 
-On Android the kernel GPU driver's state is sampled every 250 ms ([PLATFORM.md](PLATFORM.md#diagnostics);
+On Android the kernel GPU driver's state is sampled every 250 ms on a thread of its own ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md);
 `port/platform/gpu_sysfs.h`, `port/platform/window_stall.c`), and three lines come from it. At the
 window's open, once a run: `window: kernel GPU driver: /sys/class/kgsl/kgsl-3d0: readable gpuclk,
 gpu_busy_percentage, reset_count (3 so far), thermal_pwrlevel, ...; not readable temp (EACCES); not
@@ -518,7 +518,7 @@ then every 100th; the parts whose node is not readable left out). Nothing is wri
 platforms.
 
 The app's own words on the phone's thermal state and screen recording (issue 123;
-[PLATFORM.md](PLATFORM.md#diagnostics) has the Java bridge) come as `ico_pc: thermal status changed:
+[ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-thermal-state-and-screen-recording) has the Java bridge) come as `ico_pc: thermal status changed:
 MODERATE (2) -> SEVERE (3) (run time 212.4 s)` and `ico_pc: screen recording: visible (run time 40.1
 s)` the moment the system reports a change, and in the window's lines: each 10 s block, after the
 kernel GPU driver's line, `window: thermal: headroom 0.72 (1.0 is the throttling point), status

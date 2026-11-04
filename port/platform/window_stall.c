@@ -138,15 +138,22 @@ void window_stall_gpu_open(void)
     GpuSysfsInfo info;
     char text[512];
 
+    gpu_sysfs_android_start(&info); /* the sampler thread (again after a close) */
     if (s_said) {
         return;
     }
     s_said = 1;
-    gpu_sysfs_android_start(&info);
     gpu_sysfs_open_text(&info, text, sizeof(text));
     fprintf(stderr, "window: %s\n", text);
     s_gpuOn = gpu_sysfs_any_readable(&info);
     s_gpuBlockMs = ico_thread_now_ms();
+#endif
+}
+
+void window_stall_gpu_close(void)
+{
+#ifdef __ANDROID__
+    gpu_sysfs_android_stop();
 #endif
 }
 
