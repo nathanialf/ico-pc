@@ -83,10 +83,14 @@ int ico_pipe_note_creating(const char *note, unsigned bg_left);
    own heartbeat, each compile that returns); any of them moving, no
    creation, the time not counted (counted 0) or the limit off (on 0)
    starts it again.  Returns the stalled seconds (0 while it moves).
-   Zero-initialise. */
+   held_s: the time the memory rule held this creation
+   (ico_pipe_mem_hold), back to 0 when the creation changes (no creation,
+   the limit off, or seq, done or bg_done moving); last: the time of the
+   last hold asked.  Zero-initialise. */
 typedef struct IcoPipeStallWatch {
     unsigned seq, done, bg_done;
     double since;
+    double held_s, last;
 } IcoPipeStallWatch;
 
 double ico_pipe_stall_step(IcoPipeStallWatch *w, double now, int creating, int counted, int on,
@@ -109,11 +113,27 @@ double ico_pipe_stall_limit_s(int in_play, int serial_compiler);
    unknown); 1 when it grew by ICO_PIPE_MEM_MOVING_KB or more, the driver's
    compiler at work (the issue 188 phone: 147, 251, 275, 296 MB at the
    heartbeats while its compile ran), so the pipeline limit does not count
-   that heartbeat's time; an unknown reading never moves.  The free-memory
-   floor and the system's low-memory signal (issue 161) still stop a
-   compiler that grows without end. */
+   that heartbeat's time; an unknown reading never moves. */
 #define ICO_PIPE_MEM_MOVING_KB 2048L
 int ico_pipe_mem_moving(long prev_kb, long now_kb);
+
+/* Whether the memory rule holds the limit at this poll (the watchdog's
+   thread, before ico_pipe_stall_step, whose counted it then clears): a
+   creation in progress whose memory moves (ico_pipe_mem_moving), the
+   limit on, and neither memory_low (the free memory under the floor or a
+   low-memory level from the system: diag_host.c ico_diag_background_memory,
+   read here at every poll, since the set's own checks between batches
+   cannot interrupt a creation inside the driver) nor the hold used up:
+   the time held in this creation (w->held_s, the polls' time added while
+   held) under ICO_PIPE_MEM_HOLD_LIMITS times limit_s.  Without the cap a
+   driver call that never returns and grows 2 MB a heartbeat would hold
+   the limit until Android's low-memory killer ended the process (no box,
+   no stall mark).  A creation that grows all along thus ends at three
+   times the limit held plus the limit itself at the latest (40 s before
+   the game starts, 240 s on a serial compiler, 120 s in play).  1 held. */
+#define ICO_PIPE_MEM_HOLD_LIMITS 3.0
+int ico_pipe_mem_hold(IcoPipeStallWatch *w, double now, int creating, int moving, int on,
+                      int memory_low, double limit_s);
 
 /* Whether the next start prepares the graphics another way after the
    pipeline limit ended this one (the box's and the line's words, issue

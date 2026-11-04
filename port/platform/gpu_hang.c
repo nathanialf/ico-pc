@@ -75,6 +75,9 @@ int ico_pipe_note_creating(const char *note, unsigned bg_left)
 double ico_pipe_stall_step(IcoPipeStallWatch *w, double now, int creating, int counted, int on,
                            unsigned seq, unsigned done, unsigned bg_done)
 {
+    if (!creating || !on || seq != w->seq || done != w->done || bg_done != w->bg_done) {
+        w->held_s = 0.0; /* another creation, or none: the memory rule's hold anew */
+    }
     if (!creating || !counted || !on || seq != w->seq || done != w->done || bg_done != w->bg_done) {
         w->seq = seq;
         w->done = done;
@@ -96,6 +99,21 @@ double ico_pipe_stall_limit_s(int in_play, int serial_compiler)
 int ico_pipe_mem_moving(long prev_kb, long now_kb)
 {
     return prev_kb >= 0 && now_kb >= 0 && now_kb - prev_kb >= ICO_PIPE_MEM_MOVING_KB;
+}
+
+int ico_pipe_mem_hold(IcoPipeStallWatch *w, double now, int creating, int moving, int on,
+                      int memory_low, double limit_s)
+{
+    const double dt = w->last > 0.0 && now > w->last ? now - w->last : 0.0;
+    int hold;
+
+    w->last = now;
+    hold =
+        creating && moving && on && !memory_low && w->held_s < ICO_PIPE_MEM_HOLD_LIMITS * limit_s;
+    if (hold) {
+        w->held_s += dt;
+    }
+    return hold;
 }
 
 int ico_pipe_stall_next_differs(int in_selftest, int lazy_run, int skip_family, int vu_note,

@@ -5247,7 +5247,11 @@ static const char *os_wait_name(void)
    ico_pipe_stall_limit_s.  On every driver the limit does not count while
    the process's memory grew by 2 MB or more since the last heartbeat (the
    compiler at work, gpu_hang.h ico_pipe_mem_moving: the issue 188 phone
-   went 147, 251, 275, 296 MB before it stood still). */
+   went 147, 251, 275, 296 MB before it stood still), for at most three
+   times the limit in one creation, and never with the free memory under
+   the floor or a low-memory level from the system (gpu_hang.h
+   ico_pipe_mem_hold: a call that never returns and keeps growing would
+   otherwise hold it until Android's low-memory killer ended the run). */
 static volatile int pipe_stall;
 /* the heartbeat's memory rule (watchdog thread): the last heartbeat's
    resident KB, whether it grew past the rule's step, by how much, and the
@@ -5292,24 +5296,41 @@ static void stall_mark_write(void)
    progress too, and its note counts only while some have not returned
    (ico_pipe_note_creating), so a movie or a load that presents no
    picture to take a finished batch is not a stall */
-static double pipe_stall_step(double now, int counted, const IcoDiagGpu *g)
+static double pipe_stall_step(double now, int counted, const IcoDiagGpu *g, double limit_s)
 {
     static IcoPipeStallWatch w;
+    static unsigned refused;
     const int creating = act_mode != 0 && ico_pipe_note_creating(activity, g->bg_pipes_left);
-    if (creating && pipe_mem_moving && pipe_mem_logged_beat != pipe_mem_beat &&
-        gpu_hang_limit_ms != 0) {
-        /* the compiler at work: the limit waits (issue 188) */
+    const int on = gpu_hang_limit_ms != 0;
+    /* the free memory under the floor, or the system's low-memory level:
+       read here, inside the creation, not only by the set between batches
+       (ico_diag_background_memory has no side effect on the set's stop) */
+    char low[128];
+    const int memoryLow =
+        creating && pipe_mem_moving && on && ico_diag_background_memory(low, sizeof low) != 0;
+    const int hold = ico_pipe_mem_hold(&w, now, creating, pipe_mem_moving, on, memoryLow, limit_s);
+    if (creating && pipe_mem_moving && on && pipe_mem_logged_beat != pipe_mem_beat) {
         pipe_mem_logged_beat = pipe_mem_beat;
-        pipe_mem_holds++;
-        if (pipe_mem_holds <= 8 || pipe_mem_holds % 100 == 0) {
+        if (hold) {
+            /* the compiler at work: the limit waits (issue 188) */
+            pipe_mem_holds++;
+            if (pipe_mem_holds <= 8 || pipe_mem_holds % 100 == 0) {
+                ico_diag_log("ico_pc: a pipeline creation in progress, the process grew %ld MB "
+                             "since the last heartbeat (the driver's compiler at work): the "
+                             "pipeline limit waits (%u times; %.0f s held of at most %.0f s)",
+                             pipe_mem_grew_kb / 1024, pipe_mem_holds, w.held_s,
+                             ICO_PIPE_MEM_HOLD_LIMITS * limit_s);
+            }
+        } else if (++refused <= 8 || refused % 100 == 0) {
             ico_diag_log("ico_pc: a pipeline creation in progress, the process grew %ld MB since "
-                         "the last heartbeat (the driver's compiler at work): the pipeline limit "
-                         "waits (%u times)",
-                         pipe_mem_grew_kb / 1024, pipe_mem_holds);
+                         "the last heartbeat, but the pipeline limit does not wait for it (%s; "
+                         "%u times)",
+                         pipe_mem_grew_kb / 1024, memoryLow ? low : "held for its longest already",
+                         refused);
         }
     }
-    return ico_pipe_stall_step(&w, now, creating, counted && !pipe_mem_moving,
-                               gpu_hang_limit_ms != 0, activity_seq, pipes_done, g->bg_pipes_done);
+    return ico_pipe_stall_step(&w, now, creating, counted && !hold, on, activity_seq, pipes_done,
+                               g->bg_pipes_done);
 }
 #endif
 
@@ -5800,8 +5821,8 @@ static void watchdog_loop(void)
                (pipe_stall_step), in force before the game starts too */
             IcoDiagGpu bg;
             (void)gpu_state(&bg);
-            const double stalled = pipe_stall_step(now, poll_counted, &bg);
             const double stall_lim = ico_pipe_stall_limit_s(ticks != 0, pipe_serial);
+            const double stalled = pipe_stall_step(now, poll_counted, &bg, stall_lim);
             if (stalled >= stall_lim) {
                 /* the box's "another way" only when the next start does
                    something else (issue 188: the self-test's pipeline came

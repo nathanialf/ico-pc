@@ -44,7 +44,15 @@
  *            self-tests or on a lazy run the same way, unless the note
  *            names a family the renderer can leave out or a VU shader
  *            before the plain ones are in force; the set of a full or
- *            careful run another way.
+ *            careful run another way;
+ *   memcap   review 2 S1, the memory rule's cap (ico_pipe_mem_hold): a
+ *            creation whose memory grows 4 MB at every heartbeat is held
+ *            for three times the limit, then the limit fires (10, 60 and
+ *            30 s); with the free memory under the floor or a low-memory
+ *            level from 20 s nothing holds from there and the limit fires
+ *            at 20 s plus the limit; a new creation (the note changed)
+ *            starts its own hold; the limit off never fires; no hold
+ *            without a creation, without growth, or with memory low.
  */
 #include <stdio.h>
 #include "gpu_hang.h"
@@ -309,7 +317,7 @@ static void test188(void)
     static const long kMb[] = {147, 147, 147, 251, 275, 296, 295, 293};
     for (int serial = 0; serial < 2; serial++) {
         const double lim = ico_pipe_stall_limit_s(0, serial);
-        IcoPipeStallWatch w = {0, 0, 0, 0.0};
+        IcoPipeStallWatch w = {0};
         long prev = -1;
         int moving = 0;
         double firedAt = -1.0;
@@ -322,7 +330,8 @@ static void test188(void)
                 prev = mb * 1024;
             }
             const int creating = t >= 4.0;
-            const double st = ico_pipe_stall_step(&w, t, creating, !moving, 1, 7, 0, 0);
+            const int hold = ico_pipe_mem_hold(&w, t, creating, moving, 1, 0, lim);
+            const double st = ico_pipe_stall_step(&w, t, creating, !hold, 1, 7, 0, 0);
             if (st >= lim) {
                 firedAt = t;
             }
@@ -342,6 +351,68 @@ static void test188(void)
     CHECK(ico_pipe_stall_next_differs(1, 1, 0, 1, 0));
 }
 
+/* review 2 S1: a creation whose memory moves at every heartbeat (4 MB
+   each, 2 s apart, polled every 250 ms from 100 s) */
+static double memCapFiredAt(double lim, int memoryLowFrom, int on, unsigned seqChangeAt)
+{
+    IcoPipeStallWatch w = {0};
+    long kb = 100L * 1024;
+    int moving = 0;
+    unsigned seq = 7;
+    for (int q = 0; q <= 400 * 4; q++) {
+        const double t = 100.0 + q * 0.25;
+        if (q % 8 == 0) {
+            const long prev = q == 0 ? -1 : kb;
+            kb += 4L * 1024;
+            moving = ico_pipe_mem_moving(prev, kb);
+        }
+        if (seqChangeAt != 0 && (unsigned)q == seqChangeAt) {
+            seq++; /* a new note: another creation */
+        }
+        const int low = memoryLowFrom >= 0 && q >= memoryLowFrom;
+        const int hold = ico_pipe_mem_hold(&w, t, 1, moving, on, low, lim);
+        const double st = ico_pipe_stall_step(&w, t, 1, !hold, on, seq, 0, 0);
+        if (st >= lim) {
+            return t - 100.0;
+        }
+    }
+    return -1.0;
+}
+
+static void testMemCap(void)
+{
+    static const double kLim[] = {ICO_PIPE_STALL_START_S, ICO_PIPE_STALL_START_SERIAL_S,
+                                  ICO_PIPE_STALL_PLAY_S};
+    for (int i = 0; i < 3; i++) {
+        const double lim = kLim[i];
+        const double cap = ICO_PIPE_MEM_HOLD_LIMITS * lim;
+        /* growing all along: held for the cap (from the first growth at
+           2 s), then the limit: it fires, by four times the limit and a
+           heartbeat */
+        const double at = memCapFiredAt(lim, -1, 1, 0);
+        printf("  memory moving at every heartbeat: limit %.0f s fired at %.2f s\n", lim, at);
+        CHECK(at >= 2.0 + cap + lim - 0.5 && at <= 2.0 + cap + lim + 0.5);
+        /* the free memory under the floor or a low-memory level from 20 s
+           (q 80): no hold from there, the limit counts from that poll */
+        const double atLow = memCapFiredAt(lim, 80, 1, 0);
+        CHECK(atLow >= 20.0 + lim - 0.3 && atLow <= 20.0 + lim + 0.3);
+        /* a new creation (the note changed at 10 s, q 40) starts its own
+           hold: it fires later than the first one alone would */
+        const double atNew = memCapFiredAt(lim, -1, 1, 40);
+        CHECK(atNew >= 10.0 + cap + lim - 0.5 && atNew <= 10.0 + cap + lim + 0.5);
+    }
+    /* the limit off: never held, never fired */
+    CHECK(memCapFiredAt(10.0, -1, 0, 0) < 0.0);
+    {
+        IcoPipeStallWatch w = {0};
+        CHECK(!ico_pipe_mem_hold(&w, 1.0, 0, 1, 1, 0, 10.0));  /* no creation */
+        CHECK(!ico_pipe_mem_hold(&w, 1.25, 1, 0, 1, 0, 10.0)); /* not growing */
+        CHECK(!ico_pipe_mem_hold(&w, 1.5, 1, 1, 1, 1, 10.0));  /* memory low */
+        CHECK(ico_pipe_mem_hold(&w, 1.75, 1, 1, 1, 0, 10.0));
+        CHECK(w.held_s == 0.25);
+    }
+}
+
 int main(void)
 {
     testLimit();
@@ -354,6 +425,7 @@ int main(void)
     testNote();
     testStall();
     test188();
+    testMemCap();
     printf("gpu_hang_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

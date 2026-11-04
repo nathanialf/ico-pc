@@ -2283,8 +2283,16 @@ resident memory grew by 2 MB or more since the last heartbeat (`ico_pipe_mem_mov
 compiler at work; the issue 188 phone went 147, 251, 275 and 296 MB at its heartbeats before it
 stood still), with a line while a creation is held so (`ico_pc: a pipeline creation in progress,
 the process grew N MB since the last heartbeat (the driver's compiler at work): the pipeline limit
-waits (K times)`, the first 8, then every 100th); the free-memory floor and the system's
-low-memory signal still stop a compiler that grows without end. `<next>` and the box say the next
+waits (K times; H s held of at most C s)`, the first 8, then every 100th). The hold has a cap
+and a floor (`ico_pipe_mem_hold`): it ends after three times the limit held in one creation (30 s
+before the game starts, 180 s on a serial compiler, 90 s in play; the limit then runs, so such a
+creation ends the run at four times the limit at the latest), and it never holds while the free
+memory is under the floor or the system has sent a low-memory level (`ico_diag_background_memory`,
+read by the watchdog at every poll inside the creation: the set's own stops between batches
+cannot interrupt a call inside the driver, and a call that never returns but keeps growing would
+otherwise be ended only by Android's low-memory killer, with no box and no stall mark); a growth
+not held says `... but the pipeline limit does not wait for it (<the floor's figures|the
+system's low-memory signal (<level>)|held for its longest already>; K times)`. `<next>` and the box say the next
 start prepares the graphics another way only when it does (`ico_pipe_stall_next_differs`): not
 when the creation was inside the blend and VU pre-pass self-tests, which run first at every start
 whatever the set (the window tells the watchdog, `ico_diag_set_selftest`), nor on a run already
