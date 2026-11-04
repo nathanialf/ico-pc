@@ -754,7 +754,12 @@ if(ICO_RUN_TESTS)
     set(_asan_env "")
     if(ICO_SANITIZE MATCHES "address")
         set(_asan_env "ASAN_OPTIONS=detect_leaks=0")
-        set_tests_properties(settings_render PROPERTIES ENVIRONMENT "${_asan_env}")
+        # and its disc variants: the same program, the same driver leak
+        # (settings_render_aug6 showed the same 2 x 56 bytes on CI's Mesa
+        # 25.2.8 in the v0.10.2 run, all in the driver)
+        set_tests_properties(settings_render settings_render_jpn settings_render_kor
+                             settings_render_cn settings_render_ntsc settings_render_aug6
+                             settings_render_jun26 PROPERTIES ENVIRONMENT "${_asan_env}")
     endif()
     list(APPEND _env ${_asan_env})
     if(_env)

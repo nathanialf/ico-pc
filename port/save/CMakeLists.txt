@@ -67,6 +67,13 @@ if(ICO_RUN_TESTS)
         file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_name}")
         add_test(NAME ${_name} COMMAND save_test ${_slug} $<TARGET_FILE:mc_import>
                  WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/${_name}")
+        # part B's second card from the option is <user folder>/memcard2,
+        # the program's folder here (host_config.c ico_host_pref_dir), not
+        # the working directory: one folder for the seven runs.  Under
+        # ctest -j (CI's shards) save_cn and save_jpn ran at once and
+        # save_cn's icon block on it ended non-zero (save_test.c:770, run
+        # 41925244605); serially all seven pass.  One at a time on it
+        set_tests_properties(${_name} PROPERTIES RESOURCE_LOCK save_memcard2)
     endforeach()
 endif()
 

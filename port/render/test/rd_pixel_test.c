@@ -3979,17 +3979,30 @@ static void testPipelines(void)
     }
     CHECK(n < RD_PIPELINE_REACHABLE_MAX, "reachable pipelines %u >= %d (with the VU programs)", n,
           RD_PIPELINE_REACHABLE_MAX);
+    /* testSheetText drew this 1x frame's sheets through font_sheet_ps under
+       [dev] sheet_shader's switch; the set leaves those keys out at 1x
+       (issue 188) and keeps them under the switch: a font_sheet_ps key is
+       checked against the set the switch makes (WARP's 36 created keys
+       hold one; lavapipe reaches here with 5 created, none of them) */
+    static RdPipeKeyInt keysSh[RD_PIPELINE_REACHABLE_MAX];
+    const bool keepSheet = g_rd.sheetShader;
+    g_rd.sheetShader = true;
+    const uint32_t nSh = rd__enumerate_reachable(keysSh, RD_PIPELINE_REACHABLE_MAX);
+    g_rd.sheetShader = keepSheet;
     for (uint32_t i = 0; i < c; i++) {
         const RdPipeKeyInt *k = rd__pipeline_key_at(i);
         int found = 0;
         for (uint32_t j = 0; j < nMine && j < RD_PIPELINE_REACHABLE_MAX; j++) {
             found |= rd__pipe_key_equal(k, &mine[j]);
         }
+        for (uint32_t j = 0; !found && k->fs == RD_FS_FONT_SHEET && j < nSh; j++) {
+            found |= rd__pipe_key_equal(k, &keysSh[j]);
+        }
         CHECK(found,
-              "created pipeline %u (prog %u blend %u vs %u fmt %u/%u z %u/%u mask %x nodual %u) is "
-              "not in the enumerated set",
-              i, k->gs.program, k->gs.blend, k->vs, k->colorFmt, k->depthFmt, k->gs.ztst,
-              k->gs.zwrite, k->gs.colorMask, k->gs.nodual);
+              "created pipeline %u (prog %u blend %u vs %u fs %s fmt %u/%u z %u/%u mask %x nodual "
+              "%u) is not in the enumerated set",
+              i, k->gs.program, k->gs.blend, k->vs, rd__fs_name(k->fs), k->colorFmt, k->depthFmt,
+              k->gs.ztst, k->gs.zwrite, k->gs.colorMask, k->gs.nodual);
     }
 }
 

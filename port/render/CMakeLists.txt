@@ -1727,6 +1727,23 @@ if(ICO_RUN_TESTS)
                                     "${_bst_env};ICO_RD_UBER=on;ICO_RD_BLEND_SABOTAGE=attachment")
     set_tests_properties(rd_blend_selftest_uber_blend_fixed
                          PROPERTIES ENVIRONMENT "${_bst_env};ICO_RD_UBER=on;ICO_RD_BLEND=fixed")
+    # Under asan, the twins whose glyph goes through font_sheet_ps (an exact
+    # mode asked, or [dev] sheet_shader) end with LeakSanitizer's 112 bytes
+    # (2 x 56, calloc) on Ubuntu 24.04's lavapipe (Mesa 25.2.8): every frame
+    # is in the driver, on a thread the driver started (asan_thread_start
+    # with no port frame: the driver compiles its shader variants at draw
+    # time, and v0.10.2's branch-free font_sheet_ps is what changed; v0.10.1,
+    # whose every twin drew the glyph through the old one, was clean on the
+    # same Mesa build; the dev container's Mesa 25.0.7 is clean); the roots are unscanned
+    # once the loader dlcloses it at vkDestroyInstance (the rhi_vk and
+    # settings_render leak, port/rhi/CMakeLists.txt). An LSan suppression
+    # cannot name it (the frames are "<unknown module>" after the unload),
+    # so the leak check is off for these four; the baked-glyph twins keep it
+    if(ICO_SANITIZE MATCHES "address")
+        set_property(TEST rd_blend_selftest_blend_attachment rd_blend_selftest_blend_exact
+                          rd_blend_selftest_moltenvk_storage rd_blend_selftest_sheet_shader
+                     APPEND PROPERTY ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
+    endif()
     # the VU vertex pre-pass's self-test (rd_vuprepass_selftest.c): on
     # lavapipe the pre-pass draws the self-test's meshes byte for byte as
     # the programs' entries do and stays on, in the extended variant (a wide
