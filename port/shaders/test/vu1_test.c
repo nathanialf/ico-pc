@@ -2678,7 +2678,7 @@ static void triRule(const Case *c, IcoVuCB *v, uint32_t planeTexels)
 
 static int gpuTests(void)
 {
-    RhiDeviceDesc dd = {NULL, false, true, "vu1_test"};
+    RhiDeviceDesc dd = {NULL, false, true, "vu1_test", NULL};
     if (!rhi_init(&dd)) {
         return 77;
     }

@@ -2120,7 +2120,7 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
         rhi_test_log("SKIP %s: backend %s is not linked into this build\n", s_label, cfg->backend);
         return 77;
     }
-    RhiDeviceDesc dd = {NULL, false, cfg->debugLayers, s_label};
+    RhiDeviceDesc dd = {NULL, false, cfg->debugLayers, s_label, NULL};
     if (!rhi_init(&dd)) {
         rhi_test_log("SKIP %s: no usable %s device (see messages above)\n", s_label, cfg->backend);
         return 77;
