@@ -2213,6 +2213,8 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "test: loss dump (none)\n") != NULL);
         CHECK(strstr(s, "test: bisect -1\n") != NULL);
         CHECK(strstr(s, "loss bisect:") == NULL);
+        /* a GPU hang is a loss, not the watchdog's mark (review 2 N5) */
+        CHECK(strstr(s, "was ended by the watchdog") == NULL);
         CHECK(strstr(s, "test: bisect stub") == NULL);
         CHECK(strstr(read_file(ends), "loss 1\n") != NULL);
         if (fails) {
@@ -2266,6 +2268,19 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "test: box: ICO PC stopped responding, so it was closed.") != NULL);
 #endif
         CHECK(read_file(act)[0] == '\0');
+        {
+            /* a freeze, not a hang: the watchdog's mark beside the file
+               (review 2 N5); a GPU hang above wrote none (it is a loss) */
+            char wdm[320];
+            FILE *wf;
+            snprintf(wdm, sizeof wdm, "%s-watchdog.txt", act);
+            wf = fopen(wdm, "rb");
+            CHECK(wf != NULL);
+            if (wf != NULL) {
+                fclose(wf);
+            }
+            remove(wdm);
+        }
         if (fails) {
             printf("--- hangnot log ---\n%s\n", read_file(log));
         }
