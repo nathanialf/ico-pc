@@ -41,10 +41,6 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
         "Для более спокойного прохождения. Йорду все еще могут похитить в некоторых постановочных сценах.",
     [UI_STR_OPT_PIT_TIME] = "Время на спасение Йорды",
     [UI_STR_OPT_PIT_TIME_NOTE] = NULL, /* says something else than the English: English */
-    [UI_STR_VAL_PIT_HALF] = "50%",
-    [UI_STR_VAL_PIT_LONGER] = "x1,5",
-    [UI_STR_VAL_PIT_DOUBLE] = "x2",
-    [UI_STR_VAL_PIT_TRIPLE] = "x3",
     [UI_STR_OPT_SHADOW_SPEED] = "Скорость теней",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "Меняет скорость ходьбы, бега и полета теней. Частота их атак не меняется.",

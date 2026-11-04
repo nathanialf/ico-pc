@@ -670,7 +670,7 @@ typedef enum UiSettingsOpt {
     /* Gameplay */
     UI_OPT_STICK_FIX,
     UI_OPT_YORDA,
-    UI_OPT_PIT_TIME,         /* [gameplay] pit_time: Half, Original, Longer, Double, Triple */
+    UI_OPT_PIT_TIME,         /* [gameplay] pit_time: 4 to 30 s, or Original (the disc's 15 s) */
     UI_OPT_SHADOW_SPEED,     /* [gameplay] shadow_speed: Slower, Original, Faster, Fastest */
     UI_OPT_SHADOWS_TOGETHER, /* [gameplay] shadows_together: no turns between the Shadows */
     UI_OPT_DOOR_FIX,         /* [gameplay] door_fix, the doorway fix */

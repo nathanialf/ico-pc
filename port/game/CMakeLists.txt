@@ -265,6 +265,40 @@ if(ICO_RUN_TESTS)
     add_test(NAME yorda_trip_disc COMMAND yorda_trip_disc_test "${ICO_DISC_IMAGE}")
     set_tests_properties(yorda_trip_disc PROPERTIES SKIP_RETURN_CODE 77)
 endif()
+# pit_dive_base: Time to rescue Yorda's base (port/game/pit_time.h) off each
+# disc image: the disc's tables loaded from its ELF (port/data/tables.c), the
+# shadow's five SINK motions by name at the numbers the enemy_act.c hooks use,
+# their play speed 1, the motion-orient chain A to E, every .mob copy's frame
+# count in DATA.DF, and the pull-in's ticks against the option's table.  One
+# run per disc image set; no game start; skipped (77) without the image.
+add_executable(pit_dive_base_test test/pit_dive_base_test.c "${_yt_data}/tables.c"
+               ${ICO_TABLE_SOURCES})
+target_include_directories(pit_dive_base_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${_yt_data}"
+    "${CMAKE_SOURCE_DIR}" ${_ico_yorda_trip_disc_incs})
+target_compile_definitions(pit_dive_base_test PRIVATE ${_yt_defs} ICO_HOST=1)
+set_source_files_properties(${ICO_TABLE_EE_SYMBOLS} TARGET_DIRECTORY pit_dive_base_test
+                            PROPERTIES COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
+target_compile_options(pit_dive_base_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_GAME_WARNINGS})
+target_link_libraries(pit_dive_base_test PRIVATE ico_port_data ico_region ico_math)
+if(NOT WIN32)
+    target_link_libraries(pit_dive_base_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    if(ICO_DISC_IMAGE)
+        add_test(NAME pit_dive_base COMMAND pit_dive_base_test "${ICO_DISC_IMAGE}")
+        set_tests_properties(pit_dive_base PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+    endif()
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        string(TOUPPER "${_slug}" _up)
+        if(ICO_DISC_IMAGE_${_up})
+            add_test(NAME pit_dive_base_${_slug}
+                     COMMAND pit_dive_base_test "${ICO_DISC_IMAGE_${_up}}")
+            set_tests_properties(pit_dive_base_${_slug} PROPERTIES SKIP_RETURN_CODE 77
+                                                                    TIMEOUT 900)
+        endif()
+    endforeach()
+endif()
 
 # The doorway fix: the arm and the grace with the option off and
 # on, holding hands or not, the stage it leads to, the frame count, and a copy

@@ -38,11 +38,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "부담 없이 즐기고 싶은 분께. 일부 이벤트 장면에서는 요르다가 잡혀가는 모습이 나옵니다.",
     [UI_STR_OPT_PIT_TIME] = "요르다를 구할 시간",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "그림자가 요르다를 데려가기까지의 시간입니다. 위의 요르다 항목을 켜면 잡혀가지 않습니다.",
-    [UI_STR_VAL_PIT_HALF] = "절반",
-    [UI_STR_VAL_PIT_LONGER] = "더 오래",
-    [UI_STR_VAL_PIT_DOUBLE] = "2배",
-    [UI_STR_VAL_PIT_TRIPLE] = "3배",
+        "그림자가 요르다와 함께 가라앉기 시작해 데려가기까지의 시간(초)입니다. 위의 요르다 항목을 켜면 잡혀가지 않습니다.",
     [UI_STR_OPT_SHADOW_SPEED] = "그림자 속도",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "그림자가 걷고, 달리고, 나는 속도입니다. 공격하는 빈도는 바뀌지 않습니다.",

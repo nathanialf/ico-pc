@@ -34,11 +34,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "For a less stressful game. A few scripted scenes still show the capture.",
     [UI_STR_OPT_PIT_TIME] = "Time to rescue Yorda",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "How long a shadow takes to pull Yorda into a pit. The Yorda row above stops it altogether.",
-    [UI_STR_VAL_PIT_HALF] = "Half",
-    [UI_STR_VAL_PIT_LONGER] = "Longer",
-    [UI_STR_VAL_PIT_DOUBLE] = "Double",
-    [UI_STR_VAL_PIT_TRIPLE] = "Triple",
+        "Seconds from a shadow starting to sink with Yorda until she is taken. The Yorda row above stops it altogether.",
     [UI_STR_OPT_SHADOW_SPEED] = "Shadow speed",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "How fast shadows walk, run and fly. It does not change how often they attack.",

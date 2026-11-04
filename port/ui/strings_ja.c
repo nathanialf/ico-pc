@@ -34,11 +34,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "気軽に遊びたい方に。一部のイベントでは、さらわれる場面が表示されます。",
     [UI_STR_OPT_PIT_TIME] = "ヨルダを助けるまでの時間",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "影がヨルダを連れ去るまでの時間です。上のヨルダの項目なら、さらわれなくなります。",
-    [UI_STR_VAL_PIT_HALF] = "半分",
-    [UI_STR_VAL_PIT_LONGER] = "やや長い",
-    [UI_STR_VAL_PIT_DOUBLE] = "2倍",
-    [UI_STR_VAL_PIT_TRIPLE] = "3倍",
+        "影がヨルダを連れて沈み始めてから、連れ去るまでの秒数です。上のヨルダの項目なら、さらわれなくなります。",
     [UI_STR_OPT_SHADOW_SPEED] = "影の速さ",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "影が歩く、走る、飛ぶ速さです。攻撃してくる頻度は変わりません。",

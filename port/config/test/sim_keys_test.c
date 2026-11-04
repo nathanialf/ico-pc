@@ -137,10 +137,10 @@ static void test_text_and_hash(void)
     /* a saved text without a key reads it as its default */
     CHECK(ico_sim_keys_first_diff("", out, sizeof out) == NULL);
     CHECK(ico_sim_keys_first_diff(NULL, out, sizeof out) == NULL);
-    CHECK(ico_config_set_string("gameplay.pit_time", "dive") == 0);
+    CHECK(ico_config_set_string("gameplay.pit_time", "8") == 0);
     k = ico_sim_keys_first_diff("gameplay.mirror=\n", out, sizeof out);
     CHECK(k != NULL && strcmp(k, "gameplay.pit_time") == 0);
-    CHECK(strcmp(out, "gameplay.pit_time=(absent) (now dive)") == 0);
+    CHECK(strcmp(out, "gameplay.pit_time=(absent) (now 8)") == 0);
     /* a short out buffer is cut, NUL-terminated */
     k = ico_sim_keys_first_diff("", out, 8);
     CHECK(k != NULL && strlen(out) == 7);
