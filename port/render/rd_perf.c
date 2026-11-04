@@ -203,6 +203,8 @@ static double s_cullMs, s_cullHizMs;
 static uint64_t s_besideNoFacing[RD_VU_NOFACE_COUNT];
 /* the VU draws with side bands and card verdicts (RdPerfRecord.vuBesideCards) */
 static uint64_t s_besideCards;
+/* the VU draws under the camera rule (RdPerfRecord.vuCameraDraws) */
+static uint64_t s_cameraDraws;
 /* the store plan's (RdPerfRecord storePasses, storeDepthDropped,
  * storeColorDropped) and the replays it planned */
 static uint64_t s_storePasses, s_storeDepth, s_storeColor;
@@ -254,6 +256,7 @@ bool rd_perf_pop(RdPerfRecord *out)
         s_besideNoFacing[k] += s_queue[s_head].vuBesideNoFacing[k];
     }
     s_besideCards += s_queue[s_head].vuBesideCards;
+    s_cameraDraws += s_queue[s_head].vuCameraDraws;
     s_fuseSame += s_queue[s_head].vuFuseSame;
     for (int k = 0; k < RD_VU_FUSE_WHY_COUNT; k++) {
         s_fuseKept[k] += s_queue[s_head].vuFuseKept[k];
@@ -438,17 +441,29 @@ const char *rd_perf_backend_text(void)
     for (int k = 0; k < RD_VU_NOFACE_COUNT; k++) {
         noFacing += s_besideNoFacing[k];
     }
+    if (s_cameraDraws && s_backendReplays) {
+        /* the camera rule (rd_replay_vu.c vuSource; [dev] region_rule =
+           camera): the draws whose triangles the PS2 drops are drawn
+           clipped when they face the eye (a report shows the rule was in
+           force where something near the camera shows or not) */
+        const int k = snprintf(s_text + at, sizeof(s_text) - at,
+                               "; region rule: the camera's: %.0f VU draws a replay drawn by "
+                               "the camera rule (the PS2's drops that face the eye drawn)",
+                               (double)s_cameraDraws / (double)s_backendReplays);
+        at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
+    }
     if (noFacing) {
-        /* the side bands (rd_replay_vu.c vuBesideOn): the draws on a frame
-           wider than 4:3 that had none because their mesh has no facing
-           data, by why (RD_VU_NOFACE_*): a report shows why the sides of
-           the picture are empty where they should not be */
+        /* the side bands or the camera rule (rd_replay_vu.c vuDropMode):
+           the draws that kept the PS2's drops because their mesh has no
+           facing data, by why (RD_VU_NOFACE_*): a report shows why a wall
+           near the camera still opens, or the sides of the picture are
+           empty, where they should not be */
         const int k = snprintf(
             s_text + at, sizeof(s_text) - at,
-            "; side bands: %llu draws without facing data (%llu prelit rebuilt without the "
+            "; %s: %llu draws without facing data (%llu prelit rebuilt without the "
             "EE's table: a save state or a morph, %llu model pack replacements, %llu copies, "
             "%llu other)",
-            (unsigned long long)noFacing,
+            s_cameraDraws ? "camera rule" : "side bands", (unsigned long long)noFacing,
             (unsigned long long)s_besideNoFacing[RD_VU_NOFACE_NO_TABLE],
             (unsigned long long)s_besideNoFacing[RD_VU_NOFACE_REPLACED],
             (unsigned long long)s_besideNoFacing[RD_VU_NOFACE_COPY],
@@ -590,6 +605,7 @@ const char *rd_perf_backend_text(void)
     s_cullMs = s_cullHizMs = 0.0;
     memset(s_besideNoFacing, 0, sizeof(s_besideNoFacing));
     s_besideCards = 0;
+    s_cameraDraws = 0;
     s_cutCarried = s_cutSkipped = s_cutLast = 0;
     memset(s_cutLastWhy, 0, sizeof(s_cutLastWhy));
     s_smMerged = s_smArmed = s_smResets = s_smClears = 0;

@@ -198,6 +198,23 @@ int vu1ref_region_between(int drawT, int cardT, int shownPrev, int shownCur)
     return shownPrev || shownCur ? VU1REF_DRAW_CLIPPED : drawT;
 }
 
+int vu1ref_region_camera(int freeCamera, int insideA, int insideB, int insideC, int hide,
+                         int reaches, int shown, int facing)
+{
+    if (hide) {
+        return VU1REF_DRAW_NONE;
+    }
+    if (insideA && insideB && insideC) {
+        return VU1REF_DRAW_EXACT;
+    }
+    /* vu_region_rule: the free camera, the cut; then the ticks' rescue and
+       vu_drop_fate on the PS2's drop */
+    if (freeCamera || !reaches || shown || facing) {
+        return VU1REF_DRAW_CLIPPED;
+    }
+    return VU1REF_DRAW_NONE;
+}
+
 /* whether static kick k (vertices k-2..k) is drawn: vu1ref_static_kicks */
 static int staticKick(const float *stw, const int *batchFirst, int k)
 {

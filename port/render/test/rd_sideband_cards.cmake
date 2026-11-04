@@ -26,6 +26,14 @@
 # PRESENT.png: both edges of the picture within 1.5 levels (7.3 and 7.2
 # with the cards drawn beside the picture; 0.1 with the drop kept, the
 # image's own column-to-column step).
+# All of the above under the PS2's region rule (ICO_RD_REGION_RULE=ps2),
+# whose side bands these are.  Then the camera rule (the default, [dev]
+# region_rule = camera) at each setting: the mist's three card triangles,
+# facing the eye, drawn over the whole frame (--region-stats: "drop 0" and
+# "drawn by the camera rule 3 (behind-eye 0, out-of-box 0, card 3)";
+# --stats: "region rule: the camera's: N VU draws" with N at least 1), and
+# on the 16:10 presents band_seam.py within 1.5 levels (the mist on both
+# sides of the picture's edges and inside it).
 # A missing dump (machine-local) or no device (77): SKIP.
 # -DTOOL=<rd_replay_tool> -DDUMP=<the 189 dump> -DOUT=<a folder the test may write>
 # -DSEAM=<tools/band_seam.py> [-DPYTHON=<python3>]
@@ -51,7 +59,8 @@ set(failures 0)
 foreach(s IN LISTS settings)
   set(dir "${OUT}/${s}")
   file(MAKE_DIRECTORY "${dir}/drop" "${dir}/bands")
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_VU_BESIDE=0 "${TOOL}" "${DUMP}" -
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_VU_BESIDE=0 ICO_RD_REGION_RULE=ps2
+                          "${TOOL}" "${DUMP}" -
                           ${args_${s}} --pass-dump "${dir}/drop"
                   RESULT_VARIABLE rcA OUTPUT_VARIABLE outA ERROR_VARIABLE errA)
   if(rcA EQUAL 77)
@@ -61,7 +70,8 @@ foreach(s IN LISTS settings)
   if(NOT rcA EQUAL 0)
     message(FATAL_ERROR "${s}: the replay without side bands exited ${rcA}:\n${outA}\n${errA}")
   endif()
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_VU_BESIDE=1 "${TOOL}" "${DUMP}" -
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_VU_BESIDE=1 ICO_RD_REGION_RULE=ps2
+                          "${TOOL}" "${DUMP}" -
                           ${args_${s}} --pass-dump "${dir}/bands" --stats
                   RESULT_VARIABLE rcB OUTPUT_VARIABLE outB ERROR_VARIABLE errB)
   if(NOT rcB EQUAL 0)
@@ -105,7 +115,8 @@ foreach(s IN LISTS settings)
     endif()
   endif()
   # the CPU oracle: every drop a card's, none beside
-  execute_process(COMMAND "${TOOL}" "${DUMP}" - ${args_${s}} --region-stats
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_REGION_RULE=ps2
+                          "${TOOL}" "${DUMP}" - ${args_${s}} --region-stats
                   RESULT_VARIABLE rcR OUTPUT_VARIABLE outR ERROR_VARIABLE errR)
   if(NOT rcR EQUAL 0)
     message(FATAL_ERROR "${s}: --region-stats exited ${rcR}:\n${outR}\n${errR}")
@@ -126,6 +137,39 @@ foreach(s IN LISTS settings)
     message(STATUS "${outS}")
     if(NOT rcS EQUAL 0)
       message(SEND_ERROR "${s}: the picture's edges show a seam (exit ${rcS}): ${outS}${errS}")
+      math(EXPR failures "${failures} + 1")
+    endif()
+  endif()
+  # the camera rule: the cards drawn over the whole frame
+  file(MAKE_DIRECTORY "${dir}/camera")
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_REGION_RULE=camera
+                          "${TOOL}" "${DUMP}" - ${args_${s}} --pass-dump "${dir}/camera" --stats
+                          --region-stats
+                  RESULT_VARIABLE rcC OUTPUT_VARIABLE outC ERROR_VARIABLE errC)
+  if(NOT rcC EQUAL 0)
+    message(FATAL_ERROR "${s}: the camera rule's replay exited ${rcC}:\n${outC}\n${errC}")
+  endif()
+  string(REGEX MATCH "region: frame [^\n]*" frameC "${outC}")
+  if(NOT frameC MATCHES "drop 0 \\("
+     OR NOT frameC MATCHES "drawn by the camera rule 3 \\(behind-eye 0, out-of-box 0, card 3\\)")
+    message(SEND_ERROR "${s}: under the camera rule the region frame line is not the mist's "
+                       "three cards drawn:\n${frameC}")
+    math(EXPR failures "${failures} + 1")
+  else()
+    message(STATUS "${s} (camera rule): ${frameC}")
+  endif()
+  if(NOT outC MATCHES "stats: region rule: the camera's: ([0-9]+) VU draws" OR CMAKE_MATCH_1 EQUAL 0)
+    message(SEND_ERROR "${s}: no camera rule draws in --stats:\n${outC}")
+    math(EXPR failures "${failures} + 1")
+  endif()
+  if(PYTHON AND wide_${s})
+    execute_process(COMMAND "${PYTHON}" -I "${SEAM}" "${dir}/camera/PRESENT.png" --max 1.5
+                    RESULT_VARIABLE rcS OUTPUT_VARIABLE outS ERROR_VARIABLE errS)
+    string(STRIP "${outS}" outS)
+    message(STATUS "camera rule: ${outS}")
+    if(NOT rcS EQUAL 0)
+      message(SEND_ERROR "${s}: under the camera rule the picture's edges show a seam (exit "
+                         "${rcS}): ${outS}${errS}")
       math(EXPR failures "${failures} + 1")
     endif()
   endif()

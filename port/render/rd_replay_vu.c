@@ -1049,7 +1049,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         if (dp[i].key.dst == RHI_DST_READ_STORAGE) {
             /* the _dstrov build writes depth before its shader runs, so a
              * pixel the side bands discard would leave its depth: the
-             * PS2's drop (vu_common.hlsli VU_RULE_CLIP_BESIDE) */
+             * PS2's drop (vu_common.hlsli VU_RULE_CLIP_BESIDE; the camera
+             * rule discards nothing and stays) */
             vcbAt.draw[2] |= ICO_VU_NO_BESIDE;
         }
     }
@@ -1210,55 +1211,78 @@ typedef struct VuSource {
     uint64_t bonesOff, streamBufSize, streamOff, streamSize, indexOff;
     RhiBuffer streamBuf, indexBuf;
     uint8_t vs;
-    /* the side bands off because the mesh has no facing data:
-     * RD_VU_NOFACE_* + 1 (0: on, or off for another reason; vuBesideOn) */
+    /* the side bands or the camera rule off because the mesh has no
+     * facing data: RD_VU_NOFACE_* + 1 (0: on, or off for another reason;
+     * vuDropMode) */
     uint8_t noFacing;
     /* 1: the draw has side bands and card verdicts, whose cards keep the
      * drop beside the picture (RdPerfRecord.vuBesideCards) */
     uint8_t besideCards;
+    /* 1: the camera rule draws its drops that face the eye (ICO_VU_CAMERA;
+     * RdPerfRecord.vuCameraDraws) */
+    uint8_t camera;
 } VuSource;
 
-/* The region rule's side bands (vu_common.hlsli VU_RULE_CLIP_BESIDE,
- * docs/port/VU1_PROGRAMS.md "The region rule", step 7): a triangle the
- * rule drops that faces the eye is drawn clipped beside the 4:3 picture on
- * a wider frame, unless the card test dropped it (a card stays off the
- * sides as off the picture: issue 189).  Off (ICO_VU_NO_BESIDE) where the draw cannot say which
- * side faces the eye or where nothing lies beside the picture: a frame
- * not wider than 4:3 (the picture is the frame: the PS2's, byte for
- * byte), a grid (no winding marks: its strips wind both ways), a mesh
- * without winding marks (RdMeshRec.facingFrom none: a prelit stream the
- * EE gave no table, an older dump's prelit meshes), the device's plain set
- * (g_rd.vuNoBeside: a device-table row or Turnip, issue 163: the plain set
- * hides the stray vertex the extended set's clipped triangles showed there,
- * and the side bands would draw those triangles clipped again beside the
- * picture; the profile line says "side bands: off ...") and
- * ICO_RD_VU_BESIDE=0 (the before/after compare, rd_sideband_ab).  vuDraw adds it for a pass
- * whose pixel shader writes depth before it runs (_dstrov). */
+/* What becomes of the triangles the PS2's region rule drops in a draw
+ * (vu_common.hlsli vu_drop_fate, docs/port/VU1_PROGRAMS.md "The region
+ * rule"; RD_DROPS_*).
+ * RD_DROPS_CAMERA, the camera rule ([dev] region_rule = camera, the
+ * default; rd__region_camera): in every preset and state a drop that faces
+ * the eye is drawn clipped over the whole frame (ICO_VU_CAMERA); one that
+ * faces away stays dropped.  A grid has no winding marks but open surfaces
+ * (water): all its drops drawn (ICO_VU_TWO_SIDED).
+ * RD_DROPS_BESIDE, the side bands under region_rule = ps2 (issue 29): a
+ * front-facing drop drawn clipped beside the 4:3 picture on a wider frame,
+ * unless the card test dropped it (issue 189); not on a frame not wider
+ * than 4:3 (the picture is the frame), not for a grid, and not under
+ * ICO_RD_VU_BESIDE=0 (the before/after compare, rd_sideband_ab); vuDraw
+ * adds ICO_VU_NO_BESIDE for a pass whose pixel shader writes depth before
+ * it runs (_dstrov: a discarded pixel would leave its depth).
+ * RD_DROPS_KEPT, the PS2's drop (ICO_VU_NO_BESIDE): those cases, a mesh
+ * without winding marks (RdMeshRec.facingFrom none: a prelit stream the EE
+ * gave no table, an older dump's prelit meshes; counted by why, noFacing),
+ * and the device's plain set under either mode (g_rd.vuNoBeside: a
+ * device-table row or Turnip, issue 163: the plain set hides the stray
+ * vertex the extended set's clipped triangles showed there, and either
+ * rule would draw those triangles clipped again; the profile line says
+ * "side bands: off ...", the region rule's start line "off on this
+ * device's plain set"). */
+enum { RD_DROPS_KEPT, RD_DROPS_BESIDE, RD_DROPS_CAMERA, RD_DROPS_CAMERA_TWO_SIDED };
+
 static int s_besideEnv = -1;
 
-static bool vuBesideOn(const RdCmd *c, const RdMeshRec *m, uint8_t *noFacing)
+static int vuDropMode(const RdCmd *c, const RdMeshRec *m, uint8_t *noFacing)
 {
     *noFacing = 0;
+    const bool camera = rd__region_camera();
     if (s_besideEnv < 0) {
         const char *e = getenv("ICO_RD_VU_BESIDE");
         s_besideEnv = !(e && e[0] == '0' && e[1] == 0);
-        rd__log("VU side bands: %s (a front-facing triangle the region rule drops is drawn "
-                "beside the 4:3 picture on a wider frame, a card's kept off as inside it; "
-                "ICO_RD_VU_BESIDE=0 turns them off)",
-                s_besideEnv ? "on" : "off (ICO_RD_VU_BESIDE=0)");
+        if (!camera) {
+            rd__log("VU side bands: %s (a front-facing triangle the region rule drops is drawn "
+                    "beside the 4:3 picture on a wider frame, a card's kept off as inside it; "
+                    "ICO_RD_VU_BESIDE=0 turns them off)",
+                    s_besideEnv ? "on" : "off (ICO_RD_VU_BESIDE=0)");
+        }
     }
-    if (!s_besideEnv || g_rd.vuNoBeside || g_rd.gsW <= ICO_SH_FRAME_BASE_W || c->type == RDC_GRID ||
-        !m) {
-        return false;
+    if (g_rd.vuNoBeside) {
+        return RD_DROPS_KEPT;
+    }
+    if (camera && c->type == RDC_GRID) {
+        return RD_DROPS_CAMERA_TWO_SIDED;
+    }
+    if (!m || c->type == RDC_GRID ||
+        (!camera && (!s_besideEnv || g_rd.gsW <= ICO_SH_FRAME_BASE_W))) {
+        return RD_DROPS_KEPT;
     }
     if (m->facingFrom == RD_MESH_FACING_NONE) {
         /* the one reason a report cannot see from the start lines: counted
          * by why in the 10 s line (doVuDraw) */
         *noFacing =
             (uint8_t)(1u + (m->facingWhy < RD_VU_NOFACE_COUNT ? m->facingWhy : RD_VU_NOFACE_OTHER));
-        return false;
+        return RD_DROPS_KEPT;
     }
-    return true;
+    return camera ? RD_DROPS_CAMERA : RD_DROPS_BESIDE;
 }
 
 static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
@@ -1295,7 +1319,12 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
     RdVuCards cards;
     const uint8_t *pay = f->payload + c->u[1];
     const uint32_t cardWords = rd__vu_cards_at(pay, c->u[2], &cards);
-    const bool cardsRead = cardWords && cards.any && rd__vu_extended();
+    /* what becomes of the triangles the PS2's rule drops (vuDropMode): the
+     * camera rule has no card test, so its draws skip the verdicts */
+    uint8_t noFacing = 0;
+    const int drops = c->type != RDC_PARTICLES ? vuDropMode(c, m, &noFacing) : RD_DROPS_KEPT;
+    const bool cameraDrops = drops == RD_DROPS_CAMERA || drops == RD_DROPS_CAMERA_TWO_SIDED;
+    const bool cardsRead = cardWords && cards.any && rd__vu_extended() && !cameraDrops;
     const bool withCards = cardsRead && (c->type != RDC_SKINNED || (m && m->boneQwUsed < 240u));
     if (cardsRead && !withCards && c->type == RDC_SKINNED) {
         /* bones reaching bone 59 (address 252; the game allows 0..59,
@@ -1423,19 +1452,33 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
         }
     }
     if (c->type != RDC_PARTICLES) {
-        /* the side bands' facing: the sign of the matrix h is made with
-         * (normal_c, normal_l, mesh: VU memory 16..18; cluster: 4..6) and
-         * whether the draw has them at all (vuBesideOn) */
+        /* the facing: the sign of the matrix h is made with (normal_c,
+         * normal_l, mesh: VU memory 16..18; cluster: 4..6), and what
+         * becomes of the triangles the PS2's rule drops (vuDropMode) */
         const unsigned at = c->type == RDC_SKINNED ? 4u : 16u;
         if (vu1ref_region_mirror(vcb.mem[at], vcb.mem[at + 1], vcb.mem[at + 2])) {
             vcb.draw[2] |= ICO_VU_MIRROR;
         }
-        if (!vuBesideOn(c, m, &s->noFacing)) {
+        s->noFacing = noFacing;
+        s->camera = cameraDrops ? 1u : 0u;
+        if (cameraDrops) {
+            /* drawn clipped over the whole frame when they face the eye
+             * (vu_drop_fate); no side bands */
+            vcb.draw[2] |= ICO_VU_CAMERA | ICO_VU_NO_BESIDE;
+            if (drops == RD_DROPS_CAMERA_TWO_SIDED) {
+                vcb.draw[2] |= ICO_VU_TWO_SIDED;
+            }
+        } else if (drops == RD_DROPS_KEPT) {
             vcb.draw[2] |= ICO_VU_NO_BESIDE;
         } else {
             /* its cards keep the drop beside the picture (vu_rule_beside) */
             s->besideCards = withCards ? 1u : 0u;
         }
+    } else if (rd__region_camera()) {
+        /* a sprite the VU skips for its x/y window is drawn whole
+         * (vu_particle_vs): the camera decides, in every state */
+        vcb.draw[2] |= ICO_VU_CAMERA;
+        s->camera = 1;
     }
     if (m && m->kickMark) {
         /* the triangles' marks, a byte a kick after the stream
@@ -2836,10 +2879,11 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     /* a draw under the ticks' cameras (vuSource), once a draw */
     g_rdPerf.vuTickDraws += (src->vcb.draw[2] & ICO_VU_TICKS) != 0u;
     if (src->noFacing) {
-        /* no side bands: its mesh has no facing data (vuBesideOn) */
+        /* the PS2's drops kept: its mesh has no facing data (vuDropMode) */
         g_rdPerf.vuBesideNoFacing[src->noFacing - 1u]++;
     }
     g_rdPerf.vuBesideCards += src->besideCards;
+    g_rdPerf.vuCameraDraws += src->camera;
     DrawSetup ds;
     if (!rd__replay_prepare_draw(r, &ds, NULL)) {
         return;

@@ -3205,6 +3205,29 @@ bool rd__vu_extended(void)
            g_rd.sceneSx > 1.0f || g_rd.sceneSy > 1.0f;
 }
 
+/* [dev] region_rule (ICO_RD_REGION_RULE): camera (unset, the default) or
+ * ps2; anything else is camera, logged.  Read at each device start
+ * (rd__vu_policy_init: a test may start the renderer under both), and on
+ * the first ask without one (the record-only renderer) */
+static int s_regionCamera = -1;
+
+static void regionRuleRead(void)
+{
+    const char *e = getenv("ICO_RD_REGION_RULE");
+    s_regionCamera = !(e && strcmp(e, "ps2") == 0);
+    if (e && e[0] && strcmp(e, "ps2") != 0 && strcmp(e, "camera") != 0) {
+        rd__log("region rule: ICO_RD_REGION_RULE=%s is not camera or ps2: camera", e);
+    }
+}
+
+bool rd__region_camera(void)
+{
+    if (s_regionCamera < 0) {
+        regionRuleRead();
+    }
+    return s_regionCamera != 0;
+}
+
 static char s_vuHostWhy[128];
 
 void rd_set_vu_plain_only(const char *reason)
@@ -3333,7 +3356,7 @@ void rd__vu_set_choose(const RhiLimits *lim, bool envPlain, bool envExtended, co
         out->brief = "Turnip driver, issue 163";
         /* the side bands would draw those dropped triangles again, clipped
          * beside the 4:3 picture (a phone's frame is always wider): the
-         * sliver of a skinned draw would come back there (vuBesideOn) */
+         * sliver of a skinned draw would come back there (vuDropMode) */
         out->noBeside = true;
     } else if (envPlain) {
         snprintf(out->why, sizeof(out->why),
@@ -3463,6 +3486,19 @@ bool rd__vu_policy_init(const RhiLimits *lim)
             "(largest %s %u words), in the start-up set only with the vertex pre-pass off",
             kind, plain ? " " : "", plain ? g_rd.vuPlainWhy : "", fn, fw,
             plain ? " (no wide-screen rule and no tick cameras on those draws)" : "", mn, mw);
+    /* the region rule's mode (rd_replay_vu.c vuSource; a report shows which
+     * rule drew the picture on its start lines) */
+    regionRuleRead();
+    if (rd__region_camera()) {
+        rd__log("region rule: the camera decides (triangles the PS2 drops are drawn clipped when "
+                "they face the eye; [dev] region_rule = ps2 keeps the PS2's drops)%s",
+                g_rd.vuNoBeside ? "; off on this device's plain set (issue 163): the PS2's "
+                                  "drops"
+                                : "");
+    } else {
+        rd__log("region rule: the PS2's ([dev] region_rule = ps2: a triangle the VU drops stays "
+                "dropped, drawn beside the 4:3 picture on a wider frame when it faces the eye)");
+    }
     return true;
 }
 
