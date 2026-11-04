@@ -3173,9 +3173,31 @@ static void testGpuGap(void)
     CHECK(pace_gpu_gap_text(&g, text, 16) > 16 && strlen(text) == 15);
 }
 
+/* FIFO from the first swapchain on Qualcomm's own driver (QCOMFIX): vsync
+   off with a FIFO swapchain (rhi_present_mailbox false) is the state the
+   FIFO fallback leaves after its switch, and every uncapped rule reads the
+   options and the render thread, never the present mode: the pictures are
+   as made, the allowance is paced, and the presents go back to back */
+static void testFifoFromStart(void)
+{
+    const uint64_t r6000 = 16666667ull;
+
+    /* vsync off, uncapped, render thread on: as made, FIFO or not */
+    CHECK(pace_rt_as_made(false, true, false, true));
+    /* the paced allowance is for vsync off whatever the present mode */
+    CHECK(pace_budget_paced_mode(false, false));
+    /* uncapped, vsync off, FIFO: not the mailbox "one a refresh" gap, the
+       presents are back to back */
+    CHECK(pace_present_gap(-1, false, false, r6000) == 0);
+    /* a cap above the refresh keeps its own gap under FIFO (mailbox false) */
+    CHECK(!pace_cap_above_refresh(144, false, r6000));
+    CHECK(pace_present_gap(144, false, false, r6000) == 1000000000ull / 144u);
+}
+
 int main(void)
 {
     PaceHist h = {0};
+    testFifoFromStart();
     testStepRule();
     testStepTrace();
     testGpuGap();

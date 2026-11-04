@@ -21,7 +21,9 @@
 void window_fifo_set(void);
 /* ", FIFO fallback armed|taken after N blocks|set by [dev]
    present_fallback=fifo" or "" for the present mode line and the summary
-   (a static buffer, valid to the next call) */
+   (a static buffer, valid to the next call); the first call after the
+   device exists, with the start in force, writes its line once
+   ("window: present fifo (Qualcomm's own driver: FIFO from the start; ...)") */
 const char *window_fifo_words(void);
 /* window_host.c present_blocked: a present's time in the driver's present
    call (over 50 ms) noted now; over 250 ms the line naming the driver

@@ -43,6 +43,26 @@ int ico_present_fallback_driver_eligible(unsigned vendorId, const char *driverTe
     return vendorId != 0 && !has_word(driverText, "mesa") && !has_word(driverText, "turnip");
 }
 
+int ico_present_fallback_qualcomm_own(unsigned vendorId, const char *driverText)
+{
+    return vendorId == ICO_PRESENT_FALLBACK_QCOM_VENDOR &&
+           ico_present_fallback_driver_eligible(vendorId, driverText);
+}
+
+int ico_present_fallback_start(IcoPresentFallbackMode mode, int vsync, unsigned vendorId,
+                               const char *driverText)
+{
+    return mode == ICO_PRESENT_FALLBACK_AUTO && !vsync &&
+           ico_present_fallback_qualcomm_own(vendorId, driverText);
+}
+
+void ico_present_fallback_start_line(char *out, size_t size)
+{
+    snprintf(out, size,
+             "window: present fifo (Qualcomm's own driver: FIFO from the start; [dev] "
+             "present_fallback = off keeps mailbox)");
+}
+
 /* the held blocks older than the window before nowNs leave */
 static void expire(IcoPresentFallback *f, unsigned long long nowNs)
 {
@@ -180,12 +200,14 @@ void ico_present_fallback_block_suffix(const IcoPresentFallback *f, unsigned lon
 }
 
 void ico_present_fallback_mode_suffix(const IcoPresentFallback *f, IcoPresentFallbackMode mode,
-                                      int armed, char *out, size_t size)
+                                      int armed, int fifoStart, char *out, size_t size)
 {
     if (f != NULL && f->taken) {
         snprintf(out, size, ", FIFO fallback taken after %u blocks", f->takenBlocks);
     } else if (mode == ICO_PRESENT_FALLBACK_FIFO) {
         snprintf(out, size, ", FIFO fallback set by [dev] present_fallback=fifo");
+    } else if (fifoStart) {
+        snprintf(out, size, ", FIFO from the start (Qualcomm's own driver)");
     } else if (armed) {
         snprintf(out, size, ", FIFO fallback armed");
     } else {

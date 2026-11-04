@@ -510,7 +510,7 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   `rhi_begin_commands`, `rhi_create_bind_group`, the buffer maps, the timestamp and occlusion
   reads, `rhi_acquire_backbuffer`) passing the call guard when no job of its slot is queued or
   running. The acquire may come before the present of the picture before when the swapchain has
-  an image to spare (one over the surface's minimum, as made: always outside the FIFO fallback),
+  an image to spare (one over the surface's minimum, as made: never under the FIFO fallback or FIFO from the start, which ask for the minimum),
   else it waits; a present on the submit thread that finds the swapchain out of date, another size
   or the surface lost leaves the rebuild to the next acquire. Every other call that changes the
   device's state (a texture or a pipeline made or destroyed, a readback, a submit, a rebuild)

@@ -1169,6 +1169,12 @@ bool rhi_present_fifo_fallback_on(void)
     return false;
 }
 
+/* rhi.h: no mailbox here, so no FIFO start either */
+void rhi_present_fifo_start(RhiFifoStartFn eligible)
+{
+    (void)eligible;
+}
+
 void rhi_set_exclusive_fullscreen(bool allowed)
 {
     g_gl.exclusiveFullscreen = allowed; /* stored: the driver decides */
