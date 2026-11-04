@@ -65,7 +65,8 @@ prints `name: ok` or the failure count and returns the exit code. The Settings t
 A slow program lists its cases once with a weight in seconds (`IcoShardCase k_cases[]`), starts
 `main` with `ico_shard_start` and wraps each case in `ico_shard_take("name")`. Cases go heaviest
 first to the shard with the least weight so far, so ownership is a pure function of the table and
-N; a run with no `--shard` owns every case. `ico_shard_take` stops the program when a call does not
+N; a run with no `--shard` owns every case, and `--only <name>` runs that one case alone (a twin
+of one case under another environment: `rd_blur_glow_fold_tile`). `ico_shard_take` stops the program when a call does not
 match the table's next entry, and `ico_shard_finish` fails when a case was never reached, so the
 table cannot drift from `main` (`port/test/ico_shard.h`, header comment).
 `ico_add_sharded_test(<name> <N> PROGRAM <target> ...)` registers `<name>.1ofN` to `<name>.NofN`
