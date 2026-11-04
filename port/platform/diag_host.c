@@ -178,6 +178,8 @@ static volatile int render_hang;
 static unsigned long long render_hang_seq;
 static double render_hang_s;
 static void (*exit_hook)(const char *reason);
+/* ico_diag_set_poll_hook's sampler, called on the watchdog thread */
+static void (*poll_hook)(void);
 
 #ifndef _WIN32
 /* ico_diag_set_fatal_ui's box and flush (Android: both ends; Linux: the
@@ -532,6 +534,11 @@ void ico_diag_set_pipelines(unsigned int done, unsigned int total, unsigned int 
 void ico_diag_set_exit_hook(void (*fn)(const char *reason))
 {
     exit_hook = fn;
+}
+
+void ico_diag_set_poll_hook(void (*fn)(void))
+{
+    __atomic_store_n(&poll_hook, fn, __ATOMIC_RELEASE);
 }
 
 /* --- Addresses and names ----------------------------------------------------- */
@@ -5532,6 +5539,13 @@ static void watchdog_loop(void)
 #endif
         if (fatal_once || !main_alive) {
             continue;
+        }
+        {
+            /* the device's sampler (ico_diag_set_poll_hook) */
+            void (*hook)(void) = __atomic_load_n(&poll_hook, __ATOMIC_ACQUIRE);
+            if (hook != NULL) {
+                hook();
+            }
         }
         now = ico_diag_uptime();
         os = os_wait_seconds(&os_cur, &os_since);

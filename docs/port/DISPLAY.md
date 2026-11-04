@@ -22,7 +22,8 @@ are [RHI.md](RHI.md).
 | `port/platform/display_rate.h`, `display_rate.c` | the refresh rate's log lines and the frame rate pin's decisions, free of SDL ([The refresh rate and the frame rate pin](#the-refresh-rate-and-the-frame-rate-pin)) |
 | `port/platform/window_display_rate.h`, `window_display_rate.c` | the window's side: SDL's display mode in the log, the Android pin through the NDK |
 | `port/platform/present_hist.h`, `present_hist.c` | the 10 s block's histogram of the driver's present call (over 20, 50, 100 and 300 ms); the texts of the lines around a present that blocked (its split, the replay after it) |
-| `port/platform/window_stall.h`, `window_stall.c` | the window's lines around a present that blocked (issue 123), from the replays' records as they pop |
+| `port/platform/window_stall.h`, `window_stall.c` | the window's lines around a present that blocked (issue 123), from the replays' records as they pop; the kernel GPU driver's lines on Android |
+| `port/platform/gpu_sysfs.h`, `gpu_sysfs.c` | the kernel GPU driver's nodes, the pure part: the parser, the ring of samples, the block and around reductions, the lines ([PLATFORM.md](PLATFORM.md#diagnostics) has the sampler) |
 | `port/platform/window_disc.h`, `window_disc.c` | the window's side of the disc reader: the step's disc wait for the present allowance, the 10 s disc line |
 | `port/platform/window_blended.h`, `window_blended.c` | F12's blended present's frame: the arm after F12's zip (a result still to collect collected first) and the move into it |
 | `port/platform/display_clock.h` | the vblank clock's interface |
@@ -494,7 +495,35 @@ together: the call holding the whole time with the lock and the poll near 0 puts
 the driver; a stalled replay's GPU span far over the block's is the GPU running slow while the
 present waited (a clock drop, another GPU client); a GPU idle about as long as the stall before the
 next replay is the queue draining behind the present, the driver waiting on something other than
-this replay's work. A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
+this replay's work.
+
+On Android the kernel GPU driver's state is sampled every 250 ms ([PLATFORM.md](PLATFORM.md#diagnostics);
+`port/platform/gpu_sysfs.h`, `port/platform/window_stall.c`), and three lines come from it. At the
+window's open, once a run: `window: kernel GPU driver: /sys/class/kgsl/kgsl-3d0: readable gpuclk,
+gpu_busy_percentage, reset_count (3 so far), thermal_pwrlevel, ...; not readable temp (EACCES); not
+present clock_mhz, devfreq/cur_freq; the fastest clock 905 MHz, power levels 0 (fastest) to 8;
+sampled every 250 ms`, or `... kgsl-3d0: not readable (EACCES)` (every node denied: nothing
+sampled) or `... kgsl-3d0 not present` (not a Qualcomm GPU). Each 10 s block, after the `present
+calls` line: `window: kernel GPU driver: clock 285-905 MHz (average 612) over 40 samples, busy 71 %
+on average, resets 0 in the block (3 in all), thermal power level at most 0` (a temperature where
+`temp` is readable). For every present that blocked over 50 ms, once the sample after it came (or a
+second passed): `window: kernel GPU driver around the present that blocked (replay N): 0.12 s
+before: clock 905 MHz, busy 74 %, resets 3, thermal power level 0; 1 during: clock 285 MHz, busy 9
+%, resets 3; 0.03 s after: clock 285 MHz, busy 12 %, resets 3, thermal power level 0` (the first 8,
+then every 100th; the parts whose node is not readable left out). Nothing is written on other
+platforms. How the lines tell the stall's causes apart, from one log:
+
+| Reading | the GPU's clock or a thermal step | another GPU client | a GPU fault's recovery | the driver's present path | the screen recorder |
+| --- | --- | --- | --- | --- | --- |
+| clock before / after the stall | drops (905 to 285 MHz), thermal level above 0 | unchanged | unchanged | unchanged | unchanged |
+| busy during | high | high | any | low | low to moderate |
+| resets | none | none | one more per stall | none | none |
+| the stalled replay's passes | all about 3x | one or a few grown | one by hundreds of ms | mildly, alike | mildly |
+| the GPU idle before the next replay | small | small | large | about the stall | about the stall |
+| the present's split | the call holds it | the call holds it | the call holds it | the call, lock and poll near 0 | the call holds it |
+| `[dev] render_thread` / `submit_thread` = off | unchanged | unchanged | unchanged | the stall's length or period changes | unchanged |
+
+A numeric cap above the display's refresh in mailbox mode writes `window: frame rate N
 is above the display's X Hz: presenting once a refresh (mailbox)` once after each settings change
 (`port/platform/window_present.c` (`pace`)).
 

@@ -1730,6 +1730,7 @@ static void window_attach(int mode)
     /* the window system's answer before the size is read */
     SDL_SyncWindow(s_window);
     window_display_rate_start(s_window); /* the refresh rate in the log (issue 123) */
+    window_stall_gpu_open();             /* Android: the kernel GPU driver's nodes (issue 123) */
     s_fullscreen = window_fullscreen();
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
     if (mode == ICO_WINDOW_BORDERLESS) {
@@ -4438,6 +4439,7 @@ static void perf_drain(void)
     double refreshMs = -1.0; /* the slow-replay threshold, read at the first record */
 
     window_video_memory_watch();
+    window_stall_poll(); /* the kernel GPU driver around the presents that blocked */
     while (rd_perf_pop(&r)) {
         auto_res_sample(&r);
         if (r.presented && r.gpuValid) {
@@ -4664,6 +4666,7 @@ static void perf_log(void)
         if (present_hist_text(&s_perf.presentHist, hist, sizeof(hist)) > 0) {
             fprintf(stderr, "window: %s\n", hist);
         }
+        window_stall_gpu_block(); /* Android: the kernel GPU driver's block */
         window_display_rate_line(s_window);
     }
     if (s_perf.gpuN) {

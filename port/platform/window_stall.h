@@ -16,7 +16,11 @@
  *     ... before the next replay");
  *   - from the first stall on every replay timed pass by pass, and a
  *     stalled replay's passes against the block's: "window: stalled
- *     replay N (present ..., GPU ... against the block's ...): ...".
+ *     replay N (present ..., GPU ... against the block's ...): ...";
+ *   - on Android, the kernel GPU driver's clock, load, resets and thermal
+ *     level sampled every 250 ms (gpu_sysfs.h): which nodes were readable
+ *     at the open, the 10 s block's line, and the samples before, during
+ *     and after each present that blocked.
  * The texts are present_hist.c's and rd_perf.c's (pure, present_hist_test
  * and rd_perf_test's checkPassTexts).  Everything
  * here runs on the window's thread, in perf_drain, from the records as
@@ -56,5 +60,21 @@ void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap);
    blockGpuN, blockGpuMs as window_stall_split's */
 void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const RdPerfPass *p,
                          uint32_t n, unsigned blockGpuN, double blockGpuMs);
+
+/* The kernel GPU driver's nodes (gpu_sysfs.h; Android only, nothing
+   elsewhere): at the window's open, once a run, the line saying which were
+   readable ("window: kernel GPU driver: /sys/class/kgsl/kgsl-3d0: readable
+   ..." or "... not readable (EACCES)") and the sampling started on the
+   watchdog thread when any is */
+void window_stall_gpu_open(void);
+/* The 10 s block's line ("window: kernel GPU driver: clock A-B MHz ..."),
+   when a node is sampled */
+void window_stall_gpu_block(void);
+/* At each drain: the around lines of the presents that blocked whose
+   sample after them came (or that waited a second for it): "window: kernel
+   GPU driver around the present that blocked (replay N): 0.12 s before:
+   clock 905 MHz, busy 74 %, resets 3; 0.09 s after: ..." (the first 8, then
+   every 100th) */
+void window_stall_poll(void);
 
 #endif /* ICO_PLATFORM_WINDOW_STALL_H */

@@ -288,10 +288,13 @@ if(ICO_LINK_EXE)
         # host_config.c keeps everything in the app's files folder.
         # iso_import.c: the first start's copy of the disc image chosen in
         # the system's picker (tested on Linux as iso_import).
+        # gpu_sysfs_android.c: the kernel GPU driver's nodes sampled for the
+        # log (port/platform/gpu_sysfs.h; its pure part tested everywhere).
         add_library(ico_pc SHARED ${_ico_pc_sources} port/platform/android/main_android.c
                                   port/platform/android/host_android.c
                                   port/platform/android/android_paths.c
-                                  port/platform/android/iso_import.c)
+                                  port/platform/android/iso_import.c
+                                  port/platform/android/gpu_sysfs_android.c)
         set_target_properties(ico_pc PROPERTIES OUTPUT_NAME main)
         target_compile_definitions(ico_pc PRIVATE ICO_HOST_FORCE_PORTABLE=1)
         target_include_directories(ico_pc PRIVATE port/platform/android)

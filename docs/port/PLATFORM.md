@@ -59,7 +59,8 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/backup_host.c`, `backup_host.h` | the two rows' host in the window build: the file dialogs, the work on its own thread, the end of the run after a restore (not on iOS) |
 | `port/platform/steam_shortcut.c`, `steam_shortcut.h` | Settings > Extras > Add to Steam (Windows and Linux; not offered on macOS) |
 | `port/platform/gpu_driver.c`, `gpu_driver.h` | Android graphics driver packages (pure C, tested everywhere) |
-| `port/platform/android/` | `main_android.c`, `host_android.c`, `android_paths.c`, `iso_import.c`, `gpu_driver_android.c` |
+| `port/platform/gpu_sysfs.c`, `gpu_sysfs.h` | the kernel GPU driver's nodes for the log, the pure part: the parser, the sample ring, the block and around reductions, the lines (tested everywhere) |
+| `port/platform/android/` | `main_android.c`, `host_android.c`, `android_paths.c`, `iso_import.c`, `gpu_driver_android.c`, `gpu_sysfs_android.c` |
 | `port/platform/ios/main_ios.c`, `ios/Info.plist.in` | the iOS entry point and bundle |
 | `port/platform/macos/Info.plist.in` | the macOS bundle |
 | `port/platform/win/` | the Windows manifest and resource script (`ico_pc.manifest`, `ico_pc.rc`) |
@@ -2078,6 +2079,18 @@ other progress for twice that; a movie notes each picture as progress, time insi
 excused for an effects program, and the first limit is doubled when one is loaded
 (`port/platform/diag_host.h` (`ico_diag_start`, `ico_diag_note_progress`);
 `port/platform/main_host.c` (`start_watchdog`)).
+
+The same thread runs a sampler at each of its 250 ms polls while the main thread lives and
+nothing fatal is under way (`ico_diag_set_poll_hook`): on Android the kernel GPU driver's nodes
+under `/sys/class/kgsl/kgsl-3d0/` (the clock from `gpuclk`, `clock_mhz` or the devfreq node's
+`cur_freq`, `gpu_busy_percentage`, `reset_count`, `thermal_pwrlevel`, `temp`), each read by open,
+read and close as `ico_diag_device_memory` reads `/proc/meminfo`, into a ring of 64 samples on the
+monotonic clock the renderer's records use (issue 123; `port/platform/android/gpu_sysfs_android.c`,
+`port/platform/gpu_sysfs.h`). The window probes the nodes once at its open, writes which were
+readable (some devices' SELinux policy denies apps these nodes: `not readable (EACCES)`), and sets
+the hook only when a sampled node is readable; it reads the ring on its own thread under a lock held
+for the copy. The lines are in [DISPLAY.md](DISPLAY.md#the-stats-lines). Nothing is sampled
+elsewhere.
 
 **A wait the system holds.** The hang verdict applies to the game's own code only. The window build
 marks the main thread's calls into the system that run none of the game's code (`SDL_PollEvent`, and
