@@ -862,7 +862,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   two blocks 40 s apart, blocks 31 s apart and blocks under 200 ms (52 ms, 21 of 143 ms) switch
   nothing; Turnip's driver text is not eligible while the count still rises; `[dev]
   present_fallback=off` keeps mailbox with its line once; a count reached with vsync on switches at
-  the next block once eligible; the driver texts and the `[dev]` values (`present_fallback`).
+  the next block once eligible; the driver texts and the `[dev]` values (`present_fallback`); FIFO from the first swapchain
+  (`testStart`): Qualcomm's own driver (0x5143, text neither Mesa nor turnip) with auto and vsync
+  off yes; off, fifo, vsync on, Mesa and turnip texts and other vendors no; the start line word for
+  word. `pace_policy_test`'s `testFifoFromStart`: vsync off with a FIFO swapchain keeps the
+  as-made rule, the paced allowance and the back-to-back gap.
 - `display_rate_test.c`: the refresh rate's log lines and the Android frame rate pin's decisions
   (`display_rate.h`, issue 123): the watch (first rate noted, 59.94 against 59.95 not a change, an
   unknown rate not one, 144 -> 60 -> 120 two changes), the block's line and the change's line word

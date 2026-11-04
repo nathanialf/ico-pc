@@ -1017,6 +1017,12 @@ bool rhi_present_fifo_fallback_on(void)
     return false;
 }
 
+/* rhi.h: no mailbox here, so no FIFO start either */
+void rhi_present_fifo_start(RhiFifoStartFn eligible)
+{
+    (void)eligible;
+}
+
 /* rhi.h: ignored for now; the swapchain is DXGI's flip model in the
    window, and the window's fullscreen is SDL's and DXGI's to decide */
 void rhi_set_exclusive_fullscreen(bool allowed)

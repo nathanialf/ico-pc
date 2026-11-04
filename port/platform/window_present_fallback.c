@@ -33,6 +33,25 @@ void window_fifo_set(void)
         }
     }
     rhi_present_fifo_fallback(s_fallback.taken || s_mode == ICO_PRESENT_FALLBACK_FIFO);
+    /* auto: Qualcomm's own driver makes its first swapchain FIFO at the
+       fewest images when vsync is off (the rhi asks the driver's ids, so
+       this works before the device exists); off keeps mailbox, fifo needs
+       no question */
+    rhi_present_fifo_start(s_mode == ICO_PRESENT_FALLBACK_AUTO ? ico_present_fallback_qualcomm_own
+                                                               : NULL);
+}
+
+/* Whether the swapchain in use is the one FIFO from the start made
+   (present_fallback.h ico_present_fallback_start): after the device exists */
+static int start_active(void)
+{
+    IcoVideoOptions o;
+    const RhiLimits *l = rhi_limits();
+
+    ico_video_get(&o);
+    return rhi_backend() == RHI_BACKEND_VULKAN && l != NULL && !rhi_present_mailbox() &&
+           !s_fallback.taken &&
+           ico_present_fallback_start(s_mode, o.vsync, l->vendorId, l->driverText);
 }
 
 /* What the window says about a present it notes (present_fallback.h):
@@ -57,9 +76,19 @@ static int gate(void)
 const char *window_fifo_words(void)
 {
     static char words[96];
+    static int s_startLogged;
+    const int start = start_active();
 
+    if (start && !s_startLogged) {
+        /* once, before the present mode line that asks for these words */
+        char line[160];
+
+        s_startLogged = 1;
+        ico_present_fallback_start_line(line, sizeof line);
+        fprintf(stderr, "%s\n", line);
+    }
     ico_present_fallback_mode_suffix(&s_fallback, s_mode, gate() == ICO_PRESENT_FALLBACK_GATE_YES,
-                                     words, sizeof words);
+                                     start, words, sizeof words);
     return words;
 }
 

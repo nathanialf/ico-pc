@@ -1614,6 +1614,16 @@ bool rhi_present_mailbox(void);
  * Vulkan only: D3D12, D3D11 and OpenGL ignore it (false). */
 void rhi_present_fifo_fallback(bool on);
 bool rhi_present_fifo_fallback_on(void);
+/* FIFO from the first swapchain on a driver the window names: with vsync
+ * off, a swapchain (re)creation asks eligible(vendorId, driverText) with the
+ * device's PCI vendor id and driver text (RhiLimits.vendorId, .driverText)
+ * and, when it answers non-zero, presents FIFO with the surface's fewest images
+ * as rhi_present_fifo_fallback does, so no mailbox to FIFO switch happens
+ * mid-run.  NULL (the default) asks nothing.  Kept across rhi_init like the
+ * mailbox preference.  Vsync on is unchanged.  Vulkan only: D3D12, D3D11 and
+ * OpenGL ignore it. */
+typedef int (*RhiFifoStartFn)(unsigned vendorId, const char *driverText);
+void rhi_present_fifo_start(RhiFifoStartFn eligible);
 /* Whether the driver may take exclusive fullscreen presentation of the
  * window (true, the default: the driver decides) or must keep it a
  * composed window that other programs can draw over or capture (false:

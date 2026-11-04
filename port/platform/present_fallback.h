@@ -26,10 +26,13 @@
 /* a present over this counts after the switch (the window's own threshold
    for a blocked present) */
 #define ICO_PRESENT_FALLBACK_SLOW_MS 50.0
+/* the PCI vendor id Qualcomm's Adreno driver reports */
+#define ICO_PRESENT_FALLBACK_QCOM_VENDOR 0x5143u
 
 /* [dev] present_fallback (ICO_PRESENT_FALLBACK, host_config.c) */
 typedef enum IcoPresentFallbackMode {
-    ICO_PRESENT_FALLBACK_AUTO = 0, /* the default: FIFO after the blocks */
+    ICO_PRESENT_FALLBACK_AUTO = 0, /* the default: FIFO after the blocks, and from the start on
+                                      Qualcomm's own driver with vsync off */
     ICO_PRESENT_FALLBACK_OFF,      /* mailbox kept whatever the blocks */
     ICO_PRESENT_FALLBACK_FIFO      /* FIFO from the start */
 } IcoPresentFallbackMode;
@@ -71,6 +74,28 @@ IcoPresentFallbackMode ico_present_fallback_mode(const char *value);
    230 ms there are not the stock driver's queue wait. */
 int ico_present_fallback_driver_eligible(unsigned vendorId, const char *driverText);
 
+/* Qualcomm's own driver: vendorId 0x5143 (ICO_PRESENT_FALLBACK_QCOM_VENDOR)
+   and an eligible driver text (neither Mesa nor turnip).  The rhi calls it
+   (rhi_present_fifo_start) when it makes a swapchain, before any present. */
+int ico_present_fallback_qualcomm_own(unsigned vendorId, const char *driverText);
+
+/* Whether the first swapchain presents FIFO at the driver's fewest images:
+   mode auto (not off, which keeps mailbox for the whole run; fifo is FIFO
+   from the start whatever the driver, a path of its own), vsync off, and
+   Qualcomm's own driver.  Qualcomm's Adreno guide advises FIFO with the
+   minimum image count and says mailbox costs battery and heat for no
+   benefit; with it no mailbox to FIFO switch happens mid-run and the GPU
+   draws nothing that is never shown.  It is not known to remove the
+   stalls issue 123 reports (they continued under FIFO in three logs). */
+int ico_present_fallback_start(IcoPresentFallbackMode mode, int vsync, unsigned vendorId,
+                               const char *driverText);
+
+/* The start line, once, after the first swapchain when
+   ico_present_fallback_start said yes: "window: present fifo (Qualcomm's
+   own driver: FIFO from the start; [dev] present_fallback = off keeps
+   mailbox)", no newline. */
+void ico_present_fallback_start_line(char *out, size_t size);
+
 /* One present's time in the driver's present call (presentMs) at nowNs
    with the window's gate: a block (>= ICO_PRESENT_FALLBACK_BLOCK_MS) joins
    the count, the ones older than ICO_PRESENT_FALLBACK_WINDOW_NS before it
@@ -103,9 +128,11 @@ void ico_present_fallback_block_suffix(const IcoPresentFallback *f, unsigned lon
 
 /* The present mode line's and the summary's suffix: ", FIFO fallback taken
    after N blocks" after the switch, ", FIFO fallback set by [dev]
-   present_fallback=fifo" under mode FIFO, ", FIFO fallback armed" when
-   armed (the gate would be GATE_YES), else "". */
+   present_fallback=fifo" under mode FIFO, ", FIFO from the start
+   (Qualcomm's own driver)" when fifoStart (ico_present_fallback_start said
+   yes and the swapchain is FIFO), ", FIFO fallback armed" when armed (the
+   gate would be GATE_YES), else "". */
 void ico_present_fallback_mode_suffix(const IcoPresentFallback *f, IcoPresentFallbackMode mode,
-                                      int armed, char *out, size_t size);
+                                      int armed, int fifoStart, char *out, size_t size);
 
 #endif /* ICO_PLATFORM_PRESENT_FALLBACK_H */

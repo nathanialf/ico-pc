@@ -802,6 +802,12 @@ bool rhi_present_fifo_fallback_on(void)
     return be()->present_fifo_fallback_on();
 }
 
+void rhi_present_fifo_start(RhiFifoStartFn eligible)
+{
+    RHI_GUARD();
+    be()->present_fifo_start(eligible);
+}
+
 void rhi_set_exclusive_fullscreen(bool allowed)
 {
     RHI_GUARD();

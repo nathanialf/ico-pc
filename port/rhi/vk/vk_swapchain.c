@@ -527,6 +527,9 @@ static bool s_preferMailbox;
 /* rhi_present_fifo_fallback: every later swapchain presents FIFO with the
  * surface's fewest images; kept across rhi_init like s_preferMailbox */
 static bool s_fifoFallback;
+/* rhi_present_fifo_start: the window's question for a driver whose first
+ * swapchain presents FIFO (NULL asks nothing); kept across rhi_init */
+static RhiFifoStartFn s_fifoStart;
 
 /* The surface's present modes (calloc'd, *n of them; NULL with *n 0 when
  * the query fails): every one, no cap */
@@ -796,8 +799,17 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
      * minimum (the queue the driver blocked on under mailbox stays short),
      * and two at least (with one, every acquire waits for the image to
      * leave the display) */
-    uint32_t count = s_fifoFallback ? (caps.minImageCount > 2u ? caps.minImageCount : 2u)
-                                    : caps.minImageCount + 1u;
+    bool fifoStart = false;
+    if (!vsync && !s_fifoFallback && s_fifoStart != NULL) {
+        /* the window's driver question (Qualcomm's own driver): FIFO from
+         * the first swapchain, at the fewest images, as the fallback's */
+        const RhiLimits *lim = rhi_limits();
+
+        fifoStart = lim != NULL && s_fifoStart(lim->vendorId, lim->driverText) != 0;
+    }
+    const bool fifoNow = s_fifoFallback || fifoStart;
+    uint32_t count =
+        fifoNow ? (caps.minImageCount > 2u ? caps.minImageCount : 2u) : caps.minImageCount + 1u;
     if (caps.maxImageCount && count > caps.maxImageCount) {
         count = caps.maxImageCount;
     }
@@ -849,7 +861,7 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
         .preTransform = pre,
         .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
         .presentMode = vkr_choose_present_mode(modes, nModes, vsync, s_preferMailbox,
-                                               g_vkr.fifoLatestReady, s_fifoFallback),
+                                               g_vkr.fifoLatestReady, fifoNow),
         .clipped = VK_TRUE,
         .oldSwapchain = old,
     };
@@ -967,10 +979,12 @@ bool vkr_swapchain_create(uint32_t w, uint32_t h, bool vsync)
                 "pre-transform 0x%x, images asked %u got %u, window %dx%d pixels, video driver %s",
                 w, h, n, vkr_present_mode_name(ci.presentMode), vsync ? "on" : "off",
                 vsync && s_preferMailbox && !s_fifoFallback ? ", mailbox preferred" : "",
-                s_fifoFallback ? ", fifo fallback" : "", offered, (int)pick.format,
-                (int)pick.colorSpace, pickedFirst ? "first" : "not first",
-                found ? "wanted" : "fallback", (unsigned)ci.compositeAlpha,
-                (unsigned)ci.preTransform, count, n, winW, winH, drv);
+                s_fifoFallback ? ", fifo fallback"
+                : fifoStart    ? ", fifo from the start"
+                               : "",
+                offered, (int)pick.format, (int)pick.colorSpace,
+                pickedFirst ? "first" : "not first", found ? "wanted" : "fallback",
+                (unsigned)ci.compositeAlpha, (unsigned)ci.preTransform, count, n, winW, winH, drv);
     }
     {
         static bool s_formatsLogged;
@@ -1170,6 +1184,11 @@ void rhi_present_fifo_fallback(bool on)
 bool rhi_present_fifo_fallback_on(void)
 {
     return s_fifoFallback;
+}
+
+void rhi_present_fifo_start(RhiFifoStartFn eligible)
+{
+    s_fifoStart = eligible;
 }
 
 bool rhi_present_mailbox(void)
