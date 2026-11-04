@@ -29,6 +29,12 @@
          granted at install, never asked for. -->
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <!-- the log says whether the screen was being recorded when a picture
+         was held back (IcoActivity.startThermalWatch, Android 15 and later;
+         a recorder can hold frames back). A normal permission: granted at
+         install, never asked for. -->
+    <uses-permission android:name="android.permission.DETECT_SCREEN_RECORDING" />
+
     <!-- the file picker (IcoActivity.pickFile) and the backup's "save as"
          screen (IcoActivity.createFile): on Android 11 and later an app sees
          only the apps it names here, so the log can say which app takes the

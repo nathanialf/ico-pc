@@ -20,7 +20,11 @@
  *   - on Android, the kernel GPU driver's clock, load, resets and thermal
  *     level sampled every 250 ms (gpu_sysfs.h): which nodes were readable
  *     at the open, the 10 s block's line, and the samples before, during
- *     and after each present that blocked.
+ *     and after each present that blocked;
+ *   - on Android, the app's own thermal headroom and status and whether
+ *     the screen is being recorded (thermal_text.h, host_android.h
+ *     ico_host_thermal): the block's "window: thermal: ..." line after the
+ *     driver's, and the end of each around line.
  * The texts are present_hist.c's and rd_perf.c's (pure, present_hist_test
  * and rd_perf_test's checkPassTexts).  Everything
  * here runs on the window's thread, in perf_drain, from the records as

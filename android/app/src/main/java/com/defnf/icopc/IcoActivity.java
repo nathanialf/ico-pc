@@ -15,6 +15,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
+import android.os.PowerManager;
 import android.provider.OpenableColumns;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -85,9 +86,139 @@ public class IcoActivity extends SDLActivity {
         }
     };
 
+    // The phone's thermal state and whether the screen is being recorded,
+    // for the log (issue 123: a throttled GPU or a recorder holding frames
+    // back looks like a stall). thermalHeadroom and thermalStatus answer
+    // the native side's asks (host_android.c ico_host_thermal, on SDL's
+    // main thread); the two listeners push every change (nativeThermalStatus
+    // from Android 10, nativeScreenRecording from Android 15). Every call is
+    // behind its API level, a missing native method is ignored, and a
+    // failure of any of it only means no words in the log. The listener
+    // fields are Objects so that this class loads on Android 8 without the
+    // newer classes.
+    private static native void nativeThermalStatus(int status);
+    private static native void nativeScreenRecording(int state);
+    private static PowerManager sPower;
+    private Object mThermalListener;
+    private Object mRecordingCallback;
+
+    private static PowerManager power() {
+        if (sPower == null && sInstance != null) {
+            sPower = (PowerManager) sInstance.getSystemService(Context.POWER_SERVICE);
+        }
+        return sPower;
+    }
+
+    // PowerManager.getThermalHeadroom(0): the forecast of the thermal
+    // state now, 1.0 the point where the system starts to throttle; NaN
+    // before Android 11, when the phone gives none, or when asked too often
+    public static float thermalHeadroom() {
+        try {
+            PowerManager pm = power();
+            if (Build.VERSION.SDK_INT >= 30 && pm != null) {
+                return pm.getThermalHeadroom(0);
+            }
+        } catch (RuntimeException e) {
+            // no answer is the answer
+        }
+        return Float.NaN;
+    }
+
+    // PowerManager.getCurrentThermalStatus: 0 (none) to 6 (shutdown), -1
+    // before Android 10 or when the phone gives none
+    public static int thermalStatus() {
+        try {
+            PowerManager pm = power();
+            if (Build.VERSION.SDK_INT >= 29 && pm != null) {
+                return pm.getCurrentThermalStatus();
+            }
+        } catch (RuntimeException e) {
+            // no answer is the answer
+        }
+        return -1;
+    }
+
+    private void pushThermalStatus(int status) {
+        if (!SDLActivity.mBrokenLibraries) {
+            try {
+                nativeThermalStatus(status);
+            } catch (UnsatisfiedLinkError e) {
+                // libmain.so without the method
+            }
+        }
+    }
+
+    private void pushScreenRecording(int state) {
+        if (!SDLActivity.mBrokenLibraries) {
+            try {
+                nativeScreenRecording(state);
+            } catch (UnsatisfiedLinkError e) {
+                // libmain.so without the method
+            }
+        }
+    }
+
+    // while the activity is visible: the thermal status listener (Android
+    // 10) and the screen recording callback (Android 15, the
+    // DETECT_SCREEN_RECORDING permission in the manifest, a normal one;
+    // addScreenRecordingCallback answers with the state at registration)
+    private void startThermalWatch() {
+        if (Build.VERSION.SDK_INT >= 29 && mThermalListener == null) {
+            try {
+                PowerManager pm = power();
+                if (pm != null) {
+                    PowerManager.OnThermalStatusChangedListener l =
+                            status -> pushThermalStatus(status);
+                    pm.addThermalStatusListener(ContextCompat.getMainExecutor(this), l);
+                    mThermalListener = l;
+                }
+            } catch (RuntimeException | LinkageError e) {
+                mThermalListener = null;
+            }
+        }
+        if (Build.VERSION.SDK_INT >= 35 && mRecordingCallback == null) {
+            try {
+                java.util.function.Consumer<Integer> cb = state -> pushScreenRecording(state);
+                int state = getWindowManager().addScreenRecordingCallback(
+                        ContextCompat.getMainExecutor(this), cb);
+                mRecordingCallback = cb;
+                pushScreenRecording(state);
+            } catch (RuntimeException | LinkageError e) {
+                // no permission, or the system refuses: no recording words
+                mRecordingCallback = null;
+            }
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private void stopThermalWatch() {
+        if (Build.VERSION.SDK_INT >= 29 && mThermalListener != null) {
+            try {
+                PowerManager pm = power();
+                if (pm != null) {
+                    pm.removeThermalStatusListener(
+                            (PowerManager.OnThermalStatusChangedListener) mThermalListener);
+                }
+            } catch (RuntimeException | LinkageError e) {
+                // already gone
+            }
+            mThermalListener = null;
+        }
+        if (Build.VERSION.SDK_INT >= 35 && mRecordingCallback != null) {
+            try {
+                getWindowManager().removeScreenRecordingCallback(
+                        (java.util.function.Consumer<Integer>) mRecordingCallback);
+            } catch (RuntimeException | LinkageError e) {
+                // already gone
+            }
+            mRecordingCallback = null;
+        }
+    }
+
     @Override
     protected void onStart() {
         super.onStart();
+        startThermalWatch();
         try {
             if (mLayoutTracker == null) {
                 mLayoutTracker = new WindowInfoTrackerCallbackAdapter(
@@ -107,6 +238,7 @@ public class IcoActivity extends SDLActivity {
 
     @Override
     protected void onStop() {
+        stopThermalWatch();
         if (mLayoutTracker != null) {
             try {
                 mLayoutTracker.removeWindowLayoutInfoListener(mLayoutListener);

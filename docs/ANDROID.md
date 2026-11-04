@@ -291,7 +291,10 @@ with a problem report. On phones with a Qualcomm graphics chip the log says,
 for each picture that was held back, how fast the graphics chip was running
 and how busy it was just before and just after, and whether the phone's
 graphics driver reset it; that tells a graphics chip that slowed down apart
-from a picture the driver held for another reason.
+from a picture the driver held for another reason. The log also says how
+warm the phone was (a number where 1.0 is the point the phone starts to slow
+the game down, and a level from NONE to SHUTDOWN, on Android 10 and later) and,
+on Android 15 and later, whether the screen was being recorded.
 
 ### A fixed refresh rate for a Frame rate you set
 

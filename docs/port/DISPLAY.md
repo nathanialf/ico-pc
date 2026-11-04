@@ -511,7 +511,22 @@ second passed): `window: kernel GPU driver around the present that blocked (repl
 before: clock 905 MHz, busy 74 %, resets 3, thermal power level 0; 1 during: clock 285 MHz, busy 9
 %, resets 3; 0.03 s after: clock 285 MHz, busy 12 %, resets 3, thermal power level 0` (the first 8,
 then every 100th; the parts whose node is not readable left out). Nothing is written on other
-platforms. How the lines tell the stall's causes apart, from one log:
+platforms.
+
+The app's own words on the phone's thermal state and screen recording (issue 123;
+[PLATFORM.md](PLATFORM.md#diagnostics) has the Java bridge) come as `ico_pc: thermal status changed:
+MODERATE (2) -> SEVERE (3) (run time 212.4 s)` and `ico_pc: screen recording: visible (run time 40.1
+s)` the moment the system reports a change, and in the window's lines: each 10 s block, after the
+kernel GPU driver's line, `window: thermal: headroom 0.72 (1.0 is the throttling point), status
+MODERATE (2); screen recording not visible` (a headroom of 1.0 or more is the throttling point;
+the status runs NONE 0, LIGHT 1, MODERATE 2, SEVERE 3, CRITICAL 4, EMERGENCY 5, SHUTDOWN 6; a part
+the phone does not report is left out; `window: thermal: not available (...)` once when it reports
+none), and at the end of each `kernel GPU driver around the present that blocked` line,
+`; thermal headroom 0.98, status SEVERE; screen recording visible`. The screen recording state exists
+from Android 15 and shows only recordings the system announces; on older phones a recorder is not
+visible to the log. Thermal status SEVERE or worse, or a headroom near or above 1.0, beside a
+clock drop is the phone throttling; a visible recording beside the first pass grown alone is the
+recorder holding the image. How the lines tell the stall's causes apart, from one log:
 
 | Reading | the GPU's clock or a thermal step | another GPU client | a GPU fault's recovery | the driver's present path | the screen recorder |
 | --- | --- | --- | --- | --- | --- |

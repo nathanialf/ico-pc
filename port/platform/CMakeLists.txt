@@ -12,6 +12,7 @@ target_sources(ico_platform PRIVATE
     game_data_range.c
     gpu_hang.c
     gpu_sysfs.c
+    thermal_text.c
     hotkeys.c
     kernel_host.c
     pace_policy.c
@@ -138,7 +139,8 @@ endif()
 # numbers under a fake clock, the [dev] render_thread mode
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
           gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
-          present_fallback frame_mailbox display_rate present_hist gpu_sysfs)
+          present_fallback frame_mailbox display_rate present_hist gpu_sysfs
+          thermal_text)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

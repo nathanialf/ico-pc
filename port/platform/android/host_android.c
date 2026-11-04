@@ -10,11 +10,13 @@
 #include "host_android.h"
 #include "diag_host.h"
 #include "report.h"
+#include "thermal_text.h"
 #include <android/asset_manager.h>
 #include <android/asset_manager_jni.h>
 #include <android/log.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <math.h>
 #include <poll.h>
 #include <stdio.h>
 #include <string.h>
@@ -510,6 +512,127 @@ void ico_host_vibrate(int amplitude, int ms)
         (*env)->ExceptionClear(env);
     }
     (*env)->DeleteLocalRef(env, act);
+}
+
+/* --- the phone's thermal state and screen recording (issue 123) ----------- */
+
+/* The static Java methods IcoActivity.thermalHeadroom ()F and thermalStatus
+   ()I, called as ico_host_vibrate calls its method: on SDL's main thread
+   only (the thread SDL_GetAndroidJNIEnv answers for), the method id looked
+   up once, a failed lookup remembered (the app's Java without them, one
+   line, then silence), local references deleted, a pending exception
+   cleared. Returns 0 when the call could not be made. kind 0 float into
+   *f, 1 int into *i. */
+static int call_thermal(const char *name, const char *sig, jmethodID *mid, int *failed, int kind,
+                        float *f, int *i)
+{
+    JNIEnv *env;
+    jobject act;
+    jclass cls;
+    int ok = 0;
+
+    if (*failed) {
+        return 0;
+    }
+    env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    act = env != NULL ? (jobject)SDL_GetAndroidActivity() : NULL;
+    if (env == NULL || act == NULL) {
+        return 0;
+    }
+    cls = (*env)->GetObjectClass(env, act);
+    if (cls != NULL) {
+        if (*mid == NULL) {
+            *mid = (*env)->GetStaticMethodID(env, cls, name, sig);
+            if (*mid == NULL) {
+                *failed = 1;
+            }
+        }
+        if (*mid != NULL) {
+            if (kind == 0) {
+                *f = (*env)->CallStaticFloatMethod(env, cls, *mid);
+            } else {
+                *i = (*env)->CallStaticIntMethod(env, cls, *mid);
+            }
+            ok = 1;
+        }
+        if ((*env)->ExceptionCheck(env)) {
+            (*env)->ExceptionClear(env);
+            ok = 0;
+        }
+        (*env)->DeleteLocalRef(env, cls);
+    } else if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+    }
+    (*env)->DeleteLocalRef(env, act);
+    return ok;
+}
+
+/* the last values the Java listeners pushed (nativeThermalStatus,
+   nativeScreenRecording), -1 before the first */
+static SDL_AtomicInt s_thermalPushed = {-1};
+static SDL_AtomicInt s_recordingPushed = {-1};
+
+ThermalState ico_host_thermal(const char **why)
+{
+    static jmethodID s_midHeadroom, s_midStatus;
+    static int s_failedHeadroom, s_failedStatus;
+    ThermalState t = thermal_state_none();
+    float f = 0.0f;
+    int st = -1;
+
+    if (call_thermal("thermalHeadroom", "()F", &s_midHeadroom, &s_failedHeadroom, 0, &f, NULL) &&
+        !isnan(f) && f >= 0.0f) {
+        t.headroom = (double)f;
+    }
+    if (call_thermal("thermalStatus", "()I", &s_midStatus, &s_failedStatus, 1, NULL, &st) &&
+        st >= 0) {
+        t.status = st;
+    } else {
+        t.status = SDL_GetAtomicInt(&s_thermalPushed);
+    }
+    t.recording = SDL_GetAtomicInt(&s_recordingPushed);
+    if (why != NULL) {
+        *why = s_failedHeadroom && s_failedStatus
+                   ? "the app's Java side has no thermal methods"
+                   : "this Android version reports neither a headroom nor a status";
+    }
+    return t;
+}
+
+/* IcoActivity.nativeThermalStatus (a static native method): the system's
+   thermal status changed (PowerManager.OnThermalStatusChangedListener,
+   Android 10 and later), on the activity's thread. Logged at once. */
+JNIEXPORT void JNICALL Java_com_defnf_icopc_IcoActivity_nativeThermalStatus(JNIEnv *env, jclass cls,
+                                                                            jint status)
+{
+    char line[160];
+    const int old = SDL_SetAtomicInt(&s_thermalPushed, (int)status);
+
+    (void)env;
+    (void)cls;
+    if (old != (int)status) {
+        thermal_change_text(old, (int)status, (double)SDL_GetTicks() / 1000.0, line, sizeof line);
+        ico_diag_log("%s", line);
+    }
+}
+
+/* IcoActivity.nativeScreenRecording (Android 15 and later): 1 when the
+   window is visible in a screen recording, 0 when not; called with the
+   state at registration and at every change. Logged at once. */
+JNIEXPORT void JNICALL Java_com_defnf_icopc_IcoActivity_nativeScreenRecording(JNIEnv *env,
+                                                                              jclass cls,
+                                                                              jint state)
+{
+    char line[160];
+    const int now = state != 0;
+    const int old = SDL_SetAtomicInt(&s_recordingPushed, now);
+
+    (void)env;
+    (void)cls;
+    if (old != now) {
+        thermal_recording_text(now, (double)SDL_GetTicks() / 1000.0, line, sizeof line);
+        ico_diag_log("%s", line);
+    }
 }
 
 /* --- the file picker --------------------------------------------------------- */

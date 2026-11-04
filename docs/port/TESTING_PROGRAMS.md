@@ -878,6 +878,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`DISPLAY_PIN_SET_AGAIN`; none wanted then: nothing asked or said), the pin's lines
   (`display_rate`).
 - `gpu_sysfs_test.c`: the kernel GPU driver's nodes, the pure part (`gpu_sysfs.h`, issue 123): the nodes' texts parsed (`905000000`, `42 %`, leading blanks, a sign, empty, no digit first, a 4 KB text, a buffer read to its length only, digits past a long long's room), Hz to MHz rounded; the ring of 64 (70 samples, the oldest dropped); the 10 s block (the clock's range and mean, busy's mean, the resets in the block against the last before it and from the ring's start, the thermal level's highest, a temperature, only busy read, a steady clock, an empty block); around a present (the sample before, the ones during, the one after, samples exactly at its start and end, none before, none after, nothing read); the open line (the usual readable set, every node denied, the directory missing, nothing present, only the once nodes with errnos named), the block and around lines word for word, a short buffer cut (`gpu_sysfs`).
+- `thermal_text_test.c`: the thermal and screen recording words (`thermal_text.h`, issue 123): the
+  status name table (NONE 0 to SHUTDOWN 6, -1 and 7 UNKNOWN), the change line (`MODERATE (2) ->
+  SEVERE (3) (run time 212.4 s)`) and the recording line (visible, not visible), the 10 s block's line
+  with every part, without a headroom (NaN), headroom alone, status alone, recording alone and
+  nothing reported (`not available (why)`), the around line's ending in the same cases (empty when
+  nothing is reported), a short buffer cut and terminated, all word for word (`thermal_text`).
 - `present_hist_test.c`: the 10 s histogram of the driver's present call (`present_hist.h`): a
   limit is not over itself, a call is counted in every row it is over, issue 123's block
   (750 presents of 9 to 15 ms and five of 344 to 365 ms: 5 in every row), the line word for
