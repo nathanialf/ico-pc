@@ -617,15 +617,15 @@ static struct {
 static int modeOf(const char *v)
 {
     if (!v || !v[0]) {
-        return RD_VIS_FRUSTUM;
+        return RD_VIS_FULL; /* the default: the frustum skip and the occlusion test */
     }
     if (strcmp(v, "off") == 0 || strcmp(v, "0") == 0 || strcmp(v, "false") == 0) {
         return RD_VIS_OFF;
     }
-    if (strcmp(v, "full") == 0 || strcmp(v, "2") == 0) {
-        return RD_VIS_FULL;
+    if (strcmp(v, "frustum") == 0 || strcmp(v, "1") == 0) {
+        return RD_VIS_FRUSTUM;
     }
-    return RD_VIS_FRUSTUM;
+    return RD_VIS_FULL; /* "full", "2", "true" */
 }
 
 const char *rd__vis_mode_name(int mode)
