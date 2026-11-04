@@ -7,7 +7,9 @@
  * chain planned on a recorded frame, kept with the shine drawn into WORK2
  * between the mask and the reduction).  On the device, post modes 1..7 as
  * (e) records them but without the shine (so the fold applies wherever the
- * glow is drawn), each frame drawn with the fold forced on
+ * glow is drawn), without and with the sun's fans drawn into WORK2 before
+ * the mask (s_fanWork2: an untextured sprite each; then the mask alone is
+ * folded and WORK2 read where it keeps a texel), each frame drawn with the fold forced on
  * (rd__glow_fold_force(1)) and the same recorded frame replayed with it
  * forced off, at four settings:
  *   1x      Original, PAL 512 x 512: the reduction the GS bilinear;
@@ -134,10 +136,10 @@ static bool gfInit(const char *what, int preset, float scale, uint32_t sw, uint3
  * with the fold, then replayed without it; model: both against the CPU
  * model.  The folds counted into *folds, the bytes that differ into
  * *differ */
-static void gfFrame(const char *cfg, int post, int model, uint32_t *folds, int *differ)
+static void gfFrame(const char *cfg, int post, int model, int fans, uint32_t *folds, int *differ)
 {
     char what[96], again[128];
-    snprintf(what, sizeof(what), "(k) %s post mode %d", cfg, post);
+    snprintf(what, sizeof(what), "(k) %s post mode %d%s", cfg, post, fans ? ", the fans" : "");
     snprintf(again, sizeof(again), "%s, the fold off", what);
     setStage(post, 0, 64);
     makeImage((uint32_t)post, 0);
@@ -152,7 +154,10 @@ static void gfFrame(const char *cfg, int post, int model, uint32_t *folds, int *
         putImageAt(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), gsFrame.w, ScreenHeight,
                    ScreenHeight / 3, ScreenHeight / 2, Q_Z_FACE, 1);
     }
+    s_fanDraws = 0;
+    s_fanWork2 = fans; /* the sun's fans drawn into WORK2 before the mask */
     FullScreenEffectBefore();
+    s_fanWork2 = 0;
     FullScreenEffectAfter();
     rd__glow_fold_force(1);
     if (model) {
@@ -162,6 +167,7 @@ static void gfFrame(const char *cfg, int post, int model, uint32_t *folds, int *
         rhi_wait_idle();
     }
     const uint32_t on = g_rdPerf.glowFolded, kept = g_rdPerf.glowKept, why = g_rdPerf.glowWhy;
+    const uint32_t read = g_rdPerf.glowFoldRead;
     gfRead(0);
     const RdFrame *f = rd__last_frame();
     rd__glow_fold_force(0);
@@ -176,6 +182,8 @@ static void gfFrame(const char *cfg, int post, int model, uint32_t *folds, int *
     const int d = gfDiffer(what);
     CHECK(kept == 0, "%s: the glow's mask drawn into WORK2 (%s)", what, rd_glow_fold_why_text(why));
     CHECK(off == 0, "%s: folded with the fold forced off", again);
+    CHECK(!on || read == (uint32_t)(fans && s_fanDraws > 0), "%s: the fold %s WORK2 as drawn", what,
+          read ? "read" : "did not read");
     printf("  %s: %s, %d bytes differ from the chain drawn\n", what,
            on ? "folded" : (kept ? "kept" : "no glow"), d);
     *folds += on;
@@ -193,7 +201,8 @@ static void glowFoldSetting(const char *name, int model)
     uint32_t folds = 0;
     int differ = 0;
     for (int post = 1; post <= 7 && failures <= 20; post++) {
-        gfFrame(name, post, model, &folds, &differ);
+        gfFrame(name, post, model, 0, &folds, &differ);
+        gfFrame(name, post, model, 1, &folds, &differ); /* the sun's fans into WORK2 */
     }
     if (model) {
         /* (e)'s frame (against the model): the shine drawn into WORK2
@@ -268,14 +277,17 @@ static void checkGlowFold(void)
  * recorded (post mode 7 with the sun; its fans draw nothing here): the
  * fill, the mask and the reduction found in that order, the fill's colour
  * (0, 0, 0, 192, or grey 128 for the bloom), the mask's test (ATST LESS,
- * AREF 129, AFAIL KEEP) and RGBAQ's alpha 128; then the flare recorded
- * with the shine drawn into WORK2 after the mask: kept, the lamps' reason */
+ * AREF 129, AFAIL KEEP) and RGBAQ's alpha 128; the flare with the sun's
+ * fans drawn into WORK2 before the mask (s_fanWork2): the mask alone
+ * planned (maskOnly); then the flare recorded with the shine drawn into
+ * WORK2 after the mask: kept, the lamps' reason */
 static void checkGlowFoldPlan(const RdFrame *f)
 {
     RdGlowFoldPlan pl;
     uint32_t why = 0;
     const char *v = rd__glow_fold_plan(f, 0, &pl, &why);
-    CHECK(v == NULL && pl.on && pl.fillOrd < pl.maskOrd && pl.maskOrd < pl.reductionOrd,
+    CHECK(v == NULL && pl.on && !pl.maskOnly && pl.fillOrd < pl.maskOrd &&
+              pl.maskOrd < pl.reductionOrd,
           "(r) the glow fold: post mode 7 not planned: %s", v ? v : "planned out of order");
     const uint32_t rgb = pl.fill & 0xFFFFFFu;
     CHECK(v != NULL || ((pl.fill >> 24) == 192u && (rgb == 0u || rgb == 0x808080u)),
@@ -288,6 +300,21 @@ static void checkGlowFoldPlan(const RdFrame *f)
     printf("  (r) the glow fold: post mode 7 planned (fill %u, mask %u, reduction %u; fill "
            "%08X, test %08X, flags %X)\n",
            pl.fillOrd, pl.maskOrd, pl.reductionOrd, pl.fill, pl.test, pl.flags);
+    /* the sun's fans drawn into WORK2 between the fill and the mask: the
+       mask alone folded, WORK2 read where it keeps a texel */
+    setStage(1, 0, 64);
+    s_fanDraws = 0;
+    s_fanWork2 = 1;
+    FullScreenEffectBefore();
+    s_fanWork2 = 0;
+    FullScreenEffectAfter();
+    dl_Swap();
+    v = rd__glow_fold_plan(rd__last_frame(), 0, &pl, &why);
+    CHECK(s_fanDraws == 0 || (v == NULL && pl.maskOnly == 1),
+          "(r) the glow fold: the sun's fans into WORK2 before the mask: %s (mask only %d)",
+          v ? (v[0] ? v : "no glow") : "planned", pl.maskOnly);
+    printf("  (r) the glow fold: with %d fans drawn into WORK2, %s\n", s_fanDraws,
+           v ? "kept" : (pl.maskOnly ? "the mask alone folded" : "fill and mask folded"));
     setStage(1, 0, 64);
     FullScreenEffectBefore();
     dl_SetDLPriority(7);
