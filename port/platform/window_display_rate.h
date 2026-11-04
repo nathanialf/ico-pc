@@ -19,6 +19,10 @@ void window_display_rate_line(SDL_Window *window);
    applied: Android asks the system for that rate or releases the ask
    ([dev] frame_rate_pin, display_rate.h); every other platform nothing */
 void window_frame_rate_pin(SDL_Window *window, int framerate);
+/* The same after the app came back from the background (the pump, not
+   SDL's event thread): the surface is new, so the ask is made again
+   ("frame rate pin: asked again for a new surface") */
+void window_frame_rate_pin_resumed(SDL_Window *window, int framerate);
 /* At exit: the ask released, the watch removed */
 void window_display_rate_stop(SDL_Window *window);
 

@@ -1378,7 +1378,13 @@ rate, so the next log carries it (`port/platform/display_rate.h`, `window_displa
   `window: frame rate pin: asked 60 Hz (fixed source; the Frame rate row is 60) with <call>:
   returned 0` (`(refused)` after a return other than 0, tried again at the next change), and
   `window: frame rate pin: released (the Frame rate row is Uncapped) with <call>: returned 0`.
-  Nothing runs on any other platform. It is a hint to the system's refresh rate governor: it does not
+  The ask is a vote on the Surface: going to the background destroys the SurfaceView's surface and
+  the foreground brings a new native window with no vote. The pin keeps the native window it asked
+  on (`DisplayPin.surface`); a call with another one, or the pump's `resume_recheck` after the app
+  came back (`window_frame_rate_pin_resumed`: the pointer may be reused), forgets the ask
+  (`display_pin_surface`) and asks again: `window: frame rate pin: asked again for a new surface:
+  60 Hz (fixed source; the Frame rate row is 60) with <call>: returned 0`. A new surface with no
+  rate wanted asks and says nothing. Nothing runs on any other platform. It is a hint to the system's refresh rate governor: it does not
   change the game's own pacing, and nothing about it is measured on a device yet.
 
 ### Downsampling

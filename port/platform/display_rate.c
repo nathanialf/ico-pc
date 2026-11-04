@@ -82,12 +82,35 @@ int display_pin_rate(int framerate, DisplayPinMode mode)
     return framerate;
 }
 
+int display_pin_surface(DisplayPin *p, const void *surface, int resumed)
+{
+    int lost = 0;
+
+    if (surface != p->surface || resumed) {
+        /* a new surface has no vote: nothing to release, the rate asked
+           again */
+        lost = p->asked != 0;
+        p->surface = surface;
+        p->asked = 0;
+        p->again = p->again || lost;
+    }
+    return lost;
+}
+
 DisplayPinAct display_pin_next(DisplayPin *p, int want, int deviceOffers)
 {
     if (!deviceOffers || want == p->asked) {
+        if (want == 0) {
+            p->again = 0; /* none wanted on the new surface: nothing to say */
+        }
         return DISPLAY_PIN_NOTHING;
     }
     p->asked = want;
+    if (want > 0 && p->again) {
+        p->again = 0;
+        return DISPLAY_PIN_SET_AGAIN;
+    }
+    p->again = 0;
     return want > 0 ? DISPLAY_PIN_SET : DISPLAY_PIN_RELEASE;
 }
 
@@ -110,6 +133,12 @@ int display_pin_text(DisplayPinAct act, int rate, int framerate, const char *cal
     }
     if (call == NULL) {
         call = "(no call)";
+    }
+    if (act == DISPLAY_PIN_SET_AGAIN) {
+        return snprintf(buf, size,
+                        "frame rate pin: asked again for a new surface: %d Hz (fixed source; the "
+                        "Frame rate row is %s) with %s: returned %d%s",
+                        rate, row, call, ret, ret == 0 ? "" : " (refused)");
     }
     if (act == DISPLAY_PIN_SET) {
         return snprintf(buf, size,

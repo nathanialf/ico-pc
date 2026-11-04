@@ -302,7 +302,9 @@ The log shows what happened:
   60) with ANativeWindow_setFrameRateWithChangeStrategy: returned 0` (a
   return other than 0 says the phone refused it), and `window: frame rate pin:
   released ...` after Uncapped. The first line of the run says whether the
-  phone offers the call at all.
+  phone offers the call at all. The phone forgets the request when the game
+  goes to the background, so the game asks again when you come back:
+  `window: frame rate pin: asked again for a new surface: 60 Hz ...`.
 - `window: display refresh: 144.00 Hz, 3048x2032 "..." (run time 85.2 s, 2
   changes this run)` in every 10 second block, and `window: display refresh
   changed: 144.00 Hz -> 60.00 Hz ...` the moment the phone reports the screen

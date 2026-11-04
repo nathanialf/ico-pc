@@ -824,7 +824,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   for word, `[dev] frame_rate_pin` (auto, off, false, 0, no, any case), the rate asked for each
   Frame rate row (60, 120, 144; Original, Uncapped, off and above 1000 none), the sequence set,
   nothing, set, release, nothing, a device without the call never asked, a refused ask tried
-  again, the pin's lines (`display_rate`).
+  again, a new native window or a resume forgetting the ask and the next set made again
+  (`DISPLAY_PIN_SET_AGAIN`; none wanted then: nothing asked or said), the pin's lines
+  (`display_rate`).
 - `present_hist_test.c`: the 10 s histogram of the driver's present call (`present_hist.h`): a
   limit is not over itself, a call is counted in every row it is over, issue 123's block
   (750 presents of 9 to 15 ms and five of 344 to 365 ms: 5 in every row), the line word for

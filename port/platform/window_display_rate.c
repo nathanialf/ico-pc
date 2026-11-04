@@ -123,6 +123,7 @@ typedef int32_t (*SetRateStrategyFn)(void *window, float rate, int8_t compat, in
 enum { COMPAT_DEFAULT = 0, COMPAT_FIXED_SOURCE = 1, STRATEGY_ONLY_IF_SEAMLESS = 0 };
 
 static DisplayPin s_pin;
+static int s_pinResumed; /* window_frame_rate_pin_resumed's call */
 
 static int pin_call(void *nw, int rate, const char **call)
 {
@@ -176,20 +177,36 @@ void window_frame_rate_pin(SDL_Window *window, int framerate)
                     mode == DISPLAY_PIN_OFF ? "off" : "auto", offers ? "offers" : "does not offer",
                     nw == NULL ? " (no native window from SDL)" : "");
         }
+        /* a new native window (the app came back: Android made the surface
+       again) holds no vote: the ask is made again */
+        (void)display_pin_surface(&s_pin, nw, s_pinResumed);
+        s_pinResumed = 0;
         act = display_pin_next(&s_pin, want, offers);
     }
     if (act == DISPLAY_PIN_NOTHING) {
         return;
     }
-    ret = pin_call(nw, act == DISPLAY_PIN_SET ? want : 0, &call);
+    ret = pin_call(nw, act == DISPLAY_PIN_RELEASE ? 0 : want, &call);
     if (ret != 0) {
         display_pin_failed(&s_pin);
     }
     display_pin_text(act, want, framerate, call, ret, line, sizeof line);
     fprintf(stderr, "window: %s\n", line);
 }
+
+void window_frame_rate_pin_resumed(SDL_Window *window, int framerate)
+{
+    s_pinResumed = 1;
+    window_frame_rate_pin(window, framerate);
+}
 #else
 void window_frame_rate_pin(SDL_Window *window, int framerate)
+{
+    (void)window;
+    (void)framerate;
+}
+
+void window_frame_rate_pin_resumed(SDL_Window *window, int framerate)
 {
     (void)window;
     (void)framerate;

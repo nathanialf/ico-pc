@@ -882,6 +882,8 @@ static void resume_recheck(void)
                 pw, ph);
     }
     rd_log_frame_state("after resume");
+    /* Android: the surface came back without the frame rate vote */
+    window_frame_rate_pin_resumed(s_window, s_pres.framerate);
 }
 
 #if defined(__ANDROID__) || defined(ICO_IOS)
