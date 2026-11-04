@@ -172,6 +172,11 @@ typedef struct VideoOut {
     RhiFormat fmt;
     uint32_t w, h;
     bool window;
+    /* a swapchain in the surface's turn (rd_prerotate.c): tex is the
+     * picture before the turn, bb the swapchain image it is turned into */
+    uint32_t turns;
+    RhiTexture bb;
+    RhiState bbState;
 } VideoOut;
 
 static bool acquireOut(VideoOut *o)
@@ -193,6 +198,16 @@ static bool acquireOut(VideoOut *o)
         o->fmt = rhi_swapchain_format();
         o->w = g_rd.settings.outputWidth;
         o->h = g_rd.settings.outputHeight;
+        o->turns = o->tex.id ? rd__prerotate_turns() : 0;
+        if (o->turns) {
+            /* the film drawn at the window's size, then turned into the
+             * image as the game's present is */
+            o->bb = o->tex;
+            o->bbState = RHI_STATE_UNDEFINED;
+            if (!rd__prerotate_target(o->w, o->h, o->fmt, &o->tex, &o->state)) {
+                return false;
+            }
+        }
         return o->tex.id && o->w && o->h;
     }
     if (!rd__present_acquire()) {
@@ -554,7 +569,11 @@ static int presentVideo(const RdVideoPicture *pics, uint32_t w, uint32_t h, uint
         rd__transition(cl, out.tex, out.state, RHI_STATE_RENDER_TARGET);
         rd__overlay_film_record(cl, out.tex, out.fmt, out.w, out.h);
     }
-    if (out.window) {
+    if (out.window && out.turns) {
+        rd__prerotate_record(cl, out.tex, out.state, out.w, out.h, out.bb, &out.bbState, out.fmt,
+                             out.turns);
+        rd__transition(cl, out.bb, &out.bbState, RHI_STATE_PRESENT);
+    } else if (out.window) {
         rd__transition(cl, out.tex, out.state, RHI_STATE_PRESENT);
     }
     rhi_end_commands(cl);

@@ -41,3 +41,9 @@ docs/port/*.md: \bB[01] \(
 docs/port/*.md: \bR[1-3]\b
 # a third-party library version in the developer docs
 docs/port/PACKS.md: xxHash v0\.8\.2
+
+# The Vulkan backend's pre-rotation log lines, quoted word for word
+# (port/rhi/vk/vk_swapchain.c): the compositor's turn of each image is what
+# the turned swapchain leaves out, not a comparison with an earlier tree.
+docs/port/*.md: the compositor no longer rotates
+docs/port/*.md: no longer pre-rotated

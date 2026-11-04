@@ -27,6 +27,7 @@
 #define rhi_resize_swapchain     RHI__NAME(resize_swapchain)
 #define rhi_swapchain_format     RHI__NAME(swapchain_format)
 #define rhi_swapchain_size       RHI__NAME(swapchain_size)
+#define rhi_swapchain_rotation   RHI__NAME(swapchain_rotation)
 #define rhi_surface_poll_restart  RHI__NAME(surface_poll_restart)
 #define rhi_acquire_backbuffer   RHI__NAME(acquire_backbuffer)
 #define rhi_present             RHI__NAME(present)

@@ -1,0 +1,13 @@
+# Dump list for rd_replay_tool_prerotate (port/render/test/rd_replay_tool_prerotate.cmake:
+# the present turned into a pre-rotated swapchain's twin and read back turned back,
+# byte for byte the identity present).  MACHINE-LOCAL: these are paths on the
+# maintainer's machine; the dumps themselves are never committed.  Missing files are
+# reported and skipped (the test still runs rd_pixel's own dump).  Relative paths are
+# relative to this file; '*' globs are allowed.
+#
+# the coverage corpus's plain, lightning and queen scenes
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/plain/rd-00100.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/lightning/rd-00100.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/queen/rd-00100.rddump
+# the PowerVR phone's v0.10.0 rc3 F12 frame (stage 6 in play), at the phone's own size
+/primary/dev/ico-pc/build-host/tmp/v098/evidence/rc3/f12/frame-20261102-091017-v15677.rddump

@@ -98,6 +98,12 @@ void rhi_surface_poll_restart(void)
     /* the present follows the window's size itself; nothing to poll */
 }
 
+/* rhi.h: the images are never turned here (the desktop's surfaces are not) */
+uint32_t rhi_swapchain_rotation(void)
+{
+    return 0;
+}
+
 bool rhi_present_shown(void)
 {
     return g_gl.presentShown;

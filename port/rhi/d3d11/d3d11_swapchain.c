@@ -223,6 +223,12 @@ void rhi_surface_poll_restart(void)
     /* DXGI's size follows the window at each present; nothing to poll */
 }
 
+/* rhi.h: the images are never turned here (the desktop's surfaces are not) */
+uint32_t rhi_swapchain_rotation(void)
+{
+    return 0;
+}
+
 static bool s_presentShown;
 
 bool rhi_present_shown(void)

@@ -2009,6 +2009,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   1-2` and one with `--mask-marks` run clean and name their last draw (`rd_replay_tool_loss_bisect`).
 - `rd_replay_tool_pass_split.cmake`: that dump with `ICO_RD_PASS_SPLIT=8` draws the plain replay's
   DISPLAY picture byte for byte (`rd_replay_tool_pass_split`).
+- `rd_replay_tool_prerotate.cmake`: the present into a turned swapchain through its headless twin
+  (`ICO_VK_FAKE_TRANSFORM=90`, `180`, `270`: the picture turned into a texture of the turned size
+  by the swapchain path's own pass and read back turned back on the CPU, `port/render/rd_prerotate.c`)
+  is the identity present byte for byte, and each turned run names its twin; that dump at 640x480,
+  1280x720, with `--overlay-test` (the port's UI layer) and with `--crt pvm`, and the dumps of
+  `tools/prerotate_dumps.txt` that are on the machine at 640x480 and 2400x1080
+  ([DISPLAY.md](DISPLAY.md#the-turned-swapchain)) (`rd_replay_tool_prerotate`).
 - `rd_replay_tool_pass_merge.cmake`: that dump under `ICO_RD_BLEND=storage` with the storage pass
   merge draws `ICO_RD_PASS_MERGE=0`'s DISPLAY picture byte for byte at 1x and 2x, with no more
   passes or pass switches; skips without the storage read, as on a lavapipe before Mesa 25.2,
@@ -2295,7 +2302,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rhi_vk_enum`).
 - `rhi_vk_present_mode_test.c`: the present-mode choice over the sets drivers offer, and FIFO
   over every set and preference under the FIFO fallback (Android's mailbox and FIFO with vsync off,
-  Mesa's four modes, vsync on with mailbox preferred, FIFO latest ready asked) (`rhi_vk_present_mode`).
+  Mesa's four modes, vsync on with mailbox preferred, FIFO latest ready asked), and the turned
+  swapchain's choice (`vkr_prerotate_turns`: 90, 270 and 180 at issue 179's 1612x720; identity, a
+  mirrored turn, a turn not offered, `[dev] prerotate = false` and images past the surface's largest
+  keep identity) (`rhi_vk_present_mode`).
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver
   (`rhi_vk_swapchain`).
 - Helpers: `rhi_test_common.c`/`.h` (the shared cells, seven of whose pipelines come from one

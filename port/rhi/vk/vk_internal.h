@@ -601,6 +601,12 @@ typedef struct VkrState {
     RhiFormat swapRhiFormat;
     VkColorSpaceKHR swapColorSpace;
     uint32_t swapWidth, swapHeight;
+    /* the quarter turns clockwise the images are made in (rhi_swapchain_
+     * rotation; vkr_prerotate_turns): 0 identity, else the surface's
+     * transform is the preTransform and the images are swapWidth x
+     * swapHeight turned (swapped at 1 and 3); swapWidth x swapHeight stay
+     * the window's own orientation, the size the renderer draws at */
+    uint32_t swapTurns;
     bool vsync;
     uint32_t swapImageCount;
     uint32_t swapTextures[VKR_MAX_SWAP_IMAGES];  /* texture ids */
@@ -617,9 +623,10 @@ typedef struct VkrState {
      * rhi_slot_guard_worker): what it found is kept here, under the
      * swapchain's lock, and done at the next acquire, with the submit
      * thread idle (vk_swapchain.c vkr_take_deferred).  VKR_DEFER_* bits;
-     * deferW/H the size the poll found (VKR_DEFER_POLL) */
+     * deferW/H and deferTurns the size and turn the poll found
+     * (VKR_DEFER_POLL) */
     uint32_t deferred;
-    uint32_t deferW, deferH;
+    uint32_t deferW, deferH, deferTurns;
     uint64_t deferredCount; /* ever, for the line */
 
     /* one-shot command pool for readback */
@@ -760,7 +767,7 @@ _Static_assert(((VKR_GEN_MASK + 1u) % RHI_FRAMES_IN_FLIGHT) == 0u,
  * acquire (vk_swapchain.c) */
 #define VKR_DEFER_REBUILD 1u      /* out of date (or suboptimal on the desktop) */
 #define VKR_DEFER_SIZE 2u         /* Android's suboptimal with another size */
-#define VKR_DEFER_POLL 4u         /* the poll found another size (deferW x deferH) */
+#define VKR_DEFER_POLL 4u         /* the poll found another size or turn (deferW x deferH) */
 #define VKR_DEFER_SURFACE_LOST 8u /* the surface went away */
 
 /* the late counters (VkrState.late) */
@@ -900,6 +907,17 @@ const char *vkr_present_mode_name(VkPresentModeKHR m);
  * offered, an RTX 3090 on Windows showed nothing usable in mailbox mode at
  * 120/144/240 and under the vsync lock. */
 bool vkr_present_wait_wanted(bool offered, const char *asked, bool canThread);
+/* vk_present_mode.c: the quarter turns clockwise (1, 2, 3) a swapchain is
+ * made with when the surface's current transform is ROTATE_90, 180 or 270
+ * (the system shows the surface turned: an Android phone held sideways),
+ * the transform among the supported ones and `on` ([dev] prerotate, not
+ * ICO_VK_PREROTATE=0); 0 (identity: the compositor turns each image) for
+ * any other transform (identity, the mirrored ones), with `on` false, or
+ * when a quarter turn's images (h x w for the current extent w x h) would
+ * pass the surface's maxW x maxH.  The swapchain's preTransform is then the
+ * current transform and its images the extent turned (vk_swapchain.c) */
+uint32_t vkr_prerotate_turns(uint32_t currentTransform, uint32_t supportedTransforms, uint32_t w,
+                             uint32_t h, uint32_t maxW, uint32_t maxH, bool on);
 
 /* vk_memory.c: the memory types an allocation of `kind` tries, in order,
  * into out[] (the count returned; distinct type indices of typeBits):
