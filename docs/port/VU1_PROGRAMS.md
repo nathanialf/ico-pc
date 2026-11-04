@@ -87,7 +87,17 @@ trivially rejected, drawn by the strip, or cut by `SCISSOR_COMMON` through six p
 X+, Y-, Y+) and kicked as a fan (PRIM 0x5D, ABE on) before the batch's own packet. The
 [replay](ARCHITECTURE.md#terms) keeps that order by drawing a code-36 batch twice: the cut triangles
 first, then the strip's (`ico2/vusrc/scissorcommcut.h`; `port/render/vu1_ref/vu1_scissor.c`;
-`port/render/rd_mesh.h` ("the recorded payload")).
+`port/render/rd_mesh.h` ("the recorded payload")). The GPU does the cutting
+(`vu_triangle_out_pos`): a triangle with a z flag or a corner behind the eye is clipped by the GPU,
+the corners without a GS position in the homogeneous form; one with x or y flags only is drawn as it
+is (the VU's guard band is wider than any target, the scissor does the rest) when every corner has
+its GS position, and else clipped like the first. A corner within about 8 units of the eye
+saturates its ftoi4 Z at 0x7FFFFFFF; the PS2 never draws such a corner past the guard band (its cut
+puts the fan's corners on the band, at their true depth), and drawn as it is the corner pulled the
+triangle's depth far behind the true one: the main gate's bottom rail, seen from the sofa beside a
+48:9 picture, lost to the stone sill behind it along a diagonal strip (`rd_pixel`'s VU seams
+S6). `rd_replay_tool --stats` counts such corners of code 36's draws (`stats: VU corners with a
+saturated GS Z: N vertices of code 36's meshes`).
 
 **cluster** blends position and normal over two bones, `P = B0 (pos, 1) w0 + B1 (pos, 1) w1`;
 the bones are VU memory 16.. (bone i at `16 + 4i`), the vertex weights hold the bones' VU
@@ -305,7 +315,9 @@ The PS2's rule, in this order (`port/shaders/vu_common.hlsli` (`vu_region_rule`,
 
 A `VU_MARK_HIDE` triangle never reaches the rule (`vu_content_hidden`). A drawn triangle with a
 vertex outside takes code 36's corner rule (`vu_corner_cut_position`; in a state other than out of
-the box a corner whose GS Z alone saturated keeps its GS position, as the exact neighbour has it).
+the box a corner whose GS Z alone saturated keeps its GS position, as the exact neighbour has it,
+unless code 36's scissor flagged it: the PS2's cut drops that corner, so it takes the homogeneous
+form at its true depth).
 A coordinate that is not a number converts to `0x80000000` (`vu_ftoi`, an ordered compare picks the
 saturated value: [SHADERS.md](SHADERS.md#float-to-integer)), so its corner has no GS position on
 every driver.

@@ -87,6 +87,8 @@ VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
         } else if (((fa | fb | fc) & 0x30u) != 0u || min(a.h.w, min(b.h.w, c.h.w)) <= 0.0) {
             at = 2u; // SCISSOR_COMMON; the GPU clips
             exact = gsPos;
+        } else if (gsPos == 0u) {
+            at = 2u; // only x/y flags, a corner without its GS position: the GPU clips
         } else {
             at = 1u; // only x/y flags: the GS scissor does the rest
             exact = 1u;

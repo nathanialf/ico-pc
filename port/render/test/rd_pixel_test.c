@@ -228,7 +228,11 @@
  *            w < 0) beside its kicked second, along v1-v2, and the cut
  *            triangle still covers v0's side; S4 (reported against
  *            Original 1x) 8 x 8 quads of one mesh under a matrix each,
- *            turned 0.002 rad, whose shared corners differ by float noise.
+ *            turned 0.002 rad, whose shared corners differ by float noise;
+ *            S6 a code-36 triangle with an x flag only and a corner whose
+ *            GS Z saturates under a GIF triangle at a depth between the
+ *            cut's true one and the saturated one: the VU's surface wins
+ *            in every mode (the main gate's bottom rail beside 48:9).
  *            (the VU drawn off the 12.4 grid, as ICO_RD_VU_OFFGRID does
  *            in Enhanced above 1x, opens S1 with the VU on P3's side and
  *            S2; a cut path with unsnapped corners opens S3 in every
@@ -4943,6 +4947,60 @@ static void testVuSeams(const char *mode)
             /* out of the box: the PS2's rule, the first triangle dropped */
             CHECK(probeBg, "vu seams (%s): S5: the first triangle is drawn out of the box", mode);
         }
+        rd_destroy_vu_mesh(m);
+    }
+
+    /* S6 (the main gate's bottom rail beside the 48:9 picture): a code-36
+     * triangle whose v0 is past the guard band on the right (clip x 1.096:
+     * x flag only, mem[20..23] x and y as (X - 2048) / 1500) with a GS Z
+     * ftoi4 saturates (3.2e9 true), then a GIF triangle at GS Z 3.1e8 over
+     * the probe, 1/9 of the way to v0 from the v1-v2 edge (Z 1.6e7): the
+     * PS2's cut gives the probe Z 3.70e8, above the GIF's (GEQUAL fails,
+     * red stays); v0 drawn at its saturated Z gave 2.53e8 there (the GIF
+     * drew green over the VU's surface).  The VU triangle must win */
+    {
+        const float tri[3][4] = {{1900.0f, 200.0f, 200000000.0f, 1.0f},
+                                 {100.0f, 100.0f, 1000000.0f, 1.0f},
+                                 {100.0f, 300.0f, 1000000.0f, 1.0f}};
+        CHECK(seamGsVtx(tri[0], 0.0, 0.0, kSeamRed).z == 0x7FFFFFFFu,
+              "vu seams: S6 v0's GS Z is not saturated");
+        const RdMesh m = seamMesh(tri, kStart3, 3, kSeamRed);
+        seamBegin();
+        RdVuDraw d;
+        memset(&d, 0, sizeof(d));
+        d.prog = RD_PROG_PRELIT;
+        d.code = 36;
+        d.clip = RD_VU_CLIP_SCISSOR;
+        d.vu.mem[16][0] = d.vu.mem[17][1] = d.vu.mem[18][2] = d.vu.mem[19][3] = 1.0f;
+        d.vu.mem[19][0] = d.vu.mem[19][1] = 1792.0f;
+        d.vu.mem[20][0] = d.vu.mem[21][1] = 1.0f / 1500.0f;
+        d.vu.mem[23][0] = d.vu.mem[23][1] = -256.0f / 1500.0f;
+        d.vu.mem[22][2] = 1.0f / 400000000.0f; /* v0's clip z 0.5: no z flag */
+        d.vu.mem[23][3] = 1.0f;
+        rd_draw_vu_mesh(m, &d, RD_KEY(&kSeamKey, 36, 6));
+        const float g[3][4] = {{250.0f, 150.0f, 19375000.0f, 1.0f},
+                               {400.0f, 150.0f, 19375000.0f, 1.0f},
+                               {300.0f, 300.0f, 19375000.0f, 1.0f}};
+        RdScreenVtx gv[3];
+        for (int k = 0; k < 3; k++) {
+            gv[k] = seamGsVtx(g[k], 0.0, 0.0, kSeamGreen);
+        }
+        rd_screen_prims(RD_PRIM_TRIANGLES, gv, 3, RD_SPACE_WORLD, 1, 0);
+        rd_end_frame(0);
+        uint32_t w = 0, h = 0;
+        float sx = 1.0f, sy = 1.0f;
+        uint8_t *img = readScaled(RD_TARGET_SCENE, &w, &h, &sx, &sy);
+        const size_t px = (size_t)(300.0f * sx + 0.5f), py = (size_t)(200.0f * sy + 0.5f);
+        CHECK(img && px < w && py < h, "vu seams (%s): S6: no picture", mode);
+        if (img && px < w && py < h) {
+            const uint8_t *c = &img[(py * w + px) * 4];
+            printf("  vu seams (%s): S6 code 36, x flag only, v0's GS Z saturated, a GIF triangle "
+                   "between its true and saturated depth: the probe %d %d %d\n",
+                   mode, c[0], c[1], c[2]);
+            CHECK(c[0] > 150 && c[1] < 100, "vu seams (%s): S6: the GIF triangle won (%d %d %d)",
+                  mode, c[0], c[1], c[2]);
+        }
+        free(img);
         rd_destroy_vu_mesh(m);
     }
 }
