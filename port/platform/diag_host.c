@@ -132,6 +132,9 @@ static volatile int movie_playing;
 static char activity[640];
 /* ico_diag_set_pipelines: the start-up set's count and its longest compile */
 static volatile unsigned int pipes_done, pipes_total, pipes_longest_ms;
+/* ico_diag_step: the last step's line (the start's and the switch's),
+   written by the main thread, read by the reports */
+static char step_line[256];
 /* ico_diag_present_enter/leave (diag_host.h): when the main thread entered
    the present it is in (0 = not inside one), and the capped time of the
    presents that finished, both in ico_diag_now_ns */
@@ -1101,6 +1104,26 @@ static void prefix(char *out, size_t size)
     snprintf(out, size, "[%.3f s, vsync %u, tick %u, #%d %s]", ico_diag_uptime(),
              vsyncs_fn != NULL ? vsyncs_fn() : 0u, ticks_fn != NULL ? ticks_fn() : 0u, cur,
              thread_name(cur, tmp, sizeof tmp));
+}
+
+void ico_diag_step(const char *fmt, ...)
+{
+    char msg[sizeof step_line];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(msg, sizeof msg, fmt, ap);
+    va_end(ap);
+    /* what stdout and stderr hold goes first, so the log keeps its order
+       (Windows: fully buffered, host_config.c; a no-op where unbuffered) */
+    fflush(stdout);
+    fflush(stderr);
+    ico_diag_log("%s", msg);
+    memcpy(step_line, msg, sizeof step_line);
+}
+
+const char *ico_diag_last_step(void)
+{
+    return step_line;
 }
 
 void ico_diag_milestone(const char *fmt, ...)
@@ -4688,6 +4711,9 @@ static void report_crash_block(void)
     if (activity[0] != '\0') {
         flog("ico_pc: while: %s", activity);
     }
+    if (step_line[0] != '\0') {
+        flog("ico_pc: the last step: %s", step_line);
+    }
     if (crash.fault_kind >= 0) {
         flog("ico_pc: the faulting access: %s address 0x%llx",
              crash.fault_kind == 1   ? "writing"
@@ -5233,6 +5259,9 @@ static void watchdog_fire(const char *reason)
     }
     if (activity[0] != '\0') {
         flog("ico_pc: while: %s", activity);
+    }
+    if (step_line[0] != '\0') {
+        flog("ico_pc: the last step: %s", step_line);
     }
     if (failure[0] != '\0') {
         flog("ico_pc: last failure message: %s", failure);

@@ -257,6 +257,14 @@ void ico_diag_start_reporter(void);
    background), 0 when it runs again: while paused neither watchdog limit
    counts and the heartbeat is quiet. Any thread. */
 void ico_diag_watchdog_pause(int paused);
+/* A step of the start or of the renderer's switch, one line written to the
+   log at once (what stdout and stderr hold flushed first, so the log keeps
+   its order): a hang or a kill inside the step leaves the line naming it.
+   The crash and watchdog reports repeat it ("ico_pc: the last step:
+   <line>"). Main thread. */
+void ico_diag_step(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);
+/* The last ico_diag_step line ("" before the first; tests). */
+const char *ico_diag_last_step(void);
 /* The thread that called ico_diag_init is about to end (Android: Quit,
    with the process possibly kept): from now on the watchdog neither
    samples nor signals it. */

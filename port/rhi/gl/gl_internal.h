@@ -402,6 +402,17 @@ extern GlState g_gl;
         fputc('\n', stderr);                                                                       \
     } while (0)
 
+/* GL_LOG written out at once: stderr is fully buffered on Windows
+ * (port/platform/host_config.c ico_host_redirect_output) and flushed by the
+ * host loop once a vsync, so a hang inside the driver (a context's start, a
+ * shader compile) would keep the line in the buffer; the start lines and
+ * the compile's lines go this way. */
+#define GL_LOG_DIRECT(...)                                                                         \
+    do {                                                                                           \
+        GL_LOG(__VA_ARGS__);                                                                       \
+        fflush(stderr);                                                                            \
+    } while (0)
+
 /* A rate for repeated failure lines: true for the first 8 of a counter,
  * then for every 100th (*n counts every call). */
 static inline bool gl_log_rate(uint32_t *n)

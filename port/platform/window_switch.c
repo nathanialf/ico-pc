@@ -202,6 +202,12 @@ int ico_window_switch_backend(const char *name, const char *adapter, int trial)
     if (strcmp(name, old) == 0 && adapterRunning(adapter)) {
         return 0;
     }
+    /* each step's line goes to the log at once (diag_host.h ico_diag_step;
+       the rest of the switch's lines sit in stderr's buffer on Windows
+       until the host loop's next flush): a hang leaves the step named */
+    ico_diag_step("window: switch: %s -> %s%s%s begins", old, name,
+                  adapter != NULL && adapter[0] != '\0' ? " on " : "",
+                  adapter != NULL ? adapter : "");
     if (adapter != NULL) {
         rhi_set_adapter_wanted(adapter);
     }
@@ -231,6 +237,7 @@ int ico_window_switch_backend(const char *name, const char *adapter, int trial)
        back that failed has the renderer on trial again */
     ico_diag_set_backend_trial(trial ? NULL : old);
     rhi_set_adapter_wanted(oldWanted);
+    ico_diag_step("window: switch: %s did not start; back to %s", name, old);
     if (ico_window_reopen(old, trial ? explicitFor(old) : true)) {
         rd_resume_frame();
         installAdapters();

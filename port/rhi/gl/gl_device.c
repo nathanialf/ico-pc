@@ -223,13 +223,17 @@ static bool gl_create_context(const RhiDeviceDesc *desc, bool debug)
     }
     SDL_Window *target = w ? w : g_gl.ownWindow;
     gl_context_attributes(debug);
+    if (w) {
+        /* the driver's context start: a hang here leaves the line */
+        GL_LOG_DIRECT("creating the OpenGL 4.3 core context on the window");
+    }
     g_gl.context = SDL_GL_CreateContext(target);
     if (!g_gl.context) {
-        GL_LOG("no OpenGL 4.3 core context (%s)", SDL_GetError());
+        GL_LOG_DIRECT("no OpenGL 4.3 core context (%s)", SDL_GetError());
         return false;
     }
     if (!SDL_GL_MakeCurrent(target, g_gl.context)) {
-        GL_LOG("the OpenGL context is not current (%s)", SDL_GetError());
+        GL_LOG_DIRECT("the OpenGL context is not current (%s)", SDL_GetError());
         return false;
     }
     return true;
@@ -909,11 +913,11 @@ bool rhi_init(const RhiDeviceDesc *desc)
     char msaa[16];
     snprintf(msaa, sizeof(msaa), "1%s%s%s", (l->msaaCounts & 2u) ? "|2" : "",
              (l->msaaCounts & 4u) ? "|4" : "", (l->msaaCounts & 8u) ? "|8" : "");
-    GL_LOG("%s (OpenGL %d.%d %s, %s; GLSL %s)%s; index values up to %u", g_gl.adapterName,
-           g_gl.major, g_gl.minor, g_gl.core ? "core" : "compatibility", g_gl.versionText,
-           gl_str(GL_SHADING_LANGUAGE_VERSION), g_gl.window ? "" : ", headless",
-           l->maxDrawIndexedIndexValue);
-    GL_LOG(
+    GL_LOG_DIRECT("%s (OpenGL %d.%d %s, %s; GLSL %s)%s; index values up to %u", g_gl.adapterName,
+                  g_gl.major, g_gl.minor, g_gl.core ? "core" : "compatibility", g_gl.versionText,
+                  gl_str(GL_SHADING_LANGUAGE_VERSION), g_gl.window ? "" : ", headless",
+                  l->maxDrawIndexedIndexValue);
+    GL_LOG_DIRECT(
         "limits: uniform align %u, dual-source %s, MSAA %s, interlock %s (image units %d), "
         "texture barrier %s, multi bind %s, BC %s, anisotropy %.0f, max texture %u, entry "
         "points %u (%u optional missing), debug output %s, clip origin lower left (vertex y negated)",
