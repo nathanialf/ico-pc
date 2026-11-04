@@ -65,24 +65,25 @@
 #ifndef ICO_SHEET_TEXT_C
 
 // The falloff across at |dx| = i (0..SHEET_RX) and down at |dy| = i
-// (0..SHEET_RY), per mille; constant under [unroll].
+// (0..SHEET_RY), per mille; constant under [unroll] (as a chain of ?: it was
+// not: DXC emitted the chain as branches before unrolling and never folded
+// them: a chain of branches and phis for each of the 296 weights).
 uint sheet_wx(int i)
 {
-    return i == 0   ? (uint)SHEET_WX_0
-           : i == 1 ? (uint)SHEET_WX_1
-           : i == 2 ? (uint)SHEET_WX_2
-           : i == 3 ? (uint)SHEET_WX_3
-           : i == 4 ? (uint)SHEET_WX_4
-           : i == 5 ? (uint)SHEET_WX_5
-                    : (uint)SHEET_WX_6;
+    return ICO_SELECT(i == 0, (uint)SHEET_WX_0,
+                  ICO_SELECT(i == 1, (uint)SHEET_WX_1,
+                         ICO_SELECT(i == 2, (uint)SHEET_WX_2,
+                                ICO_SELECT(i == 3, (uint)SHEET_WX_3,
+                                       ICO_SELECT(i == 4, (uint)SHEET_WX_4,
+                                              ICO_SELECT(i == 5, (uint)SHEET_WX_5,
+                                                     (uint)SHEET_WX_6))))));
 }
 uint sheet_wy(int i)
 {
-    return i == 0   ? (uint)SHEET_WY_0
-           : i == 1 ? (uint)SHEET_WY_1
-           : i == 2 ? (uint)SHEET_WY_2
-           : i == 3 ? (uint)SHEET_WY_3
-                    : (uint)SHEET_WY_4;
+    return ICO_SELECT(i == 0, (uint)SHEET_WY_0,
+                  ICO_SELECT(i == 1, (uint)SHEET_WY_1,
+                         ICO_SELECT(i == 2, (uint)SHEET_WY_2,
+                                ICO_SELECT(i == 3, (uint)SHEET_WY_3, (uint)SHEET_WY_4))));
 }
 
 // The rim from the largest weighted coverage m (c * wx * wy, 0..255e6):
@@ -95,15 +96,12 @@ uint sheet_rim(uint m)
 // The threshold (in 32nds) at sheet texel p; dither 0: SHEET_T_OFF.
 uint sheet_threshold(int2 p, uint dither)
 {
-    if (dither == 0u) {
-        return SHEET_T_OFF;
-    }
     const uint x = ((uint)p.x) & 3u, y = ((uint)p.y) & 3u;
-    const uint row = y == 0u   ? (uint)SHEET_BAYER_ROW0
-                     : y == 1u ? (uint)SHEET_BAYER_ROW1
-                     : y == 2u ? (uint)SHEET_BAYER_ROW2
-                               : (uint)SHEET_BAYER_ROW3;
-    return 2u * ((row >> (4u * x)) & 15u) + 1u;
+    const uint row = ICO_SELECT(y == 0u, (uint)SHEET_BAYER_ROW0,
+                            ICO_SELECT(y == 1u, (uint)SHEET_BAYER_ROW1,
+                                   ICO_SELECT(y == 2u, (uint)SHEET_BAYER_ROW2,
+                                          (uint)SHEET_BAYER_ROW3)));
+    return ICO_SELECT(dither == 0u, (uint)SHEET_T_OFF, 2u * ((row >> (4u * x)) & 15u) + 1u);
 }
 
 // v 0..255 quantised to SHEET_LEVELS levels against threshold th (32nds),
@@ -121,8 +119,10 @@ uint sheet_quantise(uint v, uint th)
 // th: x grey 0..255, y alpha in GS units (0x80 full).
 uint2 sheet_texel(uint c, uint r, uint4 style, uint th)
 {
-    const uint a = style.x != 0u ? max(c, (r * style.x + 32u) / 64u) : c;
-    const uint t = a != 0u ? (c * 255u + a / 2u) / a : 0u;
+    // a weight of 0 makes the rim's term (0 + 32) / 64 = 0, so max() is c
+    const uint a = max(c, (r * style.x + 32u) / 64u);
+    // 0 where a is 0, the division made by 1 there (never by 0)
+    const uint t = ICO_SELECT(a != 0u, (c * 255u + a / 2u) / max(a, 1u), 0u);
     const uint aq = sheet_quantise(a, th), tq = sheet_quantise(t, th);
     const uint grey = (style.y * (255u - tq) + style.z * tq + 127u) / 255u;
     return uint2(grey, (aq * 128u + 127u) / 255u);
@@ -134,7 +134,8 @@ uint2 sheet_texel(uint c, uint r, uint4 style, uint th)
 // sheet texel's threshold th: the rim's alpha alone, without the letters.
 uint sheet_rim_level(uint r, uint4 style, uint th)
 {
-    return sheet_quantise(style.x != 0u ? (r * style.x + 32u) / 64u : 0u, th);
+    // a weight of 0 gives (0 + 32) / 64 = 0
+    return sheet_quantise((r * style.x + 32u) / 64u, th);
 }
 
 // The texel of a scaled strip from its own coverage c and the rim levels
@@ -148,7 +149,7 @@ uint2 sheet_texel_scaled(uint c, float rq, float ra, uint4 style, uint th)
 {
     const uint rm = (uint)floor(rq + 0.5);
     const uint a = max(c, rm);
-    const uint t = a != 0u ? (c * 255u + a / 2u) / a : 0u;
+    const uint t = ICO_SELECT(a != 0u, (c * 255u + a / 2u) / max(a, 1u), 0u);
     const uint cq = sheet_quantise(c, th), tq = sheet_quantise(t, th);
     const uint grey = (style.y * (255u - tq) + style.z * tq + 127u) / 255u;
     const float af = (float)((cq * 128u + 127u) / 255u);

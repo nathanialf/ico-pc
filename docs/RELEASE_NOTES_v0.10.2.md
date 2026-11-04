@@ -7,3 +7,4 @@
 
 - On phones with a Qualcomm graphics driver and Vsync off, pictures now go to the screen one after another from the start, as the chip maker advises, instead of switching to that only after a few held-back pictures; this is not expected to remove the stutter some of these phones report.
 - Options > Gameplay > Time to rescue Yorda is now set in seconds and changes the whole pull-in; before, only its last moment changed.
+- The text effect's shader is a third of its old size, so phones prepare it in a fraction of the time; the picture is the same.
