@@ -25,6 +25,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "config.h" /* [dev] backend_switch_test */
 #include "diag_host.h"
 #include "font.h" /* ui_font_forget_textures */
 #include "input_sdl.h"
@@ -279,10 +280,113 @@ int ico_window_switch_backend(const char *name, const char *adapter, int trial)
     return -3;
 }
 
+static int hostBegin(const char *name, const char *adapter, int why);
+static void hostKept(void);
+
+/* [dev] backend_switch_test = "opengl,vulkan" (ini backend_switch_test):
+   the renderers in turn through Apply's own path (hostBegin, the pump's
+   switch, Keep), the first after SELFTEST_FIRST pumps and each next one
+   SELFTEST_NEXT pumps after the last returned, waiting while a switch is
+   refused (a movie); each line says how it went, the last one the count.
+   The window build's switch test (port/platform/test/backend_switch.cmake,
+   ctest backend_switch_window) runs it on lavapipe and llvmpipe. */
+#define SELFTEST_FIRST 300u
+#define SELFTEST_NEXT 120u
+
+static struct {
+    int inited, asked, done;
+    char list[128];
+    size_t pos;
+    unsigned wait, switches, failed;
+    char from[16], to[16];
+    Uint64 t0;
+    char refused[64];
+} s_st;
+
+static void selftestPoll(void)
+{
+    if (!s_st.inited) {
+        const char *v = ico_config_get_string("dev.backend_switch_test", "");
+
+        s_st.inited = 1;
+        snprintf(s_st.list, sizeof(s_st.list), "%s", v != NULL ? v : "");
+        s_st.wait = SELFTEST_FIRST;
+        if (s_st.list[0] != '\0') {
+            ico_diag_step("window: backend switch test: %s, from %s, the first after %u pumps",
+                          s_st.list, ico_window_switch_running(), SELFTEST_FIRST);
+        }
+    }
+    if (s_st.list[0] == '\0' || s_st.done || s_sw.want[0] != '\0') {
+        return;
+    }
+    if (s_st.asked) {
+        const int r = s_sw.result;
+        const double secs = (double)(SDL_GetTicksNS() - s_st.t0) / 1e9;
+
+        s_st.asked = 0;
+        s_st.switches++;
+        if (r == UI_GFX_SWITCH_DONE && strcmp(ico_window_switch_running(), s_st.to) == 0) {
+            hostKept();
+            ico_diag_step("window: backend switch test: %s -> %s: applied and kept in %.1f s",
+                          s_st.from, s_st.to, secs);
+        } else {
+            s_st.failed++;
+            ico_diag_step("window: backend switch test: %s -> %s: FAILED (%s; running %s) after "
+                          "%.1f s",
+                          s_st.from, s_st.to,
+                          r == UI_GFX_SWITCH_REFUSED ? "refused"
+                          : r == UI_GFX_SWITCH_DONE  ? "done on another renderer"
+                                                     : "did not start",
+                          ico_window_switch_running(), secs);
+        }
+        s_st.wait = SELFTEST_NEXT;
+    }
+    if (s_st.wait > 0) {
+        s_st.wait--;
+        return;
+    }
+    while (s_st.list[s_st.pos] == ',' || s_st.list[s_st.pos] == ' ') {
+        s_st.pos++;
+    }
+    if (s_st.list[s_st.pos] == '\0') {
+        s_st.done = 1;
+        ico_diag_step("window: backend switch test: done, %u switch%s, %u failed", s_st.switches,
+                      s_st.switches == 1 ? "" : "es", s_st.failed);
+        return;
+    }
+    size_t n = strcspn(s_st.list + s_st.pos, ", ");
+    if (n >= sizeof(s_st.to)) {
+        n = sizeof(s_st.to) - 1;
+    }
+    memcpy(s_st.to, s_st.list + s_st.pos, n);
+    s_st.to[n] = '\0';
+    {
+        const char *no = refusal(s_st.to);
+
+        if (no != NULL && strcmp(no, "a movie plays") == 0) {
+            /* the opening's movie: the next pump asks again */
+            if (strcmp(s_st.refused, no) != 0) {
+                snprintf(s_st.refused, sizeof(s_st.refused), "%s", no);
+                fprintf(stderr, "window: backend switch test: waiting (%s)\n", no);
+            }
+            return;
+        }
+    }
+    s_st.refused[0] = '\0';
+    s_st.pos += strcspn(s_st.list + s_st.pos, ", ");
+    snprintf(s_st.from, sizeof(s_st.from), "%s", ico_window_switch_running());
+    s_st.t0 = SDL_GetTicksNS();
+    s_st.asked = 1;
+    if (hostBegin(s_st.to, "", UI_GFX_WHY_APPLY) != UI_GFX_SWITCH_PENDING) {
+        s_sw.result = UI_GFX_SWITCH_REFUSED; /* counted at the next pump */
+    }
+}
+
 int ico_window_switch_pump(void)
 {
     char want[16], old[16], wantAdapter[256], oldAdapter[256];
 
+    selftestPoll();
     if (s_sw.want[0] == '\0') {
         return 0;
     }

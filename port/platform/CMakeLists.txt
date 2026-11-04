@@ -419,3 +419,28 @@ function(_ico_window_video_test)
     endif()
 endfunction()
 cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL _ico_window_video_test)
+
+# backend_switch_window: the window build's Options > Graphics > Apply,
+# Vulkan (lavapipe) -> OpenGL (llvmpipe) -> Vulkan through
+# ico_window_switch_backend and ico_window_reopen, on SDL's offscreen
+# driver, driven by [dev] backend_switch_test (test/backend_switch.cmake);
+# Linux, both backends built, the disc image (skipped without it). A game
+# run with two renderer starts on software drivers: alone, label window.
+# Deferred: port/rhi (the OpenGL backend's target) is configured after this
+# directory.
+function(_ico_backend_switch_test)
+    if(NOT TARGET ico_pc OR ICO_HEADLESS OR NOT ICO_RUN_TESTS OR NOT TARGET ico_rhi_opengl
+       OR NOT TARGET ico_rhi_vulkan OR NOT CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID)
+        return()
+    endif()
+    set(_dir "${CMAKE_SOURCE_DIR}/port/platform")
+    add_test(NAME backend_switch_window
+             COMMAND "${CMAKE_COMMAND}" "-DICO_PC=$<TARGET_FILE:ico_pc>" "-DISO=${ICO_DISC_IMAGE}"
+                     "-DDIR=${CMAKE_BINARY_DIR}/port/platform/backend_switch_run"
+                     "-DLVP=/usr/share/vulkan/icd.d/lvp_icd.json"
+                     -P "${_dir}/test/backend_switch.cmake")
+    set_tests_properties(backend_switch_window PROPERTIES RUN_SERIAL TRUE TIMEOUT 1500
+                         SKIP_REGULAR_EXPRESSION "backend_switch_window: skipped"
+                         LABELS "platform;window")
+endfunction()
+cmake_language(DEFER DIRECTORY "${CMAKE_SOURCE_DIR}" CALL _ico_backend_switch_test)
