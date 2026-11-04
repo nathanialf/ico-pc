@@ -141,6 +141,15 @@ int main(void)
                                         "E031.41.03.47 Driver Branch:");
         char two[16] = "\n\n a\r\n\tb \n";
         CHECK_STR(rhi_text_one_line(two), "a b");
+        /* the gap's space and a space beside it: one space */
+        char lead[16] = "a\n b";
+        CHECK_STR(rhi_text_one_line(lead), "a b");
+        char trail[16] = "a \nb";
+        CHECK_STR(rhi_text_one_line(trail), "a b");
+        char both[16] = "a \r\n  b";
+        CHECK_STR(rhi_text_one_line(both), "a b");
+        char inner[16] = "a  b";
+        CHECK_STR(rhi_text_one_line(inner), "a  b"); /* a line's own spaces kept */
         char none[8] = "\r\n";
         CHECK_STR(rhi_text_one_line(none), "");
         char same[16] = "NVIDIA 581.57";
