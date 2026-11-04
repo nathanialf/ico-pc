@@ -985,7 +985,15 @@ alpha stays the grid's.
   picture is made: its display wait is its wait for the render thread's picture before it
   (`rd_submit_waited_ns`: that one's walk, acquire and present, FIFO's full queue), its GPU wait
   the fence waits counted by then, its cost the game thread's time in it; the pacing rules read them as before
-  (`pace_loop`'s `testAsyncLock` and `testAsyncRates`). A backend whose fence waits
+  (`pace_loop`'s `testAsyncLock` and `testAsyncRates`). With no submit thread (Direct3D 11) the
+  wait for room in the present queue (the frame latency wait the next acquire would make) is made
+  at the end of the picture before, after its present, outside its reads
+  ([PLATFORM.md](PLATFORM.md#the-render-thread), the display's wait ahead): the game's step no
+  longer waits through it as a read wait, which nothing excuses; what is left of it when the next
+  present is posted is that present's wait for the render thread, the display's wait above
+  (`pace_loop`'s `testRoomOffGame`: at 60 Hz about 14 ms a picture on the render thread, no read
+  wait in the step, the period kept; made in the acquire instead, about 4.2 ms of every step's
+  time is the display's as read waits). A backend whose fence waits
   hold the display's wait sets `RhiStats.fenceWaitsHoldDisplay` and the whole wait is the
   display's (`pace_display_wait`): OpenGL, whose swap returns at once while the driver waits for
   FIFO's queue inside the next `glClientWaitSync` (issue 126: a GTX 750 Ti under the n = 1 lock
@@ -1639,7 +1647,7 @@ one's pixels: for a measurement, not for play.
 
 | test | checks |
 | --- | --- |
-| `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), the present allowance with the fence (`test120Budget`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`); the render thread's further presents: the step-deadline rule's rates and vsync off's pictures as made (`testStepRule`) |
+| `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), the present allowance with the fence (`test120Budget`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`); the render thread's further presents: the step-deadline rule's rates and vsync off's pictures as made (`testStepRule`); the lock with Direct3D 11's wait for room in the present queue on the render thread, made after the picture before's present (`testRoomOffGame`) |
 | `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`), the timer path's unbound start (`testBudgetUnbound`), the reporters' sequences (`testBudgetHitch130`, `testBudgetSustained`, `testBudgetGlWait126`), the window's allowance and clock words (`testBudgetLines`), the timer path with a GPU queue (`testBudgetTimerLoop`) and paced by the GPU (`testBudgetPaced`, `testBudgetPacedLoop`), vsync off under the FIFO fallback at 120 Hz (`testBudgetFifo120`), the step-deadline rule's arithmetic, its back-off, the reads' prediction and the as-made line (`testStepRule`) |
 | `port/platform/test/present_fallback_test.c` | the FIFO fallback's decision over the stock driver's blocks (the third within 30 s switches, never a second time), blocks too far apart or too short, Turnip's driver text, `[dev] present_fallback=off`, the lines word for word |
 | `port/platform/test/perf_block_test.c` | a block's sums and maxima, the replays over the threshold, the longest-phase text, a reset |

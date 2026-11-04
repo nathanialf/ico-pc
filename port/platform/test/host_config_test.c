@@ -538,6 +538,11 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("blend", "attachment"), "attachment") == 0);
     CHECK(strcmp(ico_dev_env_value("blend", "storage"), "storage") == 0);
     CHECK(ico_dev_env_value("blend", "auto") == NULL); /* the default: nothing set */
+    /* the display's wait ahead (rd_thread.c): its switch as a bool */
+    CHECK(strcmp(ico_dev_env_name("acquire_ahead"), "ICO_RD_ACQUIRE_AHEAD") == 0);
+    CHECK(strcmp(ico_dev_env_value("acquire_ahead", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("acquire_ahead", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("acquire_ahead", "later") == NULL);
     /* the attachment read on Qualcomm's driver (vk_device.c) */
     CHECK(strcmp(ico_dev_env_name("attachment_read"), "ICO_VK_ATTACHMENT_READ") == 0);
     CHECK(strcmp(ico_dev_env_value("attachment_read", "true"), "1") == 0);

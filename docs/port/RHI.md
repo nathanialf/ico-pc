@@ -288,8 +288,11 @@ ends the session.
 `rhi_resize_swapchain`, `rhi_swapchain_size` (the backend rebuilds on its own at the surface's size,
 and the renderer follows it at each acquire), `rhi_acquire_backbuffer` (id 0: rebuild needed),
 `rhi_present`, `rhi_present_shown` (false after a [present](ARCHITECTURE.md#terms) that did nothing
-or a D3D12 present the OS reported occluded), and the Android lifecycle's `rhi_release_surface` and
-`rhi_recreate_surface` (`port/rhi/rhi.h`, device).
+or a D3D12 present the OS reported occluded), `rhi_wait_present_room` (the wait for room in the
+present queue the next acquire would make, made now: Direct3D 11's frame latency wait, which the
+render thread makes at the end of a picture so the next picture's reads do not hold it,
+[PLATFORM.md](PLATFORM.md#the-render-thread); false and nothing done on the other backends), and the
+Android lifecycle's `rhi_release_surface` and `rhi_recreate_surface` (`port/rhi/rhi.h`, device).
 
 **Stats** (`RhiStats`) are cumulative since `rhi_init`; the caller takes differences. The `*Ns`
 fields are CPU time blocked in the backend: `fenceWaitNs` on GPU completion (`rhi_wait_frame`,
@@ -1312,7 +1315,12 @@ FLIP_SEQUENTIAL`; where that is refused too while it asks for the frame latency 
 latency waitable object refused (HRESULT 0x...): without it`) and Present waits for the display. Under the flip model buffer 0 is always the one to draw, so it is the one RHI
 texture; its RTV is made again after every `ResizeBuffers`. Creation logs
 `rhi_d3d11: swapchain WxH, 3 buffers, flip discard|flip sequential, frame latency N (waitable)` or
-`..., no waitable object`.
+`..., no waitable object`. The frame latency wait (up to 50 ms, in `acquireNs`) is made once a
+present: by the acquire, or ahead of it by `rhi_wait_present_room` after the present
+(`frameLatencyWaited`, then the acquire does not wait again; a new waitable object clears it); none
+after a present that queued nothing (failed or occluded) or with a backbuffer still acquired. The
+WARP job's swapchain run (`rhi_d3d11_test` part 3) asks it twice after each present (the same
+answer) and once with a backbuffer acquired (false).
 
 **The shader cache folder** (`d3d11_device.c`, `d11_cache_setup`). The window's pipeline cache path
 `<pref>/pipelines-<key>.vkcache` becomes the folder `<pref>/pipelines-<key>.d3d11`, one DXBC

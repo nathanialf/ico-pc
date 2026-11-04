@@ -371,9 +371,13 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
     if (rd_submit_async()) {
         /* handed to the render thread, its present still to come (the
            counters are the hand-over's, rhi.h rhi_set_call_guard): the
-           display's wait is this present's acquire and its wait for the
-           picture before it (that one's submit and present: FIFO's full
-           queue), the GPU's the fence waits; never more than the present */
+           display's wait is the acquire counted since the last hand-over
+           and this present's wait for the render thread's picture before
+           (its present with no submit thread, and the wait for room in the
+           present queue made at its end, Direct3D 11's frame latency wait,
+           rd_thread.h rd__room_ahead_take; with the submit thread the drain
+           is the render thread's alone), the GPU's the fence waits; never
+           more than the present */
         const Uint64 disp = (st.acquireNs - before.acquireNs) + (rd_submit_waited_ns() - handWait0);
         const Uint64 fence = st.fenceWaitNs - before.fenceWaitNs;
 
