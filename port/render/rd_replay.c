@@ -317,6 +317,7 @@ bool rd__gpu_init(void *sdlWindow)
             logged = true;
         }
     }
+    rhi_plan_shaders(rd__shader_plan(lim, dstStorage, dstAttach)); /* the screens' count */
     for (int i = 0; i < RD_VS_COUNT; i++) {
         /* a module from RD_VS_OPTIONAL_FIRST on that is missing from the
          * table leaves its id empty (its draws take their fallback) */

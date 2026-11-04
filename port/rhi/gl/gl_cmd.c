@@ -177,6 +177,13 @@ static void gl_default_raster(GlRaster *w)
 
 /* the write masks a clear honours, opened (colour draw buffers in
  * colourBits, the depth, the stencil) */
+static void gl_open_masks(uint32_t colourBits, bool depth, bool stencil);
+
+void gl_cmd_open_colour_mask(void)
+{
+    gl_open_masks(1u, false, false);
+}
+
 static void gl_open_masks(uint32_t colourBits, bool depth, bool stencil)
 {
     GlRaster w;
@@ -593,6 +600,7 @@ RhiCommandList rhi_begin_commands(void)
     if (!g_gl.initialised) {
         return out;
     }
+    gl_start_screen_end(); /* the renderer draws from here on */
     GlFrame *f = gl_cur_frame();
     if (f->listCount == GL_MAX_CMD_LISTS) {
         GL_LOG("more than %d command lists in one frame", GL_MAX_CMD_LISTS);

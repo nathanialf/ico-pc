@@ -351,6 +351,7 @@ static RhiPipeline gl_pipe_create(const RhiPipelineDesc *d, float *ms)
 
 RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *d)
 {
+    gl_start_screen_end(); /* the shaders made: the renderer's screens from here on */
     return gl_pipe_create(d, NULL);
 }
 
@@ -361,6 +362,7 @@ uint32_t rhi_create_pipelines(const RhiPipelineDesc *descs, uint32_t n, RhiPipel
                               RhiPipelineBatch *batch)
 {
     uint32_t made = 0;
+    gl_start_screen_end(); /* the shaders made: the renderer's screens from here on */
     if (batch) {
         batch->threads = 1;
     }

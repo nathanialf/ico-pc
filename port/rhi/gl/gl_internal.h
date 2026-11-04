@@ -317,6 +317,18 @@ typedef struct GlFrame {
 } GlFrame;
 
 /* --------------------------------------------------------------- device */
+/* gl_start_screen.c's state, cleared with g_gl at rhi_init: the set's
+ * shader in hand and its size (RhiShaderDesc.planIndex, planTotal), when
+ * the set began, the screens drawn, the last one's end and the slowest,
+ * whether the draws during a compile were turned off (a slow one), the
+ * set over (the first command list or pipeline), ICO_GL_START_SCREEN read
+ * and off */
+typedef struct GlStartScreen {
+    uint32_t index, total, drawn;
+    uint64_t startNs, lastNs, slowestNs;
+    bool noWaitDraws, ended, envRead, off;
+} GlStartScreen;
+
 typedef struct GlState {
     bool initialised;
     RhiLimits limits;
@@ -412,6 +424,8 @@ typedef struct GlState {
     uint32_t compiles;
     uint64_t compileNs, compileLongestNs;
     char compileLongestName[96];
+    /* the progress screen while the start-up set compiles (gl_start_screen.c) */
+    GlStartScreen screen;
 } GlState;
 
 extern GlState g_gl;
@@ -535,5 +549,18 @@ GLuint gl_compile_program(GLenum type, char *text, const char *name, GLint *link
 
 bool gl_swapchain_create(uint32_t w, uint32_t h, bool vsync);
 void gl_swapchain_destroy(void);
+
+/* gl_start_screen.c: the progress screen while the start-up shader set
+ * compiles (the file's header says how and when).  gl_start_screen_shader
+ * before shader index of total of the set compiles (rhi_create_shader;
+ * index 0: not of the set, nothing); gl_start_screen_wait between the
+ * compile's wait slices (gl_compile.c); gl_start_screen_end at the device's
+ * first command list or pipeline (the set's line; no screen after it). */
+void gl_start_screen_shader(uint32_t index, uint32_t total);
+void gl_start_screen_wait(void);
+void gl_start_screen_end(void);
+/* gl_cmd.c: colour attachment 0's write mask opened through the command
+ * code's raster cache (the start screen's clears of framebuffer 0) */
+void gl_cmd_open_colour_mask(void);
 
 #endif /* PORT_RHI_GL_GL_INTERNAL_H */

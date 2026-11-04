@@ -41,6 +41,11 @@ static char s_adapterWanted[256];
 /* rhi_set_wait_hooks (rhi.h): copied, handed to every rhi_init */
 static RhiWaitHooks s_waits;
 static bool s_waitsOn;
+/* rhi_plan_shaders (rhi.h): the start-up set's size and the shaders of it
+   made so far, from the first rhi_plan_shaders until rhi_plan_end or the
+   first rhi_begin_commands */
+static uint32_t s_planTotal, s_planMade;
+static bool s_planOpen;
 
 static bool nameEq(const char *a, const char *b)
 {
@@ -223,6 +228,9 @@ bool rhi_init(const RhiDeviceDesc *desc)
         return true;
     }
     be()->set_adapter_wanted(s_adapterWanted);
+    /* the renderer plans the new device's set */
+    s_planTotal = s_planMade = 0;
+    s_planOpen = false;
     if (desc && !desc->waits && s_waitsOn) {
         RhiDeviceDesc d = *desc;
         d.waits = &s_waits;
@@ -243,12 +251,44 @@ void rhi_set_wait_hooks(const RhiWaitHooks *hooks)
     }
 }
 
+void rhi_plan_shaders(uint32_t count)
+{
+    s_planTotal += count;
+    s_planOpen = s_planOpen || count > 0;
+}
+
+void rhi_plan_progress(uint32_t *made, uint32_t *total)
+{
+    *made = s_planOpen ? s_planMade : 0u;
+    *total = s_planOpen ? (s_planMade > s_planTotal ? s_planMade : s_planTotal) : 0u;
+}
+
 /* the device's start moves (RhiWaitHooks.made) */
 static void noteMade(void)
 {
     if (s_waitsOn && s_waits.made) {
         s_waits.made(s_waits.ctx);
     }
+}
+
+void rhi_plan_end(void)
+{
+    if (!s_planOpen) {
+        return;
+    }
+    if (s_planMade != s_planTotal) {
+        /* the count and rd__gpu_init's loops apart (rd_shader_plan.c):
+           the screens counted wrong, nothing else */
+        fprintf(stderr, "rhi: the start-up shader set ended with %u made of the %u planned (%s)\n",
+                s_planMade, s_planTotal,
+                s_planMade < s_planTotal
+                    ? "the renderer's start stopped early, or the plan counted modules it did "
+                      "not make"
+                    : "the plan counted fewer than the renderer made");
+    }
+    s_planOpen = false;
+    s_planTotal = s_planMade = 0;
+    noteMade(); /* the window's line for the set's end (rhi_plan_progress 0 and 0) */
 }
 
 void rhi_shutdown(void)
@@ -395,8 +435,18 @@ void rhi_destroy_sampler(RhiSampler s)
 RhiShader rhi_create_shader(const RhiShaderDesc *desc)
 {
     RHI_GUARD();
-    const RhiShader s = be()->create_shader(desc);
-    noteMade();
+    RhiShader s;
+    if (desc && s_planOpen) {
+        /* one of the start-up set: its number for the backend's progress
+           screen (OpenGL's, gl_start_screen.c) */
+        RhiShaderDesc d = *desc;
+        d.planIndex = ++s_planMade;
+        d.planTotal = s_planMade > s_planTotal ? s_planMade : s_planTotal;
+        s = be()->create_shader(&d);
+    } else {
+        s = be()->create_shader(desc);
+    }
+    noteMade(); /* the window's lines read rhi_plan_progress there */
     return s;
 }
 
@@ -462,6 +512,9 @@ void rhi_destroy_pipeline(RhiPipeline p)
 RhiCommandList rhi_begin_commands(void)
 {
     RHI_GUARD_SLOT(RHI_SLOT_NOW());
+    if (s_planOpen) {
+        rhi_plan_end(); /* a frame: the start-up set is over */
+    }
     return be()->begin_commands();
 }
 

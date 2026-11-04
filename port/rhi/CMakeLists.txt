@@ -386,6 +386,7 @@ if(_ico_have_gl)
         gl/gl_loader.c
         gl/gl_pipeline.c
         gl/gl_resource.c
+        gl/gl_start_screen.c
         gl/gl_swapchain.c
         gl/gl_sync_wait.c
         d3d12/d3d12_plan.c)

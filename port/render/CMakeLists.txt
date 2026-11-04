@@ -219,6 +219,7 @@ add_library(ico_render STATIC
     rd_shadow.c
     rd_shadow_one.c # the shadow count resolved in one draw from the stencil view
     rd_shadow_selftest.c # the shadow count's one draw: the start-up check on the device
+    rd_shader_plan.c # the start-up shader set's size, for the progress screens' count
     rd_store_plan.c # the depth stores and loads a replay drops: no later pass touches the depth
     rd_submit.c # a replay's end: the present's pass, the submit and the present
     rd_submit_queue.c # the submit thread's queue (pure)

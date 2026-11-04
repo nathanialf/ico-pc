@@ -605,6 +605,8 @@ RhiShader rhi_create_shader(const RhiShaderDesc *desc)
         text = gl_flip_vertex_y(gl_redeclare_per_vertex(text));
     }
     const GLenum type = desc->stage == RHI_STAGE_VERTEX ? GL_VERTEX_SHADER : GL_FRAGMENT_SHADER;
+    /* one of the start-up set: the progress screen (gl_start_screen.c) */
+    gl_start_screen_shader(desc->planIndex, desc->planTotal);
     /* on the compile thread when the window set its wait hooks, held to
      * their limit (gl_compile.c); text is taken */
     GLint linked = GL_FALSE;

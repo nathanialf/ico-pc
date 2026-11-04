@@ -279,6 +279,16 @@ void ico_diag_switch_progress(void);
    crash and watchdog reports repeat it ("ico_pc: the last step: <line>"),
    and it is progress for the switch's limit. Main thread. */
 void ico_diag_step(const char *fmt, ...) ICO_DIAG_PRINTF(1, 2);
+/* The device's start-up shader set as it is made (window_switch.c's made
+   hook from rhi.h rhi_plan_progress): made of total so far, secs since its
+   first shader; total 0 once the set ended (rhi_plan_end).  Steps
+   (ico_diag_step) at the set's first shader, at each quarter of it passed
+   ("window: shaders: 103 of 412 made in 21.4 s"; a total that grows later
+   does not write a quarter twice) and at its end with the count and the
+   time; the same made count again (a pipeline made) writes nothing.  The
+   progress screens draw the same count (OpenGL's own while its shaders
+   compile, port/rhi/gl/gl_start_screen.c).  Main thread. */
+void ico_diag_shader_set(unsigned made, unsigned total, double secs);
 /* The last ico_diag_step line ("" before the first; tests). */
 const char *ico_diag_last_step(void);
 /* The GPU hang limit in seconds (ico_diag_set_gpu_hang_limit; 0 off): the

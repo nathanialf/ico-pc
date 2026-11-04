@@ -481,11 +481,24 @@ static void waitStalled(void *ctx, const char *what, uint64_t heldNs)
     s_stalledS = (double)heldNs / 1e9;
 }
 
-/* a shader or pipeline made: the switch's watch moves (any thread) */
+/* a shader or pipeline made: the switch's watch moves (any thread); the
+   start-up shader set's lines (diag_host.h ico_diag_shader_set) on the
+   thread that makes it, which is the window's (the device's start) */
 static void waitMade(void *ctx)
 {
+    static Uint64 s_setNs;
+    uint32_t made = 0, total = 0;
+
     (void)ctx;
     ico_diag_switch_progress();
+    if (!SDL_IsMainThread()) {
+        return;
+    }
+    rhi_plan_progress(&made, &total);
+    if (made == 1 && total > 0) {
+        s_setNs = SDL_GetTicksNS();
+    }
+    ico_diag_shader_set(made, total, (double)(SDL_GetTicksNS() - s_setNs) / 1e9);
 }
 
 void ico_window_switch_wait_hooks(void)
