@@ -34,7 +34,8 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Für ein entspannteres Spiel. Einige geskriptete Szenen zeigen die Entführung weiterhin.",
     [UI_STR_OPT_PIT_TIME] = "Zeit zur Rettung Yordas",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "Sekunden vom Versinken eines Schattens mit Yorda, bis sie fort ist. Die Yorda-Zeile darüber verhindert es ganz.",
+        "Sekunden vom Versinken eines Schattens mit Yorda, bis sie fort ist; in manchen Szenen "
+        "anteilig kürzer. Die Yorda-Zeile oben verhindert es.",
     [UI_STR_OPT_SHADOW_SPEED] = "Tempo der Schatten",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "Wie schnell Schatten gehen, rennen und fliegen. Wie oft sie angreifen, ändert sich nicht.",

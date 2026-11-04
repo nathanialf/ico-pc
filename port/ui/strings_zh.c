@@ -39,7 +39,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_YORDA_NOTE] = "適合想輕鬆遊玩的玩家。部分劇情場景仍會出現被抓走的畫面。",
     [UI_STR_OPT_PIT_TIME] = "救出 Yorda 的時間",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "影子開始帶著 Yorda 沉下去到把她帶走的秒數。使用上方的 Yorda 選項，影子就完全抓不走她。",
+        "影子開始帶著 Yorda 沉下去到把她帶走的秒數（部分場景按比例較短）。上方的 Yorda 選項可讓她不被抓走。",
     [UI_STR_OPT_SHADOW_SPEED] = "影子速度",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] = "影子行走、奔跑和飛行的速度。不會改變它們攻擊的頻率。",
     [UI_STR_VAL_SPEED_SLOWER] = "較慢",

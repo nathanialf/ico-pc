@@ -433,13 +433,16 @@ Every row here plays as the original until you change it, on a phone too.
   story still show her being taken.
 - **Time to rescue Yorda** sets how many seconds a shadow takes to pull Yorda
   into a pit, from the moment it starts to sink into the ground with her until
-  she is gone: from 4 to 30 seconds, one second a press. It starts at
+  she is gone (in most scenes; see below): from 4 to 30 seconds, one second a
+  press. It starts at
   **15 s (Original)**, the game's own time (15.4 seconds). The whole pull-in
   speeds up or slows down evenly, so a short time leaves less time to reach
   her at every point of it, and a long one more. Ico taking her hand still
-  pulls her back out. Where the game shows the pit with a camera of its own,
-  the original takes her sooner (after 5 of its 15 seconds); that part scales
-  in the same proportion. The row above, Shadows never take Yorda, stops it
+  pulls her back out. In some scenes, where the game shows the pit with a
+  camera of its own, the pull-in is quicker: the original takes her after 5
+  of its 15 seconds there, and the time you set scales that in the same
+  proportion (at 8 s she is taken after about 2.6 seconds there; at 30 s
+  after about 9.7). The row above, Shadows never take Yorda, stops it
   altogether.
 - **Shadow speed** sets how fast shadows walk, run and fly: **Slower** (three
   quarters of the original speed), **Original**, **Faster** (a quarter faster)
