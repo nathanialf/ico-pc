@@ -446,6 +446,7 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_EXTENDED` | `rd_pipeline.c` | 1: the extended variants whatever the device table or `ICO_RD_VU_PLAIN` says |
 | `ICO_RD_VU_SET` | `rd_pipeline.c` | `plain` or `extended`: as `ICO_RD_VU_PLAIN=1` or `ICO_RD_VU_EXTENDED=1` (`[dev] vu_set`); `auto` or unset: the device table's |
 | `ICO_RD_SHEET_SHADER` | `rd_core.c` | 1: the menus' sheet text through `font_sheet_ps` at every scale, no bake (`[dev] sheet_shader = true`; the bake's A/B) |
+| `ICO_RD_ACQUIRE_AHEAD` | `rd_thread.c` | 0: with the render thread submitting (Direct3D 11), the next picture's wait for room in the present queue stays in its acquire, inside its reads (`[dev] acquire_ahead = false`; the display's wait ahead's A/B) |
 | `ICO_RD_PASS_AREA` | `rd_pass_area.c` | 1: a render pass on SCENE whose draws are all 2D with a known place takes the render area of the tiles they touch, 0: every pass its whole target, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] pass_area`; `rd_pass_area_ab`, `rd_state` `testPassArea`) |
 | `ICO_RD_CLEAR_CARRY` | `rd_pass_cut.c` | 1: a pending clear carried past a source's barrier into the next pass on its target, 0: flushed as before, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] clear_carry`; `rd_pass_cut_ab`, `rd_pass_cut`) |
 | `ICO_RD_CLEAR_SKIP` | `rd_pass_cut.c` | 1: a clear of AURA_WORK or AURA_TAP whose only reader is a constant read not drawn (drawn later where read), 0: drawn, `auto` or unset: the profile's (on on a tile-based GPU; `[dev] clear_skip`; `rd_pass_cut_ab`, `rd_pass_cut`) |
@@ -739,7 +740,9 @@ Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay op
   that does not pass, the game side's texture calls do not wait, the next picture takes that slot,
   as the device has it, with `ICO_RD_SUBMIT_THREAD=0` and with `ICO_RD_SLOT_AHEAD=0`; its
   `threadFair`: a call waiting for one picture's reads runs before the next picture's begin, the
-  wait counted in the walk; and `rd_tex_test` under
+  wait counted in the walk; its `threadRoomAhead`: the display's wait for room in the present
+  queue made at the end of the picture before, held there without a read wait, taken by the next
+  acquire, with `ICO_RD_ACQUIRE_AHEAD=0` never made; and `rd_tex_test` under
   the tsan build), `rd_present` (the deferred state picture, the slot waits by whose), `rd_replay_tool_save_blended` (the
   interpolation on the render thread); the device runs are the window's, with `[dev]
   render_thread = sync` against `off` for the same pictures ([PLATFORM.md](PLATFORM.md#the-render-thread)).

@@ -715,6 +715,10 @@ static const struct {
     /* port/render/rd_core.c rd_init: 1 draws every menu text page through
        font_sheet_ps (no bake) */
     {"sheet_shader", "ICO_RD_SHEET_SHADER"},
+    /* port/render/rd_thread.c rd_set_thread_host: 0 makes the next
+       picture's wait for room in the present queue inside its reads (no
+       display's wait ahead) */
+    {"acquire_ahead", "ICO_RD_ACQUIRE_AHEAD"},
     /* port/render/rd_aura_kernel.c rd__aura_kernel_steps: gs or box */
     {"aura_kernel", "ICO_RD_AURA_KERNEL"},
     /* port/render/rd_aura_box.c rd__aura_box_init: auto, 1 or 0 */

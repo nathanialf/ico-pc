@@ -30,9 +30,21 @@
  * over a frame of its own, the tests):
  *   - the frame touches WORK2 (a draw into it or on its depth, its texture,
  *     a clear, a copy or exact blend naming it, a command the scan does not
- *     know) with three commands and no other: the fill, the mask and the
- *     reduction, in that order (a clear or a draw before the fill, which
- *     the fill covers, aside);
+ *     know) with the fill, the mask and the reduction, in that order, a
+ *     clear or a draw before the fill (which the fill covers) and any
+ *     command between the fill and the mask aside: the sun's fans
+ *     (dispSun: two fans of triangles, blended and Z-tested against SCENE's
+ *     depth) draw there whenever the sun is on screen (6 of the 14 corpus
+ *     glow frames, most of a reporter's PC session of 2026-11-04).
+ *     Then the fill and the fans are drawn as ever and only the mask is
+ *     not (maskOnly): fx_glow_mask reads WORK2 itself (t2,
+ *     FXF_GLOW_KEPT) where the mask's sprite would have kept the texel
+ *     (outside its rect, the alpha test failing), the very bytes the
+ *     reduction would have loaded there, and computes the mask's texel
+ *     elsewhere as below.  The fans themselves are not computed (their
+ *     triangles' coverage and Gouraud colours are the rasteriser's, which
+ *     no shader reproduces bit for bit): one pass fewer there too, the
+ *     mask's, but WORK2 is drawn and read;
  *   - the fill: a post sprite into WORK2, untextured, no blend, no alpha
  *     test that can fail, no DATE, the colour mask whole, no Z test or Z
  *     write, the scissor the whole target, covering every texel (its GS
@@ -56,13 +68,15 @@
  *     edge strip, not the display reduction's hardware sprite;
  *   - the switch on (rd__glow_fold_on), the fx plan on with fx_frame_ps
  *     (RdProfile.fxPlan, every class), a device, no MSAA, no pass window.
- * In 9 of the 14 corpus glow frames the sun's fans (dispSun, before the
- * mask) or the lamps' meshes (after it) draw into WORK2: the chain is
- * drawn as before there, and the frame counted kept with its reason.
+ * In 3 of the 14 corpus glow frames (the issue 163 rooms) the lamps'
+ * meshes draw into WORK2 after the mask, blending over its texels: the
+ * chain is drawn as before there, and the frame counted kept with its
+ * reason.
  *
  * The replay: blurPostSprite (rd_blur_border.c) asks rd__glow_fold_skip
  * for every post sprite, after SCENE's border repeat (done at the mask as
- * before): the fill and the mask are not drawn, their state kept.  At the
+ * before): the fill (not with maskOnly) and the mask are not drawn, their
+ * state kept.  At the
  * reduction rd_fx_plan.c rd__fx_plan_draw asks rd__glow_fold_due, which
  * gives the mask's words for fx_glow_mask (the fill, the rect, WORK2's
  * XYOFFSET as the mask's pass has it, rd_replay.c frameRefresh, U - X and
@@ -518,8 +532,10 @@ void rd__glow_fold_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock
             s_gf.phase = PHASE_MASK;
             return;
         }
-        refuse(writes && c->type != RDC_POST_STUB ? RD_GLOW_FOLD_WHY_FANS : RD_GLOW_FOLD_WHY_OTHER,
-               "WORK2 touched between its fill and the mask");
+        /* the sun's fans (dispSun) or any other command on WORK2 before the
+         * mask: drawn as they are, the fill with them, and the reduction
+         * reads WORK2 where the mask keeps the texel (maskOnly) */
+        pl->maskOnly = 1;
         return;
     case PHASE_MASK:
         if (glowSprite(c) && !writes && texTarget(st) == w2) {
@@ -604,7 +620,7 @@ bool rd__glow_fold_scan_begin(const RdFrame *f)
     s_gf.scanning = false;
     s_gf.on = false;
     s_gf.fillSkipped = s_gf.maskSkipped = s_gf.drawn = false;
-    g_rdPerf.glowFolded = g_rdPerf.glowKept = g_rdPerf.glowWhy = 0;
+    g_rdPerf.glowFolded = g_rdPerf.glowKept = g_rdPerf.glowWhy = g_rdPerf.glowFoldRead = 0;
     rd__glow_fold_scan_reset();
     if (!f || g_rdWin.first || !rd__glow_fold_on()) {
         return false; /* a pass window reads targets mid-frame */
@@ -664,12 +680,15 @@ bool rd__glow_fold_skip(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     s_gf.f = f;
     if (c == s_gf.plan.fillCmd) {
+        if (s_gf.plan.maskOnly) {
+            return false; /* drawn: the fans draw over it */
+        }
         s_gf.fillSt = r->st;
         s_gf.fillHalf = r->halfAdded;
         s_gf.fillCmd = *c;
         s_gf.fillSkipped = true;
     } else {
-        if (!s_gf.fillSkipped) {
+        if (!s_gf.fillSkipped && !s_gf.plan.maskOnly) {
             return false;
         }
         s_gf.maskSt = r->st;
@@ -699,7 +718,7 @@ bool rd__glow_fold_skip(Replay *r, const RdFrame *f, const RdCmd *c)
 }
 
 bool rd__glow_fold_due(Replay *r, const RdFxDraw *x, uint32_t words[RD_GLOW_FOLD_WORDS],
-                       RdTargetRec **scene)
+                       RdTargetRec **scene, RdTargetRec **kept)
 {
     if (!active() || x->c != s_gf.plan.reductionCmd || g_rdStoreOrd != s_gf.plan.reductionOrd) {
         return false;
@@ -707,7 +726,7 @@ bool rd__glow_fold_due(Replay *r, const RdFxDraw *x, uint32_t words[RD_GLOW_FOLD
     RdTargetRec *sc = rd__target_rec(idOf(RD_TARGET_SCENE));
     const RdTargetRec *w2 = rd__target_rec(idOf(RD_TARGET_WORK2));
     const char *why = NULL;
-    if (!s_gf.fillSkipped || !s_gf.maskSkipped) {
+    if ((!s_gf.fillSkipped && !s_gf.plan.maskOnly) || !s_gf.maskSkipped) {
         why = "the fill or the mask was drawn";
     } else if (!sc || !w2 || x->src != w2 || !x->textured || x->dstRead || x->selfSample ||
                x->tfmt != RD_TEXSRC_RGBA32 || !sc->color.id || sc->format != RHI_FMT_RGBA8_UNORM ||
@@ -721,6 +740,7 @@ bool rd__glow_fold_due(Replay *r, const RdFxDraw *x, uint32_t words[RD_GLOW_FOLD
     }
     memcpy(words, s_gf.words, sizeof(s_gf.words));
     *scene = sc;
+    *kept = s_gf.plan.maskOnly ? rd__target_rec(idOf(RD_TARGET_WORK2)) : NULL;
     return true;
 }
 
@@ -729,12 +749,18 @@ void rd__glow_fold_drawn(void)
     s_gf.drawn = true;
     s_work2Stale = true;
     g_rdPerf.glowFolded = 1;
-    static bool said;
-    if (!said) {
-        said = true;
-        rd__log("glow: WORK2 fold: the glow's mask computed inside its reduction from SCENE's "
-                "alpha (fx_frame_ps), WORK2 neither drawn nor read: one full-frame pass fewer "
-                "(frame %u; reported once)",
+    g_rdPerf.glowFoldRead = s_gf.plan.maskOnly ? 1u : 0u;
+    static bool said[2];
+    const int m = s_gf.plan.maskOnly ? 1 : 0;
+    if (!said[m]) {
+        said[m] = true;
+        rd__log(m ? "glow: WORK2 fold: the glow's mask computed inside its reduction from SCENE's "
+                    "alpha (fx_frame_ps), WORK2 as the fill and the sun's fans left it read where "
+                    "the mask keeps a texel: the mask's pass not drawn, one full-frame pass fewer "
+                    "(frame %u; reported once)"
+                  : "glow: WORK2 fold: the glow's mask computed inside its reduction from SCENE's "
+                    "alpha (fx_frame_ps), WORK2 neither drawn nor read: one full-frame pass fewer "
+                    "(frame %u; reported once)",
                 s_frameNo);
     }
 }
@@ -775,9 +801,8 @@ void rd__glow_fold_end(void)
         s_off = true;
         g_rdPerf.glowKept = 1;
         g_rdPerf.glowWhy = RD_GLOW_FOLD_WHY_UNDONE;
-        rd__log("glow: WORK2 fold: frame %u's reduction was not reached: WORK2 holds neither "
-                "the fill nor the mask (nothing in the frame read it); the fold is off from now "
-                "on",
+        rd__log("glow: WORK2 fold: frame %u's reduction was not reached: WORK2 does not hold the "
+                "mask (nothing in the frame read it); the fold is off from now on",
                 s_frameNo);
     }
     s_gf.on = false;

@@ -73,7 +73,15 @@
  *            picture inside).  Fairness (threadFair): a call that waits
  *            for picture 1's reads (its walk held open) runs before
  *            picture 2's reads begin, one wait of one picture's reads,
- *            counted in the walk.
+ *            counted in the walk.  The display's wait ahead
+ *            (threadRoomAhead, the render thread submitting, the backend's
+ *            wait for room in the present queue replaced by a seam): a
+ *            picture handed over that presented ends by making the next
+ *            picture's wait; held there, this thread's rd_update_texture
+ *            and rdtex_find do not wait; the next picture's acquire takes
+ *            it (none inside its reads); a picture after one whose wait
+ *            was not made waits inside its reads (counted); SCENE the
+ *            same; with ICO_RD_ACQUIRE_AHEAD=0 the seam is never asked.
  *
  * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU
  * checks passed).
@@ -1501,6 +1509,175 @@ static void threadFair(void)
     rd_thread_local_stop();
 }
 
+/* The display's wait ahead's seam (rd_thread.h rd__thread_room_hook), in
+ * place of the backend's rhi_wait_present_room: mode 1 holds the next wait
+ * until this thread releases it (a display that keeps the queue full),
+ * mode 2 answers false once (no wait made: as a present that queued
+ * nothing), else true at once; every call counted */
+static int s_roomMode;
+static unsigned s_roomCalls;
+
+static bool roomHook(void)
+{
+    ico_mutex_lock(s_hk.m);
+    s_roomCalls++;
+    const int mode = s_roomMode;
+    s_roomMode = 0;
+    ico_mutex_unlock(s_hk.m);
+    if (mode == 1) {
+        hookSet(&s_hk.entered);
+        hookWait(&s_hk.release);
+    }
+    return mode != 2;
+}
+
+static void roomSet(int mode)
+{
+    ico_mutex_lock(s_hk.m);
+    s_roomMode = mode;
+    ico_mutex_unlock(s_hk.m);
+}
+
+static unsigned roomCalls(void)
+{
+    ico_mutex_lock(s_hk.m);
+    const unsigned n = s_roomCalls;
+    ico_mutex_unlock(s_hk.m);
+    return n;
+}
+
+/* The display's wait ahead (rd_thread.h rd__room_ahead_take): with the
+ * render thread submitting (ICO_RD_SUBMIT_THREAD=0, as Direct3D 11 and
+ * OpenGL run), a picture handed over that presented ends, after its
+ * present, by making the next picture's wait for room in the present
+ * queue (the seam above in place of the backend's).  Held there, this
+ * thread's calls that change the renderer's state (rd_update_texture,
+ * rdtex_find: rd__texlock_wait) return without a read wait; the next
+ * picture's acquire takes the wait made ahead (none inside its reads); a
+ * picture whose predecessor made none (the seam's false) waits inside its
+ * reads and is counted; the 10 s line's clause says so; SCENE after
+ * picture 3 byte for byte as after picture 0 (the same frame; the cell
+ * runs after replacementPixels, so not checkPixels' references).  With
+ * ICO_RD_ACQUIRE_AHEAD=0 the seam is never asked.  The output is given a
+ * size so the pictures present (rd_tex_test's settings have none): run
+ * after the other device cells */
+static void threadRoomAhead(void)
+{
+    if (rhi_backend() == RHI_BACKEND_OPENGL) {
+        return;
+    }
+    rd_resize_output(256, 256);
+    for (int run = 0; run < 2; run++) {
+        setEnv("ICO_RD_SUBMIT_THREAD", "0");
+        setEnv("ICO_RD_ACQUIRE_AHEAD", run == 1 ? "0" : NULL);
+        const char *name = run == 0 ? "ICO_RD_SUBMIT_THREAD=0" : "ICO_RD_ACQUIRE_AHEAD=0";
+        if (!rd_thread_local_start(RD_THREAD_ON)) {
+            CHECK(0, "display's wait ahead, %s: the renderer's own thread could not start", name);
+            break;
+        }
+        RdThreadBlock b, mid;
+        uint8_t *pat = malloc(64 * 64 * 4);
+        uint8_t *scene0 = malloc(512 * 512 * 4), *scene3 = malloc(512 * 512 * 4);
+        uint32_t w0 = 0, h0 = 0, w3 = 0, h3 = 0;
+        RdTex u = rd_create_texture(64, 64, NULL, RD_TEXA_80_80, "room ahead");
+        memset(&mid, 0, sizeof(mid));
+        if (!pat || !scene0 || !scene3 || !hookStart(0)) {
+            free(pat);
+            free(scene0);
+            free(scene3);
+            rd_thread_local_stop();
+            break;
+        }
+        s_roomMode = 0;
+        s_roomCalls = 0;
+        rd__thread_room_hook(roomHook);
+        gif_HostFrameReset();
+        dl_Clear();
+        recordFrame(); /* replayed and presented by rd_end_frame: a call, not handed over */
+        const RdFrame *f = rd__last_frame();
+        (void)rd_thread_drain();
+        rd_thread_block_take(&b); /* the block from here */
+        /* picture 0: presents, makes the wait ahead at once */
+        const bool p0 = f != NULL && rd__replay_frame_async(f, 0, true);
+        (void)rd_thread_drain();
+        rd_thread_block_take(&b);
+        if (run == 1) {
+            CHECK(p0 && b.roomAheads == 0 && b.roomInside == 0 && roomCalls() == 0,
+                  "display's wait ahead, %s: never made (%u, the seam asked %u times), none "
+                  "counted inside (%u)",
+                  name, b.roomAheads, roomCalls(), b.roomInside);
+        } else if (!(p0 && b.roomAheads == 1 && b.pictures == 1) ||
+                   !rd__read_target(rd_target(RD_TARGET_SCENE), scene0, 512 * 512 * 4, &w0, &h0)) {
+            CHECK(0,
+                  "display's wait ahead, %s: picture 0 handed over (%d) and presented, its job "
+                  "ending with the wait ahead (%u, %u pictures; none: the picture did not "
+                  "present, the cell cannot go on)",
+                  name, (int)p0, b.roomAheads, b.pictures);
+        } else {
+            /* picture 1: takes picture 0's wait, then its own held */
+            roomSet(1);
+            const bool p1 = rd__replay_frame_async(f, 0, true);
+            CHECK(p1, "display's wait ahead, %s: picture 1 handed over", name);
+            if (p1) {
+                hookWait(&s_hk.entered); /* the render thread in the wait ahead, held */
+                for (int i = 0; i < 64 * 64 * 4; i++) {
+                    pat[i] = (uint8_t)(hash((uint32_t)(i + 313)) & 0xFF);
+                }
+                const double t0 = ico_thread_now_ms();
+                rd_update_texture(u, pat);
+                (void)rdtex_find((uint32_t)s_t8.id, 1u, RDTEX_TEXA_REPLAY);
+                const double ms = ico_thread_now_ms() - t0;
+                rd_thread_block_take(&mid);
+                CHECK(mid.readWaits == 0 && !s_hk.release,
+                      "display's wait ahead, %s: with the display's wait held, the game side's "
+                      "calls waited %u times (%.2f ms)",
+                      name, mid.readWaits, ms);
+                hookSet(&s_hk.release);
+            }
+            (void)rd_thread_drain();
+            rd_thread_block_take(&b);
+            CHECK(mid.roomAheads + b.roomAheads == 1 && mid.roomInside + b.roomInside == 0 &&
+                      mid.readWaits + b.readWaits == 0,
+                  "display's wait ahead, %s: picture 1 took the wait made ahead (%u inside its "
+                  "reads), made the next one (%u), no read wait (%u)",
+                  name, mid.roomInside + b.roomInside, mid.roomAheads + b.roomAheads,
+                  mid.readWaits + b.readWaits);
+            /* picture 2 makes none (the seam's false); picture 3 then
+               waits inside its reads, and makes its own */
+            roomSet(2);
+            const bool p2 = rd__replay_frame_async(f, 0, true);
+            const bool p3 = p2 && rd__replay_frame_async(f, 0, true);
+            (void)rd_thread_drain();
+            rd_thread_block_take(&b);
+            CHECK(p2 && p3 && b.pictures == 2 && b.roomAheads == 1 && b.roomInside == 1,
+                  "display's wait ahead, %s: after a picture that made none, the next waited "
+                  "inside its reads (%u) and made its own (%u; %u pictures)",
+                  name, b.roomInside, b.roomAheads, b.pictures);
+            CHECK(rd__read_target(rd_target(RD_TARGET_SCENE), scene3, 512 * 512 * 4, &w3, &h3) &&
+                      w3 == w0 && h3 == h0 && memcmp(scene0, scene3, (size_t)w0 * h0 * 4) == 0,
+                  "display's wait ahead, %s: SCENE after picture 3 as after picture 0 (%ux%u, "
+                  "%ux%u)",
+                  name, w0, h0, w3, h3);
+            char text[1024];
+            rd_thread_read_waits_text(&b, text, sizeof(text));
+            CHECK(strstr(text, "; the display's wait for room in the present queue made at the "
+                               "end of the picture before 1 times (") != NULL &&
+                      strstr(text, "1 pictures waited for it inside their reads") != NULL,
+                  "display's wait ahead, %s: the 10 s line's clause: %s", name, text);
+            printf("display's wait ahead, %s: %s\n", name, text);
+        }
+        rd__thread_room_hook(NULL);
+        hookStop();
+        rd_destroy_texture(u);
+        free(pat);
+        free(scene0);
+        free(scene3);
+        rd_thread_local_stop();
+    }
+    setEnv("ICO_RD_SUBMIT_THREAD", NULL);
+    setEnv("ICO_RD_ACQUIRE_AHEAD", NULL);
+}
+
 /* [dev] render_thread = sync (rd_thread.h RdThreadHost.sync): a picture is
  * posted as one that waits and is not counted as handed over
  * (rd_submit_async false after it, as with the thread off, so the window
@@ -1868,6 +2045,7 @@ int main(void)
     threadFair();
     r8Pixels();
     replacementPixels();
+    threadRoomAhead(); /* last: it gives the output a size */
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
           rhi_vk_validation_error_count());
     rd_shutdown();

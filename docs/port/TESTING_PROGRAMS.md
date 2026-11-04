@@ -647,7 +647,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   long waiting for the disc drops nothing, each counted in `discExcused`), and the render thread's
   asynchronous present (`testAsyncLock`: under the lock at 60 Hz a 5 ms step with a 12.5 ms
   present on the game thread falls behind, the same present split 9 ms on the game thread and
-  3.5 ms on the render thread keeps every step on time, one present a step; `testAsyncRates`: the
+  3.5 ms on the render thread keeps every step on time, one present a step; `testRoomOffGame`:
+  the lock at 60 Hz with Direct3D 11's wait for room in the present queue on the render thread (the
+  render thread's whole job modelled: 1.5 ms of interpolation, 0.5 ms more of reads, 0.3 ms of
+  submit and present, the wait ending at the next vblank, a full FIFO queue; a 3 ms step whose
+  first renderer call waits for the picture's reads): made after the present, at the end of the
+  picture, it is 13.5-15 ms a picture with no read wait, the next present waiting 0.3-1.2 ms for
+  it as the display's wait, one present a step, no step past the next due time, no drop, skip or
+  resync, the alphas exact; made in the acquire, inside the reads, every step carries 3.5-5 ms of
+  read waits (issue 126, PACEEVAL's finding 3); `testAsyncRates`: the
   timer path paced by the GPU's time with the presents handed over, 9, 12, 17, 20 and 25 ms
   pictures give about a period over the picture time presents a step and 30 ms every new frame, a
   9 ms present with a 3 ms step two presents a step against one; `testRenderThreadPlan`: the
@@ -974,14 +982,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`rd_blur_glow_fold_test.inc`) runs the seven post modes without the shine into WORK2 at
   Original, Enhanced 2x, the phone's 2364 x 1080 with the full height, and the phone's 848-pixel
   frame (NTSC, aspect 2.189) at 2364 x 1080 with Full pixel (WORK2's crop printed), each frame
-  drawn with the glow's mask folded into its reduction (`rd__glow_fold_force(1)`) and the same
+  drawn without and with the sun's fans drawn into WORK2 before the mask (the test's fan stub, `s_fanWork2`), each with the glow's mask folded into its reduction (`rd__glow_fold_force(1)`) and the same
   frame replayed with it off: every target but WORK2 the same bytes both ways, at Original and 2x
   every target the CPU model's both ways (WORK2 too with the fold off), the fold counted in every
   frame that draws the glow and none kept, (e)'s frame with the shine kept for the lamps' reason,
   every pipeline created enumerated (`checkGlowFold`; [RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction));
   the recording part plans the chain without a device (`rd__glow_fold_plan` on post mode 7: the
-  fill, the mask and the reduction in order, the fill's colour, the mask's test; the shine frame
-  kept, `checkGlowFoldPlan`). In every shard a replay that folded the mask leaves WORK2 out of
+  fill, the mask and the reduction in order, the fill's colour, the mask's test; with the fans the
+  mask alone; the shine frame kept, `checkGlowFoldPlan`). In every shard a replay that folded the mask leaves WORK2 out of
   `compareAll` (the fold does not draw it; WORK0, its reduction, is compared).
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
@@ -1418,8 +1426,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   folder>`, machine-local: six corpus dumps at the gate's Enhanced 2x 4:3 against
   `build-host/tmp/v095/after/w3/pd`, and five of the PowerVR phone's frames at its Resolution Auto,
   2364x1080 at 2.189 under its profile's fakes, against `build-host/tmp/v098/evidence/cheap/base-phone`)
-  replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0` (the
-  baselines' own): the stats line says `crack fill on: P passes` (P 0 where the fill was the
+  replayed with `--pass-dump --stats` under `ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+  ICO_RD_CULL=off` (the baselines' own: they replayed every draw, and the draws the visibility
+  test leaves out keep every pixel but take their copies with them, so the phone's copy count is
+  the baseline's minus one only with every draw replayed; the culler's own gate is `rd_cull_ab`):
+  the stats line says `crack fill on: P passes` (P 0 where the fill was the
   first draw of the aura's paste pass, else 1) and `1 fills after lists 4-6`,
   or, on a dump with no fog of SCENE above 1x (`0 passes, 0 pixels filled (0 replays counted;
   scale 0x0, ...; 0 fogged replays above 1x not filled; 0 fills after lists 4-6`: the v3086 and
@@ -1499,7 +1510,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`ICO_RD_GLOW_FOLD=1`, into `<name>-<setting>-fold`): every PNG but `WORK2.png` (which the fold
   leaves undrawn) the same bytes as the run without it, `PRESENT.png` too at the phone's setting;
   a run whose stats say `glow: WORK2 fold on: 1 folded` has at least one glow pass fewer, a kept
-  one (the sun's fans or the lamps drawn into WORK2) as many; at each setting that ran, at least
+  one (only the lamps drawn into WORK2 after the mask may keep it: any other reason fails) as
+  many; the folds reading the sun's fans' WORK2 counted; at each setting that ran, at least
   one run folded ([RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction)).
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
@@ -2069,7 +2081,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   timeline sync), so each replay's walk runs while the submit thread ends and submits the one
   before (RHI.md "Frame slots and the submit thread"): the race check for that partition. `threadSync`: in the sync mode a picture is
   waited for and not counted as handed over (`rd_submit_async` false), with the thread on it is
-  until the drain (not on OpenGL). It is the render thread's program to run under
+  until the drain (not on OpenGL). `threadRoomAhead` (not on OpenGL; with
+  `ICO_RD_SUBMIT_THREAD=0`, the output given a size so the pictures present; run last): the
+  display's wait ahead through `rd__thread_room_hook` in place of `rhi_wait_present_room`, a
+  picture handed over that presented ends by making the next one's wait for room; held there, the
+  test's `rd_update_texture` and `rdtex_find` make no read wait; the next picture takes it (none
+  inside its reads), a picture after one that made none is counted inside; the 10 s clause's
+  text; SCENE byte for byte across the pictures; with `ICO_RD_ACQUIRE_AHEAD=0` the seam is never
+  asked. It is the render thread's program to run under
   ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
   build folder of its own (`build-host/linux-x64-tsan`), `--target rd_tex_test`, run with
   `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`; a report is a failure.
@@ -2155,7 +2174,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   next frame, 2064 for marks 512, 2050 and 1000 in one frame, and all 8192 of a buffer never noted,
   each read back byte for byte; the video memory fields of `RhiStats` on WARP: a budget, no more
   to reserve than the budget, two reads inside 250 ms equal; the hardware adapter, the swapchain on
-  a hidden window, Vulkan for comparison), the cells' shaders compiled at run time from
+  a hidden window, after each present the frame latency wait made ahead of the acquire
+  (`rhi_wait_present_room`) asked twice with the same answer and false with a backbuffer acquired,
+  Vulkan for comparison), the cells' shaders compiled at run time from
   `rhi_test_hlsl.h`; a Windows GUI program that writes `rhi_d3d11_test.log` and shows a message box
   (`rhi_d3d11`, registered on a native Windows build only). The `win-x64` and `win-x64-clang`
   cross builds build it; CI's `windows` job runs it with `--console` on WARP

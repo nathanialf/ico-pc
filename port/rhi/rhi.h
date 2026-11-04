@@ -951,6 +951,19 @@ void rhi_present(void);
  * DXGI_STATUS_OCCLUDED (the window minimised or covered: the present did
  * not wait for a vblank). */
 bool rhi_present_shown(void);
+/* The wait for room in the present queue that the next
+ * rhi_acquire_backbuffer would make, made now: Direct3D 11's frame latency
+ * wait (the waitable swap chain, d3d11_swapchain.c; up to 50 ms, as the
+ * acquire's).  The render thread makes it at the end of a picture, after
+ * that picture's present, so the next picture's reads do not hold it
+ * (port/render/rd_thread.c, the display's wait ahead).  The acquire after
+ * it then does not wait again: one wait a present, whichever call makes
+ * it.  Its time counts as the acquire's (RhiStats.acquireNs).  True: that
+ * wait is behind the next acquire (made now, or already); false: the
+ * backend has no such wait (Vulkan, Direct3D 12, OpenGL), no swapchain, a
+ * backbuffer still acquired, or a present that queued nothing (nothing to
+ * wait for). */
+bool rhi_wait_present_room(void);
 /* The window's surface (the Android lifecycle).
  * rhi_release_surface waits for the GPU, destroys the swapchain and the
  * surface and keeps the device and everything made on it: the app goes to

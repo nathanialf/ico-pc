@@ -375,6 +375,34 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   `rd: render thread: the next picture's frame slot is waited for at the end of the picture before,
   outside the hand-over (...)` (with `ICO_RD_SLOT_AHEAD=0`: `the next picture waits for its frame
   slot inside its reads (...)`).
+- The display's wait ahead. With no submit thread (Direct3D 11, OpenGL) the acquire ran inside the
+  hand-over, and on Direct3D 11 the acquire is the waitable swap chain's frame latency wait for room
+  in the present queue: the game thread's calls waited through the display as read waits, which the
+  vsync lock's step rule does not excuse (it excuses the present's own display wait only,
+  `port/platform/pace_policy.c` (`pace_budget_step`)). Issue 126's GTX 750 Ti at the capsule escape:
+  `read waits 301 (4238.7 ms)` in 10 s, the slow replay `interp 1.08`, `acquire 10.05`, `walk 2.73`,
+  the game step 8.5 ms mean against 1.1-1.7 ms with the replays on the game thread (`build-host/tmp/v0101/evidence/126/analysis.md`
+  section 3). Now a picture handed over that presented ends its job, after its submit and present
+  (made in that job with no submit thread) and the slot ahead, by making the next acquire's wait
+  (`port/render/rd_thread.c` (`roomAhead`), `rhi_wait_present_room`: once a present, the acquire
+  after it then does not wait, [RHI.md](RHI.md#direct3d-11)). The game thread's calls go on
+  meanwhile; the next post's drain waits for what is left of it, the present's own wait, which
+  `present_once` counts as the display's (`rd_submit_waited_ns`), so the lock's excuse applies to
+  it as it did before the render thread. The pictures' bytes are unchanged (the same calls, the
+  wait earlier). `rd__room_ahead_take` (`rd__present_acquire`) takes the record and counts a picture
+  handed over whose acquire found none made where the backend has the wait. Not done: with the
+  submit thread on (Vulkan, Direct3D 12: the present is that thread's, after the job), for a picture
+  that presented nothing, for the pictures that wait, and under `ICO_RD_ACQUIRE_AHEAD=0` (`[dev]
+  acquire_ahead = false`). Vulkan's acquire is the wait itself and OpenGL's acquire makes none (its
+  FIFO wait is in the next frame slot's fence, which the slot ahead already waits outside the
+  reads): `rhi_wait_present_room` answers false there and nothing changes. The lines: at each start
+  `rd: render thread: the next picture's wait for room in the present queue (Direct3D 11's frame
+  latency wait) is made at the end of the picture before, after its present, outside the hand-over
+  (...)` (with the switch: `the next picture waits for room in the present queue inside its reads
+  (...)`); the first such wait on a host `rd: render thread: the display's wait for room in the
+  present queue made at the end of a picture, after its present (X ms): ...`; the 10 s line's
+  clause below. `pace_loop`'s `testRoomOffGame` models it at 60 Hz (about 14 ms a picture off the
+  game thread, the period kept), `rd_tex`'s `threadRoomAhead` checks the threading.
 - Further presents held only when a step would miss its period (the step-deadline rule;
   [DISPLAY.md](DISPLAY.md#further-presents-and-the-game-step) has it in words). On the timer path
   a further present of a frame already shown is held when it would make a game step miss its own
@@ -608,7 +636,11 @@ its frame slot's fence N (X ms), the acquire N (X ms), the ring and the uploads 
 N (X ms)` (`rd_thread_read_waits_text`; the phase set at the hand-over and by `rd__thread_phase`
 in `rd__wait_frame`, `rd__present_acquire` and at the walk's start), and the slot ahead's `; the
 next picture's frame slot waited for at the end of the one before N times (X ms in all, longest Y
-ms), P pictures waited for their slot inside their reads`), then the render thread's CPU time a picture (the replays line's), its share of the
+ms), P pictures waited for their slot inside their reads`, and where the backend has a display's
+wait to make ahead (Direct3D 11 with no submit thread) the display's share: `; the display's wait for
+room in the present queue made at the end of the picture before N times (X ms in all, longest Y ms;
+the presents waited for it D times, Z ms, as the display's wait), P pictures waited for it inside
+their reads`), then the render thread's CPU time a picture (the replays line's), its share of the
 block with no picture to do, its longest wait for one, its longest picture (the heartbeat's
 longest gap), and per picture its interpolation, its uploads and walk, its submit and present and
 the GPU's and the display's waits inside them, the textures it destroyed for the game thread, and

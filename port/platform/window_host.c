@@ -234,11 +234,12 @@ static struct {
        kept (rd.h RdPerfRecord.constReads, constKept) */
     uint64_t constReads, constKept, fadesFolded;
     /* the glow's mask folded into its reduction: the replays that folded it
-       and the glow replays that drew it into WORK2, with the last one's
-       reason (rd.h RdPerfRecord.glowFolded, glowKept, glowWhy;
+       (of them those reading WORK2 as the sun's fans left it) and the glow
+       replays that drew it into WORK2, by reason (rd.h
+       RdPerfRecord.glowFolded, glowFoldRead, glowKept, glowWhy;
        rd_glow_fold.c) */
-    uint64_t glowFolded, glowKept;
-    uint32_t glowWhy;
+    uint64_t glowFolded, glowFoldRead, glowKept;
+    uint64_t glowWhyN[RD_GLOW_FOLD_WHY_COUNT];
     /* the passes with a render area, their tiles, their targets' tiles and
        those ended early (rd.h RdPerfRecord.passAreas ..., rd_pass_area.c) */
     uint64_t passAreas, passAreaTiles, passAreaTargetTiles, passAreaEnds;
@@ -4542,8 +4543,9 @@ static void perf_drain(void)
         s_perf.fadesFolded += r.fadesFolded;
         s_perf.glowFolded += r.glowFolded;
         s_perf.glowKept += r.glowKept;
-        if (r.glowKept) {
-            s_perf.glowWhy = r.glowWhy;
+        s_perf.glowFoldRead += r.glowFoldRead;
+        if (r.glowKept && r.glowWhy < RD_GLOW_FOLD_WHY_COUNT) {
+            s_perf.glowWhyN[r.glowWhy]++;
         }
         s_perf.passAreas += r.passAreas;
         s_perf.passAreaTiles += r.passAreaTiles;
@@ -4766,13 +4768,28 @@ static void perf_log(void)
             s_perf.fadesFolded / n);
     if (s_perf.glowFolded || s_perf.glowKept) {
         /* the glow's mask computed in its reduction (one full-frame pass
-           fewer each) or drawn into WORK2, and why the last kept one was
-           (rd_glow_fold.c: the sun's fans or the lamps into WORK2, ...) */
-        fprintf(stderr, "window: glow: WORK2 fold: %llu folded, %llu kept%s%s%s\n",
-                (unsigned long long)s_perf.glowFolded, (unsigned long long)s_perf.glowKept,
-                s_perf.glowKept ? " (" : "",
-                s_perf.glowKept ? rd_glow_fold_why_text(s_perf.glowWhy) : "",
-                s_perf.glowKept ? ")" : "");
+           fewer each; of them those that read WORK2 as the sun's fans left
+           it) or drawn into WORK2, the kept ones counted by reason
+           (rd_glow_fold.c: the lamps into WORK2, ...) */
+        char why[512] = "";
+        size_t at = 0;
+        for (int k = 0; k < RD_GLOW_FOLD_WHY_COUNT; k++) {
+            if (!s_perf.glowWhyN[k]) {
+                continue;
+            }
+            const int m = snprintf(why + at, sizeof(why) - at, "%s%llu %s", at ? ", " : " (",
+                                   (unsigned long long)s_perf.glowWhyN[k],
+                                   rd_glow_fold_why_text((uint32_t)k));
+            if (m < 0 || (size_t)m >= sizeof(why) - at) {
+                break;
+            }
+            at += (size_t)m;
+        }
+        fprintf(stderr,
+                "window: glow: WORK2 fold: %llu folded (%llu reading the sun's fans' WORK2), %llu "
+                "kept%s%s\n",
+                (unsigned long long)s_perf.glowFolded, (unsigned long long)s_perf.glowFoldRead,
+                (unsigned long long)s_perf.glowKept, why, at ? ")" : "");
     }
     window_pipeline_skip_line();
     if (s_perf.msaaSamples) {
