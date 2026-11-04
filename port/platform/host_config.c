@@ -599,8 +599,9 @@ static const struct {
     {"dev.vu_fuse", "vu_fuse"},
     /* the scene draws' visibility test: frustum (the default: a draw wholly
        off its target or behind the eye is not replayed, the same picture),
-       full (the occlusion test too, once it is built; frustum until then)
-       or off (port/render/rd_vis.c) */
+       full (the occlusion test too: a list-0 draw wholly behind the depth
+       the opaque draws before it wrote, port/render/rd_vis_hiz.c) or off
+       (port/render/rd_vis.c) */
     {"dev.cull", "cull"},
     /* false: a post sprite whose source target holds only its last clear
        reads the target as before instead of being drawn in the clear's
