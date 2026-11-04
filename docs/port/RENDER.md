@@ -421,12 +421,14 @@ Where the sun is on screen its fans (`dispSun`) draw into WORK2 between passes 4
 fill as their pass's load op (6 of the 14 corpus glow frames); the issue 163 frames draw the lamps'
 meshes into WORK2 after the mask, a pass of their own (they test SCENE's depth).
 
-In the other frames passes 4 and 5 are not drawn at all: pass 6 reads SCENE and computes each
+Passes 4 and 5 are not drawn at all where the fans are not: pass 6 reads SCENE and computes each
 WORK2 texel its box loads as the mask stored it over the fill (the same bytes;
 [The glow's mask in its reduction](RENDER_POST.md#the-glows-mask-in-its-reduction)): one
 full-frame pass fewer on the tile class (the fill rides on the mask's pass there), two on a desktop,
-and WORK2's 10.2 MB neither stored nor read. The 10 s line `window: glow: WORK2 fold: N folded, M
-kept (reason)` says which frames took it.
+and WORK2's 10.2 MB neither stored nor read. With the fans, the fill and the fans are drawn and
+pass 5 alone goes: pass 6 reads WORK2 where the mask keeps a texel and computes the rest. The 10 s
+line `window: glow: WORK2 fold: N folded (F reading the sun's fans' WORK2), M kept (...)` says which
+frames took it.
 
 Two of the breaks moved bytes nothing needed, and are gone (the same bytes; `rd_glow_cheap_ab`):
 
@@ -451,13 +453,12 @@ Two of the breaks moved bytes nothing needed, and are gone (the same bytes; `rd_
   ends the fog's pass there and the two sprites take a pass each again (v4251 at the phone's profile on lavapipe: 22
   glow passes with the fill, 20 without).
 
-What is left: the mask's pass where the sun's fans or the lamps draw into WORK2 (SCENE read, WORK2
-stored, then read by the reduction), the paste's SCENE pass (WORK3 is drawn after the fog's pass
+What is left: the mask's pass where the lamps draw into WORK2 after it (SCENE read, WORK2 stored,
+then read by the reduction), the fans' pass on WORK2 (their triangles are the rasteriser's), the paste's SCENE pass (WORK3 is drawn after the fog's pass
 ends), and the twelve small WORK0 passes (the fixed cost). Not done, and why: the mask at half
 size (its alpha test makes a hard-edged mask, and the reduction's box over it moves by a whole
-texel at an edge: a difference no stored dump bounds yet); the fold with the fans or the lamps
-(SCENE's border repeat and transition hoisted before the fans' pass, the lamps' meshes tested
-against SCENE's depth in the mask's texels); two blur pairs in one pass (exact needs pass 1's
+texel at an edge: a difference no stored dump bounds yet); the fold with the lamps (their meshes blend over the mask's texels,
+tested against SCENE's depth: the rasteriser's work, not a sprite's); two blur pairs in one pass (exact needs pass 1's
 texels for pass 2's for pass 3's: 256 loads a texel or a window of intermediates per pixel; a blur
 of a blur in floats differs by the GS's truncation at each of the four steps, up to about 4 levels
 before the eye blur, and the twelve passes' fixed cost is about 2.9 ms). The glow pass count is the

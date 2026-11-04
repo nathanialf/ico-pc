@@ -1534,10 +1534,12 @@ plan's alpha-only form, `FXF_ALPHA_ONLY`) and the alpha test LESS 0x81 with AFAI
 SCENE's alpha (bilinear at the texel's own GS position) where that alpha is under 0x81, else the
 fill. `reduceWork2ToWork0` reads all of it into WORK0 through the box (2 x 3.5 GS texels a
 texel). It is not a snapshot for the paste (the paste reads WORK3) and not the blur fold's. Where
-nothing else draws into WORK2 (no sun's fans, no lamps) and nothing else reads it, the reduction
+nothing else draws into WORK2 after the mask (no lamps) and nothing else reads it, the reduction
 computes each WORK2 texel it weighs from SCENE instead, byte for byte (the mask's coverage, its
 four alpha loads, the alpha test, the fill; `fx_frame_ps` with `FXF_GLOW_MASK`): neither the fill
-nor the mask is drawn, and WORK2 holds no mask ([The glow's mask in its
+nor the mask is drawn, and WORK2 holds no mask; where the sun's fans drew into WORK2 the fill and
+the fans are drawn, the mask alone is not, and the reduction loads WORK2 where the mask keeps a
+texel (`FXF_GLOW_KEPT`) ([The glow's mask in its
 reduction](RENDER_POST.md#the-glows-mask-in-its-reduction); `[dev] glow_fold`). The expected
 saving on the phone is the WORK2 pass (2.9 ms in a glow replay, about 1.3 ms a replay over the
 phone's capture) less the reduction's extra loads (four SCENE alpha loads a WORK2 tap). The pass

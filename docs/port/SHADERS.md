@@ -669,7 +669,7 @@ in: `vu_prelit_pre_vs` 2,120 words (483 instructions, 36 blocks), `vu_lit_pre_vs
 shader of both ways, and the no-planes builds `vu_np_ps` 4,927 (1,187, 189) and `vu_texa_np_ps`
 11,063 (2,679, 475), and their `_nodual` twins `vu_np_ps_nodual` 4,952 (1,196, 193) and
 `vu_texa_np_ps_nodual` 11,088 (2,688, 479). The frame-size sprite modules (words, instructions,
-blocks): `fx_sprite_ps` 8,557 (2,087, 360), `fx_frame_ps` 17,750 (4,349, 802, with the glow's
+blocks): `fx_sprite_ps` 8,557 (2,087, 360), `fx_frame_ps` 17,973 (4,401, 810, with the glow's
 mask in its reduction), `fx_local_ps` 8,561
 (2,088, 360), `fx_blur2_ps` 14,883 (3,491, 558). By the live-path walk (the SPIR-V executed for one pixel, its arithmetic
 weighted by components) an opaque textured pixel of `vu_ps` runs 168 instructions and 127

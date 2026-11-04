@@ -236,13 +236,24 @@ no new pipeline. One full-frame pass fewer a glow picture on a tile-based GPU (t
 mask's CLEAR load there), two on a desktop (the fill's clear is a pass of its own), and WORK2 is
 neither stored nor read.
 
+**With the sun's fans.** Whenever the sun is on screen, `dispSun` draws two fans of triangles into
+WORK2 between the fill and the mask (blended, Z-tested against SCENE's depth): 6 of the 14 corpus
+glow frames, and most of a reporter's PC session of 2026-11-04 (its 10 s lines name the fans). The fans' texels are the
+rasteriser's (their coverage and Gouraud colours), which no shader recomputes bit for bit, so they
+are not folded: the fill and the fans are drawn as without the fold, only the mask is not, and the
+reduction binds WORK2 in the destination's slot (t2, `FXF_GLOW_KEPT`) and loads its texel where
+the mask's sprite would have kept it (outside the rect, the alpha test failing): the bytes the
+reduction would have loaded there. Elsewhere it computes the mask's texel as above. The mask's
+pass is the one gone (WORK2's 10.2 MB loaded and stored again for it), so one full-frame pass
+fewer there too; WORK2 is drawn and read.
+
 Where it holds (the scan, in `rd__store_plan_scan`'s one walk of the lists; `rd__glow_fold_plan`
 over a frame of its own for the tests):
 
 - the frame touches WORK2 (a draw into it or on its depth, its texture, a copy or exact blend
-  naming it, a command the scan does not know) with three commands and no other, in order: the
-  fill, the mask and the reduction (a clear or a draw before the fill, which the fill covers,
-  aside);
+  naming it, a command the scan does not know) with the fill, the mask and the reduction in that
+  order, a clear or a draw before the fill (which the fill covers) and any command between the
+  fill and the mask (the fans: then the mask alone is folded) aside;
 - the fill: a post sprite into WORK2, untextured, no blend, no alpha test that can fail, no DATE,
   the colour mask whole, no Z test or Z write, the scissor whole, every texel's GS pixel inside its
   rect: WORK2 holds its colour (with FBA's MSB) everywhere the mask leaves;
@@ -259,10 +270,10 @@ over a frame of its own for the tests):
   another target, no destination read, the mask's TEX0 size, no glow edge strip;
 - the switch on, the fx plan on with `fx_frame_ps`, a device, no MSAA, no pass window.
 
-In 9 of the 14 corpus glow frames the sun's fans (`dispSun`, before the mask) or the lamps' meshes
-(after it) draw into WORK2: the chain is drawn there, and the frame counted kept with its reason.
-The replay: `blurPostSprite` (`port/render/rd_blur_border.c`) leaves the planned fill and mask
-undrawn (`rd__glow_fold_skip`, after SCENE's border repeat), their state kept; at the reduction
+In 3 of the 14 corpus glow frames (the issue 163 rooms) the lamps' meshes draw into WORK2 after
+the mask, blending over its texels: the chain is drawn there, and the frame counted kept with its
+reason. The replay: `blurPostSprite` (`port/render/rd_blur_border.c`) leaves the planned fill
+(not with the fans) and mask undrawn (`rd__glow_fold_skip`, after SCENE's border repeat), their state kept; at the reduction
 `rd__fx_plan_draw` takes the fold (`rd__glow_fold_due`). A reduction that cannot take it (no
 pipeline, a target made again) has the fill and the mask drawn first with their states
 (`rd__glow_fold_undo`) and reads WORK2: the same bytes, and the fold off from then on.
@@ -278,15 +289,16 @@ on every device and backend.
 
 ```
 rd: glow: WORK2 fold: the glow's mask computed inside its reduction from SCENE's alpha (fx_frame_ps), WORK2 neither drawn nor read: one full-frame pass fewer (frame N; reported once)
+rd: glow: WORK2 fold: the glow's mask computed inside its reduction from SCENE's alpha (fx_frame_ps), WORK2 as the fill and the sun's fans left it read where the mask keeps a texel: the mask's pass not drawn, one full-frame pass fewer (frame N; reported once)
 rd: glow: WORK2 fold: the mask drawn into WORK2 and read by its reduction: <reason> (<detail>; frame N; reported once for this reason)
 rd: glow: WORK2 fold: <why>: the fill and the mask drawn before the reduction after all (frame N); the fold is off from now on
-window: glow: WORK2 fold: N folded, M kept (<reason>)
+window: glow: WORK2 fold: N folded (F reading the sun's fans' WORK2), M kept (K <reason>, ...)
 ```
 
-The 10 s line counts the replays of its window (`RdPerfRecord.glowFolded`, `glowKept`, `glowWhy`,
-the last kept one's reason); `rd_replay_tool --stats` prints `glow: WORK2 fold on|off: N folded, M
-kept (reason)`; the glow pass count (`glow N passes`, the 10 s `passes per replay`) is one fewer
-where it folds. The reasons (`rd.h` `RD_GLOW_FOLD_WHY_*`): the sun's fans, the lamps, SCENE drawn
+The 10 s line counts the replays of its window (`RdPerfRecord.glowFolded`, `glowFoldRead`,
+`glowKept`, `glowWhy`, the kept ones by reason); `rd_replay_tool --stats` prints `glow: WORK2 fold
+on|off: N folded (F reading the sun's fans' WORK2), M kept (reason)`; the glow pass count (`glow N passes`, the 10 s `passes per replay`) is one fewer
+where it folds. The reasons (`rd.h` `RD_GLOW_FOLD_WHY_*`): the lamps, SCENE drawn
 between the mask and the reduction, WORK2 drawn or read elsewhere, the chain not in the fold's form, MSAA, the fx plan off, a reduction that
 could not take it. Tests: `rd_blur` (k) and its (r) scan, `rd_glow_cheap_ab`
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portrendertest)).
