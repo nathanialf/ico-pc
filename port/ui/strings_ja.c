@@ -150,6 +150,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_TOUCH_SIZE] = "タッチの大きさ",
     [UI_STR_OPT_TOUCH_OPACITY] = "タッチの不透明度",
     [UI_STR_VAL_ALWAYS] = "常に表示",
+    [UI_STR_VAL_ALWAYS_SCENES] = "常に表示、シーン中はスタートのみ",
     [UI_STR_VAL_SMALL] = "小",
     [UI_STR_VAL_MEDIUM] = "中",
     [UI_STR_VAL_LARGE] = "大",

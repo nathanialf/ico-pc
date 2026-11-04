@@ -1987,9 +1987,10 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return ui_str(toggle ? UI_STR_VAL_HOLD_B : UI_STR_VAL_HOLD_A);
     }
     case UI_OPT_TOUCH_MODE: {
-        static const int modeStr[3] = {UI_STR_OFF, UI_STR_VAL_AUTO, UI_STR_VAL_ALWAYS};
+        static const int modeStr[4] = {UI_STR_OFF, UI_STR_VAL_AUTO, UI_STR_VAL_ALWAYS,
+                                       UI_STR_VAL_ALWAYS_SCENES};
         const int m = touchModeInForce();
-        return ui_str(modeStr[m >= 0 && m < 3 ? m : 1]);
+        return ui_str(modeStr[m >= 0 && m < 4 ? m : 1]);
     }
     case UI_OPT_TOUCH_SIZE: {
         static const int sizeStr[3] = {UI_STR_VAL_SMALL, UI_STR_VAL_MEDIUM, UI_STR_VAL_LARGE};
@@ -2617,15 +2618,22 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         break;
     case UI_OPT_TOUCH_MODE: {
         /* live from the next vsync (input_sdl.c reads the table); a phone
-           steps between Auto and Always only: Off there would leave no
-           way to turn the buttons back on (ico_touch_effective_mode) */
+           steps Auto, Always, Always with Start only in scenes and back:
+           Off there would leave no way to turn the buttons back on
+           (ico_touch_effective_mode) */
         IcoBindings *b = liveBindings();
         const int m = touchModeInForce();
 
         if (ico_video_android()) {
-            b->touch_mode = m == ICO_TOUCH_MODE_AUTO ? ICO_TOUCH_MODE_ALWAYS : ICO_TOUCH_MODE_AUTO;
+            /* Auto, Always, Always with Start only in scenes: the order is
+               the enum's, Off (0) left out */
+            const int at =
+                m >= ICO_TOUCH_MODE_AUTO && m < ICO_TOUCH_MODE_COUNT ? m - ICO_TOUCH_MODE_AUTO : 0;
+
+            b->touch_mode = ICO_TOUCH_MODE_AUTO + stepIndex(at, ICO_TOUCH_MODE_COUNT - 1, dir);
         } else {
-            b->touch_mode = stepIndex(m >= 0 && m < 3 ? m : 1, 3, dir);
+            b->touch_mode =
+                stepIndex(m >= 0 && m < ICO_TOUCH_MODE_COUNT ? m : 1, ICO_TOUCH_MODE_COUNT, dir);
         }
         s_dirtyBindings = 1;
         break;

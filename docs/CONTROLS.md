@@ -342,7 +342,12 @@ only shows up on a device with a touch screen. The page has these rows:
 
 - **Touch controls:** Auto is the normal choice and works as described
   above. Always keeps the buttons on the screen all the time, and they
-  keep working with a gamepad connected. Off turns them off, but a phone
+  keep working with a gamepad connected. Always, Start only in scenes is
+  Always, except that during a scene or a movie only the Start button
+  stays on the screen, so the scene can be skipped; the other buttons
+  fade out and return when it ends. A Start you hid in the editor stays
+  hidden, and the hidden buttons still work if you touch where they are.
+  Off turns them off, but a phone
   does not offer Off: with no gamepad connected there would be no way to
   turn the buttons back on, so on a phone Off counts as Auto.
 - **Touch size:** Small, Medium or Large. Medium is about the size of a

@@ -153,6 +153,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_TOUCH_SIZE] = "터치 크기",
     [UI_STR_OPT_TOUCH_OPACITY] = "터치 불투명도",
     [UI_STR_VAL_ALWAYS] = "항상 표시",
+    [UI_STR_VAL_ALWAYS_SCENES] = "항상 표시, 장면 중 시작만",
     [UI_STR_VAL_SMALL] = "작게",
     [UI_STR_VAL_MEDIUM] = "보통",
     [UI_STR_VAL_LARGE] = "크게",

@@ -85,6 +85,17 @@ if(ICO_RUN_TESTS)
     add_test(NAME touch_gap COMMAND touch_gap_test)
 endif()
 
+# Touch controls "Always, Start only in scenes" (touch.c
+# ico_touch_scene_alpha): the other modes unchanged, every control without the
+# Start bit fading out over 300 ms in a scene, Start kept (or kept hidden), the
+# mapper's layout untouched, the Frame rate counter's place on the faded copy
+add_executable(touch_scene_test test/touch_scene_test.c)
+target_compile_options(touch_scene_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(touch_scene_test PRIVATE ico_input)
+if(ICO_RUN_TESTS)
+    add_test(NAME touch_scene COMMAND touch_scene_test)
+endif()
+
 # the mouse camera's speed and range for the hand camera: the step arithmetic
 # and the gating on the mouse's stick driving the camera
 add_executable(mouse_camera_test test/mouse_camera_test.c ../platform/host_config.c)

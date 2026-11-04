@@ -149,6 +149,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_TOUCH_SIZE] = "Touch size",
     [UI_STR_OPT_TOUCH_OPACITY] = "Touch opacity",
     [UI_STR_VAL_ALWAYS] = "Always",
+    [UI_STR_VAL_ALWAYS_SCENES] = "Always, Start only in scenes",
     [UI_STR_VAL_SMALL] = "Small",
     [UI_STR_VAL_MEDIUM] = "Medium",
     [UI_STR_VAL_LARGE] = "Large",
