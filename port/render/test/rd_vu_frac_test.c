@@ -26,9 +26,12 @@
  *           the output of every VU vertex shader that draws (the record
  *           path's vu_main_vs and vu_particle_main_vs, the programs' own
  *           entries and their plain builds): the twins read a prefix of
- *           VuVSOut, 8 located input components against vu_ps's 36 (with
- *           the position, 12 against 40; skipped when the table was built
- *           without shaders)
+ *           VuVSOut, 9 located input components against vu_ps's 37 (with
+ *           the position, 13 against 41; skipped when the table was built
+ *           without shaders): col 4, stq 3 and plane 2 (x the clip-plane
+ *           distance, y the side-band flag of VU_RULE_CLIP_BESIDE, the
+ *           float2 since issue 29's side bands), then the seven nointerpolation
+ *           planes of 4 that vu_ps alone reads
  *   skip    the sprite planes builds off for the run (issue 161:
  *           rd_set_sprite_planes_off, the host's [dev] pipeline_skip, read by
  *           rd__sprite_planes_init): the start-up set holds no planes key
@@ -448,7 +451,7 @@ static void testPrefix(void)
     for (uint32_t i = 0; i < nb; i++) {
         baseComps += bi[i].comps;
     }
-    CHECK(nb == 10 && baseComps == 36, "vu_ps: %u inputs, %u components (want 10, 36)", nb,
+    CHECK(nb == 10 && baseComps == 37, "vu_ps: %u inputs, %u components (want 10, 37)", nb,
           baseComps);
     /* every vertex shader's outputs at vu_ps's input locations */
     uint32_t nvs = 0;
@@ -481,7 +484,7 @@ static void testPrefix(void)
             CHECK(ioSame(ioAt(bi, nb, in[i].loc), &in[i]), "%s: location %u is not vu_ps's",
                   kTwins[t], in[i].loc);
         }
-        CHECK(ni == 3 && comps == 8, "%s: %u inputs, %u components (want 3, 8)", kTwins[t], ni,
+        CHECK(ni == 3 && comps == 9, "%s: %u inputs, %u components (want 3, 9)", kTwins[t], ni,
               comps);
         if (t == 0) {
             printf("  prefix: vu_np_ps reads %u inputs, %u components and the position (vu_ps "
