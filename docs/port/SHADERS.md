@@ -355,7 +355,10 @@ Auto or 2x has a scene 2.1 times the PS2's height, so its menus' strips are at s
 PowerVR phone's 10 s lines show as list 11 at 5.4 to 9.6 ms a picture there (its pass timing: list
 11 with the menus' 7 or 8 draws 9.3 to 10.0 ms, with the fades' 2 to 4 draws 1.0 to 3.0 ms;
 [WORK_BUFFERS.md](WORK_BUFFERS.md#the-menus-on-the-phone)), drop from a gather, nine loads and
-about sixteen integer divisions a pixel to four loads. `ctest rd_sheet_bake` checks the 2x and 4x
+about sixteen integer divisions a pixel to four loads. Only the tile-based classes bake s = 2
+(`RdProfile.sheetBake2x`, `port/render/rd_profile.c`): on the others the bake was a 4 to 18 MB upload
+on the render thread whenever new text appeared (10 to 111 ms on a GTX 750 Ti, issue 126), and
+`font_sheet_ps` costs nothing one sees there, for the same bytes. `ctest rd_sheet_bake` checks the 2x and 4x
 bake at every texel (both halves and the apron) against a float transcription of `sheet_scaled` in
 both lerp forms and against `sheet_ref.c`, and `rd_pixel` the 2x frame through both shaders byte for
 byte.
