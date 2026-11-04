@@ -47,13 +47,16 @@ The thermal state and screen recording come from the app's Java side (issue 123;
 native side's asks (`ico_host_thermal`, modeled on `ico_host_vibrate`: cached method ids, one failed
 lookup remembered, local references deleted, exceptions cleared): `thermalHeadroom()`
 (`PowerManager.getThermalHeadroom(0)`, Android 11; NaN otherwise or when the system is asked too
-often) and `thermalStatus()` (`getCurrentThermalStatus`, Android 10; -1 otherwise). Two listeners
+often, so the native side asks it at most once a second and reuses that answer for the lines
+written in between) and `thermalStatus()` (`getCurrentThermalStatus`, Android 10; -1 otherwise). Two listeners
 push the changes into `SDL_AtomicInt`s and log them at once, on the activity's thread
 (`nativeThermalStatus`, an `OnThermalStatusChangedListener`; `nativeScreenRecording`, on Android 15
 and later `WindowManager.addScreenRecordingCallback` with the `DETECT_SCREEN_RECORDING` permission,
 a normal one). Both are added in `onStart` and removed in `onStop`, every API behind
 `Build.VERSION.SDK_INT`, every native call wrapped as `nativeTrimMemory` is. The getters must run on
-SDL's main thread, which is where the window writes its block and around lines. A Java side without
+SDL's main thread, which is where the window writes its block and around lines. The around
+lines come only where the kernel GPU driver's nodes are sampled (above), so on a phone that denies
+them the thermal and recording words are in the block line and the change lines only. A Java side without
 the methods costs one failed lookup; the block line then says `thermal: not available (...)` once.
 What the bridge cannot read: SurfaceFlinger's composition type (whether the system composites the
 window or scans it out directly) and the overlays some vendor builds (HyperOS) add are not available
