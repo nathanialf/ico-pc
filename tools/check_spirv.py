@@ -41,8 +41,16 @@ Gates:
              carried one OpUndef each; the gate allows none.)
   size       no module is longer than its stage's budget in 32-bit words:
              VS_BUDGET for a vertex shader, PS_BUDGET for a pixel shader
-             (the largest at the gate's introduction, font_sheet_ps_dstrov's
-             71,418, plus 10 percent).  A phone's driver compiles the
+             (the largest, yuv_ps's 47,629, plus 10 percent; 78,560 until
+             v0.10.2, sized on font_sheet_ps_dstrov's 71,418), SHEET_BUDGET
+             for the sheet text shaders (font_sheet_*: the largest,
+             font_sheet_ps_dstatt's 21,840, plus 10 percent).  Issue 188:
+             a PowerVR BXM-8-256 (driver 1.15@6133110) did not finish
+             compiling font_sheet_ps_nodual (70,549 words, 5,337 blocks:
+             DXC makes every && and ?: a branch) within the pre-game limit
+             of 10 s; the same pixels from branch-free selects are 20,892
+             words in 69 blocks (docs/port/SHADERS.md, Branches from && and
+             ?:), and the sheet budget keeps it there.  A phone's driver compiles the
              start-up set in a time about proportional to the size: v0.7.6's
              VU vertex shaders were 81k to 93k words (the cut copied three
              times as branch chains), minutes on a phone.  The vertex budget
@@ -237,7 +245,8 @@ PROGRAM_ENTRIES = ("vu_prelit_vs", "vu_lit_vs", "vu_lit_spec_vs", "vu_reflect_vs
 SPIRV_VERSION = 0x00010000
 VS_BUDGET = 56000
 VS_PLAIN_BUDGET = 25700
-PS_BUDGET = 78560
+PS_BUDGET = 52392
+SHEET_BUDGET = 24024
 
 
 def decode(path):
@@ -397,18 +406,19 @@ def check(path, sizes=None):
     plain = os.path.basename(path).endswith("_plain_vs.spv")
     pre = (os.path.basename(path).endswith("_pre_vs.spv") or
            os.path.basename(path).endswith("_main_vs.spv"))
-    budget = (VS_PLAIN_BUDGET if plain or pre else VS_BUDGET) if vertex else PS_BUDGET
+    sheet = not vertex and os.path.basename(path).startswith("font_sheet_")
+    budget = ((VS_PLAIN_BUDGET if plain or pre else VS_BUDGET) if vertex else
+              SHEET_BUDGET if sheet else PS_BUDGET)
+    klass = (("plain vertex" if (plain or pre) else "vertex") if vertex else
+             "sheet text" if sheet else "pixel")
     if nwords > budget:
-        out.append("size: %d words, over the %s budget of %d" %
-                   (nwords, "plain vertex" if (plain or pre) and vertex else
-                    "vertex" if vertex else "pixel", budget))
+        out.append("size: %d words, over the %s budget of %d" % (nwords, klass, budget))
     if sizes is not None:
         sizes.append("%-32s %-2s %7d words %6d insts %5d blocks %5d phis %3d loops %3d dot "
                      "%4d vcmp %4d bsel %3d any" %
                      (os.path.basename(path), "vs" if vertex else "ps", nwords, len(insts),
                       census.get(OP_LABEL, 0), census.get(OP_PHI, 0),
                       census.get(OP_LOOP_MERGE, 0), census.get(OP_DOT, 0), vcmp, bsel, anyall))
-        klass = ("plain vertex" if (plain or pre) else "vertex") if vertex else "pixel"
         best = LARGEST.get(klass)
         if best is None or nwords > best[0]:
             LARGEST[klass] = (nwords, os.path.basename(path), budget)
@@ -451,7 +461,7 @@ def main(argv):
                 findings += 1
     if show:
         print("\n".join(sizes))
-        for klass in ("vertex", "plain vertex", "pixel"):
+        for klass in ("vertex", "plain vertex", "pixel", "sheet text"):
             if klass in LARGEST:
                 w, n, budget = LARGEST[klass]
                 print("largest %-12s %7d words of %d (%s)" % (klass, w, budget, n))

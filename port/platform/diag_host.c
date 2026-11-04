@@ -634,6 +634,11 @@ static const char *thread_name(int id, char *tmp, size_t size)
     return tmp;
 }
 
+const char *ico_diag_thread_name(int id, char *tmp, size_t size)
+{
+    return thread_name(id, tmp, size);
+}
+
 /* --- Thread lines -------------------------------------------------------------- */
 
 static const char *state_name(int s)

@@ -886,6 +886,10 @@ void ico_diag_set_relaunch_stub(int (*fn)(const char *value));
 /* Names a thread function for the thread lines; game threads are named by
    the function iosThreadCreate runs (ico_host_thread_func). */
 void ico_diag_name_func(void *func, const char *name);
+/* A game thread's name as the thread lines give it (its function's name,
+   else the function's address; "host loop" for id 0, "?" out of range);
+   tmp (size bytes) may be used for the address form.  Any thread. */
+const char *ico_diag_thread_name(int id, char *tmp, size_t size);
 /* Seconds since ico_diag_init. */
 double ico_diag_uptime(void);
 /* A monotonic clock in nanoseconds (QueryPerformanceCounter, CLOCK_MONOTONIC)

@@ -2526,6 +2526,12 @@ typedef struct RdPerfRecord {
      * a frame blended between two ticks, a draw marked RD_VU_TICK_CAMERAS,
      * vuSource), once a draw whether the pre-pass recorded it or not */
     uint32_t vuTickDraws;
+    /* the VU draws issued (rd_replay_vu.c vuDraw, before any merge: a cut
+     * and a kick draw count one each) and the triangles in them (their
+     * index lists in threes; a particle's six indices a quad): the work the
+     * vertex shader does where the pre-pass is off (9 invocations a
+     * triangle; window_scene.h) */
+    uint32_t vuDraws, vuTris;
     /* The draw-merge count (rd_replay_vu.c vuMergeNote; counting only, no
      * draw or record changes): per list the VU draws that could join the
      * previous draw's run (vuMergeDraws) and the runs started (vuMergeRuns:

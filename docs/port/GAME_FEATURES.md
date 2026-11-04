@@ -1097,7 +1097,7 @@ into place; the folder is the package's name and driver version made safe. A tri
 driver a start is trying, so a start that died inside the driver is noticed at the next one
 (`port/platform/gpu_driver.h` (`ico_gpu_driver_install_zip`, `ico_gpu_driver_trial_crashed`)). The
 package handling is pure C, built and tested on every platform; the loading itself and the fallback
-are [PLATFORM.md](PLATFORM.md#android-graphics-driver-packages)'s.
+are [ANDROID_DRIVERS.md](ANDROID_DRIVERS.md)'s.
 
 ## Tests
 

@@ -606,7 +606,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   bad folder, a damaged file, neither file listing as a driver) and the loss window (`test_loss`: a loss under a
   package at 0, 12 s and 29.999 s counts, at 30 s and later or on the phone's own driver does not; the marker
   written again makes the next start see a crash), and `test_list_zips` (`ico_gpu_driver_list_zips`: `a.zip`, `B.ZIP`, `incoming.*`, a text file, a hidden zip and a folder named `.zip` give two names in byte order, the cap and a missing folder) (`gpu_driver`).
-  The Android file picker ([PLATFORM.md](PLATFORM.md#the-file-picker): `IcoActivity.pickFile`,
+  The Android file picker ([PLATFORM.md](ANDROID_DRIVERS.md#the-file-picker): `IcoActivity.pickFile`,
   `ico_android_pick_file`, `nativePickDone`) has no case: it is Java and JNI, and nothing here runs
   either. It is checked on a phone: `adb logcat -s ico-pc SDL` while pressing Add a driver shows
   the `ico_pc: file picker: pick N:` lines and the picker; `adb shell pm disable-user --user 0
@@ -781,7 +781,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`cpu_place_split`: `0-1 2.2 GHz, 2-6 3.1 GHz, 7 3.8 GHz` gives the render thread core 7
   alone and the submit thread 2-6, a 4+3+1 phone 7 and 4-6, a core of unknown speed in neither; no
   split with two fastest cores, with the fastest the only one above the slowest, with one speed
-  or none known), and the calling
+  or none known), the placement rule (`cpu_place_plan`: 2 faster of 8 gives the game and render
+  threads both cores and the submit thread none; 3 and 4 faster keep render and submit with the
+  game thread free; one faster the render thread alone; all equal or none known nothing), and the calling
   thread (its core inside the cores it may run on, the priority text's `nice`, a pin to no core
   refused, a pin to the cores already allowed taken), and a pin's result by the cores read back
   (`cpu_place_pin_result`: core 7 asked, the call's yes and 2-7 read back is other cores; the same
@@ -902,9 +904,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   never under 0, a gap under 0, the call not timed apart, no gap, no GPU span) and the after line (`present_after_text`: the replay after the stall, its gap across one
   and two untimed replays, no GPU span, a short buffer cut); the stall lines' threshold
   (`present_stall_lines`: from 250 ms on, never from 50 to 250 ms nor for NaN) (`present_hist`).
+- `robust_persist_test.c`: the port's own `[dev] gpu_robust` turning itself off (`robust_persist.h`): the mark `gpu_robust_by` written and read back and a hand-written value never taken for it, the rule over sequences of starts (three clean starts in a row turn it off; a loss or an end while preparing resets the count; a start that never reached the game leaves it; another version turns it off at once; no mark does nothing), the mark through the config text, the removal of both `[dev]` keys leaving every other line (a `gpu_robust` in another section included), the three log lines word for word (`robust_persist`).
 - `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
-  (`sched`).
+  (`sched`); the longest single switch (`ico_sched_switch_max`: a 30 ms thread against a 1 ms
+  one names the long one, its time at least 30 ms, the reset empties it, a NULL id).
+- `window_scene_test.c`: the window's scene lines (`window_scene.h`, issue 179): the layout kinds
+  of the European disc's ids (a movie over any layout is a scene, the title's two, the pause menu,
+  the options and button configuration, anything else `other`), the block's layout share over a
+  sequence of steps (`layout: play 6.2 s, scene 3.1 s, pause 0.7 s, other 0.0 s`, the empty block,
+  a kind out of range ignored, a reset, a cut buffer), the slow step's game threads part (`game
+  threads 199.3 in 39 switches (longest Main 171.2 ms; on core 2)`, the core or the longest switch
+  left out, no name) and the VU line (pre-pass off 9 a triangle, on the recorded vertices, the k and
+  M words, no replays, a cut buffer), word for word (`window_scene`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the
   crash chain to the box, the variable and the relaunch environment, the `dst` field of a
   pipeline's or a start-up batch's note, its VU vertex pre-pass keys and modules, and the chains

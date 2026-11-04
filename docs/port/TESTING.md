@@ -703,7 +703,8 @@ FXC's X4000 "potentially uninitialized variable" error class; that shows in a Wi
 (`<build>/shaders/*.spv`): a vertex shader has no vector of booleans, no `any()`/`all()` and no
 boolean select, and uses only the opcodes of the envelope's set (a loop, `dot()`, a
 logical-not-equal or an undefined value named), every module stays within its stage's size budget
-in words, no module carries an array as a value (a whole-array load, store, construct, insert,
+in words (the sheet text entries `font_sheet_*` within their own, a tenth above their largest:
+[SHADERS.md](SHADERS.md#branches-from--and-)), no module carries an array as a value (a whole-array load, store, construct, insert,
 phi, select or copy), no vertex shader keeps a local array
 ([SHADERS.md](SHADERS.md#the-envelope)) and every module's header is SPIR-V 1.0 (the Vulkan 1.0
 target, [SHADERS.md](SHADERS.md)); the log lists each module's words, instructions, blocks,
