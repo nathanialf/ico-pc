@@ -1724,11 +1724,14 @@ passes").
 Which replays are timed: every replay with `[dev] perf_passes = true` (`ICO_RD_PERF_PASSES=1`,
 [CONFIG.md](CONFIG.md)); otherwise the first replay at least 250 ms after the last timed one
 (`RD_PERF_PASS_EVERY_MS`), at most 40 in a 10 s block, for the window's summary, until the first
-present that blocks over 50 ms (issue 123): from then on every replay is timed for the rest of the
-run (`rd_perf_passes_arm`, no CSV; the window says so once, `window: every replay timed pass by
-pass from here (a present blocked 359 ms at replay 2941): the next stalled replay's passes are
-compared with the block's`), so the next stalled replay has its pieces. Not on iOS (as the effect
-stamps). At start the renderer says which:
+present that blocks over 50 ms on Vulkan (issue 123): from then on every replay is timed for the
+rest of the run (`rd_perf_passes_arm`, no CSV; the window says so once, `window: every replay
+timed pass by pass from here on Vulkan (a present blocked 359 ms at replay 2941): the next stalled
+replay's passes are compared with the block's`), so the next stalled replay has its pieces. Only a
+record that carries the present split arms it (`rd_perf_passes_arm_backend`: the Vulkan backend,
+MoltenVK included): never on OpenGL, where every stamp of a timed replay reads the GL clock
+(`glGetInteger64v(GL_TIMESTAMP)`, which may hold the CPU until the driver has taken the commands
+before it), nor on Direct3D. Not on iOS (as the effect stamps). At start the renderer says which:
 
 ```
 rd: GPU pass timing: one replay every 250 ms, each pass timed apart, for the 10 s summary; [dev] perf_passes = true times every replay

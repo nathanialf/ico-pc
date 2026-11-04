@@ -14,7 +14,8 @@
  *     (the first 8, then every 100th), its gap kept for the 10 s
  *     'GPU between replays' line ("across the 3 stalls: the GPU was idle
  *     ... before the next replay");
- *   - from the first stall on every replay timed pass by pass, and a
+ *   - from the first stall on Vulkan (a record with the present split)
+ *     every replay timed pass by pass, and a
  *     stalled replay's passes against the block's: "window: stalled
  *     replay N (present ..., GPU ... against the block's ...): ...";
  *   - on Android, the kernel GPU driver's clock, load, resets and thermal
@@ -48,9 +49,10 @@
    call */
 const char *window_stall_split(const RdPerfRecord *r, unsigned blockGpuN, double blockGpuMs);
 /* r's present blocked (over WINDOW_STALL_MS): the next record popped gets
-   the after line; the first one also times every replay pass by pass from
-   here (rd_perf_passes_arm, its line once), so the next stall's replay has
-   its passes */
+   the after line; the first one with a present split (the Vulkan backend,
+   rd_perf_passes_arm_backend) also times every replay pass by pass from
+   here (rd_perf_passes_arm, its line once naming the backend), so the next
+   stall's replay has its passes */
 void window_stall_blocked(const RdPerfRecord *r);
 /* Every popped record, before window_stall_blocked of the same record:
    when the record before it blocked, the after line, and its gap into the

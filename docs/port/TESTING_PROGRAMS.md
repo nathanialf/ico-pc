@@ -1887,7 +1887,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   issue 123's stalled replay against the block's (`rd_perf_pass_grow_text`: a piece 3.1x its
   mean, one 1.3x, one under 0.05 ms, one new to the block, one not timed; an empty block; every
   piece over; no GPU span; a cut), the block's mean of a piece (`rd_perf_pass_agg_mean`) and the
-  arm line, a failure of these counted without a device (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
+  arm line with its backend, the arm's backend gate (`rd_perf_passes_arm_backend`: Vulkan and MoltenVK
+  with a present split only, never OpenGL or Direct3D), a failure of these counted without a device (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`). Its pipelines case holds the reachable set under
   `RD_PIPELINE_REACHABLE_MAX` with both blends, the tile-based GPU's set too (its profile with

@@ -10,6 +10,7 @@
 #include "gpu_sysfs.h"
 #include "ico_thread.h"
 #include "present_hist.h"
+#include "rhi.h"
 #include "thermal_text.h"
 #ifdef __ANDROID__
 #include "gpu_sysfs_android.h"
@@ -181,10 +182,15 @@ void window_stall_blocked(const RdPerfRecord *r)
     s_after.pending = 1;
     s_after.replay = r->replay;
     s_after.ms = r->presentMs;
-    if (rd_perf_passes_arm(true)) {
+    /* only where the record carries the present split (the Vulkan
+       backend): on OpenGL an armed replay's stamps would each read the GL
+       clock, which may hold the CPU (rd.h rd_perf_passes_arm_backend) */
+    if (rd_perf_passes_arm_backend(rhi_backend(), r->presentSplit != 0) &&
+        rd_perf_passes_arm(true)) {
         char text[256];
 
-        rd_perf_passes_arm_text(r->replay, r->presentMs, text, sizeof(text));
+        rd_perf_passes_arm_text(r->replay, r->presentMs, rhi_backend_kind_name(rhi_backend()), text,
+                                sizeof(text));
         fprintf(stderr, "window: %s\n", text);
     }
 }
