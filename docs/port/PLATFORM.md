@@ -59,6 +59,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/backup_host.c`, `backup_host.h` | the two rows' host in the window build: the file dialogs, the work on its own thread, the end of the run after a restore (not on iOS) |
 | `port/platform/steam_shortcut.c`, `steam_shortcut.h` | Settings > Extras > Add to Steam (Windows and Linux; not offered on macOS) |
 | `port/platform/gpu_driver.c`, `gpu_driver.h` | Android graphics driver packages (pure C, tested everywhere) |
+| `port/platform/thermal_text.c`, `thermal_text.h` | the thermal status names and the thermal and screen recording lines, the pure part (tested everywhere); the Java bridge is `ico_host_thermal` in `android/host_android.c` |
 | `port/platform/gpu_sysfs.c`, `gpu_sysfs.h` | the kernel GPU driver's nodes for the log, the pure part: the parser, the sample ring, the block and around reductions, the lines (tested everywhere) |
 | `port/platform/android/` | `main_android.c`, `host_android.c`, `android_paths.c`, `iso_import.c`, `gpu_driver_android.c`, `gpu_sysfs_android.c` |
 | `port/platform/ios/main_ios.c`, `ios/Info.plist.in` | the iOS entry point and bundle |
@@ -2097,6 +2098,27 @@ readable (some devices' SELinux policy denies apps these nodes: `not readable (E
 the hook only when a sampled node is readable; it reads the ring on its own thread under a lock held
 for the copy. The lines are in [DISPLAY.md](DISPLAY.md#the-stats-lines). Nothing is sampled
 elsewhere.
+
+Beside the sampler, the thermal state and screen recording come from the app's Java side (issue 123;
+`port/platform/thermal_text.h`, `port/platform/android/host_android.c`,
+`android/app/src/main/java/com/defnf/icopc/IcoActivity.java`). Two static Java methods answer the
+native side's asks (`ico_host_thermal`, modeled on `ico_host_vibrate`: cached method ids, one failed
+lookup remembered, local references deleted, exceptions cleared): `thermalHeadroom()`
+(`PowerManager.getThermalHeadroom(0)`, Android 11; NaN otherwise or when the system is asked too
+often) and `thermalStatus()` (`getCurrentThermalStatus`, Android 10; -1 otherwise). Two listeners
+push the changes into `SDL_AtomicInt`s and log them at once, on the activity's thread
+(`nativeThermalStatus`, an `OnThermalStatusChangedListener`; `nativeScreenRecording`, on Android 15
+and later `WindowManager.addScreenRecordingCallback` with the `DETECT_SCREEN_RECORDING` permission,
+a normal one). Both are added in `onStart` and removed in `onStop`, every API behind
+`Build.VERSION.SDK_INT`, every native call wrapped as `nativeTrimMemory` is. The getters must run on
+SDL's main thread, which is where the window writes its block and around lines. A Java side without
+the methods costs one failed lookup; the block line then says `thermal: not available (...)` once.
+What the bridge cannot read: SurfaceFlinger's composition type (whether the system composites the
+window or scans it out directly) and the overlays some vendor builds (HyperOS) add are not available
+to an app, so a recorder or overlay that does not announce itself through the Android 15 callback
+shows nowhere in the log. Lines: `ico_pc: thermal status changed: MODERATE (2) -> SEVERE (3) (run
+time 212.4 s)` (the first one, at registration, is from `UNKNOWN (-1)`), `ico_pc: screen recording:
+visible (run time 40.1 s)`, and the window's, in [DISPLAY.md](DISPLAY.md#the-stats-lines).
 
 **A wait the system holds.** The hang verdict applies to the game's own code only. The window build
 marks the main thread's calls into the system that run none of the game's code (`SDL_PollEvent`, and
