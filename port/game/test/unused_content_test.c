@@ -104,6 +104,9 @@ int mpegPlay;
 int stageManagerFreeResourceFlag;
 static GObj s_boy;
 static Sub15C s_boySub;
+/* the title boy's actor, his weapon and held item (act-game.c's flag 1) */
+static Act s_boyAct;
+static GObj s_weapon, s_item;
 static float s_boyPos[3];
 static int s_hasFloor;
 static float s_floorY;
@@ -657,10 +660,15 @@ static void testRooms(void)
     logStart();
     ico_unused_host_poll();
     CHECK(strstr(logEnd(), "unused: arena tick") == NULL, "the next line due at 60");
+    /* a stage change under way (the room's stage keeps playing through
+       it): no probe, the line says why */
     s_ticks = 1599;
+    systemStatus[6] = 1;
     logStart();
     ico_unused_host_poll();
-    CHECK(strstr(logEnd(), "unused: arena tick 299:") != NULL, "a line at tick 299");
+    CHECK(strstr(logEnd(), "unused: arena tick 299: no boy (a stage change under way)\n") != NULL,
+          "a line at tick 299, no probe during a stage change");
+    systemStatus[6] = 0;
     s_ticks = 1601;
     logStart();
     ico_unused_host_poll();
@@ -762,9 +770,39 @@ static void testRooms(void)
     CHECK(s_titleReturn == -1 && s_reopened == -1, "the return let go after its bound (%d)",
           s_titleReturn);
 
-    /* a start that never leaves the title: put back at once */
+    /* a start that never leaves the title: put back at once.  Its title
+       boy holds a weapon and an item: as ACTGame_SetActors_Debug's flag 1
+       pass, the weapon's and the item's records go to the start with the
+       boy's, and there is no sword */
     onTitle(3000);
+    s_weapon.labelId = 200;
+    s_weapon.kind = 15;
+    s_item.labelId = 300;
+    s_item.kind = 20;
+    s_boyAct.weapon = &s_weapon;
+    s_boyAct.curItem = &s_item;
+    s_boy.act = &s_boyAct;
+    boyGObj = &s_boy;
+    s_nPlaced = 0;
+    logStart();
     ico_unused_start(ICO_UNUSED_ARENA);
+    log = logEnd();
+    {
+        const Placed *w = placedOf(200, 15), *it = placedOf(300, 20);
+        CHECK(atStart(placedOf(ri->credits_boy_label, 1), arena) && atStart(w, arena) &&
+                  atStart(it, arena) && placedOf(ri->credits_boy_label + 1, 14) == NULL &&
+                  s_nPlaced == 3 && s_placed[1].label == 200 && s_placed[2].label == 300,
+              "a title boy with a weapon: the boy, his weapon and his item at the start, no "
+              "sword (%d records)",
+              s_nPlaced);
+        snprintf(want, sizeof(want),
+                 "placed: the boy (record %d), the boy's weapon (record 200, kind 15), the "
+                 "boy's item (record 300, kind 20)\n",
+                 ri->credits_boy_label);
+        CHECK(strstr(log, want) != NULL, "the held weapon's placement logged (want \"%s\")", want);
+    }
+    s_boy.act = NULL;
+    boyGObj = NULL;
     s_ticks = 3000 + 1501;
     logStart();
     ico_unused_host_poll();
@@ -784,6 +822,36 @@ static void testRooms(void)
     ico_unused_stage_enter(ri->stage_title);
     CHECK(strstr(logEnd(), "(fail-start)") != NULL && !ico_unused_active(),
           "fail-start through the title");
+    s_decided = 0;
+    s_ticks += 1000;
+    ico_unused_host_poll(); /* the pending reopen let go */
+
+    /* a game over then Quit: every Quit arm of la_game_over_continue
+       (layout_action.c) calls ico_unused_game_over before it leaves, as
+       Continue's do, so the boy's game-over line is written and the return
+       reads "game over", not "End Game" */
+    onTitle(7000);
+    CHECK(ico_unused_start(ICO_UNUSED_ARENA) == ri->layout_scene, "the arena again");
+    stage_no = arena;
+    s_ticks = 7010;
+    boyGObj = &s_boy;
+    s_boyPos[1] = -71.0f;
+    s_boySub.ctrl.fallHeight = 1200.0f;
+    s_hasFloor = 1;
+    ico_unused_host_poll(); /* the stage up */
+    logStart();
+    ico_unused_game_over(); /* the Quit arm's call */
+    CHECK(strstr(logEnd(), "unused: arena game over: the boy at (100, -71, 200)") != NULL &&
+              strcmp(ico_unused_left_by(), "game over") == 0,
+          "Quit after a game over: the boy's game-over line, the reason game over");
+    boyGObj = NULL;
+    logStart();
+    onTitle(7100);
+    ico_unused_stage_enter(ri->stage_title);
+    log = logEnd();
+    CHECK(strstr(log, "(game over)") != NULL && strstr(log, "(End Game)") == NULL &&
+              !ico_unused_active(),
+          "Quit after a game over: the return logged as a game over");
     s_decided = 0;
     s_ticks += 1000;
     ico_unused_host_poll(); /* the pending reopen let go */

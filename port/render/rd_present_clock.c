@@ -8,15 +8,18 @@
  * Smooth").
  *
  * The clock's step is the running mean of the intervals between presents.
- * Its range is a quarter of the nominal interval (the frame rate cap's gap,
- * a refresh under FIFO) to four times it, or without a nominal (Uncapped)
- * a 64th of a tick to a tick.  A present less than a quarter of the
- * nominal after the one before is a doubled present (the compositor's, a
- * late present right after a blocked one), not a cadence: it moves neither
- * the mean nor, on a reset, the step.  A reset while presents go on (an
- * error over half a tick, an interval over four steps) takes the step from
- * that interval when it is within the range; a longer one is a pause and
- * keeps the step.
+ * It is held above a quarter of the nominal interval (the frame rate cap's
+ * gap, a refresh under FIFO), or without a nominal (Uncapped) a 64th of a
+ * tick.  A present less than a quarter of the nominal after the one before
+ * is a doubled present (the compositor's, a late present right after a
+ * blocked one), not a cadence: it moves neither the mean nor, on a reset,
+ * the step, and it moves the clock by its own interval, not a step.  A
+ * reset while presents go on (an error over half a tick, an interval over
+ * four steps) takes the step from that interval when it is at most four
+ * steps or four nominals (a tick without a nominal), whichever is more; a
+ * longer one is a pause and keeps the step.  So a rate slower than four
+ * nominals is learnt one reset at a time (a 120 Hz FIFO at 25 presented
+ * fps: one reset at the change, then none).
  *
  * Issue 193 (v0.10.2, an Adreno 740 at Frame rate 60): before v0.10.4 a
  * reset took one doubled present's 0.5 ms as the step, and every later
@@ -99,8 +102,11 @@ float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, d
     const double hi = nominal ? 4.0 * nominalMs : tickMs;
     double step = c->stepMs > 0.0 ? c->stepMs : (nominal ? nominalMs : 0.0);
     if (nominal) {
-        /* a step learned under another nominal (the frame rate changed) */
-        step = step < lo ? lo : (step > hi ? hi : step);
+        /* a step learned under another nominal (the frame rate changed):
+         * only the lower bound, the one a doubled present's step breaks (a
+         * cadence slower than four nominals is a real rate, a 120 Hz FIFO
+         * phone below 30 presented fps) */
+        step = step < lo ? lo : step;
     }
     const double since = nowMs - c->lastMs;
     /* a doubled present: neither the mean's nor the step's */
@@ -110,19 +116,28 @@ float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, d
         /* the running mean of the intervals, a sixteenth of the difference a
          * present */
         c->stepMs = doubled ? step : step + (since - step) / 16.0;
-        const double predicted = c->clockMs + c->stepMs;
+        /* a doubled present moves the clock by its own interval, with no
+         * pull toward the measured time: a whole step put the clock a step
+         * ahead of it, and the next doubled present then reset it backwards
+         * (the alpha went back within a tick, up to 0.28 of one at a
+         * doubled present every 7th); the pull alone, with the clock a few
+         * ms ahead, took a tenth of a ms back.  The next present pulls. */
+        const double predicted = c->clockMs + (doubled ? since : c->stepMs);
         const double err = nowMs - predicted;
         if (fabs(err) > 0.5 * tickMs) {
             reset = true;
         } else {
-            c->clockMs = predicted + err / 8.0;
+            c->clockMs = doubled ? predicted : predicted + err / 8.0;
         }
     }
     if (reset) {
         c->clockMs = nowMs;
-        if (c->presents != 0 && since > 0.0 && !doubled && since <= hi) {
-            /* the interval, while presents go on: within the range (a
-             * doubled present is below it, a pause above) */
+        if (c->presents != 0 && since > 0.0 && !doubled &&
+            (!(step > 0.0) || since <= (4.0 * step > hi ? 4.0 * step : hi))) {
+            /* the interval, while presents go on: up to four steps or the
+             * range's top, whichever is more, so a rate slower than the
+             * range is learnt (a doubled present is below it, a pause
+             * above); no step yet (Uncapped's first reset): any interval */
             c->stepMs = since < lo ? lo : since;
         } else if (nominal && c->stepMs > 0.0) {
             c->stepMs = step; /* the step held to the range */

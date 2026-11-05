@@ -234,9 +234,14 @@ static int entranceOf(int stage)
    The boy and the sword where the stage's attrTop is set, the girl where
    its flag0 is; a row inside the stage's own label range with no record
    yet is left to the stage's layout, as the game leaves it ("first").
-   The game's own pass skips the sword when the boy it copies from
-   (boyGObj) holds a weapon; on the title there is no boyGObj. A zero
-   is printed as 0, not as the -0 the negation makes of it. */
+   The title has a boy (its stageData row's attrTop is set, and its
+   camera falls back to him: game_state_keep.c), and the hook runs
+   ACTGame_SetActors_Debug with flag 1 while boyGObj is still he, so as
+   the game's own pass this one takes his weapon and held item
+   (GOBJ_ACT(boyGObj)->weapon, ->curItem): a weapon skips the sword row,
+   and the weapon's and the item's records go to the start with the
+   boy's row, whether the boy's record is written or left ("first").  A
+   zero is printed as 0, not as the -0 the negation makes of it. */
 static void placeAtStart(int stage, int row)
 {
     const StgPre *sd = &stageData[stage];
@@ -253,22 +258,43 @@ static void placeAtStart(int stage, int row)
     float pos[4] = {-exitData[0].pos[0], -exitData[0].pos[1], -exitData[0].pos[2], 0.0f};
     float rot[4] = {exitData[0].rot[0] * 0.017453292f, exitData[0].rot[1] * 0.017453292f,
                     exitData[0].rot[2] * 0.017453292f, 0.0f};
-    char placed[96] = "";
+    /* the title boy's weapon and held item, as act-game.c reads them */
+    GObj *held[2] = {0, 0};
+    if (boyGObj != 0 && GOBJ_ACT(boyGObj) != 0) {
+        held[0] = GOBJ_ACT(boyGObj)->weapon;
+        held[1] = GOBJ_ACT(boyGObj)->curItem;
+    }
+    static const char *const heldName[2] = {"the boy's weapon", "the boy's item"};
+    char placed[192] = "";
     size_t used = 0;
 
     for (int n = 0; n < 3; n++) {
+        if (n == 2 && held[0] != 0) {
+            break; /* the boy holds a weapon: no sword */
+        }
         if (!rows[n].on) {
             continue;
         }
-        if (rows[n].label >= sd->labelTop && rows[n].label < sd->labelEnd &&
-            gamesysObjInfoGet(rows[n].kind, rows[n].label) == 0) {
-            continue;
+        const int set = !(rows[n].label >= sd->labelTop && rows[n].label < sd->labelEnd &&
+                          gamesysObjInfoGet(rows[n].kind, rows[n].label) == 0);
+        if (set) {
+            gamesysObjInfoPosNewStageSet(rows[n].label, rows[n].kind, stage, pos, rot);
+            if (used < sizeof(placed)) {
+                int w = snprintf(placed + used, sizeof(placed) - used, "%s%s (record %d)",
+                                 used ? ", " : "", rows[n].name, rows[n].label);
+                used += w > 0 ? (size_t)w : 0;
+            }
         }
-        gamesysObjInfoPosNewStageSet(rows[n].label, rows[n].kind, stage, pos, rot);
-        if (used < sizeof(placed)) {
-            int w = snprintf(placed + used, sizeof(placed) - used, "%s%s (record %d)",
-                             used ? ", " : "", rows[n].name, rows[n].label);
-            used += w > 0 ? (size_t)w : 0;
+        for (int h = 0; n == 0 && h < 2; h++) {
+            if (held[h] == 0) {
+                continue;
+            }
+            gamesysObjInfoPosNewStageSet(held[h]->labelId, held[h]->kind, stage, pos, rot);
+            if (used < sizeof(placed)) {
+                int w = snprintf(placed + used, sizeof(placed) - used, "%s%s (record %d, kind %d)",
+                                 used ? ", " : "", heldName[h], held[h]->labelId, held[h]->kind);
+                used += w > 0 ? (size_t)w : 0;
+            }
         }
     }
 
@@ -301,6 +327,13 @@ static void boyLine(const char *when)
 {
     const char *name = s_row >= 0 ? ico_unused_row(s_row)->name : "?";
 
+    /* systemStatus[6]: a stage change under way (the room's PH_PLAYING
+       outlives it): its InitIcoMisc may have the boy up while colObjList
+       still names the old stage's objects (fieldCollision.c _Clip) */
+    if (systemStatus[6] != 0) {
+        fprintf(stderr, "unused: %s %s: no boy (a stage change under way)\n", name, when);
+        return;
+    }
     if (stageManagerFreeResourceFlag != 0 || mpegPlay != 0 || boyGObj == 0 ||
         GOBJ_SUB(boyGObj) == 0) {
         fprintf(stderr, "unused: %s %s: no boy (the stage has none up)\n", name, when);
