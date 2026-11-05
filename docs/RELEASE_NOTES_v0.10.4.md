@@ -3,6 +3,8 @@
 - Options > Picture: Gamma, Picture brightness, Contrast and Saturation now change by 1 with each press instead of 5.
 - On phones and handhelds with a Snapdragon chip, the log now checks a little of the characters' drawing as you play and says when it comes out wrong (for the stray streak report).
 
+- Русский (bob-ttz): 17 more rows translated, among them the Picture rows, the Gameplay pages and five notes that were shown in English.
+
 ## Fixed
 
 - Entering a test room from Options > Extras > Unused content no longer ends in a game over at once: the character starts on the room's floor where the camera can see him, in both rooms.

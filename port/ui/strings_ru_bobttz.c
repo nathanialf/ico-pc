@@ -122,8 +122,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_OPT_VOLUME] = "Громкость",
     [UI_STR_OPT_MOUSE_SENS] = "Чувствительность мыши",
     [UI_STR_OPT_VIDEO_MODE] = "Режим видео",
-    [UI_STR_VAL_PAL50] = "PAL 50 Гц", /* empty in the CSV: English */
-    [UI_STR_VAL_60HZ] = "60 Гц",  /* empty in the CSV: English */
+    [UI_STR_VAL_PAL50] = "PAL 50 Гц",
+    [UI_STR_VAL_60HZ] = "60 Гц",
     [UI_STR_OPT_FRAMERATE] = "Частота кадров",
     [UI_STR_VAL_WINDOW] = "Оконное",
     [UI_STR_VAL_AUTO] = "Автоматическое",
@@ -197,7 +197,7 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_PAD_RSTICK_UP] = "Правый стик Вверх",
     [UI_STR_PAD_RSTICK_DOWN] = "Правый стик Вниз",
     [UI_STR_VAL_UNCAPPED] = "Неограниченный",
-    [UI_STR_FPS_UNIT] = NULL,              /* empty in the CSV: English */
+    [UI_STR_FPS_UNIT] = NULL, /* empty in the CSV: English */
     [UI_STR_VIDEO_MODE_TITLE_ONLY] = "только заголовок",
     [UI_STR_ACH_LOCKED] = "Заблокировано",
     [UI_STR_ACH_STATE_UNLOCKED] = "Разблокировано",
@@ -205,19 +205,21 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
         "Игра проходит в отражённом виде слева направо. Сохранение сохраняет выбранный вариант.",
     [UI_STR_OPT_NEWGAME_PLUS] = "Новая игра+",
     /* longer than a note holds (two lines, 255 bytes): English until shortened */
-    [UI_STR_NEWGAME_PLUS_SCREEN] = "«Новая игра+»: второе путешествие (перевод слов Йорды, новые предметы и концовка). «Выкл» оставляет первое путешествие даже после финала.",
+    [UI_STR_NEWGAME_PLUS_SCREEN] =
+        "«Новая игра+»: второе путешествие (перевод слов Йорды, новые предметы и концовка). «Выкл» оставляет первое путешествие даже после финала.",
     [UI_STR_OPT_CRT] = "ЭЛТ фильтр",
     [UI_STR_OPT_CRT_STRENGTH] = "Сила ЭЛТ фильтра",
     [UI_STR_OPT_TONE_GAMMA] = "Гамма",
     [UI_STR_OPT_TONE_BRIGHTNESS] = "Яркость",
-    [UI_STR_OPT_TONE_CONTRAST] = "Контрастность", 
+    [UI_STR_OPT_TONE_CONTRAST] = "Контрастность",
     [UI_STR_OPT_TONE_SATURATION] = "Насыщенность",
-    [UI_STR_OPT_TONE_NOTE] = "50 — исходное значение. Нажмите Квадрат для сброса. Влияет в том числе на ЭЛТ-фильтр. Текст не меняется.",
-    [UI_STR_VAL_CRT_SCANLINES] = NULL,   /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_CONSUMER] = NULL,    /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_TRINITRON] = NULL,   /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_PVM] = NULL,         /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_SHADOW] = NULL,      /* empty in the CSV: English */
+    [UI_STR_OPT_TONE_NOTE] =
+        "50 — исходное значение. Нажмите Квадрат для сброса. Влияет в том числе на ЭЛТ-фильтр. Текст не меняется.",
+    [UI_STR_VAL_CRT_SCANLINES] = NULL, /* empty in the CSV: English */
+    [UI_STR_VAL_CRT_CONSUMER] = NULL,  /* empty in the CSV: English */
+    [UI_STR_VAL_CRT_TRINITRON] = NULL, /* empty in the CSV: English */
+    [UI_STR_VAL_CRT_PVM] = NULL,       /* empty in the CSV: English */
+    [UI_STR_VAL_CRT_SHADOW] = NULL,    /* empty in the CSV: English */
     [UI_STR_VAL_CUSTOM] = "Пользовательский",
     [UI_STR_RESOLUTION_CRT_NOTE] =
         "Фильтр ЭЛТ: собственные пиксели PS2, разрешение 1x во время работы.",
@@ -230,8 +232,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_MT_LANG_DEUTSCH] = NULL,  /* empty in the CSV: English */
     [UI_STR_MT_LANG_ITALIANO] = NULL, /* empty in the CSV: English */
     [UI_STR_MT_LANG_ESPANOL] = NULL,  /* empty in the CSV: English */
-    [UI_STR_MT_HZ50] = "50 Гц",          /* empty in the CSV: English */
-    [UI_STR_MT_HZ60] = "60 Гц",          /* empty in the CSV: English */
+    [UI_STR_MT_HZ50] = "50 Гц",
+    [UI_STR_MT_HZ60] = "60 Гц",
     [UI_STR_MT_NO_CARD] = "Отсутствует Карта памяти (PS2)",
     [UI_STR_MT_NEED_START] = "По крайней мере 360КБ необходимо\nдля сохранение\nВы хотите начать?",
     [UI_STR_MT_NO_SPACE_START] =
@@ -525,7 +527,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_GRAPHICS_API_NOTE] =
         "Принять переключает сразу; без принятия выбор используется со следующего запуска.",
     [UI_STR_OPT_GRAPHICS_ADAPTER] = "Графический адаптер",
-    [UI_STR_GRAPHICS_ADAPTER_NOTE] = "Выбор графического адаптера. Принять переключает сразу; без принятия выбор используется со следующего запуска.",
+    [UI_STR_GRAPHICS_ADAPTER_NOTE] =
+        "Выбор графического адаптера. Принять переключает сразу; без принятия выбор используется со следующего запуска.",
     [UI_STR_GRAPHICS_ADAPTER_FAILED] = "Не удалось запустить графический адаптер %s; %s остаётся",
     [UI_STR_GRAPHICS_APPLY] = "Принять",
     [UI_STR_GRAPHICS_APPLY_NOTE] =
@@ -583,13 +586,15 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_OPT_SECOND_CARD_NOTE] =
         "Добавление второй карты памяти, содержащей ещё 10 слотов сохранения. Обе карты доступны на экранах сохранения и загрузки игры.",
     [UI_STR_OPT_SHADOWS_TOGETHER] = "Тени атакуют вместе",
-    [UI_STR_OPT_SHADOWS_TOGETHER_NOTE] = "Выкл: как в оригинале, тени ждут своего хода. Вкл: несколько теней могут атаковать одновременно.",
+    [UI_STR_OPT_SHADOWS_TOGETHER_NOTE] =
+        "Выкл: как в оригинале, тени ждут своего хода. Вкл: несколько теней могут атаковать одновременно.",
     [UI_STR_OPT_AA] = "Сглаживание",
     [UI_STR_OPT_AA_NOTE] =
         "Сглаживает края. Суперсэмплинг рендерит в 4 раза (2x) или в 16 раз (4x) больше пикселей; снизьте значение, если счётчик кадров упадет до 30.",
     [UI_STR_OPT_DOWNSAMPLE] = "Понижение разрешения",
     [UI_STR_VAL_DOWNSAMPLE_BOX] = "К оригинальному размеру",
-    [UI_STR_OPT_DOWNSAMPLE_NOTE] = "Рендерит в повышенном разрешении, затем сжимает до исходного. Нужен масштаб от 2x; не работает с ЭЛТ-фильтром или в окне.",
+    [UI_STR_OPT_DOWNSAMPLE_NOTE] =
+        "Рендерит в повышенном разрешении, затем сжимает до исходного. Нужен масштаб от 2x; не работает с ЭЛТ-фильтром или в окне.",
     [UI_STR_AA_OFF] = "Выкл",
     [UI_STR_AA_SSAA2] = "2x суперсемплинг",
     [UI_STR_AA_SSAA4] = "4x суперсемплинг",
@@ -668,7 +673,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_BACKUP_WHY_NO_SPACE] = "На устройстве недостаточно свободного места.",
     [UI_STR_OPT_EFFECT_WATER] = "Отражения воды",
     [UI_STR_VAL_SHARP] = "Резкие",
-    [UI_STR_EFFECT_WATER_NOTE] = "«Резкие» рендерит отражения в воде в выбранном разрешении; «Исходный» сохраняет мягкие отражения PS2",
+    [UI_STR_EFFECT_WATER_NOTE] =
+        "«Резкие» рендерит отражения в воде в выбранном разрешении; «Исходный» сохраняет мягкие отражения PS2",
     [UI_STR_VAL_SMOOTH] = "Плавное",
     [UI_STR_OPT_SHOW_FPS] = "Счётчик кадров",
     [UI_STR_EFFECT_MOTION_BLUR_NOTE] =
@@ -794,14 +800,18 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
         "Более низкие значения приводят к более быстрому исчезновению следа; 100 — как на PS2.",
     [UI_STR_SECTION_UNUSED] = "Неиспользованные материалы",
-    [UI_STR_UNUSED_ARENA] = "Тестовая комната: Арена",  
-    [UI_STR_UNUSED_ARENA_NOTE] = "Комната разработчиков для тестов сражения с Тенями. У неё нет выхода: выходите, нажав «Старт», а затем «Конец игры».",
+    [UI_STR_UNUSED_ARENA] = "Тестовая комната: Арена",
+    [UI_STR_UNUSED_ARENA_NOTE] =
+        "Комната разработчиков для тестов сражения с Тенями. У неё нет выхода: выходите, нажав «Старт», а затем «Конец игры».",
     [UI_STR_UNUSED_CLIMB] = "Тестовая комната: Подъём",
-    [UI_STR_UNUSED_CLIMB_NOTE] = "Комната разработчиков для тестов карабкания и ящиков. Для выхода нажмите «Старт», а затем «Конец игры».", 
+    [UI_STR_UNUSED_CLIMB_NOTE] =
+        "Комната разработчиков для тестов карабкания и ящиков. Для выхода нажмите «Старт», а затем «Конец игры».",
     [UI_STR_UNUSED_MOVIE] = "Развлекательный ролик (в разрешении 576p)",
-    [UI_STR_UNUSED_MOVIE_NOTE] = "Вторая копия ролика из главного меню (европейская ТВ-версия, которая никогда не транслировалась).",
+    [UI_STR_UNUSED_MOVIE_NOTE] =
+        "Вторая копия ролика из главного меню (европейская ТВ-версия, которая никогда не транслировалась).",
     [UI_STR_UNUSED_ART] = "Ранние арты",
-    [UI_STR_UNUSED_ART_NOTE] = "Картинки титульного экрана ранней демоверсии, оставшиеся на диске и никогда не показанные.",
+    [UI_STR_UNUSED_ART_NOTE] =
+        "Картинки титульного экрана ранней демоверсии, оставшиеся на диске и никогда не показанные.",
     [UI_STR_UNUSED_ART_VER] = NULL,        /* newer than the CSV: English */
     [UI_STR_UNUSED_ART_START] = NULL,      /* newer than the CSV: English */
     [UI_STR_UNUSED_ART_COPYRIGHT] = NULL,  /* newer than the CSV: English */
