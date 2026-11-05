@@ -213,9 +213,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   stored at the root itself not taken, so an un-negated test fails; the climbing room's start
   outside every zone: of a zone whose floor lies below its box, two with the same box bottom and
   different floors, one higher and one with no floor, the larger floor plan of the lowest wins,
-  every zone probed once from its box's top, the boy at the floor plus his 71 above his own
-  floor, the girl moved with him when up and not when `girlGObj` is NULL, the move's line and the
-  tick line after it; no zone with a floor: he stays, its line; no camera set: its line; no boy
+  every zone probed once from its box's top, the boy at the floor minus his fake skeleton's root
+  height 72 (`GOBJ_SUB(boyGObj)->skel` node 0's `pos[1]`, the entrance height) with his root ON its
+  floor (a measured 0) and with it 71 above (a measured 71: still 72), the girl at her own 60,
+  moved with him when up and not when `girlGObj` is NULL, the move's line with the probe from the
+  moved root, the tick line after it with the camera's zone, eye and look-at (a stubbed
+  `ico_host_camera_view`) and his draw mask; the big floor or no floor under the moved root
+  (`s_underMoved`): the "not the zone's" line and no second move; no zone with a floor: he stays, its line; no camera set: its line; no boy
   in the 300 ticks: the never-ran line), the return to the title with its log and the reopen of
   Options, the failures; the art row refused when the model viewer offers none of its rows, and its start
   opening the viewer's list on the viewer's first art row (a stubbed `ico_mv_models_enter_at`),

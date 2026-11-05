@@ -1106,9 +1106,18 @@ has.
   the game's floor probe (`GetLowerPlaneCollision`) cast down from the box's top at the centre's x
   and z must hit a floor no lower than the box's bottom. The lowest is the zone whose box bottom is
   nearest the big floor; zones with the same bottom go to the one with the larger floor plan (half x
-  times half z), then the set's order. He lands at the zone centre's x and z, at the height above
-  that floor his root had above the floor under the start (the same probe where he stood; 0 with no
-  floor under him). In the climbing room that is group 20 (world centre (1111, -1355, 81), half
+  times half z), then the set's order. He lands at the zone centre's x and z, his root at that
+  floor's y minus his skeleton's root height: the game's own rule for a direct move, `act.c`'s
+  debug move (`ACTDebugMove`, `ico2/fumi/src/act.c`: `pos[1] = floor - h` with `h` node 0's
+  `pos[1]` of `GOBJ_SUB(self)->skel`, 0 without a skeleton; the skeleton exists from the actor's
+  creation). The girl goes to the same x and z at her own root height. The height a probe measures
+  where he stands is not used: the room's first poll can come before his first motion frame fits
+  him, so his root lies on the origin's floor and the probe measures 0; a root put at the ramp's hit
+  point lies, in the game's arithmetic, 0.000122 under the ramp's plane, every probe from it finds
+  the big floor 1,324 below, and the landing probe drops him there, a fatal fall
+  (`build-host/tmp/v0104/evidence/rooms/`, the climbing room's diagnosis, mode 1). After the move one probe
+  from the moved root says what is under him; a miss, or a floor more than twice his root height
+  below, is logged plainly and he is left there (no second move). In the climbing room that is group 20 (world centre (1111, -1355, 81), half
   (1216, 635, 529), box y -1990..-720, floor y -1324 attribute 0): a ramp of the climbing
   structure 1,324 above the room's floor, sloped about 24 degrees, 150 to 225 across
   (`build-host/tmp/v0104/evidence/review2/ledge.txt`, `ledge2.txt`). The room keeps its entrance
@@ -1124,9 +1133,14 @@ has.
   collision files, the floors cast as `build-host/tmp/v0104/tools/rooms.py` casts them). Lines:
   `unused: <room>: the start is inside camera zone G of N (centre (x, y, z))`; `unused: <room>: the
   game's no-entrance point (x, y, z) is outside every camera zone (the lowest zone's centre Y above
-  it, or below it when a zone lies below the start): the boy moved to zone G's floor at (x, y, z) (H above the floor y F)`, then `; no floor under
-  the start, so 0 above` when the probe under him found none and `; the girl with him` when she
-  moved; `unused: <room>: no camera zone holds a floor under its centre: the boy stays at (x, y,
+  it, or below it when a zone lies below the start; its root M above its floor there | no floor
+  under its root): the boy moved to zone G's floor at (x, y, z) (h above the floor y F, his
+  skeleton's root height; the probe from there finds the floor F2, D below | finds no floor)`, then
+  `; the girl with him, h above the floor` (her own root height) when she moved; when the probe
+  from the moved root finds no floor or one more than 2h below, `unused: <room>: the floor under
+  the moved root is not the zone's: the probe from (x, y, z) finds the floor F2, D below, more than
+  twice his root height | finds no floor (the zone's floor y F, his root height h); he is left
+  there`; `unused: <room>: no camera zone holds a floor under its centre: the boy stays at (x, y,
   z)`; `unused: <room>: no camera set loaded (N groups): the boy stays at (x, y, z)`; `unused:
   <room>: the camera-zone check never ran (no boy in the first 300 ticks)`. The boy's tick lines
   below show where he stands after the move.
@@ -1138,9 +1152,16 @@ has.
   K)` after the boy when the title's boy held them). For the first 300 Main ticks after the room's stage is up, a line as it comes
   up and every 30 ticks after, and at a game over in a room (`ico_unused_game_over`, through the
   engine's `game_over`): `unused: <room> tick T: the boy at (x, y, z), ground height G (the floor
-  F under him, D below | no floor below), fall height H` (`tick T` reads `game over` there), from
-  the boy's root (`GetRootPosition`), `ctrl.groundHeight`, `ctrl.fallHeight` and the game's own
-  floor probe (`GetLowerPlaneCollision`, as `act.c` calls it); `no boy (the stage has none up)`
+  F under him, D below | no floor below), fall height H; the camera (mode M) in zone Z, its eye
+  (x, y, z) looking at (x, y, z) | no camera computed yet; his draw mask 0xMMMMMMMM, display N`
+  (`tick T` reads `game over` there), from the boy's root (`GetRootPosition`),
+  `ctrl.groundHeight`, `ctrl.fallHeight` and the game's own floor probe (`GetLowerPlaneCollision`,
+  as `act.c` calls it); the camera is the monitor camera's work (`ico_host_camera_view`,
+  `ico2/omori/src/camera-ico2.c`, read only: the zone the zone search last found, -1 none since
+  the stage's init, as a frame with no zone keeps the last; the eye and look-at in the roots'
+  space, the work's negation; `CameraGetMode`; `CameraCalclated_f`), and he is drawn while the
+  draw mask (`GObj` `drawMask`, ANDed with a camera's mask: all ones while shown) is set and
+  `disp` (the display object's, nonzero while the stage animation draws it) is nonzero; `no boy (the stage has none up)`
   while the stage has no boy, `no boy (a stage change under way)` while `systemStatus[6]` is set
   (the next stage's collision list may still name the old stage's objects).
 - Leaving: the rooms have no exit. Pause > End Game goes back to the title by the game's own path.
