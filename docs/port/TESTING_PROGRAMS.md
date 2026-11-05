@@ -202,7 +202,19 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `unused_content_<slug>` for jpn, kor, cn, ntsc, aug6, jun26): each row's stage, which rows the
   disc's DATA.DF has, the engine indirection, the test rooms' start and the arena's boy at its
   first shadow row, the return to the title with its log and the reopen of Options, the
-  failures.
+  failures; the art row refused when the model viewer offers none of its rows, and its start
+  opening the viewer's list on the viewer's first art row (a stubbed `ico_mv_models_enter_at`),
+  the list's refusal and a start off the title refused, each logged.
+- `charfile_image_test.c`: the early show title art's hook in the game
+  (`ico2/common/src/charFileManager.c` `ico_char_file_image`) by its text, no game linked
+  (`charfile_image`, the file and `ico2/fumi/ios/cdvd.c` as arguments): each of its four twins is
+  its loader's body (`ReadModelFile`, `ReadModelFile_jun26`, `ReadTextureFile`,
+  `ReadTextureFile_ntscaug6jun26`) line for line but for the read from the cdvd handle (a copy of
+  the image), the two skips (nothing) and the call of the 2001 or demo arm (the twin's); the four
+  loaders read the handle eight times; no line of the block reads a handle; the dispatcher's
+  extension lookup over `initFunc`'s 26 rows, its two loaders told by address and its load count
+  in order; and the pack loop it stands in for (`iosCdvdMgrPackLoad`: `getPackLoader`, the row's
+  function with the directory's words and the pack's segment, `debugCdvdLoadInfoSegAdd`) as it is.
 - `unused_movie_test.c`: the attract movie row (`unused_live.c` `beginMovie` and its poll) over
   stubs of the game, DATA.DF and Settings, one run per disc (`unused_movie`,
   `unused_movie_<slug>` for jpn, kor, cn, ntsc, aug6, jun26): on the European disc the start from
@@ -315,7 +327,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   and without Skip the opening.
 - `model_viewer_cam_test.c`: the viewer's camera step without the game (`model_viewer_cam`).
 - `model_viewer_test.c`: the viewer's table against its motion-kind blocks and the game's table
-  sizes, its names in five languages (`model_viewer`); its Japanese model column is checked by
+  sizes, its names in five languages (`model_viewer`); its three member rows (the early show
+  title art) over a fake of each disc's logo pack directory, read from the ISOs
+  (`model_viewer_rows_<slug>` for jpn, kor, cn, ntsc, aug6, jun26; `model_viewer` is the European
+  disc's): kind 35 on the Cage's stage with no motions, each id its member's `PackEnt.id` (1595
+  for the copyright on pal, 1577-1579 jpn/kor/cn, 1544-1546 ntsc, 1539-1541 aug6), the rows
+  offered (one on pal, three on the other retail discs, none on jun26) and the first art row,
+  nothing asked with no disc mounted, each asked once per disc and again after a region change,
+  and a member found in another pack not offered; its Japanese model column is checked by
   `tools/gen_mv_region.py --check` against the PAL ELF's and the Japanese ELF's `modelData`
   (`model_viewer_jpn`) and, since the Korean disc reads the same column, the Korean ELF's
   (`model_viewer_kor`).
