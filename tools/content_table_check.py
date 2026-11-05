@@ -655,14 +655,14 @@ def table_range(name, slug="pal"):
 class Disc:
     """A disc image (ISO 9660): its files, DATA.DF's packs, the boot ELF."""
 
-    def __init__(self, path, boot_elf="SCES_507.60", df_shift=0):
+    def __init__(self, path, boot_elf="SCES_507.60", df_shift=0, df_path="DFDATAS/DATA.DF"):
         self.boot_elf = boot_elf
         self.f = open(path, "rb")
         pvd = self.sectors(16, 1)
         if pvd[1:6] != b"CD001":
             raise ValueError("%s: not an ISO 9660 image" % path)
         self.root = struct.unpack_from("<I", pvd, 158)[0], struct.unpack_from("<I", pvd, 166)[0]
-        lsn, size = self.find("DFDATAS/DATA.DF")
+        lsn, size = self.find(df_path)
         # the Korean disc's archive lies df_shift sectors past the directory's LSN
         # (IcoDiscInfo.df_lsn_shift, port/data/archive.h); the span shrinks by as much
         if size <= df_shift * 2048:
