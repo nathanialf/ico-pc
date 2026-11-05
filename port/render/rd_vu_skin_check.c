@@ -454,8 +454,15 @@ static bool keyEq(const RdPipeKeyInt *a, const RdPipeKeyInt *b)
 
 /* the box check's pipeline of key k: begun in the background the first
  * time, {0} until it is made (wait: taken now) */
-static RhiPipeline boxPipe(const RdPipeKeyInt *k, bool wait)
+static RhiPipeline boxPipe(const RdPipeKeyInt *raw, bool wait)
 {
+    /* the key as the pass makes it: a key checked first in an MSAA pass
+     * and again in a single-sampled one (or the other way) is two
+     * pipelines, as rd__get_pipeline's cache holds it (review2 S8: a
+     * multisampled pipeline bound in a single-sampled pass) */
+    RdPipeKeyInt norm;
+    rd__pipeline_key_norm(raw, &norm);
+    const RdPipeKeyInt *k = &norm;
     SkBoxPipe *e = NULL;
     for (int i = 0; i < SK_BOX_PIPES && !e; i++) {
         if (s_box[i].used && keyEq(&s_box[i].key, k)) {
@@ -478,7 +485,7 @@ static RhiPipeline boxPipe(const RdPipeKeyInt *k, bool wait)
         memset(e, 0, sizeof(*e));
         e->used = true;
         e->key = *k;
-        if (!rd__pipeline_desc(k, &e->desc, e->lay)) {
+        if (!rd__pipeline_desc(raw, &e->desc, e->lay)) { /* drawKey(raw): norm's */
             e->failed = true;
             return (RhiPipeline){0};
         }

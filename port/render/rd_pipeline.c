@@ -1329,6 +1329,12 @@ bool rd__pipeline_desc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroupLa
     return pipelineDesc(drawKey(k, &tmp), d, layouts);
 }
 
+void rd__pipeline_key_norm(const RdPipeKeyInt *k, RdPipeKeyInt *out)
+{
+    RdPipeKeyInt tmp;
+    *out = *drawKey(k, &tmp);
+}
+
 /* k's slot in s_hash: its entry's (*found) or the empty slot the probe
  * ended on */
 static uint32_t probeKey(const RdPipeKeyInt *k, bool *found)

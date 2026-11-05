@@ -247,6 +247,11 @@ RhiBuffer rd__vu_skin_index_buffer(void);
 /* rd_pipeline.c: the pipeline description of a key, as rd__get_pipeline
  * makes it (layouts: 4 entries the description points to) */
 bool rd__pipeline_desc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroupLayout layouts[4]);
+/* rd_pipeline.c: the key rd__get_pipeline hashes for k in the pass now
+ * (drawKey: the pass's sample count, the dynamic state and the attachment
+ * read's mask normalised), so a pipeline made beside the cache is told
+ * apart by the pass it can draw in */
+void rd__pipeline_key_norm(const RdPipeKeyInt *k, RdPipeKeyInt *out);
 /* rd_pipeline.c: note to the activity function (rd_set_activity_fn) as
  * it is; rd__pipeline_note_end puts back the note rd__get_pipeline would
  * leave */

@@ -83,7 +83,10 @@ fragment entry drawn. Drawn only where
 the box is closed (every vertex of the draw's batches in front of the eye: a clipped corner behind
 it reaches anywhere), the pass an ordinary one (no storage pass, no DATE through the stencil bit, no
 stencil mode) and its pipeline made (compiled in the background at its key's first check: no
-hitch).
+hitch). Its pipelines are told apart by the key as the pass makes it (`rd__pipeline_key_norm`:
+the pass's sample count, the dynamic state, as `rd__get_pipeline`'s cache), so a key checked in
+an MSAA pass and again in a single-sampled one is two pipelines, never one bound in a pass of
+another sample count.
 
 **S1, the start-up probe.** An early warning, not the decider. A VuBoneCB of 60 distinct bones (each
 a turn, a scale, a shear and a move of its own) and 120 vertices whose weight qwords name every
