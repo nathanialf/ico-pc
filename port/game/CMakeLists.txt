@@ -608,8 +608,10 @@ endif()
 # --- The model viewer -----------------------------------
 if(TARGET ico_pc)
     # title_logo.c: the title's logo hidden under Settings and
-    # Extras, asked by seki/src/RegistPacket.c
-    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_cam.c model_viewer_motion.c model_viewer_table.c title_logo.c)
+    # Extras, asked by seki/src/RegistPacket.c; model_viewer_member.c: the
+    # early show title art's members registered on the host stage
+    # (charFileManager.c ico_char_file_image)
+    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_cam.c model_viewer_member.c model_viewer_motion.c model_viewer_table.c title_logo.c)
     ico_include_dirs(sugipon _ico_mv_game_incs)
     # port/data: df_pack.h (the June 2001 demo's DATA.DF asked for a stage's pack)
     target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
@@ -766,6 +768,19 @@ if(ICO_RUN_TESTS)
         add_test(NAME unused_content_${_slug}
                  COMMAND unused_content_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
     endforeach()
+endif()
+
+# charfile_image_test: the early show title art's hook in the game
+# (ico2/common/src/charFileManager.c ico_char_file_image) by its text: its
+# twins are the model and texture loaders' bodies line for line but for the
+# read from the cdvd handle, and its dispatch is the pack loop's
+# (ico2/fumi/ios/cdvd.c iosCdvdMgrPackLoad). CPU only, no game linked.
+add_executable(charfile_image_test test/charfile_image_test.c)
+target_compile_options(charfile_image_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME charfile_image
+             COMMAND charfile_image_test "${CMAKE_SOURCE_DIR}/ico2/common/src/charFileManager.c"
+                     "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/cdvd.c")
 endif()
 
 # unused_movie_test: the attract movie row (unused_live.c beginMovie and its

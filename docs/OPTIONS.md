@@ -797,7 +797,9 @@ of them, so its Extras page has no Unused content row.
   televisions. The game never plays it.
 - **Early show title art** (when the disc has it): pictures from the title
   screen of an early show version of the game, left on the disc and never
-  shown. They open in the model viewer.
+  shown. They open in the model viewer's list, where you pick one: the
+  version mark, Press Start and the copyright line. The European disc has
+  only the copyright line. Back in the list returns to this page.
 
 The test rooms have no exit. To leave one, press Start and choose End Game:
 the game goes back to the title screen and opens Options on this page

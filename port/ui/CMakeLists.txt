@@ -366,12 +366,16 @@ endif()
 # model_viewer_test (port/game/test): the model viewer's table
 # (port/game/model_viewer_table.c) against its motion-kind blocks and the
 # game's table sizes, and its names and words in the six languages with a
-# glyph for every character in the port font. CPU only.
+# glyph for every character in the port font; its member rows (the early
+# show title art) over a fake of each disc's logo pack directory: their
+# ids, the rows offered, the per-disc id cache (model_viewer and
+# model_viewer_rows_<slug>). CPU only.
 add_executable(model_viewer_test "${CMAKE_SOURCE_DIR}/port/game/test/model_viewer_test.c"
     "${CMAKE_SOURCE_DIR}/port/game/model_viewer_table.c" font.c ${_ui_string_srcs}
     ${_ui_font_srcs})
 target_include_directories(model_viewer_test PRIVATE "${CMAKE_SOURCE_DIR}/port/game"
-                           "${CMAKE_SOURCE_DIR}/port/third_party/stb")
+                           "${CMAKE_SOURCE_DIR}/port/third_party/stb"
+                           $<TARGET_PROPERTY:ico_port_data,INTERFACE_INCLUDE_DIRECTORIES>)
 # port/ui's "strings.h" by -iquote, so <strings.h> stays the C library's
 target_compile_options(model_viewer_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
                        -iquote "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -381,6 +385,9 @@ if(NOT WIN32)
 endif()
 if(ICO_RUN_TESTS)
     add_test(NAME model_viewer COMMAND model_viewer_test)
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        add_test(NAME model_viewer_rows_${_slug} COMMAND model_viewer_test ${_slug})
+    endforeach()
     # the table's Japanese model column against the PAL ELF's and each other
     # disc's modelData (tools/gen_mv_region.py --check; the Korean disc reads
     # the Japanese column; tools/gen_data_c.py reads the ELFs, so pyelftools:

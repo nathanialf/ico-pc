@@ -24,6 +24,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | `port/game/model_viewer.h`, `model_viewer.c` | Extras > Models and the game side of Extras > Characters |
 | `port/game/model_viewer_table.c` | the viewer's models and the motion-kind blocks |
 | `port/game/model_viewer_motion.c` | which motions of a block the loaded stage can play (`ico_mv_motion_playable`) |
+| `port/game/model_viewer_member.c` | the early show title art's model and texture registered from the logo pack's members and its object built on the host stage ([The model viewer and Characters](#the-model-viewer-and-characters)) |
 | `port/game/model_viewer_cam.h`, `model_viewer_cam.c` | the viewer's camera step, a pure function |
 | `port/game/appearance.h`, `appearance.c` | the characters' colours: the parts, the palette, the recolour of the CLUTs |
 | `port/ui/gallery.h`, `gallery.c`, `gallery_play.c` | the music gallery's list and its engine |
@@ -456,7 +457,7 @@ hold the rest.
 | Extras > Credits (title, once unlocked) | W | W | W | W | W | H | W | `credits_staff_packs` (the demo's DATA.DF has no `STGSTAFF*.DF`); `settings_discs`, `settings_extras_<slug>`, `credits_<slug>` |
 | Extras > Unused content: Test room: arena, Test room: climbing (title) | W | W | W | W | W | H | W | the stage's pack in the disc's `DATA.DF` (`STGBOSS_TEST.DF`, `STG8TEST.DF`; the demo's 49 entries hold neither), the host's `available`; `unused_content_<slug>`, `settings_discs_<slug>` |
 | Extras > Unused content: Attract movie (576 lines) (title) | W | H | H | H | H | H | H | stage 59 (`memoryPAL576`) is the European `stageData`'s only (`ico_region_stage(59)` is -1 elsewhere) and `pal_advertise576.pss` its `DATA.DF`'s; `unused_content_<slug>`, `unused_movie_<slug>`, `settings_discs_<slug>` |
-| Extras > Unused content: Early show title art (title) | W | W | W | W | W | H | W | the member `object/sdf/e3/st13b/model/copy_right.p2o` in a pack of the disc (`ico_df_find_member`; the demo has no `STGLOG.DF`); the link itself hidden on the demo, one line; `unused_content_<slug>`, `settings_discs_<slug>` |
+| Extras > Unused content: Early show title art (title) | W | W | W | W | W | H | W | the member `object/sdf/e3/st13b/model/copy_right.p2o` in a pack of the disc (`ico_df_find_member`; the demo has no `STGLOG.DF`) and a member row the model viewer offers (`mv_member_first_row`); the row opens the viewer's list there, which offers the copyright only on pal (its `STGLOG.DF` holds no other) and all three elsewhere; the link itself hidden on the demo, one line; `unused_content_<slug>`, `model_viewer_rows_<slug>`, `charfile_image`, `settings_discs_<slug>` |
 | Extras > Export textures, Add to Steam | W | W | W | W | W | W | W | the running disc's `DATA.DF`; disc-independent |
 | Extras > Back up your data, Restore from a backup (title) | W | W | W | W | W | W | W | the user folder's files, every disc's at once (the card folders hold each disc's directory; `states/<slug>/`); the manifest names the disc played; `backup`, `settings_backup`, `settings_backup_<slug>` (jpn, kor, cn) |
 | Photo mode (Film effect 1 to 4, Deja vu) | W | W | W | W | W | W | W | the grain is `gsb_filmNoise` on every disc (the 2001 arm's call is the port's); no reel scratches where `reel_row` is -1 (logged) |
@@ -858,7 +859,52 @@ from `ico_mv_tick`, called by `Main` after the pad is read (`ico2/common/src/mai
 step is a pure function of the held buttons and sticks so a CPU test drives it
 (`port/game/model_viewer_cam.h` (`mv_cam_step`)). Nothing is saved, and the viewer's own buffers are
 host memory, not the game's [arena](ARCHITECTURE.md#terms) (`port/game/model_viewer.c`, header
-comment).
+comment); the early show art's model and texture are the exception, in the arena as the stage's own
+(below).
+
+The table ends with three rows no stage builds, the early show title art of Extras > Unused
+content (`MvModel.member`): the E3 2001 title's three textured quads (`e3_ver.p2o`, `p_start.p2o`,
+`copy_right.p2o` and the TIM2s they name, `e3_ver.tm2`, `p_start.tm2`, `scei_cr.tm2`, in
+`object/sdf/e3/st13b/`). Every retail disc's logo pack `STGLOG.DF` carries them and the game loads
+them with it at every boot, but only the E3 title script draws them, as stage animation objects of
+kind 35 (`ico2/script/src/e3.c`, `objTableScene`), and no retail disc has that script's pack. A
+member row's model id is its member's `PackEnt.id` in the running disc's `STGLOG.DF` (1577 to 1579 on
+the Japanese, Korean and Asian discs, 1544 to 1546 on the North American, 1539 to 1541 on the August
+2001 preview, 1595 for the copyright on the European disc, whose pack has only that one), asked once
+per disc through `ico_df_find_member` and checked to lie in that pack (`mv_model_id`,
+`model_viewer_table.c`); the list offers a member row only where the pack holds it
+(`mv_model_shown`): one on the European disc, three on the other retail discs, none on the June 2001
+demo. Its host stage is the Cage's quiet stage (European 31).
+
+Once the host stage is up, `setup` has `mv_member_load` (`port/game/model_viewer_member.c`) register
+the row's texture and then its model, as the pack holds them (textures first: the model's material
+finds its texture by name when its object is built, `ico2/seki/src/Packet.c`
+(`pac_getTextureInfo`)), through the game's own hook `ico_char_file_image`
+(`ico2/common/src/charFileManager.c`, the `PC port` block at its end). The hook does what the pack
+loader does with one member (`ico2/fumi/ios/cdvd.c` (`iosCdvdMgrPackLoad`)): the `initFunc` row of
+the member's extension (`.p2o` is `ReadModelFile`, `.tm2` `ReadTextureFile`, on every disc's ELF),
+then that loader's body on the image, then the load count (`debugCdvdLoadInfoSegAdd`). The bodies are
+twins of the two loaders and their 2001 and demo arms, line for line with the read from the cdvd
+handle replaced by a copy of the image, which the ctest `charfile_image`
+(`port/game/test/charfile_image_test.c`) holds against the loaders and the pack loop. So the model
+lands in `charFiles[id]` with the next `objSerial` and the texture in the texture table, in the
+stage partition and malloc partition 1 a stage pack's members get; the next stage change clears both
+as it clears the logo pack's own (`ResetCharFileManager`, `tex_Init`, the partition resets), so they
+are left registered for the stage's life, and each pick of an art row loads the host stage afresh
+and registers them again. It runs on the game thread from Main's tick, when no pack load can be in
+progress (packs are loaded only by `InitIcoMisc` at a stage change; the loaders yield only inside the
+handle read the twins do not call; the game's threads are fibers on one host thread). Then the
+object is built as a stage builds a layouted object (`CreateLayoutedGObj`, as
+`ico2/common/src/sceneManager.c` (`initSceneGObj`)): kind 35 (MOBJ: no constructor, drawn by
+`p2o_DispVU1MultiDefault`, the static objects' `reg_DispObj`), at the origin with no turn and scale
+1, light 0, display group 7, no layout row and no accessary. Because the loaders stop the game on a
+failed allocation, the room is checked first and the load refused with a line when it is short: the
+stage partition's free list (the members' bytes and 1 MB kept free, the largest block holding the
+largest member), the texture table (`Texture.c` asserts at 200), the object pool (`isysGObjInit`'s
+320). Lines: `unused: title art <member> (id N from STGLOG.DF) loaded for the viewer (texture
+<name>, K KB read in M ms; stage S, F KB of its memory left)`, or `unused: title art <member> not
+loaded for the viewer: <why> (stage S)`, then `model_viewer: failed: the early show title art could
+not be loaded` and the way back to the title.
 
 Settings > Extras > Characters from the title runs in the viewer: Ico's model is loaded, the
 Characters page becomes a panel at the left with the model beside it, L1 and R1 switch characters,
@@ -983,7 +1029,7 @@ stage numbers and pack names are the ELFs' `stageData` (`port/data/gen/<slug>/ta
 | Test room: arena | 88 `boss_test` | 86 | 85 | `STGBOSS_TEST.DF` |
 | Test room: climbing | 91 `8a_TEST` | 89 | 88 | `STG8TEST.DF` |
 | Attract movie (576 lines) | 59 `memoryPAL576` (its `dataFile` is `#REF!`: no pack) | none | none | the loose `pal_advertise576.pss` |
-| Early show title art | 1 `logo` | 1 | 1 | `STGLOG.DF` and its member `object/sdf/e3/st13b/model/copy_right.p2o` |
+| Early show title art | 1 `logo` (the art's pack); shown on 31, the Cage's | 1; 31's row | 1 | `STGLOG.DF` and its member `object/sdf/e3/st13b/model/copy_right.p2o` |
 
 On the PS2 only the debug Stage Select reaches the two rooms (`ico2/common/src/debug.c`
 (`debug_SelectStageMain`)); the title's attract picks stage 58 or 57 only (`ico2/script/src/op.c`,
@@ -1043,8 +1089,14 @@ has.
   at the title after X s (movie ended | skipped | fail-start)`, `unused: failed: the movie's stage
   N was not reached ...`. The film's length is read in wall seconds, as Main runs no tick while a
   film plays.
-- The art row's start refuses in this build (`unused: failed: ... cannot be started in this
-  build`); its availability is final.
+- The art row's start (`beginArt`, `port/game/unused_live.c`), from the title only: Extras >
+  Models' list opened on the viewer's first art row on this disc (`ico_mv_models_enter_at`,
+  `mv_member_first_row`); Back there comes to this page's art row. The viewer loads the art on its
+  host stage ([The model viewer and Characters](#the-model-viewer-and-characters)). The row needs a
+  member row the viewer offers as well as the member (`unused: no early show title art row on
+  <disc>: the model viewer offers none of its models`). Lines: `unused: early show title art: the
+  model viewer's list (layout L) on its row R`, `model_viewer: the list opened at "<name>" (row N of
+  M offered)`, or `unused: failed: the model viewer's list did not open for early show title art`.
 - Log lines: `unused: enter <row>`, `unused: test room <row> (stage N on this disc) started from the
   title at Main tick T`, the arena's placement, `unused: stage N at Main tick T`, `unused: the test
   room's stage N is up ...`, `unused: game over in the test room <row>: both choices go to the
@@ -1053,8 +1105,9 @@ has.
   `extras: no Unused content page on <disc id>`.
 
 ctests `unused_content` and its six other-disc runs (`port/game/test/unused_content_test.c`),
-`settings_extras`, `settings_discs` and its runs, `keep_flags` (the game-over arms compile with the
-flag's stub).
+`model_viewer` and `model_viewer_rows_<slug>` (the art's rows per disc), `charfile_image` (the hook's
+twins), `settings_extras`, `settings_discs` and its runs, `keep_flags` (the game-over arms compile
+with the flag's stub).
 
 ## The title logo
 

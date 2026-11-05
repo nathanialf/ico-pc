@@ -7,6 +7,7 @@
 
 #ifndef CHARFILEMANAGER_H
 #define CHARFILEMANAGER_H
+
 /* charFileManager.c's `inline` functions, in the order of their definitions'
  * out-of-line copies at the end of the object (first-declaration order). */
 
@@ -26,6 +27,27 @@ struct Sub15C;
 void CSVSYSTEM_ReadCharFiles(struct Sub15C *rec, int id);
 /* the loaded model of a character file id (enemy.c's setup) */
 struct PObjModel *GetPObjAddress(int id);
+
+/* PC port: one pack member registered from an image in memory as the pack
+   loader registers it (charFileManager.c, the block at its end): name is the
+   member's directory name ("object/sdf/e3/st13b/model/copy_right.p2o"), the
+   next four its directory words (PackEnt id, kind, word08 and size), seg the
+   pack's segment (1 a stage's pack).  0 registered, 1 a model already in
+   charFiles[id] (the loader skips it too), or one of the refusals, which
+   change nothing: no initFunc row for the extension, a row whose loader is
+   neither ReadModelFile nor ReadTextureFile, a model id outside the table, a
+   size of 0 or less. */
+enum {
+    ICO_CHAR_IMAGE_LOADED = 0,
+    ICO_CHAR_IMAGE_ALREADY = 1,
+    ICO_CHAR_IMAGE_NO_LOADER = -1,
+    ICO_CHAR_IMAGE_OTHER_LOADER = -2,
+    ICO_CHAR_IMAGE_BAD_ID = -3,
+    ICO_CHAR_IMAGE_BAD_SIZE = -4
+};
+
+int ico_char_file_image(char *name, const void *image, int size, int id, int kind, int word08,
+                        int seg);
 
 /* texture-path: one texture file, 0x34 bytes (JPN and KOR 0x30, in .rodata). Readers:
  * ico2/common/src/charFileManager.c (TexRec, PAL), kanban.c, layout_texture.c.

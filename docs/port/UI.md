@@ -1140,6 +1140,13 @@ page has no lock; each row has its note (`UI_STR_UNUSED_*_NOTE`, `buildOptionPag
 - Cross: `extrasUnused`, as Credits (`extrasCredits`): from the title only, `ui_settings_save`, the
   host's `open(row)`; a layout back closes the menu on it (`extrasLeave`: `la_host_leave`, the
   title's cursor kept on Settings); -1 keeps the page (the host logged why).
+- The art row: its `open` is the model viewer's list on the viewer's first art row on the disc
+  (`port/game/unused_live.c` `beginArt`, `ico_mv_models_enter_at`), on which `extrasLeave` closes
+  the menu as for any start; Back in that list comes to this page's art row
+  (`ui_settings_page_layout(UI_PAGE_UNUSED)`, `ui_settings_row_of(UI_PAGE_UNUSED,
+  UI_OPT_UNUSED_ART)`), where from Extras > Models it comes to Extras' Models row. The list offers
+  the art rows the disc's logo pack holds (the European disc the copyright only)
+  ([GAME_FEATURES.md](GAME_FEATURES.md#the-model-viewer-and-characters)).
 - The way back: after a test room the engine arms `ui_settings_title_return(UI_PAGE_UNUSED)` as the
   title's stage is entered, and once the title's menu is up and faded in (`lt_fade_status() == 2`,
   `ui_settings_title_decided`, layout 13 or 12) switches to `ui_settings_reopen_page(UI_PAGE_UNUSED)`:

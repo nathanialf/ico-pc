@@ -217,6 +217,19 @@ int ico_df_find_member(IcoVfs *vfs, const char *name, IcoDfMember *out)
     return -1;
 }
 
+/* --- the model viewer (the art row's start, unused_content_test's) -------- */
+
+int mv_member_first_row(void)
+{
+    return isDemo() ? -1 : 23;
+}
+
+int ico_mv_models_enter_at(int row)
+{
+    (void)row;
+    return -1;
+}
+
 /* --- Settings ------------------------------------------------------------- */
 
 static const UiUnusedHost *s_host;
