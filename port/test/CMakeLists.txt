@@ -91,6 +91,25 @@ if(Python3_FOUND)
     set_tests_properties(content_table_chains_kor PROPERTIES SKIP_RETURN_CODE 77)
 endif()
 
+# unused_content_audit_<disc>: docs/port/UNUSED_CONTENT_AUDIT.md's section for the disc against the
+# disc's image (tools/unused_content_audit.py --check): the DATA.DF entries no table names, the
+# stage rows no exit leads to, the models no row names, the loose items; skipped (77) without the
+# image
+if(Python3_FOUND)
+    foreach(uca_slug IN ITEMS pal jpn kor ntsc aug6 jun26 cn)
+        if(uca_slug STREQUAL "pal")
+            set(uca_image "${ICO_DISC_IMAGE}")
+        else()
+            string(TOUPPER "${uca_slug}" uca_upper)
+            set(uca_image "${ICO_DISC_IMAGE_${uca_upper}}")
+        endif()
+        add_test(NAME unused_content_audit_${uca_slug}
+                 COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/unused_content_audit.py"
+                         --slug ${uca_slug} --disc "${uca_image}" --check)
+        set_tests_properties(unused_content_audit_${uca_slug} PROPERTIES SKIP_RETURN_CODE 77)
+    endforeach()
+endif()
+
 # offset_audit: every raw EE-offset access the host
 # compiles (ICO_RAW/ICO_RAWP, (char *)x + 0xNN, ((int *)x)[N], variable
 # strides, scalar and record views of a record, pad<HEX> members, static

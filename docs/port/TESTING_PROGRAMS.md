@@ -1171,6 +1171,16 @@ The renderer's test programs have a page of their own:
   or the first quadword that differs) byte for byte with the committed files. `vu1_test.c`'s
   `testVariantPlumbing` holds the state's variant, its names, the flag's bit and the block's size, and
   names the demo's hand traces that are still to be written.
+- `unused_content_audit_pal`, `_jpn`, `_kor`, `_ntsc`, `_aug6`, `_jun26`, `_cn`
+  (`tools/unused_content_audit.py --slug <disc> --check`; no C program): reads the disc image's
+  DATA.DF directory, the packs' member directories (the head of each pack's deflate stream, no
+  member's data except the animation files that decide a model's use), the folder's files and the
+  boot ELF's tables (`port/data/gen/<disc>/table_desc.c`), and compares the disc's section of
+  [UNUSED_CONTENT_AUDIT.md](UNUSED_CONTENT_AUDIT.md) with it: the entries no table or program string
+  names, the stage rows no exit row of a reached stage leads to (roots: the boot's logo and the
+  title's attract in `op.c`, whose literals the tool also checks are still in the source), the
+  movie rows, the logo pack's and test rooms' models by who uses them, the stream motions and sound
+  streams, the debug files. Skipped (77) without the image (`ICO_DISC_IMAGE`, `ICO_DISC_IMAGE_<DISC>`).
 - `layout_asserts.c`: the generated struct layout asserts, which hold at compile time
   (`layout_asserts`).
 - `gs_blend_test.c` is a standalone CPU program on the GS blender's drift, not a ctest.
