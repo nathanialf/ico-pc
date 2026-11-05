@@ -793,7 +793,7 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "Интенсивность размытия движения",
     [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
         "Более низкие значения приводят к более быстрому исчезновению следа; 100 — как на PS2.",
-    [UI_STR_SECTION_UNUSED] = NULL,        /* newer than the CSV: English */
+    [UI_STR_SECTION_UNUSED] = "Неиспользованные материалы",        /* newer than the CSV: English */
     [UI_STR_UNUSED_ARENA] = NULL,          /* newer than the CSV: English */
     [UI_STR_UNUSED_ARENA_NOTE] = NULL,     /* newer than the CSV: English */
     [UI_STR_UNUSED_CLIMB] = NULL,          /* newer than the CSV: English */
