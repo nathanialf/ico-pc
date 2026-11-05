@@ -800,11 +800,14 @@ with a fake clock and swapchain; the window only supplies its I/O (`port/platfor
    drawn picture, not once per game step, on a GPU too slow for every picture, and a skipped
    frame's texture uploads and decode settles wait for the next replay (review finding 7: a known
    change of look on a slow GPU, not a defect).
-   A keep frame the gate presents while the render thread is busy waits for the picture before,
-   its present included, before it is handed over, so an acquire never waits behind a present
-   inside a picture's reads. The lines: at each start `rd: render thread: with Frame rate Original
+   A keep frame (every frame of a stage change's fade and load, the boot card check, the ending)
+   that the gate presents while the render thread is busy still waits inside the step for the
+   picture before, its present included, before it is handed over, so an acquire never waits
+   behind a present inside a picture's reads; the 10 s line counts it in `N waited for the
+   picture before`. The lines: at each start `rd: render thread: with Frame rate Original
    each game frame's picture is handed over as the other frame rates' are: its submit and present
-   run on the submit thread; ...` (or `... is replayed and presented inside the game step, the game
+   run on the submit thread; ... but a kept frame (a fade, a load) still waits for the picture
+   before, its present included ...` (or `... is replayed and presented inside the game step, the game
    thread waiting ([dev] original_async = false)`); the 10 s game-thread line's `(closing a frame
    ...; its picture handed over in 0.6 ms (longest 14.2 ms; 3 waited for the picture before, 31.0 ms
    in all; 12 skipped: render thread busy); presents waited inside the step: 0 (0.0 ms))`; the 10 s

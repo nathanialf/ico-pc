@@ -507,8 +507,10 @@ void rd_set_thread_host(const RdThreadHost *host)
                             "is handed over as the other frame rates' are: its submit and "
                             "present run on the %s; the game step waits for the picture "
                             "before's reads only, and skips a picture when the render thread is "
-                            "still busy ([dev] original_async = false replays it inside the step "
-                            "as before)",
+                            "still busy, but a kept frame (a fade, a load) still waits for the "
+                            "picture before, its present included (counted in the 10 s line's "
+                            "\"waited for the picture before\") ([dev] original_async = false "
+                            "replays it inside the step as before)",
                             rd_thread_submit_on() ? "submit thread" : "render thread");
                 }
             }
