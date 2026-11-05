@@ -2557,14 +2557,11 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_TONE_BRIGHTNESS:
     case UI_OPT_TONE_CONTRAST:
     case UI_OPT_TONE_SATURATION: {
-        /* 5 a press to the next multiple of 5 (a hand-set 47 lands on 50 or
-           45), held at 1 and 100 */
+        /* ICO_TONE_STEP (1) a press, held at 1 and 100 (issue 194: a step of
+           5 was too coarse to match a display) */
         int *const f = toneField(&o, opt);
-        const int v = *f;
 
-        *f = ico_video_tone_clamp(dir > 0             ? (v / ICO_TONE_STEP + 1) * ICO_TONE_STEP
-                                  : v % ICO_TONE_STEP ? v / ICO_TONE_STEP * ICO_TONE_STEP
-                                                      : v - ICO_TONE_STEP);
+        *f = ico_video_tone_clamp(*f + (dir > 0 ? ICO_TONE_STEP : -ICO_TONE_STEP));
         video = 1;
         break;
     }

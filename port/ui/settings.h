@@ -649,7 +649,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_CRT,          /* [video] crt and crt_mode in one row */
     UI_OPT_CRT_STRENGTH, /* [video] crt_strength, 0..100 % in tens */
     /* [video] gamma, brightness, contrast, saturation: 1..100, 50 the game's own
-       picture, 5 a press, Square puts 50 back; outside the preset */
+       picture, 1 a press, Square puts 50 back; outside the preset */
     UI_OPT_TONE_GAMMA,
     UI_OPT_TONE_BRIGHTNESS,
     UI_OPT_TONE_CONTRAST,

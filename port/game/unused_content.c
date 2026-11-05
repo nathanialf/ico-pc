@@ -98,6 +98,9 @@ void ico_unused_game_over(void)
         s_gameOver = 1;
         fprintf(stderr, "unused: game over in the test room %s: both choices go to the title\n",
                 kRows[s_running].name);
+        if (s_engine != NULL && s_engine->game_over != NULL) {
+            s_engine->game_over(); /* the boy as he ended, in the log */
+        }
     }
 }
 

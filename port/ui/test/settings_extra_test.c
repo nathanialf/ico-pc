@@ -195,8 +195,8 @@ static void testWaterReflections(void)
 }
 
 /* Options > Picture > Gamma, Picture brightness, Contrast and Saturation
-   (issue 190): 50 (Default) shown, 5 a press to the next multiple of 5 (a
-   hand-set 47 lands on 50 or 45), held at 1 and 100, Square back to 50
+   (issue 190): 50 (Default) shown, 1 a press (issue 194; a hand-set 47
+   goes to 48 or 46), held at 1 and 100, Square back to 50
    (only on a tone row), one shared note, leaving the page writes the four
    keys, a file with bad values reads 1/100/50 and one without the keys 50;
    the preset stays Original; the page fits from the title and the pause menu */
@@ -247,12 +247,12 @@ static void testToneRows(void)
             lt_ext_layout(picL)->curItem = row;
             frame(0);
             press(LT_PAD_RIGHT);
-            CHECK(strcmp(ui_settings_value_text(kRows[i]), "55") == 0,
-                  "title %d: row %d Right: 55 (%s)", title, i, ui_settings_value_text(kRows[i]));
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "51") == 0,
+                  "title %d: row %d Right: 51 (%s)", title, i, ui_settings_value_text(kRows[i]));
             press(LT_PAD_LEFT);
             press(LT_PAD_LEFT);
-            CHECK(strcmp(ui_settings_value_text(kRows[i]), "45") == 0,
-                  "title %d: row %d Left twice: 45 (%s)", title, i,
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "49") == 0,
+                  "title %d: row %d Left twice: 49 (%s)", title, i,
                   ui_settings_value_text(kRows[i]));
             /* the other rows untouched */
             for (int j = 0; j < 4; j++) {
@@ -266,22 +266,22 @@ static void testToneRows(void)
             CHECK(strcmp(ui_settings_value_text(kRows[i]), "50 (Default)") == 0,
                   "title %d: row %d Square: 50 (Default) (%s)", title, i,
                   ui_settings_value_text(kRows[i]));
-            /* held at both ends */
-            for (int k = 0; k < 14; k++) {
+            /* held at both ends (1 a press, issue 194) */
+            for (int k = 0; k < 60; k++) {
                 press(LT_PAD_LEFT);
             }
             CHECK(strcmp(ui_settings_value_text(kRows[i]), "1") == 0,
                   "title %d: row %d held at 1 (%s)", title, i, ui_settings_value_text(kRows[i]));
             press(LT_PAD_RIGHT);
-            CHECK(strcmp(ui_settings_value_text(kRows[i]), "5") == 0, "title %d: row %d 1 -> 5",
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "2") == 0, "title %d: row %d 1 -> 2",
                   title, i);
-            for (int k = 0; k < 30; k++) {
+            for (int k = 0; k < 110; k++) {
                 press(LT_PAD_RIGHT);
             }
             CHECK(strcmp(ui_settings_value_text(kRows[i]), "100") == 0,
                   "title %d: row %d held at 100 (%s)", title, i, ui_settings_value_text(kRows[i]));
             press(LT_PAD_LEFT);
-            CHECK(strcmp(ui_settings_value_text(kRows[i]), "95") == 0, "title %d: row %d 100 -> 95",
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "99") == 0, "title %d: row %d 100 -> 99",
                   title, i);
             press(LT_PAD_SQUARE);
         }
@@ -308,20 +308,20 @@ static void testToneRows(void)
         CHECK(t != NULL && ico_toml_get_int(t, "video.gamma", 0) == 70 &&
                   ico_toml_get_int(t, "video.brightness", 0) == 50 &&
                   ico_toml_get_int(t, "video.contrast", 0) == 50 &&
-                  ico_toml_get_int(t, "video.saturation", 0) == 45,
+                  ico_toml_get_int(t, "video.saturation", 0) == 49,
               "title %d: leaving Picture wrote gamma 70, brightness 50, contrast 50, "
-              "saturation 45",
+              "saturation 49",
               title);
         ico_toml_free(t);
     }
-    /* a hand-set 47 lands on 50 (Right) and 45 (Left) */
+    /* a hand-set 47 goes to 48 (Right) and 46 (Left): 1 a press (issue 194) */
     for (int dir = 1; dir >= -1; dir -= 2) {
         useConfig("version = 1\n[video]\ngamma = 47\n");
         ico_video_get(&o);
         CHECK(o.toneGamma == 47, "hand-set 47 read as 47 (%d)", o.toneGamma);
         ui_settings_step(UI_OPT_TONE_GAMMA, dir);
         ico_video_get(&o);
-        CHECK(o.toneGamma == (dir > 0 ? 50 : 45), "hand-set 47, dir %d: %d", dir, o.toneGamma);
+        CHECK(o.toneGamma == (dir > 0 ? 48 : 46), "hand-set 47, dir %d: %d", dir, o.toneGamma);
     }
     /* values outside the range or not numbers, and absent keys */
     useConfig("version = 1\n[video]\ngamma = 0\nbrightness = 250\ncontrast = \"x\"\n");
@@ -342,7 +342,7 @@ static void testToneRows(void)
     }
     ui_settings_step(UI_OPT_TONE_CONTRAST, 1);
     ico_video_get(&o);
-    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.toneContrast == 55,
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.toneContrast == 51,
           "a step keeps the preset Original");
     useConfig("version = 1\n");
 }

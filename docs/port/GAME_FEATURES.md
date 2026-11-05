@@ -1053,12 +1053,46 @@ has.
   `stgmgrForceSwitchWithFade(stage, 8, 4)` and `ACTGame_SetActors_Debug(stage, 1)`; the port writes
   no flag number. The menu closes on the game's empty layout; the stage's own init switches to the
   play layout, whose Start opens the pause menu.
-- The arena has no `exitData` row into it, so `ACTGame_SetActors_Debug` puts the boy's record at
-  `exitData[0]`'s place, the origin; its sword row is at y 65 and its sixteen shadow rows at y 71
-  (`objLayout` 3589, 3591-3606 on the European disc), so the engine moves the boy's record
-  (`credits_boy_label`, kind 1) to the first kind-4 row of the stage's own layout range, read from
-  the running disc's `objLayout` at the start (`placeOnFloor`), and logs both places. The climbing
-  room has its entrance (`exitData` 260 on the European disc).
+- Where the rooms start (`placeAtStart`, after the hook): both rooms start where Stage Select
+  starts a stage that has no entrance row, `exitData[0]`, the origin. `ACTGame_SetActors_Debug`
+  (`ico2/fumi/src/act-game.c`) takes the first `exitData` row whose `nextStage` is the stage, else
+  row 0, and writes three records there: the boy (`credits_boy_label`, kind 1) and the sword
+  (`credits_boy_label + 1`, kind 14) where the stage's `attrTop` is set, the girl (`girl_label`,
+  148 European, 131 North American, 130 August 2001, 124 June 2001 demo; kind 2) where its `flag0`
+  is set. The engine writes the same three records again at `exitData[0]` with
+  `gamesysObjInfoPosNewStageSet`: the arena (`attrTop` 1, `flag0` 0) the boy and the sword, the
+  climbing room (`attrTop` 1, `flag0` 1) the girl too.
+- The sign rule: the game stores exit rows, as it stores layout rows, negated. `EXITDATA_GetNextPosition`
+  (`act-game.c`) takes `pos = -exitData[idx].pos` and the rotation in degrees times 0.017453292,
+  and `initSceneGObj` builds a scene object at `-gen->pos` (`ico2/common/src/sceneManager.c:478`);
+  +y is down in the world (the floor probe casts from the root to `y + 10000`, `ico2/fumi/src/act.c`).
+  A row copied as stored puts the boy wrong: the arena's first shadow row as stored, (-1049, 71,
+  409), has the floor under it at y 3475, a fall of 3404 where 1000 is fatal (`gameParam[2]`,
+  `commonact.c`): under the room's floor, a game over at once. Negated, the shadow row is
+  over an st13b script-trigger floor (attribute 0x1000000) where the shadows rise; the origin is on
+  the arena's pad (y 0, attribute 0, x -300..600, z -250..250), the sword's row beside it at world
+  (-427, -65, 17).
+- The climbing room's own entrance row (`exitData` 260 European, Japanese, Korean and Asian, 256
+  North American; stored (3080, 2606, -1899), rot 0) puts the boy at (-3080, -2606, 1899), 72.7
+  above a floor of collision only, a 293 x 2327 walkway at y -2533 that no model draws (st08a_p2's
+  nearest vertex is 163 away at y -3093, p3's 463, p4's 225 at y 46): he stood in the sky, and the
+  entry walk or a step took him off it, 2533 above the room's floor. The origin is on the room's
+  floor (y 0, attribute 0, x -6922..3621, z -1662..8549; the collision spans y -5005..0). The
+  August and June 2001 discs have neither room. The floors under every candidate point on every
+  disc: `build-host/tmp/v0104/evidence/rooms/rooms-every-disc.txt` (read from the ISOs' packs:
+  the arena's `object/sdf/st13b/collis/st13b.cl`, 129 floors; the climbing room's
+  `object/sdf/8test/collis/st08a.cl`, 270 floors).
+- The start's line: `unused: <room>: the boy at the room's start (x, y, z), the game's
+  no-entrance point (exitData[0])`, then `: the room has no entrance row` (the arena) or `; the
+  game's own entrance row N (x, y, z) not used: it leads to a walkway with no model` (the
+  climbing room), then `; placed: the boy (record R), the girl (record R), the sword (record
+  R)` as placed. For the first 300 Main ticks after the room's stage is up, a line as it comes
+  up and every 30 ticks after, and at a game over in a room (`ico_unused_game_over`, through the
+  engine's `game_over`): `unused: <room> tick T: the boy at (x, y, z), ground height G (the floor
+  F under him, D below | no floor below), fall height H` (`tick T` reads `game over` there), from
+  the boy's root (`GetRootPosition`), `ctrl.groundHeight`, `ctrl.fallHeight` and the game's own
+  floor probe (`GetLowerPlaneCollision`, as `act.c` calls it); `no boy (the stage has none up)`
+  while the stage has no boy.
 - Leaving: the rooms have no exit. Pause > End Game goes back to the title by the game's own path.
   A game over goes there with either choice: `la_game_over_continue` and its two other arms
   (`ico2/common/src/layout_action.c`) route Continue as Quit while `ico_unused_active()`
@@ -1101,7 +1135,7 @@ has.
   model viewer's list (layout L) on its row R`, `model_viewer: the list opened at "<name>" (row N of
   M offered)`, or `unused: failed: the model viewer's list did not open for early show title art`.
 - Log lines: `unused: enter <row>`, `unused: test room <row> (stage N on this disc) started from the
-  title at Main tick T`, the arena's placement, `unused: stage N at Main tick T`, `unused: the test
+  title at Main tick T`, the start's line and the boy's lines (above), `unused: stage N at Main tick T`, `unused: the test
   room's stage N is up ...`, `unused: game over in the test room <row>: both choices go to the
   title`, `unused: back at the title after X s (End Game | game over | fail-start): ...`, `unused:
   Options open again on Unused content`, the failures (`unused: failed: ...`), and Settings'

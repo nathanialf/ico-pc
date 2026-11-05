@@ -17,14 +17,16 @@
  * the title theme fades as a load from the title fades it
  * (layout_action.c la_load_processing, credits_live.c), and the game's own
  * debug.c enters the stage the way its Stage Select does
- * (ico_host_enter_test_stage: the port writes no game flag).  boss_test
- * has no exitData row into it, so ACTGame_SetActors_Debug puts the boy's
- * record at exitData[0]'s place, the origin; nothing of the arena's layout
- * stands at that height (its sword at y 65, its sixteen shadows at y 71:
- * objLayout rows 3589 and 3591-3606 on the European disc), so the boy's
- * record is moved to the first shadow row of the stage's layout (a read
- * of the running disc's objLayout, kind 4: attackhit.c's enemy kind), and
- * the log names both places.  8a_TEST has its entrance (exitData 260 on the European disc).
+ * (ico_host_enter_test_stage: the port writes no game flag).  Both rooms
+ * then start where Stage Select starts a stage with no entrance: the
+ * boy, the girl (where the stage's stageData flag0 asks for her) and the
+ * sword at exitData[0]'s place, the origin (placeAtStart).  boss_test has
+ * no exitData row into it, so this is what the game itself did; 8a_TEST's
+ * one entrance row (exitData 260 on the European disc, 256 on the North
+ * American) leads onto a walkway of collision only, 2533 above the
+ * room's floor, that no model draws (build-host/tmp/v0104/evidence/rooms),
+ * so its placement is replaced.  For the first 300 Main ticks of a room,
+ * and at a game over in one, the log follows the boy (boyLine).
  *
  * The rooms have no exit: pause > End Game goes back to the title (the
  * game's own path), and a game over goes there with either choice
@@ -78,6 +80,11 @@ extern void stgmgrForceSwitchWithFade(int stage, float fadeIn, float fadeOut);
 extern unsigned int ico_host_main_ticks(void);
 extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned char r,
                                     unsigned char gr, unsigned char b);
+extern GObj *boyGObj;                                        /* main.c */
+extern int mpegPlay;                                         /* StageManager.c */
+extern int stageManagerFreeResourceFlag;                     /* StageManager.c */
+extern void GetRootPosition(void *pos, GObj *obj);           /* geometryManager.c */
+extern void GetLowerPlaneCollision(ClipWork *w, float *pos); /* motionManager2.c */
 
 #define TITLE_STAGE (ico_region_cur()->stage_title)
 /* the game's empty layout, the one a scene runs under (55, 52 on the
@@ -89,8 +96,18 @@ extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned ch
    the disc's (54, 51, 50, 47: region.h) */
 #define BOY_LABEL (ico_region_cur()->credits_boy_label)
 #define BOY_KIND 1
-/* attackhit.c's enemy kind: a shadow's objLayout row */
-#define KIND_ENEMY 4
+/* the girl's (kind 2: 148 European, region.h) and the sword's (kind 14:
+   the boy's label + 1 on every disc), ACTGame_SetActors_Debug's second
+   and third rows */
+#define GIRL_LABEL (ico_region_cur()->girl_label)
+#define GIRL_KIND 2
+#define SWORD_LABEL (BOY_LABEL + 1)
+#define SWORD_KIND 14
+
+/* the boy followed in the log: a line as the room's stage is up and every
+   PROBE_STEP Main ticks after, to PROBE_TICKS */
+#define PROBE_STEP 30u
+#define PROBE_TICKS 300u
 
 /* Main ticks the stage change may take before it counts as failed (the
    credits' bounds: credits_live.c REACH_TICKS) */
@@ -125,6 +142,10 @@ static unsigned int s_startTick;
 static unsigned int s_returnTick;
 static int s_lastStage;
 static int s_reopen;
+/* the Main tick the room's stage came up, and the next tick the boy's line
+   is due (past PROBE_TICKS: none) */
+static unsigned int s_upTick;
+static unsigned int s_nextProbe;
 static unsigned int s_reopenTick;
 /* the movie's start in wall seconds: Main runs no tick while a film plays,
    so its length is not read from the Main ticks */
@@ -188,31 +209,150 @@ static int available(int row)
 
 /* --- the test rooms ------------------------------------------------------ */
 
-/* boss_test: the boy's record from exitData[0] (the origin) to the first
-   shadow row of the stage's layout; 0 when the layout has none (the record
-   stays, logged) */
-static int placeOnFloor(int stage)
+/* The first exitData row leading into the stage, -1 none: the entrance
+   ACTGame_SetActors_Debug takes (act-game.c getExitIndexOfStage, over the
+   disc's exitData rows) */
+static int entranceOf(int stage)
 {
-    const StgPre *sd = &stageData[stage];
-    for (int i = sd->labelTop; i < sd->labelEnd; i++) {
-        if (objLayout[i].kind == KIND_ENEMY) {
-            float pos[3] = {objLayout[i].pos[0], objLayout[i].pos[1], objLayout[i].pos[2]};
-            float rot[3] = {0.0f, 0.0f, 0.0f};
-            gamesysObjInfoPosNewStageSet(BOY_LABEL, BOY_KIND, stage, pos, rot);
-            fprintf(stderr,
-                    "unused: the arena has no entrance: the boy at its first shadow row %d "
-                    "(%.0f, %.0f, %.0f), not exitData[0]'s (%.0f, %.0f, %.0f)\n",
-                    i, (double)pos[0], (double)pos[1], (double)pos[2], (double)exitData[0].pos[0],
-                    (double)exitData[0].pos[1], (double)exitData[0].pos[2]);
-            return 1;
+    for (int i = 0; i < PAL_NTSCAUG6_JUN26(261, 257, 256); i++) {
+        if (exitData[i].nextStage == stage) {
+            return i;
         }
     }
+    return -1;
+}
+
+/* Both rooms start where the game's Stage Select starts a stage with no
+   entrance row: ACTGame_SetActors_Debug's three rows (act-game.c) at
+   exitData[0], written again after debug.c's hook has run it with the
+   stage's own entrance.  The game stores exit rows (as it stores layout
+   rows) negated: EXITDATA_GetNextPosition (act-game.c) takes
+   pos = -exitData[idx].pos and the rotation in degrees times
+   0.017453292 (radians), as initSceneGObj builds a scene object at
+   -gen->pos (sceneManager.c:478); +y is down in the world.  Copying a
+   row as stored is what put v0.10.3's arena boy 3404 under its floor.
+   The boy and the sword where the stage's attrTop is set, the girl where
+   its flag0 is; a row inside the stage's own label range with no record
+   yet is left to the stage's layout, as the game leaves it ("first").
+   The game's own pass skips the sword when the boy it copies from
+   (boyGObj) holds a weapon; on the title there is no boyGObj. A zero
+   is printed as 0, not as the -0 the negation makes of it. */
+static void placeAtStart(int stage, int row)
+{
+    const StgPre *sd = &stageData[stage];
+
+    const struct {
+        int label, kind, on;
+        const char *name;
+    } rows[3] = {
+        {BOY_LABEL, BOY_KIND, sd->attrTop, "the boy"},
+        {GIRL_LABEL, GIRL_KIND, sd->flag0, "the girl"},
+        {SWORD_LABEL, SWORD_KIND, sd->attrTop, "the sword"},
+    };
+
+    float pos[4] = {-exitData[0].pos[0], -exitData[0].pos[1], -exitData[0].pos[2], 0.0f};
+    float rot[4] = {exitData[0].rot[0] * 0.017453292f, exitData[0].rot[1] * 0.017453292f,
+                    exitData[0].rot[2] * 0.017453292f, 0.0f};
+    char placed[96] = "";
+    size_t used = 0;
+
+    for (int n = 0; n < 3; n++) {
+        if (!rows[n].on) {
+            continue;
+        }
+        if (rows[n].label >= sd->labelTop && rows[n].label < sd->labelEnd &&
+            gamesysObjInfoGet(rows[n].kind, rows[n].label) == 0) {
+            continue;
+        }
+        gamesysObjInfoPosNewStageSet(rows[n].label, rows[n].kind, stage, pos, rot);
+        if (used < sizeof(placed)) {
+            int w = snprintf(placed + used, sizeof(placed) - used, "%s%s (record %d)",
+                             used ? ", " : "", rows[n].name, rows[n].label);
+            used += w > 0 ? (size_t)w : 0;
+        }
+    }
+
+    const char *name = ico_unused_row(row)->name;
+    const int entrance = entranceOf(stage);
+    char why[160];
+    if (entrance < 0) {
+        snprintf(why, sizeof(why), ": the room has no entrance row");
+    } else {
+        snprintf(why, sizeof(why),
+                 "; the game's own entrance row %d (%.0f, %.0f, %.0f) not used: it leads to a "
+                 "walkway with no model",
+                 entrance, 0.0 - exitData[entrance].pos[0], 0.0 - exitData[entrance].pos[1],
+                 0.0 - exitData[entrance].pos[2]);
+    }
     fprintf(stderr,
-            "unused: the arena's layout rows %d..%d hold no shadow: the boy stays at "
-            "exitData[0]'s (%.0f, %.0f, %.0f)\n",
-            sd->labelTop, sd->labelEnd - 1, (double)exitData[0].pos[0], (double)exitData[0].pos[1],
-            (double)exitData[0].pos[2]);
-    return 0;
+            "unused: %s: the boy at the room's start (%.0f, %.0f, %.0f), the game's no-entrance "
+            "point (exitData[0])%s; placed: %s\n",
+            name, pos[0] + 0.0, pos[1] + 0.0, pos[2] + 0.0, why,
+            placed[0] ? placed : "none (the stage's rows ask for none)");
+}
+
+/* The boy as the game sees him: his root, the ground height and the fall
+   height the death checks compare (commonact.c: a fall past gameParam[2],
+   1000 on the European disc, is fatal), and the floor the game's own
+   probe finds under him (act.c's GetLowerPlaneCollision: a ray from the
+   root 10000 down, +y). when: "tick T" (Main ticks since the room's stage
+   came up) or "game over" */
+static void boyLine(const char *when)
+{
+    const char *name = s_row >= 0 ? ico_unused_row(s_row)->name : "?";
+
+    if (stageManagerFreeResourceFlag != 0 || mpegPlay != 0 || boyGObj == 0 ||
+        GOBJ_SUB(boyGObj) == 0) {
+        fprintf(stderr, "unused: %s %s: no boy (the stage has none up)\n", name, when);
+        return;
+    }
+    float pos[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    ClipWork w;
+    char floor[80];
+
+    GetRootPosition(pos, boyGObj);
+    memset(&w, 0, sizeof(w));
+    GetLowerPlaneCollision(&w, pos);
+    if (w.floor.elem != 0) {
+        snprintf(floor, sizeof(floor), "the floor %.0f under him, %.0f below", (double)w.pt[2][1],
+                 (double)(w.pt[2][1] - pos[1]));
+    } else {
+        snprintf(floor, sizeof(floor), "no floor below");
+    }
+    fprintf(stderr,
+            "unused: %s %s: the boy at (%.0f, %.0f, %.0f), ground height %.0f (%s), fall "
+            "height %.0f\n",
+            name, when, (double)pos[0], (double)pos[1], (double)pos[2],
+            (double)GOBJ_SUB(boyGObj)->ctrl.groundHeight, floor,
+            (double)GOBJ_SUB(boyGObj)->ctrl.fallHeight);
+}
+
+/* the boy's line every PROBE_STEP ticks from the stage up to PROBE_TICKS */
+static void probePoll(void)
+{
+    const unsigned int t = ico_host_main_ticks() - s_upTick;
+    if (s_nextProbe > PROBE_TICKS || t < s_nextProbe) {
+        return;
+    }
+    if (t > PROBE_TICKS) {
+        s_nextProbe = PROBE_TICKS + 1; /* the window passed between two polls */
+        return;
+    }
+    char when[32];
+    snprintf(when, sizeof(when), "tick %u", t);
+    boyLine(when);
+    while (s_nextProbe <= t) {
+        s_nextProbe += PROBE_STEP;
+    }
+}
+
+/* layout_action.c's game over in a room (ico_unused_game_over): the boy as
+   he ended */
+static void gameOver(void)
+{
+    if (s_phase == PH_PLAYING) {
+        boyLine("game over");
+    }
 }
 
 static int beginRoom(int row)
@@ -240,9 +380,7 @@ static int beginRoom(int row)
     }
     titleAdpcm = 0;
     ico_host_enter_test_stage(stage);
-    if (row == ICO_UNUSED_ARENA) {
-        placeOnFloor(stage);
-    }
+    placeAtStart(stage, row);
     fprintf(stderr,
             "unused: test room %s (stage %d on this disc) started from the title at Main tick "
             "%u\n",
@@ -497,12 +635,19 @@ void ico_unused_host_poll(void)
                     "unused: the test room's stage %d is up at Main tick %u (%.1f s); leave "
                     "with Start, then End Game\n",
                     stage_no, ico_host_main_ticks(), secondsSinceStart());
+            s_upTick = ico_host_main_ticks();
+            s_nextProbe = 0;
+            probePoll();
         } else {
             const unsigned int t = ico_host_main_ticks() - s_startTick;
             if ((t > REACH_TICKS && systemStatus[6] == 0) || t > REACH_LIMIT) {
                 failStart();
             }
         }
+        return;
+    }
+    if (s_phase == PH_PLAYING) {
+        probePoll();
         return;
     }
     if (s_phase == PH_RETURNING && ico_host_main_ticks() - s_returnTick > RETURN_TICKS) {
@@ -523,7 +668,7 @@ static int hostOpen(int row)
     return ico_unused_start(row);
 }
 
-static const IcoUnusedEngine kEngine = {available, begin};
+static const IcoUnusedEngine kEngine = {available, begin, gameOver};
 
 void ico_unused_engine_install(void)
 {

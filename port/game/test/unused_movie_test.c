@@ -56,8 +56,9 @@ static int failures;
 /* --- the game's side ------------------------------------------------------ */
 
 StgPre stageData[110];
-const ExitData exitData[2] = {
-    [0] = {.pos = {0.0f, 0.0f, 0.0f}}}; /* exitData[0]: the origin, as on every disc */
+/* the European disc's 261 rows (a room's start reads them for its
+   entrance), exitData[0] the origin as on every disc */
+const ExitData exitData[261] = {[0] = {.pos = {0.0f, 0.0f, 0.0f}}};
 GenGeo objLayout[64];
 int stage_no = 1;
 int systemStatus[12] = {1, 1}; /* PAL, frame step 1 */
@@ -77,6 +78,11 @@ int mpegPlayReturnStage = 3;
 unsigned int stage_after_skipping_demo = 0xFFFFFFFEu; /* an earlier film's skip */
 static int s_placedLabel = -1, s_placedKind = -1, s_placedStage = -1;
 static float s_placedPos[3];
+/* the boy unused_live.c follows in a test room's log: none here (the
+   movie starts no room) */
+GObj *boyGObj;
+int mpegPlay;
+int stageManagerFreeResourceFlag;
 
 int gflagChk(int i)
 {
@@ -117,6 +123,25 @@ GamesysObjInfo *gamesysObjInfoPosNewStageSet(int no, int kind, int stage, float 
     s_placedStage = stage;
     memcpy(s_placedPos, pos, sizeof(s_placedPos));
     return NULL;
+}
+
+GamesysObjInfo *gamesysObjInfoGet(int kind, int no)
+{
+    (void)kind;
+    (void)no;
+    return NULL;
+}
+
+void GetRootPosition(void *pos, GObj *obj)
+{
+    (void)obj;
+    memset(pos, 0, 4 * sizeof(float));
+}
+
+void GetLowerPlaneCollision(ClipWork *w, float *pos)
+{
+    (void)pos;
+    w->floor.elem = NULL;
 }
 
 /* debug.c's Stage Select way in: the boy's records go to the stage */
