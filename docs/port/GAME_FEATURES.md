@@ -1087,6 +1087,40 @@ has.
   the arena's `object/sdf/st13b/collis/st13b.cl`, 129 floors; the climbing room's
   `object/sdf/8test/collis/st08a.cl`, 270 floors; the North American disc's model records are
   268 bytes, as the August 2001 disc's).
+- The camera zones (`startInZone`, once per room as soon as the boy is up, within the log's 300
+  ticks): the camera finds the boy only inside one of the stage's camera zones, the groups of the
+  camera set `CameraSetCameraSet` (`ico2/omori/src/camera-ico2.c`) loads from the stage row's
+  `camSetId` into `TopCameraSetDataOfCurrentStage` (a `CamSetFile` head, then `count` `CamGroup`
+  records of 76 bytes, `ico2/omori/include/camera-editor.h`). A group's centre and half-size are
+  stored negated as layout rows are: the game tests the stored box against the root times -1
+  (`findCameraGroupContaining`), so the world box is `-centre` +- half. The arena (PAL stage 88,
+  camera set 6, `camdata/boss.gcm`, 15 groups): the origin lies inside its group 0 (world centre
+  (-375, 50, 0), half (1645, 170, 1200)), with the pad's floor y 0 inside the box, so its start is
+  right and stays. The climbing room (PAL stage 91, camera set 67, `camdata/troko.gcm`, 51 groups):
+  every zone lies 1355 to 4980 above its big floor (world y 0), so from the origin the camera never
+  found him and the character was not in view. The rule: a root inside a zone stays; otherwise the
+  boy, and the girl when `girlGObj` is up, goes with `SetDirectRootPosition` (as `E3_StageStartBoy`
+  moves him, `ico2/fumi/src/boyact.c`) to the lowest zone whose centre has a floor inside its box:
+  the game's floor probe (`GetLowerPlaneCollision`) cast down from the box's top at the centre's x
+  and z must hit a floor no lower than the box's bottom. The lowest is the zone whose box bottom is
+  nearest the big floor; zones with the same bottom go to the one with the larger floor plan (half x
+  times half z), then the set's order. He lands at the zone centre's x and z, at the height above
+  that floor his root had above the floor under the start (the same probe where he stood; 0 with no
+  floor under him). In the climbing room that is group 20 (world centre (1111, -1355, 81), half
+  (1216, 635, 529), box y -1990..-720, floor y -1324 attribute 0): the bottom of the climbing
+  structure. Its thin side zone 47 (centre (1847, -1355, -534), half (475, 635, 85)) has the same
+  box and a floor at y -1221 (attribute 0x4), 103 lower; the floor plan decides for group 20. The
+  zones and the floors under their centres, on the European disc:
+  `build-host/tmp/v0104/evidence/rooms/camera-zones.txt` (from the two camera set files and the two
+  collision files, the floors cast as `build-host/tmp/v0104/tools/rooms.py` casts them). Lines:
+  `unused: <room>: the start is inside camera zone G of N (centre (x, y, z))`; `unused: <room>: the
+  game's no-entrance point (x, y, z) is outside every camera zone (the lowest zone's centre Y above
+  it): the boy moved to zone G's floor at (x, y, z) (H above the floor y F)`, then `; no floor under
+  the start, so 0 above` when the probe under him found none and `; the girl with him` when she
+  moved; `unused: <room>: no camera zone holds a floor under its centre: the boy stays at (x, y,
+  z)`; `unused: <room>: no camera set loaded (N groups): the boy stays at (x, y, z)`; `unused:
+  <room>: the camera-zone check never ran (no boy in the first 300 ticks)`. The boy's tick lines
+  below show where he stands after the move.
 - The start's line: `unused: <room>: the boy at the room's start (x, y, z), the game's
   no-entrance point (exitData[0])`, then `: the room has no entrance row` (the arena) or `; the
   game's own entrance row N (x, y, z) not used: it leads to a walkway with no model` (the
@@ -1142,7 +1176,7 @@ has.
   model viewer's list (layout L) on its row R`, `model_viewer: the list opened at "<name>" (row N of
   M offered)`, or `unused: failed: the model viewer's list did not open for early show title art`.
 - Log lines: `unused: enter <row>`, `unused: test room <row> (stage N on this disc) started from the
-  title at Main tick T`, the start's line and the boy's lines (above), `unused: stage N at Main tick T`, `unused: the test
+  title at Main tick T`, the start's line, the camera-zone line and the boy's lines (above), `unused: stage N at Main tick T`, `unused: the test
   room's stage N is up ...`, `unused: game over in the test room <row>: both choices go to the
   title`, `unused: back at the title after X s (End Game | game over | fail-start): ...`, `unused:
   Options open again on Unused content`, the failures (`unused: failed: ...`), and Settings'
