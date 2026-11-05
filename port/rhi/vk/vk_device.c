@@ -2797,6 +2797,8 @@ void rhi_get_stats(RhiStats *out)
         out->pipelinesPeak = g_vkr.pipelines.next;
         out->pipelinePoolFull = g_vkr.pipelines.full;
         out->swapImages = g_vkr.swapchain ? g_vkr.swapImageCount : 0;
+        out->swapAcquired =
+            g_vkr.swapchain ? __atomic_load_n(&g_vkr.swapAcquired, __ATOMIC_RELAXED) : 0;
     }
 }
 

@@ -56,6 +56,13 @@ typedef struct WindowPres {
     Uint64 paceEnd;
     double stepSumMs, stepMaxMs;
     unsigned stepCount;
+    /* the game thread's CPU time at paceEnd (cpu_place.h
+       cpu_place_thread_cpu_ns; 0 not known) and the steps' CPU time in the
+       block, over stepCpuCount steps, for the 10 s line and the slow-step
+       line: a step far longer than its CPU time waited */
+    uint64_t paceEndCpuNs;
+    double stepCpuSumMs;
+    unsigned stepCpuCount;
     /* rd_vu_card_counts at the block's start: the card verdicts the
        steps decided (rd_mesh.c), for the 10 s line */
     uint64_t cardStrips, cardTris;

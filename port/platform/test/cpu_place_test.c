@@ -37,7 +37,15 @@
  *     submit thread's case on the Helio G85) and on every allowed core when
  *     the process's cores were kept (cpu_place_keep_free) before the pin;
  *     cpu_place_thread_free on the kept thread itself resets it, then
- *     finds it already there; nothing done with no mask kept.
+ *     finds it already there; nothing done with no mask kept;
+ *   the thread's CPU time (Linux): it grows over a busy loop, never more
+ *     than the wall time; the slow-step words, none for 0;
+ *   the kernel's core lists ("0-5,7") to masks, malformed ones 0;
+ *   the threads line (issue 179) word for word from a fake table: the
+ *     Helio G85's two kept cores with the game and render threads, the
+ *     rest on 0-7 with its names cut at five, a repeated name counted, a
+ *     single kept core, threads whose cores were not read, none; and from
+ *     a fake /proc/self/task under the build folder (Linux).
  */
 #include <stdio.h>
 #include <string.h>
@@ -444,6 +452,165 @@ static void testFree(void)
 #endif
 }
 
+static void testCpuTime(void)
+{
+    char b[64];
+
+#if defined(__linux__)
+    {
+        const uint64_t t0 = cpu_place_thread_cpu_ns();
+        const double w0 = ico_thread_now_ms();
+        volatile unsigned x = 0;
+        uint64_t t1;
+        double w1;
+
+        for (unsigned i = 0; i < 20000000u; i++) {
+            x += i;
+        }
+        t1 = cpu_place_thread_cpu_ns();
+        w1 = ico_thread_now_ms();
+        CHECK(t0 > 0 && t1 > t0);
+        /* one thread: not past the wall time */
+        CHECK((double)(t1 - t0) / 1e6 <= (w1 - w0) + 2.0);
+    }
+#else
+    (void)cpu_place_thread_cpu_ns();
+#endif
+    (void)cpu_place_cpu_text(9.84, b, sizeof(b));
+    CHECK_STR(b, "CPU 9.8 ms of it");
+    CHECK(cpu_place_cpu_text(0.0, b, sizeof(b)) == 0 && b[0] == '\0');
+    CHECK(cpu_place_cpu_text(-1.0, b, sizeof(b)) == 0 && b[0] == '\0');
+}
+
+static void testList(void)
+{
+    CHECK(cpu_place_list_parse("0-7") == 0xffu);
+    CHECK(cpu_place_list_parse("6-7\n") == 0xc0u);
+    CHECK(cpu_place_list_parse("0-5,7") == 0xbfu);
+    CHECK(cpu_place_list_parse("3") == 0x08u);
+    CHECK(cpu_place_list_parse("0,2,4-5") == 0x35u);
+    CHECK(cpu_place_list_parse("") == 0);
+    CHECK(cpu_place_list_parse("x") == 0);
+    CHECK(cpu_place_list_parse("5-3") == 0);
+    CHECK(cpu_place_list_parse("1-") == 0);
+    CHECK(cpu_place_list_parse("1,x") == 0);
+    CHECK(cpu_place_list_parse(NULL) == 0);
+    CHECK(cpu_place_list_parse("62-70") == 0xc000000000000000ull); /* past 63 dropped */
+}
+
+static void addThread(CpuThreads *t, long tid, const char *name, uint64_t mask)
+{
+    CpuThread *a = &t->t[t->n++];
+
+    a->tid = tid;
+    snprintf(a->name, sizeof(a->name), "%s", name);
+    a->mask = mask;
+    t->total++;
+}
+
+static void testThreads(void)
+{
+    static CpuThreads t;
+    static const char *const rest[] = {
+        "ico-submit",    "mali-cmar-backend", "mali-utility-wo", "mali-mem-purge",
+        "ico-gpu-sysfs", "ico-tex",           "ico-tex",         "ico-tex"};
+    char b[1024];
+
+    memset(&t, 0, sizeof(t));
+    CHECK(cpu_place_threads_format(&t, 0, b, sizeof(b)) == strlen("threads: none read"));
+    CHECK_STR(b, "threads: none read");
+    /* the Helio G85: the game and the render thread kept to 6-7 */
+    addThread(&t, 100, "ico_pc", 0xc0u);
+    addThread(&t, 105, "ico-render", 0xc0u);
+    for (unsigned i = 0; i < sizeof(rest) / sizeof(rest[0]); i++) {
+        addThread(&t, 110 + (long)i, rest[i], 0xffu);
+    }
+    for (int i = 0; i < 21; i++) {
+        addThread(&t, 200 + i, "binder", 0xffu);
+    }
+    (void)cpu_place_threads_format(&t, 100, b, sizeof(b));
+    CHECK_STR(b, "threads: 31; kept to cores 6-7: ico_pc (the game thread), ico-render; on 0-7: "
+                 "ico-submit, mali-cmar-backend, mali-utility-wo, mali-mem-purge, ico-gpu-sysfs "
+                 "and 24 more");
+    /* the game thread first in its group whatever its id; with no game
+       thread named, by id */
+    memset(&t, 0, sizeof(t));
+    addThread(&t, 50, "ico-render", 0xc0u);
+    addThread(&t, 60, "ico_pc", 0xc0u);
+    addThread(&t, 70, "ico-tex", 0x3fu);
+    addThread(&t, 71, "ico-tex", 0x3fu);
+    addThread(&t, 72, "ico-tex", 0x3fu);
+    addThread(&t, 80, "pinned", 0x80u);
+    addThread(&t, 90, "", 0xffu);
+    addThread(&t, 95, "lost", 0);
+    (void)cpu_place_threads_format(&t, 60, b, sizeof(b));
+    CHECK_STR(b, "threads: 8; kept to core 7: pinned; kept to cores 6-7: ico_pc (the game "
+                 "thread), ico-render; kept to cores 0-5: ico-tex (3); on 0-7: ?; cores not "
+                 "known: lost");
+    (void)cpu_place_threads_format(&t, 0, b, sizeof(b));
+    CHECK(strstr(b, "kept to cores 6-7: ico-render, ico_pc;") != NULL);
+    /* more threads than the table: counted, said */
+    t.total += 3;
+    (void)cpu_place_threads_format(&t, 60, b, sizeof(b));
+    CHECK(strstr(b, "threads: 11;") == b && strstr(b, "; 3 more not looked at") != NULL);
+    {
+        char c[16];
+        const size_t n = cpu_place_threads_format(&t, 60, c, sizeof(c));
+
+        CHECK(n == strlen(c) && n < sizeof(c));
+    }
+}
+
+#if defined(__linux__)
+static void writeTask(const char *root, long tid, const char *comm, const char *status)
+{
+    char p[1024];
+    FILE *f;
+
+    snprintf(p, sizeof(p), "%s/%ld", root, tid);
+    (void)mkdir(p, 0755);
+    snprintf(p, sizeof(p), "%s/%ld/comm", root, tid);
+    f = fopen(p, "w");
+    if (f != NULL) {
+        fputs(comm, f);
+        fclose(f);
+    }
+    if (status == NULL) {
+        return;
+    }
+    snprintf(p, sizeof(p), "%s/%ld/status", root, tid);
+    f = fopen(p, "w");
+    if (f != NULL) {
+        fputs(status, f);
+        fclose(f);
+    }
+}
+
+static void testThreadsRead(const char *dir)
+{
+    char root[768], b[512];
+    static CpuThreads t;
+
+    snprintf(root, sizeof(root), "%s/cpu_place_task", dir);
+    (void)mkdir(root, 0755);
+    writeTask(root, 31000, "ico-render\n",
+              "Name:\tico-render\nCpus_allowed:\tc0\nCpus_allowed_list:\t6-7\nVoluntary:\t1\n");
+    writeTask(root, 3100, "ico_pc\n", "Name:\tico_pc\nCpus_allowed_list:\t6-7\n");
+    writeTask(root, 3200, "ico-submit\n", "Name:\tico-submit\nCpus_allowed_list:\t0-7\n");
+    writeTask(root, 3300, "no-status\n", NULL);
+    CHECK(cpu_place_threads_read(root, &t) == 4);
+    CHECK(t.total == 4 && t.t[0].tid == 3100 && t.t[3].tid == 31000); /* by id */
+    CHECK(t.t[0].mask == 0xc0u && t.t[2].mask == 0 && strcmp(t.t[3].name, "ico-render") == 0);
+    (void)cpu_place_threads_text(root, 3100, b, sizeof(b));
+    CHECK_STR(b, "threads: 4; kept to cores 6-7: ico_pc (the game thread), ico-render; on 0-7: "
+                 "ico-submit; cores not known: no-status");
+    snprintf(root, sizeof(root), "%s/cpu_place_no_task", dir);
+    CHECK(cpu_place_threads_read(root, &t) == 0);
+    /* this process's own threads: at least this one */
+    CHECK(cpu_place_threads_read(NULL, &t) >= 1);
+}
+#endif
+
 int main(int argc, char **argv)
 {
     testHist();
@@ -459,6 +626,12 @@ int main(int argc, char **argv)
     testThread();
     testPinResult();
     testFree();
+    testCpuTime();
+    testList();
+    testThreads();
+#if defined(__linux__)
+    testThreadsRead(argc > 1 ? argv[1] : ".");
+#endif
     if (fails) {
         printf("cpu_place: %d failed\n", fails);
         return 1;

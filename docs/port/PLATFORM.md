@@ -685,7 +685,25 @@ is the render thread's job, which ends with the walk. The line ends with the cor
 ran on most (`on cores G:4 (78 %) R:7 (64 %) S:5 (90 %)`: one sample a step on the game thread,
 a picture on the render thread, a job on the submit thread, `port/platform/cpu_place.h`) and,
 where the cores differ in speed, each thread's share on the slowest ones (`, on the slowest cores
-(0-3) G 0 % R 12 % S 3 %`), so a render thread kept on a phone's little cores shows:
+(0-3) G 0 % R 12 % S 3 %`), so a render thread kept on a phone's little cores shows, and on Linux
+and Android with each thread's time on a core and waiting for one in the block, from the kernel's
+`/proc/self/task/<tid>/schedstat` (`port/platform/thread_stat.h`; the game thread's id taken at
+`place_init`, the render and submit threads' at their start; a thread first read in the block
+left out until the next): `; ran / waited for a core: game 3.9 s / 0.4 s, render 2.1 s / 1.8 s,
+submit 0.0 s / 0.0 s` (once `schedstat not readable (EACCES)` where the system denies it). A
+thread that waited for a core about as long as it ran was held off its cores by other threads.
+The step's mean opens the line with the game thread's own CPU time inside it (`step 38.4 ms (CPU
+12.1 ms of it; closing a frame ...`; `cpu_place_thread_cpu_ns`: `CLOCK_THREAD_CPUTIME_ID`, or
+`GetThreadTimes` on Windows, read at the end of one pace and the start of the next; left out where
+not known). After the block's lines, and once at the start after the game thread's pin, the
+process's threads by the cores they may run on (`cpu_place_threads_format` over
+`/proc/self/task/*/comm` and `status`'s `Cpus_allowed_list`: the narrowest set first, `on` the
+widest, a repeated name with its count, five names a group then `and N more`; written again only
+when the text changed, the first 8 changes then every 100th; Linux and Android only):
+`window: threads: 31; kept to cores 6-7: ico_pc (the game thread), ico-render; on 0-7: ico-submit,
+mali-cmar-backend, mali-utility-wo, mali-mem-purge, ico-gpu-sysfs and 24 more`. How these decide
+issue 179's open questions is in
+[ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides). The line:
 
 ```
 window: game thread: step 3.1 ms (closing a frame 0.4 ms of it, longest 1.2 ms, 300 frames), pump 0.4 ms, slot waits 12 (8.2 ms; 9 (7.9 ms) by a new frame's present, 2 (0.3 ms) by a further present's, 1 other), read waits 290 (610.4 ms, longest 6.9 ms); render thread: CPU 9.3 ms a picture, idle 21 %, waited for a frame 14.2 ms, heartbeat max 13.9 ms (590 pictures); interp 3.8 ms, walk 3.9 ms, submit 2.6 ms, GPU and display waits 1.2 ms a picture; 40 textures destroyed for the game thread; 12 further presents held back (12 would have made the step miss its period, 0 while a picture ran past its estimate, 0 while the presents waited for the display or the GPU; a picture holds the renderer for 4.1 ms (3.6 ms of its own, 3.0 ms of it the interpolation; the rest its waits for the GPU and the submit thread), takes 4.2 ms, its present waits 0.3 ms, the submit thread's part 3.4 ms; the steps planned at 3.9 ms closing a frame and 3.9 ms between frames (their typical time, 0.0 ms of it the margin widened after a miss; 0 long steps of the game's own left out)); steps started late by the pictures: 290 (longest 6.9 ms); steps that missed their period: 0 (0 the pictures', 0 the game's own; latest 0.0 ms past it; 0 steps planned at the whole period after the pictures'); submit thread: 3.4 ms a picture (submit 2.7, present 0.7; 590 pictures, longest 12.6 ms), queue depth max 1, the render thread waited for it 41 times (22.3 ms), the others 3 times (0.4 ms, longest 2.1 ms), 0 submitted on the render thread; on cores G:4 (97 %) R:6 (88 %) S:5 (91 %), on the slowest cores (0-3) G 0 % R 2 % S 1 %

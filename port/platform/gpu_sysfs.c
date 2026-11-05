@@ -10,13 +10,92 @@
 #include <stdio.h>
 #include <string.h>
 
-static const char *const s_names[GPU_SYSFS_NODES] = {
-    "gpuclk",           "clock_mhz", "devfreq/cur_freq", "gpu_busy_percentage", "reset_count",
-    "thermal_pwrlevel", "temp",      "max_gpuclk",       "min_pwrlevel",        "max_pwrlevel"};
+static const char *const s_names[GPU_SYSFS_NODES] = {"gpuclk",
+                                                     "clock_mhz",
+                                                     "devfreq/cur_freq",
+                                                     "gpu_busy_percentage",
+                                                     "reset_count",
+                                                     "thermal_pwrlevel",
+                                                     "temp",
+                                                     "max_gpuclk",
+                                                     "min_pwrlevel",
+                                                     "max_pwrlevel",
+                                                     "cur_freq",
+                                                     "load",
+                                                     "/sys/class/misc/mali0/device/utilization",
+                                                     "/sys/kernel/ged/hal/gpu_utilization",
+                                                     "/sys/kernel/ged/hal/current_freqency",
+                                                     "max_freq"};
 
 const char *gpu_sysfs_node_name(int node)
 {
     return node >= 0 && node < GPU_SYSFS_NODES ? s_names[node] : "?";
+}
+
+bool gpu_sysfs_node_absolute(int node)
+{
+    return node >= GPU_SYSFS_MALI_UTIL && node <= GPU_SYSFS_GED_FREQ;
+}
+
+bool gpu_sysfs_node_in(int kind, int node)
+{
+    if (node < 0 || node >= GPU_SYSFS_NODES) {
+        return false;
+    }
+    switch (kind) {
+    case GPU_SYSFS_KIND_KGSL:
+        return node <= GPU_SYSFS_MAX_PWRLEVEL;
+    case GPU_SYSFS_KIND_DEVFREQ:
+        return node >= GPU_SYSFS_DF_CUR;
+    case GPU_SYSFS_KIND_NONE:
+        return gpu_sysfs_node_absolute(node);
+    default:
+        return false;
+    }
+}
+
+bool gpu_sysfs_node_sampled(int node)
+{
+    return (node >= GPU_SYSFS_GPUCLK && node <= GPU_SYSFS_TEMP) ||
+           (node >= GPU_SYSFS_DF_CUR && node <= GPU_SYSFS_GED_FREQ);
+}
+
+/* the name holds word, whatever the case */
+static bool holds(const char *name, const char *word)
+{
+    const size_t n = strlen(word);
+
+    for (const char *p = name; *p != '\0'; p++) {
+        size_t k = 0;
+
+        while (k < n && p[k] != '\0' &&
+               (p[k] >= 'A' && p[k] <= 'Z' ? p[k] - 'A' + 'a' : p[k]) == word[k]) {
+            k++;
+        }
+        if (k == n) {
+            return true;
+        }
+    }
+    return false;
+}
+
+int gpu_sysfs_devfreq_name_rank(const char *name)
+{
+    if (name == NULL) {
+        return 0;
+    }
+    if (holds(name, "mali")) {
+        return 2;
+    }
+    if (holds(name, "gpu") && !holds(name, "bw") && !holds(name, "bus")) {
+        return 1;
+    }
+    return 0;
+}
+
+bool gpu_sysfs_devfreq_name_ok(const char *name)
+{
+    return gpu_sysfs_devfreq_name_rank(name) > 0;
 }
 
 bool gpu_sysfs_parse(const char *buf, size_t len, long long *out)
@@ -44,6 +123,26 @@ bool gpu_sysfs_parse(const char *buf, size_t len, long long *out)
     return true;
 }
 
+bool gpu_sysfs_parse_last(const char *buf, size_t len, long long *out)
+{
+    size_t i = 0, last = len;
+
+    while (i < len) {
+        if (buf[i] >= '0' && buf[i] <= '9' && (i == 0 || buf[i - 1] < '0' || buf[i - 1] > '9')) {
+            last = i;
+        }
+        i++;
+    }
+    if (last == len) {
+        return false;
+    }
+    /* a sign right before it counts */
+    if (last > 0 && buf[last - 1] == '-') {
+        last--;
+    }
+    return gpu_sysfs_parse(buf + last, len - last, out);
+}
+
 int32_t gpu_sysfs_mhz(long long v, bool isHz)
 {
     if (v < 0) {
@@ -57,17 +156,30 @@ int32_t gpu_sysfs_mhz(long long v, bool isHz)
 
 bool gpu_sysfs_any_readable(const GpuSysfsInfo *info)
 {
-    for (int i = GPU_SYSFS_GPUCLK; i <= GPU_SYSFS_TEMP; i++) {
-        if (info->state[i] == 1) {
+    for (int i = 0; i < GPU_SYSFS_NODES; i++) {
+        if (info->state[i] == 1 && gpu_sysfs_node_sampled(i) && gpu_sysfs_node_in(info->kind, i)) {
             return true;
         }
     }
     return false;
 }
 
+bool gpu_sysfs_any_sampled(const GpuSysfsInfo *info)
+{
+    return gpu_sysfs_any_readable(info) || info->cpuMask != 0;
+}
+
 void gpu_sysfs_ring_reset(GpuSysfsRing *r)
 {
     memset(r, 0, sizeof(*r));
+}
+
+void gpu_sysfs_ring_cpus(GpuSysfsRing *r, int count, const uint32_t *khz)
+{
+    r->cpuCount = count < 0 ? 0 : count > GPU_SYSFS_CPUS ? GPU_SYSFS_CPUS : count;
+    for (int i = 0; i < GPU_SYSFS_CPUS; i++) {
+        r->cpuKhz[i] = i < r->cpuCount && khz != NULL ? khz[i] : 0u;
+    }
 }
 
 void gpu_sysfs_ring_add(GpuSysfsRing *r, const GpuSysfsSample *s)
@@ -95,6 +207,11 @@ void gpu_sysfs_ring_block(const GpuSysfsRing *r, double sinceMs, GpuSysfsBlock *
     out->resetsIn = out->resetsAll = -1;
     out->thermalMax = -1;
     out->tempMax = GPU_SYSFS_NO_TEMP;
+    out->cpuCount = r->cpuCount;
+    for (int c = 0; c < GPU_SYSFS_CPUS; c++) {
+        out->cpuKhz[c] = r->cpuKhz[c];
+        out->cpuMin[c] = out->cpuMax[c] = -1;
+    }
     for (uint32_t k = 0; k < r->count; k++) {
         const GpuSysfsSample *s = at(r, k);
 
@@ -105,6 +222,17 @@ void gpu_sysfs_ring_block(const GpuSysfsRing *r, double sinceMs, GpuSysfsBlock *
             continue;
         }
         out->n++;
+        for (int c = 0; c < r->cpuCount; c++) {
+            const int32_t m = s->cpuMhz[c];
+
+            if (m == 0) {
+                continue;
+            }
+            out->cpuMin[c] = out->cpuN[c] == 0 || m < out->cpuMin[c] ? m : out->cpuMin[c];
+            out->cpuMax[c] = m > out->cpuMax[c] ? m : out->cpuMax[c];
+            out->cpuSum[c] += m;
+            out->cpuN[c]++;
+        }
         if (s->clockMhz >= 0) {
             out->clockMin =
                 out->clockN == 0 || s->clockMhz < out->clockMin ? s->clockMhz : out->clockMin;
@@ -137,7 +265,8 @@ void gpu_sysfs_ring_block(const GpuSysfsRing *r, double sinceMs, GpuSysfsBlock *
     }
 }
 
-void gpu_sysfs_ring_around(const GpuSysfsRing *r, double t0Ms, double t1Ms, GpuSysfsAround *out)
+void gpu_sysfs_ring_around(const GpuSysfsRing *r, double t0Ms, double t1Ms, int core,
+                           GpuSysfsAround *out)
 {
     memset(out, 0, sizeof(*out));
     out->t0Ms = t0Ms;
@@ -145,6 +274,8 @@ void gpu_sysfs_ring_around(const GpuSysfsRing *r, double t0Ms, double t1Ms, GpuS
     out->duringClockMin = out->duringClockMax = -1;
     out->duringBusyMin = out->duringBusyMax = -1;
     out->duringResets = -1;
+    out->core = core >= 0 && core < r->cpuCount ? core : -1;
+    out->duringCpuMin = out->duringCpuMax = -1;
     for (uint32_t k = 0; k < r->count; k++) {
         const GpuSysfsSample *s = at(r, k);
 
@@ -174,6 +305,13 @@ void gpu_sysfs_ring_around(const GpuSysfsRing *r, double t0Ms, double t1Ms, GpuS
             }
             if (s->resets >= 0) {
                 out->duringResets = s->resets;
+            }
+            if (out->core >= 0 && s->cpuMhz[out->core] != 0) {
+                const int32_t m = s->cpuMhz[out->core];
+
+                out->duringCpuMin =
+                    out->duringCpuMin < 0 || m < out->duringCpuMin ? m : out->duringCpuMin;
+                out->duringCpuMax = m > out->duringCpuMax ? m : out->duringCpuMax;
             }
         }
     }
@@ -231,18 +369,63 @@ static const char *errno_name(int e)
     }
 }
 
+/* "0-7", "0-5, 7" (the cores of mask) */
+static void mask_words(Out *o, uint32_t mask)
+{
+    const char *sep = "";
+
+    for (int i = 0; i < 32;) {
+        int j = i;
+
+        if (!(mask & (1u << i))) {
+            i++;
+            continue;
+        }
+        while (j + 1 < 32 && (mask & (1u << (j + 1)))) {
+            j++;
+        }
+        if (j > i) {
+            put(o, "%s%d-%d", sep, i, j);
+        } else {
+            put(o, "%s%d", sep, i);
+        }
+        sep = ", ";
+        i = j + 1;
+    }
+}
+
+/* a node in the open line: its name, and the first text read where the
+   probe kept it ("load (\"45@650000000Hz\")") */
+static void node_words(Out *o, const GpuSysfsInfo *info, int i)
+{
+    put(o, "%s", s_names[i]);
+    if (info->first[i][0] != '\0') {
+        put(o, " (\"%s\")", info->first[i]);
+    }
+}
+
 int gpu_sysfs_open_text(const GpuSysfsInfo *info, char *buf, size_t size)
 {
     Out o = {buf, size, 0};
     int readable = 0, unreadable = 0, sameErr = 0;
     const char *sep;
+    const bool none = info->kind == GPU_SYSFS_KIND_NONE;
 
-    put(&o, "kernel GPU driver: %s", GPU_SYSFS_DIR);
-    if (!info->dirPresent) {
+    if (info->kind == GPU_SYSFS_KIND_DEVFREQ) {
+        put(&o, "kernel GPU driver: %s", info->dir);
+    } else {
+        put(&o, "kernel GPU driver: %s", info->dir[0] != '\0' ? info->dir : GPU_SYSFS_DIR);
+    }
+    if (none) {
+        put(&o, " not present, no GPU entry in %s", GPU_SYSFS_DEVFREQ_DIR);
+    } else if (!info->dirPresent) {
         put(&o, " not present");
-        return done(&o);
+        goto cpus;
     }
     for (int i = 0; i < GPU_SYSFS_NODES; i++) {
+        if (!gpu_sysfs_node_in(info->kind, i)) {
+            continue;
+        }
         if (info->state[i] == 1) {
             readable++;
         } else if (info->state[i] < 0) {
@@ -250,20 +433,21 @@ int gpu_sysfs_open_text(const GpuSysfsInfo *info, char *buf, size_t size)
             unreadable++;
         }
     }
-    if (readable == 0 && unreadable == 0) {
+    if (!none && readable == 0 && unreadable == 0) {
         put(&o, ": none of its nodes present");
-        return done(&o);
+        goto cpus;
     }
-    if (readable == 0 && sameErr < 0) {
+    if (info->kind == GPU_SYSFS_KIND_KGSL && readable == 0 && sameErr < 0) {
+        /* KGSL's directory denied whole (SELinux): one word for all */
         put(&o, ": not readable (%s)", errno_name(-sameErr));
-        return done(&o);
+        goto cpus;
     }
-    put(&o, ":");
+    sep = none ? "; readable " : ": readable ";
     if (readable) {
-        sep = " readable ";
         for (int i = 0; i < GPU_SYSFS_NODES; i++) {
-            if (info->state[i] == 1) {
-                put(&o, "%s%s", sep, s_names[i]);
+            if (info->state[i] == 1 && gpu_sysfs_node_in(info->kind, i)) {
+                put(&o, "%s", sep);
+                node_words(&o, info, i);
                 if (i == GPU_SYSFS_RESETS && info->resets >= 0) {
                     put(&o, " (%d so far)", (int)info->resets);
                 }
@@ -272,17 +456,17 @@ int gpu_sysfs_open_text(const GpuSysfsInfo *info, char *buf, size_t size)
         }
     }
     if (unreadable) {
-        sep = readable ? "; not readable " : " not readable ";
+        sep = readable || none ? "; not readable " : ": not readable ";
         for (int i = 0; i < GPU_SYSFS_NODES; i++) {
-            if (info->state[i] < 0) {
+            if (info->state[i] < 0 && gpu_sysfs_node_in(info->kind, i)) {
                 put(&o, "%s%s (%s)", sep, s_names[i], errno_name(-info->state[i]));
                 sep = ", ";
             }
         }
     }
-    sep = "; not present ";
+    sep = readable || unreadable || none ? "; not present " : ": not present ";
     for (int i = 0; i < GPU_SYSFS_NODES; i++) {
-        if (info->state[i] == 0) {
+        if (info->state[i] == 0 && gpu_sysfs_node_in(info->kind, i)) {
             put(&o, "%s%s", sep, s_names[i]);
             sep = ", ";
         }
@@ -297,10 +481,63 @@ int gpu_sysfs_open_text(const GpuSysfsInfo *info, char *buf, size_t size)
            the fastest allowed, min_pwrlevel the slowest */
         put(&o, "%spower levels %d (fastest) to %d", sep, (int)info->maxLevel, (int)info->minLevel);
     }
+cpus:
+    if (info->cpuMask != 0) {
+        put(&o, "; CPU clocks of cores ");
+        mask_words(&o, info->cpuMask);
+        if (gpu_sysfs_any_readable(info)) {
+            put(&o, " sampled with it");
+        } else {
+            put(&o, " sampled every %u ms", GPU_SYSFS_PERIOD_MS);
+        }
+    } else if (info->cpuErr < 0) {
+        put(&o, "; CPU clocks not readable (%s)", errno_name(-info->cpuErr));
+    }
     if (gpu_sysfs_any_readable(info)) {
         put(&o, "; sampled every %u ms", GPU_SYSFS_PERIOD_MS);
     }
     return done(&o);
+}
+
+/* "; CPU clocks: cores 0-5 1000-1800 MHz (average 1500), cores 6-7 2000
+   MHz" (the runs of cores of one top speed with a sample; nothing with
+   none) */
+static void cpu_block_words(Out *o, const GpuSysfsBlock *b)
+{
+    const char *sep = "; CPU clocks: ";
+
+    for (int i = 0; i < b->cpuCount;) {
+        int j = i, lo = -1, hi = -1;
+        unsigned n = 0;
+        double sum = 0.0;
+
+        while (j + 1 < b->cpuCount && b->cpuKhz[j + 1] == b->cpuKhz[i]) {
+            j++;
+        }
+        for (int c = i; c <= j; c++) {
+            if (b->cpuN[c] == 0) {
+                continue;
+            }
+            lo = lo < 0 || b->cpuMin[c] < lo ? b->cpuMin[c] : lo;
+            hi = b->cpuMax[c] > hi ? b->cpuMax[c] : hi;
+            sum += b->cpuSum[c];
+            n += b->cpuN[c];
+        }
+        if (n != 0) {
+            if (j > i) {
+                put(o, "%scores %d-%d ", sep, i, j);
+            } else {
+                put(o, "%score %d ", sep, i);
+            }
+            if (lo == hi) {
+                put(o, "%d MHz", lo);
+            } else {
+                put(o, "%d-%d MHz (average %.0f)", lo, hi, sum / n);
+            }
+            sep = ", ";
+        }
+        i = j + 1;
+    }
 }
 
 int gpu_sysfs_block_text(const GpuSysfsBlock *b, char *buf, size_t size)
@@ -332,6 +569,7 @@ int gpu_sysfs_block_text(const GpuSysfsBlock *b, char *buf, size_t size)
     if (b->tempMax != GPU_SYSFS_NO_TEMP) {
         put(&o, ", temperature at most %d C", (int)b->tempMax);
     }
+    cpu_block_words(&o, b);
     return done(&o);
 }
 
@@ -407,6 +645,31 @@ int gpu_sysfs_around_text(const GpuSysfsAround *a, unsigned replay, char *buf, s
         sample_words(&o, &a->after);
     } else {
         put(&o, "; no sample after");
+    }
+    if (a->core >= 0) {
+        /* the game thread's core's clock: did the CPU slow down there? */
+        const char *sep = ": ";
+        const int c = a->core;
+
+        if ((a->hasBefore && a->before.cpuMhz[c] != 0) || a->duringCpuMin >= 0 ||
+            (a->hasAfter && a->after.cpuMhz[c] != 0)) {
+            put(&o, "; CPU core %d (the game thread's)", c);
+            if (a->hasBefore && a->before.cpuMhz[c] != 0) {
+                put(&o, "%s%d MHz before", sep, (int)a->before.cpuMhz[c]);
+                sep = ", ";
+            }
+            if (a->duringCpuMin >= 0) {
+                if (a->duringCpuMin == a->duringCpuMax) {
+                    put(&o, "%s%d MHz during", sep, (int)a->duringCpuMin);
+                } else {
+                    put(&o, "%s%d-%d MHz during", sep, (int)a->duringCpuMin, (int)a->duringCpuMax);
+                }
+                sep = ", ";
+            }
+            if (a->hasAfter && a->after.cpuMhz[c] != 0) {
+                put(&o, "%s%d MHz after", sep, (int)a->after.cpuMhz[c]);
+            }
+        }
     }
     return done(&o);
 }

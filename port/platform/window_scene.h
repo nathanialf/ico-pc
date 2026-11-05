@@ -13,11 +13,17 @@
  *     switch and the core the game thread was on: "game threads 199.3 in 39
  *     switches (longest Main 171.2 ms; on core 2)";
  *   - the VU work of a replay: "VU: 1182 draws, 61k triangles, 550k vertex
- *     invocations (pre-pass off: 9 a triangle)".
+ *     invocations (pre-pass off: 9 a triangle)", and (issue 179) what list
+ *     0, the scene, cost the GPU in the block's timed replays against
+ *     their VU triangles: "; list 0 GPU 41.2 ms a replay, 12.3 ms + 0.41 ms
+ *     a thousand triangles (R^2 0.80, 38 replays)";
+ *   - the swapchain's images and those the game holds: " (images: 10, in
+ *     use 1)" after the present mode.
  */
 #ifndef ICO_PLATFORM_WINDOW_SCENE_H
 #define ICO_PLATFORM_WINDOW_SCENE_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -70,5 +76,32 @@ size_t window_scene_threads_text(char *out, size_t cap, double threadsMs, unsign
      "VU: 250 draws, 9.2k triangles, 4.1k vertex invocations (pre-pass: each vertex once)" */
 size_t window_scene_vu_text(char *out, size_t cap, uint64_t draws, uint64_t tris,
                             uint64_t preVertices, unsigned n, int prepass);
+
+/* The block's timed replays as (VU triangles, list 0's GPU ms) pairs, for
+   a least-squares line: list 0 = a + b x (x in thousands of triangles).
+   Sums, no ring: a block's few hundred replays in doubles */
+typedef struct SceneVuFit {
+    unsigned n;
+    double sx, sy, sxx, sxy, syy;
+} SceneVuFit;
+
+void window_scene_vu_fit_add(SceneVuFit *f, uint64_t tris, double list0Ms);
+/* The line's a (ms), b (ms a thousand triangles) and r2 (the share of
+   list 0's variance the triangles explain; -1 when list 0 did not vary):
+   false with fewer than 3 replays or the triangles' count not varying
+   (no slope to be had) */
+bool window_scene_vu_fit(const SceneVuFit *f, double *a, double *b, double *r2);
+/* "; list 0 GPU 41.2 ms a replay, 12.3 ms + 0.41 ms a thousand triangles
+   (R^2 0.80, 38 replays)": the mean, then the line where it is had; "" with
+   no replay timed.  b near 0 with a high R^2 is not possible; a high b with
+   a high R^2 says the vertex work (the VU draws' triangles) sets list 0's
+   time, a low R^2 that something else does (the pixels, the passes).  The
+   length written */
+size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f);
+
+/* " (images: 10, in use 1)": the swapchain's images and those acquired and
+   not yet handed back to the presentation engine; "" with no image count
+   (a backend without one); the length written */
+size_t window_scene_images_text(char *out, size_t cap, uint64_t images, uint64_t inUse);
 
 #endif /* ICO_PLATFORM_WINDOW_SCENE_H */

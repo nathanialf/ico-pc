@@ -6,7 +6,9 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #if defined(__linux__)
 /* the system's calls by number: port/platform's own sched.h (the game's
@@ -14,6 +16,7 @@
    path, so sched_getcpu, sched_setaffinity and cpu_set_t are not
    reachable by name; the kernel's interface is the same on glibc and
    Android's bionic */
+#include <dirent.h>
 #include <errno.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
@@ -535,4 +538,316 @@ void cpu_place_free_counts(unsigned *resets, unsigned *failures)
 {
     *resets = __atomic_load_n(&s_freeResets, __ATOMIC_RELAXED);
     *failures = __atomic_load_n(&s_freeFailures, __ATOMIC_RELAXED);
+}
+
+uint64_t cpu_place_thread_cpu_ns(void)
+{
+#if defined(_WIN32)
+    FILETIME created, exited, kernel, user;
+
+    if (!GetThreadTimes(GetCurrentThread(), &created, &exited, &kernel, &user)) {
+        return 0;
+    }
+    /* 100 ns units */
+    return ((((uint64_t)kernel.dwHighDateTime << 32) | kernel.dwLowDateTime) +
+            (((uint64_t)user.dwHighDateTime << 32) | user.dwLowDateTime)) *
+           100u;
+#elif defined(CLOCK_THREAD_CPUTIME_ID)
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_THREAD_CPUTIME_ID, &ts) != 0) {
+        return 0;
+    }
+    return (uint64_t)ts.tv_sec * 1000000000u + (uint64_t)ts.tv_nsec;
+#else
+    return 0;
+#endif
+}
+
+size_t cpu_place_cpu_text(double cpuMs, char *out, size_t cap)
+{
+    size_t len = 0;
+
+    if (cap > 0) {
+        out[0] = '\0';
+    }
+    if (cpuMs > 0.0) {
+        put(out, cap, &len, "CPU %.1f ms of it", cpuMs);
+    }
+    return done(out, cap, len);
+}
+
+uint64_t cpu_place_list_parse(const char *text)
+{
+    uint64_t m = 0;
+    const char *p = text;
+    bool any = false;
+
+    if (p == NULL) {
+        return 0;
+    }
+    for (;;) {
+        char *end;
+        long a, b;
+
+        while (*p == ' ' || *p == '\t') {
+            p++;
+        }
+        if (*p < '0' || *p > '9') {
+            break;
+        }
+        a = strtol(p, &end, 10);
+        p = end;
+        b = a;
+        if (*p == '-') {
+            p++;
+            if (*p < '0' || *p > '9') {
+                return 0;
+            }
+            b = strtol(p, &end, 10);
+            p = end;
+        }
+        if (b < a) {
+            return 0;
+        }
+        for (long i = a; i <= b && i < CPU_PLACE_MAX; i++) {
+            m |= (uint64_t)1 << i;
+        }
+        any = true;
+        if (*p != ',') {
+            break;
+        }
+        p++;
+    }
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') {
+        p++;
+    }
+    return any && *p == '\0' ? m : 0;
+}
+
+#if defined(__linux__)
+/* a small file's text (open, read, close: procfs makes it at the read),
+   NUL-ended, its trailing newline kept; false when not read */
+static bool read_small(const char *path, char *buf, size_t cap)
+{
+    FILE *f = fopen(path, "r");
+    size_t got;
+
+    if (f == NULL) {
+        return false;
+    }
+    got = fread(buf, 1, cap - 1, f);
+    fclose(f);
+    buf[got] = '\0';
+    return got > 0;
+}
+
+static int by_tid(const void *a, const void *b)
+{
+    const long x = ((const CpuThread *)a)->tid, y = ((const CpuThread *)b)->tid;
+
+    return x < y ? -1 : x > y;
+}
+#endif
+
+int cpu_place_threads_read(const char *root, CpuThreads *out)
+{
+    out->n = out->total = 0;
+#if defined(__linux__)
+    DIR *d;
+    struct dirent *e;
+
+    if (root == NULL) {
+        root = "/proc/self/task";
+    }
+    d = opendir(root);
+    if (d == NULL) {
+        return 0;
+    }
+    while ((e = readdir(d)) != NULL) {
+        char path[512], buf[4096];
+        char *end;
+        const long tid = strtol(e->d_name, &end, 10);
+        CpuThread *t;
+
+        if (e->d_name[0] < '0' || e->d_name[0] > '9' || *end != '\0') {
+            continue; /* "." and ".." */
+        }
+        out->total++;
+        if (out->n >= CPU_THREADS_MAX) {
+            continue;
+        }
+        t = &out->t[out->n++];
+        memset(t, 0, sizeof(*t));
+        t->tid = tid;
+        snprintf(path, sizeof(path), "%s/%s/comm", root, e->d_name);
+        if (read_small(path, buf, sizeof(t->name))) {
+            buf[strcspn(buf, "\n")] = '\0';
+            /* the precision bounds the copy where gcc's -O2 truncation check sees it */
+            snprintf(t->name, sizeof(t->name), "%.*s", (int)(sizeof(t->name) - 1), buf);
+        }
+        snprintf(path, sizeof(path), "%s/%s/status", root, e->d_name);
+        if (read_small(path, buf, sizeof(buf))) {
+            const char *at = strstr(buf, "Cpus_allowed_list:");
+
+            if (at != NULL) {
+                char list[256];
+                size_t k = 0;
+
+                at += strlen("Cpus_allowed_list:");
+                while (*at == ' ' || *at == '\t') {
+                    at++;
+                }
+                while (at[k] != '\0' && at[k] != '\n' && k + 1 < sizeof(list)) {
+                    list[k] = at[k];
+                    k++;
+                }
+                list[k] = '\0';
+                t->mask = cpu_place_list_parse(list);
+            }
+        }
+    }
+    closedir(d);
+    if (out->n > 1) {
+        qsort(out->t, (size_t)out->n, sizeof(out->t[0]), by_tid);
+    }
+#else
+    (void)root;
+#endif
+    return out->n;
+}
+
+static int popcount64(uint64_t m)
+{
+    int n = 0;
+
+    for (; m != 0; m &= m - 1) {
+        n++;
+    }
+    return n;
+}
+
+/* one group's names: the game thread first, then by thread id (the
+   table's order), each name once with its count; at most
+   CPU_THREADS_NAMES, then "and N more" */
+static void group_names(const CpuThreads *t, uint64_t mask, long gameTid, char *out, size_t cap,
+                        size_t *len)
+{
+    int order[CPU_THREADS_MAX], n = 0, said = 0, shown = 0;
+    bool used[CPU_THREADS_MAX];
+
+    for (int i = 0; i < t->n; i++) {
+        if (t->t[i].mask == mask && t->t[i].tid == gameTid && gameTid != 0) {
+            order[n++] = i;
+        }
+    }
+    for (int i = 0; i < t->n; i++) {
+        if (t->t[i].mask == mask && !(t->t[i].tid == gameTid && gameTid != 0)) {
+            order[n++] = i;
+        }
+    }
+    memset(used, 0, sizeof(used));
+    for (int k = 0; k < n && said < CPU_THREADS_NAMES; k++) {
+        const CpuThread *a = &t->t[order[k]];
+        const char *name = a->name[0] != '\0' ? a->name : "?";
+        const bool game = gameTid != 0 && a->tid == gameTid;
+        int same = 1;
+
+        if (used[k]) {
+            continue;
+        }
+        used[k] = true;
+        for (int j = k + 1; j < n && !game; j++) {
+            const CpuThread *b = &t->t[order[j]];
+
+            if (!used[j] && strcmp(b->name[0] != '\0' ? b->name : "?", name) == 0) {
+                used[j] = true;
+                same++;
+            }
+        }
+        put(out, cap, len, "%s%s", said ? ", " : "", name);
+        if (game) {
+            put(out, cap, len, " (the game thread)");
+        } else if (same > 1) {
+            put(out, cap, len, " (%d)", same);
+        }
+        said++;
+        shown += same;
+    }
+    if (shown < n) {
+        put(out, cap, len, " and %d more", n - shown);
+    }
+}
+
+size_t cpu_place_threads_format(const CpuThreads *t, long gameTid, char *out, size_t cap)
+{
+    uint64_t masks[CPU_THREADS_MAX], full = 0;
+    int nm = 0;
+    bool unknown = false;
+    size_t len = 0;
+
+    if (cap > 0) {
+        out[0] = '\0';
+    }
+    if (t->n == 0) {
+        put(out, cap, &len, "threads: none read");
+        return done(out, cap, len);
+    }
+    for (int i = 0; i < t->n; i++) {
+        const uint64_t m = t->t[i].mask;
+        bool seen = false;
+
+        full |= m;
+        if (m == 0) {
+            unknown = true;
+            continue;
+        }
+        for (int k = 0; k < nm; k++) {
+            seen = seen || masks[k] == m;
+        }
+        if (!seen) {
+            masks[nm++] = m;
+        }
+    }
+    /* the narrowest first (fewest cores, then the lowest), the widest last */
+    for (int i = 1; i < nm; i++) {
+        for (int k = i; k > 0; k--) {
+            const int pa = popcount64(masks[k - 1]), pb = popcount64(masks[k]);
+
+            if (pa > pb || (pa == pb && masks[k - 1] > masks[k])) {
+                const uint64_t x = masks[k - 1];
+
+                masks[k - 1] = masks[k];
+                masks[k] = x;
+            }
+        }
+    }
+    put(out, cap, &len, "threads: %d", t->total);
+    for (int k = 0; k < nm; k++) {
+        char m[96];
+
+        (void)cpu_place_mask_text(masks[k], m, sizeof(m));
+        if (masks[k] == full) {
+            put(out, cap, &len, "; on %s: ", m);
+        } else {
+            put(out, cap, &len, "; kept to core%s %s: ", popcount64(masks[k]) == 1 ? "" : "s", m);
+        }
+        group_names(t, masks[k], gameTid, out, cap, &len);
+    }
+    if (unknown) {
+        put(out, cap, &len, "; cores not known: ");
+        group_names(t, 0, gameTid, out, cap, &len);
+    }
+    if (t->total > t->n) {
+        put(out, cap, &len, "; %d more not looked at", t->total - t->n);
+    }
+    return done(out, cap, len);
+}
+
+size_t cpu_place_threads_text(const char *root, long gameTid, char *out, size_t cap)
+{
+    static CpuThreads s_t; /* 5 KB: off the caller's stack (the window's thread) */
+
+    (void)cpu_place_threads_read(root, &s_t);
+    return cpu_place_threads_format(&s_t, gameTid, out, cap);
 }
