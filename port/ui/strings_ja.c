@@ -208,7 +208,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_TONE_CONTRAST] = "コントラスト",
     [UI_STR_OPT_TONE_SATURATION] = "彩度",
     [UI_STR_OPT_TONE_NOTE] =
-        "50はゲームが描く画面そのままです。□で50にもどします。CRTフィルタを含む画面全体が変わります。",
+        "50はゲームが描く画面そのままです。□で50にもどします。CRTフィルタも変わりますが、くっきり表示のメニュー文字は変わりません。",
     [UI_STR_VAL_CRT_SCANLINES] = "走査線",
     [UI_STR_VAL_CRT_CONSUMER] = "家庭用テレビ",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",

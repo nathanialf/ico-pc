@@ -217,7 +217,7 @@ How the picture is drawn and finished: smoothing, the picture's size and sharpne
   still show through it. To adjust a style's details, see
   [the lines you can change in a file](#settings-you-can-only-change-in-a-file).
 - **Gamma**, **Picture brightness**, **Contrast** and **Saturation** change
-  the colours of the whole picture, from 1 to 100. 50 is the picture as the
+  the colours of the game's picture, from 1 to 100. 50 is the picture as the
   game draws it, and it is what each row starts at. They work the way the
   same four settings do in PCSX2: Gamma makes the middle tones lighter or
   darker, Picture brightness lightens or darkens everything, Contrast
@@ -225,8 +225,10 @@ How the picture is drawn and finished: smoothing, the picture's size and sharpne
   how strong the colours are (1 is almost black and white). Left or Right
   changes a row by 5, to the next multiple of 5. Square puts the row back to
   50. They apply with every Preset and with the CRT filter, which gets the
-  same colours. The films are not changed. Picture brightness is not
-  the game's own **Brightness** row above.
+  same colours. With the Enhanced preset, the menu text and subtitles,
+  which are drawn sharp on top of the picture, keep their own colours. The
+  films are not changed. Picture brightness is not the game's own
+  **Brightness** row above.
 - **Texture pack** turns an installed texture pack On or Off. It says
   **None installed** when there is none. [About texture packs](TEXTURE_PACKS.md).
 - **Model pack** turns an installed model pack On or Off. It says **None

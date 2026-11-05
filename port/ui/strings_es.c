@@ -209,7 +209,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_OPT_TONE_CONTRAST] = "Contraste",
     [UI_STR_OPT_TONE_SATURATION] = "Saturación",
     [UI_STR_OPT_TONE_NOTE] =
-        "50 es la imagen tal como la dibuja el juego. Cuadrado vuelve a poner 50. Cambia toda la imagen, también la del filtro CRT.",
+        "50 es la imagen tal como la dibuja el juego. Cuadrado vuelve a poner 50. El filtro CRT la sigue; el texto nítido de los menús no.",
     [UI_STR_VAL_CRT_SCANLINES] = "Líneas de barrido",
     [UI_STR_VAL_CRT_CONSUMER] = "Televisor",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",
