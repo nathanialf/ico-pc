@@ -200,8 +200,14 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `unused_content_test.c`: Extras > Unused content's rows, flag and start and its engine over
   stubs of the game, DATA.DF and Settings, one run per disc (`unused_content`,
   `unused_content_<slug>` for jpn, kor, cn, ntsc, aug6, jun26): each row's stage, which rows the
-  disc's DATA.DF has, the engine indirection, the test rooms' start and the arena's boy at its
-  first shadow row, the return to the title with its log and the reopen of Options, the
+  disc's DATA.DF has, the engine indirection, the test rooms' start (both rooms place the boy and
+  the sword, and the girl in the room whose fake `stageData` `flag0` is set, at
+  `-exitData[0].pos` with `exitData[0].rot` in radians: the fake `exitData[0]` is (12, -34, 56),
+  rot 90, so a copy as stored fails; a fake entrance row into the climbing stage, row 7, is not
+  used; each start's line), the boy's lines over a fake `boyGObj` and stubbed `GetRootPosition` /
+  `GetLowerPlaneCollision` (no boy as the stage is up, the floor and its drop, no floor, the
+  30-tick step, none past 300 ticks, the line at a game over), the return to the title with its
+  log and the reopen of Options, the
   failures; the art row refused when the model viewer offers none of its rows, and its start
   opening the viewer's list on the viewer's first art row (a stubbed `ico_mv_models_enter_at`),
   the list's refusal and a start off the title refused, each logged.

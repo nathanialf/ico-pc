@@ -206,6 +206,7 @@ const IcoRegionInfo ico_region_info_aug6 = {
                                      PAL's exitData[216] to 60 */
     .credits_boy_label = 50,      /* act-game.c ACTGame_SetActors_Debug's first row {50, 1,
                                      hasBoy} (PAL 54; the North American disc 51) */
+    .girl_label = 130,            /* act-game.c ACTGame_SetActors_Debug's second row (PAL 148) */
     /* DATA.DF's directory (172 entries) holds STGSTAFF1.DF, STGSTAFF2.DF and STGSTAFF3.DF */
     .credits_staff_packs = 1,
 

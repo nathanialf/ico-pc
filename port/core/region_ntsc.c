@@ -188,6 +188,7 @@ const IcoRegionInfo ico_region_info_ntsc = {
                                      PAL's exitData[216] to 60 */
     .credits_boy_label = 51,      /* act-game.c ACTGame_SetActors_Debug's first row {51, 1,
                                      hasBoy} (PAL 54) */
+    .girl_label = 131,            /* act-game.c ACTGame_SetActors_Debug's second row (PAL 148) */
     /* DATA.DF's directory (172 entries) holds STGSTAFF1.DF, STGSTAFF2.DF and STGSTAFF3.DF */
     .credits_staff_packs = 1,
 

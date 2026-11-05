@@ -17,8 +17,12 @@
  * disc does not have is refused before the engine; the test rooms start
  * only from the title, keep the game's state, fade the title theme, enter
  * the stage through debug.c's hook, return the scene layout and set the
- * flag; the arena's boy is put at the first shadow row of its layout
- * (exitData[0] is the origin), the climbing room's is not moved; a second
+ * flag; both rooms place the boy and the sword (and the girl in the room
+ * whose stageData flag0 is set, the climbing room) at -exitData[0].pos,
+ * exitData[0].rot in radians (a non-zero fake row, so a copy as stored
+ * fails), the climbing room's own entrance row not used, each logged; the
+ * boy's line (root, ground height, the probe's floor, fall height) as the
+ * stage is up, every 30 Main ticks to 300 and at a game over; a second
  * start while one runs is refused; the stage up, the title's stage entered
  * puts the state back, clears the flag, logs the time and End Game (or game
  * over after ico_unused_game_over) and arms Options' return on the page,
@@ -66,9 +70,12 @@ static int failures;
 /* --- the game's side ------------------------------------------------------ */
 
 StgPre stageData[110];
-const ExitData exitData[2] = {
-    [0] = {.pos = {0.0f, 0.0f, 0.0f}}}; /* exitData[0]: the origin, as on every disc */
-GenGeo objLayout[64];
+/* the European disc's 261 rows (a room's start reads them for its
+   entrance), filled by fakeTables: exitData[0] NOT the origin (every disc
+   has the origin there), so a placement that copies the row as stored
+   instead of negating it fails, and one entrance row into the climbing
+   stage that the start must not use */
+ExitData exitData[261];
 int stage_no = 1;
 int systemStatus[12] = {1, 1}; /* PAL, frame step 1 */
 int current_layout_id;
@@ -80,8 +87,26 @@ static unsigned char s_gflags[400];
 static unsigned int s_ticks;
 static int s_world, s_loads, s_saves;
 static int s_entered = -1, s_simpleTo = -1, s_fade = 2;
-static int s_placedLabel = -1, s_placedKind = -1, s_placedStage = -1;
-static float s_placedPos[3];
+
+/* the records a start wrote (gamesysObjInfoPosNewStageSet), in order */
+typedef struct {
+    int label, kind, stage;
+    float pos[3], rot[3];
+} Placed;
+
+static Placed s_placed[8];
+static int s_nPlaced;
+
+/* the boy unused_live.c follows in a room's log: his root, his ground and
+   fall heights, the floor the game's probe finds (s_hasFloor) */
+GObj *boyGObj;
+int mpegPlay;
+int stageManagerFreeResourceFlag;
+static GObj s_boy;
+static Sub15C s_boySub;
+static float s_boyPos[3];
+static int s_hasFloor;
+static float s_floorY;
 
 int gflagChk(int i)
 {
@@ -116,12 +141,69 @@ void gamesysMemoryLoad(void **tbl, void *mem, void *arg)
 
 GamesysObjInfo *gamesysObjInfoPosNewStageSet(int no, int kind, int stage, float *pos, float *rot)
 {
-    (void)rot;
-    s_placedLabel = no;
-    s_placedKind = kind;
-    s_placedStage = stage;
-    memcpy(s_placedPos, pos, sizeof(s_placedPos));
+    if (s_nPlaced < (int)(sizeof(s_placed) / sizeof(s_placed[0]))) {
+        Placed *p = &s_placed[s_nPlaced];
+        p->label = no;
+        p->kind = kind;
+        p->stage = stage;
+        memcpy(p->pos, pos, sizeof(p->pos));
+        memcpy(p->rot, rot, sizeof(p->rot));
+    }
+    s_nPlaced++;
     return NULL;
+}
+
+/* no record yet: only asked for a row inside the stage's own label range */
+GamesysObjInfo *gamesysObjInfoGet(int kind, int no)
+{
+    (void)kind;
+    (void)no;
+    return NULL;
+}
+
+void GetRootPosition(void *pos, GObj *obj)
+{
+    float *p = pos;
+    CHECK(obj == &s_boy, "the root asked of the boy");
+    p[0] = s_boyPos[0];
+    p[1] = s_boyPos[1];
+    p[2] = s_boyPos[2];
+    p[3] = 1.0f;
+}
+
+/* the game's probe: a ray from pos 10000 down (+y), the floor's point in
+   pt[2] */
+void GetLowerPlaneCollision(ClipWork *w, float *pos)
+{
+    static int floorElem;
+    CHECK(pos[0] == s_boyPos[0] && pos[1] == s_boyPos[1] && pos[2] == s_boyPos[2],
+          "the probe from the boy's root");
+    w->floor.elem = s_hasFloor ? &floorElem : NULL;
+    w->pt[2][0] = pos[0];
+    w->pt[2][1] = s_hasFloor ? s_floorY : pos[1] + 10000.0f;
+    w->pt[2][2] = pos[2];
+}
+
+/* the record a start wrote for label/kind, NULL none */
+static const Placed *placedOf(int label, int kind)
+{
+    for (int i = 0; i < s_nPlaced && i < (int)(sizeof(s_placed) / sizeof(s_placed[0])); i++) {
+        if (s_placed[i].label == label && s_placed[i].kind == kind) {
+            return &s_placed[i];
+        }
+    }
+    return NULL;
+}
+
+/* the record at the room's start: -exitData[0].pos, exitData[0].rot in
+   radians, on the room's stage */
+static int atStart(const Placed *p, int stage)
+{
+    return p != NULL && p->stage == stage && p->pos[0] == -exitData[0].pos[0] &&
+           p->pos[1] == -exitData[0].pos[1] && p->pos[2] == -exitData[0].pos[2] &&
+           p->rot[0] == exitData[0].rot[0] * 0.017453292f &&
+           p->rot[1] == exitData[0].rot[1] * 0.017453292f &&
+           p->rot[2] == exitData[0].rot[2] * 0.017453292f;
 }
 
 /* debug.c's Stage Select way in: the boy's records go to the stage */
@@ -326,30 +408,35 @@ static void setRow(int stage, const char *name, const char *dataFile, int labelT
 }
 
 /* the disc's rows at its own numbers, the European data: boss_test's
-   layout rows 10..19 (its rows 3584-3593 shortened), 8a_TEST's 30..39 */
+   label range shortened to 10..19, 8a_TEST's to 30..39 (the boy's, the
+   girl's and the sword's records lie below both, as on the discs); both
+   rooms have the boy (attrTop), the climbing room the girl too (flag0) */
 static void fakeTables(void)
 {
     memset(stageData, 0, sizeof(stageData));
-    memset(objLayout, 0, sizeof(objLayout));
+    memset(exitData, 0, sizeof(exitData));
     setRow(1, "logo", "STGLOG", 0, 0);
     setRow(ico_region_stage(59), "memoryPAL576", "#REF!", 0, 0);
     setRow(ico_region_stage(88), "boss_test", "STGBOSS_TEST", 10, 20);
     setRow(ico_region_stage(91), "8a_TEST", "STG8TEST", 30, 40);
-    for (int i = 10; i < 14; i++) {
-        objLayout[i].kind = 7; /* the stage models, at the origin */
+    if (ico_region_stage(88) > 0) {
+        stageData[ico_region_stage(88)].attrTop = 1;
     }
-    objLayout[14].kind = 14; /* the magic sword */
-    objLayout[14].pos[0] = 427.0f;
-    objLayout[14].pos[1] = 65.0f;
-    objLayout[14].pos[2] = -17.0f;
-    for (int i = 15; i < 19; i++) {
-        objLayout[i].kind = 4; /* the shadows */
-        objLayout[i].pos[0] = -1049.0f;
-        objLayout[i].pos[1] = 71.0f;
-        objLayout[i].pos[2] = (i & 1) ? 409.0f : -409.0f;
+    if (ico_region_stage(91) > 0) {
+        stageData[ico_region_stage(91)].attrTop = 1;
+        stageData[ico_region_stage(91)].flag0 = 1;
+        /* the climbing room's entrance (exitData 260 on the European disc:
+           stored (3080, 2606, -1899), rot 0) at row 7 */
+        exitData[7].pos[0] = 3080.0f;
+        exitData[7].pos[1] = 2606.0f;
+        exitData[7].pos[2] = -1899.0f;
+        exitData[7].nextStage = ico_region_stage(91);
     }
-    objLayout[30].kind = 7;
-    objLayout[31].kind = 10; /* a torch */
+    exitData[0].pos[0] = 12.0f;
+    exitData[0].pos[1] = -34.0f;
+    exitData[0].pos[2] = 56.0f;
+    exitData[0].rot[1] = 90.0f;
+    s_boy.dobj = &s_boySub;
 }
 
 static void testStages(void)
@@ -501,6 +588,7 @@ static void testRooms(void)
     theme.stream = &stream;
     stream.fadeStep = 0;
     titleAdpcm = &theme;
+    s_nPlaced = 0;
     logStart();
     const int to = ico_unused_start(ICO_UNUSED_ARENA);
     const char *log = logEnd();
@@ -508,25 +596,77 @@ static void testRooms(void)
           "the arena starts (layout %d, want %d)", to, ri->layout_scene);
     CHECK(s_entered == arena && s_saves == 1 && stream.fadeStep == 0x40 && titleAdpcm == NULL,
           "entered through debug.c (%d), the state kept, the theme faded", s_entered);
-    CHECK(s_placedLabel == ri->credits_boy_label && s_placedKind == 1 && s_placedStage == arena &&
-              s_placedPos[0] == -1049.0f && s_placedPos[1] == 71.0f && s_placedPos[2] == 409.0f,
-          "the boy at the first shadow row (%d, %d, %d: %.0f %.0f %.0f)", s_placedLabel,
-          s_placedKind, s_placedStage, (double)s_placedPos[0], (double)s_placedPos[1],
-          (double)s_placedPos[2]);
-    char want[128];
+    /* the game's no-entrance start: the boy and the sword at
+       -exitData[0].pos (here (-12, 34, -56): the row is stored negated),
+       rot 90 degrees in radians; no girl (the arena's flag0 is 0) */
+    {
+        const Placed *boy = placedOf(ri->credits_boy_label, 1);
+        CHECK(atStart(boy, arena), "the arena's boy at -exitData[0] (%.0f %.0f %.0f, rot %f)",
+              boy ? (double)boy->pos[0] : 0.0, boy ? (double)boy->pos[1] : 0.0,
+              boy ? (double)boy->pos[2] : 0.0, boy ? (double)boy->rot[1] : 0.0);
+        CHECK(atStart(placedOf(ri->credits_boy_label + 1, 14), arena),
+              "the arena's sword at -exitData[0]");
+        CHECK(placedOf(ri->girl_label, 2) == NULL && s_nPlaced == 2,
+              "the arena: no girl (%d records)", s_nPlaced);
+    }
+    char want[512];
     snprintf(want, sizeof(want), "unused: test room arena (stage %d on this disc) started", arena);
-    CHECK(strstr(log, want) != NULL && strstr(log, "its first shadow row 15") != NULL,
-          "the start logged");
+    CHECK(strstr(log, want) != NULL, "the start logged");
+    snprintf(want, sizeof(want),
+             "unused: arena: the boy at the room's start (-12, 34, -56), the game's no-entrance "
+             "point (exitData[0]): the room has no entrance row; placed: the boy (record %d), "
+             "the sword (record %d)\n",
+             ri->credits_boy_label, ri->credits_boy_label + 1);
+    CHECK(strstr(log, want) != NULL, "the arena's placement logged (want \"%s\")", want);
 
     /* a second start while it runs */
     CHECK(ico_unused_start(ICO_UNUSED_CLIMB) == -1 && ico_unused_running() == ICO_UNUSED_ARENA,
           "a second start refused");
 
-    /* the stage up, then End Game: the title's stage entered */
+    /* the stage up: the boy's line at once (no boy yet), then every 30
+       Main ticks (the boy on the floor 71 under his root) */
     stage_no = arena;
     systemStatus[6] = 0;
     s_ticks = 1300;
+    boyGObj = NULL;
+    logStart();
     ico_unused_host_poll();
+    log = logEnd();
+    CHECK(strstr(log, "unused: the test room's stage") != NULL &&
+              strstr(log, "unused: arena tick 0: no boy (the stage has none up)\n") != NULL,
+          "the stage up: the boy's first line");
+    boyGObj = &s_boy;
+    s_boyPos[0] = 100.0f;
+    s_boyPos[1] = -71.0f;
+    s_boyPos[2] = 200.0f;
+    s_boySub.ctrl.groundHeight = 71.0f;
+    s_boySub.ctrl.fallHeight = 5.0f;
+    s_hasFloor = 1;
+    s_floorY = 0.0f;
+    s_ticks = 1315;
+    logStart();
+    ico_unused_host_poll();
+    CHECK(strstr(logEnd(), "unused: arena tick") == NULL, "no line before 30 ticks");
+    s_ticks = 1335;
+    logStart();
+    ico_unused_host_poll();
+    CHECK(strstr(logEnd(), "unused: arena tick 35: the boy at (100, -71, 200), ground height 71 "
+                           "(the floor 0 under him, 71 below), fall height 5\n") != NULL,
+          "the boy's line at tick 35");
+    s_ticks = 1350;
+    logStart();
+    ico_unused_host_poll();
+    CHECK(strstr(logEnd(), "unused: arena tick") == NULL, "the next line due at 60");
+    s_ticks = 1599;
+    logStart();
+    ico_unused_host_poll();
+    CHECK(strstr(logEnd(), "unused: arena tick 299:") != NULL, "a line at tick 299");
+    s_ticks = 1601;
+    logStart();
+    ico_unused_host_poll();
+    CHECK(strstr(logEnd(), "unused: arena tick") == NULL, "no line past 300 ticks");
+
+    /* then End Game: the title's stage entered */
     gflagOff(5);
     s_ticks = 1500; /* 500 ticks of 20 ms (PAL, one field a tick): 10 s */
     s_loads = 0;
@@ -557,16 +697,56 @@ static void testRooms(void)
     ico_unused_host_poll();
     CHECK(s_reopened == -1, "reopened once");
 
-    /* the climbing room, a game over: Continue goes to the title */
+    /* the climbing room: the boy, the girl (its flag0) and the sword at
+       the room's start, not at its entrance row (row 7 here, exitData 260
+       on the European disc: a walkway with no model) */
     onTitle(2000);
-    s_placedLabel = -1;
-    CHECK(ico_unused_start(ICO_UNUSED_CLIMB) == ri->layout_scene && s_entered == climb &&
-              s_placedLabel == -1,
-          "the climbing room starts, the boy at its entrance");
+    s_nPlaced = 0;
+    logStart();
+    CHECK(ico_unused_start(ICO_UNUSED_CLIMB) == ri->layout_scene && s_entered == climb,
+          "the climbing room starts");
+    log = logEnd();
+    CHECK(atStart(placedOf(ri->credits_boy_label, 1), climb) &&
+              atStart(placedOf(ri->girl_label, 2), climb) &&
+              atStart(placedOf(ri->credits_boy_label + 1, 14), climb) && s_nPlaced == 3,
+          "the climbing room: the boy, the girl and the sword at -exitData[0] (%d records)",
+          s_nPlaced);
+    for (int i = 0; i < s_nPlaced && i < 8; i++) {
+        CHECK(s_placed[i].pos[0] != -3080.0f && s_placed[i].pos[1] != -2606.0f,
+              "no record at the entrance row");
+    }
+    snprintf(want, sizeof(want),
+             "unused: climbing: the boy at the room's start (-12, 34, -56), the game's "
+             "no-entrance point (exitData[0]); the game's own entrance row 7 (-3080, -2606, "
+             "1899) not used: it leads to a walkway with no model; placed: the boy (record %d), "
+             "the girl (record %d), the sword (record %d)\n",
+             ri->credits_boy_label, ri->girl_label, ri->credits_boy_label + 1);
+    CHECK(strstr(log, want) != NULL, "the climbing room's placement logged (want \"%s\")", want);
+
+    /* the stage up, the poll window passed between two polls, then a game
+       over: the boy's line with "game over"; Continue goes to the title */
     stage_no = climb;
+    s_hasFloor = 0;
+    s_boyPos[1] = -2533.0f;
+    s_boySub.ctrl.fallHeight = 2533.0f;
+    logStart();
     ico_unused_host_poll();
+    CHECK(strstr(logEnd(), "unused: climbing tick 0: the boy at (100, -2533, 200), ground height "
+                           "71 (no floor below), fall height 2533\n") != NULL,
+          "the climbing room's first line, no floor");
+    s_ticks = 2400;
+    logStart();
+    ico_unused_host_poll();
+    CHECK(strstr(logEnd(), "unused: climbing tick") == NULL, "no line once 300 ticks passed");
+    logStart();
     ico_unused_game_over();
+    log = logEnd();
     CHECK(strcmp(ico_unused_left_by(), "game over") == 0, "a game over noted");
+    CHECK(strstr(log, "unused: game over in the test room climbing") != NULL &&
+              strstr(log, "unused: climbing game over: the boy at (100, -2533, 200), ground "
+                          "height 71 (no floor below), fall height 2533\n") != NULL,
+          "the game over's boy line");
+    boyGObj = NULL;
     logStart();
     onTitle(2100);
     ico_unused_stage_enter(ri->stage_title);

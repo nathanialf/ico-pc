@@ -249,6 +249,9 @@ static void test_consistency(void)
     CHECK(ico_region_info_pal.mc_product_size == 0x1F0);
     CHECK(ico_region_info_pal.layout_load_files == 19 && ico_region_info_pal.layout_mc_files == 14);
     CHECK(ico_region_info_pal.reduction_crops_rows == 1);
+    /* act-game.c ACTGame_SetActors_Debug's rows on the European disc: the
+       boy 54, the girl 148, the sword the boy's + 1 */
+    CHECK(ico_region_info_pal.credits_boy_label == 54 && ico_region_info_pal.girl_label == 148);
 }
 
 /* the Japanese values, as region_jpn.c resolved them by name: every field */
@@ -335,6 +338,7 @@ static void test_jpn_values(void)
     NUM(credits_roll_ms, 151050);
     NUM(credits_entrance_exit, 216);
     NUM(credits_boy_label, 54);
+    NUM(girl_label, 148);
     NUM(credits_staff_packs, 1);
     NUM(n_adpcm, 105);
     NUM(n_sefile, 104);
@@ -470,6 +474,7 @@ static void test_kor_values(void)
     SAME(credits_roll_ms);
     SAME(credits_entrance_exit);
     SAME(credits_boy_label);
+    SAME(girl_label);
     SAME(credits_staff_packs);
     SAME(n_adpcm);
     SAME(n_sefile);
@@ -575,6 +580,7 @@ static void test_cn_values(void)
     SAME(credits_roll_ms);
     SAME(credits_entrance_exit);
     SAME(credits_boy_label);
+    SAME(girl_label);
     SAME(credits_staff_packs);
     SAME(n_adpcm);
     SAME(n_sefile);
@@ -686,6 +692,7 @@ static void test_ntsc_values(void)
     CHECK(x->credits_roll_ms == 151050);
     CHECK(x->credits_entrance_exit == 212);
     CHECK(x->credits_boy_label == 51);
+    CHECK(x->girl_label == 131);
     CHECK(x->credits_staff_packs == 1);
     CHECK(x->n_adpcm == 96);
     CHECK(x->n_sefile == 104);
@@ -818,6 +825,7 @@ static void test_aug6_values(void)
     CHECK(x->credits_roll_ms == 151050);
     CHECK(x->credits_entrance_exit == 212);
     CHECK(x->credits_boy_label == 50);
+    CHECK(x->girl_label == 130);
     CHECK(x->credits_staff_packs == 1);
     CHECK(x->n_adpcm == 96);
     CHECK(x->n_sefile == 104);
@@ -948,6 +956,7 @@ static void test_jun26_values(void)
     CHECK(x->credits_roll_ms == 151050);
     CHECK(x->credits_entrance_exit == 212);
     CHECK(x->credits_boy_label == 47);
+    CHECK(x->girl_label == 124);
     CHECK(x->credits_staff_packs == 0);
     CHECK(x->n_adpcm == 90);
     CHECK(x->n_sefile == 104);
