@@ -2876,7 +2876,7 @@ void GirlGeo(GObj *gobj)
 
 static void GirlAI_ntscaug6jun26(GObj *gobj) {}
 
-/* PC port: port/game/variants.h: 0 with Options > Extras > Game variants > No
+/* PC port: port/game/variants.h: 0 with Options > Gameplay > No
    hints on */
 extern int ico_hints_on(void);
 

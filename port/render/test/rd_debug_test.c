@@ -25,7 +25,7 @@
  *     writes host0:thisIsYourDebugOption (a temporary folder here); with
  *     developer mode and debug_option 1 debug_VariableInit loads it back,
  *     with debug_option 0 or developer mode off it keeps the retail values;
- *   - the Game variants' bind (port/game/variants.h): debug_VariableInit
+ *   - the game variants' bind (port/game/variants.h): debug_VariableInit
  *     hands over the five switches the variants hold and debug_MenuOpen;
  *     the menu opened through that opener (as Options > Extras > Game
  *     variants > Debug menu does) is up on each of the next three ticks with
@@ -575,7 +575,7 @@ static void checkMenu(void)
     }
 }
 
-/* the Game variants' way in: the bind and the menu opened through it */
+/* the game variants' way in: the bind and the menu opened through it */
 static void checkMenuOpen(void)
 {
     const Pts *p;

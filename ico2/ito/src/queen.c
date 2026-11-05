@@ -2261,7 +2261,7 @@ static inline float WrapRad(float a) /* derived name */
     return a;
 }
 
-/* PC port: port/game/variants.h: Options > Extras > Game variants > Queen
+/* PC port: port/game/variants.h: Options > Gameplay > Shadows > Queen
    barrier, the hits that break the barrier: the disc's own (5, and 7 on the
    June 2001 demo) unless chosen */
 extern int ico_variant_barrier_hits(void);
