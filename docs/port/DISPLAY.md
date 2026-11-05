@@ -35,6 +35,7 @@ are [RHI.md](RHI.md).
 | `port/render/rd_prerotate.c` | the present into a swapchain made in the surface's own turn ([The turned swapchain](#the-turned-swapchain)) |
 | `port/render/rd_interp.c` | presenting between ticks; the present clock |
 | `port/render/rd_crt.c`, `port/shaders/crt.hlsl` | the CRT filter |
+| `port/render/rd_tone.c`, `port/render/rd_tone.h`, `port/shaders/tone.hlsli` | the colour adjustment (Options > Picture's Gamma, Picture brightness, Contrast, Saturation; [Presentation](#presentation)) |
 | `port/platform/fps_counter.h`, `fps_counter.c` | the Frame rate counter's presents per second, free of SDL and rd ([UI.md](UI.md#the-frame-rate-counter)) |
 | `port/platform/test/` | `fps_counter_test.c`, `pace_loop_test.c`, `pace_policy_test.c`, `present_fallback_test.c`, `display_rate_test.c`, `present_hist_test.c`, `perf_block_test.c`, `window_video_test.c`, `hotkeys_test.c` |
 
@@ -1398,6 +1399,23 @@ and `effects_depth` `blit_depth_ps` writes the scene's depth beside it (`port/re
 The UI box is the 4:3 part of the presentation box (`port/render/rd_present.c` (`rd_ui_box_of`)).
 Movies draw their own box ([FMV.md](FMV.md#the-picture-on-screen)).
 
+**The colour adjustment.** Options > Picture's Gamma, Picture brightness, Contrast and Saturation
+(`RdSettings.toneGamma`, `toneBrightness`, `toneContrast`, `toneSaturation`, 1..100) are PCSX2's
+shade boost: its arithmetic (`bin/resources/shaders/dx11/shadeboost.fx`
+`ContrastSaturationBrightness`, luma weights 0.2125, 0.7154, 0.0721) with each value / 50 as its
+factor (`pcsx2/GS/Renderers/Common/GSDevice.cpp` `GSDevice::ShadeBoost`), so 50 is the identity; the
+one deviation is a 1e-6 floor before the power, where a contrast above 50 takes a dark channel below
+0 (`port/shaders/tone.hlsli`). It acts on the finished picture in the box blit: `blit_tone_ps`
+(`blit_depth_tone_ps` with the effects depth) in place of `blit_ps`, the factors in `DrawCB.param`,
+the bars the cleared black (`port/render/rd_present.c` (`blit`, `depthBlit`), `port/render/rd_tone.c`).
+The line doubling, the CRT filter's crop and overlay copies (`rd__present_blit`), the turn into a
+pre-rotated swapchain and the MSAA resolve keep `blit_ps`. While every row is 50 (or 0, a zeroed
+`RdSettings`) `rd__tone_active` is false and the present is the one without the rows byte for byte.
+The deferred text and the overlay draw after the box blit and are not adjusted; the movies draw
+their own box and are not adjusted either. The four keys are made at start-up on both outputs
+(`rd__enumerate_reachable_screen`). Log: `present: colour adjustment gamma G, brightness B, contrast
+C, saturation S (50 = the game's picture)` at start-up when on and at every change.
+
 **The reduction stays a pass of its own.** Even where the box is the window's size (the phone's
 Resolution Auto with Full pixel: DISPLAY 2366 texels, the window 2364 pixels), the present is not a
 copy of DISPLAY at its own pixels: Full pixel's DISPLAY holds one guard texel more at each side
@@ -1754,6 +1772,15 @@ mask fades in with the box: none at 720 output lines or fewer, full at 1080 or m
 (`rd__crt_mask_fade`). `crt.hlsl` binds `CrtCB` at b1 space1 (DrawCB's slot and size, `IcoCrtCB`),
 the source at t1, the blurred target at t2 and a bilinear clamped sampler at s1, all in space2; it
 does not include `common.hlsli` (`port/shaders/crt.hlsl`, header comment).
+
+The colour adjustment ([Presentation](#presentation)) acts on the finished picture before the CRT
+filter, so the filter's scanlines, mask, glow and gamma work on the adjusted colours: `crt.hlsl`'s
+`toneOf` adjusts every source read (`linearAt` in `crt_bloom_ps`, `linearLoad` in `crt_ps`) before
+the gamma decode, the factors in `IcoCrtCB.pad[0..3]` (`c_toneAdj`) and `pad[4]` 1 with it on
+(`c_toneOn`; `port/render/rd_crt.c` (`compose`)). A uniform branch, not a pipeline of its own: with
+every row at 50 it is not taken and each mode's present is the recorded one (`rd_crt_test`
+`checkTone`). This order is the port's own; PCSX2 applies its shade boost to the merged frame before
+its TV shader, by our reading of its source (not checked against PCSX2 on a device).
 
 ## Hotkeys for pictures
 

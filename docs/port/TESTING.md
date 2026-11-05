@@ -272,11 +272,13 @@ static, as on an Android 8 phone; [RHI.md](RHI.md#vulkan), variable table), fold
 (its pass and barrier counts are `rd_perf`'s) and `rd_mesh_vk10.1of4` to `rd_mesh_vk10.4of4`.
 Under `ICO_VK_FAKE_NO_D32F_ATTACHMENT=1` (the D32F depth-attachment bit hidden, an Adreno 505 on a 1.0.61
 driver) the twins `rd_pixel_vk10_nod32f`, `rd_present_vk10_nod32f` and `rd_interp_vk10_nod32f` run with
-the same expectations; `rd_present`'s `checkNoD32Keys` finds the effects depth's two keys in the
-reachable set exactly where `RhiLimits.depth32Attachment` is true, and its effects-depth cell finds the
-forced pass not drawn when it is false.
+the same expectations; `rd_present`'s `checkNoD32Keys` finds the effects depth's four keys (both
+outputs, with and without the colour adjustment) in the reachable set exactly where
+`RhiLimits.depth32Attachment` is true, and its effects-depth cells (`checkEffectsDepth`,
+`checkToneDepth`) find the forced pass not drawn when it is false.
 `rd_present`'s `checkReduceKey` finds the present's box average (`aa_reduce_ps`, RGBA8) in the
-reachable set in both blend modes on every device.
+reachable set in both blend modes on every device, and `checkTone` the colour adjustment's box blit
+(`blit_tone_ps`, both outputs).
 With `port/rhi`'s `rhi_vk_vk10` and `rhi_vk_swapchain_vk10` they are `ctest -j1 -L vk10`; CI's
 full `ctest` runs them. The shaders are SPIR-V 1.0 for every device (`spirv_check`'s version gate,
 [SHADERS.md](SHADERS.md)), so the validation layer sees no module newer than the device. A real
