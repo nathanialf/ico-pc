@@ -13,7 +13,12 @@
  *   5. the byte windows: equal, one qword, qwords 184..187;
  *   6. the decision table's words for each row (H2 race, H2 memory, the
  *      probe right, H1 address-dependent, H1 robust only, H1 neither,
- *      robustness off not tried).
+ *      robustness off not tried);
+ *   10. the default (rd__skin_check_default, rd__profile_vendor_adreno,
+ *      rd__skin_check_env): on only on an Adreno (0x5143) with a window,
+ *      off on Mali, PowerVR, NVIDIA, lavapipe and through MoltenVK, off
+ *      headless; ICO_RD_VU_SKIN_CHECK=1/true on anywhere, 0/false/off
+ *      off, 2 every command.
  * clean|probe|ring (a device; 77 without one): rd_init at Original 4:3 1x,
  *   the check on (rd__vu_skin_check_set), then
  *   7. the start-up probe (rd__vu_skin_selftest: its "ok" line, matched by
@@ -237,8 +242,8 @@ static int judgeTests(void)
          "H1, address-dependent: the driver's uniform read at that "
          "offset"},
         {false, false, true, 1, 1,
-         "H1, address-dependent: the driver's uniform read at that "
-         "offset (right at a fresh offset, and right without"},
+         "H1, address-dependent under robust access: right at a fresh "
+         "offset and right without uniform robustness (either fix"},
         {false, false, true, 0, 1, "H1 under robust access only:"},
         {false, false, true, 0, 0,
          "H1, the driver's uniform read of this draw: wrong at a fresh "
@@ -254,6 +259,49 @@ static int judgeTests(void)
         printf("  6. row %zu: %s\n", i, d);
         CHECK(strncmp(d, rows[i].starts, strlen(rows[i].starts)) == 0, "row %zu: \"%s\"", i, d);
     }
+
+    /* 10. the default: on only on an Adreno (vendor 0x5143, Qualcomm's
+     * driver and Turnip alike) with a window; the setting over it */
+    static const struct {
+        uint32_t vendor;
+        bool moltenvk, adreno;
+    } vendors[] = {
+        {0x5143u, false, true},   /* Adreno */
+        {0x13B5u, false, false},  /* Mali (issue 179's G52) */
+        {0x1010u, false, false},  /* PowerVR */
+        {0x10DEu, false, false},  /* NVIDIA */
+        {0x10005u, false, false}, /* lavapipe */
+        {0x5143u, true, false},   /* through MoltenVK: the Apple class */
+    };
+
+    for (size_t i = 0; i < sizeof(vendors) / sizeof(vendors[0]); i++) {
+        const bool a = rd__profile_vendor_adreno(vendors[i].vendor, vendors[i].moltenvk);
+        CHECK(a == vendors[i].adreno, "vendor 0x%x moltenvk %d: adreno %d", vendors[i].vendor,
+              vendors[i].moltenvk, a);
+        const int on = rd__skin_check_default(true, a, -1);
+        CHECK(on == (vendors[i].adreno ? 1 : 0), "vendor 0x%x with a window: %d", vendors[i].vendor,
+              on);
+        CHECK(rd__skin_check_default(false, a, -1) == 0, "vendor 0x%x headless: on",
+              vendors[i].vendor);
+        CHECK(rd__skin_check_default(false, a, 1) == 1 && rd__skin_check_default(true, a, 1) == 1,
+              "vendor 0x%x: ICO_RD_VU_SKIN_CHECK=1 not on", vendors[i].vendor);
+        CHECK(rd__skin_check_default(true, a, 0) == 0, "vendor 0x%x: ICO_RD_VU_SKIN_CHECK=0 on",
+              vendors[i].vendor);
+    }
+    CHECK(rd__skin_check_default(true, true, 2) == 2, "=2 not every command");
+
+    static const struct {
+        const char *v;
+        int want;
+    } envs[] = {{NULL, -1}, {"", -1},    {"0", 0},  {"false", 0}, {"off", 0}, {"no", 0},
+                {"1", 1},   {"true", 1}, {"on", 1}, {"yes", 1},   {"2", 2}};
+
+    for (size_t i = 0; i < sizeof(envs) / sizeof(envs[0]); i++) {
+        const int e = rd__skin_check_env(envs[i].v);
+        CHECK(e == envs[i].want, "ICO_RD_VU_SKIN_CHECK=%s read as %d, not %d",
+              envs[i].v ? envs[i].v : "(unset)", e, envs[i].want);
+    }
+    printf("  10. on by default only on an Adreno with a window; =false off, =1 on anywhere\n");
     return failures ? 1 : 0;
 }
 
@@ -373,6 +421,11 @@ static int deviceTests(const char *mode)
                s.decision[0] ? s.decision : "-");
         CHECK(rc >= 0 && s.commands == 1 && s.checks == 1, "rc %d, %u commands, %u checks", rc,
               s.commands, s.checks);
+        /* c2 drawn wherever the device offers uniform robustness off
+         * (robust access on, VK_EXT_pipeline_robustness: _robust,
+         * _probe_robust) */
+        const bool c2Offered = rhi_limits()->uniformRobustOff;
+        CHECK(!c2Offered || s.c2Run == 1, "c2 offered but drawn in %u checks", s.c2Run);
         if (strcmp(mode, "clean") == 0) {
             CHECK(s.wrong == 0 && s.blocksDiffer == 0 && s.rereadDiffer == 0, "a clean check");
             CHECK(!rhi_occlusion_supported() || (s.boxChecks == 1 && s.boxOutside == 0),
@@ -381,6 +434,10 @@ static int deviceTests(const char *mode)
             CHECK(s.wrong == 1 && s.lastAddr == 200 && s.blocksDiffer == 0 && s.c1Right == 1 &&
                       strncmp(s.decision, "H1, address-dependent", 21) == 0,
                   "the probe's zero matrix at 200 not named as H1");
+            /* c2 reads the draw's own block (right) through the pipeline
+             * with uniform robustness off */
+            CHECK(!c2Offered || s.c2Right == 1, "c2 offered, drawn %u, right %u", s.c2Run,
+                  s.c2Right);
         } else {
             CHECK(s.wrong == 1 && s.lastAddr == 200 && s.blocksDiffer == 1 && s.rereadDiffer == 1 &&
                       strncmp(s.decision, "H2, a port race", 15) == 0,

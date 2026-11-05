@@ -116,6 +116,11 @@ void ico_unused_stage_enter(int stage);
    records given to the stage.  The port calls it and writes no game flag
    itself. */
 void ico_host_enter_test_stage(int stage);
+/* common/src/debug.c: the boy's walk in from the entrance skipped the
+   game's own way (the flag its checkpoint loads set, which
+   E3_StageStartBoy clears and returns on), so a test room's boy stands
+   where the room puts him */
+void ico_host_skip_entry_walk(void);
 
 #ifdef __cplusplus
 }

@@ -1088,17 +1088,19 @@ has.
   `object/sdf/8test/collis/st08a.cl`, 270 floors; the North American disc's model records are
   268 bytes, as the August 2001 disc's).
 - The camera zones (`startInZone`, once per room as soon as the boy is up, within the log's 300
-  ticks): the camera finds the boy only inside one of the stage's camera zones, the groups of the
+  ticks): the camera follows the boy through the stage's camera zones, the groups of the
   camera set `CameraSetCameraSet` (`ico2/omori/src/camera-ico2.c`) loads from the stage row's
   `camSetId` into `TopCameraSetDataOfCurrentStage` (a `CamSetFile` head, then `count` `CamGroup`
   records of 76 bytes, `ico2/omori/include/camera-editor.h`). A group's centre and half-size are
   stored negated as layout rows are: the game tests the stored box against the root times -1
-  (`findCameraGroupContaining`), so the world box is `-centre` +- half. The arena (PAL stage 88,
+  (`findCameraGroupContaining`), so the world box is `-centre` +- half. When no zone holds him the
+  game falls back to the nearest zone by box distance (`ico2camera_GetGroupNearest`,
+  `camera-ico2.c`), and that zone's pins aim at its own space. The arena (PAL stage 88,
   camera set 6, `camdata/boss.gcm`, 15 groups): the origin lies inside its group 0 (world centre
   (-375, 50, 0), half (1645, 170, 1200)), with the pad's floor y 0 inside the box, so its start is
   right and stays. The climbing room (PAL stage 91, camera set 67, `camdata/troko.gcm`, 51 groups):
-  every zone lies 1355 to 4980 above its big floor (world y 0), so from the origin the camera never
-  found him and the character was not in view. The rule: a root inside a zone stays; otherwise the
+  every zone lies 1355 to 4980 above its big floor (world y 0), so from the origin no zone held him
+  and the nearest zone's pins aimed 1,355 or more above him: the character was not in view. The rule: a root inside a zone stays; otherwise the
   boy, and the girl when `girlGObj` is up, goes with `SetDirectRootPosition` (as `E3_StageStartBoy`
   moves him, `ico2/fumi/src/boyact.c`) to the lowest zone whose centre has a floor inside its box:
   the game's floor probe (`GetLowerPlaneCollision`) cast down from the box's top at the centre's x
@@ -1107,15 +1109,22 @@ has.
   times half z), then the set's order. He lands at the zone centre's x and z, at the height above
   that floor his root had above the floor under the start (the same probe where he stood; 0 with no
   floor under him). In the climbing room that is group 20 (world centre (1111, -1355, 81), half
-  (1216, 635, 529), box y -1990..-720, floor y -1324 attribute 0): the bottom of the climbing
-  structure. Its thin side zone 47 (centre (1847, -1355, -534), half (475, 635, 85)) has the same
+  (1216, 635, 529), box y -1990..-720, floor y -1324 attribute 0): a ramp of the climbing
+  structure 1,324 above the room's floor, sloped about 24 degrees, 150 to 225 across
+  (`build-host/tmp/v0104/evidence/review2/ledge.txt`, `ledge2.txt`). The room keeps its entrance
+  row's `exit_no`, so `E3_StageStartBoy` would play the 50-frame walk in from the entrance, which
+  could take him off the ramp into a fatal fall; the port skips it the game's own way
+  (`ico_host_skip_entry_walk`, `ico2/common/src/debug.c`, called in `beginRoom` after the way in,
+  for both rooms): the flag the game's checkpoint loads set (`scpSekizouCheckPoint`, flag 381
+  European, 348 North American, 347 August 2001, 332 June 2001), which `E3_StageStartBoy` clears
+  and returns on before the walk, so he stands where the room puts him. Its thin side zone 47 (centre (1847, -1355, -534), half (475, 635, 85)) has the same
   box and a floor at y -1221 (attribute 0x4), 103 lower; the floor plan decides for group 20. The
   zones and the floors under their centres, on the European disc:
   `build-host/tmp/v0104/evidence/rooms/camera-zones.txt` (from the two camera set files and the two
   collision files, the floors cast as `build-host/tmp/v0104/tools/rooms.py` casts them). Lines:
   `unused: <room>: the start is inside camera zone G of N (centre (x, y, z))`; `unused: <room>: the
   game's no-entrance point (x, y, z) is outside every camera zone (the lowest zone's centre Y above
-  it): the boy moved to zone G's floor at (x, y, z) (H above the floor y F)`, then `; no floor under
+  it, or below it when a zone lies below the start): the boy moved to zone G's floor at (x, y, z) (H above the floor y F)`, then `; no floor under
   the start, so 0 above` when the probe under him found none and `; the girl with him` when she
   moved; `unused: <room>: no camera zone holds a floor under its centre: the boy stays at (x, y,
   z)`; `unused: <room>: no camera set loaded (N groups): the boy stays at (x, y, z)`; `unused:

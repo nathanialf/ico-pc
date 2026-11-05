@@ -286,6 +286,10 @@ static void segv_thread(void *arg)
     "creating pipelines 201-208 of 220: program 0 blend 12 vs 41 fs 5 fmt 1/8 msaa 0 dst 0 to "    \
     "program 0 blend 4 vs 41 fs 19 fmt 1/8 msaa 0 dst 0; vertex vu_main_vs 20000 words (4000 "     \
     "instructions); largest fragment vu_texa_ps 11666 words; compiler E031.41.03.47"
+/* the skin check's start-up probe compiling its pipelines
+   (rd_vu_skin_selftest.c): neither the pre-pass's kind nor the set's */
+#define SKIN_PROBE_NOTE                                                                            \
+    "creating pipeline rd vu skin probe (the VU skin check's start-up probe: its three pipelines)"
 #define VU_PLAIN_NOTE                                                                              \
     "creating pipelines 297-328 of 702: program 0 blend 12 vs 4 fs 5 fmt 1/8 msaa 0 dst 0 ext 0 "  \
     "to program 0 blend 4 vs 4 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex vu_prelit_plain_vs "       \
@@ -800,15 +804,17 @@ static void activity_child(const char *mode, const char *log)
         ico_diag_startup_activity_record(0);
         child_quit(0);
     } else if (strcmp(mode, "actvuext") == 0 || strcmp(mode, "actvuplain") == 0 ||
-               strcmp(mode, "actvupre") == 0 || strcmp(mode, "actvumain") == 0) {
+               strcmp(mode, "actvupre") == 0 || strcmp(mode, "actvumain") == 0 ||
+               strcmp(mode, "actskinprobe") == 0) {
         /* the start-up set ended without a word inside a VU batch (the
            device froze): the batch's note is in the file */
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_set_activity(BATCH_NOTE);
-        ico_diag_set_activity(strcmp(mode, "actvuext") == 0    ? VU_EXT_NOTE
-                              : strcmp(mode, "actvupre") == 0  ? VU_PRE_NOTE
-                              : strcmp(mode, "actvumain") == 0 ? VU_MAIN_NOTE
-                                                               : VU_PLAIN_NOTE);
+        ico_diag_set_activity(strcmp(mode, "actvuext") == 0       ? VU_EXT_NOTE
+                              : strcmp(mode, "actvupre") == 0     ? VU_PRE_NOTE
+                              : strcmp(mode, "actvumain") == 0    ? VU_MAIN_NOTE
+                              : strcmp(mode, "actskinprobe") == 0 ? SKIN_PROBE_NOTE
+                                                                  : VU_PLAIN_NOTE);
         _exit(0);
     } else if (strcmp(mode, "actvutimes") == 0) {
         /* the plain batches compiled (their times kept as the file's
@@ -3179,6 +3185,20 @@ int main(int argc, char **argv)
                         "vertex pre-pass): 1\n") != NULL);
         CHECK(strstr(s, "test: vu prepass 1\n") != NULL);
         CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
+        remove(ends);
+        /* an end inside the skin check's start-up probe (issue 163): not
+           an end while making the pipelines nor the pre-pass's (the window
+           turns the check off, window_host.c), the set as usual */
+        remove(act);
+        run(argv[0], "actskinprobe", log);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous run ended while: " SKIN_PROBE_NOTE) != NULL);
+        CHECK(strstr(s, "starts in a row that ended while preparing the graphics") == NULL);
+        CHECK(strstr(s, "test: vu prepass 0\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
+        CHECK(startup_retry_note_has_skin_probe(SKIN_PROBE_NOTE));
+        remove(act);
         remove(ends);
         /* Android's next start after a device loss: robust access for that
            start only; its end without a loss leaves the row, the start

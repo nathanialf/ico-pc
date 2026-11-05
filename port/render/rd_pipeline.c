@@ -1228,6 +1228,13 @@ void rd__pipeline_note_end(void)
     activityDone();
 }
 
+void rd__activity_note(const char *note)
+{
+    if (s_activityFn != NULL) {
+        s_activityFn(note);
+    }
+}
+
 /* The key a draw is created with: the MSAA epoch (a pipeline fetched for a
  * multisampled pass draws with its sample count; single-sampled passes keep
  * msaa 0: the same keys as without anti-aliasing) and, without dual-source
@@ -1320,6 +1327,12 @@ bool rd__pipeline_desc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroupLa
 {
     RdPipeKeyInt tmp;
     return pipelineDesc(drawKey(k, &tmp), d, layouts);
+}
+
+void rd__pipeline_key_norm(const RdPipeKeyInt *k, RdPipeKeyInt *out)
+{
+    RdPipeKeyInt tmp;
+    *out = *drawKey(k, &tmp);
 }
 
 /* k's slot in s_hash: its entry's (*found) or the empty slot the probe
@@ -1792,12 +1805,13 @@ float rd_precreate_longest_ms(void)
 /* The pool's headroom (rhi_pipeline_pool.h) holds what is alive outside
  * the cache at once: one batch's descriptions (its ids held until it
  * ends, its duplicates destroyed then), the COLCLAMP 0 pipelines, Motion
- * blur: Smooth's two (rd_blur_smooth.c) and the movie's three (rd_video.c:
- * two outputs, the field pipeline) */
-_Static_assert(RD_PIPE_BATCH + RD_WRAP_PIPES + RD_BLUR_SMOOTH_PIPES + 3u <=
+ * blur: Smooth's two (rd_blur_smooth.c), the movie's three (rd_video.c:
+ * two outputs, the field pipeline) and the skin check's (rd_vu_skin_check.h
+ * RD_VU_SKIN_PIPES: the probe's, c2's and the box checks') */
+_Static_assert(RD_PIPE_BATCH + RD_WRAP_PIPES + RD_BLUR_SMOOTH_PIPES + 3u + RD_VU_SKIN_PIPES <=
                    (unsigned)RHI_PIPELINE_POOL_HEADROOM,
-               "the RHI's pipeline pool headroom holds a batch, the wrap, Smooth's and the movie "
-               "pipelines");
+               "the RHI's pipeline pool headroom holds a batch, the wrap, Smooth's, the movie's "
+               "and the skin check's pipelines");
 _Static_assert(RD_PIPELINE_CACHE_MAX + RHI_PIPELINE_POOL_HEADROOM == RHI_PIPELINE_POOL_MAX,
                "the RHI's pipeline pool holds the cache and the headroom");
 

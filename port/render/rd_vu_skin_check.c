@@ -2,8 +2,9 @@
  * and its box check (S3) (rd_vu_skin_check.h; docs/port/VU_SKIN_CHECK.md;
  * issue 163).
  *
- * The pick (rd__vu_skin_pick, doVuDraw): on a window's Vulkan device, at
- * most every 100 ms, the next skinned command of the replay in a round
+ * The pick (rd__vu_skin_pick, doVuDraw): on an Adreno's Vulkan device
+ * with a window (rd__skin_check_default; [dev] vu_skin_check = true
+ * anywhere), at most every 100 ms, the next skinned command of the replay in a round
  * robin over the replay's skinned commands (Yorda's 26 draws and Ico's are
  * all covered within a few seconds).  The CPU's side is kept then: VU
  * memory 0..35 from the payload, the stream's vertices of the draw's
@@ -56,37 +57,67 @@
 bool g_rdSkinArm;
 
 #define SK_INTERVAL_MS 100.0
-#define SK_COLS 3u        /* a check's probes: the draw's block, c1, c2 */
-#define SK_CHECKS_ALL 80u /* mode 2: the checks one replay holds (16 x 3 x 80 texels wide) */
+#define SK_COLS 3u /* a check's probes: the draw's block, c1, c2 */
+/* mode 2: the checks one replay holds (16 x 3 x 80 texels wide); check i's
+ * box query is occlusion query i */
+#define SK_CHECKS_ALL RD_SKIN_CHECKS_ALL
 #define SK_INDEX_VERTS 8192u
-#define SK_QUERY0 (RHI_MAX_OCCLUSION - 1u) /* check i's box query: SK_QUERY0 - i */
 #define SK_BONE_BYTES ((uint32_t)sizeof(IcoVuBoneCB))
 #define SK_VS_COUNT 3u /* RD_VS_VU_SKIN, _SKIN_SPEC, _SKIN_DEBUG */
 
 /* --------------------------------------------------------- the switch */
 
 static int s_set = -1;     /* rd__vu_skin_check_set */
-static int s_env = -2;     /* ICO_RD_VU_SKIN_CHECK: -1 unset, 0 or 1; -2 not read */
+static int s_env = -2;     /* ICO_RD_VU_SKIN_CHECK (rd__skin_check_env); -2 not read */
+static int s_dev = -1;     /* the device's default (an Adreno with a window): -1 not read */
 static uint32_t s_allFrom; /* mode 2: the first skinned command of the replay checked */
 
+/* the mode, read once a run (skMode runs for every skinned command) */
 static int skMode(void)
 {
     if (s_set >= 0) {
         return s_set;
     }
     if (s_env == -2) {
-        const char *e = getenv("ICO_RD_VU_SKIN_CHECK");
-        s_env = !e || !e[0] ? -1 : (e[0] == '0' ? 0 : 1);
+        s_env = rd__skin_check_env(getenv("ICO_RD_VU_SKIN_CHECK"));
     }
-    if (s_env >= 0) {
-        return s_env;
+    if (s_dev < 0) {
+        s_dev = rd__skin_check_default(g_rd.windowed, rd__profile_adreno(), -1);
     }
-    return g_rd.windowed ? 1 : 0;
+    return s_env >= 0 ? s_env : s_dev;
 }
 
 void rd__vu_skin_check_set(int mode)
 {
     s_set = mode < 0 ? -1 : (mode > 2 ? 2 : mode);
+}
+
+const char *rd__vu_skin_check_why(void)
+{
+    const int m = skMode();
+    if (s_set >= 0) {
+        return m ? "on by the tests' or the tool's switch"
+                 : "off by the tests' or the tool's switch";
+    }
+    if (s_env == 0) {
+        return "[dev] vu_skin_check = false (ICO_RD_VU_SKIN_CHECK=0)";
+    }
+    if (s_env == 2) {
+        return "ICO_RD_VU_SKIN_CHECK=2: every skinned command of every replay";
+    }
+    if (s_env == 1) {
+        return "[dev] vu_skin_check = true (ICO_RD_VU_SKIN_CHECK=1)";
+    }
+    if (m) {
+        return rd__driver_is_turnip(rhi_limits())
+                   ? "on by default on an Adreno with a window (Turnip); [dev] vu_skin_check = "
+                     "false turns it off"
+                   : "on by default on an Adreno with a window (Qualcomm's driver); [dev] "
+                     "vu_skin_check = false turns it off";
+    }
+    return g_rd.windowed ? "not an Adreno: ICO_RD_VU_SKIN_CHECK=1 / [dev] vu_skin_check = true "
+                           "turns it on"
+                         : "off without a window: ICO_RD_VU_SKIN_CHECK=1 turns it on";
 }
 
 bool rd__vu_skin_check_on(void)
@@ -142,21 +173,6 @@ static struct {
     RhiBuffer idx; /* fields 0..2 of SK_INDEX_VERTS vertices: 9 indices a vertex */
     bool idxTried;
 } s_p;
-
-/* the box check's pipelines: the draw's key without its writes, compiled
- * in the background */
-#define SK_BOX_PIPES 16
-
-typedef struct SkBoxPipe {
-    bool used, failed;
-    RdPipeKeyInt key;
-    RhiPipelineDesc desc;
-    RhiBindGroupLayout lay[4];
-    RhiPipelineJobs *job;
-    RhiPipeline pipe;
-} SkBoxPipe;
-
-static SkBoxPipe s_box[SK_BOX_PIPES];
 
 static uint8_t vsOf(uint32_t i)
 {
@@ -229,14 +245,135 @@ static bool probesMake(void)
     return true;
 }
 
-/* c2's pipelines: begun in the background once; wait: the tool's and the
- * tests' (taken now) */
+/* the counts: the run's and the 10 s block's */
+static struct {
+    uint64_t checks, wrong, blocks, reread, box, boxOut;
+    /* the lines' own budgets (the first 8, then every 100th, each): a
+     * wrong check's (its mismatch and variants lines), a check whose bytes
+     * differed with every vertex right, a box check's samples outside, so
+     * the many blocks of an H2 run never use up a wrong check's lines */
+    uint64_t wrongEvents, bytesEvents, boxEvents;
+    uint64_t drawn, boxDrawn; /* the checks recorded (probed) and their box checks drawn */
+} s_run;
+
+static struct {
+    uint64_t checks, wrong, blocks, reread, box, boxOut, c1Right, c2Right, c2Run;
+    /* box checks not drawn: their pipeline not made (the background
+     * compile not begun or not done: one job at a time, the memory rule),
+     * of them with no slot left for the key */
+    uint64_t boxNot, boxFull;
+    int32_t maxRight;
+} s_blk;
+
+/* the box check's pipelines: the draw's key without its writes, compiled
+ * in the background */
+#define SK_BOX_PIPES RD_VU_SKIN_BOX_PIPES
+
+typedef struct SkBoxPipe {
+    bool used, failed;
+    RdPipeKeyInt key; /* rd__pipeline_key_norm's: the pass's sample count in it */
+    RhiPipelineDesc desc;
+    RhiBindGroupLayout lay[4];
+    RhiPipelineJobs *job;
+    RhiPipeline pipe;
+} SkBoxPipe;
+
+static SkBoxPipe s_box[SK_BOX_PIPES];
+
+/* ----------------------------------------- the background compiles' rule
+ * Issue 161's memory rule for the check's own compiles (c2's three, the
+ * box check's): one job at a time; each begun only when the window's
+ * memory function (rd.h rd_vu_skin_background: diag_host.h
+ * ico_diag_background_memory, as the background finisher asks it) says
+ * neither the system's low-memory signal (2: none for the run) nor the
+ * free-memory floor now (1: asked again at the next check), and none at
+ * all where the start-up set stopped for memory on Qualcomm's own driver
+ * (window_pipe_finish.c: that driver's compiler ran the device out of
+ * memory).  Until a pipeline exists its part is not drawn (the box check,
+ * c2), said once. */
+static RdBackgroundMemoryFn s_memFn;
+static char s_noBg[192]; /* why none is compiled in the background: "" allowed */
+static bool s_memStop;   /* the system's signal: none for the run */
+static bool s_bgSaid[3]; /* the lines said: the rule, the signal, the floor */
+
+void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground)
+{
+    s_memFn = memory;
+    snprintf(s_noBg, sizeof(s_noBg), "%s", noBackground ? noBackground : "");
+}
+
+static bool jobBusy(void)
+{
+    if (s_p.roJob) {
+        return true;
+    }
+    for (int i = 0; i < SK_BOX_PIPES; i++) {
+        if (s_box[i].job) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* whether a background compile may begin now (wait: the tool's and the
+ * tests', taken at once: always) */
+static bool bgMay(bool wait)
+{
+    if (wait) {
+        return true;
+    }
+    if (jobBusy()) {
+        return false;
+    }
+    if (s_noBg[0]) {
+        if (!s_bgSaid[0]) {
+            s_bgSaid[0] = true;
+            rd__log("VU skin check: its box check and its c2 variant are not compiled in the "
+                    "background (%s): the check runs without them",
+                    s_noBg);
+        }
+        return false;
+    }
+    if (s_memStop) {
+        return false;
+    }
+    if (s_memFn) {
+        char why[128] = "";
+        const int m = s_memFn(why, sizeof(why));
+        if (m >= 2) {
+            s_memStop = true;
+            if (!s_bgSaid[1]) {
+                s_bgSaid[1] = true;
+                rd__log("VU skin check: no background compile for the rest of the run (%s): the "
+                        "box checks and the c2 variant not made yet are not drawn",
+                        why);
+            }
+            return false;
+        }
+        if (m == 1) {
+            if (!s_bgSaid[2]) {
+                s_bgSaid[2] = true;
+                rd__log("VU skin check: a background compile waits for memory (%s): the box "
+                        "check or the c2 variant not made yet is not drawn until then",
+                        why);
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+/* c2's pipelines: begun in the background once (bgMay); wait: the tool's
+ * and the tests' (taken now) */
 static void roPoll(bool wait)
 {
     if (!rhi_limits()->uniformRobustOff || s_p.roDone) {
         return;
     }
     if (!s_p.roBegun) {
+        if (!bgMay(wait)) {
+            return;
+        }
         s_p.roBegun = true;
         uint32_t n = 0;
         for (uint32_t i = 0; i < SK_VS_COUNT; i++) {
@@ -317,8 +454,15 @@ static bool keyEq(const RdPipeKeyInt *a, const RdPipeKeyInt *b)
 
 /* the box check's pipeline of key k: begun in the background the first
  * time, {0} until it is made (wait: taken now) */
-static RhiPipeline boxPipe(const RdPipeKeyInt *k, bool wait)
+static RhiPipeline boxPipe(const RdPipeKeyInt *raw, bool wait)
 {
+    /* the key as the pass makes it: a key checked first in an MSAA pass
+     * and again in a single-sampled one (or the other way) is two
+     * pipelines, as rd__get_pipeline's cache holds it (review2 S8: a
+     * multisampled pipeline bound in a single-sampled pass) */
+    RdPipeKeyInt norm;
+    rd__pipeline_key_norm(raw, &norm);
+    const RdPipeKeyInt *k = &norm;
     SkBoxPipe *e = NULL;
     for (int i = 0; i < SK_BOX_PIPES && !e; i++) {
         if (s_box[i].used && keyEq(&s_box[i].key, k)) {
@@ -332,12 +476,16 @@ static RhiPipeline boxPipe(const RdPipeKeyInt *k, bool wait)
             }
         }
         if (!e) {
-            return (RhiPipeline){0}; /* full: the keys after the first 16 go unchecked */
+            s_blk.boxFull++; /* full: the keys after the first 16 go unchecked */
+            return (RhiPipeline){0};
+        }
+        if (!bgMay(wait)) {
+            return (RhiPipeline){0}; /* another job in flight, or the memory rule */
         }
         memset(e, 0, sizeof(*e));
         e->used = true;
         e->key = *k;
-        if (!rd__pipeline_desc(k, &e->desc, e->lay)) {
+        if (!rd__pipeline_desc(raw, &e->desc, e->lay)) { /* drawKey(raw): norm's */
             e->failed = true;
             return (RhiPipeline){0};
         }
@@ -356,6 +504,19 @@ static RhiPipeline boxPipe(const RdPipeKeyInt *k, bool wait)
         e->failed = !e->pipe.id;
     }
     return e->pipe;
+}
+
+/* the job in flight taken when done (each check: one job at a time, so
+ * the next key's may begin) */
+static void jobsPoll(void)
+{
+    for (int i = 0; i < SK_BOX_PIPES; i++) {
+        SkBoxPipe *e = &s_box[i];
+        if (e->job && rhi_create_pipelines_end(e->job, false, &e->pipe, NULL, NULL)) {
+            e->job = NULL;
+            e->failed = !e->pipe.id;
+        }
+    }
 }
 
 /* ------------------------------------------------------------ the checks */
@@ -379,9 +540,11 @@ typedef struct SkCheck {
     IcoVuCB vcb;
     RhiBindGroup g1;
     uint64_t dOff, bonesOff, c1Off, sabOff;
-    bool c2;     /* c2 drawn */
-    bool boxRun; /* its box check drawn */
-    RhiRect box; /* the box in texels */
+    bool c2;       /* c2 drawn */
+    bool boxRun;   /* its box check drawn */
+    bool boxNoDst; /* ... without the draw's destination read (its _dstatt link) */
+    uint8_t boxFs; /* the key's fragment entry (rd__fs_name) */
+    RhiRect box;   /* the box in texels */
 } SkCheck;
 
 typedef struct SkSlot {
@@ -405,17 +568,8 @@ static uint32_t s_seenReplay, s_seen, s_lastCount, s_rr;
 static bool s_pickedThis;
 static double s_lastMs;
 
-/* the counts: the run's and the 10 s block's */
-static struct {
-    uint64_t checks, wrong, blocks, reread, box, boxOut, events, boxEvents;
-} s_run;
-
-static struct {
-    uint64_t checks, wrong, blocks, reread, box, boxOut, c1Right, c2Right, c2Run;
-    int32_t maxRight;
-} s_blk;
-
 static RdSkinSummary *s_collect; /* rd__vu_skin_check_frame's */
+static bool s_boxDstSaid;        /* the box check's attachment-read line, once a run */
 
 static bool sayNth(uint64_t n)
 {
@@ -669,6 +823,7 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
     key.gs.zwrite = RD_ZWRITE_OFF;
     const RhiPipeline p = boxPipe(&key, skMode() == 2);
     if (!p.id) {
+        s_blk.boxNot++;
         return;
     }
     const RhiCommandList cl = rd__replay_cl();
@@ -680,7 +835,7 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
     if (d->indexBuf.id) {
         rhi_cmd_set_index_buffer(cl, d->indexBuf, d->indexOff, true);
     }
-    rhi_cmd_begin_occlusion(cl, SK_QUERY0 - at);
+    rhi_cmd_begin_occlusion(cl, at);
     for (int i = 0; i < 4; i++) {
         if (!band[i].w || !band[i].h) {
             continue;
@@ -692,11 +847,27 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
             rhi_cmd_draw(cl, d->count, d->first, 1);
         }
     }
-    rhi_cmd_end_occlusion(cl, SK_QUERY0 - at);
+    rhi_cmd_end_occlusion(cl, at);
     /* the draw's state back for whatever the replay records next */
     rhi_cmd_set_scissor(cl, &r->sc);
     rd__set_pipeline(cl, d->pipe, d->key);
     k->boxRun = true;
+    k->boxNoDst = d->key->dst != RHI_DST_READ_NONE;
+    k->boxFs = d->key->fs;
+    s_run.boxDrawn++;
+    if (k->boxNoDst && !s_boxDstSaid) {
+        /* the deep dive's last row (the pipeline's link with its
+         * attachment-read fragment shader) is not what this box sees: said
+         * once, so a clean box under GS state as shader data is read as
+         * the vertex placement alone */
+        s_boxDstSaid = true;
+        rd__log("VU skin check: the box check of a draw that reads its attachment (GS state as "
+                "shader data, or the exact blend) is drawn through %s without that read (with "
+                "it the write mask is the shader's and colour would be written): it checks the "
+                "vertex placement through the draw's vertex module and pass, not the draw's "
+                "link with its attachment-read fragment shader",
+                rd__fs_name(k->boxFs));
+    }
     k->box = clipRect(bx0, by0, bx1, by1, &all);
 }
 
@@ -838,6 +1009,7 @@ void rd__vu_skin_end(void)
         sl->n = 0;
         return;
     }
+    jobsPoll();
     roPoll(skMode() == 2);
     RhiBinding fb;
     memset(&fb, 0, sizeof(fb));
@@ -936,6 +1108,7 @@ void rd__vu_skin_end(void)
                             (uint64_t)i * SK_BONE_BYTES, SK_BONE_BYTES);
     }
     sl->pending = true;
+    s_run.drawn += n;
     sl->counter = g_rd.replayCounter;
     sl->rhiSlot = rhi_frame_slot();
     sl->ringId = g_rd.ring[slot].id;
@@ -1007,7 +1180,7 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
     const int c1 = varState(k, &v[1], true), c2 = varState(k, &v[2], k->c2);
     const char *decision = rd__skin_decision(copyDiff, rereadDiff, v[0].wrong != 0, c1, c2);
     /* the box check */
-    const uint32_t qi = SK_QUERY0 - i;
+    const uint32_t qi = i;
     const bool boxRead = k->boxRun && samples && qi < nSamples && samples[qi] != RHI_OCCLUSION_NONE;
     const uint64_t outside = boxRead ? samples[qi] : 0u;
     /* the counts */
@@ -1056,7 +1229,8 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
         snprintf(place, sizeof(place), "?");
     }
     if (v[0].wrong || copyDiff || rereadDiff) {
-        if (sayNth(++s_run.events)) {
+        const uint64_t ev = v[0].wrong ? ++s_run.wrongEvents : ++s_run.bytesEvents;
+        if (sayNth(ev)) {
             char cw[48], rw[48], mod[48];
             rd__skin_bytes_words(copyDiff, q0, q1, cw, sizeof(cw));
             if (reread) {
@@ -1073,12 +1247,12 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
                         "vertices wrong of %u, address %u: got (%.1f, %.1f, %d) want (%.1f, "
                         "%.1f, %d) (a zero matrix at %u gives it: %s; it gives %u of them); the "
                         "bone block as the GPU copied it: %s; as the CPU reads it after the "
-                        "fence: %s; code %d through %s (event %llu)",
+                        "fence: %s; code %d through %s (wrong check %llu)",
                         k->frame, place, k->mesh, k->meshId, k->meshVertices, v[0].wrong,
                         v[0].compared, a, v[0].got[0] / 16.0, v[0].got[1] / 16.0, v[0].got[2],
                         v[0].want.x / 16.0, v[0].want.y / 16.0, v[0].want.z, a,
                         v[0].explains ? "yes" : "no", v[0].explained, cw, rw, k->code, mod,
-                        (unsigned long long)s_run.events);
+                        (unsigned long long)ev);
                 const uint64_t phase = k->c1Off & 4095u;
                 const char *c2w =
                     k->c2 ? varWords(c2)
@@ -1096,17 +1270,20 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
             } else {
                 rd__log("VU skin check: frame %u command %s mesh %s #%u (%u vertices): every "
                         "vertex right (%u compared); the bone block as the GPU copied it: %s; as "
-                        "the CPU reads it after the fence: %s; reads as: %s (event %llu)",
+                        "the CPU reads it after the fence: %s; reads as: %s (bytes event %llu)",
                         k->frame, place, k->mesh, k->meshId, k->meshVertices, v[0].compared, cw, rw,
-                        decision, (unsigned long long)s_run.events);
+                        decision, (unsigned long long)ev);
             }
         }
     }
     if (outside && sayNth(++s_run.boxEvents)) {
         rd__log("VU skin check: frame %u command %s drew %llu samples outside its box (texels "
-                "%d,%d %ux%u, the CPU's vertices + 2 GS pixels; the probe %s) (event %llu)",
+                "%d,%d %ux%u, the CPU's vertices + 2 GS pixels; through %s%s; the probe %s) (box "
+                "event %llu)",
                 k->frame, place, (unsigned long long)outside, k->box.x, k->box.y, k->box.w,
-                k->box.h, v[0].wrong ? "wrong too" : "right", (unsigned long long)s_run.boxEvents);
+                k->box.h, rd__fs_name(k->boxFs),
+                k->boxNoDst ? " without the draw's attachment read" : "",
+                v[0].wrong ? "wrong too" : "right", (unsigned long long)s_run.boxEvents);
     }
 }
 
@@ -1114,14 +1291,14 @@ static void readSlot(SkSlot *sl, uint32_t slot, bool intact, bool occ)
 {
     const uint8_t *map = sl->rb.id ? rhi_map_buffer(sl->rb) : NULL;
     if (map) {
-        static uint64_t samples[RHI_MAX_OCCLUSION];
+        static uint64_t samples[SK_CHECKS_ALL];
         uint32_t ns = 0;
         bool anyBox = false;
         for (uint32_t i = 0; i < sl->n; i++) {
             anyBox = anyBox || sl->checks[i].boxRun;
         }
         if (anyBox && occ) {
-            ns = rhi_read_occlusion(samples, RHI_MAX_OCCLUSION);
+            ns = rhi_read_occlusion(samples, SK_CHECKS_ALL);
         }
         const uint8_t *ringNow = intact ? g_rd.ringMap[slot] : NULL;
         for (uint32_t i = 0; i < sl->n; i++) {
@@ -1176,12 +1353,14 @@ void rd__vu_skin_block(void)
         return;
     }
     rd__log("VU skin check: %llu checks, %llu wrong, %llu blocks whose bytes differed (%llu "
-            "changed after the draw); %llu box checks, %llu with samples outside the box; "
+            "changed after the draw); %llu box checks, %llu with samples outside the box, %llu "
+            "not drawn (their pipeline not made yet; %llu with no slot left for the key); "
             "variants on the wrong ones: c1 right %llu, c2 right %llu (c2 drawn in %llu checks); "
             "largest difference on a right vertex %d/16 pixel",
             (unsigned long long)s_blk.checks, (unsigned long long)s_blk.wrong,
             (unsigned long long)s_blk.blocks, (unsigned long long)s_blk.reread,
             (unsigned long long)s_blk.box, (unsigned long long)s_blk.boxOut,
+            (unsigned long long)s_blk.boxNot, (unsigned long long)s_blk.boxFull,
             (unsigned long long)s_blk.c1Right, (unsigned long long)s_blk.c2Right,
             (unsigned long long)s_blk.c2Run, s_blk.maxRight);
     memset(&s_blk, 0, sizeof(s_blk));
@@ -1201,6 +1380,8 @@ int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out)
     const int saved = s_set;
     s_set = 2;
     s_collect = out;
+    /* the box queries' pools before any recording (no first-begin stall) */
+    (void)rhi_occlusion_prepare(SK_CHECKS_ALL);
     int rc = 0;
     /* the replays of the commands from s_allFrom on, SK_CHECKS_ALL each */
     for (uint32_t from = 0; from < out->commands || from == 0; from += SK_CHECKS_ALL) {
@@ -1222,6 +1403,18 @@ int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out)
 
 void rd__vu_skin_shutdown(void)
 {
+    if (s_run.drawn) {
+        /* the run's own end: what it drew and what it read (a check
+         * recorded in the last replays is not read: its slot not
+         * recycled), the A/B's proof that the check ran
+         * (rd_vu_skin_check_ab) */
+        rd__log("VU skin check: at the end of the run: %llu checks drawn (%llu box checks drawn), "
+                "%llu read, %llu wrong, %llu blocks whose bytes differed, %llu box checks with "
+                "samples outside",
+                (unsigned long long)s_run.drawn, (unsigned long long)s_run.boxDrawn,
+                (unsigned long long)s_run.checks, (unsigned long long)s_run.wrong,
+                (unsigned long long)s_run.blocks, (unsigned long long)s_run.boxOut);
+    }
     if (g_rd.hasDevice) {
         if (s_p.roJob) {
             (void)rhi_create_pipelines_end(s_p.roJob, true, s_p.ro, NULL, NULL);
@@ -1275,4 +1468,8 @@ void rd__vu_skin_shutdown(void)
     s_pickedThis = false;
     s_lastMs = 0.0;
     s_env = -2;
+    s_dev = -1;
+    s_memStop = false;
+    memset(s_bgSaid, 0, sizeof(s_bgSaid));
+    s_boxDstSaid = false;
 }

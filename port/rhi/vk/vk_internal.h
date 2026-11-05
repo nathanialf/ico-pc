@@ -355,6 +355,7 @@ typedef struct VkrFrame {
     VkQueryPool occPool;
     uint32_t occWritten[RHI_OCCLUSION_WORDS];
     bool occReset;
+    uint32_t occResetN; /* the queries that reset covered: 0 .. occResetN - 1 */
 } VkrFrame;
 
 /* A render pass as both paths take it (vk_cmd.c rhi_cmd_begin_render_pass
@@ -671,6 +672,9 @@ typedef struct VkrState {
      * an index not written) with 1 + the highest index written */
     bool occUsed;
     bool occBroken; /* the pools or the array could not be made: no more tries this run */
+    /* the queries each slot's first list resets (rhi_occlusion_prepare's
+     * count, RHI_MAX_OCCLUSION when a begin made the pools or went past it) */
+    uint32_t occRange;
     bool occPrecise;
     uint64_t *occResult;
     uint32_t occCount;

@@ -282,6 +282,16 @@ void ico_host_enter_test_stage(int stage)
     s_world = 100 + stage;
 }
 
+/* debug.c: the boy's walk in skipped (the game's flag); counted, with the
+   stage the way in had just entered (-1: called before it) */
+static int s_skips, s_skipStage = -2;
+
+void ico_host_skip_entry_walk(void)
+{
+    s_skips++;
+    s_skipStage = s_entered;
+}
+
 /* the movie row's: unused_movie_test checks them */
 int mpegPlayReturnStage;
 unsigned int stage_after_skipping_demo;
@@ -645,6 +655,7 @@ static void testRooms(void)
     stage_no = 11;
     systemStatus[6] = 0;
     s_saves = 0;
+    s_skips = 0;
     logStart();
     CHECK(ico_unused_start(ICO_UNUSED_ARENA) == -1 && s_entered == -1 && s_saves == 0 &&
               !ico_unused_active(),
@@ -666,6 +677,10 @@ static void testRooms(void)
           "the arena starts (layout %d, want %d)", to, ri->layout_scene);
     CHECK(s_entered == arena && s_saves == 1 && stream.fadeStep == 0x40 && titleAdpcm == NULL,
           "entered through debug.c (%d), the state kept, the theme faded", s_entered);
+    /* the walk in skipped once, after the way in (none by the failed
+       starts above) */
+    CHECK(s_skips == 1 && s_skipStage == arena, "the arena's walk in skipped %d times (stage %d)",
+          s_skips, s_skipStage);
     /* the game's no-entrance start: the boy and the sword at
        -exitData[0].pos (here (-12, 34, -56): the row is stored negated),
        rot 90 degrees in radians; no girl (the arena's flag0 is 0) */
@@ -785,8 +800,13 @@ static void testRooms(void)
     onTitle(2000);
     s_nPlaced = 0;
     logStart();
+    s_skips = 0;
     CHECK(ico_unused_start(ICO_UNUSED_CLIMB) == ri->layout_scene && s_entered == climb,
           "the climbing room starts");
+    CHECK(s_skips == 1 && s_skipStage == climb,
+          "the climbing room's walk in skipped %d times "
+          "(stage %d)",
+          s_skips, s_skipStage);
     log = logEnd();
     CHECK(atStart(placedOf(ri->credits_boy_label, 1), climb) &&
               atStart(placedOf(ri->girl_label, 2), climb) &&

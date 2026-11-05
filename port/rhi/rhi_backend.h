@@ -99,6 +99,7 @@
     X(read_timestamps)                                                                             \
     X(read_timestamps_busy)                                                                        \
     X(occlusion_supported)                                                                         \
+    X(occlusion_prepare)                                                                           \
     X(cmd_begin_occlusion)                                                                         \
     X(cmd_end_occlusion)                                                                           \
     X(read_occlusion)                                                                              \

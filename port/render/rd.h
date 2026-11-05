@@ -774,6 +774,16 @@ void rd_pipelines_lazy_tick(void);
  * logged).  The game thread, before the render thread starts. */
 typedef int (*RdBackgroundMemoryFn)(char *why, size_t size);
 uint32_t rd_pipelines_background_start(RdBackgroundMemoryFn memory);
+/* The skinned draws' bone-block check's own background compiles (its c2
+ * variant's three pipelines and its box checks', rd_vu_skin_check.c; issue
+ * 163) under issue 161's rule as the finisher above: memory asked before
+ * each (2: none for the rest of the run; 1: not now), one at a time;
+ * noBackground non-NULL (the start-up set stopped for memory on Qualcomm's
+ * own driver: window_pipe_finish.c) none at all, its words in the one line
+ * that says so.  Until a pipeline exists its part of the check is not drawn.
+ * The window, before the render thread starts; without a call (the tests,
+ * the tool) every compile may begin. */
+void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground);
 /* A late game step or a slow picture: no background batch begins for
  * RD_FINISH_HOLD_MS (a batch in flight goes on).  Any thread. */
 void rd_pipelines_background_hold(void);
@@ -869,6 +879,18 @@ bool rd_blend_selftest(void);
  * programs').  Waits for the GPU.  Returns false when it turned the
  * pre-pass off. */
 bool rd_vuprepass_selftest(void);
+/* Whether the skinned draws' bone-block check's start-up probe
+ * (rd_vu_skin_check.h; issue 163), run first by rd_vuprepass_selftest,
+ * found the device failing in it (lost, or its picture not read back); why
+ * gets the words.  The check is then off for the run; the window writes
+ * [dev] vu_skin_check = false before a loss's restart or box, so no later
+ * start runs the probe again (window_host.c).  The probe's notes go to the
+ * activity function (rd_set_activity_fn): "creating pipeline rd vu skin
+ * probe (...)" while its pipelines compile, "the VU skin check's start-up
+ * probe (rd vu skin probe): ..." while it draws and reads back
+ * (startup_retry.h startup_retry_note_has_skin_probe), so a crash, a freeze
+ * or the system's end there names it at the next start. */
+bool rd_vu_skin_probe_failed(char *why, size_t size);
 /* The longest frame replay (CPU time of recording, pipeline creation,
  * submit and present) in ms since the last reset, and *count the replays
  * in that time; reset != 0 starts a new period.  For the window's 10 s

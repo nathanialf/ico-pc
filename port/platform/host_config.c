@@ -602,7 +602,9 @@ static const struct {
     {"dev.vu_fuse", "vu_fuse"},
     /* false: the skinned draws' bone-block check off (issue 163: one
        skinned draw every 100 ms drawn again as a probe beside the picture
-       and compared with the CPU; an A/B; port/render/rd_vu_skin_check.c) */
+       and compared with the CPU; on by default only on an Adreno with a
+       window; an A/B; port/render/rd_vu_skin_check.c); true: on where it
+       is off by default */
     {"dev.vu_skin_check", "vu_skin_check"},
     /* the scene draws' visibility test: frustum (the default: a draw wholly
        off its target or behind the eye is not replayed, the same picture),
@@ -767,7 +769,7 @@ static const struct {
        under their own pipeline (no fused pair) */
     {"vu_fuse", "ICO_RD_VU_FUSE"},
     /* port/render/rd_vu_skin_check.c skMode: 0 leaves the skinned draws'
-       bone-block check off (1 turns it on in a headless run) */
+       bone-block check off (1 turns it on on any device, headless too) */
     {"vu_skin_check", "ICO_RD_VU_SKIN_CHECK"},
     /* port/render/rd_vis.c rd__vis_init: off, frustum or full */
     {"cull", "ICO_RD_CULL"},

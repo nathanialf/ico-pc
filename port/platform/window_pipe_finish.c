@@ -40,6 +40,25 @@ void window_pipe_finish_start(void)
     (void)rd_pipelines_background_start(ico_diag_background_memory);
 }
 
+void window_pipe_skin_check(int pipePolicy)
+{
+    const int driver = ico_diag_memory_floor_driver();
+    char why[200];
+
+    if (driver != ICO_MEMORY_FLOOR_DRIVER_OTHER &&
+        (ico_diag_floor_stopped() || pipePolicy == ICO_DIAG_PIPESET_LAZY_LOW_MEMORY)) {
+        snprintf(why, sizeof why,
+                 "the start-up set %s for memory on %s; issue 161: that driver's compiler ran the "
+                 "device out of memory",
+                 pipePolicy == ICO_DIAG_PIPESET_LAZY_LOW_MEMORY ? "of the last start stopped"
+                                                                : "stopped",
+                 ico_memory_floor_driver_words(driver));
+        rd_vu_skin_background(ico_diag_background_memory, why);
+        return;
+    }
+    rd_vu_skin_background(ico_diag_background_memory, NULL);
+}
+
 /* the cache file's size in bytes, -1 when there is none */
 static long long cache_file_bytes(const char *path)
 {

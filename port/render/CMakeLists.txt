@@ -1830,7 +1830,9 @@ if(ICO_RUN_TESTS)
     # frame with the bone at 200 read as zeros by the probe alone (H1,
     # address-dependent: c1 right) or in the ring under the GPU (H2, a port
     # race); robust the clean frame under robust access with the c2 variant
-    # where the device offers VK_EXT_pipeline_robustness
+    # drawn where the device offers VK_EXT_pipeline_robustness, probe_robust
+    # the probe's sabotage there with c2 right (the pipeline robustness
+    # chain read back)
     set(_vsk "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_check.cmake")
     set(_vsk_wrong "rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh rd vu skin check test #[0-9]+ \\(120 vertices\\): [0-9]+ vertices wrong of 120, address 200: got \\([-0-9., ]+\\) want \\([-0-9., ]+\\) \\(a zero matrix at 200 gives it: yes")
     add_test(NAME rd_vu_skin_check_judge
@@ -1846,15 +1848,25 @@ if(ICO_RUN_TESTS)
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=probe
                      "-DEXTRA=${_vsk_wrong}.*the bone block as the GPU copied it: equal[;,] as the CPU reads it after the fence: equal.*\\(c1\\) the block at a fresh ring offset \\(page phase [0-9]+, the draw's [0-9]+\\): right.*reads as: H1, address-dependent"
                      -P "${_vsk}")
+    add_test(NAME rd_vu_skin_check_probe_robust
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=probe
+                     "-DEXTRA=${_vsk_wrong}.*\\(c1\\) the block at a fresh ring offset \\(page phase [0-9]+, the draw's [0-9]+\\): right.*\\(c2\\) uniform robustness off: (right|not offered)"
+                     -P "${_vsk}")
     add_test(NAME rd_vu_skin_check_ring
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=ring
                      "-DEXTRA=${_vsk_wrong}.*the bone block as the GPU copied it: differs at qwords 184..187[;,] as the CPU reads it after the fence: differs at qwords 184..187.*reads as: H2, a port race"
                      -P "${_vsk}")
     set_tests_properties(rd_vu_skin_check_judge rd_vu_skin_check rd_vu_skin_check_robust
-                         rd_vu_skin_check_probe rd_vu_skin_check_ring
-                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+                         rd_vu_skin_check_probe rd_vu_skin_check_probe_robust
+                         rd_vu_skin_check_ring PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     set_tests_properties(rd_vu_skin_check PROPERTIES ENVIRONMENT "${_env}")
-    set_tests_properties(rd_vu_skin_check_robust PROPERTIES ENVIRONMENT "${_env};ICO_GPU_ROBUST=1")
+    # ICO_RD_VU_SKIN_CHECK=1: the device is made with VK_EXT_pipeline_robustness
+    # only where the check can run (an Adreno, or the setting: vk_device.c)
+    set_tests_properties(rd_vu_skin_check_robust
+                         PROPERTIES ENVIRONMENT "${_env};ICO_GPU_ROBUST=1;ICO_RD_VU_SKIN_CHECK=1")
+    set_tests_properties(rd_vu_skin_check_probe_robust
+                         PROPERTIES ENVIRONMENT
+                                    "${_env};ICO_GPU_ROBUST=1;ICO_RD_VU_SKIN_CHECK=1;ICO_RD_VU_SKIN_SABOTAGE=200")
     set_tests_properties(rd_vu_skin_check_probe
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200")
     set_tests_properties(rd_vu_skin_check_ring
@@ -2109,6 +2121,9 @@ if(ICO_RUN_TESTS)
     set(_vskd "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_check_dump.cmake")
     set(_vskd_clean "[0-9]+ skinned commands, [1-9][0-9]* checks, 0 wrong \\(address 0\\), 0 blocks whose bytes differed \\(0 changed after the draw\\), 0 of [0-9]+ box checks with samples outside")
     set(_vsk163 "/primary/dev/ico-dumps/163")
+    # a wrong check's mismatch line for Yorda's mesh at bone address 200
+    # (review2 S5: the H2 run's 42 changed blocks must not use up its lines)
+    set(_vsk163_wrong "rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh testmodel #[0-9]+ \\([0-9]+ vertices\\): [0-9]+ vertices wrong of [0-9]+, address 200: ")
     add_test(NAME rd_vu_skin_check_dump
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=/primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump"
@@ -2125,13 +2140,13 @@ if(ICO_RUN_TESTS)
                      "-DDUMP=${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_probe"
                      "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\), 0 blocks whose bytes differed \\(0 changed after the draw\\).*reads as: H1, address-dependent"
-                     -P "${_vskd}")
+                     "-DLOG=${_vsk163_wrong}" -P "${_vskd}")
     add_test(NAME rd_vu_skin_check_163_ring
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_ring"
                      "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\), [1-9][0-9]* blocks whose bytes differed \\([1-9][0-9]* changed after the draw\\).*reads as: H2, a port race"
-                     -P "${_vskd}")
+                     "-DLOG=${_vsk163_wrong}" -P "${_vskd}")
     add_test(NAME rd_vu_skin_check_163_patched
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${_vsk163}/blended-750-a200.rddump"
@@ -2148,6 +2163,24 @@ if(ICO_RUN_TESTS)
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200")
     set_tests_properties(rd_vu_skin_check_163_ring
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring")
+    # rd_vu_skin_check_ab (test/rd_vu_skin_check_ab.cmake, review2 S6): the
+    # picture with the check on for every skinned command (ICO_RD_VU_SKIN_CHECK=2)
+    # against off, every pass-dump PNG byte for byte, at Original, with the
+    # attachment read and GS state as shader data (the Turnip reporter's
+    # profile on lavapipe) and at Enhanced 2x MSAA 4, on the corpus dump of
+    # tools/vustage_dumps.txt's /primary/dev/ico-dumps/*.rddump with the
+    # most skinned commands (frame-20261007-200706-v3086: 46) and issue 163's
+    # blended dump (Yorda's draws); SKIP without them or a device
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_ab")
+    add_test(NAME rd_vu_skin_check_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMPS=/primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump|${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_check_ab.cmake")
+    set_tests_properties(rd_vu_skin_check_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
+    if(_env)
+        set_tests_properties(rd_vu_skin_check_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
     # rd_region_stats (test/rd_region_stats.cmake, docs/port/VU1_PROGRAMS.md
     # "The region rule"): rd_replay_tool --region-stats on the first two
     # dumps of the machine-local list tools/occlusion_corpus.txt here, at

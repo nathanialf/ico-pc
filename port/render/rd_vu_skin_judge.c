@@ -243,8 +243,8 @@ const char *rd__skin_decision(bool copyDiffers, bool rereadDiffers, bool probeWr
                "the bone read (see the box check)";
     }
     if (c1 == RD_SKIN_VAR_RIGHT && c2 == RD_SKIN_VAR_RIGHT) {
-        return "H1, address-dependent: the driver's uniform read at that offset (right at a "
-               "fresh offset, and right without uniform robustness)";
+        return "H1, address-dependent under robust access: right at a fresh offset and right "
+               "without uniform robustness (either fix: a storage read or robustness off)";
     }
     if (c1 == RD_SKIN_VAR_RIGHT) {
         return "H1, address-dependent: the driver's uniform read at that offset";
@@ -262,4 +262,26 @@ const char *rd__skin_decision(bool copyDiffers, bool rereadDiffers, bool probeWr
     }
     return "H1 or the robust access: the bytes are right and the read is wrong (no variant "
            "ran)";
+}
+
+int rd__skin_check_env(const char *value)
+{
+    if (!value || !value[0]) {
+        return -1;
+    }
+    if (strcmp(value, "2") == 0) {
+        return 2;
+    }
+    return strcmp(value, "1") == 0 || strcmp(value, "true") == 0 || strcmp(value, "on") == 0 ||
+           strcmp(value, "yes") == 0;
+}
+
+int rd__skin_check_default(bool windowed, bool adreno, int env)
+{
+    if (env >= 0) {
+        return env;
+    }
+    /* issue 163's devices only: on any other the check's GPU work is not
+     * spent (issue 179's Mali-G52 is GPU-bound already) */
+    return windowed && adreno ? 1 : 0;
 }

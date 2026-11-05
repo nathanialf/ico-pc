@@ -257,6 +257,18 @@ bool startup_retry_note_has_dst(const char *note);
  * ico_diag_startup_vu_prepass).  Tolerant as startup_retry_note_has_dst. */
 bool startup_retry_note_has_vu_pre(const char *note);
 
+/* Whether an activity note names the skinned draws' bone-block check's
+ * start-up probe (port/render/rd_vu_skin_selftest.c; issue 163): it holds
+ * "rd vu skin probe" ("creating pipeline rd vu skin probe (...)" while its
+ * pipelines compile, "the VU skin check's start-up probe (rd vu skin
+ * probe): ..." while it draws and reads back).  A start whose previous run
+ * ended there (a crash, a freeze, the system's end, a device loss)
+ * writes [dev] vu_skin_check = false and runs without the check
+ * (window_host.c); such an end is not counted as one while making the
+ * pipelines (diag_host.c), and the start makes its set as usual.
+ * Tolerant: NULL is false. */
+bool startup_retry_note_has_skin_probe(const char *note);
+
 /* The step after the run described by run ended (run->why): the crash or
  * loss order above, NONE when nothing is left or the platform cannot start
  * the game again.  reason gets one line in plain words (also for NONE: why

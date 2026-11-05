@@ -1717,6 +1717,38 @@ static int vu_prepass_persist(void)
     return ico_config_set_bool("dev.vu_prepass", 0) == 0 && ico_config_save() == 0 ? 0 : -1;
 }
 
+/* [dev] vu_skin_check = false in config.toml, for good (issue 163's skin
+   check: its start-up probe crashed, froze or lost the device; the setting
+   is a diagnostic's, the picture is the same without it): said in one line
+   with why, 0 when written */
+static int skin_check_persist_off(const char *why)
+{
+    const char *cfgName = ico_config_toml_path() ? ico_config_toml_path() : "config.toml";
+    const int ok = ico_config_set_bool("dev.vu_skin_check", 0) == 0 && ico_config_save() == 0;
+
+    fprintf(stderr,
+            "window: VU skin check: %s; [dev] vu_skin_check = false %s %s, so %s without the "
+            "check%s\n",
+            why, ok ? "is written to" : "could not be written to", cfgName,
+            ok ? "this start and every start after it run" : "this start only runs",
+            ok ? " (delete that line to try it again)" : "");
+    return ok ? 0 : -1;
+}
+
+/* after rd_vuprepass_selftest, before anything that may restart the game
+   or show the loss box: the probe's device failure written for good
+   (rd.h rd_vu_skin_probe_failed) */
+static void skin_probe_after(void)
+{
+    char why[96];
+    char line[160];
+
+    if (rd_vu_skin_probe_failed(why, sizeof why)) {
+        snprintf(line, sizeof line, "the start-up probe failed on this device (%s)", why);
+        (void)skin_check_persist_off(line);
+    }
+}
+
 /* the watchdog's GPU hang (below, beside device_lost_quit) */
 static int window_gpu_progress(IcoDiagGpu *out);
 static void window_gpu_hang(void);
@@ -1931,6 +1963,25 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
                  startup_retry_is_loss(retry) ? "the graphics card stopped responding"
                                               : "a graphics driver crash");
         rd_set_vu_prepass_off(why);
+    }
+    /* issue 163's skin check: a previous run that ended inside its
+       start-up probe (startup_retry.h startup_retry_note_has_skin_probe: a
+       crash there, a restart after it, a freeze or the system's end, a
+       device loss) makes this start and every start after it run without
+       the check ([dev] vu_skin_check = false; ICO_RD_VU_SKIN_CHECK=0 before
+       the device is made, vk_device.c reads it); the end is not counted as
+       one while making the pipelines (diag_host.c) */
+    {
+        const char *prevNote = ico_diag_startup_activity_prev();
+
+        if (startup_retry_note_has_skin_probe(prevNote)) {
+            char line[200];
+
+            window_setenv("ICO_RD_VU_SKIN_CHECK", "0");
+            snprintf(line, sizeof line, "the previous run ended inside its start-up probe (%.120s)",
+                     prevNote);
+            (void)skin_check_persist_off(line);
+        }
     }
     /* issues 93 and 107: the start-up set, the careful one or none. [dev]
        pipeline_set = "lazy" or "careful" (ICO_PIPELINE_SET); a previous
@@ -2344,6 +2395,7 @@ open_window:
         rd_blend_selftest();
         selftests_between();
         rd_vuprepass_selftest();
+        skin_probe_after();
         selftests_done();
     } else {
         /* the careful policy: on a device of the table, by the settings, or
@@ -2393,6 +2445,7 @@ open_window:
            it is noted as the set's would be (its pipeline's " pre" or
            vu_tri note: startup_retry.h's noprepass step) */
         rd_vuprepass_selftest();
+        skin_probe_after();
         selftests_done();
         static PipeScreen screen;
 
@@ -2440,6 +2493,8 @@ open_window:
        the next start counts it as a clean start when it ended without a
        loss (window_robust.h, robust_persist.h) */
     window_robust_reached();
+    /* the skin check's own background compiles under issue 161's rule */
+    window_pipe_skin_check(pipePolicy);
     /* a device loss from here takes the loss order's lossnoprepass step
        first when the run draws with the VU vertex pre-pass (its self-test
        above may have turned it off) */
@@ -2671,6 +2726,7 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
     rd_blend_selftest();
     ico_diag_step("window: switch to %s: the VU pre-pass self-test", backend);
     rd_vuprepass_selftest();
+    skin_probe_after();
     selftests_done();
     if (reopen_lost(backend)) {
         return 0;
@@ -2691,6 +2747,7 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
         }
     }
     ico_diag_set_vu_prepass(rd_vu_prepass_on());
+    window_pipe_skin_check(-1);
     ico_diag_step("window: switch to %s: the fog self-test", backend);
     rd_fog_selftest();
     if (reopen_lost(backend)) {

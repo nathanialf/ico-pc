@@ -154,6 +154,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_vu_skin_check.h"
 
 /* the device classes of the table */
 typedef enum ProfileClass {
@@ -264,16 +265,17 @@ static ProfileClass classOf(const RhiLimits *lim)
     default:
         break;
     }
-    if (lim->moltenvk) {
-        return PC_APPLE;
-    }
-    switch (lim->vendorId) {
-    case VENDOR_QUALCOMM:
+    if (rd__profile_vendor_adreno(lim->vendorId, lim->moltenvk)) {
         /* Mesa's Turnip reports Qualcomm's vendor id and names itself in
          * the driver text (VkPhysicalDeviceDriverProperties.driverName
          * "turnip Mesa driver", RhiLimits.driverText); Qualcomm's own
          * driver does not */
         return rd__driver_is_turnip(lim) ? PC_ADRENO_TURNIP : PC_ADRENO_QUALCOMM;
+    }
+    if (lim->moltenvk) {
+        return PC_APPLE;
+    }
+    switch (lim->vendorId) {
     case VENDOR_ARM:
         return PC_MALI;
     case VENDOR_IMAGINATION:
@@ -281,6 +283,23 @@ static ProfileClass classOf(const RhiLimits *lim)
     default:
         return lim->tiler ? PC_TILER : PC_DESKTOP;
     }
+}
+
+/* rd_vu_skin_check.h: classOf's two Adreno classes on Vulkan (Qualcomm's
+ * vendor id, not through MoltenVK), from the ids alone */
+bool rd__profile_vendor_adreno(uint32_t vendorId, bool moltenvk)
+{
+    return !moltenvk && vendorId == VENDOR_QUALCOMM;
+}
+
+bool rd__profile_adreno(void)
+{
+    const RhiLimits *lim = rhi_limits();
+    if (lim == NULL) {
+        return false;
+    }
+    const ProfileClass c = classOf(lim);
+    return c == PC_ADRENO_QUALCOMM || c == PC_ADRENO_TURNIP;
 }
 
 /* ICO_<name>: -1 unset, else 1 for 1/true/on/yes, 0 for anything else */

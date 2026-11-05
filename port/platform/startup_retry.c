@@ -181,6 +181,11 @@ bool startup_retry_note_has_vu_pre(const char *note)
     return false;
 }
 
+bool startup_retry_note_has_skin_probe(const char *note)
+{
+    return note != NULL && strstr(note, "rd vu skin probe") != NULL;
+}
+
 StartupRetry startup_retry_next(const StartupRetryRun *run, char *reason, size_t reasonLen)
 {
     const char *name =

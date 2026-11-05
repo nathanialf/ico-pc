@@ -22,7 +22,12 @@
  *     address A read as zero (got (x, y, z) want (x, y, z)) in T ms
  *   rd: VU skin check: on (...)  the in-game check's start line
  *
- * Nothing is turned off by a wrong probe: the in-game check decides. */
+ * Nothing is turned off by a wrong probe: the in-game check decides.  A
+ * device that fails in it (lost, its picture not read back) turns the
+ * check off ("VU skin check: off (the start-up probe failed: ...)"), and
+ * the window writes [dev] vu_skin_check = false (rd.h
+ * rd_vu_skin_probe_failed); its notes name it to the start-up retry and
+ * the activity file. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -147,6 +152,17 @@ static bool blocks(const void *b, uint64_t ua, uint64_t off[ST_OFFSETS], uint32_
     return true;
 }
 
+/* the device's failure in the probe (rd.h rd_vu_skin_probe_failed) */
+static const char *s_failed;
+
+bool rd_vu_skin_probe_failed(char *why, size_t size)
+{
+    if (why && size) {
+        snprintf(why, size, "%s", s_failed ? s_failed : "");
+    }
+    return s_failed != NULL;
+}
+
 bool rd__vu_skin_selftest(void)
 {
     if (!g_rd.inited || !g_rd.hasDevice) {
@@ -154,12 +170,19 @@ bool rd__vu_skin_selftest(void)
     }
     if (!rd__vu_skin_check_on()) {
         if (rhi_backend() == RHI_BACKEND_VULKAN && g_rd.windowed) {
-            rd__log("VU skin check: off ([dev] vu_skin_check = false, ICO_RD_VU_SKIN_CHECK=0)");
+            rd__log("VU skin check: off (%s)",
+                    rhi_device_lost() ? "the device was lost" : rd__vu_skin_check_why());
         }
         return true;
     }
     const double t0 = rd__now_ms();
     const char *set = g_rd.vuFallbackPlain ? "plain set" : "extended set";
+    /* the crash report's and the activity file's note (rd.h
+     * rd_vu_skin_probe_failed): a crash, a freeze or the system's end
+     * inside the probe names it at the next start, which then runs
+     * without the check ([dev] vu_skin_check = false, window_host.c) */
+    rd__pipeline_note_begin("rd vu skin probe (the VU skin check's start-up probe: its three "
+                            "pipelines)");
     static float mem[36][4], bb[240][4], st[ST_VERTS * 5u][4];
     block(mem);
     bones(bb);
@@ -182,11 +205,20 @@ bool rd__vu_skin_selftest(void)
         made = made && rd__vu_skin_probe_pipeline(kVs[c], false).id != 0;
     }
     const RhiBuffer idx = rd__vu_skin_index_buffer();
+    /* the box check's occlusion queries made now, where the start already
+     * waits, for its 80 indices: the game's frames neither stall at the
+     * first box check nor reset and read the whole pool (rhi.h
+     * rhi_occlusion_prepare) */
+    if (rhi_occlusion_supported()) {
+        (void)rhi_occlusion_prepare(RD_SKIN_CHECKS_ALL);
+    }
     const uint32_t w = ICO_VU_PROBE_FIELDS * ST_OFFSETS, h = ST_VERTS * ST_CODES;
     RhiTexture tex = {0};
     RhiState texState = RHI_STATE_UNDEFINED;
     uint8_t *px = malloc((size_t)w * h * 4u);
     const char *why = NULL;
+    rd__activity_note("the VU skin check's start-up probe (rd vu skin probe): drawing 192 probes "
+                      "and reading them back");
     uint32_t phases = 0;
     uint64_t boff[ST_OFFSETS];
     if (!made || !idx.id || !px) {
@@ -302,6 +334,8 @@ bool rd__vu_skin_selftest(void)
             if (!rd__read_rhi_texture(tex, &texState, w, h, px, (size_t)w * h * 4u) ||
                 rhi_device_lost()) {
                 why = "the device failed in it";
+                s_failed = rhi_device_lost() ? "the device was lost in it"
+                                             : "its picture could not be read back";
             }
         }
     }
@@ -334,6 +368,7 @@ bool rd__vu_skin_selftest(void)
         rhi_destroy_texture(tex);
     }
     free(px);
+    rd__pipeline_note_end();
     const double ms = rd__now_ms() - t0;
     if (why) {
         rd__log("VU skin probe: not run (%s) in %.1f ms", why, ms);
@@ -360,17 +395,24 @@ bool rd__vu_skin_selftest(void)
                     bv.want.y / 16.0, bv.want.z, ms);
         }
     }
+    if (s_failed) {
+        /* the device cannot run it: off for the run, and the window
+         * writes the setting (rd_vu_skin_probe_failed) */
+        rd__vu_skin_check_set(0);
+        rd__log("VU skin check: off (the start-up probe failed: %s)", s_failed);
+        return true;
+    }
     const RhiLimits *lim = rhi_limits();
     rd__log("VU skin check: on (one skinned draw every %d ms, in turn, drawn again after the "
             "picture as a probe of its own and compared with the CPU, its bone block's bytes "
             "with the GPU's copy; variants: a fresh ring offset, uniform robustness off %s; the "
-            "box check %s; [dev] vu_skin_check = false turns it off)",
+            "box check %s; %s)",
             100,
             lim->uniformRobustOff ? "(VK_EXT_pipeline_robustness)"
             : lim->robustText && strncmp(lim->robustText, "on", 2) == 0
                 ? "not offered (no VK_EXT_pipeline_robustness)"
                 : "not needed (robust access off)",
-            rhi_occlusion_supported() ? "by occlusion query"
-                                      : "not offered (no occlusion queries)");
+            rhi_occlusion_supported() ? "by occlusion query" : "not offered (no occlusion queries)",
+            rd__vu_skin_check_why());
     return why != NULL || bad == 0;
 }

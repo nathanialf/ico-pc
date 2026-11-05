@@ -395,12 +395,17 @@ it first. `rhi_read_occlusion` hands back the slot `rhi_wait_frame` last recycle
 `rhi_read_timestamps` does: the count, or `RHI_OCCLUSION_NONE` for an index the frame did not
 write; it returns 1 + the highest index written. Vulkan only (`port/rhi/vk/vk_cmd.c`
 (`vkr_occ_make`, `vkr_collect_occlusion`)): a `VK_QUERY_TYPE_OCCLUSION` pool a slot made at the
-first begin of the run (the game never asks for one, so it pays nothing), the current slot's pool
-reset by a one-time submit at that begin and every slot's in its first command list from then on,
+first begin of the run, or by `rhi_occlusion_prepare(count)` outside any recording (the skin
+check's start-up probe on an Adreno, [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md): 80; elsewhere the game
+never asks for one, so it pays nothing), the current slot's pool reset by a one-time submit then
+and every slot's in its first command list from then on, over the range in use: `count` queries
+after a prepare (a later call widens it; a begin past a slot's reset range is dropped, logged once
+`rhi_vk: occlusion queries: query I is past the N reset a frame: dropped; ...`, and the whole pool
+is reset from each slot's next use), the whole pool after a first begin;
 `VK_QUERY_CONTROL_PRECISE_BIT` where the device has `occlusionQueryPrecise` (enabled at device
 creation; without it a count is exact only as zero or not zero, which is all the measurement
-reads). The first begin logs `rhi_vk: occlusion queries: on (8192 a frame slot, precise sample
-counts|not precise: ...)`. Direct3D 12, Direct3D 11 and OpenGL report `rhi_occlusion_supported`
+reads). The pools' making logs `rhi_vk: occlusion queries: on (8192 a frame slot, N of them reset a
+frame, precise sample counts|not precise: ...)`. Direct3D 12, Direct3D 11 and OpenGL report `rhi_occlusion_supported`
 false, the calls do nothing and the read is 0 (their forms would be an occlusion query heap
 resolved like the timestamps, `D3D11_QUERY_OCCLUSION`, `GL_SAMPLES_PASSED`).
 
@@ -434,12 +439,14 @@ variables as the loader does (`port/rhi/rhi.h`; `port/rhi/rhi_backend.c`).
 
 Each backend keeps its pipelines in a handle pool of `RHI_PIPELINE_POOL_MAX` slots
 (`port/rhi/rhi_pipeline_pool.h`; `port/rhi/vk/vk_device.c` and `port/rhi/d3d12/d3d12_device.c`
-(`rhi_init`)), 4160: `RHI_PIPELINE_POOL_CACHE` (4096), the renderer's whole pipeline cache
+(`rhi_init`)), 4192: `RHI_PIPELINE_POOL_CACHE` (4096), the renderer's whole pipeline cache
 (`port/render/rd_state.h` (`RD_PIPELINE_CACHE_MAX`) is that number), and
-`RHI_PIPELINE_POOL_HEADROOM` (64) for what the renderer holds outside the cache at once: one batch
+`RHI_PIPELINE_POOL_HEADROOM` (96) for what the renderer holds outside the cache at once: one batch
 of the start-up set's or a replay's gathered keys (`RD_PIPE_BATCH`, 32: their ids are held until
-the batch ends and its duplicates are destroyed), the COLCLAMP 0 pipelines (`RD_WRAP_PIPES`, 16)
-and the movie's three (`port/render/rd_video.c`: two outputs, the field pipeline), 51 in all; a
+the batch ends and its duplicates are destroyed), the COLCLAMP 0 pipelines (`RD_WRAP_PIPES`, 16),
+Motion blur: Smooth's two, the movie's three (`port/render/rd_video.c`: two outputs, the field
+pipeline) and the skin check's 22 (`RD_VU_SKIN_PIPES`: the probe's three, c2's three, 16 box
+checks; [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)), 75 in all; a
 static assert in `port/render/rd_pipeline.c` holds the sum under the headroom and the cache plus
 the headroom to the pool. So no pipeline the renderer's cache can keep is refused by the pool. A
 handle indexes `2^20 - 1` slots (`port/rhi/vk/vk_internal.h` (`VKR_INDEX_BITS`),
@@ -461,8 +468,8 @@ renderer reads them around a creation to name the failure's reason in its line
 and then every 100th, with the running count (Vulkan `vkr_pool_alloc`, any pool; D3D12 at the
 pipeline's allocation, `dx_pipe_finish`):
 
-    rhi_vk: pipeline pool full (4160); 9 refused so far
-    rhi_d3d12: pipeline pool full (4160); 100 refused so far
+    rhi_vk: pipeline pool full (4192); 9 refused so far
+    rhi_d3d12: pipeline pool full (4192); 100 refused so far
 
 the 8th ending `; from here every 100th is written`. The window's 10 s `memory:` line ends with the
 pool's numbers (`port/platform/window_host.c` (`perf_log`); [PLATFORM.md](PLATFORM.md#diagnostics)):
@@ -1253,7 +1260,7 @@ holds one reference each until `rhi_shutdown` (`d11_pipelines_release`); Direct3
 4096 of a kind, and past that a pipeline is not created
 (`rhi_d3d11: pipeline: 4095 distinct <kind> states, the most Direct3D 11 keeps; ...`, once). The
 pool is `RHI_PIPELINE_POOL_MAX` with the other backends' line
-(`rhi_d3d11: pipeline pool full (4160); N refused so far`, the first 8 then every 100th); a
+(`rhi_d3d11: pipeline pool full (4192); N refused so far`, the first 8 then every 100th); a
 pipeline whose shader failed logs `rhi_d3d11: pipeline <name> not created: vertex|pixel shader
 <name>: <reason> (N so far)` on the same schedule and counts in `pipelineFailures`
 (`pipelineLastError` the `CreateInputLayout` HRESULT where that failed, else 0). A destroyed
@@ -1664,7 +1671,7 @@ their lines are the other backends':
 attachment read always; the storage image without `fragmentInterlock` or with a colour target),
 `... no vertex shader`, and `... dual-source blend factors without dual-source blending`; a GL
 error at creation gives `rhi_gl: pipeline <name> not created: GL error 0x....` with the error in
-`pipelineLastError`; a full pool `rhi_gl: pipeline pool full (4160); N refused so far` (the first 8,
+`pipelineLastError`; a full pool `rhi_gl: pipeline pool full (4192); N refused so far` (the first 8,
 then every 100th). A vertex shader input that no attribute feeds (OpenGL would read (0, 0, 0, 1))
 is logged, not refused: `rhi_gl: pipeline <name>: the vertex shader reads location N, which no
 vertex attribute feeds (N so far)` (the first 8, then every 100th). As on Vulkan, `RHI_DYN_DEPTH`
