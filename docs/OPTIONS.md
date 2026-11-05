@@ -662,7 +662,7 @@ page, and it is the same setting in both places.
 ## Extras
 
 On the title screen's Options this page has Music, Models, Credits,
-Character Customization, Add to Steam (on Windows and Linux),
+Character Customization, Unused content, Add to Steam (on Windows and Linux),
 Export textures, Back up your data, Restore from a backup and Achievement
 pop-ups. In the pause menu's Options it has only Character Customization
 and Achievement pop-ups. The rows that change how the game plays are under
@@ -677,6 +677,9 @@ and Achievement pop-ups. The rows that change how the game plays are under
   its disc, so the row is not there with that disc.
 - **Character Customization:** change the colours of Ico and Yorda.
   [Details below](#character-customization).
+- **Unused content** (on the title screen's Extras page only): things the
+  makers left on the disc that the game never shows.
+  [Details below](#unused-content).
 - **Achievement pop-ups** is the switch that is also the first row of the
   [Achievements](#achievements) list. Turn it on or off in either place.
 - **Add to Steam** (on the title screen's Extras page only; it finds Steam
@@ -774,6 +777,33 @@ A texture pack that has its own pictures of Ico and Yorda replaces these
 colours. While a texture pack is on, the page reminds you of this.
 
 Your choices are saved when you leave the page.
+
+### Unused content
+
+This page, on the title screen's Options only, opens things the makers left
+on the disc that the game itself never shows. Each disc has its own: the
+European disc has all four rows; the Japanese, Korean, Asian and North
+American discs and the August 2001 preview have all but the attract movie,
+which only the European disc carries; the June 2001 magazine demo has none
+of them, so its Extras page has no Unused content row.
+
+- **Test room: arena:** a room the makers built to try fights with the
+  Shadows: an arena with Shadows, a sword and two statues. Ico is there
+  alone.
+- **Test room: climbing:** a room the makers built to try climbing and
+  boxes, with Yorda, torches, wooden boxes and a chain.
+- **Attract movie (576 lines)** (when the disc has it): a second copy of the
+  film the title screen plays when you leave it alone, made for European
+  televisions. The game never plays it.
+- **Early show title art** (when the disc has it): pictures from the title
+  screen of an early show version of the game, left on the disc and never
+  shown. They open in the model viewer.
+
+The test rooms have no exit. To leave one, press Start and choose End Game:
+the game goes back to the title screen and opens Options on this page
+again. If Ico falls or is caught, either choice on the game over screen also
+takes you back to the title screen. Nothing is saved in a test room, it does
+not change your game, and achievements do not count there.
 
 ## Save states
 

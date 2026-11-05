@@ -8,8 +8,10 @@
  * listed with its kind, model, layout row, whether it was active, its
  * motion-orient rows and how many of the motions those rows reach the
  * stage held.  A model's host stage is one that builds it active at load,
- * holds the most of its block, and is not stage 88 or 91 (the ending's
- * stages).  Only the numbers are here; the names are the port's strings.
+ * holds the most of its block, and is not stage 88 or 91 (the two test
+ * rooms only the debug Stage Select reaches, offered under Extras > Unused
+ * content: ico_unused.h).  Only the numbers are here; the names are the
+ * port's strings.
  */
 #include "model_viewer.h"
 
