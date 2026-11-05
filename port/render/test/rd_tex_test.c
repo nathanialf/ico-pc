@@ -1939,17 +1939,25 @@ static void threadOriginal(void)
         rd_thread_local_stop();
     }
     setEnv("ICO_RD_ORIGINAL_ASYNC", NULL);
-    /* the busy skip, made certain through the submit side: the first
-       picture's present held on the submit thread (its render job over, so
-       the render thread's part reads idle), the gate answering as
-       window_orig_gate does; the next frames are left out (not replayed,
-       counted as busy) and SCENE stays the first one's */
+    /* the busy skip, made certain through the submit side.  Frames are
+       handed over one at a time, each after the one before has ended on
+       both threads, until a picture's present reaches the submit thread's
+       hook (a picture that does not present, as the first after a start
+       can be, passes it by: lead counts them); that present is held, as a
+       driver's present that blocks.  With the render thread's part idle,
+       busy is the submit thread's part alone.  Then `held` frames go
+       through rd_end_frame while it is held, the gate answering as
+       window_orig_gate does: each is left out as busy (not replayed).
+       Released and drained, one more frame is handed over.  So: the gate
+       lead + held + 1 times, held busy skips, lead + 1 handed over, as many
+       pictures on the render thread, SCENE the last handed-over frame's */
     if (rd_thread_local_start(RD_THREAD_ON)) {
         if (!rd_thread_submit_on()) {
             printf("Original, busy: no submit thread on this device; the held present is not "
                    "driven\n");
         } else {
-            const unsigned skipFrames = 4;
+            const unsigned held = 4, leadMax = 8;
+            unsigned lead = 0;
             memset(&s_og, 0, sizeof(s_og));
             s_og.mode = 2;
             __atomic_store_n(&s_shEntered, 0, __ATOMIC_RELEASE);
@@ -1958,10 +1966,24 @@ static void threadOriginal(void)
             rd__submit_test_hook(submitHold);
             rd_thread_block_take(&b);
             rd_frame_post_take(&fp);
-            gif_HostFrameReset();
-            dl_Clear();
-            recordFrame(); /* both idle: handed over */
-            const bool entered = spinUntil(&s_shEntered, 5000.0);
+            bool entered = false;
+            while (!entered && lead < leadMax) {
+                gif_HostFrameReset();
+                dl_Clear();
+                recordFrame(); /* both threads idle: handed over */
+                lead++;
+                /* this picture's present held, or the picture over on both
+                   threads without one (then the next frame) */
+                const double t0 = ico_thread_now_ms();
+                for (;;) {
+                    entered = __atomic_load_n(&s_shEntered, __ATOMIC_ACQUIRE) != 0;
+                    if (entered ||
+                        (!rd__thread_picture_busy_render() && !rd_thread_submit_unfinished()) ||
+                        ico_thread_now_ms() - t0 > 5000.0) {
+                        break;
+                    }
+                }
+            }
             bool renderIdle = false;
             {
                 const double t0 = ico_thread_now_ms();
@@ -1972,35 +1994,42 @@ static void threadOriginal(void)
             }
             const bool busyHeld = rd__thread_picture_busy();
             CHECK(entered && renderIdle && rd_thread_submit_unfinished() && busyHeld,
-                  "Original, busy: the present held on the submit thread (%d), the render "
-                  "thread's part idle (%d): busy %d (the submit thread's part of it)",
-                  entered, renderIdle, busyHeld);
-            for (unsigned k = 0; k < skipFrames; k++) {
+                  "Original, busy: a present held on the submit thread (%d, after %u frames "
+                  "handed over), the render thread's part idle (%d): busy %d (the submit "
+                  "thread's part of it)",
+                  entered, lead, renderIdle, busyHeld);
+            for (unsigned k = 0; k < held; k++) {
                 gif_HostFrameReset();
                 dl_Clear();
                 recordFrame(); /* told busy: left out */
             }
             __atomic_store_n(&s_shRelease, 1, __ATOMIC_RELEASE);
             (void)rd_thread_drain();
+            gif_HostFrameReset();
+            dl_Clear();
+            recordFrame(); /* both idle again: handed over */
+            (void)rd_thread_drain();
             rd__submit_test_hook(NULL);
             rd_thread_block_take(&b);
             rd_frame_post_take(&fp);
-            CHECK(s_og.calls == skipFrames + 1u && fp.busySkips == skipFrames &&
+            CHECK(s_og.calls == lead + held + 1u && fp.busySkips == held && fp.posts == lead + 1u &&
                       fp.posts + fp.busySkips == s_og.calls && fp.lateSkips == 0 &&
-                      fp.inlines == 0 && b.pictures == fp.posts && fp.posts == 1u,
-                  "Original, busy: the gate %u times, %u left out as busy, %u handed over, %u "
-                  "inside the step, %u late, %u pictures on the render thread",
-                  s_og.calls, fp.busySkips, fp.posts, fp.inlines, fp.lateSkips, b.pictures);
+                      fp.inlines == 0 && b.pictures == fp.posts,
+                  "Original, busy: the gate %u times (want %u), %u left out as busy (want %u), "
+                  "%u handed over (want %u), %u inside the step, %u late, %u pictures on the "
+                  "render thread",
+                  s_og.calls, lead + held + 1u, fp.busySkips, held, fp.posts, lead + 1u, fp.inlines,
+                  fp.lateSkips, b.pictures);
             {
                 char text[320];
                 rd_frame_post_text(&fp, text, sizeof(text));
                 CHECK(strstr(text, "skipped: render thread busy") != NULL,
-                      "Original, busy: the 10 s clause: %s", text);
-                printf("Original, busy:%s\n", text);
+                      "Original, busy: the 10 s clause: %.300s", text);
+                printf("Original, busy (%u frames before the held present):%.300s\n", lead, text);
             }
             CHECK(readScene(scene, display, &dw, &dh) &&
                       memcmp(scene, refScene, (size_t)512 * 512 * 4) == 0,
-                  "Original, busy: SCENE the handed-over frame's, the frames left out not "
+                  "Original, busy: SCENE the handed-over frames', the frames left out not "
                   "replayed");
         }
         rd_thread_local_stop();
