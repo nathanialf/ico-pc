@@ -223,6 +223,42 @@ static void testDriver(void)
     CHECK(!ico_present_fallback_driver_eligible(0u, k_qcom));
 }
 
+/* the window's gate (window_present_fallback.c gate()): only Qualcomm's own
+   driver takes the switch; reverting the vendor check to GATE_YES fails the
+   Mali and desktop cases */
+static void testGate(void)
+{
+    const IcoPresentFallbackMode autoM = ICO_PRESENT_FALLBACK_AUTO;
+
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, k_qcom, autoM) ==
+          ICO_PRESENT_FALLBACK_GATE_YES);
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x13b5u, k_mali, autoM) ==
+          ICO_PRESENT_FALLBACK_GATE_OTHER);
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x1010u, "PowerVR Rogue", autoM) ==
+          ICO_PRESENT_FALLBACK_GATE_OTHER);
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x10deu, "NVIDIA 570", autoM) ==
+          ICO_PRESENT_FALLBACK_GATE_OTHER);
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x1002u, "AMD proprietary", autoM) ==
+          ICO_PRESENT_FALLBACK_GATE_OTHER);
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, "turnip Mesa driver", autoM) ==
+          ICO_PRESENT_FALLBACK_GATE_NO);
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x1002u, "radv Mesa 25.1.0", autoM) ==
+          ICO_PRESENT_FALLBACK_GATE_NO);
+    CHECK(ico_present_fallback_gate(1, 1, 1, 0x5143u, k_qcom, autoM) ==
+          ICO_PRESENT_FALLBACK_GATE_NO);
+    CHECK(ico_present_fallback_gate(0, 0, 1, 0x5143u, k_qcom, autoM) ==
+          ICO_PRESENT_FALLBACK_GATE_NO);
+    CHECK(ico_present_fallback_gate(0, 1, 0, 0x5143u, k_qcom, autoM) ==
+          ICO_PRESENT_FALLBACK_GATE_NO);
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0u, NULL, autoM) == ICO_PRESENT_FALLBACK_GATE_NO);
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, k_qcom, ICO_PRESENT_FALLBACK_OFF) ==
+          ICO_PRESENT_FALLBACK_GATE_KEPT);
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x13b5u, k_mali, ICO_PRESENT_FALLBACK_OFF) ==
+          ICO_PRESENT_FALLBACK_GATE_KEPT);
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, k_qcom, ICO_PRESENT_FALLBACK_FIFO) ==
+          ICO_PRESENT_FALLBACK_GATE_NO);
+}
+
 static void testMode(void)
 {
     char line[96];
@@ -302,6 +338,7 @@ int main(void)
     testOther();
     testLate();
     testDriver();
+    testGate();
     testMode();
     testStart();
     return ico_check_summary("present_fallback_test");

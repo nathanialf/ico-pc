@@ -507,8 +507,10 @@ void rd_set_thread_host(const RdThreadHost *host)
                             "is handed over as the other frame rates' are: its submit and "
                             "present run on the %s; the game step waits for the picture "
                             "before's reads only, and skips a picture when the render thread is "
-                            "still busy ([dev] original_async = false replays it inside the step "
-                            "as before)",
+                            "still busy, but a kept frame (a fade, a load) still waits for the "
+                            "picture before, its present included (counted in the 10 s line's "
+                            "\"waited for the picture before\") ([dev] original_async = false "
+                            "replays it inside the step as before)",
                             rd_thread_submit_on() ? "submit thread" : "render thread");
                 }
             }
@@ -879,6 +881,11 @@ bool rd__thread_picture_busy(void)
     return __atomic_load_n(&s_picBusy, __ATOMIC_ACQUIRE) != 0 || rd_thread_submit_unfinished();
 }
 
+bool rd__thread_picture_busy_render(void)
+{
+    return __atomic_load_n(&s_picBusy, __ATOMIC_ACQUIRE) != 0;
+}
+
 bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs)
 {
     *waitMs = 0.0;
@@ -898,6 +905,11 @@ bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs)
     }
     (void)rd_thread_submit_drain();
     *waitMs = rd__now_ms() - d0;
+    /* rd_last_present_info names this frame only now: the picture before's
+       job may still present inside the wait above, and its screenshot
+       check (rd_present.c shotTake) would read this newer frame and drop a
+       shot armed for it as later than armed */
+    rd__note_frame_present(f);
     /* the UI's layers on this thread, before the hand-over (rd_present.c
        s_pre), as rd__replay_frame_async */
     rd__overlay_hand_over();

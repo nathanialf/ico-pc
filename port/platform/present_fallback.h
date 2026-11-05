@@ -85,6 +85,18 @@ int ico_present_fallback_driver_eligible(unsigned vendorId, const char *driverTe
    (rhi_present_fifo_start) when it makes a swapchain, before any present. */
 int ico_present_fallback_qualcomm_own(unsigned vendorId, const char *driverText);
 
+/* The window's gate for the present it notes (window_present_fallback.c):
+   GATE_NO with vsync on, a swapchain not in mailbox mode, a backend other
+   than Vulkan, a driver that is not eligible (no device, Mesa, Turnip) or
+   mode fifo (FIFO from the start needs no switch); GATE_KEPT under mode
+   off; GATE_YES on Qualcomm's own driver; GATE_OTHER on every other
+   eligible driver (Mali, PowerVR, the desktop cards' own drivers: the
+   switch was measured on Qualcomm's own driver only, and on a Mali-G52 it
+   lengthened the blocks, issue 179). */
+IcoPresentFallbackGate ico_present_fallback_gate(int vsync, int mailbox, int vulkan,
+                                                 unsigned vendorId, const char *driverText,
+                                                 IcoPresentFallbackMode mode);
+
 /* 1 in the Android build (the phones FIFO from the start is for), 0
    elsewhere: the platform argument below */
 #ifdef __ANDROID__

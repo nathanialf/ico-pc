@@ -991,9 +991,10 @@ warm the phone was and whether the screen was being recorded. With
 **Vsync** off, phones with a Qualcomm graphics driver send pictures to the
 screen one after another from the start, as the chip maker advises, instead
 of switching to that only after a few held-back pictures; this is not
-expected to remove the stutter. Phones with a Mali or PowerVR graphics chip
-do not switch at all: with **Vsync** off they keep showing pictures the
-usual way, as that switch only helped on Qualcomm chips. With **Frame
+expected to remove the stutter. Every other graphics chip does not switch
+at all, phones with a Mali or PowerVR chip and the graphics cards of
+computers included: with **Vsync** off they keep showing pictures the usual
+way, as that switch only helped with Qualcomm's own driver. With **Frame
 rate** set to a number the game asks the phone to hold one rate
 ([the details](ANDROID.md#a-fixed-refresh-rate-for-a-frame-rate-you-set)).
 On a tablet, a high **Resolution** with Vsync off and Frame rate

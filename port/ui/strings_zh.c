@@ -209,7 +209,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_TONE_CONTRAST] = "對比度",
     [UI_STR_OPT_TONE_SATURATION] = "飽和度",
     [UI_STR_OPT_TONE_NOTE] =
-        "50 為遊戲原本繪製的畫面。按 □ 可還原為 50。會改變整個畫面，CRT 濾鏡也一併改變。",
+        "50 為遊戲原本繪製的畫面。按 □ 可還原為 50。CRT 濾鏡會一併改變，清晰顯示的選單文字則不變。",
     [UI_STR_VAL_CRT_SCANLINES] = "掃描線",
     [UI_STR_VAL_CRT_CONSUMER] = "家用電視",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",

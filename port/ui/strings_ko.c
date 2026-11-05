@@ -212,7 +212,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_TONE_CONTRAST] = "대비",
     [UI_STR_OPT_TONE_SATURATION] = "채도",
     [UI_STR_OPT_TONE_NOTE] =
-        "50은 게임이 그리는 그대로의 화면입니다. □를 누르면 50으로 돌아갑니다. CRT 필터를 포함한 화면 전체가 바뀝니다.",
+        "50은 게임이 그리는 그대로의 화면입니다. □를 누르면 50으로 돌아갑니다. CRT 필터도 바뀌지만 선명하게 그린 메뉴 글자는 바뀌지 않습니다.",
     [UI_STR_VAL_CRT_SCANLINES] = "주사선",
     [UI_STR_VAL_CRT_CONSUMER] = "가정용 TV",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",

@@ -924,7 +924,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   nothing; Turnip's driver text is not eligible while the count still rises; a Mali-G52's blocks (204, 231,
   240 ms at 408, 412, 416 s) under the other-driver gate answer once, never switch, with the line
   word for word and no suffix (`testOther`; `ico_present_fallback_qualcomm_own` for Mali, AMD and
-  NVIDIA no); `[dev]
+  NVIDIA no); the window's gate (`testGate`, `ico_present_fallback_gate`, which
+  `window_present_fallback.c`'s `gate()` calls): Qualcomm's own driver `GATE_YES`; Mali, PowerVR,
+  NVIDIA and AMD `GATE_OTHER` (a revert of the vendor check to `GATE_YES` fails here); Turnip and
+  RADV texts, vsync on, a swapchain not in mailbox mode, a backend other than Vulkan, no device and
+  `[dev] present_fallback=fifo` `GATE_NO`; `[dev] present_fallback=off` `GATE_KEPT`; `[dev]
   present_fallback=off` keeps mailbox with its line once; a count reached with vsync on switches at
   the next block once eligible; the driver texts and the `[dev]` values (`present_fallback`); FIFO from the first swapchain
   (`testStart`): Qualcomm's own driver (0x5143, text neither Mesa nor turnip) with auto and vsync

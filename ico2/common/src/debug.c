@@ -56,8 +56,10 @@
 int ico_opt_developer_mode(void);
 int ico_opt_debug_option(void);
 
-/* PC port: port/game/variants.h: the Game variants hold these debug
-   switches and open the debug menu (debug_VariableInit binds them) */
+/* PC port: port/game/variants.h: the game variants (Options > Gameplay >
+   Shadows and Cutscenes) hold these debug switches, and Options >
+   Developer > Debug menu opens the debug menu (debug_VariableInit binds
+   them) */
 void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
                              int *ignore_demo_camera, int *hand_camera, void (*menu_open)(void));
 
@@ -4336,7 +4338,7 @@ void debug_Menu_off(void)
 }
 
 /* PC port: what SELECT does in debug_Menu above (developer mode, main.c),
-   for Options > Extras > Game variants > Debug menu: the menu opens on its
+   for Options > Developer > Debug menu: the menu opens on its
    first row; nothing changes while it is already open */
 void debug_MenuOpen(void)
 {

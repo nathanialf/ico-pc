@@ -976,7 +976,7 @@ typedef enum UiStrId {
     UI_STR_UNUSED_ART_VER,
     UI_STR_UNUSED_ART_START,
     UI_STR_UNUSED_ART_COPYRIGHT,
-    /* the Save states page's refusal of a save in a test room */
+    /* the Save states page's refusal of a save or a load in a test room */
     UI_STR_STATES_REFUSED_UNUSED,
     /* the community translations' names (the Language and Menu language
        rows, after UI_STR_LANG_ZH), in their own language in every table */

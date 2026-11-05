@@ -37,9 +37,11 @@ IcoStateResult ico_state_conditions(const IcoStateConds *c, int saving, const ch
     } else if (c->photo || c->credits || c->gallery) {
         r = ICO_STATE_PHOTO;
         w = c->photo ? "photo mode" : c->credits ? "the credits" : "the music gallery";
-    } else if (saving && c->unused) {
+    } else if (c->unused) {
         /* a test room has no save stage, and a state of it would come
-           back without the room's flag; a load is unaffected */
+           back without the room's flag; a load there would leave the
+           flag set in normal play (the achievements suspended, a game
+           over's Continue sent to the title): both refused */
         r = ICO_STATE_PHOTO;
         w = "a test room";
     }

@@ -28,7 +28,7 @@
 #include "sceneManager.h"
 #include "Primitive.h"
 
-/* PC port: Options > Extras > Game variants (port/game/variants.c): every
+/* PC port: Options > Gameplay > Shadows (port/game/variants.c): every
    read of the disc's enemyKind row goes through the variants' reader, which
    gives the disc's own row while Shadow toughness and Shadow aggression are as
    the disc ships them, a copy with the USA disc's life, scale and attribute
