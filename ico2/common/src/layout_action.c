@@ -5079,6 +5079,7 @@ static int la_game_over_continue_jun26(int first)
             break;
         case 379:
             if (PSH_POSITIVE(0)) {
+                ico_unused_game_over(); /* PC port: the log's reason, in a test room */
                 gflagInit();
                 sampleModeDemoEndTimeOut();
             }

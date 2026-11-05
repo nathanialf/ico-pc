@@ -826,6 +826,36 @@ static void testRooms(void)
     s_ticks += 1000;
     ico_unused_host_poll(); /* the pending reopen let go */
 
+    /* a game over then Quit: every Quit arm of la_game_over_continue
+       (layout_action.c) calls ico_unused_game_over before it leaves, as
+       Continue's do, so the boy's game-over line is written and the return
+       reads "game over", not "End Game" */
+    onTitle(7000);
+    CHECK(ico_unused_start(ICO_UNUSED_ARENA) == ri->layout_scene, "the arena again");
+    stage_no = arena;
+    s_ticks = 7010;
+    boyGObj = &s_boy;
+    s_boyPos[1] = -71.0f;
+    s_boySub.ctrl.fallHeight = 1200.0f;
+    s_hasFloor = 1;
+    ico_unused_host_poll(); /* the stage up */
+    logStart();
+    ico_unused_game_over(); /* the Quit arm's call */
+    CHECK(strstr(logEnd(), "unused: arena game over: the boy at (100, -71, 200)") != NULL &&
+              strcmp(ico_unused_left_by(), "game over") == 0,
+          "Quit after a game over: the boy's game-over line, the reason game over");
+    boyGObj = NULL;
+    logStart();
+    onTitle(7100);
+    ico_unused_stage_enter(ri->stage_title);
+    log = logEnd();
+    CHECK(strstr(log, "(game over)") != NULL && strstr(log, "(End Game)") == NULL &&
+              !ico_unused_active(),
+          "Quit after a game over: the return logged as a game over");
+    s_decided = 0;
+    s_ticks += 1000;
+    ico_unused_host_poll(); /* the pending reopen let go */
+
     /* the art: the model viewer's list on its first art row (the movie's
        start is unused_movie_test's) */
     onTitle(9000);
