@@ -223,11 +223,12 @@ How the picture is drawn and finished: smoothing, the picture's size and sharpne
   darker, Picture brightness lightens or darkens everything, Contrast
   pulls the light and dark tones apart or together, and Saturation changes
   how strong the colours are (1 is almost black and white). Left or Right
-  changes a row by 1. Square puts the row back to 50. They apply with every Preset and with the CRT filter, which gets the
-  same colours. With the Enhanced preset, the menu text and subtitles,
-  which are drawn sharp on top of the picture, keep their own colours. The
-  films are not changed. Picture brightness is not the game's own
-  **Brightness** row above.
+  changes a row by 1. Square puts the row back to 50. They apply with
+  every Preset and with the CRT filter, which gets the same colours. With
+  the Enhanced preset, the menu text and subtitles, which are drawn sharp
+  on top of the picture, keep their own colours. The films are not
+  changed. Picture brightness is not the game's own **Brightness** row
+  above.
 - **Texture pack** turns an installed texture pack On or Off. It says
   **None installed** when there is none. [About texture packs](TEXTURE_PACKS.md).
 - **Model pack** turns an installed model pack On or Off. It says **None
