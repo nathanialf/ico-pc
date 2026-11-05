@@ -212,8 +212,16 @@ static void checkMembers(void)
                   m->oriTo == 0,
               "%s: kind %d, label %d, stage %d, ids %d %d, motions %d..%d", en, m->kind, m->label,
               m->stage, m->pal_id, m->jpn_id, m->motFirst, m->motLast);
+        /* the names as the logo pack's directory spells them: the TIM2s
+           under model/../texture/, unnormalised (US MANIFEST.tsv rows 9-11),
+           which is what ico_df_find_member compares */
+        static const char kModelDir[] = "object/sdf/e3/st13b/model/";
+        static const char kTexDir[] = "object/sdf/e3/st13b/model/../texture/";
         CHECK(endsWith(m->member, ".p2o") && endsWith(m->texture, ".tm2") &&
-                  strncmp(m->member, "object/sdf/e3/st13b/model/", 27) == 0,
+                  strncmp(m->member, kModelDir, sizeof kModelDir - 1) == 0 &&
+                  strchr(m->member + sizeof kModelDir - 1, '/') == NULL && m->texture != NULL &&
+                  strncmp(m->texture, kTexDir, sizeof kTexDir - 1) == 0 &&
+                  strchr(m->texture + sizeof kTexDir - 1, '/') == NULL,
               "%s: members %s, %s", en, m->member, m->texture != NULL ? m->texture : "(none)");
         CHECK(members < 3, "%s: more than three member rows", en);
         const int want = members < 3 ? ids[members] : -1;
