@@ -204,7 +204,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the sword, and the girl in the room whose fake `stageData` `flag0` is set, at
   `-exitData[0].pos` with `exitData[0].rot` in radians: the fake `exitData[0]` is (12, -34, 56),
   rot 90, so a copy as stored fails; a fake entrance row into the climbing stage, row 7, is not
-  used; each start's line), the boy's lines over a fake `boyGObj` and stubbed `GetRootPosition` /
+  used; each start's line; the boy's walk in skipped once per room, after the way in, by the
+  stubbed `ico_host_skip_entry_walk`), the boy's lines over a fake `boyGObj` and stubbed `GetRootPosition` /
   `GetLowerPlaneCollision` (no boy as the stage is up, the floor and its drop, no floor, the
   30-tick step, none past 300 ticks, the line at a game over), the camera-zone rule over a fake
   camera set (`TopCameraSetDataOfCurrentStage`, groups stored negated) and a stubbed

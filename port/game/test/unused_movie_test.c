@@ -161,6 +161,8 @@ void ico_host_enter_test_stage(int stage)
     s_world = 100 + stage;
 }
 
+void ico_host_skip_entry_walk(void) {}
+
 /* StageManager.c: the stage switch the attract asks for */
 void stgmgrForceSwitchWithFade(int stage, float fadeIn, float fadeOut)
 {

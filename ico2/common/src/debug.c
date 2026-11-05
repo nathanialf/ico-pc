@@ -3144,6 +3144,21 @@ void ico_host_enter_test_stage(int stage)
     ACTGame_SetActors_Debug(stage, on);
 }
 
+/* PC port: a test room's boy starts without the entrance's walk in.  The
+   flag the game's own scripts set around a checkpoint load (script.c
+   scpSekizouCheckPoint, st13c.c, e3.c) so the boy stands where the load
+   put him: E3_StageStartBoy (fumi/src/boyact.c) and its June 2001 form
+   clear it and return before the walk (motion 8 for the stage's w2
+   frames, which on the climbing room's ramp could walk him off it).
+   Set before the stage's objects are built, as the scripts set it before
+   CheckPoint; the port writes no flag number of its own. */
+void ico_host_skip_entry_walk(void);
+
+void ico_host_skip_entry_walk(void)
+{
+    gflagOn(PAL_NTSC_AUG6_JUN26(381, 348, 347, 332));
+}
+
 int debug_SelectStage(void)
 {
     return debug_SelectStageMain(PAL_JPNKORNTSCCN_AUG6JUN26(debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData,

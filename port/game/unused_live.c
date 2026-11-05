@@ -558,6 +558,10 @@ static int beginRoom(int row)
     }
     titleAdpcm = 0;
     ico_host_enter_test_stage(stage);
+    /* no walk in: the climbing room's start is a ramp 1,324 above its
+       floor, and the 50-frame walk could take him off it into a fatal
+       fall (the game's own way: debug.c ico_host_skip_entry_walk) */
+    ico_host_skip_entry_walk();
     placeAtStart(stage, row);
     fprintf(stderr,
             "unused: test room %s (stage %d on this disc) started from the title at Main tick "
