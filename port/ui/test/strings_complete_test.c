@@ -181,13 +181,22 @@ static void testTables(void)
     /* Shadows attack together (issue 185), newer than the three community
        tables: English there until a translator sends it; the eight tables
        have it in their own words */
+    /* a community table has them NULL (English) until its translator
+       sends them, then its own words: bob-ttz's since PR 195 */
     for (int l = UI_LANG_COMMUNITY_FIRST; l < UI_LANG_TABLES; l++) {
-        CHECK(kTables[l][UI_STR_OPT_SHADOWS_TOGETHER] == NULL &&
-                  kTables[l][UI_STR_OPT_SHADOWS_TOGETHER_NOTE] == NULL &&
-                  strcmp(ui_str_in((UiLang)l, UI_STR_OPT_SHADOWS_TOGETHER),
-                         "Shadows attack together") == 0,
-              "%s: Shadows attack together in English", kNames[l]);
+        const char *row = kTables[l][UI_STR_OPT_SHADOWS_TOGETHER];
+        const char *note = kTables[l][UI_STR_OPT_SHADOWS_TOGETHER_NOTE];
+        CHECK((row == NULL && note == NULL &&
+               strcmp(ui_str_in((UiLang)l, UI_STR_OPT_SHADOWS_TOGETHER),
+                      "Shadows attack together") == 0) ||
+                  (row != NULL && note != NULL && row[0] != 0 && note[0] != 0 &&
+                   strcmp(row, "Shadows attack together") != 0),
+              "%s: Shadows attack together in English or the translator's words", kNames[l]);
     }
+    CHECK(ui_strings_ru_bobttz[UI_STR_OPT_SHADOWS_TOGETHER] != NULL &&
+              ui_strings_ru_cobra838[UI_STR_OPT_SHADOWS_TOGETHER] == NULL &&
+              ui_strings_pt_br[UI_STR_OPT_SHADOWS_TOGETHER] == NULL,
+          "Shadows attack together: bob-ttz's words (PR 195), the other two in English");
     for (int l = 0; l < UI_LANG_COMMUNITY_FIRST; l++) {
         CHECK(kTables[l][UI_STR_OPT_SHADOWS_TOGETHER] != NULL &&
                   kTables[l][UI_STR_OPT_SHADOWS_TOGETHER_NOTE] != NULL,
@@ -203,21 +212,39 @@ static void testTables(void)
               "%s: Yorda, Shadows and Cutscenes in its own words", kNames[l]);
     }
     for (int l = UI_LANG_COMMUNITY_FIRST; l < UI_LANG_TABLES; l++) {
-        CHECK(kTables[l][UI_STR_SECTION_YORDA] == NULL &&
-                  kTables[l][UI_STR_SECTION_SHADOWS] == NULL &&
-                  kTables[l][UI_STR_SECTION_CUTSCENES] == NULL &&
-                  strcmp(ui_str_in((UiLang)l, UI_STR_SECTION_CUTSCENES), "Cutscenes") == 0,
-              "%s: Yorda, Shadows and Cutscenes in English", kNames[l]);
+        const char *y = kTables[l][UI_STR_SECTION_YORDA];
+        const char *sh = kTables[l][UI_STR_SECTION_SHADOWS];
+        const char *c = kTables[l][UI_STR_SECTION_CUTSCENES];
+        CHECK((y == NULL && sh == NULL && c == NULL &&
+               strcmp(ui_str_in((UiLang)l, UI_STR_SECTION_CUTSCENES), "Cutscenes") == 0) ||
+                  (y != NULL && sh != NULL && c != NULL && y[0] != 0 && sh[0] != 0 && c[0] != 0 &&
+                   strcmp(c, "Cutscenes") != 0),
+              "%s: Yorda, Shadows and Cutscenes in English or the translator's words", kNames[l]);
     }
+    CHECK(ui_strings_ru_bobttz[UI_STR_SECTION_YORDA] != NULL &&
+              ui_strings_ru_cobra838[UI_STR_SECTION_YORDA] == NULL &&
+              ui_strings_pt_br[UI_STR_SECTION_YORDA] == NULL,
+          "the Gameplay pages: bob-ttz's words (PR 195), the other two in English");
     /* Extras > Unused content (v0.10.3): the page, its rows and notes and
        the three early show names, the same rule */
     for (int id = UI_STR_SECTION_UNUSED; id <= UI_STR_UNUSED_ART_COPYRIGHT; id++) {
         for (int l = 0; l < UI_LANG_TABLES; l++) {
             const int community = l >= UI_LANG_COMMUNITY_FIRST;
-            CHECK((kTables[l][id] == NULL) == community, "%s: Unused content string %d %s",
-                  kNames[l], id, community ? "English (NULL)" : "in its own words");
+            const char *row = kTables[l][id];
+            CHECK(community ? (row == NULL || row[0] != 0) : row != NULL,
+                  "%s: Unused content string %d %s", kNames[l], id,
+                  community ? "English (NULL) or the translator's words" : "in its own words");
         }
     }
+    /* bob-ttz's PR 195: the page, the four rows and their notes; the three
+       early show names still English */
+    CHECK(ui_strings_ru_bobttz[UI_STR_SECTION_UNUSED] != NULL &&
+              ui_strings_ru_bobttz[UI_STR_UNUSED_ART_NOTE] != NULL &&
+              ui_strings_ru_bobttz[UI_STR_UNUSED_ART_VER] == NULL &&
+              ui_strings_ru_cobra838[UI_STR_SECTION_UNUSED] == NULL &&
+              ui_strings_pt_br[UI_STR_SECTION_UNUSED] == NULL,
+          "Unused content: bob-ttz's nine rows, his three early show names and the other two "
+          "tables in English");
     CHECK(strcmp(ui_str_in(UI_LANG_EN, UI_STR_SECTION_UNUSED), "Unused content") == 0 &&
               strcmp(ui_str_in(UI_LANG_EN, UI_STR_UNUSED_ARENA), "Test room: arena") == 0 &&
               strcmp(ui_str_in(UI_LANG_EN, UI_STR_UNUSED_CLIMB), "Test room: climbing") == 0 &&
