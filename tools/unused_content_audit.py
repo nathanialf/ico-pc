@@ -254,6 +254,52 @@ def attract_roots(img):
     return roots
 
 
+SWITCH_CALL = re.compile(r"\b(stgmgrForceSwitch\w*|RequestStageChangeSimple|RequestStageChangeDirect)"
+                         r"\s*\(([^;]*?)[,)]", re.S)
+
+
+def switch_literals():
+    """{stage number: [file:line]} of the script and stage-manager calls that name a stage by a
+    literal: stgmgrForceSwitch*(N, ..), RequestStageChangeSimple(N, ..), RequestStageChangeDirect(
+    girl, N, ..), the literal either bare or any alternative of a region selector PAL_xxx(a, b, ..)
+    (op.c, whose attract is the roots, and e3.c, whose numbers are the early show's own on
+    each disc and which only early-show stages run, are left out).  RequestStageChange(N, ..)
+    takes an exit slot of the current stage (boyact.c: exitData[ent[N - 1]]) and is covered by
+    the exit rows, not here."""
+    out = {}
+    for sub in ("script/src", "common/src"):
+        base = os.path.join(SRC, sub)
+        for f in sorted(os.listdir(base)):
+            if not f.endswith(".c") or f in ("op.c", "e3.c"):
+                continue  # op.c's attract is the roots above; e3.c's numbers are the early show's own
+            text = open(os.path.join(base, f), encoding="latin-1").read()
+            for m in re.finditer(r"\b(stgmgrForceSwitch\w*|RequestStageChangeSimple|RequestStageChangeDirect)"
+                                 r"\s*\(([^;]*)", text):
+                if m.group(1) == "stgmgrForceSwitch" and "{" in text[max(0, m.start() - 6):m.start()]:
+                    continue
+                args, depth, cur = [], 0, ""
+                for ch in m.group(2):
+                    if ch == "(":
+                        depth += 1
+                    elif ch == ")":
+                        if depth == 0:
+                            break
+                        depth -= 1
+                    if ch == "," and depth == 0:
+                        args.append(cur)
+                        cur = ""
+                    else:
+                        cur += ch
+                args.append(cur)
+                a = args[1 if m.group(1) == "RequestStageChangeDirect" and len(args) > 1 else 0]
+                nums = [int(x) for x in re.findall(r"(?<![\w.])(\d+)(?![\w.])", a)] if (
+                    re.fullmatch(r"\s*(\d+|PAL\w*\([\d,\s]+\)|systemStatus\[0\] != 0 \? \d+ : \d+)\s*", a)) else []
+                line = text.count("\n", 0, m.start()) + 1
+                for n in nums:
+                    out.setdefault(n, []).append("%s/%s:%d" % (sub.split("/")[0], f, line))
+    return out
+
+
 def stream_readers():
     """{streamMotion index: [source file:count]} from the `streamMotion[N]` literals."""
     out = {}
@@ -303,8 +349,13 @@ def analyse(img):
     R["movie"] = movie
     # reachability: the closure of the roots over the exit rows of each stage's ent[]
     roots = attract_roots(img)
+    lits = switch_literals()
+    R["lits"] = lits
     reach = {}
     todo = list(roots) if stages[1]["on_disc"] else []
+    if stages[1]["on_disc"]:
+        todo += [(n, "a script switch (%s)" % sites[0]) for n, sites in sorted(lits.items())
+                 if 0 < n < len(stages) and stages[n]["on_disc"]]
     while todo:
         st, how = todo.pop()
         if st in reach or not 0 < st < len(stages):
@@ -476,6 +527,17 @@ def section(img):
                                                                  len(on) - len(unreached)))
         w("")
         w("Roots: " + "; ".join("stage %d, %s" % r for r in R["roots"]) + ".")
+        w("")
+        sw = [(n, sites) for n, sites in sorted(R["lits"].items())
+              if 0 < n < len(stages) and stages[n]["on_disc"]]
+        w("Stage rows a script names by a number (stgmgrForceSwitch*, RequestStageChangeSimple, "
+          "RequestStageChangeDirect; the numbers are the source's own, every alternative of a "
+          "region selector counted), first call site each:")
+        w("")
+        w("| row | name | call site |")
+        w("| --- | --- | --- |")
+        for n, sites in sw:
+            w("| %d | %s | %s |" % (n, stages[n]["name"], sites[0]))
         w("")
         w("Reached by nothing, pack on the disc:")
     else:

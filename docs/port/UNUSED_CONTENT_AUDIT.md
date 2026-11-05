@@ -39,6 +39,16 @@ Names listed twice in the directory: 24_2.int.
 
 Roots: stage 1, boot: the logo (kanbanBoot.c); stage 57, the title's attract (op.c, stgmgrForceSwitchWithFade 57); stage 58, the title's attract in the 50 Hz mode (op.c, systemStatus[0] != 0 ? 58 : 57).
 
+Stage rows a script names by a number (stgmgrForceSwitch*, RequestStageChangeSimple, RequestStageChangeDirect; the numbers are the source's own, every alternative of a region selector counted), first call site each:
+
+| row | name | call site |
+| --- | --- | --- |
+| 1 | logo | common/kanban.c:654 |
+| 11 | st04a (GATE_1ST) | script/st47a.c:2608 |
+| 19 | st04c (CREST_L1) | script/st04b.c:625 |
+| 22 | st02a (WATERFALL) | script/st06a.c:2980 |
+| 28 | st05c (CREST_R1) | script/st05b.c:464 |
+
 Reached by nothing, pack on the disc:
 
 | row | name | file | what leads to it |
@@ -136,6 +146,16 @@ Names listed twice in the directory: 24_2.int.
 63 of the 103 stage rows have their pack or movie on the disc; 59 of those are reached (a root below, or an exit row of a reached stage).
 
 Roots: stage 1, boot: the logo (kanbanBoot.c); stage 57, the title's attract (op.c, stgmgrForceSwitchWithFade 57).
+
+Stage rows a script names by a number (stgmgrForceSwitch*, RequestStageChangeSimple, RequestStageChangeDirect; the numbers are the source's own, every alternative of a region selector counted), first call site each:
+
+| row | name | call site |
+| --- | --- | --- |
+| 1 | logo | common/kanban.c:654 |
+| 11 | st04a (GATE_1ST) | script/st47a.c:2608 |
+| 19 | st04c (CREST_L1) | script/st04b.c:625 |
+| 22 | st02a (WATERFALL) | script/st06a.c:2980 |
+| 28 | st05c (CREST_R1) | script/st05b.c:464 |
 
 Reached by nothing, pack on the disc:
 
@@ -236,6 +256,16 @@ Names listed twice in the directory: 24_2.int.
 
 Roots: stage 1, boot: the logo (kanbanBoot.c); stage 57, the title's attract (op.c, stgmgrForceSwitchWithFade 57).
 
+Stage rows a script names by a number (stgmgrForceSwitch*, RequestStageChangeSimple, RequestStageChangeDirect; the numbers are the source's own, every alternative of a region selector counted), first call site each:
+
+| row | name | call site |
+| --- | --- | --- |
+| 1 | logo | common/kanban.c:654 |
+| 11 | st04a (GATE_1ST) | script/st47a.c:2608 |
+| 19 | st04c (CREST_L1) | script/st04b.c:625 |
+| 22 | st02a (WATERFALL) | script/st06a.c:2980 |
+| 28 | st05c (CREST_R1) | script/st05b.c:464 |
+
 Reached by nothing, pack on the disc:
 
 | row | name | file | what leads to it |
@@ -329,9 +359,20 @@ Named by a string in the program, not by a table: COMMON.DF, MOTION1.DF, MOTION2
 
 ### Stage rows
 
-64 of the 103 stage rows have their pack or movie on the disc; 59 of those are reached (a root below, or an exit row of a reached stage).
+64 of the 103 stage rows have their pack or movie on the disc; 60 of those are reached (a root below, or an exit row of a reached stage).
 
 Roots: stage 1, boot: the logo (kanbanBoot.c); stage 57, the title's attract (op.c, stgmgrForceSwitchWithFade 57).
+
+Stage rows a script names by a number (stgmgrForceSwitch*, RequestStageChangeSimple, RequestStageChangeDirect; the numbers are the source's own, every alternative of a region selector counted), first call site each:
+
+| row | name | call site |
+| --- | --- | --- |
+| 1 | logo | common/kanban.c:654 |
+| 11 | st04a (GATE_1ST) | script/st47a.c:2608 |
+| 19 | st04c (CREST_L1) | script/st04b.c:625 |
+| 22 | st02a (WATERFALL) | script/st06a.c:2980 |
+| 28 | st05c (CREST_R1) | script/st05b.c:464 |
+| 101 | E3_ADVERTISE1 | common/main.c:885 |
 
 Reached by nothing, pack on the disc:
 
@@ -341,7 +382,6 @@ Reached by nothing, pack on the disc:
 | 38 | st26a (SEA) | STGST26A.DF | entrance row 14 names it; no stage lists that row as an exit |
 | 86 | boss_test | STGBOSS_TEST.DF | no exit row |
 | 89 | 8a_TEST | STG8TEST.DF | entrance row 256 names it; no stage lists that row as an exit |
-| 101 | E3_ADVERTISE1 | advertise.pss | no exit row; plays the file of reached row 57 |
 
 Rows whose pack or movie the disc does not hold: 28 development (62-85, 87-88, 90-91), 9 early show (92-100), 2 movie (102, 103).
 
@@ -350,7 +390,7 @@ Movie rows:
 | movie | file | on the disc | stage rows playing it | reached |
 | --- | --- | --- | --- | --- |
 | 1 | advertise.pss | yes | 57 | yes |
-| 2 | advertise.pss | yes | 101 | no |
+| 2 | advertise.pss | yes | 101 | yes |
 | 3 | e3_end.pss | no | 102 | no |
 | 4 | e3_badend.pss | no | 103 | no |
 
@@ -429,9 +469,20 @@ Named by a string in the program, not by a table: COMMON.DF, MOTION1.DF, MOTION2
 
 ### Stage rows
 
-64 of the 103 stage rows have their pack or movie on the disc; 59 of those are reached (a root below, or an exit row of a reached stage).
+64 of the 103 stage rows have their pack or movie on the disc; 60 of those are reached (a root below, or an exit row of a reached stage).
 
 Roots: stage 1, boot: the logo (kanbanBoot.c); stage 57, the title's attract (op.c, stgmgrForceSwitchWithFade 57).
+
+Stage rows a script names by a number (stgmgrForceSwitch*, RequestStageChangeSimple, RequestStageChangeDirect; the numbers are the source's own, every alternative of a region selector counted), first call site each:
+
+| row | name | call site |
+| --- | --- | --- |
+| 1 | logo | common/kanban.c:654 |
+| 11 | st04a (GATE_1ST) | script/st47a.c:2608 |
+| 19 | st04c (CREST_L1) | script/st04b.c:625 |
+| 22 | st02a (WATERFALL) | script/st06a.c:2980 |
+| 28 | st05c (CREST_R1) | script/st05b.c:464 |
+| 101 | E3_ADVERTISE1 | common/main.c:885 |
 
 Reached by nothing, pack on the disc:
 
@@ -441,7 +492,6 @@ Reached by nothing, pack on the disc:
 | 38 | st26a (SEA) | STGST26A.DF | entrance row 14 names it; no stage lists that row as an exit |
 | 86 | boss_test | STGBOSS_TEST.DF | no exit row |
 | 89 | 8a_TEST | STG8TEST.DF | entrance row 256 names it; no stage lists that row as an exit |
-| 101 | E3_ADVERTISE1 | advertise.pss | no exit row; plays the file of reached row 57 |
 
 Rows whose pack or movie the disc does not hold: 28 development (62-85, 87-88, 90-91), 9 early show (92-100), 2 movie (102, 103).
 
@@ -450,7 +500,7 @@ Movie rows:
 | movie | file | on the disc | stage rows playing it | reached |
 | --- | --- | --- | --- | --- |
 | 1 | advertise.pss | yes | 57 | yes |
-| 2 | advertise.pss | yes | 101 | no |
+| 2 | advertise.pss | yes | 101 | yes |
 | 3 | e3_end.pss | no | 102 | no |
 | 4 | e3_badend.pss | no | 103 | no |
 
@@ -613,6 +663,16 @@ Names listed twice in the directory: 24_2.int.
 63 of the 103 stage rows have their pack or movie on the disc; 59 of those are reached (a root below, or an exit row of a reached stage).
 
 Roots: stage 1, boot: the logo (kanbanBoot.c); stage 57, the title's attract (op.c, stgmgrForceSwitchWithFade 57).
+
+Stage rows a script names by a number (stgmgrForceSwitch*, RequestStageChangeSimple, RequestStageChangeDirect; the numbers are the source's own, every alternative of a region selector counted), first call site each:
+
+| row | name | call site |
+| --- | --- | --- |
+| 1 | logo | common/kanban.c:654 |
+| 11 | st04a (GATE_1ST) | script/st47a.c:2608 |
+| 19 | st04c (CREST_L1) | script/st04b.c:625 |
+| 22 | st02a (WATERFALL) | script/st06a.c:2980 |
+| 28 | st05c (CREST_R1) | script/st05b.c:464 |
 
 Reached by nothing, pack on the disc:
 
