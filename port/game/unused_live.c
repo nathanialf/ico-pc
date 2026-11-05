@@ -25,7 +25,10 @@
  * one entrance row (exitData 260 on the European disc, 256 on the North
  * American) leads onto a walkway of collision only, 2533 above the
  * room's floor, that no model draws (build-host/tmp/v0104/evidence/rooms),
- * so its placement is replaced.  For the first 300 Main ticks of a room,
+ * so its placement is replaced.  Once the room's stage is up, a boy outside
+ * every camera zone (the climbing room's origin: its zones lie 1355 and more
+ * above its floor) moves to the lowest zone with a floor (startInZone), so
+ * the camera finds him.  For the first 300 Main ticks of a room,
  * and at a game over in one, the log follows the boy (boyLine).
  *
  * The rooms have no exit: pause > End Game goes back to the title (the
@@ -65,6 +68,7 @@
 #include "settings.h"     /* the host, the title return */
 
 #include "adpcm_init.h"
+#include "camera-editor.h" /* CamGroup, CamSetFile */
 #include "gamesys.h"
 #include "layout_texture.h"
 #include "s_init.h"
@@ -85,6 +89,9 @@ extern int mpegPlay;                                         /* StageManager.c *
 extern int stageManagerFreeResourceFlag;                     /* StageManager.c */
 extern void GetRootPosition(void *pos, GObj *obj);           /* geometryManager.c */
 extern void GetLowerPlaneCollision(ClipWork *w, float *pos); /* motionManager2.c */
+extern GObj *girlGObj;                                       /* main.c */
+extern void SetDirectRootPosition(GObj *self, void *v);      /* geometryManager.c */
+extern void *TopCameraSetDataOfCurrentStage;                 /* camera-set-manager.c */
 
 #define TITLE_STAGE (ico_region_cur()->stage_title)
 /* the game's empty layout, the one a scene runs under (55, 52 on the
@@ -146,6 +153,8 @@ static int s_reopen;
    is due (past PROBE_TICKS: none) */
 static unsigned int s_upTick;
 static unsigned int s_nextProbe;
+/* the camera-zone check (startInZone) has run in this room */
+static int s_zoneDone;
 static unsigned int s_reopenTick;
 /* the movie's start in wall seconds: Main runs no tick while a film plays,
    so its length is not read from the Main ticks */
@@ -323,20 +332,29 @@ static void placeAtStart(int stage, int row)
    probe finds under him (act.c's GetLowerPlaneCollision: a ray from the
    root 10000 down, +y). when: "tick T" (Main ticks since the room's stage
    came up) or "game over" */
-static void boyLine(const char *when)
+/* why the boy cannot be read or probed now, NULL when he can: systemStatus[6],
+   a stage change under way (the room's PH_PLAYING outlives it): its
+   InitIcoMisc may have the boy up while colObjList still names the old
+   stage's objects (fieldCollision.c _Clip); or no stage up with a boy */
+static const char *boyMissing(void)
 {
-    const char *name = s_row >= 0 ? ico_unused_row(s_row)->name : "?";
-
-    /* systemStatus[6]: a stage change under way (the room's PH_PLAYING
-       outlives it): its InitIcoMisc may have the boy up while colObjList
-       still names the old stage's objects (fieldCollision.c _Clip) */
     if (systemStatus[6] != 0) {
-        fprintf(stderr, "unused: %s %s: no boy (a stage change under way)\n", name, when);
-        return;
+        return "a stage change under way";
     }
     if (stageManagerFreeResourceFlag != 0 || mpegPlay != 0 || boyGObj == 0 ||
         GOBJ_SUB(boyGObj) == 0) {
-        fprintf(stderr, "unused: %s %s: no boy (the stage has none up)\n", name, when);
+        return "the stage has none up";
+    }
+    return NULL;
+}
+
+static void boyLine(const char *when)
+{
+    const char *name = s_row >= 0 ? ico_unused_row(s_row)->name : "?";
+    const char *missing = boyMissing();
+
+    if (missing != NULL) {
+        fprintf(stderr, "unused: %s %s: no boy (%s)\n", name, when, missing);
         return;
     }
     float pos[4] = {0.0f, 0.0f, 0.0f, 1.0f};
@@ -358,6 +376,133 @@ static void boyLine(const char *when)
             name, when, (double)pos[0], (double)pos[1], (double)pos[2],
             (double)GOBJ_SUB(boyGObj)->ctrl.groundHeight, floor,
             (double)GOBJ_SUB(boyGObj)->ctrl.fallHeight);
+}
+
+/* The camera finds the boy only inside one of the stage's camera zones:
+   the groups of its camera set (CameraSetCameraSet, camera-ico2.c, loads
+   stageData[stage].camSetId's set into TopCameraSetDataOfCurrentStage: a
+   CamSetFile head, then `count` CamGroup records), whose centre and
+   half-size are stored negated as layout rows are (the game tests a group
+   against the root times -1: camera-ico2.c findCameraGroupContaining over
+   ico2camera_GetTargetPos's negated targets).  The arena's no-entrance
+   point lies inside its zone 0 (world centre (-375, 50, 0)); every one of
+   the climbing room's 51 zones lies 1355 to 4980 above its big floor, so
+   from the origin the camera never finds him
+   (build-host/tmp/v0104/evidence/rooms/camera-zones.txt).  Once per room,
+   as soon as the boy is up: a root inside a zone is left; otherwise the
+   boy (and the girl when she is up) goes to the lowest zone (its box's
+   bottom nearest the big floor) whose centre has a floor inside the box,
+   probed down from the box's top with the game's own floor probe, at the
+   root's own height above its floor (H, from the probe under him where
+   he stands), as E3_StageStartBoy moves him with SetDirectRootPosition.
+   Zones with the same bottom: the one with the larger floor plan, then
+   the set's order (the climbing room's group 20 and its thin side zone
+   47 share the bottom; 47's floor lies 103 lower than 20's).  A zero is
+   printed as 0, not as the -0 a negation makes of it. */
+static void startInZone(void)
+{
+    const char *name = ico_unused_row(s_row)->name;
+    float root[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    ClipWork w;
+
+    GetRootPosition(root, boyGObj);
+    memset(&w, 0, sizeof(w));
+    GetLowerPlaneCollision(&w, root);
+    const int under = w.floor.elem != 0;
+    const float h = under ? w.pt[2][1] - root[1] : 0.0f;
+
+    const CamSetFile *set = (const CamSetFile *)TopCameraSetDataOfCurrentStage;
+    const int n = set != NULL ? set->count : 0;
+    if (set == NULL || n <= 0 || n > 100) {
+        fprintf(stderr,
+                "unused: %s: no camera set loaded (%d groups): the boy stays at (%.0f, %.0f, "
+                "%.0f)\n",
+                name, n, root[0] + 0.0, root[1] + 0.0, root[2] + 0.0);
+        return;
+    }
+    const CamGroup *g = (const CamGroup *)(const void *)(set + 1);
+
+    /* the game's test, on the stored box against the negated root */
+    for (int i = 0; i < n; i++) {
+        int k = 0;
+        while (k < 3 && -root[k] >= g[i].center[k] - g[i].range[k] &&
+               -root[k] <= g[i].center[k] + g[i].range[k]) {
+            k++;
+        }
+        if (k == 3) {
+            fprintf(stderr,
+                    "unused: %s: the start is inside camera zone %d of %d (centre (%.0f, %.0f, "
+                    "%.0f))\n",
+                    name, i, n, 0.0 - g[i].center[0], 0.0 - g[i].center[1], 0.0 - g[i].center[2]);
+            return;
+        }
+    }
+
+    int best = -1;
+    float bestBot = 0.0f, bestArea = 0.0f, bestFloor = 0.0f;
+    float lowestCentre = 0.0f;
+    for (int i = 0; i < n; i++) {
+        const float c[3] = {-g[i].center[0], -g[i].center[1], -g[i].center[2]};
+        const float yTop = -(g[i].center[1] + g[i].range[1]);
+        const float yBot = -(g[i].center[1] - g[i].range[1]);
+        if (i == 0 || c[1] > lowestCentre) {
+            lowestCentre = c[1];
+        }
+        float from[4] = {c[0], yTop, c[2], 1.0f};
+        memset(&w, 0, sizeof(w));
+        GetLowerPlaneCollision(&w, from);
+        if (w.floor.elem == 0 || w.pt[2][1] > yBot) {
+            continue; /* no floor, or the first one lies below the box */
+        }
+        const float area = g[i].range[0] * g[i].range[2];
+        if (best < 0 || yBot > bestBot || (yBot == bestBot && area > bestArea)) {
+            best = i;
+            bestBot = yBot;
+            bestArea = area;
+            bestFloor = w.pt[2][1];
+        }
+    }
+    if (best < 0) {
+        fprintf(stderr,
+                "unused: %s: no camera zone holds a floor under its centre: the boy stays at "
+                "(%.0f, %.0f, %.0f)\n",
+                name, root[0] + 0.0, root[1] + 0.0, root[2] + 0.0);
+        return;
+    }
+    float to[4] = {-g[best].center[0], bestFloor - h, -g[best].center[2], 1.0f};
+    SetDirectRootPosition(boyGObj, to);
+    const int girl = girlGObj != 0 && GOBJ_SUB(girlGObj) != 0;
+    if (girl) {
+        SetDirectRootPosition(girlGObj, to);
+    }
+    fprintf(stderr,
+            "unused: %s: the game's no-entrance point (%.0f, %.0f, %.0f) is outside every "
+            "camera zone (the lowest zone's centre %.0f above it): the boy moved to zone %d's "
+            "floor at (%.0f, %.0f, %.0f) (%.0f above the floor y %.0f)%s%s\n",
+            name, root[0] + 0.0, root[1] + 0.0, root[2] + 0.0, (double)(root[1] - lowestCentre),
+            best, to[0] + 0.0, to[1] + 0.0, to[2] + 0.0, (double)h, (double)bestFloor,
+            under ? "" : "; no floor under the start, so 0 above",
+            girl ? "; the girl with him" : "");
+}
+
+/* the zone check once the boy is up, within the log's window; past it a
+   line says it never ran */
+static void zonePoll(void)
+{
+    if (s_zoneDone) {
+        return;
+    }
+    if (ico_host_main_ticks() - s_upTick > PROBE_TICKS) {
+        s_zoneDone = 1;
+        fprintf(stderr,
+                "unused: %s: the camera-zone check never ran (no boy in the first %u ticks)\n",
+                ico_unused_row(s_row)->name, PROBE_TICKS);
+        return;
+    }
+    if (boyMissing() == NULL) {
+        s_zoneDone = 1;
+        startInZone();
+    }
 }
 
 /* the boy's line every PROBE_STEP ticks from the stage up to PROBE_TICKS */
@@ -670,6 +815,8 @@ void ico_unused_host_poll(void)
                     stage_no, ico_host_main_ticks(), secondsSinceStart());
             s_upTick = ico_host_main_ticks();
             s_nextProbe = 0;
+            s_zoneDone = 0;
+            zonePoll();
             probePoll();
         } else {
             const unsigned int t = ico_host_main_ticks() - s_startTick;
@@ -680,6 +827,7 @@ void ico_unused_host_poll(void)
         return;
     }
     if (s_phase == PH_PLAYING) {
+        zonePoll();
         probePoll();
         return;
     }

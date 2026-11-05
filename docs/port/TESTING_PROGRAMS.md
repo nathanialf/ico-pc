@@ -206,9 +206,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   rot 90, so a copy as stored fails; a fake entrance row into the climbing stage, row 7, is not
   used; each start's line), the boy's lines over a fake `boyGObj` and stubbed `GetRootPosition` /
   `GetLowerPlaneCollision` (no boy as the stage is up, the floor and its drop, no floor, the
-  30-tick step, none past 300 ticks, the line at a game over), the return to the title with its
-  log and the reopen of Options, the
-  failures; the art row refused when the model viewer offers none of its rows, and its start
+  30-tick step, none past 300 ticks, the line at a game over), the camera-zone rule over a fake
+  camera set (`TopCameraSetDataOfCurrentStage`, groups stored negated) and a stubbed
+  `SetDirectRootPosition` (the arena's start inside its zone: no move, the inside line, a group
+  stored at the root itself not taken, so an un-negated test fails; the climbing room's start
+  outside every zone: of a zone whose floor lies below its box, two with the same box bottom and
+  different floors, one higher and one with no floor, the larger floor plan of the lowest wins,
+  every zone probed once from its box's top, the boy at the floor plus his 71 above his own
+  floor, the girl moved with him when up and not when `girlGObj` is NULL, the move's line and the
+  tick line after it; no zone with a floor: he stays, its line; no camera set: its line; no boy
+  in the 300 ticks: the never-ran line), the return to the title with its log and the reopen of
+  Options, the failures; the art row refused when the model viewer offers none of its rows, and its start
   opening the viewer's list on the viewer's first art row (a stubbed `ico_mv_models_enter_at`),
   the list's refusal and a start off the title refused, each logged.
 - `charfile_image_test.c`: the early show title art's hook in the game

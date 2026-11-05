@@ -748,7 +748,9 @@ endif()
 # rows each disc's DATA.DF has (fake stageData, stubbed ico_df_has and
 # ico_df_find_member), the engine indirection, the test rooms' start (the
 # boy, the girl and the sword at -exitData[0].pos, the entrance row not
-# used), the boy's log lines, the return to the title and its log,
+# used), the camera-zone move over a fake camera set (inside a zone: none;
+# outside: the lowest zone with a floor in its box, the girl with him), the
+# boy's log lines, the return to the title and its log,
 # the reopen of Options on the page, the failures. CPU only, one run per disc.
 ico_include_dirs(common _ico_unused_incs)
 add_executable(unused_content_test test/unused_content_test.c unused_content.c unused_live.c
