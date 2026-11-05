@@ -111,7 +111,10 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
                                  uint64_t closeMeanNs, uint64_t closeDevNs, bool leftOut, int act);
 
 /* The 10 s line (window_host.c window_pace_log): the game thread's mean
-   step and pump per call in ms, its own cost of closing a frame
+   step and pump per call in ms, the step's mean CPU time (stepCpuMs,
+   cpu_place.h cpu_place_thread_cpu_ns: "step 38.4 ms (CPU 12.1 ms of it;
+   closing a frame ...", left out when 0: not known), its own cost of
+   closing a frame
    (rd_frame_close_take; at Frame rate Original with its pictures,
    rd_frame_post_text: "; its picture handed over in 0.6 ms (longest 14.2
    ms; 3 waited for the picture before, 31.0 ms in all; 12 skipped: render
@@ -132,10 +135,21 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
      late by the pictures: 280 (longest 9.6 ms); steps that missed their period: 0 (latest
      0.0 ms past it; 0 steps planned at the whole period after them)
    or "...; render thread: off (CPU 9.3 ms a picture on the game thread)" with no thread;
+   at the end, after the cores, the game, render and submit threads' time
+   on a core and waiting for one in the block (thread_stat.h: "; ran /
+   waited for a core: game 3.9 s / 0.4 s, render 2.1 s / 1.8 s, submit 0.0
+   s / 0.0 s"; once "schedstat not readable (EACCES)" where it is not; on
+   Linux and Android only);
    then, when the step rule was asked in the block, its sums (pace_policy.h
    pace_rt_trace_sum_text):
      window: step rule: in 10 s 1214 further presents asked of the rule, 581 held by a
-     step's period (575 the next step's start past its slack, by 6.1 ms on average; ...) */
-void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pumpMs);
+     step's period (575 the next step's start past its slack, by 6.1 ms on average; ...)
+   and last, when the process's threads or the cores they may run on changed
+   since it was last written (once at the start, after the game thread's
+   pin; cpu_place.h cpu_place_threads_format):
+     window: threads: 31; kept to cores 6-7: ico_pc (the game thread), ico-render; on 0-7:
+     ico-submit, mali-cmar-backend, mali-utility-wo, mali-mem-purge, ico-gpu-sysfs and 24 more */
+void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictureCpuMs,
+                                  double pumpMs);
 
 #endif /* ICO_PLATFORM_RENDER_THREAD_H */

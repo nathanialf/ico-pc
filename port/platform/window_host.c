@@ -230,6 +230,9 @@ static struct {
        drawn the old way (rd.h RdPerfRecord.vuPre*) */
     uint64_t vuPreVerts, vuPreDraws, vuPreFallbacks;
     uint64_t vuDraws, vuTris; /* the VU draws and their triangles (rd.h RdPerfRecord) */
+    /* the timed replays' (VU triangles, list 0's GPU ms) for the VU line's
+       least-squares line (window_scene.h SceneVuFit, issue 179) */
+    SceneVuFit vuFit;
     /* the pixel diet's draws: the alpha/blend planner's one-pass and
        opaque draws, the frame-size plan's constant, additive and local-read
        sprites, the VU passes without the planes (rd.h RdPerfRecord) */
@@ -985,6 +988,7 @@ static void lc_pace_reset(void *u)
     (void)u;
     s_deadline = SDL_GetTicksNS();
     s_pres.paceEnd = 0;
+    s_pres.paceEndCpuNs = 0;
     memset(&s_pres.paceHist, 0, sizeof(s_pres.paceHist));
     s_pres.paceSlow = false;
     s_pres.skipOpen = false;
@@ -4614,6 +4618,7 @@ static void perf_drain(void)
             for (int l = 0; l < GPU_LISTS; l++) {
                 s_perf.gpuList[l] += r.gpuListMs[l];
             }
+            window_scene_vu_fit_add(&s_perf.vuFit, r.vuTris, r.gpuListMs[0]);
             for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
                 s_perf.gpuPost[p] += r.gpuPostMs[p];
             }
@@ -4717,6 +4722,8 @@ static void perf_reset(void)
     s_perf.passCsvTried = passTried;
     s_pres.stepSumMs = s_pres.stepMaxMs = 0.0;
     s_pres.stepCount = 0;
+    s_pres.stepCpuSumMs = 0.0;
+    s_pres.stepCpuCount = 0;
     /* the layout shares start with the block's steps (stepSumMs), not at
        the last layout line (review 2 N6) */
     window_scene_reset(&s_sceneShare);
@@ -4769,11 +4776,15 @@ static void perf_log(void)
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
     {
         /* the VU work of a replay: where the vertex shader's time goes */
-        char vu[160];
+        char vu[160], fit[192];
 
         (void)window_scene_vu_text(vu, sizeof(vu), s_perf.vuDraws, s_perf.vuTris, s_perf.vuPreVerts,
                                    b->n, rd_vu_prepass_on());
-        fprintf(stderr, "window: %s\n", vu);
+        /* and list 0's GPU time against the triangles: what the vertex work
+           costs this GPU (the VU pre-pass question, docs/port/
+           ANDROID_DIAGNOSTICS.md) */
+        (void)window_scene_vu_fit_text(fit, sizeof(fit), &s_perf.vuFit);
+        fprintf(stderr, "window: %s%s\n", vu, fit);
     }
     if (s_perf.presentBlocked != 0) {
         char fr[16];
@@ -5244,6 +5255,15 @@ void window_pace_log(Uint64 now)
         window_disc_block(b);
     }
     const char *ow = window_orig_words(!rd_interpolation_active());
+    /* the swapchain's images and those the game holds now (acquired, not
+       yet presented; issue 179: whether the images run out) */
+    char images[64];
+    {
+        RhiStats st;
+
+        rhi_get_stats(&st);
+        (void)window_scene_images_text(images, sizeof(images), st.swapImages, st.swapAcquired);
+    }
 
     fprintf(
         stderr,
@@ -5253,7 +5273,7 @@ void window_pace_log(Uint64 now)
         "%.0f ms; skipped %u presents (late %u, slow %u)%s%s; longest replay %.1f ms of %u, %u "
         "over a refresh; %u steps over %.0f ms; "
         "framerate %s%s, present "
-        "%s, display %.2f Hz (%.3f presents a refresh), window %dx%d%s; step late max %.1f "
+        "%s%s, display %.2f Hz (%.3f presents a refresh), window %dx%d%s; step late max %.1f "
         "ms; pump max %.1f ms; %s\n",
         s_pres.statPresents, movie - s_pres.statMovie, movieFailed, s_pres.statFrames,
         fn - s_pres.statFrameNo, sec, s_pres.statPresents / sec, s_pres.statFrames / sec,
@@ -5261,7 +5281,7 @@ void window_pace_log(Uint64 now)
         (double)s_pres.statDropped / 1e6, s_pres.statSkipLate + s_pres.statSkipSlow,
         s_pres.statSkipLate, s_pres.statSkipSlow, ow, budget, maxMs, replays, s_perf.ph.over,
         s_pres.slowSteps, s_pres.slowMs, ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)),
-        held, rhi_present_mode_name(), dm != NULL ? (double)dm->refresh_rate : 0.0,
+        held, rhi_present_mode_name(), images, dm != NULL ? (double)dm->refresh_rate : 0.0,
         dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate : 0.0,
         pw, ph, window_fullscreen() ? " fullscreen" : "", (double)s_pres.lateMaxNs / 1e6,
         s_pres.pumpMaxMs, lock);
@@ -5277,6 +5297,8 @@ void window_pace_log(Uint64 now)
                       s_perf.ph.total, s_perf.ph.n, !rd_interpolation_active(), fr);
     /* the game thread's parts and the render thread's (render_thread.h) */
     ico_render_thread_block_line(s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0,
+                                 s_pres.stepCpuCount ? s_pres.stepCpuSumMs / s_pres.stepCpuCount
+                                                     : 0.0,
                                  s_perf.ph.n ? s_perf.ph.total / s_perf.ph.n : 0.0,
                                  s_pres.pumpCount ? s_pres.pumpSumMs / s_pres.pumpCount : 0.0);
     /* the audio's 10 s line (out_sdl.c; the pull path's only) */
@@ -5345,7 +5367,7 @@ void window_boot_log(float alpha)
 /* A step (ico_host_step to this pace) over [dev] slow_step_ms: what ran
    in it.  "other" is the host loop's work between the step and the pump:
    the trace line, the pad recording and the log flush. */
-static void slow_step(double ms)
+static void slow_step(double ms, double cpuMs)
 {
     IcoStepProfile p;
     const RdTexCacheStats *tc = rdtex_stats();
@@ -5373,15 +5395,21 @@ static void slow_step(double ms)
     if (s_pres.postHave) {
         rd_frame_post_last_text(&s_pres.post, threads + at, sizeof(threads) - at);
     }
+    /* the CPU time of the whole span (cpu_place.h; "" when not known) */
+    char cpuText[40], cpu[48] = "";
+
+    if (cpu_place_cpu_text(cpuMs, cpuText, sizeof(cpuText)) > 0) {
+        snprintf(cpu, sizeof(cpu), " (%s)", cpuText);
+    }
     fprintf(
         stderr,
-        "window: slow step %.1f ms at vsync %u (Main tick %u, stage %d%s): step %.1f "
+        "window: slow step %.1f ms%s at vsync %u (Main tick %u, stage %d%s): step %.1f "
         "(vsync callbacks %.1f, audio %.1f, %s, strip verdicts "
         "%llu strips, %llu triangles, %.2f ms, achievements "
         "%.1f), pump %.1f (events %.1f in %u, settings %.1f, input %.1f), other %.1f; %u "
         "disc reads (%u sectors), disc wait %.1f ms, %u texture decodes, %u pipelines created, memory card %s\n",
-        ms, ico_host_vsync_count(), ico_host_main_ticks(), p.stage, p.loading ? ", loading" : "",
-        p.totalMs, p.hooksMs, p.audioMs, threads,
+        ms, cpu, ico_host_vsync_count(), ico_host_main_ticks(), p.stage,
+        p.loading ? ", loading" : "", p.totalMs, p.hooksMs, p.audioMs, threads,
         (unsigned long long)(cardStrips - s_pres.stepCardStrips),
         (unsigned long long)(cardTris - s_pres.stepCardTris), cardMs - s_pres.stepCardMs, p.achMs,
         s_pres.pumpMs, s_pres.pumpEventsMs, s_pres.pumpEvents, s_pres.pumpSettingsMs,
@@ -5417,6 +5445,7 @@ void ico_window_pace(int hz)
     /* the simulation step that ran since the last pace (the host loop
        calls ico_host_step, then this) */
     const Uint64 now = SDL_GetTicksNS();
+    const uint64_t cpuNow = cpu_place_thread_cpu_ns();
 
     /* Frame rate Original's picture the step made (handed over, replayed
        inside it, or left out), for the slow-step line and the pacing */
@@ -5428,10 +5457,18 @@ void ico_window_pace(int hz)
         s_pres.stepSumMs += ms;
         s_pres.stepMaxMs = ms > s_pres.stepMaxMs ? ms : s_pres.stepMaxMs;
         s_pres.stepCount++;
+        /* its CPU time: the game thread's own between the two reads */
+        const double cpuMs = s_pres.paceEndCpuNs != 0 && cpuNow > s_pres.paceEndCpuNs
+                                 ? (double)(cpuNow - s_pres.paceEndCpuNs) / 1e6
+                                 : 0.0;
+        if (cpuMs > 0.0) {
+            s_pres.stepCpuSumMs += cpuMs;
+            s_pres.stepCpuCount++;
+        }
         scene_note_step(ms);
         ico_render_thread_note_game_core(); /* the 10 s line's cores */
         if (s_pres.slowMs > 0.0 && ms > s_pres.slowMs) {
-            slow_step(ms);
+            slow_step(ms, cpuMs);
         }
         /* a late step the audio held sound back in: what it was doing */
         window_hold_line(ms - 1000.0 / (hz > 0 ? hz : 60), ico_audio_sdl_held_ms(), s_pres.decodes,
@@ -5472,6 +5509,7 @@ void ico_window_pace(int hz)
         s_pres.pipeCreates = rs != NULL ? rs->pipelineCreates : 0;
     }
     s_pres.paceEnd = SDL_GetTicksNS();
+    s_pres.paceEndCpuNs = cpu_place_thread_cpu_ns();
     /* the step starts now: how late against when it was due (the
        deadline, or under the vsync lock the vblank it follows) */
     if (s_pres.paceEnd > s_deadline && s_pres.paceEnd - s_deadline > s_pres.lateMaxNs) {
