@@ -167,3 +167,47 @@ static void testPresentClockStep(void)
           "noted; no clock value: the counted presents (%u)",
           c.stepMs, stepKept, gap[0], rd__present_clock_k(NAN, 3u));
 }
+
+/* The present clock across doubled presents (the v0.10.4 review): presents
+ * 18..22 ms apart (the issue 193 reporter's rate) at Frame rate 60, one
+ * 0.5 ms after its neighbour every 7th or every 50th, over 3000 presents.
+ * The clock never goes back and the alpha never drops within a tick, with
+ * at most 2 resets.  Before the fix a doubled present moved the clock a
+ * whole step, ahead of the measured time, and the next one reset it back:
+ * 413 resets and 156 steps back (9.25 ms at worst) at every 7th. */
+static void testPresentClockDoubled(void)
+{
+    const double tick = 33.3667, nominal = 1000.0 / 60.0;
+    static const int every[] = {7, 50};
+    for (size_t e = 0; e < sizeof(every) / sizeof(every[0]); e++) {
+        RdPresentClock c;
+        memset(&c, 0, sizeof(c));
+        uint32_t seed = 193u;
+        double now = 5000.0, lastClock = -1.0, lastAt = -1.0, worst = 0.0;
+        float lastA = -1.0f;
+        int back = 0, dropped = 0;
+        for (int i = 0; i < 3000; i++) {
+            seed = seed * 1664525u + 1013904223u;
+            const double u = (double)(seed >> 8) / 16777216.0;
+            now += i % every[e] == every[e] - 1 ? 0.5 : 18.0 + 4.0 * u;
+            const double at = floor(now / tick) * tick;
+            const float a = rd_present_clock_alpha(&c, now, at, tick, nominal);
+            if (lastClock >= 0.0 && c.clockMs < lastClock) {
+                back++;
+                worst = lastClock - c.clockMs > worst ? lastClock - c.clockMs : worst;
+            }
+            if (at == lastAt && a < lastA) {
+                dropped++;
+            }
+            lastClock = c.clockMs;
+            lastAt = at;
+            lastA = a;
+        }
+        (void)rd__present_clock_take(NULL);
+        CHECK(back == 0 && dropped == 0 && c.resets <= 2u,
+              "present clock: a doubled present every %d of 3000 at 18..22 ms: the clock went "
+              "back %d times (%.3f ms at worst), the alpha dropped within a tick %d times, %u "
+              "resets",
+              every[e], back, worst, dropped, c.resets);
+    }
+}

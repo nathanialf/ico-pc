@@ -13,7 +13,8 @@
  * a 64th of a tick to a tick.  A present less than a quarter of the
  * nominal after the one before is a doubled present (the compositor's, a
  * late present right after a blocked one), not a cadence: it moves neither
- * the mean nor, on a reset, the step.  A reset while presents go on (an
+ * the mean nor, on a reset, the step, and it moves the clock by its own
+ * interval, not a step.  A reset while presents go on (an
  * error over half a tick, an interval over four steps) takes the step from
  * that interval when it is within the range; a longer one is a pause and
  * keeps the step.
@@ -110,12 +111,18 @@ float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, d
         /* the running mean of the intervals, a sixteenth of the difference a
          * present */
         c->stepMs = doubled ? step : step + (since - step) / 16.0;
-        const double predicted = c->clockMs + c->stepMs;
+        /* a doubled present moves the clock by its own interval, with no
+         * pull toward the measured time: a whole step put the clock a step
+         * ahead of it, and the next doubled present then reset it backwards
+         * (the alpha went back within a tick, up to 0.28 of one at a
+         * doubled present every 7th); the pull alone, with the clock a few
+         * ms ahead, took a tenth of a ms back.  The next present pulls. */
+        const double predicted = c->clockMs + (doubled ? since : c->stepMs);
         const double err = nowMs - predicted;
         if (fabs(err) > 0.5 * tickMs) {
             reset = true;
         } else {
-            c->clockMs = predicted + err / 8.0;
+            c->clockMs = doubled ? predicted : predicted + err / 8.0;
         }
     }
     if (reset) {

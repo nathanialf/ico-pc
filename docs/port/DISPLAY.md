@@ -1797,9 +1797,11 @@ backwards resets it; `alpha = (clock - tickAt) / tick` in [0, 0.999], `tickAt` t
 the frame closed and `tick` the last two closes apart, held to one to four periods. The step is
 held to a quarter of the nominal interval (the Frame rate's gap, a refresh under FIFO) to four
 times it, without one (Uncapped) a 64th of a tick to a tick; a present less than a quarter of the
-nominal after the one before is a doubled present and moves neither the mean nor the step; a reset
-while presents go on takes the step from that interval when it is in the range (a longer one is a
-pause and keeps the step). A reset that took a doubled present's 0.5 ms as the step would hold it
+nominal after the one before is a doubled present: it moves neither the mean nor the step, and it
+moves the clock by its own interval with no pull towards the measured time, so the clock never goes
+back at one (a whole step put the clock ahead of the measured time and the next doubled present
+reset it backwards, up to 0.28 of a tick at one every 7th); a reset while presents go on takes
+the step from that interval when it is in the range (a longer one is a pause and keeps the step). A reset that took a doubled present's 0.5 ms as the step would hold it
 there, every later present being over four steps apart and resetting without learning one (issue
 193: Motion blur: Smooth read 64 presents a tick)
 (`port/render/rd.h` (`RdPresentClock`); `port/render/rd_present_clock.c` (`rd_present_clock_alpha`);
