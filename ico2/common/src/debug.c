@@ -3119,6 +3119,28 @@ static int debug_SelectStageMain(int ret, int stage)
     return ret;
 }
 
+/* PC port: Settings > Extras > Unused content's test rooms (port/game/
+   unused_live.c, port/include/ico_unused.h): the same way into a stage as
+   Stage Select's above, with the fade the title's own stage changes have
+   (stgmgrForceSwitchWithFade, as a load from the title), so the port
+   writes no game flag of its own.  mpegPlayReturnStage is left alone (a
+   room is no movie). */
+void ico_host_enter_test_stage(int stage);
+
+void ico_host_enter_test_stage(int stage)
+{
+    int on = 1;
+    soundDataSegAllClose(0, 2);
+    seEnvForceClose = on;
+    enable_game_pause = on;
+    kanbanInit(0);
+    gflagOn(PAL_NTSC_AUG6JUN26(394, 361, 360));
+    scpBoyControlReadDisable = 0;
+    stgmgrForceSwitchWithFade(stage, 8.0f, 4.0f);
+    gflagOff(PAL_NTSC_AUG6JUN26(388, 355, 354));
+    ACTGame_SetActors_Debug(stage, on);
+}
+
 int debug_SelectStage(void)
 {
     return debug_SelectStageMain(PAL_JPNKORNTSCCN_AUG6JUN26(debug_SelectCsvWindowWithLine("stage select", 10, 80, 11, stageData,

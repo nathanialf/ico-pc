@@ -492,7 +492,11 @@ endif()
 # the same library (gamestate.c suspends the achievements on its flag);
 # credits_live.c, the playback's engine, reads and writes the game's state,
 # so it is built into the program with the game's include path, as
-# gamestate.c is.
+# gamestate.c is.  unused_content.c: Extras > Unused content's rows, flag
+# and start, in the same library (gamestate.c and layout_action.c read its
+# flag); its engine unused_live.c is the program's, as credits_live.c is.
+# game_state_keep.c: the game's state both engines keep across their stages
+# and put back at the title.
 set(_ico_gs_include "${CMAKE_SOURCE_DIR}/port/include")
 foreach(_p common fumi script sugipon)
     if(TARGET ico_${_p})
@@ -500,7 +504,7 @@ foreach(_p common fumi script sugipon)
     endif()
 endforeach()
 
-add_library(ico_achievements STATIC achievements.c credits.c)
+add_library(ico_achievements STATIC achievements.c credits.c unused_content.c)
 target_include_directories(ico_achievements
     PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}" "${_ico_gs_include}"
     PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
@@ -522,13 +526,25 @@ if(TARGET ico_pc)
     target_compile_options(ico_gamestate_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
                            ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_gamestate_live>)
-    add_library(ico_credits_live OBJECT credits_live.c)
+    add_library(ico_credits_live OBJECT credits_live.c game_state_keep.c)
     target_include_directories(ico_credits_live PRIVATE "${_ico_gs_include}" ${_ico_gs_game_incs})
     target_compile_definitions(ico_credits_live PRIVATE ${ICO_GAME_DEFINITIONS})
     target_compile_options(ico_credits_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
                            ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes)
     target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_credits_live>)
     target_link_libraries(ico_pc PRIVATE ico_achievements)
+    # the Unused content engine: the game's tables (stageData, objLayout),
+    # DATA.DF's directory (port/data df_pack.h) and Settings' host and
+    # title return (port/ui's settings.h, "strings.h" by -iquote)
+    add_library(ico_unused_live OBJECT unused_live.c)
+    target_include_directories(ico_unused_live PRIVATE "${_ico_gs_include}"
+                               "${CMAKE_CURRENT_SOURCE_DIR}" ${_ico_gs_game_incs}
+                               $<TARGET_PROPERTY:ico_port_data,INTERFACE_INCLUDE_DIRECTORIES>)
+    target_compile_definitions(ico_unused_live PRIVATE ${ICO_GAME_DEFINITIONS})
+    target_compile_options(ico_unused_live PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                           ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_PORT_WARNINGS} -Wno-strict-prototypes
+                           -iquote "${CMAKE_SOURCE_DIR}/port/ui")
+    target_sources(ico_pc PRIVATE $<TARGET_OBJECTS:ico_unused_live>)
 endif()
 
 # Save states (port/platform/state.h): state_host.c takes and puts back a
@@ -731,7 +747,7 @@ endif()
 # unlock_credits through the ini) and a start with no engine; then
 # credits_live.c's failure paths over stubs of the game. CPU only.
 ico_include_dirs(common _ico_credits_incs)
-add_executable(credits_test test/credits_test.c credits.c credits_live.c
+add_executable(credits_test test/credits_test.c credits.c credits_live.c game_state_keep.c
     "${CMAKE_SOURCE_DIR}/ico2/common/src/staffroll.c" ../platform/host_config.c)
 target_include_directories(credits_test PRIVATE ${_ico_credits_incs} "${_ico_gs_include}"
                            "${CMAKE_CURRENT_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")

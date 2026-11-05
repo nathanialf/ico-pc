@@ -79,6 +79,7 @@ static IOSThread initIcoMiscThread; /* derived name; wider than 28 words here (p
 #include <string.h>
 #include "ico_gamestate.h" /* port: achievement signals */
 #include "ico_credits.h"   /* port: Extras > Credits */
+#include "ico_unused.h"    /* port: Extras > Unused content */
 
 extern void ico_video_camera_cut(void); /* port: port/game/video_options.c */
 
@@ -201,6 +202,7 @@ static void start_stage_Load_thread(int stage)
     stage_no = stage;
     ico_gs_signal(ICO_GS_EV_STAGE_ENTER, stage);
     ico_credits_stage_enter(stage); /* port: the title after the credits */
+    ico_unused_stage_enter(stage);  /* port: the title after a test room */
     ico_video_camera_cut();         /* port: a stage change is a cut for the presenter */
     gsb_SetBGColor(&db, 1, 1, 1);
     sceGsSyncPath(0, 0);
