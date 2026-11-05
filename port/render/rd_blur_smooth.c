@@ -22,13 +22,23 @@
  * RGBA8 scene-class temporary target, RES, through its RGB24 view, its UVs
  * over all H lines) with FIX' in place of FIX:
  *
- *     FIX' = clamp(round(128 (FIX / 128)^(1 / k)), FIX, 127),
+ *     FIX' = clamp(round(128 (FIX / 128)^(dt / tick)), FIX, 127),
  *
- * k the presents a tick (rd_interp.c rd_present: the present clock's tick
- * over its step, or under the vsync lock the presents the tick before
- * counted; 1 for the first tick), so k presents keep the share one tick
- * kept on the PS2: the same length of trail.  The sprite's 8-bit result is
- * A_i rounded; the accumulator keeps the fraction.
+ * dt the time since the present before and tick the game's tick, both the
+ * present clock's on the timer path (rd_present_clock.c, handed every
+ * present by rd_interp.c rd_present), dt held to [tick / 64, tick].  The
+ * presents of any span keep (FIX / 128)^(span / tick) of the trail, the
+ * share the PS2 keeps a tick, whatever their count or spacing (1.7 presents
+ * a tick, uneven gaps, Uncapped): the same length of trail.  The first
+ * present after a pause (dt held to the tick) draws the game's FIX.
+ * Without a time (the vsync lock, the replay tool, the tests) dt is
+ * tick / k, k the presents a tick (under the lock the presents the tick
+ * before counted, so dt is the refresh period; 1 for the first tick):
+ * FIX' = clamp(round(128 (FIX / 128)^(1 / k)), FIX, 127).  Before v0.10.4
+ * the timer path took k from the clock's tick over its step, and a step
+ * stuck at 0.5 ms (issue 193) gave k 64: FIX 32 drawn as 125 at 1.7
+ * presents a tick.  The sprite's 8-bit result is A_i rounded; the
+ * accumulator keeps the fraction.
  *
  * What it does not keep of Original (docs/port/DISPLAY.md): the light the
  * passes after the sprite add (the aura, the brightness step, the
@@ -71,6 +81,13 @@
 /* the restarts named in an event line a block (rd__blur_smooth_block) */
 #define SMOOTH_RESTART_LINES 3u
 
+/* the trail held too long (the event line in rd__blur_smooth_sprite): FIX'
+ * at least SMOOTH_HELD_FIX for SMOOTH_HELD_RUN presents in a row while the
+ * presents counted a tick are under SMOOTH_HELD_PRESENTS */
+#define SMOOTH_HELD_FIX 120u
+#define SMOOTH_HELD_RUN 32u
+#define SMOOTH_HELD_PRESENTS 8u
+
 static struct {
     RhiTexture acc[2]; /* the pair, RGBA16F, values 0..255 */
     RhiState accState[2];
@@ -83,12 +100,18 @@ static struct {
     bool sawSprite;        /* and it drew the motion blur sprite */
     uint32_t k;            /* the presents a tick, 1..RD_BLUR_SMOOTH_K_MAX */
     bool kMeasured;        /* k came from the presenter (not the first tick's 1) */
+    double dtMs, tickMs;   /* this present's time since the one before and the
+                              tick (the present clock's; tickMs 0: none, FIX' from k) */
+    uint32_t tickCount;    /* the presents of the tick being presented, counted */
+    uint32_t lastCount;    /* and of the tick before (0 before one ended) */
+    uint32_t heldRun;      /* the presents in a row with FIX' held too long */
+    uint32_t heldEvents;   /* the event lines' runs (rate-limited) */
     uint8_t fix, fixPrime; /* the last sprite's */
     uint32_t frame;        /* the frame of the last sprite */
     const char *why;       /* the next restart's reason */
     bool oneNoted;         /* the line for k = 1, once a run */
     /* the block's (rd__blur_smooth_block) */
-    uint64_t bPresents, bDrawn, bRestarts, bOriginal;
+    uint64_t bPresents, bTimed, bDrawn, bRestarts, bOriginal;
     uint32_t bLogged, bKMin, bKMax;
     /* since start (rd__blur_smooth_counts) */
     uint64_t drawn, restarts, original;
@@ -103,6 +126,25 @@ uint8_t rd__blur_smooth_fix(uint32_t fix, uint32_t presentsPerTick)
         return (uint8_t)(fix > 255u ? 255u : fix);
     }
     const double v = 128.0 * pow((double)fix / 128.0, 1.0 / (double)presentsPerTick);
+    long r = lround(v);
+    if (r > 127) {
+        r = 127;
+    }
+    if (r < (long)fix) {
+        r = (long)fix;
+    }
+    return (uint8_t)r;
+}
+
+uint8_t rd__blur_smooth_fix_dt(uint32_t fix, double dtMs, double tickMs)
+{
+    if (!(tickMs > 0.0) || fix == 0u || fix >= 128u) {
+        return (uint8_t)(fix > 255u ? 255u : fix);
+    }
+    /* the exponent's floor is the k form's cap, its ceiling one tick */
+    const double lo = tickMs / (double)RD_BLUR_SMOOTH_K_MAX;
+    const double dt = !(dtMs > lo) ? lo : (dtMs > tickMs ? tickMs : dtMs);
+    const double v = 128.0 * pow((double)fix / 128.0, dt / tickMs);
     long r = lround(v);
     if (r > 127) {
         r = 127;
@@ -180,7 +222,7 @@ bool rd__blur_smooth_active(void)
     return g_rd.settings.motionBlurSmooth != 0 && !s_sm.refused;
 }
 
-void rd__blur_smooth_arm(int firstOfTick, uint32_t presentsPerTick)
+void rd__blur_smooth_arm(int firstOfTick, uint32_t presentsPerTick, double sinceMs, double tickMs)
 {
     s_sm.armed = true;
     s_sm.sawSprite = false;
@@ -190,11 +232,21 @@ void rd__blur_smooth_arm(int firstOfTick, uint32_t presentsPerTick)
                                                                     : presentsPerTick;
         s_sm.k = k;
         s_sm.kMeasured = presentsPerTick != 0u;
+        if (s_sm.tickCount != 0u) {
+            s_sm.lastCount = s_sm.tickCount;
+        }
+        s_sm.tickCount = 0;
     }
+    s_sm.tickCount++;
+    /* every present's own weight from time; none: the k form */
+    const bool timed = tickMs > 0.0 && !isnan(sinceMs);
+    s_sm.dtMs = timed ? sinceMs : 0.0;
+    s_sm.tickMs = timed ? tickMs : 0.0;
     if (!rd__blur_smooth_active()) {
         return;
     }
     s_sm.bPresents++;
+    s_sm.bTimed += timed;
     if (s_sm.bKMin == 0u || s_sm.k < s_sm.bKMin) {
         s_sm.bKMin = s_sm.k;
     }
@@ -300,14 +352,23 @@ void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *origi
 
 void rd__blur_smooth_block(void)
 {
+    /* the present clock's resets in this block, taken every block */
+    const uint32_t resets = rd__present_clock_resets_take();
     if (s_sm.bDrawn || s_sm.bRestarts || s_sm.bOriginal) {
         const uint64_t more =
             s_sm.bRestarts > SMOOTH_RESTART_LINES ? s_sm.bRestarts - SMOOTH_RESTART_LINES : 0u;
-        rd__log("motion blur: smooth: %llu presents, %u to %u presents a tick, FIX %u drawn as "
-                "%u (the last); %llu sprites through the accumulator, %llu restarts (%llu not "
+        char clock[400]; /* a step of any size: no truncation */
+        if (s_sm.bTimed) {
+            snprintf(clock, sizeof(clock), "by time; the present clock's step %.2f ms, %u resets",
+                     rd__present_clock_step_ms(), (unsigned)resets);
+        } else {
+            snprintf(clock, sizeof(clock), "counted; no present clock");
+        }
+        rd__log("motion blur: smooth: %llu presents, %u to %u presents a tick (%s), FIX %u drawn "
+                "as %u (the last); %llu sprites through the accumulator, %llu restarts (%llu not "
                 "named above), %llu drawn as Original (no accumulator)",
-                (unsigned long long)s_sm.bPresents, s_sm.bKMin, s_sm.bKMax, (unsigned)s_sm.fix,
-                (unsigned)s_sm.fixPrime, (unsigned long long)s_sm.bDrawn,
+                (unsigned long long)s_sm.bPresents, s_sm.bKMin, s_sm.bKMax, clock,
+                (unsigned)s_sm.fix, (unsigned)s_sm.fixPrime, (unsigned long long)s_sm.bDrawn,
                 (unsigned long long)s_sm.bRestarts, (unsigned long long)more,
                 (unsigned long long)s_sm.bOriginal);
     }
@@ -318,7 +379,7 @@ void rd__blur_smooth_block(void)
                 (unsigned)s_str.fix, (unsigned)s_str.fixEff);
     }
     s_str.bDrawn = 0;
-    s_sm.bPresents = s_sm.bDrawn = s_sm.bRestarts = s_sm.bOriginal = 0;
+    s_sm.bPresents = s_sm.bTimed = s_sm.bDrawn = s_sm.bRestarts = s_sm.bOriginal = 0;
     s_sm.bLogged = s_sm.bKMin = s_sm.bKMax = 0;
 }
 
@@ -454,6 +515,36 @@ static void smoothPass(Replay *r, RhiPipeline pipe, RhiTexture dst, RhiState *st
     g_rdPerf.blurSmoothPasses++;
 }
 
+/* The trail held much longer than the game's: FIX' at least
+ * SMOOTH_HELD_FIX for SMOOTH_HELD_RUN presents in a row while the presents
+ * counted a tick are under SMOOTH_HELD_PRESENTS (issue 193's FIX 32 drawn as
+ * 125 at 1.7 presents a tick).  A line a run, the first 8 then every 100th;
+ * a game FIX that high itself is the game's own trail. */
+static void heldNote(uint32_t frame, uint32_t fix, uint8_t fp, bool restart)
+{
+    const uint32_t n = s_sm.lastCount;
+    if (restart || fp < SMOOTH_HELD_FIX || fix >= SMOOTH_HELD_FIX || n == 0u ||
+        n >= SMOOTH_HELD_PRESENTS) {
+        s_sm.heldRun = 0;
+        return;
+    }
+    if (++s_sm.heldRun != SMOOTH_HELD_RUN) {
+        return;
+    }
+    s_sm.heldEvents++;
+    if (s_sm.heldEvents <= 8u || s_sm.heldEvents % 100u == 0u) {
+        const double keep = 100.0 * pow((double)fp / 128.0, (double)n);
+        rd__log("motion blur: smooth: the trail is held much longer than the game's: FIX %u "
+                "drawn as %u for %u presents in a row at %u presents a tick (counted; k %u at the "
+                "tick's first present, the present clock's step %.2f ms, this present %.2f ms "
+                "after the one before, the tick %.2f ms), to frame %u: the trail keeps %.1f %% of "
+                "itself a tick where the game keeps %.1f %% (run %u)",
+                (unsigned)fix, (unsigned)fp, SMOOTH_HELD_RUN, (unsigned)n, (unsigned)s_sm.k,
+                rd__present_clock_step_ms(), s_sm.dtMs, s_sm.tickMs, (unsigned)frame, keep,
+                (double)fix * 100.0 / 128.0, (unsigned)s_sm.heldEvents);
+    }
+}
+
 /* The sprite's state: SCENE as its target, a texture, a record of its own
  * (no table); NULL with the reason otherwise */
 static RdTargetRec *spriteTarget(const Replay *r, const RdFrame *f, const RdCmd *c, RdPostRec *p,
@@ -509,7 +600,10 @@ bool rd__blur_smooth_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     const uint32_t fix = r->st.ds.blendFix;
     const bool restart = !s_sm.valid;
-    const uint8_t fp = restart ? 0u : rd__blur_smooth_fix(fix, s_sm.k);
+    const uint8_t fp = restart             ? 0u
+                       : s_sm.tickMs > 0.0 ? rd__blur_smooth_fix_dt(fix, s_sm.dtMs, s_sm.tickMs)
+                                           : rd__blur_smooth_fix(fix, s_sm.k);
+    heldNote(f->number, fix, fp, restart);
     s_sm.fix = (uint8_t)fix;
     s_sm.fixPrime = fp;
     s_sm.frame = f->number;

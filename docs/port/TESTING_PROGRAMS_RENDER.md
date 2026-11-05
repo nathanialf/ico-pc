@@ -896,7 +896,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_interp`); the feedback head copies (`testFeedback`: `DISPLAY_HELD` and `FEED_HELD` at a
   tick's first present and the later ones, none for DISPLAY under Motion blur: Smooth, FEED128's
   unchanged, the motion blur's record as recorded; FIX' of 32 at 1, 2, 4 and 10 presents and at
-  the ends); its rotation cases live in `rd_interp_turn_test.inc` and its seams cases in
+  the ends; FIX' from time, `testSmoothFixDt` in `rd_interp_clock_test.inc` (`rd__blur_smooth_fix_dt`): at dt = tick / k equal to the k form for
+  every FIX 0..128 and k 1..64, at 1.7 presents a tick FIX 32 drawn as 57 and the share a tick
+  within 2 % of the game's for FIX 8..96, over the uneven gaps of issue 193's log (a 0.5 ms
+  present among 14..20 ms ones) the trail's share within 5 % of the game's for that span, dt held
+  to [tick / 64, tick], no tick or FIX 0 / 128 as recorded); its rotation cases live in `rd_interp_turn_test.inc` and its seams cases in
   `rd_interp_seams_test.inc`, included where they stood, and its bars case in
   `rd_interp_bars_test.inc` (`testBars`: the same screen sprite under another key in each tick is
   drawn once, whole; a taller one or another blend FIX still cross-fades,
@@ -937,7 +941,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   by size, `sizeTailBlended` 1), both are still draws with the shared vertex in one cell, and B's
   card section is the tick's. The present clock (`testPresentClock`) notes
   its value before the clamp (`rd__present_clock_raw`), below 0 for a present before the tick's
-  time, and `rd__alpha_bin` sorts the alphas into the 10 s line's bins. The ticks' eyes
+  time, and `rd__alpha_bin` sorts the alphas into the 10 s line's bins. The present clock's step
+  (`testPresentClockStep` in `rd_interp_clock_test.inc`, issue 193): a steady 60 Hz cadence with one present 0.5 ms after its
+  neighbour keeps the step within 10 % of the cadence (the doubled present is not taken as the
+  step), at most 2 resets for it, `rd__present_clock_k` 2 against a 30 Hz tick and the time since
+  the present before and the tick noted once (`rd__present_clock_take`); the reporter's timing
+  (presents 18..22 ms apart, a 0.5 ms one every 7th, every 50th a 120 ms one followed by a 0.5 ms
+  one: the reset that, taking the 0.5 ms as the step, holds k at 64) gives k 2 at every tick's
+  first present, the step in the cadence and at most 2 resets in a row; a step already stuck at
+  0.5 ms is learnt again at the next present (18 ms, k 2) with the Frame rate's gap and without
+  one (Uncapped); a 500 ms pause keeps the step, and without a clock value k is the counted
+  presents. The ticks' eyes
   (`testEyeTicks`, on a device): alpha 0 carries the ticks' cameras as every present between the
   ticks, alpha 1 none.
 - `rd_layout_test.c`: the layout frame from the game's layout calls (`rd_layout`).

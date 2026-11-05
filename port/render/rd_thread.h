@@ -348,10 +348,12 @@ bool rd__thread_in_step_now(void);
 /* a picture of the game thread's begins: the one before it finished (its
  * wait counted for rd_submit_waited_ns; rd_present's start) */
 void rd__thread_picture_begin(void);
-/* rd_present's value of the present clock (rd_interp.c s_clockRaw): the
- * one the game thread took when it posted the present, on the render
- * thread; else the clock's own, taken (NAN after) */
-double rd__thread_clock_raw(void);
+/* rd_present's value of the present clock (rd_present_clock.c), with
+ * gap[0] its time since the present before and gap[1] its tick (0 when the
+ * clock did not time the present): the ones the game thread took when it
+ * posted the present, on the render thread; else the clock's own, taken
+ * (NAN and 0 after) */
+double rd__thread_clock(double gap[2]);
 /* rd_get_stats on the game thread with a host: the counts as above */
 const struct RdStats *rd__thread_stats(void);
 /* RdStats the calling thread counts into: the render thread's own inside

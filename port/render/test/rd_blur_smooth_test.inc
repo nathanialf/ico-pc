@@ -100,7 +100,7 @@ static bool sTick(int n, uint8_t *each, uint8_t *last)
     for (int k = 0; k < n; k++) {
         const RdFrame *f = rd__interp_frame(rd__prev_frame(), rd__last_frame(),
                                             (float)(k + 1) / (float)n, k == 0, NULL);
-        rd__blur_smooth_arm(k == 0, (uint32_t)n);
+        rd__blur_smooth_arm(k == 0, (uint32_t)n, 0.0, 0.0);
         if (!f || !rd__replay_frame(f, 0, false)) {
             return false;
         }
@@ -314,7 +314,7 @@ static void checkMotionBlurSmoothScaled(void)
         for (int k = 0; k < 2 && ok; k++) {
             const RdFrame *f = rd__interp_frame(rd__prev_frame(), rd__last_frame(),
                                                 (float)(k + 1) / 2.0f, k == 0, NULL);
-            rd__blur_smooth_arm(k == 0, 2);
+            rd__blur_smooth_arm(k == 0, 2, 0.0, 0.0);
             ok = f && rd__replay_frame(f, 0, false);
         }
     }

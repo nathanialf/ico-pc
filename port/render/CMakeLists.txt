@@ -196,6 +196,7 @@ add_library(ico_render STATIC
     rd_frame.c
     rd_fx_plan.c # the frame-size post sprites' plan: fixed-function forms, local read
     rd_interp.c # interpolation between the retained frames
+    rd_present_clock.c # the present clock the timer path takes alpha from; Motion blur: Smooth's time between presents
     rd_interp_mesh.c # the interpolation's reads of a mesh's stream, kept while it is unchanged
     rd_reshow.c # a between-tick picture the same as the last rendered one's is shown again
     rd_glow_fold.c # the glow's mask computed in its reduction: WORK2 neither drawn nor read ([dev] glow_fold)

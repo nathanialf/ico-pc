@@ -2550,6 +2550,8 @@ static void testPresentClock(void)
           "present clock: the alpha histogram's bins");
 }
 
+#include "rd_interp_clock_test.inc"
+
 /* ----------------------------------- unmatched draws, particles, lights */
 
 static const char kObjU, kObjP1, kObjP2, kObjP3, kObjL;
@@ -5887,6 +5889,8 @@ static void runCpu(void)
     testCameraLocked();
     testPhoto();
     testPresentClock();
+    testPresentClockStep();
+    testSmoothFixDt();
     testSprites();
     testSpriteSnaps();
     testFrameSnaps();

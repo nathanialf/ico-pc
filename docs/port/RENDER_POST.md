@@ -455,12 +455,18 @@ between ticks the trail stands still while the picture moves. Under Smooth `rd__
 hands the sprite to `rd__blur_smooth_sprite` (`port/render/rd_blur_smooth.c`, file comment),
 which per present i keeps
 
-    A_i = S_i + a' (A_i-1 - S_i),   a' = FIX' / 128,   FIX' = clamp(round(128 (FIX / 128)^(1 / k)), FIX, 127)
+    A_i = S_i + a' (A_i-1 - S_i),   a' = FIX' / 128,   FIX' = clamp(round(128 (FIX / 128)^(dt / tick)), FIX, 127)
 
 with S_i SCENE just before the sprite, A an RGBA16F ping-pong pair at SCENE's texture size (its
-scale, its Full pixel crop; an 8-bit running blend would stall up to 7 levels short at k = 10,
-its floor step `(A - S) FIX' >> 7` being 0 below `128 / (128 - FIX')`), and k the presents a
-tick. Each present: the sprite's pass ends; SCENE goes to a shader read (an open MSAA epoch
+scale, its Full pixel crop; an 8-bit running blend would stall up to 7 levels short at 10 presents
+a tick, its floor step `(A - S) FIX' >> 7` being 0 below `128 / (128 - FIX')`), dt the time since
+the present before and tick the game's tick, dt held to [tick / 64, tick]
+(`rd__blur_smooth_fix_dt`). The presents of any span keep `(FIX / 128)^(span / tick)` of the
+trail, the PS2's share a tick, whatever their count or spacing (1.7 presents a tick, uneven gaps,
+Uncapped); the first present after a pause (dt held to the tick) draws the game's FIX. Without a
+time dt is tick / k, k the presents a tick: `FIX' = clamp(round(128 (FIX / 128)^(1 / k)), FIX,
+127)` (`rd__blur_smooth_fix`, equal to the time form at dt = tick / k for every FIX and k). Each
+present: the sprite's pass ends; SCENE goes to a shader read (an open MSAA epoch
 resolves into it there); `fx_acc_resolve_ps` rounds A_i-1 into RES, an RGBA8 scene-class
 temporary target (`rd__temp_target_alloc(gsW, gsH, 0, 1)`); `fx_acc_ps` writes A_i into the
 pair's other texture from A_i-1 and SCENE (both `blit_vs`, one triangle, each texel by Load);
@@ -474,13 +480,22 @@ fraction. The two pipelines are a private cache (`RD_BLUR_SMOOTH_PIPES`, as the 
 and `RD_PIPELINE_REACHABLE_MAX` do not change; the sprite's own key is the recorded one (FIX and
 the texture are not in it).
 
-k comes from the presenters (`rd__blur_smooth_arm`, before each replay that presents): on the timer
-path `rd_present_clock_alpha`'s tick over its step (kept in `rd_interp.c` statics), under the vsync
-lock the presents the tick before counted (`rd_present`), 1 for the first tick and for the
-presenter without interpolation (`rd_core.c` (`replayOnHost`)); clamped to 1..64
-(`RD_BLUR_SMOOTH_K_MAX`); FIX' is taken at each sprite from the tick's k. A replay nobody armed
-(a self-test, a dump's, the replay tool's `--time`) draws the sprite as Original and leaves A
-alone. `feedback` makes no DISPLAY / DISPLAY_HELD head copy while `rd__blur_smooth_active` (the
+dt and k come from the presenters (`rd__blur_smooth_arm`, before each replay that presents). On the
+timer path `rd_present` hands every present the present clock's time since the present before and
+its tick (`rd_present_clock_alpha` notes them with its alpha, `rd__present_clock_take`; the render
+thread gets them with the posted picture, `rd__thread_clock`), and FIX' is the time form. Under
+the vsync lock no clock runs: k is the presents the tick before counted (`rd_present`), so dt =
+tick / k is the refresh period; k is 1 for the first tick, for the presenter without interpolation
+(`rd_core.c` (`replayOnHost`), `rd_thread.c` (`replayJob`)) and for the replay tool's replays
+except `--presents N` (k = N), clamped to 1..64 (`RD_BLUR_SMOOTH_K_MAX`, also the time form's
+floor). k is also taken on the timer path at a tick's first present, the clock's tick over its
+step (`rd__present_clock_k`, `port/render/rd_present_clock.c`), for the block line. FIX' from that
+k on the timer path is what issue 193 showed (an Adreno 740 at Frame rate 60): a clock step stuck
+at 0.5 ms (a reset that took one doubled present's interval as the step, with nothing to learn it
+again) gave k 64, FIX 32 drawn as 125 at 1.7 presents a tick, a trail keeping 96 % of itself a
+tick instead of 25 % (the clock's step: [DISPLAY.md](DISPLAY.md#interpolation-between-ticks), "The
+alpha"). A replay nobody armed (a self-test, a dump's, the replay tool's `--time`) draws the
+sprite as Original and leaves A alone. `feedback` makes no DISPLAY / DISPLAY_HELD head copy while `rd__blur_smooth_active` (the
 sprite does not read DISPLAY; FEED128's copies are unchanged).
 
 The trail ends where an armed replay that is not a keep frame's drew no motion blur sprite (the
@@ -515,8 +530,17 @@ motion blur: smooth: the accumulator WxH freed (why)
 motion blur: smooth: the trail starts again at frame N (why): this present's scene is its first picture, no old frame in it      (the first 3 a block)
 motion blur: smooth at one present a tick (FIX F as recorded): ...      (once)
 motion blur: smooth: the sprite of frame N is drawn as Original: why (reported once)
-motion blur: smooth: P presents, K1 to K2 presents a tick, FIX F drawn as F' (the last); D sprites through the accumulator, R restarts (M not named above), O drawn as Original (no accumulator)      (with the interp summary, when it drew)
+motion blur: smooth: P presents, K1 to K2 presents a tick (by time; the present clock's step S ms, N resets), FIX F drawn as F' (the last); D sprites through the accumulator, R restarts (M not named above), O drawn as Original (no accumulator)      (with the interp summary, when it drew; "(counted; no present clock)" when no present of the block was timed: the vsync lock)
+motion blur: smooth: the trail is held much longer than the game's: FIX F drawn as F' for 32 presents in a row at C presents a tick (counted; k K at the tick's first present, the present clock's step S ms, this present D ms after the one before, the tick T ms), to frame N: the trail keeps X % of itself a tick where the game keeps Y % (run R)      (FIX' at least 120 for 32 presents in a row at under 8 presents a tick counted, the game's FIX under 120; a line a run, the first 8 then every 100th)
 ```
+
+The block line's K1 to K2 are the ticks' k (the clock's tick over its step on the timer path), its
+step and resets the present clock's (its resets in the 10 s block): a step near the presents'
+real interval and k near the presented fps over the game fps of the window's line of the same
+block is the healthy reading; a step far below the interval with a reset at nearly every present
+is issue 193's stuck clock. The held line names the fault directly: under the time form FIX' 120 or more needs a present
+under a 20th of a tick after the one before (at FIX 32), and 32 of those in a row do not happen at
+under 8 presents a tick.
 
 `RdPerfRecord.blurSmoothPasses` counts the passes a replay. The replay tool's `--motion-blur
 smooth` sets it (its replays armed; the `--prev` dumps feed the trail) and `--presents N` (with
