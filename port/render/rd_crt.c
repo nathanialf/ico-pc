@@ -45,6 +45,7 @@
 #include <math.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_tone.h"
 #include "shader_consts.h"
 
 /* The modes, in RdCrtMode order */
@@ -548,6 +549,12 @@ static bool compose(RhiCommandList cl, const RdCrtParams *pp, RhiTexture src, ui
     cb.tone[2] = p.gammaOut > 0.1f ? p.gammaOut : 2.2f;
     cb.tone[3] = unit(g_rd.settings.crtStrength);
     cb.pass[0] = mirror ? 1.0f : 0.0f;
+    /* the colour adjustment (Options > Picture's tone rows; rd_tone.h) on
+     * the source's colour before the filter linearises it (crt.hlsl toneOf,
+     * in the glow's pass and the composite's); off, 0 and the branch not
+     * taken */
+    rd__tone_params(cb.pad);
+    cb.pad[4] = rd__tone_active() ? 1.0f : 0.0f;
 
     /* 1. the horizontal glow, 2. the vertical */
     const RhiRect glowArea = {0, 0, gw, gh};

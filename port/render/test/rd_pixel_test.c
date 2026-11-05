@@ -3820,7 +3820,8 @@ static void testPipelines(void)
          * the vertex pre-pass off, no dynamic state (every state in the
          * keys), Enhanced at the phone's fractional 2.8125 x 2.41071 (the
          * vu_np_ps twins), both blends: under the ceiling and inside the
-         * RHI's pool less its headroom (rhi_pipeline_pool.h) */
+         * RHI's pool less its headroom (rhi_pipeline_pool.h); 1293 and
+         * 1371 in v0.10.2, 4 more with the colour adjustment's blits */
         static RdPipeKeyInt keysT[RD_PIPELINE_REACHABLE_MAX];
         const RdProfile keepProfile = g_rd.profile;
         const bool keepD = g_rd.dynDepth, keepB = g_rd.dynBlend, keepPrepass = g_rd.vuPrepass;
@@ -3873,7 +3874,9 @@ static void testPipelines(void)
               RHI_PIPELINE_POOL_MAX, RHI_PIPELINE_POOL_HEADROOM);
     }
     /* 347 with the triangle commands' plane shaders (rd_screen_planes.c),
-     * a second vertex shader for each triangle pass (250 without them) */
+     * a second vertex shader for each triangle pass (250 without them);
+     * 357 in v0.10.2, and 4 more with the present's colour adjustment
+     * (blit_tone_ps and blit_depth_tone_ps on both outputs, rd_tone.h) */
     CHECK(ns < 400, "reachable screen and post pipelines %u >= 400", ns);
     /* the keys a frame with the dark volume's FBMSK (colour mask 7 until the
      * next FRAME write) and the lightning's perspective STQ would otherwise

@@ -98,7 +98,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "font_ps", "font_sheet_ps", "font_sheet_baked_ps", "sprite_aa1_ps", "box_reduce_ps",
     "sprite_stq_ps", "crt_bloom_ps", "crt_blur_ps", "crt_ps", "sprite_texa_ps", "vu_texa_ps",
     "blit_depth_ps", "fog_lut_buffer_ps", "aa_reduce_ps", "fog_lut_ms_ps", "depth_resolve_ps",
-    "depth_upsample_ps", "msaa_resolve_ps", "vu_pre_ps",
+    "depth_upsample_ps", "msaa_resolve_ps", "vu_pre_ps", "blit_tone_ps", "blit_depth_tone_ps",
     /* RD_FS_OPTIONAL_FIRST on */
     "sprite_ps_planes", "sprite_texa_ps_planes", "sprite_stq_ps_planes", "fog_lut_local_ps",
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",

@@ -74,6 +74,10 @@ static const char *const expectedShadowLoad[] = {"shadow_count_load_ps"};
 /* the aura's feedback read in two passes (fx_sprite.hlsl; port/render/rd_aura_box.c) */
 static const char *const expectedAuraBox[] = {"fx_aura_rows_ps", "fx_aura_sum_ps"};
 
+/* the present's box blit with the colour adjustment (blit.hlsl, tone.hlsli;
+ * port/render/rd_tone.h) */
+static const char *const expectedTone[] = {"blit_tone_ps", "blit_depth_tone_ps"};
+
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */
 static const char *const expectedPlain[] = {
@@ -430,6 +434,13 @@ int main(void)
             failures++;
         }
     }
+    const size_t nTone = sizeof(expectedTone) / sizeof(expectedTone[0]);
+    for (size_t i = 0; i < nTone; i++) {
+        if (!ico_find_shader(expectedTone[i])) {
+            printf("FAIL %s: not in the table\n", expectedTone[i]);
+            failures++;
+        }
+    }
     const size_t nPlain = sizeof(expectedPlain) / sizeof(expectedPlain[0]);
     for (size_t i = 0; i < nPlain; i++) {
         if (!ico_find_shader(expectedPlain[i])) {
@@ -473,7 +484,7 @@ int main(void)
     }
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
                         nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nMerge +
-                        nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked;
+                        nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;

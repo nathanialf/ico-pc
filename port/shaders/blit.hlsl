@@ -5,6 +5,9 @@
 //   blit_ps      single colour output; colour = texture function(texel, tint)
 //   blit_depth_ps blit_ps plus SV_Depth from the scene's depth (the present's
 //                effects depth)
+//   blit_tone_ps, blit_depth_tone_ps the two with the colour adjustment
+//                (tone.hlsli; DrawCB.g_param: rd__tone_params), for the
+//                present's box blit when a Picture tone row is not 50
 //   aa_reduce_ps the supersampled DISPLAY box-averaged to the present box
 //   msaa_resolve_ps, depth_resolve_ps, depth_upsample_ps the MSAA epoch
 //   crack_fill_ps, crack_count_ps the crack filler above 1x (rd_crack_fill.c)
@@ -12,6 +15,7 @@
 // Texture function flags are DrawCB.g_mode.x: with DF_TEXTURED clear the
 // pass writes the tint colour alone (fade, letterbox).
 #include "common.hlsli"
+#include "tone.hlsli"
 
 struct BlitVSOut {
     float4 pos : SV_Position;
@@ -61,6 +65,16 @@ float4 blit_ps(BlitVSOut i) : SV_Target0
     return float4(blit_color(i.uv)) * (1.0 / 255.0);
 }
 
+// blit_tone_ps (rd_present.c blit): blit_ps's colour through the colour
+// adjustment, g_param its four factors (brightness, contrast, saturation,
+// gamma; tone.hlsli), clamped to 0..1. Alpha as blit_ps's
+float4 blit_tone_ps(BlitVSOut i) : SV_Target0
+{
+    float4 c = float4(blit_color(i.uv)) * (1.0 / 255.0);
+    c.rgb = saturate(tone_adjust(c.rgb, g_param));
+    return c;
+}
+
 // blit_depth_ps (rd_present.c): blit_ps's colour, and
 // SV_Depth from t2, the scene's depth (sampled in place), at the same normalised uv
 // (the source rectangle covers the whole scene; a mirrored blit flips both)
@@ -80,6 +94,22 @@ BlitDepthOut blit_depth_ps(BlitVSOut i)
 {
     BlitDepthOut o;
     o.c = float4(blit_color(i.uv)) * (1.0 / 255.0);
+    uint w, h;
+    g_sceneDepth.GetDimensions(w, h);
+    int2 p = int2(floor(saturate(i.uv) * float2(w, h)));
+    p = min(p, int2(int(w) - 1, int(h) - 1));
+    o.d = g_sceneDepth.Load(int3(p, 0));
+    return o;
+}
+
+// blit_depth_tone_ps: blit_depth_ps with blit_tone_ps's colour (the depth
+// read written out again rather than shared, so blit_depth_ps's module
+// stays the one it was)
+BlitDepthOut blit_depth_tone_ps(BlitVSOut i)
+{
+    BlitDepthOut o;
+    o.c = float4(blit_color(i.uv)) * (1.0 / 255.0);
+    o.c.rgb = saturate(tone_adjust(o.c.rgb, g_param));
     uint w, h;
     g_sceneDepth.GetDimensions(w, h);
     int2 p = int2(floor(saturate(i.uv) * float2(w, h)));

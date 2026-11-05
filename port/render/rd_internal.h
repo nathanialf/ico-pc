@@ -1514,6 +1514,10 @@ typedef enum RdFsId {
     /* vu_pre_ps: the vertex pre-pass's records into its three RGBA32_UINT
      * targets (rd_replay_vu.c rd__vu_prepass) */
     RD_FS_VU_PRE,
+    /* blit_tone_ps, blit_depth_tone_ps: the box blit with the colour
+     * adjustment (rd_tone.h rd__tone_active) */
+    RD_FS_BLIT_TONE,
+    RD_FS_BLIT_DEPTH_TONE,
     /* From RD_FS_OPTIONAL_FIRST on a module missing from the table leaves
      * its id empty (as the vertex ids from RD_VS_OPTIONAL_FIRST) */
     RD_FS_SPRITE_PLANES,      /* sprite_ps_planes: the screen-prim triangles' plane build */
@@ -1866,9 +1870,10 @@ int rd__texa_per_texel(const RdStateBlock *s);
 int rd__gs_filter_int(const RdStateBlock *s);
 RdPipeKeyInt rd__post_key(RdVsId vs, RdFsId fs, RhiFormat colorFmt);
 /* The present's box blit with the effects depth: blit_vs and
- * blit_depth_ps into colorFmt (the headless output's RGBA8, the swapchain's
- * BGRA8) and an RHI_FMT_D32F depth target, Z written, test ALWAYS. */
-RdPipeKeyInt rd__present_depth_key(RhiFormat colorFmt);
+ * blit_depth_ps (blit_depth_tone_ps with tone) into colorFmt (the headless
+ * output's RGBA8, the swapchain's BGRA8) and an RHI_FMT_D32F depth target,
+ * Z written, test ALWAYS. */
+RdPipeKeyInt rd__present_depth_key(RhiFormat colorFmt, bool tone);
 /* The pipeline for k, created on first use.  0 without a device. */
 RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k);
 /* The same, not noted on the pass ring's newest entry
