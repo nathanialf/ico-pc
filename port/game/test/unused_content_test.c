@@ -24,9 +24,13 @@
  * camera-zone rule once the boy is up (testZones, over a fake camera set
  * stored negated): a start inside a zone stays, one outside every zone
  * moves to the lowest zone whose centre has a floor in its box (ties: the
- * larger floor plan) at his own height above the floor, the girl with him
- * when she is up, no zone with a floor or no set leaves him, each logged; the
- * boy's line (root, ground height, the probe's floor, fall height) as the
+ * larger floor plan) at the floor minus his skeleton's root height (a root
+ * ON its floor still 72 above the zone's; the girl at her own), the girl
+ * with him when she is up, the probe under the moved root logged and a
+ * floor there not the zone's (the big floor, none) said with no second
+ * move, no zone with a floor or no set leaves him, each logged; the boy's
+ * line (root, ground height, the probe's floor, fall height, the camera's
+ * zone, eye and look-at, his draw mask) as the
  * stage is up, every 30 Main ticks to 300 and at a game over; a second
  * start while one runs is refused; the stage up, the title's stage entered
  * puts the state back, clears the flag, logs the time and End Game (or game
@@ -122,6 +126,10 @@ static float s_floorY;
 GObj *girlGObj;
 static GObj s_girl;
 static Sub15C s_girlSub;
+/* their skeletons: node 0's pos[1] is the root height act.c's debug move
+   puts the root at above a floor (the boy's 72, the entrance height; the
+   girl her own) */
+static SkelNode s_boySkel, s_girlSkel;
 
 typedef struct {
     GObj *who;
@@ -147,6 +155,26 @@ static struct {
 static int s_zoneFloorOn[ZONES];
 static float s_zoneFloorY[ZONES];
 static int s_zoneProbed[ZONES];
+/* a probe under a zone's centre from anywhere but its box's top (the one
+   from the moved root, the tick lines'): 0 the zone's floor, 1 the big
+   floor at y 0 (a root under the zone's floor), 2 no floor */
+static int s_underMoved;
+
+/* camera-ico2.c's monitor camera beside the boy's lines (the eye and the
+   look-at as the roots have them) */
+static int s_camGroup = -1, s_camMode, s_camComputed;
+static float s_camEye[3], s_camAt[3];
+
+int ico_host_camera_view(float *eye, float *at, int *mode, int *computed)
+{
+    for (int k = 0; k < 3; k++) {
+        eye[k] = s_camEye[k];
+        at[k] = s_camAt[k];
+    }
+    *mode = s_camMode;
+    *computed = s_camComputed;
+    return s_camGroup;
+}
 
 int gflagChk(int i)
 {
@@ -225,8 +253,14 @@ void GetLowerPlaneCollision(ClipWork *w, float *pos)
         if (pos[0] != -g->center[0] || pos[2] != -g->center[2]) {
             continue;
         }
-        if (pos[1] == -(g->center[1] + g->range[1])) {
+        const int top = pos[1] == -(g->center[1] + g->range[1]);
+        if (top) {
             s_zoneProbed[i]++;
+        }
+        if (!top && s_underMoved != 0) {
+            w->floor.elem = s_underMoved == 1 ? &floorElem : NULL;
+            w->pt[2][1] = s_underMoved == 1 ? 0.0f : pos[1] + 10000.0f;
+            return;
         }
         const int hit = s_zoneFloorOn[i] && s_zoneFloorY[i] >= pos[1];
         w->floor.elem = hit ? &floorElem : NULL;
@@ -517,6 +551,10 @@ static void fakeTables(void)
     exitData[0].rot[1] = 90.0f;
     s_boy.dobj = &s_boySub;
     s_girl.dobj = &s_girlSub;
+    s_boySkel.pos[1] = 72.0f;
+    s_girlSkel.pos[1] = 60.0f;
+    s_boySub.skel = &s_boySkel;
+    s_girlSub.skel = &s_girlSkel;
 }
 
 static void testStages(void)
@@ -743,7 +781,8 @@ static void testRooms(void)
     logStart();
     ico_unused_host_poll();
     CHECK(strstr(logEnd(), "unused: arena tick 35: the boy at (100, -71, 200), ground height 71 "
-                           "(the floor 0 under him, 71 below), fall height 5\n") != NULL,
+                           "(the floor 0 under him, 71 below), fall height 5; no camera computed "
+                           "yet; his draw mask 0x00000000, display 0\n") != NULL,
           "the boy's line at tick 35");
     s_ticks = 1350;
     logStart();
@@ -834,7 +873,7 @@ static void testRooms(void)
     logStart();
     ico_unused_host_poll();
     CHECK(strstr(logEnd(), "unused: climbing tick 0: the boy at (100, -2533, 200), ground height "
-                           "71 (no floor below), fall height 2533\n") != NULL,
+                           "71 (no floor below), fall height 2533; ") != NULL,
           "the climbing room's first line, no floor");
     s_ticks = 2400;
     logStart();
@@ -846,7 +885,7 @@ static void testRooms(void)
     CHECK(strcmp(ico_unused_left_by(), "game over") == 0, "a game over noted");
     CHECK(strstr(log, "unused: game over in the test room climbing") != NULL &&
               strstr(log, "unused: climbing game over: the boy at (100, -2533, 200), ground "
-                          "height 71 (no floor below), fall height 2533\n") != NULL,
+                          "height 71 (no floor below), fall height 2533; ") != NULL,
           "the game over's boy line");
     boyGObj = NULL;
     logStart();
@@ -1003,9 +1042,10 @@ static void zone(int i, float cx, float cy, float cz, float rx, float ry, float 
 }
 
 /* a room from the title to its stage's first poll with the boy at
-   (100, -71, 200) on the floor 0 (71 above it), the girl up or not; the
-   poll's log copied to out; then back to the title */
-static void zoneRun(int row, unsigned int t, int girlUp, char *out, size_t outSize)
+   (100, rootY, 200) over the floor 0 (-rootY above it: 0 a root ON the
+   floor, as before his first motion frame), the girl up or not; the poll's
+   log copied to out; then back to the title */
+static void zoneRunAt(int row, unsigned int t, int girlUp, float rootY, char *out, size_t outSize)
 {
     const IcoRegionInfo *ri = ico_region_cur();
     onTitle(t);
@@ -1013,7 +1053,7 @@ static void zoneRun(int row, unsigned int t, int girlUp, char *out, size_t outSi
     s_boy.act = NULL;
     girlGObj = girlUp ? &s_girl : NULL;
     s_boyPos[0] = 100.0f;
-    s_boyPos[1] = -71.0f;
+    s_boyPos[1] = rootY;
     s_boyPos[2] = 200.0f;
     s_hasFloor = 1;
     s_floorY = 0.0f;
@@ -1037,10 +1077,16 @@ static void zoneRun(int row, unsigned int t, int girlUp, char *out, size_t outSi
     girlGObj = NULL;
 }
 
+static void zoneRun(int row, unsigned int t, int girlUp, char *out, size_t outSize)
+{
+    zoneRunAt(row, t, girlUp, -71.0f, out, outSize);
+}
+
 /* the camera-zone rule (unused_live.c startInZone): a start inside a zone
    stays; one outside every zone moves, with the girl when she is up, to
-   the lowest zone whose centre has a floor inside its box, at the root's
-   own height above its floor; no such zone: he stays */
+   the lowest zone whose centre has a floor inside its box, at the floor
+   minus each one's skeleton root height (act.c's debug move), and the
+   probe from the moved root is logged; no such zone: he stays */
 static void testZones(void)
 {
     static char log[8192];
@@ -1073,30 +1119,82 @@ static void testZones(void)
     zone(2, -2090.0f, -2210.0f, 4796.0f, 850.0f, 210.0f, 957.0f, 1, -2167.0f);
     zone(3, 1111.0f, -1355.0f, 81.0f, 1216.0f, 635.0f, 529.0f, 1, -1324.0f);
     zone(4, 240.0f, -3320.0f, 678.0f, 103.0f, 635.0f, 111.0f, 0, 0.0f);
-    zoneRun(ICO_UNUSED_CLIMB, 21000, 1, log, sizeof(log));
+    /* the root ON the floor (the probe measures 0, as at the room's first
+       poll before his first motion frame): still moved to the floor minus
+       the skeleton's root height (72; the girl's 60), never the measured
+       height */
+    s_camComputed = 1;
+    s_camMode = 1;
+    s_camGroup = 3;
+    s_camEye[0] = 576.0f;
+    s_camEye[1] = -1856.0f;
+    s_camEye[2] = 389.0f;
+    s_camAt[0] = 1102.0f;
+    s_camAt[1] = -1354.0f;
+    s_camAt[2] = 78.0f;
+    s_boy.drawMask = -1;
+    s_boySub.disp = 1;
+    zoneRunAt(ICO_UNUSED_CLIMB, 21000, 1, 0.0f, log, sizeof(log));
     snprintf(want, sizeof(want), "%s",
-             "unused: climbing: the game's no-entrance point (100, -71, 200) is outside every "
-             "camera zone (the lowest zone's centre 529 above it): the boy moved to zone 3's "
-             "floor at (1111, -1395, 81) (71 above the floor y -1324); the girl with him\n");
+             "unused: climbing: the game's no-entrance point (100, 0, 200) is outside every "
+             "camera zone (the lowest zone's centre 600 above it; its root 0 above its floor "
+             "there): the boy moved to zone 3's floor at (1111, -1396, 81) (72 above the floor "
+             "y -1324, his skeleton's root height; the probe from there finds the floor -1324, "
+             "72 below); the girl with him, 60 above the floor\n");
     CHECK(strstr(log, want) != NULL, "the climbing room's move logged (want \"%s\")", want);
     CHECK(s_nMoved == 2 && s_moved[0].who == &s_boy && s_moved[1].who == &s_girl &&
-              s_moved[0].pos[0] == 1111.0f && s_moved[0].pos[1] == -1395.0f &&
-              s_moved[0].pos[2] == 81.0f &&
-              memcmp(s_moved[0].pos, s_moved[1].pos, sizeof(s_moved[0].pos)) == 0,
-          "the boy and the girl moved to zone 3's floor, 71 above it (%d moves)", s_nMoved);
+              s_moved[0].pos[0] == 1111.0f && s_moved[0].pos[1] == -1396.0f &&
+              s_moved[0].pos[2] == 81.0f && s_moved[1].pos[0] == 1111.0f &&
+              s_moved[1].pos[1] == -1384.0f && s_moved[1].pos[2] == 81.0f,
+          "the boy 72 and the girl 60 above zone 3's floor (%d moves)", s_nMoved);
+    CHECK(strstr(log, "not the zone's") == NULL, "the zone's floor under the moved root");
     for (int i = 0; i < 5; i++) {
         CHECK(s_zoneProbed[i] == 1, "zone %d probed once from its box's top (%d)", i,
               s_zoneProbed[i]);
     }
-    CHECK(strstr(log, "unused: climbing tick 0: the boy at (1111, -1395, 81), ground height 71 "
-                      "(the floor -1324 under him, 71 below), fall height 5\n") != NULL,
-          "the tick line after the move");
+    CHECK(strstr(log, "unused: climbing tick 0: the boy at (1111, -1396, 81), ground height 71 "
+                      "(the floor -1324 under him, 72 below), fall height 5; the camera (mode 1) "
+                      "in zone 3, its eye (576, -1856, 389) looking at (1102, -1354, 78); his "
+                      "draw mask 0xFFFFFFFF, display 1\n") != NULL,
+          "the tick line after the move, the camera and the draw mask beside him");
 
-    /* the girl not up: the boy alone */
+    /* the girl not up, the root 71 above its floor: the boy alone, at 72
+       (the skeleton's), not 71 (the probe's) */
     zoneRun(ICO_UNUSED_CLIMB, 22000, 0, log, sizeof(log));
-    CHECK(s_nMoved == 1 && s_moved[0].who == &s_boy &&
-              strstr(log, "(71 above the floor y -1324)\n") != NULL,
-          "no girl: the boy alone moved (%d moves)", s_nMoved);
+    CHECK(s_nMoved == 1 && s_moved[0].who == &s_boy && s_moved[0].pos[1] == -1396.0f &&
+              strstr(log, "(the lowest zone's centre 529 above it; its root 71 above its floor "
+                          "there)") != NULL &&
+              strstr(log, "(72 above the floor y -1324, his skeleton's root height; the probe "
+                          "from there finds the floor -1324, 72 below)\n") != NULL,
+          "no girl: the boy alone moved, at his root height (%d moves)", s_nMoved);
+
+    /* under the moved root the big floor (a root under the zone's floor):
+       said plainly, no second move */
+    s_underMoved = 1;
+    zoneRun(ICO_UNUSED_CLIMB, 22500, 0, log, sizeof(log));
+    CHECK(s_nMoved == 1 &&
+              strstr(log, "(72 above the floor y -1324, his skeleton's root height; the probe "
+                          "from there finds the floor 0, 1396 below)\n") != NULL &&
+              strstr(log, "unused: climbing: the floor under the moved root is not the zone's: "
+                          "the probe from (1111, -1396, 81) finds the floor 0, 1396 below, more "
+                          "than twice his root height (the zone's floor y -1324, his root height "
+                          "72); he is left there\n") != NULL,
+          "the big floor under the moved root said, no second move (%d moves)", s_nMoved);
+    /* nothing under him: said too */
+    s_underMoved = 2;
+    zoneRun(ICO_UNUSED_CLIMB, 22700, 0, log, sizeof(log));
+    CHECK(s_nMoved == 1 &&
+              strstr(log, "his skeleton's root height; the probe from there finds no floor)\n") !=
+                  NULL &&
+              strstr(log, "unused: climbing: the floor under the moved root is not the zone's: "
+                          "the probe from (1111, -1396, 81) finds no floor (the zone's floor y "
+                          "-1324, his root height 72); he is left there\n") != NULL,
+          "no floor under the moved root said, no second move (%d moves)", s_nMoved);
+    s_underMoved = 0;
+    s_camComputed = 0;
+    s_camGroup = -1;
+    s_boy.drawMask = 0;
+    s_boySub.disp = 0;
 
     /* no zone with a floor in its box: he stays */
     s_camSet.head.count = 1;

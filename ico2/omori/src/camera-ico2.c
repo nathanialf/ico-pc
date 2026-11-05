@@ -2273,3 +2273,23 @@ static int cameraIco2Word0 = 0; /* derived name */
 int current_group = 0;
 
 static int cameraIco2Word1 = 0; /* derived name */
+
+/* PC port: the monitor camera as port/game/unused_live.c's test-room lines
+   log it: the group the zone search last found (-1 none since the stage's
+   init: a frame with no zone keeps the last), the eye and the look-at in
+   the roots' space (the work holds them negated, as the groups are), the
+   camera mode (camera-root.c CameraGetMode) and whether a camera has been
+   computed since the stage's init (CameraCalclated_f: GetCameraPos's
+   test).  Reads only. */
+int ico_host_camera_view(float *eye, float *at, int *mode, int *computed);
+
+int ico_host_camera_view(float *eye, float *at, int *mode, int *computed)
+{
+    for (int k = 0; k < 3; k++) {
+        eye[k] = 0.0f - monitorCamera.work.eye.f[k];
+        at[k] = 0.0f - monitorCamera.work.at.f[k];
+    }
+    *mode = CameraGetMode();
+    *computed = CameraCalclated_f != 0;
+    return cameraGroupCurrent;
+}

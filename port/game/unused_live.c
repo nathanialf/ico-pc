@@ -27,8 +27,9 @@
  * room's floor, that no model draws (build-host/tmp/v0104/evidence/rooms),
  * so its placement is replaced.  Once the room's stage is up, a boy outside
  * every camera zone (the climbing room's origin: its zones lie 1355 and more
- * above its floor) moves to the lowest zone with a floor (startInZone), so
- * the camera finds him.  For the first 300 Main ticks of a room,
+ * above its floor) moves to the lowest zone with a floor (startInZone), his
+ * skeleton's root height above it (act.c's debug move), so the camera
+ * finds him.  For the first 300 Main ticks of a room,
  * and at a game over in one, the log follows the boy (boyLine).
  *
  * The rooms have no exit: pause > End Game goes back to the title (the
@@ -331,7 +332,9 @@ static void placeAtStart(int stage, int row)
    1000 on the European disc, is fatal), and the floor the game's own
    probe finds under him (act.c's GetLowerPlaneCollision: a ray from the
    root 10000 down, +y). when: "tick T" (Main ticks since the room's stage
-   came up) or "game over" */
+   came up) or "game over".  Beside him the monitor camera (its zone, eye
+   and look-at: camera-ico2.c ico_host_camera_view) and whether he is
+   drawn (GObj drawMask, the display object's disp) */
 /* why the boy cannot be read or probed now, NULL when he can: systemStatus[6],
    a stage change under way (the room's PH_PLAYING outlives it): its
    InitIcoMisc may have the boy up while colObjList still names the old
@@ -370,12 +373,38 @@ static void boyLine(const char *when)
     } else {
         snprintf(floor, sizeof(floor), "no floor below");
     }
+    /* the camera beside him: is he framed, and is he drawn (GObj drawMask,
+       ANDed with a camera's mask: all ones while shown; the display
+       object's disp: nonzero while the stage animation draws it) */
+    float eye[3], at[3];
+    int mode = 0, computed = 0;
+    const int group = ico_host_camera_view(eye, at, &mode, &computed);
+    char cam[160];
+    if (!computed) {
+        snprintf(cam, sizeof(cam), "no camera computed yet");
+    } else {
+        snprintf(cam, sizeof(cam),
+                 "the camera (mode %d) in zone %d, its eye (%.0f, %.0f, %.0f) looking at (%.0f, "
+                 "%.0f, %.0f)",
+                 mode, group, eye[0] + 0.0, eye[1] + 0.0, eye[2] + 0.0, at[0] + 0.0, at[1] + 0.0,
+                 at[2] + 0.0);
+    }
     fprintf(stderr,
             "unused: %s %s: the boy at (%.0f, %.0f, %.0f), ground height %.0f (%s), fall "
-            "height %.0f\n",
+            "height %.0f; %s; his draw mask 0x%08X, display %d\n",
             name, when, (double)pos[0], (double)pos[1], (double)pos[2],
             (double)GOBJ_SUB(boyGObj)->ctrl.groundHeight, floor,
-            (double)GOBJ_SUB(boyGObj)->ctrl.fallHeight);
+            (double)GOBJ_SUB(boyGObj)->ctrl.fallHeight, cam, (unsigned int)boyGObj->drawMask,
+            GOBJ_SUB(boyGObj)->disp);
+}
+
+/* an actor's root height as act.c's debug move takes it: its skeleton's
+   node 0 pos[1] (+y is down: the root that far above the floor), 0 when it
+   has no skeleton (GOBJ_SUB(self)->skel, set from the actor's creation) */
+static float rootHeight(GObj *self)
+{
+    const SkelNode *p = GOBJ_SUB(self)->skel;
+    return p != 0 ? p->pos[1] : 0.0f;
 }
 
 /* The camera finds the boy only inside one of the stage's camera zones:
@@ -392,9 +421,20 @@ static void boyLine(const char *when)
    as soon as the boy is up: a root inside a zone is left; otherwise the
    boy (and the girl when she is up) goes to the lowest zone (its box's
    bottom nearest the big floor) whose centre has a floor inside the box,
-   probed down from the box's top with the game's own floor probe, at the
-   root's own height above its floor (H, from the probe under him where
-   he stands), as E3_StageStartBoy moves him with SetDirectRootPosition.
+   probed down from the box's top with the game's own floor probe, and is
+   put there by the game's own rule for a direct move: act.c's debug move
+   (ACTDebugMove) sets the root to the floor's y minus the skeleton's root
+   height, node 0's pos[1] (rootHeight; each actor its own, 0 without a
+   skeleton), never the height a probe measures where he stands (the room's
+   first poll can come before his first motion frame fits him: his root
+   then lies ON the origin's floor, a probe measures 0, and a root put AT
+   the ramp's hit point lies, in the game's arithmetic, a hair under the
+   ramp's plane, so every probe from it finds the big floor 1324 below and
+   the landing probe drops him there: build-host/tmp/v0104/evidence/rooms/
+   climb-rc3-diagnosis.md), then SetDirectRootPosition as
+   E3_StageStartBoy moves him.  One probe from the moved root says what is
+   under him; a miss, or a floor more than twice his root height below, is
+   said plainly and he is left there (no second move).
    Zones with the same bottom: the one with the larger floor plan, then
    the set's order (the climbing room's group 20 and its thin side zone
    47 share the bottom; 47's floor lies 103 lower than 20's).  A zero is
@@ -408,8 +448,9 @@ static void startInZone(void)
     GetRootPosition(root, boyGObj);
     memset(&w, 0, sizeof(w));
     GetLowerPlaneCollision(&w, root);
+    /* the start's measured height, for the line only */
     const int under = w.floor.elem != 0;
-    const float h = under ? w.pt[2][1] - root[1] : 0.0f;
+    const float measured = under ? w.pt[2][1] - root[1] : 0.0f;
 
     const CamSetFile *set = (const CamSetFile *)TopCameraSetDataOfCurrentStage;
     const int n = set != NULL ? set->count : 0;
@@ -469,23 +510,71 @@ static void startInZone(void)
                 name, root[0] + 0.0, root[1] + 0.0, root[2] + 0.0);
         return;
     }
+    const float h = rootHeight(boyGObj);
     float to[4] = {-g[best].center[0], bestFloor - h, -g[best].center[2], 1.0f};
     SetDirectRootPosition(boyGObj, to);
     const int girl = girlGObj != 0 && GOBJ_SUB(girlGObj) != 0;
+    const float hGirl = girl ? rootHeight(girlGObj) : 0.0f;
     if (girl) {
-        SetDirectRootPosition(girlGObj, to);
+        float toGirl[4] = {to[0], bestFloor - hGirl, to[2], 1.0f};
+        SetDirectRootPosition(girlGObj, toGirl);
+    }
+
+    /* what the game's probe finds under the moved root (+y is down: D is
+       the floor's y minus the root's) */
+    float moved[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+    GetRootPosition(moved, boyGObj);
+    memset(&w, 0, sizeof(w));
+    GetLowerPlaneCollision(&w, moved);
+    const int found = w.floor.elem != 0;
+    const float f2 = w.pt[2][1];
+    const float d = f2 - moved[1];
+    char after[96];
+    if (found) {
+        snprintf(after, sizeof(after), "the probe from there finds the floor %.0f, %.0f below",
+                 (double)f2 + 0.0, (double)d + 0.0);
+    } else {
+        snprintf(after, sizeof(after), "the probe from there finds no floor");
+    }
+    char start[64];
+    if (under) {
+        snprintf(start, sizeof(start), "its root %.0f above its floor there",
+                 (double)measured + 0.0);
+    } else {
+        snprintf(start, sizeof(start), "no floor under its root");
+    }
+    char girlText[64] = "";
+    if (girl) {
+        snprintf(girlText, sizeof(girlText), "; the girl with him, %.0f above the floor",
+                 (double)hGirl + 0.0);
     }
     /* +y is down: the centre above the start when root.y - centre.y > 0
        (a zone below the start makes it negative: said as below) */
     const double above = (double)(root[1] - lowestCentre);
     fprintf(stderr,
             "unused: %s: the game's no-entrance point (%.0f, %.0f, %.0f) is outside every "
-            "camera zone (the lowest zone's centre %.0f %s it): the boy moved to zone %d's "
-            "floor at (%.0f, %.0f, %.0f) (%.0f above the floor y %.0f)%s%s\n",
+            "camera zone (the lowest zone's centre %.0f %s it; %s): the boy moved to zone %d's "
+            "floor at (%.0f, %.0f, %.0f) (%.0f above the floor y %.0f, his skeleton's root "
+            "height; %s)%s\n",
             name, root[0] + 0.0, root[1] + 0.0, root[2] + 0.0, (above < 0.0 ? -above : above) + 0.0,
-            above < 0.0 ? "below" : "above", best, to[0] + 0.0, to[1] + 0.0, to[2] + 0.0, (double)h,
-            (double)bestFloor, under ? "" : "; no floor under the start, so 0 above",
-            girl ? "; the girl with him" : "");
+            above < 0.0 ? "below" : "above", start, best, to[0] + 0.0, to[1] + 0.0, to[2] + 0.0,
+            (double)h + 0.0, (double)bestFloor, after, girlText);
+    if (!found || d > 2.0f * h) {
+        char what[96];
+        if (found) {
+            snprintf(what, sizeof(what),
+                     "the floor %.0f, %.0f below, more than twice his root height",
+                     (double)f2 + 0.0, (double)d + 0.0);
+        } else {
+            snprintf(what, sizeof(what), "no floor");
+        }
+        fprintf(stderr,
+                "unused: %s: the floor under the moved root is not the zone's: the probe from "
+                "(%.0f, %.0f, %.0f) finds %s (the zone's floor y %.0f, his root height %.0f); "
+                "he is left there\n",
+                name, moved[0] + 0.0, moved[1] + 0.0, moved[2] + 0.0, what, (double)bestFloor,
+                (double)h + 0.0);
+    }
 }
 
 /* the zone check once the boy is up, within the log's window; past it a
