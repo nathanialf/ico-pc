@@ -39,11 +39,14 @@
  * reaches its stage is a failure, logged, the title requested and the
  * state put back as it is entered (the credits' bounds).
  *
- * The movie and the art rows' starts belong to later work; here they
- * refuse with a line.
+ * The attract movie (beginMovie): the title's attract path started from
+ * the Settings menu: mpegPlayReturnStage the title, the theme faded, a
+ * stage switch to the movie stage; Main plays it and returns by itself.
+ * The art row's start belongs to later work; here it refuses with a line.
  */
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "ico_unused.h"
 #include "../core/region.h" /* ico_region_cur */
@@ -61,7 +64,10 @@
 /* the game's side, declared here as the callers in the game do */
 extern int stage_no;
 extern int systemStatus[];
-extern struct SqEntry *titleAdpcm; /* op.c */
+extern struct SqEntry *titleAdpcm;             /* op.c */
+extern int mpegPlayReturnStage;                /* StageManager.c */
+extern unsigned int stage_after_skipping_demo; /* layout_action.c */
+extern void stgmgrForceSwitchWithFade(int stage, float fadeIn, float fadeOut);
 extern unsigned int ico_host_main_ticks(void);
 extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned char r,
                                     unsigned char gr, unsigned char b);
@@ -89,7 +95,20 @@ extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned ch
    again (a log line) */
 #define REOPEN_TICKS 250u
 
-enum { PH_IDLE, PH_SWITCHING, PH_PLAYING, PH_RETURNING };
+enum {
+    PH_IDLE,
+    PH_SWITCHING,
+    PH_PLAYING,
+    PH_RETURNING,
+    /* the attract movie: the stage switch asked, the film playing, the
+       title requested after a start that never reached it */
+    PH_MOVIE_SWITCHING,
+    PH_MOVIE_PLAYING,
+    PH_MOVIE_RETURNING
+};
+
+/* main.c sets this when the player skipped a movie (movie_proc returned 1) */
+#define SKIPPED_DEMO 0xFFFFFFFEu
 
 static int s_phase = PH_IDLE;
 static int s_row = -1;
@@ -100,6 +119,9 @@ static unsigned int s_returnTick;
 static int s_lastStage;
 static int s_reopen;
 static unsigned int s_reopenTick;
+/* the movie's start in wall seconds: Main runs no tick while a film plays,
+   so its length is not read from the Main ticks */
+static time_t s_movieStart;
 
 /* --- available ----------------------------------------------------------- */
 
@@ -214,6 +236,98 @@ static int beginRoom(int row)
     return LAYOUT_NONE;
 }
 
+/* --- the attract movie --------------------------------------------------- */
+
+/* The European disc's second attract film, as the title's attract starts the
+   first (op.c, actOpDemo01 mode 2): the title is the return stage, the
+   title theme fades, and the stage switch goes to the movie stage; Main's
+   movie path (main.c: movie_init, movie_proc(movie_abort_check), then
+   ACTGame_SetActors_Debug and the switch to mpegPlayReturnStage) plays it,
+   Start skips it, and the title comes back by itself.  No game state is
+   touched, so none is kept.  The title's menu then reopens on the page. */
+static int beginMovie(void)
+{
+    const IcoUnusedRow *r = ico_unused_row(ICO_UNUSED_MOVIE);
+    const int stage = ico_unused_stage(ICO_UNUSED_MOVIE);
+
+    if (s_phase != PH_IDLE || stage_no != TITLE_STAGE || systemStatus[6] != 0) {
+        fprintf(stderr, "unused: failed: not on the title (stage %d, stage change %d)\n", stage_no,
+                systemStatus[6]);
+        return -1;
+    }
+    ico_unused_set_running(ICO_UNUSED_MOVIE);
+    s_phase = PH_MOVIE_SWITCHING;
+    s_row = ICO_UNUSED_MOVIE;
+    s_stage = stage;
+    s_startTick = ico_host_main_ticks();
+    s_movieStart = time(NULL);
+    s_lastStage = stage_no;
+    s_reopen = 0;
+    mpegPlayReturnStage = TITLE_STAGE;
+    /* a skip is told by this word at the return; an earlier film's would
+       read as this one's */
+    stage_after_skipping_demo = 0;
+    if (titleAdpcm != 0) {
+        titleAdpcm->stream->fadeStep = 0x40;
+    }
+    titleAdpcm = 0;
+    stgmgrForceSwitchWithFade(stage, 256.0f, 4.0f);
+    fprintf(stderr, "unused: %s started from the title (stage %d, Main tick %u)\n", r->name, stage,
+            s_startTick);
+    return LAYOUT_NONE;
+}
+
+static void movieFinish(const char *why)
+{
+    fprintf(stderr, "unused: back at the title after %.0f s (%s)\n",
+            difftime(time(NULL), s_movieStart), why);
+    ico_unused_set_running(-1);
+    s_phase = PH_IDLE;
+    s_row = -1;
+    s_stage = -1;
+    ui_settings_title_return(UI_PAGE_UNUSED);
+    s_reopen = 1;
+    s_reopenTick = ico_host_main_ticks();
+}
+
+static void movieEnter(void)
+{
+    if (s_phase == PH_MOVIE_PLAYING) {
+        movieFinish(stage_after_skipping_demo == SKIPPED_DEMO ? "skipped" : "movie ended");
+    } else if (s_phase == PH_MOVIE_RETURNING) {
+        movieFinish("fail-start");
+    }
+}
+
+static void moviePoll(void)
+{
+    if (s_phase == PH_MOVIE_SWITCHING) {
+        if (stage_no == s_stage && systemStatus[6] == 0) {
+            s_phase = PH_MOVIE_PLAYING;
+            fprintf(stderr, "unused: the movie's stage %d is up at Main tick %u; Start skips it\n",
+                    stage_no, ico_host_main_ticks());
+        } else {
+            const unsigned int t = ico_host_main_ticks() - s_startTick;
+            if ((t > REACH_TICKS && systemStatus[6] == 0) || t > REACH_LIMIT) {
+                fprintf(stderr,
+                        "unused: failed: the movie's stage %d was not reached by Main tick %u "
+                        "(stage %d, stage change %d)\n",
+                        s_stage, ico_host_main_ticks(), stage_no, systemStatus[6]);
+                if (stage_no == TITLE_STAGE && systemStatus[6] == 0) {
+                    movieFinish("fail-start");
+                } else {
+                    s_phase = PH_MOVIE_RETURNING;
+                    s_returnTick = ico_host_main_ticks();
+                    RequestStageChangeSimple(TITLE_STAGE, 16.0f, 8.0f, 0, 0, 0);
+                }
+            }
+        }
+    } else if (s_phase == PH_MOVIE_RETURNING &&
+               ico_host_main_ticks() - s_returnTick > RETURN_TICKS) {
+        movieFinish("fail-start, the title did not come back");
+    }
+}
+
 static int begin(int row)
 {
     switch (row) {
@@ -221,9 +335,10 @@ static int begin(int row)
     case ICO_UNUSED_CLIMB:
         return beginRoom(row);
     case ICO_UNUSED_MOVIE:
+        return beginMovie();
     case ICO_UNUSED_ART:
     default:
-        /* the movie's and the art's starts are not in this build */
+        /* the art's start is not in this build */
         fprintf(stderr, "unused: failed: %s cannot be started in this build\n",
                 ico_unused_row(row) != NULL ? ico_unused_row(row)->name : "?");
         return -1;
@@ -264,7 +379,9 @@ void ico_unused_stage_enter(int stage)
     if (stage != TITLE_STAGE) {
         return;
     }
-    if (s_phase == PH_PLAYING) {
+    if (s_phase >= PH_MOVIE_SWITCHING) {
+        movieEnter();
+    } else if (s_phase == PH_PLAYING) {
         finish(ico_unused_left_by()); /* End Game, or a game over's choice */
     } else if (s_phase == PH_RETURNING) {
         finish("fail-start");
@@ -326,6 +443,10 @@ void ico_unused_host_poll(void)
     if (stage_no != s_lastStage) {
         fprintf(stderr, "unused: stage %d at Main tick %u\n", stage_no, ico_host_main_ticks());
         s_lastStage = stage_no;
+    }
+    if (s_phase >= PH_MOVIE_SWITCHING) {
+        moviePoll();
+        return;
     }
     if (s_phase == PH_SWITCHING) {
         if (stage_no == s_stage && systemStatus[6] == 0) {
