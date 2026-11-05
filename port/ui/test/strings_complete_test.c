@@ -193,6 +193,16 @@ static void testTables(void)
                   kTables[l][UI_STR_OPT_SHADOWS_TOGETHER_NOTE] != NULL,
               "%s: Shadows attack together in its own words", kNames[l]);
     }
+    /* Gameplay's three pages' names in every table, the community ones
+       too: each a word their own rows use (Yorda as her Characters rows
+       spell her, the Shadows and the cutscenes as the variants rows name
+       them) */
+    for (int l = 0; l < UI_LANG_TABLES; l++) {
+        CHECK(kTables[l][UI_STR_SECTION_YORDA] != NULL &&
+                  kTables[l][UI_STR_SECTION_SHADOWS] != NULL &&
+                  kTables[l][UI_STR_SECTION_CUTSCENES] != NULL,
+              "%s: Yorda, Shadows and Cutscenes in its own words", kNames[l]);
+    }
 }
 
 static void testSerial(void)
