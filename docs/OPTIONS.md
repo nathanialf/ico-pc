@@ -428,36 +428,18 @@ The six mouse rows do not show on phones and tablets.
 ## Gameplay
 
 Every row here plays as the original until you change it, on a phone too.
+The Gameplay page has its own rows, then three pages of their own, each
+opened from its row just above Back: [Yorda](#yorda),
+[Shadows](#shadows) and [Cutscenes](#cutscenes). All of it is there from
+the title screen or the pause menu, on every disc.
 
-- **Shadows never take Yorda** makes the game gentler. A few scenes in the
-  story still show her being taken.
-- **Time to rescue Yorda** sets how many seconds a shadow takes to pull Yorda
-  into a pit, from the moment it starts to sink into the ground with her until
-  she is gone (in most scenes; see below): from 4 to 30 seconds, one second a
-  press. It starts at
-  **15 s (Original)**, the game's own time (15.4 seconds). The whole pull-in
-  speeds up or slows down evenly, so a short time leaves less time to reach
-  her at every point of it, and a long one more. Ico taking her hand still
-  pulls her back out. In some scenes, where the game shows the pit with a
-  camera of its own, the pull-in is quicker: the original takes her after 5
-  of its 15 seconds there, and the time you set scales that in the same
-  proportion (at 8 s she is taken after about 2.6 seconds there; at 30 s
-  after about 9.7). The row above, Shadows never take Yorda, stops it
-  altogether.
-- **Shadow speed** sets how fast shadows walk, run and fly: **Slower** (three
-  quarters of the original speed), **Original**, **Faster** (a quarter faster)
-  or **Fastest** (half as fast again). Only their walking, running and flying
-  change: their attacks, grabs, flinches and fading away play at the original
-  speed. It does not change how often they attack, how long they wait before
-  they do, or how long a shadow takes to pull Yorda into a pit (Time to rescue
-  Yorda sets that).
-- **Shadows attack together** lets several shadows attack Ico at the same
-  time. In the original game they take turns: while one shadow is attacking,
-  the others hold back and wait. With this on, none of them waits for the
-  others. How they come at you, how long they wait before they strike and how
-  they go after Yorda stay as in the original, and still only one shadow at a
-  time can carry Yorda away (several can already go after her at once). It
-  takes effect at once. Off unless you turn it on.
+Some rows change the game more than others. The line under a row says what
+it does, and on the game variants rows (No hints here, five rows on the
+Shadows page and two on the Cutscenes page) whether it switches
+achievements off. Those that switch them off do so for as long as they are
+on, like Developer mode, so you cannot earn an achievement by accident while
+playing a changed game. Turn them off again and achievements come back.
+
 - **Analogue stick fix** lets Ico run in any direction you push the stick,
   not only the eight the original game knows. It is also on the Controls
   page, and it is the same switch.
@@ -467,23 +449,6 @@ Every row here plays as the original until you change it, on a phone too.
   of the ladder in the East Reflector. For a few seconds after you come
   through a door holding her hand, that door does not take you back.
   [Why this is needed](FAQ.md#ico-and-yorda-come-straight-back-out-of-a-doorway).
-- **Yorda trips** makes Yorda trip and fall the way she does in the original
-  game after the main gate opens: when Ico has run pulling her by the hand
-  for three seconds, she falls, and again after every three more seconds of
-  it. She gets up again when Ico moves on. It takes effect from
-  the next room you go into, or the next time you continue from a save. The
-  June 2001 demo does not have her fall, so on that disc it does nothing.
-- **Natural chains** changes how two chains look as they come down for Ico:
-  the one at the Stone Pillar and one underground. In the original game the
-  links look squashed until the chain is all the way down. With this on, the
-  links stay the right size and more of the chain shows as it comes down. It
-  only changes the picture, not the game.
-- **Skip the opening** starts the game at the title screen, without the
-  Sony sign ("Sony Computer Entertainment Europe Presents" on the European
-  disc) and the opening scene.
-  The memory card check still runs, and its warning still shows if the card
-  is missing or full. It takes effect the next time you start the game.
-  Without it, Start still skips the opening scene once the sign has gone.
 - **Second memory card** puts a second memory card in the second slot, as
   on a PS2 with two cards: ten more saves. The game's own save and load
   screens then ask which card to use. It takes effect at once, the next
@@ -492,6 +457,10 @@ Every row here plays as the original until you change it, on a phone too.
   come back when you turn it on again. The second card is the folder
   `memcard2` beside `memcard` in your user folder
   ([where that is](PORTABLE_MODE.md#a-second-memory-card)).
+- **No hints:** Yorda gives no hints about where to go, as on the North
+  American disc. Achievements stay on. The North American disc, the August
+  2001 preview and the June 2001 demo have no hints, so there it changes
+  nothing, and the line under it says so.
 
 Two more rows are the game's own, and only show up in the pause menu's
 Options once you have finished the game:
@@ -512,6 +481,99 @@ European game added for it are missing there: Yorda does not jump up to
 Ico's hand at the highest ledges (he pulls her up the usual way), and the
 second controller does not rumble. Your choice is kept with each save, as on the
 other discs.
+
+### Yorda
+
+Options > Gameplay > Yorda:
+
+- **Shadows never take Yorda** makes the game gentler. A few scenes in the
+  story still show her being taken.
+- **Time to rescue Yorda** sets how many seconds a shadow takes to pull Yorda
+  into a pit, from the moment it starts to sink into the ground with her until
+  she is gone (in most scenes; see below): from 4 to 30 seconds, one second a
+  press. It starts at
+  **15 s (Original)**, the game's own time (15.4 seconds). The whole pull-in
+  speeds up or slows down evenly, so a short time leaves less time to reach
+  her at every point of it, and a long one more. Ico taking her hand still
+  pulls her back out. In some scenes, where the game shows the pit with a
+  camera of its own, the pull-in is quicker: the original takes her after 5
+  of its 15 seconds there, and the time you set scales that in the same
+  proportion (at 8 s she is taken after about 2.6 seconds there; at 30 s
+  after about 9.7). The row above, Shadows never take Yorda, stops it
+  altogether.
+- **Yorda trips** makes Yorda trip and fall the way she does in the original
+  game after the main gate opens: when Ico has run pulling her by the hand
+  for three seconds, she falls, and again after every three more seconds of
+  it. She gets up again when Ico moves on. It takes effect from
+  the next room you go into, or the next time you continue from a save. The
+  June 2001 demo does not have her fall, so on that disc it does nothing.
+- **Natural chains** changes how two chains look as they come down for Ico:
+  the one at the Stone Pillar and one underground. In the original game the
+  links look squashed until the chain is all the way down. With this on, the
+  links stay the right size and more of the chain shows as it comes down. It
+  only changes the picture, not the game.
+
+### Shadows
+
+Options > Gameplay > Shadows. Shadow toughness, One hit per swing, Shadows
+never dodge, Shadow aggression and Queen barrier each start as the game
+shipped on your disc.
+
+- **Shadow speed** sets how fast shadows walk, run and fly: **Slower** (three
+  quarters of the original speed), **Original**, **Faster** (a quarter faster)
+  or **Fastest** (half as fast again). Only their walking, running and flying
+  change: their attacks, grabs, flinches and fading away play at the original
+  speed. It does not change how often they attack, how long they wait before
+  they do, or how long a shadow takes to pull Yorda into a pit (Time to rescue
+  Yorda sets that).
+- **Shadows attack together** lets several shadows attack Ico at the same
+  time. In the original game they take turns: while one shadow is attacking,
+  the others hold back and wait. With this on, none of them waits for the
+  others. How they come at you, how long they wait before they strike and how
+  they go after Yorda stay as in the original, and still only one shadow at a
+  time can carry Yorda away (several can already go after her at once). It
+  takes effect at once. Off unless you turn it on.
+- **Shadow toughness:** **Original** keeps your disc's Shadows. **American**
+  makes every Shadow as tough as on the North American disc, and no tougher on
+  later playthroughs. **Not tougher later** keeps your disc's Shadows but they
+  do not get tougher on later playthroughs. Achievements stay on. On the June
+  2001 magazine demo there is no **American** choice: the demo's Shadows are
+  not the North American disc's, so the row has Original and Not tougher
+  later only (an `american` set in `config.toml` counts as Original there).
+- **One hit per swing:** a swing of Ico's weapon can hurt a Shadow only once.
+  Switches achievements off.
+- **Shadows never dodge:** Shadows never step aside from Ico's swings.
+  Switches achievements off.
+- **Shadow aggression:** how the Shadows fight. **Their own** leaves each
+  Shadow as the game made it. The other four make them all **Bold** or
+  **Wary**, and **patient** or **quick**. Achievements stay on.
+- **Queen barrier:** how many hits it takes to break the Queen's barrier,
+  5 or 7. Your disc's own number is shown until you choose. Achievements stay
+  on.
+
+### Cutscenes
+
+Options > Gameplay > Cutscenes:
+
+- **Skip the opening** starts the game at the title screen, without the
+  Sony sign ("Sony Computer Entertainment Europe Presents" on the European
+  disc) and the opening scene.
+  The memory card check still runs, and its warning still shows if the card
+  is missing or full. It takes effect the next time you start the game.
+  Without it, Start still skips the opening scene once the sign has gone.
+- **No cutscene look-around:** the right stick does not move the camera
+  during cutscenes. Achievements stay on. The North American disc, the August
+  2001 preview and the June 2001 demo have no look-around in cutscenes, so
+  there it changes nothing, and the line under it says so.
+- **Ignore cutscene cameras:** the game's cutscene cameras are not used.
+  Cutscenes can look wrong, and the game may show places it never meant you to
+  see. Switches achievements off.
+
+The game variants rows (No hints, the five Shadows rows from Shadow
+toughness on, the two cutscene rows and the Debug menu under
+[Developer mode](#developer-mode)) are kept in `config.toml`, under the
+heading `[variants]`.
+
 ## Language
 
 - **Language** is the game's own language: English, French, German,
@@ -589,10 +651,11 @@ page, and it is the same setting in both places.
 ## Extras
 
 On the title screen's Options this page has Music, Models, Credits,
-Character Customization, Game variants, Add to Steam (on Windows and Linux),
+Character Customization, Add to Steam (on Windows and Linux),
 Export textures, Back up your data, Restore from a backup and Achievement
-pop-ups. In the pause menu's Options it has only Character Customization,
-Game variants and Achievement pop-ups.
+pop-ups. In the pause menu's Options it has only Character Customization
+and Achievement pop-ups. The rows that change how the game plays are under
+[Gameplay](#gameplay).
 [Save states](#save-states) are on the pause menu and the Continue screen.
 
 - **Music:** listen to the game's music and sound effects.
@@ -603,8 +666,6 @@ Game variants and Achievement pop-ups.
   its disc, so the row is not there with that disc.
 - **Character Customization:** change the colours of Ico and Yorda.
   [Details below](#character-customization).
-- **Game variants:** change how the game plays.
-  [Details below](#game-variants).
 - **Achievement pop-ups** is the switch that is also the first row of the
   [Achievements](#achievements) list. Turn it on or off in either place.
 - **Add to Steam** (on the title screen's Extras page only; it finds Steam
@@ -662,53 +723,6 @@ Game variants and Achievement pop-ups.
   the same; a backup made by a newer version works in an older one for the
   memory card and the settings, but its save states only load in the version
   that can resume them ([save states and versions](#save-states)).
-
-### Game variants
-
-Options > Extras > Game variants, from the title screen or the pause menu,
-on every disc. Every row starts as the game shipped on your disc, and the line
-under a row says what it does and whether it switches achievements off. The
-rows that switch them off do so for as long as they are on, like Developer
-mode, so you cannot earn an achievement by accident while playing a changed
-game. Turn them off again and achievements come back.
-
-- **Shadow toughness:** **Original** keeps your disc's Shadows. **American**
-  makes every Shadow as tough as on the North American disc, and no tougher on
-  later playthroughs. **Not tougher later** keeps your disc's Shadows but they
-  do not get tougher on later playthroughs. Achievements stay on. On the June
-  2001 magazine demo there is no **American** choice: the demo's Shadows are
-  not the North American disc's, so the row has Original and Not tougher
-  later only (an `american` set in `config.toml` counts as Original there).
-- **One hit per swing:** a swing of Ico's weapon can hurt a Shadow only once.
-  Switches achievements off.
-- **Shadows never dodge:** Shadows never step aside from Ico's swings.
-  Switches achievements off.
-- **Shadow aggression:** how the Shadows fight. **Their own** leaves each
-  Shadow as the game made it. The other four make them all **Bold** or
-  **Wary**, and **patient** or **quick**. Achievements stay on.
-- **No hints:** Yorda gives no hints about where to go, as on the North
-  American disc. Achievements stay on. The North American disc, the August
-  2001 preview and the June 2001 demo have no hints, so there it changes
-  nothing, and the line under it says so.
-- **Queen barrier:** how many hits it takes to break the Queen's barrier,
-  5 or 7. Your disc's own number is shown until you choose. Achievements stay
-  on.
-- **No cutscene look-around:** the right stick does not move the camera
-  during cutscenes. Achievements stay on. The North American disc, the August
-  2001 preview and the June 2001 demo have no look-around in cutscenes, so
-  there it changes nothing, and the line under it says so.
-- **Ignore cutscene cameras:** the game's cutscene cameras are not used.
-  Cutscenes can look wrong, and the game may show places it never meant you to
-  see. Switches achievements off.
-- **Debug menu** (only while [Developer mode](#developer-mode) is on): opens
-  the game's own debug menu, made for the people who built the game. Options
-  closes and the menu opens over the game, or over the title screen if you
-  came from there; it works as the Select button opens it in Developer mode.
-  Switches achievements off. The June 2001 magazine demo has no Debug menu
-  row: the demo's debug menu is not right for it (it is the August 2001
-  preview's).
-
-The same choices are kept in `config.toml`, under the heading `[variants]`.
 
 ### Character Customization
 
@@ -820,13 +834,20 @@ game even after you turn it off, until you go back to the title screen. A
 game you save in that time keeps them off when you load it again, until
 you start a New Game.
 
-With Developer mode on, two more rows show up under it on the same page, for people who
-make packs:
+With Developer mode on, three more rows show up under it on the same page:
+two for people who make packs, and the game's own debug menu:
 
 - **Dump textures** saves every texture as a picture file when the game
   loads it. [More](TEXTURE_PACKS.md#make-a-texture-pack).
 - **Dump models** saves every model piece as a 3D model file when the game
   draws it. [More](MODEL_PACKS.md#make-a-model-pack).
+- **Debug menu** opens
+  the game's own debug menu, made for the people who built the game. Options
+  closes and the menu opens over the game, or over the title screen if you
+  came from there; it works as the Select button opens it in Developer mode.
+  Switches achievements off. The June 2001 magazine demo has no Debug menu
+  row: the demo's debug menu is not right for it (it is the August 2001
+  preview's).
 
 ## The pause menu's journey panel
 
