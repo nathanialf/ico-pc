@@ -1571,6 +1571,90 @@ static void test_video_effects(const char *dir)
         text = read_text(path);
         CHECK(text != NULL && strstr(text, "effect_motion_blur_strength = 100\n") != NULL);
     }
+    /* The colour adjustment ([video] gamma, brightness, contrast,
+       saturation, issue 190): 50 by default and with no key (a file from
+       before the rows), 1..100 read as written (a hand-set 47 kept), outside
+       1..100 clamped and a value that is not a number 50; saved with every
+       save and read back; outside the preset */
+    {
+        static const struct {
+            const char *text;
+            int want;
+        } kTone[] = {{NULL, 50}, {"50", 50}, {"47", 47},   {"1", 1},     {"100", 100},
+                     {"0", 1},   {"-30", 1}, {"250", 100}, {"\"x\"", 50}};
+
+        static const char *const kKey[4] = {"gamma", "brightness", "contrast", "saturation"};
+
+        ico_video_defaults(&d);
+        CHECK(d.toneGamma == 50 && d.toneBrightness == 50 && d.toneContrast == 50 &&
+              d.toneSaturation == 50);
+        CHECK(ico_video_tone_clamp(0) == 1 && ico_video_tone_clamp(1) == 1 &&
+              ico_video_tone_clamp(47) == 47 && ico_video_tone_clamp(100) == 100 &&
+              ico_video_tone_clamp(101) == 100);
+        for (size_t i = 0; i < sizeof(kTone) / sizeof(kTone[0]); i++) {
+            for (int k = 0; k < 4; k++) {
+                int got[4];
+
+                f = fopen(path, "wb");
+                if (f != NULL) {
+                    fputs("[video]\n", f);
+                    if (kTone[i].text != NULL) {
+                        fprintf(f, "%s = %s\n", kKey[k], kTone[i].text);
+                    }
+                    fclose(f);
+                }
+                ico_config_reset(path, "/nonexistent/options_test.ini");
+                ico_video_reload();
+                ico_video_get(&o);
+                got[0] = o.toneGamma;
+                got[1] = o.toneBrightness;
+                got[2] = o.toneContrast;
+                got[3] = o.toneSaturation;
+                for (int j = 0; j < 4; j++) {
+                    CHECK(got[j] == (j == k ? kTone[i].want : 50));
+                }
+                CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+            }
+        }
+        /* ico_video_set clamps; the save writes all four; read back */
+        ico_video_get(&o);
+        o.toneGamma = 0;
+        o.toneBrightness = 47;
+        o.toneContrast = 300;
+        o.toneSaturation = 80;
+        ico_video_set(&o);
+        ico_video_get(&o);
+        CHECK(o.toneGamma == 1 && o.toneBrightness == 47 && o.toneContrast == 100 &&
+              o.toneSaturation == 80 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+        CHECK(ico_video_save() == 0);
+        text = read_text(path);
+        CHECK(text != NULL && strstr(text, "gamma = 1\n") != NULL &&
+              strstr(text, "brightness = 47\n") != NULL &&
+              strstr(text, "contrast = 100\n") != NULL &&
+              strstr(text, "saturation = 80\n") != NULL);
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        ico_video_get(&o);
+        CHECK(o.toneGamma == 1 && o.toneBrightness == 47 && o.toneContrast == 100 &&
+              o.toneSaturation == 80);
+        ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+        CHECK(o.toneGamma == 1 && o.toneSaturation == 80);
+        ico_video_set_preset(&o, ICO_VIDEO_ORIGINAL);
+        CHECK(o.toneBrightness == 47 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+        /* a file without the keys saved by this build gains them as 50 */
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fputs("[video]\neffect_fog = false\n", f);
+            fclose(f);
+        }
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        CHECK(ico_video_save() == 0);
+        text = read_text(path);
+        CHECK(text != NULL && strstr(text, "gamma = 50\n") != NULL &&
+              strstr(text, "brightness = 50\n") != NULL &&
+              strstr(text, "contrast = 50\n") != NULL && strstr(text, "saturation = 50\n") != NULL);
+    }
     /* Glow between frames ([video] effect_glow_mode): Original with no key
        under the Original rows, "original" and "smooth" read in any case,
        anything else Original (with a stderr line); Smooth beside the

@@ -154,6 +154,10 @@ display option, the [preset](ARCHITECTURE.md#terms) rule and the pacing belong t
 | `crt_mode` | string | `"consumer"` | `scanlines`, `consumer`, `trinitron`, `pvm`, `shadow` |
 | `crt_strength` | float | `1.0` | 0..1 |
 | `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom`, `crt_curvature` | float | `-1` | file only; below 0 is the mode's value |
+| `gamma` | int | `50` | Picture > Gamma (`RdSettings.toneGamma`): 1..100, 50 the game's own picture; outside the range clamped, a word 50, each with a `video:` stderr line; no key (a file from before the rows) is 50; written with every save; outside the preset, with or without the CRT filter |
+| `brightness` | int | `50` | Picture > Picture brightness (`RdSettings.toneBrightness`): as `gamma`. Not the game's own Brightness row (`systemStatus[11]`, the pause menu's, never written here) |
+| `contrast` | int | `50` | Picture > Contrast (`RdSettings.toneContrast`): as `gamma` |
+| `saturation` | int | `50` | Picture > Saturation (`RdSettings.toneSaturation`): as `gamma` |
 | `texture_pack` | bool | `true` | load an installed texture pack (the disc's serial folder: SCES-50760 or SCPS-11003, [PACKS.md](PACKS.md)) |
 | `dump_textures` | bool | `false` | write each texture under its PCSX2 name |
 | `model_pack` | bool | `true` | load an installed model pack |
@@ -238,7 +242,9 @@ original game's behaviour (`port/game/options.h`, header comment).
 
 ### [variants]
 
-Extras > Game variants ([UI.md](UI.md#extras--game-variants), [OPTIONS.md](../OPTIONS.md#game-variants)).
+Options > Gameplay: No hints on the page, the Shadows rows on Gameplay > Shadows, the two cutscene
+rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-and-cutscenes),
+[OPTIONS.md](../OPTIONS.md#gameplay)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
 the game as the disc ships it. All eight are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
 `port/platform/sim_keys.c`). A word
@@ -255,10 +261,10 @@ or number that is no value reads as the default and is logged once.
 | `no_cutscene_look` | bool | `false` | no camera look-around in cutscenes |
 | `ignore_cutscene_cameras` | bool | `false` | the cutscenes' cameras are ignored (`debug_ignore_demo_camera`); suspends achievements |
 
-The Debug menu row has no key: its press marks the Debug menu used until the options are reloaded,
+The Debug menu row (Options > Developer, with Developer mode on) has no key: its press marks the Debug menu used until the options are reloaded,
 which suspends achievements too (`ico_variants_suspend_achievements`, read by `gamestate.c` beside
 developer mode), opens the game's debug menu and closes Options. Where the game reads each key, and
-what it changes, is in [GAME_FEATURES.md](GAME_FEATURES.md#game-variants); a change on the page
+what it changes, is in [GAME_FEATURES.md](GAME_FEATURES.md#game-variants); a change on a page
 takes effect at once (`ico_variants_apply`).
 
 ### [mirror]

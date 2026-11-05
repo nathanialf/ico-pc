@@ -208,11 +208,16 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_NEWGAME_PLUS_SCREEN] = NULL,
     [UI_STR_OPT_CRT] = "ЭЛТ фильтр",
     [UI_STR_OPT_CRT_STRENGTH] = "Сила ЭЛТ фильтра",
-    [UI_STR_VAL_CRT_SCANLINES] = NULL, /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_CONSUMER] = NULL,  /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_TRINITRON] = NULL, /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_PVM] = NULL,       /* empty in the CSV: English */
-    [UI_STR_VAL_CRT_SHADOW] = NULL,    /* empty in the CSV: English */
+    [UI_STR_OPT_TONE_GAMMA] = NULL,      /* newer than the translation: English */
+    [UI_STR_OPT_TONE_BRIGHTNESS] = NULL, /* newer than the translation: English */
+    [UI_STR_OPT_TONE_CONTRAST] = NULL,   /* newer than the translation: English */
+    [UI_STR_OPT_TONE_SATURATION] = NULL, /* newer than the translation: English */
+    [UI_STR_OPT_TONE_NOTE] = NULL,       /* newer than the translation: English */
+    [UI_STR_VAL_CRT_SCANLINES] = NULL,   /* empty in the CSV: English */
+    [UI_STR_VAL_CRT_CONSUMER] = NULL,    /* empty in the CSV: English */
+    [UI_STR_VAL_CRT_TRINITRON] = NULL,   /* empty in the CSV: English */
+    [UI_STR_VAL_CRT_PVM] = NULL,         /* empty in the CSV: English */
+    [UI_STR_VAL_CRT_SHADOW] = NULL,      /* empty in the CSV: English */
     [UI_STR_VAL_CUSTOM] = "Пользовательский",
     [UI_STR_RESOLUTION_CRT_NOTE] =
         "Фильтр ЭЛТ: собственные пиксели PS2, разрешение 1x во время работы.",
@@ -705,7 +710,9 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Копирование образа диска в приложение",
     [UI_STR_ISO_COPYING_LONG] =
         "Копирование образа диска в приложение. Это большой образ: процесс займет несколько минут.",
-    [UI_STR_SECTION_VARIANTS] = "Варианты игры",
+    [UI_STR_SECTION_YORDA] = NULL,     /* newer than the CSV: English */
+    [UI_STR_SECTION_SHADOWS] = NULL,   /* newer than the CSV: English */
+    [UI_STR_SECTION_CUTSCENES] = NULL, /* newer than the CSV: English */
     [UI_STR_OPT_VAR_TOUGHNESS] = "Сила теней",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         "Американская версия: Сила теней соответствует NTSC диску и не возрастает по мере прохождения. Достижения не отключаются.",

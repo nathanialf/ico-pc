@@ -208,6 +208,11 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
         "Диалоги Йорды будут отображаться с переводом, а концовка и предметы отличаться от оригинала. Работает и при первом прохождении.",
     [UI_STR_OPT_CRT] = "ЭЛТ-фильтр",
     [UI_STR_OPT_CRT_STRENGTH] = "Сила ЭЛТ-фильтра",
+    [UI_STR_OPT_TONE_GAMMA] = NULL,      /* newer than the translation: English */
+    [UI_STR_OPT_TONE_BRIGHTNESS] = NULL, /* newer than the translation: English */
+    [UI_STR_OPT_TONE_CONTRAST] = NULL,   /* newer than the translation: English */
+    [UI_STR_OPT_TONE_SATURATION] = NULL, /* newer than the translation: English */
+    [UI_STR_OPT_TONE_NOTE] = NULL,       /* newer than the translation: English */
     [UI_STR_VAL_CRT_SCANLINES] = "Линии развертки",
     [UI_STR_VAL_CRT_CONSUMER] = "Бытовой телевизор",
     [UI_STR_VAL_CRT_TRINITRON] = NULL, /* English in his table: English */
@@ -701,7 +706,9 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Копирование образа диска в приложение",
     [UI_STR_ISO_COPYING_LONG] =
         "Копирование образа диска в приложение. Из-за большого объема файла это может занять несколько минут.",
-    [UI_STR_SECTION_VARIANTS] = "Версии игры",
+    [UI_STR_SECTION_YORDA] = NULL,     /* newer than his table: English */
+    [UI_STR_SECTION_SHADOWS] = NULL,   /* newer than his table: English */
+    [UI_STR_SECTION_CUTSCENES] = NULL, /* newer than his table: English */
     [UI_STR_OPT_VAR_TOUGHNESS] = "Прочность теней",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         "Стойкость теней как в версии NTSC. В следующих прохождениях сложность не растет. Достижения не отключаются.",

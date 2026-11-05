@@ -776,6 +776,29 @@ static int render(void)
         CHECK(settle(mainL, 60), "back to the menu from Controls (touch)");
         ui_settings_set_touch_query(NULL);
     }
+    /* Gameplay -> Yorda, Shadows and Cutscenes (its three links before
+       Back), each with the cursor on its first row */
+    {
+        static const struct {
+            UiSettingsPage page;
+            const char *name;
+        } sub[] = {{UI_PAGE_YORDA, "settings_gameplay_yorda.png"},
+                   {UI_PAGE_SHADOWS, "settings_gameplay_shadows.png"},
+                   {UI_PAGE_CUTSCENES, "settings_gameplay_cutscenes.png"}};
+
+        for (unsigned i = 0; i < sizeof(sub) / sizeof(sub[0]); i++) {
+            int gameL = -1;
+            openGameplayPage(mainL, sub[i].page, &gameL);
+            for (int k = 0; k < 30; k++) {
+                frame(0);
+            }
+            snap(sub[i].name);
+            press(0x10);
+            CHECK(settle(gameL, 60), "back to Gameplay from %s", sub[i].name);
+            press(0x10);
+            CHECK(settle(mainL, 60), "back to the menu from Gameplay (%s)", sub[i].name);
+        }
+    }
     /* Controls -> Remap, then a capture in progress */
     lt_ext_layout(mainL)->curItem = mainLink(UI_PAGE_CONTROLS);
     press(0x40);
@@ -980,6 +1003,29 @@ static int render(void)
             snap1080(pg[i].name);
             press(0x10);
             CHECK(settle(mainL, 60), "back to the menu from %s at 1080p", pg[i].name);
+        }
+        /* Gameplay's three pages at 1080p, through Gameplay */
+        {
+            static const struct {
+                UiSettingsPage page;
+                const char *name;
+            } sub[] = {{UI_PAGE_YORDA, "settings_gameplay_yorda"},
+                       {UI_PAGE_SHADOWS, "settings_gameplay_shadows"},
+                       {UI_PAGE_CUTSCENES, "settings_gameplay_cutscenes"}};
+
+            for (unsigned i = 0; i < sizeof(sub) / sizeof(sub[0]); i++) {
+                int gameL = -1;
+                openGameplayPage(mainL, sub[i].page, &gameL);
+                for (int k = 0; k < 30; k++) {
+                    frame(0);
+                }
+                snap1080(sub[i].name);
+                press(0x10);
+                CHECK(settle(gameL, 60), "back to Gameplay from %s at 1080p", sub[i].name);
+                press(0x10);
+                CHECK(settle(mainL, 60), "back to the menu from Gameplay (%s) at 1080p",
+                      sub[i].name);
+            }
         }
         int mir = ui_new_game_screen_enter();
         lt_switch_layout(mir);

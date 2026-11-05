@@ -585,15 +585,20 @@ typedef enum UiSettingsPage {
        shows only while the build has more than one renderer
        (ui_settings_set_backend_names) */
     UI_PAGE_GRAPHICS,
-    /* Extras > Game variants (port/game/variants.h): the eight [variants]
-       rows, the Debug menu (Developer mode only), Back */
-    UI_PAGE_VARIANTS,
+    /* Gameplay's three pages, their links before Gameplay's Back: Yorda
+       (Yorda safe, Time to rescue Yorda, Yorda trips, Natural chains),
+       Shadows (Shadow speed, Shadows attack together and five of the
+       [variants] rows, port/game/variants.h) and Cutscenes (Skip the
+       opening and the two cutscene [variants] rows), each with Back */
+    UI_PAGE_YORDA,
+    UI_PAGE_SHADOWS,
+    UI_PAGE_CUTSCENES,
     /* Picture (main page, after Display): the picture's own rows
        (Anti-aliasing, Full-height picture, Texture filtering, Full pixel,
        Brightness, CRT, the texture and model packs), Back */
     UI_PAGE_PICTURE,
     /* Developer (main page, before Back): Developer mode, Dump textures,
-       Dump models, Back */
+       Dump models, the Debug menu, Back */
     UI_PAGE_DEVELOPER,
     /* Save states: the pause menu's Save states row and the Continue
        screen's Square prompt open it (both only built while a UiStatesHost
@@ -623,6 +628,12 @@ typedef enum UiSettingsOpt {
     UI_OPT_SHOW_FPS,     /* [video] show_fps: Off/On, default Off (the Frame rate counter) */
     UI_OPT_CRT,          /* [video] crt and crt_mode in one row */
     UI_OPT_CRT_STRENGTH, /* [video] crt_strength, 0..100 % in tens */
+    /* [video] gamma, brightness, contrast, saturation: 1..100, 50 the game's own
+       picture, 5 a press, Square puts 50 back; outside the preset */
+    UI_OPT_TONE_GAMMA,
+    UI_OPT_TONE_BRIGHTNESS,
+    UI_OPT_TONE_CONTRAST,
+    UI_OPT_TONE_SATURATION,
     UI_OPT_TEXTURE_PACK, /* [video] texture_pack: On/Off, "None installed" without a pack */
     UI_OPT_MODEL_PACK, /* [video] model_pack: On/Off, "None installed" without a pack; title only */
     UI_OPT_BRIGHTNESS, /* the game's brightness step, systemStatus[11] 0..14 */
@@ -701,8 +712,10 @@ typedef enum UiSettingsOpt {
     UI_OPT_CHAR_ICO_SHORTS,
     UI_OPT_CHAR_YORDA_SKIN,
     UI_OPT_CHAR_YORDA_DRESS,
-    /* Extras > Game variants, one row per IcoVariantId in its order
-       (UI_OPT_VAR_TOUGHNESS + id): [variants] keys, port/game/variants.h */
+    /* the game variants, one row per IcoVariantId in its order
+       (UI_OPT_VAR_TOUGHNESS + id): [variants] keys, port/game/variants.h;
+       No hints on Gameplay, the two cutscene rows on Gameplay > Cutscenes,
+       the others on Gameplay > Shadows */
     UI_OPT_VAR_TOUGHNESS,
     UI_OPT_VAR_ONE_HIT,
     UI_OPT_VAR_NEVER_DODGE,
@@ -770,7 +783,7 @@ typedef enum UiSettingsOpt {
     /* Main's row "Save a picture for a bug report", above Developer mode:
        the host's frame dump, 3 s later (ui_settings_set_frame_dump_handler) */
     UI_OPT_REPORT_PICTURE,
-    /* Game variants' Debug menu: a press row, shown while Developer mode
+    /* Developer's Debug menu: a press row, shown while Developer mode
        is on (ico_variants_debug_menu_pressed) */
     UI_OPT_VAR_DEBUG_MENU,
     /* Save states page: a slot's card (its label row; the action word is

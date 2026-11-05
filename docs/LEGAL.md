@@ -193,7 +193,7 @@ The table of enemy kinds that `enemy.c` reads (the decompilation's member
 the decision of the project owner on 2026-10-24, as it is on the
 decompilation's main branch (its `docs/LEGAL.md` has the same exception).
 The port offers the North American disc's enemy tuning as a play variant on
-every disc (Options > Extras > Game variants), which needs that table
+every disc (Options > Gameplay > Shadows), which needs that table
 without the North American disc. The table holds only numbers, one row per
 enemy kind: the model and particle ids, the life, the scale, the dodge range
 and the attribute bits. It holds no names, text or layouts, and it is written

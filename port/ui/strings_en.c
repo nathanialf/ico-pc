@@ -202,6 +202,12 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "New Game+ plays the second journey: Yorda’s words translated, the ending and items changed. Off plays the first journey even after finishing.",
     [UI_STR_OPT_CRT] = "CRT filter",
     [UI_STR_OPT_CRT_STRENGTH] = "CRT strength",
+    [UI_STR_OPT_TONE_GAMMA] = "Gamma",
+    [UI_STR_OPT_TONE_BRIGHTNESS] = "Picture brightness",
+    [UI_STR_OPT_TONE_CONTRAST] = "Contrast",
+    [UI_STR_OPT_TONE_SATURATION] = "Saturation",
+    [UI_STR_OPT_TONE_NOTE] =
+        "50 is the picture as the game draws it. Square puts 50 back. Changes the whole picture, the CRT filter's too.",
     [UI_STR_VAL_CRT_SCANLINES] = "Scanlines",
     [UI_STR_VAL_CRT_CONSUMER] = "Consumer TV",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",
@@ -709,7 +715,9 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Copying the disc image into the app",
     [UI_STR_ISO_COPYING_LONG] =
         "Copying the disc image into the app. It is a large image: this takes a few minutes",
-    [UI_STR_SECTION_VARIANTS] = "Game variants",
+    [UI_STR_SECTION_YORDA] = "Yorda",
+    [UI_STR_SECTION_SHADOWS] = "Shadows",
+    [UI_STR_SECTION_CUTSCENES] = "Cutscenes",
     [UI_STR_OPT_VAR_TOUGHNESS] = "Shadow toughness",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         "American: every Shadow as tough as on the North American disc, and no tougher on later playthroughs. Achievements stay on.",

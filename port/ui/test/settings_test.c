@@ -63,10 +63,11 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_BACK};
-    static const int picOpts[] = {UI_OPT_ANTI_ALIAS, UI_OPT_DOWNSAMPLE,   UI_OPT_FULL_HEIGHT,
-                                  UI_OPT_FILTER,     UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,
-                                  UI_OPT_CRT,        UI_OPT_CRT_STRENGTH, UI_OPT_TEXTURE_PACK,
-                                  UI_OPT_MODEL_PACK, UI_OPT_BACK};
+    static const int picOpts[] = {
+        UI_OPT_ANTI_ALIAS,   UI_OPT_DOWNSAMPLE,      UI_OPT_FULL_HEIGHT,   UI_OPT_FILTER,
+        UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,      UI_OPT_CRT,           UI_OPT_CRT_STRENGTH,
+        UI_OPT_TONE_GAMMA,   UI_OPT_TONE_BRIGHTNESS, UI_OPT_TONE_CONTRAST, UI_OPT_TONE_SATURATION,
+        UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,      UI_OPT_BACK};
     static const int picStrs[] = {UI_STR_OPT_AA,
                                   UI_STR_OPT_DOWNSAMPLE,
                                   UI_STR_OPT_FULL_HEIGHT,
@@ -75,13 +76,17 @@ static void testBuild(void)
                                   UI_STR_OPT_BRIGHTNESS,
                                   UI_STR_OPT_CRT,
                                   UI_STR_OPT_CRT_STRENGTH,
+                                  UI_STR_OPT_TONE_GAMMA,
+                                  UI_STR_OPT_TONE_BRIGHTNESS,
+                                  UI_STR_OPT_TONE_CONTRAST,
+                                  UI_STR_OPT_TONE_SATURATION,
                                   UI_STR_OPT_TEXTURE_PACK,
                                   UI_STR_OPT_MODEL_PACK,
                                   UI_STR_BACK};
     static const int devOpts[] = {UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,
-                                  UI_OPT_BACK};
+                                  UI_OPT_VAR_DEBUG_MENU, UI_OPT_BACK};
     static const int devStrs[] = {UI_STR_OPT_DEVELOPER_MODE, UI_STR_OPT_DUMP_TEXTURES,
-                                  UI_STR_OPT_DUMP_MODELS, UI_STR_BACK};
+                                  UI_STR_OPT_DUMP_MODELS, UI_STR_OPT_VAR_DEBUG_MENU, UI_STR_BACK};
     static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
                                    UI_STR_SECTION_PICTURE,
                                    UI_STR_SECTION_EFFECTS,
@@ -129,24 +134,31 @@ static void testBuild(void)
         UI_STR_OPT_TOUCH_MODE, UI_STR_OPT_TOUCH_SIZE,  UI_STR_OPT_TOUCH_OPACITY,
         UI_STR_OPT_TOUCH_EDIT, UI_STR_OPT_TOUCH_SNAP,  UI_STR_OPT_TOUCH_GRID,
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
-    static const int gameOpts[] = {
-        UI_OPT_YORDA,        UI_OPT_PIT_TIME,    UI_OPT_SHADOW_SPEED, UI_OPT_SHADOWS_TOGETHER,
-        UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_YORDA_TRIPS,  UI_OPT_NATURAL_CHAINS,
-        UI_OPT_SKIP_OPENING, UI_OPT_SECOND_CARD, UI_OPT_FILM_EFFECT,  UI_OPT_PLAYERS,
-        UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_YORDA,
-                                   UI_STR_OPT_PIT_TIME,
-                                   UI_STR_OPT_SHADOW_SPEED,
-                                   UI_STR_OPT_SHADOWS_TOGETHER,
-                                   UI_STR_OPT_STICK_FIX,
-                                   UI_STR_OPT_DOOR_FIX,
-                                   UI_STR_OPT_YORDA_TRIPS,
-                                   UI_STR_OPT_NATURAL_CHAINS,
-                                   UI_STR_OPT_SKIP_OPENING,
-                                   UI_STR_OPT_SECOND_CARD,
-                                   UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS,
-                                   UI_STR_BACK};
+    /* Gameplay: its own six rows, the three pages' links, Back */
+    static const int gameOpts[] = {UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_SECOND_CARD,
+                                   UI_OPT_VAR_NO_HINTS, UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,
+                                   UI_OPT_LINK,         UI_OPT_LINK,        UI_OPT_LINK,
+                                   UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,     UI_STR_OPT_DOOR_FIX,
+                                   UI_STR_OPT_SECOND_CARD,   UI_STR_OPT_VAR_NO_HINTS,
+                                   UI_STR_OPT_FILM_EFFECT,   UI_STR_OPT_PLAYERS,
+                                   UI_STR_SECTION_YORDA,     UI_STR_SECTION_SHADOWS,
+                                   UI_STR_SECTION_CUTSCENES, UI_STR_BACK};
+    static const int yordaOpts[] = {UI_OPT_YORDA, UI_OPT_PIT_TIME, UI_OPT_YORDA_TRIPS,
+                                    UI_OPT_NATURAL_CHAINS, UI_OPT_BACK};
+    static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
+                                    UI_STR_OPT_NATURAL_CHAINS, UI_STR_BACK};
+    static const int shadowOpts[] = {
+        UI_OPT_SHADOW_SPEED,    UI_OPT_SHADOWS_TOGETHER, UI_OPT_VAR_TOUGHNESS, UI_OPT_VAR_ONE_HIT,
+        UI_OPT_VAR_NEVER_DODGE, UI_OPT_VAR_AGGRESSION,   UI_OPT_VAR_BARRIER,   UI_OPT_BACK};
+    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED,    UI_STR_OPT_SHADOWS_TOGETHER,
+                                     UI_STR_OPT_VAR_TOUGHNESS,   UI_STR_OPT_VAR_ONE_HIT,
+                                     UI_STR_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_AGGRESSION,
+                                     UI_STR_OPT_VAR_BARRIER,     UI_STR_BACK};
+    static const int cutOpts[] = {UI_OPT_SKIP_OPENING, UI_OPT_VAR_NO_LOOK, UI_OPT_VAR_IGNORE_CAMS,
+                                  UI_OPT_BACK};
+    static const int cutStrs[] = {UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_VAR_NO_LOOK,
+                                  UI_STR_OPT_VAR_IGNORE_CAMS, UI_STR_BACK};
     static const int listOpts[8] = {UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST,
                                     UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST, UI_OPT_LIST};
     static const int listStrs[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
@@ -160,47 +172,23 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
     CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 6), "Graphics page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 10), "effects rows");
-    CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 11), "picture rows");
-    CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 4), "developer rows");
+    CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 15), "picture rows");
+    CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 5), "developer rows");
     {
-        /* Characters and Game variants (links), then Add to Steam,
+        /* the Characters link, then Add to Steam,
            Export textures, Back up your data and Restore from a backup
            (hidden without a host) before the pop-ups and Back */
-        static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,
-                                         UI_OPT_EXTRAS_MODELS,
-                                         UI_OPT_EXTRAS_CREDITS,
-                                         UI_OPT_LINK,
-                                         UI_OPT_LINK,
-                                         UI_OPT_EXTRAS_STEAM,
-                                         UI_OPT_EXTRAS_EXPORT_TEXTURES,
-                                         UI_OPT_EXTRAS_BACKUP,
-                                         UI_OPT_EXTRAS_RESTORE,
-                                         UI_OPT_ACH_POPUPS,
-                                         UI_OPT_BACK};
-        static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,
-                                         UI_STR_EXTRAS_MODELS,
-                                         UI_STR_EXTRAS_CREDITS,
-                                         UI_STR_SECTION_CHARACTERS,
-                                         UI_STR_SECTION_VARIANTS,
-                                         UI_STR_EXTRAS_STEAM,
-                                         UI_STR_EXTRAS_EXPORT_TEXTURES,
-                                         UI_STR_EXTRAS_BACKUP,
-                                         UI_STR_EXTRAS_RESTORE,
-                                         UI_STR_OPT_ACH_POPUPS,
-                                         UI_STR_BACK};
-        CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 11), "Extras page rows");
-        /* Game variants: the eight variants, the Debug menu, Back */
-        static const int varOpts[] = {UI_OPT_VAR_TOUGHNESS,   UI_OPT_VAR_ONE_HIT,
-                                      UI_OPT_VAR_NEVER_DODGE, UI_OPT_VAR_AGGRESSION,
-                                      UI_OPT_VAR_NO_HINTS,    UI_OPT_VAR_BARRIER,
-                                      UI_OPT_VAR_NO_LOOK,     UI_OPT_VAR_IGNORE_CAMS,
-                                      UI_OPT_VAR_DEBUG_MENU,  UI_OPT_BACK};
-        static const int varStrs[] = {UI_STR_OPT_VAR_TOUGHNESS,   UI_STR_OPT_VAR_ONE_HIT,
-                                      UI_STR_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_AGGRESSION,
-                                      UI_STR_OPT_VAR_NO_HINTS,    UI_STR_OPT_VAR_BARRIER,
-                                      UI_STR_OPT_VAR_NO_LOOK,     UI_STR_OPT_VAR_IGNORE_CAMS,
-                                      UI_STR_OPT_VAR_DEBUG_MENU,  UI_STR_BACK};
-        CHECK(labelsAre(UI_PAGE_VARIANTS, varOpts, varStrs, 10), "Game variants page rows");
+        static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,   UI_OPT_EXTRAS_MODELS,
+                                         UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK,
+                                         UI_OPT_EXTRAS_STEAM,   UI_OPT_EXTRAS_EXPORT_TEXTURES,
+                                         UI_OPT_EXTRAS_BACKUP,  UI_OPT_EXTRAS_RESTORE,
+                                         UI_OPT_ACH_POPUPS,     UI_OPT_BACK};
+        static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,   UI_STR_EXTRAS_MODELS,
+                                         UI_STR_EXTRAS_CREDITS, UI_STR_SECTION_CHARACTERS,
+                                         UI_STR_EXTRAS_STEAM,   UI_STR_EXTRAS_EXPORT_TEXTURES,
+                                         UI_STR_EXTRAS_BACKUP,  UI_STR_EXTRAS_RESTORE,
+                                         UI_STR_OPT_ACH_POPUPS, UI_STR_BACK};
+        CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 10), "Extras page rows");
     }
     CHECK(labelsAre(UI_PAGE_DISPLAY, dispOpts, dispStrs, 9),
           "display rows (Frame rate without a framerate key)");
@@ -217,7 +205,23 @@ static void testBuild(void)
                   lt_ext_prop(cl[12])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
               "Touch screen opens its page");
     }
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 13), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 10), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 5), "Gameplay > Yorda rows");
+    CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 8), "Gameplay > Shadows rows");
+    CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
+    {
+        /* Yorda, Shadows and Cutscenes open their pages, right before
+           Back (settings_extra's testGameplayPages walks them and back) */
+        static const UiSettingsPage kSub[3] = {UI_PAGE_YORDA, UI_PAGE_SHADOWS, UI_PAGE_CUTSCENES};
+        int gl[16], go[16];
+        const int gn = ui_settings_page_rows(UI_PAGE_GAMEPLAY, gl, go, NULL, 16);
+        CHECK(gn == 10, "Gameplay: ten rows (%d)", gn);
+        for (int k = 0; k < 3 && gn == 10; k++) {
+            CHECK(go[6 + k] == UI_OPT_LINK &&
+                      lt_ext_prop(gl[6 + k])->right == ui_settings_page_layout(kSub[k]),
+                  "Gameplay row %d opens page %d", 6 + k, kSub[k]);
+        }
+    }
     /* the pop-ups switch is an item of the list (first, before the achievements), not a row of its own */
     CHECK(labelsAre(UI_PAGE_ACHIEVEMENTS, listOpts, listStrs, 8), "achievement slots");
     CHECK(labelsAre(UI_PAGE_REMAP, listOpts, listStrs, 8), "remap slots");
@@ -236,10 +240,10 @@ static void testBuild(void)
                   l->first >= LT_GAME_PROPERTY_COUNT && l->last > l->first && l->proc != NULL,
               "page %d layout", p);
     }
-    /* the gameplay option's explanation */
-    int yorda = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_YORDA);
-    CHECK(yorda >= 0, "the Yorda row");
-    /* the Gameplay page holds the stick fix beside Yorda's */
+    /* Yorda safe on Gameplay > Yorda, none of its rows on Gameplay */
+    int yorda = ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_YORDA);
+    CHECK(yorda >= 0 && ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_YORDA) < 0, "the Yorda row");
+    /* the Gameplay page holds the stick fix */
     CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX) >= 0, "the stick fix row");
     CHECK(ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX) >= 0, "also on Controls");
     /* no Menu text or Font row (one behaviour: the game's
@@ -1903,11 +1907,11 @@ static void testValues(void)
         char want[32];
         int k;
 
-        CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PIT_TIME) >
-                      ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_YORDA) &&
-                  ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_PIT_TIME) <
-                      ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX),
-              "the Time to rescue Yorda row sits between Yorda's and Stick fix's");
+        CHECK(ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_PIT_TIME) >
+                      ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_YORDA) &&
+                  ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_PIT_TIME) <
+                      ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_YORDA_TRIPS),
+              "the Time to rescue Yorda row sits between Yorda safe and Yorda trips");
         CHECK(strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), "15 s (Original)") == 0,
               "pit time default (%s)", ui_settings_value_text(UI_OPT_PIT_TIME));
         for (k = 14; k >= 2; k--) {
@@ -1946,7 +1950,8 @@ static void testValues(void)
         ico_opt_set_pit_time(ICO_PIT_ORIGINAL);
         ico_config_set_string("gameplay.pit_time", "original");
     }
-    /* Shadow speed: right after Time to rescue Yorda; Original, Faster, Fastest, Slower, Original */
+    /* Shadow speed: first on Gameplay > Shadows, Shadows attack together right after it;
+       Original, Faster, Fastest, Slower, Original */
     {
         static const char *const kWord[4] = {"slower", "original", "faster", "fastest"};
         static const char *const kText[4] = {"Slower", "Original", "Faster", "Fastest"};
@@ -1956,19 +1961,19 @@ static void testValues(void)
         {
             /* the rows in page order (ui_settings_row_of gives a layout item, and a
                row's note item sits between two rows' labels) */
-            int rl[16], ro[16], rn, pit = -1, speed = -1;
+            int rl[16], ro[16], rn, together = -1, speed = -1;
 
-            rn = ui_settings_page_rows(UI_PAGE_GAMEPLAY, rl, ro, NULL, 16);
+            rn = ui_settings_page_rows(UI_PAGE_SHADOWS, rl, ro, NULL, 16);
             for (k = 0; k < rn; k++) {
-                if (ro[k] == UI_OPT_PIT_TIME) {
-                    pit = k;
+                if (ro[k] == UI_OPT_SHADOWS_TOGETHER) {
+                    together = k;
                 } else if (ro[k] == UI_OPT_SHADOW_SPEED) {
                     speed = k;
                 }
             }
-            CHECK(pit >= 0 && speed == pit + 1,
-                  "the Shadow speed row sits right after Time to rescue Yorda (%d, %d)", pit,
-                  speed);
+            CHECK(speed == 0 && together == 1,
+                  "Shadow speed first on Shadows, Shadows attack together after it (%d, %d)", speed,
+                  together);
         }
         CHECK(strcmp(ui_settings_value_text(UI_OPT_SHADOW_SPEED), "Original") == 0,
               "shadow speed default");
@@ -2925,13 +2930,12 @@ static void testGameOptions(void)
               rowShown(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS),
           "cleared: Film effect and Players");
     checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (cleared)");
-    for (int k = 0; k < 10; k++) {
+    for (int k = 0; k < 4; k++) {
         press(0x4000);
     }
     CHECK(lt_ext_layout(gameL)->curItem == film,
-          "down ten times from Yorda (past Time to rescue Yorda, Shadow speed, Shadows attack "
-          "together, the stick fix, the door fix, Yorda trips, Natural chains, Skip the opening "
-          "and Second memory card): Film effect");
+          "down four times from the stick fix (past the door fix, Second memory card and No "
+          "hints): Film effect");
     optionScreenMode = 0;
     s_filmCalls = 0;
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FILM_EFFECT), "Off") == 0, "film effect Off (%s)",
@@ -3106,9 +3110,9 @@ static void testGameOptions(void)
     systemStatus[11] = 0;
 
     /* the game's variables, never the port config */
-    CHECK(ico_config_get_string("video.brightness", NULL) == NULL &&
+    CHECK(ico_config_get_int("video.brightness", 50) == 50 &&
               ico_config_get_string("input.vibration", NULL) == NULL,
-          "no port keys for the game's settings");
+          "no port keys for the game's settings (video.brightness is the Picture page's, 50)");
     /* the strings in every language */
     static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
     static const int kIds[] = {
@@ -3387,10 +3391,14 @@ static void testTexturePack(void)
               back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "Back's box ends at %d", back->dispY + back->dispH);
         checkPageFits(UI_PAGE_MAIN, "Main (title, developer mode)");
-        /* the Developer page: its three rows and Back */
+        /* the Developer page: its four rows and Back (no Debug menu on
+           the June 2001 demo) */
         openPage(mainL, -1, UI_PAGE_DEVELOPER);
-        CHECK(winShownCount(UI_PAGE_DEVELOPER) == 4,
-              "Developer: Developer mode, the two dumps, Back");
+        CHECK(winShownCount(UI_PAGE_DEVELOPER) == (ICO_JUN26 ? 4 : 5),
+              "Developer: Developer mode, the two dumps, the Debug menu, Back (%d)",
+              winShownCount(UI_PAGE_DEVELOPER));
+        CHECK(rowShown(UI_PAGE_DEVELOPER, UI_OPT_VAR_DEBUG_MENU) == !ICO_JUN26,
+              "Developer: the Debug menu row in developer mode");
         checkPageFits(UI_PAGE_DEVELOPER, "Developer (title, developer mode)");
         press(0x10);
         CHECK(settle(mainL, 60), "Developer: back");
@@ -3401,7 +3409,9 @@ static void testTexturePack(void)
     }
     CHECK(!rowShown(UI_PAGE_DEVELOPER, UI_OPT_DUMP_TEXTURES), "hidden again");
     openPage(mainL, -1, UI_PAGE_DEVELOPER);
-    CHECK(winShownCount(UI_PAGE_DEVELOPER) == 2, "developer mode off: Developer mode and Back");
+    CHECK(winShownCount(UI_PAGE_DEVELOPER) == 2 &&
+              !rowShown(UI_PAGE_DEVELOPER, UI_OPT_VAR_DEBUG_MENU),
+          "developer mode off: Developer mode and Back");
     checkPageFits(UI_PAGE_DEVELOPER, "Developer (title)");
     press(0x10);
     CHECK(settle(mainL, 60), "Developer: back");

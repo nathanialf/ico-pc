@@ -48,7 +48,7 @@ extern const EnemyDef enemyKind_jun26[];
                                  enemyKind_jun26)
 
 /* PC port: the rows of each table (enemyKind.c), and of the running disc's:
-   the Game variants' reader of a row (port/game/variants.c
+   the game variants' reader of a row (port/game/variants.c
    ico_variant_enemy_def) never reads past them */
 extern const int enemyKindRows_pal;
 extern const int enemyKindRows_jpn;

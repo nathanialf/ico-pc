@@ -209,6 +209,12 @@ const char *const
                 "Nouvelle partie + joue le second voyage : paroles de Yorda traduites, fin et objets changés. Désactivé, c’est le premier voyage, même après avoir fini le jeu.",
             [UI_STR_OPT_CRT] = "Filtre CRT",
             [UI_STR_OPT_CRT_STRENGTH] = "Intensité CRT",
+            [UI_STR_OPT_TONE_GAMMA] = "Gamma",
+            [UI_STR_OPT_TONE_BRIGHTNESS] = "Luminosité de l'image",
+            [UI_STR_OPT_TONE_CONTRAST] = "Contraste",
+            [UI_STR_OPT_TONE_SATURATION] = "Saturation",
+            [UI_STR_OPT_TONE_NOTE] =
+                "50 est l'image du jeu. Carré remet 50. Vaut aussi pour le filtre CRT.",
             [UI_STR_VAL_CRT_SCANLINES] = "Lignes de balayage",
             [UI_STR_VAL_CRT_CONSUMER] = "Téléviseur",
             [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",
@@ -681,7 +687,9 @@ const char *const
             [UI_STR_ISO_COPYING] = "Copie de l’image disque dans l’application",
             [UI_STR_ISO_COPYING_LONG] =
                 "Copie de l’image disque dans l’application. C’est une grande image : cela prend quelques minutes",
-            [UI_STR_SECTION_VARIANTS] = "Variantes du jeu",
+            [UI_STR_SECTION_YORDA] = "Yorda",
+            [UI_STR_SECTION_SHADOWS] = "Ombres",
+            [UI_STR_SECTION_CUTSCENES] = "Cinématiques",
             [UI_STR_OPT_VAR_TOUGHNESS] = "Résistance des ombres",
             [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
                 "Américain : chaque ombre aussi résistante que sur le disque nord-américain, sans durcir aux parties suivantes. Les succès restent actifs.",

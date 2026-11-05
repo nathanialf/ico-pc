@@ -204,6 +204,12 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "新遊戲+會進行第二次旅程：Yorda 的話語有了翻譯，結局與道具也有所不同。關閉時，即使通關後也進行第一次旅程。",
     [UI_STR_OPT_CRT] = "CRT 濾鏡",
     [UI_STR_OPT_CRT_STRENGTH] = "CRT 強度",
+    [UI_STR_OPT_TONE_GAMMA] = "伽瑪",
+    [UI_STR_OPT_TONE_BRIGHTNESS] = "畫面亮度",
+    [UI_STR_OPT_TONE_CONTRAST] = "對比度",
+    [UI_STR_OPT_TONE_SATURATION] = "飽和度",
+    [UI_STR_OPT_TONE_NOTE] =
+        "50 為遊戲原本繪製的畫面。按 □ 可還原為 50。會改變整個畫面，CRT 濾鏡也一併改變。",
     [UI_STR_VAL_CRT_SCANLINES] = "掃描線",
     [UI_STR_VAL_CRT_CONSUMER] = "家用電視",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",
@@ -694,7 +700,9 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "無法將光碟映像複製到 %s。\n請確認約有 %llu.%llu GB 的可用空間，且檔案仍在原處，然後重新啟動遊戲。記錄檔會說明原因。",
     [UI_STR_ISO_COPYING] = "正在將光碟映像複製到應用程式中",
     [UI_STR_ISO_COPYING_LONG] = "正在將光碟映像複製到應用程式中。映像檔很大，需要幾分鐘",
-    [UI_STR_SECTION_VARIANTS] = "遊戲版本差異",
+    [UI_STR_SECTION_YORDA] = "Yorda",
+    [UI_STR_SECTION_SHADOWS] = "影子",
+    [UI_STR_SECTION_CUTSCENES] = "過場動畫",
     [UI_STR_OPT_VAR_TOUGHNESS] = "影子的強韌度",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         "「美版」：每隻影子都和北美版光碟一樣強韌，之後的遊玩也不會變得更強。成就維持開啟。",

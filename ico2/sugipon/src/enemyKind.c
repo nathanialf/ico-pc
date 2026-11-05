@@ -140,7 +140,7 @@ const EnemyDef enemyKind_jun26[] = {
     {11, -1, 100.0f, 0.0f, 1.0f, 0.0f, 0, 0, 1},  {1425, 0, 100.0f, 0.0f, 4.0f, 0.0f, 0, 0, 3},
 }; /* derived name */
 
-/* PC port: each table's rows, for the Game variants' reader of a row
+/* PC port: each table's rows, for the game variants' reader of a row
    (port/game/variants.c ico_variant_enemy_def, through enemy.h) */
 const int enemyKindRows_pal = (int)(sizeof(enemyKind_pal) / sizeof(enemyKind_pal[0]));
 

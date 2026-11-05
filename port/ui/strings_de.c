@@ -206,6 +206,12 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Neues Spiel + spielt die zweite Reise: Yordas Worte übersetzt, Ende und Gegenstände verändert. Aus spielt die erste Reise, auch nach dem Durchspielen.",
     [UI_STR_OPT_CRT] = "CRT-Filter",
     [UI_STR_OPT_CRT_STRENGTH] = "CRT-Stärke",
+    [UI_STR_OPT_TONE_GAMMA] = "Gamma",
+    [UI_STR_OPT_TONE_BRIGHTNESS] = "Bildhelligkeit",
+    [UI_STR_OPT_TONE_CONTRAST] = "Kontrast",
+    [UI_STR_OPT_TONE_SATURATION] = "Sättigung",
+    [UI_STR_OPT_TONE_NOTE] =
+        "50 ist das Bild, wie das Spiel es zeichnet. Quadrat setzt auf 50 zurück. Gilt auch für den CRT-Filter.",
     [UI_STR_VAL_CRT_SCANLINES] = "Bildzeilen",
     [UI_STR_VAL_CRT_CONSUMER] = "Fernseher",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",
@@ -725,7 +731,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Das Disc-Image wird in die App kopiert",
     [UI_STR_ISO_COPYING_LONG] =
         "Das Disc-Image wird in die App kopiert. Es ist groß: Das dauert einige Minuten",
-    [UI_STR_SECTION_VARIANTS] = "Spielvarianten",
+    [UI_STR_SECTION_YORDA] = "Yorda",
+    [UI_STR_SECTION_SHADOWS] = "Schatten",
+    [UI_STR_SECTION_CUTSCENES] = "Zwischensequenzen",
     [UI_STR_OPT_VAR_TOUGHNESS] = "Härte der Schatten",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         "Amerikanisch: alle Schatten so zäh wie auf der nordamerikanischen Disc, in späteren Durchgängen nicht zäher. Erfolge bleiben aktiv.",

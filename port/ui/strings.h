@@ -300,6 +300,13 @@ typedef enum UiStrId {
     /* Settings > Display, "CRT filter" and "CRT strength" */
     UI_STR_OPT_CRT,
     UI_STR_OPT_CRT_STRENGTH,
+    /* Options > Picture, the colour adjustment: four rows (1..100, 50 the game's
+       own picture) and the note under them */
+    UI_STR_OPT_TONE_GAMMA,
+    UI_STR_OPT_TONE_BRIGHTNESS,
+    UI_STR_OPT_TONE_CONTRAST,
+    UI_STR_OPT_TONE_SATURATION,
+    UI_STR_OPT_TONE_NOTE,
     UI_STR_VAL_CRT_SCANLINES,
     UI_STR_VAL_CRT_CONSUMER,
     UI_STR_VAL_CRT_TRINITRON,
@@ -866,11 +873,14 @@ typedef enum UiStrId {
     UI_STR_ISO_COPY_FAILED,
     UI_STR_ISO_COPYING,
     UI_STR_ISO_COPYING_LONG,
-    /* Extras > Game variants (port/game/variants.h): the page's name (also the
-       Extras link), the eight rows with their notes and values (a note ends
-       with whether the row switches achievements off) and the Debug menu
-       row (shown with Developer mode); Original is UI_STR_VAL_ORIGINAL */
-    UI_STR_SECTION_VARIANTS,
+    /* Gameplay's three pages' names (also their links on Gameplay); then
+       the game variants (port/game/variants.h): the eight rows with their
+       notes and values (a note ends with whether the row switches
+       achievements off) and Developer's Debug menu row (shown with
+       Developer mode); Original is UI_STR_VAL_ORIGINAL */
+    UI_STR_SECTION_YORDA,
+    UI_STR_SECTION_SHADOWS,
+    UI_STR_SECTION_CUTSCENES,
     UI_STR_OPT_VAR_TOUGHNESS,
     UI_STR_OPT_VAR_TOUGHNESS_NOTE,
     UI_STR_VAL_VAR_AMERICAN,

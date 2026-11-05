@@ -73,6 +73,7 @@ void ico_video_defaults_for(IcoVideoOptions *o, int android)
     o->crtMode = ICO_CRT_CONSUMER;
     o->crtStrength = 1.0f;
     o->crtScanlines = o->crtMask = o->crtHalation = o->crtBloom = o->crtCurvature = -1.0f;
+    o->toneGamma = o->toneBrightness = o->toneContrast = o->toneSaturation = ICO_TONE_DEFAULT;
     o->texturePack = 1;
     o->dumpTextures = 0;
     o->modelPack = 1;
@@ -434,6 +435,10 @@ static void sanitize(IcoVideoOptions *o)
     o->crtHalation = crt_override(o->crtHalation, 1.0f);
     o->crtBloom = crt_override(o->crtBloom, 1.0f);
     o->crtCurvature = crt_override(o->crtCurvature, 0.25f);
+    o->toneGamma = ico_video_tone_clamp(o->toneGamma);
+    o->toneBrightness = ico_video_tone_clamp(o->toneBrightness);
+    o->toneContrast = ico_video_tone_clamp(o->toneContrast);
+    o->toneSaturation = ico_video_tone_clamp(o->toneSaturation);
     o->texturePack = o->texturePack != 0;
     o->dumpTextures = o->dumpTextures != 0;
     o->modelPack = o->modelPack != 0;
@@ -536,6 +541,24 @@ static void read_config(void)
     o.crtHalation = (float)ico_config_get_float("video.crt_halation", -1.0);
     o.crtBloom = (float)ico_config_get_float("video.crt_bloom", -1.0);
     o.crtCurvature = (float)ico_config_get_float("video.crt_curvature", -1.0);
+    /* the colour adjustment: no key (a file from before the rows) is 50, the
+       game's own picture; a value outside 1..100 (or not a number, which
+       the reader gives as the default) is clamped and said */
+    {
+        static const char *const keys[4] = {"video.gamma", "video.brightness", "video.contrast",
+                                            "video.saturation"};
+        int *const dst[4] = {&o.toneGamma, &o.toneBrightness, &o.toneContrast, &o.toneSaturation};
+
+        for (int i = 0; i < 4; i++) {
+            const long long v = ico_config_get_int(keys[i], ICO_TONE_DEFAULT);
+
+            *dst[i] = ico_video_tone_clamp(v < -1000 ? -1000 : v > 1000 ? 1000 : (int)v);
+            if ((long long)*dst[i] != v) {
+                fprintf(stderr, "video: %s %lld is not %d..%d; %d used\n", keys[i] + 6, v,
+                        ICO_TONE_MIN, ICO_TONE_MAX, *dst[i]);
+            }
+        }
+    }
     /* texture packs */
     o.texturePack = ico_config_get_bool("video.texture_pack", 1) != 0;
     o.dumpTextures = ico_config_get_bool("video.dump_textures", 0) != 0;
@@ -708,6 +731,11 @@ int ico_video_save(void)
        a hand-set 0.25 is kept) */
     r |= ico_config_set_float("video.crt_strength",
                               (double)(int)(o.crtStrength * 100.0f + 0.5f) / 100.0);
+    /* the colour adjustment always: each has a row in the menu */
+    r |= ico_config_set_int("video.gamma", o.toneGamma);
+    r |= ico_config_set_int("video.brightness", o.toneBrightness);
+    r |= ico_config_set_int("video.contrast", o.toneContrast);
+    r |= ico_config_set_int("video.saturation", o.toneSaturation);
     /* the overrides only when set: an absent key is the mode's value */
     {
         static const char *const keys[5] = {"video.crt_scanlines", "video.crt_mask",
@@ -873,6 +901,11 @@ int ico_video_motion_blur_strength_clamp(int v)
     }
     return (v + ICO_MOTION_BLUR_STRENGTH_STEP / 2) / ICO_MOTION_BLUR_STRENGTH_STEP *
            ICO_MOTION_BLUR_STRENGTH_STEP;
+}
+
+int ico_video_tone_clamp(int v)
+{
+    return v < ICO_TONE_MIN ? ICO_TONE_MIN : v > ICO_TONE_MAX ? ICO_TONE_MAX : v;
 }
 
 int ico_video_effect_glow_smooth(void)
@@ -1072,6 +1105,18 @@ int ico_video_changes_text(const IcoVideoOptions *was, const IcoVideoOptions *no
     snprintf(a, sizeof(a), "%.2f", (double)p->crtStrength);
     snprintf(b, sizeof(b), "%.2f", (double)o->crtStrength);
     changes_field(out, size, "crt strength", a, b);
+    snprintf(a, sizeof(a), "%d", p->toneGamma);
+    snprintf(b, sizeof(b), "%d", o->toneGamma);
+    changes_field(out, size, "gamma", a, b);
+    snprintf(a, sizeof(a), "%d", p->toneBrightness);
+    snprintf(b, sizeof(b), "%d", o->toneBrightness);
+    changes_field(out, size, "brightness", a, b);
+    snprintf(a, sizeof(a), "%d", p->toneContrast);
+    snprintf(b, sizeof(b), "%d", o->toneContrast);
+    changes_field(out, size, "contrast", a, b);
+    snprintf(a, sizeof(a), "%d", p->toneSaturation);
+    snprintf(b, sizeof(b), "%d", o->toneSaturation);
+    changes_field(out, size, "saturation", a, b);
     changes_field(out, size, "texture pack", p->texturePack ? "on" : "off",
                   o->texturePack ? "on" : "off");
     changes_field(out, size, "dump textures", p->dumpTextures ? "on" : "off",
