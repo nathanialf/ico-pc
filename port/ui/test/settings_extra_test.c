@@ -194,6 +194,152 @@ static void testWaterReflections(void)
     useConfig("version = 1\n");
 }
 
+/* Options > Picture > Gamma, Picture brightness, Contrast and Saturation
+   (issue 190): 50 (Default) shown, 5 a press to the next multiple of 5 (a
+   hand-set 47 lands on 50 or 45), held at 1 and 100, Square back to 50
+   (only on a tone row), one shared note, leaving the page writes the four
+   keys, a file with bad values reads 1/100/50 and one without the keys 50;
+   the preset stays Original; the page fits from the title and the pause menu */
+static void testToneRows(void)
+{
+    static const UiSettingsOpt kRows[4] = {UI_OPT_TONE_GAMMA, UI_OPT_TONE_BRIGHTNESS,
+                                           UI_OPT_TONE_CONTRAST, UI_OPT_TONE_SATURATION};
+    static const char *const kKeys[4] = {"video.gamma", "video.brightness", "video.contrast",
+                                         "video.saturation"};
+    char p[1100];
+    IcoVideoOptions o;
+
+    for (int title = 1; title >= 0; title--) {
+        useConfig("version = 1\n");
+        gFlagGameClear = 0;
+        stage_no = title ? 1 : 11;
+        const int mainL = enterMain(title);
+        const int picL = openPage(mainL, 1, UI_PAGE_PICTURE);
+        int fo[16], fl[16];
+        const int fn = ui_settings_page_rows(UI_PAGE_PICTURE, fl, fo, NULL, 16);
+
+        CHECK(fn == 15, "title %d: Picture has 15 rows (%d)", title, fn);
+        for (int i = 0; i < 4; i++) {
+            const int row = ui_settings_row_of(UI_PAGE_PICTURE, kRows[i]);
+
+            CHECK(row >= 0 && ui_settings_row_shown(row), "title %d: tone row %d shown", title, i);
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "50 (Default)") == 0,
+                  "title %d: tone row %d: 50 (Default) (%s)", title, i,
+                  ui_settings_value_text(kRows[i]));
+        }
+        CHECK(ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_TONE_GAMMA) ==
+                      ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_CRT_STRENGTH) + 1 &&
+                  ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_TEXTURE_PACK) ==
+                      ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_TONE_SATURATION) + 1,
+              "title %d: the four rows sit between CRT strength and Texture pack", title);
+        CHECK(noteStarting(UI_PAGE_PICTURE, "50 is the picture as the game draws it.") >= 0,
+              "title %d: the shared note", title);
+        for (int i = 0; i < 4; i++) {
+            const int row = ui_settings_row_of(UI_PAGE_PICTURE, kRows[i]);
+
+            lt_ext_layout(picL)->curItem = row;
+            frame(0);
+            press(LT_PAD_RIGHT);
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "55") == 0,
+                  "title %d: row %d Right: 55 (%s)", title, i, ui_settings_value_text(kRows[i]));
+            press(LT_PAD_LEFT);
+            press(LT_PAD_LEFT);
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "45") == 0,
+                  "title %d: row %d Left twice: 45 (%s)", title, i,
+                  ui_settings_value_text(kRows[i]));
+            /* the other rows untouched */
+            for (int j = 0; j < 4; j++) {
+                if (j != i) {
+                    CHECK(strcmp(ui_settings_value_text(kRows[j]), "50 (Default)") == 0,
+                          "title %d: row %d step leaves row %d", title, i, j);
+                }
+            }
+            /* Square puts 50 back */
+            press(LT_PAD_SQUARE);
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "50 (Default)") == 0,
+                  "title %d: row %d Square: 50 (Default) (%s)", title, i,
+                  ui_settings_value_text(kRows[i]));
+            /* held at both ends */
+            for (int k = 0; k < 14; k++) {
+                press(LT_PAD_LEFT);
+            }
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "1") == 0,
+                  "title %d: row %d held at 1 (%s)", title, i, ui_settings_value_text(kRows[i]));
+            press(LT_PAD_RIGHT);
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "5") == 0, "title %d: row %d 1 -> 5",
+                  title, i);
+            for (int k = 0; k < 30; k++) {
+                press(LT_PAD_RIGHT);
+            }
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "100") == 0,
+                  "title %d: row %d held at 100 (%s)", title, i, ui_settings_value_text(kRows[i]));
+            press(LT_PAD_LEFT);
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "95") == 0, "title %d: row %d 100 -> 95",
+                  title, i);
+            press(LT_PAD_SQUARE);
+        }
+        /* Square on another row does not touch them */
+        ico_video_get(&o);
+        o.toneGamma = 70;
+        ico_video_set(&o);
+        lt_ext_layout(picL)->curItem = ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_CRT);
+        press(LT_PAD_SQUARE);
+        ico_video_get(&o);
+        CHECK(o.toneGamma == 70, "title %d: Square on CRT leaves Gamma (%d)", title, o.toneGamma);
+        /* the preset stays Original */
+        CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL, "title %d: the preset stays Original",
+              title);
+        checkPageFits(UI_PAGE_PICTURE,
+                      title ? "Picture with tone rows (title)" : "Picture with tone rows (pause)");
+        /* leaving the page writes the four keys */
+        lt_ext_layout(picL)->curItem = ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_TONE_SATURATION);
+        press(LT_PAD_LEFT);
+        press(LT_PAD_TRIANGLE);
+        CHECK(settle(mainL, 60), "title %d: Picture: back", title);
+        path(p, sizeof(p), "settings_test.toml");
+        IcoToml *t = ico_toml_load(p);
+        CHECK(t != NULL && ico_toml_get_int(t, "video.gamma", 0) == 70 &&
+                  ico_toml_get_int(t, "video.brightness", 0) == 50 &&
+                  ico_toml_get_int(t, "video.contrast", 0) == 50 &&
+                  ico_toml_get_int(t, "video.saturation", 0) == 45,
+              "title %d: leaving Picture wrote gamma 70, brightness 50, contrast 50, "
+              "saturation 45",
+              title);
+        ico_toml_free(t);
+    }
+    /* a hand-set 47 lands on 50 (Right) and 45 (Left) */
+    for (int dir = 1; dir >= -1; dir -= 2) {
+        useConfig("version = 1\n[video]\ngamma = 47\n");
+        ico_video_get(&o);
+        CHECK(o.toneGamma == 47, "hand-set 47 read as 47 (%d)", o.toneGamma);
+        ui_settings_step(UI_OPT_TONE_GAMMA, dir);
+        ico_video_get(&o);
+        CHECK(o.toneGamma == (dir > 0 ? 50 : 45), "hand-set 47, dir %d: %d", dir, o.toneGamma);
+    }
+    /* values outside the range or not numbers, and absent keys */
+    useConfig("version = 1\n[video]\ngamma = 0\nbrightness = 250\ncontrast = \"x\"\n");
+    ico_video_get(&o);
+    CHECK(o.toneGamma == 1 && o.toneBrightness == 100 && o.toneContrast == 50 &&
+              o.toneSaturation == 50,
+          "file gamma 0, brightness 250, contrast \"x\", no saturation: %d/%d/%d/%d", o.toneGamma,
+          o.toneBrightness, o.toneContrast, o.toneSaturation);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_TONE_GAMMA), "1") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_TONE_BRIGHTNESS), "100") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_TONE_CONTRAST), "50 (Default)") == 0,
+          "the rows read the clamped values");
+    useConfig("version = 1\n");
+    for (int i = 0; i < 4; i++) {
+        CHECK(strcmp(ui_settings_value_text(kRows[i]), "50 (Default)") == 0 &&
+                  ico_config_get_int(kKeys[i], 50) == 50,
+              "absent key %s reads 50", kKeys[i]);
+    }
+    ui_settings_step(UI_OPT_TONE_CONTRAST, 1);
+    ico_video_get(&o);
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.toneContrast == 55,
+          "a step keeps the preset Original");
+    useConfig("version = 1\n");
+}
+
 /* default_item_select hands the select callback the current
    item (la_mc_saved_file_select indexes the card's file table with it; with
    nothing passed it would read whatever the argument register held) */
@@ -5357,6 +5503,8 @@ int main(int argc, char **argv)
     testCinematicBars();
     /* Effects > Water reflections */
     testWaterReflections();
+    /* Picture > Gamma, Picture brightness, Contrast, Saturation */
+    testToneRows();
     /* the select callback's argument */
     testItemSelectArg();
     /* Settings > Graphics driver, the Quit game label */

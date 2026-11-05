@@ -206,6 +206,12 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Neues Spiel + spielt die zweite Reise: Yordas Worte übersetzt, Ende und Gegenstände verändert. Aus spielt die erste Reise, auch nach dem Durchspielen.",
     [UI_STR_OPT_CRT] = "CRT-Filter",
     [UI_STR_OPT_CRT_STRENGTH] = "CRT-Stärke",
+    [UI_STR_OPT_TONE_GAMMA] = "Gamma",
+    [UI_STR_OPT_TONE_BRIGHTNESS] = "Bildhelligkeit",
+    [UI_STR_OPT_TONE_CONTRAST] = "Kontrast",
+    [UI_STR_OPT_TONE_SATURATION] = "Sättigung",
+    [UI_STR_OPT_TONE_NOTE] =
+        "50 ist das Bild, wie das Spiel es zeichnet. Quadrat setzt auf 50 zurück. Gilt auch für den CRT-Filter.",
     [UI_STR_VAL_CRT_SCANLINES] = "Bildzeilen",
     [UI_STR_VAL_CRT_CONSUMER] = "Fernseher",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",

@@ -207,6 +207,12 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "뉴 게임+에서는 두 번째 여정을 플레이합니다. 요르다의 말이 번역되고, 엔딩과 아이템이 바뀝니다. 끄면 클리어한 뒤에도 첫 번째 여정을 플레이합니다.",
     [UI_STR_OPT_CRT] = "CRT 필터",
     [UI_STR_OPT_CRT_STRENGTH] = "CRT 강도",
+    [UI_STR_OPT_TONE_GAMMA] = "감마",
+    [UI_STR_OPT_TONE_BRIGHTNESS] = "화면 밝기",
+    [UI_STR_OPT_TONE_CONTRAST] = "대비",
+    [UI_STR_OPT_TONE_SATURATION] = "채도",
+    [UI_STR_OPT_TONE_NOTE] =
+        "50은 게임이 그리는 그대로의 화면입니다. □를 누르면 50으로 돌아갑니다. CRT 필터를 포함한 화면 전체가 바뀝니다.",
     [UI_STR_VAL_CRT_SCANLINES] = "주사선",
     [UI_STR_VAL_CRT_CONSUMER] = "가정용 TV",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",

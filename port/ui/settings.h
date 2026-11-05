@@ -628,6 +628,12 @@ typedef enum UiSettingsOpt {
     UI_OPT_SHOW_FPS,     /* [video] show_fps: Off/On, default Off (the Frame rate counter) */
     UI_OPT_CRT,          /* [video] crt and crt_mode in one row */
     UI_OPT_CRT_STRENGTH, /* [video] crt_strength, 0..100 % in tens */
+    /* [video] gamma, brightness, contrast, saturation: 1..100, 50 the game's own
+       picture, 5 a press, Square puts 50 back; outside the preset */
+    UI_OPT_TONE_GAMMA,
+    UI_OPT_TONE_BRIGHTNESS,
+    UI_OPT_TONE_CONTRAST,
+    UI_OPT_TONE_SATURATION,
     UI_OPT_TEXTURE_PACK, /* [video] texture_pack: On/Off, "None installed" without a pack */
     UI_OPT_MODEL_PACK, /* [video] model_pack: On/Off, "None installed" without a pack; title only */
     UI_OPT_BRIGHTNESS, /* the game's brightness step, systemStatus[11] 0..14 */

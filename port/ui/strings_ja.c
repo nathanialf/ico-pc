@@ -203,6 +203,12 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "ニューゲーム+では2周目の旅を遊びます。ヨルダの言葉が訳され、エンディングとアイテムが変わります。オフにすると、クリア後も1周目の旅を遊びます。",
     [UI_STR_OPT_CRT] = "CRTフィルタ",
     [UI_STR_OPT_CRT_STRENGTH] = "CRTの強さ",
+    [UI_STR_OPT_TONE_GAMMA] = "ガンマ",
+    [UI_STR_OPT_TONE_BRIGHTNESS] = "画面の明るさ",
+    [UI_STR_OPT_TONE_CONTRAST] = "コントラスト",
+    [UI_STR_OPT_TONE_SATURATION] = "彩度",
+    [UI_STR_OPT_TONE_NOTE] =
+        "50はゲームが描く画面そのままです。□で50にもどします。CRTフィルタを含む画面全体が変わります。",
     [UI_STR_VAL_CRT_SCANLINES] = "走査線",
     [UI_STR_VAL_CRT_CONSUMER] = "家庭用テレビ",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",

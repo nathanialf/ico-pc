@@ -204,6 +204,12 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
         "Nueva partida + juega el segundo viaje: palabras de Yorda traducidas, final y objetos cambiados. Desactivado juega el primer viaje incluso tras terminar el juego.",
     [UI_STR_OPT_CRT] = "Filtro CRT",
     [UI_STR_OPT_CRT_STRENGTH] = "Intensidad CRT",
+    [UI_STR_OPT_TONE_GAMMA] = "Gamma",
+    [UI_STR_OPT_TONE_BRIGHTNESS] = "Brillo de la imagen",
+    [UI_STR_OPT_TONE_CONTRAST] = "Contraste",
+    [UI_STR_OPT_TONE_SATURATION] = "Saturación",
+    [UI_STR_OPT_TONE_NOTE] =
+        "50 es la imagen tal como la dibuja el juego. Cuadrado vuelve a poner 50. Cambia toda la imagen, también la del filtro CRT.",
     [UI_STR_VAL_CRT_SCANLINES] = "Líneas de barrido",
     [UI_STR_VAL_CRT_CONSUMER] = "Televisor",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",

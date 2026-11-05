@@ -63,10 +63,11 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_BACK};
-    static const int picOpts[] = {UI_OPT_ANTI_ALIAS, UI_OPT_DOWNSAMPLE,   UI_OPT_FULL_HEIGHT,
-                                  UI_OPT_FILTER,     UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,
-                                  UI_OPT_CRT,        UI_OPT_CRT_STRENGTH, UI_OPT_TEXTURE_PACK,
-                                  UI_OPT_MODEL_PACK, UI_OPT_BACK};
+    static const int picOpts[] = {
+        UI_OPT_ANTI_ALIAS,   UI_OPT_DOWNSAMPLE,      UI_OPT_FULL_HEIGHT,   UI_OPT_FILTER,
+        UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,      UI_OPT_CRT,           UI_OPT_CRT_STRENGTH,
+        UI_OPT_TONE_GAMMA,   UI_OPT_TONE_BRIGHTNESS, UI_OPT_TONE_CONTRAST, UI_OPT_TONE_SATURATION,
+        UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,      UI_OPT_BACK};
     static const int picStrs[] = {UI_STR_OPT_AA,
                                   UI_STR_OPT_DOWNSAMPLE,
                                   UI_STR_OPT_FULL_HEIGHT,
@@ -75,6 +76,10 @@ static void testBuild(void)
                                   UI_STR_OPT_BRIGHTNESS,
                                   UI_STR_OPT_CRT,
                                   UI_STR_OPT_CRT_STRENGTH,
+                                  UI_STR_OPT_TONE_GAMMA,
+                                  UI_STR_OPT_TONE_BRIGHTNESS,
+                                  UI_STR_OPT_TONE_CONTRAST,
+                                  UI_STR_OPT_TONE_SATURATION,
                                   UI_STR_OPT_TEXTURE_PACK,
                                   UI_STR_OPT_MODEL_PACK,
                                   UI_STR_BACK};
@@ -167,7 +172,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
     CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 6), "Graphics page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 10), "effects rows");
-    CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 11), "picture rows");
+    CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 15), "picture rows");
     CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 5), "developer rows");
     {
         /* the Characters link, then Add to Steam,
@@ -3105,9 +3110,9 @@ static void testGameOptions(void)
     systemStatus[11] = 0;
 
     /* the game's variables, never the port config */
-    CHECK(ico_config_get_string("video.brightness", NULL) == NULL &&
+    CHECK(ico_config_get_int("video.brightness", 50) == 50 &&
               ico_config_get_string("input.vibration", NULL) == NULL,
-          "no port keys for the game's settings");
+          "no port keys for the game's settings (video.brightness is the Picture page's, 50)");
     /* the strings in every language */
     static const UiLang kLangs[5] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
     static const int kIds[] = {

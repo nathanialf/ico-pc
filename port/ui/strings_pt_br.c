@@ -212,6 +212,11 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
         NULL, /* longer than its space (170 bytes): English until shortened */
     [UI_STR_OPT_CRT] = "Filtro CRT",
     [UI_STR_OPT_CRT_STRENGTH] = "Intensidade do Filtro CRT",
+    [UI_STR_OPT_TONE_GAMMA] = NULL,                     /* newer than the translation: English */
+    [UI_STR_OPT_TONE_BRIGHTNESS] = NULL,                /* newer than the translation: English */
+    [UI_STR_OPT_TONE_CONTRAST] = NULL,                  /* newer than the translation: English */
+    [UI_STR_OPT_TONE_SATURATION] = NULL,                /* newer than the translation: English */
+    [UI_STR_OPT_TONE_NOTE] = NULL,                      /* newer than the translation: English */
     [UI_STR_VAL_CRT_SCANLINES] = "Linhas de varredura", /* [cobra838] */
     [UI_STR_VAL_CRT_CONSUMER] = "TV de consumo",        /* [cobra838] */
     [UI_STR_VAL_CRT_TRINITRON] = NULL,                  /* empty in the CSV: English */

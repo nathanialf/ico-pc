@@ -204,6 +204,12 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "新遊戲+會進行第二次旅程：Yorda 的話語有了翻譯，結局與道具也有所不同。關閉時，即使通關後也進行第一次旅程。",
     [UI_STR_OPT_CRT] = "CRT 濾鏡",
     [UI_STR_OPT_CRT_STRENGTH] = "CRT 強度",
+    [UI_STR_OPT_TONE_GAMMA] = "伽瑪",
+    [UI_STR_OPT_TONE_BRIGHTNESS] = "畫面亮度",
+    [UI_STR_OPT_TONE_CONTRAST] = "對比度",
+    [UI_STR_OPT_TONE_SATURATION] = "飽和度",
+    [UI_STR_OPT_TONE_NOTE] =
+        "50 為遊戲原本繪製的畫面。按 □ 可還原為 50。會改變整個畫面，CRT 濾鏡也一併改變。",
     [UI_STR_VAL_CRT_SCANLINES] = "掃描線",
     [UI_STR_VAL_CRT_CONSUMER] = "家用電視",
     [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",
