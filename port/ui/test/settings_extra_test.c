@@ -247,12 +247,12 @@ static void testToneRows(void)
             lt_ext_layout(picL)->curItem = row;
             frame(0);
             press(LT_PAD_RIGHT);
-            CHECK(strcmp(ui_settings_value_text(kRows[i]), "55") == 0,
-                  "title %d: row %d Right: 55 (%s)", title, i, ui_settings_value_text(kRows[i]));
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "51") == 0,
+                  "title %d: row %d Right: 51 (%s)", title, i, ui_settings_value_text(kRows[i]));
             press(LT_PAD_LEFT);
             press(LT_PAD_LEFT);
-            CHECK(strcmp(ui_settings_value_text(kRows[i]), "45") == 0,
-                  "title %d: row %d Left twice: 45 (%s)", title, i,
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "49") == 0,
+                  "title %d: row %d Left twice: 49 (%s)", title, i,
                   ui_settings_value_text(kRows[i]));
             /* the other rows untouched */
             for (int j = 0; j < 4; j++) {
@@ -266,22 +266,22 @@ static void testToneRows(void)
             CHECK(strcmp(ui_settings_value_text(kRows[i]), "50 (Default)") == 0,
                   "title %d: row %d Square: 50 (Default) (%s)", title, i,
                   ui_settings_value_text(kRows[i]));
-            /* held at both ends */
-            for (int k = 0; k < 14; k++) {
+            /* held at both ends (1 a press, issue 194) */
+            for (int k = 0; k < 60; k++) {
                 press(LT_PAD_LEFT);
             }
             CHECK(strcmp(ui_settings_value_text(kRows[i]), "1") == 0,
                   "title %d: row %d held at 1 (%s)", title, i, ui_settings_value_text(kRows[i]));
             press(LT_PAD_RIGHT);
-            CHECK(strcmp(ui_settings_value_text(kRows[i]), "5") == 0, "title %d: row %d 1 -> 5",
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "2") == 0, "title %d: row %d 1 -> 2",
                   title, i);
-            for (int k = 0; k < 30; k++) {
+            for (int k = 0; k < 110; k++) {
                 press(LT_PAD_RIGHT);
             }
             CHECK(strcmp(ui_settings_value_text(kRows[i]), "100") == 0,
                   "title %d: row %d held at 100 (%s)", title, i, ui_settings_value_text(kRows[i]));
             press(LT_PAD_LEFT);
-            CHECK(strcmp(ui_settings_value_text(kRows[i]), "95") == 0, "title %d: row %d 100 -> 95",
+            CHECK(strcmp(ui_settings_value_text(kRows[i]), "99") == 0, "title %d: row %d 100 -> 99",
                   title, i);
             press(LT_PAD_SQUARE);
         }
