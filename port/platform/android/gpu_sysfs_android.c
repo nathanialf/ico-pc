@@ -112,7 +112,7 @@ static bool devfreq_gpu_dir(char *dir, size_t size)
 {
     DIR *d = opendir(GPU_SYSFS_DEVFREQ_DIR);
     struct dirent *e;
-    char best[96] = "";
+    char best[sizeof(e->d_name)] = ""; /* a whole name: a cut one would not open */
     int bestRank = 0;
 
     if (d == NULL) {

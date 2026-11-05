@@ -683,7 +683,8 @@ int cpu_place_threads_read(const char *root, CpuThreads *out)
         snprintf(path, sizeof(path), "%s/%s/comm", root, e->d_name);
         if (read_small(path, buf, sizeof(t->name))) {
             buf[strcspn(buf, "\n")] = '\0';
-            snprintf(t->name, sizeof(t->name), "%s", buf);
+            /* the precision bounds the copy where gcc's -O2 truncation check sees it */
+            snprintf(t->name, sizeof(t->name), "%.*s", (int)(sizeof(t->name) - 1), buf);
         }
         snprintf(path, sizeof(path), "%s/%s/status", root, e->d_name);
         if (read_small(path, buf, sizeof(buf))) {
