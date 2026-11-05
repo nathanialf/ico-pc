@@ -129,6 +129,17 @@ void ico_host_enter_test_stage(int stage)
     s_world = 100 + stage;
 }
 
+/* the movie row's: unused_movie_test checks them */
+int mpegPlayReturnStage;
+unsigned int stage_after_skipping_demo;
+
+void stgmgrForceSwitchWithFade(int stage, float fadeIn, float fadeOut)
+{
+    (void)stage;
+    (void)fadeIn;
+    (void)fadeOut;
+}
+
 int RequestStageChangeSimple(int no, float speed, float wait, unsigned char r, unsigned char gr,
                              unsigned char b)
 {
