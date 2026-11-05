@@ -2640,7 +2640,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   language's rule (`ui_lang.c`, its inputs stubbed); a community translation's table (an id it has
   not translated NULL, English at run time, at least half translated, its name in every table;
   in the Brazilian Portuguese one, rows cobra838 corrected or filled; the Gameplay pages' three
-  names, Yorda, Shadows and Cutscenes, in every table, the community ones too),
+  names, Yorda, Shadows and Cutscenes, in the eight tables' own words and NULL, English, in the
+  three community tables),
   the translation in force (`ui_lang_text_resolve`: the European disc in English only), Auto
   following it, the menu words over the English sheet (`ui_menu_words_language`); the Japanese
   line-break rules (`strings_complete`).

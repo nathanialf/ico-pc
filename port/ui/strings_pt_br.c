@@ -706,12 +706,9 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Copiando a imagem de disco para o aplicativo",
     [UI_STR_ISO_COPYING_LONG] =
         "Copiando a imagem de disco para o aplicativo. O arquivo é grande, então isso levará alguns minutos.",
-    /* the three Gameplay pages: the words of this table's own rows (Yorda
-       as her Characters rows spell her, the Shadows' and the cutscenes'
-       as the variants rows name them) */
-    [UI_STR_SECTION_YORDA] = "Yorda",
-    [UI_STR_SECTION_SHADOWS] = "Sombras",
-    [UI_STR_SECTION_CUTSCENES] = "Cenas",
+    [UI_STR_SECTION_YORDA] = NULL,     /* newer than the CSV: English */
+    [UI_STR_SECTION_SHADOWS] = NULL,   /* newer than the CSV: English */
+    [UI_STR_SECTION_CUTSCENES] = NULL, /* newer than the CSV: English */
     [UI_STR_OPT_VAR_TOUGHNESS] = "Resistência das sombras",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         NULL, /* longer than its space (184 bytes): English until shortened */
