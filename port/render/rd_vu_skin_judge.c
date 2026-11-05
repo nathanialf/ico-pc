@@ -243,8 +243,8 @@ const char *rd__skin_decision(bool copyDiffers, bool rereadDiffers, bool probeWr
                "the bone read (see the box check)";
     }
     if (c1 == RD_SKIN_VAR_RIGHT && c2 == RD_SKIN_VAR_RIGHT) {
-        return "H1, address-dependent: the driver's uniform read at that offset (right at a "
-               "fresh offset, and right without uniform robustness)";
+        return "H1, address-dependent under robust access: right at a fresh offset and right "
+               "without uniform robustness (either fix: a storage read or robustness off)";
     }
     if (c1 == RD_SKIN_VAR_RIGHT) {
         return "H1, address-dependent: the driver's uniform read at that offset";

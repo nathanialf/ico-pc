@@ -475,13 +475,16 @@ static void startInZone(void)
     if (girl) {
         SetDirectRootPosition(girlGObj, to);
     }
+    /* +y is down: the centre above the start when root.y - centre.y > 0
+       (a zone below the start makes it negative: said as below) */
+    const double above = (double)(root[1] - lowestCentre);
     fprintf(stderr,
             "unused: %s: the game's no-entrance point (%.0f, %.0f, %.0f) is outside every "
-            "camera zone (the lowest zone's centre %.0f above it): the boy moved to zone %d's "
+            "camera zone (the lowest zone's centre %.0f %s it): the boy moved to zone %d's "
             "floor at (%.0f, %.0f, %.0f) (%.0f above the floor y %.0f)%s%s\n",
-            name, root[0] + 0.0, root[1] + 0.0, root[2] + 0.0, (double)(root[1] - lowestCentre),
-            best, to[0] + 0.0, to[1] + 0.0, to[2] + 0.0, (double)h, (double)bestFloor,
-            under ? "" : "; no floor under the start, so 0 above",
+            name, root[0] + 0.0, root[1] + 0.0, root[2] + 0.0, (above < 0.0 ? -above : above) + 0.0,
+            above < 0.0 ? "below" : "above", best, to[0] + 0.0, to[1] + 0.0, to[2] + 0.0, (double)h,
+            (double)bestFloor, under ? "" : "; no floor under the start, so 0 above",
             girl ? "; the girl with him" : "");
 }
 

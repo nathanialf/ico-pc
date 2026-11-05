@@ -51,6 +51,13 @@ row the vertex less the draw's first, by FrameCB's exact-viewport form):
 | 1, c1 | the same with the CPU's bytes copied to a fresh ring offset of another 4 KB page phase | the address and the page phase |
 | 2, c2 | the same as column 0 through a pipeline with uniform-buffer robustness off (`VK_EXT_pipeline_robustness`; made in the background, drawn where robust access is on and the device offers it) | robust access alone |
 
+Where the vertex pre-pass is on (a desktop device under `[dev] vu_skin_check = true`; it is off on
+the tile-based GPUs, so on an Adreno the check's own default never meets it), the draw itself goes
+through `vu_main_vs` with the pre-pass's record, while the probe goes through the program's own
+cluster entry: there S2 checks the program entry's read of the same bytes, and S3 (below) the
+real draw's placement. The probe pass is not in the pass ring (`rd__passring_*`): a device loss
+during it names the scene's last pass, not the probe's.
+
 Then the target and the ring's 3,840 bytes at the draw's offset are copied into the slot's readback
 buffer. When the fence has let the slot go (`rd__vu_skin_harvest`, in `rd__wait_frame` of the
 replay that is about to take the slot's ring again, before it writes it: never a stall), three
@@ -130,7 +137,8 @@ The log's `reads as:` words, for the first wrong check and every event after it:
 | --- | --- |
 | `H2, a port race: the ring's bytes changed after the draw was recorded` | the CPU's re-read differs: the ring was written while the GPU used it (the slot and fence order) |
 | `H2, the memory: the GPU read other bytes than the CPU wrote and still holds` | only the GPU's copy differs: the memory as the GPU sees it |
-| `H1, address-dependent: the driver's uniform read at that offset` | the bytes equal, the probe wrong, c1 right |
+| `H1, address-dependent: the driver's uniform read at that offset` | the bytes equal, the probe wrong, c1 right (c2 wrong or not run) |
+| `H1, address-dependent under robust access: right at a fresh offset and right without uniform robustness (either fix: a storage read or robustness off)` | the bytes equal, the probe wrong, c1 and c2 right: the read is wrong only with robust access on at that offset; a storage-buffer read of the bones or robustness off would each do, the second byte-identical by construction |
 | `H1 under robust access only: the driver's uniform read with robustness on` | the bytes equal, the probe wrong, c1 wrong, c2 right |
 | `H1, the driver's uniform read of this draw: wrong at a fresh offset too, and not robust access alone` | the bytes equal, every probe wrong |
 | `H1, ... (robustness off not tried)` | c1 wrong, c2 not drawn (robust access off, or the extension not offered) |

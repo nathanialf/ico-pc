@@ -242,8 +242,8 @@ static int judgeTests(void)
          "H1, address-dependent: the driver's uniform read at that "
          "offset"},
         {false, false, true, 1, 1,
-         "H1, address-dependent: the driver's uniform read at that "
-         "offset (right at a fresh offset, and right without"},
+         "H1, address-dependent under robust access: right at a fresh "
+         "offset and right without uniform robustness (either fix"},
         {false, false, true, 0, 1, "H1 under robust access only:"},
         {false, false, true, 0, 0,
          "H1, the driver's uniform read of this draw: wrong at a fresh "

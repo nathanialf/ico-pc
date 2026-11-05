@@ -1124,7 +1124,7 @@ has.
   collision files, the floors cast as `build-host/tmp/v0104/tools/rooms.py` casts them). Lines:
   `unused: <room>: the start is inside camera zone G of N (centre (x, y, z))`; `unused: <room>: the
   game's no-entrance point (x, y, z) is outside every camera zone (the lowest zone's centre Y above
-  it): the boy moved to zone G's floor at (x, y, z) (H above the floor y F)`, then `; no floor under
+  it, or below it when a zone lies below the start): the boy moved to zone G's floor at (x, y, z) (H above the floor y F)`, then `; no floor under
   the start, so 0 above` when the probe under him found none and `; the girl with him` when she
   moved; `unused: <room>: no camera zone holds a floor under its centre: the boy stays at (x, y,
   z)`; `unused: <room>: no camera set loaded (N groups): the boy stays at (x, y, z)`; `unused:
