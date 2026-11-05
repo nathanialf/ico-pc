@@ -768,6 +768,19 @@ if(ICO_RUN_TESTS)
     endforeach()
 endif()
 
+# charfile_image_test: the early show title art's hook in the game
+# (ico2/common/src/charFileManager.c ico_char_file_image) by its text: its
+# twins are the model and texture loaders' bodies line for line but for the
+# read from the cdvd handle, and its dispatch is the pack loop's
+# (ico2/fumi/ios/cdvd.c iosCdvdMgrPackLoad). CPU only, no game linked.
+add_executable(charfile_image_test test/charfile_image_test.c)
+target_compile_options(charfile_image_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME charfile_image
+             COMMAND charfile_image_test "${CMAKE_SOURCE_DIR}/ico2/common/src/charFileManager.c"
+                     "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/cdvd.c")
+endif()
+
 # unused_movie_test: the attract movie row (unused_live.c beginMovie and its
 # poll) over stubs of the game, DATA.DF and Settings: the start on the
 # European disc (the return stage, the theme fade, the stage switch with

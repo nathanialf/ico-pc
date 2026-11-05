@@ -94,12 +94,12 @@
 #define OFF(T, m, o) _Static_assert(offsetof(T, m) == (o), #T "." #m " at " #o)
 #define SIZE(T, n) _Static_assert(sizeof(T) == (n), "sizeof(" #T ") == " #n)
 
-/* TexRec: overlay, ico2/common/include/charFileManager.h:33 */
+/* TexRec: overlay, ico2/common/include/charFileManager.h:55 */
 OFF(TexRec, path, 0x0);
 OFF(TexRec, cameraMove, 0x30);
 SIZE(TexRec, 0x34); /* comment */
 
-/* PObjMdl: overlay, ico2/common/include/charFileManager.h:41 */
+/* PObjMdl: overlay, ico2/common/include/charFileManager.h:63 */
 OFF(PObjMdl, path, 0x0);
 OFF(PObjMdl, collPath, 0x30);
 OFF(PObjMdl, offset, 0x70);

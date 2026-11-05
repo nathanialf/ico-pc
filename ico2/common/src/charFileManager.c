@@ -1398,3 +1398,218 @@ void CSVSYSTEM_ReadCharFiles(Sub15C *rec, int id)
         rec->morphNum = 0;
     }
 }
+
+/* PC port: a pack member registered from an image the port read itself
+   (port/data/df_pack.h ico_df_read_member), for Extras > Unused content's
+   early show title art (port/game/model_viewer_member.c).  The pack loader
+   (fumi/ios/cdvd.c iosCdvdMgrPackLoad) hands each member to the initFunc row
+   of its extension (the name after its last '.', the first row with that
+   extension), with the cdvd handle the member is read from, then counts it
+   (debugCdvdLoadInfoSegAdd); a .p2o goes to ReadModelFile and a .tm2 to
+   ReadTextureFile on every disc.  ico_char_file_image does the same for one
+   member: the lookup, then the twin below of the loader the row names, then
+   the count.  The twins are those two loaders' bodies (and their 2001 and
+   demo arms) line for line, the read from the handle (iosCdvdHandlerRead)
+   replaced by a copy of the image (memcpy) and the two skips of a member
+   already loaded or empty by nothing; the ctest
+   charfile_image (port/game/test/charfile_image_test.c) compares them with
+   the loaders in this file.  So the member's model lands in charFiles[id]
+   with the next objSerial, its texture in the texture table, in the arena
+   partition and malloc partition its segment names, as the pack's own load
+   puts them; the next stage change clears them as it clears the pack's
+   (ResetCharFileManager, tex_Init, the partition resets).  The caller runs
+   it on the game thread with no pack load in progress (the loaders yield
+   only inside iosCdvdHandlerRead, which the twins do not call), and checks
+   the room in the arena, the texture table and the object tables first:
+   the twins, as the loaders, stop the game on a failed allocation. */
+static void ReadModelImage_jun26(const void *image, ICO_WORD name, int size, int id, int kind,
+                                 int word08, int part)
+{
+    char buf[1024];
+    char *p;
+
+    systemStatus[8]++;
+    if (size == 0) {
+        return;
+    }
+
+    if (id >= MAX_CHARS) {
+        sprintf(buf, "Illegal Model ID number: %d (\"%s\")\n", id, name);
+        /* please raise MAX_CHARS in commmon/include/charFileName.h */
+        debug_StdPrintfDummy("commmon/include/charFileName.hのMAX_CHARSを増やしてください\n");
+        debug_assertMessage(__FILE__, 125, buf);
+        __assert(__FILE__, 125, "e");
+    }
+
+    if (charFiles[id].pObj != 0) {
+        debug_StdPrintfDummy("ReadModelFile:Already loaded. (id:%d)%s\n", id, name);
+        (void)image;
+        return;
+    }
+
+    if (part == 0) {
+        malloc_SetPartition(0);
+    } else {
+        malloc_SetPartition(1);
+    }
+
+    charFiles[id].state = part;
+    p = iosMallocDebug(ios_partition_seki, size, __FILE__, 140);
+    memcpy(p, image, size);
+    debug_StdPrintfDummy("ReadModelFile:loaded::(id:%d)%s(addr:%p/size:%d)\n", id, name, p, size);
+    charFiles[id].pObj = InitPObj(p, name, id);
+    charFiles[id].pObj->serial = objSerial++;
+    iosFree(p);
+    PObj_FreeImageTables();
+}
+
+static void ReadModelImage(const void *image, ICO_WORD name, int size, int id, int kind, int word08,
+                           int part)
+{
+    if (ICO_JUN26) {
+        ReadModelImage_jun26(image, name, size, id, kind, word08, part);
+        return;
+    }
+    char buf[256];
+    char *p;
+
+    systemStatus[8]++;
+    if (size == 0) {
+        return;
+    }
+
+    if (id >= MAX_CHARS) {
+        sprintf(buf, "Illegal Model ID number: %d (\"%s\")\n", id, name);
+        /* please raise MAX_CHARS in commmon/include/charFileName.h */
+        debug_StdPrintfDummy("commmon/include/charFileName.hのMAX_CHARSを増やしてください\n");
+        debug_assertMessage(__FILE__, LN(130, 129, 129, 129, 129, 129, 129), buf);
+        __assert(__FILE__, LN(130, 129, 129, 129, 129, 129, 129), "e");
+    }
+
+    if (charFiles[id].pObj != 0) {
+        debug_StdPrintfDummy("ReadModelFile:Already loaded. (id:%d)%s\n", id, name);
+        (void)image;
+        return;
+    }
+
+    if (part == 0) {
+        malloc_SetPartition(0);
+    } else {
+        malloc_SetPartition(1);
+    }
+
+    charFiles[id].state = part;
+    p = iosMallocDebug(ios_partition_seki, size, __FILE__, LN(145, 144, 144, 144, 144, 144, 144));
+    memcpy(p, image, size);
+    debug_StdPrintfDummy("ReadModelFile:loaded::(id:%d)%s(addr:%p/size:%d)\n", id, name, p, size);
+    charFiles[id].pObj = InitPObj(p, name, id);
+    charFiles[id].pObj->serial = objSerial++;
+    iosFree(p);
+    PObj_FreeImageTables();
+}
+
+static void ReadTextureImage_ntscaug6jun26(const void *image, char *name, int size, int id,
+                                           int kind, int word08, int seg)
+{
+    int rv;
+    char *buf;
+
+    systemStatus[8]++;
+    if (seg == 0) {
+        malloc_SetPartition(0);
+    } else {
+        malloc_SetPartition(1);
+    }
+    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, PAL_JUN26(274, 255));
+    if (size == 0) {
+        debug_StdPrintfDummy("ReadTextureFile:texture size is zero.%s\n", name);
+        (void)image;
+        return;
+    }
+    memcpy(buf, image, size);
+    rv = tex_InitTexture(name, buf);
+    debug_StdPrintfDummy("ReadTextureFile:loaded::(%d)%s(addr:%p/size:%d)\n", rv, name, buf, size);
+    iosFree(buf);
+}
+
+static void ReadTextureImage(const void *image, char *name, int size, int id, int kind, int word08,
+                             int seg)
+{
+    if (ICO_NTSCAUG6JUN26) {
+        ReadTextureImage_ntscaug6jun26(image, name, size, id, kind, word08, seg);
+        return;
+    }
+    int rv = 0;
+    char *buf;
+    int flag = 0;
+
+    systemStatus[8]++;
+    if (seg == 0) {
+        malloc_SetPartition(0);
+    } else {
+        malloc_SetPartition(1);
+    }
+    buf = iosMallocDebug(ios_partition_seki, size, __FILE__, LN(276, 274, 274, 276, 276, 276, 274));
+    if (size == 0) {
+        debug_StdPrintfDummy("ReadTextureFile:texture size is zero.%s\n", name);
+        (void)image;
+        return;
+    }
+    memcpy(buf, image, size);
+    if (ICO_JPNKORCN) {
+        rv = tex_InitTexture(name, buf);
+    } else {
+        if (kind == 55 && seg == 1 && texFile[id].cameraMove != 0) {
+            if (texFile[id].cameraMove != NonLinearCameraMove) {
+                flag = seg;
+            }
+        }
+        if (flag == 0) {
+            rv = tex_InitTexture(name, buf);
+        }
+    }
+    debug_StdPrintfDummy("ReadTextureFile:loaded::(%d)%s(addr:%p/size:%d)\n", rv, name, buf, size);
+    iosFree(buf);
+}
+
+int ico_char_file_image(char *name, const void *image, int size, int id, int kind, int word08,
+                        int seg)
+{
+    typedef void (*AnyFn)(void);
+    const char *ext = 0;
+    int row = -1;
+    int already = 0;
+    int i;
+
+    for (i = (int)strlen(name) - 1; i >= 0; i--) {
+        if (name[i] == '.') {
+            ext = name + i + 1;
+            break;
+        }
+    }
+    for (i = 0; ext != 0 && i < 26; i++) {
+        if (strcmp(ext, initFunc[i].ext) == 0) {
+            row = i;
+            break;
+        }
+    }
+    if (row < 0) {
+        return ICO_CHAR_IMAGE_NO_LOADER;
+    }
+    if (size <= 0) {
+        return ICO_CHAR_IMAGE_BAD_SIZE;
+    }
+    if ((AnyFn)initFunc[row].func == (AnyFn)ReadModelFile) {
+        if (id < 0 || id >= MAX_CHARS) {
+            return ICO_CHAR_IMAGE_BAD_ID;
+        }
+        already = charFiles[id].pObj != 0;
+        ReadModelImage(image, (ICO_WORD)name, size, id, kind, word08, seg);
+    } else if ((AnyFn)initFunc[row].func == (AnyFn)ReadTextureFile) {
+        ReadTextureImage(image, name, size, id, kind, word08, seg);
+    } else {
+        return ICO_CHAR_IMAGE_OTHER_LOADER;
+    }
+    debugCdvdLoadInfoSegAdd(seg, row, size);
+    return already ? ICO_CHAR_IMAGE_ALREADY : ICO_CHAR_IMAGE_LOADED;
+}
