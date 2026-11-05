@@ -195,8 +195,8 @@ static void testWaterReflections(void)
 }
 
 /* Options > Picture > Gamma, Picture brightness, Contrast and Saturation
-   (issue 190): 50 (Default) shown, 5 a press to the next multiple of 5 (a
-   hand-set 47 lands on 50 or 45), held at 1 and 100, Square back to 50
+   (issue 190): 50 (Default) shown, 1 a press (issue 194; a hand-set 47
+   goes to 48 or 46), held at 1 and 100, Square back to 50
    (only on a tone row), one shared note, leaving the page writes the four
    keys, a file with bad values reads 1/100/50 and one without the keys 50;
    the preset stays Original; the page fits from the title and the pause menu */
@@ -314,14 +314,14 @@ static void testToneRows(void)
               title);
         ico_toml_free(t);
     }
-    /* a hand-set 47 lands on 50 (Right) and 45 (Left) */
+    /* a hand-set 47 goes to 48 (Right) and 46 (Left): 1 a press (issue 194) */
     for (int dir = 1; dir >= -1; dir -= 2) {
         useConfig("version = 1\n[video]\ngamma = 47\n");
         ico_video_get(&o);
         CHECK(o.toneGamma == 47, "hand-set 47 read as 47 (%d)", o.toneGamma);
         ui_settings_step(UI_OPT_TONE_GAMMA, dir);
         ico_video_get(&o);
-        CHECK(o.toneGamma == (dir > 0 ? 50 : 45), "hand-set 47, dir %d: %d", dir, o.toneGamma);
+        CHECK(o.toneGamma == (dir > 0 ? 48 : 46), "hand-set 47, dir %d: %d", dir, o.toneGamma);
     }
     /* values outside the range or not numbers, and absent keys */
     useConfig("version = 1\n[video]\ngamma = 0\nbrightness = 250\ncontrast = \"x\"\n");
@@ -342,7 +342,7 @@ static void testToneRows(void)
     }
     ui_settings_step(UI_OPT_TONE_CONTRAST, 1);
     ico_video_get(&o);
-    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.toneContrast == 55,
+    CHECK(ico_video_preset(&o) == ICO_VIDEO_ORIGINAL && o.toneContrast == 51,
           "a step keeps the preset Original");
     useConfig("version = 1\n");
 }
