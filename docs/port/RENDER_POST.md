@@ -322,7 +322,7 @@ on|off: N folded (F reading the sun's fans' WORK2), M kept (reason)`; the glow p
 where it folds. The reasons (`rd.h` `RD_GLOW_FOLD_WHY_*`): the lamps, SCENE drawn
 between the mask and the reduction, WORK2 drawn or read elsewhere, the chain not in the fold's form, MSAA, the fx plan off, a reduction that
 could not take it. Tests: `rd_blur` (k) and its (r) scan, `rd_glow_cheap_ab`
-([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portrendertest)).
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS_RENDER.md)).
 
 ### The fades fold
 

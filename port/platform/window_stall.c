@@ -6,6 +6,7 @@
 #include "window_stall.h"
 #include <stdio.h>
 #include <string.h>
+#include "cpu_place.h"
 #include "diag_host.h"
 #include "gpu_sysfs.h"
 #include "ico_thread.h"
@@ -65,6 +66,7 @@ static struct {
     struct {
         unsigned replay;
         double t0Ms, t1Ms;
+        int core; /* the game thread's core as the record popped (-1 not known) */
     } q[AROUND_MAX];
 } s_around;
 
@@ -85,6 +87,7 @@ static void around_queue(const RdPerfRecord *r)
     s_around.q[s_around.n].replay = r->replay;
     s_around.q[s_around.n].t0Ms = r->presentEndMs - r->presentMs;
     s_around.q[s_around.n].t1Ms = r->presentEndMs;
+    s_around.q[s_around.n].core = cpu_place_now();
     s_around.n++;
 }
 
@@ -114,7 +117,8 @@ void window_stall_poll(void)
         GpuSysfsAround a;
         char text[512];
 
-        if (!gpu_sysfs_android_around(s_around.q[i].t0Ms, s_around.q[i].t1Ms, &a)) {
+        if (!gpu_sysfs_android_around(s_around.q[i].t0Ms, s_around.q[i].t1Ms, s_around.q[i].core,
+                                      &a)) {
             continue; /* not sampled: dropped */
         }
         if (!a.hasAfter && now - s_around.q[i].t1Ms < AROUND_WAIT_MS) {
@@ -145,7 +149,7 @@ void window_stall_gpu_open(void)
     s_said = 1;
     gpu_sysfs_open_text(&info, text, sizeof(text));
     fprintf(stderr, "window: %s\n", text);
-    s_gpuOn = gpu_sysfs_any_readable(&info);
+    s_gpuOn = gpu_sysfs_any_sampled(&info); /* the GPU's nodes or the CPU clocks */
     s_gpuBlockMs = ico_thread_now_ms();
 #endif
 }
@@ -165,7 +169,7 @@ void window_stall_gpu_block(void)
     const char *why = "";
     ThermalState t;
     GpuSysfsBlock b;
-    char text[256];
+    char text[512];
 
     if (s_gpuOn && gpu_sysfs_android_block(s_gpuBlockMs, &b)) {
         s_gpuBlockMs = now;

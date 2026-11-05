@@ -1398,6 +1398,11 @@ typedef struct RhiStats {
     /* a gauge: the current swapchain's images (Vulkan; 0 elsewhere), for
      * the FIFO fallback's line (window_host.c present_fallback_switch) */
     uint64_t swapImages;
+    /* a gauge: of them, those acquired and not yet handed back by a
+     * present (Vulkan; 0 elsewhere), for the 10 s line's "images: 10, in
+     * use 1"; while the call guard is busy the hand-over's count, as every
+     * counter here */
+    uint64_t swapAcquired;
     /* The pipeline pool (both backends): its size (RHI_PIPELINE_POOL_MAX),
      * the pipelines alive now and the most alive at once (gauges); the
      * creations refused because the pool was full (pipelinePoolFull) and

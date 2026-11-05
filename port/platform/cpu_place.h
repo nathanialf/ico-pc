@@ -172,4 +172,57 @@ void cpu_place_free_counts(unsigned *resets, unsigned *failures);
    not known; the length written */
 size_t cpu_place_priority_text(char *out, size_t cap);
 
+/* The calling thread's CPU time so far in ns (CLOCK_THREAD_CPUTIME_ID on
+   Linux, Android and macOS, GetThreadTimes on Windows); 0 where not known.
+   The window reads it at the end of one pace and at the start of the next
+   (window_host.c ico_window_pace): the game step's CPU time against its
+   wall time.  A step far longer than its CPU time waited (for the render
+   thread, a present, a core); one near it was busy. */
+uint64_t cpu_place_thread_cpu_ns(void);
+/* "CPU 9.8 ms of it" (the slow-step line's "slow step 64.1 ms (CPU 9.8 ms
+   of it)", the 10 s game-thread line's "step 38.4 ms (CPU 12.1 ms of it;
+   ..."); "" when cpuMs is 0 or less (not known); the length written */
+size_t cpu_place_cpu_text(double cpuMs, char *out, size_t cap);
+
+/* A core list as the kernel writes it ("0-5,7", Cpus_allowed_list) to a
+   mask; 0 for an empty or malformed text (cores past CPU_PLACE_MAX
+   dropped) */
+uint64_t cpu_place_list_parse(const char *text);
+
+/* The process's threads and the cores each may run on, read from
+   /proc/self/task (root NULL) or a fake root: per thread its id, its name
+   (comm) and Cpus_allowed_list (status; mask 0 when not read).  Linux and
+   Android; elsewhere none (the count 0) */
+#define CPU_THREADS_MAX 160
+
+typedef struct CpuThread {
+    long tid;
+    char name[20];
+    uint64_t mask;
+} CpuThread;
+
+typedef struct CpuThreads {
+    int n;     /* held, by thread id */
+    int total; /* seen (more than CPU_THREADS_MAX: the rest only counted) */
+    CpuThread t[CPU_THREADS_MAX];
+} CpuThreads;
+
+int cpu_place_threads_read(const char *root, CpuThreads *out);
+/* The threads grouped by the cores they may run on (issue 179: which
+   threads share the two cores the game and render threads are kept to):
+     "threads: 31; kept to cores 6-7: ico_pc (the game thread), ico-render;
+     on 0-7: ico-submit, mali-cmar-backend, mali-utility-wo, mali-mem-purge,
+     ico-gpu-sysfs and 24 more"
+   The cores every thread together may run on are "on 0-7" (last but the
+   threads whose cores were not read, "cores not known"); a narrower set is
+   "kept to cores 6-7" ("kept to core 7" for one), the narrowest first.  In
+   a group the game thread (gameTid; 0 none) comes first, then by thread
+   id; one name repeated is said once with its count ("ico-tex (4)"); at
+   most CPU_THREADS_NAMES names a group, then "and N more" threads.
+   "threads: none read" with none; the length written */
+#define CPU_THREADS_NAMES 5
+size_t cpu_place_threads_format(const CpuThreads *t, long gameTid, char *out, size_t cap);
+/* cpu_place_threads_read then _format */
+size_t cpu_place_threads_text(const char *root, long gameTid, char *out, size_t cap);
+
 #endif
