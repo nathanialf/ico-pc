@@ -103,6 +103,172 @@ static void testCredits(int mainL, int exL)
     (void)mainL;
 }
 
+/* Extras > Unused content over a fake host (ui_settings_set_unused_host,
+   unused_live.c's in the program): without a host, or with one that has
+   no row (the June 2001 demo), the Extras link is hidden, the latter with
+   one log line; with rows, the link shows from the title and opens the
+   page, whose rows are the host's (the 104-row discs' case: no movie);
+   from the pause menu the link and the rows are hidden; Cross on a row
+   calls open(row) once, the menu leaving for the layout it returns with
+   the title's cursor kept on Settings (as Credits); open -1 stays. */
+static int s_unusedHas[4];
+static int s_unusedOpens, s_unusedRow;
+static int s_unusedTo = -1;
+
+static int fakeUnusedAvailable(int row)
+{
+    return row >= 0 && row < 4 ? s_unusedHas[row] : 0;
+}
+
+static int fakeUnusedOpen(int row)
+{
+    s_unusedOpens++;
+    s_unusedRow = row;
+    return s_unusedTo;
+}
+
+static void setUnusedHas(int a, int b, int c, int d)
+{
+    s_unusedHas[0] = a;
+    s_unusedHas[1] = b;
+    s_unusedHas[2] = c;
+    s_unusedHas[3] = d;
+}
+
+/* the Extras page's Unused content link row (Extras opened from mainL) */
+static int unusedLink(int mainL, int *exL)
+{
+    int el[11];
+    *exL = openPage(mainL, -1, UI_PAGE_EXTRAS);
+    const int n = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 11);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    CHECK(n == 11, "Extras has its eleven rows (%d)", n);
+    return n == 11 ? el[4] : -1;
+}
+
+static void testUnused(void)
+{
+    static const UiUnusedHost kHost = {fakeUnusedAvailable, fakeUnusedOpen};
+    static const UiSettingsOpt kRows[4] = {UI_OPT_UNUSED_ARENA, UI_OPT_UNUSED_CLIMB,
+                                           UI_OPT_UNUSED_MOVIE, UI_OPT_UNUSED_ART};
+    static const char *const kNames[5] = {"Test room: arena", "Test room: climbing",
+                                          "Attract movie (576 lines)", "Early show title art",
+                                          "Back"};
+    char log[2048];
+    int exL, link;
+
+    /* no host: hidden */
+    ui_settings_set_unused_host(NULL);
+    setUnusedHas(1, 1, 1, 1);
+    link = unusedLink(enterMain(1), &exL);
+    CHECK(link >= 0 && strcmp(lt_ext_row_text(link), "Unused content") == 0 &&
+              lt_ext_prop(link)->defaultMask && !ui_settings_row_shown(link),
+          "no host: the Unused content link is hidden");
+    for (int k = 0; k < 4; k++) {
+        CHECK(!ui_settings_opt_shown(kRows[k]), "no host: row %d hidden", k);
+    }
+
+    /* a host with none of the rows: hidden, one line for the disc */
+    setUnusedHas(0, 0, 0, 0);
+    ui_settings_set_unused_host(&kHost);
+    errCapture();
+    link = unusedLink(enterMain(1), &exL);
+    frame(0);
+    errRelease(log, sizeof(log));
+    const char *line = strstr(log, "extras: no Unused content page on ");
+    CHECK(link >= 0 && lt_ext_prop(link)->defaultMask && line != NULL &&
+              strstr(line + 1, "extras: no Unused content page on ") == NULL,
+          "no row: the link hidden, logged once (\"%s\")", log);
+
+    /* the rows of a disc without the movie: the link opens the page */
+    setUnusedHas(1, 1, 0, 1);
+    link = unusedLink(enterMain(1), &exL);
+    CHECK(link >= 0 && !lt_ext_prop(link)->defaultMask && ui_settings_row_shown(link) &&
+              lt_ext_prop(link)->right == ui_settings_page_layout(UI_PAGE_UNUSED),
+          "rows: the link shown and opening the page");
+    const int uL = openLink(exL, UI_PAGE_EXTRAS, UI_PAGE_UNUSED);
+    int ul[8], uo[8];
+    const int un = ui_settings_page_rows(UI_PAGE_UNUSED, ul, uo, NULL, 8);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    CHECK(un == 5, "the page has five rows (%d)", un);
+    for (int i = 0; i < un && i < 5; i++) {
+        CHECK(strcmp(lt_ext_row_text(ul[i]), kNames[i]) == 0 &&
+                  uo[i] == (i < 4 ? (int)kRows[i] : UI_OPT_BACK),
+              "row %d: \"%s\" (want \"%s\")", i, lt_ext_row_text(ul[i]), kNames[i]);
+    }
+    CHECK(un == 5 && !lt_ext_prop(ul[0])->defaultMask && !lt_ext_prop(ul[1])->defaultMask &&
+              lt_ext_prop(ul[2])->defaultMask && !lt_ext_prop(ul[3])->defaultMask &&
+              !lt_ext_prop(ul[4])->defaultMask,
+          "the host's rows shown, the movie hidden");
+    CHECK(ui_settings_opt_shown(UI_OPT_UNUSED_ARENA) && !ui_settings_opt_shown(UI_OPT_UNUSED_MOVIE),
+          "the rows' rule is the host's");
+    checkPageFits(UI_PAGE_UNUSED, "Unused content");
+    /* the note on the cursor: the arena's */
+    lt_ext_layout(uL)->curItem = ul[0];
+    frame(0);
+    int note = -1;
+    {
+        LtProp *l = lt_ext_layout(uL);
+        for (int j = l->first; j < l->last; j++) {
+            if (strncmp(lt_ext_row_text(j), "A room the makers used to try fights", 36) == 0) {
+                note = j;
+            }
+        }
+    }
+    CHECK(note >= 0 && lt_ext_prop(note)->masked == 0, "the arena's note on its row");
+
+    /* Cross: open -1 stays on the page */
+    s_unusedOpens = 0;
+    s_unusedTo = -1;
+    press(lt_ext_confirm_button());
+    CHECK(s_unusedOpens == 1 && s_unusedRow == 0 && current_layout_id == uL,
+          "a refused start stays (%d calls, row %d, layout %d)", s_unusedOpens, s_unusedRow,
+          current_layout_id);
+    /* Cross on the climbing room: the menu leaves for the host's layout
+       (the game's empty layout; here an empty one shaped like 54), the
+       title's cursor on Settings */
+    setLayout(55, 292, 292, -1, -1);
+    texLayout[55].fadeInTime = 0.0f;
+    texLayout[55].fadeOutTime = 0.0f;
+    s_unusedOpens = 0;
+    s_unusedTo = 55;
+    lt_ext_layout(uL)->curItem = ul[1];
+    frame(0);
+    press(lt_ext_confirm_button());
+    CHECK(s_unusedOpens == 1 && s_unusedRow == 1, "Cross calls open once on its row (%d, %d)",
+          s_unusedOpens, s_unusedRow);
+    CHECK(settle(55, 60), "the menu leaves for the host's layout (%d)", current_layout_id);
+    CHECK(texLayout[13].defaultItem == ui_settings_entry_row(13),
+          "the title comes back on Settings (%d)", texLayout[13].defaultItem);
+
+    /* the way back (unused_live.c after the room): Options again on this
+       page, Extras on its Unused content link, the page on its first row */
+    lt_switch_layout(fxLayout(13));
+    CHECK(settle(fxLayout(13), 60), "the title again");
+    CHECK(ui_settings_reopen_page(UI_PAGE_UNUSED) == uL, "Reopen Unused content on the title");
+    CHECK(lt_ext_layout(exL)->defaultItem == link,
+          "Reopen: Extras on the Unused content link (%d, want %d)",
+          lt_ext_layout(exL)->defaultItem, link);
+    lt_switch_layout(uL);
+    CHECK(settle(uL, 60) && lt_ext_layout(uL)->curItem == ul[0],
+          "the page opens on its first row (%d)", lt_ext_layout(uL)->curItem);
+
+    /* the pause menu: the link and the rows hidden (title only) */
+    setUnusedHas(1, 1, 1, 1);
+    link = unusedLink(enterMain(0), &exL);
+    CHECK(link >= 0 && lt_ext_prop(link)->defaultMask && !ui_settings_row_shown(link),
+          "pause: the Unused content link is hidden");
+    for (int k = 0; k < 4; k++) {
+        CHECK(!ui_settings_opt_shown(kRows[k]), "pause: row %d hidden", k);
+    }
+    ui_settings_set_unused_host(NULL);
+    s_unusedTo = -1;
+}
+
 /* Settings > Extras: a row of the main page after Achievements, from both
    entries; Music, Models, Credits (from the title
    only), Characters and Back; the entries are placeholders that log;
@@ -152,27 +318,32 @@ static void testExtras(void)
         CHECK(settle(exL, 60), "the Extras page");
         int el[11], eo[11], ev[11];
         int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, eo, ev, 11);
-        /* the page keeps every row; Add to Steam (el[4]), Export textures
-           (el[5]) and the two backup rows (el[6], el[7]) are hidden without
-           a host (testAddToSteam and testExportTextures in
-           settings_extra_test.c, settings_backup_test.c show them) */
-        CHECK(en == 10 && lt_ext_layout(exL)->curItem == el[0] && lt_ext_prop(el[4])->defaultMask &&
+        /* the page keeps every row; Unused content (el[4]), Add to Steam
+           (el[5]), Export textures (el[6]) and the two backup rows (el[7],
+           el[8]) are hidden without a host (testUnused here,
+           testAddToSteam and testExportTextures in settings_extra_test.c,
+           settings_backup_test.c show them) */
+        CHECK(en == 11 && lt_ext_layout(exL)->curItem == el[0] && lt_ext_prop(el[4])->defaultMask &&
                   lt_ext_prop(el[5])->defaultMask && lt_ext_prop(el[6])->defaultMask &&
-                  lt_ext_prop(el[7])->defaultMask,
-              "ten rows, Add to Steam, Export textures and the backup rows hidden, the cursor "
-              "on Music");
+                  lt_ext_prop(el[7])->defaultMask && lt_ext_prop(el[8])->defaultMask,
+              "eleven rows, Unused content, Add to Steam, Export textures and the backup rows "
+              "hidden, the cursor on Music");
         CHECK(strcmp(lt_ext_row_text(el[0]), "Music") == 0 &&
                   strcmp(lt_ext_row_text(el[1]), "Models") == 0 &&
                   strcmp(lt_ext_row_text(el[2]), "Credits") == 0 &&
                   strcmp(lt_ext_row_text(el[3]), "Character Customization") == 0 &&
-                  strcmp(lt_ext_row_text(el[4]), "Add to Steam") == 0 &&
-                  strcmp(lt_ext_row_text(el[5]), "Export textures") == 0 &&
-                  strcmp(lt_ext_row_text(el[6]), "Back up your data") == 0 &&
-                  strcmp(lt_ext_row_text(el[7]), "Restore from a backup") == 0 &&
-                  strcmp(lt_ext_row_text(el[8]), "Achievement pop-ups") == 0 &&
-                  strcmp(lt_ext_row_text(el[9]), "Back") == 0,
-              "Music, Models, Credits, Character Customization, Add to Steam, Export textures, "
-              "the backup rows, pop-ups, Back");
+                  strcmp(lt_ext_row_text(el[4]), "Unused content") == 0 &&
+                  strcmp(lt_ext_row_text(el[5]), "Add to Steam") == 0 &&
+                  strcmp(lt_ext_row_text(el[6]), "Export textures") == 0 &&
+                  strcmp(lt_ext_row_text(el[7]), "Back up your data") == 0 &&
+                  strcmp(lt_ext_row_text(el[8]), "Restore from a backup") == 0 &&
+                  strcmp(lt_ext_row_text(el[9]), "Achievement pop-ups") == 0 &&
+                  strcmp(lt_ext_row_text(el[10]), "Back") == 0,
+              "Music, Models, Credits, Character Customization, Unused content, Add to Steam, "
+              "Export textures, the backup rows, pop-ups, Back");
+        CHECK(eo[4] == UI_OPT_LINK &&
+                  lt_ext_prop(el[4])->right == ui_settings_page_layout(UI_PAGE_UNUSED),
+              "Unused content opens its page");
         /* the row's name fits its box of 300 at 60 % or more */
         for (int g = 0; g < UI_LANG_COUNT; g++) {
             ui_set_language((UiLang)g);
@@ -240,7 +411,7 @@ static void testExtras(void)
         press(0x40);
         CHECK(settle(exL, 60), "Extras after the handler's layout");
         /* Back and Triangle return to the main page, the cursor on Extras */
-        lt_ext_layout(exL)->curItem = el[9];
+        lt_ext_layout(exL)->curItem = el[10];
         press(0x40);
         CHECK(settle(mainL, 60) && lt_ext_layout(mainL)->curItem == ex,
               "Back: the cursor on Extras");
@@ -1130,7 +1301,7 @@ static void testCharacters(void)
     }
 
     /* Extras from the pause menu: Characters, the pop-ups and Back only;
-       the others masked; the cursor steps between them */
+       the others (Unused content too) masked; the cursor steps between them */
     {
         const int mainL = enterMain(0);
         const int exL = openPage(mainL, 8, UI_PAGE_EXTRAS);
@@ -1139,23 +1310,23 @@ static void testCharacters(void)
         for (int k = 0; k < 4; k++) {
             frame(0);
         }
-        CHECK(en == 10, "pause: Extras has its ten rows (%d)", en);
+        CHECK(en == 11, "pause: Extras has its eleven rows (%d)", en);
         CHECK(lt_ext_prop(el[0])->defaultMask && lt_ext_prop(el[1])->defaultMask &&
                   lt_ext_prop(el[2])->defaultMask && lt_ext_prop(el[4])->defaultMask &&
                   lt_ext_prop(el[5])->defaultMask && lt_ext_prop(el[6])->defaultMask &&
-                  lt_ext_prop(el[7])->defaultMask,
-              "pause: Music, Models, Credits, Add to Steam, Export textures and the backup rows "
-              "are hidden");
-        CHECK(!lt_ext_prop(el[3])->defaultMask && !lt_ext_prop(el[8])->defaultMask &&
-                  !lt_ext_prop(el[9])->defaultMask,
+                  lt_ext_prop(el[7])->defaultMask && lt_ext_prop(el[8])->defaultMask,
+              "pause: Music, Models, Credits, Unused content, Add to Steam, Export textures and "
+              "the backup rows are hidden");
+        CHECK(!lt_ext_prop(el[3])->defaultMask && !lt_ext_prop(el[9])->defaultMask &&
+                  !lt_ext_prop(el[10])->defaultMask,
               "pause: Characters, the pop-ups and Back are shown");
         lt_ext_layout(exL)->curItem = el[3];
         frame(0);
         press(0x4000);
-        CHECK(lt_ext_layout(exL)->curItem == el[8],
+        CHECK(lt_ext_layout(exL)->curItem == el[9],
               "pause: Down from Characters lands on the pop-ups");
         press(0x4000);
-        CHECK(lt_ext_layout(exL)->curItem == el[9], "pause: Down from the pop-ups lands on Back");
+        CHECK(lt_ext_layout(exL)->curItem == el[10], "pause: Down from the pop-ups lands on Back");
         /* the budget keeps its spare (testBudget has the count) */
         printf("settings_extras_test: Characters: %d of %d properties used\n", lt_ext_prop_count(),
                LT_EXT_MAX_PROPERTIES);
@@ -1223,6 +1394,7 @@ int main(int argc, char **argv)
         return failures ? 1 : 0;
     }
     testExtras();
+    testUnused();
     testCoversTitle();
     testCharacters();
     testCharactersRestart();

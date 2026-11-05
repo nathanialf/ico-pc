@@ -740,6 +740,34 @@ if(TARGET ico_pc AND ICO_HEADLESS AND ICO_RUN_TESTS)
     endforeach()
 endif()
 
+# unused_content_test: Extras > Unused content's rows, flag and start
+# (unused_content.c) and its engine (unused_live.c, game_state_keep.c) over
+# stubs of the game, DATA.DF and Settings: each row's stage on the disc, the
+# rows each disc's DATA.DF has (fake stageData, stubbed ico_df_has and
+# ico_df_find_member), the engine indirection, the test rooms' start, the
+# arena's boy at its first shadow row, the return to the title and its log,
+# the reopen of Options on the page, the failures. CPU only, one run per disc.
+ico_include_dirs(common _ico_unused_incs)
+add_executable(unused_content_test test/unused_content_test.c unused_content.c unused_live.c
+    game_state_keep.c)
+target_include_directories(unused_content_test PRIVATE ${_ico_unused_incs} "${_ico_gs_include}"
+                           "${CMAKE_CURRENT_SOURCE_DIR}"
+                           $<TARGET_PROPERTY:ico_port_data,INTERFACE_INCLUDE_DIRECTORIES>)
+target_compile_definitions(unused_content_test PRIVATE ICO_HOST=1)
+# port/ui's settings.h and "strings.h" by -iquote, so <strings.h> stays the C
+# library's
+target_compile_options(unused_content_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_GAME_WARNINGS}
+                       -iquote "${CMAKE_SOURCE_DIR}/port/ui")
+target_link_libraries(unused_content_test PRIVATE ico_region)
+if(ICO_RUN_TESTS)
+    add_test(NAME unused_content COMMAND unused_content_test "${CMAKE_CURRENT_BINARY_DIR}")
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        add_test(NAME unused_content_${_slug}
+                 COMMAND unused_content_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+    endforeach()
+endif()
+
 # credits_test: the game's staffroll.c over a short table in the disc's forms,
 # with the font stubbed to record the posted and printed lines: the port
 # credit's lines come after the disc's, the heading then the name in the
