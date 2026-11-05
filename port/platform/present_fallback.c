@@ -134,10 +134,12 @@ int ico_present_fallback_note(IcoPresentFallback *f, unsigned long long nowNs, d
         record(f, nowNs);
         return ICO_PRESENT_FALLBACK_SWITCH;
     }
-    if (gate == ICO_PRESENT_FALLBACK_GATE_KEPT && !f->kept) {
+    if ((gate == ICO_PRESENT_FALLBACK_GATE_KEPT || gate == ICO_PRESENT_FALLBACK_GATE_OTHER) &&
+        !f->kept) {
         f->kept = 1;
         record(f, nowNs);
-        return ICO_PRESENT_FALLBACK_KEPT;
+        return gate == ICO_PRESENT_FALLBACK_GATE_KEPT ? ICO_PRESENT_FALLBACK_KEPT
+                                                      : ICO_PRESENT_FALLBACK_OTHER;
     }
     return 0;
 }
@@ -178,6 +180,21 @@ void ico_present_fallback_kept_line(const IcoPresentFallback *f, char *out, size
              "window: present blocked %d times over %.0f ms in %.0f s under mailbox: mailbox "
              "kept ([dev] present_fallback=off)",
              f->n, ICO_PRESENT_FALLBACK_BLOCK_MS, f->takenSpanS);
+}
+
+void ico_present_fallback_other_line(const IcoPresentFallback *f, const char *adapter,
+                                     const char *driverText, char *out, size_t size)
+{
+    char drv[160];
+
+    first_line(driverText, drv, sizeof drv);
+    snprintf(out, size,
+             "window: present blocked %d times (%.0f-%.0f ms) in %.0f s on %s (%s) under "
+             "mailbox: mailbox kept (presents go FIFO by themselves only on Qualcomm's own "
+             "driver, where the blocks were measured; [dev] present_fallback = fifo asks for FIFO "
+             "here)",
+             f->n, f->takenMinMs, f->takenMaxMs, f->takenSpanS,
+             adapter != NULL ? adapter : "an unknown device", drv);
 }
 
 void ico_present_fallback_block_suffix(const IcoPresentFallback *f, unsigned long long nowNs,

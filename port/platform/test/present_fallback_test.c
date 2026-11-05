@@ -15,9 +15,12 @@
  *            switch, no "toward FIFO" suffix;
  *   kept     [dev] present_fallback=off (GATE_KEPT): no switch, the kept
  *            answer once and its line word for word;
+ *   other    the Mali-G52 reporter's blocks of 204, 231 and 240 ms at 408, 412 and
+ *            416 s under GATE_OTHER: the other answer once, no switch, the line
+ *            word for word, no suffix;
  *   late     a count reached under GATE_NO (vsync on) switches at the next
  *            block once the gate is YES;
- *   driver   eligibility: Qualcomm's text yes, Mesa's and Turnip's no (any
+ *   driver   eligibility (and Qualcomm's own: only vendor 0x5143): Qualcomm's text yes, Mesa's and Turnip's no (any
  *            case), no device no;
  *   start    FIFO from the first swapchain: Qualcomm's own driver (vendor
  *            0x5143, text neither Mesa nor turnip) with auto and vsync off
@@ -165,11 +168,54 @@ static void testLate(void)
     CHECK(f.takenBlocks == 4);
 }
 
+static const char k_mali[] = "device 13b5:74021000; driver Mali-G52 MC2 "
+                             "v1.r32p1-01eac0.2a893c04ca0026c2e6802dbe7d7af5c5, version 32.1.0";
+
+/* the Mali-G52 reporter's three blocks (issue 179): the switch is Qualcomm's own */
+static void testOther(void)
+{
+    IcoPresentFallback f = {0};
+    const int other = ICO_PRESENT_FALLBACK_GATE_OTHER;
+    char line[512];
+
+    CHECK(ico_present_fallback_note(&f, S(408), 204.0, other) == 0);
+    ico_present_fallback_block_suffix(&f, S(409), line, sizeof line);
+    CHECK_STR(line, "");
+    CHECK(ico_present_fallback_note(&f, S(412), 231.0, other) == 0);
+    CHECK(ico_present_fallback_note(&f, S(416), 240.0, other) == ICO_PRESENT_FALLBACK_OTHER);
+    CHECK(!f.taken && f.kept);
+    ico_present_fallback_other_line(&f, "Mali-G52 MC2", k_mali, line, sizeof line);
+    CHECK_STR(
+        line,
+        "window: present blocked 3 times (204-240 ms) in 8 s on Mali-G52 MC2 (device "
+        "13b5:74021000; driver Mali-G52 MC2 v1.r32p1-01eac0.2a893c04ca0026c2e6802dbe7d7af5c5, "
+        "version 32.1.0) under mailbox: mailbox kept (presents go FIFO by themselves only on "
+        "Qualcomm's own driver, where the blocks were measured; [dev] present_fallback = fifo "
+        "asks for FIFO here)");
+    /* once a run, whatever follows */
+    for (int i = 0; i < 10; i++) {
+        CHECK(ico_present_fallback_note(&f, S(417 + i), 300.0, other) == 0);
+    }
+    CHECK(!f.taken && f.slowSince == 0);
+    ico_present_fallback_block_suffix(&f, S(430), line, sizeof line);
+    CHECK_STR(line, "");
+    ico_present_fallback_mode_suffix(&f, ICO_PRESENT_FALLBACK_AUTO, 0, 0, line, sizeof line);
+    CHECK_STR(line, "");
+}
+
 static void testDriver(void)
 {
     CHECK(ico_present_fallback_driver_eligible(0x5143u, k_qcom));
     CHECK(ico_present_fallback_driver_eligible(0x13b5u, "ARM Mali driver"));
     CHECK(ico_present_fallback_driver_eligible(0x5143u, NULL));
+    /* the Mali-G52 stays eligible (the Mesa/Turnip exclusion) but is not Qualcomm's own: the
+       blocks' switch needs the vendor too */
+    CHECK(ico_present_fallback_driver_eligible(0x13b5u, k_mali));
+    CHECK(!ico_present_fallback_qualcomm_own(0x13b5u, k_mali));
+    CHECK(!ico_present_fallback_qualcomm_own(0x13b5u, "ARM Mali driver"));
+    CHECK(!ico_present_fallback_qualcomm_own(0x1002u, "AMD proprietary"));
+    CHECK(!ico_present_fallback_qualcomm_own(0x10deu, "NVIDIA 570"));
+    CHECK(ico_present_fallback_qualcomm_own(0x5143u, k_qcom));
     CHECK(!ico_present_fallback_driver_eligible(0x5143u, "turnip Mesa driver"));
     CHECK(!ico_present_fallback_driver_eligible(0x5143u, "TURNIP"));
     CHECK(!ico_present_fallback_driver_eligible(0x1002u, "radv Mesa 25.1.0"));
@@ -253,6 +299,7 @@ int main(void)
     testShort();
     testTurnip();
     testKept();
+    testOther();
     testLate();
     testDriver();
     testMode();

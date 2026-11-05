@@ -1532,9 +1532,17 @@ the window's side, called from `port/platform/window_host.c` (`video_settings`, 
 
 - A block is a present that spent 200 ms or more in the driver's present call (the replay record's
   present time, `present_blocked`). Three within 30 s switch, once a run, when the vsync option is
-  Off, the swapchain is in mailbox mode, the backend is Vulkan and the driver is not Mesa's (its text
-  names neither `Mesa` nor `turnip`: Turnip on the same tablet showed a few blocks of 230-238 ms in a whole
-  run) (`ico_present_fallback_note`, `ico_present_fallback_driver_eligible`).
+  Off, the swapchain is in mailbox mode, the backend is Vulkan and the driver is Qualcomm's own (vendor id `0x5143`, text naming neither
+  `Mesa` nor `turnip`: Turnip on the same tablet showed a few blocks of 230-238 ms in a whole run)
+  (`ico_present_fallback_note`, `ico_present_fallback_qualcomm_own`). Any other driver answers
+  `GATE_OTHER`: the blocks are counted, mailbox is kept, and the window writes `window: present
+  blocked 3 times (204-240 ms) in 8 s on ADAPTER (DRIVER) under mailbox: mailbox kept (presents go
+  FIFO by themselves only on Qualcomm's own driver, where the blocks were measured; [dev]
+  present_fallback = fifo asks for FIFO here)` once (`ico_present_fallback_other_line`), with no
+  `toward FIFO` words on the 10 s lines and no `FIFO fallback armed` on the start's line. A Mali-G52
+  (issue 179) took the switch after three blocks of 204-240 ms and its present calls over
+  100 ms went from 1-4 to 12-23 a 10 s block (blocks of 285-308 ms inside `vkQueuePresentKHR`), and
+  the switch's evidence base, issue 123's Qualcomm logs, had the stall continue under FIFO.
 - The switch line is `window: present blocked 3 times (376-382 ms) in 14 s on ADAPTER (DRIVER) under
   mailbox (vsync off, 6 images): presents now FIFO for this run ([dev] present_fallback=off keeps
   mailbox)`. At the step's end the backend's flag is set (`rhi_present_fifo_fallback`), the
@@ -1549,10 +1557,11 @@ the window's side, called from `port/platform/window_host.c` (`video_settings`, 
   the game's own 30 pictures a second stay, and vsync off keeps the paced allowance whatever the
   present mode (`pace_budget_paced_mode`; `pace_policy_test` (`testBudgetFifo120`)).
 - The start's `window: present mode ...` line and the summary end `, FIFO fallback armed` where the
-  switch can be taken, `, FIFO fallback taken after N blocks` once taken, `, FIFO fallback set by
+  switch can be taken (Qualcomm's own driver only), `, FIFO fallback taken after N blocks` once taken, `, FIFO fallback set by
   [dev] present_fallback=fifo` under that value.
 - `[dev] present_fallback` ([CONFIG.md](CONFIG.md#dev)): `auto` (the default) as above, and FIFO from
-  the start on Qualcomm's own driver (below); `off` keeps
+  the start on Qualcomm's own driver (below); on other drivers `auto` keeps mailbox and `fifo` is the
+  A/B; `off` keeps
   mailbox and writes `window: present blocked 3 times over 200 ms in N s under mailbox: mailbox kept
   ([dev] present_fallback=off)` once; `fifo` presents FIFO from the start.
 
