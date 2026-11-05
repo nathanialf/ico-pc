@@ -254,7 +254,7 @@ int ico_video_motion_blur_strength_clamp(int v);
 #define ICO_TONE_MIN 1
 #define ICO_TONE_MAX 100
 #define ICO_TONE_DEFAULT 50
-#define ICO_TONE_STEP 5
+#define ICO_TONE_STEP 1 /* issue 194: 1 a press (was 5 in v0.10.3) */
 /* v clamped to MIN..MAX (no rounding: a hand-set 47 is kept) */
 int ico_video_tone_clamp(int v);
 

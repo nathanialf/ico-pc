@@ -1,3 +1,7 @@
+## New
+
+- Options > Picture: Gamma, Picture brightness, Contrast and Saturation now change by 1 with each press instead of 5.
+
 ## Fixed
 
 - Entering a test room from Options > Extras > Unused content no longer ends in a game over at once: the character starts on the room's floor in both rooms.
