@@ -3,6 +3,7 @@
 # line "<dump>: skin check: ..." must match LINE; SKIP without the dump or
 # a device (77).
 # -DTOOL=<rd_replay_tool> -DDUMP=<dump> -DOUT=<dir> -DLINE=<regex>
+# [-DLOG=<regex>]: a line the tool's log (stderr) must hold
 if(NOT EXISTS "${DUMP}")
   message(STATUS "SKIP: no ${DUMP}")
   return()
@@ -23,3 +24,10 @@ if(NOT flat MATCHES "skin check: ${LINE}")
   message(FATAL_ERROR "the summary does not match \"skin check: ${LINE}\":\n${out}\n${err}")
 endif()
 message(STATUS "rd_replay_tool --skin-check: ${CMAKE_MATCH_0}")
+if(LOG)
+  string(REPLACE ";" "," flatErr "${err}")
+  if(NOT flatErr MATCHES "${LOG}")
+    message(FATAL_ERROR "the log has no line matching \"${LOG}\":\n${err}")
+  endif()
+  message(STATUS "the log: ${CMAKE_MATCH_0}")
+endif()

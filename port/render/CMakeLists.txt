@@ -2121,6 +2121,9 @@ if(ICO_RUN_TESTS)
     set(_vskd "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_check_dump.cmake")
     set(_vskd_clean "[0-9]+ skinned commands, [1-9][0-9]* checks, 0 wrong \\(address 0\\), 0 blocks whose bytes differed \\(0 changed after the draw\\), 0 of [0-9]+ box checks with samples outside")
     set(_vsk163 "/primary/dev/ico-dumps/163")
+    # a wrong check's mismatch line for Yorda's mesh at bone address 200
+    # (review2 S5: the H2 run's 42 changed blocks must not use up its lines)
+    set(_vsk163_wrong "rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh testmodel #[0-9]+ \\([0-9]+ vertices\\): [0-9]+ vertices wrong of [0-9]+, address 200: ")
     add_test(NAME rd_vu_skin_check_dump
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=/primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump"
@@ -2137,13 +2140,13 @@ if(ICO_RUN_TESTS)
                      "-DDUMP=${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_probe"
                      "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\), 0 blocks whose bytes differed \\(0 changed after the draw\\).*reads as: H1, address-dependent"
-                     -P "${_vskd}")
+                     "-DLOG=${_vsk163_wrong}" -P "${_vskd}")
     add_test(NAME rd_vu_skin_check_163_ring
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_163_ring"
                      "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\), [1-9][0-9]* blocks whose bytes differed \\([1-9][0-9]* changed after the draw\\).*reads as: H2, a port race"
-                     -P "${_vskd}")
+                     "-DLOG=${_vsk163_wrong}" -P "${_vskd}")
     add_test(NAME rd_vu_skin_check_163_patched
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${_vsk163}/blended-750-a200.rddump"

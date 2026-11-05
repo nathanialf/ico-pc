@@ -247,7 +247,12 @@ static bool probesMake(void)
 
 /* the counts: the run's and the 10 s block's */
 static struct {
-    uint64_t checks, wrong, blocks, reread, box, boxOut, events, boxEvents;
+    uint64_t checks, wrong, blocks, reread, box, boxOut;
+    /* the lines' own budgets (the first 8, then every 100th, each): a
+     * wrong check's (its mismatch and variants lines), a check whose bytes
+     * differed with every vertex right, a box check's samples outside, so
+     * the many blocks of an H2 run never use up a wrong check's lines */
+    uint64_t wrongEvents, bytesEvents, boxEvents;
 } s_run;
 
 static struct {
@@ -1196,7 +1201,8 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
         snprintf(place, sizeof(place), "?");
     }
     if (v[0].wrong || copyDiff || rereadDiff) {
-        if (sayNth(++s_run.events)) {
+        const uint64_t ev = v[0].wrong ? ++s_run.wrongEvents : ++s_run.bytesEvents;
+        if (sayNth(ev)) {
             char cw[48], rw[48], mod[48];
             rd__skin_bytes_words(copyDiff, q0, q1, cw, sizeof(cw));
             if (reread) {
@@ -1213,12 +1219,12 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
                         "vertices wrong of %u, address %u: got (%.1f, %.1f, %d) want (%.1f, "
                         "%.1f, %d) (a zero matrix at %u gives it: %s; it gives %u of them); the "
                         "bone block as the GPU copied it: %s; as the CPU reads it after the "
-                        "fence: %s; code %d through %s (event %llu)",
+                        "fence: %s; code %d through %s (wrong check %llu)",
                         k->frame, place, k->mesh, k->meshId, k->meshVertices, v[0].wrong,
                         v[0].compared, a, v[0].got[0] / 16.0, v[0].got[1] / 16.0, v[0].got[2],
                         v[0].want.x / 16.0, v[0].want.y / 16.0, v[0].want.z, a,
                         v[0].explains ? "yes" : "no", v[0].explained, cw, rw, k->code, mod,
-                        (unsigned long long)s_run.events);
+                        (unsigned long long)ev);
                 const uint64_t phase = k->c1Off & 4095u;
                 const char *c2w =
                     k->c2 ? varWords(c2)
@@ -1236,15 +1242,15 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
             } else {
                 rd__log("VU skin check: frame %u command %s mesh %s #%u (%u vertices): every "
                         "vertex right (%u compared); the bone block as the GPU copied it: %s; as "
-                        "the CPU reads it after the fence: %s; reads as: %s (event %llu)",
+                        "the CPU reads it after the fence: %s; reads as: %s (bytes event %llu)",
                         k->frame, place, k->mesh, k->meshId, k->meshVertices, v[0].compared, cw, rw,
-                        decision, (unsigned long long)s_run.events);
+                        decision, (unsigned long long)ev);
             }
         }
     }
     if (outside && sayNth(++s_run.boxEvents)) {
         rd__log("VU skin check: frame %u command %s drew %llu samples outside its box (texels "
-                "%d,%d %ux%u, the CPU's vertices + 2 GS pixels; the probe %s) (event %llu)",
+                "%d,%d %ux%u, the CPU's vertices + 2 GS pixels; the probe %s) (box event %llu)",
                 k->frame, place, (unsigned long long)outside, k->box.x, k->box.y, k->box.w,
                 k->box.h, v[0].wrong ? "wrong too" : "right", (unsigned long long)s_run.boxEvents);
     }

@@ -139,14 +139,14 @@ At start, from `rd_vuprepass_selftest`:
 - `rd: VU skin check: off (the start-up probe failed: the device was lost in it | its picture could not be read back)`, then `window: VU skin check: the start-up probe failed on this device (...); [dev] vu_skin_check = false is written to <config> ...`; at the next start after an end inside the probe `window: VU skin check: the previous run ended inside its start-up probe (<note>); ...`
 - on a window's Vulkan device with the check off: `rd: VU skin check: off (not an Adreno: ICO_RD_VU_SKIN_CHECK=1 / [dev] vu_skin_check = true turns it on)`, `off ([dev] vu_skin_check = false (ICO_RD_VU_SKIN_CHECK=0))` or `off (the device was lost)`
 
-On an event (a wrong probe, or the block's bytes differing), the first 8, then every 100th:
+On an event, the first 8, then every 100th, of each kind on its own count (a wrong check's two lines, a check whose bytes differed with every vertex right, a box check's samples outside), so the many changed blocks of an H2 run never use up a wrong check's lines:
 
-- `rd: VU skin check: frame F command L:I mesh NAME #ID (V vertices): N vertices wrong of M, address A: got (x, y, z) want (x, y, z) (a zero matrix at A gives it: yes|no; it gives K of them); the bone block as the GPU copied it: equal | differs at qwords Q..R; as the CPU reads it after the fence: equal | differs at qwords Q..R | not read (...); code C through MODULE (event E)`
+- `rd: VU skin check: frame F command L:I mesh NAME #ID (V vertices): N vertices wrong of M, address A: got (x, y, z) want (x, y, z) (a zero matrix at A gives it: yes|no; it gives K of them); the bone block as the GPU copied it: equal | differs at qwords Q..R; as the CPU reads it after the fence: equal | differs at qwords Q..R | not read (...); code C through MODULE (wrong check E)`
   (X and Y in GS pixels, absolute; Z the GS Z; A the address whose zero matrix gives the most wrong
   vertices, else the first wrong vertex's lane x)
 - `rd: VU skin check: frame F command L:I variants: (c1) the block at a fresh ring offset (page phase P, the draw's D): right|wrong (N wrong); (c2) uniform robustness off: right | wrong | not run (robust access off) | not offered (no VK_EXT_pipeline_robustness) | not run (its pipeline not made yet) (N wrong); reads as: WORDS`
-- `rd: VU skin check: frame F command L:I mesh ...: every vertex right (M compared); the bone block as the GPU copied it: ...; reads as: WORDS (event E)` (bytes that differed, every vertex right)
-- `rd: VU skin check: frame F command L:I drew N samples outside its box (texels X,Y WxH, the CPU's vertices + 2 GS pixels; the probe right|wrong too) (event E)`
+- `rd: VU skin check: frame F command L:I mesh ...: every vertex right (M compared); the bone block as the GPU copied it: ...; reads as: WORDS (bytes event E)` (bytes that differed, every vertex right)
+- `rd: VU skin check: frame F command L:I drew N samples outside its box (texels X,Y WxH, the CPU's vertices + 2 GS pixels; the probe right|wrong too) (box event E)`
 
 In the 10 s summary, when the check ran: `rd: VU skin check: P checks, W wrong, B blocks whose bytes
 differed (R changed after the draw); Q box checks, S with samples outside the box, N not drawn
