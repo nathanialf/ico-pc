@@ -43,6 +43,7 @@ In reading order.
 | [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md) | Every test program by area: what it checks and its ctest names. |
 | [TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md) | The renderer's test programs (the port/render/test section in its own file). |
 | [DIVERGENCES.md](DIVERGENCES.md) | Every known way the port's behaviour or output differs from the PS2 game. |
+| [UNUSED_CONTENT_AUDIT.md](UNUSED_CONTENT_AUDIT.md) | What each retail disc holds that the game never reaches, generated from the images: one section per disc. |
 
 ## Elsewhere
 
