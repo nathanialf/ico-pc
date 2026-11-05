@@ -1210,9 +1210,10 @@ void debug_VariableInit(void)
     if (ico_opt_developer_mode() && ico_opt_debug_option() != 0) {
         debug_GetDebugOption();
     }
-    /* PC port: Options > Extras > Game variants: the switches they hold
-       (One hit per swing, Shadows never dodge, Shadow aggression, Ignore
-       cutscene cameras, No cutscene look-around) bound here, after the retail
+    /* PC port: the game variants (Options > Gameplay > Shadows and
+       Cutscenes): the switches they hold (One hit per swing, Shadows never
+       dodge, Shadow aggression, Ignore cutscene cameras, No cutscene
+       look-around) bound here, after the retail
        values and the option file, and written at once; a variant at its
        shipped value leaves its switch as set above (port/game/variants.c) */
     ico_variants_bind_debug(&debug_one_hit_only, &debug_ignore_dodge, &debug_enemy_battle_type,
