@@ -537,8 +537,12 @@ motion blur: smooth: the trail is held much longer than the game's: FIX F drawn 
 The block line's K1 to K2 are the ticks' k (the clock's tick over its step on the timer path), its
 step and resets the present clock's (its resets in the 10 s block): a step near the presents'
 real interval and k near the presented fps over the game fps of the window's line of the same
-block is the healthy reading; a step far below the interval with a reset at nearly every present
-is issue 193's stuck clock. The held line names the fault directly: under the time form FIX' 120 or more needs a present
+block is the healthy reading, with a reset or two a block (a pause, a change of rate). The clock
+learns any slower rate (a 120 Hz FIFO at 25 presented fps: one reset, then none) and a doubled
+present moves it by its own interval, so a reset at nearly every present means presents so
+irregular that the clock is over half a tick from the measured time at each one (the measured
+alpha passes on, unsmoothed); a step far below the interval with it would be issue 193's stuck
+clock, which the step's lower bound rules out. The held line names the fault directly: under the time form FIX' 120 or more needs a present
 under a 20th of a tick after the one before (at FIX 32), and 32 of those in a row do not happen at
 under 8 presents a tick.
 
