@@ -11,13 +11,21 @@
  * holds the most of its block, and is not stage 88 or 91 (the two test
  * rooms only the debug Stage Select reaches, offered under Extras > Unused
  * content: ico_unused.h).  Only the numbers are here; the names are the
- * port's strings.
+ * port's strings.  The last three rows, the early show title art, are no
+ * stage's objects: they name their members of the logo pack, which the
+ * viewer registers on the host stage itself (model_viewer.h MvModel.member),
+ * and their ids are that pack directory's, read from the running disc.
  */
 #include "model_viewer.h"
 
+#include <stdio.h>
+#include <string.h>
+
 #include "../core/region.h" /* ico_region, ico_region_stage */
 
+#include "df_pack.h" /* port/data: the member rows' pack directory */
 #include "strings.h"
+#include "vfs.h"
 
 /* motionViewer.c's objMenu, and the opening's guards and horses (the D1_*
    motions between the shadows' block and the queen's) */
@@ -40,31 +48,47 @@ const int mv_blockCount = (int)(sizeof(mv_blocks) / sizeof(mv_blocks[0]));
    couch, 19 a barrel (the bomb, the pot), 22 a floor lever, 32 the bird,
    44 a cage, 48 the queen in a scene */
 const MvModel mv_models[] = {
-    {UI_STR_MV_ICO, 0, 0, 1, 54, 8, 0, 532, 0, 1283},
-    {UI_STR_MV_YORDA, 4, 4, 2, 148, 4, 532, 834, 1283, 2122},
-    {UI_STR_MV_QUEEN, 71, 71, 48, 590, 11, 1072, 1134, 2407, 2421},
-    {UI_STR_MV_SHADOW, 20, 20, 4, 2464, 46, 834, 983, 2122, 2407},
-    {UI_STR_MV_SHADOW_WINGED, 31, 31, 4, 341, 8, 834, 983, 2122, 2407},
-    {UI_STR_MV_SHADOW_HORNED, 32, 32, 4, 336, 8, 834, 983, 2122, 2407},
-    {UI_STR_MV_SHADOW_HORNED_WINGED, 34, 34, 4, 400, 9, 834, 983, 2122, 2407},
-    {UI_STR_MV_SHADOW_BULL, 35, 35, 4, 835, 14, 834, 983, 2122, 2407},
-    {UI_STR_MV_SHADOW_BULL_WINGED, 36, 36, 4, 342, 8, 834, 983, 2122, 2407},
-    {UI_STR_MV_SHADOW_LARVA, 23, 23, 4, 150, 4, 834, 983, 2122, 2407},
-    {UI_STR_MV_SHADOW_BUTTERFLY, 24, 24, 4, 335, 8, 834, 983, 2122, 2407},
-    {UI_STR_MV_SHADOW_SLUG, 21, 21, 4, 832, 14, 834, 983, 2122, 2407},
-    {UI_STR_MV_SHADOW_BONES, 39, 39, 4, 509, 10, 834, 983, 2122, 2407},
-    {UI_STR_MV_BIRD, 1547, 1543, 32, 595, 11, 1134, 1143, 2421, 2467},
-    {UI_STR_MV_GUARD, 53, 53, 6, 2336, 42, 983, 1005, 2122, 2407},
-    {UI_STR_MV_CAGE, 937, 937, 44, 1847, 31, 0, 0, 0, 0},
-    {UI_STR_MV_BOMB, 99, 99, 19, 324, 8, 0, 0, 0, 0},
-    {UI_STR_MV_POT, 101, 101, 19, 208, 5, 0, 0, 0, 0},
-    {UI_STR_MV_BARREL, 92, 92, 19, 280, 7, 0, 0, 0, 0},
-    {UI_STR_MV_LEVER, 151, 151, 22, 145, 4, 0, 0, 0, 0},
-    {UI_STR_MV_SWORD, 77, 77, 14, 483, 10, 0, 0, 0, 0},
-    {UI_STR_MV_MAGIC_SWORD, 79, 79, 14, 2098, 35, 0, 0, 0, 0},
-    {UI_STR_MV_COUCH, 160, 160, 16, 327, 8, 0, 0, 0, 0},
+    {UI_STR_MV_ICO, 0, 0, 1, 54, 8, 0, 532, 0, 1283, NULL, NULL},
+    {UI_STR_MV_YORDA, 4, 4, 2, 148, 4, 532, 834, 1283, 2122, NULL, NULL},
+    {UI_STR_MV_QUEEN, 71, 71, 48, 590, 11, 1072, 1134, 2407, 2421, NULL, NULL},
+    {UI_STR_MV_SHADOW, 20, 20, 4, 2464, 46, 834, 983, 2122, 2407, NULL, NULL},
+    {UI_STR_MV_SHADOW_WINGED, 31, 31, 4, 341, 8, 834, 983, 2122, 2407, NULL, NULL},
+    {UI_STR_MV_SHADOW_HORNED, 32, 32, 4, 336, 8, 834, 983, 2122, 2407, NULL, NULL},
+    {UI_STR_MV_SHADOW_HORNED_WINGED, 34, 34, 4, 400, 9, 834, 983, 2122, 2407, NULL, NULL},
+    {UI_STR_MV_SHADOW_BULL, 35, 35, 4, 835, 14, 834, 983, 2122, 2407, NULL, NULL},
+    {UI_STR_MV_SHADOW_BULL_WINGED, 36, 36, 4, 342, 8, 834, 983, 2122, 2407, NULL, NULL},
+    {UI_STR_MV_SHADOW_LARVA, 23, 23, 4, 150, 4, 834, 983, 2122, 2407, NULL, NULL},
+    {UI_STR_MV_SHADOW_BUTTERFLY, 24, 24, 4, 335, 8, 834, 983, 2122, 2407, NULL, NULL},
+    {UI_STR_MV_SHADOW_SLUG, 21, 21, 4, 832, 14, 834, 983, 2122, 2407, NULL, NULL},
+    {UI_STR_MV_SHADOW_BONES, 39, 39, 4, 509, 10, 834, 983, 2122, 2407, NULL, NULL},
+    {UI_STR_MV_BIRD, 1547, 1543, 32, 595, 11, 1134, 1143, 2421, 2467, NULL, NULL},
+    {UI_STR_MV_GUARD, 53, 53, 6, 2336, 42, 983, 1005, 2122, 2407, NULL, NULL},
+    {UI_STR_MV_CAGE, 937, 937, 44, 1847, 31, 0, 0, 0, 0, NULL, NULL},
+    {UI_STR_MV_BOMB, 99, 99, 19, 324, 8, 0, 0, 0, 0, NULL, NULL},
+    {UI_STR_MV_POT, 101, 101, 19, 208, 5, 0, 0, 0, 0, NULL, NULL},
+    {UI_STR_MV_BARREL, 92, 92, 19, 280, 7, 0, 0, 0, 0, NULL, NULL},
+    {UI_STR_MV_LEVER, 151, 151, 22, 145, 4, 0, 0, 0, 0, NULL, NULL},
+    {UI_STR_MV_SWORD, 77, 77, 14, 483, 10, 0, 0, 0, 0, NULL, NULL},
+    {UI_STR_MV_MAGIC_SWORD, 79, 79, 14, 2098, 35, 0, 0, 0, 0, NULL, NULL},
+    {UI_STR_MV_COUCH, 160, 160, 16, 327, 8, 0, 0, 0, 0, NULL, NULL},
+    /* the early show title art (Extras > Unused content): the E3 2001
+       title's three quads, kind 35 (MOBJ, the kind of the stage animation
+       objects that drew them: objTableScene), built on the Cage's quiet
+       stage from their members of the logo pack (model_viewer_member.c);
+       the European disc's pack holds only the copyright */
+    {UI_STR_UNUSED_ART_VER, -1, -1, 35, -1, 31, 0, 0, 0, 0, "object/sdf/e3/st13b/model/e3_ver.p2o",
+     "object/sdf/e3/st13b/model/../texture/e3_ver.tm2"},
+    {UI_STR_UNUSED_ART_START, -1, -1, 35, -1, 31, 0, 0, 0, 0,
+     "object/sdf/e3/st13b/model/p_start.p2o", "object/sdf/e3/st13b/model/../texture/p_start.tm2"},
+    {UI_STR_UNUSED_ART_COPYRIGHT, -1, -1, 35, -1, 31, 0, 0, 0, 0,
+     "object/sdf/e3/st13b/model/copy_right.p2o",
+     "object/sdf/e3/st13b/model/../texture/scei_cr.tm2"},
 };
 const int mv_modelCount = (int)(sizeof(mv_models) / sizeof(mv_models[0]));
+/* the member ids' cache holds a slot per row */
+#define MV_MAX_MODELS 64
+_Static_assert(sizeof(mv_models) / sizeof(mv_models[0]) <= MV_MAX_MODELS,
+               "mv_models outgrew the member ids' cache");
 
 /* The id column each row of config/regions.txt reads: 0 pal_id, 1 jpn_id.
    The Korean disc's modelData is the Japanese one row for row (its
@@ -79,11 +103,89 @@ const int mv_modelCount = (int)(sizeof(mv_models) / sizeof(mv_models[0]));
    docs/port/UI.md "Extras > Models"). */
 static const unsigned char mv_id_column[ICO_REGION_COUNT] = {0, 1, 1, 0, 0, 0, 1};
 
+/* the member rows' ids on the disc they were asked for (a region change
+   asks again); -2 not asked yet */
+static const IcoRegionInfo *s_memberFor;
+static int s_memberId[MV_MAX_MODELS];
+static int s_memberLookups;
+
+static int memberId(int row)
+{
+    const MvModel *m = &mv_models[row];
+    IcoDfMember dm;
+    IcoVfs *vfs;
+    const char *pack;
+    int id = -1;
+
+    if (s_memberFor != ico_region_cur()) {
+        s_memberFor = ico_region_cur();
+        for (int i = 0; i < MV_MAX_MODELS; i++) {
+            s_memberId[i] = -2;
+        }
+    }
+    if (s_memberId[row] != -2) {
+        return s_memberId[row];
+    }
+    vfs = ico_vfs_disc();
+    if (vfs == NULL) {
+        return -1; /* no disc yet: asked again */
+    }
+    s_memberLookups++;
+    if (ico_df_find_member(vfs, m->member, &dm) != 0) {
+        fprintf(stderr,
+                "model_viewer: no %.120s in this disc's packs (%.16s): the row is not "
+                "offered\n",
+                m->member, ico_region_cur()->disc_id);
+    } else if ((pack = ico_df_entry_name(vfs, dm.pack)) == NULL ||
+               strcmp(pack, MV_MEMBER_PACK) != 0) {
+        fprintf(stderr, "model_viewer: %.120s is in %.40s, not %s: the row is not offered\n",
+                m->member, pack != NULL ? pack : "?", MV_MEMBER_PACK);
+    } else if (dm.id < 0) {
+        fprintf(stderr, "model_viewer: %.120s has the id %d in %s: the row is not offered\n",
+                m->member, dm.id, MV_MEMBER_PACK);
+    } else {
+        id = dm.id;
+    }
+    s_memberId[row] = id;
+    return id;
+}
+
 int mv_model_id(const MvModel *m)
 {
     int r = ico_region >= 0 && ico_region < ICO_REGION_COUNT ? ico_region : 0;
 
+    if (m->member != NULL) {
+        for (int row = 0; row < mv_modelCount; row++) {
+            if (m == &mv_models[row]) {
+                return memberId(row);
+            }
+        }
+        return -1;
+    }
     return mv_id_column[r] ? m->jpn_id : m->pal_id;
+}
+
+int mv_model_shown(int row)
+{
+    if (row < 0 || row >= mv_modelCount) {
+        return 0;
+    }
+    return mv_models[row].member == NULL || mv_model_id(&mv_models[row]) >= 0;
+}
+
+int mv_member_first_row(void)
+{
+    for (int row = 0; row < mv_modelCount; row++) {
+        if (mv_models[row].member != NULL && mv_model_shown(row)) {
+            return row;
+        }
+    }
+    return -1;
+}
+
+int mv_member_lookups(void)
+{
+    return s_memberLookups;
 }
 
 int mv_model_stage(const MvModel *m)

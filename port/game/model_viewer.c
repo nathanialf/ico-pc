@@ -70,8 +70,17 @@
  * 12, unseen) and the layout to be faded in, then opens Settings on Extras
  * (ui_settings_reopen_page), Back returning to the decided title menu.
  *
+ * The early show title art (the table's member rows, Extras > Unused
+ * content's art row: ico_mv_models_enter_at) is no stage's object: once its
+ * host stage is up, setup has model_viewer_member.c register the row's
+ * model and texture from their logo pack members as the pack loader does
+ * and build its object, then finds it as any other row.  The list offers
+ * a member row only on a disc whose logo pack holds it (mv_model_shown):
+ * the European disc has the copyright only, the June 2001 demo none.
+ *
  * Nothing is saved and no game flag is set but what End Game resets.  The
- * viewer's own buffers are host memory (malloc), not the game's arena.
+ * viewer's own buffers are host memory (malloc), not the game's arena; the
+ * art's model and texture are in the arena, as the stage's own.
  */
 #include <math.h>
 #include <stdio.h>
@@ -284,17 +293,47 @@ static int nextRow(void)
     return LT_GAME_PROPERTY_COUNT + lt_ext_prop_count();
 }
 
+/* the rows the list offers on this disc (mv_model_shown), in table order;
+   rebuilt as the list opens */
+#define MV_LIST_ROWS 64
+static int s_rows[MV_LIST_ROWS];
+static int s_rowCount;
+/* ico_mv_models_enter_at: the row the cursor opens on, and Back to the
+   Unused content page */
+static int s_listAt = -1;
+static int s_listFromUnused;
+
+static void refreshRows(void)
+{
+    s_rowCount = 0;
+    for (int row = 0; row < mv_modelCount && s_rowCount < MV_LIST_ROWS; row++) {
+        if (mv_model_shown(row)) {
+            s_rows[s_rowCount++] = row;
+        }
+    }
+}
+
+static int listIndexOf(int row)
+{
+    for (int i = 0; i < s_rowCount; i++) {
+        if (s_rows[i] == row) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 /* the model list: the names, the hint in the status line */
 static int listCount(void *user)
 {
     (void)user;
-    return mv_modelCount;
+    return s_rowCount;
 }
 
 static void listFill(void *user, int d, UiListSlot *out)
 {
     (void)user;
-    out->labelStr = mv_models[d].nameStr;
+    out->labelStr = d >= 0 && d < s_rowCount ? mv_models[s_rows[d]].nameStr : 0;
 }
 
 static void listDecorate(void *user, int d)
@@ -363,22 +402,26 @@ static int listInput(void *user, int d, int flags)
             mvToTitle();
             return -1;
         }
-        /* back on Extras' Models row */
-        int to = ui_settings_page_layout(UI_PAGE_EXTRAS);
-        int row = ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_MODELS);
+        /* back on Extras' Models row, or on Unused content's art row when
+           the list was opened from there */
+        const int page = s_listFromUnused ? UI_PAGE_UNUSED : UI_PAGE_EXTRAS;
+        int to = ui_settings_page_layout(page);
+        int row =
+            ui_settings_row_of(page, s_listFromUnused ? UI_OPT_UNUSED_ART : UI_OPT_EXTRAS_MODELS);
         if (to >= 0 && row >= 0) {
             lt_ext_layout(to)->defaultItem = row;
         }
         return to;
     }
-    if ((flags & PAD_OK) && d >= 0 && d < mv_modelCount && !modelStageOnDisc(d, "the model")) {
+    const int pick = d >= 0 && d < s_rowCount ? s_rows[d] : -1;
+    if ((flags & PAD_OK) && pick >= 0 && !modelStageOnDisc(pick, "the model")) {
         NEGATIVE_SE();
         return -1;
     }
-    if ((flags & PAD_OK) && d >= 0 && d < mv_modelCount) {
+    if ((flags & PAD_OK) && pick >= 0) {
         POSITIVE_SE();
         la_host_leave();
-        mvStart(d);
+        mvStart(pick);
         return -1;
     }
     return UI_LIST_PASS;
@@ -461,12 +504,16 @@ static int listProc(int first, int item)
     (void)item;
     ui_settings_apply_language();
     if (first) {
+        refreshRows();
         ui_list_reset(&s_list);
-        if (s_model >= 0 && s_model < mv_modelCount) {
-            /* the cursor on the model last viewed */
-            int shown = mv_modelCount < UI_LIST_SLOTS ? mv_modelCount : UI_LIST_SLOTS;
-            s_list.offset = s_model < shown ? 0 : s_model - shown + 1;
-            lay->curItem = s_list.label[s_model - s_list.offset];
+        /* the cursor on the model last viewed, or the one the list was
+           opened on */
+        const int at = listIndexOf(s_model >= 0 ? s_model : s_listAt);
+        s_listAt = -1;
+        if (at >= 0) {
+            int shown = s_rowCount < UI_LIST_SLOTS ? s_rowCount : UI_LIST_SLOTS;
+            s_list.offset = at < shown ? 0 : at - shown + 1;
+            lay->curItem = s_list.label[at - s_list.offset];
         }
     }
     ui_list_refresh(&s_list, lay->curItem);
@@ -528,7 +575,30 @@ int ico_mv_models_enter(void)
     if (!built()) {
         build();
     }
+    refreshRows();
+    s_listAt = -1;
+    s_listFromUnused = 0;
     return s_listLayout;
+}
+
+int ico_mv_models_enter_at(int row)
+{
+    if (s_state != MV_OFF) {
+        fprintf(stderr, "model_viewer: the list not opened at row %d: the viewer is still %s\n",
+                row, s_state == MV_LEAVING ? "leaving" : "running");
+        return -1;
+    }
+    const int to = ico_mv_models_enter();
+    if (to < 0 || listIndexOf(row) < 0) {
+        fprintf(stderr, "model_viewer: the list not opened at row %d (%s)\n", row,
+                to < 0 ? "no list" : "not offered on this disc");
+        return -1;
+    }
+    s_listAt = row;
+    s_listFromUnused = 1;
+    fprintf(stderr, "model_viewer: the list opened at \"%s\" (row %d of %d offered)\n",
+            modelNameEn(row), listIndexOf(row) + 1, s_rowCount);
+    return to;
 }
 
 int ico_mv_title_list_layout(void)
@@ -971,6 +1041,12 @@ static void logModelTextures(const Sub15C *d)
 static void setup(void)
 {
     const MvModel *m = &mv_models[s_model];
+    /* the early show art: its members registered and its object built on
+       the stage, now that it is up (model_viewer_member.c) */
+    if (m->member != NULL && mv_member_load(m) == NULL) {
+        mvFailed("the early show title art could not be loaded");
+        return;
+    }
     GObj *g = findObject(m);
     if (g == NULL) {
         mvFailed("the object is not in its stage");

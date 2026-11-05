@@ -44,6 +44,14 @@ typedef struct MvModel {
     int stage;             /* the host stage */
     int motFirst, motLast; /* the motion-kind block, [first, last) */
     int oriFrom, oriTo;    /* its motion-orient rows, [from, to) */
+    /* a model no stage builds (the early show title art, Extras > Unused
+       content): its pack member, read and registered by the viewer once its
+       host stage is up (model_viewer_member.c), and the TIM2 member the
+       model's material names; NULL for the stages' own models.  Such a row's
+       pal_id and jpn_id are -1: its model id is the member's own number in
+       the pack's directory (mv_model_id) */
+    const char *member;
+    const char *texture;
 } MvModel;
 
 extern const MvModel mv_models[];
@@ -54,6 +62,20 @@ extern const int mv_modelCount;
    ico_region_stage) */
 int mv_model_id(const MvModel *m);
 int mv_model_stage(const MvModel *m);
+/* The member rows (MvModel.member): their pack (MV_MEMBER_PACK, the
+   title's logo pack, which the game loads at every boot and whose E3 2001
+   title models nothing in a retail disc draws).  A member row's id is
+   PackEnt.id of its member in that pack on the running disc, asked once
+   per disc (ico_df_find_member over the program's DATA.DF, the member
+   checked to lie in that pack) and kept; -1 when the disc has no such
+   member or cannot be read (not kept: asked again).  mv_model_shown(row):
+   whether the model list offers the row (every stage row; a member row
+   whose id is known); mv_member_first_row: the first member row shown, or
+   -1; mv_member_lookups: the member look-ups so far (the tests' count). */
+#define MV_MEMBER_PACK "STGLOG.DF"
+int mv_model_shown(int row);
+int mv_member_first_row(void);
+int mv_member_lookups(void);
 /* the table's first two rows, the characters Settings > Extras >
    Characters shows (appearance.h ico_appearance_character's numbers) */
 #define MV_ROW_ICO 0
@@ -94,6 +116,20 @@ void ico_mv_tick(void);
 /* Settings > Extras > Models (port/ui/settings.c): the model list's layout,
    built on first use, or -1 */
 int ico_mv_models_enter(void);
+/* Extras > Unused content's art row (port/game/unused_live.c): the model
+   list as ico_mv_models_enter opens it, the cursor on table row `row`; Back
+   goes to the Unused content page's art row instead of Extras. -1 as
+   ico_mv_models_enter, or for a row the list does not offer */
+int ico_mv_models_enter_at(int row);
+/* model_viewer_member.c: the member row m's model and texture registered
+   from their pack members as the pack loader registers them
+   (charFileManager.h ico_char_file_image), then its object built as a
+   stage builds a layouted object of its kind (sceneManager.c
+   CreateLayoutedGObj), on the host stage once it is up; the object, or
+   NULL with a line saying why.  The object found already (a second call on
+   the same stage) is returned as it is. */
+struct GObj;
+struct GObj *mv_member_load(const MvModel *m);
 /* The model list's layout while it is opened from the title (the viewer
    off), or -1 (port/game/title_logo.c hides the logo under it) */
 int ico_mv_title_list_layout(void);

@@ -608,8 +608,10 @@ endif()
 # --- The model viewer -----------------------------------
 if(TARGET ico_pc)
     # title_logo.c: the title's logo hidden under Settings and
-    # Extras, asked by seki/src/RegistPacket.c
-    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_cam.c model_viewer_motion.c model_viewer_table.c title_logo.c)
+    # Extras, asked by seki/src/RegistPacket.c; model_viewer_member.c: the
+    # early show title art's members registered on the host stage
+    # (charFileManager.c ico_char_file_image)
+    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_cam.c model_viewer_member.c model_viewer_motion.c model_viewer_table.c title_logo.c)
     ico_include_dirs(sugipon _ico_mv_game_incs)
     # port/data: df_pack.h (the June 2001 demo's DATA.DF asked for a stage's pack)
     target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"

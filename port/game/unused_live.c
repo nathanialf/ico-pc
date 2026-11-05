@@ -42,7 +42,13 @@
  * The attract movie (beginMovie): the title's attract path started from
  * the Settings menu: mpegPlayReturnStage the title, the theme faded, a
  * stage switch to the movie stage; Main plays it and returns by itself.
- * The art row's start belongs to later work; here it refuses with a line.
+ *
+ * The early show title art (beginArt): Extras > Models' list opened on its
+ * first art row (model_viewer.h ico_mv_models_enter_at); the viewer loads
+ * the art's members on its host stage (model_viewer_member.c), and Back
+ * from the list comes back to this page.  The row is offered where the
+ * viewer offers an art row (mv_member_first_row: the disc's logo pack holds
+ * one), so the page and the list agree.
  */
 #include <stdio.h>
 #include <string.h>
@@ -53,7 +59,8 @@
 
 #include "df_pack.h" /* port/data: ico_df_has, ico_df_find_member */
 #include "game_state_keep.h"
-#include "settings.h" /* the host, the title return */
+#include "model_viewer.h" /* the art's rows in the model viewer */
+#include "settings.h"     /* the host, the title return */
 
 #include "adpcm_init.h"
 #include "gamesys.h"
@@ -165,6 +172,13 @@ static int available(int row)
         if (ico_df_find_member(vfs, r->member, &m) != 0) {
             fprintf(stderr, "unused: no %s row on %s: no pack holds %s\n", r->name, ri->disc_id,
                     r->member);
+            return 0;
+        }
+        if (row == ICO_UNUSED_ART && mv_member_first_row() < 0) {
+            fprintf(stderr,
+                    "unused: no %s row on %s: the model viewer offers none of its models (its "
+                    "lines say why)\n",
+                    r->name, ri->disc_id);
             return 0;
         }
     }
@@ -328,6 +342,35 @@ static void moviePoll(void)
     }
 }
 
+/* --- the early show title art ------------------------------------------- */
+
+/* The model list, opened on the first art row the disc has; the viewer
+   does the rest (model_viewer.c, model_viewer_member.c). */
+static int beginArt(void)
+{
+    const IcoUnusedRow *r = ico_unused_row(ICO_UNUSED_ART);
+    const int row = mv_member_first_row();
+
+    if (s_phase != PH_IDLE || stage_no != TITLE_STAGE || systemStatus[6] != 0) {
+        fprintf(stderr, "unused: failed: not on the title (stage %d, stage change %d)\n", stage_no,
+                systemStatus[6]);
+        return -1;
+    }
+    if (row < 0) {
+        fprintf(stderr, "unused: failed: the model viewer offers no %s row on %s\n", r->name,
+                ico_region_cur()->disc_id);
+        return -1;
+    }
+    const int to = ico_mv_models_enter_at(row);
+    if (to < 0) {
+        fprintf(stderr, "unused: failed: the model viewer's list did not open for %s\n", r->name);
+        return -1;
+    }
+    fprintf(stderr, "unused: %s: the model viewer's list (layout %d) on its row %d\n", r->name, to,
+            row);
+    return to;
+}
+
 static int begin(int row)
 {
     switch (row) {
@@ -337,10 +380,9 @@ static int begin(int row)
     case ICO_UNUSED_MOVIE:
         return beginMovie();
     case ICO_UNUSED_ART:
+        return beginArt();
     default:
-        /* the art's start is not in this build */
-        fprintf(stderr, "unused: failed: %s cannot be started in this build\n",
-                ico_unused_row(row) != NULL ? ico_unused_row(row)->name : "?");
+        fprintf(stderr, "unused: failed: row %d has no start\n", row);
         return -1;
     }
 }

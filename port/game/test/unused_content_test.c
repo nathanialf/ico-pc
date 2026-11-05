@@ -24,8 +24,10 @@
  * over after ico_unused_game_over) and arms Options' return on the page,
  * reopened once the title's menu is up or let go after its bound; a start
  * that never reaches its stage fails (on the title at once, elsewhere
- * through the title's request); the art row refuses in this build; the
- * install hands Settings the host.
+ * through the title's request); the art row needs a model viewer row too
+ * (refused, logged, when the viewer offers none), and its start opens the
+ * viewer's list on the viewer's first art row (from the title only; the
+ * list's refusal logged); the install hands Settings the host.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -216,10 +218,37 @@ int ico_df_find_member(IcoVfs *vfs, const char *name, IcoDfMember *out)
     s_dfAsked++;
     memset(out, 0, sizeof(*out));
     if (!isDemo() && strcmp(name, "object/sdf/e3/st13b/model/copy_right.p2o") == 0) {
-        out->id = isPal() ? 1595 : 1544;
+        /* the member's id in each disc's STGLOG.DF (read from the ISOs) */
+        const int ntsc = strcmp(s_slug, "ntsc") == 0, aug6 = strcmp(s_slug, "aug6") == 0;
+        out->id = isPal() ? 1595 : ntsc ? 1546 : aug6 ? 1541 : 1579;
         return 0;
     }
     return -1;
+}
+
+/* --- the model viewer --------------------------------------------------------- */
+
+/* its first art row (the table's last three rows; the European disc has the
+   copyright only), -1 when it offers none */
+static int s_artRow = -2;
+static int s_listAt = -1;
+static int s_listRefuse;
+
+int mv_member_first_row(void)
+{
+    if (s_artRow != -2) {
+        return s_artRow;
+    }
+    return isDemo() ? -1 : isPal() ? 25 : 23;
+}
+
+int ico_mv_models_enter_at(int row)
+{
+    if (s_listRefuse) {
+        return -1;
+    }
+    s_listAt = row;
+    return 91;
 }
 
 /* --- Settings ------------------------------------------------------------- */
@@ -405,6 +434,19 @@ static void testAvailable(void)
               "the refusal logged");
     }
 
+    /* the art without a model viewer row: refused, logged (a new engine
+       asks again) */
+    if (!demo) {
+        s_artRow = -1;
+        ico_unused_engine_install();
+        logStart();
+        CHECK(!ico_unused_available(ICO_UNUSED_ART), "the art without a viewer row: refused");
+        CHECK(strstr(logEnd(), "the model viewer offers none of its models") != NULL,
+              "the art without a viewer row: logged");
+        s_artRow = -2;
+        ico_unused_engine_install();
+    }
+
     /* a stage row that names another pack: the row is refused (a new engine
        asks again) */
     if (!demo) {
@@ -566,17 +608,37 @@ static void testRooms(void)
     s_ticks += 1000;
     ico_unused_host_poll(); /* the pending reopen let go */
 
-    /* the art: not started in this build (the movie's start is
-       unused_movie_test's) */
+    /* the art: the model viewer's list on its first art row (the movie's
+       start is unused_movie_test's) */
     onTitle(9000);
     s_entered = -1;
-    for (int r = ICO_UNUSED_ART; r <= ICO_UNUSED_ART; r++) {
-        if (ico_unused_available(r)) {
-            logStart();
-            CHECK(ico_unused_start(r) == -1 && !ico_unused_active() && s_entered == -1,
-                  "row %d refused", r);
-            CHECK(strstr(logEnd(), "cannot be started in this build") != NULL, "logged");
-        }
+    if (ico_unused_available(ICO_UNUSED_ART)) {
+        const int first = mv_member_first_row();
+        s_listAt = -1;
+        logStart();
+        const int lay = ico_unused_start(ICO_UNUSED_ART);
+        log = logEnd();
+        CHECK(lay == 91 && s_listAt == first && !ico_unused_active() && s_entered == -1,
+              "the art opens the list (layout %d, row %d, want 91 and %d)", lay, s_listAt, first);
+        snprintf(want, sizeof(want), "the model viewer's list (layout 91) on its row %d", first);
+        CHECK(strstr(log, want) != NULL, "the art's start logged");
+        /* the list refused: the page stays */
+        s_listRefuse = 1;
+        logStart();
+        CHECK(ico_unused_start(ICO_UNUSED_ART) == -1, "the list refused: -1");
+        CHECK(strstr(logEnd(), "the model viewer's list did not open") != NULL,
+              "the list's refusal logged");
+        s_listRefuse = 0;
+        /* off the title: refused, the list not asked */
+        stage_no = 11;
+        s_listAt = -1;
+        logStart();
+        CHECK(ico_unused_start(ICO_UNUSED_ART) == -1 && s_listAt == -1, "off the title: refused");
+        CHECK(strstr(logEnd(), "unused: failed: not on the title") != NULL,
+              "off the title: logged");
+        onTitle(9100);
+    } else {
+        CHECK(isDemo(), "%s: the art is available on every retail disc", s_slug);
     }
 }
 
