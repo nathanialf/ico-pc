@@ -69,7 +69,17 @@ nothing), inside an occlusion query (check i's is query i: the pools are made by
 `rhi_occlusion_prepare`, so no frame stalls at the first box check and each slot resets and reads
 only those) whose scissors cover the draw's scissor less the CPU's box of
 its vertices widened by 2 GS pixels (four bands). Any sample means the GPU placed a vertex where the
-CPU does not, through the real pipeline family, in the scene pass's own execution. Drawn only where
+CPU does not, through the draw's own vertex module and rasterisation, in the scene pass's own
+execution. What it does not cover: on a draw that reads its attachment (GS state as shader data,
+the Turnip reporter's profile, or the exact blend), the box is drawn through the plain fragment
+entry (`vu_ps`), not the draw's attachment-read link (`vu_ps_dstatt`): with the read, the write
+mask is the shader's (`rd__uber_normalise`), so a mask of 0 in the key would still write colour,
+and drawing the read with a shader-data mask of 0 would write back the pixel it read inside the
+picture's pass, which the A/B cannot clear for every device. So on that profile a clean box clears
+the vertex placement, not the decision table's last row (the pipeline's link with its
+attachment-read shader); the log says so once (`rd: VU skin check: the box check of a draw that
+reads its attachment ... is drawn through vu_ps without that read ...`) and each box line names the
+fragment entry drawn. Drawn only where
 the box is closed (every vertex of the draw's batches in front of the eye: a clipped corner behind
 it reaches anywhere), the pass an ordinary one (no storage pass, no DATE through the stencil bit, no
 stencil mode) and its pipeline made (compiled in the background at its key's first check: no
@@ -121,7 +131,7 @@ The log's `reads as:` words, for the first wrong check and every event after it:
 | `H1 under robust access only: the driver's uniform read with robustness on` | the bytes equal, the probe wrong, c1 wrong, c2 right |
 | `H1, the driver's uniform read of this draw: wrong at a fresh offset too, and not robust access alone` | the bytes equal, every probe wrong |
 | `H1, ... (robustness off not tried)` | c1 wrong, c2 not drawn (robust access off, or the extension not offered) |
-| `the probe drew right: a wrong picture would be the scene pass's execution, not the bone read` | the probe right; a box check's samples outside then say the scene pass placed the vertex (the binning pass, the pipeline's link with its pixel shader) |
+| `the probe drew right: a wrong picture would be the scene pass's execution, not the bone read` | the probe right; a box check's samples outside then say the scene pass placed the vertex (the binning pass, the pipeline's link with its pixel shader). On a draw that reads its attachment the box is drawn without that read, so a clean box there does not clear the link with `vu_ps_dstatt` (S3 above) |
 
 The conditional fixes each row points to (a storage-buffer read of the bones on Turnip, the
 uniform robustness off on the VU pipelines, the ring's slot order) are not built until a log says
@@ -146,7 +156,7 @@ On an event, the first 8, then every 100th, of each kind on its own count (a wro
   vertices, else the first wrong vertex's lane x)
 - `rd: VU skin check: frame F command L:I variants: (c1) the block at a fresh ring offset (page phase P, the draw's D): right|wrong (N wrong); (c2) uniform robustness off: right | wrong | not run (robust access off) | not offered (no VK_EXT_pipeline_robustness) | not run (its pipeline not made yet) (N wrong); reads as: WORDS`
 - `rd: VU skin check: frame F command L:I mesh ...: every vertex right (M compared); the bone block as the GPU copied it: ...; reads as: WORDS (bytes event E)` (bytes that differed, every vertex right)
-- `rd: VU skin check: frame F command L:I drew N samples outside its box (texels X,Y WxH, the CPU's vertices + 2 GS pixels; the probe right|wrong too) (box event E)`
+- `rd: VU skin check: frame F command L:I drew N samples outside its box (texels X,Y WxH, the CPU's vertices + 2 GS pixels; through FS[ without the draw's attachment read]; the probe right|wrong too) (box event E)`
 
 At the renderer's shutdown, when the run drew a check: `rd: VU skin check: at the end of the run: D
 checks drawn (B box checks drawn), R read, W wrong, X blocks whose bytes differed, Y box checks

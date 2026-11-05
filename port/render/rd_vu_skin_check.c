@@ -533,9 +533,11 @@ typedef struct SkCheck {
     IcoVuCB vcb;
     RhiBindGroup g1;
     uint64_t dOff, bonesOff, c1Off, sabOff;
-    bool c2;     /* c2 drawn */
-    bool boxRun; /* its box check drawn */
-    RhiRect box; /* the box in texels */
+    bool c2;       /* c2 drawn */
+    bool boxRun;   /* its box check drawn */
+    bool boxNoDst; /* ... without the draw's destination read (its _dstatt link) */
+    uint8_t boxFs; /* the key's fragment entry (rd__fs_name) */
+    RhiRect box;   /* the box in texels */
 } SkCheck;
 
 typedef struct SkSlot {
@@ -560,6 +562,7 @@ static bool s_pickedThis;
 static double s_lastMs;
 
 static RdSkinSummary *s_collect; /* rd__vu_skin_check_frame's */
+static bool s_boxDstSaid;        /* the box check's attachment-read line, once a run */
 
 static bool sayNth(uint64_t n)
 {
@@ -842,7 +845,22 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
     rhi_cmd_set_scissor(cl, &r->sc);
     rd__set_pipeline(cl, d->pipe, d->key);
     k->boxRun = true;
+    k->boxNoDst = d->key->dst != RHI_DST_READ_NONE;
+    k->boxFs = d->key->fs;
     s_run.boxDrawn++;
+    if (k->boxNoDst && !s_boxDstSaid) {
+        /* the deep dive's last row (the pipeline's link with its
+         * attachment-read fragment shader) is not what this box sees: said
+         * once, so a clean box under GS state as shader data is read as
+         * the vertex placement alone */
+        s_boxDstSaid = true;
+        rd__log("VU skin check: the box check of a draw that reads its attachment (GS state as "
+                "shader data, or the exact blend) is drawn through %s without that read (with "
+                "it the write mask is the shader's and colour would be written): it checks the "
+                "vertex placement through the draw's vertex module and pass, not the draw's "
+                "link with its attachment-read fragment shader",
+                rd__fs_name(k->boxFs));
+    }
     k->box = clipRect(bx0, by0, bx1, by1, &all);
 }
 
@@ -1253,9 +1271,12 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
     }
     if (outside && sayNth(++s_run.boxEvents)) {
         rd__log("VU skin check: frame %u command %s drew %llu samples outside its box (texels "
-                "%d,%d %ux%u, the CPU's vertices + 2 GS pixels; the probe %s) (box event %llu)",
+                "%d,%d %ux%u, the CPU's vertices + 2 GS pixels; through %s%s; the probe %s) (box "
+                "event %llu)",
                 k->frame, place, (unsigned long long)outside, k->box.x, k->box.y, k->box.w,
-                k->box.h, v[0].wrong ? "wrong too" : "right", (unsigned long long)s_run.boxEvents);
+                k->box.h, rd__fs_name(k->boxFs),
+                k->boxNoDst ? " without the draw's attachment read" : "",
+                v[0].wrong ? "wrong too" : "right", (unsigned long long)s_run.boxEvents);
     }
 }
 
@@ -1443,4 +1464,5 @@ void rd__vu_skin_shutdown(void)
     s_dev = -1;
     s_memStop = false;
     memset(s_bgSaid, 0, sizeof(s_bgSaid));
+    s_boxDstSaid = false;
 }
