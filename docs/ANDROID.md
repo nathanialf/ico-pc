@@ -331,7 +331,8 @@ The log shows what happened:
   not expected to remove the stutter some of these phones report. With
   Vsync on nothing changes. `present_fallback = off` under `[dev]` in
   `config.toml` goes back to the older way, for comparing two logs.
-  Phones with a Mali or PowerVR graphics chip never switch.
+  Every other graphics chip never switches: phones with a Mali or PowerVR
+  chip keep the usual way, and so do the graphics cards of computers.
 - `window: present calls: 755 timed (over 20 ms 5, over 50 ms 5, over 100 ms 5,
   over 300 ms 5), longest 365 ms, total ...` in every block: how many times the
   phone's graphics driver held up a picture, and for how long. A few over 300
