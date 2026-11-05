@@ -819,6 +819,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ART_VER] = "Versione da fiera: marchio di versione",
     [UI_STR_UNUSED_ART_START] = "Versione da fiera: Press Start",
     [UI_STR_UNUSED_ART_COPYRIGHT] = "Versione da fiera: copyright",
+    [UI_STR_STATES_REFUSED_UNUSED] = "Non in una stanza di prova",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

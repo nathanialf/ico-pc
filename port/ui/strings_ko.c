@@ -816,6 +816,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ART_VER] = "전시판: 버전 표기",
     [UI_STR_UNUSED_ART_START] = "전시판: PRESS START",
     [UI_STR_UNUSED_ART_COPYRIGHT] = "전시판: 저작권 표기",
+    [UI_STR_STATES_REFUSED_UNUSED] = "테스트 방에서는 할 수 없습니다",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

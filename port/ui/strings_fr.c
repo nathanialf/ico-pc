@@ -837,6 +837,7 @@ const char *const
             [UI_STR_UNUSED_ART_VER] = "Version de salon : marque de version",
             [UI_STR_UNUSED_ART_START] = "Version de salon : Press Start",
             [UI_STR_UNUSED_ART_COPYRIGHT] = "Version de salon : copyright",
+            [UI_STR_STATES_REFUSED_UNUSED] = "Pas dans une salle de test",
             [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
             [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
             [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

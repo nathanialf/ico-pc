@@ -795,6 +795,7 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ART_VER] = NULL,                   /* newer than his table: English */
     [UI_STR_UNUSED_ART_START] = NULL,                 /* newer than his table: English */
     [UI_STR_UNUSED_ART_COPYRIGHT] = NULL,             /* newer than his table: English */
+    [UI_STR_STATES_REFUSED_UNUSED] = NULL,            /* newer than his table: English */
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

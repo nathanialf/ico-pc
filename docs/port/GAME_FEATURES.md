@@ -1025,7 +1025,11 @@ has.
   4500 in all): on the title the state is put back at once, elsewhere the title is requested and the
   state put back as it is entered.
 - While a room runs the achievements are suspended (`ico_gs_achievements_suspended`) and nothing is
-  saved by the port.
+  saved by the port. A save state is refused: the Save states page refuses Save before its host
+  (`port/ui/settings_states.c` (`statesPerform`): the popup `UI_STR_STATES_REFUSED_UNUSED`, "Not
+  in a test room", and `unused: save state refused in a test room (slot N)`), and the save
+  conditions refuse it too (`port/game/state_rules.c`, `IcoStateConds.unused`: `ICO_STATE_PHOTO`,
+  "a test room"), so F5 cannot save there either. Loading a state is not refused.
 - The movie and art rows' starts refuse in this build (`unused: failed: ... cannot be started in
   this build`); their availability is final.
 - Log lines: `unused: enter <row>`, `unused: test room <row> (stage N on this disc) started from the

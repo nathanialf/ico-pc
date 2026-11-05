@@ -821,6 +821,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ART_VER] = "展示版：バージョン表記",
     [UI_STR_UNUSED_ART_START] = "展示版：PRESS START",
     [UI_STR_UNUSED_ART_COPYRIGHT] = "展示版：コピーライト",
+    [UI_STR_STATES_REFUSED_UNUSED] = "テスト部屋ではできません",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

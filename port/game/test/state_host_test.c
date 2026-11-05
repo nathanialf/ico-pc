@@ -124,6 +124,12 @@ static void test_conditions(void)
     c.gallery = 1;
     CHECK(ico_state_conditions(&c, 1, &what) == ICO_STATE_PHOTO);
     CHECK_STR(what, "the music gallery");
+    /* a test room (Extras > Unused content): a save refused, a load not */
+    c = ok_conds();
+    c.unused = 1;
+    CHECK(ico_state_conditions(&c, 1, &what) == ICO_STATE_PHOTO);
+    CHECK_STR(what, "a test room");
+    CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_OK);
 
     /* the order: off, pause, stage switch, card, disc, movie, photo */
     c = ok_conds();

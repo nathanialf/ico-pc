@@ -60,6 +60,7 @@
 #include "../core/region.h"
 #include "../data/cdvd_host.h"
 #include "../include/ico_credits.h"
+#include "../include/ico_unused.h"
 #include "../include/ico_gamestate.h"
 #include "../input/input_record.h"
 #include "../save/mc_host.h"
@@ -389,6 +390,7 @@ static void sample(IcoStateConds *c)
     c->movie = ico_movie_open();
     c->photo = ico_photo_active();
     c->credits = ico_credits_active();
+    c->unused = ico_unused_active();
     c->gallery = gallery_playing() >= 0;
 }
 
