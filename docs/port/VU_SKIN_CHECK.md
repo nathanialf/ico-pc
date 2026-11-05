@@ -148,6 +148,10 @@ On an event, the first 8, then every 100th, of each kind on its own count (a wro
 - `rd: VU skin check: frame F command L:I mesh ...: every vertex right (M compared); the bone block as the GPU copied it: ...; reads as: WORDS (bytes event E)` (bytes that differed, every vertex right)
 - `rd: VU skin check: frame F command L:I drew N samples outside its box (texels X,Y WxH, the CPU's vertices + 2 GS pixels; the probe right|wrong too) (box event E)`
 
+At the renderer's shutdown, when the run drew a check: `rd: VU skin check: at the end of the run: D
+checks drawn (B box checks drawn), R read, W wrong, X blocks whose bytes differed, Y box checks
+with samples outside` (a check of the last replays is not read: its slot was not recycled).
+
 In the 10 s summary, when the check ran: `rd: VU skin check: P checks, W wrong, B blocks whose bytes
 differed (R changed after the draw); Q box checks, S with samples outside the box, N not drawn
 (their pipeline not made yet; F with no slot left for the key); variants on the wrong ones: c1
@@ -182,7 +186,11 @@ the device's wrong read.
 ## Tests
 
 `rd_vu_skin_check_test.c` with `rd_vu_skin_check.cmake` (`rd_vu_skin_check_judge`,
-`rd_vu_skin_check`, `rd_vu_skin_check_robust`, `rd_vu_skin_check_probe`, `rd_vu_skin_check_ring`)
+`rd_vu_skin_check`, `rd_vu_skin_check_robust`, `rd_vu_skin_check_probe`,
+`rd_vu_skin_check_probe_robust`, `rd_vu_skin_check_ring`)
 and `rd_vu_skin_check_dump.cmake` (`rd_vu_skin_check_dump`, `rd_vu_skin_check_163`,
-`rd_vu_skin_check_163_probe`, `rd_vu_skin_check_163_ring`, `rd_vu_skin_check_163_patched`);
+`rd_vu_skin_check_163_probe`, `rd_vu_skin_check_163_ring`, `rd_vu_skin_check_163_patched`), and
+`rd_vu_skin_check_ab.cmake` (`rd_vu_skin_check_ab`: the pictures with the check on for every
+skinned command against off, byte for byte, at Original, with the attachment read and GS state as
+shader data, and with MSAA);
 [TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md).

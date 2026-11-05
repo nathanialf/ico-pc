@@ -253,6 +253,7 @@ static struct {
      * differed with every vertex right, a box check's samples outside, so
      * the many blocks of an H2 run never use up a wrong check's lines */
     uint64_t wrongEvents, bytesEvents, boxEvents;
+    uint64_t drawn, boxDrawn; /* the checks recorded (probed) and their box checks drawn */
 } s_run;
 
 static struct {
@@ -841,6 +842,7 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
     rhi_cmd_set_scissor(cl, &r->sc);
     rd__set_pipeline(cl, d->pipe, d->key);
     k->boxRun = true;
+    s_run.boxDrawn++;
     k->box = clipRect(bx0, by0, bx1, by1, &all);
 }
 
@@ -1081,6 +1083,7 @@ void rd__vu_skin_end(void)
                             (uint64_t)i * SK_BONE_BYTES, SK_BONE_BYTES);
     }
     sl->pending = true;
+    s_run.drawn += n;
     sl->counter = g_rd.replayCounter;
     sl->rhiSlot = rhi_frame_slot();
     sl->ringId = g_rd.ring[slot].id;
@@ -1372,6 +1375,18 @@ int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out)
 
 void rd__vu_skin_shutdown(void)
 {
+    if (s_run.drawn) {
+        /* the run's own end: what it drew and what it read (a check
+         * recorded in the last replays is not read: its slot not
+         * recycled), the A/B's proof that the check ran
+         * (rd_vu_skin_check_ab) */
+        rd__log("VU skin check: at the end of the run: %llu checks drawn (%llu box checks drawn), "
+                "%llu read, %llu wrong, %llu blocks whose bytes differed, %llu box checks with "
+                "samples outside",
+                (unsigned long long)s_run.drawn, (unsigned long long)s_run.boxDrawn,
+                (unsigned long long)s_run.checks, (unsigned long long)s_run.wrong,
+                (unsigned long long)s_run.blocks, (unsigned long long)s_run.boxOut);
+    }
     if (g_rd.hasDevice) {
         if (s_p.roJob) {
             (void)rhi_create_pipelines_end(s_p.roJob, true, s_p.ro, NULL, NULL);

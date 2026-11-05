@@ -422,6 +422,16 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the CPU reads them and `reads as: H2, a port race` (`rd_vu_skin_check_163_ring`), and the deep
   dive's patched copy (its lanes on 200 moved to a zero bone) checked right, the CPU and the GPU
   reading the same stream (`rd_vu_skin_check_163_patched`). SKIP without the dump or a device.
+- `rd_vu_skin_check_ab.cmake`: the skin check is designed not to change the picture
+  ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)); `rd_replay_tool --pass-dump` with it off
+  (`ICO_RD_VU_SKIN_CHECK=0`) and on for every skinned command of every replay (`=2`: the probes,
+  the box check inside the scene pass, the checked draw out of the draw merge) on the corpus dump
+  `frame-20261007-200706-v3086` (46 skinned commands) and issue 163's blended dump, at Original
+  presented at 640x480, the same with the attachment read and GS state as shader data
+  (`ICO_RD_BLEND=attachment`, `ICO_RD_UBER=on`, the interlock faked off; the on run must say `GS
+  state as shader data: on`) and at Enhanced 4:3 2x with MSAA 4: every PNG byte for byte, each on
+  run's `VU skin check: at the end of the run: N checks drawn` with N at least 1, at least one box
+  check drawn over all (`rd_vu_skin_check_ab`). SKIP without the dumps or a device.
 - `rd_region_stats.cmake`: `rd_replay_tool --region-stats`
   ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the first two dumps of
   `tools/occlusion_corpus.txt` that are here, each at Original 4:3 1x and Enhanced 4:3 2x with a

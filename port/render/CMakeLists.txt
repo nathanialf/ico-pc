@@ -2163,6 +2163,24 @@ if(ICO_RUN_TESTS)
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200")
     set_tests_properties(rd_vu_skin_check_163_ring
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring")
+    # rd_vu_skin_check_ab (test/rd_vu_skin_check_ab.cmake, review2 S6): the
+    # picture with the check on for every skinned command (ICO_RD_VU_SKIN_CHECK=2)
+    # against off, every pass-dump PNG byte for byte, at Original, with the
+    # attachment read and GS state as shader data (the Turnip reporter's
+    # profile on lavapipe) and at Enhanced 2x MSAA 4, on the corpus dump of
+    # tools/vustage_dumps.txt's /primary/dev/ico-dumps/*.rddump with the
+    # most skinned commands (frame-20261007-200706-v3086: 46) and issue 163's
+    # blended dump (Yorda's draws); SKIP without them or a device
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_ab")
+    add_test(NAME rd_vu_skin_check_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMPS=/primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump|${_vsk163}/frame-20261105-195124-v6171-blended.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_check_ab.cmake")
+    set_tests_properties(rd_vu_skin_check_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
+    if(_env)
+        set_tests_properties(rd_vu_skin_check_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
     # rd_region_stats (test/rd_region_stats.cmake, docs/port/VU1_PROGRAMS.md
     # "The region rule"): rd_replay_tool --region-stats on the first two
     # dumps of the machine-local list tools/occlusion_corpus.txt here, at
