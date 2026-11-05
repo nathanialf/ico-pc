@@ -57,29 +57,20 @@ static int start_active(void)
                                       l->driverText);
 }
 
-/* What the window says about a present it notes (present_fallback.h):
-   vsync off in the options, the swapchain in mailbox mode, Vulkan, a
-   driver the switch is for (Qualcomm's own; others answer OTHER); the dev key off keeps mailbox; FIFO from the
-   start needs no switch */
+/* What the window says about a present it notes (present_fallback.h
+   ico_present_fallback_gate: vsync off in the options, the swapchain in
+   mailbox mode, Vulkan, a driver the switch is for (Qualcomm's own; others
+   answer OTHER); the dev key off keeps mailbox; FIFO from the start needs
+   no switch) */
 static int gate(void)
 {
     IcoVideoOptions o;
     const RhiLimits *l = rhi_limits();
 
     ico_video_get(&o);
-    if (o.vsync || !rhi_present_mailbox() || rhi_backend() != RHI_BACKEND_VULKAN || l == NULL ||
-        !ico_present_fallback_driver_eligible(l->vendorId, l->driverText) ||
-        s_mode == ICO_PRESENT_FALLBACK_FIFO) {
-        return ICO_PRESENT_FALLBACK_GATE_NO;
-    }
-    if (s_mode == ICO_PRESENT_FALLBACK_OFF) {
-        return ICO_PRESENT_FALLBACK_GATE_KEPT;
-    }
-    /* the switch was measured on Qualcomm's own driver only; on a Mali-G52 it
-       lengthened the blocks (issue 179) */
-    return ico_present_fallback_qualcomm_own(l->vendorId, l->driverText)
-               ? ICO_PRESENT_FALLBACK_GATE_YES
-               : ICO_PRESENT_FALLBACK_GATE_OTHER;
+    return ico_present_fallback_gate(
+        o.vsync, rhi_present_mailbox(), rhi_backend() == RHI_BACKEND_VULKAN,
+        l != NULL ? l->vendorId : 0u, l != NULL ? l->driverText : NULL, s_mode);
 }
 
 const char *window_fifo_words(void)

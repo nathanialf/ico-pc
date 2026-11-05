@@ -49,6 +49,25 @@ int ico_present_fallback_qualcomm_own(unsigned vendorId, const char *driverText)
            ico_present_fallback_driver_eligible(vendorId, driverText);
 }
 
+IcoPresentFallbackGate ico_present_fallback_gate(int vsync, int mailbox, int vulkan,
+                                                 unsigned vendorId, const char *driverText,
+                                                 IcoPresentFallbackMode mode)
+{
+    if (vsync || !mailbox || !vulkan ||
+        !ico_present_fallback_driver_eligible(vendorId, driverText) ||
+        mode == ICO_PRESENT_FALLBACK_FIFO) {
+        return ICO_PRESENT_FALLBACK_GATE_NO;
+    }
+    if (mode == ICO_PRESENT_FALLBACK_OFF) {
+        return ICO_PRESENT_FALLBACK_GATE_KEPT;
+    }
+    /* the switch was measured on Qualcomm's own driver only; on a Mali-G52 it
+       lengthened the blocks (issue 179) */
+    return ico_present_fallback_qualcomm_own(vendorId, driverText)
+               ? ICO_PRESENT_FALLBACK_GATE_YES
+               : ICO_PRESENT_FALLBACK_GATE_OTHER;
+}
+
 int ico_present_fallback_start_asked(IcoPresentFallbackMode mode, int android)
 {
     return mode == ICO_PRESENT_FALLBACK_AUTO && android;
