@@ -292,13 +292,18 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   where a zero matrix at 200 puts it: one wrong, address 200 named, `gives it: yes`; one moved where
   no zero matrix puts it: no address; the 16/16 pixel bound; the byte windows (`equal`, `differs at
   qword 5`, `differs at qwords 184..187`); every row of the decision table's words
-  (`rd_vu_skin_check_judge`). On a device at Original 4:3 1x: the start-up probe's `ok` line and
+  (`rd_vu_skin_check_judge`); the default (`rd__skin_check_default`): on only for vendor 0x5143
+  with a window, off on Mali, PowerVR, NVIDIA, lavapipe, through MoltenVK and headless,
+  `ICO_RD_VU_SKIN_CHECK` 1/true on anywhere, 0/false/off off, 2 every command. On a device at
+  Original 4:3 1x: the start-up probe's `ok` line and
   the check's start line once each; a frame of one skinned command (the same bones and vertices
   through code 20, the world origin in front of the eye) checked through `rd__vu_skin_check_frame`:
   right, the bytes equal, its box check run with no sample outside (`rd_vu_skin_check`; under
-  `ICO_GPU_ROBUST=1` with the c2 variant where lavapipe offers `VK_EXT_pipeline_robustness`,
-  `rd_vu_skin_check_robust`); with `ICO_RD_VU_SKIN_SABOTAGE=200` wrong at address 200, the bytes
-  equal, c1 right, `reads as: H1, address-dependent` (`rd_vu_skin_check_probe`); with `=200,ring`
+  `ICO_GPU_ROBUST=1` and `ICO_RD_VU_SKIN_CHECK=1` the c2 variant drawn where lavapipe offers
+  `VK_EXT_pipeline_robustness`, `rd_vu_skin_check_robust`); with `ICO_RD_VU_SKIN_SABOTAGE=200` wrong
+  at address 200, the bytes equal, c1 right, `reads as: H1, address-dependent`
+  (`rd_vu_skin_check_probe`; under robust access c2 right too, the pipeline robustness chain read
+  back, `rd_vu_skin_check_probe_robust`); with `=200,ring`
   wrong at 200, the GPU's copy and the CPU's re-read `differs at qwords 184..187`, `reads as: H2, a
   port race` (`rd_vu_skin_check_ring`); no validation error.
 - `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
