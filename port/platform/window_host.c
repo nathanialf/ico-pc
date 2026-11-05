@@ -359,6 +359,11 @@ static void video_settings(RdSettings *rs, int w, int h)
     rs->crtHalation = o.crtHalation;
     rs->crtBloom = o.crtBloom;
     rs->crtCurvature = o.crtCurvature;
+    /* the colour adjustment in either preset, with or without the CRT filter */
+    rs->toneGamma = (uint8_t)o.toneGamma;
+    rs->toneBrightness = (uint8_t)o.toneBrightness;
+    rs->toneContrast = (uint8_t)o.toneContrast;
+    rs->toneSaturation = (uint8_t)o.toneSaturation;
     /* texture packs and the dump, in either preset */
     rs->texturePack = (uint8_t)(o.texturePack != 0);
     /* the dump is a Developer mode row: never in force without it (a
