@@ -796,7 +796,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   two or more cores allowed: the test thread kept to one core, an `ico_thread` made then has
   that one core with no mask kept and every allowed core once `cpu_place_keep_free` kept them;
   `cpu_place_thread_free` resets the kept thread itself, then finds it already there, and does
-  nothing with no mask kept) (`cpu_place`).
+  nothing with no mask kept); issue 179: the thread's CPU time, core lists to masks, the threads
+  line from a fake table and a fake `/proc/self/task` (`cpu_place`).
+- `thread_stat_test.c`: `schedstat` parsed and read from a fake `/proc/self/task`, the block's
+  difference, its words (`thread_stat`).
 - `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
   the first second, 50 presents a second give 50 at every whole second, a second that ran 1.5 s long
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays
@@ -907,7 +910,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   again, a new native window or a resume forgetting the ask and the next set made again
   (`DISPLAY_PIN_SET_AGAIN`; none wanted then: nothing asked or said), the pin's lines
   (`display_rate`).
-- `gpu_sysfs_test.c`: the kernel GPU driver's nodes, the pure part (`gpu_sysfs.h`, issue 123): the nodes' texts parsed (`905000000`, `42 %`, leading blanks, a sign, empty, no digit first, a 4 KB text, a buffer read to its length only, digits past a long long's room), Hz to MHz rounded; the ring of 64 (70 samples, the oldest dropped); the 10 s block (the clock's range and mean, busy's mean, the resets in the block against the last before it and from the ring's start, the thermal level's highest, a temperature, only busy read, a steady clock, an empty block); around a present (the sample before, the ones during, the one after, samples exactly at its start and end, none before, none after, nothing read); the open line (the usual readable set, every node denied, the directory missing, nothing present, only the once nodes with errnos named), the block and around lines word for word, a short buffer cut (`gpu_sysfs`).
+- `gpu_sysfs_test.c`: the kernel GPU driver's nodes, the pure part (`gpu_sysfs.h`, issue 123): the nodes' texts parsed (`905000000`, `42 %`, leading blanks, a sign, empty, no digit first, a 4 KB text, a buffer read to its length only, digits past a long long's room), Hz to MHz rounded; the ring of 64 (70 samples, the oldest dropped); the 10 s block (the clock's range and mean, busy's mean, the resets in the block against the last before it and from the ring's start, the thermal level's highest, a temperature, only busy read, a steady clock, an empty block); around a present (the sample before, the ones during, the one after, samples exactly at its start and end, none before, none after, nothing read); the open line (the usual readable set, every node denied, the directory missing, nothing present, only the once nodes with errnos named), the block and around lines word for word, a short buffer cut; issue 179: the devfreq name rule and lines, the CPU clocks by class and around a present (`gpu_sysfs`).
 - `thermal_text_test.c`: the thermal and screen recording words (`thermal_text.h`, issue 123): the
   status name table (NONE 0 to SHUTDOWN 6, -1 and 7 UNKNOWN), the change line (`MODERATE (2) ->
   SEVERE (3) (run time 212.4 s)`) and the recording line (visible, not visible), the 10 s block's line
@@ -936,7 +939,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   a kind out of range ignored, a reset, a cut buffer), the slow step's game threads part (`game
   threads 199.3 in 39 switches (longest Main 171.2 ms; on core 2)`, the core or the longest switch
   left out, no name) and the VU line (pre-pass off 9 a triangle, on the recorded vertices, the k and
-  M words, no replays, a cut buffer), word for word (`window_scene`).
+  M words, no replays, a cut buffer), the list-0 line and the images in use, word for word
+  (`window_scene`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the
   crash chain to the box, the variable and the relaunch environment, the `dst` field of a
   pipeline's or a start-up batch's note, its VU vertex pre-pass keys and modules, and the chains
@@ -2453,8 +2457,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   swapchain's choice (`vkr_prerotate_turns`: 90, 270 and 180 at issue 179's 1612x720; identity, a
   mirrored turn, a turn not offered, `[dev] prerotate = false` and images past the surface's largest
   keep identity) (`rhi_vk_present_mode`).
-- `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver
-  (`rhi_vk_swapchain`).
+- `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver;
+  `swapAcquired` per frame (`rhi_vk_swapchain`).
 - Helpers: `rhi_test_common.c`/`.h` (the shared cells, seven of whose pipelines come from one
   `rhi_create_pipelines` call with a failing description among them, and the fill-rule cell:
   edges through pixel centres under the top-left rule on every backend; and the dynamic state

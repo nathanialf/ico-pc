@@ -419,7 +419,10 @@ GPU timestamps` where the backend has none, or `GPU not timed yet`;
 [The present allowance](#the-present-allowance)), the longest [replay](ARCHITECTURE.md#terms) and the replay count with how many
 were over a refresh, the slow
 steps, the frame rate option (with `(held to the display's X Hz)` while a cap above the refresh
-presents once a refresh, [the present gap](#pacing)), the present mode, the display's refresh with presents a refresh, the
+presents once a refresh, [the present gap](#pacing)), the present mode with, on Vulkan, the
+swapchain's images and those the game holds as the block ends (`present mailbox (images: 10, in use
+1)`: acquired and not yet presented, `RhiStats.swapAcquired`; the hand-over's count while the
+render thread is busy; images the compositor holds are not visible to an app), the display's refresh with presents a refresh, the
 window's pixel size, "step late max" (the latest a simulation step started against when it was due),
 "pump max" (the longest window event pump, [PLATFORM.md](PLATFORM.md#diagnostics)) and the lock's
 state (`window_pace_log`), one of:
@@ -514,15 +517,23 @@ window's open, once a run: `window: kernel GPU driver: /sys/class/kgsl/kgsl-3d0:
 gpu_busy_percentage, reset_count (3 so far), thermal_pwrlevel, ...; not readable temp (EACCES); not
 present clock_mhz, devfreq/cur_freq; the fastest clock 905 MHz, power levels 0 (fastest) to 8;
 sampled every 250 ms`, or `... kgsl-3d0: not readable (EACCES)` (every node denied: nothing
-sampled) or `... kgsl-3d0 not present` (not a Qualcomm GPU). Each 10 s block, after the `present
-calls` line: `window: kernel GPU driver: clock 285-905 MHz (average 612) over 40 samples, busy 71 %
-on average, resets 0 in the block (3 in all), thermal power level at most 0` (a temperature where
-`temp` is readable). For every present that blocked 250 ms or more, once the sample after it came (or a
+sampled); on a phone without KGSL (not a Qualcomm GPU) the GPU's devfreq entry and the candidate
+paths, each node's state said and the unverified texts quoted (`window: kernel GPU driver:
+/sys/class/devfreq/13040000.mali: readable cur_freq, max_freq; not present load, ...; the fastest
+clock 950 MHz; CPU clocks of cores 0-7 sampled with it; sampled every 250 ms`, or `...
+/sys/class/kgsl/kgsl-3d0 not present, no GPU entry in /sys/class/devfreq; not present ...`;
+[ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#a-phone-without-kgsl-and-the-cpu-clocks)). Each
+10 s block, after the `present calls` line: `window: kernel GPU driver: clock 285-905 MHz (average
+612) over 40 samples, busy 71 % on average, resets 0 in the block (3 in all), thermal power level
+at most 0` (a temperature where `temp` is readable), then the CPU cores' clocks by speed class
+(`; CPU clocks: cores 0-5 1000-1800 MHz (average 1500), cores 6-7 1600-2000 MHz (average
+1900)`). For every present that blocked 250 ms or more, once the sample after it came (or a
 second passed): `window: kernel GPU driver around the present that blocked (replay N): 0.12 s
 before: clock 905 MHz, busy 74 %, resets 3, thermal power level 0; 1 during: clock 285 MHz, busy 9
-%, resets 3; 0.03 s after: clock 285 MHz, busy 12 %, resets 3, thermal power level 0` (the first 8,
-then every 100th; the parts whose node is not readable left out). Nothing is written on other
-platforms.
+%, resets 3; 0.03 s after: clock 285 MHz, busy 12 %, resets 3, thermal power level 0; CPU core 6
+(the game thread's): 2000 MHz before, 1600 MHz during, 2000 MHz after` (the first 8, then every
+100th; the parts whose node is not readable left out; the core the game thread was on as the
+record popped). Nothing is written on other platforms.
 
 The app's own words on the phone's thermal state and screen recording (issue 123;
 [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-thermal-state-and-screen-recording) has the Java bridge) come as `ico_pc: thermal status changed:
@@ -688,7 +699,11 @@ arrive two replays late, so the vsync is the one the record was drained at
 renderer's `rd: slow walk` line ([RENDER.md](PIPELINES.md#the-start-up-set)). `[dev] slow_step_ms`
 (default 8, 0 off) logs up to 5 `slow step` lines a block for simulation steps over it, split into
 the step's parts and the pump's, with the step's own card verdicts next to the game threads' time
-(`slow_step`). The game threads' part names where that time went: `game threads 199.3 in 39
+(`slow_step`). After the step's time, the game thread's own CPU time over the same span
+(`window: slow step 64.1 ms (CPU 9.8 ms of it) at vsync ...`; `cpu_place_thread_cpu_ns` read at
+the end of one pace and the start of the next, left out where the system has no thread clock): a
+step far longer than its CPU time waited (a present, the render thread, a core), one near it
+computed (issue 179). The game threads' part names where that time went: `game threads 199.3 in 39
 switches (longest Main 171.2 ms; on core 2)` is the longest single fiber switch of the step (one
 resume of a game thread until it next yields, the thread named as the thread lines name it: Main,
 the sound thread, the stage's), its time, and the core the game thread was on at the step's end
@@ -714,7 +729,13 @@ triangle)`), right after the `N replays:` line: a replay's average of the VU dra
 (index lists in threes) and the vertex invocations the picture costs: with the vertex pre-pass off
 (tilers) 9 a triangle (every triangle shades 3 corners, three times each, no index reuse), with it
 on the vertices it recorded (`pre-pass: each vertex once`). The title's pictures are 250 to 340
-draws, the cutscenes of issue 179 1182 to 1473 (`RdPerfRecord.vuDraws`, `vuTris`).
+draws, the cutscenes of issue 179 1182 to 1473 (`RdPerfRecord.vuDraws`, `vuTris`). With GPU
+timestamps it ends with list 0's (the scene's) GPU time over the block's timed replays and a
+least-squares line of it against their VU triangles: `; list 0 GPU 41.2 ms a replay, 12.3 ms +
+0.41 ms a thousand triangles (R^2 0.80, 38 replays)` (`window_scene_vu_fit`; the mean alone with
+fewer than 3 replays or one triangle count, no R^2 when list 0 did not vary). A high R^2 with a
+large slope is the vertex work setting list 0's time, the question the VU pre-pass answers on a
+tiler ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides)).
 
 ## Pacing
 
