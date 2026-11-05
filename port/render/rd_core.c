@@ -2644,7 +2644,9 @@ static void originalPicture(const RdFrame *f)
                  false);
         return;
     }
-    rd__note_frame_present(f); /* rd_last_present_info, as rd_present notes its own */
+    /* rd_last_present_info, as rd_present notes its own: the hand-over
+       notes it after its wait for the picture before (a keep frame told
+       busy), so that picture's screenshot check still reads its own frame */
     if (s_replayGate != NULL && rd__replay_frame_post_ok()) {
         PostCall c = {f, f->keep, false, 0.0};
         onHostStack(postOnHost, &c);
@@ -2653,6 +2655,7 @@ static void originalPicture(const RdFrame *f)
             return;
         }
     }
+    rd__note_frame_present(f); /* again where a refused hand-over noted it: the same words */
     ReplayCall c = {f, f->keep};
     rd__on_host(replayOnHost, &c); /* on the render thread, waited for; or here */
     if (s_replayGate != NULL) {

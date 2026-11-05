@@ -905,6 +905,11 @@ bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs)
     }
     (void)rd_thread_submit_drain();
     *waitMs = rd__now_ms() - d0;
+    /* rd_last_present_info names this frame only now: the picture before's
+       job may still present inside the wait above, and its screenshot
+       check (rd_present.c shotTake) would read this newer frame and drop a
+       shot armed for it as later than armed */
+    rd__note_frame_present(f);
     /* the UI's layers on this thread, before the hand-over (rd_present.c
        s_pre), as rd__replay_frame_async */
     rd__overlay_hand_over();
