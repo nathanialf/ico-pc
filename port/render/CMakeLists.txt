@@ -1737,11 +1737,20 @@ if(ICO_RUN_TESTS)
     # same Mesa build; the dev container's Mesa 25.0.7 is clean); the roots are unscanned
     # once the loader dlcloses it at vkDestroyInstance (the rhi_vk and
     # settings_render leak, port/rhi/CMakeLists.txt). An LSan suppression
-    # cannot name it (the frames are "<unknown module>" after the unload),
-    # so the leak check is off for these four; the baked-glyph twins keep it
+    # cannot name it (the frames are "<unknown module>" after the unload).
+    # The leak is not steady: CI run 41925244605 showed it on the four
+    # font_sheet_ps twins and 41937286231 on _adreno, _adreno_forced and
+    # _uber (the baked-glyph ones) instead, the same 2 x 56 bytes, so it is
+    # the driver's compile thread racing the exit, which any twin can hit;
+    # the leak check is off for the whole family under asan
     if(ICO_SANITIZE MATCHES "address")
-        set_property(TEST rd_blend_selftest_blend_attachment rd_blend_selftest_blend_exact
-                          rd_blend_selftest_moltenvk_storage rd_blend_selftest_sheet_shader
+        set_property(TEST rd_blend_selftest rd_blend_selftest_sabotage rd_blend_selftest_adreno
+                          rd_blend_selftest_adreno_forced rd_blend_selftest_no_dst
+                          rd_blend_selftest_blend_attachment rd_blend_selftest_blend_exact
+                          rd_blend_selftest_blend_storage rd_blend_selftest_blend_fixed
+                          rd_blend_selftest_moltenvk_storage rd_blend_selftest_uber
+                          rd_blend_selftest_uber_sabotage rd_blend_selftest_uber_blend_fixed
+                          rd_blend_selftest_sheet_shader
                      APPEND PROPERTY ENVIRONMENT "ASAN_OPTIONS=detect_leaks=0")
     endif()
     # the VU vertex pre-pass's self-test (rd_vuprepass_selftest.c): on
