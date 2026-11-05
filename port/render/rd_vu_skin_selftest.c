@@ -154,7 +154,8 @@ bool rd__vu_skin_selftest(void)
     }
     if (!rd__vu_skin_check_on()) {
         if (rhi_backend() == RHI_BACKEND_VULKAN && g_rd.windowed) {
-            rd__log("VU skin check: off ([dev] vu_skin_check = false, ICO_RD_VU_SKIN_CHECK=0)");
+            rd__log("VU skin check: off (%s)",
+                    rhi_device_lost() ? "the device was lost" : rd__vu_skin_check_why());
         }
         return true;
     }
@@ -364,13 +365,13 @@ bool rd__vu_skin_selftest(void)
     rd__log("VU skin check: on (one skinned draw every %d ms, in turn, drawn again after the "
             "picture as a probe of its own and compared with the CPU, its bone block's bytes "
             "with the GPU's copy; variants: a fresh ring offset, uniform robustness off %s; the "
-            "box check %s; [dev] vu_skin_check = false turns it off)",
+            "box check %s; %s)",
             100,
             lim->uniformRobustOff ? "(VK_EXT_pipeline_robustness)"
             : lim->robustText && strncmp(lim->robustText, "on", 2) == 0
                 ? "not offered (no VK_EXT_pipeline_robustness)"
                 : "not needed (robust access off)",
-            rhi_occlusion_supported() ? "by occlusion query"
-                                      : "not offered (no occlusion queries)");
+            rhi_occlusion_supported() ? "by occlusion query" : "not offered (no occlusion queries)",
+            rd__vu_skin_check_why());
     return why != NULL || bad == 0;
 }

@@ -2,8 +2,9 @@
  * and its box check (S3) (rd_vu_skin_check.h; docs/port/VU_SKIN_CHECK.md;
  * issue 163).
  *
- * The pick (rd__vu_skin_pick, doVuDraw): on a window's Vulkan device, at
- * most every 100 ms, the next skinned command of the replay in a round
+ * The pick (rd__vu_skin_pick, doVuDraw): on an Adreno's Vulkan device
+ * with a window (rd__skin_check_default; [dev] vu_skin_check = true
+ * anywhere), at most every 100 ms, the next skinned command of the replay in a round
  * robin over the replay's skinned commands (Yorda's 26 draws and Ico's are
  * all covered within a few seconds).  The CPU's side is kept then: VU
  * memory 0..35 from the payload, the stream's vertices of the draw's
@@ -66,27 +67,56 @@ bool g_rdSkinArm;
 /* --------------------------------------------------------- the switch */
 
 static int s_set = -1;     /* rd__vu_skin_check_set */
-static int s_env = -2;     /* ICO_RD_VU_SKIN_CHECK: -1 unset, 0 or 1; -2 not read */
+static int s_env = -2;     /* ICO_RD_VU_SKIN_CHECK (rd__skin_check_env); -2 not read */
+static int s_dev = -1;     /* the device's default (an Adreno with a window): -1 not read */
 static uint32_t s_allFrom; /* mode 2: the first skinned command of the replay checked */
 
+/* the mode, read once a run (skMode runs for every skinned command) */
 static int skMode(void)
 {
     if (s_set >= 0) {
         return s_set;
     }
     if (s_env == -2) {
-        const char *e = getenv("ICO_RD_VU_SKIN_CHECK");
-        s_env = !e || !e[0] ? -1 : (e[0] == '0' ? 0 : 1);
+        s_env = rd__skin_check_env(getenv("ICO_RD_VU_SKIN_CHECK"));
     }
-    if (s_env >= 0) {
-        return s_env;
+    if (s_dev < 0) {
+        s_dev = rd__skin_check_default(g_rd.windowed, rd__profile_adreno(), -1);
     }
-    return g_rd.windowed ? 1 : 0;
+    return s_env >= 0 ? s_env : s_dev;
 }
 
 void rd__vu_skin_check_set(int mode)
 {
     s_set = mode < 0 ? -1 : (mode > 2 ? 2 : mode);
+}
+
+const char *rd__vu_skin_check_why(void)
+{
+    const int m = skMode();
+    if (s_set >= 0) {
+        return m ? "on by the tests' or the tool's switch"
+                 : "off by the tests' or the tool's switch";
+    }
+    if (s_env == 0) {
+        return "[dev] vu_skin_check = false (ICO_RD_VU_SKIN_CHECK=0)";
+    }
+    if (s_env == 2) {
+        return "ICO_RD_VU_SKIN_CHECK=2: every skinned command of every replay";
+    }
+    if (s_env == 1) {
+        return "[dev] vu_skin_check = true (ICO_RD_VU_SKIN_CHECK=1)";
+    }
+    if (m) {
+        return rd__driver_is_turnip(rhi_limits())
+                   ? "on by default on an Adreno with a window (Turnip); [dev] vu_skin_check = "
+                     "false turns it off"
+                   : "on by default on an Adreno with a window (Qualcomm's driver); [dev] "
+                     "vu_skin_check = false turns it off";
+    }
+    return g_rd.windowed ? "not an Adreno: ICO_RD_VU_SKIN_CHECK=1 / [dev] vu_skin_check = true "
+                           "turns it on"
+                         : "off without a window: ICO_RD_VU_SKIN_CHECK=1 turns it on";
 }
 
 bool rd__vu_skin_check_on(void)
@@ -1275,4 +1305,5 @@ void rd__vu_skin_shutdown(void)
     s_pickedThis = false;
     s_lastMs = 0.0;
     s_env = -2;
+    s_dev = -1;
 }

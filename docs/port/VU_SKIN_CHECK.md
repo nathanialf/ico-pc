@@ -1,10 +1,12 @@
 # The skin check
 
-The skinned draws' bone-block check (issue 163): on every Vulkan device the game runs on, the
-renderer draws one skinned command again every 100 ms as a probe beside the picture and compares
-what the GPU computed with the CPU's copy of the same program, so a reporter's log names the layer
-that placed a skinned vertex wrong without anything to switch on. Nothing it draws reaches a
-picture.
+The skinned draws' bone-block check (issue 163): on an Adreno with a window (Qualcomm's driver or
+Turnip, issue 163's devices), the renderer draws one skinned command again every 100 ms as a probe
+of its own and compares what the GPU computed with the CPU's copy of the same program, so a
+reporter's log names the layer that placed a skinned vertex wrong without anything to switch on.
+It is designed not to change the picture (`rd_vu_skin_check_ab` replays the dumps with it on for
+every skinned command and compares the pictures byte for byte). Off on every other device: issue
+179's Mali-G52 is GPU-bound, and the check's GPU work is not spent there.
 
 Why it exists: issue 163's streak on Mesa's Turnip driver on an Adreno 740 was one draw of Yorda's
 mesh in which every vertex weighting bone address 200 was placed as if that bone's matrix (VuBoneCB
@@ -24,7 +26,8 @@ alone, a replay cannot tell. The check tells it from the device itself.
 | `port/render/rd_vu_skin_selftest.c` | the start-up probe (S1) and the check's start line |
 | `port/render/rd_replay_vu.c` (`doVuDraw`, `vuDraw`) | the pick before a skinned command's draw, the note after it |
 | `port/render/rd_replay.c` (`rd__wait_frame`, `replayFrame`) | the harvest once the slot's fence let the replay go; the probes after the replay's last pass |
-| `port/rhi/vk/vk_pipeline.c`, `vk_device.c` | `RhiPipelineDesc.uniformRobustOff`: `VK_EXT_pipeline_robustness`'s uniform-buffer robustness off on one pipeline, enabled where robust access is on and the device offers it (`RhiLimits.uniformRobustOff`) |
+| `port/render/rd_profile.c` (`rd__profile_adreno`, `rd__profile_vendor_adreno`) | the device an Adreno: the default's one question |
+| `port/rhi/vk/vk_pipeline.c`, `vk_device.c` | `RhiPipelineDesc.uniformRobustOff`: `VK_EXT_pipeline_robustness`'s uniform-buffer robustness off on one pipeline, enabled where robust access is on, the device offers it and the check can run (vendor 0x5143, or `ICO_RD_VU_SKIN_CHECK` on: any other device is made as before) (`RhiLimits.uniformRobustOff`) |
 
 ## What it checks
 
@@ -110,8 +113,8 @@ At start, from `rd_vuprepass_selftest`:
 - `rd: VU skin probe: wrong at offset O (page phase P), code C, plain set: N vertices, address A read as zero (got (x, y, z) want (x, y, z)) in T ms`
   (or `..., no zero matrix explains them ...`; `not run (<why>)` when its pipelines or frame could
   not be made)
-- `rd: VU skin check: on (one skinned draw every 100 ms, in turn, ...; variants: a fresh ring offset, uniform robustness off (VK_EXT_pipeline_robustness) | not offered | not needed (robust access off); the box check by occlusion query | not offered; [dev] vu_skin_check = false turns it off)`
-- on a window's Vulkan device with the check off: `rd: VU skin check: off ([dev] vu_skin_check = false, ICO_RD_VU_SKIN_CHECK=0)`
+- `rd: VU skin check: on (one skinned draw every 100 ms, in turn, ...; variants: a fresh ring offset, uniform robustness off (VK_EXT_pipeline_robustness) | not offered | not needed (robust access off); the box check by occlusion query | not offered; WHY)`, WHY saying why it is on: `on by default on an Adreno with a window (Qualcomm's driver|Turnip); [dev] vu_skin_check = false turns it off`, or `[dev] vu_skin_check = true (ICO_RD_VU_SKIN_CHECK=1)`
+- on a window's Vulkan device with the check off: `rd: VU skin check: off (not an Adreno: ICO_RD_VU_SKIN_CHECK=1 / [dev] vu_skin_check = true turns it on)`, `off ([dev] vu_skin_check = false (ICO_RD_VU_SKIN_CHECK=0))` or `off (the device was lost)`
 
 On an event (a wrong probe, or the block's bytes differing), the first 8, then every 100th:
 
@@ -129,10 +132,13 @@ D/16 pixel`.
 
 ## Switches
 
-- `[dev] vu_skin_check = false` (`ICO_RD_VU_SKIN_CHECK=0`): off, for an A/B
-  ([CONFIG.md](CONFIG.md)). On by default on a window's Vulkan device; off in a headless run
-  unless `ICO_RD_VU_SKIN_CHECK=1` (the tests) or `rd_replay_tool --skin-check`. Not on Direct3D or
-  OpenGL.
+- On by default only on an Adreno (vendor 0x5143: Qualcomm's driver and Turnip alike; not
+  through MoltenVK) with a window (`rd__skin_check_default`, pinned by `rd_vu_skin_check_judge`).
+  `[dev] vu_skin_check = false` (`ICO_RD_VU_SKIN_CHECK=0`, also `false`, `off`, `no`): off, for an
+  A/B; `true` (`=1`, `true`, `on`, `yes`): on on any Vulkan device, headless too (the tests);
+  `ICO_RD_VU_SKIN_CHECK=2`: every skinned command of every replay (`rd_vu_skin_check_ab`)
+  ([CONFIG.md](CONFIG.md)). `rd_replay_tool --skin-check` turns it on for its own replays. Not on
+  Direct3D or OpenGL.
 - `ICO_RD_VU_SKIN_SABOTAGE=A` (tests): the check's own probe of the draw's block reads the bone at
   address A as zeros while the draw's bytes are right (H1's form); `A,ring` zeroes the bone in the
   ring after the check kept the bytes, so the draw and the probe both read zeros (H2's form).

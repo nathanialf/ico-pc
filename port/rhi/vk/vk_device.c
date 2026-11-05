@@ -1871,11 +1871,20 @@ static bool vkr_create_device(void)
         const bool extCheck =
             wantCheck && vkr_has_props2(g_vkr.phys) &&
             vkr_device_has_ext(g_vkr.phys, VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
-        /* with robust access on, VK_EXT_pipeline_robustness where offered:
-         * the skin check's variant turns the uniform reads' robustness off
-         * on its probe pipeline alone (issue 163); nothing else uses it */
+        /* with robust access on, VK_EXT_pipeline_robustness where offered
+         * and the skin check can run: the check's variant turns the uniform
+         * reads' robustness off on its probe pipeline alone (issue 163);
+         * nothing else uses it.  The check is on by default only on an
+         * Adreno (vendor 0x5143, port/render/rd_vu_skin_check.c), or where
+         * ICO_RD_VU_SKIN_CHECK ([dev] vu_skin_check) turns it on ("2" too):
+         * any other device is made as before the check */
+        const char *skinEnv = getenv("ICO_RD_VU_SKIN_CHECK");
+        const bool skinCheck = skinEnv && skinEnv[0]
+                                   ? vkr_env_on("ICO_RD_VU_SKIN_CHECK") || strcmp(skinEnv, "2") == 0
+                                   : g_vkr.props.vendorID == 0x5143u;
         const bool extPipeRob =
-            wantRobust && vkr_device_has_ext(g_vkr.phys, VK_EXT_PIPELINE_ROBUSTNESS_EXTENSION_NAME);
+            wantRobust && skinCheck &&
+            vkr_device_has_ext(g_vkr.phys, VK_EXT_PIPELINE_ROBUSTNESS_EXTENSION_NAME);
         void *chain = NULL;
         if (extPipeRob) {
             qPipeRob.pNext = chain;

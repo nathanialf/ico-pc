@@ -32,11 +32,13 @@
  *       22 and 24, with the block at 64 ring offsets of every 64-byte page
  *       phase, against vu1_ref.
  *
- * Nothing the check draws reaches a picture: the probes into their own
- * target after the last pass, the box check with no write at all.  On by
- * itself on a window's Vulkan device; [dev] vu_skin_check = false
- * (ICO_RD_VU_SKIN_CHECK=0) turns it off, ICO_RD_VU_SKIN_CHECK=1 turns it on
- * in a headless run (the tests; rd_replay_tool --skin-check). */
+ * Nothing the check draws is meant to reach a picture: the probes into
+ * their own target after the last pass, the box check with no write at all.
+ * On by itself only on an Adreno (Qualcomm's driver or Turnip: issue 163's
+ * devices) with a window; off elsewhere (issue 179's Mali-G52 is GPU-bound:
+ * no new GPU work there).  [dev] vu_skin_check = false
+ * (ICO_RD_VU_SKIN_CHECK=0) turns it off, true (=1) on on any Vulkan device,
+ * headless too (the tests; rd_replay_tool --skin-check). */
 #ifndef PORT_RENDER_RD_VU_SKIN_CHECK_H
 #define PORT_RENDER_RD_VU_SKIN_CHECK_H
 
@@ -137,11 +139,28 @@ enum { RD_SKIN_VAR_NOT_RUN = -1, RD_SKIN_VAR_WRONG = 0, RD_SKIN_VAR_RIGHT = 1 };
 const char *rd__skin_decision(bool copyDiffers, bool rereadDiffers, bool probeWrong, int c1,
                               int c2);
 
+/* ICO_RD_VU_SKIN_CHECK's value: -1 unset (NULL or ""), 2 for "2" (every
+ * skinned command of every replay: rd_vu_skin_check_ab), 1 for 1, true, on
+ * or yes, 0 for anything else (rd_profile.c envBool's rule: "false" is off) */
+int rd__skin_check_env(const char *value);
+/* The check's mode: env (rd__skin_check_env) when set, else on (1) only on
+ * an Adreno with a window, off (0) elsewhere */
+int rd__skin_check_default(bool windowed, bool adreno, int env);
+/* rd_profile.c: an Adreno, Qualcomm's driver or Turnip (the profile's
+ * PC_ADRENO_QUALCOMM and PC_ADRENO_TURNIP): from the ids (vendor 0x5143, not
+ * through MoltenVK) and of the device in use */
+bool rd__profile_vendor_adreno(uint32_t vendorId, bool moltenvk);
+bool rd__profile_adreno(void);
+
 /* ------------------------------------------------------- the engine
  * rd_vu_skin_check.c, rd_vu_skin_selftest.c; the replay calls these. */
 
 /* whether the in-game check runs (the device, the settings, the run) */
 bool rd__vu_skin_check_on(void);
+/* why it is on or off, for the start and off lines: "on by default on an
+ * Adreno with a window (Turnip)", "[dev] vu_skin_check = true
+ * (ICO_RD_VU_SKIN_CHECK=1)", "not an Adreno (...turns it on)", ... */
+const char *rd__vu_skin_check_why(void);
 /* the tests' and the tool's switch over the settings: 0 off, 1 the game's
  * rule (one command every 100 ms), 2 every skinned command of every replay
  * (rd_replay_tool --skin-check; the 100 ms and the one-a-replay limits
