@@ -600,6 +600,10 @@ static const struct {
        so the merge joins them (an A/B; port/render/rd_replay_vu.c
        vuFuseVerdict) */
     {"dev.vu_fuse", "vu_fuse"},
+    /* false: the skinned draws' bone-block check off (issue 163: one
+       skinned draw every 100 ms drawn again as a probe beside the picture
+       and compared with the CPU; an A/B; port/render/rd_vu_skin_check.c) */
+    {"dev.vu_skin_check", "vu_skin_check"},
     /* the scene draws' visibility test: frustum (the default: a draw wholly
        off its target or behind the eye is not replayed, the same picture),
        full (the occlusion test too: a list-0 draw wholly behind the depth
@@ -762,6 +766,9 @@ static const struct {
     /* port/render/rd_replay_vu.c vuMergeInit: 0 draws code 36's kicks
        under their own pipeline (no fused pair) */
     {"vu_fuse", "ICO_RD_VU_FUSE"},
+    /* port/render/rd_vu_skin_check.c skMode: 0 leaves the skinned draws'
+       bone-block check off (1 turns it on in a headless run) */
+    {"vu_skin_check", "ICO_RD_VU_SKIN_CHECK"},
     /* port/render/rd_vis.c rd__vis_init: off, frustum or full */
     {"cull", "ICO_RD_CULL"},
     /* port/render/rd_pipeline.c rd__region_camera: camera or ps2 */

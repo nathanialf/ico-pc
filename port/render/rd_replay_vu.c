@@ -13,6 +13,7 @@
 #include "rd_mesh.h"
 #include "rd_passring.h"
 #include "rd_replay.h"
+#include "rd_vu_skin_check.h"
 #include "shader_consts.h"
 #include "vu1_ref.h" /* vu1ref_region_mirror: ICO_VU_MIRROR */
 
@@ -1092,8 +1093,12 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
                           s_zeroBonesFor == g_rd.replayCounter && bonesOff == s_zeroBones;
     const RdStateBlock saved = r->st;
     r->st = *s; /* fillDrawCB reads the state the passes were planned from */
+    /* the skin check's draw (g_rdSkinArm) is drawn on its own, not held in
+     * the run: its note needs its blocks and its pass now (the merge is the
+     * same bytes either way); under the pre-pass a skinned draw takes
+     * vu_main_vs, which has a merge build */
     if (g_rd.vuMerge && mergeable && indexed && !own && !r->dateStNow && !g_rdWin.first &&
-        !g_rd.passSplit && r->passOpen) {
+        !g_rd.passSplit && r->passOpen && !g_rdSkinArm) {
         /* the draw merge: held in the run (drawn when it ends) */
         IcoDrawCB cb[2];
         for (uint32_t i = 0; i < mp; i++) {
@@ -1149,6 +1154,7 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
         rhi_cmd_set_index_buffer(rd__replay_cl(), ix->buf, ix->off, true);
         vuSpanOf(ix);
     }
+    uint64_t dOff0 = ~0ull; /* the first pass's DrawCB (the skin check's) */
     for (int i = 0; i < np; i++) {
         const RdPipeKeyInt key = keys[i];
         const RhiPipeline p = pipes[i];
@@ -1164,6 +1170,7 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             continue;
         }
         const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vOff, (uint32_t)bonesOff};
+        dOff0 = dOff0 == ~0ull ? dOff : dOff0;
         rd__replay_dst_pass_mode(r, &dp[i].key); /* a storage pass for a storage destination read */
         rd__set_pipeline(rd__replay_cl(), p, &key);
         rd__bind_uniform(rd__replay_cl(), 0, r->frameBG);
@@ -1191,6 +1198,24 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             /* PC port: counting only (vuMergeNote) */
             vuMergeNote(r, noteable, p.id, g1.id, g2.id, &cb);
         }
+    }
+    if (g_rdSkinArm && np > 0 && pipes[0].id && dOff0 != ~0ull) {
+        /* the skin check's draw (rd_vu_skin_check.h): its blocks, and its
+         * box check here in its pass */
+        const RdSkinDraw sd = {.key = &keys[0],
+                               .pipe = pipes[0],
+                               .g1 = g1,
+                               .g2 = g2,
+                               .vcb = vcb,
+                               .vOff = vOff,
+                               .dOff = dOff0,
+                               .bonesOff = bonesOff,
+                               .indexBuf = indexed ? ix->buf : (RhiBuffer){0},
+                               .indexOff = ix->off,
+                               .first = first,
+                               .count = count,
+                               .vs = progVs};
+        rd__vu_skin_note(r, ds, &sd);
     }
     r->st = saved;
     if (g_rd.passSplit) {
@@ -3002,6 +3027,9 @@ static void doVuDraw(Replay *r, const RdFrame *f, const RdCmd *c)
     if (p.clip != RD_VU_CLIP_SCISSOR) {
         const RdVuBatchRec *b0 = &m->batches[p.firstBatch], *b1 = &m->batches[last - 1];
         const uint32_t end = rd__vu_sheet_end(m, b1->firstIndex + b1->indexCount, extended);
+        if (c->type == RDC_SKINNED) {
+            rd__vu_skin_pick(f, c, m); /* the skin check's round robin (rd_vu_skin_check.h) */
+        }
         if (end > b0->firstIndex) {
             vuDraw(r, &r->st, &ds, g2, p.prog, vs, progVs, streamBuf, streamBufSize, streamOff,
                    streamSize, &vcb, bonesOff, &mix, b0->firstIndex, end - b0->firstIndex);

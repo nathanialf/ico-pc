@@ -1843,6 +1843,8 @@ static bool vkr_create_device(void)
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT};
     VkPhysicalDeviceAddressBindingReportFeaturesEXT qBind = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ADDRESS_BINDING_REPORT_FEATURES_EXT};
+    VkPhysicalDevicePipelineRobustnessFeaturesEXT qPipeRob = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_FEATURES_EXT};
     {
         /* robust access: off by default on every platform.  Android had it
          * on, because a Mali GPU reads storage buffers through plain
@@ -1869,7 +1871,16 @@ static bool vkr_create_device(void)
         const bool extCheck =
             wantCheck && vkr_has_props2(g_vkr.phys) &&
             vkr_device_has_ext(g_vkr.phys, VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME);
+        /* with robust access on, VK_EXT_pipeline_robustness where offered:
+         * the skin check's variant turns the uniform reads' robustness off
+         * on its probe pipeline alone (issue 163); nothing else uses it */
+        const bool extPipeRob =
+            wantRobust && vkr_device_has_ext(g_vkr.phys, VK_EXT_PIPELINE_ROBUSTNESS_EXTENSION_NAME);
         void *chain = NULL;
+        if (extPipeRob) {
+            qPipeRob.pNext = chain;
+            chain = &qPipeRob;
+        }
         if (extFault) {
             qFault.pNext = chain;
             chain = &qFault;
@@ -1894,6 +1905,10 @@ static bool vkr_create_device(void)
         const bool nullDesc =
             g_vkr.robust && extRobust2 && robustSaid == 1 && qRobust2.nullDescriptor;
         g_vkr.robust2 = buffer2 || image2 || nullDesc;
+        g_vkr.pipeRobust = g_vkr.robust && extPipeRob && qPipeRob.pipelineRobustness;
+        memset(&qPipeRob, 0, sizeof(qPipeRob));
+        qPipeRob.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_ROBUSTNESS_FEATURES_EXT;
+        qPipeRob.pipelineRobustness = VK_TRUE;
         g_vkr.addressReport = extBind && qBind.reportAddressBinding;
         g_vkr.checkpoints = extCheck;
         memset(&qFault, 0, sizeof(qFault));
@@ -1912,6 +1927,9 @@ static bool vkr_create_device(void)
         }
         if (g_vkr.robust2) {
             exts[extCount++] = VK_EXT_ROBUSTNESS_2_EXTENSION_NAME;
+        }
+        if (g_vkr.pipeRobust) {
+            exts[extCount++] = VK_EXT_PIPELINE_ROBUSTNESS_EXTENSION_NAME;
         }
         if (g_vkr.addressReport) {
             exts[extCount++] = VK_EXT_DEVICE_ADDRESS_BINDING_REPORT_EXTENSION_NAME;
@@ -2076,6 +2094,10 @@ static bool vkr_create_device(void)
     if (g_vkr.robust2) {
         qRobust2.pNext = dyn.pNext;
         dyn.pNext = &qRobust2;
+    }
+    if (g_vkr.pipeRobust) {
+        qPipeRob.pNext = dyn.pNext;
+        dyn.pNext = &qPipeRob;
     }
     if (g_vkr.addressReport) {
         qBind.pNext = dyn.pNext;
@@ -2465,6 +2487,7 @@ static void vkr_fill_limits(void)
     o->apiMinor = VK_API_VERSION_MINOR(g_vkr.apiVersion);
     o->mesa = g_vkr.mesa;
     o->robustText = s_robustText[0] ? s_robustText : NULL;
+    o->uniformRobustOff = g_vkr.pipeRobust;
     o->robustDefaultOff = s_robustDefaultOff;
     /* texture packs: the BC formats (vkr_create_device enabled the feature) */
     o->bcTextures = g_vkr.bc;

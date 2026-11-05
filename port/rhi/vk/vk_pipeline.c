@@ -1068,6 +1068,7 @@ typedef struct VkrPipeJob {
     VkDynamicState dynStates[10];
     VkPipelineDynamicStateCreateInfo dy;
     VkPipelineRenderingCreateInfo ri;
+    VkPipelineRobustnessCreateInfoEXT rob;
     VkGraphicsPipelineCreateInfo ci;
 } VkrPipeJob;
 
@@ -1289,6 +1290,18 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
         .pDynamicState = &j->dy,
         .layout = j->layout,
     };
+    if (d->uniformRobustOff && g_vkr.pipeRobust) {
+        /* the uniform reads without robustness (rhi.h RhiPipelineDesc
+         * .uniformRobustOff; the rest the device's): chained below, after
+         * the render pass path has set its own head */
+        j->rob = (VkPipelineRobustnessCreateInfoEXT){
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO_EXT,
+            .storageBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT,
+            .uniformBuffers = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DISABLED_EXT,
+            .vertexInputs = VK_PIPELINE_ROBUSTNESS_BUFFER_BEHAVIOR_DEVICE_DEFAULT_EXT,
+            .images = VK_PIPELINE_ROBUSTNESS_IMAGE_BEHAVIOR_DEVICE_DEFAULT_EXT,
+        };
+    }
     if (g_vkr.legacyPasses) {
         /* no dynamic rendering: the render pass of the pipeline's
          * compatibility class (vk_renderpass.c), made here on the calling
@@ -1308,6 +1321,10 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
             j->id = 0;
             return false;
         }
+    }
+    if (j->rob.sType == VK_STRUCTURE_TYPE_PIPELINE_ROBUSTNESS_CREATE_INFO_EXT) {
+        j->rob.pNext = j->ci.pNext;
+        j->ci.pNext = &j->rob;
     }
     return true;
 }

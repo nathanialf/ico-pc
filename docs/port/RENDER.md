@@ -23,6 +23,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_submit_thread.c`, `rd_submit_thread.h`, `rd_submit_queue.c`, `rd_submit_queue.h` | the submit thread: a picture handed over has its list ended and submitted and its image presented there (Vulkan, Direct3D 12), the render thread free once its walk ends; its queue (pure) |
 | `port/render/rd_replay_vu.c`, `rd_replay.h` | the replay's VU draws and the vertex and triangle pre-passes; what they share with `rd_replay.c` (the replay's state, a draw's setup, its helpers) |
 | `port/render/rd_vuprepass_selftest.c` | the vertex and triangle pre-passes' start-up self-test |
+| `port/render/rd_vu_skin_check.h`, `rd_vu_skin_check.c`, `rd_vu_skin_judge.c`, `rd_vu_skin_selftest.c` | the skinned draws' bone-block check: a skinned draw probed beside the picture against the CPU, the box check, the start-up probe ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
 | `port/render/rd_pipeline.c` | pipeline keys from the state block, the pipeline cache, the reachable set |
 | `port/render/rd_dst_read.c` | the exact GS blend read from the destination in the fragment shader |
@@ -2331,6 +2332,9 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   frustum, O occluded), T ms; not tested: E exempt, U unbounded; skipped beyond the left ...;
   occlusion: K occluder triangles (B past the budget), C cells, D draws tested, R resets, H ms`
   (`--cull off|frustum|full` sets the variable; `--occlusion` replays with it off).
+- *The skin check.* `rd_replay_tool --skin-check` checks every skinned command of the dump
+  through the skinned draws' bone-block check and prints `<dump>: skin check: ...`
+  ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#switches)).
 - *Why each command was or was not skipped.* `rd_replay_tool --stats` follows that line with
   `stats: cull why: <reason> <count>; ...`: one reason a scene draw command, the counts summing to
   M (`rd_vis.h`, `RD_VIS_WHY_*`). Skipped: by the stream's box, by the batches' box (what only the

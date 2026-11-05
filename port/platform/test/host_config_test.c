@@ -719,6 +719,13 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_fuse", "true"), "1") == 0);
     CHECK(ico_dev_env_value("vu_fuse", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.vu_fuse"), "vu_fuse") == 0);
+    /* vu_skin_check: the skinned draws' bone-block check's A/B switch
+       (port/render/rd_vu_skin_check.c, issue 163) */
+    CHECK(strcmp(ico_dev_env_name("vu_skin_check"), "ICO_RD_VU_SKIN_CHECK") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_skin_check", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_skin_check", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("vu_skin_check", "maybe") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_skin_check"), "vu_skin_check") == 0);
     /* cull: the scene draws' visibility test (port/render/rd_vis.c
        rd__vis_init reads ICO_RD_CULL: off, frustum or full) */
     CHECK(strcmp(ico_dev_env_name("cull"), "ICO_RD_CULL") == 0);

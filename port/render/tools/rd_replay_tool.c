@@ -291,6 +291,20 @@
  *                         the view or the scissor, every fragment
  *                         discarded); the corpus script takes them from the
  *                         hidden set to leave what the depth hid
+ *   --skin-check          the skinned draws' bone-block check (issue 163;
+ *                         rd_vu_skin_check.h, docs/port/VU_SKIN_CHECK.md)
+ *                         on every skinned command of the frame, after the
+ *                         picture: replays of the frame with every command
+ *                         probed (80 a replay), each read back at once; the
+ *                         check's own lines on stderr, then "<dump>: skin
+ *                         check: N skinned commands, C checks, W wrong
+ *                         (address A), B blocks whose bytes differed (R
+ *                         changed after the draw), X of Y box checks with
+ *                         samples outside; on the wrong ones c1 right K, c2
+ *                         right L (c2 drawn in M); reads as: WORDS".  Vulkan
+ *                         only (another backend: exit 77);
+ *                         ICO_RD_VU_SKIN_SABOTAGE=A[,ring] the tests' wrong
+ *                         reads
  *   --pass-times          (implies --stats) every replay timed pass by pass
  *                         ([dev] perf_passes, rd_perf.c): after the gpu line
  *                         the warm replay's passes, one line each ("pass N:
@@ -428,6 +442,7 @@
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "rd_vis.h"
+#include "rd_vu_skin_check.h"
 #include "../core/region.h"              /* the dump's disc (version 12) */
 #include "../vu1_ref/vu1_ref.h"          /* --vu-ref: the CPU mirror of the VU programs */
 #include "../../shaders/shader_consts.h" /* ICO_VU_MARK_*: the marks --mesh shows */
@@ -1895,7 +1910,7 @@ int main(int argc, char **argv)
                 "[--mirror] [--overlay-test] [--backend vulkan|d3d12|opengl|d3d11] "
                 "[--render-thread off|sync|on] [--repeat N] [--list] "
                 "[--nop L:A[-B][,...]|@FILE] [--occlusion [--occlusion-out FILE] "
-                "[--occlusion-csv FILE]] [--cull off|frustum|full] "
+                "[--occlusion-csv FILE]] [--skin-check] [--cull off|frustum|full] "
                 "[--gpu-repeat K] "
                 "[--region-stats] [--region-png FILE] [--region-out FILE] [--region-mask FILE] "
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
@@ -1923,6 +1938,8 @@ int main(int argc, char **argv)
     const char *occlusionOut = NULL; /* --occlusion-out FILE */
     const char *occlusionCsv = NULL; /* --occlusion-csv FILE */
     bool occFailed = false;          /* the spec could not be written */
+    bool skinCheck = false;          /* --skin-check */
+    bool skinFailed = false;         /* a replay of its check failed */
     bool regionStats = false;        /* --region-stats (rd_replay_region.c) */
     RdRegionOpts regionOpts = {NULL, NULL, NULL, NULL};
     bool regionFailed = false; /* its picture or spec could not be written */
@@ -2190,6 +2207,8 @@ int main(int argc, char **argv)
             setEnv("ICO_RD_CULL", v); /* read at rd_init (rd_vis.c rd__vis_init) */
         } else if (strcmp(argv[i], "--occlusion") == 0) {
             occlusion = true;
+        } else if (strcmp(argv[i], "--skin-check") == 0) {
+            skinCheck = true;
         } else if (strcmp(argv[i], "--occlusion-out") == 0 && i + 1 < argc) {
             occlusionOut = argv[++i];
         } else if (strcmp(argv[i], "--occlusion-csv") == 0 && i + 1 < argc) {
@@ -2241,6 +2260,11 @@ int main(int argc, char **argv)
     }
     if (saveBlended && (!interpPrev || presentsN)) {
         fprintf(stderr, "--save-blended needs --interp T PREV (and not --presents)\n");
+        return 1;
+    }
+    if (skinCheck && (presentsN || lossBisect || keysCheck || noDevice || occlusion)) {
+        fprintf(stderr, "--skin-check replays the frame itself: not with --presents, "
+                        "--loss-bisect, --keys, --no-device or --occlusion\n");
         return 1;
     }
     if ((occlusionOut || occlusionCsv) && !occlusion) {
@@ -2506,6 +2530,29 @@ int main(int argc, char **argv)
             printf("%s: occlusion: no list-0 draw was measured\n", dump);
         }
         free(occ.cmds);
+    }
+    if (replayed && skinCheck) {
+        if (rhi_backend() != RHI_BACKEND_VULKAN) {
+            fprintf(stderr, "%s: skin check: not run: Vulkan only (%s)\n", dump,
+                    rhi_backend_kind_name(rhi_backend()));
+            rd__frame_free(&f);
+            rd__frame_free(&pf);
+            rd_shutdown();
+            return 77;
+        }
+        RdSkinSummary sk;
+        const int wrong = rd__vu_skin_check_frame(rf, (int)rf->keep, &sk);
+        if (wrong < 0) {
+            fprintf(stderr, "%s: skin check: a replay failed\n", dump);
+            skinFailed = true;
+        }
+        printf("%s: skin check: %u skinned commands, %u checks, %u wrong (address %u), %u blocks "
+               "whose bytes differed (%u changed after the draw), %u of %u box checks with "
+               "samples outside; on the wrong ones c1 right %u, c2 right %u (c2 drawn in %u); "
+               "reads as: %s\n",
+               dump, sk.commands, sk.checks, sk.wrong, sk.lastAddr, sk.blocksDiffer,
+               sk.rereadDiffer, sk.boxOutside, sk.boxChecks, sk.c1Right, sk.c2Right, sk.c2Run,
+               sk.decision[0] ? sk.decision : "every check right");
     }
     if (replayed && saveBlended) {
         /* after the replay, as rd_present writes F12's (rd_interp.c
@@ -3017,7 +3064,7 @@ int main(int argc, char **argv)
     if (rc == 0 && timeN > 0 && !timeReplays(dump, &pf, &f, rf, timeN, pw != 0)) {
         rc = 1;
     }
-    if (occFailed || regionFailed) {
+    if (occFailed || regionFailed || skinFailed) {
         rc = 1;
     }
     rd__frame_free(&f);

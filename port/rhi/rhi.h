@@ -517,6 +517,12 @@ typedef struct RhiPipelineDesc {
      * RhiLimits.dynamicDepth / dynamicBlend); the static values are the
      * defaults until a set.  0 for a pipeline with every state static. */
     uint32_t dynamic;
+    /* uniform-buffer robustness off for this pipeline's uniform reads
+     * (VK_EXT_pipeline_robustness, only where RhiLimits.uniformRobustOff:
+     * robust access on and the extension offered; ignored elsewhere): the
+     * skin check's variant (port/render/rd_vu_skin_check.h, issue 163).
+     * In-range reads are the same either way. */
+    bool uniformRobustOff;
 } RhiPipelineDesc;
 
 enum { RHI_DYN_DEPTH = 1u, RHI_DYN_BLEND = 2u };
@@ -829,6 +835,10 @@ typedef struct RhiLimits {
      * guard then lets the slot calls (rhi_set_slot_guard) of the thread
      * that records run beside the other thread's work of another slot. */
     bool slotOverlap;
+    /* RhiPipelineDesc.uniformRobustOff takes effect: robust access is on
+     * and the device offers VK_EXT_pipeline_robustness's pipelineRobustness
+     * (Vulkan; false elsewhere) */
+    bool uniformRobustOff;
 } RhiLimits;
 
 /* The window's part in a driver call that may take long (rhi_set_wait_hooks):

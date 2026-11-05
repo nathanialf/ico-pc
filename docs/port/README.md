@@ -24,6 +24,7 @@ In reading order.
 | [RENDER.md](RENDER.md) | rd: recording, state, the replay, the device profile, camera blending, performance records, dumps and the replay tool. |
 | [RENDER_POST.md](RENDER_POST.md) | rd's post passes: the fades fold, the motion blur, above 1x, shadows, water blocks, the fog path and crack filling. |
 | [PIPELINES.md](PIPELINES.md) | the pipeline key and blend paths, the start-up set, the fallback entries, the vertex and triangle pre-passes. |
+| [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md) | The skinned draws' bone-block check: a skinned draw probed beside the picture every 100 ms against the CPU, its variants, the box check, the start-up probe, the decision table and its lines. |
 | [MSAA.md](MSAA.md) | The MSAA resolve: where the multisampled part of a frame ends, the covered-majority rule, one resolve a picture, its lines and tests. |
 | [WORK_BUFFERS.md](WORK_BUFFERS.md) | The post effects' work buffers: sizes per frame width, the glow chain's rects, its left edge on a wide frame, what stays across frames and the work clear. |
 | [TEXTURES.md](TEXTURES.md) | Texture decodes off the game thread: the decode pool, the job a store makes, the settle, its bound, key, lines and tests. |

@@ -78,6 +78,7 @@
 
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_vu_skin_check.h"
 
 #define ST_W 256 /* the block, GS pixels */
 #define ST_H 96
@@ -590,6 +591,9 @@ bool rd_vuprepass_selftest(void)
     if (!g_rd.inited || !g_rd.hasDevice) {
         return false;
     }
+    /* first, whatever the pre-pass: the skin check's start-up probe and its
+     * start line (rd_vu_skin_selftest.c; issue 163) */
+    (void)rd__vu_skin_selftest();
     if (!g_rd.vuPrepass) {
         snprintf(g_rdSumPrepass, sizeof g_rdSumPrepass, "off %s (self-test not run)",
                  g_rd.vuPrepassWhy);

@@ -850,8 +850,10 @@ void rd_summary_text(char *out, size_t size);
  * after that it runs again whenever SCENE is made at a new size.  Waits
  * for the GPU.  Returns whether the blend in force passed. */
 bool rd_blend_selftest(void);
-/* The VU vertex pre-pass's self-test (rd_vuprepass_selftest.c): a frame of
- * its own (never recorded, never presented) draws three meshes made for it
+/* The VU vertex pre-pass's self-test (rd_vuprepass_selftest.c), after the
+ * skinned draws' bone-block check's start-up probe and start line, which
+ * run first whatever the pre-pass (rd_vu_skin_check.h rd__vu_skin_selftest;
+ * issue 163): a frame of its own (never recorded, never presented) draws three meshes made for it
  * (a prelit, a lit and a skinned strip) on SCENE at its real size and
  * scale, without MSAA, once through the programs' own vertex shaders and
  * once through the pre-pass, in the VU shader variant the settings draw

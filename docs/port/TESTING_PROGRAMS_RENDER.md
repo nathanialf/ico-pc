@@ -286,6 +286,21 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   merge is on (`g_rd.vuMerge`, the summary's `VU merge on`) unless `ICO_RD_VU_MERGE=0`, which
   `rd_vuprepass_selftest_unmerged` sets (both sides of the self-test's comparison one GPU draw a VU
   draw), or on Direct3D 11.
+- `rd_vu_skin_check_test.c` with `rd_vu_skin_check.cmake`: the skinned draws' bone-block check
+  ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)). `judge` (no device): a case of 60 bones and 120 vertices
+  through `vu1_ref`, the CPU's positions as the probe all right; one vertex on address 200 moved to
+  where a zero matrix at 200 puts it: one wrong, address 200 named, `gives it: yes`; one moved where
+  no zero matrix puts it: no address; the 16/16 pixel bound; the byte windows (`equal`, `differs at
+  qword 5`, `differs at qwords 184..187`); every row of the decision table's words
+  (`rd_vu_skin_check_judge`). On a device at Original 4:3 1x: the start-up probe's `ok` line and
+  the check's start line once each; a frame of one skinned command (the same bones and vertices
+  through code 20, the world origin in front of the eye) checked through `rd__vu_skin_check_frame`:
+  right, the bytes equal, its box check run with no sample outside (`rd_vu_skin_check`; under
+  `ICO_GPU_ROBUST=1` with the c2 variant where lavapipe offers `VK_EXT_pipeline_robustness`,
+  `rd_vu_skin_check_robust`); with `ICO_RD_VU_SKIN_SABOTAGE=200` wrong at address 200, the bytes
+  equal, c1 right, `reads as: H1, address-dependent` (`rd_vu_skin_check_probe`); with `=200,ring`
+  wrong at 200, the GPU's copy and the CPU's re-read `differs at qwords 184..187`, `reads as: H2, a
+  port race` (`rd_vu_skin_check_ring`); no validation error.
 - `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
   paths, `*` globs, a missing dump named and skipped, none at all `SKIP`) replayed by
   `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
@@ -391,6 +406,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   and a line a command; then the plain replay and the replay with `--nop @SPEC`, each `--pass-dump`
   with `--present 640x480` under `ICO_RD_BLEND=fixed`: DISPLAY.png and PRESENT.png byte for byte
   (`rd_occlusion_tool`). SKIP without the list, a dump of it or a device.
+- `rd_vu_skin_check_dump.cmake`: `rd_replay_tool --skin-check`
+  ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) at the tool's default settings: on the machine-local
+  corpus dump `frame-20261007-200706-v3086` (46 skinned commands) every command the replay draws
+  checked, none wrong, the bytes equal and no box sample outside (`rd_vu_skin_check_dump`); on the
+  issue 163 reporter's blended dump (`/primary/dev/ico-dumps/163/`) the same clean
+  (`rd_vu_skin_check_163`), with `ICO_RD_VU_SKIN_SABOTAGE=200` the probe's zero matrix at address
+  200 named with the bytes equal and `reads as: H1, address-dependent`
+  (`rd_vu_skin_check_163_probe`), with `=200,ring` the bytes differing as the GPU copied them and as
+  the CPU reads them and `reads as: H2, a port race` (`rd_vu_skin_check_163_ring`), and the deep
+  dive's patched copy (its lanes on 200 moved to a zero bone) checked right, the CPU and the GPU
+  reading the same stream (`rd_vu_skin_check_163_patched`). SKIP without the dump or a device.
 - `rd_region_stats.cmake`: `rd_replay_tool --region-stats`
   ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the first two dumps of
   `tools/occlusion_corpus.txt` that are here, each at Original 4:3 1x and Enhanced 4:3 2x with a
