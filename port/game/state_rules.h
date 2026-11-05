@@ -48,8 +48,8 @@ int ico_state_can_save_here(void);
 
 /* ICO_STATE_OK, or the first refusal in this order: OFF, NOT_PAUSED (a
    save only: ico_state_on_pause_menu), STAGE_SWITCH, CARD_BUSY,
-   DISC_BUSY, MOVIE, PHOTO (photo mode, the credits or the music gallery;
-   and, a save only, a test room; *what, when not NULL, names which). */
+   DISC_BUSY, MOVIE, PHOTO (photo mode, the credits, the music gallery or
+   a test room; *what, when not NULL, names which). */
 IcoStateResult ico_state_conditions(const IcoStateConds *c, int saving, const char **what);
 
 /* The log's words for a result: "not paused", "settings differ", ... ("ok"

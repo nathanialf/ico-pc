@@ -26,7 +26,7 @@
 #include "settings.h"
 #include "settings_states.h"
 
-#include "ico_unused.h" /* a test room of Extras > Unused content: no save */
+#include "ico_unused.h" /* a test room of Extras > Unused content: no save, no load */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -533,12 +533,15 @@ static void statesPerform(int slot)
         return;
     }
     s_stConfirmSlot = -1;
-    if (act == UI_STATES_ACT_SAVE && ico_unused_active()) {
+    if ((act == UI_STATES_ACT_SAVE || act == UI_STATES_ACT_LOAD) && ico_unused_active()) {
         /* a test room has no save stage, and a state taken there would
            come back without the room's flag (its game-over guard, its
-           return to the title): refused before the host; a load goes on */
+           return to the title); a state loaded there would keep the flag
+           set in normal play (the achievements suspended, a game over's
+           Continue sent to the title): both refused before the host */
         NEGATIVE_SE();
-        fprintf(stderr, "unused: save state refused in a test room (slot %d)\n", slot + 1);
+        fprintf(stderr, "unused: save state %srefused in a test room (slot %d)\n",
+                act == UI_STATES_ACT_LOAD ? "load " : "", slot + 1);
         (void)ui_popup_push(ui_str(UI_STR_STATES), ui_str(UI_STR_STATES_REFUSED_UNUSED));
         return;
     }

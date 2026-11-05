@@ -1071,11 +1071,14 @@ has.
   4500 in all): on the title the state is put back at once, elsewhere the title is requested and the
   state put back as it is entered.
 - While a room runs the achievements are suspended (`ico_gs_achievements_suspended`) and nothing is
-  saved by the port. A save state is refused: the Save states page refuses Save before its host
-  (`port/ui/settings_states.c` (`statesPerform`): the popup `UI_STR_STATES_REFUSED_UNUSED`, "Not
-  in a test room", and `unused: save state refused in a test room (slot N)`), and the save
-  conditions refuse it too (`port/game/state_rules.c`, `IcoStateConds.unused`: `ICO_STATE_PHOTO`,
-  "a test room"), so F5 cannot save there either. Loading a state is not refused.
+  saved by the port. Saving and loading a state are both refused: the Save states page refuses
+  Save and Load before its host (`port/ui/settings_states.c` (`statesPerform`): the popup
+  `UI_STR_STATES_REFUSED_UNUSED`, "Not in a test room", and `unused: save state refused in a test
+  room (slot N)` or `unused: save state load refused in a test room (slot N)`), and the state
+  conditions refuse both too (`port/game/state_rules.c`, `IcoStateConds.unused`: `ICO_STATE_PHOTO`,
+  "a test room"), so F5 and F9 cannot either. A load is refused because the room's flag is cleared
+  only at the title: a state of normal play loaded in a room would keep it set (the achievements
+  suspended, a game over's Continue sent to the title, Save refused) until the next title.
 - The attract movie's start (`beginMovie`, `port/game/unused_live.c`), from the title only: the
   title's attract path, started from the menu. `mpegPlayReturnStage` is the title, the title theme
   fades as in the credits, the skip word `stage_after_skipping_demo` is cleared (a skip is told by

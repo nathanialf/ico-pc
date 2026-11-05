@@ -806,7 +806,7 @@ the game goes back to the title screen and opens Options on this page
 again. If Ico falls or is caught, either choice on the game over screen also
 takes you back to the title screen. Nothing is saved in a test room, it does
 not change your game, and achievements do not count there. You cannot save
-a state in a test room.
+or load a state in a test room.
 
 ## Save states
 

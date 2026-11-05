@@ -804,9 +804,8 @@ static void testConfirm(void)
     CHECK(ui_popup_active() && s_sounds[2] > neg, "a refusal: a popup and the refusal sound");
 }
 
-/* in a test room of Extras > Unused content (ico_unused_active): Save is
-   refused before the host with the plain popup and one line, Load still
-   asks the host */
+/* in a test room of Extras > Unused content (ico_unused_active): Save and
+   Load are refused before the host with the plain popup and one line each */
 static void testTestRoom(void)
 {
     char log[2048];
@@ -827,14 +826,28 @@ static void testTestRoom(void)
           s_requests);
     CHECK(strstr(log, "unused: save state refused in a test room") != NULL,
           "a test room: the line (\"%s\")", log);
-    /* Load on slot 1: the host is asked */
+    /* Load on slot 1: refused the same way */
     moveTo(sl, 0);
     press(0x2000); /* Save -> Load */
     s_requests = 0;
+    ui_popup_reset();
+    const int negLoad = s_sounds[2];
+    errCapture();
+    press(conf);
+    errRelease(log, sizeof(log));
+    CHECK(s_requests == 0 && ui_popup_active() && s_sounds[2] > negLoad,
+          "a test room: Load refused before the host (%d asked), a popup, the refusal sound",
+          s_requests);
+    CHECK(strstr(log, "unused: save state load refused in a test room (slot 1)") != NULL,
+          "a test room: the load's line (\"%s\")", log);
+    ico_unused_set_running(-1);
+    /* out of the room: Load on slot 1 is asked again (the popup gone
+       first, so the press reaches the card) */
+    ui_popup_reset();
+    s_requests = 0;
     press(conf);
     CHECK(s_requests == 1 && s_reqAct == UI_STATES_ACT_LOAD && s_reqSlot == 1,
-          "a test room: Load asked (%d: %d, slot %d)", s_requests, s_reqAct, s_reqSlot);
-    ico_unused_set_running(-1);
+          "out of the room: Load asked (%d: %d, slot %d)", s_requests, s_reqAct, s_reqSlot);
     /* out of the room: Save on slot 2 is asked again */
     moveTo(sl, 1);
     s_requests = 0;
