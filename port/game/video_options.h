@@ -46,6 +46,9 @@
  *   [video] crt_strength    1.0         0..1
  *   [video] crt_scanlines, crt_mask, crt_halation, crt_bloom, crt_curvature
  *                           -1          config only: the mode's value when < 0
+ *   [video] gamma, brightness, contrast, saturation
+ *                           50          1..100; 50 is the game's own picture (any preset, with
+ *                                       or without the CRT filter)
  *   [video] texture_pack    true        load a PCSX2 texture pack when one is installed
  *   [video] dump_textures   false       write each texture under its PCSX2 name (pack authors)
  *   [video] model_pack      true        load a model pack (replacement models) when one is installed
@@ -186,6 +189,9 @@ typedef struct IcoVideoOptions {
     /* the config-only overrides, -1 = the mode's own: scanline strength,
        mask strength, halation, bloom (0..1), curvature (0..0.25) */
     float crtScanlines, crtMask, crtHalation, crtBloom, crtCurvature;
+    /* the colour adjustment (Picture page), 1..100, ICO_TONE_DEFAULT the
+       game's own picture: applied whatever the preset, to the CRT's too */
+    int toneGamma, toneBrightness, toneContrast, toneSaturation;
     /* texture packs: applied whatever the preset */
     int texturePack;         /* replacements from an installed pack drawn */
     int dumpTextures;        /* each texture written under its PCSX2 name */
@@ -242,6 +248,15 @@ typedef struct IcoVideoOptions {
 #define ICO_MOTION_BLUR_STRENGTH_STEP 10
 /* v clamped to MIN..MAX and rounded to the nearest step (half up) */
 int ico_video_motion_blur_strength_clamp(int v);
+/* IcoVideoOptions.toneGamma, toneBrightness, toneContrast, toneSaturation:
+   the range, the default (the game's own picture, as PCSX2's 50) and the
+   step of the Picture page's four rows */
+#define ICO_TONE_MIN 1
+#define ICO_TONE_MAX 100
+#define ICO_TONE_DEFAULT 50
+#define ICO_TONE_STEP 5
+/* v clamped to MIN..MAX (no rounding: a hand-set 47 is kept) */
+int ico_video_tone_clamp(int v);
 
 /* IcoVideoOptions.crtMode (rd.h RdCrtMode is this + 1) */
 enum {

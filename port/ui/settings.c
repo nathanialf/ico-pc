@@ -471,6 +471,15 @@ static double stepTenth(double v, int dir)
     return (t < 0 ? 0 : t > 10 ? 10 : t) / 10.0;
 }
 
+/* the colour adjustment's field of o for one of its four rows */
+static int *toneField(IcoVideoOptions *o, int opt)
+{
+    return opt == UI_OPT_TONE_GAMMA        ? &o->toneGamma
+           : opt == UI_OPT_TONE_BRIGHTNESS ? &o->toneBrightness
+           : opt == UI_OPT_TONE_CONTRAST   ? &o->toneContrast
+                                           : &o->toneSaturation;
+}
+
 /* [audio] output (port/game/options.h) in force: the game's mode set from
    an explicit key; with `restore` (the row stepped to Auto) the game's own
    mode back.  Install passes 0, so with Auto the game's mode is never
@@ -1902,6 +1911,18 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_CRT_STRENGTH:
         snprintf(buf, size, "%d %%", (int)(o.crtStrength * 100.0f + 0.5f));
         return buf;
+    case UI_OPT_TONE_GAMMA:
+    case UI_OPT_TONE_BRIGHTNESS:
+    case UI_OPT_TONE_CONTRAST:
+    case UI_OPT_TONE_SATURATION: {
+        const int v = *toneField(&o, opt);
+        if (v == ICO_TONE_DEFAULT) {
+            snprintf(buf, size, "%d (%s)", v, ui_str(UI_STR_VAL_DEFAULT));
+        } else {
+            snprintf(buf, size, "%d", v);
+        }
+        return buf;
+    }
     case UI_OPT_BRIGHTNESS:
         if (brightness() == BRIGHTNESS_DEFAULT) {
             snprintf(buf, size, "%d (%s)", brightness(), ui_str(UI_STR_VAL_DEFAULT));
@@ -2509,6 +2530,21 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         o.crtStrength = (float)stepTenth(o.crtStrength, dir);
         video = 1;
         break;
+    case UI_OPT_TONE_GAMMA:
+    case UI_OPT_TONE_BRIGHTNESS:
+    case UI_OPT_TONE_CONTRAST:
+    case UI_OPT_TONE_SATURATION: {
+        /* 5 a press to the next multiple of 5 (a hand-set 47 lands on 50 or
+           45), held at 1 and 100 */
+        int *const f = toneField(&o, opt);
+        const int v = *f;
+
+        *f = ico_video_tone_clamp(dir > 0             ? (v / ICO_TONE_STEP + 1) * ICO_TONE_STEP
+                                  : v % ICO_TONE_STEP ? v / ICO_TONE_STEP * ICO_TONE_STEP
+                                                      : v - ICO_TONE_STEP);
+        video = 1;
+        break;
+    }
     case UI_OPT_VIDEO_MODE:
         /* as kanbanBoot.c step 201: the value, then gsb_Init on a change */
         systemStatus[0] = systemStatus[0] != 0 ? 0 : 1;
@@ -3366,6 +3402,19 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_PICTURE:
         addNote(pg, UI_OPT_ANTI_ALIAS, UI_STR_OPT_AA_NOTE);
         addNote(pg, UI_OPT_DOWNSAMPLE, UI_STR_OPT_DOWNSAMPLE_NOTE);
+        /* one note under the four colour rows (the Graphics driver's pattern) */
+        addNote(pg, UI_OPT_TONE_GAMMA, UI_STR_OPT_TONE_NOTE);
+        for (int i = 1; i < pg->count; i++) {
+            if (pg->rows[i].opt >= UI_OPT_TONE_BRIGHTNESS &&
+                pg->rows[i].opt <= UI_OPT_TONE_SATURATION) {
+                for (int j = 0; j < i; j++) {
+                    if (pg->rows[j].opt == UI_OPT_TONE_GAMMA) {
+                        pg->rows[i].note = pg->rows[j].note;
+                        pg->rows[i].noteStr = UI_STR_OPT_TONE_NOTE;
+                    }
+                }
+            }
+        }
         addNote(pg, UI_OPT_TEXTURE_PACK, UI_STR_TEXTURE_PACK_NOTE);
         addNote(pg, UI_OPT_MODEL_PACK, UI_STR_MODEL_PACK_NOTE);
         break;
@@ -3991,10 +4040,11 @@ static void build(void)
     /* Picture: the picture's own rows (Brightness is the pause menu's, the
        Model pack the title's); the Downsampling row goes right after
        Anti-aliasing */
-    static const int picOpts[] = {UI_OPT_ANTI_ALIAS, UI_OPT_DOWNSAMPLE,   UI_OPT_FULL_HEIGHT,
-                                  UI_OPT_FILTER,     UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,
-                                  UI_OPT_CRT,        UI_OPT_CRT_STRENGTH, UI_OPT_TEXTURE_PACK,
-                                  UI_OPT_MODEL_PACK, UI_OPT_BACK};
+    static const int picOpts[] = {
+        UI_OPT_ANTI_ALIAS,   UI_OPT_DOWNSAMPLE,      UI_OPT_FULL_HEIGHT,   UI_OPT_FILTER,
+        UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,      UI_OPT_CRT,           UI_OPT_CRT_STRENGTH,
+        UI_OPT_TONE_GAMMA,   UI_OPT_TONE_BRIGHTNESS, UI_OPT_TONE_CONTRAST, UI_OPT_TONE_SATURATION,
+        UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,      UI_OPT_BACK};
     static const int picStrs[] = {UI_STR_OPT_AA,
                                   UI_STR_OPT_DOWNSAMPLE,
                                   UI_STR_OPT_FULL_HEIGHT,
@@ -4003,6 +4053,10 @@ static void build(void)
                                   UI_STR_OPT_BRIGHTNESS,
                                   UI_STR_OPT_CRT,
                                   UI_STR_OPT_CRT_STRENGTH,
+                                  UI_STR_OPT_TONE_GAMMA,
+                                  UI_STR_OPT_TONE_BRIGHTNESS,
+                                  UI_STR_OPT_TONE_CONTRAST,
+                                  UI_STR_OPT_TONE_SATURATION,
                                   UI_STR_OPT_TEXTURE_PACK,
                                   UI_STR_OPT_MODEL_PACK,
                                   UI_STR_BACK};
@@ -6418,6 +6472,17 @@ static int settingsProc(int first, int item)
         if ((flags & LT_PAD_SQUARE) && r->opt == UI_OPT_BRIGHTNESS && canStep(r->opt)) {
             /* the adjust screen's Default */
             systemStatus[11] = BRIGHTNESS_DEFAULT;
+            CUR_SE();
+            refreshPage(pg, id, lay->curItem);
+        }
+        if ((flags & LT_PAD_SQUARE) && r->opt >= UI_OPT_TONE_GAMMA &&
+            r->opt <= UI_OPT_TONE_SATURATION && canStep(r->opt)) {
+            /* the colour adjustment's 50, the game's own picture */
+            IcoVideoOptions v;
+            ico_video_get(&v);
+            *toneField(&v, r->opt) = ICO_TONE_DEFAULT;
+            ico_video_set(&v);
+            s_dirtyVideo = 1;
             CUR_SE();
             refreshPage(pg, id, lay->curItem);
         }

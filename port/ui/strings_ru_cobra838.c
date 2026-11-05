@@ -208,6 +208,11 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
         "Диалоги Йорды будут отображаться с переводом, а концовка и предметы отличаться от оригинала. Работает и при первом прохождении.",
     [UI_STR_OPT_CRT] = "ЭЛТ-фильтр",
     [UI_STR_OPT_CRT_STRENGTH] = "Сила ЭЛТ-фильтра",
+    [UI_STR_OPT_TONE_GAMMA] = NULL,      /* newer than the translation: English */
+    [UI_STR_OPT_TONE_BRIGHTNESS] = NULL, /* newer than the translation: English */
+    [UI_STR_OPT_TONE_CONTRAST] = NULL,   /* newer than the translation: English */
+    [UI_STR_OPT_TONE_SATURATION] = NULL, /* newer than the translation: English */
+    [UI_STR_OPT_TONE_NOTE] = NULL,       /* newer than the translation: English */
     [UI_STR_VAL_CRT_SCANLINES] = "Линии развертки",
     [UI_STR_VAL_CRT_CONSUMER] = "Бытовой телевизор",
     [UI_STR_VAL_CRT_TRINITRON] = NULL, /* English in his table: English */

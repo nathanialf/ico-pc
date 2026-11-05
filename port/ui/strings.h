@@ -300,6 +300,13 @@ typedef enum UiStrId {
     /* Settings > Display, "CRT filter" and "CRT strength" */
     UI_STR_OPT_CRT,
     UI_STR_OPT_CRT_STRENGTH,
+    /* Options > Picture, the colour adjustment: four rows (1..100, 50 the game's
+       own picture) and the note under them */
+    UI_STR_OPT_TONE_GAMMA,
+    UI_STR_OPT_TONE_BRIGHTNESS,
+    UI_STR_OPT_TONE_CONTRAST,
+    UI_STR_OPT_TONE_SATURATION,
+    UI_STR_OPT_TONE_NOTE,
     UI_STR_VAL_CRT_SCANLINES,
     UI_STR_VAL_CRT_CONSUMER,
     UI_STR_VAL_CRT_TRINITRON,

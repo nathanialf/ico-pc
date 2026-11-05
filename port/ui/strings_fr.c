@@ -209,6 +209,12 @@ const char *const
                 "Nouvelle partie + joue le second voyage : paroles de Yorda traduites, fin et objets changés. Désactivé, c’est le premier voyage, même après avoir fini le jeu.",
             [UI_STR_OPT_CRT] = "Filtre CRT",
             [UI_STR_OPT_CRT_STRENGTH] = "Intensité CRT",
+            [UI_STR_OPT_TONE_GAMMA] = "Gamma",
+            [UI_STR_OPT_TONE_BRIGHTNESS] = "Luminosité de l'image",
+            [UI_STR_OPT_TONE_CONTRAST] = "Contraste",
+            [UI_STR_OPT_TONE_SATURATION] = "Saturation",
+            [UI_STR_OPT_TONE_NOTE] =
+                "50 est l'image du jeu. Carré remet 50. Vaut aussi pour le filtre CRT.",
             [UI_STR_VAL_CRT_SCANLINES] = "Lignes de balayage",
             [UI_STR_VAL_CRT_CONSUMER] = "Téléviseur",
             [UI_STR_VAL_CRT_TRINITRON] = "Trinitron",

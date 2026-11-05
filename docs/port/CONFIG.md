@@ -154,6 +154,10 @@ display option, the [preset](ARCHITECTURE.md#terms) rule and the pacing belong t
 | `crt_mode` | string | `"consumer"` | `scanlines`, `consumer`, `trinitron`, `pvm`, `shadow` |
 | `crt_strength` | float | `1.0` | 0..1 |
 | `crt_scanlines`, `crt_mask`, `crt_halation`, `crt_bloom`, `crt_curvature` | float | `-1` | file only; below 0 is the mode's value |
+| `gamma` | int | `50` | Picture > Gamma (`RdSettings.toneGamma`): 1..100, 50 the game's own picture; outside the range clamped, a word 50, each with a `video:` stderr line; no key (a file from before the rows) is 50; written with every save; outside the preset, with or without the CRT filter |
+| `brightness` | int | `50` | Picture > Picture brightness (`RdSettings.toneBrightness`): as `gamma`. Not the game's own Brightness row (`systemStatus[11]`, the pause menu's, never written here) |
+| `contrast` | int | `50` | Picture > Contrast (`RdSettings.toneContrast`): as `gamma` |
+| `saturation` | int | `50` | Picture > Saturation (`RdSettings.toneSaturation`): as `gamma` |
 | `texture_pack` | bool | `true` | load an installed texture pack (the disc's serial folder: SCES-50760 or SCPS-11003, [PACKS.md](PACKS.md)) |
 | `dump_textures` | bool | `false` | write each texture under its PCSX2 name |
 | `model_pack` | bool | `true` | load an installed model pack |
