@@ -1730,12 +1730,41 @@ static struct {
 
 static int origGate(int keep, bool busy)
 {
-    (void)keep;
     const unsigned n = s_og.calls++;
-    const int answer = s_og.mode == 1 && (n & 1u) ? RD_GATE_LATE : RD_GATE_PRESENT;
+    /* mode 2: window_orig_gate's busy arm (pace_original_gate): a frame
+       that is not a keep frame is left out while told busy */
+    const int answer = s_og.mode == 2 && busy && !keep ? RD_GATE_BUSY
+                       : s_og.mode == 1 && (n & 1u)    ? RD_GATE_LATE
+                                                       : RD_GATE_PRESENT;
     s_og.other += !t_testThread || rd_thread_on_render();
     s_og.busy += busy && answer == RD_GATE_PRESENT ? 1u : 0u;
     return answer;
+}
+
+/* The submit thread's hook (rd_submit_thread.h rd__submit_test_hook): the
+ * first present held, as a driver's present call that blocks, until this
+ * thread releases it (or 10 s pass: a test that would wait for it fails
+ * instead of hanging) */
+static int s_shEntered, s_shRelease, s_shHeld;
+
+static bool spinUntil(const int *flag, double ms)
+{
+    const double t0 = ico_thread_now_ms();
+    while (!__atomic_load_n(flag, __ATOMIC_ACQUIRE)) {
+        if (ico_thread_now_ms() - t0 > ms) {
+            return false;
+        }
+    }
+    return true;
+}
+
+static void submitHold(void)
+{
+    if (__atomic_exchange_n(&s_shHeld, 1, __ATOMIC_ACQ_REL)) {
+        return;
+    }
+    __atomic_store_n(&s_shEntered, 1, __ATOMIC_RELEASE);
+    (void)spinUntil(&s_shRelease, 10000.0);
 }
 
 /* the presents' records popped since the last call: how many, and how many
@@ -1910,6 +1939,74 @@ static void threadOriginal(void)
         rd_thread_local_stop();
     }
     setEnv("ICO_RD_ORIGINAL_ASYNC", NULL);
+    /* the busy skip, made certain through the submit side: the first
+       picture's present held on the submit thread (its render job over, so
+       the render thread's part reads idle), the gate answering as
+       window_orig_gate does; the next frames are left out (not replayed,
+       counted as busy) and SCENE stays the first one's */
+    if (rd_thread_local_start(RD_THREAD_ON)) {
+        if (!rd_thread_submit_on()) {
+            printf("Original, busy: no submit thread on this device; the held present is not "
+                   "driven\n");
+        } else {
+            const unsigned skipFrames = 4;
+            memset(&s_og, 0, sizeof(s_og));
+            s_og.mode = 2;
+            __atomic_store_n(&s_shEntered, 0, __ATOMIC_RELEASE);
+            __atomic_store_n(&s_shRelease, 0, __ATOMIC_RELEASE);
+            __atomic_store_n(&s_shHeld, 0, __ATOMIC_RELEASE);
+            rd__submit_test_hook(submitHold);
+            rd_thread_block_take(&b);
+            rd_frame_post_take(&fp);
+            gif_HostFrameReset();
+            dl_Clear();
+            recordFrame(); /* both idle: handed over */
+            const bool entered = spinUntil(&s_shEntered, 5000.0);
+            bool renderIdle = false;
+            {
+                const double t0 = ico_thread_now_ms();
+                while (!(renderIdle = !rd__thread_picture_busy_render()) &&
+                       ico_thread_now_ms() - t0 < 5000.0) {
+                    /* the render job's end, after its post to the submit thread */
+                }
+            }
+            const bool busyHeld = rd__thread_picture_busy();
+            CHECK(entered && renderIdle && rd_thread_submit_unfinished() && busyHeld,
+                  "Original, busy: the present held on the submit thread (%d), the render "
+                  "thread's part idle (%d): busy %d (the submit thread's part of it)",
+                  entered, renderIdle, busyHeld);
+            for (unsigned k = 0; k < skipFrames; k++) {
+                gif_HostFrameReset();
+                dl_Clear();
+                recordFrame(); /* told busy: left out */
+            }
+            __atomic_store_n(&s_shRelease, 1, __ATOMIC_RELEASE);
+            (void)rd_thread_drain();
+            rd__submit_test_hook(NULL);
+            rd_thread_block_take(&b);
+            rd_frame_post_take(&fp);
+            CHECK(s_og.calls == skipFrames + 1u && fp.busySkips == skipFrames &&
+                      fp.posts + fp.busySkips == s_og.calls && fp.lateSkips == 0 &&
+                      fp.inlines == 0 && b.pictures == fp.posts && fp.posts == 1u,
+                  "Original, busy: the gate %u times, %u left out as busy, %u handed over, %u "
+                  "inside the step, %u late, %u pictures on the render thread",
+                  s_og.calls, fp.busySkips, fp.posts, fp.inlines, fp.lateSkips, b.pictures);
+            {
+                char text[320];
+                rd_frame_post_text(&fp, text, sizeof(text));
+                CHECK(strstr(text, "skipped: render thread busy") != NULL,
+                      "Original, busy: the 10 s clause: %s", text);
+                printf("Original, busy:%s\n", text);
+            }
+            CHECK(readScene(scene, display, &dw, &dh) &&
+                      memcmp(scene, refScene, (size_t)512 * 512 * 4) == 0,
+                  "Original, busy: SCENE the handed-over frame's, the frames left out not "
+                  "replayed");
+        }
+        rd_thread_local_stop();
+    } else {
+        CHECK(0, "Original, busy: the renderer's own thread could not start");
+    }
 out:
     rd_set_replay_gate(NULL);
     (void)rd_frame_post_last_take(&last);

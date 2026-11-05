@@ -335,6 +335,10 @@ bool rd__replay_frame_async(const RdFrame *f, int keep, bool present);
 bool rd__replay_frame_post_ok(void);
 bool rd__thread_picture_busy(void);
 bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs);
+/* The tests' read (rd_tex_test): the render thread's part of
+ * rd__thread_picture_busy alone, the job of the picture posted last not
+ * ended; the submit thread's part is rd_thread_submit_unfinished */
+bool rd__thread_picture_busy_render(void);
 /* rd_end_frame's replay inside the game's step runs on the calling thread
  * (set around it, on whichever thread runs it): RdPerfRecord.presentThread
  * RD_PRESENT_IN_STEP (rd_perf.c) */

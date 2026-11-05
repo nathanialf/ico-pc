@@ -49,6 +49,15 @@ static _Thread_local bool t_onS;
 static _Thread_local bool t_kept;
 static _Thread_local RdSubmitJob t_job;
 
+/* the tests' seam (rd__submit_test_hook): kept apart from s_st, which a
+   start clears */
+static void (*s_testHook)(void);
+
+void rd__submit_test_hook(void (*fn)(void))
+{
+    __atomic_store_n(&s_testHook, fn, __ATOMIC_RELEASE);
+}
+
 /* the list's end, its submit and the present: rd__submit_frame's tail */
 static void tail(RdSubmitJob *j)
 {
@@ -59,6 +68,10 @@ static void tail(RdSubmitJob *j)
     const double t1 = rd__now_ms();
     j->submitMs = t1 - t0;
     if (j->present) {
+        void (*hook)(void) = __atomic_load_n(&s_testHook, __ATOMIC_ACQUIRE);
+        if (hook != NULL && t_onS) {
+            hook(); /* the test's driver present that blocks */
+        }
         rhi_present();
     }
     j->presentMs = rd__now_ms() - t1;

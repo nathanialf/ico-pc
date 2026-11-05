@@ -881,6 +881,11 @@ bool rd__thread_picture_busy(void)
     return __atomic_load_n(&s_picBusy, __ATOMIC_ACQUIRE) != 0 || rd_thread_submit_unfinished();
 }
 
+bool rd__thread_picture_busy_render(void)
+{
+    return __atomic_load_n(&s_picBusy, __ATOMIC_ACQUIRE) != 0;
+}
+
 bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs)
 {
     *waitMs = 0.0;

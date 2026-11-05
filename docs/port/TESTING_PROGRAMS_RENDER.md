@@ -1331,7 +1331,15 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   picture before, the presents on the submit thread, the 10 s clause's words, and SCENE and
   DISPLAY byte for byte the reference's; the gate leaving out every second frame: 15 pictures of
   30, the same pixels; under `ICO_RD_ORIGINAL_ASYNC=0` every frame replayed inside the step
-  (`rd_submit_async` false), the same pixels. It is the render thread's program to run under
+  (`rd_submit_async` false), the same pixels; and the busy skip made certain where there is a
+  submit thread: the first picture's present held on the submit thread
+  (`rd__submit_test_hook`, as a driver's present that blocks; released after at most 10 s, so a
+  wait for it fails rather than hangs) with the render thread's part of busy idle
+  (`rd__thread_picture_busy_render`), `rd__thread_picture_busy` true (deleting the submit
+  thread's part of it fails here), and a gate answering `RD_GATE_BUSY` when told busy as
+  `window_orig_gate` does: the next four frames left out (`busySkips` 4, posts plus skips the
+  gate's calls, one picture on the render thread, the clause's "skipped: render thread busy")
+  and SCENE the handed-over frame's. It is the render thread's program to run under
   ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
   build folder of its own (`build-host/linux-x64-tsan`), `--target rd_tex_test`, run with
   `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`; a report is a failure.
