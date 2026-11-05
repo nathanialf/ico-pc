@@ -33,6 +33,7 @@
 #endif
 
 #include "reg.hlsli"
+#include "tone.hlsli"
 
 cbuffer CrtCB : ICO_REG(b1, 1)
 {
@@ -44,8 +45,12 @@ cbuffer CrtCB : ICO_REG(b1, 1)
     float4 c_tone; // vignette, gamma in, gamma out, strength
     float4 c_pass; // x mirror, y unused (the slot's row gain is per pixel, rowGainOf), zw 1 /
                    // the blurred target's size
-    float4 c_pad0; // IcoCrtCB.pad: the slot's size with IcoDrawCB
-    float4 c_pad1;
+    // the colour adjustment (tone.hlsli; rd__tone_params): brightness,
+    // contrast, saturation, gamma factors, applied to the source's colour
+    // before the filter linearises it when c_toneOn.x is 1 (a Picture tone
+    // row not 50, rd__tone_active); IcoCrtCB.pad[0..3]
+    float4 c_toneAdj;
+    float4 c_toneOn; // x: 1 on, 0 off; yzw unused (IcoCrtCB.pad[4..7])
 };
 
 Texture2D<float4> g_texture : ICO_REG(t1, 2);
@@ -78,9 +83,20 @@ float luma(float3 c)
     return dot(c, float3(0.299, 0.587, 0.114));
 }
 
+// The colour adjustment, the finished picture's colour c (0..1) adjusted
+// before the filter reads it; off (every Picture tone row at 50) c itself.
+// A uniform branch: off, the filter's arithmetic is what it was without it
+float3 toneOf(float3 c)
+{
+    if (c_toneOn.x > 0.5) {
+        c = saturate(tone_adjust(c, c_toneAdj));
+    }
+    return c;
+}
+
 float3 linearAt(float2 uv)
 {
-    return powp(g_texture.SampleLevel(g_sampler, uv, 0.0).rgb, c_tone.y);
+    return powp(toneOf(g_texture.SampleLevel(g_sampler, uv, 0.0).rgb), c_tone.y);
 }
 
 // The 9-tap Gaussian, sigma 2 taps: exp(-i^2 / 8), i = 0..4, normalised
@@ -114,7 +130,7 @@ float4 crt_blur_ps(CrtVSOut i) : SV_Target0
 float3 linearLoad(int2 p)
 {
     int2 hi = int2(c_src.xy) - int2(1, 1);
-    return powp(g_texture.Load(int3(clamp(p, int2(0, 0), hi), 0)).rgb, c_tone.y);
+    return powp(toneOf(g_texture.Load(int3(clamp(p, int2(0, 0), hi), 0)).rgb), c_tone.y);
 }
 
 // The beam of a line of colour c at distance d (lines): a Gaussian whose

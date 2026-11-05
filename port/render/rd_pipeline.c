@@ -508,9 +508,10 @@ RdPipeKeyInt rd__post_key(RdVsId vs, RdFsId fs, RhiFormat colorFmt)
     return k;
 }
 
-RdPipeKeyInt rd__present_depth_key(RhiFormat colorFmt)
+RdPipeKeyInt rd__present_depth_key(RhiFormat colorFmt, bool tone)
 {
-    RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_BLIT_DEPTH, colorFmt);
+    RdPipeKeyInt k =
+        rd__post_key(RD_VS_BLIT, tone ? RD_FS_BLIT_DEPTH_TONE : RD_FS_BLIT_DEPTH, colorFmt);
     k.depthFmt = RHI_FMT_D32F;
     k.gs.ztst = RD_ZTST_ALWAYS;
     k.gs.zwrite = RD_ZWRITE_ON;
@@ -4303,6 +4304,13 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
     n = rd__add_pipe_key(out, max, n, &dateSnap);
     n = rd__add_pipe_key(out, max, n, &blitA);
     n = rd__add_pipe_key(out, max, n, &blitB);
+    /* the box blit with the colour adjustment (a Picture tone row not 50,
+     * rd__tone_active), on both outputs: made at start-up whatever the
+     * settings, so moving a row makes no pipeline at run time */
+    const RdPipeKeyInt blitToneA = rd__post_key(RD_VS_BLIT, RD_FS_BLIT_TONE, RHI_FMT_RGBA8_UNORM);
+    const RdPipeKeyInt blitToneB = rd__post_key(RD_VS_BLIT, RD_FS_BLIT_TONE, RHI_FMT_BGRA8_UNORM);
+    n = rd__add_pipe_key(out, max, n, &blitToneA);
+    n = rd__add_pipe_key(out, max, n, &blitToneB);
     /* the present's box average of DISPLAY into an RGBA8 texture of the box's
      * (or the game's own) size (rd_present.c reduceInto: supersampling, a
      * scaled scene with more texels than the box has pixels, Downsampling) */
@@ -4312,10 +4320,12 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
      * device cannot draw to a D32F depth buffer: a render pass with that
      * attachment is invalid there) */
     if (!g_rd.hasDevice || rhi_limits()->depth32Attachment) {
-        const RdPipeKeyInt depthA = rd__present_depth_key(RHI_FMT_RGBA8_UNORM);
-        const RdPipeKeyInt depthB = rd__present_depth_key(RHI_FMT_BGRA8_UNORM);
-        n = rd__add_pipe_key(out, max, n, &depthA);
-        n = rd__add_pipe_key(out, max, n, &depthB);
+        for (int tone = 0; tone < 2; tone++) {
+            const RdPipeKeyInt depthA = rd__present_depth_key(RHI_FMT_RGBA8_UNORM, tone != 0);
+            const RdPipeKeyInt depthB = rd__present_depth_key(RHI_FMT_BGRA8_UNORM, tone != 0);
+            n = rd__add_pipe_key(out, max, n, &depthA);
+            n = rd__add_pipe_key(out, max, n, &depthB);
+        }
     }
     n = rd__add_pipe_key(out, max, n, &exact);
     return n;

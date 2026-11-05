@@ -94,6 +94,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_submit.h"
+#include "rd_tone.h"
 #include "shader_consts.h"
 
 typedef struct RdPresentPreset {
@@ -680,10 +681,14 @@ static bool snapWindow(uint32_t sw, float crop, uint32_t boxW, float *u0, float 
  * at each side of src (sourceCrop; 0: all of it); keepOpen leaves the pass
  * open for the caller to draw more into dst and end it.  sc: the scissor
  * inside the box (the border mask, rd__border_mask: the cleared black
- * stays in the bands, the picture keeps the box's scale), NULL the box */
+ * stays in the bands, the picture keeps the box's scale), NULL the box.
+ * tone: through the colour adjustment (blit_tone_ps, DrawCB.param
+ * rd__tone_params; rd_tone.h), only the box blit's own call; the line
+ * doubling and rd__present_blit copy */
 static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
                  RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load, const RhiRect *box,
-                 const RhiRect *sc, RdFilter filter, int mirror, float crop, bool keepOpen)
+                 const RhiRect *sc, RdFilter filter, int mirror, float crop, bool keepOpen,
+                 bool tone)
 {
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
@@ -696,7 +701,7 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
     RhiViewport vp = {(float)box->x, (float)box->y, (float)box->w, (float)box->h, 0.0f, 1.0f};
     rhi_cmd_set_viewport(cl, &vp);
     rhi_cmd_set_scissor(cl, sc ? sc : box);
-    RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_BLIT, dstFmt);
+    RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, tone ? RD_FS_BLIT_TONE : RD_FS_BLIT, dstFmt);
     RhiPipeline pipe = rd__get_pipeline(&k);
     if (pipe.id) {
         IcoDrawCB cb;
@@ -705,6 +710,9 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
             cb.col[i] = 0x80; /* modulate by 1.0: identity */
         }
         cb.mode[0] = ICO_DF_TEXTURED | ICO_DF_TCC_RGBA;
+        if (tone) {
+            rd__tone_params(cb.param);
+        }
         /* mirrored: the source rectangle right to left (blit_vs interpolates
          * u0 + t (u1 - u0)): u = sw (1 - t), exact at the box's pixel
          * centres when the scale is a power of two.  A crop narrows it by
@@ -734,7 +742,7 @@ void rd__present_blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
                       RhiFormat dstFmt, uint32_t dw, uint32_t dh, RhiLoadOp load,
                       const RhiRect *box, RdFilter filter, int mirror, float crop)
 {
-    blit(cl, src, sw, sh, dst, dstFmt, dw, dh, load, box, NULL, filter, mirror, crop, false);
+    blit(cl, src, sw, sh, dst, dstFmt, dw, dh, load, box, NULL, filter, mirror, crop, false, false);
 }
 
 /* ------------------------------------------------------ the supersampling
@@ -1005,7 +1013,7 @@ static void depthShutdown(void)
  * run, and the plain blit draws the box */
 static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, RhiTexture dst,
                       RhiFormat dstFmt, uint32_t dw, uint32_t dh, const RhiRect *box,
-                      const RhiRect *sc, RdFilter filter, int mirror, float crop)
+                      const RhiRect *sc, RdFilter filter, int mirror, float crop, bool tone)
 {
     RdTargetRec *ts = rd__target_rec(RD_TARGET_SCENE + 1);
     if (!ts || !ts->withDepth || !ts->depth.id || ts->depthState == RHI_STATE_UNDEFINED) {
@@ -1024,7 +1032,7 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
         s_depth.outW = dw;
         s_depth.outH = dh;
     }
-    const RdPipeKeyInt k = rd__present_depth_key(dstFmt);
+    const RdPipeKeyInt k = rd__present_depth_key(dstFmt, tone);
     const RhiPipeline pipe = rd__get_pipeline(&k);
     if (!s_depth.out.id || !pipe.id) {
         if (!s_depth.failLogged) {
@@ -1058,13 +1066,17 @@ static bool depthBlit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t s
     /* blit()'s scissor: the border mask's bands keep the cleared black and
      * the far depth of the bars */
     rhi_cmd_set_scissor(cl, sc ? sc : box);
-    /* blit()'s constants, so the colour is blit_ps's bytes */
+    /* blit()'s constants, so the colour is blit_ps's bytes (blit_tone_ps's
+     * with tone) */
     IcoDrawCB cb;
     memset(&cb, 0, sizeof(cb));
     for (int i = 0; i < 4; i++) {
         cb.col[i] = 0x80;
     }
     cb.mode[0] = ICO_DF_TEXTURED | ICO_DF_TCC_RGBA;
+    if (tone) {
+        rd__tone_params(cb.param);
+    }
     float u0, u1;
     snapWindow(sw, crop, box->w, &u0, &u1);
     cb.uvRect[0] = mirror ? u1 : u0;
@@ -2424,7 +2436,7 @@ void rd__present_record(RhiCommandList cl)
         rd__transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_RENDER_TARGET);
         const RhiRect full = {0, 0, lw, lh};
         blit(cl, src, sw, sh, g_rd.presentLines, RHI_FMT_RGBA8_UNORM, lw, lh, RHI_LOAD_DONT_CARE,
-             &full, NULL, pr->doubleFilter, 0, 0.0f, false);
+             &full, NULL, pr->doubleFilter, 0, 0.0f, false, false);
         rd__transition(cl, g_rd.presentLines, &g_rd.presentLinesState, RHI_STATE_SHADER_READ);
         src = g_rd.presentLines;
         sw = lw;
@@ -2462,13 +2474,17 @@ void rd__present_record(RhiCommandList cl)
         RhiRect mask;
         const RhiRect *sc =
             rd__border_mask(&box, rd__frame_wexact(), g_rd.gsH, &mask) ? &mask : NULL;
+        /* the colour adjustment in this blit (Options > Picture's tone
+         * rows; rd_tone.h): the finished picture's colour, the box alone
+         * (the bars stay the cleared black) */
+        const bool tone = rd__tone_active();
         const bool depth = depthWanted() && !rd__crt_on() &&
                            depthBlit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, &box, sc,
-                                     scaleFilter, mirror, crop);
+                                     scaleFilter, mirror, crop, tone);
         if (!depth) {
             open = !rd__crt_on();
             blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box, sc,
-                 scaleFilter, mirror, crop, open);
+                 scaleFilter, mirror, crop, open, tone);
         }
     }
     /* the deferred text, drawn in list order with the regions and colours

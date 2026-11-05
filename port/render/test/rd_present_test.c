@@ -162,6 +162,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_tone.h"
 #include "rd_submit.h"
 #include "rd_tex.h"
 #include "../../core/region.h" /* the Japanese disc's reduction crop */
@@ -770,6 +771,19 @@ static RdSettings originalSettings(void)
     s.aspect = 4.0f / 3.0f;
     s.vsync = 1;
     return s;
+}
+
+/* the colour adjustment exactRun and depthRun present with
+ * (rd_present_tone_test.inc): gamma, brightness, contrast, saturation; 0
+ * (every other case) leaves the settings at 0, the game's picture */
+static uint8_t s_runTone[4];
+
+static void applyRunTone(RdSettings *s)
+{
+    s->toneGamma = s_runTone[0];
+    s->toneBrightness = s_runTone[1];
+    s->toneContrast = s_runTone[2];
+    s->toneSaturation = s_runTone[3];
 }
 
 /* What the renderer produced for the rich frame on llvmpipe before the
@@ -2771,6 +2785,7 @@ static bool exactRun(float aspect, uint32_t outW, uint32_t outH, int full, Exact
     s.fullPixel = (uint8_t)(full == 1);
     s.borderMask = (uint8_t)(full == 2);
     s.fullHeightScene = 1;
+    applyRunTone(&s);
     const uint32_t FW = (uint32_t)ico_frame_width_for(aspect);
     if (!rd_init(FW, 512, &s, NULL)) {
         return false;
@@ -5566,6 +5581,7 @@ static bool depthRun(uint32_t w, uint32_t h, int on, DepthRun *r)
     s.outputWidth = w;
     s.outputHeight = h;
     s.effectsDepth = (uint8_t)on;
+    applyRunTone(&s);
     if (!rd_init(512, 512, &s, NULL)) {
         return false;
     }
@@ -5731,7 +5747,7 @@ static void checkEffectsDepth(void)
     for (int m = 0; m < 2; m++) {
         for (int f = 0; f < 2; f++) {
             const RdPipeKeyInt k =
-                rd__present_depth_key(f ? RHI_FMT_BGRA8_UNORM : RHI_FMT_RGBA8_UNORM);
+                rd__present_depth_key(f ? RHI_FMT_BGRA8_UNORM : RHI_FMT_RGBA8_UNORM, false);
             CHECK(k.depthFmt == RHI_FMT_D32F && k.gs.zwrite == RD_ZWRITE_ON &&
                       k.gs.ztst == RD_ZTST_ALWAYS && k.fs == RD_FS_BLIT_DEPTH,
                   "effects depth: the key");
@@ -5741,8 +5757,11 @@ static void checkEffectsDepth(void)
     }
 }
 
-/* The effects depth's two start-up keys exist exactly where the device can
- * draw to a D32F depth buffer (RhiLimits.depth32Attachment; false under
+#include "rd_present_tone_test.inc"
+
+/* The effects depth's start-up keys (its two outputs, with and without the
+ * colour adjustment) exist exactly where the device can draw to a D32F
+ * depth buffer (RhiLimits.depth32Attachment; false under
  * ICO_VK_FAKE_NO_D32F_ATTACHMENT, which also gives the limit false). */
 static void checkNoD32Keys(void)
 {
@@ -5756,13 +5775,14 @@ static void checkNoD32Keys(void)
     const bool can = rhi_limits()->depth32Attachment != 0;
     CHECK(can == !fake, "no D32F keys: depth32Attachment %d under the fake %d", (int)can,
           (int)fake);
-    for (int m = 0; m < 2; m++) {
+    for (int m = 0; m < 4; m++) {
         for (int f = 0; f < 2; f++) {
             const RdPipeKeyInt k =
-                rd__present_depth_key(f ? RHI_FMT_BGRA8_UNORM : RHI_FMT_RGBA8_UNORM);
-            CHECK(reachable(&k, m != 0) == can,
-                  "no D32F keys: the %s key is %sin the start-up set (depth32Attachment %d)",
-                  f ? "BGRA8" : "RGBA8", can ? "not " : "", (int)can);
+                rd__present_depth_key(f ? RHI_FMT_BGRA8_UNORM : RHI_FMT_RGBA8_UNORM, m >= 2);
+            CHECK(reachable(&k, (m & 1) != 0) == can,
+                  "no D32F keys: the %s key%s is %sin the start-up set (depth32Attachment %d)",
+                  f ? "BGRA8" : "RGBA8", m >= 2 ? " with the colour adjustment" : "",
+                  can ? "not " : "", (int)can);
         }
     }
     rd_shutdown();
@@ -6069,7 +6089,9 @@ int main(int argc, char **argv)
     checkShot(dir);
     checkPresentPasses(dir);
     checkEffectsDepth();
+    checkToneDepth();
     checkNoD32Keys();
+    checkTone();
     checkReduceKey();
     checkBlank();
     checkRingGrowth();
