@@ -149,9 +149,10 @@
  * before the sprite, A = S + a' (A - S), never through P: no light is
  * recycled and nothing runs to white or dark at any k.  feedback then makes
  * no DISPLAY head copy (the sprite does not read DISPLAY), and rd_present
- * hands rd_blur_smooth.c each present (rd__blur_smooth_arm) with k: the
- * present clock's tick over its step on the timer path, the presents the
- * tick before counted under the vsync lock.
+ * hands rd_blur_smooth.c each present (rd__blur_smooth_arm) with the
+ * present clock's time since the present before and its tick on the timer
+ * path (a' from time), k the presents the tick before counted under the
+ * vsync lock (rd_present_clock.c).
  */
 #include <math.h>
 #include <stddef.h>
@@ -6119,24 +6120,6 @@ static struct {
     uint32_t tickPresents, lastTickPresents;
 } s_pres;
 
-/* the present clock's last tick and step (rd_present_clock_alpha): Motion
- * blur: Smooth's k on the timer path */
-static double s_clockTickMs, s_clockStepMs;
-
-/* the presents a tick for Motion blur: Smooth (rd_blur_smooth.c), at a
- * tick's first present: the clock's tick over its step when the clock ran
- * for this present (raw a number), else the presents the tick before
- * counted (the vsync lock); 0 before either is known (the first tick) */
-static uint32_t presentsPerTick(double raw)
-{
-    if (!isnan(raw) && s_clockTickMs > 0.0 && s_clockStepMs > 0.0) {
-        const double k = floor(s_clockTickMs / s_clockStepMs + 0.5);
-        return k < 1.0 ? 1u
-                       : (k > (double)RD_BLUR_SMOOTH_K_MAX ? RD_BLUR_SMOOTH_K_MAX : (uint32_t)k);
-    }
-    return s_pres.lastTickPresents;
-}
-
 #define RD_INTERP_LOG_FRAMES 250
 
 static void presentLog(void)
@@ -6363,10 +6346,6 @@ static void presentLog(void)
     s_pres.lastTickPresents = lastTickPresents;
 }
 
-/* rd__present_clock_raw: the last rd_present_clock_alpha's value before its
- * clamp, NAN once rd_present has taken it */
-static double s_clockRaw = NAN;
-
 static void presentReset(void)
 {
     memset(&s_pres, 0, sizeof(s_pres));
@@ -6519,7 +6498,8 @@ bool rd_present(float alpha)
      * ICO_RD_S2_LEGACY=1 the window replaces the clock's alpha by the
      * measured one after the clock ran, and the bin still follows the
      * clock's value */
-    const double raw = rd__thread_clock_raw(); /* the poster's, on the render thread */
+    double gap[2];                            /* and its time since the present before, its tick */
+    const double raw = rd__thread_clock(gap); /* the poster's, on the render thread */
     /* the tick's first present keeps the feedback passes' inputs (FEED128,
      * and DISPLAY for the motion blur), the later ones start from them
      * again (feedback) */
@@ -6531,7 +6511,7 @@ bool rd_present(float alpha)
         s_pres.tickPresents = 0;
     }
     s_pres.tickPresents++;
-    const uint32_t k = first ? presentsPerTick(raw) : 0u;
+    const uint32_t k = first ? rd__present_clock_k(raw, s_pres.lastTickPresents) : 0u;
     {
         const int bin = rd__alpha_bin(alpha, raw);
         s_pres.alphaBins[bin]++;
@@ -6543,7 +6523,7 @@ bool rd_present(float alpha)
     if (cur->keep) {
         /* a keep frame draws lists 11..12 over DISPLAY: once; the other
          * presents show DISPLAY again (an empty keep frame) */
-        rd__blur_smooth_arm(first, k);                   /* a keep frame draws no motion blur */
+        rd__blur_smooth_arm(first, k, gap[0], gap[1]);   /* a keep frame draws no motion blur */
         blendedDumpTake(NULL, true, cur->number, alpha); /* the tick's own picture */
         if (first) {
             return rd__replay_frame_async(cur, 1, true);
@@ -6565,7 +6545,7 @@ bool rd_present(float alpha)
         blendedDumpTake(NULL, false, cur->number, alpha);
         return false;
     }
-    rd__blur_smooth_arm(first, k); /* Motion blur: Smooth's present */
+    rd__blur_smooth_arm(first, k, gap[0], gap[1]); /* Motion blur: Smooth's present */
     const bool ok = rd__present_blended(f, first, true);
     /* F12's blended frame: after the present, so the dump's write is not
      * in the picture's time; s_out stays the frame drawn until the next
@@ -6574,7 +6554,7 @@ bool rd_present(float alpha)
     return ok;
 }
 
-/* ---------------------------------------------------------- present clock */
+/* ------------------------------- the alpha bins (the clock: rd_present_clock.c) */
 
 int rd__alpha_bin(float alpha, double raw)
 {
@@ -6589,58 +6569,4 @@ int rd__alpha_bin(float alpha, double raw)
     }
     const int k = (int)(alpha * 10.0f);
     return RD_ALPHA_BIN_TENTH0 + (k < 0 ? 0 : (k > 9 ? 9 : k));
-}
-
-double rd__present_clock_raw(void)
-{
-    return s_clockRaw;
-}
-
-double rd__present_clock_raw_take(void)
-{
-    const double r = s_clockRaw;
-    s_clockRaw = NAN;
-    return r;
-}
-
-float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, double tickMs,
-                             double nominalMs)
-{
-    s_clockRaw = NAN;
-    if (!(tickMs > 0.0)) {
-        return 0.0f;
-    }
-    const double step = c->stepMs > 0.0 ? c->stepMs : (nominalMs > 0.0 ? nominalMs : 0.0);
-    const double since = nowMs - c->lastMs;
-    bool reset = c->presents == 0 || since < 0.0 || !(step > 0.0) || since > 4.0 * step;
-    if (!reset) {
-        /* the running mean of the intervals, a sixteenth of the difference a
-         * present */
-        c->stepMs = step + (since - step) / 16.0;
-        const double predicted = c->clockMs + c->stepMs;
-        const double err = nowMs - predicted;
-        if (fabs(err) > 0.5 * tickMs) {
-            reset = true;
-        } else {
-            c->clockMs = predicted + err / 8.0;
-        }
-    }
-    if (reset) {
-        c->clockMs = nowMs;
-        if (c->presents != 0 && since > 0.0 && (!(step > 0.0) || since <= 4.0 * step)) {
-            c->stepMs = since; /* the first interval, when nothing nominal was given */
-        } else if (!(c->stepMs > 0.0)) {
-            c->stepMs = nominalMs > 0.0 ? nominalMs : 0.0;
-        }
-        c->presents = 0;
-        c->resets++;
-    }
-    c->presents++;
-    c->lastMs = nowMs;
-    s_clockTickMs = tickMs; /* Motion blur: Smooth's presents a tick */
-    s_clockStepMs = c->stepMs;
-    double a = (c->clockMs - tickAtMs) / tickMs;
-    s_clockRaw = a; /* before the clamp: the alpha histogram's "clamped from below" */
-    a = a < 0.0 ? 0.0 : (a > 0.999 ? 0.999 : a);
-    return (float)a;
 }

@@ -2950,9 +2950,15 @@ void rd__interp_set_reproject(bool on);
  * noted for it, so a present the clock did not time, the vsync lock's,
  * finds none).  For the alpha histogram and the tests. */
 double rd__present_clock_raw(void);
-/* The same value taken: NAN after it (rd_thread.c rd_present_post, which
- * hands it to the render thread's rd_present) */
-double rd__present_clock_raw_take(void);
+/* The same value taken, NAN after (rd_thread.c rd_present_post hands it to
+ * the render thread's rd_present), gap (or NULL) the time since the present
+ * before and the tick, 0 after or untimed.  rd_present_clock.c, as are
+ * Smooth's k (the clock's tick over its step, else counted) and the step
+ * and resets of Smooth's block line. */
+double rd__present_clock_take(double gap[2]);
+uint32_t rd__present_clock_k(double raw, uint32_t counted);
+double rd__present_clock_step_ms(void);
+uint32_t rd__present_clock_resets_take(void);
 /* F12's blended dump is armed (rd_dump_blended_arm): the present that
  * takes it waits for its end (rd_thread.c) */
 bool rd__blended_dump_armed(void);
@@ -4491,15 +4497,15 @@ uint32_t rd__wrap_pipeline_count(void);
  * under Smooth").  The motion blur's sprite reads, instead of the DISPLAY
  * the tick started from, an RGBA16F accumulator of the scenes of every
  * present, A = S + a' (A - S), resolved into an RGBA8 scene-class temporary
- * target, with the sprite's FIX spread over the tick's presents:
- * FIX' = clamp(round(128 (FIX / 128)^(1 / k)), FIX, 127).
+ * target, with FIX' = clamp(round(128 (FIX / 128)^(dt / tick)), FIX, 127),
+ * dt the time since the present before in [tick / 64, tick], or tick / k.
  * rd__blur_smooth_arm      the presenters, before a replay that presents
  *                          (rd_interp.c rd_present, rd_core.c replayOnHost;
  *                          the replay tool before its own): a tick's first
- *                          present, and k the presents a tick (1..64); a
- *                          replay not armed (a self-test, a dump's, --time)
- *                          draws the sprite as Original and leaves the
- *                          accumulator alone
+ *                          present, k the presents a tick (1..64), dt and
+ *                          tick (tickMs 0: FIX' from k); a replay not armed
+ *                          (a self-test, a dump's, --time) draws the sprite
+ *                          as Original and leaves the accumulator alone
  * rd__blur_smooth_replay_end  rd__replay_frame after every replay: an armed
  *                          replay that is not a keep frame's and drew no
  *                          motion blur sprite (the game's alpha 0, the
@@ -4513,6 +4519,7 @@ uint32_t rd__wrap_pipeline_count(void);
  *                          Original); why is logged when it held one
  * rd__blur_smooth_shutdown the above and the two pipelines (rd__gpu_shutdown)
  * rd__blur_smooth_fix      FIX' of FIX over k presents (pure)
+ * rd__blur_smooth_fix_dt   the same at dt (pure; = fix(k) at tick / k)
  * rd__blur_smooth_block    the 10 s summary's line (rd_interp.c presentLog),
  *                          logged when the block drew a Smooth sprite or
  *                          restarted, then the block's counts start again
@@ -4522,14 +4529,15 @@ uint32_t rd__wrap_pipeline_count(void);
  *                          restarts, the sprites drawn as Original while
  *                          Smooth was set (tests)
  * k (rd_interp.c rd_present): the present clock's tick over its step
- * (rd_present_clock_alpha) on the timer path, the presents the tick before
+ * (rd__present_clock_k) on the timer path, the presents the tick before
  * counted under the vsync lock, 1 for the first tick */
-void rd__blur_smooth_arm(int firstOfTick, uint32_t presentsPerTick);
+void rd__blur_smooth_arm(int firstOfTick, uint32_t presentsPerTick, double sinceMs, double tickMs);
 void rd__blur_smooth_replay_end(int keep);
 bool rd__blur_smooth_active(void);
 void rd__blur_smooth_free(const char *why);
 void rd__blur_smooth_shutdown(void);
 uint8_t rd__blur_smooth_fix(uint32_t fix, uint32_t presentsPerTick);
+uint8_t rd__blur_smooth_fix_dt(uint32_t fix, double dtMs, double tickMs);
 void rd__blur_smooth_block(void);
 void rd__blur_smooth_sizes(uint32_t acc[2], uint32_t res[2]);
 void rd__blur_smooth_counts(uint64_t *drawn, uint64_t *restarts, uint64_t *original);

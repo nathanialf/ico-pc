@@ -2329,8 +2329,8 @@ typedef struct ReplayCall {
 static void replayOnHost(void *arg)
 {
     const ReplayCall *c = (const ReplayCall *)arg;
-    rd__thread_in_step(true);  /* its record's present: "inside the game step" */
-    rd__blur_smooth_arm(1, 1); /* Motion blur: Smooth at one present a tick */
+    rd__thread_in_step(true);            /* its record's present: "inside the game step" */
+    rd__blur_smooth_arm(1, 1, 0.0, 0.0); /* Motion blur: Smooth at one present a tick */
     rd__replay_frame(c->f, c->keep, true);
     rd__thread_in_step(false);
 }

@@ -94,6 +94,7 @@ static ReplayArgs s_picReplay;
 typedef struct PresentArgs {
     float alpha;
     double raw;
+    double gap[2]; /* rd__present_clock_take's */
     bool ok;
 } PresentArgs;
 
@@ -782,7 +783,7 @@ static void replayJob(void *arg)
 {
     ReplayArgs *r = arg;
     if (r->armSmooth) {
-        rd__blur_smooth_arm(1, 1); /* Motion blur: Smooth at one present a tick */
+        rd__blur_smooth_arm(1, 1, 0.0, 0.0); /* Motion blur: Smooth at one present a tick */
     }
     r->ok = rd__replay_frame_here(r->f, r->keep, r->present);
 }
@@ -942,31 +943,39 @@ bool rd__thread_in_step_now(void)
 
 /* ------------------------------------------------------- the presents */
 
-/* the present clock's value the poster took, for rd_present on the
- * render thread (rd__thread_clock_raw) */
+/* the present clock's value the poster took, and its time since the
+ * present before and its tick, for rd_present on the render thread
+ * (rd__thread_clock) */
 static _Thread_local bool t_rawSet;
-static _Thread_local double t_raw;
+static _Thread_local double t_raw, t_gap[2];
 
 static void presentJob(void *arg)
 {
     PresentArgs *p = arg;
     const bool set = t_rawSet;
-    const double raw = t_raw;
+    const double raw = t_raw, gap0 = t_gap[0], gap1 = t_gap[1];
     t_rawSet = true;
     t_raw = p->raw;
+    t_gap[0] = p->gap[0];
+    t_gap[1] = p->gap[1];
     p->ok = rd_present(p->alpha);
     t_rawSet = set;
     t_raw = raw;
+    t_gap[0] = gap0;
+    t_gap[1] = gap1;
 }
 
-double rd__thread_clock_raw(void)
+double rd__thread_clock(double gap[2])
 {
     if (t_rawSet) {
         const double r = t_raw;
+        gap[0] = t_gap[0];
+        gap[1] = t_gap[1];
         t_rawSet = false; /* taken: a second present in the job finds none */
+        t_gap[0] = t_gap[1] = 0.0;
         return r;
     }
-    return rd__present_clock_raw_take();
+    return rd__present_clock_take(gap);
 }
 
 /* rd_present_post's wait for the picture before: counted as
@@ -1015,7 +1024,8 @@ bool rd_present_post(float alpha)
      * callbacks share port/ui's font state with the step's own text
      * (rd_present.c s_pre) */
     rd__overlay_hand_over();
-    s_picPresent = (PresentArgs){alpha, rd__present_clock_raw_take(), false};
+    s_picPresent = (PresentArgs){alpha, 0.0, {0.0, 0.0}, false};
+    s_picPresent.raw = rd__present_clock_take(s_picPresent.gap);
     s_picTramp = (Tramp){presentJob, &s_picPresent, !wait, NULL};
     if (!wait) {
         handOver();

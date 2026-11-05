@@ -33,7 +33,8 @@ are [RHI.md](RHI.md).
 | `port/platform/hotkeys.h`, `hotkeys.c` | F11, F12, Shift+F12 and the stats period |
 | `port/render/rd_present.c` | DISPLAY to the output: the box, line doubling, the overlay, the display options as scales |
 | `port/render/rd_prerotate.c` | the present into a swapchain made in the surface's own turn ([The turned swapchain](#the-turned-swapchain)) |
-| `port/render/rd_interp.c` | presenting between ticks; the present clock |
+| `port/render/rd_interp.c` | presenting between ticks |
+| `port/render/rd_present_clock.c` | the present clock (`rd_present_clock_alpha`), what it notes for `rd_present`, Motion blur: Smooth's presents a tick |
 | `port/render/rd_crt.c`, `port/shaders/crt.hlsl` | the CRT filter |
 | `port/render/rd_tone.c`, `port/render/rd_tone.h`, `port/shaders/tone.hlsli` | the colour adjustment (Options > Picture's Gamma, Picture brightness, Contrast, Saturation; [Presentation](#presentation)) |
 | `port/platform/fps_counter.h`, `fps_counter.c` | the Frame rate counter's presents per second, free of SDL and rd ([UI.md](UI.md#the-frame-rate-counter)) |
@@ -1735,14 +1736,16 @@ present's copies (`FEED_HELD`, `DISPLAY_HELD`), so the motion blur runs once a t
 rate (`port/render/rd_interp.c`, header comment). Under Motion blur: Smooth
 (`[video] effect_motion_blur_mode = "smooth"`, `RdSettings.motionBlurSmooth`) the motion blur's
 sprite instead reads an RGBA16F accumulator of the scenes of every present, `A = S + a' (A - S)`,
-with `a' = FIX' / 128` and `FIX' = clamp(round(128 (FIX / 128)^(1 / k)), FIX, 127)` for k presents
-a tick, so the trail moves on at every present and keeps the PS2's share over a tick; no
+with `a' = FIX' / 128` and `FIX' = clamp(round(128 (FIX / 128)^(dt / tick)), FIX, 127)` for a present
+dt after the one before (dt held to [tick / 64, tick]), so the trail moves on at every present and
+keeps the PS2's share over a tick whatever the count or spacing of the presents; no
 `DISPLAY_HELD` copy is made then. What it gives up against Original: the light the passes after
 the sprite add (the aura, the brightness step, the reduction's tint, a fade) is not fed
 back into the trail, and the old frame's vertical halving (DISPLAY's H / 2 lines) is gone; a
-still picture is the same within a level. k is the present clock's tick over its step on the
-timer path, the presents the tick before counted under the vsync lock, 1 for the first tick; at
-one present a tick FIX' is FIX ([RENDER_POST.md](RENDER_POST.md#the-motion-blur-under-smooth)).
+still picture is the same within a level. dt is the present clock's time since the present before
+on the timer path; under the vsync lock, with no clock, dt is tick / k, k the presents the tick
+before counted (the refresh period), 1 for the first tick; at one present a tick FIX' is FIX
+([RENDER_POST.md](RENDER_POST.md#the-motion-blur-under-smooth)).
 
 **The still re-present.** A between-tick present whose frame would draw the bytes of the tick's last
 rendered present shows that picture again instead of replaying it (`port/render/rd_reshow.c`,
@@ -1791,8 +1794,15 @@ its chain`, `RdPerfRecord.glowHeld` marks the replay, and `rd_replay_tool --pres
 running mean of the intervals between presents and moves towards the measured time by an eighth of
 the error a present; an error over half a tick, a pause of more than four steps or time going
 backwards resets it; `alpha = (clock - tickAt) / tick` in [0, 0.999], `tickAt` the simulated time
-the frame closed and `tick` the last two closes apart, held to one to four periods
-(`port/render/rd.h` (`RdPresentClock`); `port/render/rd_interp.c` (`rd_present_clock_alpha`);
+the frame closed and `tick` the last two closes apart, held to one to four periods. The step is
+held to a quarter of the nominal interval (the Frame rate's gap, a refresh under FIFO) to four
+times it, without one (Uncapped) a 64th of a tick to a tick; a present less than a quarter of the
+nominal after the one before is a doubled present and moves neither the mean nor the step; a reset
+while presents go on takes the step from that interval when it is in the range (a longer one is a
+pause and keeps the step). A reset that took a doubled present's 0.5 ms as the step would hold it
+there, every later present being over four steps apart and resetting without learning one (issue
+193: Motion blur: Smooth read 64 presents a tick)
+(`port/render/rd.h` (`RdPresentClock`); `port/render/rd_present_clock.c` (`rd_present_clock_alpha`);
 `port/platform/window_present.c` (`pace`)). `ICO_RD_S2_LEGACY=1` takes the raw measured time instead
 and turns off the finer blending (`port/render/rd_internal.h` (`rd__s2_legacy`)). Under the lock the
 alpha is the grid's exact `k / (n * perFrame)` (`pace_lock_alpha`).

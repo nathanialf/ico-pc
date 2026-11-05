@@ -1414,7 +1414,7 @@ static bool replayPrev(void)
         }
         dropHalf(&q);
         if (motionSmooth) {
-            rd__blur_smooth_arm(1, 1); /* Smooth's trail fed by the frames before */
+            rd__blur_smooth_arm(1, 1, 0.0, 0.0); /* Smooth's trail fed by the frames before */
         }
         const bool ok = rd__replay_frame(&q, (int)q.keep, false);
         rhi_wait_frame();
@@ -1832,7 +1832,7 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
     if (n > 4 && strcmp(stem + n - 4, ".png") == 0) {
         stem[n - 4] = '\0';
     }
-    rd__blur_smooth_arm(1, (uint32_t)presentsN);
+    rd__blur_smooth_arm(1, (uint32_t)presentsN, 0.0, 0.0);
     if (!rd__replay_frame(pf, (int)pf->keep, false)) {
         fprintf(stderr, "%s: --presents: PREV's replay failed\n", dump);
         return 1;
@@ -1852,7 +1852,7 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
             rc = 1;
             break;
         }
-        rd__blur_smooth_arm(k == 0, (uint32_t)presentsN);
+        rd__blur_smooth_arm(k == 0, (uint32_t)presentsN, 0.0, 0.0);
         char name[1100];
         snprintf(name, sizeof(name), "%s-p%d.png", stem, k);
         uint32_t w = 0, h = 0;
@@ -2459,7 +2459,7 @@ int main(int argc, char **argv)
     if (motionSmooth) {
         /* a replay of its own is a tick's first present; its trail is the
            --prev frames' (none without them: the trail starts here) */
-        rd__blur_smooth_arm(1, 1);
+        rd__blur_smooth_arm(1, 1, 0.0, 0.0);
         if (!prevCount) {
             printf("note: --motion-blur smooth on one replay holds no trail (give --prev DUMP or "
                    "--interp T PREV --presents N)\n");
