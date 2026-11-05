@@ -805,6 +805,22 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "モーションブラーの強さ",
     [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
         "小さくするとブラーが速く消えます。100はPS2のままです。",
+    [UI_STR_SECTION_UNUSED] = "未使用コンテンツ",
+    [UI_STR_UNUSED_ARENA] = "テスト部屋：アリーナ",
+    [UI_STR_UNUSED_ARENA_NOTE] =
+        "開発者が影との戦いを試した部屋です。出口がないので、STARTから「ゲーム終了」で戻ってください。",
+    [UI_STR_UNUSED_CLIMB] = "テスト部屋：クライミング",
+    [UI_STR_UNUSED_CLIMB_NOTE] =
+        "開発者がよじ登りや箱を試した部屋です。出口がないので、STARTから「ゲーム終了」で戻ってください。",
+    [UI_STR_UNUSED_MOVIE] = "デモムービー（576ライン）",
+    [UI_STR_UNUSED_MOVIE_NOTE] =
+        "タイトル画面で放置すると流れる映像のもう一つの版です。ヨーロッパのテレビ向けに作られ、使われませんでした。",
+    [UI_STR_UNUSED_ART] = "初期展示版のタイトル画像",
+    [UI_STR_UNUSED_ART_NOTE] =
+        "初期の展示版のタイトル画面の画像です。ディスクに残っていますが、表示されません。",
+    [UI_STR_UNUSED_ART_VER] = "展示版：バージョン表記",
+    [UI_STR_UNUSED_ART_START] = "展示版：PRESS START",
+    [UI_STR_UNUSED_ART_COPYRIGHT] = "展示版：コピーライト",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

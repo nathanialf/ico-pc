@@ -798,6 +798,22 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "Motion blur strength",
     [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
         "Lower values make the trail fade faster; 100 is the PS2’s own trail.",
+    [UI_STR_SECTION_UNUSED] = "Unused content",
+    [UI_STR_UNUSED_ARENA] = "Test room: arena",
+    [UI_STR_UNUSED_ARENA_NOTE] =
+        "A room the makers used to try fights with the Shadows; it has no exit, so leave with Start, then End Game.",
+    [UI_STR_UNUSED_CLIMB] = "Test room: climbing",
+    [UI_STR_UNUSED_CLIMB_NOTE] =
+        "A room the makers used to try climbing and boxes; it has no exit, so leave with Start, then End Game.",
+    [UI_STR_UNUSED_MOVIE] = "Attract movie (576 lines)",
+    [UI_STR_UNUSED_MOVIE_NOTE] =
+        "A second copy of the film the title screen plays when left alone, made for European televisions and never shown.",
+    [UI_STR_UNUSED_ART] = "Early show title art",
+    [UI_STR_UNUSED_ART_NOTE] =
+        "Pictures from the title screen of an early show version, left on the disc and never shown.",
+    [UI_STR_UNUSED_ART_VER] = "Early show: version mark",
+    [UI_STR_UNUSED_ART_START] = "Early show: Press Start",
+    [UI_STR_UNUSED_ART_COPYRIGHT] = "Early show: copyright",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

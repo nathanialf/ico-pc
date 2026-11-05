@@ -39,6 +39,7 @@
 #include "settings_graphics.h" /* the Graphics page's rows and Apply */
 #include "settings_backup.h"   /* Extras' Back up your data and Restore from a backup */
 #include "settings_states.h"   /* the Save states page's cards, actions and F6 latch */
+#include "settings_unused.h"   /* Extras > Unused content's host */
 #include "touch_edit_ui.h"     /* the Edit layout page */
 #include "variants.h"          /* the game variants rows (Gameplay and its pages) */
 #include "ui_hint.h"
@@ -1563,6 +1564,18 @@ static int extrasModels(void)
    the title comes back with the cursor on Settings.  Locked: nothing. */
 static void gameCursorOn(int to, int row);
 
+/* the menu closes on to (a start's layout), the title's cursor on Settings */
+static int extrasLeave(int to)
+{
+    if (to < 0) {
+        return -1;
+    }
+    la_host_leave();
+    gameCursorOn(s_origin,
+                 s_entryRow[s_origin == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
+    return to;
+}
+
 static int extrasCredits(void)
 {
     if (!creditsUnlocked()) {
@@ -1573,14 +1586,18 @@ static int extrasCredits(void)
         return -1;
     }
     ui_settings_save();
-    int to = ico_credits_start();
-    if (to < 0) {
+    return extrasLeave(ico_credits_start());
+}
+
+/* Extras > Unused content's rows (settings_unused.c): from the title, as
+   Credits starts */
+static int extrasUnused(int opt)
+{
+    if (!onTitle()) {
         return -1;
     }
-    la_host_leave();
-    gameCursorOn(s_origin,
-                 s_entryRow[s_origin == LAYOUT_TITLE_NEW ? ENTRY_TITLE13 : ENTRY_TITLE12]);
-    return to;
+    ui_settings_save();
+    return extrasLeave(ui__unused_open(opt));
 }
 
 static int extrasOpen(int opt)
@@ -2165,6 +2182,12 @@ static int optShown(int opt, int link)
     }
     if (isExtrasOpt(opt)) {
         return onTitle(); /* the Extras row itself shows from both */
+    }
+    if (opt == UI_OPT_LINK && link == UI_PAGE_UNUSED) {
+        return onTitle() && ui__unused_any_shown(); /* none on the June 2001 demo */
+    }
+    if (ui__unused_row(opt) >= 0) {
+        return onTitle() && ui__unused_shown(opt); /* the disc's own (the host's) */
     }
     if (opt == UI_OPT_EXTRAS_STEAM) {
         return onTitle() && s_steamFn != NULL;
@@ -3514,6 +3537,12 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_EXTRAS_RESTORE, UI_STR_RESTORE_NOTE);
         addNote(pg, UI_OPT_ACH_POPUPS, UI_STR_ACH_POPUPS_ALSO_NOTE);
         break;
+    case UI_PAGE_UNUSED:
+        addNote(pg, UI_OPT_UNUSED_ARENA, UI_STR_UNUSED_ARENA_NOTE);
+        addNote(pg, UI_OPT_UNUSED_CLIMB, UI_STR_UNUSED_CLIMB_NOTE);
+        addNote(pg, UI_OPT_UNUSED_MOVIE, UI_STR_UNUSED_MOVIE_NOTE);
+        addNote(pg, UI_OPT_UNUSED_ART, UI_STR_UNUSED_ART_NOTE);
+        break;
     case UI_PAGE_CHARACTERS: {
         /* a swatch right of each colour row's arrows, then one note row
            for every row but Back (its text chosen at refresh:
@@ -4067,18 +4096,36 @@ static void build(void)
     static const int devStrs[] = {UI_STR_OPT_DEVELOPER_MODE, UI_STR_OPT_DUMP_TEXTURES,
                                   UI_STR_OPT_DUMP_MODELS, UI_STR_OPT_VAR_DEBUG_MENU, UI_STR_BACK};
     /* Characters after Credits (from both entries; the other three
-       from the title only) */
-    static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,   UI_OPT_EXTRAS_MODELS,
-                                     UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK,
-                                     UI_OPT_EXTRAS_STEAM,   UI_OPT_EXTRAS_EXPORT_TEXTURES,
-                                     UI_OPT_EXTRAS_BACKUP,  UI_OPT_EXTRAS_RESTORE,
-                                     UI_OPT_ACH_POPUPS,     UI_OPT_BACK};
-    static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,   UI_STR_EXTRAS_MODELS,
-                                     UI_STR_EXTRAS_CREDITS, UI_STR_SECTION_CHARACTERS,
-                                     UI_STR_EXTRAS_STEAM,   UI_STR_EXTRAS_EXPORT_TEXTURES,
-                                     UI_STR_EXTRAS_BACKUP,  UI_STR_EXTRAS_RESTORE,
-                                     UI_STR_OPT_ACH_POPUPS, UI_STR_BACK};
-    static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, -1, -1, -1, -1, -1, -1};
+       from the title only), then Unused content (from the title) */
+    static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,
+                                     UI_OPT_EXTRAS_MODELS,
+                                     UI_OPT_EXTRAS_CREDITS,
+                                     UI_OPT_LINK,
+                                     UI_OPT_LINK,
+                                     UI_OPT_EXTRAS_STEAM,
+                                     UI_OPT_EXTRAS_EXPORT_TEXTURES,
+                                     UI_OPT_EXTRAS_BACKUP,
+                                     UI_OPT_EXTRAS_RESTORE,
+                                     UI_OPT_ACH_POPUPS,
+                                     UI_OPT_BACK};
+    static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,
+                                     UI_STR_EXTRAS_MODELS,
+                                     UI_STR_EXTRAS_CREDITS,
+                                     UI_STR_SECTION_CHARACTERS,
+                                     UI_STR_SECTION_UNUSED,
+                                     UI_STR_EXTRAS_STEAM,
+                                     UI_STR_EXTRAS_EXPORT_TEXTURES,
+                                     UI_STR_EXTRAS_BACKUP,
+                                     UI_STR_EXTRAS_RESTORE,
+                                     UI_STR_OPT_ACH_POPUPS,
+                                     UI_STR_BACK};
+    static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, UI_PAGE_UNUSED, -1, -1, -1,
+                                      -1, -1, -1};
+    /* Extras > Unused content: press rows, each the disc's own */
+    static const int unusedOpts[] = {UI_OPT_UNUSED_ARENA, UI_OPT_UNUSED_CLIMB, UI_OPT_UNUSED_MOVIE,
+                                     UI_OPT_UNUSED_ART, UI_OPT_BACK};
+    static const int unusedStrs[] = {UI_STR_UNUSED_ARENA, UI_STR_UNUSED_CLIMB, UI_STR_UNUSED_MOVIE,
+                                     UI_STR_UNUSED_ART, UI_STR_BACK};
     /* the Save states page's ways in (the pause menu's row, the Continue
        screen's prompt) exist when its host was set before the menus were
        built */
@@ -4211,6 +4258,8 @@ static void build(void)
                        sizeof(extrasOpts) == sizeof(extrasLinks),
                    "a string and a link for each Extras row");
     _Static_assert(sizeof(charOpts) == sizeof(charStrs), "a string for each Characters row");
+    _Static_assert(sizeof(unusedOpts) == sizeof(unusedStrs) && N_OF(unusedOpts) <= MAX_ROWS,
+                   "a string for each Unused content row, within the page's budget");
     _Static_assert(N_OF(charOpts) <= MAX_ROWS, "the Characters rows fit");
     _Static_assert(N_OF(mainOpts) <= MAX_ROWS, "the mainOpts rows fit the page's row budget");
     _Static_assert(N_OF(dispOpts) <= MAX_ROWS, "the dispOpts rows fit the page's row budget");
@@ -4270,6 +4319,8 @@ static void build(void)
        the count at install */
     buildOptionPage(UI_PAGE_CHARACTERS, UI_STR_SECTION_CHARACTERS, charOpts, charStrs, NULL,
                     N_OF(charOpts), UI_PAGE_EXTRAS);
+    buildOptionPage(UI_PAGE_UNUSED, UI_STR_SECTION_UNUSED, unusedOpts, unusedStrs, NULL,
+                    N_OF(unusedOpts), UI_PAGE_EXTRAS);
     buildStatesPage();
     buildListPage(UI_PAGE_ACHIEVEMENTS, UI_STR_SECTION_ACHIEVEMENTS, &kAchDef, UI_PAGE_MAIN);
     buildListPage(UI_PAGE_REMAP, UI_STR_OPT_REMAP, &kRemapDef, UI_PAGE_CONTROLS);
@@ -6591,8 +6642,8 @@ static int settingsProc(int first, int item)
         if ((flags & PAD_OK) && r->opt == UI_OPT_BACK) {
             return leaveTo(id, parentLayout(pg));
         }
-        if ((flags & PAD_OK) && isExtrasOpt(r->opt)) {
-            int to = extrasOpen(r->opt);
+        if ((flags & PAD_OK) && (isExtrasOpt(r->opt) || ui__unused_row(r->opt) >= 0)) {
+            int to = isExtrasOpt(r->opt) ? extrasOpen(r->opt) : extrasUnused(r->opt);
             if (to >= 0) {
                 POSITIVE_SE();
                 return to;

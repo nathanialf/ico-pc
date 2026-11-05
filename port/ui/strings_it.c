@@ -803,6 +803,22 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "Intensità della sfocatura",
     [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
         "Valori più bassi fanno svanire la scia più in fretta; 100 è quella della PS2.",
+    [UI_STR_SECTION_UNUSED] = "Contenuti inutilizzati",
+    [UI_STR_UNUSED_ARENA] = "Stanza di prova: arena",
+    [UI_STR_UNUSED_ARENA_NOTE] =
+        "Stanza per provare gli scontri con le Ombre; senza uscita: Start, poi Termina partita.",
+    [UI_STR_UNUSED_CLIMB] = "Stanza di prova: arrampicata",
+    [UI_STR_UNUSED_CLIMB_NOTE] =
+        "Stanza per provare arrampicate e casse; senza uscita: Start, poi Termina partita.",
+    [UI_STR_UNUSED_MOVIE] = "Filmato dimostrativo (576 linee)",
+    [UI_STR_UNUSED_MOVIE_NOTE] =
+        "Seconda copia del filmato del titolo in attesa, per televisori europei; mai mostrata.",
+    [UI_STR_UNUSED_ART] = "Titolo di una versione da fiera",
+    [UI_STR_UNUSED_ART_NOTE] =
+        "Immagini della schermata del titolo di una prima versione da fiera; mai mostrate.",
+    [UI_STR_UNUSED_ART_VER] = "Versione da fiera: marchio di versione",
+    [UI_STR_UNUSED_ART_START] = "Versione da fiera: Press Start",
+    [UI_STR_UNUSED_ART_COPYRIGHT] = "Versione da fiera: copyright",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

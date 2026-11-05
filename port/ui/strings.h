@@ -961,6 +961,21 @@ typedef enum UiStrId {
     /* Effects > Motion blur strength (issue 181): the label and the note */
     UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH,
     UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE,
+    /* Extras > Unused content (port/include/ico_unused.h): the page's name,
+       its four rows and their notes, and the Models list's names of the
+       early show title art (three pictures) */
+    UI_STR_SECTION_UNUSED,
+    UI_STR_UNUSED_ARENA,
+    UI_STR_UNUSED_ARENA_NOTE,
+    UI_STR_UNUSED_CLIMB,
+    UI_STR_UNUSED_CLIMB_NOTE,
+    UI_STR_UNUSED_MOVIE,
+    UI_STR_UNUSED_MOVIE_NOTE,
+    UI_STR_UNUSED_ART,
+    UI_STR_UNUSED_ART_NOTE,
+    UI_STR_UNUSED_ART_VER,
+    UI_STR_UNUSED_ART_START,
+    UI_STR_UNUSED_ART_COPYRIGHT,
     /* the community translations' names (the Language and Menu language
        rows, after UI_STR_LANG_ZH), in their own language in every table */
     UI_STR_LANG_RU_BOBTTZ,

@@ -804,6 +804,22 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "Intensidad del desenfoque",
     [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
         "Los valores más bajos hacen que la estela se desvanezca antes; 100 es la de PS2.",
+    [UI_STR_SECTION_UNUSED] = "Contenido no usado",
+    [UI_STR_UNUSED_ARENA] = "Sala de pruebas: arena",
+    [UI_STR_UNUSED_ARENA_NOTE] =
+        "Sala para probar combates con las Sombras; sin salida: Start y luego Terminar partida.",
+    [UI_STR_UNUSED_CLIMB] = "Sala de pruebas: escalada",
+    [UI_STR_UNUSED_CLIMB_NOTE] =
+        "Sala para probar la escalada y las cajas; sin salida: Start y luego Terminar partida.",
+    [UI_STR_UNUSED_MOVIE] = "Película de demostración (576 líneas)",
+    [UI_STR_UNUSED_MOVIE_NOTE] =
+        "Copia de la película del título en espera para televisores europeos; nunca se mostró.",
+    [UI_STR_UNUSED_ART] = "Arte de título de una versión de feria",
+    [UI_STR_UNUSED_ART_NOTE] =
+        "Imágenes de la pantalla de título de una versión temprana de feria; nunca mostradas.",
+    [UI_STR_UNUSED_ART_VER] = "Versión de feria: marca de versión",
+    [UI_STR_UNUSED_ART_START] = "Versión de feria: Press Start",
+    [UI_STR_UNUSED_ART_COPYRIGHT] = "Versión de feria: copyright",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

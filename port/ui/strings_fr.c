@@ -821,6 +821,22 @@ const char *const
             [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "Intensité du flou",
             [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
                 "Une valeur plus basse fait s’effacer la traînée plus vite ; 100 est celle de la PS2.",
+            [UI_STR_SECTION_UNUSED] = "Contenu inutilisé",
+            [UI_STR_UNUSED_ARENA] = "Salle de test : arène",
+            [UI_STR_UNUSED_ARENA_NOTE] =
+                "Une salle où les créateurs essayaient les combats contre les Ombres ; sans sortie : quittez avec Start, puis Terminer la partie.",
+            [UI_STR_UNUSED_CLIMB] = "Salle de test : escalade",
+            [UI_STR_UNUSED_CLIMB_NOTE] =
+                "Une salle où les créateurs essayaient l’escalade et les caisses ; sans sortie : quittez avec Start, puis Terminer la partie.",
+            [UI_STR_UNUSED_MOVIE] = "Film de démonstration (576 lignes)",
+            [UI_STR_UNUSED_MOVIE_NOTE] =
+                "Une seconde copie du film que l’écran titre joue en attente, faite pour les téléviseurs européens et jamais montrée.",
+            [UI_STR_UNUSED_ART] = "Écran titre d’une version de salon",
+            [UI_STR_UNUSED_ART_NOTE] =
+                "Images de l’écran titre d’une première version de salon, restées sur le disque et jamais montrées.",
+            [UI_STR_UNUSED_ART_VER] = "Version de salon : marque de version",
+            [UI_STR_UNUSED_ART_START] = "Version de salon : Press Start",
+            [UI_STR_UNUSED_ART_COPYRIGHT] = "Version de salon : copyright",
             [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
             [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
             [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
