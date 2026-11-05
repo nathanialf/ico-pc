@@ -348,6 +348,23 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   drained first), and only the game thread's calls wait for it, so a call that waited for one
   picture has run before the next picture's reads can begin: a wait is one picture's reads, never
   two (`rd_tex_test`'s `threadFair`).
+- Frame rate Original's hand-over. With no interpolation the frame `rd_end_frame` closes is
+  handed over the same way when the window's gate is set (`port/render/rd_core.c`
+  (`originalPicture`), `port/render/rd_thread.c` (`rd__replay_frame_post`)): the overlay's layers
+  collected on the game thread on its host stack, the walk on the render thread, the submit and
+  the present on the submit thread; the game's step waits only for the hand-over and, at its next
+  renderer call, the picture's reads. The gate runs on the game thread before the post with the
+  busy input (`rd__thread_picture_busy`: the posted picture's job not ended, or a submit-thread
+  job unfinished) and skips the frame while busy (`port/platform/pace_policy.h`
+  (`pace_original_gate`)): the swapchain's lock is held through the driver's present call and the
+  next acquire takes it, so a picture posted then would wait for that present inside its reads.
+  A keep frame is never skipped; while busy it waits for the picture before and its present first
+  (`rd_thread_drain`'s two parts), counted. The replay stays inside the step, as a job the game
+  thread waits for, without the gate (tests, tools), with the render thread off, parked or in sync,
+  for a picture that waits (a capture, the blended dump, `rd_submit_hold`) and under `[dev]
+  original_async = false` (`ICO_RD_ORIGINAL_ASYNC=0`). The pictures' bytes are those of the replay
+  inside the step (the same replay, the same submit; `rd_tex`'s `threadOriginal`). The interpolated
+  presets' path is not touched. The lines: [DISPLAY.md](DISPLAY.md#pacing) path 1.
 - The window and the slot ahead. A present's job runs the interpolation (reads the retained
   frames), its wait for its frame slot (`rd__wait_frame`: the submit thread's jobs of that slot and
   the GPU's fence of the picture two before; reads nothing the game thread changes), the ring, the
