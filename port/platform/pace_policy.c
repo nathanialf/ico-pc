@@ -108,6 +108,19 @@ bool pace_original_present(bool keep, uint64_t nowNs, uint64_t dueNs, uint64_t p
     return nowNs - dueNs < periodNs;
 }
 
+PaceOrig pace_original_gate(bool keep, bool busy, uint64_t nowNs, uint64_t dueNs, uint64_t periodNs)
+{
+    if (keep) {
+        return PACE_ORIG_PRESENT; /* drawn over the picture before: always */
+    }
+    if (!pace_original_present(false, nowNs, dueNs, periodNs)) {
+        return PACE_ORIG_LATE;
+    }
+    /* the picture before still walked or presented: this one would wait for
+       its present inside its reads, and the step with it */
+    return busy ? PACE_ORIG_BUSY : PACE_ORIG_PRESENT;
+}
+
 uint64_t pace_next_present(uint64_t nextPresent, uint64_t startNs, uint64_t gap)
 {
     const uint64_t n = nextPresent + gap;

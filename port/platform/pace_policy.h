@@ -834,28 +834,49 @@ PaceSkip pace_late_skip(bool newFrame, bool skippedLast, bool paceSlow, uint64_t
  * again is not "two in a row". */
 bool pace_skipped_last(bool skipOpen, uint32_t skippedFrame, uint32_t frame);
 
-/* Frame rate Original (no interpolation): rd_end_frame replays and presents
- * each game frame once, inside the game step, so a replay longer than the
- * step's period holds the simulation (and the audio, whose clock it is)
- * below the disc's rate.  The rule, a rate requirement: the game steps at
- * the disc's rate (50 or 59.94 a second) in real time whatever the GPU; a
- * frame is not replayed nor presented (the last picture stays) when, at the
- * point its replay would start (nowNs, inside the step), the step is a whole
- * period or more past its due time (dueNs, when the step was due to start):
- * the late arm of pace_late_skip.  A keep frame (keep: lists 11..12 drawn
- * over the picture before it, a fade or a menu) is always drawn: it costs
- * little and the next keep frame draws over it.  A skipped frame's step
- * ends at once and pays back a period of the debt; skipping only once the
- * debt is a whole period wastes none of the time, so the pictures float
- * with their cost: about 1000 / (picture ms + step ms) a second, all of
- * them while a step and its picture fit the period, while the steps keep
- * their rate.  The lag behind real time stays under a period plus one
- * picture: the audio's lead (two device periods, held back at 120 ms,
- * out_sdl.c) is not reached for a picture up to about 70 ms.  Unlike
- * pace_late_skip there is no "never two in a row": a skipped frame is never
- * shown later (the next one is), and a picture longer than two periods
- * needs two skips to a present to keep the rate.  dueNs 0 (the pacer not
- * started): presented. */
+/* Frame rate Original (no interpolation): rd_end_frame makes each game
+ * frame's one picture.  The rule, a rate requirement: the game steps at the
+ * disc's rate (50 or 59.94 a second) in real time whatever the GPU and the
+ * display, and the pictures come as fast as the device makes them.
+ *
+ * With the render thread on, the picture is handed over (rd.h
+ * RdReplayGate): the render thread walks it, the submit thread submits and
+ * presents it, and the step goes on; its next renderer call waits only
+ * for the picture's reads (the walk).  A present that blocks in the driver
+ * (280 ms on a Mali-G52 in a scene) holds the swapchain's lock, which the
+ * next picture's acquire takes, so a picture posted then would wait inside
+ * its reads and the step with it.  pace_original_gate therefore skips a
+ * frame (PACE_ORIG_BUSY, the last picture stays) while the render thread
+ * or the submit thread is still busy with the picture before (busy): one
+ * present in flight, the steps at the disc's rate, about 1000 / (walk +
+ * present) pictures a second.
+ *
+ * Without the render thread (or under [dev] original_async = false) the
+ * picture is replayed and presented inside the step, so a replay longer
+ * than the step's period holds the simulation (and the audio, whose clock
+ * it is) below the disc's rate; pace_original_present is that path's
+ * rule, and pace_original_gate's late arm (PACE_ORIG_LATE) on both: a frame
+ * is not replayed nor presented when, at the point its replay would start
+ * (nowNs, inside the step), the step is a whole period or more past its
+ * due time (dueNs, when the step was due to start): the late arm of
+ * pace_late_skip.  A keep frame (keep: lists 11..12 drawn over the picture
+ * before it, a fade or a menu) is always drawn, busy or late: it costs
+ * little and the next keep frame draws over it (busy, it waits for the
+ * picture before).  A skipped frame's step ends at once and pays back a
+ * period of the debt; skipping only once the debt is a whole period wastes
+ * none of the time, so the pictures float with their cost: about 1000 /
+ * (picture ms + step ms) a second, all of them while a step and its
+ * picture fit the period, while the steps keep their rate.  The lag behind
+ * real time stays under a period plus one picture: the audio's lead (two
+ * device periods, held back at 120 ms, out_sdl.c) is not reached for a
+ * picture up to about 70 ms.  Unlike pace_late_skip there is no "never two
+ * in a row": a skipped frame is never shown later (the next one is), and a
+ * picture longer than two periods needs two skips to a present to keep the
+ * rate.  dueNs 0 (the pacer not started): presented. */
+typedef enum PaceOrig { PACE_ORIG_PRESENT = 0, PACE_ORIG_LATE, PACE_ORIG_BUSY } PaceOrig;
+
+PaceOrig pace_original_gate(bool keep, bool busy, uint64_t nowNs, uint64_t dueNs,
+                            uint64_t periodNs);
 bool pace_original_present(bool keep, uint64_t nowNs, uint64_t dueNs, uint64_t periodNs);
 
 /* The limiter's grid: when the present after one that started at startNs is

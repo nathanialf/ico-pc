@@ -735,13 +735,31 @@ than 100 ms behind (`RESYNC_NS`) the lag is dropped and counted instead of run o
 with a fake clock and swapchain; the window only supplies its I/O (`port/platform/window_present.c`
 (`pace`, `pace_locked`, the `lock_io_*` callbacks of `PaceLockIo`)). Three paths:
 
-1. **Frame rate Original**: `rd_end_frame` replays and presents the frame once inside the step; the
-   window only sleeps to the deadline (`pace`). The rule is a rate requirement: the game steps at
-   the disc's rate (50 or 59.94 a second) in real time whatever the GPU, and the pictures float with
-   their cost. Before a frame's replay the renderer asks the window (`rd_set_replay_gate`,
-   `orig_gate`, `port/platform/window_lines.c` (`window_orig_gate`)): a frame whose step is already a whole period or more past its due time
-   at that point (the late arm of the timer path's skip) is neither replayed nor presented, and the
-   last picture stays on the screen (`port/platform/pace_policy.h` (`pace_original_present`)). A
+1. **Frame rate Original**: `rd_end_frame` makes each frame's one picture; the window only sleeps
+   to the deadline (`pace`). The rule is a rate requirement: the game steps at the disc's rate (50
+   or 59.94 a second) in real time whatever the GPU and the display, and the pictures float with
+   their cost. With the render thread on, the picture is handed over as the other frame rates'
+   are (`port/render/rd_thread.h` (`rd__replay_frame_post`), `port/render/rd_core.c`
+   (`originalPicture`)): the render thread walks it, the submit thread submits and presents it,
+   and the step goes on at once; its next renderer call waits only for the picture's reads (the
+   walk, texLock, [PLATFORM.md](PLATFORM.md#the-render-thread)). The driver's present call holds
+   the swapchain's lock (`port/rhi/vk/vk_swapchain.c` (`rhi_present`)) and the next picture's
+   acquire takes it, so a picture posted while a present blocks would wait inside its reads, and
+   the step with it: a Mali-G52 in a scene blocked 165-300 ms in `vkQueuePresentKHR`, and with
+   the replay inside the step every second step lasted 55-230 ms and the game ran at half its rate
+   (issue 179). Before a frame's picture the renderer asks the window on the game thread
+   (`rd_set_replay_gate`, `orig_gate`, `port/platform/window_lines.c` (`window_orig_gate`)) with
+   whether the render thread or the submit thread is still busy with the picture before
+   (`rd__thread_picture_busy`): busy, the frame is neither replayed nor presented and the last
+   picture stays (`port/platform/pace_policy.h` (`pace_original_gate`, `PACE_ORIG_BUSY`)). One
+   present is in flight, the steps keep the disc's rate, and the pictures come about `1000 /
+   (walk + present)` a second, a frame interval less at worst (a picture waits for the first
+   frame closed after the one before is done). Without the render thread, parked, in sync, with a
+   capture armed, or under `[dev] original_async = false` ([CONFIG.md](CONFIG.md)) the frame is
+   replayed and presented inside the step, the game thread waiting. On both, a frame whose step is
+   already a whole period or more past its due time at that point (the late arm of the timer
+   path's skip) is neither replayed nor presented, and the last picture stays on the screen
+   (`port/platform/pace_policy.h` (`pace_original_present`, `PACE_ORIG_LATE`)). A
    keep frame (a fade or a menu drawn over the picture before it) is always drawn. The skipped
    frame's step ends at once and pays back a period of the debt, so a picture of G ms against a
    period of P ms comes about `1000 / (G + step)` times a second (all of them while a step and its
@@ -750,16 +768,34 @@ with a fake clock and swapchain; the window only supplies its I/O (`port/platfor
    is not reached for a picture up to about 70 ms. There is no "never two in a row": a skipped
    frame is never shown later, and a picture over two periods needs two skips to every present.
    The swapchain takes mailbox where the surface offers it, as the timer path does (`video_settings`),
-   so that present never waits for the display inside the step; FIFO only without mailbox
+   so that present never waits for the display (on the submit thread, or inside the step where the
+   picture is replayed there); FIFO only without mailbox
    (Direct3D 11 and 12, OpenGL, some surfaces), where a wait for the display shows as a late step
    and the next frame's replay is the one left out. A replayed frame draws the same picture as
    before (the gate decides only whether it is replayed: Original at 4:3 1x stays the camera's
-   picture, the console's except inside triangles it dropped, VD-29); the tools and tests set no gate and replay every frame. Since the gate
+   picture, the console's except inside triangles it dropped, VD-29); the tools and tests set no gate and replay every frame inside the step. Since the gate
    skips the replay itself, not only the present (the timer path's skip still replays), an effect
    that reads the previous picture (a motion blur's history, an after-image pass) advances once per
    drawn picture, not once per game step, on a GPU too slow for every picture, and a skipped
    frame's texture uploads and decode settles wait for the next replay (review finding 7: a known
    change of look on a slow GPU, not a defect).
+   A keep frame the gate presents while the render thread is busy waits for the picture before,
+   its present included, before it is handed over, so an acquire never waits behind a present
+   inside a picture's reads. The lines: at each start `rd: render thread: with Frame rate Original
+   each game frame's picture is handed over as the other frame rates' are: its submit and present
+   run on the submit thread; ...` (or `... is replayed and presented inside the game step, the game
+   thread waiting ([dev] original_async = false)`); the 10 s game-thread line's `(closing a frame
+   ...; its picture handed over in 0.6 ms (longest 14.2 ms; 3 waited for the picture before, 31.0 ms
+   in all; 12 skipped: render thread busy); presents waited inside the step: 0 (0.0 ms))`; the 10 s
+   line's `steps late N (frames not presented M: the step late L, the render thread busy B)`; a slow
+   step's `, the picture handed over 0.5 ms (0.0 ms waiting for the one before)`, `, the picture
+   replayed inside the step 165.6 ms` or `, the picture not presented (...)`; a present that blocked
+   `window: a present blocked N ms in the driver's present call (...; on the submit thread)` or `(...;
+   inside the game step)`. `pace_policy_test`'s `testOriginalSplit` holds the hand-over's rates:
+   walks of 5 to 40 ms and presents of 1 to 300 ms, the game at 50 steps a second within 2 % and no
+   resync, the pictures between `1000 / (present + walk + a frame interval)` and `1000 / (present +
+   walk)` a second; the same 320 ms picture inside the step resyncs. `rd_tex`'s `threadOriginal`
+   checks the threading and the bytes.
    `pace_policy_test` (`testOriginalRule`, `testOriginalLoop`) holds the rates: 9 to 17 ms a
    picture at 20 ms every frame presented, no skip; 20 to 90 ms 50 steps a second of real time,
    about `1000 / (G + 1)` presents a second, no resync; without the skip a 30 ms picture ran the game

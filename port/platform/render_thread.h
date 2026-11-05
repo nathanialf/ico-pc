@@ -112,7 +112,11 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
 
 /* The 10 s line (window_host.c window_pace_log): the game thread's mean
    step and pump per call in ms, its own cost of closing a frame
-   (rd_frame_close_take), the slot waits it made (waits for the render
+   (rd_frame_close_take; at Frame rate Original with its pictures,
+   rd_frame_post_text: "; its picture handed over in 0.6 ms (longest 14.2
+   ms; 3 waited for the picture before, 31.0 ms in all; 12 skipped: render
+   thread busy); presents waited inside the step: 0 (0.0 ms)" before the
+   parenthesis closes), the slot waits it made (waits for the render
    thread, split by whose: a new frame's present, a further present's, the
    rest) and the read waits, then the render thread's block with its CPU
    time a picture (pictureCpuMs: the window's replays line):

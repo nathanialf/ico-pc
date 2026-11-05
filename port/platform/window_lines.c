@@ -201,9 +201,9 @@ void window_hold_block_line(unsigned long long heldMs, double stepAvgMs, double 
             stepAvgMs, periodMs, rateWords, pictureMs, heldMs, s_blocks);
 }
 
-/* Frame rate Original's counts for the block (window_orig_*) */
-static unsigned s_origLate, s_origSkipped, s_origReplays;
-static double s_origReplayMs;
+/* Frame rate Original's counts for the block (window_orig_*): the steps
+   late, the frames not presented by reason */
+static unsigned s_origLate, s_origSkipLate, s_origSkipBusy;
 static unsigned long long s_heldAt; /* ico_audio_sdl_held_ms at the last block's end */
 
 /* the simulation's period at hz (host_loop.c's: PAL 20 ms, NTSC 16.683 ms) */
@@ -212,32 +212,35 @@ static uint64_t period_ns(int hz)
     return hz == 50 ? 20000000ull : 16683333ull;
 }
 
-bool window_orig_gate(int keep, uint64_t nowNs, uint64_t dueNs, int hz)
+int window_orig_gate(int keep, bool busy, uint64_t nowNs, uint64_t dueNs, int hz)
 {
-    if (pace_original_present(keep != 0, nowNs, dueNs, period_ns(hz))) {
-        return true;
+    switch (pace_original_gate(keep != 0, busy, nowNs, dueNs, period_ns(hz))) {
+    case PACE_ORIG_LATE:
+        s_origSkipLate++;
+        return RD_GATE_LATE;
+    case PACE_ORIG_BUSY:
+        s_origSkipBusy++;
+        return RD_GATE_BUSY;
+    default:
+        return RD_GATE_PRESENT;
     }
-    s_origSkipped++;
-    return false;
 }
 
-void window_orig_step(bool late, double replayMs)
+void window_orig_step(bool late)
 {
     s_origLate += late ? 1u : 0u;
-    if (replayMs >= 0.0) {
-        s_origReplayMs += replayMs;
-        s_origReplays++;
-    }
 }
 
 const char *window_orig_words(bool original)
 {
-    static char words[80];
+    static char words[128];
 
     words[0] = '\0';
     if (original) {
-        snprintf(words, sizeof(words), "; steps late %u (frames not presented %u)", s_origLate,
-                 s_origSkipped);
+        snprintf(words, sizeof(words),
+                 "; steps late %u (frames not presented %u: the step late %u, the render thread "
+                 "busy %u)",
+                 s_origLate, s_origSkipLate + s_origSkipBusy, s_origSkipLate, s_origSkipBusy);
     }
     return words;
 }
@@ -247,17 +250,16 @@ void window_hold_block(double stepSumMs, unsigned steps, double stepMaxMs, int h
 {
     const unsigned long long held = ico_audio_sdl_held_ms();
     const double periodMs = (double)period_ns(hz) / 1e6;
-    double picture = replays ? replaySumMs / replays : 0.0;
+    /* the replays' block mean, the submit thread's submit and present
+       included (rd_perf.c rd__perf_submit_times): at Original the picture
+       is handed over, its time no longer the step's own */
+    const double picture = replays ? replaySumMs / replays : 0.0;
 
-    if (original && s_origReplays) {
-        picture = s_origReplayMs / s_origReplays;
-    }
     window_hold_block_line(held > s_heldAt ? held - s_heldAt : 0u, steps ? stepSumMs / steps : 0.0,
                            stepMaxMs - periodMs, periodMs, picture,
                            original ? "Original" : rateName);
     s_heldAt = held;
-    s_origLate = s_origSkipped = s_origReplays = 0;
-    s_origReplayMs = 0.0;
+    s_origLate = s_origSkipLate = s_origSkipBusy = 0;
 }
 
 const char *window_tiler_words(void)

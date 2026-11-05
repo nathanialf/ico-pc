@@ -109,7 +109,11 @@ runs on the host stack in the host FP mode (`port/render/rd.h` (`RdHostCall`);
 `port/render/rd_core.c` (`rd__on_host`)). With the window's render thread on
 ([PLATFORM.md](PLATFORM.md#the-render-thread)) every picture is made there
 (`port/render/rd_thread.c`): the window's present posts `rd_present` whole (`rd_present_post`),
-the interpolation included, and `rd__on_host`'s calls, `rd__replay_frame`, `rd_read_display` and
+the interpolation included; with Frame rate Original `rd_end_frame` hands its frame's picture
+over the same way (`rd__replay_frame_post`, the window's gate on the game thread skipping a frame
+while the render thread or the submit thread is busy with the picture before:
+[DISPLAY.md](DISPLAY.md#pacing) path 1), or replays it inside the step without the gate, the
+thread or under `[dev] original_async = false`; and `rd__on_host`'s calls, `rd__replay_frame`, `rd_read_display` and
 `rd_resize_output` run there with the game thread waiting (`rd__render_call`); a display change's
 pipelines stay on the game thread with the render thread idle (`onGameHost`: their progress screen
 pumps the window's events). A picture handed
