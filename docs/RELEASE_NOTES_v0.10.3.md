@@ -9,3 +9,7 @@
 
 - With Vsync Off, the game now switches to the other way of showing pictures after a few held-back ones only with Qualcomm's own graphics driver, where that switch was measured. Every other graphics chip keeps the usual way, the graphics cards of computers included: on a Mali phone the switch made the pictures wait longer.
 - With Frame rate set to Original, the game no longer waits for the screen to take each picture before it goes on: on a slow graphics chip the game keeps its speed and the pictures come as fast as the chip draws them.
+
+## Known issues
+
+- Entering a test room from Options > Extras > Unused content can end in a game over at once: the character starts in the wrong place and falls. Either choice on the game-over screen returns to the title. A fix is coming in the next version.
