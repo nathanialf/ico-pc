@@ -327,6 +327,13 @@ static void boyLine(const char *when)
 {
     const char *name = s_row >= 0 ? ico_unused_row(s_row)->name : "?";
 
+    /* systemStatus[6]: a stage change under way (the room's PH_PLAYING
+       outlives it): its InitIcoMisc may have the boy up while colObjList
+       still names the old stage's objects (fieldCollision.c _Clip) */
+    if (systemStatus[6] != 0) {
+        fprintf(stderr, "unused: %s %s: no boy (a stage change under way)\n", name, when);
+        return;
+    }
     if (stageManagerFreeResourceFlag != 0 || mpegPlay != 0 || boyGObj == 0 ||
         GOBJ_SUB(boyGObj) == 0) {
         fprintf(stderr, "unused: %s %s: no boy (the stage has none up)\n", name, when);

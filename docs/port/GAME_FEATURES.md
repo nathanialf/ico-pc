@@ -1096,7 +1096,8 @@ has.
   F under him, D below | no floor below), fall height H` (`tick T` reads `game over` there), from
   the boy's root (`GetRootPosition`), `ctrl.groundHeight`, `ctrl.fallHeight` and the game's own
   floor probe (`GetLowerPlaneCollision`, as `act.c` calls it); `no boy (the stage has none up)`
-  while the stage has no boy.
+  while the stage has no boy, `no boy (a stage change under way)` while `systemStatus[6]` is set
+  (the next stage's collision list may still name the old stage's objects).
 - Leaving: the rooms have no exit. Pause > End Game goes back to the title by the game's own path.
   A game over goes there with either choice: `la_game_over_continue` and its two other arms
   (`ico2/common/src/layout_action.c`) route Continue as Quit while `ico_unused_active()`

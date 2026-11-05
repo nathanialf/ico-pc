@@ -660,10 +660,15 @@ static void testRooms(void)
     logStart();
     ico_unused_host_poll();
     CHECK(strstr(logEnd(), "unused: arena tick") == NULL, "the next line due at 60");
+    /* a stage change under way (the room's stage keeps playing through
+       it): no probe, the line says why */
     s_ticks = 1599;
+    systemStatus[6] = 1;
     logStart();
     ico_unused_host_poll();
-    CHECK(strstr(logEnd(), "unused: arena tick 299:") != NULL, "a line at tick 299");
+    CHECK(strstr(logEnd(), "unused: arena tick 299: no boy (a stage change under way)\n") != NULL,
+          "a line at tick 299, no probe during a stage change");
+    systemStatus[6] = 0;
     s_ticks = 1601;
     logStart();
     ico_unused_host_poll();
