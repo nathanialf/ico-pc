@@ -709,7 +709,9 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Copying the disc image into the app",
     [UI_STR_ISO_COPYING_LONG] =
         "Copying the disc image into the app. It is a large image: this takes a few minutes",
-    [UI_STR_SECTION_VARIANTS] = "Game variants",
+    [UI_STR_SECTION_YORDA] = "Yorda",
+    [UI_STR_SECTION_SHADOWS] = "Shadows",
+    [UI_STR_SECTION_CUTSCENES] = "Cutscenes",
     [UI_STR_OPT_VAR_TOUGHNESS] = "Shadow toughness",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         "American: every Shadow as tough as on the North American disc, and no tougher on later playthroughs. Achievements stay on.",

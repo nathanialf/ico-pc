@@ -716,7 +716,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "ディスクイメージをアプリにコピーしています",
     [UI_STR_ISO_COPYING_LONG] =
         "ディスクイメージをアプリにコピーしています。大きなイメージなので数分かかります",
-    [UI_STR_SECTION_VARIANTS] = "ゲームのバリエーション",
+    [UI_STR_SECTION_YORDA] = "ヨルダ",
+    [UI_STR_SECTION_SHADOWS] = "影",
+    [UI_STR_SECTION_CUTSCENES] = "ムービー",
     [UI_STR_OPT_VAR_TOUGHNESS] = "影の強さ",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         "北米版：影の強さが北米版ディスクと同じになり、2周目以降も強くなりません。実績はそのままです。",
