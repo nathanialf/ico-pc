@@ -268,14 +268,16 @@ from the front page. If you have no sound with the newest version, send the
 
 When the graphics card cannot draw every picture in time, the game keeps
 its normal speed and leaves some pictures out, so it looks less smooth
-instead of slowing down. This works at every frame rate except Original.
+instead of slowing down. This works at every frame rate.
 If the game stutters, or your graphics card is always at full load, these
 settings lower the load the most (Options):
 
 - **Frame rate** Original draws one picture per game step, as on the PS2,
   instead of also drawing the pictures in between: about half the work.
-  It never leaves a picture out, so if the card still cannot keep up there,
-  the game slows down a little instead.
+  The game does not wait for the screen to take each picture: if the card
+  cannot draw them all in time, the game keeps its speed and some pictures
+  are left out, so it looks less smooth, which is the best choice on a
+  slow phone.
 - **Resolution** 1x is the PS2's own sharpness and the lightest of all.
 
 On a Mac the game runs fast with anti-aliasing on or off: it draws with
@@ -989,7 +991,9 @@ warm the phone was and whether the screen was being recorded. With
 **Vsync** off, phones with a Qualcomm graphics driver send pictures to the
 screen one after another from the start, as the chip maker advises, instead
 of switching to that only after a few held-back pictures; this is not
-expected to remove the stutter. With **Frame
+expected to remove the stutter. Phones with a Mali or PowerVR graphics chip
+do not switch at all: with **Vsync** off they keep showing pictures the
+usual way, as that switch only helped on Qualcomm chips. With **Frame
 rate** set to a number the game asks the phone to hold one rate
 ([the details](ANDROID.md#a-fixed-refresh-rate-for-a-frame-rate-you-set)).
 On a tablet, a high **Resolution** with Vsync off and Frame rate
