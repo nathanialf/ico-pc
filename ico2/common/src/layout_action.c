@@ -5847,7 +5847,7 @@ int la_host_mc_files_shown(void)
 
 /* PC port: what the pause menu's Back does before it returns la_game_loop
    (la_game_pause and its twins), for the port's Settings procs that close
-   the menu into the game (Game variants > Debug menu); the caller returns
+   the menu into the game (Developer > Debug menu); the caller returns
    the region's la_game_loop */
 void la_host_resume_play(void)
 {
