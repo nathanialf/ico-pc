@@ -171,12 +171,24 @@ endif()
 
 # cpu_place: the cores a thread ran on most, the cores' speeds from a fake
 # sysfs under the build folder (Linux and Android only), the 10 s part's
-# words, the masks' text, the calling thread's priority and allowed cores
+# words, the masks' text, the calling thread's priority and allowed cores,
+# its CPU time, the threads line from a fake table and a fake
+# /proc/self/task
 add_executable(cpu_place_test test/cpu_place_test.c)
 target_compile_options(cpu_place_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(cpu_place_test PRIVATE ico_thread)
 if(ICO_RUN_TESTS)
     add_test(NAME cpu_place COMMAND cpu_place_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# thread_stat: a thread's time on a core and waiting for one (thread_stat.c,
+# issue 179): the kernel's schedstat text, a fake /proc/self/task under the
+# build folder (Linux and Android), the block's difference, the words
+add_executable(thread_stat_test test/thread_stat_test.c)
+target_compile_options(thread_stat_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(thread_stat_test PRIVATE ico_thread)
+if(ICO_RUN_TESTS)
+    add_test(NAME thread_stat COMMAND thread_stat_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # The Android build's file layout (android/android_paths.c), pure C, so it
