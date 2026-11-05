@@ -447,7 +447,7 @@ static char s_log[8192];
 static void logStart(void)
 {
     char p[1100];
-    snprintf(p, sizeof(p), "%s/unused_content_test_stderr.txt", s_dir);
+    snprintf(p, sizeof(p), "%s/unused_content_test_%s_stderr.txt", s_dir, s_slug);
     fflush(stderr);
     s_errSaved = dup(2);
     FILE *f = freopen(p, "wb", stderr);
@@ -457,7 +457,7 @@ static void logStart(void)
 static const char *logEnd(void)
 {
     char p[1100];
-    snprintf(p, sizeof(p), "%s/unused_content_test_stderr.txt", s_dir);
+    snprintf(p, sizeof(p), "%s/unused_content_test_%s_stderr.txt", s_dir, s_slug);
     fflush(stderr);
     dup2(s_errSaved, 2);
     close(s_errSaved);
