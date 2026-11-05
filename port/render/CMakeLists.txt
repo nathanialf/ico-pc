@@ -187,6 +187,7 @@ add_library(ico_render STATIC
     rd_core.c
     rd_crack_fill.c # above 1x: the pixels no draw covered between drawn ones, before the fog
     rd_crt.c # the CRT filter at present time
+    rd_tone.c # the colour adjustment's settings (Options > Picture: gamma, brightness, contrast, saturation)
     rd_date_selftest.c # DATE through the stencil bit: the start-up check on the device
     rd_dst_read.c # the exact GS blend: the destination read
     rd_dump.c

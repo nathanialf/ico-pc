@@ -62,7 +62,9 @@ typedef struct IcoDrawCB {
                         * ICO_DF_GS_LOD (rd_state.h rd_tex1_lod), else 0 */
     float uvRect[4];   /* u0, v0, u1, v1 in texels */
     float tex[4];      /* w, h of t1 in texels, 1/w, 1/h */
-    float param[4];    /* kind specific */
+    float param[4];    /* kind specific (blit_tone_ps, blit_depth_tone_ps: the
+                        * colour adjustment's brightness, contrast, saturation,
+                        * gamma factors, rd__tone_params; tone.hlsli) */
     float scale[4];    /* xy t1 texels per GS texel (1, or a scaled target's
                         * scale); z with t1 a Full pixel crop of the frame:
                         * the left-out share of t1's width, ox / tw, in the
@@ -104,7 +106,11 @@ typedef struct IcoCrtCB {
     float tone[4]; /* vignette, gamma in, gamma out, strength */
     float pass[4]; /* x mirror, y unused (the slot's row gain is per pixel: crt.hlsl
                     * rowGainOf), zw 1 / the blurred target's size */
-    float pad[8];  /* keeps the slot's size with IcoDrawCB (its aux blocks) */
+    /* [0..3] the colour adjustment's factors (crt.hlsl c_toneAdj:
+     * brightness, contrast, saturation, gamma; rd__tone_params), [4] 1 with
+     * it on (c_toneOn.x; rd__tone_active), [5..7] 0; also keeps the slot's
+     * size with IcoDrawCB (its aux blocks) */
+    float pad[8];
 } IcoCrtCB;
 
 /* DrawCB.mode[0] flags (DF_* in common.hlsli). */

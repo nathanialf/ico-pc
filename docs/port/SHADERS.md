@@ -19,6 +19,7 @@ interface that loads the blobs is [RHI.md](RHI.md).
 | `port/shaders/gs_math.hlsli` | the GS integer arithmetic, scalar, valid HLSL and C |
 | `port/shaders/sheet_text.hlsli` | the sheet texel arithmetic of `font_sheet_ps`, mirrored on the CPU (the tests' oracle and the renderer's bake at 1x and 2x) |
 | `port/shaders/vu_common.hlsli` | what the VU program shaders share ([VU1_PROGRAMS.md](VU1_PROGRAMS.md)) |
+| `port/shaders/tone.hlsli` | the colour adjustment (Options > Picture's Gamma, Picture brightness, Contrast, Saturation): PCSX2's shade boost arithmetic, `tone_adjust` ([DISPLAY.md](DISPLAY.md#presentation)) |
 | `port/shaders/shader_consts.h` | the C side of the byte layouts and constants |
 | `port/shaders/*.hlsl` | the families, below |
 | `port/shaders/test/` | the shader tests and `hlsl_shim.h` |
@@ -87,21 +88,21 @@ each file's header comment):
 | file | entries | what it draws |
 | --- | --- | --- |
 | `sprite.hlsl` | `sprite_ui_vs`, `sprite_world_vs`, `sprite_ps`, `sprite_texa_ps`, `date_snap_ps`, `sprite_aa1_*`, `sprite_stq_*`; the planes build: `sprite_plane_*_vs`, `sprite_stq_plane_*_vs`, `sprite_ps_planes`, `sprite_texa_ps_planes`, `sprite_stq_ps_planes` | screen-space prims in GS window coordinates: TEXA per texel before the filter, the DATE snapshot, PRIM.AA1 lines and triangles with a coverage attribute, perspective-correct STQ, and screen-prim triangles evaluated from their planes the same at every frame width |
-| `blit.hlsl` | `blit_vs`, `blit_ps`, `blit_depth_ps`, `box_reduce_ps`, `aa_reduce_ps`, `depth_resolve_ps`, `depth_upsample_ps`, `camera_probe_ps`, `crack_fill1_ps` (`CRACK_REACH_1`: the crack fill for a reach of 1 texel, [WORK_BUFFERS.md](WORK_BUFFERS.md)) | the present's box blit, the MSAA resolve's colour copy and the shadow count's resolve passes (`blit_ps`); the present's blit with the scene's depth (`blit_depth_ps`); the shadow count box-reduced to the GS size; the supersampled DISPLAY box-averaged; the MSAA depth resolved (smallest sample) and spread over samples; a test probe |
+| `blit.hlsl` | `blit_vs`, `blit_ps`, `blit_depth_ps`, `blit_tone_ps`, `blit_depth_tone_ps`, `box_reduce_ps`, `aa_reduce_ps`, `depth_resolve_ps`, `depth_upsample_ps`, `camera_probe_ps`, `crack_fill1_ps` (`CRACK_REACH_1`: the crack fill for a reach of 1 texel, [WORK_BUFFERS.md](WORK_BUFFERS.md)) | the present's box blit, the MSAA resolve's colour copy and the shadow count's resolve passes (`blit_ps`); the present's blit with the scene's depth (`blit_depth_ps`); the two with the colour adjustment (`blit_tone_ps`, `blit_depth_tone_ps`, `tone.hlsli`: the present's box blit while a Picture tone row is not 50); the shadow count box-reduced to the GS size; the supersampled DISPLAY box-averaged; the MSAA depth resolved (smallest sample) and spread over samples; a test probe |
 | `blend_int.hlsl` | `blend_int_vs`, `blend_int_ps` | the GS integer blend between two RGBA8 UINT textures for feedback passes, no hardware blending |
 | `fx_sprite.hlsl` | `fx_rect_vs`, `fx_sprite_ps` and its `ICO_UINT_SRC` (`fx_sprite_u_ps`), `ICO_FX_FRAME` (`fx_frame_ps`) and `ICO_FX_DST_LOCAL` (`fx_local_ps`) builds, `fx_blur2_ps`, `fx_aura_rows_ps` and `fx_aura_sum_ps` (`ICO_UINT_SRC`) | one GS sprite of `staticBlur.c`'s passes in the GS integer arithmetic (`port/render/rd_blur.c`): through the RGBA8_UINT views; the frame-size forms the open pass draws (the alpha alone, `FXF_ALPHA_ONLY`; the premultiplied term for the fixed-function add or subtract, `FXF_OUT_PREMUL`; the glow's reduction computing its mask, `FXF_GLOW_MASK`); the destination by local read (`port/render/rd_fx_plan.c`); two blur passes folded; the aura's read of SCENE into FEED128 above 1x in two passes, the box's row sums into ROWBOX (RGBA16_UINT, `fx_kernel_row`) then FEED128's column sum, the same bytes as `fx_sprite_ps` (`port/render/rd_aura_box.c`) |
 | `fog_lut.hlsl` | `fog_lut_ps` and its `FOG_BUFFER` (`fog_lut_buffer_ps`) and `FOG_MS` (`fog_lut_ms_ps`) builds | the depth fog: bits 16..23 of the 32-bit Z through the fog CLUT, from the depth, an R32 UINT copy of it, or per sample |
 | `raw_wrap.hlsl` | `wrap_acc_ps`, `wrap_resolve_ps` | COLCLAMP 0 prims (`darkVolume.c`): an RGBA16F accumulation, then the sum modulo 256 |
 | `font.hlsl` | `font_ps`, `font_sheet_ps`, `font_sheet_baked_ps` | R8 coverage textures (the port's font atlas) read as sprite_ps reads a texel; sheet text in the menu sheets' style, rebuilt from the coverage (above 1x) or read from the texels the renderer baked (1x) |
 | `yuv.hlsl` | `yuv_vs`, `yuv_ps`, `yuv_field_ps` | the FMV picture, 4:2:0 planes to RGB with the [IPU](ARCHITECTURE.md#terms)'s conversion; a field deinterlaced at the picture's size (`port/render/rd_video.c`) |
-| `crt.hlsl` | `crt_vs`, `crt_bloom_ps`, `crt_blur_ps`, `crt_ps` | the CRT filter ([DISPLAY.md](DISPLAY.md)) |
+| `crt.hlsl` | `crt_vs`, `crt_bloom_ps`, `crt_blur_ps`, `crt_ps` | the CRT filter ([DISPLAY.md](DISPLAY.md)); the colour adjustment on its source reads under a uniform branch (`toneOf`, `tone.hlsli`) |
 | `vu_prelit.hlsl` | `vu_prelit_vs`, `vu_prelit_pre_vs`, `vu_ps`, `vu_texa_ps`, `vu_probe_ps` | `normal_c` (codes 32, 34, 36); the pixel shader of every VU draw, through the main shaders and the programs' own entries alike (the planes as flat varyings); the tests' probe output |
 | `vu_lit.hlsl` | `vu_lit_vs`, `vu_lit_spec_vs`, `vu_reflect_vs` and their `_pre_vs` | `normal_l` (codes 32/36, 34, 38) |
 | `vu_skin.hlsl` | `vu_skin_vs`, `vu_skin_spec_vs`, `vu_skin_debug_vs` and their `_pre_vs` | `cluster`, skinned (codes 20, 22, 24) |
 | `vu_grid.hlsl` | `vu_grid_vs`, `vu_grid_lit_vs`, `vu_grid_spec_vs` and their `_pre_vs` | `mesh`, the procedural grids (codes 20, 22, 24) |
 | `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_pre_ps` | the main vertex shader of every mesh program, the triangle pre-pass's record stages and the record targets' pixel shader ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) |
 | `vu_particle.hlsl` | `vu_particle_vs`, `vu_particle_pre_vs`, `vu_particle_main_vs` | `particle`, six vertices a particle, non-indexed; the sprite's record stage and main shader |
-| `common.hlsli`, `gs_math.hlsli`, `sheet_text.hlsli`, `vu_common.hlsli` | none | included headers, below |
+| `common.hlsli`, `gs_math.hlsli`, `sheet_text.hlsli`, `tone.hlsli`, `vu_common.hlsli` | none | included headers, below |
 
 The vertex shaders of the VU programs are one per [microprogram](ARCHITECTURE.md#terms) family; the
 CPU references they are tested against are `port/render/vu1_ref/` (`port/shaders/vu_common.hlsli`,
@@ -270,8 +271,8 @@ packing (each member a 16-byte register or a 64-byte matrix, so the packing is u
 | struct | register | bytes | notes |
 | --- | --- | --- | --- |
 | `IcoFrameCB` | b0 space0 | 336 | view, proj, viewProj, cameraPos, clip, target, origin, frame, vp, z, misc, vpo |
-| `IcoDrawCB` | b1 space1 | 112 | col, mode, blend, uvRect, tex, param, scale |
-| `IcoCrtCB` | b1 space1 | 112 | the CRT filter's block in DrawCB's place: src, box, beam, mask, glow, tone, pass |
+| `IcoDrawCB` | b1 space1 | 112 | col, mode, blend, uvRect, tex, param (the tone blits: the colour adjustment's factors), scale |
+| `IcoCrtCB` | b1 space1 | 112 | the CRT filter's block in DrawCB's place: src, box, beam, mask, glow, tone, pass; pad[0..3] the colour adjustment's factors (`c_toneAdj`), pad[4] 1 with it on (`c_toneOn`) |
 | `IcoSpriteVertex` | vertex | 20 | XY 12.4 (U16x2), Z (U32), RGBA (U8x4, 0x80 = 1.0), UV in texels (F32x2) |
 | `IcoSpriteAa1Vertex` | vertex | 40 | plus the AA1 coverage and a triangle edge's clip, flat: the sorted first vertex (U16x2), the other two less it (two int16 in a U32 each) and the flags (U32) |
 | `IcoSpriteStqVertex` | vertex | 24 | plus Q |

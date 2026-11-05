@@ -33,6 +33,7 @@
 #include "rd_mesh.h"
 #include "rd_tex.h"
 #include "rd_tex_decode.h"
+#include "rd_tone.h"
 #include "rd_vis.h"
 #include "texpack.h"
 
@@ -1891,7 +1892,8 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     if (g_rd.settings.glowSmooth) {
         logGlowBetween("");
     }
-    rd__crack_fill_init(); /* its line once SCENE is made */
+    rd__tone_log(NULL, &g_rd.settings); /* the colour adjustment, when on */
+    rd__crack_fill_init();              /* its line once SCENE is made */
     createNamedTargets();
     readDumpConfig();
     rdtex__decode_init(g_rd.windowed); /* the texture decode pool (rd_tex_decode.h) */
@@ -2379,6 +2381,7 @@ void rd_begin_frame(void)
         const bool glowChanged = g_rd.settings.glowSmooth != g_rd.pendingSettings.glowSmooth;
         const uint32_t strengthWas = rd__blur_strength_pct();
         const bool presetChanged = g_rd.settings.preset != g_rd.pendingSettings.preset;
+        rd__tone_log(&g_rd.settings, &g_rd.pendingSettings); /* from the next present */
         g_rd.settings = g_rd.pendingSettings;
         g_rd.settingsPending = false;
         if (packOff) {

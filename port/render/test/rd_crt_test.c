@@ -783,6 +783,161 @@ static void checkLuma(void)
     }
 }
 
+/* the four colour adjustment rows (rd.h RdSettings.tone*) */
+static void setTone(RdSettings *s, uint8_t gamma, uint8_t brightness, uint8_t contrast,
+                    uint8_t saturation)
+{
+    s->toneGamma = gamma;
+    s->toneBrightness = brightness;
+    s->toneContrast = contrast;
+    s->toneSaturation = saturation;
+}
+
+/* the mean over the box's rows of the luma's standard deviation along the
+ * row: the picture's spread across, which the scanlines (constant along a
+ * row without a mask) leave out */
+static double boxRowSpread(uint32_t w, uint32_t h)
+{
+    RhiRect b;
+    rd__present_box(w, h, 4.0f / 3.0f, &b);
+    double sum = 0.0;
+    for (uint32_t y = (uint32_t)b.y; y < (uint32_t)b.y + b.h; y++) {
+        double m = 0.0, m2 = 0.0;
+        for (uint32_t x = (uint32_t)b.x; x < (uint32_t)b.x + b.w; x++) {
+            const uint8_t *p = &s_out[((size_t)y * w + x) * 4];
+            const double l = 0.299 * p[0] + 0.587 * p[1] + 0.114 * p[2];
+            m += l;
+            m2 += l * l;
+        }
+        m /= (double)b.w;
+        const double var = m2 / (double)b.w - m * m;
+        sum += var > 0.0 ? sqrt(var) : 0.0;
+    }
+    return sum / (double)b.h;
+}
+
+/* The colour adjustment under the filter (rd_tone.h; crt.hlsl toneOf, on
+ * the source before the filter linearises it): every row at 50 is each
+ * mode's recorded present (the branch not taken: the filter's arithmetic
+ * unchanged), at both sizes; Scanlines (no mask) at saturation 1 greys a
+ * flat colour within a level a channel over the box; the box's mean luma
+ * grows with brightness and with gamma (1 < 50 < 100); contrast 1 flattens
+ * the picture's spread across; with the filter off the rows still change
+ * the plain present (the box blit's blit_tone_ps). */
+static void checkTone(void)
+{
+    static const uint32_t sizes[2][2] = {{960, 720}, {1920, 1440}};
+    makeNoiseScene();
+    for (int m = RD_CRT_SCANLINES; m < RD_CRT_MODE_COUNT; m++) {
+        for (int k = 0; k < 2; k++) {
+            RdSettings s = outputSettings(sizes[k][0], sizes[k][1]);
+            rd_crt_settings(&s, (RdCrtMode)m, 1.0f);
+            const size_t n = (size_t)sizes[k][0] * sizes[k][1] * 4;
+            setTone(&s, 50, 50, 50, 50);
+            if (!present(&s, 1)) {
+                continue;
+            }
+            const uint64_t h50 = fnv(s_out, n);
+            if (s_llvmpipe && s_presentExact == RD_BLEND_EXACT_ATTACHMENT) {
+                CHECK(h50 == kGoldExact[m - 1][k],
+                      "tone: %s %ux%u at 50 is the recorded hash (exact blend; %016llx)",
+                      kModeName[m], sizes[k][0], sizes[k][1], (unsigned long long)h50);
+            } else if (s_llvmpipe && !s_presentExact) {
+                CHECK(h50 == kGold[m - 1][k], "tone: %s %ux%u at 50 is the recorded hash (%016llx)",
+                      kModeName[m], sizes[k][0], sizes[k][1], (unsigned long long)h50);
+            } else {
+                setTone(&s, 0, 0, 0, 0);
+                if (present(&s, 1)) {
+                    CHECK(fnv(s_out, n) == h50,
+                          "tone: %s %ux%u at 50 is the present without the rows", kModeName[m],
+                          sizes[k][0], sizes[k][1]);
+                }
+            }
+        }
+    }
+
+    /* saturation 1 (a factor of 0.02: a channel 20 levels from the grey
+     * moves under half a level) on a flat (150, 130, 110) */
+    const uint32_t w = 960, h = 720;
+    RhiRect b;
+    rd__present_box(w, h, 4.0f / 3.0f, &b);
+    makeFlatScene(150, 130, 110);
+    for (int pass = 0; pass < 2; pass++) {
+        RdSettings s = outputSettings(w, h);
+        rd_crt_settings(&s, RD_CRT_SCANLINES, 1.0f);
+        setTone(&s, 50, 50, 50, pass ? 1 : 50);
+        if (!present(&s, 0)) {
+            return;
+        }
+        int worst = 0;
+        for (uint32_t y = (uint32_t)b.y; y < (uint32_t)b.y + b.h; y++) {
+            for (uint32_t x = (uint32_t)b.x; x < (uint32_t)b.x + b.w; x++) {
+                const uint8_t *p = &s_out[((size_t)y * w + x) * 4];
+                const int rg = abs((int)p[0] - (int)p[1]), gb = abs((int)p[1] - (int)p[2]);
+                worst = rg > worst ? rg : worst;
+                worst = gb > worst ? gb : worst;
+            }
+        }
+        printf("  tone: scanlines, saturation %d: the box's channels at most %d apart\n",
+               pass ? 1 : 50, worst);
+        if (pass) {
+            CHECK(worst <= 1, "tone: saturation 1 leaves channels %d levels apart", worst);
+        } else {
+            CHECK(worst > 4, "tone: at saturation 50 the flat colour keeps its hue (%d)", worst);
+        }
+    }
+
+    /* brightness and gamma raise the box's luma, contrast 1 flattens it */
+    makeNoiseScene();
+    static const uint8_t kLevels[3] = {1, 50, 100};
+    for (int row = 0; row < 2; row++) {
+        double l[3] = {0.0, 0.0, 0.0};
+        bool ok = true;
+        for (int i = 0; i < 3 && ok; i++) {
+            RdSettings s = outputSettings(w, h);
+            rd_crt_settings(&s, RD_CRT_SCANLINES, 1.0f);
+            setTone(&s, row ? kLevels[i] : 50, row ? 50 : kLevels[i], 50, 50);
+            ok = present(&s, 1);
+            l[i] = ok ? boxLuma(w, h) : 0.0;
+        }
+        if (!ok) {
+            return;
+        }
+        printf("  tone: scanlines, %s 1 / 50 / 100: box luma %.2f / %.2f / %.2f\n",
+               row ? "gamma" : "brightness", l[0], l[1], l[2]);
+        CHECK(l[0] < l[1] && l[1] < l[2], "tone: the box's luma grows with %s (%.2f %.2f %.2f)",
+              row ? "gamma" : "brightness", l[0], l[1], l[2]);
+    }
+    double spread[2] = {0.0, 0.0};
+    for (int i = 0; i < 2; i++) {
+        RdSettings s = outputSettings(w, h);
+        rd_crt_settings(&s, RD_CRT_SCANLINES, 1.0f);
+        setTone(&s, 50, 50, i ? 1 : 50, 50);
+        if (!present(&s, 1)) {
+            return;
+        }
+        spread[i] = boxRowSpread(w, h);
+    }
+    printf("  tone: scanlines, contrast 50 / 1: the luma's spread along a row %.2f / %.2f\n",
+           spread[0], spread[1]);
+    CHECK(spread[1] < spread[0] * 0.25, "tone: contrast 1 flattens the picture (%.2f, %.2f)",
+          spread[0], spread[1]);
+
+    /* the filter off: the plain present, the box blit through blit_tone_ps */
+    RdSettings o = outputSettings(w, h);
+    if (!present(&o, 1)) {
+        return;
+    }
+    const uint64_t plain = fnv(s_out, (size_t)w * h * 4);
+    setTone(&o, 50, 80, 50, 50);
+    if (present(&o, 1)) {
+        const uint64_t toned = fnv(s_out, (size_t)w * h * 4);
+        CHECK(toned != plain && toned != GOLD_OFF && toned != GOLD_OFF_EXACT,
+              "tone: with the filter off the rows change the present (%016llx)",
+              (unsigned long long)toned);
+    }
+}
+
 /* Full pixel under the filter: a flat frame through the tube at 1920 x 1080
  * (pillars).  Off, the reduction's border is dark at the box edge; on, the
  * edge pixels are as lit as the centre and the pillars stay black.  Off in
@@ -1624,6 +1779,7 @@ int main(int argc, char **argv)
     checkModes();
     checkOutside();
     checkLuma();
+    checkTone();
     checkFullPixel();
     checkPhosphors();
     checkLight();

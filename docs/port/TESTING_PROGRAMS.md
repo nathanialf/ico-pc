@@ -1726,7 +1726,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   not offer the count, which it then draws as off: lavapipe offers 4 only)
   ([MSAA.md](MSAA.md#the-crack-filler-after-the-resolve)).
 - `rd_crt_test.c`: the CRT filter's options and its shader (`rd_crt`, `rd_crt_fixed`); downsampling
-  changes no byte under the filter (`checkOff`).
+  changes no byte under the filter (`checkOff`); the colour adjustment before the filter
+  (`checkTone`): every mode at both sizes with the four rows at 50 is the recorded hash (on
+  llvmpipe; elsewhere the present with the rows at 0), Scanlines at saturation 1 greys a flat
+  (150, 130, 110) to within a level a channel over the box (and keeps its hue at 50), the box's
+  mean luma grows with brightness and with gamma (1 < 50 < 100), contrast 1 cuts the luma's
+  spread along a row to under a quarter, and with the filter off a moved row changes the plain
+  present.
 - `rd_debug_test.c`: `debug.c` on the host, recorded (`rd_debug`); with the Game variants' bind
   (`debug_VariableInit` hands `ico_variants_bind_debug` the five switches and `debug_MenuOpen`)
   and the menu opened through that opener drawn on each of three ticks with no pad (title and bug
@@ -2079,6 +2085,14 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   counts the frames closed since its last take and starts again;
   the scene limit's fallback checks drive the Vulkan backend's `vkr_test_fail_texels_above` and
   are skipped on Direct3D 12, OpenGL and Direct3D 11, which have no such hook);
+  the colour adjustment (`rd_present_tone_test.inc`): `checkToneSettings` (0 and 50 neutral,
+  the factors value / 50 in `tone.hlsli`'s order); `checkTone`: every row at 50 presents the rich
+  frame as `checkOriginal` did, byte for byte; the exact window at 4:3 (Full pixel, one texel a
+  pixel) at 1280x720 with one row moved (gamma 25 and 80, brightness 25 and 80, contrast 25 and
+  80, saturation 1 and 80) puts every box pixel within a level of PCSX2's shade boost computed in
+  double precision on the neutral present, the bars black; `blit_tone_ps` on both outputs is in
+  the reachable set in both blend modes; `checkToneDepth`: with the effects depth forced the toned
+  present is the toned present without it, byte for byte, and not the neutral one;
   the open border's outer columns (`rd_present_border_test.inc`, `checkOpenBorderEdges`): at
   2340x1080 (832 columns, the frame its exact width) and 4:3, 1x and 2x, the mirror on and off,
   SCENE red with green over GS columns 1 .. W - 2 presents green outer columns, byte for byte the
@@ -2455,7 +2469,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
 ## port/shaders/test
 
 - `shaders_table_test.c`: every embedded entry compiled for SPIR-V and signed DXIL, the vertex
-  pre-pass's among them (`expectedPrepass`) (`shaders_table`).
+  pre-pass's among them (`expectedPrepass`) and the colour adjustment's box blits (`expectedTone`)
+  (`shaders_table`).
 - `gs_math_test.c`: `gs_math.hlsli` compiled as C against the [GS](ARCHITECTURE.md#terms) formulas,
   and its integer forms against the operators they replace ([SHADERS.md](SHADERS.md#integer-forms))
   (`gs_math`); `hlsl_shim.h` makes it compile.

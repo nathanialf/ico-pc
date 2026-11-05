@@ -454,6 +454,16 @@ typedef struct RdSettings {
      * glow held, as before this option.  An explicit ICO_RD_GLOW_REDRAW
      * ([dev] glow_redraw) wins over it. */
     uint8_t glowSmooth;
+    /* Options > Picture: Gamma, Picture brightness, Contrast, Saturation
+     * ([video] gamma, brightness, contrast, saturation; 1..100).  The
+     * colour adjustment of PCSX2's shade boost (port/shaders/tone.hlsli),
+     * each value / 50 its factor, applied to the finished picture in the
+     * present's box blit, or to the CRT filter's source before the filter
+     * (rd_present.c rd__tone_active, rd__tone_params).  50 is the game's
+     * picture; 0 (a zeroed RdSettings) reads as 50, so the present is the
+     * PS2 picture's byte for byte and its box blit keeps blit_ps while
+     * every value is 0 or 50.  Not the movies (they draw their own box). */
+    uint8_t toneGamma, toneBrightness, toneContrast, toneSaturation;
     /* The internal scene resolution, in texels: the scene's
      * texture is sceneWidth x sceneHeight (GS coordinates unchanged); 0 x 0
      * with sceneScale 0 = the presentation box in the window under the
