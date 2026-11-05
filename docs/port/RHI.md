@@ -395,12 +395,17 @@ it first. `rhi_read_occlusion` hands back the slot `rhi_wait_frame` last recycle
 `rhi_read_timestamps` does: the count, or `RHI_OCCLUSION_NONE` for an index the frame did not
 write; it returns 1 + the highest index written. Vulkan only (`port/rhi/vk/vk_cmd.c`
 (`vkr_occ_make`, `vkr_collect_occlusion`)): a `VK_QUERY_TYPE_OCCLUSION` pool a slot made at the
-first begin of the run (the game never asks for one, so it pays nothing), the current slot's pool
-reset by a one-time submit at that begin and every slot's in its first command list from then on,
+first begin of the run, or by `rhi_occlusion_prepare(count)` outside any recording (the skin
+check's start-up probe on an Adreno, [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md): 80; elsewhere the game
+never asks for one, so it pays nothing), the current slot's pool reset by a one-time submit then
+and every slot's in its first command list from then on, over the range in use: `count` queries
+after a prepare (a later call widens it; a begin past a slot's reset range is dropped, logged once
+`rhi_vk: occlusion queries: query I is past the N reset a frame: dropped; ...`, and the whole pool
+is reset from each slot's next use), the whole pool after a first begin;
 `VK_QUERY_CONTROL_PRECISE_BIT` where the device has `occlusionQueryPrecise` (enabled at device
 creation; without it a count is exact only as zero or not zero, which is all the measurement
-reads). The first begin logs `rhi_vk: occlusion queries: on (8192 a frame slot, precise sample
-counts|not precise: ...)`. Direct3D 12, Direct3D 11 and OpenGL report `rhi_occlusion_supported`
+reads). The pools' making logs `rhi_vk: occlusion queries: on (8192 a frame slot, N of them reset a
+frame, precise sample counts|not precise: ...)`. Direct3D 12, Direct3D 11 and OpenGL report `rhi_occlusion_supported`
 false, the calls do nothing and the read is 0 (their forms would be an occlusion query heap
 resolved like the timestamps, `D3D11_QUERY_OCCLUSION`, `GL_SAMPLES_PASSED`).
 

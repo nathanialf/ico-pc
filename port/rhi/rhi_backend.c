@@ -771,6 +771,11 @@ bool rhi_occlusion_supported(void)
     return be()->occlusion_supported();
 }
 
+bool rhi_occlusion_prepare(uint32_t count)
+{
+    return be()->occlusion_prepare(count);
+}
+
 void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index)
 {
     be()->cmd_begin_occlusion(cl, index);

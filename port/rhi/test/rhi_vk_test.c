@@ -825,8 +825,11 @@ static int renderAreaCell(void)
  * at the first begin (inside the pass, a one-time submit), the second
  * frame's reset in the slot's first list.  Then again under
  * ICO_VK_DEPTH_ALWAYS=1 (vk_cmd.c: every depth test passes, the
- * measurement's run without the depth): 64, 64 and 64.  No validation
- * message. */
+ * measurement's run without the depth): 64, 64 and 64.  Then once more
+ * with the pools made beforehand for 4 queries (rhi_occlusion_prepare:
+ * outside any recording; each slot resets 4): the same counts, and query 5
+ * begun in the first frame, past the 4, dropped (RHI_OCCLUSION_NONE, the
+ * read still 3).  No validation message. */
 static void testSetEnv(const char *name, const char *value)
 {
 #ifdef _WIN32
@@ -840,7 +843,7 @@ static void testSetEnv(const char *name, const char *value)
 #endif
 }
 
-static int occlusionRun(bool always)
+static int occlusionRun(bool always, uint32_t prepare)
 {
     RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test occlusion", NULL};
     if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
@@ -856,6 +859,10 @@ static int occlusionRun(bool always)
         }                                                                                          \
     } while (0)
     OCC_CHECK(rhi_occlusion_supported(), "not supported on Vulkan\n");
+    if (prepare) {
+        OCC_CHECK(rhi_occlusion_prepare(prepare), "the pools not made for %u\n", prepare);
+        OCC_CHECK(rhi_occlusion_prepare(prepare), "a second prepare refused\n");
+    }
     const RhiShader vs = rhi_create_shader(&(RhiShaderDesc){.stage = RHI_STAGE_VERTEX,
                                                             .bytecode = spv_vs_main,
                                                             .bytecodeSize = sizeof(spv_vs_main),
@@ -938,6 +945,12 @@ static int occlusionRun(bool always)
                 rhi_cmd_draw(cl, 6, q * 6u, 1);
                 rhi_cmd_end_occlusion(cl, q);
             }
+            if (prepare && round == 0) {
+                /* past the prepared range: dropped */
+                rhi_cmd_begin_occlusion(cl, prepare + 1u);
+                rhi_cmd_draw(cl, 6, 0, 1);
+                rhi_cmd_end_occlusion(cl, prepare + 1u);
+            }
             rhi_cmd_end_render_pass(cl);
             rhi_end_commands(cl);
             rhi_submit(cl);
@@ -965,6 +978,10 @@ static int occlusionRun(bool always)
                       (unsigned long long)got[1], (unsigned long long)got[2],
                       (unsigned long long)behind);
             OCC_CHECK(got[7] == 12345u, "frame %d: index 7 written past the count read\n", round);
+            if (prepare) {
+                OCC_CHECK(got[prepare + 1u] == 12345u,
+                          "frame %d: the query past the prepared %u was read\n", round, prepare);
+            }
         }
         /* a frame without queries reads none */
         rhi_wait_frame();
@@ -995,10 +1012,11 @@ static int occlusionRun(bool always)
 
 static int occlusionCell(void)
 {
-    int failures = occlusionRun(false);
+    int failures = occlusionRun(false, 0);
     testSetEnv("ICO_VK_DEPTH_ALWAYS", "1");
-    failures += occlusionRun(true);
+    failures += occlusionRun(true, 0);
     testSetEnv("ICO_VK_DEPTH_ALWAYS", NULL);
+    failures += occlusionRun(false, 4);
     return failures;
 }
 

@@ -1059,7 +1059,9 @@ The renderer's test programs have a page of their own:
   in front at 0.75 count 64, 0 and 64 samples, read once the slot is recycled; a begin outside a
   pass dropped, the read saying 3 indices; two frames, the first making and resetting the pool at
   its first begin, the second resetting it in the slot's first list; a frame without queries reads
-  none; then again under `ICO_VK_DEPTH_ALWAYS=1`: 64, 64, 64); the adapter cell (`adapterCell`: `rhi_set_adapter_wanted` with a name no device
+  none; then again under `ICO_VK_DEPTH_ALWAYS=1`: 64, 64, 64; then with the pools made
+  beforehand for 4 queries (`rhi_occlusion_prepare`, twice): the same counts, and a query past the
+  4 dropped, not read); the adapter cell (`adapterCell`: `rhi_set_adapter_wanted` with a name no device
   has still starts, on the device a plain start picks, one `rhi_adapter_list` entry current and
   automatic; the plain start's own name picks it again; NULL is automatic); the sync cell (`syncCell`) checks the fence ring under `ICO_VK_FAKE_API=1.1`
   and `1.0`, and under `1.0` the device's version (1.0), the `VkRenderPass` path and the UINT

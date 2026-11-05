@@ -1643,6 +1643,18 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max);
 #define RHI_OCCLUSION_NONE UINT64_MAX
 
 bool rhi_occlusion_supported(void);
+/* The pools made now, outside any recording, for queries 0 .. count - 1
+ * (Vulkan: the call guard's wait and the one-time reset submit and wait
+ * that a first begin would make in the middle of a frame), and from then on
+ * each slot's first list resets only that range (at least count; a later
+ * call can widen it), so a user of a few queries (the skin check's box
+ * check, port/render/rd_vu_skin_check.c) neither stalls a frame nor resets
+ * and reads RHI_MAX_OCCLUSION of them a frame.  A begin of an index past
+ * the slot's reset range is dropped and widens the range to the whole pool
+ * from each slot's next use.  Without a call the first begin makes the
+ * pools for the whole pool (the replay tool's measurement).  Returns
+ * whether the queries are on.  Elsewhere false. */
+bool rhi_occlusion_prepare(uint32_t count);
 void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index);
 void rhi_cmd_end_occlusion(RhiCommandList cl, uint32_t index);
 uint32_t rhi_read_occlusion(uint64_t *samples, uint32_t max);

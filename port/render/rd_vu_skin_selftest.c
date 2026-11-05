@@ -205,6 +205,13 @@ bool rd__vu_skin_selftest(void)
         made = made && rd__vu_skin_probe_pipeline(kVs[c], false).id != 0;
     }
     const RhiBuffer idx = rd__vu_skin_index_buffer();
+    /* the box check's occlusion queries made now, where the start already
+     * waits, for its 80 indices: the game's frames neither stall at the
+     * first box check nor reset and read the whole pool (rhi.h
+     * rhi_occlusion_prepare) */
+    if (rhi_occlusion_supported()) {
+        (void)rhi_occlusion_prepare(RD_SKIN_CHECKS_ALL);
+    }
     const uint32_t w = ICO_VU_PROBE_FIELDS * ST_OFFSETS, h = ST_VERTS * ST_CODES;
     RhiTexture tex = {0};
     RhiState texState = RHI_STATE_UNDEFINED;

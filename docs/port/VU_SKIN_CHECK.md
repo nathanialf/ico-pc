@@ -65,7 +65,9 @@ positions is named, and whether it gives the first wrong one's.
 **S3, the box check.** The checked command is drawn again inside its own pass right after its draw,
 through its own pipeline key with the colour mask 0 and Z writes off, without the destination read
 (so GS state as shader data cannot put the mask into the shader: the fixed-function mask writes
-nothing), inside an occlusion query whose scissors cover the draw's scissor less the CPU's box of
+nothing), inside an occlusion query (check i's is query i: the pools are made by the start-up probe for 80,
+`rhi_occlusion_prepare`, so no frame stalls at the first box check and each slot resets and reads
+only those) whose scissors cover the draw's scissor less the CPU's box of
 its vertices widened by 2 GS pixels (four bands). Any sample means the GPU placed a vertex where the
 CPU does not, through the real pipeline family, in the scene pass's own execution. Drawn only where
 the box is closed (every vertex of the draw's batches in front of the eye: a clipped corner behind

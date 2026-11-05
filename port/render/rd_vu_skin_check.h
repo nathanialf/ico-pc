@@ -57,6 +57,9 @@ extern "C" {
 
 /* the most vertices one check probes */
 #define RD_SKIN_MAXV 1024u
+/* the most checks one replay holds (mode 2), and the box check's
+ * occlusion queries: check i's is query i (rhi_occlusion_prepare) */
+#define RD_SKIN_CHECKS_ALL 80u
 /* a vertex is wrong when its X or Y is more than this far (1/16 pixel:
  * one GS pixel) from the CPU's, or its Z more than RD_SKIN_Z_REL of the
  * CPU's (at least RD_SKIN_XY_TOL) */

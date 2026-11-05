@@ -57,10 +57,11 @@
 bool g_rdSkinArm;
 
 #define SK_INTERVAL_MS 100.0
-#define SK_COLS 3u        /* a check's probes: the draw's block, c1, c2 */
-#define SK_CHECKS_ALL 80u /* mode 2: the checks one replay holds (16 x 3 x 80 texels wide) */
+#define SK_COLS 3u /* a check's probes: the draw's block, c1, c2 */
+/* mode 2: the checks one replay holds (16 x 3 x 80 texels wide); check i's
+ * box query is occlusion query i */
+#define SK_CHECKS_ALL RD_SKIN_CHECKS_ALL
 #define SK_INDEX_VERTS 8192u
-#define SK_QUERY0 (RHI_MAX_OCCLUSION - 1u) /* check i's box query: SK_QUERY0 - i */
 #define SK_BONE_BYTES ((uint32_t)sizeof(IcoVuBoneCB))
 #define SK_VS_COUNT 3u /* RD_VS_VU_SKIN, _SKIN_SPEC, _SKIN_DEBUG */
 
@@ -818,7 +819,7 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
     if (d->indexBuf.id) {
         rhi_cmd_set_index_buffer(cl, d->indexBuf, d->indexOff, true);
     }
-    rhi_cmd_begin_occlusion(cl, SK_QUERY0 - at);
+    rhi_cmd_begin_occlusion(cl, at);
     for (int i = 0; i < 4; i++) {
         if (!band[i].w || !band[i].h) {
             continue;
@@ -830,7 +831,7 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
             rhi_cmd_draw(cl, d->count, d->first, 1);
         }
     }
-    rhi_cmd_end_occlusion(cl, SK_QUERY0 - at);
+    rhi_cmd_end_occlusion(cl, at);
     /* the draw's state back for whatever the replay records next */
     rhi_cmd_set_scissor(cl, &r->sc);
     rd__set_pipeline(cl, d->pipe, d->key);
@@ -1146,7 +1147,7 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
     const int c1 = varState(k, &v[1], true), c2 = varState(k, &v[2], k->c2);
     const char *decision = rd__skin_decision(copyDiff, rereadDiff, v[0].wrong != 0, c1, c2);
     /* the box check */
-    const uint32_t qi = SK_QUERY0 - i;
+    const uint32_t qi = i;
     const bool boxRead = k->boxRun && samples && qi < nSamples && samples[qi] != RHI_OCCLUSION_NONE;
     const uint64_t outside = boxRead ? samples[qi] : 0u;
     /* the counts */
@@ -1253,14 +1254,14 @@ static void readSlot(SkSlot *sl, uint32_t slot, bool intact, bool occ)
 {
     const uint8_t *map = sl->rb.id ? rhi_map_buffer(sl->rb) : NULL;
     if (map) {
-        static uint64_t samples[RHI_MAX_OCCLUSION];
+        static uint64_t samples[SK_CHECKS_ALL];
         uint32_t ns = 0;
         bool anyBox = false;
         for (uint32_t i = 0; i < sl->n; i++) {
             anyBox = anyBox || sl->checks[i].boxRun;
         }
         if (anyBox && occ) {
-            ns = rhi_read_occlusion(samples, RHI_MAX_OCCLUSION);
+            ns = rhi_read_occlusion(samples, SK_CHECKS_ALL);
         }
         const uint8_t *ringNow = intact ? g_rd.ringMap[slot] : NULL;
         for (uint32_t i = 0; i < sl->n; i++) {
@@ -1342,6 +1343,8 @@ int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out)
     const int saved = s_set;
     s_set = 2;
     s_collect = out;
+    /* the box queries' pools before any recording (no first-begin stall) */
+    (void)rhi_occlusion_prepare(SK_CHECKS_ALL);
     int rc = 0;
     /* the replays of the commands from s_allFrom on, SK_CHECKS_ALL each */
     for (uint32_t from = 0; from < out->commands || from == 0; from += SK_CHECKS_ALL) {

@@ -767,6 +767,12 @@ bool rhi_occlusion_supported(void)
     return false;
 }
 
+bool rhi_occlusion_prepare(uint32_t count)
+{
+    (void)count;
+    return false;
+}
+
 void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index)
 {
     (void)cl;

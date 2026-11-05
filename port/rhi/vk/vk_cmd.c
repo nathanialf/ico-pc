@@ -467,9 +467,11 @@ RhiCommandList rhi_begin_commands(void)
         f->tsReset = true;
     }
     if (f->occPool && !f->occReset) {
-        /* likewise the occlusion queries, once a run has used them */
-        vkCmdResetQueryPool(c->cb, f->occPool, 0, RHI_MAX_OCCLUSION);
+        /* likewise the occlusion queries, once a run has used them: the
+         * range in use (rhi_occlusion_prepare) */
+        vkCmdResetQueryPool(c->cb, f->occPool, 0, g_vkr.occRange);
         f->occReset = true;
+        f->occResetN = g_vkr.occRange;
     }
     out.id = (f->gen << VKR_GEN_SHIFT) | f->listCount;
     return out;
@@ -2158,16 +2160,18 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
 }
 
 /* ------------------------------------------------------- occlusion queries */
-/* The pools at the first begin (rhi.h rhi_cmd_begin_occlusion): one per
- * slot and the result array; the current slot's pool is reset by a
- * one-time submit (its first list began before the pool existed), the
- * others in their first list (rhi_begin_commands).  False when a pool or
- * the array could not be made (occlusion then stays off for the run). */
-static bool vkr_occ_make(void)
+/* The pools at the first begin (rhi.h rhi_cmd_begin_occlusion) or at
+ * rhi_occlusion_prepare: one per slot and the result array; the current
+ * slot's pool is reset by a one-time submit (its first list began before
+ * the pool existed), the others in their first list (rhi_begin_commands),
+ * over range queries.  False when a pool or the array could not be made
+ * (occlusion then stays off for the run). */
+static bool vkr_occ_make(uint32_t range)
 {
     if (g_vkr.occUsed || g_vkr.occBroken) {
         return g_vkr.occUsed;
     }
+    g_vkr.occRange = range;
     g_vkr.occBroken = true; /* until every part is made */
     g_vkr.occResult = malloc(sizeof(uint64_t) * RHI_MAX_OCCLUSION);
     if (!g_vkr.occResult) {
@@ -2215,7 +2219,7 @@ static bool vkr_occ_make(void)
             .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
         };
         vkBeginCommandBuffer(cb, &bi);
-        vkCmdResetQueryPool(cb, f->occPool, 0, RHI_MAX_OCCLUSION);
+        vkCmdResetQueryPool(cb, f->occPool, 0, range);
         vkEndCommandBuffer(cb);
         /* submitted before the lists of this frame, so the reset comes
            first in the queue's order */
@@ -2225,15 +2229,34 @@ static bool vkr_occ_make(void)
             vkr_note_submit(f, value, 1, false);
             vkr_wait_value(value);
             f->occReset = true;
+            f->occResetN = range;
         }
         vkFreeCommandBuffers(g_vkr.device, g_vkr.oneShotPool, 1, &cb);
     }
     g_vkr.occUsed = true;
     g_vkr.occBroken = false;
-    VKR_LOG("occlusion queries: on (%u a frame slot, %s)", (unsigned)RHI_MAX_OCCLUSION,
+    VKR_LOG("occlusion queries: on (%u a frame slot, %u of them reset a frame, %s)",
+            (unsigned)RHI_MAX_OCCLUSION, (unsigned)range,
             g_vkr.occPrecise ? "precise sample counts"
                              : "not precise: a count is exact only as zero or not zero");
     return true;
+}
+
+bool rhi_occlusion_prepare(uint32_t count)
+{
+    if (!rhi_occlusion_supported() || g_vkr.deviceLost || count == 0) {
+        return false;
+    }
+    count = count > RHI_MAX_OCCLUSION ? RHI_MAX_OCCLUSION : count;
+    if (!g_vkr.occUsed && !g_vkr.occBroken) {
+        /* the reset's submit, as at a first begin */
+        rhi_call_guard_settle();
+        return vkr_occ_make(count);
+    }
+    if (g_vkr.occUsed && count > g_vkr.occRange) {
+        g_vkr.occRange = count; /* each slot's next first list */
+    }
+    return g_vkr.occUsed;
 }
 
 void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index)
@@ -2248,10 +2271,21 @@ void rhi_cmd_begin_occlusion(RhiCommandList cl, uint32_t index)
          * entry point that submits makes it ("Frame slots" above) */
         rhi_call_guard_settle();
     }
-    if (!vkr_occ_make()) {
+    if (!vkr_occ_make(RHI_MAX_OCCLUSION)) {
         return;
     }
     VkrFrame *f = vkr_cur_frame();
+    if (f->occPool && f->occReset && index >= f->occResetN) {
+        /* past the range this slot reset (rhi_occlusion_prepare): dropped,
+         * and the whole pool reset from each slot's next use */
+        if (g_vkr.occRange < RHI_MAX_OCCLUSION) {
+            VKR_LOG("occlusion queries: query %u is past the %u reset a frame: dropped; the "
+                    "whole pool is reset from each slot's next use",
+                    (unsigned)index, (unsigned)g_vkr.occRange);
+        }
+        g_vkr.occRange = RHI_MAX_OCCLUSION;
+        return;
+    }
     if (!f->occPool || !f->occReset || ((f->occWritten[index >> 5] >> (index & 31u)) & 1u)) {
         return;
     }
