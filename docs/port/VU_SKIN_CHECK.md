@@ -89,6 +89,19 @@ start write `[dev] vu_skin_check = false` and run without the check; a probe in 
 was lost or the picture not read back turns the check off for the run and the window writes the
 same setting at once ([PLATFORM.md](PLATFORM.md), `rd_vu_skin_probe_failed`).
 
+**Its own compiles** (c2's three pipelines, a box check's for each new key) follow issue 161's
+rule for background compiles (`rd_vu_skin_background`, set by the window from
+`port/platform/window_pipe_finish.c` (`window_pipe_skin_check`)): one job at a time, each begun
+only when `ico_diag_background_memory` says neither the system's low-memory signal (none for the
+rest of the run) nor the free-memory floor now (asked again at the next check), and none at all
+where the start-up set stopped for memory (this start's at the floor, or the last start's, which
+makes this one set-less) on Qualcomm's own driver. Until a pipeline exists its part is not drawn:
+the check runs without its box check or c2, said once (`rd: VU skin check: its box check and its
+c2 variant are not compiled in the background (<why>): the check runs without them`, `... no
+background compile for the rest of the run (<why>) ...`, `... a background compile waits for
+memory (<why>) ...`). The check holds 22 pipelines outside the renderer's cache at most, counted
+in the pool's headroom ([RHI.md](RHI.md)); keys past the 16 box slots are not box-checked.
+
 The cost: one probe pass of three times the draw's vertices times nine one-pixel triangles, one
 3,840-byte copy, a 48 x 1,024 target's copy, every 100 ms; the box check four scissored redraws of
 one command with nothing written; on the CPU the cluster program over at most 1,024 vertices, and
@@ -134,9 +147,9 @@ On an event (a wrong probe, or the block's bytes differing), the first 8, then e
 - `rd: VU skin check: frame F command L:I drew N samples outside its box (texels X,Y WxH, the CPU's vertices + 2 GS pixels; the probe right|wrong too) (event E)`
 
 In the 10 s summary, when the check ran: `rd: VU skin check: P checks, W wrong, B blocks whose bytes
-differed (R changed after the draw); Q box checks, S with samples outside the box; variants on the
-wrong ones: c1 right K, c2 right L (c2 drawn in M checks); largest difference on a right vertex
-D/16 pixel`.
+differed (R changed after the draw); Q box checks, S with samples outside the box, N not drawn
+(their pipeline not made yet; F with no slot left for the key); variants on the wrong ones: c1
+right K, c2 right L (c2 drawn in M checks); largest difference on a right vertex D/16 pixel`.
 
 ## Switches
 

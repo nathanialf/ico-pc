@@ -1799,12 +1799,13 @@ float rd_precreate_longest_ms(void)
 /* The pool's headroom (rhi_pipeline_pool.h) holds what is alive outside
  * the cache at once: one batch's descriptions (its ids held until it
  * ends, its duplicates destroyed then), the COLCLAMP 0 pipelines, Motion
- * blur: Smooth's two (rd_blur_smooth.c) and the movie's three (rd_video.c:
- * two outputs, the field pipeline) */
-_Static_assert(RD_PIPE_BATCH + RD_WRAP_PIPES + RD_BLUR_SMOOTH_PIPES + 3u <=
+ * blur: Smooth's two (rd_blur_smooth.c), the movie's three (rd_video.c:
+ * two outputs, the field pipeline) and the skin check's (rd_vu_skin_check.h
+ * RD_VU_SKIN_PIPES: the probe's, c2's and the box checks') */
+_Static_assert(RD_PIPE_BATCH + RD_WRAP_PIPES + RD_BLUR_SMOOTH_PIPES + 3u + RD_VU_SKIN_PIPES <=
                    (unsigned)RHI_PIPELINE_POOL_HEADROOM,
-               "the RHI's pipeline pool headroom holds a batch, the wrap, Smooth's and the movie "
-               "pipelines");
+               "the RHI's pipeline pool headroom holds a batch, the wrap, Smooth's, the movie's "
+               "and the skin check's pipelines");
 _Static_assert(RD_PIPELINE_CACHE_MAX + RHI_PIPELINE_POOL_HEADROOM == RHI_PIPELINE_POOL_MAX,
                "the RHI's pipeline pool holds the cache and the headroom");
 

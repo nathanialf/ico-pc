@@ -412,7 +412,7 @@ adds two fx keys while it is on, `fx_aura_rows_ps` into the RGBA16_UINT ROWBOX a
 Adreno 710; the tests' counts keep it off (no device, or a desktop device whose profile leaves it
 off). The set's first line names it against the pool (`rd_precreate_pipelines`):
 
-    rd: pipelines: the start-up set's 1153 keys (pool 4160: the cache's 4096 and 64 for the pipelines made outside it; 0 already made)
+    rd: pipelines: the start-up set's 1153 keys (pool 4192: the cache's 4096 and 96 for the pipelines made outside it; 0 already made)
 
 and the next line splits the set by family (`port/render/rd_pipeline.c` (`rd__pipe_key_family`), by what
 a key holds, not by the enumerator that listed it: a DATE twin of a VU or screen key counts as DATE,
@@ -457,12 +457,12 @@ caller of `mc_SetMicroCode`, so the programs that draw there cannot be read from
 and with the vertex pre-pass the drawing keys carry `vu_main_vs` and `RD_PROG_PRELIT` whatever the
 program (`port/render/rd_mesh.c` (`enumerateVuDraws`)), so a key cannot say "specular only". A
 fold to the specular entries could be made only with the pre-pass off. `rd_replay_tool --keys` lists the VU keys with a DATE state a dump asks for.
-The summary line's renderer part ends with ` (pool 4160, cache 4096)` after the set's words
+The summary line's renderer part ends with ` (pool 4192, cache 4096)` after the set's words
 (`rd_summary_text`). A creation that fails, in the set or at first use, is logged with the key, when
 it was asked for and why, the first 8 and then every 100th with the count so far
 (`port/render/rd_pipeline.c` (`keepPipeline`, `failReason`)):
 
-    rd: pipeline creation failed on first use in list 0 (program 0 blend 4 vs 4 fs 5 fmt 1/8): the RHI's pipeline pool is full (4160 of 4160 alive); draws with this key are skipped (1 failed so far)
+    rd: pipeline creation failed on first use in list 0 (program 0 blend 4 vs 4 fs 5 fmt 1/8): the RHI's pipeline pool is full (4192 of 4192 alive); draws with this key are skipped (1 failed so far)
 
 `in the start-up set` or `in a replay's gathered keys` in place of `on first use in list 0`; the
 reason is the RHI's, read from `RhiStats` around the creation (`pipelinePoolFull`,

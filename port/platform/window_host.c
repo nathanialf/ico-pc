@@ -2493,6 +2493,8 @@ open_window:
        the next start counts it as a clean start when it ended without a
        loss (window_robust.h, robust_persist.h) */
     window_robust_reached();
+    /* the skin check's own background compiles under issue 161's rule */
+    window_pipe_skin_check(pipePolicy);
     /* a device loss from here takes the loss order's lossnoprepass step
        first when the run draws with the VU vertex pre-pass (its self-test
        above may have turned it off) */
@@ -2745,6 +2747,7 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
         }
     }
     ico_diag_set_vu_prepass(rd_vu_prepass_on());
+    window_pipe_skin_check(-1);
     ico_diag_step("window: switch to %s: the fog self-test", backend);
     rd_fog_selftest();
     if (reopen_lost(backend)) {

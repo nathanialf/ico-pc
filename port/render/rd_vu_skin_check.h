@@ -152,6 +152,13 @@ int rd__skin_check_default(bool windowed, bool adreno, int env);
 bool rd__profile_vendor_adreno(uint32_t vendorId, bool moltenvk);
 bool rd__profile_adreno(void);
 
+/* the box check's pipeline slots (distinct keys, kept for the run), and
+ * every pipeline the check holds outside the renderer's cache: the probe's
+ * three, c2's three and the box checks' (rd_pipeline.c counts them in the
+ * pool's headroom, rhi_pipeline_pool.h) */
+#define RD_VU_SKIN_BOX_PIPES 16
+#define RD_VU_SKIN_PIPES (3u + 3u + RD_VU_SKIN_BOX_PIPES)
+
 /* ------------------------------------------------------- the engine
  * rd_vu_skin_check.c, rd_vu_skin_selftest.c; the replay calls these. */
 

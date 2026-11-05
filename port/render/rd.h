@@ -774,6 +774,16 @@ void rd_pipelines_lazy_tick(void);
  * logged).  The game thread, before the render thread starts. */
 typedef int (*RdBackgroundMemoryFn)(char *why, size_t size);
 uint32_t rd_pipelines_background_start(RdBackgroundMemoryFn memory);
+/* The skinned draws' bone-block check's own background compiles (its c2
+ * variant's three pipelines and its box checks', rd_vu_skin_check.c; issue
+ * 163) under issue 161's rule as the finisher above: memory asked before
+ * each (2: none for the rest of the run; 1: not now), one at a time;
+ * noBackground non-NULL (the start-up set stopped for memory on Qualcomm's
+ * own driver: window_pipe_finish.c) none at all, its words in the one line
+ * that says so.  Until a pipeline exists its part of the check is not drawn.
+ * The window, before the render thread starts; without a call (the tests,
+ * the tool) every compile may begin. */
+void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground);
 /* A late game step or a slow picture: no background batch begins for
  * RD_FINISH_HOLD_MS (a batch in flight goes on).  Any thread. */
 void rd_pipelines_background_hold(void);

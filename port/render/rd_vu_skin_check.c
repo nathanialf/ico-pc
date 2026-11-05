@@ -173,21 +173,6 @@ static struct {
     bool idxTried;
 } s_p;
 
-/* the box check's pipelines: the draw's key without its writes, compiled
- * in the background */
-#define SK_BOX_PIPES 16
-
-typedef struct SkBoxPipe {
-    bool used, failed;
-    RdPipeKeyInt key;
-    RhiPipelineDesc desc;
-    RhiBindGroupLayout lay[4];
-    RhiPipelineJobs *job;
-    RhiPipeline pipe;
-} SkBoxPipe;
-
-static SkBoxPipe s_box[SK_BOX_PIPES];
-
 static uint8_t vsOf(uint32_t i)
 {
     return (uint8_t)(RD_VS_VU_SKIN + i);
@@ -259,14 +244,129 @@ static bool probesMake(void)
     return true;
 }
 
-/* c2's pipelines: begun in the background once; wait: the tool's and the
- * tests' (taken now) */
+/* the counts: the run's and the 10 s block's */
+static struct {
+    uint64_t checks, wrong, blocks, reread, box, boxOut, events, boxEvents;
+} s_run;
+
+static struct {
+    uint64_t checks, wrong, blocks, reread, box, boxOut, c1Right, c2Right, c2Run;
+    /* box checks not drawn: their pipeline not made (the background
+     * compile not begun or not done: one job at a time, the memory rule),
+     * of them with no slot left for the key */
+    uint64_t boxNot, boxFull;
+    int32_t maxRight;
+} s_blk;
+
+/* the box check's pipelines: the draw's key without its writes, compiled
+ * in the background */
+#define SK_BOX_PIPES RD_VU_SKIN_BOX_PIPES
+
+typedef struct SkBoxPipe {
+    bool used, failed;
+    RdPipeKeyInt key; /* rd__pipeline_key_norm's: the pass's sample count in it */
+    RhiPipelineDesc desc;
+    RhiBindGroupLayout lay[4];
+    RhiPipelineJobs *job;
+    RhiPipeline pipe;
+} SkBoxPipe;
+
+static SkBoxPipe s_box[SK_BOX_PIPES];
+
+/* ----------------------------------------- the background compiles' rule
+ * Issue 161's memory rule for the check's own compiles (c2's three, the
+ * box check's): one job at a time; each begun only when the window's
+ * memory function (rd.h rd_vu_skin_background: diag_host.h
+ * ico_diag_background_memory, as the background finisher asks it) says
+ * neither the system's low-memory signal (2: none for the run) nor the
+ * free-memory floor now (1: asked again at the next check), and none at
+ * all where the start-up set stopped for memory on Qualcomm's own driver
+ * (window_pipe_finish.c: that driver's compiler ran the device out of
+ * memory).  Until a pipeline exists its part is not drawn (the box check,
+ * c2), said once. */
+static RdBackgroundMemoryFn s_memFn;
+static char s_noBg[192]; /* why none is compiled in the background: "" allowed */
+static bool s_memStop;   /* the system's signal: none for the run */
+static bool s_bgSaid[3]; /* the lines said: the rule, the signal, the floor */
+
+void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground)
+{
+    s_memFn = memory;
+    snprintf(s_noBg, sizeof(s_noBg), "%s", noBackground ? noBackground : "");
+}
+
+static bool jobBusy(void)
+{
+    if (s_p.roJob) {
+        return true;
+    }
+    for (int i = 0; i < SK_BOX_PIPES; i++) {
+        if (s_box[i].job) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* whether a background compile may begin now (wait: the tool's and the
+ * tests', taken at once: always) */
+static bool bgMay(bool wait)
+{
+    if (wait) {
+        return true;
+    }
+    if (jobBusy()) {
+        return false;
+    }
+    if (s_noBg[0]) {
+        if (!s_bgSaid[0]) {
+            s_bgSaid[0] = true;
+            rd__log("VU skin check: its box check and its c2 variant are not compiled in the "
+                    "background (%s): the check runs without them",
+                    s_noBg);
+        }
+        return false;
+    }
+    if (s_memStop) {
+        return false;
+    }
+    if (s_memFn) {
+        char why[128] = "";
+        const int m = s_memFn(why, sizeof(why));
+        if (m >= 2) {
+            s_memStop = true;
+            if (!s_bgSaid[1]) {
+                s_bgSaid[1] = true;
+                rd__log("VU skin check: no background compile for the rest of the run (%s): the "
+                        "box checks and the c2 variant not made yet are not drawn",
+                        why);
+            }
+            return false;
+        }
+        if (m == 1) {
+            if (!s_bgSaid[2]) {
+                s_bgSaid[2] = true;
+                rd__log("VU skin check: a background compile waits for memory (%s): the box "
+                        "check or the c2 variant not made yet is not drawn until then",
+                        why);
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+/* c2's pipelines: begun in the background once (bgMay); wait: the tool's
+ * and the tests' (taken now) */
 static void roPoll(bool wait)
 {
     if (!rhi_limits()->uniformRobustOff || s_p.roDone) {
         return;
     }
     if (!s_p.roBegun) {
+        if (!bgMay(wait)) {
+            return;
+        }
         s_p.roBegun = true;
         uint32_t n = 0;
         for (uint32_t i = 0; i < SK_VS_COUNT; i++) {
@@ -362,7 +462,11 @@ static RhiPipeline boxPipe(const RdPipeKeyInt *k, bool wait)
             }
         }
         if (!e) {
-            return (RhiPipeline){0}; /* full: the keys after the first 16 go unchecked */
+            s_blk.boxFull++; /* full: the keys after the first 16 go unchecked */
+            return (RhiPipeline){0};
+        }
+        if (!bgMay(wait)) {
+            return (RhiPipeline){0}; /* another job in flight, or the memory rule */
         }
         memset(e, 0, sizeof(*e));
         e->used = true;
@@ -386,6 +490,19 @@ static RhiPipeline boxPipe(const RdPipeKeyInt *k, bool wait)
         e->failed = !e->pipe.id;
     }
     return e->pipe;
+}
+
+/* the job in flight taken when done (each check: one job at a time, so
+ * the next key's may begin) */
+static void jobsPoll(void)
+{
+    for (int i = 0; i < SK_BOX_PIPES; i++) {
+        SkBoxPipe *e = &s_box[i];
+        if (e->job && rhi_create_pipelines_end(e->job, false, &e->pipe, NULL, NULL)) {
+            e->job = NULL;
+            e->failed = !e->pipe.id;
+        }
+    }
 }
 
 /* ------------------------------------------------------------ the checks */
@@ -434,16 +551,6 @@ static SkCheck *s_cur;
 static uint32_t s_seenReplay, s_seen, s_lastCount, s_rr;
 static bool s_pickedThis;
 static double s_lastMs;
-
-/* the counts: the run's and the 10 s block's */
-static struct {
-    uint64_t checks, wrong, blocks, reread, box, boxOut, events, boxEvents;
-} s_run;
-
-static struct {
-    uint64_t checks, wrong, blocks, reread, box, boxOut, c1Right, c2Right, c2Run;
-    int32_t maxRight;
-} s_blk;
 
 static RdSkinSummary *s_collect; /* rd__vu_skin_check_frame's */
 
@@ -699,6 +806,7 @@ static void boxCheck(Replay *r, const DrawSetup *ds, const RdSkinDraw *d, SkChec
     key.gs.zwrite = RD_ZWRITE_OFF;
     const RhiPipeline p = boxPipe(&key, skMode() == 2);
     if (!p.id) {
+        s_blk.boxNot++;
         return;
     }
     const RhiCommandList cl = rd__replay_cl();
@@ -868,6 +976,7 @@ void rd__vu_skin_end(void)
         sl->n = 0;
         return;
     }
+    jobsPoll();
     roPoll(skMode() == 2);
     RhiBinding fb;
     memset(&fb, 0, sizeof(fb));
@@ -1206,12 +1315,14 @@ void rd__vu_skin_block(void)
         return;
     }
     rd__log("VU skin check: %llu checks, %llu wrong, %llu blocks whose bytes differed (%llu "
-            "changed after the draw); %llu box checks, %llu with samples outside the box; "
+            "changed after the draw); %llu box checks, %llu with samples outside the box, %llu "
+            "not drawn (their pipeline not made yet; %llu with no slot left for the key); "
             "variants on the wrong ones: c1 right %llu, c2 right %llu (c2 drawn in %llu checks); "
             "largest difference on a right vertex %d/16 pixel",
             (unsigned long long)s_blk.checks, (unsigned long long)s_blk.wrong,
             (unsigned long long)s_blk.blocks, (unsigned long long)s_blk.reread,
             (unsigned long long)s_blk.box, (unsigned long long)s_blk.boxOut,
+            (unsigned long long)s_blk.boxNot, (unsigned long long)s_blk.boxFull,
             (unsigned long long)s_blk.c1Right, (unsigned long long)s_blk.c2Right,
             (unsigned long long)s_blk.c2Run, s_blk.maxRight);
     memset(&s_blk, 0, sizeof(s_blk));
@@ -1306,4 +1417,6 @@ void rd__vu_skin_shutdown(void)
     s_lastMs = 0.0;
     s_env = -2;
     s_dev = -1;
+    s_memStop = false;
+    memset(s_bgSaid, 0, sizeof(s_bgSaid));
 }
