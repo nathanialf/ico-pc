@@ -227,11 +227,18 @@ static void testToneRows(void)
                   "title %d: tone row %d: 50 (Default) (%s)", title, i,
                   ui_settings_value_text(kRows[i]));
         }
-        CHECK(ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_TONE_GAMMA) ==
-                      ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_CRT_STRENGTH) + 1 &&
-                  ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_TEXTURE_PACK) ==
-                      ui_settings_row_of(UI_PAGE_PICTURE, UI_OPT_TONE_SATURATION) + 1,
-              "title %d: the four rows sit between CRT strength and Texture pack", title);
+        {
+            /* the page's option list skips the notes between the rows */
+            int at = 0;
+
+            while (at < fn && fo[at] != UI_OPT_CRT_STRENGTH) {
+                at++;
+            }
+            CHECK(at + 5 < fn && fo[at + 1] == UI_OPT_TONE_GAMMA &&
+                      fo[at + 2] == UI_OPT_TONE_BRIGHTNESS && fo[at + 3] == UI_OPT_TONE_CONTRAST &&
+                      fo[at + 4] == UI_OPT_TONE_SATURATION && fo[at + 5] == UI_OPT_TEXTURE_PACK,
+                  "title %d: the four rows sit between CRT strength and Texture pack", title);
+        }
         CHECK(noteStarting(UI_PAGE_PICTURE, "50 is the picture as the game draws it.") >= 0,
               "title %d: the shared note", title);
         for (int i = 0; i < 4; i++) {
