@@ -497,6 +497,11 @@ typedef struct VkrState {
      *                (vk_resource.c, the allocation table), so a faulting
      *                address names its resource. */
     bool robust, robust2, deviceFault, checkpoints, addressReport;
+    /* VK_EXT_pipeline_robustness enabled (robust access on and the device
+     * offers pipelineRobustness): a pipeline can turn the uniform-buffer
+     * robustness off (RhiPipelineDesc.uniformRobustOff; the skin check's
+     * variant, issue 163) */
+    bool pipeRobust;
     PFN_vkGetDeviceFaultInfoEXT getFaultInfo;
     PFN_vkCmdSetCheckpointNV cmdSetCheckpoint;
     PFN_vkGetQueueCheckpointDataNV getCheckpointData;
