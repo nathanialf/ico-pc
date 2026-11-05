@@ -64,7 +64,8 @@ static int failures;
 /* --- the game's side ------------------------------------------------------ */
 
 StgPre stageData[110];
-const ExitData exitData[2]; /* exitData[0]: the origin, as on every disc */
+const ExitData exitData[2] = {
+    [0] = {.pos = {0.0f, 0.0f, 0.0f}}}; /* exitData[0]: the origin, as on every disc */
 GenGeo objLayout[64];
 int stage_no = 1;
 int systemStatus[12] = {1, 1}; /* PAL, frame step 1 */
