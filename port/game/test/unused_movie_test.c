@@ -163,6 +163,18 @@ void ico_host_enter_test_stage(int stage)
 
 void ico_host_skip_entry_walk(void) {}
 
+/* camera-ico2.c: the camera beside the boy's lines (no room starts here) */
+int ico_host_camera_view(float *eye, float *at, int *mode, int *computed)
+{
+    for (int k = 0; k < 3; k++) {
+        eye[k] = 0.0f;
+        at[k] = 0.0f;
+    }
+    *mode = 0;
+    *computed = 0;
+    return -1;
+}
+
 /* StageManager.c: the stage switch the attract asks for */
 void stgmgrForceSwitchWithFade(int stage, float fadeIn, float fadeOut)
 {

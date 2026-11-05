@@ -121,6 +121,12 @@ void ico_host_enter_test_stage(int stage);
    E3_StageStartBoy clears and returns on), so a test room's boy stands
    where the room puts him */
 void ico_host_skip_entry_walk(void);
+/* omori/src/camera-ico2.c: the monitor camera for a test room's log
+   lines (reads only): returns the zone the camera last found (-1 none
+   since the stage's init); eye and at its eye and look-at in the roots'
+   space, mode the camera mode, computed nonzero once a camera has been
+   computed since the stage's init */
+int ico_host_camera_view(float *eye, float *at, int *mode, int *computed);
 
 #ifdef __cplusplus
 }
