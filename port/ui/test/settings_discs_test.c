@@ -10,6 +10,8 @@
  * only. */
 #include "settings_fixture.h"
 
+#include "ico_unused.h"
+
 typedef struct {
     const char *slug;
     int hz50;       /* 50 Hz (Display, title only): has_50hz_row */
@@ -25,14 +27,104 @@ typedef struct {
     int credits;   /* Extras > Credits (title): credits_staff_packs */
     int debugMenu; /* Developer > Debug menu (Developer mode): not jun26 */
     int startFlag; /* the New Game screen's start flag: gflag_new_game */
+    /* Extras > Unused content (title): the arena, the climbing room, the
+       attract movie, the early show art, and the page's link */
+    int unused[4];
+    int unusedPage;
 } Expect;
 
 static const Expect kExpect[] = {
-    {"pal", 1, 1, 1, 1, 0, 1, 1, 382},  {"jpn", 0, 0, 0, 1, 0, 1, 1, 382},
-    {"kor", 0, 0, 0, 1, 0, 1, 1, 382},  {"ntsc", 0, 0, 1, 0, 1, 1, 1, 349},
-    {"aug6", 0, 0, 1, 0, 1, 1, 1, 348}, {"jun26", 0, 0, 1, 0, 1, 0, 0, 333},
-    {"cn", 0, 0, 0, 1, 0, 1, 1, 382},
+    {"pal", 1, 1, 1, 1, 0, 1, 1, 382, {1, 1, 1, 1}, 1},
+    {"jpn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1},
+    {"kor", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1},
+    {"ntsc", 0, 0, 1, 0, 1, 1, 1, 349, {1, 1, 0, 1}, 1},
+    {"aug6", 0, 0, 1, 0, 1, 1, 1, 348, {1, 1, 0, 1}, 1},
+    {"jun26", 0, 0, 1, 0, 1, 0, 0, 333, {0, 0, 0, 0}, 0},
+    {"cn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1},
 };
+
+/* Extras > Unused content through the program's CPU side (unused_content.c:
+   the row's stage on this disc by ico_region_stage, asked once per disc)
+   over a fake engine for DATA.DF: the June 2001 demo's holds none of the
+   rows' data (region_jun26.c's 49 entries), every other disc's answers 1
+   for every row it is asked about, so the 104-row discs' movie is hidden
+   by the stage mapping (no memoryPAL576 row) before the engine is asked */
+static const char *s_discSlug;
+static int s_engineAsked[4];
+
+static int fakeEngineAvailable(int row)
+{
+    if (row >= 0 && row < 4) {
+        s_engineAsked[row]++;
+    }
+    return strcmp(s_discSlug, "jun26") != 0;
+}
+
+static int fakeEngineBegin(int row)
+{
+    (void)row;
+    return -1;
+}
+
+static int hostAvailable(int row)
+{
+    return ico_unused_available(row);
+}
+
+static int hostOpen(int row)
+{
+    return ico_unused_start(row);
+}
+
+static void checkUnusedRows(const Expect *e)
+{
+    static const IcoUnusedEngine kEngine = {fakeEngineAvailable, fakeEngineBegin};
+    static const UiUnusedHost kHost = {hostAvailable, hostOpen};
+    static const UiSettingsOpt kRows[4] = {UI_OPT_UNUSED_ARENA, UI_OPT_UNUSED_CLIMB,
+                                           UI_OPT_UNUSED_MOVIE, UI_OPT_UNUSED_ART};
+    s_discSlug = e->slug;
+    memset(s_engineAsked, 0, sizeof(s_engineAsked));
+    ico_unused_set_engine(&kEngine);
+    ui_settings_set_unused_host(&kHost);
+    useConfig("version = 1\n[ui]\nlanguage = \"en\"\n");
+    stage_no = 1;
+    const int mainL = enterMainKeep(1);
+    const int exL = openPage(mainL, -1, UI_PAGE_EXTRAS);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    for (int r = 0; r < 4; r++) {
+        CHECK(ui_settings_opt_shown(kRows[r]) == e->unused[r],
+              "%s title: Unused content row %d %d, want %d", e->slug, r,
+              ui_settings_opt_shown(kRows[r]), e->unused[r]);
+        CHECK(s_engineAsked[r] <= 1, "%s: row %d asked of the engine %d times (once per disc)",
+              e->slug, r, s_engineAsked[r]);
+    }
+    CHECK(ico_unused_stage(ICO_UNUSED_MOVIE) > 0 || s_engineAsked[ICO_UNUSED_MOVIE] == 0,
+          "%s: no movie stage, the engine not asked (%d)", e->slug,
+          s_engineAsked[ICO_UNUSED_MOVIE]);
+    int el[11];
+    const int n = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 11);
+    CHECK(n == 11 && ui_settings_row_shown(el[4]) == e->unusedPage &&
+              lt_ext_prop(el[4])->defaultMask == !e->unusedPage,
+          "%s title: the Unused content link shown %d, want %d", e->slug,
+          n == 11 ? ui_settings_row_shown(el[4]) : -1, e->unusedPage);
+    if (e->unusedPage) {
+        openLink(exL, UI_PAGE_EXTRAS, UI_PAGE_UNUSED);
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        checkPageFits(UI_PAGE_UNUSED, "Unused content");
+    }
+    /* the pause menu: never */
+    stage_no = 11;
+    enterMainKeep(0);
+    for (int r = 0; r < 4; r++) {
+        CHECK(!ui_settings_opt_shown(kRows[r]), "%s pause: no Unused content row %d", e->slug, r);
+    }
+    ui_settings_set_unused_host(NULL);
+    ico_unused_set_engine(NULL);
+}
 
 static const Expect *expectFor(const char *slug)
 {
@@ -172,6 +264,7 @@ int main(int argc, char **argv)
               "%s: the region row's fields as the matrix says", slug);
         checkTitleRows(e);
         checkPauseRows(e);
+        checkUnusedRows(e);
     }
     gFlagGameClear = 0;
     ico_opt_set_ui_language(-1);

@@ -800,6 +800,23 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "모션 블러 강도",
     [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
         "값을 줄이면 블러가 더 빠르게 사라집니다. 100은 PS2 그대로입니다.",
+    [UI_STR_SECTION_UNUSED] = "미사용 콘텐츠",
+    [UI_STR_UNUSED_ARENA] = "테스트 방: 아레나",
+    [UI_STR_UNUSED_ARENA_NOTE] =
+        "제작진이 그림자와의 전투를 시험하던 방입니다. 출구가 없으니 START를 누르고 '게임을 종료함'으로 나가십시오.",
+    [UI_STR_UNUSED_CLIMB] = "테스트 방: 오르기",
+    [UI_STR_UNUSED_CLIMB_NOTE] =
+        "제작진이 오르기와 상자를 시험하던 방입니다. 출구가 없으니 START를 누르고 '게임을 종료함'으로 나가십시오.",
+    [UI_STR_UNUSED_MOVIE] = "데모 영상 (576라인)",
+    [UI_STR_UNUSED_MOVIE_NOTE] =
+        "타이틀 화면을 그대로 두면 나오는 영상의 또 다른 판입니다. 유럽 TV용으로 만들어졌지만 쓰이지 않았습니다.",
+    [UI_STR_UNUSED_ART] = "초기 전시판 타이틀 그림",
+    [UI_STR_UNUSED_ART_NOTE] =
+        "초기 전시판의 타이틀 화면 그림입니다. 디스크에 남아 있지만 표시되지 않습니다.",
+    [UI_STR_UNUSED_ART_VER] = "전시판: 버전 표기",
+    [UI_STR_UNUSED_ART_START] = "전시판: PRESS START",
+    [UI_STR_UNUSED_ART_COPYRIGHT] = "전시판: 저작권 표기",
+    [UI_STR_STATES_REFUSED_UNUSED] = "테스트 방에서는 할 수 없습니다",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

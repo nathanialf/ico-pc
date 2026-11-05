@@ -288,6 +288,7 @@ UNUSED_FN(soundSeDefPlay)
 UNUSED_FN(soundSeGroupStop)
 UNUSED_FN(staffRollStart)
 UNUSED_FN(stgmgrForceSwitch)
+UNUSED_FN(stgmgrForceSwitchWithFade)
 UNUSED_FN(tex_ListTool)
 
 /* called by debug_VariableInit */

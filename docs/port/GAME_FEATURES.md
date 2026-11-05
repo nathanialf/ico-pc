@@ -29,6 +29,8 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | `port/ui/gallery.h`, `gallery.c`, `gallery_play.c` | the music gallery's list and its engine |
 | `port/data/df_pack.h` | reading one member of a `DATA.DF` stage pack outside the game's disc thread |
 | `port/include/ico_credits.h`, `port/game/credits.c`, `credits_live.c` | the staff roll's port credit and the Extras credits playback |
+| `port/include/ico_unused.h`, `port/game/unused_content.c`, `unused_live.c` | Extras > Unused content: the rows, the flag and the start; the engine (what each disc holds, the test rooms) ([Unused content](#unused-content)) |
+| `port/game/game_state_keep.h`, `game_state_keep.c` | the game's state kept across the credits playback and a test room, put back at the title |
 | `port/game/title_logo.h`, `title_logo.c` | the title logo hidden under the port's menus, the title's full-frame models |
 | `port/game/subtitles.h`, `subtitles_ru_bobttz.c`, `subtitles_ru_cobra838.c`, `subtitles_pt_br.c` | the community translations' subtitle tables: the words of each record each translates |
 | `port/ui/subtitle_text.h`, `subtitle_text.c` | the subtitles of the community translation in force, drawn as text in `jimakuDisp`'s place of the strips |
@@ -452,6 +454,9 @@ hold the rest.
 | Extras > Models | W | W | W | K | K | K | W | the model table has a Japanese column only (`tools/gen_mv_region.py`); the README names the 2001 discs' wrong models and the demo's missing ones; `model_viewer_jpn`/`_kor`/`_cn` |
 | Extras > Characters | W | W | W | W | W | W | W | the characters' textures by name (`appearance.c`); `appearance`, `settings_extras` (from the title it runs in the model viewer) |
 | Extras > Credits (title, once unlocked) | W | W | W | W | W | H | W | `credits_staff_packs` (the demo's DATA.DF has no `STGSTAFF*.DF`); `settings_discs`, `settings_extras_<slug>`, `credits_<slug>` |
+| Extras > Unused content: Test room: arena, Test room: climbing (title) | W | W | W | W | W | H | W | the stage's pack in the disc's `DATA.DF` (`STGBOSS_TEST.DF`, `STG8TEST.DF`; the demo's 49 entries hold neither), the host's `available`; `unused_content_<slug>`, `settings_discs_<slug>` |
+| Extras > Unused content: Attract movie (576 lines) (title) | W | H | H | H | H | H | H | stage 59 (`memoryPAL576`) is the European `stageData`'s only (`ico_region_stage(59)` is -1 elsewhere) and `pal_advertise576.pss` its `DATA.DF`'s; `unused_content_<slug>`, `settings_discs_<slug>` |
+| Extras > Unused content: Early show title art (title) | W | W | W | W | W | H | W | the member `object/sdf/e3/st13b/model/copy_right.p2o` in a pack of the disc (`ico_df_find_member`; the demo has no `STGLOG.DF`); the link itself hidden on the demo, one line; `unused_content_<slug>`, `settings_discs_<slug>` |
 | Extras > Export textures, Add to Steam | W | W | W | W | W | W | W | the running disc's `DATA.DF`; disc-independent |
 | Extras > Back up your data, Restore from a backup (title) | W | W | W | W | W | W | W | the user folder's files, every disc's at once (the card folders hold each disc's directory; `states/<slug>/`); the manifest names the disc played; `backup`, `settings_backup`, `settings_backup_<slug>` (jpn, kor, cn) |
 | Photo mode (Film effect 1 to 4, Deja vu) | W | W | W | W | W | W | W | the grain is `gsb_filmNoise` on every disc (the 2001 arm's call is the port's); no reel scratches where `reel_row` is -1 (logged) |
@@ -965,6 +970,79 @@ American disc, the August 2001 preview and the June 2001 demo, `ico2/fumi/src/ac
 before anything changes, logged as `credits: failed: this disc (SCUS-97158) has no staff roll: its
 DATA.DF holds no STGSTAFF1.DF (stage 59), so the ending's staff scenes cannot be played`.
 
+## Unused content
+
+Settings > Extras > Unused content offers, from the title, what the retail discs carry and nothing
+in play reaches (`port/include/ico_unused.h`). The rows are keyed by the European stage number and
+reach each disc's own through `ico_region_stage` (`port/game/unused_content.c` (`kRows`)); the
+stage numbers and pack names are the ELFs' `stageData` (`port/data/gen/<slug>/table_desc.c`
+`stage-all`):
+
+| row | European stage | 104-row discs | June 2001 demo | needs in `DATA.DF` |
+| --- | --- | --- | --- | --- |
+| Test room: arena | 88 `boss_test` | 86 | 85 | `STGBOSS_TEST.DF` |
+| Test room: climbing | 91 `8a_TEST` | 89 | 88 | `STG8TEST.DF` |
+| Attract movie (576 lines) | 59 `memoryPAL576` (its `dataFile` is `#REF!`: no pack) | none | none | the loose `pal_advertise576.pss` |
+| Early show title art | 1 `logo` | 1 | 1 | `STGLOG.DF` and its member `object/sdf/e3/st13b/model/copy_right.p2o` |
+
+On the PS2 only the debug Stage Select reaches the two rooms (`ico2/common/src/debug.c`
+(`debug_SelectStageMain`)); the title's attract picks stage 58 or 57 only (`ico2/script/src/op.c`,
+`systemStatus[0] != 0 ? 58 : 57`), so the 576-line film is never shown; the early show art is
+loaded with the logo pack at every boot and drawn only by a title script whose pack no retail disc
+has.
+
+- Availability (`port/game/unused_live.c` (`available`)): the row's stage exists on the disc and
+  is below its `stage_count`; the stage row's `dataFile` plus `.DF` is the table's pack and is in
+  `DATA.DF` (`ico_df_has`, as the model viewer asks for a host stage's pack); the loose file
+  (`ico_df_has`); the member (`ico_df_find_member`). Each answer is asked once per disc
+  (`ico_unused_available`), each refusal one line (`unused: no <row> row on <disc>: ...`), each yes
+  one line (`unused: <row> on <disc> (stage N)`). The disc matrix's three rows are
+  [Options on each disc](#options-on-each-disc)'s.
+- The test rooms' start (`beginRoom`), from the title only (stage 1, no stage change, as the
+  credits): the game's state is kept (`game_state_keep.c`, the credits' recipe), the title theme
+  fades as a load from the title fades it, and `ico_host_enter_test_stage(stage)`
+  (`ico2/common/src/debug.c`) enters the stage as Stage Select does: the sound segments and the
+  stage's sounds closed, the pause menu allowed, the boards reset, Stage Select's flag pair (on
+  before the change, off after: `PAL_NTSC_AUG6JUN26`), the boy's control on,
+  `stgmgrForceSwitchWithFade(stage, 8, 4)` and `ACTGame_SetActors_Debug(stage, 1)`; the port writes
+  no flag number. The menu closes on the game's empty layout; the stage's own init switches to the
+  play layout, whose Start opens the pause menu.
+- The arena has no `exitData` row into it, so `ACTGame_SetActors_Debug` puts the boy's record at
+  `exitData[0]`'s place, the origin; its sword row is at y 65 and its sixteen shadow rows at y 71
+  (`objLayout` 3589, 3591-3606 on the European disc), so the engine moves the boy's record
+  (`credits_boy_label`, kind 1) to the first kind-4 row of the stage's own layout range, read from
+  the running disc's `objLayout` at the start (`placeOnFloor`), and logs both places. The climbing
+  room has its entrance (`exitData` 260 on the European disc).
+- Leaving: the rooms have no exit. Pause > End Game goes back to the title by the game's own path.
+  A game over goes there with either choice: `la_game_over_continue` and its two other arms
+  (`ico2/common/src/layout_action.c`) route Continue as Quit while `ico_unused_active()`
+  (`gflagInit`, `nextStage = 1`, on the European arm `optionScreenMode = 0` as its Quit), and
+  `ico_unused_game_over` marks the reason. As the title's stage is entered
+  (`ico_unused_stage_enter`, `StageManager.c` (`start_stage_Load_thread`)) the state is put back
+  and the flag cleared, and Options opens again on the page once the title's menu is up
+  ([UI.md](UI.md#extras--unused-content)).
+- A start that never reaches its stage (the credits' bounds, 1500 Main ticks with no stage change,
+  4500 in all): on the title the state is put back at once, elsewhere the title is requested and the
+  state put back as it is entered.
+- While a room runs the achievements are suspended (`ico_gs_achievements_suspended`) and nothing is
+  saved by the port. A save state is refused: the Save states page refuses Save before its host
+  (`port/ui/settings_states.c` (`statesPerform`): the popup `UI_STR_STATES_REFUSED_UNUSED`, "Not
+  in a test room", and `unused: save state refused in a test room (slot N)`), and the save
+  conditions refuse it too (`port/game/state_rules.c`, `IcoStateConds.unused`: `ICO_STATE_PHOTO`,
+  "a test room"), so F5 cannot save there either. Loading a state is not refused.
+- The movie and art rows' starts refuse in this build (`unused: failed: ... cannot be started in
+  this build`); their availability is final.
+- Log lines: `unused: enter <row>`, `unused: test room <row> (stage N on this disc) started from the
+  title at Main tick T`, the arena's placement, `unused: stage N at Main tick T`, `unused: the test
+  room's stage N is up ...`, `unused: game over in the test room <row>: both choices go to the
+  title`, `unused: back at the title after X s (End Game | game over | fail-start): ...`, `unused:
+  Options open again on Unused content`, the failures (`unused: failed: ...`), and Settings'
+  `extras: no Unused content page on <disc id>`.
+
+ctests `unused_content` and its six other-disc runs (`port/game/test/unused_content_test.c`),
+`settings_extras`, `settings_discs` and its runs, `keep_flags` (the game-over arms compile with the
+flag's stub).
+
 ## The title logo
 
 The logo is nine stage animations of the title's stage (I, C and O, their glows and shadows). While
@@ -1107,7 +1185,7 @@ are [ANDROID_DRIVERS.md](ANDROID_DRIVERS.md)'s.
 Each is a ctest: `settings_discs` and its six other-disc runs (the rows each disc shows,
 [Options on each disc](#options-on-each-disc)), `options` (`port/game/test/options_test.c`: the defaults, the setters,
 `eBrainGetTarget` with Yorda safe), `door_grace`, `yorda_trip` and its six other-disc runs, `yorda_trip_disc`, `achievements`, `photo`, `appearance` and
-`appearance_disc`, `credits`, `title_logo`, `state_host`, `jimaku_text` (the subtitle hook) and `model_viewer_headless` (`port/game/CMakeLists.txt`);
+`appearance_disc`, `credits`, `unused_content` and its six other-disc runs, `title_logo`, `state_host`, `jimaku_text` (the subtitle hook) and `model_viewer_headless` (`port/game/CMakeLists.txt`);
 `gallery`, `gallery_sweep`, `credits_headless`, `model_viewer`, `model_viewer_cam`,
 `model_viewer_effects`, `model_viewer_effects_elf`, `subtitles_ru` and its three other-disc runs (`port/ui/CMakeLists.txt`); `steam_shortcut` and `gpu_driver` (`port/platform/CMakeLists.txt`).
 [TESTING.md](TESTING.md) has how to run them.

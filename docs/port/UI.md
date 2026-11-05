@@ -13,6 +13,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/settings.h`, `settings.c` | the Settings menu: the pages, the entry rows, the New Game and Quit screens, the values and their setters, the saves |
 | `port/ui/settings_graphics.h`, `settings_graphics.c` | Settings > Graphics: the Graphics API and Graphics card rows' values and steps, Apply and its countdown |
 | `port/ui/settings_backup.h`, `settings_backup.c` | Settings > Extras > Back up your data and Restore from a backup: the rows' words and notes, Cross, the confirmations, the popups |
+| `port/ui/settings_unused.h`, `settings_unused.c` | Settings > Extras > Unused content's host: whether each row and the link show, Cross's open ([Extras > Unused content](#extras--unused-content)) |
 | `port/ui/settings_states.h`, `settings_states.c` | the Save states page's host, cards' texts and pictures, actions on a slot with their second press, and F6's latch (`settings.c` builds, opens, leaves and ticks the page) |
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
 | `port/ui/ui_hint.h`, `ui_hint.c` | a line of button prompts (glyphs and words) |
@@ -205,7 +206,8 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Shadows (`UI_PAGE_SHADOWS`) | Shadow speed, Shadows attack together (`UI_OPT_SHADOWS_TOGETHER`, `[gameplay] shadows_together`, its note `UI_STR_OPT_SHADOWS_TOGETHER_NOTE`), Shadow toughness, One hit per swing, Shadows never dodge, Shadow aggression, Queen barrier (`UI_OPT_VAR_*`), Back |
 | Cutscenes (`UI_PAGE_CUTSCENES`) | Skip the opening (`UI_OPT_SKIP_OPENING`), No cutscene look-around, Ignore cutscene cameras (`UI_OPT_VAR_*`), Back |
 | Achievements | a list, the popups switch |
-| Extras | Music, Models, Credits, Characters, Add to Steam, Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Back up your data (`UI_OPT_EXTRAS_BACKUP`), Restore from a backup (`UI_OPT_EXTRAS_RESTORE`), Achievement popups, Back |
+| Extras | Music, Models, Credits, Characters, Unused content (`UI_PAGE_UNUSED`, a link), Add to Steam, Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Back up your data (`UI_OPT_EXTRAS_BACKUP`), Restore from a backup (`UI_OPT_EXTRAS_RESTORE`), Achievement popups, Back |
+| Unused content (`UI_PAGE_UNUSED`) | Test room: arena, Test room: climbing, Attract movie (576 lines), Early show title art (`UI_OPT_UNUSED_ARENA` .. `_ART`, press rows), Back ([Extras > Unused content](#extras--unused-content)) |
 | Music | the music gallery, a list |
 | Characters | nine colour rows, Switch, Randomize, Reset, Back |
 
@@ -243,7 +245,9 @@ the pause menu (Hold type shows from the title too: `[gameplay] hold_type`), Fil
 Music, Models and Credits only from the title (Add to Steam also only where the window host installs
 its handler, Export textures only while a `UiTextureExportHost` is set, the backup rows only while a
 `UiBackupHost` is set, the window build's but iOS's; none of them is in
-`isExtrasOpt`, which is the three rows that leave the stage); the dump rows only in developer mode; the Touch screen link only with a touch screen; the
+`isExtrasOpt`, which is the three rows that leave the stage); the Unused content link only from
+the title while the host has any row, and each of its rows only from the title while the host has
+that row (`ui__unused_any_shown`, `ui__unused_shown`); the dump rows only in developer mode; the Touch screen link only with a touch screen; the
 window and mouse camera rows not on Android; the Graphics link only with two or more renderer names (`ui_settings_set_backend_names`), the Graphics driver link only with a driver host on an
 Adreno GPU (`port/ui/settings.c` (`optShown`, `isGameOpt`, `isExtrasOpt`)). `layoutPage` masks the
 hidden rows, links the shown ones in a loop and places them in the window.
@@ -278,7 +282,7 @@ tick (`lt_item_select_disable`): the mouse drops its queued wheel notches after 
 (`ui_mouse_tick`), and a notch is an Up or Down press, so three notches move three rows across the
 window's edge. Every other move is the game's alone (both rows in view).
 
-A page whose table is longer than the slots (Main, Picture, Controls, Characters) has two
+A page whose table is longer than the slots (Main, Picture, Controls, Extras, Characters) has two
 marks, port text rows of the font's U+25B2 and U+25BC at `NOTE_SIZE`, greyed (`lt_ext_set_dim`),
 right of the value arrows at x 584, 32 wide (on Characters at x 618, 20 wide, right of the
 swatches): the up mark beside the first slot while rows above are out of view, the down mark
@@ -1114,6 +1118,41 @@ achievements rule, `checkPageFits` on Gameplay, Shadows, Cutscenes and Developer
 on Developer and its press: unbound it stays on the page, bound to a fake opener it opens once and
 Options closes into the title or the game), `variants`, `config`.
 
+### Extras > Unused content
+
+`UI_PAGE_UNUSED`, Extras' fifth row (`extrasOpts[4] = UI_OPT_LINK`, `extrasLinks[4]`), built from
+`unusedOpts` / `unusedStrs` with Extras as its parent: Test room: arena, Test room: climbing,
+Attract movie (576 lines), Early show title art and Back. The four are press rows
+(`UI_OPT_UNUSED_ARENA` .. `UI_OPT_UNUSED_ART`, after `UI_OPT_STATE_SLOT`, outside `steppable`), in
+the order of `ico_unused.h`'s rows (`ui__unused_row` is the option less `UI_OPT_UNUSED_ARENA`). The
+page has no lock; each row has its note (`UI_STR_UNUSED_*_NOTE`, `buildOptionPage`'s case).
+
+- Host: `UiUnusedHost {available, open}` (`ui_settings_set_unused_host`, `settings_unused.c`). The
+  program's is `port/game/unused_live.c`'s (`ico_unused_engine_install` from `host_loop.c`):
+  `available` is `ico_unused_available`, the disc's answer kept per disc, `open` is
+  `ico_unused_start` ([GAME_FEATURES.md](GAME_FEATURES.md#unused-content)). Without a host the link
+  is hidden.
+- Shown: the link from the title only (`onTitle()`) while `available` answers 1 for any row; the
+  first time none does on a disc (the June 2001 demo) one line, `extras: no Unused content page on
+  <disc id> (its disc has none of the rows)`. A row from the title only while `available(row)` is 1
+  (the European disc has all four; the 104-row discs no movie). From the pause menu the link and
+  the rows are masked.
+- Cross: `extrasUnused`, as Credits (`extrasCredits`): from the title only, `ui_settings_save`, the
+  host's `open(row)`; a layout back closes the menu on it (`extrasLeave`: `la_host_leave`, the
+  title's cursor kept on Settings); -1 keeps the page (the host logged why).
+- The way back: after a test room the engine arms `ui_settings_title_return(UI_PAGE_UNUSED)` as the
+  title's stage is entered, and once the title's menu is up and faded in (`lt_fade_status() == 2`,
+  `ui_settings_title_decided`, layout 13 or 12) switches to `ui_settings_reopen_page(UI_PAGE_UNUSED)`:
+  Main on Extras, Extras on the link, the page on its first row; past 250 Main ticks it lets go
+  (`ui_settings_title_return(-1)`, a log line), the model viewer's recipe.
+- Places: five rows inside the window, Back in the slot after the last row shown.
+
+ctests `settings` (the page's labels, Extras' eleven), `settings_extras` (`testUnused`: hidden
+without a host, hidden with the line when no row, the link and rows per `available`, the arena's
+note, `checkPageFits`, Cross with -1 stays, Cross calls `open` once and leaves on its layout with
+the title's cursor on Settings, the reopen, nothing from the pause menu), `settings_discs` and its
+six disc runs (each row per disc through the real CPU side), `strings_complete`.
+
 ## Galleries and photo mode
 
 ### Extras > Music
@@ -1199,7 +1238,8 @@ two path strings PAL's do not). On the Japanese disc:
   shown on every disc (`port/ui/settings.c` (`optShown`, `ui_settings_opt_shown`)). On the 2001
   discs Film effect is not shown either (`has_film_effect`; Players and Hold type are, Hold type
   starting on the disc's own B), and on
-  the June 2001 demo Extras > Credits (`credits_staff_packs`); every disc's rows are
+  the June 2001 demo Extras > Credits (`credits_staff_packs`) and Extras > Unused content (no row:
+  the host's answer); every disc's rows are
   [GAME_FEATURES.md](GAME_FEATURES.md#options-on-each-disc)'s matrix.
 - **Disc.** Main's Disc row, after Menu language, shows on every disc when more than one disc's game data
   is there: the window host passes `ico_host_disc_archive_present` (`port/platform/host_config.h`:
@@ -1415,7 +1455,8 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 - `settings_states` (`test/settings_states_test.c`): the Save states page, the pause menu's row
   and the Continue screen's prompt over a fake host ([Save states](#save-states)).
 - `settings_extras` (`test/settings_extras_test.c`): the Extras page from the title and the pause
-  menu, Credits, Models, Characters with a faked viewer, the pages that hide the logo.
+  menu, Credits, Models, Unused content over a fake host, Characters with a faked viewer, the pages
+  that hide the logo.
 - `settings_extra` (`test/settings_extra_test.c`): further Settings tests, one function per
   feature, kept in their own file under the source size cap of `tools/check_no_rom.sh`; new
   Settings tests go here (`port/ui/CMakeLists.txt`), or into a program of their own once it is

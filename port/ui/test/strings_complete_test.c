@@ -209,6 +209,22 @@ static void testTables(void)
                   strcmp(ui_str_in((UiLang)l, UI_STR_SECTION_CUTSCENES), "Cutscenes") == 0,
               "%s: Yorda, Shadows and Cutscenes in English", kNames[l]);
     }
+    /* Extras > Unused content (v0.10.3): the page, its rows and notes and
+       the three early show names, the same rule */
+    for (int id = UI_STR_SECTION_UNUSED; id <= UI_STR_UNUSED_ART_COPYRIGHT; id++) {
+        for (int l = 0; l < UI_LANG_TABLES; l++) {
+            const int community = l >= UI_LANG_COMMUNITY_FIRST;
+            CHECK((kTables[l][id] == NULL) == community, "%s: Unused content string %d %s",
+                  kNames[l], id, community ? "English (NULL)" : "in its own words");
+        }
+    }
+    CHECK(strcmp(ui_str_in(UI_LANG_EN, UI_STR_SECTION_UNUSED), "Unused content") == 0 &&
+              strcmp(ui_str_in(UI_LANG_EN, UI_STR_UNUSED_ARENA), "Test room: arena") == 0 &&
+              strcmp(ui_str_in(UI_LANG_EN, UI_STR_UNUSED_CLIMB), "Test room: climbing") == 0 &&
+              strcmp(ui_str_in(UI_LANG_EN, UI_STR_UNUSED_MOVIE), "Attract movie (576 lines)") ==
+                  0 &&
+              strcmp(ui_str_in(UI_LANG_EN, UI_STR_UNUSED_ART), "Early show title art") == 0,
+          "the Unused content page's English names");
 }
 
 static void testSerial(void)

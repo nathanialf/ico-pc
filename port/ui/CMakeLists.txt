@@ -131,11 +131,12 @@ function(ico_ui_settings name)
     # the Graphics page's rows and Apply (settings_graphics.c)
     # Extras' Back up your data and Restore from a backup (settings_backup.c)
     # the Save states page's cards, actions and F6 latch (settings_states.c)
+    # Extras > Unused content's host (settings_unused.c)
     # a community translation's subtitles as text (subtitle_text.c, jimaku.c's
     # hook, over port/game's tables: subtitles_ru_bobttz.c, subtitles_ru_cobra838.c,
     # subtitles_pt_br.c)
     target_sources(${name} PRIVATE settings.c settings_graphics.c settings_backup.c
-                                   settings_states.c ui_list.c
+                                   settings_states.c settings_unused.c ui_list.c
                                    ui_hint.c gallery.c photo_ui.c ui_mouse.c ui_mouse_geom.c
                                    ui_lang.c touch_edit_ui.c subtitle_text.c
                                    "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_bobttz.c"

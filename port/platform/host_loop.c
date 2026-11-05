@@ -10,6 +10,7 @@
 #include "../data/cdvd_host.h"
 #include "../game/achievements.h"
 #include "../include/ico_credits.h"
+#include "../include/ico_unused.h"
 #include "../save/mc_host.h"
 #include "arena.h"
 #include "diag_host.h"
@@ -85,6 +86,7 @@ void ico_host_init(void)
     ico_audio_host_init();
     gallery_engine_install();
     ico_credits_engine_install();
+    ico_unused_engine_install(); /* Extras > Unused content (unused_live.c) */
     /* the EE timers follow the video mode (50 or 60 Hz vsyncs) */
     ico_clock_set_mode_word(systemStatus);
     ico_sched_reset();
@@ -144,6 +146,9 @@ void ico_host_step(void)
     /* the Extras credits' playback: nothing unless one is running; then it
        watches the stage and puts the game flags back at the title */
     ico_credits_host_poll();
+    /* Extras > Unused content's test rooms: the same, and Options opened
+       again on the page once the title's menu is back */
+    ico_unused_host_poll();
     profile.achMs = ms_since(&t);
     profile.totalMs = (double)(t - start) / 1e6;
     profile.switches = ico_sched_switch_count() - switches;

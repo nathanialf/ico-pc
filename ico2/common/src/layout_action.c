@@ -22,6 +22,7 @@
 #include "s_init.h"
 #include "typedef.h"
 #include "main.h"
+#include "ico_unused.h" /* PC port: Extras > Unused content's test rooms */
 
 static int _la_set_current_port_2(void *p, int first);
 static int _la_set_current_port_lock_2(void *p, int first);
@@ -5060,8 +5061,16 @@ static int la_game_over_continue_jun26(int first)
                 0) { /* JPN property ids 23 lower, KOR property ids 29 lower */
         case 378:
             if (PSH_POSITIVE(0)) {
-                systemStatus[4] = 1;
-                nextStage = gFlagSaveStage;
+                if (ico_unused_active()) {
+                    /* PC port: a test room of Extras > Unused content has no
+                       save stage: Continue goes to the title as Quit does */
+                    ico_unused_game_over();
+                    gflagInit();
+                    nextStage = 1;
+                } else {
+                    systemStatus[4] = 1;
+                    nextStage = gFlagSaveStage;
+                }
                 releaseGameLoopCursor();
                 lt_set_item_select_func(0);
                 actionStarted = 0;
@@ -5114,8 +5123,16 @@ static int la_game_over_continue_ntscaug6(int first)
                 return -1;
             }
             POSITIVE_SE();
-            systemStatus[4] = 1;
-            nextStage = gFlagSaveStage;
+            if (ico_unused_active()) {
+                /* PC port: a test room of Extras > Unused content has no save
+                   stage: Continue goes to the title as Quit does */
+                ico_unused_game_over();
+                gflagInit();
+                nextStage = 1;
+            } else {
+                systemStatus[4] = 1;
+                nextStage = gFlagSaveStage;
+            }
             releaseGameLoopCursor();
             lt_set_item_select_func(0);
             actionStarted = 0;
@@ -5125,6 +5142,7 @@ static int la_game_over_continue_ntscaug6(int first)
                 return -1;
             }
             POSITIVE_SE();
+            ico_unused_game_over(); /* PC port: the log's reason, in a test room */
             gflagInit();
             nextStage = 1;
             releaseGameLoopCursor();
@@ -5181,8 +5199,17 @@ int la_game_over_continue(int first)
                 return -1;
             }
             POSITIVE_SE();
-            systemStatus[4] = 1;
-            nextStage = gFlagSaveStage;
+            if (ico_unused_active()) {
+                /* PC port: a test room of Extras > Unused content has no save
+                   stage: Continue goes to the title as Quit does */
+                ico_unused_game_over();
+                optionScreenMode = 0;
+                gflagInit();
+                nextStage = 1;
+            } else {
+                systemStatus[4] = 1;
+                nextStage = gFlagSaveStage;
+            }
             releaseGameLoopCursor();
             lt_set_item_select_func(0);
             actionStarted = 0;
@@ -5192,6 +5219,7 @@ int la_game_over_continue(int first)
                 return -1;
             }
             POSITIVE_SE();
+            ico_unused_game_over(); /* PC port: the log's reason, in a test room */
             optionScreenMode = 0;
             gflagInit();
             nextStage = 1;

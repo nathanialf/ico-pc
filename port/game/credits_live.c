@@ -18,11 +18,11 @@
  * scenes as in the real ending (end.c); under the flag actStaff3RollChk
  * goes back to the title when the roll ends.
  *
- * The state kept: everything a save holds, taken with the game's own
- * gamesysMemorySave into a buffer of this file (the flags, the object
- * records that place the boy and Yorda in a stage, the generators, hints,
- * the character record, the back stage, itou's flags), the checkpoint
- * image gameSysMainSaveBuff, gFlagGameClear and systemStatus[2..4].  The
+ * The state kept: everything a save holds (game_state_keep.c, shared with
+ * Extras > Unused content's test rooms): the flags, the object records
+ * that place the boy and Yorda in a stage, the generators, hints, the
+ * character record, the back stage, itou's flags, the checkpoint image
+ * gameSysMainSaveBuff, gFlagGameClear and systemStatus[2..4].  The
  * staff scenes move the boy's record to STAFF1, 2 and 3 (the entrance, then
  * each RequestStageChange), so without it the title would come back with
  * no boy, and its camera, falling back to him when the title's animation
@@ -44,11 +44,8 @@
 #include "ico_credits.h"
 #include "../core/region.h" /* ico_region_cur */
 
-#include <string.h>
-
 #include "adpcm_init.h"
-#include "gamesys.h"
-#include "gflag.h"
+#include "game_state_keep.h"
 #include "s_init.h"
 
 /* the game's side, declared here as the callers in the game do */
@@ -63,9 +60,6 @@ extern unsigned int ico_host_main_ticks(void);
 extern struct SqEntry *sea; /* end.c: the ending's song */
 extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned char r,
                                     unsigned char gr, unsigned char b);
-/* gamesys.c's checkpoint image, sized in gamesys.h (its definition's size,
-   checked by the compiler against the declaration) */
-#define SAVE_IMAGE ((int)sizeof(gameSysMainSaveBuff))
 
 /* The ending's song, "ICO -You were there-" (adpcmFile 47, event/39_8.int,
    265.6 s), starts in actEndDemo06Chk, six scenes before the roll.  Run
@@ -94,12 +88,6 @@ extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned ch
 #define BOY_LABEL (ico_region_cur()->credits_boy_label)
 #define BOY_KIND 1
 
-/* the story flags: gflag.c's bitmap, 400 flags on the European, Japanese, Korean and Asian
-   discs, 368 on the USA disc and the August 2001 preview, 352 on the June 2001 demo
-   (region.h gflag_count); kept at the largest, walked to the disc's count */
-#define GFLAG_MAX 400
-#define GFLAG_COUNT                                                                                \
-    (ico_region_cur()->gflag_count < GFLAG_MAX ? ico_region_cur()->gflag_count : GFLAG_MAX)
 /* Main ticks the stage change may take before it counts as failed (the
    load of STAFF1 takes a few hundred): REACH_TICKS with no stage change
    running, REACH_LIMIT whatever runs; then RETURN_TICKS for the title's
@@ -114,11 +102,7 @@ extern int RequestStageChangeSimple(int no, float speed, float wait, unsigned ch
 enum { PH_IDLE, PH_SWITCHING, PH_PLAYING, PH_RETURNING };
 
 static int s_phase = PH_IDLE;
-static unsigned char s_flags[GFLAG_MAX];
-static int s_gameClear;
-static char s_world[SAVE_IMAGE];
-static char s_checkpoint[SAVE_IMAGE];
-static int s_status[3];
+static IcoGameKeep s_kept; /* the state at the start (game_state_keep.c) */
 static unsigned int s_startTick;
 static unsigned int s_returnTick;
 static int s_lastStage;
@@ -129,49 +113,6 @@ static int s_songStartMs; /* the playback's start of the song, ms into it (secto
    it opened at: the real ending's measure of the song at the roll */
 static int s_seaOpen;
 static unsigned int s_seaTick;
-
-static void keepState(void)
-{
-    int i;
-
-    for (i = 0; i < GFLAG_COUNT; i++) {
-        s_flags[i] = (unsigned char)gflagChk(i);
-    }
-    s_gameClear = gFlagGameClear;
-    memset(s_world, 0, sizeof(s_world));
-    gamesysMemorySave(gameSysMemoryFuncList, s_world, 0);
-    memcpy(s_checkpoint, gameSysMainSaveBuff, SAVE_IMAGE);
-    for (i = 0; i < 3; i++) {
-        s_status[i] = systemStatus[2 + i];
-    }
-}
-
-/* the state as it was at the start; returns how many flags differed after
-   the load (ACTGame_SetActors_Debug sets the disc's 394, 361, 360 or 343) */
-static int restoreState(void)
-{
-    int i;
-    int n = 0;
-
-    gamesysMemoryLoad(gameSysMemoryFuncList, s_world, 0);
-    memcpy(gameSysMainSaveBuff, s_checkpoint, SAVE_IMAGE);
-    for (i = 0; i < 3; i++) {
-        systemStatus[2 + i] = s_status[i];
-    }
-
-    for (i = 0; i < GFLAG_COUNT; i++) {
-        if (gflagChk(i) != s_flags[i]) {
-            n++;
-            if (s_flags[i]) {
-                gflagOn(i);
-            } else {
-                gflagOff(i);
-            }
-        }
-    }
-    gFlagGameClear = s_gameClear;
-    return n;
-}
 
 static int begin(void)
 {
@@ -188,7 +129,7 @@ static int begin(void)
                 systemStatus[6]);
         return -1;
     }
-    keepState();
+    ico_game_keep_take(&s_kept);
     ico_credits_set_active(1);
     s_phase = PH_SWITCHING;
     s_startTick = ico_host_main_ticks();
@@ -211,7 +152,7 @@ static int begin(void)
 
 static void finish(const char *why, int restore)
 {
-    int n = restore ? restoreState() : 0;
+    int n = restore ? ico_game_keep_put_back(&s_kept) : 0;
 
     ico_adpcm_set_start(-1, 0); /* a song start not taken is not kept */
 

@@ -82,6 +82,14 @@ STUB_FN(ico_opt_output_toggled)
 STUB_FN(ico_players_slot_loaded)
 STUB_FN(ico_players_slot_saved)
 STUB_FN(ico_rand)
+STUB_FN(ico_unused_game_over)
+/* port/game/unused_content.c's flag: no test room runs here */
+int ico_unused_active(void);
+
+int ico_unused_active(void)
+{
+    return 0;
+}
 STUB_FN(iosMcDelete)
 STUB_FN(iosMcFormat)
 STUB_FN(iosMcGetBlockSaveInfo)

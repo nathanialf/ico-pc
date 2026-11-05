@@ -533,6 +533,22 @@ typedef struct UiCharactersHost {
 } UiCharactersHost;
 
 void ui_settings_set_characters_host(const UiCharactersHost *host);
+
+/* Extras > Unused content (port/include/ico_unused.h; the program's host is
+   port/game/unused_live.c's, the tests' a fake).  row is the page's row,
+   0 .. 3 (ICO_UNUSED_ARENA, _CLIMB, _MOVIE, _ART):
+     available  whether the running disc has the row: 1 shows it (from the
+                title only); the Extras link shows while any row does
+     open       Cross on the row: the row is started; the layout to switch
+                to (the menu closes on it, the title's cursor kept on
+                Settings), or -1 (the page stays; the host logged why)
+   NULL (or never called) hides the page's link. */
+typedef struct UiUnusedHost {
+    int (*available)(int row);
+    int (*open)(int row);
+} UiUnusedHost;
+
+void ui_settings_set_unused_host(const UiUnusedHost *host);
 /* whether the Characters page is the viewer's panel now (host->shown() is
    not -2) */
 int ui_settings_characters_in_viewer(void);
@@ -606,6 +622,10 @@ typedef enum UiSettingsPage {
        cards, each a picture, "Slot N" with its action, the area and play
        time, and the date */
     UI_PAGE_STATES,
+    /* Extras > Unused content (title only, the link hidden when the disc
+       has none of its rows): the two test rooms, the attract movie, the
+       early show title art, Back (ui_settings_set_unused_host) */
+    UI_PAGE_UNUSED,
     UI_PAGE_COUNT
 } UiSettingsPage;
 
@@ -789,6 +809,12 @@ typedef enum UiSettingsOpt {
     /* Save states page: a slot's card (its label row; the action word is
        the value row) */
     UI_OPT_STATE_SLOT,
+    /* Extras > Unused content's rows, in ico_unused.h's order (ICO_UNUSED_*):
+       press rows, each shown from the title while the host has it */
+    UI_OPT_UNUSED_ARENA,
+    UI_OPT_UNUSED_CLIMB,
+    UI_OPT_UNUSED_MOVIE,
+    UI_OPT_UNUSED_ART,
 #if ICO_RC_TOOLS
     /* Main's row "Share a bug report" below it, rc builds on Android alone
        (ui_settings_set_share_report_handler) */

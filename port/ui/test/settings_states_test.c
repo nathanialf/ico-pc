@@ -15,6 +15,7 @@
 #include "photo_mode.h"
 #include "pointer.h"
 #include "popup.h"
+#include "ico_unused.h"
 #include "ui_mouse.h"
 
 #include <time.h>
@@ -366,7 +367,7 @@ static void testExtrasRows(void)
             CHECK(settle(ml, 60), "title %d: the menu", title);
             openPage(ml, -1, UI_PAGE_EXTRAS);
             const int n = ui_settings_page_rows(UI_PAGE_EXTRAS, labels, NULL, NULL, 24);
-            CHECK(n == 10, "title %d, host %d: %d Extras rows", title, host, n);
+            CHECK(n == 11, "title %d, host %d: %d Extras rows", title, host, n);
             for (int i = 0; i < n; i++) {
                 CHECK(strcmp(txt(labels[i]), ui_str(UI_STR_STATES)) != 0 &&
                           lt_ext_prop(labels[i])->right != ui_settings_page_layout(UI_PAGE_STATES),
@@ -803,6 +804,47 @@ static void testConfirm(void)
     CHECK(ui_popup_active() && s_sounds[2] > neg, "a refusal: a popup and the refusal sound");
 }
 
+/* in a test room of Extras > Unused content (ico_unused_active): Save is
+   refused before the host with the plain popup and one line, Load still
+   asks the host */
+static void testTestRoom(void)
+{
+    char log[2048];
+    const int conf = lt_ext_confirm_button();
+    startMenus(1, 11);
+    const int sl = pauseToStates();
+    ico_unused_set_running(ICO_UNUSED_ARENA);
+    /* Save on the empty slot 2 */
+    moveTo(sl, 1);
+    s_requests = 0;
+    ui_popup_reset();
+    const int neg = s_sounds[2];
+    errCapture();
+    press(conf);
+    errRelease(log, sizeof(log));
+    CHECK(s_requests == 0 && ui_popup_active() && s_sounds[2] > neg,
+          "a test room: Save refused before the host (%d asked), a popup, the refusal sound",
+          s_requests);
+    CHECK(strstr(log, "unused: save state refused in a test room") != NULL,
+          "a test room: the line (\"%s\")", log);
+    /* Load on slot 1: the host is asked */
+    moveTo(sl, 0);
+    press(0x2000); /* Save -> Load */
+    s_requests = 0;
+    press(conf);
+    CHECK(s_requests == 1 && s_reqAct == UI_STATES_ACT_LOAD && s_reqSlot == 1,
+          "a test room: Load asked (%d: %d, slot %d)", s_requests, s_reqAct, s_reqSlot);
+    ico_unused_set_running(-1);
+    /* out of the room: Save on slot 2 is asked again */
+    moveTo(sl, 1);
+    s_requests = 0;
+    press(conf);
+    CHECK(s_requests == 1 && s_reqAct == UI_STATES_ACT_SAVE, "out of the room: Save asked (%d)",
+          s_requests);
+    CHECK(strcmp(ui_str(UI_STR_STATES_REFUSED_UNUSED), "Not in a test room") == 0,
+          "the refusal's words");
+}
+
 /* the title: no Save, the hint under the cards; Back to Extras */
 static void testTitle(void)
 {
@@ -1054,6 +1096,7 @@ int main(int argc, char **argv)
     testCards();
     testActions();
     testConfirm();
+    testTestRoom();
     testTitle();
     testBackAndLoad();
     testNoHost();

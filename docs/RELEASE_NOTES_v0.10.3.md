@@ -2,6 +2,7 @@
 
 - Options > Gameplay is now four pages: Gameplay, Yorda, Shadows and Cutscenes, holding the Game variants rows; the Debug menu row is on the Developer page.
 - Options > Picture has four new rows: Gamma, Picture brightness, Contrast and Saturation. 50 is the game's own picture; they also work with the CRT filter.
+- Options > Extras has an Unused content page: two rooms the makers used for testing, the European disc's second attract film, and title-screen pictures from an early show version.
 
 ## Fixed
 

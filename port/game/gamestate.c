@@ -11,6 +11,7 @@
  */
 #include "ico_gamestate.h"
 #include "ico_credits.h"
+#include "ico_unused.h"
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -641,11 +642,11 @@ int ico_gs_start_stage_used(void)
 int ico_gs_achievements_suspended(void)
 {
     /* the model viewer's stages are not play, nor the Extras credits'
-       playback of the ending; One hit per swing, Shadows never dodge,
-       Cutscene cameras ignored and the Debug menu (the game variants) are
-       cheats like developer mode */
+       playback of the ending, nor a test room of Extras > Unused content;
+       One hit per swing, Shadows never dodge, Cutscene cameras ignored and
+       the Debug menu (the game variants) are cheats like developer mode */
     return ico_gs_developer_mode() || ico_gs_start_stage_used() || ico_mv_active ||
-           ico_credits_active() || ico_variants_suspend_achievements();
+           ico_credits_active() || ico_unused_active() || ico_variants_suspend_achievements();
 }
 
 /* --- retail addresses ---------------------------------------------------- */

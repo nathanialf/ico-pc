@@ -816,6 +816,22 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_OPT_EFFECT_MOTION_BLUR_STRENGTH] = "Stärke der Unschärfe",
     [UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE] =
         "Niedrigere Werte lassen die Spur schneller verblassen; 100 ist die Spur der PS2.",
+    [UI_STR_SECTION_UNUSED] = "Unbenutzte Inhalte",
+    [UI_STR_UNUSED_ARENA] = "Testraum: Arena",
+    [UI_STR_UNUSED_ARENA_NOTE] =
+        "Testraum für Kämpfe mit den Schatten; ohne Ausgang: Start, dann Spiel beenden.",
+    [UI_STR_UNUSED_CLIMB] = "Testraum: Klettern",
+    [UI_STR_UNUSED_CLIMB_NOTE] =
+        "Testraum für Klettern und Kisten; ohne Ausgang: Start, dann Spiel beenden.",
+    [UI_STR_UNUSED_MOVIE] = "Vorspannfilm (576 Zeilen)",
+    [UI_STR_UNUSED_MOVIE_NOTE] =
+        "Zweite Fassung des Titel-Vorspannfilms, für europäische Fernseher, nie gezeigt.",
+    [UI_STR_UNUSED_ART] = "Titelbilder einer frühen Messeversion",
+    [UI_STR_UNUSED_ART_NOTE] = "Bilder vom Titelbildschirm einer frühen Messeversion, nie gezeigt.",
+    [UI_STR_UNUSED_ART_VER] = "Messeversion: Versionszeichen",
+    [UI_STR_UNUSED_ART_START] = "Messeversion: Press Start",
+    [UI_STR_UNUSED_ART_COPYRIGHT] = "Messeversion: Copyright",
+    [UI_STR_STATES_REFUSED_UNUSED] = "Nicht in einem Testraum",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
