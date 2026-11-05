@@ -59,7 +59,7 @@ static int start_active(void)
 
 /* What the window says about a present it notes (present_fallback.h):
    vsync off in the options, the swapchain in mailbox mode, Vulkan, a
-   driver the switch is for; the dev key off keeps mailbox; FIFO from the
+   driver the switch is for (Qualcomm's own; others answer OTHER); the dev key off keeps mailbox; FIFO from the
    start needs no switch */
 static int gate(void)
 {
@@ -72,8 +72,14 @@ static int gate(void)
         s_mode == ICO_PRESENT_FALLBACK_FIFO) {
         return ICO_PRESENT_FALLBACK_GATE_NO;
     }
-    return s_mode == ICO_PRESENT_FALLBACK_OFF ? ICO_PRESENT_FALLBACK_GATE_KEPT
-                                              : ICO_PRESENT_FALLBACK_GATE_YES;
+    if (s_mode == ICO_PRESENT_FALLBACK_OFF) {
+        return ICO_PRESENT_FALLBACK_GATE_KEPT;
+    }
+    /* the switch was measured on Qualcomm's own driver only; on a Mali-G52 it
+       lengthened the blocks (issue 179) */
+    return ico_present_fallback_qualcomm_own(l->vendorId, l->driverText)
+               ? ICO_PRESENT_FALLBACK_GATE_YES
+               : ICO_PRESENT_FALLBACK_GATE_OTHER;
 }
 
 const char *window_fifo_words(void)
@@ -121,6 +127,12 @@ void window_fifo_note(double presentMs, unsigned replay, const char *framerateNa
                                          line, sizeof line);
         fprintf(stderr, "%s\n", line);
         s_pending = 1;
+    } else if (got == ICO_PRESENT_FALLBACK_OTHER) {
+        const RhiLimits *l = rhi_limits();
+
+        ico_present_fallback_other_line(&s_fallback, rhi_adapter_name(),
+                                        l != NULL ? l->driverText : NULL, line, sizeof line);
+        fprintf(stderr, "%s\n", line);
     } else if (got == ICO_PRESENT_FALLBACK_KEPT) {
         ico_present_fallback_kept_line(&s_fallback, line, sizeof line);
         fprintf(stderr, "%s\n", line);
