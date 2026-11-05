@@ -261,6 +261,29 @@ Start edge reaches the poll within a vsync of the press for every source, exactl
 that the held button shows in `pad[0].now`, and that `ico_input_start_source` names the source for
 the skip's log line (`port/platform/test/movie_pad_test.c`, header comment).
 
+## The European disc's second attract film
+
+`pal_advertise576.pss` is the European disc's third movie row (`movieFile` row 3, stage 59
+`memoryPAL576`). The title's attract switches to stage 58 or 57 only (`ico2/script/src/op.c`,
+mode 2), so no play path reaches it; Options > Extras > Unused content > Attract movie (576 lines)
+starts it from the title on the European disc (`port/game/unused_live.c` (`beginMovie`)). It is a
+stage switch to `ico_region_stage(59)` with `mpegPlayReturnStage` the title, as op.c's mode 2
+makes it, so Main's movie path plays it: `movie_init`, `movie_proc(movie_abort_check)` (Start
+skips), then `ACTGame_SetActors_Debug(mpegPlayReturnStage, 1)` and the switch back to the title
+(`ico2/common/src/main.c`); the port adds no movie code.
+
+The "576" is the film's own encode, not a mode: `main.c` passes 576 lines to `movie_init` in 50 Hz
+and 480 in 60 Hz for every PAL movie. `movie.c` reads the picture size from the stream, not from
+`movie_init`'s arguments: the picture is kept at its decoded size and the log says it once, `fmv:
+picture 720 x 576 in a 720 x 480 area` in 60 Hz mode. `rd_video.c` (`drawPicture`) fits a picture
+larger than the display area, so the 60 Hz run shows all 576 lines scaled into the 4:3 box (a
+1.2 x taller picture is not cut), and in 50 Hz mode the area and the picture agree. The size is
+read from the code only, no run (`port/fmv/movie.c` (`keep_frame`); `port/render/rd_video.c`
+(`drawPicture`)).
+
+`unused_movie_test` (`port/game/test/unused_movie_test.c`) covers the start and the return over
+stubs of the game.
+
 ## Tests
 
 The ctests `fmv`, `fmv_fields`, `rd_video`, `rd_video_mali` and `rd_video_window`

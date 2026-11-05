@@ -24,8 +24,8 @@
  * over after ico_unused_game_over) and arms Options' return on the page,
  * reopened once the title's menu is up or let go after its bound; a start
  * that never reaches its stage fails (on the title at once, elsewhere
- * through the title's request); the movie and art rows refuse in this
- * build; the install hands Settings the host.
+ * through the title's request); the art row refuses in this build; the
+ * install hands Settings the host.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -555,10 +555,11 @@ static void testRooms(void)
     s_ticks += 1000;
     ico_unused_host_poll(); /* the pending reopen let go */
 
-    /* the movie and the art: not started in this build */
+    /* the art: not started in this build (the movie's start is
+       unused_movie_test's) */
     onTitle(9000);
     s_entered = -1;
-    for (int r = ICO_UNUSED_MOVIE; r <= ICO_UNUSED_ART; r++) {
+    for (int r = ICO_UNUSED_ART; r <= ICO_UNUSED_ART; r++) {
         if (ico_unused_available(r)) {
             logStart();
             CHECK(ico_unused_start(r) == -1 && !ico_unused_active() && s_entered == -1,

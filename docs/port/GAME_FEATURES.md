@@ -455,7 +455,7 @@ hold the rest.
 | Extras > Characters | W | W | W | W | W | W | W | the characters' textures by name (`appearance.c`); `appearance`, `settings_extras` (from the title it runs in the model viewer) |
 | Extras > Credits (title, once unlocked) | W | W | W | W | W | H | W | `credits_staff_packs` (the demo's DATA.DF has no `STGSTAFF*.DF`); `settings_discs`, `settings_extras_<slug>`, `credits_<slug>` |
 | Extras > Unused content: Test room: arena, Test room: climbing (title) | W | W | W | W | W | H | W | the stage's pack in the disc's `DATA.DF` (`STGBOSS_TEST.DF`, `STG8TEST.DF`; the demo's 49 entries hold neither), the host's `available`; `unused_content_<slug>`, `settings_discs_<slug>` |
-| Extras > Unused content: Attract movie (576 lines) (title) | W | H | H | H | H | H | H | stage 59 (`memoryPAL576`) is the European `stageData`'s only (`ico_region_stage(59)` is -1 elsewhere) and `pal_advertise576.pss` its `DATA.DF`'s; `unused_content_<slug>`, `settings_discs_<slug>` |
+| Extras > Unused content: Attract movie (576 lines) (title) | W | H | H | H | H | H | H | stage 59 (`memoryPAL576`) is the European `stageData`'s only (`ico_region_stage(59)` is -1 elsewhere) and `pal_advertise576.pss` its `DATA.DF`'s; `unused_content_<slug>`, `unused_movie_<slug>`, `settings_discs_<slug>` |
 | Extras > Unused content: Early show title art (title) | W | W | W | W | W | H | W | the member `object/sdf/e3/st13b/model/copy_right.p2o` in a pack of the disc (`ico_df_find_member`; the demo has no `STGLOG.DF`); the link itself hidden on the demo, one line; `unused_content_<slug>`, `settings_discs_<slug>` |
 | Extras > Export textures, Add to Steam | W | W | W | W | W | W | W | the running disc's `DATA.DF`; disc-independent |
 | Extras > Back up your data, Restore from a backup (title) | W | W | W | W | W | W | W | the user folder's files, every disc's at once (the card folders hold each disc's directory; `states/<slug>/`); the manifest names the disc played; `backup`, `settings_backup`, `settings_backup_<slug>` (jpn, kor, cn) |
@@ -1030,8 +1030,21 @@ has.
   in a test room", and `unused: save state refused in a test room (slot N)`), and the save
   conditions refuse it too (`port/game/state_rules.c`, `IcoStateConds.unused`: `ICO_STATE_PHOTO`,
   "a test room"), so F5 cannot save there either. Loading a state is not refused.
-- The movie and art rows' starts refuse in this build (`unused: failed: ... cannot be started in
-  this build`); their availability is final.
+- The attract movie's start (`beginMovie`, `port/game/unused_live.c`), from the title only: the
+  title's attract path, started from the menu. `mpegPlayReturnStage` is the title, the title theme
+  fades as in the credits, the skip word `stage_after_skipping_demo` is cleared (a skip is told by
+  it at the return), and `stgmgrForceSwitchWithFade(ico_unused_stage(movie), 256, 4)` is asked, the
+  fades of `ico2/script/src/op.c` (mode 2). The stage manager and Main play it
+  ([FMV.md](FMV.md#the-european-discs-second-attract-film)); Start skips it; the title returns by
+  itself and the menu reopens on the page. No game state is touched, so none is kept; the flag
+  (`ico_unused_active`) holds the achievements and save states off meanwhile. A start that never
+  reaches the stage fails as the rooms' does (1500 / 4500 Main ticks). Log lines: `unused: attract
+  movie (576 lines) started from the title`, `unused: the movie's stage N is up ...`, `unused: back
+  at the title after X s (movie ended | skipped | fail-start)`, `unused: failed: the movie's stage
+  N was not reached ...`. The film's length is read in wall seconds, as Main runs no tick while a
+  film plays.
+- The art row's start refuses in this build (`unused: failed: ... cannot be started in this
+  build`); its availability is final.
 - Log lines: `unused: enter <row>`, `unused: test room <row> (stage N on this disc) started from the
   title at Main tick T`, the arena's placement, `unused: stage N at Main tick T`, `unused: the test
   room's stage N is up ...`, `unused: game over in the test room <row>: both choices go to the

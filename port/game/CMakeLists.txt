@@ -768,6 +768,30 @@ if(ICO_RUN_TESTS)
     endforeach()
 endif()
 
+# unused_movie_test: the attract movie row (unused_live.c beginMovie and its
+# poll) over stubs of the game, DATA.DF and Settings: the start on the
+# European disc (the return stage, the theme fade, the stage switch with
+# op.c's fades, the flag, no state kept), the return as "movie ended" or
+# "skipped", Options' reopen on the page, the failed starts; on the other
+# discs the refusal before the engine. CPU only, one run per disc.
+add_executable(unused_movie_test test/unused_movie_test.c unused_content.c unused_live.c
+    game_state_keep.c)
+target_include_directories(unused_movie_test PRIVATE ${_ico_unused_incs} "${_ico_gs_include}"
+                           "${CMAKE_CURRENT_SOURCE_DIR}"
+                           $<TARGET_PROPERTY:ico_port_data,INTERFACE_INCLUDE_DIRECTORIES>)
+target_compile_definitions(unused_movie_test PRIVATE ICO_HOST=1)
+target_compile_options(unused_movie_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_GAME_WARNINGS}
+                       -iquote "${CMAKE_SOURCE_DIR}/port/ui")
+target_link_libraries(unused_movie_test PRIVATE ico_region)
+if(ICO_RUN_TESTS)
+    add_test(NAME unused_movie COMMAND unused_movie_test "${CMAKE_CURRENT_BINARY_DIR}")
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        add_test(NAME unused_movie_${_slug}
+                 COMMAND unused_movie_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+    endforeach()
+endif()
+
 # credits_test: the game's staffroll.c over a short table in the disc's forms,
 # with the font stubbed to record the posted and printed lines: the port
 # credit's lines come after the disc's, the heading then the name in the

@@ -203,6 +203,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   disc's DATA.DF has, the engine indirection, the test rooms' start and the arena's boy at its
   first shadow row, the return to the title with its log and the reopen of Options, the
   failures.
+- `unused_movie_test.c`: the attract movie row (`unused_live.c` `beginMovie` and its poll) over
+  stubs of the game, DATA.DF and Settings, one run per disc (`unused_movie`,
+  `unused_movie_<slug>` for jpn, kor, cn, ntsc, aug6, jun26): on the European disc the start from
+  the title (the return stage, the title theme's fade, the stage switch to stage 59 with op.c's
+  256 / 4 fades, the flag, no state kept), the stage up, the return as "movie ended" or "skipped",
+  the reopen of Options, the failed starts and their bounds; on the other discs the refusal
+  before the engine.
 - `camera_wall_test.c`: the blended camera's wall rule (`port/game/camera_wall.c`) without game
   sources: a segment against one wall (through it either way, past its ends and over its top
   within `ICO_CAMERA_WALL_RADIUS`, a sloped bottom, an end on the plane) and one floor (down and up
