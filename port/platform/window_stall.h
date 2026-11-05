@@ -78,18 +78,24 @@ void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const 
 /* The kernel GPU driver's nodes (gpu_sysfs.h; Android only, nothing
    elsewhere): at the window's open, once a run, the line saying which were
    readable ("window: kernel GPU driver: /sys/class/kgsl/kgsl-3d0: readable
-   ..." or "... not readable (EACCES)") and, when any is, the sampler's
-   own thread started (again at each later open) */
+   ..." or "... not readable (EACCES)"; on a phone without KGSL its devfreq
+   entry's and the candidates' nodes, "window: kernel GPU driver:
+   /sys/class/devfreq/13040000.mali: readable cur_freq, ..."; and the CPU
+   cores' clocks sampled with them) and, when any is, the sampler's own
+   thread started (again at each later open) */
 void window_stall_gpu_open(void);
 /* The window's close: the sampler's thread stopped and joined (Android) */
 void window_stall_gpu_close(void);
-/* The 10 s block's line ("window: kernel GPU driver: clock A-B MHz ..."),
-   when a node is sampled */
+/* The 10 s block's line ("window: kernel GPU driver: clock A-B MHz ...;
+   CPU clocks: cores 0-5 1000-1800 MHz (average 1500), cores 6-7 ..."),
+   when a node or a CPU clock is sampled */
 void window_stall_gpu_block(void);
 /* At each drain: the around lines of the presents that blocked whose
    sample after them came (or that waited a second for it): "window: kernel
    GPU driver around the present that blocked (replay N): 0.12 s before:
-   clock 905 MHz, busy 74 %, resets 3; 0.09 s after: ..." (the first 8, then
+   clock 905 MHz, busy 74 %, resets 3; 0.09 s after: ...; CPU core 6 (the
+   game thread's): 2000 MHz before, 1600-2000 MHz during, 2000 MHz after"
+   (the core the game thread was on as the record popped; the first 8, then
    every 100th) */
 void window_stall_poll(void);
 

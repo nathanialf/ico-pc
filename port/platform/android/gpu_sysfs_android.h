@@ -14,17 +14,20 @@
 #include <stdbool.h>
 #include "gpu_sysfs.h"
 
-/* The nodes probed (the first call; later calls give the same answer) and,
-   when any sampled node is readable, the sampler thread started (again
-   after a stop). Main thread. */
+/* The nodes probed (the first call; later calls give the same answer:
+   KGSL's directory, else the GPU's devfreq entry, else the candidates'
+   paths; and the CPU cores' scaling_cur_freq) and, when any sampled node
+   or a CPU clock is readable, the sampler thread started (again after a
+   stop). Main thread. */
 void gpu_sysfs_android_start(GpuSysfsInfo *info);
 /* The sampler thread stopped and joined (the window's close); the ring
    keeps its samples. Main thread. */
 void gpu_sysfs_android_stop(void);
 /* The ring's samples after sinceMs, and around [t0Ms, t1Ms] (gpu_sysfs.h
-   gpu_sysfs_ring_block, gpu_sysfs_ring_around); false when nothing is
+   gpu_sysfs_ring_block, gpu_sysfs_ring_around: core the game thread's,
+   -1 none); false when nothing is
    sampled (no readable node, not started) */
 bool gpu_sysfs_android_block(double sinceMs, GpuSysfsBlock *out);
-bool gpu_sysfs_android_around(double t0Ms, double t1Ms, GpuSysfsAround *out);
+bool gpu_sysfs_android_around(double t0Ms, double t1Ms, int core, GpuSysfsAround *out);
 
 #endif /* ICO_PLATFORM_GPU_SYSFS_ANDROID_H */
