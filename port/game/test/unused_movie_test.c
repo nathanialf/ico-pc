@@ -144,6 +144,16 @@ void GetLowerPlaneCollision(ClipWork *w, float *pos)
     w->floor.elem = NULL;
 }
 
+/* the camera-zone move's (unused_live.c startInZone): no room starts here */
+GObj *girlGObj;
+void *TopCameraSetDataOfCurrentStage;
+
+void SetDirectRootPosition(GObj *self, void *v)
+{
+    (void)self;
+    (void)v;
+}
+
 /* debug.c's Stage Select way in: the boy's records go to the stage */
 void ico_host_enter_test_stage(int stage)
 {

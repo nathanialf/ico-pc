@@ -21,6 +21,11 @@
  * whose stageData flag0 is set, the climbing room) at -exitData[0].pos,
  * exitData[0].rot in radians (a non-zero fake row, so a copy as stored
  * fails), the climbing room's own entrance row not used, each logged; the
+ * camera-zone rule once the boy is up (testZones, over a fake camera set
+ * stored negated): a start inside a zone stays, one outside every zone
+ * moves to the lowest zone whose centre has a floor in its box (ties: the
+ * larger floor plan) at his own height above the floor, the girl with him
+ * when she is up, no zone with a floor or no set leaves him, each logged; the
  * boy's line (root, ground height, the probe's floor, fall height) as the
  * stage is up, every 30 Main ticks to 300 and at a game over; a second
  * start while one runs is refused; the stage up, the title's stage entered
@@ -47,6 +52,7 @@
 #undef exitData
 
 #include "adpcm_init.h"
+#include "camera-editor.h"
 #include "gamesys.h"
 #include "s_init.h"
 
@@ -110,6 +116,37 @@ static GObj s_weapon, s_item;
 static float s_boyPos[3];
 static int s_hasFloor;
 static float s_floorY;
+
+/* the girl the camera-zone move takes with the boy (girlGObj, NULL when
+   she is not up), and the moves made (SetDirectRootPosition) */
+GObj *girlGObj;
+static GObj s_girl;
+static Sub15C s_girlSub;
+
+typedef struct {
+    GObj *who;
+    float pos[3];
+} Moved;
+
+static Moved s_moved[4];
+static int s_nMoved;
+
+/* the stage's camera set (camera-ico2.c CameraSetCameraSet's
+   TopCameraSetDataOfCurrentStage: a CamSetFile head, then the groups,
+   centre and half-size stored negated), NULL in testRooms; each group's
+   floor under its centre (s_zoneFloorOn, s_zoneFloorY) and the probes
+   from its box's top */
+void *TopCameraSetDataOfCurrentStage;
+#define ZONES 5
+
+static struct {
+    CamSetFile head;
+    CamGroup g[ZONES];
+} s_camSet;
+
+static int s_zoneFloorOn[ZONES];
+static float s_zoneFloorY[ZONES];
+static int s_zoneProbed[ZONES];
 
 int gflagChk(int i)
 {
@@ -179,12 +216,41 @@ void GetRootPosition(void *pos, GObj *obj)
 void GetLowerPlaneCollision(ClipWork *w, float *pos)
 {
     static int floorElem;
-    CHECK(pos[0] == s_boyPos[0] && pos[1] == s_boyPos[1] && pos[2] == s_boyPos[2],
-          "the probe from the boy's root");
-    w->floor.elem = s_hasFloor ? &floorElem : NULL;
     w->pt[2][0] = pos[0];
-    w->pt[2][1] = s_hasFloor ? s_floorY : pos[1] + 10000.0f;
     w->pt[2][2] = pos[2];
+    /* under a camera group's world centre (x, z): its floor; a probe from
+       the box's world top, -(centre.y + half.y), counted */
+    for (int i = 0; TopCameraSetDataOfCurrentStage != NULL && i < s_camSet.head.count; i++) {
+        const CamGroup *g = &s_camSet.g[i];
+        if (pos[0] != -g->center[0] || pos[2] != -g->center[2]) {
+            continue;
+        }
+        if (pos[1] == -(g->center[1] + g->range[1])) {
+            s_zoneProbed[i]++;
+        }
+        const int hit = s_zoneFloorOn[i] && s_zoneFloorY[i] >= pos[1];
+        w->floor.elem = hit ? &floorElem : NULL;
+        w->pt[2][1] = hit ? s_zoneFloorY[i] : pos[1] + 10000.0f;
+        return;
+    }
+    CHECK(pos[0] == s_boyPos[0] && pos[1] == s_boyPos[1] && pos[2] == s_boyPos[2],
+          "the probe from the boy's root or under a camera group's centre (%.0f %.0f %.0f)",
+          (double)pos[0], (double)pos[1], (double)pos[2]);
+    w->floor.elem = s_hasFloor ? &floorElem : NULL;
+    w->pt[2][1] = s_hasFloor ? s_floorY : pos[1] + 10000.0f;
+}
+
+void SetDirectRootPosition(GObj *self, void *v)
+{
+    const float *p = v;
+    if (s_nMoved < (int)(sizeof(s_moved) / sizeof(s_moved[0]))) {
+        s_moved[s_nMoved].who = self;
+        memcpy(s_moved[s_nMoved].pos, p, sizeof(s_moved[0].pos));
+    }
+    s_nMoved++;
+    if (self == &s_boy) {
+        memcpy(s_boyPos, p, sizeof(s_boyPos));
+    }
 }
 
 /* the record a start wrote for label/kind, NULL none */
@@ -440,6 +506,7 @@ static void fakeTables(void)
     exitData[0].pos[2] = 56.0f;
     exitData[0].rot[1] = 90.0f;
     s_boy.dobj = &s_boySub;
+    s_girl.dobj = &s_girlSub;
 }
 
 static void testStages(void)
@@ -649,7 +716,14 @@ static void testRooms(void)
     s_ticks = 1315;
     logStart();
     ico_unused_host_poll();
-    CHECK(strstr(logEnd(), "unused: arena tick") == NULL, "no line before 30 ticks");
+    log = logEnd();
+    CHECK(strstr(log, "unused: arena tick") == NULL, "no line before 30 ticks");
+    /* the camera-zone check waits for the boy, then runs once: no camera
+       set here (testZones has them) */
+    CHECK(strstr(log, "unused: arena: no camera set loaded (0 groups): the boy stays at (100, "
+                      "-71, 200)\n") != NULL &&
+              s_nMoved == 0,
+          "the zone check once the boy is up, no camera set");
     s_ticks = 1335;
     logStart();
     ico_unused_host_poll();
@@ -890,6 +964,150 @@ static void testRooms(void)
     }
 }
 
+/* a camera group at the world centre c, half-size r: stored negated, as
+   the game stores them (a copy as stored misses every zone below) */
+static void zone(int i, float cx, float cy, float cz, float rx, float ry, float rz, int floorOn,
+                 float floorY)
+{
+    CamGroup *g = &s_camSet.g[i];
+    memset(g, 0, sizeof(*g));
+    snprintf(g->name, sizeof(g->name), "%d", i);
+    g->center[0] = -cx;
+    g->center[1] = -cy;
+    g->center[2] = -cz;
+    g->range[0] = rx;
+    g->range[1] = ry;
+    g->range[2] = rz;
+    s_zoneFloorOn[i] = floorOn;
+    s_zoneFloorY[i] = floorY;
+}
+
+/* a room from the title to its stage's first poll with the boy at
+   (100, -71, 200) on the floor 0 (71 above it), the girl up or not; the
+   poll's log copied to out; then back to the title */
+static void zoneRun(int row, unsigned int t, int girlUp, char *out, size_t outSize)
+{
+    const IcoRegionInfo *ri = ico_region_cur();
+    onTitle(t);
+    boyGObj = &s_boy;
+    s_boy.act = NULL;
+    girlGObj = girlUp ? &s_girl : NULL;
+    s_boyPos[0] = 100.0f;
+    s_boyPos[1] = -71.0f;
+    s_boyPos[2] = 200.0f;
+    s_hasFloor = 1;
+    s_floorY = 0.0f;
+    s_boySub.ctrl.groundHeight = 71.0f;
+    s_boySub.ctrl.fallHeight = 5.0f;
+    s_nPlaced = 0;
+    s_nMoved = 0;
+    memset(s_zoneProbed, 0, sizeof(s_zoneProbed));
+    CHECK(ico_unused_start(row) == ri->layout_scene, "the room starts (row %d)", row);
+    stage_no = ico_unused_stage(row);
+    s_ticks = t + 10;
+    logStart();
+    ico_unused_host_poll();
+    snprintf(out, outSize, "%s", logEnd());
+    onTitle(t + 20);
+    ico_unused_stage_enter(ri->stage_title);
+    CHECK(!ico_unused_active(), "back at the title (row %d)", row);
+    s_decided = 0;
+    s_ticks += 1000;
+    ico_unused_host_poll(); /* the pending reopen let go */
+    girlGObj = NULL;
+}
+
+/* the camera-zone rule (unused_live.c startInZone): a start inside a zone
+   stays; one outside every zone moves, with the girl when she is up, to
+   the lowest zone whose centre has a floor inside its box, at the root's
+   own height above its floor; no such zone: he stays */
+static void testZones(void)
+{
+    static char log[8192];
+    char want[512];
+
+    if (isDemo()) {
+        return;
+    }
+    TopCameraSetDataOfCurrentStage = &s_camSet;
+
+    /* the arena: its zone 0 (world centre (-375, 50, 0), the disc's) holds
+       the start; group 0 here is stored at the root itself, so a test of
+       the stored box against the root un-negated would name it */
+    s_camSet.head.count = 2;
+    zone(0, -100.0f, 71.0f, -200.0f, 10.0f, 10.0f, 10.0f, 1, 80.0f);
+    zone(1, -375.0f, 50.0f, 0.0f, 1645.0f, 170.0f, 1200.0f, 1, 0.0f);
+    zoneRun(ICO_UNUSED_ARENA, 20000, 0, log, sizeof(log));
+    CHECK(strstr(log, "unused: arena: the start is inside camera zone 1 of 2 (centre (-375, 50, "
+                      "0))\n") != NULL &&
+              s_nMoved == 0,
+          "the arena: inside zone 1, no move (%d moves)", s_nMoved);
+
+    /* the climbing room (the disc's numbers, world): zone 0 the lowest,
+       its floor below its box; zone 1 the thin side zone 47 and zone 3
+       the big group 20, the same box bottom (-720), 1's floor 103 lower:
+       the larger floor plan wins; zone 2 higher up; zone 4 no floor */
+    s_camSet.head.count = 5;
+    zone(0, 500.0f, -600.0f, 500.0f, 100.0f, 100.0f, 100.0f, 1, 0.0f);
+    zone(1, 1847.0f, -1355.0f, -534.0f, 475.0f, 635.0f, 85.0f, 1, -1221.0f);
+    zone(2, -2090.0f, -2210.0f, 4796.0f, 850.0f, 210.0f, 957.0f, 1, -2167.0f);
+    zone(3, 1111.0f, -1355.0f, 81.0f, 1216.0f, 635.0f, 529.0f, 1, -1324.0f);
+    zone(4, 240.0f, -3320.0f, 678.0f, 103.0f, 635.0f, 111.0f, 0, 0.0f);
+    zoneRun(ICO_UNUSED_CLIMB, 21000, 1, log, sizeof(log));
+    snprintf(want, sizeof(want), "%s",
+             "unused: climbing: the game's no-entrance point (100, -71, 200) is outside every "
+             "camera zone (the lowest zone's centre 529 above it): the boy moved to zone 3's "
+             "floor at (1111, -1395, 81) (71 above the floor y -1324); the girl with him\n");
+    CHECK(strstr(log, want) != NULL, "the climbing room's move logged (want \"%s\")", want);
+    CHECK(s_nMoved == 2 && s_moved[0].who == &s_boy && s_moved[1].who == &s_girl &&
+              s_moved[0].pos[0] == 1111.0f && s_moved[0].pos[1] == -1395.0f &&
+              s_moved[0].pos[2] == 81.0f &&
+              memcmp(s_moved[0].pos, s_moved[1].pos, sizeof(s_moved[0].pos)) == 0,
+          "the boy and the girl moved to zone 3's floor, 71 above it (%d moves)", s_nMoved);
+    for (int i = 0; i < 5; i++) {
+        CHECK(s_zoneProbed[i] == 1, "zone %d probed once from its box's top (%d)", i,
+              s_zoneProbed[i]);
+    }
+    CHECK(strstr(log, "unused: climbing tick 0: the boy at (1111, -1395, 81), ground height 71 "
+                      "(the floor -1324 under him, 71 below), fall height 5\n") != NULL,
+          "the tick line after the move");
+
+    /* the girl not up: the boy alone */
+    zoneRun(ICO_UNUSED_CLIMB, 22000, 0, log, sizeof(log));
+    CHECK(s_nMoved == 1 && s_moved[0].who == &s_boy &&
+              strstr(log, "(71 above the floor y -1324)\n") != NULL,
+          "no girl: the boy alone moved (%d moves)", s_nMoved);
+
+    /* no zone with a floor in its box: he stays */
+    s_camSet.head.count = 1;
+    zoneRun(ICO_UNUSED_CLIMB, 23000, 1, log, sizeof(log));
+    CHECK(strstr(log, "unused: climbing: no camera zone holds a floor under its centre: the boy "
+                      "stays at (100, -71, 200)\n") != NULL &&
+              s_nMoved == 0,
+          "no zone with a floor: no move (%d moves)", s_nMoved);
+
+    /* no boy in the log's window: the check never ran, and says so */
+    onTitle(24000);
+    boyGObj = NULL;
+    CHECK(ico_unused_start(ICO_UNUSED_CLIMB) == ico_region_cur()->layout_scene,
+          "the climbing room again");
+    stage_no = ico_unused_stage(ICO_UNUSED_CLIMB);
+    s_ticks = 24010;
+    ico_unused_host_poll();
+    s_ticks = 24010 + 301;
+    logStart();
+    ico_unused_host_poll();
+    CHECK(strstr(logEnd(), "unused: climbing: the camera-zone check never ran (no boy in the "
+                           "first 300 ticks)\n") != NULL,
+          "the check that never ran logged");
+    onTitle(24400);
+    ico_unused_stage_enter(ico_region_cur()->stage_title);
+    s_decided = 0;
+    s_ticks += 1000;
+    ico_unused_host_poll();
+    TopCameraSetDataOfCurrentStage = NULL;
+}
+
 int main(int argc, char **argv)
 {
     /* unused_content_test DIR [SLUG]: that disc's region */
@@ -904,6 +1122,7 @@ int main(int argc, char **argv)
     testStages();
     testAvailable();
     testRooms();
+    testZones();
     if (failures) {
         fprintf(stderr, "unused_content_test %s: %d failure(s)\n", s_slug, failures);
         return 1;
