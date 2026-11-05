@@ -1093,8 +1093,12 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
                           s_zeroBonesFor == g_rd.replayCounter && bonesOff == s_zeroBones;
     const RdStateBlock saved = r->st;
     r->st = *s; /* fillDrawCB reads the state the passes were planned from */
+    /* the skin check's draw (g_rdSkinArm) is drawn on its own, not held in
+     * the run: its note needs its blocks and its pass now (the merge is the
+     * same bytes either way); under the pre-pass a skinned draw takes
+     * vu_main_vs, which has a merge build */
     if (g_rd.vuMerge && mergeable && indexed && !own && !r->dateStNow && !g_rdWin.first &&
-        !g_rd.passSplit && r->passOpen) {
+        !g_rd.passSplit && r->passOpen && !g_rdSkinArm) {
         /* the draw merge: held in the run (drawn when it ends) */
         IcoDrawCB cb[2];
         for (uint32_t i = 0; i < mp; i++) {
