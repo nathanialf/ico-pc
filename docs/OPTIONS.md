@@ -151,7 +151,7 @@ The window, the picture's size and shape, and the speed.
 
 This page is in the Options menu, right under Display.
 
-How the picture is drawn and finished: smoothing, the picture's size and sharpness, brightness, the CRT filter and the packs.
+How the picture is drawn and finished: smoothing, the picture's size and sharpness, brightness and colours, the CRT filter and the packs.
 
 - **Anti-aliasing** smooths jagged edges. The choices go in this order:
   **Off**, **MSAA 2x**, **MSAA 4x**, **MSAA 8x**, **2x supersampling** and

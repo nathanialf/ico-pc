@@ -239,8 +239,8 @@ whole game; the differences are the original releases' own:
   Players (a second controller for Yorda) and Hold type are there on every
   disc, though those three discs' own game has neither. Hold type starts on the
   disc's own way (on those three discs, press R1 once to take Yorda's
-  hand and again to let go). The June 2001 demo has no Credits under
-  Extras, since its disc does not hold them.
+  hand and again to let go). The June 2001 demo has no Credits or
+  Unused content under Extras, since its disc does not hold them.
   [More in Options](docs/OPTIONS.md).
 - **The port's own menus** (Options, the extras, photo mode) can be shown in
   English, French, German, Italian, Spanish, Japanese, Korean or Traditional
