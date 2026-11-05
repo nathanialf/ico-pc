@@ -104,6 +104,9 @@ int mpegPlay;
 int stageManagerFreeResourceFlag;
 static GObj s_boy;
 static Sub15C s_boySub;
+/* the title boy's actor, his weapon and held item (act-game.c's flag 1) */
+static Act s_boyAct;
+static GObj s_weapon, s_item;
 static float s_boyPos[3];
 static int s_hasFloor;
 static float s_floorY;
@@ -762,9 +765,39 @@ static void testRooms(void)
     CHECK(s_titleReturn == -1 && s_reopened == -1, "the return let go after its bound (%d)",
           s_titleReturn);
 
-    /* a start that never leaves the title: put back at once */
+    /* a start that never leaves the title: put back at once.  Its title
+       boy holds a weapon and an item: as ACTGame_SetActors_Debug's flag 1
+       pass, the weapon's and the item's records go to the start with the
+       boy's, and there is no sword */
     onTitle(3000);
+    s_weapon.labelId = 200;
+    s_weapon.kind = 15;
+    s_item.labelId = 300;
+    s_item.kind = 20;
+    s_boyAct.weapon = &s_weapon;
+    s_boyAct.curItem = &s_item;
+    s_boy.act = &s_boyAct;
+    boyGObj = &s_boy;
+    s_nPlaced = 0;
+    logStart();
     ico_unused_start(ICO_UNUSED_ARENA);
+    log = logEnd();
+    {
+        const Placed *w = placedOf(200, 15), *it = placedOf(300, 20);
+        CHECK(atStart(placedOf(ri->credits_boy_label, 1), arena) && atStart(w, arena) &&
+                  atStart(it, arena) && placedOf(ri->credits_boy_label + 1, 14) == NULL &&
+                  s_nPlaced == 3 && s_placed[1].label == 200 && s_placed[2].label == 300,
+              "a title boy with a weapon: the boy, his weapon and his item at the start, no "
+              "sword (%d records)",
+              s_nPlaced);
+        snprintf(want, sizeof(want),
+                 "placed: the boy (record %d), the boy's weapon (record 200, kind 15), the "
+                 "boy's item (record 300, kind 20)\n",
+                 ri->credits_boy_label);
+        CHECK(strstr(log, want) != NULL, "the held weapon's placement logged (want \"%s\")", want);
+    }
+    s_boy.act = NULL;
+    boyGObj = NULL;
     s_ticks = 3000 + 1501;
     logStart();
     ico_unused_host_poll();

@@ -1061,7 +1061,10 @@ has.
   148 European, 131 North American, 130 August 2001, 124 June 2001 demo; kind 2) where its `flag0`
   is set. The engine writes the same three records again at `exitData[0]` with
   `gamesysObjInfoPosNewStageSet`: the arena (`attrTop` 1, `flag0` 0) the boy and the sword, the
-  climbing room (`attrTop` 1, `flag0` 1) the girl too.
+  climbing room (`attrTop` 1, `flag0` 1) the girl too. The title has a boy (its `attrTop` is
+  set), and the hook runs with flag 1 while `boyGObj` is still he, so as the game's pass the
+  engine takes his `weapon` and `curItem` (`act-game.c`): a weapon skips the sword, and the
+  weapon's and the item's records go to the start with the boy's.
 - The sign rule: the game stores exit rows, as it stores layout rows, negated. `EXITDATA_GetNextPosition`
   (`act-game.c`) takes `pos = -exitData[idx].pos` and the rotation in degrees times 0.017453292,
   and `initSceneGObj` builds a scene object at `-gen->pos` (`ico2/common/src/sceneManager.c:478`);
@@ -1086,7 +1089,8 @@ has.
   no-entrance point (exitData[0])`, then `: the room has no entrance row` (the arena) or `; the
   game's own entrance row N (x, y, z) not used: it leads to a walkway with no model` (the
   climbing room), then `; placed: the boy (record R), the girl (record R), the sword (record
-  R)` as placed. For the first 300 Main ticks after the room's stage is up, a line as it comes
+  R)` as placed (with `the boy's weapon (record R, kind K)` and `the boy's item (record R, kind
+  K)` after the boy when the title's boy held them). For the first 300 Main ticks after the room's stage is up, a line as it comes
   up and every 30 ticks after, and at a game over in a room (`ico_unused_game_over`, through the
   engine's `game_over`): `unused: <room> tick T: the boy at (x, y, z), ground height G (the floor
   F under him, D below | no floor below), fall height H` (`tick T` reads `game over` there), from
