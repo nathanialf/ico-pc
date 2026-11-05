@@ -23,7 +23,9 @@
  * such a frame costs one submit, and a frame whose drawing list does not
  * present costs one submit per list and none more.  The display's timing
  * of presents on a stand-in for vkWaitForPresentKHR (presentTiming, and a
- * wait that does not keep its timeout: presentWaitHang).  Exit
+ * wait that does not keep its timeout: presentWaitHang).  Each frame's
+ * image counts as acquired (RhiStats.swapAcquired) from its acquire to its
+ * present.  Exit
  * 77 when SDL has no offscreen Vulkan surface or no device presents to it. */
 #include "rhi.h"
 #include "vk/rhi_vk.h"
@@ -64,6 +66,17 @@ static int frame(SDL_Window *win, RhiFormat fmt, int n)
         printf("FAIL frame %d: no backbuffer\n", n);
         return 1;
     }
+    int failures = 0;
+    {
+        /* the image held: one acquired, not yet presented (RhiStats.swapAcquired) */
+        RhiStats st;
+        rhi_get_stats(&st);
+        if (st.swapImages == 0 || st.swapAcquired != 1) {
+            printf("FAIL frame %d: %llu images, %llu acquired after the acquire\n", n,
+                   (unsigned long long)st.swapImages, (unsigned long long)st.swapAcquired);
+            failures++;
+        }
+    }
     RhiCommandList cl = rhi_begin_commands();
     RhiTextureBarrier b0 = {bb, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
     rhi_cmd_barrier(cl, &b0, 1);
@@ -84,7 +97,6 @@ static int frame(SDL_Window *win, RhiFormat fmt, int n)
     rhi_cmd_barrier(cl, &b1, 1);
     rhi_submit(cl);
 
-    int failures = 0;
     uint32_t pitch = 0;
     if (!rhi_readback_texture(bb, RHI_ASPECT_COLOR, px, sizeof(px), &pitch) || pitch != w * 4) {
         printf("FAIL frame %d: readback (pitch %u)\n", n, pitch);
@@ -108,6 +120,15 @@ static int frame(SDL_Window *win, RhiFormat fmt, int n)
     rhi_cmd_barrier(cl2, &b2, 1);
     rhi_submit(cl2);
     rhi_present();
+    {
+        RhiStats st;
+        rhi_get_stats(&st);
+        if (st.swapAcquired != 0) {
+            printf("FAIL frame %d: %llu acquired after the present\n", n,
+                   (unsigned long long)st.swapAcquired);
+            failures++;
+        }
+    }
     return failures;
 }
 
@@ -280,6 +301,17 @@ static int presentAtSwapSize(int n)
         printf("FAIL frame %d: no backbuffer\n", n);
         return 1;
     }
+    int failures = 0;
+    {
+        /* the image held: one acquired, not yet presented (RhiStats.swapAcquired) */
+        RhiStats st;
+        rhi_get_stats(&st);
+        if (st.swapImages == 0 || st.swapAcquired != 1) {
+            printf("FAIL frame %d: %llu images, %llu acquired after the acquire\n", n,
+                   (unsigned long long)st.swapImages, (unsigned long long)st.swapAcquired);
+            failures++;
+        }
+    }
     RhiCommandList cl = rhi_begin_commands();
     RhiTextureBarrier b0 = {bb, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
     rhi_cmd_barrier(cl, &b0, 1);
@@ -295,7 +327,7 @@ static int presentAtSwapSize(int n)
     rhi_cmd_barrier(cl, &b1, 1);
     rhi_submit(cl);
     rhi_present();
-    return 0;
+    return failures;
 }
 
 /* The submits of a present (RhiStats.submits; rhi_readback_texture's own

@@ -689,6 +689,7 @@ static void vkr_acq_reset_all(void)
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
         memset(&g_vkr.frames[i].acq, 0, sizeof(g_vkr.frames[i].acq));
     }
+    __atomic_store_n(&g_vkr.swapAcquired, 0u, __ATOMIC_RELAXED);
 }
 
 /* An acquire's semaphore no submit waited on (an image acquired, then the
@@ -1549,6 +1550,7 @@ static RhiTexture vkr_acquire_backbuffer(bool ahead, bool *lost, bool *busy)
     }
     f->acq.image = idx;
     f->acq.acquired = true;
+    __atomic_fetch_add(&g_vkr.swapAcquired, 1u, __ATOMIC_RELAXED);
     f->acq.signalled = false;
     f->acq.waitPending = true;
     f->acq.seq = ++g_vkr.acqSeq;
@@ -1683,6 +1685,9 @@ static void vkr_present(bool defer)
     vkr_late_add(&g_vkr.late.presents, 1u);
     f->acq.acquired = false;
     f->acq.signalled = false;
+    if (__atomic_load_n(&g_vkr.swapAcquired, __ATOMIC_RELAXED) > 0u) {
+        __atomic_fetch_sub(&g_vkr.swapAcquired, 1u, __ATOMIC_RELAXED);
+    }
     if (g_vkr.retired && (r == VK_SUCCESS || r == VK_SUBOPTIMAL_KHR)) {
         /* the new swapchain's picture is on its way to the screen: the one
          * it replaced can go */

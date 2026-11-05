@@ -125,3 +125,92 @@ size_t window_scene_vu_text(char *out, size_t cap, uint64_t draws, uint64_t tris
     }
     return (size_t)w < cap ? (size_t)w : cap - 1;
 }
+
+void window_scene_vu_fit_add(SceneVuFit *f, uint64_t tris, double list0Ms)
+{
+    const double x = (double)tris / 1000.0;
+
+    f->n++;
+    f->sx += x;
+    f->sy += list0Ms;
+    f->sxx += x * x;
+    f->sxy += x * list0Ms;
+    f->syy += list0Ms * list0Ms;
+}
+
+bool window_scene_vu_fit(const SceneVuFit *f, double *a, double *b, double *r2)
+{
+    const double n = (double)f->n;
+    double vx, vy, cxy;
+
+    if (f->n < 3) {
+        return false;
+    }
+    vx = f->sxx - f->sx * f->sx / n;
+    vy = f->syy - f->sy * f->sy / n;
+    cxy = f->sxy - f->sx * f->sy / n;
+    /* the triangles' spread against their size: a count that did not vary
+       (or by rounding only) has no slope */
+    if (!(vx > 1e-9 * (f->sxx > 1.0 ? f->sxx : 1.0))) {
+        return false;
+    }
+    *b = cxy / vx;
+    *a = (f->sy - *b * f->sx) / n;
+    *r2 = vy > 1e-12 ? cxy * cxy / (vx * vy) : -1.0;
+    if (*r2 > 1.0) {
+        *r2 = 1.0;
+    }
+    return true;
+}
+
+size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f)
+{
+    double a, b, r2;
+    int w;
+
+    if (cap == 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (f->n == 0) {
+        return 0;
+    }
+    if (!window_scene_vu_fit(f, &a, &b, &r2)) {
+        w = snprintf(out, cap, "; list 0 GPU %.1f ms a replay (%u replays)", f->sy / f->n, f->n);
+    } else if (r2 < 0.0) {
+        w = snprintf(out, cap,
+                     "; list 0 GPU %.1f ms a replay, %.1f ms %s %.2f ms a thousand triangles "
+                     "(%u replays)",
+                     f->sy / f->n, a, b < 0.0 ? "-" : "+", b < 0.0 ? -b : b, f->n);
+    } else {
+        w = snprintf(out, cap,
+                     "; list 0 GPU %.1f ms a replay, %.1f ms %s %.2f ms a thousand triangles "
+                     "(R^2 %.2f, %u replays)",
+                     f->sy / f->n, a, b < 0.0 ? "-" : "+", b < 0.0 ? -b : b, r2, f->n);
+    }
+    if (w < 0) {
+        out[0] = '\0';
+        return 0;
+    }
+    return (size_t)w < cap ? (size_t)w : cap - 1;
+}
+
+size_t window_scene_images_text(char *out, size_t cap, uint64_t images, uint64_t inUse)
+{
+    int w;
+
+    if (cap == 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (images == 0) {
+        return 0;
+    }
+    w = snprintf(out, cap, " (images: %llu, in use %llu)", (unsigned long long)images,
+                 (unsigned long long)inUse);
+    if (w < 0) {
+        out[0] = '\0';
+        return 0;
+    }
+    return (size_t)w < cap ? (size_t)w : cap - 1;
+}

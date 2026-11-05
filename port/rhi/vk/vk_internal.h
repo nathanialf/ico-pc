@@ -616,6 +616,10 @@ typedef struct VkrState {
      * swapImageCount - swapMinImages is at least 1 (the spec's limit for an
      * acquire without a timeout; vk_swapchain.c vkr_acquire_ahead_ok) */
     uint32_t swapMinImages;
+    /* the images acquired and not yet presented (vk_swapchain.c: an
+     * acquire adds one, a present call takes one, the swapchain made again
+     * or released empties it), atomic: rhi_get_stats reads it on any thread */
+    uint32_t swapAcquired;
     /* the acquires' numbers (VkrAcquire.seq), under the swapchain's lock */
     uint64_t acqSeq;
     /* a present on the submit thread does not make the swapchain or the
