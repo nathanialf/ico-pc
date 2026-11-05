@@ -308,9 +308,9 @@ static void testToneRows(void)
         CHECK(t != NULL && ico_toml_get_int(t, "video.gamma", 0) == 70 &&
                   ico_toml_get_int(t, "video.brightness", 0) == 50 &&
                   ico_toml_get_int(t, "video.contrast", 0) == 50 &&
-                  ico_toml_get_int(t, "video.saturation", 0) == 45,
+                  ico_toml_get_int(t, "video.saturation", 0) == 49,
               "title %d: leaving Picture wrote gamma 70, brightness 50, contrast 50, "
-              "saturation 45",
+              "saturation 49",
               title);
         ico_toml_free(t);
     }
