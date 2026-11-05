@@ -1332,17 +1332,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   DISPLAY byte for byte the reference's; the gate leaving out every second frame: 15 pictures of
   30, the same pixels; under `ICO_RD_ORIGINAL_ASYNC=0` every frame replayed inside the step
   (`rd_submit_async` false), the same pixels; and the busy skip made certain where there is a
-  submit thread: frames handed over one at a time, each after the one before ended on both
-  threads, until a picture's present reaches the submit thread's hook (`rd__submit_test_hook`;
-  a picture that does not present, as the first after a start can be, passes it; these are the
-  lead frames), that present held as a driver's present that blocks (released after at most
-  10 s, so a wait for it fails rather than hangs); with the render thread's part of busy idle
-  (`rd__thread_picture_busy_render`), `rd__thread_picture_busy` true (deleting the submit
-  thread's part of it fails here); a gate answering `RD_GATE_BUSY` when told busy as
-  `window_orig_gate` does: four frames while held are left out, and after the release one more
-  is handed over, so the gate runs lead + 4 + 1 times, `busySkips` is 4, lead + 1 are handed
-  over and run on the render thread, the clause says "skipped: render thread busy", and SCENE
-  is the handed-over frames'. It is the render thread's program to run under
+  submit thread: one frame handed over, its submit job held unfinished inside the submit
+  thread's hook (`rd__submit_test_hook`: after the job's submit, before its present, so
+  `rd_thread_submit_unfinished` stays true; the harness's output is offscreen with no swapchain,
+  so the job has no present of its own, and the held job is what the busy rule reads), as a
+  driver's present that blocks (released after at most 10 s, so a wait for it fails rather than
+  hangs); with the render thread's part of busy idle (`rd__thread_picture_busy_render`),
+  `rd__thread_picture_busy` true (deleting the submit thread's part of it fails here); a gate
+  answering `RD_GATE_BUSY` when told busy as `window_orig_gate` does: four frames while held are
+  left out, and after the release one more is handed over, so the gate runs 6 times, `busySkips`
+  is 4, 2 are handed over and run on the render thread, the clause says "skipped: render thread
+  busy", and SCENE is the handed-over frames'. It is the render thread's program to run under
   ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
   build folder of its own (`build-host/linux-x64-tsan`), `--target rd_tex_test`, run with
   `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`; a report is a failure.

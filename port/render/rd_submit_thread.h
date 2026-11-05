@@ -129,9 +129,11 @@ void rd_thread_submit_reap(void);
 uint64_t rd_thread_submit_drain(void);
 /* A job is queued or running (the window's heartbeat: no lock) */
 bool rd_thread_submit_unfinished(void);
-/* The tests' seam (rd_tex_test): fn() on the submit thread inside a job
- * that presents, before its present call (a driver's present that blocks,
- * held as long as fn does); NULL: none */
+/* The tests' seam (rd_tex_test): fn() on the submit thread inside every
+ * job, after its submit and before its present call, while the job is
+ * still unfinished (rd_thread_submit_unfinished true): a driver's present
+ * that blocks, held as long as fn does, also where the job has no present
+ * (the tests' offscreen output has no swapchain); NULL: none */
 void rd__submit_test_hook(void (*fn)(void));
 /* The longest present call of the jobs finished since the last take, ns
  * (0: none; render_thread.c's present estimate, pace_rt_further_hold) */

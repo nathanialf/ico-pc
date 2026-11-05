@@ -67,11 +67,13 @@ static void tail(RdSubmitJob *j)
     rhi_submit(cl);
     const double t1 = rd__now_ms();
     j->submitMs = t1 - t0;
-    if (j->present) {
+    {
         void (*hook)(void) = __atomic_load_n(&s_testHook, __ATOMIC_ACQUIRE);
         if (hook != NULL && t_onS) {
-            hook(); /* the test's driver present that blocks */
+            hook(); /* the test's job that does not end: a driver's present that blocks */
         }
+    }
+    if (j->present) {
         rhi_present();
     }
     j->presentMs = rd__now_ms() - t1;

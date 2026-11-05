@@ -1742,9 +1742,9 @@ static int origGate(int keep, bool busy)
 }
 
 /* The submit thread's hook (rd_submit_thread.h rd__submit_test_hook): the
- * first present held, as a driver's present call that blocks, until this
- * thread releases it (or 10 s pass: a test that would wait for it fails
- * instead of hanging) */
+ * first job held unfinished, as a driver's present call that blocks, until
+ * this thread releases it (or 10 s pass: a test that would wait for it
+ * fails instead of hanging) */
 static int s_shEntered, s_shRelease, s_shHeld;
 
 static bool spinUntil(const int *flag, double ms)
@@ -1939,25 +1939,26 @@ static void threadOriginal(void)
         rd_thread_local_stop();
     }
     setEnv("ICO_RD_ORIGINAL_ASYNC", NULL);
-    /* the busy skip, made certain through the submit side.  Frames are
-       handed over one at a time, each after the one before has ended on
-       both threads, until a picture's present reaches the submit thread's
-       hook (a picture that does not present, as the first after a start
-       can be, passes it by: lead counts them); that present is held, as a
-       driver's present that blocks.  With the render thread's part idle,
-       busy is the submit thread's part alone.  Then `held` frames go
-       through rd_end_frame while it is held, the gate answering as
-       window_orig_gate does: each is left out as busy (not replayed).
-       Released and drained, one more frame is handed over.  So: the gate
-       lead + held + 1 times, held busy skips, lead + 1 handed over, as many
-       pictures on the render thread, SCENE the last handed-over frame's */
+    /* the busy skip, made certain through the submit side.  One frame is
+       handed over; its submit job is held inside the submit thread's hook
+       (rd__submit_test_hook: after the job's submit, before its present and
+       before the job marks itself finished, so rd_thread_submit_unfinished
+       stays true), as a driver's present that blocks.  The harness's
+       output is offscreen with no swapchain, so the job has no present of
+       its own: what the busy rule reads is the unfinished job, and that is
+       what is held.  With the render thread's part idle, busy is the submit
+       thread's part alone.  Then `held` frames go through rd_end_frame
+       while it is held, the gate answering as window_orig_gate does: each
+       is left out as busy (not replayed).  Released and drained, one more
+       frame is handed over.  So: the gate held + 2 times, held busy skips,
+       2 handed over, as many pictures on the render thread, SCENE the
+       handed-over frames' */
     if (rd_thread_local_start(RD_THREAD_ON)) {
         if (!rd_thread_submit_on()) {
-            printf("Original, busy: no submit thread on this device; the held present is not "
+            printf("Original, busy: no submit thread on this device; the held job is not "
                    "driven\n");
         } else {
-            const unsigned held = 4, leadMax = 8;
-            unsigned lead = 0;
+            const unsigned held = 4, lead = 1;
             memset(&s_og, 0, sizeof(s_og));
             s_og.mode = 2;
             __atomic_store_n(&s_shEntered, 0, __ATOMIC_RELEASE);
@@ -1966,24 +1967,10 @@ static void threadOriginal(void)
             rd__submit_test_hook(submitHold);
             rd_thread_block_take(&b);
             rd_frame_post_take(&fp);
-            bool entered = false;
-            while (!entered && lead < leadMax) {
-                gif_HostFrameReset();
-                dl_Clear();
-                recordFrame(); /* both threads idle: handed over */
-                lead++;
-                /* this picture's present held, or the picture over on both
-                   threads without one (then the next frame) */
-                const double t0 = ico_thread_now_ms();
-                for (;;) {
-                    entered = __atomic_load_n(&s_shEntered, __ATOMIC_ACQUIRE) != 0;
-                    if (entered ||
-                        (!rd__thread_picture_busy_render() && !rd_thread_submit_unfinished()) ||
-                        ico_thread_now_ms() - t0 > 5000.0) {
-                        break;
-                    }
-                }
-            }
+            gif_HostFrameReset();
+            dl_Clear();
+            recordFrame(); /* both threads idle: handed over */
+            const bool entered = spinUntil(&s_shEntered, 5000.0); /* its job in the hook */
             bool renderIdle = false;
             {
                 const double t0 = ico_thread_now_ms();
@@ -1994,10 +1981,9 @@ static void threadOriginal(void)
             }
             const bool busyHeld = rd__thread_picture_busy();
             CHECK(entered && renderIdle && rd_thread_submit_unfinished() && busyHeld,
-                  "Original, busy: a present held on the submit thread (%d, after %u frames "
-                  "handed over), the render thread's part idle (%d): busy %d (the submit "
-                  "thread's part of it)",
-                  entered, lead, renderIdle, busyHeld);
+                  "Original, busy: the submit job held on the submit thread (%d), the render "
+                  "thread's part idle (%d): busy %d (the submit thread's part of it)",
+                  entered, renderIdle, busyHeld);
             for (unsigned k = 0; k < held; k++) {
                 gif_HostFrameReset();
                 dl_Clear();
@@ -2025,7 +2011,7 @@ static void threadOriginal(void)
                 rd_frame_post_text(&fp, text, sizeof(text));
                 CHECK(strstr(text, "skipped: render thread busy") != NULL,
                       "Original, busy: the 10 s clause: %.300s", text);
-                printf("Original, busy (%u frames before the held present):%.300s\n", lead, text);
+                printf("Original, busy:%.300s\n", text);
             }
             CHECK(readScene(scene, display, &dw, &dh) &&
                       memcmp(scene, refScene, (size_t)512 * 512 * 4) == 0,
