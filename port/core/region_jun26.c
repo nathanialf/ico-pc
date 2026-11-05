@@ -213,6 +213,7 @@ const IcoRegionInfo ico_region_info_jun26 = {
                                      PAL's exitData[216] to 60 */
     .credits_boy_label = 47,      /* act-game.c ACTGame_SetActors_Debug's first row (the JUN26
                                      arm) {47, 1, hasBoy} (PAL 54) */
+    .girl_label = 124,            /* act-game.c ACTGame_SetActors_Debug's second row (PAL 148) */
     /* NONE: CUS97113/DFDATAS/DATA.DF's directory (49 entries) has no STGSTAFF*.DF
        (nor STGEND.DF, STG26B2.DF, STGLOG.DF or STGTTL.DF): stageData[59] staff1 names
        STGSTAFF1, which this disc does not carry, so Extras > Credits refuses here */

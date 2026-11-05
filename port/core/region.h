@@ -207,6 +207,11 @@ typedef struct IcoRegionInfo {
                                   (credits_live.c SONG_AT_ROLL_MS) */
     int credits_entrance_exit; /* exitData row into STAFF1 */
     int credits_boy_label;     /* the boy's object record */
+    /* the girl's object record (kind 2): ACTGame_SetActors_Debug's second
+       row (act-game.c, PAL_NTSC_AUG6_JUN26(148, 131, 130, 124)), placed
+       with the boy where the stage's stageData flag0 is set; the sword's
+       (kind 14) is credits_boy_label + 1 on every disc (the third row) */
+    int girl_label;
     /* 1: the disc's DATA.DF holds the staff scenes' packs (STGSTAFF1.DF,
        STGSTAFF2.DF, STGSTAFF3.DF: stageData's dataFile of STAFF1 ..), so
        Extras > Credits can play them; 0: it does not (the June 2001 demo's

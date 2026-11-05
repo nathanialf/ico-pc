@@ -88,10 +88,12 @@ const char *ico_unused_left_by(void);
 /* the engine the program installs (unused_live.c): available answers
    whether DATA.DF holds the row's data (its stage's pack, the loose file,
    the member; 1 or 0); begin starts the row from the title and returns the
-   layout to switch to, or -1 (the engine logs why) */
+   layout to switch to, or -1 (the engine logs why); game_over (may be
+   NULL) is told of ico_unused_game_over while a row runs, for its log */
 typedef struct IcoUnusedEngine {
     int (*available)(int row);
     int (*begin)(int row);
+    void (*game_over)(void);
 } IcoUnusedEngine;
 
 void ico_unused_set_engine(const IcoUnusedEngine *e);
