@@ -764,7 +764,9 @@ Arimo's ranges `tools/subset_font_arimo.py` (`font_subset_arimo`). A gameplay op
   `threadFair`: a call waiting for one picture's reads runs before the next picture's begin, the
   wait counted in the walk; its `threadRoomAhead`: the display's wait for room in the present
   queue made at the end of the picture before, held there without a read wait, taken by the next
-  acquire, with `ICO_RD_ACQUIRE_AHEAD=0` never made; and `rd_tex_test` under
+  acquire, with `ICO_RD_ACQUIRE_AHEAD=0` never made; its `threadOriginal`: Frame rate Original's
+  frames handed over by `rd_end_frame`, the gate on the game thread, the pixels byte for byte the
+  thread-off run's, with `ICO_RD_ORIGINAL_ASYNC=0` inside the step; and `rd_tex_test` under
   the tsan build), `rd_present` (the deferred state picture, the slot waits by whose), `rd_replay_tool_save_blended` (the
   interpolation on the render thread); the device runs are the window's, with `[dev]
   render_thread = sync` against `off` for the same pictures ([PLATFORM.md](PLATFORM.md#the-render-thread)).

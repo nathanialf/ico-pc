@@ -27,7 +27,15 @@
  * about 1000 / (picture + step ms) pictures a second, no resync, and up to
  * 60 ms the audio's lead under its 120 ms bound; without the skip 30 ms ran
  * the game under its rate; a 30 frames a second game and a GPU-bound
- * replay waiting on its fence).
+ * replay waiting on its fence; pace_original_gate's busy arm: a frame on
+ * time left out while the render thread or the submit thread is busy with
+ * the picture before, a keep frame never; testOriginalSplit: the picture
+ * handed over to the render thread, walks of 5-40 ms and presents of
+ * 1-300 ms on the submit thread, a frame every step or every second: the
+ * game at 50 steps a second within 2 %, no resync, the pictures between
+ * 1000 / (present + walk + a frame interval) and 1000 / (present + walk)
+ * a second, the audio's lead under its bound; the same 320 ms picture
+ * replayed inside the step resyncs and runs the game under its rate).
  * The present allowance (testBudgetRule: the arm, the drop, hold, climb
  * (under the lock a probe), excuse and limits; testBudgetUnbound: the timer
  * path's start unbound, 15 presents a step never refused, a drop to max at
@@ -981,6 +989,18 @@ static void testOriginalRule(void)
     CHECK(pace_original_present(false, 5000 * MS, 0, p));      /* not started */
     CHECK(pace_original_present(false, due + PERIOD - 1, due, PERIOD));
     CHECK(!pace_original_present(false, due + PERIOD, due, PERIOD));
+    /* pace_original_gate: the same late arm, and with the render thread
+       busy with the picture before a frame on time is left out too; a keep
+       frame never (it waits for the picture before) */
+    CHECK(pace_original_gate(false, false, due + 10 * MS, due, p) == PACE_ORIG_PRESENT);
+    CHECK(pace_original_gate(false, true, due + 10 * MS, due, p) == PACE_ORIG_BUSY);
+    CHECK(pace_original_gate(false, true, due - MS, due, p) == PACE_ORIG_BUSY);
+    CHECK(pace_original_gate(false, false, due + p, due, p) == PACE_ORIG_LATE);
+    CHECK(pace_original_gate(false, true, due + p, due, p) == PACE_ORIG_LATE);
+    CHECK(pace_original_gate(true, true, due + 90 * MS, due, p) == PACE_ORIG_PRESENT);
+    CHECK(pace_original_gate(true, false, due + 90 * MS, due, p) == PACE_ORIG_PRESENT);
+    CHECK(pace_original_gate(false, true, 5000 * MS, 0, p) == PACE_ORIG_BUSY);
+    CHECK(pace_original_gate(false, false, 5000 * MS, 0, p) == PACE_ORIG_PRESENT);
 }
 
 /* The window's Original loop (window_host.c pace and original_replay_gate)
@@ -1049,6 +1069,147 @@ static OrigRun origLoop(unsigned steps, unsigned every, uint64_t periodNs, uint6
     }
     r.endNs = t - 1000 * MS;
     return r;
+}
+
+/* The window's Original loop with the render thread (rd_end_frame's
+   hand-over, rd.h RdReplayGate): the step closing a frame pays only the
+   hand-over (handNs) and posts the picture; the render thread walks it
+   (walkNs: its reads, which the next step's first renderer call waits for,
+   texLock) and the submit thread then presents it (presentNs, the driver's
+   present call: the swapchain's lock held through it).  At each close the
+   gate (pace_original_gate) skips the frame while the picture before is
+   not done, its present included (busy).  The pacer as origLoop's. */
+typedef struct OrigSplit {
+    OrigRun r;
+    unsigned busy; /* frames left out with the render thread busy */
+} OrigSplit;
+
+static OrigSplit origSplitLoop(unsigned steps, unsigned every, uint64_t periodNs, uint64_t stepNs,
+                               uint64_t handNs, uint64_t walkNs, uint64_t presentNs)
+{
+    const uint64_t resyncNs = 100 * MS;
+    OrigSplit o = {{0}, 0};
+    uint64_t t = 1000 * MS, deadline = 1000 * MS;
+    uint64_t readsEnd = 0, freeAt = 0; /* the picture's reads' end, its present's end */
+
+    for (unsigned k = 0; k < steps; k++) {
+        if (readsEnd > t) {
+            t = readsEnd; /* the step's first renderer call: the reads (texLock) */
+        }
+        t += stepNs;
+        if (k % every == 0) {
+            o.r.frames++;
+            switch (pace_original_gate(false, t < freeAt, t, deadline, periodNs)) {
+            case PACE_ORIG_PRESENT:
+                t += handNs;
+                readsEnd = t + walkNs;
+                freeAt = readsEnd + presentNs; /* one present in flight */
+                o.r.presents++;
+                break;
+            case PACE_ORIG_BUSY:
+                o.busy++;
+                o.r.skipped++;
+                break;
+            default:
+                o.r.skipped++;
+                break;
+            }
+        }
+        deadline += periodNs;
+        if (t > deadline && t - deadline > o.r.lagMaxNs) {
+            o.r.lagMaxNs = t - deadline;
+        }
+        if (t < deadline) {
+            t = deadline;
+        } else {
+            o.r.late++;
+            if (t - deadline > resyncNs) {
+                o.r.resyncs++;
+                deadline = t;
+            }
+        }
+    }
+    o.r.endNs = t - 1000 * MS;
+    return o;
+}
+
+/* The rule with the render thread, a rate requirement (issue 179: a
+   Mali-G52 whose present call blocked 165-300 ms in a scene, inside the
+   step): the game keeps the disc's rate (50 steps a second, within 2 %)
+   whatever the present costs, the pictures come at about 1000 / (present +
+   walk) a second (one present in flight; a frame closes every frame
+   interval, so a picture waits for the first close after the one before
+   is done: never faster than that, never slower than with one interval
+   more), and the audio's lead stays under its bound.  The old model
+   (the picture replayed and presented inside the step, origLoop) on the
+   same 300 ms presents holds the game below its rate and resyncs: why the
+   picture left the step. */
+static void testOriginalSplit(void)
+{
+    static const unsigned walks[] = {5, 10, 20, 40};
+    static const unsigned presents[] = {1, 30, 165, 300};
+    const uint64_t p = 20 * MS, step = 9 * MS / 10, hand = MS / 2;
+
+    for (unsigned every = 1; every <= 2; every++) {
+        for (unsigned i = 0; i < sizeof walks / sizeof walks[0]; i++) {
+            for (unsigned j = 0; j < sizeof presents / sizeof presents[0]; j++) {
+                const unsigned steps = 3000; /* 60 s */
+                const uint64_t w = walks[i] * MS, pr = presents[j] * MS;
+                const OrigSplit o = origSplitLoop(steps, every, p, step, hand, w, pr);
+                const double sec = (double)o.r.endNs / 1e9;
+                const double stepsPerSec = steps / sec, presentsPerSec = o.r.presents / sec;
+                const double cycleMs = (double)(w + pr + hand) / 1e6;
+                const double frameMs = (double)(every * p) / 1e6;
+                /* at most every frame; at most one picture per present +
+                   walk; at least one per present + walk + a frame interval */
+                const double top = 1000.0 / (cycleMs > frameMs ? cycleMs : frameMs);
+                const double least = 1000.0 / (cycleMs + frameMs);
+
+                CHECK(o.r.resyncs == 0);
+                CHECK(stepsPerSec >= 0.98 * 50.0 && stepsPerSec <= 50.01);
+                CHECK(presentsPerSec <= top * 1.01 && presentsPerSec >= 0.98 * least);
+                CHECK(o.r.presents + o.r.skipped == o.r.frames);
+                CHECK(ORIG_AUDIO_STEADY + o.r.lagMaxNs < ORIG_AUDIO_BOUND);
+                if (cycleMs <= frameMs - (double)step / 1e6) {
+                    CHECK(o.busy == 0 && o.r.skipped == 0); /* the picture fits its frame */
+                }
+                if (presents[j] == 300 && every == 1) {
+                    /* the brief's 10 %: at 50 frames a second the interval is
+                       small against the present */
+                    CHECK(presentsPerSec >= 0.9 * 1000.0 / cycleMs);
+                }
+                if (presents[j] == 300 && walks[i] == 20) {
+                    printf("pace_policy_test: Original, the picture handed over, %u ms walk and "
+                           "%u ms present, a frame every %u steps: %.2f steps and %.2f presents "
+                           "a second (1000 / (present + walk) = %.2f), %u of %u frames not "
+                           "presented (%u the render thread busy), %u resyncs, lag at most %.1f "
+                           "ms\n",
+                           walks[i], presents[j], every, stepsPerSec, presentsPerSec,
+                           1000.0 / cycleMs, o.r.skipped, o.r.frames, o.busy, o.r.resyncs,
+                           (double)o.r.lagMaxNs / 1e6);
+                }
+            }
+        }
+    }
+    /* the old model: the same 20 ms walk and 300 ms present replayed inside
+       the step (the late gate on), a frame every second step as in the
+       reporter's scene: the step runs 320 ms, past RESYNC_NS, so the pacer
+       drops the lag again and again and the game runs below its rate */
+    {
+        const unsigned steps = 3000;
+        const OrigRun old = origLoop(steps, 2, p, step, 320 * MS, 0, true);
+        const OrigSplit now = origSplitLoop(steps, 2, p, step, hand, 20 * MS, 300 * MS);
+        const double oldSec = (double)old.endNs / 1e9, nowSec = (double)now.r.endNs / 1e9;
+
+        CHECK(old.resyncs > 0 && now.r.resyncs == 0);
+        CHECK(steps / oldSec < 0.9 * 50.0 && steps / nowSec >= 0.98 * 50.0);
+        CHECK(old.lagMaxNs > 100 * MS && ORIG_AUDIO_STEADY + now.r.lagMaxNs < ORIG_AUDIO_BOUND);
+        printf("pace_policy_test: Original, 320 ms pictures replayed inside the step: %.2f steps "
+               "a second, %u resyncs, lag at most %.1f ms; handed over: %.2f steps a second, %u "
+               "resyncs, lag at most %.1f ms\n",
+               steps / oldSec, old.resyncs, (double)old.lagMaxNs / 1e6, steps / nowSec,
+               now.r.resyncs, (double)now.r.lagMaxNs / 1e6);
+    }
 }
 
 /* the rates per picture time (memory: a pacing rule is a throughput
@@ -3288,6 +3449,7 @@ int main(void)
     testLateSkipLoop();
     testOriginalRule();
     testOriginalLoop();
+    testOriginalSplit();
     testLockPause();
     testIntervals();
     testFirstPresentPause();

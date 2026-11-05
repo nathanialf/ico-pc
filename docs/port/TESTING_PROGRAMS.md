@@ -808,7 +808,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   sound, less does not, slow presents skip past the deadline, never two frames in a row while the
   same frame may stay skipped; the timer path's loop under a fake clock keeps a 30 frames a second
   game on 39 ms presents at real time with no resync, where a frame skipped for one step only fell
-  behind, and a 60 frames a second game on 20 ms presents through the late arm alone; the present
+  behind, and a 60 frames a second game on 20 ms presents through the late arm alone; Frame rate
+  Original's rule (`testOriginalRule`: `pace_original_present`'s late arm, `pace_original_gate`
+  leaving a frame on time out while the render thread or the submit thread is busy with the
+  picture before and a keep frame never; `testOriginalLoop`: the picture inside the step, 9 to 90
+  ms a picture, the game at 50 steps a second; `testOriginalSplit`: the picture handed over, walks
+  of 5 to 40 ms and presents of 1 to 300 ms on the submit thread, a frame every step or every
+  second: the game at 50 steps a second within 2 % with no resync, the pictures between 1000 /
+  (present + walk + a frame interval) and 1000 / (present + walk) a second, the audio's lead under
+  its bound, where the same 320 ms picture inside the step resyncs and runs the game under its
+  rate); the present
   allowance's rule (`testBudgetRule`: one late step arming only, a second within 60 steps dropping
   to one below its presents, a late step of new frames only confirming an armed drop, the arm's 60
   steps, the hold, the lock's climb a probe straight back to the ceiling that holds through its 60
@@ -2250,13 +2259,22 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   before (RHI.md "Frame slots and the submit thread"): the race check for that partition. `threadSync`: in the sync mode a picture is
   waited for and not counted as handed over (`rd_submit_async` false), with the thread on it is
   until the drain (not on OpenGL). `threadRoomAhead` (not on OpenGL; with
-  `ICO_RD_SUBMIT_THREAD=0`, the output given a size so the pictures present; run last): the
+  `ICO_RD_SUBMIT_THREAD=0`, the output given a size so the pictures present): the
   display's wait ahead through `rd__thread_room_hook` in place of `rhi_wait_present_room`, a
   picture handed over that presented ends by making the next one's wait for room; held there, the
   test's `rd_update_texture` and `rdtex_find` make no read wait; the next picture takes it (none
   inside its reads), a picture after one that made none is counted inside; the 10 s clause's
   text; SCENE byte for byte across the pictures; with `ICO_RD_ACQUIRE_AHEAD=0` the seam is never
-  asked. It is the render thread's program to run under
+  asked. `threadOriginal` (not on OpenGL; run last, after `threadRoomAhead` so the pictures
+  present): Frame rate Original with a gate recording where it ran; without the render thread
+  thirty frames replayed inside the step (the reference SCENE and DISPLAY, the presents' records
+  `RD_PRESENT_IN_STEP`); with it each frame `rd_end_frame` closes is handed over
+  (`rd_submit_async` true after it, `rd_last_present_info` naming it at once), the gate on the
+  test's thread every time, the frames it presented while told busy counted as waits for the
+  picture before, the presents on the submit thread, the 10 s clause's words, and SCENE and
+  DISPLAY byte for byte the reference's; the gate leaving out every second frame: 15 pictures of
+  30, the same pixels; under `ICO_RD_ORIGINAL_ASYNC=0` every frame replayed inside the step
+  (`rd_submit_async` false), the same pixels. It is the render thread's program to run under
   ThreadSanitizer, as `audio_pull_test`: the `asan` preset with `-DICO_SANITIZE=thread` into a
   build folder of its own (`build-host/linux-x64-tsan`), `--target rd_tex_test`, run with
   `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`; a report is a failure.

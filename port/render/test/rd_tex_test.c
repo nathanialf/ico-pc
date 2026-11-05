@@ -82,6 +82,13 @@
  *            it (none inside its reads); a picture after one whose wait
  *            was not made waits inside its reads (counted); SCENE the
  *            same; with ICO_RD_ACQUIRE_AHEAD=0 the seam is never asked.
+ *            Frame rate Original (threadOriginal, the window's gate set):
+ *            the frame rd_end_frame closes is handed over to the render
+ *            thread (rd_submit_async, rd_last_present_info at once), the
+ *            gate runs on this thread, SCENE and DISPLAY byte for byte as
+ *            without the thread, the presents on the submit thread; the
+ *            gate leaving out every second frame gives 15 pictures of 30;
+ *            ICO_RD_ORIGINAL_ASYNC=0 replays each inside the step.
  *
  * Exit 0, 1 on a mismatch, 77 when there is no device (after the CPU
  * checks passed).
@@ -1708,6 +1715,211 @@ static void threadSync(void)
     }
 }
 
+/* ------------------------------------------------- Frame rate Original */
+
+/* The window's gate as the test's (rd.h RdReplayGate): its calls, the ones
+ * made off this thread (it runs on the game thread, never on the render
+ * thread), the frames it presented while told busy; mode 1 leaves out
+ * every second frame (its odd calls) */
+static _Thread_local int t_testThread;
+
+static struct {
+    unsigned calls, other, busy;
+    int mode;
+} s_og;
+
+static int origGate(int keep, bool busy)
+{
+    (void)keep;
+    const unsigned n = s_og.calls++;
+    const int answer = s_og.mode == 1 && (n & 1u) ? RD_GATE_LATE : RD_GATE_PRESENT;
+    s_og.other += !t_testThread || rd_thread_on_render();
+    s_og.busy += busy && answer == RD_GATE_PRESENT ? 1u : 0u;
+    return answer;
+}
+
+/* the presents' records popped since the last call: how many, and how many
+ * had their present where `want` says (RdPerfRecord.presentThread; the
+ * first RHI_FRAMES_IN_FLIGHT records of a pass are the pass before's last
+ * replays, whose GPU times came in this one) */
+static void presentWhere(int want, unsigned *n, unsigned *match)
+{
+    RdPerfRecord r;
+    *n = *match = 0;
+    while (rd_perf_pop(&r)) {
+        if (!r.presented) {
+            continue;
+        }
+        (*n)++;
+        *match += r.presentThread == want;
+    }
+}
+
+/* SCENE into scene, and DISPLAY into display where it reads back (*dw x
+ * *dh; 0 x 0 where it does not) */
+static bool readScene(uint8_t *scene, uint8_t *display, uint32_t *dw, uint32_t *dh)
+{
+    uint32_t w = 0, h = 0;
+    *dw = *dh = 0;
+    if (!rd__read_target(rd_target(RD_TARGET_SCENE), scene, 512 * 512 * 4, &w, &h) || w != 512) {
+        return false;
+    }
+    if (!rd__read_target(rd_target(RD_TARGET_DISPLAY), display, 512 * 512 * 4, dw, dh)) {
+        *dw = *dh = 0;
+    }
+    return true;
+}
+
+/* Frame rate Original with the render thread (rd.h RdReplayGate, rd_thread.h
+ * rd__replay_frame_post): with the gate set, the frame rd_end_frame closes
+ * is handed over (rd_submit_async true right after it; rd_last_present_info
+ * names it at once), the gate runs on this thread every time, and after the
+ * drain SCENE and DISPLAY are byte for byte the renderer's without the
+ * thread (RD_THREAD_OFF, the replay inside the step); the presents ran on
+ * the submit thread (inside the step without the thread).  A frame
+ * presented while the render thread was busy waited for the picture before
+ * (counted, as many as the gate was told busy).  The gate leaving out every
+ * second frame: 15 pictures of 30, the same SCENE.  Under
+ * ICO_RD_ORIGINAL_ASYNC=0 ([dev] original_async = false) every frame is
+ * replayed inside the step (rd_submit_async false), the same SCENE.  Run
+ * after threadRoomAhead: the output has a size, so the pictures present. */
+static void threadOriginal(void)
+{
+    if (rhi_backend() == RHI_BACKEND_OPENGL) {
+        return;
+    }
+    const int frames = 30;
+    uint8_t *refScene = malloc(512 * 512 * 4), *refDisplay = malloc(512 * 512 * 4);
+    uint8_t *scene = malloc(512 * 512 * 4), *display = malloc(512 * 512 * 4);
+    uint8_t *pat = malloc(64 * 64 * 4);
+    uint32_t refW = 0, refH = 0, dw = 0, dh = 0;
+    RdFramePost fp;
+    RdFramePostLast last;
+    RdThreadBlock b;
+    unsigned n, match;
+    t_testThread = 1;
+    if (!refScene || !refDisplay || !scene || !display || !pat) {
+        CHECK(0, "Original: memory");
+        goto out;
+    }
+    rd_set_replay_gate(origGate);
+    /* pass 0: no render thread, the replay inside the step */
+    memset(&s_og, 0, sizeof(s_og));
+    rd_frame_post_take(&fp);
+    presentWhere(RD_PRESENT_IN_STEP, &n, &match);
+    for (int k = 0; k < frames; k++) {
+        gif_HostFrameReset();
+        dl_Clear();
+        recordFrame();
+    }
+    rd_frame_post_take(&fp);
+    CHECK(s_og.calls == (unsigned)frames && s_og.other == 0 && s_og.busy == 0 &&
+              fp.inlines == (unsigned)frames && fp.posts == 0,
+          "Original, no render thread: the gate %u times (%u off this thread, %u busy), %u "
+          "replayed inside the step, %u handed over",
+          s_og.calls, s_og.other, s_og.busy, fp.inlines, fp.posts);
+    CHECK(rd_frame_post_last_take(&last) && last.how == RD_POST_INLINE &&
+              last.frame == rd__last_frame()->number && !rd_frame_post_last_take(&last),
+          "Original, no render thread: the last picture's record");
+    presentWhere(RD_PRESENT_IN_STEP, &n, &match);
+    CHECK(match > 0 && match + RHI_FRAMES_IN_FLIGHT >= n,
+          "Original, no render thread: %u of %u presents inside the step", match, n);
+    if (!readScene(refScene, refDisplay, &refW, &refH)) {
+        CHECK(0, "Original: SCENE readback");
+        goto out;
+    }
+    printf("Original: the reference SCENE%s\n", refW ? " and DISPLAY" : " (no DISPLAY)");
+    for (int run = 0; run < 3; run++) {
+        /* 1: handed over; 2: every second frame left out; 3: the escape */
+        setEnv("ICO_RD_ORIGINAL_ASYNC", run == 2 ? "0" : NULL);
+        const char *name = run == 0   ? "handed over"
+                           : run == 1 ? "every second frame left out"
+                                      : "ICO_RD_ORIGINAL_ASYNC=0";
+        if (!rd_thread_local_start(RD_THREAD_ON)) {
+            CHECK(0, "Original, %s: the renderer's own thread could not start", name);
+            break;
+        }
+        RdTex u = rd_create_texture(64, 64, NULL, RD_TEXA_80_80, "original");
+        memset(&s_og, 0, sizeof(s_og));
+        s_og.mode = run == 1 ? 1 : 0;
+        rd_thread_block_take(&b);
+        rd_frame_post_take(&fp);
+        presentWhere(RD_PRESENT_ON_SUBMIT, &n, &match);
+        int async = 0, infoOk = 0;
+        for (int k = 0; k < frames; k++) {
+            gif_HostFrameReset();
+            dl_Clear();
+            recordFrame();
+            RdPresentInfo pi;
+            const RdFrame *f = rd__last_frame();
+            const bool shown = run != 1 || (k & 1) == 0;
+            async += shown && rd_submit_async(); /* true until the next drain */
+            infoOk += !shown || (f != NULL && rd_last_present_info(&pi) && pi.frame == f->number);
+            /* the game's side goes on while the picture runs */
+            for (int i = 0; i < 64 * 64 * 4; i++) {
+                pat[i] = (uint8_t)(hash((uint32_t)(k * 64 * 64 * 4 + i + 7)) & 0xFF);
+            }
+            rd_update_texture(u, pat);
+        }
+        (void)rd_thread_drain();
+        rd_thread_block_take(&b);
+        rd_frame_post_take(&fp);
+        const unsigned want = run == 1 ? (unsigned)frames / 2u : (unsigned)frames;
+        CHECK(s_og.calls == (unsigned)frames && s_og.other == 0,
+              "Original, %s: the gate %u times, %u of them off this thread", name, s_og.calls,
+              s_og.other);
+        CHECK(infoOk == frames, "Original, %s: rd_last_present_info named the frame %d of %d times",
+              name, infoOk, frames);
+        if (run == 2) {
+            CHECK(async == 0 && fp.inlines == want && fp.posts == 0 && s_og.busy == 0,
+                  "Original, %s: %d handed over, %u replayed inside the step, %u handed over "
+                  "counted, the gate told busy %u times",
+                  name, async, fp.inlines, fp.posts, s_og.busy);
+        } else {
+            CHECK(async == (int)want && fp.posts == want && fp.inlines == 0 && b.pictures == want &&
+                      fp.postWaits == s_og.busy && fp.lateSkips == (unsigned)frames - want,
+                  "Original, %s: %d handed over (%u counted, %u inside the step, %u pictures on "
+                  "the render thread, want %u), %u waited for the picture before (the gate told "
+                  "busy %u times), %u left out",
+                  name, async, fp.posts, fp.inlines, b.pictures, want, fp.postWaits, s_og.busy,
+                  fp.lateSkips);
+        }
+        {
+            char text[320];
+            rd_frame_post_text(&fp, text, sizeof(text));
+            CHECK(strstr(text, "; its picture handed over in ") != NULL &&
+                      strstr(text, "); presents waited inside the step: ") != NULL,
+                  "Original, %s: the 10 s clause: %s", name, text);
+            printf("Original, %s:%s\n", name, text);
+        }
+        presentWhere(run == 2                ? RD_PRESENT_IN_STEP
+                     : rd_thread_submit_on() ? RD_PRESENT_ON_SUBMIT
+                                             : RD_PRESENT_ELSEWHERE,
+                     &n, &match);
+        CHECK(match > 0 && match + RHI_FRAMES_IN_FLIGHT >= n,
+              "Original, %s: %u of %u presents where they ran (%s)", name, match, n,
+              run == 2 ? "inside the step" : "the submit thread");
+        CHECK(readScene(scene, display, &dw, &dh) &&
+                  memcmp(scene, refScene, (size_t)512 * 512 * 4) == 0,
+              "Original, %s: SCENE as without the render thread", name);
+        CHECK(dw == refW && dh == refH &&
+                  (refW == 0 || memcmp(display, refDisplay, (size_t)refW * refH * 4) == 0),
+              "Original, %s: DISPLAY as without the render thread (%ux%u, %ux%u)", name, dw, dh,
+              refW, refH);
+        rd_destroy_texture(u);
+        rd_thread_local_stop();
+    }
+    setEnv("ICO_RD_ORIGINAL_ASYNC", NULL);
+out:
+    rd_set_replay_gate(NULL);
+    (void)rd_frame_post_last_take(&last);
+    free(refScene);
+    free(refDisplay);
+    free(scene);
+    free(display);
+    free(pat);
+}
+
 /* ----------------------------------------------------------------- R8 */
 
 static uint8_t r8At(int x, int y)
@@ -2045,7 +2257,8 @@ int main(void)
     threadFair();
     r8Pixels();
     replacementPixels();
-    threadRoomAhead(); /* last: it gives the output a size */
+    threadRoomAhead(); /* it gives the output a size */
+    threadOriginal();  /* after it: its pictures present */
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
           rhi_vk_validation_error_count());
     rd_shutdown();
