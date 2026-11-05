@@ -69,6 +69,7 @@
 #include "rd_tex.h"
 #include "shader_consts.h"
 #include "shaders_gen.h"
+#include "rd_vu_skin_check.h"
 #include "texpack.h"
 
 /* the snapshots taken, copies and swaps alike (rd__blur_snapshot_count) */
@@ -691,6 +692,7 @@ void rd__wait_frame(void)
         rd__submit_drain(); /* the last replay's submit, before its slot's fence (rd_submit.h) */
         rhi_wait_frame();
     }
+    rd__vu_skin_harvest(); /* a skin check its fence let go */
     rd__thread_phase(RD_READ_UPLOAD);
     s_bindEpoch++;
 }
@@ -5955,6 +5957,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
             RD_MSAA_CLOSE_END); /* an epoch still open: SCENE resolved before anything reads it */
     endPass(&r);
     rd__store_plan_end();
+    rd__vu_skin_end(); /* outside every pass */
     s_ms.r = NULL;
     rd__diag_frame(f, s_ms.want);
     s_vpExact = false; /* the present sets its own viewports */

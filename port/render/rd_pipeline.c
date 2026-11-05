@@ -79,6 +79,7 @@
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_pipe_finish.h"
+#include "rd_vu_skin_check.h"
 #include "shader_consts.h"
 #include "shaders_gen.h"
 
@@ -1309,6 +1310,16 @@ static const RdPipeKeyInt *drawKey(const RdPipeKeyInt *k, RdPipeKeyInt *tmp)
         k = tmp;
     }
     return k;
+}
+
+/* rd_vu_skin_check.h: the description rd__get_pipeline would make for k
+ * (drawKey's key: the pass's sample count, the dynamic state and the
+ * attachment read's mask normalised), for a pipeline made beside the
+ * cache (the skin check's box draw, compiled in the background) */
+bool rd__pipeline_desc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroupLayout layouts[4])
+{
+    RdPipeKeyInt tmp;
+    return pipelineDesc(drawKey(k, &tmp), d, layouts);
 }
 
 /* k's slot in s_hash: its entry's (*found) or the empty slot the probe

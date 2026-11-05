@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_vu_skin_check.h"
 #include "rd_mesh.h"
 #include "rd_tex.h"
 #include "shader_consts.h"
@@ -144,7 +145,8 @@ uint64_t rd__estimate_ring(const RdFrame *f, int keep)
             }
         }
     }
-    return total + rd__texture_ring_bytes();
+    /* the skin check's probes and copies (rd_vu_skin_check.c rd__vu_skin_end) */
+    return total + rd__texture_ring_bytes() + rd__vu_skin_ring_bytes();
 }
 
 uint64_t rd__texture_ring_bytes(void)

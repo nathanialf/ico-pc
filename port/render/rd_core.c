@@ -35,6 +35,7 @@
 #include "rd_tex_decode.h"
 #include "rd_tone.h"
 #include "rd_vis.h"
+#include "rd_vu_skin_check.h"
 #include "texpack.h"
 
 RdContext g_rd;
@@ -1941,6 +1942,7 @@ void rd_shutdown(void)
         rd__present_shutdown();
         rd__crack_fill_shutdown(); /* the crack filler's count target and buffer */
         rd__aura_box_shutdown();   /* the aura's ROWBOX (rd_aura_box.c) */
+        rd__vu_skin_shutdown();    /* the skin check's probes (rd_vu_skin_check.c) */
         rd__gpu_shutdown();
     }
     rd__pipeline_cache_clear();

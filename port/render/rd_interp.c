@@ -162,6 +162,7 @@
 #include "rd_camera_blend.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_vu_skin_check.h"
 #include "xxh3.h"
 
 /* ------------------------------------------------------------ the result */
@@ -6338,6 +6339,7 @@ static void presentLog(void)
     rd__aura_box_block();    /* the aura's read in two passes, when it drew or fell back */
     rd__reshow_block();      /* the still re-present's */
     rd__glow_hold_block();   /* the glow held between ticks */
+    rd__vu_skin_block();     /* the skin check's counts, when it ran */
     const uint32_t number = s_pres.number;
     const uint32_t tickPresents = s_pres.tickPresents, lastTickPresents = s_pres.lastTickPresents;
     memset(&s_pres, 0, sizeof(s_pres));
