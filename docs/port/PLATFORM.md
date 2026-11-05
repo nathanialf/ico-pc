@@ -1877,6 +1877,24 @@ other) (`port/platform/diag_host.h` (`ico_diag_startup_end_count`); `port/platfo
 `ico_pc: the count of starts that ended while preparing the graphics could not be written to
 <path> (pipelines <n>, vertex pre-pass <n>, device losses <n>)` (`ends_write`).
 
+An end inside the skinned draws' bone-block check's start-up probe (issue 163,
+[VU_SKIN_CHECK.md](VU_SKIN_CHECK.md); its notes hold `rd vu skin probe`,
+`startup_retry_note_has_skin_probe`: `creating pipeline rd vu skin probe (...)` while its
+pipelines compile, `the VU skin check's start-up probe (rd vu skin probe): ...` while it draws and
+reads back, each written to the disc before the work) is neither kind: it breaks the pipelines'
+row, and the next start, whatever the version and a restart after a crash report too, writes
+`[dev] vu_skin_check = false` to `config.toml` at once (the check is a diagnostic, not part of the
+picture: no second try), sets `ICO_RD_VU_SKIN_CHECK=0` before the device is made and makes its set
+as usual: `window: VU skin check: the previous run ended inside its start-up probe (<note>);
+[dev] vu_skin_check = false is written to <config>, so this start and every start after it run
+without the check (delete that line to try it again)` (`, which could not be written`: `could not
+be written to <config>, so this start only runs without the check`). A probe in which the device
+was lost or whose picture could not be read back (`rd_vu_skin_probe_failed`) turns the check off
+for the run (`rd: VU skin check: off (the start-up probe failed: ...)`) and the window writes the
+same setting right after the self-test, before a loss restart or the loss box: `window: VU skin
+check: the start-up probe failed on this device (<why>); ...` (`skin_check_persist_off`,
+`skin_probe_after`).
+
 The next start's step, by kind (`ico_diag_startup_pipeline_set`, `ico_diag_startup_vu_prepass`,
 `ico_diag_startup_end_persist`; `port/platform/window_host.c` (`ico_window_open`)):
 

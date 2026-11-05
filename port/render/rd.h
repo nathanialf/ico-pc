@@ -869,6 +869,18 @@ bool rd_blend_selftest(void);
  * programs').  Waits for the GPU.  Returns false when it turned the
  * pre-pass off. */
 bool rd_vuprepass_selftest(void);
+/* Whether the skinned draws' bone-block check's start-up probe
+ * (rd_vu_skin_check.h; issue 163), run first by rd_vuprepass_selftest,
+ * found the device failing in it (lost, or its picture not read back); why
+ * gets the words.  The check is then off for the run; the window writes
+ * [dev] vu_skin_check = false before a loss's restart or box, so no later
+ * start runs the probe again (window_host.c).  The probe's notes go to the
+ * activity function (rd_set_activity_fn): "creating pipeline rd vu skin
+ * probe (...)" while its pipelines compile, "the VU skin check's start-up
+ * probe (rd vu skin probe): ..." while it draws and reads back
+ * (startup_retry.h startup_retry_note_has_skin_probe), so a crash, a freeze
+ * or the system's end there names it at the next start. */
+bool rd_vu_skin_probe_failed(char *why, size_t size);
 /* The longest frame replay (CPU time of recording, pipeline creation,
  * submit and present) in ms since the last reset, and *count the replays
  * in that time; reset != 0 starts a new period.  For the window's 10 s

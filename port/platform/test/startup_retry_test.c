@@ -459,6 +459,20 @@ static void test_note_vu_pre(void)
               notes[i].note);
     }
     CHECK(!startup_retry_note_has_vu_pre(NULL));
+    /* the skin check's start-up probe (rd_vu_skin_selftest.c): its
+       compile's note and its draw's, neither the pre-pass's nor a
+       destination read's */
+    static const char skinCompile[] =
+        "creating pipeline rd vu skin probe (the VU skin check's start-up probe: its three "
+        "pipelines)";
+    static const char skinDraw[] = "the VU skin check's start-up probe (rd vu skin probe): "
+                                   "drawing 192 probes and reading them back";
+    CHECK(startup_retry_note_has_skin_probe(skinCompile) &&
+          startup_retry_note_has_skin_probe(skinDraw));
+    CHECK(!startup_retry_note_has_vu_pre(skinCompile) && !startup_retry_note_has_vu_pre(skinDraw));
+    CHECK(!startup_retry_note_has_dst(skinCompile));
+    CHECK(!startup_retry_note_has_skin_probe(NULL) && !startup_retry_note_has_skin_probe("") &&
+          !startup_retry_note_has_skin_probe(notes[0].note));
 }
 
 /* one loss-chain step */

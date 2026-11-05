@@ -1228,6 +1228,13 @@ void rd__pipeline_note_end(void)
     activityDone();
 }
 
+void rd__activity_note(const char *note)
+{
+    if (s_activityFn != NULL) {
+        s_activityFn(note);
+    }
+}
+
 /* The key a draw is created with: the MSAA epoch (a pipeline fetched for a
  * multisampled pass draws with its sample count; single-sampled passes keep
  * msaa 0: the same keys as without anti-aliasing) and, without dual-source

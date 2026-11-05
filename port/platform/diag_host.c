@@ -1581,6 +1581,7 @@ static int act_sync_note(const char *note)
     }
 #endif
     return strncmp(note, "creating pipelines ", 19) == 0 || startup_retry_note_has_vu_pre(note) ||
+           startup_retry_note_has_skin_probe(note) ||
            (act_mode == ICO_DIAG_ACTIVITY_LAZY && strncmp(note, "creating pipeline ", 18) == 0);
 }
 
@@ -1952,8 +1953,12 @@ static void ends_count_prev(const char *prev, int relaunched)
         return;
     }
     /* a pipeline of the vertex pre-pass or the record path first (the
-       next start draws without them), then any other */
-    if (startup_retry_note_has_vu_pre(prev)) {
+       next start draws without them), then any other; the skin check's
+       start-up probe is neither (the next start runs without the check,
+       window_host.c): it breaks the row */
+    if (startup_retry_note_has_skin_probe(prev)) {
+        kind = -1;
+    } else if (startup_retry_note_has_vu_pre(prev)) {
         kind = ICO_DIAG_END_VU_PRE;
     } else if (note_is_pipelines(prev)) {
         kind = ICO_DIAG_END_PIPELINES;
@@ -2930,7 +2935,9 @@ int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *set
     /* an end inside the vertex pre-pass's (or the record path's) pipelines
        makes a start without it the rule instead
        (ico_diag_startup_vu_prepass), and that start builds the set */
-    if (startup_retry_note_has_vu_pre(act_prev)) {
+    if (startup_retry_note_has_vu_pre(act_prev) || startup_retry_note_has_skin_probe(act_prev)) {
+        /* ... as an end inside the skin check's start-up probe makes a
+           start without the check (window_host.c) */
         return careful ? ICO_DIAG_PIPESET_CAREFUL_SETTING : ICO_DIAG_PIPESET_FULL;
     }
     /* a restart after a crash report takes its own step (startup_retry.h);

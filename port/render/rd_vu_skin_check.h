@@ -237,6 +237,10 @@ RhiBuffer rd__vu_skin_index_buffer(void);
 /* rd_pipeline.c: the pipeline description of a key, as rd__get_pipeline
  * makes it (layouts: 4 entries the description points to) */
 bool rd__pipeline_desc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroupLayout layouts[4]);
+/* rd_pipeline.c: note to the activity function (rd_set_activity_fn) as
+ * it is; rd__pipeline_note_end puts back the note rd__get_pipeline would
+ * leave */
+void rd__activity_note(const char *note);
 
 #ifdef __cplusplus
 }

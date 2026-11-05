@@ -23,7 +23,8 @@ alone, a replay cannot tell. The check tells it from the device itself.
 | `port/render/rd_vu_skin_check.h` | the check's API: the judgement's pure functions, the replay's hooks, the tool's entry |
 | `port/render/rd_vu_skin_check.c` | the in-game check (S2) and the box check (S3): the pick, the note, the probes, the harvest, the lines |
 | `port/render/rd_vu_skin_judge.c` | the judgement (pure): the CPU's positions through `vu1_ref`'s cluster program, a probe against them, the zero-matrix address, the byte windows, the decision table's words |
-| `port/render/rd_vu_skin_selftest.c` | the start-up probe (S1) and the check's start line |
+| `port/render/rd_vu_skin_selftest.c` | the start-up probe (S1) and the check's start line; `rd_vu_skin_probe_failed` |
+| `port/platform/window_host.c` (`skin_probe_after`, `skin_check_persist_off`), `startup_retry.c` (`startup_retry_note_has_skin_probe`), `diag_host.c` | an end or a device failure inside the start-up probe: `[dev] vu_skin_check = false` |
 | `port/render/rd_replay_vu.c` (`doVuDraw`, `vuDraw`) | the pick before a skinned command's draw, the note after it |
 | `port/render/rd_replay.c` (`rd__wait_frame`, `replayFrame`) | the harvest once the slot's fence let the replay go; the probes after the replay's last pass |
 | `port/render/rd_profile.c` (`rd__profile_adreno`, `rd__profile_vendor_adreno`) | the device an Adreno: the default's one question |
@@ -80,7 +81,13 @@ where the fallback takes it) with the block at 64 ring offsets, one in each 64-b
 page (a coarser uniform alignment: its own phases), under the device's robust access, in a frame of
 its own read back at once; each of the 192 probes against `vu1_ref`. It runs first in
 `rd_vuprepass_selftest`, whatever the pre-pass, and writes the check's start line. A wrong probe
-turns nothing off.
+turns nothing off. It is inside the start-up ladders as the pre-pass's self-test is: its notes
+(`creating pipeline rd vu skin probe (...)` while its pipelines compile, `the VU skin check's
+start-up probe (rd vu skin probe): ...` while it draws and reads back) go to the crash report and
+the activity file, so a crash, a freeze, the system's end or a device loss inside it makes the next
+start write `[dev] vu_skin_check = false` and run without the check; a probe in which the device
+was lost or the picture not read back turns the check off for the run and the window writes the
+same setting at once ([PLATFORM.md](PLATFORM.md), `rd_vu_skin_probe_failed`).
 
 The cost: one probe pass of three times the draw's vertices times nine one-pixel triangles, one
 3,840-byte copy, a 48 x 1,024 target's copy, every 100 ms; the box check four scissored redraws of
@@ -114,6 +121,7 @@ At start, from `rd_vuprepass_selftest`:
   (or `..., no zero matrix explains them ...`; `not run (<why>)` when its pipelines or frame could
   not be made)
 - `rd: VU skin check: on (one skinned draw every 100 ms, in turn, ...; variants: a fresh ring offset, uniform robustness off (VK_EXT_pipeline_robustness) | not offered | not needed (robust access off); the box check by occlusion query | not offered; WHY)`, WHY saying why it is on: `on by default on an Adreno with a window (Qualcomm's driver|Turnip); [dev] vu_skin_check = false turns it off`, or `[dev] vu_skin_check = true (ICO_RD_VU_SKIN_CHECK=1)`
+- `rd: VU skin check: off (the start-up probe failed: the device was lost in it | its picture could not be read back)`, then `window: VU skin check: the start-up probe failed on this device (...); [dev] vu_skin_check = false is written to <config> ...`; at the next start after an end inside the probe `window: VU skin check: the previous run ended inside its start-up probe (<note>); ...`
 - on a window's Vulkan device with the check off: `rd: VU skin check: off (not an Adreno: ICO_RD_VU_SKIN_CHECK=1 / [dev] vu_skin_check = true turns it on)`, `off ([dev] vu_skin_check = false (ICO_RD_VU_SKIN_CHECK=0))` or `off (the device was lost)`
 
 On an event (a wrong probe, or the block's bytes differing), the first 8, then every 100th:
