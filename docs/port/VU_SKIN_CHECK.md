@@ -140,7 +140,10 @@ D/16 pixel`.
   dump checked (80 a replay, each read back at once, the box checks waiting for their pipelines),
   the lines above on stderr, then `<dump>: skin check: N skinned commands, C checks, W wrong
   (address A), B blocks whose bytes differed (R changed after the draw), X of Y box checks with
-  samples outside; on the wrong ones c1 right K, c2 right L (c2 drawn in M); reads as: WORDS`.
+  samples outside; on the wrong ones c1 right K, c2 right L (c2 drawn in M); reads as: WORDS`. A
+  is the address the last wrong check named, WORDS that check's decision (a check whose bytes
+  differed but whose probe drew right, a block whose changed bone the mesh does not use, gives its
+  words only while no check was wrong).
 
 What it cannot see: the check compares the device with the CPU over the same stream and bytes, so
 a dump whose stream was patched (the deep dive's copy with the lanes on 200 moved to a zero bone)

@@ -1038,8 +1038,14 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
         o->c1Right += v[0].wrong && c1 == RD_SKIN_VAR_RIGHT;
         o->c2Right += v[0].wrong && c2 == RD_SKIN_VAR_RIGHT;
         o->c2Run += k->c2;
-        if (v[0].wrong || copyDiff || rereadDiff) {
+        /* the address and the words of the last wrong check; an event
+         * whose probe drew right (its bytes differed, nothing it reads
+         * moved: a block whose changed bone the mesh does not use) gives
+         * its words only while no wrong check has */
+        if (v[0].wrong) {
             o->lastAddr = v[0].addr;
+            snprintf(o->decision, sizeof(o->decision), "%s", decision);
+        } else if ((copyDiff || rereadDiff) && o->wrong == 0) {
             snprintf(o->decision, sizeof(o->decision), "%s", decision);
         }
     }
