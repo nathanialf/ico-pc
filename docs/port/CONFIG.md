@@ -238,7 +238,9 @@ original game's behaviour (`port/game/options.h`, header comment).
 
 ### [variants]
 
-Extras > Game variants ([UI.md](UI.md#extras--game-variants), [OPTIONS.md](../OPTIONS.md#game-variants)).
+Options > Gameplay: No hints on the page, the Shadows rows on Gameplay > Shadows, the two cutscene
+rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-and-cutscenes),
+[OPTIONS.md](../OPTIONS.md#gameplay)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
 the game as the disc ships it. All eight are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
 `port/platform/sim_keys.c`). A word
@@ -255,10 +257,10 @@ or number that is no value reads as the default and is logged once.
 | `no_cutscene_look` | bool | `false` | no camera look-around in cutscenes |
 | `ignore_cutscene_cameras` | bool | `false` | the cutscenes' cameras are ignored (`debug_ignore_demo_camera`); suspends achievements |
 
-The Debug menu row has no key: its press marks the Debug menu used until the options are reloaded,
+The Debug menu row (Options > Developer, with Developer mode on) has no key: its press marks the Debug menu used until the options are reloaded,
 which suspends achievements too (`ico_variants_suspend_achievements`, read by `gamestate.c` beside
 developer mode), opens the game's debug menu and closes Options. Where the game reads each key, and
-what it changes, is in [GAME_FEATURES.md](GAME_FEATURES.md#game-variants); a change on the page
+what it changes, is in [GAME_FEATURES.md](GAME_FEATURES.md#game-variants); a change on a page
 takes effect at once (`ico_variants_apply`).
 
 ### [mirror]

@@ -701,7 +701,9 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Копирование образа диска в приложение",
     [UI_STR_ISO_COPYING_LONG] =
         "Копирование образа диска в приложение. Из-за большого объема файла это может занять несколько минут.",
-    [UI_STR_SECTION_VARIANTS] = "Версии игры",
+    [UI_STR_SECTION_YORDA] = NULL,     /* newer than his table: English */
+    [UI_STR_SECTION_SHADOWS] = NULL,   /* newer than his table: English */
+    [UI_STR_SECTION_CUTSCENES] = NULL, /* newer than his table: English */
     [UI_STR_OPT_VAR_TOUGHNESS] = "Прочность теней",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         "Стойкость теней как в версии NTSC. В следующих прохождениях сложность не растет. Достижения не отключаются.",

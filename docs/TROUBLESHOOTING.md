@@ -843,7 +843,8 @@ be loaded is greyed and the line under the cards gives the reason:
   game from the disc the state was saved on.
 - **A gameplay setting differs.** The message names the setting and the value
   it had when you saved. Put the setting back (a few, such as Analogue stick
-  fix, Skip the opening and the Game variants, change how the game plays),
+  fix, Skip the opening and the rows on the Gameplay pages, change how the
+  game plays),
   and the state loads.
 - **The state could not be restored; the game goes on.** The file is damaged,
   or the game found something wrong in it. Your game carries on as it was.

@@ -725,7 +725,9 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Das Disc-Image wird in die App kopiert",
     [UI_STR_ISO_COPYING_LONG] =
         "Das Disc-Image wird in die App kopiert. Es ist groß: Das dauert einige Minuten",
-    [UI_STR_SECTION_VARIANTS] = "Spielvarianten",
+    [UI_STR_SECTION_YORDA] = "Yorda",
+    [UI_STR_SECTION_SHADOWS] = "Schatten",
+    [UI_STR_SECTION_CUTSCENES] = "Zwischensequenzen",
     [UI_STR_OPT_VAR_TOUGHNESS] = "Härte der Schatten",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         "Amerikanisch: alle Schatten so zäh wie auf der nordamerikanischen Disc, in späteren Durchgängen nicht zäher. Erfolge bleiben aktiv.",

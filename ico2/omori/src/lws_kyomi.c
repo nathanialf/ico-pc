@@ -94,7 +94,7 @@ GObj *CreateKyomiGObj(int no)
 /* the hint timers, a window onto the per-hint elapsed-time array */
 static float *hintTimers; /* derived name */
 
-/* PC port: port/game/variants.h: 0 with Options > Extras > Game variants > No
+/* PC port: port/game/variants.h: 0 with Options > Gameplay > No
    hints on (and on the discs without hints) */
 extern int ico_hints_on(void);
 

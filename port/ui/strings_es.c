@@ -714,7 +714,9 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Copiando la imagen de disco en la aplicación",
     [UI_STR_ISO_COPYING_LONG] =
         "Copiando la imagen de disco en la aplicación. Es una imagen grande: tardará unos minutos",
-    [UI_STR_SECTION_VARIANTS] = "Variantes del juego",
+    [UI_STR_SECTION_YORDA] = "Yorda",
+    [UI_STR_SECTION_SHADOWS] = "Sombras",
+    [UI_STR_SECTION_CUTSCENES] = "Escenas",
     [UI_STR_OPT_VAR_TOUGHNESS] = "Dureza de las sombras",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         "Americana: cada sombra tan resistente como en el disco norteamericano, y no más resistente en las partidas siguientes. Los logros siguen activos.",

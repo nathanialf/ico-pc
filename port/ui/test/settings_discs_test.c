@@ -23,7 +23,7 @@ typedef struct {
        (hold_type_own) */
     int holdOwn;
     int credits;   /* Extras > Credits (title): credits_staff_packs */
-    int debugMenu; /* Extras > Game variants > Debug menu (Developer mode): not jun26 */
+    int debugMenu; /* Developer > Debug menu (Developer mode): not jun26 */
     int startFlag; /* the New Game screen's start flag: gflag_new_game */
 } Expect;
 
@@ -118,12 +118,11 @@ static void checkPauseRows(const Expect *e)
           ui_settings_opt_shown(UI_OPT_FILM_EFFECT), e->film,
           ui_settings_opt_shown(UI_OPT_PLAYERS));
     /* a row that is not shown is not reached: on the page as it opens, its
-       row is masked (layoutPage).  With Yorda trips and Second memory card
-       the cleared page has up to eleven rows before Back, more than the
-       window's slots: Film effect (the tenth) and Players (the eleventh)
-       may open below the window, masked as the window masks a row out of
-       view, so a disc with the row has it shown by its rule and in view,
-       unmasked, with the cursor on it */
+       row is masked (layoutPage).  The cleared Gameplay page has its six
+       rows, the three links and Back, inside the window's slots; a disc
+       with the row has it shown by its rule and in view, unmasked, with the
+       cursor on it (and on a page with more rows than the slots, a row out
+       of view is masked as the window masks it) */
     const int gpL = openPage(mainL, -1, UI_PAGE_GAMEPLAY);
     const int film = ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_FILM_EFFECT);
     if (e->film) {

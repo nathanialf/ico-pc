@@ -119,6 +119,8 @@ int enterMain(int title);
 int enterMainKeep(int title);
 int openPage(int mainL, int mainRow, UiSettingsPage page);
 int mainLink(UiSettingsPage page);
+int openLink(int parentL, UiSettingsPage parent, UiSettingsPage page);
+int openGameplayPage(int mainL, UiSettingsPage page, int *gameL);
 extern IcoGsSnapshot s_gs;
 void gsSampler(IcoGsSnapshot *out);
 int rowWithText(UiSettingsPage page, const char *str);

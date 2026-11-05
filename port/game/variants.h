@@ -1,7 +1,8 @@
 /*
  * port/game/variants.h
  *
- * The game variants: Options > Extras > Game variants.  Eight settings
+ * The game variants: Options > Gameplay (No hints) and its Shadows and
+ * Cutscenes pages, the Debug menu on Developer.  Eight settings
  * that change how the game plays, each read once from config.toml
  * ([variants], via ico_config_get_*) the first time it is asked for and
  * settable at run time, as the options of options.h.  Every default is the

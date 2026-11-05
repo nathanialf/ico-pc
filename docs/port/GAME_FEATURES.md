@@ -61,7 +61,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] natural_chains` | `BgAnimation.c` (window build) |
 | `[gameplay] skip_opening` | `kanbanBoot.c`, `op.c`, `main_host.c` (its log line) |
 | `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
-| `[variants] *` (Extras > Game variants) | `port/game/variants.c`; the game hooks in `debug.c`, `enemy.c`, `enemy_act.c`, `queen.c`, `lws_kyomi.c`, `girl.c` ([Game variants](#game-variants)); `settings.c` (the Debug menu row); `gamestate.c` (the achievements rule) |
+| `[variants] *` (Gameplay, Gameplay > Shadows and Gameplay > Cutscenes) | `port/game/variants.c`; the game hooks in `debug.c`, `enemy.c`, `enemy_act.c`, `queen.c`, `lws_kyomi.c`, `girl.c` ([Game variants](#game-variants)); `settings.c` (the Debug menu row); `gamestate.c` (the achievements rule) |
 | `[gameplay] mirror` | `pad_host.c`, `audio_host.c`, rd, `photo_ui.c` |
 | `[gameplay] developer_mode` | `main.c`, `debug.c`, the port |
 | `[game] circle_back` | `layout_action.c`, `layout_texture.c` |
@@ -350,7 +350,10 @@ disc](#options-on-each-disc)).
 
 ### Game variants
 
-Options > Extras > Game variants (`[variants]`, [CONFIG.md](CONFIG.md#variants)). The values are
+Options > Gameplay: No hints on the page, Shadow toughness, One hit per swing, Shadows never dodge,
+Shadow aggression and Queen barrier on Gameplay > Shadows, No cutscene look-around and Ignore
+cutscene cameras on Gameplay > Cutscenes, and the Debug menu on Developer (`[variants]`,
+[CONFIG.md](CONFIG.md#variants), [UI.md](UI.md#gameplay--yorda-shadows-and-cutscenes)). The values are
 `port/game/variants.c`'s; the game reads them in three ways, and with every row at its shipped value
 it runs as before (each hook below gives the game's own value or row then).
 
@@ -441,10 +444,10 @@ hold the rest.
 | Gameplay: Players (pause, once cleared) | W | W | W | W | W | W | W | the 2001 arms carry the European second-pad branches ([Players on the 2001 discs](#players-on-the-2001-discs)); the count kept per save beside the card there (`[players]`); `settings_discs`, `options_<slug>` |
 | Audio: Sound output | W | W | W | W | W | W | W | `soundOutputModeSet` on every disc; `options_<slug>` |
 | Developer: Developer mode | W | W | W | W | W | W | W | `achievements_<slug>` (the suspension) |
-| Extras > Game variants: Debug menu | W | W | W | W | W | H | W | `ICO_JUN26` (the demo's debug tables are the preview's); `settings_discs`, `settings_extra_<slug>` |
-| Extras > Game variants: Shadow toughness American | W | W | W | W | W | N | W | `ico_variant_offered`; `variants_<slug>`, `settings_extra_<slug>` |
-| Extras > Game variants: No hints, No cutscene look-around | W | W | W | N | N | N | W | `ico_hints_on` is not in `GirlAI_ntscaug6jun26`; `debug_hand_camera` stays 0; `settings_extra_<slug>` |
-| Extras > Game variants: the other rows | W | W | W | W | W | W | W | `variants_<slug>` |
+| Developer: Debug menu | W | W | W | W | W | H | W | `ICO_JUN26` (the demo's debug tables are the preview's); `settings_discs`, `settings_extra_<slug>` |
+| Gameplay > Shadows: Shadow toughness American | W | W | W | W | W | N | W | `ico_variant_offered`; `variants_<slug>`, `settings_extra_<slug>` |
+| Gameplay: No hints; Gameplay > Cutscenes: No cutscene look-around | W | W | W | N | N | N | W | `ico_hints_on` is not in `GirlAI_ntscaug6jun26`; `debug_hand_camera` stays 0; `settings_extra_<slug>` |
+| Gameplay > Shadows and Cutscenes: the other game variants rows | W | W | W | W | W | W | W | `variants_<slug>` |
 | Extras > Music | W | W | W | W | W | W | W | names by asset path, the region's stream bounds; `gallery`, `gallery_jpn`/`_kor`/`_cn` (the 2001 discs have no run: the test compares 105 rows) |
 | Extras > Models | W | W | W | K | K | K | W | the model table has a Japanese column only (`tools/gen_mv_region.py`); the README names the 2001 discs' wrong models and the demo's missing ones; `model_viewer_jpn`/`_kor`/`_cn` |
 | Extras > Characters | W | W | W | W | W | W | W | the characters' textures by name (`appearance.c`); `appearance`, `settings_extras` (from the title it runs in the model viewer) |

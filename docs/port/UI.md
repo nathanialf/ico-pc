@@ -56,7 +56,7 @@ rectangle, its box on screen, its item links); on the Japanese disc `texLayout[7
 rows 66..79 sit inside every stage's layout range, whose textures the game initialises at each
 stage load, so a port row there would be looked up as a texture file. The port therefore extends
 both tables past their ends: layouts `80 ..` and properties `436 ..`, up to
-`LT_EXT_MAX_LAYOUTS` (32) and `LT_EXT_MAX_PROPERTIES` (1024) (`port/ui/layout_ext.h`, header
+`LT_EXT_MAX_LAYOUTS` (40) and `LT_EXT_MAX_PROPERTIES` (1024) (`port/ui/layout_ext.h`, header
 comment). `layout_texture.c` reads both tables through `LT_LAYOUT(i)` and `LT_PROP(i)`, which are
 `lt_ext_layout(i)` and `lt_ext_prop(i)`: the game's row below its count, the port's above it, and
 a zeroed scratch row for an index in neither, never memory outside the tables
@@ -195,15 +195,17 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Effects | the six game effects (Glow between frames, `UI_OPT_EFFECT_GLOW_SMOOTH`, Original or Smooth right after Glow, `[video] effect_glow_mode`, greyed by `glowSmoothLocked` at Frame rate Original or with Glow off, its note `UI_STR_EFFECT_GLOW_SMOOTH_NOTE` swapped for `UI_STR_EFFECT_GLOW_SMOOTH_LOCKED` while greyed; Motion blur Off, Original or Smooth, `UI_OPT_EFFECT_MOTION_BLUR`, stepped round with `stepIndex` and its note `UI_STR_EFFECT_MOTION_BLUR_NOTE`; Motion blur strength right after it, `UI_OPT_EFFECT_MOTION_BLUR_STRENGTH`, 10..100 % in tens held at both ends, `[video] effect_motion_blur_strength`, hidden by `optShown` while Motion blur is Off, its note `UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE`) with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Cinematic bars last, Back |
 | Graphics | Graphics API (`UI_OPT_GRAPHICS_API`, shown with two or more renderer names: Automatic, then each name `ui_settings_set_backend_names` was given as Vulkan, OpenGL, Direct3D 12 or Direct3D 11; the shown value and the step base are the config's `video.backend`, an unlinked value shows as written and steps from Automatic; a step writes `video.backend` ("" for Automatic) and sets `s_dirtyConfig`, so the file is written on leaving; the note `UI_STR_GRAPHICS_API_NOTE` says Apply switches now and the choice is otherwise used from the next start), Graphics card (`UI_OPT_GRAPHICS_ADAPTER`, shown with two or more card names: Automatic (`UI_STR_VAL_GRAPHICS_AUTOMATIC`), then each name `ui_settings_set_adapter_names` was given, untranslated and cut to the value box by `gpuFit`; the config's `video.adapter`, a name the list lacks shows as written and steps from Automatic; a step writes it ("" for Automatic) with the line `settings: Graphics card set to <name|automatic> (used from the next start)`; note `UI_STR_GRAPHICS_ADAPTER_NOTE`), Apply (`UI_OPT_GRAPHICS_APPLY`, shown while a `UiGraphicsHost` is set, no switch under way and either the Graphics API value, Automatic counting as the host's `automatic()` (the backend Automatic started this run) or else `vulkan`, is a linked name that is not the host's `running()`, or the Graphics card value, Automatic counting as the card the names marked automatic, is a listed card that is not the host's `runningAdapter()`; note `UI_STR_GRAPHICS_APPLY_NOTE`), Keep and Revert (`UI_OPT_GRAPHICS_KEEP`, `UI_OPT_GRAPHICS_REVERT`, shown only in the countdown, which hides Graphics API, Graphics card and Back), Back (the link and the page with two or more renderer names or two or more card names) |
 | Graphics driver | Driver, Add a driver, Add from the drivers folder (`UI_OPT_GPU_ADD_FILE`, stepped over `fileName(i)`, shown while `fileCount()` is above 0, Cross calls `installFileBegin`), Remove this driver, Back (Android) |
-| Developer | Developer mode, Dump textures, Dump models (the two dump rows only with Developer mode on), Back |
+| Developer | Developer mode, Dump textures, Dump models, Debug menu (`UI_OPT_VAR_DEBUG_MENU`, a press row; the dump rows and Debug menu only with Developer mode on, Debug menu not on the June 2001 demo), Back |
 | Audio | Volume, Music, Effects, Output, Device, Back |
 | Controls | Remap (a list), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, Touch screen (a link, with a touch screen only), Back |
 | Touch screen (`UI_PAGE_TOUCH`) | Touch controls, Touch size, Touch opacity, Edit layout (`UI_OPT_TOUCH_EDIT`), Snap to grid, Grid size, Reset layout, Reset all layouts, Back |
 | Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
-| Gameplay | Yorda safe, Time to rescue Yorda (`UI_OPT_PIT_TIME`, `[gameplay] pit_time`: its value is formatted, `"15 s (Original)"` for Original with the base from `ico_opt_pit_base_seconds` and the word `UI_STR_VAL_ORIGINAL`, else `"8 s"`; Left and Right step a second from the seconds shown, held at 4 and 30 (the Motion blur strength pattern), the base itself is Original again and writes `"original"`, any other value an integer; its note `UI_STR_OPT_PIT_TIME_NOTE`; the value has no words to translate), Shadow speed, Shadows attack together (`UI_OPT_SHADOWS_TOGETHER`, `[gameplay] shadows_together`, its note `UI_STR_OPT_SHADOWS_TOGETHER_NOTE`), Stick fix, Door fix, Yorda trips (`UI_OPT_YORDA_TRIPS`, `[gameplay] yorda_trips`, its note `UI_STR_OPT_YORDA_TRIPS_NOTE`), Natural chains, Skip the opening (`UI_OPT_SKIP_OPENING`), Second memory card (`UI_OPT_SECOND_CARD`, `[gameplay] second_memory_card`, its note `UI_STR_OPT_SECOND_CARD_NOTE`; the step calls `ico_opt_set_second_memory_card`, whose listener puts the card in at once), Film effect, Players, Back; thirteen rows once the game is cleared, so the page scrolls |
+| Gameplay | Stick fix, Door fix, Second memory card (`UI_OPT_SECOND_CARD`, `[gameplay] second_memory_card`, its note `UI_STR_OPT_SECOND_CARD_NOTE`; the step calls `ico_opt_set_second_memory_card`, whose listener puts the card in at once), No hints (`UI_OPT_VAR_NO_HINTS`), Film effect, Players, Yorda (`UI_PAGE_YORDA`), Shadows (`UI_PAGE_SHADOWS`), Cutscenes (`UI_PAGE_CUTSCENES`), Back: the three links before Back as Controls' Touch screen; ten rows once the game is cleared, inside the window |
+| Yorda (`UI_PAGE_YORDA`) | Yorda safe, Time to rescue Yorda (`UI_OPT_PIT_TIME`, `[gameplay] pit_time`: its value is formatted, `"15 s (Original)"` for Original with the base from `ico_opt_pit_base_seconds` and the word `UI_STR_VAL_ORIGINAL`, else `"8 s"`; Left and Right step a second from the seconds shown, held at 4 and 30 (the Motion blur strength pattern), the base itself is Original again and writes `"original"`, any other value an integer; its note `UI_STR_OPT_PIT_TIME_NOTE`; the value has no words to translate), Yorda trips (`UI_OPT_YORDA_TRIPS`, `[gameplay] yorda_trips`, its note `UI_STR_OPT_YORDA_TRIPS_NOTE`), Natural chains, Back |
+| Shadows (`UI_PAGE_SHADOWS`) | Shadow speed, Shadows attack together (`UI_OPT_SHADOWS_TOGETHER`, `[gameplay] shadows_together`, its note `UI_STR_OPT_SHADOWS_TOGETHER_NOTE`), Shadow toughness, One hit per swing, Shadows never dodge, Shadow aggression, Queen barrier (`UI_OPT_VAR_*`), Back |
+| Cutscenes (`UI_PAGE_CUTSCENES`) | Skip the opening (`UI_OPT_SKIP_OPENING`), No cutscene look-around, Ignore cutscene cameras (`UI_OPT_VAR_*`), Back |
 | Achievements | a list, the popups switch |
-| Extras | Music, Models, Credits, Characters, Game variants (`UI_PAGE_VARIANTS`), Add to Steam, Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Back up your data (`UI_OPT_EXTRAS_BACKUP`), Restore from a backup (`UI_OPT_EXTRAS_RESTORE`), Achievement popups, Back |
-| Game variants (`UI_PAGE_VARIANTS`) | Shadow toughness, One hit per swing, Shadows never dodge, Shadow aggression, No hints, Queen barrier, No cutscene look-around, Ignore cutscene cameras (`UI_OPT_VAR_*`, one per `IcoVariantId`), Debug menu (`UI_OPT_VAR_DEBUG_MENU`, a press row, shown with Developer mode on), Back |
+| Extras | Music, Models, Credits, Characters, Add to Steam, Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Back up your data (`UI_OPT_EXTRAS_BACKUP`), Restore from a backup (`UI_OPT_EXTRAS_RESTORE`), Achievement popups, Back |
 | Music | the music gallery, a list |
 | Characters | nine colour rows, Switch, Randomize, Reset, Back |
 
@@ -276,7 +278,7 @@ tick (`lt_item_select_disable`): the mouse drops its queued wheel notches after 
 (`ui_mouse_tick`), and a notch is an Up or Down press, so three notches move three rows across the
 window's edge. Every other move is the game's alone (both rows in view).
 
-A page whose table is longer than the slots (Main, Display, Controls, Effects, Characters) has two
+A page whose table is longer than the slots (Main, Picture, Controls, Characters) has two
 marks, port text rows of the font's U+25B2 and U+25BC at `NOTE_SIZE`, greyed (`lt_ext_set_dim`),
 right of the value arrows at x 584, 32 wide (on Characters at x 618, 20 wide, right of the
 swatches): the up mark beside the first slot while rows above are out of view, the down mark
@@ -323,10 +325,13 @@ A new option row needs:
    marks;
 3. its value text in `rawValue` and its setter in `ui_settings_step`, plus a case in `optShown`
    when it is not always shown and in `canStep` when it cannot always step;
-4. a `UI_STR_OPT_*` id in `port/ui/strings.h` and its text in each of `strings_en.c`,
-   `strings_fr.c`, `strings_de.c`, `strings_it.c`, `strings_es.c`, `strings_ja.c` and
-   `strings_ko.c` (`strings_complete` fails on a missing entry, which would fall back to
-   English);
+4. a `UI_STR_OPT_*` id in `port/ui/strings.h` and its text in each of the eleven tables,
+   `strings_en.c`, `strings_fr.c`, `strings_de.c`, `strings_it.c`, `strings_es.c`,
+   `strings_ja.c`, `strings_ko.c`, `strings_zh.c` and the three community tables
+   `strings_pt_br.c`, `strings_ru_bobttz.c` and `strings_ru_cobra838.c` (NULL there for a row
+   newer than the translation: English at run time) (`strings_complete` fails on a missing
+   entry, which would fall back to English without a word); a new CJK character needs
+   `tools/subset_font_ja.py`, `_ko.py` and `_zh.py` run (the `font_subset_*` ctests);
 5. for a config key, the key in its owner's module ([CONFIG.md](CONFIG.md#adding-a-key)).
 
 The `settings` test holds each page's rows as fixed lists (`port/ui/test/settings_test.c`
@@ -1054,24 +1059,35 @@ frame (`lt_host_point_item`), and whether a card screen's empty slot is pickable
 (`la_host_mc_slot_pickable`: on the Save screen, not on Load) (`ico2/common/src/layout_texture.c`;
 `ico2/common/src/layout_action.c`).
 
-### Extras > Game variants
+### Gameplay > Yorda, Shadows and Cutscenes
 
-`UI_PAGE_VARIANTS`, a link on Extras after Characters (from the title and the pause menu: it is not
-one of the three rows `isExtrasOpt` hides), its page built like Controls and Gameplay from the tables
-`varOpts` and `varStrs` in `build`. Eight stepped rows, one `UI_OPT_VAR_*` per `IcoVariantId`
-(`port/game/variants.h`; a `_Static_assert` keeps the order), then Debug menu (`UI_OPT_VAR_DEBUG_MENU`,
-a press row after `UI_OPT_DEVELOPER` in the enum, so not stepped) and Back. The value text is
+`UI_PAGE_YORDA`, `UI_PAGE_SHADOWS` and `UI_PAGE_CUTSCENES`, three links on Gameplay right before
+its Back (`gameLinks` in `build`, the Controls > Touch screen pattern), each page built like
+Controls from its tables (`yordaOpts`, `shadowOpts`, `cutOpts` and their strings) with Gameplay as
+its parent, so Back and Triangle return to Gameplay on the link's row (`leaveTo`). All of them show
+from the title and the pause menu on every disc; the game's pause-only rows (Film effect, Players)
+stay on Gameplay. The game variants (`port/game/variants.h`), eight stepped rows, one `UI_OPT_VAR_*`
+per `IcoVariantId` (a `_Static_assert` keeps the order), sit on these pages: No hints on Gameplay,
+Shadow toughness, One hit per swing, Shadows never dodge, Shadow aggression and Queen barrier on
+Shadows after Shadow speed and Shadows attack together, No cutscene look-around and Ignore cutscene
+cameras on Cutscenes after Skip the opening. Debug menu (`UI_OPT_VAR_DEBUG_MENU`, a press row after
+`UI_OPT_DEVELOPER` in the enum, so not stepped) is on Developer before Back. The value text is
 `variantText`; a step is `ico_variant_step`, which writes `[variants] <key>` in memory and logs
 `variants: <key> = <value>`; the page's leaving saves the file as every page does.
 
 - Values: Shadow toughness Original, American, Not tougher later (`no_plus`); Shadow aggression Their
   own, Bold patient, Bold quick, Wary patient, Wary quick; Queen barrier 5 hits, 7 hits (shown as the
   disc ships it until a step, which writes the number); the others Off, On.
-- Each row's note (`UI_STR_OPT_VAR_*_NOTE`) is under the page while the cursor is on the row and ends
-  with the rule: "Switches achievements off." for One hit per swing, Shadows never dodge, Ignore
-  cutscene cameras and Debug menu (`ico_variants_suspend_achievements`, read by `gamestate.c`
-  beside `ico_opt_developer_mode`), "Achievements stay on." for the others.
-- Debug menu is shown only while Developer mode is on (`optShown`). Cross calls
+- Each variants row's note (`UI_STR_OPT_VAR_*_NOTE`, added in the page's case of `buildOptionPage`)
+  is under the page while the cursor is on the row and ends with the rule: "Switches achievements
+  off." for One hit per swing, Shadows never dodge, Ignore cutscene cameras and Debug menu
+  (`ico_variants_suspend_achievements`, read by `gamestate.c` beside `ico_opt_developer_mode`),
+  "Achievements stay on." for the others. The disc's own notes (`variantNote`, chosen in
+  `refreshPage` by the row's option, whatever page holds it): Shadow toughness on the June 2001 demo
+  (American is not offered), No hints and No cutscene look-around on the three 2001 discs (they
+  change nothing there).
+- Debug menu is shown only while Developer mode is on and not on the June 2001 demo (`optShown`,
+  one log line there). Cross calls
   `ico_variants_debug_menu_pressed`, which logs `variants: the Debug menu is opened from Options`,
   marks the menu used (achievements off until `ico_variants_debug_menu_clear` or an options reload)
   and calls `ico_variants_open_debug_menu`, which opens the game's menu through the opener
@@ -1081,18 +1097,22 @@ a press row after `UI_OPT_DEVELOPER` in the enum, so not stepped) and Back. The 
   menu's Back does (`la_host_resume_play`, then the region's `layout_play`), logging `settings:
   Options closed for the Debug menu (to the title|back to the game)`. With nothing bound it logs
   `variants: the Debug menu cannot open: the game has not bound it` and Options stays.
-- Places: the window's ([The window](#the-window)); ten rows with Debug menu fill its slots, Back
-  at 189.
+- Places: the window's ([The window](#the-window)); Gameplay's ten rows fill its slots, Back at 189;
+  Yorda (5), Shadows (8) and Cutscenes (4) fit with slots to spare; Developer has five rows with
+  Developer mode on.
 - Log lines: the values once at the first read (`variants: shade_toughness=... ignore_cutscene_cameras=0`),
   each change, the achievements rule when it changes (`variants: achievements are off (one_hit ...)`,
   `... are back on`), a value that is none (`variants: [variants] <key> = "<word>" is not a value; using
   <default>`).
 
-ctests `settings` (the page's rows), `settings_extra`, `settings_extra_jpn`, `settings_extra_kor`
-(`testVariantsPage`: the link, labels, values, a step and the key and the saved file on every row, the
-notes and the achievements rule, the Debug menu row and its press: unbound it stays on the page,
-bound to a fake opener it opens once and Options closes into the title or the game), `variants`,
-`config`.
+ctests `settings` (each page's rows, the three links before Gameplay's Back, the Developer rows
+with Developer mode on), `settings_extra`, `settings_extra_jpn`, `settings_extra_kor`,
+`settings_extra_ntsc`, `_aug6`, `_jun26` (`testVariantsPage`: no Game variants row on Extras,
+Gameplay's labels and the three links, each page opened through Gameplay and Back to it, labels,
+values, a step and the key and the saved file on every variants row, the notes and the
+achievements rule, `checkPageFits` on Gameplay, Shadows, Cutscenes and Developer, the Debug menu row
+on Developer and its press: unbound it stays on the page, bound to a fake opener it opens once and
+Options closes into the title or the game), `variants`, `config`.
 
 ## Galleries and photo mode
 

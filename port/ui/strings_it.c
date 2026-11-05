@@ -713,7 +713,9 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_ISO_COPYING] = "Copia dell’immagine del disco nell’app",
     [UI_STR_ISO_COPYING_LONG] =
         "Copia dell’immagine del disco nell’app. È un’immagine grande: ci vorranno alcuni minuti",
-    [UI_STR_SECTION_VARIANTS] = "Varianti di gioco",
+    [UI_STR_SECTION_YORDA] = "Yorda",
+    [UI_STR_SECTION_SHADOWS] = "Ombre",
+    [UI_STR_SECTION_CUTSCENES] = "Filmati",
     [UI_STR_OPT_VAR_TOUGHNESS] = "Resistenza delle ombre",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
         "Americana: ogni ombra resistente come nel disco nordamericano, e non più resistente nelle partite successive. Gli obiettivi restano attivi.",
