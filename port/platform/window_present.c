@@ -852,28 +852,28 @@ void window_present_pace(int hz)
         s_pres.sinceClose++;
     }
     if (!rd_interpolation_active()) {
-        /* framerate "original": rd_end_frame presented the frame once; the
-           picture is held until the next.  That present's start-up log line
-           (the frame whole: t 1) */
-        RdPresentInfo pi;
-        const bool whole =
-            newFrame && rd_last_present_info(&pi) && pi.frame == s_pres.frame && !pi.keep;
-
+        /* framerate "original": rd_end_frame made the frame's one picture
+           (handed over to the render thread, or replayed inside the step);
+           the picture is held until the next.  That present's start-up log
+           line (the frame whole: t 1) */
         if (newFrame) {
             window_boot_log(1.0f);
-            /* that present ran inside the step (rd_end_frame's replay):
-               the first on a swapchain made since the last one is the
-               rebuild's past a refresh (as present_once), paused out
-               before the deadline is judged */
+            /* the first present on a swapchain made since the last one is
+               the rebuild's past a refresh (as present_once), paused out
+               before the deadline is judged: what the step itself spent on
+               the picture (its hand-over, or its replay inside the step;
+               rd.h rd_frame_post_last_take), not the replay's own time,
+               which a picture handed over spends off the step */
             RhiStats st;
+            const double stepMs = s_pres.postHave ? s_pres.post.ms : 0.0;
 
             rhi_get_stats(&st);
             window_pace_paused(pace_first_present_pause(st.swapchains, &s_pres.swapchains,
-                                                        (Uint64)(rd_last_replay_ms() * 1e6),
+                                                        (Uint64)(stepMs * 1e6),
                                                         window_refresh_ns(period)));
         }
         now = SDL_GetTicksNS();
-        window_orig_step(now >= s_deadline, whole ? rd_last_replay_ms() : -1.0);
+        window_orig_step(now >= s_deadline);
         if (now < s_deadline) {
             SDL_DelayPrecise(s_deadline - now);
         } else if (now - s_deadline > RESYNC_NS) {

@@ -739,6 +739,10 @@ static const struct {
        picture's wait for room in the present queue inside its reads (no
        display's wait ahead) */
     {"acquire_ahead", "ICO_RD_ACQUIRE_AHEAD"},
+    /* port/render/rd_thread.c rd_set_thread_host: 0 replays Frame rate
+       Original's pictures inside the game step, the game thread waiting
+       (no hand-over to the render thread) */
+    {"original_async", "ICO_RD_ORIGINAL_ASYNC"},
     /* port/render/rd_aura_kernel.c rd__aura_kernel_steps: gs or box */
     {"aura_kernel", "ICO_RD_AURA_KERNEL"},
     /* port/render/rd_aura_box.c rd__aura_box_init: auto, 1 or 0 */

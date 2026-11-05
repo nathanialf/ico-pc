@@ -543,6 +543,11 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("acquire_ahead", "false"), "0") == 0);
     CHECK(strcmp(ico_dev_env_value("acquire_ahead", "true"), "1") == 0);
     CHECK(ico_dev_env_value("acquire_ahead", "later") == NULL);
+    /* Frame rate Original's hand-over (rd_thread.c): its escape as a bool */
+    CHECK(strcmp(ico_dev_env_name("original_async"), "ICO_RD_ORIGINAL_ASYNC") == 0);
+    CHECK(strcmp(ico_dev_env_value("original_async", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("original_async", "true"), "1") == 0);
+    CHECK(ico_dev_env_value("original_async", "later") == NULL);
     /* the attachment read on Qualcomm's driver (vk_device.c) */
     CHECK(strcmp(ico_dev_env_name("attachment_read"), "ICO_VK_ATTACHMENT_READ") == 0);
     CHECK(strcmp(ico_dev_env_value("attachment_read", "true"), "1") == 0);

@@ -966,6 +966,14 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
     rd_thread_block_take(&tb);
     rd_thread_submit_block_take(&sb);
     rd_frame_close_take(&closes, &closeMs, &closeMaxMs);
+    /* Frame rate Original's pictures: handed over, waited, skipped while
+       the render thread was busy, replayed inside the step (rd.h
+       rd_frame_post_take; empty at the other frame rates) */
+    RdFramePost fp;
+    char post[288];
+
+    rd_frame_post_take(&fp);
+    rd_frame_post_text(&fp, post, sizeof(post));
     /* the submit thread (rd_submit_thread.h): per picture its submit and
        present, the most pictures queued and running at once, the render
        thread's waits for it (its next picture's first graphics call) and
@@ -1048,11 +1056,11 @@ void ico_render_thread_block_line(double stepMs, double pictureCpuMs, double pum
     rd_thread_read_waits_text(&tb, rw, sizeof(rw));
     fprintf(stderr,
             "window: game thread: step %.1f ms (closing a frame %.1f ms of it, longest %.1f ms, "
-            "%u frames), pump %.1f ms, slot waits %u (%.1f ms; %u (%.1f ms) by a new frame's "
+            "%u frames%s), pump %.1f ms, slot waits %u (%.1f ms; %u (%.1f ms) by a new frame's "
             "present, %u (%.1f ms) by a further present's, %u other), read waits %u (%.1f ms, "
             "longest %.1f ms%s); %s%s; %s\n",
-            stepMs, closeMs, closeMaxMs, closes, pumpMs, waits, (double)waitNs / 1e6, tb.freshWaits,
-            tb.freshWaitMs, tb.furtherWaits, tb.furtherWaitMs,
+            stepMs, closeMs, closeMaxMs, closes, post, pumpMs, waits, (double)waitNs / 1e6,
+            tb.freshWaits, tb.freshWaitMs, tb.furtherWaits, tb.furtherWaitMs,
             waits > byPresents ? waits - byPresents : 0u, tb.readWaits, tb.readWaitMs,
             tb.readWaitMaxMs, rw, rt, st, cores);
     if (s_rt.asks.asks != 0) {

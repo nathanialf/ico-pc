@@ -39,7 +39,7 @@
 RdContext g_rd;
 
 static RdHostCall s_hostCall;
-static RdReplayGate s_replayGate; /* rd_set_replay_gate: Frame rate Original's late skip */
+static RdReplayGate s_replayGate; /* rd_set_replay_gate: Frame rate Original's skip */
 
 double rd__now_ms(void)
 {
@@ -2321,15 +2321,31 @@ typedef struct ReplayCall {
     int keep;
 } ReplayCall;
 
+/* Frame rate Original's picture replayed and presented inside the game's
+ * step, the game thread waiting (rd_end_frame: no render thread, parked,
+ * sync, a picture that waits, the escape, no gate) */
 static void replayOnHost(void *arg)
 {
     const ReplayCall *c = (const ReplayCall *)arg;
-    if (s_replayGate != NULL && !s_replayGate(c->keep)) {
-        return; /* the window's late skip: the last picture stays */
-    }
-    rd__note_frame_present(c->f); /* rd_last_present_info, as rd_present notes its own */
-    rd__blur_smooth_arm(1, 1);    /* Motion blur: Smooth at one present a tick */
+    rd__thread_in_step(true);  /* its record's present: "inside the game step" */
+    rd__blur_smooth_arm(1, 1); /* Motion blur: Smooth at one present a tick */
     rd__replay_frame(c->f, c->keep, true);
+    rd__thread_in_step(false);
+}
+
+/* the hand-over on the host's stack (the overlay's layers are collected in
+ * it: the UI's callbacks, not on the game's fiber stack) */
+typedef struct PostCall {
+    const RdFrame *f;
+    int keep;
+    bool ok;
+    double waitMs;
+} PostCall;
+
+static void postOnHost(void *arg)
+{
+    PostCall *c = (PostCall *)arg;
+    c->ok = rd__replay_frame_post(c->f, c->keep, &c->waitMs);
 }
 
 void rd_begin_frame(void)
@@ -2517,6 +2533,130 @@ static void closeNote(double ms)
     s_close.maxMs = ms > s_close.maxMs ? ms : s_close.maxMs;
 }
 
+/* rd_frame_post_take's sums and rd_frame_post_last_take's record (the game
+ * thread's) */
+static RdFramePost s_post;
+static RdFramePostLast s_postLast;
+static bool s_postLastHave;
+
+void rd_frame_post_take(RdFramePost *out)
+{
+    *out = s_post;
+    memset(&s_post, 0, sizeof(s_post));
+}
+
+bool rd_frame_post_last_take(RdFramePostLast *out)
+{
+    const bool have = s_postLastHave;
+    *out = s_postLast;
+    s_postLastHave = false;
+    return have;
+}
+
+void rd_frame_post_text(const RdFramePost *p, char *out, size_t cap)
+{
+    if (cap == 0) {
+        return;
+    }
+    out[0] = '\0';
+    if (p->posts == 0 && p->inlines == 0 && p->busySkips == 0) {
+        return;
+    }
+    snprintf(out, cap,
+             "; its picture handed over in %.1f ms (longest %.1f ms; %u waited for the picture "
+             "before, %.1f ms in all; %u skipped: render thread busy); presents waited inside the "
+             "step: %u (%.1f ms)",
+             p->posts ? p->postMs / p->posts : 0.0, p->postMaxMs, p->postWaits, p->postWaitMs,
+             p->busySkips, p->inlines, p->inlineMs);
+}
+
+void rd_frame_post_last_text(const RdFramePostLast *p, char *out, size_t cap)
+{
+    if (cap == 0) {
+        return;
+    }
+    out[0] = '\0';
+    switch (p->how) {
+    case RD_POST_HANDED:
+        snprintf(out, cap, ", the picture handed over %.1f ms (%.1f ms waiting for the one before)",
+                 p->ms, p->waitMs);
+        break;
+    case RD_POST_INLINE:
+        snprintf(out, cap, ", the picture replayed inside the step %.1f ms", p->ms);
+        break;
+    case RD_POST_SKIP_BUSY:
+        snprintf(out, cap, ", the picture not presented (the render thread busy)");
+        break;
+    case RD_POST_SKIP_LATE:
+        snprintf(out, cap, ", the picture not presented (the step late)");
+        break;
+    default:
+        break;
+    }
+}
+
+/* waited: a picture handed over that found the render thread busy (a keep
+ * frame the gate presents: it waited for the picture before, waitMs) */
+static void postNote(uint32_t frame, int how, double ms, double waitMs, bool waited)
+{
+    s_postLast = (RdFramePostLast){frame, how, ms, waitMs};
+    s_postLastHave = true;
+    switch (how) {
+    case RD_POST_HANDED:
+        s_post.posts++;
+        s_post.postMs += ms;
+        s_post.postMaxMs = ms > s_post.postMaxMs ? ms : s_post.postMaxMs;
+        if (waited) {
+            s_post.postWaits++;
+            s_post.postWaitMs += waitMs;
+        }
+        break;
+    case RD_POST_INLINE:
+        s_post.inlines++;
+        s_post.inlineMs += ms;
+        break;
+    case RD_POST_SKIP_BUSY:
+        s_post.busySkips++;
+        break;
+    default:
+        s_post.lateSkips++;
+        break;
+    }
+}
+
+/* Frame rate Original: frame f's one picture, on the game thread
+ * (rd_set_replay_gate).  The gate first, with the render thread's busy
+ * state (the rule: a frame whose picture would wait for the picture before,
+ * its walk or its present, is left out, the last picture staying, unless it
+ * is a keep frame); then the hand-over, the step going on at once; where
+ * there is none, the replay inside the step as before. */
+static void originalPicture(const RdFrame *f)
+{
+    const double t0 = rd__now_ms();
+    const bool busy = s_replayGate != NULL && rd__thread_picture_busy();
+    const int gate = s_replayGate != NULL ? s_replayGate(f->keep, busy) : RD_GATE_PRESENT;
+    if (gate != RD_GATE_PRESENT) {
+        /* the window's skip: the last picture stays */
+        postNote(f->number, gate == RD_GATE_BUSY ? RD_POST_SKIP_BUSY : RD_POST_SKIP_LATE, 0.0, 0.0,
+                 false);
+        return;
+    }
+    rd__note_frame_present(f); /* rd_last_present_info, as rd_present notes its own */
+    if (s_replayGate != NULL && rd__replay_frame_post_ok()) {
+        PostCall c = {f, f->keep, false, 0.0};
+        onHostStack(postOnHost, &c);
+        if (c.ok) {
+            postNote(f->number, RD_POST_HANDED, rd__now_ms() - t0, c.waitMs, busy);
+            return;
+        }
+    }
+    ReplayCall c = {f, f->keep};
+    rd__on_host(replayOnHost, &c); /* on the render thread, waited for; or here */
+    if (s_replayGate != NULL) {
+        postNote(f->number, RD_POST_INLINE, rd__now_ms() - t0, 0.0, false);
+    }
+}
+
 void rd_end_frame(int keep)
 {
     rd__texlock_wait();
@@ -2547,10 +2687,9 @@ void rd_end_frame(int keep)
     g_rd.videoShown = 0;
     closeNote(rd__now_ms() - closeAt);
     /* with interpolation on (either preset) the host presents (rd_present);
-     * with it off the frame is replayed and presented once here */
+     * with it off the frame is replayed and presented once from here */
     if (g_rd.hasDevice && !rd_interpolation_active()) {
-        ReplayCall c = {f, f->keep};
-        rd__on_host(replayOnHost, &c);
+        originalPicture(f);
     }
     if (s_dumpEvery && f->number % s_dumpEvery == 0 && f->number >= s_dumpFrom) {
         if (!rd__render_call(dumpEvery, f)) {

@@ -951,6 +951,8 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
     g_rdPerf.frame = f ? f->number : 0;
     g_rdPerf.keep = (uint8_t)(keep != 0);
     g_rdPerf.presented = (uint8_t)present;
+    /* the submit thread's times set it again when they come */
+    g_rdPerf.presentThread = rd__thread_in_step_now() ? RD_PRESENT_IN_STEP : RD_PRESENT_ELSEWHERE;
     g_rdPerf.interpolated = (uint8_t)(s_interpMs > 0.0);
     g_rdPerf.interpMs = s_interpMs;
     g_rdPerf.readbackMs = s_readbackMs; /* since the previous replay */
@@ -998,6 +1000,7 @@ static void presentSplitInto(RdPerfRecord *r, const RdSubmitJob *j)
     r->presentCallMs = j->presentCallMs;
     r->presentPollMs = j->presentPollMs;
     r->presentEndMs = j->presentEndMs;
+    r->presentThread = RD_PRESENT_ON_SUBMIT;
 }
 
 void rd__perf_submit_times(const RdSubmitJob *j)

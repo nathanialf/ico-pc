@@ -76,12 +76,17 @@ typedef struct Tramp {
     void (*fn)(void *arg);
     void *arg;
     bool handed;
+    /* set to 0 at the job's very end (its slot ahead and display's wait
+     * ahead included): rd__thread_picture_busy's flag; NULL none */
+    int *busy;
 } Tramp;
 
+/* armSmooth: Motion blur: Smooth armed at one present a tick before the
+ * replay, as rd_end_frame's replay inside the step arms it (rd_core.c) */
 typedef struct ReplayArgs {
     const RdFrame *f;
     int keep;
-    bool present, ok;
+    bool present, ok, armSmooth;
 } ReplayArgs;
 
 static ReplayArgs s_picReplay;
@@ -101,6 +106,14 @@ static uint64_t s_waitedNs;
  * line's split of the waits (RdThreadBlock.freshWaits) */
 static uint32_t s_lastPresentFrame;
 static uint32_t s_failedPresents; /* rd_thread_failed_presents */
+/* Frame rate Original's hand-over (rd__replay_frame_post): its picture's
+ * job not yet ended (atomic; set by the game thread as it posts, cleared
+ * by the render thread at the job's end); [dev] original_async = false
+ * (ICO_RD_ORIGINAL_ASYNC=0, read with the host); the replay inside the
+ * game's step running on this thread (rd__thread_in_step) */
+static int s_picBusy;
+static bool s_origOff;
+static _Thread_local bool t_inStep;
 
 static void lk(void)
 {
@@ -367,6 +380,11 @@ static void runTramp(Tramp *t, bool picture)
             slotAhead(); /* the next picture's slot, the hand-over ended */
             roomAhead(); /* and its room in the present queue */
         }
+        if (t->busy != NULL) {
+            /* the last read of t: the game thread may post the next
+               picture into it from here */
+            __atomic_store_n(t->busy, 0, __ATOMIC_RELEASE);
+        }
     }
     t_handed = handed;
     t_onR--;
@@ -464,10 +482,36 @@ void rd_set_thread_host(const RdThreadHost *host)
         s_async = false;
         s_lastOk = true;
         s_lastPresentFrame = 0;
+        __atomic_store_n(&s_picBusy, 0, __ATOMIC_RELAXED);
         s_on = true;
         if (host->submit && !host->sync) {
             /* the pictures' submit and present on a thread of their own */
             (void)rd__submit_thread_start(host->submitBegin, host->user);
+        }
+        {
+            /* Frame rate Original's hand-over (rd__replay_frame_post), its
+               escape ([dev] original_async = false), its line on each start
+               (the first 8, then every 100th) */
+            static unsigned s_origLines;
+            const char *e = getenv("ICO_RD_ORIGINAL_ASYNC");
+            s_origOff = e != NULL && strcmp(e, "0") == 0;
+            if (++s_origLines <= 8 || s_origLines % 100 == 0) {
+                if (s_origOff || host->sync) {
+                    rd__log("render thread: with Frame rate Original each game frame's picture is "
+                            "replayed and presented inside the game step, the game thread "
+                            "waiting (%s)",
+                            host->sync ? "[dev] render_thread = sync"
+                                       : "[dev] original_async = false");
+                } else {
+                    rd__log("render thread: with Frame rate Original each game frame's picture "
+                            "is handed over as the other frame rates' are: its submit and "
+                            "present run on the %s; the game step waits for the picture "
+                            "before's reads only, and skips a picture when the render thread is "
+                            "still busy ([dev] original_async = false replays it inside the step "
+                            "as before)",
+                            rd_thread_submit_on() ? "submit thread" : "render thread");
+                }
+            }
         }
     }
 }
@@ -726,7 +770,7 @@ bool rd__render_call(void (*fn)(void *arg), void *arg)
         fn(arg);
         return true;
     }
-    Tramp t = {fn, arg, false};
+    Tramp t = {fn, arg, false, NULL};
     return s_host.post(s_host.user, callTramp, &t, false, true);
 }
 
@@ -735,6 +779,9 @@ bool rd__render_call(void (*fn)(void *arg), void *arg)
 static void replayJob(void *arg)
 {
     ReplayArgs *r = arg;
+    if (r->armSmooth) {
+        rd__blur_smooth_arm(1, 1); /* Motion blur: Smooth at one present a tick */
+    }
     r->ok = rd__replay_frame_here(r->f, r->keep, r->present);
 }
 
@@ -743,8 +790,8 @@ bool rd__replay_frame(const RdFrame *f, int keep, bool present)
     if (!s_on || t_onR) {
         return rd__replay_frame_here(f, keep, present);
     }
-    ReplayArgs r = {f, keep, present, false};
-    Tramp t = {replayJob, &r, false};
+    ReplayArgs r = {f, keep, present, false, false};
+    Tramp t = {replayJob, &r, false, NULL};
     if (present) {
         (void)rd_thread_drain();
         rd__overlay_hand_over(); /* the UI's layers on this thread (rd_present.c) */
@@ -787,8 +834,8 @@ bool rd__replay_frame_async(const RdFrame *f, int keep, bool present)
     if (present) {
         rd__overlay_hand_over(); /* the UI's layers on this thread (rd_present.c) */
     }
-    s_picReplay = (ReplayArgs){f, keep, present, false};
-    s_picTramp = (Tramp){replayJob, &s_picReplay, !wait};
+    s_picReplay = (ReplayArgs){f, keep, present, false, false};
+    s_picTramp = (Tramp){replayJob, &s_picReplay, !wait, NULL};
     if (!wait) {
         handOver();
     }
@@ -808,6 +855,77 @@ bool rd__replay_frame_async(const RdFrame *f, int keep, bool present)
     s_lastOk = rd__replay_frame_here(f, keep, present);
     rd__overlay_hand_over_drop(); /* nothing posted holds it */
     return s_lastOk;
+}
+
+/* ------------------------------------------ Frame rate Original's post */
+
+bool rd__replay_frame_post_ok(void)
+{
+    return s_on && t_onR == 0 && !s_origOff && !pictureWaits();
+}
+
+/* The rule's input (rd.h RdReplayGate busy): the render thread has not
+ * ended the job of the picture before (its walk, or its acquire waiting
+ * behind a present, its slot ahead waiting for the GPU), or the submit
+ * thread has not ended that picture's submit and present (the swapchain's
+ * lock is held through the driver's present call, vk_swapchain.c, and the
+ * next acquire takes it: a picture posted now would wait for that present
+ * inside its reads, and the game step's next renderer call with it) */
+bool rd__thread_picture_busy(void)
+{
+    if (!rd__replay_frame_post_ok()) {
+        return false;
+    }
+    return __atomic_load_n(&s_picBusy, __ATOMIC_ACQUIRE) != 0 || rd_thread_submit_unfinished();
+}
+
+bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs)
+{
+    *waitMs = 0.0;
+    if (!rd__replay_frame_post_ok()) {
+        return false;
+    }
+    /* the picture before ended, its present too: a no-op unless the gate
+       presented this frame while busy (a keep frame), or there is none */
+    const double d0 = rd__now_ms();
+    const uint64_t ns = renderDrain();
+    noteRoomDrain(d0, ns);
+    if (ns != 0) {
+        lk();
+        s_block.freshWaits++; /* the 10 s line's slot waits by a new frame's present */
+        s_block.freshWaitMs += (double)ns / 1e6;
+        ulk();
+    }
+    (void)rd_thread_submit_drain();
+    *waitMs = rd__now_ms() - d0;
+    /* the UI's layers on this thread, before the hand-over (rd_present.c
+       s_pre), as rd__replay_frame_async */
+    rd__overlay_hand_over();
+    s_picReplay = (ReplayArgs){f, keep, true, false, true};
+    s_picTramp = (Tramp){replayJob, &s_picReplay, true, &s_picBusy};
+    __atomic_store_n(&s_picBusy, 1, __ATOMIC_RELEASE);
+    handOver();
+    if (s_host.post(s_host.user, pictureTramp, &s_picTramp, true, false)) {
+        s_async = true;
+        s_asyncPresent = false;
+        return true;
+    }
+    /* refused (parked, the queue full): nothing posted holds the state;
+       the caller replays it inside the step on the host's stack */
+    __atomic_store_n(&s_picBusy, 0, __ATOMIC_RELEASE);
+    giveBack();
+    rd__overlay_hand_over_drop();
+    return false;
+}
+
+void rd__thread_in_step(bool on)
+{
+    t_inStep = on;
+}
+
+bool rd__thread_in_step_now(void)
+{
+    return t_inStep;
 }
 
 /* ------------------------------------------------------- the presents */
@@ -886,7 +1004,7 @@ bool rd_present_post(float alpha)
      * (rd_present.c s_pre) */
     rd__overlay_hand_over();
     s_picPresent = (PresentArgs){alpha, rd__present_clock_raw_take(), false};
-    s_picTramp = (Tramp){presentJob, &s_picPresent, !wait};
+    s_picTramp = (Tramp){presentJob, &s_picPresent, !wait, NULL};
     if (!wait) {
         handOver();
     }

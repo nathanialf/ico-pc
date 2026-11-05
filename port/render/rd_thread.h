@@ -26,6 +26,14 @@
  *                   here ends with its walk, and the next picture's
  *                   interpolation runs while the submit thread works; its
  *                   first graphics call waits for that thread.
+ *   Original        with Frame rate Original (no interpolation) the
+ *                   frame rd_end_frame closes is handed over the same way
+ *                   (rd__replay_frame_post below): the game step never
+ *                   waits for its present.  The window's gate skips a
+ *                   frame whose picture would find the render thread or
+ *                   the submit thread still busy with the one before, so
+ *                   a picture's acquire never waits behind a present while
+ *                   the game thread waits for its reads.
  *   one picture     a picture waits for the one before to finish (the
  *                   drain: the render thread's job, not the submit
  *                   thread's); a picture whose capture or blended dump is
@@ -306,6 +314,32 @@ bool rd__render_call(void (*fn)(void *arg), void *arg);
  * thread's present (rd__replay_frame_async: rd_present, rd_reshow.c) */
 bool rd__replay_frame_here(const RdFrame *f, int keep, bool present);
 bool rd__replay_frame_async(const RdFrame *f, int keep, bool present);
+/* Frame rate Original's hand-over (rd_core.c rd_end_frame with the
+ * window's gate set, rd.h RdReplayGate).  rd__replay_frame_post_ok: a
+ * picture would be handed over (the host on, not on the render thread, not
+ * under [dev] original_async = false (ICO_RD_ORIGINAL_ASYNC=0), and no
+ * picture that waits: sync, rd_submit_hold, a capture or blended dump
+ * armed).  rd__thread_picture_busy: the gate's busy input, false unless
+ * rd__replay_frame_post_ok: the job of the picture it posted last has not
+ * ended (its walk, its acquire, its slot ahead), or the submit thread has
+ * a job unfinished (that picture's submit and present: the next acquire
+ * would wait for its present inside the reads).  rd__replay_frame_post:
+ * frame f replayed and presented as a picture handed over (the overlay's
+ * layers collected here first, Motion blur: Smooth armed at one present a
+ * tick there, as rd_end_frame's replay inside the step did), after the
+ * picture before ended (its present too: waitMs, a no-op unless the gate
+ * presented a keep frame while busy; counted as a new frame's slot wait);
+ * true when posted, false when not taken (the reasons above, or the host
+ * refused: nothing is posted and the caller replays it inside the step on
+ * the host's stack; never here on the game's fiber stack). */
+bool rd__replay_frame_post_ok(void);
+bool rd__thread_picture_busy(void);
+bool rd__replay_frame_post(const RdFrame *f, int keep, double *waitMs);
+/* rd_end_frame's replay inside the game's step runs on the calling thread
+ * (set around it, on whichever thread runs it): RdPerfRecord.presentThread
+ * RD_PRESENT_IN_STEP (rd_perf.c) */
+void rd__thread_in_step(bool on);
+bool rd__thread_in_step_now(void);
 /* a picture of the game thread's begins: the one before it finished (its
  * wait counted for rd_submit_waited_ns; rd_present's start) */
 void rd__thread_picture_begin(void);

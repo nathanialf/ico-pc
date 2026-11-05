@@ -51,22 +51,23 @@ void window_hold_line(double lateMs, unsigned long long heldMs, unsigned decodes
 void window_hold_block_line(unsigned long long heldMs, double stepAvgMs, double stepMaxLateMs,
                             double periodMs, double pictureMs, const char *rateWords);
 
-/* Frame rate Original's late skip (pace_policy.h pace_original_present),
-   kept here so window_host.c stays under the repository's file size cap.
-   window_orig_gate: the replay gate's answer (rd_set_replay_gate) for a
-   frame of the step due at dueNs at the simulation's rate hz (50: 20 ms,
-   else 16.683 ms), counting the frames it leaves out.  window_orig_step:
-   after each Original pace, whether the step ran past its period and a
-   whole frame's replay time (below 0: none replayed in the step).
-   window_orig_words: the 10 s line's "; steps late N (frames not presented
-   M)" (empty unless original; a static buffer).  window_hold_block: at the
-   block's end, window_hold_block_line from the sound held back since the
-   last block (the first: since the open), the steps' time (sum, count,
-   longest, in ms), the picture's time (the Original replays' mean, else
-   replaySumMs / replays) and the frame rate's words; then the counts start
-   again. */
-bool window_orig_gate(int keep, uint64_t nowNs, uint64_t dueNs, int hz);
-void window_orig_step(bool late, double replayMs);
+/* Frame rate Original's skip (pace_policy.h pace_original_gate), kept here
+   so window_host.c stays under the repository's file size cap.
+   window_orig_gate: the replay gate's answer (rd.h rd_set_replay_gate,
+   RD_GATE_*) for a frame of the step due at dueNs at the simulation's rate
+   hz (50: 20 ms, else 16.683 ms), with the render thread busy with the
+   picture before or not, counting the frames it leaves out by reason.
+   window_orig_step: after each Original pace, whether the step ran past
+   its period.  window_orig_words: the 10 s line's "; steps late N (frames
+   not presented M: the step late L, the render thread busy B)" (empty
+   unless original; a static buffer).  window_hold_block: at the block's
+   end, window_hold_block_line from the sound held back since the last
+   block (the first: since the open), the steps' time (sum, count,
+   longest, in ms), the picture's time (replaySumMs / replays: the replays'
+   block mean, the submit thread's times in it) and the frame rate's words;
+   then the counts start again. */
+int window_orig_gate(int keep, bool busy, uint64_t nowNs, uint64_t dueNs, int hz);
+void window_orig_step(bool late);
 const char *window_orig_words(bool original);
 /* PC port: the end of the 10 s GPU lines on a tile-based GPU (where a pass's time and the
  * display wait land; issues 95, 123), "" elsewhere */

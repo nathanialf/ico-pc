@@ -100,6 +100,10 @@ typedef struct WindowPres {
     /* RhiStats.swapchains at the last present accounted: a present on a
        newer swapchain is the first on it (pace_first_present_pause) */
     Uint64 swapchains;
+    /* Frame rate Original's picture of the step just ended (rd.h
+       rd_frame_post_last_take, taken at each pace; postHave 0: none) */
+    RdFramePostLast post;
+    int postHave;
     /* the lock's counts at the 10 s block's start */
     double lockNudgeAt;
     unsigned lockSeenAt, lockLateAt, lockEarlyAt, lockWaitedAt, lockSkippedAt;

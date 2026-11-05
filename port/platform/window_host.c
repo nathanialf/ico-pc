@@ -1733,10 +1733,11 @@ static SDL_Window *window_create(int mode, int w, int h, int x, int y)
     return win;
 }
 
-/* Original's replay gate (window_lines.h) */
-static bool orig_gate(int keep)
+/* Original's replay gate (window_lines.h), on the game thread at the
+   frame's close */
+static int orig_gate(int keep, bool busy)
 {
-    return window_orig_gate(keep, SDL_GetTicksNS(), s_deadline, s_pres.paceHz);
+    return window_orig_gate(keep, busy, SDL_GetTicksNS(), s_deadline, s_pres.paceHz);
 }
 
 /* What hangs on a new window in mode, at the start and when the renderer
@@ -4533,6 +4534,9 @@ static void present_blocked(const RdPerfRecord *r)
         r->presentMs > s_perf.presentBlockedMaxMs ? r->presentMs : s_perf.presentBlockedMaxMs;
     window_fifo_note(
         r->presentMs, r->replay, ico_video_framerate_name(s_pres.framerate, fr, sizeof(fr)),
+        r->presentThread == RD_PRESENT_ON_SUBMIT ? "; on the submit thread"
+        : r->presentThread == RD_PRESENT_IN_STEP ? "; inside the game step"
+                                                 : "",
         window_stall_split(r, s_perf.gpuN, s_perf.gpuN ? s_perf.gpu / s_perf.gpuN : 0.0));
     window_stall_blocked(r);
 }
@@ -5359,11 +5363,16 @@ static void slow_step(double ms)
     uint64_t cardStrips, cardTris;
     double cardMs;
     rd_vu_card_counts(&cardStrips, &cardTris, &cardMs);
-    /* the longest fiber switch and the core the game thread ended on */
-    char threads[160], tmp[80];
+    /* the longest fiber switch and the core the game thread ended on, then
+       Frame rate Original's picture of the step (rd.h rd_frame_post_last_text) */
+    char threads[288], tmp[80];
+    const size_t at = window_scene_threads_text(
+        threads, sizeof(threads), p.threadsMs, p.switches, p.longestMs,
+        ico_diag_thread_name(p.longestId, tmp, sizeof(tmp)), cpu_place_now());
 
-    window_scene_threads_text(threads, sizeof(threads), p.threadsMs, p.switches, p.longestMs,
-                              ico_diag_thread_name(p.longestId, tmp, sizeof(tmp)), cpu_place_now());
+    if (s_pres.postHave) {
+        rd_frame_post_last_text(&s_pres.post, threads + at, sizeof(threads) - at);
+    }
     fprintf(
         stderr,
         "window: slow step %.1f ms at vsync %u (Main tick %u, stage %d%s): step %.1f "
@@ -5409,6 +5418,9 @@ void ico_window_pace(int hz)
        calls ico_host_step, then this) */
     const Uint64 now = SDL_GetTicksNS();
 
+    /* Frame rate Original's picture the step made (handed over, replayed
+       inside it, or left out), for the slow-step line and the pacing */
+    s_pres.postHave = rd_frame_post_last_take(&s_pres.post);
     if (s_pres.paceEnd != 0 && now > s_pres.paceEnd) {
         const double ms = (double)(now - s_pres.paceEnd) / 1e6;
 

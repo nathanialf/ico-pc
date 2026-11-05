@@ -863,15 +863,37 @@ bool rd_vuprepass_selftest(void);
  * statistics line. */
 double rd_replay_time_max(int reset, uint32_t *count);
 void rd_set_host_call(RdHostCall call);
-/* Frame rate Original (interpolation off): asked on the host (rd__on_host)
- * before rd_end_frame replays and presents a frame, with the frame's keep
- * flag; false leaves the frame unreplayed and unpresented (the last picture
- * stays on the screen), so a renderer slower than the game's step does not
- * hold the simulation below its rate (window_host.c's late skip at
- * Original, pace_policy.h pace_original_present).  NULL (the default, tests
- * and tools) replays every frame.  Nothing else of the frame changes: a
- * replayed frame draws the same picture as without the gate. */
-typedef bool (*RdReplayGate)(int keep);
+
+/* Frame rate Original (interpolation off): asked on the game thread before
+ * rd_end_frame replays and presents a frame, with the frame's keep flag and
+ * whether the render thread is still busy with the picture before (busy:
+ * its job not ended, or its submit and present still on the submit thread;
+ * rd_thread.h rd__thread_picture_busy; false when the picture would not be
+ * handed over).  RD_GATE_PRESENT replays and presents it; RD_GATE_LATE and
+ * RD_GATE_BUSY leave it unreplayed and unpresented (the last picture stays
+ * on the screen), so a renderer slower than the game's step does not hold
+ * the simulation below its rate (window_host.c's skip at Original,
+ * pace_policy.h pace_original_gate).
+ *
+ * With a gate set and the render thread on, the picture is handed over as
+ * the other frame rates' are (rd_thread.h rd__replay_frame_post): the
+ * render thread walks it, the submit thread submits and presents it, and
+ * the game's step waits for nothing but the hand-over (and, at its next
+ * renderer call, the picture's reads: texLock).  A frame the gate presents
+ * while the render thread is busy (a keep frame) waits for the picture
+ * before to end, its present included, first: an acquire never waits
+ * behind a present inside a picture's reads.  Without the render thread,
+ * with it parked or in sync, with a capture or blended dump armed, under
+ * rd_submit_hold, and under [dev] original_async = false
+ * (ICO_RD_ORIGINAL_ASYNC=0) the frame is replayed inside the step, the
+ * game thread waiting, as without a gate.
+ *
+ * NULL (the default, tests and tools) replays every frame inside the step:
+ * the caller reads its results after rd_end_frame.  Nothing else of the
+ * frame changes: a replayed frame draws the same picture either way. */
+enum { RD_GATE_PRESENT = 0, RD_GATE_LATE = 1, RD_GATE_BUSY = 2 };
+
+typedef int (*RdReplayGate)(int keep, bool busy);
 void rd_set_replay_gate(RdReplayGate gate);
 /* dl_Clear without dl_Swap (gsb_UpdateGSSystem(1)
  * on the movie path, gsb_UpdateGSSystem before gsSystemReady): the lists
@@ -2286,6 +2308,8 @@ enum {
  * (rd_internal.h RdKeyFamily) */
 #define RD_PERF_PIPE_FAMILIES 8
 
+enum { RD_PRESENT_ELSEWHERE = 0, RD_PRESENT_ON_SUBMIT = 1, RD_PRESENT_IN_STEP = 2 };
+
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
     uint32_t frame;  /* the replayed frame's number */
@@ -2302,6 +2326,12 @@ typedef struct RdPerfRecord {
      * 123, window_stall.c) */
     uint8_t presentSplit;
     double presentLockMs, presentCallMs, presentPollMs, presentEndMs;
+    /* where the present ran (RD_PRESENT_*): the submit thread (its job's
+     * times taken, rd__perf_submit_times), inside the game's step (Frame
+     * rate Original's replay with the game thread waiting, rd_end_frame),
+     * or elsewhere (the render thread's own job, a present of the window's);
+     * the window's line on a present that blocked names the first two */
+    uint8_t presentThread;
     uint32_t buffersCreated, buffersDestroyed, texturesCreated, texturesDestroyed;
     uint32_t memoryAllocs, memoryFrees, bindGroups, pipelineBinds, bindGroupBinds;
     /* the binds and state sets the RHI's bind cache found already in force
@@ -2695,8 +2725,8 @@ enum {
 const char *rd_glow_fold_why_text(uint32_t why);
 
 /* The CPU time of the replay finished last (its RdPerfRecord.totalMs,
- * popped or not): with interpolation off the window's pacing reads the
- * frame's one replay, rd_end_frame's present, after the step. */
+ * popped or not; a picture handed over is still running when the step
+ * ends, so the window's pacing reads rd_frame_post_last_take instead). */
 double rd_last_replay_ms(void);
 
 /* The game thread's own cost of closing a frame since the last take:
@@ -2707,6 +2737,53 @@ double rd_last_replay_ms(void);
  * The closes counted, their mean and the longest in ms; the sums start
  * again.  The window's 10 s line gives it (render_thread.c). */
 void rd_frame_close_take(unsigned *closes, double *meanMs, double *maxMs);
+
+/* Frame rate Original's pictures as the game thread made them in
+ * rd_end_frame (rd_set_replay_gate), since the last take: posts, the
+ * pictures handed over to the render thread (postMs their hand-over's time
+ * on the game thread in all, postMaxMs the longest); postWaits of them,
+ * those that waited for the picture before to end first (a keep frame
+ * while the render thread was busy, or no gate), postWaitMs that wait in
+ * all; inlines, the pictures replayed and presented inside the step, the
+ * game thread waiting (no render thread, parked, sync, a capture, [dev]
+ * original_async = false), inlineMs their time in all; busySkips, the
+ * frames the gate left out because the render thread was busy (RD_GATE_BUSY),
+ * lateSkips those it left out late.  The sums start again.  The window's 10
+ * s game-thread line (render_thread.c, rd_frame_post_text). */
+typedef struct RdFramePost {
+    unsigned posts, postWaits, inlines, busySkips, lateSkips;
+    double postMs, postMaxMs, postWaitMs, inlineMs;
+} RdFramePost;
+
+void rd_frame_post_take(RdFramePost *out);
+/* The clause of the 10 s line from p: "; its picture handed over in 0.6 ms
+ * (longest 14.2 ms; 3 waited for the picture before, 31.0 ms in all; 12
+ * skipped: render thread busy); presents waited inside the step: 0 (0.0
+ * ms)"; empty when p counts nothing (the other frame rates); out always
+ * terminated */
+void rd_frame_post_text(const RdFramePost *p, char *out, size_t cap);
+
+/* The last Original picture rd_end_frame made since the last take (false:
+ * none): how (RD_POST_HANDED, RD_POST_INLINE, RD_POST_SKIP_LATE,
+ * RD_POST_SKIP_BUSY), its frame, ms the game thread spent on it (the
+ * hand-over, its wait included, or the replay inside the step) and waitMs
+ * the hand-over's wait for the picture before.  The window takes it every
+ * pace: the slow-step line and the first present's pause on a new
+ * swapchain (window_present.c). */
+enum { RD_POST_HANDED = 1, RD_POST_INLINE, RD_POST_SKIP_LATE, RD_POST_SKIP_BUSY };
+
+typedef struct RdFramePostLast {
+    uint32_t frame;
+    int how;
+    double ms, waitMs;
+} RdFramePostLast;
+
+bool rd_frame_post_last_take(RdFramePostLast *out);
+/* The slow-step line's words for p: ", the picture handed over 0.5 ms (0.0
+ * ms waiting for the one before)", ", the picture replayed inside the step
+ * 165.6 ms", ", the picture not presented (the render thread busy)" or ",
+ * the picture not presented (the step late)"; out always terminated */
+void rd_frame_post_last_text(const RdFramePostLast *p, char *out, size_t cap);
 
 /* The pieces of timed replay `replay` (RdPerfRecord.passTimed): their
  * count, *out pointing at them until the next replay; 0 when that replay was
