@@ -222,6 +222,22 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   AFAIL FB_ONLY whose texture is not uploaded yet (record-only: dirty) hiding the box behind it when
   the texture's alpha is 0x80 throughout (`rd__vis_hiz_pending_scan`'s scan 0x80..0x80), not when
   one texel is 0x40 (`rd_vis`).
+- `rd_vis_hiz_test.c`: the occlusion test's cheaper collect ([RENDER.md](RENDER.md#culling), the
+  occlusion test's cost) on the CPU, without a device (`rd__init_record_only`, 512 x 448): over
+  3000 random perspective cameras and boxes (code 32, and code 36's pos.w range) every triangle of
+  three random points of the box whose corners `rd__vis_hiz_vertex` accepts has an area at most
+  `rd__vis_hiz_screen_area`'s bound; 400 random meshes of up to 12 batches (tiny clusters, wide
+  ones, ones crossing the eye plane) under clip modes 32, 34 and 36 and random batch ranges: the
+  fast pass (`rd__vis_hiz_mesh_ex` with every batch's box and the check) puts out the full pass's
+  triangles field for field in its order, none left wrongly, both shortcuts taken over 100 times;
+  60 random frames of list 0 (walls near the eye, boxes far behind, a wall square and a tiny box
+  inside its first triangle that it hides, draws under Z test ALWAYS, clears, draws of part of a
+  mesh) under `ICO_RD_CULL_HIZ_FAST=0` and then three times with the fast collect and
+  `ICO_RD_CULL_HIZ_CHECK=1`: the same NOPs, `cull why` and `cull occlusion` reasons and counts, no
+  check wrong, every occluder draw of the second and third walk from the collect cache; a wall and
+  the box it hides drawn again (a cache hit), after the wall's stream was written (a new serial: a
+  miss, the box kept), back (hidden again), under a moved matrix (a miss) and after
+  `rd__vis_hiz_cache_clear` (`rd_vis_hiz`).
 - `rd_boot_present_test.c`: a saved start-up through the presenter, present by present; needs
   `ICO_BOOT_DUMP_DIR` (`rd_boot_present`).
 - `rd_blend_selftest_test.c` with `rd_blend_selftest.cmake`: the exact blend's start-up self-test
@@ -609,6 +625,18 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   skipped over the corpus (the occluded total printed); each run's counts printed;
   `-DMAX_DUMPS=n` takes the first n dumps (`rd_cull_ab`, TIMEOUT 5400, and its OpenGL twin
   `rd_cull_ab_gl`; [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
+- `rd_vis_hiz_corpus.cmake`: the rows of `test/rd_vis_hiz_corpus.txt` (the dumps of
+  `tools/occlusion_corpus.txt` and issue 179's frame at Original 4:3 640x480, Enhanced 4:3 2x and Enhanced 4:3 2x with
+  `--repeat 3`, the last replay's counts, so the collect cache's; the missing dumps named and
+  skipped) through `rd_replay_tool --cull full --stats` under `ICO_RD_BLEND=fixed`, once with
+  `ICO_RD_CULL_HIZ_FAST=0` (the plain pass) and once with the fast collect and
+  `ICO_RD_CULL_HIZ_CHECK=1`: the 26 counts of `stats: cull full:` (draws skipped, walked, frustum,
+  occluded, occluder triangles, past the budget, cells, tested, resets) and `stats: cull
+  occlusion:` (the 17 reasons) of the fast run equal to the plain run's and to the table's,
+  `stats: cull occlusion cost:`'s `check: N checked, 0 wrong`, `fast off` and `fast on` as set;
+  each row's cull, occlusion and collect ms of both runs printed, and their sums (the table made by
+  the plain pass; made again only when the culler's rules change)
+  (`rd_vis_hiz_corpus`, TIMEOUT 1800; [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
 - `rd_thread_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` through
   `rd_replay_tool --render-thread off`, `sync` and `on` (every replay, the interpolation and the
   renderer's calls on a thread of the renderer's own, `port/render/rd_thread.h`), with
