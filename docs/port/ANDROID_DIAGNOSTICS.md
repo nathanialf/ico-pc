@@ -133,6 +133,22 @@ question it decides:
   about 64 ms against 132) is the fix working; an unchanged span with the wait moved into the
   present says the presentation engine's hold was our own backlog, not the compositor's. Decides
   whether the image wait was the limit of the scenes.
+- **The slow-scene file** (`window: slow scene: the block's GPU work 52.3 ms a replay (bound 40;
+  display wait 3.1, span 55.4) in a scene layout: frame 4812 written to logs/slow-20261106-120000.zip;
+  attach it with the log`; `slow_scene_check` in `window_host.c`, the rule in `window_scene.h`
+  (`window_slow_scene_due`)). A cutscene cannot be dumped by hand (no pause menu, F12 needs the
+  keyboard), and the issue's cage scene (stage 40) spent 22 to 35 ms in list 3 for 103 to 132 draws
+  with no frame to look at. At the end of a 10 s block the game writes one frame when a window is
+  up, no movie is playing, the block's steps were mostly in a scene layout, at least 8 replays were
+  timed, the mean GPU work a replay (the span less the display wait, so the wait for the screen's
+  image does not trigger it) is over `[dev] slow_scene_dump_ms` (default 40, the Original rate's
+  period; 0 is off) and the run is 30 s old. Once a run: the file is one frame (the last closed
+  one) and a copy of the log, `logs/slow-<date>-<time>.zip`, pruned to the newest one, and it goes
+  into a crash or hang report and the rc share menu's set. Written in releases. What to send: the log
+  and this zip; replay it with `rd_replay_tool` as a loss dump (the frame is the zip's first
+  `.rddump`). The line's work and span against the block's `GPU` line say whether the frame is
+  the cost or the wait; the frame number matches the replays after it. Decides what the cage's
+  list 3 draws are.
 - **The occlusion test's cost** (the 10 s line's cull part, `; cull: N of M scene draws skipped a
   replay (F frustum, O occluded), T ms (occlusion H) ([dev] cull)`, now followed by `; occlusion:
   collect C ms (settle S, alpha A, vertices V ms for Nv vertices, Nt triangles kept of Na; cache Hc

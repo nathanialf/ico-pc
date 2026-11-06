@@ -815,6 +815,16 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ART_START] = "Early show: Press Start",
     [UI_STR_UNUSED_ART_COPYRIGHT] = "Early show: copyright",
     [UI_STR_STATES_REFUSED_UNUSED] = "Not in a test room",
+    [UI_STR_SECTION_COMBAT] = "Combat",
+    [UI_STR_OPT_VAR_AUTO_GUARD] = "Automatic guard",
+    [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
+        "Off: Ico no longer blocks a Shadow’s attack from the front; it lands as an attack from behind does. Achievements stay on.",
+    [UI_STR_OPT_VAR_ATTACK_TURN] = "Turn to face shadows",
+    [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
+        "Off: Ico swings straight ahead instead of turning toward the nearest Shadow; the swing’s reach is unchanged. Achievements stay on.",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Shadows wait while Ico is down",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
+        "Off: the Shadows no longer hold back while Ico is knocked down, so they can hit him again before he is up. Achievements stay on.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

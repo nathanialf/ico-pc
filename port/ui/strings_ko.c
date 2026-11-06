@@ -817,6 +817,16 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ART_START] = "전시판: PRESS START",
     [UI_STR_UNUSED_ART_COPYRIGHT] = "전시판: 저작권 표기",
     [UI_STR_STATES_REFUSED_UNUSED] = "테스트 방에서는 할 수 없습니다",
+    [UI_STR_SECTION_COMBAT] = "전투",
+    [UI_STR_OPT_VAR_AUTO_GUARD] = "자동 방어",
+    [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
+        "끔: 이코가 앞쪽에서 오는 그림자의 공격을 막지 않으며, 뒤에서 맞을 때처럼 맞습니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_ATTACK_TURN] = "그림자 쪽으로 돌아봄",
+    [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
+        "끔: 이코가 휘두를 때 가장 가까운 그림자 쪽으로 돌지 않고 정면으로 휘두릅니다. 옆에 있는 그림자는 여전히 맞을 수 있습니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "이코가 쓰러지면 그림자 대기",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
+        "끔: 이코가 쓰러져 있는 동안에도 그림자가 기다리지 않아, 일어나기 전에 다시 공격받을 수 있습니다. 업적은 그대로 유지됩니다.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

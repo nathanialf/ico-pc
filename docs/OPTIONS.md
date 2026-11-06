@@ -441,14 +441,14 @@ The six mouse rows do not show on phones and tablets.
 ## Gameplay
 
 Every row here plays as the original until you change it, on a phone too.
-The Gameplay page has its own rows, then three pages of their own, each
+The Gameplay page has its own rows, then four pages of their own, each
 opened from its row just above Back: [Yorda](#yorda),
-[Shadows](#shadows) and [Cutscenes](#cutscenes). All of it is there from
+[Shadows](#shadows), [Combat](#combat) and [Cutscenes](#cutscenes). All of it is there from
 the title screen or the pause menu, on every disc.
 
 Some rows change the game more than others. The line under a row says what
-it does, and on the game variants rows (No hints here, five rows on the
-Shadows page and two on the Cutscenes page) whether it switches
+it does, and on the game variants rows (No hints here, two rows on the
+Shadows page, seven on the Combat page and two on the Cutscenes page) whether it switches
 achievements off. Those that switch them off do so for as long as they are
 on, like Developer mode, so you cannot earn an achievement by accident while
 playing a changed game. Turn them off again and achievements come back.
@@ -528,9 +528,10 @@ Options > Gameplay > Yorda:
 
 ### Shadows
 
-Options > Gameplay > Shadows. Shadow toughness, One hit per swing, Shadows
-never dodge, Shadow aggression and Queen barrier each start as the game
-shipped on your disc.
+Options > Gameplay > Shadows. Shadow toughness and Shadow aggression start as
+the game shipped on your disc. The fight rules (One hit
+per swing, Shadows never dodge, Shadows attack together and Queen barrier) are
+on the [Combat](#combat) page.
 
 - **Shadow speed** sets how fast shadows walk, run and fly: **Slower** (three
   quarters of the original speed), **Original**, **Faster** (a quarter faster)
@@ -539,13 +540,6 @@ shipped on your disc.
   speed. It does not change how often they attack, how long they wait before
   they do, or how long a shadow takes to pull Yorda into a pit (Time to rescue
   Yorda sets that).
-- **Shadows attack together** lets several shadows attack Ico at the same
-  time. In the original game they take turns: while one shadow is attacking,
-  the others hold back and wait. With this on, none of them waits for the
-  others. How they come at you, how long they wait before they strike and how
-  they go after Yorda stay as in the original, and still only one shadow at a
-  time can carry Yorda away (several can already go after her at once). It
-  takes effect at once. Off unless you turn it on.
 - **Shadow toughness:** **Original** keeps your disc's Shadows. **American**
   makes every Shadow as tough as on the North American disc, and no tougher on
   later playthroughs. **Not tougher later** keeps your disc's Shadows but they
@@ -553,13 +547,39 @@ shipped on your disc.
   2001 magazine demo there is no **American** choice: the demo's Shadows are
   not the North American disc's, so the row has Original and Not tougher
   later only (an `american` set in `config.toml` counts as Original there).
+- **Shadow aggression:** how the Shadows fight. **Their own** leaves each
+  Shadow as the game made it. The other four make them all **Bold** or
+  **Wary**, and **patient** or **quick**. Achievements stay on.
+
+### Combat
+
+Options > Gameplay > Combat. The first three rows start **On**, which is the
+game as it shipped; turning one Off makes a fight harder, and none of them
+switches achievements off. The next four are the fight rules that were on the
+Shadows page.
+
+- **Automatic guard:** in the game Ico blocks a Shadow's attack by himself
+  when it comes from the front. Off: Ico does not block a Shadow's attack
+  from the front; it lands as an attack from behind does. Achievements stay
+  on.
+- **Turn to face shadows:** in the game Ico's swing turns him toward the
+  nearest Shadow in front of him. Off: Ico swings straight ahead. The swing
+  itself is the weapon's own, so a Shadow beside him can still be caught by
+  it. Achievements stay on.
+- **Shadows wait while Ico is down:** in the game the Shadows hold back while
+  Ico is knocked down and getting up. Off: they do not hold back, so they
+  can attack him again before he is on his feet. Achievements stay on.
 - **One hit per swing:** a swing of Ico's weapon can hurt a Shadow only once.
   Switches achievements off.
 - **Shadows never dodge:** Shadows never step aside from Ico's swings.
   Switches achievements off.
-- **Shadow aggression:** how the Shadows fight. **Their own** leaves each
-  Shadow as the game made it. The other four make them all **Bold** or
-  **Wary**, and **patient** or **quick**. Achievements stay on.
+- **Shadows attack together** lets several shadows attack Ico at the same
+  time. In the original game they take turns: while one shadow is attacking,
+  the others hold back and wait. With this on, none of them waits for the
+  others. How they come at you, how long they wait before they strike and how
+  they go after Yorda stay as in the original, and still only one shadow at a
+  time can carry Yorda away (several can already go after her at once). It
+  takes effect at once. Off unless you turn it on.
 - **Queen barrier:** how many hits it takes to break the Queen's barrier,
   5 or 7. Your disc's own number is shown until you choose. Achievements stay
   on.
@@ -582,8 +602,7 @@ Options > Gameplay > Cutscenes:
   Cutscenes can look wrong, and the game may show places it never meant you to
   see. Switches achievements off.
 
-The game variants rows (No hints, the five Shadows rows from Shadow
-toughness on, the two cutscene rows and the Debug menu under
+The game variants rows (No hints, the Shadows rows, the Combat rows, the two cutscene rows and the Debug menu under
 [Developer mode](#developer-mode)) are kept in `config.toml`, under the
 heading `[variants]`.
 

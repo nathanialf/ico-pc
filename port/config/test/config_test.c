@@ -366,7 +366,14 @@ static void test_precedence(void)
     CHECK(ico_config_get_float("audio.volume", 1.0) == 0.5); /* no ini key for it */
     CHECK_STR(ico_config_get_string("paths.iso", "x"), "from-toml.iso");
     CHECK(ico_config_get_int("dev.dump_every", 0) == 0); /* default */
-    CHECK(ico_config_get_bool("dev.trace", 1) == 1);     /* default */
+    /* [dev] slow_scene_dump_ms (window_host.c slow_scene_check): 40 unset,
+       the value from the toml, 0 kept as 0 (off) */
+    CHECK(ico_config_get_float("dev.slow_scene_dump_ms", 40.0) == 40.0);
+    ico_config_set_float("dev.slow_scene_dump_ms", 55.5);
+    CHECK(ico_config_get_float("dev.slow_scene_dump_ms", 40.0) == 55.5);
+    ico_config_set_float("dev.slow_scene_dump_ms", 0.0);
+    CHECK(ico_config_get_float("dev.slow_scene_dump_ms", 40.0) == 0.0);
+    CHECK(ico_config_get_bool("dev.trace", 1) == 1); /* default */
     /* a set value is written to the toml layer; the ini still overrides it */
     ico_config_set_int("dev.ticks", 77);
     CHECK(ico_config_get_int("dev.ticks", -1) == 5);
@@ -513,6 +520,13 @@ static void test_first_run(void)
     CHECK(ico_config_get_string("variants.barrier_hits", NULL) == NULL);
     CHECK(ico_config_get_bool("variants.no_cutscene_look", 1) == 0);
     CHECK(ico_config_get_bool("variants.ignore_cutscene_cameras", 1) == 0);
+    /* the Combat rows: on, the game as shipped */
+    CHECK(ico_config_get_bool("variants.auto_guard", 0) == 1);
+    CHECK(ico_config_get_bool("variants.attack_turn", 0) == 1);
+    CHECK(ico_config_get_bool("variants.shadows_wait_down", 0) == 1);
+    CHECK(text != NULL && strstr(text, "auto_guard = true") != NULL &&
+          strstr(text, "attack_turn = true") != NULL &&
+          strstr(text, "shadows_wait_down = true") != NULL);
     CHECK(text != NULL && strstr(text, "\n[variants]\n") != NULL &&
           strstr(text, "shade_toughness = \"original\"") != NULL &&
           strstr(text, "aggression = \"own\"") != NULL && strstr(text, "\nbarrier_hits") == NULL);

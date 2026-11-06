@@ -30,7 +30,8 @@ static const char *const kBool[2] = {"false", "true"};
 
 static const char *const kKeys[ICO_VARIANT_COUNT] = {
     "shade_toughness", "one_hit",      "never_dodge",      "aggression",
-    "no_hints",        "barrier_hits", "no_cutscene_look", "ignore_cutscene_cameras"};
+    "no_hints",        "barrier_hits", "no_cutscene_look", "ignore_cutscene_cameras",
+    "auto_guard",      "attack_turn",  "shadows_wait_down"};
 
 /* 0: not read yet */
 static int s_loaded;
@@ -76,6 +77,9 @@ int ico_variant_count(IcoVariantId id)
     case ICO_VARIANT_BARRIER_HITS:
     case ICO_VARIANT_NO_CUTSCENE_LOOK:
     case ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS:
+    case ICO_VARIANT_AUTO_GUARD:
+    case ICO_VARIANT_ATTACK_TURN:
+    case ICO_VARIANT_SHADOWS_WAIT_DOWN:
         return 2;
     default:
         return 0;
@@ -148,11 +152,14 @@ static void log_summary(void)
 {
     fprintf(stderr,
             "variants: shade_toughness=%s one_hit=%d never_dodge=%d aggression=%s no_hints=%d "
-            "barrier_hits=%s no_cutscene_look=%d ignore_cutscene_cameras=%d\n",
+            "barrier_hits=%s no_cutscene_look=%d ignore_cutscene_cameras=%d auto_guard=%d "
+            "attack_turn=%d shadows_wait_down=%d\n",
             kToughness[s_value[ICO_VARIANT_SHADE_TOUGHNESS]], s_value[ICO_VARIANT_ONE_HIT],
             s_value[ICO_VARIANT_NEVER_DODGE], kAggression[s_value[ICO_VARIANT_AGGRESSION]],
             s_value[ICO_VARIANT_NO_HINTS], kBarrier[s_value[ICO_VARIANT_BARRIER_HITS]],
-            s_value[ICO_VARIANT_NO_CUTSCENE_LOOK], s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS]);
+            s_value[ICO_VARIANT_NO_CUTSCENE_LOOK], s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS],
+            s_value[ICO_VARIANT_AUTO_GUARD], s_value[ICO_VARIANT_ATTACK_TURN],
+            s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN]);
 }
 
 static void load(void)
@@ -190,6 +197,11 @@ static void load(void)
         ico_config_get_bool("variants.no_cutscene_look", 0) != 0;
     s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS] =
         ico_config_get_bool("variants.ignore_cutscene_cameras", 0) != 0;
+    /* the Combat rows: On is the game as shipped */
+    s_value[ICO_VARIANT_AUTO_GUARD] = ico_config_get_bool("variants.auto_guard", 1) != 0;
+    s_value[ICO_VARIANT_ATTACK_TURN] = ico_config_get_bool("variants.attack_turn", 1) != 0;
+    s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN] =
+        ico_config_get_bool("variants.shadows_wait_down", 1) != 0;
     log_summary();
 }
 
@@ -271,12 +283,13 @@ void ico_variants_apply(void)
     fprintf(stderr,
             "variants: applied shade_toughness=%s one_hit=%d never_dodge=%d aggression=%s "
             "no_hints=%d (hints %s) barrier_hits=%d no_cutscene_look=%d "
-            "ignore_cutscene_cameras=%d;%s\n",
+            "ignore_cutscene_cameras=%d auto_guard=%d attack_turn=%d shadows_wait_down=%d;%s\n",
             kToughness[s_value[ICO_VARIANT_SHADE_TOUGHNESS]], s_value[ICO_VARIANT_ONE_HIT],
             s_value[ICO_VARIANT_NEVER_DODGE], kAggression[s_value[ICO_VARIANT_AGGRESSION]],
             s_value[ICO_VARIANT_NO_HINTS], ico_hints_on() ? "on" : "off",
             ico_variant_barrier_hits(), s_value[ICO_VARIANT_NO_CUTSCENE_LOOK],
-            s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS], sw);
+            s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS], s_value[ICO_VARIANT_AUTO_GUARD],
+            s_value[ICO_VARIANT_ATTACK_TURN], s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN], sw);
 }
 
 void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
@@ -427,6 +440,48 @@ int ico_variant_no_cutscene_look(void)
 int ico_variant_ignore_cutscene_cameras(void)
 {
     return ico_variant_get(ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS);
+}
+
+/* The Combat rows: a hook that is read in a fight counts the times it kept the
+   game's rule off, the first 8 then every 100th (every 600th for the two read
+   every frame), so a reporter's log shows the row
+   at work (variants: ... lines carry the values). */
+static void count_off(const char *what, unsigned *n, unsigned every)
+{
+    (*n)++;
+    if (*n <= 8 || *n % every == 0) {
+        fprintf(stderr, "variants: %s is off (%u)\n", what, *n);
+    }
+}
+
+int ico_variant_auto_guard(void)
+{
+    static unsigned n;
+    const int on = ico_variant_get(ICO_VARIANT_AUTO_GUARD);
+    if (!on) {
+        count_off("auto_guard: a front hit lands as a hit", &n, 100);
+    }
+    return on;
+}
+
+int ico_variant_attack_turn(void)
+{
+    static unsigned n;
+    const int on = ico_variant_get(ICO_VARIANT_ATTACK_TURN);
+    if (!on) {
+        count_off("attack_turn: the swing does not turn Ico", &n, 600);
+    }
+    return on;
+}
+
+int ico_variant_shadows_wait_down(void)
+{
+    static unsigned n;
+    const int on = ico_variant_get(ICO_VARIANT_SHADOWS_WAIT_DOWN);
+    if (!on) {
+        count_off("shadows_wait_down: the Shadows are not held", &n, 600);
+    }
+    return on;
 }
 
 int ico_variants_suspend_achievements(void)

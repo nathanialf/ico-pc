@@ -601,13 +601,15 @@ typedef enum UiSettingsPage {
        shows only while the build has more than one renderer
        (ui_settings_set_backend_names) */
     UI_PAGE_GRAPHICS,
-    /* Gameplay's three pages, their links before Gameplay's Back: Yorda
+    /* Gameplay's four pages, their links before Gameplay's Back: Yorda
        (Yorda safe, Time to rescue Yorda, Yorda trips, Natural chains),
        Shadows (Shadow speed, Shadows attack together and five of the
-       [variants] rows, port/game/variants.h) and Cutscenes (Skip the
-       opening and the two cutscene [variants] rows), each with Back */
+       [variants] rows, port/game/variants.h), Combat (the three combat
+       [variants] rows) and Cutscenes (Skip the opening and the two cutscene
+       [variants] rows), each with Back */
     UI_PAGE_YORDA,
     UI_PAGE_SHADOWS,
+    UI_PAGE_COMBAT,
     UI_PAGE_CUTSCENES,
     /* Picture (main page, after Display): the picture's own rows
        (Anti-aliasing, Full-height picture, Texture filtering, Full pixel,
@@ -735,7 +737,8 @@ typedef enum UiSettingsOpt {
     /* the game variants, one row per IcoVariantId in its order
        (UI_OPT_VAR_TOUGHNESS + id): [variants] keys, port/game/variants.h;
        No hints on Gameplay, the two cutscene rows on Gameplay > Cutscenes,
-       the others on Gameplay > Shadows */
+       the three combat rows on Gameplay > Combat, the others on
+       Gameplay > Shadows */
     UI_OPT_VAR_TOUGHNESS,
     UI_OPT_VAR_ONE_HIT,
     UI_OPT_VAR_NEVER_DODGE,
@@ -744,6 +747,9 @@ typedef enum UiSettingsOpt {
     UI_OPT_VAR_BARRIER,
     UI_OPT_VAR_NO_LOOK,
     UI_OPT_VAR_IGNORE_CAMS,
+    UI_OPT_VAR_AUTO_GUARD,
+    UI_OPT_VAR_ATTACK_TURN,
+    UI_OPT_VAR_SHADOWS_WAIT_DOWN,
     UI_OPT_DEVELOPER,
     /* actions */
     UI_OPT_BACK,

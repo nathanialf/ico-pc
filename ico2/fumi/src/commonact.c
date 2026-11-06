@@ -452,6 +452,11 @@ static inline int GetHitDirIdx(GObj *self) /* derived name */
     return 0;
 }
 
+/* PC port: port/game/variants.h: Automatic guard (0: a hit from the front on Ico
+   lands as a hit from behind does; the guard rule of every other actor is the
+   game's) */
+extern int ico_variant_auto_guard(void);
+
 static int _ACTCorrectMsg_jun26(GObj *self, int msg, void *param)
 {
     float pos[4];
@@ -594,7 +599,8 @@ static int _ACTCorrectMsg_jun26(GObj *self, int msg, void *param)
             }
         }
         if (_AbsRotyGV(test_CURRENTORIENT(self), GOBJ_ACT(self)->attackDir) < 60 &&
-            sk->actMode != 15 && sk->actMode != 20 && GOBJ_ACT(self)->unguardable == 0 &&
+            (self != boyGObj || ico_variant_auto_guard()) && sk->actMode != 15 &&
+            sk->actMode != 20 && GOBJ_ACT(self)->unguardable == 0 &&
             !((int)(sk->flags18.ll >> 45) & 1)) {
             iosOmSendMail(self, 256, param);
             debug_StdPrintfDummy("guard mail\n");
@@ -855,7 +861,8 @@ static int _ACTCorrectMsg_aug6(GObj *self, int msg, void *param)
             }
         }
         if (_AbsRotyGV(test_CURRENTORIENT(self), GOBJ_ACT(self)->attackDir) < 60 &&
-            sk->actMode != 15 && sk->actMode != 20 && GOBJ_ACT(self)->unguardable == 0 &&
+            (self != boyGObj || ico_variant_auto_guard()) && sk->actMode != 15 &&
+            sk->actMode != 20 && GOBJ_ACT(self)->unguardable == 0 &&
             !((int)(sk->flags18.ll >> 46) & 1)) {
             iosOmSendMail(self, 264, param);
             debug_StdPrintfDummy("guard mail\n");
@@ -1138,7 +1145,8 @@ static int _ACTCorrectMsg_ntsc(GObj *self, int msg, void *param)
             }
         }
         if (_AbsRotyGV(test_CURRENTORIENT(self), GOBJ_ACT(self)->attackDir) < 60 &&
-            sk->actMode != 15 && sk->actMode != 20 && GOBJ_ACT(self)->unguardable == 0 &&
+            (self != boyGObj || ico_variant_auto_guard()) && sk->actMode != 15 &&
+            sk->actMode != 20 && GOBJ_ACT(self)->unguardable == 0 &&
             !((int)(sk->flags18.ll >> 46) & 1)) {
             iosOmSendMail(self, 267, param);
             debug_StdPrintfDummy("guard mail\n");
@@ -1444,7 +1452,8 @@ int _ACTCorrectMsg(GObj *self, int msg, void *param)
             }
         }
         if (_AbsRotyGV(test_CURRENTORIENT(self), GOBJ_ACT(self)->attackDir) < 60 &&
-            sk->actMode != 15 && sk->actMode != 20 && GOBJ_ACT(self)->unguardable == 0 &&
+            (self != boyGObj || ico_variant_auto_guard()) && sk->actMode != 15 &&
+            sk->actMode != 20 && GOBJ_ACT(self)->unguardable == 0 &&
             !((int)(sk->flags18.ll >> 51) & 1)) {
             iosOmSendMail(self, 283, param);
             debug_StdPrintfDummy("guard mail\n");

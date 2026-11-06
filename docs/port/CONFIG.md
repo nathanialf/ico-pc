@@ -21,7 +21,7 @@ files are written, and how libscf's system configuration is answered from them.
 | `port/game/achievements.h` | `[game] achievements` and `achievements.toml` |
 | `port/render/texpack.h` | what the texture pack keys of `[video]` control |
 | `port/platform/main_host.c` | the start-up keys of `ico-pc.ini` and the command line |
-| `port/platform/window_host.c` | `[video] backend`, `[video] adapter`, `[dev] perf_log` and `slow_step_ms` |
+| `port/platform/window_host.c` | `[video] backend`, `[video] adapter`, `[dev] perf_log`, `slow_step_ms` and `slow_scene_dump_ms` |
 | `port/platform/render_thread.c` | `[dev] render_thread`, `big_cores` |
 | `port/render/rd_submit_thread.c` | `[dev] submit_thread` (`ICO_RD_SUBMIT_THREAD`) |
 | `port/game/credits.c` | `[dev] unlock_credits` |
@@ -242,11 +242,11 @@ original game's behaviour (`port/game/options.h`, header comment).
 
 ### [variants]
 
-Options > Gameplay: No hints on the page, the Shadows rows on Gameplay > Shadows, the two cutscene
-rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-and-cutscenes),
+Options > Gameplay: No hints on the page, Shadow toughness and aggression on Gameplay > Shadows, the combat
+rows (the three new ones, One hit per swing, Shadows never dodge and Queen barrier) on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
 [OPTIONS.md](../OPTIONS.md#gameplay)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
-the game as the disc ships it. All eight are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
+the game as the disc ships it. All eleven are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
 `port/platform/sim_keys.c`). A word
 or number that is no value reads as the default and is logged once.
 
@@ -260,6 +260,9 @@ or number that is no value reads as the default and is logged once.
 | `barrier_hits` | int | absent (not in the template) | `5` or `7`: the hits the Queen's barrier takes; absent, the disc's own (`7` on `jun26`, else `5`); the Settings row writes it |
 | `no_cutscene_look` | bool | `false` | no camera look-around in cutscenes |
 | `ignore_cutscene_cameras` | bool | `false` | the cutscenes' cameras are ignored (`debug_ignore_demo_camera`); suspends achievements |
+| `auto_guard` | bool | `true` | Ico blocks a Shadow's attack from the front; `false` = he does not (does not suspend achievements) |
+| `attack_turn` | bool | `true` | Ico's swing turns him toward the nearest Shadow; `false` = he swings straight ahead (does not suspend achievements) |
+| `shadows_wait_down` | bool | `true` | the Shadows hold back while Ico is knocked down; `false` = they do not (does not suspend achievements) |
 
 The Debug menu row (Options > Developer, with Developer mode on) has no key: its press marks the Debug menu used until the options are reloaded,
 which suspends achievements too (`ico_variants_suspend_achievements`, read by `gamestate.c` beside
@@ -429,6 +432,7 @@ under the same name (below). Read through the store:
 | `unlock_credits` | bool | `false` | Extras > Credits unlocked (`port/game/credits.c`) |
 | `perf_log` | bool | `false` | `ico-pc-perf.csv` in the logs folder, one line per [replayed](ARCHITECTURE.md#terms) frame (`port/platform/window_host.c` (`perf_csv_open`)) |
 | `slow_step_ms` | float | `8` | the slow-step log threshold; 0 is off (`port/platform/window_host.c` (`ico_window_open`)) |
+| `slow_scene_dump_ms` | float | `40` | the slow-scene dump's bound: when a 10 s block spent most of its time in a scene layout and its timed replays' GPU work (the span less the display wait) averaged over this many ms, the game writes one frame and the log to `logs/slow-<date>-<time>.zip`, once a run and not before 30 s of uptime; 0 is off. Written in releases too ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides)) (`port/platform/window_host.c` (`slow_scene_check`), `window_scene.h` (`window_slow_scene_due`)) |
 | `blend` | string | (none: `fixed`) | the A/B switches below, as their ini keys |
 | `uber` | string | `auto` | |
 | `fog_path` | string | (none) | |

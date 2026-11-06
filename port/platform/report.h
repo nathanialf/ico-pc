@@ -24,7 +24,9 @@
  *   startup-activity.txt     when there is one (diag_host.h);
  *   config.toml, ico-pc.ini  the settings;
  *   loss-<stamp>.zip         the newest loss dump, when there is one
- *                            (stored as it is).
+ *                            (stored as it is);
+ *   slow-<stamp>.zip         this run's slow-scene dump, when one was
+ *                            written (stored as it is).
  *
  * Written from a crash handler: no allocation, no stdio, raw file calls
  * through static buffers, the zip's entries deflated by miniz's tdefl into
@@ -66,6 +68,7 @@ typedef struct IcoReportInputs {
        device 320 MB available of 7632 MB"; NULL or "": unknown) */
     const char *memory;
     const char *loss_zip; /* the newest loss dump's path (NULL: none) */
+    const char *slow_zip; /* this run's slow-scene dump's path (NULL: none) */
     double uptime_s;      /* seconds into the run */
     /* text of the host's own for report.txt's end (the window: SDL's log
        ring, diag_host.h ico_diag_set_report_extra; NULL or "": none) */

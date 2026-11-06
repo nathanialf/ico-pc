@@ -6366,6 +6366,10 @@ inline void actBoyFall(GObj *volatile self)
     }
 }
 
+/* PC port: port/game/variants.h: Turn to face shadows (0: Ico's swing no
+   longer turns him toward the nearest Shadow) */
+extern int ico_variant_attack_turn(void);
+
 /* the nearest enemy in front of the actor, which ACTSearchEnemy and
    actBoyAttack inline */
 static inline void searchEnemy(void *self, ICO_WORD *out_id, float *out_vec) /* derived name */
@@ -6387,7 +6391,7 @@ static void actBoyAttack_ntsc(GObj *volatile self)
     _ACTWait(2);
     searchEnemy((void *)self, &((Act *)sub)->attackTurn, vec);
     while (1) {
-        if (((Act *)sub)->attackTurn) {
+        if (((Act *)sub)->attackTurn && ico_variant_attack_turn()) {
             if (ACTGame_NoWeapon(self)) {
                 SetMotionDirectionWithLimit((void *)self, vec, 5.0f, 45.0f);
             } else {
@@ -6412,7 +6416,7 @@ static void actBoyAttack_jun26(GObj *volatile self)
     _ACTWait(2);
     searchEnemy((void *)self, &((Act *)sub)->attackTurn, vec);
     while (1) {
-        if (((Act *)sub)->attackTurn) {
+        if (((Act *)sub)->attackTurn && ico_variant_attack_turn()) {
             if (ACTGame_NoWeapon(self)) {
                 SetMotionDirectionWithLimit((void *)self, vec, 5.0f, 45.0f);
             } else {
@@ -6448,7 +6452,7 @@ void actBoyAttack(GObj *volatile self)
     _ACTWait(2);
     searchEnemy((void *)self, &((Act *)sub)->attackTurn, vec);
     while (1) {
-        if (((Act *)sub)->attackTurn) {
+        if (((Act *)sub)->attackTurn && ico_variant_attack_turn()) {
             if (ACTGame_NoWeapon(self)) {
                 SetMotionDirectionWithLimit((void *)self, vec, 5.0f, 45.0f);
             } else {
@@ -8918,6 +8922,9 @@ inline void PrivInsCamSet(float *pos, float *tgt, GObj *track, int inFrames, int
     privInsCam.on = 1;
 }
 
+/* PC port: port/game/variants.h: Shadows wait while Ico is down */
+extern int ico_variant_shadows_wait_down(void);
+
 inline int IsBoyStatus_EnemyMustWait(void)
 {
     Act *sub;
@@ -8939,7 +8946,9 @@ inline int IsBoyStatus_EnemyMustWait(void)
             return 1;
         }
     }
-    if (st == 0x15 || 0 < ((ActWork *)sub->work)->downTimer) {
+    /* PC port: Shadows wait while Ico is down off: the down act and the get-up
+       timer no longer hold the Shadows (the stone and 22..23 parts stay) */
+    if (ico_variant_shadows_wait_down() && (st == 0x15 || 0 < ((ActWork *)sub->work)->downTimer)) {
         return 1;
     }
     return 0;

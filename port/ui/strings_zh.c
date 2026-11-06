@@ -790,6 +790,16 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ART_START] = "展示版：PRESS START",
     [UI_STR_UNUSED_ART_COPYRIGHT] = "展示版：版權標示",
     [UI_STR_STATES_REFUSED_UNUSED] = "測試房間中無法使用",
+    [UI_STR_SECTION_COMBAT] = "戰鬥",
+    [UI_STR_OPT_VAR_AUTO_GUARD] = "自動防禦",
+    [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
+        "關閉：Ico 不再擋下影子從正面的攻擊，會像從背後被打到一樣受傷。成就維持開啟。",
+    [UI_STR_OPT_VAR_ATTACK_TURN] = "轉向影子",
+    [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
+        "關閉：Ico 揮擊時不再轉向最近的影子，而是直直揮出；身旁的影子仍可能被打中。成就維持開啟。",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Ico 倒下時影子等待",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
+        "關閉：Ico 倒下時影子不再等待，可能在他站起來之前再次打中他。成就維持開啟。",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

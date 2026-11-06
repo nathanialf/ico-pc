@@ -731,6 +731,10 @@ void ico_diag_startup_activity_exit(void);
 void ico_diag_note_device_loss(const char *dump_zip);
 /* The loss dump the previous run left for this one (NULL: none). */
 const char *ico_diag_loss_dump(void);
+/* The slow-scene dump this run wrote (window_host.c slow_scene_dump, issue
+   179): its zip's path, kept for the crash and hang reports, which carry it
+   (report.h IcoReportInputs.slow_zip).  NULL or "": none. */
+void ico_diag_note_slow_scene(const char *zip);
 /* The loss bisect (docs/port/RENDER.md, "The loss bisect"), once, before
    the game: with a loss dump pending, the activity file's note says the
    bisect is running (so a run ended inside it does not bisect again at the

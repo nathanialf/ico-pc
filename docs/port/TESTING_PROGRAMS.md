@@ -527,7 +527,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `share_report_test.c`: an rc build's Share a bug report's files over a fake logs and dumps
   folder: the log, the run before's when there, the newest dump zip by modification time (a loss
   zip included, an `.rddump` left out), the newest `-present.png`, the newest `report-*.zip` (not
-  another `report-` file), the newest skin check capture `vu-skin-fail-*.bin` last, a tie in time
+  another `report-` file), the newest skin check capture `vu-skin-fail-*.bin` and the newest
+  slow-scene zip `slow-*.zip` last (seven files at most), a tie in time
   to the greater name, missing folders skipped, the names line and a short buffer (`share_report`).
 - `backup_test.c`: Options > Extras' backup and restore (`backup.h`) on a user folder of its own
   under the build folder: the names a backup may hold (no `..`, no absolute or drive path, no `\`,
@@ -547,7 +548,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the player's data, the rest as it was, the next start naming the copy, and an old copy of a place
   beside the data named at every start while another name is not; an unfinished unpacking deleted
   at the start; `ico_remove_tree` taking hidden files; the suggested file name (`backup`).
-- `dump_zip_test.c`: F12's zip (with the tick before as its second `.rddump`, and the blended present's frame moved in third by `ico_zip_move_file`, the loose file gone), the aspect sweep's zip and the device-loss zip (the lost frame first, the second `.rddump` the frame before, the pruning to the newest three), written and read back with miniz
+- `dump_zip_test.c`: F12's zip (with the tick before as its second `.rddump`, and the blended present's frame moved in third by `ico_zip_move_file`, the loose file gone), the aspect sweep's zip, the device-loss zip (the lost frame first, the second `.rddump` the frame before, the pruning to the newest three) and the slow-scene zip (its name, the frame then the log, the pruning to the newest one with the loss zips left alone), written and read back with miniz
   (`dump_zip`).
 - `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
   on this toolchain's compiler and linker, over a stand-in game library (`game_data_fixture.c`)
@@ -1022,8 +1023,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   a kind out of range ignored, a reset, a cut buffer), the slow step's game threads part (`game
   threads 199.3 in 39 switches (longest Main 171.2 ms; on core 2)`, the core or the longest switch
   left out, no name) and the VU line (pre-pass off 9 a triangle, on the recorded vertices, the k and
-  M words, no replays, a cut buffer), the list-0 line and the images in use, word for word
-  (`window_scene`).
+  M words, no replays, a cut buffer), the list-0 line and the images in use, word for word, and
+  the slow-scene dump's trigger over a block's figures (each condition alone: kind, window, movie,
+  once, 30 s, 8 replays, the bound off; the bound itself is not over; the display wait taken from
+  the work; no negative work) and its log line (`window_scene`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the
   crash chain to the box, the variable and the relaunch environment, the `dst` field of a
   pipeline's or a start-up batch's note, its VU vertex pre-pass keys and modules, the skin check's
@@ -1388,16 +1391,18 @@ The renderer's test programs have a page of their own:
 - `settings_extra_test.c`'s `testVariantsPage` (`testVariants`, and `testVariantsOtherDisc` on
   `jpn`, `kor`, `ntsc`, `aug6`, `jun26`), from the title and the pause menu: no Game variants row
   on Extras (ten rows); Gameplay's labels with No hints and the three links; Gameplay > Shadows'
-  eight rows and their shipped values (the demo's 7-hit barrier), Shadow toughness round its
-  values (no American on the demo), aggression's five, the barrier's two, One hit per swing and
-  Shadows never dodge on and off with the achievements rule and the notes, the saved file;
+  four rows and their shipped values, Shadow toughness round its values (no American on the
+  demo), aggression's five; Gameplay > Combat's eight rows and their shipped values (the demo's
+  7-hit barrier), the three combat rows Off and On with their notes, the barrier's two, One hit
+  per swing and Shadows never dodge on and off with the achievements rule and the notes, the
+  saved file;
   Gameplay > Cutscenes' four rows, No cutscene look-around and Ignore cutscene cameras on and off
   (the 2001 discs' own notes); `checkPageFits` on each; Developer's Debug menu hidden without
   Developer mode, shown with it (not on the demo) before Back, its note, unbound staying on
   Developer, bound opening the game's menu once and closing Options into the title or the game.
-- `settings_extra_test.c`'s `testShadowsTogether`: Options > Gameplay > Shadows > Shadows attack
-  together from the title and the pause menu, right after Shadow speed and before Shadow
-  toughness, Off by default; Right turns it on (`ico_opt_shadows_together`, and a Shadow does not wait:
+- `settings_extra_test.c`'s `testShadowsTogether`: Options > Gameplay > Combat > Shadows attack
+  together from the title and the pause menu, after Shadows never dodge and before Queen
+  barrier, Off by default; Right turns it on (`ico_opt_shadows_together`, and a Shadow does not wait:
   `ico_opt_shadow_waits(1)` is 0) and sets `gameplay.shadows_together`, the saved file has it,
   its note shows on the cursor, Left turns it off (the game's turns again); the cleared page still
   fits. `settings_discs` shows the row on every disc from both entries.

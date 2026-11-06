@@ -214,3 +214,51 @@ size_t window_scene_images_text(char *out, size_t cap, uint64_t images, uint64_t
     }
     return (size_t)w < cap ? (size_t)w : cap - 1;
 }
+
+SceneKind window_scene_dominant(const SceneShare *s)
+{
+    SceneKind best = SCENE_OTHER;
+    uint64_t most = 0;
+
+    for (int k = 0; k < SCENE_KIND_COUNT; k++) {
+        if (s->ns[k] > most) {
+            most = s->ns[k];
+            best = (SceneKind)k;
+        }
+    }
+    return best;
+}
+
+double window_slow_scene_work_ms(const SlowSceneBlock *b)
+{
+    if (b->gpuN == 0) {
+        return 0.0;
+    }
+    const double w = (b->spanSumMs - b->waitSumMs) / (double)b->gpuN;
+
+    return w > 0.0 ? w : 0.0;
+}
+
+bool window_slow_scene_due(const SlowSceneBlock *b)
+{
+    return b->boundMs > 0.0 && b->window && !b->movie && !b->written &&
+           b->dominant == SCENE_SCENE && b->uptimeS >= SLOW_SCENE_UPTIME_MIN_S &&
+           b->gpuN >= SLOW_SCENE_GPU_MIN && window_slow_scene_work_ms(b) > b->boundMs;
+}
+
+size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, unsigned frame,
+                              const char *zipName)
+{
+    if (cap == 0) {
+        return 0;
+    }
+    const double n = b->gpuN ? (double)b->gpuN : 1.0;
+    const int c = snprintf(out, cap,
+                           "slow scene: the block's GPU work %.1f ms a replay (bound %.0f; display "
+                           "wait %.1f, span %.1f) in a scene layout: frame %u written to "
+                           "logs/%s; attach it with the log",
+                           window_slow_scene_work_ms(b), b->boundMs, b->waitSumMs / n,
+                           b->spanSumMs / n, frame, zipName);
+
+    return c < 0 ? 0 : ((size_t)c < cap ? (size_t)c : cap - 1);
+}

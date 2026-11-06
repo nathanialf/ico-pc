@@ -225,6 +225,23 @@ static void testTables(void)
               ui_strings_ru_cobra838[UI_STR_SECTION_YORDA] == NULL &&
               ui_strings_pt_br[UI_STR_SECTION_YORDA] == NULL,
           "the Gameplay pages: bob-ttz's words (PR 195), the other two in English");
+    /* Gameplay > Combat (v0.10.5): the page's name and the three rows with
+       their notes, the eight tables in their own words (never the English
+       text outside the English table); the community tables English (NULL)
+       or the translator's words */
+    for (int id = UI_STR_SECTION_COMBAT; id <= UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE; id++) {
+        for (int l = 0; l < UI_LANG_TABLES; l++) {
+            const int community = l >= UI_LANG_COMMUNITY_FIRST;
+            const char *row = kTables[l][id];
+            CHECK(community ? (row == NULL || row[0] != 0) : (row != NULL && row[0] != 0),
+                  "%s: Combat string %d %s", kNames[l], id,
+                  community ? "English (NULL) or the translator's words" : "in its own words");
+            if (l != UI_LANG_EN && !community && row != NULL) {
+                CHECK(strcmp(row, kTables[UI_LANG_EN][id]) != 0 || id == UI_STR_SECTION_COMBAT,
+                      "%s: Combat string %d is not the English text", kNames[l], id);
+            }
+        }
+    }
     /* Extras > Unused content (v0.10.3): the page, its rows and notes and
        the three early show names, the same rule */
     for (int id = UI_STR_SECTION_UNUSED; id <= UI_STR_UNUSED_ART_COPYRIGHT; id++) {
