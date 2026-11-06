@@ -846,7 +846,7 @@ const char *const
                 "Aus: Ico wehrt den Angriff eines Schattens von vorn nicht mehr ab; er trifft wie von hinten. Die Erfolge bleiben aktiv.",
             [UI_STR_OPT_VAR_ATTACK_TURN] = "Schatten ansehen",
             [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
-                "Aus: Icos Schlag dreht ihn nicht mehr zum nächsten Schatten; er schlägt geradeaus, und ein Schatten neben ihm kann trotzdem getroffen werden. Die Erfolge bleiben aktiv.",
+                "Aus: Ico schlägt geradeaus, statt sich zum nächsten Schatten zu drehen; die Reichweite bleibt. Die Erfolge bleiben aktiv.",
             [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Schatten warten bei Icos Sturz",
             [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
                 "Aus: Die Schatten halten sich nicht mehr zurück, solange Ico am Boden liegt, und können ihn treffen, bevor er wieder steht. Die Erfolge bleiben aktiv.",

@@ -848,7 +848,7 @@ const char *const
                     "Désactivé : Ico ne pare plus l’attaque d’une ombre venue de face ; elle le touche comme par derrière. Les succès restent actifs.",
                 [UI_STR_OPT_VAR_ATTACK_TURN] = "Se tourner vers les ombres",
                 [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
-                    "Désactivé : le coup d’Ico ne le tourne plus vers l’ombre la plus proche ; il frappe droit devant, et une ombre à côté de lui peut quand même être touchée. Les succès restent actifs.",
+                    "Désactivé : Ico frappe droit devant sans se tourner vers l’ombre la plus proche ; la portée reste. Les succès restent actifs.",
                 [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Les ombres attendent qu’Ico se relève",
                 [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
                     "Désactivé : les ombres ne se retiennent plus quand Ico est à terre et peuvent le frapper avant qu’il soit debout. Les succès restent actifs.",

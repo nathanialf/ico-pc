@@ -821,7 +821,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "Off: Ico no longer blocks a Shadow’s attack from the front; it lands as an attack from behind does. Achievements stay on.",
     [UI_STR_OPT_VAR_ATTACK_TURN] = "Turn to face shadows",
     [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
-        "Off: Ico’s swing no longer turns him toward the nearest Shadow; he swings straight ahead, and a Shadow beside him can still be caught by the swing. Achievements stay on.",
+        "Off: Ico swings straight ahead instead of turning toward the nearest Shadow; the swing’s reach is unchanged. Achievements stay on.",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Shadows wait while Ico is down",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
         "Off: the Shadows no longer hold back while Ico is knocked down, so they can hit him again before he is up. Achievements stay on.",
