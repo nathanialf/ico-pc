@@ -839,6 +839,10 @@ typedef struct RhiLimits {
      * and the device offers VK_EXT_pipeline_robustness's pipelineRobustness
      * (Vulkan; false elsewhere) */
     bool uniformRobustOff;
+    /* The occlusion queries count samples exactly (Vulkan's
+     * occlusionQueryPrecise); without it a count is exact only as zero or
+     * not zero (rhi_cmd_begin_occlusion; false elsewhere) */
+    bool occlusionPrecise;
 } RhiLimits;
 
 /* The window's part in a driver call that may take long (rhi_set_wait_hooks):

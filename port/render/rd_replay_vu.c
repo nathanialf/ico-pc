@@ -1093,12 +1093,13 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
                           s_zeroBonesFor == g_rd.replayCounter && bonesOff == s_zeroBones;
     const RdStateBlock saved = r->st;
     r->st = *s; /* fillDrawCB reads the state the passes were planned from */
-    /* the skin check's draw (g_rdSkinArm) is drawn on its own, not held in
-     * the run: its note needs its blocks and its pass now (the merge is the
-     * same bytes either way); under the pre-pass a skinned draw takes
-     * vu_main_vs, which has a merge build */
+    /* the skin check's draw (g_rdSkinArm) and a twinned one (g_rdSkinTwin)
+     * are drawn on their own, not held in the run: the note needs the
+     * blocks and the pass now (the merge is the same bytes either way);
+     * under the pre-pass a skinned draw takes vu_main_vs, which has a merge
+     * build */
     if (g_rd.vuMerge && mergeable && indexed && !own && !r->dateStNow && !g_rdWin.first &&
-        !g_rd.passSplit && r->passOpen && !g_rdSkinArm) {
+        !g_rd.passSplit && r->passOpen && !g_rdSkinArm && !g_rdSkinTwin) {
         /* the draw merge: held in the run (drawn when it ends) */
         IcoDrawCB cb[2];
         for (uint32_t i = 0; i < mp; i++) {
@@ -1199,9 +1200,9 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
             vuMergeNote(r, noteable, p.id, g1.id, g2.id, &cb);
         }
     }
-    if (g_rdSkinArm && np > 0 && pipes[0].id && dOff0 != ~0ull) {
-        /* the skin check's draw (rd_vu_skin_check.h): its blocks, and its
-         * box check here in its pass */
+    if ((g_rdSkinArm || g_rdSkinTwin) && np > 0 && pipes[0].id && dOff0 != ~0ull) {
+        /* the skin check's draw (rd_vu_skin_check.h): its blocks, its twins
+         * and its box check here in its pass */
         const RdSkinDraw sd = {.key = &keys[0],
                                .pipe = pipes[0],
                                .g1 = g1,
@@ -1214,7 +1215,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
                                .indexOff = ix->off,
                                .first = first,
                                .count = count,
-                               .vs = progVs};
+                               .vs = progVs,
+                               .prog = prog};
         rd__vu_skin_note(r, ds, &sd);
     }
     r->st = saved;

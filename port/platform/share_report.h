@@ -12,7 +12,7 @@
 
 #include <stddef.h>
 
-#define ICO_SHARE_REPORT_MAX 5
+#define ICO_SHARE_REPORT_MAX 6
 #define ICO_SHARE_REPORT_PATH 1024
 
 typedef struct IcoShareReport {
@@ -30,6 +30,9 @@ typedef struct IcoShareReport {
                                     the picture as presented, written one
                                     present after its zip was closed
      logs_dir's newest report-*.zip the crash or hang report (report.c)
+     logs_dir's newest vu-skin-fail-*.bin
+                                    the skin check's capture on failure
+                                    (issue 123; rd_vu_skin_check.h)
    "newest": the latest modification time, then the greatest name.  NULL or
    "" folders are skipped.  The count (out->count). */
 int ico_share_report_collect(const char *logs_dir, const char *dumps_dir, IcoShareReport *out);

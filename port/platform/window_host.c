@@ -3169,6 +3169,10 @@ static int device_lost_quit(void)
    --console there is none and the zip holds the dump alone. */
 /* forReport: Settings' bug-report capture (the presented picture goes into
    the zip too); F12 leaves the PNG loose as ever */
+/* the skin check's sidecar for the next frame_dump (skin_capture_pump):
+   added to its zip, "" none */
+static char s_skinSidecar[ICO_PATH_MAX];
+
 static void frame_dump(int forReport)
 {
     char pref[ICO_PATH_MAX], dir[ICO_PATH_MAX], dump[ICO_PATH_MAX], png[ICO_PATH_MAX],
@@ -3224,6 +3228,25 @@ static void frame_dump(int forReport)
                                 sizeof(why));
     }
     s_pres.presentDumpPrev = havePrev && zr >= 0;
+    if (s_skinSidecar[0] != '\0') {
+        /* the skin check's capture (issue 123): its sidecar in the zip too
+           (kept in logs/ for the share menu); one line names both */
+        char swhy[160] = "no zip";
+        const char *b = s_skinSidecar + strlen(s_skinSidecar);
+
+        while (b > s_skinSidecar && b[-1] != '/' && b[-1] != '\\') {
+            b--;
+        }
+        const int added =
+            zr >= 0 && ico_zip_add_file(zip, s_skinSidecar, b, swhy, sizeof(swhy), NULL) == 0;
+        fprintf(stderr,
+                "window: VU skin check: the capture: %s and the frame dump %s (%s), the "
+                "presented picture at the next present%s%s\n",
+                s_skinSidecar, zr >= 0 ? zip : dump, png,
+                added ? "; the sidecar is in the zip" : "; the sidecar is not in the zip: ",
+                added ? "" : swhy);
+        s_skinSidecar[0] = '\0';
+    }
     if (forReport && zr >= 0 && s_pres.presentPng[0] != '\0') {
         snprintf(s_pres.reportZip, sizeof(s_pres.reportZip), "%s", zip);
     }
@@ -3259,6 +3282,24 @@ static Uint64 s_reportDumpAt;
 static void report_picture_arm(void)
 {
     s_reportDumpAt = SDL_GetTicksNS() + 3000000000ull;
+}
+
+/* the skin check's capture on failure (issue 123; rd.h
+   rd_vu_skin_capture_due): once a run, a frame dump of the next present,
+   its sidecar into the zip; nothing asked of the player */
+static void skin_capture_pump(void)
+{
+    char path[ICO_PATH_MAX];
+
+    if (!rd_vu_skin_capture_due(path, sizeof(path))) {
+        return;
+    }
+    fprintf(stderr,
+            "window: VU skin check: a failure was captured (%s): a frame dump for the "
+            "next present\n",
+            path[0] != '\0' ? path : "no sidecar");
+    snprintf(s_skinSidecar, sizeof(s_skinSidecar), "%s", path);
+    frame_dump(0);
 }
 
 static void report_picture_pump(void)
@@ -4001,6 +4042,7 @@ int ico_window_pump(void)
     first_pump_recheck();
     resume_recheck();
     report_picture_pump();
+    skin_capture_pump();
 #if ICO_RC_TOOLS && defined(__ANDROID__)
     share_report_pump();
 #endif

@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <SDL3/SDL_filesystem.h>
 #include "diag_host.h"
+#include "host_config.h"
 #include "memory_floor.h"
 #include "rd.h"
 #include "rhi.h"
@@ -44,6 +45,11 @@ void window_pipe_skin_check(int pipePolicy)
 {
     const int driver = ico_diag_memory_floor_driver();
     char why[200];
+    char logs[ICO_PATH_MAX];
+
+    /* the check's capture on failure (issue 123): its sidecar beside the
+       log, so the share menu and the frame dump's zip take it */
+    rd_set_vu_skin_capture_dir(ico_host_logs_dir(logs, sizeof logs) == 0 ? logs : NULL);
 
     if (driver != ICO_MEMORY_FLOOR_DRIVER_OTHER &&
         (ico_diag_floor_stopped() || pipePolicy == ICO_DIAG_PIPESET_LAZY_LOW_MEMORY)) {

@@ -60,6 +60,13 @@ extern "C" {
 /* the most checks one replay holds (mode 2), and the box check's
  * occlusion queries: check i's is query i (rhi_occlusion_prepare) */
 #define RD_SKIN_CHECKS_ALL 80u
+/* the twins (rd_vu_skin_check.c): at most this many skinned draws of one
+ * replay twinned; twin t's occlusion queries are RD_SKIN_CHECKS_ALL + 3 t
+ * (A, the draw's bone offset), + 1 (B, the same bytes at a fresh offset)
+ * and + 2 (C, kept for the ring read's twin), so every query the check
+ * uses is below RD_SKIN_QUERIES (rhi_occlusion_prepare) */
+#define RD_SKIN_TWINS_MAX 128u
+#define RD_SKIN_QUERIES (RD_SKIN_CHECKS_ALL + 3u * RD_SKIN_TWINS_MAX)
 /* a vertex is wrong when its X or Y is more than this far (1/16 pixel:
  * one GS pixel) from the CPU's, or its Z more than RD_SKIN_Z_REL of the
  * CPU's (at least RD_SKIN_XY_TOL) */
@@ -98,6 +105,15 @@ typedef struct RdSkinPos {
  * (16..252, 0: none) read as zeros (its four qwords), into out[0 ..
  * count); false when a batch is too long for the reference */
 bool rd__skin_reference(const RdSkinCase *k, uint32_t zeroAddr, RdSkinPos *out);
+/* the same with the bone's four qwords filled with the 32-bit pattern
+ * fillBits instead of zeros (0x7FC00000: a NaN matrix, the judgement's
+ * non-finite candidate) */
+bool rd__skin_reference_fill(const RdSkinCase *k, uint32_t zeroAddr, uint32_t fillBits,
+                             RdSkinPos *out);
+/* a probed position the shader dropped: X, Y or Z saturated by ftoi4 (a
+ * non-finite or huge value: a NaN takes 0x80000000, vu_common.hlsli
+ * vu_ftoi) */
+bool rd__skin_got_dropped(const int32_t got[3]);
 
 /* whether a probed position (GS X, Y, Z) is the CPU's within the bounds */
 bool rd__skin_pos_near(const int32_t got[3], const RdSkinPos *want);
@@ -119,6 +135,11 @@ typedef struct RdSkinVerdict {
     bool explains;
     uint32_t explained;
     int32_t maxRightXY;
+    /* of the wrong vertices, those the probe dropped (rd__skin_got_dropped:
+     * read as non-finite or huge), and the address whose non-finite (NaN)
+     * matrix drops the most of them (0: none, or none dropped) */
+    uint32_t dropped;
+    uint32_t nanAddr, nanExplained;
 } RdSkinVerdict;
 
 void rd__skin_judge(const RdSkinCase *k, const RdSkinPos *ref, const int32_t (*got)[3],
@@ -180,8 +201,26 @@ void rd__vu_skin_check_set(int mode);
 /* doVuDraw: a skinned command's draw is to be checked (sets the arm that
  * rd__vu_skin_note reads); f, c the command, m its mesh */
 void rd__vu_skin_pick(const RdFrame *f, const RdCmd *c, const RdMeshRec *m);
-/* set by rd__vu_skin_pick for the vuDraw that follows */
+/* set by rd__vu_skin_pick for the vuDraw that follows: g_rdSkinArm the
+ * sampled probe's draw, g_rdSkinTwin a draw to twin (every skinned draw
+ * where the twins are on: rd__vu_skin_twins_on) */
 extern bool g_rdSkinArm;
+extern bool g_rdSkinTwin;
+/* whether the twins run: on an Adreno with a window (Qualcomm's driver and
+ * Turnip, the check's default rule) wherever the check runs, under
+ * ICO_RD_VU_SKIN_CHECK=2 (and the tool's and the tests' mode 2) anywhere;
+ * rd__vu_skin_twins_set (the tests) over it.  The probe's interval stays
+ * 0 (one a present) on Turnip alone, 100 ms elsewhere */
+bool rd__vu_skin_twins_on(void);
+/* the tests' switch: 1 the twins on, 0 off, -1 back to the rule */
+void rd__vu_skin_twins_set(int on);
+/* the occlusion queries the check uses (RD_SKIN_QUERIES with the twins,
+ * RD_SKIN_CHECKS_ALL without): the start-up probe prepares them */
+uint32_t rd__vu_skin_queries(void);
+/* B2's hook (the ring-read module, not built yet): the probe pipeline of
+ * column 3 (the draw's bones through the ring) for the cluster entry vs,
+ * {0} while there is none (column 3 not drawn) */
+RhiPipeline rd__vu_skin_ring_module(uint8_t vs);
 
 /* vuDraw, after a picked command's draw (inside its pass): what the probe
  * needs of the draw, and the box check drawn here (S3).  The types are
@@ -199,6 +238,8 @@ typedef struct RdSkinDraw {
     uint64_t indexOff;
     uint32_t first, count; /* its indices */
     uint8_t vs;            /* the vertex entry (RD_VS_*) of the program */
+    uint8_t prog;          /* the program (RD_PROG_*): its own entry's key (the twins of a
+                            * draw through the pre-pass record) */
 } RdSkinDraw;
 
 void rd__vu_skin_note(struct Replay *r, const struct DrawSetup *ds, const RdSkinDraw *d);
@@ -225,9 +266,68 @@ typedef struct RdSkinSummary {
     uint32_t c1Right, c2Right, c2Run;
     uint32_t lastAddr;
     char decision[160];
+    /* the twins read, those whose two counts differed, those drawn through
+     * the draw's own pipeline (its attachment read), the checks targeted
+     * after a twin event, of them wrong, the wrong vertices the probe
+     * dropped (non-finite) */
+    uint32_t twins, twinsDiffer, twinsOwn, targeted, targetedWrong, dropped;
+    uint32_t twinsDifferOwn; /* of the twins that differed, those through the draw's own pipeline */
 } RdSkinSummary;
 
 int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out);
+/* The tests: f replayed `replays` times under the check's mode as it is
+ * (the schedule, the twins, the targeted probe), each replay's check and
+ * twins harvested at once, the counts into out (zeroed first).  Returns
+ * the wrong checks, -1 when f could not be replayed. */
+int rd__vu_skin_check_replays(const RdFrame *f, int keep, uint32_t replays, RdSkinSummary *out);
+
+/* ---------------------------------------------------- the capture
+ * On the run's first failure (twins that differ, or a wrong check), once
+ * a run: the sidecar <dir>/vu-skin-fail-<frame>-<list>-<index>.bin
+ * (rd_vu_skin_capture.c writes it) and a frame dump asked of the window
+ * (rd.h rd_vu_skin_capture_due). */
+#define RD_SKIN_CAPTURE_MAGIC "ICOSKINF"
+#define RD_SKIN_CAPTURE_VERSION 1u
+
+/* the sidecar's header (little-endian, as written): every section's
+ * offset from the file's start and its bytes (0: not in this capture) */
+typedef struct RdSkinCaptureHeader {
+    char magic[8];    /* RD_SKIN_CAPTURE_MAGIC */
+    uint32_t version; /* RD_SKIN_CAPTURE_VERSION */
+    uint32_t headerBytes;
+    uint32_t frame, list, index, meshId, meshVertices;
+    int32_t code;
+    /* bit 0 a check's data (the probe), 1 the twins' counts, 2 the ring
+     * re-read after the fence, 3 the check was wrong, 4 the twins differed,
+     * 5 the check targeted after a twin event */
+    uint32_t flags;
+    uint32_t probeFirst, probeVertices, probeCols, wrong, dropped, addr, nanAddr;
+    uint64_t bonesOff, freshOff;
+    uint64_t twinA, twinB, twinC; /* the samples (UINT64_MAX: not drawn) */
+    char mesh[24];
+    char fs[32];     /* the twins' fragment entry */
+    char reads[160]; /* the decision's words */
+    /* sections: the CPU's bone bytes (3,840), the GPU's copy (3,840), the
+     * ring as the CPU read it after the fence (3,840), the draw's VuCB, VU
+     * memory 0..35, the stream's slice (5 qwords a vertex), the probe's
+     * rows (int32 X, Y, Z a vertex a column) */
+    uint32_t cpuOff, cpuBytes, gpuOff, gpuBytes, ringOff, ringBytes, vcbOff, vcbBytes;
+    uint32_t memOff, memBytes, streamOff, streamBytes, rowsOff, rowsBytes;
+} RdSkinCaptureHeader;
+
+typedef struct RdSkinCapture {
+    RdSkinCaptureHeader h;
+    const void *cpu, *gpu, *ring, *vcb, *mem, *stream, *rows;
+} RdSkinCapture;
+
+/* writes c to <dir>/vu-skin-fail-<frame>-<list>-<index>.bin (the
+ * sections whose pointer is NULL left out); the path into path; false
+ * when the file could not be written (why in path) */
+bool rd__vu_skin_capture_write(const char *dir, RdSkinCapture *c, char *path, size_t size);
+/* the window's frame dump asked (rd_vu_skin_capture_due), path the
+ * sidecar's ("" none), and the folder rd_set_vu_skin_capture_dir set */
+void rd__vu_skin_capture_ask(const char *path);
+const char *rd__vu_skin_capture_dir(void);
 
 /* The start-up probe (S1; rd_vu_skin_selftest.c): run by
  * rd_vuprepass_selftest before anything else, on a Vulkan device, unless

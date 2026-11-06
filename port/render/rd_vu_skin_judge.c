@@ -36,6 +36,12 @@ static bool saturated(int32_t v)
 
 bool rd__skin_reference(const RdSkinCase *k, uint32_t zeroAddr, RdSkinPos *out)
 {
+    return rd__skin_reference_fill(k, zeroAddr, 0u, out);
+}
+
+bool rd__skin_reference_fill(const RdSkinCase *k, uint32_t zeroAddr, uint32_t fillBits,
+                             RdSkinPos *out)
+{
     if (!k || !out || k->count == 0 || k->qpv != 5u || !refAlloc()) {
         return false;
     }
@@ -54,7 +60,11 @@ bool rd__skin_reference(const RdSkinCase *k, uint32_t zeroAddr, RdSkinPos *out)
     if (zeroAddr >= 16u && zeroAddr <= 252u) {
         /* the shader's index (vu_skin.hlsl vu_bone_mat: min(addr - 16, 236)) */
         const uint32_t q = zeroAddr - 16u > 236u ? 236u : zeroAddr - 16u;
-        memset(pk[1 + q], 0, 4u * 16u);
+        for (uint32_t r = 0; r < 4u; r++) {
+            for (uint32_t c = 0; c < 4u; c++) {
+                memcpy(&pk[1 + q + r][c], &fillBits, 4);
+            }
+        }
     }
     vu1ref_cluster_set_matrix(s_ref, (const float (*)[4])pk);
     vu1ref_cluster_set_light(s_ref, (const float (*)[4])(k->mem + 28));
@@ -90,6 +100,11 @@ bool rd__skin_reference(const RdSkinCase *k, uint32_t zeroAddr, RdSkinPos *out)
         }
     }
     return true;
+}
+
+bool rd__skin_got_dropped(const int32_t got[3])
+{
+    return saturated(got[0]) || saturated(got[1]) || saturated(got[2]);
 }
 
 bool rd__skin_pos_near(const int32_t got[3], const RdSkinPos *want)
@@ -147,6 +162,7 @@ void rd__skin_judge(const RdSkinCase *k, const RdSkinPos *ref, const int32_t (*g
         }
         uint32_t lane[4];
         memcpy(lane, k->stream[(size_t)i * k->qpv + 2u], sizeof(lane));
+        v->dropped += rd__skin_got_dropped(got[i]);
         if (v->wrong++ == 0) {
             v->firstWrong = i;
             memcpy(v->got, got[i], sizeof(v->got));
@@ -174,6 +190,29 @@ void rd__skin_judge(const RdSkinCase *k, const RdSkinPos *ref, const int32_t (*g
     RdSkinPos *zero = malloc(sizeof(*zero) * k->count);
     if (!zero) {
         return;
+    }
+    /* a non-finite (or huge) matrix at an address: the shader's ftoi4 of
+     * the result saturates (a NaN takes 0x80000000, vu_common.hlsli
+     * vu_ftoi), so the vertex is dropped, at whatever saturated value; the
+     * reference under that matrix is not compared there.  The candidate
+     * whose non-finite matrix drops the most of the dropped wrong vertices
+     * is named beside the zero matrix's (issue 123's v0.10.4 picture:
+     * bone 200 read as non-finite, every triangle on it dropped) */
+    for (uint32_t c = 0; c < nc && v->dropped; c++) {
+        if (!rd__skin_reference_fill(k, cand[c].addr, 0x7FC00000u, zero)) {
+            break;
+        }
+        uint32_t gives = 0;
+        for (uint32_t i = 0; i < k->count; i++) {
+            if (ref[i].compared && !rd__skin_pos_near(got[i], &ref[i]) &&
+                rd__skin_got_dropped(got[i]) && !zero[i].compared) {
+                gives++;
+            }
+        }
+        if (gives > v->nanExplained) {
+            v->nanExplained = gives;
+            v->nanAddr = cand[c].addr;
+        }
     }
     for (uint32_t c = 0; c < nc; c++) {
         if (!rd__skin_reference(k, cand[c].addr, zero)) {
