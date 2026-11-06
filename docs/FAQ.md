@@ -437,6 +437,14 @@ or tablet). While you play, open the pause menu (Start, or Escape on a
 computer), choose **End Game** to reach the title screen, and quit from
 there. On a computer you can also close the window.
 
+## The game wrote an extra file called slow-something.zip
+
+When a cutscene runs slowly, the game may write one extra file in the `logs` folder, once each time
+you start it: `slow-` and the date and time, ending in `.zip`. It holds one picture from the
+cutscene and a copy of the log. If you are reporting that the game runs slowly, please attach it
+with the log. It is safe to delete. To stop the game writing it, set `slow_scene_dump_ms = 0` under
+`[dev]` in `config.toml`.
+
 ## Something went wrong. What now?
 
 Look at [When something goes wrong](TROUBLESHOOTING.md). It explains the
