@@ -280,7 +280,11 @@
  *                         "stats: cull occlusion: <reason> <count>; ..."
  *                         (list 0's occluder candidates by the rule that
  *                         refused them, its occludee candidates by why they
- *                         were kept, RD_VIS_HZ_*)
+ *                         were kept, RD_VIS_HZ_*), then "stats: cull
+ *                         occlusion cost: collect C ms (...)" (its time by
+ *                         part, the vertex pass's counts, the collect
+ *                         cache's hits; ICO_RD_CULL_HIZ_FAST on or off and
+ *                         ICO_RD_CULL_HIZ_CHECK's checked and wrong)
  *   --occlusion-out FILE  (with --occlusion) writes SPEC to FILE, for
  *                         --nop @FILE
  *   --occlusion-csv FILE  (with --occlusion) writes a line a command of the
@@ -2879,6 +2883,18 @@ int main(int argc, char **argv)
                 printf("%s %s %u", k ? ";" : "", rd__vis_hiz_why_name(k), hz[k]);
             }
             printf("\n");
+            /* the occlusion test's time by part and its vertex pass
+             * (rd_vis.h RdVisCounts' hiz fields; docs/port/RENDER.md,
+             * "Culling", the occlusion test's cost) */
+            printf("%s: stats: cull occlusion cost: collect %.3f ms (settle %.3f, alpha %.3f, "
+                   "vertices %.3f ms: %u in full, %u for the screen box alone; %u triangles "
+                   "read, %u kept, %u left by their batch's box, %u by their own; cache %u of "
+                   "%u draws), raster %.3f ms, test %.3f ms; fast %s, check: %u checked, %u "
+                   "wrong\n",
+                   dump, vc.hizCollectMs, vc.hizSettleMs, vc.hizAlphaMs, vc.hizVertMs, vc.hizVerts,
+                   vc.hizCheapVerts, vc.hizTrisRead, vc.hizTrisKept, vc.hizTrisBatch,
+                   vc.hizTrisArea, vc.hizCacheHits, vc.hizCacheDraws, vc.hizRasterMs, vc.hizTestMs,
+                   rd__vis_hiz_fast() ? "on" : "off", vc.hizChecked, vc.hizWrong);
         }
         uint32_t satDraws = 0;
         const uint64_t sat = satZVertices(rf, RD_VU_CLIP_REGION, &satDraws);

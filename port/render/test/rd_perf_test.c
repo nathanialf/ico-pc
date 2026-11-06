@@ -48,7 +48,12 @@
  *             RD_PERF_PASS_EVERY_MS after the last timed one, an untimed
  *             one has no pieces, and every replay still counts its pieces
  *             by kind.  Before any device: the CSV header and line and the
- *             window's two summary texts on fixed pieces, to the byte.
+ *             window's two summary texts on fixed pieces, to the byte;
+ *   cull      the visibility test's part of the 10 s line
+ *             (rd_perf_cull_text) on fixed records, to the byte: the cull
+ *             figures as tools/cull_log_compare.py's CULL_RE reads them,
+ *             the occlusion test's parts after "(occlusion H)", none when
+ *             the occlusion test did not run, nothing without draws.
  *
  * With a dump instead (a measurement tool):
  *   rd_perf_test --dump FILE [--enhanced] [--resolution N] [--full-height]
@@ -855,6 +860,76 @@ static void checkBackgroundSet(void)
            done);
 }
 
+/* ------------------------------------------- the cull part's text (pure) */
+
+static void checkCullText(void)
+{
+    char buf[1024];
+    RdPerfCullSum s;
+    memset(&s, 0, sizeof(s));
+    rd_perf_cull_text(buf, sizeof(buf), &s, 2.0);
+    CHECK(buf[0] == '\0', "cull text without draws: \"%s\"", buf);
+    RdPerfRecord r;
+    memset(&r, 0, sizeof(r));
+    r.cullDraws = 300;
+    r.cullSkipped = 120;
+    r.cullFrustum = 118;
+    r.cullOccluded = 2;
+    r.cullMs = 13.0;
+    r.cullHizMs = 12.0;
+    /* frustum only: no occlusion part */
+    RdPerfRecord fr = r;
+    fr.cullOccluded = 0;
+    fr.cullHizMs = 0.0;
+    rd_perf_cull_add(&s, &fr);
+    rd_perf_cull_text(buf, sizeof(buf), &s, 1.0);
+    CHECK(strcmp(buf, "; cull: 120 of 300 scene draws skipped a replay (118 frustum, 0 occluded), "
+                      "13.00 ms (occlusion 0.00) ([dev] cull)") == 0,
+          "cull text, frustum: \"%s\"", buf);
+    memset(&s, 0, sizeof(s));
+    r.cullHizSettleMs = 0.5;
+    r.cullHizCollectMs = 10.0;
+    r.cullHizAlphaMs = 1.0;
+    r.cullHizVertMs = 8.0;
+    r.cullHizRasterMs = 1.5;
+    r.cullHizTestMs = 0.5;
+    r.cullHizVerts = 4000;
+    r.cullHizTrisRead = 3000;
+    r.cullHizTrisKept = 40;
+    r.cullHizCells = 8000;
+    r.cullHizTested = 44;
+    r.cullHizOverBudget = 3;
+    r.cullHizCacheHits = 10;
+    r.cullHizCacheDraws = 20;
+    const uint32_t occ[RD_PERF_HIZ_OCC] = {20, 2, 1, 0, 42, 0, 16, 11, 37};
+    memcpy(r.cullHizOcc, occ, sizeof(occ));
+    rd_perf_cull_add(&s, &r);
+    rd_perf_cull_add(&s, &r);
+    rd_perf_cull_text(buf, sizeof(buf), &s, 2.0);
+    CHECK(strcmp(buf, "; cull: 120 of 300 scene draws skipped a replay (118 frustum, 2 occluded), "
+                      "13.00 ms (occlusion 12.00) ([dev] cull); occlusion: collect 10.00 ms "
+                      "(settle 0.50, alpha 1.00, vertices 8.00 ms for 4000 vertices, 40 triangles "
+                      "kept of 3000; cache 10 of 20 draws), raster 1.50 ms (8000 cells), test "
+                      "0.50 ms (44 draws tested); occluders used 20, refused: "
+                      "state/chain/target/bound/program/alpha/small/no-tri 2/1/0/42/0/16/11/37; "
+                      "past the budget 3") == 0,
+          "cull text, full: \"%s\"", buf);
+    /* tools/cull_log_compare.py's CULL_RE: "cull: S of D scene draws skipped
+     * a replay (F frustum, O occluded), T ms" still at the head */
+    double sk = 0.0, dr = 0.0, fu = 0.0, oc = 0.0, ms = 0.0;
+    CHECK(sscanf(buf,
+                 "; cull: %lf of %lf scene draws skipped a replay (%lf frustum, %lf "
+                 "occluded), %lf ms",
+                 &sk, &dr, &fu, &oc, &ms) == 5 &&
+              sk == 120.0 && dr == 300.0 && ms == 13.0,
+          "cull text: CULL_RE's part (%g of %g, %g ms)", sk, dr, ms);
+    /* cut to the buffer, never past it */
+    char small[40];
+    memset(small, 'x', sizeof(small));
+    rd_perf_cull_text(small, 32, &s, 2.0);
+    CHECK(strlen(small) == 31 && small[32] == 'x', "cull text cut: %zu", strlen(small));
+}
+
 /* ---------------------------------------------- the pieces' texts (pure) */
 
 static void checkPassTexts(void)
@@ -1659,6 +1734,7 @@ int main(int argc, char **argv)
         return dumpMode(argc, argv);
     }
     checkPassTexts(); /* pure: before any device; its failures count without one */
+    checkCullText();
     /* the shadow volumes in their own pass and the count target cleared
      * (rd_shadow_merge.c, on on the tile-based classes: rd_perf_mali's):
      * the barrier and pass counts below are those of that frame; the merge

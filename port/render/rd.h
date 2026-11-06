@@ -2370,6 +2370,9 @@ enum {
 /* RdPerfRecord.pipeFamily's counts: one per pipeline key family
  * (rd_internal.h RdKeyFamily) */
 #define RD_PERF_PIPE_FAMILIES 8
+/* RdPerfRecord.cullHizOcc's counts: the occlusion test's occluder
+ * candidates by reason (rd_vis.h RD_VIS_HZ_OCC_USED .. RD_VIS_HZ_OCC_NOTRI) */
+#define RD_PERF_HIZ_OCC 9
 
 enum { RD_PRESENT_ELSEWHERE = 0, RD_PRESENT_ON_SUBMIT = 1, RD_PRESENT_IN_STEP = 2 };
 
@@ -2685,6 +2688,26 @@ typedef struct RdPerfRecord {
      * (cullMs; cullHizMs of it the occlusion test's) */
     uint32_t cullDraws, cullSkipped, cullFrustum, cullOccluded;
     double cullMs, cullHizMs;
+    /* The occlusion test's cost by part (rd_vis.h RdVisCounts' hiz
+     * fields): cullHizMs is the collect (cullHizCollectMs: of it the alpha
+     * proofs, cullHizAlphaMs, and the vertex pass, cullHizVertMs), the
+     * occludees' test (cullHizTestMs) and the rasterisation
+     * (cullHizRasterMs); the decodes settled before the collect
+     * (cullHizSettleMs) are outside it.  The vertices projected
+     * (cullHizVerts), the triangles read and kept as occluders before the
+     * budget (cullHizTrisRead, cullHizTrisKept), the cells covered, the
+     * draws tested, the triangles past the budget, the occluder draws that
+     * took their triangles from the collect cache of those that reached
+     * the vertex pass (cullHizCacheHits, cullHizCacheDraws), and the
+     * occluder candidates by reason (cullHizOcc: used, then refused by
+     * state, chain plane, target, bound, program, alpha, small box, no
+     * triangle: rd_vis.h RD_VIS_HZ_OCC_USED .. RD_VIS_HZ_OCC_NOTRI) */
+    double cullHizSettleMs, cullHizCollectMs, cullHizAlphaMs, cullHizVertMs, cullHizRasterMs;
+    double cullHizTestMs;
+    uint32_t cullHizVerts, cullHizTrisRead, cullHizTrisKept, cullHizTested, cullHizOverBudget;
+    uint32_t cullHizCacheHits, cullHizCacheDraws;
+    uint64_t cullHizCells;
+    uint32_t cullHizOcc[RD_PERF_HIZ_OCC];
     uint32_t prepassBatches;
     double gpuPrepassMs;
     /* The store plan (rd_replay.c storePlanScan; RdProfile.storePlan): of
@@ -2773,6 +2796,26 @@ const char *rd_perf_backend_text(void);
  * last store's (RD_LAST_WHY_*: "N last stores kept (...)"); the reasons
  * that hold none are left out, "" with none at all.  Into buf (size). */
 void rd_perf_why_text(char *buf, size_t size, int which, const uint64_t *counts, double replays);
+
+/* The visibility test's sums over records (rd_perf_backend_text's cull
+ * part): rd_perf_cull_add adds record r's cull* fields; rd_perf_cull_text
+ * writes the part, the mean a replay over `replays`, into buf (size), ""
+ * when no draw was walked: "; cull: N of M scene draws skipped a replay (F
+ * frustum, O occluded), T ms (occlusion H) ([dev] cull)", and when the
+ * occlusion test ran "; occlusion: collect C ms (settle S, alpha A,
+ * vertices V ms for Nv vertices, Nt triangles kept of Na; cache Hc of Dc
+ * draws), raster R ms (Nc cells), test X ms (Nd draws tested); occluders
+ * used U, refused: state/chain/target/bound/program/alpha/small/no-tri
+ * a/b/c/d/e/f/g/h; past the budget B" (docs/port/RENDER.md, "Culling") */
+typedef struct RdPerfCullSum {
+    uint64_t draws, skipped, frustum, occluded;
+    double ms, hizMs, settleMs, collectMs, alphaMs, vertMs, rasterMs, testMs;
+    uint64_t verts, trisRead, trisKept, cells, tested, overBudget, cacheHits, cacheDraws;
+    uint64_t occ[RD_PERF_HIZ_OCC];
+} RdPerfCullSum;
+
+void rd_perf_cull_add(RdPerfCullSum *s, const RdPerfRecord *r);
+void rd_perf_cull_text(char *buf, size_t size, const RdPerfCullSum *s, double replays);
 
 /* RdPerfRecord.glowWhy (rd_glow_fold.c): why a glow frame drew its mask into
  * WORK2 (docs/port/RENDER_POST.md, "The glow's mask in its reduction"):

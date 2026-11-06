@@ -133,6 +133,24 @@ question it decides:
   about 64 ms against 132) is the fix working; an unchanged span with the wait moved into the
   present says the presentation engine's hold was our own backlog, not the compositor's. Decides
   whether the image wait was the limit of the scenes.
+- **The occlusion test's cost** (the 10 s line's cull part, `; cull: N of M scene draws skipped a
+  replay (F frustum, O occluded), T ms (occlusion H) ([dev] cull)`, now followed by `; occlusion:
+  collect C ms (settle S, alpha A, vertices V ms for Nv vertices, Nt triangles kept of Na; cache Hc
+  of Dc draws), raster R ms (Nc cells), test X ms (Nd draws tested); occluders used U, refused:
+  state/chain/target/bound/program/alpha/small/no-tri a/b/c/d/e/f/g/h; past the budget B`, each
+  figure the mean a replay; [RENDER.md](RENDER.md#culling)). The issue's log showed 14.4 to 16.1
+  ms of cull a picture on the render thread, 12.8 to 14.7 of it the occlusion test, for 0 draws
+  occluded in its scene blocks (L596, L634, L678 and L727 of the evidence log); the code says the
+  cost was the collect's vertex pass (every vertex of every candidate occluder projected in full
+  before nearly all its triangles were dropped as too small). The collect now leaves those
+  triangles before projecting them, and keeps a draw's triangles from one picture to the next while
+  nothing it reads changed, with the same occluders and verdicts (`rd_cull_ab`,
+  `rd_vis_hiz_corpus`). How to read the next log: `C` against `R` and `X` says which part of `H` is
+  left; `V` most of `C` with `Nv` large against `Na` says the screen boxes left little (the vertex
+  pass across threads is the next step); `S` large says the texture decodes were behind, not the
+  test (it is in `T`, not in `H`); `Hc` near `Dc` on a still scene says the cache holds. Decides
+  whether the occlusion test still costs the render thread a share of the 40 ms Original cap in
+  the scenes.
 
 ## Issues 123 and 163's lines: the skin check on an Adreno
 
