@@ -242,8 +242,8 @@ original game's behaviour (`port/game/options.h`, header comment).
 
 ### [variants]
 
-Options > Gameplay: No hints on the page, the Shadows rows on Gameplay > Shadows, the three combat
-rows on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
+Options > Gameplay: No hints on the page, Shadow toughness and aggression on Gameplay > Shadows, the combat
+rows (the three new ones, One hit per swing, Shadows never dodge and Queen barrier) on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
 [OPTIONS.md](../OPTIONS.md#gameplay)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
 the game as the disc ships it. All eleven are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,

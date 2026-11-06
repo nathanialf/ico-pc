@@ -3512,17 +3512,17 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_SHADOWS:
         /* the June 2001 demo's own toughness note: refreshPage, variantNote */
         addNote(pg, UI_OPT_SHADOW_SPEED, UI_STR_OPT_SHADOW_SPEED_NOTE);
-        addNote(pg, UI_OPT_SHADOWS_TOGETHER, UI_STR_OPT_SHADOWS_TOGETHER_NOTE);
         addNote(pg, UI_OPT_VAR_TOUGHNESS, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
-        addNote(pg, UI_OPT_VAR_ONE_HIT, UI_STR_OPT_VAR_ONE_HIT_NOTE);
-        addNote(pg, UI_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_NEVER_DODGE_NOTE);
         addNote(pg, UI_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_AGGRESSION_NOTE);
-        addNote(pg, UI_OPT_VAR_BARRIER, UI_STR_OPT_VAR_BARRIER_NOTE);
         break;
     case UI_PAGE_COMBAT:
         addNote(pg, UI_OPT_VAR_AUTO_GUARD, UI_STR_OPT_VAR_AUTO_GUARD_NOTE);
         addNote(pg, UI_OPT_VAR_ATTACK_TURN, UI_STR_OPT_VAR_ATTACK_TURN_NOTE);
         addNote(pg, UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE);
+        addNote(pg, UI_OPT_VAR_ONE_HIT, UI_STR_OPT_VAR_ONE_HIT_NOTE);
+        addNote(pg, UI_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_NEVER_DODGE_NOTE);
+        addNote(pg, UI_OPT_SHADOWS_TOGETHER, UI_STR_OPT_SHADOWS_TOGETHER_NOTE);
+        addNote(pg, UI_OPT_VAR_BARRIER, UI_STR_OPT_VAR_BARRIER_NOTE);
         break;
     case UI_PAGE_CUTSCENES:
         /* the 2001 discs' own No cutscene look-around note: refreshPage,
@@ -4237,22 +4237,24 @@ static void build(void)
                                     UI_OPT_NATURAL_CHAINS, UI_OPT_BACK};
     static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
                                     UI_STR_OPT_NATURAL_CHAINS, UI_STR_BACK};
-    /* Gameplay > Shadows: the two [gameplay] rows, then the [variants]
-       Shadows rows in variants.h's order and the Queen's barrier */
-    static const int shadowOpts[] = {
-        UI_OPT_SHADOW_SPEED,    UI_OPT_SHADOWS_TOGETHER, UI_OPT_VAR_TOUGHNESS, UI_OPT_VAR_ONE_HIT,
-        UI_OPT_VAR_NEVER_DODGE, UI_OPT_VAR_AGGRESSION,   UI_OPT_VAR_BARRIER,   UI_OPT_BACK};
-    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED,    UI_STR_OPT_SHADOWS_TOGETHER,
-                                     UI_STR_OPT_VAR_TOUGHNESS,   UI_STR_OPT_VAR_ONE_HIT,
-                                     UI_STR_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_AGGRESSION,
-                                     UI_STR_OPT_VAR_BARRIER,     UI_STR_BACK};
-    /* Gameplay > Combat: the three combat [variants] rows in variants.h's
-       order (VAR-WEAPONS's two weapon rows follow Shadows wait while Ico is
-       down) */
-    static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD, UI_OPT_VAR_ATTACK_TURN,
-                                     UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_OPT_BACK};
-    static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD, UI_STR_OPT_VAR_ATTACK_TURN,
-                                     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_BACK};
+    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness
+       and Shadow aggression (VAR-SHADOWS's Peaceful shadows follow) */
+    static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
+                                     UI_OPT_VAR_AGGRESSION, UI_OPT_BACK};
+    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
+                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_BACK};
+    /* Gameplay > Combat: the three combat [variants] rows, then the four
+       fight rules that were on Shadows (One hit per swing, Shadows never
+       dodge, Shadows attack together, Queen barrier); VAR-WEAPONS's two weapon
+       rows follow Queen barrier */
+    static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,        UI_OPT_VAR_ATTACK_TURN,
+                                     UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_OPT_VAR_ONE_HIT,
+                                     UI_OPT_VAR_NEVER_DODGE,       UI_OPT_SHADOWS_TOGETHER,
+                                     UI_OPT_VAR_BARRIER,           UI_OPT_BACK};
+    static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD,        UI_STR_OPT_VAR_ATTACK_TURN,
+                                     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_OPT_VAR_ONE_HIT,
+                                     UI_STR_OPT_VAR_NEVER_DODGE,       UI_STR_OPT_SHADOWS_TOGETHER,
+                                     UI_STR_OPT_VAR_BARRIER,           UI_STR_BACK};
     /* Gameplay > Cutscenes: the opening skipped, the two cutscene
        [variants] rows */
     static const int cutOpts[] = {UI_OPT_SKIP_OPENING, UI_OPT_VAR_NO_LOOK, UI_OPT_VAR_IGNORE_CAMS,

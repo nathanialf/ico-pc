@@ -353,8 +353,7 @@ disc](#options-on-each-disc)).
 
 ### Game variants
 
-Options > Gameplay: No hints on the page, Shadow toughness, One hit per swing, Shadows never dodge,
-Shadow aggression and Queen barrier on Gameplay > Shadows, Automatic guard, Turn to face shadows and Shadows wait while Ico is down on Gameplay > Combat, No cutscene look-around and Ignore
+Options > Gameplay: No hints on the page, Shadow toughness and Shadow aggression on Gameplay > Shadows, Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge and Queen barrier on Gameplay > Combat (Shadows attack together is there too), No cutscene look-around and Ignore
 cutscene cameras on Gameplay > Cutscenes, and the Debug menu on Developer (`[variants]`,
 [CONFIG.md](CONFIG.md#variants), [UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes)). The values are
 `port/game/variants.c`'s; the game reads them in three ways, and with every row at its shipped value

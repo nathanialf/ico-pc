@@ -154,17 +154,18 @@ static void testBuild(void)
                                     UI_OPT_NATURAL_CHAINS, UI_OPT_BACK};
     static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
                                     UI_STR_OPT_NATURAL_CHAINS, UI_STR_BACK};
-    static const int shadowOpts[] = {
-        UI_OPT_SHADOW_SPEED,    UI_OPT_SHADOWS_TOGETHER, UI_OPT_VAR_TOUGHNESS, UI_OPT_VAR_ONE_HIT,
-        UI_OPT_VAR_NEVER_DODGE, UI_OPT_VAR_AGGRESSION,   UI_OPT_VAR_BARRIER,   UI_OPT_BACK};
-    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED,    UI_STR_OPT_SHADOWS_TOGETHER,
-                                     UI_STR_OPT_VAR_TOUGHNESS,   UI_STR_OPT_VAR_ONE_HIT,
-                                     UI_STR_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_AGGRESSION,
-                                     UI_STR_OPT_VAR_BARRIER,     UI_STR_BACK};
-    static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD, UI_OPT_VAR_ATTACK_TURN,
-                                     UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_OPT_BACK};
-    static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD, UI_STR_OPT_VAR_ATTACK_TURN,
-                                     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_BACK};
+    static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
+                                     UI_OPT_VAR_AGGRESSION, UI_OPT_BACK};
+    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
+                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_BACK};
+    static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,        UI_OPT_VAR_ATTACK_TURN,
+                                     UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_OPT_VAR_ONE_HIT,
+                                     UI_OPT_VAR_NEVER_DODGE,       UI_OPT_SHADOWS_TOGETHER,
+                                     UI_OPT_VAR_BARRIER,           UI_OPT_BACK};
+    static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD,        UI_STR_OPT_VAR_ATTACK_TURN,
+                                     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_OPT_VAR_ONE_HIT,
+                                     UI_STR_OPT_VAR_NEVER_DODGE,       UI_STR_OPT_SHADOWS_TOGETHER,
+                                     UI_STR_OPT_VAR_BARRIER,           UI_STR_BACK};
     static const int cutOpts[] = {UI_OPT_SKIP_OPENING, UI_OPT_VAR_NO_LOOK, UI_OPT_VAR_IGNORE_CAMS,
                                   UI_OPT_BACK};
     static const int cutStrs[] = {UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_VAR_NO_LOOK,
@@ -236,8 +237,8 @@ static void testBuild(void)
     }
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 5), "Gameplay > Yorda rows");
-    CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 8), "Gameplay > Shadows rows");
-    CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 4), "Gameplay > Combat rows");
+    CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 4), "Gameplay > Shadows rows");
+    CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 8), "Gameplay > Combat rows");
     CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
     {
         /* Yorda, Shadows, Combat and Cutscenes open their pages, right before
@@ -1981,7 +1982,7 @@ static void testValues(void)
         ico_opt_set_pit_time(ICO_PIT_ORIGINAL);
         ico_config_set_string("gameplay.pit_time", "original");
     }
-    /* Shadow speed: first on Gameplay > Shadows, Shadows attack together right after it;
+    /* Shadow speed: first on Gameplay > Shadows, Shadows attack together on Gameplay > Combat;
        Original, Faster, Fastest, Slower, Original */
     {
         static const char *const kWord[4] = {"slower", "original", "faster", "fastest"};
@@ -1996,15 +1997,19 @@ static void testValues(void)
 
             rn = ui_settings_page_rows(UI_PAGE_SHADOWS, rl, ro, NULL, 16);
             for (k = 0; k < rn; k++) {
-                if (ro[k] == UI_OPT_SHADOWS_TOGETHER) {
-                    together = k;
-                } else if (ro[k] == UI_OPT_SHADOW_SPEED) {
+                if (ro[k] == UI_OPT_SHADOW_SPEED) {
                     speed = k;
                 }
             }
-            CHECK(speed == 0 && together == 1,
-                  "Shadow speed first on Shadows, Shadows attack together after it (%d, %d)", speed,
-                  together);
+            rn = ui_settings_page_rows(UI_PAGE_COMBAT, rl, ro, NULL, 16);
+            for (k = 0; k < rn; k++) {
+                if (ro[k] == UI_OPT_SHADOWS_TOGETHER) {
+                    together = k;
+                }
+            }
+            CHECK(speed == 0 && together == 5,
+                  "Shadow speed first on Shadows, Shadows attack together sixth on Combat (%d, %d)",
+                  speed, together);
         }
         CHECK(strcmp(ui_settings_value_text(UI_OPT_SHADOW_SPEED), "Original") == 0,
               "shadow speed default");
