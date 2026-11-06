@@ -1087,6 +1087,21 @@ has.
   the arena's `object/sdf/st13b/collis/st13b.cl`, 129 floors; the climbing room's
   `object/sdf/8test/collis/st08a.cl`, 270 floors; the North American disc's model records are
   268 bytes, as the August 2001 disc's).
+- What the climbing room is (measured on the European disc by
+  `build-host/tmp/v0104/tools/rooms_compare.py`, output `evidence/rooms/rooms-compare.txt`): an
+  early cut of the trolley room (stage 8, `st08a (TRUCK)`, pack `STGST08D.DF`). Every file of it is
+  named `st08a` under its own `8test/` folder, it uses the trolley room's camera set (`camSetId` 67,
+  `camdata/troko.gcm`), and its one entrance row (exit 260) is the point of the trolley room's main
+  entrance (exits 2 and 61). It is not the shipped room: its collision has 270 floors against the
+  shipped room's 436 (plus 237 in `st08a_fr.cl`), of which 37 are the same polygons (10 more match
+  `st08a_fr.cl`); its box spans y -5005..0 where the shipped room's spans -4955..6200 (it goes on
+  below the test room's floor) and z -1662..8549 against -4362..9549; its models are other builds
+  (`st08a_p1` empty against 26 parts and 13,964 vertices; `p2` 1 part and 6,821 vertices against
+  15 and 7,238; `p3` 8 and 7,796 against 17 and 5,836; `p4` 1 and 2,349 against 17 and 6,568) with
+  their own texture set (`8test/texture/`); its layout has 32 rows against 78, with no shadow
+  generators (kind 4), no kind 12, 19, 22, 26 or 28 rows (the shipped room's doors, switches and
+  fittings), one save couch (kind 16) against three, and fifteen rows of kind 266, which no table of
+  the shipped game names, laid along the walkways. The disc carries no date or version for it.
 - The climbing room's floors and walls: its collision, `object/sdf/8test/collis/st08a.cl`, belongs
   to model 1140 (European; 1105 North American, 1136 Japanese, Korean and Asian, 1100 August
   2001), whose model file `object/sdf/8test/model/st08a_p1.p2o` in `STG8TEST.DF` is an empty
