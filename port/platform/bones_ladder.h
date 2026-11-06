@@ -7,14 +7,19 @@
  * skinned draw differ (Mesa's Turnip on an Adreno: Yorda's shin).  Pure: no
  * file, no renderer; window_bones.c reads the keys and writes them.
  *
- *   step 1  [dev] vu_bones = ring: the next start reads the skinned draws'
- *           bones through the ring (a storage buffer) instead of a uniform
- *           block (port/render/rd_pipeline.c rd__vu_policy_init).  Written
+ *   step 1  [dev] vu_bones = ring: the skinned draws' bones read through the
+ *           ring (a storage buffer) instead of a uniform block
+ *           (port/render/rd_pipeline.c rd__vu_policy_init), in the same
+ *           run: the window sets ICO_RD_VU_BONES and makes the renderer
+ *           again in place (window_switch.h ico_window_switch_restart, as
+ *           Options > Graphics > Apply does; bones_restart_step's guards),
+ *           and every later start reads the key.  Written
  *           at the run's first evidence that the ring read clears it (the
  *           ring read's twin C equal to B, or a wrong probe whose column 3
  *           drew right), or after BONES_EVENTS_UNTESTED twin events with no
  *           evidence either way (its pipelines not made yet).
- *   step 2  [dev] turnip_debug = nobin: the next start sets TU_DEBUG=nobin
+ *   step 2  [dev] turnip_debug = nobin: the next start (the driver library
+ *           is loaded once a process) sets TU_DEBUG=nobin
  *           before the Turnip package loads (Android only,
  *           android/gpu_driver_android.c; the package's library
  *           libvulkan_freedreno.so).  Written when the twins still differ
@@ -72,6 +77,18 @@ typedef enum BonesAction {
    HEALED once) */
 BonesAction bones_ladder_step(const BonesLadderIn *in);
 
+/* Step 1's switch in the run (window_bones.c): BONES_RESTART_ASK when the
+   key was written and the switch is still wanted (pending) and not asked
+   yet this run (asked), with no movie playing and BONES_RESTART_AFTER_S
+   seconds of the run gone (uptimeS); BONES_RESTART_WAIT while a movie
+   plays or before that; BONES_RESTART_NONE otherwise (nothing pending, or
+   asked once already: at most once a run) */
+#define BONES_RESTART_AFTER_S 30.0
+
+enum { BONES_RESTART_NONE = 0, BONES_RESTART_ASK, BONES_RESTART_WAIT };
+
+int bones_restart_step(int pending, int asked, int movie, double uptimeS);
+
 /* the mark beside a key the ladder writes */
 typedef struct BonesMark {
     char version[32];
@@ -91,8 +108,20 @@ int bones_mark_parse(const char *text, BonesMark *m);
 int bones_ladder_start_line(char *out, size_t size, const char *vuBones, const char *vuBonesBy,
                             const char *turnipDebug, const char *turnipDebugBy, int nobinSet);
 
+/* Step 1's written line by when it takes effect: BONES_RING_NOW (the
+   renderer made again in place now: "in force from the next picture"),
+   BONES_RING_WAITS (the switch waits for `wait`'s words), BONES_RING_NEXT
+   (the switch refused or not asked: the next start) */
+enum { BONES_RING_NEXT = 0, BONES_RING_NOW, BONES_RING_WAITS };
+
+int bones_ring_line(char *out, size_t size, const BonesLadderIn *in, int written,
+                    const char *cfgName, int when, const char *wait);
+/* the line before step 1's switch in the run */
+int bones_restart_line(char *out, size_t size);
+
 /* The line for an action (not BONES_WAIT): written says whether the key
-   reached config.toml (cfgName the file's name); 0, or -1 for WAIT. */
+   reached config.toml (cfgName the file's name); 0, or -1 for WAIT.
+   BONES_WRITE_RING's is bones_ring_line's BONES_RING_NEXT. */
 int bones_ladder_action_line(char *out, size_t size, BonesAction a, const BonesLadderIn *in,
                              int written, const char *cfgName);
 

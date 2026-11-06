@@ -57,7 +57,15 @@ static struct {
     int result; /* UI_GFX_SWITCH_* of the last one asked */
     int ended;  /* -3: no renderer left (ico_window_switch_end_text) */
     char endText[512];
+    /* ico_window_switch_restart: the next switch is the renderer made
+       again in place (the same backend and card), for why */
+    bool restart;
+    char restartWhy[96];
 } s_sw;
+
+/* the switch the pump runs makes the renderer again even on the backend
+   and card running (ico_window_switch_restart) */
+static bool s_force;
 
 /* the call the driver stalled in during the switch (RhiWaitHooks.stalled:
    "sprite_aa1_ps", "" none) and how long it had held */
@@ -212,7 +220,7 @@ int ico_window_switch_backend(const char *name, const char *adapter, int trial)
                 name != NULL ? name : "(none)", why);
         return -2;
     }
-    if (strcmp(name, old) == 0 && adapterRunning(adapter)) {
+    if (strcmp(name, old) == 0 && adapterRunning(adapter) && !s_force) {
         return 0;
     }
     s_stalled[0] = '\0';
@@ -398,6 +406,8 @@ int ico_window_switch_pump(void)
     snprintf(wantAdapter, sizeof(wantAdapter), "%s", s_sw.wantAdapter);
     snprintf(oldAdapter, sizeof(oldAdapter), "%s", rhi_adapter_name());
     s_sw.want[0] = '\0';
+    const bool restart = s_sw.restart;
+    s_sw.restart = false;
     const Uint64 t0 = SDL_GetTicksNS();
     /* the device's start and the pipeline set are not a hang of the game,
        but a step that never ends is one: the switch's own watch
@@ -411,9 +421,29 @@ int ico_window_switch_pump(void)
         snprintf(what, sizeof(what), "switching the renderer from %s to %s", old, want);
         ico_diag_watchdog_switch(SWITCH_WATCH_S, what);
     }
-    const int r = ico_window_switch_backend(want, wantAdapter, s_sw.why == UI_GFX_WHY_APPLY);
+    s_force = restart;
+    const int r =
+        ico_window_switch_backend(want, wantAdapter, !restart && s_sw.why == UI_GFX_WHY_APPLY);
+    s_force = false;
     ico_diag_watchdog_switch(0, NULL);
     const double secs = (double)(SDL_GetTicksNS() - t0) / 1e9;
+    if (restart) {
+        /* the renderer made again in place: its own line; the Graphics
+           page's result untouched (it asked nothing) */
+        if (r == 0) {
+            fprintf(stderr, "window: the renderer made again in place on %s (%s), %.1f s\n", want,
+                    s_sw.restartWhy, secs);
+        }
+        if (r == -3) {
+            s_sw.ended = 1;
+            snprintf(s_sw.endText, sizeof(s_sw.endText),
+                     "The game's graphics could not start again (%s): %s did not start.\n"
+                     "The game ends.",
+                     s_sw.restartWhy, properName(want));
+            return -1;
+        }
+        return 0;
+    }
     const char *how = s_sw.why == UI_GFX_WHY_TIMEOUT ? "not kept in 10 s" : "reverted";
     /* what changed: the renderer, the card it runs on (or both) */
     const bool backendChanged = strcmp(want, old) != 0;
@@ -451,6 +481,24 @@ int ico_window_switch_pump(void)
                  properName(want), properName(old));
         return -1;
     }
+    return 0;
+}
+
+int ico_window_switch_restart(const char *why)
+{
+    const char *running = ico_window_switch_running();
+    const char *no = s_sw.want[0] != '\0' ? "a switch is asked already" : refusal(running);
+
+    if (no != NULL) {
+        fprintf(stderr, "window: the renderer not made again in place (%s): %s\n",
+                why != NULL ? why : "", no);
+        return -2;
+    }
+    snprintf(s_sw.want, sizeof(s_sw.want), "%s", running);
+    snprintf(s_sw.wantAdapter, sizeof(s_sw.wantAdapter), "%s", rhi_adapter_wanted());
+    s_sw.why = UI_GFX_WHY_REVERT; /* not on trial: the start's renderer again */
+    s_sw.restart = true;
+    snprintf(s_sw.restartWhy, sizeof(s_sw.restartWhy), "%s", why != NULL ? why : "");
     return 0;
 }
 

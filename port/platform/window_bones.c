@@ -5,6 +5,7 @@
  */
 #include "window_bones.h"
 
+#include <SDL3/SDL.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -12,6 +13,7 @@
 #include "config.h"
 #include "ico_version.h"
 #include "rd.h"
+#include "window_switch.h"
 #ifdef __ANDROID__
 #include "android/gpu_driver_android.h"
 #endif
@@ -21,11 +23,21 @@
 #define KEY_TU "dev.turnip_debug"
 #define KEY_TU_BY "dev.turnip_debug_by"
 
+/* the game's (ico2/common/include/StageManager.h): a movie plays (window_switch.c
+   refuses a switch then) */
+extern int mpegPlay;
+
 static struct {
     int init;
     int done;   /* a write, a stop or the port race acted on: nothing more this run */
     int healed; /* the healed line said */
     int nobin, nobinOff, nobinAvail;
+    /* step 1 written: the switch in the run wanted (pending), asked
+       (once a run), its waiting line said; the run's evidence then (the
+       lines), the mark (the environment) */
+    int ringPending, ringAsked, ringWaitSaid;
+    BonesLadderIn ringIn;
+    char ringMark[128];
 } s;
 
 static const char *game_version(void)
@@ -38,9 +50,20 @@ static const char *cfg_name(void)
     return ico_config_toml_path() != NULL ? ico_config_toml_path() : "config.toml";
 }
 
-/* key = value and key_by = the mark of the run so far; 1 when saved */
+/* a variable for this process, read by rd_init (rd__vu_policy_init) */
+static void put_env(const char *name, const char *value)
+{
+#ifdef _WIN32
+    _putenv_s(name, value);
+#else
+    setenv(name, value, 1);
+#endif
+}
+
+/* key = value and key_by = the mark of the run so far (kept in mark when
+   given); 1 when saved */
 static int write_key(const char *key, const char *keyBy, const char *value,
-                     const RdVuBonesEvidence *ev)
+                     const RdVuBonesEvidence *ev, char *keep, size_t keepSize)
 {
     BonesMark m;
     char mark[128];
@@ -50,6 +73,9 @@ static int write_key(const char *key, const char *keyBy, const char *value,
     m.frame = ev->frame;
     m.differ = ev->differ;
     m.twins = ev->twins;
+    if (keep != NULL && bones_mark_format(keep, keepSize, &m) != 0) {
+        keep[0] = '\0';
+    }
     return bones_mark_format(mark, sizeof(mark), &m) == 0 &&
            ico_config_set_string(key, value) == 0 && ico_config_set_string(keyBy, mark) == 0 &&
            ico_config_save() == 0;
@@ -78,6 +104,50 @@ static void start(void)
     }
 }
 
+/* step 1's switch in the run (bones_restart_step's guards): the renderer
+   made again in place at this pump's switch (window_switch.c, after this
+   pump), with ICO_RD_VU_BONES set so its rd_init takes the ring builds */
+static void ring_switch_poll(void)
+{
+    char line[640];
+    const double up = (double)SDL_GetTicks() / 1000.0;
+    const int step = bones_restart_step(s.ringPending, s.ringAsked, mpegPlay != 0, up);
+
+    if (step == BONES_RESTART_NONE) {
+        return;
+    }
+    if (step == BONES_RESTART_WAIT) {
+        if (!s.ringWaitSaid) {
+            s.ringWaitSaid = 1;
+            if (bones_ring_line(line, sizeof(line), &s.ringIn, 1, cfg_name(), BONES_RING_WAITS,
+                                mpegPlay != 0 ? "the movie's end" : "the run's first 30 s") == 0) {
+                fprintf(stderr, "%s\n", line);
+            }
+        }
+        return;
+    }
+    s.ringAsked = 1;
+    s.ringPending = 0;
+    put_env("ICO_RD_VU_BONES", "ring");
+    put_env("ICO_RD_VU_BONES_BY", s.ringMark);
+    if (ico_window_switch_restart("issue 123's ladder: the bones through the ring") != 0) {
+        /* the switch machinery refuses (its line above): the next start */
+        if (!s.ringWaitSaid && bones_ring_line(line, sizeof(line), &s.ringIn, 1, cfg_name(),
+                                               BONES_RING_NEXT, NULL) == 0) {
+            fprintf(stderr, "%s\n", line);
+        }
+        s.done = 1;
+        return;
+    }
+    if (!s.ringWaitSaid &&
+        bones_ring_line(line, sizeof(line), &s.ringIn, 1, cfg_name(), BONES_RING_NOW, NULL) == 0) {
+        fprintf(stderr, "%s\n", line);
+    }
+    if (bones_restart_line(line, sizeof(line)) == 0) {
+        fprintf(stderr, "%s\n", line);
+    }
+}
+
 void window_bones_pump(void)
 {
     RdVuBonesEvidence ev;
@@ -94,6 +164,18 @@ void window_bones_pump(void)
         start();
     }
     if (s.done) {
+        return;
+    }
+    if (s.ringPending) {
+        ring_switch_poll();
+        return;
+    }
+    if (s.ringAsked && !ev.ring) {
+        /* the renderer made again in place, not up on the ring builds yet
+           (or it fell back): nothing decided on the old evidence */
+        if (ev.started) {
+            s.done = 1; /* up without them: the next start reads the key */
+        }
         return;
     }
     if (ev.twins == 0) {
@@ -124,15 +206,22 @@ void window_bones_pump(void)
         s.healed = 1;
         break;
     case BONES_WRITE_RING:
-        written = write_key(KEY_BONES, KEY_BONES_BY, "ring", &ev);
+        written = write_key(KEY_BONES, KEY_BONES_BY, "ring", &ev, s.ringMark, sizeof(s.ringMark));
+        if (written) {
+            /* step 1 in this run: the switch at this pump or a later one */
+            s.ringIn = in;
+            s.ringPending = 1;
+            ring_switch_poll();
+            return;
+        }
         s.done = 1;
         break;
     case BONES_WRITE_NOBIN:
-        written = write_key(KEY_TU, KEY_TU_BY, "nobin", &ev);
+        written = write_key(KEY_TU, KEY_TU_BY, "nobin", &ev, NULL, 0);
         s.done = 1;
         break;
     case BONES_WRITE_OFF:
-        written = write_key(KEY_TU, KEY_TU_BY, "off", &ev);
+        written = write_key(KEY_TU, KEY_TU_BY, "off", &ev, NULL, 0);
         s.done = 1;
         break;
     default: /* BONES_STOP, BONES_PORT_RACE: said, nothing written */
