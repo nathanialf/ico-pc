@@ -44,6 +44,19 @@ gesture or button opens the pause menu during play, and **Options >
 Controls > Touch screen > Reset layout** puts everything back. Each way you
 hold or fold the phone has its own arrangement. [How it works](CONTROLS.md#arranging-the-buttons-yourself).
 
+## Ico runs in circles in the climbing test room
+
+The second room under Options > Extras > Unused content (Test room:
+climbing) was left on the disc without a floor; the port gives it one.
+Its camera, though, was made for a different room (the one with the
+trolley): in the room's lower part five camera spots sit close together on
+different sides of the ramp, and the game moves the camera between them
+by how near Ico is to each. Because the controls follow the camera, when
+Ico runs the view jumps from one spot to the next and his path curves
+with it. At walking speed the view settles and he keeps his line. It is
+how the room was built, not a fault in the port; the arena test room and
+every real room of the game are not affected.
+
 ## Ico and Yorda come straight back out of a doorway
 
 **When I take Yorda's hand through the door at the top of the ladder in the
