@@ -333,7 +333,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the capture asked once (`rd_vu_skin_capture_due`), the sidecar's header (magic, version, the
   command, the flags: the check's data, the twins' counts, wrong, differ, targeted; A != B) and
   sections read back, the CPU's bytes the bones and the GPU's copy differing at qwords 184..187
-  alone (`rd_vu_skin_check_capture`).
+  alone (`rd_vu_skin_check_capture`). Issue 123's ladder ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)),
+  under the plain set (`ICO_RD_VU_SET=plain`): with `=200` the probe's column 3 (the bones through
+  the ring at the draw's block) right where column 0 is wrong (`(c3) the bones through the ring:
+  right (0 wrong); reads as: H1, address-dependent`, `rd_vu_skin_check_probe_c3`); the twin run
+  with `=200,ring` drawing twin C and C differing from B as A does (`C (ring read) K samples`, the
+  end line's `the ring read's twin (C) X drawn, Y read, Z differ from B`,
+  `rd_vu_skin_check_twin_c`); the same with `ICO_RD_VU_BONES=ring`: the start line `rd: VU bones:
+  through the ring (storage buffer) on the skinned entries ([dev] vu_bones = ring, set without the
+  skin check's mark)`, the twins (both ring reads) differing with `A and B read the bones through
+  the ring: step 1 of the ladder in force`, and `the ring read: not healed` at the end
+  (`rd_vu_skin_check_twin_bones_ring`).
 - `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
   paths, `*` globs, a missing dump named and skipped, none at all `SKIP`) replayed by
   `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
@@ -460,7 +470,22 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_vu_skin_check_123_nan_attach`; on this dump the three draws on bone 200 are twinned through
   the box check's pipeline, and each line says why). The summary line ends `twins: T read (O through
   the draw's own pipeline), D differ (E of them through it); V wrong vertices dropped
-  (non-finite)`. SKIP without the dump or a device.
+  (non-finite); the ring read: c3 right K (c3 drawn in M), ring twins R read, E differ from B`. Issue
+  123's ladder on the same dump under the plain set with the pre-pass off
+  (`ICO_RD_VU_SET=plain ICO_RD_VU_PREPASS=0`): with `=200` H1 with column 3 right and every twin C
+  equal to B (`rd_vu_skin_check_123_c3`); with `=200,nan` twin C differing from B
+  (`rd_vu_skin_check_123_nan_c`); with `ICO_RD_VU_BONES=ring` clean, the `rd: VU bones: through the
+  ring` start line and `the ring read: healed (0 of T ...)` (`rd_vu_skin_check_123_bones_ring`), and
+  with the NaN too the twins (both ring reads) differing and `not healed`
+  (`rd_vu_skin_check_123_bones_ring_nan`). SKIP without the dump or a device.
+- `rd_vu_bones_ring_ab.cmake`: issue 123's ladder, step 1 ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)):
+  the three dumps of `/primary/dev/ico-dumps/163/` (issue 163's blended dump, its patched copy,
+  issue 123's blended dump of 2026-11-06) through `rd_replay_tool --pass-dump --present 640x480` under the
+  plain set with the VU pre-pass off and the skin check off, `ICO_RD_VU_BONES=cbuffer` against
+  `=ring`, at Original and with the attachment read and GS state as shader data: every PNG byte for
+  byte, each run's start line (`rd: VU bones: through VuBoneCB`, `rd: VU bones: through the ring
+  (storage buffer) on the skinned entries`) (`rd_vu_bones_ring_ab`). SKIP without the dumps or a
+  device.
 - `rd_vu_skin_check_ab.cmake`: the skin check is designed not to change the picture
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)); `rd_replay_tool --pass-dump` with it off
   (`ICO_RD_VU_SKIN_CHECK=0`) and on for every skinned command of every replay (`=2`: the probes,

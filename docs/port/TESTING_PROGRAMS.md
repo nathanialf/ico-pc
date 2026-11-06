@@ -692,7 +692,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   winning, no folder made), portable mode, the `[dev]`
   keys exported as environment switches (`ico_dev_env_value`, `test_dev_env`; `present_fallback`
   auto, off or fifo; `glow_fold` as `ICO_RD_GLOW_FOLD`; `submit_thread` as `ICO_RD_SUBMIT_THREAD`,
-  off and false as 0, true as 1, its ini name), a restart's
+  off and false as 0, true as 1, its ini name; `vu_bones` ring or cbuffer and `vu_bones_by` as
+  it is, exported as `ICO_RD_VU_BONES` and `ICO_RD_VU_BONES_BY`, `turnip_debug` with no variable),
+  a restart's
   `ICO_RD_BLEND` and `ICO_RD_VU_PREPASS` over the ini's (`test_retry_blend`,
   `test_retry_prepass`), the disc choice's rules in order (`ico_host_choose_disc`,
   `test_choose_disc`), the logs folder set by `ico_host_set_logs_dir` (`test_logs_override`), and
@@ -999,6 +1001,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   never under 0, a gap under 0, the call not timed apart, no gap, no GPU span) and the after line (`present_after_text`: the replay after the stall, its gap across one
   and two untimed replays, no GPU span, a short buffer cut); the stall lines' threshold
   (`present_stall_lines`: from 250 ms on, never from 50 to 250 ms nor for NaN) (`present_hist`).
+- `bones_ladder_test.c`: issue 123's ladder across starts (`bones_ladder.h`,
+  [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)): the step for each run's evidence over sequences
+  of starts as `window_bones.c` applies them (step 1 written and healed over 2,000 presents; step 1
+  still differing: step 2, then `turnip_debug = off` and a later start's stop; step 2 healed and
+  kept; step 2 out of reach: the stop; step 1 skipped when the ring read beside the picture did not
+  clear it or the scene pass's execution differed twice with no wrong probe; step 1 untested after 8
+  events; nothing without a differing twin; a port race never acted on), the mark written and read
+  back and a hand-written value never taken for it, the start and action lines word for word
+  (`bones_ladder`).
 - `robust_persist_test.c`: the port's own `[dev] gpu_robust` turning itself off (`robust_persist.h`): the mark `gpu_robust_by` written and read back and a hand-written value never taken for it, the rule over sequences of starts (three clean starts in a row turn it off; a loss or an end while preparing resets the count; a start that never reached the game leaves it; another version turns it off at once; no mark does nothing), the mark through the config text, the removal of both `[dev]` keys leaving every other line (a `gpu_robust` in another section included), the three log lines word for word (`robust_persist`).
 - `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
@@ -1199,7 +1210,8 @@ The renderer's test programs have a page of their own:
 ## port/shaders/test
 
 - `shaders_table_test.c`: every embedded entry compiled for SPIR-V and signed DXIL, the vertex
-  pre-pass's among them (`expectedPrepass`) and the colour adjustment's box blits (`expectedTone`)
+  pre-pass's among them (`expectedPrepass`), the colour adjustment's box blits (`expectedTone`) and
+  the cluster entries' ring builds (`vu_skin_ring_plain_vs` and its two kin in `expectedPlain`)
   (`shaders_table`).
 - `gs_math_test.c`: `gs_math.hlsli` compiled as C against the [GS](ARCHITECTURE.md#terms) formulas,
   and its integer forms against the operators they replace ([SHADERS.md](SHADERS.md#integer-forms))
@@ -1237,7 +1249,11 @@ The renderer's test programs have a page of their own:
   range out of the box, a card, the 48:9 edge, between two ticks, turned to the eye drawn clipped
   and away dropped; a grid card out of the box two-sided, drawn; a sprite past its window out of
   the box, drawn whole); the pictures use the plain mapping (no exact viewport), so the planes stay
-  the GPU's there (`vu1`, `vu1_mali`).
+  the GPU's there; every cluster case without the extended flags and tick cameras drawn again
+  through its ring build (`vu_X_ring_plain_vs`, the bones through t5 from `IcoVuCB.mark[3]`, a
+  layout with slot 5): probe and pictures byte for byte the plain variant's, the count printed and
+  required above 0 (issue 123's ladder, [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)) (`vu1`,
+  `vu1_mali`).
 
 ## port/test
 
