@@ -138,10 +138,16 @@ scene pass's binning and the pipeline's link exactly as the draw. Any other draw
 the box check's pipeline (the key without the destination read, colour mask 0, Z write off,
 compiled in the background; until it exists the twin is not drawn and counted as such). No twin in
 a storage, DATE, stencil or multisampled pass, nor for a draw through a merge build's table (it
-reads its bones through the table, not the b3 offset). Both twins clip alike, so unlike the box
+reads its bones through the table, not the b3 offset). A draw through the VU pre-pass's record
+(`vu_main_vs`: a desktop device; the pre-pass is off on the tile-based GPUs) reads the record, not
+its bones, so twins through its own key would read the same record at either offset and never
+differ: its twins go through the program's own vertex entry (the key `vuDraw`'s fallback takes,
+which reads the bones at b3 and ignores the record) in the box check's form, and the line says
+`(the program's own vertex entry: the draw read the pre-pass record)`. Both twins clip alike, so unlike the box
 check there is no behind-the-eye gate. Equal bytes give equal counts; when A's and B's differ
-(by count where the device's queries are precise, `RhiLimits.occlusionPrecise`, else as zero or
-not) the line `twins differ` names the command, both counts and page phases, the fragment entry
+(by count where the device's queries are precise, `RhiLimits.occlusionPrecise`: the device's
+`occlusionQueryPrecise` enabled at device creation and `VK_QUERY_CONTROL_PRECISE_BIT` passed to
+each begin, `vk_cmd.c`; lavapipe and Turnip offer it) the line `twins differ` names the command, both counts and page phases, the fragment entry
 and whether it was the draw's own pipeline, and what the probe of the same draw in that replay
 said; the command becomes the probe's target for the next 8 replays (whatever the clock and the
 schedule; nothing else is probed meanwhile). A non-finite read drops A's triangles, a zero read
@@ -307,8 +313,11 @@ binning pass and the pipeline's link included), on every skinned draw of every p
 see a fault that reads both offsets alike (a wrong read whatever the address: the probe's c1 row
 says that one), a fault in a draw's second pass (the no-dual pair: the twins redraw the first), a
 draw with Z writes that reads its attachment (twinned through the box pipeline, not its own), or
-anything under the vertex pre-pass (the draw reads the pre-pass record, not the bones; off on the
-tile-based GPUs). What the check as a whole cannot see: it compares the device with the CPU over the same stream and bytes, so
+the pre-pass record's own path (under the vertex pre-pass the twins read the bones through the
+program's entry, not the record the draw read; the pre-pass is off on the tile-based GPUs). Where
+the device does not offer precise occlusion counts the twins compare only zero against not zero
+(the start line says `zero or not only`): a fault that drops part of a draw that still draws
+something (the missing shin) is then invisible to them, and the probe alone sees it. What the check as a whole cannot see: it compares the device with the CPU over the same stream and bytes, so
 a dump whose stream was patched (the deep dive's copy with the lanes on 200 moved to a zero bone)
 checks right everywhere: both sides read the patched stream. On lavapipe the sabotage stands in for
 the device's wrong read.
@@ -321,7 +330,7 @@ the device's wrong read.
 `rd_vu_skin_check_twin_nan`, `rd_vu_skin_check_capture`)
 and `rd_vu_skin_check_dump.cmake` (`rd_vu_skin_check_dump`, `rd_vu_skin_check_163`,
 `rd_vu_skin_check_163_probe`, `rd_vu_skin_check_163_ring`, `rd_vu_skin_check_163_patched`, `rd_vu_skin_check_123`,
-`rd_vu_skin_check_123_nan` on issue 123's blended dump
+`rd_vu_skin_check_123_nan`, `rd_vu_skin_check_123_attach`, `rd_vu_skin_check_123_nan_attach` on issue 123's blended dump
 `frame-20261106-080033-v3910-blended`), and
 `rd_vu_skin_check_ab.cmake` (`rd_vu_skin_check_ab`: the pictures with the check on for every
 skinned command against off, byte for byte, at Original, with the attachment read and GS state as

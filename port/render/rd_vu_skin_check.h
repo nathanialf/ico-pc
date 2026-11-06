@@ -238,6 +238,8 @@ typedef struct RdSkinDraw {
     uint64_t indexOff;
     uint32_t first, count; /* its indices */
     uint8_t vs;            /* the vertex entry (RD_VS_*) of the program */
+    uint8_t prog;          /* the program (RD_PROG_*): its own entry's key (the twins of a
+                            * draw through the pre-pass record) */
 } RdSkinDraw;
 
 void rd__vu_skin_note(struct Replay *r, const struct DrawSetup *ds, const RdSkinDraw *d);

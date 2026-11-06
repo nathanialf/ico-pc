@@ -671,6 +671,7 @@ typedef struct SkTwin {
     uint64_t bonesOff, freshOff;
     uint8_t fs;
     bool own, c;
+    bool entry; /* through the program's own entry (the draw read the pre-pass record) */
     int32_t check;
 } SkTwin;
 
@@ -1112,8 +1113,18 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
         return;
     }
     const uint32_t slot = rd__ring_slot();
-    const bool own = dk->dst == RHI_DST_READ_ATTACHMENT && dk->gs.zwrite == RD_ZWRITE_OFF;
+    /* a draw through the VU pre-pass's record (vu_main_vs: a desktop device;
+     * off on the tile-based GPUs) reads the record, not its bones: its twins
+     * would read the same record whatever the bone offset, so they go
+     * through the program's own entry, which reads the bones at b3 and
+     * ignores the record (rd_replay_vu.c vuDraw's fallback key) */
+    const bool entry = dk->vs != d->vs;
+    const bool own = !entry && dk->dst == RHI_DST_READ_ATTACHMENT && dk->gs.zwrite == RD_ZWRITE_OFF;
     RdPipeKeyInt key = *dk;
+    if (entry) {
+        key.vs = d->vs;
+        key.gs.program = d->prog;
+    }
     RhiPipeline p = d->pipe;
     uint64_t dOff = d->dOff;
     if (own) {
@@ -1148,6 +1159,7 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
     tw->freshOff = fresh;
     tw->fs = dk->fs;
     tw->own = own;
+    tw->entry = entry;
     tw->c = false; /* C, the ring read's twin: B2 */
     tw->check = check;
     const RhiCommandList cl = rd__replay_cl();
@@ -1849,8 +1861,10 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
                 (unsigned long long)(tw->bonesOff & 4095u), (unsigned long long)c[0],
                 (unsigned long long)(tw->freshOff & 4095u), (unsigned long long)c[1], cw,
                 rd__fs_name(tw->fs),
-                tw->own ? " with the draw's attachment read (its own pipeline)"
-                        : " with colour and Z writes off",
+                tw->own     ? " with the draw's attachment read (its own pipeline)"
+                : tw->entry ? " with colour and Z writes off (the program's own vertex entry: the "
+                              "draw read the pre-pass record)"
+                            : " with colour and Z writes off",
                 probe, reads, (unsigned long long)s_run.twinEvents);
     }
     if (s_cap.done) {

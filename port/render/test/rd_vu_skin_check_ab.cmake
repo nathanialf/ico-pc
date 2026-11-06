@@ -9,7 +9,9 @@
 #   plain   Original at the dump's aspect, presented at 640x480;
 #   attach  the same with the attachment read and GS state as shader data
 #           (ICO_RD_BLEND=attachment, ICO_RD_UBER=on, the interlock faked
-#           off: lavapipe's form of the Turnip reporter's profile; the on
+#           off, the VU pre-pass off as on a tile-based GPU: lavapipe's form
+#           of the Turnip reporter's profile, where the twins of the
+#           Z-write-off draws go through the draws' own pipelines; the on
 #           run must say "GS state as shader data: on");
 #   msaa    Enhanced 4:3 2x with --aa msaa4.
 # Every target's PNG of the on run must equal the off run's byte for byte,
@@ -44,7 +46,7 @@ set(args_plain --present 640x480)
 set(args_attach --present 640x480)
 set(args_msaa --enhanced --aspect 4:3 --resolution 2x --aa msaa4)
 set(env_plain "")
-set(env_attach ICO_VK_FAKE_NO_INTERLOCK=1 ICO_RD_BLEND=attachment ICO_RD_UBER=on)
+set(env_attach ICO_VK_FAKE_NO_INTERLOCK=1 ICO_RD_BLEND=attachment ICO_RD_UBER=on ICO_RD_VU_PREPASS=0)
 set(env_msaa "")
 set(compared 0)
 set(failures 0)

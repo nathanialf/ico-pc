@@ -1865,7 +1865,7 @@ if(ICO_RUN_TESTS)
     # bone made NaN (the v0.10.4 picture's form): the probe's wrong vertices
     # dropped, address 200 named by its non-finite matrix; capture the same
     # with the sidecar written to a folder: its header and sections read back
-    set(_vsk_twin "rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh rd vu skin check test #[0-9]+ \\(120 vertices\\): twins differ: A \\(the draw's offset, page phase [0-9]+\\) [0-9]+ samples, B \\(fresh, phase [0-9]+\\) [0-9]+ samples[;,] through [a-z0-9_]+ with colour and Z writes off[;,] the probe of this command: not probed")
+    set(_vsk_twin "rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh rd vu skin check test #[0-9]+ \\(120 vertices\\): twins differ: A \\(the draw's offset, page phase [0-9]+\\) [0-9]+ samples, B \\(fresh, phase [0-9]+\\) [0-9]+ samples[;,] through [a-z0-9_]+ with colour and Z writes off[^;,]*[;,] the probe of this command: not probed")
     add_test(NAME rd_vu_skin_check_twin
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=twin
                      "-DEXTRA=${_vsk_twin}.*${_vsk_wrong}.*the probe targeted after a twin event.*twins at the end of the run: [1-9][0-9]* drawn"
@@ -2199,9 +2199,26 @@ if(ICO_RUN_TESTS)
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_nan"
                      "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\).*reads as: H2, a port race.*twins: [1-9][0-9]* read, [1-9][0-9]* differ.*[1-9][0-9]* wrong vertices dropped"
                      "-DLOG=${_vsk163_wrong}.*reads as non-finite / dropped" -P "${_vskd}")
+    # _attach: the same two under the Turnip reporter's profile on lavapipe
+    # (the attachment read, GS state as shader data, the VU pre-pass off as
+    # on a tile-based GPU), so Yorda's Z-write-off draws are twinned through
+    # their own pipelines with the write mask cleared: clean every twin
+    # equal, with the NaN bone twins differing there too
+    set(_vsk_attach "ICO_RD_VU_PREPASS=0;ICO_VK_FAKE_NO_INTERLOCK=1;ICO_RD_BLEND=attachment;ICO_RD_UBER=on")
+    add_test(NAME rd_vu_skin_check_123_attach
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_attach"
+                     "-DLINE=${_vskd_clean}.*twins: [1-9][0-9]* read, 0 differ \\([1-9][0-9]* through the draw's own pipeline\\)"
+                     -P "${_vskd}")
+    add_test(NAME rd_vu_skin_check_123_nan_attach
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_nan_attach"
+                     "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\).*twins: [1-9][0-9]* read, [1-9][0-9]* differ \\([1-9][0-9]* through the draw's own pipeline\\)"
+                     "-DLOG=twins differ: .* with the draw's attachment read \\(its own pipeline\\)" -P "${_vskd}")
     set(_vskd_tests rd_vu_skin_check_dump rd_vu_skin_check_163 rd_vu_skin_check_163_probe
                     rd_vu_skin_check_163_ring rd_vu_skin_check_163_patched rd_vu_skin_check_123
-                    rd_vu_skin_check_123_nan)
+                    rd_vu_skin_check_123_nan rd_vu_skin_check_123_attach
+                    rd_vu_skin_check_123_nan_attach)
     set_tests_properties(${_vskd_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
     if(_env)
         set_tests_properties(rd_vu_skin_check_dump rd_vu_skin_check_163
@@ -2214,6 +2231,10 @@ if(ICO_RUN_TESTS)
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring")
     set_tests_properties(rd_vu_skin_check_123_nan
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,nan")
+    set_tests_properties(rd_vu_skin_check_123_attach PROPERTIES ENVIRONMENT "${_env};${_vsk_attach}")
+    set_tests_properties(rd_vu_skin_check_123_nan_attach
+                         PROPERTIES ENVIRONMENT
+                                    "${_env};${_vsk_attach};ICO_RD_VU_SKIN_SABOTAGE=200,nan")
     # rd_vu_skin_check_ab (test/rd_vu_skin_check_ab.cmake, review2 S6): the
     # picture with the check on for every skinned command (ICO_RD_VU_SKIN_CHECK=2)
     # against off, every pass-dump PNG byte for byte, at Original, with the

@@ -436,7 +436,12 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   reading the same stream (`rd_vu_skin_check_163_patched`); on issue 123's blended dump
   `frame-20261106-080033-v3910-blended` (copied to the same folder) clean with every twin equal (`rd_vu_skin_check_123`) and with
   `=200,nan` wrong at address 200, H2, the twins differing and the wrong vertices dropped
-  (`rd_vu_skin_check_123_nan`). The summary line ends `twins: T read, D differ (O through the
+  (`rd_vu_skin_check_123_nan`); the same two under the Turnip reporter's profile on lavapipe (the
+  attachment read, GS state as shader data, the VU pre-pass off), where the twins of Yorda's
+  Z-write-off draws go through their own pipelines: every twin equal and at least one through the
+  draw's own pipeline (`rd_vu_skin_check_123_attach`), and with `=200,nan` the twins differing
+  there, the log's `twins differ: ... with the draw's attachment read (its own pipeline)`
+  (`rd_vu_skin_check_123_nan_attach`). The summary line ends `twins: T read, D differ (O through the
   draw's own pipeline); V wrong vertices dropped (non-finite)`. SKIP without the dump or a device.
 - `rd_vu_skin_check_ab.cmake`: the skin check is designed not to change the picture
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)); `rd_replay_tool --pass-dump` with it off
@@ -444,8 +449,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the box check inside the scene pass, the checked draw out of the draw merge) on the corpus dump
   `frame-20261007-200706-v3086` (46 skinned commands) and issue 163's blended dump, at Original
   presented at 640x480, the same with the attachment read and GS state as shader data
-  (`ICO_RD_BLEND=attachment`, `ICO_RD_UBER=on`, the interlock faked off; the on run must say `GS
-  state as shader data: on`) and at Enhanced 4:3 2x with MSAA 4: every PNG byte for byte, each on
+  (`ICO_RD_BLEND=attachment`, `ICO_RD_UBER=on`, the interlock faked off, the VU pre-pass off as on
+  a tile-based GPU; the on run must say `GS state as shader data: on`) and at Enhanced 4:3 2x with MSAA 4: every PNG byte for byte, each on
   run's `VU skin check: at the end of the run: N checks drawn` with N at least 1, at least one box
   check drawn over all, the twins drawn in every on run (`VU skin check: twins at the end of the
   run: T drawn (O through the draw's own pipeline with its attachment read)`) and O above 0 over the

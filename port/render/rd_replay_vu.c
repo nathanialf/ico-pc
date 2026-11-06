@@ -1215,7 +1215,8 @@ static void vuDraw(Replay *r, const RdStateBlock *s, const DrawSetup *ds, RhiBin
                                .indexOff = ix->off,
                                .first = first,
                                .count = count,
-                               .vs = progVs};
+                               .vs = progVs,
+                               .prog = prog};
         rd__vu_skin_note(r, ds, &sd);
     }
     r->st = saved;
