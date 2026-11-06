@@ -44,6 +44,22 @@ gesture or button opens the pause menu during play, and **Options >
 Controls > Touch screen > Reset layout** puts everything back. Each way you
 hold or fold the phone has its own arrangement. [How it works](CONTROLS.md#arranging-the-buttons-yourself).
 
+## What is the climbing test room?
+
+An early cut of the trolley room (the one where Ico rides the cart), kept
+on the disc as a place the makers built to try climbing and boxes. Every
+one of its files carries the trolley room's name, it uses that room's
+camera data, and its one entrance is the trolley room's main entrance. It
+is not the finished room, though: it has about one floor in seven in
+common with the shipped one, its structure is built from far fewer and
+rougher pieces with its own set of textures, it stops at the floor where
+the shipped room goes on below, and it has none of the shadows, doors or
+switches. Fifteen marker objects of a kind the finished game does not
+know lie along its walkways. The disc holds no date or version for it, so
+how early it is cannot be told. Its main model was emptied at some point
+while its floor data stayed attached to it, which is why the room had no
+floor until the port gave it one.
+
 ## Ico runs in circles in the climbing test room
 
 The second room under Options > Extras > Unused content (Test room:
