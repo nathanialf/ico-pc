@@ -192,6 +192,52 @@ static bool vkr_fence_slot_take(uint64_t value)
     return true;
 }
 
+/* rhi_vk.h vkr_test_submit_waits: the submits' binary waits, in order,
+ * while the test records them (the test's own thread submits) */
+#define VKR_TEST_SUBMITS 32u
+static bool s_testRecord;
+static RhiVkTestSubmit s_testSubmits[VKR_TEST_SUBMITS];
+static uint32_t s_testSubmitN;
+
+/* a semaphore as the test sees it (a pointer or a 64-bit handle) */
+static uint64_t vkr_test_handle(VkSemaphore h)
+{
+    uint64_t v = 0;
+    memcpy(&v, &h, sizeof(h) < sizeof(v) ? sizeof(h) : sizeof(v));
+    return v;
+}
+
+static void vkr_test_note_submit(const VkrSubmitDesc *d)
+{
+    if (s_testSubmitN < VKR_TEST_SUBMITS) {
+        RhiVkTestSubmit *t = &s_testSubmits[s_testSubmitN++];
+        t->waitSem = vkr_test_handle(d->wait);
+        t->waitStage = d->wait != VK_NULL_HANDLE ? (uint32_t)d->waitStage : 0u;
+        t->lists = d->cbCount;
+    }
+}
+
+void vkr_test_submit_record(bool on)
+{
+    s_testRecord = on;
+    s_testSubmitN = 0;
+}
+
+uint32_t vkr_test_submit_waits(RhiVkTestSubmit *out, uint32_t max)
+{
+    const uint32_t n = s_testSubmitN < max ? s_testSubmitN : max;
+    if (n) {
+        memcpy(out, s_testSubmits, (size_t)n * sizeof(out[0]));
+    }
+    s_testSubmitN = 0;
+    return n;
+}
+
+uint64_t vkr_test_acquire_sem(void)
+{
+    return vkr_test_handle(vkr_cur_frame()->acquireSem);
+}
+
 bool vkr_sync_submit(const VkrSubmitDesc *d, uint64_t *outValue)
 {
     VkSemaphore waitSems[2];
@@ -250,6 +296,9 @@ bool vkr_sync_submit(const VkrSubmitDesc *d, uint64_t *outValue)
             return false;
         }
         fence = g_vkr.fences[value % VKR_SYNC_FENCE_RING];
+    }
+    if (s_testRecord) {
+        vkr_test_note_submit(d);
     }
     if (!VKR_CHECK(vkQueueSubmit(g_vkr.queue, 1, &si, fence))) {
         /* nothing will signal the number: the counter stays, and a later

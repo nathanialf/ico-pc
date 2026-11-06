@@ -1179,7 +1179,11 @@ The renderer's test programs have a page of their own:
   mirrored turn, a turn not offered, `[dev] prerotate = false` and images past the surface's largest
   keep identity) (`rhi_vk_present_mode`).
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver;
-  `swapAcquired` per frame (`rhi_vk_swapchain`).
+  `swapAcquired` per frame; the acquire's wait with the list that uses the image (issue 179,
+  `acquireWaits` through `vkr_test_submit_waits`: a list of off-screen work before it waits for
+  nothing, the image's list on the acquire at `COLOR_ATTACHMENT_OUTPUT`, a dropped acquire drained
+  by one empty batch at `ALL_COMMANDS`; on the fence ring in `rhi_vk_swapchain_vk11`)
+  (`rhi_vk_swapchain`).
 - Helpers: `rhi_test_common.c`/`.h` (the shared cells, seven of whose pipelines come from one
   `rhi_create_pipelines` call with a failing description among them, and the fill-rule cell:
   edges through pixel centres under the top-left rule on every backend; and the dynamic state
