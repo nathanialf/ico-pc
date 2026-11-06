@@ -559,6 +559,11 @@ static const char *const s_whyNames[RD_VIS_WHY_COUNT] = {"skipped by the stream'
                                                          "occluded",
                                                          "kept: may close the MSAA epoch"};
 
+/* rd.h RdPerfRecord.cullHizOcc: the occluder candidates' reasons, in this
+ * order */
+_Static_assert(RD_VIS_HZ_OCC_USED == 0 && RD_VIS_HZ_OCC_NOTRI + 1 == RD_PERF_HIZ_OCC,
+               "RD_PERF_HIZ_OCC: the occluder reasons");
+
 static const char *const s_hzNames[RD_VIS_HZ_COUNT] = {
     "occluder used",
     "occluder refused: state",
@@ -1717,5 +1722,22 @@ const RdFrame *rd__vis_frame(const RdFrame *f, int keep)
     g_rdPerf.cullOccluded = w.n.occluded;
     g_rdPerf.cullMs = w.n.ms;
     g_rdPerf.cullHizMs = w.n.hizMs;
+    g_rdPerf.cullHizSettleMs = w.n.hizSettleMs;
+    g_rdPerf.cullHizCollectMs = w.n.hizCollectMs;
+    g_rdPerf.cullHizAlphaMs = w.n.hizAlphaMs;
+    g_rdPerf.cullHizVertMs = w.n.hizVertMs;
+    g_rdPerf.cullHizRasterMs = w.n.hizRasterMs;
+    g_rdPerf.cullHizTestMs = w.n.hizTestMs;
+    g_rdPerf.cullHizVerts = w.n.hizVerts + w.n.hizCheapVerts;
+    g_rdPerf.cullHizTrisRead = w.n.hizTrisRead;
+    g_rdPerf.cullHizTrisKept = w.n.hizTrisKept;
+    g_rdPerf.cullHizCells = w.n.hizCells;
+    g_rdPerf.cullHizTested = w.n.hizTested;
+    g_rdPerf.cullHizOverBudget = w.n.hizOverBudget;
+    g_rdPerf.cullHizCacheHits = w.n.hizCacheHits;
+    g_rdPerf.cullHizCacheDraws = w.n.hizCacheDraws;
+    for (int k = 0; k < RD_PERF_HIZ_OCC; k++) {
+        g_rdPerf.cullHizOcc[k] = s_vis.hz[RD_VIS_HZ_OCC_USED + k];
+    }
     return out;
 }
