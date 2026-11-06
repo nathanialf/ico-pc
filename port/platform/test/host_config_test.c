@@ -747,6 +747,27 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("region_rule", "0") == NULL);
     CHECK(ico_dev_env_value("region_rule", "") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.region_rule"), "region_rule") == 0);
+    /* vu_bones and its mark: issue 123's ladder, step 1 (port/render/
+       rd_pipeline.c rd__vu_policy_init reads ICO_RD_VU_BONES, rd_vu_bones.c
+       the mark from ICO_RD_VU_BONES_BY for the start line; window_bones.c
+       writes both) */
+    CHECK(strcmp(ico_dev_env_name("vu_bones"), "ICO_RD_VU_BONES") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_bones", "ring"), "ring") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_bones", "cbuffer"), "cbuffer") == 0);
+    CHECK(ico_dev_env_value("vu_bones", "true") == NULL);
+    CHECK(ico_dev_env_value("vu_bones", "1") == NULL);
+    CHECK(ico_dev_env_value("vu_bones", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_bones"), "vu_bones") == 0);
+    CHECK(strcmp(ico_dev_env_name("vu_bones_by"), "ICO_RD_VU_BONES_BY") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_bones_by",
+                                   "vu_skin_check 0.10.5 frame 812; 3 of 5200 twins differed"),
+                 "vu_skin_check 0.10.5 frame 812; 3 of 5200 twins differed") == 0);
+    CHECK(ico_dev_env_value("vu_bones_by", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_bones_by"), "vu_bones_by") == 0);
+    /* turnip_debug (step 2) is read from config.toml by the Android driver
+       loader alone (android/gpu_driver_android.c): no variable */
+    CHECK(ico_dev_env_name("turnip_debug") == NULL);
+    CHECK(ico_dev_env_value("turnip_debug", "nobin") == NULL);
     /* constant_reads: a cleared source read as its colour, the A/B switch
        (port/render/rd_const_read.c rd__const_reads_on) */
     CHECK(strcmp(ico_dev_env_name("constant_reads"), "ICO_RD_CONSTANT_READS") == 0);
@@ -998,6 +1019,21 @@ static void test_dev_env(void)
     ico_ini_parse(&ini, "[dev]\ncull = maybe\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
     CHECK(env_is("ICO_RD_CULL", NULL));
+    /* ... and vu_bones as its word with its mark as it is (rd_pipeline.c,
+       rd_vu_bones.c read them) */
+    unset_env("ICO_RD_VU_BONES");
+    unset_env("ICO_RD_VU_BONES_BY");
+    ico_ini_parse(&ini, "[dev]\nvu_bones = ring\n"
+                        "vu_bones_by = vu_skin_check 0.10.5 frame 812; 3 of 5200 twins differed\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_VU_BONES", "ring"));
+    CHECK(env_is("ICO_RD_VU_BONES_BY", "vu_skin_check 0.10.5 frame 812; 3 of 5200 twins differed"));
+    unset_env("ICO_RD_VU_BONES");
+    unset_env("ICO_RD_VU_BONES_BY");
+    ico_ini_parse(&ini, "[dev]\nvu_bones = sometimes\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_VU_BONES", NULL));
+    CHECK(env_is("ICO_RD_VU_BONES_BY", NULL));
     /* ... and region_rule as its word (rd_pipeline.c reads it) */
     unset_env("ICO_RD_REGION_RULE");
     ico_ini_parse(&ini, "[dev]\nregion_rule = ps2\n");

@@ -4,6 +4,7 @@
 target_sources(ico_platform PRIVATE
     arena.c
     backup.c
+    bones_ladder.c
     code_hash.c
     diag_host.c
     fiber.c
@@ -142,10 +143,14 @@ endif()
 # (frame_mailbox.c): the latest frame wins, the slot pins, park and quit with
 # a job queued, the submit's handshake, the heartbeat and the block's
 # numbers under a fake clock, the [dev] render_thread mode
+# bones_ladder: issue 123's ladder across starts (bones_ladder.c): the step
+# for each run's evidence over sequences of starts (step 1, step 2, healed,
+# both tried, a port race, step 2 out of reach), the mark written and read
+# back, the start and action lines word for word
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
           gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
           present_fallback frame_mailbox display_rate present_hist gpu_sysfs
-          thermal_text window_scene)
+          thermal_text window_scene bones_ladder)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")
     target_compile_options(${t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

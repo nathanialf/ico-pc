@@ -56,6 +56,7 @@
 #include "window_host.h"
 #include "window_lines.h"
 #include "window_pipeline_skip.h"
+#include "window_bones.h"
 #include "window_robust.h"
 #include "window_display_rate.h"
 #include "window_pipe_finish.h"
@@ -4043,6 +4044,7 @@ int ico_window_pump(void)
     resume_recheck();
     report_picture_pump();
     skin_capture_pump();
+    window_bones_pump(); /* issue 123's ladder (window_bones.c) */
 #if ICO_RC_TOOLS && defined(__ANDROID__)
     share_report_pump();
 #endif
