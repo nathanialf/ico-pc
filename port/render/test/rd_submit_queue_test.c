@@ -23,7 +23,12 @@
  *   slots    the jobs queued and running of each frame slot (the render
  *            thread's wait for the slot it recycles, the slots apart): a
  *            running job counted until it finishes, a queued one of the
- *            other slot not counted for this one.
+ *            other slot not counted for this one;
+ *   tail     a presenting picture's two lists (issue 179: only the
+ *            present's own list waits for the window's image): the job
+ *            carries both through the queue, and its tail ends and submits
+ *            the scene's list, then the present's, then presents; a job of
+ *            one list ends and submits it and presents only when asked.
  */
 #include <stdio.h>
 #include <string.h>
@@ -186,11 +191,45 @@ static void testCarry(void)
     CHECK(rd__sq_take_present_ns(&q) == 1u);
 }
 
+static void testTail(void)
+{
+    RdSubmitQ q;
+    rd__sq_init(&q);
+    RdSubmitJob two = job(41, true, 50);
+    two.cl2 = 42;
+    CHECK(rd__sq_post(&q, &two) == 1);
+    RdSubmitJob j;
+    CHECK(rd__sq_next(&q, &j) && j.cl == 41 && j.cl2 == 42 && j.present);
+    RdSqStep st[RD_SQ_TAIL_MAX];
+    uint32_t n = rd__sq_tail_steps(&j, st);
+    CHECK(n == 5);
+    CHECK(st[0].what == RD_SQ_END && st[0].cl == 41);
+    CHECK(st[1].what == RD_SQ_SUBMIT && st[1].cl == 41);
+    CHECK(st[2].what == RD_SQ_END && st[2].cl == 42);
+    CHECK(st[3].what == RD_SQ_SUBMIT && st[3].cl == 42);
+    CHECK(st[4].what == RD_SQ_PRESENT && st[4].cl == 0);
+    rd__sq_finish(&q, &j);
+    RdSubmitJob f;
+    CHECK(rd__sq_take_finished(&q, &f) && f.cl == 41 && f.cl2 == 42);
+    /* one list (a replay that does not present, or a present that found no
+       second list): its end and submit, no present */
+    const RdSubmitJob one = job(43, false, 51);
+    n = rd__sq_tail_steps(&one, st);
+    CHECK(n == 2 && st[0].what == RD_SQ_END && st[0].cl == 43 && st[1].what == RD_SQ_SUBMIT &&
+          st[1].cl == 43);
+    /* one list that presents (a backend's present of a picture recorded in
+       one list): end, submit, present */
+    const RdSubmitJob onePresent = job(44, true, 52);
+    n = rd__sq_tail_steps(&onePresent, st);
+    CHECK(n == 3 && st[1].what == RD_SQ_SUBMIT && st[2].what == RD_SQ_PRESENT);
+}
+
 int main(void)
 {
     testOrderDepth();
     testCarry();
     testSlots();
+    testTail();
     printf("rd_submit_queue_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

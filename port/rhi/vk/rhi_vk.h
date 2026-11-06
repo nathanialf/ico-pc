@@ -97,6 +97,24 @@ bool vkr_test_legacy_passes(void);
 bool vkr_test_view_usage(void);
 bool vkr_test_props2(void);
 
+/* For rhi_vk_swapchain_test's acquire cells (vk_sync.c, vk_cmd.c
+ * vkr_submit_batch): with vkr_test_submit_record(true) every vkQueueSubmit
+ * notes the binary semaphore it waits on (0: none; the timeline's own wait
+ * is not noted), that wait's stage (a VkPipelineStageFlags, 0 without a
+ * wait) and its command buffers (0: an empty batch), the first 32 since
+ * the last take; vkr_test_submit_waits copies them out in order and starts
+ * again (false: off and cleared).  vkr_test_acquire_sem is the current
+ * frame slot's acquire semaphore, to compare with waitSem. */
+typedef struct RhiVkTestSubmit {
+    uint64_t waitSem;
+    uint32_t waitStage;
+    uint32_t lists;
+} RhiVkTestSubmit;
+
+void vkr_test_submit_record(bool on);
+uint32_t vkr_test_submit_waits(RhiVkTestSubmit *out, uint32_t max);
+uint64_t vkr_test_acquire_sem(void);
+
 #ifdef __cplusplus
 }
 

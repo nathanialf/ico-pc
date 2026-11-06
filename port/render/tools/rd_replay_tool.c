@@ -3011,9 +3011,9 @@ int main(int argc, char **argv)
             for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
                 printf("%s %s %.3f", p ? "," : "", rd_perf_post_name(p), last.gpuPostMs[p]);
             }
-            printf("%s; present %.3f; VU pre-pass %.3f\n",
-                   last.gpuPostPartial ? " (not all timed apart)" : "", last.gpuPresentMs,
-                   last.gpuPrepassMs);
+            printf("%s; display wait %.3f; present %.3f; VU pre-pass %.3f\n",
+                   last.gpuPostPartial ? " (not all timed apart)" : "", last.gpuDisplayWaitMs,
+                   last.gpuPresentMs, last.gpuPrepassMs);
             if (gpuRepeat > 1) {
                 printf("%s: gpu median of %d replays: total %.3f ms, list 0 %.3f ms, VU pre-pass "
                        "%.3f ms\n",

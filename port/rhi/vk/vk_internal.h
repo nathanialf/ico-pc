@@ -275,6 +275,13 @@ typedef struct VkrCmdList {
      * (VK_NULL_HANDLE: none): its submit signals the present semaphore
      * (rhi_submit) */
     VkImage presentImage;
+    /* the swapchain image the list puts a barrier on or draws into
+     * (VK_NULL_HANDLE: none; every use of a swapchain image begins with a
+     * barrier out of UNDEFINED or PRESENT): its submit is the one that waits on the slot's
+     * acquire semaphore when the image is the slot's acquired one
+     * (rhi_submit), so a list that draws only off-screen targets never
+     * waits for the presentation engine */
+    VkImage swapImage;
     /* the occlusion query open in the list (rhi_cmd_begin_occlusion),
      * its index + 1; 0 for none */
     uint32_t occOpen;
@@ -304,7 +311,10 @@ typedef struct VkrCmdList {
 
 /* A frame slot's swapchain image (vk_swapchain.c): acquired, not yet
  * presented; waitPending: its acquire semaphore (the slot's acquireSem)
- * not yet waited on by a submit of the slot; signalled: renderDone[image]
+ * not yet waited on by a submit of the slot (the submit of the slot's
+ * first list that puts a barrier on the image, VkrCmdList.swapImage, or
+ * the present's empty batch when no list did; a list on other images
+ * leaves it pending); signalled: renderDone[image]
  * is signalled by the submit of the slot's list that moved the image to
  * PRESENT (rhi_submit), so rhi_present submits nothing before presenting;
  * seq: the acquire's number (VkrState.acqSeq), the present takes the

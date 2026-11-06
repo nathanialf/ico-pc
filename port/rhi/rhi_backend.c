@@ -543,7 +543,11 @@ RhiCommandList rhi_begin_commands(void)
 
 void rhi_end_commands(RhiCommandList cl)
 {
-    RHI_GUARD();
+    /* a slot call: the renderer ends a picture's scene list on the render
+     * thread before it begins the present's (port/render/rd_submit.c),
+     * beside the submit thread's work of the other slot; an end touches
+     * only its own list (vk_cmd.c "Frame slots") */
+    RHI_GUARD_SLOT(RHI_SLOT_NOW());
     be()->end_commands(cl);
 }
 

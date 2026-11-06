@@ -6,10 +6,12 @@
  * Every submit takes the next number of the port's counter, which the
  * submission sync signals (vk_sync.c: a timeline semaphore, or a ring of
  * fences on a device without one), and rhi_wait_frame waits for the number
- * of a slot's last submit before it reuses the slot.  The first submit
- * after a swapchain acquire waits on the acquire semaphore; the present
- * waits on the image's renderDone semaphore, which the presenting list's
- * submit or an empty batch in rhi_present signals (rhi_submit).
+ * of a slot's last submit before it reuses the slot.  After a swapchain
+ * acquire, the submit of the first list that puts a barrier on the
+ * acquired image waits on the acquire semaphore (a list on other images
+ * does not: vkr_submit_batch); the present waits on the image's
+ * renderDone semaphore, which the presenting list's submit or an empty
+ * batch in rhi_present signals (rhi_submit).
  *
  * Frame slots (docs/port/RHI.md "Frame slots and the submit thread"): a
  * command list belongs to the slot whose pool it came from
@@ -25,7 +27,10 @@
  *                     hzEpoch, stats, tsResult and occResult (the recycled
  *                     slot's results), the texture and buffer tracking
  *                     state of what its list touches;
- *   submit thread     slot A's lists (their end), A's waitValue and
+ *   submit thread     slot A's lists (their end, unless the recording
+ *                     thread ended them: rhi_end_commands is a slot call,
+ *                     port/render/rd_submit.c ends a picture's scene list
+ *                     before it begins the present's), A's waitValue and
  *                     acquire record, the submission counter
  *                     (timelineValue, stored with __atomic), the submit
  *                     history, late (atomic adds), and under the
@@ -445,6 +450,7 @@ RhiCommandList rhi_begin_commands(void)
     c->pendSrc = c->pendDst = 0;
     c->pendMemDst = 0;
     c->presentImage = VK_NULL_HANDLE;
+    c->swapImage = VK_NULL_HANDLE;
     /* a new hazard-tracking epoch ("Hazards") */
     c->epoch = ++g_vkr.hzEpoch;
     c->globalOrder = g_vkr.globalBarriers;
@@ -479,9 +485,11 @@ RhiCommandList rhi_begin_commands(void)
 
 static void vkr_flush_barriers_to(VkrCmdList *c, bool late);
 
-/* On the submit thread with RhiLimits.slotOverlap: its own list only, and
- * the barriers it sends counted in late (the recording thread writes
- * stats) */
+/* A slot call (rhi_backend.c): on the recording thread beside the submit
+ * thread's work of the other slot, or on the submit thread with
+ * RhiLimits.slotOverlap.  Either way its own list only (its command buffer,
+ * of its slot's pool), and the barriers it sends counted in late (the
+ * recording thread writes stats; atomic adds) */
 void rhi_end_commands(RhiCommandList cl)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
@@ -516,24 +524,31 @@ void rhi_end_commands(RhiCommandList cl)
  * (vkr_submit_present_signal) or as the submit of the list that moved the
  * image to PRESENT (rhi_submit). */
 static bool vkr_submit_batch(VkrFrame *f, const VkCommandBuffer *cbs, uint32_t count,
-                             bool forPresent)
+                             bool forPresent, bool takeAcquire)
 {
     VkrSubmitDesc d = {.cbs = cbs, .cbCount = count};
     bool tookAcquire = false;
 
-    if (f->acq.waitPending) {
-        /* The first submit after an acquire waits for the image.  With
-         * commands, at COLOR_ATTACHMENT_OUTPUT: the image's first use after
-         * an acquire is a barrier out of UNDEFINED or PRESENT, and such a
+    if (f->acq.waitPending && (count == 0 || takeAcquire)) {
+        /* The submit of the list that uses the acquired image waits for it
+         * (takeAcquire: the list put a barrier on that image or drew into
+         * it, VkrCmdList.swapImage),
+         * at COLOR_ATTACHMENT_OUTPUT: the image's first use after an
+         * acquire is a barrier out of UNDEFINED or PRESENT, and such a
          * barrier on a swapchain image has that stage in its first scope
-         * (vkr_image_barrier), which chains it to this wait in this submit
-         * or a later one; the work before it, on other images, need not
-         * wait for the presentation engine.  The clear passes of new targets
-         * (rd__clear_new_targets, the uploads piece) are the first colour
-         * output when they come first, so on a tile-based GPU the display
-         * wait lands in the uploads piece's time (the 10 s GPU lines say so).
-         * An empty batch keeps ALL_COMMANDS.  The slot's own acquire: a
-         * submit of slot A never takes the image slot B acquired since. */
+         * (vkr_image_barrier), which chains it to this wait.  A semaphore
+         * wait holds that stage for every command of its batch, so a list
+         * that does not touch the image is submitted without it: with the
+         * wait on one list of off-screen passes and the window's pass
+         * together, every colour pass of the picture waited for the
+         * presentation engine (issue 179: 38-84 ms of a 88-143 ms scene
+         * picture on a Mali, in whichever pass wrote colour first).  The
+         * renderer records a picture's scene in one list and the present's
+         * pass in a second (port/render/rd_submit.c), so only the second
+         * waits.  An empty batch (the present's semaphore signal when no
+         * list touched the image, a dropped acquire's drain) takes it at
+         * ALL_COMMANDS.  The slot's own acquire: a submit of slot A never
+         * takes the image slot B acquired since. */
         d.wait = f->acquireSem;
         d.waitStage = count ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
                             : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
@@ -574,7 +589,7 @@ bool vkr_submit_empty(VkrFrame *f)
     if (!f->acq.waitPending) {
         return true;
     }
-    if (!vkr_submit_batch(f, NULL, 0, false)) {
+    if (!vkr_submit_batch(f, NULL, 0, false, true)) {
         return false;
     }
     vkr_wait_value(f->waitValue);
@@ -597,22 +612,25 @@ void rhi_submit(RhiCommandList cl)
      * signals it with an empty batch after the frame's work.  Only the
      * first presenting list signals: a later list that writes the
      * backbuffer again and moves it back to PRESENT is not covered by the
-     * present's wait.  Today rd_replay.c (rd__present_record) and
-     * rd_video.c each present from one list. */
+     * present's wait.  Today the present's own list (port/render/
+     * rd_submit.c, rd__present_record) and rd_video.c each present from
+     * one list. */
     VkrFrame *f = &g_vkr.frames[c->slot];
-    bool signal = false;
-    if (c->presentImage != VK_NULL_HANDLE && f->acq.acquired && !f->acq.signalled) {
+    bool signal = false, takeAcquire = false;
+    if (f->acq.acquired && (c->presentImage != VK_NULL_HANDLE || c->swapImage != VK_NULL_HANDLE)) {
         const VkrTexture *bb = vkr_get_texture((RhiTexture){g_vkr.swapTextures[f->acq.image]});
-        signal = bb && bb->image == c->presentImage;
+        signal = !f->acq.signalled && bb && bb->image == c->presentImage;
+        /* the acquire's wait goes with the list that uses the image (vkr_submit_batch) */
+        takeAcquire = bb && bb->image == c->swapImage;
     }
-    if (vkr_submit_batch(f, &c->cb, 1, signal) && signal) {
+    if (vkr_submit_batch(f, &c->cb, 1, signal, takeAcquire) && signal) {
         f->acq.signalled = true;
     }
 }
 
 bool vkr_submit_present_signal(VkrFrame *f)
 {
-    return vkr_submit_batch(f, NULL, 0, true);
+    return vkr_submit_batch(f, NULL, 0, true, true);
 }
 
 /* ---------------------------------------------------------------- barriers
@@ -684,9 +702,14 @@ void vkr_image_barrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState a
     VkAccessFlags srcAccess, dstAccess;
     vkr_state_scope(before, t, &src, &srcAccess);
     vkr_state_scope(after, t, &dst, &dstAccess);
+    if (t->swapchain) {
+        /* the list's submit takes the acquire's wait when this is the
+         * acquired image (rhi_submit) */
+        c->swapImage = t->image;
+    }
     if (t->swapchain && (before == RHI_STATE_UNDEFINED || before == RHI_STATE_PRESENT)) {
-        /* a swapchain image's first barrier after an acquire: the submit
-         * waits on the acquire semaphore at COLOR_ATTACHMENT_OUTPUT
+        /* a swapchain image's first barrier after an acquire: this list's
+         * submit waits on the acquire semaphore at COLOR_ATTACHMENT_OUTPUT
          * (vkr_submit_batch), and this stage in the first scope makes the
          * transition wait for it */
         src = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -1098,6 +1121,9 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
             return;
         }
         colorTex[i] = t;
+        if (t->swapchain) {
+            c->swapImage = t->image; /* drawn here: the acquire's wait (rhi_submit) */
+        }
         VkClearValue cv;
         if (vkr_formatMap[t->rhiFormat].isInteger) {
             /* integer targets clear with integer values: the float clear

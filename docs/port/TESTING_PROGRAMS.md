@@ -1059,7 +1059,8 @@ The renderer's test programs have a page of their own:
   one slot ended and submitted on a thread B while the test's thread recycles the other slot,
   begins its list there and records it (B ends once that list has begun), with a test slot guard
   (`rhi_set_slot_guard`) freeing the test thread's slot calls while B's job is of the other slot:
-  no guard wait while recycling and recording, one at the second list's end, and both targets
+  no guard wait while recycling, recording and ending the second list (the end is a slot call),
+  one at its submit, and both targets
   equal row by row to the same two lists made one after the other and to their squares (red and
   green, and a blue one); skipped where the slots are not apart (`thread slots cell skipped`:
   Direct3D 12, OpenGL, Direct3D 11, and Vulkan's fence ring: `ICO_VK_FAKE_API=1.0`, `1.0bare` and
@@ -1179,7 +1180,11 @@ The renderer's test programs have a page of their own:
   mirrored turn, a turn not offered, `[dev] prerotate = false` and images past the surface's largest
   keep identity) (`rhi_vk_present_mode`).
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver;
-  `swapAcquired` per frame (`rhi_vk_swapchain`).
+  `swapAcquired` per frame; the acquire's wait with the list that uses the image (issue 179,
+  `acquireWaits` through `vkr_test_submit_waits`: a list of off-screen work before it waits for
+  nothing, the image's list on the acquire at `COLOR_ATTACHMENT_OUTPUT`, a dropped acquire drained
+  by one empty batch at `ALL_COMMANDS`; on the fence ring in `rhi_vk_swapchain_vk11`)
+  (`rhi_vk_swapchain`).
 - Helpers: `rhi_test_common.c`/`.h` (the shared cells, seven of whose pipelines come from one
   `rhi_create_pipelines` call with a failing description among them, and the fill-rule cell:
   edges through pixel centres under the top-left rule on every backend; and the dynamic state

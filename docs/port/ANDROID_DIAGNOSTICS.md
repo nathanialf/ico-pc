@@ -118,6 +118,21 @@ question it decides:
   its last hand-over. It counts only the game's own: images the compositor holds after a present
   are not visible to an app, so a compositor holding images shows as the image wait (the replays
   line's `acquire`) with `in use` at 0 or 1, not here.
+- **The display wait** (the replays line's GPU part `uploads 2.1, lists 0-10 55.2, 11-12
+  1.0, display wait 38.4, present 2.0`, the per-replay counts' `submits 2.0`, the start line `rd:
+  present: the present's pass is a list of its own, submitted after the scene's; only its submit
+  waits for the display's image ...`; [RENDER.md](RENDER.md#the-presents-own-list)). The issue's last
+  log, with a picture in one list, showed the GPU's wait for the window's image inside the first scene pass that wrote colour
+  (uploads 38.8 to 84.5 ms, 52 to 59 % of every stage-42 picture, L658 and L707 of the evidence):
+  the acquire's semaphore held the whole picture's one list. Now only the present's own list waits.
+  How to read the next log: uploads back at 2 to 5 ms and list 0 at its own cost say the scene no
+  longer waits; the wait itself shows as `display wait`, or, on a GPU whose timestamps run ahead of
+  the wait as the Mali's did (its first stamp came before the wait), as a `present` far above the
+  1.7 to 3.5 ms it took there. The span (`GPU N ms`) still holds it, and the picture rate then says
+  whether the scene's work filled the wait: a GPU time a picture near the scene's own (stage 42:
+  about 64 ms against 132) is the fix working; an unchanged span with the wait moved into the
+  present says the presentation engine's hold was our own backlog, not the compositor's. Decides
+  whether the image wait was the limit of the scenes.
 
 ## The thermal state and screen recording
 

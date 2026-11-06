@@ -215,9 +215,11 @@ static struct {
     unsigned longestVsync;
     int longestShown;
     double gpu, maxGpu, gpuList[GPU_LISTS], gpuUpload, gpuPresent, gpuPrepass;
+    double gpuDisplayWait;              /* rd.h RdPerfRecord.gpuDisplayWaitMs */
     double gpuPost[RD_PERF_POST_COUNT]; /* per picture effect (rd.h RD_PERF_POST_*) */
     unsigned gpuPostPartial;            /* replays whose effects were not all timed apart */
     uint64_t draws, passes, pipeBinds, groupBinds, groups, barriers, copies, bytes, meshBytes;
+    uint64_t submits;                           /* the queue submits (rd.h RdPerfRecord.submits) */
     uint64_t pipeSkips, groupSkips, stateSkips; /* the bind cache's (RhiStats *Skipped) */
     uint64_t texUploads, meshUploads, dateSnaps, exact, pipeCreates;
     /* the exact blend's draws and passes, the glow's passes, the target
@@ -4431,7 +4433,8 @@ static void perf_csv_open(void)
         fprintf(s_perf.csv, ",walk_list%d_ms", l);
     }
     fprintf(s_perf.csv, ",upload_texture_bytes,upload_uniform_bytes,upload_interp_bytes,"
-                        "upload_stream_bytes,passes,pass_timed,pass_count\n");
+                        "upload_stream_bytes,passes,pass_timed,pass_count,gpu_display_wait_ms,"
+                        "submits\n");
 }
 
 static void perf_csv_line(const RdPerfRecord *r)
@@ -4461,14 +4464,15 @@ static void perf_csv_line(const RdPerfRecord *r)
             r->vuPreDraws, r->vuPreFallbacks);
     unsigned passes = 0;
     for (int k = 0; k < RD_PERF_PASS_KIND_COUNT; k++) {
-        passes += r->passKinds[k];
+        passes += k != RD_PERF_PASS_WAIT ? r->passKinds[k] : 0u; /* the display wait is no pass */
     }
     for (int l = 0; l < RD_LIST_COUNT; l++) {
         fprintf(f, ",%.3f", r->walkListMs[l]);
     }
-    fprintf(f, ",%llu,%llu,%llu,%llu,%u,%u,%u\n", (unsigned long long)r->uploadTextureBytes,
+    fprintf(f, ",%llu,%llu,%llu,%llu,%u,%u,%u,%.3f,%u\n", (unsigned long long)r->uploadTextureBytes,
             (unsigned long long)r->uploadUniformBytes, (unsigned long long)r->uploadInterpBytes,
-            (unsigned long long)r->uploadStreamBytes, passes, r->passTimed, r->passCount);
+            (unsigned long long)r->uploadStreamBytes, passes, r->passTimed, r->passCount,
+            r->gpuDisplayWaitMs, r->submits);
 }
 
 /* ico-pc-passes.csv beside ico-pc-perf.csv, opened on the first timed
@@ -4538,7 +4542,9 @@ static void auto_res_sample(const RdPerfRecord *r)
         return;
     }
     if (r->gpuValid) {
-        ms = r->gpuMs - r->gpuUploadMs;
+        /* the GPU's own work: the span less the uploads and the display
+           wait (rd.h rd_perf_pace_gpu_ms) */
+        ms = rd_perf_pace_gpu_ms(r) - r->gpuUploadMs;
     } else if (rhi_present_mailbox()) {
         ms = r->totalMs - r->acquireMs - r->presentMs;
     } else {
@@ -4619,9 +4625,11 @@ static void perf_drain(void)
         auto_res_sample(&r);
         if (r.presented && r.gpuValid) {
             /* the present allowance's GPU gate and budget: a timed
-               replay's GPU span (two replays late; gpuIsSpan true), the
+               replay's GPU span less its display wait (two replays late;
+               gpuIsSpan true; rd.h rd_perf_pace_gpu_ms: the present's own
+               list waits for the window's image inside the span), the
                median of the last 8 (not the replays line's block mean) */
-            s_pres.gpuNs = pace_hist_add(&s_pres.gpuHist, (Uint64)(r.gpuMs * 1e6));
+            s_pres.gpuNs = pace_hist_add(&s_pres.gpuHist, (Uint64)(rd_perf_pace_gpu_ms(&r) * 1e6));
         }
         if (r.presented) {
             present_hist_add(&s_perf.presentHist, r.presentMs);
@@ -4676,6 +4684,7 @@ static void perf_drain(void)
             s_perf.maxGpu = r.gpuMs > s_perf.maxGpu ? r.gpuMs : s_perf.maxGpu;
             s_perf.gpuUpload += r.gpuUploadMs;
             s_perf.gpuPresent += r.gpuPresentMs;
+            s_perf.gpuDisplayWait += r.gpuDisplayWaitMs;
             s_perf.gpuPrepass += r.gpuPrepassMs;
             for (int l = 0; l < GPU_LISTS; l++) {
                 s_perf.gpuList[l] += r.gpuListMs[l];
@@ -4700,6 +4709,7 @@ static void perf_drain(void)
         s_perf.groups += r.bindGroups;
         s_perf.barriers += r.barriers;
         s_perf.copies += r.copies;
+        s_perf.submits += r.submits;
         s_perf.bytes += r.uploadBytes;
         s_perf.meshBytes += r.meshUploadBytes;
         s_perf.texUploads += r.textureUploads;
@@ -4802,7 +4812,7 @@ static void perf_log(void)
     const PerfBlock *b = &s_perf.ph;
     const double n = b->n ? (double)b->n : 1.0;
     const double g = s_perf.gpuN ? (double)s_perf.gpuN : 1.0;
-    char gpu[160] = "no GPU timestamps";
+    char gpu[192] = "no GPU timestamps";
     char longest[160];
 
     perf_block_max_text(b, longest, sizeof(longest));
@@ -4813,10 +4823,15 @@ static void perf_log(void)
         for (int l = 0; l < 11; l++) {
             scene += s_perf.gpuList[l];
         }
+        /* the display wait: the scene list's end to the present's own
+           list's start (rd_submit.c), where a GPU that waits whole batches
+           for the window's image waits */
         snprintf(gpu, sizeof(gpu),
-                 "GPU %.2f ms (max %.2f): uploads %.2f, lists 0-10 %.2f, 11-12 %.2f, present %.2f",
+                 "GPU %.2f ms (max %.2f): uploads %.2f, lists 0-10 %.2f, 11-12 %.2f, display wait "
+                 "%.2f, present %.2f",
                  s_perf.gpu / g, s_perf.maxGpu, s_perf.gpuUpload / g, scene / g,
-                 (s_perf.gpuList[11] + s_perf.gpuList[12]) / g, s_perf.gpuPresent / g);
+                 (s_perf.gpuList[11] + s_perf.gpuList[12]) / g, s_perf.gpuDisplayWait / g,
+                 s_perf.gpuPresent / g);
     }
     /* the region rule's card verdicts the steps decided on the CPU
        (rd_mesh.c), a step's average */
@@ -4940,7 +4955,7 @@ static void perf_log(void)
     fprintf(
         stderr,
         "window: per replay %.0f draws, %.0f passes, %.0f pipeline and %.0f bind group binds "
-        "(repeats skipped: %.0f pipeline, %.0f bind group, %.0f state), %.0f bind groups, %.0f barriers, %.0f copies, %.0f KB uploaded (%.0f KB meshes), "
+        "(repeats skipped: %.0f pipeline, %.0f bind group, %.0f state), %.0f bind groups, %.0f barriers, %.0f copies, submits %.1f, %.0f KB uploaded (%.0f KB meshes), "
         "%.1f textures and %.1f meshes uploaded, %.1f DATE snapshots, %.1f exact blends, "
         "%.0f destination-read draws, %.0f storage passes, %.0f pass switches for the exact "
         "blend, glow %.0f passes, %.1f snapshots copied and %.1f swapped, %.1f draws "
@@ -4951,12 +4966,12 @@ static void perf_log(void)
         "tiles loaded, %.1f ended early)%s\n",
         s_perf.draws / n, s_perf.passes / n, s_perf.pipeBinds / n, s_perf.groupBinds / n,
         s_perf.pipeSkips / n, s_perf.groupSkips / n, s_perf.stateSkips / n, s_perf.groups / n,
-        s_perf.barriers / n, s_perf.copies / n, s_perf.bytes / n / 1024.0,
-        s_perf.meshBytes / n / 1024.0, s_perf.texUploads / n, s_perf.meshUploads / n,
-        s_perf.dateSnaps / n, s_perf.exact / n, s_perf.dstDraws / n, s_perf.storagePasses / n,
-        s_perf.dstSwitches / n, s_perf.glowPasses / n, s_perf.snapshots / n, s_perf.snapSwaps / n,
-        s_perf.a1xDraws / n, s_perf.vuPreVerts / n, s_perf.vuPreDraws / n,
-        s_perf.vuPreFallbacks / n, (unsigned long long)s_perf.bufCreated,
+        s_perf.barriers / n, s_perf.copies / n, (double)s_perf.submits / n,
+        s_perf.bytes / n / 1024.0, s_perf.meshBytes / n / 1024.0, s_perf.texUploads / n,
+        s_perf.meshUploads / n, s_perf.dateSnaps / n, s_perf.exact / n, s_perf.dstDraws / n,
+        s_perf.storagePasses / n, s_perf.dstSwitches / n, s_perf.glowPasses / n,
+        s_perf.snapshots / n, s_perf.snapSwaps / n, s_perf.a1xDraws / n, s_perf.vuPreVerts / n,
+        s_perf.vuPreDraws / n, s_perf.vuPreFallbacks / n, (unsigned long long)s_perf.bufCreated,
         (unsigned long long)s_perf.texCreated, (unsigned long long)s_perf.bufDestroyed,
         (unsigned long long)s_perf.texDestroyed, (unsigned long long)s_perf.allocs,
         (unsigned long long)s_perf.pipeCreates, (unsigned long long)s_perf.fenceWaits,

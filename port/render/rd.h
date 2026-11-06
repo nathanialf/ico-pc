@@ -2145,7 +2145,11 @@ const char *rd_perf_post_name(int post);
  * table's upload), EXACT the exact blend's copies and pass, MSAA the MSAA
  * epoch's resolves and spreads, STENCIL a shadow reset's stencil clear as a
  * pass of its own, PRESENT the present (DISPLAY onto the window, the CRT
- * filter). */
+ * filter), WAIT the display wait: no pass, the stretch from the end of a
+ * presenting picture's scene list (its start stamp, the list's last
+ * command) to the start of the present's own list, which alone waits for
+ * the window's image (rd_submit.c; RdPerfRecord.gpuDisplayWaitMs; not
+ * counted among the passes). */
 enum {
     RD_PERF_PASS_UPLOAD = 0,
     RD_PERF_PASS_PREPASS,
@@ -2158,11 +2162,26 @@ enum {
     RD_PERF_PASS_MSAA,
     RD_PERF_PASS_STENCIL,
     RD_PERF_PASS_PRESENT,
+    RD_PERF_PASS_WAIT,
     RD_PERF_PASS_KIND_COUNT
 };
 
 /* A RD_PERF_PASS_* in plain words ("uploads", "DATE snapshot", ...) */
 const char *rd_perf_pass_kind_name(int kind);
+
+struct RdPerfRecord;
+/* The GPU time a picture that pacing reads (the present allowance's gate
+ * and budget, the step rule, automatic resolution): the record's span
+ * (gpuMs) less its display wait (gpuDisplayWaitMs), never below 0; 0 for a
+ * record without GPU times.  The present's own list waits for the window's
+ * image between the two lists' stamps (rd_submit.c), so under vsync on a
+ * driver that waits whole batches the span now holds the wait, which fell
+ * before the first stamp while a picture was one list; less the wait,
+ * pacing reads the GPU's own work as before.  Where the stamps run ahead of
+ * the wait (issue 179's Mali) the wait figure is about 0 and the input is
+ * the span, as it was there.  The perf lines print the span and the wait
+ * apart. */
+double rd_perf_pace_gpu_ms(const struct RdPerfRecord *r);
 
 /* RdPerfPass.target: a named target (RdTargetId: SCENE, WORK0, ...) or one
  * of these */
@@ -2378,6 +2397,11 @@ typedef struct RdPerfRecord {
      * dualLeftovers) */
     uint32_t blendEqOffSets, dualLeftovers;
     uint32_t draws, renderPasses, barriers, copies, fenceWaits, waitIdles, readbacks;
+    /* the queue submits (RhiStats.submits; the submit thread's land in the
+     * record closed after them): a presenting picture's two lists, its
+     * scene's and its present's (rd_submit.c), on Vulkan an empty one
+     * where no list signalled the present's semaphore */
+    uint32_t submits;
     uint32_t textureUploads, meshUploads, tempClears, dateSnapshots, exactBlends;
     uint32_t pipelineCreates; /* pipelines created (a key the start-up set missed) */
     /* draws that sampled a render-to-texture block (RdTargetRec.block: the
@@ -2403,6 +2427,13 @@ typedef struct RdPerfRecord {
     double gpuUploadMs;              /* the upload copies at the head */
     double gpuListMs[RD_LIST_COUNT]; /* per command list (0 for a list not replayed) */
     double gpuPresentMs;             /* the present blits */
+    /* the display wait: from the scene list's last stamp to the present's
+     * own list's first (RD_PERF_PASS_WAIT), inside gpuMs.  Where the GPU
+     * writes that stamp only once the list's wait for the window's image
+     * is over (a whole-batch wait) it holds the wait; where the wait holds
+     * colour output alone (a Mali in the v0.10.4 logs) the stamp comes
+     * early and the wait shows in gpuPresentMs instead */
+    double gpuDisplayWaitMs;
     /* per picture effect (RD_PERF_POST_*), inside the times above */
     double gpuPostMs[RD_PERF_POST_COUNT];
     double startMs;      /* the replay's start (rd's monotonic ms clock) */
@@ -2709,7 +2740,8 @@ typedef struct RdPerfRecord {
      * for this replay's submit), under 0 this replay's first stamp written
      * before the one before ended, so gpuMs counts that end too (the
      * window's 10 s 'GPU between replays' line, pace_policy.h PaceGpuGap;
-     * the step rule's GPU time a picture is the median of gpuMs);
+     * the step rule's GPU time a picture is the median of
+     * rd_perf_pace_gpu_ms, gpuMs less the display wait);
      * gpuGapSkipped the replays without timestamps between (their GPU work
      * is inside the gap then) */
     uint8_t gpuGapValid;

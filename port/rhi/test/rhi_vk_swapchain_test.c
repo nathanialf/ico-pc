@@ -25,7 +25,11 @@
  * of presents on a stand-in for vkWaitForPresentKHR (presentTiming, and a
  * wait that does not keep its timeout: presentWaitHang).  Each frame's
  * image counts as acquired (RhiStats.swapAcquired) from its acquire to its
- * present.  Exit
+ * present.  Only the submit of the list that uses the acquired image waits
+ * on the acquire's semaphore (issue 179, acquireWaits): a list of
+ * off-screen passes before it waits for nothing, and an acquire no list
+ * used is drained by an empty batch at ALL_COMMANDS; the same on the fence
+ * ring (the rhi_vk_swapchain_vk11 run).  Exit
  * 77 when SDL has no offscreen Vulkan surface or no device presents to it. */
 #include "rhi.h"
 #include "vk/rhi_vk.h"
@@ -366,6 +370,145 @@ static int submitCounts(SDL_Window *win, RhiFormat fmt)
     return failures;
 }
 
+/* VkPipelineStageFlags of the waits acquireWaits expects (the test does
+   not include the Vulkan headers) */
+#define STAGE_COLOR_OUTPUT 0x00000400u /* VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT */
+#define STAGE_ALL_COMMANDS 0x00010000u /* VK_PIPELINE_STAGE_ALL_COMMANDS_BIT */
+
+/* one list of off-screen work: off cleared, left readable */
+static void offscreenList(RhiTexture off, RhiState *state)
+{
+    RhiCommandList cl = rhi_begin_commands();
+    RhiTextureBarrier b0 = {off, *state, RHI_STATE_RENDER_TARGET};
+    rhi_cmd_barrier(cl, &b0, 1);
+    RhiRenderPassDesc rp = {0};
+    rp.color[0] = (RhiColorAttachment){
+        off, RHI_LOAD_CLEAR, {0.25f, 0.5f, 0.75f, 1.0f}, RHI_STORE_STORE, false};
+    rp.colorCount = 1;
+    rp.width = 16;
+    rp.height = 16;
+    rhi_cmd_begin_render_pass(cl, &rp);
+    rhi_cmd_end_render_pass(cl);
+    RhiTextureBarrier b1 = {off, RHI_STATE_RENDER_TARGET, RHI_STATE_SHADER_READ};
+    rhi_cmd_barrier(cl, &b1, 1);
+    *state = RHI_STATE_SHADER_READ;
+    rhi_submit(cl);
+}
+
+/* Issue 179: the acquire's wait goes with the submit of the list that uses
+ * the acquired image (vk_cmd.c vkr_submit_batch), never with a list of
+ * off-screen work before it, whose colour passes it would otherwise hold
+ * for the presentation engine.  (a) A list of off-screen work, then a list
+ * that clears the image and moves it to PRESENT: two submits, the first
+ * without a wait, the second on the acquire's semaphore at
+ * COLOR_ATTACHMENT_OUTPUT, and no empty batch before the present.  (b) The
+ * off-screen list alone, then the surface released with the image unused:
+ * the list waits for nothing, and the dropped acquire's semaphore is
+ * waited on by one empty batch at ALL_COMMANDS (vkr_drain_acquire_wait; a
+ * present of an image no list used would show it in an undefined layout,
+ * so the present's empty batch is the same call, vkr_submit_batch with no
+ * command buffers).  Each on the sync this run uses: the timeline here,
+ * the fence ring in rhi_vk_swapchain_vk11. */
+static int acquireWaits(SDL_Window *win, RhiFormat fmt)
+{
+    int failures = 0;
+    RhiTexture off = rhi_create_texture(&(RhiTextureDesc){16, 16, 1, RHI_FMT_RGBA8_UNORM,
+                                                          RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED,
+                                                          "acquire cell", 0});
+    if (!off.id) {
+        printf("FAIL acquire cells: no off-screen target\n");
+        return 1;
+    }
+    RhiState offState = RHI_STATE_UNDEFINED;
+    RhiVkTestSubmit s[8];
+    uint32_t sw = 0, sh = 0;
+    if (!rhi_swapchain_size(&sw, &sh)) {
+        printf("FAIL acquire cells: no swapchain\n");
+        rhi_destroy_texture(off);
+        return 1;
+    }
+
+    /* (a) */
+    rhi_wait_frame();
+    RhiTexture bb = rhi_acquire_backbuffer();
+    if (!bb.id) {
+        printf("FAIL acquire cell a: no backbuffer\n");
+        rhi_destroy_texture(off);
+        return 1;
+    }
+    uint64_t acq = vkr_test_acquire_sem();
+    vkr_test_submit_record(true);
+    offscreenList(off, &offState);
+    RhiCommandList cl = rhi_begin_commands();
+    RhiTextureBarrier b0 = {bb, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
+    rhi_cmd_barrier(cl, &b0, 1);
+    RhiRenderPassDesc rp = {0};
+    rp.color[0] =
+        (RhiColorAttachment){bb, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 1.0f}, RHI_STORE_STORE, false};
+    rp.colorCount = 1;
+    rp.width = sw;
+    rp.height = sh;
+    rhi_cmd_begin_render_pass(cl, &rp);
+    rhi_cmd_end_render_pass(cl);
+    RhiTextureBarrier b1 = {bb, RHI_STATE_RENDER_TARGET, RHI_STATE_PRESENT};
+    rhi_cmd_barrier(cl, &b1, 1);
+    rhi_submit(cl);
+    rhi_present();
+    uint32_t n = vkr_test_submit_waits(s, 8);
+    vkr_test_submit_record(false);
+    printf("acquire cell a (%s sync): %u submits:", vkr_test_sync_kind(), n);
+    for (uint32_t i = 0; i < n; i++) {
+        printf(" [%u lists, %s, stage 0x%x]", s[i].lists,
+               s[i].waitSem == 0 ? "no wait" : (s[i].waitSem == acq ? "the acquire" : "other"),
+               s[i].waitStage);
+    }
+    printf("\n");
+    if (acq == 0 || n != 2 || s[0].lists != 1 || s[0].waitSem != 0 || s[1].lists != 1 ||
+        s[1].waitSem != acq || s[1].waitStage != STAGE_COLOR_OUTPUT) {
+        printf("FAIL acquire cell a: want an off-screen list without a wait, then the image's "
+               "list on the acquire at COLOR_ATTACHMENT_OUTPUT, and no empty batch\n");
+        failures++;
+    }
+
+    /* (b) */
+    rhi_wait_frame();
+    bb = rhi_acquire_backbuffer();
+    if (!bb.id) {
+        printf("FAIL acquire cell b: no backbuffer\n");
+        rhi_destroy_texture(off);
+        return failures + 1;
+    }
+    acq = vkr_test_acquire_sem();
+    vkr_test_submit_record(true);
+    offscreenList(off, &offState);
+    rhi_wait_idle();
+    rhi_release_surface(); /* the acquire dropped with no list on its image */
+    n = vkr_test_submit_waits(s, 8);
+    vkr_test_submit_record(false);
+    unsigned onAcquire = 0, emptyAll = 0;
+    for (uint32_t i = 0; i < n; i++) {
+        onAcquire += s[i].waitSem == acq;
+        emptyAll += s[i].waitSem == acq && s[i].lists == 0 && s[i].waitStage == STAGE_ALL_COMMANDS;
+    }
+    printf("acquire cell b: %u submits, %u on the acquire, %u of them empty at ALL_COMMANDS\n", n,
+           onAcquire, emptyAll);
+    if (acq == 0 || n < 2 || s[0].lists != 1 || s[0].waitSem != 0 || onAcquire != 1 ||
+        emptyAll != 1) {
+        printf("FAIL acquire cell b: want the off-screen list without a wait and one empty "
+               "batch on the acquire at ALL_COMMANDS\n");
+        failures++;
+    }
+    if (!rhi_recreate_surface(win)) {
+        printf("FAIL acquire cell b: rhi_recreate_surface\n");
+        rhi_destroy_texture(off);
+        return failures + 1;
+    }
+    failures += frame(win, fmt, 60); /* the window path works again */
+    rhi_wait_idle();
+    rhi_destroy_texture(off);
+    return failures;
+}
+
 /* The window resized without rhi_resize_swapchain and no present
  * reporting it (an Android surface that changed size in the first seconds
  * while the driver returns VK_SUCCESS): with the poll on, the present
@@ -540,6 +683,9 @@ static int run(SDL_Window *win)
     }
     if (!failures) {
         failures += pollSize(win, fmt);
+    }
+    if (!failures) {
+        failures += acquireWaits(win, fmt);
     }
     rhi_wait_idle();
     rhi_shutdown();

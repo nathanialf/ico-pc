@@ -550,21 +550,26 @@ static void checkGroups(const char *what, const Sum *s)
  * vkCmdPipelineBarrier calls: the image transitions recorded together go
  * out in one call, joined to the next pass's or copy's own barrier
  * (vk_cmd.c, vkr_flush_barriers); the global mode records each transition
- * in a call of its own.  18 and 21 are the steady-state counts this test
- * prints with the fixed-function blend.
+ * in a call of its own.  19 and 22 are the steady-state counts this test
+ * prints with the fixed-function blend: a presenting picture is two lists
+ * (rd_submit.c, issue 179: the present's pass in a list of its own, so only
+ * its submit waits for the window's image), and the second list opens with
+ * its own barrier (vkr_open_barrier), one more than the 18 and 21 of one
+ * list.  The global mode opens no list with a barrier (its passes each have
+ * one already), so its counts stay.
  *
  * Under the exact blend's attachment read (rd_dst_read.c) a pending clear
  * of a readable target is a pass of its own before the pass that draws
  * (the load op's clear is not ordered against the shaders' reads of the
  * attachment), and the pass after it starts behind a barrier: two in this
- * frame (SCENE with its depth, the reflection's block target), so 20 and
- * 23.  No draw adds one: the rasterization-order access orders the reads
+ * frame (SCENE with its depth, the reflection's block target), so 21 and
+ * 24.  No draw adds one: the rasterization-order access orders the reads
  * (the by-region barriers the validation layer needs before a
  * destination-read draw are RhiStats.orderBarriers, not counted here).
  * The storage path (interlock, ROV) is not measured on the devices the
  * tests run on (lavapipe has no interlock): not checked. */
-#define BARRIERS_REPLAY 18
-#define BARRIERS_RECORD 21
+#define BARRIERS_REPLAY 19
+#define BARRIERS_RECORD 22
 #define BARRIERS_ATTACHMENT_CLEARS 2
 #define BARRIERS_REPLAY_GLOBAL 42
 #define BARRIERS_RECORD_GLOBAL 46
@@ -611,7 +616,7 @@ static void checkBarriers(const char *what, const Sum *s, uint32_t tracked, uint
             want += 1; /* v0.9.4: the shadow count in one draw reads the stencil
                           through a view: one transition more under the
                           attachment read with the record on (the count the
-                          run prints; 24) */
+                          run prints; 25 with the present's own list) */
         }
     }
     CHECK(s->n > 0 && s->barrierMin == want && s->barrierMax == want,
@@ -989,6 +994,78 @@ static void checkPassTexts(void)
     memset(small, 'x', sizeof(small));
     const int g = rd_perf_pass_grow_text(&agg, q, 5, 2941, 352.0, 1, 71.3, 27.0, 3, small, 20);
     CHECK(g == 19 && small[19] == '\0' && small[20] == 'x', "stalled replay cut: %d", g);
+    /* issue 179: the present's own list (rd_submit.c) gives a presenting
+       record a display wait piece, from the scene list's end to the
+       present's list's start: a stalled replay names it instead of the
+       first render pass, the top passes show it without draws, and it is
+       no pass in the counts */
+    RdPerfPass dw[3] = {b[0], b[0], b[0]};
+    dw[1].kind = RD_PERF_PASS_WAIT;
+    dw[1].target = RD_PERF_TARGET_WINDOW;
+    dw[1].list = -1;
+    dw[1].w = 1280;
+    dw[1].h = 720;
+    dw[1].gpuUs = 38400.0f;
+    dw[2] = dw[1];
+    dw[2].kind = RD_PERF_PASS_PRESENT;
+    dw[2].gpuUs = 2000.0f;
+    rd_perf_pass_grow_text(&agg, dw, 3, 3001, 120.0, 1, 44.4, 27.0, 2, buf, sizeof(buf));
+    CHECK(strcmp(buf, "stalled replay 3001 (present 120 ms, GPU 44.4 ms against the block's 27.0): "
+                      "the display wait 38.4 ms, the other 2 timed passes 6.0 ms (the block's "
+                      "4.0); display wait window 1280x720 38.4 ms (new to the block), list 0 "
+                      "SCENE 848x448 4.0 ms (the block's 4.0); 0 of 1 passes over 2x their block "
+                      "mean, the rest within 1.0x; 2 new to the block (2 timed replays in the "
+                      "block so far)") == 0,
+          "stalled replay with a display wait: %s", buf);
+    static RdPerfPassAgg dwAgg;
+    rd_perf_pass_agg_reset(&dwAgg);
+    rd_perf_pass_agg_add(&dwAgg, dw, 3);
+    rd_perf_pass_agg_text(&dwAgg, 1, buf, sizeof(buf));
+    CHECK(strcmp(buf, "display wait window 1280x720 38.40 ms (1 of 2.0 passes a replay, 1 timed "
+                      "replays; passes under 0.05 ms: 0.0 a replay, 0.00 ms)") == 0,
+          "top passes with a display wait: %s", buf);
+    dw[1].gpuUs = 50000.0f;
+    rd_perf_pass_grow_text(&dwAgg, dw, 3, 3002, 130.0, 1, 56.0, 44.4, 1, buf, sizeof(buf));
+    CHECK(strncmp(buf,
+                  "stalled replay 3002 (present 130 ms, GPU 56.0 ms against the block's "
+                  "44.4): the display wait 50.0 ms (the block's 38.4), the other 2 timed "
+                  "passes 6.0 ms (the block's 6.0); display wait window 1280x720 50.0 ms "
+                  "(the block's 38.4);",
+                  strlen("stalled replay 3002 (present 130 ms, GPU 56.0 ms against the block's "
+                         "44.4): the display wait 50.0 ms (the block's 38.4), the other 2 timed "
+                         "passes 6.0 ms (the block's 6.0); display wait window 1280x720 50.0 ms "
+                         "(the block's 38.4);")) == 0,
+          "stalled replay, the display wait against its block: %s", buf);
+    double dwKinds[RD_PERF_PASS_KIND_COUNT] = {0}, dwEffects[RD_PERF_POST_COUNT] = {0};
+    dwKinds[RD_PERF_PASS_RENDER] = 2.0;
+    dwKinds[RD_PERF_PASS_PRESENT] = 2.0;
+    dwKinds[RD_PERF_PASS_WAIT] = 2.0;
+    rd_perf_pass_kinds_text(dwKinds, dwEffects, 2.0, buf, sizeof(buf));
+    CHECK(strcmp(buf, "2.0: render passes 1.0 (lists 1.0), present 1.0") == 0,
+          "passes by kind with a display wait: %s", buf);
+    CHECK(strcmp(rd_perf_pass_kind_name(RD_PERF_PASS_WAIT), "display wait") == 0,
+          "the display wait's name: %s", rd_perf_pass_kind_name(RD_PERF_PASS_WAIT));
+    /* pacing reads the span less the display wait (rd_perf_pace_gpu_ms):
+       the vsync wait inside a whole-batch driver's span is the display's,
+       not the GPU's; a record without a wait gives its span, one without
+       GPU times 0, and a wait over the span never goes below 0 */
+    static RdPerfRecord pr;
+    memset(&pr, 0, sizeof(pr));
+    pr.gpuValid = 1;
+    pr.gpuMs = 24.5;
+    pr.gpuDisplayWaitMs = 12.0;
+    CHECK(rd_perf_pace_gpu_ms(&pr) == 12.5, "pace GPU with a display wait: %.3f",
+          rd_perf_pace_gpu_ms(&pr));
+    pr.gpuDisplayWaitMs = 0.0;
+    CHECK(rd_perf_pace_gpu_ms(&pr) == 24.5, "pace GPU without a display wait: %.3f",
+          rd_perf_pace_gpu_ms(&pr));
+    pr.gpuDisplayWaitMs = 30.0;
+    CHECK(rd_perf_pace_gpu_ms(&pr) == 0.0, "pace GPU, a wait over the span: %.3f",
+          rd_perf_pace_gpu_ms(&pr));
+    pr.gpuValid = 0;
+    pr.gpuDisplayWaitMs = 0.0;
+    CHECK(rd_perf_pace_gpu_ms(&pr) == 0.0, "pace GPU without GPU times: %.3f",
+          rd_perf_pace_gpu_ms(&pr));
     rd_perf_passes_arm_text(2941, 359.4, "Vulkan", buf, sizeof(buf));
     CHECK(strcmp(buf, "every replay timed pass by pass from here on Vulkan (a present blocked "
                       "359 ms at replay 2941): the next stalled replay's passes are compared "
@@ -1053,6 +1130,15 @@ static void checkPieces(const RdPerfRecord *r, const RdPerfPass *p, uint32_t n, 
           "passes: replay %u: no pre-pass second", r->replay);
     CHECK(p[n - 1].kind == RD_PERF_PASS_PRESENT, "passes: replay %u ends with %s", r->replay,
           rd_perf_pass_kind_name(p[n - 1].kind));
+    /* issue 179: the present's own list, the display wait before it (the
+       scene list's end to the present's list's start), within the record's
+       GPU time */
+    CHECK(n > 1 && p[n - 2].kind == RD_PERF_PASS_WAIT && p[n - 2].draws == 0,
+          "passes: replay %u: the present's piece follows %s, not the display wait", r->replay,
+          n > 1 ? rd_perf_pass_kind_name(p[n - 2].kind) : "nothing");
+    CHECK(!r->gpuValid || (r->gpuDisplayWaitMs >= 0.0 && r->gpuDisplayWaitMs <= r->gpuMs + 1e-6),
+          "passes: replay %u: display wait %.3f ms of %.3f ms", r->replay, r->gpuDisplayWaitMs,
+          r->gpuMs);
     /* the pass ring's entries of the replay, one for one, in order */
     uint32_t k = 0, matched = 0, entries = 0;
     for (uint32_t i = 0; i < rd_passring_count(); i++) {
@@ -1192,10 +1278,12 @@ static void checkPasses(const RdFrame *f, bool prepass)
         rd__replay_frame(f, 0, true);
         while (rd_perf_pop(&r)) {
             const uint32_t n = rd_perf_passes_of(r.replay, &p);
-            CHECK(r.passKinds[RD_PERF_PASS_UPLOAD] == 1 && r.passKinds[RD_PERF_PASS_PRESENT] == 1,
-                  "passes: replay %u counted %u uploads and %u presents", r.replay,
-                  (unsigned)r.passKinds[RD_PERF_PASS_UPLOAD],
-                  (unsigned)r.passKinds[RD_PERF_PASS_PRESENT]);
+            CHECK(r.passKinds[RD_PERF_PASS_UPLOAD] == 1 && r.passKinds[RD_PERF_PASS_PRESENT] == 1 &&
+                      r.passKinds[RD_PERF_PASS_WAIT] == 1,
+                  "passes: replay %u counted %u uploads, %u presents and %u display waits",
+                  r.replay, (unsigned)r.passKinds[RD_PERF_PASS_UPLOAD],
+                  (unsigned)r.passKinds[RD_PERF_PASS_PRESENT],
+                  (unsigned)r.passKinds[RD_PERF_PASS_WAIT]);
             if (!r.passTimed) {
                 untimed++;
                 CHECK(n == 0 && r.passCount == 0, "passes: untimed replay %u has %u pieces",
