@@ -48,6 +48,16 @@ static int on_jun26(void)
     return strcmp(ico_region_cur()->slug, "jun26") == 0;
 }
 
+/* Shadow toughness Third journey is offered on the discs whose restart life
+   multiplies by gameParam[38 + playthroughs]: the PAL, Japanese, Korean and
+   Chinese ones (their gameParam has 44 entries; the North American disc's 36,
+   the August 2001 build's 36 and the June 2001 demo's 32 have no entry 38..43) */
+static int third_offered(void)
+{
+    const char *s = ico_region_cur()->slug;
+    return strcmp(s, "ntsc") != 0 && strcmp(s, "aug6") != 0 && strcmp(s, "jun26") != 0;
+}
+
 /* one of the three 2001-family discs (North American, August 2001, June
    2001 demo): no light sword there */
 static int y2001(void)
@@ -97,13 +107,16 @@ static void test_defaults(void)
     for (int k = 0; k < 16; k++) {
         CHECK(ico_variant_weapon_kind(k) == k && ico_variant_weapon_put_kind(k) == k);
     }
+    CHECK(ico_variant_shadow_brain() == 1); /* Peaceful shadows Off: the game's */
     CHECK(ico_variants_suspend_achievements() == 0);
     /* the shipped file's values are the defaults */
     use_config("[variants]\nshade_toughness = \"original\"\none_hit = false\n"
                "never_dodge = false\naggression = \"own\"\nno_hints = false\n"
                "no_cutscene_look = false\nignore_cutscene_cameras = false\n"
                "auto_guard = true\nattack_turn = true\nshadows_wait_down = true\n"
+               "peaceful_shadows = false\n"
                "sword_colour = \"original\"\nweapon = \"original\"\n");
+    CHECK(ico_variant_shadow_brain() == 1);
     CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL);
     CHECK(ico_variant_aggression() == ICO_AGGRESSION_OWN);
     CHECK(ico_variant_auto_guard() == 1 && ico_variant_attack_turn() == 1 &&
@@ -111,10 +124,12 @@ static void test_defaults(void)
     CHECK(ico_variants_suspend_achievements() == 0);
 }
 
-/* the names: thirteen variants, the words the keys are written with */
+/* the names: fourteen variants, the words the keys are written with */
 static void test_names(void)
 {
-    CHECK(ico_variant_count(ICO_VARIANT_SHADE_TOUGHNESS) == 3);
+    CHECK(ico_variant_count(ICO_VARIANT_SHADE_TOUGHNESS) == 4);
+    CHECK(ico_variant_count(ICO_VARIANT_PEACEFUL_SHADOWS) == 2);
+    CHECK(strcmp(ico_variant_key(ICO_VARIANT_PEACEFUL_SHADOWS), "peaceful_shadows") == 0);
     CHECK(ico_variant_count(ICO_VARIANT_AGGRESSION) == 5);
     CHECK(ico_variant_count(ICO_VARIANT_BARRIER_HITS) == 2);
     CHECK(ico_variant_count(ICO_VARIANT_ONE_HIT) == 2);
@@ -139,7 +154,8 @@ static void test_names(void)
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_SHADE_TOUGHNESS, 0), "original") == 0);
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_SHADE_TOUGHNESS, 1), "american") == 0);
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_SHADE_TOUGHNESS, 2), "no_plus") == 0);
-    CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_SHADE_TOUGHNESS, 3), "") == 0);
+    CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_SHADE_TOUGHNESS, 3), "third_journey") == 0);
+    CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_SHADE_TOUGHNESS, 4), "") == 0);
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_AGGRESSION, 0), "own") == 0);
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_AGGRESSION, 1), "bold_patient") == 0);
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_AGGRESSION, 2), "bold_quick") == 0);
@@ -204,12 +220,15 @@ static void test_round_trip(void)
     CHECK(ico_variant_barrier_hits() == 7);
     CHECK(ico_variant_no_hints() == 1);
     CHECK(ico_variant_no_cutscene_look() == 1);
-    /* a clamped set, a wrapping step in both directions */
+    /* a clamped set (to Third journey, Original where it is not offered), a
+       wrapping step in both directions */
     ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, 9);
-    CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_NO_PLUS);
+    CHECK(ico_variant_shade_toughness() ==
+          (third_offered() ? ICO_TOUGHNESS_THIRD_JOURNEY : ICO_TOUGHNESS_ORIGINAL));
     ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, -4);
     CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL);
-    CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, -1) == ICO_TOUGHNESS_NO_PLUS);
+    CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, -1) ==
+          (third_offered() ? ICO_TOUGHNESS_THIRD_JOURNEY : ICO_TOUGHNESS_NO_PLUS));
     CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, 1) == ICO_TOUGHNESS_ORIGINAL);
     /* a reload goes back to the config's */
     ico_opt_reload();
@@ -356,11 +375,12 @@ static void test_weapons(void)
 static void test_suspend(void)
 {
     static const IcoVariantId cheats[] = {ICO_VARIANT_ONE_HIT, ICO_VARIANT_NEVER_DODGE,
-                                          ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS};
+                                          ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS,
+                                          ICO_VARIANT_PEACEFUL_SHADOWS};
     static const IcoVariantId harmless[] = {ICO_VARIANT_NO_HINTS, ICO_VARIANT_NO_CUTSCENE_LOOK,
                                             ICO_VARIANT_BARRIER_HITS};
 
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 4; i++) {
         use_config(NULL);
         CHECK(ico_variants_suspend_achievements() == 0);
         ico_variant_set(cheats[i], 1);
@@ -392,6 +412,8 @@ static void test_suspend(void)
     CHECK(ico_variants_suspend_achievements() == 1);
     /* a file with one on starts suspended */
     use_config("[variants]\nignore_cutscene_cameras = true\n");
+    CHECK(ico_variants_suspend_achievements() == 1);
+    use_config("[variants]\npeaceful_shadows = true\n");
     CHECK(ico_variants_suspend_achievements() == 1);
     /* the Debug menu: the press marks it used until cleared or reloaded */
     use_config(NULL);
@@ -620,6 +642,9 @@ static int restart_index(int clears)
     if (ico_variant_shade_toughness() != 0) {
         idx = 38;
     }
+    if (ico_variant_shade_toughness() == 3) {
+        idx = 40; /* Third journey */
+    }
     idx = (idx < 38) ? 38 : ((idx <= max) ? idx : max);
     return idx;
 }
@@ -637,6 +662,42 @@ static void test_restart_life(void)
     ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_AMERICAN);
     /* (Original on the June 2001 demo: the factor of the playthrough) */
     CHECK(restart_index(3) == (on_jun26() ? 41 : 38));
+    /* Third journey: the table's entry 40 on every playthrough, on the discs
+       that offer it; Original (the playthrough's own) where they do not */
+    use_config("[variants]\nshade_toughness = \"third_journey\"\n");
+    for (int c = 0; c < 8; c++) {
+        CHECK(restart_index(c) == (third_offered() ? 40 : (c < 5 ? 38 + c : 43)));
+    }
+    use_config(NULL);
+}
+
+/* Peaceful shadows: the hook the four Shadow starts read (enemy_act.c, beside
+   debug_brain_flag) is 1 by default, 0 with the key on; stepping writes the key;
+   it is a cheat (achievements off); Yorda's own brain thread (girl_act.c) reads
+   no variant, so nothing here touches it */
+static void test_peaceful(void)
+{
+    char path[64] = "variants.peaceful_shadows";
+
+    use_config(NULL);
+    CHECK(ico_variant_shadow_brain() == 1 && ico_variants_suspend_achievements() == 0);
+    use_config("[variants]\npeaceful_shadows = true\n");
+    CHECK(ico_variant_shadow_brain() == 0 && ico_variants_suspend_achievements() == 1);
+    use_config("[variants]\npeaceful_shadows = \"sideways\"\n");
+    CHECK(ico_variant_shadow_brain() == 1);
+    use_config(NULL);
+    CHECK(ico_variant_step(ICO_VARIANT_PEACEFUL_SHADOWS, 1) == 1);
+    CHECK(ico_variant_shadow_brain() == 0 && ico_config_get_bool(path, 0) == 1 &&
+          ico_variants_suspend_achievements() == 1);
+    CHECK(ico_variant_step(ICO_VARIANT_PEACEFUL_SHADOWS, 1) == 0);
+    CHECK(ico_variant_shadow_brain() == 1 && ico_config_get_bool(path, 1) == 0 &&
+          ico_variants_suspend_achievements() == 0);
+    /* the other Shadow rows are untouched by it */
+    ico_variant_set(ICO_VARIANT_PEACEFUL_SHADOWS, 1);
+    CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL &&
+          ico_variant_aggression() == ICO_AGGRESSION_OWN && ico_variant_auto_guard() == 1);
+    ico_opt_reload();
+    CHECK(ico_variant_shadow_brain() == 1);
     use_config(NULL);
 }
 
@@ -651,6 +712,8 @@ static void test_offered(void)
     CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_AMERICAN) == !demo);
     CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_ORIGINAL) == 1);
     CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_NO_PLUS) == 1);
+    CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_THIRD_JOURNEY) ==
+          third_offered());
     CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_COUNT) == 0);
     CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, -1) == 0);
     /* Red only where the light sword's kinds 8 and 9 exist */
@@ -665,15 +728,35 @@ static void test_offered(void)
         }
     }
     use_config(NULL);
-    CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, 1) ==
-          (demo ? ICO_TOUGHNESS_NO_PLUS : ICO_TOUGHNESS_AMERICAN));
-    CHECK(strcmp(ico_config_get_string("variants.shade_toughness", ""),
-                 demo ? "no_plus" : "american") == 0);
-    CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, 1) ==
-          (demo ? ICO_TOUGHNESS_ORIGINAL : ICO_TOUGHNESS_NO_PLUS));
-    CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, -1) ==
-          (demo ? ICO_TOUGHNESS_NO_PLUS : ICO_TOUGHNESS_AMERICAN));
-    CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, -1) == ICO_TOUGHNESS_ORIGINAL);
+    {
+        /* the row steps through the offered values only, around both ways */
+        int offs[ICO_TOUGHNESS_COUNT], n = 0;
+
+        for (int v = 0; v < ICO_TOUGHNESS_COUNT; v++) {
+            if (ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, v)) {
+                offs[n++] = v;
+            }
+        }
+        CHECK(n == 2 + !demo + third_offered());
+        for (int k = 1; k <= n; k++) {
+            CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, 1) == offs[k % n]);
+            if (k == 1) {
+                CHECK(strcmp(ico_config_get_string("variants.shade_toughness", ""),
+                             ico_variant_value_name(ICO_VARIANT_SHADE_TOUGHNESS, offs[1])) == 0);
+            }
+        }
+        for (int k = n - 1; k >= 0; k--) {
+            CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, -1) == offs[k]);
+        }
+        /* Third journey: its key when offered, Original (and a log line) when not */
+        ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_THIRD_JOURNEY);
+        CHECK(ico_variant_shade_toughness() ==
+              (third_offered() ? ICO_TOUGHNESS_THIRD_JOURNEY : ICO_TOUGHNESS_ORIGINAL));
+        use_config("[variants]\nshade_toughness = \"third_journey\"\n");
+        CHECK(ico_variant_shade_toughness() ==
+              (third_offered() ? ICO_TOUGHNESS_THIRD_JOURNEY : ICO_TOUGHNESS_ORIGINAL));
+        use_config(NULL);
+    }
     ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_AMERICAN);
     CHECK(ico_variant_shade_toughness() ==
           (demo ? ICO_TOUGHNESS_ORIGINAL : ICO_TOUGHNESS_AMERICAN));
@@ -705,6 +788,7 @@ int main(int argc, char **argv)
     test_enemy_def();
     test_restart_life();
     test_offered();
+    test_peaceful();
     remove(s_path);
     if (failures != 0) {
         fprintf(stderr, "variants_test: %d failure(s)\n", failures);

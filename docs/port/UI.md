@@ -204,7 +204,7 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
 | Gameplay | Stick fix, Door fix, Second memory card (`UI_OPT_SECOND_CARD`, `[gameplay] second_memory_card`, its note `UI_STR_OPT_SECOND_CARD_NOTE`; the step calls `ico_opt_set_second_memory_card`, whose listener puts the card in at once), No hints (`UI_OPT_VAR_NO_HINTS`), Film effect, Players, Yorda (`UI_PAGE_YORDA`), Shadows (`UI_PAGE_SHADOWS`), Combat (`UI_PAGE_COMBAT`), Cutscenes (`UI_PAGE_CUTSCENES`), Back: the four links before Back as Controls' Touch screen; eleven rows once the game is cleared, inside the window |
 | Yorda (`UI_PAGE_YORDA`) | Yorda safe, Time to rescue Yorda (`UI_OPT_PIT_TIME`, `[gameplay] pit_time`: its value is formatted, `"15 s (Original)"` for Original with the base from `ico_opt_pit_base_seconds` and the word `UI_STR_VAL_ORIGINAL`, else `"8 s"`; Left and Right step a second from the seconds shown, held at 4 and 30 (the Motion blur strength pattern), the base itself is Original again and writes `"original"`, any other value an integer; its note `UI_STR_OPT_PIT_TIME_NOTE`; the value has no words to translate), Yorda trips (`UI_OPT_YORDA_TRIPS`, `[gameplay] yorda_trips`, its note `UI_STR_OPT_YORDA_TRIPS_NOTE`), Natural chains, Back |
-| Shadows (`UI_PAGE_SHADOWS`) | Shadow speed, Shadow toughness, Shadow aggression (`UI_OPT_VAR_*`), Back |
+| Shadows (`UI_PAGE_SHADOWS`) | Shadow speed, Shadow toughness, Shadow aggression, Peaceful shadows (`UI_OPT_VAR_PEACEFUL`) (`UI_OPT_VAR_*`), Back |
 | Combat (`UI_PAGE_COMBAT`) | Automatic guard (`UI_OPT_VAR_AUTO_GUARD`), Turn to face shadows (`UI_OPT_VAR_ATTACK_TURN`), Shadows wait while Ico is down (`UI_OPT_VAR_SHADOWS_WAIT_DOWN`), One hit per swing, Shadows never dodge, Shadows attack together (`UI_OPT_SHADOWS_TOGETHER`, `[gameplay] shadows_together`, its note `UI_STR_OPT_SHADOWS_TOGETHER_NOTE`), Queen barrier (`UI_OPT_VAR_*`), Light sword colour (`UI_OPT_VAR_SWORD_COLOUR`: Original, Red; hidden on ntsc, aug6 and jun26, `ui__variant_shown`), Stick (`UI_OPT_VAR_WEAPON`: Original, Insect net), Back; the first three On as the game ships, the weapon rows Original, achievements rules unchanged. The page's rows are `combatOpts` / `combatStrs` in `build`; a later row is one entry in each and one `addNote` in the page's case: ten rows with Back, the window's ten slots |
 | Cutscenes (`UI_PAGE_CUTSCENES`) | Skip the opening (`UI_OPT_SKIP_OPENING`), No cutscene look-around, Ignore cutscene cameras (`UI_OPT_VAR_*`), Back |
 | Achievements | a list, the popups switch |
@@ -1072,9 +1072,9 @@ its Back (`gameLinks` in `build`, the Controls > Touch screen pattern), each pag
 Controls from its tables (`yordaOpts`, `shadowOpts`, `combatOpts`, `cutOpts` and their strings) with Gameplay as
 its parent, so Back and Triangle return to Gameplay on the link's row (`leaveTo`). All of them show
 from the title and the pause menu on every disc; the game's pause-only rows (Film effect, Players)
-stay on Gameplay. The game variants (`port/game/variants.h`), thirteen stepped rows, one `UI_OPT_VAR_*`
+stay on Gameplay. The game variants (`port/game/variants.h`), fourteen stepped rows, one `UI_OPT_VAR_*`
 per `IcoVariantId` (a `_Static_assert` keeps the order), sit on these pages: No hints on Gameplay,
-Shadow toughness and Shadow aggression on
+Shadow toughness, Shadow aggression and Peaceful shadows on
 Shadows after Shadow speed; Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge, (Shadows attack together), Queen barrier, Light sword colour and Stick on Combat (the first three On by default: `ico_variant_get` reads 1 when the key is absent; the weapon rows Original), No cutscene look-around and Ignore cutscene
 cameras on Cutscenes after Skip the opening. Debug menu (`UI_OPT_VAR_DEBUG_MENU`, a press row after
 `UI_OPT_DEVELOPER` in the enum, so not stepped) is on Developer before Back. The rows' helpers live in
@@ -1083,14 +1083,16 @@ cameras on Cutscenes after Skip the opening. Debug menu (`UI_OPT_VAR_DEBUG_MENU`
 `ui__variant_note` and the per-disc rule `ui__variant_shown`; a step is `ico_variant_step`, which writes `[variants] <key>` in memory and logs
 `variants: <key> = <value>`; the page's leaving saves the file as every page does.
 
-- Values: Shadow toughness Original, American, Not tougher later (`no_plus`); Shadow aggression Their
+- Values: Shadow toughness Original, American, Not tougher later (`no_plus`), Third journey
+  (`third_journey`, hidden on `ntsc`, `aug6` and `jun26` by `ico_variant_offered`; its own note
+  `UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD` shows in `variantNote` while the row is on it); Shadow aggression Their
   own, Bold patient, Bold quick, Wary patient, Wary quick; Queen barrier 5 hits, 7 hits (shown as the
   disc ships it until a step, which writes the number); Light sword colour Original, Red (the
   Characters page's colour word); Stick Original, Insect net (both written as words, `"original"`,
   `"red"`, `"net"`); the others Off, On.
 - Each variants row's note (`UI_STR_OPT_VAR_*_NOTE`, added in the page's case of `buildOptionPage`)
   is under the page while the cursor is on the row and ends with the rule: "Switches achievements
-  off." for One hit per swing, Shadows never dodge, Ignore cutscene cameras and Debug menu
+  off." for One hit per swing, Shadows never dodge, Peaceful shadows, Ignore cutscene cameras and Debug menu
   (`ico_variants_suspend_achievements`, read by `gamestate.c` beside `ico_opt_developer_mode`),
   "Achievements stay on." for the others but Light sword colour and Stick, whose notes say what
   changes and "From the next room" (no room for the rule; neither suspends them). The disc's own
@@ -1112,7 +1114,7 @@ cameras on Cutscenes after Skip the opening. Debug menu (`UI_OPT_VAR_DEBUG_MENU`
   Options closed for the Debug menu (to the title|back to the game)`. With nothing bound it logs
   `variants: the Debug menu cannot open: the game has not bound it` and Options stays.
 - Places: the window's ([The window](#the-window)); Gameplay's eleven rows fill its slots;
-  Yorda (5), Shadows (4) and Cutscenes (4) fit with slots to spare, Combat (10, 9 shown on ntsc, aug6
+  Yorda (5), Shadows (5) and Cutscenes (4) fit with slots to spare, Combat (10, 9 shown on ntsc, aug6
   and jun26) fills them; Developer has five rows with
   Developer mode on.
 - Log lines: the values once at the first read (`variants: shade_toughness=... ignore_cutscene_cameras=0`),

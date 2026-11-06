@@ -4793,8 +4793,8 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                                 "Combat",
                                                 "Cutscenes",
                                                 "Back"};
-    static const char *const kShadowLabels[4] = {"Shadow speed", "Shadow toughness",
-                                                 "Shadow aggression", "Back"};
+    static const char *const kShadowLabels[5] = {"Shadow speed", "Shadow toughness",
+                                                 "Shadow aggression", "Peaceful shadows", "Back"};
     static const char *const kCombatLabels[10] = {"Automatic guard",
                                                   "Turn to face shadows",
                                                   "Shadows wait while Ico is down",
@@ -4845,7 +4845,8 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
               !ico_variant_no_hints() && ico_variant_barrier_hits() == (demo ? 7 : 5) &&
               !ico_variant_no_cutscene_look() && !ico_variant_ignore_cutscene_cameras() &&
               ico_variant_auto_guard() && ico_variant_attack_turn() &&
-              ico_variant_shadows_wait_down() && !ico_variants_suspend_achievements(),
+              ico_variant_shadows_wait_down() && ico_variant_shadow_brain() &&
+              !ico_variants_suspend_achievements(),
           "%s: the accessors answer the shipped game", who);
 
     /* Gameplay: its rows and the three links, from both entries */
@@ -4893,8 +4894,8 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     }
     int lb[16], lv[16];
     const int sn = ui_settings_page_rows(UI_PAGE_SHADOWS, lb, NULL, lv, 16);
-    varLabelsAre(who, "Shadows", lb, sn, kShadowLabels, 4);
-    if (sn == 4) {
+    varLabelsAre(who, "Shadows", lb, sn, kShadowLabels, 5);
+    if (sn == 5) {
         static const char *const kDefaults[2] = {"Original", "Their own"};
         for (int i = 0; i < 2; i++) {
             CHECK(strcmp(lt_ext_row_text(lv[1 + i]), kDefaults[i]) == 0,
@@ -4902,11 +4903,26 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                   lt_ext_row_text(lv[1 + i]));
         }
     }
-    checkPageFits(UI_PAGE_SHADOWS, "Gameplay > Shadows (four rows)");
+    checkPageFits(UI_PAGE_SHADOWS, "Gameplay > Shadows (five rows)");
 
-    if (sn == 4) {
-        /* Shadow toughness: Original, American, Not tougher later, around,
-           both ways (Original and Not tougher later on the June 2001 demo) */
+    if (sn == 5) {
+        /* Peaceful shadows: Off, then On (a cheat) and back */
+        CHECK(strcmp(lt_ext_row_text(lv[3]), "Off") == 0, "%s: Peaceful shadows starts Off", who);
+        {
+            const VarSwitch ps = {UI_PAGE_SHADOWS,
+                                  3,
+                                  ICO_VARIANT_PEACEFUL_SHADOWS,
+                                  "variants.peaceful_shadows",
+                                  "Peaceful shadows",
+                                  "On: Shadows stay where they appear",
+                                  1};
+            varSwitch(who, &ps, shL, lb, lv);
+        }
+        /* Shadow toughness round its offered values (no American on the demo,
+           no Third journey on ntsc, aug6 and jun26) */
+        const int third =
+            ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_THIRD_JOURNEY);
+        const char *const last = third ? "Third journey" : "Not tougher later";
         lt_ext_layout(shL)->curItem = lb[1];
         frame(0);
         if (!demo) {
@@ -4922,11 +4938,27 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                   ico_variant_shade_toughness() == ICO_TOUGHNESS_NO_PLUS &&
                   strcmp(ico_config_get_string("variants.shade_toughness", ""), "no_plus") == 0,
               "%s: Right: Not tougher later and its key", who);
+        if (third) {
+            press(0x2000);
+            CHECK(strcmp(lt_ext_row_text(lv[1]), "Third journey") == 0 &&
+                      ico_variant_shade_toughness() == ICO_TOUGHNESS_THIRD_JOURNEY &&
+                      strcmp(ico_config_get_string("variants.shade_toughness", ""),
+                             "third_journey") == 0,
+                  "%s: Right: Third journey and its key", who);
+            CHECK(varNoteHas(UI_PAGE_SHADOWS, "Shadows as tough as on a third playthrough",
+                             "Achievements stay on.") &&
+                      !ico_variants_suspend_achievements(),
+                  "%s: the Third journey note, achievements stay on", who);
+        } else {
+            ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_THIRD_JOURNEY);
+            CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL,
+                  "%s: Third journey is not offered on this disc", who);
+            ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_NO_PLUS);
+        }
         press(0x2000);
         CHECK(strcmp(lt_ext_row_text(lv[1]), "Original") == 0, "%s: Right wraps to Original", who);
         press(0x8000);
-        CHECK(strcmp(lt_ext_row_text(lv[1]), "Not tougher later") == 0,
-              "%s: Left wraps to Not tougher later", who);
+        CHECK(strcmp(lt_ext_row_text(lv[1]), last) == 0, "%s: Left wraps to %s", who, last);
         CHECK(!ico_variants_suspend_achievements(), "%s: Toughness keeps the achievements", who);
         press(0x2000);
         CHECK(demo ? varNoteHas(UI_PAGE_SHADOWS, "American is not offered on this demo",

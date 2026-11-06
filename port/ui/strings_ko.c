@@ -834,6 +834,12 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_VAL_VAR_INSECT_NET] = "잠자리채",
     [UI_STR_OPT_VAR_WEAPON_NOTE] =
         "잠자리채: 모든 막대기가 쓰이지 않은 잠자리채가 됩니다. 휘두르거나 불을 붙일 수 없고 그림자를 해치지 못합니다. 다음 방부터 적용됩니다.",
+    [UI_STR_VAL_VAR_THIRD_JOURNEY] = "3회차",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
+        "그림자가 3회차와 같은 강도(첫 플레이의 2배)가 됩니다. 게임에서는 3회차에 도달할 수 없습니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_PEACEFUL] = "얌전한 그림자",
+    [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
+        "켬: 그림자가 나타난 자리에 머물며 이코나 요르다를 쫓지 않습니다. 업적이 꺼집니다.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

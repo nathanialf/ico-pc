@@ -996,6 +996,12 @@ typedef enum UiStrId {
     UI_STR_OPT_VAR_WEAPON,
     UI_STR_OPT_VAR_WEAPON_NOTE,
     UI_STR_VAL_VAR_INSECT_NET,
+    /* Gameplay > Shadows (v0.10.5): Shadow toughness's fourth value and the note
+       it shows, and Peaceful shadows with its note */
+    UI_STR_VAL_VAR_THIRD_JOURNEY,
+    UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD,
+    UI_STR_OPT_VAR_PEACEFUL,
+    UI_STR_OPT_VAR_PEACEFUL_NOTE,
     /* the community translations' names (the Language and Menu language
        rows, after UI_STR_LANG_ZH), in their own language in every table */
     UI_STR_LANG_RU_BOBTTZ,

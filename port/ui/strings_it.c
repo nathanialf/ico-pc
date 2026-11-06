@@ -839,6 +839,12 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_VAL_VAR_INSECT_NET] = "Retino",
         [UI_STR_OPT_VAR_WEAPON_NOTE] =
             "Retino: ogni bastone è il retino inutilizzato del gioco; non si brandisce né si accende e non ferisce le ombre. Dalla stanza seguente.",
+        [UI_STR_VAL_VAR_THIRD_JOURNEY] = "Terzo viaggio",
+        [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
+            "Ombre resistenti come in una terza partita, che il gioco non raggiunge mai (il doppio del primo viaggio). Gli obiettivi restano attivi.",
+        [UI_STR_OPT_VAR_PEACEFUL] = "Ombre pacifiche",
+        [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
+            "Sì: le ombre restano dove compaiono e non attaccano mai Ico né Yorda. Disattiva gli obiettivi.",
         [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
         [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
         [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

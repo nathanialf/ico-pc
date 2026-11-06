@@ -2080,6 +2080,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_VAR_SHADOWS_WAIT_DOWN:
     case UI_OPT_VAR_SWORD_COLOUR:
     case UI_OPT_VAR_WEAPON:
+    case UI_OPT_VAR_PEACEFUL:
         return ui__variant_text(opt);
     case UI_OPT_EXTRAS_CREDITS:
         return creditsUnlocked() ? "" : ui_str(UI_STR_ACH_LOCKED);
@@ -3481,6 +3482,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_SHADOW_SPEED, UI_STR_OPT_SHADOW_SPEED_NOTE);
         addNote(pg, UI_OPT_VAR_TOUGHNESS, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
         addNote(pg, UI_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_AGGRESSION_NOTE);
+        addNote(pg, UI_OPT_VAR_PEACEFUL, UI_STR_OPT_VAR_PEACEFUL_NOTE);
         break;
     case UI_PAGE_COMBAT:
         addNote(pg, UI_OPT_VAR_AUTO_GUARD, UI_STR_OPT_VAR_AUTO_GUARD_NOTE);
@@ -4206,12 +4208,13 @@ static void build(void)
                                     UI_OPT_NATURAL_CHAINS, UI_OPT_BACK};
     static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
                                     UI_STR_OPT_NATURAL_CHAINS, UI_STR_BACK};
-    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness
-       and Shadow aggression (VAR-SHADOWS's Peaceful shadows follow) */
+    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness,
+       Shadow aggression and Peaceful shadows */
     static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
-                                     UI_OPT_VAR_AGGRESSION, UI_OPT_BACK};
+                                     UI_OPT_VAR_AGGRESSION, UI_OPT_VAR_PEACEFUL, UI_OPT_BACK};
     static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
-                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_BACK};
+                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_PEACEFUL,
+                                     UI_STR_BACK};
     /* Gameplay > Combat: the three combat [variants] rows, then the four
        fight rules that were on Shadows (One hit per swing, Shadows never
        dodge, Shadows attack together, Queen barrier), the two weapon rows */

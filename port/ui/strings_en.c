@@ -832,6 +832,12 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_VAL_VAR_INSECT_NET] = "Insect net",
     [UI_STR_OPT_VAR_WEAPON_NOTE] =
         "Insect net: each stick is the game’s unused insect net; it cannot be swung or lit and never hurts a Shadow. From the next room.",
+    [UI_STR_VAL_VAR_THIRD_JOURNEY] = "Third journey",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
+        "Shadows as tough as on a third playthrough, which the game never reaches (twice the first journey’s). Achievements stay on.",
+    [UI_STR_OPT_VAR_PEACEFUL] = "Peaceful shadows",
+    [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
+        "On: Shadows stay where they appear and never go after Ico or Yorda. Switches achievements off.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

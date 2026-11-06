@@ -861,6 +861,12 @@ const char *const
                 [UI_STR_VAL_VAR_INSECT_NET] = "Cazamariposas",
                 [UI_STR_OPT_VAR_WEAPON_NOTE] =
                     "Cazamariposas: cada palo es la red sin usar del juego; no se blande ni se enciende y no hiere a las sombras. Desde la siguiente sala.",
+                [UI_STR_VAL_VAR_THIRD_JOURNEY] = "Tercer viaje",
+                [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
+                    "Sombras tan resistentes como en una tercera partida, que el juego nunca alcanza (el doble que en el primer viaje). Los logros siguen activos.",
+                [UI_STR_OPT_VAR_PEACEFUL] = "Sombras pacíficas",
+                [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
+                    "Sí: las sombras se quedan donde aparecen y nunca van a por Ico ni Yorda. Desactiva los logros.",
                 [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
                 [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
                 [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

@@ -738,6 +738,7 @@ typedef enum UiSettingsOpt {
        (UI_OPT_VAR_TOUGHNESS + id): [variants] keys, port/game/variants.h;
        No hints on Gameplay, the two cutscene rows on Gameplay > Cutscenes,
        the three combat rows and the two weapon rows on Gameplay > Combat,
+       Peaceful shadows and
        the others on Gameplay > Shadows */
     UI_OPT_VAR_TOUGHNESS,
     UI_OPT_VAR_ONE_HIT,
@@ -752,6 +753,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_VAR_SHADOWS_WAIT_DOWN,
     UI_OPT_VAR_SWORD_COLOUR,
     UI_OPT_VAR_WEAPON,
+    UI_OPT_VAR_PEACEFUL,
     UI_OPT_DEVELOPER,
     /* actions */
     UI_OPT_BACK,

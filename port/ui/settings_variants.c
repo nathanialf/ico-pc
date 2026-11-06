@@ -16,7 +16,7 @@
 #include "variants.h"
 #include "../core/region.h" /* ico_region_cur, ICO_JUN26, ICO_NTSCAUG6JUN26 */
 
-_Static_assert(UI_OPT_VAR_WEAPON - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COUNT &&
+_Static_assert(UI_OPT_VAR_PEACEFUL - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COUNT &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_AGGRESSION == UI_OPT_VAR_AGGRESSION &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_BARRIER_HITS == UI_OPT_VAR_BARRIER &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_NO_CUTSCENE_LOOK == UI_OPT_VAR_NO_LOOK &&
@@ -25,18 +25,20 @@ _Static_assert(UI_OPT_VAR_WEAPON - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COUNT
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_SHADOWS_WAIT_DOWN ==
                        UI_OPT_VAR_SHADOWS_WAIT_DOWN &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_SWORD_COLOUR == UI_OPT_VAR_SWORD_COLOUR &&
-                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_WEAPON == UI_OPT_VAR_WEAPON,
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_WEAPON == UI_OPT_VAR_WEAPON &&
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_PEACEFUL_SHADOWS == UI_OPT_VAR_PEACEFUL,
                "a Settings row for each variant, in variants.h's order");
 
 int ui__var_opt(int opt)
 {
-    return opt >= UI_OPT_VAR_TOUGHNESS && opt <= UI_OPT_VAR_WEAPON;
+    return opt >= UI_OPT_VAR_TOUGHNESS && opt <= UI_OPT_VAR_PEACEFUL;
 }
 
 const char *ui__variant_text(int opt)
 {
     static const int tough[ICO_TOUGHNESS_COUNT] = {UI_STR_VAL_ORIGINAL, UI_STR_VAL_VAR_AMERICAN,
-                                                   UI_STR_VAL_VAR_NOT_TOUGHER};
+                                                   UI_STR_VAL_VAR_NOT_TOUGHER,
+                                                   UI_STR_VAL_VAR_THIRD_JOURNEY};
     static const int agg[ICO_AGGRESSION_COUNT] = {
         UI_STR_VAL_VAR_AGG_OWN, UI_STR_VAL_VAR_AGG_BOLD_PATIENT, UI_STR_VAL_VAR_AGG_BOLD_QUICK,
         UI_STR_VAL_VAR_AGG_WARY_PATIENT, UI_STR_VAL_VAR_AGG_WARY_QUICK};
@@ -70,6 +72,11 @@ int ui__variant_note(int opt, int strId)
 {
     if (opt == UI_OPT_VAR_TOUGHNESS && ICO_JUN26) {
         return UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO;
+    }
+    /* Third journey explains itself when stepped to */
+    if (opt == UI_OPT_VAR_TOUGHNESS &&
+        ico_variant_get(ICO_VARIANT_SHADE_TOUGHNESS) == ICO_TOUGHNESS_THIRD_JOURNEY) {
+        return UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD;
     }
     if (opt == UI_OPT_VAR_NO_HINTS && ICO_NTSCAUG6JUN26) {
         return UI_STR_OPT_VAR_NO_HINTS_NOTE_2001;

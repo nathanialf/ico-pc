@@ -807,6 +807,12 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_VAL_VAR_INSECT_NET] = "捕蟲網",
     [UI_STR_OPT_VAR_WEAPON_NOTE] =
         "捕蟲網：每根木棒都變成遊戲中未使用的捕蟲網。無法揮動或點火，也傷不了影子。從下一個房間起生效。",
+    [UI_STR_VAL_VAR_THIRD_JOURNEY] = "第三輪",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
+        "影子和第三輪遊玩一樣強韌（第一輪的兩倍），遊戲本身永遠不會進入第三輪。成就維持開啟。",
+    [UI_STR_OPT_VAR_PEACEFUL] = "和平的影子",
+    [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
+        "開啟：影子停留在出現的地方，不會去攻擊 Ico 或 Yorda。會關閉成就。",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

@@ -155,9 +155,10 @@ static void testBuild(void)
     static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
                                     UI_STR_OPT_NATURAL_CHAINS, UI_STR_BACK};
     static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
-                                     UI_OPT_VAR_AGGRESSION, UI_OPT_BACK};
+                                     UI_OPT_VAR_AGGRESSION, UI_OPT_VAR_PEACEFUL, UI_OPT_BACK};
     static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
-                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_BACK};
+                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_PEACEFUL,
+                                     UI_STR_BACK};
     /* the two weapon rows after Queen barrier (Light sword colour is built on
        every disc and hidden where there is no light sword) */
     static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,
@@ -251,7 +252,7 @@ static void testBuild(void)
     }
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 5), "Gameplay > Yorda rows");
-    CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 4), "Gameplay > Shadows rows");
+    CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 5), "Gameplay > Shadows rows");
     CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 10), "Gameplay > Combat rows");
     CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
     {

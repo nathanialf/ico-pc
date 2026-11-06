@@ -1281,8 +1281,11 @@ inline ICO_WORD_PTR(GObj *) actEnemy_GetClingTarget(GObj *self)
 }
 
 /* PC port: port/game/variants.h: Shadow toughness (0 Original, 1 American,
-   2 not tougher later) */
+   2 not tougher later, 3 third journey) */
 extern int ico_variant_shade_toughness(void);
+/* PC port: port/game/variants.h: 0 with Peaceful shadows on (a Shadow is
+   started without its brain thread; Yorda's own, girl_act.c, is not asked) */
+extern int ico_variant_shadow_brain(void);
 
 /* A static inline shared by actEnemyRestart and actEnemyStart.  `max` is a
    local holding 43. */
@@ -1295,6 +1298,11 @@ static inline float getEnemyRestartLife(GObj *self) /* derived name */
        the first playthrough on every playthrough (the USA disc's has none) */
     if (ico_variant_shade_toughness() != 0) {
         idx = 38;
+    }
+    /* Third journey: the table's own entry for a third playthrough (x2 on
+       the PAL-family discs), which the clear count (at most 1) never reaches */
+    if (ico_variant_shade_toughness() == 3) {
+        idx = 40;
     }
     idx = (idx < 38) ? 38 : ((idx <= max) ? idx : max);
     return GetEnemyDefLife(self) * _ACTGame_GetParamF(idx);
@@ -5730,7 +5738,7 @@ static void actEnemyStart_ntsc(GObj *self)
     }
     _ACTWait(1);
     act->mainMail = (ActMail *)&actIntrList[67];
-    if (debug_brain_flag != 0) {
+    if (debug_brain_flag != 0 && ico_variant_shadow_brain()) {
         actCreateSubThread((void *)subEnemyBrainMain, 20);
     }
     actCreateSubThread((void *)subEnemyControl, 21);
@@ -5811,7 +5819,7 @@ static void actEnemyStart_jun26(GObj *self)
     }
     _ACTWait(1);
     act->mainMail = (ActMail *)&actIntrList[65];
-    if (debug_brain_flag != 0) {
+    if (debug_brain_flag != 0 && ico_variant_shadow_brain()) {
         actCreateSubThread((void *)subEnemyBrainMain, 20);
     }
     actCreateSubThread((void *)subEnemyControl, 21);
@@ -5891,7 +5899,7 @@ static void actEnemyStart_aug6(GObj *self)
     }
     _ACTWait(1);
     act->mainMail = (ActMail *)&actIntrList[67];
-    if (debug_brain_flag != 0) {
+    if (debug_brain_flag != 0 && ico_variant_shadow_brain()) {
         actCreateSubThread((void *)subEnemyBrainMain, 20);
     }
     actCreateSubThread((void *)subEnemyControl, 21);
@@ -5991,7 +5999,7 @@ void actEnemyStart(GObj *self)
         GOBJ_WORK(self)->motherGObj = isysGObjSearchFromObjLayoutID(GOBJ_WORK(self)->motherLabel);
     }
     act->mainMail = (ActMail *)&actIntrList[74];
-    if (debug_brain_flag != 0) {
+    if (debug_brain_flag != 0 && ico_variant_shadow_brain()) {
         actCreateSubThread((void *)subEnemyBrainMain, 20);
     }
     actCreateSubThread((void *)subEnemyControl, 21);
