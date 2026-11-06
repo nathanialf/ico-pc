@@ -22,16 +22,17 @@
 
 #include "config.h"
 
-static const char *const kToughness[ICO_TOUGHNESS_COUNT] = {"original", "american", "no_plus"};
+static const char *const kToughness[ICO_TOUGHNESS_COUNT] = {"original", "american", "no_plus",
+                                                            "third_journey"};
 static const char *const kAggression[ICO_AGGRESSION_COUNT] = {"own", "bold_patient", "bold_quick",
                                                               "wary_patient", "wary_quick"};
 static const char *const kBarrier[2] = {"5", "7"};
 static const char *const kBool[2] = {"false", "true"};
 
 static const char *const kKeys[ICO_VARIANT_COUNT] = {
-    "shade_toughness", "one_hit",      "never_dodge",      "aggression",
-    "no_hints",        "barrier_hits", "no_cutscene_look", "ignore_cutscene_cameras",
-    "auto_guard",      "attack_turn",  "shadows_wait_down"};
+    "shade_toughness", "one_hit",      "never_dodge",       "aggression",
+    "no_hints",        "barrier_hits", "no_cutscene_look",  "ignore_cutscene_cameras",
+    "auto_guard",      "attack_turn",  "shadows_wait_down", "peaceful_shadows"};
 
 /* 0: not read yet */
 static int s_loaded;
@@ -80,6 +81,7 @@ int ico_variant_count(IcoVariantId id)
     case ICO_VARIANT_AUTO_GUARD:
     case ICO_VARIANT_ATTACK_TURN:
     case ICO_VARIANT_SHADOWS_WAIT_DOWN:
+    case ICO_VARIANT_PEACEFUL_SHADOWS:
         return 2;
     default:
         return 0;
@@ -127,13 +129,28 @@ static int american_offered(void)
     return !(r != NULL && r->slug != NULL && strcmp(r->slug, "jun26") == 0);
 }
 
+/* PC port: only the PAL, Japanese, Korean and Chinese discs' restart life
+   (enemy_act.c getEnemyRestartLife) multiplies a Shadow's life by
+   gameParam[38 + playthroughs cleared]; the North American disc's and the two
+   2001 builds' restarts use the table's life as it is, and their gameParam
+   (36, 36 and 32 entries) has no entry 38..43. Third journey would change
+   nothing there, so it is not offered. */
+static int third_journey_offered(void)
+{
+    return !ICO_NTSCAUG6JUN26;
+}
+
 int ico_variant_offered(IcoVariantId id, int index)
 {
     if (index < 0 || index >= ico_variant_count(id)) {
         return 0;
     }
-    return id != ICO_VARIANT_SHADE_TOUGHNESS || index != ICO_TOUGHNESS_AMERICAN ||
-           american_offered();
+    if (id != ICO_VARIANT_SHADE_TOUGHNESS) {
+        return 1;
+    }
+    return index == ICO_TOUGHNESS_AMERICAN        ? american_offered()
+           : index == ICO_TOUGHNESS_THIRD_JOURNEY ? third_journey_offered()
+                                                  : 1;
 }
 
 static int word_index(const char *const *names, int n, const char *word, int def, const char *key)
@@ -153,13 +170,13 @@ static void log_summary(void)
     fprintf(stderr,
             "variants: shade_toughness=%s one_hit=%d never_dodge=%d aggression=%s no_hints=%d "
             "barrier_hits=%s no_cutscene_look=%d ignore_cutscene_cameras=%d auto_guard=%d "
-            "attack_turn=%d shadows_wait_down=%d\n",
+            "attack_turn=%d shadows_wait_down=%d peaceful_shadows=%d\n",
             kToughness[s_value[ICO_VARIANT_SHADE_TOUGHNESS]], s_value[ICO_VARIANT_ONE_HIT],
             s_value[ICO_VARIANT_NEVER_DODGE], kAggression[s_value[ICO_VARIANT_AGGRESSION]],
             s_value[ICO_VARIANT_NO_HINTS], kBarrier[s_value[ICO_VARIANT_BARRIER_HITS]],
             s_value[ICO_VARIANT_NO_CUTSCENE_LOOK], s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS],
             s_value[ICO_VARIANT_AUTO_GUARD], s_value[ICO_VARIANT_ATTACK_TURN],
-            s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN]);
+            s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN], s_value[ICO_VARIANT_PEACEFUL_SHADOWS]);
 }
 
 static void load(void)
@@ -172,8 +189,13 @@ static void load(void)
         kToughness, ICO_TOUGHNESS_COUNT,
         ico_config_get_string("variants.shade_toughness", kToughness[0]), 0, "shade_toughness");
     if (!ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, s_value[ICO_VARIANT_SHADE_TOUGHNESS])) {
-        fprintf(stderr, "variants: shade_toughness = american is not offered on the June 2001 demo "
-                        "(its enemy rows are its own); using original\n");
+        fprintf(stderr,
+                "variants: shade_toughness = %s is not offered on this disc (%s); using "
+                "original\n",
+                kToughness[s_value[ICO_VARIANT_SHADE_TOUGHNESS]],
+                s_value[ICO_VARIANT_SHADE_TOUGHNESS] == ICO_TOUGHNESS_AMERICAN
+                    ? "the June 2001 demo's enemy rows are its own"
+                    : "its restart life has no playthrough factor");
         s_value[ICO_VARIANT_SHADE_TOUGHNESS] = ICO_TOUGHNESS_ORIGINAL;
     }
     s_value[ICO_VARIANT_ONE_HIT] = ico_config_get_bool("variants.one_hit", 0) != 0;
@@ -202,6 +224,9 @@ static void load(void)
     s_value[ICO_VARIANT_ATTACK_TURN] = ico_config_get_bool("variants.attack_turn", 1) != 0;
     s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN] =
         ico_config_get_bool("variants.shadows_wait_down", 1) != 0;
+    /* a switch the game ships Off (a cheat: achievements are suspended) */
+    s_value[ICO_VARIANT_PEACEFUL_SHADOWS] =
+        ico_config_get_bool("variants.peaceful_shadows", 0) != 0;
     log_summary();
 }
 
@@ -283,13 +308,15 @@ void ico_variants_apply(void)
     fprintf(stderr,
             "variants: applied shade_toughness=%s one_hit=%d never_dodge=%d aggression=%s "
             "no_hints=%d (hints %s) barrier_hits=%d no_cutscene_look=%d "
-            "ignore_cutscene_cameras=%d auto_guard=%d attack_turn=%d shadows_wait_down=%d;%s\n",
+            "ignore_cutscene_cameras=%d auto_guard=%d attack_turn=%d shadows_wait_down=%d "
+            "peaceful_shadows=%d;%s\n",
             kToughness[s_value[ICO_VARIANT_SHADE_TOUGHNESS]], s_value[ICO_VARIANT_ONE_HIT],
             s_value[ICO_VARIANT_NEVER_DODGE], kAggression[s_value[ICO_VARIANT_AGGRESSION]],
             s_value[ICO_VARIANT_NO_HINTS], ico_hints_on() ? "on" : "off",
             ico_variant_barrier_hits(), s_value[ICO_VARIANT_NO_CUTSCENE_LOOK],
             s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS], s_value[ICO_VARIANT_AUTO_GUARD],
-            s_value[ICO_VARIANT_ATTACK_TURN], s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN], sw);
+            s_value[ICO_VARIANT_ATTACK_TURN], s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN],
+            s_value[ICO_VARIANT_PEACEFUL_SHADOWS], sw);
 }
 
 void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
@@ -484,18 +511,34 @@ int ico_variant_shadows_wait_down(void)
     return on;
 }
 
+int ico_variant_shadow_brain(void)
+{
+    static unsigned n;
+    const int peaceful = ico_variant_get(ICO_VARIANT_PEACEFUL_SHADOWS);
+    if (peaceful) {
+        /* a Shadow starts: the first 8, then every 100th */
+        n++;
+        if (n <= 8 || n % 100 == 0) {
+            fprintf(stderr, "variants: peaceful_shadows: Shadow %u starts without its brain\n", n);
+        }
+    }
+    return !peaceful;
+}
+
 int ico_variants_suspend_achievements(void)
 {
     int mask;
     load();
     mask = (s_value[ICO_VARIANT_ONE_HIT] ? 1 : 0) | (s_value[ICO_VARIANT_NEVER_DODGE] ? 2 : 0) |
-           (s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS] ? 4 : 0) | (s_debug_menu_used ? 8 : 0);
+           (s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS] ? 4 : 0) | (s_debug_menu_used ? 8 : 0) |
+           (s_value[ICO_VARIANT_PEACEFUL_SHADOWS] ? 16 : 0);
     if (mask != s_suspend_logged) {
         s_suspend_logged = mask;
         if (mask != 0) {
-            fprintf(stderr, "variants: achievements are off (%s%s%s%s)\n",
+            fprintf(stderr, "variants: achievements are off (%s%s%s%s%s)\n",
                     mask & 1 ? "one_hit " : "", mask & 2 ? "never_dodge " : "",
-                    mask & 4 ? "ignore_cutscene_cameras " : "", mask & 8 ? "debug_menu" : "");
+                    mask & 4 ? "ignore_cutscene_cameras " : "", mask & 8 ? "debug_menu " : "",
+                    mask & 16 ? "peaceful_shadows" : "");
         } else {
             fprintf(stderr, "variants: achievements are back on\n");
         }

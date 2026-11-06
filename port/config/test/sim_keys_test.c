@@ -74,7 +74,8 @@ static void test_list(void)
     CHECK(listed("gameplay.shadows_together"));
     CHECK(listed("variants.one_hit"));
     CHECK(listed("variants.auto_guard") && listed("variants.attack_turn") &&
-          listed("variants.shadows_wait_down"));
+          listed("variants.shadows_wait_down") && listed("variants.peaceful_shadows"));
+    CHECK(strcmp(ico_sim_key_default("variants.peaceful_shadows"), "false") == 0);
     CHECK(strcmp(ico_sim_key_default("variants.auto_guard"), "true") == 0 &&
           strcmp(ico_sim_key_default("variants.attack_turn"), "true") == 0 &&
           strcmp(ico_sim_key_default("variants.shadows_wait_down"), "true") == 0);

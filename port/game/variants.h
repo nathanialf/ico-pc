@@ -2,7 +2,7 @@
  * port/game/variants.h
  *
  * The game variants: Options > Gameplay (No hints) and its Shadows,
- * Combat and Cutscenes pages, the Debug menu on Developer.  Eleven settings
+ * Combat and Cutscenes pages, the Debug menu on Developer.  Twelve settings
  * that change how the game plays, each read once from config.toml
  * ([variants], via ico_config_get_*) the first time it is asked for and
  * settable at run time, as the options of options.h.  Every default is the
@@ -14,7 +14,13 @@
  *                                       on the North American disc, and no
  *                                       tougher on later playthroughs) or
  *                                       "no_plus" (the disc's Shadows, no
- *                                       tougher on later playthroughs)
+ *                                       tougher on later playthroughs) or
+ *                                       "third_journey" (the factor of a
+ *                                       third playthrough, twice the first
+ *                                       journey's, that the game's table has
+ *                                       and no playthrough reaches; the
+ *                                       PAL, Japanese, Korean and Chinese
+ *                                       discs only)
  *   [variants] one_hit      false  one hit per swing (debug_one_hit_only)
  *   [variants] never_dodge  false  the Shadows never dodge (debug_ignore_dodge)
  *   [variants] aggression  "own"   "own" (each Shadow's own), "bold_patient",
@@ -33,6 +39,9 @@
  *   [variants] attack_turn  true   Ico's swing turns him toward the nearest Shadow
  *   [variants] shadows_wait_down
  *                          true   the Shadows wait while Ico is knocked down
+ *   [variants] peaceful_shadows
+ *                          false  the Shadows get no brain thread (the game's
+ *                                  BrainOnOff switch, for Shadows only)
  *
  * The game reads them in three ways (docs/port/GAME_FEATURES.md "Game
  * variants" names every site):
@@ -52,7 +61,7 @@
  *
  * Achievements are suspended (ico_variants_suspend_achievements, read by
  * gamestate.c beside developer mode) while One hit per swing, Shadows never
- * dodge or Cutscene cameras ignored is on, and from the Debug menu's being
+ * dodge, Peaceful shadows or Cutscene cameras ignored is on, and from the Debug menu's being
  * opened until the options are reloaded or ico_variants_debug_menu_clear.
  * Shadow toughness, aggression, No hints, the barrier, the look-around and the
  * three Combat rows (Automatic guard, Turn to face shadows, Shadows wait while
@@ -78,6 +87,7 @@ typedef enum IcoVariantId {
     ICO_VARIANT_AUTO_GUARD,
     ICO_VARIANT_ATTACK_TURN,
     ICO_VARIANT_SHADOWS_WAIT_DOWN,
+    ICO_VARIANT_PEACEFUL_SHADOWS,
     ICO_VARIANT_COUNT
 } IcoVariantId;
 
@@ -85,6 +95,7 @@ typedef enum IcoVariantToughness {
     ICO_TOUGHNESS_ORIGINAL = 0,
     ICO_TOUGHNESS_AMERICAN,
     ICO_TOUGHNESS_NO_PLUS,
+    ICO_TOUGHNESS_THIRD_JOURNEY, /* gameParam[40], the game's x2 */
     ICO_TOUGHNESS_COUNT
 } IcoVariantToughness;
 
@@ -115,6 +126,11 @@ int ico_variant_ignore_cutscene_cameras(void);
 int ico_variant_auto_guard(void);
 int ico_variant_attack_turn(void);
 int ico_variant_shadows_wait_down(void);
+/* Peaceful shadows: 1 when a Shadow gets its brain thread (the game's
+   own, the default), 0 with Peaceful shadows on.  Read at the four places
+   enemy_act.c starts a Shadow (one per disc copy) beside debug_brain_flag, so
+   Yorda's own brain thread (girl_act.c, the same flag) is never touched. */
+int ico_variant_shadow_brain(void);
 
 /* The Settings page's way in.  A variant has ico_variant_count(id) values,
    numbered from 0 (a switch: 0 off, 1 on; the barrier: 0 is 5 hits, 1 is 7;
@@ -133,13 +149,17 @@ const char *ico_variant_value_name(IcoVariantId id, int index);
 /* 1 when value index of id is offered on the selected disc: every value but
    Shadow toughness American on the June 2001 demo, whose enemy rows are
    kinds of its own (PC port: a by-index copy of the USA rows would change
-   unrelated Shadows). A config "american" there reads as Original with a log
-   line, ico_variant_set gives Original for it, and ico_variant_step passes
-   over it (Original <-> Not tougher later). The indices stay the enum's. */
+   unrelated Shadows), and Shadow toughness Third journey on the three
+   discs whose restart life has no gameParam factor (the North American disc
+   and the two 2001 builds: only the PAL, Japanese, Korean and Chinese discs
+   multiply a Shadow's life by gameParam[38 + playthroughs cleared]). A config
+   word that is not offered reads as Original with a log line,
+   ico_variant_set gives Original for it, and ico_variant_step passes over
+   it. The indices stay the enum's. */
 int ico_variant_offered(IcoVariantId id, int index);
 
 /* 1 while a variant that switches achievements off is in force: One hit per
-   swing, Shadows never dodge, Cutscene cameras ignored, or the Debug menu
+   swing, Shadows never dodge, Peaceful shadows, Cutscene cameras ignored, or the Debug menu
    opened.  Logs "variants: achievements are off ..." when that changes. */
 int ico_variants_suspend_achievements(void);
 

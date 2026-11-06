@@ -524,6 +524,8 @@ static void test_first_run(void)
     CHECK(ico_config_get_bool("variants.auto_guard", 0) == 1);
     CHECK(ico_config_get_bool("variants.attack_turn", 0) == 1);
     CHECK(ico_config_get_bool("variants.shadows_wait_down", 0) == 1);
+    CHECK(ico_config_get_bool("variants.peaceful_shadows", 1) == 0);
+    CHECK(text != NULL && strstr(text, "peaceful_shadows = false") != NULL);
     CHECK(text != NULL && strstr(text, "auto_guard = true") != NULL &&
           strstr(text, "attack_turn = true") != NULL &&
           strstr(text, "shadows_wait_down = true") != NULL);
