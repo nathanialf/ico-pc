@@ -4542,7 +4542,9 @@ static void auto_res_sample(const RdPerfRecord *r)
         return;
     }
     if (r->gpuValid) {
-        ms = r->gpuMs - r->gpuUploadMs;
+        /* the GPU's own work: the span less the uploads and the display
+           wait (rd.h rd_perf_pace_gpu_ms) */
+        ms = rd_perf_pace_gpu_ms(r) - r->gpuUploadMs;
     } else if (rhi_present_mailbox()) {
         ms = r->totalMs - r->acquireMs - r->presentMs;
     } else {
@@ -4623,9 +4625,11 @@ static void perf_drain(void)
         auto_res_sample(&r);
         if (r.presented && r.gpuValid) {
             /* the present allowance's GPU gate and budget: a timed
-               replay's GPU span (two replays late; gpuIsSpan true), the
+               replay's GPU span less its display wait (two replays late;
+               gpuIsSpan true; rd.h rd_perf_pace_gpu_ms: the present's own
+               list waits for the window's image inside the span), the
                median of the last 8 (not the replays line's block mean) */
-            s_pres.gpuNs = pace_hist_add(&s_pres.gpuHist, (Uint64)(r.gpuMs * 1e6));
+            s_pres.gpuNs = pace_hist_add(&s_pres.gpuHist, (Uint64)(rd_perf_pace_gpu_ms(&r) * 1e6));
         }
         if (r.presented) {
             present_hist_add(&s_perf.presentHist, r.presentMs);

@@ -1040,6 +1040,27 @@ static void checkPassTexts(void)
           "passes by kind with a display wait: %s", buf);
     CHECK(strcmp(rd_perf_pass_kind_name(RD_PERF_PASS_WAIT), "display wait") == 0,
           "the display wait's name: %s", rd_perf_pass_kind_name(RD_PERF_PASS_WAIT));
+    /* pacing reads the span less the display wait (rd_perf_pace_gpu_ms):
+       the vsync wait inside a whole-batch driver's span is the display's,
+       not the GPU's; a record without a wait gives its span, one without
+       GPU times 0, and a wait over the span never goes below 0 */
+    static RdPerfRecord pr;
+    memset(&pr, 0, sizeof(pr));
+    pr.gpuValid = 1;
+    pr.gpuMs = 24.5;
+    pr.gpuDisplayWaitMs = 12.0;
+    CHECK(rd_perf_pace_gpu_ms(&pr) == 12.5, "pace GPU with a display wait: %.3f",
+          rd_perf_pace_gpu_ms(&pr));
+    pr.gpuDisplayWaitMs = 0.0;
+    CHECK(rd_perf_pace_gpu_ms(&pr) == 24.5, "pace GPU without a display wait: %.3f",
+          rd_perf_pace_gpu_ms(&pr));
+    pr.gpuDisplayWaitMs = 30.0;
+    CHECK(rd_perf_pace_gpu_ms(&pr) == 0.0, "pace GPU, a wait over the span: %.3f",
+          rd_perf_pace_gpu_ms(&pr));
+    pr.gpuValid = 0;
+    pr.gpuDisplayWaitMs = 0.0;
+    CHECK(rd_perf_pace_gpu_ms(&pr) == 0.0, "pace GPU without GPU times: %.3f",
+          rd_perf_pace_gpu_ms(&pr));
     rd_perf_passes_arm_text(2941, 359.4, "Vulkan", buf, sizeof(buf));
     CHECK(strcmp(buf, "every replay timed pass by pass from here on Vulkan (a present blocked "
                       "359 ms at replay 2941): the next stalled replay's passes are compared "

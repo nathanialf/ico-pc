@@ -54,9 +54,9 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
  * first stamp is a bottom-of-pipe stamp (the Vulkan backend's every
  * stamp), written once the earlier commands are done, so a driver that
  * keeps that rule shows no overlap and the step rule's GPU time a picture
- * (the median span, PaceRtAsk.gpuNs) is the GPU's whole time per picture,
- * any wait inside the replay (the display's image at its first colour
- * write) included */
+ * (the median span less the display wait, PaceRtAsk.gpuNs; rd.h
+ * rd_perf_pace_gpu_ms) is the GPU's whole time per picture without the
+ * present's own list's wait for the window's image */
 #define PACE_GPU_IDLE_NS 50000ll
 
 /* Issue 123: the gaps of the replays right after a present that blocked
@@ -147,8 +147,8 @@ int pace_gpu_gap_text(const PaceGpuGap *g, char *out, unsigned len);
  * probeFailed the steps since the climb) and doubles probeWait, to
  * PACE_PROBE_WAIT_MAX at most; a probe that lasts them sets probeWait back
  * to PACE_PROBE_WAIT.  The GPU figure is the timed replay's stamp span on
- * every backend (RdPerfRecord.gpuMs, rd_perf.c rd__perf_collect_gpu: the
- * first stamp to the last), the GPU's waits for the CPU's submissions in it: a
+ * every backend less its display wait (rd.h rd_perf_pace_gpu_ms: the first
+ * stamp to the last, rd_perf.c rd__perf_collect_gpu), the GPU's waits for the CPU's submissions in it: a
  * 750 Ti reading 12 to 15 ms presented 60 a second with 598 of 601
  * presents waiting for the display, yet the gate (1 * 14 + 5 > 16.7) held
  * the lock at 30 for up to 3600 steps.  So under the lock the figure is

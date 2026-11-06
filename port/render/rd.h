@@ -2169,6 +2169,20 @@ enum {
 /* A RD_PERF_PASS_* in plain words ("uploads", "DATE snapshot", ...) */
 const char *rd_perf_pass_kind_name(int kind);
 
+struct RdPerfRecord;
+/* The GPU time a picture that pacing reads (the present allowance's gate
+ * and budget, the step rule, automatic resolution): the record's span
+ * (gpuMs) less its display wait (gpuDisplayWaitMs), never below 0; 0 for a
+ * record without GPU times.  The present's own list waits for the window's
+ * image between the two lists' stamps (rd_submit.c), so under vsync on a
+ * driver that waits whole batches the span now holds the wait, which fell
+ * before the first stamp while a picture was one list; less the wait,
+ * pacing reads the GPU's own work as before.  Where the stamps run ahead of
+ * the wait (issue 179's Mali) the wait figure is about 0 and the input is
+ * the span, as it was there.  The perf lines print the span and the wait
+ * apart. */
+double rd_perf_pace_gpu_ms(const struct RdPerfRecord *r);
+
 /* RdPerfPass.target: a named target (RdTargetId: SCENE, WORK0, ...) or one
  * of these */
 enum {
@@ -2726,7 +2740,8 @@ typedef struct RdPerfRecord {
      * for this replay's submit), under 0 this replay's first stamp written
      * before the one before ended, so gpuMs counts that end too (the
      * window's 10 s 'GPU between replays' line, pace_policy.h PaceGpuGap;
-     * the step rule's GPU time a picture is the median of gpuMs);
+     * the step rule's GPU time a picture is the median of
+     * rd_perf_pace_gpu_ms, gpuMs less the display wait);
      * gpuGapSkipped the replays without timestamps between (their GPU work
      * is inside the gap then) */
     uint8_t gpuGapValid;

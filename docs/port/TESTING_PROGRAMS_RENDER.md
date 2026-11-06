@@ -1103,7 +1103,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   mean, one 1.3x, one under 0.05 ms, one new to the block, one not timed; an empty block; every
   piece over; no GPU span; a cut; and issue 179's display wait named instead of the first pass,
   against no block mean and against its block's, shown without draws among the top passes and
-  left out of the passes' counts), the block's mean of a piece (`rd_perf_pass_agg_mean`) and the
+  left out of the passes' counts; the GPU time pacing reads, the span less the display wait,
+  `rd_perf_pace_gpu_ms`, never below 0, 0 without GPU times), the block's mean of a piece (`rd_perf_pass_agg_mean`) and the
   arm line with its backend, the arm's backend gate (`rd_perf_passes_arm_backend`: Vulkan and MoltenVK
   with a present split only, never OpenGL or Direct3D), a failure of these counted without a device (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the

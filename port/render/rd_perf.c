@@ -110,6 +110,15 @@ const char *rd_perf_pass_kind_name(int kind)
     return kind >= 0 && kind < RD_PERF_PASS_KIND_COUNT ? s_passKindNames[kind] : "none";
 }
 
+double rd_perf_pace_gpu_ms(const RdPerfRecord *r)
+{
+    if (!r->gpuValid) {
+        return 0.0;
+    }
+    const double ms = r->gpuMs - r->gpuDisplayWaitMs; /* rd.h: the wait is not GPU work */
+    return ms > 0.0 ? ms : 0.0;
+}
+
 int rd_perf_pass_label(const RdPerfPass *p, char *buf, size_t n)
 {
     if (p->kind == RD_PERF_PASS_RENDER) {

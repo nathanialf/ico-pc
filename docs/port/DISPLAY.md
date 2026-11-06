@@ -471,6 +471,11 @@ lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,
   `window: presents paced by the GPU: N.N a step|not held (GPU span G ms a picture, period P ms)`
   (`not held` at 8 a step or more).
 
+The GPU span G these lines and the allowance's gate read is a timed replay's span less its display
+wait (`rd_perf_pace_gpu_ms`): the present's own list waits for the window's image between the
+scene's stamps and the present's ([RENDER.md](RENDER.md#the-presents-own-list)), and that wait is
+the display's, not the GPU's work, so under vsync it does not make the GPU look slower.
+
 Paced with the GPU's time known, the drop ends `back to paced by the GPU after 60 steps on time`
 and its climb reads `window: presents back to paced by the GPU (where they started) after S steps
 (GPU span G ms a picture, step T ms, period P ms)`; no refused climb is written there.
