@@ -846,6 +846,31 @@ target_compile_options(rd_raw_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LA
                        ${ICO_GAME_WARNINGS})
 target_link_libraries(rd_raw_test PRIVATE ico_render ico_vu1_ref ico_math)
 
+# weapon_draw_test: the insect net of Gameplay > Combat's Stick row through
+# the game's weapon code: sugipon/src/weapon.c with lineManager.c,
+# matrixDrive.c and the 2D layer as the window build has them, the variants
+# (ico_options) linked, the rest of the game stubbed; recording only. Per
+# disc (its InitWeaponGeo, WeaponGeo and WeaponDL copies): the layout stick
+# made as the net with no torch, found and picked up by the boy, then held
+# and drawn as dispInsectNet's 17 grey lines in list 11 at his hand and no
+# model; at Original the stick with its torch and its model. CPU only.
+add_executable(weapon_draw_test test/weapon_draw_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/weapon.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/lineManager.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/matrixDrive.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/Matrix.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/GifPacket.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DisplayList.c"
+    "${CMAKE_SOURCE_DIR}/ico2/seki/src/DmaPacket.c"
+    "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+target_include_directories(weapon_draw_test PRIVATE ${_ico_sugipon_incs}
+                           "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
+                           "${CMAKE_SOURCE_DIR}/port/rhi" "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(weapon_draw_test PRIVATE ICO_HOST=1 ICO_RD=1)
+target_compile_options(weapon_draw_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                       ${ICO_GAME_WARNINGS})
+target_link_libraries(weapon_draw_test PRIVATE ico_render ico_options ico_math)
+
 # rd_debug_test: common/src/debug.c on the host, with the 2D
 # layer as the window build has them and port/data/sifdev_host.c for host0:,
 # the rest of the game stubbed: the debug font's points (the VU1 routine
@@ -1163,6 +1188,11 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_water PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_raw COMMAND rd_raw_test WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_raw PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME weapon_draw COMMAND weapon_draw_test pal "${CMAKE_CURRENT_BINARY_DIR}")
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        add_test(NAME weapon_draw_${_slug}
+                 COMMAND weapon_draw_test ${_slug} "${CMAKE_CURRENT_BINARY_DIR}")
+    endforeach()
     add_test(NAME rd_debug COMMAND rd_debug_test "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_debug PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_present COMMAND rd_present_test "${CMAKE_CURRENT_BINARY_DIR}")
