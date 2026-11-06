@@ -901,6 +901,29 @@ bool rd_vu_skin_probe_failed(char *why, size_t size);
  * frame_dump) and puts the sidecar in its zip.  Any thread (an atomic). */
 void rd_set_vu_skin_capture_dir(const char *dir);
 bool rd_vu_skin_capture_due(char *path, size_t size);
+
+/* Issue 123's ladder (rd_vu_bones.c; docs/port/VU_SKIN_CHECK.md "The
+ * ladder"): the skin check's evidence so far this run, which the window's
+ * pump (window_bones.c) decides from (bones_ladder.h) before it writes
+ * [dev] vu_bones = ring or turnip_debug = nobin for the next start.
+ * ring: the skinned entries read their bones through the ring this run;
+ * replays: replays whose twins were read; twins read, differ of them with
+ * A and B differing (each a twin event); ringClear the evidence that the
+ * ring read clears it (an event whose twin C, the ring read in the pass,
+ * equalled B, or a wrong check with equal bytes whose column 3 was right),
+ * ringFail the opposite; sceneOnly events whose probe of the same command
+ * in the same replay drew right (the scene pass's execution), probeWrong
+ * events whose probe was wrong; portRace wrong checks whose bytes differed
+ * (H2: not the driver's read); addr the last wrong check's address; frame
+ * the last event's.  Any thread (each field an atomic). */
+typedef struct RdVuBonesEvidence {
+    bool ring;
+    uint32_t replays, twins, differ;
+    uint32_t ringClear, ringFail, sceneOnly, probeWrong, portRace;
+    uint32_t addr, frame;
+} RdVuBonesEvidence;
+
+void rd_vu_bones_evidence(RdVuBonesEvidence *out);
 /* The longest frame replay (CPU time of recording, pipeline creation,
  * submit and present) in ms since the last reset, and *count the replays
  * in that time; reset != 0 starts a new period.  For the window's 10 s

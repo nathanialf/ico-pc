@@ -195,13 +195,6 @@ uint32_t rd__vu_skin_queries(void)
     return rd__vu_skin_twins_on() ? SK_QUERIES : RD_SKIN_CHECKS_ALL;
 }
 
-RhiPipeline rd__vu_skin_ring_module(uint8_t vs)
-{
-    /* B2's ring-read module is not built: column 3 is not drawn */
-    (void)vs;
-    return (RhiPipeline){0};
-}
-
 /* the scheduled probe's interval in ms: -1 none (the targeted alone) */
 static double s_interval = -2.0;
 
@@ -268,6 +261,12 @@ static struct {
     RhiPipeline ro[SK_VS_COUNT];
     RhiPipelineJobs *roJob;
     bool roBegun, roDone;
+    /* column 3: the cluster entries' ring builds (issue 123's ladder,
+     * rd_vu_bones.c), compiled in the background */
+    RhiPipelineDesc rgDesc[SK_VS_COUNT];
+    RhiPipeline rg[SK_VS_COUNT];
+    RhiPipelineJobs *rgJob;
+    bool rgBegun, rgDone;
     RhiBindGroupLayout lay[3];
     RhiBuffer idx; /* fields 0..2 of SK_INDEX_VERTS vertices: 9 indices a vertex */
     bool idxTried;
@@ -285,14 +284,15 @@ static RhiShader moduleOf(uint8_t vs)
     return g_rd.vsFallback[vs].id ? g_rd.vsFallback[vs] : g_rd.vs[vs];
 }
 
-static bool probeDesc(uint32_t i, bool robustOff, RhiPipelineDesc *d)
+static bool probeDesc(uint32_t i, bool robustOff, bool ring, RhiPipelineDesc *d)
 {
     if (!s_p.psTried) {
         s_p.psTried = true;
         s_p.ps = rd__make_shader("vu_probe_ps");
     }
     memset(d, 0, sizeof(*d));
-    d->vertex = moduleOf(vsOf(i));
+    /* column 3's: the cluster entry's ring build (the bones through t5) */
+    d->vertex = ring ? rd__vu_bones_ring_shader(vsOf(i)) : moduleOf(vsOf(i));
     d->fragment = s_p.ps;
     if (!d->vertex.id || !d->fragment.id) {
         return false;
@@ -308,7 +308,9 @@ static bool probeDesc(uint32_t i, bool robustOff, RhiPipelineDesc *d)
     d->colorFormats[0] = RHI_FMT_RGBA8_UINT;
     d->colorCount = 1;
     d->depthFormat = RHI_FMT_UNKNOWN;
-    d->debugName = robustOff ? "rd vu skin probe (uniform robustness off)" : "rd vu skin probe";
+    d->debugName = robustOff ? "rd vu skin probe (uniform robustness off)"
+                   : ring    ? "rd vu skin probe (the bones through the ring)"
+                             : "rd vu skin probe";
     d->uniformRobustOff = robustOff;
     return true;
 }
@@ -325,7 +327,7 @@ static bool probesMake(void)
             continue;
         }
         s_p.probeTried[i] = true;
-        if (probeDesc(i, false, &d[n])) {
+        if (probeDesc(i, false, false, &d[n])) {
             want[n++] = i;
         }
     }
@@ -357,6 +359,9 @@ static struct {
      * attachment read), read, whose counts differed; their events' line
      * budget; the checks targeted after a twin event */
     uint64_t twinsDrawn, twinsOwn, twins, twinsDiffer, twinEvents, targeted;
+    /* twin C (issue 123's ladder: the ring read in the pass): drawn, read,
+     * differing from B */
+    uint64_t ringDrawn, ringTwins, ringDiffer;
 } s_run;
 
 static struct {
@@ -369,6 +374,7 @@ static struct {
     /* the twins read, whose counts differed (the first at frame
      * firstDiffer), not drawn (their pipeline not made yet) */
     uint64_t twins, twinsDiffer, twinsNot;
+    uint64_t ringTwins, ringDiffer; /* twin C read, differing from B */
     uint32_t firstDiffer;
     bool anyDiffer;
 } s_blk;
@@ -387,6 +393,11 @@ typedef struct SkBoxPipe {
 } SkBoxPipe;
 
 static SkBoxPipe s_box[SK_BOX_PIPES];
+/* twin C's pipelines (issue 123's ladder): the twin's key with the cluster
+ * entry's ring build as its vertex module, compiled in the background */
+#define SK_RING_PIPES RD_VU_SKIN_RING_PIPES
+static SkBoxPipe s_rbox[SK_RING_PIPES];
+static RdSkinSummary *s_collect; /* rd__vu_skin_check_frame's */
 
 /* ----------------------------------------- the background compiles' rule
  * Issue 161's memory rule for the check's own compiles (c2's three, the
@@ -412,11 +423,16 @@ void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground
 
 static bool jobBusy(void)
 {
-    if (s_p.roJob) {
+    if (s_p.roJob || s_p.rgJob) {
         return true;
     }
     for (int i = 0; i < SK_BOX_PIPES; i++) {
         if (s_box[i].job) {
+            return true;
+        }
+    }
+    for (int i = 0; i < SK_RING_PIPES; i++) {
+        if (s_rbox[i].job) {
             return true;
         }
     }
@@ -485,7 +501,7 @@ static void roPoll(bool wait)
         s_p.roBegun = true;
         uint32_t n = 0;
         for (uint32_t i = 0; i < SK_VS_COUNT; i++) {
-            if (!probeDesc(i, true, &s_p.roDesc[i])) {
+            if (!probeDesc(i, true, false, &s_p.roDesc[i])) {
                 s_p.roDone = true;
                 return;
             }
@@ -501,6 +517,47 @@ static void roPoll(bool wait)
         s_p.roJob = NULL;
         s_p.roDone = true;
     }
+}
+
+/* column 3's pipelines: begun in the background once (bgMay) where the
+ * ring builds exist (rd__vu_bones_ring_shader); wait: taken now */
+static void rgPoll(bool wait)
+{
+    if (s_p.rgDone) {
+        return;
+    }
+    if (!s_p.rgBegun) {
+        if (!rd__vu_bones_ring_shader(RD_VS_VU_SKIN).id || !bgMay(wait)) {
+            return;
+        }
+        s_p.rgBegun = true;
+        for (uint32_t i = 0; i < SK_VS_COUNT; i++) {
+            if (!probeDesc(i, false, true, &s_p.rgDesc[i])) {
+                s_p.rgDone = true;
+                return;
+            }
+        }
+        s_p.rgJob = rhi_create_pipelines_begin(s_p.rgDesc, SK_VS_COUNT, 1, true);
+        if (!s_p.rgJob) {
+            s_p.rgDone = true;
+            return;
+        }
+    }
+    if (s_p.rgJob && rhi_create_pipelines_end(s_p.rgJob, wait, s_p.rg, NULL, NULL)) {
+        s_p.rgJob = NULL;
+        s_p.rgDone = true;
+    }
+}
+
+RhiPipeline rd__vu_skin_ring_module(uint8_t vs)
+{
+    if (vs < RD_VS_VU_SKIN || vs >= RD_VS_VU_SKIN + SK_VS_COUNT) {
+        return (RhiPipeline){0};
+    }
+    /* column 3: the probe through the cluster entry's ring build
+     * (rd_vu_bones.c), compiled in the background as c2's (bgMay) */
+    rgPoll(skMode() == 2 || s_collect != NULL);
+    return s_p.rg[vs - RD_VS_VU_SKIN];
 }
 
 static bool indexMake(void)
@@ -560,9 +617,10 @@ static bool keyEq(const RdPipeKeyInt *a, const RdPipeKeyInt *b)
     return memcmp(a, b, sizeof(*a)) == 0;
 }
 
-/* the box check's pipeline of key k: begun in the background the first
- * time, {0} until it is made (wait: taken now) */
-static RhiPipeline boxPipe(const RdPipeKeyInt *raw, bool wait)
+/* the pipeline of key raw in the table tab of n (the box check's, or twin
+ * C's with the cluster entry's ring build as its vertex module: ring): begun
+ * in the background the first time, {0} until it is made (wait: taken now) */
+static RhiPipeline tablePipe(SkBoxPipe *tab, int n, const RdPipeKeyInt *raw, bool wait, bool ring)
 {
     /* the key as the pass makes it: a key checked first in an MSAA pass
      * and again in a single-sampled one (or the other way) is two
@@ -572,19 +630,19 @@ static RhiPipeline boxPipe(const RdPipeKeyInt *raw, bool wait)
     rd__pipeline_key_norm(raw, &norm);
     const RdPipeKeyInt *k = &norm;
     SkBoxPipe *e = NULL;
-    for (int i = 0; i < SK_BOX_PIPES && !e; i++) {
-        if (s_box[i].used && keyEq(&s_box[i].key, k)) {
-            e = &s_box[i];
+    for (int i = 0; i < n && !e; i++) {
+        if (tab[i].used && keyEq(&tab[i].key, k)) {
+            e = &tab[i];
         }
     }
     if (!e) {
-        for (int i = 0; i < SK_BOX_PIPES && !e; i++) {
-            if (!s_box[i].used) {
-                e = &s_box[i];
+        for (int i = 0; i < n && !e; i++) {
+            if (!tab[i].used) {
+                e = &tab[i];
             }
         }
         if (!e) {
-            s_blk.boxFull++; /* full: the keys after the first 16 go unchecked */
+            s_blk.boxFull += !ring; /* full: the keys after the first 16 go unchecked */
             return (RhiPipeline){0};
         }
         if (!bgMay(wait)) {
@@ -600,7 +658,15 @@ static RhiPipeline boxPipe(const RdPipeKeyInt *raw, bool wait)
         /* the description's layouts are this entry's (pipelineDesc points
          * them at its own array: copied into e->lay above) */
         e->desc.layouts = e->lay;
-        e->desc.debugName = "rd vu skin box check";
+        e->desc.debugName =
+            ring ? "rd vu skin twin C (the bones through the ring)" : "rd vu skin box check";
+        if (ring) {
+            e->desc.vertex = rd__vu_bones_ring_shader(k->vs);
+            if (!e->desc.vertex.id) {
+                e->failed = true;
+                return (RhiPipeline){0};
+            }
+        }
         e->job = rhi_create_pipelines_begin(&e->desc, 1, 1, true);
         if (!e->job) {
             e->pipe = rhi_create_pipeline(&e->desc);
@@ -614,12 +680,23 @@ static RhiPipeline boxPipe(const RdPipeKeyInt *raw, bool wait)
     return e->pipe;
 }
 
+static RhiPipeline boxPipe(const RdPipeKeyInt *raw, bool wait)
+{
+    return tablePipe(s_box, SK_BOX_PIPES, raw, wait, false);
+}
+
+/* twin C's pipeline: the key with the cluster entry's ring build */
+static RhiPipeline ringPipe(const RdPipeKeyInt *raw, bool wait)
+{
+    return tablePipe(s_rbox, SK_RING_PIPES, raw, wait, true);
+}
+
 /* the job in flight taken when done (each check: one job at a time, so
  * the next key's may begin) */
 static void jobsPoll(void)
 {
-    for (int i = 0; i < SK_BOX_PIPES; i++) {
-        SkBoxPipe *e = &s_box[i];
+    for (int i = 0; i < SK_BOX_PIPES + SK_RING_PIPES; i++) {
+        SkBoxPipe *e = i < SK_BOX_PIPES ? &s_box[i] : &s_rbox[i - SK_BOX_PIPES];
         if (e->job && rhi_create_pipelines_end(e->job, false, &e->pipe, NULL, NULL)) {
             e->job = NULL;
             e->failed = !e->pipe.id;
@@ -722,8 +799,7 @@ static struct {
     uint64_t counts[3];
 } s_cap;
 
-static RdSkinSummary *s_collect; /* rd__vu_skin_check_frame's */
-static bool s_boxDstSaid;        /* the box check's attachment-read line, once a run */
+static bool s_boxDstSaid; /* the box check's attachment-read line, once a run */
 
 static bool sayNth(uint64_t n)
 {
@@ -1106,7 +1182,14 @@ static void sabRing(uint8_t *ring, uint64_t off)
  * Through the draw's own pipeline where it reads its attachment and writes
  * no Z (a DrawCB copy with the write mask cleared: the shader writes back
  * the pixel it read); else through the box check's pipeline (the key with
- * no destination read, colour mask 0, Z write off), once it is made. */
+ * no destination read, colour mask 0, Z write off), once it is made.
+ * Issue 123's ladder: C (+ 2) is the same draw through the same key with
+ * the cluster entry's ring build, the bones read through t5 at the draw's
+ * offset (VuCB's mark lane), once its pipeline is made (twin C's table); A
+ * against B says the uniform read at the draw's offset, C against B whether
+ * the ring read would clear it.  Under the ring builds ([dev] vu_bones =
+ * ring) the draw's own module reads t5: B's VuCB copy carries the fresh
+ * offset's index, and there is no C. */
 static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh, int32_t check)
 {
     const RdPipeKeyInt *dk = d->key;
@@ -1155,6 +1238,36 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
             return;
         }
     }
+    /* the VuCB copies the ring reads need: A's and B's under the ring
+     * builds (each its block's index: the draw's VuCB may carry a merge
+     * table's in that lane), C's otherwise (the draw's own block) */
+    const uint64_t ua = rhi_limits()->uniformAlign ? rhi_limits()->uniformAlign : 256u;
+    uint64_t vOffA = d->vOff, vOffB = d->vOff, vOffC = ~0ull;
+    RhiPipeline pc = {0};
+    if (g_rd.vuBonesRing) {
+        IcoVuCB va, vb;
+        memcpy(&va, d->vcb, sizeof(va));
+        memcpy(&vb, d->vcb, sizeof(vb));
+        if (!rd__vu_ring_index(d->bonesOff, SK_BONE_BYTES, &va.mark[3]) ||
+            !rd__vu_ring_index(fresh, SK_BONE_BYTES, &vb.mark[3])) {
+            return;
+        }
+        vOffA = ringPut(&va, sizeof(va), ua);
+        vOffB = ringPut(&vb, sizeof(vb), ua);
+        if (vOffA == ~0ull || vOffB == ~0ull) {
+            return;
+        }
+    } else {
+        pc = ringPipe(own ? dk : &key, skMode() == 2 || s_collect != NULL);
+        IcoVuCB vc;
+        memcpy(&vc, d->vcb, sizeof(vc));
+        if (pc.id && rd__vu_ring_index(d->bonesOff, SK_BONE_BYTES, &vc.mark[3])) {
+            vOffC = ringPut(&vc, sizeof(vc), ua);
+        }
+        if (vOffC == ~0ull) {
+            pc = (RhiPipeline){0};
+        }
+    }
     const uint32_t t = sl->nTwins++;
     SkTwin *tw = &sl->twins[t];
     *tw = s_twinCmd;
@@ -1164,7 +1277,7 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
     tw->own = own;
     tw->entry = entry;
     tw->notOwn = own || entry ? 0u : dk->dst != RHI_DST_READ_ATTACHMENT ? 1u : 2u;
-    tw->c = false; /* C, the ring read's twin: B2 */
+    tw->c = pc.id != 0; /* C, the ring read's twin */
     tw->check = check;
     const RhiCommandList cl = rd__replay_cl();
     rd__set_pipeline(cl, p, own ? dk : &key);
@@ -1177,9 +1290,18 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
         rhi_cmd_set_index_buffer(cl, d->indexBuf, d->indexOff, true);
     }
     rhi_cmd_set_scissor(cl, &r->sc);
-    for (uint32_t q = 0; q < 2u; q++) {
-        const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)d->vOff,
-                                  (uint32_t)(q == 0 ? d->bonesOff : fresh)};
+    for (uint32_t q = 0; q < 3u; q++) {
+        if (q == 2u) {
+            if (!pc.id) {
+                break;
+            }
+            /* C: the same key through the ring build (the same group 3 where
+             * it is the draw's own: the same layouts) */
+            rd__set_pipeline(cl, pc, own ? dk : &key);
+        }
+        const uint64_t vq = q == 0 ? vOffA : q == 1 ? vOffB : vOffC;
+        const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vq,
+                                  (uint32_t)(q == 1 ? fresh : d->bonesOff)};
         rhi_cmd_set_bind_group_offsets(cl, 1, d->g1, offs, 3);
         rhi_cmd_begin_occlusion(cl, SK_TWIN_Q0 + 3u * t + q);
         if (d->indexBuf.id) {
@@ -1192,11 +1314,12 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
     /* the draw's state back for whatever the replay records next */
     const uint32_t back[3] = {(uint32_t)d->dOff, (uint32_t)d->vOff, (uint32_t)d->bonesOff};
     rhi_cmd_set_bind_group_offsets(cl, 1, d->g1, back, 3);
-    if (!own) {
+    if (!own || pc.id) {
         rd__set_pipeline(cl, d->pipe, dk);
     }
     s_run.twinsDrawn++;
     s_run.twinsOwn += own;
+    s_run.ringDrawn += pc.id != 0;
 }
 
 void rd__vu_skin_note(Replay *r, const DrawSetup *ds, const RdSkinDraw *d)
@@ -1265,11 +1388,16 @@ uint64_t rd__vu_skin_ring_bytes(void)
         return 0;
     }
     const uint64_t ua = rhi_limits()->uniformAlign ? rhi_limits()->uniformAlign : 256u;
-    const uint64_t one = SK_COLS * (sizeof(IcoFrameCB) + ua) + 2u * (sizeof(IcoVuCB) + ua) +
+    /* a check: a FrameCB and a VuCB (the column's block's ring index in its
+     * mark lane) a column, the draw's VuCB, c1's and H1's blocks */
+    const uint64_t one = SK_COLS * (sizeof(IcoFrameCB) + ua) +
+                         (SK_COLS + 1u) * (sizeof(IcoVuCB) + ua) +
                          2u * (SK_BONE_BYTES + 4096u + ua);
     /* each twin: B's block at a fresh page phase, its own DrawCB copy (the
-     * write mask cleared) */
-    const uint64_t twin = SK_BONE_BYTES + 4096u + ua + sizeof(IcoDrawCB) + ua;
+     * write mask cleared), the VuCB copies the ring reads need (A's and B's
+     * under the ring builds, C's otherwise) */
+    const uint64_t twin =
+        SK_BONE_BYTES + 4096u + ua + sizeof(IcoDrawCB) + ua + 2u * (sizeof(IcoVuCB) + ua);
     return (skMode() == 2 ? SK_CHECKS_ALL : 1u) * one +
            (rd__vu_skin_twins_on() ? SK_TWINS_MAX * twin : 0u) + 4096u;
 }
@@ -1368,8 +1496,9 @@ void rd__vu_skin_end(void)
         sl->nTwins = 0;
         return;
     }
-    /* each check's blocks first: c1's bytes, the probe's VuCB, its FrameCBs */
-    uint64_t vOff[SK_CHECKS_ALL], fOff[SK_CHECKS_ALL][SK_COLS];
+    /* each check's blocks first: c1's bytes, the probe's VuCBs, its FrameCBs */
+    uint64_t vOff[SK_CHECKS_ALL][SK_COLS], fOff[SK_CHECKS_ALL][SK_COLS];
+    bool index3[SK_CHECKS_ALL] = {false}; /* column 3's block has a ring index */
     bool ok = true;
     for (uint32_t i = 0; i < n && ok; i++) {
         SkCheck *k = &sl->checks[i];
@@ -1381,10 +1510,20 @@ void rd__vu_skin_end(void)
             memset(b[s_sab.addr - 16u], 0, 64);
             k->sabOff = ringPut(b, SK_BONE_BYTES, ua);
         }
-        IcoVuCB v = k->vcb;
-        v.draw[2] |= ICO_VU_PROBE;
-        vOff[i] = ringPut(&v, sizeof(v), ua);
         for (uint32_t c = 0; c < SK_COLS; c++) {
+            /* the column's VuCB: the probe flag, and in the mark lane the
+             * ring index of the block the column reads (the ring builds read
+             * the bones there, issue 123's ladder: column 3, and every column
+             * under [dev] vu_bones = ring; no cbuffer build reads the lane) */
+            IcoVuCB v = k->vcb;
+            v.draw[2] |= ICO_VU_PROBE;
+            const uint64_t bones = c == 0 ? k->sabOff : c == 1 ? k->c1Off : k->bonesOff;
+            const bool indexed = rd__vu_ring_index(bones, SK_BONE_BYTES, &v.mark[3]);
+            if (c == 3u) {
+                index3[i] = indexed; /* none: column 3 not drawn */
+            }
+            vOff[i][c] = ringPut(&v, sizeof(v), ua);
+            ok = ok && vOff[i][c] != ~0ull;
             IcoFrameCB fc;
             memset(&fc, 0, sizeof(fc));
             fc.target[0] = (float)sl->texW;
@@ -1403,7 +1542,7 @@ void rd__vu_skin_end(void)
             fOff[i][c] = ringPut(&fc, sizeof(fc), ua);
             ok = ok && fOff[i][c] != ~0ull;
         }
-        ok = ok && k->c1Off != ~0ull && k->sabOff != ~0ull && vOff[i] != ~0ull;
+        ok = ok && k->c1Off != ~0ull && k->sabOff != ~0ull;
     }
     if (!ok) {
         sl->n = 0;
@@ -1426,17 +1565,18 @@ void rd__vu_skin_end(void)
         const RhiPipeline ro = rd__vu_skin_probe_pipeline(k->vs, true);
         const RhiPipeline ringP = rd__vu_skin_ring_module(k->vs);
         k->c2 = ro.id != 0;
-        k->c3 = ringP.id != 0;
+        k->c3 = ringP.id != 0 && index3[i];
         for (uint32_t c = 0; c < SK_COLS; c++) {
-            const RhiPipeline p = c == 3 ? ringP : c == 2 ? ro : main;
+            const RhiPipeline p = c == 3 ? (k->c3 ? ringP : (RhiPipeline){0}) : c == 2 ? ro : main;
             if (!p.id) {
                 continue;
             }
-            /* column 3 reads the draw's bones through the ring (B2: its
-             * offset in VuCB's mark lane), at the draw's own offset here */
+            /* column 3 reads the draw's bones through the ring (issue 123's
+             * ladder: the block's index in VuCB's mark lane), at the draw's
+             * own offset here */
             const uint64_t bones = c == 0 ? k->sabOff : c == 1 ? k->c1Off : k->bonesOff;
             const uint32_t f0 = (uint32_t)fOff[i][c];
-            const uint32_t offs[3] = {(uint32_t)k->dOff, (uint32_t)vOff[i], (uint32_t)bones};
+            const uint32_t offs[3] = {(uint32_t)k->dOff, (uint32_t)vOff[i][c], (uint32_t)bones};
             rd__set_pipeline(cl, p, NULL);
             rhi_cmd_set_bind_group_offsets(cl, 0, g0, &f0, 1);
             rhi_cmd_set_bind_group_offsets(cl, 1, k->g1, offs, 3);
@@ -1495,8 +1635,10 @@ static void moduleName(uint8_t vs, char *out, size_t size)
 {
     const char *nm = rd__vs_name(vs);
     const size_t len = strlen(nm);
-    if (g_rd.vsPlain[vs].id && g_rd.vsFallback[vs].id == g_rd.vsPlain[vs].id && len > 3 &&
-        strcmp(nm + len - 3, "_vs") == 0) {
+    if (g_rd.vuBonesRing && vs >= RD_VS_VU_SKIN && vs <= RD_VS_VU_SKIN_DEBUG) {
+        rd__vu_bones_ring_name(vs, out, size); /* the ring builds ([dev] vu_bones = ring) */
+    } else if (g_rd.vsPlain[vs].id && g_rd.vsFallback[vs].id == g_rd.vsPlain[vs].id && len > 3 &&
+               strcmp(nm + len - 3, "_vs") == 0) {
         snprintf(out, size, "%.*s_plain_vs", (int)(len - 3), nm);
     } else {
         snprintf(out, size, "%s", nm);
@@ -1522,14 +1664,20 @@ static bool twinCounts(const SkTwin *tw, uint32_t t, const uint64_t *samples, ui
     return true;
 }
 
-/* A and B differ: by count where the device's queries are precise, else
- * only as zero or not (rhi.h: a count is then exact only so) */
-static bool twinsDiffer(const uint64_t c[3])
+/* two twins' counts differ: by count where the device's queries are
+ * precise, else only as zero or not (rhi.h: a count is then exact only so) */
+static bool countsDiffer(uint64_t a, uint64_t b)
 {
     if (rhi_limits()->occlusionPrecise) {
-        return c[0] != c[1];
+        return a != b;
     }
-    return (c[0] != 0u) != (c[1] != 0u);
+    return (a != 0u) != (b != 0u);
+}
+
+/* A and B differ */
+static bool twinsDiffer(const uint64_t c[3])
+{
+    return countsDiffer(c[0], c[1]);
 }
 
 /* The run's capture, once (rd_vu_skin_capture.c): the sidecar from what
@@ -1680,6 +1828,8 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
         o->c1Right += v[0].wrong && c1 == RD_SKIN_VAR_RIGHT;
         o->c2Right += v[0].wrong && c2 == RD_SKIN_VAR_RIGHT;
         o->c2Run += k->c2;
+        o->c3Run += k->c3;
+        o->c3Right += v[0].wrong && k->c3 && !v[3].wrong;
         o->targeted += k->targeted;
         o->targetedWrong += k->targeted && v[0].wrong;
         o->dropped += v[0].dropped;
@@ -1693,6 +1843,11 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
         } else if ((copyDiff || rereadDiff) && o->wrong == 0) {
             snprintf(o->decision, sizeof(o->decision), "%s", decision);
         }
+    }
+    if (v[0].wrong) {
+        /* issue 123's ladder: whether the ring read (column 3) clears a
+         * wrong read whose bytes were right (rd_vu_bones.c) */
+        rd__vu_bones_check(copyDiff || rereadDiff, k->c3 ? (v[3].wrong ? 0 : 1) : -1, named);
     }
     char place[48];
     if (k->list != UINT32_MAX) {
@@ -1750,12 +1905,14 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
                     : rhi_limits()->uniformRobustOff
                         ? "not run (its pipeline not made yet)"
                         : "not offered (no VK_EXT_pipeline_robustness)";
+                const char *c3w = !k->c3 ? "not drawn" : v[3].wrong == 0u ? "right" : "wrong";
                 rd__log("VU skin check: frame %u command %s variants: (c1) the block at a fresh "
                         "ring offset (page phase %llu, the draw's %llu): %s (%u wrong); (c2) "
-                        "uniform robustness off: %s (%u wrong); reads as: %s",
+                        "uniform robustness off: %s (%u wrong); (c3) the bones through the ring: "
+                        "%s (%u wrong); reads as: %s",
                         k->frame, place, (unsigned long long)phase,
                         (unsigned long long)(k->bonesOff & 4095u), varWords(c1), v[1].wrong, c2w,
-                        v[2].wrong, decision);
+                        v[2].wrong, c3w, v[3].wrong, decision);
             } else {
                 rd__log("VU skin check: frame %u command %s mesh %s #%u (%u vertices): every "
                         "vertex right (%u compared); the bone block as the GPU copied it: %s; as "
@@ -1813,6 +1970,19 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
         s_collect->twins++;
         s_collect->twinsOwn += tw->own;
     }
+    /* C, the ring read at the draw's offset (issue 123's ladder), against
+     * B, the uniform read of the same bytes at a fresh one: equal, the ring
+     * read gives what the draw should have read */
+    const bool ringRead = c[2] != UINT64_MAX;
+    const bool ringDiffer = ringRead && countsDiffer(c[2], c[1]);
+    s_run.ringTwins += ringRead;
+    s_blk.ringTwins += ringRead;
+    s_run.ringDiffer += ringDiffer;
+    s_blk.ringDiffer += ringDiffer;
+    if (s_collect) {
+        s_collect->ringTwins += ringRead;
+        s_collect->ringDiffer += ringDiffer;
+    }
     if (!twinsDiffer(c)) {
         return;
     }
@@ -1848,6 +2018,13 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
                 "same bytes at a fresh one; the probe of this command follows in the next "
                 "replays";
     }
+    /* the ladder's evidence (rd_vu_bones.c): whether C cleared it, and what
+     * the probe of the same command in the same replay said */
+    rd__vu_bones_event(tw->frame,
+                       !ringRead    ? -1
+                       : ringDiffer ? 0
+                                    : 1,
+                       k && k->judged ? (k->probeWrong ? 0 : 1) : -1);
     if (sayNth(++s_run.twinEvents)) {
         char place[48], cw[48] = "";
         if (tw->list != UINT32_MAX) {
@@ -1861,7 +2038,7 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
         rd__log("VU skin check: frame %u command %s mesh %s #%u (%u vertices): twins differ: A "
                 "(the draw's offset, page phase %llu) %llu samples, B (fresh, phase %llu) %llu "
                 "samples%s; through %s%s; the probe of this command: %s; reads as: %s (twin "
-                "event %llu)",
+                "event %llu%s)",
                 tw->frame, place, tw->mesh, tw->meshId, tw->meshVertices,
                 (unsigned long long)(tw->bonesOff & 4095u), (unsigned long long)c[0],
                 (unsigned long long)(tw->freshOff & 4095u), (unsigned long long)c[1], cw,
@@ -1874,7 +2051,10 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
                       "its attachment but writes Z)"
                     : " with colour and Z writes off (the box check's pipeline: the draw does not "
                       "read its attachment)",
-                probe, reads, (unsigned long long)s_run.twinEvents);
+                probe, reads, (unsigned long long)s_run.twinEvents,
+                g_rd.vuBonesRing ? "; A and B read the bones through the ring: step 1 of the "
+                                   "ladder in force"
+                                 : "");
     }
     if (s_cap.done) {
         return;
@@ -1914,9 +2094,13 @@ static void readSlot(SkSlot *sl, uint32_t slot, bool intact, bool occ)
         }
         rhi_unmap_buffer(sl->rb);
     }
+    const uint64_t twinsBefore = s_run.twins, differBefore = s_run.twinsDiffer;
     for (uint32_t t = 0; t < sl->nTwins; t++) {
         readTwin(sl, t, ns ? samples : NULL, ns, ringNow);
     }
+    /* the ladder's count of replays whose twins were read */
+    rd__vu_bones_twins_read((uint32_t)(s_run.twins - twinsBefore),
+                            (uint32_t)(s_run.twinsDiffer - differBefore));
     if (s_cap.want && !s_cap.done && g_rd.replayCounter >= s_cap.deadline) {
         /* no targeted probe read in time: the twin's data alone */
         captureWrite(NULL, &s_cap.twin, s_cap.counts, NULL, NULL, NULL, NULL,
@@ -1969,17 +2153,26 @@ void rd__vu_skin_block(void)
     if (!s_blk.checks && !s_blk.twins && !s_blk.twinsNot) {
         return;
     }
-    char twins[160] = "";
+    char twins[256] = "";
     if (s_blk.twins || s_blk.twinsNot) {
         char first[48] = "";
         if (s_blk.anyDiffer) {
             snprintf(first, sizeof(first), " (first at frame %u)", s_blk.firstDiffer);
         }
+        /* twin C (issue 123's ladder): the ring read against B; under the
+         * ring builds A and B are ring reads themselves */
+        char ring[96];
+        if (g_rd.vuBonesRing) {
+            snprintf(ring, sizeof(ring), ", A and B through the ring");
+        } else {
+            snprintf(ring, sizeof(ring), ", ring twins differ %llu (of %llu read)",
+                     (unsigned long long)s_blk.ringDiffer, (unsigned long long)s_blk.ringTwins);
+        }
         snprintf(twins, sizeof(twins),
                  "; %llu twins, %llu differ%s, %llu not drawn (their "
-                 "pipeline not made yet)",
+                 "pipeline not made yet)%s",
                  (unsigned long long)s_blk.twins, (unsigned long long)s_blk.twinsDiffer, first,
-                 (unsigned long long)s_blk.twinsNot);
+                 (unsigned long long)s_blk.twinsNot, ring);
     }
     rd__log("VU skin check: %llu checks, %llu wrong, %llu blocks whose bytes differed (%llu "
             "changed after the draw); %llu box checks, %llu with samples outside the box, %llu "
@@ -2075,21 +2268,27 @@ void rd__vu_skin_shutdown(void)
          * through their own pipelines (rd_vu_skin_check_ab, attach) */
         rd__log("VU skin check: twins at the end of the run: %llu drawn (%llu through the draw's "
                 "own pipeline with its attachment read), %llu read, %llu differ; %llu checks "
-                "targeted after a twin event",
+                "targeted after a twin event; the ring read's twin (C) %llu drawn, %llu read, %llu "
+                "differ from B",
                 (unsigned long long)s_run.twinsDrawn, (unsigned long long)s_run.twinsOwn,
                 (unsigned long long)s_run.twins, (unsigned long long)s_run.twinsDiffer,
-                (unsigned long long)s_run.targeted);
+                (unsigned long long)s_run.targeted, (unsigned long long)s_run.ringDrawn,
+                (unsigned long long)s_run.ringTwins, (unsigned long long)s_run.ringDiffer);
     }
     if (g_rd.hasDevice) {
         if (s_p.roJob) {
             (void)rhi_create_pipelines_end(s_p.roJob, true, s_p.ro, NULL, NULL);
         }
-        for (int i = 0; i < SK_BOX_PIPES; i++) {
-            if (s_box[i].job) {
-                (void)rhi_create_pipelines_end(s_box[i].job, true, &s_box[i].pipe, NULL, NULL);
+        if (s_p.rgJob) {
+            (void)rhi_create_pipelines_end(s_p.rgJob, true, s_p.rg, NULL, NULL);
+        }
+        for (int i = 0; i < SK_BOX_PIPES + SK_RING_PIPES; i++) {
+            SkBoxPipe *e = i < SK_BOX_PIPES ? &s_box[i] : &s_rbox[i - SK_BOX_PIPES];
+            if (e->job) {
+                (void)rhi_create_pipelines_end(e->job, true, &e->pipe, NULL, NULL);
             }
-            if (s_box[i].pipe.id) {
-                rhi_destroy_pipeline(s_box[i].pipe);
+            if (e->pipe.id) {
+                rhi_destroy_pipeline(e->pipe);
             }
         }
         for (uint32_t i = 0; i < SK_VS_COUNT; i++) {
@@ -2098,6 +2297,9 @@ void rd__vu_skin_shutdown(void)
             }
             if (s_p.ro[i].id) {
                 rhi_destroy_pipeline(s_p.ro[i]);
+            }
+            if (s_p.rg[i].id) {
+                rhi_destroy_pipeline(s_p.rg[i]);
             }
         }
         if (s_p.ps.id) {
@@ -2115,6 +2317,9 @@ void rd__vu_skin_shutdown(void)
             }
         }
     }
+    /* the ring read's verdict and its modules, after the pipelines and the
+     * background jobs made of them */
+    rd__vu_bones_shutdown();
     for (uint32_t s = 0; s < RHI_FRAMES_IN_FLIGHT; s++) {
         for (uint32_t i = 0; i < s_slots[s].cap; i++) {
             checkFree(&s_slots[s].checks[i]);
@@ -2124,6 +2329,7 @@ void rd__vu_skin_shutdown(void)
     memset(s_slots, 0, sizeof(s_slots));
     memset(&s_p, 0, sizeof(s_p));
     memset(s_box, 0, sizeof(s_box));
+    memset(s_rbox, 0, sizeof(s_rbox));
     memset(&s_run, 0, sizeof(s_run));
     memset(&s_blk, 0, sizeof(s_blk));
     memset(&s_sab, 0, sizeof(s_sab));

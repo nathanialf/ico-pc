@@ -227,6 +227,7 @@ add_library(ico_render STATIC
     rd_vuprepass_selftest.c # the VU vertex pre-pass's start-up check on the device
     rd_vu_skin_check.c # the skinned draws' bone-block check in the game (issue 163)
     rd_vu_skin_capture.c # its capture on failure: the sidecar, the frame dump asked (issue 123)
+    rd_vu_bones.c # issue 123's ladder: the bones through the ring, the evidence for the window
     rd_vu_skin_judge.c # its judgement against vu1_ref (pure)
     rd_vu_skin_selftest.c # its start-up probe on the device
     rd_window.c
@@ -1872,7 +1873,7 @@ if(ICO_RUN_TESTS)
     # bone made NaN (the v0.10.4 picture's form): the probe's wrong vertices
     # dropped, address 200 named by its non-finite matrix; capture the same
     # with the sidecar written to a folder: its header and sections read back
-    set(_vsk_twin "rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh rd vu skin check test #[0-9]+ \\(120 vertices\\): twins differ: A \\(the draw's offset, page phase [0-9]+\\) [0-9]+ samples, B \\(fresh, phase [0-9]+\\) [0-9]+ samples[;,] through [a-z0-9_]+ with colour and Z writes off[^;,]*[;,] the probe of this command: not probed")
+    set(_vsk_twin "rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh rd vu skin check test #[0-9]+ \\(120 vertices\\): twins differ: A \\(the draw's offset, page phase [0-9]+\\) [0-9]+ samples, B \\(fresh, phase [0-9]+\\) [0-9]+ samples(, C \\(ring read\\) [0-9]+ samples)?[;,] through [a-z0-9_]+ with colour and Z writes off[^;,]*[;,] the probe of this command: not probed")
     add_test(NAME rd_vu_skin_check_twin
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=twin
                      "-DEXTRA=${_vsk_twin}.*${_vsk_wrong}.*the probe targeted after a twin event.*twins at the end of the run: [1-9][0-9]* drawn"
@@ -2224,7 +2225,7 @@ if(ICO_RUN_TESTS)
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> "-DDUMP=${_vsk123}"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_skin_check_123_nan_attach"
                      "-DLINE=[0-9]+ skinned commands, [0-9]+ checks, [1-9][0-9]* wrong \\(address 200\\).*twins: [1-9][0-9]* read \\([1-9][0-9]* through the draw's own pipeline\\), [1-9][0-9]* differ"
-                     "-DLOG=twins differ: A \\(the draw's offset, page phase [0-9]+\\) [0-9]+ samples, B \\(fresh, phase [0-9]+\\) [0-9]+ samples[;,] through [a-z0-9_]+ with " -P "${_vskd}")
+                     "-DLOG=twins differ: A \\(the draw's offset, page phase [0-9]+\\) [0-9]+ samples, B \\(fresh, phase [0-9]+\\) [0-9]+ samples(, C \\(ring read\\) [0-9]+ samples)?[;,] through [a-z0-9_]+ with " -P "${_vskd}")
     set(_vskd_tests rd_vu_skin_check_dump rd_vu_skin_check_163 rd_vu_skin_check_163_probe
                     rd_vu_skin_check_163_ring rd_vu_skin_check_163_patched rd_vu_skin_check_123
                     rd_vu_skin_check_123_nan rd_vu_skin_check_123_attach
