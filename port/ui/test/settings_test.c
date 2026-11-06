@@ -138,12 +138,18 @@ static void testBuild(void)
     static const int gameOpts[] = {UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_SECOND_CARD,
                                    UI_OPT_VAR_NO_HINTS, UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,
                                    UI_OPT_LINK,         UI_OPT_LINK,        UI_OPT_LINK,
-                                   UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,     UI_STR_OPT_DOOR_FIX,
-                                   UI_STR_OPT_SECOND_CARD,   UI_STR_OPT_VAR_NO_HINTS,
-                                   UI_STR_OPT_FILM_EFFECT,   UI_STR_OPT_PLAYERS,
-                                   UI_STR_SECTION_YORDA,     UI_STR_SECTION_SHADOWS,
-                                   UI_STR_SECTION_CUTSCENES, UI_STR_BACK};
+                                   UI_OPT_LINK,         UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_DOOR_FIX,
+                                   UI_STR_OPT_SECOND_CARD,
+                                   UI_STR_OPT_VAR_NO_HINTS,
+                                   UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,
+                                   UI_STR_SECTION_YORDA,
+                                   UI_STR_SECTION_SHADOWS,
+                                   UI_STR_SECTION_COMBAT,
+                                   UI_STR_SECTION_CUTSCENES,
+                                   UI_STR_BACK};
     static const int yordaOpts[] = {UI_OPT_YORDA, UI_OPT_PIT_TIME, UI_OPT_YORDA_TRIPS,
                                     UI_OPT_NATURAL_CHAINS, UI_OPT_BACK};
     static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
@@ -155,6 +161,10 @@ static void testBuild(void)
                                      UI_STR_OPT_VAR_TOUGHNESS,   UI_STR_OPT_VAR_ONE_HIT,
                                      UI_STR_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_AGGRESSION,
                                      UI_STR_OPT_VAR_BARRIER,     UI_STR_BACK};
+    static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD, UI_OPT_VAR_ATTACK_TURN,
+                                     UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_OPT_BACK};
+    static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD, UI_STR_OPT_VAR_ATTACK_TURN,
+                                     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_BACK};
     static const int cutOpts[] = {UI_OPT_SKIP_OPENING, UI_OPT_VAR_NO_LOOK, UI_OPT_VAR_IGNORE_CAMS,
                                   UI_OPT_BACK};
     static const int cutStrs[] = {UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_VAR_NO_LOOK,
@@ -224,18 +234,20 @@ static void testBuild(void)
                   lt_ext_prop(cl[12])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
               "Touch screen opens its page");
     }
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 10), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 5), "Gameplay > Yorda rows");
     CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 8), "Gameplay > Shadows rows");
+    CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 4), "Gameplay > Combat rows");
     CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
     {
-        /* Yorda, Shadows and Cutscenes open their pages, right before
+        /* Yorda, Shadows, Combat and Cutscenes open their pages, right before
            Back (settings_extra's testGameplayPages walks them and back) */
-        static const UiSettingsPage kSub[3] = {UI_PAGE_YORDA, UI_PAGE_SHADOWS, UI_PAGE_CUTSCENES};
+        static const UiSettingsPage kSub[4] = {UI_PAGE_YORDA, UI_PAGE_SHADOWS, UI_PAGE_COMBAT,
+                                               UI_PAGE_CUTSCENES};
         int gl[16], go[16];
         const int gn = ui_settings_page_rows(UI_PAGE_GAMEPLAY, gl, go, NULL, 16);
-        CHECK(gn == 10, "Gameplay: ten rows (%d)", gn);
-        for (int k = 0; k < 3 && gn == 10; k++) {
+        CHECK(gn == 11, "Gameplay: eleven rows (%d)", gn);
+        for (int k = 0; k < 4 && gn == 11; k++) {
             CHECK(go[6 + k] == UI_OPT_LINK &&
                       lt_ext_prop(gl[6 + k])->right == ui_settings_page_layout(kSub[k]),
                   "Gameplay row %d opens page %d", 6 + k, kSub[k]);

@@ -840,6 +840,16 @@ const char *const
             [UI_STR_UNUSED_ART_START] = "Messeversion: Press Start",
             [UI_STR_UNUSED_ART_COPYRIGHT] = "Messeversion: Copyright",
             [UI_STR_STATES_REFUSED_UNUSED] = "Nicht in einem Testraum",
+            [UI_STR_SECTION_COMBAT] = "Kampf",
+            [UI_STR_OPT_VAR_AUTO_GUARD] = "Automatische Abwehr",
+            [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
+                "Aus: Ico wehrt den Angriff eines Schattens von vorn nicht mehr ab; er trifft wie von hinten. Die Erfolge bleiben aktiv.",
+            [UI_STR_OPT_VAR_ATTACK_TURN] = "Schatten ansehen",
+            [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
+                "Aus: Icos Schlag dreht ihn nicht mehr zum nächsten Schatten; er schlägt geradeaus, und ein Schatten neben ihm kann trotzdem getroffen werden. Die Erfolge bleiben aktiv.",
+            [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Schatten warten bei Icos Sturz",
+            [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
+                "Aus: Die Schatten halten sich nicht mehr zurück, solange Ico am Boden liegt, und können ihn treffen, bevor er wieder steht. Die Erfolge bleiben aktiv.",
             [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
             [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
             [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

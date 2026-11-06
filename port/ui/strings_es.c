@@ -821,6 +821,15 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ART_START] = "Versión de feria: Press Start",
     [UI_STR_UNUSED_ART_COPYRIGHT] = "Versión de feria: copyright",
     [UI_STR_STATES_REFUSED_UNUSED] = "No en una sala de pruebas",
+    [UI_STR_SECTION_COMBAT] = "Combate",
+    [UI_STR_OPT_VAR_AUTO_GUARD] = "Guardia automática",
+    [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
+        "No: Ico ya no bloquea de frente el ataque de una sombra; le golpea como por detrás. Los logros siguen activos.",
+    [UI_STR_OPT_VAR_ATTACK_TURN] = "Girarse hacia las sombras",
+    [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] = "No: el golpe de Ico ya no lo gira hacia la sombra más cercana; golpea hacia delante, y una sombra a su lado aún puede ser alcanzada. Los logros siguen activos.",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Las sombras esperan si Ico cae",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
+        "No: las sombras ya no se contienen mientras Ico está en el suelo y pueden golpearlo antes de que se levante. Los logros siguen activos.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

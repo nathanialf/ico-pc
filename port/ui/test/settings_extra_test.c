@@ -4782,7 +4782,7 @@ static void varSwitch(const char *who, const VarSwitch *sw, int pl, const int *l
    *debugPressed counts the opener's calls over the runs */
 static void testVariantsPage(const char *who, int title, int *debugPressed)
 {
-    static const char *const kGameLabels[10] = {"Analogue stick fix",
+    static const char *const kGameLabels[11] = {"Analogue stick fix",
                                                 "East Reflector door fix",
                                                 "Second memory card",
                                                 "No hints",
@@ -4790,11 +4790,14 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                                 "Players",
                                                 "Yorda",
                                                 "Shadows",
+                                                "Combat",
                                                 "Cutscenes",
                                                 "Back"};
     static const char *const kShadowLabels[8] = {
         "Shadow speed",        "Shadows attack together", "Shadow toughness", "One hit per swing",
         "Shadows never dodge", "Shadow aggression",       "Queen barrier",    "Back"};
+    static const char *const kCombatLabels[4] = {"Automatic guard", "Turn to face shadows",
+                                                 "Shadows wait while Ico is down", "Back"};
     static const char *const kCutLabels[4] = {"Skip the opening", "No cutscene look-around",
                                               "Ignore cutscene cameras", "Back"};
     char p[1100], log[4096];
@@ -4834,7 +4837,8 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
               !ico_variant_never_dodge() && ico_variant_aggression() == ICO_AGGRESSION_OWN &&
               !ico_variant_no_hints() && ico_variant_barrier_hits() == (demo ? 7 : 5) &&
               !ico_variant_no_cutscene_look() && !ico_variant_ignore_cutscene_cameras() &&
-              !ico_variants_suspend_achievements(),
+              ico_variant_auto_guard() && ico_variant_attack_turn() &&
+              ico_variant_shadows_wait_down() && !ico_variants_suspend_achievements(),
           "%s: the accessors answer the shipped game", who);
 
     /* Gameplay: its rows and the three links, from both entries */
@@ -4844,11 +4848,11 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     }
     int gb[16], go[16], gv[16];
     const int gn = ui_settings_page_rows(UI_PAGE_GAMEPLAY, gb, go, gv, 16);
-    varLabelsAre(who, "Gameplay", gb, gn, kGameLabels, 10);
-    CHECK(gn == 10 && strcmp(lt_ext_row_text(gv[3]), "Off") == 0 && ui_settings_row_shown(gb[3]) &&
+    varLabelsAre(who, "Gameplay", gb, gn, kGameLabels, 11);
+    CHECK(gn == 11 && strcmp(lt_ext_row_text(gv[3]), "Off") == 0 && ui_settings_row_shown(gb[3]) &&
               ui_settings_row_shown(gb[6]) && ui_settings_row_shown(gb[7]) &&
-              ui_settings_row_shown(gb[8]),
-          "%s: No hints Off, the three links shown", who);
+              ui_settings_row_shown(gb[8]) && ui_settings_row_shown(gb[9]),
+          "%s: No hints Off, the four links shown", who);
     checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (the variants' entry)");
 
     /* the switches: On and the key; the notes; the achievements rule */
@@ -4871,7 +4875,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
         kSw[3].notePrefix = "This version of the game has no look-around";
     }
 
-    if (gn == 10) {
+    if (gn == 11) {
         varSwitch(who, &kSw[0], gameL, gb, gv);
     }
 
@@ -5009,6 +5013,55 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     }
     press(0x10);
     CHECK(settle(gameL, 60), "%s: Shadows: back to Gameplay", who);
+
+    /* Gameplay > Combat: three rows, each On as the game ships (its link
+       after Shadows, before Cutscenes); Off writes the key false, keeps the
+       achievements and says so in its note */
+    {
+        static const struct {
+            IcoVariantId id;
+            const char *key;
+            const char *notePrefix;
+        } kCombat[3] = {
+            {ICO_VARIANT_AUTO_GUARD, "variants.auto_guard", "Off: Ico no longer blocks a Shadow"},
+            {ICO_VARIANT_ATTACK_TURN, "variants.attack_turn",
+             "Off: Ico\xe2\x80\x99s swing no longer turns him"},
+            {ICO_VARIANT_SHADOWS_WAIT_DOWN, "variants.shadows_wait_down",
+             "Off: the Shadows no longer hold back"}};
+
+        const int coL = openLink(gameL, UI_PAGE_GAMEPLAY, UI_PAGE_COMBAT);
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        int ob[8], ov[8];
+        const int on = ui_settings_page_rows(UI_PAGE_COMBAT, ob, NULL, ov, 8);
+        varLabelsAre(who, "Combat", ob, on, kCombatLabels, 4);
+        CHECK(on == 4 && strcmp(lt_ext_row_text(ov[0]), "On") == 0 &&
+                  strcmp(lt_ext_row_text(ov[1]), "On") == 0 &&
+                  strcmp(lt_ext_row_text(ov[2]), "On") == 0,
+              "%s: the three combat rows start On", who);
+        checkPageFits(UI_PAGE_COMBAT, "Gameplay > Combat (four rows)");
+        for (int i = 0; i < 3 && on == 4; i++) {
+            lt_ext_layout(coL)->curItem = ob[i];
+            frame(0);
+            press(0x2000);
+            CHECK(strcmp(lt_ext_row_text(ov[i]), "Off") == 0 &&
+                      ico_variant_get(kCombat[i].id) == 0 &&
+                      ico_config_get_bool(kCombat[i].key, 1) == 0,
+                  "%s: Combat row %d: Right: Off and the key", who, i);
+            CHECK(!ico_variants_suspend_achievements(), "%s: Combat row %d keeps achievements", who,
+                  i);
+            CHECK(varNoteHas(UI_PAGE_COMBAT, kCombat[i].notePrefix, "Achievements stay on."),
+                  "%s: Combat row %d: the note", who, i);
+            press(0x8000);
+            CHECK(strcmp(lt_ext_row_text(ov[i]), "On") == 0 &&
+                      ico_variant_get(kCombat[i].id) == 1 &&
+                      ico_config_get_bool(kCombat[i].key, 0) == 1,
+                  "%s: Combat row %d: Left: On again", who, i);
+        }
+        press(0x10);
+        CHECK(settle(gameL, 60), "%s: Combat: back to Gameplay", who);
+    }
 
     /* Gameplay > Cutscenes: Skip the opening, then the two variants rows */
     const int cutL = openLink(gameL, UI_PAGE_GAMEPLAY, UI_PAGE_CUTSCENES);

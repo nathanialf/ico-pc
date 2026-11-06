@@ -820,6 +820,15 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ART_START] = "Versione da fiera: Press Start",
     [UI_STR_UNUSED_ART_COPYRIGHT] = "Versione da fiera: copyright",
     [UI_STR_STATES_REFUSED_UNUSED] = "Non in una stanza di prova",
+    [UI_STR_SECTION_COMBAT] = "Combattimento",
+    [UI_STR_OPT_VAR_AUTO_GUARD] = "Parata automatica",
+    [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
+        "No: Ico non para più l’attacco di un’ombra di fronte; lo colpisce come se arrivasse da dietro. Gli obiettivi restano attivi.",
+    [UI_STR_OPT_VAR_ATTACK_TURN] = "Gira verso le ombre",
+    [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] = "No: il colpo di Ico non lo gira più verso l’ombra più vicina; colpisce dritto davanti a sé, e un’ombra al suo fianco può comunque essere colpita. Gli obiettivi restano attivi.",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Le ombre aspettano che Ico si rialzi",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
+        "No: le ombre non si trattengono più mentre Ico è a terra e possono colpirlo prima che si rialzi. Gli obiettivi restano attivi.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
