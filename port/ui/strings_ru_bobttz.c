@@ -803,7 +803,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ARENA] = "Тестовая комната: Арена",
     [UI_STR_UNUSED_ARENA_NOTE] =
         "Комната разработчиков для тестов сражения с Тенями. У неё нет выхода: выходите, нажав «Старт», а затем «Конец игры».",
-    [UI_STR_UNUSED_CLIMB] = NULL, /* the room was renamed (crane) after his words: English */
+    [UI_STR_UNUSED_CLIMB] =
+        "Тестовая комната: Подъём", /* his words; the English label is Test room: crane */
     [UI_STR_UNUSED_CLIMB_NOTE] =
         "Комната разработчиков для тестов карабкания и ящиков. Для выхода нажмите «Старт», а затем «Конец игры».",
     [UI_STR_UNUSED_MOVIE] = "Развлекательный ролик (в разрешении 576p)",
