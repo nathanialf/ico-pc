@@ -14,6 +14,8 @@
 #include "DObj.h"
 #include "DisplayP2O.h"
 #include "Light.h"
+#include "GobjProc.h"
+#include <stdio.h>
 
 /* The object initGeometryState builds on its stack to hand SetMotionDirection
    the display object at 0x15C.  The word there is a union, so each read of it
@@ -404,6 +406,44 @@ static void initPolygonState(Sub15C *d, SObjSimpleSetting *lay)
             allocMorphWeights(d, 6);
         }
         d->morphNum = mx;
+    }
+
+    /* PC port: a model with no parts gets nodeNum 0 above, so its node
+       matrices are a 0-byte block, whose address is the allocator's next
+       block header (memory.c).  fieldCollision.c's _Clip reads node 0's
+       matrix of every object it tests whatever the node count (one pass when
+       colPerNode is 0), so such an object's floors and walls were tested in a
+       frame made of that header's text and no ray met them, on the EE as
+       here.  DATA.DF holds exactly one model with no parts on every disc that
+       has STG8TEST.DF (none on the June 2001 demo), and it carries a
+       collision: the climbing test room's
+       object/sdf/8test/model/st08a_p1.p2o (48 bytes), with
+       object/sdf/8test/collis/st08a.cl, so on the original that room has no
+       floor.  The carrier gets the one matrix a one-part model's node 0
+       holds, the layout's (allocMatrixArrays' copy); nodeNum stays 0, so only
+       the collision passes, which ignore it, read the matrix. */
+    if (p->partCount == 0 && d->nodeNum == 0 && d->colData != 0) {
+        static unsigned int notes;
+        char *m = iosMallocDebug(ios_partition_seki, 64, __FILE__, __LINE__);
+        int n = GetMaxGObj();
+        GObj *g = n > 0 ? GetGObjP(n - 1) : 0;
+        int row = -1;
+
+        _CopyMatrix(m, d->matrix);
+        *(char **)&d->nodeMtx = m;
+        /* CreateLayoutedGObj makes the object before its display object, so
+           the newest object without one is this layout row's */
+        if (g != 0 && g->dobj == 0 && g->labelType == 1) {
+            row = g->labelId;
+        }
+        if (notes < 8 || notes % 100 == 0) {
+            fprintf(stderr,
+                    "dobj: model %d (layout row %d) has no parts but carries the collision %s: "
+                    "node 0's matrix is the layout's, at (%g, %g, %g)\n",
+                    d->modelId, row, modelData[d->modelId].collPath, d->matrix[3][0],
+                    d->matrix[3][1], d->matrix[3][2]);
+        }
+        notes++;
     }
 }
 

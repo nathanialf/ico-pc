@@ -1087,6 +1087,32 @@ has.
   the arena's `object/sdf/st13b/collis/st13b.cl`, 129 floors; the climbing room's
   `object/sdf/8test/collis/st08a.cl`, 270 floors; the North American disc's model records are
   268 bytes, as the August 2001 disc's).
+- The climbing room's floors and walls: its collision, `object/sdf/8test/collis/st08a.cl`, belongs
+  to model 1140 (European; 1105 North American, 1136 Japanese, Korean and Asian, 1100 August
+  2001), whose model file `object/sdf/8test/model/st08a_p1.p2o` in `STG8TEST.DF` is an empty
+  48-byte stub with no parts; the room's layout row 3716 (European) makes a stage object of it, the
+  collision's carrier. A display object of a model with no parts gets `nodeNum` 0, so its node
+  matrices are a 0-byte block, whose address is the allocator's next block header
+  (`ico2/fumi/ios/memory.c`). `_Clip` (`ico2/fumi/src/fieldCollision.c`) tests each object's
+  collision through node 0's matrix whatever its node count, so the room's every floor and wall was
+  tested in a frame made of that header's text and no probe met one: from the origin the boy fell
+  through the world (the phone's log: `no floor below` at every tick line, his root from y 788 to
+  90003 in 10 s, no camera zone with a floor under its centre). The code and the stub are the same
+  on every disc that has the pack, so on the original the room has no floor either. The port gives
+  such a carrier the one matrix a one-part model's node 0 holds, the layout's
+  (`initPolygonState`, `ico2/common/src/DObj.c`), and keeps its `nodeNum` 0, so only the collision
+  passes, which read node 0 whatever the count, see it. DATA.DF holds exactly one model with no
+  parts on each disc that has `STG8TEST.DF` and none on the June 2001 demo (ctest
+  `collision_carrier_disc` and its per-disc rows read every model member of every pack), so no other
+  object changes ([DIVERGENCES.md](DIVERGENCES.md) GL-18). The diagnosis with its file and line
+  evidence: `build-host/tmp/v0104/evidence/rooms/climb-no-collision.md`. The line, at each start of
+  the room: `dobj: model 1140 (layout row 3716) has no parts but carries the collision
+  object/sdf/8test/collis/st08a.cl: node 0's matrix is the layout's, at (0, 0, 0)`. With the floor
+  the camera-zone move below runs as written: `unused: climbing: the game's no-entrance point (0, 0,
+  0) is outside every camera zone (...; its root 0 above its floor there): the boy moved to zone
+  20's floor at (1111, -1396, 81) (72 above the floor y -1324, his skeleton's root height; the probe
+  from there finds the floor -1324, 72 below)` (72 is his skeleton's root height), then tick lines
+  with `the floor -1324 under him, 72 below`, his y steady and fall height 0.
 - The camera zones (`startInZone`, once per room as soon as the boy is up, within the log's 300
   ticks): the camera follows the boy through the stage's camera zones, the groups of the
   camera set `CameraSetCameraSet` (`ico2/omori/src/camera-ico2.c`) loads from the stage row's
