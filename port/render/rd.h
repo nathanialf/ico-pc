@@ -915,9 +915,11 @@ bool rd_vu_skin_capture_due(char *path, size_t size);
  * in the same replay drew right (the scene pass's execution), probeWrong
  * events whose probe was wrong; portRace wrong checks whose bytes differed
  * (H2: not the driver's read); addr the last wrong check's address; frame
- * the last event's.  Any thread (each field an atomic). */
+ * the last event's; started: the renderer has chosen its modules
+ * (rd__vu_policy_init ran: the driver and its environment are those of
+ * this start).  Any thread (each field an atomic). */
 typedef struct RdVuBonesEvidence {
-    bool ring;
+    bool started, ring;
     uint32_t replays, twins, differ;
     uint32_t ringClear, ringFail, sceneOnly, probeWrong, portRace;
     uint32_t addr, frame;

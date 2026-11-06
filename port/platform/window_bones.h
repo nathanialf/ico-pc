@@ -9,7 +9,8 @@
 #define ICO_PLATFORM_WINDOW_BONES_H
 
 /* From the window's pump, every pump (cheap: a few atomic loads while the
-   skin check has no twins): at the first call the start's line when a key
+   skin check has no twins): at the first call after the renderer chose
+   its modules (rd.h RdVuBonesEvidence.started) the start's line when a key
    of the ladder is set; then the skin check's evidence (rd.h
    rd_vu_bones_evidence) through bones_ladder_step, and the action's key
    with its mark written to config.toml and its line logged, once each. */

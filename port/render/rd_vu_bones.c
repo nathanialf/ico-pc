@@ -31,6 +31,7 @@ static bool s_tried[RB_VS_COUNT];
 /* the evidence (rd.h RdVuBonesEvidence), each word an atomic: written on
  * the render thread at the harvest, read by the window's pump */
 enum {
+    EV_STARTED,
     EV_RING,
     EV_REPLAYS,
     EV_TWINS,
@@ -97,6 +98,7 @@ RhiShader rd__vu_bones_ring_shader(uint8_t vs)
 void rd__vu_bones_policy(bool asked, bool on, const char *why)
 {
     evSet(EV_RING, on ? 1u : 0u);
+    evSet(EV_STARTED, 1u);
     if (!on) {
         if (asked) {
             rd__log("VU bones: through VuBoneCB ([dev] vu_bones = ring not used: %s)",
@@ -177,6 +179,7 @@ void rd__vu_bones_check(bool bytesDiffer, int c3, uint32_t addr)
 void rd_vu_bones_evidence(RdVuBonesEvidence *out)
 {
     memset(out, 0, sizeof(*out));
+    out->started = evGet(EV_STARTED) != 0;
     out->ring = evGet(EV_RING) != 0;
     out->replays = evGet(EV_REPLAYS);
     out->twins = evGet(EV_TWINS);

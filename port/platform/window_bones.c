@@ -86,13 +86,16 @@ void window_bones_pump(void)
     char line[640];
     int written = 0;
 
+    rd_vu_bones_evidence(&ev);
     if (!s.init) {
+        if (!ev.started) {
+            return; /* the renderer not up yet: TU_DEBUG and the modules not this start's */
+        }
         start();
     }
     if (s.done) {
         return;
     }
-    rd_vu_bones_evidence(&ev);
     if (ev.twins == 0) {
         return; /* no twin read yet (or not a device the twins run on) */
     }
