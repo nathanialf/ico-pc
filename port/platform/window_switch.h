@@ -30,6 +30,16 @@
  *                               build with one renderer, a name the build
  *                               does not link); -3 neither started (no
  *                               renderer: the game ends)
+ *   ico_window_switch_restart(why)
+ *                               the renderer made again in place (the same
+ *                               backend, the card asked for) at the next
+ *                               ico_window_switch_pump, as Apply's switch
+ *                               makes it (rd_suspend, the window again,
+ *                               rd_resume), so what rd_init reads at the
+ *                               start (the environment) takes effect in the
+ *                               run: issue 123's ladder (window_bones.c).
+ *                               0 asked; -2 refused (refusal's reasons, a
+ *                               switch asked already), said in a line
  *   ico_window_switch_running() the backend running, as the config key
  *                               [video] backend names it ("vulkan",
  *                               "opengl", "d3d12", "d3d11")
@@ -74,6 +84,7 @@ int ico_window_switch_backend(const char *name, const char *adapter, int trial);
 const char *ico_window_switch_running(void);
 void ico_window_switch_install(void);
 int ico_window_switch_pump(void);
+int ico_window_switch_restart(const char *why);
 const char *ico_window_switch_end_text(void);
 void ico_window_switch_started(bool backendExplicit, const char *backend);
 int ico_window_reopen(const char *backend, bool backendExplicit);

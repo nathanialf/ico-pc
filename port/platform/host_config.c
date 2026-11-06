@@ -606,6 +606,13 @@ static const struct {
        window; an A/B; port/render/rd_vu_skin_check.c); true: on where it
        is off by default */
     {"dev.vu_skin_check", "vu_skin_check"},
+    /* ring: the skinned draws' bones read through the ring (a storage
+       buffer) instead of a uniform block, issue 123's ladder step 1; cbuffer
+       (absent: the default) the uniform block (port/render/rd_pipeline.c
+       rd__vu_policy_init).  The skin check writes it with its mark,
+       vu_bones_by (port/platform/window_bones.c, bones_ladder.h) */
+    {"dev.vu_bones", "vu_bones"},
+    {"dev.vu_bones_by", "vu_bones_by"},
     /* the scene draws' visibility test: frustum (the default: a draw wholly
        off its target or behind the eye is not replayed, the same picture),
        full (the occlusion test too: a list-0 draw wholly behind the depth
@@ -771,6 +778,10 @@ static const struct {
     /* port/render/rd_vu_skin_check.c skMode: 0 leaves the skinned draws'
        bone-block check off (1 turns it on on any device, headless too) */
     {"vu_skin_check", "ICO_RD_VU_SKIN_CHECK"},
+    /* port/render/rd_pipeline.c rd__vu_policy_init: ring or cbuffer; its
+       mark as it is, for the start line (rd_vu_bones.c) */
+    {"vu_bones", "ICO_RD_VU_BONES"},
+    {"vu_bones_by", "ICO_RD_VU_BONES_BY"},
     /* port/render/rd_vis.c rd__vis_init: off, frustum or full */
     {"cull", "ICO_RD_CULL"},
     /* port/render/rd_pipeline.c rd__region_camera: camera or ps2 */
@@ -869,6 +880,7 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const auraKernels[] = {"box", "gs", NULL};
     static const char *const culls[] = {"off", "frustum", "full", NULL};
     static const char *const regionRules[] = {"camera", "ps2", NULL};
+    static const char *const vuBones[] = {"ring", "cbuffer", NULL};
 
     if (key == NULL || value == NULL || ico_dev_env_name(key) == NULL) {
         return NULL;
@@ -917,6 +929,14 @@ const char *ico_dev_env_value(const char *key, const char *value)
     if (strcmp(key, "vu_set") == 0) {
         /* auto, plain or extended as they are (no boolean form) */
         return value_is(value, vuSets) ? value : NULL;
+    }
+    if (strcmp(key, "vu_bones") == 0) {
+        /* ring or cbuffer as they are (no boolean form) */
+        return value_is(value, vuBones) ? value : NULL;
+    }
+    if (strcmp(key, "vu_bones_by") == 0) {
+        /* the skin check's mark, any words (the start line repeats them) */
+        return value[0] != '\0' ? value : NULL;
     }
     if (strcmp(key, "region_rule") == 0) {
         /* camera or ps2 as they are (no boolean form) */
@@ -1126,9 +1146,12 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
            prepared the graphics (window_host.c): an old fallback still in
            force shows in the log */
         {
-            static const char *const kept[] = {"dev.pipeline_set", "dev.vu_prepass",
-                                               "dev.gpu_robust", "dev.pipeline_skip"};
-            char line[384] = "";
+            /* and issue 123's ladder: the bones through the ring, TU_DEBUG
+               on a Turnip package, each with the skin check's mark */
+            static const char *const kept[] = {
+                "dev.pipeline_set", "dev.vu_prepass",  "dev.gpu_robust",   "dev.pipeline_skip",
+                "dev.vu_bones",     "dev.vu_bones_by", "dev.turnip_debug", "dev.turnip_debug_by"};
+            char line[768] = "";
             size_t i;
 
             for (i = 0; t != NULL && i < sizeof(kept) / sizeof(kept[0]); i++) {

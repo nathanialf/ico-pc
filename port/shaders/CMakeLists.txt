@@ -84,6 +84,15 @@ foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:sk
     string(REGEX REPLACE ".*:" "" _f "${_v}")
     ico_add_shader(vu_${_e}_plain_vs vu_${_f}.hlsl vu_${_e}_vs vertex DEFINES ICO_VU_PLAIN=1)
 endforeach()
+# the cluster entries' plain variants with the bones read through the ring
+# (ICO_VU_BONES_RING, vu_common.hlsli: t5 from VuCB's mark lane instead of
+# VuBoneCB at b3): issue 123's ladder, made only under [dev] vu_bones = ring
+# (rd_pipeline.c rd__vu_policy_init) and by the skin check's ring-read probe
+# and twin (rd_vu_bones.c); docs/port/VU_SKIN_CHECK.md "The ladder"
+foreach(_e skin skin_spec skin_debug)
+    ico_add_shader(vu_${_e}_ring_plain_vs vu_skin.hlsl vu_${_e}_vs vertex
+                   DEFINES ICO_VU_PLAIN=1 ICO_VU_BONES_RING=1)
+endforeach()
 # the FMV picture (port/render/rd_video.c)
 ico_add_shader(yuv_vs yuv.hlsl yuv_vs vertex)
 ico_add_shader(yuv_ps yuv.hlsl yuv_ps fragment)

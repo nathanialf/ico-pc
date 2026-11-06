@@ -202,7 +202,7 @@ number the RHI slot (`port/shaders/common.hlsli`, header comment; `port/rhi/rhi.
 | 0 | `b0` | FrameCB, once per frame |
 | 1 | `b1` | DrawCB, per draw or post pass (crt.hlsl's CrtCB takes the same slot) |
 | 1 | `b2`, `b3`, `t0`, `t4` | the VU programs' VuCB and VuBoneCB (bones, card bits; `uint4 vu_bone[240]`), the VU vertex stream (`vu_stream`, `StructuredBuffer<uint4>`), and the pre-passes' record (`vu_rec_buf`, `StructuredBuffer<uint4>`, three planes), every one declared `uint4` so integer lanes are read as integers ([Integer lanes](#integer-lanes-never-through-a-float-load)); VuCB and the record are visible to the pixel stage too (`vu_ps` reads the planes) |
-| 1 | `t5` | the upload ring from the replay's VU base on (`vu_ring`, `StructuredBuffer<uint4>`, vertex stage; `rd_replay_vu.c` `s_ringBase`, 256-aligned, after the uploads): the pre-pass's batch builds (`vu_X_batch_pre_vs`, `ICO_VU_PRE_BATCH`) read each entry's VuCB and VuBoneCB and the batch's table there, the table found through DrawCB's `aux0` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)); the draw merge's builds (`vu_X_merge_vs`, `vu_X_merge_plain_vs`, `vu_merge_main_vs`, `ICO_VU_MERGE`) read each draw's VuCB and VuBoneCB and the run's table there, the table found through b2's `mark.w` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)); every VU group binds it (Direct3D 11's leave it unbound only with both the pre-pass's batches and the merge off), the other builds do not read it |
+| 1 | `t5` | the upload ring from the replay's VU base on (`vu_ring`, `StructuredBuffer<uint4>`, vertex stage; `rd_replay_vu.c` `s_ringBase`, 256-aligned, after the uploads): the pre-pass's batch builds (`vu_X_batch_pre_vs`, `ICO_VU_PRE_BATCH`) read each entry's VuCB and VuBoneCB and the batch's table there, the table found through DrawCB's `aux0` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)); the draw merge's builds (`vu_X_merge_vs`, `vu_X_merge_plain_vs`, `vu_merge_main_vs`, `ICO_VU_MERGE`) read each draw's VuCB and VuBoneCB and the run's table there, the table found through b2's `mark.w` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)); every VU group binds it (Direct3D 11's leave it unbound only with the pre-pass's batches, the merge and the ring builds off), the cluster entries' ring builds (`vu_X_ring_plain_vs`, `ICO_VU_BONES_RING`: issue 123's ladder, under `[dev] vu_bones = ring` or the skin check's column 3 and twin C) read the bones there from b2's `mark.w`, the other builds do not read it |
 | 2 | `t1`..`t4`, `s1`..`s4` | textures and samplers |
 | 3 | `u0` | the destination read's target (`_dstrov`); `_dstatt` reads binding 16 of set 3 as an input attachment |
 
@@ -777,6 +777,15 @@ has no `vu_X_plain_vs` (`tools/check_spirv.py`, gates `size per variant` and `va
 cut is about 9,500 of a plain mesh program's words (`vu_prelit_vs` without it: 12,866); it stays,
 because at 4:3 it decides whether a triangle wholly beside the picture is drawn, and the plain
 variant must give the extended one's picture.
+
+The cluster entries have a third build each, the ring build (`vu_skin_ring_plain_vs`,
+`vu_skin_spec_ring_plain_vs`, `vu_skin_debug_ring_plain_vs`: the plain variant with
+`ICO_VU_BONES_RING=1`): `VU_BONE(i)` and `VU_BONE_BITS(i)` read `vu_ring[vu_mark.w + i]` (t5, the
+VuBoneCB block's qword index in the mark lane, which no cbuffer build reads) instead of VuBoneCB at
+b3, `uint4` and `asfloat` as before (the intlane gate holds). 22,340, 22,403 and 22,492 words, 240
+above the plain ones, inside `VS_PLAIN_BUDGET`. They are issue 123's ladder's step 1 and the skin
+check's ring read beside the picture ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)); `vu1_test`
+holds their probe and pictures to the plain variant's byte for byte.
 
 ## Direct3D 11: run-time compile
 

@@ -111,6 +111,12 @@ void ico_gpu_driver_android_device_lost(void);
 /* At a normal end, before the renderer shuts down: a trial still running
    ends as passed (the marker removed). */
 void ico_gpu_driver_android_end(void);
+/* 1 when this start runs on a driver package whose library is Turnip's
+   (libvulkan_freedreno.so): the start TU_DEBUG can reach, set from [dev]
+   turnip_debug before the package loads (issue 123's ladder,
+   window_bones.c, bones_ladder.h); 0 on the phone's own driver or another
+   package. */
+int ico_gpu_driver_android_turnip_package(void);
 /* The Settings page's host; valid for the program's life; NULL below
    Android 9 (ico_gpu_driver_android_supported). */
 const UiGpuDriverHost *ico_gpu_driver_android_host(void);

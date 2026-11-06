@@ -2851,6 +2851,29 @@ static int gpuTests(void)
         }
     }
     int plainCases = 0; /* the cases the plain variant drew, byte for byte the extended's */
+    /* the cluster entries' ring builds (vu_X_ring_plain_vs, ICO_VU_BONES_RING;
+     * issue 123's ladder, docs/port/VU_SKIN_CHECK.md): the bones read through
+     * t5 (slot 5, a layout of its own here) from qword vu_mark.w instead of
+     * VuBoneCB at b3, byte for byte the plain variant's */
+    const RhiBindSlot s1r[6] = {s1[0], s1[1], s1[2],
+                                s1[3], s1[4], {5, RHI_BIND_STORAGE_BUFFER, VS}};
+    RhiBindGroupLayout l1r =
+        rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){s1r, 6, "vu draw, the ring"});
+    const RhiBindGroupLayout layRing[3] = {l0, l1r, l2};
+    RhiPipeline pProbeRing[NCASES], pDrawRing[NCASES];
+    for (int i = 0; i < NCASES; i++) {
+        pProbeRing[i] = pDrawRing[i] = (RhiPipeline){0};
+        if (kCases[i].prog == P_CLUSTER) {
+            char rn[64];
+            const size_t n = strlen(kCases[i].vs);
+            snprintf(rn, sizeof(rn), "%.*s_ring_plain_vs", (int)(n - 3), kCases[i].vs);
+            RhiShader vsr = makeShader(rn);
+            pProbeRing[i] =
+                makePipeline(vsr, probePs, layRing, 0, RHI_FMT_RGBA8_UINT, kCases[i].name);
+            pDrawRing[i] = makePipeline(vsr, vuPs, layRing, 0, RHI_FMT_RGBA8_UNORM, kCases[i].name);
+        }
+    }
+    int ringCases = 0; /* the cluster cases the ring build drew, byte for byte the plain's */
     /* the vertex pre-pass: each mesh case's pre-pass entry; the triangle
      * pre-pass's record stages (the tick stage under the masks R and G) and
      * the sprites'; the main shaders */
@@ -3051,6 +3074,13 @@ static int gpuTests(void)
         }
         checkCards(c, &cr, (const float (*)[4])in, &vcb, &bones);
         cardBits(c, &cr, &vcb, &bones);
+        if (c->prog == P_CLUSTER) {
+            /* the ring builds' bones: VuBoneCB's slot as t5 holds it (t5
+             * bound from OFF_UBO below, as rd_replay_vu.c vuSource puts the
+             * block's index in mark[3]); every other build leaves the lane
+             * unread, so the extended and plain pictures are as before */
+            vcb.mark[3] = 5u * UBO_SLOT / 16u;
+        }
         vcbProbe = vcb;
         vcbProbe.draw[2] |= ICO_VU_PROBE;
         IcoFrameCB fProbe, fDraw;
@@ -3266,6 +3296,80 @@ static int gpuTests(void)
                       memcmp(qpa, pa, sizeof(qpa)) ? "differs" : "same");
             }
             plainCases++;
+            if (pDrawRing[ci].id && c->clip != ICO_VU_CLIP_SCISSOR) {
+                /* the ring build of the same case: the plain variant's
+                 * probe and pictures (qimg, qa, qpa) byte for byte */
+                RhiBinding br[6];
+                memcpy(br, b1, sizeof(b1));
+                br[5] = (RhiBinding){.slot = 5,
+                                     .type = RHI_BIND_STORAGE_BUFFER,
+                                     .buffer = ring,
+                                     .offset = OFF_UBO,
+                                     .size = 16u * UBO_SLOT};
+                br[2].offset = OFF_UBO + 3 * UBO_SLOT;
+                RhiBindGroup g1DrawR = rhi_create_bind_group(&(RhiBindGroupDesc){l1r, br, 6});
+                br[2].offset = OFF_UBO + 4 * UBO_SLOT;
+                RhiBindGroup g1ProbeR = rhi_create_bind_group(&(RhiBindGroupDesc){l1r, br, 6});
+                static uint8_t rimg[ICO_VU_PROBE_FIELDS * MAXV * 4], ra[RT * RT * 4],
+                    rpa[RT * RT * 4];
+                RhiCommandList rl = rhi_begin_commands();
+                RhiTextureBarrier rpre[3] = {
+                    {probe, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET},
+                    {imgVu, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET},
+                    {imgPort, RHI_STATE_COPY_SRC, RHI_STATE_RENDER_TARGET}};
+                rhi_cmd_barrier(rl, rpre, 3);
+                rhi_cmd_begin_render_pass(rl, &rp);
+                rhi_cmd_set_pipeline(rl, pProbeRing[ci]);
+                rhi_cmd_set_bind_group(rl, 0, g0Probe);
+                rhi_cmd_set_bind_group(rl, 1, g1ProbeR);
+                rhi_cmd_set_bind_group(rl, 2, g2);
+                rhi_cmd_draw(rl, (uint32_t)nvert * ICO_VU_PROBE_FIELDS * 3, 0, 1);
+                rhi_cmd_end_render_pass(rl);
+                for (int pass = 0; pass < 2; pass++) {
+                    RhiRenderPassDesc dp = {0};
+                    dp.color[0] = (RhiColorAttachment){pass ? imgPort : imgVu,
+                                                       RHI_LOAD_CLEAR,
+                                                       {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
+                                                       RHI_STORE_STORE,
+                                                       false};
+                    dp.colorCount = 1;
+                    dp.width = dp.height = RT;
+                    rhi_cmd_begin_render_pass(rl, &dp);
+                    rhi_cmd_set_bind_group(rl, 0, g0Draw);
+                    rhi_cmd_set_bind_group(rl, 1, g1DrawR);
+                    rhi_cmd_set_bind_group(rl, 2, g2);
+                    if (pass == 0) {
+                        drawCase(rl, pDrawRing[ci], c, ring, g1DrawR, g1DrawR, 0, nkept, 0);
+                    } else if (nidx > nkept) {
+                        drawCase(rl, pDrawRing[ci], c, ring, g1DrawR, g1DrawR, nkept, nidx - nkept,
+                                 0);
+                    }
+                    rhi_cmd_end_render_pass(rl);
+                }
+                RhiTextureBarrier rpost[3] = {
+                    {probe, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
+                    {imgVu, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC},
+                    {imgPort, RHI_STATE_RENDER_TARGET, RHI_STATE_COPY_SRC}};
+                rhi_cmd_barrier(rl, rpost, 3);
+                rhi_end_commands(rl);
+                rhi_submit(rl);
+                uint32_t rp0 = 0, rq = 0;
+                if (!rhi_readback_texture(probe, RHI_ASPECT_COLOR, rimg, sizeof(rimg), &rp0) ||
+                    !rhi_readback_texture(imgVu, RHI_ASPECT_COLOR, ra, sizeof(ra), &rq) ||
+                    !rhi_readback_texture(imgPort, RHI_ASPECT_COLOR, rpa, sizeof(rpa), &rq)) {
+                    FAILF("%s ring readback\n", c->name);
+                    break;
+                }
+                if (memcmp(rimg, qimg, sizeof(rimg)) != 0 || memcmp(ra, qa, sizeof(ra)) != 0 ||
+                    memcmp(rpa, qpa, sizeof(rpa)) != 0) {
+                    FAILF("%s: the ring build differs from the plain variant (probe %s, exact %s, "
+                          "the others %s)\n",
+                          c->name, memcmp(rimg, qimg, sizeof(rimg)) ? "differs" : "same",
+                          memcmp(ra, qa, sizeof(ra)) ? "differs" : "same",
+                          memcmp(rpa, qpa, sizeof(rpa)) ? "differs" : "same");
+                }
+                ringCases++;
+            }
         }
         /* (4) the vertex and triangle pre-passes: the case's vertices (a
          * particle case's sprites, slots A and B) once into the record's row
@@ -3603,6 +3707,12 @@ static int gpuTests(void)
     printf("  the plain variants: %d cases drawn byte for byte as the extended ones\n", plainCases);
     if (plainCases == 0) {
         FAILF("the plain variants: no case without VU_F_EXTENDED and VU_F_TICKS\n");
+    }
+    printf("  the ring builds: %d cluster cases drawn byte for byte as the plain variants (the "
+           "bones through t5)\n",
+           ringCases);
+    if (ringCases == 0) {
+        FAILF("the ring builds: no cluster case without VU_F_EXTENDED and VU_F_TICKS\n");
     }
     printf("  the record: %d mesh cases through vu_main_vs and %d particle cases through "
            "vu_particle_main_vs (%d under the tick cameras), byte for byte the programs' "
