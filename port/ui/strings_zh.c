@@ -800,6 +800,13 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Ico 倒下時影子等待",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
         "關閉：Ico 倒下時影子不再等待，可能在他站起來之前再次打中他。成就維持開啟。",
+    [UI_STR_OPT_VAR_SWORD_COLOUR] = "光之劍顏色",
+    [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
+        "紅：光之劍的軌跡變成紅色，如同遊戲中未使用的另一把；只有顏色改變。從下一個房間起生效。",
+    [UI_STR_OPT_VAR_WEAPON] = "木棒",
+    [UI_STR_VAL_VAR_INSECT_NET] = "捕蟲網",
+    [UI_STR_OPT_VAR_WEAPON_NOTE] =
+        "捕蟲網：每根木棒都變成遊戲中未使用的捕蟲網。無法揮動或點火，也傷不了影子。從下一個房間起生效。",
     [UI_STR_VAL_VAR_THIRD_JOURNEY] = "第三輪",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
         "影子和第三輪遊玩一樣強韌（第一輪的兩倍），遊戲本身永遠不會進入第三輪。成就維持開啟。",

@@ -1309,6 +1309,14 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   and 2x byte for byte, and on smooth gradients the downsampled presents are within 4 LSB of the
   1x present (`checkDownsample`).
 - `rd_raw_test.c`: the raw packet builders outside `seki` (`rd_raw`).
+- `weapon_draw_test.c`: the insect net of Gameplay > Combat's Stick row through the game's own
+  `ico2/sugipon/src/weapon.c` (with `lineManager.c`, `matrixDrive.c` and the 2D layer, the rest of the
+  game stubbed; recording only, no device), one run per disc for its copies of `InitWeaponGeo`,
+  `WeaponGeo` and `WeaponDL`: at Insect net the layout stick is the net's kind with no torch, the boy
+  beside it finds it (`CheckSwapableWeapon`) and picks it up (`PickupWeapon`: his `pickedWeapon`, the
+  weapon signal's kind), and held it records `dispInsectNet`'s 17 Gouraud lines in list 11, grey
+  (128, 128, 128, 128), at his hand, and no model; at Original the stick with its torch draws its
+  model and no line; nothing undecoded (`weapon_draw`, `weapon_draw_<disc>`).
 - `rd_replay_tool_list.cmake`: `--list --no-device` on `rd_pixel`'s dump (`rd_replay_tool_list`).
 - `rd_replay_tool_pass_dump.cmake`: `--pass-dump`, `--target` and `--aspect` on that dump
   (`rd_replay_tool_pass_dump`).

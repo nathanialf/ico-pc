@@ -14,6 +14,10 @@
  * type, never past the table: the June 2001 demo's 18 rows, which are never
  * mapped by index; American is not offered on the demo: test_offered) and the restart
  * life's playthrough index (a copy of enemy_act.c getEnemyRestartLife's).
+ * The weapon rows (test_weapons): the kinds InitWeaponGeo and PutWeapon read
+ * through ico_variant_weapon_kind and ico_variant_weapon_put_kind on this
+ * disc (Red only where the light sword exists, the net's kind 6 on the June
+ * 2001 demo and 7 elsewhere, every other kind untouched), the keys' words.
  *
  *   variants_test DIR [REGION]
  */
@@ -54,6 +58,14 @@ static int third_offered(void)
     return strcmp(s, "ntsc") != 0 && strcmp(s, "aug6") != 0 && strcmp(s, "jun26") != 0;
 }
 
+/* one of the three 2001-family discs (North American, August 2001, June
+   2001 demo): no light sword there */
+static int y2001(void)
+{
+    const char *slug = ico_region_cur()->slug;
+    return strcmp(slug, "ntsc") == 0 || strcmp(slug, "aug6") == 0 || strcmp(slug, "jun26") == 0;
+}
+
 /* config.toml with TEXT as its body (NULL: no file), options reloaded */
 static void use_config(const char *text)
 {
@@ -89,6 +101,12 @@ static void test_defaults(void)
     CHECK(ico_variant_auto_guard() == 1);
     CHECK(ico_variant_attack_turn() == 1);
     CHECK(ico_variant_shadows_wait_down() == 1);
+    /* the weapon rows: Original, every kind as placed */
+    CHECK(ico_variant_get(ICO_VARIANT_SWORD_COLOUR) == ICO_SWORD_ORIGINAL);
+    CHECK(ico_variant_get(ICO_VARIANT_WEAPON) == ICO_WEAPON_ORIGINAL);
+    for (int k = 0; k < 16; k++) {
+        CHECK(ico_variant_weapon_kind(k) == k && ico_variant_weapon_put_kind(k) == k);
+    }
     CHECK(ico_variant_shadow_brain() == 1); /* Peaceful shadows Off: the game's */
     CHECK(ico_variants_suspend_achievements() == 0);
     /* the shipped file's values are the defaults */
@@ -96,7 +114,8 @@ static void test_defaults(void)
                "never_dodge = false\naggression = \"own\"\nno_hints = false\n"
                "no_cutscene_look = false\nignore_cutscene_cameras = false\n"
                "auto_guard = true\nattack_turn = true\nshadows_wait_down = true\n"
-               "peaceful_shadows = false\n");
+               "peaceful_shadows = false\n"
+               "sword_colour = \"original\"\nweapon = \"original\"\n");
     CHECK(ico_variant_shadow_brain() == 1);
     CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL);
     CHECK(ico_variant_aggression() == ICO_AGGRESSION_OWN);
@@ -105,7 +124,7 @@ static void test_defaults(void)
     CHECK(ico_variants_suspend_achievements() == 0);
 }
 
-/* the names: twelve variants, the words the keys are written with */
+/* the names: fourteen variants, the words the keys are written with */
 static void test_names(void)
 {
     CHECK(ico_variant_count(ICO_VARIANT_SHADE_TOUGHNESS) == 4);
@@ -145,6 +164,15 @@ static void test_names(void)
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_BARRIER_HITS, 0), "5") == 0);
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_BARRIER_HITS, 1), "7") == 0);
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_NO_HINTS, 1), "true") == 0);
+    CHECK(strcmp(ico_variant_key(ICO_VARIANT_SWORD_COLOUR), "sword_colour") == 0);
+    CHECK(strcmp(ico_variant_key(ICO_VARIANT_WEAPON), "weapon") == 0);
+    CHECK(ico_variant_count(ICO_VARIANT_SWORD_COLOUR) == 2 &&
+          ico_variant_count(ICO_VARIANT_WEAPON) == 2);
+    CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_SWORD_COLOUR, 0), "original") == 0 &&
+          strcmp(ico_variant_value_name(ICO_VARIANT_SWORD_COLOUR, 1), "red") == 0 &&
+          strcmp(ico_variant_value_name(ICO_VARIANT_SWORD_COLOUR, 2), "") == 0);
+    CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_WEAPON, 0), "original") == 0 &&
+          strcmp(ico_variant_value_name(ICO_VARIANT_WEAPON, 1), "net") == 0);
 }
 
 /* every key: step through every value, save, reload, the same value back;
@@ -273,6 +301,72 @@ static void test_combat(void)
         ico_variant_set(rows[i].id, 0);
         ico_opt_reload();
         CHECK(rows[i].hook() == 1);
+    }
+    use_config(NULL);
+}
+
+/* The weapon rows: the kinds weapon.c InitWeaponGeo (every disc's copy) and
+   boyact.c PutWeapon read.  Red makes the light sword's kind 9 the red kind
+   8 where the light sword exists and is read as Original elsewhere; the net
+   makes the stick's kind 1 the disc's net kind (6 on the June 2001 demo, 7
+   elsewhere); no other kind moves; neither row suspends achievements; the
+   keys are words; a reload goes back to the file. */
+static void test_weapons(void)
+{
+    const int light = !y2001();
+    const int net = on_jun26() ? 6 : 7;
+
+    use_config("[variants]\nsword_colour = \"red\"\n");
+    CHECK(ico_variant_get(ICO_VARIANT_SWORD_COLOUR) == (light ? ICO_SWORD_RED : 0));
+    CHECK(ico_variant_weapon_kind(9) == (light ? 8 : 9));
+    CHECK(ico_variant_weapon_put_kind(8) == (light ? 9 : 8));
+    CHECK(ico_variant_weapon_put_kind(9) == 9);
+    for (int k = 0; k < 16; k++) {
+        if (k != 9) {
+            CHECK(ico_variant_weapon_kind(k) == k);
+        }
+        if (k != 8) {
+            CHECK(ico_variant_weapon_put_kind(k) == k);
+        }
+    }
+    CHECK(ico_variants_suspend_achievements() == 0);
+
+    use_config("[variants]\nweapon = \"net\"\n");
+    CHECK(ico_variant_net_kind() == net);
+    CHECK(ico_variant_get(ICO_VARIANT_WEAPON) == ICO_WEAPON_NET);
+    CHECK(ico_variant_weapon_kind(1) == net);
+    for (int k = 0; k < 16; k++) {
+        if (k != 1) {
+            CHECK(ico_variant_weapon_kind(k) == k);
+        }
+        CHECK(ico_variant_weapon_put_kind(k) == k);
+    }
+    CHECK(ico_variants_suspend_achievements() == 0);
+
+    /* both at once: each its own kind */
+    use_config("[variants]\nsword_colour = \"red\"\nweapon = \"net\"\n");
+    CHECK(ico_variant_weapon_kind(1) == net && ico_variant_weapon_kind(9) == (light ? 8 : 9));
+
+    /* a word that is no value reads as Original */
+    use_config("[variants]\nsword_colour = \"blue\"\nweapon = \"spoon\"\n");
+    CHECK(ico_variant_get(ICO_VARIANT_SWORD_COLOUR) == 0 &&
+          ico_variant_get(ICO_VARIANT_WEAPON) == 0);
+    CHECK(ico_variant_weapon_kind(1) == 1 && ico_variant_weapon_kind(9) == 9);
+
+    /* the page's step writes the word; Red is passed over where not offered */
+    use_config(NULL);
+    CHECK(ico_variant_step(ICO_VARIANT_WEAPON, 1) == ICO_WEAPON_NET);
+    CHECK(strcmp(ico_config_get_string("variants.weapon", ""), "net") == 0);
+    CHECK(ico_variant_step(ICO_VARIANT_WEAPON, 1) == ICO_WEAPON_ORIGINAL);
+    CHECK(strcmp(ico_config_get_string("variants.weapon", ""), "original") == 0);
+    CHECK(ico_variant_step(ICO_VARIANT_SWORD_COLOUR, 1) == (light ? ICO_SWORD_RED : 0));
+    if (light) {
+        CHECK(strcmp(ico_config_get_string("variants.sword_colour", ""), "red") == 0);
+        CHECK(ico_variant_weapon_kind(9) == 8);
+        /* a fresh config with no file goes back to Original (the step wrote
+           the word into the loaded config, so a plain reload keeps it) */
+        use_config(NULL);
+        CHECK(ico_variant_weapon_kind(9) == 9);
     }
     use_config(NULL);
 }
@@ -622,7 +716,13 @@ static void test_offered(void)
           third_offered());
     CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_COUNT) == 0);
     CHECK(ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, -1) == 0);
+    /* Red only where the light sword's kinds 8 and 9 exist */
+    CHECK(ico_variant_offered(ICO_VARIANT_SWORD_COLOUR, ICO_SWORD_ORIGINAL) == 1);
+    CHECK(ico_variant_offered(ICO_VARIANT_SWORD_COLOUR, ICO_SWORD_RED) == !y2001());
     for (int id = 1; id < ICO_VARIANT_COUNT; id++) {
+        if (id == ICO_VARIANT_SWORD_COLOUR) {
+            continue;
+        }
         for (int v = 0; v < ico_variant_count((IcoVariantId)id); v++) {
             CHECK(ico_variant_offered((IcoVariantId)id, v) == 1);
         }
@@ -681,6 +781,7 @@ int main(int argc, char **argv)
     test_round_trip();
     test_file_words();
     test_combat();
+    test_weapons();
     test_suspend();
     test_apply();
     test_hints();

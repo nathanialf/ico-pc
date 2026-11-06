@@ -4795,14 +4795,16 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                                 "Back"};
     static const char *const kShadowLabels[5] = {"Shadow speed", "Shadow toughness",
                                                  "Shadow aggression", "Peaceful shadows", "Back"};
-    static const char *const kCombatLabels[8] = {"Automatic guard",
-                                                 "Turn to face shadows",
-                                                 "Shadows wait while Ico is down",
-                                                 "One hit per swing",
-                                                 "Shadows never dodge",
-                                                 "Shadows attack together",
-                                                 "Queen barrier",
-                                                 "Back"};
+    static const char *const kCombatLabels[10] = {"Automatic guard",
+                                                  "Turn to face shadows",
+                                                  "Shadows wait while Ico is down",
+                                                  "One hit per swing",
+                                                  "Shadows never dodge",
+                                                  "Shadows attack together",
+                                                  "Queen barrier",
+                                                  "Light sword colour",
+                                                  "Stick",
+                                                  "Back"};
     static const char *const kCutLabels[4] = {"Skip the opening", "No cutscene look-around",
                                               "Ignore cutscene cameras", "Back"};
     char p[1100], log[4096];
@@ -4904,30 +4906,20 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     checkPageFits(UI_PAGE_SHADOWS, "Gameplay > Shadows (five rows)");
 
     if (sn == 5) {
-        /* Peaceful shadows starts Off; On is a cheat (achievements off) and
-           its note says so; the hook the game reads answers 0 while it is on */
-        CHECK(strcmp(lt_ext_row_text(lv[3]), "Off") == 0 && ico_variant_shadow_brain() == 1,
-              "%s: Peaceful shadows starts Off (\"%s\")", who, lt_ext_row_text(lv[3]));
+        /* Peaceful shadows: Off, then On (a cheat) and back */
+        CHECK(strcmp(lt_ext_row_text(lv[3]), "Off") == 0, "%s: Peaceful shadows starts Off", who);
         {
-            const VarSwitch peaceful = {UI_PAGE_SHADOWS,
-                                        3,
-                                        ICO_VARIANT_PEACEFUL_SHADOWS,
-                                        "variants.peaceful_shadows",
-                                        "Peaceful shadows",
-                                        "On: Shadows stay where they appear",
-                                        1};
-            lt_ext_layout(shL)->curItem = lb[3];
-            frame(0);
-            press(0x2000);
-            CHECK(ico_variant_shadow_brain() == 0, "%s: Peaceful shadows On: no brain", who);
-            press(0x8000);
-            CHECK(ico_variant_shadow_brain() == 1, "%s: Peaceful shadows Off: the brain", who);
-            varSwitch(who, &peaceful, shL, lb, lv);
+            const VarSwitch ps = {UI_PAGE_SHADOWS,
+                                  3,
+                                  ICO_VARIANT_PEACEFUL_SHADOWS,
+                                  "variants.peaceful_shadows",
+                                  "Peaceful shadows",
+                                  "On: Shadows stay where they appear",
+                                  1};
+            varSwitch(who, &ps, shL, lb, lv);
         }
-        /* Shadow toughness: Original, American, Not tougher later, Third
-           journey, around, both ways (no American on the June 2001 demo; no
-           Third journey on the discs whose restart life has no playthrough
-           factor: the North American disc and the two 2001 builds) */
+        /* Shadow toughness round its offered values (no American on the demo,
+           no Third journey on ntsc, aug6 and jun26) */
         const int third =
             ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_THIRD_JOURNEY);
         const char *const last = third ? "Third journey" : "Not tougher later";
@@ -4958,7 +4950,6 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                       !ico_variants_suspend_achievements(),
                   "%s: the Third journey note, achievements stay on", who);
         } else {
-            /* the row does not offer it: asking for it gives Original */
             ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_THIRD_JOURNEY);
             CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL,
                   "%s: Third journey is not offered on this disc", who);
@@ -5030,17 +5021,25 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
         }
         int ob[16], ov[16];
         const int on = ui_settings_page_rows(UI_PAGE_COMBAT, ob, NULL, ov, 16);
-        varLabelsAre(who, "Combat", ob, on, kCombatLabels, 8);
-        CHECK(on == 8 && strcmp(lt_ext_row_text(ov[0]), "On") == 0 &&
+        varLabelsAre(who, "Combat", ob, on, kCombatLabels, 10);
+        CHECK(on == 10 && strcmp(lt_ext_row_text(ov[0]), "On") == 0 &&
                   strcmp(lt_ext_row_text(ov[1]), "On") == 0 &&
                   strcmp(lt_ext_row_text(ov[2]), "On") == 0 &&
                   strcmp(lt_ext_row_text(ov[3]), "Off") == 0 &&
                   strcmp(lt_ext_row_text(ov[4]), "Off") == 0 &&
                   strcmp(lt_ext_row_text(ov[5]), "Off") == 0 &&
-                  strcmp(lt_ext_row_text(ov[6]), demo ? "7 hits" : "5 hits") == 0,
+                  strcmp(lt_ext_row_text(ov[6]), demo ? "7 hits" : "5 hits") == 0 &&
+                  strcmp(lt_ext_row_text(ov[7]), "Original") == 0 &&
+                  strcmp(lt_ext_row_text(ov[8]), "Original") == 0,
               "%s: the Combat rows start as the game ships", who);
-        checkPageFits(UI_PAGE_COMBAT, "Gameplay > Combat (eight rows)");
-        for (int i = 0; i < 3 && on == 8; i++) {
+        /* Light sword colour shows only where the light sword exists (the
+           European, Japanese, Korean and Asian discs); Stick on every disc */
+        CHECK(on == 10 && ui_settings_row_shown(ob[7]) == !y2001 && ui_settings_row_shown(ob[8]) &&
+                  ui_settings_row_shown(ob[9]),
+              "%s: Light sword colour %s, Stick and Back shown", who, y2001 ? "hidden" : "shown");
+        checkPageFits(UI_PAGE_COMBAT, y2001 ? "Gameplay > Combat (nine rows shown)"
+                                            : "Gameplay > Combat (ten rows)");
+        for (int i = 0; i < 3 && on == 10; i++) {
             lt_ext_layout(coL)->curItem = ob[i];
             frame(0);
             press(0x2000);
@@ -5058,7 +5057,49 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                       ico_config_get_bool(kCombat[i].key, 0) == 1,
                   "%s: Combat row %d: Left: On again", who, i);
         }
-        if (on == 8) {
+        if (on == 10) {
+            /* the weapon rows: Original <-> Red (where shown), Original <->
+               Insect net; the key a word; achievements stay on; each note */
+            if (!y2001) {
+                lt_ext_layout(coL)->curItem = ob[7];
+                frame(0);
+                press(0x2000);
+                CHECK(strcmp(lt_ext_row_text(ov[7]), "Red") == 0 &&
+                          ico_variant_get(ICO_VARIANT_SWORD_COLOUR) == ICO_SWORD_RED &&
+                          strcmp(ico_config_get_string("variants.sword_colour", ""), "red") == 0 &&
+                          ico_variant_weapon_kind(9) == 8,
+                      "%s: Light sword colour: Right: Red, its key and kind 9 made as 8", who);
+                CHECK(!ico_variants_suspend_achievements(),
+                      "%s: Light sword colour keeps achievements", who);
+                CHECK(varNoteHas(UI_PAGE_COMBAT, "Red: the light sword", "From the next room."),
+                      "%s: the Light sword colour note", who);
+                press(0x8000);
+                CHECK(strcmp(lt_ext_row_text(ov[7]), "Original") == 0 &&
+                          ico_variant_get(ICO_VARIANT_SWORD_COLOUR) == ICO_SWORD_ORIGINAL &&
+                          strcmp(ico_config_get_string("variants.sword_colour", ""), "original") ==
+                              0 &&
+                          ico_variant_weapon_kind(9) == 9,
+                      "%s: Light sword colour: Left: Original again", who);
+            }
+            lt_ext_layout(coL)->curItem = ob[8];
+            frame(0);
+            press(0x2000);
+            CHECK(strcmp(lt_ext_row_text(ov[8]), "Insect net") == 0 &&
+                      ico_variant_get(ICO_VARIANT_WEAPON) == ICO_WEAPON_NET &&
+                      strcmp(ico_config_get_string("variants.weapon", ""), "net") == 0 &&
+                      ico_variant_weapon_kind(1) == (demo ? 6 : 7),
+                  "%s: Stick: Right: Insect net, its key and the stick made as kind %d", who,
+                  demo ? 6 : 7);
+            CHECK(!ico_variants_suspend_achievements(), "%s: Stick keeps achievements", who);
+            CHECK(varNoteHas(UI_PAGE_COMBAT, "Insect net: each stick", "never hurts a Shadow."),
+                  "%s: the Stick note", who);
+            press(0x8000);
+            CHECK(strcmp(lt_ext_row_text(ov[8]), "Original") == 0 &&
+                      ico_variant_get(ICO_VARIANT_WEAPON) == ICO_WEAPON_ORIGINAL &&
+                      ico_variant_weapon_kind(1) == 1,
+                  "%s: Stick: Left: Original again", who);
+        }
+        if (on == 10) {
             const int shL = coL;
             int *lb = ob, *lv = ov;
             /* the barrier: 5 hits, 7 hits, around; written as a number (from 7

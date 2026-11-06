@@ -300,6 +300,17 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   packs (all copies equal), and (A-1)+(B-1)+(C-1)+(D-1)+51 against `ico_pit_chain_ticks_for`
   (`port/game/pit_time.h`: 462, the June 2001 demo 463); nothing starts the game; 77 without the
   image (`pit_dive_base` for `ICO_DISC_IMAGE`, `pit_dive_base_<disc>` for each other image set).
+- `weapon_kinds_disc_test.c`: Gameplay > Combat's weapon rows on each disc image the build names:
+  the disc's tables from its ELF, then with Red and Insect net the kinds `ico_variant_weapon_kind`
+  gives against the disc's rows: weaponKind's row count (10, 8 on ntsc and aug6, 7 on jun26), the
+  stick made as the net's kind (7, 6 on jun26), the net's row (length 120, grip 40, power 0, the
+  stick's weight and trail, no flags, request 0), no motion-orient row of request 0 (the swing
+  never starts: the table's last row, the "no motion" row that leads to itself, answers it) while
+  the stick's request has rows, rows 8 and 9 the same bytes but the trail colours (where the light
+  sword exists; elsewhere Red not offered and kind 9 untouched), objLayout's weapons (sticks placed,
+  the net never, the light sword placed on the four discs that have it), no other kind moved;
+  nothing starts the game; 77 without the image (`weapon_kinds_disc` for `ICO_DISC_IMAGE`,
+  `weapon_kinds_disc_<disc>` for each other image set).
 - `env_bits_test.c`: where each disc's wall-reach read in `act-env.c` takes its two bits of a motion record (a shift of 6 on every disc, the host layout), every `config/motion_bits.*.txt` row naming the field at bit 24 for two bits, and a synthetic word read through the shift (the June 2001 demo once read the item-mode bits) (`env_bits`).
 - `keep_flags_test.c`: the twenty words a load's keep and restore walk reads on each disc, exactly as that disc's objects have them (issue 160's new-game flag), with the key-config slots as at start and after a Button configuration visit; one argument selects the disc (`keep_flags`, `keep_flags_<disc>`).
 - `eye_trail_test.c`: the shadows' eye trails rebuilt from their world points
@@ -341,8 +352,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   rows whole, aggression's battle type on every row, never past a table: the June 2001 demo's 18
   rows, never mapped by index), the restart life's playthrough index (a copy of
   `getEnemyRestartLife`'s: 38 with American or Not tougher later) and `test_offered` (American is
-  not offered on `jun26`: the config, the setter and both step directions); one run per disc (`variants`, `variants_jpn`, `variants_kor`,
-  `variants_<slug>`).
+  not offered on `jun26`: the config, the setter and both step directions; Light sword colour Red
+  offered on pal, jpn, kor and cn only) and `test_weapons` (the kinds `ico_variant_weapon_kind` and
+  `ico_variant_weapon_put_kind` give: Red 9 to 8 and 8 back to 9 where offered, the net's kind 6 on
+  `jun26` and 7 elsewhere for the stick, every other kind untouched, the words, the step, a reload);
+  one run per disc (`variants`, `variants_jpn`, `variants_kor`, `variants_<slug>`).
 - `hand_ik_test.c`: the hand records as `ACTGame_ConnectHand` sets them through the real
   `handManager.c`: every target finite, a NaN into `GetTableArcCos` giving 0 and a counted fault
   (`hand_ik`).

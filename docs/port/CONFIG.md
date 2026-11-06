@@ -243,10 +243,10 @@ original game's behaviour (`port/game/options.h`, header comment).
 ### [variants]
 
 Options > Gameplay: No hints on the page, Shadow toughness and aggression on Gameplay > Shadows, the combat
-rows (the three new ones, One hit per swing, Shadows never dodge and Queen barrier) on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
+rows (the three new ones, One hit per swing, Shadows never dodge, Queen barrier and the two weapon rows) on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
 [OPTIONS.md](../OPTIONS.md#gameplay)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
-the game as the disc ships it. All twelve are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
+the game as the disc ships it. All fourteen are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
 `port/platform/sim_keys.c`). A word
 or number that is no value reads as the default and is logged once.
 
@@ -263,6 +263,8 @@ or number that is no value reads as the default and is logged once.
 | `auto_guard` | bool | `true` | Ico blocks a Shadow's attack from the front; `false` = he does not (does not suspend achievements) |
 | `attack_turn` | bool | `true` | Ico's swing turns him toward the nearest Shadow; `false` = he swings straight ahead (does not suspend achievements) |
 | `shadows_wait_down` | bool | `true` | the Shadows hold back while Ico is knocked down; `false` = they do not (does not suspend achievements) |
+| `sword_colour` | string | `"original"` | `"original"` or `"red"`: the light sword (weapon kind 9) is made as its red twin, kind 8, from the next room; offered on pal, jpn, kor and cn only (the other tables have no kinds 8 and 9: `"red"` reads as `"original"` there, logged once); does not suspend achievements |
+| `weapon` | string | `"original"` | `"original"` or `"net"`: the stick (kind 1) is made as the insect net (kind 7, 6 on jun26), from the next room: held, never swung, never lit, power 0; does not suspend achievements |
 | `peaceful_shadows` | bool | `false` | a Shadow is started without its brain thread (the game's `BrainOnOff` switch, for Shadows only; Yorda's brain is untouched); suspends achievements |
 
 The Debug menu row (Options > Developer, with Developer mode on) has no key: its press marks the Debug menu used until the options are reloaded,

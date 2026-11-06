@@ -825,6 +825,13 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Shadows wait while Ico is down",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
         "Off: the Shadows no longer hold back while Ico is knocked down, so they can hit him again before he is up. Achievements stay on.",
+    [UI_STR_OPT_VAR_SWORD_COLOUR] = "Light sword colour",
+    [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
+        "Red: the light sword leaves a red trail, as its unused twin in the game does; nothing else changes. From the next room.",
+    [UI_STR_OPT_VAR_WEAPON] = "Stick",
+    [UI_STR_VAL_VAR_INSECT_NET] = "Insect net",
+    [UI_STR_OPT_VAR_WEAPON_NOTE] =
+        "Insect net: each stick is the game’s unused insect net; it cannot be swung or lit and never hurts a Shadow. From the next room.",
     [UI_STR_VAL_VAR_THIRD_JOURNEY] = "Third journey",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
         "Shadows as tough as on a third playthrough, which the game never reaches (twice the first journey’s). Achievements stay on.",

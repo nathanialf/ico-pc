@@ -632,6 +632,12 @@ static void initializeQueenzSword(GObj *g, int index, SObjSimpleSetting *lay)
 
 typedef float WeaponVec[4] __attribute__((aligned(8))); /* derived name */
 
+/* PC port: port/game/variants.h: Light sword colour Red (the light sword's
+   kind 9 made as its red twin, kind 8) and Stick Insect net (the stick's kind
+   1 made as the insect net, 7, or 6 on the June 2001 demo); the layout's kind
+   unchanged otherwise.  Each disc's InitWeaponGeo reads it. */
+extern int ico_variant_weapon_kind(int kind);
+
 static void *InitWeaponGeo_ntsc(GObj *g, SObjSimpleSetting *lay)
 {
     WeaponWork *w = iosMallocDebug(ios_partition_sugipon, sizeof(WeaponWork), __FILE__, 772);
@@ -640,7 +646,7 @@ static void *InitWeaponGeo_ntsc(GObj *g, SObjSimpleSetting *lay)
     GOBJ_SUB(g)->work = w;
 
     *w = swordWorkTemplate;
-    w->kind = lay->obj & 0xFF;
+    w->kind = ico_variant_weapon_kind(lay->obj & 0xFF);
 
     for (i = 0; i < GOBJ_SUB(g)->nodeNum; i++) {
         switch (w->kind) {
@@ -688,7 +694,7 @@ static void *InitWeaponGeo_jun26(GObj *g, SObjSimpleSetting *lay)
     int i;
 
     *w = swordWorkTemplate;
-    w->kind = lay->obj & 0xFF;
+    w->kind = ico_variant_weapon_kind(lay->obj & 0xFF);
 
     for (i = 0; i < GOBJ_SUB(g)->nodeNum; i++) {
         switch (w->kind) {
@@ -765,7 +771,7 @@ static void *InitWeaponGeo_aug6(GObj *g, SObjSimpleSetting *lay)
     GOBJ_SUB(g)->work = w;
 
     *w = swordWorkTemplate;
-    w->kind = lay->obj & 0xFF;
+    w->kind = ico_variant_weapon_kind(lay->obj & 0xFF);
 
     for (i = 0; i < GOBJ_SUB(g)->nodeNum; i++) {
         switch (w->kind) {
@@ -824,7 +830,7 @@ void *InitWeaponGeo(GObj *g, SObjSimpleSetting *lay)
     GOBJ_SUB(g)->work = w;
 
     *w = swordWorkTemplate;
-    w->kind = lay->obj & 0xFF;
+    w->kind = ico_variant_weapon_kind(lay->obj & 0xFF);
 
     for (i = 0; i < GOBJ_SUB(g)->nodeNum; i++) {
         switch (w->kind) {

@@ -529,6 +529,11 @@ static void test_first_run(void)
     CHECK(text != NULL && strstr(text, "auto_guard = true") != NULL &&
           strstr(text, "attack_turn = true") != NULL &&
           strstr(text, "shadows_wait_down = true") != NULL);
+    /* the weapon rows: Original, the game as shipped */
+    CHECK_STR(ico_config_get_string("variants.sword_colour", "?"), "original");
+    CHECK_STR(ico_config_get_string("variants.weapon", "?"), "original");
+    CHECK(text != NULL && strstr(text, "sword_colour = \"original\"") != NULL &&
+          strstr(text, "weapon = \"original\"") != NULL);
     CHECK(text != NULL && strstr(text, "\n[variants]\n") != NULL &&
           strstr(text, "shade_toughness = \"original\"") != NULL &&
           strstr(text, "aggression = \"own\"") != NULL && strstr(text, "\nbarrier_hits") == NULL);

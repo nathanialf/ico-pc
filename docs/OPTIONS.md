@@ -573,7 +573,7 @@ on the [Combat](#combat) page.
 Options > Gameplay > Combat. The first three rows start **On**, which is the
 game as it shipped; turning one Off makes a fight harder, and none of them
 switches achievements off. The next four are the fight rules that were on the
-Shadows page.
+Shadows page. The last two change Ico's weapons and start at **Original**.
 
 - **Automatic guard:** in the game Ico blocks a Shadow's attack by himself
   when it comes from the front. Off: Ico does not block a Shadow's attack
@@ -600,6 +600,19 @@ Shadows page.
 - **Queen barrier:** how many hits it takes to break the Queen's barrier,
   5 or 7. Your disc's own number is shown until you choose. Achievements stay
   on.
+- **Light sword colour:** Original or Red. The light sword of a finished game
+  leaves a pale trail when it swings; the game also has a red twin of it that
+  is never handed out. Red gives you that one: the same sword, as strong and
+  as long, with a red trail. Only the colour changes. It takes effect from
+  the next room. The row is on the European, Japanese, Korean and Asian
+  discs; the North American disc and the 2001 previews have no light sword.
+  Achievements stay on.
+- **Stick:** Original or Insect net. Insect net turns every stick into an
+  insect net the makers left in the game unused, drawn as fine grey lines.
+  Ico picks it up and carries it like the stick, but he cannot swing it, it
+  cannot be set alight at a torch, and it never hurts a Shadow. Where the
+  game asks for a burning stick, turn the row back to Original: the sticks
+  return from the next room. On every disc. Achievements stay on.
 
 ### Cutscenes
 

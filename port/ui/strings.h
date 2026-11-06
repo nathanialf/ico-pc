@@ -988,6 +988,14 @@ typedef enum UiStrId {
     UI_STR_OPT_VAR_ATTACK_TURN_NOTE,
     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN,
     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE,
+    /* Gameplay > Combat's weapon rows (port/game/variants.h): Light sword
+       colour (Original or Red, UI_STR_VAL_ORIGINAL and UI_STR_COLOUR_RED) and
+       Stick (Original or Insect net) with their notes */
+    UI_STR_OPT_VAR_SWORD_COLOUR,
+    UI_STR_OPT_VAR_SWORD_COLOUR_NOTE,
+    UI_STR_OPT_VAR_WEAPON,
+    UI_STR_OPT_VAR_WEAPON_NOTE,
+    UI_STR_VAL_VAR_INSECT_NET,
     /* Gameplay > Shadows (v0.10.5): Shadow toughness's fourth value and the note
        it shows, and Peaceful shadows with its note */
     UI_STR_VAL_VAR_THIRD_JOURNEY,

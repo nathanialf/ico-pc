@@ -159,14 +159,28 @@ static void testBuild(void)
     static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
                                      UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_PEACEFUL,
                                      UI_STR_BACK};
-    static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,        UI_OPT_VAR_ATTACK_TURN,
-                                     UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_OPT_VAR_ONE_HIT,
-                                     UI_OPT_VAR_NEVER_DODGE,       UI_OPT_SHADOWS_TOGETHER,
-                                     UI_OPT_VAR_BARRIER,           UI_OPT_BACK};
-    static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD,        UI_STR_OPT_VAR_ATTACK_TURN,
-                                     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_OPT_VAR_ONE_HIT,
-                                     UI_STR_OPT_VAR_NEVER_DODGE,       UI_STR_OPT_SHADOWS_TOGETHER,
-                                     UI_STR_OPT_VAR_BARRIER,           UI_STR_BACK};
+    /* the two weapon rows after Queen barrier (Light sword colour is built on
+       every disc and hidden where there is no light sword) */
+    static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,
+                                     UI_OPT_VAR_ATTACK_TURN,
+                                     UI_OPT_VAR_SHADOWS_WAIT_DOWN,
+                                     UI_OPT_VAR_ONE_HIT,
+                                     UI_OPT_VAR_NEVER_DODGE,
+                                     UI_OPT_SHADOWS_TOGETHER,
+                                     UI_OPT_VAR_BARRIER,
+                                     UI_OPT_VAR_SWORD_COLOUR,
+                                     UI_OPT_VAR_WEAPON,
+                                     UI_OPT_BACK};
+    static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD,
+                                     UI_STR_OPT_VAR_ATTACK_TURN,
+                                     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN,
+                                     UI_STR_OPT_VAR_ONE_HIT,
+                                     UI_STR_OPT_VAR_NEVER_DODGE,
+                                     UI_STR_OPT_SHADOWS_TOGETHER,
+                                     UI_STR_OPT_VAR_BARRIER,
+                                     UI_STR_OPT_VAR_SWORD_COLOUR,
+                                     UI_STR_OPT_VAR_WEAPON,
+                                     UI_STR_BACK};
     static const int cutOpts[] = {UI_OPT_SKIP_OPENING, UI_OPT_VAR_NO_LOOK, UI_OPT_VAR_IGNORE_CAMS,
                                   UI_OPT_BACK};
     static const int cutStrs[] = {UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_VAR_NO_LOOK,
@@ -239,7 +253,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 5), "Gameplay > Yorda rows");
     CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 5), "Gameplay > Shadows rows");
-    CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 8), "Gameplay > Combat rows");
+    CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 10), "Gameplay > Combat rows");
     CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
     {
         /* Yorda, Shadows, Combat and Cutscenes open their pages, right before

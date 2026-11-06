@@ -852,6 +852,13 @@ const char *const
                 [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Les ombres attendent qu’Ico se relève",
                 [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
                     "Désactivé : les ombres ne se retiennent plus quand Ico est à terre et peuvent le frapper avant qu’il soit debout. Les succès restent actifs.",
+                [UI_STR_OPT_VAR_SWORD_COLOUR] = "Couleur de l’épée de lumière",
+                [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
+                    "Rouge : l’épée de lumière laisse la traînée rouge de sa jumelle inutilisée ; seule la couleur change. Dès la salle suivante.",
+                [UI_STR_OPT_VAR_WEAPON] = "Bâton",
+                [UI_STR_VAL_VAR_INSECT_NET] = "Filet à insectes",
+                [UI_STR_OPT_VAR_WEAPON_NOTE] =
+                    "Filet : chaque bâton est le filet à insectes inutilisé, qui ne se brandit ni ne s’allume et ne blesse pas. Dès la salle suivante.",
                 [UI_STR_VAL_VAR_THIRD_JOURNEY] = "Troisième voyage",
                 [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
                     "Ombres aussi résistantes qu’à une troisième partie, que le jeu n’atteint jamais (le double du premier voyage). Les succès restent actifs.",
