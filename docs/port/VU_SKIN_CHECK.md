@@ -8,10 +8,11 @@ It is designed not to change the picture (`rd_vu_skin_check_ab` replays the dump
 every skinned command and compares the pictures byte for byte). Off on every other device: issue
 179's Mali-G52 is GPU-bound, and the check's GPU work is not spent there.
 
-On Turnip (Mesa's driver on an Adreno, issue 123's and 163's reporters) the check also twins EVERY
-skinned draw inside its own pass (the twins, [What it checks](#what-it-checks)), probes one command a present instead of
-one every 100 ms, aims that probe at a command whose twins differed, and captures its first failure
-of the run by itself (the capture, same section).
+On every Adreno with a window (Qualcomm's own driver and Turnip, Mesa's driver, issue 123's and
+163's reporters) the check also twins EVERY skinned draw inside its own pass (the twins, [What it
+checks](#what-it-checks)), aims its probe at a command whose twins differed, and captures its first
+failure of the run by itself (the capture, same section); on Turnip it also probes one command a
+present instead of one every 100 ms.
 
 Why it exists: issue 163's streak on Mesa's Turnip driver on an Adreno 740 was one draw of Yorda's
 mesh in which every vertex weighting bone address 200 was placed as if that bone's matrix (VuBoneCB
@@ -119,8 +120,8 @@ non-finite / dropped: N of them (a non-finite matrix at A drops K)`, A being the
 whose NaN matrix, run on the CPU, drops the most of them (`rd__skin_reference_fill`); where no zero
 matrix explains the wrong vertices, that address is the one named.
 
-**The twins.** Where they run (`rd__vu_skin_twins_on`: Turnip, `rd__driver_is_turnip`, with the
-check on by default; `ICO_RD_VU_SKIN_CHECK=2` and the tool's and tests' mode 2 anywhere), every
+**The twins.** Where they run (`rd__vu_skin_twins_on`: an Adreno with a window, Qualcomm's driver
+and Turnip alike, the check's own default rule; `ICO_RD_VU_SKIN_CHECK=2` and the tool's and tests' mode 2 anywhere), every
 skinned draw of a replay (up to 128, `RD_SKIN_TWINS_MAX`) is drawn twice more right after itself,
 inside its own pass, nothing written, each inside an occlusion query (twin t's are queries 80 + 3 t
 and 80 + 3 t + 1; + 2 is kept for the ring read's twin of the next step; `RD_SKIN_QUERIES` = 464
@@ -230,9 +231,10 @@ At start, from `rd_vuprepass_selftest`:
 - `rd: VU skin probe: wrong at offset O (page phase P), code C, plain set: N vertices, address A read as zero (got (x, y, z) want (x, y, z)) in T ms`
   (or `..., no zero matrix explains them ...`; `not run (<why>)` when its pipelines or frame could
   not be made)
-- with the twins: `rd: VU skin check: on (every skinned draw twinned in its own pass through its own
-  pipeline (A the draw's bone offset, B the same bytes at a fresh offset; counted by occlusion query,
-  precise | zero or not only); one probe a present, targeted after a twin event, ...; the first
+- with the twins (an Adreno with a window, mode 2): `rd: VU skin check: on (every skinned draw
+  twinned in its own pass through its own pipeline (A the draw's bone offset, B the same bytes at a
+  fresh offset; counted by occlusion query, precise | zero or not only); one probe a present (Turnip)
+  | every 100 ms (elsewhere), targeted after a twin event, ...; the first
   failure captured (a sidecar and a frame dump); WHY)`
 - `rd: VU skin check: on (one skinned draw every 100 ms, in turn, ...; variants: a fresh ring offset, uniform robustness off (VK_EXT_pipeline_robustness) | not offered | not needed (robust access off); the box check by occlusion query | not offered; WHY)`, WHY saying why it is on: `on by default on an Adreno with a window (Qualcomm's driver|Turnip); [dev] vu_skin_check = false turns it off`, or `[dev] vu_skin_check = true (ICO_RD_VU_SKIN_CHECK=1)`
 - `rd: VU skin check: off (the start-up probe failed: the device was lost in it | its picture could not be read back)`, then `window: VU skin check: the start-up probe failed on this device (...); [dev] vu_skin_check = false is written to <config> ...`; at the next start after an end inside the probe `window: VU skin check: the previous run ended inside its start-up probe (<note>); ...`

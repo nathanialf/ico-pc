@@ -119,15 +119,16 @@ question it decides:
   are not visible to an app, so a compositor holding images shows as the image wait (the replays
   line's `acquire`) with `in use` at 0 or 1, not here.
 
-## Issues 123 and 163's lines: the skin check on Turnip
+## Issues 123 and 163's lines: the skin check on an Adreno
 
-On Turnip the skinned draws' check ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) watches every skinned draw
+On an Adreno (Qualcomm's own driver and Turnip alike) the skinned draws' check
+([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) watches every skinned draw
 of every picture and captures its first failure by itself; nothing is asked of the player. The
 lines and what each decides:
 
 - **The start line** (`rd: VU skin check: on (every skinned draw twinned in its own pass through
-  its own pipeline ...`): the twins run. On another Adreno (Qualcomm's own driver) the line keeps
-  `one skinned draw every 100 ms`.
+  its own pipeline ...; one probe a present` on Turnip, `one probe every 100 ms` on Qualcomm's own
+  driver): the twins run; the probe's interval is the only difference between the two drivers.
 - **The 10 s block** (`rd: VU skin check: P checks, W wrong, ...; T twins, D differ (first at frame
   F), N not drawn ...`): T near the skinned draws of the block's pictures (up to 128 a picture) says
   every draw was watched; D 0 over a run in which the player saw Yorda flicker says the fault is not

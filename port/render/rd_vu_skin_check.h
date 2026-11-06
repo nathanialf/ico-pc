@@ -206,9 +206,11 @@ void rd__vu_skin_pick(const RdFrame *f, const RdCmd *c, const RdMeshRec *m);
  * where the twins are on: rd__vu_skin_twins_on) */
 extern bool g_rdSkinArm;
 extern bool g_rdSkinTwin;
-/* whether the twins run: on Turnip (rd__driver_is_turnip) where the check
- * runs by default, under ICO_RD_VU_SKIN_CHECK=2 (and the tool's and the
- * tests' mode 2) anywhere; rd__vu_skin_twins_set (the tests) over it */
+/* whether the twins run: on an Adreno with a window (Qualcomm's driver and
+ * Turnip, the check's default rule) wherever the check runs, under
+ * ICO_RD_VU_SKIN_CHECK=2 (and the tool's and the tests' mode 2) anywhere;
+ * rd__vu_skin_twins_set (the tests) over it.  The probe's interval stays
+ * 0 (one a present) on Turnip alone, 100 ms elsewhere */
 bool rd__vu_skin_twins_on(void);
 /* the tests' switch: 1 the twins on, 0 off, -1 back to the rule */
 void rd__vu_skin_twins_set(int on);

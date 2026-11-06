@@ -413,12 +413,13 @@ bool rd__vu_skin_selftest(void)
     if (rd__vu_skin_twins_on()) {
         rd__log("VU skin check: on (every skinned draw twinned in its own pass through its own "
                 "pipeline (A the draw's bone offset, B the same bytes at a fresh offset; counted "
-                "by occlusion query%s); one probe a present, targeted after a twin event, "
+                "by occlusion query%s); one probe %s, targeted after a twin event, "
                 "drawn again after the picture and compared with the CPU, its bone block's "
                 "bytes with the GPU's copy; variants: a fresh ring offset, uniform robustness "
                 "off %s; the box check %s; the first failure captured (a sidecar and a frame "
                 "dump); %s)",
                 lim->occlusionPrecise ? ", precise" : ", zero or not only",
+                rd__driver_is_turnip(lim) ? "a present" : "every 100 ms",
                 lim->uniformRobustOff ? "(VK_EXT_pipeline_robustness)"
                 : lim->robustText && strncmp(lim->robustText, "on", 2) == 0
                     ? "not offered (no VK_EXT_pipeline_robustness)"

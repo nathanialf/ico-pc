@@ -48,7 +48,8 @@
  * The twins (issue 123: the probe above is one draw now and then, drawn
  * after the picture through a pipeline of its own, and saw nothing in a
  * run whose pictures lost Yorda's shin): where they are on
- * (rd__vu_skin_twins_on: Turnip by default, mode 2 anywhere), EVERY
+ * (rd__vu_skin_twins_on: an Adreno with a window by default, Qualcomm's
+ * driver and Turnip alike; mode 2 anywhere), EVERY
  * skinned draw of the replay (up to RD_SKIN_TWINS_MAX) is drawn twice more
  * right after itself, inside its own pass, with nothing written, each in
  * an occlusion query: A with the draw's own bone offset, B with the same
@@ -184,7 +185,9 @@ bool rd__vu_skin_twins_on(void)
     if (s_twinSet >= 0) {
         return s_twinSet == 1;
     }
-    return m == 2 || onTurnip();
+    /* the probe check's own default rule: an Adreno (Qualcomm's driver or
+     * Turnip) with a window (rd__skin_check_default) */
+    return m == 2 || (g_rd.windowed && rd__profile_adreno());
 }
 
 uint32_t rd__vu_skin_queries(void)
