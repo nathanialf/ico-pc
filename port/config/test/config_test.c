@@ -366,7 +366,14 @@ static void test_precedence(void)
     CHECK(ico_config_get_float("audio.volume", 1.0) == 0.5); /* no ini key for it */
     CHECK_STR(ico_config_get_string("paths.iso", "x"), "from-toml.iso");
     CHECK(ico_config_get_int("dev.dump_every", 0) == 0); /* default */
-    CHECK(ico_config_get_bool("dev.trace", 1) == 1);     /* default */
+    /* [dev] slow_scene_dump_ms (window_host.c slow_scene_check): 40 unset,
+       the value from the toml, 0 kept as 0 (off) */
+    CHECK(ico_config_get_float("dev.slow_scene_dump_ms", 40.0) == 40.0);
+    ico_config_set_float("dev.slow_scene_dump_ms", 55.5);
+    CHECK(ico_config_get_float("dev.slow_scene_dump_ms", 40.0) == 55.5);
+    ico_config_set_float("dev.slow_scene_dump_ms", 0.0);
+    CHECK(ico_config_get_float("dev.slow_scene_dump_ms", 40.0) == 0.0);
+    CHECK(ico_config_get_bool("dev.trace", 1) == 1); /* default */
     /* a set value is written to the toml layer; the ini still overrides it */
     ico_config_set_int("dev.ticks", 77);
     CHECK(ico_config_get_int("dev.ticks", -1) == 5);
