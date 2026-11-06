@@ -866,7 +866,8 @@ add_executable(weapon_draw_test test/weapon_draw_test.c
     "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
 target_include_directories(weapon_draw_test PRIVATE ${_ico_sugipon_incs}
                            "${CMAKE_SOURCE_DIR}/port/shaders" "${CMAKE_SOURCE_DIR}/port/math"
-                           "${CMAKE_SOURCE_DIR}/port/rhi" "${CMAKE_SOURCE_DIR}/port/platform")
+                           "${CMAKE_SOURCE_DIR}/port/rhi" "${CMAKE_SOURCE_DIR}/port/platform"
+                           "${CMAKE_SOURCE_DIR}/port/include")
 target_compile_definitions(weapon_draw_test PRIVATE ICO_HOST=1 ICO_RD=1)
 target_compile_options(weapon_draw_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                        ${ICO_GAME_WARNINGS})
