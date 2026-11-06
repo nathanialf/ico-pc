@@ -305,7 +305,19 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_vu_skin_check_probe`; under robust access c2 right too, the pipeline robustness chain read
   back, `rd_vu_skin_check_probe_robust`); with `=200,ring`
   wrong at 200, the GPU's copy and the CPU's re-read `differs at qwords 184..187`, `reads as: H2, a
-  port race` (`rd_vu_skin_check_ring`); no validation error.
+  port race` (`rd_vu_skin_check_ring`); no validation error. `twin` (issue 123): the same frame
+  under the game's mode with the twins on (`rd__vu_skin_twins_set`), the scheduled probe off
+  (`ICO_RD_VU_SKIN_INTERVAL_MS=off`) and `ICO_RD_VU_SKIN_SABOTAGE=200,ring`, replayed three times
+  through `rd__vu_skin_check_replays`: the first replay's twins differ with nothing probed (`twins
+  differ: ... the probe of this command: not probed`), the next replay's probe, targeted at that
+  command, wrong at address 200 (`the probe targeted after a twin event`), the twins' end line
+  (`rd_vu_skin_check_twin`); the same with `=200,nan`, the probe's wrong vertices dropped and
+  address 200 named by its non-finite matrix (`reads as non-finite / dropped`,
+  `rd_vu_skin_check_twin_nan`); `capture FOLDER`: the twin run with the sidecar written to FOLDER,
+  the capture asked once (`rd_vu_skin_capture_due`), the sidecar's header (magic, version, the
+  command, the flags: the check's data, the twins' counts, wrong, differ, targeted; A != B) and
+  sections read back, the CPU's bytes the bones and the GPU's copy differing at qwords 184..187
+  alone (`rd_vu_skin_check_capture`).
 - `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
   paths, `*` globs, a missing dump named and skipped, none at all `SKIP`) replayed by
   `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
@@ -421,7 +433,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_vu_skin_check_163_probe`), with `=200,ring` the bytes differing as the GPU copied them and as
   the CPU reads them and `reads as: H2, a port race` (`rd_vu_skin_check_163_ring`), and the deep
   dive's patched copy (its lanes on 200 moved to a zero bone) checked right, the CPU and the GPU
-  reading the same stream (`rd_vu_skin_check_163_patched`). SKIP without the dump or a device.
+  reading the same stream (`rd_vu_skin_check_163_patched`); on issue 123's blended dump
+  `frame-20261106-080033-v3910-blended` (copied to the same folder) clean with every twin equal (`rd_vu_skin_check_123`) and with
+  `=200,nan` wrong at address 200, H2, the twins differing and the wrong vertices dropped
+  (`rd_vu_skin_check_123_nan`). The summary line ends `twins: T read, D differ (O through the
+  draw's own pipeline); V wrong vertices dropped (non-finite)`. SKIP without the dump or a device.
 - `rd_vu_skin_check_ab.cmake`: the skin check is designed not to change the picture
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)); `rd_replay_tool --pass-dump` with it off
   (`ICO_RD_VU_SKIN_CHECK=0`) and on for every skinned command of every replay (`=2`: the probes,
@@ -431,7 +447,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`ICO_RD_BLEND=attachment`, `ICO_RD_UBER=on`, the interlock faked off; the on run must say `GS
   state as shader data: on`) and at Enhanced 4:3 2x with MSAA 4: every PNG byte for byte, each on
   run's `VU skin check: at the end of the run: N checks drawn` with N at least 1, at least one box
-  check drawn over all (`rd_vu_skin_check_ab`). SKIP without the dumps or a device.
+  check drawn over all, the twins drawn in every on run (`VU skin check: twins at the end of the
+  run: T drawn (O through the draw's own pipeline with its attachment read)`) and O above 0 over the
+  attach runs: the twins through the draws' own pipelines with the write mask cleared leave every
+  picture byte for byte; also on issue 123's blended dump (`rd_vu_skin_check_ab`). SKIP
+  without the dumps or a device.
 - `rd_region_stats.cmake`: `rd_replay_tool --region-stats`
   ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#region-statistics)) on the first two dumps of
   `tools/occlusion_corpus.txt` that are here, each at Original 4:3 1x and Enhanced 4:3 2x with a

@@ -1,7 +1,7 @@
 /* rd_vu_skin_check_test.c: the skinned draws' bone-block check (issue 163;
  * rd_vu_skin_check.h, docs/port/VU_SKIN_CHECK.md).
  *
- *   rd_vu_skin_check_test <judge|clean|probe|ring>
+ *   rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture> [folder]
  *
  * judge (no device): the judgement alone (rd_vu_skin_judge.c) on a skinned
  *   case of 60 bones and 120 vertices through vu1_ref:
@@ -34,6 +34,23 @@
  *      they were kept), wrong, address 200, the GPU's copy and the CPU's
  *      re-read differing: "H2, a port race";
  *   9. no validation error.
+ * twin|capture (a device; issue 123): the same frame under the game's
+ *   mode (1) with the twins on (rd__vu_skin_twins_set) and the scheduled
+ *   probe off (ICO_RD_VU_SKIN_INTERVAL_MS=off: the targeted probe alone),
+ *   ICO_RD_VU_SKIN_SABOTAGE=200,ring (or 200,nan) in the environment,
+ *   replayed three times, each harvested at once
+ *   (rd__vu_skin_check_replays):
+ *   11. the first replay's twins differ (A read the sabotaged bone, B the
+ *      kept bytes at a fresh offset), no check drawn there;
+ *   12. the next replay's probe targeted at that command, wrong, address
+ *      200 named (zero: by the zero matrix; nan: dropped, by the
+ *      non-finite matrix);
+ *   capture, with folder: 13. the capture asked once
+ *      (rd_vu_skin_capture_due), its sidecar under folder: the header's
+ *      magic, version, command, the flags (the check's data, the twins'
+ *      counts, the twins differed, the check targeted), A != B, the CPU's
+ *      bytes and the GPU's copy differing at bone 200 (qwords 184..187)
+ *      and nowhere else.
  * The log lines are matched by test/rd_vu_skin_check.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -386,7 +403,55 @@ static bool buildFrame(RdFrame *f, RdMesh mesh)
     return true;
 }
 
-static int deviceTests(const char *mode)
+/* 13.: the sidecar's header and sections (path from
+ * rd_vu_skin_capture_due) */
+static void captureCheck(const char *path)
+{
+    FILE *fp = fopen(path, "rb");
+    CHECK(fp != NULL, "the sidecar %s cannot be read", path);
+    if (!fp) {
+        return;
+    }
+    static uint8_t buf[1u << 20];
+    const size_t n = fread(buf, 1, sizeof(buf), fp);
+    fclose(fp);
+    RdSkinCaptureHeader h;
+    CHECK(n >= sizeof(h), "the sidecar is %zu bytes", n);
+    if (n < sizeof(h)) {
+        return;
+    }
+    memcpy(&h, buf, sizeof(h));
+    printf("  13. %s: %zu bytes, frame %u command %u:%u mesh %s #%u, flags 0x%x, twins %llu / "
+           "%llu, %u wrong (%u dropped), address %u (non-finite %u); reads as: %s\n",
+           path, n, h.frame, h.list, h.index, h.mesh, h.meshId, h.flags,
+           (unsigned long long)h.twinA, (unsigned long long)h.twinB, h.wrong, h.dropped, h.addr,
+           h.nanAddr, h.reads);
+    CHECK(memcmp(h.magic, RD_SKIN_CAPTURE_MAGIC, 8) == 0 && h.version == RD_SKIN_CAPTURE_VERSION &&
+              h.headerBytes == sizeof(h),
+          "the header's magic, version or size");
+    CHECK((h.flags & 0x3Bu) == 0x3Bu,
+          "flags 0x%x: the check's data, the twins' counts, wrong, "
+          "the twins differed, targeted expected",
+          h.flags);
+    CHECK(h.twinA != h.twinB && h.twinA != UINT64_MAX && h.twinB != UINT64_MAX, "twins %llu / %llu",
+          (unsigned long long)h.twinA, (unsigned long long)h.twinB);
+    CHECK(h.list == 0 && h.probeVertices == NV && h.cpuBytes == 3840u && h.gpuBytes == 3840u &&
+              h.memBytes == 36u * 16u && h.streamBytes == NV * 80u && h.rowsBytes > 0,
+          "list %u, %u vertices, sections cpu %u gpu %u mem %u stream %u rows %u", h.list,
+          h.probeVertices, h.cpuBytes, h.gpuBytes, h.memBytes, h.streamBytes, h.rowsBytes);
+    CHECK((uint64_t)h.rowsOff + h.rowsBytes <= n && (uint64_t)h.cpuOff + 3840u <= n &&
+              (uint64_t)h.gpuOff + 3840u <= n,
+          "a section past the file's end");
+    if ((uint64_t)h.cpuOff + 3840u <= n && (uint64_t)h.gpuOff + 3840u <= n) {
+        uint32_t q0 = 0, q1 = 0;
+        const bool d = rd__skin_bytes_differ(buf + h.cpuOff, buf + h.gpuOff, 3840u, &q0, &q1);
+        CHECK(d && q0 == 184u && q1 == 187u, "the CPU's bytes and the GPU's copy differ at %u..%u",
+              q0, q1);
+        CHECK(memcmp(buf + h.cpuOff, s_bones, 3840u) == 0, "the CPU's bytes are not the bones");
+    }
+}
+
+static int deviceTests(const char *mode, const char *folder)
 {
     RdSettings st;
     memset(&st, 0, sizeof(st));
@@ -401,6 +466,13 @@ static int deviceTests(const char *mode)
     }
     rd__set_not_implemented_fatal(true);
     rd__vu_skin_check_set(1);
+    const bool twins = strcmp(mode, "twin") == 0 || strcmp(mode, "capture") == 0;
+    if (twins) {
+        rd__vu_skin_twins_set(1);
+        if (folder) {
+            rd_set_vu_skin_capture_dir(folder);
+        }
+    }
     block(s_mem);
     bones(s_bones);
     stream(s_stream);
@@ -410,7 +482,35 @@ static int deviceTests(const char *mode)
     RdMesh mesh = makeMesh();
     static RdFrame f;
     CHECK(mesh.id != 0, "the mesh");
-    if (mesh.id && buildFrame(&f, mesh)) {
+    if (mesh.id && twins && buildFrame(&f, mesh)) {
+        /* 11., 12. */
+        const char *sab = getenv("ICO_RD_VU_SKIN_SABOTAGE");
+        const bool nan = sab && strstr(sab, "nan");
+        RdSkinSummary s1, s2;
+        const int rc1 = rd__vu_skin_check_replays(&f, 0, 1, &s1);
+        printf("  11. %s, the first replay: %u twins, %u differ (%u through the draw's own "
+               "pipeline), %u checks\n",
+               mode, s1.twins, s1.twinsDiffer, s1.twinsOwn, s1.checks);
+        CHECK(rc1 >= 0 && s1.twins == 1 && s1.twinsDiffer == 1 && s1.checks == 0,
+              "rc %d, %u twins, %u differ, %u checks", rc1, s1.twins, s1.twinsDiffer, s1.checks);
+        const int rc2 = rd__vu_skin_check_replays(&f, 0, 2, &s2);
+        printf("  12. %s, the next replays: %u checks, %u targeted, %u of them wrong, address %u, "
+               "%u dropped; reads as: %s\n",
+               mode, s2.checks, s2.targeted, s2.targetedWrong, s2.lastAddr, s2.dropped,
+               s2.decision[0] ? s2.decision : "-");
+        CHECK(rc2 >= 0 && s2.targeted >= 1 && s2.targetedWrong >= 1 && s2.lastAddr == 200,
+              "rc %d, %u targeted, %u wrong, address %u", rc2, s2.targeted, s2.targetedWrong,
+              s2.lastAddr);
+        CHECK(!nan || s2.dropped > 0, "a NaN bone: no wrong vertex dropped");
+        char path[1200];
+        const bool due = rd_vu_skin_capture_due(path, sizeof(path));
+        CHECK(due, "no capture asked");
+        if (due && folder) {
+            captureCheck(path);
+        }
+        CHECK(!rd_vu_skin_capture_due(path, sizeof(path)), "a second capture asked");
+        rd__frame_free(&f);
+    } else if (mesh.id && buildFrame(&f, mesh)) {
         RdSkinSummary s;
         const int rc = rd__vu_skin_check_frame(&f, 0, &s);
         printf("  8. %s: %u commands, %u checks, %u wrong (address %u), %u blocks differ, %u "
@@ -460,10 +560,11 @@ static int deviceTests(const char *mode)
 int main(int argc, char **argv)
 {
     if (argc < 2) {
-        printf("usage: rd_vu_skin_check_test <judge|clean|probe|ring>\n");
+        printf("usage: rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture> [folder]\n");
         return 2;
     }
-    const int rc = strcmp(argv[1], "judge") == 0 ? judgeTests() : deviceTests(argv[1]);
+    const int rc = strcmp(argv[1], "judge") == 0 ? judgeTests()
+                                                 : deviceTests(argv[1], argc > 2 ? argv[2] : NULL);
     if (rc == 77) {
         return 77;
     }

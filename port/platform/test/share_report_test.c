@@ -7,7 +7,8 @@
  * included, an .rddump left out), the newest presented picture, the newest
  * report zip of logs (not another file that starts with report-); a tie in
  * time goes to the greater name; missing folders and files are skipped;
- * the names line for the log.
+ * the names line for the log; the newest skin check capture of logs last
+ * (vu-skin-fail-*.bin, issue 123).
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -74,9 +75,13 @@ int main(int argc, char **argv)
     ico_mkdir(s_logs);
     ico_mkdir(s_dumps);
     /* a run before this one's files would change the answers */
-    static const char *const kOld[] = {"ico-pc.log", "ico-pc-previous.log",
-                                       "report-20261020-101010.zip", "report-20261021-101010.zip",
-                                       "report-notes.txt"};
+    static const char *const kOld[] = {"ico-pc.log",
+                                       "ico-pc-previous.log",
+                                       "report-20261020-101010.zip",
+                                       "report-20261021-101010.zip",
+                                       "report-notes.txt",
+                                       "vu-skin-fail-10-0-611.bin",
+                                       "vu-skin-fail-20-0-602.bin"};
     for (unsigned i = 0; i < sizeof(kOld) / sizeof(kOld[0]); i++) {
         char p[1200];
         snprintf(p, sizeof(p), "%s/%s", s_logs, kOld[i]);
@@ -144,6 +149,20 @@ int main(int argc, char **argv)
         expect(&r, want, 5, "a tie: the greater name (loss- after frame-)");
     }
 
+    /* the skin check's capture last, the newest of them */
+    put(s_logs, "vu-skin-fail-10-0-611.bin", 6000);
+    put(s_logs, "vu-skin-fail-20-0-602.bin", 5500);
+    {
+        static const char *const want[] = {"ico-pc.log",
+                                           "ico-pc-previous.log",
+                                           "loss-20261023-103000.zip",
+                                           "frame-20261023-110000-present.png",
+                                           "report-20261021-101010.zip",
+                                           "vu-skin-fail-10-0-611.bin"};
+        ico_share_report_collect(s_logs, s_dumps, &r);
+        expect(&r, want, 6, "with the skin check's capture");
+    }
+
     /* no logs folder: the dumps alone; no dumps folder: the logs alone */
     {
         static const char *const want[] = {"loss-20261023-103000.zip",
@@ -155,9 +174,10 @@ int main(int argc, char **argv)
         char missing[1100];
         snprintf(missing, sizeof(missing), "%s/no-such-folder", root);
         static const char *const want[] = {"ico-pc.log", "ico-pc-previous.log",
-                                           "report-20261021-101010.zip"};
+                                           "report-20261021-101010.zip",
+                                           "vu-skin-fail-10-0-611.bin"};
         ico_share_report_collect(s_logs, missing, &r);
-        expect(&r, want, 3, "a missing dumps folder");
+        expect(&r, want, 4, "a missing dumps folder");
     }
 
     /* a short names buffer is cut, never overrun */

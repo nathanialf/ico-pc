@@ -2497,6 +2497,7 @@ static void vkr_fill_limits(void)
     o->mesa = g_vkr.mesa;
     o->robustText = s_robustText[0] ? s_robustText : NULL;
     o->uniformRobustOff = g_vkr.pipeRobust;
+    o->occlusionPrecise = g_vkr.occPrecise;
     o->robustDefaultOff = s_robustDefaultOff;
     /* texture packs: the BC formats (vkr_create_device enabled the feature) */
     o->bcTextures = g_vkr.bc;

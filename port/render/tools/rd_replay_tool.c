@@ -2549,10 +2549,12 @@ int main(int argc, char **argv)
         printf("%s: skin check: %u skinned commands, %u checks, %u wrong (address %u), %u blocks "
                "whose bytes differed (%u changed after the draw), %u of %u box checks with "
                "samples outside; on the wrong ones c1 right %u, c2 right %u (c2 drawn in %u); "
-               "reads as: %s\n",
+               "reads as: %s; twins: %u read, %u differ (%u through the draw's own pipeline); "
+               "%u wrong vertices dropped (non-finite)\n",
                dump, sk.commands, sk.checks, sk.wrong, sk.lastAddr, sk.blocksDiffer,
                sk.rereadDiffer, sk.boxOutside, sk.boxChecks, sk.c1Right, sk.c2Right, sk.c2Run,
-               sk.decision[0] ? sk.decision : "every check right");
+               sk.decision[0] ? sk.decision : "every check right", sk.twins, sk.twinsDiffer,
+               sk.twinsOwn, sk.dropped);
     }
     if (replayed && saveBlended) {
         /* after the replay, as rd_present writes F12's (rd_interp.c

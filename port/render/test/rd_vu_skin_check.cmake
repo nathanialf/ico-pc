@@ -2,9 +2,15 @@
 # on a device, its log matched (rd_vu_skin_check.c, rd_vu_skin_selftest.c):
 # the start-up probe's "VU skin probe: ok (...)" line and the check's start
 # line once each, EXTRA a line the log must hold, NOT a line it must not.
-# -DTOOL=<rd_vu_skin_check_test> -DMODE=<judge|clean|probe|ring>
-# [-DEXTRA=<regex>] [-DNOT=<regex>]
-execute_process(COMMAND "${TOOL}" "${MODE}" RESULT_VARIABLE rc OUTPUT_VARIABLE out
+# -DTOOL=<rd_vu_skin_check_test> -DMODE=<judge|clean|probe|ring|twin|capture>
+# [-DARG=<a folder the test may write: capture's sidecar>] [-DEXTRA=<regex>] [-DNOT=<regex>]
+set(args "${MODE}")
+if(ARG)
+  file(REMOVE_RECURSE "${ARG}")
+  file(MAKE_DIRECTORY "${ARG}")
+  list(APPEND args "${ARG}")
+endif()
+execute_process(COMMAND "${TOOL}" ${args} RESULT_VARIABLE rc OUTPUT_VARIABLE out
                 ERROR_VARIABLE err)
 message(STATUS "${out}")
 if(rc EQUAL 77)
@@ -19,7 +25,7 @@ if(MODE STREQUAL "judge")
 endif()
 string(REPLACE ";" "," flat "${err}")
 foreach(_line "rd: VU skin probe: ok \\(120 vertices x 64 offsets in [0-9]+ page phases, codes 20 22 24, (plain|extended) set\\) in [0-9.]+ ms"
-              "rd: VU skin check: on \\(one skinned draw every 100 ms")
+              "rd: VU skin check: on \\((one skinned draw every 100 ms|every skinned draw twinned in its own pass through its own pipeline)")
   string(REGEX MATCHALL "${_line}" lines "${flat}")
   list(LENGTH lines n)
   if(NOT n EQUAL 1)

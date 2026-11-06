@@ -23,7 +23,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_submit_thread.c`, `rd_submit_thread.h`, `rd_submit_queue.c`, `rd_submit_queue.h` | the submit thread: a picture handed over has its list ended and submitted and its image presented there (Vulkan, Direct3D 12), the render thread free once its walk ends; its queue (pure) |
 | `port/render/rd_replay_vu.c`, `rd_replay.h` | the replay's VU draws and the vertex and triangle pre-passes; what they share with `rd_replay.c` (the replay's state, a draw's setup, its helpers) |
 | `port/render/rd_vuprepass_selftest.c` | the vertex and triangle pre-passes' start-up self-test |
-| `port/render/rd_vu_skin_check.h`, `rd_vu_skin_check.c`, `rd_vu_skin_judge.c`, `rd_vu_skin_selftest.c` | the skinned draws' bone-block check: a skinned draw probed beside the picture against the CPU, the box check, the start-up probe ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
+| `port/render/rd_vu_skin_check.h`, `rd_vu_skin_check.c`, `rd_vu_skin_judge.c`, `rd_vu_skin_selftest.c`, `rd_vu_skin_capture.c` | the skinned draws' bone-block check: a skinned draw probed beside the picture against the CPU, the twins of every skinned draw inside its pass (Turnip), the box check, the start-up probe, the capture on failure ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
 | `port/render/rd_pipeline.c` | pipeline keys from the state block, the pipeline cache, the reachable set |
 | `port/render/rd_dst_read.c` | the exact GS blend read from the destination in the fragment shader |

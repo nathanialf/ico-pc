@@ -527,8 +527,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `share_report_test.c`: an rc build's Share a bug report's files over a fake logs and dumps
   folder: the log, the run before's when there, the newest dump zip by modification time (a loss
   zip included, an `.rddump` left out), the newest `-present.png`, the newest `report-*.zip` (not
-  another `report-` file), a tie in time to the greater name, missing folders skipped, the names
-  line and a short buffer (`share_report`).
+  another `report-` file), the newest skin check capture `vu-skin-fail-*.bin` last, a tie in time
+  to the greater name, missing folders skipped, the names line and a short buffer (`share_report`).
 - `backup_test.c`: Options > Extras' backup and restore (`backup.h`) on a user folder of its own
   under the build folder: the names a backup may hold (no `..`, no absolute or drive path, no `\`,
   no empty part, the places only); a backup holding the card folders, `states/`, `config.toml` and

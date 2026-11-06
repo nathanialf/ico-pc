@@ -891,6 +891,16 @@ bool rd_vuprepass_selftest(void);
  * (startup_retry.h startup_retry_note_has_skin_probe), so a crash, a freeze
  * or the system's end there names it at the next start. */
 bool rd_vu_skin_probe_failed(char *why, size_t size);
+/* The skin check's capture on failure (issue 123; rd_vu_skin_check.h): the
+ * folder its sidecar is written to (the window's logs folder; NULL or ""
+ * none: no sidecar, the frame dump is still asked), kept until changed.
+ * rd_vu_skin_capture_due: true once a run, when the check has seen its
+ * first failure (twins whose counts differ, or a wrong check) and written
+ * its sidecar; path gets the sidecar's path ("" when none was written).
+ * The window then takes a frame dump for the next present (window_host.c
+ * frame_dump) and puts the sidecar in its zip.  Any thread (an atomic). */
+void rd_set_vu_skin_capture_dir(const char *dir);
+bool rd_vu_skin_capture_due(char *path, size_t size);
 /* The longest frame replay (CPU time of recording, pipeline creation,
  * submit and present) in ms since the last reset, and *count the replays
  * in that time; reset != 0 starts a new period.  For the window's 10 s

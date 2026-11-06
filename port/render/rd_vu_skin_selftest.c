@@ -210,7 +210,7 @@ bool rd__vu_skin_selftest(void)
      * first box check nor reset and read the whole pool (rhi.h
      * rhi_occlusion_prepare) */
     if (rhi_occlusion_supported()) {
-        (void)rhi_occlusion_prepare(RD_SKIN_CHECKS_ALL);
+        (void)rhi_occlusion_prepare(rd__vu_skin_queries()); /* the twins' too where they run */
     }
     const uint32_t w = ICO_VU_PROBE_FIELDS * ST_OFFSETS, h = ST_VERTS * ST_CODES;
     RhiTexture tex = {0};
@@ -386,6 +386,13 @@ bool rd__vu_skin_selftest(void)
                     bad, bv.addr, bv.explains ? "" : " (not the first wrong vertex's)",
                     bv.got[0] / 16.0, bv.got[1] / 16.0, bv.got[2], bv.want.x / 16.0,
                     bv.want.y / 16.0, bv.want.z, ms);
+        } else if (bv.nanAddr) {
+            rd__log("VU skin probe: wrong at offset %llu (page phase %llu), code %d, %s: %u "
+                    "vertices, address %u read as non-finite (%u dropped) (got (%.1f, %.1f, %d) "
+                    "want (%.1f, %.1f, %d)) in %.1f ms",
+                    (unsigned long long)boff[badK], (unsigned long long)phase, kCode[badC], set,
+                    bad, bv.nanAddr, bv.dropped, bv.got[0] / 16.0, bv.got[1] / 16.0, bv.got[2],
+                    bv.want.x / 16.0, bv.want.y / 16.0, bv.want.z, ms);
         } else {
             rd__log("VU skin probe: wrong at offset %llu (page phase %llu), code %d, %s: %u "
                     "vertices, no zero matrix explains them (got (%.1f, %.1f, %d) want (%.1f, "
@@ -403,6 +410,24 @@ bool rd__vu_skin_selftest(void)
         return true;
     }
     const RhiLimits *lim = rhi_limits();
+    if (rd__vu_skin_twins_on()) {
+        rd__log("VU skin check: on (every skinned draw twinned in its own pass through its own "
+                "pipeline (A the draw's bone offset, B the same bytes at a fresh offset; counted "
+                "by occlusion query%s); one probe a present, targeted after a twin event, "
+                "drawn again after the picture and compared with the CPU, its bone block's "
+                "bytes with the GPU's copy; variants: a fresh ring offset, uniform robustness "
+                "off %s; the box check %s; the first failure captured (a sidecar and a frame "
+                "dump); %s)",
+                lim->occlusionPrecise ? ", precise" : ", zero or not only",
+                lim->uniformRobustOff ? "(VK_EXT_pipeline_robustness)"
+                : lim->robustText && strncmp(lim->robustText, "on", 2) == 0
+                    ? "not offered (no VK_EXT_pipeline_robustness)"
+                    : "not needed (robust access off)",
+                rhi_occlusion_supported() ? "by occlusion query"
+                                          : "not offered (no occlusion queries)",
+                rd__vu_skin_check_why());
+        return why != NULL || bad == 0;
+    }
     rd__log("VU skin check: on (one skinned draw every %d ms, in turn, drawn again after the "
             "picture as a probe of its own and compared with the CPU, its bone block's bytes "
             "with the GPU's copy; variants: a fresh ring offset, uniform robustness off %s; the "

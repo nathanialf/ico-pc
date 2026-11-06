@@ -119,6 +119,33 @@ question it decides:
   are not visible to an app, so a compositor holding images shows as the image wait (the replays
   line's `acquire`) with `in use` at 0 or 1, not here.
 
+## Issues 123 and 163's lines: the skin check on Turnip
+
+On Turnip the skinned draws' check ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) watches every skinned draw
+of every picture and captures its first failure by itself; nothing is asked of the player. The
+lines and what each decides:
+
+- **The start line** (`rd: VU skin check: on (every skinned draw twinned in its own pass through
+  its own pipeline ...`): the twins run. On another Adreno (Qualcomm's own driver) the line keeps
+  `one skinned draw every 100 ms`.
+- **The 10 s block** (`rd: VU skin check: P checks, W wrong, ...; T twins, D differ (first at frame
+  F), N not drawn ...`): T near the skinned draws of the block's pictures (up to 128 a picture) says
+  every draw was watched; D 0 over a run in which the player saw Yorda flicker says the fault is not
+  a read that depends on the bone block's place in the pass (a wrong read at every offset shows in
+  the probe's lines instead); N above 0 for long says the twins of draws without the attachment
+  read waited for their pipeline.
+- **`twins differ`** (`rd: VU skin check: frame F command L:I mesh testmodel #65641 (763
+  vertices): twins differ: A ... N samples, B ... M samples; through FS with the draw's attachment
+  read (its own pipeline); the probe of this command: ...; reads as: ...`): the same bytes drew
+  different samples at the draw's bone offset and at a fresh one, inside the scene pass, through the
+  draw's own pipeline. `the probe ...: wrong at address 200` names the bone (and its next line
+  whether the read was zeros or non-finite: `reads as non-finite / dropped`); `right` says the fault
+  is the scene pass's execution, not the bone read (the binning pass, the pipeline's link).
+- **The capture** (`rd: VU skin check: captured .../logs/vu-skin-fail-F-L-I.bin and asked for a
+  frame dump`, then `window: VU skin check: the capture: ... and the frame dump ...zip (...png)`):
+  the sidecar (the bytes, the probe's rows, the twins' counts) and F12's dump of the next present
+  with the sidecar in its zip, once a run. The files a report needs are those two and the log.
+
 ## The thermal state and screen recording
 
 The thermal state and screen recording come from the app's Java side (issue 123;
