@@ -3,9 +3,13 @@
  *
  * The render thread (rd_thread.h) makes a picture handed over to it: the
  * interpolation, the fence wait, the acquire, the uploads and the walk,
- * then the list's end, its submit and the present.  With the submit thread
- * the last three leave it: the replay's end (rd__submit_frame) keeps the
- * list open (rd__submit_defer) and the job's end posts it here
+ * then the lists' ends, their submits and the present (a presenting
+ * picture has two lists, its scene's and the present's pass's own, so only
+ * the second waits for the window's image: rd_submit.c).  With the submit
+ * thread the submits and the present leave it: the replay's end
+ * (rd__submit_frame) ends the scene's list before it begins the
+ * present's, keeps the last list open (rd__submit_defer) and the job's
+ * end posts both here
  * (rd__submit_post_pending), so the render thread is free for the next
  * picture as soon as its walk ends, and the game thread's next present
  * waits for that much only (the drain of rd_present_post).
@@ -149,11 +153,16 @@ void rd_thread_submit_block_take(RdSubmitBlock *out);
  * sample a job, cpu_place.h), for the 10 s line; empty with no thread */
 void rd_thread_submit_take_cores(CpuPlaceHist *out);
 
-/* The render thread, rd__submit_frame before the reads end: the list kept
- * open for the submit thread (true), else false and the caller ends,
- * submits and presents it as before.  present: an image was acquired for
- * the replay */
-bool rd__submit_defer(RhiCommandList cl, bool present);
+/* The render thread, rd__submit_frame before the reads end: the lists
+ * kept for the submit thread (true), else false and the caller ends,
+ * submits and presents them as before.  cl the scene's list (left open
+ * when it is the only one, else ended), cl2 the present's own (left open;
+ * 0: none); present: an image was acquired for the replay */
+bool rd__submit_defer(RhiCommandList cl, RhiCommandList cl2, bool present);
+/* A job's ends and submits, in order (rd_submit_queue.h rd__sq_tail_steps:
+ * cl, then cl2), without its present: the submit thread's tail and
+ * rd__submit_frame's own path */
+void rd__submit_lists(const RdSubmitJob *j);
 /* The render thread, a job's end (rd_thread.c runTramp): the list kept,
  * posted */
 void rd__submit_post_pending(void);

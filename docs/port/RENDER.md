@@ -1732,13 +1732,15 @@ snapshot's pass (`DATE snapshot`, `dateSnapshot`), the fog's depth read made rea
 read`: the copy path's copy, the buffer path's transfers, the table's upload, before the fog's
 pass), the exact blend (`exact blend`, `doExact`), the MSAA epoch's spreads and resolves (`MSAA
 resolve`, `msaaUpsample`, `msaaEnd`), a shadow reset's stencil clear as a pass of its own
-(`stencil clear`) and the present (`present`: DISPLAY onto the window and the CRT filter)
+(`stencil clear`) and the present (`present`: DISPLAY onto the window and the CRT filter), with
+the display wait before it (`display wait`, at the window's size: no pass, the stretch from the
+scene list's last command to the present's own list's first, [below](#the-presents-own-list))
 (`port/render/rd.h` (`RD_PERF_PASS_*`, `RdPerfPass`); `port/render/rd_replay.c`,
 `port/render/rd_replay_vu.c` (`rd__vu_prepass`)). Every replay counts its pieces by kind and its
 render passes by effect (`RdPerfRecord.passKinds`, `passEffects`). A timed replay also writes a
 timestamp at each piece's start, `RD_PERF_TS_PASS0` (32) plus the piece's index, keeping the
 barriers the backend holds back held (so the barriers recorded are an untimed replay's), and one
-after the last piece (`rd__perf_pass_end`, before the list ends); a piece's GPU time is its stamp
+after the last piece (`rd__perf_pass_end`, before the last list ends); a piece's GPU time is its stamp
 to the next one's, so it includes the barriers before its first command and nothing of another
 piece. Its draws and pipeline binds are the RHI's counters between the two, its CPU time the
 replay's recording of it. Each frame slot has 256 timestamps (`RHI_MAX_TIMESTAMPS`,
@@ -1782,9 +1784,11 @@ display's image), the other 46 timed passes 27.0 ms (the block's 25.8); list 0 S
 ms (the block's 1.2), ...; 31 of
 45 passes over 2x their block mean, the rest within 1.3x; 2 under 0.05 ms left out (16 timed
 replays in the block so far)` (the first 8, then every 100th; `rd_perf_pass_grow_text`,
-`rd_perf_pass_agg_mean`; `port/platform/window_stall.c`): its first render pass apart, since the
-GPU's wait for the display's image (the acquire's semaphore at the first colour write) lands inside
-that pass's stamps, against the other timed pieces summed with the sum of their block means (the
+`rd_perf_pass_agg_mean`; `port/platform/window_stall.c`): its display wait apart (`the display
+wait 38.4 ms (the block's 20.1), the other 46 timed passes ...`: the present's own list alone waits
+for the window's image), or in a record without one its first render pass, since the GPU's wait
+for the display's image (the acquire's semaphore at the first colour write) landed inside that
+pass's stamps before the present had a list of its own, against the other timed pieces summed with the sum of their block means (the
 first pass grown alone is the display holding the image, not a slow GPU), then its five most
 expensive pieces each with
 the block's mean of a piece like it (`(new to the block)` for one the block has none like), then
@@ -1810,6 +1814,46 @@ perf_passes` the window also writes every piece of every replay to `ico-pc-passe
 the warm replay pass by pass and prints one line a piece, `<dump>: pass N: <label> <target> WxH,
 list L, D draws, B pipeline binds, GPU <us> us, CPU <us> us`, then `<dump>: gpu top passes: ...`
 and `<dump>: passes ...` as the window has them (`port/render/tools/rd_replay_tool.c`).
+
+#### The present's own list
+
+A presenting replay records two command lists: the scene's (the uploads, the pre-pass, lists 0
+to 12) and the present's pass alone (`port/render/rd_submit.c` `rd__submit_frame`). The scene's
+list ends on the render thread (`rhi_end_commands` is a slot call,
+[RHI.md](RHI.md#the-interface), "Frame slots and the submit thread") before the present's begins, and both go to
+the submit thread's job (`RdSubmitJob.cl`, `cl2`), whose tail ends and submits them in that order
+and then presents (`rd_submit_queue.h` `rd__sq_tail_steps`; the inline path runs the same steps).
+On Vulkan the acquire's semaphore is waited on by the submit of the list that uses the window's
+image only (`port/rhi/vk/vk_cmd.c` `vkr_submit_batch`, `VkrCmdList.swapImage`): a semaphore wait
+holds `COLOR_ATTACHMENT_OUTPUT` for every command of its batch, so with one list the scene's
+off-screen passes waited for the presentation engine too, and on issue 179's Mali that wait was
+38 to 84 ms of every 88 to 143 ms scene picture, in whichever pass wrote colour first. Now the
+scene's passes run while the presentation engine still holds the image, and only the present's
+pass waits. Direct3D and OpenGL submit the two lists as they come (two submits a picture were
+already normal there). The pixels are those of one list: the second list's opening barrier orders
+it after the first, the DATE and MSAA epochs closed before, and the present reads DISPLAY through
+barriers of its own. At start the renderer says so:
+
+```
+rd: present: the present's pass is a list of its own, submitted after the scene's; only its submit waits for the display's image (Vulkan: the acquire semaphore at COLOR_ATTACHMENT_OUTPUT)
+```
+
+and, should the backend have no list left for the second (`VKR_MAX_CMD_LISTS` a frame slot),
+`rd: present: no command list left for the present's own list (N times so far): this picture is
+not presented` (the first, then every 100th; its image is the next acquire's). The display wait is
+`RdPerfRecord.gpuDisplayWaitMs`: from the scene list's last stamp to the present's list's first
+(`RD_PERF_TS_PRESENT_BEGIN`), inside the replay's span (`gpuMs`, which the pace policy reads, so
+the wait still counts for the picture), and the `display wait` piece of a timed replay
+(`display wait window WxH N ms` among the top passes). It holds the wait where the GPU writes that
+stamp only once its batch's wait is over (a driver that waits whole batches); where the wait holds
+colour output alone, as issue 179's Mali log shows (its first stamp came before the wait, which
+sat in the uploads piece when the picture was one list), the stamp is early and the wait shows in the `present` figure instead:
+a present far above its usual 2 to 4 ms there is the display's image. The window's replays line
+carries both (`... 11-12 1.0, display wait 38.4, present 2.0`), the per-replay counts the queue
+submits (`submits 2.0`: the two lists), the CSV `gpu_display_wait_ms` and `submits`
+([DISPLAY.md](DISPLAY.md#the-perf-csv)), and the replay tool's `gpu:` line `display wait` before
+`present`. Without the list stamps (`[dev] perf_list_stamps = false`) the present's list's stamp
+is not written and the display wait reads 0 (the present figure keeps the lists, as before).
 
 ### The pixel cuts' records
 

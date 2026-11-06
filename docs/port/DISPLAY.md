@@ -471,6 +471,11 @@ lock held (grid G ms, n presents a step, mailbox|fifo, audio rate xR, CLOCK,
   `window: presents paced by the GPU: N.N a step|not held (GPU span G ms a picture, period P ms)`
   (`not held` at 8 a step or more).
 
+The GPU span G these lines and the allowance's gate read is a timed replay's span less its display
+wait (`rd_perf_pace_gpu_ms`): the present's own list waits for the window's image between the
+scene's stamps and the present's ([RENDER.md](RENDER.md#the-presents-own-list)), and that wait is
+the display's, not the GPU's work, so under vsync it does not make the GPU look slower.
+
 Paced with the GPU's time known, the drop ends `back to paced by the GPU after 60 steps on time`
 and its climb reads `window: presents back to paced by the GPU (where they started) after S steps
 (GPU span G ms a picture, step T ms, period P ms)`; no refused climb is written there.
@@ -592,7 +597,9 @@ window: N replays: CPU A ms (max M): interp, wait, acquire, upload, walk, bind, 
 It gives the replays' mean CPU time by phase, then `longest:` with each phase's maximum in the block
 (wait, acquire, upload, walk, bind, submit, present), so a log says which phase made the slowest
 replay slow; the GPU times when the backend has timestamps (uploads, [lists](ARCHITECTURE.md#terms)
-0-10, lists 11-12, present), else `no GPU timestamps`; the simulation step's mean and maximum;
+0-10, lists 11-12, display wait, present: `GPU 64.0 ms (max 70.1): uploads 2.1, lists 0-10 55.2,
+11-12 1.0, display wait 3.4, present 2.0`; the display wait is the stretch from the scene's list
+to the present's own, [RENDER.md](RENDER.md#the-presents-own-list)), else `no GPU timestamps`; the simulation step's mean and maximum;
 and a step's mean of the region rule's card verdicts the CPU decided while the draws were recorded
 (the strips and triangles tested, the time;
 [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)) (`perf_log`; `port/platform/perf_block.h`
@@ -665,10 +672,11 @@ plan's means per replay, `; stores: N depth and M colour stores dropped a replay
   is done where the pass ends, not where its commands were recorded, so a list's or an effect's time
   there is where the work ended and not its own cost ([RENDER.md](RENDER.md#the-per-pass-timing));
   the top passes line and the total are the numbers to compare, and a reporter on such a device
-  should not be asked to explain the lists' split. The GPU ms per replay and top passes lines end with that sentence on a tile-based GPU, and say that the first pass that writes colour carries the wait for the display's image: the Vulkan acquire's wait (`COLOR_ATTACHMENT_OUTPUT`) holds every colour write of the replay's batch, not only the window's image, so it lands in uploads when new targets are cleared first and otherwise in list 0's first pass (a phone at the Original preset in play: uploads 0.53 ms, list 0 6.91 of 14.76).
+  should not be asked to explain the lists' split. The GPU ms per replay and top passes lines end with that sentence on a tile-based GPU, and say that the present's own list alone waits for the display's image. The Vulkan acquire's wait (`COLOR_ATTACHMENT_OUTPUT`) holds every colour write of the batch it is attached to, not only the window's image; with a picture in one list and one submit the wait held the scene's off-screen passes too and landed in uploads when new targets were cleared first and otherwise in list 0's first pass (a phone at the Original preset in play: uploads 0.53 ms, list 0 6.91 of 14.76; issue 179's Mali in its boat scene: 38 to 84 ms of 88 to 143 ms pictures). The present's pass is a list of its own, and only its submit takes the wait (`port/rhi/vk/vk_cmd.c` `vkr_submit_batch`, [RENDER.md](RENDER.md#the-presents-own-list)), so the scene's passes run while the presentation engine still holds the image; the replays line's `display wait` is the stretch between the two lists, and where the GPU holds only colour output for the wait (the Mali) the wait shows in `present` instead.
 - `window: GPU between replays: N timed replays after the one before: the GPU idle before I of them (A ms on average, the longest L ms), K begun before the one before ended (by O ms on average: their spans count that end too); the GPU's time a replay past the one before's end E ms, its span S ms`: each replay's first stamp against the replay before's last (`RdPerfRecord.gpuGapNs`, the same GPU clock; `PaceGpuGap`, `pace_gpu_gap_text`). Every Vulkan stamp is bottom-of-pipe, written once the earlier commands are done, so K is 0 on a driver that keeps the rule and a span then holds its replay's whole GPU time, any wait inside the replay (the display's image) included: that is the time from the replay's start on the GPU to its fence, what the step rule's pipe needs. K above 0 is a driver that writes the first stamp early: the spans count the replay before's end too and E is the GPU's own time a replay, the one to compare with the span the rule reads. I is the GPU waiting for the CPU's submissions. A replay's gap is measured from the timed replay before it across any replays without timestamps between (their GPU work then inside it; refused only past 60 s), and when any were, the line goes on `; C of them timed across untimed replays`; the gaps of the replays right after a present that blocked over 50 ms are listed too, `; across the 3 stalls: the GPU was idle 301.2, 298.0, 310.5 ms before the next replay` (the first 8 of a block, `the first 8 of the 11 stalls` past them; a negative one is a replay begun before the stalled one ended) (issue 123; `rd_perf_gap.h`, `pace_gpu_gap_stall`, `port/platform/window_stall.c`). A gap about the stall's length is a GPU that sat idle while the present blocked: the wait was not this picture's GPU work. From the first such present on Vulkan (never OpenGL or Direct3D) every replay is timed pass by pass and a stalled replay gets `window: stalled replay N (...)` ([RENDER.md](RENDER.md#the-per-pass-timing)).
 - `window: per replay ...`: the counts (draws, passes, pipeline and bind group binds, barriers,
-  copies, uploads, DATE snapshots). After the binds, `(repeats skipped: X pipeline, Y bind group, Z
+  copies, `submits 2.0` (the queue submits a replay: a presenting picture's two lists, the scene's
+  and the present's own, [RENDER.md](RENDER.md#the-presents-own-list)), uploads, DATE snapshots). After the binds, `(repeats skipped: X pipeline, Y bind group, Z
   state)`: the binds and state sets the RHI found already in force and recorded nothing for
   ([RHI.md](RHI.md#the-bind-cache)); the binds before it are what was recorded. Its exact-blend fields (`exact blends`, `destination-read
   draws`, `storage passes`, `pass switches for the exact blend`) are 0 unless the player opted into
@@ -1938,8 +1946,11 @@ replay's start, alpha, `first_of_tick`, each picture effect `gpu_<effect>_ms`,
 `vu_pre_draws` and `vu_pre_fallbacks` ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)), the walk's
 CPU time by list `walk_list<N>_ms`, the upload bytes by what they carry `upload_texture_bytes`,
 `upload_uniform_bytes`, `upload_interp_bytes` (of the mesh bytes) and `upload_stream_bytes`, and
-the per-pass timing's `passes` (the pieces begun), `pass_timed` and `pass_count`
-([RENDER.md](RENDER.md#the-per-pass-timing))
+the per-pass timing's `passes` (the pieces begun, the display wait not among them), `pass_timed`
+and `pass_count` ([RENDER.md](RENDER.md#the-per-pass-timing)), then `gpu_display_wait_ms` (the
+scene list's end to the present's own list's start, `RdPerfRecord.gpuDisplayWaitMs`) and `submits`
+(the queue submits counted with the record: 2 a presenting picture, its scene's list and the
+present's, [RENDER.md](RENDER.md#the-presents-own-list))
 (`port/platform/window_host.c` (`perf_csv_open`, `perf_csv_line`)). The file
 is flushed after each drain, every vsync (`perf_drain`).
 
@@ -1948,7 +1959,7 @@ window writes `ico-pc-passes.csv` beside it, logging `window: perf_passes: one l
 every replay in <path>`: one line per piece of GPU work, `replay,frame,pass,kind,list,effect,
 target,width,height,draws,pipeline_binds,gpu_us,cpu_us` (the kind in words: `uploads`, `VU
 pre-pass`, `render pass`, `copy`, `snapshot`, `DATE snapshot`, `fog depth read`, `exact blend`,
-`MSAA resolve`, `stencil clear`, `present`; the list -1 outside the lists; the effect `none` or
+`MSAA resolve`, `stencil clear`, `present`, `display wait`; the list -1 outside the lists; the effect `none` or
 its name; the target `SCENE`, `WORK0`, ..., `block`, `temporary`, `window`, `record` or `none`;
 `gpu_us` -1 when a stamp is missing), the replay and frame numbers those of the perf CSV's line
 (`port/platform/window_host.c` (`perf_pass_csv_open`, `perf_passes_add`); `port/render/rd_perf.c`

@@ -58,13 +58,26 @@ void rd__submit_test_hook(void (*fn)(void))
     __atomic_store_n(&s_testHook, fn, __ATOMIC_RELEASE);
 }
 
-/* the list's end, its submit and the present: rd__submit_frame's tail */
+/* the lists' ends and submits in rd__sq_tail_steps's order (the scene's,
+   then the present's own); the present, its last step, is the caller's,
+   timed apart */
+void rd__submit_lists(const RdSubmitJob *j)
+{
+    RdSqStep st[RD_SQ_TAIL_MAX];
+    const uint32_t n = rd__sq_tail_steps(j, st);
+    for (uint32_t k = 0; k < n; k++) {
+        if (st[k].what == RD_SQ_END) {
+            rhi_end_commands((RhiCommandList){st[k].cl});
+        } else if (st[k].what == RD_SQ_SUBMIT) {
+            rhi_submit((RhiCommandList){st[k].cl});
+        }
+    }
+}
+
 static void tail(RdSubmitJob *j)
 {
-    const RhiCommandList cl = {j->cl};
     const double t0 = rd__now_ms();
-    rhi_end_commands(cl);
-    rhi_submit(cl);
+    rd__submit_lists(j);
     const double t1 = rd__now_ms();
     j->submitMs = t1 - t0;
     {
@@ -434,7 +447,7 @@ void rd_thread_submit_block_take(RdSubmitBlock *out)
     ico_mutex_unlock(s_st.m);
 }
 
-bool rd__submit_defer(RhiCommandList cl, bool present)
+bool rd__submit_defer(RhiCommandList cl, RhiCommandList cl2, bool present)
 {
     if (s_st.th == NULL || t_onS || t_kept || cl.id == 0 || !rd_thread_on_render() ||
         !rd__thread_handed() || rd__capture_pending()) {
@@ -442,6 +455,7 @@ bool rd__submit_defer(RhiCommandList cl, bool present)
     }
     memset(&t_job, 0, sizeof(t_job));
     t_job.cl = cl.id;
+    t_job.cl2 = cl2.id;
     t_job.slot = (uint8_t)(rhi_frame_slot() % RHI_FRAMES_IN_FLIGHT);
     t_job.present = present && rd__present_will_show();
     t_job.replay = g_rdPerf.replay;

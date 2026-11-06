@@ -813,8 +813,11 @@ static void threadRecordCell(const Ctx *c)
  * the same time (B waits until this thread has begun list B, then ends and
  * submits A).  The slot guard (rhi.h rhi_set_slot_guard) says the slot
  * calls of this thread are free while B's job is of the other slot, so
- * neither rhi_wait_frame nor rhi_begin_commands waits for B; list B's end,
- * not a slot call, waits for it through the call guard (one wait).  Both
+ * neither rhi_wait_frame, rhi_begin_commands nor list B's end (a slot
+ * call: it touches only list B, of this slot's pool; the renderer ends a
+ * picture's scene list before the present's own begins) waits for B; list
+ * B's submit, not a slot call (the queue is one thread's at a time), waits
+ * for it through the call guard (one wait).  Both
  * targets read back row by row equal to the same two lists made one after
  * the other on this thread, and to the squares each drew (A the fill rule
  * cell's red and green squares, B a blue square of its own).  Skipped where
@@ -965,31 +968,37 @@ static void threadSlotsCell(const Ctx *c)
         slotsRecordB(clB, tgtB, pipe, ring, FS);
     }
     const int waitsRecording = s_guardWaits;
-    /* not a slot call: waits for thread B (the guard's wait joins it) */
+    /* a slot call too (rhi.h rhi_set_slot_guard): the end touches only its
+       own list, of this slot's pool, beside thread B's end and submit of
+       the other slot's (the renderer ends a picture's scene list so before
+       it begins the present's own, port/render/rd_submit.c) */
     if (clB.id) {
         rhi_end_commands(clB);
     }
     const int waitsEnd = s_guardWaits;
+    /* not a slot call: the submit waits for thread B (the guard's wait
+       joins it; the queue is one thread's at a time) */
+    if (clB.id) {
+        rhi_submit(clB);
+    }
+    const int waitsSubmit = s_guardWaits;
     rhi_set_slot_guard(NULL);
     rhi_set_call_guard(NULL);
     if (s_submitThread != NULL) {
         submitGuardWait(NULL); /* the guard did not wait: joined here (a failure below) */
         s_guardWaits--;
     }
-    if (clB.id) {
-        rhi_submit(clB);
-    }
     const bool haveGot = rhi_readback_texture(tgtA, RHI_ASPECT_COLOR, gotA, sizeof(gotA), &qA) &&
                          rhi_readback_texture(tgtB, RHI_ASPECT_COLOR, gotB, sizeof(gotB), &qB);
     if (!haveRef || !haveGot || !clB.id || pA != qA || pB != qB) {
         rhi_test_log("FAIL %s: thread slots readback\n", s_label);
         failures++;
-    } else if (!otherSlot || waitsRecording != 0 || waitsEnd != 1 ||
+    } else if (!otherSlot || waitsRecording != 0 || waitsEnd != 0 || waitsSubmit != 1 ||
                !__atomic_load_n(&job.done, __ATOMIC_ACQUIRE)) {
-        rhi_test_log("FAIL %s: thread slots: the recycle and the next list's recording waited "
-                     "for the other thread (waits %d while recording, %d at the end, other slot "
-                     "%d)\n",
-                     s_label, waitsRecording, waitsEnd, otherSlot ? 1 : 0);
+        rhi_test_log("FAIL %s: thread slots: the recycle, the next list's recording and its end "
+                     "waited for the other thread, or its submit did not (waits %d while "
+                     "recording, %d at the end, %d at the submit, other slot %d)\n",
+                     s_label, waitsRecording, waitsEnd, waitsSubmit, otherSlot ? 1 : 0);
         failures++;
     } else if (!rowsEqual(wantA, gotA, qA, FS, FS) || !rowsEqual(wantB, gotB, qB, FS, FS)) {
         rhi_test_log("FAIL %s: thread slots: a list ended and submitted on another thread while "
@@ -1013,8 +1022,8 @@ static void threadSlotsCell(const Ctx *c)
         if (failures == before) {
             rhi_test_log("%s: thread slots cell passed (slot %d's list ended and submitted on "
                          "thread B while this thread recycled the other slot and recorded its "
-                         "list without waiting; both read back equal to the serial run; the "
-                         "next list's end waited once)\n",
+                         "list and ended it without waiting; both read back equal to the serial "
+                         "run; the next list's submit waited once)\n",
                          s_label, s_slotsJob);
         }
     }

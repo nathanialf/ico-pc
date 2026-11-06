@@ -1506,7 +1506,7 @@ void rhi_set_call_guard(const RhiCallGuard *guard);
  * thread, and none of the other thread's jobs of that frame slot queued or
  * running.  The slot calls and their slot: rhi_wait_frame (the slot it
  * recycles: (rhi_frame_slot() + 1) % RHI_FRAMES_IN_FLIGHT),
- * rhi_begin_commands, rhi_create_bind_group, rhi_map_buffer,
+ * rhi_begin_commands, rhi_end_commands, rhi_create_bind_group, rhi_map_buffer,
  * rhi_unmap_buffer, rhi_read_timestamps, rhi_read_timestamps_busy,
  * rhi_read_occlusion and rhi_acquire_backbuffer (rhi_frame_slot()).  Each
  * touches the recording thread's slot and nothing the other thread's end,
