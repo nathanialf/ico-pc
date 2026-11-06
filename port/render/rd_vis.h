@@ -170,6 +170,25 @@ typedef struct RdVisCounts {
     uint32_t hizTris, hizOverBudget, hizTested, hizResets;
     uint64_t hizCells;
     double hizMs;
+    /* hizMs by part (rd_vis.c hizCollect, hizDraw): the occluders'
+     * collect (hizCollectMs; of it the alpha proofs, hizAlphaMs, and the
+     * vertex pass, hizVertMs), the rasterisation of the walk's occluders
+     * (hizRasterMs) and the occludees' test (hizTestMs); the decodes
+     * settled before the collect (hizSettleMs: rdtex_settle, outside
+     * hizMs).  The vertex pass: the vertices projected (hizVerts: in full,
+     * rd__vis_hiz_vertex; hizCheapVerts: for the screen box alone), the
+     * triangles read (hizTrisRead: not hidden by the content table) and
+     * kept as occluders before the budget (hizTrisKept), those not
+     * projected for their batch's screen box (hizTrisBatch) or left by
+     * their own screen box before the full projection (hizTrisArea); the
+     * occluder draws whose triangles came from the collect cache
+     * (hizCacheHits) of those that reached the vertex pass
+     * (hizCacheDraws); under ICO_RD_CULL_HIZ_CHECK the triangles the fast
+     * path left out checked in full (hizChecked) and those the full pass
+     * would have kept (hizWrong: 0, or the fast path is wrong) */
+    double hizCollectMs, hizAlphaMs, hizVertMs, hizRasterMs, hizTestMs, hizSettleMs;
+    uint32_t hizVerts, hizCheapVerts, hizTrisRead, hizTrisKept, hizTrisBatch, hizTrisArea;
+    uint32_t hizCacheHits, hizCacheDraws, hizChecked, hizWrong;
 } RdVisCounts;
 
 void rd__vis_counts(RdVisCounts *out);
@@ -255,6 +274,9 @@ enum {
 };
 
 void rd__vis_hiz_why(uint32_t out[RD_VIS_HZ_COUNT]);
+/* the cheaper collect is on (ICO_RD_CULL_HIZ_FAST unset or not 0, read
+ * with the budget at rd__vis_init) */
+bool rd__vis_hiz_fast(void);
 const char *rd__vis_hiz_why_name(int why);
 
 /* rd__vis_hiz_hidden's verdict, why not hidden */
@@ -372,6 +394,72 @@ bool rd__vis_hiz_list_push(RdVisHizList *l, const RdVisHizTri *t);
 bool rd__vis_hiz_pending_scan(uint32_t id, RdTexAlphaScan *out);
 int rd__vis_hiz_mesh(const RdMeshRec *m, const RdVuPayload *p, const float (*mem)[4], uint32_t cmd,
                      double minArea, RdVisHizList *out, uint32_t *lbAll);
+
+/* The same triangles at less cost (rd_vis_hiz.c; docs/port/RENDER.md,
+ * "Culling", the occlusion test's cost).  With fast set, a triangle is
+ * left before its full projection when it could not be kept anyway: a
+ * later mark or a sheet's tile; all three corners in the vertices of one
+ * batch whose screen box (rd__vis_hiz_screen_area over bb[batch], the
+ * mesh's per-batch boxes, bbN of them; NULL: none) is under minArea, so
+ * its own is (its corners lie in that box); or its own screen box,
+ * worked out from the very x and y rd__vis_hiz_vertex would give its
+ * corners (the same products, divide and offset, bit for bit), under
+ * minArea.  So out gets the triangles rd__vis_hiz_mesh gives, in its
+ * order, but *lbAll and the 0 / 1 of the result cover only the triangles
+ * projected: a draw under Z test ALWAYS (which reads both) takes fast
+ * false, the full pass.  check: every triangle left is also projected in
+ * full and counted in wrong when the full pass would have kept it.  The
+ * counts are added to. */
+typedef struct RdVisHizPass {
+    const RdVisBox *bb;
+    uint32_t bbN;
+    bool fast, check;
+    uint32_t verts, cheapVerts, trisRead, trisBatch, trisArea, checked, wrong;
+} RdVisHizPass;
+
+int rd__vis_hiz_mesh_ex(const RdMeshRec *m, const RdVuPayload *p, const float (*mem)[4],
+                        uint32_t cmd, double minArea, RdVisHizList *out, uint32_t *lbAll,
+                        RdVisHizPass *ps);
+/* An upper bound of the screen box's area (GS pixels squared) of any
+ * triangle whose three corners rd__vis_hiz_vertex accepts and which all
+ * lie in box b (its pos.w range under code 36, scissor) through m: false
+ * when it cannot say (a corner of b not in front of the eye by the
+ * tolerance, a bound not finite).  The corners' x / w and y / w lie
+ * between those of b's corners (the mediant, every w > 0), inside the
+ * region test's bounds. */
+bool rd__vis_hiz_screen_area(const float (*m)[4], const RdVisBox *b, bool scissor, double *area);
+
+/* rd_vis_hiz_fast.c: what the collect keeps.
+ *
+ * The collect cache: a mesh draw's occluder triangles (rd__vis_hiz_mesh_ex)
+ * kept across pictures by everything they are made from: the mesh id, its
+ * stream serial (new at every write of the stream, its marks, indices and
+ * batches: rd__mesh_stream_written) and the stream, index, batch and mark
+ * arrays and counts, the sheet's tile bounds, the draw's batch range and
+ * clip mode, VU memory 16..23 byte for byte, minArea, the extended state
+ * (rd__vu_extended) and whether the pass was the full one (fast false).
+ * rd__vis_hiz_cache_get: on a hit the kept triangles appended to out with
+ * cmd (sel 1), *lbAll and *all as kept; true.  rd__vis_hiz_cache_put
+ * keeps out->t[first ..] (nothing for a record of serial 0), in 512 sets
+ * of 4 entries (a key's set by its hash; a free entry, else the one read
+ * longest ago).  Its memory: at most RD_VIS_HIZ_CACHE_TRIS triangles in
+ * all; past it the entries no draw of the collect in hand read go, and a
+ * collect whose own draws are more keeps no more.  rd__vis_hiz_cache_clear
+ * drops every entry (a test's). */
+#define RD_VIS_HIZ_CACHE_TRIS 32768u
+bool rd__vis_hiz_cache_get(uint32_t meshId, const RdMeshRec *m, const RdVuPayload *p,
+                           const float (*mem)[4], double minArea, bool full, uint32_t cmd,
+                           RdVisHizList *out, uint32_t *lbAll, int *all);
+void rd__vis_hiz_cache_put(uint32_t meshId, const RdMeshRec *m, const RdVuPayload *p,
+                           const float (*mem)[4], double minArea, bool full,
+                           const RdVisHizList *out, uint32_t first, uint32_t lbAll, int all);
+void rd__vis_hiz_cache_clear(void);
+/* rd__vis_hiz_pending_scan's answer for texture id, scanned once a
+ * collect (rd__vis_hiz_collect_begin starts one, the scan memo's and the
+ * cache's age: the textures do not change inside it, the decodes settled
+ * before) */
+void rd__vis_hiz_collect_begin(void);
+bool rd__vis_hiz_scan_memo(uint32_t id, RdTexAlphaScan *out);
 
 #ifdef __cplusplus
 }

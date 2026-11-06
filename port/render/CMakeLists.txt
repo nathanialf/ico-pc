@@ -247,6 +247,7 @@ add_library(ico_render STATIC
     rd_video.c # the FMV picture (port/fmv/rd_video.h)
     rd_vis.c # the scene draws' visibility test: a draw off its target replayed as a NOP ([dev] cull)
     rd_vis_hiz.c # its occlusion test: a draw of list 0 behind the depth written before it
+    rd_vis_hiz_fast.c # what its collect keeps: the collect cache, the pending scans
     texpack_dds.c # texture packs: the DDS and PNG loaders (texpack.h)
     texpack_image.c
     texpack_png.c
