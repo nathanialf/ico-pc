@@ -87,7 +87,15 @@
  * largest within the budget); then the walk keeps the record of list 0's
  * depth as it goes (hizCommand, hizDraw): each draw of list 0 the frustum
  * test keeps is tested against what the draws before it wrote, then its
- * own triangles go in, and whatever may lower the depth resets it.
+ * own triangles go in, and whatever may lower the depth resets it.  The
+ * collect costs less with ICO_RD_CULL_HIZ_FAST on (the default; 0 the
+ * plain pass, a comparison), the same occluders: the vertex pass leaves
+ * the triangles too small to count before projecting them in full
+ * (rd_vis_hiz.c rd__vis_hiz_mesh_ex), the walk takes the collect's
+ * verdicts (HizSeen), a texture's pending scan is made once a collect and
+ * a draw read as before takes its triangles from the collect cache
+ * (rd_vis_hiz_fast.c); ICO_RD_CULL_HIZ_CHECK=1 does each left triangle and
+ * each cache hit in full as well and counts a difference (hizWrong).
  *
  * Under MSAA (rd_aa_samples(rd__aa_mode()) > 1) the replay draws SCENE's
  * passes into SCENE_MS until the first command that touches SCENE's own
@@ -551,6 +559,11 @@ static const char *const s_whyNames[RD_VIS_WHY_COUNT] = {"skipped by the stream'
                                                          "occluded",
                                                          "kept: may close the MSAA epoch"};
 
+/* rd.h RdPerfRecord.cullHizOcc: the occluder candidates' reasons, in this
+ * order */
+_Static_assert(RD_VIS_HZ_OCC_USED == 0 && RD_VIS_HZ_OCC_NOTRI + 1 == RD_PERF_HIZ_OCC,
+               "RD_PERF_HIZ_OCC: the occluder reasons");
+
 static const char *const s_hzNames[RD_VIS_HZ_COUNT] = {
     "occluder used",
     "occluder refused: state",
@@ -601,6 +614,12 @@ typedef struct HizCmd {
 
 static struct {
     bool budgetRead, depthAlways;
+    /* the cheaper collect (ICO_RD_CULL_HIZ_FAST, on unless 0: the batch and
+     * triangle screen boxes before the vertex pass, the walk's verdicts
+     * taken from the collect, the scan memo, the collect cache; the same
+     * occluders) and its check (ICO_RD_CULL_HIZ_CHECK=1: every triangle it
+     * leaves and every cache hit done in full too, RdVisCounts.hizWrong) */
+    bool fast, check;
     uint32_t budget; /* ICO_RD_CULL_HIZ_TRIS */
     bool active;     /* this walk keeps the record (full, list 0 replayed) */
     bool keyed;      /* key is the state's pair the record was set up for */
@@ -645,7 +664,19 @@ static void hizSwitches(void)
         t && t[0] && end && *end == '\0' && v <= 1000000ul ? (uint32_t)v : RD_VIS_HIZ_TRIS;
     const char *a = getenv("ICO_VK_DEPTH_ALWAYS");
     s_hiz.depthAlways = a && a[0] && strcmp(a, "0") != 0;
+    const char *fa = getenv("ICO_RD_CULL_HIZ_FAST");
+    s_hiz.fast = !(fa && (strcmp(fa, "0") == 0 || strcmp(fa, "off") == 0));
+    const char *ck = getenv("ICO_RD_CULL_HIZ_CHECK");
+    s_hiz.check = s_hiz.fast && ck && ck[0] && strcmp(ck, "0") != 0;
     s_hiz.budgetRead = true;
+}
+
+bool rd__vis_hiz_fast(void)
+{
+    if (!s_hiz.budgetRead) {
+        hizSwitches();
+    }
+    return s_hiz.fast;
 }
 
 void rd__vis_init(void)
@@ -752,6 +783,26 @@ static VisEntry *entryOf(uint32_t id, const RdMeshRec *m)
     return e;
 }
 
+/* the per-batch boxes on a kept entry (made once a stream version); false
+ * when the entry has none (no memory, a batch outside the stream) */
+static bool batchBoxes(VisEntry *e, const RdMeshRec *m)
+{
+    const uint32_t qpv = m->qwPerVertex;
+    if (!e->bbTried) {
+        e->bbTried = true;
+        e->bb = calloc(m->batchCount, sizeof(RdVisBox));
+        e->batchN = e->bb ? m->batchCount : 0;
+        e->bbOk = e->bb != NULL;
+        for (uint32_t b = 0; e->bbOk && b < m->batchCount; b++) {
+            const RdVuBatchRec *br = &m->batches[b];
+            e->bbOk = (uint64_t)br->firstVertex + br->vertexCount <= m->vertexCount &&
+                      rd__vis_box((const float (*)[4])m->stream + (size_t)br->firstVertex * qpv,
+                                  br->vertexCount, qpv, &e->bb[b]);
+        }
+    }
+    return e->bbOk && e->batchN == m->batchCount;
+}
+
 /* The box of the vertices of batches first .. last - 1 of mesh m (the ones a
  * draw reads: its indices lie in its batches' own vertices, rd_internal.h
  * RdVuBatchRec); false when a batch lies outside the stream, the mesh
@@ -766,19 +817,7 @@ static bool rangeBox(VisEntry *e, const RdMeshRec *m, uint32_t first, uint32_t l
     }
     const uint32_t qpv = m->qwPerVertex;
     const bool keep = e != &s_vis.scratch;
-    if (keep && !e->bbTried) {
-        e->bbTried = true;
-        e->bb = calloc(m->batchCount, sizeof(RdVisBox));
-        e->batchN = e->bb ? m->batchCount : 0;
-        e->bbOk = e->bb != NULL;
-        for (uint32_t b = 0; e->bbOk && b < m->batchCount; b++) {
-            const RdVuBatchRec *br = &m->batches[b];
-            e->bbOk = (uint64_t)br->firstVertex + br->vertexCount <= m->vertexCount &&
-                      rd__vis_box((const float (*)[4])m->stream + (size_t)br->firstVertex * qpv,
-                                  br->vertexCount, qpv, &e->bb[b]);
-        }
-    }
-    if (keep && (!e->bbOk || e->batchN != m->batchCount)) {
+    if (keep && !batchBoxes(e, m)) {
         return false;
     }
     for (uint32_t b = first; b < last; b++) {
@@ -855,6 +894,25 @@ typedef struct VisDraw {
     RdVisBox box;
     bool have, scissor, later;
 } VisDraw;
+
+/* The verdicts hizCollect worked out for list 0's occluder candidates
+ * (cmdVerdict's: the verdict, the reason, what it added to the counts and
+ * the draw), in command order: the walk that follows takes them instead of
+ * a second cmdVerdict of the same command in the same state (the collect
+ * and the walk both start list 0 at the frame's start state and apply each
+ * command's state; the entries cmdVerdict reads are kept by stream
+ * version), so its verdicts and counts are those it would have made. */
+typedef struct HizSeen {
+    uint32_t index, exempt, unbounded;
+    int v, why;
+    bool noMemory;
+    VisDraw d;
+} HizSeen;
+
+static struct {
+    HizSeen *s;
+    uint32_t n, cap, cursor;
+} s_seen;
 
 static int cmdVerdict(VisWalk *w, int l, const RdCmd *c, const RdStateBlock *st, VisDraw *d)
 {
@@ -1067,8 +1125,9 @@ static bool hizAlphaPasses(const RdStateBlock *st, const RdFrame *f, const RdCmd
     uint8_t tlo, thi;
     const RdTexRec *tex =
         st->ds.texEnabled && st->ds.tcc == RD_TCC_RGBA ? rd__tex_rec(st->tex) : NULL;
-    if (tex && rd__vis_hiz_pending_scan(st->tex, &scan) &&
-        rdtex_alpha_range(&scan, (RdTexSrc)tex->src, st->ds.texa, &tlo, &thi)) {
+    const bool pending = tex && (s_hiz.fast ? rd__vis_hiz_scan_memo(st->tex, &scan)
+                                            : rd__vis_hiz_pending_scan(st->tex, &scan));
+    if (pending && rdtex_alpha_range(&scan, (RdTexSrc)tex->src, st->ds.texa, &tlo, &thi)) {
         /* The texture is uploaded after the walk (rd_replay.c replayFrame:
          * rd__vis_frame, then rd__upload_dirty_textures), so the alpha
          * plan's scan (rd__tex_alpha_scan) does not have it yet: every
@@ -1173,7 +1232,7 @@ static void hizCommand(VisWalk *w, const RdCmd *c, const RdStateBlock *st)
 static int hizDraw(VisWalk *w, uint32_t index, const RdCmd *c, const RdStateBlock *st,
                    const VisDraw *d)
 {
-    const double t0 = rd__now_ms();
+    const double t0 = rd__now_ms(); /* the test, then its own triangles in (the raster) */
     int v = RD_VIS_KEEP;
     const bool held = hizKey(w, st);
     int hz = RD_VIS_HZ_NOT_ELIGIBLE;
@@ -1205,6 +1264,8 @@ static int hizDraw(VisWalk *w, uint32_t index, const RdCmd *c, const RdStateBloc
     if (v == RD_VIS_OCCLUDED) {
         s_vis.whyCur = RD_VIS_WHY_OCCLUDED;
     }
+    const double t1 = rd__now_ms();
+    w->n.hizTestMs += t1 - t0;
     while (s_hiz.cursor < s_hiz.nCmds && s_hiz.cmds[s_hiz.cursor].index < index) {
         s_hiz.cursor++;
     }
@@ -1243,7 +1304,9 @@ static int hizDraw(VisWalk *w, uint32_t index, const RdCmd *c, const RdStateBloc
             }
         }
     }
-    w->n.hizMs += rd__now_ms() - t0;
+    const double t2 = rd__now_ms();
+    w->n.hizRasterMs += t2 - t1;
+    w->n.hizMs += t2 - t0;
     return v;
 }
 
@@ -1257,6 +1320,87 @@ static int byArea(const void *a, const void *b)
     return x > y ? -1 : x < y ? 1 : (i > j) - (i < j);
 }
 
+/* the verdict of command index of list 0 cmdVerdict gave in hizCollect,
+ * kept for the walk (nothing kept without memory: the walk works it out) */
+static void seenPut(uint32_t index, int v, const VisWalk *scratch, const VisDraw *d)
+{
+    if (s_seen.n == s_seen.cap) {
+        const uint32_t cap = s_seen.cap ? s_seen.cap * 2u : 64u;
+        HizSeen *g = realloc(s_seen.s, (size_t)cap * sizeof(HizSeen));
+        if (!g) {
+            return;
+        }
+        s_seen.s = g;
+        s_seen.cap = cap;
+    }
+    HizSeen *e = &s_seen.s[s_seen.n++];
+    e->index = index;
+    e->v = v;
+    e->why = s_vis.whyCur;
+    e->exempt = scratch->n.exempt;
+    e->unbounded = scratch->n.unbounded;
+    e->noMemory = scratch->noMemory;
+    e->d = *d;
+}
+
+/* the walk's command index of list 0: the collect's verdict, with what it
+ * added to the counts, when it made one */
+static bool seenTake(VisWalk *w, uint32_t index, VisDraw *d, int *v)
+{
+    while (s_seen.cursor < s_seen.n && s_seen.s[s_seen.cursor].index < index) {
+        s_seen.cursor++;
+    }
+    if (s_seen.cursor >= s_seen.n || s_seen.s[s_seen.cursor].index != index) {
+        return false;
+    }
+    const HizSeen *e = &s_seen.s[s_seen.cursor];
+    w->n.exempt += e->exempt;
+    w->n.unbounded += e->unbounded;
+    w->noMemory = w->noMemory || e->noMemory;
+    s_vis.whyCur = e->why;
+    *d = e->d;
+    *v = e->v;
+    return true;
+}
+
+/* mesh id's per-batch boxes for the collect's batch filter (rd_vis_hiz.c
+ * rd__vis_hiz_mesh_ex), NULL when its entry keeps none (a record of serial
+ * 0, a sheet's tiles, a batch outside the stream) */
+static const RdVisBox *hizBatchBoxes(uint32_t id, const RdMeshRec *m)
+{
+    if (m->streamSerial == 0 || m->tiledFrom || !m->batches || !m->batchCount) {
+        return NULL;
+    }
+    VisEntry *e = entryOf(id, m); /* cmdVerdict's, kept */
+    return e && e != &s_vis.scratch && batchBoxes(e, m) ? e->bb : NULL;
+}
+
+/* under ICO_RD_CULL_HIZ_CHECK: the cache's triangles of command i
+ * (out->t[first ..], *lbAll, all) against the pass's own; a difference is
+ * counted wrong */
+static void hizCheckHit(VisWalk *w, const RdMeshRec *m, const RdVuPayload *p, const float (*mem)[4],
+                        uint32_t i, double minArea, bool always, uint32_t first, uint32_t lbAll,
+                        int all)
+{
+    static RdVisHizList s_check;
+    s_check.n = 0;
+    RdVisHizPass ps;
+    memset(&ps, 0, sizeof(ps));
+    ps.fast = !always;
+    uint32_t lb;
+    const int a = rd__vis_hiz_mesh_ex(m, p, mem, i, minArea, &s_check, &lb, &ps);
+    bool same =
+        a >= 0 && s_check.n == s_hiz.tris.n - first && (!always || (a == all && lb == lbAll));
+    for (uint32_t k = 0; same && k < s_check.n; k++) {
+        const RdVisHizTri *x = &s_check.t[k], *y = &s_hiz.tris.t[first + k];
+        same = memcmp(x->x, y->x, sizeof(x->x)) == 0 && memcmp(x->y, y->y, sizeof(x->y)) == 0 &&
+               x->r == y->r && x->area == y->area && x->lb == y->lb && x->cmd == y->cmd &&
+               x->sel == y->sel;
+    }
+    w->n.hizChecked++;
+    w->n.hizWrong += same ? 0u : 1u;
+}
+
 /* list 0's occluders' triangles before the walk (the walk's state up to
  * each command, the frustum verdict), the budget's largest */
 static void hizCollect(VisWalk *w, const RdFrame *f, int keep)
@@ -1264,6 +1408,7 @@ static void hizCollect(VisWalk *w, const RdFrame *f, int keep)
     s_hiz.tris.n = 0;
     s_hiz.nCmds = 0;
     s_hiz.cursor = 0;
+    s_seen.n = s_seen.cursor = 0;
     s_hiz.keyed = s_hiz.keyOk = false;
     rd__vis_hiz_reset(&s_hiz.z);
     if (!s_hiz.budgetRead) {
@@ -1273,14 +1418,21 @@ static void hizCollect(VisWalk *w, const RdFrame *f, int keep)
     if (!s_hiz.active) {
         return;
     }
-    const double t0 = rd__now_ms();
     /* the decodes in flight into their textures (rd_tex_decode.h), which
      * the ring's estimate settles right after anyway: the occluders' alpha
-     * proof reads the texels a dirty texture is about to upload */
+     * proof reads the texels a dirty texture is about to upload.  A wait
+     * for the decode workers, timed apart (hizSettleMs), not the test's */
+    const double ts = rd__now_ms();
     rdtex_settle();
+    const double t0 = rd__now_ms();
+    w->n.hizSettleMs += t0 - ts;
+    rd__vis_hiz_collect_begin();
     VisWalk scratch;
     memset(&scratch, 0, sizeof(scratch));
     scratch.f = f;
+    RdVisHizPass ps;
+    memset(&ps, 0, sizeof(ps));
+    ps.check = s_hiz.check;
     RdStateBlock st = f->startState;
     const RdCmdList *cl = &f->lists[0];
     for (uint32_t i = 0; i < cl->count && s_hiz.budget; i++) {
@@ -1303,7 +1455,13 @@ static void hizCollect(VisWalk *w, const RdFrame *f, int keep)
             continue;
         }
         VisDraw d;
-        if (cmdVerdict(&scratch, 0, c, &st, &d) != RD_VIS_KEEP || !d.have) {
+        scratch.n.exempt = scratch.n.unbounded = 0;
+        scratch.noMemory = false;
+        const int v = cmdVerdict(&scratch, 0, c, &st, &d);
+        if (s_hiz.fast) {
+            seenPut(i, v, &scratch, &d);
+        }
+        if (v != RD_VIS_KEEP || !d.have) {
             s_vis.hz[RD_VIS_HZ_OCC_BOUND]++;
             continue;
         }
@@ -1314,7 +1472,10 @@ static void hizCollect(VisWalk *w, const RdFrame *f, int keep)
             s_vis.hz[RD_VIS_HZ_OCC_PROG]++;
             continue;
         }
-        if (!hizAlphaPasses(&st, f, c, m, p.prog)) {
+        const double ta = rd__now_ms();
+        const bool alphaOk = hizAlphaPasses(&st, f, c, m, p.prog);
+        w->n.hizAlphaMs += rd__now_ms() - ta;
+        if (!alphaOk) {
             s_vis.hz[RD_VIS_HZ_OCC_ALPHA]++;
             continue;
         }
@@ -1327,10 +1488,32 @@ static void hizCollect(VisWalk *w, const RdFrame *f, int keep)
         }
         float mem[36][4];
         memcpy(mem, f->payload + c->u[1] + sizeof(RdVuPayload), sizeof(mem));
+        const float (*cm)[4] = (const float (*)[4])mem;
         const uint32_t first = s_hiz.tris.n;
+        /* a draw under Z test ALWAYS reads lbAll and every triangle's
+         * exactness: the full pass; the others the fast one */
+        const bool always = st.ds.test.ztst == RD_ZTST_ALWAYS;
+        const double tv = rd__now_ms();
         uint32_t lbAll;
-        const int all =
-            rd__vis_hiz_mesh(m, &p, (const float (*)[4])mem, i, minArea, &s_hiz.tris, &lbAll);
+        int all;
+        w->n.hizCacheDraws++;
+        if (s_hiz.fast && rd__vis_hiz_cache_get(c->u[0], m, &p, cm, minArea, always, i, &s_hiz.tris,
+                                                &lbAll, &all)) {
+            w->n.hizCacheHits++;
+            if (s_hiz.check) {
+                hizCheckHit(w, m, &p, cm, i, minArea, always, first, lbAll, all);
+            }
+        } else {
+            ps.fast = s_hiz.fast && !always;
+            ps.bb = ps.fast ? hizBatchBoxes(c->u[0], m) : NULL;
+            ps.bbN = ps.bb ? m->batchCount : 0;
+            all = rd__vis_hiz_mesh_ex(m, &p, cm, i, minArea, &s_hiz.tris, &lbAll, &ps);
+            if (s_hiz.fast) {
+                rd__vis_hiz_cache_put(c->u[0], m, &p, cm, minArea, always, &s_hiz.tris, first,
+                                      lbAll, all);
+            }
+        }
+        w->n.hizVertMs += rd__now_ms() - tv;
         if (all < 0) {
             w->noMemory = true;
             s_hiz.tris.n = first;
@@ -1352,17 +1535,27 @@ static void hizCollect(VisWalk *w, const RdFrame *f, int keep)
             s_hiz.cmds = g;
             s_hiz.capCmds = cap;
         }
-        s_hiz.cmds[s_hiz.nCmds++] = (HizCmd){
-            i, first, s_hiz.tris.n - first, lbAll, st.ds.test.ztst == RD_ZTST_ALWAYS, all == 1};
+        s_hiz.cmds[s_hiz.nCmds++] =
+            (HizCmd){i, first, s_hiz.tris.n - first, lbAll, always, all == 1};
     }
+    w->n.hizVerts += ps.verts;
+    w->n.hizCheapVerts += ps.cheapVerts;
+    w->n.hizTrisRead += ps.trisRead;
+    w->n.hizTrisBatch += ps.trisBatch;
+    w->n.hizTrisArea += ps.trisArea;
+    w->n.hizChecked += ps.checked;
+    w->n.hizWrong += ps.wrong;
     const uint32_t n = s_hiz.tris.n;
+    w->n.hizTrisKept = n;
     if (n > s_hiz.budget) {
         if (n > s_hiz.orderCap) {
             uint32_t *o = realloc(s_hiz.order, (size_t)n * sizeof(uint32_t));
             if (!o) {
                 w->noMemory = true;
                 s_hiz.tris.n = s_hiz.nCmds = 0; /* no occluder this picture */
-                w->n.hizMs += rd__now_ms() - t0;
+                const double dt = rd__now_ms() - t0;
+                w->n.hizCollectMs += dt;
+                w->n.hizMs += dt;
                 return;
             }
             s_hiz.order = o;
@@ -1378,7 +1571,9 @@ static void hizCollect(VisWalk *w, const RdFrame *f, int keep)
         }
         w->n.hizOverBudget = n - s_hiz.budget;
     }
-    w->n.hizMs += rd__now_ms() - t0;
+    const double dt = rd__now_ms() - t0;
+    w->n.hizCollectMs += dt;
+    w->n.hizMs += dt;
 }
 
 static void visWalk(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *st)
@@ -1392,7 +1587,10 @@ static void visWalk(void *user, int list, uint32_t index, const RdCmd *c, const 
     }
     w->n.draws++;
     VisDraw d;
-    int v = cmdVerdict(w, list, c, st, &d);
+    int v;
+    if (!(list == 0 && s_hiz.active && seenTake(w, index, &d, &v))) {
+        v = cmdVerdict(w, list, c, st, &d);
+    }
     if (v == RD_VIS_KEEP && list == 0 && s_hiz.active) {
         v = hizDraw(w, index, c, st, &d);
     }
@@ -1524,5 +1722,22 @@ const RdFrame *rd__vis_frame(const RdFrame *f, int keep)
     g_rdPerf.cullOccluded = w.n.occluded;
     g_rdPerf.cullMs = w.n.ms;
     g_rdPerf.cullHizMs = w.n.hizMs;
+    g_rdPerf.cullHizSettleMs = w.n.hizSettleMs;
+    g_rdPerf.cullHizCollectMs = w.n.hizCollectMs;
+    g_rdPerf.cullHizAlphaMs = w.n.hizAlphaMs;
+    g_rdPerf.cullHizVertMs = w.n.hizVertMs;
+    g_rdPerf.cullHizRasterMs = w.n.hizRasterMs;
+    g_rdPerf.cullHizTestMs = w.n.hizTestMs;
+    g_rdPerf.cullHizVerts = w.n.hizVerts + w.n.hizCheapVerts;
+    g_rdPerf.cullHizTrisRead = w.n.hizTrisRead;
+    g_rdPerf.cullHizTrisKept = w.n.hizTrisKept;
+    g_rdPerf.cullHizCells = w.n.hizCells;
+    g_rdPerf.cullHizTested = w.n.hizTested;
+    g_rdPerf.cullHizOverBudget = w.n.hizOverBudget;
+    g_rdPerf.cullHizCacheHits = w.n.hizCacheHits;
+    g_rdPerf.cullHizCacheDraws = w.n.hizCacheDraws;
+    for (int k = 0; k < RD_PERF_HIZ_OCC; k++) {
+        g_rdPerf.cullHizOcc[k] = s_vis.hz[RD_VIS_HZ_OCC_USED + k];
+    }
     return out;
 }

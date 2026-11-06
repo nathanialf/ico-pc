@@ -160,7 +160,11 @@ replayed (`off`) under `ICO_RD_BLEND=fixed`, `--pass-dump --stats` at Original 4
 640x480, Enhanced 4:3 2x, Enhanced 2x at a wide dump's own aspect and once with `--aa msaa4`: every
 target's PNG of both runs byte for byte the off run's, the stats line's `cull off: 0 of 0`, `cull
 frustum: N of M` and `cull full: N of M (F frustum, O occluded)` with F the frustum run's N, and
-draws skipped over the corpus ([RENDER.md](RENDER.md#culling)) (`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
+draws skipped over the corpus ([RENDER.md](RENDER.md#culling)), and `rd_vis_hiz_corpus.cmake` over
+the rows of `port/render/test/rd_vis_hiz_corpus.txt` (the occlusion corpus at three settings):
+the occlusion test's fast collect (with `ICO_RD_CULL_HIZ_CHECK=1`) against its plain pass
+(`ICO_RD_CULL_HIZ_FAST=0`) and the table, the same 26 counts, no check wrong
+(`port/render/CMakeLists.txt`). The ctest `rd_replay_tool` renders `rd_pixel`'s dump with
 `--present 640x480`; it requires `rd_pixel` to have run first (`FIXTURES_REQUIRED rd_dump`), as
 does `rd_replay_tool_downsample`, which adds `--enhanced --resolution 2x --downsample --stats` and
 passes on `present: downsample 1024x512 -> 512x256, window reduce off`.
@@ -492,6 +496,8 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_SKIN_SABOTAGE` | `rd_vu_skin_check.c` | `A`: the check's own probe reads the bone at VU address A as zeros, the draw's bytes right (H1's form); `A,ring`: the bone zeroed in the ring after the check kept the bytes, the draw and the probe both reading zeros (H2's form) (`rd_vu_skin_check_probe`, `_ring`, `rd_vu_skin_check_163`; [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
 | `ICO_RD_CULL` | `rd_vis.c` | `off` (or 0): every scene draw replayed; `full` (or 2, `true`; the default): `frustum` with list 0's occlusion test; `frustum` (or 1): a mesh, skinned or grid command of lists 0 to 10 wholly off its target or behind the eye replayed as an `RDC_NOP`; `full`: list 0's occlusion test too, a mesh or grid draw of list 0 wholly behind the depth the opaque draws before it wrote replayed as an `RDC_NOP` (`rd_vis_hiz.c`) (`[dev] cull`; `rd_cull_ab`; the replay tool's `--cull`, and its `--occlusion` sets 0; [RENDER.md](RENDER.md#culling)) |
 | `ICO_RD_CULL_HIZ_TRIS` | `rd_vis.c` | under `ICO_RD_CULL=full`: the occluder triangles a picture rasterises into the occlusion test's record, the largest screen boxes first (a count up to 1000000, 0 none; default 12000; the stats line's `past the budget`; [RENDER.md](RENDER.md#culling)) |
+| `ICO_RD_CULL_HIZ_FAST` | `rd_vis.c` | `0` (or `off`): the occlusion test's collect without its shortcuts (no batch or triangle screen box before the vertex pass, no verdicts handed to the walk, no scan memo, no collect cache): the plain pass, a comparison; the same occluders either way (read at `rd__vis_init`; `rd_vis_hiz`, `rd_vis_hiz_corpus`; [RENDER.md](RENDER.md#culling)) |
+| `ICO_RD_CULL_HIZ_CHECK` | `rd_vis.c` | `1`: with the fast collect, every triangle it leaves and every collect cache hit worked out in full as well, a difference counted (`rd_replay_tool --stats`'s `stats: cull occlusion cost: ... check: N checked, W wrong`; `rd_vis_hiz`, `rd_vis_hiz_corpus`) |
 | `ICO_RD_CULL_RANGE` | `rd_vis.c` | `0` (or `off`): a draw of part of a mesh is tested with the whole stream's box alone, not its batches' box (a comparison; read at `rd_init`; [RENDER.md](RENDER.md#culling)) |
 | `ICO_RD_CONSTANT_READS` | `rd_const_read.c` | 0: a post sprite whose source target holds only its last clear reads the target as before instead of being drawn in the clear's colour (`[dev] constant_reads = false`; `rd_constant_reads_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)) |
 | `ICO_RD_NO_SPRITE_PLANES` | `rd_screen_planes.c` | 1: the sprite planes builds off for the run, the screen-prim triangles through the plain sprite builds, as `[dev] pipeline_skip` makes it on a device whose driver stopped creating them (issue 161; `rd_noplanes_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)) |

@@ -47,6 +47,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_perf_gap.h`, `rd_perf_gap.c` | the GPU's time between two timed replays, across untimed ones (pure) |
 | `port/render/rd_vis.c`, `rd_vis.h` | the scene draws' visibility test: a mesh, skinned or grid command wholly off its target or behind the eye replayed as an `RDC_NOP` of a shadow frame ([Culling](#culling)) |
 | `port/render/rd_vis_hiz.c` | its occlusion test (`[dev] cull = full`): a record of list 0's depth from the opaque draws' exact triangles, and a mesh or grid draw of list 0 wholly behind it replayed as an `RDC_NOP` ([Culling](#culling)) |
+| `port/render/rd_vis_hiz_fast.c` | what the occlusion test's collect keeps: the occluder triangles of a draw read as before (the collect cache) and a pending texture's alpha scan once a picture ([Culling](#culling)) |
 | `port/render/rd_occlusion.c` | every GPU draw of a replay (`rd__replay_draw`, `rd__replay_draw_indexed`: the pass window's take) and the hidden-draw measurement around them ([Culling](#culling)) |
 | `port/render/rd_passring.h`, `rd_passring.c` | the pass ring: the last passes recorded, for the device-loss report |
 | `port/render/rd_dump.c`, `rd_png.c` | frame dumps; a minimal PNG writer |
@@ -2342,6 +2343,62 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
     sort over the whole list); the walk then tests each kept draw of list 0 against the record and
     puts its own triangles in after. The reset touches only the tiles written. The test's time is
     its own figure in the lines below (its target: 0.4 ms a picture on a phone's big core).
+  - *Where the time goes, and the cheaper collect* (issue 179). Issue 179's Mali-G52 phone
+    logged 14.4 to 16.1 ms of cull a picture, 12.8 to 14.7 of it the occlusion test, for 0 draws
+    occluded in its scene blocks (the 10 s lines at L596, L634, L678 and L727 of the evidence
+    log). The test's own split: the collect ran once a picture over every
+    mesh draw of list 0, and for each candidate that passed the state, target, bound, program,
+    alpha and box rules projected every vertex of the range it draws through
+    `rd__vis_hiz_vertex` (in double: 32 multiplies and 6 divides a vertex, 32 more for code 36's
+    clip matrix) and only then dropped nearly every triangle at the 64th of the frame; the
+    rasterisation of the few kept and the occludees' tests are small beside it. On this machine
+    the plain pass over the occlusion corpus (lavapipe, x86, the replay tool's `--stats`) takes a
+    median 2.9 ms of cull a picture on a dump's first replay (2.1 the occlusion test; the textures
+    not uploaded yet are scanned for the alpha proof) and 0.9 (0.75) on its third. With
+    `ICO_RD_CULL_HIZ_FAST` on (the default; `0` the plain pass, a comparison) the collect makes
+    the same occluders at less cost, each step exact:
+    - *A batch's screen box.* For each batch of the draw, `rd__vis_hiz_screen_area` bounds the
+      screen box of any triangle whose three corners lie in the batch's vertices and are accepted:
+      the batch's box (kept per batch on the mesh's entry, as the frustum test's batches' box)
+      through the matrix, every corner in front of the eye by the tolerance, so a vertex's exact
+      `x / w` lies between the corners' (the mediant); the accepted corner `x = p - 1/32` is
+      within 2^-32 of `p`'s exact value (its `w` and `x` clear their tolerances of 2^-18), far
+      inside the 1/1024 GS pixel of room, and inside the region test's bounds, to which the box is
+      cut. A batch whose box area is under `minArea` marks its vertices, and a triangle with all
+      three corners in one marked batch is left unprojected: its own box lies in the batch's, each
+      side at most the batch's and rounding monotone, so its area is under `minArea` too. A batch
+      with a corner behind the eye is not marked; a sheet's tiles (`tiledFrom`) and a record of
+      serial 0 have no batch boxes.
+    - *A triangle's screen box.* Before the full projection, the corners' `x` and `y` exactly as
+      `rd__vis_hiz_vertex` makes them (the same products in the VU's order, the same divide and
+      offset: the same bits, under `-ffp-contract=off` and without excess precision,
+      `cmake/IcoFlags.cmake`) and the area as `rd__vis_hiz_tri` takes it: under `minArea` the
+      triangle is left, as the full pass would leave it at the area. Equal by construction, so no
+      bound is needed. A later-marked triangle or a sheet's tile, never kept, is left unread too.
+      A draw under Z test ALWAYS reads `lbAll` and whether every triangle is exact, so it takes
+      the full pass.
+    - *The walk's verdicts.* `cmdVerdict` of an occluder candidate in the collect is kept (its
+      verdict, reason, counts and bound) and the walk takes it for the same command instead of
+      working it out again (the same state at that command, the entries kept by stream version).
+    - *The pending scans.* A texture not uploaded yet is scanned for the alpha proof once a
+      collect, not once a draw (`rd__vis_hiz_scan_memo`). The decodes' settle before the collect
+      (`rdtex_settle`, a wait for the decode workers) is timed apart, outside the occlusion
+      figure.
+    - *The collect cache* (`rd_vis_hiz_fast.c`). A draw's occluder triangles are a function of
+      the mesh's stream, index list, batches and marks (new only with a new stream serial), the
+      sheet's tile bounds, the draw's batch range and clip mode, VU memory 16..23, `minArea`, the
+      extended state and the pass; a draw whose key is all of these byte for byte takes the
+      triangles kept from an earlier picture (a still camera, a paused or re-shown picture): 512
+      sets of 4 entries, at most 32768 triangles kept in all (past it the entries no draw of the
+      picture read go).
+    `ICO_RD_CULL_HIZ_CHECK=1` works out in full every triangle the fast collect leaves and every
+    cache hit, and counts a difference. The proof: `rd_vis_hiz` (random meshes, cameras and frames
+    against the plain pass, field for field), `rd_vis_hiz_corpus` (every row of the occlusion
+    corpus at three settings, the third the cache's: the same 26 counts as the plain pass and the
+    table, no check wrong) and `rd_cull_ab` on Vulkan and OpenGL (every picture byte for byte).
+    Not taken: a triangle's box as the cells it covers (claims cells it does not), `1 / w`
+    multiplies (other bits), coarser cells or fewer occluders (culls less), the vertex pass on
+    other threads (measure first: the line below says what is left).
 - *The numbers and the default.* Over the corpus of the gate (`rd_cull_ab`, 2026-11-03: 33 dumps,
   every run of them) the frustum test left out 3137 of 12470 scene draws, 25 % of them, and the
   occlusion test 3 more; 2838 targets of those runs equal the off run's byte for byte. The skipped
@@ -2375,7 +2432,25 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   ([dev] cull)` and `rd_replay_tool --stats`'s `stats: cull frustum: N of M scene draws skipped (F
   frustum, O occluded), T ms; not tested: E exempt, U unbounded; skipped beyond the left ...;
   occlusion: K occluder triangles (B past the budget), C cells, D draws tested, R resets, H ms`
-  (`--cull off|frustum|full` sets the variable; `--occlusion` replays with it off).
+  (`--cull off|frustum|full` sets the variable; `--occlusion` replays with it off). Where the
+  occlusion test ran, the 10 s line goes on after `([dev] cull)` (so `tools/cull_log_compare.py`'s
+  `CULL_RE` reads the part before as it did), each figure the mean a replay: `; occlusion: collect
+  C ms (settle S, alpha A, vertices V ms for Nv vertices, Nt triangles kept of Na; cache Hc of Dc
+  draws), raster R ms (Nc cells), test X ms (Nd draws tested); occluders used U, refused:
+  state/chain/target/bound/program/alpha/small/no-tri a/b/c/d/e/f/g/h; past the budget B`. `H` is
+  `C + R + X` (and the walk's bookkeeping around them); `S` is the decodes' settle before the
+  collect, in neither `H` nor `C` (in `T`); `A` the occluders' alpha proofs and `V` the vertex
+  pass, both inside `C`; `Nv` the vertices projected (in full and for the screen box alone), `Na`
+  the triangles read and `Nt` those kept as occluders before the budget; `Hc of Dc` the occluder
+  draws that took their triangles from the collect cache of those that reached the vertex pass;
+  `R` the rasterisation of the walk's occluders and `X` the occludees' tests; then the occluder
+  candidates by the rule that refused them (`stats: cull occlusion:`'s names). A collect costing
+  most of `T` with `V` most of it says the vertex pass is still the cost (`Nv` against `Na`: how
+  much the screen boxes left); `S` large says the decode workers were behind; `Hc` near `Dc` on a
+  still scene says the cache holds. `rd_replay_tool --stats` prints the same parts after the
+  reasons: `stats: cull occlusion cost: collect C ms (settle S, alpha A, vertices V ms: F in full,
+  B for the screen box alone; N triangles read, K kept, L left by their batch's box, M by their
+  own; cache Hc of Dc draws), raster R ms, test X ms; fast on|off, check: N checked, W wrong`.
 - *The skin check.* `rd_replay_tool --skin-check` checks every skinned command of the dump
   through the skinned draws' bone-block check and prints `<dump>: skin check: ...`
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#switches)).

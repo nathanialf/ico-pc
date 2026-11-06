@@ -1,0 +1,118 @@
+# rd_vis_hiz_corpus's table (port/render/test/rd_vis_hiz_corpus.cmake): the
+# visibility test's counts under [dev] cull = full for every dump of
+# tools/occlusion_corpus.txt and issue 179's frame (the last rows) at three
+# settings, as the plain occlusion pass
+# made them (rd_replay_tool --cull full --stats under ICO_RD_BLEND=fixed on
+# lavapipe, v0.10.4's code, 2026-11-06).  MACHINE-LOCAL paths, as the corpus
+# list's; a dump not here is skipped.  A row: the setting (orig43: --aspect
+# 4:3 --present 640x480; enh2x43: --enhanced --aspect 4:3 --resolution 2x;
+# enh2x43r3: the same with --repeat 3, the last of three replays, so the
+# collect cache's), the dump, then 26 counts: from "stats: cull full:" the
+# draws skipped, the draws walked, frustum, occluded, the occluder triangles
+# rasterised, those past the budget, the cells, the draws tested, the
+# resets; from "stats: cull occlusion:" the 17 reasons in rd_vis.h's
+# RD_VIS_HZ_* order.  Made again (the plain pass, ICO_RD_CULL_HIZ_FAST=0)
+# only when a change of the culler's rules is meant to change them.
+orig43 /primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43 /primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43r3 /primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+orig43 /primary/dev/ico-dumps/frame-20261007-200706-v3100.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43 /primary/dev/ico-dumps/frame-20261007-200706-v3100.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43r3 /primary/dev/ico-dumps/frame-20261007-200706-v3100.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+orig43 /primary/dev/ico-dumps/frame-20261007-200706-v3112.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43 /primary/dev/ico-dumps/frame-20261007-200706-v3112.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43r3 /primary/dev/ico-dumps/frame-20261007-200706-v3112.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+orig43 /primary/dev/ico-dumps/frame-20261007-200706-v3126.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43 /primary/dev/ico-dumps/frame-20261007-200706-v3126.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43r3 /primary/dev/ico-dumps/frame-20261007-200706-v3126.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+orig43 /primary/dev/ico-dumps/frame-20261007-200707-v3139.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43 /primary/dev/ico-dumps/frame-20261007-200707-v3139.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43r3 /primary/dev/ico-dumps/frame-20261007-200707-v3139.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+orig43 /primary/dev/ico-dumps/frame-20261007-200707-v3153.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43 /primary/dev/ico-dumps/frame-20261007-200707-v3153.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43r3 /primary/dev/ico-dumps/frame-20261007-200707-v3153.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+orig43 /primary/dev/ico-dumps/frame-20261007-200707-v3167.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43 /primary/dev/ico-dumps/frame-20261007-200707-v3167.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43r3 /primary/dev/ico-dumps/frame-20261007-200707-v3167.rddump 3 48 3 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+orig43 /primary/dev/ico-dumps/frame-20261007-210236-v1985.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43 /primary/dev/ico-dumps/frame-20261007-210236-v1985.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43r3 /primary/dev/ico-dumps/frame-20261007-210236-v1985.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+orig43 /primary/dev/ico-dumps/frame-20261007-210236-v1995.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43 /primary/dev/ico-dumps/frame-20261007-210236-v1995.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43r3 /primary/dev/ico-dumps/frame-20261007-210236-v1995.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+orig43 /primary/dev/ico-dumps/frame-20261007-210236-v2004.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43 /primary/dev/ico-dumps/frame-20261007-210236-v2004.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43r3 /primary/dev/ico-dumps/frame-20261007-210236-v2004.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+orig43 /primary/dev/ico-dumps/frame-20261007-210236-v2011.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43 /primary/dev/ico-dumps/frame-20261007-210236-v2011.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+enh2x43r3 /primary/dev/ico-dumps/frame-20261007-210236-v2011.rddump 0 48 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 7 0 0 0 0 0 0
+orig43 /primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump 52 199 51 1 1306 0 80324 44 0 43 2 0 0 42 0 16 11 37 1 10 0 7 58 0 43 0
+enh2x43 /primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump 52 199 51 1 1306 0 80324 44 0 43 2 0 0 42 0 16 11 37 1 10 0 7 58 0 43 0
+enh2x43r3 /primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump 52 199 51 1 1306 0 80324 44 0 43 2 0 0 42 0 16 11 37 1 10 0 7 58 0 43 0
+orig43 /primary/dev/ico-dumps/phone/frame-20261028-105852-v4103.zip 39 220 39 0 1072 0 60431 40 0 20 3 0 0 24 0 1 12 23 0 26 0 5 14 2 37 1
+enh2x43 /primary/dev/ico-dumps/phone/frame-20261028-105852-v4103.zip 39 220 39 0 1072 0 60431 40 0 20 3 0 0 24 0 1 12 23 0 26 0 5 14 2 37 1
+enh2x43r3 /primary/dev/ico-dumps/phone/frame-20261028-105852-v4103.zip 39 220 39 0 1072 0 60431 40 0 20 3 0 0 24 0 1 12 23 0 26 0 5 14 2 37 1
+orig43 /primary/dev/ico-dumps/phone/frame-20261028-151709-v2199.zip 18 209 18 0 959 0 61461 39 0 23 3 0 0 8 0 2 13 22 0 26 0 3 21 0 36 3
+enh2x43 /primary/dev/ico-dumps/phone/frame-20261028-151709-v2199.zip 18 209 18 0 959 0 61461 39 0 23 3 0 0 8 0 2 13 22 0 26 0 3 21 0 36 3
+enh2x43r3 /primary/dev/ico-dumps/phone/frame-20261028-151709-v2199.zip 18 209 18 0 959 0 61461 39 0 23 3 0 0 8 0 2 13 22 0 26 0 3 21 0 36 3
+orig43 /primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip 37 219 37 0 1155 0 66867 38 0 21 3 0 0 23 0 2 10 23 0 26 0 4 17 0 35 3
+enh2x43 /primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip 37 219 37 0 1155 0 66867 38 0 21 3 0 0 23 0 2 10 23 0 26 0 4 17 0 35 3
+enh2x43r3 /primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip 37 219 37 0 1155 0 66867 38 0 21 3 0 0 23 0 2 10 23 0 26 0 4 17 0 35 3
+orig43 /primary/dev/ico-pc/build-host/tmp/v097/evidence/163/frame/frame-20261031-211530-v10103.rddump 6 167 6 0 1746 0 44988 16 0 16 4 0 0 4 0 7 6 35 0 26 0 1 51 0 12 4
+enh2x43 /primary/dev/ico-pc/build-host/tmp/v097/evidence/163/frame/frame-20261031-211530-v10103.rddump 6 167 6 0 1746 0 44988 16 0 16 4 0 0 4 0 7 6 35 0 26 0 1 51 0 12 4
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/v097/evidence/163/frame/frame-20261031-211530-v10103.rddump 6 167 6 0 1746 0 44988 16 0 16 4 0 0 4 0 7 6 35 0 26 0 1 51 0 12 4
+orig43 /primary/dev/ico-pc/build-host/tmp/v097/evidence/173/frame/frame-20261031-092256-v1700.rddump 60 293 60 0 223 0 114 39 0 12 2 0 0 35 0 7 60 51 0 10 0 90 3 0 39 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/v097/evidence/173/frame/frame-20261031-092256-v1700.rddump 60 293 60 0 223 0 114 39 0 12 2 0 0 35 0 7 60 51 0 10 0 90 3 0 39 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/v097/evidence/173/frame/frame-20261031-092256-v1700.rddump 60 293 60 0 223 0 114 39 0 12 2 0 0 35 0 7 60 51 0 10 0 90 3 0 39 0
+orig43 /primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump 80 269 80 0 233 0 1281 31 0 11 0 0 0 30 0 6 47 56 0 0 0 87 2 0 31 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump 80 269 80 0 233 0 1281 31 0 11 0 0 0 30 0 6 47 56 0 0 0 87 2 0 31 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump 80 269 80 0 233 0 1281 31 0 11 0 0 0 30 0 6 47 56 0 0 0 87 2 0 31 0
+orig43 /primary/dev/ico-pc/build-host/tmp/issue-drafts/deja/frame-20261013-125037-v2227.rddump 61 171 61 0 725 0 112536 1 0 17 0 0 0 23 0 8 0 30 0 0 0 14 40 0 0 1
+enh2x43 /primary/dev/ico-pc/build-host/tmp/issue-drafts/deja/frame-20261013-125037-v2227.rddump 61 171 61 0 725 0 112536 1 0 17 0 0 0 23 0 8 0 30 0 0 0 14 40 0 0 1
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/issue-drafts/deja/frame-20261013-125037-v2227.rddump 61 171 61 0 725 0 112536 1 0 17 0 0 0 23 0 8 0 30 0 0 0 14 40 0 0 1
+orig43 /primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181358-v1279.rddump 80 274 80 0 233 0 1281 31 0 11 0 0 0 30 0 6 47 56 0 0 0 87 2 0 31 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181358-v1279.rddump 80 274 80 0 233 0 1281 31 0 11 0 0 0 30 0 6 47 56 0 0 0 87 2 0 31 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181358-v1279.rddump 80 274 80 0 233 0 1281 31 0 11 0 0 0 30 0 6 47 56 0 0 0 87 2 0 31 0
+orig43 /primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181400-v1358.rddump 80 273 80 0 233 0 1281 31 0 11 0 0 0 30 0 6 47 56 0 0 0 87 2 0 31 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181400-v1358.rddump 80 273 80 0 233 0 1281 31 0 11 0 0 0 30 0 6 47 56 0 0 0 87 2 0 31 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181400-v1358.rddump 80 273 80 0 233 0 1281 31 0 11 0 0 0 30 0 6 47 56 0 0 0 87 2 0 31 0
+orig43 /primary/dev/ico-pc/build-host/tmp/v091/evidence/146/frame-20261025-221358-v2567/frame-20261025-221358-v2567.rddump 137 301 137 0 140 0 1143 27 0 8 0 0 0 38 0 6 40 46 0 0 0 73 0 0 27 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/v091/evidence/146/frame-20261025-221358-v2567/frame-20261025-221358-v2567.rddump 137 301 137 0 140 0 1143 27 0 8 0 0 0 38 0 6 40 46 0 0 0 73 0 0 27 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/v091/evidence/146/frame-20261025-221358-v2567/frame-20261025-221358-v2567.rddump 137 301 137 0 140 0 1143 27 0 8 0 0 0 38 0 6 40 46 0 0 0 73 0 0 27 0
+orig43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00430.rddump 29 113 29 0 554 0 23722 8 0 11 0 0 0 0 0 0 0 3 0 0 0 2 4 0 8 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00430.rddump 29 113 29 0 554 0 23722 8 0 11 0 0 0 0 0 0 0 3 0 0 0 2 4 0 8 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00430.rddump 29 113 29 0 554 0 23722 8 0 11 0 0 0 0 0 0 0 3 0 0 0 2 4 0 8 0
+orig43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00574.rddump 56 107 56 0 528 0 11531 0 0 8 0 0 0 2 0 0 0 0 0 1 0 1 7 0 0 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00574.rddump 56 107 56 0 528 0 11531 0 0 8 0 0 0 2 0 0 0 0 0 1 0 1 7 0 0 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00574.rddump 56 107 56 0 528 0 11531 0 0 8 0 0 0 2 0 0 0 0 0 1 0 1 7 0 0 0
+orig43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00718.rddump 34 106 34 0 795 0 37464 5 0 6 2 0 0 2 0 1 2 0 0 20 0 1 5 0 3 2
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00718.rddump 34 106 34 0 795 0 37464 5 0 6 2 0 0 2 0 1 2 0 0 20 0 1 5 0 3 2
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00718.rddump 34 106 34 0 795 0 37464 5 0 6 2 0 0 2 0 1 2 0 0 20 0 1 5 0 3 2
+orig43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00910.rddump 7 153 7 0 718 0 18270 9 0 9 2 0 0 0 0 1 2 4 0 41 0 5 4 0 8 1
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00910.rddump 7 153 7 0 718 0 18270 9 0 9 2 0 0 0 0 1 2 4 0 41 0 5 4 0 8 1
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-00910.rddump 7 153 7 0 718 0 18270 9 0 9 2 0 0 0 0 1 2 4 0 41 0 5 4 0 8 1
+orig43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01006.rddump 24 74 24 0 816 0 27731 3 0 8 0 0 0 0 0 0 0 0 0 13 0 1 4 0 3 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01006.rddump 24 74 24 0 816 0 27731 3 0 8 0 0 0 0 0 0 0 0 0 13 0 1 4 0 3 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01006.rddump 24 74 24 0 816 0 27731 3 0 8 0 0 0 0 0 0 0 0 0 13 0 1 4 0 3 0
+orig43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01078.rddump 84 238 84 0 1089 0 33957 78 0 42 0 0 0 17 0 3 7 39 0 11 0 2 11 3 74 1
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01078.rddump 84 238 84 0 1089 0 33957 78 0 42 0 0 0 17 0 3 7 39 0 11 0 2 11 3 74 1
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01078.rddump 84 238 84 0 1089 0 33957 78 0 42 0 0 0 17 0 3 7 39 0 11 0 2 11 3 74 1
+orig43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01222.rddump 20 164 20 0 601 0 7973 13 0 16 2 0 0 12 0 1 2 6 0 43 0 7 7 0 13 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01222.rddump 20 164 20 0 601 0 7973 13 0 16 2 0 0 12 0 1 2 6 0 43 0 7 7 0 13 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01222.rddump 20 164 20 0 601 0 7973 13 0 16 2 0 0 12 0 1 2 6 0 43 0 7 7 0 13 0
+orig43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01450.rddump 102 261 102 0 495 0 17645 72 0 28 2 0 0 23 0 2 12 45 0 5 0 5 10 2 70 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01450.rddump 102 261 102 0 495 0 17645 72 0 28 2 0 0 23 0 2 12 45 0 5 0 5 10 2 70 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01450.rddump 102 261 102 0 495 0 17645 72 0 28 2 0 0 23 0 2 12 45 0 5 0 5 10 2 70 0
+orig43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01762.rddump 102 197 102 0 246 0 0 0 0 11 0 0 0 20 0 4 7 29 0 0 0 51 0 0 0 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01762.rddump 102 197 102 0 246 0 0 0 0 11 0 0 0 20 0 4 7 29 0 0 0 51 0 0 0 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-01762.rddump 102 197 102 0 246 0 0 0 0 11 0 0 0 20 0 4 7 29 0 0 0 51 0 0 0 0
+orig43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-02098.rddump 92 264 92 0 24 0 896 25 0 4 0 0 0 13 0 6 35 46 0 0 0 66 0 0 25 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-02098.rddump 92 264 92 0 24 0 896 25 0 4 0 0 0 13 0 6 35 46 0 0 0 66 0 0 25 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-02098.rddump 92 264 92 0 24 0 896 25 0 4 0 0 0 13 0 6 35 46 0 0 0 66 0 0 25 0
+orig43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-02254.rddump 91 264 91 0 20 0 1323 27 0 3 0 0 0 13 0 6 40 42 0 0 0 64 0 0 27 0
+enh2x43 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-02254.rddump 91 264 91 0 20 0 1323 27 0 3 0 0 0 13 0 6 40 42 0 0 0 64 0 0 27 0
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port2/keep/rd-02254.rddump 91 264 91 0 20 0 1323 27 0 3 0 0 0 13 0 6 40 42 0 0 0 64 0 0 27 0
+# issue 179's frame (the Mali-G52 MC2 reporter's v0.10.4 dump: play under the Options menu)
+orig43 /primary/dev/ico-pc/build-host/tmp/v0105/evidence/179/frame-20261106-000921-v21191.rddump 55 262 55 0 1361 0 47237 38 0 37 2 0 0 53 0 29 35 67 0 10 0 70 62 0 35 3
+enh2x43 /primary/dev/ico-pc/build-host/tmp/v0105/evidence/179/frame-20261106-000921-v21191.rddump 55 262 55 0 1361 0 47237 38 0 37 2 0 0 53 0 29 35 67 0 10 0 70 62 0 35 3
+enh2x43r3 /primary/dev/ico-pc/build-host/tmp/v0105/evidence/179/frame-20261106-000921-v21191.rddump 55 262 55 0 1361 0 47237 38 0 37 2 0 0 53 0 29 35 67 0 10 0 70 62 0 35 3

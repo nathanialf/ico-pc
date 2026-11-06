@@ -308,6 +308,81 @@ bool rd__vis_hiz_occludee(const float (*m)[4], const RdVisBox *b, bool scissor, 
            out->zmax < HIZ_DTOP;
 }
 
+bool rd__vis_hiz_screen_area(const float (*m)[4], const RdVisBox *b, bool scissor, double *area)
+{
+    if (!m || !b || !area || b->n == 0) {
+        return false;
+    }
+    for (int i = 0; i < 4; i++) {
+        if (!finite4(m[i])) {
+            return false;
+        }
+    }
+    /* w and the tolerances as rd__vis_hiz_occludee's */
+    double ws[2] = {1.0, 1.0};
+    if (scissor) {
+        ws[0] = b->lo[3] < 1.0f ? (double)b->lo[3] : 1.0;
+        ws[1] = b->hi[3] > 1.0f ? (double)b->hi[3] : 1.0;
+    }
+    const double ax = dmax(fabs((double)b->lo[0]), fabs((double)b->hi[0]));
+    const double ay = dmax(fabs((double)b->lo[1]), fabs((double)b->hi[1]));
+    const double az = dmax(fabs((double)b->lo[2]), fabs((double)b->hi[2]));
+    const double aw = dmax(fabs(ws[0]), fabs(ws[1]));
+    double tol[4];
+    for (int c = 0; c < 4; c++) {
+        tol[c] = RD_VIS_TOL * (fabs((double)m[0][c]) * ax + fabs((double)m[1][c]) * ay +
+                               fabs((double)m[2][c]) * az + fabs((double)m[3][c]) * aw);
+    }
+    double lo[2] = {0.0, 0.0}, hi[2] = {0.0, 0.0};
+    bool any = false;
+    const int nw = scissor ? 2 : 1;
+    for (int k = 0; k < 8; k++) {
+        for (int j = 0; j < nw; j++) {
+            const double v[4] = {(double)(k & 1 ? b->hi[0] : b->lo[0]),
+                                 (double)(k & 2 ? b->hi[1] : b->lo[1]),
+                                 (double)(k & 4 ? b->hi[2] : b->lo[2]), ws[j]};
+            double h[4];
+            hOf(m, v, h, NULL);
+            const double wlo = h[3] - tol[3], whi = h[3] + tol[3];
+            /* every corner in front of the eye: a vertex's exact x / w is
+             * then a mean of the corners' weighted by their w (> 0), so it
+             * lies between theirs; a corner's own lies in [n0 / w, n1 / w]
+             * over its numerator's range n0..n1 and w's wlo..whi */
+            if (!(wlo > 0.0) || !isfinite(whi) || !isfinite(h[0]) || !isfinite(h[1])) {
+                return false;
+            }
+            for (int a = 0; a < 2; a++) {
+                const double n0 = h[a] - tol[a], n1 = h[a] + tol[a];
+                const double c0 = n0 >= 0.0 ? n0 / whi : n0 / wlo;
+                const double c1 = n1 >= 0.0 ? n1 / wlo : n1 / whi;
+                lo[a] = any ? dmin(lo[a], c0) : c0;
+                hi[a] = any ? dmax(hi[a], c1) : c1;
+            }
+            any = true;
+        }
+    }
+    /* The corner the vertex test accepts is x = p - 1/32, p its float
+     * h.x / h.w in double: within 2^-32 of p's exact value (its w and x
+     * clear their tolerances, 2^-18 of the products, so the double sums'
+     * rounding is 2^-35 of each at most), a millionth of a GS pixel below
+     * 4096; HIZ_NDC is far more, and the divides' rounding is HIZ_ULP's.
+     * An accepted corner also lies inside the region test's bounds
+     * (HIZ_LO < p, p < HIZ_HI), so the box is cut to them. */
+    double e[2];
+    for (int a = 0; a < 2; a++) {
+        double x0 = lo[a] - fabs(lo[a]) * HIZ_ULP - 1.0 / 32.0 - HIZ_NDC;
+        double x1 = hi[a] + fabs(hi[a]) * HIZ_ULP - 1.0 / 32.0 + HIZ_NDC;
+        x0 = dmax(x0, HIZ_LO - 1.0 / 16.0);
+        x1 = dmin(x1, HIZ_HI);
+        e[a] = x1 - x0;
+        e[a] = e[a] > 0.0 ? e[a] : 0.0;
+    }
+    /* a triangle's area is (x1 - x0) (y1 - y0) of its corners, each
+     * difference no larger than the box's, and rounding is monotone */
+    *area = e[0] * e[1];
+    return isfinite(*area);
+}
+
 double rd__vis_hiz_margin(double zmax, bool later)
 {
     double m = 4096.0 + zmax / 131072.0; /* 2^-17 */
@@ -602,12 +677,51 @@ bool rd__vis_hiz_pending_scan(uint32_t id, RdTexAlphaScan *out)
 
 /* ------------------------------------------------- an occluder's triangles */
 
+/* The vertices of the draw in hand (s_memo.now): the full projection
+ * (v, ok: stamp), the screen position alone (cx, cy: cstamp) and the batch
+ * whose screen box is under minArea that the vertex belongs to (bid:
+ * bstamp) */
 static struct {
     RdVisHizVtx *v;
     uint32_t *stamp;
     uint8_t *ok;
+    double *cx, *cy;
+    uint32_t *cstamp, *bstamp, *bid;
     uint32_t cap, now;
 } s_memo;
+
+static bool growTo(void **p, size_t n, size_t size)
+{
+    void *g = realloc(*p, n * size);
+    if (!g) {
+        return false;
+    }
+    *p = g;
+    return true;
+}
+
+/* room for n vertices in every array, the new stamps matching no draw */
+static bool memoGrow(uint32_t n)
+{
+    if (n <= s_memo.cap) {
+        return true;
+    }
+    if (!growTo((void **)&s_memo.v, n, sizeof(RdVisHizVtx)) ||
+        !growTo((void **)&s_memo.stamp, n, sizeof(uint32_t)) ||
+        !growTo((void **)&s_memo.ok, n, 1) || !growTo((void **)&s_memo.cx, n, sizeof(double)) ||
+        !growTo((void **)&s_memo.cy, n, sizeof(double)) ||
+        !growTo((void **)&s_memo.cstamp, n, sizeof(uint32_t)) ||
+        !growTo((void **)&s_memo.bstamp, n, sizeof(uint32_t)) ||
+        !growTo((void **)&s_memo.bid, n, sizeof(uint32_t))) {
+        return false; /* the arrays grown so far keep their contents; cap as it was */
+    }
+    const size_t add = (size_t)(n - s_memo.cap) * sizeof(uint32_t);
+    memset(s_memo.stamp + s_memo.cap, 0, add);
+    memset(s_memo.cstamp + s_memo.cap, 0, add);
+    memset(s_memo.bstamp + s_memo.cap, 0, add);
+    s_memo.cap = n;
+    return true;
+}
 
 bool rd__vis_hiz_list_push(RdVisHizList *l, const RdVisHizTri *t)
 {
@@ -626,23 +740,76 @@ bool rd__vis_hiz_list_push(RdVisHizList *l, const RdVisHizTri *t)
 
 /* vertex v of m through the draw (memoised for the draw: s_memo.now) */
 static bool vertexOf(const RdMeshRec *m, uint32_t v, const float (*mm)[4], const float (*clip)[4],
-                     const RdVisHizVtx **out)
+                     const RdVisHizVtx **out, RdVisHizPass *ps)
 {
     if (s_memo.stamp[v] != s_memo.now) {
         s_memo.stamp[v] = s_memo.now;
         s_memo.ok[v] =
             rd__vis_hiz_vertex(mm, clip, m->stream[(size_t)v * m->qwPerVertex], &s_memo.v[v]) ? 1u
                                                                                               : 0u;
+        if (ps) {
+            ps->verts++;
+        }
     }
     *out = &s_memo.v[v];
     return s_memo.ok[v] != 0;
 }
 
+/* The screen box's area of the triangle of corners v - 2 .. v from the x
+ * and y rd__vis_hiz_vertex gives a corner it accepts: the same h (hOf, in
+ * the VU's order), the same divide and the same offset, so the same bits
+ * (-ffp-contract=off, no excess precision: cmake/IcoFlags.cmake), and the
+ * area as rd__vis_hiz_tri works it out.  Not finite, or anything, for a
+ * corner it refuses: such a triangle is never kept. */
+static double cheapArea(const RdMeshRec *m, uint32_t kick, const float (*mm)[4],
+                        const float (*clip)[4], RdVisHizPass *ps)
+{
+    double x[3], y[3];
+    for (int k = 0; k < 3; k++) {
+        const uint32_t v = kick - 2u + (uint32_t)k;
+        if (s_memo.cstamp[v] != s_memo.now) {
+            s_memo.cstamp[v] = s_memo.now;
+            const float *pos = m->stream[(size_t)v * m->qwPerVertex];
+            const double vv[4] = {pos[0], pos[1], pos[2], clip ? (double)pos[3] : 1.0};
+            double h[4];
+            hOf(mm, vv, h, NULL);
+            const double p0 = h[0] / h[3], p1 = h[1] / h[3];
+            s_memo.cx[v] = p0 - 1.0 / 32.0;
+            s_memo.cy[v] = p1 - 1.0 / 32.0;
+            ps->cheapVerts++;
+        }
+        x[k] = s_memo.cx[v];
+        y[k] = s_memo.cy[v];
+    }
+    double x0 = x[0], x1 = x[0], y0 = y[0], y1 = y[0];
+    for (int k = 0; k < 3; k++) {
+        x0 = dmin(x0, x[k]);
+        x1 = dmax(x1, x[k]);
+        y0 = dmin(y0, y[k]);
+        y1 = dmax(y1, y[k]);
+    }
+    return (x1 - x0) * (y1 - y0);
+}
+
+/* the triangle the fast pass left: whether the full pass keeps it (the
+ * check, ICO_RD_CULL_HIZ_CHECK) */
+static bool keptInFull(const RdMeshRec *m, uint32_t kick, const float (*mm)[4],
+                       const float (*clip)[4], double minArea, RdVisHizPass *ps)
+{
+    const RdVisHizVtx *a, *b, *c;
+    const bool okA = vertexOf(m, kick - 2u, mm, clip, &a, ps);
+    const bool okB = vertexOf(m, kick - 1u, mm, clip, &b, ps);
+    const bool okC = vertexOf(m, kick, mm, clip, &c, ps);
+    RdVisHizTri t;
+    return okA && okB && okC && rd__vis_hiz_tri(a, b, c, &t) && !(t.area < minArea);
+}
+
 /* the triangles of the index range [i0, i1) of m */
 static int rangeTris(const RdMeshRec *m, uint32_t i0, uint32_t i1, const float (*mm)[4],
                      const float (*clip)[4], uint32_t cmd, double minArea, RdVisHizList *out,
-                     uint32_t *lbAll)
+                     uint32_t *lbAll, RdVisHizPass *ps)
 {
+    const bool fast = ps && ps->fast;
     int all = 1;
     i1 = i1 > m->indexCount ? m->indexCount : i1;
     for (uint32_t i = i0; i < i1; i += 3u) {
@@ -660,10 +827,42 @@ static int rangeTris(const RdMeshRec *m, uint32_t i0, uint32_t i1, const float (
         if (mark & ICO_VU_MARK_HIDE) {
             continue; /* drawn nowhere (vu_content_hidden) */
         }
+        if (ps) {
+            ps->trisRead++;
+        }
+        if (fast) {
+            if ((mark & ICO_VU_MARK_LATER) || (m->tiledFrom && kick >= m->tiledFrom)) {
+                continue; /* never kept (below) */
+            }
+            /* all three corners in one batch whose screen box is under
+             * minArea, or the triangle's own screen box under it: the
+             * full pass would leave it at the area */
+            const uint32_t n = s_memo.now;
+            const bool inBatch = s_memo.bstamp[kick - 2u] == n && s_memo.bstamp[kick - 1u] == n &&
+                                 s_memo.bstamp[kick] == n &&
+                                 s_memo.bid[kick - 2u] == s_memo.bid[kick] &&
+                                 s_memo.bid[kick - 1u] == s_memo.bid[kick];
+            const bool small = inBatch || cheapArea(m, kick, mm, clip, ps) < minArea;
+            if (small) {
+                if (inBatch) {
+                    ps->trisBatch++;
+                } else {
+                    ps->trisArea++;
+                }
+                all = 0;
+                if (ps->check) {
+                    ps->checked++;
+                    if (keptInFull(m, kick, mm, clip, minArea, ps)) {
+                        ps->wrong++;
+                    }
+                }
+                continue;
+            }
+        }
         const RdVisHizVtx *a, *b, *c;
-        const bool okA = vertexOf(m, kick - 2u, mm, clip, &a);
-        const bool okB = vertexOf(m, kick - 1u, mm, clip, &b);
-        const bool okC = vertexOf(m, kick, mm, clip, &c);
+        const bool okA = vertexOf(m, kick - 2u, mm, clip, &a, ps);
+        const bool okB = vertexOf(m, kick - 1u, mm, clip, &b, ps);
+        const bool okC = vertexOf(m, kick, mm, clip, &c, ps);
         RdVisHizTri t;
         if (!okA || !okB || !okC || !rd__vis_hiz_tri(a, b, c, &t)) {
             all = 0;
@@ -685,6 +884,13 @@ static int rangeTris(const RdMeshRec *m, uint32_t i0, uint32_t i1, const float (
 int rd__vis_hiz_mesh(const RdMeshRec *m, const RdVuPayload *p, const float (*mem)[4], uint32_t cmd,
                      double minArea, RdVisHizList *out, uint32_t *lbAll)
 {
+    return rd__vis_hiz_mesh_ex(m, p, mem, cmd, minArea, out, lbAll, NULL);
+}
+
+int rd__vis_hiz_mesh_ex(const RdMeshRec *m, const RdVuPayload *p, const float (*mem)[4],
+                        uint32_t cmd, double minArea, RdVisHizList *out, uint32_t *lbAll,
+                        RdVisHizPass *ps)
+{
     *lbAll = UINT32_MAX;
     if (!m || !m->stream || !m->index || !m->batches || p->firstBatch >= m->batchCount ||
         (p->clip != RD_VU_CLIP_REGION && p->clip != RD_VU_CLIP_SCISSOR &&
@@ -692,44 +898,49 @@ int rd__vis_hiz_mesh(const RdMeshRec *m, const RdVuPayload *p, const float (*mem
                                          * wraps to 16 bits, which no vertex accepted below does */
         return 0;
     }
-    if (m->vertexCount > s_memo.cap) {
-        RdVisHizVtx *v = realloc(s_memo.v, (size_t)m->vertexCount * sizeof(RdVisHizVtx));
-        if (v) {
-            s_memo.v = v;
-        }
-        uint32_t *st = v ? realloc(s_memo.stamp, (size_t)m->vertexCount * sizeof(uint32_t)) : NULL;
-        if (st) {
-            s_memo.stamp = st;
-        }
-        uint8_t *ok = st ? realloc(s_memo.ok, m->vertexCount) : NULL;
-        if (!ok) {
-            return -1;
-        }
-        s_memo.ok = ok;
-        /* the new entries' stamps: none matches a draw */
-        memset(s_memo.stamp + s_memo.cap, 0, (size_t)(m->vertexCount - s_memo.cap) * 4u);
-        s_memo.cap = m->vertexCount;
+    if (!memoGrow(m->vertexCount)) {
+        return -1;
     }
     if (++s_memo.now == 0u) {
         if (s_memo.cap) {
             memset(s_memo.stamp, 0, (size_t)s_memo.cap * 4u);
+            memset(s_memo.cstamp, 0, (size_t)s_memo.cap * 4u);
+            memset(s_memo.bstamp, 0, (size_t)s_memo.cap * 4u);
         }
         s_memo.now = 1u;
     }
     const float (*mm)[4] = &mem[16];
-    const float (*clip)[4] = p->clip == RD_VU_CLIP_SCISSOR ? &mem[20] : NULL;
+    const bool scissor = p->clip == RD_VU_CLIP_SCISSOR;
+    const float (*clip)[4] = scissor ? &mem[20] : NULL;
     /* the index ranges doVuDraw (rd_replay_vu.c) draws */
     uint32_t last = p->firstBatch + p->batchCount;
     if (last > m->batchCount || p->batchCount == 0) {
         last = m->batchCount;
     }
+    if (ps && ps->fast && ps->bb && ps->bbN == m->batchCount && !m->tiledFrom && minArea > 0.0) {
+        /* the vertices of each batch whose screen box is under minArea:
+         * a triangle with its three corners among them is smaller */
+        for (uint32_t b = p->firstBatch; b < last; b++) {
+            const RdVuBatchRec *br = &m->batches[b];
+            double area;
+            if (!rd__vis_hiz_screen_area(mm, &ps->bb[b], scissor, &area) || !(area < minArea)) {
+                continue;
+            }
+            const uint64_t ve = (uint64_t)br->firstVertex + br->vertexCount;
+            const uint32_t end = ve > m->vertexCount ? m->vertexCount : (uint32_t)ve;
+            for (uint32_t v = br->firstVertex; v < end; v++) {
+                s_memo.bstamp[v] = s_memo.now;
+                s_memo.bid[v] = b;
+            }
+        }
+    }
     const bool extended = rd__vu_extended();
     int all = 1;
-    if (p->clip != RD_VU_CLIP_SCISSOR) {
+    if (!scissor) {
         const RdVuBatchRec *b0 = &m->batches[p->firstBatch], *b1 = &m->batches[last - 1u];
         const uint32_t end = rd__vu_sheet_end(m, b1->firstIndex + b1->indexCount, extended);
         if (end > b0->firstIndex) {
-            all = rangeTris(m, b0->firstIndex, end, mm, clip, cmd, minArea, out, lbAll);
+            all = rangeTris(m, b0->firstIndex, end, mm, clip, cmd, minArea, out, lbAll, ps);
         }
         return all;
     }
@@ -737,7 +948,7 @@ int rd__vis_hiz_mesh(const RdMeshRec *m, const RdVuPayload *p, const float (*mem
         const RdVuBatchRec *br = &m->batches[b];
         const uint32_t end = rd__vu_sheet_end(m, br->firstIndex + br->indexCount, extended);
         if (end > br->firstIndex) {
-            const int a = rangeTris(m, br->firstIndex, end, mm, clip, cmd, minArea, out, lbAll);
+            const int a = rangeTris(m, br->firstIndex, end, mm, clip, cmd, minArea, out, lbAll, ps);
             all = a < 0 ? -1 : (a && all);
         }
     }

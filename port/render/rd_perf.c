@@ -203,10 +203,8 @@ static uint64_t s_backendBytes;
 static uint32_t s_backendReplays, s_reshownReplays, s_glowHeldReplays;
 static uint64_t s_mergeIn, s_mergeGpu, s_mergeAlone, s_mergeBlocked[5];
 static uint64_t s_fusePairs, s_fuseSame, s_fuseKept[RD_VU_FUSE_WHY_COUNT];
-/* the visibility test (rd_vis.c; RdPerfRecord cullDraws, cullSkipped,
- * cullFrustum, cullOccluded, cullMs, cullHizMs) */
-static uint64_t s_cullDraws, s_cullSkipped, s_cullFrustum, s_cullOccluded;
-static double s_cullMs, s_cullHizMs;
+/* the visibility test (rd_vis.c; RdPerfRecord cull*) */
+static RdPerfCullSum s_cull;
 /* the VU draws without side bands for want of facing data, by why
  * (RdPerfRecord.vuBesideNoFacing, RD_VU_NOFACE_*) */
 static uint64_t s_besideNoFacing[RD_VU_NOFACE_COUNT];
@@ -255,12 +253,7 @@ bool rd_perf_pop(RdPerfRecord *out)
         s_mergeBlocked[k] += s_queue[s_head].vuMergeBlocked[k];
     }
     s_fusePairs += s_queue[s_head].vuFusePairs;
-    s_cullDraws += s_queue[s_head].cullDraws;
-    s_cullSkipped += s_queue[s_head].cullSkipped;
-    s_cullFrustum += s_queue[s_head].cullFrustum;
-    s_cullOccluded += s_queue[s_head].cullOccluded;
-    s_cullMs += s_queue[s_head].cullMs;
-    s_cullHizMs += s_queue[s_head].cullHizMs;
+    rd_perf_cull_add(&s_cull, &s_queue[s_head]);
     for (int k = 0; k < RD_VU_NOFACE_COUNT; k++) {
         s_besideNoFacing[k] += s_queue[s_head].vuBesideNoFacing[k];
     }
@@ -391,9 +384,79 @@ void rd_perf_why_text(char *buf, size_t size, int which, const uint64_t *counts,
     }
 }
 
+void rd_perf_cull_add(RdPerfCullSum *s, const RdPerfRecord *r)
+{
+    s->draws += r->cullDraws;
+    s->skipped += r->cullSkipped;
+    s->frustum += r->cullFrustum;
+    s->occluded += r->cullOccluded;
+    s->ms += r->cullMs;
+    s->hizMs += r->cullHizMs;
+    s->settleMs += r->cullHizSettleMs;
+    s->collectMs += r->cullHizCollectMs;
+    s->alphaMs += r->cullHizAlphaMs;
+    s->vertMs += r->cullHizVertMs;
+    s->rasterMs += r->cullHizRasterMs;
+    s->testMs += r->cullHizTestMs;
+    s->verts += r->cullHizVerts;
+    s->trisRead += r->cullHizTrisRead;
+    s->trisKept += r->cullHizTrisKept;
+    s->cells += r->cullHizCells;
+    s->tested += r->cullHizTested;
+    s->overBudget += r->cullHizOverBudget;
+    s->cacheHits += r->cullHizCacheHits;
+    s->cacheDraws += r->cullHizCacheDraws;
+    for (int k = 0; k < RD_PERF_HIZ_OCC; k++) {
+        s->occ[k] += r->cullHizOcc[k];
+    }
+}
+
+void rd_perf_cull_text(char *buf, size_t size, const RdPerfCullSum *s, double replays)
+{
+    if (!buf || size == 0) {
+        return;
+    }
+    buf[0] = '\0';
+    if (!s->draws || !(replays > 0.0)) {
+        return;
+    }
+    const double n = replays;
+    int k = snprintf(buf, size,
+                     "; cull: %.0f of %.0f scene draws skipped a replay (%.0f frustum, "
+                     "%.0f occluded), %.2f ms (occlusion %.2f) ([dev] cull)",
+                     (double)s->skipped / n, (double)s->draws / n, (double)s->frustum / n,
+                     (double)s->occluded / n, s->ms / n, s->hizMs / n);
+    size_t at = k > 0 && (size_t)k < size ? (size_t)k : size - 1;
+    uint64_t cands = 0;
+    for (int j = 0; j < RD_PERF_HIZ_OCC; j++) {
+        cands += s->occ[j];
+    }
+    if (!cands && !(s->collectMs > 0.0) && !s->tested) {
+        return; /* the occlusion test did not run (frustum, a list other than 0 first) */
+    }
+    /* after "(occlusion H)", so tools/cull_log_compare.py's CULL_RE still
+       reads the part before: the collect (the decodes' settle before it
+       apart: in neither figure), its alpha proofs and vertex pass, the
+       raster, the occludees' test, the candidates by reason */
+    k = snprintf(buf + at, size - at,
+                 "; occlusion: collect %.2f ms (settle %.2f, alpha %.2f, vertices %.2f ms for %.0f "
+                 "vertices, %.0f triangles kept of %.0f; cache %.0f of %.0f draws), raster %.2f "
+                 "ms (%.0f cells), test %.2f ms (%.0f draws tested); occluders used %.0f, refused: "
+                 "state/chain/target/bound/program/alpha/small/no-tri "
+                 "%.0f/%.0f/%.0f/%.0f/%.0f/%.0f/%.0f/%.0f; past the budget %.0f",
+                 s->collectMs / n, s->settleMs / n, s->alphaMs / n, s->vertMs / n,
+                 (double)s->verts / n, (double)s->trisKept / n, (double)s->trisRead / n,
+                 (double)s->cacheHits / n, (double)s->cacheDraws / n, s->rasterMs / n,
+                 (double)s->cells / n, s->testMs / n, (double)s->tested / n, (double)s->occ[0] / n,
+                 (double)s->occ[1] / n, (double)s->occ[2] / n, (double)s->occ[3] / n,
+                 (double)s->occ[4] / n, (double)s->occ[5] / n, (double)s->occ[6] / n,
+                 (double)s->occ[7] / n, (double)s->occ[8] / n, (double)s->overBudget / n);
+    (void)k;
+}
+
 const char *rd_perf_backend_text(void)
 {
-    static char s_text[2048];
+    static char s_text[3072];
     size_t at = 0;
     s_text[0] = '\0';
     if (s_backendBytes && s_backendReplays) {
@@ -433,17 +496,14 @@ const char *rd_perf_backend_text(void)
                      (double)s_mergeBlocked[4] / n);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
-    if (s_cullDraws && s_backendReplays) {
+    if (s_cull.draws && s_backendReplays) {
         /* the visibility test (rd_vis.c): per replay, the scene draws it
            turned into NOPs of the VU draw commands, by which test, and its
-           CPU time, the occlusion test's (rd_vis_hiz.c) share of it */
-        const double n = (double)s_backendReplays;
-        const int k =
-            snprintf(s_text + at, sizeof(s_text) - at,
-                     "; cull: %.0f of %.0f scene draws skipped a replay (%.0f frustum, "
-                     "%.0f occluded), %.2f ms (occlusion %.2f) ([dev] cull)",
-                     (double)s_cullSkipped / n, (double)s_cullDraws / n, (double)s_cullFrustum / n,
-                     (double)s_cullOccluded / n, s_cullMs / n, s_cullHizMs / n);
+           CPU time, the occlusion test's (rd_vis_hiz.c) share of it, and
+           that share by part */
+        char cull[640];
+        rd_perf_cull_text(cull, sizeof(cull), &s_cull, (double)s_backendReplays);
+        const int k = snprintf(s_text + at, sizeof(s_text) - at, "%s", cull);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
     uint64_t noFacing = 0;
@@ -610,8 +670,7 @@ const char *rd_perf_backend_text(void)
     memset(s_mergeBlocked, 0, sizeof(s_mergeBlocked));
     s_fusePairs = s_fuseSame = 0;
     memset(s_fuseKept, 0, sizeof(s_fuseKept));
-    s_cullDraws = s_cullSkipped = s_cullFrustum = s_cullOccluded = 0;
-    s_cullMs = s_cullHizMs = 0.0;
+    memset(&s_cull, 0, sizeof(s_cull));
     memset(s_besideNoFacing, 0, sizeof(s_besideNoFacing));
     s_besideCards = 0;
     s_cameraDraws = 0;
