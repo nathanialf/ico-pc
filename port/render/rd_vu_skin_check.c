@@ -672,6 +672,9 @@ typedef struct SkTwin {
     uint8_t fs;
     bool own, c;
     bool entry; /* through the program's own entry (the draw read the pre-pass record) */
+    /* why not the draw's own pipeline: 1 it does not read its attachment,
+     * 2 it reads it but writes Z (0: own, or through the entry) */
+    uint8_t notOwn;
     int32_t check;
 } SkTwin;
 
@@ -1160,6 +1163,7 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
     tw->fs = dk->fs;
     tw->own = own;
     tw->entry = entry;
+    tw->notOwn = own || entry ? 0u : dk->dst != RHI_DST_READ_ATTACHMENT ? 1u : 2u;
     tw->c = false; /* C, the ring read's twin: B2 */
     tw->check = check;
     const RhiCommandList cl = rd__replay_cl();
@@ -1820,6 +1824,7 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
     }
     if (s_collect) {
         s_collect->twinsDiffer++;
+        s_collect->twinsDifferOwn += tw->own;
     }
     /* the probe's target for the next replays */
     s_target.meshId = tw->meshId;
@@ -1864,7 +1869,11 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
                 tw->own     ? " with the draw's attachment read (its own pipeline)"
                 : tw->entry ? " with colour and Z writes off (the program's own vertex entry: the "
                               "draw read the pre-pass record)"
-                            : " with colour and Z writes off",
+                : tw->notOwn == 2u
+                    ? " with colour and Z writes off (the box check's pipeline: the draw reads "
+                      "its attachment but writes Z)"
+                    : " with colour and Z writes off (the box check's pipeline: the draw does not "
+                      "read its attachment)",
                 probe, reads, (unsigned long long)s_run.twinEvents);
     }
     if (s_cap.done) {

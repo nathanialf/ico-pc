@@ -271,6 +271,7 @@ typedef struct RdSkinSummary {
      * after a twin event, of them wrong, the wrong vertices the probe
      * dropped (non-finite) */
     uint32_t twins, twinsDiffer, twinsOwn, targeted, targetedWrong, dropped;
+    uint32_t twinsDifferOwn; /* of the twins that differed, those through the draw's own pipeline */
 } RdSkinSummary;
 
 int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out);

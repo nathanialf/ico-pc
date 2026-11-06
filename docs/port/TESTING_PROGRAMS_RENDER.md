@@ -437,12 +437,14 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `frame-20261106-080033-v3910-blended` (copied to the same folder) clean with every twin equal (`rd_vu_skin_check_123`) and with
   `=200,nan` wrong at address 200, H2, the twins differing and the wrong vertices dropped
   (`rd_vu_skin_check_123_nan`); the same two under the Turnip reporter's profile on lavapipe (the
-  attachment read, GS state as shader data, the VU pre-pass off), where the twins of Yorda's
-  Z-write-off draws go through their own pipelines: every twin equal and at least one through the
-  draw's own pipeline (`rd_vu_skin_check_123_attach`), and with `=200,nan` the twins differing
-  there, the log's `twins differ: ... with the draw's attachment read (its own pipeline)`
-  (`rd_vu_skin_check_123_nan_attach`). The summary line ends `twins: T read, D differ (O through the
-  draw's own pipeline); V wrong vertices dropped (non-finite)`. SKIP without the dump or a device.
+  attachment read, GS state as shader data, the VU pre-pass off), where the twins of the draws
+  whose first pass reads the attachment with Z writes off go through their own pipelines: every twin
+  equal and at least one through the draw's own pipeline (`rd_vu_skin_check_123_attach`), and with
+  `=200,nan` the same with the twins differing and a `twins differ` line
+  (`rd_vu_skin_check_123_nan_attach`; on this dump the three draws on bone 200 are twinned through
+  the box check's pipeline, and each line says why). The summary line ends `twins: T read (O through
+  the draw's own pipeline), D differ (E of them through it); V wrong vertices dropped
+  (non-finite)`. SKIP without the dump or a device.
 - `rd_vu_skin_check_ab.cmake`: the skin check is designed not to change the picture
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)); `rd_replay_tool --pass-dump` with it off
   (`ICO_RD_VU_SKIN_CHECK=0`) and on for every skinned command of every replay (`=2`: the probes,

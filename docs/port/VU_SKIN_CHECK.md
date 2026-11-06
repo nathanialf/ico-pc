@@ -255,7 +255,9 @@ On an event, the first 8, then every 100th, of each kind on its own count (a wro
 - `rd: VU skin check: frame F command L:I mesh ...: every vertex right (M compared); the bone block as the GPU copied it: ...; reads as: WORDS (bytes event E)` (bytes that differed, every vertex right)
 - `rd: VU skin check: frame F command L:I mesh NAME #ID (V vertices): twins differ: A (the draw's
   offset, page phase P) N samples, B (fresh, phase Q) M samples[, C (ring read) K samples]; through
-  FS with the draw's attachment read (its own pipeline) | with colour and Z writes off; the probe of
+  FS with the draw's attachment read (its own pipeline) | with colour and Z writes off (the program's
+  own vertex entry: the draw read the pre-pass record | the box check's pipeline: the draw does not
+  read its attachment | the box check's pipeline: the draw reads its attachment but writes Z); the probe of
   this command: right | wrong at address A | not probed; reads as: WORDS (twin event E)` (WORDS:
   `the draw's bone read at its own offset ...` with a wrong probe, `the scene pass's execution: the
   twins differ inside the pass while the probe of the same bytes drew right outside it` with a right
@@ -301,8 +303,8 @@ right K, c2 right L (c2 drawn in M checks); largest difference on a right vertex
   the lines above on stderr, then `<dump>: skin check: N skinned commands, C checks, W wrong
   (address A), B blocks whose bytes differed (R changed after the draw), X of Y box checks with
   samples outside; on the wrong ones c1 right K, c2 right L (c2 drawn in M); reads as: WORDS;
-  twins: T read, D differ (O through the draw's own pipeline); V wrong vertices dropped
-  (non-finite)`. A
+  twins: T read (O through the draw's own pipeline), D differ (E of them through it); V wrong
+  vertices dropped (non-finite)`. A
   is the address the last wrong check named, WORDS that check's decision (a check whose bytes
   differed but whose probe drew right, a block whose changed bone the mesh does not use, gives its
   words only while no check was wrong).
