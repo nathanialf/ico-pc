@@ -278,8 +278,11 @@ static void checkFast(void)
         }
         float mem[36][4];
         memset(mem, 0, sizeof(mem));
-        camMatrix(&cam, &mem[16]);
-        clipMatrix(&mem[20]);
+        float cm[4][4], cl[4][4];
+        camMatrix(&cam, cm);
+        clipMatrix(cl);
+        memcpy(mem[16], cm, sizeof(cm));
+        memcpy(mem[20], cl, sizeof(cl));
         static const uint8_t clips[3] = {RD_VU_CLIP_REGION, RD_VU_CLIP_NONE, RD_VU_CLIP_SCISSOR};
         for (int k = 0; k < 3; k++) {
             RdVuPayload p;
@@ -343,7 +346,9 @@ static RdCmd *pushMesh(RdFrame *f, uint32_t mesh, uint8_t clip, const float (*m)
     memset(&blk, 0, sizeof(blk));
     memcpy(&blk.mem[16], m, 64);
     memcpy(&blk.mem[4], m, 64);
-    clipMatrix(&blk.mem[20]);
+    float cl[4][4];
+    clipMatrix(cl);
+    memcpy(blk.mem[20], cl, sizeof(cl));
     memcpy(buf, &p, sizeof(p));
     memcpy(buf + sizeof(p), &blk, sizeof(blk));
     const uint32_t off = rd__frame_payload(f, buf, (uint32_t)sizeof(buf));
