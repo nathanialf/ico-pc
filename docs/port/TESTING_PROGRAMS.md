@@ -1059,7 +1059,8 @@ The renderer's test programs have a page of their own:
   one slot ended and submitted on a thread B while the test's thread recycles the other slot,
   begins its list there and records it (B ends once that list has begun), with a test slot guard
   (`rhi_set_slot_guard`) freeing the test thread's slot calls while B's job is of the other slot:
-  no guard wait while recycling and recording, one at the second list's end, and both targets
+  no guard wait while recycling, recording and ending the second list (the end is a slot call),
+  one at its submit, and both targets
   equal row by row to the same two lists made one after the other and to their squares (red and
   green, and a blue one); skipped where the slots are not apart (`thread slots cell skipped`:
   Direct3D 12, OpenGL, Direct3D 11, and Vulkan's fence ring: `ICO_VK_FAKE_API=1.0`, `1.0bare` and

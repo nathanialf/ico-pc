@@ -550,21 +550,26 @@ static void checkGroups(const char *what, const Sum *s)
  * vkCmdPipelineBarrier calls: the image transitions recorded together go
  * out in one call, joined to the next pass's or copy's own barrier
  * (vk_cmd.c, vkr_flush_barriers); the global mode records each transition
- * in a call of its own.  18 and 21 are the steady-state counts this test
- * prints with the fixed-function blend.
+ * in a call of its own.  19 and 22 are the steady-state counts this test
+ * prints with the fixed-function blend: a presenting picture is two lists
+ * (rd_submit.c, issue 179: the present's pass in a list of its own, so only
+ * its submit waits for the window's image), and the second list opens with
+ * its own barrier (vkr_open_barrier), one more than the 18 and 21 of one
+ * list.  The global mode opens no list with a barrier (its passes each have
+ * one already), so its counts stay.
  *
  * Under the exact blend's attachment read (rd_dst_read.c) a pending clear
  * of a readable target is a pass of its own before the pass that draws
  * (the load op's clear is not ordered against the shaders' reads of the
  * attachment), and the pass after it starts behind a barrier: two in this
- * frame (SCENE with its depth, the reflection's block target), so 20 and
- * 23.  No draw adds one: the rasterization-order access orders the reads
+ * frame (SCENE with its depth, the reflection's block target), so 21 and
+ * 24.  No draw adds one: the rasterization-order access orders the reads
  * (the by-region barriers the validation layer needs before a
  * destination-read draw are RhiStats.orderBarriers, not counted here).
  * The storage path (interlock, ROV) is not measured on the devices the
  * tests run on (lavapipe has no interlock): not checked. */
-#define BARRIERS_REPLAY 18
-#define BARRIERS_RECORD 21
+#define BARRIERS_REPLAY 19
+#define BARRIERS_RECORD 22
 #define BARRIERS_ATTACHMENT_CLEARS 2
 #define BARRIERS_REPLAY_GLOBAL 42
 #define BARRIERS_RECORD_GLOBAL 46
@@ -611,7 +616,7 @@ static void checkBarriers(const char *what, const Sum *s, uint32_t tracked, uint
             want += 1; /* v0.9.4: the shadow count in one draw reads the stencil
                           through a view: one transition more under the
                           attachment read with the record on (the count the
-                          run prints; 24) */
+                          run prints; 25 with the present's own list) */
         }
     }
     CHECK(s->n > 0 && s->barrierMin == want && s->barrierMax == want,

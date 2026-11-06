@@ -117,8 +117,10 @@ acquires B's image and records B's list. The device line is followed by `rhi_vk:
 The slot calls the guard lets through (`rhi.h` `rhi_set_slot_guard`, `port/rhi/rhi_backend.c`
 `RHI_GUARD_SLOT`): `rhi_wait_frame` (for the slot it recycles), `rhi_begin_commands`,
 `rhi_end_commands` (the renderer ends a picture's scene list before it begins the present's own,
-[RENDER.md](RENDER.md#the-presents-own-list); an end touches only its list's command buffer and
-the atomic late counters), `rhi_create_bind_group`, `rhi_map_buffer`, `rhi_unmap_buffer`, `rhi_read_timestamps`,
+[RENDER.md](RENDER.md#the-presents-own-list); an end touches only its list's command buffer, of
+its own slot's pool, and the atomic late counters, so it waits only while the other thread has a
+job of its slot; `threadSlotsCell` ends a list beside the other thread's end and submit of the
+other slot without a wait, and its submit, not a slot call, waits once), `rhi_create_bind_group`, `rhi_map_buffer`, `rhi_unmap_buffer`, `rhi_read_timestamps`,
 `rhi_read_timestamps_busy`, `rhi_read_occlusion` and `rhi_acquire_backbuffer`, each when the slot
 guard's `free` says the calling thread is the render thread, keeps no list of its own for the submit
 thread and the submit thread has no job of that slot. Every other call that changes the device's
