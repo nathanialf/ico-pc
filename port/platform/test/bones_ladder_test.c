@@ -146,6 +146,54 @@ static void testSequences(void)
     }
 }
 
+/* step 1's switch in the run as window_bones.c polls it each pump: asked
+   once, at the pump after the write, never while a movie plays or in the
+   run's first 30 s, never again in the run */
+static void testRestart(void)
+{
+    int pending = 0, asked = 0, asks = 0;
+
+    /* (the pump's movie flag, the run's seconds) */
+    static const struct {
+        int movie;
+        double up;
+    } pumps[] = {{0, 50.0}, {0, 50.1}, {1, 50.2}, {1, 51.0}, {0, 51.1}, {0, 51.2}, {0, 52.0}};
+
+    CHECK(bones_restart_step(0, 0, 0, 100.0) == BONES_RESTART_NONE);
+    CHECK(bones_restart_step(1, 0, 0, 29.9) == BONES_RESTART_WAIT);
+    CHECK(bones_restart_step(1, 0, 0, 30.0) == BONES_RESTART_ASK);
+    CHECK(bones_restart_step(1, 0, 1, 300.0) == BONES_RESTART_WAIT);
+    CHECK(bones_restart_step(1, 1, 0, 300.0) == BONES_RESTART_NONE);
+    for (size_t i = 0; i < sizeof(pumps) / sizeof(pumps[0]); i++) {
+        const int step = bones_restart_step(pending, asked, pumps[i].movie, pumps[i].up);
+
+        if (i == 0) {
+            CHECK(step == BONES_RESTART_NONE); /* before the write */
+        }
+        if (i == 1) {
+            pending = 1; /* the write at this pump, during a movie next */
+        }
+        if (step == BONES_RESTART_ASK) {
+            CHECK(!pumps[i].movie);
+            asks++;
+            asked = 1;
+            pending = 0;
+        }
+        /* the movie's pumps wait; the first pump after it asks */
+        if (i == 2 || i == 3) {
+            CHECK(step == BONES_RESTART_WAIT);
+        }
+        if (i == 4) {
+            CHECK(step == BONES_RESTART_ASK);
+        }
+    }
+    CHECK(asks == 1);
+    /* written at pump 1 with no movie: asked at that pump */
+    pending = 1;
+    asked = 0;
+    CHECK(bones_restart_step(pending, asked, pumps[1].movie, pumps[1].up) == BONES_RESTART_ASK);
+}
+
 static void testMark(void)
 {
     BonesMark m, n;
@@ -219,13 +267,36 @@ static void testLines(void)
     CHECK(strcmp(line, "window: VU bones: [dev] vu_bones = ring could not be written (the skin "
                        "check saw 3 twin events at a bone address the probe did not name over 40 "
                        "presents); the ring read untested beside the picture: its pipelines not "
-                       "made yet; the next start reads them as before (c.toml)") == 0);
+                       "made yet; the bones are read as before (c.toml)") == 0);
+    /* step 1 in the run: the renderer made again in place now, or the
+       switch waiting */
+    in.addr = 200;
+    in.ringClear = 2;
+    CHECK(bones_ring_line(line, sizeof(line), &in, 1, "config.toml", BONES_RING_NOW, NULL) == 0);
+    CHECK(strcmp(line, "window: VU bones: [dev] vu_bones = ring is written (the skin check saw 3 "
+                       "twin events at bone address 200 over 40 presents); the ring read beside "
+                       "the picture cleared it 2 times; in force from the next picture "
+                       "(config.toml)") == 0);
+    CHECK(bones_ring_line(line, sizeof(line), &in, 1, "config.toml", BONES_RING_WAITS,
+                          "the movie's end") == 0);
+    CHECK(strcmp(line, "window: VU bones: [dev] vu_bones = ring is written (the skin check saw 3 "
+                       "twin events at bone address 200 over 40 presents); the ring read beside "
+                       "the picture cleared it 2 times; the switch to the ring read waits for the "
+                       "movie's end (else the next start reads it) (config.toml)") == 0);
+    CHECK(bones_restart_line(line, sizeof(line)) == 0);
+    CHECK(strcmp(line, "window: VU bones: switching to the ring read now (the renderer made again "
+                       "in place, as Options > Graphics > Apply does); [dev] vu_bones = ring "
+                       "written for every later start") == 0);
+    CHECK(bones_restart_line(line, 16) == -1);
+    in.addr = 0;
+    in.ringClear = 0;
     in.ring = 1;
     CHECK(bones_ladder_action_line(line, sizeof(line), BONES_WRITE_NOBIN, &in, 1, "config.toml") ==
           0);
     CHECK(strcmp(line, "window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin) for the next "
-                       "start: [dev] turnip_debug = nobin is written to config.toml; step 1 (ring "
-                       "read) did not clear the twins (3 of 1600)") == 0);
+                       "start (the driver library is loaded once a process): [dev] turnip_debug = "
+                       "nobin is written to config.toml; step 1 (ring read) did not clear the "
+                       "twins (3 of 1600)") == 0);
     CHECK(bones_ladder_action_line(line, sizeof(line), BONES_WRITE_OFF, &in, 1, "config.toml") ==
           0);
     CHECK(strcmp(line, "window: VU skin check ladder: both tried, neither cleared the twins (3 of "
@@ -256,6 +327,7 @@ static void testLines(void)
 int main(void)
 {
     testSequences();
+    testRestart();
     testMark();
     testLines();
     printf("bones_ladder_test: %s\n", g_fail ? "FAILED" : "ok");

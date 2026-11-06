@@ -138,40 +138,78 @@ int bones_ladder_start_line(char *out, size_t size, const char *vuBones, const c
     return -1;
 }
 
+int bones_restart_step(int pending, int asked, int movie, double uptimeS)
+{
+    if (!pending || asked) {
+        return BONES_RESTART_NONE;
+    }
+    if (movie || uptimeS < BONES_RESTART_AFTER_S) {
+        return BONES_RESTART_WAIT;
+    }
+    return BONES_RESTART_ASK;
+}
+
+int bones_restart_line(char *out, size_t size)
+{
+    const int n = snprintf(out, size,
+                           "window: VU bones: switching to the ring read now (the renderer made "
+                           "again in place, as Options > Graphics > Apply does); [dev] vu_bones = "
+                           "ring written for every later start");
+    return n < 0 || (size_t)n >= size ? -1 : 0;
+}
+
+int bones_ring_line(char *out, size_t size, const BonesLadderIn *in, int written,
+                    const char *cfgName, int when, const char *wait)
+{
+    char addr[48], beside[160], tail[160];
+    const char *cfg = cfgName != NULL ? cfgName : "config.toml";
+
+    if (in->addr) {
+        snprintf(addr, sizeof(addr), "bone address %u", (unsigned)in->addr);
+    } else {
+        snprintf(addr, sizeof(addr), "a bone address the probe did not name");
+    }
+    if (in->ringClear) {
+        snprintf(beside, sizeof(beside), "the ring read beside the picture cleared it %u times",
+                 (unsigned)in->ringClear);
+    } else {
+        snprintf(beside, sizeof(beside),
+                 "the ring read untested beside the picture: its pipelines not made yet");
+    }
+    if (!written) {
+        snprintf(tail, sizeof(tail), "the bones are read as before");
+    } else if (when == BONES_RING_NOW) {
+        snprintf(tail, sizeof(tail), "in force from the next picture");
+    } else if (when == BONES_RING_WAITS) {
+        snprintf(tail, sizeof(tail),
+                 "the switch to the ring read waits for %s (else the next start reads it)",
+                 wait != NULL ? wait : "?");
+    } else {
+        snprintf(tail, sizeof(tail),
+                 "the next start reads the skinned draws' bones through the ring");
+    }
+    const int n = snprintf(out, size,
+                           "window: VU bones: [dev] vu_bones = ring %s (the skin check saw %u twin "
+                           "events at %s over %u presents); %s; %s (%s)",
+                           written ? "is written" : "could not be written", (unsigned)in->differ,
+                           addr, (unsigned)in->replays, beside, tail, cfg);
+    return n < 0 ? -1 : 0;
+}
+
 int bones_ladder_action_line(char *out, size_t size, BonesAction a, const BonesLadderIn *in,
                              int written, const char *cfgName)
 {
-    char addr[48], beside[160];
     const char *cfg = cfgName != NULL ? cfgName : "config.toml";
     const char *put = written ? "is written to" : "could not be written to";
 
     switch (a) {
     case BONES_WRITE_RING:
-        if (in->addr) {
-            snprintf(addr, sizeof(addr), "bone address %u", (unsigned)in->addr);
-        } else {
-            snprintf(addr, sizeof(addr), "a bone address the probe did not name");
-        }
-        if (in->ringClear) {
-            snprintf(beside, sizeof(beside), "the ring read beside the picture cleared it %u times",
-                     (unsigned)in->ringClear);
-        } else {
-            snprintf(beside, sizeof(beside),
-                     "the ring read untested beside the picture: its pipelines not made yet");
-        }
-        snprintf(out, size,
-                 "window: VU bones: [dev] vu_bones = ring %s (the skin check saw %u twin events "
-                 "at %s over %u presents); %s; %s (%s)",
-                 written ? "is written" : "could not be written", (unsigned)in->differ, addr,
-                 (unsigned)in->replays, beside,
-                 written ? "the next start reads the skinned draws' bones through the ring"
-                         : "the next start reads them as before",
-                 cfg);
-        return 0;
+        return bones_ring_line(out, size, in, written, cfgName, BONES_RING_NEXT, NULL);
     case BONES_WRITE_NOBIN:
         snprintf(out, size,
-                 "window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin) for the next start: "
-                 "[dev] turnip_debug = nobin %s %s; step 1 (ring read) %s (%u of %u)",
+                 "window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin) for the next start "
+                 "(the driver library is loaded once a process): [dev] turnip_debug = nobin %s %s; "
+                 "step 1 (ring read) %s (%u of %u)",
                  put, cfg,
                  in->ring ? "did not clear the twins"
                  : in->ringFail > 0
