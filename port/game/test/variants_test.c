@@ -344,8 +344,9 @@ static void test_weapons(void)
     if (light) {
         CHECK(strcmp(ico_config_get_string("variants.sword_colour", ""), "red") == 0);
         CHECK(ico_variant_weapon_kind(9) == 8);
-        /* a reload goes back to the file (none: Original) */
-        ico_opt_reload();
+        /* a fresh config with no file goes back to Original (the step wrote
+           the word into the loaded config, so a plain reload keeps it) */
+        use_config(NULL);
         CHECK(ico_variant_weapon_kind(9) == 9);
     }
     use_config(NULL);
