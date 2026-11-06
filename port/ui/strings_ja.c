@@ -809,7 +809,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ARENA] = "テスト部屋：アリーナ",
     [UI_STR_UNUSED_ARENA_NOTE] =
         "開発者が影との戦いを試した部屋です。出口がないので、STARTから「ゲーム終了」で戻ってください。",
-    [UI_STR_UNUSED_CLIMB] = "テスト部屋：クライミング",
+    [UI_STR_UNUSED_CLIMB] = "テスト部屋：クレーン",
     [UI_STR_UNUSED_CLIMB_NOTE] =
         "開発者がよじ登りや箱を試した部屋です。出口がないので、STARTから「ゲーム終了」で戻ってください。",
     [UI_STR_UNUSED_MOVIE] = "デモムービー（576ライン）",

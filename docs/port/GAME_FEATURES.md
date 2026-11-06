@@ -455,7 +455,7 @@ hold the rest.
 | Extras > Models | W | W | W | K | K | K | W | the model table has a Japanese column only (`tools/gen_mv_region.py`); the README names the 2001 discs' wrong models and the demo's missing ones; `model_viewer_jpn`/`_kor`/`_cn` |
 | Extras > Characters | W | W | W | W | W | W | W | the characters' textures by name (`appearance.c`); `appearance`, `settings_extras` (from the title it runs in the model viewer) |
 | Extras > Credits (title, once unlocked) | W | W | W | W | W | H | W | `credits_staff_packs` (the demo's DATA.DF has no `STGSTAFF*.DF`); `settings_discs`, `settings_extras_<slug>`, `credits_<slug>` |
-| Extras > Unused content: Test room: arena, Test room: climbing (title) | W | W | W | W | W | H | W | the stage's pack in the disc's `DATA.DF` (`STGBOSS_TEST.DF`, `STG8TEST.DF`; the demo's 49 entries hold neither), the host's `available`; `unused_content_<slug>`, `settings_discs_<slug>` |
+| Extras > Unused content: Test room: arena, Test room: crane (title) | W | W | W | W | W | H | W | the stage's pack in the disc's `DATA.DF` (`STGBOSS_TEST.DF`, `STG8TEST.DF`; the demo's 49 entries hold neither), the host's `available`; `unused_content_<slug>`, `settings_discs_<slug>` |
 | Extras > Unused content: Attract movie (576 lines) (title) | W | H | H | H | H | H | H | stage 59 (`memoryPAL576`) is the European `stageData`'s only (`ico_region_stage(59)` is -1 elsewhere) and `pal_advertise576.pss` its `DATA.DF`'s; `unused_content_<slug>`, `unused_movie_<slug>`, `settings_discs_<slug>` |
 | Extras > Unused content: Early show title art (title) | W | W | W | W | W | H | W | the member `object/sdf/e3/st13b/model/copy_right.p2o` in a pack of the disc (`ico_df_find_member`; the demo has no `STGLOG.DF`) and a member row the model viewer offers (`mv_member_first_row`); the row opens the viewer's list there, which offers the copyright only on pal (its `STGLOG.DF` holds no other) and all three elsewhere; the link itself hidden on the demo, one line; `unused_content_<slug>`, `model_viewer_rows_<slug>`, `charfile_image`, `settings_discs_<slug>` |
 | Extras > Export textures, Add to Steam | W | W | W | W | W | W | W | the running disc's `DATA.DF`; disc-independent |
@@ -1027,7 +1027,7 @@ stage numbers and pack names are the ELFs' `stageData` (`port/data/gen/<slug>/ta
 | row | European stage | 104-row discs | June 2001 demo | needs in `DATA.DF` |
 | --- | --- | --- | --- | --- |
 | Test room: arena | 88 `boss_test` | 86 | 85 | `STGBOSS_TEST.DF` |
-| Test room: climbing | 91 `8a_TEST` | 89 | 88 | `STG8TEST.DF` |
+| Test room: crane | 91 `8a_TEST` | 89 | 88 | `STG8TEST.DF` |
 | Attract movie (576 lines) | 59 `memoryPAL576` (its `dataFile` is `#REF!`: no pack) | none | none | the loose `pal_advertise576.pss` |
 | Early show title art | 1 `logo` (the art's pack); shown on 31, the Cage's | 1; 31's row | 1 | `STGLOG.DF` and its member `object/sdf/e3/st13b/model/copy_right.p2o` |
 
@@ -1084,7 +1084,7 @@ has.
   August and June 2001 discs have neither room. The floors under every candidate point on the
   five discs with the rooms, the same on each (European, North American, Japanese, Korean and
   Asian): `build-host/tmp/v0104/evidence/rooms/rooms-every-disc.txt` (read from the ISOs' packs:
-  the arena's `object/sdf/st13b/collis/st13b.cl`, 129 floors; the climbing room's
+  the arena's `object/sdf/st13b/collis/st13b.cl`, 129 floors; the crane room's ("climbing" in the log lines and the code)
   `object/sdf/8test/collis/st08a.cl`, 270 floors; the North American disc's model records are
   268 bytes, as the August 2001 disc's).
 - The climbing room's floors and walls: its collision, `object/sdf/8test/collis/st08a.cl`, belongs

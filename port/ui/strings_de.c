@@ -827,7 +827,7 @@ const char *const
             [UI_STR_UNUSED_ARENA] = "Testraum: Arena",
             [UI_STR_UNUSED_ARENA_NOTE] =
                 "Testraum für Kämpfe mit den Schatten; ohne Ausgang: Start, dann Spiel beenden.",
-            [UI_STR_UNUSED_CLIMB] = "Testraum: Klettern",
+            [UI_STR_UNUSED_CLIMB] = "Testraum: Kran",
             [UI_STR_UNUSED_CLIMB_NOTE] =
                 "Testraum für Klettern und Kisten; ohne Ausgang: Start, dann Spiel beenden.",
             [UI_STR_UNUSED_MOVIE] = "Vorspannfilm (576 Zeilen)",

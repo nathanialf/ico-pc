@@ -807,7 +807,7 @@ const char *const ui_strings_it[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ARENA] = "Stanza di prova: arena",
     [UI_STR_UNUSED_ARENA_NOTE] =
         "Stanza per provare gli scontri con le Ombre; senza uscita: Start, poi Termina partita.",
-    [UI_STR_UNUSED_CLIMB] = "Stanza di prova: arrampicata",
+    [UI_STR_UNUSED_CLIMB] = "Stanza di prova: gru",
     [UI_STR_UNUSED_CLIMB_NOTE] =
         "Stanza per provare arrampicate e casse; senza uscita: Start, poi Termina partita.",
     [UI_STR_UNUSED_MOVIE] = "Filmato dimostrativo (576 linee)",

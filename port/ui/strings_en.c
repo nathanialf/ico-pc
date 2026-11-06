@@ -802,7 +802,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ARENA] = "Test room: arena",
     [UI_STR_UNUSED_ARENA_NOTE] =
         "A room the makers used to try fights with the Shadows; it has no exit, so leave with Start, then End Game.",
-    [UI_STR_UNUSED_CLIMB] = "Test room: climbing",
+    [UI_STR_UNUSED_CLIMB] = "Test room: crane",
     [UI_STR_UNUSED_CLIMB_NOTE] =
         "A room the makers used to try climbing and boxes; it has no exit, so leave with Start, then End Game.",
     [UI_STR_UNUSED_MOVIE] = "Attract movie (576 lines)",
