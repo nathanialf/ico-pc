@@ -254,6 +254,23 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   skips, records outside the arena not read, the arena and the object table byte-identical after
   every check, the `camera:` line and its Frame rate gate, a pending cut, photo mode and forgetting
   (`camera_wall_stage`).
+- `collision_carrier_test.c`: a display object whose model has no parts but which carries a
+  collision (`ico2/common/src/DObj.c` `initPolygonState`'s PC-port block), with DObj.c, the
+  allocator over the EE RAM arena, the field collision and the matrix stack and tables compiled in
+  and the character files, the motion set-up and the object table stubbed. `synth`: the carrier
+  gets one 64-byte node matrix holding the layout's (identity; a moved and turned row's), its
+  `dobj:` line names the model, the layout row (-1 when the newest object already has a display
+  object) and the collision path, and a floor probe hits its floor (y 0; the moved row's y); the
+  same object with its collision attached after the create (the original's state) reads the next
+  block header's tag as its matrix and no probe finds the floor; a one-part model with a
+  collision, a 0-part model without one and a 0-part model with a skeleton allocate the same
+  blocks as without the collision, the carrier those plus one of 64 bytes (`collision_carrier`,
+  `collision_carrier_ntsc`, `collision_carrier_jun26`). `disc`: DATA.DF holds exactly one model
+  with no parts, `STG8TEST.DF`'s `st08a_p1.p2o` with the disc's model id (none on the June 2001
+  demo), and the room's `st08a.cl` on its carrier finds y 0 at the origin and y -1323.67 from camera
+  zone 20's box top, neither with the collision attached after the create; skipped (77) without
+  the image (`collision_carrier_disc`, `collision_carrier_disc_jpn`, `_kor`, `_cn`, `_ntsc`,
+  `_aug6`, `_jun26`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
 - `yorda_trip_test.c`: Yorda trips ([GAME_FEATURES.md](GAME_FEATURES.md#yorda-trips)) on the CPU,
