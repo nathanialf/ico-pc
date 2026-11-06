@@ -793,7 +793,9 @@ of them, so its Extras page has no Unused content row.
   Shadows: an arena with Shadows, a sword and two statues. Ico is there
   alone.
 - **Test room: climbing:** a room the makers built to try climbing and
-  boxes, with Yorda, torches, wooden boxes and a chain.
+  boxes, with Yorda, torches, wooden boxes and a chain. Its camera was made
+  for the trolley room, so when Ico runs the view jumps between camera
+  spots and his path curves; walk, or steer with the camera, to go straight.
 - **Attract movie (576 lines)** (when the disc has it): a second copy of the
   film the title screen plays when you leave it alone, made for European
   televisions. The game never plays it.
