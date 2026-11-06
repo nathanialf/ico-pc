@@ -242,11 +242,11 @@ original game's behaviour (`port/game/options.h`, header comment).
 
 ### [variants]
 
-Options > Gameplay: No hints on the page, the Shadows rows on Gameplay > Shadows, the two cutscene
-rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-and-cutscenes),
+Options > Gameplay: No hints on the page, the Shadows rows on Gameplay > Shadows, the three combat
+rows on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
 [OPTIONS.md](../OPTIONS.md#gameplay)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
-the game as the disc ships it. All eight are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
+the game as the disc ships it. All eleven are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
 `port/platform/sim_keys.c`). A word
 or number that is no value reads as the default and is logged once.
 
@@ -260,6 +260,9 @@ or number that is no value reads as the default and is logged once.
 | `barrier_hits` | int | absent (not in the template) | `5` or `7`: the hits the Queen's barrier takes; absent, the disc's own (`7` on `jun26`, else `5`); the Settings row writes it |
 | `no_cutscene_look` | bool | `false` | no camera look-around in cutscenes |
 | `ignore_cutscene_cameras` | bool | `false` | the cutscenes' cameras are ignored (`debug_ignore_demo_camera`); suspends achievements |
+| `auto_guard` | bool | `true` | Ico blocks a Shadow's attack from the front; `false` = he does not (does not suspend achievements) |
+| `attack_turn` | bool | `true` | Ico's swing turns him toward the nearest Shadow; `false` = he swings straight ahead (does not suspend achievements) |
+| `shadows_wait_down` | bool | `true` | the Shadows hold back while Ico is knocked down; `false` = they do not (does not suspend achievements) |
 
 The Debug menu row (Options > Developer, with Developer mode on) has no key: its press marks the Debug menu used until the options are reloaded,
 which suspends achievements too (`ico_variants_suspend_achievements`, read by `gamestate.c` beside

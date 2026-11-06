@@ -64,7 +64,7 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] natural_chains` | `BgAnimation.c` (window build) |
 | `[gameplay] skip_opening` | `kanbanBoot.c`, `op.c`, `main_host.c` (its log line) |
 | `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
-| `[variants] *` (Gameplay, Gameplay > Shadows and Gameplay > Cutscenes) | `port/game/variants.c`; the game hooks in `debug.c`, `enemy.c`, `enemy_act.c`, `queen.c`, `lws_kyomi.c`, `girl.c` ([Game variants](#game-variants)); `settings.c` (the Debug menu row); `gamestate.c` (the achievements rule) |
+| `[variants] *` (Gameplay, Gameplay > Shadows, Gameplay > Combat and Gameplay > Cutscenes) | `port/game/variants.c`; the game hooks in `debug.c`, `enemy.c`, `enemy_act.c`, `queen.c`, `lws_kyomi.c`, `girl.c`, `commonact.c`, `boyact.c` ([Game variants](#game-variants)); `settings.c` (the Debug menu row); `gamestate.c` (the achievements rule) |
 | `[gameplay] mirror` | `pad_host.c`, `audio_host.c`, rd, `photo_ui.c` |
 | `[gameplay] developer_mode` | `main.c`, `debug.c`, the port |
 | `[game] circle_back` | `layout_action.c`, `layout_texture.c` |
@@ -354,9 +354,9 @@ disc](#options-on-each-disc)).
 ### Game variants
 
 Options > Gameplay: No hints on the page, Shadow toughness, One hit per swing, Shadows never dodge,
-Shadow aggression and Queen barrier on Gameplay > Shadows, No cutscene look-around and Ignore
+Shadow aggression and Queen barrier on Gameplay > Shadows, Automatic guard, Turn to face shadows and Shadows wait while Ico is down on Gameplay > Combat, No cutscene look-around and Ignore
 cutscene cameras on Gameplay > Cutscenes, and the Debug menu on Developer (`[variants]`,
-[CONFIG.md](CONFIG.md#variants), [UI.md](UI.md#gameplay--yorda-shadows-and-cutscenes)). The values are
+[CONFIG.md](CONFIG.md#variants), [UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes)). The values are
 `port/game/variants.c`'s; the game reads them in three ways, and with every row at its shipped value
 it runs as before (each hook below gives the game's own value or row then).
 
@@ -408,6 +408,9 @@ Local reads.
 | --- | --- |
 | No hints | `ico_hints_on()` (0 on the USA disc and the 2001 builds, and with No hints on): `LwsKyomiGeo` (`ico2/omori/src/lws_kyomi.c`) keeps the hint from being the stage's waiting one, so its timer stands still and a playing hint animation stops; `GirlAI` (`ico2/sugipon/src/girl.c`) does not ready or play the hint voice. The hints' finished and asleep flags (`FinishHint`, `SleepHint`, `WakeupHint`, set by the stage scripts), `Hint_Init` and the save's hint block are untouched, so a save keeps the scripts' progress and turning hints back on resumes them |
 | Queen barrier | `ico_variant_barrier_hits()` (5, or 7 on the June 2001 demo, unless chosen): `QueenBarrierGeo` and its June 2001 twin (the hit that breaks it) and `QueenBarrierDL` (the barrier's fade divisor), `ico2/ito/src/queen.c`; the tables indexed by the hit count have 11 rows |
+| Automatic guard | `ico_variant_auto_guard()` (key `auto_guard`, On = the game's): the guard rule of `_ACTCorrectMsg` case 13 (`ico2/fumi/src/commonact.c`: the European arm, `_ACTCorrectMsg_jun26`, `_aug6` and `_ntsc`, one copy each) is `_AbsRotyGV(orient, attackDir) < 60 && ... && !(flags18 >> n & 1)`, then `iosOmSendMail(self, 256 / 264 / 267 / 283, param)`; one conjunct `(self != boyGObj \|\| ico_variant_auto_guard())` so only Ico's guard is switched (the same rule runs for every actor). Off: the guard mail is not sent and the hit falls on to the damage message the function goes on to build (`dir + 260`, the down message 264, or the death message 265) as a hit from behind does. The stone-hit paths above it and `unguardable` are untouched. The guard act (`actCommonGuard`) is not entered, so its recoil and effect do not play |
+| Turn to face shadows | `ico_variant_attack_turn()` (key `attack_turn`, On = the game's): `actBoyAttack` (`ico2/fumi/src/boyact.c`; the European, `_ntsc` and `_jun26` copies) searches for the nearest enemy within 300 units and 90 degrees (`searchEnemy`, kept so `attackTurn` is as the game sets it) and turns Ico toward it every frame with `SetMotionDirectionWithLimit` (5 degrees a frame up to 45 bare-handed, 10 up to 90 with a weapon); Off skips the turn only (`attackTurn && ico_variant_attack_turn()`). The swing's hit volume is the weapon's own and is not narrowed. `actEnemyAttack`'s own use of `attackTurn` (`enemy_act.c`) and `actCommonDodge` are not changed |
+| Shadows wait while Ico is down | `ico_variant_shadows_wait_down()` (key `shadows_wait_down`, On = the game's): `IsBoyStatus_EnemyMustWait` (`ico2/fumi/src/boyact.c`), read by `ebrain.c` (`enemiesWait`, which holds every Shadow's brain in status 8) returns 1 for act modes 0x16 and 0x17, for 0x13..0x15 while the boy is stone (`stoneLevel != 0`), and for act mode 0x15 or `downTimer > 0` (`actAfterDown`, `commonact.c`: 130 frames, 60 on the June 2001 demo, at 60 Hz). Off drops only the last pair (mode 0x15 and the get-up timer); the stone part and modes 0x16..0x17 stay. The Shadows' dodge decisions (`IsBoyStatus_NotDanger`) are not touched |
 | Debug menu | the row's press (`port/ui/settings.c`) calls `ico_variants_debug_menu_pressed`, which opens the menu through the bound `debug_MenuOpen` (`menuState` 1 as SELECT sets it, `debugBackGroundDisableFlag` 1, the first row) and returns 1; Options then closes (`closeForDebugMenu`): from the title back to the title, from the pause menu into the game as the pause menu's Back does (`la_host_resume_play`, `ico2/common/src/layout_action.c`: the sound resumed, `la_game_loop`). `debug_Menu` runs in developer mode only (`main.c`), and the row shows only then. Unbound, the press logs, Options stays and nothing is marked used (achievements stay on). PC port: on the June 2001 demo the row is never shown (`settings.c` `optShown`): its `debug.c` option table (67 rows against the demo's 62) and stage-select flags are the preview's; `variants: the Debug menu is not offered on the June 2001 demo (its debug tables are the preview's)` once, when Developer mode would show it. SELECT in Developer mode still opens the game's menu there (game code) |
 
 Log lines: `variants: the game's debug switches are bound (...)` once per `debug_VariableInit`;
@@ -450,7 +453,7 @@ hold the rest.
 | Developer: Debug menu | W | W | W | W | W | H | W | `ICO_JUN26` (the demo's debug tables are the preview's); `settings_discs`, `settings_extra_<slug>` |
 | Gameplay > Shadows: Shadow toughness American | W | W | W | W | W | N | W | `ico_variant_offered`; `variants_<slug>`, `settings_extra_<slug>` |
 | Gameplay: No hints; Gameplay > Cutscenes: No cutscene look-around | W | W | W | N | N | N | W | `ico_hints_on` is not in `GirlAI_ntscaug6jun26`; `debug_hand_camera` stays 0; `settings_extra_<slug>` |
-| Gameplay > Shadows and Cutscenes: the other game variants rows | W | W | W | W | W | W | W | `variants_<slug>` |
+| Gameplay > Shadows, Combat and Cutscenes: the other game variants rows | W | W | W | W | W | W | W | `variants_<slug>` |
 | Extras > Music | W | W | W | W | W | W | W | names by asset path, the region's stream bounds; `gallery`, `gallery_jpn`/`_kor`/`_cn` (the 2001 discs have no run: the test compares 105 rows) |
 | Extras > Models | W | W | W | K | K | K | W | the model table has a Japanese column only (`tools/gen_mv_region.py`); the README names the 2001 discs' wrong models and the demo's missing ones; `model_viewer_jpn`/`_kor`/`_cn` |
 | Extras > Characters | W | W | W | W | W | W | W | the characters' textures by name (`appearance.c`); `appearance`, `settings_extras` (from the title it runs in the model viewer) |

@@ -441,14 +441,14 @@ The six mouse rows do not show on phones and tablets.
 ## Gameplay
 
 Every row here plays as the original until you change it, on a phone too.
-The Gameplay page has its own rows, then three pages of their own, each
+The Gameplay page has its own rows, then four pages of their own, each
 opened from its row just above Back: [Yorda](#yorda),
-[Shadows](#shadows) and [Cutscenes](#cutscenes). All of it is there from
+[Shadows](#shadows), [Combat](#combat) and [Cutscenes](#cutscenes). All of it is there from
 the title screen or the pause menu, on every disc.
 
 Some rows change the game more than others. The line under a row says what
 it does, and on the game variants rows (No hints here, five rows on the
-Shadows page and two on the Cutscenes page) whether it switches
+Shadows page, three on the Combat page and two on the Cutscenes page) whether it switches
 achievements off. Those that switch them off do so for as long as they are
 on, like Developer mode, so you cannot earn an achievement by accident while
 playing a changed game. Turn them off again and achievements come back.
@@ -564,6 +564,24 @@ shipped on your disc.
   5 or 7. Your disc's own number is shown until you choose. Achievements stay
   on.
 
+### Combat
+
+Options > Gameplay > Combat. Three rows, all **On**, which is the game as it
+shipped. Turning one Off makes a fight harder; none of them switches
+achievements off.
+
+- **Automatic guard:** in the game Ico blocks a Shadow's attack by himself
+  when it comes from the front. Off: Ico does not block a Shadow's attack
+  from the front; it lands as an attack from behind does. Achievements stay
+  on.
+- **Turn to face shadows:** in the game Ico's swing turns him toward the
+  nearest Shadow in front of him. Off: Ico swings straight ahead. The swing
+  itself is the weapon's own, so a Shadow beside him can still be caught by
+  it. Achievements stay on.
+- **Shadows wait while Ico is down:** in the game the Shadows hold back while
+  Ico is knocked down and getting up. Off: they do not hold back, so they
+  can attack him again before he is on his feet. Achievements stay on.
+
 ### Cutscenes
 
 Options > Gameplay > Cutscenes:
@@ -583,7 +601,7 @@ Options > Gameplay > Cutscenes:
   see. Switches achievements off.
 
 The game variants rows (No hints, the five Shadows rows from Shadow
-toughness on, the two cutscene rows and the Debug menu under
+toughness on, the three Combat rows, the two cutscene rows and the Debug menu under
 [Developer mode](#developer-mode)) are kept in `config.toml`, under the
 heading `[variants]`.
 
