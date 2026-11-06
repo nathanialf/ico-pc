@@ -208,6 +208,63 @@ if(ICO_RUN_TESTS)
     add_test(NAME camera_wall_stage COMMAND camera_wall_stage_test)
 endif()
 
+# collision_carrier_test: a display object whose model has no parts but which
+# carries a collision (ico2/common/src/DObj.c initPolygonState's PC-port
+# block): DObj.c, the allocator (fumi/ios/memory.c, over the EE RAM arena),
+# the field collision (fumi/src/fieldCollision.c) and the matrix stack and
+# tables (sugipon/src/matrixDrive.c, quaternion.c, tableSin.c) compiled in,
+# the character files, the motion set-up and the object table stubbed.
+# `synth`: the carrier gets one 64-byte node matrix holding the layout's
+# (identity; a moved and turned row's) and its `dobj:` line, and a floor probe
+# hits its floor; the same object with its collision attached after the create
+# (the original) reads a block header's tag as its matrix and finds no floor;
+# a one-part model with a collision, a 0-part model without one and a 0-part
+# model with a skeleton keep their allocations.  `disc`: DATA.DF holds exactly
+# one model without parts (STG8TEST.DF's st08a_p1.p2o; none on the June 2001
+# demo) and the room's st08a.cl on its carrier finds the floor at the origin
+# (y 0) and camera zone 20's ramp (y -1323.67); skipped (77) without the
+# image.  CPU only.
+ico_include_dirs(common _ico_carrier_incs)
+add_executable(collision_carrier_test test/collision_carrier_test.c
+    "${CMAKE_SOURCE_DIR}/ico2/common/src/DObj.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/ios/memory.c"
+    "${CMAKE_SOURCE_DIR}/ico2/fumi/src/fieldCollision.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/matrixDrive.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/quaternion.c"
+    "${CMAKE_SOURCE_DIR}/ico2/sugipon/src/tableSin.c")
+target_include_directories(collision_carrier_test PRIVATE ${_ico_carrier_incs}
+                           "${CMAKE_SOURCE_DIR}/port/include" "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(collision_carrier_test PRIVATE ${ICO_GAME_DEFINITIONS})
+# __FILE__ as the game spells it (src/DObj.c): a 0-byte block's matrix is the
+# next block header, whose name is the allocating file's first 11 characters
+target_compile_options(collision_carrier_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_GAME_WARNINGS}
+                       "-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/ico2/common/="
+                       "-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/ico2/fumi/="
+                       "-fmacro-prefix-map=${CMAKE_SOURCE_DIR}/ico2/sugipon/=")
+target_link_libraries(collision_carrier_test PRIVATE ico_port_data ico_region ico_math ico_platform)
+if(ICO_RUN_TESTS)
+    add_test(NAME collision_carrier
+             COMMAND collision_carrier_test synth pal "${CMAKE_CURRENT_BINARY_DIR}")
+    foreach(_slug ntsc jun26)
+        add_test(NAME collision_carrier_${_slug}
+                 COMMAND collision_carrier_test synth ${_slug} "${CMAKE_CURRENT_BINARY_DIR}")
+    endforeach()
+    add_test(NAME collision_carrier_disc
+             COMMAND collision_carrier_test disc pal "${ICO_DISC_IMAGE}" "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(collision_carrier_disc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 600)
+    foreach(_pair jpn:JPN kor:KOR cn:CN ntsc:NTSC aug6:AUG6 jun26:JUN26)
+        string(REPLACE ":" ";" _p "${_pair}")
+        list(GET _p 0 _slug)
+        list(GET _p 1 _var)
+        add_test(NAME collision_carrier_disc_${_slug}
+                 COMMAND collision_carrier_test disc ${_slug} "${ICO_DISC_IMAGE_${_var}}"
+                         "${CMAKE_CURRENT_BINARY_DIR}")
+        set_tests_properties(collision_carrier_disc_${_slug} PROPERTIES SKIP_RETURN_CODE 77
+                             TIMEOUT 600)
+    endforeach()
+endif()
+
 # Yorda trips (port/game/yorda_trip.h): the rule (yorda_trip.c, through
 # ico_options), the game's side (yorda_trip_live.c) and the motion reader
 # (yorda_trip_source.c) compiled in, the game, the disc and its pack index
