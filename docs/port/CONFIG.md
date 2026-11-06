@@ -246,13 +246,13 @@ Options > Gameplay: No hints on the page, Shadow toughness and aggression on Gam
 rows (the three new ones, One hit per swing, Shadows never dodge and Queen barrier) on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
 [OPTIONS.md](../OPTIONS.md#gameplay)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
-the game as the disc ships it. All eleven are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
+the game as the disc ships it. All twelve are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
 `port/platform/sim_keys.c`). A word
 or number that is no value reads as the default and is logged once.
 
 | key | type | default | meaning |
 | --- | --- | --- | --- |
-| `shade_toughness` | string | `"original"` | `"original"` (the disc's table), `"american"` (every Shadow as tough as on the North American disc, and no tougher on later playthroughs) or `"no_plus"` (the disc's Shadows, no tougher on later playthroughs) |
+| `shade_toughness` | string | `"original"` | `"original"` (the disc's table), `"american"` (every Shadow as tough as on the North American disc, and no tougher on later playthroughs) or `"no_plus"` (the disc's Shadows, no tougher on later playthroughs) or `"third_journey"` (the factor of a third playthrough, `gameParam[40]`, twice the first journey's; the PAL, Japanese, Korean and Chinese discs only: elsewhere it reads as `"original"` with a log line) |
 | `one_hit` | bool | `false` | a swing hurts a Shadow only once (`debug_one_hit_only`); suspends achievements |
 | `never_dodge` | bool | `false` | the Shadows never dodge (`debug_ignore_dodge`); suspends achievements |
 | `aggression` | string | `"own"` | `"own"` (each Shadow's own), `"bold_patient"`, `"bold_quick"`, `"wary_patient"` or `"wary_quick"` (`debug_enemy_battle_type`) |
@@ -263,6 +263,7 @@ or number that is no value reads as the default and is logged once.
 | `auto_guard` | bool | `true` | Ico blocks a Shadow's attack from the front; `false` = he does not (does not suspend achievements) |
 | `attack_turn` | bool | `true` | Ico's swing turns him toward the nearest Shadow; `false` = he swings straight ahead (does not suspend achievements) |
 | `shadows_wait_down` | bool | `true` | the Shadows hold back while Ico is knocked down; `false` = they do not (does not suspend achievements) |
+| `peaceful_shadows` | bool | `false` | a Shadow is started without its brain thread (the game's `BrainOnOff` switch, for Shadows only; Yorda's brain is untouched); suspends achievements |
 
 The Debug menu row (Options > Developer, with Developer mode on) has no key: its press marks the Debug menu used until the options are reloaded,
 which suspends achievements too (`ico_variants_suspend_achievements`, read by `gamestate.c` beside

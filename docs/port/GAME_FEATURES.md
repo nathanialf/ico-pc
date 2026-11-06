@@ -353,7 +353,7 @@ disc](#options-on-each-disc)).
 
 ### Game variants
 
-Options > Gameplay: No hints on the page, Shadow toughness and Shadow aggression on Gameplay > Shadows, Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge and Queen barrier on Gameplay > Combat (Shadows attack together is there too), No cutscene look-around and Ignore
+Options > Gameplay: No hints on the page, Shadow toughness, Shadow aggression and Peaceful shadows on Gameplay > Shadows, Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge and Queen barrier on Gameplay > Combat (Shadows attack together is there too), No cutscene look-around and Ignore
 cutscene cameras on Gameplay > Cutscenes, and the Debug menu on Developer (`[variants]`,
 [CONFIG.md](CONFIG.md#variants), [UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes)). The values are
 `port/game/variants.c`'s; the game reads them in three ways, and with every row at its shipped value
@@ -398,8 +398,47 @@ own); using original`, `ico_variant_set` gives Original for it, `ico_variant_ste
 (`settings.c` `variantNote`; No hints and No cutscene look-around show their `_2001` notes on the
 three 2001 discs, where `ico_hints_on` is 0 and `debug_VariableInit` leaves `debug_hand_camera` 0).
 `getEnemyRestartLife` (`enemy_act.c`) uses the first playthrough's factor (`gameParam[38]`) on
-every playthrough when Shadow toughness is American or Not tougher later; the 2001 builds' and the
-USA disc's restarts have no factor.
+every playthrough when Shadow toughness is American or Not tougher later, and the table's entry
+`gameParam[40]` when it is Third journey (`ico_variant_shade_toughness() == 3`, the `idx` the clamp
+to 38..43 then passes); the 2001 builds' and the USA disc's restarts have no factor.
+
+Third journey. The game multiplies a restarted or started Shadow's table life by
+`gameParam[38 + gFlagGameClear]` (clamped to 38..43), and `gFlagGameClear` is set to 1 once
+(`ico2/script/src/end.c`), so entries 40..43 are never read in play. The six factors on every
+disc, read from each boot ELF's `gameParam` (the table's address from `port/data/gen/<slug>/table_desc.c`):
+
+| disc | `gameParam` entries | [38] | [39] | [40] | [41] | [42] | [43] | Third journey |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| pal | 44 | 1.0 | 1.5 | 2.0 | 2.0 | 2.0 | 2.0 | offered (x2) |
+| jpn | 44 | 1.0 | 1.5 | 2.0 | 2.0 | 2.0 | 2.0 | offered (x2) |
+| kor | 44 | 1.0 | 1.5 | 2.0 | 2.0 | 2.0 | 2.0 | offered (x2) |
+| cn | 44 | 1.0 | 1.5 | 2.0 | 2.0 | 2.0 | 2.0 | offered (x2) |
+| ntsc | 36 | none | none | none | none | none | none | hidden: no factor in the restart |
+| aug6 | 36 | none | none | none | none | none | none | hidden |
+| jun26 | 32 | none | none | none | none | none | none | hidden |
+
+Entry 40 differs from entry 39 on the four discs that have the factor (2.0 against 1.5), so the row
+is a real step up; on the other three the table is shorter than 38 entries and their restart code
+(`actEnemyRestart_ntsc`, `_aug6`, `_jun26`, `actEnemyStart_*`) takes `GetEnemyDefLife` as it is. The
+value is hidden there by `third_journey_offered` (`variants.c`, `!ICO_NTSCAUG6JUN26`):
+`ico_variant_offered`, `ico_variant_set` (Original), `ico_variant_step` (passed over) and a config
+`third_journey` (Original, with `variants: shade_toughness = third_journey is not offered on this
+disc (its restart life has no playthrough factor); using original`).
+
+Peaceful shadows. The game's `BrainOnOff` row sets `debug_brain_flag` (`debug.c`, 1 from
+`debug_VariableInit`); it is read at the four Shadow starts in `enemy_act.c` (`actEnemyStart_ntsc`,
+`_jun26`, `_aug6` and the European `actEnemyStart`: `if (debug_brain_flag != 0)
+actCreateSubThread(subEnemyBrainMain, 20)`) and at Yorda's four starts in `girl_act.c`, so the
+variant does not bind the flag: each Shadow site reads `debug_brain_flag != 0 &&
+ico_variant_shadow_brain()` (one `extern`, `variants.c`; 1 unless `peaceful_shadows`, counted in the
+log: the first 8 Shadows, then every 100th, `variants: peaceful_shadows: Shadow N starts without its
+brain`). Without `subEnemyBrainMain` the Shadow keeps its `subEnemyControl`, `subEnemyCollision`
+and `subCommonIdle` threads: the brain is what sets the Shadow's mode and its movement brain
+(`CheckEnemyBrainMode`, `BrainMode_Requset`, `actChangeActBrain`) and sends the mails for the first
+status (carry Yorda, approach, wait), so with no brain `stick` stays at rest, `subEnemyControl`
+sends only the idle mails, and the attack, approach, dodge and kidnap decisions (all in the brain
+modes and their `ChangeBrain_To*`) never run; the collision thread (`CommonAttackCenter`, hit
+reactions) and the idle thread still run. Not read in play on a disc.
 
 Local reads.
 
@@ -451,6 +490,7 @@ hold the rest.
 | Developer: Developer mode | W | W | W | W | W | W | W | `achievements_<slug>` (the suspension) |
 | Developer: Debug menu | W | W | W | W | W | H | W | `ICO_JUN26` (the demo's debug tables are the preview's); `settings_discs`, `settings_extra_<slug>` |
 | Gameplay > Shadows: Shadow toughness American | W | W | W | W | W | N | W | `ico_variant_offered`; `variants_<slug>`, `settings_extra_<slug>` |
+| Gameplay > Shadows: Shadow toughness Third journey | W | W | W | N | N | N | W | `third_journey_offered` (`!ICO_NTSCAUG6JUN26`: only the PAL-family restart reads `gameParam[38 + clears]`); `variants_<slug>`, `settings_extra_<slug>` |
 | Gameplay: No hints; Gameplay > Cutscenes: No cutscene look-around | W | W | W | N | N | N | W | `ico_hints_on` is not in `GirlAI_ntscaug6jun26`; `debug_hand_camera` stays 0; `settings_extra_<slug>` |
 | Gameplay > Shadows, Combat and Cutscenes: the other game variants rows | W | W | W | W | W | W | W | `variants_<slug>` |
 | Extras > Music | W | W | W | W | W | W | W | names by asset path, the region's stream bounds; `gallery`, `gallery_jpn`/`_kor`/`_cn` (the 2001 discs have no run: the test compares 105 rows) |

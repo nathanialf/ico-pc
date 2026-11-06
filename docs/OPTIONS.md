@@ -529,7 +529,7 @@ Options > Gameplay > Yorda:
 ### Shadows
 
 Options > Gameplay > Shadows. Shadow toughness and Shadow aggression start as
-the game shipped on your disc. The fight rules (One hit
+the game shipped on your disc; Peaceful shadows starts Off. The fight rules (One hit
 per swing, Shadows never dodge, Shadows attack together and Queen barrier) are
 on the [Combat](#combat) page.
 
@@ -547,9 +547,26 @@ on the [Combat](#combat) page.
   2001 magazine demo there is no **American** choice: the demo's Shadows are
   not the North American disc's, so the row has Original and Not tougher
   later only (an `american` set in `config.toml` counts as Original there).
+  **Third journey** makes every Shadow as tough as the game's own table makes
+  them on a third playthrough, which is twice as tough as on the first
+  journey. The game has that number but you can never reach it: finishing the
+  game once is as far as the count goes, and a second journey is only half as
+  much again (one and a half times). Achievements stay on. The row has this
+  choice only on the European, Japanese, Korean and Asian discs, because
+  only their game makes Shadows tougher on a later journey; on the North
+  American disc, the August 2001 preview and the June 2001 demo it is not
+  offered (a `third_journey` set in `config.toml` counts as Original there).
 - **Shadow aggression:** how the Shadows fight. **Their own** leaves each
   Shadow as the game made it. The other four make them all **Bold** or
   **Wary**, and **patient** or **quick**. Achievements stay on.
+- **Peaceful shadows:** the Shadows come out of their pits as usual, but they
+  stand where they appear and never go after Ico or Yorda: they do not walk
+  up to you, attack, or carry Yorda off. It is the game's own switch that
+  turns the Shadows' thinking off, used here for the Shadows only; Yorda
+  keeps hers. It is different from **Shadows never take Yorda** (Gameplay >
+  Yorda), where the Shadows still come for you and fight but do not carry her
+  off: with Peaceful shadows they do not come at all. Switches achievements
+  off, the same as the other rows that make the game easier.
 
 ### Combat
 
