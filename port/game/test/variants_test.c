@@ -75,17 +75,24 @@ static void test_defaults(void)
     CHECK(ico_variant_barrier_hits() == (strcmp(ico_region_cur()->slug, "jun26") == 0 ? 7 : 5));
     CHECK(ico_variant_no_cutscene_look() == 0);
     CHECK(ico_variant_ignore_cutscene_cameras() == 0);
+    /* the Combat rows: all three On, the game as shipped */
+    CHECK(ico_variant_auto_guard() == 1);
+    CHECK(ico_variant_attack_turn() == 1);
+    CHECK(ico_variant_shadows_wait_down() == 1);
     CHECK(ico_variants_suspend_achievements() == 0);
     /* the shipped file's values are the defaults */
     use_config("[variants]\nshade_toughness = \"original\"\none_hit = false\n"
                "never_dodge = false\naggression = \"own\"\nno_hints = false\n"
-               "no_cutscene_look = false\nignore_cutscene_cameras = false\n");
+               "no_cutscene_look = false\nignore_cutscene_cameras = false\n"
+               "auto_guard = true\nattack_turn = true\nshadows_wait_down = true\n");
     CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL);
     CHECK(ico_variant_aggression() == ICO_AGGRESSION_OWN);
+    CHECK(ico_variant_auto_guard() == 1 && ico_variant_attack_turn() == 1 &&
+          ico_variant_shadows_wait_down() == 1);
     CHECK(ico_variants_suspend_achievements() == 0);
 }
 
-/* the names: eight variants, the words the keys are written with */
+/* the names: eleven variants, the words the keys are written with */
 static void test_names(void)
 {
     CHECK(ico_variant_count(ICO_VARIANT_SHADE_TOUGHNESS) == 3);
@@ -102,6 +109,14 @@ static void test_names(void)
     CHECK(strcmp(ico_variant_key(ICO_VARIANT_NO_CUTSCENE_LOOK), "no_cutscene_look") == 0);
     CHECK(strcmp(ico_variant_key(ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS), "ignore_cutscene_cameras") ==
           0);
+    CHECK(strcmp(ico_variant_key(ICO_VARIANT_AUTO_GUARD), "auto_guard") == 0);
+    CHECK(strcmp(ico_variant_key(ICO_VARIANT_ATTACK_TURN), "attack_turn") == 0);
+    CHECK(strcmp(ico_variant_key(ICO_VARIANT_SHADOWS_WAIT_DOWN), "shadows_wait_down") == 0);
+    CHECK(ico_variant_count(ICO_VARIANT_AUTO_GUARD) == 2 &&
+          ico_variant_count(ICO_VARIANT_ATTACK_TURN) == 2 &&
+          ico_variant_count(ICO_VARIANT_SHADOWS_WAIT_DOWN) == 2);
+    CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_AUTO_GUARD, 0), "false") == 0 &&
+          strcmp(ico_variant_value_name(ICO_VARIANT_AUTO_GUARD, 1), "true") == 0);
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_SHADE_TOUGHNESS, 0), "original") == 0);
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_SHADE_TOUGHNESS, 1), "american") == 0);
     CHECK(strcmp(ico_variant_value_name(ICO_VARIANT_SHADE_TOUGHNESS, 2), "no_plus") == 0);
@@ -194,6 +209,53 @@ static void test_file_words(void)
     CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL);
     CHECK(ico_variant_aggression() == ICO_AGGRESSION_OWN);
     CHECK(ico_variant_barrier_hits() == (strcmp(ico_region_cur()->slug, "jun26") == 0 ? 7 : 5));
+}
+
+/* The Combat rows through the config path: each hook is 1 with no key, 0 when
+   the file says false (the others stay 1), steps to 0 and writes its key, and
+   none of the three suspends achievements. The hooks are the externs the game's
+   commonact.c, boyact.c (twice) read, so their value here is the value the
+   game's conjunct sees. */
+static void test_combat(void)
+{
+    static const struct {
+        IcoVariantId id;
+        const char *key;
+        int (*hook)(void);
+    } rows[3] = {
+        {ICO_VARIANT_AUTO_GUARD, "auto_guard", ico_variant_auto_guard},
+        {ICO_VARIANT_ATTACK_TURN, "attack_turn", ico_variant_attack_turn},
+        {ICO_VARIANT_SHADOWS_WAIT_DOWN, "shadows_wait_down", ico_variant_shadows_wait_down}};
+
+    for (int i = 0; i < 3; i++) {
+        char text[96], path[64];
+
+        use_config(NULL);
+        CHECK(rows[i].hook() == 1);
+        snprintf(text, sizeof(text), "[variants]\n%s = false\n", rows[i].key);
+        use_config(text);
+        for (int j = 0; j < 3; j++) {
+            CHECK(rows[j].hook() == (j == i ? 0 : 1));
+        }
+        CHECK(ico_variants_suspend_achievements() == 0);
+        /* a bad word reads as the default (On) */
+        snprintf(text, sizeof(text), "[variants]\n%s = \"sideways\"\n", rows[i].key);
+        use_config(text);
+        CHECK(rows[i].hook() == 1);
+        /* the page's step: On -> Off writes the key, Off -> On puts it back */
+        use_config(NULL);
+        snprintf(path, sizeof(path), "variants.%s", rows[i].key);
+        CHECK(ico_variant_step(rows[i].id, 1) == 0 && rows[i].hook() == 0);
+        CHECK(ico_config_get_bool(path, 1) == 0);
+        CHECK(ico_variants_suspend_achievements() == 0);
+        CHECK(ico_variant_step(rows[i].id, 1) == 1 && rows[i].hook() == 1);
+        CHECK(ico_config_get_bool(path, 0) == 1);
+        /* a reload goes back to the file */
+        ico_variant_set(rows[i].id, 0);
+        ico_opt_reload();
+        CHECK(rows[i].hook() == 1);
+    }
+    use_config(NULL);
 }
 
 /* the achievements rule */
@@ -535,6 +597,7 @@ int main(int argc, char **argv)
     test_names();
     test_round_trip();
     test_file_words();
+    test_combat();
     test_suspend();
     test_apply();
     test_hints();
