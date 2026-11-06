@@ -832,6 +832,13 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "イコが倒れている間は影が待つ",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
         "オフ：イコが倒れている間も影が待たなくなり、イコが起き上がる前に攻撃されることがあります。実績はそのままです。",
+    [UI_STR_OPT_VAR_SWORD_COLOUR] = "光の剣の色",
+    [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
+        "赤：光の剣の軌跡が、未使用のもう一本と同じ赤になります。変わるのは色だけです。次の部屋から反映されます。",
+    [UI_STR_OPT_VAR_WEAPON] = "棒",
+    [UI_STR_VAL_VAR_INSECT_NET] = "虫取り網",
+    [UI_STR_OPT_VAR_WEAPON_NOTE] =
+        "虫取り網：棒がすべて未使用の虫取り網になります。振れず、火もつかず、影を傷つけません。次の部屋から反映されます。",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

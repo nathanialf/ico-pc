@@ -4306,6 +4306,11 @@ static void PutWeapon_jun26(void)
     }
 }
 
+/* PC port: port/game/variants.h: the light sword made as kind 8 by Light sword
+   colour Red reads as the kind 9 it was placed as, so it is set down as the
+   game sets the light sword down */
+extern int ico_variant_weapon_put_kind(int kind);
+
 static void PutWeapon(void)
 {
     if (ICO_JUN26) {
@@ -4318,7 +4323,7 @@ static void PutWeapon(void)
         InitMotionGeoInfo(&GOBJ_SUB(BOYINFO.weapon)->root, BOYINFO.f30, BOYINFO.f34, BOYINFO.f38,
                           -BOYINFO.f40, -BOYINFO.f44, -BOYINFO.f48);
         if (!ICO_NTSCAUG6JUN26) {
-            if (CheckWeaponKind(BOYINFO.weapon) == 9) {
+            if (ico_variant_weapon_put_kind(CheckWeaponKind(BOYINFO.weapon)) == 9) {
                 SetWeaponOffsetMode(BOYINFO.weapon, 1);
             }
         }

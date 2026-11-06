@@ -832,6 +832,13 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Le ombre aspettano che Ico si rialzi",
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
             "No: le ombre non si trattengono più mentre Ico è a terra e possono colpirlo prima che si rialzi. Gli obiettivi restano attivi.",
+        [UI_STR_OPT_VAR_SWORD_COLOUR] = "Colore della spada di luce",
+        [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
+            "Rosso: la spada di luce lascia una scia rossa come la gemella inutilizzata; nient’altro cambia. Dalla stanza seguente.",
+        [UI_STR_OPT_VAR_WEAPON] = "Bastone",
+        [UI_STR_VAL_VAR_INSECT_NET] = "Retino",
+        [UI_STR_OPT_VAR_WEAPON_NOTE] =
+            "Retino: ogni bastone è il retino inutilizzato del gioco; non si brandisce né si accende e non ferisce le ombre. Dalla stanza seguente.",
         [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
         [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
         [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
