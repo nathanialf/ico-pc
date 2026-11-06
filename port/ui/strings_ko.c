@@ -827,6 +827,13 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "이코가 쓰러지면 그림자 대기",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
         "끔: 이코가 쓰러져 있는 동안에도 그림자가 기다리지 않아, 일어나기 전에 다시 공격받을 수 있습니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_SWORD_COLOUR] = "빛의 검 색",
+    [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
+        "빨강: 빛의 검이 쓰이지 않은 쌍둥이 검처럼 붉은 궤적을 남깁니다. 색만 바뀝니다. 다음 방부터 적용됩니다.",
+    [UI_STR_OPT_VAR_WEAPON] = "막대기",
+    [UI_STR_VAL_VAR_INSECT_NET] = "잠자리채",
+    [UI_STR_OPT_VAR_WEAPON_NOTE] =
+        "잠자리채: 모든 막대기가 쓰이지 않은 잠자리채가 됩니다. 휘두르거나 불을 붙일 수 없고 그림자를 해치지 못합니다. 다음 방부터 적용됩니다.",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

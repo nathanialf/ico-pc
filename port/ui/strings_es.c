@@ -854,6 +854,13 @@ const char *const
                 [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Las sombras esperan si Ico cae",
                 [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
                     "No: las sombras ya no se contienen mientras Ico está en el suelo y pueden golpearlo antes de que se levante. Los logros siguen activos.",
+                [UI_STR_OPT_VAR_SWORD_COLOUR] = "Color de la espada de luz",
+                [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
+                    "Rojo: la espada de luz deja una estela roja, como su gemela sin usar del juego; nada más cambia. Desde la siguiente sala.",
+                [UI_STR_OPT_VAR_WEAPON] = "Palo",
+                [UI_STR_VAL_VAR_INSECT_NET] = "Cazamariposas",
+                [UI_STR_OPT_VAR_WEAPON_NOTE] =
+                    "Cazamariposas: cada palo es la red sin usar del juego; no se blande ni se enciende y no hiere a las sombras. Desde la siguiente sala.",
                 [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
                 [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
                 [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
