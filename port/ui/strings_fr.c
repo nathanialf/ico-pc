@@ -829,7 +829,7 @@ const char *const
                 [UI_STR_UNUSED_ARENA] = "Salle de test : arène",
                 [UI_STR_UNUSED_ARENA_NOTE] =
                     "Une salle où les créateurs essayaient les combats contre les Ombres ; sans sortie : quittez avec Start, puis Terminer la partie.",
-                [UI_STR_UNUSED_CLIMB] = "Salle de test : grue",
+                [UI_STR_UNUSED_CLIMB] = "Salle de test : escalade",
                 [UI_STR_UNUSED_CLIMB_NOTE] =
                     "Une salle où les créateurs essayaient l’escalade et les caisses ; sans sortie : quittez avec Start, puis Terminer la partie.",
                 [UI_STR_UNUSED_MOVIE] = "Film de démonstration (576 lignes)",

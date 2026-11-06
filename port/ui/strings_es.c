@@ -808,7 +808,7 @@ const char *const ui_strings_es[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ARENA] = "Sala de pruebas: arena",
     [UI_STR_UNUSED_ARENA_NOTE] =
         "Sala para probar combates con las Sombras; sin salida: Start y luego Terminar partida.",
-    [UI_STR_UNUSED_CLIMB] = "Sala de pruebas: grúa",
+    [UI_STR_UNUSED_CLIMB] = "Sala de pruebas: escalada",
     [UI_STR_UNUSED_CLIMB_NOTE] =
         "Sala para probar la escalada y las cajas; sin salida: Start y luego Terminar partida.",
     [UI_STR_UNUSED_MOVIE] = "Película de demostración (576 líneas)",

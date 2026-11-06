@@ -247,7 +247,7 @@ static void testTables(void)
           "tables in English");
     CHECK(strcmp(ui_str_in(UI_LANG_EN, UI_STR_SECTION_UNUSED), "Unused content") == 0 &&
               strcmp(ui_str_in(UI_LANG_EN, UI_STR_UNUSED_ARENA), "Test room: arena") == 0 &&
-              strcmp(ui_str_in(UI_LANG_EN, UI_STR_UNUSED_CLIMB), "Test room: crane") == 0 &&
+              strcmp(ui_str_in(UI_LANG_EN, UI_STR_UNUSED_CLIMB), "Test room: climbing") == 0 &&
               strcmp(ui_str_in(UI_LANG_EN, UI_STR_UNUSED_MOVIE), "Attract movie (576 lines)") ==
                   0 &&
               strcmp(ui_str_in(UI_LANG_EN, UI_STR_UNUSED_ART), "Early show title art") == 0,

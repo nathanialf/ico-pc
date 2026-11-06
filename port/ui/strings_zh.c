@@ -779,7 +779,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ARENA] = "測試房間：競技場",
     [UI_STR_UNUSED_ARENA_NOTE] =
         "製作者用來測試與影子戰鬥的房間；沒有出口，請按 START 再選「遊戲終了」離開。",
-    [UI_STR_UNUSED_CLIMB] = "測試房間：起重機",
+    [UI_STR_UNUSED_CLIMB] = "測試房間：攀爬",
     [UI_STR_UNUSED_CLIMB_NOTE] =
         "製作者用來測試攀爬與箱子的房間；沒有出口，請按 START 再選「遊戲終了」離開。",
     [UI_STR_UNUSED_MOVIE] = "展示影片（576 線）",

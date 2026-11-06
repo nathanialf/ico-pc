@@ -804,7 +804,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ARENA] = "테스트 방: 아레나",
     [UI_STR_UNUSED_ARENA_NOTE] =
         "제작진이 그림자와의 전투를 시험하던 방입니다. 출구가 없으니 START를 누르고 '게임을 종료함'으로 나가십시오.",
-    [UI_STR_UNUSED_CLIMB] = "테스트 방: 크레인",
+    [UI_STR_UNUSED_CLIMB] = "테스트 방: 오르기",
     [UI_STR_UNUSED_CLIMB_NOTE] =
         "제작진이 오르기와 상자를 시험하던 방입니다. 출구가 없으니 START를 누르고 '게임을 종료함'으로 나가십시오.",
     [UI_STR_UNUSED_MOVIE] = "데모 영상 (576라인)",

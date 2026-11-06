@@ -207,7 +207,7 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Cutscenes (`UI_PAGE_CUTSCENES`) | Skip the opening (`UI_OPT_SKIP_OPENING`), No cutscene look-around, Ignore cutscene cameras (`UI_OPT_VAR_*`), Back |
 | Achievements | a list, the popups switch |
 | Extras | Music, Models, Credits, Characters, Unused content (`UI_PAGE_UNUSED`, a link), Add to Steam, Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Back up your data (`UI_OPT_EXTRAS_BACKUP`), Restore from a backup (`UI_OPT_EXTRAS_RESTORE`), Achievement popups, Back |
-| Unused content (`UI_PAGE_UNUSED`) | Test room: arena, Test room: crane, Attract movie (576 lines), Early show title art (`UI_OPT_UNUSED_ARENA` .. `_ART`, press rows), Back ([Extras > Unused content](#extras--unused-content)) |
+| Unused content (`UI_PAGE_UNUSED`) | Test room: arena, Test room: climbing, Attract movie (576 lines), Early show title art (`UI_OPT_UNUSED_ARENA` .. `_ART`, press rows), Back ([Extras > Unused content](#extras--unused-content)) |
 | Music | the music gallery, a list |
 | Characters | nine colour rows, Switch, Randomize, Reset, Back |
 
@@ -1121,7 +1121,7 @@ Options closes into the title or the game), `variants`, `config`.
 ### Extras > Unused content
 
 `UI_PAGE_UNUSED`, Extras' fifth row (`extrasOpts[4] = UI_OPT_LINK`, `extrasLinks[4]`), built from
-`unusedOpts` / `unusedStrs` with Extras as its parent: Test room: arena, Test room: crane,
+`unusedOpts` / `unusedStrs` with Extras as its parent: Test room: arena, Test room: climbing,
 Attract movie (576 lines), Early show title art and Back. The four are press rows
 (`UI_OPT_UNUSED_ARENA` .. `UI_OPT_UNUSED_ART`, after `UI_OPT_STATE_SLOT`, outside `steppable`), in
 the order of `ico_unused.h`'s rows (`ui__unused_row` is the option less `UI_OPT_UNUSED_ARENA`). The

@@ -153,7 +153,7 @@ static void testUnused(void)
     static const UiUnusedHost kHost = {fakeUnusedAvailable, fakeUnusedOpen};
     static const UiSettingsOpt kRows[4] = {UI_OPT_UNUSED_ARENA, UI_OPT_UNUSED_CLIMB,
                                            UI_OPT_UNUSED_MOVIE, UI_OPT_UNUSED_ART};
-    static const char *const kNames[5] = {"Test room: arena", "Test room: crane",
+    static const char *const kNames[5] = {"Test room: arena", "Test room: climbing",
                                           "Attract movie (576 lines)", "Early show title art",
                                           "Back"};
     char log[2048];
