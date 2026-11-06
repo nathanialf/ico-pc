@@ -2,6 +2,8 @@
 
 (kept current after every merge; player words only)
 
+- When a cutscene runs slowly, the game now saves one picture from it and a copy of the log in a file called `slow-` and the date, in the logs folder, once each time you start it. If you report a slow cutscene, attach that file with the log.
+
 ## Fixed
 
 (kept current after every merge; player words only)

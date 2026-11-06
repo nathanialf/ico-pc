@@ -253,20 +253,21 @@ int ico_loss_dump_path(char *out, size_t size, const char *dir, const char *stam
 typedef struct PruneList {
     char (*paths)[1024];
     int count, cap;
+    const char *prefix; /* "loss-" or "slow-" */
 } PruneList;
 
-static int is_loss_zip(const char *name)
+static int is_loss_zip(const char *name, const char *prefix)
 {
-    const size_t n = strlen(name);
+    const size_t n = strlen(name), p = strlen(prefix);
 
-    return n > 9 && strncmp(name, "loss-", 5) == 0 && strcmp(name + n - 4, ".zip") == 0;
+    return n > p + 4 && strncmp(name, prefix, p) == 0 && strcmp(name + n - 4, ".zip") == 0;
 }
 
 static int prune_visit(const char *path, const char *name, void *user)
 {
     PruneList *l = (PruneList *)user;
 
-    if (!is_loss_zip(name) || strlen(path) >= sizeof(l->paths[0])) {
+    if (!is_loss_zip(name, l->prefix) || strlen(path) >= sizeof(l->paths[0])) {
         return 0;
     }
     if (l->count == l->cap) {
@@ -283,9 +284,9 @@ static int prune_visit(const char *path, const char *name, void *user)
     return 0;
 }
 
-int ico_loss_dump_prune(const char *dir, int keep)
+static int prune_zips(const char *dir, const char *prefix, int keep)
 {
-    PruneList l = {NULL, 0, 0};
+    PruneList l = {NULL, 0, 0, prefix};
     int removed = 0;
 
     if (ico_dir_walk(dir, 0, prune_visit, &l) < 0) {
@@ -299,6 +300,25 @@ int ico_loss_dump_prune(const char *dir, int keep)
     }
     free(l.paths);
     return removed;
+}
+
+int ico_loss_dump_prune(const char *dir, int keep)
+{
+    return prune_zips(dir, "loss-", keep);
+}
+
+int ico_slow_dump_path(char *out, size_t size, const char *dir, const char *stamp)
+{
+    const size_t n = strlen(dir);
+    const char *sep = n > 0 && (dir[n - 1] == '/' || dir[n - 1] == '\\') ? "" : "/";
+    const int c = snprintf(out, size, "%s%sslow-%s.zip", dir, sep, stamp);
+
+    return c < 0 || (size_t)c >= size ? -1 : 0;
+}
+
+int ico_slow_dump_prune(const char *dir, int keep)
+{
+    return prune_zips(dir, "slow-", keep);
 }
 
 void *ico_dump_zip_extract_nth(const char *zip_path, int nth, size_t *size, char *name,

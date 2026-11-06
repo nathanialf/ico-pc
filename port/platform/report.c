@@ -888,6 +888,14 @@ int ico_report_write(const IcoReportInputs *in, char *name, size_t name_size)
         }
         (void)zip_add_file(b, in->loss_zip, 1);
     }
+    if (in->slow_zip != NULL && in->slow_zip[0] != '\0') {
+        const char *b = in->slow_zip + strlen(in->slow_zip);
+
+        while (b > in->slow_zip && b[-1] != '/' && b[-1] != '\\') {
+            b--;
+        }
+        (void)zip_add_file(b, in->slow_zip, 1);
+    }
     if (zip_end() != 0) {
         r_remove(zpath);
         snprintf(name, name_size, "%s could not be written", zname);

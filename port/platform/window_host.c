@@ -4844,6 +4844,74 @@ static void perf_reset(void)
     rd_vu_card_counts(&s_pres.cardStrips, &s_pres.cardTris, &s_pres.cardMs);
 }
 
+/* The slow-scene dump (docs/port/ANDROID_DIAGNOSTICS.md, issue 179): the
+   one frame the renderer last closed, with a copy of the log, as
+   logs/slow-<date>-<time>.zip, written at most once a run when a 10 s block
+   spent its time in a scene layout and its replays' GPU work (the span less
+   the display wait) averaged over [dev] slow_scene_dump_ms (default 40, the
+   Original rate's period; 0 off). It is written in releases too: a
+   reporter's cutscene is the frame that explains the slow picture, and F12
+   cannot be pressed in a scene. The block's dominant kind is
+   s_blockKind, taken where the layout share is written; the zip is pruned
+   to ICO_SLOW_DUMP_KEEP and a crash or hang report carries it
+   (ico_diag_note_slow_scene). */
+static SceneKind s_blockKind = SCENE_OTHER;
+static int s_slowSceneWritten;
+
+static void slow_scene_check(void)
+{
+    SlowSceneBlock b;
+
+    memset(&b, 0, sizeof(b));
+    b.dominant = s_blockKind;
+    b.window = s_window != NULL;
+    b.movie = mpegPlay != 0;
+    b.written = s_slowSceneWritten;
+    b.uptimeS = ico_diag_uptime();
+    b.gpuN = s_perf.gpuN;
+    b.spanSumMs = s_perf.gpu;
+    b.waitSumMs = s_perf.gpuDisplayWait;
+    b.boundMs = ico_config_get_float("dev.slow_scene_dump_ms", 40.0);
+    if (!window_slow_scene_due(&b)) {
+        return;
+    }
+    s_slowSceneWritten = 1; /* once a run, whether or not the file is written */
+
+    char logs[ICO_PATH_MAX], zip[ICO_PATH_MAX], dump[ICO_PATH_MAX + 64], stamp[32], why[160];
+    const time_t now = time(NULL);
+    const struct tm *tm = localtime(&now);
+    uint32_t frame = 0;
+
+    if (tm == NULL || strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", tm) == 0) {
+        snprintf(stamp, sizeof(stamp), "unknown");
+    }
+    if (ico_host_logs_dir(logs, sizeof(logs)) != 0 ||
+        ico_slow_dump_path(zip, sizeof(zip), logs, stamp) != 0) {
+        fprintf(stderr, "window: slow scene: no usable logs folder\n");
+        return;
+    }
+    snprintf(dump, sizeof(dump), "%s/slow-%s.rddump", logs, stamp);
+    if (!rd_dump_retained(dump, NULL, &frame, NULL)) {
+        fprintf(stderr, "window: slow scene: the renderer holds no frame to write\n");
+        ico_remove(dump);
+        return;
+    }
+    ico_host_log_flush();
+    if (ico_loss_dump_zip(zip, dump, NULL, ico_diag_log_path(), why, sizeof(why)) < 0) {
+        fprintf(stderr, "window: slow scene: zip not written: %s\n", why);
+        ico_remove(dump);
+        return;
+    }
+    (void)ico_slow_dump_prune(logs, ICO_SLOW_DUMP_KEEP);
+    ico_diag_note_slow_scene(zip);
+
+    char name[64], line[512];
+
+    snprintf(name, sizeof(name), "slow-%s.zip", stamp);
+    (void)window_slow_scene_text(line, sizeof(line), &b, (unsigned)frame, name);
+    fprintf(stderr, "window: %s\n", line);
+}
+
 /* The block's second line: where a replay's time went, on average */
 static void perf_log(void)
 {
@@ -5410,6 +5478,7 @@ void window_pace_log(Uint64 now)
 
         (void)window_scene_text(&s_sceneShare, layouts, sizeof(layouts));
         fprintf(stderr, "window: %s\n", layouts);
+        s_blockKind = window_scene_dominant(&s_sceneShare);
         window_scene_reset(&s_sceneShare);
     }
     window_hold_block(s_pres.stepSumMs, s_pres.stepCount, s_pres.stepMaxMs, s_pres.paceHz,
@@ -5426,6 +5495,7 @@ void window_pace_log(Uint64 now)
         disp_log(sec, s_pres.lock.refreshNs);
     }
     disp_block_reset();
+    slow_scene_check();
     perf_log();
     s_pres.statAt = now;
     s_pres.statPresents = s_pres.statFrames = s_pres.statVsyncs = s_pres.statResyncs = 0;

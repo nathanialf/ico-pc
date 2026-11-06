@@ -60,6 +60,44 @@ size_t window_scene_text(const SceneShare *s, char *out, size_t cap);
 /* the block over: the sums empty */
 void window_scene_reset(SceneShare *s);
 
+/* The kind that held most of the block's step time (the first of equals);
+   SCENE_OTHER for a block with no steps */
+SceneKind window_scene_dominant(const SceneShare *s);
+
+/* The slow-scene dump's trigger (issue 179, window_host.c slow_scene_check):
+   the figures of a 10 s block, and whether this block is the one to write
+   the run's single cutscene frame.  boundMs is [dev] slow_scene_dump_ms (0
+   or less: off); workMs and waitMs are the block's GPU sums, from which the
+   mean work less the display wait is compared with the bound. */
+#define SLOW_SCENE_UPTIME_MIN_S 30.0
+#define SLOW_SCENE_GPU_MIN 8
+
+typedef struct SlowSceneBlock {
+    SceneKind dominant; /* window_scene_dominant of the block */
+    int window;         /* a window is up */
+    int movie;          /* a movie is playing */
+    int written;        /* this run already wrote its dump */
+    double uptimeS;
+    unsigned gpuN;    /* the block's timed replays */
+    double spanSumMs; /* their GPU spans summed */
+    double waitSumMs; /* and their display waits */
+    double boundMs;
+} SlowSceneBlock;
+
+/* The mean GPU work a replay: (span less the display wait) over gpuN, 0
+   with no timed replay and never below 0 */
+double window_slow_scene_work_ms(const SlowSceneBlock *b);
+/* true when the block is the dump's: a window up, no movie, the dominant
+   kind a scene, the bound on, not yet written, 30 s of uptime, at least 8
+   timed replays and the work over the bound (not at it) */
+bool window_slow_scene_due(const SlowSceneBlock *b);
+/* "slow scene: the block's GPU work 52.3 ms a replay (bound 40; display
+   wait 3.1, span 55.4) in a scene layout: frame 4812 written to
+   logs/slow-20261106-120000.zip; attach it with the log" (the name is the
+   file name alone); the length written */
+size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, unsigned frame,
+                              const char *zipName);
+
 /* The slow step's game threads part: "game threads 199.3 in 39 switches
    (longest Main 171.2 ms; on core 2)".  longestMs 0 (no switch timed) leaves
    the bracket out; core below 0 (not known) leaves "; on core N" out; name

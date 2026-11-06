@@ -99,6 +99,8 @@ int ico_share_report_collect(const char *logs_dir, const char *dumps_dir, IcoSha
         add_newest(out, logs_dir, "report-", ".zip");
         /* the skin check's capture on failure (rd.h rd_vu_skin_capture_due) */
         add_newest(out, logs_dir, "vu-skin-fail-", ".bin");
+        /* the slow-scene dump (window_host.c slow_scene_dump, issue 179) */
+        add_newest(out, logs_dir, "slow-", ".zip");
     }
     return out->count;
 }

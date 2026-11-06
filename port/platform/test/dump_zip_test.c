@@ -16,7 +16,9 @@
  * (ico_loss_dump_prune) keeps the newest loss zips by name and leaves
  * every other file alone.  ico_zip_add_file: the bug-report picture added to
  * a finished zip, its entries kept; ico_zip_move_file: F12's blended
- * present's frame added third, the loose file gone.
+ * present's frame added third, the loose file gone.  The slow-scene zip
+ * (ico_slow_dump_path, ico_slow_dump_prune): its name, its contents (the
+ * frame, then the log), one kept, the loss zips left alone.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -153,6 +155,67 @@ static void test_loss(const char *base)
     remove(log);
     snprintf(zip, sizeof(zip), "%s/no-such-folder", dir);
     CHECK(ico_loss_dump_prune(zip, 3) == -1);
+    ico_rmdir(dir);
+}
+
+/* The slow-scene zip (ico_slow_dump_path, ico_loss_dump_zip with no frame
+   before, ico_slow_dump_prune): its name, its contents (the one frame, then
+   the log, the loose dump gone), and the pruning to one slow zip that leaves
+   the loss zips and every other file alone, as the loss pruning leaves the
+   slow ones */
+static void test_slow(const char *base)
+{
+    char dir[1200], dump[1300], log[1300], zip[1300], zip2[1300], why[160];
+    const char a[] = "the slow scene's frame", text[] = "window: slow scene\n";
+    mz_zip_archive z;
+    size_t size = 0;
+
+    snprintf(dir, sizeof(dir), "%s/slow-test", base);
+    ico_mkdir(dir);
+    snprintf(dump, sizeof(dump), "%s/slow-20261106-120000.rddump", dir);
+    snprintf(log, sizeof(log), "%s/ico-pc.log", dir);
+    CHECK(ico_slow_dump_path(zip, sizeof(zip), dir, "20261106-120000") == 0);
+    CHECK(strstr(zip, "/slow-20261106-120000.zip") != NULL);
+    CHECK(ico_slow_dump_path(zip, 8, dir, "20261106-120000") == -1);
+    CHECK(ico_slow_dump_path(zip, sizeof(zip), dir, "20261106-120000") == 0);
+    CHECK(put(dump, a, sizeof(a)) == 0);
+    CHECK(put(log, text, sizeof(text) - 1) == 0);
+    CHECK(ico_loss_dump_zip(zip, dump, NULL, log, why, sizeof(why)) == 0);
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 2);
+    CHECK(find(&z, "slow-20261106-120000.rddump") == 0);
+    CHECK(entry_is(&z, "slow-20261106-120000.rddump", a, sizeof(a)));
+    CHECK(entry_is(&z, "ico-pc.log", text, sizeof(text) - 1));
+    mz_zip_reader_end(&z);
+    CHECK(ico_path_kind(dump, NULL, NULL) == -1); /* the loose dump is gone */
+    void *got = ico_dump_zip_extract(zip, &size, NULL, 0);
+    CHECK(got != NULL && size == sizeof(a) &&
+          memcmp(got, a, size) == 0); /* rd_replay_tool takes it */
+    free(got);
+
+    /* one kept: a second slow zip (newer), a loss zip and another file */
+    CHECK(ico_slow_dump_path(zip2, sizeof(zip2), dir, "20261106-130000") == 0);
+    CHECK(put(zip2, "z", 1) == 0);
+    char loss[1300], other[1300];
+    snprintf(loss, sizeof(loss), "%s/loss-20261106-110000.zip", dir);
+    snprintf(other, sizeof(other), "%s/slow-notes.txt", dir);
+    CHECK(put(loss, "z", 1) == 0);
+    CHECK(put(other, "z", 1) == 0);
+    CHECK(ico_slow_dump_prune(dir, ICO_SLOW_DUMP_KEEP) == 1);
+    CHECK(ico_path_kind(zip, NULL, NULL) == -1);
+    CHECK(ico_path_kind(zip2, NULL, NULL) == 0);
+    CHECK(ico_path_kind(loss, NULL, NULL) == 0);
+    CHECK(ico_path_kind(other, NULL, NULL) == 0);
+    /* the loss pruning leaves the slow zip alone */
+    CHECK(ico_loss_dump_prune(dir, 0) == 1);
+    CHECK(ico_path_kind(zip2, NULL, NULL) == 0);
+    CHECK(ico_slow_dump_prune(dir, ICO_SLOW_DUMP_KEEP) == 0);
+    remove(zip2);
+    remove(other);
+    remove(log);
+    snprintf(zip, sizeof(zip), "%s/no-such-folder", dir);
+    CHECK(ico_slow_dump_prune(zip, 1) == -1);
     ico_rmdir(dir);
 }
 
@@ -402,6 +465,7 @@ int main(int argc, char **argv)
     }
 
     test_loss(argv[1]);
+    test_slow(argv[1]);
     test_add(argv[1]);
 
     printf("dump_zip_test: %s\n", fails ? "FAILED" : "ok");

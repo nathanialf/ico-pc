@@ -9,7 +9,9 @@
  * on, the count words, no replays); the list-0 line over the block's timed
  * replays (an exact line, a noisy one with its R^2, two replays, the
  * triangles not varying, list 0 not varying, none, a cut buffer) and the
- * swapchain's images in use.
+ * swapchain's images in use; the slow-scene dump's trigger over a block's
+ * figures (each condition alone, the bound exactly, the display wait less
+ * from the work) and its line.
  */
 #include <stdio.h>
 #include <string.h>
@@ -176,6 +178,85 @@ int main(void)
             const size_t n = window_scene_vu_fit_text(t, sizeof(t), &f);
 
             CHECK(n < sizeof(t) && strlen(t) == n);
+        }
+    }
+    /* the slow-scene dump's trigger (issue 179): a scene-dominant block on a
+       window, no movie, 30 s up, 8 timed replays, the work (span less the
+       display wait, a replay's mean) over the bound, not yet written */
+    {
+        SlowSceneBlock t;
+
+        memset(&s, 0, sizeof(s));
+        CHECK(window_scene_dominant(&s) == SCENE_OTHER); /* no steps */
+        window_scene_note(&s, SCENE_PLAY, 3000000000ull);
+        window_scene_note(&s, SCENE_SCENE, 5000000000ull);
+        window_scene_note(&s, SCENE_PAUSE, 1000000000ull);
+        CHECK(window_scene_dominant(&s) == SCENE_SCENE);
+        window_scene_note(&s, SCENE_PLAY, 3000000000ull);
+        CHECK(window_scene_dominant(&s) == SCENE_PLAY); /* 6 s of play against 5 s */
+
+        memset(&t, 0, sizeof(t));
+        t.dominant = SCENE_SCENE;
+        t.window = 1;
+        t.uptimeS = 45.0;
+        t.gpuN = 10;
+        t.spanSumMs = 600.0; /* 60 ms a replay */
+        t.waitSumMs = 100.0; /* 10 ms of it the display's image: work 50 */
+        t.boundMs = 40.0;
+        CHECK(window_slow_scene_work_ms(&t) > 49.999 && window_slow_scene_work_ms(&t) < 50.001);
+        CHECK(window_slow_scene_due(&t));
+        /* each condition alone defeats it */
+        t.dominant = SCENE_PLAY;
+        CHECK(!window_slow_scene_due(&t));
+        t.dominant = SCENE_SCENE;
+        t.window = 0;
+        CHECK(!window_slow_scene_due(&t));
+        t.window = 1;
+        t.movie = 1;
+        CHECK(!window_slow_scene_due(&t));
+        t.movie = 0;
+        t.written = 1; /* once a run */
+        CHECK(!window_slow_scene_due(&t));
+        t.written = 0;
+        t.uptimeS = 29.9;
+        CHECK(!window_slow_scene_due(&t));
+        t.uptimeS = 30.0;
+        CHECK(window_slow_scene_due(&t)); /* 30 s is enough */
+        t.gpuN = 7;
+        CHECK(!window_slow_scene_due(&t));
+        t.gpuN = 8;
+        CHECK(window_slow_scene_due(&t));
+        t.boundMs = 0.0; /* [dev] slow_scene_dump_ms = 0: off */
+        CHECK(!window_slow_scene_due(&t));
+        t.boundMs = -5.0;
+        CHECK(!window_slow_scene_due(&t));
+        /* the display wait is not GPU work: a span of 60 with a wait of 30
+           is under 40; the bound itself is not over */
+        t.boundMs = 40.0;
+        t.gpuN = 10;
+        t.waitSumMs = 300.0;
+        CHECK(!window_slow_scene_due(&t));
+        t.waitSumMs = 200.0; /* work 40.0 exactly */
+        CHECK(!window_slow_scene_due(&t));
+        t.waitSumMs = 199.0;
+        CHECK(window_slow_scene_due(&t));
+        /* a wait above the span, or no replay: no work, never negative */
+        t.waitSumMs = 700.0;
+        CHECK(window_slow_scene_work_ms(&t) == 0.0);
+        t.gpuN = 0;
+        CHECK(window_slow_scene_work_ms(&t) == 0.0 && !window_slow_scene_due(&t));
+        /* the line */
+        t.gpuN = 10;
+        t.waitSumMs = 100.0;
+        window_slow_scene_text(b, sizeof(b), &t, 4812, "slow-20261106-120000.zip");
+        CHECK(text_is(b, "slow scene: the block's GPU work 50.0 ms a replay (bound 40; display "
+                         "wait 10.0, span 60.0) in a scene layout: frame 4812 written to "
+                         "logs/slow-20261106-120000.zip; attach it with the log"));
+        {
+            char c[20];
+            const size_t n = window_slow_scene_text(c, sizeof(c), &t, 1, "slow-x.zip");
+
+            CHECK(n < sizeof(c) && strlen(c) == n);
         }
     }
     /* the swapchain's images */
