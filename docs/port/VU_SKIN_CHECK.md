@@ -455,7 +455,8 @@ and `rd_vu_skin_check_dump.cmake` (`rd_vu_skin_check_dump`, `rd_vu_skin_check_16
 `rd_vu_skin_check_123_bones_ring_nan` on issue 123's blended dump
 `frame-20261106-080033-v3910-blended`), `rd_vu_bones_ring_ab.cmake` (`rd_vu_bones_ring_ab`: the
 three dumps of `/primary/dev/ico-dumps/163/` under the plain set with the pre-pass off, the bones
-through the ring against VuBoneCB, every picture byte for byte), `vu1_test` (the ring builds' probe
+through the ring against VuBoneCB, and both with the check on for every skinned command (column 3
+and twin C drawn, the twins through the ring), every picture byte for byte), `vu1_test` (the ring builds' probe
 and pictures as the plain variants'), `bones_ladder` (the ladder over sequences of starts, the
 mark, the lines word for word), `host_config` (the keys), and
 `rd_vu_skin_check_ab.cmake` (`rd_vu_skin_check_ab`: the pictures with the check on for every

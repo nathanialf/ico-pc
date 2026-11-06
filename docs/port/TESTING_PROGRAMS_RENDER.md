@@ -481,11 +481,12 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
 - `rd_vu_bones_ring_ab.cmake`: issue 123's ladder, step 1 ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)):
   the three dumps of `/primary/dev/ico-dumps/163/` (issue 163's blended dump, its patched copy,
   issue 123's blended dump of 2026-11-06) through `rd_replay_tool --pass-dump --present 640x480` under the
-  plain set with the VU pre-pass off and the skin check off, `ICO_RD_VU_BONES=cbuffer` against
-  `=ring`, at Original and with the attachment read and GS state as shader data: every PNG byte for
-  byte, each run's start line (`rd: VU bones: through VuBoneCB`, `rd: VU bones: through the ring
-  (storage buffer) on the skinned entries`) (`rd_vu_bones_ring_ab`). SKIP without the dumps or a
-  device.
+  plain set with the VU pre-pass off, `ICO_RD_VU_BONES=cbuffer` with the skin check off against
+  `=ring` with it off, `cbuffer` with it on for every skinned command (`ICO_RD_VU_SKIN_CHECK=2`:
+  column 3 and twin C drawn, at least one twin C over the dumps) and `ring` with it on, at Original
+  and with the attachment read and GS state as shader data: every PNG byte for byte, each run's
+  start line (`rd: VU bones: through VuBoneCB`, `rd: VU bones: through the ring (storage buffer) on
+  the skinned entries`) (`rd_vu_bones_ring_ab`). SKIP without the dumps or a device.
 - `rd_vu_skin_check_ab.cmake`: the skin check is designed not to change the picture
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)); `rd_replay_tool --pass-dump` with it off
   (`ICO_RD_VU_SKIN_CHECK=0`) and on for every skinned command of every replay (`=2`: the probes,
