@@ -1491,6 +1491,9 @@ static char loss_prev_hang[1024];
 /* the loss dump the previous run left for this one's bisect
    (ico_diag_startup_activity_begin), "" none */
 static char loss_pending[1024];
+/* this run's slow-scene dump (ico_diag_note_slow_scene), "" none: a report
+   carries it beside the loss dump */
+static char slow_scene_zip[1024];
 /* the bisect's note: a run ended during it is not bisected again */
 static const char act_bisect[] = "replaying the lost frame pass by pass (the loss bisect)";
 /* the second level's note (ico_diag_loss_bisect2): the same; its state file
@@ -3234,6 +3237,11 @@ void ico_diag_note_device_loss(const char *dump_zip)
     }
 }
 
+void ico_diag_note_slow_scene(const char *zip)
+{
+    snprintf(slow_scene_zip, sizeof slow_scene_zip, "%s", zip != NULL ? zip : "");
+}
+
 const char *ico_diag_loss_dump(void)
 {
     return loss_pending[0] != '\0' ? loss_pending : NULL;
@@ -4617,6 +4625,7 @@ static void report_file(const char *what, int fatal)
         in.memory = mem;
     }
     in.uptime_s = ico_diag_uptime();
+    in.slow_zip = slow_scene_zip[0] != '\0' ? slow_scene_zip : NULL;
     /* this run's loss dump, else the one the previous run left */
     if (strncmp(act_loss, act_loss_prefix, np) == 0) {
         in.loss_zip = act_loss + np;
