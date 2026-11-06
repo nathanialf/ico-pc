@@ -822,6 +822,16 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_UNUSED_ART_START] = "展示版：PRESS START",
     [UI_STR_UNUSED_ART_COPYRIGHT] = "展示版：コピーライト",
     [UI_STR_STATES_REFUSED_UNUSED] = "テスト部屋ではできません",
+    [UI_STR_SECTION_COMBAT] = "戦闘",
+    [UI_STR_OPT_VAR_AUTO_GUARD] = "自動ガード",
+    [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
+        "オフ：正面からの影の攻撃をイコがガードしなくなり、背後から受けたときと同じように当たります。実績はそのままです。",
+    [UI_STR_OPT_VAR_ATTACK_TURN] = "影のほうを向く",
+    [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
+        "オフ：イコの攻撃で最も近い影のほうを向かなくなり、正面に振ります。横にいる影には攻撃が当たることがあります。実績はそのままです。",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "イコが倒れている間は影が待つ",
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
+        "オフ：イコが倒れている間も影が待たなくなり、イコが起き上がる前に攻撃されることがあります。実績はそのままです。",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

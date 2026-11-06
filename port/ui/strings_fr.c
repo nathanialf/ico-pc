@@ -842,6 +842,16 @@ const char *const
                 [UI_STR_UNUSED_ART_START] = "Version de salon : Press Start",
                 [UI_STR_UNUSED_ART_COPYRIGHT] = "Version de salon : copyright",
                 [UI_STR_STATES_REFUSED_UNUSED] = "Pas dans une salle de test",
+                [UI_STR_SECTION_COMBAT] = "Combat",
+                [UI_STR_OPT_VAR_AUTO_GUARD] = "Garde automatique",
+                [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
+                    "Désactivé : Ico ne pare plus l’attaque d’une ombre venue de face ; elle le touche comme par derrière. Les succès restent actifs.",
+                [UI_STR_OPT_VAR_ATTACK_TURN] = "Se tourner vers les ombres",
+                [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
+                    "Désactivé : Ico frappe droit devant sans se tourner vers l’ombre la plus proche ; la portée reste. Les succès restent actifs.",
+                [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Les ombres attendent qu’Ico se relève",
+                [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
+                    "Désactivé : les ombres ne se retiennent plus quand Ico est à terre et peuvent le frapper avant qu’il soit debout. Les succès restent actifs.",
                 [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
                 [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
                 [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

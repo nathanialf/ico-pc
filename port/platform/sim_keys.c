@@ -41,6 +41,10 @@ const char *const ICO_SIM_KEYS[] = {
     "variants.no_cutscene_look",
     "variants.ignore_cutscene_cameras",
     "gameplay.shadows_together", /* the Shadows' turns (enemy_act.c) */
+    /* Gameplay > Combat (port/game/variants.h): on is the game as shipped */
+    "variants.auto_guard",
+    "variants.attack_turn",
+    "variants.shadows_wait_down",
     NULL,
 };
 
@@ -74,6 +78,9 @@ static const char *const kDefaults[] = {
     "false",    /* variants.no_cutscene_look */
     "false",    /* variants.ignore_cutscene_cameras */
     "false",    /* gameplay.shadows_together */
+    "true",     /* variants.auto_guard */
+    "true",     /* variants.attack_turn */
+    "true",     /* variants.shadows_wait_down */
     NULL,
 };
 

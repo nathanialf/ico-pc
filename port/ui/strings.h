@@ -978,6 +978,16 @@ typedef enum UiStrId {
     UI_STR_UNUSED_ART_COPYRIGHT,
     /* the Save states page's refusal of a save or a load in a test room */
     UI_STR_STATES_REFUSED_UNUSED,
+    /* Gameplay > Combat (port/game/variants.h): the page's name (also its link on
+       Gameplay) and its three rows with their notes; the community tables
+       carry English until a translator sends them */
+    UI_STR_SECTION_COMBAT,
+    UI_STR_OPT_VAR_AUTO_GUARD,
+    UI_STR_OPT_VAR_AUTO_GUARD_NOTE,
+    UI_STR_OPT_VAR_ATTACK_TURN,
+    UI_STR_OPT_VAR_ATTACK_TURN_NOTE,
+    UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN,
+    UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE,
     /* the community translations' names (the Language and Menu language
        rows, after UI_STR_LANG_ZH), in their own language in every table */
     UI_STR_LANG_RU_BOBTTZ,

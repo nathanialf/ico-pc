@@ -520,6 +520,13 @@ static void test_first_run(void)
     CHECK(ico_config_get_string("variants.barrier_hits", NULL) == NULL);
     CHECK(ico_config_get_bool("variants.no_cutscene_look", 1) == 0);
     CHECK(ico_config_get_bool("variants.ignore_cutscene_cameras", 1) == 0);
+    /* the Combat rows: on, the game as shipped */
+    CHECK(ico_config_get_bool("variants.auto_guard", 0) == 1);
+    CHECK(ico_config_get_bool("variants.attack_turn", 0) == 1);
+    CHECK(ico_config_get_bool("variants.shadows_wait_down", 0) == 1);
+    CHECK(text != NULL && strstr(text, "auto_guard = true") != NULL &&
+          strstr(text, "attack_turn = true") != NULL &&
+          strstr(text, "shadows_wait_down = true") != NULL);
     CHECK(text != NULL && strstr(text, "\n[variants]\n") != NULL &&
           strstr(text, "shade_toughness = \"original\"") != NULL &&
           strstr(text, "aggression = \"own\"") != NULL && strstr(text, "\nbarrier_hits") == NULL);

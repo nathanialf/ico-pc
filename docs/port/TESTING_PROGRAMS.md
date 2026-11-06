@@ -1375,16 +1375,18 @@ The renderer's test programs have a page of their own:
 - `settings_extra_test.c`'s `testVariantsPage` (`testVariants`, and `testVariantsOtherDisc` on
   `jpn`, `kor`, `ntsc`, `aug6`, `jun26`), from the title and the pause menu: no Game variants row
   on Extras (ten rows); Gameplay's labels with No hints and the three links; Gameplay > Shadows'
-  eight rows and their shipped values (the demo's 7-hit barrier), Shadow toughness round its
-  values (no American on the demo), aggression's five, the barrier's two, One hit per swing and
-  Shadows never dodge on and off with the achievements rule and the notes, the saved file;
+  four rows and their shipped values, Shadow toughness round its values (no American on the
+  demo), aggression's five; Gameplay > Combat's eight rows and their shipped values (the demo's
+  7-hit barrier), the three combat rows Off and On with their notes, the barrier's two, One hit
+  per swing and Shadows never dodge on and off with the achievements rule and the notes, the
+  saved file;
   Gameplay > Cutscenes' four rows, No cutscene look-around and Ignore cutscene cameras on and off
   (the 2001 discs' own notes); `checkPageFits` on each; Developer's Debug menu hidden without
   Developer mode, shown with it (not on the demo) before Back, its note, unbound staying on
   Developer, bound opening the game's menu once and closing Options into the title or the game.
-- `settings_extra_test.c`'s `testShadowsTogether`: Options > Gameplay > Shadows > Shadows attack
-  together from the title and the pause menu, right after Shadow speed and before Shadow
-  toughness, Off by default; Right turns it on (`ico_opt_shadows_together`, and a Shadow does not wait:
+- `settings_extra_test.c`'s `testShadowsTogether`: Options > Gameplay > Combat > Shadows attack
+  together from the title and the pause menu, after Shadows never dodge and before Queen
+  barrier, Off by default; Right turns it on (`ico_opt_shadows_together`, and a Shadow does not wait:
   `ico_opt_shadow_waits(1)` is 0) and sets `gameplay.shadows_together`, the saved file has it,
   its note shows on the cursor, Left turns it off (the game's turns again); the cleared page still
   fits. `settings_discs` shows the row on every disc from both entries.

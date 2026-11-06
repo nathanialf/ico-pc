@@ -3757,9 +3757,9 @@ static void testSecondCard(void)
     gFlagGameClear = 0;
 }
 
-/* Options > Gameplay > Shadows > Shadows attack together ([gameplay]
-   shadows_together): after Shadow speed on the title's and the pause menu's
-   Shadows page, Off by default; Right turns it on at once (options.h
+/* Options > Gameplay > Combat > Shadows attack together ([gameplay]
+   shadows_together): after Shadows never dodge on the title's and the pause menu's
+   Combat page, Off by default; Right turns it on at once (options.h
    ico_opt_shadows_together, read at each Shadow's turn check) and sets the
    key, which the save writes; its note under the cursor; Left turns it off
    again */
@@ -3773,20 +3773,20 @@ static void testShadowsTogether(void)
         stage_no = title ? 1 : 11;
         const int mainL = enterMain(title);
         int gameL = -1;
-        openGameplayPage(mainL, UI_PAGE_SHADOWS, &gameL);
-        const int row = ui_settings_row_of(UI_PAGE_SHADOWS, UI_OPT_SHADOWS_TOGETHER);
+        openGameplayPage(mainL, UI_PAGE_COMBAT, &gameL);
+        const int row = ui_settings_row_of(UI_PAGE_COMBAT, UI_OPT_SHADOWS_TOGETHER);
         CHECK(row >= 0 && ui_settings_row_shown(row), "title %d: the Shadows attack together row",
               title);
         CHECK(row >= 0 && strcmp(lt_ext_row_text(row), "Shadows attack together") == 0,
               "title %d: its label \"%s\"", title, row >= 0 ? lt_ext_row_text(row) : "");
-        CHECK(row > ui_settings_row_of(UI_PAGE_SHADOWS, UI_OPT_SHADOW_SPEED) &&
-                  row < ui_settings_row_of(UI_PAGE_SHADOWS, UI_OPT_VAR_TOUGHNESS),
-              "title %d: after Shadow speed, before Shadow toughness", title);
+        CHECK(row > ui_settings_row_of(UI_PAGE_COMBAT, UI_OPT_VAR_NEVER_DODGE) &&
+                  row < ui_settings_row_of(UI_PAGE_COMBAT, UI_OPT_VAR_BARRIER),
+              "title %d: after Shadows never dodge, before Queen barrier", title);
         CHECK(ico_opt_shadows_together() == 0 &&
                   strcmp(ui_settings_value_text(UI_OPT_SHADOWS_TOGETHER), "Off") == 0,
               "title %d: Off by default", title);
         press(0x10);
-        CHECK(settle(gameL, 60), "Shadows: back to Gameplay");
+        CHECK(settle(gameL, 60), "Combat: back to Gameplay");
         press(0x10);
         CHECK(settle(mainL, 60), "Gameplay: back");
     }
@@ -3795,9 +3795,9 @@ static void testShadowsTogether(void)
     stage_no = 11;
     const int mainL = enterMain(0);
     int gameL = -1;
-    const int shL = openGameplayPage(mainL, UI_PAGE_SHADOWS, &gameL);
-    checkPageFits(UI_PAGE_SHADOWS, "Gameplay > Shadows (cleared, with Shadows attack together)");
-    const int row = ui_settings_row_of(UI_PAGE_SHADOWS, UI_OPT_SHADOWS_TOGETHER);
+    const int shL = openGameplayPage(mainL, UI_PAGE_COMBAT, &gameL);
+    checkPageFits(UI_PAGE_COMBAT, "Gameplay > Combat (cleared, with Shadows attack together)");
+    const int row = ui_settings_row_of(UI_PAGE_COMBAT, UI_OPT_SHADOWS_TOGETHER);
     lt_ext_layout(shL)->curItem = row;
     press(0x2000);
     CHECK(ico_opt_shadows_together() == 1 &&
@@ -3805,7 +3805,7 @@ static void testShadowsTogether(void)
               ico_config_get_bool("gameplay.shadows_together", 0) == 1,
           "Right: Shadows attack together On and the key set");
     CHECK(ico_opt_shadow_waits(1) == 0, "On: a Shadow does not wait for another's attack");
-    const int note = noteStarting(UI_PAGE_SHADOWS, "Off: as the original, the shadows take turns");
+    const int note = noteStarting(UI_PAGE_COMBAT, "Off: as the original, the shadows take turns");
     CHECK(note >= 0 && !lt_ext_prop(note)->masked,
           "the Shadows attack together note on the cursor");
     CHECK(ui_settings_save() == 0, "save");
@@ -3822,7 +3822,7 @@ static void testShadowsTogether(void)
               ico_opt_shadow_waits(1) == 1,
           "Left: Off again, the game's turns");
     press(0x10);
-    CHECK(settle(gameL, 60), "Shadows: back to Gameplay");
+    CHECK(settle(gameL, 60), "Combat: back to Gameplay");
     press(0x10);
     CHECK(settle(mainL, 60), "Gameplay: back");
     ico_opt_set_shadows_together(0);
@@ -4782,7 +4782,7 @@ static void varSwitch(const char *who, const VarSwitch *sw, int pl, const int *l
    *debugPressed counts the opener's calls over the runs */
 static void testVariantsPage(const char *who, int title, int *debugPressed)
 {
-    static const char *const kGameLabels[10] = {"Analogue stick fix",
+    static const char *const kGameLabels[11] = {"Analogue stick fix",
                                                 "East Reflector door fix",
                                                 "Second memory card",
                                                 "No hints",
@@ -4790,11 +4790,19 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                                 "Players",
                                                 "Yorda",
                                                 "Shadows",
+                                                "Combat",
                                                 "Cutscenes",
                                                 "Back"};
-    static const char *const kShadowLabels[8] = {
-        "Shadow speed",        "Shadows attack together", "Shadow toughness", "One hit per swing",
-        "Shadows never dodge", "Shadow aggression",       "Queen barrier",    "Back"};
+    static const char *const kShadowLabels[4] = {"Shadow speed", "Shadow toughness",
+                                                 "Shadow aggression", "Back"};
+    static const char *const kCombatLabels[8] = {"Automatic guard",
+                                                 "Turn to face shadows",
+                                                 "Shadows wait while Ico is down",
+                                                 "One hit per swing",
+                                                 "Shadows never dodge",
+                                                 "Shadows attack together",
+                                                 "Queen barrier",
+                                                 "Back"};
     static const char *const kCutLabels[4] = {"Skip the opening", "No cutscene look-around",
                                               "Ignore cutscene cameras", "Back"};
     char p[1100], log[4096];
@@ -4834,7 +4842,8 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
               !ico_variant_never_dodge() && ico_variant_aggression() == ICO_AGGRESSION_OWN &&
               !ico_variant_no_hints() && ico_variant_barrier_hits() == (demo ? 7 : 5) &&
               !ico_variant_no_cutscene_look() && !ico_variant_ignore_cutscene_cameras() &&
-              !ico_variants_suspend_achievements(),
+              ico_variant_auto_guard() && ico_variant_attack_turn() &&
+              ico_variant_shadows_wait_down() && !ico_variants_suspend_achievements(),
           "%s: the accessors answer the shipped game", who);
 
     /* Gameplay: its rows and the three links, from both entries */
@@ -4844,20 +4853,20 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     }
     int gb[16], go[16], gv[16];
     const int gn = ui_settings_page_rows(UI_PAGE_GAMEPLAY, gb, go, gv, 16);
-    varLabelsAre(who, "Gameplay", gb, gn, kGameLabels, 10);
-    CHECK(gn == 10 && strcmp(lt_ext_row_text(gv[3]), "Off") == 0 && ui_settings_row_shown(gb[3]) &&
+    varLabelsAre(who, "Gameplay", gb, gn, kGameLabels, 11);
+    CHECK(gn == 11 && strcmp(lt_ext_row_text(gv[3]), "Off") == 0 && ui_settings_row_shown(gb[3]) &&
               ui_settings_row_shown(gb[6]) && ui_settings_row_shown(gb[7]) &&
-              ui_settings_row_shown(gb[8]),
-          "%s: No hints Off, the three links shown", who);
+              ui_settings_row_shown(gb[8]) && ui_settings_row_shown(gb[9]),
+          "%s: No hints Off, the four links shown", who);
     checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (the variants' entry)");
 
     /* the switches: On and the key; the notes; the achievements rule */
     VarSwitch kSw[] = {
         {UI_PAGE_GAMEPLAY, 3, ICO_VARIANT_NO_HINTS, "variants.no_hints", "No hints",
          "Yorda gives no hints", 0},
-        {UI_PAGE_SHADOWS, 3, ICO_VARIANT_ONE_HIT, "variants.one_hit", "One hit per swing",
+        {UI_PAGE_COMBAT, 3, ICO_VARIANT_ONE_HIT, "variants.one_hit", "One hit per swing",
          "Each swing of Ico", 1},
-        {UI_PAGE_SHADOWS, 4, ICO_VARIANT_NEVER_DODGE, "variants.never_dodge", "Shadows never dodge",
+        {UI_PAGE_COMBAT, 4, ICO_VARIANT_NEVER_DODGE, "variants.never_dodge", "Shadows never dodge",
          "The Shadows never step aside", 1},
         {UI_PAGE_CUTSCENES, 1, ICO_VARIANT_NO_CUTSCENE_LOOK, "variants.no_cutscene_look",
          "No cutscene look-around", "The right stick no longer", 0},
@@ -4871,7 +4880,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
         kSw[3].notePrefix = "This version of the game has no look-around";
     }
 
-    if (gn == 10) {
+    if (gn == 11) {
         varSwitch(who, &kSw[0], gameL, gb, gv);
     }
 
@@ -4882,40 +4891,39 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     }
     int lb[16], lv[16];
     const int sn = ui_settings_page_rows(UI_PAGE_SHADOWS, lb, NULL, lv, 16);
-    varLabelsAre(who, "Shadows", lb, sn, kShadowLabels, 8);
-    if (sn == 8) {
-        static const char *const kDefaults[5] = {"Original", "Off", "Off", "Their own", "5 hits"};
-        for (int i = 0; i < 5; i++) {
-            const char *def = i == 4 && demo ? "7 hits" : kDefaults[i];
-            CHECK(strcmp(lt_ext_row_text(lv[2 + i]), def) == 0,
-                  "%s: Shadows row %d starts \"%s\" (\"%s\")", who, 2 + i, def,
-                  lt_ext_row_text(lv[2 + i]));
+    varLabelsAre(who, "Shadows", lb, sn, kShadowLabels, 4);
+    if (sn == 4) {
+        static const char *const kDefaults[2] = {"Original", "Their own"};
+        for (int i = 0; i < 2; i++) {
+            CHECK(strcmp(lt_ext_row_text(lv[1 + i]), kDefaults[i]) == 0,
+                  "%s: Shadows row %d starts \"%s\" (\"%s\")", who, 1 + i, kDefaults[i],
+                  lt_ext_row_text(lv[1 + i]));
         }
     }
-    checkPageFits(UI_PAGE_SHADOWS, "Gameplay > Shadows (eight rows)");
+    checkPageFits(UI_PAGE_SHADOWS, "Gameplay > Shadows (four rows)");
 
-    if (sn == 8) {
+    if (sn == 4) {
         /* Shadow toughness: Original, American, Not tougher later, around,
            both ways (Original and Not tougher later on the June 2001 demo) */
-        lt_ext_layout(shL)->curItem = lb[2];
+        lt_ext_layout(shL)->curItem = lb[1];
         frame(0);
         if (!demo) {
             press(0x2000);
-            CHECK(strcmp(lt_ext_row_text(lv[2]), "American") == 0 &&
+            CHECK(strcmp(lt_ext_row_text(lv[1]), "American") == 0 &&
                       ico_variant_shade_toughness() == ICO_TOUGHNESS_AMERICAN &&
                       strcmp(ico_config_get_string("variants.shade_toughness", ""), "american") ==
                           0,
                   "%s: Right: American and its key", who);
         }
         press(0x2000);
-        CHECK(strcmp(lt_ext_row_text(lv[2]), "Not tougher later") == 0 &&
+        CHECK(strcmp(lt_ext_row_text(lv[1]), "Not tougher later") == 0 &&
                   ico_variant_shade_toughness() == ICO_TOUGHNESS_NO_PLUS &&
                   strcmp(ico_config_get_string("variants.shade_toughness", ""), "no_plus") == 0,
               "%s: Right: Not tougher later and its key", who);
         press(0x2000);
-        CHECK(strcmp(lt_ext_row_text(lv[2]), "Original") == 0, "%s: Right wraps to Original", who);
+        CHECK(strcmp(lt_ext_row_text(lv[1]), "Original") == 0, "%s: Right wraps to Original", who);
         press(0x8000);
-        CHECK(strcmp(lt_ext_row_text(lv[2]), "Not tougher later") == 0,
+        CHECK(strcmp(lt_ext_row_text(lv[1]), "Not tougher later") == 0,
               "%s: Left wraps to Not tougher later", who);
         CHECK(!ico_variants_suspend_achievements(), "%s: Toughness keeps the achievements", who);
         press(0x2000);
@@ -4927,7 +4935,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
               "%s: the toughness note, achievements stay on", who);
 
         /* the aggression row: five values around */
-        lt_ext_layout(shL)->curItem = lb[5];
+        lt_ext_layout(shL)->curItem = lb[2];
         frame(0);
         {
             static const char *const kAgg[5] = {"Bold, patient", "Bold, quick", "Wary, patient",
@@ -4936,79 +4944,141 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                                    "wary_quick", "own"};
             for (int k = 0; k < 5; k++) {
                 press(0x2000);
-                CHECK(strcmp(lt_ext_row_text(lv[5]), kAgg[k]) == 0 &&
+                CHECK(strcmp(lt_ext_row_text(lv[2]), kAgg[k]) == 0 &&
                           strcmp(ico_config_get_string("variants.aggression", ""), kAggKey[k]) == 0,
                       "%s: aggression step %d is \"%s\" (\"%s\")", who, k, kAgg[k],
-                      lt_ext_row_text(lv[5]));
+                      lt_ext_row_text(lv[2]));
             }
         }
         CHECK(!ico_variants_suspend_achievements(), "%s: aggression keeps the achievements", who);
         press(0x8000);
-        CHECK(strcmp(lt_ext_row_text(lv[5]), "Wary, quick") == 0 &&
+        CHECK(strcmp(lt_ext_row_text(lv[2]), "Wary, quick") == 0 &&
                   ico_variant_aggression() == ICO_AGGRESSION_WARY_QUICK,
               "%s: Left from Their own: Wary, quick", who);
         press(0x2000);
 
-        /* the barrier: 5 hits, 7 hits, around; written as a number (from 7
-           on the June 2001 demo) */
-        lt_ext_layout(shL)->curItem = lb[6];
+        /* one more step: American (Not tougher later on the demo), which the
+           saved file below keeps */
+        lt_ext_layout(shL)->curItem = lb[1];
         frame(0);
         press(0x2000);
-        {
-            const int other = demo ? 5 : 7;
-            char txt[16];
-            snprintf(txt, sizeof(txt), "%d hits", other);
-            CHECK(strcmp(lt_ext_row_text(lv[6]), txt) == 0 && ico_variant_barrier_hits() == other &&
-                      ico_config_get_int("variants.barrier_hits", 0) == other,
-                  "%s: Right: %s and the key", who, txt);
-        }
-        CHECK(!ico_variants_suspend_achievements(), "%s: the barrier keeps the achievements", who);
-        CHECK(varNoteHas(UI_PAGE_SHADOWS, "How many hits it takes to break the Queen",
-                         "Achievements stay on."),
-              "%s: the barrier note", who);
-        press(0x2000);
-        {
-            const int back = demo ? 7 : 5;
-            char txt[16];
-            snprintf(txt, sizeof(txt), "%d hits", back);
-            CHECK(strcmp(lt_ext_row_text(lv[6]), txt) == 0 && ico_variant_barrier_hits() == back &&
-                      ico_config_get_int("variants.barrier_hits", 0) == back,
-                  "%s: Right again: %s, named in the file", who, txt);
-        }
-
-        varSwitch(who, &kSw[1], shL, lb, lv);
-        varSwitch(who, &kSw[2], shL, lb, lv);
-
-        /* the saved file keeps what was chosen */
-        lt_ext_layout(shL)->curItem = lb[3];
-        frame(0);
-        press(0x2000);
-        lt_ext_layout(shL)->curItem = lb[2];
-        frame(0);
-        press(0x2000);
-        CHECK(ui_settings_save() == 0, "%s: save", who);
-        path(p, sizeof(p), "settings_test.toml");
-        IcoToml *t = ico_toml_load(p);
-        CHECK(t != NULL && ico_toml_get_bool(t, "variants.one_hit", 0) == 1 &&
-                  ico_toml_has(t, "variants.shade_toughness") &&
-                  strcmp(ico_toml_get(t, "variants.shade_toughness"),
-                         demo ? "no_plus" : "american") == 0 &&
-                  ico_toml_get_bool(t, "variants.never_dodge", 1) == 0,
-              "%s: saved: variants.one_hit = true, shade_toughness = \"%s\"", who,
-              demo ? "no_plus" : "american");
-        if (t != NULL) {
-            ico_toml_free(t);
-        }
-        /* One hit per swing off again: the cutscene rows below read the
-           achievements rule with nothing else on */
-        lt_ext_layout(shL)->curItem = lb[3];
-        frame(0);
-        press(0x8000);
-        CHECK(!ico_variant_one_hit() && !ico_variants_suspend_achievements(),
-              "%s: One hit per swing off again, achievements back on", who);
     }
     press(0x10);
     CHECK(settle(gameL, 60), "%s: Shadows: back to Gameplay", who);
+
+    /* Gameplay > Combat: the three combat rows, each On as the game ships
+       (its link after Shadows, before Cutscenes), then the four fight rules
+       that moved here from Shadows; Off writes the key false, keeps the
+       achievements and says so in its note */
+    {
+        static const struct {
+            IcoVariantId id;
+            const char *key;
+            const char *notePrefix;
+        } kCombat[3] = {
+            {ICO_VARIANT_AUTO_GUARD, "variants.auto_guard", "Off: Ico no longer blocks a Shadow"},
+            {ICO_VARIANT_ATTACK_TURN, "variants.attack_turn", "Off: Ico swings straight ahead"},
+            {ICO_VARIANT_SHADOWS_WAIT_DOWN, "variants.shadows_wait_down",
+             "Off: the Shadows no longer hold back"}};
+
+        const int coL = openLink(gameL, UI_PAGE_GAMEPLAY, UI_PAGE_COMBAT);
+        for (int k = 0; k < 4; k++) {
+            frame(0);
+        }
+        int ob[16], ov[16];
+        const int on = ui_settings_page_rows(UI_PAGE_COMBAT, ob, NULL, ov, 16);
+        varLabelsAre(who, "Combat", ob, on, kCombatLabels, 8);
+        CHECK(on == 8 && strcmp(lt_ext_row_text(ov[0]), "On") == 0 &&
+                  strcmp(lt_ext_row_text(ov[1]), "On") == 0 &&
+                  strcmp(lt_ext_row_text(ov[2]), "On") == 0 &&
+                  strcmp(lt_ext_row_text(ov[3]), "Off") == 0 &&
+                  strcmp(lt_ext_row_text(ov[4]), "Off") == 0 &&
+                  strcmp(lt_ext_row_text(ov[5]), "Off") == 0 &&
+                  strcmp(lt_ext_row_text(ov[6]), demo ? "7 hits" : "5 hits") == 0,
+              "%s: the Combat rows start as the game ships", who);
+        checkPageFits(UI_PAGE_COMBAT, "Gameplay > Combat (eight rows)");
+        for (int i = 0; i < 3 && on == 8; i++) {
+            lt_ext_layout(coL)->curItem = ob[i];
+            frame(0);
+            press(0x2000);
+            CHECK(strcmp(lt_ext_row_text(ov[i]), "Off") == 0 &&
+                      ico_variant_get(kCombat[i].id) == 0 &&
+                      ico_config_get_bool(kCombat[i].key, 1) == 0,
+                  "%s: Combat row %d: Right: Off and the key", who, i);
+            CHECK(!ico_variants_suspend_achievements(), "%s: Combat row %d keeps achievements", who,
+                  i);
+            CHECK(varNoteHas(UI_PAGE_COMBAT, kCombat[i].notePrefix, "Achievements stay on."),
+                  "%s: Combat row %d: the note", who, i);
+            press(0x8000);
+            CHECK(strcmp(lt_ext_row_text(ov[i]), "On") == 0 &&
+                      ico_variant_get(kCombat[i].id) == 1 &&
+                      ico_config_get_bool(kCombat[i].key, 0) == 1,
+                  "%s: Combat row %d: Left: On again", who, i);
+        }
+        if (on == 8) {
+            const int shL = coL;
+            int *lb = ob, *lv = ov;
+            /* the barrier: 5 hits, 7 hits, around; written as a number (from 7
+               on the June 2001 demo) */
+            lt_ext_layout(shL)->curItem = lb[6];
+            frame(0);
+            press(0x2000);
+            {
+                const int other = demo ? 5 : 7;
+                char txt[16];
+                snprintf(txt, sizeof(txt), "%d hits", other);
+                CHECK(strcmp(lt_ext_row_text(lv[6]), txt) == 0 &&
+                          ico_variant_barrier_hits() == other &&
+                          ico_config_get_int("variants.barrier_hits", 0) == other,
+                      "%s: Right: %s and the key", who, txt);
+            }
+            CHECK(!ico_variants_suspend_achievements(), "%s: the barrier keeps the achievements",
+                  who);
+            CHECK(varNoteHas(UI_PAGE_COMBAT, "How many hits it takes to break the Queen",
+                             "Achievements stay on."),
+                  "%s: the barrier note", who);
+            press(0x2000);
+            {
+                const int back = demo ? 7 : 5;
+                char txt[16];
+                snprintf(txt, sizeof(txt), "%d hits", back);
+                CHECK(strcmp(lt_ext_row_text(lv[6]), txt) == 0 &&
+                          ico_variant_barrier_hits() == back &&
+                          ico_config_get_int("variants.barrier_hits", 0) == back,
+                      "%s: Right again: %s, named in the file", who, txt);
+            }
+            varSwitch(who, &kSw[1], shL, lb, lv);
+            varSwitch(who, &kSw[2], shL, lb, lv);
+
+            /* the saved file keeps what was chosen (the toughness step is
+               the Shadows page's, above) */
+            lt_ext_layout(shL)->curItem = lb[3];
+            frame(0);
+            press(0x2000);
+            CHECK(ui_settings_save() == 0, "%s: save", who);
+            path(p, sizeof(p), "settings_test.toml");
+            IcoToml *t = ico_toml_load(p);
+            CHECK(t != NULL && ico_toml_get_bool(t, "variants.one_hit", 0) == 1 &&
+                      ico_toml_has(t, "variants.shade_toughness") &&
+                      strcmp(ico_toml_get(t, "variants.shade_toughness"),
+                             demo ? "no_plus" : "american") == 0 &&
+                      ico_toml_get_bool(t, "variants.never_dodge", 1) == 0,
+                  "%s: saved: variants.one_hit = true, shade_toughness = \"%s\"", who,
+                  demo ? "no_plus" : "american");
+            if (t != NULL) {
+                ico_toml_free(t);
+            }
+            /* One hit per swing off again: the cutscene rows below read the
+               achievements rule with nothing else on */
+            lt_ext_layout(shL)->curItem = lb[3];
+            frame(0);
+            press(0x8000);
+            CHECK(!ico_variant_one_hit() && !ico_variants_suspend_achievements(),
+                  "%s: One hit per swing off again, achievements back on", who);
+        }
+        press(0x10);
+        CHECK(settle(gameL, 60), "%s: Combat: back to Gameplay", who);
+    }
 
     /* Gameplay > Cutscenes: Skip the opening, then the two variants rows */
     const int cutL = openLink(gameL, UI_PAGE_GAMEPLAY, UI_PAGE_CUTSCENES);

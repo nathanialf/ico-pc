@@ -1,8 +1,8 @@
 /*
  * port/game/variants.h
  *
- * The game variants: Options > Gameplay (No hints) and its Shadows and
- * Cutscenes pages, the Debug menu on Developer.  Eight settings
+ * The game variants: Options > Gameplay (No hints) and its Shadows,
+ * Combat and Cutscenes pages, the Debug menu on Developer.  Eleven settings
  * that change how the game plays, each read once from config.toml
  * ([variants], via ico_config_get_*) the first time it is asked for and
  * settable at run time, as the options of options.h.  Every default is the
@@ -29,6 +29,10 @@
  *   [variants] ignore_cutscene_cameras
  *                          false  the cutscenes' cameras are ignored
  *                                  (debug_ignore_demo_camera)
+ *   [variants] auto_guard   true   Ico blocks a Shadow's attack from the front
+ *   [variants] attack_turn  true   Ico's swing turns him toward the nearest Shadow
+ *   [variants] shadows_wait_down
+ *                          true   the Shadows wait while Ico is knocked down
  *
  * The game reads them in three ways (docs/port/GAME_FEATURES.md "Game
  * variants" names every site):
@@ -50,8 +54,10 @@
  * gamestate.c beside developer mode) while One hit per swing, Shadows never
  * dodge or Cutscene cameras ignored is on, and from the Debug menu's being
  * opened until the options are reloaded or ico_variants_debug_menu_clear.
- * Shadow toughness, aggression, No hints, the barrier and the look-around do
- * not suspend them.
+ * Shadow toughness, aggression, No hints, the barrier, the look-around and the
+ * three Combat rows (Automatic guard, Turn to face shadows, Shadows wait while
+ * Ico is down: each makes the game harder, none is a cheat) do not suspend
+ * them.
  */
 #ifndef ICO_PORT_GAME_VARIANTS_H
 #define ICO_PORT_GAME_VARIANTS_H
@@ -69,6 +75,9 @@ typedef enum IcoVariantId {
     ICO_VARIANT_BARRIER_HITS,
     ICO_VARIANT_NO_CUTSCENE_LOOK,
     ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS,
+    ICO_VARIANT_AUTO_GUARD,
+    ICO_VARIANT_ATTACK_TURN,
+    ICO_VARIANT_SHADOWS_WAIT_DOWN,
     ICO_VARIANT_COUNT
 } IcoVariantId;
 
@@ -97,6 +106,15 @@ int ico_variant_no_hints(void);
 int ico_variant_barrier_hits(void); /* 5 or 7 */
 int ico_variant_no_cutscene_look(void);
 int ico_variant_ignore_cutscene_cameras(void);
+/* The Combat page's rows, all three On as the game ships (a missing key reads
+   as true).  Off: auto_guard, a hit from the front within 60 degrees is not
+   blocked (commonact.c's guard rule); attack_turn, Ico's swing does not turn
+   him toward the nearest Shadow (boyact.c's actBoyAttack); shadows_wait_down,
+   the down act and its get-up timer no longer hold the Shadows' brains
+   (boyact.c IsBoyStatus_EnemyMustWait, read by ebrain.c). */
+int ico_variant_auto_guard(void);
+int ico_variant_attack_turn(void);
+int ico_variant_shadows_wait_down(void);
 
 /* The Settings page's way in.  A variant has ico_variant_count(id) values,
    numbered from 0 (a switch: 0 off, 1 on; the barrier: 0 is 5 hits, 1 is 7;

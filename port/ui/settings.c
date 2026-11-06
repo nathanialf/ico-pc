@@ -1286,13 +1286,17 @@ static const char *onOff(int v)
    its Shadows and Cutscenes pages) */
 static int isVarOpt(int opt)
 {
-    return opt >= UI_OPT_VAR_TOUGHNESS && opt <= UI_OPT_VAR_IGNORE_CAMS;
+    return opt >= UI_OPT_VAR_TOUGHNESS && opt <= UI_OPT_VAR_SHADOWS_WAIT_DOWN;
 }
 
-_Static_assert(UI_OPT_VAR_IGNORE_CAMS - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COUNT &&
+_Static_assert(UI_OPT_VAR_SHADOWS_WAIT_DOWN - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COUNT &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_AGGRESSION == UI_OPT_VAR_AGGRESSION &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_BARRIER_HITS == UI_OPT_VAR_BARRIER &&
-                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_NO_CUTSCENE_LOOK == UI_OPT_VAR_NO_LOOK,
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_NO_CUTSCENE_LOOK == UI_OPT_VAR_NO_LOOK &&
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_AUTO_GUARD == UI_OPT_VAR_AUTO_GUARD &&
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_ATTACK_TURN == UI_OPT_VAR_ATTACK_TURN &&
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_SHADOWS_WAIT_DOWN ==
+                       UI_OPT_VAR_SHADOWS_WAIT_DOWN,
                "a Settings row for each variant, in variants.h's order");
 
 static const char *variantText(int opt)
@@ -2109,6 +2113,9 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_VAR_BARRIER:
     case UI_OPT_VAR_NO_LOOK:
     case UI_OPT_VAR_IGNORE_CAMS:
+    case UI_OPT_VAR_AUTO_GUARD:
+    case UI_OPT_VAR_ATTACK_TURN:
+    case UI_OPT_VAR_SHADOWS_WAIT_DOWN:
         return variantText(opt);
     case UI_OPT_EXTRAS_CREDITS:
         return creditsUnlocked() ? "" : ui_str(UI_STR_ACH_LOCKED);
@@ -3505,11 +3512,16 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_SHADOWS:
         /* the June 2001 demo's own toughness note: refreshPage, variantNote */
         addNote(pg, UI_OPT_SHADOW_SPEED, UI_STR_OPT_SHADOW_SPEED_NOTE);
-        addNote(pg, UI_OPT_SHADOWS_TOGETHER, UI_STR_OPT_SHADOWS_TOGETHER_NOTE);
         addNote(pg, UI_OPT_VAR_TOUGHNESS, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
+        addNote(pg, UI_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_AGGRESSION_NOTE);
+        break;
+    case UI_PAGE_COMBAT:
+        addNote(pg, UI_OPT_VAR_AUTO_GUARD, UI_STR_OPT_VAR_AUTO_GUARD_NOTE);
+        addNote(pg, UI_OPT_VAR_ATTACK_TURN, UI_STR_OPT_VAR_ATTACK_TURN_NOTE);
+        addNote(pg, UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE);
         addNote(pg, UI_OPT_VAR_ONE_HIT, UI_STR_OPT_VAR_ONE_HIT_NOTE);
         addNote(pg, UI_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_NEVER_DODGE_NOTE);
-        addNote(pg, UI_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_AGGRESSION_NOTE);
+        addNote(pg, UI_OPT_SHADOWS_TOGETHER, UI_STR_OPT_SHADOWS_TOGETHER_NOTE);
         addNote(pg, UI_OPT_VAR_BARRIER, UI_STR_OPT_VAR_BARRIER_NOTE);
         break;
     case UI_PAGE_CUTSCENES:
@@ -4204,29 +4216,45 @@ static void build(void)
     static const int gameOpts[] = {UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_SECOND_CARD,
                                    UI_OPT_VAR_NO_HINTS, UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,
                                    UI_OPT_LINK,         UI_OPT_LINK,        UI_OPT_LINK,
-                                   UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,     UI_STR_OPT_DOOR_FIX,
-                                   UI_STR_OPT_SECOND_CARD,   UI_STR_OPT_VAR_NO_HINTS,
-                                   UI_STR_OPT_FILM_EFFECT,   UI_STR_OPT_PLAYERS,
-                                   UI_STR_SECTION_YORDA,     UI_STR_SECTION_SHADOWS,
-                                   UI_STR_SECTION_CUTSCENES, UI_STR_BACK};
+                                   UI_OPT_LINK,         UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,
+                                   UI_STR_OPT_DOOR_FIX,
+                                   UI_STR_OPT_SECOND_CARD,
+                                   UI_STR_OPT_VAR_NO_HINTS,
+                                   UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,
+                                   UI_STR_SECTION_YORDA,
+                                   UI_STR_SECTION_SHADOWS,
+                                   UI_STR_SECTION_COMBAT,
+                                   UI_STR_SECTION_CUTSCENES,
+                                   UI_STR_BACK};
     static const int gameLinks[] = {
-        -1, -1, -1, -1, -1, -1, UI_PAGE_YORDA, UI_PAGE_SHADOWS, UI_PAGE_CUTSCENES, -1};
+        -1, -1, -1, -1, -1, -1, UI_PAGE_YORDA, UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_CUTSCENES,
+        -1};
     /* Gameplay > Yorda: how the Shadows take her, how long Ico has to pull
        her out, her falls, and the chains Ico lets down for her */
     static const int yordaOpts[] = {UI_OPT_YORDA, UI_OPT_PIT_TIME, UI_OPT_YORDA_TRIPS,
                                     UI_OPT_NATURAL_CHAINS, UI_OPT_BACK};
     static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
                                     UI_STR_OPT_NATURAL_CHAINS, UI_STR_BACK};
-    /* Gameplay > Shadows: the two [gameplay] rows, then the [variants]
-       Shadows rows in variants.h's order and the Queen's barrier */
-    static const int shadowOpts[] = {
-        UI_OPT_SHADOW_SPEED,    UI_OPT_SHADOWS_TOGETHER, UI_OPT_VAR_TOUGHNESS, UI_OPT_VAR_ONE_HIT,
-        UI_OPT_VAR_NEVER_DODGE, UI_OPT_VAR_AGGRESSION,   UI_OPT_VAR_BARRIER,   UI_OPT_BACK};
-    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED,    UI_STR_OPT_SHADOWS_TOGETHER,
-                                     UI_STR_OPT_VAR_TOUGHNESS,   UI_STR_OPT_VAR_ONE_HIT,
-                                     UI_STR_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_AGGRESSION,
-                                     UI_STR_OPT_VAR_BARRIER,     UI_STR_BACK};
+    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness
+       and Shadow aggression (VAR-SHADOWS's Peaceful shadows follow) */
+    static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
+                                     UI_OPT_VAR_AGGRESSION, UI_OPT_BACK};
+    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
+                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_BACK};
+    /* Gameplay > Combat: the three combat [variants] rows, then the four
+       fight rules that were on Shadows (One hit per swing, Shadows never
+       dodge, Shadows attack together, Queen barrier); VAR-WEAPONS's two weapon
+       rows follow Queen barrier */
+    static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,        UI_OPT_VAR_ATTACK_TURN,
+                                     UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_OPT_VAR_ONE_HIT,
+                                     UI_OPT_VAR_NEVER_DODGE,       UI_OPT_SHADOWS_TOGETHER,
+                                     UI_OPT_VAR_BARRIER,           UI_OPT_BACK};
+    static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD,        UI_STR_OPT_VAR_ATTACK_TURN,
+                                     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_OPT_VAR_ONE_HIT,
+                                     UI_STR_OPT_VAR_NEVER_DODGE,       UI_STR_OPT_SHADOWS_TOGETHER,
+                                     UI_STR_OPT_VAR_BARRIER,           UI_STR_BACK};
     /* Gameplay > Cutscenes: the opening skipped, the two cutscene
        [variants] rows */
     static const int cutOpts[] = {UI_OPT_SKIP_OPENING, UI_OPT_VAR_NO_LOOK, UI_OPT_VAR_IGNORE_CAMS,
@@ -4250,6 +4278,7 @@ static void build(void)
                    "a string and a link for each Gameplay row");
     _Static_assert(sizeof(yordaOpts) == sizeof(yordaStrs), "a string for each Yorda row");
     _Static_assert(sizeof(shadowOpts) == sizeof(shadowStrs), "a string for each Shadows row");
+    _Static_assert(sizeof(combatOpts) == sizeof(combatStrs), "a string for each Combat row");
     _Static_assert(sizeof(cutOpts) == sizeof(cutStrs), "a string for each Cutscenes row");
     _Static_assert(sizeof(extrasOpts) == sizeof(extrasStrs) &&
                        sizeof(extrasOpts) == sizeof(extrasLinks),
@@ -4268,6 +4297,7 @@ static void build(void)
     _Static_assert(N_OF(extrasOpts) <= MAX_ROWS, "the extrasOpts rows fit the page's row budget");
     _Static_assert(N_OF(yordaOpts) <= MAX_ROWS, "the Yorda rows fit the page's row budget");
     _Static_assert(N_OF(shadowOpts) <= MAX_ROWS, "the Shadows rows fit the page's row budget");
+    _Static_assert(N_OF(combatOpts) <= MAX_ROWS, "the Combat rows fit the page's row budget");
     _Static_assert(N_OF(cutOpts) <= MAX_ROWS, "the Cutscenes rows fit the page's row budget");
 
     ui_font_init(); /* the notes are wrapped by measuring */
@@ -4297,6 +4327,8 @@ static void build(void)
                     N_OF(yordaOpts), UI_PAGE_GAMEPLAY);
     buildOptionPage(UI_PAGE_SHADOWS, UI_STR_SECTION_SHADOWS, shadowOpts, shadowStrs, NULL,
                     N_OF(shadowOpts), UI_PAGE_GAMEPLAY);
+    buildOptionPage(UI_PAGE_COMBAT, UI_STR_SECTION_COMBAT, combatOpts, combatStrs, NULL,
+                    N_OF(combatOpts), UI_PAGE_GAMEPLAY);
     buildOptionPage(UI_PAGE_CUTSCENES, UI_STR_SECTION_CUTSCENES, cutOpts, cutStrs, NULL,
                     N_OF(cutOpts), UI_PAGE_GAMEPLAY);
     buildOptionPage(UI_PAGE_EFFECTS, UI_STR_SECTION_EFFECTS, fxOpts, fxStrs, NULL, N_OF(fxOpts),
