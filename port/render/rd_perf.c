@@ -102,7 +102,7 @@ const char *rd_perf_post_name(int post)
 
 static const char *const s_passKindNames[RD_PERF_PASS_KIND_COUNT] = {
     "uploads",        "VU pre-pass", "render pass",  "copy",          "snapshot", "DATE snapshot",
-    "fog depth read", "exact blend", "MSAA resolve", "stencil clear", "present",
+    "fog depth read", "exact blend", "MSAA resolve", "stencil clear", "present",  "display wait",
 };
 
 const char *rd_perf_pass_kind_name(int kind)
@@ -657,6 +657,11 @@ static double s_passCpu0;    /* the CPU clock at the open piece's start */
 
 void rd__perf_passes_init(void)
 {
+    /* at the device's start (rd__gpu_init): the picture's two lists
+       (rd_submit.c rd__submit_frame; issue 179) */
+    rd__log("present: the present's pass is a list of its own, submitted after the scene's; only "
+            "its submit waits for the display's image (Vulkan: the acquire semaphore at "
+            "COLOR_ATTACHMENT_OUTPUT)");
     const char *env = getenv("ICO_RD_PERF_PASSES");
     s_passesMode = env && env[0] == '1';
     const char *lists = getenv("ICO_RD_PERF_LIST_STAMPS");
@@ -1109,6 +1114,8 @@ void rd__perf_collect_gpu(void)
                 }
             } else if (i == RD_PERF_TS_PRESENT) {
                 r->gpuPresentMs = stretch;
+            } else if (i == RD_PERF_TS_PRESENT_BEGIN) {
+                r->gpuDisplayWaitMs = stretch; /* the last list's end to the present's list */
             } else if (i >= RD_PERF_TS_LIST0 && i < RD_PERF_TS_LIST0 + RD_LIST_COUNT) {
                 r->gpuListMs[i - RD_PERF_TS_LIST0] = stretch;
             }
@@ -1210,6 +1217,7 @@ void rd__perf_end(void)
         r->fenceWaits = D(fenceWaits);
         r->waitIdles = D(waitIdles);
         r->readbacks = D(readbacks);
+        r->submits = D(submits);
 #undef D
         r->fenceWaitMs = (double)(s.fenceWaitNs - s_last.fenceWaitNs) / 1e6;
         r->backendWriteBytes = s.uploadWriteBytes - s_last.uploadWriteBytes;
@@ -1251,7 +1259,8 @@ static void stamp(RhiCommandList cl, uint32_t index)
     }
     /* [dev] perf_list_stamps = false: only the stamps written outside every
        render pass (the replay's start, the pre-pass's, the lists' start, the
-       present's end), for the A/B of what a stamp inside an open pass costs
+       present's end; not the present's list's start, whose stretch would
+       then hold the lists: the display wait reads 0), for the A/B of what a stamp inside an open pass costs
        a tile-based GPU (one that ends the pass there and begins it again) */
     if (s_noListStamps && index != RD_PERF_TS_BEGIN && index != RD_PERF_TS_LISTS &&
         index != RD_PERF_TS_PREPASS && index != RD_PERF_TS_PRESENT) {
@@ -1354,11 +1363,12 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
     for (uint32_t k = 0; k < n; k++) {
         const RdPerfPass *q = &p[k];
         const double ms = q->gpuUs >= 0.0f ? (double)q->gpuUs / 1e3 : 0.0;
-        a->passes++;
+        const bool wait = q->kind == RD_PERF_PASS_WAIT; /* no pass: its time only */
+        a->passes += wait ? 0u : 1u;
         a->gpuMs += ms;
         a->entryBinds += q->entryBinds;
         a->entrySkipped += q->entrySkipped;
-        if (q->gpuUs >= 0.0f && q->gpuUs < RD_PERF_PASS_SMALL_US) {
+        if (!wait && q->gpuUs >= 0.0f && q->gpuUs < RD_PERF_PASS_SMALL_US) {
             a->small++;
             a->smallMs += ms;
         }
@@ -1428,14 +1438,17 @@ int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_
         if (pr < 0.95 || pr > 1.05) {
             snprintf(passes, sizeof(passes), " %.1f passes", pr);
         }
-        char busy[32] = "";
+        char busy[32] = "", draws[32] = "";
         if (e->busyN) {
             snprintf(busy, sizeof(busy), " (busy %.2f)", e->busyMs / r);
         }
-        const int w =
-            snprintf(buf + at, n - at, "%s%s %s %ux%u%s %.0f draws %.2f ms%s", shown ? ", " : "",
-                     label, rd_perf_target_name(e->target), (unsigned)e->w, (unsigned)e->h, passes,
-                     (double)e->draws / r, e->gpuMs / r, busy);
+        if (e->kind != RD_PERF_PASS_WAIT) {
+            /* the display wait: "display wait window 1280x720 38.40 ms" */
+            snprintf(draws, sizeof(draws), " %.0f draws", (double)e->draws / r);
+        }
+        const int w = snprintf(buf + at, n - at, "%s%s %s %ux%u%s%s %.2f ms%s", shown ? ", " : "",
+                               label, rd_perf_target_name(e->target), (unsigned)e->w,
+                               (unsigned)e->h, passes, draws, e->gpuMs / r, busy);
         if (w < 0 || (size_t)w >= n - at) {
             at = n - 1;
             break;
@@ -1510,15 +1523,25 @@ int rd_perf_pass_grow_text(const RdPerfPassAgg *a, const RdPerfPass *p, uint32_t
         at += (size_t)w;                                                                           \
         w = snprintf(buf + at, n - at, __VA_ARGS__);                                               \
     } while (0)
-    /* the first render pass apart: the GPU's wait for the display's image
-       (the acquire's semaphore, COLOR_ATTACHMENT_OUTPUT) lands inside its
-       stamps, so a stall there alone is the display holding the image, not
-       a slow GPU; the other timed pieces summed against their block means */
+    /* The display wait apart (RD_PERF_PASS_WAIT: the present's own list
+       alone waits for the window's image, rd_submit.c): a stall there is
+       the display holding the image, not a slow GPU.  A record without
+       one (a replay that did not present, or one from before the present
+       had a list of its own) keeps the first render pass apart instead:
+       the acquire's wait (COLOR_ATTACHMENT_OUTPUT) landed inside its
+       stamps.  The other timed pieces summed against their block means */
     int first = -1;
+    bool waitPiece = false;
     for (uint32_t i = 0; i < count; i++) {
+        if (p[i].kind == RD_PERF_PASS_WAIT && p[i].gpuUs >= 0.0f) {
+            first = (int)i;
+            waitPiece = true;
+            break;
+        }
+    }
+    for (uint32_t i = 0; first < 0 && i < count; i++) {
         if (p[i].kind == RD_PERF_PASS_RENDER && p[i].gpuUs >= 0.0f) {
             first = (int)i;
-            break;
         }
     }
     if (first >= 0) {
@@ -1535,14 +1558,22 @@ int rd_perf_pass_grow_text(const RdPerfPassAgg *a, const RdPerfPass *p, uint32_t
                 otherMean += m;
             }
         }
-        if (a->replays != 0 && rd_perf_pass_agg_mean(a, &p[first], &m)) {
-            snprintf(fm, sizeof(fm), "the block's %.1f: ", m);
+        const bool mean = a->replays != 0 && rd_perf_pass_agg_mean(a, &p[first], &m);
+        if (waitPiece) {
+            if (mean) {
+                snprintf(fm, sizeof(fm), " (the block's %.1f)", m);
+            }
+            ADD("the display wait %.1f ms%s", (double)p[first].gpuUs / 1e3, fm);
+        } else {
+            if (mean) {
+                snprintf(fm, sizeof(fm), "the block's %.1f: ", m);
+            }
+            ADD("the first pass %.1f ms (%sit waits for the display's image)",
+                (double)p[first].gpuUs / 1e3, fm);
         }
         if (a->replays != 0) {
             snprintf(om, sizeof(om), " (the block's %.1f)", otherMean);
         }
-        ADD("the first pass %.1f ms (%sit waits for the display's image)",
-            (double)p[first].gpuUs / 1e3, fm);
         if (others) {
             ADD(", the other %u timed passes %.1f ms%s", others, otherMs, om);
         }
@@ -1647,7 +1678,7 @@ int rd_perf_pass_kinds_text(const double kinds[RD_PERF_PASS_KIND_COUNT],
     const double r = replays > 0.0 ? replays : 1.0;
     double all = 0.0, fx = 0.0;
     for (int k = 0; k < RD_PERF_PASS_KIND_COUNT; k++) {
-        all += kinds[k];
+        all += k != RD_PERF_PASS_WAIT ? kinds[k] : 0.0; /* the display wait is no pass */
     }
     for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
         fx += effects[p];
@@ -1673,7 +1704,7 @@ int rd_perf_pass_kinds_text(const double kinds[RD_PERF_PASS_KIND_COUNT],
     }
     ADD(")");
     for (int k = 0; k < RD_PERF_PASS_KIND_COUNT; k++) {
-        if (k != RD_PERF_PASS_RENDER && kinds[k] > 0.0) {
+        if (k != RD_PERF_PASS_RENDER && k != RD_PERF_PASS_WAIT && kinds[k] > 0.0) {
             ADD(", %s %.1f", rd_perf_pass_kind_name(k), kinds[k] / r);
         }
     }

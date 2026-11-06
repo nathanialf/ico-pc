@@ -514,10 +514,12 @@ The rules (`port/render/rd_thread.h` and `port/platform/render_thread.h`, header
   those. So that wait is the picture's submit and present call, and on a driver whose present
   blocks behind the GPU's earlier pictures, the GPU's backlog.
 - The submit thread (`port/render/rd_submit_thread.h`, `rd_submit_thread.c`, its queue
-  `rd_submit_queue.h`). A picture handed over without waiting keeps its list open at the walk's
-  end (`rd__submit_defer`, from `rd__submit_frame` before the reads end), and the render thread's
-  job posts it at its end (`rd__submit_post_pending`, from `port/render/rd_thread.c`
-  (`runTramp`)): the submit thread ends it, submits it and presents the image. The render thread
+  `rd_submit_queue.h`). A picture handed over without waiting keeps its last list open at the
+  walk's end (`rd__submit_defer`, from `rd__submit_frame` before the reads end; a presenting
+  picture's scene list is ended there and its present's own list kept,
+  [RENDER.md](RENDER.md#the-presents-own-list)), and the render thread's job posts it at its end
+  (`rd__submit_post_pending`, from `port/render/rd_thread.c` (`runTramp`)): the submit thread ends
+  and submits the lists in order and presents the image. The render thread
   is then free for the next picture as soon as its walk ends, and the game thread's next present
   waits for that much only (`rd_present_post`'s drain is the render thread's alone). With
   Vulkan's frame slots apart (`RhiLimits.slotOverlap`: the timeline sync; RHI.md, "Frame slots and

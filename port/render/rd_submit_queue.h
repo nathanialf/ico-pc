@@ -27,7 +27,10 @@
  *           a list the render thread ended and submitted itself;
  *           rd__sq_note_overlap: a picture of the render thread began its
  *           graphics calls while a job of the other slot still ran;
- *   block   rd__sq_block_take: the block's numbers, the sums cleared.
+ *   block   rd__sq_block_take: the block's numbers, the sums cleared;
+ *   tail    rd__sq_tail_steps: a job's graphics calls in order (the submit
+ *           thread's tail and rd_submit.c's inline path run them): end and
+ *           submit cl, end and submit cl2, present.
  *
  * Pure C (no threads, no graphics calls): the caller holds its own lock
  * around every call.  The unit test is port/render/test/rd_submit_queue_test.c.
@@ -44,7 +47,12 @@
 #define RD_SUBMIT_DEPTH 2u
 
 typedef struct RdSubmitJob {
-    uint32_t cl;      /* the list (RhiCommandList.id), recorded and left open */
+    uint32_t cl; /* the list (RhiCommandList.id), recorded and left open */
+    /* a presenting picture's second list, the present's pass alone (0:
+       none), submitted after cl: only its submit waits for the window's
+       image (rd_submit.c rd__submit_frame, port/rhi/vk/vk_cmd.c
+       vkr_submit_batch) */
+    uint32_t cl2;
     uint8_t slot;     /* its frame slot (rhi_frame_slot when it was recorded) */
     bool present;     /* its image is presented after the submit */
     uint32_t replay;  /* its replay's perf record (RdPerfRecord.replay) */
@@ -107,5 +115,20 @@ void rd__sq_note_wait(RdSubmitQ *q, double ms, bool byRender);
 void rd__sq_note_on_render(RdSubmitQ *q);
 void rd__sq_note_overlap(RdSubmitQ *q);
 void rd__sq_block_take(RdSubmitQ *q, RdSubmitBlock *out);
+
+/* a job's tail, step by step (rd__sq_tail_steps) */
+enum { RD_SQ_END, RD_SQ_SUBMIT, RD_SQ_PRESENT };
+
+typedef struct RdSqStep {
+    uint8_t what; /* RD_SQ_* */
+    uint32_t cl;  /* the list ended or submitted (0 for the present) */
+} RdSqStep;
+
+#define RD_SQ_TAIL_MAX 5u
+/* j's steps in order into out (room for RD_SQ_TAIL_MAX), their count: end
+   and submit cl, then cl2's (a list already ended ends again as nothing:
+   rhi_end_commands of a list not recording), then the present when
+   j->present */
+uint32_t rd__sq_tail_steps(const RdSubmitJob *j, RdSqStep out[RD_SQ_TAIL_MAX]);
 
 #endif /* RD_SUBMIT_QUEUE_H */

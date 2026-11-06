@@ -132,3 +132,20 @@ void rd__sq_block_take(RdSubmitQ *q, RdSubmitBlock *out)
         out->presentMs /= out->jobs;
     }
 }
+
+uint32_t rd__sq_tail_steps(const RdSubmitJob *j, RdSqStep out[RD_SQ_TAIL_MAX])
+{
+    uint32_t n = 0;
+    const uint32_t lists[2] = {j->cl, j->cl2};
+    for (int k = 0; k < 2; k++) {
+        if (lists[k] == 0) {
+            continue;
+        }
+        out[n++] = (RdSqStep){RD_SQ_END, lists[k]};
+        out[n++] = (RdSqStep){RD_SQ_SUBMIT, lists[k]};
+    }
+    if (j->present) {
+        out[n++] = (RdSqStep){RD_SQ_PRESENT, 0};
+    }
+    return n;
+}

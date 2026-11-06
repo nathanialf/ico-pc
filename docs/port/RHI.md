@@ -106,7 +106,7 @@ acquires B's image and records B's list. The device line is followed by `rhi_vk:
 | state | written by | how it stays apart |
 | --- | --- | --- |
 | `frameIndex`, slot B's command pool, lists, descriptor pools, sets, deferred destroys, query pools, submit tag, acquire record | the recording thread | a list's handle tag names its slot (`VkrFrame.gen`, `vkr_get_cmd`), the list carries it (`VkrCmdList.slot`); nothing of the submit thread asks for the current frame (`vkr_cur_frame`) |
-| slot A's lists (their end), `waitValue` and acquire record (`VkrAcquire`) | the submit thread | the slot guard lets the recording thread recycle slot A only when no job of A is queued or running |
+| slot A's lists (their end, unless the recording thread ended one before the hand-over), `waitValue` and acquire record (`VkrAcquire`) | the submit thread | the slot guard lets the recording thread recycle slot A only when no job of A is queued or running |
 | `hzEpoch`, `stats`, `tsResult`, `occResult`, the textures' and buffers' tracking state | the recording thread | the submit thread's end, submit and present touch none of them |
 | the counters an end, a submit and a present add | either | `VkrState.late`, atomic adds; `rhi_get_stats` adds them in, so the recording thread reads live counters while the submit thread works |
 | the submission counter `timelineValue`, the submit history | the submit thread (any thread while it is idle) | the counter stored and read with `__atomic`; the history read only by the loss report |
@@ -116,7 +116,9 @@ acquires B's image and records B's list. The device line is followed by `rhi_vk:
 
 The slot calls the guard lets through (`rhi.h` `rhi_set_slot_guard`, `port/rhi/rhi_backend.c`
 `RHI_GUARD_SLOT`): `rhi_wait_frame` (for the slot it recycles), `rhi_begin_commands`,
-`rhi_create_bind_group`, `rhi_map_buffer`, `rhi_unmap_buffer`, `rhi_read_timestamps`,
+`rhi_end_commands` (the renderer ends a picture's scene list before it begins the present's own,
+[RENDER.md](RENDER.md#the-presents-own-list); an end touches only its list's command buffer and
+the atomic late counters), `rhi_create_bind_group`, `rhi_map_buffer`, `rhi_unmap_buffer`, `rhi_read_timestamps`,
 `rhi_read_timestamps_busy`, `rhi_read_occlusion` and `rhi_acquire_backbuffer`, each when the slot
 guard's `free` says the calling thread is the render thread, keeps no list of its own for the submit
 thread and the submit thread has no job of that slot. Every other call that changes the device's
@@ -133,7 +135,8 @@ replay gave up in a slot with no job is taken over by the next acquire with its 
 anything of picture N+1 (the render thread submits nothing beside the submit thread), so every
 picture's bytes are those of one thread; a slot is recycled only after its own jobs were submitted
 and its fence passed; a command buffer is used by one thread at a time (recorded by the render
-thread, ended by the submit thread after the hand-over's lock). Tests: `rhi_test_common.c`
+thread, ended by the submit thread after the hand-over's lock, or by the render thread before it
+hands the list over). Tests: `rhi_test_common.c`
 `threadSlotsCell` (`rhi_vk*`), `rd_submit_queue`, `rd_thread_ab` (`--repeat 3`), and the TSan
 tree's `rd_tex_test`.
 

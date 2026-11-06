@@ -3668,7 +3668,8 @@ enum {
     RD_PERF_TS_LISTS = 1, /* the uploads and the VU vertex pre-pass done, list 0 starts */
     RD_PERF_TS_LIST0 = 2, /* + l: list l done */
     RD_PERF_TS_PRESENT = RD_PERF_TS_LIST0 + RD_LIST_COUNT, /* the present blits done */
-    RD_PERF_TS_PREPASS, /* the uploads done, the VU vertex pre-pass starts */
+    RD_PERF_TS_PREPASS,       /* the uploads done, the VU vertex pre-pass starts */
+    RD_PERF_TS_PRESENT_BEGIN, /* the present's own list starts (rd_submit.c) */
     RD_PERF_TS_COUNT
 };
 
