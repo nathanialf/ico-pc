@@ -1104,6 +1104,9 @@ static void keyVsName(const RdPipeKeyInt *k, char *out, size_t size)
     const size_t n = strlen(v);
     if (g_rd.vuMerge && g_rd.vsMerge[k->vs].id) {
         rd__vu_merge_name(k->vs, keyPlain(k), out, size); /* the draw merge's build */
+    } else if (keyPlain(k) && g_rd.vuBonesRing && k->vs >= RD_VS_VU_SKIN &&
+               k->vs <= RD_VS_VU_SKIN_DEBUG) {
+        rd__vu_bones_ring_name(k->vs, out, size); /* the ring build (vu_bones = ring) */
     } else if (keyPlain(k) && n > 3) {
         snprintf(out, size, "%.*s_plain_vs", (int)(n - 3), v);
     } else {
@@ -1807,7 +1810,8 @@ float rd_precreate_longest_ms(void)
  * ends, its duplicates destroyed then), the COLCLAMP 0 pipelines, Motion
  * blur: Smooth's two (rd_blur_smooth.c), the movie's three (rd_video.c:
  * two outputs, the field pipeline) and the skin check's (rd_vu_skin_check.h
- * RD_VU_SKIN_PIPES: the probe's, c2's and the box checks') */
+ * RD_VU_SKIN_PIPES: the probe's, c2's, column 3's, the box checks' and
+ * twin C's) */
 _Static_assert(RD_PIPE_BATCH + RD_WRAP_PIPES + RD_BLUR_SMOOTH_PIPES + 3u + RD_VU_SKIN_PIPES <=
                    (unsigned)RHI_PIPELINE_POOL_HEADROOM,
                "the RHI's pipeline pool headroom holds a batch, the wrap, Smooth's, the movie's "
@@ -3485,6 +3489,47 @@ bool rd__vu_policy_init(const RhiLimits *lim)
             g_rd.vuPlainWhy[0] = '\0';
             kind = "extended set (a plain module missing from this build)";
         }
+    }
+    /* issue 123's ladder, step 1 ([dev] vu_bones = ring, ICO_RD_VU_BONES;
+     * docs/port/VU_SKIN_CHECK.md "The ladder"): the cluster entries' ring
+     * builds (vu_X_ring_plain_vs, vu_common.hlsli ICO_VU_BONES_RING: the
+     * bones through t5 from VuCB's mark lane, rd_replay_vu.c vuSource) in
+     * place of their plain variants, the same words computed; with the plain
+     * set only (they are plain variants), one missing keeps the plain ones */
+    g_rd.vuBonesRing = false;
+    {
+        const char *vb = getenv("ICO_RD_VU_BONES");
+        const bool want = vb && strcmp(vb, "ring") == 0;
+        const char *why = NULL;
+        if (vb && vb[0] && !want && strcmp(vb, "cbuffer") != 0) {
+            rd__log("VU bones: ICO_RD_VU_BONES=%s is not ring or cbuffer: cbuffer", vb);
+        }
+        if (want && !plain) {
+            why = "the program entries are the extended set, the ring builds plain variants";
+        } else if (want) {
+            RhiShader ring[RD_VS_VU_SKIN_DEBUG - RD_VS_VU_SKIN + 1];
+            memset(ring, 0, sizeof(ring));
+            bool all = true;
+            rhi_plan_shaders((uint32_t)(RD_VS_VU_SKIN_DEBUG - RD_VS_VU_SKIN + 1));
+            for (uint8_t v = RD_VS_VU_SKIN; v <= RD_VS_VU_SKIN_DEBUG; v++) {
+                char name[64];
+                rd__vu_bones_ring_name(v, name, sizeof(name));
+                ring[v - RD_VS_VU_SKIN] = rd__make_shader(name);
+                all = all && ring[v - RD_VS_VU_SKIN].id != 0;
+            }
+            for (uint8_t v = RD_VS_VU_SKIN; v <= RD_VS_VU_SKIN_DEBUG; v++) {
+                RhiShader *r = &ring[v - RD_VS_VU_SKIN];
+                if (all) {
+                    rhi_destroy_shader(g_rd.vsPlain[v]); /* the plain build, unused */
+                    g_rd.vsPlain[v] = *r;
+                } else if (r->id) {
+                    rhi_destroy_shader(*r);
+                }
+            }
+            g_rd.vuBonesRing = all;
+            why = all ? NULL : "a ring build is missing from this build";
+        }
+        rd__vu_bones_policy(want, g_rd.vuBonesRing, why);
     }
     g_rd.vuFallbackPlain = plain;
     g_rd.vuPlainBrief = plain ? choice.brief : NULL;

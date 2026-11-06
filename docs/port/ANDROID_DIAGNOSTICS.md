@@ -195,6 +195,27 @@ lines and what each decides:
   frame dump`, then `window: VU skin check: the capture: ... and the frame dump ...zip (...png)`):
   the sidecar (the bytes, the probe's rows, the twins' counts) and F12's dump of the next present
   with the sidecar in its zip, once a run. The files a report needs are those two and the log.
+- **The ring read beside the picture** (the variants line's `(c3) the bones through the ring:
+  right | wrong`, the event line's `C (ring read) K samples`, the 10 s block's `ring twins differ E
+  (of R read)`): where the program entries are the plain set (Turnip's), the same bones read through
+  the ring, a storage buffer. `c3 right` where the probe is wrong, or C equal to B where A differs,
+  says the ladder's step 1 clears the fault; C differing too says it does not.
+- **The ladder** ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)): `window: VU bones: [dev] vu_bones
+  = ring is written (the skin check saw N twin events at bone address A over P presents); ...` (step
+  1 for the next start), then at that start `rd: VU bones: through the ring (storage buffer) on the
+  skinned entries ([dev] vu_bones = ring, written by the skin check at <version> frame F; ...)` and
+  `window: VU skin check ladder: step 1 of 2 (the ring read) for this start ...`; its twins' event
+  lines end `A and B read the bones through the ring: step 1 of the ladder in force`, and the run
+  ends with `rd: VU skin check: the ring read: healed (0 of T ...) | not healed (D of T ...)`. Still
+  differing on a Turnip package: `window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin) for the
+  next start: ...`, then at that start `gpu driver: TU_DEBUG=nobin set before
+  libvulkan_freedreno.so loads ...` and `window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin)
+  for this start; step 1 (ring read) did not clear the twins (D of T)`; still differing there:
+  `window: VU skin check ladder: both tried, neither cleared the twins (...); [dev] turnip_debug =
+  off is written ... and the ladder stops`. `healed` over 2,000 presents says the step in force
+  holds; whether `TU_DEBUG` reaches the driver through the package loader is not verified, so the
+  twins' counts under it are the answer. The kept-keys start line (`ico_pc: [dev] keys kept from an
+  earlier start: ... vu_bones = ring, vu_bones_by = ...`) shows the chain in a reporter's log.
 
 ## The thermal state and screen recording
 

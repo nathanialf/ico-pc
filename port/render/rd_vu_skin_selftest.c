@@ -235,8 +235,10 @@ bool rd__vu_skin_selftest(void)
         memset(&dcb, 0, sizeof(dcb));
         const uint64_t dOff = put(&dcb, sizeof(dcb), ua);
         uint64_t vOff[ST_CODES];
+        IcoVuCB vcbs[ST_CODES];
         bool ok = tex.id && sOff != ~0ull && dOff != ~0ull && blocks(bb, ua, boff, &phases);
         for (uint32_t c = 0; c < ST_CODES && ok; c++) {
+            IcoVuCB *vp = &vcbs[c];
             IcoVuCB v;
             memset(&v, 0, sizeof(v));
             memcpy(v.mem, mem, sizeof(v.mem));
@@ -244,12 +246,15 @@ bool rd__vu_skin_selftest(void)
             v.draw[1] = 5;
             v.draw[2] = ICO_VU_CLIP_REGION | ICO_VU_PROBE | ICO_VU_NO_BESIDE;
             v.strip[1] = 1;
+            *vp = v;
             vOff[c] = put(&v, sizeof(v), ua);
             ok = vOff[c] != ~0ull;
         }
         /* group 1 as vuGroupMake binds it: the stream at t0, the ring for
          * the three dynamic blocks, t4 and t5 the ring (read by no cluster
-         * entry) */
+         * entry, but the ring builds under [dev] vu_bones = ring, issue 123's
+         * ladder: t5 then from the ring's start over every block, each
+         * draw's VuCB copy carrying its block's index in the mark lane) */
         RhiBinding b[6];
         memset(b, 0, sizeof(b));
         const RhiBuffer ring = g_rd.ring[rd__ring_slot()];
@@ -268,8 +273,11 @@ bool rd__vu_skin_selftest(void)
         }
         b[4] = (RhiBinding){
             .slot = 4, .type = RHI_BIND_STORAGE_BUFFER, .buffer = ring, .offset = 0, .size = 4096};
+        const uint64_t t5 = g_rd.vuBonesRing && ok
+                                ? (boff[ST_OFFSETS - 1] + sizeof(IcoVuBoneCB) + 15u) & ~15ull
+                                : 4096u;
         b[5] = (RhiBinding){
-            .slot = 5, .type = RHI_BIND_STORAGE_BUFFER, .buffer = ring, .offset = 0, .size = 4096};
+            .slot = 5, .type = RHI_BIND_STORAGE_BUFFER, .buffer = ring, .offset = 0, .size = t5};
         const RhiBindGroup g1 = ok ? rd__replay_bind_group(g_rd.layoutVu, b, 6) : (RhiBindGroup){0};
         RhiBinding fb = {.slot = 0,
                          .type = RHI_BIND_UNIFORM_BUFFER_DYNAMIC,
@@ -320,7 +328,17 @@ bool rd__vu_skin_selftest(void)
                         continue;
                     }
                     const uint32_t f0 = (uint32_t)fOff;
-                    const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vOff[c], (uint32_t)boff[k]};
+                    uint64_t vk = vOff[c];
+                    if (g_rd.vuBonesRing) {
+                        /* the ring builds: block k's qword index in t5 */
+                        IcoVuCB v = vcbs[c];
+                        v.mark[3] = (uint32_t)(boff[k] / 16u);
+                        vk = put(&v, sizeof(v), ua);
+                        if (vk == ~0ull) {
+                            continue;
+                        }
+                    }
+                    const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vk, (uint32_t)boff[k]};
                     rhi_cmd_set_bind_group_offsets(cl, 0, g0, &f0, 1);
                     rhi_cmd_set_bind_group_offsets(cl, 1, g1, offs, 3);
                     rhi_cmd_set_bind_group(cl, 2, g2);

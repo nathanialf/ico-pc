@@ -81,10 +81,22 @@ static const char *const expectedTone[] = {"blit_tone_ps", "blit_depth_tone_ps"}
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */
 static const char *const expectedPlain[] = {
-    "vu_prelit_plain_vs",     "vu_lit_plain_vs",  "vu_lit_spec_plain_vs",
-    "vu_reflect_plain_vs",    "vu_skin_plain_vs", "vu_skin_spec_plain_vs",
-    "vu_skin_debug_plain_vs", "vu_grid_plain_vs", "vu_grid_lit_plain_vs",
+    "vu_prelit_plain_vs",
+    "vu_lit_plain_vs",
+    "vu_lit_spec_plain_vs",
+    "vu_reflect_plain_vs",
+    "vu_skin_plain_vs",
+    "vu_skin_spec_plain_vs",
+    "vu_skin_debug_plain_vs",
+    "vu_grid_plain_vs",
+    "vu_grid_lit_plain_vs",
     "vu_grid_spec_plain_vs",
+    /* the cluster entries' plain variants with the bones read through the
+     * ring (ICO_VU_BONES_RING: issue 123's ladder, rd_pipeline.c
+     * rd__vu_policy_init under [dev] vu_bones = ring, rd_vu_bones.c) */
+    "vu_skin_ring_plain_vs",
+    "vu_skin_spec_ring_plain_vs",
+    "vu_skin_debug_ring_plain_vs",
 };
 
 /* the vertex and triangle pre-passes (vu_tri.hlsl, vu_particle.hlsl;

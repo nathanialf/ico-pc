@@ -11,6 +11,7 @@
 #include <jni.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include "config.h"
@@ -127,6 +128,69 @@ static char s_active[160];  /* its folder */
    right for any loss within 49 days of it) */
 static SDL_AtomicInt s_custom;
 static SDL_AtomicU32 s_firstPresentMs;
+/* the package opened for this start is Turnip's (its library
+   libvulkan_freedreno.so): the start TU_DEBUG can reach (issue 123's
+   ladder, tu_debug_apply) */
+static int s_turnipPackage;
+
+/* the package's library is Turnip's (Mesa's freedreno Vulkan driver) */
+static int library_is_turnip(const char *library)
+{
+    const char *base = library != NULL ? strrchr(library, '/') : NULL;
+
+    base = base != NULL ? base + 1 : library;
+    return base != NULL && strcmp(base, "libvulkan_freedreno.so") == 0;
+}
+
+/* Issue 123's ladder, step 2 (bones_ladder.h; docs/port/VU_SKIN_CHECK.md
+   "The ladder"): [dev] turnip_debug = nobin, which the skin check writes
+   when the twins of a skinned draw still differ with the bones read through
+   the ring, sets TU_DEBUG=nobin in the process environment before the
+   package loads (Mesa reads it when the driver starts: the binning pass
+   off, every pass drawn in system memory; docs.mesa3d.org/drivers/
+   freedreno.html lists nobin among TU_DEBUG's options), only when the
+   package's library is Turnip's.  Whether the variable reaches the driver
+   through libadrenotools on Android is not verified: the twins' result
+   under it is the indicator (window_bones.c reads TU_DEBUG back). */
+static void tu_debug_apply(const char *library)
+{
+    const char *want = ico_config_get_string("dev.turnip_debug", "");
+    const char *by = ico_config_get_string("dev.turnip_debug_by", "");
+    const char *old = getenv("TU_DEBUG");
+    char value[256];
+
+    if (strcmp(want, "nobin") != 0) {
+        return;
+    }
+    if (!library_is_turnip(library)) {
+        fprintf(stderr,
+                "gpu driver: [dev] turnip_debug = nobin, but the package's library is %s, not "
+                "Turnip's libvulkan_freedreno.so: TU_DEBUG is not set\n",
+                library != NULL ? library : "unknown");
+        return;
+    }
+    if (old != NULL && strstr(old, "nobin") != NULL) {
+        snprintf(value, sizeof(value), "%s", old);
+    } else if (old != NULL && old[0] != '\0') {
+        snprintf(value, sizeof(value), "%s,nobin", old);
+    } else {
+        snprintf(value, sizeof(value), "nobin");
+    }
+    if (setenv("TU_DEBUG", value, 1) != 0) {
+        fprintf(stderr, "gpu driver: TU_DEBUG could not be set ([dev] turnip_debug = nobin)\n");
+        return;
+    }
+    fprintf(stderr,
+            "gpu driver: TU_DEBUG=%s set before %s loads ([dev] turnip_debug = nobin%s%s): "
+            "whether the driver reads it through the package loader is not verified; the skin "
+            "check's twins under it are the indicator\n",
+            value, library, by[0] != '\0' ? ", turnip_debug_by = " : "", by);
+}
+
+int ico_gpu_driver_android_turnip_package(void)
+{
+    return SDL_GetAtomicInt(&s_custom) && s_turnipPackage;
+}
 
 /* a Java exception from the last call, cleared: 1 when there was one */
 static int clear_exception(JNIEnv *env)
@@ -261,6 +325,7 @@ int ico_gpu_driver_android_start(void)
     rhi_set_vulkan_loader(NULL);
     s_trial = 0;
     s_presents = 0;
+    s_turnipPackage = 0;
     SDL_SetAtomicInt(&s_custom, 0);
     SDL_SetAtomicU32(&s_firstPresentMs, 0);
     if (!ico_gpu_driver_android_supported()) {
@@ -326,6 +391,9 @@ int ico_gpu_driver_android_start(void)
     fprintf(stderr, "gpu driver: opening %s (%s, %s) from %s, hooks in %s%s%s\n", s_active,
             s_list[i].meta.name, s_list[i].meta.libraryName, driverDir, hookDir,
             tmpLibDir != NULL ? ", patched loader in " : "", tmpLibDir != NULL ? tmpLibDir : "");
+    /* issue 123's ladder, step 2: before the package's library loads */
+    tu_debug_apply(s_list[i].meta.libraryName);
+    s_turnipPackage = library_is_turnip(s_list[i].meta.libraryName);
     void *lib = adrenotools_open_libvulkan(RTLD_NOW, ADRENOTOOLS_DRIVER_CUSTOM, tmpLibDir, hookDir,
                                            driverDir, s_list[i].meta.libraryName, NULL, NULL);
     if (lib == NULL) {

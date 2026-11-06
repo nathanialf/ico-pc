@@ -198,6 +198,11 @@ static bool ringIndex(uint64_t off, uint64_t size, uint32_t *out)
     return true;
 }
 
+bool rd__vu_ring_index(uint64_t off, uint64_t size, uint32_t *out)
+{
+    return ringIndex(off, size, out);
+}
+
 /* The VU layout's group binds the stream's whole buffer (the
  * mesh arena chunk or the ring) at t0, the ring at offset 0 for the
  * three dynamic uniforms, the slot's record buffer at t4 and the ring
@@ -246,9 +251,11 @@ static RhiBindGroup vuGroupMake(RhiBuffer streamBuf, uint64_t streamOff, uint64_
      * vu_prepass_batch = false, its self-test; the merge off by [dev]
      * vu_merge = false or a merge module missing) the bind is skipped and a
      * submit writes only the bytes its draws stream (the slot reads zeros,
-     * which no module then reads); with either on, those bytes are what
-     * their builds read */
-    if (!g_rd.vuPreBatch && !g_rd.vuMerge && rhi_backend() == RHI_BACKEND_D3D11) {
+     * which no module then reads); with either on, or the cluster entries'
+     * ring builds ([dev] vu_bones = ring, g_rd.vuBonesRing), those bytes are
+     * what their builds read */
+    if (!g_rd.vuPreBatch && !g_rd.vuMerge && !g_rd.vuBonesRing &&
+        rhi_backend() == RHI_BACKEND_D3D11) {
         return rd__replay_bind_group(g_rd.layoutVu, b, 5);
     }
     b[5].slot = 5;
@@ -1552,6 +1559,16 @@ static bool vuSource(const RdFrame *f, const RdCmd *c, VuSource *s)
     s->indexBuf = indexBuf;
     s->indexOff = indexOff;
     s->vs = vuVs(p.prog, p.code);
+    if (g_rd.vuBonesRing && s->vs >= RD_VS_VU_SKIN && s->vs <= RD_VS_VU_SKIN_DEBUG &&
+        !ringIndex(bonesOff, sizeof(IcoVuBoneCB), &s->vcb.mark[3])) {
+        /* the cluster entries' ring builds (issue 123's ladder, [dev]
+         * vu_bones = ring; vu_common.hlsli ICO_VU_BONES_RING) read the bones
+         * at t5 from the qword in mark[3], the lane no cbuffer build reads:
+         * a block t5 does not hold whole has no index, and the draw is not
+         * drawn rather than drawn from other bytes (counted, said once) */
+        rd__vu_bones_ring_miss(bonesOff);
+        return false;
+    }
     return true;
 }
 

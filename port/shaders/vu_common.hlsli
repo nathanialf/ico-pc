@@ -12,7 +12,9 @@
 //                  (rd_mesh.h).  Read as uint4 (Integer lanes, below)
 //   b2  VuCB       the VU1 data memory 0..35 the program reads (see below)
 //   b3  VuBoneCB   cluster: VU memory 16..255, the bones; every mesh
-//                  program: the card bits after them (vu_strip_card)
+//                  program: the card bits after them (vu_strip_card); the
+//                  ring builds of the cluster entries (ICO_VU_BONES_RING)
+//                  read the same bytes through t5 instead
 //   t4  vu_rec_buf the record: the vertex pre-pass's vertices
 //                  (vu_rec_vertex) and the triangle pre-pass's triangles and
 //                  sprites (the record stages below), read by the main
@@ -152,6 +154,22 @@ cbuffer VuCB : ICO_REG(b2, 1)
     uint4 vu_tri;
 };
 
+#ifdef ICO_VU_BONES_RING
+// The bones through the ring (ICO_VU_BONES_RING: the cluster entries'
+// vu_skin_ring_plain_vs, vu_skin_spec_ring_plain_vs and
+// vu_skin_debug_ring_plain_vs; issue 123, docs/port/VU_SKIN_CHECK.md "The
+// ladder"): the same 3,840 bytes VuBoneCB would hold at b3, read as a
+// storage buffer, vu_ring (t5, the ring from rd_replay_vu.c s_ringBase), from
+// qword vu_mark.w (IcoVuCB.mark[3], the lane nothing else reads in these
+// builds; rd_replay_vu.c vuSource puts the block's index there).  A uniform
+// read of the block at the draw's offset gave other bytes than the CPU
+// wrote on Mesa's Turnip (Yorda's shin): the skin check's ladder switches
+// to this read by itself.  uint4 and asfloat as VuBoneCB's (Integer lanes,
+// above); every word computed is the same.
+StructuredBuffer<uint4> vu_ring : ICO_REG(t5, 1);
+#define VU_BONE(i) asfloat(vu_ring[vu_mark.w + (i)])
+#define VU_BONE_BITS(i) vu_ring[vu_mark.w + (i)]
+#else
 // VU memory 16..255: the cluster program's bones (vu_skin.hlsl), and for
 // every mesh program the card bits from qword vu_strip.w (vu_strip_card;
 // rd_replay_vu.c doVuDraw puts them after the bones a skinned mesh reads).
@@ -161,14 +179,15 @@ cbuffer VuBoneCB : ICO_REG(b3, 1)
 {
     uint4 vu_bone[240];
 };
-
-// The arrays' elements, read one at a time (the batch build below reads
-// them from vu_ring); VU_BONE_BITS a qword of VuBoneCB as integers (the
-// card bits)
-#define VU_MEM(i) vu_mem[i]
-#define VU_TICK(i) vu_ticks[i]
+// VU_BONE_BITS a qword of VuBoneCB as integers (the card bits)
 #define VU_BONE(i) asfloat(vu_bone[i])
 #define VU_BONE_BITS(i) vu_bone[i]
+#endif
+
+// The arrays' elements, read one at a time (the batch build below reads
+// them from vu_ring)
+#define VU_MEM(i) vu_mem[i]
+#define VU_TICK(i) vu_ticks[i]
 // a pre-pass entry's vertex: SV_VertexID itself (the batch build's
 // vu_pre_batch_entry finds its entry first)
 #define VU_PRE_ENTRY(vid) (vid)

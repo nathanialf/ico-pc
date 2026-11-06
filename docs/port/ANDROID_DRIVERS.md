@@ -92,6 +92,23 @@ once and the row's note becomes `UI_STR_GPU_DRIVER_NOTE_LOST` (a failed driver's
 When no device starts, `window: a graphics driver package (...) is loaded by the game itself,
 without the system's Vulkan loader` precedes the box.
 
+`TU_DEBUG` before a Turnip package loads (issue 123's ladder, step 2; [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)).
+`tu_debug_apply`, called by `ico_gpu_driver_android_start` before `adrenotools_open_libvulkan`,
+reads `[dev] turnip_debug` ([CONFIG.md](CONFIG.md)): `nobin`, which the skin check writes when the
+twins of a skinned draw still differ with the bones read through the ring, sets `TU_DEBUG=nobin` in
+the process environment (appended to a value already set), only when the package's library is
+Turnip's (`libvulkan_freedreno.so`, `library_is_turnip`): `gpu driver: TU_DEBUG=nobin set before
+<library> loads ([dev] turnip_debug = nobin, turnip_debug_by = <mark>): whether the driver reads it
+through the package loader is not verified; the skin check's twins under it are the indicator`, or
+`gpu driver: [dev] turnip_debug = nobin, but the package's library is <library>, not Turnip's
+libvulkan_freedreno.so: TU_DEBUG is not set`. Mesa's documentation lists `nobin` among `TU_DEBUG`'s
+options (docs.mesa3d.org/drivers/freedreno.html). It is unverified that the variable reaches the
+driver on Android through libadrenotools' loader: the twins' result under it is the indicator
+(`window_bones.c` reads `TU_DEBUG` back and says `window: VU skin check ladder: step 2 of 2
+(TU_DEBUG=nobin) for this start; ...`; twins still differing write `turnip_debug = off`).
+`ico_gpu_driver_android_turnip_package` tells the ladder whether this start runs such a package
+(the start the variable can reach).
+
 ### The file picker
 
 Android has the app's own file picker, not SDL's (issue 135). SDL's `SDL_ShowOpenFileDialog`

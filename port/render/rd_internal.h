@@ -3220,6 +3220,10 @@ typedef struct RdContext {
      * drops): the device's plain set is in force (RdVuSetChoice.noBeside, issue 163; rd_replay_vu.c vuDropMode,
      * the profile line's "side bands:" words) */
     bool vuNoBeside;
+    /* the cluster entries' bones through t5 (issue 123's ladder, [dev]
+     * vu_bones = ring; vsPlain[RD_VS_VU_SKIN..DEBUG] the ring builds,
+     * rd__vu_policy_init; IcoVuCB.mark[3] their index, vuSource) */
+    bool vuBonesRing;
     /* the dynamic state in force (rd__vu_policy_init from
      * RhiLimits.dynamicDepth / dynamicBlend; rd__key_dynamic_normalise,
      * rd__set_pipeline) */

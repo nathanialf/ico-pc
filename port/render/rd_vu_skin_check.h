@@ -176,12 +176,15 @@ int rd__skin_check_default(bool windowed, bool adreno, int env);
 bool rd__profile_vendor_adreno(uint32_t vendorId, bool moltenvk);
 bool rd__profile_adreno(void);
 
-/* the box check's pipeline slots (distinct keys, kept for the run), and
- * every pipeline the check holds outside the renderer's cache: the probe's
- * three, c2's three and the box checks' (rd_pipeline.c counts them in the
- * pool's headroom, rhi_pipeline_pool.h) */
+/* the box check's pipeline slots (distinct keys, kept for the run), twin
+ * C's (the twin's key through the cluster entry's ring build, issue 123's
+ * ladder), and every pipeline the check holds outside the renderer's cache:
+ * the probe's three, c2's three, column 3's three, the box checks' and twin
+ * C's (rd_pipeline.c counts them in the pool's headroom,
+ * rhi_pipeline_pool.h) */
 #define RD_VU_SKIN_BOX_PIPES 16
-#define RD_VU_SKIN_PIPES (3u + 3u + RD_VU_SKIN_BOX_PIPES)
+#define RD_VU_SKIN_RING_PIPES 8
+#define RD_VU_SKIN_PIPES (3u + 3u + 3u + RD_VU_SKIN_BOX_PIPES + RD_VU_SKIN_RING_PIPES)
 
 /* ------------------------------------------------------- the engine
  * rd_vu_skin_check.c, rd_vu_skin_selftest.c; the replay calls these. */
@@ -217,9 +220,10 @@ void rd__vu_skin_twins_set(int on);
 /* the occlusion queries the check uses (RD_SKIN_QUERIES with the twins,
  * RD_SKIN_CHECKS_ALL without): the start-up probe prepares them */
 uint32_t rd__vu_skin_queries(void);
-/* B2's hook (the ring-read module, not built yet): the probe pipeline of
- * column 3 (the draw's bones through the ring) for the cluster entry vs,
- * {0} while there is none (column 3 not drawn) */
+/* the probe pipeline of column 3 (the draw's bones through the ring: the
+ * cluster entry's ring build, rd__vu_bones_ring_shader) for the cluster
+ * entry vs, compiled in the background at the first ask (the c2 rule); {0}
+ * while there is none (column 3 not drawn) */
 RhiPipeline rd__vu_skin_ring_module(uint8_t vs);
 
 /* vuDraw, after a picked command's draw (inside its pass): what the probe
@@ -272,6 +276,10 @@ typedef struct RdSkinSummary {
      * dropped (non-finite) */
     uint32_t twins, twinsDiffer, twinsOwn, targeted, targetedWrong, dropped;
     uint32_t twinsDifferOwn; /* of the twins that differed, those through the draw's own pipeline */
+    /* issue 123's ladder: column 3 (the bones through the ring) drawn, and
+     * right where column 0 was wrong; twin C (the ring read in the pass)
+     * read, and differing from B (the same bytes at a fresh offset) */
+    uint32_t c3Run, c3Right, ringTwins, ringDiffer;
 } RdSkinSummary;
 
 int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out);
@@ -280,6 +288,46 @@ int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out);
  * twins harvested at once, the counts into out (zeroed first).  Returns
  * the wrong checks, -1 when f could not be replayed. */
 int rd__vu_skin_check_replays(const RdFrame *f, int keep, uint32_t replays, RdSkinSummary *out);
+
+/* ------------------------------------------------ the ladder's side
+ * issue 123 (rd_vu_bones.c; docs/port/VU_SKIN_CHECK.md "The ladder"): the
+ * cluster entries' ring builds (vu_common.hlsli ICO_VU_BONES_RING), which
+ * the check draws beside the picture (column 3, twin C) and [dev] vu_bones
+ * = ring puts in place of the plain variants at the next start
+ * (rd_pipeline.c rd__vu_policy_init), and the run's evidence for the
+ * window's ladder (rd.h rd_vu_bones_evidence). */
+
+/* "vu_skin_ring_plain_vs" for RD_VS_VU_SKIN (and _spec, _debug) */
+void rd__vu_bones_ring_name(uint8_t vs, char *out, size_t size);
+/* the cluster entry vs's ring build: the run's own entry under vu_bones =
+ * ring, else made here at the first ask where the program entries are the
+ * plain set (the ring builds are plain variants); {0} elsewhere or missing */
+RhiShader rd__vu_bones_ring_shader(uint8_t vs);
+/* rd_replay_vu.c: the qword index t5 reads a block of size bytes at ring
+ * offset off from (the replay's s_ringBase), false when t5 does not hold
+ * it whole */
+bool rd__vu_ring_index(uint64_t off, uint64_t size, uint32_t *out);
+/* rd__vu_policy_init: the start line ("VU bones: ..."), asked whether
+ * [dev] vu_bones = ring was asked, on whether the ring builds are in force,
+ * why not when asked and not */
+void rd__vu_bones_policy(bool asked, bool on, const char *why);
+/* vuSource under the ring builds: a skinned draw's VuBoneCB block t5 does
+ * not hold whole (the draw not drawn; counted, said once) */
+void rd__vu_bones_ring_miss(uint64_t bonesOff);
+/* the harvest: one slot's twins read (twins), of them A and B differing
+ * (differ) */
+void rd__vu_bones_twins_read(uint32_t twins, uint32_t differ);
+/* the harvest: a twin event (A != B) of frame `frame`: ring 1 twin C (the
+ * ring read) equalled B, 0 it differed, -1 not drawn; probe 1 the same
+ * replay's probe of the command right, 0 wrong, -1 not probed */
+void rd__vu_bones_event(uint32_t frame, int ring, int probe);
+/* the harvest: a wrong check whose bytes were equal (bytesDiffer false:
+ * H1's rows) or not (H2: a port race, not the driver's read); c3 1 column
+ * 3 right, 0 wrong, -1 not drawn; addr the address named */
+void rd__vu_bones_check(bool bytesDiffer, int c3, uint32_t addr);
+/* rd__vu_skin_shutdown: the end-of-run line under the ring builds, the
+ * modules made here destroyed, the counts reset */
+void rd__vu_bones_shutdown(void);
 
 /* ---------------------------------------------------- the capture
  * On the run's first failure (twins that differ, or a wrong check), once

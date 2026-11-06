@@ -565,6 +565,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
                                   port/platform/window_video.c port/platform/window_lines.c
                                   port/platform/window_pipeline_skip.c
                                   port/platform/window_robust.c
+                                  port/platform/window_bones.c
                                   port/platform/window_pipe_finish.c
                                   port/platform/window_display_rate.c
                                   port/platform/window_present_fallback.c

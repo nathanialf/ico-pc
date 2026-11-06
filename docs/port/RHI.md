@@ -450,8 +450,8 @@ Each backend keeps its pipelines in a handle pool of `RHI_PIPELINE_POOL_MAX` slo
 of the start-up set's or a replay's gathered keys (`RD_PIPE_BATCH`, 32: their ids are held until
 the batch ends and its duplicates are destroyed), the COLCLAMP 0 pipelines (`RD_WRAP_PIPES`, 16),
 Motion blur: Smooth's two, the movie's three (`port/render/rd_video.c`: two outputs, the field
-pipeline) and the skin check's 22 (`RD_VU_SKIN_PIPES`: the probe's three, c2's three, 16 box
-checks; [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)), 75 in all; a
+pipeline) and the skin check's 33 (`RD_VU_SKIN_PIPES`: the probe's three, c2's three, column 3's
+three, 16 box checks and twin C's 8; [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)), 86 in all; a
 static assert in `port/render/rd_pipeline.c` holds the sum under the headroom and the cache plus
 the headroom to the pool. So no pipeline the renderer's cache can keep is refused by the pool. A
 handle indexes `2^20 - 1` slots (`port/rhi/vk/vk_internal.h` (`VKR_INDEX_BITS`),
