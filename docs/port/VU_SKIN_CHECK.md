@@ -47,7 +47,8 @@ fixed value. The judgement names both forms ([What it checks](#what-it-checks)).
 | `port/render/rd_vu_bones.c` | the ladder's renderer side: the cluster entries' ring builds for column 3 and twin C (`rd__vu_bones_ring_shader`), the start line of `[dev] vu_bones`, the run's evidence for the window (`rd.h` `rd_vu_bones_evidence`), the ring read's verdict at the end |
 | `port/shaders/vu_common.hlsli` (`ICO_VU_BONES_RING`), `port/shaders/CMakeLists.txt` | the ring builds `vu_skin_ring_plain_vs`, `vu_skin_spec_ring_plain_vs`, `vu_skin_debug_ring_plain_vs`: the plain variants with `VU_BONE(i)` read as `vu_ring[vu_mark.w + i]` (t5) |
 | `port/render/rd_pipeline.c` (`rd__vu_policy_init`), `rd_replay_vu.c` (`vuSource`) | `[dev] vu_bones = ring`: the ring builds in place of the cluster entries' plain variants, the block's t5 index in `IcoVuCB.mark[3]` |
-| `port/platform/bones_ladder.c`, `window_bones.c` | the ladder across starts (pure: the step, the mark, the lines) and the window's part (the evidence read from the pump, the keys written) |
+| `port/platform/bones_ladder.c`, `window_bones.c` | the ladder across starts (pure: the step, the mark, the lines, step 1's switch guards) and the window's part (the evidence read from the pump, the keys written, step 1's switch asked) |
+| `port/platform/window_switch.c` (`ico_window_switch_restart`) | step 1 in the run: the renderer made again in place through Options > Graphics > Apply's switch |
 | `port/platform/android/gpu_driver_android.c` (`tu_debug_apply`) | `[dev] turnip_debug = nobin`: `TU_DEBUG=nobin` set before a Turnip package loads |
 | `port/render/rd_vu_skin_judge.c` | the judgement (pure): the CPU's positions through `vu1_ref`'s cluster program, a probe against them, the zero-matrix address, the byte windows, the decision table's words |
 | `port/render/rd_vu_skin_selftest.c` | the start-up probe (S1) and the check's start line; `rd_vu_skin_probe_failed` |
@@ -321,7 +322,7 @@ the window's pump reads it (`port/platform/window_bones.c`) and decides with
 
 | the run's evidence and the keys in force | the action |
 | --- | --- |
-| a twin event whose C equalled B, or a wrong check with equal bytes whose column 3 drew right | step 1: `[dev] vu_bones = ring` written for the next start |
+| a twin event whose C equalled B, or a wrong check with equal bytes whose column 3 drew right | step 1: `[dev] vu_bones = ring` written and put in force in the run (the renderer made again in place), and for every later start |
 | twin events, C differing from B (or the twins differing twice while the probe of the same command drew right and no probe wrong: the scene pass's execution) | step 1 skipped: step 2, `[dev] turnip_debug = nobin`, where the next start can set it, else the ladder stops |
 | 8 twin events with no evidence either way (the ring read's pipelines not made yet) | step 1 |
 | step 1 in force and the twins still differing | step 2 where the next start can set it (Android, a Turnip package), else the ladder stops |
@@ -330,7 +331,20 @@ the window's pump reads it (`port/platform/window_bones.c`) and decides with
 | a wrong check whose bytes changed under the GPU (H2, a port race) | the ladder does not act |
 | no twin differing and no step in force | nothing |
 
-**Step 1, the bones through the ring.** At the next start `rd__vu_policy_init` reads `[dev]
+**Step 1, the bones through the ring, in the run.** When the window writes the key it sets
+`ICO_RD_VU_BONES=ring` (and `ICO_RD_VU_BONES_BY`, the mark) in the process and asks for the
+renderer to be made again in place (`port/platform/window_switch.h` `ico_window_switch_restart`):
+the same backend and card through Options > Graphics > Apply's own switch, run in the event pump
+between two steps of the game and never inside a present (`rd_suspend` with the game's state kept,
+the window made again, `rd_init`, `rd_resume`), so no shader id is added and no pipeline in flight
+is retired. Guards (`bones_restart_step`): not while a movie plays and not in the run's first 30 s
+(the switch waits, said once: `... the switch to the ring read waits for the movie's end | the run's
+first 30 s (else the next start reads it)`), at most once a run, and not when the switch machinery
+refuses (photo mode, the model viewer, the touch layout editor, a switch asked already: its own line
+`window: the renderer not made again in place (...): WHY`, then the next start reads the key). The
+new renderer's evidence starts from zero, with the ring builds in force, so the ladder goes on in
+the same run (step 2 is written there when the twins still differ). At every later start
+`rd__vu_policy_init` reads `[dev]
 vu_bones = ring` (exported as `ICO_RD_VU_BONES=ring`) and, where the program entries are the plain
 set (Turnip's always; the ring builds are plain variants), puts the cluster entries' ring builds
 (`vu_skin_ring_plain_vs`, `vu_skin_spec_ring_plain_vs`, `vu_skin_debug_ring_plain_vs`:
@@ -341,12 +355,10 @@ device) from the qword `vuSource` puts in `IcoVuCB.mark[3]`. The same words are 
 variant's). A skinned draw whose block t5 does not hold whole is not drawn (counted, said once:
 `rd: VU bones: a skinned draw's bone block (ring offset O) lies past what t5 holds: not drawn ...`).
 With the vertex pre-pass on (not on a tile-based GPU) the pre-pass's own entries still read
-VuBoneCB. The switch waits one start: switching inside the run would need new vertex shader ids
-outside the VU range every range test knows, a cache adopt with a deferred destroy of pipelines
-still in flight, and a twin of every seen key made first; column 3 and twin C test the fix in the
-run without them.
+VuBoneCB. Column 3 and twin C test the fix beside the picture before it is switched in.
 
-**Step 2, `TU_DEBUG=nobin`.** At the next start `port/platform/android/gpu_driver_android.c`
+**Step 2, `TU_DEBUG=nobin`, at the next start** (the driver library is loaded once a process: a
+renderer made again in place keeps it). At the next start `port/platform/android/gpu_driver_android.c`
 (`tu_debug_apply`, before `adrenotools_open_libvulkan`) reads `[dev] turnip_debug = nobin` and sets
 `TU_DEBUG=nobin` in the process environment (appended to a value already set), only when the
 package's library is Turnip's (`libvulkan_freedreno.so`); Mesa's documentation lists `nobin` among
@@ -379,9 +391,15 @@ The lines:
   nobin, but the package's library is LIB, not Turnip's libvulkan_freedreno.so: TU_DEBUG is not set`
 - step 1 written: `window: VU bones: [dev] vu_bones = ring is written (the skin check saw N twin
   events at bone address A over P presents); the ring read beside the picture cleared it K times |
-  the ring read untested beside the picture: its pipelines not made yet; the next start reads the
-  skinned draws' bones through the ring (CONFIG)`
-- step 2 written: `window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin) for the next start:
+  the ring read untested beside the picture: its pipelines not made yet; in force from the next
+  picture (CONFIG)`, then `window: VU bones: switching to the ring read now (the renderer made again
+  in place, as Options > Graphics > Apply does); [dev] vu_bones = ring written for every later
+  start` and the switch's own `window: the renderer made again in place on BACKEND (issue 123's
+  ladder: the bones through the ring), S s`; when the switch waits `...; the switch to the ring read
+  waits for WHAT (else the next start reads it) (CONFIG)`; when it is refused `...; the next start
+  reads the skinned draws' bones through the ring (CONFIG)`
+- step 2 written: `window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin) for the next start
+  (the driver library is loaded once a process):
   [dev] turnip_debug = nobin is written to CONFIG; step 1 (ring read) did not clear the twins (D of
   T)` (or `was skipped: ...` with why)
 - step 2 failed: `window: VU skin check ladder: both tried, neither cleared the twins (D of T under

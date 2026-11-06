@@ -201,14 +201,17 @@ lines and what each decides:
   the ring, a storage buffer. `c3 right` where the probe is wrong, or C equal to B where A differs,
   says the ladder's step 1 clears the fault; C differing too says it does not.
 - **The ladder** ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)): `window: VU bones: [dev] vu_bones
-  = ring is written (the skin check saw N twin events at bone address A over P presents); ...` (step
-  1 for the next start), then at that start `rd: VU bones: through the ring (storage buffer) on the
-  skinned entries ([dev] vu_bones = ring, written by the skin check at <version> frame F; ...)` and
-  `window: VU skin check ladder: step 1 of 2 (the ring read) for this start ...`; its twins' event
+  = ring is written (the skin check saw N twin events at bone address A over P presents); ...; in
+  force from the next picture`, `window: VU bones: switching to the ring read now (the renderer made
+  again in place, ...)` and `window: the renderer made again in place on vulkan (...)` (step 1 in
+  the same run), then `rd: VU bones: through the ring (storage buffer) on the skinned entries
+  ([dev] vu_bones = ring, written by the skin check at <version> frame F; ...)` from the new
+  renderer and at every later start with `window: VU skin check ladder: step 1 of 2 (the ring read)
+  for this start ...`; its twins' event
   lines end `A and B read the bones through the ring: step 1 of the ladder in force`, and the run
   ends with `rd: VU skin check: the ring read: healed (0 of T ...) | not healed (D of T ...)`. Still
   differing on a Turnip package: `window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin) for the
-  next start: ...`, then at that start `gpu driver: TU_DEBUG=nobin set before
+  next start (the driver library is loaded once a process): ...`, then at that start `gpu driver: TU_DEBUG=nobin set before
   libvulkan_freedreno.so loads ...` and `window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin)
   for this start; step 1 (ring read) did not clear the twins (D of T)`; still differing there:
   `window: VU skin check ladder: both tried, neither cleared the twins (...); [dev] turnip_debug =

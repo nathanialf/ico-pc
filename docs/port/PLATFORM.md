@@ -2776,7 +2776,8 @@ log's last line. The switch
    a switch of the card alone), a name it does not link, a movie playing (`mpegPlay`), photo mode,
    the model viewer, the touch layout editor. Nothing either, `0`, when name runs already on the
    card asked for (`adapterRunning`: `""` counts as the card `rhi_adapter_list` marks
-   `automatic`). Otherwise the card goes to the backend first, `rhi_set_adapter_wanted(adapter)`,
+   `automatic`), except for `ico_window_switch_restart(why)`'s switch, the renderer made again in
+   place on purpose (issue 123's ladder, [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)). Otherwise the card goes to the backend first, `rhi_set_adapter_wanted(adapter)`,
    the value the start set from `[video] adapter` kept for step 4.
 2. The texture ids kept outside the renderer forgotten: the font pages (re-uploaded from their CPU
    atlases, `ui_font_forget_textures`) and the GS shim's placeholders (`gif_HostForgetTextures`).

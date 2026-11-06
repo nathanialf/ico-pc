@@ -1008,9 +1008,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   still differing: step 2, then `turnip_debug = off` and a later start's stop; step 2 healed and
   kept; step 2 out of reach: the stop; step 1 skipped when the ring read beside the picture did not
   clear it or the scene pass's execution differed twice with no wrong probe; step 1 untested after 8
-  events; nothing without a differing twin; a port race never acted on), the mark written and read
-  back and a hand-written value never taken for it, the start and action lines word for word
-  (`bones_ladder`).
+  events; nothing without a differing twin; a port race never acted on), step 1's switch in the run
+  as `window_bones.c` polls it each pump (`bones_restart_step`: asked once, at the pump after the
+  write, never while a movie plays or in the run's first 30 s, never again in the run), the mark
+  written and read back and a hand-written value never taken for it, the start, action, step 1
+  (now, waiting, next start) and switch lines word for word (`bones_ladder`).
 - `robust_persist_test.c`: the port's own `[dev] gpu_robust` turning itself off (`robust_persist.h`): the mark `gpu_robust_by` written and read back and a hand-written value never taken for it, the rule over sequences of starts (three clean starts in a row turn it off; a loss or an end while preparing resets the count; a start that never reached the game leaves it; another version turns it off at once; no mark does nothing), the mark through the config text, the removal of both `[dev]` keys leaving every other line (a `gpu_robust` in another section included), the three log lines word for word (`robust_persist`).
 - `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
