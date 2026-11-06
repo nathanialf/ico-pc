@@ -852,6 +852,12 @@ const char *const
                 [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Les ombres attendent qu’Ico se relève",
                 [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
                     "Désactivé : les ombres ne se retiennent plus quand Ico est à terre et peuvent le frapper avant qu’il soit debout. Les succès restent actifs.",
+                [UI_STR_VAL_VAR_THIRD_JOURNEY] = "Troisième voyage",
+                [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
+                    "Ombres aussi résistantes qu’à une troisième partie, que le jeu n’atteint jamais (le double du premier voyage). Les succès restent actifs.",
+                [UI_STR_OPT_VAR_PEACEFUL] = "Ombres pacifiques",
+                [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
+                    "Activé : les ombres restent là où elles apparaissent et ne s’en prennent jamais à Ico ni à Yorda. Désactive les succès.",
                 [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
                 [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
                 [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

@@ -832,6 +832,12 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "イコが倒れている間は影が待つ",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
         "オフ：イコが倒れている間も影が待たなくなり、イコが起き上がる前に攻撃されることがあります。実績はそのままです。",
+    [UI_STR_VAL_VAR_THIRD_JOURNEY] = "3周目",
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
+        "影が3周目と同じ強さ（1周目の2倍）になります。ゲームでは3周目に到達することはありません。実績はそのままです。",
+    [UI_STR_OPT_VAR_PEACEFUL] = "おとなしい影",
+    [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
+        "オン：影は現れた場所にとどまり、イコやヨルダを襲いません。実績が無効になります。",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

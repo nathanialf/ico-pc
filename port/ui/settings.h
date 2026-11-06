@@ -737,8 +737,8 @@ typedef enum UiSettingsOpt {
     /* the game variants, one row per IcoVariantId in its order
        (UI_OPT_VAR_TOUGHNESS + id): [variants] keys, port/game/variants.h;
        No hints on Gameplay, the two cutscene rows on Gameplay > Cutscenes,
-       the three combat rows on Gameplay > Combat, the others on
-       Gameplay > Shadows */
+       the three combat rows on Gameplay > Combat, Peaceful shadows and
+       the others on Gameplay > Shadows */
     UI_OPT_VAR_TOUGHNESS,
     UI_OPT_VAR_ONE_HIT,
     UI_OPT_VAR_NEVER_DODGE,
@@ -750,6 +750,7 @@ typedef enum UiSettingsOpt {
     UI_OPT_VAR_AUTO_GUARD,
     UI_OPT_VAR_ATTACK_TURN,
     UI_OPT_VAR_SHADOWS_WAIT_DOWN,
+    UI_OPT_VAR_PEACEFUL,
     UI_OPT_DEVELOPER,
     /* actions */
     UI_OPT_BACK,

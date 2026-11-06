@@ -1286,23 +1286,25 @@ static const char *onOff(int v)
    its Shadows and Cutscenes pages) */
 static int isVarOpt(int opt)
 {
-    return opt >= UI_OPT_VAR_TOUGHNESS && opt <= UI_OPT_VAR_SHADOWS_WAIT_DOWN;
+    return opt >= UI_OPT_VAR_TOUGHNESS && opt <= UI_OPT_VAR_PEACEFUL;
 }
 
-_Static_assert(UI_OPT_VAR_SHADOWS_WAIT_DOWN - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COUNT &&
+_Static_assert(UI_OPT_VAR_PEACEFUL - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COUNT &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_AGGRESSION == UI_OPT_VAR_AGGRESSION &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_BARRIER_HITS == UI_OPT_VAR_BARRIER &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_NO_CUTSCENE_LOOK == UI_OPT_VAR_NO_LOOK &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_AUTO_GUARD == UI_OPT_VAR_AUTO_GUARD &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_ATTACK_TURN == UI_OPT_VAR_ATTACK_TURN &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_SHADOWS_WAIT_DOWN ==
-                       UI_OPT_VAR_SHADOWS_WAIT_DOWN,
+                       UI_OPT_VAR_SHADOWS_WAIT_DOWN &&
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_PEACEFUL_SHADOWS == UI_OPT_VAR_PEACEFUL,
                "a Settings row for each variant, in variants.h's order");
 
 static const char *variantText(int opt)
 {
     static const int tough[ICO_TOUGHNESS_COUNT] = {UI_STR_VAL_ORIGINAL, UI_STR_VAL_VAR_AMERICAN,
-                                                   UI_STR_VAL_VAR_NOT_TOUGHER};
+                                                   UI_STR_VAL_VAR_NOT_TOUGHER,
+                                                   UI_STR_VAL_VAR_THIRD_JOURNEY};
     static const int agg[ICO_AGGRESSION_COUNT] = {
         UI_STR_VAL_VAR_AGG_OWN, UI_STR_VAL_VAR_AGG_BOLD_PATIENT, UI_STR_VAL_VAR_AGG_BOLD_QUICK,
         UI_STR_VAL_VAR_AGG_WARY_PATIENT, UI_STR_VAL_VAR_AGG_WARY_QUICK};
@@ -2116,6 +2118,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_VAR_AUTO_GUARD:
     case UI_OPT_VAR_ATTACK_TURN:
     case UI_OPT_VAR_SHADOWS_WAIT_DOWN:
+    case UI_OPT_VAR_PEACEFUL:
         return variantText(opt);
     case UI_OPT_EXTRAS_CREDITS:
         return creditsUnlocked() ? "" : ui_str(UI_STR_ACH_LOCKED);
@@ -3514,6 +3517,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_SHADOW_SPEED, UI_STR_OPT_SHADOW_SPEED_NOTE);
         addNote(pg, UI_OPT_VAR_TOUGHNESS, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
         addNote(pg, UI_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_AGGRESSION_NOTE);
+        addNote(pg, UI_OPT_VAR_PEACEFUL, UI_STR_OPT_VAR_PEACEFUL_NOTE);
         break;
     case UI_PAGE_COMBAT:
         addNote(pg, UI_OPT_VAR_AUTO_GUARD, UI_STR_OPT_VAR_AUTO_GUARD_NOTE);
@@ -4237,16 +4241,15 @@ static void build(void)
                                     UI_OPT_NATURAL_CHAINS, UI_OPT_BACK};
     static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
                                     UI_STR_OPT_NATURAL_CHAINS, UI_STR_BACK};
-    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness
-       and Shadow aggression (VAR-SHADOWS's Peaceful shadows follow) */
+    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness,
+       Shadow aggression and Peaceful shadows */
     static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
-                                     UI_OPT_VAR_AGGRESSION, UI_OPT_BACK};
+                                     UI_OPT_VAR_AGGRESSION, UI_OPT_VAR_PEACEFUL, UI_OPT_BACK};
     static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
-                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_BACK};
+                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_PEACEFUL,
+                                     UI_STR_BACK};
     /* Gameplay > Combat: the three combat [variants] rows, then the four
-       fight rules that were on Shadows (One hit per swing, Shadows never
-       dodge, Shadows attack together, Queen barrier); VAR-WEAPONS's two weapon
-       rows follow Queen barrier */
+       fight rules that were on Shadows; the weapon rows follow Queen barrier */
     static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,        UI_OPT_VAR_ATTACK_TURN,
                                      UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_OPT_VAR_ONE_HIT,
                                      UI_OPT_VAR_NEVER_DODGE,       UI_OPT_SHADOWS_TOGETHER,
@@ -6298,16 +6301,19 @@ static int gfxProc(const Row *r, int flags)
     return 0;
 }
 
-/* PC port: a game variants row's note on the running disc. The June 2001
-   demo offers no American toughness (port/game/variants.h
-   ico_variant_offered: its Shadows are its own), and the three 2001 discs
-   have no hints (variants.c ico_hints_on) and no cutscene look-around (the
-   game's debug_VariableInit leaves debug_hand_camera 0 on them), so those
-   two rows say they change nothing there */
+/* PC port: a game variants row's note on the running disc: the June 2001
+   demo offers no American toughness (variants.h ico_variant_offered), and the
+   three 2001 discs have no hints and no cutscene look-around (debug_hand_camera
+   stays 0), so those rows say they change nothing there */
 static int variantNote(int opt, int strId)
 {
     if (opt == UI_OPT_VAR_TOUGHNESS && ICO_JUN26) {
         return UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO;
+    }
+    /* Third journey explains itself when stepped to */
+    if (opt == UI_OPT_VAR_TOUGHNESS &&
+        ico_variant_get(ICO_VARIANT_SHADE_TOUGHNESS) == ICO_TOUGHNESS_THIRD_JOURNEY) {
+        return UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD;
     }
     if (opt == UI_OPT_VAR_NO_HINTS && ICO_NTSCAUG6JUN26) {
         return UI_STR_OPT_VAR_NO_HINTS_NOTE_2001;

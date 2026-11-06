@@ -850,6 +850,12 @@ const char *const
             [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Schatten warten bei Icos Sturz",
             [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
                 "Aus: Die Schatten halten sich nicht mehr zurück, solange Ico am Boden liegt, und können ihn treffen, bevor er wieder steht. Die Erfolge bleiben aktiv.",
+            [UI_STR_VAL_VAR_THIRD_JOURNEY] = "Dritte Reise",
+            [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
+                "Schatten so zäh wie in einem dritten Durchgang, den das Spiel nie erreicht (doppelt so zäh wie auf der ersten Reise). Erfolge bleiben aktiv.",
+            [UI_STR_OPT_VAR_PEACEFUL] = "Friedliche Schatten",
+            [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
+                "An: Schatten bleiben, wo sie erscheinen, und gehen nie auf Ico oder Yorda los. Schaltet die Erfolge ab.",
             [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
             [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
             [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
