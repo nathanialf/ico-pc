@@ -549,8 +549,13 @@ target_link_libraries(rd_perf_test PRIVATE ico_render)
 # (rd_vis.c, rd_vis_hiz.c), CPU only: the bounds of synthetic streams, the
 # plane test under random matrices, the VU references (vu1_ref) as its
 # oracle in both rounding modes, the shadow frame on recorded frames, and the
-# occlusion test's bounds, rasterisation and verdicts.
-foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold rd_vis)
+# occlusion test's bounds, rasterisation and verdicts.  rd_vis_hiz_test: the
+# occlusion test's cheaper collect (rd_vis_hiz.c rd__vis_hiz_mesh_ex,
+# rd_vis_hiz_fast.c), CPU only: the batch screen box's bound, the fast vertex
+# pass against the full one on random meshes, random frames under the plain
+# and the fast collect (the same verdicts and counts, the check's none
+# wrong), the collect cache's hits and misses.
+foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold rd_vis rd_vis_hiz)
     add_executable(${_t}_test test/${_t}_test.c)
     target_compile_options(${_t}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_include_directories(${_t}_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi"
@@ -943,7 +948,8 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_perf_test rd_display_change_test rd_boot_present_test rd_crt_test
                   texpack_load_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
-                  rd_fx_frame_test rd_vu_frac_test rd_crack_test rd_local_probe_test rd_vis_test)
+                  rd_fx_frame_test rd_vu_frac_test rd_crack_test rd_local_probe_test rd_vis_test
+                  rd_vis_hiz_test)
 
 if(ICO_RUN_TESTS)
     add_test(NAME rd_state COMMAND rd_state_test "${CMAKE_CURRENT_BINARY_DIR}")
@@ -1173,7 +1179,7 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_display_change COMMAND rd_display_change_test)
     set_tests_properties(rd_display_change PROPERTIES SKIP_RETURN_CODE 77)
-    foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold rd_vis)
+    foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold rd_vis rd_vis_hiz)
         add_test(NAME ${_t} COMMAND ${_t}_test)
         set_tests_properties(${_t} PROPERTIES SKIP_RETURN_CODE 77)
     endforeach()
@@ -2439,6 +2445,23 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_cull_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
+    # rd_vis_hiz_corpus (test/rd_vis_hiz_corpus.cmake): the occlusion test's
+    # cheaper collect over the occlusion corpus: for every row of
+    # test/rd_vis_hiz_corpus.txt whose dump is here (Original 4:3, Enhanced
+    # 4:3 2x, and the same with --repeat 3: the collect cache's), --cull full
+    # --stats under ICO_RD_CULL_HIZ_FAST=0 and under the fast collect with
+    # ICO_RD_CULL_HIZ_CHECK=1: the same counts as each other and as the
+    # table, no check wrong; SKIP as rd_cull_ab
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vis_hiz_corpus")
+    add_test(NAME rd_vis_hiz_corpus
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DTABLE=${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vis_hiz_corpus.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vis_hiz_corpus"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vis_hiz_corpus.cmake")
+    set_tests_properties(rd_vis_hiz_corpus PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
+    if(_env)
+        set_tests_properties(rd_vis_hiz_corpus PROPERTIES ENVIRONMENT "${_env}")
+    endif()
     # rd_thread_ab (test/rd_thread_ab.cmake): the same dumps through
     # rd_replay_tool --render-thread off, sync and on (the replays, the
     # interpolation and the renderer's calls on a thread of their own,
@@ -3029,8 +3052,9 @@ endif()
 #    rd_vufuse_ab, rd_store_plan_ab, rd_constant_reads_ab, rd_fades_fold_ab, rd_thread_ab,
 #    the native frame gates, coverage_corpus; tools/native_frame_check.py compare runs the dumps
 #    on both backends; rd_cull_ab is twinned: the culler's byte identity is proven on
-#    both lavapipe backends)
-#  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_fades_fold, rd_vis, rd_mip,
+#    both lavapipe backends; rd_vis_hiz_corpus is not: its counts are the CPU's)
+#  * tests with no device (rd_alpha_plan, rd_fx_frame, rd_vu_frac, rd_fades_fold, rd_vis,
+#    rd_vis_hiz, rd_mip,
 #    rd_passring,
 #    rd_filter, rd_bisect_plan, rd_stream_audit, fog_lut*, gsb_cull*, texpack*, gltf)
 #
