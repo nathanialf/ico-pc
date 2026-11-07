@@ -79,6 +79,10 @@ static void test_list(void)
     CHECK(strcmp(ico_sim_key_default("variants.auto_guard"), "true") == 0 &&
           strcmp(ico_sim_key_default("variants.attack_turn"), "true") == 0 &&
           strcmp(ico_sim_key_default("variants.shadows_wait_down"), "true") == 0);
+    /* the chain rows change the swing's pace: the game's own 4 and 4 */
+    CHECK(listed("variants.chain_swing_speed") && listed("variants.chain_swing_damping"));
+    CHECK(strcmp(ico_sim_key_default("variants.chain_swing_speed"), "4") == 0 &&
+          strcmp(ico_sim_key_default("variants.chain_swing_damping"), "4") == 0);
     /* the weapon rows change the weapon objects' kinds */
     CHECK(listed("variants.sword_colour") && listed("variants.weapon"));
     CHECK(strcmp(ico_sim_key_default("variants.sword_colour"), "original") == 0 &&

@@ -739,7 +739,8 @@ typedef enum UiSettingsOpt {
        No hints on Gameplay, the two cutscene rows on Gameplay > Cutscenes,
        the three combat rows and the two weapon rows on Gameplay > Combat,
        Peaceful shadows and
-       the others on Gameplay > Shadows */
+       the others on Gameplay > Shadows, the two chain rows on Gameplay >
+       Yorda */
     UI_OPT_VAR_TOUGHNESS,
     UI_OPT_VAR_ONE_HIT,
     UI_OPT_VAR_NEVER_DODGE,
@@ -754,6 +755,8 @@ typedef enum UiSettingsOpt {
     UI_OPT_VAR_SWORD_COLOUR,
     UI_OPT_VAR_WEAPON,
     UI_OPT_VAR_PEACEFUL,
+    UI_OPT_VAR_CHAIN_SPEED,   /* Gameplay > Yorda */
+    UI_OPT_VAR_CHAIN_DAMPING, /* Gameplay > Yorda */
     UI_OPT_DEVELOPER,
     /* actions */
     UI_OPT_BACK,

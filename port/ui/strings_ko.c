@@ -840,6 +840,13 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_PEACEFUL] = "얌전한 그림자",
     [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
         "켬: 그림자가 나타난 자리에 머물며 이코나 요르다를 쫓지 않습니다. 업적이 꺼집니다.",
+    [UI_STR_OPT_VAR_CHAIN_SPEED] = "사슬 흔들림 속도",
+    [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
+        "이코가 매달려 흔들 때 사슬이 흔들리는 속도입니다. 1이 가장 느리고 10이 가장 빠르며 4가 게임 원래 값입니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_CHAIN_DAMPING] = "사슬 흔들림 멈춤",
+    [UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE] =
+        "이코가 사슬을 흔들지 않을 때 흔들림이 잦아드는 속도입니다. 1이 가장 느리고 10이 가장 빠르며 4가 게임 원래 값입니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_VAL_VAR_CHAIN_ORIGINAL] = "4 (오리지널)",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

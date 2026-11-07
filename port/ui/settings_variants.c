@@ -3,7 +3,8 @@
  *
  * The game variants' rows (settings_variants.h): one row per IcoVariantId,
  * in its order (UI_OPT_VAR_TOUGHNESS + id), on Gameplay (No hints) and its
- * Shadows, Combat and Cutscenes pages.  Moved out of settings.c unchanged
+ * Shadows, Combat and Cutscenes pages, and the two chain rows on its Yorda
+ * page.  Moved out of settings.c unchanged
  * but for the two weapon rows (Light sword colour, Stick) when they were
  * added in v0.10.5.
  */
@@ -16,7 +17,7 @@
 #include "variants.h"
 #include "../core/region.h" /* ico_region_cur, ICO_JUN26, ICO_NTSCAUG6JUN26 */
 
-_Static_assert(UI_OPT_VAR_PEACEFUL - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COUNT &&
+_Static_assert(UI_OPT_VAR_CHAIN_DAMPING - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COUNT &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_AGGRESSION == UI_OPT_VAR_AGGRESSION &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_BARRIER_HITS == UI_OPT_VAR_BARRIER &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_NO_CUTSCENE_LOOK == UI_OPT_VAR_NO_LOOK &&
@@ -26,12 +27,18 @@ _Static_assert(UI_OPT_VAR_PEACEFUL - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COU
                        UI_OPT_VAR_SHADOWS_WAIT_DOWN &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_SWORD_COLOUR == UI_OPT_VAR_SWORD_COLOUR &&
                    UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_WEAPON == UI_OPT_VAR_WEAPON &&
-                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_PEACEFUL_SHADOWS == UI_OPT_VAR_PEACEFUL,
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_PEACEFUL_SHADOWS == UI_OPT_VAR_PEACEFUL &&
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_CHAIN_SWING_SPEED == UI_OPT_VAR_CHAIN_SPEED &&
+                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_CHAIN_SWING_DAMPING ==
+                       UI_OPT_VAR_CHAIN_DAMPING,
                "a Settings row for each variant, in variants.h's order");
+
+/* the index of the game's own chain value, 4 (variants.c CHAIN_SHIPPED) */
+#define CHAIN_OWN_INDEX 3
 
 int ui__var_opt(int opt)
 {
-    return opt >= UI_OPT_VAR_TOUGHNESS && opt <= UI_OPT_VAR_PEACEFUL;
+    return opt >= UI_OPT_VAR_TOUGHNESS && opt <= UI_OPT_VAR_CHAIN_DAMPING;
 }
 
 const char *ui__variant_text(int opt)
@@ -57,6 +64,11 @@ const char *ui__variant_text(int opt)
         return ui_str(v == ICO_SWORD_RED ? UI_STR_COLOUR_RED : UI_STR_VAL_ORIGINAL);
     case ICO_VARIANT_WEAPON:
         return ui_str(v == ICO_WEAPON_NET ? UI_STR_VAL_VAR_INSECT_NET : UI_STR_VAL_ORIGINAL);
+    case ICO_VARIANT_CHAIN_SWING_SPEED:
+    case ICO_VARIANT_CHAIN_SWING_DAMPING:
+        /* the game's number, the game's own (4) marked */
+        return v == CHAIN_OWN_INDEX ? ui_str(UI_STR_VAL_VAR_CHAIN_ORIGINAL)
+                                    : ico_variant_value_name(id, v);
     default:
         return ui_str(v ? UI_STR_ON : UI_STR_OFF);
     }

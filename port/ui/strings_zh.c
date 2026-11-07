@@ -813,6 +813,13 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_PEACEFUL] = "和平的影子",
     [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
         "開啟：影子停留在出現的地方，不會去攻擊 Ico 或 Yorda。會關閉成就。",
+    [UI_STR_OPT_VAR_CHAIN_SPEED] = "鎖鏈擺動速度",
+    [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
+        "Ico 抓住鎖鏈擺盪時，鎖鏈擺動的快慢。1 最慢，10 最快，4 是遊戲原本的值。成就不受影響。",
+    [UI_STR_OPT_VAR_CHAIN_DAMPING] = "鎖鏈擺動減弱",
+    [UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE] =
+        "Ico 沒有在盪鎖鏈時，擺動減弱的快慢。1 最慢，10 最快，4 是遊戲原本的值。成就不受影響。",
+    [UI_STR_VAL_VAR_CHAIN_ORIGINAL] = "4（原版）",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

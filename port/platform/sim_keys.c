@@ -49,6 +49,9 @@ const char *const ICO_SIM_KEYS[] = {
     "variants.sword_colour",
     "variants.weapon",
     "variants.peaceful_shadows", /* no brain thread for a Shadow (a cheat) */
+    /* Gameplay > Yorda's chain rows: the swing's pace (chain.c, debug values 1..10) */
+    "variants.chain_swing_speed",
+    "variants.chain_swing_damping",
     NULL,
 };
 
@@ -88,6 +91,8 @@ static const char *const kDefaults[] = {
     "original", /* variants.sword_colour */
     "original", /* variants.weapon */
     "false",    /* variants.peaceful_shadows */
+    "4",        /* variants.chain_swing_speed */
+    "4",        /* variants.chain_swing_damping */
     NULL,
 };
 

@@ -340,7 +340,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the barrier and the look-around do not; Peaceful shadows does, as `peaceful_shadows`; a reload clears the Debug menu's mark), `test_peaceful` (the
   `ico_variant_shadow_brain` hook the four Shadow starts read: 1 by default, 0 with the key on, a bad
   word reads 1, a step writes the key and the achievements rule, the other rows untouched),
-  Shadow toughness Third journey (`third_offered`: the step order round the offered values only,
+  the chain rows (`test_chain`: the game's 4 and 4 by default, `ico_variants_bind_debug_chain` leaves
+  the switches alone at 4, every value 1 to 10 reaches its own switch, 4 puts the game's value back,
+  a step wraps and writes the number, a file's value is written at the bind, 0, 11 or a word read as 4,
+  nothing written unbound), Shadow toughness Third journey (`third_offered`: the step order round the offered values only,
   the key `third_journey`, a config word or a set of it giving Original on `ntsc`, `aug6` and
   `jun26`, `restart_index` 40 on every playthrough where offered), and the game
   hooks: the bound debug switches (untouched at the shipped values, each variant's value while it
@@ -1403,6 +1406,10 @@ The renderer's test programs have a page of their own:
   it off with one more call; the cleared page still fits. `settings_test.c`'s `testBuild` reads
   the Gameplay page's ten rows, `testGameOptions` four Downs from the stick fix to Film effect, and
   `settings_discs` (every disc) shows the row from both entries.
+- `settings_test.c`: Gameplay > Yorda's seven rows (the Chain swing speed and Chain swing slowdown rows
+  after Natural chains), their value text ("4 (original)", else the number), ten steps round
+  4..10, 1..4 with the key written as the number and the achievements untouched, and their notes after
+  Natural chains' note.
 - `settings_extra_test.c`'s `testNaturalChains` and `testSkipOpening`: Options > Gameplay > Yorda >
   Natural chains (after Yorda trips, before Back) and Gameplay > Cutscenes > Skip the opening (the
   page's first row), each opened through Gameplay (`openGameplayPage`, `openLink` in

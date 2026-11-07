@@ -845,6 +845,13 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_PEACEFUL] = "おとなしい影",
     [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
         "オン：影は現れた場所にとどまり、イコやヨルダを襲いません。実績が無効になります。",
+    [UI_STR_OPT_VAR_CHAIN_SPEED] = "鎖の揺れの速さ",
+    [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
+        "イコがつかまって揺らしたときに、鎖が揺れる速さです。1が最も遅く、10が最も速く、4がゲーム本来の値です。実績はそのままです。",
+    [UI_STR_OPT_VAR_CHAIN_DAMPING] = "鎖の揺れのおさまり",
+    [UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE] =
+        "イコが鎖を揺らしていないときに、揺れがおさまる速さです。1が最も遅く、10が最も速く、4がゲーム本来の値です。実績はそのままです。",
+    [UI_STR_VAL_VAR_CHAIN_ORIGINAL] = "4（オリジナル）",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

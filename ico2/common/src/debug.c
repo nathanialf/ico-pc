@@ -63,6 +63,10 @@ int ico_opt_debug_option(void);
 void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
                              int *ignore_demo_camera, int *hand_camera, void (*menu_open)(void));
 
+/* Gameplay > Yorda's Chain swing speed and slowdown: the two chain switches
+   (port/game/variants.h ico_variants_bind_debug_chain) */
+void ico_variants_bind_debug_chain(int *cycle_speed, int *slow_speed);
+
 #ifdef ICO_RD
 
 #include "GifHost.h"
@@ -1220,6 +1224,10 @@ void debug_VariableInit(void)
        shipped value leaves its switch as set above (port/game/variants.c) */
     ico_variants_bind_debug(&debug_one_hit_only, &debug_ignore_dodge, &debug_enemy_battle_type,
                             &debug_ignore_demo_camera, &debug_hand_camera, debug_MenuOpen);
+    /* PC port: Chain swing speed and slowdown hold CHAIN CYCLE SPEED and CHAIN
+       SLOW SPEED (4 and 4 above; chain.c's initPendulum and DecreasePdlChain
+       read them on every disc) */
+    ico_variants_bind_debug_chain(&debug_chain_cycle_speed, &debug_chain_slow_speed);
 }
 
 void debug_Init(void)

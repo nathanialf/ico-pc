@@ -1002,6 +1002,15 @@ typedef enum UiStrId {
     UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD,
     UI_STR_OPT_VAR_PEACEFUL,
     UI_STR_OPT_VAR_PEACEFUL_NOTE,
+    /* Gameplay > Yorda (v0.10.5): Chain swing speed and Chain swing slowdown
+       ([variants] chain_swing_speed, chain_swing_damping) with their notes,
+       and the value text of the game's own 4 ("4 (original)"; the other
+       values are plain numbers) */
+    UI_STR_OPT_VAR_CHAIN_SPEED,
+    UI_STR_OPT_VAR_CHAIN_SPEED_NOTE,
+    UI_STR_OPT_VAR_CHAIN_DAMPING,
+    UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE,
+    UI_STR_VAL_VAR_CHAIN_ORIGINAL,
     /* the community translations' names (the Language and Menu language
        rows, after UI_STR_LANG_ZH), in their own language in every table */
     UI_STR_LANG_RU_BOBTTZ,

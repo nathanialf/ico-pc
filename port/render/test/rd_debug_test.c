@@ -68,7 +68,8 @@ void debug_Menu(void);
 void debug_Menu_off(void);
 void debug_MenuOpen(void);
 extern int debug_one_hit_only, debug_ignore_dodge, debug_enemy_battle_type,
-    debug_ignore_demo_camera, debug_hand_camera, debugBackGroundDisableFlag;
+    debug_ignore_demo_camera, debug_hand_camera, debugBackGroundDisableFlag,
+    debug_chain_cycle_speed, debug_chain_slow_speed;
 int debug_SnapShot(int idx);
 void dl_Init(void);
 void dl_SetDLPriority(int pri);
@@ -301,6 +302,8 @@ void ChangeFieldCollisionDebugMode(int on)
 static struct {
     int binds;
     int *oneHit, *dodge, *battle, *demoCam, *hand;
+    int chainBinds;
+    int *chainCycle, *chainSlow;
     void (*menuOpen)(void);
 } s_bind;
 
@@ -314,6 +317,13 @@ void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
     s_bind.demoCam = ignore_demo_camera;
     s_bind.hand = hand_camera;
     s_bind.menuOpen = menu_open;
+}
+
+void ico_variants_bind_debug_chain(int *cycle_speed, int *slow_speed)
+{
+    s_bind.chainBinds++;
+    s_bind.chainCycle = cycle_speed;
+    s_bind.chainSlow = slow_speed;
 }
 
 /* GsBase.h's sceVu0IVECTOR copy (debug_PrintCharacter) */
@@ -588,6 +598,9 @@ static void checkMenuOpen(void)
               s_bind.demoCam == &debug_ignore_demo_camera && s_bind.hand == &debug_hand_camera &&
               s_bind.menuOpen == debug_MenuOpen,
           "debug_VariableInit binds the five switches and debug_MenuOpen (%d binds)", s_bind.binds);
+    CHECK(s_bind.chainBinds > 0 && s_bind.chainCycle == &debug_chain_cycle_speed &&
+              s_bind.chainSlow == &debug_chain_slow_speed,
+          "debug_VariableInit binds the two chain switches (%d binds)", s_bind.chainBinds);
     /* developer mode on, as the Debug menu row needs (and as debug_Menu
        runs only then, main.c): debug_PrintfDummy draws nothing without it,
        and checkOptionFile leaves it off */

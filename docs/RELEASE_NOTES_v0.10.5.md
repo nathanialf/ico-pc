@@ -7,6 +7,7 @@
 - Options > Gameplay > Shadows has a new row, Peaceful shadows (Off as in the original game). On, the Shadows stand where they appear and never go after Ico or Yorda. It switches achievements off while it is on.
 - Options > Gameplay > Combat has a new row, Light sword colour: Red gives the light sword of a finished game the red trail of a twin the makers left unused. Only the colour changes, from the next room. On the European, Japanese, Korean and Asian discs.
 - Options > Gameplay > Combat has a new row, Stick: Insect net turns every stick into an insect net the makers left in the game unused. Ico can pick it up and carry it, but he cannot swing it or set it alight, and it never hurts a Shadow. Set the row back to Original where you need the stick; it returns from the next room.
+- Options > Gameplay > Yorda has two new rows, Chain swing speed and Chain swing slowdown, each from 1 to 10 and starting at 4 (original), the game's own. Chain swing speed sets how fast a chain swings when Ico hangs on it (a higher number swings quicker), and Chain swing slowdown how quickly the swing dies down while he is not swinging it (a higher number stops it sooner). Neither switches achievements off.
 - When a cutscene runs slowly, the game now saves one picture from it and a copy of the log in a file called `slow-` and the date, in the logs folder, once each time you start it. If you report a slow cutscene, attach that file with the log.
 
 ## Fixed

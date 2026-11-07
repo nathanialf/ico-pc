@@ -52,12 +52,22 @@
  *   [variants] peaceful_shadows
  *                          false  the Shadows get no brain thread (the game's
  *                                  BrainOnOff switch, for Shadows only)
+ *   [variants] chain_swing_speed
+ *                          4      1..10: how fast a chain swings under Ico
+ *                                  (the game's debug row CHAIN CYCLE SPEED;
+ *                                  higher is a shorter swing)
+ *   [variants] chain_swing_damping
+ *                          4      1..10: how quickly a swing dies down while
+ *                                  Ico is not swinging it (CHAIN SLOW SPEED;
+ *                                  higher is quicker)
  *
  * The game reads them in three ways (docs/port/GAME_FEATURES.md "Game
  * variants" names every site):
  *   - debug switches the game already has (One hit per swing, Shadows never
  *     dodge, Shadow aggression, Ignore cutscene cameras, and No cutscene
- *     look-around as debug_hand_camera 0, the USA disc's value): debug.c's
+ *     look-around as debug_hand_camera 0, the USA disc's value; Chain swing
+ *     speed and damping as debug_chain_cycle_speed and debug_chain_slow_speed,
+ *     ico_variants_bind_debug_chain): debug.c's
  *     debug_VariableInit binds them (ico_variants_bind_debug) and
  *     ico_variants_apply writes them at the bind, at every reload and on every
  *     change; a variant at its shipped value leaves its switch as the game
@@ -78,7 +88,8 @@
  * three Combat rows (Automatic guard, Turn to face shadows, Shadows wait while
  * Ico is down: each makes the game harder, none is a cheat) and the two weapon
  * rows (Light sword colour, a colour only; Stick, a weapon that cannot hurt)
- * do not suspend them.
+ * and the two chain rows (the swing's pace, the game's own debug values) do
+ * not suspend them.
  */
 #ifndef ICO_PORT_GAME_VARIANTS_H
 #define ICO_PORT_GAME_VARIANTS_H
@@ -102,6 +113,8 @@ typedef enum IcoVariantId {
     ICO_VARIANT_SWORD_COLOUR,
     ICO_VARIANT_WEAPON,
     ICO_VARIANT_PEACEFUL_SHADOWS,
+    ICO_VARIANT_CHAIN_SWING_SPEED,   /* value 1..10 is index 0..9 */
+    ICO_VARIANT_CHAIN_SWING_DAMPING, /* value 1..10 is index 0..9 */
     ICO_VARIANT_COUNT
 } IcoVariantId;
 
@@ -182,6 +195,7 @@ int ico_variant_net_kind(void);
 
 /* The Settings page's way in.  A variant has ico_variant_count(id) values,
    numbered from 0 (a switch: 0 off, 1 on; the barrier: 0 is 5 hits, 1 is 7;
+   the chain rows: index 0..9 is the game's value 1..10, 3 (value 4) its own;
    the others as their enums above).  ico_variant_get is the index in force,
    ico_variant_set sets it (clamped; no config write), ico_variant_step moves
    it by dir (wrapping), writes [variants] <key> in memory (the caller saves
@@ -234,6 +248,12 @@ void ico_variants_reload(void);
    unbinds (tests).  Logs once per bind and applies. */
 void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
                              int *ignore_demo_camera, int *hand_camera, void (*menu_open)(void));
+
+/* The same for the two chain switches (debug_chain_cycle_speed, debug_chain_slow_speed),
+   called right after ico_variants_bind_debug (a separate call so that one's
+   signature stays).  A value of 4, the game's own, leaves the switch as the
+   game set it. */
+void ico_variants_bind_debug_chain(int *cycle_speed, int *slow_speed);
 
 /* Writes the bound switches from the values in force (variants.h above) and
    logs "variants: applied ..." with every value and every switch.  Called at

@@ -281,6 +281,23 @@ static void testTables(void)
             }
         }
     }
+    /* Gameplay > Yorda (v0.10.5): the two chain rows, their notes and the
+       game's own 4 as a value, the same rule */
+    for (int id = UI_STR_OPT_VAR_CHAIN_SPEED; id <= UI_STR_VAL_VAR_CHAIN_ORIGINAL; id++) {
+        for (int l = 0; l < UI_LANG_TABLES; l++) {
+            const int community = l >= UI_LANG_COMMUNITY_FIRST;
+            const char *row = kTables[l][id];
+            CHECK(community ? (row == NULL || row[0] != 0) : (row != NULL && row[0] != 0),
+                  "%s: chain string %d %s", kNames[l], id,
+                  community ? "English (NULL) or the translator's words" : "in its own words");
+            /* "4 (original)" is the same word in English, French and Spanish */
+            if (l != UI_LANG_EN && !community && row != NULL &&
+                id != UI_STR_VAL_VAR_CHAIN_ORIGINAL) {
+                CHECK(strcmp(row, kTables[UI_LANG_EN][id]) != 0,
+                      "%s: chain string %d is not the English text", kNames[l], id);
+            }
+        }
+    }
     /* Extras > Unused content (v0.10.3): the page, its rows and notes and
        the three early show names, the same rule */
     for (int id = UI_STR_SECTION_UNUSED; id <= UI_STR_UNUSED_ART_COPYRIGHT; id++) {

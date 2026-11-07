@@ -266,6 +266,8 @@ or number that is no value reads as the default and is logged once.
 | `sword_colour` | string | `"original"` | `"original"` or `"red"`: the light sword (weapon kind 9) is made as its red twin, kind 8, from the next room; offered on pal, jpn, kor and cn only (the other tables have no kinds 8 and 9: `"red"` reads as `"original"` there, logged once); does not suspend achievements |
 | `weapon` | string | `"original"` | `"original"` or `"net"`: the stick (kind 1) is made as the insect net (kind 7, 6 on jun26), from the next room: held, never swung, never lit, power 0; does not suspend achievements |
 | `peaceful_shadows` | bool | `false` | a Shadow is started without its brain thread (the game's `BrainOnOff` switch, for Shadows only; Yorda's brain is untouched); suspends achievements |
+| `chain_swing_speed` | int | `4` | `1` to `10`: the game's debug row `CHAIN CYCLE SPEED` (`debug_chain_cycle_speed`), the swing's period when Ico takes hold of a chain; higher is a shorter swing, `4` the game's own (leaves the game's value alone); anything else reads as `4` with a log line; does not suspend achievements |
+| `chain_swing_damping` | int | `4` | `1` to `10`: the game's debug row `CHAIN SLOW SPEED` (`debug_chain_slow_speed`), how fast a swing dies down while Ico is not swinging it (`0.05` of swing amplitude per tick per step); `4` the game's own; same reading and rule as above |
 
 The Debug menu row (Options > Developer, with Developer mode on) has no key: its press marks the Debug menu used until the options are reloaded,
 which suspends achievements too (`ico_variants_suspend_achievements`, read by `gamestate.c` beside
