@@ -187,6 +187,7 @@ add_library(ico_render STATIC
     rd_core.c
     rd_crack_fill.c # above 1x: the pixels no draw covered between drawn ones, before the fog
     rd_crt.c # the CRT filter at present time
+    rd_fsr1.c # Upscaling: FSR 1.0 (AMD FidelityFX Super Resolution 1.0) at present time
     rd_tone.c # the colour adjustment's settings (Options > Picture: gamma, brightness, contrast, saturation)
     rd_date_selftest.c # DATE through the stencil bit: the start-up check on the device
     rd_dst_read.c # the exact GS blend: the destination read
@@ -1075,6 +1076,17 @@ if(ICO_RUN_TESTS)
                      --enhanced --resolution 2x --downsample --stats)
     set_tests_properties(rd_replay_tool_downsample PROPERTIES
                          PASS_REGULAR_EXPRESSION "present: downsample 1024x512 -> 512x256, window reduce off"
+                         SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    # Upscaling: FSR 1.0 (issue 99): the 1x picture (the dump's 512x256
+    # DISPLAY line-doubled to 512x512) EASU-upscaled and RCAS-sharpened to
+    # the 960x720 box, named by --stats (at 640x480 the box has fewer rows
+    # than the picture and FSR 1.0 does not run)
+    add_test(NAME rd_replay_tool_fsr1
+             COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_fsr1.png" --present 960x720
+                     --fsr1 --stats)
+    set_tests_properties(rd_replay_tool_fsr1 PROPERTIES
+                         PASS_REGULAR_EXPRESSION "present: fsr1 512x512 -> 960x720"
                          SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
     # the same dump listed without a device (--list --no-device)
     add_test(NAME rd_replay_tool_list
