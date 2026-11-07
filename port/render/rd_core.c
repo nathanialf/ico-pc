@@ -34,6 +34,7 @@
 #include "rd_tex.h"
 #include "rd_tex_decode.h"
 #include "rd_tone.h"
+#include "rd_velocity.h"
 #include "rd_vis.h"
 #include "rd_vu_skin_check.h"
 #include "texpack.h"
@@ -2696,6 +2697,9 @@ void rd_end_frame(int keep)
     closeNote(rd__now_ms() - closeAt);
     /* with interpolation on (either preset) the host presents (rd_present);
      * with it off the frame is replayed and presented once from here */
+    if (!rd_interpolation_active()) {
+        rd__velocity_attach(f, f->keep); /* VuPrevCB: the tick before's (rd_velocity.h) */
+    }
     if (g_rd.hasDevice && !rd_interpolation_active()) {
         originalPicture(f);
     }

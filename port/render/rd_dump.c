@@ -104,6 +104,12 @@
  *            of a blended present's frame (rd_interp.c, the draws marked
  *            RD_VU_TICK_CAMERAS; rd.h rd_dump_blended_arm), 0 and zeros
  *            for a tick's frame.  A version 3 to 13 dump has none)
+ *   (version 16: no new section: a VU draw's u[3] may carry RD_VU_PREV and
+ *            the payload offset of its VuPrevCB, the fixed part of the
+ *            draw's payload as the picture before drew it (rd_velocity.h),
+ *            appended to the payload; a version 3 to 15 dump has none and
+ *            replays with velocity 0.  A VuPrevCB whose bytes do not hold
+ *            the draw's own header shape is dropped at load)
  *   (version 15: u32 facing table count; per table: u32 mesh id (one of
  *            the meshes above), u32 vertexCount, then (vertexCount + 7) / 8
  *            bytes, bit v (LSB first) set when the triangle kicked at
@@ -132,6 +138,7 @@
 #include "rd_mesh.h"
 #include "rd_passring.h"
 #include "rd_tex.h"
+#include "rd_velocity.h"
 #include "shader_consts.h"
 
 #define MAX_REFS 4096
@@ -945,6 +952,14 @@ bool rd__load_frame(const char *path, RdFrame *out)
                 break;
             default:
                 break;
+            }
+            if (c->type >= RDC_MESH && c->type <= RDC_PARTICLES &&
+                (ver < 16u || c->type == RDC_PARTICLES ||
+                 ((c->u[3] & RD_VU_PREV) != 0u && !rd__velocity_prev(out, c)))) {
+                /* VuPrevCB (version 16, rd_velocity.h): none in an older
+                 * dump (u[3] 0 or RD_VU_TICK_CAMERAS), nor one whose bytes
+                 * do not hold the draw's shape: velocity 0 */
+                c->u[3] &= RD_VU_TICK_CAMERAS;
             }
         }
     }

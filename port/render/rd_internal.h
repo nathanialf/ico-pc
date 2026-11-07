@@ -4423,7 +4423,7 @@ bool rd__read_texture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t 
  * dump before 10 loads as the 4:3 frame (aspect 4/3, wExact 512, cullW 512).
  * A dump holds the picture as drawn at its width: a replay can crop it to a
  * narrower aspect, never widen it (rd_replay_tool). */
-#define RD_DUMP_VERSION 15u
+#define RD_DUMP_VERSION 16u
 #define RD_DUMP_REGION_BYTES 8
 bool rd__dump_frame(const RdFrame *f, const char *path);
 bool rd__load_frame(const char *path, RdFrame *out);

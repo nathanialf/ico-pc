@@ -705,6 +705,17 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_prepass_batch", "false"), "0") == 0);
     CHECK(strcmp(ico_dev_env_value("vu_prepass_batch", "true"), "1") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.vu_prepass_batch"), "vu_prepass_batch") == 0);
+    /* velocity_test and velocity_sign: the temporal upscaler's motion vectors
+       and their sign (port/render/rd_velocity.c) */
+    CHECK(strcmp(ico_dev_env_name("velocity_test"), "ICO_RD_VELOCITY") == 0);
+    CHECK(strcmp(ico_dev_env_value("velocity_test", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("velocity_test", "false"), "0") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.velocity_test"), "velocity_test") == 0);
+    CHECK(strcmp(ico_dev_env_name("velocity_sign"), "ICO_RD_VELOCITY_SIGN") == 0);
+    CHECK(strcmp(ico_dev_env_value("velocity_sign", "-1"), "-1") == 0);
+    CHECK(strcmp(ico_dev_env_value("velocity_sign", "1"), "1") == 0);
+    CHECK(ico_dev_env_value("velocity_sign", "true") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.velocity_sign"), "velocity_sign") == 0);
     /* vu_merge: the draw merge's A/B switch (port/render/rd_replay_vu.c
        vuMergeInit) */
     CHECK(strcmp(ico_dev_env_name("vu_merge"), "ICO_RD_VU_MERGE") == 0);
