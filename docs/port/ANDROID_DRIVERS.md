@@ -104,7 +104,9 @@ through the package loader is not verified; the skin check's twins under it are 
 libvulkan_freedreno.so: TU_DEBUG is not set`. Mesa's documentation lists `nobin` among `TU_DEBUG`'s
 options (docs.mesa3d.org/drivers/freedreno.html). It is unverified that the variable reaches the
 driver on Android through libadrenotools' loader: the twins' result under it is the indicator
-(`window_bones.c` reads `TU_DEBUG` back and says `window: VU skin check ladder: step 2 of 2
+(`window_bones.c` takes step 2 for in force only when `TU_DEBUG` holds `nobin` and the Turnip
+package actually loaded, `bones_nobin_in_force`: the variable stays set when the open fails or the
+phone's own driver runs; it then says `window: VU skin check ladder: step 2 of 2
 (TU_DEBUG=nobin) for this start; ...`; twins still differing write `turnip_debug = off`).
 `ico_gpu_driver_android_turnip_package` tells the ladder whether this start runs such a package
 (the start the variable can reach).
