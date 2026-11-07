@@ -563,6 +563,12 @@ void rhi_wait_frame(void)
     be()->wait_frame();
 }
 
+bool rhi_commands_left(void)
+{
+    RHI_GUARD_SLOT(RHI_SLOT_NOW());
+    return be()->commands_left();
+}
+
 uint32_t rhi_frame_slot(void)
 {
     return be()->frame_slot();

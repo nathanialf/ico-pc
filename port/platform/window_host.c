@@ -4873,6 +4873,7 @@ static void slow_scene_check(void)
     b.gpuN = s_perf.gpuN;
     b.spanSumMs = s_perf.gpu;
     b.waitSumMs = s_perf.gpuDisplayWait;
+    b.presentSumMs = s_perf.gpuPresent;
     b.boundMs = ico_config_get_float("dev.slow_scene_dump_ms", 40.0);
     if (!window_slow_scene_due(&b)) {
         return;

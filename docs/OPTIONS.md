@@ -579,7 +579,10 @@ on the [Combat](#combat) page.
   keeps hers. It is different from **Shadows never take Yorda** (the row
   above), where the Shadows still come for you and fight but do not carry her
   off: with Peaceful shadows they do not come at all. Switches achievements
-  off, the same as the other rows that make the game easier.
+  off, the same as the other rows that make the game easier. The story's own
+  scenes were checked by reading the game's code, not by playing them all
+  with the row On: if a scene ever stalls waiting for a Shadow, switch the
+  row Off and load your save.
 
 ### Combat
 

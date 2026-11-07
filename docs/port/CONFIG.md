@@ -449,7 +449,7 @@ under the same name (below). Read through the store:
 | `unlock_credits` | bool | `false` | Extras > Credits unlocked (`port/game/credits.c`) |
 | `perf_log` | bool | `false` | `ico-pc-perf.csv` in the logs folder, one line per [replayed](ARCHITECTURE.md#terms) frame (`port/platform/window_host.c` (`perf_csv_open`)) |
 | `slow_step_ms` | float | `8` | the slow-step log threshold; 0 is off (`port/platform/window_host.c` (`ico_window_open`)) |
-| `slow_scene_dump_ms` | float | `40` | the slow-scene dump's bound: when a 10 s block spent most of its time in a scene layout and its timed replays' GPU work (the span less the display wait) averaged over this many ms, the game writes one frame and the log to `logs/slow-<date>-<time>.zip`, once a run and not before 30 s of uptime; 0 is off. Written in releases too ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides)) (`port/platform/window_host.c` (`slow_scene_check`), `window_scene.h` (`window_slow_scene_due`)) |
+| `slow_scene_dump_ms` | float | `40` | the slow-scene dump's bound: when a 10 s block spent most of its time in a scene layout and its timed replays' GPU work (the span less the display wait and the present pass) averaged over this many ms, the game writes one frame and the log to `logs/slow-<date>-<time>.zip`, once a run and not before 30 s of uptime; 0 is off. Written in releases too ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides)) (`port/platform/window_host.c` (`slow_scene_check`), `window_scene.h` (`window_slow_scene_due`)) |
 | `blend` | string | (none: `fixed`) | the A/B switches below, as their ini keys |
 | `uber` | string | `auto` | |
 | `fog_path` | string | (none) | |

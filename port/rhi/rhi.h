@@ -1186,6 +1186,13 @@ void rhi_wait_frame(void);
  * finished.  Per-frame resources outside the RHI (upload buffers, query
  * results) are keyed by it, not by a counter of their own. */
 uint32_t rhi_frame_slot(void);
+/* true when rhi_begin_commands can give one more list in the current slot
+ * (Vulkan: fewer than its lists a slot are begun; the others always).  The
+ * renderer asks before it ends a picture's list to begin the present's own
+ * (rd_submit.c): with no list left the present's pass shares the scene's
+ * list instead, so the picture is still presented and no acquired image is
+ * left waiting for a present that never comes. */
+bool rhi_commands_left(void);
 /* Full GPU idle, for shutdown, resize and verification readbacks. */
 void rhi_wait_idle(void);
 /* Full GPU idle, then every deferred destroy is carried out now, the current

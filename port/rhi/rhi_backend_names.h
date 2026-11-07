@@ -57,6 +57,7 @@
 #define rhi_submit              RHI__NAME(submit)
 #define rhi_wait_frame           RHI__NAME(wait_frame)
 #define rhi_frame_slot           RHI__NAME(frame_slot)
+#define rhi_commands_left        RHI__NAME(commands_left)
 #define rhi_wait_idle            RHI__NAME(wait_idle)
 #define rhi_collect_garbage_now  RHI__NAME(collect_garbage_now)
 #define rhi_cmd_barrier          RHI__NAME(cmd_barrier)
