@@ -502,6 +502,17 @@ target_compile_options(rd_interp_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT
 target_include_directories(rd_interp_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_interp_test PRIVATE ico_render)
 
+# rd_velocity_test: the scene's motion vectors (rd_velocity.c, the velocity
+# pass of rd_replay_vu.c): the source rule on synthetic pairs (a moved mesh's
+# VuPrevCB and its delta, no pair, a cut, off, two presents between ticks)
+# and on a device the moving mesh's pixels in VELOCITY, SCENE unchanged, the
+# dump rd_replay_tool_velocity replays
+add_executable(rd_velocity_test test/rd_velocity_test.c)
+target_compile_options(rd_velocity_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_velocity_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_velocity_test PRIVATE ico_render)
+ico_copy_sdl3_dll(rd_velocity_test)
+
 # rd_mirror_test: the mirror mode: the present is the exact
 # flip with it on (Original, Enhanced, interpolated), UI prims land on the
 # same output pixels (the replay's flip cancels the present's), SCENE's UI
@@ -1093,6 +1104,19 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_pass_dump.cmake")
     set_tests_properties(rd_replay_tool_pass_dump PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                              FIXTURES_REQUIRED rd_dump TIMEOUT 300)
+    # the motion vectors (rd_velocity.h; test/rd_replay_tool_velocity.cmake):
+    # --velocity --velocity-dump on rd_velocity's moving mesh writes a PNG
+    # with moving texels; every target and the present the same bytes with
+    # and without --velocity on that dump and on rd_pixel's (Off identity)
+    add_test(NAME rd_replay_tool_velocity
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_velocity_moving.rddump"
+                     "-DPIXEL=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_velocity"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_velocity.cmake")
+    set_tests_properties(rd_replay_tool_velocity
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                    FIXTURES_REQUIRED "rd_dump;rd_velocity_dump" TIMEOUT 300)
     # --loss-bisect (the frame one pass longer each time, clean on this
     # device) and --passes (the pass window: the whole frame's window draws
     # the plain picture; one pass stops the walk at the next)
@@ -1204,6 +1228,10 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_crt PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_filter COMMAND rd_filter_test)
     add_test(NAME rd_interp COMMAND rd_interp_test)
+    # the motion vectors; leaves rd_velocity_moving.rddump (a frame with
+    # VuPrevCBs) for rd_replay_tool_velocity
+    add_test(NAME rd_velocity COMMAND rd_velocity_test "${CMAKE_CURRENT_BINARY_DIR}")
+    set_tests_properties(rd_velocity PROPERTIES FIXTURES_SETUP rd_velocity_dump)
     add_test(NAME rd_still COMMAND rd_still_test)
     add_test(NAME rd_mirror COMMAND rd_mirror_test)
     set_tests_properties(rd_mirror PROPERTIES SKIP_RETURN_CODE 77)
@@ -1240,6 +1268,7 @@ if(ICO_RUN_TESTS)
                              rd_shadow rd_shadow_edges rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_display_change rd_native PROPERTIES ENVIRONMENT
                                                                            "${_env}")
         set_tests_properties(${rd_blur_SHARDS} PROPERTIES ENVIRONMENT "${_env}")
+        set_tests_properties(rd_velocity PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_blur's glow fold case (k) alone on the tile class's fake
     # (ICO_VK_FAKE_LIMITS=moltenvk: the Apple row of the device profile):

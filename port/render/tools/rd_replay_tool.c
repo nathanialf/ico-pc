@@ -400,6 +400,21 @@
  *                         frame hashes as the last rendered one's is shown
  *                         again (rd_reshow.c; ICO_RD_STILL_REPRESENT=0
  *                         renders every one, the pictures the same)
+ *   --velocity            the temporal upscaler's switch on (rd_velocity.h,
+ *                         [dev] velocity_test): the replay draws the scene's
+ *                         motion vectors into VELOCITY from the VuPrevCBs the
+ *                         dump carries (version 16; an older dump has none:
+ *                         every vector 0), with --interp T PREV from the
+ *                         blend at 0 (PREV's tick) to the one at T; prints
+ *                         "velocity: N of M mesh and grid draws carry their
+ *                         previous transform; the replay drew D into
+ *                         VELOCITY, Z of list 0 left at 0".  The pictures are
+ *                         the same bytes as without it
+ *   --velocity-dump PNG   (implies --velocity) VELOCITY as a picture: x and y
+ *                         in R and G about 128 (8 levels a pixel), the length
+ *                         in B (16 a pixel), black where no draw wrote it;
+ *                         prints "velocity-dump: WxH -> PNG: moving N texels,
+ *                         the largest L pixels"; exit 1 when it cannot
  *   --save-blended DUMP   (with --interp T PREV, not --presents) writes the
  *                         frame built between the two, after its replay, as
  *                         the dump F12 saves of a present drawn between the
@@ -444,6 +459,7 @@
 #include "../../include/ico_endian.h"
 #include "dump_zip.h" /* port/platform: the F12 zip */
 #include "rd_internal.h"
+#include "rd_velocity.h"
 #include "rd_mesh.h"
 #include "rd_vis.h"
 #include "rd_vu_skin_check.h"
@@ -1164,6 +1180,9 @@ static float interpT = 1.0f;
 static const char *prevDumps[16];
 static int prevCount;
 static bool noHalf;
+/* --velocity, --velocity-dump PNG: the motion vectors (rd_velocity.h) */
+static bool velocityOn;
+static const char *velocityPng;
 /* --motion-blur smooth (every replay armed as a present, rd__blur_smooth_arm)
  * and --presents N */
 static bool motionSmooth;
@@ -1421,6 +1440,72 @@ static bool printOcclusion(const char *dump, const RdFrame *f, const RdOccResult
     return ok;
 }
 
+/* --velocity: the frame's draws carrying their previous transform and the
+ * replay's velocity pass, and with --velocity-dump PNG VELOCITY as a
+ * picture: x and y in R and G about 128 (8 levels a pixel, clamped), the
+ * length in B (16 levels a pixel), alpha 255 where a draw wrote it, black
+ * where none did; then the moving texels' count.  False when PNG was asked
+ * and VELOCITY could not be read or written. */
+static bool velocityReport(const char *dump, const RdFrame *rf, const char *pngPath)
+{
+    uint32_t carried = 0, vu = 0;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < rf->lists[l].count; i++) {
+            const RdCmd *c = &rf->lists[l].cmds[i];
+            if (c->type == RDC_MESH || c->type == RDC_SKINNED || c->type == RDC_GRID) {
+                vu++;
+                carried += rd__velocity_prev(rf, c) != NULL;
+            }
+        }
+    }
+    const RdVelocityStats *vs = rd__velocity_stats();
+    printf("%s: velocity: %u of %u mesh and grid draws carry their previous transform; the replay "
+           "drew %u into VELOCITY, %u of list 0 left at 0\n",
+           dump, carried, vu, vs->drawn, vs->noRecord);
+    if (!pngPath) {
+        return true;
+    }
+    RhiTexture t;
+    RhiState *st;
+    uint32_t w = 0, h = 0;
+    if (!rd__velocity_target(&t, &st, &w, &h)) {
+        fprintf(stderr, "%s: --velocity-dump: no VELOCITY\n", dump);
+        return false;
+    }
+    float *v = malloc((size_t)w * h * 4 * sizeof(float));
+    uint8_t *px = malloc((size_t)w * h * 4);
+    bool ok = v && px && rd__velocity_read(v, (size_t)w * h * 4, &w, &h);
+    uint64_t moving = 0;
+    double most = 0.0;
+    for (size_t k = 0; ok && k < (size_t)w * h; k++) {
+        const float *q = &v[k * 4];
+        const double len = sqrt((double)q[0] * q[0] + (double)q[1] * q[1]);
+        uint8_t *o = &px[k * 4];
+        if (!(q[3] > 0.5f)) {
+            o[0] = o[1] = o[2] = o[3] = 0;
+            continue;
+        }
+        const double x = 128.0 + q[0] * 8.0, y = 128.0 + q[1] * 8.0, b = len * 16.0;
+        o[0] = (uint8_t)(x < 0.0 ? 0.0 : (x > 255.0 ? 255.0 : x));
+        o[1] = (uint8_t)(y < 0.0 ? 0.0 : (y > 255.0 ? 255.0 : y));
+        o[2] = (uint8_t)(b > 255.0 ? 255.0 : b);
+        o[3] = 255;
+        moving += len > 0.01;
+        most = len > most ? len : most;
+    }
+    ok = ok && rd_write_png(pngPath, px, w, h, w * 4, 0);
+    if (ok) {
+        printf("%s: velocity-dump: %ux%u -> %s: moving %llu texels, the largest %.3f pixels\n",
+               dump, w, h, pngPath, (unsigned long long)moving, most);
+    } else {
+        fprintf(stderr, "%s: --velocity-dump: VELOCITY not read or %s not written\n", dump,
+                pngPath);
+    }
+    free(v);
+    free(px);
+    return ok;
+}
+
 /* replays the --prev dumps in order; false on a load failure */
 static bool replayPrev(void)
 {
@@ -1491,6 +1576,12 @@ static const RdFrame *prepareFrame(const char *dump, RdFrame *pf, RdFrame *f)
         RdInterpStats ist;
         if (interpAny) {
             pf->number = f->number - 1; /* the tick before, whatever was saved between */
+        }
+        if (rd__velocity_on() && interpT > 0.0f) {
+            /* the picture before for the motion vectors: the present at
+             * alpha 0, PREV's tick (rd_velocity.h) */
+            (void)interpAt(pf, f, 0.0f, 1, &ist);
+            printf("velocity: the picture before is the blend at 0 (PREV's tick)\n");
         }
         rf = interpAt(pf, f, interpT, 1, &ist);
         if (!rf) {
@@ -1920,6 +2011,7 @@ int main(int argc, char **argv)
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
                 "[--time N] [--keys] "
                 "[--pass-dump DIR] "
+                "[--velocity] [--velocity-dump PNG] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject] "
                 "[--interp-nop-prev L:A[-B]] [--presents N] [--save-blended DUMP]]\n"
                 "       [--loss-bisect] [--passes A[-B]] [--draws A[-B]] [--mask-marks]\n"
@@ -1944,6 +2036,7 @@ int main(int argc, char **argv)
     bool occFailed = false;          /* the spec could not be written */
     bool skinCheck = false;          /* --skin-check */
     bool skinFailed = false;         /* a replay of its check failed */
+    bool velFailed = false;          /* --velocity-dump: no VELOCITY or no PNG */
     bool regionStats = false;        /* --region-stats (rd_replay_region.c) */
     RdRegionOpts regionOpts = {NULL, NULL, NULL, NULL};
     bool regionFailed = false; /* its picture or spec could not be written */
@@ -2106,6 +2199,11 @@ int main(int argc, char **argv)
             timeN = (int)n;
         } else if (strcmp(argv[i], "--no-aa1") == 0) {
             noAa1 = true;
+        } else if (strcmp(argv[i], "--velocity") == 0) {
+            velocityOn = true;
+        } else if (strcmp(argv[i], "--velocity-dump") == 0 && i + 1 < argc) {
+            velocityOn = true;
+            velocityPng = argv[++i];
         } else if (strcmp(argv[i], "--interp-any") == 0) {
             interpAny = true;
         } else if (strcmp(argv[i], "--no-reproject") == 0) {
@@ -2385,6 +2483,9 @@ int main(int argc, char **argv)
     if (overlay) {
         rd_set_present_overlay(overlayTest, NULL);
     }
+    if (velocityOn) {
+        rd__velocity_set(true); /* the temporal upscaler's switch (rd_velocity.h) */
+    }
     if (!noDevice && prevCount && !replayPrev()) {
         rd_shutdown();
         return 1;
@@ -2598,6 +2699,9 @@ int main(int argc, char **argv)
             }
             free(tp);
         }
+    }
+    if (replayed && velocityOn && !velocityReport(dump, rf, velocityPng)) {
+        velFailed = true;
     }
     if (passA) {
         RdReplayWindowStats ws;
@@ -3085,7 +3189,7 @@ int main(int argc, char **argv)
     if (rc == 0 && timeN > 0 && !timeReplays(dump, &pf, &f, rf, timeN, pw != 0)) {
         rc = 1;
     }
-    if (occFailed || regionFailed || skinFailed) {
+    if (occFailed || regionFailed || skinFailed || velFailed) {
         rc = 1;
     }
     rd__frame_free(&f);
