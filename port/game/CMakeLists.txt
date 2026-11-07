@@ -20,7 +20,7 @@
 # blocks ([gameplay] yorda_trips, yorda_trip.h); the game's side is
 # yorda_trip_live.c below
 add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c door_grace.c
-            variants.c yorda_trip.c)
+            variants.c yorda_trip.c ico_rows.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -369,6 +369,16 @@ if(ICO_RUN_TESTS)
     add_test(NAME door_grace COMMAND door_grace_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
+# Free movement and Ask Yorda for a hint (ico_rows.h): the row's key and its
+# Developer mode rule, the reload, the hint binding's presses and fires. CPU
+# only, no game sources.
+add_executable(ico_rows_test test/ico_rows_test.c ../platform/host_config.c)
+target_include_directories(ico_rows_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(ico_rows_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_rows_test PRIVATE ico_options)
+if(ICO_RUN_TESTS)
+    add_test(NAME ico_rows COMMAND ico_rows_test)
+endif()
 
 # The game variants (variants.h): the defaults, every [variants] key's round
 # trip through config.toml, the words a file may say, the achievements rule,

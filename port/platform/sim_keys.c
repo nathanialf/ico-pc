@@ -45,6 +45,7 @@ const char *const ICO_SIM_KEYS[] = {
     "variants.auto_guard",
     "variants.attack_turn",
     "variants.shadows_wait_down",
+    "developer.free_movement", /* Developer > Free movement (ico_rows.h) */
     NULL,
 };
 
@@ -81,6 +82,7 @@ static const char *const kDefaults[] = {
     "true",     /* variants.auto_guard */
     "true",     /* variants.attack_turn */
     "true",     /* variants.shadows_wait_down */
+    "false",    /* developer.free_movement */
     NULL,
 };
 
