@@ -838,6 +838,13 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_PEACEFUL] = "Peaceful shadows",
     [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
         "On: Shadows stay where they appear and never go after Ico or Yorda. Switches achievements off.",
+    [UI_STR_OPT_VAR_CHAIN_SPEED] = "Chain swing speed",
+    [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
+        "How fast a chain swings when Ico hangs on it and swings it. 1 is the slowest, 10 the fastest, 4 the game’s own. Achievements stay on.",
+    [UI_STR_OPT_VAR_CHAIN_DAMPING] = "Chain swing slowdown",
+    [UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE] =
+        "How quickly a swing dies down while Ico is not swinging the chain. 1 is the slowest, 10 the quickest, 4 the game’s own. Achievements stay on.",
+    [UI_STR_VAL_VAR_CHAIN_ORIGINAL] = "4 (original)",
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

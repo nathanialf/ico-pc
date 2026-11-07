@@ -867,6 +867,13 @@ const char *const
                 [UI_STR_OPT_VAR_PEACEFUL] = "Sombras pacíficas",
                 [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
                     "Sí: las sombras se quedan donde aparecen y nunca van a por Ico ni Yorda. Desactiva los logros.",
+                [UI_STR_OPT_VAR_CHAIN_SPEED] = "Velocidad de la cadena",
+                [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
+                    "Lo rápido que se balancea una cadena con Ico colgado. 1 es lo más lento, 10 lo más rápido y 4 como en el juego. Los logros siguen activos.",
+                [UI_STR_OPT_VAR_CHAIN_DAMPING] = "Freno de la cadena",
+                [UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE] =
+                    "Lo rápido que se apaga el balanceo mientras Ico no columpia la cadena. 1 es lo más lento, 10 lo más rápido y 4 el valor del juego. Los logros siguen activos.",
+                [UI_STR_VAL_VAR_CHAIN_ORIGINAL] = "4 (original)",
                 [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
                 [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
                 [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

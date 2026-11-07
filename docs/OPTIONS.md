@@ -530,6 +530,15 @@ Options > Gameplay > Yorda:
   links look squashed until the chain is all the way down. With this on, the
   links stay the right size and more of the chain shows as it comes down. It
   only changes the picture, not the game.
+- **Chain swing speed** sets how fast a chain swings back and forth when Ico
+  hangs on it and swings it, from **1** to **10**. A higher number is a
+  quicker swing: 1 is the slowest and 10 the fastest. It starts at
+  **4 (original)**, the game's own. The speed is set when Ico takes hold, so a
+  change reaches the next chain he grabs. It does not switch achievements off.
+- **Chain swing slowdown** sets how quickly a swing dies down while Ico is not
+  swinging the chain, from **1** to **10**. A higher number stops it sooner: 1
+  lets it swing on the longest and 10 stops it quickest. It starts at
+  **4 (original)**, the game's own. It does not switch achievements off.
 
 ### Shadows
 

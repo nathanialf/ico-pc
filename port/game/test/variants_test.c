@@ -115,7 +115,10 @@ static void test_defaults(void)
                "no_cutscene_look = false\nignore_cutscene_cameras = false\n"
                "auto_guard = true\nattack_turn = true\nshadows_wait_down = true\n"
                "peaceful_shadows = false\n"
-               "sword_colour = \"original\"\nweapon = \"original\"\n");
+               "sword_colour = \"original\"\nweapon = \"original\"\n"
+               "chain_swing_speed = 4\nchain_swing_damping = 4\n");
+    CHECK(ico_variant_get(ICO_VARIANT_CHAIN_SWING_SPEED) == 3 &&
+          ico_variant_get(ICO_VARIANT_CHAIN_SWING_DAMPING) == 3);
     CHECK(ico_variant_shadow_brain() == 1);
     CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL);
     CHECK(ico_variant_aggression() == ICO_AGGRESSION_OWN);
@@ -124,7 +127,7 @@ static void test_defaults(void)
     CHECK(ico_variants_suspend_achievements() == 0);
 }
 
-/* the names: fourteen variants, the words the keys are written with */
+/* the names: sixteen variants, the words the keys are written with */
 static void test_names(void)
 {
     CHECK(ico_variant_count(ICO_VARIANT_SHADE_TOUGHNESS) == 4);
@@ -701,6 +704,90 @@ static void test_peaceful(void)
     use_config(NULL);
 }
 
+/* Chain swing speed and damping: the game's debug values 1..10 (CHAIN CYCLE
+   SPEED, CHAIN SLOW SPEED; debug_VariableInit sets both to 4), index 0..9;
+   4 leaves the switch as the game set it, another value is written while it
+   is held, and the game's value comes back at 4, on a reload and unbound;
+   a value outside 1..10 reads as 4; neither suspends the achievements */
+static void test_chain(void)
+{
+    static const struct {
+        IcoVariantId id;
+        const char *key;
+    } rows[2] = {{ICO_VARIANT_CHAIN_SWING_SPEED, "chain_swing_speed"},
+                 {ICO_VARIANT_CHAIN_SWING_DAMPING, "chain_swing_damping"}};
+
+    int cycle = 4, slow = 4;
+
+    use_config(NULL);
+    for (int r = 0; r < 2; r++) {
+        CHECK(ico_variant_count(rows[r].id) == 10);
+        CHECK(strcmp(ico_variant_key(rows[r].id), rows[r].key) == 0);
+        CHECK(ico_variant_get(rows[r].id) == 3); /* the game's 4 */
+        CHECK(strcmp(ico_variant_value_name(rows[r].id, 0), "1") == 0 &&
+              strcmp(ico_variant_value_name(rows[r].id, 3), "4") == 0 &&
+              strcmp(ico_variant_value_name(rows[r].id, 9), "10") == 0 &&
+              strcmp(ico_variant_value_name(rows[r].id, 10), "") == 0);
+    }
+    /* bound at the game's 4 and 4: nothing written, even when set again */
+    ico_variants_bind_debug_chain(&cycle, &slow);
+    CHECK(cycle == 4 && slow == 4);
+    ico_variant_set(ICO_VARIANT_CHAIN_SWING_SPEED, 3);
+    CHECK(cycle == 4 && slow == 4);
+    /* every value reaches its switch, and only its own */
+    for (int v = 1; v <= 10; v++) {
+        ico_variant_set(ICO_VARIANT_CHAIN_SWING_SPEED, v - 1);
+        ico_variant_set(ICO_VARIANT_CHAIN_SWING_DAMPING, 10 - v);
+        CHECK(cycle == v && slow == 11 - v);
+        CHECK(ico_variants_suspend_achievements() == 0);
+    }
+    /* back at 4: the game's value returns; a value the game sets while the
+       variant holds the switch is overwritten by the put-back (the rule of
+       the other debug switches), one it sets while unheld is kept */
+    ico_variant_set(ICO_VARIANT_CHAIN_SWING_SPEED, 3);
+    CHECK(cycle == 4);
+    cycle = 7;
+    ico_variant_set(ICO_VARIANT_CHAIN_SWING_SPEED, 1);
+    CHECK(cycle == 2);
+    ico_variant_set(ICO_VARIANT_CHAIN_SWING_SPEED, 3);
+    CHECK(cycle == 7);
+    /* stepping wraps 10 -> 1 and 1 -> 10 and writes the key as the number */
+    use_config(NULL);
+    ico_variants_bind_debug_chain(&cycle, &slow);
+    CHECK(ico_variant_step(ICO_VARIANT_CHAIN_SWING_SPEED, 1) == 4 &&
+          ico_config_get_int("variants.chain_swing_speed", 0) == 5);
+    ico_variant_set(ICO_VARIANT_CHAIN_SWING_SPEED, 9);
+    CHECK(ico_variant_step(ICO_VARIANT_CHAIN_SWING_SPEED, 1) == 0 &&
+          ico_config_get_int("variants.chain_swing_speed", 0) == 1);
+    CHECK(ico_variant_step(ICO_VARIANT_CHAIN_SWING_SPEED, -1) == 9 &&
+          ico_config_get_int("variants.chain_swing_speed", 0) == 10);
+    CHECK(ico_variant_step(ICO_VARIANT_CHAIN_SWING_DAMPING, -1) == 2 &&
+          ico_config_get_int("variants.chain_swing_damping", 0) == 3 && slow == 3);
+    /* a file: read at the bind, written at once */
+    use_config("[variants]\nchain_swing_speed = 9\nchain_swing_damping = 1\n");
+    cycle = 4;
+    slow = 4;
+    ico_variants_bind_debug_chain(&cycle, &slow);
+    CHECK(cycle == 9 && slow == 1);
+    CHECK(ico_variants_suspend_achievements() == 0);
+    /* a reload with the file's values gone: the game's values back */
+    use_config(NULL);
+    ico_opt_reload();
+    CHECK(cycle == 4 && slow == 4);
+    /* not 1..10 (0, 11, a word): the game's 4, nothing written */
+    use_config("[variants]\nchain_swing_speed = 0\nchain_swing_damping = 11\n");
+    CHECK(ico_variant_get(ICO_VARIANT_CHAIN_SWING_SPEED) == 3 &&
+          ico_variant_get(ICO_VARIANT_CHAIN_SWING_DAMPING) == 3);
+    use_config("[variants]\nchain_swing_speed = \"fast\"\n");
+    CHECK(ico_variant_get(ICO_VARIANT_CHAIN_SWING_SPEED) == 3);
+    /* unbound: nothing written */
+    ico_variants_bind_debug_chain(NULL, NULL);
+    cycle = 5;
+    ico_variant_set(ICO_VARIANT_CHAIN_SWING_SPEED, 0);
+    CHECK(cycle == 5);
+    use_config(NULL);
+}
+
 /* Shadow toughness American is offered on every disc but the June 2001 demo
    (its enemy rows are its own): there a config "american" reads as Original,
    a set of it gives Original, and the row steps Original <-> Not tougher
@@ -789,6 +876,7 @@ int main(int argc, char **argv)
     test_restart_life();
     test_offered();
     test_peaceful();
+    test_chain();
     remove(s_path);
     if (failures != 0) {
         fprintf(stderr, "variants_test: %d failure(s)\n", failures);

@@ -845,6 +845,13 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_OPT_VAR_PEACEFUL] = "Ombre pacifiche",
         [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
             "Sì: le ombre restano dove compaiono e non attaccano mai Ico né Yorda. Disattiva gli obiettivi.",
+        [UI_STR_OPT_VAR_CHAIN_SPEED] = "Velocità della catena",
+        [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
+            "Quanto veloce oscilla una catena quando Ico vi si aggrappa e la fa dondolare. 1 è il più lento, 10 il più veloce, 4 il valore del gioco. Gli obiettivi restano attivi.",
+        [UI_STR_OPT_VAR_CHAIN_DAMPING] = "Freno della catena",
+        [UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE] =
+            "Quanto in fretta si smorza l’oscillazione finché Ico non fa dondolare la catena. 1 è il più lento, 10 il più veloce, 4 il valore del gioco. Gli obiettivi restano attivi.",
+        [UI_STR_VAL_VAR_CHAIN_ORIGINAL] = "4 (originale)",
         [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
         [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
         [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

@@ -30,12 +30,17 @@ static const char *const kBarrier[2] = {"5", "7"};
 static const char *const kBool[2] = {"false", "true"};
 static const char *const kSword[ICO_SWORD_COUNT] = {"original", "red"};
 static const char *const kWeapon[ICO_WEAPON_COUNT] = {"original", "net"};
+/* the chain rows: the game's debug values 1..10 (debug.c's CHAIN CYCLE SPEED
+   and CHAIN SLOW SPEED rows run 1 to 10), index = value - 1 */
+#define CHAIN_VALUES 10
+#define CHAIN_SHIPPED 4 /* debug_VariableInit's value for both */
+static const char *const kChain[CHAIN_VALUES] = {"1", "2", "3", "4", "5", "6", "7", "8", "9", "10"};
 
 static const char *const kKeys[ICO_VARIANT_COUNT] = {
-    "shade_toughness", "one_hit",         "never_dodge",       "aggression",
-    "no_hints",        "barrier_hits",    "no_cutscene_look",  "ignore_cutscene_cameras",
-    "auto_guard",      "attack_turn",     "shadows_wait_down", "sword_colour",
-    "weapon",          "peaceful_shadows"};
+    "shade_toughness", "one_hit",          "never_dodge",       "aggression",
+    "no_hints",        "barrier_hits",     "no_cutscene_look",  "ignore_cutscene_cameras",
+    "auto_guard",      "attack_turn",      "shadows_wait_down", "sword_colour",
+    "weapon",          "peaceful_shadows", "chain_swing_speed", "chain_swing_damping"};
 
 /* 0: not read yet */
 static int s_loaded;
@@ -52,11 +57,15 @@ enum {
     DBG_BATTLE_TYPE,        /* debug_enemy_battle_type */
     DBG_IGNORE_DEMO_CAMERA, /* debug_ignore_demo_camera */
     DBG_HAND_CAMERA,        /* debug_hand_camera */
-    DBG_COUNT
+    DBG_CHAIN_CYCLE,        /* debug_chain_cycle_speed (ico_variants_bind_debug_chain) */
+    DBG_CHAIN_SLOW,         /* debug_chain_slow_speed */
+    DBG_COUNT,
+    DBG_BIND_FIRST = DBG_CHAIN_CYCLE /* ico_variants_bind_debug binds the ones before */
 };
 
 static const char *const kDbgNames[DBG_COUNT] = {
-    "one_hit_only", "ignore_dodge", "enemy_battle_type", "ignore_demo_camera", "hand_camera"};
+    "one_hit_only", "ignore_dodge",      "enemy_battle_type", "ignore_demo_camera",
+    "hand_camera",  "chain_cycle_speed", "chain_slow_speed"};
 static int *s_dbg[DBG_COUNT];
 static int s_dbg_base[DBG_COUNT];
 static int s_dbg_held[DBG_COUNT];
@@ -90,6 +99,9 @@ int ico_variant_count(IcoVariantId id)
         return ICO_SWORD_COUNT;
     case ICO_VARIANT_WEAPON:
         return ICO_WEAPON_COUNT;
+    case ICO_VARIANT_CHAIN_SWING_SPEED:
+    case ICO_VARIANT_CHAIN_SWING_DAMPING:
+        return CHAIN_VALUES;
     default:
         return 0;
     }
@@ -116,6 +128,9 @@ const char *ico_variant_value_name(IcoVariantId id, int index)
         return kSword[index];
     case ICO_VARIANT_WEAPON:
         return kWeapon[index];
+    case ICO_VARIANT_CHAIN_SWING_SPEED:
+    case ICO_VARIANT_CHAIN_SWING_DAMPING:
+        return kChain[index];
     default:
         return kBool[index];
     }
@@ -194,14 +209,34 @@ static void log_summary(void)
     fprintf(stderr,
             "variants: shade_toughness=%s one_hit=%d never_dodge=%d aggression=%s no_hints=%d "
             "barrier_hits=%s no_cutscene_look=%d ignore_cutscene_cameras=%d auto_guard=%d "
-            "attack_turn=%d shadows_wait_down=%d sword_colour=%s weapon=%s peaceful_shadows=%d\n",
+            "attack_turn=%d shadows_wait_down=%d sword_colour=%s weapon=%s peaceful_shadows=%d "
+            "chain_swing_speed=%s chain_swing_damping=%s\n",
             kToughness[s_value[ICO_VARIANT_SHADE_TOUGHNESS]], s_value[ICO_VARIANT_ONE_HIT],
             s_value[ICO_VARIANT_NEVER_DODGE], kAggression[s_value[ICO_VARIANT_AGGRESSION]],
             s_value[ICO_VARIANT_NO_HINTS], kBarrier[s_value[ICO_VARIANT_BARRIER_HITS]],
             s_value[ICO_VARIANT_NO_CUTSCENE_LOOK], s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS],
             s_value[ICO_VARIANT_AUTO_GUARD], s_value[ICO_VARIANT_ATTACK_TURN],
             s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN], kSword[s_value[ICO_VARIANT_SWORD_COLOUR]],
-            kWeapon[s_value[ICO_VARIANT_WEAPON]], s_value[ICO_VARIANT_PEACEFUL_SHADOWS]);
+            kWeapon[s_value[ICO_VARIANT_WEAPON]], s_value[ICO_VARIANT_PEACEFUL_SHADOWS],
+            kChain[s_value[ICO_VARIANT_CHAIN_SWING_SPEED]],
+            kChain[s_value[ICO_VARIANT_CHAIN_SWING_DAMPING]]);
+}
+
+/* [variants] key as a game value 1..10 (the debug rows' range) as an index
+   0..9; anything else is named in the log and gives the game's own */
+static int chain_index(const char *key)
+{
+    char path[64];
+    long long v;
+
+    snprintf(path, sizeof(path), "variants.%s", key);
+    v = ico_config_get_int(path, CHAIN_SHIPPED);
+    if (v < 1 || v > CHAIN_VALUES) {
+        fprintf(stderr, "variants: [variants] %s = %lld is not 1 to %d; using %d\n", key, v,
+                CHAIN_VALUES, CHAIN_SHIPPED);
+        v = CHAIN_SHIPPED;
+    }
+    return (int)v - 1;
 }
 
 static void load(void)
@@ -264,6 +299,9 @@ static void load(void)
     /* a switch the game ships Off (a cheat: achievements are suspended) */
     s_value[ICO_VARIANT_PEACEFUL_SHADOWS] =
         ico_config_get_bool("variants.peaceful_shadows", 0) != 0;
+    /* the chain rows: 4 is the game's own value */
+    s_value[ICO_VARIANT_CHAIN_SWING_SPEED] = chain_index("chain_swing_speed");
+    s_value[ICO_VARIANT_CHAIN_SWING_DAMPING] = chain_index("chain_swing_damping");
     log_summary();
 }
 
@@ -307,6 +345,15 @@ static int dbg_wanted(int i)
         /* the European cutscene look-around (camera-root.c's stick block
            under debug_hand_camera, which the USA disc never sets) */
         return s_value[ICO_VARIANT_NO_CUTSCENE_LOOK] ? 0 : -1;
+    case DBG_CHAIN_CYCLE:
+        /* the game's own value (4) leaves the switch as the game set it */
+        return s_value[ICO_VARIANT_CHAIN_SWING_SPEED] + 1 == CHAIN_SHIPPED
+                   ? -1
+                   : s_value[ICO_VARIANT_CHAIN_SWING_SPEED] + 1;
+    case DBG_CHAIN_SLOW:
+        return s_value[ICO_VARIANT_CHAIN_SWING_DAMPING] + 1 == CHAIN_SHIPPED
+                   ? -1
+                   : s_value[ICO_VARIANT_CHAIN_SWING_DAMPING] + 1;
     default:
         return -1;
     }
@@ -346,7 +393,8 @@ void ico_variants_apply(void)
             "variants: applied shade_toughness=%s one_hit=%d never_dodge=%d aggression=%s "
             "no_hints=%d (hints %s) barrier_hits=%d no_cutscene_look=%d "
             "ignore_cutscene_cameras=%d auto_guard=%d attack_turn=%d shadows_wait_down=%d "
-            "sword_colour=%s weapon=%s (net kind %d) peaceful_shadows=%d;%s\n",
+            "sword_colour=%s weapon=%s (net kind %d) peaceful_shadows=%d chain_swing_speed=%s "
+            "chain_swing_damping=%s;%s\n",
             kToughness[s_value[ICO_VARIANT_SHADE_TOUGHNESS]], s_value[ICO_VARIANT_ONE_HIT],
             s_value[ICO_VARIANT_NEVER_DODGE], kAggression[s_value[ICO_VARIANT_AGGRESSION]],
             s_value[ICO_VARIANT_NO_HINTS], ico_hints_on() ? "on" : "off",
@@ -354,14 +402,17 @@ void ico_variants_apply(void)
             s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS], s_value[ICO_VARIANT_AUTO_GUARD],
             s_value[ICO_VARIANT_ATTACK_TURN], s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN],
             kSword[s_value[ICO_VARIANT_SWORD_COLOUR]], kWeapon[s_value[ICO_VARIANT_WEAPON]],
-            ico_variant_net_kind(), s_value[ICO_VARIANT_PEACEFUL_SHADOWS], sw);
+            ico_variant_net_kind(), s_value[ICO_VARIANT_PEACEFUL_SHADOWS],
+            kChain[s_value[ICO_VARIANT_CHAIN_SWING_SPEED]],
+            kChain[s_value[ICO_VARIANT_CHAIN_SWING_DAMPING]], sw);
 }
 
 void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
                              int *ignore_demo_camera, int *hand_camera, void (*menu_open)(void))
 {
-    int *const p[DBG_COUNT] = {one_hit, ignore_dodge, battle_type, ignore_demo_camera, hand_camera};
-    for (int i = 0; i < DBG_COUNT; i++) {
+    int *const p[DBG_BIND_FIRST] = {one_hit, ignore_dodge, battle_type, ignore_demo_camera,
+                                    hand_camera};
+    for (int i = 0; i < DBG_BIND_FIRST; i++) {
         s_dbg[i] = p[i];
         s_dbg_base[i] = p[i] != NULL ? *p[i] : 0;
         s_dbg_held[i] = 0;
@@ -374,6 +425,23 @@ void ico_variants_bind_debug(int *one_hit, int *ignore_dodge, int *battle_type,
                 s_dbg_base[DBG_ONE_HIT], s_dbg_base[DBG_IGNORE_DODGE], s_dbg_base[DBG_BATTLE_TYPE],
                 s_dbg_base[DBG_IGNORE_DEMO_CAMERA], s_dbg_base[DBG_HAND_CAMERA],
                 menu_open != NULL ? "yes" : "no");
+    }
+    ico_variants_apply();
+}
+
+void ico_variants_bind_debug_chain(int *cycle_speed, int *slow_speed)
+{
+    int *const p[2] = {cycle_speed, slow_speed};
+    for (int i = 0; i < 2; i++) {
+        s_dbg[DBG_BIND_FIRST + i] = p[i];
+        s_dbg_base[DBG_BIND_FIRST + i] = p[i] != NULL ? *p[i] : 0;
+        s_dbg_held[DBG_BIND_FIRST + i] = 0;
+    }
+    if (cycle_speed != NULL) {
+        fprintf(stderr,
+                "variants: the game's chain switches are bound (chain_cycle_speed=%d "
+                "chain_slow_speed=%d)\n",
+                s_dbg_base[DBG_CHAIN_CYCLE], s_dbg_base[DBG_CHAIN_SLOW]);
     }
     ico_variants_apply();
 }
@@ -458,6 +526,8 @@ int ico_variant_step(IcoVariantId id, int dir)
     snprintf(path, sizeof(path), "variants.%s", kKeys[id]);
     if (id == ICO_VARIANT_BARRIER_HITS) {
         ico_config_set_int(path, v == 1 ? 7 : 5);
+    } else if (id == ICO_VARIANT_CHAIN_SWING_SPEED || id == ICO_VARIANT_CHAIN_SWING_DAMPING) {
+        ico_config_set_int(path, v + 1);
     } else if (id == ICO_VARIANT_SHADE_TOUGHNESS || id == ICO_VARIANT_AGGRESSION ||
                id == ICO_VARIANT_SWORD_COLOUR || id == ICO_VARIANT_WEAPON) {
         ico_config_set_string(path, ico_variant_value_name(id, v));

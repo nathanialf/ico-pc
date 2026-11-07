@@ -865,6 +865,13 @@ const char *const
                 [UI_STR_OPT_VAR_PEACEFUL] = "Ombres pacifiques",
                 [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
                     "Activé : les ombres restent là où elles apparaissent et ne s’en prennent jamais à Ico ni à Yorda. Désactive les succès.",
+                [UI_STR_OPT_VAR_CHAIN_SPEED] = "Vitesse de la chaîne",
+                [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
+                    "Vitesse à laquelle une chaîne se balance quand Ico s’y accroche et la balance. 1 est le plus lent, 10 le plus rapide, 4 la valeur du jeu. Les succès restent actifs.",
+                [UI_STR_OPT_VAR_CHAIN_DAMPING] = "Arrêt de la chaîne",
+                [UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE] =
+                    "Vitesse à laquelle le balancement s’éteint tant qu’Ico ne balance pas la chaîne. 1 est le plus lent, 10 le plus rapide, 4 la valeur du jeu. Les succès restent actifs.",
+                [UI_STR_VAL_VAR_CHAIN_ORIGINAL] = "4 (original)",
                 [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
                 [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
                 [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",

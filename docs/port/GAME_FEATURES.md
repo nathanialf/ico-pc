@@ -378,6 +378,28 @@ program's link order (`libico_game.a` before `libico_options.a`) needs nothing f
 | Shadow aggression | `debug_enemy_battle_type`: bold/wary = Positive/Negative, patient/quick = Low/High (`debugEnemyBattleName` 0 Positive-Low, 1 Negative-Low, 2 Positive-High, 3 Negative-High); Their own: untouched | `actEnemyStart` and its twins (`enemy_act.c`) |
 | Ignore cutscene cameras | `debug_ignore_demo_camera` 1 | `ico2/omori/src/camera-root.c` |
 | No cutscene look-around | `debug_hand_camera` 0, the USA disc's value (it never sets it) | `camera-root.c`: the right-stick block under `handCameraLimitP/V` (`SetHandCameraLimitInDemo`) and the cutscene zoom range |
+| Chain swing speed | `debug_chain_cycle_speed` (the debug row `CHAIN CYCLE SPEED`, 1..10), bound by `ico_variants_bind_debug_chain`; 4 (`debug_VariableInit`'s value) leaves it alone | `ico2/omori/src/chain.c`: `initPendulum` (from `StartPendulum`) and `InitPendulum` |
+| Chain swing slowdown | `debug_chain_slow_speed` (`CHAIN SLOW SPEED`, 1..10); 4 leaves it alone | `chain.c`: `DecreasePdlChain`, called from `boyact.c` while Ico is on a chain without the swing button (`pad.now & 0x20` clear) |
+
+The chain rows (Gameplay > Yorda, `[variants] chain_swing_speed` and `chain_swing_damping`, integers
+1 to 10, index 0..9 in `ICO_VARIANT_CHAIN_SWING_SPEED` / `_DAMPING`) hold two more debug switches,
+bound by a second call, `ico_variants_bind_debug_chain`, that `debug_VariableInit` makes right after
+`ico_variants_bind_debug` (so the first call's signature did not change); nothing else in `ico2/`
+changed. Both values are set to 4 by `debug_VariableInit` on every disc (the lines are outside the
+region branches) and the table rows exist in both of `debug.c`'s row tables; `chain.c` is one source
+for all seven discs (the region macros in it are in other functions), so `initPendulum`,
+`InitPendulum` and `DecreasePdlChain` read the same two variables everywhere. The formulas:
+swing speed `a = clamp(2 - 0.2 v, 0.1, 2)`, `cycle = clamp(int(a * 6 * sqrt(length / 2.5) * 0.8), 1,
+255)` with `length = holdNode * 50` (`holdNode` >= 2, the node Ico holds), the swing's period in
+ticks (`phase` runs 0 to `cycle`); slowdown `ampSpeed = v * 0.5 * -0.1 = -0.05 v` per tick while Ico
+is not pumping (`IncreasePdlChain` is +0.1). `cycle` by value, in ticks: holdNode 2: 54 48 42 36 30
+24 18 12 6 3; holdNode 8: 109 97 85 72 60 48 36 24 12 6; holdNode 20: 172 153 134 115 96 76 57 38 19
+9 (v = 1..10; v = 10 is `a = 0` before the clamp and `0.1` after, so 10 is meaningful: the
+shortest swing, not a zero period). No two values give the same period (the closest pair, 9 and
+10, is three ticks apart at the shortest hold) and none reaches the minimum of 1, so all ten are
+offered. The swings that end (`chain_simulate_term_*`, a rope turn, a loop, the swing-ready ramp)
+set `ampSpeed` themselves and are not covered by the slowdown row. Neither row suspends
+achievements.
 
 The enemy table. Every read of `enemyKind` in `ico2/sugipon/src/enemy.c` (`setEnemyObject` and its
 June 2001 twin, `InitEnemyGeo`, `CanThisEnemyFly`, `GetEnemyBattleType`, `GetEnemyDefLife`,

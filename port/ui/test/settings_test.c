@@ -152,10 +152,16 @@ static void testBuild(void)
                                    UI_STR_SECTION_COMBAT,
                                    UI_STR_SECTION_CUTSCENES,
                                    UI_STR_BACK};
-    static const int yordaOpts[] = {UI_OPT_YORDA, UI_OPT_PIT_TIME, UI_OPT_YORDA_TRIPS,
-                                    UI_OPT_NATURAL_CHAINS, UI_OPT_BACK};
-    static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
-                                    UI_STR_OPT_NATURAL_CHAINS, UI_STR_BACK};
+    static const int yordaOpts[] = {
+        UI_OPT_YORDA,           UI_OPT_PIT_TIME,          UI_OPT_YORDA_TRIPS, UI_OPT_NATURAL_CHAINS,
+        UI_OPT_VAR_CHAIN_SPEED, UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
+    static const int yordaStrs[] = {UI_STR_OPT_YORDA,
+                                    UI_STR_OPT_PIT_TIME,
+                                    UI_STR_OPT_YORDA_TRIPS,
+                                    UI_STR_OPT_NATURAL_CHAINS,
+                                    UI_STR_OPT_VAR_CHAIN_SPEED,
+                                    UI_STR_OPT_VAR_CHAIN_DAMPING,
+                                    UI_STR_BACK};
     static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
                                      UI_OPT_VAR_AGGRESSION, UI_OPT_VAR_PEACEFUL, UI_OPT_BACK};
     static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
@@ -253,7 +259,7 @@ static void testBuild(void)
               "Touch screen opens its page");
     }
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
-    CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 5), "Gameplay > Yorda rows");
+    CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 7), "Gameplay > Yorda rows");
     CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 5), "Gameplay > Shadows rows");
     CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 10), "Gameplay > Combat rows");
     CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
@@ -2042,6 +2048,50 @@ static void testValues(void)
         ui_settings_step(UI_OPT_SHADOW_SPEED, -1);
         CHECK(ico_opt_shadow_speed() == ICO_SPEED_ORIGINAL, "shadow speed steps back");
     }
+    /* Chain swing speed and slowdown (Gameplay > Yorda, after Natural chains): the
+       game's own 4 reads "4 (original)", the others are their numbers, 1 to 10 around
+       both ways, each step writes the key as the number; neither switches achievements off */
+    {
+        static const struct {
+            int opt;
+            IcoVariantId id;
+            const char *key;
+        } chain[2] = {
+            {UI_OPT_VAR_CHAIN_SPEED, ICO_VARIANT_CHAIN_SWING_SPEED, "variants.chain_swing_speed"},
+            {UI_OPT_VAR_CHAIN_DAMPING, ICO_VARIANT_CHAIN_SWING_DAMPING,
+             "variants.chain_swing_damping"}};
+
+        for (int r = 0; r < 2; r++) {
+            char want[16];
+
+            CHECK(strcmp(ui_settings_value_text(chain[r].opt), "4 (original)") == 0 &&
+                      ico_variant_get(chain[r].id) == 3,
+                  "chain row %d: the game's 4 by default (%s)", r,
+                  ui_settings_value_text(chain[r].opt));
+            for (int k = 5; k <= 14; k++) {
+                const int v = (k - 1) % 10 + 1; /* 5..10, 1..4 */
+
+                ui_settings_step(chain[r].opt, 1);
+                snprintf(want, sizeof(want), v == 4 ? "4 (original)" : "%d", v);
+                CHECK(strcmp(ui_settings_value_text(chain[r].opt), want) == 0 &&
+                          ico_variant_get(chain[r].id) == v - 1 &&
+                          ico_config_get_int(chain[r].key, 0) == v &&
+                          !ico_variants_suspend_achievements(),
+                      "chain row %d step to %d (%s)", r, v, ui_settings_value_text(chain[r].opt));
+            }
+            ui_settings_step(chain[r].opt, -1);
+            CHECK(ico_variant_get(chain[r].id) == 2 && ico_config_get_int(chain[r].key, 0) == 3,
+                  "chain row %d: Left from 4 is 3", r);
+            ui_settings_step(chain[r].opt, 1);
+        }
+    }
+    /* their notes, on the Yorda page, after Natural chains' */
+    CHECK(noteStarting(UI_PAGE_YORDA, "How fast a chain") >= 0 &&
+              noteStarting(UI_PAGE_YORDA, "How quickly a swing") >
+                  noteStarting(UI_PAGE_YORDA, "How fast a chain") &&
+              noteStarting(UI_PAGE_YORDA, "How fast a chain") >
+                  noteStarting(UI_PAGE_YORDA, "A chain that comes down"),
+          "the chain rows' notes follow Natural chains'");
     ui_settings_step(UI_OPT_DEVELOPER, 1);
     CHECK(ico_opt_developer_mode() == 1, "developer mode on");
     ui_settings_step(UI_OPT_MOUSE_SENS, 1);

@@ -2085,6 +2085,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_VAR_SWORD_COLOUR:
     case UI_OPT_VAR_WEAPON:
     case UI_OPT_VAR_PEACEFUL:
+    case UI_OPT_VAR_CHAIN_SPEED:
+    case UI_OPT_VAR_CHAIN_DAMPING:
         return ui__variant_text(opt);
     case UI_OPT_EXTRAS_CREDITS:
         return creditsUnlocked() ? "" : ui_str(UI_STR_ACH_LOCKED);
@@ -3487,6 +3489,8 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_PIT_TIME, UI_STR_OPT_PIT_TIME_NOTE);
         addNote(pg, UI_OPT_YORDA_TRIPS, UI_STR_OPT_YORDA_TRIPS_NOTE);
         addNote(pg, UI_OPT_NATURAL_CHAINS, UI_STR_OPT_NATURAL_CHAINS_NOTE);
+        addNote(pg, UI_OPT_VAR_CHAIN_SPEED, UI_STR_OPT_VAR_CHAIN_SPEED_NOTE);
+        addNote(pg, UI_OPT_VAR_CHAIN_DAMPING, UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE);
         break;
     case UI_PAGE_SHADOWS:
         /* the June 2001 demo's own toughness note: refreshPage, ui__variant_note */
@@ -4215,11 +4219,18 @@ static void build(void)
         -1, -1, -1, -1, -1, -1, UI_PAGE_YORDA, UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_CUTSCENES,
         -1};
     /* Gameplay > Yorda: how the Shadows take her, how long Ico has to pull
-       her out, her falls, and the chains Ico lets down for her */
-    static const int yordaOpts[] = {UI_OPT_YORDA, UI_OPT_PIT_TIME, UI_OPT_YORDA_TRIPS,
-                                    UI_OPT_NATURAL_CHAINS, UI_OPT_BACK};
-    static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
-                                    UI_STR_OPT_NATURAL_CHAINS, UI_STR_BACK};
+       her out, her falls, the chains Ico lets down for her and how they swing
+       (the [variants] chain rows) */
+    static const int yordaOpts[] = {
+        UI_OPT_YORDA,           UI_OPT_PIT_TIME,          UI_OPT_YORDA_TRIPS, UI_OPT_NATURAL_CHAINS,
+        UI_OPT_VAR_CHAIN_SPEED, UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
+    static const int yordaStrs[] = {UI_STR_OPT_YORDA,
+                                    UI_STR_OPT_PIT_TIME,
+                                    UI_STR_OPT_YORDA_TRIPS,
+                                    UI_STR_OPT_NATURAL_CHAINS,
+                                    UI_STR_OPT_VAR_CHAIN_SPEED,
+                                    UI_STR_OPT_VAR_CHAIN_DAMPING,
+                                    UI_STR_BACK};
     /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness,
        Shadow aggression and Peaceful shadows */
     static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
