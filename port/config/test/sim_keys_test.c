@@ -83,6 +83,8 @@ static void test_list(void)
     CHECK(listed("variants.sword_colour") && listed("variants.weapon"));
     CHECK(strcmp(ico_sim_key_default("variants.sword_colour"), "original") == 0 &&
           strcmp(ico_sim_key_default("variants.weapon"), "original") == 0);
+    CHECK(listed("developer.free_movement") &&
+          strcmp(ico_sim_key_default("developer.free_movement"), "false") == 0);
     CHECK(listed("video.video_mode"));
 }
 
@@ -234,6 +236,17 @@ static void test_defaults(const char *dir)
     CHECK(k != NULL && strcmp(k, "gameplay.shadows_together") == 0 &&
           strcmp(out, "gameplay.shadows_together=(absent) (now true)") == 0);
     CHECK(ico_config_set_string("gameplay.shadows_together", "") == 0);
+    /* a state saved before developer.free_movement existed: loads with the row
+       off, is refused with it on */
+    drop_line(t, "developer.free_movement", older, sizeof older);
+    CHECK(strstr(older, "developer.free_movement=") == NULL && strlen(older) < strlen(t));
+    CHECK(ico_config_set_bool("developer.free_movement", 0) == 0);
+    CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);
+    CHECK(ico_config_set_bool("developer.free_movement", 1) == 0);
+    k = ico_sim_keys_first_diff(older, out, sizeof out);
+    CHECK(k != NULL && strcmp(k, "developer.free_movement") == 0 &&
+          strcmp(out, "developer.free_movement=(absent) (now true)") == 0);
+    CHECK(ico_config_set_string("developer.free_movement", "") == 0);
     /* a key without one fixed default, absent, set now: differs */
     drop_line(t, "variants.barrier_hits", older, sizeof older);
     CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL);

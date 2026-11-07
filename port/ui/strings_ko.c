@@ -843,4 +843,8 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
+    [UI_STR_OPT_FREE_MOVEMENT] = "자유 이동",
+    [UI_STR_OPT_FREE_MOVEMENT_NOTE] =
+        "L2를 누르면 스틱으로 이코를 자유롭게 움직입니다. 왼쪽 스틱은 이동, 오른쪽 스틱은 위아래, L3는 바닥에 내려놓습니다. 업적이 꺼집니다.",
+    [UI_STR_REMAP_ASK_HINT] = "요르다에게 힌트 묻기",
 };

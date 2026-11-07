@@ -11,6 +11,7 @@
 
 #include "appearance.h"
 #include "config.h"
+#include "ico_rows.h"
 #include "pit_time.h"
 #include "region.h" /* port/core: the per-disc keys (ico_region_key_prefixed) */
 #include "variants.h"
@@ -878,6 +879,7 @@ void ico_opt_reload(void)
     s_pit_time = s_shadow_speed = -1;
     s_natural_chains = s_skip_opening = s_yorda_trips = s_second_card = -1;
     s_shadows_together = -1;
+    ico_rows_reload();
     s_output = -2;
     s_ui_language = -2;
     s_text_language = -2;

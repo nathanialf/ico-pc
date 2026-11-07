@@ -347,6 +347,10 @@ sources. A key or value that does not parse is logged and skipped (`ico_bindings
 puts back only what differs from the defaults or is already in the file
 (`port/input/input.h` (`ico_input_write_bindings`)). [INPUT.md](INPUT.md) has the bindings.
 
+One target is an action, not a pad button: `hint` (Ask Yorda for a hint; `kb.hint`, `mouse.hint`,
+`pad.hint`; no default on any device; `ICO_T_HINT`). Settings > Controls > Remap controls lists it
+last, and only on the discs with the hint system (not `ntsc`, `aug6`, `jun26`).
+
 ### [touch]
 
 The touch overlay's layout edits, written only when the player edits (the Edit layout page,
@@ -403,6 +407,12 @@ look  = "l50 t0 w60 h30 o100"
 A line that does not parse or is out of range is logged once as `touch: ignoring full.l2 = "..."
 (why)` and ignored: the control stays at its default place. Deleting the tables or any line gives
 the default back.
+
+### [developer]
+
+| key | type | default | meaning |
+| --- | --- | --- | --- |
+| `free_movement` | bool | `false` | Options > Developer > Free movement: with Developer mode on, L2 hands Ico to the game's own debug move (`ACTDebugMove`, [GAME_FEATURES.md](GAME_FEATURES.md#free-movement-and-ask-yorda-for-a-hint)); a simulation key (`port/platform/sim_keys.c`); suspends achievements (`ico_gs_achievements_suspended`) |
 
 ### [photo]
 

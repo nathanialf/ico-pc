@@ -868,4 +868,8 @@ const char *const
                 [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
                 [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
                 [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
+                [UI_STR_OPT_FREE_MOVEMENT] = "Déplacement libre",
+                [UI_STR_OPT_FREE_MOVEMENT_NOTE] =
+                    "Appuyez sur L2 pour piloter Ico aux sticks : le gauche le déplace, le droit le monte et le descend, L3 le pose au sol. Désactive les succès.",
+                [UI_STR_REMAP_ASK_HINT] = "Demander un indice à Yorda",
 };

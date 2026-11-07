@@ -8,6 +8,8 @@
 - Options > Gameplay > Combat has a new row, Light sword colour: Red gives the light sword of a finished game the red trail of a twin the makers left unused. Only the colour changes, from the next room. On the European, Japanese, Korean and Asian discs.
 - Options > Gameplay > Combat has a new row, Stick: Insect net turns every stick into an insect net the makers left in the game unused. Ico can pick it up and carry it, but he cannot swing it or set it alight, and it never hurts a Shadow. Set the row back to Original where you need the stick; it returns from the next room.
 - When a cutscene runs slowly, the game now saves one picture from it and a copy of the log in a file called `slow-` and the date, in the logs folder, once each time you start it. If you report a slow cutscene, attach that file with the log.
+- Options > Controls > Remap controls has a new last action, Ask Yorda for a hint (on the discs that have hints: not the North American disc or the two 2001 previews). It starts with no button or key. Press the one you give it and Yorda gives the hint that is waiting in the room at once, instead of after her usual wait.
+- Options > Developer has a new row, Free movement (with Developer mode on). Turn it On and pressing L2 hands Ico to the sticks, the way the people who made the game moved him about to test it: the left stick moves him, the right stick up and down, L3 sets him on the floor, and letting go of L2 gives him back. It switches achievements off while it is On.
 
 ## Fixed
 

@@ -49,6 +49,7 @@ const char *const ICO_SIM_KEYS[] = {
     "variants.sword_colour",
     "variants.weapon",
     "variants.peaceful_shadows", /* no brain thread for a Shadow (a cheat) */
+    "developer.free_movement",   /* Developer > Free movement (ico_rows.h) */
     NULL,
 };
 
@@ -88,6 +89,7 @@ static const char *const kDefaults[] = {
     "original", /* variants.sword_colour */
     "original", /* variants.weapon */
     "false",    /* variants.peaceful_shadows */
+    "false",    /* developer.free_movement */
     NULL,
 };
 

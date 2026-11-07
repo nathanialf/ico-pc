@@ -848,4 +848,8 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
         [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
         [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
+        [UI_STR_OPT_FREE_MOVEMENT] = "Movimento libero",
+        [UI_STR_OPT_FREE_MOVEMENT_NOTE] =
+            "Premi L2 per guidare Ico con gli stick: il sinistro lo muove, il destro lo alza e abbassa, L3 lo posa a terra. Disattiva gli obiettivi.",
+        [UI_STR_REMAP_ASK_HINT] = "Chiedi un suggerimento a Yorda",
 };

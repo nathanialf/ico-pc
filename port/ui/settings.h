@@ -830,6 +830,9 @@ typedef enum UiSettingsOpt {
        (ui_settings_set_share_report_handler) */
     UI_OPT_SHARE_REPORT,
 #endif
+    /* Developer's Free movement: [developer] free_movement, shown while
+       Developer mode is on (port/game/ico_rows.h) */
+    UI_OPT_FREE_MOVEMENT,
 } UiSettingsOpt;
 
 /* The entry rows and the menu's layouts (-1 before ui_settings_install):

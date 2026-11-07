@@ -816,4 +816,8 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
+    [UI_STR_OPT_FREE_MOVEMENT] = "自由移動",
+    [UI_STR_OPT_FREE_MOVEMENT_NOTE] =
+        "按 L2 後可用搖桿自由移動 Ico：左搖桿移動，右搖桿上下，L3 讓他落到地面。會關閉成就。",
+    [UI_STR_REMAP_ASK_HINT] = "向 Yorda 詢問提示",
 };

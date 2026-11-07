@@ -866,4 +866,8 @@ const char *const
             [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
             [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
             [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
+            [UI_STR_OPT_FREE_MOVEMENT] = "Freie Bewegung",
+            [UI_STR_OPT_FREE_MOVEMENT_NOTE] =
+                "Mit L2 steuerst du Ico frei mit den Sticks: links bewegt ihn, rechts hoch und runter, L3 setzt ihn auf den Boden. Schaltet die Erfolge ab.",
+            [UI_STR_REMAP_ASK_HINT] = "Yorda um einen Hinweis bitten",
 };

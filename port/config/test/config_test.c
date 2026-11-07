@@ -537,6 +537,10 @@ static void test_first_run(void)
     CHECK(text != NULL && strstr(text, "\n[variants]\n") != NULL &&
           strstr(text, "shade_toughness = \"original\"") != NULL &&
           strstr(text, "aggression = \"own\"") != NULL && strstr(text, "\nbarrier_hits") == NULL);
+    /* Developer > Free movement, off */
+    CHECK(ico_config_get_bool("developer.free_movement", 1) == 0);
+    CHECK(text != NULL && strstr(text, "\n[developer]\n") != NULL &&
+          strstr(text, "free_movement = false") != NULL);
     CHECK_STR(ico_config_get_string("paths.iso", "?"), "");
     /* photo mode's keys */
     CHECK(ico_config_get_float("photo.stick_speed", 0.0) == 1.0);
