@@ -160,7 +160,7 @@ static void test_loss(const char *base)
 
 /* The slow-scene zip (ico_slow_dump_path, ico_loss_dump_zip with no frame
    before, ico_slow_dump_prune): its name, its contents (the one frame, then
-   the log, the loose dump gone), and the pruning to one slow zip that leaves
+   the log, the loose dump gone), and the pruning to the newest three slow zips that leaves
    the loss zips and every other file alone, as the loss pruning leaves the
    slow ones */
 static void test_slow(const char *base)
@@ -194,9 +194,16 @@ static void test_slow(const char *base)
           memcmp(got, a, size) == 0); /* rd_replay_tool takes it */
     free(got);
 
-    /* one kept: a second slow zip (newer), a loss zip and another file */
+    /* the newest ICO_SLOW_DUMP_KEEP (3) kept: three newer slow zips, a loss
+       zip and another file; the oldest goes */
+    char zip3[1300], zip4[1300];
+    CHECK(ICO_SLOW_DUMP_KEEP == 3);
     CHECK(ico_slow_dump_path(zip2, sizeof(zip2), dir, "20261106-130000") == 0);
+    CHECK(ico_slow_dump_path(zip3, sizeof(zip3), dir, "20261106-140000") == 0);
+    CHECK(ico_slow_dump_path(zip4, sizeof(zip4), dir, "20261106-150000") == 0);
     CHECK(put(zip2, "z", 1) == 0);
+    CHECK(put(zip3, "z", 1) == 0);
+    CHECK(put(zip4, "z", 1) == 0);
     char loss[1300], other[1300];
     snprintf(loss, sizeof(loss), "%s/loss-20261106-110000.zip", dir);
     snprintf(other, sizeof(other), "%s/slow-notes.txt", dir);
@@ -205,6 +212,8 @@ static void test_slow(const char *base)
     CHECK(ico_slow_dump_prune(dir, ICO_SLOW_DUMP_KEEP) == 1);
     CHECK(ico_path_kind(zip, NULL, NULL) == -1);
     CHECK(ico_path_kind(zip2, NULL, NULL) == 0);
+    CHECK(ico_path_kind(zip3, NULL, NULL) == 0);
+    CHECK(ico_path_kind(zip4, NULL, NULL) == 0);
     CHECK(ico_path_kind(loss, NULL, NULL) == 0);
     CHECK(ico_path_kind(other, NULL, NULL) == 0);
     /* the loss pruning leaves the slow zip alone */
@@ -212,6 +221,8 @@ static void test_slow(const char *base)
     CHECK(ico_path_kind(zip2, NULL, NULL) == 0);
     CHECK(ico_slow_dump_prune(dir, ICO_SLOW_DUMP_KEEP) == 0);
     remove(zip2);
+    remove(zip3);
+    remove(zip4);
     remove(other);
     remove(log);
     snprintf(zip, sizeof(zip), "%s/no-such-folder", dir);
