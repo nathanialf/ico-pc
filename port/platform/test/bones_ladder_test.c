@@ -49,6 +49,7 @@ static BonesAction start(Keys *k, int avail, uint32_t replays, uint32_t twins, u
     in.nobin = k->nobin;
     in.nobinOff = k->off;
     in.nobinAvail = avail;
+    in.ringUsable = 1; /* the plain set on Vulkan (testPlain: without) */
     in.replays = replays;
     in.twins = twins;
     in.differ = differ;
@@ -194,6 +195,47 @@ static void testRestart(void)
     CHECK(bones_restart_step(pending, asked, pumps[1].movie, pumps[1].up) == BONES_RESTART_ASK);
 }
 
+/* review M2: step 1 only where the ring builds can be put in force (the
+   plain set on Vulkan): on the extended set the ladder waits, writes
+   nothing, and step 2's evidence still acts; L3: step 2 in force only when
+   the Turnip package loaded */
+static void testPlain(void)
+{
+    BonesLadderIn in;
+    char line[640];
+
+    memset(&in, 0, sizeof(in));
+    in.nobinAvail = 1;
+    in.replays = 50;
+    in.twins = 2000;
+    in.differ = 3;
+    in.ringClear = 2;
+    CHECK(bones_ladder_step(&in) == BONES_WAIT_PLAIN);
+    in.ringClear = 0;
+    in.differ = 8;
+    CHECK(bones_ladder_step(&in) == BONES_WAIT_PLAIN);
+    in.ringUsable = 1;
+    CHECK(bones_ladder_step(&in) == BONES_WRITE_RING);
+    in.ringUsable = 0;
+    in.ringFail = 1;
+    CHECK(bones_ladder_step(&in) == BONES_WRITE_NOBIN);
+    in.ringFail = 0;
+    in.differ = 3;
+    CHECK(bones_ladder_action_line(line, sizeof(line), BONES_WAIT_PLAIN, &in, 0, NULL) == 0);
+    CHECK(strcmp(line, "window: VU skin check ladder: waits: the ring read needs the plain "
+                       "shader set (this run's program entries are not it, or not on Vulkan): "
+                       "step 1 not written (3 of 2000 twins differ)") == 0);
+
+    CHECK(bones_nobin_in_force("nobin", "nobin", 1));
+    CHECK(bones_nobin_in_force("nobin", "startup,nobin", 1));
+    CHECK(!bones_nobin_in_force("nobin", "nobin", 0)); /* the open failed, the phone's driver */
+    CHECK(!bones_nobin_in_force("nobin", NULL, 1));
+    CHECK(!bones_nobin_in_force("nobin", "gmem", 1));
+    CHECK(!bones_nobin_in_force("off", "nobin", 1));
+    CHECK(!bones_nobin_in_force(NULL, "nobin", 1));
+    CHECK(!bones_nobin_in_force("", "nobin", 1));
+}
+
 static void testMark(void)
 {
     BonesMark m, n;
@@ -328,6 +370,7 @@ int main(void)
 {
     testSequences();
     testRestart();
+    testPlain();
     testMark();
     testLines();
     printf("bones_ladder_test: %s\n", g_fail ? "FAILED" : "ok");

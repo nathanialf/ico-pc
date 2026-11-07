@@ -27,9 +27,11 @@ BonesAction bones_ladder_step(const BonesLadderIn *in)
         /* step 1 in force and the twins still differ: step 2, once */
         return in->nobinAvail && !in->nobinOff ? BONES_WRITE_NOBIN : BONES_STOP;
     }
-    /* neither step in force: the evidence beside the picture */
+    /* neither step in force: the evidence beside the picture; step 1 only
+       where the ring builds can be put in force (on the extended set the
+       renderer refuses them: a restart and a key for nothing) */
     if (in->ringClear > 0) {
-        return BONES_WRITE_RING;
+        return in->ringUsable ? BONES_WRITE_RING : BONES_WAIT_PLAIN;
     }
     if (in->ringFail > 0 || (in->sceneOnly >= BONES_SCENE_EVENTS && in->probeWrong == 0)) {
         /* the ring read does not clear it, or the scene pass's execution:
@@ -37,7 +39,8 @@ BonesAction bones_ladder_step(const BonesLadderIn *in)
         return in->nobinAvail && !in->nobinOff ? BONES_WRITE_NOBIN : BONES_STOP;
     }
     if (in->differ >= BONES_EVENTS_UNTESTED) {
-        return BONES_WRITE_RING; /* untested beside the picture: step 1 first */
+        /* untested beside the picture: step 1 first */
+        return in->ringUsable ? BONES_WRITE_RING : BONES_WAIT_PLAIN;
     }
     return BONES_WAIT;
 }
@@ -136,6 +139,12 @@ int bones_ladder_start_line(char *out, size_t size, const char *vuBones, const c
         return 0;
     }
     return -1;
+}
+
+int bones_nobin_in_force(const char *turnipDebug, const char *tuDebugEnv, int turnipLoaded)
+{
+    return turnipDebug != NULL && strcmp(turnipDebug, "nobin") == 0 && tuDebugEnv != NULL &&
+           strstr(tuDebugEnv, "nobin") != NULL && turnipLoaded;
 }
 
 int bones_restart_step(int pending, int asked, int movie, double uptimeS)
@@ -248,6 +257,13 @@ int bones_ladder_action_line(char *out, size_t size, BonesAction a, const BonesL
                  "presents%s",
                  in->nobin ? "step 2 (TU_DEBUG=nobin)" : "step 1 (ring read)", (unsigned)in->twins,
                  (unsigned)in->replays, in->nobin ? "; [dev] turnip_debug = nobin is kept" : "");
+        return 0;
+    case BONES_WAIT_PLAIN:
+        snprintf(out, size,
+                 "window: VU skin check ladder: waits: the ring read needs the plain shader set "
+                 "(this run's program entries are not it, or not on Vulkan): step 1 not written "
+                 "(%u of %u twins differ)",
+                 (unsigned)in->differ, (unsigned)in->twins);
         return 0;
     case BONES_PORT_RACE:
         snprintf(out, size,

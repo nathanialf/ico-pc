@@ -3498,7 +3498,9 @@ bool rd__vu_policy_init(const RhiLimits *lim)
      * set only (they are plain variants), one missing keeps the plain ones */
     g_rd.vuBonesRing = false;
     {
-        const char *vb = getenv("ICO_RD_VU_BONES");
+        /* the window's choice in the run (rd_set_vu_bones) over the
+         * environment the start exported */
+        const char *vb = rd__vu_bones_asked();
         const bool want = vb && strcmp(vb, "ring") == 0;
         const char *why = NULL;
         if (vb && vb[0] && !want && strcmp(vb, "cbuffer") != 0) {
@@ -3529,7 +3531,10 @@ bool rd__vu_policy_init(const RhiLimits *lim)
             g_rd.vuBonesRing = all;
             why = all ? NULL : "a ring build is missing from this build";
         }
-        rd__vu_bones_policy(want, g_rd.vuBonesRing, why);
+        /* the ring builds usable: the plain set on Vulkan (the skin
+         * check's twins and the ladder run there) */
+        rd__vu_bones_policy(want, g_rd.vuBonesRing, plain && rhi_backend() == RHI_BACKEND_VULKAN,
+                            why);
     }
     g_rd.vuFallbackPlain = plain;
     g_rd.vuPlainBrief = plain ? choice.brief : NULL;
