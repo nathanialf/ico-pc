@@ -340,6 +340,9 @@ static void video_settings(RdSettings *rs, int w, int h)
        draws an MSAA count the device lacks as off (rd_aa_supported_mask) */
     rs->antiAlias = (uint8_t)ico_video_anti_alias();
     rs->downsample = (uint8_t)(o.downsample == ICO_DOWNSAMPLE_BOX); /* PC port: issue 149 */
+    /* Upscaling: FSR 1.0 and its Sharpness (PC port: issue 99) */
+    rs->upscale = (uint8_t)(o.upscale == ICO_UPSCALE_FSR1 ? RD_UPSCALE_FSR1 : RD_UPSCALE_OFF);
+    rs->upscaleSharpness = (uint8_t)o.upscaleSharpness;
     rs->sceneWidth = (uint32_t)o.resW;
     rs->sceneHeight = (uint32_t)o.resH;
     rs->sceneScale = (float)o.resScale;
