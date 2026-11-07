@@ -147,6 +147,7 @@
  *             with a capture armed the output's pass is ended for the copy
  *             and opened again (one more), and the shown picture is the
  *             same byte for byte; each layer's rectangle is drawn
+ *   fsr1      Upscaling: FSR 1.0 (rd_present_fsr1_test.inc)
  *   blank     rd_present_blank: at 800 x 600 with nothing
  *             registered the output is all 0 (no scene, though a frame was
  *             just recorded and presented); with an overlay drawing a red
@@ -5758,6 +5759,7 @@ static void checkEffectsDepth(void)
 }
 
 #include "rd_present_tone_test.inc"
+#include "rd_present_fsr1_test.inc"
 
 /* The effects depth's start-up keys (its two outputs, with and without the
  * colour adjustment) exist exactly where the device can draw to a D32F
@@ -6092,6 +6094,7 @@ int main(int argc, char **argv)
     checkToneDepth();
     checkNoD32Keys();
     checkTone();
+    checkFsr1();
     checkReduceKey();
     checkBlank();
     checkRingGrowth();

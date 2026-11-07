@@ -65,12 +65,15 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_BACK};
     static const int picOpts[] = {
-        UI_OPT_ANTI_ALIAS,   UI_OPT_DOWNSAMPLE,      UI_OPT_FULL_HEIGHT,   UI_OPT_FILTER,
-        UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,      UI_OPT_CRT,           UI_OPT_CRT_STRENGTH,
-        UI_OPT_TONE_GAMMA,   UI_OPT_TONE_BRIGHTNESS, UI_OPT_TONE_CONTRAST, UI_OPT_TONE_SATURATION,
-        UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,      UI_OPT_BACK};
+        UI_OPT_ANTI_ALIAS,    UI_OPT_DOWNSAMPLE,      UI_OPT_UPSCALE,      UI_OPT_UPSCALE_SHARPNESS,
+        UI_OPT_FULL_HEIGHT,   UI_OPT_FILTER,          UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,
+        UI_OPT_CRT,           UI_OPT_CRT_STRENGTH,    UI_OPT_TONE_GAMMA,   UI_OPT_TONE_BRIGHTNESS,
+        UI_OPT_TONE_CONTRAST, UI_OPT_TONE_SATURATION, UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,
+        UI_OPT_BACK};
     static const int picStrs[] = {UI_STR_OPT_AA,
                                   UI_STR_OPT_DOWNSAMPLE,
+                                  UI_STR_OPT_UPSCALE,
+                                  UI_STR_OPT_UPSCALE_SHARPNESS,
                                   UI_STR_OPT_FULL_HEIGHT,
                                   UI_STR_OPT_FILTERING,
                                   UI_STR_OPT_FULL_PIXEL,
@@ -203,7 +206,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
     CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 6), "Graphics page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 10), "effects rows");
-    CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 15), "picture rows");
+    CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 17), "picture rows");
     CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 6), "developer rows");
     {
         /* the Characters and Unused content links, then Add to Steam,
@@ -692,6 +695,82 @@ static void testDownsample(void)
     useConfig("[video]\ndownsample = \"box\"\n");
     CHECK(strcmp(ui_settings_value_text(UI_OPT_DOWNSAMPLE), "To original size") == 0,
           "a file's box: To original size");
+}
+
+/* the Upscaling row (issue 99): on Picture right after Downsampling with
+   Sharpness under it (shown only while Upscaling is on), Off by default,
+   Right and Left both switch it, Sharpness 80 by default stepping by 10 and
+   held at 0 and 100, the preset is not changed, [video] upscaling = "fsr1"
+   and upscaling_sharpness are saved, a file's are read, and the note is on
+   the page */
+static void testUpscale(void)
+{
+    char p[1100];
+    IcoVideoOptions o;
+    int l[17], op[17];
+
+    useConfig("[video]\npreset = \"enhanced\"\n");
+    fakeTables();
+    lt_ext_reset();
+    ui_settings_reset();
+    ui_set_language(UI_LANG_EN);
+    ui_settings_install();
+    const int n = ui_settings_page_rows(UI_PAGE_PICTURE, l, op, NULL, 17);
+    CHECK(n > 4 && op[1] == UI_OPT_DOWNSAMPLE && op[2] == UI_OPT_UPSCALE &&
+              op[3] == UI_OPT_UPSCALE_SHARPNESS,
+          "the rows are on Picture right after Downsampling");
+    CHECK(ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_UPSCALE) < 0, "not on Display");
+    CHECK(strcmp(ui_str(UI_STR_OPT_UPSCALE), "Upscaling") == 0 &&
+              strcmp(ui_str(UI_STR_OPT_UPSCALE_SHARPNESS), "Sharpness") == 0,
+          "their labels");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_UPSCALE), "Off") == 0, "Off by default (%s)",
+          ui_settings_value_text(UI_OPT_UPSCALE));
+    CHECK(!ui_settings_opt_shown(UI_OPT_UPSCALE_SHARPNESS), "Sharpness hidden while Off");
+    CHECK(rowWithPrefix(UI_PAGE_PICTURE, "FSR 1.0 (AMD) sharpens the picture") >= 0,
+          "its note is on the page");
+    ico_video_get(&o);
+    const int presetBefore = ico_video_preset(&o);
+    ui_settings_step(UI_OPT_UPSCALE, 1);
+    ico_video_get(&o);
+    CHECK(o.upscale == ICO_UPSCALE_FSR1 && ico_video_upscale() == ICO_UPSCALE_FSR1 &&
+              strcmp(ui_settings_value_text(UI_OPT_UPSCALE), "FSR 1.0") == 0,
+          "Right: FSR 1.0 (%d \"%s\")", o.upscale, ui_settings_value_text(UI_OPT_UPSCALE));
+    CHECK(ui_settings_opt_shown(UI_OPT_UPSCALE_SHARPNESS), "Sharpness shown while on");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_UPSCALE_SHARPNESS), "80 (Default)") == 0,
+          "Sharpness 80 by default (%s)", ui_settings_value_text(UI_OPT_UPSCALE_SHARPNESS));
+    ui_settings_step(UI_OPT_UPSCALE_SHARPNESS, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_UPSCALE_SHARPNESS), "90") == 0, "Right: 90 (%s)",
+          ui_settings_value_text(UI_OPT_UPSCALE_SHARPNESS));
+    ui_settings_step(UI_OPT_UPSCALE_SHARPNESS, 1);
+    ui_settings_step(UI_OPT_UPSCALE_SHARPNESS, 1);
+    CHECK(ico_video_upscale_sharpness() == 100, "held at 100 (%d)", ico_video_upscale_sharpness());
+    for (int i = 0; i < 12; i++) {
+        ui_settings_step(UI_OPT_UPSCALE_SHARPNESS, -1);
+    }
+    CHECK(ico_video_upscale_sharpness() == 0, "held at 0 (%d)", ico_video_upscale_sharpness());
+    for (int i = 0; i < 7; i++) {
+        ui_settings_step(UI_OPT_UPSCALE_SHARPNESS, 1);
+    }
+    ico_video_get(&o);
+    CHECK(ico_video_preset(&o) == presetBefore, "the preset is not changed");
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get(t, "video.upscaling") != NULL &&
+              strcmp(ico_toml_get(t, "video.upscaling"), "fsr1") == 0 &&
+              ico_toml_get(t, "video.upscaling_sharpness") != NULL &&
+              strcmp(ico_toml_get(t, "video.upscaling_sharpness"), "70") == 0,
+          "[video] upscaling = \"fsr1\", upscaling_sharpness = 70");
+    ico_toml_free(t);
+    ui_settings_step(UI_OPT_UPSCALE, -1);
+    ico_video_get(&o);
+    CHECK(o.upscale == ICO_UPSCALE_OFF &&
+              strcmp(ui_settings_value_text(UI_OPT_UPSCALE), "Off") == 0,
+          "Left: Off again");
+    useConfig("[video]\nupscaling = \"fsr1\"\nupscaling_sharpness = 40\n");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_UPSCALE), "FSR 1.0") == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_UPSCALE_SHARPNESS), "40") == 0,
+          "a file's fsr1 and 40");
 }
 
 static void checkSavedPreset(const char *want)
@@ -2972,16 +3051,18 @@ static void testGameOptions(void)
                   rowShown(UI_PAGE_PICTURE, UI_OPT_FULL_HEIGHT),
               "title %d: Texture filtering and Full-height are on Picture", title);
         {
-            /* Anti-aliasing, Downsampling, Full-height and Texture filtering
-               first, Full pixel before Brightness and the CRT rows */
-            int fl[16], fo[16];
-            const int fn = ui_settings_page_rows(UI_PAGE_PICTURE, fl, fo, NULL, 16);
-            CHECK(fn > 6 && fo[0] == UI_OPT_ANTI_ALIAS && fo[1] == UI_OPT_DOWNSAMPLE &&
-                      fo[2] == UI_OPT_FULL_HEIGHT && fo[3] == UI_OPT_FILTER &&
-                      fo[4] == UI_OPT_FULL_PIXEL && fo[5] == UI_OPT_BRIGHTNESS &&
-                      fo[6] == UI_OPT_CRT,
-                  "title %d: Picture starts Anti-aliasing, Downsampling, Full-height, Texture "
-                  "filtering, Full pixel, Brightness, CRT",
+            /* Anti-aliasing, Downsampling, Upscaling, Sharpness, Full-height
+               and Texture filtering first, Full pixel before Brightness and
+               the CRT rows */
+            int fl[17], fo[17];
+            const int fn = ui_settings_page_rows(UI_PAGE_PICTURE, fl, fo, NULL, 17);
+            CHECK(fn > 8 && fo[0] == UI_OPT_ANTI_ALIAS && fo[1] == UI_OPT_DOWNSAMPLE &&
+                      fo[2] == UI_OPT_UPSCALE && fo[3] == UI_OPT_UPSCALE_SHARPNESS &&
+                      fo[4] == UI_OPT_FULL_HEIGHT && fo[5] == UI_OPT_FILTER &&
+                      fo[6] == UI_OPT_FULL_PIXEL && fo[7] == UI_OPT_BRIGHTNESS &&
+                      fo[8] == UI_OPT_CRT,
+                  "title %d: Picture starts Anti-aliasing, Downsampling, Upscaling, Sharpness, "
+                  "Full-height, Texture filtering, Full pixel, Brightness, CRT",
                   title);
         }
         CHECK(rowShown(UI_PAGE_PICTURE, UI_OPT_CRT) &&
@@ -4249,6 +4330,7 @@ int main(int argc, char **argv)
     testFramerate();
     testShowFps();
     testDownsample();
+    testUpscale();
     testNotesFit();
     testFreeMovement();
     testPreset();

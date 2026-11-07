@@ -94,6 +94,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_submit.h"
+#include "rd_fsr1.h"
 #include "rd_tone.h"
 #include "shader_consts.h"
 
@@ -478,8 +479,14 @@ bool rd__apply_display(void)
     /* one line when what the options give differs from what was in force:
      * this runs on a settings change or a resize (rd_begin_frame's
      * settingsPending) and at init, never per frame */
+    /* Upscaling: FSR 1.0 (rd_fsr1.c), never at the "window" resolution (the
+     * branch above that takes the box's size) */
+    char fsrNote[96];
+    const bool windowRes = !(scale > 0.0f) && !(st->sceneWidth && st->sceneHeight) &&
+                           st->preset == RD_PRESET_ENHANCED && st->outputWidth && st->outputHeight;
+    const bool fsrChanged = rd__fsr1_apply(st, windowRes, fsrNote, sizeof(fsrNote));
     if (changed || aspect != g_rd.outAspect || filter != g_rd.filterUpgrade ||
-        vs != g_rd.vsyncApplied || down != g_rd.downsample) {
+        vs != g_rd.vsyncApplied || down != g_rd.downsample || fsrChanged) {
         char ssaaNote[96] = "";
         if (ssaaAsked > 1.0f && ssaa > 1.0f && ssaa < ssaaAsked) {
             snprintf(ssaaNote, sizeof(ssaaNote), " (at %gx: the resolution has %.2f texels %s)",
@@ -498,13 +505,13 @@ bool rd__apply_display(void)
         char frameNote[160];
         frameWords(frameNote, sizeof(frameNote), (uint32_t)gw, wexactFor(aspect));
         rd__log("display: scene %gx%g (%.0fx%.0f)%s, aspect %.3f, filter %u, %s height, "
-                "full pixel %s, vsync %s%s%s%s%s, %s",
+                "full pixel %s, vsync %s%s%s%s%s%s, %s",
                 (double)sx, (double)sy, floor((double)sceneW + 0.5), floor((double)(gh * sy) + 0.5),
                 crtLock ? " (CRT: 1x)" : "", (double)aspect, (unsigned)filter,
                 full ? "full" : "half", st->fullPixel ? "on" : "off", st->vsync ? "on" : "off",
                 aaMode == RD_AA_OFF ? "" : rd__aa_label(aaMode),
                 rd_aa_samples(aaMode) > 1u ? " (asked)" : "", ssaaNote,
-                down && (sx > 1.0f || sy > 1.0f) ? ", downsampled to original size" : "",
+                down && (sx > 1.0f || sy > 1.0f) ? ", downsampled to original size" : "", fsrNote,
                 frameNote);
     }
     if (changed) {
@@ -2377,6 +2384,7 @@ void rd__present_record(RhiCommandList cl)
     memset(s_redDown, 0, sizeof(s_redDown));
     memset(s_redWin, 0, sizeof(s_redWin));
     s_redNoted = true;
+    rd__fsr1_present_begin();
     /* Downsampling: DISPLAY at its GS size first, then everything below as
      * at 1x (step 1 reads src, sw, sh) */
     const bool downsampled = downsampleRecord(cl, disp, &src, &sw, &sh);
@@ -2460,12 +2468,23 @@ void rd__present_record(RhiCommandList cl)
         /* the frame's columns past its exact width left out (none at 4:3) */
         float crop = sourceCrop(disp, sw);
         RdFilter scaleFilter = pr->scaleFilter;
+        float su0, su1; /* the one-texel-a-pixel window (snapWindow): no FSR 1.0 there */
+        const bool snapped = snapWindow(sw, crop, box.w, &su0, &su1);
         /* anti-aliasing (or a scaled scene with more texels than the box
          * has pixels): the source box-averaged to the box first
          * (reduceRecord; the reduce takes the crop; the box blit is then
          * one texel a pixel, nearest).  Not after the downsample: its
          * picture is presented as 1x is */
         if (!downsampled && reduceRecord(cl, &src, &sw, &sh, &box, crop)) {
+            crop = 0.0f;
+            scaleFilter = RD_FILTER_NEAREST;
+        } else if (rd__fsr1_record(cl, &src, &sw, &sh, &box, crop, snapped)) {
+            /* Upscaling: FSR 1.0 (rd_fsr1.c): fewer texels than the box has
+             * pixels on both axes, EASU and RCAS into a texture of the box's
+             * size (the crop taken in EASU), which the box blit draws one
+             * texel a pixel, nearest; the mirror stays the box blit's (a
+             * nearest flip, as after the reduce, so the effects depth flips
+             * with the colour) */
             crop = 0.0f;
             scaleFilter = RD_FILTER_NEAREST;
         }
@@ -2565,7 +2584,8 @@ void rd__present_shutdown(void)
     memset(&s_down, 0, sizeof(s_down));
     /* the last present's reduces stay noted, as its box does, for the
      * tests that read them after rd_shutdown */
-    rd__crt_shutdown(); /* the CRT filter */
+    rd__crt_shutdown();  /* the CRT filter */
+    rd__fsr1_shutdown(); /* FSR 1.0's two textures */
     /* the overlay's prims (the registration stays), the deferred text's list */
     free(s_ov.buf.v);
     free(s_ov.buf.b);

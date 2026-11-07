@@ -70,6 +70,12 @@
  *                         with a --resolution above 1x, DISPLAY box-averaged
  *                         to its GS size before the present, which then
  *                         draws it as at 1x; --stats names the reduce
+ *   --fsr1 [S]            Upscaling: FSR 1.0 (RdSettings.upscale, rd_fsr1.c):
+ *                         where the picture has fewer texels than the
+ *                         --present box on both axes, EASU and RCAS draw it
+ *                         at the box's size; S the Sharpness row, 0..100
+ *                         (default 80); --stats names the pass ("present:
+ *                         fsr1 WxH -> wxh", or "present: fsr1 off")
  *   --full-pixel          the reduction draws the whole frame: no black border
  *   --border-mask         the game's Full pixel off: the same picture, the
  *                         border masked over it at present (rd__border_mask)
@@ -443,6 +449,7 @@
 #endif
 #include "../../include/ico_endian.h"
 #include "dump_zip.h" /* port/platform: the F12 zip */
+#include "rd_fsr1.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
 #include "rd_vis.h"
@@ -1926,7 +1933,7 @@ int main(int argc, char **argv)
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
                 "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n"
-                "       [--downsample (with --resolution above 1x)]\n",
+                "       [--downsample (with --resolution above 1x)] [--fsr1 [0..100]]\n",
                 argv[0]);
         return 1;
     }
@@ -1993,6 +2000,19 @@ int main(int argc, char **argv)
             s.fullHeightScene = 1;
         } else if (strcmp(argv[i], "--downsample") == 0) {
             s.downsample = 1;
+        } else if (strcmp(argv[i], "--fsr1") == 0) {
+            s.upscale = RD_UPSCALE_FSR1;
+            s.upscaleSharpness = 80; /* the row's default */
+            char *end = NULL;
+            const long v = i + 1 < argc ? strtol(argv[i + 1], &end, 10) : -1;
+            if (i + 1 < argc && end && end != argv[i + 1] && *end == '\0') {
+                if (v < 0 || v > 100) {
+                    fprintf(stderr, "--fsr1: the sharpness is 0..100\n");
+                    return 1;
+                }
+                s.upscaleSharpness = (uint8_t)v;
+                i++;
+            }
         } else if (strcmp(argv[i], "--full-pixel") == 0) {
             s.fullPixel = 1;
         } else if (strcmp(argv[i], "--border-mask") == 0) {
@@ -2665,6 +2685,16 @@ int main(int argc, char **argv)
                 snprintf(wn, sizeof(wn), "%ux%u -> %ux%u", rwn[0], rwn[1], rwn[2], rwn[3]);
             }
             printf("%s: stats: present: downsample %s, window reduce %s\n", dump, dn, wn);
+        }
+        /* Upscaling: FSR 1.0 (--fsr1; rd_fsr1.c): the source EASU read and the box */
+        uint32_t fsr[4];
+        if (pw && s.upscale) {
+            if (rd__last_present_fsr1(fsr)) {
+                printf("%s: stats: present: fsr1 %ux%u -> %ux%u\n", dump, fsr[0], fsr[1], fsr[2],
+                       fsr[3]);
+            } else {
+                printf("%s: stats: present: fsr1 off\n", dump);
+            }
         }
         /* the tiler passes (rd_replay.c: DATE through the stencil bit, the
          * fog's local read, the blur pairs folded) */

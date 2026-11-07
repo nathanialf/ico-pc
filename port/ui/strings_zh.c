@@ -593,6 +593,11 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_VAL_DOWNSAMPLE_BOX] = "縮至原始大小",
     [UI_STR_OPT_DOWNSAMPLE_NOTE] =
         "以上方解析度繪製，再縮小為遊戲原本大小。需 2x 以上；不適用於 CRT 濾鏡與視窗。",
+    [UI_STR_OPT_UPSCALE] = "放大",
+    [UI_STR_VAL_UPSCALE_FSR1] = "FSR 1.0",
+    [UI_STR_OPT_UPSCALE_SHARPNESS] = "銳利度",
+    [UI_STR_OPT_UPSCALE_NOTE] =
+        "畫面小於螢幕時（如 1x 或縮小後），以 FSR 1.0（AMD）讓畫面更銳利。不適用於 CRT 濾鏡與視窗。",
     [UI_STR_AA_OFF] = "關",
     [UI_STR_AA_SSAA2] = "2倍超取樣",
     [UI_STR_AA_SSAA4] = "4倍超取樣",

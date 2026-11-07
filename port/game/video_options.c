@@ -80,6 +80,8 @@ void ico_video_defaults_for(IcoVideoOptions *o, int android)
     o->dumpModels = 0;
     o->showFps = 0;
     o->downsample = ICO_DOWNSAMPLE_OFF;
+    o->upscale = ICO_UPSCALE_OFF;
+    o->upscaleSharpness = ICO_UPSCALE_SHARPNESS_DEFAULT;
     o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_DEFAULT;
     o->texturePackPrecache = 1;
     o->texturePackCacheMb = 0;
@@ -166,6 +168,33 @@ int ico_video_parse_downsample(const char *s, int *ds)
 const char *ico_video_downsample_name(int ds)
 {
     return ds >= 0 && ds < ICO_DOWNSAMPLE_COUNT ? kDownsample[ds] : kDownsample[ICO_DOWNSAMPLE_OFF];
+}
+
+static const char *const kUpscale[ICO_UPSCALE_COUNT] = {"off", "fsr1"};
+
+int ico_video_parse_upscale(const char *s, int *up)
+{
+    for (int i = 0; i < ICO_UPSCALE_COUNT; i++) {
+        if (lower_eq(s, kUpscale[i])) {
+            *up = i;
+            return 0;
+        }
+    }
+    if (lower_eq(s, "fsr3")) {
+        *up = ICO_UPSCALE_OFF; /* the temporal upscaler: not offered yet */
+        return 1;
+    }
+    return -1;
+}
+
+const char *ico_video_upscale_name(int up)
+{
+    return up >= 0 && up < ICO_UPSCALE_COUNT ? kUpscale[up] : kUpscale[ICO_UPSCALE_OFF];
+}
+
+int ico_video_upscale_sharpness_clamp(int v)
+{
+    return v < 0 ? 0 : v > 100 ? 100 : v;
 }
 
 static const char *const kAntiAlias[ICO_AA_COUNT] = {"off",   "ssaa2", "ssaa4",
@@ -447,6 +476,10 @@ static void sanitize(IcoVideoOptions *o)
     if (o->downsample < 0 || o->downsample >= ICO_DOWNSAMPLE_COUNT) {
         o->downsample = ICO_DOWNSAMPLE_OFF;
     }
+    if (o->upscale < 0 || o->upscale >= ICO_UPSCALE_COUNT) {
+        o->upscale = ICO_UPSCALE_OFF;
+    }
+    o->upscaleSharpness = ico_video_upscale_sharpness_clamp(o->upscaleSharpness);
     if (o->texturePackBudgetMb < ICO_TEXPACK_BUDGET_MIN) {
         o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_MIN;
     } else if (o->texturePackBudgetMb > ICO_TEXPACK_BUDGET_MAX) {
@@ -569,6 +602,24 @@ static void read_config(void)
                                    &o.downsample) != 0) {
         o.downsample = ICO_DOWNSAMPLE_OFF;
         fprintf(stderr, "video: downsample not understood; \"off\" used\n");
+    }
+    {
+        const int r =
+            ico_video_parse_upscale(ico_config_get_string("video.upscaling", "off"), &o.upscale);
+        if (r != 0) {
+            o.upscale = ICO_UPSCALE_OFF;
+            fprintf(stderr, "video: upscaling %s; \"off\" used\n",
+                    r > 0 ? "\"fsr3\" is not available yet" : "not understood");
+        }
+        const long long v =
+            ico_config_get_int("video.upscaling_sharpness", ICO_UPSCALE_SHARPNESS_DEFAULT);
+        o.upscaleSharpness = ico_video_upscale_sharpness_clamp(v < -1000  ? -1000
+                                                               : v > 1000 ? 1000
+                                                                          : (int)v);
+        if ((long long)o.upscaleSharpness != v) {
+            fprintf(stderr, "video: upscaling_sharpness %lld is not 0..100; %d used\n", v,
+                    o.upscaleSharpness);
+        }
     }
     {
         long long mb =
@@ -754,6 +805,8 @@ int ico_video_save(void)
     r |= ico_config_set_bool("video.dump_models", o.dumpModels);
     r |= ico_config_set_bool("video.show_fps", o.showFps);
     r |= ico_config_set_string("video.downsample", ico_video_downsample_name(o.downsample));
+    r |= ico_config_set_string("video.upscaling", ico_video_upscale_name(o.upscale));
+    r |= ico_config_set_int("video.upscaling_sharpness", o.upscaleSharpness);
     /* the config-only keys only when not at their defaults, as the CRT
        overrides: an absent key is the default */
     if (o.texturePackBudgetMb != ICO_TEXPACK_BUDGET_DEFAULT) {
@@ -1026,6 +1079,22 @@ int ico_video_downsample(void)
         read_config();
     }
     return s_opt.downsample;
+}
+
+int ico_video_upscale(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.upscale;
+}
+
+int ico_video_upscale_sharpness(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.upscaleSharpness;
 }
 
 int ico_video_framerate(void)

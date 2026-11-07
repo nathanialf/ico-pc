@@ -642,6 +642,9 @@ typedef enum UiSettingsOpt {
     UI_OPT_ASPECT,
     UI_OPT_ANTI_ALIAS, /* [video] anti_aliasing, stepped through rd_aa_supported_mask */
     UI_OPT_DOWNSAMPLE, /* [video] downsample: Off / To original size, default Off */
+    UI_OPT_UPSCALE,    /* [video] upscaling: Off / FSR 1.0, default Off */
+    /* [video] upscaling_sharpness: 0..100 in tens, default 80; shown while Upscaling is on */
+    UI_OPT_UPSCALE_SHARPNESS,
     UI_OPT_WINDOW_MODE,
     UI_OPT_VSYNC,
     UI_OPT_FILTER,
