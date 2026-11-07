@@ -538,6 +538,18 @@ target_compile_options(rd_jitter_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT
 target_include_directories(rd_jitter_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_jitter_test PRIVATE ico_render)
 
+# rd_upscale_test: the upscale point (rd_upscale.c): the render scale from
+# the display scale on the CPU; on a device the marker before the
+# reduction, the marker a no-op with the upscaler off (DISPLAY and the
+# present byte for byte), the test's upscale at Enhanced 3x over 1.5
+# (UPSCALED is SCENE upscaled bilinearly, the reduction reads it, the fades
+# fold off), the edge guard under a jitter, the jitter per present, the
+# window resolution and Auto's cap; 77 without a device.
+add_executable(rd_upscale_test test/rd_upscale_test.c)
+target_compile_options(rd_upscale_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_upscale_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_upscale_test PRIVATE ico_render)
+
 # rd_msaa_test: the anti-aliasing's MSAA epoch: MSAA4 against no
 # anti-aliasing on a synthetic scene (identical away from edges, integer
 # sprites identical), a DATE draw closing the epoch, the fog per sample and
@@ -1001,7 +1013,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_vuprepass_selftest_test rd_vu_skin_check_test rd_blur_test rd_water_test
                   rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
-                  rd_jitter_test
+                  rd_jitter_test rd_upscale_test
                   rd_perf_test rd_display_change_test rd_boot_present_test rd_crt_test
                   texpack_load_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
@@ -1128,6 +1140,17 @@ if(ICO_RUN_TESTS)
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_jitter.cmake")
     set_tests_properties(rd_replay_tool_jitter PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                           FIXTURES_REQUIRED rd_dump TIMEOUT 600)
+    # the upscale point (rd_upscale.h): the dump's 512x512 frame at Enhanced
+    # 3x with the test's upscaler at 1.5 (FSR's Quality): SCENE at 2x, the
+    # reduction's marker dispatched once, UPSCALED at 3x read by the
+    # reduction, the jitter's phase count 8 (the present takes term 0)
+    add_test(NAME rd_replay_tool_upscale_test
+             COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_upscale_test.png" --present 960x720
+                     --enhanced --resolution 3x --upscale-test 1.5 --upscale-phases 8 --stats)
+    set_tests_properties(rd_replay_tool_upscale_test PROPERTIES
+                         PASS_REGULAR_EXPRESSION "upscale point: SCENE 1024x1024 -> UPSCALED 1536x1536 \\(render scale 2x2, display scale 3x3\\), markers [1-9][0-9]*, dispatched [1-9][0-9]*, refused 0, reductions remapped [1-9]"
+                         SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
     # the same dump listed without a device (--list --no-device)
     add_test(NAME rd_replay_tool_list
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
@@ -1279,6 +1302,8 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_msaa PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_jitter COMMAND rd_jitter_test)
     set_tests_properties(rd_jitter PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_upscale COMMAND rd_upscale_test)
+    set_tests_properties(rd_upscale PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_perf COMMAND rd_perf_test)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_display_change COMMAND rd_display_change_test)
@@ -3469,7 +3494,7 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         rd_state rd_pixel rd_native rd_layout rd_tex rd_gsbase ${rd_mesh_SHARDS} modelpack
         rd_shadow rd_shadow_edges rd_fog ${rd_blur_SHARDS} rd_water rd_raw rd_debug rd_present
         rd_crt rd_mirror rd_msaa rd_perf rd_display_change rd_interp rd_boot_present rd_dst_usage
-        rd_jitter
+        rd_jitter rd_upscale
         # the two-pass blend (ICO_RD_NO_DUAL=1 is the renderer's own switch, not a Vulkan fake)
         rd_pixel_nodual rd_present_nodual rd_fog_nodual rd_shadow_nodual rd_water_nodual
         rd_raw_nodual rd_mirror_nodual rd_interp_nodual rd_msaa_nodual rd_crack_nodual

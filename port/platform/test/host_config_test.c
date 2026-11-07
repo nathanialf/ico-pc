@@ -716,6 +716,11 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("velocity_sign", "1"), "1") == 0);
     CHECK(ico_dev_env_value("velocity_sign", "true") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.velocity_sign"), "velocity_sign") == 0);
+    /* upscale_test: the upscale point's test (port/render/rd_upscale.c) */
+    CHECK(strcmp(ico_dev_env_name("upscale_test"), "ICO_RD_UPSCALE_TEST") == 0);
+    CHECK(strcmp(ico_dev_env_value("upscale_test", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("upscale_test", "false"), "0") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.upscale_test"), "upscale_test") == 0);
     /* vu_merge: the draw merge's A/B switch (port/render/rd_replay_vu.c
        vuMergeInit) */
     CHECK(strcmp(ico_dev_env_name("vu_merge"), "ICO_RD_VU_MERGE") == 0);
