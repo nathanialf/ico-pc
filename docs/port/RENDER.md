@@ -968,8 +968,11 @@ sampled, copy source and storage (made again without storage where the backend r
 owned by `rd_upscale.c` (not a named target: a new named id would shift every dump's temporary
 ids). The hook in this release (`port/render/rd_upscale_hook.c`) is the test's stand-in: SCENE
 blitted into UPSCALED with the presenter's bilinear blit (`rd__present_blit`); it takes neither
-the depth, the vectors nor the jitter. The temporal upscaler replaces its body. Turning the
-switch on turns the motion vectors on.
+the depth, the vectors nor the jitter. The temporal upscaler replaces its body. The hook runs
+with the plain FrameCB mapping (the replay's exact viewport off around it, as for the present):
+a pass it draws sets its own viewport, and `rd__frame_group`'s fullscreen triangle covers it
+(under the exact viewport the triangle covered only tw / 16384 of UPSCALED about its centre).
+Turning the switch on turns the motion vectors on.
 
 **The reduction reads UPSCALED.** `rd__blur_post_sprite` (`port/render/rd_blur_border.c`): for
 the reduction's textured sprite of a replay whose marker wrote UPSCALED, SCENE's target record

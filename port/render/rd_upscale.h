@@ -140,7 +140,9 @@ typedef struct RdUpscaleIn {
 
 /* The temporal upscaler's dispatch (rd_upscale_hook.c): writes in->out from
  * in->color; false when it wrote nothing (the reduction then reads SCENE).
- * Outside any pass on the replay's command list. */
+ * Outside any pass on the replay's command list, with the plain FrameCB
+ * mapping (rd__frame_group is the present's: a pass sets its own viewport,
+ * not rd__replay_viewport's exact one). */
 bool rd__upscale_dispatch(RhiCommandList cl, const RdUpscaleIn *in);
 /* The hook's name for the log ("the test's bilinear upscale") */
 const char *rd__upscale_hook_name(void);

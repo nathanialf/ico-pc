@@ -5821,7 +5821,12 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 flushScreenRun(&r); /* SCENE's last draws before the upscaler reads it */
                 rd__replay_vu_flush(&r);
                 endPass(&r);
+                /* the plain FrameCB mapping: the hook's passes set their own
+                 * viewports, as the present's do (the exact one shrank its
+                 * fullscreen triangle to tw / 16384 of UPSCALED) */
+                s_vpExact = false;
                 rd__upscale_point(&r, f, c, s_ms.active); /* rd_upscale.c */
+                s_vpExact = true;
             }
             if (rd__apply_state(&r.st, c)) {
                 if (c->type == RDC_TARGET) {
