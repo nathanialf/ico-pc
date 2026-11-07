@@ -187,6 +187,7 @@ add_library(ico_render STATIC
     rd_core.c
     rd_crack_fill.c # above 1x: the pixels no draw covered between drawn ones, before the fog
     rd_crt.c # the CRT filter at present time
+    rd_fsr1.c # Upscaling: FSR 1.0 (AMD FidelityFX Super Resolution 1.0) at present time
     rd_tone.c # the colour adjustment's settings (Options > Picture: gamma, brightness, contrast, saturation)
     rd_date_selftest.c # DATE through the stencil bit: the start-up check on the device
     rd_dst_read.c # the exact GS blend: the destination read
@@ -909,6 +910,12 @@ add_executable(rd_mip_test test/rd_mip_test.c)
 target_compile_options(rd_mip_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(rd_mip_test PRIVATE ico_render)
 
+# rd_png_mem_test: rd_write_png_mem (rd_png.c) read back through the texture
+# pack's PNG loader, and equal to the bytes rd_write_png puts in a file.
+add_executable(rd_png_mem_test test/rd_png_mem_test.c)
+target_compile_options(rd_png_mem_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(rd_png_mem_test PRIVATE ico_render ico_miniz ico_host_fs)
+
 # texpack_load_test (texture packs): the DDS and PNG loaders on files built
 # in memory (every DDS layout and BC format, truncated files, a BC size
 # that is not a multiple of 4; PNG colour types, depths, filters, Adam7,
@@ -974,7 +981,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_perf_test rd_display_change_test rd_boot_present_test rd_crt_test
-                  texpack_load_test gsb_cull_test
+                  texpack_load_test rd_png_mem_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
                   rd_fx_frame_test rd_vu_frac_test rd_crack_test rd_local_probe_test rd_vis_test
                   rd_vis_hiz_test)
@@ -1075,6 +1082,17 @@ if(ICO_RUN_TESTS)
                      --enhanced --resolution 2x --downsample --stats)
     set_tests_properties(rd_replay_tool_downsample PROPERTIES
                          PASS_REGULAR_EXPRESSION "present: downsample 1024x512 -> 512x256, window reduce off"
+                         SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    # Upscaling: FSR 1.0 (issue 99): the 1x picture (the dump's 512x256
+    # DISPLAY line-doubled to 512x512) EASU-upscaled and RCAS-sharpened to
+    # the 960x720 box, named by --stats (at 640x480 the box has fewer rows
+    # than the picture and FSR 1.0 does not run)
+    add_test(NAME rd_replay_tool_fsr1
+             COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_fsr1.png" --present 960x720
+                     --fsr1 --stats)
+    set_tests_properties(rd_replay_tool_fsr1 PROPERTIES
+                         PASS_REGULAR_EXPRESSION "present: fsr1 512x512 -> 960x720"
                          SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
     # the same dump listed without a device (--list --no-device)
     add_test(NAME rd_replay_tool_list
@@ -1221,6 +1239,7 @@ if(ICO_RUN_TESTS)
     if(ICO_BOOT_DUMP_OLD)
         set_tests_properties(rd_boot_present PROPERTIES ENVIRONMENT "ICO_BOOT_OLD=1")
     endif()
+    add_test(NAME rd_png_mem COMMAND rd_png_mem_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME texpack_load COMMAND texpack_load_test)
     add_test(NAME texpack_pack_files COMMAND texpack_load_test --pack "${ICO_TEXPACK_DIR}")
     set_tests_properties(texpack_pack_files PROPERTIES SKIP_RETURN_CODE 77)

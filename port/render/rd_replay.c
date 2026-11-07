@@ -105,7 +105,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
     "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
     "crack_fill_ps", "crack_count_ps", "shadow_count_ps", "crack_fill1_ps", "fx_aura_rows_ps",
-    "fx_aura_sum_ps", "shadow_count_load_ps"};
+    "fx_aura_sum_ps", "shadow_count_load_ps", "fsr1_easu_ps", "fsr1_rcas_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
