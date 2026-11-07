@@ -62,6 +62,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_jitter.h"
 #include "rd_passring.h"
 #include "rd_replay.h"
 #include "rd_submit.h"
@@ -920,6 +921,8 @@ static uint32_t s_framePicture, s_framePictureFrameH;
  * crop of the frame (RdTargetRec.ox), else NULL: its texture is narrower
  * than its GS width times its scale (frameGroupOf) */
 static const RdTargetRec *s_frameCrop;
+/* frameGroupOf's jitter (rd_jitter.h), else NULL */
+static const float *s_frameJitter;
 
 RdUniform rd__frame_group_ex(uint32_t targetW, uint32_t targetH, float originX, float originY,
                              float zScale, float regionScale, float scaleX, float scaleY)
@@ -1023,6 +1026,10 @@ RdUniform rd__frame_group_ex(uint32_t targetW, uint32_t targetH, float originX, 
             cb.vpo[0] = 0.0f;
             cb.misc[2] = (float)(tw + (tw & 1u)) / (float)pw;
         }
+        for (int k = 0; s_frameJitter && k < 2; k++) {
+            cb.vpo[k] += s_frameJitter[k]; /* past the GS's snap */
+            cb.jitter[k] = s_frameJitter[k];
+        }
     }
     return uniformGroup(g_rd.layoutFrame, 0, &cb, sizeof(cb));
 }
@@ -1033,9 +1040,11 @@ RdUniform rd__frame_group_ex(uint32_t targetW, uint32_t targetH, float originX, 
 static RdUniform frameGroupOf(const RdTargetRec *tc, float ox, float oy, float zScale)
 {
     s_frameCrop = tc->ox > 0.0f ? tc : NULL;
+    s_frameJitter = rd__frame_jitter_of(tc);
     const RdUniform u =
         rd__frame_group_ex(tc->w, tc->h, ox, oy, zScale, rd__region_scale(tc), tc->sx, tc->sy);
     s_frameCrop = NULL;
+    s_frameJitter = NULL;
     return u;
 }
 

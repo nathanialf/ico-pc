@@ -144,7 +144,8 @@ const char *ico_config_ini_key(const char *toml_path);
    vu_planes=, shadow_one=, shadow_bspline=, dynamic_state=, gpu_checkpoints=,
    gpu_robust=, pass_split=, attachment_read=, storage_pass_merge=,
    vu_prepass=, crack_fill=, joystick_directinput=, pipeline_set=, bind_cache=,
-   aura_box=, pass_area=, clear_carry=, clear_skip=, last_store=, glow_fold=):
+   aura_box=, pass_area=, clear_carry=, clear_skip=, last_store=, glow_fold=,
+   jitter_test=):
    ico_dev_env_name
    gives the environment variable a key is exported as (ICO_RD_BLEND,
    ICO_RD_UBER, ICO_RD_FOG_PATH, ICO_RD_DATE_PATH, ICO_RD_STORE_PLAN, ICO_RD_BLUR_FOLD,
@@ -153,7 +154,8 @@ const char *ico_config_ini_key(const char *toml_path);
    ICO_VK_ATTACHMENT_READ, ICO_RD_PASS_MERGE, ICO_RD_VU_PREPASS, ICO_RD_CRACK_FILL,
    ICO_JOYSTICK_DIRECTINPUT, ICO_PIPELINE_SET, ICO_DISC_READER,
    ICO_DISC_READ_AHEAD_KB, ICO_RHI_BIND_CACHE, ICO_RD_AURA_BOX, ICO_RD_PASS_AREA,
-   ICO_RD_CLEAR_CARRY, ICO_RD_CLEAR_SKIP, ICO_RD_LAST_STORE, ICO_RD_GLOW_FOLD), NULL for any
+   ICO_RD_CLEAR_CARRY, ICO_RD_CLEAR_SKIP, ICO_RD_LAST_STORE, ICO_RD_GLOW_FOLD,
+   ICO_RD_JITTER_TEST), NULL for any
    other key (the
    retired vu_plain_only= and vu_extended= among them: read, logged by
    ico_ini_export as "ico_pc: [dev] <key> = <value> is not used (every
@@ -171,7 +173,8 @@ const char *ico_config_ini_key(const char *toml_path);
    present_fallback auto, off or fifo as they are (0/false/no -> "off");
    frame_rate_pin auto or off as they are (0/false/no -> "off");
    disc_reader thread or sync as they are (0/false/off/no -> "sync");
-   disc_read_ahead_kb 0 to 4096 as it is (false/off/no -> "0"); pass_split a
+   disc_read_ahead_kb 0 to 4096 as it is (false/off/no -> "0"); jitter_test
+   "x,y" (each -0.5..0.5) as it is; pass_split a
    count; gpu_*, attachment_read, storage_pass_merge, store_plan,
    blur_fold, uint_view, alpha_plan, fx_plan, fx_dst_local, vu_planes,
    shadow_one, shadow_bspline, vu_prepass, vu_prepass_batch, still_represent, glow_redraw, glow_fold,
