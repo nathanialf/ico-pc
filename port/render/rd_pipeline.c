@@ -3658,6 +3658,8 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     case RD_FS_CRT_BLOOM:
     case RD_FS_CRT_BLUR:
     case RD_FS_CRT:
+    case RD_FS_FSR1_EASU: /* the other present-stage filter (rd_fsr1.c) */
+    case RD_FS_FSR1_RCAS:
         return RD_KF_CRT;
     case RD_FS_FX_SPRITE:
     case RD_FS_FX_SPRITE_UINT:
@@ -4392,6 +4394,16 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
      * scaled scene with more texels than the box has pixels, Downsampling) */
     const RdPipeKeyInt reduce = rd__post_key(RD_VS_BLIT, RD_FS_AA_REDUCE, RHI_FMT_RGBA8_UNORM);
     n = rd__add_pipe_key(out, max, n, &reduce);
+    /* FSR 1.0 (Options > Picture > Upscaling, rd_fsr1.c): EASU and RCAS into
+     * RGBA8 textures of the box's size, made at start-up whatever the
+     * settings, as the reduce; not where a module is missing (OpenGL
+     * without its GLSL) */
+    if (g_rd.fs[RD_FS_FSR1_EASU].id && g_rd.fs[RD_FS_FSR1_RCAS].id) {
+        const RdPipeKeyInt easu = rd__post_key(RD_VS_BLIT, RD_FS_FSR1_EASU, RHI_FMT_RGBA8_UNORM);
+        const RdPipeKeyInt rcas = rd__post_key(RD_VS_BLIT, RD_FS_FSR1_RCAS, RHI_FMT_RGBA8_UNORM);
+        n = rd__add_pipe_key(out, max, n, &easu);
+        n = rd__add_pipe_key(out, max, n, &rcas);
+    }
     /* the box blit with the effects depth, on both outputs (not where the
      * device cannot draw to a D32F depth buffer: a render pass with that
      * attachment is invalid there) */

@@ -36,6 +36,7 @@ are [RHI.md](RHI.md).
 | `port/render/rd_interp.c` | presenting between ticks |
 | `port/render/rd_present_clock.c` | the present clock (`rd_present_clock_alpha`), what it notes for `rd_present`, Motion blur: Smooth's presents a tick |
 | `port/render/rd_crt.c`, `port/shaders/crt.hlsl` | the CRT filter |
+| `port/render/rd_fsr1.c`, `port/render/rd_fsr1.h`, `port/shaders/fsr1.hlsl`, `port/third_party/fsr1/` | Upscaling: FSR 1.0, AMD's EASU and RCAS at the present ([FSR 1.0 upscaling](#fsr-10-upscaling)) |
 | `port/render/rd_tone.c`, `port/render/rd_tone.h`, `port/shaders/tone.hlsli` | the colour adjustment (Options > Picture's Gamma, Picture brightness, Contrast, Saturation; [Presentation](#presentation)) |
 | `port/platform/fps_counter.h`, `fps_counter.c` | the Frame rate counter's presents per second, free of SDL and rd ([UI.md](UI.md#the-frame-rate-counter)) |
 | `port/platform/test/` | `fps_counter_test.c`, `pace_loop_test.c`, `pace_policy_test.c`, `present_fallback_test.c`, `display_rate_test.c`, `present_hist_test.c`, `perf_block_test.c`, `window_video_test.c`, `hotkeys_test.c` |
@@ -192,6 +193,14 @@ key says; the renderer draws an MSAA count the device lacks as off (`port/game/v
 **Downsampling.** `downsample` (`"off"` or `"box"`) is read and saved outside the preset, as
 `show_fps` is, and reaches the renderer as `RdSettings.downsample`; the renderer decides where it is
 in force ([downsampling](#downsampling)).
+
+**Upscaling.** `upscaling` (`"off"` or `"fsr1"`) and `upscaling_sharpness` (0..100, default 80) are
+read and saved outside the preset, as `downsample` is, and reach the renderer as
+`RdSettings.upscale` (`RD_UPSCALE_FSR1`) and `upscaleSharpness`; the renderer decides where FSR 1.0
+is in force ([FSR 1.0 upscaling](#fsr-10-upscaling)). `"fsr3"` is the temporal upscaler's word,
+not offered yet: it reads as `"off"` with `video: upscaling "fsr3" is not available yet; "off"
+used` (`port/game/video_options.c` (`ico_video_parse_upscale`); `port/platform/window_host.c`
+(`video_settings`)).
 
 **Fallbacks.** A key the parser does not understand logs one `video: ... not understood` line and
 takes the default (resolution, aspect, texture filter, window mode, anti-aliasing,
@@ -1463,7 +1472,8 @@ in output pixels), the deferred text (Enhanced: the frame's text items laid out 
 the top layer (the touch controls); `rd_present_blank` draws the overlay alone (the start-up
 screens). With supersampling, or without anti-aliasing when a scaled scene has more texels than the
 box has pixels on both axes (never at scale 1), `aa_reduce_ps` box-averages DISPLAY to the box
-(`reduceRecord`); with an effects program
+(`reduceRecord`); with Upscaling: FSR 1.0 and fewer texels than the box has pixels on both axes,
+EASU and RCAS draw it at the box's size first ([FSR 1.0 upscaling](#fsr-10-upscaling)); with an effects program
 and `effects_depth` `blit_depth_ps` writes the scene's depth beside it (`port/render/rd_present.c`).
 The UI box is the 4:3 part of the presentation box (`port/render/rd_present.c` (`rd_ui_box_of`)).
 Movies draw their own box ([FMV.md](FMV.md#the-picture-on-screen)).
@@ -1723,6 +1733,61 @@ against the GS grid instead of the window: `perPx` is the scale, so 4x with SSAA
 SSAA2 draws 2x, one reduce for both. The display line ends its options with `, downsampled to original
 size` and is logged again when that changes. The replay tool's `--downsample` sets it, and `--stats`
 prints `present: downsample WxH -> wxh, window reduce off|WxH -> wxh` (`rd__last_present_reduce`).
+
+### FSR 1.0 upscaling
+
+`RdSettings.upscale` = `RD_UPSCALE_FSR1` (Options > Picture > Upscaling: FSR 1.0; `[video]
+upscaling = "fsr1"`, default `"off"`, kept outside the preset) runs AMD FidelityFX Super Resolution
+1.0 at the present: where the picture the box blit would stretch (DISPLAY, line-doubled or full
+height, after Downsampling when that ran) has fewer texels than the presentation box has pixels on
+both axes, its visible columns (the width less `sourceCrop` at each side) are drawn into a texture
+of the box's size by EASU (`fsr1_easu_ps`, AMD's edge-adaptive upscale; the crop through the
+viewport and offset of `FsrEasuConOffset`) and sharpened into a second by RCAS (`fsr1_rcas_ps`),
+which the box blit then draws one texel a pixel, nearest: the border mask, the mirror (a nearest
+flip, as after the window's reduce, so the effects depth flips with the colour), the colour
+adjustment, the deferred text, the capture and the overlay are as without it
+(`port/render/rd_present.c` (`rd__present_record`), `port/render/rd_fsr1.c` (`rd__fsr1_record`)).
+The step comes after the window's reduce: a picture with more texels than the box keeps the reduce
+(supersampling, a resolution above the window's), one with as many (the `window` resolution, the
+one-texel-a-pixel window of `snapWindow`) or a mixed case (more across, fewer down) the plain
+blit. Never under the CRT filter (it draws its own box from the PS2's pixels) and never at the
+`window` resolution (`rd__fsr1_apply`, from `rd__apply_display`). Off (or `RD_UPSCALE_FSR3`, the
+temporal upscaler's value, not offered yet) nothing here runs and the present is the one
+without the row byte for byte.
+
+**The sharpness.** `RdSettings.upscaleSharpness` (Options > Picture > Sharpness, 0..100 in tens,
+`[video] upscaling_sharpness`, default 80) is RCAS's stops of sharpness taken away,
+`2 (1 - s / 100)`: 100 is RCAS at its sharpest (0 stops), 80 is 0.4 stops, 0 is 2 stops. AMD
+specifies EASU for up to 2x a side (4x the area); past that on either axis (Resolution 1x on a
+1440p or 4K screen, the phone's Auto at 1x stretched 2.1-2.4x) RCAS takes half a stop more, so it
+does not sharpen the stretch's softness into edges (`rd__fsr1_stops`).
+
+**The shaders and the constants.** `port/shaders/fsr1.hlsl` supplies the callbacks AMD's headers
+ask for (`FsrEasuRF/GF/BF` the three gathers, `FsrRcasLoadF` a clamped `Load`) and includes
+`port/third_party/fsr1/ffx_a.h` and `ffx_fsr1.h`, unmodified, on the 32-bit path (`FSR_EASU_F`,
+`FSR_RCAS_F`, `FSR_RCAS_PASSTHROUGH_ALPHA`; no `A_HALF`: no 16-bit types, so SPIR-V 1.0 core and
+GLSL 4.30 hold it on every backend). Both entries run behind `blit_vs` with `IcoFsrCB` in the DrawCB
+slot ([SHADERS.md](SHADERS.md#files)); EASU's alpha is the input's, bilinear, at the pixel's
+position (EASU filters colour alone). The constants are computed on the CPU by a C copy of AMD's
+`FsrEasuConOffset` and `FsrRcasCon`, the same float operations in the same order
+(`rd__fsr1_easu_con`, `rd__fsr1_rcas_con`). Two RGBA8 textures of the box's size (about 12 MB at
+2340 x 1080), made on first use and remade on a change of size, freed at shutdown
+(`rd__fsr1_shutdown`). Both keys are in the start-up set on every device that has the modules
+(`rd__enumerate_reachable_screen`, the CRT family).
+
+**Log lines.** The display line ends its options with `, upscaling fsr1 (sharpness S)` in force,
+`, upscaling fsr1 off (the CRT filter draws its own box)` or `(the window resolution)` asked but
+not in force, and is logged again when that or the sharpness changes. Each change of the pass's
+sizes or stops logs `present: fsr1 WxH (C columns shown) -> wxh, sharpness S (RCAS K stops)`, with
+`, past 2x a side: half a stop softer` when it applies (the first 8, then every 100th); a device
+where a pass cannot be made logs once `present: fsr1 cannot draw here (...): the picture is
+stretched as with Upscaling off`. The replay tool's `--fsr1 [S]` sets it (S the Sharpness, default
+80), and `--stats` prints `present: fsr1 WxH -> wxh` or `present: fsr1 off`
+(`rd__last_present_fsr1`).
+
+**Licence.** AMD's two headers are MIT (Copyright (c) 2021 Advanced Micro Devices, Inc.), vendored
+unmodified with their licence in `port/third_party/fsr1/`; the row, the pinned commit and the files'
+SHA-256 are in [THIRD_PARTY.md](../THIRD_PARTY.md), and the notice ships in `NOTICES.txt`.
 
 ## Interpolation between ticks
 

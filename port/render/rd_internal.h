@@ -1573,6 +1573,9 @@ typedef enum RdFsId {
      * gather (RhiLimits.stencilGather) or the loads are in force
      * (g_rd.shadowLoad); key rd__shadow_count_key */
     RD_FS_SHADOW_COUNT_LOAD,
+    /* FSR 1.0's EASU and RCAS behind blit_vs (rd_fsr1.c, fsr1.hlsl) */
+    RD_FS_FSR1_EASU,
+    RD_FS_FSR1_RCAS,
     RD_FS_COUNT
 } RdFsId;
 

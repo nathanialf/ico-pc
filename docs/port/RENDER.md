@@ -17,6 +17,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_tex.h`, `rd_tex.c` | the texture cache: GS formats decoded into rd textures |
 | `port/render/rd_mesh.h`, `rd_mesh.c` | the VU mesh path (VU1_PROGRAMS.md) |
 | `port/render/rd_replay.c` | a frame onto the RHI: every command's replay |
+| `port/render/rd_jitter.h`, `rd_jitter.c` | the scene's sub-pixel jitter after the GS's snap ([Jitter](#jitter)) and the Halton (2, 3) table |
 | `port/render/rd_shader_plan.c` | the size of `rd__gpu_init`'s shader set, counted before it is made, for the progress screens (`rhi_plan_shaders`) |
 | `port/render/rd_submit.c`, `rd_submit.h` | a replay's end: the present's pass recorded, the list ended and submitted, the picture presented and the capture it copied written out |
 | `port/render/rd_thread.c`, `rd_thread.h` | the renderer on the window's render thread: the picture and the calls posted there, the hand-over of the renderer's state (texLock), the retire list, the stats split, the renderer's own thread for the tools |
@@ -56,7 +57,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/tools/rd_replay_region.c` | the replay tool's `--region-stats`: the region rule's verdicts on the CPU |
 | `port/render/vu1_ref/` | the VU1 programs' CPU references ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-cpu-oracles)) |
 | `port/render/test/` | the renderer's tests ([TESTING_PROGRAMS.md](TESTING_PROGRAMS_RENDER.md)) |
-| `port/render/rd_interp.c`, `rd_present.c`, `rd_present_info.c`, `rd_crt.c`, `rd_video.c` | presentation ([DISPLAY.md](DISPLAY.md)); `rd_present_info.c` holds `rd_last_present_info`'s record |
+| `port/render/rd_interp.c`, `rd_present.c`, `rd_present_info.c`, `rd_crt.c`, `rd_fsr1.c`, `rd_video.c` | presentation ([DISPLAY.md](DISPLAY.md)); `rd_present_info.c` holds `rd_last_present_info`'s record |
 | `port/render/rd_present_clock.c` | the present clock the timer path takes alpha from (`rd_present_clock_alpha`), the values it notes for `rd_present` (the alpha before its clamp, the time since the present before, the tick) and Motion blur: Smooth's presents a tick (`rd__present_clock_k`) ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)) |
 | `port/render/rd_interp_mesh.c` | the interpolation's reads of a mesh's stream kept while its serial holds: a skinned mesh's bone pivots, a rigid mesh's centroid, the same-shape answer of two streams ([Performance notes](#performance-notes)) |
 | `port/render/texpack*.c`, `modelpack.c`, `gltf.c`, `xxh3.c` | texture and model packs ([PACKS.md](PACKS.md)) |
@@ -594,7 +595,8 @@ largest power of two the GPU takes, centred on the target, and FrameCB maps posi
 scissor, always inside the target, bounds the drawing. Every step is exact for a GS position at an
 integer scale, and the clip-space numbers are the same at every frame width, so the GPU clips the
 same corners the same way whatever the width (`port/render/rd_replay.c` (`s_vpExact`)). The
-present and the camera probe keep the plain mapping.
+present and the camera probe keep the plain mapping. A jittered frame's scene-class passes add the
+jitter to this mapping's centre offset ([Jitter](#jitter)).
 
 **Uploads.** Before the first pass the replay uploads pending textures and their levels through
 the frame's upload ring, and the static meshes the frame draws into the device arena (once, and
@@ -808,6 +810,39 @@ the fog reads the resolved depth ([DIVERGENCES.md](DIVERGENCES.md) VD-22); the l
 epoch per sample ...` or `... on the resolved picture ...`, `port/render/rd_replay.c` (`doFog`)). When no
 way of reading the multisampled depth passed the fog's self-test, rd draws without MSAA and
 `rd_aa_msaa_blocked` says so (`port/render/rd.h` (`rd_aa_msaa_blocked`)).
+
+### Jitter
+
+A temporal upscaler renders each picture a sub-pixel off the last and accumulates them; the
+jitter is that offset. The GS position is made as the PS2 makes it (the divide, the snap to the
+1/16 grid, the region test and the side bands); the jitter moves it after, in texels of the
+bound target, x right and y down. `rd__frame_group_ex` adds it to the exact viewport's centre
+offset (FrameCB `vpo.xy`), which `gs_px_to_ndc` and `vu_homogeneous_position` already add to
+every position, so no vertex shader changes; FrameCB `jitter.xy` holds the same values for the
+pixel side, where the helpers that map a pixel back to the GS's place subtract it: the screen
+planes (`gs_plane_offset`: colour and ST evaluated at the pixel's jittered GS position), the side
+bands' pixel test (`vu_pixel_in_picture`) and `fullscreen_triangle` (a full-target pass keeps its
+texels) (`port/shaders/common.hlsli` (FrameCB `g_jitter`); [SHADERS.md](SHADERS.md#commonhlsli)).
+
+Only `frameGroupOf`'s frame groups take it, the scene draws' and the scene's post sprites', and
+of those only the ones of SCENE, WORK2 (the glow's mask: the lamps' meshes drawn against SCENE's
+depth, read back pixel for pixel) and AURA_WORK (SCENE's depth): a file-static
+(`s_frameJitter`) set around the one call, like `s_frameCrop`, so no caller of `rd__frame_group`
+changes. Not jittered: the post chain's reads (by pixel), the work buffers and the shadow levels,
+the reduction into DISPLAY, DISPLAY_HELD and the motion blur, the DATE snapshot's copy, the
+present (`port/render/rd_jitter.c` (`rd__frame_jitter_of`); `port/render/rd_replay.c`
+(`frameGroupOf`)). List 11's UI, drawn into SCENE, is in a SCENE pass and is moved too.
+
+The jitter comes from `rd__frame_jitter_set` (until `rd__frame_jitter_clear`), in this build only
+from the developer switch `[dev] jitter_test = x,y` (`ICO_RD_JITTER_TEST`, read at the first
+replay, logged once: [CONFIG.md](CONFIG.md)) and `rd_replay_tool --jitter x,y` (`--stats`:
+`jitter X, Y: N frame groups`). With nothing set no frame group changes; a jitter of 0, 0 adds 0.0,
+which leaves every finite float as it is, so the picture is the same byte for byte
+(`rd_replay_tool_jitter`). `rd__jitter_halton` is the Halton (2, 3) sequence less 0.5, FSR's
+jitter at a frame index reduced by the phase count. Tests: `rd_jitter` (the sub-pixel edges move
+by the jitter exactly at 1x and 2x, a whole-texel jitter moves SCENE exactly while WORK1, the
+reduction and the present take none) and `rd_replay_tool_jitter`
+([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ### Velocity
 
@@ -1640,7 +1675,8 @@ With `RdSettings.interpolate` on, `rd_end_frame` only closes the frame and the h
 `rd_present(alpha)` (the [present](ARCHITECTURE.md#terms)) as often as the display allows; what
 blends and how is [DISPLAY.md](DISPLAY.md#interpolation-between-ticks)'s
 (`port/render/rd_interp.c`). `rd_present.c` shows DISPLAY in a box of the frame's aspect on the
-output, `rd_crt.c` replaces that blit under the CRT filter, and `rd_video.c` shows the FMV picture.
+output, `rd_crt.c` replaces that blit under the CRT filter, `rd_fsr1.c` upscales the picture before
+it with FSR 1.0 (Options > Picture > Upscaling), and `rd_video.c` shows the FMV picture.
 All of it is [DISPLAY.md](DISPLAY.md). Re-keyed screen prims:
 [WORK_BUFFERS.md](WORK_BUFFERS.md#screen-sprites-redrawn-under-a-new-key-between-ticks).
 

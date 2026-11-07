@@ -2182,6 +2182,95 @@ static void test_video_downsample(const char *dir)
     ico_video_reload();
 }
 
+/* [video] upscaling and upscaling_sharpness (issue 99, default "off" and
+   80): the default, the file read ("fsr1", any case; "fsr3", not in this
+   version, and an unknown word are off; a sharpness outside 0..100 is
+   clamped), the run-time values sanitized, the round trip, and the preset
+   untouched either way (they are no preset rows) */
+static void test_video_upscale(const char *dir)
+{
+    char path[512];
+    IcoVideoOptions o, d;
+    const char *text;
+    FILE *f;
+    int v = -1;
+
+    ico_video_defaults(&d);
+    CHECK(d.upscale == ICO_UPSCALE_OFF && d.upscaleSharpness == 80);
+    CHECK(ico_video_parse_upscale("FSR1", &v) == 0 && v == ICO_UPSCALE_FSR1);
+    CHECK(ico_video_parse_upscale("off", &v) == 0 && v == ICO_UPSCALE_OFF);
+    v = -1;
+    CHECK(ico_video_parse_upscale("fsr3", &v) == 1 && v == ICO_UPSCALE_OFF);
+    CHECK(ico_video_parse_upscale("dlss", &v) < 0);
+    CHECK(strcmp(ico_video_upscale_name(ICO_UPSCALE_FSR1), "fsr1") == 0);
+    CHECK(strcmp(ico_video_upscale_name(99), "off") == 0);
+    CHECK(ico_video_upscale_sharpness_clamp(-5) == 0 &&
+          ico_video_upscale_sharpness_clamp(150) == 100 &&
+          ico_video_upscale_sharpness_clamp(30) == 30);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.upscale == ICO_UPSCALE_OFF && ico_video_upscale() == ICO_UPSCALE_OFF &&
+          ico_video_upscale_sharpness() == 80 && ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    snprintf(path, sizeof(path), "%s/options_upscale_test.toml", dir);
+    f = fopen(path, "wb");
+    if (f == NULL) {
+        fprintf(stderr, "cannot write %s\n", path);
+        failures++;
+        return;
+    }
+    fputs("[video]\nupscaling = \"fsr1\"\nupscaling_sharpness = 30\n", f);
+    fclose(f);
+    ico_config_reset(path, "/nonexistent/options_test.ini");
+    ico_video_reload();
+    ico_video_get(&o);
+    CHECK(o.upscale == ICO_UPSCALE_FSR1 && ico_video_upscale() == ICO_UPSCALE_FSR1 &&
+          o.upscaleSharpness == 30 && ico_video_upscale_sharpness() == 30 &&
+          ico_video_preset(&o) == ICO_VIDEO_ORIGINAL);
+    o.upscale = 7;
+    o.upscaleSharpness = 400;
+    ico_video_set(&o);
+    ico_video_get(&o);
+    CHECK(o.upscale == ICO_UPSCALE_OFF && ico_video_upscale() == ICO_UPSCALE_OFF &&
+          o.upscaleSharpness == 100);
+    o.upscale = ICO_UPSCALE_FSR1;
+    o.upscaleSharpness = 60;
+    ico_video_set(&o);
+    CHECK(ico_video_save() == 0);
+    text = read_text(path);
+    CHECK(text != NULL && strstr(text, "upscaling = \"fsr1\"") != NULL &&
+          strstr(text, "upscaling_sharpness = 60") != NULL);
+    o.upscale = ICO_UPSCALE_OFF;
+    ico_video_set(&o);
+    CHECK(ico_video_save() == 0);
+    text = read_text(path);
+    CHECK(text != NULL && strstr(text, "upscaling = \"off\"") != NULL);
+    /* "fsr3" (not offered yet), an unknown word and a sharpness out of
+       range read as off and clamped */
+    for (int i = 0; i < 2; i++) {
+        f = fopen(path, "wb");
+        if (f != NULL) {
+            fputs(i ? "[video]\nupscaling = \"sharp\"\nupscaling_sharpness = -3\n"
+                    : "[video]\nupscaling = \"fsr3\"\nupscaling_sharpness = 101\n",
+                  f);
+            fclose(f);
+        }
+        ico_config_reset(path, "/nonexistent/options_test.ini");
+        ico_video_reload();
+        ico_video_get(&o);
+        CHECK(o.upscale == ICO_UPSCALE_OFF && o.upscaleSharpness == (i ? 0 : 100));
+    }
+    /* Enhanced's shortcut leaves them alone */
+    o.upscale = ICO_UPSCALE_FSR1;
+    o.upscaleSharpness = 40;
+    ico_video_set_preset(&o, ICO_VIDEO_ENHANCED);
+    CHECK(o.upscale == ICO_UPSCALE_FSR1 && o.upscaleSharpness == 40 &&
+          ico_video_preset(&o) == ICO_VIDEO_ENHANCED);
+    remove(path);
+    ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
+    ico_video_reload();
+}
+
 /* [video] show_fps (the Frame rate counter, default off): the default, the
    file read, the run-time value sanitized to 0 or 1, the round trip, and
    the preset untouched either way */
@@ -2468,6 +2557,7 @@ int main(int argc, char **argv)
     test_video_models(argc > 1 ? argv[1] : ".");
     test_video_show_fps(argc > 1 ? argv[1] : ".");
     test_video_downsample(argc > 1 ? argv[1] : ".");
+    test_video_upscale(argc > 1 ? argv[1] : ".");
     test_video_auto(argc > 1 ? argv[1] : ".");
     test_video_interpolate();
     test_video_changes_text();

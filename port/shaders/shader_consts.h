@@ -52,6 +52,11 @@ typedef struct IcoFrameCB {
      * target (common.hlsli g_vpo); z the texels of the GS frame a Full
      * pixel target leaves out at its left, else 0; w reserved (0) */
     float vpo[4];
+    /* xy: the sub-pixel jitter in texels a jittered frame's scene-class
+     * passes take (port/render/rd_jitter.c), already added to vpo's xy; the
+     * pixel side subtracts it (common.hlsli g_jitter); 0 in every other
+     * frame group; zw reserved (0) */
+    float jitter[4];
 } IcoFrameCB;
 
 /* DrawCB: group 1, slot 1 (register b1, space1). */
@@ -112,6 +117,21 @@ typedef struct IcoCrtCB {
      * size with IcoDrawCB (its aux blocks) */
     float pad[8];
 } IcoCrtCB;
+
+/* FsrCB (fsr1.hlsl): group 1, slot 1, DrawCB's register and size, so the
+ * FSR 1.0 passes run under the post pipelines' layouts behind blit_vs, which
+ * reads this block as DrawCB (its aux1.w, the quarter turns, is pad[11]: 0).
+ * The constants of AMD's FsrEasuConOffset and FsrRcasCon as their uint bit
+ * patterns (port/render/rd_fsr1.c computes them on the CPU). */
+typedef struct IcoFsrCB {
+    uint32_t con0[4]; /* EASU: the output pixel to the input's position (scale, offset) */
+    uint32_t con1[4]; /* EASU: the input's texel size, the first gather's offset */
+    uint32_t con2[4]; /* EASU: the second and third gathers' offsets */
+    uint32_t con3[4]; /* EASU: the fourth gather's offset, zw 0 */
+    uint32_t rcas[4]; /* RCAS: x the sharpness (2^-stops) as a float, y the same as two halves */
+    uint32_t last[4]; /* x, y: the RCAS input's last column and row (its loads clamp there) */
+    uint32_t pad[12];
+} IcoFsrCB;
 
 /* DrawCB.mode[0] flags (DF_* in common.hlsli). */
 enum {
@@ -356,7 +376,9 @@ _Static_assert(offsetof(IcoFrameCB, misc) == 304, "misc");
 
 _Static_assert(offsetof(IcoFrameCB, vpo) == 320, "vpo");
 
-_Static_assert(sizeof(IcoFrameCB) == 336, "FrameCB size");
+_Static_assert(offsetof(IcoFrameCB, jitter) == 336, "jitter");
+
+_Static_assert(sizeof(IcoFrameCB) == 352, "FrameCB size");
 
 _Static_assert(offsetof(IcoDrawCB, mode) == 16, "mode");
 
@@ -375,6 +397,18 @@ _Static_assert(sizeof(IcoDrawCB) == 144, "DrawCB size");
 _Static_assert(sizeof(IcoCrtCB) == sizeof(IcoDrawCB), "CrtCB shares DrawCB's slot and size");
 
 _Static_assert(offsetof(IcoCrtCB, pass) == 96, "CrtCB pass");
+
+_Static_assert(sizeof(IcoFsrCB) == sizeof(IcoDrawCB), "FsrCB shares DrawCB's slot and size");
+
+_Static_assert(offsetof(IcoFsrCB, con1) == 16, "FsrCB con1");
+
+_Static_assert(offsetof(IcoFsrCB, con2) == 32, "FsrCB con2");
+
+_Static_assert(offsetof(IcoFsrCB, con3) == 48, "FsrCB con3");
+
+_Static_assert(offsetof(IcoFsrCB, rcas) == 64, "FsrCB rcas");
+
+_Static_assert(offsetof(IcoFsrCB, last) == 80, "FsrCB last");
 
 _Static_assert(offsetof(IcoSpriteVertex, z) == 4, "vertex z");
 

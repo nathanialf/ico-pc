@@ -187,6 +187,8 @@ add_library(ico_render STATIC
     rd_core.c
     rd_crack_fill.c # above 1x: the pixels no draw covered between drawn ones, before the fog
     rd_crt.c # the CRT filter at present time
+    rd_fsr1.c # Upscaling: FSR 1.0 (AMD FidelityFX Super Resolution 1.0) at present time
+    rd_jitter.c # the scene's sub-pixel jitter after the GS's snap (a temporal upscaler's; [dev] jitter_test)
     rd_tone.c # the colour adjustment's settings (Options > Picture: gamma, brightness, contrast, saturation)
     rd_date_selftest.c # DATE through the stencil bit: the start-up check on the device
     rd_dst_read.c # the exact GS blend: the destination read
@@ -521,6 +523,17 @@ add_executable(rd_mirror_test test/rd_mirror_test.c)
 target_compile_options(rd_mirror_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_mirror_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_mirror_test PRIVATE ico_render)
+
+# rd_jitter_test: the scene's sub-pixel jitter (rd_jitter.c): the Halton
+# (2, 3) table and the switch's parse on the CPU; on a device the scene's
+# sub-pixel edges moved by the jitter exactly (Original 1x, Enhanced 2x),
+# 0, 0 the same bytes, a whole-texel jitter moving SCENE exactly (the
+# screen planes evaluated at the jittered position) while WORK1, the
+# reduction and the present take none; 77 without a device.
+add_executable(rd_jitter_test test/rd_jitter_test.c)
+target_compile_options(rd_jitter_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_jitter_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_jitter_test PRIVATE ico_render)
 
 # rd_msaa_test: the anti-aliasing's MSAA epoch: MSAA4 against no
 # anti-aliasing on a synthetic scene (identical away from edges, integer
@@ -985,6 +998,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_vuprepass_selftest_test rd_vu_skin_check_test rd_blur_test rd_water_test
                   rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
+                  rd_jitter_test
                   rd_perf_test rd_display_change_test rd_boot_present_test rd_crt_test
                   texpack_load_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
@@ -1088,6 +1102,29 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_replay_tool_downsample PROPERTIES
                          PASS_REGULAR_EXPRESSION "present: downsample 1024x512 -> 512x256, window reduce off"
                          SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    # Upscaling: FSR 1.0 (issue 99): the 1x picture (the dump's 512x256
+    # DISPLAY line-doubled to 512x512) EASU-upscaled and RCAS-sharpened to
+    # the 960x720 box, named by --stats (at 640x480 the box has fewer rows
+    # than the picture and FSR 1.0 does not run)
+    add_test(NAME rd_replay_tool_fsr1
+             COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_fsr1.png" --present 960x720
+                     --fsr1 --stats)
+    set_tests_properties(rd_replay_tool_fsr1 PROPERTIES
+                         PASS_REGULAR_EXPRESSION "present: fsr1 512x512 -> 960x720"
+                         SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    # the scene's jitter (rd_jitter.h; test/rd_replay_tool_jitter.cmake): at
+    # Original 1x and Enhanced 2x, --jitter 0,0 draws every target and the
+    # present byte for byte as without it, --jitter 0.25,0.25 moves SCENE and
+    # the present, ICO_RD_JITTER_TEST ([dev] jitter_test) equals --jitter,
+    # --stats names it; a jitter outside -0.5..0.5 is refused
+    add_test(NAME rd_replay_tool_jitter
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_jitter"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_jitter.cmake")
+    set_tests_properties(rd_replay_tool_jitter PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                          FIXTURES_REQUIRED rd_dump TIMEOUT 600)
     # the same dump listed without a device (--list --no-device)
     add_test(NAME rd_replay_tool_list
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
@@ -1237,6 +1274,8 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_mirror PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_msaa COMMAND rd_msaa_test)
     set_tests_properties(rd_msaa PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_jitter COMMAND rd_jitter_test)
+    set_tests_properties(rd_jitter PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_perf COMMAND rd_perf_test)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_display_change COMMAND rd_display_change_test)
@@ -3427,6 +3466,7 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         rd_state rd_pixel rd_native rd_layout rd_tex rd_gsbase ${rd_mesh_SHARDS} modelpack
         rd_shadow rd_shadow_edges rd_fog ${rd_blur_SHARDS} rd_water rd_raw rd_debug rd_present
         rd_crt rd_mirror rd_msaa rd_perf rd_display_change rd_interp rd_boot_present rd_dst_usage
+        rd_jitter
         # the two-pass blend (ICO_RD_NO_DUAL=1 is the renderer's own switch, not a Vulkan fake)
         rd_pixel_nodual rd_present_nodual rd_fog_nodual rd_shadow_nodual rd_water_nodual
         rd_raw_nodual rd_mirror_nodual rd_interp_nodual rd_msaa_nodual rd_crack_nodual

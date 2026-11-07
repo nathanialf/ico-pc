@@ -758,6 +758,18 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("region_rule", "0") == NULL);
     CHECK(ico_dev_env_value("region_rule", "") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.region_rule"), "region_rule") == 0);
+    /* jitter_test: the scene's sub-pixel jitter, x,y each -0.5..0.5, as it is
+       (port/render/rd_jitter.c reads ICO_RD_JITTER_TEST) */
+    CHECK(strcmp(ico_dev_env_name("jitter_test"), "ICO_RD_JITTER_TEST") == 0);
+    CHECK(strcmp(ico_dev_env_value("jitter_test", "0.25,0.25"), "0.25,0.25") == 0);
+    CHECK(strcmp(ico_dev_env_value("jitter_test", "-0.5, 0.5"), "-0.5, 0.5") == 0);
+    CHECK(strcmp(ico_dev_env_value("jitter_test", "0,0"), "0,0") == 0);
+    CHECK(ico_dev_env_value("jitter_test", "0.75,0") == NULL);
+    CHECK(ico_dev_env_value("jitter_test", "0.25") == NULL);
+    CHECK(ico_dev_env_value("jitter_test", "0.1,0.2,0.3") == NULL);
+    CHECK(ico_dev_env_value("jitter_test", "true") == NULL);
+    CHECK(ico_dev_env_value("jitter_test", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.jitter_test"), "jitter_test") == 0);
     /* vu_bones and its mark: issue 123's ladder, step 1 (port/render/
        rd_pipeline.c rd__vu_policy_init reads ICO_RD_VU_BONES, rd_vu_bones.c
        the mark from ICO_RD_VU_BONES_BY for the start line; window_bones.c
@@ -1054,6 +1066,15 @@ static void test_dev_env(void)
     ico_ini_parse(&ini, "[dev]\nregion_rule = sometimes\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
     CHECK(env_is("ICO_RD_REGION_RULE", NULL));
+    /* ... and jitter_test as its x,y (rd_jitter.c reads it) */
+    unset_env("ICO_RD_JITTER_TEST");
+    ico_ini_parse(&ini, "[dev]\njitter_test = 0.25,-0.25\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_JITTER_TEST", "0.25,-0.25"));
+    unset_env("ICO_RD_JITTER_TEST");
+    ico_ini_parse(&ini, "[dev]\njitter_test = 2,2\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_JITTER_TEST", NULL));
     /* blend=attachment and attachment_read=true (config.toml's [dev]) */
     ico_ini_parse(&ini, "[dev]\nblend = attachment\nattachment_read = true\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);

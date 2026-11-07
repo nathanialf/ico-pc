@@ -1125,6 +1125,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`windingDiscChecks`).
 - `rd_mip_test.c`: the Enhanced mip chain's size and its builder staying inside it (`rd_mip`).
 - `rd_mirror_test.c`: mirror mode's flag and the flipped presenter output (`rd_mirror`).
+- `rd_jitter_test.c`: the scene's sub-pixel jitter (`rd_jitter`; [RENDER.md](RENDER.md#jitter)). Without a device: `rd__jitter_halton`'s first 8 terms of base 2 and base 3 exact (each less 0.5), 1000 more inside -0.5..0.5; `rd__frame_jitter_parse` taking `x,y` with each -0.5..0.5 and refusing the rest; set, get and clear. On a device: SCENE at Original 1x and Enhanced 2x with 24 rows of quads whose left edges step 1/16 GS pixel a row and 24 columns whose top edges do: with a jitter (0.25, -0.25), then (-0.25, 0.25), every row's first lit texel is the unjittered run's of row f + 16 jx / s (the columns' of f + 16 jy / s), and a GS pixel on is s texels on; 0, 0 SCENE byte for byte as without; a Gouraud triangle (the screen planes), a nearest and a bilinear textured sprite: with a whole-texel jitter (1, 1) SCENE is the picture moved one texel right and down at every texel (the planes evaluated at the jittered position) and WORK1 (a work buffer) unchanged; with (1, 0) DISPLAY moved one texel right (the reduction not jittered) and the present at 1024 x 768 two pixels right (the present not jittered); no validation error.
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
   replays printed (the last three, whole at 430 passes a replay), the line format (the VU
   vertex pre-pass's entry among them, `testVuPre`) and the loss bisect's line; the pipeline
@@ -1297,6 +1298,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   double precision on the neutral present, the bars black; `blit_tone_ps` on both outputs is in
   the reachable set in both blend modes; `checkToneDepth`: with the effects depth forced the toned
   present is the toned present without it, byte for byte, and not the neutral one;
+  Upscaling: FSR 1.0 (`rd_present_fsr1_test.inc`, `checkFsr1`): the constants against hand-worked
+  values (`rd__fsr1_easu_con` at 512 x 512 into 960 x 720 and with a 7.5 offset, `rd__fsr1_rcas_con`
+  at 0, 1, 2, 0.4, 20 and 30 stops with AMD's truncated halves, `rd__fsr1_stops`); off with a
+  sharpness set, the rich frame's present is `checkOriginal`'s byte for byte with no pass noted; on
+  at 1280 x 720 the pass is noted 512x512 -> 960x720, the pillars stay black, a quarter or more of
+  the box changes and the box is the RCAS output (`rd__read_fsr1`) one texel a pixel, mirrored its
+  flip; with a tone row moved the box changes and the pillars stay black; sharpness 0 and 100
+  differ; under the CRT filter and at the window resolution on is off byte for byte; after
+  Downsampling at 2x the 512 x 512 picture is upscaled; at 16:9 with Full pixel off (688 GS
+  pixels) the pass takes the frame's 688 columns into the box and everything outside the border
+  mask is black; both keys in the start-up set in both blend modes, in the CRT family;
   the open border's outer columns (`rd_present_border_test.inc`, `checkOpenBorderEdges`): at
   2340x1080 (832 columns, the frame its exact width) and 4:3, 1x and 2x, the mirror on and off,
   SCENE red with green over GS columns 1 .. W - 2 presents green outer columns, byte for byte the
