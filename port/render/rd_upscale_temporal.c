@@ -1,26 +1,14 @@
-/* FSR 3.1's rows: the support query (a stub until FSR3HOST), the quality
- * ratios, the exclusions and the display line's words (rd_upscale_temporal.h) */
+/* FSR 3.1's rows: the quality ratios, the exclusions and the display line's
+ * words (rd_upscale_temporal.h); the support query is rd_fsr3.c's */
 
+#include "rd_fsr3.h"
 #include "rd_internal.h"
 #include "rd_upscale_temporal.h"
 
 #include <stdio.h>
 #include <string.h>
 
-bool rd_upscale_temporal_supported(void)
-{
-    /* The temporal upscaler is not built into this version: false on every
-     * backend.  The line says so once (the Options page asks on every
-     * frame) so a reporter's log shows why the row is "(off: not
-     * available)" */
-    static bool told;
-    if (!told) {
-        told = true;
-        rd__log("upscaling: FSR 3.1 is not available (the temporal upscaler is not in this "
-                "version); a saved \"fsr3\" is drawn as off and kept in the config");
-    }
-    return false;
-}
+/* rd_upscale_temporal_supported() is rd_fsr3.c's (the device's answer) */
 
 float rd__upscale_quality_ratio(int quality)
 {
@@ -54,24 +42,26 @@ static uint8_t s_asked;
 static bool s_on, s_inited;
 static float s_ratio;
 
-bool rd__upscale_temporal_apply(const RdSettings *st, bool crt, bool down, float sceneScale,
-                                char *note, size_t noteSize)
+bool rd__upscale_temporal_apply(const RdSettings *st, bool crt, bool down, float displayScale,
+                                const char *detail, char *note, size_t noteSize)
 {
     const bool asked = st->upscale == RD_UPSCALE_FSR3;
     const bool on = rd__upscale_temporal_on(st, crt);
-    const float ratio = on ? rd__upscale_temporal_ratio(st, sceneScale) : 0.0f;
+    const float ratio = on ? rd__upscale_temporal_ratio(st, displayScale) : 0.0f;
     if (note && noteSize) {
         note[0] = '\0';
         if (on) {
             static const char *const names[RD_UPSCALE_Q_COUNT] = {"native AA", "quality",
                                                                   "balanced", "performance"};
             const int q = st->upscaleQuality < RD_UPSCALE_Q_COUNT ? st->upscaleQuality : 0;
-            snprintf(note, noteSize, ", upscaling fsr3 %s (ratio %.1f)", names[q], (double)ratio);
+            snprintf(note, noteSize, ", upscaling fsr3 %s (ratio %.1f%s)", names[q], (double)ratio,
+                     detail ? detail : "");
         } else if (asked) {
-            snprintf(note, noteSize, ", upscaling fsr3 off (%s)",
+            snprintf(note, noteSize, ", upscaling fsr3 off (%s%s)",
                      crt                        ? "the CRT filter draws its own box"
                      : (down || st->downsample) ? "Downsampling is on"
-                                                : "not available");
+                                                : "not available: ",
+                     crt || down || st->downsample ? "" : rd_upscale_temporal_why());
         }
     }
     const bool changed = !s_inited || st->upscale != s_asked || on != s_on || ratio != s_ratio;

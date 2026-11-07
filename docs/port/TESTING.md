@@ -179,7 +179,12 @@ environment's run byte for byte the `--jitter` one, each run's `jitter` stats li
 `rd_replay_tool_upscale_test`, which replays the dump at `--enhanced --resolution 3x
 --upscale-test 1.5 --upscale-phases 8 --present 960x720 --stats` and passes on `upscale point:
 SCENE 1024x1024 -> UPSCALED 1536x1536 (render scale 2x2, display scale 3x3)` with a marker
-dispatched, none refused and a reduction remapped ([RENDER.md](RENDER.md#the-upscale-point)).
+dispatched, none refused and a reduction remapped ([RENDER.md](RENDER.md#the-upscale-point)), and
+`rd_replay_tool_fsr3`, which replays the dump at `--enhanced --fsr3 quality --present 1280x960
+--stats` under the validation layer and passes on `upscale: fsr3 ran N presents (context render WxH
+-> display WxH, ..., refused 0, failed 0, ...), validation errors 0` (FSR 3.1 dispatched by the
+FidelityFX upscaler; 77 where it cannot run: a build without it, a device without Vulkan 1.2 or the
+extensions; [DISPLAY.md](DISPLAY.md#fsr-31-upscaling)).
 
 ## The render suite on OpenGL
 

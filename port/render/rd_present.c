@@ -98,6 +98,7 @@
 #include "rd_upscale_temporal.h"
 #include "rd_tone.h"
 #include "rd_upscale.h"
+#include "rd_fsr3.h"
 #include "shader_consts.h"
 
 typedef struct RdPresentPreset {
@@ -395,7 +396,10 @@ bool rd__apply_display(void)
     /* A temporal upscaler (rd_upscale.h): the size so far is the display's
      * (DISPLAY, DISPLAY_HELD, UPSCALED); the scene-class targets take it
      * over the upscaler's ratio below (sx, sy), with no supersampling or
-     * MSAA (rd__aa_mode) and no Downsampling.  Off: nothing changes */
+     * MSAA (rd__aa_mode) and no Downsampling.  Off: nothing changes.
+     * Upscaling = FSR 3.1 is one source of it (rd__upscale_follow; its
+     * ratio settles below, once the display scale is known) */
+    rd__upscale_follow(st, rd__crt_on(), 0.0f);
     const bool temporal = rd__upscale_wanted();
     /* supersampling (RdSettings.antiAlias, rd__aa_mode: never under the
      * Original preset): the scene at 2 or 4 times the Resolution row's
@@ -477,6 +481,7 @@ bool rd__apply_display(void)
     const float dsy = h / gh < 1.0f ? 1.0f : h / gh;
     float sx = dsx, sy = dsy;
     if (temporal) {
+        rd__upscale_follow(st, rd__crt_on(), dsy); /* FSR 3.1's ratio at this display scale */
         rd__upscale_render_scale(dsx, dsy, rd__upscale_ratio(), st->upscaleRenderCap, &sx, &sy);
     }
     uint8_t filter = st->filterUpgrade <= RD_FILTER_UPGRADE_ANISOTROPIC ? st->filterUpgrade : 0;
@@ -496,15 +501,36 @@ bool rd__apply_display(void)
      * settingsPending) and at init, never per frame */
     /* Upscaling: FSR 1.0 (rd_fsr1.c), never at the "window" resolution (the
      * branch above that takes the box's size) */
-    char fsrNote[96];
+    char fsrNote[256];
     const bool windowRes = !(scale > 0.0f) && !(st->sceneWidth && st->sceneHeight) &&
                            st->preset == RD_PRESET_ENHANCED && st->outputWidth && st->outputHeight;
     bool fsrChanged = rd__fsr1_apply(st, windowRes, fsrNote, sizeof(fsrNote));
     {
-        /* FSR 3.1's words (rd_upscale_temporal.c) follow, when it is asked for */
+        /* FSR 3.1's words (rd_upscale_temporal.c) follow, when it is asked
+         * for; in force, the sizes and the FidelityFX build (rd_fsr3.c; the
+         * GPU memory once a context of these sizes was made, else the
+         * context's own line at the first picture says it) */
+        char detail[144] = "";
+        if (temporal && rd__upscale_by_fsr3()) {
+            const RdFsr3Stats *fs = rd__fsr3_stats();
+            const float fw = cropWe > 0.0f ? cropWe : gw;
+            const uint32_t rw = (uint32_t)floor((double)(fw * sx) + 0.5);
+            const uint32_t rh = (uint32_t)floor((double)(gh * sy) + 0.5);
+            const uint32_t dw = (uint32_t)floor((double)(fw * dsx) + 0.5);
+            const uint32_t dh = (uint32_t)floor((double)(gh * dsy) + 0.5);
+            char mem[48];
+            if (fs->made && fs->renderW == rw && fs->renderH == rh && fs->displayW == dw &&
+                fs->displayH == dh) {
+                snprintf(mem, sizeof(mem), "GPU memory %.1f MB", fs->memoryMb);
+            } else {
+                snprintf(mem, sizeof(mem), "GPU memory on the context's line");
+            }
+            snprintf(detail, sizeof(detail), ", render %ux%u -> display %ux%u, FFX %s, %s", rw, rh,
+                     dw, dh, fs->version[0] ? fs->version : "3.1.4", mem);
+        }
         const size_t used = strlen(fsrNote);
-        fsrChanged |= rd__upscale_temporal_apply(st, rd__crt_on(), down, sx, fsrNote + used,
-                                                 sizeof(fsrNote) - used);
+        fsrChanged |= rd__upscale_temporal_apply(st, rd__crt_on(), down, dsy, detail,
+                                                 fsrNote + used, sizeof(fsrNote) - used);
     }
     if (changed || aspect != g_rd.outAspect || filter != g_rd.filterUpgrade ||
         vs != g_rd.vsyncApplied || down != g_rd.downsample || fsrChanged) {
@@ -2623,6 +2649,7 @@ void rd__present_shutdown(void)
     rd__crt_shutdown();  /* the CRT filter */
     rd__fsr1_shutdown(); /* FSR 1.0's two textures */
     rd__upscale_free();  /* UPSCALED (rd_upscale.c) */
+    rd__fsr3_shutdown(); /* FSR 3.1's contexts (rd_fsr3.c), the GPU idle */
     /* the overlay's prims (the registration stays), the deferred text's list */
     free(s_ov.buf.v);
     free(s_ov.buf.b);

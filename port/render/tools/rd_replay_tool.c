@@ -76,6 +76,17 @@
  *                         at the box's size; S the Sharpness row, 0..100
  *                         (default 80); --stats names the pass ("present:
  *                         fsr1 WxH -> wxh", or "present: fsr1 off")
+ *   --fsr3 Q              Upscaling: FSR 3.1 (RdSettings.upscale, rd_fsr3.c) at
+ *                         the Upscaling quality Q (native, quality, balanced
+ *                         or performance; Native AA at 1x and under the
+ *                         Original preset), Sharpness 80: the FidelityFX
+ *                         upscaler at the upscale point (Vulkan; exit 77
+ *                         where it cannot run, with the reason).  A dump
+ *                         holds no history: each replay starts FSR from
+ *                         empty, as a camera cut does, so this proves the
+ *                         dispatch runs, not FSR's picture.  --stats names
+ *                         it ("upscale: fsr3 ran N presents (...),
+ *                         validation errors E", or "upscale: fsr3 off")
  *   --jitter X,Y          the scene's sub-pixel jitter (rd_jitter.h), X right
  *                         and Y down in texels of the bound target, each
  *                         -0.5..0.5, added after the GS's snap in the
@@ -487,6 +498,9 @@
 #include "../../include/ico_endian.h"
 #include "dump_zip.h" /* port/platform: the F12 zip */
 #include "rd_fsr1.h"
+#include "rd_fsr3.h"
+#include "rd_upscale_temporal.h"
+#include "vk/rhi_vk.h" /* the validation layer's count (--fsr3's stats) */
 #include "rd_internal.h"
 #include "rd_jitter.h"
 #include "rd_upscale.h"
@@ -1216,6 +1230,8 @@ static bool noHalf;
 /* --velocity, --velocity-dump PNG: the motion vectors (rd_velocity.h) */
 static bool velocityOn;
 static const char *velocityPng;
+/* --fsr3 Q: Upscaling: FSR 3.1 (rd_fsr3.c) */
+static bool fsr3Asked;
 /* --motion-blur smooth (every replay armed as a present, rd__blur_smooth_arm)
  * and --presents N */
 static bool motionSmooth;
@@ -2052,6 +2068,7 @@ int main(int argc, char **argv)
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
                 "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n"
                 "       [--downsample (with --resolution above 1x)] [--fsr1 [0..100]]\n"
+                "       [--fsr3 native|quality|balanced|performance]\n"
                 "       [--jitter X,Y (texels, each -0.5..0.5)]\n"
                 "       [--upscale-test [1..3] [--upscale-phases N]]\n",
                 argv[0]);
@@ -2141,6 +2158,24 @@ int main(int argc, char **argv)
                 return 1;
             }
             rd__frame_jitter_set(j[0], j[1]);
+        } else if (strcmp(argv[i], "--fsr3") == 0 && i + 1 < argc) {
+            /* Upscaling: FSR 3.1 at the quality named (rd_fsr3.c) */
+            static const char *const qn[RD_UPSCALE_Q_COUNT] = {"native", "quality", "balanced",
+                                                               "performance"};
+            int q = -1;
+            for (int k = 0; k < RD_UPSCALE_Q_COUNT; k++) {
+                q = strcmp(argv[i + 1], qn[k]) == 0 ? k : q;
+            }
+            if (q < 0) {
+                fprintf(stderr, "--fsr3: native, quality, balanced or performance (\"%s\")\n",
+                        argv[i + 1]);
+                return 1;
+            }
+            s.upscale = RD_UPSCALE_FSR3;
+            s.upscaleQuality = (uint8_t)q;
+            s.upscaleSharpness = 80; /* the row's default */
+            fsr3Asked = true;
+            i++;
         } else if (strcmp(argv[i], "--upscale-test") == 0) {
             /* the upscale point's test (rd_upscale.h), at the ratio given */
             float ratio = 1.5f;
@@ -2557,6 +2592,11 @@ int main(int argc, char **argv)
         }
     }
     rd__set_not_implemented_fatal(false);
+    if (fsr3Asked && !noDevice && !rd_upscale_temporal_supported()) {
+        printf("skip: --fsr3: FSR 3.1 is not available (%s)\n", rd_upscale_temporal_why());
+        rd_shutdown();
+        return 77;
+    }
     if (overlay) {
         rd_set_present_overlay(overlayTest, NULL);
     }
@@ -2879,6 +2919,25 @@ int main(int argc, char **argv)
                    us->refused, us->remapped, us->guardCols, us->guardRows, us->jittered);
         } else {
             printf("%s: stats: upscale point off\n", dump);
+        }
+        /* FSR 3.1 (--fsr3; rd_fsr3.c): the dispatches that ran, the
+         * contexts, the validation layer's errors so far (Vulkan) */
+        if (s.upscale == RD_UPSCALE_FSR3) {
+            const RdFsr3Stats *fs = rd__fsr3_stats();
+            const uint32_t verr =
+                rhi_backend() == RHI_BACKEND_VULKAN ? rhi_vk_validation_error_count() : 0u;
+            if (rd__upscale_by_fsr3() || fs->dispatched) {
+                printf("%s: stats: upscale: fsr3 ran %u presents (context render %ux%u -> "
+                       "display %ux%u, phase count %d, made %u, refused %u, failed %u, resets "
+                       "%u, FidelityFX %s, GPU memory %.1f MB, %u FidelityFX messages), "
+                       "validation errors %u\n",
+                       dump, fs->dispatched, fs->renderW, fs->renderH, fs->displayW, fs->displayH,
+                       (int)fs->phases, fs->made, fs->refused, fs->failed, fs->resets,
+                       fs->version[0] ? fs->version : "-", fs->memoryMb, fs->messages, verr);
+            } else {
+                printf("%s: stats: upscale: fsr3 off (%s)\n", dump,
+                       rd_upscale_temporal_why()[0] ? rd_upscale_temporal_why() : "not in force");
+            }
         }
         /* the tiler passes (rd_replay.c: DATE through the stencil bit, the
          * fog's local read, the blur pairs folded) */

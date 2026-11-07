@@ -327,7 +327,7 @@ and macOS).
 | `ICO_SHADERS_GLSL` | `ON` with `ICO_RHI_OPENGL` when `tools/fetch_deps.sh` fetched SPIRV-Cross, else `OFF` | also translates the shaders to GLSL 4.30 with SPIRV-Cross for the OpenGL backend (`ICO_SPIRV_CROSS` names another executable; `SKIP_SPIRV_CROSS=1` skips the fetch). With `ICO_RHI_OPENGL` on and this off, the configure step warns: the OpenGL backend is built but has no shaders and cannot draw |
 | `ICO_VERSION_LABEL` | empty | with `ICO_LINK_EXE`: the package label (`vX.Y.Z` or `vX.Y.Z-rcN`). Its numbers go into the Windows version information and the Apple bundles' Info.plist; the label itself, written to `generated/ico_version.h`, is shown in the log header and on the Settings menu's Main page, and is empty (nothing shown) when it does not parse as a version (`CMakeLists.txt`, `ICO_VERSION_LABEL_C`). The package scripts and `android/app/build.gradle` pass it; a build without it has an all-zero version |
 | `ICO_STATE_FIXED_IMAGE` | `ON` in `linux-x64`, `linux-x64-clang`, `win-x64`, `win-x64-clang` (and `asan`, `fptrap`, which inherit `linux-x64`); `OFF` otherwise | links the programs at a fixed image address ([Fixed image](#fixed-image)); `ICO_STATE_FIXED_IMAGE=1` in every source |
-| `ICO_FFX` | `ON` in `linux-x64` (and `asan`, `linux-x64-asan`, `fptrap`, which inherit it) and `win-x64`; `OFF` otherwise | builds the FidelityFX FSR 3.1 upscaler from the fetched SDK source: `ico_ffx_sc`, the Vulkan permutation headers, `ico_ffx_upscaler` and `ffx_link_test` ([FidelityFX upscaler](#fidelityfx-upscaler-fsr-31)). `ICO_FFX_DIR` and `ICO_FFX_GLSLANG` name another SDK install or glslangValidator |
+| `ICO_FFX` | `ON` in `linux-x64` (and `asan`, `linux-x64-asan`, `fptrap`, which inherit it) and `win-x64`; `OFF` otherwise | builds the FidelityFX FSR 3.1 upscaler from the fetched SDK source: `ico_ffx_sc`, the Vulkan permutation headers, `ico_ffx_upscaler` (linked into the renderer, so into the program: Options > Picture > Upscaling: FSR 3.1) and `ffx_link_test` ([FidelityFX upscaler](#fidelityfx-upscaler-fsr-31)). `ICO_FFX_DIR` and `ICO_FFX_GLSLANG` name another SDK install or glslangValidator |
 | `ICO_RC_TOOLS` | `OFF` | the release candidates' own tooling, for rc packages alone ([Release candidate tools](#release-candidate-tools)); `ON` defines `ICO_RC_TOOLS=1` for every source, and a non-empty `ICO_VERSION_LABEL` that does not end in `-rcN` is refused |
 | `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the data loader's reference tests read; without it they are not built |
 | `ICO_BASE_ELF_JPN` | `baserom/jpn/baseelf.elf` | the Japanese disc's base ELF (SCPS-11003), for the same tests on that disc |
@@ -446,6 +446,7 @@ the port compiles into `tools/toolchain/deps/fidelityfx/v1.1.4/src/` and applies
 | --- | --- |
 | `0001-shader-compiler-posix.patch` | the shader compiler (`FidelityFX_SC`) on Linux: its Windows-only headers, path calls (`PathAllocCanonicalize`, `CreateDirectoryW`, `_wfopen_s`) and `wmain` get POSIX equivalents, its DXC/FXC compilers (Windows COM) are left out off Windows, glslang's output is split into lines once the process has exited (a pipe read could split a line) |
 | `0002-runtime-gcc-clang.patch` | the library under gcc and clang, and three faults found running it on lavapipe: `ffx_api.h`'s entry points without `__declspec(dllexport)` (`FFX_API_STATIC`), the `FidelityFx/` include spelling (Linux file names are case-sensitive), the message callback called outside Windows, a `ui64` literal, `ffx_api_vk.h` usable from C; the FSR 3.1 context's opaque size doubled outside Windows (4-byte `wchar_t` makes the private context 837848 bytes, past the 512 KiB default) and aligned to 16 bytes (ffx-api embeds it at a 4-byte offset; gcc's vector copies fault there); the Vulkan backend's scratch arrays started on 32-byte boundaries (its `alignas(32)` effect contexts were packed at 4-byte offsets); and a device-local memory type that is also host-visible accepted when the device has no other (unified-memory GPUs and lavapipe: the backend refused every texture) |
+| `0003-vk-depth-stencil-barrier-luma-history.patch` | two Vulkan faults the upscale dispatch shows under the validation layer (`ffx_link_test`): the backend's image barriers on a depth/stencil input (the port's `D32_SFLOAT_S8_UINT` scene depth, read through its depth aspect) named the depth aspect alone, which Vulkan forbids without `separateDepthStencilLayouts` (`VUID-VkImageMemoryBarrier-image-03320`): they name the stencil aspect too, the views keep the depth aspect; and the GLSL declared the luma history storage image `rgba8` while the context makes it `R16G16B16A16_FLOAT` (the layer: "loads or stores ... produce undefined values"): declared `rgba16f`, as the HLSL's untyped `RWTexture2D<float4>` reads it |
 
 The SDK's own files are never edited by hand: a change is a new patch (made with `git diff` in a
 copy of the installed tree, `-p1` paths from the tree's root) or a line in
@@ -476,7 +477,21 @@ lists it: it decides from the device's extension list, not from what was enabled
 `VK_KHR_synchronization2`, `VK_EXT_descriptor_indexing`, `VK_KHR_dedicated_allocation` with
 `VK_KHR_get_memory_requirements2` (left off, the backend calls a NULL
 `vkGetBufferMemoryRequirements2KHR`), `VK_AMD_buffer_marker` and `VK_AMD_device_coherent_memory`;
-`ffx_link_test.c` is the reference.
+`ffx_link_test.c` is the reference, and the port's device does it in an `ICO_FFX` build
+(`port/rhi/vk/vk_device.c`; [RHI.md](port/RHI.md#native-handles-for-external-compute)).
+`ffx_link_test` also runs the upscale dispatch with the textures the port hands it (an RGBA8 colour,
+the `D32_SFLOAT_S8_UINT` scene depth through its depth aspect, an RGBA16F motion, 640x480 into an
+RGBA8 storage image at 960x720) and fails on any validation error or warning: with patch 0003, none.
+
+**The link into the program.** `port/render/CMakeLists.txt` links `ico_ffx_upscaler` into
+`ico_render` when `ICO_FFX` is on (with `ICO_FFX=1` for `rd_fsr3.c`), so the program (`ico_pc`,
+Linux and Windows) and every test and tool that links the renderer carry FSR 3.1; the library stays
+`EXCLUDE_FROM_ALL` and is built because they need it (a build that links none, such as a target of
+its own, does not run the shader compiler). Its C++ is linked into those C programs with the static
+C++ runtime on Linux (the library's interface link options) and by the Windows program's `-static`;
+its calls to the Vulkan entry points are volk's pointers, defined once by `ico_rhi_vulkan`'s
+`volk.c`. Without `ICO_FFX` `port/render/rd_fsr3.c` compiles its "not in this build" answer alone and
+the Upscaling row shows FSR 3.1 as "(off: not available)" ([DISPLAY.md](port/DISPLAY.md#fsr-31-upscaling)).
 
 **When the shader compiler fails on a host.** Its output names the shader, the permutation and
 glslang's message. Check `deps/fidelityfx/v1.1.4/glslang/bin/glslangValidator --version` runs

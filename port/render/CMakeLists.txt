@@ -238,7 +238,8 @@ add_library(ico_render STATIC
     rd_upload.c # the upload ring and the uploads before a replay's first pass
     rd_velocity.c # the scene's motion vectors: each VU draw's previous transform, VELOCITY
     rd_upscale.c # the upscale point: the render/display scale split, the marker's replay, UPSCALED
-    rd_upscale_hook.c # the temporal upscaler's dispatch (the test's bilinear stand-in)
+    rd_upscale_hook.c # the temporal upscaler's dispatch: FSR 3.1, or the test's bilinear stand-in
+    rd_fsr3.c # FSR 3.1 (the FidelityFX SDK, port/rhi/ffx): support, context, dispatch
     rd_screen_planes.c # the screen-prim triangles' planes
     rd_shadow.c
     rd_shadow_one.c # the shadow count resolved in one draw from the stencil view
@@ -267,6 +268,16 @@ target_include_directories(ico_render
 target_compile_options(ico_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref ico_texpack_name
                       ico_cache_name ico_pipe_finish)
+# rd_fsr3.c: FSR 3.1 (issue 99) from the FidelityFX SDK built in port/rhi/ffx
+# (option ICO_FFX, docs/BUILDING.md).  ico_ffx_upscaler is EXCLUDE_FROM_ALL;
+# linked here, it is built for every program and test that links the
+# renderer (the program among them), and only then.  It calls volk's
+# pointers, which ico_rhi_vulkan's volk.c defines (listed after it).
+# Without it rd_fsr3.c builds its "not in this build" answers alone.
+if(ICO_FFX AND TARGET ico_ffx_upscaler)
+    target_compile_definitions(ico_render PRIVATE ICO_FFX=1)
+    target_link_libraries(ico_render PRIVATE ico_ffx_upscaler ico_rhi_vulkan)
+endif()
 # rd_tex_decode.c: the decode pool's threads (port/platform/ico_thread.h)
 target_link_libraries(ico_render PUBLIC ico_thread)
 # texpack.c, modelpack.c: the selected disc's pack folder (port/core)
@@ -1135,6 +1146,22 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_replay_tool_fsr1 PROPERTIES
                          PASS_REGULAR_EXPRESSION "present: fsr1 512x512 -> 960x720"
                          SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    # Upscaling: FSR 3.1 (issue 99; rd_fsr3.c): the dump's frame at Enhanced
+    # in the 1280x960 box (the display scale the box's) at Quality (1.5),
+    # SCENE upscaled by the FidelityFX upscaler into UPSCALED at the upscale
+    # point, under the validation layer (the environment below): --stats
+    # names the presents it ran and the layer's errors.  A dump holds no
+    # history (each run starts FSR from empty), so this proves the dispatch
+    # runs, not FSR's picture.  77 where FSR 3.1 cannot run (a build without
+    # the upscaler, a device without Vulkan 1.2 or the extensions), with the
+    # reason
+    add_test(NAME rd_replay_tool_fsr3
+             COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_fsr3.png" --enhanced
+                     --fsr3 quality --present 1280x960 --stats)
+    set_tests_properties(rd_replay_tool_fsr3 PROPERTIES
+                         PASS_REGULAR_EXPRESSION "upscale: fsr3 ran [1-9][0-9]* presents \\(context render [0-9]+x[0-9]+ -> display [0-9]+x[0-9]+, [^)]*, refused 0, failed 0, [^)]*\\), validation errors 0"
+                         SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
     # the scene's jitter (rd_jitter.h; test/rd_replay_tool_jitter.cmake): at
     # Original 1x and Enhanced 2x, --jitter 0,0 draws every target and the
     # present byte for byte as without it, --jitter 0.25,0.25 moves SCENE and
@@ -1344,6 +1371,11 @@ if(ICO_RUN_TESTS)
                                                                            "${_env}")
         set_tests_properties(${rd_blur_SHARDS} PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_velocity PROPERTIES ENVIRONMENT "${_env}")
+        if(TEST rd_replay_tool_fsr3)
+            # FSR 3.1's dispatch under the layer (rd_replay_tool's --stats
+            # counts its errors)
+            set_tests_properties(rd_replay_tool_fsr3 PROPERTIES ENVIRONMENT "${_env}")
+        endif()
     endif()
     # rd_blur's glow fold case (k) alone on the tile class's fake
     # (ICO_VK_FAKE_LIMITS=moltenvk: the Apple row of the device profile):

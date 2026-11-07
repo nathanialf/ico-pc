@@ -688,10 +688,16 @@ void rd_get_scene_scale(float *sx, float *sy);
 int rd_scene_scale_lowered(void);
 
 /* A temporal upscaler's ratio, the display scale over the scene's (1..3),
- * while one is asked (rd_upscale.h: [dev] upscale_test) and the CRT filter
- * is off; 0 otherwise.  The host divides Auto's window scale by it, so
- * Auto's steps lower the scene below the window (RdSettings.upscaleRenderCap). */
+ * while one is asked (rd_upscale.h: Upscaling = FSR 3.1 in force, or [dev]
+ * upscale_test) and the CRT filter is off; 0 otherwise.  The host divides
+ * Auto's window scale by it, so Auto's steps lower the scene below the
+ * window (RdSettings.upscaleRenderCap). */
 float rd_upscale_ratio(void);
+/* The same for settings about to be sent (the host's Auto, before
+ * rd_set_settings): FSR 3.1 in force for st (crt: the CRT filter on) at a
+ * display scale of displayScale, or [dev] upscale_test's ratio; 0 when
+ * neither */
+float rd_upscale_ratio_of(const RdSettings *st, bool crt, float displayScale);
 
 /* gsb_SetGsDefault / dl_Swap at the start of a tick: clears the 13 lists and
  * records the per-list defaults listed above. */

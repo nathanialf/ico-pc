@@ -362,8 +362,11 @@ static void video_settings(RdSettings *rs, int w, int h)
             (boxH < (float)rs->outputHeight ? boxH : (float)rs->outputHeight) / 448.0f;
         /* a temporal upscaler (port/render/rd_upscale.h): the display stays
            the window's, and Auto's steps cap the scene's scale below it
-           instead, from the window's over the upscaler's ratio */
-        const float upRatio = rd_upscale_ratio();
+           instead, from the window's over the upscaler's ratio (FSR 3.1's
+           for these settings, rd_upscale_ratio_of: the renderer has not
+           seen them yet) */
+        const float upRatio =
+            rd_upscale_ratio_of(rs, o.crt && o.crtStrength > 0.0f, s_autoRes.windowScale);
         if (upRatio > 0.0f) {
             rs->upscaleRenderCap = rs->sceneScale;
             rs->sceneScale = 0.0f;

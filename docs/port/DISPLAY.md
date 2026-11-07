@@ -36,7 +36,8 @@ are [RHI.md](RHI.md).
 | `port/render/rd_interp.c` | presenting between ticks |
 | `port/render/rd_present_clock.c` | the present clock (`rd_present_clock_alpha`), what it notes for `rd_present`, Motion blur: Smooth's presents a tick |
 | `port/render/rd_crt.c`, `port/shaders/crt.hlsl` | the CRT filter |
-| `port/render/rd_upscale_temporal.c`, `port/render/rd_upscale_temporal.h` | Upscaling: FSR 3.1's rows (support query, quality ratios, exclusions; [FSR 3.1 upscaling](#fsr-31-upscaling)) |
+| `port/render/rd_upscale_temporal.c`, `port/render/rd_upscale_temporal.h` | Upscaling: FSR 3.1's rows (quality ratios, exclusions, the display line's words; [FSR 3.1 upscaling](#fsr-31-upscaling)) |
+| `port/render/rd_fsr3.c`, `port/render/rd_fsr3.h` | Upscaling: FSR 3.1 itself: the support answer, the context, the dispatch at the upscale point ([FSR 3.1 upscaling](#fsr-31-upscaling)) |
 | `port/render/rd_fsr1.c`, `port/render/rd_fsr1.h`, `port/shaders/fsr1.hlsl`, `port/third_party/fsr1/` | Upscaling: FSR 1.0, AMD's EASU and RCAS at the present ([FSR 1.0 upscaling](#fsr-10-upscaling)) |
 | `port/render/rd_tone.c`, `port/render/rd_tone.h`, `port/shaders/tone.hlsli` | the colour adjustment (Options > Picture's Gamma, Picture brightness, Contrast, Saturation; [Presentation](#presentation)) |
 | `port/platform/fps_counter.h`, `fps_counter.c` | the Frame rate counter's presents per second, free of SDL and rd ([UI.md](UI.md#the-frame-rate-counter)) |
@@ -200,7 +201,7 @@ read and saved outside the preset, as `downsample` is, and reach the renderer as
 `RdSettings.upscale` (`RD_UPSCALE_FSR1`) and `upscaleSharpness`; the renderer decides where FSR 1.0
 is in force ([FSR 1.0 upscaling](#fsr-10-upscaling)). `"fsr3"` (FSR 3.1) is read as saved and sent as
 `RD_UPSCALE_FSR3` with `upscaleQuality` (`[video] upscaling_quality`); it is drawn as off where
-`rd_upscale_temporal_supported()` is false ([FSR 3.1 upscaling](#fsr-31-upscaling)); an unknown word of
+`rd_upscale_temporal_supported()` is false (a device or build that cannot run it) ([FSR 3.1 upscaling](#fsr-31-upscaling)); an unknown word of
 either key reads as `"off"` / `"native"` with a line (`port/game/video_options.c`
 (`ico_video_parse_upscale`, `ico_video_parse_upscale_quality`); `port/platform/window_host.c`
 (`video_settings`)).
@@ -1807,22 +1808,98 @@ SHA-256 are in [THIRD_PARTY.md](../THIRD_PARTY.md), and the notice ships in `NOT
 `RdSettings.upscale` = `RD_UPSCALE_FSR3` (Options > Picture > Upscaling: FSR 3.1; `[video] upscaling =
 "fsr3"`) with `RdSettings.upscaleQuality` (Upscaling quality: Native AA / Quality / Balanced /
 Performance = the ratios 1.0 / 1.5 / 1.7 / 2.0, `[video] upscaling_quality`, default `"native"`) is
-AMD's temporal upscaler. This section holds the rules the rows and the renderer already keep
-(`port/render/rd_upscale_temporal.c`); the upscaler itself (the dispatch at the upscale point, the
-jitter, the velocity buffer) is completed by the FSR3HOST package and described here when it lands.
+AMD's temporal upscaler, FSR 3.1.4 from the FidelityFX SDK v1.1.4 built from source
+([BUILDING.md](../BUILDING.md#fidelityfx-upscaler-fsr-31)), on Vulkan (Linux and Windows)
+(`port/render/rd_fsr3.c`, `rd_upscale_temporal.c`, `rd_upscale.c`).
 
-- **Support.** `rd_upscale_temporal_supported()` decides whether the row offers the value. In this
-  version it is false on every backend and logs once `upscaling: FSR 3.1 is not available (...)`;
-  the real answer (Vulkan and Direct3D 12 with the compute capabilities `rhi_device_compute_caps`
-  reports; never Direct3D 11 or OpenGL) comes with the upscaler. A saved `"fsr3"` that is not
-  supported shows "FSR 3.1 (off: not available)", is drawn as Off and stays in the config.
+**What it does.** The scene is drawn at the render scale r = d / ratio (d the display scale the
+Resolution row, "window" or Auto gives; [The render and display scales](#the-render-and-display-scales))
+with a sub-pixel jitter a present (Halton (2, 3) at index % FSR's phase count,
+`ceil(8 ratio^2)` for the pair of widths: 18 at 1.5); its colour, depth and motion vectors
+([RENDER.md](RENDER.md), "Velocity") go to FSR 3.1 at the upscale point, after the whole post
+chain, where the game's reduction first reads SCENE ([RENDER.md](RENDER.md), "The upscale
+point"), and FSR writes UPSCALED at the display scale from the jittered pictures it has
+accumulated; the reduction reads UPSCALED in SCENE's place. **Native AA (ratio 1.0) is the honest
+default**: the scene at the Resolution row's own scale, FSR as a temporal anti-aliasing of it. The
+other qualities draw the scene smaller and rebuild it; this game's 512x448 picture costs little to
+draw, so they buy little time and cost sharpness. MSAA and supersampling are off while it runs
+(the row says "(off: FSR 3.1)"); the Sharpness row (shared with FSR 1.0) is FSR's sharpening at
+Sharpness / 100, off at 0.
+
+**The inputs** (`rd__fsr3_dispatch`): SCENE's RGBA8 colour; SCENE's `D32F_S8` depth read through its
+depth aspect (in place, or the effects-depth copy where the device cannot sample it in place), the
+context made with `INVERTED_DEPTH` because the GS Z grows toward the eye; VELOCITY (RGBA16F, pixels
+of the render target from the current picture to the one before, FSR's own convention: motion
+vector scale (1, 1) times `[dev] velocity_sign`), cleared to zero motion by the upscaler when the
+replay drew no velocity pass; UPSCALED (RGBA8, a storage texture). The jitter in texels (x right, y
+down; FSR's convention); `frameTimeDelta` the present clock's step times the presents since the
+last dispatch; `reset` on a camera cut, the first dispatch and a new size; the frame camera's near
+and far (passed swapped, as FSR takes them under inverted depth) and the vertical angle from the
+game's projection distance (`2 atan(gsH / 2 / zoom)`); pre-exposure 1; auto exposure on. The depth
+is not the standard projective depth FSR models (GS Z, `z * 2^-33` on D32), so FSR's depth-based
+disocclusion is approximate. A re-shown present (the still re-present) does not dispatch: UPSCALED
+stays and the next dispatch is told how many presents passed.
+
+**The context** (one per render size, display size and flags): made at the first dispatch of a size
+on the render thread (`upscaling: FSR 3.1 context made at frame N: render WxH -> display WxH (ratio
+R), jitter phase count P, FidelityFX 3.1.4, GPU memory M MB (A MB aliasable)`), given back with
+UPSCALED at a display change and destroyed once the pictures that used it have finished (a few
+replays later; `... destroyed (the pictures that used it finished)`), or at the renderer's shutdown
+with the GPU idle. **Memory:** FSR's own textures, 23.5 MB at 640x480 -> 960x720 and 32.3 MB at
+640x480 -> 1280x960 on lavapipe, growing with the display size (AMD gives 45 to 300 MB at the
+usual PC sizes); the line names it.
+
+**What ghosts.** Everything drawn without motion vectors is accumulated as if it stood still:
+sprites and particles (the glow composites, the smoke, the sparks: zero velocity), the fades and
+the motion blur's ghost (drawn into SCENE before the upscale point, the fades fold off for it), film
+noise and the UI (list 11, drawn into SCENE too). Moving particles leave a trail; the fades and the
+film grain smear a little; the menus and subtitles hold sharp only while still. The follow-ups:
+the UI and film noise after the upscaler, a reactive mask from the particle draws.
+
+- **Support.** `rd_upscale_temporal_supported()` (`port/render/rd_fsr3.c`): a build with the
+  upscaler (`ICO_FFX`), the Vulkan backend, a Vulkan 1.2 or later device, external compute offered
+  (`rhi_device_compute_caps`) and the FidelityFX extensions whole (`RhiComputeCaps.externalExts`,
+  [RHI.md](RHI.md#native-handles-for-external-compute)). Not on Direct3D 12 (not built: the
+  SDK makes its DXIL with Windows-only tools), Direct3D 11, OpenGL or Metal. The answer is logged
+  once and again when it changes: `upscaling: FSR 3.1 is available (Vulkan, FidelityFX SDK 3.1.4)`
+  or `upscaling: FSR 3.1 is not available (REASON); ...`, the reasons being "this build has no FSR
+  3.1 (built without the FidelityFX SDK)", "it runs on Vulkan; the Direct3D 12 path is not built",
+  "it runs on Vulkan, and the graphics API in use is another", "the Vulkan driver is X.Y, FSR 3.1
+  needs 1.2", "the device's compute support: ...", or the dedicated-allocation one;
+  `rd_upscale_temporal_why()` returns it. A saved `"fsr3"` that is not supported shows "FSR 3.1
+  (off: not available)", is drawn as Off and stays in the config.
 - **Exclusions** (enforced in `rd__upscale_temporal_on`, reported by the settings layer): off under
-  the CRT filter and while `downsample` is on; at the Original preset or a scene at 1x only Native AA
-  (ratio 1.0, `rd__upscale_temporal_ratio`); MSAA and SSAA read as off while it runs
-  (`rd__aa_requested`, `rd_aa_off_for_temporal`; the row says "(off: FSR 3.1)").
-- **Log lines.** The display line ends with `, upscaling fsr3 quality (ratio 1.5)` in force and `,
-  upscaling fsr3 off (not available | the CRT filter draws its own box | Downsampling is on)` asked
-  for but not in force, and is logged again when that changes.
+  the CRT filter and while `downsample` is on (one or the other); at the Original preset or a
+  display scale of 1x or less only Native AA (ratio 1.0, `rd__upscale_temporal_ratio`); MSAA and
+  SSAA read as off while it runs (`rd__aa_requested`, `rd_aa_off_for_temporal`). Under Auto the
+  host sends the window as the display and Auto's step as the cap on r (`rd_upscale_ratio_of`, the
+  ratio for the settings about to be sent): the ratio in force is then d / r, logged.
+- **Full pixel.** FSR 3.1 takes no source or destination offset, so SCENE's texture (the frame's
+  exact width plus its guard texels at r) maps onto UPSCALED's whole (the same at d): the window lands
+  within guard x (1 - r/d) display texels of its place, under a GS pixel.
+- **One source of truth.** The upscale point's switch has two sources: the settings (FSR 3.1 in force,
+  `rd__upscale_follow` from `rd__apply_display`, its ratio `rd__upscale_temporal_ratio`) and
+  `rd__upscale_set` (`rd_replay_tool --upscale-test`, the tests, `[dev] upscale_test`, which run the
+  test's bilinear stand-in); the second wins while on. `rd__upscale_by_fsr3()` says which the hook
+  (`rd_upscale_hook.c`) runs.
+- **Developer keys.** `[dev] upscale_debug_view = true` draws FSR's debug view in place of the
+  picture (`FFX_UPSCALE_FLAG_DRAW_DEBUG_VIEW`: the motion vectors, the reactive and lock masks; the
+  desktop check of the velocity's sign and of the depth, `[dev] velocity_sign`), `[dev]
+  upscale_debug_checks = true` makes the context check its inputs, with FidelityFX's messages in the
+  log (`upscaling: FidelityFX warning: ...`, the first 8 then every 100th).
+- **Log lines.** The display line ends with `, upscaling fsr3 quality (ratio 1.5, render 1280x672 ->
+  display 1920x1008, FFX 3.1.4, GPU memory N MB)` in force (the memory once a context of those sizes
+  was made, else "GPU memory on the context's line") and `, upscaling fsr3 off (not available:
+  REASON | the CRT filter draws its own box | Downsampling is on)` asked for but not in force, and is
+  logged again when that changes. A dispatch not made says why: `upscaling: FSR 3.1 not run at frame
+  N (no depth | no motion vectors | no native handles | ...; K times so far)`, the first 8 then every
+  100th.
+- **Tests.** `rd_present` (the FSR 3.1 cases: not supported and identical to Off; on: display-sized
+  and not black; the context made again at a new size, the old one destroyed; every context destroyed
+  at shutdown), `rd_replay_tool_fsr3`, `ffx_link_test` (the dispatch with the port's formats under
+  the validation layer), `rhi_native` (the extensions)
+  ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+
 ### The render and display scales
 
 A temporal upscaler (issue 99; in this release only the developer's stand-in, `[dev]
