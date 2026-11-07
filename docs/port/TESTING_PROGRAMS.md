@@ -576,7 +576,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the player's data, the rest as it was, the next start naming the copy, and an old copy of a place
   beside the data named at every start while another name is not; an unfinished unpacking deleted
   at the start; `ico_remove_tree` taking hidden files; the suggested file name (`backup`).
-- `dump_zip_test.c`: F12's zip (with the tick before as its second `.rddump`, and the blended present's frame moved in third by `ico_zip_move_file`, the loose file gone), the aspect sweep's zip, the device-loss zip (the lost frame first, the second `.rddump` the frame before, the pruning to the newest three) and the slow-scene zip (its name, the frame then the log, the pruning to the newest one with the loss zips left alone), written and read back with miniz
+- `dump_zip_test.c`: F12's zip (with the tick before as its second `.rddump`, and the blended present's frame moved in third by `ico_zip_move_file`, the loose file gone), the aspect sweep's zip, the device-loss zip (the lost frame first, the second `.rddump` the frame before, the pruning to the newest three) and the slow-scene zip (its name, the frame then the log, the pruning to the newest three with the loss zips left alone), written and read back with miniz
   (`dump_zip`).
 - `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
   on this toolchain's compiler and linker, over a stand-in game library (`game_data_fixture.c`)
@@ -1058,8 +1058,10 @@ only when the Turnip package loaded (`bones_nobin_in_force`), the mark
   left out, no name) and the VU line (pre-pass off 9 a triangle, on the recorded vertices, the k and
   M words, no replays, a cut buffer), the list-0 line and the images in use, word for word, and
   the slow-scene dump's trigger over a block's figures (each condition alone: kind, window, movie,
-  once, 30 s, 8 replays, the bound off; the bound itself is not over; the display wait taken from
-  the work; no negative work) and its log line (`window_scene`).
+  three a run, 30 s, 8 replays, the bound off; the bound itself is not over; the display wait taken from
+  the work; no negative work; a later dump at 1.5 times the last block's work: 74.9 against 50
+  not due, 75 due, the count at 3 not due, the first at any last work), the replay pick (a span
+  at or above the block's mean) and its log line with the span and "dump 2 of 3" (`window_scene`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the
   crash chain to the box, the variable and the relaunch environment, the `dst` field of a
   pipeline's or a start-up batch's note, its VU vertex pre-pass keys and modules, the skin check's

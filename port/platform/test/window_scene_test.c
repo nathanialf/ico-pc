@@ -182,7 +182,8 @@ int main(void)
     }
     /* the slow-scene dump's trigger (issue 179): a scene-dominant block on a
        window, no movie, 30 s up, 8 timed replays, the work (span less the
-       display wait, a replay's mean) over the bound, not yet written */
+       display wait, a replay's mean) over the bound, and up to three dumps a run,
+       each from a block 1.5 times as heavy as the last */
     {
         SlowSceneBlock t;
 
@@ -223,9 +224,10 @@ int main(void)
         t.movie = 1;
         CHECK(!window_slow_scene_due(&t));
         t.movie = 0;
-        t.written = 1; /* once a run */
+        t.count = SLOW_SCENE_DUMPS; /* three a run */
+        t.lastWorkMs = 1.0;
         CHECK(!window_slow_scene_due(&t));
-        t.written = 0;
+        t.count = 0;
         t.uptimeS = 29.9;
         CHECK(!window_slow_scene_due(&t));
         t.uptimeS = 30.0;
@@ -253,16 +255,64 @@ int main(void)
         CHECK(window_slow_scene_work_ms(&t) == 0.0);
         t.gpuN = 0;
         CHECK(window_slow_scene_work_ms(&t) == 0.0 && !window_slow_scene_due(&t));
-        /* the line */
+        /* the later dumps: the work a block at least 1.5 times the last's */
         t.gpuN = 10;
         t.waitSumMs = 100.0;
-        window_slow_scene_text(b, sizeof(b), &t, 4812, "slow-20261106-120000.zip");
+        t.presentSumMs = 20.0; /* work 48.0 again */
+        t.count = 0;
+        t.lastWorkMs = 1000.0; /* the first dump ignores the last */
+        CHECK(window_slow_scene_due(&t));
+        t.count = 1;
+        t.lastWorkMs = 32.0; /* 48 is exactly 1.5 times 32 */
+        CHECK(window_slow_scene_due(&t));
+        t.lastWorkMs = 50.0;         /* work 74.9 is not 1.5 times 50 */
+        t.spanSumMs = 600.0 + 269.0; /* work (869 - 100 - 20) / 10 = 74.9 */
+        CHECK(window_slow_scene_work_ms(&t) > 74.89 && window_slow_scene_work_ms(&t) < 74.91);
+        CHECK(!window_slow_scene_due(&t));
+        t.spanSumMs = 600.0 + 270.0; /* 75.0 */
+        CHECK(window_slow_scene_due(&t));
+        t.count = 2;
+        CHECK(window_slow_scene_due(&t));
+        t.count = 3; /* three dumps a run, however heavy */
+        CHECK(!window_slow_scene_due(&t));
+        t.count = 1;
+        t.lastWorkMs = 0.0; /* a last block of no work: anything over the bound */
+        CHECK(window_slow_scene_due(&t));
+        t.spanSumMs = 600.0;
+        t.count = 1;
+        t.lastWorkMs = 40.0; /* 48 is under 60: a second dump needs a heavier block */
+        CHECK(!window_slow_scene_due(&t));
+        /* the bound still applies to the first dump at any last work */
+        t.count = 0;
+        t.waitSumMs = 180.0; /* work 40.0 exactly */
+        CHECK(!window_slow_scene_due(&t));
+        t.waitSumMs = 100.0;
+        /* the replay the dump is to hold: a span at or above the block's mean */
+        CHECK(window_slow_scene_pick(60.0, 60.0));
+        CHECK(window_slow_scene_pick(112.5, 60.0));
+        CHECK(!window_slow_scene_pick(59.9, 60.0));
+        CHECK(!window_slow_scene_pick(0.0, 0.0)); /* no figures: no pick */
+        CHECK(!window_slow_scene_pick(50.0, 0.0));
+        CHECK(!window_slow_scene_pick(-1.0, 60.0));
+        /* the line */
+        t.count = 1;
+        window_slow_scene_text(b, sizeof(b), &t, 4812, 71.04, "slow-20261106-120000.zip");
         CHECK(text_is(b, "slow scene: the block's GPU work 48.0 ms a replay (bound 40; display "
                          "wait 10.0, present 2.0, span 60.0) in a scene layout: frame 4812 "
-                         "written to logs/slow-20261106-120000.zip; attach it with the log"));
+                         "(its span 71.0 ms, the block's mean 60.0) written to "
+                         "logs/slow-20261106-120000.zip (dump 2 of 3 this run); attach it with "
+                         "the log"));
+        /* the picked frame gone from the ring: the last closed, said so */
+        t.count = 0;
+        window_slow_scene_text(b, sizeof(b), &t, 4813, -1.0, "slow-x.zip");
+        CHECK(text_is(b, "slow scene: the block's GPU work 48.0 ms a replay (bound 40; display "
+                         "wait 10.0, present 2.0, span 60.0) in a scene layout: frame 4813 "
+                         "(the last the renderer closed, not the picked one; the block's mean "
+                         "60.0) written to logs/slow-x.zip (dump 1 of 3 this run); attach it "
+                         "with the log"));
         {
             char c[20];
-            const size_t n = window_slow_scene_text(c, sizeof(c), &t, 1, "slow-x.zip");
+            const size_t n = window_slow_scene_text(c, sizeof(c), &t, 1, 5.0, "slow-x.zip");
 
             CHECK(n < sizeof(c) && strlen(c) == n);
         }

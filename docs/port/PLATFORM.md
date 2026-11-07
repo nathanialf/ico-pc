@@ -2548,7 +2548,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 | `startup-activity.txt` | when there is one |
 | `config.toml`, `ico-pc.ini` | the settings |
 | `loss-<stamp>.zip` | this run's [loss dump](RENDER.md#the-loss-dump), else the one the previous run left, stored as it is |
-| `slow-<stamp>.zip` | this run's [slow-scene dump](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides), when one was written, stored as it is |
+| `slow-<stamp>.zip` | this run's [slow-scene dumps](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides), up to three (the newest three are kept), each stored as it is |
 
 `port/platform/report.c` writes it without allocation: raw file calls (`open`/`read`/`write`/`lseek`,
 the wide Win32 calls through a static buffer), a zip writer of its own (UTF-8 names, the sizes

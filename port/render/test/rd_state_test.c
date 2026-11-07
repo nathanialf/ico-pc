@@ -292,6 +292,15 @@ static void testOrderAndLeakage(void)
           "state crosses the frame boundary except the list defaults");
     CHECK(rd__prev_frame() && rd__prev_frame()->number + 1 == rd__last_frame()->number,
           "previous frame retained");
+    /* the slow-scene dump's lookup (rd_dump_retained_frame): the last closed
+       frame and the one before are found by number, anything else is not */
+    CHECK(rd__retained_frame(rd__last_frame()->number) == rd__last_frame(),
+          "retained frame: the last closed by number");
+    CHECK(rd__retained_frame(rd__prev_frame()->number) == rd__prev_frame(),
+          "retained frame: the one before by number");
+    CHECK(rd__retained_frame(rd__last_frame()->number + 1) == NULL &&
+              rd__retained_frame(rd__prev_frame()->number - 1) == NULL,
+          "retained frame: a number outside the ring is none");
 }
 
 static void testKeep(void)

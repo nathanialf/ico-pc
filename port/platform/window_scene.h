@@ -65,18 +65,23 @@ void window_scene_reset(SceneShare *s);
 SceneKind window_scene_dominant(const SceneShare *s);
 
 /* The slow-scene dump's trigger (issue 179, window_host.c slow_scene_check):
-   the figures of a 10 s block, and whether this block is the one to write
-   the run's single cutscene frame.  boundMs is [dev] slow_scene_dump_ms (0
-   or less: off); workMs and waitMs are the block's GPU sums, from which the
-   mean work less the display wait is compared with the bound. */
+   the figures of a 10 s block, and whether this block is one of the run's
+   cutscene dumps (up to SLOW_SCENE_DUMPS, each from a block at least
+   SLOW_SCENE_STEP times as heavy as the one before).  boundMs is [dev]
+   slow_scene_dump_ms (0 or less: off); the sums are the block's GPU
+   figures, from which the mean work less the display wait is compared with
+   the bound. */
 #define SLOW_SCENE_UPTIME_MIN_S 30.0
 #define SLOW_SCENE_GPU_MIN 8
+#define SLOW_SCENE_DUMPS 3
+#define SLOW_SCENE_STEP 1.5
 
 typedef struct SlowSceneBlock {
     SceneKind dominant; /* window_scene_dominant of the block */
     int window;         /* a window is up */
     int movie;          /* a movie is playing */
-    int written;        /* this run already wrote its dump */
+    int count;          /* the dumps this run has written so far */
+    double lastWorkMs;  /* the work (window_slow_scene_work_ms) of the block of the last one */
     double uptimeS;
     unsigned gpuN;       /* the block's timed replays */
     double spanSumMs;    /* their GPU spans summed */
@@ -92,16 +97,29 @@ typedef struct SlowSceneBlock {
    acquire wait (the Mali of issue 179) the wait lands in the present figure,
    not in the display wait: a display-bound block must not write the file */
 double window_slow_scene_work_ms(const SlowSceneBlock *b);
-/* true when the block is the dump's: a window up, no movie, the dominant
-   kind a scene, the bound on, not yet written, 30 s of uptime, at least 8
-   timed replays and the work over the bound (not at it) */
+/* true when the block is a dump's: a window up, no movie, the dominant
+   kind a scene, the bound on, 30 s of uptime, at least 8 timed replays, the
+   work over the bound (not at it) and either no dump yet this run or fewer
+   than SLOW_SCENE_DUMPS with the work at least SLOW_SCENE_STEP times the
+   last dump's block (so a run of climbing blocks ends with the worst one's
+   file, the zips being pruned to the newest three) */
 bool window_slow_scene_due(const SlowSceneBlock *b);
+/* Whether a replay is the block's heavy part: its GPU span at or above the
+   block's mean span (the frame the dump is to hold is the first such replay
+   after the block's end, window_host.c slow_scene_arm).  False for a span
+   or a mean that is not above 0 */
+bool window_slow_scene_pick(double spanMs, double meanMs);
 /* "slow scene: the block's GPU work 52.3 ms a replay (bound 40; display
-   wait 3.1, span 55.4) in a scene layout: frame 4812 written to
-   logs/slow-20261106-120000.zip; attach it with the log" (the name is the
-   file name alone); the length written */
+   wait 3.1, present 2.0, span 55.4) in a scene layout: frame 4812 (its span
+   71.0 ms, the block's mean 55.4) written to logs/slow-20261106-120000.zip
+   (dump 2 of 3 this run); attach it with the log" (the name is the file
+   name alone; dump is count + 1).  frameSpanMs below 0 (the dump was not
+   made from a replay of the picked frame) leaves the span out and names
+   the frame as the last the renderer closed: "frame 4812 (the last the
+   renderer closed, not the picked one; the block's mean 55.4)".  The length
+   written */
 size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, unsigned frame,
-                              const char *zipName);
+                              double frameSpanMs, const char *zipName);
 
 /* The slow step's game threads part: "game threads 199.3 in 39 switches
    (longest Main 171.2 ms; on core 2)".  longestMs 0 (no switch timed) leaves

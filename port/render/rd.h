@@ -2040,6 +2040,13 @@ int rd_dump_blended_result(uint32_t *frame, float *alpha);
  * NULL).  True when the lost frame was written. */
 bool rd_dump_retained(const char *lostPath, const char *beforePath, uint32_t *lostFrame,
                       uint32_t *beforeFrame);
+/* One retained frame by number (the slow-scene dump, window_host.c
+ * slow_scene_write, issue 179): the frame `number` to path when the ring
+ * still holds it as the last closed frame or the one before; otherwise the
+ * last closed frame is written instead.  The number written into *dumped
+ * (0: nothing written; may be NULL), so a caller sees which of the two
+ * happened (dumped != number).  True when a frame was written. */
+bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped);
 
 /* The loss bisect (docs/port/RENDER.md, "The loss bisect"): the frame of
  * the dump at path replayed in this renderer one pass longer each time
