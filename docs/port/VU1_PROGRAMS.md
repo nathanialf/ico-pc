@@ -689,6 +689,13 @@ statistics and `rd_replay_tool --stats` count the draws made (`RdPerfRecord.vuPr
 batch); the start-up self-test checks the draws one an entry and stage would make
 (`rd__vu_prepass_entry_draws`).
 
+With the temporal upscaler's switch on ([RENDER.md](RENDER.md#velocity)) a command of list 0 that
+carries a VuPrevCB is one more item (or one more draw) of its entry's batch: the same program's
+vertex function over the same vertices with the picture before's VU memory, bones and grid stream,
+its records at the next texels; the batch's table and the shader are unchanged (the item's own
+VuCB and VuBoneCB in the ring are the VuPrevCB's). `vu_velocity_main_vs` then draws the command's
+triangles as `vu_main_vs` does, with the two records' positions as the corner's motion.
+
 ## The draw merge
 
 Every VU command is at least one GPU draw, whatever the game's culling said of it

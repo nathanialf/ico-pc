@@ -25,6 +25,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_vuprepass_selftest.c` | the vertex and triangle pre-passes' start-up self-test |
 | `port/render/rd_vu_skin_check.h`, `rd_vu_skin_check.c`, `rd_vu_skin_judge.c`, `rd_vu_skin_selftest.c`, `rd_vu_skin_capture.c` | the skinned draws' bone-block check: a skinned draw probed beside the picture against the CPU, the twins of every skinned draw inside its pass (Turnip), the box check, the start-up probe, the capture on failure ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
+| `port/render/rd_velocity.c` | the scene's motion vectors for a temporal upscaler: each VU draw's previous transform (VuPrevCB), the VELOCITY texture, the velocity pass's pipeline ([Velocity](#velocity)) |
 | `port/render/rd_pipeline.c` | pipeline keys from the state block, the pipeline cache, the reachable set |
 | `port/render/rd_dst_read.c` | the exact GS blend read from the destination in the fragment shader |
 | `port/render/rd_post.c` | `rd_post`: each post kind as the GS writes and sprites GsBase.c issues |
@@ -807,6 +808,72 @@ the fog reads the resolved depth ([DIVERGENCES.md](DIVERGENCES.md) VD-22); the l
 epoch per sample ...` or `... on the resolved picture ...`, `port/render/rd_replay.c` (`doFog`)). When no
 way of reading the multisampled depth passed the fog's self-test, rd draws without MSAA and
 `rd_aa_msaa_blocked` says so (`port/render/rd.h` (`rd_aa_msaa_blocked`)).
+
+### Velocity
+
+A temporal upscaler (FidelityFX's FSR 3.1, issue 99) needs to know where each pixel's surface was
+in the picture before. rd draws that as a motion vector a texel into VELOCITY while the temporal
+upscaler's switch is on; this release has no row for it: only `[dev] velocity_test = true`
+(`ICO_RD_VELOCITY=1`, [CONFIG.md](CONFIG.md)) and `rd_replay_tool --velocity` turn it on, and
+nothing reads it yet (`port/render/rd_velocity.h`). With the switch off nothing of it runs: no
+payload is added to a frame, no texture or pipeline is made, the pictures are the same bytes.
+
+**The source rule.** Every picture's frame goes through `rd__velocity_attach` before it is
+replayed: with the interpolation each present's blended frame (the end of `rd__interp_frame`),
+without it the tick's frame (`rd_end_frame`). Each keyed mesh, skinned or grid draw is paired with
+the same object's draw in the picture drawn before (the last present's frame: with the
+interpolation the blended frame of the present before, so the motion is that between two
+presents, blended(alpha now) - blended(alpha before), across a tick's boundary too; without it
+the tick before's frame), as the interpolation pairs a draw with the tick before's (key, type,
+list and call ordinal; the meshes and grids of a key drawn two or more times by their origin in
+the world first, `placeSlot`'s rule), with the same shape (`blendVu`'s header test, `sameMesh`).
+A paired draw gets a copy of the picture before's fixed payload part (`RdVuPayload`, the VU block,
+the bones, a grid's stream: the "VuPrevCB") appended to the frame's payload, and its `u[3]` names
+it: `RD_VU_PREV` (bit 1) beside `RD_VU_TICK_CAMERAS` (bit 0) and the payload offset in the bits
+above (offsets are 8-aligned). No pair, a jump past `RD_INTERP_JUMP_WORLD`, a particle batch, an
+unkeyed draw and every draw of the first frame or a frame after a camera cut carry none: their
+velocity is 0. A cut also sets `rd__velocity_reset`, the upscaler's history reset. The picture
+before is kept as a list of its VU draws and their fixed parts (two buffers, swapped a frame).
+Dumps carry the VuPrevCBs (version 16, [Dumps and the replay tool](#dumps-and-the-replay-tool));
+an older dump replays with velocity 0. A morphing mesh's previous transform is drawn with the
+current stream (its vertices' own motion between the shapes is not in the vector).
+
+**The record.** The vertex pre-pass records a command of list 0 drawn into SCENE with its depth
+writes on and carrying a VuPrevCB twice: its own vertices as ever, and the same vertices again
+through the same pre-pass entry and pipeline with the VuPrevCB's VU memory, bones and grid stream,
+at the next texels of the record ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
+Plane 0 of a vertex record is the homogeneous position h before the divide and the GS's 1/16
+snap, so the second record's plane 0 is the previous position, unsnapped.
+
+**The pass.** When the walk has left list 0 (the first VU flush or VU command of a later list:
+after the opaque world and characters, before the semitransparent lists), rd ends SCENE's pass and
+draws every draw the replay made of those commands through `vu_main_vs` again, into VELOCITY,
+cleared to 0, through `vu_velocity_main_vs` and `velocity_ps` with SCENE's depth attached
+read-only and tested EQUAL, no depth write, at the scene passes' exact viewport
+(`port/render/rd_replay_vu.c`, "the velocity pass"). The vertex shader's position is
+`vu_main_vs`'s, so a pixel passes where the draw's surface is the one the scene kept;
+the corner's motion is its two records' positions through `vu_homogeneous_position` with the
+draw's FrameCB, previous less current in NDC, interpolated linearly in screen space as the GS
+interpolates the surface. The frame group's offsets (the exact viewport's half texel, the jitter's
+sub-pixel offset, `port/render/rd_jitter.c`) are the same in both positions and cancel: the vector is the
+unjittered motion. Screen prims, the UI, post sprites, particles, the draws of lists 1 to 12, a
+draw drawn the old way (no record) and a multisampled SCENE's draws are not drawn into VELOCITY
+and keep 0.
+
+**VELOCITY.** RGBA16F at SCENE's texture size (scene-class: the render scale), made at the first
+replay that needs it and again when SCENE's size changes; owned by `rd_velocity.c`, not a named
+target (a named slot would be made with every other at each display change, switch on or off, and
+shift every dump's temporary ids). x and y are the motion in texels of the target, **current to
+previous**: where the pixel's surface was in the picture before less where it is, +x right, +y
+down (what FidelityFX's upscaler takes, with its motion vector scale 1, 1); z 0; w 1 where a draw
+wrote it. `[dev] velocity_sign = -1` makes the upscaler take them negated (the shader never
+changes), for the desktop check of the sign with FSR's debug view.
+
+**The lines.** At the first need `rd: velocity: VELOCITY made, WxH RGBA16F (K KB), SCENE's texture
+size` and `rd: velocity: the velocity pass's pipeline made ...` (or why not); every 10 s while on
+`rd: velocity: N pictures, VU draws D: with their previous transform P (moved M), without U (no
+pair, another shape, a jump), new histories R; replays drew X into VELOCITY, Y of list 0 left at
+0 (no record or multisampled), Z passes`.
 
 ### The pass ring
 
@@ -2486,7 +2553,10 @@ cameras, and (version 15) the EE's facing tables of the meshes that have one, a 
 which a prelit stream cannot rebuild (no normals in it; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-winding-mark)):
 a version 3 to 14 dump's prelit meshes load without facing, so their draws keep the PS2's drops
 under either region rule (no side bands under `[dev] region_rule = ps2`, no camera rule under the
-default). Target
+default). Version 16 adds no section: a VU draw's `u[3]` may name a VuPrevCB in the payload
+([Velocity](#velocity)); a version 3 to 15 dump has none and replays with velocity 0, and a
+VuPrevCB whose header does not match its draw's is dropped at load. `rd_replay_tool --velocity`
+draws the motion vectors from them and `--velocity-dump PNG` writes VELOCITY as a picture. Target
 contents are not written: a frame that reads a retained target replays from what the loading
 context holds. Loading creates the textures and targets anew and rewrites every id, and gives the VU
 draws recorded without card verdicts theirs ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)), so

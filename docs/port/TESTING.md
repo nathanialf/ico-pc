@@ -148,7 +148,7 @@ reports it. `seed` overwrites every baseline after a build that is accepted
 The script tests under `port/render/test/` run the tool or a test program and check its output:
 `rd_replay_tool_list.cmake`, `rd_replay_tool_pass_dump.cmake`,
 `rd_replay_tool_loss_bisect.cmake`, `rd_replay_tool_pass_split.cmake`,
-`rd_replay_tool_pass_merge.cmake` and `rd_replay_tool_snap_swap.cmake` on the dump `rd_pixel` leaves behind, `rd_replay_tool_glow_hold.cmake` and `rd_replay_tool_save_blended.cmake` on two godrays dumps, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
+`rd_replay_tool_pass_merge.cmake` and `rd_replay_tool_snap_swap.cmake` on the dump `rd_pixel` leaves behind, `rd_replay_tool_velocity.cmake` on the one `rd_velocity` leaves (and `rd_pixel`'s), `rd_replay_tool_glow_hold.cmake` and `rd_replay_tool_save_blended.cmake` on two godrays dumps, `rd_depth_copy_dump.cmake` on a player dump with the depth fog (`ICO_FOG_DUMP`), and
 `rd_fog_selftest.cmake`, which matches the `fog: depth path` line of the self-test, and
 `rd_blend_selftest.cmake`, which matches the `blend: ... (self-test: ...)` line of the blend's,
 and `rd_vuprepass_selftest.cmake`, which matches the `VU pre-pass: on|off (self-test ...)` line

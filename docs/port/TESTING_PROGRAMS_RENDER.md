@@ -1024,6 +1024,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   sync` and `on` (`-DRT`): the interpolation and the replays on the render thread give the same
   picture and the same saved blended frame, byte for byte (the payload's alignment gaps are zeroed
   for this: the first threaded run's dump differed in 3 padding bytes the main thread's heap left).
+- `rd_velocity_test.c`: the scene's motion vectors (`rd_velocity`; [RENDER.md](RENDER.md#velocity)).
+  Without a device: a prelit mesh moved 8 GS pixels between two ticks (interpolation off) carries
+  a VuPrevCB that is the tick before's VU block, its vertex 0's delta current to previous -8 GS
+  pixels; a draw of a key the tick before did not draw and a particle batch carry none, and the
+  stats count them; a frame after `rd_camera_cut` begins a new history (`rd__velocity_reset`); the
+  switch off leaves every VU draw's `u[3]` 0; two presents between the ticks (alpha 0.25 then 0.75)
+  pair the second with the first's blended block (x 1794, its own 1798). On a device (Original 1x,
+  under the validation layer): VELOCITY inside the moving mesh is (-8, 0) with w 1, outside every
+  mesh and on the new mesh 0 with w 0, the draw drawn into VELOCITY and none left at 0, SCENE the
+  same bytes with the switch on and off; the frame is written as `rd_velocity_moving.rddump` for
+  `rd_replay_tool_velocity` (fixture `rd_velocity_dump`). Must pass under the asan preset.
 - `rd_interp_test.c`: presentation between [ticks](ARCHITECTURE.md#terms) on two synthetic frames
   (`rd_interp`); the feedback head copies (`testFeedback`: `DISPLAY_HELD` and `FEED_HELD` at a
   tick's first present and the later ones, none for DISPLAY under Motion blur: Smooth, FEED128's
@@ -1330,6 +1341,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
 - `rd_replay_tool_list.cmake`: `--list --no-device` on `rd_pixel`'s dump (`rd_replay_tool_list`).
 - `rd_replay_tool_pass_dump.cmake`: `--pass-dump`, `--target` and `--aspect` on that dump
   (`rd_replay_tool_pass_dump`).
+- `rd_replay_tool_velocity.cmake`: `--velocity-dump` on `rd_velocity`'s dump of a mesh moved 8
+  pixels writes a PNG with moving texels, the largest motion 8 pixels, and the line names the
+  moved draw's previous transform and its draw into VELOCITY; every target and the present are the
+  same bytes with and without `--velocity` there and on `rd_pixel`'s dump
+  (`rd_replay_tool_velocity`; fixtures `rd_velocity_dump` and `rd_dump`).
 - `rd_replay_tool_loss_bisect.cmake`: `--loss-bisect` on that dump runs clean on the device with one
   replay per pass and one to count them, `--passes 1-P` (the whole frame) draws the plain replay's
   picture and `--passes 1` stops the walk at pass 2; the second level's draw window: `--passes 1-P

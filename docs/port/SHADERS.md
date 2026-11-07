@@ -101,6 +101,7 @@ each file's header comment):
 | `vu_skin.hlsl` | `vu_skin_vs`, `vu_skin_spec_vs`, `vu_skin_debug_vs` and their `_pre_vs` | `cluster`, skinned (codes 20, 22, 24) |
 | `vu_grid.hlsl` | `vu_grid_vs`, `vu_grid_lit_vs`, `vu_grid_spec_vs` and their `_pre_vs` | `mesh`, the procedural grids (codes 20, 22, 24) |
 | `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_pre_ps` | the main vertex shader of every mesh program, the triangle pre-pass's record stages and the record targets' pixel shader ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) |
+| `vu_velocity.hlsl` | `vu_velocity_main_vs`, `velocity_ps` | the velocity pass ([RENDER.md](RENDER.md#velocity)): `vu_main_vs`'s position, the corner's motion from its two vertex records (this picture's and the VuPrevCB's, previous less current in NDC, every lane written: no `OpUndef`) as one noperspective float4; the motion in texels of the target, current to previous, +y down, into VELOCITY (RGBA16F). Made by `rd_velocity.c` only while the temporal upscaler's switch is on; no `RdVsId` / `RdFsId` |
 | `vu_particle.hlsl` | `vu_particle_vs`, `vu_particle_pre_vs`, `vu_particle_main_vs` | `particle`, six vertices a particle, non-indexed; the sprite's record stage and main shader |
 | `common.hlsli`, `gs_math.hlsli`, `sheet_text.hlsli`, `tone.hlsli`, `vu_common.hlsli` | none | included headers, below |
 
@@ -279,6 +280,14 @@ packing (each member a 16-byte register or a 64-byte matrix, so the packing is u
 | `IcoSpritePlaneVertex` | vertex | 120 | the STQ vertex plus the triangle's colour and STQ planes |
 | `IcoVuCB` | b2 space1 | 832 | VU1 data memory 0..35, draw, batch, the card test's bits' place, the two ticks' camera matrices, the marks' place (`vu_mark`), the vertex record's place and the program's triangle rule (`vu_rec`), its region bounds (`vu_lo`, `vu_hi`), the triangle record's slots and a stage draw's tick (`tri`) |
 | `IcoVuBoneCB` | b3 space1 | 3840 | VU memory 16..255, the cluster bones; the card bits after them |
+
+**VuPrevCB** is not a block of its own: the velocity's second vertex record binds an ordinary
+VuCB and VuBoneCB filled from the draw's VuPrevCB (the picture before's `RdVuPayload`, VU block,
+bones and grid stream in the frame's payload, `port/render/rd_velocity.h`), and the velocity draw's
+VuCB is the draw's own with `mark.w` (`IcoVuCB.mark[3]`, a lane no cbuffer build of `vu_main_vs`
+reads) the second record's texel distance. FrameCB is the draw's own: its eye's w (1 on a camera
+cut) is what `rd__velocity_reset` follows on the CPU side (`RdCamera.cut`)
+([RENDER.md](RENDER.md#velocity)).
 
 Constants mirrored from the HLSL keep the same values: `ICO_DF_*` (`common.hlsli`),
 `ICO_DF_WMASK_SHIFT` (19), `ICO_TEXFMT_*` (`gs_math.hlsli`, asserted in `gs_math_test.c`),

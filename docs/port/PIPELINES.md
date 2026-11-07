@@ -757,6 +757,23 @@ computed. GS X and Y are not stored: the readers take them from `p` as `vu_divid
 `base + v`, 1024 texels a row (`ICO_VU_REC_W`); `VuVtx` carries the clip-space flags (`clipf`)
 instead of the clip-space position, which only `vu_clipw` read.
 
+**The velocity's second record.** While the temporal upscaler's switch is on
+([RENDER.md](RENDER.md#velocity)), a mesh, skinned or grid command of list 0 drawn into SCENE with
+its depth writes on and carrying a VuPrevCB takes twice its vertices' texels in pass V: its own
+record at `base` and a second one at `prevBase = base + count`, drawn by the same pre-pass entry
+and pipeline (one more item of the same batch, or one more draw) with the VuPrevCB's VU memory,
+bones and grid stream (`rd_replay_vu.c` (`vuVelClone`, `vuVelSource`)). Only the second record's
+plane 0, the previous homogeneous position, is read (by `vu_velocity_main_vs`, at `vu_rec.x + v +
+vu_mark.w`, the velocity draw's VuCB carrying `prevBase - base` in `mark.w`); planes 1 and 2 of it
+are written and never read. So the record keeps its three planes (`ICO_VU_REC_PLANES` 3), the ten
+pre-pass entries and their batch builds are unchanged, and no pipeline key has a velocity bit: the
+plan's fourth plane under `ICO_VU_VELOCITY=1` builds was not needed (plane 0 already is the
+position before the divide). The velocity pass's one pipeline (`vu_velocity_main_vs`,
+`velocity_ps`, RGBA16F, D32F_S8 read-only, depth EQUAL, no write, no blend, every state static) is
+made by `rd_velocity.c` (`rd__velocity_pipeline`) at the first replay with the switch on, outside
+the key cache and the start-up set (`rd_blur_smooth.c`'s pattern): with the switch off it is never
+made, and the reachable set is unchanged. With the switch off no command takes a second record.
+
 **The triangle record.** A record slot is one texel index in each of the three planes; a
 triangle of kick `k` owns slot A at `vu_tri.x + k` and slot B at `vu_tri.y + k`, and under the
 tick cameras (`ICO_VU_TICKS`) slot C at `vu_tri.z + k` (`IcoVuCB.tri`; `vu_tri.z` 0xFFFFFFFF
