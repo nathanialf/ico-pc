@@ -1500,4 +1500,13 @@ uint64_t pace_samples_median(const PaceSamples *s);
  * 448), to know which step is below the window's own. */
 int pace_auto_resolution_step(const PaceSamples *s, int currentScale, float windowScale);
 
+/* The windowScale pace_auto_resolution_step takes under a temporal upscaler
+ * (port/render/rd_upscale.h) of ratio upscaleRatio (the display scale over
+ * the scene's, 1..3; 0 none): the display stays the window's, the scene is
+ * drawn at the window's scale over the ratio, so the steps start below
+ * that: windowScale / upscaleRatio (windowScale itself without one).  The
+ * step's result is then the cap on the scene's scale
+ * (RdSettings.upscaleRenderCap), not the Resolution. */
+float pace_auto_window_scale(float windowScale, float upscaleRatio);
+
 #endif /* ICO_PLATFORM_PACE_POLICY_H */

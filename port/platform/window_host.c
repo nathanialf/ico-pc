@@ -346,9 +346,12 @@ static void video_settings(RdSettings *rs, int w, int h)
        draws an MSAA count the device lacks as off (rd_aa_supported_mask) */
     rs->antiAlias = (uint8_t)ico_video_anti_alias();
     rs->downsample = (uint8_t)(o.downsample == ICO_DOWNSAMPLE_BOX); /* PC port: issue 149 */
-    /* Upscaling: FSR 1.0 and its Sharpness (PC port: issue 99) */
-    rs->upscale = (uint8_t)(o.upscale == ICO_UPSCALE_FSR1 ? RD_UPSCALE_FSR1 : RD_UPSCALE_OFF);
+    /* Upscaling: FSR 1.0 / FSR 3.1, their Sharpness and FSR 3.1's quality (PC port: issue 99) */
+    rs->upscale = (uint8_t)(o.upscale == ICO_UPSCALE_FSR1   ? RD_UPSCALE_FSR1
+                            : o.upscale == ICO_UPSCALE_FSR3 ? RD_UPSCALE_FSR3
+                                                            : RD_UPSCALE_OFF);
     rs->upscaleSharpness = (uint8_t)o.upscaleSharpness;
+    rs->upscaleQuality = (uint8_t)o.upscaleQuality; /* FSR 3.1's ratio: RdUpscaleQuality's order */
     rs->sceneWidth = (uint32_t)o.resW;
     rs->sceneHeight = (uint32_t)o.resH;
     rs->sceneScale = (float)o.resScale;
@@ -362,6 +365,18 @@ static void video_settings(RdSettings *rs, int w, int h)
         rs->sceneScale = (float)ico_video_auto_scale();
         s_autoRes.windowScale =
             (boxH < (float)rs->outputHeight ? boxH : (float)rs->outputHeight) / 448.0f;
+        /* a temporal upscaler (port/render/rd_upscale.h): the display stays
+           the window's, and Auto's steps cap the scene's scale below it
+           instead, from the window's over the upscaler's ratio (FSR 3.1's
+           for these settings, rd_upscale_ratio_of: the renderer has not
+           seen them yet) */
+        const float upRatio =
+            rd_upscale_ratio_of(rs, o.crt && o.crtStrength > 0.0f, s_autoRes.windowScale);
+        if (upRatio > 0.0f) {
+            rs->upscaleRenderCap = rs->sceneScale;
+            rs->sceneScale = 0.0f;
+            s_autoRes.windowScale = pace_auto_window_scale(s_autoRes.windowScale, upRatio);
+        }
         s_autoRes.tickBudget = o.framerate == ICO_FRAMERATE_ORIGINAL;
         s_autoRes.samples.budgetNs = o.framerate > 0        ? 1000000000ull / (Uint64)o.framerate
                                      : s_autoRes.tickBudget ? 40000000ull /* PAL until paced */

@@ -745,18 +745,48 @@ names the first missing part). Vulkan: an API version of 1.1 or later (the one t
 arithmetic operations in compute shaders, `RGBA16F` and `RGBA16 UNORM` as storage images, and
 `shaderStorageImageReadWithoutFormat` and `...WriteWithoutFormat`, which the device is now made with
 where they are offered. `float16` reports `shaderFloat16` as offered (Vulkan 1.2 features); the
-device is not made with it. D3D12: shader model 6.2 or later (asked down from 6.7), `WaveOps`, typed
+device is made with it only with the FidelityFX extensions below. D3D12: shader model 6.2 or later (asked down from 6.7), `WaveOps`, typed
 UAV loads of `R16G16B16A16_FLOAT` and `_UNORM` (`TypedUAVLoadAdditionalFormats` and the formats' own
 bits); `float16` is `Native16BitShaderOpsSupported` at 6.2 or later. The answer is logged once at
 device creation (`external compute: offered|not offered...`), the log line to read from a
 reporter's log. The renderer reads it before offering anything built on external compute.
+
+**The FidelityFX extensions.** FidelityFX's Vulkan backend decides what to use from the device's
+extension *list* (`vkEnumerateDeviceExtensionProperties`), not from what the device was made with,
+and calls the entry points of what it finds: a listed `VK_KHR_dedicated_allocation` left off made
+it call a NULL `vkGetBufferMemoryRequirements2KHR` (FFXFETCH's finding). So in a build with the
+upscaler (`ICO_FFX`, `port/rhi/ffx/CMakeLists.txt` defines it for `ico_rhi_vulkan`) the device of a
+Vulkan 1.2 or later driver is made with each extension of the set it acts on that the driver
+lists, with the one feature the upscaler uses from it:
+
+| extension | feature enabled with it |
+| --- | --- |
+| `VK_KHR_shader_float16_int8` | `shaderFloat16` (through `VkPhysicalDeviceVulkan12Features`) |
+| `VK_EXT_subgroup_size_control` | `subgroupSizeControl` |
+| `VK_KHR_synchronization2` | `synchronization2` |
+| `VK_EXT_descriptor_indexing` | `shaderStorageBufferArrayNonUniformIndexing` (through `VkPhysicalDeviceVulkan12Features`) |
+| `VK_KHR_dedicated_allocation`, `VK_KHR_get_memory_requirements2` | none |
+| `VK_AMD_buffer_marker` | none |
+| `VK_AMD_device_coherent_memory` | `deviceCoherentMemory` |
+
+The list read is the driver's own, not the one `ICO_VK_FAKE_API` shortens (the backend would see
+the extension anyway; a faked 1.1 or 1.0 device takes none of the set); an extension the RHI already enabled for itself is not named
+twice. `RhiComputeCaps.externalExts` is true when the set is whole; a driver listing
+`VK_KHR_dedicated_allocation` without `VK_KHR_get_memory_requirements2` leaves it false (the
+upscaler is then not offered). The RHI's own pipelines use none of these. One line at device
+creation names what was enabled: `external compute extensions: enabled KHR_shader_float16_int8,
+... (features: float16 on, ...)`, and the `external compute:` line ends with `the FidelityFX
+extensions enabled yes|no`. Builds without the upscaler (`ICO_FFX` off: Android, macOS, iOS,
+arm64 Linux, the clang presets) make the device as before. `rhi_native_test` checks the set is
+whole on a 1.2 device in an `ICO_FFX` build and absent otherwise.
 
 **MoltenVK.** The Vulkan code path is the same; Metal has compute, storage images and subgroup
 operations, but FidelityFX's Vulkan backend has not run on MoltenVK anywhere: may work; unverified.
 The capability check above is the gate; a macOS test has to confirm it before anything relies on it there.
 
 (`port/rhi/rhi_native.h`; `port/rhi/vk/vk_native.c`, `vk_cmd.c` (`rhi_cmd_external_begin`,
-`rhi_cmd_external_end`, `vkr_state_scope`), `vk_device.c` (`vkr_probe_compute`), `vk_resource.c`
+`rhi_cmd_external_end`, `vkr_state_scope`), `vk_device.c` (`vkr_probe_compute`, the FidelityFX
+extensions in `vkr_create_device`), `vk_resource.c`
 (`rhi_create_texture`); `port/rhi/d3d12/d3d12_native.c`, `d3d12_cmd.c`, `d3d12_device.c`
 (`dx_probe_compute`), `d3d12_plan.c` (`d3dp_storage_texture_ok`, `d3dp_compute_caps`,
 `d3dp_external_rebind`).)

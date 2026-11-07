@@ -215,10 +215,10 @@ static void testToneRows(void)
         stage_no = title ? 1 : 11;
         const int mainL = enterMain(title);
         const int picL = openPage(mainL, 1, UI_PAGE_PICTURE);
-        int fo[17], fl[17];
-        const int fn = ui_settings_page_rows(UI_PAGE_PICTURE, fl, fo, NULL, 17);
+        int fo[18], fl[18];
+        const int fn = ui_settings_page_rows(UI_PAGE_PICTURE, fl, fo, NULL, 18);
 
-        CHECK(fn == 17, "title %d: Picture has 17 rows (%d)", title, fn);
+        CHECK(fn == 18, "title %d: Picture has 18 rows (%d)", title, fn);
         for (int i = 0; i < 4; i++) {
             const int row = ui_settings_row_of(UI_PAGE_PICTURE, kRows[i]);
 
@@ -3206,7 +3206,7 @@ static void testAntiAlias(void)
             int l[16], op[16];
             const int n = ui_settings_page_rows(UI_PAGE_PICTURE, l, op, NULL, 16);
             CHECK(n > 4 && op[0] == UI_OPT_ANTI_ALIAS && op[1] == UI_OPT_DOWNSAMPLE &&
-                      op[2] == UI_OPT_UPSCALE && op[4] == UI_OPT_FULL_HEIGHT,
+                      op[2] == UI_OPT_UPSCALE && op[5] == UI_OPT_FULL_HEIGHT,
                   "title %d: Picture starts Anti-aliasing, Downsampling, Upscaling, Sharpness, "
                   "Full-height picture",
                   title);

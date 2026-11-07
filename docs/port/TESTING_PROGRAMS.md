@@ -914,7 +914,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays
   counted through the renderer's count being zeroed after a tick (100 a second, none lost), a
   change of mode starting the second again, a time going backwards changing nothing (`fps_counter`).
-- `pace_policy_test.c`: the slow-present decision, Resolution "auto"'s steps, the gap between
+- `pace_policy_test.c`: the slow-present decision, Resolution "auto"'s steps (and under a
+  temporal upscaler from the window's scale over its ratio, `pace_auto_window_scale`), the gap between
   presents, the vsync lock's n and alphas and its period's sanity, and the vblank clock's laws on a
   synthetic display, and the late-present skip: a whole period behind skips, with or without
   sound, less does not, slow presents skip past the deadline, never two frames in a row while the
@@ -1213,7 +1214,9 @@ The renderer's test programs have a page of their own:
   answer, what the external end puts back).
 - `rhi_native_test.c`: `rhi_native.h` on Vulkan (lavapipe): the device handles, textures granted
   storage, the storage barriers, the external begin/end bracket and a two-pass picture identical
-  with and without it (`rhi_native`; exit 77 without a device). `rhi_test_native.c` runs inside the
+  with and without it, and the FidelityFX extensions (`RhiComputeCaps.externalExts`: true on a
+  Vulkan 1.2 device in an `ICO_FFX` build, false without the upscaler) (`rhi_native`; exit 77 without
+  a device). `rhi_test_native.c` runs inside the
   common cells of every backend: the handles where offered, "not offered" on Direct3D 11 and OpenGL.
 - `rhi_d3d11_shader_plan_test.c`: the Direct3D 11 backend's shader route on the CPU
   (`port/rhi/d3d11/d3d11_shader.c`): the macros text and its malformed forms, the include lookup,
@@ -1271,8 +1274,14 @@ The renderer's test programs have a page of their own:
   the features the FFX backend reads enabled where present (16-bit floats, subgroup size control,
   synchronization2, non-uniform storage buffer indexing); the Quality render size at 1280x960
   (853x640); the backend and an upscale context for a 640x480 render and a 1280x960 output; its
-  provider (3.1.x) and a non-zero GPU memory figure; the context destroyed; any validation error
-  fails it. Skipped (77) without a loader, a Vulkan 1.2 device or a device it can make
+  provider (3.1.x) and a non-zero GPU memory figure; the context destroyed; then the upscale
+  dispatch with the textures the port hands it (`port/render/rd_fsr3.c`): an RGBA8 colour, a
+  `D32_SFLOAT_S8_UINT` depth read through its depth aspect (moved from the RHI's read-only depth
+  layout to `SHADER_READ_ONLY_OPTIMAL` around the dispatch, as rd_fsr3.c does) and an RGBA16F
+  motion, 640x480, into an RGBA8 storage image at 960x720, a context with the port's flags
+  (inverted depth, auto exposure) and the debug checks, four frames of FSR's jitter (phase count
+  18), each frame's output read back: not black, its centre the flat input's colour; no FFX
+  message. Any validation error or warning fails it (the layer's sync validation on). Skipped (77) without a loader, a Vulkan 1.2 device or a device it can make
   (`ffx_link_test`).
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver;
   `swapAcquired` per frame; the acquire's wait with the list that uses the image (issue 179,

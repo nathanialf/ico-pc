@@ -43,6 +43,7 @@
 #include "settings_states.h"   /* the Save states page's cards, actions and F6 latch */
 #include "settings_unused.h"   /* Extras > Unused content's host */
 #include "settings_variants.h" /* the game variants rows' values, notes and rule */
+#include "settings_upscale.h"  /* the Upscaling rows: FSR 3.1, quality */
 #include "touch_edit_ui.h"     /* the Edit layout page */
 #include "variants.h"          /* the game variants rows (Gameplay and its pages) */
 #include "ui_hint.h"
@@ -213,7 +214,7 @@ static int entryGame(int e)
 #define PAL_COPYRIGHT_Y 195
 
 /* Main's sixteen, and the rc builds' Share a bug report (ICO_RC_TOOLS) */
-#define MAX_ROWS (17 + ICO_RC_TOOLS)
+#define MAX_ROWS (18 + ICO_RC_TOOLS)
 
 typedef struct Row {
     int opt;   /* UiSettingsOpt */
@@ -1817,6 +1818,10 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         static const int aaStr[ICO_AA_COUNT] = {UI_STR_AA_OFF,   UI_STR_AA_SSAA2, UI_STR_AA_SSAA4,
                                                 UI_STR_AA_MSAA2, UI_STR_AA_MSAA4, UI_STR_AA_MSAA8};
         const int aa = aaStored();
+        if (aa != ICO_AA_OFF && ui__temporal_on(&o)) {
+            snprintf(buf, size, "%s%s", ui_str(aaStr[aa]), ui_str(UI_STR_AA_FSR3));
+            return buf;
+        }
         if (aaInForce()) {
             return ui_str(aaStr[aa]);
         }
@@ -1889,7 +1894,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_DOWNSAMPLE:
         return ui_str(o.downsample == ICO_DOWNSAMPLE_BOX ? UI_STR_VAL_DOWNSAMPLE_BOX : UI_STR_OFF);
     case UI_OPT_UPSCALE:
-        return ui_str(o.upscale == ICO_UPSCALE_FSR1 ? UI_STR_VAL_UPSCALE_FSR1 : UI_STR_OFF);
+    case UI_OPT_UPSCALE_QUALITY:
+        return ui__upscale_text(&o, opt, buf, size);
     case UI_OPT_UPSCALE_SHARPNESS:
         if (o.upscaleSharpness == ICO_UPSCALE_SHARPNESS_DEFAULT) {
             snprintf(buf, size, "%d (%s)", o.upscaleSharpness, ui_str(UI_STR_VAL_DEFAULT));
@@ -2257,8 +2263,8 @@ static int optShown(int opt, int link)
     if (opt == UI_OPT_EFFECT_MOTION_BLUR_STRENGTH) {
         return ico_video_effect_motion_blur(); /* nothing to weaken with Motion blur Off */
     }
-    if (opt == UI_OPT_UPSCALE_SHARPNESS) {
-        return ico_video_upscale() != ICO_UPSCALE_OFF; /* nothing to sharpen with Upscaling Off */
+    if (opt == UI_OPT_UPSCALE_SHARPNESS || opt == UI_OPT_UPSCALE_QUALITY) {
+        return ui__upscale_row_shown(opt);
     }
     if (opt == UI_OPT_MOUSE_CAMERA || opt == UI_OPT_MOUSE_SENS || opt == UI_OPT_MOUSE_INVERT ||
         opt == UI_OPT_MOUSE_SPEED || opt == UI_OPT_MOUSE_RANGE || opt == UI_OPT_MOUSE_RETURN) {
@@ -2432,8 +2438,8 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         video = 1;
         break;
     case UI_OPT_UPSCALE:
-        /* Off, FSR 1.0, around (a value of its own, room for more) */
-        o.upscale = stepIndex(o.upscale, ICO_UPSCALE_COUNT, dir);
+    case UI_OPT_UPSCALE_QUALITY:
+        ui__upscale_step(&o, opt, dir);
         video = 1;
         break;
     case UI_OPT_UPSCALE_SHARPNESS: {
@@ -3442,6 +3448,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_ANTI_ALIAS, UI_STR_OPT_AA_NOTE);
         addNote(pg, UI_OPT_DOWNSAMPLE, UI_STR_OPT_DOWNSAMPLE_NOTE);
         addNote(pg, UI_OPT_UPSCALE, UI_STR_OPT_UPSCALE_NOTE);
+        addNote(pg, UI_OPT_UPSCALE_QUALITY, UI_STR_OPT_UPSCALE_NOTE);
         addNote(pg, UI_OPT_UPSCALE_SHARPNESS, UI_STR_OPT_UPSCALE_NOTE);
         /* one note under the four colour rows (the Graphics driver's pattern) */
         addNote(pg, UI_OPT_TONE_GAMMA, UI_STR_OPT_TONE_NOTE);
@@ -4098,15 +4105,18 @@ static void build(void)
     /* Picture: the picture's own rows (Brightness is the pause menu's, the
        Model pack the title's); Downsampling, Upscaling and Sharpness go
        right after Anti-aliasing */
+    /* clang-format off */
     static const int picOpts[] = {
-        UI_OPT_ANTI_ALIAS,    UI_OPT_DOWNSAMPLE,      UI_OPT_UPSCALE,      UI_OPT_UPSCALE_SHARPNESS,
-        UI_OPT_FULL_HEIGHT,   UI_OPT_FILTER,          UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,
-        UI_OPT_CRT,           UI_OPT_CRT_STRENGTH,    UI_OPT_TONE_GAMMA,   UI_OPT_TONE_BRIGHTNESS,
-        UI_OPT_TONE_CONTRAST, UI_OPT_TONE_SATURATION, UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,
-        UI_OPT_BACK};
+        UI_OPT_ANTI_ALIAS, UI_OPT_DOWNSAMPLE, UI_OPT_UPSCALE, UI_OPT_UPSCALE_QUALITY,
+        UI_OPT_UPSCALE_SHARPNESS, UI_OPT_FULL_HEIGHT, UI_OPT_FILTER, UI_OPT_FULL_PIXEL,
+        UI_OPT_BRIGHTNESS, UI_OPT_CRT, UI_OPT_CRT_STRENGTH, UI_OPT_TONE_GAMMA,
+        UI_OPT_TONE_BRIGHTNESS, UI_OPT_TONE_CONTRAST, UI_OPT_TONE_SATURATION,
+        UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK, UI_OPT_BACK};
+    /* clang-format on */
     static const int picStrs[] = {UI_STR_OPT_AA,
                                   UI_STR_OPT_DOWNSAMPLE,
                                   UI_STR_OPT_UPSCALE,
+                                  UI_STR_OPT_UPSCALE_QUALITY,
                                   UI_STR_OPT_UPSCALE_SHARPNESS,
                                   UI_STR_OPT_FULL_HEIGHT,
                                   UI_STR_OPT_FILTERING,

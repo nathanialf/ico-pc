@@ -1,0 +1,30 @@
+diff --git a/sdk/include/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h b/sdk/include/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
+index d0cbf9d..c5bbbfc 100644
+--- a/sdk/include/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
++++ b/sdk/include/FidelityFX/gpu/fsr3upscaler/ffx_fsr3upscaler_callbacks_glsl.h
+@@ -395,7 +395,7 @@ FfxFloat32x4 SampleHistory(FfxFloat32x2 fUV)
+ #endif
+ 
+ #if defined(FSR3UPSCALER_BIND_UAV_LUMA_HISTORY)
+-layout (set = 0, binding = FSR3UPSCALER_BIND_UAV_LUMA_HISTORY, rgba8) uniform image2D  rw_luma_history;
++layout (set = 0, binding = FSR3UPSCALER_BIND_UAV_LUMA_HISTORY, rgba16f) uniform image2D  rw_luma_history;
+ 
+ void StoreLumaHistory(FfxInt32x2 iPxPos, FfxFloat32x4 fLumaHistory)
+ {
+diff --git a/sdk/src/backends/vk/ffx_vk.cpp b/sdk/src/backends/vk/ffx_vk.cpp
+index 7813d48..a7ea5ab 100644
+--- a/sdk/src/backends/vk/ffx_vk.cpp
++++ b/sdk/src/backends/vk/ffx_vk.cpp
+@@ -1223,6 +1223,12 @@ void addBarrier(BackendContext_VK* backendContext, FfxResourceInternal* resource
+ 
+         VkImageSubresourceRange range;
+         range.aspectMask = getImageAspect(ffxResource.resourceDescription.usage);
++        // a depth/stencil image's layout barrier names both aspects
++        // (VUID-VkImageMemoryBarrier-image-03320 without separateDepthStencilLayouts);
++        // its views keep the depth aspect alone
++        if (FFX_CONTAINS_FLAG(ffxResource.resourceDescription.usage, FFX_RESOURCE_USAGE_DEPTHTARGET) &&
++            FFX_CONTAINS_FLAG(ffxResource.resourceDescription.usage, FFX_RESOURCE_USAGE_STENCILTARGET))
++            range.aspectMask |= VK_IMAGE_ASPECT_STENCIL_BIT;
+         range.baseMipLevel = 0;
+         range.levelCount = VK_REMAINING_MIP_LEVELS;
+         range.baseArrayLayer = 0;
