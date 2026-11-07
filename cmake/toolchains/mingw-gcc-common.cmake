@@ -15,6 +15,13 @@ endif()
 list(APPEND CMAKE_TRY_COMPILE_PLATFORM_VARIABLES ICO_MINGW_GCC)
 set(CMAKE_SYSTEM_NAME Windows)
 set(CMAKE_C_COMPILER "${_bin}-gcc-14-win32")
+# g++ (Debian's g++-mingw-w64-*-win32, unpacked by tools/fetch_toolchain.sh):
+# the FidelityFX FSR 3.1 upscaler (ICO_FFX, port/rhi/ffx) is C++; the rest of
+# the program is C. Left unset when absent so a tree without it still
+# configures with ICO_FFX=OFF (port/rhi/ffx says what to run otherwise).
+if(EXISTS "${_bin}-g++-win32")
+    set(CMAKE_CXX_COMPILER "${_bin}-g++-win32")
+endif()
 set(CMAKE_RC_COMPILER "${_bin}-windres")
 set(CMAKE_AR "${_bin}-gcc-ar-win32" CACHE FILEPATH "")
 set(CMAKE_RANLIB "${_bin}-gcc-ranlib-win32" CACHE FILEPATH "")
