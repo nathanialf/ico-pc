@@ -190,6 +190,7 @@ add_library(ico_render STATIC
     rd_crt.c # the CRT filter at present time
     rd_fsr1.c # Upscaling: FSR 1.0 (AMD FidelityFX Super Resolution 1.0) at present time
     rd_jitter.c # the scene's sub-pixel jitter after the GS's snap (a temporal upscaler's; [dev] jitter_test)
+    rd_upscale_temporal.c # Upscaling: FSR 3.1's rows (support query, quality ratios, exclusions)
     rd_tone.c # the colour adjustment's settings (Options > Picture: gamma, brightness, contrast, saturation)
     rd_date_selftest.c # DATE through the stencil bit: the start-up check on the device
     rd_dst_read.c # the exact GS blend: the destination read
