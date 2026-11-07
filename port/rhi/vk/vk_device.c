@@ -2820,6 +2820,8 @@ void rhi_get_stats(RhiStats *out)
         out->submits += __atomic_load_n(&g_vkr.late.submits, __ATOMIC_RELAXED);
         out->presents += __atomic_load_n(&g_vkr.late.presents, __ATOMIC_RELAXED);
         out->presentNs += __atomic_load_n(&g_vkr.late.presentNs, __ATOMIC_RELAXED);
+        out->acquireReadyAtSubmit = __atomic_load_n(&g_vkr.late.acquireReady, __ATOMIC_RELAXED);
+        out->acquireNotReady = __atomic_load_n(&g_vkr.late.acquireNotReady, __ATOMIC_RELAXED);
         out->memoryLive = g_vkr.memLive;
         out->memoryPeak = g_vkr.memPeak;
         out->memoryLiveBytes = g_vkr.memLiveBytes;

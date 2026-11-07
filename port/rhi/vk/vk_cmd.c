@@ -95,6 +95,10 @@ bool vkr_frames_init(void)
         if (!VKR_CHECK(vkCreateSemaphore(g_vkr.device, &sci, NULL, &f->acquireSem))) {
             return false;
         }
+        VkFenceCreateInfo fci = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        if (!VKR_CHECK(vkCreateFence(g_vkr.device, &fci, NULL, &f->acquireFence))) {
+            return false;
+        }
         if (g_vkr.timestamps) {
             VkQueryPoolCreateInfo qci = {
                 .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
@@ -128,6 +132,9 @@ void vkr_frames_shutdown(void)
         }
         if (f->acquireSem) {
             vkDestroySemaphore(g_vkr.device, f->acquireSem, NULL);
+        }
+        if (f->acquireFence) {
+            vkDestroyFence(g_vkr.device, f->acquireFence, NULL);
         }
         if (f->queryPool) {
             vkDestroyQueryPool(g_vkr.device, f->queryPool, NULL);
@@ -324,6 +331,13 @@ static void vkr_recycle_frame(VkrFrame *f)
     vkr_collect_occlusion(f);
     f->tsReset = false;
     f->occReset = false;
+    /* the acquire's fence, reset once it signalled (a fence an acquire
+     * never signalled, a picture given up, stays used: the next acquire
+     * of the slot makes a fresh one) */
+    if (f->acquireFenceUsed && vkGetFenceStatus(g_vkr.device, f->acquireFence) == VK_SUCCESS &&
+        vkResetFences(g_vkr.device, 1, &f->acquireFence) == VK_SUCCESS) {
+        f->acquireFenceUsed = false;
+    }
     vkr_destroy_garbage(f);
     vkResetCommandPool(g_vkr.device, f->cmdPool, 0);
     for (uint32_t j = 0; j < VKR_MAX_CMD_LISTS; j++) {
@@ -554,6 +568,14 @@ static bool vkr_submit_batch(VkrFrame *f, const VkCommandBuffer *cbs, uint32_t c
          * list touched the image, a dropped acquire's drain) takes it at
          * ALL_COMMANDS.  The slot's own acquire: a submit of slot A never
          * takes the image slot B acquired since. */
+        if (count && f->acq.fenced) {
+            /* the present's list: was the display's image free already? */
+            vkr_late_add(vkGetFenceStatus(g_vkr.device, f->acquireFence) == VK_SUCCESS
+                             ? &g_vkr.late.acquireReady
+                             : &g_vkr.late.acquireNotReady,
+                         1u);
+            f->acq.fenced = false;
+        }
         d.wait = f->acquireSem;
         d.waitStage = count ? VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
                             : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
