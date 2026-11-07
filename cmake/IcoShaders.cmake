@@ -13,6 +13,10 @@
 #       the same entry compiled with the macros given (DXC -D); the table key
 #       is <name><s> (the *_nodual entries of the two-pass blend fallback,
 #       ICO_NO_DUAL=1).
+#   ico_add_shader(<name> <file.hlsl> <entry> <stage> HLSL2018)
+#       compiled as HLSL 2018 (DXC -HV 2018) for SPIR-V and DXIL: the
+#       vendored AMD FidelityFX headers (port/third_party/fsr1, fsr1.hlsl)
+#       use the vector ?: that HLSL 2021, DXC's default, refuses.
 #   ico_shaders_library(<target>)
 #       after the last ico_add_shader: builds the static library <target>
 #       holding shaders_gen.c, with shaders_gen.h on its public include path.
@@ -90,6 +94,9 @@ if(EXISTS "${_ico_dxc}" AND Python3_EXECUTABLE)
 endif()
 set(ICO_DXC_EXE "${_ico_dxc}")
 set(ICO_SHADER_DIR "${CMAKE_SOURCE_DIR}/port/shaders")
+# vendored shader headers, unmodified (docs/THIRD_PARTY.md): included by base
+# name from port/shaders (DXC -I; the Direct3D 11 sources embed them too)
+set(ICO_SHADER_THIRD_PARTY_DIRS "${CMAKE_SOURCE_DIR}/port/third_party/fsr1")
 set(ICO_SHADER_OUT_DIR "${CMAKE_BINARY_DIR}/shaders")
 
 # The flags that map HLSL registers to the Vulkan backend's bindings: b0.. at
@@ -106,6 +113,9 @@ set(ICO_DXC_SPIRV_FLAGS -spirv -fspv-target-env=vulkan1.0
 # -WX: a shader warning fails the build. -Zi is not used: no debug info in the
 # embedded blobs.
 set(ICO_DXC_COMMON_FLAGS -O3 -WX -I "${ICO_SHADER_DIR}")
+foreach(_d IN LISTS ICO_SHADER_THIRD_PARTY_DIRS)
+    list(APPEND ICO_DXC_COMMON_FLAGS -I "${_d}")
+endforeach()
 
 set_property(GLOBAL PROPERTY ICO_SHADER_MANIFEST "")
 set_property(GLOBAL PROPERTY ICO_SHADER_BLOBS "")
@@ -115,12 +125,15 @@ function(ico_add_shader name file entry stage)
     if(NOT ICO_SHADERS_AVAILABLE)
         return()
     endif()
-    cmake_parse_arguments(PARSE_ARGV 4 _ico_sh "" "SUFFIX" "DEFINES")
+    cmake_parse_arguments(PARSE_ARGV 4 _ico_sh "HLSL2018" "SUFFIX" "DEFINES")
     set(name "${name}${_ico_sh_SUFFIX}")
     set(_ico_sh_d "")
     foreach(_d IN LISTS _ico_sh_DEFINES)
         list(APPEND _ico_sh_d -D "${_d}")
     endforeach()
+    if(_ico_sh_HLSL2018)
+        list(APPEND _ico_sh_d -HV 2018)
+    endif()
     # the manifest's defines column: "A=1,B=2" (a comma, not the list's
     # semicolon, so the manifest line stays one string)
     list(JOIN _ico_sh_DEFINES "," _ico_sh_defines)
@@ -154,6 +167,10 @@ function(ico_add_shader name file entry stage)
         set(_ico_sh_depfile "")
         set(_ico_sh_depcmd "")
         file(GLOB _hlsli CONFIGURE_DEPENDS "${ICO_SHADER_DIR}/*.hlsli")
+        foreach(_d IN LISTS ICO_SHADER_THIRD_PARTY_DIRS)
+            file(GLOB _g CONFIGURE_DEPENDS "${_d}/*.h")
+            list(APPEND _hlsli ${_g})
+        endforeach()
     endif()
     if(ICO_SHADERS_DXIL)
         set(dxil "${ICO_SHADER_OUT_DIR}/${name}.dxil")
@@ -230,6 +247,11 @@ function(ico_shaders_library target)
     if(ICO_SHADERS_HLSL_SOURCE)
         file(GLOB _ico_sh_sources CONFIGURE_DEPENDS "${ICO_SHADER_DIR}/*.hlsl"
              "${ICO_SHADER_DIR}/*.hlsli" "${ICO_SHADER_DIR}/*.h")
+        # the vendored headers the entries include, by base name too
+        foreach(_d IN LISTS ICO_SHADER_THIRD_PARTY_DIRS)
+            file(GLOB _g CONFIGURE_DEPENDS "${_d}/*.h")
+            list(APPEND _ico_sh_sources ${_g})
+        endforeach()
         list(SORT _ico_sh_sources)
         set(_ico_sh_sources_arg --sources ${_ico_sh_sources})
     endif()

@@ -204,6 +204,13 @@
       "texts": [{"file": "port/third_party/minicoro/LICENSE"}]
     },
     {
+      "name": "AMD FidelityFX Super Resolution 1.0 (EASU, RCAS shader code)",
+      "version": "v1.0.2 (GPUOpen-Effects/FidelityFX-FSR commit a21ffb8f6c13233ba336352bdff293894c706575), ffx_a.h and ffx_fsr1.h unmodified",
+      "licence": "MIT",
+      "used_for": "Options > Picture > Upscaling: FSR 1.0, compiled into the program's shaders",
+      "texts": [{"file": "port/third_party/fsr1/LICENSE"}]
+    },
+    {
       "name": "newlib libm (fdlibm single-precision functions)",
       "version": "as linked by the PS2 game; port/math/newlib/ico_libm.c",
       "licence": "SunPro fdlibm notice",

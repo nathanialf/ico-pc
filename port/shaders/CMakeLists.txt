@@ -114,6 +114,11 @@ ico_add_shader(crt_vs crt.hlsl crt_vs vertex)
 ico_add_shader(crt_bloom_ps crt.hlsl crt_bloom_ps fragment)
 ico_add_shader(crt_blur_ps crt.hlsl crt_blur_ps fragment)
 ico_add_shader(crt_ps crt.hlsl crt_ps fragment)
+# AMD FidelityFX Super Resolution 1.0 at the present (port/render/rd_fsr1.c;
+# Options > Picture > Upscaling): EASU then RCAS, behind blit_vs. HLSL 2018:
+# the vendored headers (port/third_party/fsr1) use the vector ?:
+ico_add_shader(fsr1_easu_ps fsr1.hlsl fsr1_easu_ps fragment HLSL2018)
+ico_add_shader(fsr1_rcas_ps fsr1.hlsl fsr1_rcas_ps fragment HLSL2018)
 # tests only: the probe output of vu1_test (VU_F_PROBE)
 ico_add_shader(vu_probe_ps vu_prelit.hlsl vu_probe_ps fragment)
 # the entries that call gs_dual_out, without the second output,

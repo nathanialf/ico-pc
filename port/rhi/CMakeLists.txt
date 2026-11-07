@@ -285,7 +285,7 @@ endif()
 
 # --- ico_rhi_vulkan -------------------------------------------------------------
 if(_ico_have_vk)
-    set(_ico_vk_sources rhi_adapter.c rhi_bind_cache.c rhi_driver_version.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c
+    set(_ico_vk_sources rhi_adapter.c rhi_bind_cache.c rhi_driver_version.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c vk/vk_native.c
                         vk/vk_pipeline.c vk/vk_present_mode.c vk/vk_renderpass.c vk/vk_resource.c
                         vk/vk_swapchain.c vk/vk_sync.c)
     if(ANDROID)
@@ -325,6 +325,7 @@ if(_ico_have_d3d12)
         rhi_bind_cache.c
         d3d12/d3d12_cmd.c
         d3d12/d3d12_device.c
+        d3d12/d3d12_native.c
         d3d12/d3d12_pipeline.c
         d3d12/d3d12_plan.c
         d3d12/d3d12_resource.c
@@ -433,7 +434,7 @@ endif()
 
 # --- Tests ----------------------------------------------------------------------
 # rhi_test_common.c: the exact-texel cells every backend must pass.
-set(_ico_rhi_test_common test/rhi_test_common.c)
+set(_ico_rhi_test_common test/rhi_test_common.c test/rhi_test_native.c)
 
 if(_ico_have_vk)
     set(_ico_vk_test_env "")
@@ -480,6 +481,16 @@ if(_ico_have_vk)
     target_compile_options(rhi_vk_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(rhi_vk_test PRIVATE ico_rhi)
 
+    # rhi_native.h (the handles external compute needs): textures granted
+    # storage, the external begin/end bracket and the picture around it,
+    # through the Vulkan backend on lavapipe; exits 77 without a device.
+    add_executable(rhi_native_test test/rhi_native_test.c)
+    target_include_directories(rhi_native_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/test/shaders"
+                               "${ICO_VOLK_DIR}" "${ICO_VULKAN_INCLUDE_DIR}")
+    target_compile_definitions(rhi_native_test PRIVATE VK_NO_PROTOTYPES)
+    target_compile_options(rhi_native_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(rhi_native_test PRIVATE ico_rhi)
+
     # The window path (surface, swapchain, present, resize) through SDL's
     # offscreen video driver; needs SDL3.
     if(SDL3_FOUND)
@@ -491,7 +502,7 @@ if(_ico_have_vk)
 
     # Windows: SDL3.dll beside the test programs
     if(SDL3_FOUND)
-        ico_copy_sdl3_dll(rhi_vk_test rhi_vk_swapchain_test)
+        ico_copy_sdl3_dll(rhi_vk_test rhi_native_test rhi_vk_swapchain_test)
     endif()
 
     if(ICO_RUN_TESTS)
@@ -518,6 +529,12 @@ if(_ico_have_vk)
         endif()
         if(_ico_vk_test_env)
             set_tests_properties(rhi_vk PROPERTIES ENVIRONMENT "${_ico_vk_test_env}")
+        endif()
+        # rhi_native.h on the same layer setup (a validation message fails it)
+        add_test(NAME rhi_native COMMAND rhi_native_test)
+        set_tests_properties(rhi_native PROPERTIES SKIP_RETURN_CODE 77)
+        if(_ico_vk_test_env)
+            set_tests_properties(rhi_native PROPERTIES ENVIRONMENT "${_ico_vk_test_env}")
         endif()
         # the same cells on a device made without dualSrcBlend
         # (the hook clears the feature at device creation); its own directory

@@ -55,7 +55,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/tools/rd_replay_region.c` | the replay tool's `--region-stats`: the region rule's verdicts on the CPU |
 | `port/render/vu1_ref/` | the VU1 programs' CPU references ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-cpu-oracles)) |
 | `port/render/test/` | the renderer's tests ([TESTING_PROGRAMS.md](TESTING_PROGRAMS_RENDER.md)) |
-| `port/render/rd_interp.c`, `rd_present.c`, `rd_present_info.c`, `rd_crt.c`, `rd_video.c` | presentation ([DISPLAY.md](DISPLAY.md)); `rd_present_info.c` holds `rd_last_present_info`'s record |
+| `port/render/rd_interp.c`, `rd_present.c`, `rd_present_info.c`, `rd_crt.c`, `rd_fsr1.c`, `rd_video.c` | presentation ([DISPLAY.md](DISPLAY.md)); `rd_present_info.c` holds `rd_last_present_info`'s record |
 | `port/render/rd_present_clock.c` | the present clock the timer path takes alpha from (`rd_present_clock_alpha`), the values it notes for `rd_present` (the alpha before its clamp, the time since the present before, the tick) and Motion blur: Smooth's presents a tick (`rd__present_clock_k`) ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)) |
 | `port/render/rd_interp_mesh.c` | the interpolation's reads of a mesh's stream kept while its serial holds: a skinned mesh's bone pivots, a rigid mesh's centroid, the same-shape answer of two streams ([Performance notes](#performance-notes)) |
 | `port/render/texpack*.c`, `modelpack.c`, `gltf.c`, `xxh3.c` | texture and model packs ([PACKS.md](PACKS.md)) |
@@ -1573,7 +1573,8 @@ With `RdSettings.interpolate` on, `rd_end_frame` only closes the frame and the h
 `rd_present(alpha)` (the [present](ARCHITECTURE.md#terms)) as often as the display allows; what
 blends and how is [DISPLAY.md](DISPLAY.md#interpolation-between-ticks)'s
 (`port/render/rd_interp.c`). `rd_present.c` shows DISPLAY in a box of the frame's aspect on the
-output, `rd_crt.c` replaces that blit under the CRT filter, and `rd_video.c` shows the FMV picture.
+output, `rd_crt.c` replaces that blit under the CRT filter, `rd_fsr1.c` upscales the picture before
+it with FSR 1.0 (Options > Picture > Upscaling), and `rd_video.c` shows the FMV picture.
 All of it is [DISPLAY.md](DISPLAY.md). Re-keyed screen prims:
 [WORK_BUFFERS.md](WORK_BUFFERS.md#screen-sprites-redrawn-under-a-new-key-between-ticks).
 

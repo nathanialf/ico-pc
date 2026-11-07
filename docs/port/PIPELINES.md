@@ -301,6 +301,8 @@ The box blit with the effects depth (two keys, one per output format, `rd__prese
 
 The present's box average (`aa_reduce_ps`, one RGBA8 key, `rd_present.c` (`reduceInto`)) is in the set on every device: supersampling, a scaled scene with more texels than the box has pixels on both axes and Downsampling all draw it ([DISPLAY.md](DISPLAY.md)) (`rd_present`'s `checkReduceKey`).
 
+FSR 1.0's two passes (`fsr1_easu_ps`, `fsr1_rcas_ps` behind `blit_vs`, one RGBA8 key each, `rd_fsr1.c`) are in the set on every device that has both modules (OpenGL without their GLSL leaves them out), whatever the Upscaling row says, so turning it on makes no pipeline at run time; they count in the CRT family, the other present-stage filter ([DISPLAY.md](DISPLAY.md#fsr-10-upscaling)) (`rd_present`'s `checkFsr1`).
+
 The window builds the reachable set with `rd_precreate_pipelines` before the first frame, behind the
 start-up screen, unless one of the rules below skips it (`port/platform/window_host.c`
 (`ico_window_open`)). Without the set the window calls `rd_pipelines_lazy(why)` instead, which logs
