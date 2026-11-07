@@ -527,7 +527,10 @@ endif()
 # compiles the shaders with D3DCompile at run time, which DXC-built backends
 # do not exercise. Needs only Python.
 if(Python3_FOUND)
-    add_test(NAME hlsl_fxc_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_hlsl_fxc.py" "${CMAKE_SOURCE_DIR}/port/shaders")
+    # the vendored headers fsr1.hlsl includes are named: the scan of a
+    # directory takes only .hlsl and .hlsli
+    add_test(NAME hlsl_fxc_check COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/check_hlsl_fxc.py" "${CMAKE_SOURCE_DIR}/port/shaders"
+             "${CMAKE_SOURCE_DIR}/port/third_party/fsr1/ffx_a.h" "${CMAKE_SOURCE_DIR}/port/third_party/fsr1/ffx_fsr1.h")
 endif()
 
 # --- port/core: the game region (config/regions.txt) -------------------------
@@ -573,7 +576,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
                                   port/platform/window_disc.c port/platform/window_blended.c
                                   port/platform/window_present.c port/platform/render_thread.c
                                   port/platform/window_sweep.c port/platform/dump_zip.c
-                                  port/platform/backup_host.c)
+                                  port/platform/backup_host.c port/platform/app_icon_host.c)
     if(ICO_RC_TOOLS AND ANDROID)
         # an rc build's Share a bug report: the files it offers (share_report.h)
         target_sources(ico_pc PRIVATE port/platform/share_report.c)

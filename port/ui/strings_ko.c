@@ -604,6 +604,11 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_VAL_DOWNSAMPLE_BOX] = "원래 크기로",
     [UI_STR_OPT_DOWNSAMPLE_NOTE] =
         "위의 해상도로 그려 원래 크기로 줄입니다. 2x 이상에서 작동, CRT 필터와 창 크기에서는 안 됩니다.",
+    [UI_STR_OPT_UPSCALE] = "업스케일링",
+    [UI_STR_VAL_UPSCALE_FSR1] = "FSR 1.0",
+    [UI_STR_OPT_UPSCALE_SHARPNESS] = "선명도",
+    [UI_STR_OPT_UPSCALE_NOTE] =
+        "화면보다 작게 그릴 때(1x나 축소 뒤 등) FSR 1.0(AMD)으로 선명하게 합니다. CRT 필터와 창 크기에서는 안 됩니다.",
     [UI_STR_AA_OFF] = "끔",
     [UI_STR_AA_SSAA2] = "2x 슈퍼샘플링",
     [UI_STR_AA_SSAA4] = "4x 슈퍼샘플링",

@@ -407,6 +407,15 @@ typedef struct RdSettings {
      * "window" resolution (rd__apply_display: g_rd.downsample).  0 in a
      * zeroed RdSettings: off, nothing changes */
     uint8_t downsample;
+    /* Upscaling (RdUpscale, [video] upscaling = "fsr1", issue 99): AMD
+     * FidelityFX Super Resolution 1.0 at the present, EASU then RCAS
+     * (rd_fsr1.c), where the picture has fewer texels than the presentation
+     * box on both axes (1x, or after Downsampling), never under the CRT
+     * filter or at the "window" resolution.  upscaleSharpness 0..100 (the
+     * host's default 80): RCAS's stops 2 (1 - s / 100), half a stop softer
+     * past 2x a side.  0 in a zeroed RdSettings: off, nothing changes */
+    uint8_t upscale;
+    uint8_t upscaleSharpness;
     /* Full pixel off in the game (the host sets it with fullPixel 0): the
      * picture is Full pixel on's, the reduction drawing the whole frame as
      * above (rd_replay.c), and the presenter draws the game's border over
@@ -499,6 +508,15 @@ typedef enum RdCrtMode {
 /* Sets s's CRT fields: the mode, the strength (clamped to 0..1) and every
  * override to "the mode's own" (-1). */
 void rd_crt_settings(RdSettings *s, RdCrtMode mode, float strength);
+
+/* RdSettings.upscale.  RD_UPSCALE_FSR3 is reserved for the temporal
+ * upscaler: not offered, and drawn as RD_UPSCALE_OFF here */
+typedef enum RdUpscale {
+    RD_UPSCALE_OFF = 0,
+    RD_UPSCALE_FSR1 = 1, /* FSR 1.0: EASU + RCAS at the present (rd_fsr1.c) */
+    RD_UPSCALE_FSR3 = 2,
+    RD_UPSCALE_COUNT
+} RdUpscale;
 
 /* RdSettings.antiAlias */
 typedef enum RdAntiAlias {
@@ -2212,6 +2230,9 @@ enum {
 
 /* A RD_PERF_PASS_* in plain words ("uploads", "DATE snapshot", ...) */
 const char *rd_perf_pass_kind_name(int kind);
+/* The name a log line prints: the same, but "before list 0" for the uploads
+   on a tile-based GPU (the CSV `kind` keeps rd_perf_pass_kind_name) */
+const char *rd_perf_pass_kind_display(int kind, bool tiler);
 
 struct RdPerfRecord;
 /* The GPU time a picture that pacing reads (the present allowance's gate

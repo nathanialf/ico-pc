@@ -748,7 +748,9 @@ float4 vu_homogeneous_position(float4 h)
     if (g_vp.x != 0.0) {
         // the exact viewport's form (common.hlsli gs_px_to_ndc) times w:
         // about the target's centre, so the same at every frame width up to
-        // the viewport's power-of-two factor
+        // the viewport's power-of-two factor; g_vpo.xy holds a jittered
+        // frame's jitter in its scene-class passes (common.hlsli g_jitter),
+        // after the divide and ftoi4 (0 elsewhere)
         precise float2 c = g_origin.xy + g_target.xy * 0.5;
         precise float x = ((h.x - c.x * h.w) * g_vp.z + (g_frame.w + g_vpo.x) * h.w) * g_vp.x;
         precise float y = -(((h.y - c.y * h.w) * g_vp.w + (g_frame.w + g_vpo.y) * h.w) * g_vp.y);
@@ -2504,13 +2506,16 @@ VuPSIn vu_pixel_in(VuPSIn i)
 // 4:3 frame's own texels are (with the half texel off, g_frame.w 0, the
 // edges fall between centres and the same test holds).  The plain mapping
 // (the shader tests): the pixel's GS X from the texel, g_z.y texels a GS
-// pixel (0: 1), the same half-open range.
+// pixel (0: 1), the same half-open range.  A jittered frame's scene-class
+// pass (common.hlsli g_jitter, in the exact viewport's offset) moved the
+// triangle's corners by the jitter: the pixel is tested at its jittered GS
+// position, its offset less the jitter (0 elsewhere: the same test).
 bool vu_pixel_in_picture(float4 pos)
 {
     const float h = vu_picture_half().x;
     if (g_vp.x != 0.0) {
         precise float c = g_target.x * g_vp.z * 0.5 - g_vpo.z;
-        precise float q = pos.x - c;
+        precise float q = pos.x - c - g_jitter.x;
         const float lo = gs_texel_offset(float2(2048.0 - h, 2048.0)).x;
         const float hi = gs_texel_offset(float2(2048.0 + h, 2048.0)).x;
         return q >= lo && q < hi;

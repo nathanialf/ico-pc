@@ -124,7 +124,7 @@ int main(void)
     }
 
     /* list 0 against the VU triangles (issue 179): list 0 = 12.3 ms + 0.41
-       ms a thousand triangles exactly */
+       ms a thousand vertex invocations exactly */
     {
         SceneVuFit f;
         double a = 0.0, k = 0.0, r2 = 0.0;
@@ -139,23 +139,25 @@ int main(void)
         CHECK(window_scene_vu_fit(&f, &a, &k, &r2));
         CHECK(a > 12.299 && a < 12.301 && k > 0.4099 && k < 0.4101 && r2 > 0.9999);
         window_scene_vu_fit_text(b, sizeof(b), &f);
-        CHECK(text_is(b, "; list 0 GPU 25.6 ms a replay, 12.3 ms + 0.41 ms a thousand triangles "
-                         "(R^2 1.00, 4 replays)"));
+        CHECK(text_is(
+            b, "; GPU work 25.6 ms a replay, 12.3 ms + 0.41 ms a thousand vertex invocations "
+               "(R^2 1.00, 4 replays)"));
         /* noisy: b 0.32, a 17, R^2 25600 / 34000 */
         memset(&f, 0, sizeof(f));
         for (int i = 0; i < 4; i++) {
             window_scene_vu_fit_add(&f, (uint64_t)(noisy[i][0] * 1000.0), noisy[i][1]);
         }
         window_scene_vu_fit_text(b, sizeof(b), &f);
-        CHECK(text_is(b, "; list 0 GPU 25.0 ms a replay, 17.0 ms + 0.32 ms a thousand triangles "
-                         "(R^2 0.75, 4 replays)"));
+        CHECK(text_is(
+            b, "; GPU work 25.0 ms a replay, 17.0 ms + 0.32 ms a thousand vertex invocations "
+               "(R^2 0.75, 4 replays)"));
         /* two replays: the mean alone */
         memset(&f, 0, sizeof(f));
         window_scene_vu_fit_add(&f, 10000, 20.0);
         window_scene_vu_fit_add(&f, 20000, 22.0);
         CHECK(!window_scene_vu_fit(&f, &a, &k, &r2));
         window_scene_vu_fit_text(b, sizeof(b), &f);
-        CHECK(text_is(b, "; list 0 GPU 21.0 ms a replay (2 replays)"));
+        CHECK(text_is(b, "; GPU work 21.0 ms a replay (2 replays)"));
         /* the triangles not varying: no slope */
         memset(&f, 0, sizeof(f));
         for (int i = 0; i < 3; i++) {
@@ -163,7 +165,7 @@ int main(void)
         }
         CHECK(!window_scene_vu_fit(&f, &a, &k, &r2));
         window_scene_vu_fit_text(b, sizeof(b), &f);
-        CHECK(text_is(b, "; list 0 GPU 6.0 ms a replay (3 replays)"));
+        CHECK(text_is(b, "; GPU work 6.0 ms a replay (3 replays)"));
         /* list 0 not varying: the line, no R^2 */
         memset(&f, 0, sizeof(f));
         for (int i = 1; i <= 3; i++) {
@@ -171,14 +173,29 @@ int main(void)
         }
         CHECK(window_scene_vu_fit(&f, &a, &k, &r2) && r2 < 0.0);
         window_scene_vu_fit_text(b, sizeof(b), &f);
-        CHECK(text_is(b, "; list 0 GPU 5.0 ms a replay, 5.0 ms + 0.00 ms a thousand triangles (3 "
-                         "replays)"));
+        CHECK(text_is(
+            b, "; GPU work 5.0 ms a replay, 5.0 ms + 0.00 ms a thousand vertex invocations (3 "
+               "replays)"));
         {
             char t[16];
             const size_t n = window_scene_vu_fit_text(t, sizeof(t), &f);
 
             CHECK(n < sizeof(t) && strlen(t) == n);
         }
+    }
+    /* the block's acquire line: the pictures whose image was free at the
+       present's submit; nothing when none asked (not Vulkan) */
+    CHECK(window_scene_acquire_text(b, sizeof(b), 41, 19) == strlen(b) &&
+          text_is(b, "acquire: the display's image was free at the present's submit in 41 of 60 "
+                     "pictures"));
+    CHECK(window_scene_acquire_text(b, sizeof(b), 0, 7) > 0 &&
+          strstr(b, "in 0 of 7 pictures") != NULL);
+    CHECK(window_scene_acquire_text(b, sizeof(b), 0, 0) == 0 && b[0] == '\0');
+    {
+        char t[16];
+        const size_t n = window_scene_acquire_text(t, sizeof(t), 3, 4);
+
+        CHECK(n < sizeof(t) && strlen(t) == n);
     }
     /* the slow-scene dump's trigger (issue 179): a scene-dominant block on a
        window, no movie, 30 s up, 8 timed replays, the work (span less the

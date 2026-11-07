@@ -78,6 +78,10 @@ static const char *const expectedAuraBox[] = {"fx_aura_rows_ps", "fx_aura_sum_ps
  * port/render/rd_tone.h) */
 static const char *const expectedTone[] = {"blit_tone_ps", "blit_depth_tone_ps"};
 
+/* Upscaling: FSR 1.0's two passes (fsr1.hlsl over port/third_party/fsr1;
+ * port/render/rd_fsr1.c) */
+static const char *const expectedFsr1[] = {"fsr1_easu_ps", "fsr1_rcas_ps"};
+
 /* the mesh programs' entries' plain variants (ICO_VU_PLAIN, vu_common.hlsli:
  * the fallback's on a device of the table) */
 static const char *const expectedPlain[] = {
@@ -453,6 +457,32 @@ int main(void)
             failures++;
         }
     }
+    const size_t nFsr1 = sizeof(expectedFsr1) / sizeof(expectedFsr1[0]);
+    for (size_t i = 0; i < nFsr1; i++) {
+        const IcoShaderBlob *b = ico_find_shader(expectedFsr1[i]);
+        if (!b) {
+            printf("FAIL %s: not in the table\n", expectedFsr1[i]);
+            failures++;
+        } else if (b->stage != ICO_SHADER_STAGE_FRAGMENT) {
+            printf("FAIL %s: not a pixel shader\n", expectedFsr1[i]);
+            failures++;
+        }
+    }
+#ifndef ICO_SHADERS_NO_HLSL_SOURCE
+    /* the vendored headers fsr1.hlsl includes, embedded by base name for
+     * the Direct3D 11 compile (cmake/IcoShaders.cmake ICO_SHADER_THIRD_PARTY_DIRS) */
+    static const char *const fsr1Headers[] = {"ffx_a.h", "ffx_fsr1.h"};
+    for (size_t i = 0; i < 2; i++) {
+        int found = 0;
+        for (unsigned k = 0; k < g_icoShaderSourceCount; k++) {
+            found |= strcmp(g_icoShaderSources[k].name, fsr1Headers[i]) == 0;
+        }
+        if (!found) {
+            printf("FAIL %s: not among the embedded sources\n", fsr1Headers[i]);
+            failures++;
+        }
+    }
+#endif
     const size_t nPlain = sizeof(expectedPlain) / sizeof(expectedPlain[0]);
     for (size_t i = 0; i < nPlain; i++) {
         if (!ico_find_shader(expectedPlain[i])) {
@@ -496,7 +526,7 @@ int main(void)
     }
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
                         nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nMerge +
-                        nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone;
+                        nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone + nFsr1;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;

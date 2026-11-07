@@ -119,6 +119,23 @@ double rd_perf_pace_gpu_ms(const RdPerfRecord *r)
     return ms > 0.0 ? ms : 0.0;
 }
 
+const char *rd_perf_pass_kind_display(int kind, bool tiler)
+{
+    /* on a tile-based GPU the stamp that ends the uploads lands at an
+       arbitrary point inside a fixed amount of work (the figures before
+       list 0 and list 0's trade at a constant sum, issue 179), so the stretch
+       is named for where it ends */
+    if (tiler && kind == RD_PERF_PASS_UPLOAD) {
+        return "before list 0";
+    }
+    return rd_perf_pass_kind_name(kind);
+}
+
+static bool tiler_names(void)
+{
+    return g_rd.hasDevice && rhi_limits()->tiler;
+}
+
 int rd_perf_pass_label(const RdPerfPass *p, char *buf, size_t n)
 {
     if (p->kind == RD_PERF_PASS_RENDER) {
@@ -130,7 +147,7 @@ int rd_perf_pass_label(const RdPerfPass *p, char *buf, size_t n)
         }
         return snprintf(buf, n, "list %d", (int)p->list);
     }
-    return snprintf(buf, n, "%s", rd_perf_pass_kind_name(p->kind));
+    return snprintf(buf, n, "%s", rd_perf_pass_kind_display(p->kind, tiler_names()));
 }
 
 int rd__perf_post_of_kind(uint32_t kind)
@@ -1773,7 +1790,7 @@ int rd_perf_pass_kinds_text(const double kinds[RD_PERF_PASS_KIND_COUNT],
     ADD(")");
     for (int k = 0; k < RD_PERF_PASS_KIND_COUNT; k++) {
         if (k != RD_PERF_PASS_RENDER && k != RD_PERF_PASS_WAIT && kinds[k] > 0.0) {
-            ADD(", %s %.1f", rd_perf_pass_kind_name(k), kinds[k] / r);
+            ADD(", %s %.1f", rd_perf_pass_kind_display(k, tiler_names()), kinds[k] / r);
         }
     }
 #undef ADD

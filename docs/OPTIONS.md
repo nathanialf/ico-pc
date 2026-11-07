@@ -179,6 +179,17 @@ How the picture is drawn and finished: smoothing, the picture's size and sharpne
   more); nothing changes with the CRT filter, at **Window**, or when the
   Resolution is 1x. It works with either Preset and with Anti-aliasing:
   supersampling is then counted against the game's own size.
+- **Upscaling** is **Off** or **FSR 1.0**. FSR 1.0 (AMD's open upscaler)
+  makes the picture sharper when it is drawn smaller than your screen, as
+  at Resolution 1x or after Downsampling: edges are traced and kept crisp
+  instead of being stretched soft. It works on every computer and phone.
+  Nothing changes with the CRT filter, at **Window**, or when the picture
+  is already as large as your screen. Off shows the picture as the
+  original game did.
+- **Sharpness** (shown while Upscaling is on) is how much FSR 1.0 sharpens,
+  from 0 to 100 in steps of 10; 80 is the default. Lower it if edges look
+  too hard. When the picture is stretched more than twice its size, it is
+  sharpened a little less on its own.
 - **Full-height picture** shows every line of the picture. The PS2 showed
   half of them, which looks a little softer.
 - **Texture filtering** is how smooth the textures look up close: Original
@@ -1047,6 +1058,8 @@ Under `[video]`:
 | `gpu_driver = ""` | Android only. The Driver row of the Graphics driver page: empty is the phone's own driver. The game also writes a `gpu_driver_failed` line when a driver did not start. [About Android](ANDROID.md#using-a-different-graphics-driver). |
 | `show_fps = false` | The Frame rate counter row on the Display page. `true` shows the frames per second in the top-left corner of the screen. |
 | `downsample = "off"` | The Downsampling row on the Picture page: `"off"` or `"box"` (To original size). |
+| `upscaling = "off"` | The Upscaling row on the Picture page: `"off"` or `"fsr1"` (FSR 1.0). |
+| `upscaling_sharpness = 80` | The Sharpness row under Upscaling: 0 to 100. |
 | `model_pack = true` | The Model pack row on the Picture page. `false` shows the game's own models. |
 | `dump_models = false` | The Dump models row on the Developer page. Only works with Developer mode on. |
 | `effects_depth = true` | Lets an effects program such as ReShade see how far away things are. [About ReShade](RESHADE.md). |

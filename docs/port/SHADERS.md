@@ -22,6 +22,7 @@ interface that loads the blobs is [RHI.md](RHI.md).
 | `port/shaders/tone.hlsli` | the colour adjustment (Options > Picture's Gamma, Picture brightness, Contrast, Saturation): PCSX2's shade boost arithmetic, `tone_adjust` ([DISPLAY.md](DISPLAY.md#presentation)) |
 | `port/shaders/shader_consts.h` | the C side of the byte layouts and constants |
 | `port/shaders/*.hlsl` | the families, below |
+| `port/third_party/fsr1/` | AMD FidelityFX Super Resolution 1.0's `ffx_a.h` and `ffx_fsr1.h` with their `LICENSE` (MIT), vendored unmodified, included by `fsr1.hlsl` ([Vendored shader code](#vendored-shader-code)) |
 | `port/shaders/test/` | the shader tests and `hlsl_shim.h` |
 | `port/test/gs_blend_test.c` | a standalone CPU program on the GS blender's drift |
 
@@ -38,8 +39,12 @@ library holding `shaders_gen.c` with `shaders_gen.h` on its public include path
 **Flags.** SPIR-V: `-spirv -fspv-target-env=vulkan1.0` with `-fvk-b-shift 0`, `-fvk-t-shift 16`,
 `-fvk-s-shift 32`, `-fvk-u-shift 48` (all spaces), so a register number is the
 [RHI](ARCHITECTURE.md#terms) slot and the Vulkan binding is the slot plus 0, 16, 32 or 48. Both
-targets: `-O3 -WX -I port/shaders` (a shader warning fails the build; no `-Zi`, no debug info in the
-blobs) (`cmake/IcoShaders.cmake` (`ICO_DXC_SPIRV_FLAGS`, `ICO_DXC_COMMON_FLAGS`)).
+targets: `-O3 -WX -I port/shaders` and `-I` each directory of `ICO_SHADER_THIRD_PARTY_DIRS`
+(`port/third_party/fsr1`) (a shader warning fails the build; no `-Zi`, no debug info in the blobs)
+(`cmake/IcoShaders.cmake` (`ICO_DXC_SPIRV_FLAGS`, `ICO_DXC_COMMON_FLAGS`)). An entry registered
+with `HLSL2018` (`ico_add_shader(... HLSL2018)`) is compiled with `-HV 2018` for both targets: the
+FSR 1.0 entries, whose vendored headers use the vector `?:` that HLSL 2021, DXC's default, refuses
+("condition for short-circuiting ternary operator must be scalar").
 
 The SPIR-V target is Vulkan 1.0 (SPIR-V 1.0) so the blobs load on Vulkan 1.0 drivers (Android 8,
 issue 158). The shaders use only Vulkan 1.0
@@ -95,6 +100,7 @@ each file's header comment):
 | `raw_wrap.hlsl` | `wrap_acc_ps`, `wrap_resolve_ps` | COLCLAMP 0 prims (`darkVolume.c`): an RGBA16F accumulation, then the sum modulo 256 |
 | `font.hlsl` | `font_ps`, `font_sheet_ps`, `font_sheet_baked_ps` | R8 coverage textures (the port's font atlas) read as sprite_ps reads a texel; sheet text in the menu sheets' style, rebuilt from the coverage (above 1x) or read from the texels the renderer baked (1x) |
 | `yuv.hlsl` | `yuv_vs`, `yuv_ps`, `yuv_field_ps` | the FMV picture, 4:2:0 planes to RGB with the [IPU](ARCHITECTURE.md#terms)'s conversion; a field deinterlaced at the picture's size (`port/render/rd_video.c`) |
+| `fsr1.hlsl` | `fsr1_easu_ps`, `fsr1_rcas_ps` (behind `blit_vs`; `HLSL2018`) | Upscaling: FSR 1.0 at the present, AMD's EASU and RCAS on their 32-bit path over the vendored `ffx_a.h` and `ffx_fsr1.h`; the file supplies only the callbacks (three gathers, a clamped load) ([DISPLAY.md](DISPLAY.md#fsr-10-upscaling)) |
 | `crt.hlsl` | `crt_vs`, `crt_bloom_ps`, `crt_blur_ps`, `crt_ps` | the CRT filter ([DISPLAY.md](DISPLAY.md)); the colour adjustment on its source reads under a uniform branch (`toneOf`, `tone.hlsli`) |
 | `vu_prelit.hlsl` | `vu_prelit_vs`, `vu_prelit_pre_vs`, `vu_ps`, `vu_texa_ps`, `vu_probe_ps` | `normal_c` (codes 32, 34, 36); the pixel shader of every VU draw, through the main shaders and the programs' own entries alike (the planes as flat varyings); the tests' probe output |
 | `vu_lit.hlsl` | `vu_lit_vs`, `vu_lit_spec_vs`, `vu_reflect_vs` and their `_pre_vs` | `normal_l` (codes 32/36, 34, 38) |
@@ -192,6 +198,28 @@ The replay looks entries up by the names in `s_vsNames` and `s_fsNames` (`port/r
    `shaders_d3d11_check` (the entry under `ICO_D3D11`), then the render tests
    ([TESTING_PROGRAMS.md](TESTING_PROGRAMS_RENDER.md)).
 
+## Vendored shader code
+
+Shader code from elsewhere (AMD's FSR 1.0 headers, `port/third_party/fsr1/`) is kept as it came:
+
+- **Unmodified, with its licence.** The files as downloaded at a pinned commit, their `LICENSE`
+  beside them, a row in [THIRD_PARTY.md](../THIRD_PARTY.md) with the commit and each file's SHA-256,
+  and an entry in `tools/notices/manifest.json` (the notice ships in `NOTICES.txt`).
+- **Included by base name.** The directory is in `ICO_SHADER_THIRD_PARTY_DIRS`
+  (`cmake/IcoShaders.cmake`): DXC takes it with `-I`, the Ninja and Makefile depfiles track its
+  headers, other generators depend on its `*.h`, and the Direct3D 11 sources embed them by base name
+  (no base name may repeat one of `port/shaders`'). A wrapper in `port/shaders` (`fsr1.hlsl`)
+  supplies the callbacks and the bindings (`ICO_REG`) and is the only file that includes them.
+- **The gates on it.** `hlsl_fxc_check` names the vendored files explicitly (a directory scan
+  takes only `.hlsl` and `.hlsli`); a finding that is a false positive goes in
+  `tools/check_hlsl_fxc_allow.txt` with its reason. A DXC warning under `-WX` is silenced in the
+  wrapper (`#pragma dxc diagnostic`), never by editing the vendored file; a language difference
+  (HLSL 2021's scalar `?:`) is the entry's `HLSL2018` flag. AMD's FSR 1.0 headers draw no
+  warning and no FXC finding at the pinned commit.
+- **No C build of them.** A header that is C and shader code through macros (`ffx_a.h`) is not
+  compiled as C: its CPU half is written again in the renderer (`port/render/rd_fsr1.c`) with a
+  unit test against hand-worked values.
+
 ## The binding scheme
 
 `common.hlsli` fixes it for every program: the register space is the RHI bind group and the register
@@ -200,7 +228,7 @@ number the RHI slot (`port/shaders/common.hlsli`, header comment; `port/rhi/rhi.
 | group | registers | holds |
 | --- | --- | --- |
 | 0 | `b0` | FrameCB, once per frame |
-| 1 | `b1` | DrawCB, per draw or post pass (crt.hlsl's CrtCB takes the same slot) |
+| 1 | `b1` | DrawCB, per draw or post pass (crt.hlsl's CrtCB and fsr1.hlsl's FsrCB take the same slot) |
 | 1 | `b2`, `b3`, `t0`, `t4` | the VU programs' VuCB and VuBoneCB (bones, card bits; `uint4 vu_bone[240]`), the VU vertex stream (`vu_stream`, `StructuredBuffer<uint4>`), and the pre-passes' record (`vu_rec_buf`, `StructuredBuffer<uint4>`, three planes), every one declared `uint4` so integer lanes are read as integers ([Integer lanes](#integer-lanes-never-through-a-float-load)); VuCB and the record are visible to the pixel stage too (`vu_ps` reads the planes) |
 | 1 | `t5` | the upload ring from the replay's VU base on (`vu_ring`, `StructuredBuffer<uint4>`, vertex stage; `rd_replay_vu.c` `s_ringBase`, 256-aligned, after the uploads): the pre-pass's batch builds (`vu_X_batch_pre_vs`, `ICO_VU_PRE_BATCH`) read each entry's VuCB and VuBoneCB and the batch's table there, the table found through DrawCB's `aux0` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)); the draw merge's builds (`vu_X_merge_vs`, `vu_X_merge_plain_vs`, `vu_merge_main_vs`, `ICO_VU_MERGE`) read each draw's VuCB and VuBoneCB and the run's table there, the table found through b2's `mark.w` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)); every VU group binds it (Direct3D 11's leave it unbound only with the pre-pass's batches, the merge and the ring builds off), the cluster entries' ring builds (`vu_X_ring_plain_vs`, `ICO_VU_BONES_RING`: issue 123's ladder, under `[dev] vu_bones = ring` or the skin check's column 3 and twin C) read the bones there from b2's `mark.w`, the other builds do not read it |
 | 2 | `t1`..`t4`, `s1`..`s4` | textures and samplers |
@@ -219,10 +247,15 @@ size in [GS](ARCHITECTURE.md#terms) pixels, its GS origin, `g_frameRegs[0]` (`g_
 scale, the drawing camera's picture half-width and half-height about 2048, the exact viewport's half
 texel) and `g_frameRegs[1]` (`g_vp`: the exact viewport, a power of two centred on the target, so
 positions on the GS's 1/16 grid map to the same texel at every frame width), `g_z` (the Z scale,
-texels per GS pixel), `g_misc` (frame counter, preset) and `g_vpo` (the exact viewport's centre
-offset; the texels a [Full pixel](ARCHITECTURE.md#terms) target leaves out at its left). Nothing
-transforms a position: a GS X is drawn where the game put it, at every aspect
-(`port/shaders/common.hlsli`, FrameCB).
+texels per GS pixel), `g_misc` (frame counter, preset), `g_vpo` (the exact viewport's centre
+offset; the texels a [Full pixel](ARCHITECTURE.md#terms) target leaves out at its left) and
+`g_jitter` (xy: the sub-pixel jitter in texels of a jittered frame's scene-class passes, already
+added to `g_vpo.xy` so every position the exact viewport maps takes it after the GS's snap;
+`gs_plane_offset`, `vu_pixel_in_picture` and `fullscreen_triangle` subtract it, so a pixel is
+evaluated at its jittered GS position and a full-target pass keeps its texels; 0 in every other
+frame group, where the subtraction leaves every value as it was:
+[RENDER.md](RENDER.md#jitter)). Nothing transforms a position: a GS X is drawn where the game put
+it, at every aspect (`port/shaders/common.hlsli`, FrameCB).
 
 **DrawCB** (b1, 112 bytes): `g_col` (a constant colour), `g_mode` (the `DF_*` flags,
 [TEXA](ARCHITECTURE.md#terms) mode and texel format, alpha test and AFAIL split, AREF), `g_blend`
@@ -270,9 +303,10 @@ packing (each member a 16-byte register or a 64-byte matrix, so the packing is u
 
 | struct | register | bytes | notes |
 | --- | --- | --- | --- |
-| `IcoFrameCB` | b0 space0 | 336 | view, proj, viewProj, cameraPos, clip, target, origin, frame, vp, z, misc, vpo |
+| `IcoFrameCB` | b0 space0 | 352 | view, proj, viewProj, cameraPos, clip, target, origin, frame, vp, z, misc, vpo, jitter |
 | `IcoDrawCB` | b1 space1 | 112 | col, mode, blend, uvRect, tex, param (the tone blits: the colour adjustment's factors), scale |
 | `IcoCrtCB` | b1 space1 | 112 | the CRT filter's block in DrawCB's place: src, box, beam, mask, glow, tone, pass; pad[0..3] the colour adjustment's factors (`c_toneAdj`), pad[4] 1 with it on (`c_toneOn`) |
+| `IcoFsrCB` | b1 space1 | 144 | FSR 1.0's block in DrawCB's place and size (`blit_vs` reads it as DrawCB: pad[11], aux1.w, the quarter turns, is 0): con0..con3 (AMD's `FsrEasuConOffset`), rcas (`FsrRcasCon`), last (RCAS's load clamp), pad |
 | `IcoSpriteVertex` | vertex | 20 | XY 12.4 (U16x2), Z (U32), RGBA (U8x4, 0x80 = 1.0), UV in texels (F32x2) |
 | `IcoSpriteAa1Vertex` | vertex | 40 | plus the AA1 coverage and a triangle edge's clip, flat: the sorted first vertex (U16x2), the other two less it (two int16 in a U32 each) and the flags (U32) |
 | `IcoSpriteStqVertex` | vertex | 24 | plus Q |
@@ -796,7 +830,8 @@ translated to HLSL (still FXC) and committed DXBC (stale with no Windows tester)
 alternatives; each needs a Windows machine in the build.
 
 **What the table carries.** With `ICO_SHADERS_HLSL_SOURCE` (on where `ICO_RHI_D3D11` is) every
-`*.hlsl`, `*.hlsli` and `*.h` of `port/shaders` is embedded by base name in `g_icoShaderSources`, and
+`*.hlsl`, `*.hlsli` and `*.h` of `port/shaders`, and every `*.h` of the vendored shader directories
+(`ICO_SHADER_THIRD_PARTY_DIRS`), is embedded by base name in `g_icoShaderSources`, and
 every entry names its file (`hlslFile`) and its macros (`defines`, `"A=1,B=2"`, the entry's
 `DEFINES`); `rd__make_shader` hands them to the backend in `RhiShaderDesc` (`hlslFile`, `defines`,
 `sources`, `sourceCount`, `entryPoint`) instead of a blob (`port/shaders/embed_shaders.py`;
