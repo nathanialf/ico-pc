@@ -213,10 +213,32 @@ extern bool g_rdSkinTwin;
  * Turnip, the check's default rule) wherever the check runs, under
  * ICO_RD_VU_SKIN_CHECK=2 (and the tool's and the tests' mode 2) anywhere;
  * rd__vu_skin_twins_set (the tests) over it.  The probe's interval stays
- * 0 (one a present) on Turnip alone, 100 ms elsewhere */
+ * 0 (one a present) on Turnip alone while the twins are not thinned, 100 ms
+ * elsewhere */
 bool rd__vu_skin_twins_on(void);
 /* the tests' switch: 1 the twins on, 0 off, -1 back to the rule */
 void rd__vu_skin_twins_set(int on);
+/* The twins thin out once the run has a verdict (issue 123 after v0.10.5:
+ * three more draws of every skinned draw, every picture, for good, cost a
+ * Turnip tablet its 30 fps): after RD_SKIN_THIN_REPLAYS replays with twins
+ * read and none differing (the ladder's BONES_HEALED_REPLAYS), one skinned
+ * draw a replay is twinned, in turn over the replay's skinned commands,
+ * through the box check's pipeline (never the draw's own), and the
+ * scheduled probe goes back to every 100 ms on Turnip; a twin event twins
+ * every skinned draw again, until RD_SKIN_THIN_REPLAYS more clean replays.
+ * Not in mode 2 (every command, the tool's and the A/Bs').  The game's
+ * mode (1) only. */
+#define RD_SKIN_THIN_REPLAYS 2000u
+/* the tests' threshold (0: back to RD_SKIN_THIN_REPLAYS), and the one in
+ * force */
+void rd__vu_skin_thin_set(uint32_t replays);
+uint32_t rd__vu_skin_thin_after(void);
+/* whether the twins are thinned now */
+bool rd__vu_skin_thinned(void);
+/* the tests: the ring's sabotage (ICO_RD_VU_SKIN_SABOTAGE's A,ring form)
+ * at VU address addr from the next note on, 0 off (the environment is not
+ * read again) */
+void rd__vu_skin_sabotage_set(uint32_t addr);
 /* the occlusion queries the check uses (RD_SKIN_QUERIES with the twins,
  * RD_SKIN_CHECKS_ALL without): the start-up probe prepares them */
 uint32_t rd__vu_skin_queries(void);

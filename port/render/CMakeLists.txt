@@ -1982,6 +1982,19 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_vu_skin_check_twin rd_vu_skin_check_capture
                          PROPERTIES ENVIRONMENT
                                     "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring;ICO_RD_VU_SKIN_INTERVAL_MS=off")
+    # the twins' thinning (issue 123 after v0.10.5, rd_vu_skin_check.h
+    # RD_SKIN_THIN_REPLAYS, at 4 here): thin a frame of three skinned
+    # commands, three twins a replay until four clean replays, then one a
+    # replay through the box check's pipeline; the ring's bone at 200 zeroed
+    # in the run: the one twin differs and re-arms all three; the sabotage
+    # off: thinned again after four more
+    add_test(NAME rd_vu_skin_check_thin
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=thin
+                     "-DEXTRA=rd: VU skin check: twins thinned to one a picture after 4 clean replays \\(through the box check's pipeline.*twins differ: .*rd: VU skin check: twins re-armed by a twin event: every skinned draw twinned again until 4 replays with none differing \\(re-armed 1 times\\).*rd: VU skin check: twins thinned to one a picture after 4 clean replays.*thinned 2 times, re-armed 1 times \\(thinned at the end\\)"
+                     -P "${_vsk}")
+    set_tests_properties(rd_vu_skin_check_thin
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_INTERVAL_MS=off"
+                                    SKIP_REGULAR_EXPRESSION "SKIP:")
     set_tests_properties(rd_vu_skin_check_twin_nan
                          PROPERTIES ENVIRONMENT
                                     "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,nan;ICO_RD_VU_SKIN_INTERVAL_MS=off")

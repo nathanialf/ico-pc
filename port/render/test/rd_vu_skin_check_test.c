@@ -1,7 +1,7 @@
 /* rd_vu_skin_check_test.c: the skinned draws' bone-block check (issue 163;
  * rd_vu_skin_check.h, docs/port/VU_SKIN_CHECK.md).
  *
- *   rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture> [folder]
+ *   rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture|thin> [folder]
  *
  * judge (no device): the judgement alone (rd_vu_skin_judge.c) on a skinned
  *   case of 60 bones and 120 vertices through vu1_ref:
@@ -51,6 +51,16 @@
  *      counts, the twins differed, the check targeted), A != B, the CPU's
  *      bytes and the GPU's copy differing at bone 200 (qwords 184..187)
  *      and nowhere else.
+ * thin (a device; issue 123 after v0.10.5): the twins' thinning
+ *   (rd__vu_skin_thin_set 4 for RD_SKIN_THIN_REPLAYS) on a frame of three
+ *   skinned commands, the game's mode with the twins on and the scheduled
+ *   probe off:
+ *   14. four clean replays: 3 twins each, none differing; then thinned;
+ *   15. three more: one twin a replay;
+ *   16. the ring's bone at 200 zeroed (rd__vu_skin_sabotage_set): the one
+ *      twin differs, the twins re-armed; the next replay twins all three
+ *      again;
+ *   17. the sabotage off, four clean replays: thinned again, one a replay.
  * The log lines are matched by test/rd_vu_skin_check.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -343,7 +353,7 @@ static RdMesh makeMesh(void)
     return rd_create_vu_mesh(&d);
 }
 
-static bool buildFrame(RdFrame *f, RdMesh mesh)
+static bool buildFrame(RdFrame *f, RdMesh mesh, uint32_t copies)
 {
     const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!t) {
@@ -389,18 +399,61 @@ static bool buildFrame(RdFrame *f, RdMesh mesh)
     memcpy(buf + sizeof(p), &vu, sizeof(vu));
     memcpy(buf + sizeof(p) + sizeof(vu), s_bones, sizeof(s_bones));
     const uint32_t off = rd__frame_payload(f, buf, (uint32_t)sizeof(buf));
-    RdCmd *m = rd__st_push(f, 0, RDC_SKINNED);
-    if (!m) {
-        return false;
+    for (uint32_t i = 0; i < copies; i++) {
+        RdCmd *m = rd__st_push(f, 0, RDC_SKINNED);
+        if (!m) {
+            return false;
+        }
+        m->b[0] = p.prog;
+        m->b[1] = p.code;
+        m->b[2] = p.clip;
+        m->u[0] = mesh.id;
+        m->u[1] = off;
+        m->u[2] = (uint32_t)sizeof(buf);
+        m->keyLo = 1;
     }
-    m->b[0] = p.prog;
-    m->b[1] = p.code;
-    m->b[2] = p.clip;
-    m->u[0] = mesh.id;
-    m->u[1] = off;
-    m->u[2] = (uint32_t)sizeof(buf);
-    m->keyLo = 1;
     return true;
+}
+
+/* 14.-17.: the twins' thinning over replays of f (three skinned commands) */
+static void thinTests(const RdFrame *f)
+{
+    RdSkinSummary s;
+    rd__vu_skin_thin_set(4);
+    int rc = rd__vu_skin_check_replays(f, 0, 4, &s);
+    printf("  14. four clean replays: %u twins, %u differ; thinned %d\n", s.twins, s.twinsDiffer,
+           (int)rd__vu_skin_thinned());
+    CHECK(rc >= 0 && s.twins == 12 && s.twinsDiffer == 0 && rd__vu_skin_thinned(),
+          "rc %d, %u twins, %u differ, thinned %d", rc, s.twins, s.twinsDiffer,
+          (int)rd__vu_skin_thinned());
+    rc = rd__vu_skin_check_replays(f, 0, 3, &s);
+    printf("  15. thinned, three replays: %u twins, %u differ\n", s.twins, s.twinsDiffer);
+    CHECK(rc >= 0 && s.twins == 3 && s.twinsDiffer == 0 && rd__vu_skin_thinned(),
+          "rc %d, %u twins, %u differ", rc, s.twins, s.twinsDiffer);
+    rd__vu_skin_sabotage_set(200);
+    rc = rd__vu_skin_check_replays(f, 0, 1, &s);
+    printf("  16. the bone at 200 zeroed: %u twins, %u differ; thinned %d\n", s.twins,
+           s.twinsDiffer, (int)rd__vu_skin_thinned());
+    CHECK(rc >= 0 && s.twins == 1 && s.twinsDiffer == 1 && !rd__vu_skin_thinned(),
+          "rc %d, %u twins, %u differ, thinned %d", rc, s.twins, s.twinsDiffer,
+          (int)rd__vu_skin_thinned());
+    rc = rd__vu_skin_check_replays(f, 0, 1, &s);
+    printf("  16. re-armed, the next replay: %u twins, %u differ\n", s.twins, s.twinsDiffer);
+    CHECK(rc >= 0 && s.twins == 3 && s.twinsDiffer == 3, "rc %d, %u twins, %u differ", rc, s.twins,
+          s.twinsDiffer);
+    rd__vu_skin_sabotage_set(0);
+    rc = rd__vu_skin_check_replays(f, 0, 4, &s);
+    const bool thin = rd__vu_skin_thinned();
+    RdSkinSummary t;
+    const int rc2 = rd__vu_skin_check_replays(f, 0, 2, &t);
+    printf("  17. the sabotage off: four replays %u twins, %u differ, thinned %d; then two "
+           "replays %u twins\n",
+           s.twins, s.twinsDiffer, (int)thin, t.twins);
+    CHECK(rc >= 0 && rc2 >= 0 && s.twins == 12 && s.twinsDiffer == 0 && thin && t.twins == 2 &&
+              t.twinsDiffer == 0,
+          "rc %d/%d, %u twins, %u differ, thinned %d, then %u twins", rc, rc2, s.twins,
+          s.twinsDiffer, (int)thin, t.twins);
+    rd__vu_skin_thin_set(0);
 }
 
 /* 13.: the sidecar's header and sections (path from
@@ -466,7 +519,8 @@ static int deviceTests(const char *mode, const char *folder)
     }
     rd__set_not_implemented_fatal(true);
     rd__vu_skin_check_set(1);
-    const bool twins = strcmp(mode, "twin") == 0 || strcmp(mode, "capture") == 0;
+    const bool thin = strcmp(mode, "thin") == 0;
+    const bool twins = strcmp(mode, "twin") == 0 || strcmp(mode, "capture") == 0 || thin;
     if (twins) {
         rd__vu_skin_twins_set(1);
         if (folder) {
@@ -482,7 +536,10 @@ static int deviceTests(const char *mode, const char *folder)
     RdMesh mesh = makeMesh();
     static RdFrame f;
     CHECK(mesh.id != 0, "the mesh");
-    if (mesh.id && twins && buildFrame(&f, mesh)) {
+    if (mesh.id && thin && buildFrame(&f, mesh, 3)) {
+        thinTests(&f);
+        rd__frame_free(&f);
+    } else if (mesh.id && twins && !thin && buildFrame(&f, mesh, 1)) {
         /* 11., 12. */
         const char *sab = getenv("ICO_RD_VU_SKIN_SABOTAGE");
         const bool nan = sab && strstr(sab, "nan");
@@ -510,7 +567,7 @@ static int deviceTests(const char *mode, const char *folder)
         }
         CHECK(!rd_vu_skin_capture_due(path, sizeof(path)), "a second capture asked");
         rd__frame_free(&f);
-    } else if (mesh.id && buildFrame(&f, mesh)) {
+    } else if (mesh.id && !twins && buildFrame(&f, mesh, 1)) {
         RdSkinSummary s;
         const int rc = rd__vu_skin_check_frame(&f, 0, &s);
         printf("  8. %s: %u commands, %u checks, %u wrong (address %u), %u blocks differ, %u "
@@ -560,7 +617,8 @@ static int deviceTests(const char *mode, const char *folder)
 int main(int argc, char **argv)
 {
     if (argc < 2) {
-        printf("usage: rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture> [folder]\n");
+        printf("usage: rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture|thin> "
+               "[folder]\n");
         return 2;
     }
     const int rc = strcmp(argv[1], "judge") == 0 ? judgeTests()
