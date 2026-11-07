@@ -334,6 +334,10 @@ typedef struct VkrAcquire {
     bool acquired;
     bool waitPending;
     bool signalled;
+    /* the acquire passed the slot's acquireFence (not the ahead form, which
+     * has none): the present's list's submit asks it whether the image was
+     * free already (acquireReadyAtSubmit) */
+    bool fenced;
     uint32_t image;
     uint64_t seq;
 } VkrAcquire;
@@ -362,6 +366,13 @@ typedef struct VkrFrame {
     VkrGarbage *garbage;
     uint32_t garbageCount, garbageCap;
     VkSemaphore acquireSem; /* swapchain image acquire */
+    /* the fence the acquire signals beside acquireSem (issue 179: whether
+     * the display's image was free when the present's list was submitted);
+     * acquireFenceUsed: an acquire was given it and it was not reset since
+     * (the slot's recycle resets it once signalled; an acquire that finds
+     * it still used makes a fresh one) */
+    VkFence acquireFence;
+    bool acquireFenceUsed;
     /* the slot's GPU timestamps (rhi_cmd_write_timestamp) */
     VkQueryPool queryPool;
     uint32_t tsWritten[RHI_TIMESTAMP_WORDS]; /* the indices written since the slot was recycled */
@@ -673,6 +684,9 @@ typedef struct VkrState {
 
     struct {
         uint64_t barriers, submits, presents, presentNs;
+        /* the present's list's submits that found the acquired image free
+         * (acquireFence signalled) and those that did not */
+        uint64_t acquireReady, acquireNotReady;
     } late;
 
     /* RhiLimits.slotOverlap's answer and why not, for the device line */

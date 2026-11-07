@@ -1210,7 +1210,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   left out of the passes' counts; the GPU time pacing reads, the span less the display wait,
   `rd_perf_pace_gpu_ms`, never below 0, 0 without GPU times), the block's mean of a piece (`rd_perf_pass_agg_mean`) and the
   arm line with its backend, the arm's backend gate (`rd_perf_passes_arm_backend`: Vulkan and MoltenVK
-  with a present split only, never OpenGL or Direct3D), a failure of these counted without a device (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
+  with a present split only, never OpenGL or Direct3D), a failure of these counted without a device (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`). The log name of a pass kind (`rd_perf_pass_kind_display`: the uploads print `before list 0` on a tile-based GPU, `uploads` elsewhere, every other kind and the CSV's `rd_perf_pass_kind_name` unchanged, issue 179).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`). Its pipelines case holds the reachable set under
   `RD_PIPELINE_REACHABLE_MAX` with both blends, the tile-based GPU's set too (its profile with
