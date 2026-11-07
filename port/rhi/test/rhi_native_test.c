@@ -278,9 +278,24 @@ int main(void)
               (!caps.ok && caps.why),
           "caps parts");
     CHECK(caps.ok == (caps.why == NULL), "a reason exactly when not ok");
-    printf("compute caps: ok %d (api %d subgroup %d storage %d float16 %d)%s%s\n", (int)caps.ok,
-           (int)caps.apiVersionOk, (int)caps.subgroupOk, (int)caps.storageFormatsOk,
-           (int)caps.float16, caps.why ? ": " : "", caps.why ? caps.why : "");
+    {
+        /* the FidelityFX extensions (vk_device.c): enabled where listed on a
+         * 1.2 device in a build with the upscaler, never without it */
+        RhiNativeDevice nd;
+        const bool v12 = rhi_native_device(&nd) && nd.apiVersion >= VK_API_VERSION_1_2;
+#ifdef ICO_FFX
+        CHECK(caps.externalExts == v12, "the FidelityFX extensions on a 1.2 device (%d, 1.2 %d)",
+              (int)caps.externalExts, (int)v12);
+#else
+        (void)v12;
+        CHECK(!caps.externalExts, "no FidelityFX extensions without the upscaler");
+#endif
+    }
+    printf("compute caps: ok %d (api %d subgroup %d storage %d float16 %d, FidelityFX extensions "
+           "%d)%s%s\n",
+           (int)caps.ok, (int)caps.apiVersionOk, (int)caps.subgroupOk, (int)caps.storageFormatsOk,
+           (int)caps.float16, (int)caps.externalExts, caps.why ? ": " : "",
+           caps.why ? caps.why : "");
 
     textures();
 

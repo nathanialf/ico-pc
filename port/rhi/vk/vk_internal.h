@@ -762,10 +762,14 @@ typedef struct VkrState {
      * vkr_probe_compute at device creation.  queueCompute: the graphics
      * queue's family also takes compute work, so RHI_STATE_STORAGE barriers
      * include the compute stage (vk_cmd.c vkr_state_scope); computeFloat16:
-     * shaderFloat16 offered, not enabled */
+     * shaderFloat16 offered (enabled only with externalExts' set) */
     RhiComputeCaps compute;
     bool queueCompute;
     bool computeFloat16;
+    /* the extensions the FidelityFX Vulkan backend acts on, enabled where
+     * listed on a 1.2 device in an ICO_FFX build (vkr_create_device), the
+     * set whole (RhiComputeCaps.externalExts) */
+    bool externalExts;
 } VkrState;
 
 extern VkrState g_vkr;

@@ -911,7 +911,8 @@ static bool vkr_format_ok(VkPhysicalDevice pd, VkFormat f, VkFormatFeatureFlags 
  * also takes compute work, RGBA16F and RGBA16 UNORM are storage images,
  * and the two without-format features are enabled.  shaderFloat16 is
  * reported as offered (VkPhysicalDeviceVulkan12Features, 1.2 and later); the
- * device is not made with it. */
+ * device is made with it only with the FidelityFX extensions
+ * (vkr_create_device, ICO_FFX builds). */
 static void vkr_probe_compute(const VkPhysicalDeviceFeatures avail)
 {
     RhiComputeCaps *c = &g_vkr.compute;
@@ -954,6 +955,7 @@ static void vkr_probe_compute(const VkPhysicalDeviceFeatures avail)
         g_vkr.computeFloat16 = f12.shaderFloat16 == VK_TRUE;
     }
     c->float16 = g_vkr.computeFloat16;
+    c->externalExts = g_vkr.externalExts;
     c->ok = c->apiVersionOk && c->subgroupOk && c->storageFormatsOk && g_vkr.queueCompute;
     c->why = c->ok                 ? NULL
              : !c->apiVersionOk    ? "Vulkan 1.1 is required"
@@ -962,11 +964,11 @@ static void vkr_probe_compute(const VkPhysicalDeviceFeatures avail)
                                    : "no RGBA16 storage images or storage image access "
                                      "without a format";
     VKR_LOG("external compute: %s%s%s (api 1.1 %s, subgroup %s, storage formats %s, queue compute "
-            "%s, float16 offered %s)",
+            "%s, float16 offered %s, the FidelityFX extensions enabled %s)",
             c->ok ? "offered" : "not offered", c->ok ? "" : ": ", c->ok ? "" : c->why,
             c->apiVersionOk ? "yes" : "no", c->subgroupOk ? "yes" : "no",
             c->storageFormatsOk ? "yes" : "no", g_vkr.queueCompute ? "yes" : "no",
-            c->float16 ? "yes" : "no");
+            c->float16 ? "yes" : "no", c->externalExts ? "yes" : "no");
 }
 
 /* The one read of ICO_VK_FAKE_LIMITS.  =min is noted for vkr_fill_limits
@@ -1515,7 +1517,7 @@ static bool vkr_create_device(void)
     /* the version the device is used at: no more than the instance's */
     g_vkr.apiVersion = vkr_effective_api(g_vkr.props.apiVersion);
     const bool core12 = g_vkr.apiVersion >= VK_API_VERSION_1_2;
-    const char *exts[32];
+    const char *exts[48];
     uint32_t extCount = 0;
     if (g_vkr.surface) {
         exts[extCount++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
@@ -2154,6 +2156,127 @@ static bool vkr_create_device(void)
         }
     }
 
+    /* External compute's device extensions (rhi_native.h; docs/port/RHI.md
+     * "Native handles for external compute").  The FidelityFX Vulkan backend
+     * (programs built with ICO_FFX) reads the device's extension LIST, not
+     * what was enabled, and calls the entry points of what it finds: a
+     * listed VK_KHR_dedicated_allocation left off made it call a NULL
+     * vkGetBufferMemoryRequirements2KHR.  So on a Vulkan 1.2 device every
+     * extension it acts on is enabled when listed, with the feature it uses:
+     * shader_float16_int8 (shaderFloat16, through Vulkan12Features),
+     * subgroup_size_control (subgroupSizeControl), synchronization2,
+     * descriptor_indexing (shaderStorageBufferArrayNonUniformIndexing,
+     * Vulkan12Features), dedicated_allocation with
+     * get_memory_requirements2, AMD_buffer_marker and
+     * AMD_device_coherent_memory (deviceCoherentMemory).  The list is the
+     * driver's own (not ICO_VK_FAKE_API's shortened one): the backend sees it.
+     * The RHI's own pipelines use none of them.  compute.externalExts says
+     * whether the set is whole (vkr_probe_compute); a listed
+     * dedicated_allocation without get_memory_requirements2 leaves it false
+     * (the backend would call the missing entry point). */
+    VkPhysicalDeviceSubgroupSizeControlFeatures qSubgroup = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES};
+    VkPhysicalDeviceSynchronization2Features qSync2 = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES};
+    VkPhysicalDeviceCoherentMemoryFeaturesAMD qCoherent = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD};
+    bool extSubgroup = false, extSync2 = false, extCoherent = false;
+    VkBool32 extFloat16 = VK_FALSE, extNonUniform = VK_FALSE;
+    g_vkr.externalExts = false;
+#ifdef ICO_FFX
+    if (core12 && vkr_has_props2(g_vkr.phys)) {
+        static const char *const ffxExts[] = {
+            VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME,       /* 0 */
+            VK_EXT_SUBGROUP_SIZE_CONTROL_EXTENSION_NAME,     /* 1 */
+            VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME,         /* 2 */
+            VK_EXT_DESCRIPTOR_INDEXING_EXTENSION_NAME,       /* 3 */
+            VK_KHR_DEDICATED_ALLOCATION_EXTENSION_NAME,      /* 4 */
+            VK_KHR_GET_MEMORY_REQUIREMENTS_2_EXTENSION_NAME, /* 5 */
+            VK_AMD_BUFFER_MARKER_EXTENSION_NAME,             /* 6 */
+            VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME,    /* 7 */
+        };
+
+        enum { FFX_EXTS = (int)(sizeof(ffxExts) / sizeof(ffxExts[0])) };
+
+        bool listed[FFX_EXTS] = {false};
+        uint32_t n = 0;
+        vkEnumerateDeviceExtensionProperties(g_vkr.phys, NULL, &n, NULL);
+        VkExtensionProperties *props = calloc(n ? n : 1, sizeof(*props));
+        if (props &&
+            vkEnumerateDeviceExtensionProperties(g_vkr.phys, NULL, &n, props) == VK_SUCCESS) {
+            for (uint32_t i = 0; i < n; i++) {
+                for (int k = 0; k < FFX_EXTS; k++) {
+                    listed[k] = listed[k] || strcmp(props[i].extensionName, ffxExts[k]) == 0;
+                }
+            }
+        }
+        free(props);
+        /* an extension the RHI enabled already for itself is not named twice */
+        for (int k = 0; k < FFX_EXTS; k++) {
+            for (uint32_t i = 0; i < extCount && listed[k]; i++) {
+                if (strcmp(exts[i], ffxExts[k]) == 0) {
+                    listed[k] = false;
+                }
+            }
+        }
+        VkPhysicalDeviceVulkan12Features q12 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+        void *chain = &q12;
+        if (listed[1]) {
+            qSubgroup.pNext = chain;
+            chain = &qSubgroup;
+        }
+        if (listed[2]) {
+            qSync2.pNext = chain;
+            chain = &qSync2;
+        }
+        if (listed[7]) {
+            qCoherent.pNext = chain;
+            chain = &qCoherent;
+        }
+        VkPhysicalDeviceFeatures2 q = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                                       .pNext = chain};
+        vkr_features2(g_vkr.phys, &q);
+        const bool dedicatedAlone = listed[4] && !listed[5];
+        char said[256] = "";
+        size_t used = 0;
+        for (int k = 0; k < FFX_EXTS && extCount < 48u; k++) {
+            if (!listed[k] || (k == 4 && dedicatedAlone)) {
+                continue;
+            }
+            exts[extCount++] = ffxExts[k];
+            const int w = snprintf(said + used, sizeof(said) - used, "%s%s", used ? ", " : "",
+                                   ffxExts[k] + 3); /* without "VK_" */
+            used += w > 0 && (size_t)w < sizeof(said) - used ? (size_t)w : 0u;
+        }
+        extFloat16 = listed[0] ? q12.shaderFloat16 : VK_FALSE;
+        extNonUniform = listed[3] ? q12.shaderStorageBufferArrayNonUniformIndexing : VK_FALSE;
+        extSubgroup = listed[1] && qSubgroup.subgroupSizeControl;
+        extSync2 = listed[2] && qSync2.synchronization2;
+        extCoherent = listed[7] && qCoherent.deviceCoherentMemory;
+        g_vkr.externalExts = !dedicatedAlone;
+        VKR_LOG("external compute extensions: %s%s (features: float16 %s, subgroup size control "
+                "%s, synchronization2 %s, storage buffer non-uniform indexing %s, AMD coherent "
+                "memory %s)%s",
+                used ? "enabled " : "none listed beyond the RHI's own", said,
+                extFloat16 ? "on" : "off", extSubgroup ? "on" : "off", extSync2 ? "on" : "off",
+                extNonUniform ? "on" : "off", extCoherent ? "on" : "off",
+                dedicatedAlone ? "; dedicated_allocation is listed without "
+                                 "get_memory_requirements2: left off, FSR 3.1 not offered"
+                               : "");
+    }
+#endif
+    /* each feature structure carries only the one feature asked */
+    memset(&qSubgroup, 0, sizeof(qSubgroup));
+    qSubgroup.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES;
+    qSubgroup.subgroupSizeControl = VK_TRUE;
+    memset(&qSync2, 0, sizeof(qSync2));
+    qSync2.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES;
+    qSync2.synchronization2 = VK_TRUE;
+    memset(&qCoherent, 0, sizeof(qCoherent));
+    qCoherent.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD;
+    qCoherent.deviceCoherentMemory = VK_TRUE;
+
     /* the head of the feature chain (dynamicRendering); on the VkRenderPass
      * path (legacyPasses) the chain starts at what dyn points to instead
      * (featHead below): the feature is neither offered nor enabled there */
@@ -2206,6 +2329,18 @@ static bool vkr_create_device(void)
         qEds3.pNext = dyn.pNext;
         dyn.pNext = &qEds3;
     }
+    if (extSubgroup) {
+        qSubgroup.pNext = dyn.pNext;
+        dyn.pNext = &qSubgroup;
+    }
+    if (extSync2) {
+        qSync2.pNext = dyn.pNext;
+        dyn.pNext = &qSync2;
+    }
+    if (extCoherent) {
+        qCoherent.pNext = dyn.pNext;
+        dyn.pNext = &qCoherent;
+    }
     /* the submission sync (vk_sync.c): the timeline semaphore, through
      * VkPhysicalDeviceVulkan12Features at 1.2 and later, the extension's
      * own features below 1.2 (VK_KHR_timeline_semaphore enabled); nothing
@@ -2218,10 +2353,14 @@ static bool vkr_create_device(void)
         exts[extCount++] = VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME;
     }
     void *featHead = g_vkr.legacyPasses ? dyn.pNext : (void *)&dyn;
+    /* Vulkan12Features: the timeline semaphore, and external compute's
+     * float16 and non-uniform indexing (above) */
     VkPhysicalDeviceVulkan12Features f12 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
         .pNext = featHead,
-        .timelineSemaphore = VK_TRUE,
+        .timelineSemaphore = g_vkr.syncKind == VKR_SYNC_TIMELINE ? VK_TRUE : VK_FALSE,
+        .shaderFloat16 = extFloat16,
+        .shaderStorageBufferArrayNonUniformIndexing = extNonUniform,
     };
     VkPhysicalDeviceTimelineSemaphoreFeaturesKHR fTimeline = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR,
@@ -2231,6 +2370,8 @@ static bool vkr_create_device(void)
     void *syncFeatures = featHead;
     if (g_vkr.syncKind == VKR_SYNC_TIMELINE) {
         syncFeatures = g_vkr.apiVersion >= VK_API_VERSION_1_2 ? (void *)&f12 : (void *)&fTimeline;
+    } else if (extFloat16 || extNonUniform) {
+        syncFeatures = &f12; /* 1.2 (the external set's condition), no timeline */
     }
     VkPhysicalDeviceFeatures2 f2 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,

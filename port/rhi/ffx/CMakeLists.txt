@@ -86,6 +86,15 @@ if(WIN32 AND CMAKE_CROSSCOMPILING AND NOT CMAKE_CXX_COMPILER)
 endif()
 enable_language(CXX)
 
+# The RHI's Vulkan device: the backend acts on the extensions the device
+# lists, so the device enables each one it reads where listed (vk_device.c
+# vkr_create_device, ICO_FFX; RhiComputeCaps.externalExts); rhi_native_test
+# checks the set is whole on a Vulkan 1.2 device
+target_compile_definitions(ico_rhi_vulkan PRIVATE ICO_FFX=1)
+if(TARGET rhi_native_test)
+    target_compile_definitions(rhi_native_test PRIVATE ICO_FFX=1)
+endif()
+
 # --- ico_ffx_sc: the shader compiler, for the build host ---------------------
 if(CMAKE_CROSSCOMPILING)
     include(ExternalProject)
