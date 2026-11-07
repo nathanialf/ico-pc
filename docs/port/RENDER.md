@@ -1843,8 +1843,9 @@ and, should the backend have no list left for the second (`VKR_MAX_CMD_LISTS` a 
 `rd: present: no command list left for the present's own list (N times so far): this picture is
 not presented` (the first, then every 100th; its image is the next acquire's). The display wait is
 `RdPerfRecord.gpuDisplayWaitMs`: from the scene list's last stamp to the present's list's first
-(`RD_PERF_TS_PRESENT_BEGIN`), inside the replay's span (`gpuMs`, which the pace policy reads, so
-the wait still counts for the picture), and the `display wait` piece of a timed replay
+(`RD_PERF_TS_PRESENT_BEGIN`), inside the replay's span (`gpuMs`; the pace policy reads the span less this wait,
+`rd_perf_pace_gpu_ms`, so the wait for the screen's image does not count against the GPU:
+[DISPLAY.md](DISPLAY.md)), and the `display wait` piece of a timed replay
 (`display wait window WxH N ms` among the top passes). It holds the wait where the GPU writes that
 stamp only once its batch's wait is over (a driver that waits whole batches); where the wait holds
 colour output alone, as issue 179's Mali log shows (its first stamp came before the wait, which

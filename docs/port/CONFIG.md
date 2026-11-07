@@ -242,11 +242,13 @@ original game's behaviour (`port/game/options.h`, header comment).
 
 ### [variants]
 
-Options > Gameplay: No hints on the page, Shadow toughness and aggression on Gameplay > Shadows, the combat
-rows (the three new ones, One hit per swing, Shadows never dodge, Queen barrier and the two weapon rows) on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
+Options > Gameplay: No hints on the page, Chain swing speed and Chain swing slowdown on Gameplay > Yorda,
+Shadow toughness, Shadow aggression and Peaceful shadows on Gameplay > Shadows, the combat rows
+(Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge,
+Queen barrier and the two weapon rows) on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
 [OPTIONS.md](../OPTIONS.md#gameplay)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
-the game as the disc ships it. All fourteen are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
+the game as the disc ships it. All sixteen are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
 `port/platform/sim_keys.c`). A word
 or number that is no value reads as the default and is logged once.
 

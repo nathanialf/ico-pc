@@ -1072,8 +1072,8 @@ its Back (`gameLinks` in `build`, the Controls > Touch screen pattern), each pag
 Controls from its tables (`yordaOpts`, `shadowOpts`, `combatOpts`, `cutOpts` and their strings) with Gameplay as
 its parent, so Back and Triangle return to Gameplay on the link's row (`leaveTo`). All of them show
 from the title and the pause menu on every disc; the game's pause-only rows (Film effect, Players)
-stay on Gameplay. The game variants (`port/game/variants.h`), fourteen stepped rows, one `UI_OPT_VAR_*`
-per `IcoVariantId` (a `_Static_assert` keeps the order), sit on these pages: No hints on Gameplay,
+stay on Gameplay. The game variants (`port/game/variants.h`), sixteen stepped rows, one `UI_OPT_VAR_*`
+per `IcoVariantId` (a `_Static_assert` keeps the order), sit on these pages: No hints on Gameplay, Chain swing speed and Chain swing slowdown on Yorda,
 Shadow toughness, Shadow aggression and Peaceful shadows on
 Shadows after Shadow speed; Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge, (Shadows attack together), Queen barrier, Light sword colour and Stick on Combat (the first three On by default: `ico_variant_get` reads 1 when the key is absent; the weapon rows Original), No cutscene look-around and Ignore cutscene
 cameras on Cutscenes after Skip the opening. Debug menu (`UI_OPT_VAR_DEBUG_MENU`, a press row after
