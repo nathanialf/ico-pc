@@ -363,7 +363,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `getEnemyRestartLife`'s: 38 with American or Not tougher later) and `test_offered` (American is
   not offered on `jun26`: the config, the setter and both step directions; Light sword colour Red
   offered on pal, jpn, kor and cn only) and `test_weapons` (the kinds `ico_variant_weapon_kind` and
-  `ico_variant_weapon_put_kind` give: Red 9 to 8 and 8 back to 9 where offered, the net's kind 6 on
+  `ico_variant_weapon_put_kind` give: Red 9 to 8, and 8 back to 9 wherever Red is offered (Red on, and Red switched off with a kind-8 sword in play; 8 stays 8 on a disc without Red), the net's kind 6 on
   `jun26` and 7 elsewhere for the stick, every other kind untouched, the words, the step, a reload);
   one run per disc (`variants`, `variants_jpn`, `variants_kor`, `variants_<slug>`).
 - `hand_ik_test.c`: the hand records as `ACTGame_ConnectHand` sets them through the real

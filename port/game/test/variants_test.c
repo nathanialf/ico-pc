@@ -105,7 +105,9 @@ static void test_defaults(void)
     CHECK(ico_variant_get(ICO_VARIANT_SWORD_COLOUR) == ICO_SWORD_ORIGINAL);
     CHECK(ico_variant_get(ICO_VARIANT_WEAPON) == ICO_WEAPON_ORIGINAL);
     for (int k = 0; k < 16; k++) {
-        CHECK(ico_variant_weapon_kind(k) == k && ico_variant_weapon_put_kind(k) == k);
+        CHECK(ico_variant_weapon_kind(k) == k);
+        /* a kind 8 is set down as 9 wherever Red is offered (test_weapons) */
+        CHECK(ico_variant_weapon_put_kind(k) == (k == 8 && !y2001() ? 9 : k));
     }
     CHECK(ico_variant_shadow_brain() == 1); /* Peaceful shadows Off: the game's */
     CHECK(ico_variants_suspend_achievements() == 0);
@@ -334,6 +336,19 @@ static void test_weapons(void)
     }
     CHECK(ico_variants_suspend_achievements() == 0);
 
+    /* Red on, a kind-8 sword made, then Red back to Original with that sword
+       still in play: it is still set down as kind 9 (the offset the game
+       gives the light sword); on a disc without Red, 8 stays 8 */
+    {
+        const int made = ico_variant_weapon_kind(9);
+        ico_variant_set(ICO_VARIANT_SWORD_COLOUR, ICO_SWORD_ORIGINAL);
+        CHECK(ico_variant_get(ICO_VARIANT_SWORD_COLOUR) == ICO_SWORD_ORIGINAL);
+        CHECK(made == (light ? 8 : 9));
+        CHECK(ico_variant_weapon_put_kind(made) == 9);
+        CHECK(ico_variant_weapon_put_kind(8) == (light ? 9 : 8));
+        CHECK(ico_variant_weapon_kind(9) == 9); /* a new sword is the pale one */
+    }
+
     use_config("[variants]\nweapon = \"net\"\n");
     CHECK(ico_variant_net_kind() == net);
     CHECK(ico_variant_get(ICO_VARIANT_WEAPON) == ICO_WEAPON_NET);
@@ -342,7 +357,7 @@ static void test_weapons(void)
         if (k != 1) {
             CHECK(ico_variant_weapon_kind(k) == k);
         }
-        CHECK(ico_variant_weapon_put_kind(k) == k);
+        CHECK(ico_variant_weapon_put_kind(k) == (k == 8 && light ? 9 : k));
     }
     CHECK(ico_variants_suspend_achievements() == 0);
 
