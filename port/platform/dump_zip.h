@@ -53,12 +53,12 @@ int ico_loss_dump_path(char *out, size_t size, const char *dir, const char *stam
 #define ICO_LOSS_DUMP_KEEP 3
 int ico_loss_dump_prune(const char *dir, int keep);
 
-/* The slow-scene dump (window_host.c slow_scene_dump, issue 179): one
+/* The slow-scene dump (window_host.c slow_scene_write, issue 179): one
    frame and the log, written with ico_loss_dump_zip (no frame before), as
    dir/slow-<stamp>.zip; kept to ICO_SLOW_DUMP_KEEP by the same walk as the
    loss zips'. Path: 0, or -1 when it does not fit; prune: the number
    deleted, or -1 when dir cannot be read. */
-#define ICO_SLOW_DUMP_KEEP 1
+#define ICO_SLOW_DUMP_KEEP 3
 int ico_slow_dump_path(char *out, size_t size, const char *dir, const char *stamp);
 int ico_slow_dump_prune(const char *dir, int keep);
 

@@ -99,7 +99,7 @@ int main(int argc, char **argv)
     CHECK(ico_desktop_entry_data_home(got, sizeof(got)) == -1 && got[0] == '\0');
 
     /* an install over a fake data folder */
-    snprintf(base, sizeof(base), "%s/desktop_entry_test", argv[1]);
+    snprintf(base, sizeof(base), "%s/desktop_entry_scratch", argv[1]);
     ico_mkdir(argv[1]);
     ico_mkdir(base);
     snprintf(p, sizeof(p), "%s/in.png", base);

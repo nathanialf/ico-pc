@@ -302,24 +302,48 @@ double window_slow_scene_work_ms(const SlowSceneBlock *b)
 
 bool window_slow_scene_due(const SlowSceneBlock *b)
 {
-    return b->boundMs > 0.0 && b->window && !b->movie && !b->written &&
-           b->dominant == SCENE_SCENE && b->uptimeS >= SLOW_SCENE_UPTIME_MIN_S &&
-           b->gpuN >= SLOW_SCENE_GPU_MIN && window_slow_scene_work_ms(b) > b->boundMs;
+    if (!(b->boundMs > 0.0 && b->window && !b->movie && b->dominant == SCENE_SCENE &&
+          b->uptimeS >= SLOW_SCENE_UPTIME_MIN_S && b->gpuN >= SLOW_SCENE_GPU_MIN)) {
+        return false;
+    }
+    const double work = window_slow_scene_work_ms(b);
+
+    if (!(work > b->boundMs)) {
+        return false;
+    }
+    return b->count == 0 ||
+           (b->count < SLOW_SCENE_DUMPS && work >= SLOW_SCENE_STEP * b->lastWorkMs);
+}
+
+bool window_slow_scene_pick(double spanMs, double meanMs)
+{
+    return spanMs > 0.0 && meanMs > 0.0 && spanMs >= meanMs;
 }
 
 size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, unsigned frame,
-                              const char *zipName)
+                              double frameSpanMs, const char *zipName)
 {
     if (cap == 0) {
         return 0;
     }
     const double n = b->gpuN ? (double)b->gpuN : 1.0;
-    const int c = snprintf(out, cap,
-                           "slow scene: the block's GPU work %.1f ms a replay (bound %.0f; display "
-                           "wait %.1f, present %.1f, span %.1f) in a scene layout: frame %u "
-                           "written to logs/%s; attach it with the log",
-                           window_slow_scene_work_ms(b), b->boundMs, b->waitSumMs / n,
-                           b->presentSumMs / n, b->spanSumMs / n, frame, zipName);
+    const double mean = b->spanSumMs / n;
+    char which[128];
+
+    if (frameSpanMs >= 0.0) {
+        snprintf(which, sizeof(which), "its span %.1f ms, the block's mean %.1f", frameSpanMs,
+                 mean);
+    } else {
+        snprintf(which, sizeof(which),
+                 "the last the renderer closed, not the picked one; the block's mean %.1f", mean);
+    }
+    const int c =
+        snprintf(out, cap,
+                 "slow scene: the block's GPU work %.1f ms a replay (bound %.0f; display "
+                 "wait %.1f, present %.1f, span %.1f) in a scene layout: frame %u (%s) "
+                 "written to logs/%s (dump %d of %d this run); attach it with the log",
+                 window_slow_scene_work_ms(b), b->boundMs, b->waitSumMs / n, b->presentSumMs / n,
+                 mean, frame, which, zipName, b->count + 1, SLOW_SCENE_DUMPS);
 
     return c < 0 ? 0 : ((size_t)c < cap ? (size_t)c : cap - 1);
 }
