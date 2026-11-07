@@ -174,6 +174,13 @@ ico_add_shader(vu_tri_tick_pre_vs vu_tri.hlsl vu_tri_tick_pre_vs vertex)
 ico_add_shader(vu_tri_planes_pre_vs vu_tri.hlsl vu_tri_planes_pre_vs vertex)
 ico_add_shader(vu_particle_main_vs vu_particle.hlsl vu_particle_main_vs vertex)
 ico_add_shader(vu_particle_pre_vs vu_particle.hlsl vu_particle_pre_vs vertex)
+# The velocity pass (vu_velocity_main_vs, velocity_ps)
+# a mesh or grid draw of list 0 again from the record with its motion
+# between the two records of its vertices, into VELOCITY (docs/port/RENDER.md,
+# "Velocity"; rd_replay_vu.c vuVelPass; made by rd_velocity.c only while the
+# temporal upscaler's switch is on: no id in the tables)
+ico_add_shader(vu_velocity_main_vs vu_velocity.hlsl vu_velocity_main_vs vertex)
+ico_add_shader(velocity_ps vu_velocity.hlsl velocity_ps fragment)
 # The pre-pass's batch builds (vu_X_batch_pre_vs)
 # the ten pre-pass entries and the four record stages read their VuCB and
 # VuBoneCB from the upload ring at t5 (ICO_VU_PRE_BATCH, vu_common.hlsli

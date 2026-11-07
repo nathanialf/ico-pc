@@ -158,6 +158,11 @@ static const char *const retired[] = {"vu_tri_vs", "vu_legacy_ps", "vu_legacy_te
  * (font.hlsl font_sheet_baked_ps; rd_tex.c rd__sheet_bake_rect) */
 static const char *const expectedBaked[] = {"font_sheet_baked_ps"};
 
+/* the velocity pass (vu_velocity.hlsl; rd_velocity.c makes them only while
+ * the temporal upscaler's switch is on): the draw again from the record,
+ * with its motion, and the motion in pixels into VELOCITY */
+static const char *const expectedVelocity[] = {"vu_velocity_main_vs", "velocity_ps"};
+
 /* the anti-aliasing's (rd_present.c, rd_replay.c's MSAA epoch) */
 static const char *const expectedAa[] = {"aa_reduce_ps", "depth_resolve_ps", "depth_upsample_ps",
                                          "msaa_resolve_ps"};
@@ -366,6 +371,13 @@ int main(void)
     for (size_t i = 0; i < nBaked; i++) {
         if (!ico_find_shader(expectedBaked[i])) {
             printf("FAIL %s: not in the table\n", expectedBaked[i]);
+            failures++;
+        }
+    }
+    for (size_t i = 0; i < sizeof(expectedVelocity) / sizeof(expectedVelocity[0]); i++) {
+        const IcoShaderBlob *b = ico_find_shader(expectedVelocity[i]);
+        if (!b || b->stage != (i == 0 ? ICO_SHADER_STAGE_VERTEX : ICO_SHADER_STAGE_FRAGMENT)) {
+            printf("FAIL %s: not in the table or of another stage\n", expectedVelocity[i]);
             failures++;
         }
     }
