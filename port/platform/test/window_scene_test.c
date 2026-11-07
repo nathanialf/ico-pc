@@ -244,9 +244,9 @@ int main(void)
         t.gpuN = 10;
         t.waitSumMs = 300.0;
         CHECK(!window_slow_scene_due(&t));
-        t.waitSumMs = 200.0; /* work 40.0 exactly */
+        t.waitSumMs = 180.0; /* with the present's 20: work 40.0 exactly */
         CHECK(!window_slow_scene_due(&t));
-        t.waitSumMs = 199.0;
+        t.waitSumMs = 179.0;
         CHECK(window_slow_scene_due(&t));
         /* a wait above the span, or no replay: no work, never negative */
         t.waitSumMs = 700.0;
@@ -257,9 +257,9 @@ int main(void)
         t.gpuN = 10;
         t.waitSumMs = 100.0;
         window_slow_scene_text(b, sizeof(b), &t, 4812, "slow-20261106-120000.zip");
-        CHECK(text_is(b, "slow scene: the block's GPU work 50.0 ms a replay (bound 40; display "
-                         "wait 10.0, span 60.0) in a scene layout: frame 4812 written to "
-                         "logs/slow-20261106-120000.zip; attach it with the log"));
+        CHECK(text_is(b, "slow scene: the block's GPU work 48.0 ms a replay (bound 40; display "
+                         "wait 10.0, present 2.0, span 60.0) in a scene layout: frame 4812 "
+                         "written to logs/slow-20261106-120000.zip; attach it with the log"));
         {
             char c[20];
             const size_t n = window_slow_scene_text(c, sizeof(c), &t, 1, "slow-x.zip");
