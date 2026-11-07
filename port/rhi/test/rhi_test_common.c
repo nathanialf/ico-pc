@@ -2175,6 +2175,7 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
         rhi_test_log("FAIL the destination read faked off but reported\n");
         failures++;
     }
+    failures += rhi_test_native_surface(s_label);
     const uint32_t ua = lim->uniformAlign;
 
     Ctx c;

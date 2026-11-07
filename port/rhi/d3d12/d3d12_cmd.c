@@ -435,6 +435,7 @@ RhiCommandList rhi_begin_commands(void)
     }
     dx_bind_heaps(c->cl);
     c->recording = true;
+    c->externalOpen = false;
     /* the bind cache starts empty (Reset cleared the list's state; the
      * slot's recycle zeroed the cache too) */
     c->pipeline = NULL;
@@ -937,6 +938,70 @@ void rhi_cmd_set_blend_state(RhiCommandList cl, const RhiBlendState *blend)
 {
     (void)cl;
     (void)blend;
+}
+
+/* ------------------------------------------------- external compute
+ * rhi_native.h: the caller records compute work (FidelityFX) straight into
+ * the native command list between rhi_cmd_external_begin and _end.  D3D12
+ * needs no barrier from us (the texture barriers are in the list already and
+ * the caller's work follows them; the external code leaves each resource in
+ * the state it was given).  What the work disturbs is the list's bound
+ * state: it sets its own descriptor heaps, a compute pipeline state in the
+ * one PSO slot and its own compute root signature.  begin and end both
+ * forget the cached root signature, topology, root arguments, vertex buffer
+ * views, viewport, scissor and index buffer (d3dp_external_rebind); end sets
+ * the two descriptor heaps and the pipeline state again. */
+static void dx_forget_bindings(DxCmdList *c)
+{
+    const uint32_t m = d3dp_external_rebind(c->pipeline != NULL);
+    if (m & D3DP_REBIND_ROOT) {
+        c->rootSet = NULL;
+        c->groupDirty = 0xFFu;
+    }
+    if (m & D3DP_REBIND_TOPOLOGY) {
+        c->topoSet = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
+    }
+    if (m & D3DP_REBIND_VIEWS) {
+        c->vbDirty = 0xFFFFFFFFu;
+        c->known = 0;
+    }
+}
+
+bool rhi_cmd_external_begin(RhiCommandList cl)
+{
+    DxCmdList *c = dx_get_cmd(cl);
+    if (!c || !c->recording || !g_dx.compute.ok) {
+        return false;
+    }
+    if (c->inPass || c->externalOpen) {
+        static uint32_t s_refused;
+        if (s_refused++ < 8u) {
+            DX_LOG("rhi_cmd_external_begin: %s: refused (%u)",
+                   c->inPass ? "inside a render pass" : "already open", s_refused);
+        }
+        return false;
+    }
+    dx_forget_bindings(c);
+    c->externalOpen = true;
+    return true;
+}
+
+void rhi_cmd_external_end(RhiCommandList cl)
+{
+    DxCmdList *c = dx_get_cmd(cl);
+    if (!c || !c->recording || !c->externalOpen) {
+        return;
+    }
+    c->externalOpen = false;
+    dx_forget_bindings(c);
+    const uint32_t m = d3dp_external_rebind(c->pipeline != NULL);
+    if (m & D3DP_REBIND_HEAPS) {
+        dx_bind_heaps(c->cl);
+    }
+    if ((m & D3DP_REBIND_PSO) && c->pipeline) {
+        ID3D12GraphicsCommandList_SetPipelineState(c->cl, c->pipeline->pso);
+        g_dx.counts.pipelineBinds++;
+    }
 }
 
 void rhi_cmd_local_read_barrier(RhiCommandList cl, uint32_t mask)

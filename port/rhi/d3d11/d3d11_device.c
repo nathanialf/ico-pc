@@ -1657,4 +1657,44 @@ void rhi_set_vulkan_loader(void *getInstanceProcAddr)
 }
 
 /* The rhi_create_backend entry (port/rhi/rhi_backend.h). */
+/* The native handles of rhi_native.h: not offered here (the FidelityFX
+ * compute backends exist for Vulkan and D3D12 only). */
+bool rhi_native_device(RhiNativeDevice *out)
+{
+    (void)out;
+    return false;
+}
+
+bool rhi_native_texture(RhiTexture t, RhiNativeTexture *out)
+{
+    (void)t;
+    (void)out;
+    return false;
+}
+
+bool rhi_native_command_list(RhiCommandList cl, void **out)
+{
+    (void)cl;
+    (void)out;
+    return false;
+}
+
+bool rhi_cmd_external_begin(RhiCommandList cl)
+{
+    (void)cl;
+    return false;
+}
+
+void rhi_cmd_external_end(RhiCommandList cl)
+{
+    (void)cl;
+}
+
+bool rhi_device_compute_caps(RhiComputeCaps *out)
+{
+    out->ok = out->apiVersionOk = out->subgroupOk = out->storageFormatsOk = out->float16 = false;
+    out->why = "not offered by the Direct3D 11 backend";
+    return false;
+}
+
 RHI_BACKEND_DEFINE(rhi_backend_d3d11, "d3d11");

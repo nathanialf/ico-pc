@@ -12,6 +12,7 @@
 #define PORT_RHI_D3D12_D3D12_PLAN_H
 
 #include "../rhi.h"
+#include "../rhi_native.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -160,6 +161,34 @@ int d3dp_layout_find(const D3dpLayout *l, uint32_t slot, RhiBindType type);
 uint32_t d3dp_root_params(const D3dpLayout *const *layouts, uint32_t count,
                           int8_t resParam[RHI_MAX_BIND_SLOTS], int8_t smpParam[RHI_MAX_BIND_SLOTS],
                           int8_t dynParam[RHI_MAX_BIND_SLOTS]);
+
+/* -------------------------------------------------- external compute
+ * (rhi_native.h).  RHI_TEX_STORAGE is granted to a single-sampled RGBA8 or
+ * RGBA16F texture (ALLOW_UNORDERED_ACCESS, no ROV needed); D32F is never a
+ * UAV in D3D12 (ALLOW_DEPTH_STENCIL excludes it), so the flag is ignored
+ * there; multisampled textures cannot be UAVs either. */
+bool d3dp_storage_texture_ok(RhiFormat fmt, uint32_t samples);
+
+/* The compute capability answer from what the device reports: shaderModel
+ * the highest supported D3D_SHADER_MODEL value (0x62 = 6.2; 0 when the
+ * query failed), waveOps D3D12_OPTIONS1.WaveOps, typedUav16 typed UAV loads
+ * and stores of R16G16B16A16_FLOAT and _UNORM (TypedUAVLoadAdditionalFormats
+ * and the formats' own support bits), native16 D3D12_OPTIONS4's
+ * Native16BitShaderOpsSupported.  Needs shader model 6.2 or later. */
+void d3dp_compute_caps(uint32_t shaderModel, bool waveOps, bool typedUav16, bool native16,
+                       RhiComputeCaps *out);
+
+/* What rhi_cmd_external_end puts back (a D3DP_REBIND_* mask) for a list
+ * that has `pipelineBound` a pipeline set: the two descriptor heaps always
+ * (external code sets its own), the pipeline state when one was set (the
+ * one PSO slot serves graphics and compute), and the cached root
+ * signature, topology, root arguments and vertex buffer views as lost. */
+#define D3DP_REBIND_HEAPS 1u
+#define D3DP_REBIND_PSO 2u
+#define D3DP_REBIND_ROOT 4u
+#define D3DP_REBIND_TOPOLOGY 8u
+#define D3DP_REBIND_VIEWS 16u
+uint32_t d3dp_external_rebind(bool pipelineBound);
 
 /* ------------------------------------------------------------- small maths */
 static inline uint64_t d3dp_align_up(uint64_t v, uint64_t a)
