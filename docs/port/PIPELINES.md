@@ -697,6 +697,17 @@ the particles' stage): the 2D part + 32 + 32 + 10 + 5, 446 with a 2D part of 367
 with dynamic depth and blend to 2 each, the point keys staying 15 (`rd_state_test`
 `testEnumerationPrepass`, `testDynamicNormalise` print each set with its 2D part).
 
+Issue 123's ladder ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)) changes no key: under `[dev]
+vu_bones = ring` the three cluster entries' keys are made from their ring builds
+(`vu_skin*_ring_plain_vs`) in place of the plain variants, the same keys and cache. With the
+pre-pass on, its batch builds (the default) read every entry's bones through the ring already,
+so the record path's keys and modules are the same with the key or without. With the pre-pass's
+batches off under `vu_bones = ring`, the skinned commands stay out of the record (its one-an-entry
+entries read VuBoneCB) and draw through their entries' ring builds: those keys are not in the
+start-up set there and are made on first use, a compile each the first time a skinned key is met.
+The skin check's twins of a record draw go through the entry's ring build in the box check's form
+(the twin C table, `RD_VU_SKIN_RING_PIPES`, compiled in the background): no start-up key either.
+
 The table:
 
 | device | match | reason |

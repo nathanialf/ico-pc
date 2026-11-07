@@ -429,22 +429,24 @@ bool rd__vu_skin_selftest(void)
     }
     const RhiLimits *lim = rhi_limits();
     if (rd__vu_skin_twins_on()) {
-        rd__log("VU skin check: on (every skinned draw twinned in its own pass through its own "
-                "pipeline (A the draw's bone offset, B the same bytes at a fresh offset; counted "
-                "by occlusion query%s); one probe %s, targeted after a twin event, "
-                "drawn again after the picture and compared with the CPU, its bone block's "
-                "bytes with the GPU's copy; variants: a fresh ring offset, uniform robustness "
-                "off %s; the box check %s; the first failure captured (a sidecar and a frame "
-                "dump); %s)",
-                lim->occlusionPrecise ? ", precise" : ", zero or not only",
-                rd__driver_is_turnip(lim) ? "a present" : "every 100 ms",
-                lim->uniformRobustOff ? "(VK_EXT_pipeline_robustness)"
-                : lim->robustText && strncmp(lim->robustText, "on", 2) == 0
-                    ? "not offered (no VK_EXT_pipeline_robustness)"
-                    : "not needed (robust access off)",
-                rhi_occlusion_supported() ? "by occlusion query"
-                                          : "not offered (no occlusion queries)",
-                rd__vu_skin_check_why());
+        rd__log(
+            "VU skin check: on (every skinned draw twinned in its own pass through its own "
+            "pipeline (A the draw's bone offset, B the same bytes at a fresh offset; counted "
+            "by occlusion query%s); thinned to one a picture through the box check's "
+            "pipeline after %u replays with none differing, every draw again after a twin "
+            "event; one probe %s, targeted after a twin event, "
+            "drawn again after the picture and compared with the CPU, its bone block's "
+            "bytes with the GPU's copy; variants: a fresh ring offset, uniform robustness "
+            "off %s; the box check %s; the first failure captured (a sidecar and a frame "
+            "dump); %s)",
+            lim->occlusionPrecise ? ", precise" : ", zero or not only", rd__vu_skin_thin_after(),
+            rd__driver_is_turnip(lim) ? "a present (every 100 ms once thinned)" : "every 100 ms",
+            lim->uniformRobustOff ? "(VK_EXT_pipeline_robustness)"
+            : lim->robustText && strncmp(lim->robustText, "on", 2) == 0
+                ? "not offered (no VK_EXT_pipeline_robustness)"
+                : "not needed (robust access off)",
+            rhi_occlusion_supported() ? "by occlusion query" : "not offered (no occlusion queries)",
+            rd__vu_skin_check_why());
         return why != NULL || bad == 0;
     }
     rd__log("VU skin check: on (one skinned draw every %d ms, in turn, drawn again after the "

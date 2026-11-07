@@ -23,7 +23,17 @@
 # runs must say "VU bones: through the ring (storage buffer) on the
 # skinned entries" and the others "VU bones: through VuBoneCB".
 # A missing dump is named and skipped; no dump, or no device (77): SKIP.
+# With -DPREPASS=1 (rd_vu_bones_ring_ab_prepass, issue 123 after v0.10.5:
+# the pre-pass on every tile-based GPU since v0.11.0) the same with the VU
+# pre-pass on (ICO_RD_VU_PREPASS=1, its "VU pre-pass: on" line asked of
+# every run) and a third setting, unbatched (ICO_RD_VU_PREPASS_BATCH=0: the
+# pre-pass's one-an-entry entries, which read VuBoneCB, so under the ring
+# the skinned commands are drawn the old way through the ring builds, its
+# line asked of the ring runs there); the check runs must have twinned at
+# least one draw over the dumps (under the batch builds the twins of a
+# record draw read the bones through the ring as the record did: no C).
 # -DTOOL=<rd_replay_tool> -DDUMPS=<dump|dump...> -DOUT=<a folder the test may write>
+# [-DPREPASS=1]
 string(REPLACE "|" ";" DUMPS "${DUMPS}")
 set(dumps "")
 foreach(d IN LISTS DUMPS)
@@ -39,8 +49,16 @@ if(ndumps EQUAL 0)
   return()
 endif()
 
-set(settings "plain" "attach")
-set(env_common ICO_RD_VU_SET=plain ICO_RD_VU_PREPASS=0)
+if(PREPASS)
+  set(settings "plain" "attach" "unbatched")
+  set(env_common ICO_RD_VU_SET=plain ICO_RD_VU_PREPASS=1)
+else()
+  set(settings "plain" "attach")
+  set(env_common ICO_RD_VU_SET=plain ICO_RD_VU_PREPASS=0)
+endif()
+set(env_unbatched ICO_RD_VU_PREPASS_BATCH=0)
+set(line_prepass "rd: VU pre-pass: on: ")
+set(line_unbatched "rd: VU pre-pass: the skinned commands are drawn the old way, through their entries' ring builds")
 set(runs cbuffer ring check ringcheck)
 set(env_cbuffer ICO_RD_VU_BONES=cbuffer ICO_RD_VU_SKIN_CHECK=0)
 set(env_ring ICO_RD_VU_BONES=ring ICO_RD_VU_SKIN_CHECK=0)
@@ -53,6 +71,7 @@ set(line_ring "rd: VU bones: through the ring \\(storage buffer\\) on the skinne
 set(line_check "${line_cbuffer}")
 set(line_ringcheck "${line_ring}")
 set(ringTwins 0)
+set(twinsDrawn 0)
 set(compared 0)
 set(failures 0)
 set(index 0)
@@ -86,6 +105,20 @@ foreach(dump IN LISTS dumps)
       if(run STREQUAL "check" AND
          flat MATCHES "the ring read's twin \\(C\\) ([0-9]+) drawn")
         math(EXPR ringTwins "${ringTwins} + ${CMAKE_MATCH_1}")
+      endif()
+      if(run MATCHES "check" AND flat MATCHES "twins at the end of the run: ([0-9]+) drawn")
+        math(EXPR twinsDrawn "${twinsDrawn} + ${CMAKE_MATCH_1}")
+      endif()
+      if(PREPASS AND NOT flat MATCHES "${line_prepass}")
+        message(SEND_ERROR "${dump} ${s} ${run}: the VU pre-pass is not on:\n${err}")
+        set(ok FALSE)
+        break()
+      endif()
+      if(PREPASS AND s STREQUAL "unbatched" AND run MATCHES "^ring" AND
+         NOT flat MATCHES "${line_unbatched}")
+        message(SEND_ERROR "${dump} ${s} ${run}: no \"${line_unbatched}\" line:\n${err}")
+        set(ok FALSE)
+        break()
       endif()
       if(s STREQUAL "attach" AND NOT flat MATCHES "GS state as shader data: on")
         message(SEND_ERROR "${dump} attach ${run}: GS state as shader data is not on:\n${err}")
@@ -122,12 +155,16 @@ foreach(dump IN LISTS dumps)
     message(STATUS "${dump} ${s}: ${npng} pictures, ring, check and ringcheck = cbuffer")
   endforeach()
 endforeach()
-if(failures EQUAL 0 AND ringTwins EQUAL 0)
+if(failures EQUAL 0 AND NOT PREPASS AND ringTwins EQUAL 0)
   message(SEND_ERROR "no twin C (the ring read in the pass) was drawn in any check run")
   set(failures 1)
 endif()
+if(failures EQUAL 0 AND PREPASS AND twinsDrawn EQUAL 0)
+  message(SEND_ERROR "no twin was drawn in any check run with the pre-pass on")
+  set(failures 1)
+endif()
 message(STATUS "rd_vu_bones_ring_ab: ${compared} pictures compared over ${ndumps} dumps, "
-               "${ringTwins} twins C drawn")
+               "${ringTwins} twins C drawn, ${twinsDrawn} twins drawn in the check runs")
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_vu_bones_ring_ab: ${failures} failures")
 endif()

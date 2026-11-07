@@ -2498,6 +2498,22 @@ static void vuPrepassRun(const RdFrame *f, int keep)
                 if (!e->preVs || e->count < 3u) {
                     e->count = 0; /* no triangle: the old way */
                 }
+                if (g_rd.vuBonesRing && !g_rd.vuPreBatch && c->type == RDC_SKINNED) {
+                    /* issue 123's step 1 ([dev] vu_bones = ring) with the
+                     * pre-pass's batches off: the one-an-entry pre-pass
+                     * entries read the bones through VuBoneCB, the read
+                     * step 1 replaces, so a skinned command takes its
+                     * entry's ring build the old way (the batch builds
+                     * read them through t5 already) */
+                    e->count = 0;
+                    static bool said; /* once a run */
+                    if (!said) {
+                        said = true;
+                        rd__log("VU pre-pass: the skinned commands are drawn the old way, "
+                                "through their entries' ring builds ([dev] vu_bones = ring with "
+                                "the pre-pass's batches off: its own entries read VuBoneCB)");
+                    }
+                }
                 /* the velocity's second record (vuVelWanted) */
                 e->vel = e->count && vuVelWanted(f, c, &st, l) ? 1u : 0u;
             }

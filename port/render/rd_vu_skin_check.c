@@ -195,22 +195,54 @@ uint32_t rd__vu_skin_queries(void)
     return rd__vu_skin_twins_on() ? SK_QUERIES : RD_SKIN_CHECKS_ALL;
 }
 
-/* the scheduled probe's interval in ms: -1 none (the targeted alone) */
+/* the twins' thinning (rd_vu_skin_check.h RD_SKIN_THIN_REPLAYS): the
+ * replays with twins read and none differing since the run's start or its
+ * last twin event, whether thinned, the skinned command of the replay
+ * twinned while thinned (a round robin over the last replay's count), the
+ * times thinned and re-armed (the lines) */
+static struct {
+    uint32_t clean, at, count;
+    bool thin;
+    uint64_t thinned, rearmed;
+} s_thin;
+
+static uint32_t s_thinAfter; /* rd__vu_skin_thin_set; 0: RD_SKIN_THIN_REPLAYS */
+
+void rd__vu_skin_thin_set(uint32_t replays)
+{
+    s_thinAfter = replays;
+}
+
+uint32_t rd__vu_skin_thin_after(void)
+{
+    return s_thinAfter ? s_thinAfter : RD_SKIN_THIN_REPLAYS;
+}
+
+bool rd__vu_skin_thinned(void)
+{
+    return s_thin.thin;
+}
+
+/* the scheduled probe's interval in ms: -1 none (the targeted alone); the
+ * environment's (s_intervalEnv, -3 none) read once */
 static double s_interval = -2.0;
 
 static double skInterval(void)
 {
+    if (s_interval <= -2.0 && s_interval > -2.5) {
+        const char *e = getenv("ICO_RD_VU_SKIN_INTERVAL_MS");
+        if (e && e[0]) {
+            s_interval = strcmp(e, "off") == 0 ? -1.0 : strtod(e, NULL);
+            s_interval = s_interval < 0.0 ? -1.0 : s_interval;
+        } else {
+            s_interval = -3.0;
+        }
+    }
     if (s_interval > -2.0) {
         return s_interval;
     }
-    const char *e = getenv("ICO_RD_VU_SKIN_INTERVAL_MS");
-    if (e && e[0]) {
-        s_interval = strcmp(e, "off") == 0 ? -1.0 : strtod(e, NULL);
-        s_interval = s_interval < 0.0 ? -1.0 : s_interval;
-    } else {
-        s_interval = onTurnip() ? 0.0 : SK_INTERVAL_MS;
-    }
-    return s_interval;
+    /* one a present on Turnip until the twins are thinned */
+    return onTurnip() && !s_thin.thin ? 0.0 : SK_INTERVAL_MS;
 }
 
 /* ICO_RD_VU_SKIN_SABOTAGE=A[,ring] (tests): the bone at VU address A read
@@ -223,6 +255,14 @@ static struct {
     bool ring;
     uint32_t fill; /* the ring's bone filled with: zeros, or ",nan" a NaN */
 } s_sab;
+
+void rd__vu_skin_sabotage_set(uint32_t addr)
+{
+    s_sab.read = true;
+    s_sab.addr = addr >= 16u && addr <= 252u && (addr & 3u) == 0 ? addr : 0u;
+    s_sab.ring = s_sab.addr != 0u;
+    s_sab.fill = 0u;
+}
 
 static void sabRead(void)
 {
@@ -749,6 +789,9 @@ typedef struct SkTwin {
     uint8_t fs;
     bool own, c;
     bool entry; /* through the program's own entry (the draw read the pre-pass record) */
+    /* A and B through the entry's ring build: the record was made by the
+     * pre-pass's batch builds, which read the bones through t5 */
+    bool recRing;
     /* why not the draw's own pipeline: 1 it does not read its attachment,
      * 2 it reads it but writes Z (0: own, or through the entry) */
     uint8_t notOwn;
@@ -930,6 +973,9 @@ void rd__vu_skin_pick(const RdFrame *f, const RdCmd *c, const RdMeshRec *m)
     if (s_seenReplay != g_rd.replayCounter) {
         if (s_seenReplay != 0) {
             s_lastV = s_seenV;
+            /* thinned: the next skinned command of the replay in turn */
+            s_thin.count = s_seen;
+            s_thin.at = s_thin.count ? (s_thin.at + 1u) % s_thin.count : 0u;
         }
         s_seen = 0;
         s_seenV = 0;
@@ -946,8 +992,10 @@ void rd__vu_skin_pick(const RdFrame *f, const RdCmd *c, const RdMeshRec *m)
     uint32_t list, index;
     cmdPlace(f, c, &list, &index);
     /* the twins: every skinned draw of the replay (vuDraw draws it on its
-     * own, out of the draw merge, and rd__vu_skin_note twins it) */
-    if (rd__vu_skin_twins_on() && sl->nTwins < SK_TWINS_MAX && rhi_occlusion_supported()) {
+     * own, out of the draw merge, and rd__vu_skin_note twins it); thinned,
+     * the one whose turn it is */
+    if (rd__vu_skin_twins_on() && sl->nTwins < SK_TWINS_MAX && rhi_occlusion_supported() &&
+        (!s_thin.thin || at == s_thin.at)) {
         memset(&s_twinCmd, 0, sizeof(s_twinCmd));
         s_twinCmd.frame = f->number;
         s_twinCmd.list = list;
@@ -1206,7 +1254,18 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
      * through the program's own entry, which reads the bones at b3 and
      * ignores the record (rd_replay_vu.c vuDraw's fallback key) */
     const bool entry = dk->vs != d->vs;
-    const bool own = !entry && dk->dst == RHI_DST_READ_ATTACHMENT && dk->gs.zwrite == RD_ZWRITE_OFF;
+    /* the pre-pass's batch builds (g_rd.vuPreBatch, every device's default
+     * with the pre-pass on) read the bones through the ring (t5,
+     * vu_common.hlsli ICO_VU_PRE_BATCH), not the uniform block: the twins
+     * of a record draw read them the same way, through the entry's ring
+     * build (the plain set's: where it cannot be made, the uniform read as
+     * before), so an A/B difference is one of the read the picture took */
+    const bool recRing =
+        entry && g_rd.vuPreBatch && !g_rd.vuBonesRing && rd__vu_bones_ring_shader(d->vs).id != 0;
+    /* thinned, the box check's pipeline (colour and Z writes off): the
+     * cheap form once the run has a verdict */
+    const bool own = !entry && !s_thin.thin && dk->dst == RHI_DST_READ_ATTACHMENT &&
+                     dk->gs.zwrite == RD_ZWRITE_OFF;
     RdPipeKeyInt key = *dk;
     if (entry) {
         key.vs = d->vs;
@@ -1233,7 +1292,8 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
         key.gs.zwrite = RD_ZWRITE_OFF;
         /* taken at once in the tool's and the tests' replays (mode 2, and
          * rd__vu_skin_check_replays: each harvested at once anyway) */
-        p = boxPipe(&key, skMode() == 2 || s_collect != NULL);
+        p = recRing ? ringPipe(&key, skMode() == 2 || s_collect != NULL)
+                    : boxPipe(&key, skMode() == 2 || s_collect != NULL);
         if (!p.id) {
             s_blk.twinsNot++;
             return;
@@ -1245,7 +1305,7 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
     const uint64_t ua = rhi_limits()->uniformAlign ? rhi_limits()->uniformAlign : 256u;
     uint64_t vOffA = d->vOff, vOffB = d->vOff, vOffC = ~0ull;
     RhiPipeline pc = {0};
-    if (g_rd.vuBonesRing) {
+    if (g_rd.vuBonesRing || recRing) {
         IcoVuCB va, vb;
         memcpy(&va, d->vcb, sizeof(va));
         memcpy(&vb, d->vcb, sizeof(vb));
@@ -1277,7 +1337,11 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
     tw->fs = dk->fs;
     tw->own = own;
     tw->entry = entry;
-    tw->notOwn = own || entry ? 0u : dk->dst != RHI_DST_READ_ATTACHMENT ? 1u : 2u;
+    tw->recRing = recRing;
+    tw->notOwn = own || entry                         ? 0u
+                 : dk->dst != RHI_DST_READ_ATTACHMENT ? 1u
+                 : s_thin.thin                        ? 3u
+                                                      : 2u;
     tw->c = pc.id != 0; /* C, the ring read's twin */
     tw->check = check;
     const RhiCommandList cl = rd__replay_cl();
@@ -1311,6 +1375,10 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
             rhi_cmd_draw(cl, d->count, d->first, 1);
         }
         rhi_cmd_end_occlusion(cl, SK_TWIN_Q0 + 3u * t + q);
+        /* the check's cost on the VU line (9 invocations a triangle: the
+         * entry's own vertex shader, never the record) */
+        g_rdPerf.skinTwinDraws++;
+        g_rdPerf.skinTwinInvocations += d->count / 3u * 9u;
     }
     /* the draw's state back for whatever the replay records next */
     const uint32_t back[3] = {(uint32_t)d->dOff, (uint32_t)d->vOff, (uint32_t)d->bonesOff};
@@ -2022,7 +2090,8 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
     /* the ladder's evidence (rd_vu_bones.c): whether C cleared it, and what
      * the probe of the same command in the same replay said */
     rd__vu_bones_event(tw->frame,
-                       !ringRead    ? -1
+                       tw->recRing  ? 0 /* A and B were the ring read: it does not clear it */
+                       : !ringRead  ? -1
                        : ringDiffer ? 0
                                     : 1,
                        k && k->judged ? (k->probeWrong ? 0 : 1) : -1);
@@ -2044,9 +2113,15 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
                 (unsigned long long)(tw->bonesOff & 4095u), (unsigned long long)c[0],
                 (unsigned long long)(tw->freshOff & 4095u), (unsigned long long)c[1], cw,
                 rd__fs_name(tw->fs),
-                tw->own     ? " with the draw's attachment read (its own pipeline)"
-                : tw->entry ? " with colour and Z writes off (the program's own vertex entry: the "
-                              "draw read the pre-pass record)"
+                tw->own       ? " with the draw's attachment read (its own pipeline)"
+                : tw->recRing ? " with colour and Z writes off (the program's own vertex entry's "
+                                "ring build: the draw read the pre-pass record and its batch "
+                                "builds read the bones through the ring)"
+                : tw->entry   ? " with colour and Z writes off (the program's own vertex entry: "
+                                "the draw read the pre-pass record)"
+                : tw->notOwn == 3u
+                    ? " with colour and Z writes off (the box check's pipeline: the twins "
+                      "thinned)"
                 : tw->notOwn == 2u
                     ? " with colour and Z writes off (the box check's pipeline: the draw reads "
                       "its attachment but writes Z)"
@@ -2055,6 +2130,8 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
                 probe, reads, (unsigned long long)s_run.twinEvents,
                 g_rd.vuBonesRing ? "; A and B read the bones through the ring: step 1 of the "
                                    "ladder in force"
+                : tw->recRing    ? "; A and B read the bones through the ring, as the pre-pass "
+                                   "record did"
                                  : "");
     }
     if (s_cap.done) {
@@ -2073,6 +2150,42 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
         s_cap.twin = *tw;
         memcpy(s_cap.counts, c, sizeof(c));
         s_cap.deadline = g_rd.replayCounter + SK_TARGET_REPLAYS + RHI_FRAMES_IN_FLIGHT + 1u;
+    }
+}
+
+/* a slot's twins read (read, of them differ): the thinning's count, the
+ * thinning and the re-arm with their lines (each the first 8, then every
+ * 100th) */
+static void thinNote(uint32_t read, uint32_t differ)
+{
+    if (!read || skMode() != 1) {
+        return;
+    }
+    if (differ) {
+        if (s_thin.thin) {
+            s_thin.thin = false;
+            if (sayNth(++s_thin.rearmed)) {
+                rd__log("VU skin check: twins re-armed by a twin event: every skinned draw "
+                        "twinned again until %u replays with none differing (re-armed %llu "
+                        "times)",
+                        rd__vu_skin_thin_after(), (unsigned long long)s_thin.rearmed);
+            }
+        }
+        s_thin.clean = 0;
+        return;
+    }
+    if (s_thin.clean < UINT32_MAX) {
+        s_thin.clean++;
+    }
+    if (!s_thin.thin && s_thin.clean >= rd__vu_skin_thin_after()) {
+        s_thin.thin = true;
+        if (sayNth(++s_thin.thinned)) {
+            rd__log("VU skin check: twins thinned to one a picture after %u clean replays "
+                    "(through the box check's pipeline, in turn over the skinned draws%s; "
+                    "re-armed by a twin event)",
+                    s_thin.clean,
+                    onTurnip() && s_interval <= -2.0 ? "; the probe every 100 ms again" : "");
+        }
     }
 }
 
@@ -2102,6 +2215,7 @@ static void readSlot(SkSlot *sl, uint32_t slot, bool intact, bool occ)
     /* the ladder's count of replays whose twins were read */
     rd__vu_bones_twins_read((uint32_t)(s_run.twins - twinsBefore),
                             (uint32_t)(s_run.twinsDiffer - differBefore));
+    thinNote((uint32_t)(s_run.twins - twinsBefore), (uint32_t)(s_run.twinsDiffer - differBefore));
     if (s_cap.want && !s_cap.done && g_rd.replayCounter >= s_cap.deadline) {
         /* no targeted probe read in time: the twin's data alone */
         captureWrite(NULL, &s_cap.twin, s_cap.counts, NULL, NULL, NULL, NULL,
@@ -2154,7 +2268,7 @@ void rd__vu_skin_block(void)
     if (!s_blk.checks && !s_blk.twins && !s_blk.twinsNot) {
         return;
     }
-    char twins[256] = "";
+    char twins[384] = "";
     if (s_blk.twins || s_blk.twinsNot) {
         char first[48] = "";
         if (s_blk.anyDiffer) {
@@ -2169,11 +2283,20 @@ void rd__vu_skin_block(void)
             snprintf(ring, sizeof(ring), ", ring twins differ %llu (of %llu read)",
                      (unsigned long long)s_blk.ringDiffer, (unsigned long long)s_blk.ringTwins);
         }
+        /* the thinning: one a picture once the run has a verdict */
+        char thin[96] = "";
+        if (skMode() == 1 && s_thin.thin) {
+            snprintf(thin, sizeof(thin), ", thinned to one a picture (%u clean replays)",
+                     s_thin.clean);
+        } else if (skMode() == 1) {
+            snprintf(thin, sizeof(thin), ", every skinned draw (%u of %u clean replays to thin)",
+                     s_thin.clean, rd__vu_skin_thin_after());
+        }
         snprintf(twins, sizeof(twins),
                  "; %llu twins, %llu differ%s, %llu not drawn (their "
-                 "pipeline not made yet)%s",
+                 "pipeline not made yet)%s%s",
                  (unsigned long long)s_blk.twins, (unsigned long long)s_blk.twinsDiffer, first,
-                 (unsigned long long)s_blk.twinsNot, ring);
+                 (unsigned long long)s_blk.twinsNot, ring, thin);
     }
     rd__log("VU skin check: %llu checks, %llu wrong, %llu blocks whose bytes differed (%llu "
             "changed after the draw); %llu box checks, %llu with samples outside the box, %llu "
@@ -2270,11 +2393,13 @@ void rd__vu_skin_shutdown(void)
         rd__log("VU skin check: twins at the end of the run: %llu drawn (%llu through the draw's "
                 "own pipeline with its attachment read), %llu read, %llu differ; %llu checks "
                 "targeted after a twin event; the ring read's twin (C) %llu drawn, %llu read, %llu "
-                "differ from B",
+                "differ from B; thinned %llu times, re-armed %llu times%s",
                 (unsigned long long)s_run.twinsDrawn, (unsigned long long)s_run.twinsOwn,
                 (unsigned long long)s_run.twins, (unsigned long long)s_run.twinsDiffer,
                 (unsigned long long)s_run.targeted, (unsigned long long)s_run.ringDrawn,
-                (unsigned long long)s_run.ringTwins, (unsigned long long)s_run.ringDiffer);
+                (unsigned long long)s_run.ringTwins, (unsigned long long)s_run.ringDiffer,
+                (unsigned long long)s_thin.thinned, (unsigned long long)s_thin.rearmed,
+                s_thin.thin ? " (thinned at the end)" : "");
     }
     if (g_rd.hasDevice) {
         if (s_p.roJob) {
@@ -2351,6 +2476,9 @@ void rd__vu_skin_shutdown(void)
     g_rdSkinTwin = false;
     s_turnip = -1;
     s_interval = -2.0;
+    /* the thinning starts again with the renderer (the ladder's step 1
+     * switch in the run starts its evidence from zero too) */
+    memset(&s_thin, 0, sizeof(s_thin));
     s_pickedThis = false;
     s_lastMs = 0.0;
     s_env = -2;

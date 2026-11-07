@@ -33,6 +33,9 @@ static struct {
     int healed;    /* the healed line said */
     int plainSaid; /* the "needs the plain shader set" line said */
     int nobin, nobinOff, nobinAvail;
+    /* step 2 in force with the word "needed"; the re-test of step 2 at
+       this start (turnip_debug = retest, or nobin without the word) */
+    int nobinNeeded, retest;
     /* step 1 written: the switch in the run wanted (pending), asked
        (once a run), its waiting line said; the run's evidence then (the
        lines), the mark (the environment) */
@@ -51,9 +54,9 @@ static const char *cfg_name(void)
     return ico_config_toml_path() != NULL ? ico_config_toml_path() : "config.toml";
 }
 
-/* key = value and key_by = the mark of the run so far (kept in mark when
-   given); 1 when saved */
-static int write_key(const char *key, const char *keyBy, const char *value,
+/* key = value and key_by = the mark of the run so far with word ("" none;
+   kept in mark when given); 1 when saved */
+static int write_key(const char *key, const char *keyBy, const char *value, const char *word,
                      const RdVuBonesEvidence *ev, char *keep, size_t keepSize)
 {
     BonesMark m;
@@ -61,6 +64,7 @@ static int write_key(const char *key, const char *keyBy, const char *value,
 
     memset(&m, 0, sizeof(m));
     snprintf(m.version, sizeof(m.version), "%s", game_version());
+    snprintf(m.word, sizeof(m.word), "%s", word);
     m.frame = ev->frame;
     m.differ = ev->differ;
     m.twins = ev->twins;
@@ -72,11 +76,22 @@ static int write_key(const char *key, const char *keyBy, const char *value,
            ico_config_save() == 0;
 }
 
+/* turnip_debug and its mark removed (left empty: every reader, the
+   Android loader's and the kept-keys line's, takes an empty value for
+   absent; the config store has no removal); 1 when saved */
+static int clear_key(void)
+{
+    return ico_config_set_string(KEY_TU, "") == 0 && ico_config_set_string(KEY_TU_BY, "") == 0 &&
+           ico_config_save() == 0;
+}
+
 static void start(void)
 {
     char line[512];
     const char *tu = ico_config_get_string(KEY_TU, "");
+    const char *tuBy = ico_config_get_string(KEY_TU_BY, NULL);
     const char *env = getenv("TU_DEBUG");
+    const BonesTurnip state = bones_turnip_state(tu, tuBy);
 
     s.init = 1;
     /* TU_DEBUG=nobin set at this start (android/gpu_driver_android.c, before
@@ -89,10 +104,12 @@ static void start(void)
 #endif
     /* only when the Turnip package loaded: TU_DEBUG stays set when its
        open failed or the phone's own driver runs */
-    s.nobin = bones_nobin_in_force(tu, env, s.nobinAvail);
+    s.nobin = bones_nobin_in_force(tu, tuBy, env, s.nobinAvail);
+    s.nobinNeeded = s.nobin && state == BONES_TU_NEEDED;
+    s.retest = state == BONES_TU_RETEST || state == BONES_TU_UNMARKED;
     if (bones_ladder_start_line(line, sizeof(line), ico_config_get_string(KEY_BONES, NULL),
-                                ico_config_get_string(KEY_BONES_BY, NULL), tu[0] ? tu : NULL,
-                                ico_config_get_string(KEY_TU_BY, NULL), s.nobin) == 0) {
+                                ico_config_get_string(KEY_BONES_BY, NULL), tu[0] ? tu : NULL, tuBy,
+                                s.nobin) == 0) {
         fprintf(stderr, "%s\n", line);
     }
 }
@@ -180,6 +197,8 @@ void window_bones_pump(void)
     in.nobin = s.nobin;
     in.nobinOff = s.nobinOff;
     in.nobinAvail = s.nobinAvail;
+    in.nobinNeeded = s.nobinNeeded;
+    in.retest = s.retest;
     in.ringUsable = ev.ringUsable;
     in.replays = ev.replays;
     in.twins = ev.twins;
@@ -208,7 +227,8 @@ void window_bones_pump(void)
         s.plainSaid = 1;
         break;
     case BONES_WRITE_RING:
-        written = write_key(KEY_BONES, KEY_BONES_BY, "ring", &ev, s.ringMark, sizeof(s.ringMark));
+        written =
+            write_key(KEY_BONES, KEY_BONES_BY, "ring", "", &ev, s.ringMark, sizeof(s.ringMark));
         if (written) {
             /* step 1 in this run: the switch at this pump or a later one */
             s.ringIn = in;
@@ -219,11 +239,25 @@ void window_bones_pump(void)
         s.done = 1;
         break;
     case BONES_WRITE_NOBIN:
-        written = write_key(KEY_TU, KEY_TU_BY, "nobin", &ev, NULL, 0);
+        written = write_key(KEY_TU, KEY_TU_BY, "nobin", "trial", &ev, NULL, 0);
         s.done = 1;
         break;
     case BONES_WRITE_OFF:
-        written = write_key(KEY_TU, KEY_TU_BY, "off", &ev, NULL, 0);
+        written = write_key(KEY_TU, KEY_TU_BY, "off", "", &ev, NULL, 0);
+        s.done = 1;
+        break;
+    case BONES_WRITE_RETEST:
+        /* the next start without nobin; nothing more this run (nobin is
+           loaded with the driver for the process) */
+        written = write_key(KEY_TU, KEY_TU_BY, "retest", "", &ev, NULL, 0);
+        s.done = 1;
+        break;
+    case BONES_RETEST_CLEAR:
+        written = clear_key();
+        s.done = 1;
+        break;
+    case BONES_WRITE_NOBIN_NEEDED:
+        written = write_key(KEY_TU, KEY_TU_BY, "nobin", "needed", &ev, NULL, 0);
         s.done = 1;
         break;
     default: /* BONES_STOP, BONES_PORT_RACE: said, nothing written */
