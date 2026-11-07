@@ -309,8 +309,13 @@ RhiShader rd__vu_bones_ring_shader(uint8_t vs);
 bool rd__vu_ring_index(uint64_t off, uint64_t size, uint32_t *out);
 /* rd__vu_policy_init: the start line ("VU bones: ..."), asked whether
  * [dev] vu_bones = ring was asked, on whether the ring builds are in force,
- * why not when asked and not */
-void rd__vu_bones_policy(bool asked, bool on, const char *why);
+ * usable whether they could be (the plain set on Vulkan: the evidence's
+ * ringUsable), why not when asked and not */
+void rd__vu_bones_policy(bool asked, bool on, bool usable, const char *why);
+/* the vu_bones word asked: rd_set_vu_bones's when the window set one, else
+ * ICO_RD_VU_BONES (NULL: none); rd__vu_bones_by the same for the mark */
+const char *rd__vu_bones_asked(void);
+const char *rd__vu_bones_by(void);
 /* vuSource under the ring builds: a skinned draw's VuBoneCB block t5 does
  * not hold whole (the draw not drawn; counted, said once) */
 void rd__vu_bones_ring_miss(uint64_t bonesOff);

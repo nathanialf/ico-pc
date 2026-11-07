@@ -57,6 +57,7 @@ typedef struct BonesLadderIn {
     int nobin;      /* step 2 in force this start (TU_DEBUG=nobin was set) */
     int nobinOff;   /* [dev] turnip_debug = off: step 2 tried and did not clear, or refused */
     int nobinAvail; /* the next start can set TU_DEBUG (Android, a Turnip package) */
+    int ringUsable; /* the ring builds can be put in force (the plain set on Vulkan) */
     uint32_t replays, twins, differ;
     uint32_t ringClear, ringFail, sceneOnly, probeWrong, portRace;
     uint32_t addr; /* the bone address the last wrong probe named (0: none) */
@@ -69,7 +70,10 @@ typedef enum BonesAction {
     BONES_WRITE_OFF,   /* step 2 did not clear: turnip_debug = off, the ladder stops */
     BONES_STOP,        /* nothing left to try here: said, nothing written */
     BONES_HEALED,      /* the step in force kept the twins equal: said */
-    BONES_PORT_RACE    /* the ring's bytes changed under the GPU (H2): the ladder does not act */
+    BONES_PORT_RACE,   /* the ring's bytes changed under the GPU (H2): the ladder does not act */
+    BONES_WAIT_PLAIN   /* step 1 would be next, but the ring builds cannot be used here (the
+                          program entries are not the plain set on Vulkan): said once, nothing
+                          written, the ladder goes on */
 } BonesAction;
 
 /* the action for the run so far (called again as the evidence grows; the
@@ -88,6 +92,12 @@ BonesAction bones_ladder_step(const BonesLadderIn *in);
 enum { BONES_RESTART_NONE = 0, BONES_RESTART_ASK, BONES_RESTART_WAIT };
 
 int bones_restart_step(int pending, int asked, int movie, double uptimeS);
+
+/* Whether step 2 is in force at this start: [dev] turnip_debug = nobin,
+   TU_DEBUG holding nobin, and the Turnip package actually loaded (the
+   variable is set before the open and stays when the open fails or the
+   phone's own driver runs) */
+int bones_nobin_in_force(const char *turnipDebug, const char *tuDebugEnv, int turnipLoaded);
 
 /* the mark beside a key the ladder writes */
 typedef struct BonesMark {

@@ -363,7 +363,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `getEnemyRestartLife`'s: 38 with American or Not tougher later) and `test_offered` (American is
   not offered on `jun26`: the config, the setter and both step directions; Light sword colour Red
   offered on pal, jpn, kor and cn only) and `test_weapons` (the kinds `ico_variant_weapon_kind` and
-  `ico_variant_weapon_put_kind` give: Red 9 to 8 and 8 back to 9 where offered, the net's kind 6 on
+  `ico_variant_weapon_put_kind` give: Red 9 to 8, and 8 back to 9 wherever Red is offered (Red on, and Red switched off with a kind-8 sword in play; 8 stays 8 on a disc without Red), the net's kind 6 on
   `jun26` and 7 elsewhere for the stick, every other kind untouched, the words, the step, a reload);
   one run per disc (`variants`, `variants_jpn`, `variants_kor`, `variants_<slug>`).
 - `hand_ik_test.c`: the hand records as `ACTGame_ConnectHand` sets them through the real
@@ -1039,7 +1039,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   clear it or the scene pass's execution differed twice with no wrong probe; step 1 untested after 8
   events; nothing without a differing twin; a port race never acted on), step 1's switch in the run
   as `window_bones.c` polls it each pump (`bones_restart_step`: asked once, at the pump after the
-  write, never while a movie plays or in the run's first 30 s, never again in the run), the mark
+  write, never while a movie plays or in the run's first 30 s, never again in the run), step 1 never written where the ring builds cannot be used (the extended
+set: `BONES_WAIT_PLAIN`, its line) while step 2's evidence still acts, step 2 taken for in force
+only when the Turnip package loaded (`bones_nobin_in_force`), the mark
   written and read back and a hand-written value never taken for it, the start, action, step 1
   (now, waiting, next start) and switch lines word for word (`bones_ladder`).
 - `robust_persist_test.c`: the port's own `[dev] gpu_robust` turning itself off (`robust_persist.h`): the mark `gpu_robust_by` written and read back and a hand-written value never taken for it, the rule over sequences of starts (three clean starts in a row turn it off; a loss or an end while preparing resets the count; a start that never reached the game leaves it; another version turns it off at once; no mark does nothing), the mark through the config text, the removal of both `[dev]` keys leaving every other line (a `gpu_robust` in another section included), the three log lines word for word (`robust_persist`).

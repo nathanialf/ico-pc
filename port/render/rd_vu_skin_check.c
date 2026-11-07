@@ -2338,7 +2338,14 @@ void rd__vu_skin_shutdown(void)
     s_seenReplay = s_seen = 0;
     s_seenV = s_lastV = s_cursorV = 0;
     memset(&s_target, 0, sizeof(s_target));
-    memset(&s_cap, 0, sizeof(s_cap));
+    {
+        /* the capture is once a run, not once a renderer: a rebuild in the
+         * run (Options > Graphics > Apply, the ladder's step 1) keeps it
+         * taken */
+        const bool capDone = s_cap.done;
+        memset(&s_cap, 0, sizeof(s_cap));
+        s_cap.done = capDone;
+    }
     memset(&s_twinCmd, 0, sizeof(s_twinCmd));
     g_rdSkinTwin = false;
     s_turnip = -1;

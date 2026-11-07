@@ -29,8 +29,9 @@ extern int mpegPlay;
 
 static struct {
     int init;
-    int done;   /* a write, a stop or the port race acted on: nothing more this run */
-    int healed; /* the healed line said */
+    int done;      /* a write, a stop or the port race acted on: nothing more this run */
+    int healed;    /* the healed line said */
+    int plainSaid; /* the "needs the plain shader set" line said */
     int nobin, nobinOff, nobinAvail;
     /* step 1 written: the switch in the run wanted (pending), asked
        (once a run), its waiting line said; the run's evidence then (the
@@ -48,16 +49,6 @@ static const char *game_version(void)
 static const char *cfg_name(void)
 {
     return ico_config_toml_path() != NULL ? ico_config_toml_path() : "config.toml";
-}
-
-/* a variable for this process, read by rd_init (rd__vu_policy_init) */
-static void put_env(const char *name, const char *value)
-{
-#ifdef _WIN32
-    _putenv_s(name, value);
-#else
-    setenv(name, value, 1);
-#endif
 }
 
 /* key = value and key_by = the mark of the run so far (kept in mark when
@@ -90,13 +81,15 @@ static void start(void)
     s.init = 1;
     /* TU_DEBUG=nobin set at this start (android/gpu_driver_android.c, before
        the Turnip package loaded) */
-    s.nobin = strcmp(tu, "nobin") == 0 && env != NULL && strstr(env, "nobin") != NULL;
     s.nobinOff = strcmp(tu, "off") == 0;
 #ifdef __ANDROID__
     s.nobinAvail = ico_gpu_driver_android_turnip_package();
 #else
     s.nobinAvail = 0;
 #endif
+    /* only when the Turnip package loaded: TU_DEBUG stays set when its
+       open failed or the phone's own driver runs */
+    s.nobin = bones_nobin_in_force(tu, env, s.nobinAvail);
     if (bones_ladder_start_line(line, sizeof(line), ico_config_get_string(KEY_BONES, NULL),
                                 ico_config_get_string(KEY_BONES_BY, NULL), tu[0] ? tu : NULL,
                                 ico_config_get_string(KEY_TU_BY, NULL), s.nobin) == 0) {
@@ -128,8 +121,9 @@ static void ring_switch_poll(void)
     }
     s.ringAsked = 1;
     s.ringPending = 0;
-    put_env("ICO_RD_VU_BONES", "ring");
-    put_env("ICO_RD_VU_BONES_BY", s.ringMark);
+    /* to the next rd_init through its setter: no environment written while
+       other threads may read it */
+    rd_set_vu_bones("ring", s.ringMark);
     if (ico_window_switch_restart("issue 123's ladder: the bones through the ring") != 0) {
         /* the switch machinery refuses (its line above): the next start */
         if (!s.ringWaitSaid && bones_ring_line(line, sizeof(line), &s.ringIn, 1, cfg_name(),
@@ -186,6 +180,7 @@ void window_bones_pump(void)
     in.nobin = s.nobin;
     in.nobinOff = s.nobinOff;
     in.nobinAvail = s.nobinAvail;
+    in.ringUsable = ev.ringUsable;
     in.replays = ev.replays;
     in.twins = ev.twins;
     in.differ = ev.differ;
@@ -204,6 +199,13 @@ void window_bones_pump(void)
             return;
         }
         s.healed = 1;
+        break;
+    case BONES_WAIT_PLAIN:
+        /* said once; the evidence may still point to step 2 later */
+        if (s.plainSaid) {
+            return;
+        }
+        s.plainSaid = 1;
         break;
     case BONES_WRITE_RING:
         written = write_key(KEY_BONES, KEY_BONES_BY, "ring", &ev, s.ringMark, sizeof(s.ringMark));

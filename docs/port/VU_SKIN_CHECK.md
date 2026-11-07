@@ -184,7 +184,9 @@ chosen vertex-weighted: a cursor over the last replay's skinned vertices, moved 
 ratio of the total after each probe, picks the command whose vertices hold it, so a mesh is probed
 in proportion to its vertices.
 
-**The capture.** The run's first failure (twins that differ, or a wrong check) is captured once: a
+**The capture.** The run's first failure (twins that differ, or a wrong check) is captured once a
+run (a renderer made again in the run, by Options > Graphics > Apply or the ladder's step 1, keeps
+it taken): a
 sidecar `logs/vu-skin-fail-<frame>-<list>-<index>.bin` (`RdSkinCaptureHeader` in
 `rd_vu_skin_check.h`: the command, the twins' counts, the probe's wrong and dropped vertices and
 addresses, the decision's words, then the sections: the CPU's 3,840 bone bytes, the GPU's copy, the
@@ -330,10 +332,12 @@ the window's pump reads it (`port/platform/window_bones.c`) and decides with
 | a step in force and no twin differing over 2,000 presents (replays with twins read) | healed: said once, the key kept |
 | a wrong check whose bytes changed under the GPU (H2, a port race) | the ladder does not act |
 | no twin differing and no step in force | nothing |
+| step 1 would be next, but the program entries are not the plain set on Vulkan (the evidence's `ringUsable`: the renderer would refuse the ring builds) | nothing written, no restart; said once (`window: VU skin check ladder: waits: the ring read needs the plain shader set (...): step 1 not written (D of T twins differ)`); step 2's evidence still acts |
 
-**Step 1, the bones through the ring, in the run.** When the window writes the key it sets
-`ICO_RD_VU_BONES=ring` (and `ICO_RD_VU_BONES_BY`, the mark) in the process and asks for the
-renderer to be made again in place (`port/platform/window_switch.h` `ico_window_switch_restart`):
+**Step 1, the bones through the ring, in the run.** When the window writes the key it hands
+`ring` and the mark to the renderer through `rd_set_vu_bones` (taken by the next `rd_init` over
+`ICO_RD_VU_BONES` and `ICO_RD_VU_BONES_BY`: no environment is written while the renderer's, the
+audio's and the driver's threads may read it) and asks for the renderer to be made again in place (`port/platform/window_switch.h` `ico_window_switch_restart`):
 the same backend and card through Options > Graphics > Apply's own switch, run in the event pump
 between two steps of the game and never inside a present (`rd_suspend` with the game's state kept,
 the window made again, `rd_init`, `rd_resume`), so no shader id is added and no pipeline in flight

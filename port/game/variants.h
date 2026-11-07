@@ -185,8 +185,9 @@ int ico_variant_shadow_brain(void);
    catches fire).  Every other kind, and every kind at the rows' Original,
    comes back as it went in.  Counted log lines (first 8, then every 100th).
    ico_variant_weapon_put_kind(kind) is the kind boyact.c PutWeapon's
-   kind-9 check reads: 9 for a kind 8 made from a light sword while Red is
-   on, so the sword set down stands as the game's does; kind otherwise.
+   kind-9 check reads: 9 for a kind 8 on every disc that offers Red (whether
+   Red is on now or was switched off after the sword was made), so the
+   sword set down stands as the game's does; kind otherwise.
    ico_variant_net_kind() is this disc's insect-net kind (7, or 6 on the
    June 2001 demo). */
 int ico_variant_weapon_kind(int kind);
