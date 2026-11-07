@@ -653,7 +653,7 @@ Last, from the same stage, `tools/package_linux.sh` writes the AppImage,
 `.sha256` beside it, written by the script on both architectures. The AppDir is `AppRun` (a link to
 `usr/bin/ico_pc`), `usr/bin/` with `ico_pc`, `ico_pc.map`, `libSDL3.so.0` and `mc_import`,
 `usr/share/doc/ico-pc/` with the README, the guides, `LICENSE`, `NOTICES.txt`, `THIRD_PARTY.md`
-and `VERSION.txt`, and `ico-pc.desktop`, `ico-pc.svg` and `.DirIcon` (a link to the icon) from
+and `VERSION.txt`, and `com.defnf.icopc.desktop`, `com.defnf.icopc.svg` and `.DirIcon` (a link to the icon) from
 `tools/appimage/`; no `ico-pc.ini`, folder notes or make-portable script, because the program
 keeps all of those beside the AppImage file ([PLATFORM.md](port/PLATFORM.md#folders-ico-pcini-and-the-user-folder)).
 appimagetool runs unpacked from `tools/toolchain/deps/appimage/<arch>/squashfs-root` with its own

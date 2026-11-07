@@ -39,6 +39,7 @@
 #include "touch_edit.h"        /* the touch layout edits (port/input) */
 #include "settings_graphics.h" /* the Graphics page's rows and Apply */
 #include "settings_backup.h"   /* Extras' Back up your data and Restore from a backup */
+#include "settings_desktop.h"  /* Extras' Add to the applications menu */
 #include "settings_states.h"   /* the Save states page's cards, actions and F6 latch */
 #include "settings_unused.h"   /* Extras > Unused content's host */
 #include "settings_variants.h" /* the game variants rows' values, notes and rule */
@@ -2179,6 +2180,9 @@ static int optShown(int opt, int link)
     if (opt == UI_OPT_EXTRAS_STEAM) {
         return onTitle() && s_steamFn != NULL;
     }
+    if (opt == UI_OPT_EXTRAS_DESKTOP) {
+        return onTitle() && ui__desktop_hosted();
+    }
     if (opt == UI_OPT_EXTRAS_EXPORT_TEXTURES) {
         return onTitle() && s_texExportHostSet;
     }
@@ -4126,30 +4130,19 @@ static void build(void)
                                   UI_STR_OPT_FREE_MOVEMENT,  UI_STR_BACK};
     /* Characters after Credits (from both entries; the other three
        from the title only), then Unused content (from the title) */
-    static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,
-                                     UI_OPT_EXTRAS_MODELS,
-                                     UI_OPT_EXTRAS_CREDITS,
-                                     UI_OPT_LINK,
-                                     UI_OPT_LINK,
-                                     UI_OPT_EXTRAS_STEAM,
-                                     UI_OPT_EXTRAS_EXPORT_TEXTURES,
-                                     UI_OPT_EXTRAS_BACKUP,
-                                     UI_OPT_EXTRAS_RESTORE,
-                                     UI_OPT_ACH_POPUPS,
-                                     UI_OPT_BACK};
-    static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,
-                                     UI_STR_EXTRAS_MODELS,
-                                     UI_STR_EXTRAS_CREDITS,
-                                     UI_STR_SECTION_CHARACTERS,
-                                     UI_STR_SECTION_UNUSED,
-                                     UI_STR_EXTRAS_STEAM,
-                                     UI_STR_EXTRAS_EXPORT_TEXTURES,
-                                     UI_STR_EXTRAS_BACKUP,
-                                     UI_STR_EXTRAS_RESTORE,
-                                     UI_STR_OPT_ACH_POPUPS,
-                                     UI_STR_BACK};
-    static const int extrasLinks[] = {-1, -1, -1, UI_PAGE_CHARACTERS, UI_PAGE_UNUSED, -1, -1, -1,
-                                      -1, -1, -1};
+    static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,   UI_OPT_EXTRAS_MODELS,
+                                     UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK,
+                                     UI_OPT_LINK,           UI_OPT_EXTRAS_STEAM,
+                                     UI_OPT_EXTRAS_DESKTOP, UI_OPT_EXTRAS_EXPORT_TEXTURES,
+                                     UI_OPT_EXTRAS_BACKUP,  UI_OPT_EXTRAS_RESTORE,
+                                     UI_OPT_ACH_POPUPS,     UI_OPT_BACK};
+    static const int extrasStrs[] = {
+        UI_STR_EXTRAS_MUSIC,       UI_STR_EXTRAS_MODELS,          UI_STR_EXTRAS_CREDITS,
+        UI_STR_SECTION_CHARACTERS, UI_STR_SECTION_UNUSED,         UI_STR_EXTRAS_STEAM,
+        UI_STR_EXTRAS_DESKTOP,     UI_STR_EXTRAS_EXPORT_TEXTURES, UI_STR_EXTRAS_BACKUP,
+        UI_STR_EXTRAS_RESTORE,     UI_STR_OPT_ACH_POPUPS,         UI_STR_BACK};
+    static const int extrasLinks[] = {
+        -1, -1, -1, UI_PAGE_CHARACTERS, UI_PAGE_UNUSED, -1, -1, -1, -1, -1, -1, -1};
     /* Extras > Unused content: press rows, each the disc's own */
     static const int unusedOpts[] = {UI_OPT_UNUSED_ARENA, UI_OPT_UNUSED_CLIMB, UI_OPT_UNUSED_MOVIE,
                                      UI_OPT_UNUSED_ART, UI_OPT_BACK};
@@ -6625,6 +6618,10 @@ static int settingsProc(int first, int item)
         if ((flags & PAD_OK) && r->opt == UI_OPT_EXTRAS_STEAM) {
             POSITIVE_SE();
             steamAdd();
+        }
+        if ((flags & PAD_OK) && r->opt == UI_OPT_EXTRAS_DESKTOP) {
+            POSITIVE_SE();
+            ui__desktop_press();
         }
         if ((flags & PAD_OK) && r->opt == UI_OPT_EXTRAS_EXPORT_TEXTURES) {
             POSITIVE_SE();

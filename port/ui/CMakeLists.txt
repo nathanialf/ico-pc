@@ -130,13 +130,14 @@ function(ico_ui_settings name)
     # the Edit layout page's side of the touch layout editor (touch_edit_ui.c)
     # the Graphics page's rows and Apply (settings_graphics.c)
     # Extras' Back up your data and Restore from a backup (settings_backup.c)
+    # Extras' Add to the applications menu (settings_desktop.c)
     # the Save states page's cards, actions and F6 latch (settings_states.c)
     # Extras > Unused content's host (settings_unused.c)
     # the game variants rows' values, notes and per-disc rule (settings_variants.c)
     # a community translation's subtitles as text (subtitle_text.c, jimaku.c's
     # hook, over port/game's tables: subtitles_ru_bobttz.c, subtitles_ru_cobra838.c,
     # subtitles_pt_br.c)
-    target_sources(${name} PRIVATE settings.c settings_graphics.c settings_backup.c
+    target_sources(${name} PRIVATE settings.c settings_graphics.c settings_backup.c settings_desktop.c
                                    settings_states.c settings_unused.c settings_variants.c ui_list.c
                                    ui_hint.c gallery.c photo_ui.c ui_mouse.c ui_mouse_geom.c
                                    ui_lang.c touch_edit_ui.c subtitle_text.c
@@ -246,6 +247,9 @@ ico_settings_test(settings_adapter_test test/settings_adapter_test.c)
 # (settings_backup.c) over a fake host: the rows, the confirmations, the
 # backup read and the end popups
 ico_settings_test(settings_backup_test test/settings_backup_test.c)
+# settings_desktop_test: Extras > Add to the applications menu
+# (settings_desktop.c) over a fake handler: the row, its press and popups
+ico_settings_test(settings_desktop_test test/settings_desktop_test.c)
 # settings_discs_test: the rows each disc's Options has, from the title and
 # the pause menu (docs/port/GAME_FEATURES.md, Options on each disc): the
 # European run and the six others (the three above and the 2001 discs below)
@@ -293,6 +297,7 @@ if(ICO_RUN_TESTS)
                          settings_states_ntsc settings_states_aug6 settings_states_jun26
                          settings_adapter settings_adapter_jpn settings_adapter_kor settings_adapter_cn
                          settings_backup settings_backup_jpn settings_backup_kor settings_backup_cn
+                         settings_desktop settings_desktop_jpn settings_desktop_kor settings_desktop_cn
                          subtitles_ru subtitles_ru_jpn subtitles_ru_kor subtitles_ru_cn
                          subtitles_ru_cobra838 subtitles_ru_cobra838_jpn subtitles_ru_cobra838_kor
                          subtitles_ru_cobra838_cn subtitles_pt_br subtitles_pt_br_jpn

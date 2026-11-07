@@ -766,6 +766,13 @@ typedef enum UiStrId {
     UI_STR_STEAM_NO_USER_BODY,
     UI_STR_STEAM_FAILED,
     UI_STR_STEAM_FAILED_BODY,
+    /* Extras > Add to the applications menu (Linux): the row, then the done
+       popup (title, body) and the failed popup (title, body) */
+    UI_STR_EXTRAS_DESKTOP,
+    UI_STR_DESKTOP_ADDED,
+    UI_STR_DESKTOP_ADDED_BODY,
+    UI_STR_DESKTOP_FAILED,
+    UI_STR_DESKTOP_FAILED_BODY,
     /* Extras > Export textures: the row, its label while running, its note,
        the progress note and the end popups (titles, bodies) */
     UI_STR_EXTRAS_EXPORT_TEXTURES,

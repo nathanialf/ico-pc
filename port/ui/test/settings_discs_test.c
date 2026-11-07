@@ -109,12 +109,12 @@ static void checkUnusedRows(const Expect *e)
     CHECK(ico_unused_stage(ICO_UNUSED_MOVIE) > 0 || s_engineAsked[ICO_UNUSED_MOVIE] == 0,
           "%s: no movie stage, the engine not asked (%d)", e->slug,
           s_engineAsked[ICO_UNUSED_MOVIE]);
-    int el[11];
-    const int n = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 11);
-    CHECK(n == 11 && ui_settings_row_shown(el[4]) == e->unusedPage &&
+    int el[12];
+    const int n = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 12);
+    CHECK(n == 12 && ui_settings_row_shown(el[4]) == e->unusedPage &&
               lt_ext_prop(el[4])->defaultMask == !e->unusedPage,
           "%s title: the Unused content link shown %d, want %d", e->slug,
-          n == 11 ? ui_settings_row_shown(el[4]) : -1, e->unusedPage);
+          n == 12 ? ui_settings_row_shown(el[4]) : -1, e->unusedPage);
     if (e->unusedPage) {
         openLink(exL, UI_PAGE_EXTRAS, UI_PAGE_UNUSED);
         for (int k = 0; k < 4; k++) {

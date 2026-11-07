@@ -5,7 +5,7 @@ header is the interface the capture and the window host use), `app_icon_image.c`
 (the image maths), `app_icon_ico.c` (the `.ico` writer and the `.tmp` + rename write), and
 `app_icon_host.c` (the window build's wrappers: the user folder, the disc and the package label, the
 PNG, the "icon changed" flag), `app_icon_window.c`/`.h` (the icon on the window) and
-`macos/app_icon_mac.m` (the Dock icon).
+`macos/app_icon_mac.m` (the Dock icon), and `desktop_entry.c`/`.h` (the Linux applications-menu entry).
 
 The program's icon is the title lettering's "I", made from the player's own disc and kept as files in
 the user folder; nothing of it is in the repository or the download
@@ -117,9 +117,9 @@ compiled on Android either).
 | --- | --- |
 | Windows | the window's title bar and the taskbar button (SDL sets the window's big and small icons); `ico_pc.exe` in Explorer keeps the generic icon: it carries no icon resource and is not rewritten (the icon does not exist until the player's disc has made it) |
 | Linux, X11 | the window and the taskbar through `_NET_WM_ICON` |
-| Linux, Wayland | nothing: SDL 3.4's Wayland has no toplevel-icon support, so a Wayland desktop takes the icon from the applications-menu entry named after the app id (`com.defnf.icopc`) |
+| Linux, Wayland | nothing from the window: SDL 3.4's Wayland has no toplevel-icon support (its library holds no `xdg_toplevel_icon`), so a Wayland desktop takes the icon from the applications-menu entry named after the app id (`com.defnf.icopc`), which the Extras row writes ([below](#the-applications-menu)) |
 | macOS | SDL's Cocoa windows have no icon of their own, so `app_icon_mac.m` calls `[NSApp setApplicationIconImage:]` with the PNG: the Dock icon while the game runs. The bundle's Finder icon stays the generic one: no `CFBundleIconFile`, and the bundle is ad-hoc signed with nothing in `Resources` that is made at run time. CMake compiles the `.m` (`enable_language(OBJC)`) and links `-framework AppKit` |
-| Android, iOS | unchanged |
+| Android, iOS | unchanged: on Android the app keeps its plain icon (the launcher icon is a compiled resource, and the recents icon would need JNI plumbing and an untested capture on phones) |
 
 ### Add to Steam
 
@@ -139,7 +139,52 @@ Steam: already there; icon set to <path>`. The icon file is in the user folder (
 may be read-only; portable mode's `userdata` moves with the program). That Steam draws a `.ico` in its list is
 untested here.
 
+## The applications menu
+
+Options > Extras > Add to the applications menu (`UI_OPT_EXTRAS_DESKTOP`; Linux only, shown
+from the title while `ui_settings_set_desktop_handler` holds the window host's `desktop_add_handler`,
+the Add to Steam row's rule) writes a freedesktop desktop entry and the icon, and nothing is written
+before the press. `desktop_entry.c` has pure functions over a base folder and the program's path, so
+the test runs on a fake folder:
+
+- `ico_desktop_entry_data_home`: `$XDG_DATA_HOME` when it is an absolute path, else
+  `$HOME/.local/share`.
+- `ico_desktop_entry_text(out, size, exe)`: the entry, exactly `[Desktop Entry]`, `Type=Application`,
+  `Name=ICO`, `Exec="<exe>"`, `Icon=com.defnf.icopc`, `Categories=Game;`, `Terminal=false`,
+  `StartupWMClass=com.defnf.icopc`, one per line. Inside the quotes of `Exec` the desktop entry
+  specification's rules apply: backslash, double quote, backtick and dollar get a backslash, and a
+  percent sign is doubled (a lone `%` would be a field code). A path with a control character (a
+  newline would end the line and let the rest be read as another key) or too long for the buffer is
+  refused.
+- `ico_desktop_entry_install(dataHome, exe, pngPath)`: the PNG first, copied to
+  `<dataHome>/icons/hicolor/256x256/apps/com.defnf.icopc.png`, then the entry to
+  `<dataHome>/applications/com.defnf.icopc.desktop`, making the folders; each file goes to `<name>.tmp`
+  and is moved over the old one, so a failure never leaves a half-written file or an entry whose icon
+  was refused. A NULL path writes the entry alone.
+
+Both files are named after the application id the window carries (`SDL.app.metadata.identifier`,
+`com.defnf.icopc`): a Wayland compositor matches a window to its desktop entry by that name (the
+window's `app_id`), and X11 matches `StartupWMClass` to the window class; X11 also gets the icon from
+the window itself. `Exec` is the program Add to Steam records (`ico_steam_self_exe`): the AppImage
+file when run from one, else the running program. The handler passes the current icon
+(`ico_app_icon_current_path`); before the capture has made one, the entry is written without a
+picture and the press logs `no icon made yet`; pressing the row again at a later run copies the icon
+(a newly made icon, as after an update, reaches the menu the same way: the copy is not refreshed
+without the press). The press logs `ico_pc: applications menu: <exe> in <data folder> (with the icon /
+no icon made yet): written | failed`, and the popup says `Added to the menu` or `Could not add to the
+menu`. The AppImage's own `com.defnf.icopc.desktop` and `.svg` (`tools/appimage/`) carry the same
+name, with the placeholder art and `Icon=com.defnf.icopc`, so integrations that read the AppImage's
+entry match the app id; the placeholder is not the I. What only a desktop proves: the entry showing in a
+KDE or GNOME menu, and a Wayland window matching it.
+
 ## Tests
+
+The applications menu's are `desktop_entry_test` (`desktop_entry`: the exact file text, the `Exec`
+quoting for a path with a space, `$`, `"`, `\`, a backtick and `%`, the refusals, the data folder
+rule, the install over a fake folder with the PNG copied byte for byte and no `.tmp` left) and the
+Extras row's in `settings_desktop_test` (`settings_desktop`: hidden without a handler and on the pause
+menu, after Add to Steam, Cross and the popups, the strings), with the row counts in `settings_test`
+and the other Extras tests.
 
 The tests are `app_icon_image_test` (`app_icon_image`), `ico_icon_test` (`ico_icon`),
 `app_icon_files_test` (`app_icon_files`) and `rd_png_mem_test` (`rd_png_mem`)

@@ -1093,6 +1093,12 @@ only when the Turnip package loaded (`bones_nobin_in_force`), the mark
   writer produced before the split (a 2 x 2 image, RGBA and RGB), equal to the file writer's bytes
   for a multi-block image, a round trip through `texpack_load_png` with a padded pitch, and the
   refusals (`rd_png_mem`).
+- `desktop_entry_test.c`: Extras > Add to the applications menu's pure functions (`desktop_entry.c`,
+  Unix hosts): the entry's exact text, the `Exec` quoting for `/games/my dir/ico_pc` and for `$`, `"`,
+  `\`, a backtick and `%`, the refusals (empty, a control character, too small a buffer), the data
+  folder rule (`XDG_DATA_HOME` absolute, else `HOME/.local/share`), and an install over a fake data
+  folder: the PNG copied byte for byte, both files under the app id's name, no `.tmp`, a second
+  install replacing the first, nothing written for a missing PNG (`desktop_entry`).
 - `steam_shortcut_test.c`: Add to Steam's CRC and id, a sample `shortcuts.vdf` appended byte-true,
   the duplicate check, `loginusers.vdf`, and the recorded program path: the AppImage file when
   `APPIMAGE` names one and the program lies under `APPDIR`, else the program itself
@@ -1388,6 +1394,12 @@ The renderer's test programs have a page of their own:
   texture); `testStaleRowReturns`: four upper rows at another size leave for 100 frames, their
   shelf is emptied meanwhile (the first row's old cell then holds other texels) and they come
   back with the same letters, no word in the plain font (`menu_text`).
+- `settings_desktop_test.c`: Options > Extras > Add to the applications menu over a fake handler
+  (`settings_desktop`, and on the other discs `_jpn`, `_kor`, `_cn`: the row and the disc's confirm
+  button): hidden without a handler and on the pause menu, shown on the title right after Add to
+  Steam with its words, Down from Add to Steam lands on it, Cross runs the handler once and its
+  answer is the popup (done, failed, an unknown answer as failed), the page kept, the strings
+  translated in every built-in language.
 - `settings_backup_test.c`: Options > Extras > Back up your data and Restore from a backup over
   a fake `UiBackupHost` (`settings_backup`, and on the other discs `_jpn`, `_kor`, `_cn`: the rows
   and the disc's confirm button): the rows hidden without a host and on the pause menu, shown on

@@ -81,6 +81,9 @@
 #include "android/host_android.h"
 #elif !defined(ICO_IOS)
 #include "steam_shortcut.h"
+#if defined(__linux__) && !defined(__ANDROID__)
+#include "desktop_entry.h"
+#endif
 #endif
 #if ICO_RC_TOOLS && defined(__ANDROID__)
 #include "share_report.h" /* an rc build's Share a bug report (settings.h) */
@@ -469,6 +472,34 @@ _Static_assert(ICO_STEAM_ADDED == UI_STEAM_ADDED && ICO_STEAM_EXISTS == UI_STEAM
 static int steam_add_handler(void)
 {
     return ico_steam_add_this_game();
+}
+#endif
+
+/* Extras > Add to the applications menu: Linux only (a desktop entry for the
+   freedesktop menus; port/platform/desktop_entry.h). The program is the one
+   Add to Steam starts: the AppImage file when run from one. The picture is
+   the icon the title screen's capture made; before it exists the entry is
+   written without one (the menu then shows its generic icon) and the log
+   says so. */
+#if defined(__linux__) && !defined(__ANDROID__)
+static int desktop_add_handler(void)
+{
+    char exe[1024], home[1024], png[1024];
+    const char *picture = NULL;
+    int r;
+
+    if (ico_steam_self_exe(exe, sizeof(exe)) != 0 ||
+        ico_desktop_entry_data_home(home, sizeof(home)) != 0) {
+        fprintf(stderr, "ico_pc: applications menu: no program path or data folder\n");
+        return UI_DESKTOP_FAILED;
+    }
+    if (ico_app_icon_current_path(png, sizeof(png), 0) == 0 && png[0] != '\0') {
+        picture = png;
+    }
+    r = ico_desktop_entry_install(home, exe, picture);
+    fprintf(stderr, "ico_pc: applications menu: %s in %s (%s): %s\n", exe, home,
+            picture != NULL ? "with the icon" : "no icon made yet", r == 0 ? "written" : "failed");
+    return r == 0 ? UI_DESKTOP_DONE : UI_DESKTOP_FAILED;
 }
 #endif
 
@@ -2574,6 +2605,10 @@ open_window:
 #if !defined(__ANDROID__) && !defined(__APPLE__)
     /* Extras > Add to Steam (Windows and Linux; see steam_add_handler) */
     ui_settings_set_steam_handler(steam_add_handler);
+#endif
+#if defined(__linux__) && !defined(__ANDROID__)
+    /* Extras > Add to the applications menu (Linux only; desktop_add_handler) */
+    ui_settings_set_desktop_handler(desktop_add_handler);
 #endif
     ui_settings_set_texture_export_host(&s_texExportHost);
     /* Graphics > Graphics API lists the renderers this build links (the page
@@ -5751,6 +5786,9 @@ void ico_window_close(void)
     ui_settings_set_touch_edit_host(NULL);
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
     ui_settings_set_steam_handler(NULL);
+#endif
+#if defined(__linux__) && !defined(__ANDROID__)
+    ui_settings_set_desktop_handler(NULL);
 #endif
     ui_settings_set_texture_export_host(NULL);
     texpack_export_shutdown(); /* joins its worker, before rd_shutdown */

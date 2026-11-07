@@ -636,6 +636,12 @@ const char *const ui_strings_de[UI_STR_COUNT] =
         [UI_STR_STEAM_FAILED] = "Hinzufügen zu Steam fehlgeschlagen",
         [UI_STR_STEAM_FAILED_BODY] =
             "Die Verknüpfungsliste ließ sich nicht ändern.\nDie README zeigt das Hinzufügen von Hand.",
+        [UI_STR_EXTRAS_DESKTOP] = "Zum Anwendungsmenü hinzufügen",
+        [UI_STR_DESKTOP_ADDED] = "Zum Menü hinzugefügt",
+        [UI_STR_DESKTOP_ADDED_BODY] = "Das Spiel ist jetzt im\nAnwendungsmenü.",
+        [UI_STR_DESKTOP_FAILED] = "Hinzufügen zum Menü fehlgeschlagen",
+        [UI_STR_DESKTOP_FAILED_BODY] =
+            "Der Menüeintrag ließ sich nicht\nin den Benutzerordner schreiben.",
         [UI_STR_EXTRAS_EXPORT_TEXTURES] = "Texturen exportieren",
         [UI_STR_EXPORT_TEXTURES_STOP] = "Export anhalten",
         [UI_STR_EXPORT_TEXTURES_NOTE] =

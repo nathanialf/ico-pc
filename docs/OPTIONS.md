@@ -741,7 +741,7 @@ page, and it is the same setting in both places.
 
 On the title screen's Options this page has Music, Models, Credits,
 Character Customization, Unused content, Add to Steam (on Windows and Linux),
-Export textures, Back up your data, Restore from a backup and Achievement
+Add to the applications menu (on Linux), Export textures, Back up your data, Restore from a backup and Achievement
 pop-ups. In the pause menu's Options it has only Character Customization
 and Achievement pop-ups. The rows that change how the game plays are under
 [Gameplay](#gameplay).
@@ -776,6 +776,22 @@ and Achievement pop-ups. The rows that change how the game plays are under
   list, `shortcuts.vdf.bak`, beside Steam's own list. If you move the game
   to another folder, add it again from there. The row is only on Windows
   and Linux, the Steam Deck included.
+- **Add to the applications menu** (on the title screen's Extras page only;
+  on Linux only): puts the game in your desktop's applications menu, with
+  its icon, so you can start it from there. It writes two files in your
+  user folder, never anywhere else and never before you press the row:
+  `com.defnf.icopc.desktop` in `~/.local/share/applications` and the icon
+  in `~/.local/share/icons/hicolor/256x256/apps` (if you have set
+  `XDG_DATA_HOME`, that folder replaces `~/.local/share`). The menu entry
+  starts the program you are running now: the AppImage file when you run
+  one, so if you move or rename the game, press the row again from there.
+  The icon is the I from the title, once the game has made it; until then
+  the entry is written without it, and pressing the row again after the
+  next title screen adds it. To remove the entry, delete those two files.
+  Some desktops show a new entry only after you log in again. On Wayland
+  desktops the entry is also what gives the game's window its icon.
+  [Details](port/APP_ICON.md#the-applications-menu). On Windows and the Mac
+  the row is not there; on Android the app keeps its plain icon.
 - **Export textures** (on the title screen's Extras page only; it needs no
   Developer mode): saves every picture on your disc as a PNG file, under
   the name PCSX2 gives it, in the game's `textures` folder (`textures/`,

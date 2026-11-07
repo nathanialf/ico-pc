@@ -631,6 +631,11 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "Steamに追加できませんでした",
     [UI_STR_STEAM_FAILED_BODY] =
         "ショートカット一覧を変更できませんでした。\n手動で追加する方法はREADMEにあります。",
+    [UI_STR_EXTRAS_DESKTOP] = "アプリケーションメニューに追加",
+    [UI_STR_DESKTOP_ADDED] = "メニューに追加しました",
+    [UI_STR_DESKTOP_ADDED_BODY] = "ゲームがアプリケーション\nメニューに入りました。",
+    [UI_STR_DESKTOP_FAILED] = "メニューに追加できませんでした",
+    [UI_STR_DESKTOP_FAILED_BODY] = "メニューの項目をユーザーフォルダに\n書き込めませんでした。",
     [UI_STR_EXTRAS_EXPORT_TEXTURES] = "テクスチャを書き出す",
     [UI_STR_EXPORT_TEXTURES_STOP] = "書き出しを中止",
     [UI_STR_EXPORT_TEXTURES_NOTE] =

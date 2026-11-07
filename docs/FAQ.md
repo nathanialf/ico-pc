@@ -233,13 +233,15 @@ disc the first time the title screen shows (about half a second of black),
 and keeps it in the game's `icon` folder, so nothing of it is in the
 download. Windows and Linux (X11) show it on the game's window and
 taskbar, [Add to Steam](OPTIONS.md#extras) uses it, and on a Mac it is the Dock
-icon while the game runs. The program file itself (`ico_pc.exe`, or the
+icon while the game runs. On Linux, Options > Extras > Add to the
+applications menu puts the game in your desktop's menu with the icon (on
+a Wayland desktop that entry is also what gives the window its icon). The program file itself (`ico_pc.exe`, or the
 Mac app in Finder) keeps a plain icon, because the icon does not exist
 until your disc has made it. It is made again after an update, and
 waits while the CRT filter or a Picture colour setting (Gamma, Brightness,
 Contrast or Saturation) is changed: it is made at a later title screen once
-they are back to normal. On Android and in a Wayland session there is no
-window icon.
+they are back to normal. On Android the app keeps its plain icon, and
+a Wayland session shows no window icon until the menu entry exists.
 
 ## My browser or Windows says the download is dangerous
 

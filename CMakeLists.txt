@@ -598,6 +598,12 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
         # Extras > Add to Steam: Windows, Linux and the Steam Deck (window_host.c
         # offers the row on the same platforms)
         target_sources(ico_pc PRIVATE port/platform/steam_shortcut.c)
+    endif()
+    if(UNIX AND NOT ANDROID AND NOT APPLE)
+        # Extras > Add to the applications menu: Linux only in v0.11.0
+        target_sources(ico_pc PRIVATE port/platform/desktop_entry.c)
+    endif()
+    if(NOT ANDROID AND NOT APPLE)
         if(WIN32)
             target_link_libraries(ico_pc PRIVATE advapi32)
         endif()

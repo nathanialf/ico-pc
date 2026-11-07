@@ -630,6 +630,11 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "Steam에 추가하지 못했습니다",
     [UI_STR_STEAM_FAILED_BODY] =
         "바로 가기 목록을 바꾸지 못했습니다.\n직접 추가하는 방법은 README에 있습니다.",
+    [UI_STR_EXTRAS_DESKTOP] = "애플리케이션 메뉴에 추가",
+    [UI_STR_DESKTOP_ADDED] = "메뉴에 추가했습니다",
+    [UI_STR_DESKTOP_ADDED_BODY] = "게임이 애플리케이션 메뉴에\n들어갔습니다.",
+    [UI_STR_DESKTOP_FAILED] = "메뉴에 추가하지 못했습니다",
+    [UI_STR_DESKTOP_FAILED_BODY] = "메뉴 항목을 사용자 폴더에\n쓰지 못했습니다.",
     [UI_STR_EXTRAS_EXPORT_TEXTURES] = "텍스처 내보내기",
     [UI_STR_EXPORT_TEXTURES_STOP] = "내보내기 중지",
     [UI_STR_EXPORT_TEXTURES_NOTE] =
