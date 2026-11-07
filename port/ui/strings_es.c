@@ -869,7 +869,7 @@ const char *const
                     "Sí: las sombras se quedan donde aparecen y nunca van a por Ico ni Yorda. Desactiva los logros.",
                 [UI_STR_OPT_VAR_CHAIN_SPEED] = "Velocidad de la cadena",
                 [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
-                    "Lo rápido que se balancea una cadena cuando Ico se agarra a ella y la columpia. 1 es lo más lento, 10 lo más rápido y 4 el valor del juego. Los logros siguen activos.",
+                    "Lo rápido que se balancea una cadena con Ico colgado. 1 es lo más lento, 10 lo más rápido y 4 como en el juego. Los logros siguen activos.",
                 [UI_STR_OPT_VAR_CHAIN_DAMPING] = "Freno de la cadena",
                 [UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE] =
                     "Lo rápido que se apaga el balanceo mientras Ico no columpia la cadena. 1 es lo más lento, 10 lo más rápido y 4 el valor del juego. Los logros siguen activos.",

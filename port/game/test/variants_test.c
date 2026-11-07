@@ -741,7 +741,11 @@ static void test_chain(void)
         CHECK(cycle == v && slow == 11 - v);
         CHECK(ico_variants_suspend_achievements() == 0);
     }
-    /* back at 4: the game's value (here one the game set) returns */
+    /* back at 4: the game's value returns; a value the game sets while the
+       variant holds the switch is overwritten by the put-back (the rule of
+       the other debug switches), one it sets while unheld is kept */
+    ico_variant_set(ICO_VARIANT_CHAIN_SWING_SPEED, 3);
+    CHECK(cycle == 4);
     cycle = 7;
     ico_variant_set(ICO_VARIANT_CHAIN_SWING_SPEED, 1);
     CHECK(cycle == 2);

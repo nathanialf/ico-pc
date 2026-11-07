@@ -865,10 +865,10 @@ const char *const
                 "An: Schatten bleiben, wo sie erscheinen, und gehen nie auf Ico oder Yorda los. Schaltet die Erfolge ab.",
             [UI_STR_OPT_VAR_CHAIN_SPEED] = "Kettenschwung-Tempo",
             [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
-                "Wie schnell eine Kette schwingt, wenn Ico daran hängt und sie in Schwung bringt. 1 ist am langsamsten, 10 am schnellsten, 4 der Wert des Spiels. Die Erfolge bleiben an.",
+                "Wie schnell eine Kette mit Ico daran schwingt. 1 am langsamsten, 10 am schnellsten, 4 wie im Spiel. Erfolge bleiben an.",
             [UI_STR_OPT_VAR_CHAIN_DAMPING] = "Kettenschwung-Abklingen",
             [UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE] =
-                "Wie schnell das Schwingen nachlässt, solange Ico die Kette nicht in Schwung hält. 1 ist am langsamsten, 10 am schnellsten, 4 der Wert des Spiels. Die Erfolge bleiben an.",
+                "Wie schnell der Schwung nachlässt, wenn Ico nicht nachhilft. 1 am langsamsten, 10 am schnellsten, 4 wie im Spiel. Erfolge bleiben an.",
             [UI_STR_VAL_VAR_CHAIN_ORIGINAL] = "4 (Original)",
             [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
             [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
