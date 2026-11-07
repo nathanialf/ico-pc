@@ -395,7 +395,7 @@ static void testLines(void)
     /* v0.10.5's nobin (no word): the re-test at this start, said so */
     CHECK(bones_ladder_start_line(line, sizeof(line), "ring", mark, "nobin", mark2, 0) == 0);
     CHECK(strcmp(line, "window: VU skin check ladder: the re-test of step 2 at this start: "
-                       "TU_DEBUG=nobin not set ([dev] turnip_debug = nobin without this version's "
+                       "TU_DEBUG=nobin not set ([dev] turnip_debug = nobin without the "
                        "word trial or needed: taken as retest, written by the skin check at 0.10.5 "
                        "frame 90; 4 of 12000 twins differed); step 1 (ring read) in force; 2000 "
                        "presents with no twin differing remove the key, 8 twin events write nobin "

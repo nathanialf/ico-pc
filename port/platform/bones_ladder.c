@@ -165,10 +165,9 @@ int bones_ladder_start_line(char *out, size_t size, const char *vuBones, const c
             "window: VU skin check ladder: the re-test of step 2 at this start: TU_DEBUG=nobin "
             "not set (%s, %s)%s; %u presents with no twin differing remove the key, %u twin "
             "events write nobin back as needed",
-            tu == BONES_TU_RETEST
-                ? "[dev] turnip_debug = retest"
-                : "[dev] turnip_debug = nobin without this version's word trial or needed: "
-                  "taken as retest",
+            tu == BONES_TU_RETEST ? "[dev] turnip_debug = retest"
+                                  : "[dev] turnip_debug = nobin without the word trial or needed: "
+                                    "taken as retest",
             words, ring ? "; step 1 (ring read) in force" : "", (unsigned)BONES_HEALED_REPLAYS,
             (unsigned)BONES_NOBIN_EVENTS);
         return 0;
