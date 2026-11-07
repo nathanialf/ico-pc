@@ -36,6 +36,7 @@ In reading order.
 | [FMV.md](FMV.md) | The movie player: the PSS demuxer, the MPEG-2 decoder, pacing and the picture on screen. |
 | [INPUT.md](INPUT.md) | Devices, bindings, the virtual pad and libpad, pad scripts and recordings, mouse and touch. |
 | [SAVES.md](SAVES.md) | The memory cards as folders, where they live and the PS2 save importer. |
+| [APP_ICON.md](APP_ICON.md) | The application icon: the files under the user folder, the stamp, the two-frame matte, the .ico writer and the tests. |
 | [CONFIG.md](CONFIG.md) | Every key of `config.toml` and `ico-pc.ini`, which layer wins and when the files are written. |
 | [UI.md](UI.md) | The port's menus: the layout extension, the Settings menu, strings, the font, popups, touch and mouse. |
 | [GAME_FEATURES.md](GAME_FEATURES.md) | Gameplay options and their hooks, achievements, photo mode, the model viewer, gallery and credits. |

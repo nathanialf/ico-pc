@@ -1120,6 +1120,17 @@ static void checkPassTexts(void)
           "passes by kind with a display wait: %s", buf);
     CHECK(strcmp(rd_perf_pass_kind_name(RD_PERF_PASS_WAIT), "display wait") == 0,
           "the display wait's name: %s", rd_perf_pass_kind_name(RD_PERF_PASS_WAIT));
+    /* issue 179: a log line names the uploads "before list 0" on a tile-based
+       GPU (their stamp lands inside a fixed amount of work there); the CSV's
+       kind name and every other kind stay */
+    CHECK(strcmp(rd_perf_pass_kind_display(RD_PERF_PASS_UPLOAD, true), "before list 0") == 0,
+          "the uploads on a tiler: %s", rd_perf_pass_kind_display(RD_PERF_PASS_UPLOAD, true));
+    CHECK(strcmp(rd_perf_pass_kind_display(RD_PERF_PASS_UPLOAD, false), "uploads") == 0,
+          "the uploads elsewhere: %s", rd_perf_pass_kind_display(RD_PERF_PASS_UPLOAD, false));
+    CHECK(strcmp(rd_perf_pass_kind_name(RD_PERF_PASS_UPLOAD), "uploads") == 0,
+          "the CSV's kind stays: %s", rd_perf_pass_kind_name(RD_PERF_PASS_UPLOAD));
+    CHECK(strcmp(rd_perf_pass_kind_display(RD_PERF_PASS_DATE, true), "DATE snapshot") == 0,
+          "another kind on a tiler: %s", rd_perf_pass_kind_display(RD_PERF_PASS_DATE, true));
     /* pacing reads the span less the display wait (rd_perf_pace_gpu_ms):
        the vsync wait inside a whole-batch driver's span is the display's,
        not the GPU's; a record without a wait gives its span, one without
