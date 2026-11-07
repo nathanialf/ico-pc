@@ -12,6 +12,7 @@
 #define VKR_FUNCTION_AVAILABLE(fn) ((fn) != NULL)
 #endif
 #include "../rhi.h"
+#include "../rhi_native.h"
 #include "vk_enums.h"
 #include <stdio.h>
 
@@ -81,6 +82,9 @@ typedef struct VkrTexture {
     uint32_t width, height, mips;
     uint32_t samples; /* 1, or the multisampled count (RhiTextureDesc.samples) */
     bool swapchain;
+    /* made with the storage-image usage (RHI_TEX_STORAGE granted:
+     * vk_resource.c; rhi_native.h RhiNativeTexture.storage) */
+    bool storage;
     /* hazard tracking (vk_cmd.c, "Hazards"): what touched the image since
      * its last barrier, valid while hzEpoch is the recording list's: the
      * mips a copy wrote, and an attachment write or read */
@@ -239,6 +243,9 @@ typedef struct VkrCmdList {
     uint32_t offsets[RHI_MAX_BIND_SLOTS][RHI_MAX_DYNAMIC_OFFSETS];
     uint32_t groupDirty; /* bit per group */
     bool inPass;
+    /* between rhi_cmd_external_begin and _end (vk_cmd.c): the caller records
+     * into the native command buffer */
+    bool externalOpen;
     /* the open pass's render area (vk_cmd.c vkr_pass_area_fits, and
      * RhiRenderPassDesc.area inside it): offset areaX, areaY, extent areaW
      * x areaH; every scissor set inside the pass is cut to it */
@@ -765,6 +772,14 @@ typedef struct VkrState {
     const char *fakeLimits;
     bool fakeMinLimits;
     const char *lastLimit; /* vkr_test_last_limit (rhi_vk.h) */
+    /* external compute (rhi_native.h, vk_native.c): the answers of
+     * vkr_probe_compute at device creation.  queueCompute: the graphics
+     * queue's family also takes compute work, so RHI_STATE_STORAGE barriers
+     * include the compute stage (vk_cmd.c vkr_state_scope); computeFloat16:
+     * shaderFloat16 offered, not enabled */
+    RhiComputeCaps compute;
+    bool queueCompute;
+    bool computeFloat16;
 } VkrState;
 
 extern VkrState g_vkr;

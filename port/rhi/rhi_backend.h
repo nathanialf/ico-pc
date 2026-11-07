@@ -15,6 +15,7 @@
 #define PORT_RHI_RHI_BACKEND_H
 
 #include "rhi.h"
+#include "rhi_native.h"
 
 /* X(name): every entry point of rhi.h a backend implements, in the order of
  * RhiBackendTable. */
@@ -122,7 +123,13 @@
     X(pipeline_cache_size)                                                                         \
     X(set_vulkan_loader)                                                                           \
     X(injector_name)                                                                               \
-    X(overlay_name)
+    X(overlay_name)                                                                                \
+    X(native_device)                                                                               \
+    X(native_texture)                                                                              \
+    X(native_command_list)                                                                         \
+    X(cmd_external_begin)                                                                          \
+    X(cmd_external_end)                                                                            \
+    X(device_compute_caps)
 
 /* One function pointer per entry point, typed from rhi.h's declaration (in
  * a backend's sources rhi_##n pastes to the renamed function, which has the

@@ -465,6 +465,7 @@ RhiCommandList rhi_begin_commands(void)
     c->known = 0;
     c->vbKnown = 0;
     c->dynFresh = 0;
+    c->externalOpen = false;
     c->pendCount = 0;
     c->pendSrc = c->pendDst = 0;
     c->pendMemDst = 0;
@@ -721,6 +722,11 @@ static void vkr_state_scope(RhiState s, const VkrTexture *t, VkPipelineStageFlag
     }
     *stages = vkr_stateMap[s].stages;
     *access = vkr_stateMap[s].access;
+    if (s == RHI_STATE_STORAGE && g_vkr.queueCompute) {
+        /* a storage image is also what an external compute dispatch reads
+         * and writes (rhi_native.h) */
+        *stages |= VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
+    }
 }
 
 void vkr_image_barrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState after)
@@ -2372,4 +2378,73 @@ uint32_t rhi_read_occlusion(uint64_t *samples, uint32_t max)
     const uint32_t n = g_vkr.occCount < max ? g_vkr.occCount : max;
     memcpy(samples, g_vkr.occResult, (size_t)n * sizeof(uint64_t));
     return n;
+}
+
+/* ------------------------------------------------- external compute
+ * rhi_native.h: the caller records compute work (FidelityFX) straight into
+ * the native command buffer between rhi_cmd_external_begin and _end.  The
+ * RHI keeps no state for it: begin orders everything recorded so far before
+ * the external work with one memory barrier (the image layouts were set by
+ * the caller's own rhi_cmd_barrier calls, which go out first), and end
+ * orders the external work before everything after and makes the backend's
+ * cached bindings untrue, because the external work may have bound anything:
+ * the graphics pipeline is bound again, every descriptor set is dirty (the
+ * next draw binds the sets its pipeline uses), the viewport, scissor, index
+ * buffer, stencil reference and blend constant are forgotten (the next pass
+ * records its own defaults; the others are set again by the next draw), the
+ * vertex buffers too, and the dynamic depth and blend state is set again at
+ * the next draw.  Both barriers are counted in stats.barriers. */
+static void vkr_external_barrier(VkrCmdList *c, bool begin)
+{
+    vkr_flush_barriers(c);
+    const VkMemoryBarrier mb = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
+        .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
+    };
+    vkCmdPipelineBarrier(c->cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                         begin ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
+                               : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
+                         0, 1, &mb, 0, NULL, 0, NULL);
+    g_vkr.stats.barriers++;
+}
+
+bool rhi_cmd_external_begin(RhiCommandList cl)
+{
+    VkrCmdList *c = vkr_get_cmd(cl);
+    if (!c || !c->recording || !g_vkr.queueCompute) {
+        return false;
+    }
+    if (c->inPass || c->externalOpen) {
+        static uint32_t s_refused;
+        if (s_refused++ < 8u) {
+            VKR_LOG("rhi_cmd_external_begin: %s: refused (%u)",
+                    c->inPass ? "inside a render pass" : "already open", s_refused);
+        }
+        return false;
+    }
+    vkr_occ_close(c);
+    vkr_external_barrier(c, true);
+    c->externalOpen = true;
+    return true;
+}
+
+void rhi_cmd_external_end(RhiCommandList cl)
+{
+    VkrCmdList *c = vkr_get_cmd(cl);
+    if (!c || !c->recording || !c->externalOpen) {
+        return;
+    }
+    c->externalOpen = false;
+    vkr_external_barrier(c, false);
+    c->known = 0;
+    c->vbKnown = 0;
+    c->ibId = 0;
+    c->dynValid = 0;
+    c->dynFresh = 0;
+    c->groupDirty = 0xFFu;
+    if (c->pipeline) {
+        vkCmdBindPipeline(c->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, c->pipeline->pipeline);
+        g_vkr.stats.pipelineBinds++;
+    }
 }

@@ -684,6 +684,62 @@ static bool dx_rov_supported(void)
     return ok;
 }
 
+/* Typed UAV loads and stores of format `f` (a bind of it as a UAV that a
+ * compute shader reads and writes without a declared format) */
+static bool dx_typed_uav(DXGI_FORMAT f)
+{
+    D3D12_FEATURE_DATA_FORMAT_SUPPORT fs;
+    memset(&fs, 0, sizeof(fs));
+    fs.Format = f;
+    return SUCCEEDED(ID3D12Device_CheckFeatureSupport(g_dx.device, D3D12_FEATURE_FORMAT_SUPPORT,
+                                                      &fs, sizeof(fs))) &&
+           (fs.Support1 & D3D12_FORMAT_SUPPORT1_TYPED_UNORDERED_ACCESS_VIEW) &&
+           (fs.Support2 & D3D12_FORMAT_SUPPORT2_UAV_TYPED_LOAD) &&
+           (fs.Support2 & D3D12_FORMAT_SUPPORT2_UAV_TYPED_STORE);
+}
+
+/* External compute (rhi_native.h RhiComputeCaps), answered once at device
+ * creation: shader model 6.2 or later (the highest the runtime reports,
+ * asked down from 6.7), wave operations, and typed UAV loads and stores of
+ * R16G16B16A16_FLOAT and _UNORM (TypedUAVLoadAdditionalFormats and the
+ * formats' own bits).  d3dp_compute_caps (d3d12_plan.c) decides. */
+static void dx_probe_compute(void)
+{
+    uint32_t sm = 0;
+    for (uint32_t v = 0x67u; v >= 0x60u && !sm; v--) {
+        D3D12_FEATURE_DATA_SHADER_MODEL m;
+        memset(&m, 0, sizeof(m));
+        m.HighestShaderModel = (D3D_SHADER_MODEL)v;
+        if (SUCCEEDED(ID3D12Device_CheckFeatureSupport(g_dx.device, D3D12_FEATURE_SHADER_MODEL, &m,
+                                                       sizeof(m)))) {
+            sm = (uint32_t)m.HighestShaderModel;
+        }
+    }
+    D3D12_FEATURE_DATA_D3D12_OPTIONS o;
+    D3D12_FEATURE_DATA_D3D12_OPTIONS1 o1;
+    D3D12_FEATURE_DATA_D3D12_OPTIONS4 o4;
+    memset(&o, 0, sizeof(o));
+    memset(&o1, 0, sizeof(o1));
+    memset(&o4, 0, sizeof(o4));
+    const bool haveO = SUCCEEDED(
+        ID3D12Device_CheckFeatureSupport(g_dx.device, D3D12_FEATURE_D3D12_OPTIONS, &o, sizeof(o)));
+    const bool haveO1 = SUCCEEDED(ID3D12Device_CheckFeatureSupport(
+        g_dx.device, D3D12_FEATURE_D3D12_OPTIONS1, &o1, sizeof(o1)));
+    const bool haveO4 = SUCCEEDED(ID3D12Device_CheckFeatureSupport(
+        g_dx.device, D3D12_FEATURE_D3D12_OPTIONS4, &o4, sizeof(o4)));
+    const bool typed = haveO && o.TypedUAVLoadAdditionalFormats &&
+                       dx_typed_uav(DXGI_FORMAT_R16G16B16A16_FLOAT) &&
+                       dx_typed_uav(DXGI_FORMAT_R16G16B16A16_UNORM);
+    d3dp_compute_caps(sm, haveO1 && o1.WaveOps, typed, haveO4 && o4.Native16BitShaderOpsSupported,
+                      &g_dx.compute);
+    DX_LOG("external compute: %s%s%s (shader model %u.%u, wave ops %s, typed RGBA16 UAV %s, "
+           "native 16-bit %s)",
+           g_dx.compute.ok ? "offered" : "not offered", g_dx.compute.ok ? "" : ": ",
+           g_dx.compute.ok ? "" : g_dx.compute.why, sm >> 4, sm & 15u,
+           haveO1 && o1.WaveOps ? "yes" : "no", typed ? "yes" : "no",
+           g_dx.compute.float16 ? "yes" : "no");
+}
+
 static void dx_fill_limits(void)
 {
     RhiLimits *o = &g_dx.limits;
@@ -816,6 +872,7 @@ bool rhi_init(const RhiDeviceDesc *desc)
         return false;
     }
     dx_fill_limits();
+    dx_probe_compute();
     if (!d3dp_pool_init(&g_dx.buffers, "buffer", 4096, sizeof(DxBuffer)) ||
         !d3dp_pool_init(&g_dx.textures, "texture", 8192, sizeof(DxTexture)) ||
         !d3dp_pool_init(&g_dx.samplers, "sampler", DX_SMP_PERSISTENT, sizeof(DxSampler)) ||

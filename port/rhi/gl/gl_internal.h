@@ -64,6 +64,7 @@
 #include <stdio.h>
 #include "../d3d12/d3d12_plan.h" /* the handle pools and the bind group layout rules */
 #include "../rhi.h"
+#include "../rhi_native.h"
 #include "gl_loader.h"
 
 /* gl_glsl.c (port/rhi/gl/gl_glsl.h): the text of a table entry's deflated

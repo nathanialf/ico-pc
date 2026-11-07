@@ -1174,7 +1174,12 @@ The renderer's test programs have a page of their own:
   batch and the background set on one thread each, and a pipeline made on the test's thread while
   the background set compiles (the lock taken by both).
 - `rhi_d3d12_plan_test.c`: the D3D12 backend's state and barrier bookkeeping on the CPU
-  (`rhi_d3d12_plan`).
+  (`rhi_d3d12_plan`), with the external-compute cases (the storage grant by format, the capability
+  answer, what the external end puts back).
+- `rhi_native_test.c`: `rhi_native.h` on Vulkan (lavapipe): the device handles, textures granted
+  storage, the storage barriers, the external begin/end bracket and a two-pass picture identical
+  with and without it (`rhi_native`; exit 77 without a device). `rhi_test_native.c` runs inside the
+  common cells of every backend: the handles where offered, "not offered" on Direct3D 11 and OpenGL.
 - `rhi_d3d11_shader_plan_test.c`: the Direct3D 11 backend's shader route on the CPU
   (`port/rhi/d3d11/d3d11_shader.c`): the macros text and its malformed forms, the include lookup,
   the flat-register rule on hand-made sources, on `rhi_test_hlsl.h` (which must equal
@@ -1226,6 +1231,14 @@ The renderer's test programs have a page of their own:
   swapchain's choice (`vkr_prerotate_turns`: 90, 270 and 180 at issue 179's 1612x720; identity, a
   mirrored turn, a turn not offered, `[dev] prerotate = false` and images past the surface's largest
   keep identity) (`rhi_vk_present_mode`).
+- `ffx_link_test.c`: the FidelityFX FSR 3.1 upscaler (`port/rhi/ffx`, `ICO_FFX`) linked into a C
+  program and run through raw Vulkan calls (volk, not the RHI): the first Vulkan 1.2 device with
+  the features the FFX backend reads enabled where present (16-bit floats, subgroup size control,
+  synchronization2, non-uniform storage buffer indexing); the Quality render size at 1280x960
+  (853x640); the backend and an upscale context for a 640x480 render and a 1280x960 output; its
+  provider (3.1.x) and a non-zero GPU memory figure; the context destroyed; any validation error
+  fails it. Skipped (77) without a loader, a Vulkan 1.2 device or a device it can make
+  (`ffx_link_test`).
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver;
   `swapAcquired` per frame; the acquire's wait with the list that uses the image (issue 179,
   `acquireWaits` through `vkr_test_submit_waits`: a list of off-screen work before it waits for

@@ -904,6 +904,71 @@ static bool vkr_format_ok(VkPhysicalDevice pd, VkFormat f, VkFormatFeatureFlags 
     return (fp.optimalTilingFeatures & need) == need;
 }
 
+/* External compute (rhi_native.h RhiComputeCaps), answered once at device
+ * creation: the device's API version (as the RHI uses it, so
+ * ICO_VK_FAKE_API lowers it) is 1.1 or later, the compute stage takes
+ * subgroup basic and arithmetic operations, the graphics queue's family
+ * also takes compute work, RGBA16F and RGBA16 UNORM are storage images,
+ * and the two without-format features are enabled.  shaderFloat16 is
+ * reported as offered (VkPhysicalDeviceVulkan12Features, 1.2 and later); the
+ * device is not made with it. */
+static void vkr_probe_compute(const VkPhysicalDeviceFeatures avail)
+{
+    RhiComputeCaps *c = &g_vkr.compute;
+    memset(c, 0, sizeof(*c));
+    g_vkr.queueCompute = false;
+    g_vkr.computeFloat16 = false;
+    uint32_t qn = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(g_vkr.phys, &qn, NULL);
+    VkQueueFamilyProperties *qp = calloc(qn ? qn : 1, sizeof(*qp));
+    if (qp) {
+        vkGetPhysicalDeviceQueueFamilyProperties(g_vkr.phys, &qn, qp);
+        g_vkr.queueCompute =
+            g_vkr.queueFamily < qn && (qp[g_vkr.queueFamily].queueFlags & VK_QUEUE_COMPUTE_BIT);
+        free(qp);
+    }
+    c->apiVersionOk = g_vkr.apiVersion >= VK_API_VERSION_1_1;
+    VkPhysicalDeviceSubgroupProperties sg = {
+        .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
+    if (c->apiVersionOk && vkr_has_props2(g_vkr.phys)) {
+        VkPhysicalDeviceProperties2 p2 = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+                                          .pNext = &sg};
+        vkr_props2(g_vkr.phys, &p2);
+        const VkSubgroupFeatureFlags need =
+            VK_SUBGROUP_FEATURE_BASIC_BIT | VK_SUBGROUP_FEATURE_ARITHMETIC_BIT;
+        c->subgroupOk = (sg.supportedStages & VK_SHADER_STAGE_COMPUTE_BIT) &&
+                        (sg.supportedOperations & need) == need;
+    }
+    c->storageFormatsOk = vkr_format_ok(g_vkr.phys, VK_FORMAT_R16G16B16A16_SFLOAT,
+                                        VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) &&
+                          vkr_format_ok(g_vkr.phys, VK_FORMAT_R16G16B16A16_UNORM,
+                                        VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) &&
+                          avail.shaderStorageImageReadWithoutFormat == VK_TRUE &&
+                          avail.shaderStorageImageWriteWithoutFormat == VK_TRUE;
+    if (g_vkr.apiVersion >= VK_API_VERSION_1_2 && vkr_has_props2(g_vkr.phys)) {
+        VkPhysicalDeviceVulkan12Features f12 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES};
+        VkPhysicalDeviceFeatures2 q = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+                                       .pNext = &f12};
+        vkr_features2(g_vkr.phys, &q);
+        g_vkr.computeFloat16 = f12.shaderFloat16 == VK_TRUE;
+    }
+    c->float16 = g_vkr.computeFloat16;
+    c->ok = c->apiVersionOk && c->subgroupOk && c->storageFormatsOk && g_vkr.queueCompute;
+    c->why = c->ok                 ? NULL
+             : !c->apiVersionOk    ? "Vulkan 1.1 is required"
+             : !g_vkr.queueCompute ? "the graphics queue takes no compute work"
+             : !c->subgroupOk      ? "no compute subgroup basic and arithmetic operations"
+                                   : "no RGBA16 storage images or storage image access "
+                                     "without a format";
+    VKR_LOG("external compute: %s%s%s (api 1.1 %s, subgroup %s, storage formats %s, queue compute "
+            "%s, float16 offered %s)",
+            c->ok ? "offered" : "not offered", c->ok ? "" : ": ", c->ok ? "" : c->why,
+            c->apiVersionOk ? "yes" : "no", c->subgroupOk ? "yes" : "no",
+            c->storageFormatsOk ? "yes" : "no", g_vkr.queueCompute ? "yes" : "no",
+            c->float16 ? "yes" : "no");
+}
+
 /* The one read of ICO_VK_FAKE_LIMITS.  =min is noted for vkr_fill_limits
  * (the RhiLimits at the spec's required values).  =mali clamps the
  * device's limits to a Mali-G68's (Samsung A36 class: four descriptor
@@ -2184,6 +2249,12 @@ static bool vkr_create_device(void)
                  * buffer reads give zero and writes are dropped instead of
                  * reaching other memory */
                 .robustBufferAccess = g_vkr.robust ? VK_TRUE : VK_FALSE,
+                /* external compute (rhi_native.h): typed loads and stores
+                 * of storage images without a declared format, enabled
+                 * where offered (they change nothing for the RHI's own
+                 * pipelines) */
+                .shaderStorageImageReadWithoutFormat = avail.shaderStorageImageReadWithoutFormat,
+                .shaderStorageImageWriteWithoutFormat = avail.shaderStorageImageWriteWithoutFormat,
             },
     };
 #ifdef ICO_RHI_MOLTENVK
@@ -2233,6 +2304,7 @@ static bool vkr_create_device(void)
     }
 #endif
     vkGetDeviceQueue(g_vkr.device, g_vkr.queueFamily, 0, &g_vkr.queue);
+    vkr_probe_compute(avail);
     if (g_vkr.presentWait) {
         g_vkr.waitForPresent =
             (PFN_vkWaitForPresentKHR)vkGetDeviceProcAddr(g_vkr.device, "vkWaitForPresentKHR");
