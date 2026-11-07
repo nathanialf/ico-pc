@@ -625,6 +625,10 @@ static const struct {
        drops, the side bands beside a wide picture: the A/B and the escape;
        port/render/rd_pipeline.c rd__region_camera) */
     {"dev.region_rule", "region_rule"},
+    /* "x,y": the scene's sub-pixel jitter in texels, each -0.5..0.5, on
+       every frame (a developer A/B of the temporal upscaler's jitter;
+       port/render/rd_jitter.c) */
+    {"dev.jitter_test", "jitter_test"},
     /* false: the Vulkan swapchain keeps identity on a surface the system
        shows turned (an Android phone held sideways), the compositor turning
        every image, instead of being made in the surface's own turn with the
@@ -786,6 +790,8 @@ static const struct {
     {"cull", "ICO_RD_CULL"},
     /* port/render/rd_pipeline.c rd__region_camera: camera or ps2 */
     {"region_rule", "ICO_RD_REGION_RULE"},
+    /* port/render/rd_jitter.c rd__frame_jitter_get: x,y */
+    {"jitter_test", "ICO_RD_JITTER_TEST"},
     /* port/render/rd_const_read.c rd__const_reads_on: 0 reads a cleared
        source as before */
     {"constant_reads", "ICO_RD_CONSTANT_READS"},
@@ -941,6 +947,30 @@ const char *ico_dev_env_value(const char *key, const char *value)
     if (strcmp(key, "region_rule") == 0) {
         /* camera or ps2 as they are (no boolean form) */
         return value_is(value, regionRules) ? value : NULL;
+    }
+    if (strcmp(key, "jitter_test") == 0) {
+        /* two numbers -0.5..0.5, a comma between, as they are (the renderer
+           parses them again: rd_jitter.c rd__frame_jitter_parse) */
+        char *end = NULL;
+        const double x = strtod(value, &end);
+        if (end == value) {
+            return NULL;
+        }
+        while (*end == ' ') {
+            end++;
+        }
+        if (*end != ',') {
+            return NULL;
+        }
+        const char *t = end + 1;
+        const double y = strtod(t, &end);
+        if (end == t) {
+            return NULL;
+        }
+        while (*end == ' ') {
+            end++;
+        }
+        return *end == '\0' && x >= -0.5 && x <= 0.5 && y >= -0.5 && y <= 0.5 ? value : NULL;
     }
     if (strcmp(key, "cull") == 0) {
         /* off, frustum or full as they are; false/0/no is off, true/1/on/yes

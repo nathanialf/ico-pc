@@ -169,7 +169,13 @@ the occlusion test's fast collect (with `ICO_RD_CULL_HIZ_CHECK=1`) against its p
 does `rd_replay_tool_downsample`, which adds `--enhanced --resolution 2x --downsample --stats` and
 passes on `present: downsample 1024x512 -> 512x256, window reduce off`, and `rd_replay_tool_fsr1`,
 which presents at `--present 960x720` with `--fsr1 --stats` and passes on `present: fsr1 512x512 ->
-960x720` (the dump's 1x picture line-doubled and upscaled by FSR 1.0 to the box).
+960x720` (the dump's 1x picture line-doubled and upscaled by FSR 1.0 to the box), and
+`rd_replay_tool_jitter` (`port/render/test/rd_replay_tool_jitter.cmake`): at Original 1x and
+Enhanced 2x, `--pass-dump` with `--present 640x480 --stats` without `--jitter`, with `--jitter
+0,0`, with `--jitter 0.25,0.25` and with `ICO_RD_JITTER_TEST=0.25,0.25`: 0,0 every target and the
+present byte for byte the run without, 0.25,0.25 SCENE and the present different, the
+environment's run byte for byte the `--jitter` one, each run's `jitter` stats line read; a
+`--jitter` outside -0.5..0.5 exits 1 ([RENDER.md](RENDER.md#jitter)).
 
 ## The render suite on OpenGL
 
