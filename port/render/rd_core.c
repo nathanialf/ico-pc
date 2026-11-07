@@ -34,6 +34,7 @@
 #include "rd_tex.h"
 #include "rd_tex_decode.h"
 #include "rd_tone.h"
+#include "rd_upscale_temporal.h"
 #include "rd_vis.h"
 #include "rd_vu_skin_check.h"
 #include "texpack.h"
@@ -2149,7 +2150,8 @@ int rd__aa_requested(void)
 {
     const int aa = g_rd.settings.antiAlias;
 
-    if (aa <= RD_AA_OFF || aa >= RD_AA_COUNT || g_rd.settings.preset == RD_PRESET_ORIGINAL) {
+    if (aa <= RD_AA_OFF || aa >= RD_AA_COUNT || g_rd.settings.preset == RD_PRESET_ORIGINAL ||
+        rd_aa_off_for_temporal()) {
         return RD_AA_OFF;
     }
     return (rd_aa_supported_mask() & (1u << aa)) != 0u ? aa : RD_AA_OFF;
@@ -2160,6 +2162,11 @@ int rd__aa_mode(void)
     const int aa = rd__aa_requested();
 
     return g_rd.msaaBlocked && rd_aa_samples(aa) > 1u ? RD_AA_OFF : aa;
+}
+
+bool rd_aa_off_for_temporal(void)
+{
+    return rd__upscale_temporal_on(&g_rd.settings, rd__crt_on());
 }
 
 bool rd_aa_msaa_blocked(void)

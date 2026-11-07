@@ -1286,6 +1286,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   double precision on the neutral present, the bars black; `blit_tone_ps` on both outputs is in
   the reachable set in both blend modes; `checkToneDepth`: with the effects depth forced the toned
   present is the toned present without it, byte for byte, and not the neutral one;
+  Upscaling: FSR 3.1 rows (`rd_present_fsr3_rows_test.inc`, `checkFsr3Rows`): not supported, the ratios 1.0 / 1.5 / 1.7 / 2.0, Native AA only under Original and at 1x, the display line's words (not available, the CRT filter, Downsampling) and their change flag, anti-aliasing not turned off, the present `checkOriginal`'s byte for byte with FSR 3.1 asked for;
   Upscaling: FSR 1.0 (`rd_present_fsr1_test.inc`, `checkFsr1`): the constants against hand-worked
   values (`rd__fsr1_easu_con` at 512 x 512 into 960 x 720 and with a 7.5 offset, `rd__fsr1_rcas_con`
   at 0, 1, 2, 0.4, 20 and 30 stops with AMD's truncated halves, `rd__fsr1_stops`); off with a

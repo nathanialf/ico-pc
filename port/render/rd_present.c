@@ -95,6 +95,7 @@
 #include "rd_internal.h"
 #include "rd_submit.h"
 #include "rd_fsr1.h"
+#include "rd_upscale_temporal.h"
 #include "rd_tone.h"
 #include "shader_consts.h"
 
@@ -484,7 +485,13 @@ bool rd__apply_display(void)
     char fsrNote[96];
     const bool windowRes = !(scale > 0.0f) && !(st->sceneWidth && st->sceneHeight) &&
                            st->preset == RD_PRESET_ENHANCED && st->outputWidth && st->outputHeight;
-    const bool fsrChanged = rd__fsr1_apply(st, windowRes, fsrNote, sizeof(fsrNote));
+    bool fsrChanged = rd__fsr1_apply(st, windowRes, fsrNote, sizeof(fsrNote));
+    {
+        /* FSR 3.1's words (rd_upscale_temporal.c) follow, when it is asked for */
+        const size_t used = strlen(fsrNote);
+        fsrChanged |= rd__upscale_temporal_apply(st, rd__crt_on(), down, sx, fsrNote + used,
+                                                 sizeof(fsrNote) - used);
+    }
     if (changed || aspect != g_rd.outAspect || filter != g_rd.filterUpgrade ||
         vs != g_rd.vsyncApplied || down != g_rd.downsample || fsrChanged) {
         char ssaaNote[96] = "";

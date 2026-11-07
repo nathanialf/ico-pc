@@ -2196,11 +2196,23 @@ static void test_video_upscale(const char *dir)
     int v = -1;
 
     ico_video_defaults(&d);
-    CHECK(d.upscale == ICO_UPSCALE_OFF && d.upscaleSharpness == 80);
+    CHECK(d.upscale == ICO_UPSCALE_OFF && d.upscaleSharpness == 80 &&
+          d.upscaleQuality == ICO_UPSCALE_Q_NATIVE);
+    for (int q = 0; q < ICO_UPSCALE_Q_COUNT; q++) {
+        v = -1;
+        CHECK(ico_video_parse_upscale_quality(ico_video_upscale_quality_name(q), &v) == 0 &&
+              v == q);
+    }
+    CHECK(strcmp(ico_video_upscale_quality_name(ICO_UPSCALE_Q_BALANCED), "balanced") == 0 &&
+          strcmp(ico_video_upscale_quality_name(-1), "native") == 0);
+    CHECK(ico_video_parse_upscale_quality("Performance", &v) == 0 &&
+          v == ICO_UPSCALE_Q_PERFORMANCE);
+    CHECK(ico_video_parse_upscale_quality("ultra", &v) < 0 &&
+          ico_video_parse_upscale_quality(NULL, &v) < 0);
     CHECK(ico_video_parse_upscale("FSR1", &v) == 0 && v == ICO_UPSCALE_FSR1);
     CHECK(ico_video_parse_upscale("off", &v) == 0 && v == ICO_UPSCALE_OFF);
     v = -1;
-    CHECK(ico_video_parse_upscale("fsr3", &v) == 1 && v == ICO_UPSCALE_OFF);
+    CHECK(ico_video_parse_upscale("FSR3", &v) == 0 && v == ICO_UPSCALE_FSR3);
     CHECK(ico_video_parse_upscale("dlss", &v) < 0);
     CHECK(strcmp(ico_video_upscale_name(ICO_UPSCALE_FSR1), "fsr1") == 0);
     CHECK(strcmp(ico_video_upscale_name(99), "off") == 0);
@@ -2245,21 +2257,37 @@ static void test_video_upscale(const char *dir)
     CHECK(ico_video_save() == 0);
     text = read_text(path);
     CHECK(text != NULL && strstr(text, "upscaling = \"off\"") != NULL);
-    /* "fsr3" (not offered yet), an unknown word and a sharpness out of
-       range read as off and clamped */
+    /* an unknown word, an unknown quality and a sharpness out of range read
+       as off, native and clamped; "fsr3" is read as it is saved (the settings
+       page and the renderer decide whether it runs) and stays through a save */
     for (int i = 0; i < 2; i++) {
         f = fopen(path, "wb");
         if (f != NULL) {
             fputs(i ? "[video]\nupscaling = \"sharp\"\nupscaling_sharpness = -3\n"
-                    : "[video]\nupscaling = \"fsr3\"\nupscaling_sharpness = 101\n",
+                      "upscaling_quality = \"ultra\"\n"
+                    : "[video]\nupscaling = \"fsr3\"\nupscaling_sharpness = 101\n"
+                      "upscaling_quality = \"balanced\"\n",
                   f);
             fclose(f);
         }
         ico_config_reset(path, "/nonexistent/options_test.ini");
         ico_video_reload();
         ico_video_get(&o);
-        CHECK(o.upscale == ICO_UPSCALE_OFF && o.upscaleSharpness == (i ? 0 : 100));
+        CHECK(o.upscale == (i ? ICO_UPSCALE_OFF : ICO_UPSCALE_FSR3) &&
+              o.upscaleSharpness == (i ? 0 : 100) &&
+              o.upscaleQuality == (i ? ICO_UPSCALE_Q_NATIVE : ICO_UPSCALE_Q_BALANCED) &&
+              ico_video_upscale_quality() == o.upscaleQuality);
+        if (!i) {
+            CHECK(ico_video_save() == 0);
+            text = read_text(path);
+            CHECK(text != NULL && strstr(text, "upscaling = \"fsr3\"") != NULL &&
+                  strstr(text, "upscaling_quality = \"balanced\"") != NULL);
+        }
     }
+    o.upscaleQuality = 9;
+    ico_video_set(&o);
+    ico_video_get(&o);
+    CHECK(o.upscaleQuality == ICO_UPSCALE_Q_NATIVE);
     /* Enhanced's shortcut leaves them alone */
     o.upscale = ICO_UPSCALE_FSR1;
     o.upscaleSharpness = 40;
