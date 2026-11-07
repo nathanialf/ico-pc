@@ -38,4 +38,8 @@ void rhi_test_log(const char *fmt, ...)
  * passed), 1 (a mismatch or error) or 77 (no device, or accept said no). */
 int rhi_test_run_cells(const RhiTestConfig *cfg);
 
+/* The native-handle surface of rhi_native.h on the running backend
+ * (rhi_test_native.c); needs the device up.  Returns the failure count. */
+int rhi_test_native_surface(const char *label);
+
 #endif /* PORT_RHI_TEST_RHI_TEST_COMMON_H */
