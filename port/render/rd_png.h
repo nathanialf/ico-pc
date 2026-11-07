@@ -5,6 +5,7 @@
 #define PORT_RENDER_RD_PNG_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -16,6 +17,12 @@ extern "C" {
  * rd_png_prepare has run. */
 bool rd_write_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,
                   int withAlpha);
+
+/* The same PNG as one malloc'd blob (*out, *outN bytes; free() it): the
+ * bytes rd_write_png writes to a file, identical.  false with *out NULL on
+ * a bad argument or no memory.  Any thread once rd_png_prepare has run. */
+bool rd_write_png_mem(const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch, int withAlpha,
+                      uint8_t **out, size_t *outN);
 
 /* Builds the CRC table rd_write_png keeps (otherwise built by the first
  * write).  Call it on the game thread before another thread writes a PNG,

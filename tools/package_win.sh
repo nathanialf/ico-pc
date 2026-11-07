@@ -54,6 +54,14 @@ run cmake --build "build-host/$p" --target ico_pc mc_import
 for f in ico_pc.exe ico_pc.map SDL3.dll port/save/mc_import.exe; do
     [[ -f "build-host/$p/$f" ]] || fail "$p did not produce $f"
 done
+# the C++ runtime of the FidelityFX upscaler is linked in (-static): the program
+# may import no mingw runtime DLL, so none joins the zip
+imports="$("$wt/tools/toolchain/mingw-gcc/usr/bin/x86_64-w64-mingw32-objdump" -p "build-host/$p/ico_pc.exe" |
+    sed -n 's/^[[:space:]]*DLL Name: //p' | tr '\n' ' ')"
+echo "package_win: ico_pc.exe imports: $imports" >>"$log"
+for dll in libstdc++-6.dll libgcc_s_seh-1.dll libwinpthread-1.dll; do
+    [[ " $imports " != *" $dll "* ]] || fail "ico_pc.exe imports $dll (the C++ runtime must be linked statically)"
+done
 # a release's program holds no rc row, an rc's does
 run python3 -I "$wt/tools/check_rc_text.py" --label "$label" "build-host/$p/ico_pc.exe"
 [[ -f tools/portable/make_portable.cmd ]] || fail "tools/portable/make_portable.cmd is missing from HEAD"

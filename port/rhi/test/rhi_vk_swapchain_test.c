@@ -429,6 +429,9 @@ static int acquireWaits(SDL_Window *win, RhiFormat fmt)
     }
 
     /* (a) */
+    RhiStats st0, st1;
+    rhi_wait_idle();
+    rhi_get_stats(&st0);
     rhi_wait_frame();
     RhiTexture bb = rhi_acquire_backbuffer();
     if (!bb.id) {
@@ -454,6 +457,17 @@ static int acquireWaits(SDL_Window *win, RhiFormat fmt)
     rhi_cmd_barrier(cl, &b1, 1);
     rhi_submit(cl);
     rhi_present();
+    rhi_wait_idle();
+    rhi_get_stats(&st1);
+    /* the image list's submit asked the acquire's fence: one picture counted,
+       ready or not (which of the two depends on the machine) */
+    const uint64_t counted = (st1.acquireReadyAtSubmit - st0.acquireReadyAtSubmit) +
+                             (st1.acquireNotReady - st0.acquireNotReady);
+    if (counted != 1) {
+        printf("FAIL acquire cell a: %llu pictures counted by the acquire fence, want 1\n",
+               (unsigned long long)counted);
+        failures++;
+    }
     uint32_t n = vkr_test_submit_waits(s, 8);
     vkr_test_submit_record(false);
     printf("acquire cell a (%s sync): %u submits:", vkr_test_sync_kind(), n);
@@ -471,6 +485,7 @@ static int acquireWaits(SDL_Window *win, RhiFormat fmt)
     }
 
     /* (b) */
+    rhi_get_stats(&st0);
     rhi_wait_frame();
     bb = rhi_acquire_backbuffer();
     if (!bb.id) {
@@ -483,6 +498,13 @@ static int acquireWaits(SDL_Window *win, RhiFormat fmt)
     offscreenList(off, &offState);
     rhi_wait_idle();
     rhi_release_surface(); /* the acquire dropped with no list on its image */
+    rhi_get_stats(&st1);
+    /* no list used the image: the empty batch is no present list, nothing counted */
+    if (st1.acquireReadyAtSubmit != st0.acquireReadyAtSubmit ||
+        st1.acquireNotReady != st0.acquireNotReady) {
+        printf("FAIL acquire cell b: the dropped acquire was counted by the fence\n");
+        failures++;
+    }
     n = vkr_test_submit_waits(s, 8);
     vkr_test_submit_record(false);
     unsigned onAcquire = 0, emptyAll = 0;

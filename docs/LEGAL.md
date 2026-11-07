@@ -90,6 +90,12 @@ respective owners.
   allowed.)
 - Any code believed to derive from leaked source.
 
+Files the program writes on the player's machine from the player's own disc are derived files and
+are never committed or shipped: the extracted data, texture and model exports, and the application
+icon (`<user folder>/icon/`, the title lettering's "I" cut out of two captured frames of the running
+game; `docs/port/APP_ICON.md`). The repository holds the code that makes
+them, not the images.
+
 `.gitignore` and `tools/check_no_rom.sh` (run by the pre-commit hook) make it
 harder to commit such material by accident. They do not replace care. If you
 suspect a file in this repository breaks these rules, open an issue tagged
