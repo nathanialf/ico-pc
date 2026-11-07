@@ -917,15 +917,24 @@ bool rd_vu_skin_capture_due(char *path, size_t size);
  * (H2: not the driver's read); addr the last wrong check's address; frame
  * the last event's; started: the renderer has chosen its modules
  * (rd__vu_policy_init ran: the driver and its environment are those of
- * this start).  Any thread (each field an atomic). */
+ * this start); ringUsable: the ring builds could be put in force (the
+ * program entries are the plain set, on Vulkan: rd__vu_policy_init).  Any
+ * thread (each field an atomic). */
 typedef struct RdVuBonesEvidence {
-    bool started, ring;
+    bool started, ring, ringUsable;
     uint32_t replays, twins, differ;
     uint32_t ringClear, ringFail, sceneOnly, probeWrong, portRace;
     uint32_t addr, frame;
 } RdVuBonesEvidence;
 
 void rd_vu_bones_evidence(RdVuBonesEvidence *out);
+/* The ladder's step 1 in the run (window_bones.c): mode "ring" or
+ * "cbuffer" and its mark, taken by the next rd_init over ICO_RD_VU_BONES
+ * and ICO_RD_VU_BONES_BY (the environment is not written while the
+ * renderer's, the audio's and the driver's threads may read it).  NULL
+ * mode: back to the environment.  The window's thread, before the
+ * renderer is made again. */
+void rd_set_vu_bones(const char *mode, const char *by);
 /* The longest frame replay (CPU time of recording, pipeline creation,
  * submit and present) in ms since the last reset, and *count the replays
  * in that time; reset != 0 starts a new period.  For the window's 10 s

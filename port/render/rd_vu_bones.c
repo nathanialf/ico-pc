@@ -32,6 +32,7 @@ static bool s_tried[RB_VS_COUNT];
  * the render thread at the harvest, read by the window's pump */
 enum {
     EV_STARTED,
+    EV_USABLE,
     EV_RING,
     EV_REPLAYS,
     EV_TWINS,
@@ -95,9 +96,33 @@ RhiShader rd__vu_bones_ring_shader(uint8_t vs)
     return s_ring[i];
 }
 
-void rd__vu_bones_policy(bool asked, bool on, const char *why)
+/* rd_set_vu_bones: the window's choice in the run, read by rd_init on the
+ * same thread (no environment written while other threads read it) */
+static char s_setMode[16];
+static char s_setBy[160];
+static bool s_set;
+
+void rd_set_vu_bones(const char *mode, const char *by)
+{
+    snprintf(s_setMode, sizeof(s_setMode), "%s", mode ? mode : "");
+    snprintf(s_setBy, sizeof(s_setBy), "%s", by ? by : "");
+    s_set = mode != NULL;
+}
+
+const char *rd__vu_bones_asked(void)
+{
+    return s_set ? s_setMode : getenv("ICO_RD_VU_BONES");
+}
+
+const char *rd__vu_bones_by(void)
+{
+    return s_set ? s_setBy : getenv("ICO_RD_VU_BONES_BY");
+}
+
+void rd__vu_bones_policy(bool asked, bool on, bool usable, const char *why)
 {
     evSet(EV_RING, on ? 1u : 0u);
+    evSet(EV_USABLE, usable ? 1u : 0u);
     evSet(EV_STARTED, 1u);
     if (!on) {
         if (asked) {
@@ -111,7 +136,7 @@ void rd__vu_bones_policy(bool asked, bool on, const char *why)
     /* the mark the window wrote beside the key ([dev] vu_bones_by, exported
      * as ICO_RD_VU_BONES_BY: "vu_skin_check <version> frame F; D of T twins
      * differed") */
-    const char *by = getenv("ICO_RD_VU_BONES_BY");
+    const char *by = rd__vu_bones_by();
     char words[192];
     if (by && strncmp(by, "vu_skin_check ", 14) == 0) {
         snprintf(words, sizeof(words), "written by the skin check at %s", by + 14);
@@ -181,6 +206,7 @@ void rd_vu_bones_evidence(RdVuBonesEvidence *out)
     memset(out, 0, sizeof(*out));
     out->started = evGet(EV_STARTED) != 0;
     out->ring = evGet(EV_RING) != 0;
+    out->ringUsable = evGet(EV_USABLE) != 0;
     out->replays = evGet(EV_REPLAYS);
     out->twins = evGet(EV_TWINS);
     out->differ = evGet(EV_DIFFER);
