@@ -130,8 +130,13 @@ uint32_t rd__velocity_vp_extent(uint32_t n);
 /* VELOCITY read back as floats (RGBA, w * h * 4); false without it. */
 bool rd__velocity_read(float *dst, size_t floats, uint32_t *w, uint32_t *h);
 
-/* the replay's counters (rd_replay_vu.c) */
+/* the replay's counters (rd_replay_vu.c), at the end of each velocity pass */
 void rd__velocity_note_replay(uint32_t drawn, uint32_t noRecord);
+/* The replay (g_rd.replayCounter) whose velocity pass last cleared and drew
+ * VELOCITY, 0 before any: a replay with no VU work runs no pass, and the
+ * upscaler then clears VELOCITY itself (rd_fsr3.c) rather than read the
+ * motion of an older picture */
+uint32_t rd__velocity_pass_replay(void);
 
 void rd__velocity_shutdown(void);
 

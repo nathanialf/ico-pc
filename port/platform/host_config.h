@@ -177,7 +177,8 @@ const char *ico_config_ini_key(const char *toml_path);
    "x,y" (each -0.5..0.5) as it is; pass_split a
    count; velocity_sign 1 or -1 as it is; gpu_*, attachment_read, storage_pass_merge, store_plan,
    blur_fold, uint_view, alpha_plan, fx_plan, fx_dst_local, vu_planes,
-   shadow_one, shadow_bspline, vu_prepass, vu_prepass_batch, velocity_test, upscale_test, still_represent, glow_redraw, glow_fold,
+   shadow_one, shadow_bspline, vu_prepass, vu_prepass_batch, velocity_test, upscale_test, upscale_debug_view,
+   upscale_debug_checks, still_represent, glow_redraw, glow_fold,
    crack_fill, joystick_directinput and bind_cache (every other key: the default branch) 1/true/on/yes ->
    "1", 0/false/off/no -> "0". ico_ini_export sets them. */
 const char *ico_dev_env_name(const char *key);

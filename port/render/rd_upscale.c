@@ -10,19 +10,25 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_fsr3.h"
 #include "rd_jitter.h"
 #include "rd_replay.h"
 #include "rd_thread.h"
+#include "rd_upscale_temporal.h"
 #include "rd_velocity.h"
 
 /* the ratio [dev] upscale_test asks: FSR's Quality (1.5) */
 #define RD_UPSCALE_TEST_RATIO 1.5f
 
 static struct {
-    bool asked; /* set by a call, or the switch read */
-    bool want;
+    bool asked;        /* set by a call, or the switch read */
+    bool want;         /* rd__upscale_set's (the tools, the tests, [dev] upscale_test) */
     bool velocityOurs; /* the switch turned the motion vectors on */
     float ratio;
+    /* the settings' (rd__upscale_follow: Upscaling = FSR 3.1 in force),
+     * used while rd__upscale_set has not turned the switch on */
+    bool fsr3;
+    float fsr3Ratio;
     uint32_t phases;
     /* the split in force (rd__apply_display) */
     bool split;
@@ -69,13 +75,11 @@ static void readSwitch(void)
             (double)RD_UPSCALE_TEST_RATIO, rd__upscale_hook_name());
 }
 
-void rd__upscale_set(bool on, float ratio)
+/* the motion vectors are the upscaler's input: on with it (either source),
+ * and off again only when it was this file that turned them on */
+static void syncVelocity(void)
 {
-    s_up.asked = true;
-    s_up.want = on;
-    s_up.ratio = on ? clampRatio(ratio) : 0.0f;
-    /* the motion vectors are the upscaler's input: on with it, and off
-     * again only when it was this switch that turned them on */
+    const bool on = s_up.want || s_up.fsr3;
     if (on && !rd__velocity_on()) {
         rd__velocity_set(true);
         s_up.velocityOurs = true;
@@ -85,12 +89,38 @@ void rd__upscale_set(bool on, float ratio)
     }
 }
 
+void rd__upscale_set(bool on, float ratio)
+{
+    s_up.asked = true;
+    s_up.want = on;
+    s_up.ratio = on ? clampRatio(ratio) : 0.0f;
+    syncVelocity();
+}
+
+void rd__upscale_follow(const RdSettings *st, bool crt, float displayScale)
+{
+    /* Upscaling = FSR 3.1 in force (rd_upscale_temporal.c: supported, no
+     * CRT filter, no Downsampling) at the quality's ratio, Native AA under
+     * the Original preset or at a display scale of 1 or less */
+    s_up.fsr3 = rd__upscale_temporal_on(st, crt);
+    s_up.fsr3Ratio = s_up.fsr3 ? clampRatio(rd__upscale_temporal_ratio(st, displayScale)) : 0.0f;
+    syncVelocity();
+}
+
+bool rd__upscale_by_fsr3(void)
+{
+    if (!s_up.asked) {
+        readSwitch();
+    }
+    return !s_up.want && s_up.fsr3;
+}
+
 bool rd__upscale_wanted(void)
 {
     if (!s_up.asked) {
         readSwitch();
     }
-    return s_up.want && !rd__crt_on();
+    return (s_up.want || s_up.fsr3) && !rd__crt_on();
 }
 
 float rd__upscale_ratio(void)
@@ -98,7 +128,20 @@ float rd__upscale_ratio(void)
     if (!s_up.asked) {
         readSwitch();
     }
-    return s_up.want ? s_up.ratio : 0.0f;
+    return s_up.want ? s_up.ratio : (s_up.fsr3 ? s_up.fsr3Ratio : 0.0f);
+}
+
+float rd_upscale_ratio_of(const RdSettings *st, bool crt, float displayScale)
+{
+    if (!s_up.asked) {
+        readSwitch();
+    }
+    if (s_up.want) {
+        return crt ? 0.0f : s_up.ratio;
+    }
+    return st && rd__upscale_temporal_on(st, crt)
+               ? clampRatio(rd__upscale_temporal_ratio(st, displayScale))
+               : 0.0f;
 }
 
 void rd__upscale_set_phases(uint32_t n)
@@ -170,6 +213,7 @@ void rd__display_scale(float *sx, float *sy)
 
 void rd__upscale_replay_begin(int keep, bool present)
 {
+    rd__fsr3_collect(); /* FSR 3.1's retired contexts the GPU is done with */
     if (!s_up.split || s_up.phases == 0) {
         if (s_up.jitterOurs) {
             rd__frame_jitter_clear(); /* the sequence's, not [dev] jitter_test's */
@@ -363,6 +407,17 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
     in.reset = s_up.stats.dispatched == 0u || resized || rd__velocity_reset();
     in.presents = s_up.since + 1u;
     in.frame = frame;
+    /* the frame camera (rd_frame.c rd__fill_camera_cb's): near, far, and
+     * the vertical angle from the game's projection distance (zoom, in GS
+     * pixels) over half the frame's height */
+    if (f && f->hasCamera && f->camera.farZ > f->camera.nearZ && f->camera.nearZ > 0.0f &&
+        f->camera.zoom > 0.0f) {
+        in.camera = true;
+        in.cameraNear = f->camera.nearZ;
+        in.cameraFar = f->camera.farZ;
+        const float half = 0.5f * (float)(f->gsH ? f->gsH : g_rd.gsH);
+        in.fovY = 2.0f * atanf(half / f->camera.zoom);
+    }
     if (!rd__upscale_dispatch(cl, &in)) {
         refuse("the hook wrote nothing", frame);
         return;
@@ -475,4 +530,5 @@ void rd__upscale_free(void)
     s_up.lastW = s_up.lastH = 0;
     memset(&s_up.geom, 0, sizeof(s_up.geom));
     rd__depth_copy_free(&s_up.depth);
+    rd__fsr3_free(); /* FSR 3.1's context (rd_fsr3.c): destroyed once the GPU is done with it */
 }

@@ -139,8 +139,17 @@ static void blockLog(void)
     s_blk.at = keep;
 }
 
+/* the replay (g_rd.replayCounter) whose velocity pass wrote VELOCITY last */
+static uint32_t s_passReplay;
+
+uint32_t rd__velocity_pass_replay(void)
+{
+    return __atomic_load_n(&s_passReplay, __ATOMIC_ACQUIRE);
+}
+
 void rd__velocity_note_replay(uint32_t drawn, uint32_t noRecord)
 {
+    __atomic_store_n(&s_passReplay, g_rd.replayCounter, __ATOMIC_RELEASE);
     __atomic_store_n(&s_rDrawn, drawn, __ATOMIC_RELEASE);
     __atomic_store_n(&s_rNoRecord, noRecord, __ATOMIC_RELEASE);
     __atomic_store_n(&s_rPasses, 1u, __ATOMIC_RELEASE);

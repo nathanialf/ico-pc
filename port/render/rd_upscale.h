@@ -52,9 +52,11 @@
  * DISPLAY stay; the next dispatch is told how many presents passed
  * (RdUpscaleIn.presents).
  *
- * The switch: rd__upscale_set (the host, rd_replay_tool --upscale-test
- * [ratio]) or [dev] upscale_test = true (ICO_RD_UPSCALE_TEST=1: the
- * Quality-like ratio 1.5), read at the first ask.  A change applies at the
+ * The switch: the settings' FSR 3.1 (rd__upscale_follow: Upscaling =
+ * FSR 3.1, rd_fsr3.c's dispatch), or rd__upscale_set (rd_replay_tool
+ * --upscale-test [ratio], the tests) or [dev] upscale_test = true
+ * (ICO_RD_UPSCALE_TEST=1: the Quality-like ratio 1.5), read at the first
+ * ask, these with the test's bilinear stand-in (rd_upscale_hook.c).  A change applies at the
  * next display change (rd__apply_display).  Turning it on also turns the
  * motion vectors on (rd__velocity_set), and off again when it turned them on.
  */
@@ -78,10 +80,20 @@ extern "C" {
 /* The switch: on with ratio (1..3, the display scale over the render
  * scale; 1 is a native-resolution pass, out of range clamps) or off */
 void rd__upscale_set(bool on, float ratio);
-/* Asked (the switch on) and not under the CRT filter, which shows the
- * PS2's pixels at 1x */
+/* The settings' source (rd_present.c rd__apply_display, before and after
+ * the display scale is known; displayScale 0 when not yet): Upscaling =
+ * FSR 3.1 in force (rd_upscale_temporal.c rd__upscale_temporal_on) turns
+ * the upscale point on at the quality's ratio (Native AA under the Original
+ * preset or at a display scale of 1 or less).  rd__upscale_set's switch,
+ * when on, wins (the tools' and the tests' upscaler, [dev] upscale_test). */
+void rd__upscale_follow(const RdSettings *st, bool crt, float displayScale);
+/* The upscale point is the settings' FSR 3.1 (the hook dispatches FSR 3.1,
+ * rd_fsr3.c), not rd__upscale_set's test */
+bool rd__upscale_by_fsr3(void);
+/* Asked (the switch on, or FSR 3.1 by the settings) and not under the CRT
+ * filter, which shows the PS2's pixels at 1x */
 bool rd__upscale_wanted(void);
-/* The ratio asked (1..3), 0 when the switch is off */
+/* The ratio asked (1..3), 0 when neither source asks */
 float rd__upscale_ratio(void);
 /* The jitter's phase count (0: no jitter; at most 1024) */
 void rd__upscale_set_phases(uint32_t n);
@@ -136,6 +148,10 @@ typedef struct RdUpscaleIn {
     bool reset;        /* a new history: a cut, the first dispatch, a new size */
     uint32_t presents; /* presents since the last dispatch, this one included (re-shown ones) */
     uint32_t frame;    /* the frame's number */
+    /* the frame camera (false: none): near and far planes in the game's
+     * units, the vertical angle in radians */
+    bool camera;
+    float cameraNear, cameraFar, fovY;
 } RdUpscaleIn;
 
 /* The temporal upscaler's dispatch (rd_upscale_hook.c): writes in->out from

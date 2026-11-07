@@ -600,6 +600,11 @@ static const struct {
        scale and upscaled at the reduction by a plain bilinear pass (a
        developer switch; port/render/rd_upscale.c) */
     {"dev.upscale_test", "upscale_test"},
+    /* true: FSR 3.1 draws its debug view in place of the picture, and
+       checks its inputs with its messages in the log (Upscaling = FSR 3.1;
+       port/render/rd_fsr3.c) */
+    {"dev.upscale_debug_view", "upscale_debug_view"},
+    {"dev.upscale_debug_checks", "upscale_debug_checks"},
     /* false: every VU draw one GPU draw instead of consecutive ones with the
        same state merged into one (an A/B; port/render/rd_replay_vu.c
        vuMergeInit) */
@@ -789,6 +794,10 @@ static const struct {
     /* port/render/rd_upscale.c readSwitch: 1 draws the scene at the display
        scale over 1.5 and upscales it at the reduction */
     {"upscale_test", "ICO_RD_UPSCALE_TEST"},
+    /* port/render/rd_fsr3.c readDebug: 1 sets FSR 3.1's
+       FFX_UPSCALE_FLAG_DRAW_DEBUG_VIEW, and FFX_UPSCALE_ENABLE_DEBUG_CHECKING */
+    {"upscale_debug_view", "ICO_RD_UPSCALE_DEBUG_VIEW"},
+    {"upscale_debug_checks", "ICO_RD_UPSCALE_DEBUG_CHECKS"},
     /* port/render/rd_replay_vu.c vuMergeInit: 0 draws every VU draw as a
        GPU draw of its own, through the programs' plain builds */
     {"vu_merge", "ICO_RD_VU_MERGE"},
