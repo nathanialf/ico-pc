@@ -38,24 +38,29 @@ static bool envTrue(const char *e)
     return e && (strcmp(e, "1") == 0 || strcmp(e, "true") == 0 || strcmp(e, "on") == 0);
 }
 
+/* s_on is read on the game thread (rd_end_frame) and the render thread
+ * (the presents, the replays): atomic */
 bool rd__velocity_on(void)
 {
-    if (s_on < 0) {
-        s_on = envTrue(getenv("ICO_RD_VELOCITY")) ? 1 : 0;
-        if (s_on) {
+    int on = __atomic_load_n(&s_on, __ATOMIC_ACQUIRE);
+    if (on < 0) {
+        on = envTrue(getenv("ICO_RD_VELOCITY")) ? 1 : 0;
+        int unread = -1;
+        if (__atomic_compare_exchange_n(&s_on, &unread, on, false, __ATOMIC_ACQ_REL,
+                                        __ATOMIC_ACQUIRE) &&
+            on) {
             rd__log("velocity: on ([dev] velocity_test, ICO_RD_VELOCITY=1): every VU draw "
                     "carries its previous picture's transform and the replay draws the "
                     "scene's motion vectors (a developer switch; nothing reads them yet)");
         }
     }
-    return s_on == 1;
+    return __atomic_load_n(&s_on, __ATOMIC_ACQUIRE) == 1;
 }
 
 void rd__velocity_set(bool on)
 {
     const int want = on ? 1 : 0;
-    if (s_on != want) {
-        s_on = want;
+    if (__atomic_exchange_n(&s_on, want, __ATOMIC_ACQ_REL) != want) {
         rd__velocity_forget();
     }
 }
@@ -81,18 +86,26 @@ bool rd__velocity_reset(void)
 
 /* ------------------------------------------------------- the stats, log */
 
+/* the attach's counters (its thread), and the replays' (the render
+ * thread: atomic, read by rd__velocity_stats and the 10 s line) */
 static RdVelocityStats s_st;
+static RdVelocityStats s_out;
+static uint32_t s_rDrawn, s_rNoRecord, s_rPasses;
+static uint32_t s_rbDrawn, s_rbNoRecord, s_rbPasses;
 
 /* the block's sums (the line every 10 s while on) */
 static struct {
     double at;
     uint64_t frames, draws, paired, moved, unpaired, shape, jump, resets;
-    uint64_t drawn, noRecord, passes;
 } s_blk;
 
 const RdVelocityStats *rd__velocity_stats(void)
 {
-    return &s_st;
+    s_out = s_st;
+    s_out.drawn = __atomic_load_n(&s_rDrawn, __ATOMIC_ACQUIRE);
+    s_out.noRecord = __atomic_load_n(&s_rNoRecord, __ATOMIC_ACQUIRE);
+    s_out.passes = __atomic_load_n(&s_rPasses, __ATOMIC_ACQUIRE);
+    return &s_out;
 }
 
 static void blockLog(void)
@@ -118,8 +131,9 @@ static void blockLog(void)
             (unsigned long long)(s_blk.unpaired + s_blk.shape + s_blk.jump),
             (unsigned long long)s_blk.unpaired, (unsigned long long)s_blk.shape,
             (unsigned long long)s_blk.jump, (unsigned long long)s_blk.resets,
-            (unsigned long long)s_blk.drawn, (unsigned long long)s_blk.noRecord,
-            (unsigned long long)s_blk.passes);
+            (unsigned long long)__atomic_exchange_n(&s_rbDrawn, 0, __ATOMIC_ACQ_REL),
+            (unsigned long long)__atomic_exchange_n(&s_rbNoRecord, 0, __ATOMIC_ACQ_REL),
+            (unsigned long long)__atomic_exchange_n(&s_rbPasses, 0, __ATOMIC_ACQ_REL));
     const double keep = s_blk.at;
     memset(&s_blk, 0, sizeof(s_blk));
     s_blk.at = keep;
@@ -127,12 +141,12 @@ static void blockLog(void)
 
 void rd__velocity_note_replay(uint32_t drawn, uint32_t noRecord)
 {
-    s_st.drawn = drawn;
-    s_st.noRecord = noRecord;
-    s_st.passes = 1;
-    s_blk.drawn += drawn;
-    s_blk.noRecord += noRecord;
-    s_blk.passes++;
+    __atomic_store_n(&s_rDrawn, drawn, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_rNoRecord, noRecord, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_rPasses, 1u, __ATOMIC_RELEASE);
+    __atomic_fetch_add(&s_rbDrawn, drawn, __ATOMIC_ACQ_REL);
+    __atomic_fetch_add(&s_rbNoRecord, noRecord, __ATOMIC_ACQ_REL);
+    __atomic_fetch_add(&s_rbPasses, 1u, __ATOMIC_ACQ_REL);
 }
 
 /* ------------------------------------------------------ the draws' shape */
