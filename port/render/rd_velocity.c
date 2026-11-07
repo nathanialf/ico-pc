@@ -539,7 +539,9 @@ void rd__velocity_attach(RdFrame *f, int keep)
            the picture before kept for the next scene */
         return;
     }
-    const bool cut = f->hasCamera && f->camera.cut != 0;
+    /* rd_camera_cut or the wall's (RdFrame.cut, RdCamera.cut once closed;
+       FrameCB's eye w 1) */
+    const bool cut = f->cut != 0 || (f->hasCamera && f->camera.cut != 0);
     s_reset = !s_have || cut;
     s_st.reset = s_reset ? 1u : 0u;
     if (!collect(f, keep)) {
