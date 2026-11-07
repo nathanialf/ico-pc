@@ -5056,48 +5056,6 @@ static RhiRect rectJoin(RhiRect a, RhiRect b)
     return (RhiRect){x0, y0, (uint32_t)(x1 - x0), (uint32_t)(y1 - y0)};
 }
 
-/* fx_sprite_ps's texel range on one axis of a sprite sampling the target it
- * draws into, in that target's texels: U(X) = u0 + (X - x0) (u1 - u0) /
- * (x1 - x0) (integers, 12.4, truncated: monotonic in X) for every X a
- * covered fragment can have (within a pixel of x0 .. x1; two allowed),
- * su = round(U * ss), the nearest texel su >> 4 or LINEAR's (su - 8) >> 4
- * and the one after (one texel more), CLAMP on the TEX0 size (round(size *
- * ss), at least 1) and then on the backing size asz: both monotonic, so the
- * range's ends are the ends' images.  False (the whole axis) under REPEAT,
- * for an empty or degenerate sprite and where the shader's int product
- * could overflow. */
-static bool blurUvAxis(int32_t x0, int32_t x1, int32_t u0, int32_t u1, float ss, float size,
-                       int clamp, uint32_t asz, int32_t crop16, int32_t *lo, int32_t *hi)
-{
-    const int64_t dx = (int64_t)x1 - x0, du = (int64_t)u1 - u0;
-    if (!clamp || dx <= 0 || asz == 0 || (dx + 32) * (du < 0 ? -du : du) > (1ll << 30)) {
-        return false;
-    }
-    const int64_t ua = u0 + (-32 * du) / dx, ub = u0 + ((dx + 32) * du) / dx;
-    const float umin = (float)((ua < ub ? ua : ub) - 1), umax = (float)((ua > ub ? ua : ub) + 1);
-    const int32_t smin = (int32_t)floorf(umin * ss) - 1, smax = (int32_t)ceilf(umax * ss) + 1;
-    int32_t t0 = floorDiv16(smin - 8), t1 = floorDiv16(smax) + 1;
-    /* the shader's round() is floor or ceil of the product: the low end
-     * clamps on the smaller, the high end on the larger */
-    int32_t lszLo = (int32_t)floorf(size * ss), lszHi = (int32_t)ceilf(size * ss);
-    lszLo = lszLo < 1 ? 1 : lszLo;
-    lszHi = lszHi < 1 ? 1 : lszHi;
-    t0 = t0 < 0 ? 0 : (t0 > lszLo - 1 ? lszLo - 1 : t0);
-    t1 = t1 < 0 ? 0 : (t1 > lszHi - 1 ? lszHi - 1 : t1);
-    if (crop16 > 0) {
-        /* a Full pixel crop (fx_sprite.hlsl fx_src_crop16): the frame's
-         * texels moved to the crop's, a texel more each way for its
-         * rounding, the crop's ends the bounds */
-        t0 = floorDiv16(16 * t0 - crop16) - 1;
-        t1 = floorDiv16(16 * t1 - crop16) + 1;
-        t0 = t0 < 0 ? 0 : t0;
-        t1 = t1 < 0 ? 0 : t1;
-    }
-    *lo = t0 < (int32_t)asz - 1 ? t0 : (int32_t)asz - 1;
-    *hi = t1 < (int32_t)asz - 1 ? t1 : (int32_t)asz - 1;
-    return true;
-}
-
 /* The snapshot texels a staticBlur sprite reads (texels of tc, the whole
  * target until narrowed).  The destination (dstRead: blend, DATE, AFAIL
  * RGB_ONLY) is read at the fragment's own texel, and fragments are the
@@ -5105,22 +5063,10 @@ static bool blurUvAxis(int32_t x0, int32_t x1, int32_t u0, int32_t u1, float ss,
  * inside the scissor bindDraw sets:
  * that box padded by two GS pixels (the half-line offset, rounding), in
  * texels.  Sampling itself (selfSample), the texture is read at the UVs:
- * blurUvAxis on each axis, the whole target under REPEAT; above 1x (steps,
- * blurAbove1xSteps) each axis widened by its kernel's reach past the GS's
- * taps (blurKernelReach).  Both: the box holding the two. */
-static int32_t blurKernelReach(uint32_t step32)
-{
-    if (step32 > RD_FX_BOX_MIN32) {
-        /* the box: half its width (at most 32 texels) each side of the
-         * centre, a texel more for the edges' partial texels */
-        const uint32_t w = step32 < 1024u ? step32 : 1024u;
-        return (int32_t)((w + 63u) / 64u) + 1;
-    }
-    /* the B-spline: a texel each side past the bilinear's two (one more
-     * kept); the GS's own filter: none */
-    return step32 > 0 && step32 < RD_FX_BSPLINE_MAX32 ? 2 : 0;
-}
-
+ * rd__blur_uv_axis on each axis (rd_blur_texels.c), the whole target
+ * under REPEAT; above 1x (steps, blurAbove1xSteps) each axis widened by its
+ * kernel's reach past the GS's taps (rd__blur_kernel_reach).  Both: the
+ * box holding the two. */
 static void blurSnapArea(const Replay *r, const RdTargetRec *tc, const RdPostRec *p,
                          const float uv[4], int dstRead, int selfSample, uint32_t steps,
                          RhiRect *need)
@@ -5143,18 +5089,18 @@ static void blurSnapArea(const Replay *r, const RdTargetRec *tc, const RdPostRec
     if (selfSample) {
         const RdDrawState *d = &r->st.ds;
         int32_t a, b, e, g;
-        if (blurUvAxis(x0, x1, (int32_t)uv[0], (int32_t)uv[2], tc->sx, p->scalar[0],
-                       d->wrap.s == RD_WRAP_CLAMP, tc->tw, (int32_t)floorf(tc->ox * 16.0f + 0.5f),
-                       &a, &b)) {
-            const int32_t k = steps ? blurKernelReach(steps >> 12) : 0;
+        if (rd__blur_uv_axis(x0, x1, (int32_t)uv[0], (int32_t)uv[2], tc->sx, p->scalar[0],
+                             d->wrap.s == RD_WRAP_CLAMP, tc->tw,
+                             (int32_t)floorf(tc->ox * 16.0f + 0.5f), &a, &b)) {
+            const int32_t k = steps ? rd__blur_kernel_reach(steps >> 12) : 0;
             a = a - k < 0 ? 0 : a - k;
             b = b + k > (int32_t)tc->tw - 1 ? (int32_t)tc->tw - 1 : b + k;
             tex.x = a;
             tex.w = (uint32_t)(b - a + 1);
         }
-        if (blurUvAxis(y0, y1, (int32_t)uv[1], (int32_t)uv[3], tc->sy, p->scalar[1],
-                       d->wrap.t == RD_WRAP_CLAMP, tc->th, 0, &e, &g)) {
-            const int32_t k = steps ? blurKernelReach(steps & 4095u) : 0;
+        if (rd__blur_uv_axis(y0, y1, (int32_t)uv[1], (int32_t)uv[3], tc->sy, p->scalar[1],
+                             d->wrap.t == RD_WRAP_CLAMP, tc->th, 0, &e, &g)) {
+            const int32_t k = steps ? rd__blur_kernel_reach(steps & 4095u) : 0;
             e = e - k < 0 ? 0 : e - k;
             g = g + k > (int32_t)tc->th - 1 ? (int32_t)tc->th - 1 : g + k;
             tex.y = e;

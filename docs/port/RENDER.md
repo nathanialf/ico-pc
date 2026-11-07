@@ -33,6 +33,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_blur.c` | staticBlur.c's sprites and the reduction's, for `rd__blur_post_sprite`; the open border's strips |
 | `port/render/rd_blur_border.c` | the post sprites' replay (`rd__blur_post_sprite`): the fold, the reduction's open border and its outer columns, SCENE's outer columns repeated after the fog |
 | `port/render/rd_blur_smooth.c` | Motion blur: Smooth: the motion blur's accumulator, its two passes and the sprite drawn over it (`rd__blur_smooth_sprite`) |
+| `port/render/rd_blur_texels.c` | the texels a staticBlur sprite reads (`rd__blur_uv_axis`, `rd__blur_kernel_reach`: `rd_replay.c` `blurSnapArea`'s helpers, apart for `rd_replay.c`'s size cap) |
 | `port/render/rd_crack_fill.c` | the crack filler above 1x: the pixels no draw covered (or a farther surface seen through a seam) between drawn ones filled after lists 4-6, and their count ([Crack filling above 1x](RENDER_POST.md#crack-filling-above-1x)) |
 | `port/render/rd_shadow.c` | the shadow count on the stencil |
 | `port/render/rd_water.c` | render-to-texture blocks, target aliases, camera scopes, pool STs |

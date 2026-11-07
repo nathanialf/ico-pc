@@ -183,6 +183,7 @@ add_library(ico_render STATIC
     rd_blur.c # staticBlur.c's sprites
     rd_blur_border.c # the post sprites' replay: the reduction's open border, its outer columns
     rd_blur_smooth.c # Motion blur: Smooth, the motion blur's accumulator
+    rd_blur_texels.c # the texels a staticBlur sprite reads (rd_replay.c blurSnapArea's helpers)
     rd_const_read.c # a sprite whose source holds only its clear drawn in that colour
     rd_core.c
     rd_crack_fill.c # above 1x: the pixels no draw covered between drawn ones, before the fog
