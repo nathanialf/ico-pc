@@ -211,8 +211,17 @@ of every picture and captures its first failure by itself; nothing is asked of t
 lines and what each decides:
 
 - **The start line** (`rd: VU skin check: on (every skinned draw twinned in its own pass through
-  its own pipeline ...; one probe a present` on Turnip, `one probe every 100 ms` on Qualcomm's own
+  its own pipeline ...; thinned to one a picture ... after 2000 replays with none differing ...; one
+  probe a present (every 100 ms once thinned)` on Turnip, `one probe every 100 ms` on Qualcomm's own
   driver): the twins run; the probe's interval is the only difference between the two drivers.
+- **What the check costs** (the 10 s line `window: VU: D draws, T triangles, V vertex invocations
+  (...); twins N draws, W vertex invocations a picture; GPU work ...`): N and W the twins' own
+  draws and vertex invocations a picture (9 a triangle). Several dozen draws a picture with the
+  GPU work near the frame's budget says the check's share; once thinned (`rd: VU skin check: twins
+  thinned to one a picture after P clean replays ...`, the 10 s block's `, thinned to one a picture`)
+  N falls to 1 to 3 a picture. `rd: VU skin check: twins re-armed by a twin event ...` says a fault
+  came back and every draw is watched again; the 10 s block's `every skinned draw (P of 2000 clean
+  replays to thin)` how far the run is from thinning.
 - **The 10 s block** (`rd: VU skin check: P checks, W wrong, ...; T twins, D differ (first at frame
   F), N not drawn ...`): T near the skinned draws of the block's pictures (up to 128 a picture) says
   every draw was watched; D 0 over a run in which the player saw Yorda flicker says the fault is not
@@ -250,7 +259,18 @@ lines and what each decides:
   libvulkan_freedreno.so loads ...` and `window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin)
   for this start; step 1 (ring read) did not clear the twins (D of T)`; still differing there:
   `window: VU skin check ladder: both tried, neither cleared the twins (...); [dev] turnip_debug =
-  off is written ... and the ladder stops`. `healed` over 2,000 presents says the step in force
+  off is written ... and the ladder stops`. Step 2 takes 8 twin events under step 1, not one.
+  Healed under step 2 with step 1 in force writes the re-test (`window: VU skin check ladder: step 2
+  (TU_DEBUG=nobin) healed the twins with step 1 (ring read) beside it: ...; [dev] turnip_debug =
+  retest is written ...`); the next start runs without nobin (`gpu driver: TU_DEBUG=nobin not set at
+  this start ([dev] turnip_debug = retest ...)`, `window: VU skin check ladder: the re-test of step 2
+  at this start: ...`), and ends with `... the re-test without TU_DEBUG=nobin kept the twins equal:
+  ...; [dev] turnip_debug is removed from ...` or `... the twins differ again (D of T); [dev]
+  turnip_debug = nobin is written ..., marked needed`. A `turnip_debug = nobin` an older ladder
+  wrote (no word trial or needed in its mark) is re-tested the same way at the next start. A
+  record draw's twins (the VU pre-pass on) say `the program's own vertex entry's ring build: the
+  draw read the pre-pass record ...` and end `A and B read the bones through the ring, as the
+  pre-pass record did`: the read the picture took. `healed` over 2,000 presents says the step in force
   holds; whether `TU_DEBUG` reaches the driver through the package loader is not verified, so the
   twins' counts under it are the answer. The kept-keys start line (`ico_pc: [dev] keys kept from an
   earlier start: ... vu_bones = ring, vu_bones_by = ...`) shows the chain in a reporter's log.

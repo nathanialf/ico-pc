@@ -1034,15 +1034,21 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `bones_ladder_test.c`: issue 123's ladder across starts (`bones_ladder.h`,
   [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)): the step for each run's evidence over sequences
   of starts as `window_bones.c` applies them (step 1 written and healed over 2,000 presents; step 1
-  still differing: step 2, then `turnip_debug = off` and a later start's stop; step 2 healed and
-  kept; step 2 out of reach: the stop; step 1 skipped when the ring read beside the picture did not
-  clear it or the scene pass's execution differed twice with no wrong probe; step 1 untested after 8
+  still differing over 8 twin events (not 1 or 7): step 2 marked trial, then `turnip_debug = off`
+  and a later start's stop; step 2 healed with step 1 in force: `turnip_debug = retest`, the
+  re-test clean over 2,000 presents: the key removed, step 1 alone healed after; the re-test with
+  8 twin events (not 3): `nobin` marked needed, then kept healed and `off` on a differing twin; the
+  re-test on a driver nobin cannot reach not judged; step 2 healed without step 1 kept; step 2 out
+  of reach: the stop; step 1 skipped when the ring read beside the picture did not
+  clear it twice (once waits) or the scene pass's execution differed twice with no wrong probe; step 1 untested after 8
   events; nothing without a differing twin; a port race never acted on), step 1's switch in the run
   as `window_bones.c` polls it each pump (`bones_restart_step`: asked once, at the pump after the
   write, never while a movie plays or in the run's first 30 s, never again in the run), step 1 never written where the ring builds cannot be used (the extended
 set: `BONES_WAIT_PLAIN`, its line) while step 2's evidence still acts, step 2 taken for in force
-only when the Turnip package loaded (`bones_nobin_in_force`), the mark
-  written and read back and a hand-written value never taken for it, the start, action, step 1
+only when the Turnip package loaded and the mark carries trial or needed (`bones_nobin_in_force`,
+  `bones_turnip_state`: a nobin without either word, an older ladder's or a hand-written one, is a
+  re-test), the mark
+  written and read back with its words and a hand-written value never taken for it, the start, action, step 1
   (now, waiting, next start) and switch lines word for word (`bones_ladder`).
 - `robust_persist_test.c`: the port's own `[dev] gpu_robust` turning itself off (`robust_persist.h`): the mark `gpu_robust_by` written and read back and a hand-written value never taken for it, the rule over sequences of starts (three clean starts in a row turn it off; a loss or an end while preparing resets the count; a start that never reached the game leaves it; another version turns it off at once; no mark does nothing), the mark through the config text, the removal of both `[dev]` keys leaving every other line (a `gpu_robust` in another section included), the three log lines word for word (`robust_persist`).
 - `pipeline_skip_test.c`: the record of a pipeline family a device's driver stopped in (`pipeline_skip.h`): the family a start-up activity note names (one sprite planes build alone, or a lazy creation, names it; the issue 161 mixed batch, a plain build, a vertex shader batch and a cut note name none; the in-flight key inside a mixed batch names it when that key is a planes build), the value written and read back, a match on the same device and driver only (not after a driver update or on another device), the clear (`pipeline_skip`).
@@ -1056,7 +1062,8 @@ only when the Turnip package loaded (`bones_nobin_in_force`), the mark
   a kind out of range ignored, a reset, a cut buffer), the slow step's game threads part (`game
   threads 199.3 in 39 switches (longest Main 171.2 ms; on core 2)`, the core or the longest switch
   left out, no name) and the VU line (pre-pass off 9 a triangle, on the recorded vertices, the k and
-  M words, no replays, a cut buffer), the GPU work line (the invocations 9 a triangle off and the recorded vertices on, the work less the display wait and the present, never negative, the fit word for word), the acquire line (none asked: nothing) and the images in use, word for word, and
+  M words, no replays, a cut buffer), its skin check twins' part (`; twins 42 draws, 76k vertex
+  invocations a picture`, no replays, none drawn: nothing, a cut buffer), the GPU work line (the invocations 9 a triangle off and the recorded vertices on, the work less the display wait and the present, never negative, the fit word for word), the acquire line (none asked: nothing) and the images in use, word for word, and
   the slow-scene dump's trigger over a block's figures (each condition alone: kind, window, movie,
   once, 30 s, 8 replays, the bound off; the bound itself is not over; the display wait taken from
   the work; no negative work) and its log line (`window_scene`).

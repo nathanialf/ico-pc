@@ -353,7 +353,19 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   through the ring (storage buffer) on the skinned entries ([dev] vu_bones = ring, set without the
   skin check's mark)`, the twins (both ring reads) differing with `A and B read the bones through
   the ring: step 1 of the ladder in force`, and `the ring read: not healed` at the end
-  (`rd_vu_skin_check_twin_bones_ring`).
+  (`rd_vu_skin_check_twin_bones_ring`); `twin_c` runs with the pre-pass off (the entry path's C);
+  the twin run with the pre-pass on (`ICO_RD_VU_PREPASS=1`, its batch builds): the record draw's
+  twins through the entry's ring build, `(the program's own vertex entry's ring build: the draw read
+  the pre-pass record and its batch builds read the bones through the ring)`, `A and B read the
+  bones through the ring, as the pre-pass record did`, no C, still differing on the zeroed bone
+  (`rd_vu_skin_check_twin_record`). `thin` (issue 123, the twins' cost): a frame of three skinned
+  commands with the twins on, the scheduled probe off and the thinning's threshold 4
+  (`rd__vu_skin_thin_set`): four clean replays twin 3 each, then one a replay
+  (`rd__vu_skin_thinned`); the bone at 200 zeroed in the run (`rd__vu_skin_sabotage_set`): the one
+  twin differs and re-arms the twins, the next replay twins all three; the sabotage off: thinned
+  again after four; the lines `twins thinned to one a picture after 4 clean replays`, `twins
+  re-armed by a twin event ... (re-armed 1 times)` and the end line's `thinned 2 times, re-armed 1
+  times (thinned at the end)` (`rd_vu_skin_check_thin`).
 - `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
   paths, `*` globs, a missing dump named and skipped, none at all `SKIP`) replayed by
   `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
@@ -496,7 +508,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   column 3 and twin C drawn, at least one twin C over the dumps) and `ring` with it on, at Original
   and with the attachment read and GS state as shader data: every PNG byte for byte, each run's
   start line (`rd: VU bones: through VuBoneCB`, `rd: VU bones: through the ring (storage buffer) on
-  the skinned entries`) (`rd_vu_bones_ring_ab`). SKIP without the dumps or a device.
+  the skinned entries`) (`rd_vu_bones_ring_ab`). With `-DPREPASS=1` the same with the pre-pass on
+  (`ICO_RD_VU_PREPASS=1`, its `rd: VU pre-pass: on:` line asked of every run) and a third setting
+  with its batch builds off (`ICO_RD_VU_PREPASS_BATCH=0`: under the ring the skinned commands drawn
+  the old way through the ring builds, the line `rd: VU pre-pass: the skinned commands are drawn the
+  old way, through their entries' ring builds` asked of the ring runs), every PNG byte for byte, at
+  least one twin drawn over the check runs (the record draws' twins read the bones through the ring,
+  no C) (`rd_vu_bones_ring_ab_prepass`). SKIP without the dumps or a device.
 - `rd_vu_skin_check_ab.cmake`: the skin check is designed not to change the picture
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)); `rd_replay_tool --pass-dump` with it off
   (`ICO_RD_VU_SKIN_CHECK=0`) and on for every skinned command of every replay (`=2`: the probes,

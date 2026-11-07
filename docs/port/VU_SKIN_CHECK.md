@@ -12,7 +12,10 @@ On every Adreno with a window (Qualcomm's own driver and Turnip, Mesa's driver, 
 163's reporters) the check also twins EVERY skinned draw inside its own pass (the twins, [What it
 checks](#what-it-checks)), aims its probe at a command whose twins differed, and captures its first
 failure of the run by itself (the capture, same section); on Turnip it also probes one command a
-present instead of one every 100 ms. Where the program entries are the plain set (Turnip's) it also
+present instead of one every 100 ms. Once the run has a verdict (2,000 replays with twins read and
+none differing) the twins thin out to one skinned draw a picture through the cheap box pipeline and
+Turnip's probe goes back to every 100 ms; a twin event twins every draw again ([The
+thinning](#what-it-checks)). Where the program entries are the plain set (Turnip's) it also
 draws the bones through the ring, a storage buffer, beside the picture (column 3 of the probe and a
 third twin, C), and when the twins differ the game climbs a ladder of two fixes by itself across
 starts, each written to `config.toml` with a mark ([The ladder](#the-ladder)).
@@ -84,11 +87,11 @@ Every column draws with a VuCB copy of its own whose mark lane (`IcoVuCB.mark[3]
 cbuffer build reads) holds the ring index of the block that column reads: column 3 reads its bones
 there, and under `[dev] vu_bones = ring` every column does.
 
-Where the vertex pre-pass is on (a desktop device under `[dev] vu_skin_check = true`; it is off on
-the tile-based GPUs, so on an Adreno the check's own default never meets it), the draw itself goes
-through `vu_main_vs` with the pre-pass's record, while the probe goes through the program's own
-cluster entry: there S2 checks the program entry's read of the same bytes, and S3 (below) the
-real draw's placement. The probe pass is not in the pass ring (`rd__passring_*`): a device loss
+Where the vertex pre-pass is on (every device whose pre-pass self-test passed, tile-based GPUs and
+so the Adreno too), the draw itself goes through `vu_main_vs` with the pre-pass's
+record, while the probe goes through the program's own cluster entry: there S2 checks the program
+entry's read of the same bytes (through VuBoneCB, where the record's batch builds read them through
+the ring), and S3 (below) the real draw's placement. The probe pass is not in the pass ring (`rd__passring_*`): a device loss
 during it names the scene's last pass, not the probe's.
 
 Then the target and the ring's 3,840 bytes at the draw's offset are copied into the slot's readback
@@ -156,8 +159,18 @@ reads its bones through the table, not the b3 offset). A draw through the VU pre
 (`vu_main_vs`: every device whose pre-pass self-test passed, tile-based GPUs too) reads the record, not
 its bones, so twins through its own key would read the same record at either offset and never
 differ: its twins go through the program's own vertex entry (the key `vuDraw`'s fallback takes,
-which reads the bones at b3 and ignores the record) in the box check's form, and the line says
-`(the program's own vertex entry: the draw read the pre-pass record)`. Both twins clip alike, so unlike the box
+which ignores the record) in the box check's form, and the line says `(the program's own vertex
+entry: the draw read the pre-pass record)`. The record is made by the pre-pass's batch builds by
+default (`g_rd.vuPreBatch`; `[dev] vu_prepass_batch = false` or a missing batch module: one an
+entry), and those read every entry's bones through the ring (t5, `vu_common.hlsli`
+`ICO_VU_PRE_BATCH`), not the uniform block: so the twins of a record draw read them the
+same way, through the entry's ring build (twin C's pipeline table, A's and B's VuCB copies carrying
+their blocks' ring indices, no C), where the ring builds exist (the plain set; elsewhere the uniform
+read as before). Their line says `(the program's own vertex entry's ring build: the draw read the
+pre-pass record and its batch builds read the bones through the ring)` and ends `; A and B read the
+bones through the ring, as the pre-pass record did`, and their event reaches the ladder as a ring
+read that did not clear it (through the uniform read they would test a read the picture does not
+take, and the ladder would act on it). Both twins clip alike, so unlike the box
 check there is no behind-the-eye gate. Equal bytes give equal counts; when A's and B's differ
 (by count where the device's queries are precise, `RhiLimits.occlusionPrecise`: the device's
 `occlusionQueryPrecise` enabled at device creation and `VK_QUERY_CONTROL_PRECISE_BIT` passed to
@@ -178,8 +191,21 @@ vu_bones = ring` the draw itself reads through the ring: A and B then carry VuCB
 own block's index (A the draw's, B the fresh one), so A against B tests the ring read in the pass,
 and there is no C.
 
-**The schedule.** One probe every 100 ms elsewhere; on Turnip one a present
-(`ICO_RD_VU_SKIN_INTERVAL_MS` over both; `off` leaves only the targeted probes). The command is
+**The thinning.** The twins cost every skinned draw two or three more draws inside the scene pass
+(on Turnip through the draw's own attachment-reading pipeline): issue 123's reporter lost 30 fps
+to 15 on Turnip at Frame rate Original. Once the run has a verdict they thin out
+(`rd_vu_skin_check.h` `RD_SKIN_THIN_REPLAYS`, 2,000, the ladder's `BONES_HEALED_REPLAYS`): after
+2,000 replays with twins read and none differing, one skinned command a replay is twinned, in turn
+over the replay's skinned commands, always through the box check's pipeline (colour and Z writes
+off; never the draw's own), and Turnip's scheduled probe is every 100 ms again. A twin event sets
+the count back to zero: every skinned draw is twinned again until 2,000 more clean replays. The
+count starts again with the renderer (the ladder's evidence does too). The game's mode only (mode
+2, the tool's and the A/Bs', twins every command always). The 10 s VU line says what the twins
+cost a picture (`window: VU: ...; twins N draws, V vertex invocations a picture; GPU work ...`,
+`RdPerfRecord.skinTwinDraws`, `skinTwinInvocations`, 9 invocations a triangle).
+
+**The schedule.** One probe every 100 ms elsewhere; on Turnip one a present until the twins are
+thinned (`ICO_RD_VU_SKIN_INTERVAL_MS` over both; `off` leaves only the targeted probes). The command is
 chosen vertex-weighted: a cursor over the last replay's skinned vertices, moved on by the golden
 ratio of the total after each probe, picks the command whose vertices hold it, so a mesh is probed
 in proportion to its vertices.
@@ -267,8 +293,10 @@ At start, from `rd_vuprepass_selftest`:
   not be made)
 - with the twins (an Adreno with a window, mode 2): `rd: VU skin check: on (every skinned draw
   twinned in its own pass through its own pipeline (A the draw's bone offset, B the same bytes at a
-  fresh offset; counted by occlusion query, precise | zero or not only); one probe a present (Turnip)
-  | every 100 ms (elsewhere), targeted after a twin event, ...; the first
+  fresh offset; counted by occlusion query, precise | zero or not only); thinned to one a picture
+  through the box check's pipeline after 2000 replays with none differing, every draw again after a
+  twin event; one probe a present (every 100 ms once thinned) (Turnip) | every 100 ms (elsewhere),
+  targeted after a twin event, ...; the first
   failure captured (a sidecar and a frame dump); WHY)`
 - `rd: VU skin check: on (one skinned draw every 100 ms, in turn, ...; variants: a fresh ring offset, uniform robustness off (VK_EXT_pipeline_robustness) | not offered | not needed (robust access off); the box check by occlusion query | not offered; WHY)`, WHY saying why it is on: `on by default on an Adreno with a window (Qualcomm's driver|Turnip); [dev] vu_skin_check = false turns it off`, or `[dev] vu_skin_check = true (ICO_RD_VU_SKIN_CHECK=1)`
 - `rd: VU skin check: off (the start-up probe failed: the device was lost in it | its picture could not be read back)`, then `window: VU skin check: the start-up probe failed on this device (...); [dev] vu_skin_check = false is written to <config> ...`; at the next start after an end inside the probe `window: VU skin check: the previous run ended inside its start-up probe (<note>); ...`
@@ -284,7 +312,9 @@ On an event, the first 8, then every 100th, of each kind on its own count (a wro
 - `rd: VU skin check: frame F command L:I mesh NAME #ID (V vertices): twins differ: A (the draw's
   offset, page phase P) N samples, B (fresh, phase Q) M samples[, C (ring read) K samples]; through
   FS with the draw's attachment read (its own pipeline) | with colour and Z writes off (the program's
-  own vertex entry: the draw read the pre-pass record | the box check's pipeline: the draw does not
+  own vertex entry: the draw read the pre-pass record | the program's own vertex entry's ring build:
+  the draw read the pre-pass record and its batch builds read the bones through the ring | the box
+  check's pipeline: the twins thinned | the box check's pipeline: the draw does not
   read its attachment | the box check's pipeline: the draw reads its attachment but writes Z); the probe of
   this command: right | wrong at address A | not probed; reads as: WORDS (twin event E)` (WORDS:
   `the draw's bone read at its own offset ...` with a wrong probe, `the scene pass's execution: the
@@ -292,7 +322,15 @@ On an event, the first 8, then every 100th, of each kind on its own count (a wro
   one, else `the bone read inside the scene pass differs ...; the probe of this command follows in
   the next replays`); a wrong check's line ends `; the probe targeted after a twin event` when it
   was; under `[dev] vu_bones = ring` the event's parenthesis ends `; A and B read the bones through
-  the ring: step 1 of the ladder in force`
+  the ring: step 1 of the ladder in force`, for a record draw's ring twins `; A and B read the bones
+  through the ring, as the pre-pass record did`
+- `rd: VU skin check: twins thinned to one a picture after P clean replays (through the box check's
+  pipeline, in turn over the skinned draws[; the probe every 100 ms again]; re-armed by a twin
+  event)` and `rd: VU skin check: twins re-armed by a twin event: every skinned draw twinned again
+  until 2000 replays with none differing (re-armed N times)`
+- `rd: VU pre-pass: the skinned commands are drawn the old way, through their entries' ring builds
+  ([dev] vu_bones = ring with the pre-pass's batches off: its own entries read VuBoneCB)` (once a
+  run)
 - `rd: VU skin check: captured logs/vu-skin-fail-F-L-I.bin and asked for a frame dump` (or `no
   sidecar written (WHY); asked for a frame dump`), then the window's `window: VU skin check: a
   failure was captured (...)` and, after the dump, `window: VU skin check: the capture: SIDECAR and
@@ -304,7 +342,8 @@ checks drawn (B box checks drawn), R read, W wrong, X blocks whose bytes differe
 with samples outside` (a check of the last replays is not read: its slot was not recycled), and with
 twins drawn `rd: VU skin check: twins at the end of the run: T drawn (O through the draw's own
 pipeline with its attachment read), R read, D differ; K checks targeted after a twin event; the ring
-read's twin (C) X drawn, Y read, Z differ from B`; under `[dev] vu_bones = ring`, when twins were
+read's twin (C) X drawn, Y read, Z differ from B; thinned N times, re-armed M times[ (thinned at the
+end)]`; under `[dev] vu_bones = ring`, when twins were
 read, `rd: VU skin check: the ring read: healed (0 of T twins differ over P replays)` or `... not
 healed (D of T twins differ over P replays)`.
 
@@ -312,7 +351,11 @@ In the 10 s summary, when the check ran: `rd: VU skin check: P checks, W wrong, 
 differed (R changed after the draw); Q box checks, S with samples outside the box, N not drawn
 (their pipeline not made yet; F with no slot left for the key); variants on the wrong ones: c1
 right K, c2 right L (c2 drawn in M checks); largest difference on a right vertex D/16 pixel[; T twins, D differ (first at frame F), N not drawn
-(their pipeline not made yet), ring twins differ E (of R read) | A and B through the ring]`.
+(their pipeline not made yet), ring twins differ E (of R read) | A and B through the ring, thinned
+to one a picture (P clean replays) | every skinned draw (P of 2000 clean replays to thin)]`. The
+window's 10 s VU line carries the twins' cost: `window: VU: D draws, T triangles, V vertex
+invocations (...); twins N draws, W vertex invocations a picture; GPU work ...` (nothing without a
+twin drawn).
 
 ## The ladder
 
@@ -325,11 +368,14 @@ the window's pump reads it (`port/platform/window_bones.c`) and decides with
 | the run's evidence and the keys in force | the action |
 | --- | --- |
 | a twin event whose C equalled B, or a wrong check with equal bytes whose column 3 drew right | step 1: `[dev] vu_bones = ring` written and put in force in the run (the renderer made again in place), and for every later start |
-| twin events, C differing from B (or the twins differing twice while the probe of the same command drew right and no probe wrong: the scene pass's execution) | step 1 skipped: step 2, `[dev] turnip_debug = nobin`, where the next start can set it, else the ladder stops |
+| two twin events whose ring read differed (C differing from B, or a pre-pass record draw's twins, which read the bones through the ring as the record did), or the twins differing twice while the probe of the same command drew right and no probe wrong (the scene pass's execution) | step 1 skipped: step 2, `[dev] turnip_debug = nobin` (marked trial), where the next start can set it, else the ladder stops |
 | 8 twin events with no evidence either way (the ring read's pipelines not made yet) | step 1 |
-| step 1 in force and the twins still differing | step 2 where the next start can set it (Android, a Turnip package), else the ladder stops |
+| step 1 in force and 8 twin events (not one: a stray event is not enough for a step that costs every pass its binning) | step 2 (marked trial) where the next start can set it (Android, a Turnip package), else the ladder stops |
 | step 2 in force and the twins still differing | `[dev] turnip_debug = off` written: "both tried, neither cleared the twins", the ladder stops (a later start says so and writes nothing) |
-| a step in force and no twin differing over 2,000 presents (replays with twins read) | healed: said once, the key kept |
+| step 2 (trial) and step 1 in force and no twin differing over 2,000 presents | `[dev] turnip_debug = retest` written: the next start runs without `TU_DEBUG=nobin` |
+| the re-test (`turnip_debug = retest`, or `nobin` without the word trial or needed: an older ladder's or set by hand) on a Turnip package, no twin differing over 2,000 presents | `turnip_debug` and its mark removed (left empty): step 2 not needed |
+| the re-test and 8 twin events | `[dev] turnip_debug = nobin` marked needed: in force at every later start, never re-tested |
+| any other step in force and no twin differing over 2,000 presents (replays with twins read) | healed: said once, the key kept |
 | a wrong check whose bytes changed under the GPU (H2, a port race) | the ladder does not act |
 | no twin differing and no step in force | nothing |
 | step 1 would be next, but the program entries are not the plain set on Vulkan (the evidence's `ringUsable`: the renderer would refuse the ring builds) | nothing written, no restart; said once (`window: VU skin check ladder: waits: the ring read needs the plain shader set (...): step 1 not written (D of T twins differ)`); step 2's evidence still acts |
@@ -358,8 +404,16 @@ device) from the qword `vuSource` puts in `IcoVuCB.mark[3]`. The same words are 
 (`rd_vu_bones_ring_ab`: every picture byte for byte; `vu1_test`: probe and pictures as the plain
 variant's). A skinned draw whose block t5 does not hold whole is not drawn (counted, said once:
 `rd: VU bones: a skinned draw's bone block (ring offset O) lies past what t5 holds: not drawn ...`).
-With the vertex pre-pass on (every device whose self-test passed, tile-based GPUs too) the pre-pass's own entries still read
-VuBoneCB. Column 3 and twin C test the fix beside the picture before it is switched in.
+With the vertex pre-pass on (every device whose self-test passed, tile-based GPUs too) the record is
+made by the pre-pass's batch builds by default, which read the bones through the ring already
+(`ICO_VU_PRE_BATCH`: `VU_BONE(i)` = `vu_ring[vu_pre_b + i]`), step 1 or not: so the real skinned
+draws read the ring there whatever the key. With the batches off (`[dev] vu_prepass_batch = false`,
+or a batch module missing) the pre-pass's one-an-entry entries read VuBoneCB; under step 1 the
+skinned commands then stay out of the record and draw the old way through their entries' ring
+builds (`vuPrepassRun`, said once a run: `rd: VU pre-pass: the skinned commands are drawn the old
+way, through their entries' ring builds ...`), the rest through the record
+(`rd_vu_bones_ring_ab_prepass`: every picture byte for byte with the pre-pass on, batched and not).
+Column 3 and twin C test the fix beside the picture before it is switched in.
 
 **Step 2, `TU_DEBUG=nobin`, at the next start** (the driver library is loaded once a process: a
 renderer made again in place keeps it). At the next start `port/platform/android/gpu_driver_android.c`
@@ -368,12 +422,25 @@ renderer made again in place keeps it). At the next start `port/platform/android
 package's library is Turnip's (`libvulkan_freedreno.so`); Mesa's documentation lists `nobin` among
 `TU_DEBUG`'s options (docs.mesa3d.org/drivers/freedreno.html: the binning pass off). Whether the
 variable reaches the driver through the package loader on Android is not verified: the twins under
-it are the indicator. It is kept only while they stay equal; else `turnip_debug = off`. No step 3:
-`[dev] gpu_robust` is never touched.
+it are the indicator. Written with the mark's word `trial` after 8 twin events under step 1 (or
+straight away on the evidence above); `turnip_debug = off` when the twins still differ under it.
+
+**The re-test of step 2** (nobin binds every pass in system memory, a cost no step should keep
+without evidence). Healed under step 2
+with step 1 in force (2,000 presents, no twin differing) writes `turnip_debug = retest`; that start
+sets no `TU_DEBUG` (the loader says `gpu driver: TU_DEBUG=nobin not set at this start ([dev]
+turnip_debug = retest, ...): the skin check re-tests whether it is needed`), step 1 alone in force;
+2,000 presents there with no twin differing remove the key and its mark (left empty, which the
+loader and the kept-keys line take for absent: the config store has no removal); 8 twin events
+write `nobin` back with the word `needed`, kept for every later start and never re-tested. The
+re-test is judged only under a Turnip package. A `turnip_debug = nobin` with neither word (an older
+ladder's, or set by hand) is a re-test at the next start, said so. Healed under step 2 without
+step 1 (step 1 skipped) keeps the key: nothing else would cover the fault. No step 3: `[dev]
+gpu_robust` is never touched.
 
 **The marks.** Each key the ladder writes carries `<key>_by = "vu_skin_check <version> frame F; D of
 T twins differed"` (F the frame of the run's last twin event, D of T the run's twins that differed
-of those read), and the start-up line `ico_pc: [dev] keys kept from an earlier start: ...` lists
+of those read; `turnip_debug = nobin`'s mark ends `; trial` or `; needed`), and the start-up line `ico_pc: [dev] keys kept from an earlier start: ...` lists
 `vu_bones`, `vu_bones_by`, `turnip_debug`, `turnip_debug_by` with the other kept keys. The keys
 stay across versions; deleting them starts the ladder again.
 
@@ -387,12 +454,21 @@ The lines:
   start ([dev] vu_bones = ring, ...)`, `window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin)
   for this start; step 1 (ring read) did not clear the twins (D of T)`, `window: VU skin check
   ladder: [dev] turnip_debug = nobin, but TU_DEBUG was not set at this start (...)`, `window: VU skin
+  check ladder: step 2 of 2 (TU_DEBUG=nobin) for this start, needed (the re-test without it saw the
+  twins differ): kept, not re-tested; ...`, `window: VU skin check ladder: the re-test of step 2 at
+  this start: TU_DEBUG=nobin not set ([dev] turnip_debug = retest | [dev] turnip_debug = nobin
+  without the word trial or needed: taken as retest, MARK)[; step 1 (ring read) in
+  force]; 2000 presents with no twin differing remove the key, 8 twin events write nobin back as
+  needed`, `window: VU skin
   check ladder: both tried, neither cleared the twins ([dev] turnip_debug = off, ...); the ladder
   stops; step 1 (ring read) stays in force`
 - start, Android loader: `gpu driver: TU_DEBUG=nobin set before LIB loads ([dev] turnip_debug =
   nobin, turnip_debug_by = MARK): whether the driver reads it through the package loader is not
   verified; the skin check's twins under it are the indicator`, or `gpu driver: [dev] turnip_debug =
-  nobin, but the package's library is LIB, not Turnip's libvulkan_freedreno.so: TU_DEBUG is not set`
+  nobin, but the package's library is LIB, not Turnip's libvulkan_freedreno.so: TU_DEBUG is not set`,
+  or at a re-test `gpu driver: TU_DEBUG=nobin not set at this start ([dev] turnip_debug = retest |
+  nobin without the word trial or needed, taken as retest[, turnip_debug_by = MARK]): the skin check
+  re-tests whether it is needed`
 - step 1 written: `window: VU bones: [dev] vu_bones = ring is written (the skin check saw N twin
   events at bone address A over P presents); the ring read beside the picture cleared it K times |
   the ring read untested beside the picture: its pipelines not made yet; in force from the next
@@ -412,7 +488,17 @@ The lines:
   stops`, or `... step 2 (TU_DEBUG=nobin) needs a Turnip driver package on Android, not this
   device's driver: the ladder stops`
 - healed: `window: VU skin check ladder: step 1 (ring read) | step 2 (TU_DEBUG=nobin) healed the
-  twins: 0 of T differ over P presents`
+  twins: 0 of T differ over P presents[; [dev] turnip_debug = nobin is kept (needed: the re-test
+  without it saw the twins differ) | (step 1 not in force: nothing else would cover the fault)]`
+- re-test written: `window: VU skin check ladder: step 2 (TU_DEBUG=nobin) healed the twins with step
+  1 (ring read) beside it: 0 of T differ over P presents; [dev] turnip_debug = retest is written to
+  CONFIG: the next start runs without TU_DEBUG=nobin, to see whether step 1 alone keeps them equal`
+- re-test passed: `window: VU skin check ladder: the re-test without TU_DEBUG=nobin kept the twins
+  equal: 0 of T differ over P presents; [dev] turnip_debug is removed from CONFIG: step 2 not
+  needed[; step 1 (ring read) stays in force]`
+- re-test failed: `window: VU skin check ladder: the re-test without TU_DEBUG=nobin: the twins differ
+  again (D of T); [dev] turnip_debug = nobin is written to CONFIG, marked needed: step 2 for every
+  later start, not re-tested again`
 - a port race: `window: VU skin check ladder: the wrong reads are the ring's bytes changing under the
   GPU (H2, a port race: N checks), not the driver's read: the ladder does not act`
 
@@ -426,7 +512,7 @@ The lines:
   ([CONFIG.md](CONFIG.md)). `rd_replay_tool --skin-check` turns it on for its own replays. Not on
   Direct3D or OpenGL.
 - `[dev] vu_bones = ring` (`ICO_RD_VU_BONES=ring`; `cbuffer` or absent: VuBoneCB), with its mark
-  `vu_bones_by`, and `[dev] turnip_debug = nobin | off` with `turnip_debug_by`: the ladder's keys,
+  `vu_bones_by`, and `[dev] turnip_debug = nobin | retest | off` with `turnip_debug_by`: the ladder's keys,
   written by the game ([The ladder](#the-ladder), [CONFIG.md](CONFIG.md)); a player may set or
   delete them by hand (a key without the game's mark is named so in the start line).
 - `ICO_RD_VU_SKIN_INTERVAL_MS=N` (tests, A/Bs): the scheduled probe every N ms (0: one a present),
@@ -454,8 +540,10 @@ binning pass and the pipeline's link included), on every skinned draw of every p
 see a fault that reads both offsets alike (a wrong read whatever the address: the probe's c1 row
 says that one), a fault in a draw's second pass (the no-dual pair: the twins redraw the first), a
 draw with Z writes that reads its attachment (twinned through the box pipeline, not its own), or
-the pre-pass record's own path (under the vertex pre-pass the twins read the bones through the
-program's entry, not the record the draw read; tile-based GPUs draw through the record too). Where
+the pre-pass record's own path (under the vertex pre-pass the twins draw through the program's
+entry, not the record the draw read: they read the bones the way the record did, through the ring
+under the batch builds, but in the scene pass, not in the pre-pass's own pass V). Once thinned they
+see one skinned draw a picture, through the box pipeline. Where
 the device does not offer precise occlusion counts the twins compare only zero against not zero
 (the start line says `zero or not only`): a fault that drops part of a draw that still draws
 something (the missing shin) is then invisible to them, and the probe alone sees it. What the check as a whole cannot see: it compares the device with the CPU over the same stream and bytes, so
@@ -468,8 +556,10 @@ the device's wrong read.
 `rd_vu_skin_check_test.c` with `rd_vu_skin_check.cmake` (`rd_vu_skin_check_judge`,
 `rd_vu_skin_check`, `rd_vu_skin_check_robust`, `rd_vu_skin_check_probe`,
 `rd_vu_skin_check_probe_robust`, `rd_vu_skin_check_ring`, `rd_vu_skin_check_twin`,
-`rd_vu_skin_check_twin_nan`, `rd_vu_skin_check_capture`, and the ladder's
-`rd_vu_skin_check_probe_c3`, `rd_vu_skin_check_twin_c`, `rd_vu_skin_check_twin_bones_ring`)
+`rd_vu_skin_check_twin_nan`, `rd_vu_skin_check_capture`, `rd_vu_skin_check_thin` (the thinning:
+three twins a replay until the clean replays, one after, re-armed by the zeroed bone), and the
+ladder's `rd_vu_skin_check_probe_c3`, `rd_vu_skin_check_twin_c`, `rd_vu_skin_check_twin_bones_ring`,
+`rd_vu_skin_check_twin_record` (a pre-pass record draw's twins through the ring build))
 and `rd_vu_skin_check_dump.cmake` (`rd_vu_skin_check_dump`, `rd_vu_skin_check_163`,
 `rd_vu_skin_check_163_probe`, `rd_vu_skin_check_163_ring`, `rd_vu_skin_check_163_patched`, `rd_vu_skin_check_123`,
 `rd_vu_skin_check_123_nan`, `rd_vu_skin_check_123_attach`, `rd_vu_skin_check_123_nan_attach`,
@@ -478,9 +568,12 @@ and `rd_vu_skin_check_dump.cmake` (`rd_vu_skin_check_dump`, `rd_vu_skin_check_16
 `frame-20261106-080033-v3910-blended`), `rd_vu_bones_ring_ab.cmake` (`rd_vu_bones_ring_ab`: the
 three dumps of `/primary/dev/ico-dumps/163/` under the plain set with the pre-pass off, the bones
 through the ring against VuBoneCB, and both with the check on for every skinned command (column 3
-and twin C drawn, the twins through the ring), every picture byte for byte), `vu1_test` (the ring builds' probe
-and pictures as the plain variants'), `bones_ladder` (the ladder over sequences of starts, the
-mark, the lines word for word), `host_config` (the keys), and
+and twin C drawn, the twins through the ring), every picture byte for byte;
+`rd_vu_bones_ring_ab_prepass` the same with the pre-pass on, its batch builds on and off),
+`vu1_test` (the ring builds' probe
+and pictures as the plain variants'), `bones_ladder` (the ladder over sequences of starts, step 2's threshold, the re-test removed or
+needed, the unmarked nobin taken as a re-test, the mark and its words, the lines word for word),
+`window_scene` (the VU line's twins part), `host_config` (the keys), and
 `rd_vu_skin_check_ab.cmake` (`rd_vu_skin_check_ab`: the pictures with the check on for every
 skinned command against off, byte for byte, at Original, with the attachment read and GS state as
 shader data, and with MSAA, the twins drawn in every on run and through the draws' own pipelines in
