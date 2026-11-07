@@ -13,7 +13,9 @@
  *     switch and the core the game thread was on: "game threads 199.3 in 39
  *     switches (longest Main 171.2 ms; on core 2)";
  *   - the VU work of a replay: "VU: 1182 draws, 61k triangles, 550k vertex
- *     invocations (pre-pass off: 9 a triangle)", and (issue 179) what the
+ *     invocations (pre-pass off: 9 a triangle)", the skin check's twins'
+     share ("; twins 42 draws, 76k vertex invocations a picture", issue
+     123), and (issue 179) what the
  *     GPU's work (the span less the display wait and the present) cost in
  *     the block's timed replays against their vertex invocations: "; GPU
  *     work 51.8 ms a replay, 16.0 ms + 0.17 ms a thousand vertex
@@ -120,6 +122,13 @@ size_t window_scene_threads_text(char *out, size_t cap, double threadsMs, unsign
      "VU: 250 draws, 9.2k triangles, 4.1k vertex invocations (pre-pass: each vertex once)" */
 size_t window_scene_vu_text(char *out, size_t cap, uint64_t draws, uint64_t tris,
                             uint64_t preVertices, unsigned n, int prepass);
+
+/* The skin check's twins in a replay, averaged over replays (n): the draws
+   they added and their vertex invocations (issue 123: what the check costs
+   a picture), appended to the VU line; "" with no twin drawn:
+     "; twins 42 draws, 76k vertex invocations a picture" */
+size_t window_scene_twins_text(char *out, size_t cap, uint64_t draws, uint64_t invocations,
+                               unsigned n);
 
 /* The vertex invocations of a replay's VU draws: the pre-pass's vertices
    with it on, 9 a triangle with it off (the VU line's own quantity) */

@@ -2695,6 +2695,11 @@ typedef struct RdPerfRecord {
      * vertex shader does where the pre-pass is off (9 invocations a
      * triangle; window_scene.h) */
     uint32_t vuDraws, vuTris;
+    /* the skin check's twins (rd_vu_skin_check.c twinDraw, issue 123): the
+     * draws they added (A, B and C each one) and their vertex invocations,
+     * 9 a triangle (the twins never read the pre-pass record): what the
+     * check costs, on the window's VU line */
+    uint32_t skinTwinDraws, skinTwinInvocations;
     /* The draw-merge count (rd_replay_vu.c vuMergeNote; counting only, no
      * draw or record changes): per list the VU draws that could join the
      * previous draw's run (vuMergeDraws) and the runs started (vuMergeRuns:

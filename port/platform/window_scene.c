@@ -138,6 +138,30 @@ size_t window_scene_vu_text(char *out, size_t cap, uint64_t draws, uint64_t tris
     return (size_t)w < cap ? (size_t)w : cap - 1;
 }
 
+size_t window_scene_twins_text(char *out, size_t cap, uint64_t draws, uint64_t invocations,
+                               unsigned n)
+{
+    const double d = n ? (double)n : 1.0;
+    char v[24];
+    int w;
+
+    if (cap == 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (draws == 0) {
+        return 0;
+    }
+    count_words((double)invocations / d, v, sizeof(v));
+    w = snprintf(out, cap, "; twins %.0f draws, %s vertex invocations a picture", (double)draws / d,
+                 v);
+    if (w < 0) {
+        out[0] = '\0';
+        return 0;
+    }
+    return (size_t)w < cap ? (size_t)w : cap - 1;
+}
+
 void window_scene_vu_fit_add(SceneVuFit *f, uint64_t invocations, double workMs)
 {
     const double x = (double)invocations / 1000.0;

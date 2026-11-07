@@ -1375,6 +1375,10 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
             rhi_cmd_draw(cl, d->count, d->first, 1);
         }
         rhi_cmd_end_occlusion(cl, SK_TWIN_Q0 + 3u * t + q);
+        /* the check's cost on the VU line (9 invocations a triangle: the
+         * entry's own vertex shader, never the record) */
+        g_rdPerf.skinTwinDraws++;
+        g_rdPerf.skinTwinInvocations += d->count / 3u * 9u;
     }
     /* the draw's state back for whatever the replay records next */
     const uint32_t back[3] = {(uint32_t)d->dOff, (uint32_t)d->vOff, (uint32_t)d->bonesOff};

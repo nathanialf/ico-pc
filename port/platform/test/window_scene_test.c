@@ -123,6 +123,20 @@ int main(void)
         CHECK(n < sizeof(t) && strlen(t) == n);
     }
 
+    /* the skin check's twins (issue 123): a replay's average, "" without */
+    window_scene_twins_text(b, sizeof(b), 420, 760000, 10);
+    CHECK(text_is(b, "; twins 42 draws, 76k vertex invocations a picture"));
+    window_scene_twins_text(b, sizeof(b), 3, 2700, 0);
+    CHECK(text_is(b, "; twins 3 draws, 2.7k vertex invocations a picture"));
+    window_scene_twins_text(b, sizeof(b), 0, 0, 10);
+    CHECK(text_is(b, ""));
+    {
+        char t[16];
+        const size_t n = window_scene_twins_text(t, sizeof(t), 420, 760000, 10);
+
+        CHECK(n < sizeof(t) && strlen(t) == n);
+    }
+
     /* list 0 against the VU triangles (issue 179): list 0 = 12.3 ms + 0.41
        ms a thousand vertex invocations exactly */
     {
