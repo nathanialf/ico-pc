@@ -152,21 +152,18 @@ static void testBuild(void)
                                    UI_STR_SECTION_COMBAT,
                                    UI_STR_SECTION_CUTSCENES,
                                    UI_STR_BACK};
-    static const int yordaOpts[] = {
-        UI_OPT_YORDA,           UI_OPT_PIT_TIME,          UI_OPT_YORDA_TRIPS, UI_OPT_NATURAL_CHAINS,
-        UI_OPT_VAR_CHAIN_SPEED, UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
-    static const int yordaStrs[] = {UI_STR_OPT_YORDA,
-                                    UI_STR_OPT_PIT_TIME,
-                                    UI_STR_OPT_YORDA_TRIPS,
-                                    UI_STR_OPT_NATURAL_CHAINS,
-                                    UI_STR_OPT_VAR_CHAIN_SPEED,
-                                    UI_STR_OPT_VAR_CHAIN_DAMPING,
-                                    UI_STR_BACK};
-    static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
-                                     UI_OPT_VAR_AGGRESSION, UI_OPT_VAR_PEACEFUL, UI_OPT_BACK};
-    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
-                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_PEACEFUL,
-                                     UI_STR_BACK};
+    static const int yordaOpts[] = {UI_OPT_PIT_TIME,          UI_OPT_YORDA_TRIPS,
+                                    UI_OPT_NATURAL_CHAINS,    UI_OPT_VAR_CHAIN_SPEED,
+                                    UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
+    static const int yordaStrs[] = {UI_STR_OPT_PIT_TIME,          UI_STR_OPT_YORDA_TRIPS,
+                                    UI_STR_OPT_NATURAL_CHAINS,    UI_STR_OPT_VAR_CHAIN_SPEED,
+                                    UI_STR_OPT_VAR_CHAIN_DAMPING, UI_STR_BACK};
+    static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED,   UI_OPT_VAR_TOUGHNESS,
+                                     UI_OPT_VAR_AGGRESSION, UI_OPT_YORDA,
+                                     UI_OPT_VAR_PEACEFUL,   UI_OPT_BACK};
+    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED,   UI_STR_OPT_VAR_TOUGHNESS,
+                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_YORDA,
+                                     UI_STR_OPT_VAR_PEACEFUL,   UI_STR_BACK};
     /* the two weapon rows after Queen barrier (Light sword colour is built on
        every disc and hidden where there is no light sword) */
     static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,
@@ -259,8 +256,8 @@ static void testBuild(void)
               "Touch screen opens its page");
     }
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
-    CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 7), "Gameplay > Yorda rows");
-    CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 5), "Gameplay > Shadows rows");
+    CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 6), "Gameplay > Yorda rows");
+    CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 6), "Gameplay > Shadows rows");
     CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 10), "Gameplay > Combat rows");
     CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
     {
@@ -295,9 +292,11 @@ static void testBuild(void)
                   l->first >= LT_GAME_PROPERTY_COUNT && l->last > l->first && l->proc != NULL,
               "page %d layout", p);
     }
-    /* Yorda safe on Gameplay > Yorda, none of its rows on Gameplay */
-    int yorda = ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_YORDA);
-    CHECK(yorda >= 0 && ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_YORDA) < 0, "the Yorda row");
+    /* Yorda safe on Gameplay > Shadows (v0.10.5), on neither Gameplay nor the Yorda page */
+    int yorda = ui_settings_row_of(UI_PAGE_SHADOWS, UI_OPT_YORDA);
+    CHECK(yorda >= 0 && ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_YORDA) < 0 &&
+              ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_YORDA) < 0,
+          "the Yorda row");
     /* the Gameplay page holds the stick fix */
     CHECK(ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_STICK_FIX) >= 0, "the stick fix row");
     CHECK(ui_settings_row_of(UI_PAGE_CONTROLS, UI_OPT_STICK_FIX) >= 0, "also on Controls");
@@ -1962,11 +1961,10 @@ static void testValues(void)
         char want[32];
         int k;
 
-        CHECK(ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_PIT_TIME) >
-                      ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_YORDA) &&
+        CHECK(ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_PIT_TIME) >= 0 &&
                   ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_PIT_TIME) <
                       ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_YORDA_TRIPS),
-              "the Time to rescue Yorda row sits between Yorda safe and Yorda trips");
+              "the Time to rescue Yorda row sits before Yorda trips");
         CHECK(strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), "15 s (Original)") == 0,
               "pit time default (%s)", ui_settings_value_text(UI_OPT_PIT_TIME));
         for (k = 14; k >= 2; k--) {

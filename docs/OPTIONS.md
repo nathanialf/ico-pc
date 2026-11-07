@@ -504,8 +504,6 @@ other discs.
 
 Options > Gameplay > Yorda:
 
-- **Shadows never take Yorda** makes the game gentler. A few scenes in the
-  story still show her being taken.
 - **Time to rescue Yorda** sets how many seconds a shadow takes to pull Yorda
   into a pit, from the moment it starts to sink into the ground with her until
   she is gone (in most scenes; see below): from 4 to 30 seconds, one second a
@@ -517,7 +515,7 @@ Options > Gameplay > Yorda:
   camera of its own, the pull-in is quicker: the original takes her after 5
   of its 15 seconds there, and the time you set scales that in the same
   proportion (at 8 s she is taken after about 2.6 seconds there; at 30 s
-  after about 9.7). The row above, Shadows never take Yorda, stops it
+  after about 9.7). Shadows never take Yorda, on the Shadows page, stops it
   altogether.
 - **Yorda trips** makes Yorda trip and fall the way she does in the original
   game after the main gate opens: when Ico has run pulling her by the hand
@@ -543,7 +541,8 @@ Options > Gameplay > Yorda:
 ### Shadows
 
 Options > Gameplay > Shadows. Shadow toughness and Shadow aggression start as
-the game shipped on your disc; Peaceful shadows starts Off. The fight rules (One hit
+the game shipped on your disc; Shadows never take Yorda and Peaceful shadows
+start Off. The fight rules (One hit
 per swing, Shadows never dodge, Shadows attack together and Queen barrier) are
 on the [Combat](#combat) page.
 
@@ -577,8 +576,8 @@ on the [Combat](#combat) page.
   stand where they appear and never go after Ico or Yorda: they do not walk
   up to you, attack, or carry Yorda off. It is the game's own switch that
   turns the Shadows' thinking off, used here for the Shadows only; Yorda
-  keeps hers. It is different from **Shadows never take Yorda** (Gameplay >
-  Yorda), where the Shadows still come for you and fight but do not carry her
+  keeps hers. It is different from **Shadows never take Yorda** (the row
+  above), where the Shadows still come for you and fight but do not carry her
   off: with Peaceful shadows they do not come at all. Switches achievements
   off, the same as the other rows that make the game easier.
 

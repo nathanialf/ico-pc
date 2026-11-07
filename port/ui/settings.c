@@ -3485,7 +3485,6 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_PLAYERS, UI_STR_PLAYERS_NOTE);
         break;
     case UI_PAGE_YORDA:
-        addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
         addNote(pg, UI_OPT_PIT_TIME, UI_STR_OPT_PIT_TIME_NOTE);
         addNote(pg, UI_OPT_YORDA_TRIPS, UI_STR_OPT_YORDA_TRIPS_NOTE);
         addNote(pg, UI_OPT_NATURAL_CHAINS, UI_STR_OPT_NATURAL_CHAINS_NOTE);
@@ -3497,6 +3496,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_SHADOW_SPEED, UI_STR_OPT_SHADOW_SPEED_NOTE);
         addNote(pg, UI_OPT_VAR_TOUGHNESS, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
         addNote(pg, UI_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_AGGRESSION_NOTE);
+        addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
         addNote(pg, UI_OPT_VAR_PEACEFUL, UI_STR_OPT_VAR_PEACEFUL_NOTE);
         break;
     case UI_PAGE_COMBAT:
@@ -4221,23 +4221,21 @@ static void build(void)
     /* Gameplay > Yorda: how the Shadows take her, how long Ico has to pull
        her out, her falls, the chains Ico lets down for her and how they swing
        (the [variants] chain rows) */
-    static const int yordaOpts[] = {
-        UI_OPT_YORDA,           UI_OPT_PIT_TIME,          UI_OPT_YORDA_TRIPS, UI_OPT_NATURAL_CHAINS,
-        UI_OPT_VAR_CHAIN_SPEED, UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
-    static const int yordaStrs[] = {UI_STR_OPT_YORDA,
-                                    UI_STR_OPT_PIT_TIME,
-                                    UI_STR_OPT_YORDA_TRIPS,
-                                    UI_STR_OPT_NATURAL_CHAINS,
-                                    UI_STR_OPT_VAR_CHAIN_SPEED,
-                                    UI_STR_OPT_VAR_CHAIN_DAMPING,
-                                    UI_STR_BACK};
-    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness,
-       Shadow aggression and Peaceful shadows */
-    static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
-                                     UI_OPT_VAR_AGGRESSION, UI_OPT_VAR_PEACEFUL, UI_OPT_BACK};
-    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
-                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_PEACEFUL,
-                                     UI_STR_BACK};
+    static const int yordaOpts[] = {UI_OPT_PIT_TIME,          UI_OPT_YORDA_TRIPS,
+                                    UI_OPT_NATURAL_CHAINS,    UI_OPT_VAR_CHAIN_SPEED,
+                                    UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
+    static const int yordaStrs[] = {UI_STR_OPT_PIT_TIME,          UI_STR_OPT_YORDA_TRIPS,
+                                    UI_STR_OPT_NATURAL_CHAINS,    UI_STR_OPT_VAR_CHAIN_SPEED,
+                                    UI_STR_OPT_VAR_CHAIN_DAMPING, UI_STR_BACK};
+    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness
+       and Shadow aggression, Shadows never take Yorda (moved from the Yorda
+       page in v0.10.5: it is a rule about the Shadows) and Peaceful shadows */
+    static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED,   UI_OPT_VAR_TOUGHNESS,
+                                     UI_OPT_VAR_AGGRESSION, UI_OPT_YORDA,
+                                     UI_OPT_VAR_PEACEFUL,   UI_OPT_BACK};
+    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED,   UI_STR_OPT_VAR_TOUGHNESS,
+                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_YORDA,
+                                     UI_STR_OPT_VAR_PEACEFUL,   UI_STR_BACK};
     /* Gameplay > Combat: the three combat [variants] rows, then the four
        fight rules that were on Shadows (One hit per swing, Shadows never
        dodge, Shadows attack together, Queen barrier), the two weapon rows */

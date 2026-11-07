@@ -4793,8 +4793,9 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                                 "Combat",
                                                 "Cutscenes",
                                                 "Back"};
-    static const char *const kShadowLabels[5] = {"Shadow speed", "Shadow toughness",
-                                                 "Shadow aggression", "Peaceful shadows", "Back"};
+    static const char *const kShadowLabels[6] = {"Shadow speed",      "Shadow toughness",
+                                                 "Shadow aggression", "Shadows never take Yorda",
+                                                 "Peaceful shadows",  "Back"};
     static const char *const kCombatLabels[10] = {"Automatic guard",
                                                   "Turn to face shadows",
                                                   "Shadows wait while Ico is down",
@@ -4894,8 +4895,8 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     }
     int lb[16], lv[16];
     const int sn = ui_settings_page_rows(UI_PAGE_SHADOWS, lb, NULL, lv, 16);
-    varLabelsAre(who, "Shadows", lb, sn, kShadowLabels, 5);
-    if (sn == 5) {
+    varLabelsAre(who, "Shadows", lb, sn, kShadowLabels, 6);
+    if (sn == 6) {
         static const char *const kDefaults[2] = {"Original", "Their own"};
         for (int i = 0; i < 2; i++) {
             CHECK(strcmp(lt_ext_row_text(lv[1 + i]), kDefaults[i]) == 0,
@@ -4903,14 +4904,14 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                   lt_ext_row_text(lv[1 + i]));
         }
     }
-    checkPageFits(UI_PAGE_SHADOWS, "Gameplay > Shadows (five rows)");
+    checkPageFits(UI_PAGE_SHADOWS, "Gameplay > Shadows (six rows)");
 
-    if (sn == 5) {
+    if (sn == 6) {
         /* Peaceful shadows: Off, then On (a cheat) and back */
-        CHECK(strcmp(lt_ext_row_text(lv[3]), "Off") == 0, "%s: Peaceful shadows starts Off", who);
+        CHECK(strcmp(lt_ext_row_text(lv[4]), "Off") == 0, "%s: Peaceful shadows starts Off", who);
         {
             const VarSwitch ps = {UI_PAGE_SHADOWS,
-                                  3,
+                                  4,
                                   ICO_VARIANT_PEACEFUL_SHADOWS,
                                   "variants.peaceful_shadows",
                                   "Peaceful shadows",
