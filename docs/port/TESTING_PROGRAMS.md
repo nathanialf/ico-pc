@@ -1174,7 +1174,12 @@ The renderer's test programs have a page of their own:
   batch and the background set on one thread each, and a pipeline made on the test's thread while
   the background set compiles (the lock taken by both).
 - `rhi_d3d12_plan_test.c`: the D3D12 backend's state and barrier bookkeeping on the CPU
-  (`rhi_d3d12_plan`).
+  (`rhi_d3d12_plan`), with the external-compute cases (the storage grant by format, the capability
+  answer, what the external end puts back).
+- `rhi_native_test.c`: `rhi_native.h` on Vulkan (lavapipe): the device handles, textures granted
+  storage, the storage barriers, the external begin/end bracket and a two-pass picture identical
+  with and without it (`rhi_native`; exit 77 without a device). `rhi_test_native.c` runs inside the
+  common cells of every backend: the handles where offered, "not offered" on Direct3D 11 and OpenGL.
 - `rhi_d3d11_shader_plan_test.c`: the Direct3D 11 backend's shader route on the CPU
   (`port/rhi/d3d11/d3d11_shader.c`): the macros text and its malformed forms, the include lookup,
   the flat-register rule on hand-made sources, on `rhi_test_hlsl.h` (which must equal

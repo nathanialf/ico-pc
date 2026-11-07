@@ -120,6 +120,12 @@
 #define rhi_set_vulkan_loader     RHI__NAME(set_vulkan_loader)
 #define rhi_injector_name        RHI__NAME(injector_name)
 #define rhi_overlay_name         RHI__NAME(overlay_name)
+#define rhi_native_device        RHI__NAME(native_device)
+#define rhi_native_texture       RHI__NAME(native_texture)
+#define rhi_native_command_list  RHI__NAME(native_command_list)
+#define rhi_cmd_external_begin   RHI__NAME(cmd_external_begin)
+#define rhi_cmd_external_end     RHI__NAME(cmd_external_end)
+#define rhi_device_compute_caps  RHI__NAME(device_compute_caps)
 /* clang-format on */
 
 #endif /* RHI_BACKEND_PREFIX */

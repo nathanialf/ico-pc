@@ -330,11 +330,13 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
         rd.Flags |= D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
         rd.Flags &= ~D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET;
     }
-    /* the destination read: a single-sampled RGBA8 target the ROV pixel
-     * shaders read and write (RhiLimits.rov); asked for elsewhere it is
-     * ignored */
-    if ((desc->usage & RHI_TEX_STORAGE) && g_dx.limits.rov && samples == 1u &&
-        desc->format == RHI_FMT_RGBA8_UNORM && !fm->depth) {
+    /* a single-sampled RGBA8 target the ROV pixel shaders read and write
+     * (the destination read), or an RGBA8 or RGBA16F texture external
+     * compute writes through a typed UAV (rhi_native.h): ROV support or not.
+     * D32F cannot (a depth-stencil resource takes no UAV); asked for
+     * elsewhere the flag is ignored */
+    if ((desc->usage & RHI_TEX_STORAGE) && d3dp_storage_texture_ok(desc->format, samples) &&
+        !fm->depth) {
         rd.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
     }
     /* Created in COMMON: an RHI texture starts UNDEFINED, and the first

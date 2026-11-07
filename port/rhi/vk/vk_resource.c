@@ -651,9 +651,20 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
     }
     /* the destination read (RhiDstRead): asked for only where the device
      * has the path (RhiLimits), ignored elsewhere */
-    if ((desc->usage & RHI_TEX_STORAGE) && g_vkr.interlock && desc->format == RHI_FMT_RGBA8_UNORM &&
-        desc->samples <= 1u) {
-        usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+    bool storage = false;
+    if ((desc->usage & RHI_TEX_STORAGE) && desc->samples <= 1u &&
+        (desc->format == RHI_FMT_RGBA8_UNORM || desc->format == RHI_FMT_RGBA16F ||
+         desc->format == RHI_FMT_D32F)) {
+        /* any of the three formats where the device takes them as storage
+         * images (the interlock path's RGBA8 was this test already:
+         * vkr_create_device), for the destination read and for external
+         * compute (rhi_native.h) alike */
+        VkFormatProperties fp;
+        vkGetPhysicalDeviceFormatProperties(g_vkr.phys, vkFmt, &fp);
+        if (fp.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) {
+            usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+            storage = true;
+        }
     }
     /* an attachment its pass reads as an input attachment: the colour
      * (the exact blend's attachment read, DATE's stencil setup) or the
@@ -724,6 +735,7 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
     }
     t->memSize = req.size;
     t->format = vkFmt;
+    t->storage = storage;
     t->rhiFormat = desc->format;
     t->aspects = fm->aspect;
     t->width = desc->width;
