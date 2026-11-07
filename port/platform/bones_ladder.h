@@ -24,7 +24,10 @@
  *           android/gpu_driver_android.c; the package's library
  *           libvulkan_freedreno.so).  Written when the twins still differ
  *           under step 1, or straight away when the ring read beside the
- *           picture did not clear it, or the twins differed while the probe
+ *           picture did not clear it (BONES_SCENE_EVENTS times: the twin C
+ *           or, since v0.11.0, the twins of a pre-pass record draw, which
+ *           read the bones through the ring as the record did), or the
+ *           twins differed while the probe
  *           of the same command drew right (BONES_SCENE_EVENTS events, no
  *           wrong probe: the scene pass's execution, not the bone read).
  *           Under step 1 it takes BONES_NOBIN_EVENTS twin events, as

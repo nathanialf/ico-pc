@@ -789,6 +789,9 @@ typedef struct SkTwin {
     uint8_t fs;
     bool own, c;
     bool entry; /* through the program's own entry (the draw read the pre-pass record) */
+    /* A and B through the entry's ring build: the record was made by the
+     * pre-pass's batch builds, which read the bones through t5 */
+    bool recRing;
     /* why not the draw's own pipeline: 1 it does not read its attachment,
      * 2 it reads it but writes Z (0: own, or through the entry) */
     uint8_t notOwn;
@@ -1251,6 +1254,14 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
      * through the program's own entry, which reads the bones at b3 and
      * ignores the record (rd_replay_vu.c vuDraw's fallback key) */
     const bool entry = dk->vs != d->vs;
+    /* the pre-pass's batch builds (g_rd.vuPreBatch, every device's default
+     * with the pre-pass on) read the bones through the ring (t5,
+     * vu_common.hlsli ICO_VU_PRE_BATCH), not the uniform block: the twins
+     * of a record draw read them the same way, through the entry's ring
+     * build (the plain set's: where it cannot be made, the uniform read as
+     * before), so an A/B difference is one of the read the picture took */
+    const bool recRing =
+        entry && g_rd.vuPreBatch && !g_rd.vuBonesRing && rd__vu_bones_ring_shader(d->vs).id != 0;
     /* thinned, the box check's pipeline (colour and Z writes off): the
      * cheap form once the run has a verdict */
     const bool own = !entry && !s_thin.thin && dk->dst == RHI_DST_READ_ATTACHMENT &&
@@ -1281,7 +1292,8 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
         key.gs.zwrite = RD_ZWRITE_OFF;
         /* taken at once in the tool's and the tests' replays (mode 2, and
          * rd__vu_skin_check_replays: each harvested at once anyway) */
-        p = boxPipe(&key, skMode() == 2 || s_collect != NULL);
+        p = recRing ? ringPipe(&key, skMode() == 2 || s_collect != NULL)
+                    : boxPipe(&key, skMode() == 2 || s_collect != NULL);
         if (!p.id) {
             s_blk.twinsNot++;
             return;
@@ -1293,7 +1305,7 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
     const uint64_t ua = rhi_limits()->uniformAlign ? rhi_limits()->uniformAlign : 256u;
     uint64_t vOffA = d->vOff, vOffB = d->vOff, vOffC = ~0ull;
     RhiPipeline pc = {0};
-    if (g_rd.vuBonesRing) {
+    if (g_rd.vuBonesRing || recRing) {
         IcoVuCB va, vb;
         memcpy(&va, d->vcb, sizeof(va));
         memcpy(&vb, d->vcb, sizeof(vb));
@@ -1325,6 +1337,7 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
     tw->fs = dk->fs;
     tw->own = own;
     tw->entry = entry;
+    tw->recRing = recRing;
     tw->notOwn = own || entry                         ? 0u
                  : dk->dst != RHI_DST_READ_ATTACHMENT ? 1u
                  : s_thin.thin                        ? 3u
@@ -2073,7 +2086,8 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
     /* the ladder's evidence (rd_vu_bones.c): whether C cleared it, and what
      * the probe of the same command in the same replay said */
     rd__vu_bones_event(tw->frame,
-                       !ringRead    ? -1
+                       tw->recRing  ? 0 /* A and B were the ring read: it does not clear it */
+                       : !ringRead  ? -1
                        : ringDiffer ? 0
                                     : 1,
                        k && k->judged ? (k->probeWrong ? 0 : 1) : -1);
@@ -2095,9 +2109,12 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
                 (unsigned long long)(tw->bonesOff & 4095u), (unsigned long long)c[0],
                 (unsigned long long)(tw->freshOff & 4095u), (unsigned long long)c[1], cw,
                 rd__fs_name(tw->fs),
-                tw->own     ? " with the draw's attachment read (its own pipeline)"
-                : tw->entry ? " with colour and Z writes off (the program's own vertex entry: the "
-                              "draw read the pre-pass record)"
+                tw->own       ? " with the draw's attachment read (its own pipeline)"
+                : tw->recRing ? " with colour and Z writes off (the program's own vertex entry's "
+                                "ring build: the draw read the pre-pass record and its batch "
+                                "builds read the bones through the ring)"
+                : tw->entry   ? " with colour and Z writes off (the program's own vertex entry: "
+                                "the draw read the pre-pass record)"
                 : tw->notOwn == 3u
                     ? " with colour and Z writes off (the box check's pipeline: the twins "
                       "thinned)"
@@ -2109,6 +2126,8 @@ static void readTwin(const SkSlot *sl, uint32_t t, const uint64_t *samples, uint
                 probe, reads, (unsigned long long)s_run.twinEvents,
                 g_rd.vuBonesRing ? "; A and B read the bones through the ring: step 1 of the "
                                    "ladder in force"
+                : tw->recRing    ? "; A and B read the bones through the ring, as the pre-pass "
+                                   "record did"
                                  : "");
     }
     if (s_cap.done) {

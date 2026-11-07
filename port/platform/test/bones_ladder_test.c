@@ -169,7 +169,8 @@ static void testSequences(void)
        the twins differed twice while the probe drew right (the scene
        pass's execution); one wrong probe keeps step 1 the way */
     memset(&k, 0, sizeof(k));
-    CHECK(start(&k, 1, 5, 200, 1, 0, 1, 0, 0) == BONES_WRITE_NOBIN && !k.ring && k.nobin);
+    CHECK(start(&k, 1, 5, 200, 1, 0, 1, 0, 0) == BONES_WAIT && !k.nobin);
+    CHECK(start(&k, 1, 5, 200, 2, 0, 2, 0, 0) == BONES_WRITE_NOBIN && !k.ring && k.nobin);
     memset(&k, 0, sizeof(k));
     CHECK(start(&k, 1, 5, 200, 2, 0, 0, 2, 0) == BONES_WRITE_NOBIN && !k.ring && k.nobin);
     memset(&k, 0, sizeof(k));
@@ -278,7 +279,7 @@ static void testPlain(void)
     in.ringUsable = 1;
     CHECK(bones_ladder_step(&in) == BONES_WRITE_RING);
     in.ringUsable = 0;
-    in.ringFail = 1;
+    in.ringFail = 2;
     CHECK(bones_ladder_step(&in) == BONES_WRITE_NOBIN);
     in.ringFail = 0;
     in.differ = 3;

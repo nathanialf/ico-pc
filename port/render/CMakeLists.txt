@@ -2021,8 +2021,21 @@ if(ICO_RUN_TESTS)
                      -P "${_vsk}")
     set_tests_properties(rd_vu_skin_check_probe_c3 PROPERTIES ENVIRONMENT
                          "${_env};ICO_RD_VU_SKIN_SABOTAGE=200;ICO_RD_VU_SET=plain")
+    # twin_record (issue 123 after v0.10.5): the twin frame with the pre-pass
+    # on and its batch builds (the record's bones read through t5): the
+    # twins of the record draw read the bones through the entry's ring
+    # build as the record did (A and B the ring read, no C), and still see
+    # the zeroed bone; twin_c is the entry path's C (the pre-pass off)
+    add_test(NAME rd_vu_skin_check_twin_record
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=twin
+                     "-DEXTRA=twins differ: A \\(the draw's offset, page phase [0-9]+\\) [0-9]+ samples, B \\(fresh, phase [0-9]+\\) [0-9]+ samples[;,] through [a-z0-9_]+ with colour and Z writes off \\(the program's own vertex entry's ring build: the draw read the pre-pass record and its batch builds read the bones through the ring\\).*A and B read the bones through the ring, as the pre-pass record did"
+                     "-DNOT_=C \\(ring read\\) [0-9]+ samples"
+                     -P "${_vsk}")
+    set_tests_properties(rd_vu_skin_check_twin_record PROPERTIES ENVIRONMENT
+                         "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring;ICO_RD_VU_SKIN_INTERVAL_MS=off;ICO_RD_VU_SET=plain;ICO_RD_VU_PREPASS=1"
+                         SKIP_REGULAR_EXPRESSION "SKIP:")
     set_tests_properties(rd_vu_skin_check_twin_c PROPERTIES ENVIRONMENT
-                         "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring;ICO_RD_VU_SKIN_INTERVAL_MS=off;ICO_RD_VU_SET=plain")
+                         "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring;ICO_RD_VU_SKIN_INTERVAL_MS=off;ICO_RD_VU_SET=plain;ICO_RD_VU_PREPASS=0")
     set_tests_properties(rd_vu_skin_check_twin_bones_ring PROPERTIES ENVIRONMENT
                          "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring;ICO_RD_VU_SKIN_INTERVAL_MS=off;ICO_RD_VU_SET=plain;ICO_RD_VU_BONES=ring")
     set_tests_properties(rd_vu_skin_check_judge rd_vu_skin_check rd_vu_skin_check_robust
@@ -2502,6 +2515,23 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_vu_bones_ring_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 1800)
     if(_env)
         set_tests_properties(rd_vu_bones_ring_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    # rd_vu_bones_ring_ab_prepass: the same dumps with the VU pre-pass on (every
+    # tile-based GPU since v0.11.0): the ring runs byte for byte as the
+    # cbuffer runs under the pre-pass's batch builds (which read the bones
+    # through t5 either way) and with them off (the skinned commands then
+    # drawn the old way through the ring builds); the twins of the record
+    # draws read the bones through the ring as the record did
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vu_bones_ring_ab_prepass")
+    add_test(NAME rd_vu_bones_ring_ab_prepass
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> -DPREPASS=1
+                     "-DDUMPS=${_vsk163}/frame-20261105-195124-v6171-blended.rddump|${_vsk163}/blended-750-a200.rddump|${_vsk163}/frame-20261106-080033-v3910-blended.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vu_bones_ring_ab_prepass"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_bones_ring_ab.cmake")
+    set_tests_properties(rd_vu_bones_ring_ab_prepass PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                                 TIMEOUT 2700)
+    if(_env)
+        set_tests_properties(rd_vu_bones_ring_ab_prepass PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_region_stats (test/rd_region_stats.cmake, docs/port/VU1_PROGRAMS.md
     # "The region rule"): rd_replay_tool --region-stats on the first two

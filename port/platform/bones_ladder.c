@@ -53,9 +53,11 @@ BonesAction bones_ladder_step(const BonesLadderIn *in)
     if (in->ringClear > 0) {
         return in->ringUsable ? BONES_WRITE_RING : BONES_WAIT_PLAIN;
     }
-    if (in->ringFail > 0 || (in->sceneOnly >= BONES_SCENE_EVENTS && in->probeWrong == 0)) {
-        /* the ring read does not clear it, or the scene pass's execution:
-           step 1 skipped */
+    if (in->ringFail >= BONES_SCENE_EVENTS ||
+        (in->sceneOnly >= BONES_SCENE_EVENTS && in->probeWrong == 0)) {
+        /* the ring read does not clear it (twice: since v0.11.0 the twins of
+           a pre-pass record draw are ring reads themselves, one event each),
+           or the scene pass's execution: step 1 skipped */
         return in->nobinAvail && !in->nobinOff ? BONES_WRITE_NOBIN : BONES_STOP;
     }
     if (in->differ >= BONES_EVENTS_UNTESTED) {
