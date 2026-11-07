@@ -12,6 +12,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | --- | --- |
 | `port/game/options.h`, `options.c` | the gameplay options, their config keys and defaults, the mirror flag per save slot, the stereo/mono choice |
 | `port/game/door_grace.h`, `door_grace.c` | the doorway fix's arm and arrival grace |
+| `port/game/ico_rows.h`, `ico_rows.c` | Developer > Free movement and the Ask Yorda for a hint binding: the row's value (Developer mode ANDed in), the hint button's press latch |
 | `port/game/yorda_trip.h`, `yorda_trip.c`, `yorda_trip_live.c`, `yorda_trip_source.c` | Yorda trips: the rule (the main gate scene's 3 s count), the game's side (the stage load's motions, the run-pulled tick), her fall's motions read from the disc |
 | `port/game/pit_time.h` | Time to rescue Yorda: the length of each disc's pull-in (the five SINK motions), header-only so the disc test checks the numbers the option reads |
 | `port/game/variants.h`, `variants.c` | the game variants ([variants]): values, config keys, the achievements rule, the debug switches and debug-menu opener the game binds, the hint rule, the enemy row reader |
@@ -66,6 +67,8 @@ defaults are [CONFIG.md](CONFIG.md#gameplay)'s; the differences from the PS2 are
 | `[gameplay] hold_type` | `mcard.c`, `layout_action.c`, `settings.c` |
 | `[variants] *` (Gameplay, Gameplay > Shadows, Gameplay > Combat and Gameplay > Cutscenes) | `port/game/variants.c`; the game hooks in `debug.c`, `enemy.c`, `enemy_act.c`, `queen.c`, `lws_kyomi.c`, `girl.c`, `commonact.c`, `boyact.c`, `weapon.c` ([Game variants](#game-variants)); `settings.c` (the Debug menu row); `gamestate.c` (the achievements rule) |
 | `[gameplay] mirror` | `pad_host.c`, `audio_host.c`, rd, `photo_ui.c` |
+| `[developer] free_movement` | `boyact.c` (the four boy control loops), `gamestate.c` |
+| `[input] kb.hint`, `mouse.hint`, `pad.hint` | `lws_kyomi.c` (`LwsKyomiGeo`), through `ico_hint_ask` |
 | `[gameplay] developer_mode` | `main.c`, `debug.c`, the port |
 | `[game] circle_back` | `layout_action.c`, `layout_texture.c` |
 | `[dev] debug_option` | `debug.c` |
@@ -487,6 +490,47 @@ light sword); using original` at a load; `settings: no Light sword colour row on
 has no light sword)` once per disc; the `variants: applied` line carries `sword_colour=`,
 `weapon=` and `(net kind K)`.
 
+### Free movement and Ask Yorda for a hint
+
+Two rows built on code the discs carry and no retail path reaches (`port/game/ico_rows.h`).
+
+**Free movement** (Options > Developer, `[developer] free_movement`, default false; needs Developer mode,
+so `ico_free_movement` is the row ANDed with `ico_opt_developer_mode` and a hidden row does nothing).
+`ACTDebugMove` (`ico2/fumi/src/act.c`; `ACTDebugMove_jun26` on the June 2001 demo, the same inputs) is
+called from the four boy control loops (`boyact.c` `subBoyControl` and its `_ntsc`, `_aug6` and `_jun26`
+copies, and `way_tool.c`'s cursor), each behind `int dbg = 0` and a test of the loop's own pad:
+`self == CurrentTargetGObj && (pad.trg & 1)`, an L2 press. The port changed the four tests to
+`dbg || ico_free_movement()`. Ico is already the debug target: each copy of the boy's start-up sets
+`CurrentTargetGObj = self` after its first `_ACTWait(1)` (`boyact.c`, four sites), and nothing in the
+game or the port resets it except the Debug menu and the model viewer, which put it back. What the
+move reads, all from Ico's own pad (`iosPadRead(&ext->pad)`, the pad after the game's Button
+configuration): L2 held keeps it going (`pad.now & 1`); the left stick (`iosPadGetStick` stick 0) moves
+him 32 units a frame at full tilt over the ground, camera relative (`ConvertStickToAbsCoord`); the
+right stick (stick 1, `dz` times `mag`) moves him up and down 32 units a frame, which also leaves the
+floor-following state (`mode` 1); L3 (`pad.trg & 0x200`, `ICO_PAD_L3`) is the snap button: in the free
+state it puts the root update back and the floor under him is found each frame (`ClipFloor`, then
+`ClipFloorR`), in the floor state it drops him on the floor found below. It ends when the floor state
+holds and L2 is let go, with a last floor fit (`AdjustMotionHeightToNearestField`). The move draws the
+game's own crosshair lines (`DrawLineG`) and a dummy text. `[developer] free_movement` is a simulation
+key (`sim_keys.c`), so a pad recording and a save state carry it. `ico_gs_achievements_suspended` names it
+beside developer mode. Log: `developer: free movement on|off (row .., Developer mode ..)` once per change.
+
+**Ask Yorda for a hint** (Options > Controls > Remap controls, target `hint`, `ICO_T_HINT`, the last row;
+keyboard, mouse and gamepad columns, unbound by default; touch: none; [INPUT.md](INPUT.md)). The game's
+`debug_hintStart` (`debug.c`) loops the objects for `IsTopHint` and calls `DebugHintStart`
+(`lws_kyomi.c`), which sets that hint's timer to its trigger time; nothing calls it. The port calls it
+from `LwsKyomiGeo` instead, for the hint object that is the stage's waiting one (`hint->flags & 1`, the
+test of `IsTopHint`), once for each press: `ico_hint_ask` takes the press the device layer counted
+(`ico_hint_ask_note`, once a vsync of the first player's snapshot; a press older than 12 snapshots is dropped
+because nothing was waiting for it). The timer is then past its time on the same tick and the hint's
+animation starts as it does when the wait ends. It does nothing with No hints on (`ico_hints_on` clears
+the waiting flag first) or in a room with no waiting hint. The code exists in the final-PAL-family
+builds only: `LwsKyomiGeo` and `CreateKyomiGObj` return early on `ICO_NTSCAUG6JUN26` (the North American
+disc and the two 2001 builds have no hint objects), so the row is hidden there (`REMAP_TARGETS` in
+`settings.c`; `settings_discs`). Log lines: `hint: the Ask Yorda for a hint button was pressed (n this
+run)` and `hint: the waiting hint starts now, asked for (n this run)` (the first 8, then every 100th); a
+press line without a start line means no hint was waiting. The press is not part of a pad recording.
+
 ## Options on each disc
 
 Every row, screen and extra of the port against the seven discs (`config/regions.txt`: pal, jpn,
@@ -519,6 +563,8 @@ hold the rest.
 | Audio: Sound output | W | W | W | W | W | W | W | `soundOutputModeSet` on every disc; `options_<slug>` |
 | Developer: Developer mode | W | W | W | W | W | W | W | `achievements_<slug>` (the suspension) |
 | Developer: Debug menu | W | W | W | W | W | H | W | `ICO_JUN26` (the demo's debug tables are the preview's); `settings_discs`, `settings_extra_<slug>` |
+| Developer: Free movement | W | W | W | W | W | W | W | the four `subBoyControl` copies carry the game's debug move on every disc (`ACTDebugMove_jun26` on `jun26`); `settings_discs`, `ico_rows` |
+| Controls: Ask Yorda for a hint (Remap controls) | W | W | W | H | H | H | W | `ICO_NTSCAUG6JUN26` (no hint objects: `LwsKyomiGeo_ntscaug6jun26`); `settings_discs` |
 | Gameplay > Shadows: Shadow toughness American | W | W | W | W | W | N | W | `ico_variant_offered`; `variants_<slug>`, `settings_extra_<slug>` |
 | Gameplay > Shadows: Shadow toughness Third journey | W | W | W | N | N | N | W | `third_journey_offered` (`!ICO_NTSCAUG6JUN26`: only the PAL-family restart reads `gameParam[38 + clears]`); `variants_<slug>`, `settings_extra_<slug>` |
 | Gameplay: No hints; Gameplay > Cutscenes: No cutscene look-around | W | W | W | N | N | N | W | `ico_hints_on` is not in `GirlAI_ntscaug6jun26`; `debug_hand_camera` stays 0; `settings_extra_<slug>` |

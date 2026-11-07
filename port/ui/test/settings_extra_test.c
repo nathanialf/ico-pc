@@ -5216,14 +5216,14 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
         return;
     }
     CHECK(!lt_ext_prop(dbg)->defaultMask, "%s: the Debug menu row with Developer mode on", who);
-    checkPageFits(UI_PAGE_DEVELOPER, "Developer (five rows)");
+    checkPageFits(UI_PAGE_DEVELOPER, "Developer (six rows)");
     {
         int db[8], dop[8], dv[8], at = -1;
         const int dn = ui_settings_page_rows(UI_PAGE_DEVELOPER, db, dop, dv, 8);
         for (int i = 0; i < dn; i++) {
             at = dop[i] == UI_OPT_VAR_DEBUG_MENU ? i : at;
         }
-        CHECK(dn == 5 && at == 3 && db[at] == dbg &&
+        CHECK(dn == 6 && at == 3 && db[at] == dbg &&
                   strcmp(lt_ext_row_text(dbg), "Debug menu") == 0 && dv[at] < 0,
               "%s: the Debug menu is a press row before Back, no value (%d of %d)", who, at, dn);
     }

@@ -98,7 +98,7 @@ void ico_input_rumble_get_for_port(int port, unsigned short *high_freq, unsigned
 /* --- bindings (bindings.c) ------------------------------------------------ */
 
 /* Targets: the sixteen buttons in ICO_PAD_* bit order, then the eight stick
-   directions. */
+   directions, then the hint action. */
 enum {
     ICO_T_L2,
     ICO_T_R2,
@@ -124,6 +124,9 @@ enum {
     ICO_T_RSTICK_DOWN,
     ICO_T_RSTICK_LEFT,
     ICO_T_RSTICK_RIGHT,
+    /* an action, not a pad button: Ask Yorda for a hint (port/game/ico_rows.h;
+       unbound by default, off the pad frame, shown on the discs with hints) */
+    ICO_T_HINT,
     ICO_T_COUNT
 };
 
@@ -234,6 +237,9 @@ typedef struct IcoBindings {
        (default medium), percent 10..100 (default 75; the Settings row
        steps 25, 50, 75, 100) */
     int touch_mode, touch_size, touch_opacity;
+    /* set by each ico_bindings_step: a source of ICO_T_HINT is held (the
+       gamepad's when gamepad is on, the keyboard's and the mouse's) */
+    int hint_down;
 } IcoBindings;
 
 /* The defaults, the same on every platform. */

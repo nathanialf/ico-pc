@@ -114,7 +114,7 @@ same on every platform and live as config text, parsed by the same code as a pla
 
 The rows live in `[input.kb]`, `[input.mouse]` and `[input.pad]`, one key per target name (`l2`,
 `r2`, `l1`, `r1`, `triangle`, `circle`, `cross`, `square`, `select`, `l3`, `r3`, `start`, `up`,
-`right`, `down`, `left`, `lstick_up` .. `rstick_right`), the value a name, a comma list or an
+`right`, `down`, `left`, `lstick_up` .. `rstick_right`, and `hint`, an action: see below), the value a name, a comma list or an
 array of names, or `"none"`; `[input.kb]` also has `walk`. The default rows are in
 `default_text` (`ico_bindings_default_text`). Names are case-insensitive and ignore blanks and
 underscores, with aliases such as `return`, `grave`, `lshift`, `pgup` (`name_eq`, `key_alias`).
@@ -122,6 +122,14 @@ An unknown key or a bad value is logged (`input: ignoring "<key> = <value>" (unk
 value)`), an unknown name as `input: <key>: unknown key "<name>"` (or `mouse button`,
 `gamepad source`), more than four sources as `input: <key>: only the first 4 sources are used`, and
 the rest still applies (`ico_bindings_set`, `bind_list`).
+
+`hint` (`ICO_T_HINT`, Ask Yorda for a hint) is the one target that is neither a pad button nor a stick
+direction: it has no bit in the pad frame and no default on any device. `ico_bindings_step` only sets
+`IcoBindings.hint_down` (a key or mouse button of the row held, or a gamepad source while the gamepad
+is on), and `input_sdl.c` hands it to `ico_hint_ask_note` (`port/game/ico_rows.c`) once for each
+device snapshot of the first player; player two's step (a copy of the bindings) is not noted. The
+game's side is [GAME_FEATURES.md](GAME_FEATURES.md#free-movement-and-ask-yorda-for-a-hint). A press
+is therefore not part of a recorded pad (`input_record.c`) and replays do not repeat it.
 
 A new `[input]` switch needs its field in `IcoBindings` (`port/input/input.h`), its default line in
 `default_text` and its parse in `ico_bindings_set` (`port/input/bindings.c`), its name in

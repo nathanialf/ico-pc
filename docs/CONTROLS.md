@@ -76,6 +76,9 @@ Escape, Alt+Enter, F5, F6, F9, F11, F12 and Shift+F12 cannot be changed. Everyth
 **Options > Controls > Remap controls**. When you give a button or key to
 another action, the two actions swap. If the action you changed had no
 button on that device, the other action is left without one.
+On the discs that have hints, the last row, **Ask Yorda for a hint**, starts
+with no button or key: give it one and pressing it makes the hint that is
+waiting in the room play at once.
 The game's own **Button configuration** applies on top of your changes.
 
 ## The Japanese, Korean and Asian discs

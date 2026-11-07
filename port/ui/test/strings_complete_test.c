@@ -281,6 +281,22 @@ static void testTables(void)
             }
         }
     }
+    /* Ico's two rows (v0.10.5): Developer > Free movement with its note and the
+       Remap controls row Ask Yorda for a hint, the eight tables in their own
+       words; the community tables English (NULL) or the translator's words */
+    for (int id = UI_STR_OPT_FREE_MOVEMENT; id <= UI_STR_REMAP_ASK_HINT; id++) {
+        for (int l = 0; l < UI_LANG_TABLES; l++) {
+            const int community = l >= UI_LANG_COMMUNITY_FIRST;
+            const char *row = kTables[l][id];
+            CHECK(community ? (row == NULL || row[0] != 0) : (row != NULL && row[0] != 0),
+                  "%s: Ico row string %d %s", kNames[l], id,
+                  community ? "English (NULL) or the translator's words" : "in its own words");
+            if (l != UI_LANG_EN && !community && row != NULL) {
+                CHECK(strcmp(row, kTables[UI_LANG_EN][id]) != 0,
+                      "%s: Ico row string %d is not the English text", kNames[l], id);
+            }
+        }
+    }
     /* Gameplay > Yorda (v0.10.5): the two chain rows, their notes and the
        game's own 4 as a value, the same rule */
     for (int id = UI_STR_OPT_VAR_CHAIN_SPEED; id <= UI_STR_VAL_VAR_CHAIN_ORIGINAL; id++) {

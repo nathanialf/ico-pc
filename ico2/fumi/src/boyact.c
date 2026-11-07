@@ -54,6 +54,9 @@ extern int ico_door_grace_begin(int stage, int frames);
 extern int ico_door_grace_active(void);
 extern void ico_door_grace_tick(void);
 extern int ico_door_grace_holds(int dest_stage);
+/* PC port: port/game/ico_rows.h: Developer > Free movement, read in place of the
+   local debug switch that the four boy control loops leave at 0 */
+extern int ico_free_movement(void);
 
 typedef struct { /* field names derived */
     int a, b, c;
@@ -1812,7 +1815,7 @@ static void subBoyControl_jun26(GObj *volatile self)
            moving the current target object; the August TRFILE (2052-2056)
            and the PAL listing (2323-2327) have five code-less lines after
            the loop's brace, this block's length; the text is derived */
-        if (dbg) {
+        if (dbg || ico_free_movement()) { /* PC port: Developer > Free movement */
             if ((void *)self == CurrentTargetGObj && (s->pad.trg & 1)) {
                 ACTDebugMove(self, 1);
             }
@@ -2439,7 +2442,7 @@ static void subBoyControl_aug6(GObj *volatile self)
            moving the current target object; the August TRFILE (2052-2056)
            and the PAL listing (2323-2327) have five code-less lines after
            the loop's brace, this block's length; the text is derived */
-        if (dbg) {
+        if (dbg || ico_free_movement()) { /* PC port: Developer > Free movement */
             if ((void *)self == CurrentTargetGObj && (s->pad.trg & 1)) {
                 ACTDebugMove(self, 1);
             }
@@ -3074,7 +3077,7 @@ static void subBoyControl_ntsc(GObj *volatile self)
            moving the current target object; the August TRFILE (2052-2056)
            and the PAL listing (2323-2327) have five code-less lines after
            the loop's brace, this block's length; the text is derived */
-        if (dbg) {
+        if (dbg || ico_free_movement()) { /* PC port: Developer > Free movement */
             if ((void *)self == CurrentTargetGObj && (s->pad.trg & 1)) {
                 ACTDebugMove(self, 1);
             }
@@ -3734,7 +3737,7 @@ void subBoyControl(GObj *volatile self)
         }
         /* a local debug switch, off: the cursor_control idiom of way_tool.c,
            moving the current target object */
-        if (dbg) {
+        if (dbg || ico_free_movement()) { /* PC port: Developer > Free movement */
             if ((void *)self == CurrentTargetGObj && (s->pad.trg & 1)) {
                 if (s->actMode != 1) {
                     ACTSendMailCorrect(self, 258);

@@ -97,6 +97,9 @@ static float *hintTimers; /* derived name */
 /* PC port: port/game/variants.h: 0 with Options > Gameplay > No
    hints on (and on the discs without hints) */
 extern int ico_hints_on(void);
+/* PC port: port/game/ico_rows.h: 1 once for each press of Controls > Ask Yorda
+   for a hint (a stale one is dropped) */
+extern int ico_hint_ask(void);
 
 static void LwsKyomiGeo_ntscaug6jun26(GObj *gobj)
 {
@@ -129,6 +132,12 @@ void LwsKyomiGeo(GObj *gobj)
        scripts set and the save keeps, are untouched */
     if (!ico_hints_on()) {
         hint->flags &= ~1;
+    }
+    /* PC port: Ask Yorda for a hint: the stage's waiting hint takes its trigger
+       time at once, as the game's own debug_hintStart does (this object is the
+       waiting one: flags bit 0, the test of IsTopHint) */
+    if ((hint->flags & 1) && ico_hint_ask()) {
+        DebugHintStart(gobj);
     }
     if (hint->no != -1) {
         fin = stage_CheckAnimationFinish(hint->anim);

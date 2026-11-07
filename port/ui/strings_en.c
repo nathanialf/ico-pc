@@ -848,4 +848,8 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
+    [UI_STR_OPT_FREE_MOVEMENT] = "Free movement",
+    [UI_STR_OPT_FREE_MOVEMENT_NOTE] =
+        "Press L2 to fly Ico with the sticks: the left stick moves him, the right stick goes up and down, L3 sets him on the floor. Switches achievements off.",
+    [UI_STR_REMAP_ASK_HINT] = "Ask Yorda for a hint",
 };

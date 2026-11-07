@@ -273,6 +273,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `_aug6`, `_jun26`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
+- `ico_rows_test.c`: Developer > Free movement and the Ask Yorda for a hint button
+  ([GAME_FEATURES.md](GAME_FEATURES.md#free-movement-and-ask-yorda-for-a-hint)) on the CPU: the key
+  off by default, the row on without Developer mode doing nothing and with it on, the setter, a
+  reload reading the key again; the hint button's press counted once however long it is held, one
+  fire for each press, a press older than 12 snapshots dropped and not kept, two presses before one
+  look as one fire (`ico_rows`).
 - `yorda_trip_test.c`: Yorda trips ([GAME_FEATURES.md](GAME_FEATURES.md#yorda-trips)) on the CPU,
   the rule (`yorda_trip.c`), the game's side (`yorda_trip_live.c`) and the motion reader
   (`yorda_trip_source.c`) compiled in over a stubbed game, disc and pack index: the disc's run
@@ -480,7 +486,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 
 - `input_record_test.c`: the pad recording's format, round trip through the script reader, the
   change-only rule and the sample point (`input_record`).
-- `input_test.c`: the `[touch]` tables onto the layout edits and back (the `format` key, a file without the key reading `hidden` and `o0` as Off, rewritten as `off`), bindings from config text, dead zone, quantisation, the stick fix, merging, the
+- `input_test.c`: the `[touch]` tables onto the layout edits and back (the `format` key, a file without the key reading `hidden` and `o0` as Off, rewritten as `off`), bindings from config text, dead zone, quantisation, the stick fix, merging, the The hint target (`ICO_T_HINT`): unbound by default, `kb.hint`/`pad.hint`/`mouse.hint` from config text, `hint_down` from a key, a mouse button or a gamepad source (not with the gamepad off), the pad frame unchanged, one source one action with the hint, the row text (`input`).
   [libpad](ARCHITECTURE.md#terms) buffer, rumble, Escape, whether Start opens the pause menu (F6's
   tap: the play layout only, not a scene) (`input`).
 - `mouse_camera_test.c`: the mouse camera's speed and range for the hand camera (`mouse_camera`).
@@ -665,6 +671,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the first-run `config.toml` writing every listed key it holds at that default (`sim_keys`); a
   state saved before `gameplay.shadows_together` existed equal with the option off and differing
   (`gameplay.shadows_together=(absent) (now true)`) with it on.
+  The same for `developer.free_movement` (`developer.free_movement=(absent) (now true)`); `config_test.c` checks the first-run file's `[developer]` block.
 - `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 and the
   Continue screen's Square prompt ([UI.md](UI.md#save-states)), the pictures' box at their own
   shape, and F6 (the page from play and from the pause menu, back to the game, a late press, each
@@ -1430,6 +1437,15 @@ The renderer's test programs have a page of their own:
   (the 2001 discs' own notes); `checkPageFits` on each; Developer's Debug menu hidden without
   Developer mode, shown with it (not on the demo) before Back, its note, unbound staying on
   Developer, bound opening the game's menu once and closing Options into the title or the game.
+- `settings_test.c`'s `testFreeMovement`: Options > Developer > Free movement after the Debug
+  menu, shown with Developer mode, Off by default, Right turning it on (`ico_free_movement`, the
+  key set and saved), its note on the cursor, Developer mode off leaving the row's value and
+  switching the movement off, Left turning it off; `settings_test.c`'s Developer page now lists six
+  rows (five on the demo); `settings_discs_test.c` shows the row on every disc with Developer mode
+  and walks Remap controls to its end: Ask Yorda for a hint after the right stick's Right on the
+  hint discs (pal, jpn, kor, cn), Reset to defaults straight after it on ntsc, aug6 and jun26
+  (`settings_discs`, `settings_discs_<slug>`); `strings_complete_test.c` checks the three new
+  strings in the eight tables.
 - `settings_extra_test.c`'s `testShadowsTogether`: Options > Gameplay > Combat > Shadows attack
   together from the title and the pause menu, after Shadows never dodge and before Queen
   barrier, Off by default; Right turns it on (`ico_opt_shadows_together`, and a Shadow does not wait:

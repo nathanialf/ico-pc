@@ -1572,6 +1572,84 @@ static void test_touch_config(void)
     ico_config_reset(NULL, NULL);
 }
 
+/* Ask Yorda for a hint (ICO_T_HINT): an action target after the stick
+   directions, unbound by default, with no pad bit and no stick direction */
+static void test_hint_binding(void)
+{
+    IcoBindings b;
+    IcoInputRaw r;
+    IcoVirtualPad v, quiet;
+    IcoToml *t;
+    int d;
+
+    CHECK(ICO_T_HINT == ICO_T_RSTICK_RIGHT + 1 && ICO_T_COUNT == ICO_T_HINT + 1);
+    CHECK(ico_target_from_name("hint") == ICO_T_HINT);
+    CHECK(strcmp(ico_target_name(ICO_T_HINT), "hint") == 0);
+    ico_bindings_defaults(&b);
+    for (d = 0; d < ICO_BIND_MAX; d++) {
+        CHECK(b.kb[ICO_T_HINT][d] == 0 && b.mouse[ICO_T_HINT][d] == 0 && b.gp[ICO_T_HINT][d] == 0);
+    }
+    CHECK(b.hint_down == 0);
+    /* unbound: nothing held means nothing */
+    blank(&r);
+    r.key[ICO_KEY_H] = 1;
+    r.gp[ICO_GP_NORTH] = 0.0f;
+    ico_bindings_step(&b, &r, &quiet);
+    CHECK(b.hint_down == 0);
+    /* the config text binds it on each device */
+    t = ico_toml_parse("[input.kb]\nhint = \"H\"\n[input.pad]\nhint = \"rightshoulder\"\n"
+                       "[input.mouse]\nhint = \"x1\"\n");
+    CHECK(t != NULL && ico_input_apply_toml(&b, t) == 0);
+    ico_toml_free(t);
+    CHECK(has_key(b.kb[ICO_T_HINT], ICO_KEY_H) && has_key(b.gp[ICO_T_HINT], ICO_GP_RSHOULDER) &&
+          has_key(b.mouse[ICO_T_HINT], 4));
+    /* the key: held, and the pad frame is the same as with nothing held
+       (no button, no stick) */
+    blank(&r);
+    ico_bindings_step(&b, &r, &quiet);
+    CHECK(b.hint_down == 0);
+    r.key[ICO_KEY_H] = 1;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(b.hint_down == 1 && v.buttons == quiet.buttons && v.lx == quiet.lx && v.ly == quiet.ly &&
+          v.rx == quiet.rx && v.ry == quiet.ry);
+    /* released: down again 0; the gamepad's source and the mouse's button */
+    blank(&r);
+    ico_bindings_step(&b, &r, &v);
+    CHECK(b.hint_down == 0);
+    r.gp[ICO_GP_RSHOULDER] = 1.0f;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(b.hint_down == 1);
+    blank(&r);
+    r.mouse[4] = 1;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(b.hint_down == 1);
+    /* a device switched off does not count: the gamepad off, the pad source idle */
+    blank(&r);
+    r.gp[ICO_GP_RSHOULDER] = 1.0f;
+    b.gamepad = 0;
+    ico_bindings_step(&b, &r, &v);
+    CHECK(b.hint_down == 0);
+    b.gamepad = 1;
+    /* one source, one action: a key taken from Cross for the hint leaves Cross
+       with the hint's previous row (none) and the hint with the key alone */
+    ico_bindings_defaults(&b);
+    CHECK(ico_bindings_assign(&b, ICO_T_HINT, ICO_SRC_KEY, ICO_KEY_SPACE) == 0);
+    CHECK(b.kb[ICO_T_HINT][0] == ICO_KEY_SPACE && b.kb[ICO_T_HINT][1] == 0 &&
+          b.kb[ICO_T_CROSS][0] == 0);
+    CHECK(ico_bindings_assign(&b, ICO_T_HINT, ICO_SRC_KEY, ICO_KEY_P) == 0);
+    CHECK(b.kb[ICO_T_HINT][0] == ICO_KEY_P && b.kb[ICO_T_CROSS][0] == ICO_KEY_NONE);
+    /* clear, and the row text */
+    {
+        char buf[64];
+
+        CHECK(strcmp(ico_bindings_row_text(&b, ICO_SRC_KEY, ICO_T_HINT, buf, sizeof buf), "P") ==
+              0);
+        ico_bindings_clear(&b, ICO_T_HINT);
+        CHECK(strcmp(ico_bindings_row_text(&b, ICO_SRC_KEY, ICO_T_HINT, buf, sizeof buf), "none") ==
+              0);
+    }
+}
+
 int main(void)
 {
     test_toml();
@@ -1590,6 +1668,7 @@ int main(void)
     test_frame();
     test_libpad();
     test_touch_config();
+    test_hint_binding();
     if (failures != 0) {
         fprintf(stderr, "input_test: %d failure(s)\n", failures);
         return 1;

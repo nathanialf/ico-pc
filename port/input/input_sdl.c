@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 #include "../core/region.h" /* ico_region_cur: the disc's confirm */
+#include "ico_rows.h"       /* port/game: ico_hint_ask_note */
 #include "diag_host.h"      /* ico_log_limited */
 #include "host_config.h"
 #include "input.h"
@@ -1192,6 +1193,7 @@ void ico_input_sdl_update(void)
         if (swap) {
             swap_mouse_face(&s_bind);
         }
+        ico_hint_ask_note(s_bind.hint_down); /* Ask Yorda for a hint (ico_rows.h) */
         start_src = ico_bindings_start_sources(&s_bind, &s_raw);
         s_raw.mouse[1] = left;
     }

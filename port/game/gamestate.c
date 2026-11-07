@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "ico_rows.h"
 #include "options.h"
 #include "variants.h"
 
@@ -644,9 +645,11 @@ int ico_gs_achievements_suspended(void)
     /* the model viewer's stages are not play, nor the Extras credits'
        playback of the ending, nor a test room of Extras > Unused content;
        One hit per swing, Shadows never dodge, Cutscene cameras ignored and
-       the Debug menu (the game variants) are cheats like developer mode */
-    return ico_gs_developer_mode() || ico_gs_start_stage_used() || ico_mv_active ||
-           ico_credits_active() || ico_unused_active() || ico_variants_suspend_achievements();
+       the Debug menu (the game variants) are cheats like developer mode, and
+       so is Free movement (it needs developer mode; named for the rule) */
+    return ico_gs_developer_mode() || ico_free_movement() || ico_gs_start_stage_used() ||
+           ico_mv_active || ico_credits_active() || ico_unused_active() ||
+           ico_variants_suspend_achievements();
 }
 
 /* --- retail addresses ---------------------------------------------------- */
