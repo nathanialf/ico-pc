@@ -40,7 +40,7 @@ int main(void)
     /* the European disc's ids (region_pal.c) */
     const SceneIds ids = {54, 55, 12, 13, 57, 58, 59};
     SceneShare s;
-    char b[256];
+    char b[640]; /* the slow-scene line passes 256 bytes (window_host.c holds 640) */
 
     CHECK(window_scene_kind(&ids, 54, 0) == SCENE_PLAY);
     CHECK(window_scene_kind(&ids, 55, 0) == SCENE_SCENE);
