@@ -1284,7 +1284,8 @@ void BeforeFunc(GObj *self)
 
 static void ACTDebugMove_jun26(GObj *self, int a1)
 {
-    float dir[4];
+    float dir[4] = {0.0f, 0.0f, 0.0f, 0.0f}; /* PC port: read every frame below, written only
+                                                 when the stick moves; the PS2 FPU has no NaN */
     float pos[4];
     IosPadStick st;
     Act *ext;
@@ -1463,7 +1464,8 @@ void ACTDebugMove(GObj *self, int a1)
         ACTDebugMove_jun26(self, a1);
         return;
     }
-    float dir[4];
+    float dir[4] = {0.0f, 0.0f, 0.0f, 0.0f}; /* PC port: read every frame below, written only
+                                                 when the stick moves; the PS2 FPU has no NaN */
     float pos[4];
     IosPadStick st;
     Act *ext;
