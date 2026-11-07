@@ -14,9 +14,24 @@ BonesAction bones_ladder_step(const BonesLadderIn *in)
     if (in->portRace > 0) {
         return BONES_PORT_RACE; /* H2: the ring's bytes, not the driver's read */
     }
+    if (in->retest && in->nobinAvail) {
+        /* the re-test of step 2, judged only where nobin could be set (a
+           Turnip package): as much evidence either way as the step took */
+        if (in->differ >= BONES_NOBIN_EVENTS) {
+            return BONES_WRITE_NOBIN_NEEDED;
+        }
+        if (in->differ == 0 && in->replays >= BONES_HEALED_REPLAYS) {
+            return BONES_RETEST_CLEAR;
+        }
+        return BONES_WAIT;
+    }
     if (in->differ == 0) {
         if ((in->ring || in->nobin) && in->replays >= BONES_HEALED_REPLAYS) {
-            return BONES_HEALED;
+            /* step 2 healed with step 1 beside it: whether step 1 alone
+               keeps them equal is tried at the next start (not once the
+               re-test said nobin is needed, nor without step 1: nothing
+               else would cover the fault then) */
+            return in->nobin && in->ring && !in->nobinNeeded ? BONES_WRITE_RETEST : BONES_HEALED;
         }
         return BONES_WAIT;
     }
@@ -24,7 +39,12 @@ BonesAction bones_ladder_step(const BonesLadderIn *in)
         return BONES_WRITE_OFF; /* step 2 in force and the twins still differ */
     }
     if (in->ring) {
-        /* step 1 in force and the twins still differ: step 2, once */
+        /* step 1 in force and the twins still differ: step 2 after as many
+           events as step 1 takes untested (one stray event is not enough
+           for a step that costs every pass its binning) */
+        if (in->differ < BONES_NOBIN_EVENTS) {
+            return BONES_WAIT;
+        }
         return in->nobinAvail && !in->nobinOff ? BONES_WRITE_NOBIN : BONES_STOP;
     }
     /* neither step in force: the evidence beside the picture; step 1 only
@@ -47,9 +67,10 @@ BonesAction bones_ladder_step(const BonesLadderIn *in)
 
 int bones_mark_format(char *out, size_t size, const BonesMark *m)
 {
-    const int n = snprintf(out, size, "vu_skin_check %s frame %u; %u of %u twins differed",
-                           m->version[0] != '\0' ? m->version : "dev", (unsigned)m->frame,
-                           (unsigned)m->differ, (unsigned)m->twins);
+    const int n =
+        snprintf(out, size, "vu_skin_check %s frame %u; %u of %u twins differed%s%s",
+                 m->version[0] != '\0' ? m->version : "dev", (unsigned)m->frame,
+                 (unsigned)m->differ, (unsigned)m->twins, m->word[0] ? "; " : "", m->word);
     return n < 0 || (size_t)n >= size ? -1 : 0;
 }
 
@@ -60,10 +81,14 @@ int bones_mark_parse(const char *text, BonesMark *m)
     int used = 0;
 
     memset(m, 0, sizeof(*m));
-    if (text == NULL ||
-        sscanf(text, "vu_skin_check %31s frame %u; %u of %u twins differed%n", version, &frame,
-               &differ, &twins, &used) != 4 ||
-        text[used] != '\0') {
+    if (text == NULL || sscanf(text, "vu_skin_check %31s frame %u; %u of %u twins differed%n",
+                               version, &frame, &differ, &twins, &used) != 4) {
+        return -1;
+    }
+    if (strcmp(text + used, "; trial") == 0 || strcmp(text + used, "; needed") == 0) {
+        snprintf(m->word, sizeof(m->word), "%s", text + used + 2);
+    } else if (text[used] != '\0') {
+        memset(m, 0, sizeof(*m));
         return -1;
     }
     snprintf(m->version, sizeof(m->version), "%s", version);
@@ -76,6 +101,37 @@ int bones_mark_parse(const char *text, BonesMark *m)
 static int is(const char *v, const char *word)
 {
     return v != NULL && strcmp(v, word) == 0;
+}
+
+BonesTurnip bones_turnip_state(const char *turnipDebug, const char *turnipDebugBy)
+{
+    BonesMark m;
+
+    if (is(turnipDebug, "off")) {
+        return BONES_TU_OFF;
+    }
+    if (is(turnipDebug, "retest")) {
+        return BONES_TU_RETEST;
+    }
+    if (!is(turnipDebug, "nobin")) {
+        return BONES_TU_NONE;
+    }
+    if (bones_mark_parse(turnipDebugBy, &m) == 0) {
+        if (strcmp(m.word, "needed") == 0) {
+            return BONES_TU_NEEDED;
+        }
+        if (strcmp(m.word, "trial") == 0) {
+            return BONES_TU_TRIAL;
+        }
+    }
+    return BONES_TU_UNMARKED;
+}
+
+int bones_nobin_wanted(const char *turnipDebug, const char *turnipDebugBy)
+{
+    const BonesTurnip t = bones_turnip_state(turnipDebug, turnipDebugBy);
+
+    return t == BONES_TU_TRIAL || t == BONES_TU_NEEDED;
 }
 
 /* "written by the skin check at 0.10.5 frame 812; 3 of 5200 twins
@@ -98,8 +154,24 @@ int bones_ladder_start_line(char *out, size_t size, const char *vuBones, const c
     char words[160];
     BonesMark m;
     const int ring = is(vuBones, "ring");
+    const BonesTurnip tu = bones_turnip_state(turnipDebug, turnipDebugBy);
 
-    if (is(turnipDebug, "nobin")) {
+    if (tu == BONES_TU_RETEST || tu == BONES_TU_UNMARKED) {
+        mark_words(words, sizeof(words), turnipDebugBy);
+        snprintf(
+            out, size,
+            "window: VU skin check ladder: the re-test of step 2 at this start: TU_DEBUG=nobin "
+            "not set (%s, %s)%s; %u presents with no twin differing remove the key, %u twin "
+            "events write nobin back as needed",
+            tu == BONES_TU_RETEST
+                ? "[dev] turnip_debug = retest"
+                : "[dev] turnip_debug = nobin without this version's word trial or needed: "
+                  "taken as retest",
+            words, ring ? "; step 1 (ring read) in force" : "", (unsigned)BONES_HEALED_REPLAYS,
+            (unsigned)BONES_NOBIN_EVENTS);
+        return 0;
+    }
+    if (tu == BONES_TU_TRIAL || tu == BONES_TU_NEEDED) {
         if (!nobinSet) {
             snprintf(out, size,
                      "window: VU skin check ladder: [dev] turnip_debug = nobin, but TU_DEBUG was "
@@ -113,8 +185,11 @@ int bones_ladder_start_line(char *out, size_t size, const char *vuBones, const c
             snprintf(words, sizeof(words), "set without the skin check's mark");
         }
         snprintf(out, size,
-                 "window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin) for this start; "
+                 "window: VU skin check ladder: step 2 of 2 (TU_DEBUG=nobin) for this start%s; "
                  "step 1 (ring read) %s (%s)",
+                 tu == BONES_TU_NEEDED ? ", needed (the re-test without it saw the twins differ): "
+                                         "kept, not re-tested"
+                                       : "",
                  ring ? "did not clear the twins"
                       : "was skipped: what the check saw beside the picture pointed past it",
                  words);
@@ -141,9 +216,10 @@ int bones_ladder_start_line(char *out, size_t size, const char *vuBones, const c
     return -1;
 }
 
-int bones_nobin_in_force(const char *turnipDebug, const char *tuDebugEnv, int turnipLoaded)
+int bones_nobin_in_force(const char *turnipDebug, const char *turnipDebugBy, const char *tuDebugEnv,
+                         int turnipLoaded)
 {
-    return turnipDebug != NULL && strcmp(turnipDebug, "nobin") == 0 && tuDebugEnv != NULL &&
+    return bones_nobin_wanted(turnipDebug, turnipDebugBy) && tuDebugEnv != NULL &&
            strstr(tuDebugEnv, "nobin") != NULL && turnipLoaded;
 }
 
@@ -256,7 +332,37 @@ int bones_ladder_action_line(char *out, size_t size, BonesAction a, const BonesL
                  "window: VU skin check ladder: %s healed the twins: 0 of %u differ over %u "
                  "presents%s",
                  in->nobin ? "step 2 (TU_DEBUG=nobin)" : "step 1 (ring read)", (unsigned)in->twins,
-                 (unsigned)in->replays, in->nobin ? "; [dev] turnip_debug = nobin is kept" : "");
+                 (unsigned)in->replays,
+                 !in->nobin        ? ""
+                 : in->nobinNeeded ? "; [dev] turnip_debug = nobin is kept (needed: the re-test "
+                                     "without it saw the twins differ)"
+                 : !in->ring       ? "; [dev] turnip_debug = nobin is kept (step 1 not in force: "
+                                     "nothing else would cover the fault)"
+                                   : "; [dev] turnip_debug = nobin is kept");
+        return 0;
+    case BONES_WRITE_RETEST:
+        snprintf(out, size,
+                 "window: VU skin check ladder: step 2 (TU_DEBUG=nobin) healed the twins with step "
+                 "1 (ring read) beside it: 0 of %u differ over %u presents; [dev] turnip_debug = "
+                 "retest %s %s: the next start runs without TU_DEBUG=nobin, to see whether step 1 "
+                 "alone keeps them equal",
+                 (unsigned)in->twins, (unsigned)in->replays, put, cfg);
+        return 0;
+    case BONES_RETEST_CLEAR:
+        snprintf(out, size,
+                 "window: VU skin check ladder: the re-test without TU_DEBUG=nobin kept the twins "
+                 "equal: 0 of %u differ over %u presents; [dev] turnip_debug %s %s: step 2 not "
+                 "needed%s",
+                 (unsigned)in->twins, (unsigned)in->replays,
+                 written ? "is removed from" : "could not be removed from", cfg,
+                 in->ring ? "; step 1 (ring read) stays in force" : "");
+        return 0;
+    case BONES_WRITE_NOBIN_NEEDED:
+        snprintf(out, size,
+                 "window: VU skin check ladder: the re-test without TU_DEBUG=nobin: the twins "
+                 "differ again (%u of %u); [dev] turnip_debug = nobin %s %s, marked needed: step 2 "
+                 "for every later start, not re-tested again",
+                 (unsigned)in->differ, (unsigned)in->twins, put, cfg);
         return 0;
     case BONES_WAIT_PLAIN:
         snprintf(out, size,

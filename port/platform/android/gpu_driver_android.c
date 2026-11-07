@@ -14,6 +14,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include "bones_ladder.h"
 #include "config.h"
 #include "cpu_place.h"
 #include "diag_host.h"
@@ -149,7 +150,8 @@ static int library_is_turnip(const char *library)
    package loads (Mesa reads it when the driver starts: the binning pass
    off, every pass drawn in system memory; docs.mesa3d.org/drivers/
    freedreno.html lists nobin among TU_DEBUG's options), only when the
-   package's library is Turnip's.  Whether the variable reaches the driver
+   package's library is Turnip's and the mark beside it carries the word
+   trial or needed (bones_nobin_wanted).  Whether the variable reaches the driver
    through libadrenotools on Android is not verified: the twins' result
    under it is the indicator (window_bones.c reads TU_DEBUG back). */
 static void tu_debug_apply(const char *library)
@@ -157,9 +159,23 @@ static void tu_debug_apply(const char *library)
     const char *want = ico_config_get_string("dev.turnip_debug", "");
     const char *by = ico_config_get_string("dev.turnip_debug_by", "");
     const char *old = getenv("TU_DEBUG");
+    const BonesTurnip state = bones_turnip_state(want, by);
     char value[256];
 
-    if (strcmp(want, "nobin") != 0) {
+    /* since v0.11.0 step 2 is re-tested (bones_ladder.h): retest, or a
+       nobin without the mark's word trial or needed (a v0.10.5 ladder's, or
+       set by hand), runs this start without it */
+    if (state == BONES_TU_RETEST || state == BONES_TU_UNMARKED) {
+        fprintf(stderr,
+                "gpu driver: TU_DEBUG=nobin not set at this start ([dev] turnip_debug = %s%s%s%s): "
+                "the skin check re-tests whether it is needed\n",
+                want,
+                state == BONES_TU_UNMARKED ? " without the word trial or needed, taken as retest"
+                                           : "",
+                by[0] != '\0' ? ", turnip_debug_by = " : "", by);
+        return;
+    }
+    if (!bones_nobin_wanted(want, by)) {
         return;
     }
     if (!library_is_turnip(library)) {
