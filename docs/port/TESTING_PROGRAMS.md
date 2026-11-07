@@ -1237,8 +1237,14 @@ The renderer's test programs have a page of their own:
   the features the FFX backend reads enabled where present (16-bit floats, subgroup size control,
   synchronization2, non-uniform storage buffer indexing); the Quality render size at 1280x960
   (853x640); the backend and an upscale context for a 640x480 render and a 1280x960 output; its
-  provider (3.1.x) and a non-zero GPU memory figure; the context destroyed; any validation error
-  fails it. Skipped (77) without a loader, a Vulkan 1.2 device or a device it can make
+  provider (3.1.x) and a non-zero GPU memory figure; the context destroyed; then the upscale
+  dispatch with the textures the port hands it (`port/render/rd_fsr3.c`): an RGBA8 colour, a
+  `D32_SFLOAT_S8_UINT` depth read through its depth aspect (moved from the RHI's read-only depth
+  layout to `SHADER_READ_ONLY_OPTIMAL` around the dispatch, as rd_fsr3.c does) and an RGBA16F
+  motion, 640x480, into an RGBA8 storage image at 960x720, a context with the port's flags
+  (inverted depth, auto exposure) and the debug checks, four frames of FSR's jitter (phase count
+  18), each frame's output read back: not black, its centre the flat input's colour; no FFX
+  message. Any validation error or warning fails it (the layer's sync validation on). Skipped (77) without a loader, a Vulkan 1.2 device or a device it can make
   (`ffx_link_test`).
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver;
   `swapAcquired` per frame; the acquire's wait with the list that uses the image (issue 179,

@@ -1011,9 +1011,10 @@ fi
 # Reflect, tiny-process-library); not the samples, frame generation, FSR 4
 # (not in this release), the Windows binaries or the media. The files under
 # tools/ffx/patches/*.patch are applied in name order (the POSIX build of
-# the shader compiler; gcc/clang fixes); the stamp carries their SHA-256, so
-# a changed patch re-installs the tree. port/ffx/CMakeLists.txt builds it
-# (ICO_FFX). docs/THIRD_PARTY.md and docs/BUILDING.md have the details.
+# the shader compiler; gcc/clang fixes; two Vulkan backend fixes); the
+# stamp carries their SHA-256, so a changed patch re-installs the tree.
+# port/ffx/CMakeLists.txt builds it (ICO_FFX). docs/THIRD_PARTY.md and
+# docs/BUILDING.md have the details.
 #
 # glslang (BSD-3-Clause and others, Khronos) at the Vulkan SDK tag the other
 # Khronos tools come from, with the SPIRV-Tools and SPIRV-Headers commits its
