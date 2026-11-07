@@ -481,6 +481,7 @@ static void test_first_run(void)
     /* Upscaling: off, Sharpness 80, written with the file */
     CHECK_STR(ico_config_get_string("video.upscaling", "?"), "off");
     CHECK(ico_config_get_int("video.upscaling_sharpness", 0) == 80);
+    CHECK_STR(ico_config_get_string("video.upscaling_quality", "?"), "native");
     CHECK(text != NULL && strstr(text, "upscaling = \"off\"") != NULL &&
           strstr(text, "\nupscaling_sharpness = 80\n") != NULL);
     CHECK(ico_config_get_bool("video.effect_cinematic_bars", 0) == 1);

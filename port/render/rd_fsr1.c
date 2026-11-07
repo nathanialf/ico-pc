@@ -151,10 +151,9 @@ bool rd__fsr1_apply(const RdSettings *st, bool window, char *note, size_t noteSi
         } else if (st->upscale == RD_UPSCALE_FSR1) {
             snprintf(note, noteSize, ", upscaling fsr1 off (%s)",
                      crt ? "the CRT filter draws its own box" : "the window resolution");
-        } else if (st->upscale != RD_UPSCALE_OFF) {
-            /* RD_UPSCALE_FSR3, the temporal upscaler, is not offered yet */
-            snprintf(note, noteSize, ", upscaling %s not available (off)",
-                     st->upscale == RD_UPSCALE_FSR3 ? "fsr3" : "of an unknown kind");
+        } else if (st->upscale != RD_UPSCALE_OFF && st->upscale != RD_UPSCALE_FSR3) {
+            /* RD_UPSCALE_FSR3's words are rd_upscale_temporal.c's */
+            snprintf(note, noteSize, ", upscaling of an unknown kind not available (off)");
         } else {
             note[0] = '\0';
         }

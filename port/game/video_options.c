@@ -82,6 +82,7 @@ void ico_video_defaults_for(IcoVideoOptions *o, int android)
     o->downsample = ICO_DOWNSAMPLE_OFF;
     o->upscale = ICO_UPSCALE_OFF;
     o->upscaleSharpness = ICO_UPSCALE_SHARPNESS_DEFAULT;
+    o->upscaleQuality = ICO_UPSCALE_Q_NATIVE;
     o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_DEFAULT;
     o->texturePackPrecache = 1;
     o->texturePackCacheMb = 0;
@@ -170,7 +171,7 @@ const char *ico_video_downsample_name(int ds)
     return ds >= 0 && ds < ICO_DOWNSAMPLE_COUNT ? kDownsample[ds] : kDownsample[ICO_DOWNSAMPLE_OFF];
 }
 
-static const char *const kUpscale[ICO_UPSCALE_COUNT] = {"off", "fsr1"};
+static const char *const kUpscale[ICO_UPSCALE_COUNT] = {"off", "fsr1", "fsr3"};
 
 int ico_video_parse_upscale(const char *s, int *up)
 {
@@ -179,10 +180,6 @@ int ico_video_parse_upscale(const char *s, int *up)
             *up = i;
             return 0;
         }
-    }
-    if (lower_eq(s, "fsr3")) {
-        *up = ICO_UPSCALE_OFF; /* the temporal upscaler: not offered yet */
-        return 1;
     }
     return -1;
 }
@@ -195,6 +192,26 @@ const char *ico_video_upscale_name(int up)
 int ico_video_upscale_sharpness_clamp(int v)
 {
     return v < 0 ? 0 : v > 100 ? 100 : v;
+}
+
+static const char *const kUpscaleQuality[ICO_UPSCALE_Q_COUNT] = {"native", "quality", "balanced",
+                                                                 "performance"};
+
+int ico_video_parse_upscale_quality(const char *s, int *q)
+{
+    for (int i = 0; s && i < ICO_UPSCALE_Q_COUNT; i++) {
+        if (lower_eq(s, kUpscaleQuality[i])) {
+            *q = i;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+const char *ico_video_upscale_quality_name(int q)
+{
+    return q >= 0 && q < ICO_UPSCALE_Q_COUNT ? kUpscaleQuality[q]
+                                             : kUpscaleQuality[ICO_UPSCALE_Q_NATIVE];
 }
 
 static const char *const kAntiAlias[ICO_AA_COUNT] = {"off",   "ssaa2", "ssaa4",
@@ -480,6 +497,9 @@ static void sanitize(IcoVideoOptions *o)
         o->upscale = ICO_UPSCALE_OFF;
     }
     o->upscaleSharpness = ico_video_upscale_sharpness_clamp(o->upscaleSharpness);
+    if (o->upscaleQuality < 0 || o->upscaleQuality >= ICO_UPSCALE_Q_COUNT) {
+        o->upscaleQuality = ICO_UPSCALE_Q_NATIVE;
+    }
     if (o->texturePackBudgetMb < ICO_TEXPACK_BUDGET_MIN) {
         o->texturePackBudgetMb = ICO_TEXPACK_BUDGET_MIN;
     } else if (o->texturePackBudgetMb > ICO_TEXPACK_BUDGET_MAX) {
@@ -608,8 +628,13 @@ static void read_config(void)
             ico_video_parse_upscale(ico_config_get_string("video.upscaling", "off"), &o.upscale);
         if (r != 0) {
             o.upscale = ICO_UPSCALE_OFF;
-            fprintf(stderr, "video: upscaling %s; \"off\" used\n",
-                    r > 0 ? "\"fsr3\" is not available yet" : "not understood");
+            fprintf(stderr, "video: upscaling not understood; \"off\" used\n");
+        }
+        if (ico_video_parse_upscale_quality(
+                ico_config_get_string("video.upscaling_quality", "native"), &o.upscaleQuality) !=
+            0) {
+            o.upscaleQuality = ICO_UPSCALE_Q_NATIVE;
+            fprintf(stderr, "video: upscaling_quality not understood; \"native\" used\n");
         }
         const long long v =
             ico_config_get_int("video.upscaling_sharpness", ICO_UPSCALE_SHARPNESS_DEFAULT);
@@ -807,6 +832,8 @@ int ico_video_save(void)
     r |= ico_config_set_string("video.downsample", ico_video_downsample_name(o.downsample));
     r |= ico_config_set_string("video.upscaling", ico_video_upscale_name(o.upscale));
     r |= ico_config_set_int("video.upscaling_sharpness", o.upscaleSharpness);
+    r |= ico_config_set_string("video.upscaling_quality",
+                               ico_video_upscale_quality_name(o.upscaleQuality));
     /* the config-only keys only when not at their defaults, as the CRT
        overrides: an absent key is the default */
     if (o.texturePackBudgetMb != ICO_TEXPACK_BUDGET_DEFAULT) {
@@ -1087,6 +1114,14 @@ int ico_video_upscale(void)
         read_config();
     }
     return s_opt.upscale;
+}
+
+int ico_video_upscale_quality(void)
+{
+    if (!s_read) {
+        read_config();
+    }
+    return s_opt.upscaleQuality;
 }
 
 int ico_video_upscale_sharpness(void)
