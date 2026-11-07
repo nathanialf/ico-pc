@@ -699,8 +699,8 @@ Ico's leg in a picture between two ticks that lavapipe draws clean from the same
 under Turnip the fallback takes the plain set, which hides the vertex as the stock driver's row
 does; it does not remove whatever placed it. What Turnip gives up is the card test (a wide picture's edge at
 the old 4:3 border may open) and the tick cameras' re-test (the pictures between two ticks take the
-blended camera's rule alone) on the fallback's draws; the record path's modules, which a tile-based
-GPU runs only with `[dev] vu_prepass = true`, keep both. Turnip is no row of the device table, which
+blended camera's rule alone) on the fallback's draws; the record path's modules, which every device runs while its pre-pass is on
+(tile-based GPUs too), keep both. Turnip is no row of the device table, which
 matches Qualcomm's own driver alone: the rule is the renderer's (`rd__driver_is_turnip`, the test
 the device profile's Turnip class makes, `port/render/rd_profile.c`), and the summary line's VU
 shaders read `one set, fallback plain (Turnip driver, issue 163)` (the table's row `(Adreno 740,

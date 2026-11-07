@@ -394,7 +394,7 @@ tile-based profile ([The device profile](RENDER.md#the-device-profile)) adds the
 fx plan's 31 (`rd_fx_plan.c` (`rd__fx_enumerate`): under six depth states the alpha-only key, three
 `fx_frame_ps` keys and, with local read, one `fx_local_ps` key, and the alpha-only key once more with
 the depth attached under Z ALWAYS without Z write, for cleanUpFB's first sprite in the fog's pass) and,
-with the pre-pass off, the eleven program entries under every Z test, Z write and blend
+with the pre-pass off (by the settings or after a failed self-test), the eleven program entries under every Z test, Z write and blend
 (`rd_mesh.c` (`enumerateVuDraws`)); without dynamic state those fields stay in every key; and at a
 fractional Enhanced scale every `vu_ps` key has its `vu_np_ps` twin (`rd_pixel_plan.c`
 (`rd__vu_pixel_fs_enum`)). All four together give the largest set a device meets, 1153 keys on an
@@ -405,7 +405,11 @@ cache and so the RHI's pool: `rd_state_test` `testTilerSet` counts the tile prof
 and layout stand-ins where the test has no device), the pre-pass off, at 2x (977 keys) and at
 2.8125 x 2.41071 (1153), each under `RD_PIPELINE_REACHABLE_MAX` and inside `RHI_PIPELINE_POOL_MAX`
 less `RHI_PIPELINE_POOL_HEADROOM`; `rd_pixel_test` `testPipelines` counts the same configuration on
-a device with both blends (1153, and 1260 with the two-pass fallback). On a tile-based GPU the
+a device with both blends (1153, and 1260 with the two-pass fallback), and the same configuration
+with the pre-pass on, the default on a tile-based GPU (issue 179): the main shaders'
+and the fifteen point keys in place of the program entries', so fewer keys and a smaller VU family
+(the test prints both sets' totals and VU and VU point families and checks the pre-pass's is the
+smaller; the Mali-G52 log of issue 179, pre-pass off, has VU 242). On a tile-based GPU the
 aura's read in two passes (`port/render/rd_aura_box.c` (`rd__aura_box_keys`), `[dev] aura_box`)
 adds two fx keys while it is on, `fx_aura_rows_ps` into the RGBA16_UINT ROWBOX and
 `fx_aura_sum_ps` (the aura sprite's own key, Z ALWAYS, no depth, mask whole): 1155 on that
@@ -677,7 +681,11 @@ program entry's key is made from is decided once a run, at `rd_init` (`port/rend
 
 The program entries' keys are in the start-up set only with the pre-pass off (then every VU draw is
 the old way: the eleven entries with the legacy pixel shaders, 16 keys each, 176); with it they are
-made on first use, by the fallback alone. The set at Original 4:3 with the fixed-function blend and
+made on first use, by the fallback alone, and the record path's modules (the main shaders' keys,
+the ten pre-pass keys and the five stage keys) are in the set instead (`rd_mesh.c`
+(`rd__enumerate_reachable_vu`)). The pre-pass is on on every device the settings and the colour
+bytes allow, tile-based GPUs included, unless its start-up self-test fails, so the
+set is made after the self-test's verdict. The set at Original 4:3 with the fixed-function blend and
 every state static is the 2D keys, `vu_main_vs`'s 32 and `vu_particle_main_vs`'s 32 (TEST Z
 GEQUAL and Z ALWAYS, Z write on and off, four blends, `vu_ps` and `vu_texa_ps`; the particles' keys
 carry `RD_PROG_PARTICLE`, the meshes' `RD_PROG_PRELIT`), the ten pre-pass keys and the five stage
@@ -811,7 +819,9 @@ A, 1 slot B), all with `vu_pre_ps`, which writes the three targets; the textures
 and pass V's rows of each plane are copied into the frame slot's record buffer, plane after plane
 (`rhi_cmd_copy_texture_to_buffer`, which makes the copy visible to the shaders that read the
 buffer: [RHI.md](RHI.md#the-interface)). Pass T (the same textures back to `RENDER_TARGET`, load
-don't care: pass V's rows are in the buffer already) reads the vertex records from the buffer and
+don't care: pass V's rows are in the buffer already; its render area its own rows from row `rowsV`,
+`RhiRenderPassDesc.area`, so a tile-based GPU neither loads nor stores pass V's rows again, which it
+would write back as don't-care contents nobody reads) reads the vertex records from the buffer and
 draws, a mesh or grid command, a point a kick through `vu_tri_rule_pre_vs` (slot A), under the
 tick cameras two through `vu_tri_tick_pre_vs` with the colour masks R and G (`vu_tri.w` 0 and 1:
 slot C's x and y, each written without reading the other), and `vu_tri_planes_pre_vs` (slot B);
@@ -819,7 +829,10 @@ its rows are copied after pass V's. A frame slot has its own buffer, so a replay
 what the GPU may still read for the previous one; the textures are shared, ordered by their
 barriers. Both grow by powers of two, from 16 rows (16,384 slots) to 1,024, every slot's buffer at
 once, logged as `rd: VU pre-pass: the
-record holds 32768 slots (32 rows, 1536 KB a frame slot)`; group 1 binds the record at t4 (to the
+record holds 32768 slots (32 rows, 1536 KB a frame slot)` (48 KB a row in each frame slot's buffer
+and as much in the three shared textures; a scene of 100,000 vertices and 150,000 to 230,000
+triangle slots, issue 179's boat scene, takes 256 or 512 rows, 12 to 24 MB a frame slot; the
+1,024-row cap is 48 MB a slot); group 1 binds the record at t4 (to the
 vertex and the pixel side), and a 256-byte buffer before there is one (the slot's upload ring when
 even that could not be made, logged once: no shader reads t4 then). A record that cannot be made
 draws that replay the old way and is asked for once more at the next replay; a second failure in
@@ -924,7 +937,13 @@ so under MoltenVK on an A9 or A10 the pre-pass is off (`RhiLimits.colorBytesPerP
 log says so once. An Apple GPU name the table does not read is taken as unbounded (the families it
 names only grow), logged as `rd: VU pre-pass: the Apple GPU "<name>" is not one the colour-target
 table names: ...`; a pipeline Metal then refuses, or a wrong picture, is the start-up self-test's
-to catch (below). At start the renderer logs `rd: VU pre-pass: on: each mesh and grid vertex and
+to catch (below). A tile-based GPU takes the pre-pass as any other device (issue
+179: a Mali-G52 drew its boat scene with 9 vertex shader invocations a triangle without it, vertex
+bound). Reading the record's passes, copies, barriers and reads, and running them under
+synchronisation validation, finds no rule broken; a PowerVR phone's pictures that shook between two
+ticks through the record are the device-side fault the self-test's four replays across both frame
+slots (below) are made to see: a record read stale or across two pictures fails it and the device
+draws the old way. At start the renderer logs `rd: VU pre-pass: on: each mesh and grid vertex and
 triangle and each sprite evaluated once before the lists (two passes), 48 bytes a record slot in 3
 RGBA32_UINT targets, two slots a triangle (three under the tick cameras); [dev] vu_prepass = false
 draws the old way`, or `rd: VU pre-pass: off by the settings ([dev] vu_prepass = false,
@@ -940,7 +959,7 @@ make one would leave every VU pipeline to be made on first use (the start-up set
 shaders' keys, not the programs'), and one that miscompiles them would draw the scenery wrong with
 no error. `rd_vuprepass_selftest` checks it on the device at start, after the blend's self-test
 and before the start-up set (`port/platform/window_host.c`; in a run without the set, after
-`rd_pipelines_lazy`): a frame of its own, never recorded, on SCENE at its real size and scale
+`rd_pipelines_lazy`): a frame of its own, built four times and never recorded, on SCENE at its real size and scale
 without MSAA, draws three meshes made for it (`rd_create_vu_mesh`: a prelit strip through normal_c
 code 32, a lit one through normal_l code 32 and a skinned one through cluster code 20 with two
 bones, 12 vertices and 8 triangles each, overlapping at other depths, Z GEQUAL with Z write,
@@ -948,29 +967,36 @@ untextured) with `vu1_test`'s scene in VU memory, the prelit mesh again through 
 between two ticks' (one vertex of each triangle behind the blended camera's eye, every triangle
 inside at tick 1's camera, so each is drawn clipped through the tick stage, in front of the
 others; left out where the fallback is the plain variant, which has no tick cameras) and four
-particles, once with the pre-passes off (the programs' entries, the
-reference) and once with them on, and reads the block back after each. Their pipelines are made
+particles. Replay k of the four is moved: every mesh 0.25 model units (2 GS pixels) a replay to the
+right and the blended camera's x' and y' offsets 0.25 a replay, so each replay's records differ from
+the one before. The four are replayed with the pre-passes off (the programs' entries, the
+references), then the four with them on back to back as a run draws its pictures, each in the
+next frame slot (the record's buffer is one a slot, so they alternate between both); the block is
+copied out after each replay and read back after the four. A record that a replay did not write,
+read before its copy landed or read from the other slot draws an earlier picture, which one replay
+of one frame could not show. Their pipelines are made
 first on the worker threads the start-up set uses, named by two replays that draw nothing
 (`rd__pipeline_gather`, `rd__pipeline_create_gathered`, as the loss bisect makes its own): the
 programs' entries are not in the start-up set with the pre-pass on, and on a cold driver cache a
 PowerVR DXT-48-1536 compiles an extended VU program entry in about 1.3 to 3.4 s (its start-up
 batches in a log), so in parallel the self-test costs about the slowest one, and next to nothing
-once the pipeline cache holds them. It passes when the replay with the pre-passes drew every
+once the pipeline cache holds them. It passes when every replay with the pre-passes drew every
 command through them (`RdPerfRecord.vuPrePasses` 2, `vuPreDraws` 16, 11 without the tick copy,
-`vuPreSprites` 4, `vuPreFallbacks` 0) and the two blocks are equal byte for byte. A difference, a
+`vuPreSprites` 4, `vuPreFallbacks` 0) and each replay's block equals its own reference's byte for
+byte. A difference, a
 pipeline the pre-passes could not make or a device error turns the pre-pass off for the run, so
 the start-up set made next holds the programs' keys:
 
 ```
-rd: VU pre-pass: on (self-test: prelit, lit, skin, the tick cameras and particles byte for byte, 48 vertices and 4 sprites in 16 pre-pass draws (2 passes, 90 triangle slots), <n> of <m> pixels drawn) on SCENE <w>x<h> at <tw>x<th> texels in <t> ms
-rd: VU pre-pass: off (self-test: the pictures differ: <n> of <m> bytes, the first at texel <x>,<y>: <r>,<g>,<b>,<a> want <r>,<g>,<b>,<a>) on SCENE ...
-rd: VU pre-pass: off (self-test: a pipeline could not be made (<p> passes, <d> of <w> pre-pass draws, <s> sprites, <f> draws the old way)) on SCENE ...
-rd: VU pre-pass: off (self-test: the device failed in the replay with the pre-pass) on SCENE ...
+rd: VU pre-pass: on (self-test: prelit, lit, skin, the tick cameras and particles byte for byte over 4 replays in both frame slots, 48 vertices and 4 sprites in 16 pre-pass draws (2 passes, 90 triangle slots), <n> of <m> pixels drawn) on SCENE <w>x<h> at <tw>x<th> texels in <t> ms
+rd: VU pre-pass: off (self-test: the pictures differ: in replay <k> of 4 (frame slot <s>), <n> of <m> bytes, the first at texel <x>,<y>: <r>,<g>,<b>,<a> want <r>,<g>,<b>,<a>) on SCENE ...
+rd: VU pre-pass: off (self-test: a pipeline could not be made (replay <k> of 4: <p> passes, <d> of <w> pre-pass draws, <s> sprites, <f> draws the old way)) on SCENE ...
+rd: VU pre-pass: off (self-test: the device failed in the replays with the pre-pass) on SCENE ...
 ```
 
 A start whose pre-pass is already off (the settings, the device, the host's
 `rd_set_vu_prepass_off`: a restart step or an end in its compile) runs nothing and logs `rd: VU
-pre-pass: off (self-test not run)`; a frame it could not build, or one in which neither replay
+pre-pass: off (self-test not run)`; a frame it could not build, or one in which neither replay of a pair
 drew the meshes, leaves the pre-pass on (`on (self-test not run: ...)`, `on (self-test
 inconclusive: ...)`). The summary line carries the verdict (`VU pre-pass on (self-test: ok)`, `VU
 pre-pass off (self-test: <reason>)`, [PLATFORM.md](PLATFORM.md#the-summary-line)). A crash in one
@@ -981,7 +1007,9 @@ device loss in a run drawing with it takes the loss order's `lossnoprepass` step
 ([PLATFORM.md](PLATFORM.md#diagnostics)) (`port/render/rd_vuprepass_selftest.c`;
 `port/render/rd.h` (`rd_vuprepass_selftest`); `ICO_RD_VU_PREPASS_SABOTAGE=1` draws the first
 command's vertex records a texel off, `=tri` its triangles' slot A a slot off, `=ticks` the tick
-stage's tick 1 at tick 0's camera, [TESTING.md](TESTING.md#environment-switches)).
+stage's tick 1 at tick 0's camera, each in every replay, `=stale` the record's copies left out from
+the second replay on, which only the replays after the first can catch (a self-test of one replay
+passes it); [TESTING.md](TESTING.md#environment-switches)).
 
 **Why the picture is the same.** The pre-pass entry calls the program's vertex function, the same
 source with the same `precise` operations, so each recorded word is the value the old entry

@@ -9,8 +9,8 @@
 #   plain   Original at the dump's aspect, presented at 640x480;
 #   attach  the same with the attachment read and GS state as shader data
 #           (ICO_RD_BLEND=attachment, ICO_RD_UBER=on, the interlock faked
-#           off, the VU pre-pass off as on a tile-based GPU: lavapipe's form
-#           of the Turnip reporter's profile, where the twins of the
+#           off, the VU pre-pass off as on a tile-based GPU before
+#           v0.11.0: lavapipe's form of the Turnip reporter's profile, where the twins of the
 #           Z-write-off draws go through the draws' own pipelines; the on
 #           run must say "GS state as shader data: on");
 #   msaa    Enhanced 4:3 2x with --aa msaa4.
