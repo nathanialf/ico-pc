@@ -58,6 +58,12 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/backup.c`, `backup.h` | Options > Extras > Back up your data and Restore from a backup: the zip of the user folder's data, its manifest and checks, the unpacking and the start's swap ([Backups](#backups); pure C, tested everywhere) |
 | `port/platform/backup_host.c`, `backup_host.h` | the two rows' host in the window build: the file dialogs, the work on its own thread, the end of the run after a restore (not on iOS) |
 | `port/platform/steam_shortcut.c`, `steam_shortcut.h` | Settings > Extras > Add to Steam (Windows and Linux; not offered on macOS) |
+| `port/platform/app_icon.c`, `app_icon_image.c`, `app_icon_ico.c`, `app_icon_host.c` | the application icon: files and stamp, image maths, the `.ico` writer, the window build's wrappers ([APP_ICON.md](APP_ICON.md)) |
+| `port/platform/steam_shortcut.c`, `steam_shortcut.h` | Settings > Extras > Add to Steam (Windows and Linux; not offered on macOS) |
+| `port/platform/app_icon.c`, `app_icon.h` | the application icon's files under `<user folder>/icon/` (paths, stamp, the wanted test, the atomic writes); the header is the interface the capture and the window host use |
+| `port/platform/app_icon_image.c`, `app_icon_image.h` | the icon's image maths: the two-frame matte, the letter's box, the square crop, resampling |
+| `port/platform/app_icon_ico.c` | the `.ico` writer and the `.tmp` + rename file write the icon files share |
+| `port/platform/app_icon_host.c` | the window build's wrappers: the user folder, the disc and the package label, the PNG, the "icon changed" flag |
 | `port/platform/gpu_driver.c`, `gpu_driver.h` | Android graphics driver packages (pure C, tested everywhere) |
 | `port/platform/thermal_text.c`, `thermal_text.h` | the thermal status names and the thermal and screen recording lines, the pure part (tested everywhere); the Java bridge is `ico_host_thermal` in `android/host_android.c` |
 | `port/platform/gpu_sysfs.c`, `gpu_sysfs.h` | the kernel GPU driver's nodes for the log, the pure part (tested everywhere; [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md)) |
@@ -2936,6 +2942,13 @@ gone once the game ends), with its folder as the start folder (`port/platform/st
 <answer>`. It is
 compiled into the Windows and Linux window builds only, not macOS, Android or iOS
 (`CMakeLists.txt` (the window build section)).
+
+## The application icon
+
+The title lettering's "I", cut out of two captured frames of the title and kept as files under
+`<user folder>/icon/` (`ico-pc-<disc id>.png`, `.ico`, `.txt` stamp, and the copies `ico-pc.png`,
+`ico-pc.ico`); nothing of it is in the repository or the download. Files, stamp, formats, the
+matte and the tests: [APP_ICON.md](APP_ICON.md).
 
 ## The null floor and the headless build
 

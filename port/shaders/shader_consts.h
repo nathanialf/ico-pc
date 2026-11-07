@@ -52,6 +52,11 @@ typedef struct IcoFrameCB {
      * target (common.hlsli g_vpo); z the texels of the GS frame a Full
      * pixel target leaves out at its left, else 0; w reserved (0) */
     float vpo[4];
+    /* xy: the sub-pixel jitter in texels a jittered frame's scene-class
+     * passes take (port/render/rd_jitter.c), already added to vpo's xy; the
+     * pixel side subtracts it (common.hlsli g_jitter); 0 in every other
+     * frame group; zw reserved (0) */
+    float jitter[4];
 } IcoFrameCB;
 
 /* DrawCB: group 1, slot 1 (register b1, space1). */
@@ -371,7 +376,9 @@ _Static_assert(offsetof(IcoFrameCB, misc) == 304, "misc");
 
 _Static_assert(offsetof(IcoFrameCB, vpo) == 320, "vpo");
 
-_Static_assert(sizeof(IcoFrameCB) == 336, "FrameCB size");
+_Static_assert(offsetof(IcoFrameCB, jitter) == 336, "jitter");
+
+_Static_assert(sizeof(IcoFrameCB) == 352, "FrameCB size");
 
 _Static_assert(offsetof(IcoDrawCB, mode) == 16, "mode");
 

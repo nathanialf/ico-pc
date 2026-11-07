@@ -2,6 +2,9 @@
 # beyond the top-level CMakeLists.txt's, and the platform tests.
 
 target_sources(ico_platform PRIVATE
+    app_icon.c
+    app_icon_ico.c
+    app_icon_image.c
     arena.c
     backup.c
     bones_ladder.c
@@ -224,6 +227,30 @@ target_compile_options(steam_shortcut_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO
 target_link_libraries(steam_shortcut_test PRIVATE ico_host_fs)
 if(ICO_RUN_TESTS)
     add_test(NAME steam_shortcut COMMAND steam_shortcut_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# The application icon (app_icon.h): the image maths on synthetic frames, the
+# .ico writer parsed back, and the files and stamp over a fake user folder
+# under the build folder
+add_executable(app_icon_image_test test/app_icon_image_test.c app_icon_image.c)
+target_include_directories(app_icon_image_test PRIVATE .)
+target_compile_options(app_icon_image_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(UNIX)
+    target_link_libraries(app_icon_image_test PRIVATE m)
+endif()
+add_executable(ico_icon_test test/ico_icon_test.c app_icon_ico.c app_icon_image.c)
+target_include_directories(ico_icon_test PRIVATE .)
+target_compile_options(ico_icon_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_icon_test PRIVATE ico_host_fs)
+add_executable(app_icon_files_test test/app_icon_files_test.c app_icon.c app_icon_ico.c
+                                   app_icon_image.c)
+target_include_directories(app_icon_files_test PRIVATE .)
+target_compile_options(app_icon_files_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(app_icon_files_test PRIVATE ico_host_fs)
+if(ICO_RUN_TESTS)
+    add_test(NAME app_icon_image COMMAND app_icon_image_test)
+    add_test(NAME ico_icon COMMAND ico_icon_test "${CMAKE_CURRENT_BINARY_DIR}")
+    add_test(NAME app_icon_files COMMAND app_icon_files_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # F12's zip (dump_zip.c): the dump and the log in one archive, read back

@@ -591,6 +591,20 @@ static const struct {
     /* false: the VU pre-pass's draws one an entry and stage instead of one a
        batch (an A/B; port/render/rd_replay_vu.c preBatchInit) */
     {"dev.vu_prepass_batch", "vu_prepass_batch"},
+    /* true: the temporal upscaler's motion vectors drawn (VELOCITY; a
+       developer switch, nothing reads them yet), and -1 or 1: the sign the
+       upscaler takes them with (port/render/rd_velocity.c) */
+    {"dev.velocity_test", "velocity_test"},
+    {"dev.velocity_sign", "velocity_sign"},
+    /* true: the upscale point's test: the scene drawn below the display's
+       scale and upscaled at the reduction by a plain bilinear pass (a
+       developer switch; port/render/rd_upscale.c) */
+    {"dev.upscale_test", "upscale_test"},
+    /* true: FSR 3.1 draws its debug view in place of the picture, and
+       checks its inputs with its messages in the log (Upscaling = FSR 3.1;
+       port/render/rd_fsr3.c) */
+    {"dev.upscale_debug_view", "upscale_debug_view"},
+    {"dev.upscale_debug_checks", "upscale_debug_checks"},
     /* false: every VU draw one GPU draw instead of consecutive ones with the
        same state merged into one (an A/B; port/render/rd_replay_vu.c
        vuMergeInit) */
@@ -625,6 +639,10 @@ static const struct {
        drops, the side bands beside a wide picture: the A/B and the escape;
        port/render/rd_pipeline.c rd__region_camera) */
     {"dev.region_rule", "region_rule"},
+    /* "x,y": the scene's sub-pixel jitter in texels, each -0.5..0.5, on
+       every frame (a developer A/B of the temporal upscaler's jitter;
+       port/render/rd_jitter.c) */
+    {"dev.jitter_test", "jitter_test"},
     /* false: the Vulkan swapchain keeps identity on a surface the system
        shows turned (an Android phone held sideways), the compositor turning
        every image, instead of being made in the surface's own turn with the
@@ -769,6 +787,17 @@ static const struct {
     /* port/render/rd_replay_vu.c preBatchInit: 0 draws the pre-pass one
        draw an entry and stage */
     {"vu_prepass_batch", "ICO_RD_VU_PREPASS_BATCH"},
+    /* port/render/rd_velocity.c rd__velocity_on: 1 draws the motion
+       vectors; rd__velocity_sign: -1 or 1 */
+    {"velocity_test", "ICO_RD_VELOCITY"},
+    {"velocity_sign", "ICO_RD_VELOCITY_SIGN"},
+    /* port/render/rd_upscale.c readSwitch: 1 draws the scene at the display
+       scale over 1.5 and upscales it at the reduction */
+    {"upscale_test", "ICO_RD_UPSCALE_TEST"},
+    /* port/render/rd_fsr3.c readDebug: 1 sets FSR 3.1's
+       FFX_UPSCALE_FLAG_DRAW_DEBUG_VIEW, and FFX_UPSCALE_ENABLE_DEBUG_CHECKING */
+    {"upscale_debug_view", "ICO_RD_UPSCALE_DEBUG_VIEW"},
+    {"upscale_debug_checks", "ICO_RD_UPSCALE_DEBUG_CHECKS"},
     /* port/render/rd_replay_vu.c vuMergeInit: 0 draws every VU draw as a
        GPU draw of its own, through the programs' plain builds */
     {"vu_merge", "ICO_RD_VU_MERGE"},
@@ -786,6 +815,8 @@ static const struct {
     {"cull", "ICO_RD_CULL"},
     /* port/render/rd_pipeline.c rd__region_camera: camera or ps2 */
     {"region_rule", "ICO_RD_REGION_RULE"},
+    /* port/render/rd_jitter.c rd__frame_jitter_get: x,y */
+    {"jitter_test", "ICO_RD_JITTER_TEST"},
     /* port/render/rd_const_read.c rd__const_reads_on: 0 reads a cleared
        source as before */
     {"constant_reads", "ICO_RD_CONSTANT_READS"},
@@ -942,6 +973,30 @@ const char *ico_dev_env_value(const char *key, const char *value)
         /* camera or ps2 as they are (no boolean form) */
         return value_is(value, regionRules) ? value : NULL;
     }
+    if (strcmp(key, "jitter_test") == 0) {
+        /* two numbers -0.5..0.5, a comma between, as they are (the renderer
+           parses them again: rd_jitter.c rd__frame_jitter_parse) */
+        char *end = NULL;
+        const double x = strtod(value, &end);
+        if (end == value) {
+            return NULL;
+        }
+        while (*end == ' ') {
+            end++;
+        }
+        if (*end != ',') {
+            return NULL;
+        }
+        const char *t = end + 1;
+        const double y = strtod(t, &end);
+        if (end == t) {
+            return NULL;
+        }
+        while (*end == ' ') {
+            end++;
+        }
+        return *end == '\0' && x >= -0.5 && x <= 0.5 && y >= -0.5 && y <= 0.5 ? value : NULL;
+    }
     if (strcmp(key, "cull") == 0) {
         /* off, frustum or full as they are; false/0/no is off, true/1/on/yes
            the default, frustum */
@@ -1001,6 +1056,10 @@ const char *ico_dev_env_value(const char *key, const char *value)
             return value;
         }
         return value_is(value, off) ? "0" : NULL;
+    }
+    if (strcmp(key, "velocity_sign") == 0) {
+        /* 1 (current to previous, the default) or -1 as they are */
+        return strcmp(value, "1") == 0 || strcmp(value, "-1") == 0 ? value : NULL;
     }
     if (strcmp(key, "pass_split") == 0) {
         /* a count of VU draws, 1..65536; 0 or off: none */

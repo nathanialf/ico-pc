@@ -120,6 +120,11 @@ void ui_settings_set_aa_mask_query(unsigned (*fn)(void));
    the stored value with " (off: not available)".  Without a query the
    renderer's own answer (no renderer: never). */
 void ui_settings_set_aa_blocked_query(int (*fn)(void));
+/* Whether FSR 3.1 can run (rd_upscale_temporal_supported): the Upscaling row
+   steps to FSR 3.1 only when fn says so (nonzero), and a saved FSR 3.1 the
+   device cannot run reads "FSR 3.1 (off: not available)" and is drawn as Off.
+   Without a query the renderer's own answer (no renderer: never). */
+void ui_settings_set_temporal_query(int (*fn)(void));
 /* Display > Texture pack reads fn (texpack_count, the replacements
    found at start) to tell an installed pack from none ("None installed",
    the row then does not step); NULL, or none installed, is none. */
@@ -642,7 +647,10 @@ typedef enum UiSettingsOpt {
     UI_OPT_ASPECT,
     UI_OPT_ANTI_ALIAS, /* [video] anti_aliasing, stepped through rd_aa_supported_mask */
     UI_OPT_DOWNSAMPLE, /* [video] downsample: Off / To original size, default Off */
-    UI_OPT_UPSCALE,    /* [video] upscaling: Off / FSR 1.0, default Off */
+    UI_OPT_UPSCALE, /* [video] upscaling: Off / FSR 1.0 / FSR 3.1 (when supported), default Off */
+    /* [video] upscaling_quality: Native AA / Quality / Balanced / Performance;
+       shown while Upscaling is FSR 3.1 and the device runs it */
+    UI_OPT_UPSCALE_QUALITY,
     /* [video] upscaling_sharpness: 0..100 in tens, default 80; shown while Upscaling is on */
     UI_OPT_UPSCALE_SHARPNESS,
     UI_OPT_WINDOW_MODE,

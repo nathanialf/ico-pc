@@ -37,18 +37,20 @@
 # tools/package_linux.sh allows no libstdc++.so.6 or libgcc_s.so.1 in the
 # shipped program's NEEDED list; not under the sanitizers (test programs
 # only, and libasan replaces operator new). Windows (mingw): the program is
-# linked -static already (CMakeLists.txt).
+# linked -static already (CMakeLists.txt), which takes libstdc++ in too;
+# tools/package_win.sh refuses a program that imports libstdc++-6.dll,
+# libgcc_s_seh-1.dll or libwinpthread-1.dll.
 #
 # The D3D12 backend: not built yet. The pinned SDK makes its DXIL
 # permutations with DXC through Windows COM (hlsl_compiler.cpp), which the
 # POSIX ico_ffx_sc leaves out; docs/BUILDING.md has the state.
 #
 # ICO_FFX (CMakePresets.json): ON in linux-x64 and the presets that inherit
-# it (asan, linux-x64-asan, fptrap), the build that proved it (docs/
-# BUILDING.md). OFF (the option's default) in:
-#   win-x64          the pinned mingw-w64 gcc toolchain has no C++ compiler
-#                    (Debian's gcc-mingw-w64-x86-64-win32 without g++), so
-#                    the SDK cannot be compiled for Windows yet
+# it (asan, linux-x64-asan, fptrap) and in win-x64 (docs/BUILDING.md). Windows
+# is a cross build: the library is compiled by the mingw-w64 g++ of
+# tools/toolchain/mingw-gcc (tools/fetch_toolchain.sh) and linked into the
+# program -static, and ico_ffx_sc below is an ExternalProject built for the
+# build host. OFF (the option's default) in:
 #   win-x64-clang, linux-x64-clang
 #                    llvm-mingw's clang++ compiles the Vulkan sources
 #                    (checked with -fsyntax-only) but the presets set no C++
@@ -77,18 +79,47 @@ if(NOT EXISTS "${_ffx}/ffx-api/include/ffx_api/ffx_upscale.h" OR NOT EXISTS "${I
     message(FATAL_ERROR "ICO_FFX needs the FidelityFX SDK and glslang at ${ICO_FFX_DIR}: run "
                         "tools/fetch_deps.sh (x86-64 hosts), or configure with -DICO_FFX=OFF")
 endif()
+if(WIN32 AND CMAKE_CROSSCOMPILING AND NOT CMAKE_CXX_COMPILER)
+    message(FATAL_ERROR "ICO_FFX needs a C++ compiler for Windows: the mingw-w64 gcc tree has no g++ "
+                        "(run tools/fetch_toolchain.sh, which unpacks g++-mingw-w64-x86-64-win32), "
+                        "or configure with -DICO_FFX=OFF")
+endif()
 enable_language(CXX)
+
+# The RHI's Vulkan device: the backend acts on the extensions the device
+# lists, so the device enables each one it reads where listed (vk_device.c
+# vkr_create_device, ICO_FFX; RhiComputeCaps.externalExts); rhi_native_test
+# checks the set is whole on a Vulkan 1.2 device
+target_compile_definitions(ico_rhi_vulkan PRIVATE ICO_FFX=1)
+if(TARGET rhi_native_test)
+    target_compile_definitions(rhi_native_test PRIVATE ICO_FFX=1)
+endif()
 
 # --- ico_ffx_sc: the shader compiler, for the build host ---------------------
 if(CMAKE_CROSSCOMPILING)
     include(ExternalProject)
     set(_ico_ffx_sc_dir "${CMAKE_CURRENT_BINARY_DIR}/sc-host")
     set(_ico_ffx_sc_exe "${_ico_ffx_sc_dir}/ico_ffx_sc")
-    # the host's own compilers: no toolchain file, a clean environment's cc/c++
+    # The tool runs on this machine during the build (it drives glslang to
+    # make the SPIR-V headers), so it is a build of its own with the build
+    # host's gcc/g++, not the cross compilers: the project gets no toolchain
+    # file, and the host compilers are found here with the cross search
+    # roots out of the way (CMAKE_FIND_ROOT_PATH points at the mingw tree).
+    # ICO_FFX_HOST_CC / ICO_FFX_HOST_CXX name others.
+    find_program(ICO_FFX_HOST_CC NAMES gcc cc clang NO_CMAKE_FIND_ROOT_PATH)
+    find_program(ICO_FFX_HOST_CXX NAMES g++ c++ clang++ NO_CMAKE_FIND_ROOT_PATH)
+    if(NOT ICO_FFX_HOST_CC OR NOT ICO_FFX_HOST_CXX)
+        message(FATAL_ERROR "ICO_FFX cross-compiling: the shader compiler is built for this machine and "
+                            "needs its gcc and g++ (set ICO_FFX_HOST_CC, ICO_FFX_HOST_CXX), or "
+                            "configure with -DICO_FFX=OFF")
+    endif()
     ExternalProject_Add(ico_ffx_sc
         SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/sc"
         BINARY_DIR "${_ico_ffx_sc_dir}"
         CMAKE_ARGS -DICO_FFX_SRC=${_ffx} -DCMAKE_BUILD_TYPE=Release
+                   -DCMAKE_TOOLCHAIN_FILE=
+                   -DCMAKE_C_COMPILER=${ICO_FFX_HOST_CC}
+                   -DCMAKE_CXX_COMPILER=${ICO_FFX_HOST_CXX}
         INSTALL_COMMAND ""
         BUILD_BYPRODUCTS "${_ico_ffx_sc_exe}"
         BUILD_ALWAYS OFF
@@ -170,9 +201,10 @@ add_library(ico_ffx_upscaler STATIC
     "${_ffx}/sdk/src/backends/vk/ffx_vk.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ico_ffx_stubs.cpp")
 add_dependencies(ico_ffx_upscaler ico_ffx_vk_permutations)
-# out of `all`: built for what links it (ffx_link_test in `tests`, the
-# program once the FSR 3.1 row's host code does), so a build that links
-# neither does not run the shader compiler
+# out of `all`: built for what links it (ffx_link_test in `tests`;
+# ico_render, port/render/rd_fsr3.c, so the program and the renderer's
+# tests and tools), so a build that links none does not run the shader
+# compiler
 set_target_properties(ico_ffx_upscaler PROPERTIES EXCLUDE_FROM_ALL ON)
 set_target_properties(ico_ffx_upscaler PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON
                                                   CXX_EXTENSIONS OFF)

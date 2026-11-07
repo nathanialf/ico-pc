@@ -705,6 +705,31 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_prepass_batch", "false"), "0") == 0);
     CHECK(strcmp(ico_dev_env_value("vu_prepass_batch", "true"), "1") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.vu_prepass_batch"), "vu_prepass_batch") == 0);
+    /* velocity_test and velocity_sign: the temporal upscaler's motion vectors
+       and their sign (port/render/rd_velocity.c) */
+    CHECK(strcmp(ico_dev_env_name("velocity_test"), "ICO_RD_VELOCITY") == 0);
+    CHECK(strcmp(ico_dev_env_value("velocity_test", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("velocity_test", "false"), "0") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.velocity_test"), "velocity_test") == 0);
+    CHECK(strcmp(ico_dev_env_name("velocity_sign"), "ICO_RD_VELOCITY_SIGN") == 0);
+    CHECK(strcmp(ico_dev_env_value("velocity_sign", "-1"), "-1") == 0);
+    CHECK(strcmp(ico_dev_env_value("velocity_sign", "1"), "1") == 0);
+    CHECK(ico_dev_env_value("velocity_sign", "true") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.velocity_sign"), "velocity_sign") == 0);
+    /* upscale_test: the upscale point's test (port/render/rd_upscale.c) */
+    CHECK(strcmp(ico_dev_env_name("upscale_test"), "ICO_RD_UPSCALE_TEST") == 0);
+    CHECK(strcmp(ico_dev_env_value("upscale_test", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("upscale_test", "false"), "0") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.upscale_test"), "upscale_test") == 0);
+    /* upscale_debug_view, upscale_debug_checks: FSR 3.1's debug view and
+       input checks (port/render/rd_fsr3.c) */
+    CHECK(strcmp(ico_dev_env_name("upscale_debug_view"), "ICO_RD_UPSCALE_DEBUG_VIEW") == 0);
+    CHECK(strcmp(ico_dev_env_value("upscale_debug_view", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("upscale_debug_view", "off"), "0") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.upscale_debug_view"), "upscale_debug_view") == 0);
+    CHECK(strcmp(ico_dev_env_name("upscale_debug_checks"), "ICO_RD_UPSCALE_DEBUG_CHECKS") == 0);
+    CHECK(strcmp(ico_dev_env_value("upscale_debug_checks", "yes"), "1") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.upscale_debug_checks"), "upscale_debug_checks") == 0);
     /* vu_merge: the draw merge's A/B switch (port/render/rd_replay_vu.c
        vuMergeInit) */
     CHECK(strcmp(ico_dev_env_name("vu_merge"), "ICO_RD_VU_MERGE") == 0);
@@ -747,6 +772,18 @@ static void test_dev_env(void)
     CHECK(ico_dev_env_value("region_rule", "0") == NULL);
     CHECK(ico_dev_env_value("region_rule", "") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.region_rule"), "region_rule") == 0);
+    /* jitter_test: the scene's sub-pixel jitter, x,y each -0.5..0.5, as it is
+       (port/render/rd_jitter.c reads ICO_RD_JITTER_TEST) */
+    CHECK(strcmp(ico_dev_env_name("jitter_test"), "ICO_RD_JITTER_TEST") == 0);
+    CHECK(strcmp(ico_dev_env_value("jitter_test", "0.25,0.25"), "0.25,0.25") == 0);
+    CHECK(strcmp(ico_dev_env_value("jitter_test", "-0.5, 0.5"), "-0.5, 0.5") == 0);
+    CHECK(strcmp(ico_dev_env_value("jitter_test", "0,0"), "0,0") == 0);
+    CHECK(ico_dev_env_value("jitter_test", "0.75,0") == NULL);
+    CHECK(ico_dev_env_value("jitter_test", "0.25") == NULL);
+    CHECK(ico_dev_env_value("jitter_test", "0.1,0.2,0.3") == NULL);
+    CHECK(ico_dev_env_value("jitter_test", "true") == NULL);
+    CHECK(ico_dev_env_value("jitter_test", "") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.jitter_test"), "jitter_test") == 0);
     /* vu_bones and its mark: issue 123's ladder, step 1 (port/render/
        rd_pipeline.c rd__vu_policy_init reads ICO_RD_VU_BONES, rd_vu_bones.c
        the mark from ICO_RD_VU_BONES_BY for the start line; window_bones.c
@@ -1043,6 +1080,15 @@ static void test_dev_env(void)
     ico_ini_parse(&ini, "[dev]\nregion_rule = sometimes\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);
     CHECK(env_is("ICO_RD_REGION_RULE", NULL));
+    /* ... and jitter_test as its x,y (rd_jitter.c reads it) */
+    unset_env("ICO_RD_JITTER_TEST");
+    ico_ini_parse(&ini, "[dev]\njitter_test = 0.25,-0.25\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_JITTER_TEST", "0.25,-0.25"));
+    unset_env("ICO_RD_JITTER_TEST");
+    ico_ini_parse(&ini, "[dev]\njitter_test = 2,2\n");
+    ico_ini_export(&ini, "dev-env-test.ini", 0);
+    CHECK(env_is("ICO_RD_JITTER_TEST", NULL));
     /* blend=attachment and attachment_read=true (config.toml's [dev]) */
     ico_ini_parse(&ini, "[dev]\nblend = attachment\nattachment_read = true\n");
     ico_ini_export(&ini, "dev-env-test.ini", 0);

@@ -281,7 +281,9 @@ The PS2's rule, in this order (`port/shaders/vu_common.hlsli` (`vu_region_rule`,
    (`VU_RULE_CLIP_BESIDE`, `vu_rule_beside`): `VuVSOut.plane.y` is 1 on it and `vu_pixel_tests`
    discards its pixels in the picture's columns (`vu_pixel_in_picture`: the half-open range of
    the 4:3 frame's own columns; the exact viewport puts a GS integer coordinate on a texel's
-   centre, so the band's left edge is its first column's centre and belongs to the band), every VU pixel shader alike (the
+   centre, so the band's left edge is its first column's centre and belongs to the band; in a
+   jittered frame's scene-class pass the pixel's offset less the jitter, the place its triangle's
+   corners moved from: [RENDER.md](RENDER.md#jitter)), every VU pixel shader alike (the
    `_nodual` twins, the no-planes twins `vu_np_ps` and `vu_texa_np_ps`, the `_dstatt` builds). A
    discarded pixel writes no colour, depth or stencil, so inside the picture the PS2's drop stands
    pixel for pixel; beside it the triangle fills what was a hole (the kind of hole reporters showed
@@ -688,6 +690,13 @@ pre-pass draws batched` or `; pre-pass draws one an entry` after the pre-pass's 
 statistics and `rd_replay_tool --stats` count the draws made (`RdPerfRecord.vuPreDraws`: one a
 batch); the start-up self-test checks the draws one an entry and stage would make
 (`rd__vu_prepass_entry_draws`).
+
+With the temporal upscaler's switch on ([RENDER.md](RENDER.md#velocity)) a command of list 0 that
+carries a VuPrevCB is one more item (or one more draw) of its entry's batch: the same program's
+vertex function over the same vertices with the picture before's VU memory, bones and grid stream,
+its records at the next texels; the batch's table and the shader are unchanged (the item's own
+VuCB and VuBoneCB in the ring are the VuPrevCB's). `vu_velocity_main_vs` then draws the command's
+triangles as `vu_main_vs` does, with the two records' positions as the corner's motion.
 
 ## The draw merge
 

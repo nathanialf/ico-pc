@@ -107,6 +107,7 @@ each file's header comment):
 | `vu_skin.hlsl` | `vu_skin_vs`, `vu_skin_spec_vs`, `vu_skin_debug_vs` and their `_pre_vs` | `cluster`, skinned (codes 20, 22, 24) |
 | `vu_grid.hlsl` | `vu_grid_vs`, `vu_grid_lit_vs`, `vu_grid_spec_vs` and their `_pre_vs` | `mesh`, the procedural grids (codes 20, 22, 24) |
 | `vu_tri.hlsl` | `vu_main_vs`, `vu_tri_rule_pre_vs`, `vu_tri_tick_pre_vs`, `vu_tri_planes_pre_vs`, `vu_pre_ps` | the main vertex shader of every mesh program, the triangle pre-pass's record stages and the record targets' pixel shader ([RENDER.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) |
+| `vu_velocity.hlsl` | `vu_velocity_main_vs`, `velocity_ps` | the velocity pass ([RENDER.md](RENDER.md#velocity)): `vu_main_vs`'s position, the corner's motion from its two vertex records (this picture's and the VuPrevCB's, previous less current in NDC, every lane written: no `OpUndef`) as one noperspective float4; the motion in texels of the target, current to previous, +y down, into VELOCITY (RGBA16F). Made by `rd_velocity.c` only while the temporal upscaler's switch is on; no `RdVsId` / `RdFsId` |
 | `vu_particle.hlsl` | `vu_particle_vs`, `vu_particle_pre_vs`, `vu_particle_main_vs` | `particle`, six vertices a particle, non-indexed; the sprite's record stage and main shader |
 | `common.hlsli`, `gs_math.hlsli`, `sheet_text.hlsli`, `tone.hlsli`, `vu_common.hlsli` | none | included headers, below |
 
@@ -247,10 +248,15 @@ size in [GS](ARCHITECTURE.md#terms) pixels, its GS origin, `g_frameRegs[0]` (`g_
 scale, the drawing camera's picture half-width and half-height about 2048, the exact viewport's half
 texel) and `g_frameRegs[1]` (`g_vp`: the exact viewport, a power of two centred on the target, so
 positions on the GS's 1/16 grid map to the same texel at every frame width), `g_z` (the Z scale,
-texels per GS pixel), `g_misc` (frame counter, preset) and `g_vpo` (the exact viewport's centre
-offset; the texels a [Full pixel](ARCHITECTURE.md#terms) target leaves out at its left). Nothing
-transforms a position: a GS X is drawn where the game put it, at every aspect
-(`port/shaders/common.hlsli`, FrameCB).
+texels per GS pixel), `g_misc` (frame counter, preset), `g_vpo` (the exact viewport's centre
+offset; the texels a [Full pixel](ARCHITECTURE.md#terms) target leaves out at its left) and
+`g_jitter` (xy: the sub-pixel jitter in texels of a jittered frame's scene-class passes, already
+added to `g_vpo.xy` so every position the exact viewport maps takes it after the GS's snap;
+`gs_plane_offset`, `vu_pixel_in_picture` and `fullscreen_triangle` subtract it, so a pixel is
+evaluated at its jittered GS position and a full-target pass keeps its texels; 0 in every other
+frame group, where the subtraction leaves every value as it was:
+[RENDER.md](RENDER.md#jitter)). Nothing transforms a position: a GS X is drawn where the game put
+it, at every aspect (`port/shaders/common.hlsli`, FrameCB).
 
 **DrawCB** (b1, 112 bytes): `g_col` (a constant colour), `g_mode` (the `DF_*` flags,
 [TEXA](ARCHITECTURE.md#terms) mode and texel format, alpha test and AFAIL split, AREF), `g_blend`
@@ -298,7 +304,7 @@ packing (each member a 16-byte register or a 64-byte matrix, so the packing is u
 
 | struct | register | bytes | notes |
 | --- | --- | --- | --- |
-| `IcoFrameCB` | b0 space0 | 336 | view, proj, viewProj, cameraPos, clip, target, origin, frame, vp, z, misc, vpo |
+| `IcoFrameCB` | b0 space0 | 352 | view, proj, viewProj, cameraPos, clip, target, origin, frame, vp, z, misc, vpo, jitter |
 | `IcoDrawCB` | b1 space1 | 112 | col, mode, blend, uvRect, tex, param (the tone blits: the colour adjustment's factors), scale |
 | `IcoCrtCB` | b1 space1 | 112 | the CRT filter's block in DrawCB's place: src, box, beam, mask, glow, tone, pass; pad[0..3] the colour adjustment's factors (`c_toneAdj`), pad[4] 1 with it on (`c_toneOn`) |
 | `IcoFsrCB` | b1 space1 | 144 | FSR 1.0's block in DrawCB's place and size (`blit_vs` reads it as DrawCB: pad[11], aux1.w, the quarter turns, is 0): con0..con3 (AMD's `FsrEasuConOffset`), rcas (`FsrRcasCon`), last (RCAS's load clamp), pad |
@@ -308,6 +314,14 @@ packing (each member a 16-byte register or a 64-byte matrix, so the packing is u
 | `IcoSpritePlaneVertex` | vertex | 120 | the STQ vertex plus the triangle's colour and STQ planes |
 | `IcoVuCB` | b2 space1 | 832 | VU1 data memory 0..35, draw, batch, the card test's bits' place, the two ticks' camera matrices, the marks' place (`vu_mark`), the vertex record's place and the program's triangle rule (`vu_rec`), its region bounds (`vu_lo`, `vu_hi`), the triangle record's slots and a stage draw's tick (`tri`) |
 | `IcoVuBoneCB` | b3 space1 | 3840 | VU memory 16..255, the cluster bones; the card bits after them |
+
+**VuPrevCB** is not a block of its own: the velocity's second vertex record binds an ordinary
+VuCB and VuBoneCB filled from the draw's VuPrevCB (the picture before's `RdVuPayload`, VU block,
+bones and grid stream in the frame's payload, `port/render/rd_velocity.h`), and the velocity draw's
+VuCB is the draw's own with `mark.w` (`IcoVuCB.mark[3]`, a lane no cbuffer build of `vu_main_vs`
+reads) the second record's texel distance. FrameCB is the draw's own: its eye's w (1 on a camera
+cut) is what `rd__velocity_reset` follows on the CPU side (`RdCamera.cut`)
+([RENDER.md](RENDER.md#velocity)).
 
 Constants mirrored from the HLSL keep the same values: `ICO_DF_*` (`common.hlsli`),
 `ICO_DF_WMASK_SHIFT` (19), `ICO_TEXFMT_*` (`gs_math.hlsli`, asserted in `gs_math_test.c`),
