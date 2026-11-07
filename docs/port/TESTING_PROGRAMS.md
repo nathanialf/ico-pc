@@ -1067,6 +1067,22 @@ only when the Turnip package loaded (`bones_nobin_in_force`), the mark
   the pre-pass's nor a destination read's), and the chains
   with the pre-pass (a crash in one of its pipelines: cache, noprepass, then the rest without it;
   a loss in a run drawing with it: lossnoprepass, blend, backend) (`startup_retry`).
+- `app_icon_image_test.c`: the icon's image maths on a synthetic soft-edged shape composed over black
+  and white: the matte's alpha within 2 and colour within 2 (where alpha >= 192), the box of alpha
+  >= 8, the square with its 10 % margin and its shift and shrink at the frame's edge, the 256 x 256
+  crop when shrinking and growing, the 48/32/16 downscales keeping colour at clear edges, the ghost
+  refusal at 3 px and acceptance at 0 and 1 px, and the single-frame luma key (`app_icon_image`).
+- `ico_icon_test.c`: `ico_icon_write` read back: the header (count 4), `dwBytesInRes = 40 + w*h*4 +
+  mask`, the bottom-up BGRA rows, the clear column kept clear, the zero mask, the 256 entry holding
+  the PNG byte for byte, contiguous offsets ending at the file's end, no `.tmp` (`ico_icon`).
+- `app_icon_files_test.c`: the icon files over a fake user folder: wanted on missing, not after a
+  store, wanted on another label, not on an empty label with the files present, wanted on an empty
+  label without the PNG; the paths, the copies, the stamp (`dev` for an empty label), no `.tmp`
+  left, the refusals (`app_icon_files`).
+- `rd_png_mem_test.c` (`port/render/test`): `rd_write_png_mem` against the exact bytes the file
+  writer produced before the split (a 2 x 2 image, RGBA and RGB), equal to the file writer's bytes
+  for a multi-block image, a round trip through `texpack_load_png` with a padded pitch, and the
+  refusals (`rd_png_mem`).
 - `steam_shortcut_test.c`: Add to Steam's CRC and id, a sample `shortcuts.vdf` appended byte-true,
   the duplicate check, `loginusers.vdf`, and the recorded program path: the AppImage file when
   `APPIMAGE` names one and the program lies under `APPDIR`, else the program itself

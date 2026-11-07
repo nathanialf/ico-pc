@@ -1,0 +1,100 @@
+/*
+ * port/platform/app_icon.h
+ *
+ * The application icon: the title screen's "I", cut out of two captured
+ * frames of the title (the clear colour black, then white) and written
+ * under <user folder>/icon/ for the window and the shortcuts to use.
+ *
+ *   ico-pc-<disc id>.png   256 x 256 RGBA
+ *   ico-pc-<disc id>.ico   16, 32, 48 as BMP entries and 256 as a PNG entry
+ *   ico-pc-<disc id>.txt   the stamp: ICO_VERSION_LABEL ("dev" when empty)
+ *   ico-pc.png, ico-pc.ico current copies of the disc's pair
+ *
+ * Every file is written as <name>.tmp and moved over the old one
+ * (ico_rename_replace), the stamp last, so a cut-off write never leaves a
+ * stamp that vouches for half a set.  The image maths is
+ * app_icon_image.h, the .ico writer is ico_icon_write below.
+ *
+ * No SDL, heap only: the game thread runs on 256 KB fiber stacks.
+ *
+ * Thread use: ico_app_icon_deliver runs on the game thread behind the
+ * capture's curtain (about 30 to 50 ms); ico_app_icon_changed_take is read
+ * by the window host's pump.  The *_at functions take the folder and the
+ * names explicitly (the tests use a fake folder under the build folder);
+ * ico_app_icon_wanted / _deliver read the user folder, the current disc and
+ * the package label (app_icon_host.c, the window build).
+ */
+#ifndef ICO_PLATFORM_APP_ICON_H
+#define ICO_PLATFORM_APP_ICON_H
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "app_icon_image.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* ico_app_icon_deliver answers */
+#define ICO_APP_ICON_OK 0
+#define ICO_APP_ICON_GHOST 1 /* the pair moved between the frames: nothing written */
+#define ICO_APP_ICON_FAILED (-1)
+
+/* The ICO file: ICONDIR (0, 1, 4) and four 16-byte entries, 16, 32 and 48
+ * as 32-bit BGRA bottom-up BMP images (BITMAPINFOHEADER with biHeight =
+ * 2 * h, a zero 1-bit AND mask padded to 4-byte rows) and 256 as the PNG
+ * png256[0..n) (width and height bytes 0).  The 48/32/16 images are box
+ * downscales of rgba256 (256 x 256, straight alpha).  Written as
+ * <path>.tmp and moved over path.  0, or -1. */
+int ico_icon_write(const char *path, const uint8_t *png256, size_t n, const uint8_t *rgba256);
+
+/* data to path as <path>.tmp moved over it (the .tmp is removed on a
+ * failure).  0, or -1. */
+int ico_app_icon_write_atomic(const char *path, const uint8_t *data, size_t n);
+
+/* The wanted test for a folder: 1 when <dir>/icon/ico-pc-<discId>.png is
+ * missing, or the stamp differs from label.  An empty label (a development
+ * build) wants only a missing PNG.  A label is compared as "dev" when it is
+ * "" in the stamp that is written. */
+int ico_app_icon_wanted_at(const char *dir, const char *discId, const char *label);
+
+/* Writes the set for a disc into <dir>/icon/: the PNG (png[0..pngN), the
+ * 256 x 256 file as encoded), the .ico, the current copies, then the
+ * stamp.  rgba256 is the same image decoded.  One log line per call.
+ * 0, or -1. */
+int ico_app_icon_store_at(const char *dir, const char *discId, const char *label,
+                          const uint8_t *png, size_t pngN, const uint8_t *rgba256);
+
+/* <dir>/icon/<name> into out; 0, or -1 when it does not fit. */
+int ico_app_icon_path_at(char *out, size_t size, const char *dir, const char *name);
+
+/* The window build's wrappers (app_icon_host.c) ------------------------ */
+
+/* 1 when the current disc's icon is to be made: the user folder
+ * (ico_host_pref_dir), ico_region_cur()->disc_id and ICO_VERSION_LABEL
+ * through ico_app_icon_wanted_at. */
+int ico_app_icon_wanted(void);
+
+/* a = the title frame over black, b = the same tick over white (RGBA8, w x
+ * h, rows w * 4 bytes apart, alpha 255, as rd_capture_shot hands them).
+ * Matte, crop, 256, PNG, files; sets the changed flag.  ICO_APP_ICON_GHOST
+ * when the two frames differ (the caller retries once, then uses
+ * _deliver_single), ICO_APP_ICON_FAILED on a file or memory error. */
+int ico_app_icon_deliver(const uint8_t *a, const uint8_t *b, int w, int h);
+
+/* The fallback: one frame over black, alpha = the brightest channel
+ * (a luma key).  Logged as such. */
+int ico_app_icon_deliver_single(const uint8_t *a, int w, int h);
+
+/* 1 once per delivery (reads and clears the flag the window pump watches). */
+int ico_app_icon_changed_take(void);
+
+/* The current copy's path (<user folder>/icon/ico-pc.png or .ico) into out
+ * when the file exists: 0, or -1. */
+int ico_app_icon_current_path(char *out, size_t size, int ico);
+
+#ifdef __cplusplus
+}
+#endif
+#endif /* ICO_PLATFORM_APP_ICON_H */

@@ -50,24 +50,31 @@ static void be32(uint8_t *p, uint32_t v)
     p[3] = (uint8_t)v;
 }
 
-static bool chunk(FILE *fp, const char *type, const uint8_t *data, uint32_t len)
+/* One chunk appended at dst (12 + len bytes); returns the bytes written. */
+static size_t chunk(uint8_t *dst, const char *type, const uint8_t *data, uint32_t len)
 {
-    uint8_t hdr[8];
-    be32(hdr, len);
-    memcpy(hdr + 4, type, 4);
-    uint32_t crc = crcUpdate(0xFFFFFFFFu, hdr + 4, 4);
+    be32(dst, len);
+    memcpy(dst + 4, type, 4);
+    uint32_t crc = crcUpdate(0xFFFFFFFFu, dst + 4, 4);
     crc = crcUpdate(crc, data, len) ^ 0xFFFFFFFFu;
-    uint8_t tail[4];
-    be32(tail, crc);
-    return fwrite(hdr, 1, 8, fp) == 8 && (len == 0 || fwrite(data, 1, len, fp) == len) &&
-           fwrite(tail, 1, 4, fp) == 4;
+    if (len) {
+        memcpy(dst + 8, data, len);
+    }
+    be32(dst + 8 + len, crc);
+    return (size_t)len + 12;
 }
 
-bool rd_write_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,
-                  int withAlpha)
+bool rd_write_png_mem(const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch, int withAlpha,
+                      uint8_t **out, size_t *outN)
 {
+    if (out) {
+        *out = NULL;
+    }
+    if (outN) {
+        *outN = 0;
+    }
     /* PNG caps the image's sides and a chunk's length at 2^31 - 1 */
-    if (!path || !rgba || !w || !h || w > 0x7FFFFFFFu || h > 0x7FFFFFFFu ||
+    if (!out || !outN || !rgba || !w || !h || w > 0x7FFFFFFFu || h > 0x7FFFFFFFu ||
         pitch < (uint64_t)w * 4) {
         return false;
     }
@@ -118,6 +125,7 @@ bool rd_write_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h,
     }
     be32(z + o, (b << 16) | a);
     o += 4;
+    free(scan);
 
     uint8_t ihdr[13];
     be32(ihdr, w);
@@ -126,14 +134,38 @@ bool rd_write_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h,
     ihdr[9] = withAlpha ? 6 : 2;        /* colour type: RGBA or RGB */
     ihdr[10] = ihdr[11] = ihdr[12] = 0; /* deflate, adaptive filtering, no interlace */
     static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    uint8_t *blob = malloc(8 + 25 + 12 + o + 12);
+    if (!blob) {
+        free(z);
+        return false;
+    }
+    memcpy(blob, sig, 8);
+    size_t n = 8;
+    n += chunk(blob + n, "IHDR", ihdr, 13);
+    n += chunk(blob + n, "IDAT", z, (uint32_t)o);
+    n += chunk(blob + n, "IEND", NULL, 0);
+    free(z);
+    *out = blob;
+    *outN = n;
+    return true;
+}
+
+bool rd_write_png(const char *path, const uint8_t *rgba, uint32_t w, uint32_t h, uint32_t pitch,
+                  int withAlpha)
+{
+    if (!path) {
+        return false;
+    }
+    uint8_t *blob;
+    size_t n;
+    if (!rd_write_png_mem(rgba, w, h, pitch, withAlpha, &blob, &n)) {
+        return false;
+    }
     FILE *fp = ico_fopen(path, "wb"); /* a UTF-8 path on Windows too (texture dumps) */
-    bool ok = fp != NULL;
-    ok = ok && fwrite(sig, 1, 8, fp) == 8 && chunk(fp, "IHDR", ihdr, 13) &&
-         chunk(fp, "IDAT", z, (uint32_t)o) && chunk(fp, "IEND", NULL, 0);
+    bool ok = fp != NULL && fwrite(blob, 1, n, fp) == n;
     if (fp) {
         ok = fclose(fp) == 0 && ok;
     }
-    free(scan);
-    free(z);
+    free(blob);
     return ok;
 }
