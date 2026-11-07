@@ -12,6 +12,7 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | path | what it holds |
 | --- | --- |
 | `port/rhi/rhi.h` | the interface: handles, formats, resources, bind groups, pipelines, passes, commands, stats, timing, backend selection |
+| `port/rhi/rhi_native.h` | the native handles external compute needs (device, texture, command list, the external begin/end bracket, compute capabilities), [Native handles for external compute](#native-handles-for-external-compute) |
 | `port/rhi/rhi_pipeline_pool.h` | the pipeline pool's size, which both backends and the renderer's cache read |
 | `port/rhi/rhi_backend.h` | the backend table (`RHI_BACKEND_FUNCS`, `RhiBackendTable`, `RHI_BACKEND_DEFINE`) |
 | `port/rhi/rhi_backend_names.h` | the renaming of every entry point to `rhi_<prefix>_*` inside a backend |
@@ -25,12 +26,14 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/vk/vk_swapchain.c` | the swapchain on SDL3's surface, the present-wait thread, the surface poll |
 | `port/rhi/vk/vk_pipeline.c` | bind group layouts, bind groups, pipelines, the pipeline cache file |
 | `port/rhi/vk/vk_cmd.c` | frames, command lists, submission, barriers, passes, draws, copies, readback |
+| `port/rhi/vk/vk_native.c` | `rhi_native.h` on Vulkan: the device, a texture's `VkImage` and layouts, the `VkCommandBuffer`, the capability answer |
 | `port/rhi/vk/vk_resource.c` | buffers, textures, samplers, shaders, deferred destruction |
 | `port/rhi/vk/vk_enums.h`, `vk_internal.h` | the enum tables; the backend's shared state |
 | `port/rhi/vk/vk_surface_android.c` | the window surface on Android |
 | `port/rhi/d3d12/rhi_d3d12.h` | D3D12 extras for tests only |
 | `port/rhi/d3d12/d3d12_device.c` | runtime loading, adapter pick, device, debug layer, heaps, limits, the stats entry points |
 | `port/rhi/d3d12/d3d12_plan.h`, `d3d12_plan.c` | the bookkeeping that needs no D3D12 header |
+| `port/rhi/d3d12/d3d12_native.c` | `rhi_native.h` on D3D12: the device and queue, a texture's resource and states, the command list, the capability answer |
 | `port/rhi/d3d12/d3d12_swapchain.c` | the DXGI flip-model swapchain, the waitable object, frame statistics |
 | `port/rhi/d3d12/d3d12_cmd.c`, `d3d12_pipeline.c`, `d3d12_resource.c` | commands and fences; root signatures and pipeline states; committed resources |
 | `port/rhi/d3d12/d3d12_enums.h`, `d3d12_internal.h` | the enum tables; the backend's shared state |
@@ -675,6 +678,86 @@ readable pass: [PIPELINES.md](PIPELINES.md#gs-state-as-data); `port/render/rd_re
 (`rhi_cmd_begin_render_pass`, `rhi_cmd_local_read_barrier`); `port/rhi/vk/vk_pipeline.c`
 (`rhi_create_bind_group`); `port/rhi/vk/vk_resource.c` (`createTexture`)). The renderer reads the
 fog's depth and DATE's alpha this way ([RENDER.md](RENDER.md#the-replay)).
+
+## Native handles for external compute
+
+The RHI has no compute stage and gets none. Code that brings its own compute pipelines (AMD
+FidelityFX through its Vulkan and Direct3D 12 backends) works from the RHI's native objects instead,
+recorded into the RHI's own command list. `port/rhi/rhi_native.h` is additive: a caller that never
+asks sees every texture, barrier and pipeline exactly as before.
+
+What is exposed (every call answers false and writes zeros on Direct3D 11 and OpenGL, and on a
+device without the feature):
+
+| call | gives |
+| --- | --- |
+| `rhi_native_device` | Vulkan: `VkInstance`, `VkDevice`, `VkPhysicalDevice`, the graphics `VkQueue` and its family, the API version, `vkGetInstanceProcAddr` and `vkGetDeviceProcAddr`. D3D12: `ID3D12Device*` and the direct `ID3D12CommandQueue*`. Borrowed until `rhi_shutdown`. |
+| `rhi_native_texture` | the `VkImage` (a `uint64_t`) and `VkFormat`, or the `ID3D12Resource*` and the resource's `DXGI_FORMAT` (typeless for the colour formats); the extent, mips and samples; `storage` (the texture was granted `RHI_TEX_STORAGE`); `nativeState[RhiState]`, the layout or resource state of each RHI state; D3D12 also `state`, the state recorded after the barriers recorded so far (Vulkan keeps no layouts: `stateTracked` is false) |
+| `rhi_native_command_list` | the `VkCommandBuffer` or `ID3D12GraphicsCommandList*` an `RhiCommandList` records into, until it is submitted |
+| `rhi_cmd_external_begin`, `rhi_cmd_external_end` | the bracket around external recording, below |
+| `rhi_device_compute_caps` | what the device offers external compute, below |
+
+`RHI_TEX_STORAGE` is the destination read's and external compute's: it is accepted on any single-sampled
+RGBA8, RGBA16F or D32F texture the device can use as a storage image, with or without the
+fragment interlock or ROV (Vulkan `VK_IMAGE_USAGE_STORAGE_BIT` where the format has the storage
+feature; D3D12 `ALLOW_UNORDERED_ACCESS` for RGBA8 and RGBA16F). D32F is accepted but never granted
+on D3D12, where a depth-stencil resource takes no UAV, and on most Vulkan devices (the grant
+follows the format's storage feature); `RhiNativeTexture.storage` says what was granted. A bind
+group's `RHI_BIND_STORAGE_TEXTURE` stays the destination read's RGBA8 view. A texture made without
+the flag is made as before.
+
+**The state contract.** The renderer transitions every input texture to `RHI_STATE_SHADER_READ` and
+the output to `RHI_STATE_STORAGE` with `rhi_cmd_barrier` before the external dispatch, and back
+after it. The external code is given those native states (`nativeState[RHI_STATE_SHADER_READ]`,
+`nativeState[RHI_STATE_STORAGE]`; for FidelityFX they go in `FfxApiResource.state`) and must leave
+every texture in the state it was given. `RHI_STATE_STORAGE` is the Vulkan `GENERAL` layout and the
+D3D12 `UNORDERED_ACCESS` state; its Vulkan barrier scope now includes the compute stage (stage
+`COMPUTE_SHADER`, accesses `SHADER_READ|SHADER_WRITE`) where the graphics queue takes compute
+work, so a compute dispatch can read and write between two of the RHI's barriers (D3D12's
+`UNORDERED_ACCESS` and `SHADER_READ` already cover every shader stage). Vulkan's `SHADER_READ`
+barrier scope stays fragment-only; `rhi_cmd_external_begin`'s memory barrier carries the compute
+read.
+
+**The external bracket.** `rhi_cmd_external_begin(cl)` is refused (false, a log line, the first 8
+and none after) inside a render pass, when already open, or on a device without compute
+capabilities. Between begin and `rhi_cmd_external_end(cl)` the caller records anything into the
+native list; the RHI records nothing and tracks nothing for it.
+
+- Vulkan begin: the RHI's pending image barriers go out, then one memory barrier from every
+  earlier stage's writes to the compute stage's reads and writes. End: one memory barrier from
+  every stage to every stage, then the cached bindings are lost (the bind cache's viewport,
+  scissor, index buffer, stencil reference, blend constant and vertex buffer knowledge, the dynamic
+  depth and blend state, every descriptor set marked dirty) and the graphics pipeline bound at
+  that point is bound again. Both barriers are counted in `RhiStats.barriers`. The next render
+  pass records its own viewport and scissor; the next draw binds the sets and dynamic state its
+  pipeline uses, so the draw after the pair needs no set call the draw before did not.
+- D3D12 begin and end: the cached root signature, topology, root arguments, vertex buffer views,
+  viewport, scissor and index buffer are forgotten (the next draw sets them); end sets the two
+  descriptor heaps again (the external code sets its own) and the pipeline state again (one slot
+  serves graphics and compute). The resource barriers are the caller's own `rhi_cmd_barrier`
+  calls, already in the list.
+
+**Capabilities.** `rhi_device_compute_caps` fills `RhiComputeCaps` (`ok` is the conjunction; `why`
+names the first missing part). Vulkan: an API version of 1.1 or later (the one the RHI uses, so
+`ICO_VK_FAKE_API` lowers it), a graphics queue family that takes compute work, subgroup basic and
+arithmetic operations in compute shaders, `RGBA16F` and `RGBA16 UNORM` as storage images, and
+`shaderStorageImageReadWithoutFormat` and `...WriteWithoutFormat`, which the device is now made with
+where they are offered. `float16` reports `shaderFloat16` as offered (Vulkan 1.2 features); the
+device is not made with it. D3D12: shader model 6.2 or later (asked down from 6.7), `WaveOps`, typed
+UAV loads of `R16G16B16A16_FLOAT` and `_UNORM` (`TypedUAVLoadAdditionalFormats` and the formats' own
+bits); `float16` is `Native16BitShaderOpsSupported` at 6.2 or later. The answer is logged once at
+device creation (`external compute: offered|not offered...`), the log line to read from a
+reporter's log. The renderer reads it before offering anything built on external compute.
+
+**MoltenVK.** The Vulkan code path is the same; Metal has compute, storage images and subgroup
+operations, but FidelityFX's Vulkan backend has not run on MoltenVK anywhere: may work; unverified.
+The capability check above is the gate; a macOS test has to confirm it before anything relies on it there.
+
+(`port/rhi/rhi_native.h`; `port/rhi/vk/vk_native.c`, `vk_cmd.c` (`rhi_cmd_external_begin`,
+`rhi_cmd_external_end`, `vkr_state_scope`), `vk_device.c` (`vkr_probe_compute`), `vk_resource.c`
+(`rhi_create_texture`); `port/rhi/d3d12/d3d12_native.c`, `d3d12_cmd.c`, `d3d12_device.c`
+(`dx_probe_compute`), `d3d12_plan.c` (`d3dp_storage_texture_ok`, `d3dp_compute_caps`,
+`d3dp_external_rebind`).)
 
 ## Backends in one build
 
@@ -1937,12 +2020,13 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 | --- | --- |
 | `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), the fill rule (`fillRuleCell`: two quads with every edge through pixel centres, the top and left edges' pixels taken and the bottom and right ones left, the shared edge's row once), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state; then `dualLeftoverCell`, an opaque draw after a SRC1 lerp on one dynamic-blend pipeline: 2 commands, `blendEqOffSets` and `dualLeftovers` +1, the colour exact on an even and an odd column; skipped without dual-source blending or dynamic blend; the repeats' sets counted in `stateSetsSkipped`, every command of their groups); the bind cache cell (`bindCacheCell`, [The bind cache](#the-bind-cache)): one list recorded with every bind once, then with each bind and state set given three times in a row: the same exact pictures, the same `pipelineBinds` and `bindGroupBinds`, and exactly 6 pipeline, 8 bind group and 16 state skips more; in both, the group bound again at another dynamic offset draws that offset's value, a second pass binding the first pass's texture group draws the texture, and a pipeline destroyed in the list with a new one made in its pool slot (a new id) draws with the new one's write mask; with the bind cache off (`ICO_RHI_BIND_CACHE=0`: `rhi_vk_nobindcache`, `rhi_gl_nobindcache`) no skip counted, the repeats' pipeline binds recorded, the same pictures, and the dynamic state cells' repeats sent again |
 | `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored; the drop of other builds' cache files in a temporary folder: the current file, its `.tmp` and unrelated names stay), and the pipeline pool filled (`poolCell`, [The pipeline pool](#the-pipeline-pool); not under the fake switches); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches, `rhi_vk_nobindcache` with the bind cache off ([The bind cache](#the-bind-cache)) |
+| `rhi_native_test.c`, `rhi_test_native.c` | `rhi_native.h`: `rhi_test_native.c` runs inside the common cells on every backend (Vulkan and D3D12 hand out a device, a queue and, with a device-level loader or the command list, the handles; Direct3D 11 and OpenGL answer "not offered" with zeroed outputs, a reason for the capability query, and refuse a null and a real texture and list); `rhi_native_test.c` on Vulkan (lavapipe): the device handles, a vkCmdPipelineBarrier recorded through the `getDeviceProcAddr` handed out, RGBA16F and RGBA8 textures granted storage with their image, format, extent and layouts (a texture without the flag reports none, D32F with it is accepted), the storage barriers passing the layer's synchronisation checks, the external begin refused inside a pass and twice, and a two-pass picture byte-identical without the pair, around an empty stretch and around a native barrier (the second pass drawing with no pipeline or vertex buffer call after the pair), the pair counting two barriers; ctest `rhi_native` (exit 77 without a device; a validation message fails it) |
 | `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |
 | `rhi_vk_enum_test.c` | every `rhi.h` enumeration has a Vulkan mapping; the layer classifiers and `rhi_layer_switched_on`; ctest `rhi_vk_enum` |
 | `rhi_driver_version_test.c` | the driver version text of each vendor's encoding; ctest `rhi_driver_version` |
 | `rhi_adapter_match_test.c` | the `[video] adapter` name match and the device-list text; ctest `rhi_adapter_match` |
-| `rhi_d3d12_plan_test.c` | `d3d12_plan.c` on every host; with the shader table, every vertex shader's DXIL inputs against its SPIR-V locations and every DXIL blob signed; ctest `rhi_d3d12_plan` |
+| `rhi_d3d12_plan_test.c` | `d3d12_plan.c` on every host (the storage grant by format and sample count, the states a dispatch is told, the barrier plan around an external dispatch, the capability answer for each missing part, what the external end puts back); with the shader table, every vertex shader's DXIL inputs against its SPIR-V locations and every DXIL blob signed; ctest `rhi_d3d12_plan` |
 | `rhi_d3d11_shader_plan_test.c` | `d3d11_shader.c`'s portable part on every host: the macros text, the include lookup, the flat-register rule over the game's sources and `rhi_test_hlsl.h` (checked against `rhi_test.hlsl`), the cache key over every table entry, the cache file's round trip and the corrupt files it refuses, the failure log's limit; ctest `rhi_d3d11_shader_plan` |
 | `rhi_gl_test.c` | the common cells on OpenGL with the driver's debug output failing the run, the copies the cells do not make (a colour region into a vertex-read device buffer and on into a readback buffer, a D32F_S8 depth as floats, RGBA32_UINT words, each at a wider row pitch; a target made after one whose framebuffer was dropped), and six swapchain frames on SDL's offscreen driver with a resize; ctest `rhi_gl`, and `rhi_gl_nodual` under `ICO_GL_FAKE_NO_DUAL=1`, both on llvmpipe (`LIBGL_ALWAYS_SOFTWARE=1`, `SDL_VIDEO_DRIVER=offscreen`), skipped without a context |
 | `rhi_d3d12_test.c` | Windows, double-clickable: the cells on WARP, on the hardware adapter, the swapchain on a hidden window, then Vulkan for comparison; writes `rhi_d3d12_test.log` and shows a message box (`--console` for ctest); ctest `rhi_d3d12` |

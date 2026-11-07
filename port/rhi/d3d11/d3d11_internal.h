@@ -33,6 +33,7 @@
 #include <dxgi1_6.h>
 #include <stdio.h>
 #include "../rhi.h"
+#include "../rhi_native.h"
 #include "../d3d12/d3d12_plan.h" /* the pools, layouts, the DXBC input signature reader */
 #include "d3d11_shader.h"
 

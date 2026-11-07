@@ -926,6 +926,54 @@ const char *rhi_overlay_name(void)
     return s_up ? be()->overlay_name() : NULL;
 }
 
+/* The native handles of rhi_native.h: forwarded; nothing is offered before
+ * rhi_init succeeded (the handles belong to the device), and the command
+ * list calls are command recording like the rest (no guard) */
+bool rhi_native_device(RhiNativeDevice *out)
+{
+    if (out) {
+        memset(out, 0, sizeof(*out));
+    }
+    return out && s_up && be()->native_device(out);
+}
+
+bool rhi_native_texture(RhiTexture t, RhiNativeTexture *out)
+{
+    if (out) {
+        memset(out, 0, sizeof(*out));
+    }
+    return out && s_up && be()->native_texture(t, out);
+}
+
+bool rhi_native_command_list(RhiCommandList cl, void **out)
+{
+    if (out) {
+        *out = NULL;
+    }
+    return out && s_up && be()->native_command_list(cl, out);
+}
+
+bool rhi_cmd_external_begin(RhiCommandList cl)
+{
+    return s_up && be()->cmd_external_begin(cl);
+}
+
+void rhi_cmd_external_end(RhiCommandList cl)
+{
+    if (s_up) {
+        be()->cmd_external_end(cl);
+    }
+}
+
+bool rhi_device_compute_caps(RhiComputeCaps *out)
+{
+    if (out) {
+        memset(out, 0, sizeof(*out));
+        out->why = "no device";
+    }
+    return out && s_up && be()->device_compute_caps(out);
+}
+
 /* ------------------------------------------------ the layer classifiers
  * The known layers: name (a trailing '*' matches any rest), the program,
  * whether it is an overlay, whether the loader takes it as an explicit
