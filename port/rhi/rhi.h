@@ -1399,6 +1399,11 @@ typedef struct RhiStats {
     uint64_t fenceWaits, fenceWaitNs;
     uint64_t waitIdles, readbacks;
     uint64_t acquireNs, presentNs;
+    /* Vulkan: the pictures whose present list's submit found the acquired
+     * image already free (the acquire's fence signalled) and those it did
+     * not; the acquires of the ahead form (no wait) are in neither.  0 on
+     * the other backends (window_scene_acquire_text prints nothing) */
+    uint64_t acquireReadyAtSubmit, acquireNotReady;
     uint64_t createNs;
     /* swapchains made (rhi_resize_swapchain, a surface made again, a
      * rebuild a present found necessary): the first present on a new one

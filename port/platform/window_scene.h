@@ -13,10 +13,11 @@
  *     switch and the core the game thread was on: "game threads 199.3 in 39
  *     switches (longest Main 171.2 ms; on core 2)";
  *   - the VU work of a replay: "VU: 1182 draws, 61k triangles, 550k vertex
- *     invocations (pre-pass off: 9 a triangle)", and (issue 179) what list
- *     0, the scene, cost the GPU in the block's timed replays against
- *     their VU triangles: "; list 0 GPU 41.2 ms a replay, 12.3 ms + 0.41 ms
- *     a thousand triangles (R^2 0.80, 38 replays)";
+ *     invocations (pre-pass off: 9 a triangle)", and (issue 179) what the
+ *     GPU's work (the span less the display wait and the present) cost in
+ *     the block's timed replays against their vertex invocations: "; GPU
+ *     work 51.8 ms a replay, 16.0 ms + 0.17 ms a thousand vertex
+ *     invocations (R^2 0.81, 70 replays)";
  *   - the swapchain's images and those the game holds: " (images: 10, in
  *     use 1)" after the present mode.
  */
@@ -120,27 +121,43 @@ size_t window_scene_threads_text(char *out, size_t cap, double threadsMs, unsign
 size_t window_scene_vu_text(char *out, size_t cap, uint64_t draws, uint64_t tris,
                             uint64_t preVertices, unsigned n, int prepass);
 
-/* The block's timed replays as (VU triangles, list 0's GPU ms) pairs, for
-   a least-squares line: list 0 = a + b x (x in thousands of triangles).
+/* The vertex invocations of a replay's VU draws: the pre-pass's vertices
+   with it on, 9 a triangle with it off (the VU line's own quantity) */
+uint64_t window_scene_vu_invocations(uint64_t tris, uint64_t preVertices, int prepass);
+
+/* A replay's GPU work: its span less the display wait and the present (the
+   slow-scene rule's quantity), never negative.  The stamps inside the span
+   are not used: on a tile-based GPU the "before list 0" and list 0 figures
+   trade at a constant sum (issue 179) */
+double window_scene_gpu_work_ms(double spanMs, double waitMs, double presentMs);
+
+/* The block's timed replays as (vertex invocations, GPU work ms) pairs, for
+   a least-squares line: work = a + b x (x in thousands of invocations).
    Sums, no ring: a block's few hundred replays in doubles */
 typedef struct SceneVuFit {
     unsigned n;
     double sx, sy, sxx, sxy, syy;
 } SceneVuFit;
 
-void window_scene_vu_fit_add(SceneVuFit *f, uint64_t tris, double list0Ms);
-/* The line's a (ms), b (ms a thousand triangles) and r2 (the share of
-   list 0's variance the triangles explain; -1 when list 0 did not vary):
-   false with fewer than 3 replays or the triangles' count not varying
+void window_scene_vu_fit_add(SceneVuFit *f, uint64_t invocations, double workMs);
+/* The line's a (ms), b (ms a thousand invocations) and r2 (the share of the
+   work's variance the invocations explain; -1 when the work did not vary):
+   false with fewer than 3 replays or the invocations' count not varying
    (no slope to be had) */
 bool window_scene_vu_fit(const SceneVuFit *f, double *a, double *b, double *r2);
-/* "; list 0 GPU 41.2 ms a replay, 12.3 ms + 0.41 ms a thousand triangles
-   (R^2 0.80, 38 replays)": the mean, then the line where it is had; "" with
-   no replay timed.  b near 0 with a high R^2 is not possible; a high b with
-   a high R^2 says the vertex work (the VU draws' triangles) sets list 0's
-   time, a low R^2 that something else does (the pixels, the passes).  The
-   length written */
+/* "; GPU work 51.8 ms a replay, 16.0 ms + 0.17 ms a thousand vertex
+   invocations (R^2 0.81, 70 replays)": the mean, then the line where it is
+   had; "" with no replay timed.  A high b with a high R^2 says the vertex
+   work sets the GPU's time, a low R^2 that something else does (the
+   pixels, the passes).  The length written */
 size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f);
+
+/* "acquire: the display's image was free at the present's submit in 41 of 60
+   pictures": the pictures whose present list's submit found the acquire's
+   fence signalled (RhiStats acquireReadyAtSubmit) of those it asked
+   (that and acquireNotReady); "" with none asked (every backend but Vulkan,
+   or a block of acquires ahead).  The length written */
+size_t window_scene_acquire_text(char *out, size_t cap, uint64_t ready, uint64_t notReady);
 
 /* " (images: 10, in use 1)": the swapchain's images and those acquired and
    not yet handed back to the presentation engine; "" with no image count

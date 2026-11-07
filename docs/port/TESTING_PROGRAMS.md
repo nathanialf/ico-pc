@@ -1056,7 +1056,7 @@ only when the Turnip package loaded (`bones_nobin_in_force`), the mark
   a kind out of range ignored, a reset, a cut buffer), the slow step's game threads part (`game
   threads 199.3 in 39 switches (longest Main 171.2 ms; on core 2)`, the core or the longest switch
   left out, no name) and the VU line (pre-pass off 9 a triangle, on the recorded vertices, the k and
-  M words, no replays, a cut buffer), the list-0 line and the images in use, word for word, and
+  M words, no replays, a cut buffer), the GPU work line (the invocations 9 a triangle off and the recorded vertices on, the work less the display wait and the present, never negative, the fit word for word), the acquire line (none asked: nothing) and the images in use, word for word, and
   the slow-scene dump's trigger over a block's figures (each condition alone: kind, window, movie,
   once, 30 s, 8 replays, the bound off; the bound itself is not over; the display wait taken from
   the work; no negative work) and its log line (`window_scene`).
@@ -1190,7 +1190,12 @@ The renderer's test programs have a page of their own:
   batch and the background set on one thread each, and a pipeline made on the test's thread while
   the background set compiles (the lock taken by both).
 - `rhi_d3d12_plan_test.c`: the D3D12 backend's state and barrier bookkeeping on the CPU
-  (`rhi_d3d12_plan`).
+  (`rhi_d3d12_plan`), with the external-compute cases (the storage grant by format, the capability
+  answer, what the external end puts back).
+- `rhi_native_test.c`: `rhi_native.h` on Vulkan (lavapipe): the device handles, textures granted
+  storage, the storage barriers, the external begin/end bracket and a two-pass picture identical
+  with and without it (`rhi_native`; exit 77 without a device). `rhi_test_native.c` runs inside the
+  common cells of every backend: the handles where offered, "not offered" on Direct3D 11 and OpenGL.
 - `rhi_d3d11_shader_plan_test.c`: the Direct3D 11 backend's shader route on the CPU
   (`port/rhi/d3d11/d3d11_shader.c`): the macros text and its malformed forms, the include lookup,
   the flat-register rule on hand-made sources, on `rhi_test_hlsl.h` (which must equal
@@ -1242,11 +1247,21 @@ The renderer's test programs have a page of their own:
   swapchain's choice (`vkr_prerotate_turns`: 90, 270 and 180 at issue 179's 1612x720; identity, a
   mirrored turn, a turn not offered, `[dev] prerotate = false` and images past the surface's largest
   keep identity) (`rhi_vk_present_mode`).
+- `ffx_link_test.c`: the FidelityFX FSR 3.1 upscaler (`port/rhi/ffx`, `ICO_FFX`) linked into a C
+  program and run through raw Vulkan calls (volk, not the RHI): the first Vulkan 1.2 device with
+  the features the FFX backend reads enabled where present (16-bit floats, subgroup size control,
+  synchronization2, non-uniform storage buffer indexing); the Quality render size at 1280x960
+  (853x640); the backend and an upscale context for a 640x480 render and a 1280x960 output; its
+  provider (3.1.x) and a non-zero GPU memory figure; the context destroyed; any validation error
+  fails it. Skipped (77) without a loader, a Vulkan 1.2 device or a device it can make
+  (`ffx_link_test`).
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver;
   `swapAcquired` per frame; the acquire's wait with the list that uses the image (issue 179,
   `acquireWaits` through `vkr_test_submit_waits`: a list of off-screen work before it waits for
   nothing, the image's list on the acquire at `COLOR_ATTACHMENT_OUTPUT`, a dropped acquire drained
-  by one empty batch at `ALL_COMMANDS`; on the fence ring in `rhi_vk_swapchain_vk11`)
+  by one empty batch at `ALL_COMMANDS`; on the fence ring in `rhi_vk_swapchain_vk11`; and the
+  acquire's fence: the image's list counts one picture in `acquireReadyAtSubmit` or
+  `acquireNotReady` (which one depends on the machine), a dropped acquire counts none)
   (`rhi_vk_swapchain`).
 - Helpers: `rhi_test_common.c`/`.h` (the shared cells, seven of whose pipelines come from one
   `rhi_create_pipelines` call with a failing description among them, and the fill-rule cell:

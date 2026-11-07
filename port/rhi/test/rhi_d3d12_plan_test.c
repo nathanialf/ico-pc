@@ -587,8 +587,81 @@ static void testShaderTable(void)
 }
 #endif
 
+/* ------------------------------------------------- external compute
+ * (rhi_native.h): which textures RHI_TEX_STORAGE is granted to, the state
+ * the storage and shader-read states map to (what a compute dispatch sees),
+ * the capability answer, and what the external pair puts back. */
+static void testNative(void)
+{
+    /* RGBA8 and RGBA16F, single-sampled: yes; D32F and the depth-stencil
+     * format (depth-stencil resources take no UAV), and multisampled
+     * textures: no */
+    CHECK(d3dp_storage_texture_ok(RHI_FMT_RGBA8_UNORM, 1), "RGBA8 storage");
+    CHECK(d3dp_storage_texture_ok(RHI_FMT_RGBA8_UNORM, 0), "RGBA8 storage, samples 0");
+    CHECK(d3dp_storage_texture_ok(RHI_FMT_RGBA16F, 1), "RGBA16F storage");
+    CHECK(!d3dp_storage_texture_ok(RHI_FMT_D32F, 1), "D32F storage");
+    CHECK(!d3dp_storage_texture_ok(RHI_FMT_D32F_S8, 1), "D32F_S8 storage");
+    CHECK(!d3dp_storage_texture_ok(RHI_FMT_RGBA8_UNORM, 4), "multisampled storage");
+    CHECK(!d3dp_storage_texture_ok(RHI_FMT_RGBA16F, 2), "multisampled RGBA16F storage");
+    CHECK(!d3dp_storage_texture_ok(RHI_FMT_R32_UINT, 1), "R32_UINT storage");
+
+    /* the states a dispatch is told: inputs shader-resource (pixel and
+     * non-pixel, so a compute shader may read them), the output UAV */
+    CHECK(d3dp_texture_state(RHI_STATE_STORAGE, false) == D3DP_STATE_UNORDERED_ACCESS,
+          "STORAGE is UNORDERED_ACCESS");
+    CHECK((d3dp_texture_state(RHI_STATE_SHADER_READ, false) & D3DP_STATE_NON_PIXEL_SHADER_RESOURCE),
+          "SHADER_READ includes the non-pixel stage");
+    /* the barrier plan around an external dispatch: input and output move to
+     * their states and back, each a real transition, the tracked state
+     * following */
+    uint32_t tracked = D3DP_STATE_RENDER_TARGET, b, a;
+    CHECK(d3dp_plan_texture_barrier(RHI_STATE_RENDER_TARGET, RHI_STATE_SHADER_READ, false, &tracked,
+                                    &b, &a, NULL) &&
+              b == D3DP_STATE_RENDER_TARGET &&
+              a == d3dp_texture_state(RHI_STATE_SHADER_READ, false),
+          "input to SHADER_READ");
+    CHECK(d3dp_plan_texture_barrier(RHI_STATE_SHADER_READ, RHI_STATE_STORAGE, false, &tracked, &b,
+                                    &a, NULL) &&
+              a == D3DP_STATE_UNORDERED_ACCESS && tracked == D3DP_STATE_UNORDERED_ACCESS,
+          "output to STORAGE");
+    CHECK(d3dp_plan_texture_barrier(RHI_STATE_STORAGE, RHI_STATE_SHADER_READ, false, &tracked, &b,
+                                    &a, NULL) &&
+              b == D3DP_STATE_UNORDERED_ACCESS && tracked == D3DP_STATE_SHADER_RESOURCE,
+          "output back to SHADER_READ");
+
+    /* the capability answer: shader model 6.2, wave operations, typed RGBA16
+     * UAV loads, each missing one gives its own reason */
+    RhiComputeCaps c;
+    d3dp_compute_caps(0x62, true, true, false, &c);
+    CHECK(c.ok && c.apiVersionOk && c.subgroupOk && c.storageFormatsOk && !c.float16 && !c.why,
+          "SM 6.2 + wave + typed: ok");
+    d3dp_compute_caps(0x66, true, true, true, &c);
+    CHECK(c.ok && c.float16, "SM 6.6 + native 16-bit: ok, float16");
+    d3dp_compute_caps(0x61, true, true, true, &c);
+    CHECK(!c.ok && !c.apiVersionOk && !c.float16 && c.why && strstr(c.why, "6.2"),
+          "SM 6.1: not ok, no float16");
+    d3dp_compute_caps(0, true, true, true, &c);
+    CHECK(!c.ok && !c.apiVersionOk, "the shader model query failed");
+    d3dp_compute_caps(0x65, false, true, true, &c);
+    CHECK(!c.ok && c.apiVersionOk && !c.subgroupOk && c.why && strstr(c.why, "wave"),
+          "no wave operations");
+    d3dp_compute_caps(0x65, true, false, true, &c);
+    CHECK(!c.ok && c.apiVersionOk && c.subgroupOk && !c.storageFormatsOk && c.why &&
+              strstr(c.why, "UAV"),
+          "no typed UAV loads");
+
+    /* the external end puts back the heaps, the root state, the topology and
+     * the views always, and the pipeline state when one was set */
+    const uint32_t withPso = d3dp_external_rebind(true), without = d3dp_external_rebind(false);
+    const uint32_t always =
+        D3DP_REBIND_HEAPS | D3DP_REBIND_ROOT | D3DP_REBIND_TOPOLOGY | D3DP_REBIND_VIEWS;
+    CHECK((withPso & always) == always && (withPso & D3DP_REBIND_PSO), "rebind with a pipeline");
+    CHECK((without & always) == always && !(without & D3DP_REBIND_PSO), "rebind without one");
+}
+
 int main(void)
 {
+    testNative();
     testStateTable();
     testBarrierPlan();
     testBuffers();

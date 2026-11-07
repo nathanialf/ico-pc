@@ -56,6 +56,33 @@ bool d3dp_plan_texture_barrier(RhiState before, RhiState after, bool depthFormat
     return b != a;
 }
 
+/* -------------------------------------------------------- external compute */
+bool d3dp_storage_texture_ok(RhiFormat fmt, uint32_t samples)
+{
+    return samples <= 1u && (fmt == RHI_FMT_RGBA8_UNORM || fmt == RHI_FMT_RGBA16F);
+}
+
+void d3dp_compute_caps(uint32_t shaderModel, bool waveOps, bool typedUav16, bool native16,
+                       RhiComputeCaps *out)
+{
+    memset(out, 0, sizeof(*out));
+    out->apiVersionOk = shaderModel >= 0x62u;
+    out->subgroupOk = waveOps;
+    out->storageFormatsOk = typedUav16;
+    out->float16 = out->apiVersionOk && native16;
+    out->ok = out->apiVersionOk && out->subgroupOk && out->storageFormatsOk;
+    out->why = out->ok              ? NULL
+               : !out->apiVersionOk ? "shader model 6.2 is required"
+               : !out->subgroupOk   ? "no wave operations"
+                                    : "no typed UAV loads of RGBA16 formats";
+}
+
+uint32_t d3dp_external_rebind(bool pipelineBound)
+{
+    return D3DP_REBIND_HEAPS | D3DP_REBIND_ROOT | D3DP_REBIND_TOPOLOGY | D3DP_REBIND_VIEWS |
+           (pipelineBound ? D3DP_REBIND_PSO : 0u);
+}
+
 /* ------------------------------------------------------------------ buffers */
 uint32_t d3dp_buffer_state(const D3dpBufferTrack *t, uint64_t listSerial)
 {

@@ -267,6 +267,7 @@ const char *window_tiler_words(void)
     return rhi_limits()->tiler
                ? " (tile-based GPU: the last scene pass carries the earlier passes' tile work; "
                  "the present's own list alone waits for the display's image: the display wait, "
-                 "or the present where the GPU holds only its colour writes)"
+                 "or the present where the GPU holds only its colour writes): the stretch before list 0 is "
+                 "the uploads and the GPU's work still in flight"
                : "";
 }

@@ -319,8 +319,9 @@ static bool dx_write_resource(const RhiBindSlot *s, const RhiBinding *b,
          * UNORDERED_ACCESS (RHI_STATE_STORAGE); the shader declares it a
          * RasterizerOrderedTexture2D */
         DxTexture *t = dx_get_texture(b->texture);
-        if (!t || !t->uav) {
-            DX_LOG("bind group: u%u: invalid storage texture (not made with RHI_TEX_STORAGE)",
+        if (!t || !t->uav || t->rhiFormat != RHI_FMT_RGBA8_UNORM) {
+            DX_LOG("bind group: u%u: invalid storage texture (an RGBA8 texture made with "
+                   "RHI_TEX_STORAGE)",
                    s->slot);
             return false;
         }

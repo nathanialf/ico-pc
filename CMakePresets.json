@@ -26,7 +26,8 @@
             "displayName": "Linux x86-64, host GCC",
             "cacheVariables": {
                 "CMAKE_C_COMPILER": "gcc",
-                "ICO_STATE_FIXED_IMAGE": "ON"
+                "ICO_STATE_FIXED_IMAGE": "ON",
+                "ICO_FFX": "ON"
             }
         },
         {
