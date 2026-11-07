@@ -2237,6 +2237,9 @@ enum {
 
 /* A RD_PERF_PASS_* in plain words ("uploads", "DATE snapshot", ...) */
 const char *rd_perf_pass_kind_name(int kind);
+/* The name a log line prints: the same, but "before list 0" for the uploads
+   on a tile-based GPU (the CSV `kind` keeps rd_perf_pass_kind_name) */
+const char *rd_perf_pass_kind_display(int kind, bool tiler);
 
 struct RdPerfRecord;
 /* The GPU time a picture that pacing reads (the present allowance's gate
