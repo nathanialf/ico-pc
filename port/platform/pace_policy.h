@@ -56,7 +56,12 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
  * keeps that rule shows no overlap and the step rule's GPU time a picture
  * (the median span less the display wait, PaceRtAsk.gpuNs; rd.h
  * rd_perf_pace_gpu_ms) is the GPU's whole time per picture without the
- * present's own list's wait for the window's image */
+ * present's own list's wait for the window's image.  On a driver whose
+ * stamps run ahead of that wait (a Mali: its first stamp of the present's
+ * list is written before the acquire's semaphore is waited for) the wait
+ * lands in the present figure instead and the pacing input holds it, as it
+ * did before v0.10.5 (the same input, not a regression; the slow-scene
+ * rule counts the present pass out for that reason, window_scene.h) */
 #define PACE_GPU_IDLE_NS 50000ll
 
 /* Issue 123: the gaps of the replays right after a present that blocked

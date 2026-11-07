@@ -63,6 +63,7 @@
     X(submit)                                                                                      \
     X(wait_frame)                                                                                  \
     X(frame_slot)                                                                                  \
+    X(commands_left)                                                                               \
     X(wait_idle)                                                                                   \
     X(collect_garbage_now)                                                                         \
     X(cmd_barrier)                                                                                 \

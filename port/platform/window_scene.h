@@ -78,14 +78,19 @@ typedef struct SlowSceneBlock {
     int movie;          /* a movie is playing */
     int written;        /* this run already wrote its dump */
     double uptimeS;
-    unsigned gpuN;    /* the block's timed replays */
-    double spanSumMs; /* their GPU spans summed */
-    double waitSumMs; /* and their display waits */
+    unsigned gpuN;       /* the block's timed replays */
+    double spanSumMs;    /* their GPU spans summed */
+    double waitSumMs;    /* and their display waits */
+    double presentSumMs; /* and their present passes: on a driver whose stamps do
+                            not wait (a Mali) the display wait lands here */
     double boundMs;
 } SlowSceneBlock;
 
-/* The mean GPU work a replay: (span less the display wait) over gpuN, 0
-   with no timed replay and never below 0 */
+/* The mean GPU work a replay: (span less the display wait less the present
+   pass) over gpuN, 0 with no timed replay and never below 0.  The present
+   pass is counted out because on a driver whose timestamps run ahead of the
+   acquire wait (the Mali of issue 179) the wait lands in the present figure,
+   not in the display wait: a display-bound block must not write the file */
 double window_slow_scene_work_ms(const SlowSceneBlock *b);
 /* true when the block is the dump's: a window up, no movie, the dominant
    kind a scene, the bound on, not yet written, 30 s of uptime, at least 8

@@ -234,7 +234,7 @@ double window_slow_scene_work_ms(const SlowSceneBlock *b)
     if (b->gpuN == 0) {
         return 0.0;
     }
-    const double w = (b->spanSumMs - b->waitSumMs) / (double)b->gpuN;
+    const double w = (b->spanSumMs - b->waitSumMs - b->presentSumMs) / (double)b->gpuN;
 
     return w > 0.0 ? w : 0.0;
 }
@@ -255,10 +255,10 @@ size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, un
     const double n = b->gpuN ? (double)b->gpuN : 1.0;
     const int c = snprintf(out, cap,
                            "slow scene: the block's GPU work %.1f ms a replay (bound %.0f; display "
-                           "wait %.1f, span %.1f) in a scene layout: frame %u written to "
-                           "logs/%s; attach it with the log",
+                           "wait %.1f, present %.1f, span %.1f) in a scene layout: frame %u "
+                           "written to logs/%s; attach it with the log",
                            window_slow_scene_work_ms(b), b->boundMs, b->waitSumMs / n,
-                           b->spanSumMs / n, frame, zipName);
+                           b->presentSumMs / n, b->spanSumMs / n, frame, zipName);
 
     return c < 0 ? 0 : ((size_t)c < cap ? (size_t)c : cap - 1);
 }

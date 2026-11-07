@@ -92,8 +92,23 @@ void rd__submit_frame(RhiCommandList cl, bool present, double walkStart, double 
 {
     double t = walkStart, t1;
     RhiCommandList cl2 = {0};
+    RhiCommandList pl = cl;  /* the list the present's pass is recorded into */
     uint32_t sw = 0, sh = 0; /* the pass ring's present entry: DISPLAY onto the window */
-    const bool split = present;
+    static unsigned s_shared;
+    bool split = present;
+    if (split && !rhi_commands_left()) {
+        /* no list left for the present's own (VKR_MAX_CMD_LISTS a slot):
+         * the present's pass goes into the scene's list as before v0.10.5,
+         * so the picture is presented and its acquired image is not left
+         * for a present that never comes (the other slot could acquire a
+         * second image meanwhile and present this one undrawn) */
+        split = false;
+        if (s_shared++ % 100u == 0) {
+            rd__log("present: no command list left for the present's own list (%u times so far): "
+                    "its pass shares the scene's list this picture",
+                    s_shared);
+        }
+    }
     if (split) {
         /* A presenting picture is two lists: the scene's, which ends here,
          * and the present's pass alone, so that only the second's submit
@@ -115,20 +130,21 @@ void rd__submit_frame(RhiCommandList cl, bool present, double walkStart, double 
         rd__perf_pass(cl, RD_PERF_PASS_WAIT, RD_PERF_ID_WINDOW, sw, sh, -1);
         rhi_end_commands(cl);
         cl2 = presentList();
+        pl = cl2;
         /* without it the display wait's piece stays open, untimed (its end
            stamp would go into an ended list) */
         present = cl2.id != 0;
     }
     if (present) {
         const RdTargetRec *dt = rd__target_rec(RD_TARGET_DISPLAY + 1);
-        rd__perf_stamp(cl2, RD_PERF_TS_PRESENT_BEGIN);
-        rhi_cmd_checkpoint(cl2,
+        rd__perf_stamp(pl, RD_PERF_TS_PRESENT_BEGIN);
+        rhi_cmd_checkpoint(pl,
                            rd__passring_push(RD_PASSK_PRESENT, RD_TARGET_DISPLAY + 1,
                                              dt ? dt->tw : 0, dt ? dt->th : 0, 0, sw, sh, 0, -1));
-        rd__perf_pass(cl2, RD_PERF_PASS_PRESENT, RD_PERF_ID_WINDOW, sw, sh, -1);
-        rd__present_record(cl2);
-        rd__perf_stamp(cl2, RD_PERF_TS_PRESENT);
-        rd__perf_pass_end(cl2); /* the last piece's end (rd_perf.c) */
+        rd__perf_pass(pl, RD_PERF_PASS_PRESENT, RD_PERF_ID_WINDOW, sw, sh, -1);
+        rd__present_record(pl);
+        rd__perf_stamp(pl, RD_PERF_TS_PRESENT);
+        rd__perf_pass_end(pl); /* the last piece's end (rd_perf.c) */
     } else if (!split) {
         rd__perf_pass_end(cl);
     }

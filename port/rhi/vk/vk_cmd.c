@@ -360,6 +360,11 @@ uint32_t rhi_frame_slot(void)
     return (uint32_t)(g_vkr.frameIndex % RHI_FRAMES_IN_FLIGHT);
 }
 
+bool rhi_commands_left(void)
+{
+    return vkr_cur_frame()->listCount < VKR_MAX_CMD_LISTS;
+}
+
 void rhi_wait_idle(void)
 {
     const uint64_t t0 = vkr_now_ns();

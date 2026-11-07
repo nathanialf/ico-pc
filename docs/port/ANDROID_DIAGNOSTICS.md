@@ -133,15 +133,16 @@ question it decides:
   about 64 ms against 132) is the fix working; an unchanged span with the wait moved into the
   present says the presentation engine's hold was our own backlog, not the compositor's. Decides
   whether the image wait was the limit of the scenes.
-- **The slow-scene file** (`window: slow scene: the block's GPU work 52.3 ms a replay (bound 40;
-  display wait 3.1, span 55.4) in a scene layout: frame 4812 written to logs/slow-20261106-120000.zip;
+- **The slow-scene file** (`window: slow scene: the block's GPU work 50.3 ms a replay (bound 40;
+  display wait 3.1, present 2.0, span 55.4) in a scene layout: frame 4812 written to logs/slow-20261106-120000.zip;
   attach it with the log`; `slow_scene_check` in `window_host.c`, the rule in `window_scene.h`
   (`window_slow_scene_due`)). A cutscene cannot be dumped by hand (no pause menu, F12 needs the
   keyboard), and the issue's cage scene (stage 40) spent 22 to 35 ms in list 3 for 103 to 132 draws
   with no frame to look at. At the end of a 10 s block the game writes one frame when a window is
   up, no movie is playing, the block's steps were mostly in a scene layout, at least 8 replays were
-  timed, the mean GPU work a replay (the span less the display wait, so the wait for the screen's
-  image does not trigger it) is over `[dev] slow_scene_dump_ms` (default 40, the Original rate's
+  timed, the mean GPU work a replay (the span less the display wait and less the present pass, so
+  the wait for the screen's image does not trigger it even on a driver whose stamps run ahead of
+  that wait and put it in the present figure, as the Mali's do) is over `[dev] slow_scene_dump_ms` (default 40, the Original rate's
   period; 0 is off) and the run is 30 s old. Once a run: the file is one frame (the last closed
   one) and a copy of the log, `logs/slow-<date>-<time>.zip`, pruned to the newest one, and it goes
   into a crash or hang report and the rc share menu's set. Written in releases. What to send: the log

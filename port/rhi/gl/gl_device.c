@@ -646,6 +646,11 @@ uint32_t rhi_frame_slot(void)
     return (uint32_t)(g_gl.frameIndex % RHI_FRAMES_IN_FLIGHT);
 }
 
+bool rhi_commands_left(void)
+{
+    return true; /* no list limit a slot on this backend */
+}
+
 void rhi_wait_idle(void)
 {
     if (!g_gl.initialised) {

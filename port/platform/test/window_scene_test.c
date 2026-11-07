@@ -200,11 +200,19 @@ int main(void)
         t.window = 1;
         t.uptimeS = 45.0;
         t.gpuN = 10;
-        t.spanSumMs = 600.0; /* 60 ms a replay */
-        t.waitSumMs = 100.0; /* 10 ms of it the display's image: work 50 */
+        t.spanSumMs = 600.0;   /* 60 ms a replay */
+        t.waitSumMs = 100.0;   /* 10 ms of it the display's image */
+        t.presentSumMs = 20.0; /* 2 ms the present pass: work 48 */
         t.boundMs = 40.0;
-        CHECK(window_slow_scene_work_ms(&t) > 49.999 && window_slow_scene_work_ms(&t) < 50.001);
+        CHECK(window_slow_scene_work_ms(&t) > 47.999 && window_slow_scene_work_ms(&t) < 48.001);
         CHECK(window_slow_scene_due(&t));
+        /* a driver whose stamps run ahead of the wait (a Mali): the wait is in
+           the present figure, and a display-bound block is not the dump's */
+        t.waitSumMs = 2.0;
+        t.presentSumMs = 250.0; /* 25 ms a replay of it the image: work 34.8 */
+        CHECK(!window_slow_scene_due(&t));
+        t.waitSumMs = 100.0;
+        t.presentSumMs = 20.0;
         /* each condition alone defeats it */
         t.dominant = SCENE_PLAY;
         CHECK(!window_slow_scene_due(&t));
