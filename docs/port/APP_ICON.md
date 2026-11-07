@@ -4,7 +4,8 @@ Files: `port/platform/app_icon.c`, `app_icon.h` (paths, stamp, the wanted test, 
 header is the interface the capture and the window host use), `app_icon_image.c`, `app_icon_image.h`
 (the image maths), `app_icon_ico.c` (the `.ico` writer and the `.tmp` + rename write), and
 `app_icon_host.c` (the window build's wrappers: the user folder, the disc and the package label, the
-PNG, the "icon changed" flag).
+PNG, the "icon changed" flag), `app_icon_window.c`/`.h` (the icon on the window) and
+`macos/app_icon_mac.m` (the Dock icon).
 
 The program's icon is the title lettering's "I", made from the player's own disc and kept as files in
 the user folder; nothing of it is in the repository or the download
@@ -85,11 +86,66 @@ The capture needs the renderer and the title stage, which are up only at the tit
 run's icon (and the first run's after an update) appears at its first title screen; the next start
 finds the file before the first frame.
 
+## When the capture waits
+
+`ico_app_icon_wanted()` also answers 0 while the presented picture is not plain
+(`ico_app_icon_picture_plain`, `app_icon.c`): the CRT filter on (strength above 0), or any of the four
+Picture-page adjustments (Gamma, Brightness, Contrast, Saturation) off the game's own 50 (a stored 0
+reads as 50). Both act on the finished picture before the capture's copy, so the white background
+would not come back as 255 and the matte would be wrong (the box of alpha could grow to the whole
+frame). Screen softening does not matter: a blur of a flat field is flat. The first refusal logs
+`ico_pc: icon: waiting for a plain picture (CRT filter or Brightness on)`; the title's capture asks
+again at each title visit, so the icon is made at a later visit once the settings are plain (or on
+a run with them plain). `app_icon_host.c` reads the settings with `ico_video_get`; the rule itself is
+tested without the settings (`app_icon_files_test`).
+
+## Applying the icon
+
+`ico_app_icon_apply(SDL_Window *)` (`app_icon_window.c`) reads `<user folder>/icon/ico-pc.png`
+(`ico_app_icon_current_path`), decodes it with the texture packs' PNG loader (`texpack_load_png`),
+and hands SDL an RGBA32 surface made over the pixels (`SDL_CreateSurfaceFrom`) for
+`SDL_SetWindowIcon`, which copies it; the surface and the decoded image are freed at once. No file, or
+a file that does not decode: nothing is done and SDL's default stays. It logs `window: icon: set from
+<path>` on success and a `window: icon: ...` line on a read or SDL failure. It runs at the end of
+`window_attach` (`window_host.c`), so at the start and again when Apply reopens the window for another
+renderer, and in `ico_window_pump` whenever `ico_app_icon_changed_take()` is 1, which is the run
+that made the icon (`SDL_SetWindowIcon` is main-thread only; the pump is the main thread). Android
+and iOS keep their packaged launcher icons (the function does nothing there; the capture is not
+compiled on Android either).
+
+| platform | what the icon reaches |
+| --- | --- |
+| Windows | the window's title bar and the taskbar button (SDL sets the window's big and small icons); `ico_pc.exe` in Explorer keeps the generic icon: it carries no icon resource and is not rewritten (the icon does not exist until the player's disc has made it) |
+| Linux, X11 | the window and the taskbar through `_NET_WM_ICON` |
+| Linux, Wayland | nothing: SDL 3.4's Wayland has no toplevel-icon support, so a Wayland desktop takes the icon from the applications-menu entry named after the app id (`com.defnf.icopc`) |
+| macOS | SDL's Cocoa windows have no icon of their own, so `app_icon_mac.m` calls `[NSApp setApplicationIconImage:]` with the PNG: the Dock icon while the game runs. The bundle's Finder icon stays the generic one: no `CFBundleIconFile`, and the bundle is ad-hoc signed with nothing in `Resources` that is made at run time. CMake compiles the `.m` (`enable_language(OBJC)`) and links `-framework AppKit` |
+| Android, iOS | unchanged |
+
+### Add to Steam
+
+`IcoSteamEnv.iconPath` (`steam_shortcut.h`) holds the current copy's path when the file exists:
+`<user folder>/icon/ico-pc.ico` on Windows (backslashes), `ico-pc.png` on Linux. `ico_steam_add_this_game`
+fills it (`ico_steam_env_default` leaves it empty, so the tests' environments are their own; the
+function that links the icon's files is the caller) and gives it to a new entry as its icon field;
+with no file the old rule stands (Windows: the program itself, Linux: none). An entry of this program
+already in Steam's list is upgraded: `ico_steam_vdf_set_icon(vdf, n, exe, caseless, icon, &out,
+&outN)` finds the first entry whose Exe matches (either field order, `exe` quoted or plain) and
+replaces its icon value, or adds the field before the entry's end when it has none, only when the
+value is empty or the program (quoted or plain). It answers 1 (changed, the file in `out`, every
+other byte as it was), 0 (no such entry, or the player's own icon: left alone; or `icon` empty), -1
+(not a shortcuts file). `ico_steam_add_shortcut` then writes it on the same path as an added entry
+(`shortcuts.vdf.bak`, `.tmp`, rename) and still answers `ICO_STEAM_EXISTS`, logging `ico_pc: Add to
+Steam: already there; icon set to <path>`. The icon file is in the user folder (the install folder
+may be read-only; portable mode's `userdata` moves with the program). That Steam draws a `.ico` in its list is
+untested here.
+
 ## Tests
 
 The tests are `app_icon_image_test` (`app_icon_image`), `ico_icon_test` (`ico_icon`),
 `app_icon_files_test` (`app_icon_files`) and `rd_png_mem_test` (`rd_png_mem`)
-([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)); the capture's are `title_logo_test` (`title_logo`: the
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)), with the guard's cases in `app_icon_files_test` and the
+icon field's in `steam_shortcut_test` (`steam_shortcut`: `ico_steam_vdf_set_icon` on every outcome, the
+whole job with an old entry, a new entry, the player's icon and no icon file); the capture's are `title_logo_test` (`title_logo`: the
 name rule and the steps with the renderer and the files stubbed) and `rd_icon_pass_test`
 (`rd_icon_pass`: the renderer's pass recorded without a device,
 [TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).

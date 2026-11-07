@@ -767,9 +767,12 @@ and Achievement pop-ups. The rows that change how the game plays are under
   Steam is open, and says so if Steam is running. On a Steam Deck, use
   Desktop Mode, where you can quit Steam from its icon in the taskbar
   (right-click it, then Exit Steam). If Steam has several accounts, the game goes to the one
-  used last. It adds no pictures, so Steam shows its plain tile for it. If
-  the game is already in your library, the row says so and changes
-  nothing. When it adds the game, it first keeps a copy of Steam's old
+  used last. It uses the game's icon (the I from the title) once
+  the game has made it, and adds no other pictures, so Steam shows its
+  plain tile for the rest. If the game is already in your library, the
+  row says so, and if that entry has no icon or only the game's own file as
+  its icon, it gets the game's icon (an icon you chose yourself stays). When
+  it changes Steam's list, it first keeps a copy of Steam's old
   list, `shortcuts.vdf.bak`, beside Steam's own list. If you move the game
   to another folder, add it again from there. The row is only on Windows
   and Linux, the Steam Deck included.

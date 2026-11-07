@@ -1087,7 +1087,8 @@ only when the Turnip package loaded (`bones_nobin_in_force`), the mark
 - `app_icon_files_test.c`: the icon files over a fake user folder: wanted on missing, not after a
   store, wanted on another label, not on an empty label with the files present, wanted on an empty
   label without the PNG; the paths, the copies, the stamp (`dev` for an empty label), no `.tmp`
-  left, the refusals (`app_icon_files`).
+  left, the refusals, and the capture guard `ico_app_icon_picture_plain` (CRT filter on or off at
+  strength 0, each of the four tone values off 50, 0 read as 50) (`app_icon_files`).
 - `rd_png_mem_test.c` (`port/render/test`): `rd_write_png_mem` against the exact bytes the file
   writer produced before the split (a 2 x 2 image, RGBA and RGB), equal to the file writer's bytes
   for a multi-block image, a round trip through `texpack_load_png` with a padded pitch, and the
@@ -1095,7 +1096,10 @@ only when the Turnip package loaded (`bones_nobin_in_force`), the mark
 - `steam_shortcut_test.c`: Add to Steam's CRC and id, a sample `shortcuts.vdf` appended byte-true,
   the duplicate check, `loginusers.vdf`, and the recorded program path: the AppImage file when
   `APPIMAGE` names one and the program lies under `APPDIR`, else the program itself
-  (`test_self_exe`) (`steam_shortcut`).
+  (`test_self_exe`), and the icon field: `ico_steam_vdf_set_icon` on an empty icon (every other byte
+  identical), the program as the icon (quoted, plain, case-less), a missing field, either field order,
+  the player's own icon, no entry, a file that is not a shortcuts file, and the whole job with an
+  entry added earlier, a new entry, the player's icon and no icon file (`steam_shortcut`).
 - `backend_switch.cmake` (window build, the disc image; skipped without it): Options > Graphics >
   Apply through the program itself, `[dev] backend_switch_test = "opengl,vulkan"` from a portable
   folder on SDL's offscreen driver, Vulkan on lavapipe, OpenGL on llvmpipe: both switches applied

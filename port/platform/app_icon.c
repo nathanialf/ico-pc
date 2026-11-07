@@ -141,3 +141,18 @@ int ico_app_icon_store_at(const char *dir, const char *discId, const char *label
     fprintf(stderr, "ico_pc: icon: written %s (%s, %s)\n", pngP, discId, text);
     return 0;
 }
+
+static int tone_neutral(int v)
+{
+    return v == 0 || v == 50;
+}
+
+int ico_app_icon_picture_plain(int crtOn, float crtStrength, int gamma, int brightness,
+                               int contrast, int saturation)
+{
+    if (crtOn && crtStrength > 0.0f) {
+        return 0;
+    }
+    return tone_neutral(gamma) && tone_neutral(brightness) && tone_neutral(contrast) &&
+           tone_neutral(saturation);
+}

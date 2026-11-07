@@ -4,6 +4,8 @@
 
 - Options > Picture has a new row, Upscaling. FSR 1.0 (AMD's open upscaler) makes the picture sharper when it is drawn smaller than your screen, as at Resolution 1x or after Downsampling, on every computer and phone. A Sharpness row goes with it. Off by default, the picture as the original game showed it.
 
+- The game now has an icon: the I of the title lettering, made from your own disc the first time the title screen shows (about half a second of black). Windows and Linux show it on the window and the taskbar, Add to Steam uses it, and on a Mac it is the Dock icon while the game runs.
+
 ## Fixed
 
 (kept current after every merge; player words only)

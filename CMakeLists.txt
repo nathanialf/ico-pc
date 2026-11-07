@@ -576,7 +576,8 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
                                   port/platform/window_disc.c port/platform/window_blended.c
                                   port/platform/window_present.c port/platform/render_thread.c
                                   port/platform/window_sweep.c port/platform/dump_zip.c
-                                  port/platform/backup_host.c port/platform/app_icon_host.c)
+                                  port/platform/backup_host.c port/platform/app_icon_host.c
+                                  port/platform/app_icon_window.c)
     if(ICO_RC_TOOLS AND ANDROID)
         # an rc build's Share a bug report: the files it offers (share_report.h)
         target_sources(ico_pc PRIVATE port/platform/share_report.c)
@@ -600,6 +601,13 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
         if(WIN32)
             target_link_libraries(ico_pc PRIVATE advapi32)
         endif()
+    endif()
+    if(APPLE AND NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
+        # The Dock icon of the running program (app_icon_window.h): Objective-C
+        # on AppKit; SDL's Cocoa windows have no icon of their own
+        enable_language(OBJC)
+        target_sources(ico_pc PRIVATE port/platform/macos/app_icon_mac.m)
+        target_link_libraries(ico_pc PRIVATE "-framework AppKit")
     endif()
     if(ANDROID)
         # The player's own graphics driver (Options > Graphics
