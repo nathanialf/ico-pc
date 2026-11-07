@@ -67,6 +67,7 @@
 #include <string.h>
 
 #include "rd_replay.h"
+#include "rd_upscale.h"
 
 /* rd__set_blur_border_repeat (rd_internal.h, tests): the strips drawn */
 static bool s_borderRepeat = true;
@@ -458,12 +459,27 @@ static void glowEdge(Replay *r, const RdFrame *f, const RdCmd *c)
  * is not textured and covers everything already. */
 static void blurPostSprite(Replay *r, const RdFrame *f, const RdCmd *c);
 
+static void postSprite(Replay *r, const RdFrame *f, const RdCmd *c);
+
+/* The reduction's textured sprite after the upscale point: SCENE's record
+ * lends UPSCALED's texture and texels for this draw (rd_upscale.h), so the
+ * sprite's UVs, its GS-texel arithmetic and its scissor are the reduction's
+ * at the display scale; nothing recorded changes */
+void rd__blur_post_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    const bool remap = c->b[0] == RD_POST_REDUCTION && rd__upscale_remap_begin(&r->st);
+    postSprite(r, f, c);
+    if (remap) {
+        rd__upscale_remap_end();
+    }
+}
+
 /* Options > Effects > Motion blur strength (rd_internal.h
  * rd__blur_strength_fix): the motion blur's sprite drawn with the lower FIX
  * in the state, which its pipeline key and DrawCB take (rd_replay.c
  * doBlurSpriteDraw) and Smooth's k-root reads (rd__blur_smooth_sprite); the
  * recorded FIX put back after it.  At 100 % the sprite is drawn as before */
-void rd__blur_post_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
+static void postSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     const uint8_t fix = r->st.ds.blendFix;
     const uint8_t eff =

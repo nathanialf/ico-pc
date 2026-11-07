@@ -1435,6 +1435,11 @@ int pace_auto_resolution_step(const PaceSamples *s, int currentScale, float wind
     return currentScale > 1 ? currentScale - 1 : 1;
 }
 
+float pace_auto_window_scale(float windowScale, float upscaleRatio)
+{
+    return upscaleRatio >= 1.0f ? windowScale / upscaleRatio : windowScale;
+}
+
 /* ------------------------------------------------------------ the vsync lock */
 
 unsigned pace_lock_presents(int cap, uint64_t periodNs)

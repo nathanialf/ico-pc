@@ -591,6 +591,15 @@ static const struct {
     /* false: the VU pre-pass's draws one an entry and stage instead of one a
        batch (an A/B; port/render/rd_replay_vu.c preBatchInit) */
     {"dev.vu_prepass_batch", "vu_prepass_batch"},
+    /* true: the temporal upscaler's motion vectors drawn (VELOCITY; a
+       developer switch, nothing reads them yet), and -1 or 1: the sign the
+       upscaler takes them with (port/render/rd_velocity.c) */
+    {"dev.velocity_test", "velocity_test"},
+    {"dev.velocity_sign", "velocity_sign"},
+    /* true: the upscale point's test: the scene drawn below the display's
+       scale and upscaled at the reduction by a plain bilinear pass (a
+       developer switch; port/render/rd_upscale.c) */
+    {"dev.upscale_test", "upscale_test"},
     /* false: every VU draw one GPU draw instead of consecutive ones with the
        same state merged into one (an A/B; port/render/rd_replay_vu.c
        vuMergeInit) */
@@ -773,6 +782,13 @@ static const struct {
     /* port/render/rd_replay_vu.c preBatchInit: 0 draws the pre-pass one
        draw an entry and stage */
     {"vu_prepass_batch", "ICO_RD_VU_PREPASS_BATCH"},
+    /* port/render/rd_velocity.c rd__velocity_on: 1 draws the motion
+       vectors; rd__velocity_sign: -1 or 1 */
+    {"velocity_test", "ICO_RD_VELOCITY"},
+    {"velocity_sign", "ICO_RD_VELOCITY_SIGN"},
+    /* port/render/rd_upscale.c readSwitch: 1 draws the scene at the display
+       scale over 1.5 and upscales it at the reduction */
+    {"upscale_test", "ICO_RD_UPSCALE_TEST"},
     /* port/render/rd_replay_vu.c vuMergeInit: 0 draws every VU draw as a
        GPU draw of its own, through the programs' plain builds */
     {"vu_merge", "ICO_RD_VU_MERGE"},
@@ -1031,6 +1047,10 @@ const char *ico_dev_env_value(const char *key, const char *value)
             return value;
         }
         return value_is(value, off) ? "0" : NULL;
+    }
+    if (strcmp(key, "velocity_sign") == 0) {
+        /* 1 (current to previous, the default) or -1 as they are */
+        return strcmp(value, "1") == 0 || strcmp(value, "-1") == 0 ? value : NULL;
     }
     if (strcmp(key, "pass_split") == 0) {
         /* a count of VU draws, 1..65536; 0 or off: none */

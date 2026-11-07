@@ -162,6 +162,7 @@
 #include "rd_camera_blend.h"
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_velocity.h"
 #include "rd_vu_skin_check.h"
 #include "xxh3.h"
 
@@ -6064,6 +6065,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     /* the glow kept from the tick's first present (rd_glow_hold.c): after
      * the hash too, which the held glow leaves exact */
     (void)rd__glow_hold(&s_out, firstOfTick);
+    rd__velocity_attach(&s_out, 0); /* VuPrevCB: the last present's (rd_velocity.h) */
     if (stats) {
         *stats = st;
     }

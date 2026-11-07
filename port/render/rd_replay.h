@@ -200,6 +200,16 @@ bool rd__replay_blur_covers(const Replay *r, const RdTargetRec *tc, const RdPost
                             const RdDrawState *d, const RdPipeKeyInt *key, int useDepth);
 bool rd__replay_blur_swap(Replay *r, RdTargetRec *tc);
 bool rd__replay_take_snap(Replay *r, RdTargetRec *tc, RhiRect area);
+/* rd_blur_texels.c: blurSnapArea's helpers (the texels a staticBlur sprite
+ * reads).  rd__blur_uv_axis: one axis's texel range [*lo, *hi] of a sprite
+ * x0..x1 with UVs u0..u1 (12.4) sampling a target of scale ss, TEX0 size
+ * size, backing size asz and Full pixel crop crop16 (16ths); false (the
+ * whole axis) under REPEAT, for an empty sprite or where the shader's
+ * product could overflow.  rd__blur_kernel_reach: the above-1x kernel's
+ * texels past the GS's taps for one axis's step. */
+bool rd__blur_uv_axis(int32_t x0, int32_t x1, int32_t u0, int32_t u1, float ss, float size,
+                      int clamp, uint32_t asz, int32_t crop16, int32_t *lo, int32_t *hi);
+int32_t rd__blur_kernel_reach(uint32_t step32);
 int rd__replay_perf_target_post(const Replay *r, const RdCmd *c);
 void rd__replay_perf_post(Replay *r, int post);
 bool rd__replay_blur_fix128_skip(void);

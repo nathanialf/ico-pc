@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_velocity.h"
 #include "rd_vu_skin_check.h"
 #include "rd_mesh.h"
 #include "rd_tex.h"
@@ -134,6 +135,15 @@ uint64_t rd__estimate_ring(const RdFrame *f, int keep)
                  * table, and its index list once more in its run's (a
                  * grid's from its shape, a mesh's at most its whole list) */
                 total += (passes / 4u + 1u) * 32u + 256u;
+                if (c->type != RDC_PARTICLES && (c->u[3] & RD_VU_PREV) != 0u) {
+                    /* the velocity (rd_velocity.h; rd_replay_vu.c "the
+                     * velocity pass"): the second record's VuCB, bones,
+                     * stream and batch entry, a VuCB a velocity draw, the
+                     * pass's DrawCB */
+                    total += sizeof(IcoVuCB) + sizeof(IcoVuBoneCB) + (uint64_t)p.streamQw * 16 +
+                             4 * align + 32;
+                    total += (passes / 4u + 1u) * (sizeof(IcoVuCB) + align) + sizeof(IcoDrawCB);
+                }
                 total += (uint64_t)p.batchCount * (p.vertsPerBatch + 1) * 12 + 16;
                 const RdMeshRec *m = c->type <= RDC_SKINNED ? rd__mesh_rec(c->u[0]) : NULL;
                 if (m) {

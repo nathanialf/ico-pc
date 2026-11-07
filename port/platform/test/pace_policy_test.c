@@ -167,6 +167,33 @@ static void testAutoResolution(void)
     CHECK(autoRun(&s, &clock, 1, 2.41f, 10, 20, &steps) == 1 && steps == 0);
     /* a window at 1x or below has no step below it */
     CHECK(autoRun(&s, &clock, 0, 1.0f, 300, 10, &steps) == 0 && steps == 0);
+    /* under a temporal upscaler the steps act on the scene's scale, drawn at
+       the window's over the ratio: no upscaler leaves the window's scale; a
+       2400 x 1080 window (2.41x) at ratio 1.5 draws the scene at 1.61x, so
+       the first step is 1x (2x would be above it); a 4K window (4.82x) at
+       1.5 starts at 3.21x and steps to 3x, then 2x, then 1x; at ratio 3 the
+       2.41x window's scene is 0.80x (drawn at 1x): no step below */
+    CHECK(pace_auto_window_scale(2.41f, 0.0f) == 2.41f);
+    CHECK(pace_auto_window_scale(2.41f, 1.5f) > 1.6f &&
+          pace_auto_window_scale(2.41f, 1.5f) < 1.61f);
+    {
+        PaceSamples k = {0};
+        uint64_t c = 1000 * MS;
+        int n = 0;
+        k.budgetNs = 16666667ull;
+        CHECK(autoRun(&k, &c, 0, pace_auto_window_scale(2.41f, 1.5f), 140, 2, &n) == 1 && n == 1);
+        PaceSamples q = {0};
+        uint64_t cq = 1000 * MS;
+        int m = 0;
+        q.budgetNs = 16666667ull;
+        CHECK(autoRun(&q, &cq, 0, pace_auto_window_scale(4.82f, 1.5f), 140, 2, &m) == 3 && m == 1);
+        CHECK(autoRun(&q, &cq, 3, pace_auto_window_scale(4.82f, 1.5f), 140, 2, &m) == 2 && m == 2);
+        PaceSamples z = {0};
+        uint64_t cz = 1000 * MS;
+        int o = 0;
+        z.budgetNs = 16666667ull;
+        CHECK(autoRun(&z, &cz, 0, pace_auto_window_scale(2.41f, 3.0f), 300, 10, &o) == 0 && o == 0);
+    }
     /* a fixed 30 a second limit: its period is the budget (70 %: 23.3 ms) */
     {
         PaceSamples k = {0};

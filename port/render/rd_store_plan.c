@@ -79,6 +79,7 @@
 #include <string.h>
 
 #include "rd_replay.h"
+#include "rd_upscale.h"
 
 /* the command the walk replays (rd_replay.c replayFrame), counted as the
  * scan counts */
@@ -402,17 +403,20 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     if (!plan && !area && !cut && !glow) {
         return;
     }
+    const bool fxDepth = plan && rd__effects_depth_wanted();
     if (plan) {
-        s_plan.effects = rd__effects_depth_wanted();
+        /* the present reads SCENE's depth, or the upscale point does after
+         * the lists (rd_upscale.h: the temporal upscaler's depth input) */
+        s_plan.effects = fxDepth || rd__upscale_point_on();
     }
     if (plan && g_rd.settings.effectsDepth) {
         /* once a run each way: the setting is on by default, and reads
          * nothing without an effects program */
         static bool s_saidOn, s_saidOff;
-        bool *said = s_plan.effects ? &s_saidOn : &s_saidOff;
+        bool *said = fxDepth ? &s_saidOn : &s_saidOff;
         if (!*said) {
             *said = true;
-            rd__log(s_plan.effects
+            rd__log(fxDepth
                         ? "store plan: the present reads SCENE's depth for an effects program "
                           "([video] effects_depth): its stores are kept"
                         : "store plan: [video] effects_depth is on but no effects program reads "

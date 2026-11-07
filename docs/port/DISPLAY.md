@@ -36,6 +36,7 @@ are [RHI.md](RHI.md).
 | `port/render/rd_interp.c` | presenting between ticks |
 | `port/render/rd_present_clock.c` | the present clock (`rd_present_clock_alpha`), what it notes for `rd_present`, Motion blur: Smooth's presents a tick |
 | `port/render/rd_crt.c`, `port/shaders/crt.hlsl` | the CRT filter |
+| `port/render/rd_upscale_temporal.c`, `port/render/rd_upscale_temporal.h` | Upscaling: FSR 3.1's rows (support query, quality ratios, exclusions; [FSR 3.1 upscaling](#fsr-31-upscaling)) |
 | `port/render/rd_fsr1.c`, `port/render/rd_fsr1.h`, `port/shaders/fsr1.hlsl`, `port/third_party/fsr1/` | Upscaling: FSR 1.0, AMD's EASU and RCAS at the present ([FSR 1.0 upscaling](#fsr-10-upscaling)) |
 | `port/render/rd_tone.c`, `port/render/rd_tone.h`, `port/shaders/tone.hlsli` | the colour adjustment (Options > Picture's Gamma, Picture brightness, Contrast, Saturation; [Presentation](#presentation)) |
 | `port/platform/fps_counter.h`, `fps_counter.c` | the Frame rate counter's presents per second, free of SDL and rd ([UI.md](UI.md#the-frame-rate-counter)) |
@@ -197,9 +198,11 @@ in force ([downsampling](#downsampling)).
 **Upscaling.** `upscaling` (`"off"` or `"fsr1"`) and `upscaling_sharpness` (0..100, default 80) are
 read and saved outside the preset, as `downsample` is, and reach the renderer as
 `RdSettings.upscale` (`RD_UPSCALE_FSR1`) and `upscaleSharpness`; the renderer decides where FSR 1.0
-is in force ([FSR 1.0 upscaling](#fsr-10-upscaling)). `"fsr3"` is the temporal upscaler's word,
-not offered yet: it reads as `"off"` with `video: upscaling "fsr3" is not available yet; "off"
-used` (`port/game/video_options.c` (`ico_video_parse_upscale`); `port/platform/window_host.c`
+is in force ([FSR 1.0 upscaling](#fsr-10-upscaling)). `"fsr3"` (FSR 3.1) is read as saved and sent as
+`RD_UPSCALE_FSR3` with `upscaleQuality` (`[video] upscaling_quality`); it is drawn as off where
+`rd_upscale_temporal_supported()` is false ([FSR 3.1 upscaling](#fsr-31-upscaling)); an unknown word of
+either key reads as `"off"` / `"native"` with a line (`port/game/video_options.c`
+(`ico_video_parse_upscale`, `ico_video_parse_upscale_quality`); `port/platform/window_host.c`
 (`video_settings`)).
 
 **Fallbacks.** A key the parser does not understand logs one `video: ... not understood` line and
@@ -290,7 +293,9 @@ timestamps (Vulkan and D3D12: the sample is taken whenever the replay's timestam
 came back, so D3D12 under its FIFO present samples), else in mailbox mode its CPU time without
 the acquire and the present; under FIFO without timestamps there is no sample. The budget is the cap's period, two fields at frame rate
 Original, else 1/60 s; the rule is off under the CRT filter (`port/platform/window_host.c`
-(`auto_res_sample`, `auto_res_update`, `video_settings`)).
+(`auto_res_sample`, `auto_res_update`, `video_settings`)). Under a temporal upscaler Auto keeps
+the display at the window and its steps lower the scene's scale below it instead
+([The render and display scales](#the-render-and-display-scales)).
 
 ## The window host
 
@@ -1796,6 +1801,63 @@ stretched as with Upscaling off`. The replay tool's `--fsr1 [S]` sets it (S the 
 **Licence.** AMD's two headers are MIT (Copyright (c) 2021 Advanced Micro Devices, Inc.), vendored
 unmodified with their licence in `port/third_party/fsr1/`; the row, the pinned commit and the files'
 SHA-256 are in [THIRD_PARTY.md](../THIRD_PARTY.md), and the notice ships in `NOTICES.txt`.
+
+### FSR 3.1 upscaling
+
+`RdSettings.upscale` = `RD_UPSCALE_FSR3` (Options > Picture > Upscaling: FSR 3.1; `[video] upscaling =
+"fsr3"`) with `RdSettings.upscaleQuality` (Upscaling quality: Native AA / Quality / Balanced /
+Performance = the ratios 1.0 / 1.5 / 1.7 / 2.0, `[video] upscaling_quality`, default `"native"`) is
+AMD's temporal upscaler. This section holds the rules the rows and the renderer already keep
+(`port/render/rd_upscale_temporal.c`); the upscaler itself (the dispatch at the upscale point, the
+jitter, the velocity buffer) is completed by the FSR3HOST package and described here when it lands.
+
+- **Support.** `rd_upscale_temporal_supported()` decides whether the row offers the value. In this
+  version it is false on every backend and logs once `upscaling: FSR 3.1 is not available (...)`;
+  the real answer (Vulkan and Direct3D 12 with the compute capabilities `rhi_device_compute_caps`
+  reports; never Direct3D 11 or OpenGL) comes with the upscaler. A saved `"fsr3"` that is not
+  supported shows "FSR 3.1 (off: not available)", is drawn as Off and stays in the config.
+- **Exclusions** (enforced in `rd__upscale_temporal_on`, reported by the settings layer): off under
+  the CRT filter and while `downsample` is on; at the Original preset or a scene at 1x only Native AA
+  (ratio 1.0, `rd__upscale_temporal_ratio`); MSAA and SSAA read as off while it runs
+  (`rd__aa_requested`, `rd_aa_off_for_temporal`; the row says "(off: FSR 3.1)").
+- **Log lines.** The display line ends with `, upscaling fsr3 quality (ratio 1.5)` in force and `,
+  upscaling fsr3 off (not available | the CRT filter draws its own box | Downsampling is on)` asked
+  for but not in force, and is logged again when that changes.
+### The render and display scales
+
+A temporal upscaler (issue 99; in this release only the developer's stand-in, `[dev]
+upscale_test = true` or `rd_replay_tool --upscale-test [R]`, which upscales bilinearly) draws the
+scene below the picture's size and upscales it where the game's reduction reads it
+([RENDER.md](RENDER.md#the-upscale-point)). While one is asked and the CRT filter is off,
+`rd__apply_display` splits the scale in two (`port/render/rd_present.c` (`rd__apply_display`),
+`port/render/rd_upscale.c` (`rd__upscale_render_scale`)):
+
+- **The display scale `d`** is what the Resolution row gives today: a scale (`2x`: 2), a fixed
+  size, or the "window" resolution's box (one texel a window pixel, the frame's exact width over
+  the box across, the PS2's pixel shape kept down, the [Full pixel](#the-native-frame) window's crop as
+  without an upscaler); then the GPU's size limit. DISPLAY, its held copy (the motion blur) and
+  the upscaler's output UPSCALED are made at it, and everything from the reduction on (the
+  present, FSR 1.0, the effects depth's box) is as at that scale without an upscaler.
+- **The render scale `r`** is `d` over the upscaler's ratio (1.5 is FSR's Quality, 1 a
+  native-resolution pass), not below 1 (the game's own size: `2x` at ratio 3 draws at 1x) nor
+  below `d / 3`. The scene-class targets (SCENE, WORK2, AURA_WORK, the DATE snapshot, a
+  frame-sized render-to-texture block) are made at it; `g_rd.sceneSx/Sy` hold it. A fractional
+  `r` is drawn as any fractional scale is.
+- **Supersampling and MSAA** are off (`rd__aa_mode`: the upscaler is the anti-aliasing), and
+  **Downsampling** with them.
+- **Auto** keeps the display at the window's size and steps the render scale instead: the host
+  sends the "window" resolution and Auto's step as `RdSettings.upscaleRenderCap`, a cap on `r`'s
+  vertical scale (both axes together, never below `d / 3`), and the steps start from the window's
+  scale over the ratio (`port/platform/pace_policy.h` (`pace_auto_window_scale`)): a 2400 x 1080
+  window (2.41x) at ratio 1.5 draws the scene at 1.61x and its first step is 1x.
+- **The allocation fallback** halves `r` as it halves the scale without an upscaler; the display
+  stays. The Resolution row's "lowered" note (`rd_scene_scale_lowered`) names only that fallback.
+
+The display line says both when they differ: `display: scene RxR (WxH) (render scale RxR),
+display WxH (scale DxD; upscaler ratio K asked, E in force[, under Auto's cap])`. Off, `d` is `r`,
+every expression of `rd__apply_display` is the one before and every picture the same bytes.
+Tests: `rd_upscale` (the scales, the window, Auto's cap) and `pace_policy` (the step's window
+scale).
 
 ## Interpolation between ticks
 

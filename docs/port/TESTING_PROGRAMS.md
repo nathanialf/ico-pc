@@ -905,7 +905,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   divides by its real length and rounds to the nearest (91 presents 61, 89 presents 59), replays
   counted through the renderer's count being zeroed after a tick (100 a second, none lost), a
   change of mode starting the second again, a time going backwards changing nothing (`fps_counter`).
-- `pace_policy_test.c`: the slow-present decision, Resolution "auto"'s steps, the gap between
+- `pace_policy_test.c`: the slow-present decision, Resolution "auto"'s steps (and under a
+  temporal upscaler from the window's scale over its ratio, `pace_auto_window_scale`), the gap between
   presents, the vsync lock's n and alphas and its period's sanity, and the vblank clock's laws on a
   synthetic display, and the late-present skip: a whole period behind skips, with or without
   sound, less does not, slow presents skip past the deadline, never two frames in a row while the

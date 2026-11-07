@@ -416,6 +416,20 @@ typedef struct RdSettings {
      * past 2x a side.  0 in a zeroed RdSettings: off, nothing changes */
     uint8_t upscale;
     uint8_t upscaleSharpness;
+    /* The Upscaling quality row ([video] upscaling_quality, RdUpscaleQuality),
+     * FSR 3.1's starting ratio 1.0 / 1.5 / 1.7 / 2.0 (rd_upscale_temporal.c).
+     * FSR 3.1 (RD_UPSCALE_FSR3) is off under the CRT filter and while
+     * downsample is on, MSAA and SSAA are off while it runs, and at the
+     * Original preset's 1x only Native AA applies.  0 in a zeroed
+     * RdSettings: Native AA */
+    uint8_t upscaleQuality;
+    /* A temporal upscaler (rd_upscale.h; [dev] upscale_test this release):
+     * the Resolution row is the display's scale and the scene is drawn at it
+     * over the upscaler's ratio.  Resolution "auto" keeps the display at the
+     * window and steps this cap on the scene's vertical scale down instead
+     * (the host, window_host.c video_settings).  0 in a zeroed RdSettings:
+     * no cap */
+    float upscaleRenderCap;
     /* Full pixel off in the game (the host sets it with fullPixel 0): the
      * picture is Full pixel on's, the reduction drawing the whole frame as
      * above (rd_replay.c), and the presenter draws the game's border over
@@ -509,14 +523,32 @@ typedef enum RdCrtMode {
  * override to "the mode's own" (-1). */
 void rd_crt_settings(RdSettings *s, RdCrtMode mode, float strength);
 
-/* RdSettings.upscale.  RD_UPSCALE_FSR3 is reserved for the temporal
- * upscaler: not offered, and drawn as RD_UPSCALE_OFF here */
+/* RdSettings.upscale.  RD_UPSCALE_FSR3 is FSR 3.1, the temporal upscaler: it
+ * runs only where rd_upscale_temporal_supported(), else drawn as
+ * RD_UPSCALE_OFF */
 typedef enum RdUpscale {
     RD_UPSCALE_OFF = 0,
     RD_UPSCALE_FSR1 = 1, /* FSR 1.0: EASU + RCAS at the present (rd_fsr1.c) */
     RD_UPSCALE_FSR3 = 2,
     RD_UPSCALE_COUNT
 } RdUpscale;
+
+/* RdSettings.upscaleQuality: FSR 3.1's ratios 1.0 / 1.5 / 1.7 / 2.0 */
+typedef enum RdUpscaleQuality {
+    RD_UPSCALE_Q_NATIVE = 0,
+    RD_UPSCALE_Q_QUALITY = 1,
+    RD_UPSCALE_Q_BALANCED = 2,
+    RD_UPSCALE_Q_PERFORMANCE = 3,
+    RD_UPSCALE_Q_COUNT
+} RdUpscaleQuality;
+
+/* Whether the device can run FSR 3.1 (rd_upscale_temporal.c): false on every
+ * backend in this version (the temporal upscaler is not built in), logging
+ * why once.  The Options page offers the value only when this is true. */
+bool rd_upscale_temporal_supported(void);
+/* True when FSR 3.1 is in force, so MSAA and SSAA are drawn off (the
+ * Anti-aliasing row says "(off: FSR 3.1)") */
+bool rd_aa_off_for_temporal(void);
 
 /* RdSettings.antiAlias */
 typedef enum RdAntiAlias {
@@ -654,6 +686,12 @@ void rd_get_scene_scale(float *sx, float *sy);
  * allocation that failed); 0 when they are as asked.  The
  * Resolution row shows it after the asked scale, "16x (8x)". */
 int rd_scene_scale_lowered(void);
+
+/* A temporal upscaler's ratio, the display scale over the scene's (1..3),
+ * while one is asked (rd_upscale.h: [dev] upscale_test) and the CRT filter
+ * is off; 0 otherwise.  The host divides Auto's window scale by it, so
+ * Auto's steps lower the scene below the window (RdSettings.upscaleRenderCap). */
+float rd_upscale_ratio(void);
 
 /* gsb_SetGsDefault / dl_Swap at the start of a tick: clears the 13 lists and
  * records the per-list defaults listed above. */
