@@ -31,16 +31,19 @@ typedef struct {
        attract movie, the early show art, and the page's link */
     int unused[4];
     int unusedPage;
+    /* Controls > Remap controls > Ask Yorda for a hint: the discs with the
+       hint system (not the North American disc or the 2001 builds) */
+    int hints;
 } Expect;
 
 static const Expect kExpect[] = {
-    {"pal", 1, 1, 1, 1, 0, 1, 1, 382, {1, 1, 1, 1}, 1},
-    {"jpn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1},
-    {"kor", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1},
-    {"ntsc", 0, 0, 1, 0, 1, 1, 1, 349, {1, 1, 0, 1}, 1},
-    {"aug6", 0, 0, 1, 0, 1, 1, 1, 348, {1, 1, 0, 1}, 1},
-    {"jun26", 0, 0, 1, 0, 1, 0, 0, 333, {0, 0, 0, 0}, 0},
-    {"cn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1},
+    {"pal", 1, 1, 1, 1, 0, 1, 1, 382, {1, 1, 1, 1}, 1, 1},
+    {"jpn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1},
+    {"kor", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1},
+    {"ntsc", 0, 0, 1, 0, 1, 1, 1, 349, {1, 1, 0, 1}, 1, 0},
+    {"aug6", 0, 0, 1, 0, 1, 1, 1, 348, {1, 1, 0, 1}, 1, 0},
+    {"jun26", 0, 0, 1, 0, 1, 0, 0, 333, {0, 0, 0, 0}, 0, 0},
+    {"cn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1},
 };
 
 /* Extras > Unused content through the program's CPU side (unused_content.c:
@@ -183,9 +186,44 @@ static void checkTitleRows(const Expect *e)
     CHECK(ui_settings_opt_shown(UI_OPT_VAR_DEBUG_MENU) == e->debugMenu,
           "%s: the Debug menu row %d, want %d", e->slug,
           ui_settings_opt_shown(UI_OPT_VAR_DEBUG_MENU), e->debugMenu);
+    /* Developer > Free movement: Developer mode's, on every disc (all four
+       boy control loops carry the game's debug move) */
+    CHECK(ui_settings_opt_shown(UI_OPT_FREE_MOVEMENT),
+          "%s: the Free movement row with Developer mode", e->slug);
     ico_opt_set_developer_mode(0);
-    CHECK(!ui_settings_opt_shown(UI_OPT_VAR_DEBUG_MENU),
-          "%s: no Debug menu row without Developer mode", e->slug);
+    CHECK(!ui_settings_opt_shown(UI_OPT_VAR_DEBUG_MENU) &&
+              !ui_settings_opt_shown(UI_OPT_FREE_MOVEMENT),
+          "%s: no Debug menu or Free movement row without Developer mode", e->slug);
+}
+
+/* Controls > Remap controls ends with Ask Yorda for a hint on the discs with
+   hints, then Reset to defaults and Back; the other discs go from the right
+   stick's last direction straight to Reset */
+static void checkHintRemap(const Expect *e)
+{
+    useConfig("version = 1\n[ui]\nlanguage = \"en\"\n");
+    stage_no = 1;
+    const int mainL = enterMainKeep(1);
+    const int ctlL = openPage(mainL, -1, UI_PAGE_CONTROLS);
+    const int remapL = openLink(ctlL, UI_PAGE_CONTROLS, UI_PAGE_REMAP);
+    CHECK(!ICO_NTSCAUG6JUN26 == e->hints, "%s: the hint discs as the matrix says", e->slug);
+    for (int i = 0; i < ICO_T_RSTICK_RIGHT; i++) {
+        press(0x4000); /* from Cross to the right stick's Right: 23 steps */
+    }
+    CHECK(strcmp(lt_ext_row_text(lt_ext_layout(remapL)->curItem), "Right stick right") == 0,
+          "%s: the 24th row is the right stick's Right (\"%s\")", e->slug,
+          lt_ext_row_text(lt_ext_layout(remapL)->curItem));
+    press(0x4000);
+    CHECK(strcmp(lt_ext_row_text(lt_ext_layout(remapL)->curItem),
+                 e->hints ? "Ask Yorda for a hint" : "Reset to defaults") == 0,
+          "%s: after the right stick: %s (\"%s\")", e->slug,
+          e->hints ? "Ask Yorda for a hint" : "Reset to defaults",
+          lt_ext_row_text(lt_ext_layout(remapL)->curItem));
+    press(0x4000);
+    CHECK(strcmp(lt_ext_row_text(lt_ext_layout(remapL)->curItem),
+                 e->hints ? "Reset to defaults" : "Back") == 0,
+          "%s: then %s (\"%s\")", e->slug, e->hints ? "Reset to defaults" : "Back",
+          lt_ext_row_text(lt_ext_layout(remapL)->curItem));
 }
 
 static void checkPauseRows(const Expect *e)
@@ -263,6 +301,7 @@ int main(int argc, char **argv)
                   ico_region_cur()->gflag_new_game == e->startFlag,
               "%s: the region row's fields as the matrix says", slug);
         checkTitleRows(e);
+        checkHintRemap(e);
         checkPauseRows(e);
         checkUnusedRows(e);
     }

@@ -7,6 +7,7 @@
  * main in the same order.
  */
 #include "settings_fixture.h"
+#include "ico_rows.h"
 #include "popup.h"
 #include "pointer.h"
 #include "ui_mouse.h"
@@ -3829,6 +3830,63 @@ static void testShadowsTogether(void)
     gFlagGameClear = 0;
 }
 
+/* Settings > Developer > Free movement ([developer] free_movement): after the
+   Debug menu, shown with Developer mode, Off by default; Right turns it on
+   (ico_rows.h: the game's loops read it, achievements off), sets the key,
+   which the save writes; its note under the cursor; Left turns it off */
+static void testFreeMovement(void)
+{
+    char p[1100];
+
+    stage_no = 11;
+    useConfig("version = 1\n");
+    ico_opt_reload();
+    ico_opt_set_developer_mode(1);
+    const int mainL = enterMain(0);
+    ico_opt_set_developer_mode(1);
+    const int devL = openPage(mainL, -1, UI_PAGE_DEVELOPER);
+    for (int k = 0; k < 4; k++) {
+        frame(0); /* the page refreshes */
+    }
+    const int row = ui_settings_row_of(UI_PAGE_DEVELOPER, UI_OPT_FREE_MOVEMENT);
+    CHECK(row >= 0 && ui_settings_row_shown(row) &&
+              strcmp(lt_ext_row_text(row), "Free movement") == 0,
+          "Developer: the Free movement row");
+    CHECK(row > ui_settings_row_of(UI_PAGE_DEVELOPER, UI_OPT_VAR_DEBUG_MENU),
+          "Developer: after the Debug menu");
+    CHECK(ico_free_movement() == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_FREE_MOVEMENT), "Off") == 0,
+          "Free movement: Off by default");
+    lt_ext_layout(devL)->curItem = row;
+    press(0x2000);
+    CHECK(ico_free_movement() == 1 && ico_free_movement_row() == 1 &&
+              strcmp(ui_settings_value_text(UI_OPT_FREE_MOVEMENT), "On") == 0 &&
+              ico_config_get_bool("developer.free_movement", 0) == 1,
+          "Right: Free movement On, the game's loops read it, the key set");
+    CHECK(noteStarting(UI_PAGE_DEVELOPER, "Press L2 to fly Ico") >= 0, "its note on the cursor");
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get_bool(t, "developer.free_movement", 0) == 1,
+          "saved: developer.free_movement = true");
+    if (t != NULL) {
+        ico_toml_free(t);
+    }
+    /* Developer mode off: the row is hidden and does nothing */
+    ico_opt_set_developer_mode(0);
+    CHECK(ico_free_movement() == 0 && ico_free_movement_row() == 1,
+          "Developer mode off: the row's value stays, the movement is off");
+    ico_opt_set_developer_mode(1);
+    press(0x8000);
+    CHECK(ico_free_movement() == 0 && ico_config_get_bool("developer.free_movement", 1) == 0,
+          "Left: Off again");
+    press(0x10);
+    CHECK(settle(mainL, 60), "Developer: back");
+    ico_opt_set_developer_mode(0);
+    useConfig("version = 1\n");
+    ico_opt_reload();
+}
+
 /* Skip the opening at the boot (ico2/script/src/op.c actOpDemo01, GL-14) on
    the real layout_texture.c, with the disc's fade times (texLayout, the same
    on the three discs): the boot's layout (PAL 7, la_boot_memory_card_check:
@@ -5132,14 +5190,14 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
         return;
     }
     CHECK(!lt_ext_prop(dbg)->defaultMask, "%s: the Debug menu row with Developer mode on", who);
-    checkPageFits(UI_PAGE_DEVELOPER, "Developer (five rows)");
+    checkPageFits(UI_PAGE_DEVELOPER, "Developer (six rows)");
     {
         int db[8], dop[8], dv[8], at = -1;
         const int dn = ui_settings_page_rows(UI_PAGE_DEVELOPER, db, dop, dv, 8);
         for (int i = 0; i < dn; i++) {
             at = dop[i] == UI_OPT_VAR_DEBUG_MENU ? i : at;
         }
-        CHECK(dn == 5 && at == 3 && db[at] == dbg &&
+        CHECK(dn == 6 && at == 3 && db[at] == dbg &&
                   strcmp(lt_ext_row_text(dbg), "Debug menu") == 0 && dv[at] < 0,
               "%s: the Debug menu is a press row before Back, no value (%d of %d)", who, at, dn);
     }
@@ -5628,6 +5686,7 @@ int main(int argc, char **argv)
     /* Gameplay > Second memory card */
     testSecondCard();
     testShadowsTogether();
+    testFreeMovement();
     /* the game variants on Gameplay, Shadows and Cutscenes; the Debug menu */
     testVariants();
     /* the version in the Options menu */

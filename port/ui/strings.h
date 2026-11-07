@@ -993,6 +993,12 @@ typedef enum UiStrId {
     UI_STR_LANG_RU_BOBTTZ,
     UI_STR_LANG_RU_COBRA838,
     UI_STR_LANG_PT_BR,
+    /* v0.10.5, Ico's two rows (port/game/ico_rows.h): Developer > Free
+       movement with its note, and the Remap controls row Ask Yorda for a hint
+       (shown on the discs that have hints); the community tables carry English */
+    UI_STR_OPT_FREE_MOVEMENT,
+    UI_STR_OPT_FREE_MOVEMENT_NOTE,
+    UI_STR_REMAP_ASK_HINT,
     UI_STR_COUNT
 } UiStrId;
 

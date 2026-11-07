@@ -24,6 +24,7 @@
 #include "gallery.h"
 #include "ico_credits.h"
 #include "ico_gamestate.h"
+#include "ico_rows.h" /* Developer > Free movement */
 #include "input.h"
 #include "layout_ext.h"
 #include "menu_text.h"
@@ -174,7 +175,10 @@ static int entryGame(int e)
 #define NOTE_Y 196
 #define HEADER_SIZE 30.0f
 #define NOTE_SIZE 19.0f
-#define REMAP_ITEMS (ICO_T_COUNT + 2) /* the targets, Reset, Back */
+/* the targets on this disc (Ask Yorda for a hint, the last, is for the discs
+   with hints), then Reset and Back */
+#define REMAP_TARGETS (ICO_NTSCAUG6JUN26 ? ICO_T_COUNT - 1 : ICO_T_COUNT)
+#define REMAP_ITEMS (REMAP_TARGETS + 2)
 
 /* the pause menu's Photo mode row: under Options, its letters starting
    where the pause rows' do (menu_text.c's left anchor, 7 texels into the
@@ -186,17 +190,15 @@ static int entryGame(int e)
 #define PAUSE_ROW_W 250
 /* The title is laid out by the port (placeTitle): its four rows, Continue
    (49), New Game (50, and 51 on the New-Game-only layout), Options and
-   "Quit to desktop", one game pitch apart (20 field lines, the Options
-   screen's), and the copyright line (48) below Quit with the same space
-   between its capitals and Quit's as between the rows' (19 field lines:
-   its capitals are 24 output pixels at 960 x 720, the rows' 31).  The PAL
-   data has Continue at 135, New Game at 165 and the copyright line at 195,
-   the next step below New Game, which left no room for the port rows.
-   Where the block can go was measured on window runs' titles (960 x 720
-   Original, 1920 x 1440 Enhanced at full height): the copyright line's sprite, its rim and
-   descenders included, ends 17 pixels above the picture's end at 195 (5 field
-   lines), and the logo ends 384 pixels down; Continue at 119 and the
-   copyright line at 198 leave about 6 pixels at either end. */
+   "Quit to desktop", one game pitch apart (20 field lines), and the
+   copyright line (48) below Quit with the same space between its capitals
+   and Quit's as between the rows' (19 field lines).  The PAL data has
+   Continue at 135, New Game at 165 and the copyright line at 195, which
+   left no room for the port rows.  Measured on window runs' titles (960 x
+   720 Original, 1920 x 1440 Enhanced at full height): the copyright line
+   ends 17 pixels above the picture's end at 195, and the logo ends 384
+   pixels down; Continue at 119 and the copyright line at 198 leave about 6
+   pixels at either end. */
 #define TITLE_PITCH 20
 #define TITLE_CONTINUE_Y 119
 #define TITLE_COPYRIGHT_STEP 19
@@ -327,11 +329,11 @@ static char s_text[256];
 
 /* the remap screen's order: the face buttons first, as a pad is read */
 static const int kRemapOrder[ICO_T_COUNT] = {
-    ICO_T_CROSS,     ICO_T_CIRCLE,      ICO_T_SQUARE,      ICO_T_TRIANGLE,    ICO_T_L1,
-    ICO_T_R1,        ICO_T_L2,          ICO_T_R2,          ICO_T_L3,          ICO_T_R3,
-    ICO_T_START,     ICO_T_SELECT,      ICO_T_UP,          ICO_T_DOWN,        ICO_T_LEFT,
-    ICO_T_RIGHT,     ICO_T_LSTICK_UP,   ICO_T_LSTICK_DOWN, ICO_T_LSTICK_LEFT, ICO_T_LSTICK_RIGHT,
-    ICO_T_RSTICK_UP, ICO_T_RSTICK_DOWN, ICO_T_RSTICK_LEFT, ICO_T_RSTICK_RIGHT};
+    ICO_T_CROSS,     ICO_T_CIRCLE,      ICO_T_SQUARE,      ICO_T_TRIANGLE,     ICO_T_L1,
+    ICO_T_R1,        ICO_T_L2,          ICO_T_R2,          ICO_T_L3,           ICO_T_R3,
+    ICO_T_START,     ICO_T_SELECT,      ICO_T_UP,          ICO_T_DOWN,         ICO_T_LEFT,
+    ICO_T_RIGHT,     ICO_T_LSTICK_UP,   ICO_T_LSTICK_DOWN, ICO_T_LSTICK_LEFT,  ICO_T_LSTICK_RIGHT,
+    ICO_T_RSTICK_UP, ICO_T_RSTICK_DOWN, ICO_T_RSTICK_LEFT, ICO_T_RSTICK_RIGHT, ICO_T_HINT};
 
 /* --------------------------------------------------------------- rows */
 
@@ -2105,6 +2107,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     }
     case UI_OPT_DEVELOPER:
         return onOff(ico_opt_developer_mode());
+    case UI_OPT_FREE_MOVEMENT:
+        return onOff(ico_free_movement_row());
     case UI_OPT_VAR_TOUGHNESS:
     case UI_OPT_VAR_ONE_HIT:
     case UI_OPT_VAR_NEVER_DODGE:
@@ -2234,8 +2238,8 @@ static int optShown(int opt, int link)
     if (opt == UI_OPT_FILM_EFFECT || opt == UI_OPT_PLAYERS) {
         return gFlagGameClear != 0;
     }
-    if (opt == UI_OPT_DUMP_TEXTURES || opt == UI_OPT_DUMP_MODELS) {
-        return ico_opt_developer_mode(); /* for pack authors */
+    if (opt == UI_OPT_DUMP_TEXTURES || opt == UI_OPT_DUMP_MODELS || opt == UI_OPT_FREE_MOVEMENT) {
+        return ico_opt_developer_mode(); /* pack authors; Free movement */
     }
     if (opt == UI_OPT_VAR_DEBUG_MENU) {
         /* the game's debug menu; PC port: not on the June 2001 demo, whose
@@ -2300,8 +2304,8 @@ int ui_settings_opt_shown(UiSettingsOpt opt)
 static int steppable(int opt)
 {
     return (opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER) /* includes the Effects rows */ ||
-           opt == UI_OPT_GPU_DRIVER || opt == UI_OPT_GPU_ADD_FILE || opt == UI_OPT_GRAPHICS_API ||
-           opt == UI_OPT_GRAPHICS_ADAPTER;
+           opt == UI_OPT_FREE_MOVEMENT || opt == UI_OPT_GPU_DRIVER || opt == UI_OPT_GPU_ADD_FILE ||
+           opt == UI_OPT_GRAPHICS_API || opt == UI_OPT_GRAPHICS_ADAPTER;
 }
 
 static int resolutionLocked(void)
@@ -2890,20 +2894,23 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         /* row 325 */
         girlControlMode = girlControlMode == 0;
         break;
+    case UI_OPT_FREE_MOVEMENT:
+        ico_free_movement_set(!ico_free_movement_row());
+        ico_config_set_bool("developer.free_movement", ico_free_movement_row());
+        s_dirtyConfig = 1;
+        break;
     case UI_OPT_DEVELOPER:
         ico_opt_set_developer_mode(!ico_opt_developer_mode());
         ico_config_set_bool("gameplay.developer_mode", ico_opt_developer_mode());
         s_dirtyConfig = 1;
         if (!ico_opt_developer_mode() && o.dumpModels) {
-            /* Dump models is switched off with developer mode, as Dump
-               textures is below */
+            /* Dump models goes off with developer mode, as Dump textures */
             o.dumpModels = 0;
             video = 1;
         }
         if (!ico_opt_developer_mode() && o.dumpTextures) {
-            /* Dump textures lives under Developer mode; with its row
-               hidden it is switched off too, or the dumps would go on being
-               written on every start with no row to stop them */
+            /* with its row hidden it goes off too, or the dumps would go
+               on with no row to stop them */
             o.dumpTextures = 0;
             video = 1;
         }
@@ -3042,6 +3049,9 @@ static void targetName(int t, char *buf, unsigned size)
         return;
     case ICO_T_SELECT:
         snprintf(buf, size, "%s", ui_str(UI_STR_BTN_SELECT));
+        return;
+    case ICO_T_HINT:
+        snprintf(buf, size, "%s", ui_str(UI_STR_REMAP_ASK_HINT));
         return;
     default:
         break;
@@ -3450,6 +3460,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_DUMP_TEXTURES, UI_STR_DUMP_TEXTURES_NOTE);
         addNote(pg, UI_OPT_DUMP_MODELS, UI_STR_DUMP_MODELS_NOTE);
         addNote(pg, UI_OPT_VAR_DEBUG_MENU, UI_STR_OPT_VAR_DEBUG_MENU_NOTE);
+        addNote(pg, UI_OPT_FREE_MOVEMENT, UI_STR_OPT_FREE_MOVEMENT_NOTE);
         break;
     case UI_PAGE_AUDIO:
         break;
@@ -4100,10 +4111,11 @@ static void build(void)
                                   UI_STR_BACK};
     /* Developer: Developer mode, and what it unlocks: the two dumps and
        the game's Debug menu (not on the June 2001 demo) */
-    static const int devOpts[] = {UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,
-                                  UI_OPT_VAR_DEBUG_MENU, UI_OPT_BACK};
+    static const int devOpts[] = {UI_OPT_DEVELOPER,      UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,
+                                  UI_OPT_VAR_DEBUG_MENU, UI_OPT_FREE_MOVEMENT, UI_OPT_BACK};
     static const int devStrs[] = {UI_STR_OPT_DEVELOPER_MODE, UI_STR_OPT_DUMP_TEXTURES,
-                                  UI_STR_OPT_DUMP_MODELS, UI_STR_OPT_VAR_DEBUG_MENU, UI_STR_BACK};
+                                  UI_STR_OPT_DUMP_MODELS,    UI_STR_OPT_VAR_DEBUG_MENU,
+                                  UI_STR_OPT_FREE_MOVEMENT,  UI_STR_BACK};
     /* Characters after Credits (from both entries; the other three
        from the title only), then Unused content (from the title) */
     static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,
@@ -5571,7 +5583,7 @@ static void remapFill(void *user, int d, UiListSlot *out)
 {
     (void)user;
     static char lab[96], colA[96], colB[96];
-    if (d < ICO_T_COUNT) {
+    if (d < REMAP_TARGETS) {
         int t = kRemapOrder[d];
         targetName(t, lab, sizeof(lab));
         out->label = lab;
@@ -5585,7 +5597,7 @@ static void remapFill(void *user, int d, UiListSlot *out)
             out->colB = colB;
         }
     } else {
-        out->labelStr = d == ICO_T_COUNT ? UI_STR_REMAP_RESET : UI_STR_BACK;
+        out->labelStr = d == REMAP_TARGETS ? UI_STR_REMAP_RESET : UI_STR_BACK;
     }
 }
 
@@ -5623,7 +5635,7 @@ static int remapInput(void *user, int d, int flags)
     if (flags & PAD_BACK) {
         return leaveTo(UI_PAGE_REMAP, parentLayout(pg));
     }
-    if (d >= 0 && d < ICO_T_COUNT) {
+    if (d >= 0 && d < REMAP_TARGETS) {
         if (flags & PAD_OK) {
             POSITIVE_SE();
             ui_remap_capture_start(&s_capture, kRemapOrder[d]);
@@ -5636,7 +5648,7 @@ static int remapInput(void *user, int d, int flags)
             s_dirtyBindings = 1;
             return -1;
         }
-    } else if (d == ICO_T_COUNT && (flags & PAD_OK)) {
+    } else if (d == REMAP_TARGETS && (flags & PAD_OK)) {
         /* the bindings only; sensitivity and the other [input] values stay */
         IcoBindings def, *b = liveBindings();
         ico_bindings_defaults(&def);
@@ -5647,7 +5659,7 @@ static int remapInput(void *user, int d, int flags)
         s_dirtyBindings = 1;
         POSITIVE_SE();
         return -1;
-    } else if (d == ICO_T_COUNT + 1 && (flags & PAD_OK)) {
+    } else if (d == REMAP_TARGETS + 1 && (flags & PAD_OK)) {
         return leaveTo(UI_PAGE_REMAP, parentLayout(pg));
     }
     return UI_LIST_PASS;
@@ -5912,19 +5924,15 @@ static void markShow(int mark, int on, int y)
     }
 }
 
-/* A page's rows as the entry in force shows them (optShown): Extras'
-   Music, Models and Credits only from the title, the game's settings only
-   from the pause menu, its Film effect and Players once the game is
-   cleared.  The hidden ones are masked with their values; the shown ones
-   are linked in a loop and placed in the window: one slot each from
-   WIN_Y0, WIN_PITCH apart, Back in the slot after the last.  On a page
-   with more shown rows than WIN_SCROLL before Back, the window shows
-   WIN_SCROLL of them from pg->offset, moved so the cursor's row is in it
-   (a page entered on a row out of view: Back from a sub-page, a reopened
-   page), Back in the last slot; the rows out of view are masked as the
-   hidden ones are (the mouse never hits a masked row), their links stay
-   (scrollMove moves the cursor across the window's edges), and a mark
-   above and below the window shows while rows are out of view that way. */
+/* A page's rows as the entry in force shows them (optShown): the hidden
+   ones are masked with their values; the shown ones are linked in a loop and
+   placed in the window: one slot each from WIN_Y0, WIN_PITCH apart, Back in
+   the slot after the last.  On a page with more shown rows than WIN_SCROLL
+   before Back, the window shows WIN_SCROLL of them from pg->offset, moved so
+   the cursor's row is in it, Back in the last slot; the rows out of view are
+   masked as the hidden ones are (the mouse never hits a masked row), their
+   links stay (scrollMove moves the cursor across the window's edges), and a
+   mark above and below the window shows while rows are out of view. */
 static void layoutPage(Page *pg, int id)
 {
     int shown[MAX_ROWS], scroll;
@@ -5998,20 +6006,16 @@ static void layoutPage(Page *pg, int id)
 }
 
 /* The window's edge moves, on a page that scrolls (layoutPage): Down on
-   the last row in view (not the last before Back) scrolls one row; Down on
-   Back with rows above the window out of view puts the window at the top;
-   Up on the first row in view (not the first) scrolls one row back; Up on
-   Back with rows below the window out of view puts the window at the end.
-   The page only moves the window, before the game's own move (layout_
-   texture.c default_item_select, after this proc in the same tick): the
-   row the cursor's link leads to is then in view and unmasked, and the
-   move is the game's on every disc, its sound and glow too (left to
-   itself it would follow the link onto a masked row, the 2001 discs', or
-   walk past it to the next row in view, the European disc's).  The game's
-   move is never switched off for the tick (lt_item_select_disable), so the
-   mouse wheel's queued notches go on (ui_mouse.c drops them after a tick
-   with the item select off).  Every other move is the game's: both rows
-   are in view.  Returns 1 when the window moved. */
+   the last row in view scrolls one row; Down on Back with rows above the
+   window out of view puts the window at the top; Up on the first row in view
+   scrolls one row back; Up on Back with rows below the window out of view
+   puts the window at the end.  The page only moves the window, before the
+   game's own move (layout_texture.c default_item_select, after this proc in
+   the same tick): the row the cursor's link leads to is then in view and
+   unmasked, and the move is the game's on every disc, its sound and glow too.
+   The game's move is never switched off for the tick (lt_item_select_disable),
+   so the mouse wheel's queued notches go on (ui_mouse.c drops them after a
+   tick with the item select off).  Returns 1 when the window moved. */
 static void refreshPage(Page *pg, int id, int cur);
 
 static int scrollMove(Page *pg, int id, LtProp *lay, int flags)

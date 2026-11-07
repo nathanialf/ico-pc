@@ -83,10 +83,11 @@ static void testBuild(void)
                                   UI_STR_OPT_TEXTURE_PACK,
                                   UI_STR_OPT_MODEL_PACK,
                                   UI_STR_BACK};
-    static const int devOpts[] = {UI_OPT_DEVELOPER, UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,
-                                  UI_OPT_VAR_DEBUG_MENU, UI_OPT_BACK};
+    static const int devOpts[] = {UI_OPT_DEVELOPER,      UI_OPT_DUMP_TEXTURES, UI_OPT_DUMP_MODELS,
+                                  UI_OPT_VAR_DEBUG_MENU, UI_OPT_FREE_MOVEMENT, UI_OPT_BACK};
     static const int devStrs[] = {UI_STR_OPT_DEVELOPER_MODE, UI_STR_OPT_DUMP_TEXTURES,
-                                  UI_STR_OPT_DUMP_MODELS, UI_STR_OPT_VAR_DEBUG_MENU, UI_STR_BACK};
+                                  UI_STR_OPT_DUMP_MODELS,    UI_STR_OPT_VAR_DEBUG_MENU,
+                                  UI_STR_OPT_FREE_MOVEMENT,  UI_STR_BACK};
     static const int mainStrs[] = {UI_STR_SECTION_DISPLAY,
                                    UI_STR_SECTION_PICTURE,
                                    UI_STR_SECTION_EFFECTS,
@@ -184,7 +185,7 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 6), "Graphics page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 10), "effects rows");
     CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 15), "picture rows");
-    CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 5), "developer rows");
+    CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 6), "developer rows");
     {
         /* the Characters and Unused content links, then Add to Steam,
            Export textures, Back up your data and Restore from a backup
@@ -3427,12 +3428,14 @@ static void testTexturePack(void)
               back->dispY);
         CHECK(back->dispY + back->dispH <= 226, "Back's box ends at %d", back->dispY + back->dispH);
         checkPageFits(UI_PAGE_MAIN, "Main (title, developer mode)");
-        /* the Developer page: its four rows and Back (no Debug menu on
+        /* the Developer page: its five rows and Back (no Debug menu on
            the June 2001 demo) */
         openPage(mainL, -1, UI_PAGE_DEVELOPER);
-        CHECK(winShownCount(UI_PAGE_DEVELOPER) == (ICO_JUN26 ? 4 : 5),
-              "Developer: Developer mode, the two dumps, the Debug menu, Back (%d)",
+        CHECK(winShownCount(UI_PAGE_DEVELOPER) == (ICO_JUN26 ? 5 : 6),
+              "Developer: Developer mode, the two dumps, the Debug menu, Free movement, Back (%d)",
               winShownCount(UI_PAGE_DEVELOPER));
+        CHECK(rowShown(UI_PAGE_DEVELOPER, UI_OPT_FREE_MOVEMENT),
+              "Developer: the Free movement row in developer mode, on every disc");
         CHECK(rowShown(UI_PAGE_DEVELOPER, UI_OPT_VAR_DEBUG_MENU) == !ICO_JUN26,
               "Developer: the Debug menu row in developer mode");
         checkPageFits(UI_PAGE_DEVELOPER, "Developer (title, developer mode)");
@@ -3443,7 +3446,9 @@ static void testTexturePack(void)
     for (int k = 0; k < 4; k++) {
         frame(0); /* the page refreshes */
     }
-    CHECK(!rowShown(UI_PAGE_DEVELOPER, UI_OPT_DUMP_TEXTURES), "hidden again");
+    CHECK(!rowShown(UI_PAGE_DEVELOPER, UI_OPT_DUMP_TEXTURES) &&
+              !rowShown(UI_PAGE_DEVELOPER, UI_OPT_FREE_MOVEMENT),
+          "hidden again");
     openPage(mainL, -1, UI_PAGE_DEVELOPER);
     CHECK(winShownCount(UI_PAGE_DEVELOPER) == 2 &&
               !rowShown(UI_PAGE_DEVELOPER, UI_OPT_VAR_DEBUG_MENU),
