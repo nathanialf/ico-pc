@@ -28,6 +28,8 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/vk/vk_resource.c` | buffers, textures, samplers, shaders, deferred destruction |
 | `port/rhi/vk/vk_enums.h`, `vk_internal.h` | the enum tables; the backend's shared state |
 | `port/rhi/vk/vk_surface_android.c` | the window surface on Android |
+| `port/rhi/ffx/CMakeLists.txt`, `ffx/sc/CMakeLists.txt` | the FidelityFX FSR 3.1 upscaler built from the fetched SDK (`ICO_FFX`): the host shader compiler `ico_ffx_sc`, the Vulkan permutation headers, `ico_ffx_upscaler`, `ffx_link_test` ([BUILDING.md](../BUILDING.md#fidelityfx-upscaler-fsr-31)) |
+| `port/rhi/ffx/ico_ffx_compat.h`, `ico_ffx_provider.cpp` | the MSVC library names the SDK calls, forced into its sources; ffx-api's provider table with the FSR 3.1 upscaler alone |
 | `port/rhi/d3d12/rhi_d3d12.h` | D3D12 extras for tests only |
 | `port/rhi/d3d12/d3d12_device.c` | runtime loading, adapter pick, device, debug layer, heaps, limits, the stats entry points |
 | `port/rhi/d3d12/d3d12_plan.h`, `d3d12_plan.c` | the bookkeeping that needs no D3D12 header |
