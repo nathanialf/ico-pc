@@ -453,7 +453,7 @@ the title screen or the pause menu, on every disc.
 
 Some rows change the game more than others. The line under a row says what
 it does, and on the game variants rows (No hints here, two rows on the
-Shadows page, seven on the Combat page and two on the Cutscenes page) whether it switches
+Yorda page, three on the Shadows page, eight on the Combat page and two on the Cutscenes page) whether it switches
 achievements off. Those that switch them off do so for as long as they are
 on, like Developer mode, so you cannot earn an achievement by accident while
 playing a changed game. Turn them off again and achievements come back.
