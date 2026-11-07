@@ -678,10 +678,17 @@ int ico_variant_weapon_kind(int kind)
 
 int ico_variant_weapon_put_kind(int kind)
 {
-    /* a kind 8 in play while Red is on is the light sword the hook made (the
-       only kind 8 rows of the four discs' layouts, objLayout 12 and 86, sit
-       among the makers' rows of one of every weapon) */
-    if (kind == WK_LIGHT_RED && ico_variant_get(ICO_VARIANT_SWORD_COLOUR) == ICO_SWORD_RED) {
+    /* a kind 8 in play is the light sword the hook made, whatever Light sword
+       colour says now: the row can go back to Original while that sword is
+       in the room (or carried), and it must still be set down as kind 9 is
+       (SetWeaponOffsetMode 1).  So 8 reads as 9 on every disc that offers
+       Red, not only while Red is on.  Safe: the only kind 8 placements on
+       those discs are objLayout rows 12 and 86, the makers' unused rows of
+       one of every weapon, which no story stage loads; a kind 8 made from
+       them would only be set down as the light sword is (the same blade and
+       model).  The 2001-family discs have no kind 8 and no light sword: 8
+       stays 8 there */
+    if (kind == WK_LIGHT_RED && red_sword_offered()) {
         return WK_LIGHT;
     }
     return kind;
