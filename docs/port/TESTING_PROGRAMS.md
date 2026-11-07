@@ -480,7 +480,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`poly_flat`).
 - `shadow_spawn_test.c`: the depth a shadow rises from, read at the generator kind's word as the
   PS2 reads it; with the disc, every generator row (`shadow_spawn`).
-- `title_logo_test.c`: the logo's models and the hidden state's steps (`title_logo`).
+- `title_logo_test.c`: the logo's models and the hidden state's steps; the application icon's
+  capture (`title_icon.c`) with the renderer, the curtain and the icon files stubbed: the pass leaves
+  out every model but `I` (`title_back`, `st26a_p1`, `C`, `I_f`, `I_sd`) and off leaves the old
+  table; the capture starts after `ICO_TITLE_ICON_WAIT` ticks of layout 12 or 13 (counted again
+  after a Settings page or the model viewer) when an icon is wanted, never when not; the shot over
+  black after the settle, white once it came, the shot over white, then the pass off, the pair
+  delivered and the curtain off after the hold, done for the run; an empty answer or none within
+  the wait armed again and the run given up after three retries; a pair that differs (or a picture
+  of another size) taken again once, then the picture over black alone; the menu left during the
+  pass ending it and the next visit starting again (`title_logo`).
 
 ## port/input/test
 
@@ -1081,15 +1090,25 @@ only when the Turnip package loaded (`bones_nobin_in_force`), the mark
 - `app_icon_files_test.c`: the icon files over a fake user folder: wanted on missing, not after a
   store, wanted on another label, not on an empty label with the files present, wanted on an empty
   label without the PNG; the paths, the copies, the stamp (`dev` for an empty label), no `.tmp`
-  left, the refusals (`app_icon_files`).
+  left, the refusals, and the capture guard `ico_app_icon_picture_plain` (CRT filter on or off at
+  strength 0, each of the four tone values off 50, 0 read as 50) (`app_icon_files`).
 - `rd_png_mem_test.c` (`port/render/test`): `rd_write_png_mem` against the exact bytes the file
   writer produced before the split (a 2 x 2 image, RGBA and RGB), equal to the file writer's bytes
   for a multi-block image, a round trip through `texpack_load_png` with a padded pitch, and the
   refusals (`rd_png_mem`).
+- `desktop_entry_test.c`: Extras > Add to the applications menu's pure functions (`desktop_entry.c`,
+  Unix hosts): the entry's exact text, the `Exec` quoting for `/games/my dir/ico_pc` and for `$`, `"`,
+  `\`, a backtick and `%`, the refusals (empty, a control character, too small a buffer), the data
+  folder rule (`XDG_DATA_HOME` absolute, else `HOME/.local/share`), and an install over a fake data
+  folder: the PNG copied byte for byte, both files under the app id's name, no `.tmp`, a second
+  install replacing the first, nothing written for a missing PNG (`desktop_entry`).
 - `steam_shortcut_test.c`: Add to Steam's CRC and id, a sample `shortcuts.vdf` appended byte-true,
   the duplicate check, `loginusers.vdf`, and the recorded program path: the AppImage file when
   `APPIMAGE` names one and the program lies under `APPDIR`, else the program itself
-  (`test_self_exe`) (`steam_shortcut`).
+  (`test_self_exe`), and the icon field: `ico_steam_vdf_set_icon` on an empty icon (every other byte
+  identical), the program as the icon (quoted, plain, case-less), a missing field, either field order,
+  the player's own icon, no entry, a file that is not a shortcuts file, and the whole job with an
+  entry added earlier, a new entry, the player's icon and no icon file (`steam_shortcut`).
 - `backend_switch.cmake` (window build, the disc image; skipped without it): Options > Graphics >
   Apply through the program itself, `[dev] backend_switch_test = "opengl,vulkan"` from a portable
   folder on SDL's offscreen driver, Vulkan on lavapipe, OpenGL on llvmpipe: both switches applied
@@ -1396,6 +1415,12 @@ The renderer's test programs have a page of their own:
   texture); `testStaleRowReturns`: four upper rows at another size leave for 100 frames, their
   shelf is emptied meanwhile (the first row's old cell then holds other texels) and they come
   back with the same letters, no word in the plain font (`menu_text`).
+- `settings_desktop_test.c`: Options > Extras > Add to the applications menu over a fake handler
+  (`settings_desktop`, and on the other discs `_jpn`, `_kor`, `_cn`: the row and the disc's confirm
+  button): hidden without a handler and on the pause menu, shown on the title right after Add to
+  Steam with its words, Down from Add to Steam lands on it, Cross runs the handler once and its
+  answer is the popup (done, failed, an unknown answer as failed), the page kept, the strings
+  translated in every built-in language.
 - `settings_backup_test.c`: Options > Extras > Back up your data and Restore from a backup over
   a fake `UiBackupHost` (`settings_backup`, and on the other discs `_jpn`, `_kor`, `_cn`: the rows
   and the disc's confirm button): the rows hidden without a host and on the pause menu, shown on

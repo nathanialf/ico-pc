@@ -77,8 +77,21 @@ static void i_field(B *b, const char *k, uint32_t v)
     put(b, le, 4);
 }
 
-/* an entry as an older Steam wrote it: fewer fields, a tag */
-static void old_entry(B *b, const char *idx, const char *name, const char *exe)
+/* steam_shortcut.c asks app_icon_host.c where the icon file is; this test links
+   neither: no icon file here */
+int ico_app_icon_current_path(char *out, size_t size, int ico)
+{
+    (void)ico;
+    if (out != NULL && size > 0) {
+        out[0] = '\0';
+    }
+    return -1;
+}
+
+/* an entry as an older Steam wrote it: fewer fields, a tag; icon is the
+   value of its icon field */
+static void old_entry_icon(B *b, const char *idx, const char *name, const char *exe,
+                           const char *icon)
 {
     byte(b, 0);
     cs(b, idx);
@@ -86,13 +99,18 @@ static void old_entry(B *b, const char *idx, const char *name, const char *exe)
     s_field(b, "appname", name);
     s_field(b, "exe", exe);
     s_field(b, "StartDir", "\"/home/n/\"");
-    s_field(b, "icon", "");
+    s_field(b, "icon", icon);
     i_field(b, "IsHidden", 0);
     byte(b, 0);
     cs(b, "tags");
     s_field(b, "0", "favorite");
     byte(b, 8);
     byte(b, 8);
+}
+
+static void old_entry(B *b, const char *idx, const char *name, const char *exe)
+{
+    old_entry_icon(b, idx, name, exe, "");
 }
 
 /* the file around a list of entries */
@@ -259,6 +277,136 @@ static void test_find(void)
     byte(&in, 8);
     file_close(&in);
     CHECK(ico_steam_vdf_find_exe(in.d, in.n, "/x", 0) == 0);
+}
+
+/* the icon field of an entry of this program (ico_steam_vdf_set_icon) */
+static void test_set_icon(void)
+{
+    static B in, want;
+    uint8_t *out = NULL;
+    size_t outN = 0;
+    const char *ico = "C:\\Users\\n\\icon\\ico-pc.ico";
+    const char *exe = "/usr/bin/some game";
+
+    /* an empty icon: only that field changes, every other byte is as it was */
+    sample(&in);
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, exe, 0, ico, &out, &outN) == 1);
+    want.n = 0;
+    file_open(&want);
+    old_entry_icon(&want, "0", "Some Game", "\"/usr/bin/some game\"", ico);
+    old_entry(&want, "1", "Other", "\"/opt/other/run.sh\"");
+    file_close(&want);
+    CHECK(outN == want.n && memcmp(out, want.d, want.n) == 0);
+    CHECK(outN == in.n + strlen(ico));
+    /* the result is a shortcuts file and a second call changes nothing */
+    CHECK(ico_steam_vdf_find_exe(out, outN, exe, 0) == 1);
+    {
+        uint8_t *again = NULL;
+        size_t againN = 0;
+
+        CHECK(ico_steam_vdf_set_icon(out, outN, exe, 0, ico, &again, &againN) == 0);
+        CHECK(again == NULL);
+    }
+    free(out);
+
+    /* the second entry (the first one is another program's) */
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, "/opt/other/run.sh", 0, "/i.png", &out, &outN) == 1);
+    want.n = 0;
+    file_open(&want);
+    old_entry(&want, "0", "Some Game", "\"/usr/bin/some game\"");
+    old_entry_icon(&want, "1", "Other", "\"/opt/other/run.sh\"", "/i.png");
+    file_close(&want);
+    CHECK(outN == want.n && memcmp(out, want.d, want.n) == 0);
+    free(out);
+
+    /* the program as the icon, quoted or plain: replaced */
+    in.n = 0;
+    file_open(&in);
+    old_entry_icon(&in, "0", "ICO", "\"/g/ico_pc\"", "/g/ico_pc");
+    old_entry_icon(&in, "1", "Z", "\"/z\"", "");
+    file_close(&in);
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, "/g/ico_pc", 0, "/i.ico", &out, &outN) == 1);
+    want.n = 0;
+    file_open(&want);
+    old_entry_icon(&want, "0", "ICO", "\"/g/ico_pc\"", "/i.ico");
+    old_entry_icon(&want, "1", "Z", "\"/z\"", "");
+    file_close(&want);
+    CHECK(outN == want.n && memcmp(out, want.d, want.n) == 0);
+    free(out);
+    in.n = 0;
+    file_open(&in);
+    old_entry_icon(&in, "0", "ICO", "\"/g/ico_pc\"", "\"/g/ico_pc\"");
+    file_close(&in);
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, "/g/ico_pc", 0, "/i.ico", &out, &outN) == 1);
+    free(out);
+    /* the same path in another case, on a case-less file system */
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, "/G/ICO_PC", 0, "/i.ico", &out, &outN) == 0);
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, "/G/ICO_PC", 1, "/i.ico", &out, &outN) == 1);
+    CHECK(outN == in.n - 11 + 6);
+    free(out);
+
+    /* the player's own icon (or the one already there) is not touched */
+    in.n = 0;
+    file_open(&in);
+    old_entry_icon(&in, "0", "ICO", "\"/g/ico_pc\"", "/home/n/my.png");
+    file_close(&in);
+    out = NULL;
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, "/g/ico_pc", 0, "/i.ico", &out, &outN) == 0);
+    CHECK(out == NULL);
+
+    /* no such entry; nothing to set */
+    sample(&in);
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, "/nobody", 0, "/i.ico", &out, &outN) == 0);
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, exe, 0, "", &out, &outN) == 0);
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, exe, 0, NULL, &out, &outN) == 0);
+
+    /* the icon field before the Exe, and none at all */
+    in.n = 0;
+    file_open(&in);
+    byte(&in, 0);
+    cs(&in, "0");
+    s_field(&in, "icon", "");
+    s_field(&in, "Exe", "\"/g/ico_pc\"");
+    byte(&in, 8);
+    file_close(&in);
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, "/g/ico_pc", 0, "/i.ico", &out, &outN) == 1);
+    want.n = 0;
+    file_open(&want);
+    byte(&want, 0);
+    cs(&want, "0");
+    s_field(&want, "icon", "/i.ico");
+    s_field(&want, "Exe", "\"/g/ico_pc\"");
+    byte(&want, 8);
+    file_close(&want);
+    CHECK(outN == want.n && memcmp(out, want.d, want.n) == 0);
+    free(out);
+    in.n = 0;
+    file_open(&in);
+    byte(&in, 0);
+    cs(&in, "0");
+    s_field(&in, "Exe", "\"/g/ico_pc\"");
+    byte(&in, 8);
+    file_close(&in);
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n, "/g/ico_pc", 0, "/i.ico", &out, &outN) == 1);
+    want.n = 0;
+    file_open(&want);
+    byte(&want, 0);
+    cs(&want, "0");
+    s_field(&want, "Exe", "\"/g/ico_pc\"");
+    s_field(&want, "icon", "/i.ico");
+    byte(&want, 8);
+    file_close(&want);
+    CHECK(outN == want.n && memcmp(out, want.d, want.n) == 0);
+    CHECK(ico_steam_vdf_find_exe(out, outN, "/g/ico_pc", 0) == 1);
+    free(out);
+
+    /* not a shortcuts file */
+    out = NULL;
+    CHECK(ico_steam_vdf_set_icon((const uint8_t *)"not a vdf", 9, exe, 0, "/i.ico", &out, &outN) ==
+          -1);
+    sample(&in);
+    CHECK(ico_steam_vdf_set_icon(in.d, in.n - 1, exe, 0, "/i.ico", &out, &outN) == -1);
+    CHECK(out == NULL);
 }
 
 static void test_malformed(void)
@@ -525,6 +673,107 @@ static void test_job(void)
     CHECK(has("steam/userdata/39734273/config/shortcuts.vdf"));
 }
 
+/* the whole job with an icon file (IcoSteamEnv.iconPath) */
+static void test_job_icon(void)
+{
+    static uint8_t got[8192], bak[8192], first[8192];
+    static B in, want, tail;
+    IcoSteamEnv env;
+    size_t gotN = 0, bakN = 0, firstN = 0;
+    const char *vdf = "steam/userdata/39734274/config/shortcuts.vdf";
+    const char *bakf = "steam/userdata/39734274/config/shortcuts.vdf.bak";
+    const char *icon = "/home/n/.local/share/ico/icon/ico-pc.png";
+    IcoSteamEntry withIcon = kEntry;
+
+    withIcon.icon = icon;
+    env_for(&env);
+    snprintf(env.iconPath, sizeof(env.iconPath), "%s", icon);
+
+    /* a new entry carries the icon */
+    fresh();
+    steam_folder();
+    CHECK(ico_steam_add_shortcut(&env, &withIcon) == ICO_STEAM_ADDED);
+    want.n = 0;
+    file_open(&want);
+    new_entry(&want, "0", "ICO", "/games/ico/ico_pc", "/games/ico", icon);
+    file_close(&want);
+    CHECK(rd(vdf, got, sizeof(got), &gotN) == 0);
+    CHECK(gotN == want.n && memcmp(got, want.d, want.n) == 0);
+    /* again: the icon is there, nothing is written (no .bak) */
+    CHECK(ico_steam_add_shortcut(&env, &withIcon) == ICO_STEAM_EXISTS);
+    CHECK(!has(bakf));
+    CHECK(rd(vdf, bak, sizeof(bak), &bakN) == 0 && bakN == gotN && memcmp(bak, got, gotN) == 0);
+
+    /* an entry added by an earlier version (no icon): EXISTS, the .bak is the
+       old file, the file has the icon and nothing else changed */
+    fresh();
+    steam_folder();
+    in.n = 0;
+    file_open(&in);
+    old_entry(&in, "0", "Some Game", "\"/usr/bin/some game\"");
+    new_entry(&in, "1", "ICO", "/games/ico/ico_pc", "/games/ico", "");
+    file_close(&in);
+    wr(vdf, in.d, in.n);
+    CHECK(ico_steam_add_shortcut(&env, &withIcon) == ICO_STEAM_EXISTS);
+    want.n = 0;
+    file_open(&want);
+    old_entry(&want, "0", "Some Game", "\"/usr/bin/some game\"");
+    new_entry(&want, "1", "ICO", "/games/ico/ico_pc", "/games/ico", icon);
+    file_close(&want);
+    CHECK(rd(vdf, got, sizeof(got), &gotN) == 0);
+    CHECK(gotN == want.n && memcmp(got, want.d, want.n) == 0);
+    CHECK(rd(bakf, bak, sizeof(bak), &bakN) == 0);
+    CHECK(bakN == in.n && memcmp(bak, in.d, in.n) == 0);
+    CHECK(!has("steam/userdata/39734274/config/shortcuts.vdf.tmp"));
+    memcpy(first, got, gotN);
+    firstN = gotN;
+    /* a second press: the same file */
+    CHECK(ico_steam_add_shortcut(&env, &withIcon) == ICO_STEAM_EXISTS);
+    CHECK(rd(vdf, got, sizeof(got), &gotN) == 0 && gotN == firstN &&
+          memcmp(got, first, firstN) == 0);
+
+    /* Windows' old rule (the program as the icon) is replaced too */
+    fresh();
+    steam_folder();
+    in.n = 0;
+    file_open(&in);
+    new_entry(&in, "0", "ICO", "/games/ico/ico_pc", "/games/ico", "/games/ico/ico_pc");
+    file_close(&in);
+    wr(vdf, in.d, in.n);
+    CHECK(ico_steam_add_shortcut(&env, &withIcon) == ICO_STEAM_EXISTS);
+    CHECK(rd(vdf, got, sizeof(got), &gotN) == 0);
+    tail.n = 0;
+    file_open(&tail);
+    new_entry(&tail, "0", "ICO", "/games/ico/ico_pc", "/games/ico", icon);
+    file_close(&tail);
+    CHECK(gotN == tail.n && memcmp(got, tail.d, tail.n) == 0);
+
+    /* the player's own icon stays; no rewrite, no .bak */
+    fresh();
+    steam_folder();
+    in.n = 0;
+    file_open(&in);
+    new_entry(&in, "0", "ICO", "/games/ico/ico_pc", "/games/ico", "/home/n/mine.png");
+    file_close(&in);
+    wr(vdf, in.d, in.n);
+    CHECK(ico_steam_add_shortcut(&env, &withIcon) == ICO_STEAM_EXISTS);
+    CHECK(rd(vdf, got, sizeof(got), &gotN) == 0 && gotN == in.n && memcmp(got, in.d, in.n) == 0);
+    CHECK(!has(bakf));
+
+    /* no iconPath: the old bytes exactly, an entry without an icon stays so */
+    fresh();
+    steam_folder();
+    env.iconPath[0] = '\0';
+    in.n = 0;
+    file_open(&in);
+    new_entry(&in, "0", "ICO", "/games/ico/ico_pc", "/games/ico", "");
+    file_close(&in);
+    wr(vdf, in.d, in.n);
+    CHECK(ico_steam_add_shortcut(&env, &kEntry) == ICO_STEAM_EXISTS);
+    CHECK(rd(vdf, got, sizeof(got), &gotN) == 0 && gotN == in.n && memcmp(got, in.d, in.n) == 0);
+    CHECK(!has(bakf));
+}
+
 static void test_running(void)
 {
     static uint8_t got[8192];
@@ -709,9 +958,11 @@ int main(int argc, char **argv)
     test_crc_and_id();
     test_append();
     test_find();
+    test_set_icon();
     test_malformed();
     test_login_users();
     test_job();
+    test_job_icon();
     test_running();
     test_self_exe();
 

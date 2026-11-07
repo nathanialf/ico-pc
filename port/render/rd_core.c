@@ -3127,9 +3127,10 @@ void rd_screen_prims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace 
     if (!v || count == 0 || (unsigned)type > RD_PRIM_SPRITES) {
         return;
     }
-    if ((g_rd.spaceOverride > 0 ? g_rd.spaceOverride - 1 : (int)space) == RD_SPACE_WORLD &&
-        !rd__draw_filter_pass(key)) {
-        return;
+    if ((g_rd.spaceOverride > 0 ? g_rd.spaceOverride - 1 : (int)space) == RD_SPACE_WORLD
+            ? !rd__draw_filter_pass(key)
+            : rd_icon_pass_on()) {
+        return; /* a world draw the filter leaves out; UI and full-screen in the icon pass */
     }
     RdFrame *f = rd__rec_frame();
     if (!f) {
@@ -3160,6 +3161,9 @@ void rd_screen_prims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace 
 
 void rd_deferred_text(const RdTextItem *item, RdKey key)
 {
+    if (rd_icon_pass_on()) {
+        return; /* the menus' text: not in the title's icon pass (rd.h rd_set_icon_pass) */
+    }
     RdFrame *f = rd__rec_frame();
     if (!item || !f) {
         if (item) {

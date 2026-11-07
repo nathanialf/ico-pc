@@ -643,6 +643,11 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_STEAM_FAILED] = "No se pudo añadir a Steam",
         [UI_STR_STEAM_FAILED_BODY] =
             "No se pudo cambiar la lista de accesos directos.\nEl README explica cómo añadirlo a mano.",
+        [UI_STR_EXTRAS_DESKTOP] = "Añadir al menú de aplicaciones",
+        [UI_STR_DESKTOP_ADDED] = "Añadido al menú",
+        [UI_STR_DESKTOP_ADDED_BODY] = "El juego está en el\nmenú de aplicaciones.",
+        [UI_STR_DESKTOP_FAILED] = "No se pudo añadir al menú",
+        [UI_STR_DESKTOP_FAILED_BODY] = "No se pudo escribir la entrada\nen la carpeta de usuario.",
         [UI_STR_EXTRAS_EXPORT_TEXTURES] = "Exportar texturas",
         [UI_STR_EXPORT_TEXTURES_STOP] = "Detener la exportación",
         [UI_STR_EXPORT_TEXTURES_NOTE] =

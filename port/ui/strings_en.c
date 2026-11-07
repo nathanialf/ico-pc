@@ -634,6 +634,11 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_STEAM_FAILED] = "Could not add to Steam",
     [UI_STR_STEAM_FAILED_BODY] =
         "The shortcut list could not be changed.\nThe README shows how to add it by hand.",
+    [UI_STR_EXTRAS_DESKTOP] = "Add to the applications menu",
+    [UI_STR_DESKTOP_ADDED] = "Added to the menu",
+    [UI_STR_DESKTOP_ADDED_BODY] = "The game is in your\napplications menu.",
+    [UI_STR_DESKTOP_FAILED] = "Could not add to the menu",
+    [UI_STR_DESKTOP_FAILED_BODY] = "The menu entry could not be\nwritten to your user folder.",
     [UI_STR_EXTRAS_EXPORT_TEXTURES] = "Export textures",
     [UI_STR_EXPORT_TEXTURES_STOP] = "Stop exporting",
     [UI_STR_EXPORT_TEXTURES_NOTE] =

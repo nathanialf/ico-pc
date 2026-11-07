@@ -1562,12 +1562,12 @@ static void testAddToSteam(void)
     CHECK(strcmp(lt_ext_row_text(row), "Add to Steam") == 0, "the row's text \"%s\"",
           lt_ext_row_text(row));
     {
-        int el[11];
-        const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 11);
+        int el[12];
+        const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 12);
 
-        CHECK(en == 11 && el[5] == row,
-              "eleven rows, Unused content, Add to Steam then Export textures, the backup rows, "
-              "the pop-ups and Back (%d)",
+        CHECK(en == 12 && el[5] == row,
+              "twelve rows, Unused content, Add to Steam then the menu row and Export textures, "
+              "the backup rows, the pop-ups and Back (%d)",
               en);
     }
 
@@ -1667,13 +1667,13 @@ static void testExportTextures(void)
     CHECK(strcmp(lt_ext_row_text(row), "Export textures") == 0, "export: the row's text \"%s\"",
           lt_ext_row_text(row));
     {
-        int el[11];
-        const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 11);
+        int el[12];
+        const int en = ui_settings_page_rows(UI_PAGE_EXTRAS, el, NULL, NULL, 12);
 
-        CHECK(en == 11 && el[5] == ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_STEAM) &&
-                  el[6] == row && el[9] == ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_ACH_POPUPS),
-              "export: eleven rows, Add to Steam, Export textures, the backup rows, the pop-ups "
-              "(%d)",
+        CHECK(en == 12 && el[5] == ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_STEAM) &&
+                  el[7] == row && el[10] == ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_ACH_POPUPS),
+              "export: twelve rows, Add to Steam, the menu row, Export textures, the backup rows, "
+              "the pop-ups (%d)",
               en);
         /* Down from Add to Steam lands on it, Down again on the pop-ups
            (the backup rows hidden without their host) */
@@ -1682,7 +1682,7 @@ static void testExportTextures(void)
         press(0x4000);
         CHECK(lt_ext_layout(exL)->curItem == row, "export: Down from Add to Steam lands on it");
         press(0x4000);
-        CHECK(lt_ext_layout(exL)->curItem == el[9], "export: Down from it lands on the pop-ups");
+        CHECK(lt_ext_layout(exL)->curItem == el[10], "export: Down from it lands on the pop-ups");
     }
     ui_settings_set_steam_handler(NULL);
     lt_ext_layout(exL)->curItem = row;
@@ -4832,7 +4832,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
         for (int i = 0; i < en; i++) {
             named += strcmp(lt_ext_row_text(el[i]), "Game variants") == 0;
         }
-        CHECK(en == 11 && named == 0 &&
+        CHECK(en == 12 && named == 0 &&
                   el[5] == ui_settings_row_of(UI_PAGE_EXTRAS, UI_OPT_EXTRAS_STEAM),
               "%s %s: Extras has no Game variants row (%d rows)", who, title ? "title" : "pause",
               en);

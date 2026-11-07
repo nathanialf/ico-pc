@@ -643,6 +643,12 @@ const char *const ui_strings_fr[UI_STR_COUNT] =
         [UI_STR_STEAM_FAILED] = "Ajout à Steam impossible",
         [UI_STR_STEAM_FAILED_BODY] =
             "La liste des raccourcis n’a pas pu être modifiée.\nLe README explique l’ajout manuel.",
+        [UI_STR_EXTRAS_DESKTOP] = "Ajouter au menu des applications",
+        [UI_STR_DESKTOP_ADDED] = "Ajouté au menu",
+        [UI_STR_DESKTOP_ADDED_BODY] = "Le jeu est dans votre\nmenu des applications.",
+        [UI_STR_DESKTOP_FAILED] = "Ajout au menu impossible",
+        [UI_STR_DESKTOP_FAILED_BODY] =
+            "L’entrée de menu n’a pas pu être\nécrite dans votre dossier utilisateur.",
         [UI_STR_EXTRAS_EXPORT_TEXTURES] = "Exporter les textures",
         [UI_STR_EXPORT_TEXTURES_STOP] = "Arrêter l’export",
         [UI_STR_EXPORT_TEXTURES_NOTE] =

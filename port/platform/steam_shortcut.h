@@ -9,7 +9,8 @@
  * runs; window_host.c).
  *
  * The file is edited by inserting one entry before the end of its
- * "shortcuts" map, so every existing entry keeps its bytes; the file as it
+ * "shortcuts" map, so every existing entry keeps its bytes (but for the icon field of
+ * an entry of this program that has none or the program as its icon); the file as it
  * was is copied to shortcuts.vdf.bak first. Steam rewrites this file from
  * memory when it exits, so nothing is written while Steam runs. No artwork
  * is added.
@@ -41,6 +42,10 @@ typedef struct IcoSteamEnv {
     int (*processRunning)(void);          /* a process named steam.exe (Windows); NULL: none */
     int iconIsExe;                        /* the entry's icon is the program (Windows) */
     int caselessPaths;                    /* the duplicate check ignores case (Windows) */
+    char iconPath[ICO_STEAM_PATH_MAX];    /* the application icon's file (app_icon.h) when it
+                                             exists, else "": the new entry's icon, and set on
+                                             an entry already there whose icon is none or the
+                                             program; "" keeps the old rule (iconIsExe) */
 } IcoSteamEnv;
 
 /* The entry to add. exe and startDir are the plain paths; the entry stores
@@ -66,6 +71,14 @@ int32_t ico_steam_appid(const char *quotedExe, const char *appName);
 int ico_steam_vdf_find_exe(const uint8_t *vdf, size_t n, const char *exe, int caseless);
 int ico_steam_vdf_append(const uint8_t *vdf, size_t n, const IcoSteamEntry *e, uint8_t **out,
                          size_t *outN);
+/* The first entry whose Exe is exe gets icon as its icon field (written
+   before the entry's end when it has none) when that field is empty or the
+   program (quoted or plain): 1 with the file in *out (malloc; free it) and
+   *outN, every other byte as it was; 0 when there is no such entry, the
+   entry has its own icon, or icon is empty or too long; -1 for a file that
+   is not a shortcuts file. */
+int ico_steam_vdf_set_icon(const uint8_t *vdf, size_t n, const char *exe, int caseless,
+                           const char *icon, uint8_t **out, size_t *outN);
 
 /* The user ids (low 32 bits of the Steam id) in loginusers.vdf's text, the
    most recent user first. Fills ids[0..max); returns the count. */

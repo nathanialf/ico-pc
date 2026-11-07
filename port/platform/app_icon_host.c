@@ -14,6 +14,7 @@
 #include "ico_version.h" /* ICO_VERSION_LABEL, generated ("" in a development build) */
 #include "../render/rd_png.h"
 #include "../core/region.h"
+#include "video_options.h"
 
 static int s_changed;
 
@@ -34,7 +35,26 @@ int ico_app_icon_wanted(void)
     if (userAndDisc(dir, sizeof(dir), &disc) != 0) {
         return 0;
     }
-    return ico_app_icon_wanted_at(dir, disc, ICO_VERSION_LABEL);
+    if (!ico_app_icon_wanted_at(dir, disc, ICO_VERSION_LABEL)) {
+        return 0;
+    }
+    /* the capture needs the plain picture: with the CRT filter or a colour
+       adjustment on, the white background would not come back white and the
+       matte would be wrong.  The title is visited again, so a later visit
+       (the settings changed, or the next run) makes the icon. */
+    IcoVideoOptions v;
+    ico_video_get(&v);
+    if (!ico_app_icon_picture_plain(v.crt, v.crtStrength, v.toneGamma, v.toneBrightness,
+                                    v.toneContrast, v.toneSaturation)) {
+        static int s_logged;
+        if (!s_logged) {
+            s_logged = 1;
+            fprintf(stderr,
+                    "ico_pc: icon: waiting for a plain picture (CRT filter or Brightness on)\n");
+        }
+        return 0;
+    }
+    return 1;
 }
 
 /* the 256 x 256 image into PNG, the files, the flag */

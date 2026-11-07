@@ -319,6 +319,14 @@ void ui_settings_vsync(void);
 #define UI_STEAM_NO_USER 4   /* no Steam account to add it to */
 #define UI_STEAM_FAILED 5    /* the shortcut list could not be changed */
 void ui_settings_set_steam_handler(int (*fn)(void));
+/* Settings > Extras > Add to the applications menu (Linux only): fn writes
+   the game's desktop entry and icon into the player's data folder
+   (port/platform/desktop_entry.h) and returns UI_DESKTOP_DONE or
+   UI_DESKTOP_FAILED; the menu answers with a popup. NULL (or never called)
+   hides the row; no other platform sets it. */
+#define UI_DESKTOP_DONE 0   /* the entry and the icon are written */
+#define UI_DESKTOP_FAILED 1 /* they could not be written */
+void ui_settings_set_desktop_handler(int (*fn)(void));
 /* Settings > Extras > Export textures (the title only): every picture on the
    disc saved under its PCSX2 name into the dumps folder, a job the host runs
    in the background (window_host.c over port/render/texpack_export.h; the
@@ -810,6 +818,9 @@ typedef enum UiSettingsOpt {
     /* Extras > Add to Steam (desktop; shown from the title while a host
        handler is set) */
     UI_OPT_EXTRAS_STEAM,
+    /* Extras > Add to the applications menu (Linux; shown from the title
+       while a host handler is set, ui_settings_set_desktop_handler) */
+    UI_OPT_EXTRAS_DESKTOP,
     /* Extras > Export textures (shown from the title while a host is set,
        ui_settings_set_texture_export_host); Stop exporting while it runs */
     UI_OPT_EXTRAS_EXPORT_TEXTURES,

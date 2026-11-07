@@ -639,6 +639,12 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_STEAM_FAILED] = "Impossibile aggiungere a Steam",
         [UI_STR_STEAM_FAILED_BODY] =
             "L’elenco dei collegamenti non è stato modificato.\nIl README spiega come aggiungerlo a mano.",
+        [UI_STR_EXTRAS_DESKTOP] = "Aggiungi al menu delle applicazioni",
+        [UI_STR_DESKTOP_ADDED] = "Aggiunto al menu",
+        [UI_STR_DESKTOP_ADDED_BODY] = "Il gioco è nel menu\ndelle applicazioni.",
+        [UI_STR_DESKTOP_FAILED] = "Impossibile aggiungere al menu",
+        [UI_STR_DESKTOP_FAILED_BODY] =
+            "La voce di menu non è stata scritta\nnella cartella utente.",
         [UI_STR_EXTRAS_EXPORT_TEXTURES] = "Esporta texture",
         [UI_STR_EXPORT_TEXTURES_STOP] = "Interrompi esportazione",
         [UI_STR_EXPORT_TEXTURES_NOTE] =

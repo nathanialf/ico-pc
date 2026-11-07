@@ -763,7 +763,7 @@ page, and it is the same setting in both places.
 
 On the title screen's Options this page has Music, Models, Credits,
 Character Customization, Unused content, Add to Steam (on Windows and Linux),
-Export textures, Back up your data, Restore from a backup and Achievement
+Add to the applications menu (on Linux), Export textures, Back up your data, Restore from a backup and Achievement
 pop-ups. In the pause menu's Options it has only Character Customization
 and Achievement pop-ups. The rows that change how the game plays are under
 [Gameplay](#gameplay).
@@ -789,12 +789,31 @@ and Achievement pop-ups. The rows that change how the game plays are under
   Steam is open, and says so if Steam is running. On a Steam Deck, use
   Desktop Mode, where you can quit Steam from its icon in the taskbar
   (right-click it, then Exit Steam). If Steam has several accounts, the game goes to the one
-  used last. It adds no pictures, so Steam shows its plain tile for it. If
-  the game is already in your library, the row says so and changes
-  nothing. When it adds the game, it first keeps a copy of Steam's old
+  used last. It uses the game's icon (the I from the title) once
+  the game has made it, and adds no other pictures, so Steam shows its
+  plain tile for the rest. If the game is already in your library, the
+  row says so, and if that entry has no icon or only the game's own file as
+  its icon, it gets the game's icon (an icon you chose yourself stays). When
+  it changes Steam's list, it first keeps a copy of Steam's old
   list, `shortcuts.vdf.bak`, beside Steam's own list. If you move the game
   to another folder, add it again from there. The row is only on Windows
   and Linux, the Steam Deck included.
+- **Add to the applications menu** (on the title screen's Extras page only;
+  on Linux only): puts the game in your desktop's applications menu, with
+  its icon, so you can start it from there. It writes two files in your
+  user folder, never anywhere else and never before you press the row:
+  `com.defnf.icopc.desktop` in `~/.local/share/applications` and the icon
+  in `~/.local/share/icons/hicolor/256x256/apps` (if you have set
+  `XDG_DATA_HOME`, that folder replaces `~/.local/share`). The menu entry
+  starts the program you are running now: the AppImage file when you run
+  one, so if you move or rename the game, press the row again from there.
+  The icon is the I from the title, once the game has made it; until then
+  the entry is written without it, and pressing the row again after the
+  next title screen adds it. To remove the entry, delete those two files.
+  Some desktops show a new entry only after you log in again. On Wayland
+  desktops the entry is also what gives the game's window its icon.
+  [Details](port/APP_ICON.md#the-applications-menu). On Windows and the Mac
+  the row is not there; on Android the app keeps its plain icon.
 - **Export textures** (on the title screen's Extras page only; it needs no
   Developer mode): saves every picture on your disc as a PNG file, under
   the name PCSX2 gives it, in the game's `textures` folder (`textures/`,

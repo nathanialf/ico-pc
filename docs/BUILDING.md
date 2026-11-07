@@ -727,7 +727,8 @@ Windows program carries version information (company, product, file version `x.y
 release candidate's number for a label `vX.Y.Z-rcN`, 0 for `vX.Y.Z`; `ico_version_from_label` in
 `cmake/IcoVersion.cmake`), from `-DICO_VERSION_LABEL=<label>` which `package_win.sh` passes
 (`port/platform/win/ico_pc.rc`; a build without the label has an all-zero version). It has no icon
-and no signature. `ico_pc.manifest` has no `dpiAwareness`: SDL3 sets the process's DPI awareness
+and no signature: the game's icon is made from the player's disc at run time (`docs/port/APP_ICON.md`) and set on
+the window, so there is nothing to put in a resource, and the program file is not rewritten. `ico_pc.manifest` has no `dpiAwareness`: SDL3 sets the process's DPI awareness
 itself when the window system starts. `tools/package_linux.sh` packages for the host's architecture:
 on an arm64 host it builds `linux-arm64` into `dist/ico-pc-<label>-linux-arm64.tar.gz` (stage
 `dist/stage/linux-arm64/`, log `build-host/pkg-linux-arm64-<label>.log`) and the portable
@@ -742,7 +743,7 @@ Last, from the same stage, `tools/package_linux.sh` writes the AppImage,
 `.sha256` beside it, written by the script on both architectures. The AppDir is `AppRun` (a link to
 `usr/bin/ico_pc`), `usr/bin/` with `ico_pc`, `ico_pc.map`, `libSDL3.so.0` and `mc_import`,
 `usr/share/doc/ico-pc/` with the README, the guides, `LICENSE`, `NOTICES.txt`, `THIRD_PARTY.md`
-and `VERSION.txt`, and `ico-pc.desktop`, `ico-pc.svg` and `.DirIcon` (a link to the icon) from
+and `VERSION.txt`, and `com.defnf.icopc.desktop`, `com.defnf.icopc.svg` and `.DirIcon` (a link to the icon) from
 `tools/appimage/`; no `ico-pc.ini`, folder notes or make-portable script, because the program
 keeps all of those beside the AppImage file ([PLATFORM.md](port/PLATFORM.md#folders-ico-pcini-and-the-user-folder)).
 appimagetool runs unpacked from `tools/toolchain/deps/appimage/<arch>/squashfs-root` with its own

@@ -128,10 +128,12 @@ static void testRows(void)
                 at = i;
             }
         }
-        CHECK(n == 11 && at == 6 && opts[7] == UI_OPT_EXTRAS_BACKUP &&
-                  opts[8] == UI_OPT_EXTRAS_RESTORE && opts[9] == UI_OPT_ACH_POPUPS &&
-                  opts[10] == UI_OPT_BACK,
-              "eleven rows: Export textures, Back up, Restore, the pop-ups, Back (%d)", n);
+        CHECK(n == 12 && at == 7 && opts[6] == UI_OPT_EXTRAS_DESKTOP &&
+                  opts[8] == UI_OPT_EXTRAS_BACKUP && opts[9] == UI_OPT_EXTRAS_RESTORE &&
+                  opts[10] == UI_OPT_ACH_POPUPS && opts[11] == UI_OPT_BACK,
+              "twelve rows: the menu row, Export textures, Back up, Restore, the pop-ups, Back "
+              "(%d)",
+              n);
     }
     CHECK(strcmp(labelOf(UI_OPT_EXTRAS_BACKUP), "Back up your data") == 0 &&
               strcmp(labelOf(UI_OPT_EXTRAS_RESTORE), "Restore from a backup") == 0,

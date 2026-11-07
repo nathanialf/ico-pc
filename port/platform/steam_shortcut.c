@@ -16,6 +16,7 @@
  */
 #include "steam_shortcut.h"
 #include "host_fs.h"
+#include "app_icon.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -74,6 +75,13 @@ typedef struct Walk {
     long maxIndex;     /* the highest entry index, -1 for none */
     size_t scEnd;      /* offset of the 0x08 ending the shortcuts map */
     int haveShortcuts; /* the shortcuts map was seen */
+    /* the entry being read (reset at each entry's start) */
+    int entMatch;   /* its Exe is the one looked for */
+    size_t entIcon; /* offset of its icon field's value string; 0 for none */
+    size_t entEnd;  /* offset of the 0x08 ending it */
+    /* the first entry whose Exe matched, for ico_steam_vdf_set_icon */
+    int hit;
+    size_t hitIcon, hitEnd;
 } Walk;
 
 /* a NUL-terminated string at the read position */
@@ -122,6 +130,8 @@ static int walk_map(Rd *r, int kind, int depth, Walk *w)
         if (t == 0x08) {
             if (kind == MAP_SHORTCUTS) {
                 w->scEnd = r->i;
+            } else if (kind == MAP_ENTRY) {
+                w->entEnd = r->i;
             }
             r->i++;
             return 0;
@@ -146,8 +156,18 @@ static int walk_map(Rd *r, int kind, int depth, Walk *w)
                 }
                 sub = MAP_ENTRY;
             }
+            if (sub == MAP_ENTRY) {
+                w->entMatch = 0;
+                w->entIcon = 0;
+                w->entEnd = 0;
+            }
             if (walk_map(r, sub, depth + 1, w) != 0) {
                 return -1;
+            }
+            if (sub == MAP_ENTRY && w->entMatch && !w->hit) {
+                w->hit = 1;
+                w->hitIcon = w->entIcon;
+                w->hitEnd = w->entEnd;
             }
             break;
         }
@@ -158,6 +178,9 @@ static int walk_map(Rd *r, int kind, int depth, Walk *w)
             if (kind == MAP_ENTRY && w->exe != NULL && same(name, "exe", 1) &&
                 (same(val, w->quoted, w->caseless) || same(val, w->exe, w->caseless))) {
                 w->found = 1;
+                w->entMatch = 1;
+            } else if (kind == MAP_ENTRY && same(name, "icon", 1)) {
+                w->entIcon = (size_t)((const uint8_t *)val - r->p);
             }
             break;
         case 0x02:
@@ -190,6 +213,7 @@ static int walk_file(const uint8_t *vdf, size_t n, Walk *w)
     w->maxIndex = -1;
     w->scEnd = 0;
     w->haveShortcuts = 0;
+    w->hit = 0;
     if (n == 0) {
         return 0;
     }
@@ -218,6 +242,56 @@ int ico_steam_vdf_find_exe(const uint8_t *vdf, size_t n, const char *exe, int ca
         return -1;
     }
     return w.found;
+}
+
+int ico_steam_vdf_set_icon(const uint8_t *vdf, size_t n, const char *exe, int caseless,
+                           const char *icon, uint8_t **out, size_t *outN)
+{
+    Walk w;
+    size_t from, to, ilen, add;
+    uint8_t *q;
+
+    *out = NULL;
+    *outN = 0;
+    walk_init(&w, exe, caseless);
+    if (walk_file(vdf, n, &w) != 0) {
+        return -1;
+    }
+    if (!w.hit || icon == NULL || icon[0] == '\0' || strlen(icon) > ICO_STEAM_PATH_MAX) {
+        return 0;
+    }
+    ilen = strlen(icon);
+    if (w.hitIcon != 0) {
+        const char *cur = (const char *)vdf + w.hitIcon;
+
+        /* the player's own icon (anything but none or the program) stays */
+        if (cur[0] != '\0' && !same(cur, w.quoted, caseless) && !same(cur, exe, caseless)) {
+            return 0;
+        }
+        from = w.hitIcon;
+        to = w.hitIcon + strlen(cur);
+        add = ilen;
+    } else {
+        /* an entry without the field: it goes in before the entry's end */
+        from = to = w.hitEnd;
+        add = 1 + 5 + ilen + 1;
+    }
+    q = (uint8_t *)malloc(n - (to - from) + add + 1);
+    if (q == NULL) {
+        return -1;
+    }
+    memcpy(q, vdf, from);
+    if (w.hitIcon != 0) {
+        memcpy(q + from, icon, ilen);
+    } else {
+        q[from] = 0x01;
+        memcpy(q + from + 1, "icon", 5); /* with its NUL */
+        memcpy(q + from + 6, icon, ilen + 1);
+    }
+    memcpy(q + from + add, vdf + to, n - to);
+    *out = q;
+    *outN = n - (to - from) + add;
+    return 1;
 }
 
 /* --- building an entry ----------------------------------------------------- */
@@ -702,7 +776,22 @@ int ico_steam_add_shortcut(const IcoSteamEnv *env, const IcoSteamEntry *e)
             goto done; /* not a file this reader understands: leave it alone */
         }
         if (has == 1) {
+            /* the icon is made after the shortcut can be: an entry added
+               with none, or with the program as its icon, gets it (the
+               player's own icon is left); the answer stays "already there" */
             res = ICO_STEAM_EXISTS;
+            if (env->iconPath[0] != '\0' &&
+                ico_steam_vdf_set_icon(old, oldN, e->exe, env->caselessPaths, env->iconPath, &neu,
+                                       &neuN) == 1) {
+                if ((r == 0 && write_file(bak, old, oldN) != 0) ||
+                    write_file(tmp, neu, neuN) != 0 || ico_rename_replace(tmp, vdf) != 0) {
+                    ico_remove(tmp);
+                    res = ICO_STEAM_FAILED;
+                } else {
+                    fprintf(stderr, "ico_pc: Add to Steam: already there; icon set to %s\n",
+                            env->iconPath);
+                }
+            }
             goto done;
         }
     }
@@ -788,6 +877,29 @@ static int win_steam_exe_running(void)
 }
 #endif
 
+/* the icon the title screen's capture made (app_icon.h): the .ico on
+   Windows, the PNG on Linux, when the file is there */
+static void icon_default(IcoSteamEnv *env)
+{
+#ifdef _WIN32
+    const int ico = 1;
+#else
+    const int ico = 0;
+#endif
+    char p[ICO_STEAM_PATH_MAX];
+
+    if (ico_app_icon_current_path(p, sizeof(p), ico) == 0 && p[0] != '\0') {
+        snprintf(env->iconPath, sizeof(env->iconPath), "%s", p);
+#ifdef _WIN32
+        for (char *c = env->iconPath; *c != '\0'; c++) {
+            if (*c == '/') {
+                *c = '\\';
+            }
+        }
+#endif
+    }
+}
+
 void ico_steam_env_default(IcoSteamEnv *env)
 {
     memset(env, 0, sizeof(*env));
@@ -870,10 +982,13 @@ int ico_steam_add_this_game(void)
     }
     *slash = '\0';
     ico_steam_env_default(&env);
+    /* here and not in the env: the tests' envs are their own, and this is
+       the one caller that links the icon's files (app_icon_host.c) */
+    icon_default(&env);
     e.name = "ICO";
     e.exe = exe;
     e.startDir = dir;
-    e.icon = env.iconIsExe ? exe : "";
+    e.icon = env.iconPath[0] != '\0' ? env.iconPath : env.iconIsExe ? exe : "";
     const int r = ico_steam_add_shortcut(&env, &e);
     /* one line per press: which program the entry starts, and the answer */
     fprintf(stderr, "ico_pc: Add to Steam: %s (start folder %s): %s\n", exe, dir,
