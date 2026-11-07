@@ -469,6 +469,17 @@ int main(void)
             failures++;
         }
     }
+    const size_t nVelocity = sizeof(expectedVelocity) / sizeof(expectedVelocity[0]);
+    for (size_t i = 0; i < nVelocity; i++) {
+        const IcoShaderBlob *b = ico_find_shader(expectedVelocity[i]);
+        if (!b) {
+            printf("FAIL %s: not in the table\n", expectedVelocity[i]);
+            failures++;
+        } else if (b->stage != (i == 0 ? ICO_SHADER_STAGE_VERTEX : ICO_SHADER_STAGE_FRAGMENT)) {
+            printf("FAIL %s: the wrong stage\n", expectedVelocity[i]);
+            failures++;
+        }
+    }
     const size_t nFsr1 = sizeof(expectedFsr1) / sizeof(expectedFsr1[0]);
     for (size_t i = 0; i < nFsr1; i++) {
         const IcoShaderBlob *b = ico_find_shader(expectedFsr1[i]);
@@ -538,7 +549,8 @@ int main(void)
     }
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
                         nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nMerge +
-                        nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone + nFsr1;
+                        nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone + nFsr1 +
+                        nVelocity;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;
