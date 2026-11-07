@@ -480,7 +480,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (`poly_flat`).
 - `shadow_spawn_test.c`: the depth a shadow rises from, read at the generator kind's word as the
   PS2 reads it; with the disc, every generator row (`shadow_spawn`).
-- `title_logo_test.c`: the logo's models and the hidden state's steps (`title_logo`).
+- `title_logo_test.c`: the logo's models and the hidden state's steps; the application icon's
+  capture (`title_icon.c`) with the renderer, the curtain and the icon files stubbed: the pass leaves
+  out every model but `I` (`title_back`, `st26a_p1`, `C`, `I_f`, `I_sd`) and off leaves the old
+  table; the capture starts after `ICO_TITLE_ICON_WAIT` ticks of layout 12 or 13 (counted again
+  after a Settings page or the model viewer) when an icon is wanted, never when not; the shot over
+  black after the settle, white once it came, the shot over white, then the pass off, the pair
+  delivered and the curtain off after the hold, done for the run; an empty answer or none within
+  the wait armed again and the run given up after three retries; a pair that differs (or a picture
+  of another size) taken again once, then the picture over black alone; the menu left during the
+  pass ending it and the next visit starting again (`title_logo`).
 
 ## port/input/test
 

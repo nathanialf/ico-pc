@@ -244,6 +244,11 @@ only when its key's object is in the set, and `rd_draw_filter_open` learns the s
 object's own display list. UI and full-screen prims, post passes, state and targets are never
 filtered (`port/render/rd.h` ("the draw filter")).
 
+**The icon pass.** While the title's "I" is captured for the application icon,
+`rd_set_icon_pass(colour)` leaves out the UI and full-screen screen prims and the deferred text and
+clears SCENE to the colour at the frame head; off, a frame records byte-identically
+(`port/render/rd.h` ("the title's icon pass"); [APP_ICON.md](APP_ICON.md#the-capture-on-the-title)).
+
 ## The state
 
 `port/render/rd_state.h` enumerates the GS state the game reaches, from the sources, and the

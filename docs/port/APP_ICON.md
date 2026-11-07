@@ -39,6 +39,57 @@ from one frame (alpha = the brightest channel), logged as such. The PNG is encod
 `rd_write_png_mem` (`port/render/rd_png.c`, the same bytes `rd_write_png` writes to a file); a
 delivery raises a flag that `ico_app_icon_changed_take()` reads and clears.
 
+## The capture on the title
+
+Files: `port/game/title_icon.c`, `title_icon.h` (the steps), `port/game/title_logo.c` (the name
+rule), `port/render/rd_frame.c` and `rd_core.c` (`rd_set_icon_pass`, `port/render/rd.h` "the
+title's icon pass"), `port/ui/ui_host.c` (`ui_host_curtain`).
+
+The letter is geometry (a stage model), not a texture, and the screen-space transform runs in the
+vertex shaders, so the icon is cut from the title as it is drawn. `ico_title_logo_update` steps the
+capture once a tick (`ico_title_icon_tick`). Once the title's menu (Continue / New Game, layout 12 or
+13 on the European disc) has been up for 30 ticks with the logo shown and the model viewer off, and
+`ico_app_icon_wanted()` says so, the pass comes on:
+
+- the game side: `ico_title_logo_skip` answers 1 for every model but `I`, so `reg_DispObj` draws the
+  letter alone (no game code changes);
+- the renderer: `rd_set_icon_pass(colour)` leaves out the UI and full-frame screen prims and the
+  deferred text (the menus) and makes the frame head clear SCENE to the colour, black first; world
+  draws and post passes are untouched;
+- the curtain: `ui_host_curtain(1)` puts an opaque black quad over the whole output at the start of
+  the presenter's top overlay layer, so the player sees black frames.
+
+The shot is armed (`rd_capture_shot`, with its own answer slot: the pause picture's deferred slot is
+polled by `state_host.c` every host step) after three ticks with the colour in force, because the tick
+the colour changed had already recorded the menus and an in-between picture also reads the tick
+before. The shot copies the presentation box before the overlay, so the curtain is never in it. Once
+the picture over black is back, the clear turns white and the same wait and shot follow. Then the
+pass goes off, the pair goes to `ico_app_icon_deliver`, and the curtain comes off two ticks later
+(pictures of the pass's frames may still be presented). A pair refused as moved
+(`ICO_APP_ICON_GHOST`, or the two pictures of different sizes) is taken again once; a second refusal
+cuts the icon from the picture over black alone (`ico_app_icon_deliver_single`). An empty answer
+(the present dropped it) or none within 60 ticks arms the shot again, at most three times in a run;
+then the run gives up. Leaving the menu during the pass (New Game, Continue, a Settings page) ends
+it, and the next time the menu has been up for 30 ticks it starts again. Only the window build
+captures; on Android nothing is captured (the launcher icon is the package's).
+
+The log lines: `ico_pc: icon: capturing the title's I (pass 1 of 2)` and `(pass 2 of 2)`;
+`ico_pc: icon: made from the title's I (<w>x<h> pictures)`; `ico_pc: icon: the two pictures
+differ (...): taking the pair again` and `... differ again: the icon is cut from the picture over
+black alone`; `ico_pc: icon: could not be made (the lines above say why) ...`;
+`ico_pc: icon: the title's picture was not taken (<why>): trying again`; `ico_pc: icon: no picture of
+the title came back (<why>; <n> tries): no icon made this run, the next start tries again`;
+`ico_pc: icon: the title's menu was left during the capture: tried again the next time it shows`.
+
+The capture needs the renderer and the title stage, which are up only at the title, so the first
+run's icon (and the first run's after an update) appears at its first title screen; the next start
+finds the file before the first frame.
+
+## Tests
+
 The tests are `app_icon_image_test` (`app_icon_image`), `ico_icon_test` (`ico_icon`),
 `app_icon_files_test` (`app_icon_files`) and `rd_png_mem_test` (`rd_png_mem`)
-([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)); the capture's are `title_logo_test` (`title_logo`: the
+name rule and the steps with the renderer and the files stubbed) and `rd_icon_pass_test`
+(`rd_icon_pass`: the renderer's pass recorded without a device,
+[TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).

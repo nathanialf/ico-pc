@@ -2,6 +2,8 @@
  *
  *   rd_frame_head / rd_frame_flip   the flip's draw environment and clear
  *                                 (rd.h)
+ *   rd_set_icon_pass                the title's icon pass: its clear colour
+ *                                 (and rd_core.c's screen prims, rd.h)
  *   rd_set_target_z_format           per-target GS Z to depth scale
  *   rd_set_vu_common                gsb_MakeCommonMatrix's VU1 parameter block
  *   rd__fill_camera_cb              RdCamera into FrameCB
@@ -18,6 +20,27 @@
 #include "shader_consts.h"
 
 /* ------------------------------------------------------------ frame head */
+
+/* rd.h rd_set_icon_pass: on, and the clear colour the head records */
+static struct {
+    int on;
+    uint8_t rgba[4];
+} s_iconPass;
+
+void rd_set_icon_pass(const uint8_t *clearRgba)
+{
+    s_iconPass.on = clearRgba != NULL;
+    if (clearRgba) {
+        memcpy(s_iconPass.rgba, clearRgba, 4);
+    } else {
+        memset(s_iconPass.rgba, 0, 4);
+    }
+}
+
+bool rd_icon_pass_on(void)
+{
+    return s_iconPass.on != 0;
+}
 
 static void recordHead(RdFrame *f, int copy, int list, const RdFrameHead *h)
 {
@@ -36,11 +59,13 @@ static void recordHead(RdFrame *f, int copy, int list, const RdFrameHead *h)
     rd_col_clamp(1);
     rd_test_gs(RD_TEST_Z_GEQUAL);
     f->headClear[copy] = ~0u;
-    if (h->clear) {
+    /* the icon pass clears every frame it records, to its own colour */
+    if (h->clear || s_iconPass.on) {
         /* sceGsSetDefClear: TEST 0x30000, PRIM 6, RGBAQ, the sprite, TEST 0x50000 */
         rd_test_gs(RD_TEST_Z_ALWAYS);
         f->headClear[copy] = f->lists[list].count;
-        rd_clear_target(rd_target(RD_TARGET_SCENE), h->rgba, 1, h->z);
+        rd_clear_target(rd_target(RD_TARGET_SCENE), s_iconPass.on ? s_iconPass.rgba : h->rgba, 1,
+                        h->z);
         rd_abe(0);
         rd_texture_off();
         rd_gouraud(0);
@@ -72,6 +97,9 @@ void rd_frame_flip(const uint8_t rgba[4], int halfY)
         return;
     }
     static const int lists[2] = {0, 11};
+    if (s_iconPass.on) {
+        rgba = s_iconPass.rgba; /* the icon pass's colour over the game's */
+    }
     for (int i = 0; i < 2; i++) {
         RdCmdList *cl = &f->lists[lists[i]];
         if (f->headTarget[i] < cl->count && cl->cmds[f->headTarget[i]].type == RDC_TARGET) {

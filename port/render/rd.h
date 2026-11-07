@@ -1428,6 +1428,30 @@ void rd_set_draw_filter(bool on, const void *const *objs, uint32_t n);
 void rd_draw_filter_open(bool open);
 bool rd_draw_filter_keeps(RdKey key);
 
+/* ------------------------------------------------- the title's icon pass
+ * The application icon is the title lettering's "I", cut out of two title
+ * frames drawn with nothing but the letter over a black, then a white
+ * clear (port/game/title_icon.c; the matte: port/platform/app_icon.h).  The
+ * game side leaves every other object out by name (title_logo.c); this
+ * leaves out the rest.
+ *
+ * rd_set_icon_pass      clearRgba non-NULL: on, from now on (the frame
+ *                     open now included) a screen prim in RD_SPACE_UI or
+ *                     RD_SPACE_FULLFRAME (after any space override: the
+ *                     menus, the layouts' sprites and text quads) and a
+ *                     deferred text item (rd_deferred_text) are not
+ *                     recorded, and the frame head clears SCENE to
+ *                     clearRgba (RGBAQ, GS units: rd_frame_head records the
+ *                     clear even when the flip sends none, rd_frame_flip
+ *                     writes clearRgba over the BG colour it is given).
+ *                     World draws, post passes, state and targets are
+ *                     untouched.  NULL: off (the default), everything as
+ *                     before: a frame recorded after it is byte-identical
+ *                     to one recorded with the pass never on
+ * rd_icon_pass_on       whether it is on (the recording thread's view) */
+void rd_set_icon_pass(const uint8_t *clearRgba);
+bool rd_icon_pass_on(void);
+
 /* ------------------------------------------------------------- lists */
 
 /* dl_SetDLPriority(pri): selects the list that subsequent calls record into. */

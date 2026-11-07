@@ -485,6 +485,15 @@ target_compile_options(rd_filter_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT
 target_include_directories(rd_filter_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_filter_test PRIVATE ico_render)
 
+# rd_icon_pass_test: the title's icon pass (rd.h rd_set_icon_pass): the
+# menus' prims and text left out, the head's clear the pass's colour, and a
+# frame recorded after it byte-identical to one before; recorded without a
+# device.
+add_executable(rd_icon_pass_test test/rd_icon_pass_test.c)
+target_compile_options(rd_icon_pass_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_icon_pass_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_icon_pass_test PRIVATE ico_render)
+
 # rd_still_test: the still re-present (rd_reshow.c): the frame hash that is the
 # proof a between-tick picture repeats the tick's last rendered one, and the
 # decision on synthetic frames recorded without a device.
@@ -979,7 +988,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blend_selftest_test
                   rd_vuprepass_selftest_test rd_vu_skin_check_test rd_blur_test rd_water_test
                   rd_raw_test rd_debug_test
-                  rd_present_test rd_filter_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
+                  rd_present_test rd_filter_test rd_icon_pass_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_perf_test rd_display_change_test rd_boot_present_test rd_crt_test
                   texpack_load_test rd_png_mem_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
@@ -1220,6 +1229,7 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_crt COMMAND rd_crt_test "${CMAKE_CURRENT_BINARY_DIR}")
     set_tests_properties(rd_crt PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_filter COMMAND rd_filter_test)
+    add_test(NAME rd_icon_pass COMMAND rd_icon_pass_test)
     add_test(NAME rd_interp COMMAND rd_interp_test)
     add_test(NAME rd_still COMMAND rd_still_test)
     add_test(NAME rd_mirror COMMAND rd_mirror_test)

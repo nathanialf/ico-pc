@@ -15,6 +15,14 @@
  *                            popup test trigger and the popup clock
  *   ui_host_shutdown()        before rd_shutdown: the overlay, the atlases'
  *                            textures
+ *   ui_host_curtain(on)       the title's icon capture (port/game/title_icon.c):
+ *                            while on, every present's top overlay layer
+ *                            starts with an opaque black quad over the
+ *                            whole output, so the player sees black frames
+ *                            instead of the letter alone over black and
+ *                            white.  The capture copies the picture before
+ *                            the overlay, so the quad never reaches it.
+ *                            Any thread (an atomic flag)
  */
 #ifndef PORT_UI_HOST_H
 #define PORT_UI_HOST_H
@@ -26,6 +34,7 @@ extern "C" {
 void ui_host_init(void);
 void ui_host_vsync(unsigned int mainTick);
 void ui_host_shutdown(void);
+void ui_host_curtain(int on);
 
 #ifdef __cplusplus
 }

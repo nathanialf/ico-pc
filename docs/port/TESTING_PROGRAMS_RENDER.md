@@ -930,6 +930,12 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   makes a busy guard's wait. The window's half (the
   present allowance started again) has no test: the window is not run in the tests.
 - `rd_filter_test.c`: the model viewer's draw filter on synthetic keys (`rd_filter`).
+- `rd_icon_pass_test.c`: the title's icon pass (`rd_set_icon_pass`) recorded without a device: on,
+  the UI and full-frame screen prims (also a world prim drawn as UI space) and the deferred text are
+  not recorded while the world draws are, and both copies of the frame head clear to the pass's
+  colour over the flip's (also when the flip sends no clear, and when the pass comes on inside the
+  open frame); off again, a frame byte-identical (every list's commands and the payload) to one
+  recorded with the pass never on, and no clear without one from the flip (`rd_icon_pass`).
 - `rd_fog_selftest_test.c` with `rd_fog_selftest.cmake`: the fog's self-test and probe; its log line
   matched for each path, MSAA counts, odd widths and [Full pixel](ARCHITECTURE.md#terms)
   (`rd_fog_selftest*`; the local read's first under `ICO_RD_FOG_PATH=local`,
