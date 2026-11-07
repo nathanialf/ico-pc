@@ -380,7 +380,12 @@ A change takes effect the next time you start the game.
   column. Cross changes the one you are on, Square clears it, and the
   **Reset to defaults** row puts everything back. Giving a button to
   another action swaps the two. In the menus the gamepad's face buttons and
-  d-pad always go by position.
+  d-pad always go by position. On the discs that have hints (not the North
+  American disc or the two 2001 previews) the last action is **Ask Yorda for a
+  hint**. It has no button or key until you give it one. Press it while a
+  hint is waiting in a room and Yorda gives it at once, instead of after her
+  usual wait. It does nothing in a room with no hint waiting, or with No hints
+  on.
 - **Button configuration** opens the game's own screen for choosing which
   button does what. It applies on top of Remap controls. Pause menu only.
 - **Vibration** is On or Off, as the game's own setting. Pause menu only.
@@ -901,8 +906,9 @@ game even after you turn it off, until you go back to the title screen. A
 game you save in that time keeps them off when you load it again, until
 you start a New Game.
 
-With Developer mode on, three more rows show up under it on the same page:
-two for people who make packs, and the game's own debug menu:
+With Developer mode on, four more rows show up under it on the same page:
+two for people who make packs, the game's own debug menu, and a way to move
+Ico about freely:
 
 - **Dump textures** saves every texture as a picture file when the game
   loads it. [More](TEXTURE_PACKS.md#make-a-texture-pack).
@@ -915,6 +921,12 @@ two for people who make packs, and the game's own debug menu:
   Switches achievements off. The June 2001 magazine demo has no Debug menu
   row: the demo's debug menu is not right for it (it is the August 2001
   preview's).
+- **Free movement** is Off or On. On, pressing L2 (Z on the keyboard) hands
+  Ico to the sticks, as the people who built the game moved him about to test
+  it: the left stick moves him over the ground, the right stick moves him up
+  and down, L3 (V on the keyboard) sets him on the floor under him, and
+  letting go of L2 after that gives him back. Switches achievements off while
+  it is On. It works on every disc, and only while Developer mode is On.
 
 ## The pause menu's journey panel
 
