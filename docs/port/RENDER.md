@@ -1230,8 +1230,8 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
 | `uintViewWork`, `uintViewScene` | on where the backend has the view | off (`RhiLimits.uintView` false on D3D12) | off | off | off | off | off |
 | `carefulSet` | off | off | off | off | off | off | off |
-| the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | off (the pictures between two ticks shook on a PowerVR phone; `[dev] vu_prepass = true` turns it on) | off | off | off | off |
-| dynamic state (`[dev] dynamic_state`) | on where offered | none | off (the same phone; `[dev] dynamic_state = true` turns it on) | off | off | off | off |
+| the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | on (issue 179); off for the run when the start-up self-test's four replays fail ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) | on, the same | on, the same | on, the same | on, the same; off on an Apple A9 or A10 (32 bytes of colour targets a pixel) |
+| dynamic state (`[dev] dynamic_state`) | on where offered | none | off (the PowerVR phone whose pictures shook; `[dev] dynamic_state = true` turns it on) | off | off | off | off |
 | `alphaPlan` (`[dev] alpha_plan`) | on | on | on | on | on | on | on |
 | `fxPlan` (`[dev] fx_plan`) | on | on | on | on | on | on | on |
 | `fxDstLocal` (`[dev] fx_dst_local`) | on (probe) | off | on where local read is offered | same | same | same | same |

@@ -4,8 +4,14 @@
  *   rd_vuprepass_selftest_test <on|off|notrun> [plain]
  *
  * <mode> what the self-test must leave: on (it passed), off (it failed:
- * ICO_RD_VU_PREPASS_SABOTAGE=1, tri or ticks) or notrun (the pre-pass
- * already off: ICO_RD_VU_PREPASS=0).  On the backend ICO_RHI_BACKEND names
+ * ICO_RD_VU_PREPASS_SABOTAGE=1, tri, ticks or stale) or notrun (the
+ * pre-pass already off: ICO_RD_VU_PREPASS=0).  stale leaves the record's
+ * copies out from the self-test's second replay on: the v0.10.x self-test
+ * replayed its frame once, in which the record is always fresh, and
+ * passed it; the four moved replays across both frame slots read from
+ * replay 2 on what an earlier replay left in the slot's buffer (or nothing)
+ * and fail it (the log line's replay index, test/rd_vuprepass_selftest.cmake's
+ * LINE).  On the backend ICO_RHI_BACKEND names
  * (Vulkan by default; Direct3D 11 on WARP in CI, tools/ci_d3d11_warp.sh;
  * 77 without a device),
  * at a wide scaled scene (the Enhanced preset, 16:9, Full pixel, scale 2)

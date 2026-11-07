@@ -1811,15 +1811,22 @@ if(ICO_RUN_TESTS)
     endif()
     # the VU vertex pre-pass's self-test (rd_vuprepass_selftest.c): on
     # lavapipe the pre-pass draws the self-test's meshes byte for byte as
-    # the programs' entries do and stays on, in the extended variant (a wide
-    # scaled scene) and the plain one (Original at 4:3 and 1x); with its
-    # first command's records drawn a texel off (ICO_RD_VU_PREPASS_SABOTAGE,
-    # a driver whose record goes wrong) the pictures differ and it is
-    # turned off before the set; with it off by the settings
-    # (ICO_RD_VU_PREPASS=0) nothing runs
+    # the programs' entries do, over its four moved replays in both frame
+    # slots, and stays on, in the extended variant (a wide scaled scene)
+    # and the plain one (Original at 4:3 and 1x); with its first command's
+    # records drawn a texel off (ICO_RD_VU_PREPASS_SABOTAGE, a driver whose
+    # record goes wrong) the pictures differ and it is turned off before the
+    # set; with it off by the settings (ICO_RD_VU_PREPASS=0) nothing runs
     set(_vst "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vuprepass_selftest.cmake")
-    set(_vst_on "on \\(self-test: prelit, lit, skin(, the tick cameras)? and particles byte for byte, [0-9]+ vertices and 4 sprites in [0-9]+ pre-pass draws \\(2 passes, [0-9]+ triangle slots\\), [0-9]+ of [0-9]+ pixels drawn\\) on SCENE [0-9]+x[0-9]+ at [0-9]+x[0-9]+ texels in [0-9.]+ ms")
-    set(_vst_off "off \\(self-test: the pictures differ: [0-9]+ of [0-9]+ bytes, the first at texel [0-9]+,[0-9]+: [0-9,]+ want [0-9,]+\\) on SCENE")
+    set(_vst_on "on \\(self-test: prelit, lit, skin(, the tick cameras)? and particles byte for byte over 4 replays in both frame slots, [0-9]+ vertices and 4 sprites in [0-9]+ pre-pass draws \\(2 passes, [0-9]+ triangle slots\\), [0-9]+ of [0-9]+ pixels drawn\\) on SCENE [0-9]+x[0-9]+ at [0-9]+x[0-9]+ texels in [0-9.]+ ms")
+    set(_vst_off "off \\(self-test: the pictures differ: in replay [1-4] of 4 \\(frame slot [01]\\), [0-9]+ of [0-9]+ bytes, the first at texel [0-9]+,[0-9]+: [0-9,]+ want [0-9,]+\\) on SCENE")
+    # a stale record (ICO_RD_VU_PREPASS_SABOTAGE=stale: the record's copies
+    # left out from the second replay on, so a replay reads what an earlier
+    # one left in its frame slot's buffer): the pictures differ from replay
+    # 2 on, never in replay 1.  The self-test of v0.10.x replayed the frame
+    # once (replay 1 alone) and passed this sabotage: only the moved replays
+    # across both frame slots see a record that straddles two pictures
+    set(_vst_stale "off \\(self-test: the pictures differ: in replay [2-4] of 4 \\(frame slot [01]\\), [0-9]+ of [0-9]+ bytes, the first at texel [0-9]+,[0-9]+: [0-9,]+ want [0-9,]+\\) on SCENE")
     add_test(NAME rd_vuprepass_selftest
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}" -P "${_vst}")
@@ -1833,6 +1840,11 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vuprepass_selftest_off
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test>
                      -DMODE=notrun "-DLINE=off \\(self-test not run\\)" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_sabotage_straddle
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=off
+                     "-DLINE=${_vst_stale}"
+                     "-DEXTRA=rd: VU pre-pass: ICO_RD_VU_PREPASS_SABOTAGE: in the self-test the record's copies"
+                     -P "${_vst}")
     # the same with the pre-pass's draws one an entry and stage
     # (ICO_RD_VU_PREPASS_BATCH=0: the vu_X_pre_vs builds, as before the
     # batches; rd_replay_vu.c vuPrepassRun)
@@ -1847,7 +1859,8 @@ if(ICO_RUN_TESTS)
                      "-DLINE=${_vst_on}" -P "${_vst}")
     set(_vst_tests rd_vuprepass_selftest rd_vuprepass_selftest_plain
                    rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off
-                   rd_vuprepass_selftest_unbatched rd_vuprepass_selftest_unmerged)
+                   rd_vuprepass_selftest_unbatched rd_vuprepass_selftest_unmerged
+                   rd_vuprepass_selftest_sabotage_straddle)
     set_tests_properties(${_vst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     if(_env)
         set_tests_properties(rd_vuprepass_selftest rd_vuprepass_selftest_plain
@@ -1855,6 +1868,8 @@ if(ICO_RUN_TESTS)
     endif()
     set_tests_properties(rd_vuprepass_selftest_sabotage
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_SABOTAGE=1")
+    set_tests_properties(rd_vuprepass_selftest_sabotage_straddle
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_SABOTAGE=stale")
     set_tests_properties(rd_vuprepass_selftest_unbatched
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS_BATCH=0")
     set_tests_properties(rd_vuprepass_selftest_unmerged
@@ -2078,6 +2093,50 @@ if(ICO_RUN_TESTS)
     list(APPEND _ico_mali_tests ${rd_mesh_mali_SHARDS})
     set_tests_properties(${_ico_mali_tests} PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_ml}"
                                                        ENVIRONMENT "${_env_mali}")
+    # issue 179: the VU vertex pre-pass on a phone's limits, as every
+    # tile-based GPU takes it since v0.11.0 (rd_replay_vu.c
+    # rd__vu_prepass_init; ICO_RD_VU_PREPASS=1 as the phone's [dev]
+    # vu_prepass = true would export it).  rd_vuprepass_selftest_mali: the
+    # start-up self-test passes over its four replays under synchronisation
+    # validation with the submit-time checks (a hazard between two lists of
+    # the record's copies and reads: the open barrier's job across lists);
+    # _mali_sabotage_straddle: a stale record fails it from replay 2 on;
+    # _mali_vk11: the same self-test through VkRenderPass objects (the
+    # legacy render passes of a Vulkan 1.1 phone without dynamic rendering
+    # and without dynamic state, ICO_VK_FAKE_API=1.1 and
+    # ICO_VK_FAKE_NO_DYNAMIC=1, vk_device.c, vk_renderpass.c).
+    # rd_pixel_mali_prepass: rd_pixel's frames and expectations, byte for
+    # byte, under the same limits with the pre-pass asked for (its own
+    # folder: rd_pixel_mali writes in mali/)
+    set(_env_mali_pre ${_env_mali} "ICO_RD_VU_PREPASS=1")
+    if(_env)
+        list(APPEND _env_mali_pre "VK_KHRONOS_VALIDATION_SYNCVAL_SUBMIT_TIME_VALIDATION=true")
+    endif()
+    add_test(NAME rd_vuprepass_selftest_mali
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_mali_sabotage_straddle
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=off
+                     "-DLINE=${_vst_stale}"
+                     "-DEXTRA=rd: VU pre-pass: ICO_RD_VU_PREPASS_SABOTAGE: in the self-test the record's copies"
+                     -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_mali_vk11
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}" -P "${_vst}")
+    set_tests_properties(rd_vuprepass_selftest_mali rd_vuprepass_selftest_mali_sabotage_straddle
+                         rd_vuprepass_selftest_mali_vk11
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+    set_tests_properties(rd_vuprepass_selftest_mali PROPERTIES ENVIRONMENT "${_env_mali_pre}")
+    set_tests_properties(rd_vuprepass_selftest_mali_sabotage_straddle
+                         PROPERTIES ENVIRONMENT "${_env_mali_pre};ICO_RD_VU_PREPASS_SABOTAGE=stale")
+    set_tests_properties(
+        rd_vuprepass_selftest_mali_vk11
+        PROPERTIES ENVIRONMENT "${_env_mali_pre};ICO_VK_FAKE_API=1.1;ICO_VK_FAKE_NO_DYNAMIC=1")
+    set(_mlp "${CMAKE_CURRENT_BINARY_DIR}/mali_prepass")
+    file(MAKE_DIRECTORY "${_mlp}")
+    add_test(NAME rd_pixel_mali_prepass COMMAND rd_pixel_test "${_mlp}")
+    set_tests_properties(rd_pixel_mali_prepass PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY
+                                                          "${_mlp}" ENVIRONMENT "${_env_mali_pre}")
     # the same tests and expectations at the limits every Vulkan device is
     # required to meet (ICO_VK_FAKE_LIMITS=min, vk_device.c: 256-byte offset
     # alignment, 2^27-byte storage ranges, 4096-texel images), where phone
@@ -3363,7 +3422,7 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         rd_vuprepass_selftest rd_vuprepass_selftest_plain
         rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off rd_vuprepass_selftest_ticks
         rd_vuprepass_selftest_sabotage_tri rd_vuprepass_selftest_unbatched
-        rd_vuprepass_selftest_unmerged
+        rd_vuprepass_selftest_unmerged rd_vuprepass_selftest_sabotage_straddle
         # the scene draws' visibility test against every draw replayed, byte for
         # byte on OpenGL too (rd_cull_ab.cmake: the tool takes ICO_RHI_BACKEND)
         rd_cull_ab)

@@ -1897,7 +1897,11 @@ static bool vuStageDraw(const VuPre *e, IcoVuCB *vcb, uint64_t dOff, const RdPip
 /* one of the two passes into the record's textures, rows [row0, row0 +
  * rows): begun on the targets (load DONT_CARE: the rows before row0 were
  * copied already), the shaders' mapping the slot buffer's rows (vu_common.hlsli
- * vu_rec_point_out), the scissor the rows drawn */
+ * vu_rec_point_out), the scissor the rows drawn.  The render area is the
+ * pass's own rows (rhi.h RhiRenderPassDesc.area): pass T's starts at row0,
+ * so a tile-based GPU neither loads nor stores pass V's rows again (their
+ * DONT_CARE contents would be written back as garbage; they are in the
+ * buffer already, and no copy reads them from the textures after) */
 static void vuRecPassBegin(uint32_t row0, uint32_t rows)
 {
     for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
@@ -1913,6 +1917,7 @@ static void vuRecPassBegin(uint32_t row0, uint32_t rows)
     rp.colorCount = ICO_VU_REC_PLANES;
     rp.width = ICO_VU_REC_W;
     rp.height = row0 + rows;
+    rp.area = (RhiRect){0, (int32_t)row0, ICO_VU_REC_W, rows};
     rhi_cmd_begin_render_pass(rd__replay_cl(), &rp);
     const RhiViewport vp = {0.0f, 0.0f, (float)ICO_VU_REC_W, (float)s_recBufRows[rd__ring_slot()],
                             0.0f, 1.0f};
@@ -2428,7 +2433,7 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         vertDraws++;
         draws++;
     }
-    vuRecPassCopy(0, usedV, muted);
+    vuRecPassCopy(0, usedV, muted || s_preSabotage == RD_VU_SABOTAGE_STALE);
     passes++;
     /* 5. pass T over the vertex records in the buffer: per mesh or grid
      * command the rule stage (slot A), the tick stage under the masks R and
@@ -2532,7 +2537,7 @@ static void vuPrepassRun(const RdFrame *f, int keep)
             draws += 2;
             triSlots += vuPreTSlots(e);
         }
-        vuRecPassCopy(rowsV, usedT, muted);
+        vuRecPassCopy(rowsV, usedT, muted || s_preSabotage == RD_VU_SABOTAGE_STALE);
         passes++;
     }
     g_rd.passSamples = samples;
@@ -2821,6 +2826,15 @@ static void vuMergeInit(void)
                         : "the fuse off with the merge");
 }
 
+/* On or off for the run, before the start-up self-test judges the device
+ * (rd_vuprepass_selftest.c: four replays across both frame slots, each
+ * against its own reference; a failure turns it off there).  A tile-based
+ * GPU takes it like any other since v0.11.0: v0.10.x kept it off there
+ * after a PowerVR phone's pictures shook between two ticks through the
+ * record, a blanket rule placed in front of the self-test, which never
+ * judged that phone; reading and synchronisation validation find no rule
+ * the record's passes, copies and reads break (issue 179: a Mali phone
+ * drew 9 vertex shader invocations a triangle without it). */
 void rd__vu_prepass_init(const RhiLimits *lim)
 {
     g_rd.vuPrepassWhy[0] = '\0';
@@ -2831,16 +2845,6 @@ void rd__vu_prepass_init(const RhiLimits *lim)
     } else if (env && strcmp(env, "0") == 0) {
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "by the settings ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0)");
-    } else if (lim != NULL && lim->tiler && !(env && strcmp(env, "1") == 0)) {
-        /* a PowerVR phone's pictures shook between two ticks through the
-         * record path and were steady through the programs' entries (the
-         * replay is byte-identical on lavapipe both ways, so it is the
-         * device's side: a visibility between the record's copies and the
-         * stages' reads, not found yet); the programs' entries draw there
-         * until it is */
-        snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
-                 "on a tile-based GPU (the pictures between two ticks shook through it on a "
-                 "PowerVR phone; [dev] vu_prepass = true turns it on)");
     } else if (bytes != 0u && bytes < ICO_VU_REC_BYTES) {
         /* an Apple A9 or A10 GPU under MoltenVK (rhi_metal_color_bytes);
          * Direct3D 11 reports 0 since v0.10.0 (its record copies are a

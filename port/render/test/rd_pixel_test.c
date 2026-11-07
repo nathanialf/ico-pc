@@ -187,8 +187,8 @@
  *            mode; the tile-based GPU's set, the pre-pass off and every
  *            state static at a fractional Enhanced scale, both blends,
  *            under it and inside the RHI's pipeline pool less its
- *            headroom); a triangle pass with the planes (rd__plane_pass)
- *            takes the planes build of both shaders (sprite_plane_*_vs
+ *            headroom, and smaller with the pre-pass on); a triangle
+ *            pass with the planes (rd__plane_pass) takes the planes build of both shaders (sprite_plane_*_vs
  *            with sprite_ps_planes, sprite_texa_ps_planes or
  *            sprite_stq_ps_planes), enumerated, with their twins listed
  *
@@ -3849,8 +3849,19 @@ static void testPipelines(void)
         g_rd.sceneSy = 2.41071f;
         rd_set_no_dual(false);
         const uint32_t nT = rd__enumerate_reachable(keysT, RD_PIPELINE_REACHABLE_MAX);
+        uint32_t famOff[RD_KF_COUNT], famOn[RD_KF_COUNT];
+        (void)rd__pipe_family_counts(keysT, nT, RD_PIPELINE_REACHABLE_MAX, famOff);
         rd_set_no_dual(true);
         const uint32_t nTNd = rd__enumerate_reachable(keysT, RD_PIPELINE_REACHABLE_MAX);
+        /* issue 179: the same device with the pre-pass on, its default
+           since v0.11.0 (the set above is its fallback after a failed
+           self-test): the main shaders' keys, the ten pre-pass entries' and
+           the five stages' in place of the program entries' */
+        rd__set_vu_prepass(true);
+        const uint32_t nTOnNd = rd__enumerate_reachable(keysT, RD_PIPELINE_REACHABLE_MAX);
+        rd_set_no_dual(false);
+        const uint32_t nTOn = rd__enumerate_reachable(keysT, RD_PIPELINE_REACHABLE_MAX);
+        (void)rd__pipe_family_counts(keysT, nTOn, RD_PIPELINE_REACHABLE_MAX, famOn);
         rd_set_no_dual(was);
         g_rd.profile = keepProfile;
         g_rd.dynDepth = keepD;
@@ -3872,6 +3883,14 @@ static void testPipelines(void)
                   nTNd <= RHI_PIPELINE_POOL_MAX - RHI_PIPELINE_POOL_HEADROOM,
               "the tile-based GPU's set %u (%u) past the pool's %d less its headroom %d", nT, nTNd,
               RHI_PIPELINE_POOL_MAX, RHI_PIPELINE_POOL_HEADROOM);
+        printf("  pipelines: the same with the pre-pass on: %u, %u with the two-pass fallback; "
+               "VU %u and VU point %u keys (pre-pass off: VU %u, VU point %u)\n",
+               nTOn, nTOnNd, famOn[RD_KF_VU], famOn[RD_KF_VU_POINT], famOff[RD_KF_VU],
+               famOff[RD_KF_VU_POINT]);
+        CHECK(nTOn < nT && nTOnNd < nTNd && famOn[RD_KF_VU] < famOff[RD_KF_VU],
+              "the tile-based GPU's set with the pre-pass %u (%u), VU %u: not below the set "
+              "without it %u (%u), VU %u",
+              nTOn, nTOnNd, famOn[RD_KF_VU], nT, nTNd, famOff[RD_KF_VU]);
     }
     /* 347 with the triangle commands' plane shaders (rd_screen_planes.c),
      * a second vertex shader for each triangle pass (250 without them);

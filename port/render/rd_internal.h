@@ -2366,8 +2366,14 @@ void rd__glow_fold_readback(uint32_t id);
  * mode is not RD_VU_SABOTAGE_OFF: VERTEX the first mesh or grid command's
  * vertex records drawn one texel past where the main shader reads them,
  * TRI its triangles' slot A one slot past, TICKS every tick stage's tick 1
- * tested at tick 0's camera */
-enum { RD_VU_SABOTAGE_OFF, RD_VU_SABOTAGE_VERTEX, RD_VU_SABOTAGE_TRI, RD_VU_SABOTAGE_TICKS };
+ * tested at tick 0's camera, STALE the record's copies left out */
+enum {
+    RD_VU_SABOTAGE_OFF,
+    RD_VU_SABOTAGE_VERTEX,
+    RD_VU_SABOTAGE_TRI,
+    RD_VU_SABOTAGE_TICKS,
+    RD_VU_SABOTAGE_STALE
+};
 
 void rd__vu_prepass_sabotage(int mode);
 RdPipeKeyInt rd__vu_pre_key(uint8_t preVs);

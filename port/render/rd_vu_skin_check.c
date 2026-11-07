@@ -1199,8 +1199,9 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
         return;
     }
     const uint32_t slot = rd__ring_slot();
-    /* a draw through the VU pre-pass's record (vu_main_vs: a desktop device;
-     * off on the tile-based GPUs) reads the record, not its bones: its twins
+    /* a draw through the VU pre-pass's record (vu_main_vs: every device whose
+     * self-test passed, tile-based GPUs too since v0.11.0) reads the
+     * record, not its bones: its twins
      * would read the same record whatever the bone offset, so they go
      * through the program's own entry, which reads the bones at b3 and
      * ignores the record (rd_replay_vu.c vuDraw's fallback key) */
