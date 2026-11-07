@@ -153,7 +153,7 @@ the box check's pipeline (the key without the destination read, colour mask 0, Z
 compiled in the background; until it exists the twin is not drawn and counted as such). No twin in
 a storage, DATE, stencil or multisampled pass, nor for a draw through a merge build's table (it
 reads its bones through the table, not the b3 offset). A draw through the VU pre-pass's record
-(`vu_main_vs`: a desktop device; the pre-pass is off on the tile-based GPUs) reads the record, not
+(`vu_main_vs`: every device whose pre-pass self-test passed, tile-based GPUs too) reads the record, not
 its bones, so twins through its own key would read the same record at either offset and never
 differ: its twins go through the program's own vertex entry (the key `vuDraw`'s fallback takes,
 which reads the bones at b3 and ignores the record) in the box check's form, and the line says
@@ -358,7 +358,7 @@ device) from the qword `vuSource` puts in `IcoVuCB.mark[3]`. The same words are 
 (`rd_vu_bones_ring_ab`: every picture byte for byte; `vu1_test`: probe and pictures as the plain
 variant's). A skinned draw whose block t5 does not hold whole is not drawn (counted, said once:
 `rd: VU bones: a skinned draw's bone block (ring offset O) lies past what t5 holds: not drawn ...`).
-With the vertex pre-pass on (not on a tile-based GPU) the pre-pass's own entries still read
+With the vertex pre-pass on (every device whose self-test passed, tile-based GPUs too) the pre-pass's own entries still read
 VuBoneCB. Column 3 and twin C test the fix beside the picture before it is switched in.
 
 **Step 2, `TU_DEBUG=nobin`, at the next start** (the driver library is loaded once a process: a
@@ -455,7 +455,7 @@ see a fault that reads both offsets alike (a wrong read whatever the address: th
 says that one), a fault in a draw's second pass (the no-dual pair: the twins redraw the first), a
 draw with Z writes that reads its attachment (twinned through the box pipeline, not its own), or
 the pre-pass record's own path (under the vertex pre-pass the twins read the bones through the
-program's entry, not the record the draw read; the pre-pass is off on the tile-based GPUs). Where
+program's entry, not the record the draw read; tile-based GPUs draw through the record too). Where
 the device does not offer precise occlusion counts the twins compare only zero against not zero
 (the start line says `zero or not only`): a fault that drops part of a draw that still draws
 something (the missing shin) is then invisible to them, and the probe alone sees it. What the check as a whole cannot see: it compares the device with the CPU over the same stream and bytes, so

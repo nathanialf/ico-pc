@@ -301,7 +301,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `rd_vuprepass_selftest_unbatched` sets (the self-test one draw an entry and stage). The draw
   merge is on (`g_rd.vuMerge`, the summary's `VU merge on`) unless `ICO_RD_VU_MERGE=0`, which
   `rd_vuprepass_selftest_unmerged` sets (both sides of the self-test's comparison one GPU draw a VU
-  draw), or on Direct3D 11.
+  draw), or on Direct3D 11. The self-test replays its frame four times, moved each time, across
+  both frame slots; the passing line says `over 4 replays in both frame slots` and a failing one
+  names the replay. `rd_vuprepass_selftest_sabotage_straddle` (`ICO_RD_VU_PREPASS_SABOTAGE=stale`:
+  the record's copies left out from the second replay on) must fail in replay 2, 3 or 4, never 1:
+  a self-test of one replay passes that sabotage, so the test shows the four replays see a record
+  that straddles two pictures. Issue 179's phone form: `rd_vuprepass_selftest_mali`
+  (`ICO_VK_FAKE_LIMITS=mali`, `ICO_RD_VU_PREPASS=1`, synchronisation validation with its
+  submit-time checks), `rd_vuprepass_selftest_mali_sabotage_straddle`, and
+  `rd_vuprepass_selftest_mali_vk11` (the same through VkRenderPass objects and all-static
+  pipelines: `ICO_VK_FAKE_API=1.1`, `ICO_VK_FAKE_NO_DYNAMIC=1`); `rd_pixel_mali_prepass` runs
+  `rd_pixel_test` under the same limits with the pre-pass asked for, its expectations unchanged.
 - `rd_vu_skin_check_test.c` with `rd_vu_skin_check.cmake`: the skinned draws' bone-block check
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)). `judge` (no device): a case of 60 bones and 120 vertices
   through `vu1_ref`, the CPU's positions as the probe all right; one vertex on address 200 moved to
@@ -394,7 +404,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `rd_vustage_ab`.
 - `rd_vumerge_ab.cmake`: the same dumps twice, every VU draw a GPU draw of its own
   (`ICO_RD_VU_MERGE=0`) and with the draw merge, through the record and through the programs' own
-  entries (`ICO_RD_VU_PREPASS=0`, the tile-based GPUs' path), at Original 4:3 1x, Enhanced 4:3 2x
+  entries (`ICO_RD_VU_PREPASS=0`, the path after a failed self-test), at Original 4:3 1x, Enhanced 4:3 2x
   and Enhanced 16:9 2x under `ICO_RD_BLEND=fixed`: every named target's PNG byte for byte, `merge
   off` with nothing merged against `merge on`, the merged run's GPU draws (the first stats line's)
   exactly the other's less what its runs joined (K less G of the `VU merge` line), and fewer over

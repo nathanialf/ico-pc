@@ -6,8 +6,9 @@
 # dump of DUMPS that is here, rd_replay_tool --pass-dump with [dev] vu_bones
 # unset (ICO_RD_VU_BONES=cbuffer) and = ring, the program entries the plain
 # set (ICO_RD_VU_SET=plain, the Turnip profile's; the ring builds are plain
-# variants) and the VU pre-pass off (as on a tile-based GPU: every skinned
-# draw through its program's entry), the skin check off (its own draws are
+# variants) and the VU pre-pass off (as on a tile-based GPU before v0.11.0
+# and after a failed self-test: every skinned draw through its program's
+# entry), the skin check off (its own draws are
 # not the subject here), at two settings:
 #   plain   Original at the dump's aspect, presented at 640x480;
 #   attach  the same with the attachment read and GS state as shader data

@@ -3558,8 +3558,9 @@ bool rd__vu_policy_init(const RhiLimits *lim)
     /* PC port: which set the program entries (and the draw merge's builds,
      * rd_replay_vu.c vuMergeInit) take and why, first (issues 163/164) */
     rd__log("VU shaders: %s%s%s: the program entries (largest %s %u words) and the mesh and grid "
-            "draws' merge builds of the same set%s; the record path's modules on every device "
-            "(largest %s %u words), in the start-up set only with the vertex pre-pass off",
+            "draws' merge builds of the same set%s, in the start-up set only with the vertex "
+            "pre-pass off; the record path's modules on every device (largest %s %u words), in "
+            "the start-up set only with it on",
             kind, plain ? " " : "", plain ? g_rd.vuPlainWhy : "", fn, fw,
             plain ? " (no wide-screen rule and no tick cameras on those draws)" : "", mn, mw);
     /* the region rule's mode (rd_replay_vu.c vuSource; a report shows which

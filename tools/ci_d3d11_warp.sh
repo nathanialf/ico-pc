@@ -212,8 +212,8 @@ run() {
         # batches (vu_X_batch_pre_vs, FXC's first compile of them) and one
         # an entry (vu_X_pre_vs), and off when its first command's records
         # are drawn a texel off (the failure path a player's driver takes)
-        local vst_on='on \(self-test: prelit, lit, skin(, the tick cameras)? and particles byte for byte, [0-9]+ vertices and 4 sprites in [0-9]+ pre-pass draws \(2 passes, [0-9]+ triangle slots\), [0-9]+ of [0-9]+ pixels drawn\) on SCENE [0-9]+x[0-9]+ at [0-9]+x[0-9]+ texels in [0-9.]+ ms'
-        local vst_off='off \(self-test: the pictures differ: [0-9]+ of [0-9]+ bytes, the first at texel [0-9]+,[0-9]+: [0-9,]+ want [0-9,]+\) on SCENE'
+        local vst_on='on \(self-test: prelit, lit, skin(, the tick cameras)? and particles byte for byte over 4 replays in both frame slots, [0-9]+ vertices and 4 sprites in [0-9]+ pre-pass draws \(2 passes, [0-9]+ triangle slots\), [0-9]+ of [0-9]+ pixels drawn\) on SCENE [0-9]+x[0-9]+ at [0-9]+x[0-9]+ texels in [0-9.]+ ms'
+        local vst_off='off \(self-test: the pictures differ: in replay [1-4] of 4 \(frame slot [01]\), [0-9]+ of [0-9]+ bytes, the first at texel [0-9]+,[0-9]+: [0-9,]+ want [0-9,]+\) on SCENE'
         local vst_script
         vst_script="$(winpath "$SRC/port/render/test/rd_vuprepass_selftest.cmake")"
         run_test rd_vuprepass_selftest "$CMAKE_BIN" "-DTOOL=$W/rd_vuprepass_selftest_test.exe" \

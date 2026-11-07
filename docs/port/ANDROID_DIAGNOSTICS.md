@@ -110,8 +110,28 @@ question it decides:
   R^2 (0.7 and over) with a large slope says the vertex work sets list 0's time: on a tiler with
   the VU pre-pass off each triangle shades 9 vertex invocations (the VU line's words), so the
   pre-pass (each vertex once) would cut most of it; a low R^2 or a small slope says it would not.
-  Decides the VU pre-pass default on Mali (held back this release). The fit needs 3 timed replays with
+  Issue 179's log decided it (9 invocations a triangle, the span following the vertex
+  invocations): tile-based GPUs take the pre-pass (below). The fit needs 3 timed replays with
   different triangle counts; with fewer the mean alone (`(2 replays)`).
+- **The VU pre-pass's verdict** (start lines; [PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
+  A tile-based GPU takes the pre-pass as any other device, and the start-up self-test judges
+  it. Read, in order: `rd: VU pre-pass: on: each mesh and grid vertex and triangle
+  and each sprite evaluated once before the lists ...` (the device and the settings allow it; `off
+  by the settings ...` or `off on this device (its colour targets hold 32 bytes ...)` say why not);
+  then the self-test's `rd: VU pre-pass: on (self-test: ... byte for byte over 4 replays in both
+  frame slots, ...) ... in <t> ms` or `rd: VU pre-pass: off (self-test: <reason>) ...`, the reason
+  naming the first replay that differed, its frame slot, its first differing texel and the colour
+  it drew against the one it should have (`the pictures differ: in replay 2 of 4 (frame slot 1),
+  ...`: a record read stale or across two pictures differs from replay 2 on; replay 1 says the
+  record is wrong within one picture), or `a pipeline could not be made (replay <k> of 4: ...)`;
+  the summary line repeats it (`VU pre-pass on (self-test: ok)`). In play: `rd: VU pre-pass: the
+  record holds N slots (R rows, K KB a frame slot)` each time the record grows (the scene's
+  memory for it, twice: one a frame slot), the 10 s `window: VU: ...` line's `(pre-pass: each
+  vertex once)` in place of `(pre-pass off: 9 a triangle)`, and the per-replay line's `VU pre-pass
+  N vertices in N draws (F draws the old way)`: F above 0 in a scene says commands left the record
+  (past its 1,024 rows, a missing pipeline, a state mismatch; each logged once as `rd: VU pre-pass:
+  ...`). Decides whether the record path draws the Mali's scenes, and at what cost (the VU line's
+  slope and the span against issue 179's log of 9 a triangle).
 - **Images in use** (the 10 s first line's `present mailbox (images: 10, in use 1)`;
   `RhiStats.swapAcquired`, Vulkan only). The swapchain's images and those the game holds
   (acquired, not yet presented) as the block ends; while the render thread is busy, the count at
