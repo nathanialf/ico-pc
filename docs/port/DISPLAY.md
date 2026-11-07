@@ -1766,7 +1766,7 @@ The step comes after the window's reduce: a picture with more texels than the bo
 one-texel-a-pixel window of `snapWindow`) or a mixed case (more across, fewer down) the plain
 blit. Never under the CRT filter (it draws its own box from the PS2's pixels) and never at the
 `window` resolution (`rd__fsr1_apply`, from `rd__apply_display`). Off (or `RD_UPSCALE_FSR3`, the
-temporal upscaler's value, not offered yet) nothing here runs and the present is the one
+temporal upscaler's value, [below](#fsr-31-upscaling)) nothing here runs and the present is the one
 without the row byte for byte.
 
 **The sharpness.** `RdSettings.upscaleSharpness` (Options > Picture > Sharpness, 0..100 in tens,
@@ -1819,7 +1819,7 @@ with a sub-pixel jitter a present (Halton (2, 3) at index % FSR's phase count,
 ([RENDER.md](RENDER.md), "Velocity") go to FSR 3.1 at the upscale point, after the whole post
 chain, where the game's reduction first reads SCENE ([RENDER.md](RENDER.md), "The upscale
 point"), and FSR writes UPSCALED at the display scale from the jittered pictures it has
-accumulated; the reduction reads UPSCALED in SCENE's place. **Native AA (ratio 1.0) is the honest
+accumulated; the reduction reads UPSCALED in SCENE's place. **Native AA (ratio 1.0) is the
 default**: the scene at the Resolution row's own scale, FSR as a temporal anti-aliasing of it. The
 other qualities draw the scene smaller and rebuild it; this game's 512x448 picture costs little to
 draw, so they buy little time and cost sharpness. MSAA and supersampling are off while it runs
@@ -1902,8 +1902,8 @@ the UI and film noise after the upscaler, a reactive mask from the particle draw
 
 ### The render and display scales
 
-A temporal upscaler (issue 99; in this release only the developer's stand-in, `[dev]
-upscale_test = true` or `rd_replay_tool --upscale-test [R]`, which upscales bilinearly) draws the
+A temporal upscaler (FSR 3.1, [above](#fsr-31-upscaling); the developer's stand-in, `[dev]
+upscale_test = true` or `rd_replay_tool --upscale-test [R]`, upscales bilinearly) draws the
 scene below the picture's size and upscales it where the game's reduction reads it
 ([RENDER.md](RENDER.md#the-upscale-point)). While one is asked and the CRT filter is off,
 `rd__apply_display` splits the scale in two (`port/render/rd_present.c` (`rd__apply_display`),

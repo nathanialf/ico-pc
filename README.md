@@ -276,6 +276,10 @@ the other: see [Can I play more than one disc?](docs/FAQ.md#can-i-play-more-than
   Extras > Export textures** saves the game's own pictures to start from.
 - **Can I turn off the blur or the glow?** Yes, in **Options > Effects**.
   [What each one does](docs/OPTIONS.md#effects).
+- **Does it have FSR or DLSS?** FSR 1.0 and FSR 3.1 (AMD's open upscalers) are in
+  **Options > Picture > Upscaling**, off by default. DLSS and XeSS are not, because
+  the port ships only open-source code.
+  [The answer](docs/FAQ.md#what-are-fsr-10-and-fsr-31-why-is-there-no-dlss-or-xess).
 - **Does Lossless Scaling work?** It should, with **Options > Display >
   Window mode** at **Borderless** or **Windowed**; Windowed is known to
   work. [How to set it up](docs/TROUBLESHOOTING.md#a-program-that-adds-frames-or-scales-the-game-lossless-scaling-does-not-work).

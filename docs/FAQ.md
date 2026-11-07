@@ -209,6 +209,29 @@ would get its own dark lines, and the whole screen would look like a fine
 mesh, a bit like looking through a screen door. So the filter keeps the
 original resolution on purpose. Texture packs still show through it.
 
+## What are FSR 1.0 and FSR 3.1? Why is there no DLSS or XeSS?
+
+Both are on the Picture page, in the **Upscaling** row, and both are off by default, so the picture
+is the one the original game gave. They help when the game draws the picture smaller than your
+screen and has to stretch it.
+
+**FSR 1.0** (AMD's upscaler) looks at the picture it is about to stretch and keeps edges crisp
+instead of blurring them. It works at **Resolution 1x** and after **Downsampling**, on every
+computer and phone, whatever the graphics card.
+
+**FSR 3.1** (AMD's newer upscaler) builds each picture from the pictures before it. **Native AA**
+only smooths edges at your screen's size. **Quality**, **Balanced** and **Performance** draw the
+picture 1.5, 1.7 or 2 times smaller than your screen first and rebuild it, which costs the graphics
+card less. It is offered on Windows and Linux computers that run the game with Vulkan; on a Mac, a
+phone, or the Direct3D and OpenGL renderers the row stays at Off. Things drawn flat on the screen,
+such as the fades, the film grain, sparks and smoke, can leave a faint trail.
+[Details](OPTIONS.md#picture).
+
+DLSS (NVIDIA) and XeSS (Intel) are not offered because this port ships only open-source code. Both
+come as libraries under their makers' own licences, not as source the project can include and build,
+so they are left out on purpose, not for lack of work. FSR 1.0 and FSR 3.1 are published by AMD
+under the MIT licence.
+
 ## How are the movies shown without comb lines?
 
 The movies on the disc are stored the way a TV shows them: each frame is
@@ -456,10 +479,11 @@ there. On a computer you can also close the window.
 
 ## The game wrote an extra file called slow-something.zip
 
-When a cutscene runs slowly, the game may write one extra file in the `logs` folder, once each time
-you start it: `slow-` and the date and time, ending in `.zip`. It holds one picture from the
-cutscene and a copy of the log. If you are reporting that the game runs slowly, please attach it
-with the log. It is safe to delete. To stop the game writing it, set `slow_scene_dump_ms = 0` under
+When a scene runs slowly, the game may write extra files in the `logs` folder: `slow-` and the date
+and time, ending in `.zip`, at most three each time you start it, each one taken from a heavier moment
+than the one before. A file holds one picture from the slow scene and a copy of the log. The game
+keeps the newest three. If you are reporting that the game runs slowly, please attach them with the
+log. They are safe to delete. To stop the game writing them, set `slow_scene_dump_ms = 0` under
 `[dev]` in `config.toml`.
 
 ## Something went wrong. What now?
