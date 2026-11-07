@@ -602,6 +602,11 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_VAL_DOWNSAMPLE_BOX] = "To original size",
     [UI_STR_OPT_DOWNSAMPLE_NOTE] =
         "Draws at the Resolution above, then shrinks to the game's own size. Needs 2x or more; not with the CRT filter or at Window.",
+    [UI_STR_OPT_UPSCALE] = "Upscaling",
+    [UI_STR_VAL_UPSCALE_FSR1] = "FSR 1.0",
+    [UI_STR_OPT_UPSCALE_SHARPNESS] = "Sharpness",
+    [UI_STR_OPT_UPSCALE_NOTE] =
+        "FSR 1.0 (AMD) sharpens the picture when it is drawn smaller than the screen, as at 1x or after Downsampling. Not with the CRT filter or at Window.",
     [UI_STR_AA_OFF] = "Off",
     [UI_STR_AA_SSAA2] = "2x supersampling",
     [UI_STR_AA_SSAA4] = "4x supersampling",

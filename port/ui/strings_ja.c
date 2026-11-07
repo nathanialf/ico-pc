@@ -605,6 +605,11 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_VAL_DOWNSAMPLE_BOX] = "元のサイズへ",
     [UI_STR_OPT_DOWNSAMPLE_NOTE] =
         "上の解像度で描いて元のサイズに縮小します。2x以上で有効。CRTフィルタとウィンドウでは無効。",
+    [UI_STR_OPT_UPSCALE] = "アップスケール",
+    [UI_STR_VAL_UPSCALE_FSR1] = "FSR 1.0",
+    [UI_STR_OPT_UPSCALE_SHARPNESS] = "シャープネス",
+    [UI_STR_OPT_UPSCALE_NOTE] =
+        "画面より小さく描くとき(1xや縮小表示の後など)、FSR 1.0(AMD)で画像を鮮明にします。CRTフィルタとウィンドウでは無効。",
     [UI_STR_AA_OFF] = "オフ",
     [UI_STR_AA_SSAA2] = "2xスーパーサンプリング",
     [UI_STR_AA_SSAA4] = "4xスーパーサンプリング",

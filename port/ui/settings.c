@@ -1887,6 +1887,15 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(o.showFps);
     case UI_OPT_DOWNSAMPLE:
         return ui_str(o.downsample == ICO_DOWNSAMPLE_BOX ? UI_STR_VAL_DOWNSAMPLE_BOX : UI_STR_OFF);
+    case UI_OPT_UPSCALE:
+        return ui_str(o.upscale == ICO_UPSCALE_FSR1 ? UI_STR_VAL_UPSCALE_FSR1 : UI_STR_OFF);
+    case UI_OPT_UPSCALE_SHARPNESS:
+        if (o.upscaleSharpness == ICO_UPSCALE_SHARPNESS_DEFAULT) {
+            snprintf(buf, size, "%d (%s)", o.upscaleSharpness, ui_str(UI_STR_VAL_DEFAULT));
+        } else {
+            snprintf(buf, size, "%d", o.upscaleSharpness);
+        }
+        return buf;
     case UI_OPT_CRT:
         /* [video] crt and crt_mode as one value */
         return ui_str(
@@ -2244,6 +2253,9 @@ static int optShown(int opt, int link)
     if (opt == UI_OPT_EFFECT_MOTION_BLUR_STRENGTH) {
         return ico_video_effect_motion_blur(); /* nothing to weaken with Motion blur Off */
     }
+    if (opt == UI_OPT_UPSCALE_SHARPNESS) {
+        return ico_video_upscale() != ICO_UPSCALE_OFF; /* nothing to sharpen with Upscaling Off */
+    }
     if (opt == UI_OPT_MOUSE_CAMERA || opt == UI_OPT_MOUSE_SENS || opt == UI_OPT_MOUSE_INVERT ||
         opt == UI_OPT_MOUSE_SPEED || opt == UI_OPT_MOUSE_RANGE || opt == UI_OPT_MOUSE_RETURN) {
         return !ico_video_android(); /* no mouse camera on a phone */
@@ -2415,6 +2427,22 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         o.aspect = stepIndex(o.aspect, ICO_ASPECT_COUNT, dir);
         video = 1;
         break;
+    case UI_OPT_UPSCALE:
+        /* Off, FSR 1.0, around (a value of its own, room for more) */
+        o.upscale = stepIndex(o.upscale, ICO_UPSCALE_COUNT, dir);
+        video = 1;
+        break;
+    case UI_OPT_UPSCALE_SHARPNESS: {
+        /* 0 .. 100 in tens, held at both ends */
+        const int v = ico_video_upscale_sharpness_clamp(o.upscaleSharpness +
+                                                        dir * ICO_UPSCALE_SHARPNESS_STEP);
+        if (v == o.upscaleSharpness) {
+            return;
+        }
+        o.upscaleSharpness = v;
+        video = 1;
+        break;
+    }
     case UI_OPT_ANTI_ALIAS: {
         if (aaLocked()) {
             return; /* Off under Original */
@@ -3409,6 +3437,8 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     case UI_PAGE_PICTURE:
         addNote(pg, UI_OPT_ANTI_ALIAS, UI_STR_OPT_AA_NOTE);
         addNote(pg, UI_OPT_DOWNSAMPLE, UI_STR_OPT_DOWNSAMPLE_NOTE);
+        addNote(pg, UI_OPT_UPSCALE, UI_STR_OPT_UPSCALE_NOTE);
+        addNote(pg, UI_OPT_UPSCALE_SHARPNESS, UI_STR_OPT_UPSCALE_NOTE);
         /* one note under the four colour rows (the Graphics driver's pattern) */
         addNote(pg, UI_OPT_TONE_GAMMA, UI_STR_OPT_TONE_NOTE);
         for (int i = 1; i < pg->count; i++) {
@@ -4062,15 +4092,18 @@ static void build(void)
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_BACK};
     /* Picture: the picture's own rows (Brightness is the pause menu's, the
-       Model pack the title's); the Downsampling row goes right after
-       Anti-aliasing */
+       Model pack the title's); Downsampling, Upscaling and Sharpness go
+       right after Anti-aliasing */
     static const int picOpts[] = {
-        UI_OPT_ANTI_ALIAS,   UI_OPT_DOWNSAMPLE,      UI_OPT_FULL_HEIGHT,   UI_OPT_FILTER,
-        UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,      UI_OPT_CRT,           UI_OPT_CRT_STRENGTH,
-        UI_OPT_TONE_GAMMA,   UI_OPT_TONE_BRIGHTNESS, UI_OPT_TONE_CONTRAST, UI_OPT_TONE_SATURATION,
-        UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,      UI_OPT_BACK};
+        UI_OPT_ANTI_ALIAS,    UI_OPT_DOWNSAMPLE,      UI_OPT_UPSCALE,      UI_OPT_UPSCALE_SHARPNESS,
+        UI_OPT_FULL_HEIGHT,   UI_OPT_FILTER,          UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,
+        UI_OPT_CRT,           UI_OPT_CRT_STRENGTH,    UI_OPT_TONE_GAMMA,   UI_OPT_TONE_BRIGHTNESS,
+        UI_OPT_TONE_CONTRAST, UI_OPT_TONE_SATURATION, UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,
+        UI_OPT_BACK};
     static const int picStrs[] = {UI_STR_OPT_AA,
                                   UI_STR_OPT_DOWNSAMPLE,
+                                  UI_STR_OPT_UPSCALE,
+                                  UI_STR_OPT_UPSCALE_SHARPNESS,
                                   UI_STR_OPT_FULL_HEIGHT,
                                   UI_STR_OPT_FILTERING,
                                   UI_STR_OPT_FULL_PIXEL,

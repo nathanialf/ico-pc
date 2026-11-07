@@ -170,18 +170,29 @@ enum {
 /* IcoVideoOptions.downsample: [video] downsample "off" | "box" */
 enum { ICO_DOWNSAMPLE_OFF = 0, ICO_DOWNSAMPLE_BOX = 1, ICO_DOWNSAMPLE_COUNT = 2 };
 
+/* IcoVideoOptions.upscale: [video] upscaling "off" | "fsr1" (issue 99; rd.h
+   RdUpscale's values).  "fsr3", the temporal upscaler, is not in this
+   version: it reads as "off" with a line */
+enum { ICO_UPSCALE_OFF = 0, ICO_UPSCALE_FSR1 = 1, ICO_UPSCALE_COUNT = 2 };
+
+/* [video] upscaling_sharpness: the Sharpness row, 0..100 in tens */
+#define ICO_UPSCALE_SHARPNESS_DEFAULT 80
+#define ICO_UPSCALE_SHARPNESS_STEP 10
+
 typedef struct IcoVideoOptions {
-    int resW, resH; /* resolution "WxH"; 0 x 0 with resScale 0: "window" */
-    int resScale;   /* resolution "Nx": N (1..16); ICO_RES_AUTO: "auto"; 0 otherwise */
-    int aspect;     /* ICO_ASPECT_* */
-    int windowMode; /* ICO_WINDOW_* */
-    int vsync;      /* the swapchain waits for the vertical blank */
-    int filter;     /* ICO_FILTER_* */
-    int fullHeight; /* skip the reduction's vertical halving */
-    int fullPixel;  /* the window's own pixels, no black border (full_pixel above) */
-    int antiAlias;  /* ICO_AA_*, as written (ico_video_anti_alias: the one in force) */
-    int downsample; /* ICO_DOWNSAMPLE_*; outside the preset, as showFps */
-    int framerate;  /* ICO_FRAMERATE_ORIGINAL, _UNCAPPED, or presents a second */
+    int resW, resH;       /* resolution "WxH"; 0 x 0 with resScale 0: "window" */
+    int resScale;         /* resolution "Nx": N (1..16); ICO_RES_AUTO: "auto"; 0 otherwise */
+    int aspect;           /* ICO_ASPECT_* */
+    int windowMode;       /* ICO_WINDOW_* */
+    int vsync;            /* the swapchain waits for the vertical blank */
+    int filter;           /* ICO_FILTER_* */
+    int fullHeight;       /* skip the reduction's vertical halving */
+    int fullPixel;        /* the window's own pixels, no black border (full_pixel above) */
+    int antiAlias;        /* ICO_AA_*, as written (ico_video_anti_alias: the one in force) */
+    int downsample;       /* ICO_DOWNSAMPLE_*; outside the preset, as showFps */
+    int upscale;          /* ICO_UPSCALE_*; outside the preset, as downsample */
+    int upscaleSharpness; /* 0..100, ICO_UPSCALE_SHARPNESS_DEFAULT; outside the preset */
+    int framerate;        /* ICO_FRAMERATE_ORIGINAL, _UNCAPPED, or presents a second */
     /* the CRT filter: applied whatever the preset */
     int crt;           /* the filter on */
     int crtMode;       /* ICO_CRT_* */
@@ -396,6 +407,15 @@ int ico_video_show_fps(void);
 int ico_video_downsample(void);
 int ico_video_parse_downsample(const char *s, int *ds);
 const char *ico_video_downsample_name(int ds);
+/* [video] upscaling, ICO_UPSCALE_OFF (the default) or ICO_UPSCALE_FSR1, and
+   upscaling_sharpness (0..100), whatever the preset (the renderer decides
+   where FSR 1.0 is in force).  The parse gives 0, or 1 for "fsr3" (*up
+   ICO_UPSCALE_OFF: not offered yet), -1 for a word it does not know */
+int ico_video_upscale(void);
+int ico_video_upscale_sharpness(void);
+int ico_video_parse_upscale(const char *s, int *up);
+const char *ico_video_upscale_name(int up);
+int ico_video_upscale_sharpness_clamp(int v);
 /* The presentation rate in force: the framerate option, whatever
    the preset. */
 int ico_video_framerate(void);

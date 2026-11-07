@@ -739,6 +739,13 @@ typedef enum UiStrId {
     UI_STR_OPT_DOWNSAMPLE,
     UI_STR_VAL_DOWNSAMPLE_BOX,
     UI_STR_OPT_DOWNSAMPLE_NOTE,
+    /* Picture > Upscaling ([video] upscaling, issue 99): the row, its value
+       (Off is UI_STR_OFF), the Sharpness row ([video] upscaling_sharpness)
+       and the note under both */
+    UI_STR_OPT_UPSCALE,
+    UI_STR_VAL_UPSCALE_FSR1,
+    UI_STR_OPT_UPSCALE_SHARPNESS,
+    UI_STR_OPT_UPSCALE_NOTE,
     UI_STR_AA_OFF,
     UI_STR_AA_SSAA2,
     UI_STR_AA_SSAA4,

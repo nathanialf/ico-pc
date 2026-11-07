@@ -1286,6 +1286,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   double precision on the neutral present, the bars black; `blit_tone_ps` on both outputs is in
   the reachable set in both blend modes; `checkToneDepth`: with the effects depth forced the toned
   present is the toned present without it, byte for byte, and not the neutral one;
+  Upscaling: FSR 1.0 (`rd_present_fsr1_test.inc`, `checkFsr1`): the constants against hand-worked
+  values (`rd__fsr1_easu_con` at 512 x 512 into 960 x 720 and with a 7.5 offset, `rd__fsr1_rcas_con`
+  at 0, 1, 2, 0.4, 20 and 30 stops with AMD's truncated halves, `rd__fsr1_stops`); off with a
+  sharpness set, the rich frame's present is `checkOriginal`'s byte for byte with no pass noted; on
+  at 1280 x 720 the pass is noted 512x512 -> 960x720, the pillars stay black, a quarter or more of
+  the box changes and the box is the RCAS output (`rd__read_fsr1`) one texel a pixel, mirrored its
+  flip; with a tone row moved the box changes and the pillars stay black; sharpness 0 and 100
+  differ; under the CRT filter and at the window resolution on is off byte for byte; after
+  Downsampling at 2x the 512 x 512 picture is upscaled; at 16:9 with Full pixel off (688 GS
+  pixels) the pass takes the frame's 688 columns into the box and everything outside the border
+  mask is black; both keys in the start-up set in both blend modes, in the CRT family;
   the open border's outer columns (`rd_present_border_test.inc`, `checkOpenBorderEdges`): at
   2340x1080 (832 columns, the frame its exact width) and 4:3, 1x and 2x, the mirror on and off,
   SCENE red with green over GS columns 1 .. W - 2 presents green outer columns, byte for byte the
