@@ -910,6 +910,12 @@ add_executable(rd_mip_test test/rd_mip_test.c)
 target_compile_options(rd_mip_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(rd_mip_test PRIVATE ico_render)
 
+# rd_png_mem_test: rd_write_png_mem (rd_png.c) read back through the texture
+# pack's PNG loader, and equal to the bytes rd_write_png puts in a file.
+add_executable(rd_png_mem_test test/rd_png_mem_test.c)
+target_compile_options(rd_png_mem_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(rd_png_mem_test PRIVATE ico_render ico_miniz ico_host_fs)
+
 # texpack_load_test (texture packs): the DDS and PNG loaders on files built
 # in memory (every DDS layout and BC format, truncated files, a BC size
 # that is not a multiple of 4; PNG colour types, depths, filters, Adam7,
@@ -975,7 +981,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_perf_test rd_display_change_test rd_boot_present_test rd_crt_test
-                  texpack_load_test gsb_cull_test
+                  texpack_load_test rd_png_mem_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
                   rd_fx_frame_test rd_vu_frac_test rd_crack_test rd_local_probe_test rd_vis_test
                   rd_vis_hiz_test)
@@ -1233,6 +1239,7 @@ if(ICO_RUN_TESTS)
     if(ICO_BOOT_DUMP_OLD)
         set_tests_properties(rd_boot_present PROPERTIES ENVIRONMENT "ICO_BOOT_OLD=1")
     endif()
+    add_test(NAME rd_png_mem COMMAND rd_png_mem_test "${CMAKE_CURRENT_BINARY_DIR}")
     add_test(NAME texpack_load COMMAND texpack_load_test)
     add_test(NAME texpack_pack_files COMMAND texpack_load_test --pack "${ICO_TEXPACK_DIR}")
     set_tests_properties(texpack_pack_files PROPERTIES SKIP_RETURN_CODE 77)
