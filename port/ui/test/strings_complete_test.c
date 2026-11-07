@@ -242,6 +242,45 @@ static void testTables(void)
             }
         }
     }
+    /* Gameplay > Shadows (v0.10.5): Third journey, the note it shows, Peaceful
+       shadows and its note: the eight tables in their own words, the
+       community tables English (NULL) or the translator's words */
+    for (int id = UI_STR_VAL_VAR_THIRD_JOURNEY; id <= UI_STR_OPT_VAR_PEACEFUL_NOTE; id++) {
+        for (int l = 0; l < UI_LANG_TABLES; l++) {
+            const int community = l >= UI_LANG_COMMUNITY_FIRST;
+            const char *row = kTables[l][id];
+            CHECK(community ? (row == NULL || row[0] != 0) : (row != NULL && row[0] != 0),
+                  "%s: Shadows string %d %s", kNames[l], id,
+                  community ? "English (NULL) or the translator's words" : "in its own words");
+            if (l != UI_LANG_EN && !community && row != NULL) {
+                CHECK(strcmp(row, kTables[UI_LANG_EN][id]) != 0,
+                      "%s: Shadows string %d is not the English text", kNames[l], id);
+            }
+        }
+    }
+    /* Gameplay > Combat's weapon rows (v0.10.5): Light sword colour, Stick,
+       their notes and the Insect net value, the same rule (the eight tables
+       in their own words, the community tables English (NULL) or the
+       translator's) */
+    {
+        static const int kWeapon[] = {UI_STR_OPT_VAR_SWORD_COLOUR, UI_STR_OPT_VAR_SWORD_COLOUR_NOTE,
+                                      UI_STR_OPT_VAR_WEAPON, UI_STR_OPT_VAR_WEAPON_NOTE,
+                                      UI_STR_VAL_VAR_INSECT_NET};
+        for (unsigned k = 0; k < sizeof(kWeapon) / sizeof(kWeapon[0]); k++) {
+            const int id = kWeapon[k];
+            for (int l = 0; l < UI_LANG_TABLES; l++) {
+                const int community = l >= UI_LANG_COMMUNITY_FIRST;
+                const char *row = kTables[l][id];
+                CHECK(community ? (row == NULL || row[0] != 0) : (row != NULL && row[0] != 0),
+                      "%s: weapon row string %d %s", kNames[l], id,
+                      community ? "English (NULL) or the translator's words" : "in its own words");
+                if (l != UI_LANG_EN && !community && row != NULL) {
+                    CHECK(strcmp(row, kTables[UI_LANG_EN][id]) != 0,
+                          "%s: weapon row string %d is not the English text", kNames[l], id);
+                }
+            }
+        }
+    }
     /* Ico's two rows (v0.10.5): Developer > Free movement with its note and the
        Remap controls row Ask Yorda for a hint, the eight tables in their own
        words; the community tables English (NULL) or the translator's words */

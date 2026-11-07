@@ -45,7 +45,11 @@ const char *const ICO_SIM_KEYS[] = {
     "variants.auto_guard",
     "variants.attack_turn",
     "variants.shadows_wait_down",
-    "developer.free_movement", /* Developer > Free movement (ico_rows.h) */
+    /* Gameplay > Combat's weapon rows: the weapon objects' kinds (weapon.c) */
+    "variants.sword_colour",
+    "variants.weapon",
+    "variants.peaceful_shadows", /* no brain thread for a Shadow (a cheat) */
+    "developer.free_movement",   /* Developer > Free movement (ico_rows.h) */
     NULL,
 };
 
@@ -82,6 +86,9 @@ static const char *const kDefaults[] = {
     "true",     /* variants.auto_guard */
     "true",     /* variants.attack_turn */
     "true",     /* variants.shadows_wait_down */
+    "original", /* variants.sword_colour */
+    "original", /* variants.weapon */
+    "false",    /* variants.peaceful_shadows */
     "false",    /* developer.free_movement */
     NULL,
 };

@@ -31,19 +31,22 @@ typedef struct {
        attract movie, the early show art, and the page's link */
     int unused[4];
     int unusedPage;
+    /* Gameplay > Combat > Light sword colour (both entries): the disc has the
+       light sword's kinds 8 and 9 (ico_variant_offered); Stick on every disc */
+    int lightSword;
     /* Controls > Remap controls > Ask Yorda for a hint: the discs with the
        hint system (not the North American disc or the 2001 builds) */
     int hints;
 } Expect;
 
 static const Expect kExpect[] = {
-    {"pal", 1, 1, 1, 1, 0, 1, 1, 382, {1, 1, 1, 1}, 1, 1},
-    {"jpn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1},
-    {"kor", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1},
-    {"ntsc", 0, 0, 1, 0, 1, 1, 1, 349, {1, 1, 0, 1}, 1, 0},
-    {"aug6", 0, 0, 1, 0, 1, 1, 1, 348, {1, 1, 0, 1}, 1, 0},
-    {"jun26", 0, 0, 1, 0, 1, 0, 0, 333, {0, 0, 0, 0}, 0, 0},
-    {"cn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1},
+    {"pal", 1, 1, 1, 1, 0, 1, 1, 382, {1, 1, 1, 1}, 1, 1, 1},
+    {"jpn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1, 1},
+    {"kor", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1, 1},
+    {"ntsc", 0, 0, 1, 0, 1, 1, 1, 349, {1, 1, 0, 1}, 1, 0, 0},
+    {"aug6", 0, 0, 1, 0, 1, 1, 1, 348, {1, 1, 0, 1}, 1, 0, 0},
+    {"jun26", 0, 0, 1, 0, 1, 0, 0, 333, {0, 0, 0, 0}, 0, 0, 0},
+    {"cn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1, 1},
 };
 
 /* Extras > Unused content through the program's CPU side (unused_content.c:
@@ -144,7 +147,7 @@ static const UiSettingsOpt kEveryDisc[] = {
     UI_OPT_MENU_LANGUAGE, UI_OPT_BRIGHTNESS,  UI_OPT_VIBRATION,    UI_OPT_STICK_FIX,
     UI_OPT_YORDA,         UI_OPT_PIT_TIME,    UI_OPT_SHADOW_SPEED, UI_OPT_SHADOWS_TOGETHER,
     UI_OPT_DOOR_FIX,      UI_OPT_YORDA_TRIPS, UI_OPT_SKIP_OPENING, UI_OPT_SECOND_CARD,
-    UI_OPT_OUTPUT,        UI_OPT_DEVELOPER,
+    UI_OPT_OUTPUT,        UI_OPT_DEVELOPER,   UI_OPT_VAR_WEAPON,
 };
 
 /* the rows the title shows and the pause menu does not (on every disc) */
@@ -182,6 +185,11 @@ static void checkTitleRows(const Expect *e)
               ui_settings_opt_shown(UI_OPT_SECOND_CARD),
           "%s title: Menu language, stick fix, Skip the opening, Yorda, Second memory card",
           e->slug);
+    CHECK(ui_settings_opt_shown(UI_OPT_VAR_SWORD_COLOUR) == e->lightSword &&
+              ui_settings_opt_shown(UI_OPT_VAR_WEAPON),
+          "%s title: Light sword colour %d (want %d), Stick %d (want 1)", e->slug,
+          ui_settings_opt_shown(UI_OPT_VAR_SWORD_COLOUR), e->lightSword,
+          ui_settings_opt_shown(UI_OPT_VAR_WEAPON));
     ico_opt_set_developer_mode(1);
     CHECK(ui_settings_opt_shown(UI_OPT_VAR_DEBUG_MENU) == e->debugMenu,
           "%s: the Debug menu row %d, want %d", e->slug,
@@ -236,6 +244,9 @@ static void checkPauseRows(const Expect *e)
         CHECK(ui_settings_opt_shown(kEveryDisc[i]), "%s pause: row %d shown", e->slug,
               (int)kEveryDisc[i]);
     }
+    CHECK(ui_settings_opt_shown(UI_OPT_VAR_SWORD_COLOUR) == e->lightSword,
+          "%s pause: Light sword colour %d, want %d", e->slug,
+          ui_settings_opt_shown(UI_OPT_VAR_SWORD_COLOUR), e->lightSword);
     CHECK(!ui_settings_opt_shown(UI_OPT_VIDEO_MODE) &&
               !ui_settings_opt_shown(UI_OPT_EXTRAS_MUSIC) &&
               !ui_settings_opt_shown(UI_OPT_EXTRAS_CREDITS),

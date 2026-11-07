@@ -74,10 +74,15 @@ static void test_list(void)
     CHECK(listed("gameplay.shadows_together"));
     CHECK(listed("variants.one_hit"));
     CHECK(listed("variants.auto_guard") && listed("variants.attack_turn") &&
-          listed("variants.shadows_wait_down"));
+          listed("variants.shadows_wait_down") && listed("variants.peaceful_shadows"));
+    CHECK(strcmp(ico_sim_key_default("variants.peaceful_shadows"), "false") == 0);
     CHECK(strcmp(ico_sim_key_default("variants.auto_guard"), "true") == 0 &&
           strcmp(ico_sim_key_default("variants.attack_turn"), "true") == 0 &&
           strcmp(ico_sim_key_default("variants.shadows_wait_down"), "true") == 0);
+    /* the weapon rows change the weapon objects' kinds */
+    CHECK(listed("variants.sword_colour") && listed("variants.weapon"));
+    CHECK(strcmp(ico_sim_key_default("variants.sword_colour"), "original") == 0 &&
+          strcmp(ico_sim_key_default("variants.weapon"), "original") == 0);
     CHECK(listed("developer.free_movement") &&
           strcmp(ico_sim_key_default("developer.free_movement"), "false") == 0);
     CHECK(listed("video.video_mode"));

@@ -41,6 +41,7 @@
 #include "settings_backup.h"   /* Extras' Back up your data and Restore from a backup */
 #include "settings_states.h"   /* the Save states page's cards, actions and F6 latch */
 #include "settings_unused.h"   /* Extras > Unused content's host */
+#include "settings_variants.h" /* the game variants rows' values, notes and rule */
 #include "touch_edit_ui.h"     /* the Edit layout page */
 #include "variants.h"          /* the game variants rows (Gameplay and its pages) */
 #include "ui_hint.h"
@@ -1284,45 +1285,6 @@ static const char *onOff(int v)
     return ui_str(v ? UI_STR_ON : UI_STR_OFF);
 }
 
-/* the game variants: one row per IcoVariantId, in its order (on Gameplay and
-   its Shadows and Cutscenes pages) */
-static int isVarOpt(int opt)
-{
-    return opt >= UI_OPT_VAR_TOUGHNESS && opt <= UI_OPT_VAR_SHADOWS_WAIT_DOWN;
-}
-
-_Static_assert(UI_OPT_VAR_SHADOWS_WAIT_DOWN - UI_OPT_VAR_TOUGHNESS + 1 == ICO_VARIANT_COUNT &&
-                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_AGGRESSION == UI_OPT_VAR_AGGRESSION &&
-                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_BARRIER_HITS == UI_OPT_VAR_BARRIER &&
-                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_NO_CUTSCENE_LOOK == UI_OPT_VAR_NO_LOOK &&
-                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_AUTO_GUARD == UI_OPT_VAR_AUTO_GUARD &&
-                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_ATTACK_TURN == UI_OPT_VAR_ATTACK_TURN &&
-                   UI_OPT_VAR_TOUGHNESS + ICO_VARIANT_SHADOWS_WAIT_DOWN ==
-                       UI_OPT_VAR_SHADOWS_WAIT_DOWN,
-               "a Settings row for each variant, in variants.h's order");
-
-static const char *variantText(int opt)
-{
-    static const int tough[ICO_TOUGHNESS_COUNT] = {UI_STR_VAL_ORIGINAL, UI_STR_VAL_VAR_AMERICAN,
-                                                   UI_STR_VAL_VAR_NOT_TOUGHER};
-    static const int agg[ICO_AGGRESSION_COUNT] = {
-        UI_STR_VAL_VAR_AGG_OWN, UI_STR_VAL_VAR_AGG_BOLD_PATIENT, UI_STR_VAL_VAR_AGG_BOLD_QUICK,
-        UI_STR_VAL_VAR_AGG_WARY_PATIENT, UI_STR_VAL_VAR_AGG_WARY_QUICK};
-    const IcoVariantId id = (IcoVariantId)(opt - UI_OPT_VAR_TOUGHNESS);
-    const int v = ico_variant_get(id);
-
-    switch (id) {
-    case ICO_VARIANT_SHADE_TOUGHNESS:
-        return ui_str(tough[v >= 0 && v < ICO_TOUGHNESS_COUNT ? v : 0]);
-    case ICO_VARIANT_AGGRESSION:
-        return ui_str(agg[v >= 0 && v < ICO_AGGRESSION_COUNT ? v : 0]);
-    case ICO_VARIANT_BARRIER_HITS:
-        return ui_str(v == 1 ? UI_STR_VAL_VAR_HITS_7 : UI_STR_VAL_VAR_HITS_5);
-    default:
-        return onOff(v);
-    }
-}
-
 /* The game's own language (NonLinearCameraMove, 2..6), -1 on a disc that
    has none (port/core/region.h has_game_language: the Japanese and
    Korean ones) */
@@ -2120,7 +2082,10 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_VAR_AUTO_GUARD:
     case UI_OPT_VAR_ATTACK_TURN:
     case UI_OPT_VAR_SHADOWS_WAIT_DOWN:
-        return variantText(opt);
+    case UI_OPT_VAR_SWORD_COLOUR:
+    case UI_OPT_VAR_WEAPON:
+    case UI_OPT_VAR_PEACEFUL:
+        return ui__variant_text(opt);
     case UI_OPT_EXTRAS_CREDITS:
         return creditsUnlocked() ? "" : ui_str(UI_STR_ACH_LOCKED);
     default:
@@ -2231,6 +2196,9 @@ static int optShown(int opt, int link)
                     ico_region_cur()->disc_id);
         }
         return 0;
+    }
+    if (opt == UI_OPT_VAR_SWORD_COLOUR) {
+        return ui__variant_shown(opt); /* not on the 2001 discs */
     }
     if (isGameOpt(opt) && onTitle()) {
         return 0;
@@ -2392,7 +2360,7 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         s_dirtyConfig = 1;
         return;
     }
-    if (isVarOpt(opt)) {
+    if (ui__var_opt(opt)) {
         /* [variants] <key>, written in memory; the page's leaving saves */
         ico_variant_step((IcoVariantId)(opt - UI_OPT_VAR_TOUGHNESS), dir);
         s_dirtyConfig = 1;
@@ -3507,7 +3475,7 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         break;
     case UI_PAGE_GAMEPLAY:
         /* No hints says whether it switches achievements off (the 2001
-           discs' own note: refreshPage, variantNote), as every variants
+           discs' own note: refreshPage, ui__variant_note), as every variants
            row on the three pages below does */
         addNote(pg, UI_OPT_DOOR_FIX, UI_STR_OPT_DOOR_FIX_NOTE);
         addNote(pg, UI_OPT_SECOND_CARD, UI_STR_OPT_SECOND_CARD_NOTE);
@@ -3521,10 +3489,11 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_NATURAL_CHAINS, UI_STR_OPT_NATURAL_CHAINS_NOTE);
         break;
     case UI_PAGE_SHADOWS:
-        /* the June 2001 demo's own toughness note: refreshPage, variantNote */
+        /* the June 2001 demo's own toughness note: refreshPage, ui__variant_note */
         addNote(pg, UI_OPT_SHADOW_SPEED, UI_STR_OPT_SHADOW_SPEED_NOTE);
         addNote(pg, UI_OPT_VAR_TOUGHNESS, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
         addNote(pg, UI_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_AGGRESSION_NOTE);
+        addNote(pg, UI_OPT_VAR_PEACEFUL, UI_STR_OPT_VAR_PEACEFUL_NOTE);
         break;
     case UI_PAGE_COMBAT:
         addNote(pg, UI_OPT_VAR_AUTO_GUARD, UI_STR_OPT_VAR_AUTO_GUARD_NOTE);
@@ -3534,10 +3503,12 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_NEVER_DODGE_NOTE);
         addNote(pg, UI_OPT_SHADOWS_TOGETHER, UI_STR_OPT_SHADOWS_TOGETHER_NOTE);
         addNote(pg, UI_OPT_VAR_BARRIER, UI_STR_OPT_VAR_BARRIER_NOTE);
+        addNote(pg, UI_OPT_VAR_SWORD_COLOUR, UI_STR_OPT_VAR_SWORD_COLOUR_NOTE);
+        addNote(pg, UI_OPT_VAR_WEAPON, UI_STR_OPT_VAR_WEAPON_NOTE);
         break;
     case UI_PAGE_CUTSCENES:
         /* the 2001 discs' own No cutscene look-around note: refreshPage,
-           variantNote */
+           ui__variant_note */
         addNote(pg, UI_OPT_SKIP_OPENING, UI_STR_OPT_SKIP_OPENING_NOTE);
         addNote(pg, UI_OPT_VAR_NO_LOOK, UI_STR_OPT_VAR_NO_LOOK_NOTE);
         addNote(pg, UI_OPT_VAR_IGNORE_CAMS, UI_STR_OPT_VAR_IGNORE_CAMS_NOTE);
@@ -4249,24 +4220,34 @@ static void build(void)
                                     UI_OPT_NATURAL_CHAINS, UI_OPT_BACK};
     static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
                                     UI_STR_OPT_NATURAL_CHAINS, UI_STR_BACK};
-    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness
-       and Shadow aggression (VAR-SHADOWS's Peaceful shadows follow) */
+    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness,
+       Shadow aggression and Peaceful shadows */
     static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
-                                     UI_OPT_VAR_AGGRESSION, UI_OPT_BACK};
+                                     UI_OPT_VAR_AGGRESSION, UI_OPT_VAR_PEACEFUL, UI_OPT_BACK};
     static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
-                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_BACK};
+                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_PEACEFUL,
+                                     UI_STR_BACK};
     /* Gameplay > Combat: the three combat [variants] rows, then the four
        fight rules that were on Shadows (One hit per swing, Shadows never
-       dodge, Shadows attack together, Queen barrier); VAR-WEAPONS's two weapon
-       rows follow Queen barrier */
-    static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,        UI_OPT_VAR_ATTACK_TURN,
-                                     UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_OPT_VAR_ONE_HIT,
-                                     UI_OPT_VAR_NEVER_DODGE,       UI_OPT_SHADOWS_TOGETHER,
-                                     UI_OPT_VAR_BARRIER,           UI_OPT_BACK};
-    static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD,        UI_STR_OPT_VAR_ATTACK_TURN,
-                                     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_OPT_VAR_ONE_HIT,
-                                     UI_STR_OPT_VAR_NEVER_DODGE,       UI_STR_OPT_SHADOWS_TOGETHER,
-                                     UI_STR_OPT_VAR_BARRIER,           UI_STR_BACK};
+       dodge, Shadows attack together, Queen barrier), the two weapon rows */
+    static const int combatOpts[] = {
+        UI_OPT_VAR_AUTO_GUARD, UI_OPT_VAR_ATTACK_TURN,  UI_OPT_VAR_SHADOWS_WAIT_DOWN,
+        UI_OPT_VAR_ONE_HIT,    UI_OPT_VAR_NEVER_DODGE,  UI_OPT_SHADOWS_TOGETHER,
+        UI_OPT_VAR_BARRIER,    UI_OPT_VAR_SWORD_COLOUR, UI_OPT_VAR_WEAPON,
+        UI_OPT_BACK,
+    };
+    static const int combatStrs[] = {
+        UI_STR_OPT_VAR_AUTO_GUARD,
+        UI_STR_OPT_VAR_ATTACK_TURN,
+        UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN,
+        UI_STR_OPT_VAR_ONE_HIT,
+        UI_STR_OPT_VAR_NEVER_DODGE,
+        UI_STR_OPT_SHADOWS_TOGETHER,
+        UI_STR_OPT_VAR_BARRIER,
+        UI_STR_OPT_VAR_SWORD_COLOUR,
+        UI_STR_OPT_VAR_WEAPON,
+        UI_STR_BACK,
+    };
     /* Gameplay > Cutscenes: the opening skipped, the two cutscene
        [variants] rows */
     static const int cutOpts[] = {UI_OPT_SKIP_OPENING, UI_OPT_VAR_NO_LOOK, UI_OPT_VAR_IGNORE_CAMS,
@@ -6302,26 +6283,6 @@ static int gfxProc(const Row *r, int flags)
     return 0;
 }
 
-/* PC port: a game variants row's note on the running disc. The June 2001
-   demo offers no American toughness (port/game/variants.h
-   ico_variant_offered: its Shadows are its own), and the three 2001 discs
-   have no hints (variants.c ico_hints_on) and no cutscene look-around (the
-   game's debug_VariableInit leaves debug_hand_camera 0 on them), so those
-   two rows say they change nothing there */
-static int variantNote(int opt, int strId)
-{
-    if (opt == UI_OPT_VAR_TOUGHNESS && ICO_JUN26) {
-        return UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO;
-    }
-    if (opt == UI_OPT_VAR_NO_HINTS && ICO_NTSCAUG6JUN26) {
-        return UI_STR_OPT_VAR_NO_HINTS_NOTE_2001;
-    }
-    if (opt == UI_OPT_VAR_NO_LOOK && ICO_NTSCAUG6JUN26) {
-        return UI_STR_OPT_VAR_NO_LOOK_NOTE_2001;
-    }
-    return strId;
-}
-
 static void refreshPage(Page *pg, int id, int cur)
 {
     if (pg->isList) {
@@ -6381,11 +6342,11 @@ static void refreshPage(Page *pg, int id, int cur)
             }
         }
         if (r->opt == UI_OPT_VAR_TOUGHNESS) {
-            r->noteStr = variantNote(r->opt, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
+            r->noteStr = ui__variant_note(r->opt, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
         } else if (r->opt == UI_OPT_VAR_NO_HINTS) {
-            r->noteStr = variantNote(r->opt, UI_STR_OPT_VAR_NO_HINTS_NOTE);
+            r->noteStr = ui__variant_note(r->opt, UI_STR_OPT_VAR_NO_HINTS_NOTE);
         } else if (r->opt == UI_OPT_VAR_NO_LOOK) {
-            r->noteStr = variantNote(r->opt, UI_STR_OPT_VAR_NO_LOOK_NOTE);
+            r->noteStr = ui__variant_note(r->opt, UI_STR_OPT_VAR_NO_LOOK_NOTE);
         }
         if (r->opt == UI_OPT_EFFECT_GLOW_SMOOTH) {
             /* locked: the note says when the row matters (it shows always) */

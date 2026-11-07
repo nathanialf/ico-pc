@@ -27,6 +27,7 @@
  * (settings_render).
  */
 #include "settings_fixture.h"
+#include "ico_rows.h"
 #include "popup.h"
 #include "ui_lang.h" /* ui_settings_text_language */
 
@@ -156,17 +157,32 @@ static void testBuild(void)
     static const int yordaStrs[] = {UI_STR_OPT_YORDA, UI_STR_OPT_PIT_TIME, UI_STR_OPT_YORDA_TRIPS,
                                     UI_STR_OPT_NATURAL_CHAINS, UI_STR_BACK};
     static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,
-                                     UI_OPT_VAR_AGGRESSION, UI_OPT_BACK};
+                                     UI_OPT_VAR_AGGRESSION, UI_OPT_VAR_PEACEFUL, UI_OPT_BACK};
     static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED, UI_STR_OPT_VAR_TOUGHNESS,
-                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_BACK};
-    static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,        UI_OPT_VAR_ATTACK_TURN,
-                                     UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_OPT_VAR_ONE_HIT,
-                                     UI_OPT_VAR_NEVER_DODGE,       UI_OPT_SHADOWS_TOGETHER,
-                                     UI_OPT_VAR_BARRIER,           UI_OPT_BACK};
-    static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD,        UI_STR_OPT_VAR_ATTACK_TURN,
-                                     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_OPT_VAR_ONE_HIT,
-                                     UI_STR_OPT_VAR_NEVER_DODGE,       UI_STR_OPT_SHADOWS_TOGETHER,
-                                     UI_STR_OPT_VAR_BARRIER,           UI_STR_BACK};
+                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_PEACEFUL,
+                                     UI_STR_BACK};
+    /* the two weapon rows after Queen barrier (Light sword colour is built on
+       every disc and hidden where there is no light sword) */
+    static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,
+                                     UI_OPT_VAR_ATTACK_TURN,
+                                     UI_OPT_VAR_SHADOWS_WAIT_DOWN,
+                                     UI_OPT_VAR_ONE_HIT,
+                                     UI_OPT_VAR_NEVER_DODGE,
+                                     UI_OPT_SHADOWS_TOGETHER,
+                                     UI_OPT_VAR_BARRIER,
+                                     UI_OPT_VAR_SWORD_COLOUR,
+                                     UI_OPT_VAR_WEAPON,
+                                     UI_OPT_BACK};
+    static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD,
+                                     UI_STR_OPT_VAR_ATTACK_TURN,
+                                     UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN,
+                                     UI_STR_OPT_VAR_ONE_HIT,
+                                     UI_STR_OPT_VAR_NEVER_DODGE,
+                                     UI_STR_OPT_SHADOWS_TOGETHER,
+                                     UI_STR_OPT_VAR_BARRIER,
+                                     UI_STR_OPT_VAR_SWORD_COLOUR,
+                                     UI_STR_OPT_VAR_WEAPON,
+                                     UI_STR_BACK};
     static const int cutOpts[] = {UI_OPT_SKIP_OPENING, UI_OPT_VAR_NO_LOOK, UI_OPT_VAR_IGNORE_CAMS,
                                   UI_OPT_BACK};
     static const int cutStrs[] = {UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_VAR_NO_LOOK,
@@ -238,8 +254,8 @@ static void testBuild(void)
     }
     CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 5), "Gameplay > Yorda rows");
-    CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 4), "Gameplay > Shadows rows");
-    CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 8), "Gameplay > Combat rows");
+    CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 5), "Gameplay > Shadows rows");
+    CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 10), "Gameplay > Combat rows");
     CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
     {
         /* Yorda, Shadows, Combat and Cutscenes open their pages, right before
@@ -4097,6 +4113,63 @@ static void testOtherDisc(void)
     ui_set_language(UI_LANG_EN);
 }
 
+/* Settings > Developer > Free movement ([developer] free_movement): after the
+   Debug menu, shown with Developer mode, Off by default; Right turns it on
+   (ico_rows.h: the game's loops read it, achievements off), sets the key,
+   which the save writes; its note under the cursor; Left turns it off */
+static void testFreeMovement(void)
+{
+    char p[1100];
+
+    stage_no = 11;
+    useConfig("version = 1\n");
+    ico_opt_reload();
+    ico_opt_set_developer_mode(1);
+    const int mainL = enterMain(0);
+    ico_opt_set_developer_mode(1);
+    const int devL = openPage(mainL, -1, UI_PAGE_DEVELOPER);
+    for (int k = 0; k < 4; k++) {
+        frame(0); /* the page refreshes */
+    }
+    const int row = ui_settings_row_of(UI_PAGE_DEVELOPER, UI_OPT_FREE_MOVEMENT);
+    CHECK(row >= 0 && ui_settings_row_shown(row) &&
+              strcmp(lt_ext_row_text(row), "Free movement") == 0,
+          "Developer: the Free movement row");
+    CHECK(row > ui_settings_row_of(UI_PAGE_DEVELOPER, UI_OPT_VAR_DEBUG_MENU),
+          "Developer: after the Debug menu");
+    CHECK(ico_free_movement() == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_FREE_MOVEMENT), "Off") == 0,
+          "Free movement: Off by default");
+    lt_ext_layout(devL)->curItem = row;
+    press(0x2000);
+    CHECK(ico_free_movement() == 1 && ico_free_movement_row() == 1 &&
+              strcmp(ui_settings_value_text(UI_OPT_FREE_MOVEMENT), "On") == 0 &&
+              ico_config_get_bool("developer.free_movement", 0) == 1,
+          "Right: Free movement On, the game's loops read it, the key set");
+    CHECK(noteStarting(UI_PAGE_DEVELOPER, "Press L2 to fly Ico") >= 0, "its note on the cursor");
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get_bool(t, "developer.free_movement", 0) == 1,
+          "saved: developer.free_movement = true");
+    if (t != NULL) {
+        ico_toml_free(t);
+    }
+    /* Developer mode off: the row is hidden and does nothing */
+    ico_opt_set_developer_mode(0);
+    CHECK(ico_free_movement() == 0 && ico_free_movement_row() == 1,
+          "Developer mode off: the row's value stays, the movement is off");
+    ico_opt_set_developer_mode(1);
+    press(0x8000);
+    CHECK(ico_free_movement() == 0 && ico_config_get_bool("developer.free_movement", 1) == 0,
+          "Left: Off again");
+    press(0x10);
+    CHECK(settle(mainL, 60), "Developer: back");
+    ico_opt_set_developer_mode(0);
+    useConfig("version = 1\n");
+    ico_opt_reload();
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -4129,6 +4202,7 @@ int main(int argc, char **argv)
     testShowFps();
     testDownsample();
     testNotesFit();
+    testFreeMovement();
     testPreset();
     testCapture();
     testBootSkip();

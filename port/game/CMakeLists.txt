@@ -357,6 +357,46 @@ if(ICO_RUN_TESTS)
     endforeach()
 endif()
 
+# weapon_kinds_disc: Gameplay > Combat's weapon rows (variants.h: Light sword
+# colour, Stick) off each disc image: the disc's tables loaded from its ELF
+# (port/data/tables.c); with Red and Insect net the kinds the hook gives
+# (ico_variant_weapon_kind, which every InitWeaponGeo copy reads) against the
+# disc's weaponKind rows (the net's row: power 0, request 0; rows 8 and 9
+# differing only in the trail's colour where the light sword exists), the
+# motion-orient table (no row answers the net's swing request), objLayout's
+# weapons (sticks placed, the net never). One run per disc image; no game
+# start; skipped (77) without the image.
+add_executable(weapon_kinds_disc_test test/weapon_kinds_disc_test.c ../platform/host_config.c
+               "${_yt_data}/tables.c" ${ICO_TABLE_SOURCES})
+target_include_directories(weapon_kinds_disc_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${_yt_data}"
+    "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/platform" ${_ico_yorda_trip_disc_incs})
+target_compile_definitions(weapon_kinds_disc_test PRIVATE ${_yt_defs} ICO_HOST=1)
+set_source_files_properties(${ICO_TABLE_EE_SYMBOLS} TARGET_DIRECTORY weapon_kinds_disc_test
+                            PROPERTIES COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
+target_compile_options(weapon_kinds_disc_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
+                       ${ICO_GAME_LAYOUT_OPTIONS} ${ICO_GAME_WARNINGS})
+target_link_libraries(weapon_kinds_disc_test PRIVATE ico_options ico_port_data ico_region ico_math)
+if(NOT WIN32)
+    target_link_libraries(weapon_kinds_disc_test PRIVATE m)
+endif()
+if(ICO_RUN_TESTS)
+    if(ICO_DISC_IMAGE)
+        add_test(NAME weapon_kinds_disc
+                 COMMAND weapon_kinds_disc_test "${ICO_DISC_IMAGE}" "${CMAKE_CURRENT_BINARY_DIR}")
+        set_tests_properties(weapon_kinds_disc PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+    endif()
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        string(TOUPPER "${_slug}" _up)
+        if(ICO_DISC_IMAGE_${_up})
+            add_test(NAME weapon_kinds_disc_${_slug}
+                     COMMAND weapon_kinds_disc_test "${ICO_DISC_IMAGE_${_up}}"
+                             "${CMAKE_CURRENT_BINARY_DIR}")
+            set_tests_properties(weapon_kinds_disc_${_slug} PROPERTIES SKIP_RETURN_CODE 77
+                                                                        TIMEOUT 900)
+        endif()
+    endforeach()
+endif()
+
 # The doorway fix: the arm and the grace with the option off and
 # on, holding hands or not, the stage it leads to, the frame count, and a copy
 # of the exit check's guard driven through an arrival frame by frame. CPU
