@@ -1231,6 +1231,14 @@ The renderer's test programs have a page of their own:
   swapchain's choice (`vkr_prerotate_turns`: 90, 270 and 180 at issue 179's 1612x720; identity, a
   mirrored turn, a turn not offered, `[dev] prerotate = false` and images past the surface's largest
   keep identity) (`rhi_vk_present_mode`).
+- `ffx_link_test.c`: the FidelityFX FSR 3.1 upscaler (`port/rhi/ffx`, `ICO_FFX`) linked into a C
+  program and run through raw Vulkan calls (volk, not the RHI): the first Vulkan 1.2 device with
+  the features the FFX backend reads enabled where present (16-bit floats, subgroup size control,
+  synchronization2, non-uniform storage buffer indexing); the Quality render size at 1280x960
+  (853x640); the backend and an upscale context for a 640x480 render and a 1280x960 output; its
+  provider (3.1.x) and a non-zero GPU memory figure; the context destroyed; any validation error
+  fails it. Skipped (77) without a loader, a Vulkan 1.2 device or a device it can make
+  (`ffx_link_test`).
 - `rhi_vk_swapchain_test.c`: the window path without a display, on SDL's offscreen driver;
   `swapAcquired` per frame; the acquire's wait with the list that uses the image (issue 179,
   `acquireWaits` through `vkr_test_submit_waits`: a list of off-screen work before it waits for

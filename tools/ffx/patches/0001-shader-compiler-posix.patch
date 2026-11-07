@@ -1,0 +1,318 @@
+diff --git a/sdk/tools/ffx_shader_compiler/src/ffx_sc.cpp b/sdk/tools/ffx_shader_compiler/src/ffx_sc.cpp
+index c3ec37f..f592eab 100644
+--- a/sdk/tools/ffx_shader_compiler/src/ffx_sc.cpp
++++ b/sdk/tools/ffx_shader_compiler/src/ffx_sc.cpp
+@@ -20,12 +20,24 @@
+ // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ // THE SOFTWARE.
+ 
++#ifdef _WIN32
+ #include "hlsl_compiler.h"
++#endif
+ #include "glsl_compiler.h"
+ #include "utils.h"
+ 
++#ifdef _WIN32
+ #include <Windows.h>
+ #include <pathcch.h>
++#else
++// POSIX: only the glslang path (the Vulkan backend's permutations) is built;
++// the DXC/FXC paths need the Windows COM interfaces.
++static int _wfopen_s(FILE** fp, const wchar_t* path, const wchar_t* mode)
++{
++    *fp = fopen(WCharToUTF8(path).c_str(), WCharToUTF8(mode).c_str());
++    return *fp ? 0 : errno;
++}
++#endif
+ #include <vector>
+ #include <string_view>
+ #include <filesystem>
+@@ -34,7 +46,9 @@
+ #include <stdexcept>
+ 
+ 
++#ifdef _WIN32
+ #pragma comment(lib, "pathcch.lib")
++#endif
+ 
+ static const wchar_t* const APP_NAME    = L"FidelityFX-SC";
+ static const wchar_t* const EXE_NAME    = L"FidelityFX_SC";
+@@ -309,6 +323,17 @@ void LaunchParameters::ParseCommandLine(int argCount, const wchar_t* const* args
+ 
+ void LaunchParameters::EnsureOutputPathExistsAndMakeCanonical(std::wstring& inoutOutputPath)
+ {
++#ifndef _WIN32
++    fs::path out = fs::path(WCharToUTF8(inoutOutputPath)).lexically_normal();
++    if (!out.empty())
++        fs::create_directories(out);
++    std::string canonical = out.generic_string();
++    if (!canonical.empty() && canonical.back() != '/')
++        canonical += '/';
++    inoutOutputPath = UTF8ToWChar(canonical);
++    return;
++#endif
++#ifdef _WIN32
+     std::replace(inoutOutputPath.begin(), inoutOutputPath.end(), L'/', L'\\');
+ 
+     PWSTR canonicalOutputPath = NULL;
+@@ -342,6 +367,7 @@ void LaunchParameters::EnsureOutputPathExistsAndMakeCanonical(std::wstring& inou
+         inoutOutputPath = canonicalOutputPath;
+         LocalFree(canonicalOutputPath);
+     }
++#endif
+ }
+ 
+ void LaunchParameters::ParsePermutationOption(PermutationOption& outPermutationOption, const std::wstring arg)
+@@ -431,13 +457,17 @@ void Application::Process()
+            predictedDuplicates);
+     if (totalPermutations - m_LastPermutationIndex < predictedDuplicates)
+     {
+-        printf("\nERROR: Predicted %llu duplicates\n\n\n", predictedDuplicates);
++        printf("\nERROR: Predicted %zu duplicates\n\n\n", predictedDuplicates);
+     }
+ }
+ 
+ std::wstring Application::MakeFullPath(const std::wstring & outputPath, const std::wstring & fileName)
+ {
++#ifndef _WIN32
++    return UTF8ToWChar((fs::path(WCharToUTF8(outputPath)) / WCharToUTF8(fileName)).generic_string());
++#endif
+     // Append file name, optionally converting to long path again, because the outputPath alone could be normal path, but when filename is added -- it could become a long path
++#ifdef _WIN32
+     PWSTR canonicalFileNameRaw = NULL;
+     HRESULT hr = PathAllocCombine(outputPath.c_str(), fileName.c_str(), PATHCCH_ALLOW_LONG_PATHS, &canonicalFileNameRaw);
+ 
+@@ -448,6 +478,7 @@ std::wstring Application::MakeFullPath(const std::wstring & outputPath, const st
+         return canonicalFileName;
+     }
+     return fileName;
++#endif
+ }
+ 
+ void Application::GenerateMacroPermutations(std::deque<Permutation>& permutations)
+@@ -558,8 +589,12 @@ void Application::OpenSourceFile()
+         std::wstring extension    = m_Params.inputFile.substr(extensionPos + 1, m_Params.inputFile.size() - extensionPos - 1);
+ 
+         if (extension == L"hlsl")
++#ifndef _WIN32
++            throw std::runtime_error("HLSL (dxc/fxc) is not built on this host: only glslang");
++#else
+             m_Compiler = std::unique_ptr<HLSLCompiler>(
+                 new HLSLCompiler(HLSLCompiler::DXC, dxcDll, shaderPath, shaderName, shaderFileName, outputPath, m_Params.disableLogs, m_Params.debugCompile));
++#endif
+         else if (extension == L"glsl")
+             m_Compiler = std::unique_ptr<GLSLCompiler>(new GLSLCompiler(glslangExe, shaderPath, shaderName, shaderFileName, outputPath, m_Params.disableLogs, m_Params.debugCompile));
+         else
+@@ -567,6 +602,7 @@ void Application::OpenSourceFile()
+     }
+     else
+     {
++#ifdef _WIN32
+         if (m_Params.compiler == L"dxc")
+             m_Compiler = std::unique_ptr<HLSLCompiler>(
+                 new HLSLCompiler(HLSLCompiler::DXC, dxcDll, shaderPath, shaderName, shaderFileName, outputPath, m_Params.disableLogs, m_Params.debugCompile));
+@@ -579,7 +615,9 @@ void Application::OpenSourceFile()
+         else if (m_Params.compiler == L"fxc")
+             m_Compiler = std::unique_ptr<HLSLCompiler>(
+                 new HLSLCompiler(HLSLCompiler::FXC, d3dDll, shaderPath, shaderName, shaderFileName, outputPath, m_Params.disableLogs, m_Params.debugCompile));
+-        else if (m_Params.compiler == L"glslang")
++        else
++#endif
++        if (m_Params.compiler == L"glslang")
+             m_Compiler = std::unique_ptr<GLSLCompiler>(new GLSLCompiler(glslangExe, shaderPath, shaderName, shaderFileName, outputPath, m_Params.disableLogs, m_Params.debugCompile));
+         else
+             throw std::runtime_error("Unknown compiler requested (valid options: dxc, fxc or glslang)");
+@@ -1109,3 +1147,17 @@ int wmain(int argc, wchar_t** argv)
+         return -1;
+     }
+ }
++
++#ifndef _WIN32
++int main(int argc, char** argv)
++{
++    std::vector<std::wstring> wide;
++    std::vector<wchar_t*>     wargv;
++    for (int i = 0; i < argc; ++i)
++        wide.push_back(UTF8ToWChar(argv[i]));
++    for (auto& w : wide)
++        wargv.push_back(w.data());
++    wargv.push_back(nullptr);
++    return wmain(argc, wargv.data());
++}
++#endif
+diff --git a/sdk/tools/ffx_shader_compiler/src/glsl_compiler.cpp b/sdk/tools/ffx_shader_compiler/src/glsl_compiler.cpp
+index 532b192..bd04311 100644
+--- a/sdk/tools/ffx_shader_compiler/src/glsl_compiler.cpp
++++ b/sdk/tools/ffx_shader_compiler/src/glsl_compiler.cpp
+@@ -74,7 +74,11 @@ GLSLCompiler::GLSLCompiler(const std::string& glslangExe,
+                            bool               disableLogs,
+                            bool               debugCompile)
+     : ICompiler(shaderPath, shaderName, shaderFileName, outputPath, disableLogs, debugCompile)
++#ifdef _WIN32
+     , m_GlslangExe(glslangExe.empty() ? "glslangValidator.exe" : glslangExe)
++#else
++    , m_GlslangExe(glslangExe.empty() ? "glslangValidator" : glslangExe)
++#endif
+ {
+     fs::create_directory(m_OutputPath + "/" + m_ShaderName + "_temp");
+ }
+@@ -222,6 +226,11 @@ bool GLSLCompiler::GLSLCompiler::Compile(Permutation& permutation, const std::ve
+     // Launch process and compile SPIRV using glslangValidator
+     // ------------------------------------------------------------------------------------------------
+ 
++    // glslangValidator's output arrives in pipe-sized chunks that can split
++    // a line (on Linux its first line, the shader's full path, often is):
++    // collect it all and split it into lines once the process has exited
++    std::string output;
++    const auto collect = [&](const char* bytes, size_t n) { output.append(bytes, n); };
+     const auto func = [&](const char* bytes, size_t n) {
+ 
+         std::stringstream ss(std::string(bytes, n));
+@@ -251,21 +260,23 @@ bool GLSLCompiler::GLSLCompiler::Compile(Permutation& permutation, const std::ve
+                         token.erase(0, end + 2);
+                     }
+                 }
+-                token.pop_back();
++                if (!token.empty() && token.back() == '\r')
++                    token.pop_back();
+                 errors.push_back(ErrorData{token, lineNumber});
+             }
+         }
+     };
+ 
+-    tpl::Process process(cmdLine, "", func, func);
++    tpl::Process process(cmdLine, "", collect, collect);
+ 
+     bool succeeded = process.get_exit_status() == 0;
++    func(output.data(), output.size());
+ 
+     if (!m_DisableLogs && errors.size() > 1)
+     {
+         writeMutex.lock();
+ 
+-        fprintf(stderr, "%s[%lu]\n", m_ShaderFileName.c_str(), permutation.key);
++        fprintf(stderr, "%s[%lu]\n", m_ShaderFileName.c_str(), (unsigned long)permutation.key);
+ 
+         for (size_t i = 1; i < errors.size(); i++)
+         {
+diff --git a/sdk/tools/ffx_shader_compiler/src/pch.hpp b/sdk/tools/ffx_shader_compiler/src/pch.hpp
+index c017698..9697a3a 100644
+--- a/sdk/tools/ffx_shader_compiler/src/pch.hpp
++++ b/sdk/tools/ffx_shader_compiler/src/pch.hpp
+@@ -22,12 +22,20 @@
+ 
+ #pragma once
+ 
++#ifdef _WIN32
+ #define NOMINMAX
+ #define WIN32_LEAN_AND_MEAN
+ #include <Windows.h>
+ #include <atlcomcli.h>
+ #include <dxcapi.h>
+ #include <d3dcompiler.h>
++#endif
++#include <cmath>
++#include <cstdint>
++#include <cstring>
++#include <cwchar>
++#include <memory>
++#include <optional>
+ #include <assert.h>
+ #include <stdio.h>
+ #include <exception>
+@@ -44,7 +52,9 @@
+ #include <iostream>
+ #include <algorithm>
+ #include <fstream>
++#ifdef _WIN32
+ #include <d3d12shader.h>
++#endif
+ 
+ #include <filesystem>
+ namespace fs = std::filesystem;
+diff --git a/sdk/tools/ffx_shader_compiler/src/utils.cpp b/sdk/tools/ffx_shader_compiler/src/utils.cpp
+index 0b92936..7b28ca9 100644
+--- a/sdk/tools/ffx_shader_compiler/src/utils.cpp
++++ b/sdk/tools/ffx_shader_compiler/src/utils.cpp
+@@ -22,6 +22,7 @@
+ 
+ #include "utils.h"
+ 
++#ifdef _WIN32
+ std::string WCharToUTF8(const std::wstring& wstr)
+ {
+     if (wstr.empty())
+@@ -49,3 +50,59 @@ std::wstring UTF8ToWChar(const std::string& str)
+ 
+     return wstr;
+ }
++#else
++// POSIX: wchar_t is UTF-32.
++std::string WCharToUTF8(const std::wstring& wstr)
++{
++    std::string str;
++    for (wchar_t wc : wstr)
++    {
++        uint32_t c = static_cast<uint32_t>(wc);
++        if (c < 0x80)
++            str += static_cast<char>(c);
++        else if (c < 0x800)
++        {
++            str += static_cast<char>(0xC0 | (c >> 6));
++            str += static_cast<char>(0x80 | (c & 0x3F));
++        }
++        else if (c < 0x10000)
++        {
++            str += static_cast<char>(0xE0 | (c >> 12));
++            str += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
++            str += static_cast<char>(0x80 | (c & 0x3F));
++        }
++        else
++        {
++            str += static_cast<char>(0xF0 | (c >> 18));
++            str += static_cast<char>(0x80 | ((c >> 12) & 0x3F));
++            str += static_cast<char>(0x80 | ((c >> 6) & 0x3F));
++            str += static_cast<char>(0x80 | (c & 0x3F));
++        }
++    }
++    return str;
++}
++
++std::wstring UTF8ToWChar(const std::string& str)
++{
++    std::wstring wstr;
++    for (size_t i = 0; i < str.size();)
++    {
++        unsigned char b = static_cast<unsigned char>(str[i]);
++        uint32_t      c;
++        size_t        n;
++        if (b < 0x80)
++            c = b, n = 1;
++        else if ((b & 0xE0) == 0xC0)
++            c = b & 0x1F, n = 2;
++        else if ((b & 0xF0) == 0xE0)
++            c = b & 0x0F, n = 3;
++        else
++            c = b & 0x07, n = 4;
++        for (size_t k = 1; k < n && i + k < str.size(); ++k)
++            c = (c << 6) | (static_cast<unsigned char>(str[i + k]) & 0x3F);
++        wstr += static_cast<wchar_t>(c);
++        i += n;
++    }
++    return wstr;
++}
++#endif
+diff --git a/sdk/tools/ffx_shader_compiler/src/utils.h b/sdk/tools/ffx_shader_compiler/src/utils.h
+index ff57b45..88b735a 100644
+--- a/sdk/tools/ffx_shader_compiler/src/utils.h
++++ b/sdk/tools/ffx_shader_compiler/src/utils.h
+@@ -23,7 +23,9 @@
+ #pragma once
+ 
+ #include "pch.hpp"
++#ifdef _WIN32
+ #include "DXBCChecksum.h"
++#endif
+ 
+ std::string WCharToUTF8(const std::wstring& wstr);
+ std::wstring UTF8ToWChar(const std::string& str);
