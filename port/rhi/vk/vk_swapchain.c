@@ -1518,8 +1518,14 @@ static RhiTexture vkr_acquire_backbuffer(bool ahead, bool *lost, bool *busy)
              * with the semaphore its acquire signalled, as the one slot
              * took its own image again before the slots were apart */
             const VkSemaphore sem = f->acquireSem;
+            const VkFence fence = f->acquireFence;
+            const bool fenceUsed = f->acquireFenceUsed;
             f->acquireSem = o->acquireSem;
             o->acquireSem = sem;
+            f->acquireFence = o->acquireFence; /* the fence goes with its acquire */
+            f->acquireFenceUsed = o->acquireFenceUsed;
+            o->acquireFence = fence;
+            o->acquireFenceUsed = fenceUsed;
             f->acq = o->acq;
             memset(&o->acq, 0, sizeof(o->acq));
             out.id = g_vkr.swapTextures[f->acq.image];
@@ -1527,9 +1533,23 @@ static RhiTexture vkr_acquire_backbuffer(bool ahead, bool *lost, bool *busy)
         }
     }
     uint32_t idx = 0;
+    if (!ahead && f->acquireFenceUsed) {
+        /* the last acquire's fence was never reset (its picture was given
+         * up, or the swapchain went with it): an acquire may only be given
+         * an unsignalled fence, so make a fresh one */
+        VkFenceCreateInfo fci = {.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};
+        VkFence fresh;
+        if (VKR_CHECK(vkCreateFence(g_vkr.device, &fci, NULL, &fresh))) {
+            vkDestroyFence(g_vkr.device, f->acquireFence, NULL);
+            f->acquireFence = fresh;
+            f->acquireFenceUsed = false;
+        }
+    }
+    const bool fenced = !ahead && !f->acquireFenceUsed && f->acquireFence != VK_NULL_HANDLE;
     const uint64_t t0 = vkr_now_ns();
-    VkResult r = vkAcquireNextImageKHR(g_vkr.device, g_vkr.swapchain, ahead ? 0u : UINT64_MAX,
-                                       f->acquireSem, VK_NULL_HANDLE, &idx);
+    VkResult r =
+        vkAcquireNextImageKHR(g_vkr.device, g_vkr.swapchain, ahead ? 0u : UINT64_MAX, f->acquireSem,
+                              fenced ? f->acquireFence : VK_NULL_HANDLE, &idx);
     g_vkr.stats.acquireNs += vkr_now_ns() - t0;
     if (ahead && (r == VK_NOT_READY || r == VK_TIMEOUT)) {
         *busy = true; /* nothing signalled: the semaphore stays as it was */
@@ -1550,6 +1570,8 @@ static RhiTexture vkr_acquire_backbuffer(bool ahead, bool *lost, bool *busy)
     }
     f->acq.image = idx;
     f->acq.acquired = true;
+    f->acq.fenced = fenced;
+    f->acquireFenceUsed = f->acquireFenceUsed || fenced;
     __atomic_fetch_add(&g_vkr.swapAcquired, 1u, __ATOMIC_RELAXED);
     f->acq.signalled = false;
     f->acq.waitPending = true;

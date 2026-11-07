@@ -1056,7 +1056,7 @@ only when the Turnip package loaded (`bones_nobin_in_force`), the mark
   a kind out of range ignored, a reset, a cut buffer), the slow step's game threads part (`game
   threads 199.3 in 39 switches (longest Main 171.2 ms; on core 2)`, the core or the longest switch
   left out, no name) and the VU line (pre-pass off 9 a triangle, on the recorded vertices, the k and
-  M words, no replays, a cut buffer), the list-0 line and the images in use, word for word, and
+  M words, no replays, a cut buffer), the GPU work line (the invocations 9 a triangle off and the recorded vertices on, the work less the display wait and the present, never negative, the fit word for word), the acquire line (none asked: nothing) and the images in use, word for word, and
   the slow-scene dump's trigger over a block's figures (each condition alone: kind, window, movie,
   once, 30 s, 8 replays, the bound off; the bound itself is not over; the display wait taken from
   the work; no negative work) and its log line (`window_scene`).
@@ -1243,7 +1243,9 @@ The renderer's test programs have a page of their own:
   `swapAcquired` per frame; the acquire's wait with the list that uses the image (issue 179,
   `acquireWaits` through `vkr_test_submit_waits`: a list of off-screen work before it waits for
   nothing, the image's list on the acquire at `COLOR_ATTACHMENT_OUTPUT`, a dropped acquire drained
-  by one empty batch at `ALL_COMMANDS`; on the fence ring in `rhi_vk_swapchain_vk11`)
+  by one empty batch at `ALL_COMMANDS`; on the fence ring in `rhi_vk_swapchain_vk11`; and the
+  acquire's fence: the image's list counts one picture in `acquireReadyAtSubmit` or
+  `acquireNotReady` (which one depends on the machine), a dropped acquire counts none)
   (`rhi_vk_swapchain`).
 - Helpers: `rhi_test_common.c`/`.h` (the shared cells, seven of whose pipelines come from one
   `rhi_create_pipelines` call with a failing description among them, and the fill-rule cell:
