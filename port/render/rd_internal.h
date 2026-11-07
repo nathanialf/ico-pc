@@ -4372,6 +4372,8 @@ const RdFrame *rd__last_frame(void);
  * the log's prefix; the length written */
 size_t rd__cull_drop_line(const RdFrame *f, char *line, size_t cap);
 const RdFrame *rd__prev_frame(void);
+/* the retained closed frame (last or before it) numbered n, else NULL */
+const RdFrame *rd__retained_frame(uint32_t number);
 /* Reads a target's colour (RGBA8, tightly packed, w * h * 4 bytes). */
 bool rd__read_target(RdTarget t, void *dst, size_t dstSize, uint32_t *w, uint32_t *h);
 /* The depth buffer of a target with one, as floats (w * h,

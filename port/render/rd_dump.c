@@ -1117,6 +1117,37 @@ bool rd_dump_retained(const char *lostPath, const char *beforePath, uint32_t *lo
     return true;
 }
 
+const RdFrame *rd__retained_frame(uint32_t number)
+{
+    const RdFrame *last = rd__last_frame();
+    const RdFrame *prev = rd__prev_frame();
+
+    if (last && last->closed && last->number == number) {
+        return last;
+    }
+    return prev && prev->closed && prev->number == number ? prev : NULL;
+}
+
+bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped)
+{
+    const RdFrame *last = rd__last_frame();
+    const RdFrame *f = rd__retained_frame(number);
+
+    if (dumped) {
+        *dumped = 0;
+    }
+    if (!f) {
+        f = last; /* the picked frame is gone from the ring: the last closed */
+    }
+    if (!f || !f->closed || !path || !rd__dump_frame(f, path)) {
+        return false;
+    }
+    if (dumped) {
+        *dumped = f->number;
+    }
+    return true;
+}
+
 /* ------------------------------------------------------- loss bisect */
 
 bool rd_dump_frame_size(const char *path, uint32_t *gsW, uint32_t *gsH, float *aspect)
