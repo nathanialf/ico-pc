@@ -26,7 +26,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_vuprepass_selftest.c` | the vertex and triangle pre-passes' start-up self-test |
 | `port/render/rd_vu_skin_check.h`, `rd_vu_skin_check.c`, `rd_vu_skin_judge.c`, `rd_vu_skin_selftest.c`, `rd_vu_skin_capture.c` | the skinned draws' bone-block check: a skinned draw probed beside the picture against the CPU, the twins of every skinned draw inside its pass (Turnip), the box check, the start-up probe, the capture on failure ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
-| `port/render/rd_upscale.h`, `rd_upscale.c`, `rd_upscale_hook.c` | the upscale point: the render/display scale split, the marker's replay (the edge guard, the hook's inputs, UPSCALED), the reduction's read of UPSCALED, the per-present jitter; the hook (the test's bilinear stand-in) ([The upscale point](#the-upscale-point)) |
+| `port/render/rd_upscale.h`, `rd_upscale.c`, `rd_upscale_hook.c` | the upscale point: the render/display scale split, the marker's replay (the edge guard, the hook's inputs, UPSCALED), the reduction's read of UPSCALED, the per-present jitter; the hook (FSR 3.1, `rd_fsr3.c`, or the test's bilinear stand-in) ([The upscale point](#the-upscale-point)) |
 | `port/render/rd_velocity.c` | the scene's motion vectors for a temporal upscaler: each VU draw's previous transform (VuPrevCB), the VELOCITY texture, the velocity pass's pipeline ([Velocity](#velocity)) |
 | `port/render/rd_pipeline.c` | pipeline keys from the state block, the pipeline cache, the reachable set |
 | `port/render/rd_dst_read.c` | the exact GS blend read from the destination in the fragment shader |
@@ -966,10 +966,13 @@ dispatch, a new size, `rd__velocity_reset`) and the presents since the last disp
 UPSCALED: RGBA8, SCENE's GS size at the display scale (the Full pixel window too), render target,
 sampled, copy source and storage (made again without storage where the backend refuses it),
 owned by `rd_upscale.c` (not a named target: a new named id would shift every dump's temporary
-ids). The hook in this release (`port/render/rd_upscale_hook.c`) is the test's stand-in: SCENE
-blitted into UPSCALED with the presenter's bilinear blit (`rd__present_blit`); it takes neither
-the depth, the vectors nor the jitter. The temporal upscaler replaces its body. Turning the
-switch on turns the motion vectors on.
+ids). The hook (`port/render/rd_upscale_hook.c`) runs FSR 3.1 (`port/render/rd_fsr3.c`) when the
+switch is the settings' (Upscaling = FSR 3.1 in force, `rd__upscale_follow`; `rd__upscale_by_fsr3`),
+on Vulkan: the colour, the depth through its depth aspect, VELOCITY and the jitter
+([DISPLAY.md](DISPLAY.md#fsr-31-upscaling)). With `rd__upscale_set`'s switch (`rd_replay_tool
+--upscale-test`, the tests, `[dev] upscale_test`) it runs the test's stand-in on every backend:
+SCENE blitted into UPSCALED with the presenter's bilinear blit (`rd__present_blit`), taking neither
+the depth, the vectors nor the jitter. Turning either switch on turns the motion vectors on.
 
 **The reduction reads UPSCALED.** `rd__blur_post_sprite` (`port/render/rd_blur_border.c`): for
 the reduction's textured sprite of a replay whose marker wrote UPSCALED, SCENE's target record

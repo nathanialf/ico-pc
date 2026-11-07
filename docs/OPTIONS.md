@@ -188,14 +188,20 @@ How the picture is drawn and finished: smoothing, the picture's size and sharpne
   original game did.
   **FSR 3.1** is AMD's newer upscaler, which draws the picture smaller than
   your screen and builds it back up from several pictures in a row. It
-  is offered only on a graphics card that can run it (the Vulkan and
-  Direct3D 12 renderers); when the row is saved as FSR 3.1 on a computer
-  that cannot run it, it says **(off: not available)** after the name,
+  is offered on Windows and Linux computers that run the game with the
+  Vulkan renderer, on a graphics card with Vulkan 1.2 or newer (not with
+  the Direct3D or OpenGL renderers, on Macs or on phones); when the row is
+  saved as FSR 3.1 on a computer that cannot run it, it says
+  **(off: not available)** after the name (the log says why),
   the picture is drawn as with Off, and your choice stays in the settings
   file. FSR 3.1 is off with the CRT filter and while **Downsampling** is
   on (one or the other), and at the Original Preset (1x) only Native AA
   applies. While it runs, Anti-aliasing is off, and says
-  **(off: FSR 3.1)** after the name.
+  **(off: FSR 3.1)** after the name. Because it builds each picture from
+  the ones before, things the game draws flat on the screen without
+  depth, such as the fades, the film grain, sparks, smoke and the menus,
+  can leave a faint trail while they move. It uses some of the graphics
+  card's memory (tens of megabytes, more at large window sizes).
 - **Upscaling quality** (shown while Upscaling is FSR 3.1) is how much
   smaller than your screen the picture is drawn: **Native AA** (the picture
   is drawn at your screen's size and only smoothed, the default), **Quality**

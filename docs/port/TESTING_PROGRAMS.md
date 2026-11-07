@@ -1179,7 +1179,9 @@ The renderer's test programs have a page of their own:
   answer, what the external end puts back).
 - `rhi_native_test.c`: `rhi_native.h` on Vulkan (lavapipe): the device handles, textures granted
   storage, the storage barriers, the external begin/end bracket and a two-pass picture identical
-  with and without it (`rhi_native`; exit 77 without a device). `rhi_test_native.c` runs inside the
+  with and without it, and the FidelityFX extensions (`RhiComputeCaps.externalExts`: true on a
+  Vulkan 1.2 device in an `ICO_FFX` build, false without the upscaler) (`rhi_native`; exit 77 without
+  a device). `rhi_test_native.c` runs inside the
   common cells of every backend: the handles where offered, "not offered" on Direct3D 11 and OpenGL.
 - `rhi_d3d11_shader_plan_test.c`: the Direct3D 11 backend's shader route on the CPU
   (`port/rhi/d3d11/d3d11_shader.c`): the macros text and its malformed forms, the include lookup,
