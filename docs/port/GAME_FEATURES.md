@@ -1395,6 +1395,15 @@ screen, to the [native frame](ARCHITECTURE.md#terms) by scaling its node matrice
 `gsFrame.w / 512` when `ico_title_fullframe_model` names it (`port/game/title_logo.h`
 (`ico_title_fullframe_model`)).
 
+**The icon pass.** The application icon is the logo's I, captured from the title the first time its
+menu shows after a start that finds no icon for the disc, or one made by another version
+([APP_ICON.md](APP_ICON.md#the-capture-on-the-title)). For a few ticks `ico_title_logo_skip` skips
+every model but `I` (the backdrop `title_back`, the castle, C, O, the glows and the shadows), the
+renderer leaves out the menus and clears to black and then white, and an opaque black curtain over
+the output hides it all: the player sees about half a second of black. No game code changes:
+the name rule in `port/game/title_logo.c` is the whole game-side hook, and `ico_title_logo_update`
+steps the capture (`port/game/title_icon.h`).
+
 ## Community translations
 
 A community translation is a player's translation of the game into a language the disc does not

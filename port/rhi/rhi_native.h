@@ -114,8 +114,8 @@ void rhi_cmd_external_end(RhiCommandList cl);
  *     compute shaders, storage-image support for RGBA16F, and the two
  *     storage-image-without-format features, which the RHI enables where
  *     offered.  float16 reports shaderFloat16 as OFFERED by the device;
- *     the RHI does not enable it (the external code needs a device made with
- *     it, which this device is not).
+ *     the RHI enables it only in a build with the upscaler (ICO_FFX), on a
+ *     1.2 device listing VK_KHR_shader_float16_int8 (externalExts below).
  *   D3D12: shader model 6.2 or later, wave operations, typed UAV loads of
  *     additional formats.  float16 is true with shader model 6.2 and native
  *     16-bit support (D3D12_OPTIONS4.Native16BitShaderOpsSupported).
@@ -126,6 +126,13 @@ typedef struct RhiComputeCaps {
     bool subgroupOk;
     bool storageFormatsOk;
     bool float16;
+    /* Vulkan: the device was made with every extension the FidelityFX
+     * Vulkan backend acts on that the device lists (it reads the list, not
+     * what was enabled: vk_device.c vkr_create_device), which the RHI does
+     * on a 1.2 device in a build with the upscaler (ICO_FFX).  Not part of
+     * ok (the RHI's own answer); the upscaler asks it too.  False on the
+     * other backends. */
+    bool externalExts;
     const char *why; /* NULL when ok, else a short reason */
 } RhiComputeCaps;
 

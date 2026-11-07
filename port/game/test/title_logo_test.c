@@ -16,10 +16,27 @@
  *   stretch   title_back is the title's full-frame model, by name alone, on any
  *             stage and on no other; no other model is, the logo's
  *             included
+ *   icon      the application icon's capture (title_icon.c) with the
+ *             renderer, the curtain and the icon files stubbed: the pass
+ *             off leaves the old table; ICO_TITLE_ICON_WAIT ticks on layout
+ *             12 or 13 (counted again after the menu left) start it when
+ *             an icon is wanted, never when not; on, every model but "I"
+ *             is left out (title_back, st26a_p1, C, I_f, I_sd); the shot over
+ *             black is armed after the settle, the clear turns white once
+ *             it came, the shot over white after the settle again, then the
+ *             pass off, the pair delivered, the curtain off after the
+ *             hold, done for the run; an empty answer or none within the
+ *             wait is armed again, and after ICO_TITLE_ICON_RETRIES the
+ *             run gives up; "the frames differ" takes the pair again once,
+ *             then the picture over black alone; the menu left during the
+ *             pass ends it and the next visit starts again
  */
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include "app_icon.h" /* ICO_APP_ICON_OK, _GHOST */
+#include "title_icon.h"
 #include "title_logo.h"
 
 static int failures;
@@ -37,6 +54,7 @@ static int failures;
 /* the game's globals and the menus' answers */
 int stage_no;
 int current_layout_id;
+int ico_mv_active;   /* options.h */
 static int s_covers; /* ui_settings_covers_title */
 static int s_list = -1;
 
@@ -179,6 +197,307 @@ static void testStretch(void)
     frame(TITLE, 12, 0);
 }
 
+/* ------------------------------------------------------------ the icon */
+
+/* the stubs' state */
+enum { ANS_NONE = 0, ANS_NULL, ANS_PICTURE };
+
+static struct {
+    int wanted;
+    int arms, cancels, delivers, singles;
+    int pass;            /* on */
+    uint8_t passRgba[4]; /* its colour */
+    int curtain;
+    int answer; /* the next take's: none, NULL, a picture of answerByte */
+    uint8_t answerByte;
+    uint32_t answerW;
+    int deliverR[2];  /* deliver's answers in turn */
+    int seenA, seenB; /* the first byte of the pair deliver got */
+    int seenSingle;   /* the first byte deliver_single got */
+} st;
+
+static int stWanted(void)
+{
+    return st.wanted;
+}
+
+static int stArm(void)
+{
+    st.arms++;
+    return 1;
+}
+
+static int stTake(uint8_t **rgba, uint32_t *w, uint32_t *h)
+{
+    const int a = st.answer;
+    st.answer = ANS_NONE;
+    if (a == ANS_NONE) {
+        return 0;
+    }
+    *rgba = NULL;
+    *w = *h = 0;
+    if (a == ANS_PICTURE) {
+        *w = st.answerW;
+        *h = 2;
+        *rgba = malloc((size_t)*w * *h * 4);
+        memset(*rgba, st.answerByte, (size_t)*w * *h * 4);
+    }
+    return 1;
+}
+
+static void stCancel(void)
+{
+    st.cancels++;
+}
+
+static void stPass(const uint8_t *rgba)
+{
+    st.pass = rgba != NULL;
+    if (rgba) {
+        memcpy(st.passRgba, rgba, 4);
+    }
+}
+
+static void stCurtain(int on)
+{
+    st.curtain = on;
+}
+
+static int stDeliver(const uint8_t *a, const uint8_t *b, int w, int h)
+{
+    CHECK(w == 4 && h == 2, "icon: the pair's size %dx%d", w, h);
+    st.seenA = a[0];
+    st.seenB = b[w * h * 4 - 1];
+    return st.deliverR[st.delivers++ & 1];
+}
+
+static int stSingle(const uint8_t *a, int w, int h)
+{
+    CHECK(w == 4 && h == 2, "icon: the single picture's size %dx%d", w, h);
+    st.seenSingle = a[0];
+    st.singles++;
+    return ICO_APP_ICON_OK;
+}
+
+static const IcoTitleIconOps kStub = {stWanted, stArm,     stTake,    stCancel,
+                                      stPass,   stCurtain, stDeliver, stSingle};
+
+static void iconStart(int wanted)
+{
+    ico_title_icon_reset();
+    memset(&st, 0, sizeof(st));
+    st.wanted = wanted;
+    st.answerW = 4;
+    st.deliverR[0] = st.deliverR[1] = ICO_APP_ICON_OK;
+    ico_title_icon_set_ops(&kStub);
+}
+
+/* n ticks of the title's menu */
+static void menuTicks(int n)
+{
+    for (int i = 0; i < n; i++) {
+        frame(TITLE, 12, 0);
+    }
+}
+
+/* ticks of the menu until the shot is armed (at most limit); the ticks */
+static int untilArmed(int limit)
+{
+    const int arms = st.arms;
+    int n = 0;
+    while (st.arms == arms && n < limit) {
+        frame(TITLE, 13, 0);
+        n++;
+    }
+    return n;
+}
+
+static int isBlack(void)
+{
+    return st.pass && st.passRgba[0] == 0 && st.passRgba[1] == 0 && st.passRgba[2] == 0;
+}
+
+static int isWhite(void)
+{
+    return st.pass && st.passRgba[0] == 0xFF && st.passRgba[1] == 0xFF && st.passRgba[2] == 0xFF;
+}
+
+/* the answer to the armed shot, taken on the next tick */
+static void answer(int kind, uint8_t byte)
+{
+    st.answer = kind;
+    st.answerByte = byte;
+    frame(TITLE, 12, 0);
+}
+
+static void testIconSkip(void)
+{
+    static const char *const others[] = {"title_back", "st26a_p1", "C",    "O",
+                                         "I_f",        "I_sd",     "C_sd", "boy"};
+    iconStart(1);
+    menuTicks(ICO_TITLE_ICON_WAIT);
+    CHECK(ico_title_icon_pass_on() && isBlack() && st.curtain, "icon: the pass on over black");
+    CHECK(!ico_title_logo_skip("I"), "icon: I drawn in the pass");
+    for (unsigned i = 0; i < sizeof(others) / sizeof(others[0]); i++) {
+        CHECK(ico_title_logo_skip(others[i]), "icon: %s left out in the pass", others[i]);
+    }
+    ico_title_icon_reset();
+    CHECK(!ico_title_icon_pass_on() && !st.pass && !st.curtain,
+          "icon: reset turns the pass and the curtain off");
+    /* off: the old table (the logo shown on the menu, nothing left out) */
+    frame(TITLE, 12, 0);
+    for (unsigned i = 0; i < sizeof(others) / sizeof(others[0]); i++) {
+        CHECK(!ico_title_logo_skip(others[i]), "icon off: %s drawn", others[i]);
+    }
+    frame(TITLE, PAGE, 1);
+    CHECK(ico_title_logo_skip("I") && ico_title_logo_skip("C") &&
+              !ico_title_logo_skip("st26a_p1") && !ico_title_logo_skip("title_back"),
+          "icon off: a Settings page hides the logo alone");
+    frame(TITLE, 12, 0);
+    ico_title_icon_set_ops(NULL);
+}
+
+static void testIconSteps(void)
+{
+    /* not wanted: done, nothing on */
+    iconStart(0);
+    menuTicks(ICO_TITLE_ICON_WAIT + 5);
+    CHECK(ico_title_icon_state() == ICO_TITLE_ICON_DONE && !st.pass && !st.curtain && st.arms == 0,
+          "icon: not wanted, nothing captured");
+
+    /* the wait: counted on layout 12/13 only, again after the menu left */
+    iconStart(1);
+    frame(TITLE, 55, 0); /* the intro's layout */
+    menuTicks(ICO_TITLE_ICON_WAIT - 1);
+    CHECK(!st.pass, "icon: %d ticks of the menu: not yet", ICO_TITLE_ICON_WAIT - 1);
+    frame(TITLE, PAGE, 1); /* a Settings page: the logo hidden */
+    frame(TITLE, 12, 0);
+    menuTicks(ICO_TITLE_ICON_WAIT - 2);
+    CHECK(!st.pass, "icon: the count starts again after the menu left");
+    ico_mv_active = 1;
+    menuTicks(5);
+    CHECK(!st.pass, "icon: never inside the model viewer");
+    ico_mv_active = 0;
+    menuTicks(ICO_TITLE_ICON_WAIT - 1);
+    CHECK(!st.pass, "icon: the viewer restarted the count");
+    frame(TITLE, 12, 0);
+    CHECK(isBlack() && st.curtain && ico_title_icon_state() == ICO_TITLE_ICON_SETTLE_A,
+          "icon: %d ticks of the menu: the pass on over black, the curtain on",
+          ICO_TITLE_ICON_WAIT);
+
+    /* shot A after the settle; the clear white once it came */
+    CHECK(untilArmed(20) == ICO_TITLE_ICON_SETTLE && st.arms == 1,
+          "icon: shot A armed after %d ticks", ICO_TITLE_ICON_SETTLE);
+    frame(TITLE, 12, 0);
+    frame(TITLE, 12, 0);
+    CHECK(ico_title_icon_state() == ICO_TITLE_ICON_SHOT_A && isBlack(),
+          "icon: waiting for shot A, still black");
+    answer(ANS_PICTURE, 0x11);
+    CHECK(isWhite() && st.curtain && ico_title_icon_state() == ICO_TITLE_ICON_SETTLE_B,
+          "icon: shot A taken, the clear white");
+    CHECK(untilArmed(20) == ICO_TITLE_ICON_SETTLE && st.arms == 2,
+          "icon: shot B armed after the settle");
+    answer(ANS_PICTURE, 0xEE);
+    CHECK(st.delivers == 1 && st.seenA == 0x11 && st.seenB == 0xEE,
+          "icon: the pair delivered (over black, over white)");
+    CHECK(!st.pass && !ico_title_icon_pass_on() && st.curtain,
+          "icon: the pass off at once, the curtain held");
+    menuTicks(ICO_TITLE_ICON_HOLD);
+    CHECK(!st.curtain && ico_title_icon_state() == ICO_TITLE_ICON_DONE,
+          "icon: the curtain off after %d ticks, done", ICO_TITLE_ICON_HOLD);
+    menuTicks(ICO_TITLE_ICON_WAIT * 2);
+    CHECK(st.arms == 2 && !st.pass, "icon: done for the run");
+    ico_title_icon_set_ops(NULL);
+}
+
+static void testIconRetries(void)
+{
+    /* empty answers: armed again, then given up */
+    iconStart(1);
+    menuTicks(ICO_TITLE_ICON_WAIT);
+    untilArmed(20);
+    for (int i = 0; i < ICO_TITLE_ICON_RETRIES; i++) {
+        answer(ANS_NULL, 0);
+        CHECK(ico_title_icon_pass_on() && isBlack(), "icon: drop %d: the pass stays", i + 1);
+        CHECK(untilArmed(20) == 1 && st.arms == i + 2, "icon: drop %d: armed again next tick",
+              i + 1);
+    }
+    answer(ANS_NULL, 0);
+    CHECK(!st.pass && st.curtain && st.delivers == 0 && st.singles == 0,
+          "icon: drop %d: given up, the pass off", ICO_TITLE_ICON_RETRIES + 1);
+    menuTicks(ICO_TITLE_ICON_HOLD);
+    CHECK(!st.curtain && ico_title_icon_state() == ICO_TITLE_ICON_DONE,
+          "icon: given up for the run");
+
+    /* no answer within the wait: cancelled and armed again */
+    iconStart(1);
+    menuTicks(ICO_TITLE_ICON_WAIT);
+    untilArmed(20);
+    menuTicks(ICO_TITLE_ICON_TIMEOUT);
+    CHECK(st.cancels == 1, "icon: no answer within %d ticks: cancelled", ICO_TITLE_ICON_TIMEOUT);
+    CHECK(untilArmed(20) == 1 && st.arms == 2, "icon: and armed again");
+    answer(ANS_PICTURE, 0x22);
+    CHECK(isWhite(), "icon: the late shot A kept");
+
+    /* the pair differs: taken again once, then the picture over black alone */
+    iconStart(1);
+    st.deliverR[0] = st.deliverR[1] = ICO_APP_ICON_GHOST;
+    menuTicks(ICO_TITLE_ICON_WAIT);
+    untilArmed(20);
+    answer(ANS_PICTURE, 0x31);
+    untilArmed(20);
+    answer(ANS_PICTURE, 0xC1);
+    CHECK(st.delivers == 1 && isBlack() && st.curtain &&
+              ico_title_icon_state() == ICO_TITLE_ICON_SETTLE_A,
+          "icon: the pair differs: over black again, the curtain on");
+    untilArmed(20);
+    answer(ANS_PICTURE, 0x32);
+    untilArmed(20);
+    answer(ANS_PICTURE, 0xC2);
+    CHECK(st.delivers == 2 && st.singles == 1 && st.seenSingle == 0x32 && !st.pass,
+          "icon: it differs again: the second picture over black alone");
+    menuTicks(ICO_TITLE_ICON_HOLD);
+    CHECK(ico_title_icon_state() == ICO_TITLE_ICON_DONE && !st.curtain, "icon: then done");
+
+    /* a picture of another size over white: as the pair differing */
+    iconStart(1);
+    st.deliverR[0] = ICO_APP_ICON_OK;
+    menuTicks(ICO_TITLE_ICON_WAIT);
+    untilArmed(20);
+    answer(ANS_PICTURE, 0x41);
+    untilArmed(20);
+    st.answerW = 6;
+    answer(ANS_PICTURE, 0xD1);
+    CHECK(st.delivers == 0 && isBlack(), "icon: a resized window: the pair again");
+    st.answerW = 4;
+    untilArmed(20);
+    answer(ANS_PICTURE, 0x42);
+    untilArmed(20);
+    answer(ANS_PICTURE, 0xD2);
+    CHECK(st.delivers == 1 && st.seenA == 0x42 && st.seenB == 0xD2 && !st.pass,
+          "icon: then delivered");
+
+    /* the menu left during the pass: ended, started again next visit */
+    iconStart(1);
+    menuTicks(ICO_TITLE_ICON_WAIT);
+    untilArmed(20);
+    answer(ANS_PICTURE, 0x51);
+    frame(TITLE, EMPTY, 0); /* New Game: the title fading out */
+    CHECK(!st.pass && st.curtain, "icon: the menu left: the pass off");
+    frame(TITLE, EMPTY, 0);
+    frame(TITLE, EMPTY, 0);
+    CHECK(!st.curtain && ico_title_icon_state() == ICO_TITLE_ICON_IDLE,
+          "icon: the curtain off after the hold, idle");
+    menuTicks(ICO_TITLE_ICON_WAIT);
+    CHECK(isBlack() && st.arms == 1, "icon: the next visit starts again");
+    untilArmed(20);
+    CHECK(st.arms == 2, "icon: and arms");
+    frame(26, EMPTY, 0); /* the stage changed while armed */
+    CHECK(!st.pass && st.cancels >= 1, "icon: a stage change while armed cancels the shot");
+    ico_title_icon_reset();
+    ico_title_icon_set_ops(NULL);
+}
+
 int main(void)
 {
     testModels();
@@ -186,6 +505,9 @@ int main(void)
     testExtras();
     testPause();
     testStretch();
+    testIconSkip();
+    testIconSteps();
+    testIconRetries();
     if (failures) {
         printf("title_logo_test: %d failure(s)\n", failures);
         return 1;

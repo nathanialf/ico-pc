@@ -253,6 +253,19 @@ if(ICO_RUN_TESTS)
     add_test(NAME app_icon_files COMMAND app_icon_files_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
+# Extras > Add to the applications menu (desktop_entry.c): the entry's text
+# and the install over a fake data folder under the build folder
+# (Linux and the other Unixes: the test sets environment variables with setenv)
+if(UNIX)
+    add_executable(desktop_entry_test test/desktop_entry_test.c desktop_entry.c)
+    target_include_directories(desktop_entry_test PRIVATE .)
+    target_compile_options(desktop_entry_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_libraries(desktop_entry_test PRIVATE ico_host_fs)
+    if(ICO_RUN_TESTS)
+        add_test(NAME desktop_entry COMMAND desktop_entry_test "${CMAKE_CURRENT_BINARY_DIR}")
+    endif()
+endif()
+
 # F12's zip (dump_zip.c): the dump and the log in one archive, read back
 # with miniz's reader; it writes under the build folder
 add_executable(dump_zip_test test/dump_zip_test.c dump_zip.c)

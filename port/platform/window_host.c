@@ -9,6 +9,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include "app_icon.h"
+#include "app_icon_window.h"
 #include "audio_host.h"
 #include "cdvd_host.h"
 #include "config.h"
@@ -79,6 +81,9 @@
 #include "android/host_android.h"
 #elif !defined(ICO_IOS)
 #include "steam_shortcut.h"
+#if defined(__linux__) && !defined(__ANDROID__)
+#include "desktop_entry.h"
+#endif
 #endif
 #if ICO_RC_TOOLS && defined(__ANDROID__)
 #include "share_report.h" /* an rc build's Share a bug report (settings.h) */
@@ -342,9 +347,12 @@ static void video_settings(RdSettings *rs, int w, int h)
        draws an MSAA count the device lacks as off (rd_aa_supported_mask) */
     rs->antiAlias = (uint8_t)ico_video_anti_alias();
     rs->downsample = (uint8_t)(o.downsample == ICO_DOWNSAMPLE_BOX); /* PC port: issue 149 */
-    /* Upscaling: FSR 1.0 and its Sharpness (PC port: issue 99) */
-    rs->upscale = (uint8_t)(o.upscale == ICO_UPSCALE_FSR1 ? RD_UPSCALE_FSR1 : RD_UPSCALE_OFF);
+    /* Upscaling: FSR 1.0 / FSR 3.1, their Sharpness and FSR 3.1's quality (PC port: issue 99) */
+    rs->upscale = (uint8_t)(o.upscale == ICO_UPSCALE_FSR1   ? RD_UPSCALE_FSR1
+                            : o.upscale == ICO_UPSCALE_FSR3 ? RD_UPSCALE_FSR3
+                                                            : RD_UPSCALE_OFF);
     rs->upscaleSharpness = (uint8_t)o.upscaleSharpness;
+    rs->upscaleQuality = (uint8_t)o.upscaleQuality; /* FSR 3.1's ratio: RdUpscaleQuality's order */
     rs->sceneWidth = (uint32_t)o.resW;
     rs->sceneHeight = (uint32_t)o.resH;
     rs->sceneScale = (float)o.resScale;
@@ -358,6 +366,18 @@ static void video_settings(RdSettings *rs, int w, int h)
         rs->sceneScale = (float)ico_video_auto_scale();
         s_autoRes.windowScale =
             (boxH < (float)rs->outputHeight ? boxH : (float)rs->outputHeight) / 448.0f;
+        /* a temporal upscaler (port/render/rd_upscale.h): the display stays
+           the window's, and Auto's steps cap the scene's scale below it
+           instead, from the window's over the upscaler's ratio (FSR 3.1's
+           for these settings, rd_upscale_ratio_of: the renderer has not
+           seen them yet) */
+        const float upRatio =
+            rd_upscale_ratio_of(rs, o.crt && o.crtStrength > 0.0f, s_autoRes.windowScale);
+        if (upRatio > 0.0f) {
+            rs->upscaleRenderCap = rs->sceneScale;
+            rs->sceneScale = 0.0f;
+            s_autoRes.windowScale = pace_auto_window_scale(s_autoRes.windowScale, upRatio);
+        }
         s_autoRes.tickBudget = o.framerate == ICO_FRAMERATE_ORIGINAL;
         s_autoRes.samples.budgetNs = o.framerate > 0        ? 1000000000ull / (Uint64)o.framerate
                                      : s_autoRes.tickBudget ? 40000000ull /* PAL until paced */
@@ -469,6 +489,34 @@ _Static_assert(ICO_STEAM_ADDED == UI_STEAM_ADDED && ICO_STEAM_EXISTS == UI_STEAM
 static int steam_add_handler(void)
 {
     return ico_steam_add_this_game();
+}
+#endif
+
+/* Extras > Add to the applications menu: Linux only (a desktop entry for the
+   freedesktop menus; port/platform/desktop_entry.h). The program is the one
+   Add to Steam starts: the AppImage file when run from one. The picture is
+   the icon the title screen's capture made; before it exists the entry is
+   written without one (the menu then shows its generic icon) and the log
+   says so. */
+#if defined(__linux__) && !defined(__ANDROID__)
+static int desktop_add_handler(void)
+{
+    char exe[1024], home[1024], png[1024];
+    const char *picture = NULL;
+    int r;
+
+    if (ico_steam_self_exe(exe, sizeof(exe)) != 0 ||
+        ico_desktop_entry_data_home(home, sizeof(home)) != 0) {
+        fprintf(stderr, "ico_pc: applications menu: no program path or data folder\n");
+        return UI_DESKTOP_FAILED;
+    }
+    if (ico_app_icon_current_path(png, sizeof(png), 0) == 0 && png[0] != '\0') {
+        picture = png;
+    }
+    r = ico_desktop_entry_install(home, exe, picture);
+    fprintf(stderr, "ico_pc: applications menu: %s in %s (%s): %s\n", exe, home,
+            picture != NULL ? "with the icon" : "no icon made yet", r == 0 ? "written" : "failed");
+    return r == 0 ? UI_DESKTOP_DONE : UI_DESKTOP_FAILED;
 }
 #endif
 
@@ -1870,6 +1918,9 @@ static void window_attach(int mode)
            (ico_window_pump) */
         fprintf(stderr, "window: fullscreen was asked for at creation; the window is windowed\n");
     }
+    /* the application icon (issue 166): the file the title screen's capture
+       made on an earlier run or this one; none yet leaves SDL's default */
+    (void)ico_app_icon_apply(s_window);
 }
 
 int ico_window_open(unsigned int gsW, unsigned int gsH)
@@ -2571,6 +2622,10 @@ open_window:
 #if !defined(__ANDROID__) && !defined(__APPLE__)
     /* Extras > Add to Steam (Windows and Linux; see steam_add_handler) */
     ui_settings_set_steam_handler(steam_add_handler);
+#endif
+#if defined(__linux__) && !defined(__ANDROID__)
+    /* Extras > Add to the applications menu (Linux only; desktop_add_handler) */
+    ui_settings_set_desktop_handler(desktop_add_handler);
 #endif
     ui_settings_set_texture_export_host(&s_texExportHost);
     /* Graphics > Graphics API lists the renderers this build links (the page
@@ -3873,6 +3928,11 @@ int ico_window_pump(void)
        the last frames made closed as a batch once they pause (the pipeline
        cache written, the batch's line logged), the count for the
        low-memory line, and such a line waiting for the activity file */
+    /* the icon the title's capture just wrote is set in this run
+       (SDL_SetWindowIcon: the main thread, this one) */
+    if (ico_app_icon_changed_take()) {
+        (void)ico_app_icon_apply(s_window);
+    }
     rd_pipelines_lazy_tick();
     ico_diag_set_pipelines_made(rd_pipeline_count());
     ico_diag_startup_activity_poll();
@@ -5771,6 +5831,9 @@ void ico_window_close(void)
     ui_settings_set_touch_edit_host(NULL);
 #if !defined(__ANDROID__) && !defined(ICO_IOS)
     ui_settings_set_steam_handler(NULL);
+#endif
+#if defined(__linux__) && !defined(__ANDROID__)
+    ui_settings_set_desktop_handler(NULL);
 #endif
     ui_settings_set_texture_export_host(NULL);
     texpack_export_shutdown(); /* joins its worker, before rd_shutdown */

@@ -359,7 +359,12 @@ the reduction is SCENE's only reader after the sprites (the border's column repe
 columns before it, which the steps, the same on every column, commute with). No fold under a pass
 window, in a frame with MSAA (the epoch's resolve is not the lerp's), past four steps, or above 1x
 for a bar while the reduction resamples SCENE through the above-1x kernels (foreseen as
-`doBlurSpriteDraw` picks them, `rd__set_a1x_gs_keep` included).
+`doBlurSpriteDraw` picks them, `rd__set_a1x_gs_keep` included). No fold while a temporal upscaler
+takes SCENE at the reduction ([RENDER.md](RENDER.md#the-upscale-point): the split in force,
+`rd__upscale_point_on`): the upscaler must see the fades, the brightness and the bars in SCENE,
+and the reduction reads its output, not SCENE, so the plan is not made, `rd__fades_fold_skip`
+draws every sprite and the reduction applies none (`fades fold: off while a temporal upscaler
+takes SCENE at the reduction; list 11's sprites are drawn into SCENE`, once a run).
 
 The rounding (`roundingRefusal`): a step whose factor is 0 (Cd kept) or 0x80 (Cs) stores the same
 level under every blend and every filter, one value over the rows it covers; a step between them

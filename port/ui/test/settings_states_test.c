@@ -367,7 +367,7 @@ static void testExtrasRows(void)
             CHECK(settle(ml, 60), "title %d: the menu", title);
             openPage(ml, -1, UI_PAGE_EXTRAS);
             const int n = ui_settings_page_rows(UI_PAGE_EXTRAS, labels, NULL, NULL, 24);
-            CHECK(n == 11, "title %d, host %d: %d Extras rows", title, host, n);
+            CHECK(n == 12, "title %d, host %d: %d Extras rows", title, host, n);
             for (int i = 0; i < n; i++) {
                 CHECK(strcmp(txt(labels[i]), ui_str(UI_STR_STATES)) != 0 &&
                           lt_ext_prop(labels[i])->right != ui_settings_page_layout(UI_PAGE_STATES),

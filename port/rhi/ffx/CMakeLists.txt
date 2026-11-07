@@ -86,6 +86,15 @@ if(WIN32 AND CMAKE_CROSSCOMPILING AND NOT CMAKE_CXX_COMPILER)
 endif()
 enable_language(CXX)
 
+# The RHI's Vulkan device: the backend acts on the extensions the device
+# lists, so the device enables each one it reads where listed (vk_device.c
+# vkr_create_device, ICO_FFX; RhiComputeCaps.externalExts); rhi_native_test
+# checks the set is whole on a Vulkan 1.2 device
+target_compile_definitions(ico_rhi_vulkan PRIVATE ICO_FFX=1)
+if(TARGET rhi_native_test)
+    target_compile_definitions(rhi_native_test PRIVATE ICO_FFX=1)
+endif()
+
 # --- ico_ffx_sc: the shader compiler, for the build host ---------------------
 if(CMAKE_CROSSCOMPILING)
     include(ExternalProject)
@@ -192,9 +201,10 @@ add_library(ico_ffx_upscaler STATIC
     "${_ffx}/sdk/src/backends/vk/ffx_vk.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ico_ffx_stubs.cpp")
 add_dependencies(ico_ffx_upscaler ico_ffx_vk_permutations)
-# out of `all`: built for what links it (ffx_link_test in `tests`, the
-# program once the FSR 3.1 row's host code does), so a build that links
-# neither does not run the shader compiler
+# out of `all`: built for what links it (ffx_link_test in `tests`;
+# ico_render, port/render/rd_fsr3.c, so the program and the renderer's
+# tests and tools), so a build that links none does not run the shader
+# compiler
 set_target_properties(ico_ffx_upscaler PROPERTIES EXCLUDE_FROM_ALL ON)
 set_target_properties(ico_ffx_upscaler PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON
                                                   CXX_EXTENSIONS OFF)

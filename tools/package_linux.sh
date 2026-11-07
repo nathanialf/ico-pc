@@ -260,9 +260,9 @@ for f in README.md LICENSE NOTICES.txt THIRD_PARTY.md VERSION.txt; do
     cp -a "$stage/$f" "$doc/$f" || fail "stage: no $f"
 done
 cp -a "$stage/docs" "$doc/docs"
-cp "$wt/tools/appimage/ico-pc.desktop" "$appdir/ico-pc.desktop"
-cp "$wt/tools/appimage/ico-pc.svg" "$appdir/ico-pc.svg"
-ln -s ico-pc.svg "$appdir/.DirIcon"
+cp "$wt/tools/appimage/com.defnf.icopc.desktop" "$appdir/com.defnf.icopc.desktop"
+cp "$wt/tools/appimage/com.defnf.icopc.svg" "$appdir/com.defnf.icopc.svg"
+ln -s com.defnf.icopc.svg "$appdir/.DirIcon"
 ln -s usr/bin/ico_pc "$appdir/AppRun"
 rm -f "$appimage" "$appimage.sha256"
 run env ARCH="$appimage_arch" SOURCE_DATE_EPOCH="$(git log -1 --format=%ct "$commit")" \
@@ -280,7 +280,7 @@ mkdir -p "$chk"
 sq="$chk/squashfs-root"
 want_list="$chk/want.txt"
 {
-    printf '%s\n' .DirIcon AppRun ico-pc.desktop ico-pc.svg \
+    printf '%s\n' .DirIcon AppRun com.defnf.icopc.desktop com.defnf.icopc.svg \
         usr/bin/ico_pc usr/bin/ico_pc.map usr/bin/libSDL3.so.0 usr/bin/mc_import
     for f in README.md LICENSE NOTICES.txt THIRD_PARTY.md VERSION.txt; do
         echo "usr/share/doc/ico-pc/$f"
@@ -292,7 +292,7 @@ if ! diff -u "$want_list" "$chk/got.txt" >>"$log" 2>&1; then
     fail "the AppImage's files are not the expected list (the diff is in the log)"
 fi
 [[ "$(readlink "$sq/AppRun")" == usr/bin/ico_pc ]] || fail "the AppImage's AppRun is not a link to usr/bin/ico_pc"
-[[ "$(readlink "$sq/.DirIcon")" == ico-pc.svg ]] || fail "the AppImage's .DirIcon is not a link to ico-pc.svg"
+[[ "$(readlink "$sq/.DirIcon")" == com.defnf.icopc.svg ]] || fail "the AppImage's .DirIcon is not a link to com.defnf.icopc.svg"
 [[ -x "$sq/usr/bin/ico_pc" ]] || fail "the AppImage's ico_pc is not executable"
 cmp -s "$sq/usr/bin/ico_pc" "$stage/ico_pc" || fail "the AppImage's ico_pc differs from the stage's"
 check_program_elf "$sq/usr/bin/ico_pc"

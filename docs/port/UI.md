@@ -12,6 +12,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/layout_ext.h`, `layout_ext.c` | the layout extension: port layouts and rows past the game's tables, text, glyph and rectangle rows, the text hook, the back buttons, pointer roles |
 | `port/ui/settings.h`, `settings.c` | the Settings menu: the pages, the entry rows, the New Game and Quit screens, the values and their setters, the saves |
 | `port/ui/settings_graphics.h`, `settings_graphics.c` | Settings > Graphics: the Graphics API and Graphics card rows' values and steps, Apply and its countdown |
+| `port/ui/settings_desktop.h`, `settings_desktop.c` | Settings > Extras > Add to the applications menu (Linux): the host's handler (`ui_settings_set_desktop_handler`), Cross and the done / failed popups |
 | `port/ui/settings_backup.h`, `settings_backup.c` | Settings > Extras > Back up your data and Restore from a backup: the rows' words and notes, Cross, the confirmations, the popups |
 | `port/ui/settings_unused.h`, `settings_unused.c` | Settings > Extras > Unused content's host: whether each row and the link show, Cross's open ([Extras > Unused content](#extras--unused-content)) |
 | `port/ui/settings_variants.h`, `settings_variants.c` | the game variants rows' helpers: which options they are, their value text, the disc's note and whether a row shows on the disc ([Gameplay > Yorda, Shadows, Combat and Cutscenes](#gameplay--yorda-shadows-combat-and-cutscenes)) |
@@ -193,7 +194,7 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | --- | --- |
 | Main (`UI_PAGE_MAIN`) | Display, Picture (`UI_PAGE_PICTURE`), Effects, Graphics (`UI_PAGE_GRAPHICS`), Graphics driver, Audio, Controls, Gameplay, Language, Menu language, Disc, Achievements, Extras, Save a picture for a bug report, (an rc build on Android: Share a bug report,) Developer (`UI_PAGE_DEVELOPER`), Back |
 | Display | Preset, Resolution, Aspect, Window mode, Vsync, Frame rate, Frame rate counter (`UI_OPT_SHOW_FPS`, `[video] show_fps`, Off or On), Video mode, Back |
-| Picture | Anti-aliasing, Downsampling (`UI_OPT_DOWNSAMPLE`, `[video] downsample`, Off or To original size), Upscaling (`UI_OPT_UPSCALE`, `[video] upscaling`, Off or FSR 1.0) and Sharpness (`UI_OPT_UPSCALE_SHARPNESS`, `[video] upscaling_sharpness`, 0..100 in tens, default 80, held at both ends, shown while Upscaling is on; one note under both), Full height, Filtering, Full pixel, Brightness (pause menu only), CRT filter, CRT strength, Gamma, Picture brightness, Contrast, Saturation (`UI_OPT_TONE_GAMMA`..`UI_OPT_TONE_SATURATION`, `[video] gamma`, `brightness`, `contrast`, `saturation`: 1..100, 50 the game's picture, 1 a press (issue 194), Square puts 50 back, one shared note, 17 rows in all), Texture pack, Model pack (title only), Back |
+| Picture | Anti-aliasing, Downsampling (`UI_OPT_DOWNSAMPLE`, `[video] downsample`, Off or To original size), Upscaling (`UI_OPT_UPSCALE`, `[video] upscaling`, Off, FSR 1.0 or FSR 3.1; the stepper skips FSR 3.1 unless `rd_upscale_temporal_supported()` (`ui_settings_set_temporal_query` in tests), and a saved one the device cannot run reads "FSR 3.1 (off: not available)" and is never rewritten), Upscaling quality (`UI_OPT_UPSCALE_QUALITY`, `[video] upscaling_quality`, Native AA / Quality / Balanced / Performance, shown while FSR 3.1 is offered and chosen) and Sharpness (`UI_OPT_UPSCALE_SHARPNESS`, `[video] upscaling_sharpness`, 0..100 in tens, default 80, held at both ends, shown while Upscaling is FSR 1.0 or a runnable FSR 3.1; one note under the three; the Anti-aliasing value says "(off: FSR 3.1)" while FSR 3.1 runs), Full height, Full height, Filtering, Full pixel, Brightness (pause menu only), CRT filter, CRT strength, Gamma, Picture brightness, Contrast, Saturation (`UI_OPT_TONE_GAMMA`..`UI_OPT_TONE_SATURATION`, `[video] gamma`, `brightness`, `contrast`, `saturation`: 1..100, 50 the game's picture, 1 a press (issue 194), Square puts 50 back, one shared note, 18 rows in all), Texture pack, Model pack (title only), Back |
 | Effects | the six game effects (Glow between frames, `UI_OPT_EFFECT_GLOW_SMOOTH`, Original or Smooth right after Glow, `[video] effect_glow_mode`, greyed by `glowSmoothLocked` at Frame rate Original or with Glow off, its note `UI_STR_EFFECT_GLOW_SMOOTH_NOTE` swapped for `UI_STR_EFFECT_GLOW_SMOOTH_LOCKED` while greyed; Motion blur Off, Original or Smooth, `UI_OPT_EFFECT_MOTION_BLUR`, stepped round with `stepIndex` and its note `UI_STR_EFFECT_MOTION_BLUR_NOTE`; Motion blur strength right after it, `UI_OPT_EFFECT_MOTION_BLUR_STRENGTH`, 10..100 % in tens held at both ends, `[video] effect_motion_blur_strength`, hidden by `optShown` while Motion blur is Off, its note `UI_STR_EFFECT_MOTION_BLUR_STRENGTH_NOTE`) with Water reflections (Original or Sharp, `UI_OPT_EFFECT_WATER`) after Fog, Cinematic bars last, Back |
 | Graphics | Graphics API (`UI_OPT_GRAPHICS_API`, shown with two or more renderer names: Automatic, then each name `ui_settings_set_backend_names` was given as Vulkan, OpenGL, Direct3D 12 or Direct3D 11; the shown value and the step base are the config's `video.backend`, an unlinked value shows as written and steps from Automatic; a step writes `video.backend` ("" for Automatic) and sets `s_dirtyConfig`, so the file is written on leaving; the note `UI_STR_GRAPHICS_API_NOTE` says Apply switches now and the choice is otherwise used from the next start), Graphics card (`UI_OPT_GRAPHICS_ADAPTER`, shown with two or more card names: Automatic (`UI_STR_VAL_GRAPHICS_AUTOMATIC`), then each name `ui_settings_set_adapter_names` was given, untranslated and cut to the value box by `gpuFit`; the config's `video.adapter`, a name the list lacks shows as written and steps from Automatic; a step writes it ("" for Automatic) with the line `settings: Graphics card set to <name|automatic> (used from the next start)`; note `UI_STR_GRAPHICS_ADAPTER_NOTE`), Apply (`UI_OPT_GRAPHICS_APPLY`, shown while a `UiGraphicsHost` is set, no switch under way and either the Graphics API value, Automatic counting as the host's `automatic()` (the backend Automatic started this run) or else `vulkan`, is a linked name that is not the host's `running()`, or the Graphics card value, Automatic counting as the card the names marked automatic, is a listed card that is not the host's `runningAdapter()`; note `UI_STR_GRAPHICS_APPLY_NOTE`), Keep and Revert (`UI_OPT_GRAPHICS_KEEP`, `UI_OPT_GRAPHICS_REVERT`, shown only in the countdown, which hides Graphics API, Graphics card and Back), Back (the link and the page with two or more renderer names or two or more card names) |
 | Graphics driver | Driver, Add a driver, Add from the drivers folder (`UI_OPT_GPU_ADD_FILE`, stepped over `fileName(i)`, shown while `fileCount()` is above 0, Cross calls `installFileBegin`), Remove this driver, Back (Android) |
@@ -208,7 +209,7 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Combat (`UI_PAGE_COMBAT`) | Automatic guard (`UI_OPT_VAR_AUTO_GUARD`), Turn to face shadows (`UI_OPT_VAR_ATTACK_TURN`), Shadows wait while Ico is down (`UI_OPT_VAR_SHADOWS_WAIT_DOWN`), One hit per swing, Shadows never dodge, Shadows attack together (`UI_OPT_SHADOWS_TOGETHER`, `[gameplay] shadows_together`, its note `UI_STR_OPT_SHADOWS_TOGETHER_NOTE`), Queen barrier (`UI_OPT_VAR_*`), Light sword colour (`UI_OPT_VAR_SWORD_COLOUR`: Original, Red; hidden on ntsc, aug6 and jun26, `ui__variant_shown`), Stick (`UI_OPT_VAR_WEAPON`: Original, Insect net), Back; the first three On as the game ships, the weapon rows Original, achievements rules unchanged. The page's rows are `combatOpts` / `combatStrs` in `build`; a later row is one entry in each and one `addNote` in the page's case: ten rows with Back, the window's ten slots |
 | Cutscenes (`UI_PAGE_CUTSCENES`) | Skip the opening (`UI_OPT_SKIP_OPENING`), No cutscene look-around, Ignore cutscene cameras (`UI_OPT_VAR_*`), Back |
 | Achievements | a list, the popups switch |
-| Extras | Music, Models, Credits, Characters, Unused content (`UI_PAGE_UNUSED`, a link), Add to Steam, Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Back up your data (`UI_OPT_EXTRAS_BACKUP`), Restore from a backup (`UI_OPT_EXTRAS_RESTORE`), Achievement popups, Back |
+| Extras | Music, Models, Credits, Characters, Unused content (`UI_PAGE_UNUSED`, a link), Add to Steam, Add to the applications menu (`UI_OPT_EXTRAS_DESKTOP`, Linux only), Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Back up your data (`UI_OPT_EXTRAS_BACKUP`), Restore from a backup (`UI_OPT_EXTRAS_RESTORE`), Achievement popups, Back |
 | Unused content (`UI_PAGE_UNUSED`) | Test room: arena, Test room: climbing, Attract movie (576 lines), Early show title art (`UI_OPT_UNUSED_ARENA` .. `_ART`, press rows), Back ([Extras > Unused content](#extras--unused-content)) |
 | Music | the music gallery, a list |
 | Characters | nine colour rows, Switch, Randomize, Reset, Back |
@@ -245,7 +246,8 @@ Which rows show depends on where the menu was entered and what the machine has: 
 settings (Brightness, Vibration, Button configuration, Film effect, Players) only from
 the pause menu (Hold type shows from the title too: `[gameplay] hold_type`), Film effect and Players once the game is cleared; Video mode, Model pack and Extras'
 Music, Models and Credits only from the title (Add to Steam also only where the window host installs
-its handler, Export textures only while a `UiTextureExportHost` is set, the backup rows only while a
+its handler, Add to the applications menu only where the Linux window host installs its own,
+`ui_settings_set_desktop_handler`, Export textures only while a `UiTextureExportHost` is set, the backup rows only while a
 `UiBackupHost` is set, the window build's but iOS's; none of them is in
 `isExtrasOpt`, which is the three rows that leave the stage); the Unused content link only from
 the title while the host has any row, and each of its rows only from the title while the host has
@@ -442,7 +444,7 @@ in `ico_window_close`, which then calls `texpack_export_shutdown` before `rd_shu
 `texpack_shutdown`, so the worker joins before the pack closes ([PACKS.md](PACKS.md)). The headless
 build installs no host, so the row stays hidden there and in the UI tests without a fake.
 
-- The row shows from the title only (`optShown`), after Add to Steam; its note is
+- The row shows from the title only (`optShown`), after Add to Steam and Add to the applications menu; its note is
   `UI_STR_EXPORT_TEXTURES_NOTE`. Dump textures does not hide it (the same names, a file already
   there is kept).
 - Cross (`texExportPress`): while the host's state is `UI_TEXEXPORT_RUNNING`, `cancel()` (log
@@ -909,8 +911,7 @@ right edge of the 4:3 picture for 0.3 s, held for 4 s, sliding out for 0.3 s, co
 call, `ico_host_vsync_hz()` (15, 200 and 15 at 50 Hz; 18, 240 and 18 at 60 Hz, the Japanese disc's
 and the European disc's 60 Hz mode; `port/ui/popup.h` (`UI_POPUP_QUEUE`, `ui_popup_set_vsync_hz`,
 `ui_popup_slide_vsyncs`, `ui_popup_hold_vsyncs`), 50 Hz by default in the tests). Achievements, photo mode, the model viewer, the Graphics driver page and
-Extras > Add to Steam, Export textures and the backup rows push them (`port/ui/settings.c` (`steamAdd`,
-`texExportEnd`); `port/ui/settings_backup.c` (`ui__backup_press`, `ui__backup_vsync`)); `ui_popup_title` and `ui_popup_body` give the one showing (tests). They are drawn on the
+Extras > Add to Steam, Add to the applications menu, Export textures and the backup rows push them (`port/ui/settings.c` (`steamAdd`, `texExportEnd`); `port/ui/settings_desktop.c` (`ui__desktop_press`); `port/ui/settings_backup.c` (`ui__backup_press`, `ui__backup_vsync`)); `ui_popup_title` and `ui_popup_body` give the one showing (tests). They are drawn on the
 presentation overlay (`rd_set_present_overlay`) at every [present](ARCHITECTURE.md#terms), after the
 box blit and at the output's resolution: outside the game's frame, so a frame the GS keeps never
 shows one twice, and never mirrored (`port/ui/popup.h`, header comment; `port/ui/ui_host.c`
@@ -1486,6 +1487,9 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   near the cap.
 - `settings_adapter` (`test/settings_adapter_test.c`): the Graphics card row and Apply on another
   card over a fake host ([Graphics > Apply](#graphics--apply)).
+- `settings_desktop` (`test/settings_desktop_test.c`): Extras' Add to the applications menu row over a fake
+  handler (hidden without one and on the pause menu, after Add to Steam, Cross, the popups, the
+  strings; `_jpn`, `_kor`, `_cn`: the disc's confirm button).
 - `settings_backup` (`test/settings_backup_test.c`): Extras' backup rows over a fake host
   ([Extras > Back up your data and Restore from a backup](#extras--back-up-your-data-and-restore-from-a-backup)).
 - `settings_render` (`test/settings_photo_test.c` with `SETTINGS_RENDER`): every screen through rd

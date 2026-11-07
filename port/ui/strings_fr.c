@@ -613,9 +613,15 @@ const char *const ui_strings_fr[UI_STR_COUNT] =
             "Dessine à la résolution ci-dessus, puis réduit à la taille d’origine. Demande 2x ou plus ; pas avec le filtre CRT ni avec Fenêtre.",
         [UI_STR_OPT_UPSCALE] = "Mise à l’échelle",
         [UI_STR_VAL_UPSCALE_FSR1] = "FSR 1.0",
+        [UI_STR_VAL_UPSCALE_FSR3] = "FSR 3.1",
+        [UI_STR_OPT_UPSCALE_QUALITY] = "Qualité d’échelle",
+        [UI_STR_VAL_UPSCALE_Q_NATIVE] = "AA natif",
+        [UI_STR_VAL_UPSCALE_Q_QUALITY] = "Qualité",
+        [UI_STR_VAL_UPSCALE_Q_BALANCED] = "Équilibré",
+        [UI_STR_VAL_UPSCALE_Q_PERFORMANCE] = "Performance",
         [UI_STR_OPT_UPSCALE_SHARPNESS] = "Netteté",
         [UI_STR_OPT_UPSCALE_NOTE] =
-            "FSR 1.0 (AMD) affine l’image quand elle est dessinée plus petite que l’écran (en 1x ou après Réduction). Pas avec le filtre CRT ni Fenêtre.",
+            "FSR (AMD) affine l’image dessinée plus petite que l’écran. Pas avec le filtre CRT ni Fenêtre. 3.1 : sans Réduction, sans anticrénelage.",
         [UI_STR_AA_OFF] = "Désactivé",
         [UI_STR_AA_SSAA2] = "Supersampling 2x",
         [UI_STR_AA_SSAA4] = "Supersampling 4x",
@@ -623,6 +629,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] =
         [UI_STR_AA_MSAA4] = "MSAA 4x",
         [UI_STR_AA_MSAA8] = "MSAA 8x",
         [UI_STR_AA_UNAVAILABLE] = " (désactivé : indisponible)",
+        [UI_STR_AA_FSR3] = " (désactivé : FSR 3.1)",
         [UI_STR_EXTRAS_STEAM] = "Ajouter à Steam",
         [UI_STR_STEAM_ADDED] = "Ajouté à Steam",
         [UI_STR_STEAM_ADDED_BODY] = "Lancer Steam et chercher ICO\ndans la bibliothèque.",
@@ -636,6 +643,12 @@ const char *const ui_strings_fr[UI_STR_COUNT] =
         [UI_STR_STEAM_FAILED] = "Ajout à Steam impossible",
         [UI_STR_STEAM_FAILED_BODY] =
             "La liste des raccourcis n’a pas pu être modifiée.\nLe README explique l’ajout manuel.",
+        [UI_STR_EXTRAS_DESKTOP] = "Ajouter au menu des applications",
+        [UI_STR_DESKTOP_ADDED] = "Ajouté au menu",
+        [UI_STR_DESKTOP_ADDED_BODY] = "Le jeu est dans votre\nmenu des applications.",
+        [UI_STR_DESKTOP_FAILED] = "Ajout au menu impossible",
+        [UI_STR_DESKTOP_FAILED_BODY] =
+            "L’entrée de menu n’a pas pu être\nécrite dans votre dossier utilisateur.",
         [UI_STR_EXTRAS_EXPORT_TEXTURES] = "Exporter les textures",
         [UI_STR_EXPORT_TEXTURES_STOP] = "Arrêter l’export",
         [UI_STR_EXPORT_TEXTURES_NOTE] =

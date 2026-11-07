@@ -122,7 +122,7 @@
       "version": "v1.1.4 (c6efa6bf7f2027b3ec94f28578bb5965eabb9e55), FSR 3.1.4, with the port's patches (tools/ffx/patches)",
       "licence": "MIT",
       "used_for": "the FSR 3.1 temporal upscaler (Vulkan), compiled into the program with the SPIR-V shaders built from its GLSL",
-      "platforms": ["linux"],
+      "platforms": ["linux", "windows"],
       "arch": ["x64"],
       "texts": [{"file": "tools/toolchain/deps/fidelityfx/v1.1.4/src/LICENSE.txt"}]
     },

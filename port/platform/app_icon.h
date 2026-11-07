@@ -59,6 +59,16 @@ int ico_app_icon_write_atomic(const char *path, const uint8_t *data, size_t n);
  * "" in the stamp that is written. */
 int ico_app_icon_wanted_at(const char *dir, const char *discId, const char *label);
 
+/* 1 when the presented picture is plain enough to cut the icon from: the
+ * CRT filter is off (crtOn 0, or its strength 0) and the four colour
+ * adjustments (Picture page: gamma, brightness, contrast, saturation, 1..100,
+ * 50 the game's own, 0 read as 50) are all neutral.  The capture's white
+ * background must come back as 255; the filter or the tone would move it and
+ * the matte with it.  Screen softening is fine (a blur of a flat field is
+ * flat).  ico_app_icon_wanted adds this to its answer. */
+int ico_app_icon_picture_plain(int crtOn, float crtStrength, int gamma, int brightness,
+                               int contrast, int saturation);
+
 /* Writes the set for a disc into <dir>/icon/: the PNG (png[0..pngN), the
  * 256 x 256 file as encoded), the .ico, the current copies, then the
  * stamp.  rgba256 is the same image decoded.  One log line per call.

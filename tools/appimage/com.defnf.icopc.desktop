@@ -2,6 +2,6 @@
 Type=Application
 Name=ICO
 Exec=ico_pc
-Icon=ico-pc
+Icon=com.defnf.icopc
 Categories=Game;
 Terminal=false

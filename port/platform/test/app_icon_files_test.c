@@ -199,6 +199,18 @@ int main(int argc, char **argv)
     CHECK(absent("ico-pc-SCES-50760.png") && absent("ico-pc.png"));
     CHECK(ico_app_icon_wanted_at(NULL, disc, "v1") == 0);
 
+    /* the capture guard: a plain picture only (the game's own tone, no CRT
+       filter); 0 reads as 50; a CRT filter at strength 0 presents as off */
+    CHECK(ico_app_icon_picture_plain(0, 1.0f, 50, 50, 50, 50) == 1);
+    CHECK(ico_app_icon_picture_plain(0, 0.0f, 0, 0, 0, 0) == 1);
+    CHECK(ico_app_icon_picture_plain(1, 0.0f, 50, 50, 50, 50) == 1);
+    CHECK(ico_app_icon_picture_plain(1, 1.0f, 50, 50, 50, 50) == 0);
+    CHECK(ico_app_icon_picture_plain(1, 0.5f, 0, 0, 0, 0) == 0);
+    CHECK(ico_app_icon_picture_plain(0, 1.0f, 49, 50, 50, 50) == 0);
+    CHECK(ico_app_icon_picture_plain(0, 1.0f, 50, 51, 50, 50) == 0);
+    CHECK(ico_app_icon_picture_plain(0, 1.0f, 50, 50, 1, 50) == 0);
+    CHECK(ico_app_icon_picture_plain(0, 1.0f, 50, 50, 50, 100) == 0);
+
     removeAll();
     (void)ico_rmdir(icon);
     (void)ico_rmdir(s_dir);

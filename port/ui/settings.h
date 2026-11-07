@@ -120,6 +120,11 @@ void ui_settings_set_aa_mask_query(unsigned (*fn)(void));
    the stored value with " (off: not available)".  Without a query the
    renderer's own answer (no renderer: never). */
 void ui_settings_set_aa_blocked_query(int (*fn)(void));
+/* Whether FSR 3.1 can run (rd_upscale_temporal_supported): the Upscaling row
+   steps to FSR 3.1 only when fn says so (nonzero), and a saved FSR 3.1 the
+   device cannot run reads "FSR 3.1 (off: not available)" and is drawn as Off.
+   Without a query the renderer's own answer (no renderer: never). */
+void ui_settings_set_temporal_query(int (*fn)(void));
 /* Display > Texture pack reads fn (texpack_count, the replacements
    found at start) to tell an installed pack from none ("None installed",
    the row then does not step); NULL, or none installed, is none. */
@@ -314,6 +319,14 @@ void ui_settings_vsync(void);
 #define UI_STEAM_NO_USER 4   /* no Steam account to add it to */
 #define UI_STEAM_FAILED 5    /* the shortcut list could not be changed */
 void ui_settings_set_steam_handler(int (*fn)(void));
+/* Settings > Extras > Add to the applications menu (Linux only): fn writes
+   the game's desktop entry and icon into the player's data folder
+   (port/platform/desktop_entry.h) and returns UI_DESKTOP_DONE or
+   UI_DESKTOP_FAILED; the menu answers with a popup. NULL (or never called)
+   hides the row; no other platform sets it. */
+#define UI_DESKTOP_DONE 0   /* the entry and the icon are written */
+#define UI_DESKTOP_FAILED 1 /* they could not be written */
+void ui_settings_set_desktop_handler(int (*fn)(void));
 /* Settings > Extras > Export textures (the title only): every picture on the
    disc saved under its PCSX2 name into the dumps folder, a job the host runs
    in the background (window_host.c over port/render/texpack_export.h; the
@@ -642,7 +655,10 @@ typedef enum UiSettingsOpt {
     UI_OPT_ASPECT,
     UI_OPT_ANTI_ALIAS, /* [video] anti_aliasing, stepped through rd_aa_supported_mask */
     UI_OPT_DOWNSAMPLE, /* [video] downsample: Off / To original size, default Off */
-    UI_OPT_UPSCALE,    /* [video] upscaling: Off / FSR 1.0, default Off */
+    UI_OPT_UPSCALE, /* [video] upscaling: Off / FSR 1.0 / FSR 3.1 (when supported), default Off */
+    /* [video] upscaling_quality: Native AA / Quality / Balanced / Performance;
+       shown while Upscaling is FSR 3.1 and the device runs it */
+    UI_OPT_UPSCALE_QUALITY,
     /* [video] upscaling_sharpness: 0..100 in tens, default 80; shown while Upscaling is on */
     UI_OPT_UPSCALE_SHARPNESS,
     UI_OPT_WINDOW_MODE,
@@ -802,6 +818,9 @@ typedef enum UiSettingsOpt {
     /* Extras > Add to Steam (desktop; shown from the title while a host
        handler is set) */
     UI_OPT_EXTRAS_STEAM,
+    /* Extras > Add to the applications menu (Linux; shown from the title
+       while a host handler is set, ui_settings_set_desktop_handler) */
+    UI_OPT_EXTRAS_DESKTOP,
     /* Extras > Export textures (shown from the title while a host is set,
        ui_settings_set_texture_export_host); Stop exporting while it runs */
     UI_OPT_EXTRAS_EXPORT_TEXTURES,

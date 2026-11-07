@@ -253,6 +253,14 @@ static void postReduction(const RdPostParams *p)
     /* FBA 0, ALPHA 0x8000000048, FRAME FBP 0 (FBMSK 0), XYOFFSET centred on
      * W x H/2, SCISSOR W x H/2, TEST 0x30000, ZBUF mask on */
     rd_color_mask(0);
+    /* the upscale point (rd_upscale.h): a temporal upscaler takes SCENE
+     * here, the post chain done, and this reduction reads its output; a
+     * marker with no state, nothing at replay without one (dump version 17) */
+    RdCmd *up = rd__push(RDC_UPSCALE_POINT);
+    if (up) {
+        up->u[0] = src.id;
+        up->u[1] = dst.id;
+    }
     rd_set_target(dst, (RdTarget){0}, (uint32_t)W, (uint32_t)(H / 2), 0);
     rd_fba(0);
     rd_blend(RD_BLEND_CS_AS_ADD_CD, 0x80, 0); /* PRIM 0x106 / 0x116: no ABE */

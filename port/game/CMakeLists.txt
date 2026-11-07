@@ -717,13 +717,17 @@ if(TARGET ico_pc)
     # title_logo.c: the title's logo hidden under Settings and
     # Extras, asked by seki/src/RegistPacket.c; model_viewer_member.c: the
     # early show title art's members registered on the host stage
-    # (charFileManager.c ico_char_file_image)
-    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_cam.c model_viewer_member.c model_viewer_motion.c model_viewer_table.c title_logo.c)
+    # (charFileManager.c ico_char_file_image); title_icon.c: the application
+    # icon's capture on the title (the letter I alone over black and white,
+    # title_icon.h), stepped from title_logo.c
+    add_library(ico_model_viewer_live OBJECT model_viewer.c model_viewer_cam.c model_viewer_member.c model_viewer_motion.c model_viewer_table.c title_logo.c title_icon.c)
     ico_include_dirs(sugipon _ico_mv_game_incs)
     # port/data: df_pack.h (the June 2001 demo's DATA.DF asked for a stage's pack)
+    # port/platform: app_icon.h (title_icon.c)
     target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                ${_ico_mv_game_incs}
-                               $<TARGET_PROPERTY:ico_port_data,INTERFACE_INCLUDE_DIRECTORIES>)
+                               $<TARGET_PROPERTY:ico_port_data,INTERFACE_INCLUDE_DIRECTORIES>
+                               "${CMAKE_SOURCE_DIR}/port/platform")
     if(NOT ICO_HEADLESS)
         target_include_directories(ico_model_viewer_live PRIVATE "${CMAKE_SOURCE_DIR}/port/render")
     endif()
@@ -796,9 +800,12 @@ if(TARGET ico_pc)
 endif()
 # title_logo_test: the title's logo hidden under Settings and
 # Extras from the title, never by the pause menu's, and shown again on the
-# title's menu; the game's globals and the menus' answers stubbed. CPU only.
-add_executable(title_logo_test test/title_logo_test.c title_logo.c)
-target_include_directories(title_logo_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+# title's menu; the game's globals and the menus' answers stubbed; the
+# icon capture's pass (I alone) and steps (title_icon.c) with the renderer,
+# the curtain and the icon files stubbed. CPU only.
+add_executable(title_logo_test test/title_logo_test.c title_logo.c title_icon.c)
+target_include_directories(title_logo_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_SOURCE_DIR}/port/platform")
 target_link_libraries(title_logo_test PRIVATE ico_region) # title_logo.c reads the region's title rows
 # port/ui's "settings.h" by -iquote, so <strings.h> stays the C library's
 target_compile_options(title_logo_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}

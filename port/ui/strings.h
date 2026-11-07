@@ -744,6 +744,12 @@ typedef enum UiStrId {
        and the note under both */
     UI_STR_OPT_UPSCALE,
     UI_STR_VAL_UPSCALE_FSR1,
+    UI_STR_VAL_UPSCALE_FSR3, /* FSR 3.1 ([video] upscaling = "fsr3"; UI_STR_AA_UNAVAILABLE follows it when the device cannot) */
+    UI_STR_OPT_UPSCALE_QUALITY, /* the row under it, shown while Upscaling is FSR 3.1 */
+    UI_STR_VAL_UPSCALE_Q_NATIVE,
+    UI_STR_VAL_UPSCALE_Q_QUALITY,
+    UI_STR_VAL_UPSCALE_Q_BALANCED,
+    UI_STR_VAL_UPSCALE_Q_PERFORMANCE,
     UI_STR_OPT_UPSCALE_SHARPNESS,
     UI_STR_OPT_UPSCALE_NOTE,
     UI_STR_AA_OFF,
@@ -753,6 +759,7 @@ typedef enum UiStrId {
     UI_STR_AA_MSAA4,
     UI_STR_AA_MSAA8,
     UI_STR_AA_UNAVAILABLE, /* appended to a value that is not in force: " (off: not available)" */
+    UI_STR_AA_FSR3, /* appended while FSR 3.1 runs (it replaces the anti-aliasing): " (off: FSR 3.1)" */
     /* Extras > Add to Steam: the row and the popups (title, then body) */
     UI_STR_EXTRAS_STEAM,
     UI_STR_STEAM_ADDED,
@@ -766,6 +773,13 @@ typedef enum UiStrId {
     UI_STR_STEAM_NO_USER_BODY,
     UI_STR_STEAM_FAILED,
     UI_STR_STEAM_FAILED_BODY,
+    /* Extras > Add to the applications menu (Linux): the row, then the done
+       popup (title, body) and the failed popup (title, body) */
+    UI_STR_EXTRAS_DESKTOP,
+    UI_STR_DESKTOP_ADDED,
+    UI_STR_DESKTOP_ADDED_BODY,
+    UI_STR_DESKTOP_FAILED,
+    UI_STR_DESKTOP_FAILED_BODY,
     /* Extras > Export textures: the row, its label while running, its note,
        the progress note and the end popups (titles, bodies) */
     UI_STR_EXTRAS_EXPORT_TEXTURES,

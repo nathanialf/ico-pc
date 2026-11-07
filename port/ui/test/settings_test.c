@@ -64,15 +64,28 @@ static void testBuild(void)
                                  UI_STR_OPT_EFFECT_WATER,
                                  UI_STR_OPT_EFFECT_CINEMATIC_BARS,
                                  UI_STR_BACK};
-    static const int picOpts[] = {
-        UI_OPT_ANTI_ALIAS,    UI_OPT_DOWNSAMPLE,      UI_OPT_UPSCALE,      UI_OPT_UPSCALE_SHARPNESS,
-        UI_OPT_FULL_HEIGHT,   UI_OPT_FILTER,          UI_OPT_FULL_PIXEL,   UI_OPT_BRIGHTNESS,
-        UI_OPT_CRT,           UI_OPT_CRT_STRENGTH,    UI_OPT_TONE_GAMMA,   UI_OPT_TONE_BRIGHTNESS,
-        UI_OPT_TONE_CONTRAST, UI_OPT_TONE_SATURATION, UI_OPT_TEXTURE_PACK, UI_OPT_MODEL_PACK,
-        UI_OPT_BACK};
+    static const int picOpts[] = {UI_OPT_ANTI_ALIAS,
+                                  UI_OPT_DOWNSAMPLE,
+                                  UI_OPT_UPSCALE,
+                                  UI_OPT_UPSCALE_QUALITY,
+                                  UI_OPT_UPSCALE_SHARPNESS,
+                                  UI_OPT_FULL_HEIGHT,
+                                  UI_OPT_FILTER,
+                                  UI_OPT_FULL_PIXEL,
+                                  UI_OPT_BRIGHTNESS,
+                                  UI_OPT_CRT,
+                                  UI_OPT_CRT_STRENGTH,
+                                  UI_OPT_TONE_GAMMA,
+                                  UI_OPT_TONE_BRIGHTNESS,
+                                  UI_OPT_TONE_CONTRAST,
+                                  UI_OPT_TONE_SATURATION,
+                                  UI_OPT_TEXTURE_PACK,
+                                  UI_OPT_MODEL_PACK,
+                                  UI_OPT_BACK};
     static const int picStrs[] = {UI_STR_OPT_AA,
                                   UI_STR_OPT_DOWNSAMPLE,
                                   UI_STR_OPT_UPSCALE,
+                                  UI_STR_OPT_UPSCALE_QUALITY,
                                   UI_STR_OPT_UPSCALE_SHARPNESS,
                                   UI_STR_OPT_FULL_HEIGHT,
                                   UI_STR_OPT_FILTERING,
@@ -206,35 +219,24 @@ static void testBuild(void)
     CHECK(labelsAre(UI_PAGE_MAIN, mainOpts, mainStrs, 16), "main page rows");
     CHECK(labelsAre(UI_PAGE_GRAPHICS, apiOpts, apiStrs, 6), "Graphics page rows");
     CHECK(labelsAre(UI_PAGE_EFFECTS, fxOpts, fxStrs, 10), "effects rows");
-    CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 17), "picture rows");
+    CHECK(labelsAre(UI_PAGE_PICTURE, picOpts, picStrs, 18), "picture rows");
     CHECK(labelsAre(UI_PAGE_DEVELOPER, devOpts, devStrs, 6), "developer rows");
     {
         /* the Characters and Unused content links, then Add to Steam,
            Export textures, Back up your data and Restore from a backup
            (hidden without a host) before the pop-ups and Back */
-        static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,
-                                         UI_OPT_EXTRAS_MODELS,
-                                         UI_OPT_EXTRAS_CREDITS,
-                                         UI_OPT_LINK,
-                                         UI_OPT_LINK,
-                                         UI_OPT_EXTRAS_STEAM,
-                                         UI_OPT_EXTRAS_EXPORT_TEXTURES,
-                                         UI_OPT_EXTRAS_BACKUP,
-                                         UI_OPT_EXTRAS_RESTORE,
-                                         UI_OPT_ACH_POPUPS,
-                                         UI_OPT_BACK};
-        static const int extrasStrs[] = {UI_STR_EXTRAS_MUSIC,
-                                         UI_STR_EXTRAS_MODELS,
-                                         UI_STR_EXTRAS_CREDITS,
-                                         UI_STR_SECTION_CHARACTERS,
-                                         UI_STR_SECTION_UNUSED,
-                                         UI_STR_EXTRAS_STEAM,
-                                         UI_STR_EXTRAS_EXPORT_TEXTURES,
-                                         UI_STR_EXTRAS_BACKUP,
-                                         UI_STR_EXTRAS_RESTORE,
-                                         UI_STR_OPT_ACH_POPUPS,
-                                         UI_STR_BACK};
-        CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 11), "Extras page rows");
+        static const int extrasOpts[] = {UI_OPT_EXTRAS_MUSIC,   UI_OPT_EXTRAS_MODELS,
+                                         UI_OPT_EXTRAS_CREDITS, UI_OPT_LINK,
+                                         UI_OPT_LINK,           UI_OPT_EXTRAS_STEAM,
+                                         UI_OPT_EXTRAS_DESKTOP, UI_OPT_EXTRAS_EXPORT_TEXTURES,
+                                         UI_OPT_EXTRAS_BACKUP,  UI_OPT_EXTRAS_RESTORE,
+                                         UI_OPT_ACH_POPUPS,     UI_OPT_BACK};
+        static const int extrasStrs[] = {
+            UI_STR_EXTRAS_MUSIC,       UI_STR_EXTRAS_MODELS,          UI_STR_EXTRAS_CREDITS,
+            UI_STR_SECTION_CHARACTERS, UI_STR_SECTION_UNUSED,         UI_STR_EXTRAS_STEAM,
+            UI_STR_EXTRAS_DESKTOP,     UI_STR_EXTRAS_EXPORT_TEXTURES, UI_STR_EXTRAS_BACKUP,
+            UI_STR_EXTRAS_RESTORE,     UI_STR_OPT_ACH_POPUPS,         UI_STR_BACK};
+        CHECK(labelsAre(UI_PAGE_EXTRAS, extrasOpts, extrasStrs, 12), "Extras page rows");
         /* Extras > Unused content: the two test rooms, the movie, the art,
            Back (each shown by the host: settings_extras_test testUnused) */
         static const int unusedOpts[] = {UI_OPT_UNUSED_ARENA, UI_OPT_UNUSED_CLIMB,
@@ -707,7 +709,7 @@ static void testUpscale(void)
 {
     char p[1100];
     IcoVideoOptions o;
-    int l[17], op[17];
+    int l[18], op[18];
 
     useConfig("[video]\npreset = \"enhanced\"\n");
     fakeTables();
@@ -715,9 +717,9 @@ static void testUpscale(void)
     ui_settings_reset();
     ui_set_language(UI_LANG_EN);
     ui_settings_install();
-    const int n = ui_settings_page_rows(UI_PAGE_PICTURE, l, op, NULL, 17);
-    CHECK(n > 4 && op[1] == UI_OPT_DOWNSAMPLE && op[2] == UI_OPT_UPSCALE &&
-              op[3] == UI_OPT_UPSCALE_SHARPNESS,
+    const int n = ui_settings_page_rows(UI_PAGE_PICTURE, l, op, NULL, 18);
+    CHECK(n > 5 && op[1] == UI_OPT_DOWNSAMPLE && op[2] == UI_OPT_UPSCALE &&
+              op[3] == UI_OPT_UPSCALE_QUALITY && op[4] == UI_OPT_UPSCALE_SHARPNESS,
           "the rows are on Picture right after Downsampling");
     CHECK(ui_settings_row_of(UI_PAGE_DISPLAY, UI_OPT_UPSCALE) < 0, "not on Display");
     CHECK(strcmp(ui_str(UI_STR_OPT_UPSCALE), "Upscaling") == 0 &&
@@ -726,7 +728,7 @@ static void testUpscale(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_UPSCALE), "Off") == 0, "Off by default (%s)",
           ui_settings_value_text(UI_OPT_UPSCALE));
     CHECK(!ui_settings_opt_shown(UI_OPT_UPSCALE_SHARPNESS), "Sharpness hidden while Off");
-    CHECK(rowWithPrefix(UI_PAGE_PICTURE, "FSR 1.0 (AMD) sharpens the picture") >= 0,
+    CHECK(rowWithPrefix(UI_PAGE_PICTURE, "FSR (AMD) sharpens a picture") >= 0,
           "its note is on the page");
     ico_video_get(&o);
     const int presetBefore = ico_video_preset(&o);
@@ -771,6 +773,100 @@ static void testUpscale(void)
     CHECK(strcmp(ui_settings_value_text(UI_OPT_UPSCALE), "FSR 1.0") == 0 &&
               strcmp(ui_settings_value_text(UI_OPT_UPSCALE_SHARPNESS), "40") == 0,
           "a file's fsr1 and 40");
+}
+
+static int s_temporalOk;
+
+static int fakeTemporal(void)
+{
+    return s_temporalOk;
+}
+
+/* the FSR 3.1 value and the Upscaling quality row (issue 99): the stepper
+   skips FSR 3.1 where the device cannot run it, a saved "fsr3" then reads
+   "FSR 3.1 (off: not available)" with no quality or Sharpness row and is never
+   rewritten, and where it runs the quality row steps Native AA / Quality /
+   Balanced / Performance (config upscaling_quality) and the Anti-aliasing row
+   says "(off: FSR 3.1)" */
+static void testUpscaleFsr3(void)
+{
+    char p[1100];
+    IcoVideoOptions o;
+
+    useConfig("[video]\npreset = \"enhanced\"\nupscaling = \"fsr3\"\nanti_aliasing = \"ssaa2\"\n");
+    fakeTables();
+    lt_ext_reset();
+    ui_settings_reset();
+    ui_set_language(UI_LANG_EN);
+    ui_settings_install();
+    s_temporalOk = 0;
+    ui_settings_set_temporal_query(fakeTemporal);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_UPSCALE), "FSR 3.1 (off: not available)") == 0,
+          "a saved fsr3 the device cannot run (%s)", ui_settings_value_text(UI_OPT_UPSCALE));
+    CHECK(!ui_settings_opt_shown(UI_OPT_UPSCALE_QUALITY) &&
+              !ui_settings_opt_shown(UI_OPT_UPSCALE_SHARPNESS),
+          "quality and Sharpness hidden while FSR 3.1 is not available");
+    CHECK(strstr(ui_settings_value_text(UI_OPT_ANTI_ALIAS), "FSR 3.1") == NULL,
+          "Anti-aliasing is not blamed on FSR 3.1 (%s)", ui_settings_value_text(UI_OPT_ANTI_ALIAS));
+    CHECK(ico_video_upscale() == ICO_UPSCALE_FSR3, "the saved word is kept");
+    CHECK(strcmp(ui_str(UI_STR_VAL_UPSCALE_FSR3), "FSR 3.1") == 0 &&
+              strcmp(ui_str(UI_STR_OPT_UPSCALE_QUALITY), "Upscaling quality") == 0,
+          "their labels");
+    /* Right from the unavailable FSR 3.1 goes round to Off; Right from FSR 1.0 skips it */
+    ui_settings_step(UI_OPT_UPSCALE, 1);
+    CHECK(ico_video_upscale() == ICO_UPSCALE_OFF, "Right: Off (%d)", ico_video_upscale());
+    ui_settings_step(UI_OPT_UPSCALE, 1);
+    ui_settings_step(UI_OPT_UPSCALE, 1);
+    CHECK(ico_video_upscale() == ICO_UPSCALE_OFF, "FSR 1.0 then Off: FSR 3.1 skipped (%d)",
+          ico_video_upscale());
+    ui_settings_step(UI_OPT_UPSCALE, -1);
+    CHECK(ico_video_upscale() == ICO_UPSCALE_FSR1, "Left from Off: FSR 1.0 (%d)",
+          ico_video_upscale());
+    /* supported: all three values, the quality row, the Anti-aliasing words */
+    s_temporalOk = 1;
+    ui_settings_step(UI_OPT_UPSCALE, 1);
+    ico_video_get(&o);
+    CHECK(o.upscale == ICO_UPSCALE_FSR3 &&
+              strcmp(ui_settings_value_text(UI_OPT_UPSCALE), "FSR 3.1") == 0,
+          "FSR 3.1 offered where it runs (%s)", ui_settings_value_text(UI_OPT_UPSCALE));
+    CHECK(ui_settings_opt_shown(UI_OPT_UPSCALE_QUALITY) &&
+              ui_settings_opt_shown(UI_OPT_UPSCALE_SHARPNESS),
+          "quality and Sharpness shown");
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_UPSCALE_QUALITY), "Native AA") == 0,
+          "Native AA by default (%s)", ui_settings_value_text(UI_OPT_UPSCALE_QUALITY));
+    ui_settings_step(UI_OPT_UPSCALE_QUALITY, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_UPSCALE_QUALITY), "Quality") == 0, "Quality (%s)",
+          ui_settings_value_text(UI_OPT_UPSCALE_QUALITY));
+    ui_settings_step(UI_OPT_UPSCALE_QUALITY, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_UPSCALE_QUALITY), "Balanced") == 0, "Balanced");
+    ui_settings_step(UI_OPT_UPSCALE_QUALITY, 1);
+    CHECK(strcmp(ui_settings_value_text(UI_OPT_UPSCALE_QUALITY), "Performance") == 0,
+          "Performance");
+    ui_settings_step(UI_OPT_UPSCALE_QUALITY, 1);
+    CHECK(ico_video_upscale_quality() == ICO_UPSCALE_Q_NATIVE, "around to Native AA (%d)",
+          ico_video_upscale_quality());
+    ui_settings_step(UI_OPT_UPSCALE_QUALITY, -1);
+    CHECK(ico_video_upscale_quality() == ICO_UPSCALE_Q_PERFORMANCE, "Left: Performance");
+    CHECK(strstr(ui_settings_value_text(UI_OPT_ANTI_ALIAS), "(off: FSR 3.1)") != NULL,
+          "Anti-aliasing says (off: FSR 3.1) (%s)", ui_settings_value_text(UI_OPT_ANTI_ALIAS));
+    ui_settings_step(UI_OPT_UPSCALE, 1);
+    CHECK(ico_video_upscale() == ICO_UPSCALE_OFF, "Right: Off again (%d)", ico_video_upscale());
+    CHECK(!ui_settings_opt_shown(UI_OPT_UPSCALE_QUALITY), "quality hidden while Off");
+    ui_settings_step(UI_OPT_UPSCALE, -1);
+    CHECK(ico_video_upscale() == ICO_UPSCALE_FSR3, "Left from Off: FSR 3.1 (%d)",
+          ico_video_upscale());
+    CHECK(ui_settings_save() == 0, "save");
+    path(p, sizeof(p), "settings_test.toml");
+    IcoToml *t = ico_toml_load(p);
+    CHECK(t != NULL && ico_toml_get(t, "video.upscaling") != NULL &&
+              strcmp(ico_toml_get(t, "video.upscaling"), "fsr3") == 0 &&
+              ico_toml_get(t, "video.upscaling_quality") != NULL &&
+              strcmp(ico_toml_get(t, "video.upscaling_quality"), "performance") == 0,
+          "[video] upscaling = \"fsr3\", upscaling_quality = \"performance\"");
+    ico_toml_free(t);
+    CHECK(rowWithPrefix(UI_PAGE_PICTURE, "FSR (AMD) sharpens a picture") >= 0,
+          "the note is on the page");
+    ui_settings_set_temporal_query(NULL);
 }
 
 static void checkSavedPreset(const char *want)
@@ -3054,13 +3150,13 @@ static void testGameOptions(void)
             /* Anti-aliasing, Downsampling, Upscaling, Sharpness, Full-height
                and Texture filtering first, Full pixel before Brightness and
                the CRT rows */
-            int fl[17], fo[17];
-            const int fn = ui_settings_page_rows(UI_PAGE_PICTURE, fl, fo, NULL, 17);
-            CHECK(fn > 8 && fo[0] == UI_OPT_ANTI_ALIAS && fo[1] == UI_OPT_DOWNSAMPLE &&
-                      fo[2] == UI_OPT_UPSCALE && fo[3] == UI_OPT_UPSCALE_SHARPNESS &&
-                      fo[4] == UI_OPT_FULL_HEIGHT && fo[5] == UI_OPT_FILTER &&
-                      fo[6] == UI_OPT_FULL_PIXEL && fo[7] == UI_OPT_BRIGHTNESS &&
-                      fo[8] == UI_OPT_CRT,
+            int fl[18], fo[18];
+            const int fn = ui_settings_page_rows(UI_PAGE_PICTURE, fl, fo, NULL, 18);
+            CHECK(fn > 9 && fo[0] == UI_OPT_ANTI_ALIAS && fo[1] == UI_OPT_DOWNSAMPLE &&
+                      fo[2] == UI_OPT_UPSCALE && fo[3] == UI_OPT_UPSCALE_QUALITY &&
+                      fo[4] == UI_OPT_UPSCALE_SHARPNESS && fo[5] == UI_OPT_FULL_HEIGHT &&
+                      fo[6] == UI_OPT_FILTER && fo[7] == UI_OPT_FULL_PIXEL &&
+                      fo[8] == UI_OPT_BRIGHTNESS && fo[9] == UI_OPT_CRT,
                   "title %d: Picture starts Anti-aliasing, Downsampling, Upscaling, Sharpness, "
                   "Full-height, Texture filtering, Full pixel, Brightness, CRT",
                   title);
@@ -4332,6 +4428,7 @@ int main(int argc, char **argv)
     testDownsample();
     testUpscale();
     testNotesFit();
+    testUpscaleFsr3();
     testFreeMovement();
     testPreset();
     testCapture();

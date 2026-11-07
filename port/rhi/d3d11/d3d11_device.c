@@ -1693,6 +1693,7 @@ void rhi_cmd_external_end(RhiCommandList cl)
 bool rhi_device_compute_caps(RhiComputeCaps *out)
 {
     out->ok = out->apiVersionOk = out->subgroupOk = out->storageFormatsOk = out->float16 = false;
+    out->externalExts = false;
     out->why = "not offered by the Direct3D 11 backend";
     return false;
 }
