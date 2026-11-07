@@ -55,6 +55,12 @@
 #   deps/libchdr/          libchdr (BSD-3-Clause) source tree with its bundled
 #                          LZMA, miniz and zstd decoders, the .chd disc image
 #                          reader; compiled by port/data/CMakeLists.txt
+#   deps/fidelityfx/<tag>/ the AMD FidelityFX SDK (MIT) subset the FSR 3.1
+#                          upscaler needs (src/, patched by tools/ffx/patches)
+#                          and glslang (glslang/bin/glslangValidator, built
+#                          from source: the SDK's shader compiler runs it);
+#                          compiled by port/ffx/CMakeLists.txt (ICO_FFX);
+#                          x86-64 hosts only
 #
 # docs/THIRD_PARTY.md records the versions and licences.
 #
@@ -66,9 +72,10 @@
 #   SPIRV_CROSS_TAG, SPIRV_CROSS_COMMIT, SPIRV_CROSS_TAR_SHA256
 #   LIBMPEG2_TAG, LIBMPEG2_COMMIT, LIBMPEG2_TAR_SHA256
 #   LIBCHDR_TAG, LIBCHDR_COMMIT, LIBCHDR_TAR_SHA256, ZSTD_LICENSE_SHA256
+#   FFX_TAG, FFX_COMMIT, FFX_TAR_SHA256, GLSLANG_TAG, GLSLANG_COMMIT, GLSLANG_TAR_SHA256
 #   SKIP_SDL3_LINUX=1, SKIP_SDL3_MINGW=1, SKIP_VALIDATION_LAYER=1, SKIP_DXC=1, SKIP_SPIRV_CROSS=1,
 #   SKIP_LIBMPEG2=1, SKIP_LIBCHDR=1, SKIP_NOTO_JP=1, SKIP_NOTO_KR=1, SKIP_NOTO_TC=1,
-#   SKIP_ARIMO=1, SKIP_APPIMAGE=1
+#   SKIP_ARIMO=1, SKIP_APPIMAGE=1, SKIP_FFX=1
 #   APPIMAGETOOL_VERSION, APPIMAGETOOL_SHA256, APPIMAGE_RUNTIME_VERSION,
 #   APPIMAGE_RUNTIME_SHA256 (the host architecture's assets)
 #   NOTO_JP_COMMIT, NOTO_JP_SHA256, NOTO_JP_OFL_SHA256
@@ -986,5 +993,157 @@ else
     "$SPIRV_CROSS_DIR/bin/spirv-cross" --help >/dev/null 2>&1 || true
     echo "$SPIRV_CROSS_ID" > "$SPIRV_CROSS_DIR/.ico-release"
     echo "==> SPIRV-Cross ${SPIRV_CROSS_TAG} (built from source) at $SPIRV_CROSS_DIR"
+fi
+# --- 10. AMD FidelityFX SDK (the FSR 3.1 upscaler) and glslang (its build tool) ---
+#
+# GPUOpen-LibrariesAndSDKs/FidelityFX-SDK (MIT, "Copyright (C) 2024 Advanced
+# Micro Devices, Inc."), tag v1.1.4 (2025-05-08) = commit
+# c6efa6bf7f2027b3ec94f28578bb5965eabb9e55: FSR 3.1.4, the last release with
+# the sdk/ layout, its CMake build and the source of its shader compiler
+# (FidelityFX_SC). The later "Kits" releases (v2.x; v2.4.0 carries upscaler
+# 3.1.6) ship the upscaler's source without a build or the shader compiler,
+# so its permutation headers could not be made from them. Fetched and checked
+# like libmpeg2: the commit id, then the SHA-256 of `git archive --format=tar`
+# of it (taken 2026-11-07). Only what the port compiles is installed under
+# deps/fidelityfx/<tag>/src: the upscaler component, the shared code, the
+# Vulkan and D3D12 backends, ffx-api, the GPU headers and the shader
+# compiler's source with the three libraries it compiles in (MD5, SPIRV-
+# Reflect, tiny-process-library); not the samples, frame generation, FSR 4
+# (not in this release), the Windows binaries or the media. The files under
+# tools/ffx/patches/*.patch are applied in name order (the POSIX build of
+# the shader compiler; gcc/clang fixes); the stamp carries their SHA-256, so
+# a changed patch re-installs the tree. port/ffx/CMakeLists.txt builds it
+# (ICO_FFX). docs/THIRD_PARTY.md and docs/BUILDING.md have the details.
+#
+# glslang (BSD-3-Clause and others, Khronos) at the Vulkan SDK tag the other
+# Khronos tools come from, with the SPIRV-Tools and SPIRV-Headers commits its
+# known_good.json names (the same ones DXC's submodules record above, checked
+# the same way): FidelityFX_SC runs glslangValidator to compile the Vulkan
+# backend's GLSL shaders to SPIR-V (-Os needs SPIRV-Tools' optimizer). Built
+# from source at -j2 into deps/fidelityfx/<tag>/glslang/bin. A build tool:
+# nothing of it is linked or shipped.
+if [[ "${1:-}" != --game-only ]]; then
+FFX_TAG="${FFX_TAG:-v1.1.4}"
+FFX_COMMIT="${FFX_COMMIT:-c6efa6bf7f2027b3ec94f28578bb5965eabb9e55}"
+FFX_TAR_SHA256="${FFX_TAR_SHA256:-37d78d4abf99a7523718ce9e1efb5a809c899ebc0767c6246d8813c33b70f99c}"
+GLSLANG_TAG="${GLSLANG_TAG:-vulkan-sdk-1.4.363.0}"
+GLSLANG_COMMIT="${GLSLANG_COMMIT:-e1b562a8bed273a02f30b59b66a5d499793cede5}"
+GLSLANG_TAR_SHA256="${GLSLANG_TAR_SHA256:-6daf1c3811b4f68be560a762011c346e0414ebeb8908f8cb57517aec5c523822}"
+FFX_DIR="$DEST/fidelityfx/$FFX_TAG"
+FFX_PATCHES=("$ROOT"/tools/ffx/patches/*.patch)
+FFX_PATCH_SUM="$(cat "${FFX_PATCHES[@]}" | sha256sum | cut -c1-16)"
+FFX_ID="$FFX_TAG-$FFX_COMMIT-patches-$FFX_PATCH_SUM"
+GLSLANG_ID="$GLSLANG_TAG-$GLSLANG_COMMIT"
+if [[ "${SKIP_FFX:-0}" == "1" ]]; then
+    echo "==> SKIP_FFX=1; not fetching the FidelityFX SDK"
+elif [[ "$ICO_HOST_ARCH" != "x64" ]]; then
+    # the presets that build it (linux-x64, win-x64) are x86-64 builds
+    echo "==> the FidelityFX SDK is fetched on x86-64 hosts only"
+else
+    for t in git g++; do
+        command -v "$t" >/dev/null 2>&1 || {
+            echo "fetch_deps: $t not found; it fetches and builds the FidelityFX SDK's tools" >&2
+            exit 1
+        }
+    done
+    if stamped "$FFX_DIR/src" "$FFX_ID"; then
+        echo "==> FidelityFX SDK ${FFX_TAG} already at $FFX_DIR/src"
+    else
+        echo "==> fetching the FidelityFX SDK ${FFX_TAG}"
+        git init -q "$TMP/ffx.git"
+        git -C "$TMP/ffx.git" fetch -q --depth 1 \
+            https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK "refs/tags/${FFX_TAG}"
+        got="$(git -C "$TMP/ffx.git" rev-parse 'FETCH_HEAD^{commit}')"
+        if [[ "$got" != "$FFX_COMMIT" ]]; then
+            echo "fetch_deps: FidelityFX SDK ${FFX_TAG} is $got, expected $FFX_COMMIT" >&2
+            exit 1
+        fi
+        git -C "$TMP/ffx.git" archive --format=tar -o "$TMP/ffx.tar" "$FFX_COMMIT"
+        echo "${FFX_TAR_SHA256}  $TMP/ffx.tar" | sha256sum -c -
+        rm -rf "$TMP/ffx.git"
+        mkdir -p "$TMP/ffx-src"
+        sc=sdk/tools/ffx_shader_compiler
+        # -m: the files take the time of the install, so a re-install (a new
+        # pin or patch) is newer than an existing build's objects and rebuilt
+        tar -C "$TMP/ffx-src" -m -xf "$TMP/ffx.tar" LICENSE.txt readme.md \
+            sdk/include sdk/src/shared sdk/src/backends/shared sdk/src/backends/vk \
+            sdk/src/backends/dx12 sdk/src/components/fsr3upscaler ffx-api/include ffx-api/src \
+            "$sc/src" "$sc/libs/MD5" "$sc/libs/SPIRV-Reflect" "$sc/libs/tiny-process-library"
+        rm -f "$TMP/ffx.tar"
+        # the patches, applied by git in a repository of their own (git apply
+        # inside the port's checkout would resolve paths against its root)
+        git -C "$TMP/ffx-src" init -q
+        for p in "${FFX_PATCHES[@]}"; do
+            echo "==> applying $(basename "$p")"
+            git -C "$TMP/ffx-src" apply --whitespace=nowarn "$p"
+        done
+        rm -rf "$TMP/ffx-src/.git"
+        rm -rf "$FFX_DIR/src"
+        mkdir -p "$FFX_DIR"
+        mv "$TMP/ffx-src" "$FFX_DIR/src"
+        echo "$FFX_ID" > "$FFX_DIR/src/.ico-release"
+        echo "==> FidelityFX SDK ${FFX_TAG} at $FFX_DIR/src"
+    fi
+    if stamped "$FFX_DIR/glslang" "$GLSLANG_ID"; then
+        echo "==> glslang ${GLSLANG_TAG} already at $FFX_DIR/glslang"
+    else
+        echo "==> fetching glslang ${GLSLANG_TAG} source"
+        src="$TMP/glslang-src"
+        git init -q "$src"
+        git -C "$src" fetch -q --depth 1 \
+            https://github.com/KhronosGroup/glslang "refs/tags/${GLSLANG_TAG}"
+        got="$(git -C "$src" rev-parse 'FETCH_HEAD^{commit}')"
+        if [[ "$got" != "$GLSLANG_COMMIT" ]]; then
+            echo "fetch_deps: glslang ${GLSLANG_TAG} is $got, expected $GLSLANG_COMMIT" >&2
+            exit 1
+        fi
+        git -C "$src" archive --format=tar -o "$TMP/glslang.tar" "$GLSLANG_COMMIT"
+        echo "${GLSLANG_TAR_SHA256}  $TMP/glslang.tar" | sha256sum -c -
+        git -C "$src" -c advice.detachedHead=false checkout -q "$GLSLANG_COMMIT"
+        # known_good.json's SPIRV-Tools and SPIRV-Headers (each repository's
+        # tag of the same name is that commit), where glslang's CMake looks for
+        # them; the same commits and archive digests as DXC's submodules
+        for entry in \
+            "External/spirv-tools KhronosGroup/SPIRV-Tools ef96ed763b43b59b33b31b362f09a02b729fa1c9 a3e5d1f5dbefc057022d1c9c29315e887cb4c491dffb3ee850cbfaa3725ac9c1" \
+            "External/spirv-tools/external/spirv-headers KhronosGroup/SPIRV-Headers 496543121ce6419f23d6fa5d7194ba66c36212d2 c44aa584944201e4bb4ea5a301cd735c41b7fedeb717e8625b97cd9d7315a4b8"; do
+            read -r sub_path sub_repo sub_commit sub_sum <<<"$entry"
+            git init -q "$src/$sub_path"
+            git -C "$src/$sub_path" fetch -q --depth 1 "https://github.com/$sub_repo" \
+                "refs/tags/${GLSLANG_TAG}"
+            got="$(git -C "$src/$sub_path" rev-parse 'FETCH_HEAD^{commit}')"
+            if [[ "$got" != "$sub_commit" ]]; then
+                echo "fetch_deps: $sub_repo ${GLSLANG_TAG} is $got, expected $sub_commit" >&2
+                exit 1
+            fi
+            git -C "$src/$sub_path" archive --format=tar -o "$TMP/glslang-sub.tar" "$sub_commit"
+            echo "${sub_sum}  $TMP/glslang-sub.tar" | sha256sum -c -
+            git -C "$src/$sub_path" -c advice.detachedHead=false checkout -q "$sub_commit"
+            rm -f "$TMP/glslang-sub.tar"
+        done
+        gen=()
+        if command -v ninja >/dev/null 2>&1 || [[ -x "$ROOT/.venv/bin/ninja" ]]; then
+            gen=(-G Ninja)
+            PATH="$ROOT/.venv/bin:$PATH"
+        fi
+        "$CMAKE_BIN" -S "$src" -B "$TMP/glslang-build" "${gen[@]}" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENABLE_OPT=ON -DGLSLANG_TESTS=OFF -DGLSLANG_ENABLE_INSTALL=OFF \
+            -DENABLE_HLSL=OFF -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+            -DSPIRV_SKIP_TESTS=ON -DSPIRV_SKIP_EXECUTABLES=ON \
+            -DSPIRV_TOOLS_BUILD_STATIC=ON >"$TMP/glslang-configure.log" 2>&1 || {
+            tail -n 40 "$TMP/glslang-configure.log" >&2
+            echo "fetch_deps: glslang configure failed" >&2
+            exit 1
+        }
+        "$CMAKE_BIN" --build "$TMP/glslang-build" --parallel 2 --target glslang-standalone
+        rm -rf "$FFX_DIR/glslang"
+        mkdir -p "$FFX_DIR/glslang/bin"
+        cp -L "$TMP/glslang-build/StandAlone/glslang" "$FFX_DIR/glslang/bin/glslangValidator"
+        cp "$src/LICENSE.txt" "$FFX_DIR/glslang/LICENSE.txt"
+        "$FFX_DIR/glslang/bin/glslangValidator" --version
+        echo "$GLSLANG_ID" > "$FFX_DIR/glslang/.ico-release"
+        echo "==> glslang ${GLSLANG_TAG} (built from source) at $FFX_DIR/glslang"
+    fi
+fi
 fi
 echo "==> deps done: $DEST"
