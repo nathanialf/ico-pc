@@ -175,7 +175,11 @@ Enhanced 2x, `--pass-dump` with `--present 640x480 --stats` without `--jitter`, 
 0,0`, with `--jitter 0.25,0.25` and with `ICO_RD_JITTER_TEST=0.25,0.25`: 0,0 every target and the
 present byte for byte the run without, 0.25,0.25 SCENE and the present different, the
 environment's run byte for byte the `--jitter` one, each run's `jitter` stats line read; a
-`--jitter` outside -0.5..0.5 exits 1 ([RENDER.md](RENDER.md#jitter)).
+`--jitter` outside -0.5..0.5 exits 1 ([RENDER.md](RENDER.md#jitter)), and
+`rd_replay_tool_upscale_test`, which replays the dump at `--enhanced --resolution 3x
+--upscale-test 1.5 --upscale-phases 8 --present 960x720 --stats` and passes on `upscale point:
+SCENE 1024x1024 -> UPSCALED 1536x1536 (render scale 2x2, display scale 3x3)` with a marker
+dispatched, none refused and a reduction remapped ([RENDER.md](RENDER.md#the-upscale-point)).
 
 ## The render suite on OpenGL
 
