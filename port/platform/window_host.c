@@ -356,6 +356,15 @@ static void video_settings(RdSettings *rs, int w, int h)
         rs->sceneScale = (float)ico_video_auto_scale();
         s_autoRes.windowScale =
             (boxH < (float)rs->outputHeight ? boxH : (float)rs->outputHeight) / 448.0f;
+        /* a temporal upscaler (port/render/rd_upscale.h): the display stays
+           the window's, and Auto's steps cap the scene's scale below it
+           instead, from the window's over the upscaler's ratio */
+        const float upRatio = rd_upscale_ratio();
+        if (upRatio > 0.0f) {
+            rs->upscaleRenderCap = rs->sceneScale;
+            rs->sceneScale = 0.0f;
+            s_autoRes.windowScale = pace_auto_window_scale(s_autoRes.windowScale, upRatio);
+        }
         s_autoRes.tickBudget = o.framerate == ICO_FRAMERATE_ORIGINAL;
         s_autoRes.samples.budgetNs = o.framerate > 0        ? 1000000000ull / (Uint64)o.framerate
                                      : s_autoRes.tickBudget ? 40000000ull /* PAL until paced */

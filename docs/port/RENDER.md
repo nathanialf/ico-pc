@@ -17,6 +17,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_tex.h`, `rd_tex.c` | the texture cache: GS formats decoded into rd textures |
 | `port/render/rd_mesh.h`, `rd_mesh.c` | the VU mesh path (VU1_PROGRAMS.md) |
 | `port/render/rd_replay.c` | a frame onto the RHI: every command's replay |
+| `port/render/rd_jitter.h`, `rd_jitter.c` | the scene's sub-pixel jitter after the GS's snap ([Jitter](#jitter)) and the Halton (2, 3) table |
 | `port/render/rd_shader_plan.c` | the size of `rd__gpu_init`'s shader set, counted before it is made, for the progress screens (`rhi_plan_shaders`) |
 | `port/render/rd_submit.c`, `rd_submit.h` | a replay's end: the present's pass recorded, the list ended and submitted, the picture presented and the capture it copied written out |
 | `port/render/rd_thread.c`, `rd_thread.h` | the renderer on the window's render thread: the picture and the calls posted there, the hand-over of the renderer's state (texLock), the retire list, the stats split, the renderer's own thread for the tools |
@@ -25,12 +26,15 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_vuprepass_selftest.c` | the vertex and triangle pre-passes' start-up self-test |
 | `port/render/rd_vu_skin_check.h`, `rd_vu_skin_check.c`, `rd_vu_skin_judge.c`, `rd_vu_skin_selftest.c`, `rd_vu_skin_capture.c` | the skinned draws' bone-block check: a skinned draw probed beside the picture against the CPU, the twins of every skinned draw inside its pass (Turnip), the box check, the start-up probe, the capture on failure ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
+| `port/render/rd_upscale.h`, `rd_upscale.c`, `rd_upscale_hook.c` | the upscale point: the render/display scale split, the marker's replay (the edge guard, the hook's inputs, UPSCALED), the reduction's read of UPSCALED, the per-present jitter; the hook (the test's bilinear stand-in) ([The upscale point](#the-upscale-point)) |
+| `port/render/rd_velocity.c` | the scene's motion vectors for a temporal upscaler: each VU draw's previous transform (VuPrevCB), the VELOCITY texture, the velocity pass's pipeline ([Velocity](#velocity)) |
 | `port/render/rd_pipeline.c` | pipeline keys from the state block, the pipeline cache, the reachable set |
 | `port/render/rd_dst_read.c` | the exact GS blend read from the destination in the fragment shader |
 | `port/render/rd_post.c` | `rd_post`: each post kind as the GS writes and sprites GsBase.c issues |
 | `port/render/rd_blur.c` | staticBlur.c's sprites and the reduction's, for `rd__blur_post_sprite`; the open border's strips |
 | `port/render/rd_blur_border.c` | the post sprites' replay (`rd__blur_post_sprite`): the fold, the reduction's open border and its outer columns, SCENE's outer columns repeated after the fog |
 | `port/render/rd_blur_smooth.c` | Motion blur: Smooth: the motion blur's accumulator, its two passes and the sprite drawn over it (`rd__blur_smooth_sprite`) |
+| `port/render/rd_blur_texels.c` | the texels a staticBlur sprite reads (`rd__blur_uv_axis`, `rd__blur_kernel_reach`: `rd_replay.c` `blurSnapArea`'s helpers, apart for `rd_replay.c`'s size cap) |
 | `port/render/rd_crack_fill.c` | the crack filler above 1x: the pixels no draw covered (or a farther surface seen through a seam) between drawn ones filled after lists 4-6, and their count ([Crack filling above 1x](RENDER_POST.md#crack-filling-above-1x)) |
 | `port/render/rd_shadow.c` | the shadow count on the stencil |
 | `port/render/rd_water.c` | render-to-texture blocks, target aliases, camera scopes, pool STs |
@@ -593,7 +597,8 @@ largest power of two the GPU takes, centred on the target, and FrameCB maps posi
 scissor, always inside the target, bounds the drawing. Every step is exact for a GS position at an
 integer scale, and the clip-space numbers are the same at every frame width, so the GPU clips the
 same corners the same way whatever the width (`port/render/rd_replay.c` (`s_vpExact`)). The
-present and the camera probe keep the plain mapping.
+present and the camera probe keep the plain mapping. A jittered frame's scene-class passes add the
+jitter to this mapping's centre offset ([Jitter](#jitter)).
 
 **Uploads.** Before the first pass the replay uploads pending textures and their levels through
 the frame's upload ring, and the static meshes the frame draws into the device arena (once, and
@@ -807,6 +812,201 @@ the fog reads the resolved depth ([DIVERGENCES.md](DIVERGENCES.md) VD-22); the l
 epoch per sample ...` or `... on the resolved picture ...`, `port/render/rd_replay.c` (`doFog`)). When no
 way of reading the multisampled depth passed the fog's self-test, rd draws without MSAA and
 `rd_aa_msaa_blocked` says so (`port/render/rd.h` (`rd_aa_msaa_blocked`)).
+
+### Jitter
+
+A temporal upscaler renders each picture a sub-pixel off the last and accumulates them; the
+jitter is that offset. The GS position is made as the PS2 makes it (the divide, the snap to the
+1/16 grid, the region test and the side bands); the jitter moves it after, in texels of the
+bound target, x right and y down. `rd__frame_group_ex` adds it to the exact viewport's centre
+offset (FrameCB `vpo.xy`), which `gs_px_to_ndc` and `vu_homogeneous_position` already add to
+every position, so no vertex shader changes; FrameCB `jitter.xy` holds the same values for the
+pixel side, where the helpers that map a pixel back to the GS's place subtract it: the screen
+planes (`gs_plane_offset`: colour and ST evaluated at the pixel's jittered GS position), the side
+bands' pixel test (`vu_pixel_in_picture`) and `fullscreen_triangle` (a full-target pass keeps its
+texels) (`port/shaders/common.hlsli` (FrameCB `g_jitter`); [SHADERS.md](SHADERS.md#commonhlsli)).
+
+Only `frameGroupOf`'s frame groups take it, the scene draws' and the scene's post sprites', and
+of those only the ones of SCENE, WORK2 (the glow's mask: the lamps' meshes drawn against SCENE's
+depth, read back pixel for pixel) and AURA_WORK (SCENE's depth): a file-static
+(`s_frameJitter`) set around the one call, like `s_frameCrop`, so no caller of `rd__frame_group`
+changes. Not jittered: the post chain's reads (by pixel), the work buffers and the shadow levels,
+the reduction into DISPLAY, DISPLAY_HELD and the motion blur, the DATE snapshot's copy, the
+present (`port/render/rd_jitter.c` (`rd__frame_jitter_of`); `port/render/rd_replay.c`
+(`frameGroupOf`)). List 11's UI, drawn into SCENE, is in a SCENE pass and is moved too, and so
+goes through the upscaler with the scene ([The upscale point](#the-upscale-point)): accepted in
+this release (Native AA is the default ratio; moving list 11 after the upscaler is the follow-up).
+
+Two known effects under a temporal upscaler. A full-frame GS sprite moved right or down by the
+jitter does not cover texel column or row 0's centre (a GS integer coordinate is a texel
+centre), so that column or row would keep what the replay before left: the upscale point's edge
+guard copies column (row) 1 over it ([The upscale point](#the-upscale-point)). A post sprite
+into SCENE that samples a SCENE-derived work buffer by interpolated UVs (not by pixel) carries
+the jitter twice, once in its content (a reduction of the jittered SCENE) and once in its
+placement: up to one jitter more of offset on blurred content (the glow, the depth of field, the
+softening); the `fx_sprite` family reads by pixel and is not affected. Harmless for a blur, left
+as it is.
+
+The jitter comes from `rd__frame_jitter_set` (until `rd__frame_jitter_clear`), in this build only
+from the developer switch `[dev] jitter_test = x,y` (`ICO_RD_JITTER_TEST`, read at the first
+replay, logged once: [CONFIG.md](CONFIG.md)) and `rd_replay_tool --jitter x,y` (`--stats`:
+`jitter X, Y: N frame groups`), and from the upscale point's per-present sequence while a
+temporal upscaler runs with a phase count ([The upscale point](#the-upscale-point)). With nothing
+set no frame group changes; a jitter of 0, 0 adds 0.0,
+which leaves every finite float as it is, so the picture is the same byte for byte
+(`rd_replay_tool_jitter`). `rd__jitter_halton` is the Halton (2, 3) sequence less 0.5, FSR's
+jitter at a frame index reduced by the phase count. Tests: `rd_jitter` (the sub-pixel edges move
+by the jitter exactly at 1x and 2x, a whole-texel jitter moves SCENE exactly while WORK1, the
+reduction and the present take none) and `rd_replay_tool_jitter`
+([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+
+### Velocity
+
+A temporal upscaler (FidelityFX's FSR 3.1, issue 99) needs to know where each pixel's surface was
+in the picture before. rd draws that as a motion vector a texel into VELOCITY while the temporal
+upscaler's switch is on; this release has no row for it: only `[dev] velocity_test = true`
+(`ICO_RD_VELOCITY=1`, [CONFIG.md](CONFIG.md)) and `rd_replay_tool --velocity` turn it on, and
+nothing reads it yet (`port/render/rd_velocity.h`). With the switch off nothing of it runs: no
+payload is added to a frame, no texture or pipeline is made, the pictures are the same bytes.
+
+**The source rule.** Every picture's frame goes through `rd__velocity_attach` before it is
+replayed: with the interpolation each present's blended frame (the end of `rd__interp_frame`),
+without it the tick's frame (`rd_end_frame`). Each keyed mesh, skinned or grid draw is paired with
+the same object's draw in the picture drawn before (the last present's frame: with the
+interpolation the blended frame of the present before, so the motion is that between two
+presents, blended(alpha now) - blended(alpha before), across a tick's boundary too; without it
+the tick before's frame), as the interpolation pairs a draw with the tick before's (key, type,
+list and call ordinal; the meshes and grids of a key drawn two or more times by their origin in
+the world first, `placeSlot`'s rule), with the same shape (`blendVu`'s header test, `sameMesh`).
+A paired draw gets a copy of the picture before's fixed payload part (`RdVuPayload`, the VU block,
+the bones, a grid's stream: the "VuPrevCB") appended to the frame's payload, and its `u[3]` names
+it: `RD_VU_PREV` (bit 1) beside `RD_VU_TICK_CAMERAS` (bit 0) and the payload offset in the bits
+above (offsets are 8-aligned). No pair, a jump past `RD_INTERP_JUMP_WORLD`, a particle batch, an
+unkeyed draw and every draw of the first frame or a frame after a camera cut carry none: their
+velocity is 0. A cut also sets `rd__velocity_reset`, the upscaler's history reset. The picture
+before is kept as a list of its VU draws and their fixed parts (two buffers, swapped a frame).
+Dumps carry the VuPrevCBs (version 16, [Dumps and the replay tool](#dumps-and-the-replay-tool));
+an older dump replays with velocity 0. A morphing mesh's previous transform is drawn with the
+current stream (its vertices' own motion between the shapes is not in the vector).
+
+**The record.** The vertex pre-pass records a command of list 0 drawn into SCENE with its depth
+writes on and carrying a VuPrevCB twice: its own vertices as ever, and the same vertices again
+through the same pre-pass entry and pipeline with the VuPrevCB's VU memory, bones and grid stream,
+at the next texels of the record ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
+Plane 0 of a vertex record is the homogeneous position h before the divide and the GS's 1/16
+snap, so the second record's plane 0 is the previous position, unsnapped.
+
+**The pass.** When the walk has left list 0 (the first VU flush or VU command of a later list:
+after the opaque world and characters, before the semitransparent lists), rd ends SCENE's pass and
+draws every draw the replay made of those commands through `vu_main_vs` again, into VELOCITY,
+cleared to 0, through `vu_velocity_main_vs` and `velocity_ps` with SCENE's depth attached
+read-only and tested EQUAL, no depth write, at the scene passes' exact viewport
+(`port/render/rd_replay_vu.c`, "the velocity pass"). The vertex shader's position is
+`vu_main_vs`'s, so a pixel passes where the draw's surface is the one the scene kept;
+the corner's motion is its two records' positions through `vu_homogeneous_position` with the
+draw's FrameCB, previous less current in NDC, interpolated linearly in screen space as the GS
+interpolates the surface. The frame group's offsets (the exact viewport's half texel, the jitter's
+sub-pixel offset, `port/render/rd_jitter.c`) are the same in both positions and cancel: the vector is the
+unjittered motion. Screen prims, the UI, post sprites, particles, the draws of lists 1 to 12, a
+draw drawn the old way (no record) and a multisampled SCENE's draws are not drawn into VELOCITY
+and keep 0.
+
+**VELOCITY.** RGBA16F at SCENE's texture size (scene-class: the render scale), made at the first
+replay that needs it and again when SCENE's size changes; owned by `rd_velocity.c`, not a named
+target (a named slot would be made with every other at each display change, switch on or off, and
+shift every dump's temporary ids). x and y are the motion in texels of the target, **current to
+previous**: where the pixel's surface was in the picture before less where it is, +x right, +y
+down (what FidelityFX's upscaler takes, with its motion vector scale 1, 1); z 0; w 1 where a draw
+wrote it. `[dev] velocity_sign = -1` makes the upscaler take them negated (the shader never
+changes), for the desktop check of the sign with FSR's debug view.
+
+**The lines.** At the first need `rd: velocity: VELOCITY made, WxH RGBA16F (K KB), SCENE's texture
+size` and `rd: velocity: the velocity pass's pipeline made ...` (or why not); every 10 s while on
+`rd: velocity: N pictures, VU draws D: with their previous transform P (moved M), without U (no
+pair, another shape, a jump), new histories R; replays drew X into VELOCITY, Y of list 0 left at
+0 (no record or multisampled), Z passes`.
+
+### The upscale point
+
+A temporal upscaler (issue 99) takes the scene after the whole post chain, at the moment the
+game's reduction (`postReduction`, the end of list 12, [RENDER_POST.md](RENDER_POST.md)) first
+reads SCENE: the glow, the depth of field, the fog, the motion blur and list 11's UI, subtitles,
+fades, letterbox and film noise are all in SCENE by then. Before the post chain was rejected: the
+fog's LUT, the depth of field and the crack filler need the depth at the scale they draw at, and
+the upscaler outputs none. This release has no row for it: only `[dev] upscale_test = true`
+(`ICO_RD_UPSCALE_TEST=1`, [CONFIG.md](CONFIG.md)) and `rd_replay_tool --upscale-test [R]` turn it
+on, with a stand-in for the upscaler (below) (`port/render/rd_upscale.h`).
+
+**The marker.** `postReduction` records `RDC_UPSCALE_POINT` (`u[0]` the target the reduction
+reads, `u[1]` the one it writes) right before it binds DISPLAY. It is a state command with no
+state (`rd__cmd_is_state`; `rd__apply_state` returns true and changes nothing), so every scan of
+the lists passes over it as over a state delta, and the replay does nothing at it unless the
+split below is in force; then it flushes the screen run and the VU merge, ends the open pass and
+calls `rd__upscale_point`. Dumps carry it from version 17; an older dump has none and replays with
+nothing upscaled ([Dumps and the replay tool](#dumps-and-the-replay-tool)).
+
+**The scale split.** While the upscaler is asked (`rd__upscale_wanted`: its switch, not under the
+CRT filter), the size `rd__apply_display` computes from the Resolution row, the "window"
+resolution or Auto is the display's (`d`): DISPLAY, DISPLAY_HELD and UPSCALED are made at it. The
+scene-class targets (SCENE, WORK2, AURA_WORK, the DATE snapshot, a frame-sized temporary) take the
+render scale `r = d / ratio`, not below 1 (the GS size) nor `d / 3`, capped by Auto's step
+(`RdSettings.upscaleRenderCap`); supersampling, MSAA (`rd__aa_mode`) and Downsampling are off.
+`g_rd.sceneSx/Sy` hold `r`, `rd__display_scale` gives `d` (`r` with the split off), and
+`rd__target_scale_of` takes it for DISPLAY, DISPLAY_HELD and UPSCALED. With the upscaler off
+every expression is the one before, so every picture is the same bytes
+([DISPLAY.md](DISPLAY.md#the-render-and-display-scales)).
+
+**At the marker** (`port/render/rd_upscale.c`), once a replay, when the reduction reads SCENE and
+SCENE is not multisampled: the edge guard (with a jitter right or down, SCENE's texel column or
+row 0 made a copy of column or row 1 through a one-texel strip; nothing with no jitter, a jitter
+left or up, or a Full pixel window), then the hook `rd__upscale_dispatch` gets SCENE's colour, its
+depth through `rd__sampled_depth` (in place, or the D32F_S8 copy the effects depth also takes),
+VELOCITY ([Velocity](#velocity)) when the motion vectors are on, the jitter, a reset (the first
+dispatch, a new size, `rd__velocity_reset`) and the presents since the last dispatch, and writes
+UPSCALED: RGBA8, SCENE's GS size at the display scale (the Full pixel window too), render target,
+sampled, copy source and storage (made again without storage where the backend refuses it),
+owned by `rd_upscale.c` (not a named target: a new named id would shift every dump's temporary
+ids). The hook in this release (`port/render/rd_upscale_hook.c`) is the test's stand-in: SCENE
+blitted into UPSCALED with the presenter's bilinear blit (`rd__present_blit`); it takes neither
+the depth, the vectors nor the jitter. The temporal upscaler replaces its body. Turning the
+switch on turns the motion vectors on.
+
+**The reduction reads UPSCALED.** `rd__blur_post_sprite` (`port/render/rd_blur_border.c`): for
+the reduction's textured sprite of a replay whose marker wrote UPSCALED, SCENE's target record
+lends UPSCALED's texture, state and texel geometry (`tw`, `th`, `sx`, `sy`, `ox`) for that draw
+only and takes them back after it, so the sprite's UVs, the GS sprite model or its hardware
+fallback and the scissor are the reduction's at the display scale. Nothing recorded changes: not
+`rd_alias_target`, which is record-time and would land in dumps and redirect every
+`rd_set_target(SCENE)` of the list. Everything after (DISPLAY, the motion blur's copy, the
+present) is as before at the display scale. The fades fold is off while the split is in force
+([RENDER_POST.md](RENDER_POST.md#the-fades-fold)): the fades are drawn into SCENE before the
+dispatch. The store plan keeps SCENE's depth stored as for the effects depth.
+
+**The jitter a present.** With a phase count set (`rd__upscale_set_phases`; the stand-in sets
+none, the upscaler its own: FSR's `ceil(8 ratio^2)`), each replay that presents a newly drawn
+picture sets the jitter to `rd__jitter_halton(index % phase count)` before it replays
+(`rd__upscale_replay_begin` from `rd__replay_frame_here`: between replays, never during one). A
+re-shown present (the still re-present's keep replay) draws no scene: no jitter is taken, no
+dispatch, UPSCALED and DISPLAY stay, and the next dispatch is told how many presents passed.
+Off again, the sequence's jitter is cleared (never `[dev] jitter_test`'s).
+
+**What goes through the upscaler.** Everything in SCENE at the reduction: the glow, fog and depth
+of field (fine), the motion blur's ghost and the fades (they smear a little more), film noise and
+the UI (temporally accumulated: accepted in this release under the Native AA default; moving list
+11's noise and UI after the upscaler is the follow-up). Particles and the glow's composites have
+no motion vectors: fast particles ghost (a reactive mask from the particle draws' alpha is the
+follow-up).
+
+**The lines.** `rd: upscale point: UPSCALED WxH (display scale ...)` at each creation (or why
+not); `rd: upscale point: SCENE WxH (render scale ...) -> UPSCALED wxh (display scale ...) by
+<hook> at frame N; depth in place|a copy|none, motion vectors VELOCITY|none, jitter X, Y (phase
+count P)` at the first dispatch and at each new size; `rd: upscale point: frame N not upscaled
+(<why>): the reduction reads SCENE at the render scale` (the first 8, then every 100th); the
+display line's `(render scale r), display WxH (scale d; upscaler ratio ...)`; the fades fold's
+once-a-run line. `rd_replay_tool --stats`: `upscale point: SCENE WxH -> UPSCALED wxh (render
+scale, display scale), markers, dispatched, refused, reductions remapped, edge guard, jittered
+presents` or `upscale point off`. Tests: `rd_upscale` and `rd_replay_tool_upscale_test`
+([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ### The pass ring
 
@@ -2487,7 +2687,13 @@ cameras, and (version 15) the EE's facing tables of the meshes that have one, a 
 which a prelit stream cannot rebuild (no normals in it; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-winding-mark)):
 a version 3 to 14 dump's prelit meshes load without facing, so their draws keep the PS2's drops
 under either region rule (no side bands under `[dev] region_rule = ps2`, no camera rule under the
-default). Target
+default). Version 16 adds no section: a VU draw's `u[3]` may name a VuPrevCB in the payload
+([Velocity](#velocity)); a version 3 to 15 dump has none and replays with velocity 0, and a
+VuPrevCB whose header does not match its draw's is dropped at load. `rd_replay_tool --velocity`
+draws the motion vectors from them and `--velocity-dump PNG` writes VELOCITY as a picture.
+Version 17 adds no section: list 12 carries the upscale point's marker before the reduction
+([The upscale point](#the-upscale-point)); a version 3 to 16 dump has none and replays with
+nothing upscaled (`--upscale-test` then counts no marker). Target
 contents are not written: a frame that reads a retained target replays from what the loading
 context holds. Loading creates the textures and targets anew and rewrites every id, and gives the VU
 draws recorded without card verdicts theirs ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-card-test)), so

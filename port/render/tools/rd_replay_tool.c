@@ -76,6 +76,28 @@
  *                         at the box's size; S the Sharpness row, 0..100
  *                         (default 80); --stats names the pass ("present:
  *                         fsr1 WxH -> wxh", or "present: fsr1 off")
+ *   --jitter X,Y          the scene's sub-pixel jitter (rd_jitter.h), X right
+ *                         and Y down in texels of the bound target, each
+ *                         -0.5..0.5, added after the GS's snap in the
+ *                         frame groups of SCENE, WORK2 and AURA_WORK (what a
+ *                         temporal upscaler's jitter does; [dev]
+ *                         jitter_test = X,Y in the game); 0,0 adds 0.0 and
+ *                         draws the picture without it byte for byte;
+ *                         --stats names it ("jitter X, Y: N frame groups")
+ *   --upscale-test [R]    the upscale point (rd_upscale.h, [dev]
+ *                         upscale_test): the scene-class targets at the
+ *                         display scale (the --resolution row's) over R
+ *                         (1..3, default 1.5), and at the reduction SCENE
+ *                         upscaled into UPSCALED by the test's bilinear
+ *                         hook, which the reduction then reads; no
+ *                         supersampling or MSAA; the motion vectors on (as
+ *                         --velocity).  A dump from before version 17 has
+ *                         no marker: nothing is upscaled.  --stats names
+ *                         it ("upscale point: SCENE WxH -> UPSCALED wxh,
+ *                         ...", or "upscale point off")
+ *   --upscale-phases N    (with --upscale-test) the jitter's phase count:
+ *                         the replay's present takes Halton (2, 3) at index
+ *                         0 (0, -1/6) as a temporal upscaler's first frame
  *   --full-pixel          the reduction draws the whole frame: no black border
  *   --border-mask         the game's Full pixel off: the same picture, the
  *                         border masked over it at present (rd__border_mask)
@@ -406,6 +428,21 @@
  *                         frame hashes as the last rendered one's is shown
  *                         again (rd_reshow.c; ICO_RD_STILL_REPRESENT=0
  *                         renders every one, the pictures the same)
+ *   --velocity            the temporal upscaler's switch on (rd_velocity.h,
+ *                         [dev] velocity_test): the replay draws the scene's
+ *                         motion vectors into VELOCITY from the VuPrevCBs the
+ *                         dump carries (version 16; an older dump has none:
+ *                         every vector 0), with --interp T PREV from the
+ *                         blend at 0 (PREV's tick) to the one at T; prints
+ *                         "velocity: N of M mesh and grid draws carry their
+ *                         previous transform; the replay drew D into
+ *                         VELOCITY, Z of list 0 left at 0".  The pictures are
+ *                         the same bytes as without it
+ *   --velocity-dump PNG   (implies --velocity) VELOCITY as a picture: x and y
+ *                         in R and G about 128 (8 levels a pixel), the length
+ *                         in B (16 a pixel), black where no draw wrote it;
+ *                         prints "velocity-dump: WxH -> PNG: moving N texels,
+ *                         the largest L pixels"; exit 1 when it cannot
  *   --save-blended DUMP   (with --interp T PREV, not --presents) writes the
  *                         frame built between the two, after its replay, as
  *                         the dump F12 saves of a present drawn between the
@@ -451,6 +488,9 @@
 #include "dump_zip.h" /* port/platform: the F12 zip */
 #include "rd_fsr1.h"
 #include "rd_internal.h"
+#include "rd_jitter.h"
+#include "rd_upscale.h"
+#include "rd_velocity.h"
 #include "rd_mesh.h"
 #include "rd_vis.h"
 #include "rd_vu_skin_check.h"
@@ -466,12 +506,12 @@ static const char *const kNames[] = {
     "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD", "WORK3_HELD"};
 
 static const char *const kCmdNames[RDC_COUNT] = {
-    "NOP",          "TEST",           "BLEND",     "ABE",         "ZWRITE",       "FBA",
-    "PABE",         "COLCLAMP",       "TEXA",      "FILTER",      "WRAP",         "TEXTURE",
-    "TEXTURE_OFF",  "UVOFFSET",       "COLORMASK", "TARGET",      "SCISSOR",      "ALPHA",
-    "SHADE",        "CLEAR",          "SCREEN",    "EXACT_BLEND", "COPY",         "MESH",
-    "SKINNED",      "GRID",           "PARTICLES", "WORLD_PRIMS", "SHADOW_STRIP", "POST_STUB",
-    "SHADOW_RESET", "SHADOW_RESOLVE", "AA1",       "OVERLAY_TEXT"};
+    "NOP",          "TEST",           "BLEND",     "ABE",          "ZWRITE",       "FBA",
+    "PABE",         "COLCLAMP",       "TEXA",      "FILTER",       "WRAP",         "TEXTURE",
+    "TEXTURE_OFF",  "UVOFFSET",       "COLORMASK", "TARGET",       "SCISSOR",      "ALPHA",
+    "SHADE",        "CLEAR",          "SCREEN",    "EXACT_BLEND",  "COPY",         "MESH",
+    "SKINNED",      "GRID",           "PARTICLES", "WORLD_PRIMS",  "SHADOW_STRIP", "POST_STUB",
+    "SHADOW_RESET", "SHADOW_RESOLVE", "AA1",       "OVERLAY_TEXT", "UPSCALE_POINT"};
 
 static const char *const kPrimNames[] = {"points",   "lines",  "linestrip", "tris",
                                          "tristrip", "trifan", "sprites"};
@@ -728,6 +768,8 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
     } else if (c->type == RDC_SCISSOR) {
         printf(" (%d,%d)-(%d,%d)", (int32_t)c->u[0], (int32_t)c->u[1], (int32_t)c->u[2],
                (int32_t)c->u[3]);
+    } else if (c->type == RDC_UPSCALE_POINT) {
+        printf(" src %u dst %u", c->u[0], c->u[1]);
     } else if (c->type <= RDC_STATE_LAST || c->type == RDC_AA1) {
         if (c->type != RDC_TEXTURE_OFF && c->type != RDC_NOP && c->type != RDC_UVOFFSET) {
             printf(" %u", c->b[0]);
@@ -1171,6 +1213,9 @@ static float interpT = 1.0f;
 static const char *prevDumps[16];
 static int prevCount;
 static bool noHalf;
+/* --velocity, --velocity-dump PNG: the motion vectors (rd_velocity.h) */
+static bool velocityOn;
+static const char *velocityPng;
 /* --motion-blur smooth (every replay armed as a present, rd__blur_smooth_arm)
  * and --presents N */
 static bool motionSmooth;
@@ -1428,6 +1473,72 @@ static bool printOcclusion(const char *dump, const RdFrame *f, const RdOccResult
     return ok;
 }
 
+/* --velocity: the frame's draws carrying their previous transform and the
+ * replay's velocity pass, and with --velocity-dump PNG VELOCITY as a
+ * picture: x and y in R and G about 128 (8 levels a pixel, clamped), the
+ * length in B (16 levels a pixel), alpha 255 where a draw wrote it, black
+ * where none did; then the moving texels' count.  False when PNG was asked
+ * and VELOCITY could not be read or written. */
+static bool velocityReport(const char *dump, const RdFrame *rf, const char *pngPath)
+{
+    uint32_t carried = 0, vu = 0;
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < rf->lists[l].count; i++) {
+            const RdCmd *c = &rf->lists[l].cmds[i];
+            if (c->type == RDC_MESH || c->type == RDC_SKINNED || c->type == RDC_GRID) {
+                vu++;
+                carried += rd__velocity_prev(rf, c) != NULL;
+            }
+        }
+    }
+    const RdVelocityStats *vs = rd__velocity_stats();
+    printf("%s: velocity: %u of %u mesh and grid draws carry their previous transform; the replay "
+           "drew %u into VELOCITY, %u of list 0 left at 0\n",
+           dump, carried, vu, vs->drawn, vs->noRecord);
+    if (!pngPath) {
+        return true;
+    }
+    RhiTexture t;
+    RhiState *st;
+    uint32_t w = 0, h = 0;
+    if (!rd__velocity_target(&t, &st, &w, &h)) {
+        fprintf(stderr, "%s: --velocity-dump: no VELOCITY\n", dump);
+        return false;
+    }
+    float *v = malloc((size_t)w * h * 4 * sizeof(float));
+    uint8_t *px = malloc((size_t)w * h * 4);
+    bool ok = v && px && rd__velocity_read(v, (size_t)w * h * 4, &w, &h);
+    uint64_t moving = 0;
+    double most = 0.0;
+    for (size_t k = 0; ok && k < (size_t)w * h; k++) {
+        const float *q = &v[k * 4];
+        const double len = sqrt((double)q[0] * q[0] + (double)q[1] * q[1]);
+        uint8_t *o = &px[k * 4];
+        if (!(q[3] > 0.5f)) {
+            o[0] = o[1] = o[2] = o[3] = 0;
+            continue;
+        }
+        const double x = 128.0 + q[0] * 8.0, y = 128.0 + q[1] * 8.0, b = len * 16.0;
+        o[0] = (uint8_t)(x < 0.0 ? 0.0 : (x > 255.0 ? 255.0 : x));
+        o[1] = (uint8_t)(y < 0.0 ? 0.0 : (y > 255.0 ? 255.0 : y));
+        o[2] = (uint8_t)(b > 255.0 ? 255.0 : b);
+        o[3] = 255;
+        moving += len > 0.01;
+        most = len > most ? len : most;
+    }
+    ok = ok && rd_write_png(pngPath, px, w, h, w * 4, 0);
+    if (ok) {
+        printf("%s: velocity-dump: %ux%u -> %s: moving %llu texels, the largest %.3f pixels\n",
+               dump, w, h, pngPath, (unsigned long long)moving, most);
+    } else {
+        fprintf(stderr, "%s: --velocity-dump: VELOCITY not read or %s not written\n", dump,
+                pngPath);
+    }
+    free(v);
+    free(px);
+    return ok;
+}
+
 /* replays the --prev dumps in order; false on a load failure */
 static bool replayPrev(void)
 {
@@ -1498,6 +1609,12 @@ static const RdFrame *prepareFrame(const char *dump, RdFrame *pf, RdFrame *f)
         RdInterpStats ist;
         if (interpAny) {
             pf->number = f->number - 1; /* the tick before, whatever was saved between */
+        }
+        if (rd__velocity_on() && interpT > 0.0f) {
+            /* the picture before for the motion vectors: the present at
+             * alpha 0, PREV's tick (rd_velocity.h) */
+            (void)interpAt(pf, f, 0.0f, 1, &ist);
+            printf("velocity: the picture before is the blend at 0 (PREV's tick)\n");
         }
         rf = interpAt(pf, f, interpT, 1, &ist);
         if (!rf) {
@@ -1927,13 +2044,16 @@ int main(int argc, char **argv)
                 "[--mesh NAME] [--dump-textures DIR] [--no-aa1] [--stats] [--pass-times] "
                 "[--time N] [--keys] "
                 "[--pass-dump DIR] "
+                "[--velocity] [--velocity-dump PNG] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject] "
                 "[--interp-nop-prev L:A[-B]] [--presents N] [--save-blended DUMP]]\n"
                 "       [--loss-bisect] [--passes A[-B]] [--draws A[-B]] [--mask-marks]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
                 "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n"
-                "       [--downsample (with --resolution above 1x)] [--fsr1 [0..100]]\n",
+                "       [--downsample (with --resolution above 1x)] [--fsr1 [0..100]]\n"
+                "       [--jitter X,Y (texels, each -0.5..0.5)]\n"
+                "       [--upscale-test [1..3] [--upscale-phases N]]\n",
                 argv[0]);
         return 1;
     }
@@ -1951,6 +2071,7 @@ int main(int argc, char **argv)
     bool occFailed = false;          /* the spec could not be written */
     bool skinCheck = false;          /* --skin-check */
     bool skinFailed = false;         /* a replay of its check failed */
+    bool velFailed = false;          /* --velocity-dump: no VELOCITY or no PNG */
     bool regionStats = false;        /* --region-stats (rd_replay_region.c) */
     RdRegionOpts regionOpts = {NULL, NULL, NULL, NULL};
     bool regionFailed = false; /* its picture or spec could not be written */
@@ -2013,6 +2134,35 @@ int main(int argc, char **argv)
                 s.upscaleSharpness = (uint8_t)v;
                 i++;
             }
+        } else if (strcmp(argv[i], "--jitter") == 0 && i + 1 < argc) {
+            float j[2];
+            if (!rd__frame_jitter_parse(argv[++i], j)) {
+                fprintf(stderr, "--jitter: X,Y with each -0.5..0.5 (\"%s\")\n", argv[i]);
+                return 1;
+            }
+            rd__frame_jitter_set(j[0], j[1]);
+        } else if (strcmp(argv[i], "--upscale-test") == 0) {
+            /* the upscale point's test (rd_upscale.h), at the ratio given */
+            float ratio = 1.5f;
+            char *end = NULL;
+            const float v = i + 1 < argc ? strtof(argv[i + 1], &end) : 0.0f;
+            if (i + 1 < argc && end && end != argv[i + 1] && *end == '\0') {
+                if (!(v >= 1.0f && v <= 3.0f)) {
+                    fprintf(stderr, "--upscale-test: the ratio is 1..3 (\"%s\")\n", argv[i + 1]);
+                    return 1;
+                }
+                ratio = v;
+                i++;
+            }
+            rd__upscale_set(true, ratio);
+        } else if (strcmp(argv[i], "--upscale-phases") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            const long n = strtol(argv[++i], &end, 10);
+            if (!end || *end != '\0' || n < 1 || n > 1024) {
+                fprintf(stderr, "--upscale-phases: 1..1024 (\"%s\")\n", argv[i]);
+                return 1;
+            }
+            rd__upscale_set_phases((uint32_t)n);
         } else if (strcmp(argv[i], "--full-pixel") == 0) {
             s.fullPixel = 1;
         } else if (strcmp(argv[i], "--border-mask") == 0) {
@@ -2126,6 +2276,11 @@ int main(int argc, char **argv)
             timeN = (int)n;
         } else if (strcmp(argv[i], "--no-aa1") == 0) {
             noAa1 = true;
+        } else if (strcmp(argv[i], "--velocity") == 0) {
+            velocityOn = true;
+        } else if (strcmp(argv[i], "--velocity-dump") == 0 && i + 1 < argc) {
+            velocityOn = true;
+            velocityPng = argv[++i];
         } else if (strcmp(argv[i], "--interp-any") == 0) {
             interpAny = true;
         } else if (strcmp(argv[i], "--no-reproject") == 0) {
@@ -2405,6 +2560,9 @@ int main(int argc, char **argv)
     if (overlay) {
         rd_set_present_overlay(overlayTest, NULL);
     }
+    if (velocityOn) {
+        rd__velocity_set(true); /* the temporal upscaler's switch (rd_velocity.h) */
+    }
     if (!noDevice && prevCount && !replayPrev()) {
         rd_shutdown();
         return 1;
@@ -2619,6 +2777,9 @@ int main(int argc, char **argv)
             free(tp);
         }
     }
+    if (replayed && velocityOn && !velocityReport(dump, rf, velocityPng)) {
+        velFailed = true;
+    }
     if (passA) {
         RdReplayWindowStats ws;
         rd__replay_window_stats(&ws);
@@ -2695,6 +2856,29 @@ int main(int argc, char **argv)
             } else {
                 printf("%s: stats: present: fsr1 off\n", dump);
             }
+        }
+        /* the scene's jitter (--jitter, [dev] jitter_test; rd_jitter.h): the
+         * frame groups of the scene-class passes it moved */
+        float jit[2];
+        if (rd__frame_jitter_get(jit)) {
+            printf("%s: stats: jitter %.4g, %.4g: %u frame groups\n", dump, (double)jit[0],
+                   (double)jit[1], rd__frame_jitter_groups());
+        } else {
+            printf("%s: stats: jitter off\n", dump);
+        }
+        /* the upscale point (--upscale-test; rd_upscale.h) */
+        if (rd__upscale_point_on()) {
+            const RdUpscaleStats *us = rd__upscale_stats();
+            float dx, dy;
+            rd__display_scale(&dx, &dy);
+            printf("%s: stats: upscale point: SCENE %ux%u -> UPSCALED %ux%u (render scale %gx%g, "
+                   "display scale %gx%g), markers %u, dispatched %u, refused %u, reductions "
+                   "remapped %u, edge guard %u columns %u rows, jittered presents %u\n",
+                   dump, us->colorW, us->colorH, us->outW, us->outH, (double)g_rd.sceneSx,
+                   (double)g_rd.sceneSy, (double)dx, (double)dy, us->points, us->dispatched,
+                   us->refused, us->remapped, us->guardCols, us->guardRows, us->jittered);
+        } else {
+            printf("%s: stats: upscale point off\n", dump);
         }
         /* the tiler passes (rd_replay.c: DATE through the stencil bit, the
          * fog's local read, the blur pairs folded) */
@@ -3115,7 +3299,7 @@ int main(int argc, char **argv)
     if (rc == 0 && timeN > 0 && !timeReplays(dump, &pf, &f, rf, timeN, pw != 0)) {
         rc = 1;
     }
-    if (occFailed || regionFailed || skinFailed) {
+    if (occFailed || regionFailed || skinFailed || velFailed) {
         rc = 1;
     }
     rd__frame_free(&f);

@@ -1024,6 +1024,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   sync` and `on` (`-DRT`): the interpolation and the replays on the render thread give the same
   picture and the same saved blended frame, byte for byte (the payload's alignment gaps are zeroed
   for this: the first threaded run's dump differed in 3 padding bytes the main thread's heap left).
+- `rd_velocity_test.c`: the scene's motion vectors (`rd_velocity`; [RENDER.md](RENDER.md#velocity)).
+  Without a device: a prelit mesh moved 8 GS pixels between two ticks (interpolation off) carries
+  a VuPrevCB that is the tick before's VU block, its vertex 0's delta current to previous -8 GS
+  pixels; a draw of a key the tick before did not draw and a particle batch carry none, and the
+  stats count them; a frame after `rd_camera_cut` begins a new history (`rd__velocity_reset`); the
+  switch off leaves every VU draw's `u[3]` 0; two presents between the ticks (alpha 0.25 then 0.75)
+  pair the second with the first's blended block (x 1794, its own 1798). On a device (Original 1x,
+  under the validation layer): VELOCITY inside the moving mesh is (-8, 0) with w 1, outside every
+  mesh and on the new mesh 0 with w 0, the draw drawn into VELOCITY and none left at 0, SCENE the
+  same bytes with the switch on and off; the frame is written as `rd_velocity_moving.rddump` for
+  `rd_replay_tool_velocity` (fixture `rd_velocity_dump`). Must pass under the asan preset.
 - `rd_interp_test.c`: presentation between [ticks](ARCHITECTURE.md#terms) on two synthetic frames
   (`rd_interp`); the feedback head copies (`testFeedback`: `DISPLAY_HELD` and `FEED_HELD` at a
   tick's first present and the later ones, none for DISPLAY under Motion blur: Smooth, FEED128's
@@ -1114,6 +1125,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`windingDiscChecks`).
 - `rd_mip_test.c`: the Enhanced mip chain's size and its builder staying inside it (`rd_mip`).
 - `rd_mirror_test.c`: mirror mode's flag and the flipped presenter output (`rd_mirror`).
+- `rd_upscale_test.c`: the upscale point (`rd_upscale`, its OpenGL twin `rd_upscale_gl`; [RENDER.md](RENDER.md#the-upscale-point)). Without a device: `rd__upscale_render_scale` (d over the ratio, not below 1 nor d / 3, the ratio clamped to 1..3, Auto's cap on the vertical scale with the window's pixel shape kept) and the switch's ratio. On a device: the reduction's frame carries `RDC_UPSCALE_POINT` in list 12 right before the reduction's `RDC_TARGET` of DISPLAY, naming SCENE and DISPLAY, a state command `rd__apply_state` leaves the state unchanged at; with the upscaler off (Enhanced 2x, a fade) the closed frame replayed with the marker an `RDC_NOP` gives DISPLAY and the present byte for byte, nothing counted; the test's upscale at Enhanced 3x over 1.5: SCENE 1024 x 1024, DISPLAY 1536 x 768, UPSCALED 1536 x 1536 within 3 levels of a CPU bilinear upscale of SCENE at all but 0.1 % of its texels, one dispatch and one remapped reduction a frame, the fades fold 0 under it; the edge guard at ratio 2 over 2x (the scene at 1x) with a full-frame sprite: a jitter (0.25, 0.25) makes column 0 column 1's and row 0 row 1's everywhere (one copy each), (-0.25, -0.25) copies nothing; the phase count 8: ten presents take Halton (2, 3) at i % 8, a keep present takes none and is counted, the next present takes the next term, off clears it; the window resolution at 4:3 in 1024 x 768 (display 2 x 1.5): the scene 1 down at 1.5, and at 1.25 with Auto's cap 1 the scene 1 down and DISPLAY the window's 384 rows; no validation error. Must pass under the asan preset.
+- `rd_jitter_test.c`: the scene's sub-pixel jitter (`rd_jitter`; [RENDER.md](RENDER.md#jitter)). Without a device: `rd__jitter_halton`'s first 8 terms of base 2 and base 3 exact (each less 0.5), 1000 more inside -0.5..0.5; `rd__frame_jitter_parse` taking `x,y` with each -0.5..0.5 and refusing the rest; set, get and clear. On a device: SCENE at Original 1x and Enhanced 2x with 24 rows of quads whose left edges step 1/16 GS pixel a row and 24 columns whose top edges do: with a jitter (0.25, -0.25), then (-0.25, 0.25), every row's first lit texel is the unjittered run's of row f + 16 jx / s (the columns' of f + 16 jy / s), and a GS pixel on is s texels on; 0, 0 SCENE byte for byte as without; a Gouraud triangle (the screen planes), a nearest and a bilinear textured sprite: with a whole-texel jitter (1, 1) SCENE is the picture moved one texel right and down at every texel (the planes evaluated at the jittered position) and WORK1 (a work buffer) unchanged; with (1, 0) DISPLAY moved one texel right (the reduction not jittered) and the present at 1024 x 768 two pixels right (the present not jittered); no validation error.
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
   replays printed (the last three, whole at 430 passes a replay), the line format (the VU
   vertex pre-pass's entry among them, `testVuPre`) and the loss bisect's line; the pipeline
@@ -1341,6 +1354,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
 - `rd_replay_tool_list.cmake`: `--list --no-device` on `rd_pixel`'s dump (`rd_replay_tool_list`).
 - `rd_replay_tool_pass_dump.cmake`: `--pass-dump`, `--target` and `--aspect` on that dump
   (`rd_replay_tool_pass_dump`).
+- `rd_replay_tool_velocity.cmake`: `--velocity-dump` on `rd_velocity`'s dump of a mesh moved 8
+  pixels writes a PNG with moving texels, the largest motion 8 pixels, and the line names the
+  moved draw's previous transform and its draw into VELOCITY; every target and the present are the
+  same bytes with and without `--velocity` there and on `rd_pixel`'s dump
+  (`rd_replay_tool_velocity`; fixtures `rd_velocity_dump` and `rd_dump`).
 - `rd_replay_tool_loss_bisect.cmake`: `--loss-bisect` on that dump runs clean on the device with one
   replay per pass and one to count them, `--passes 1-P` (the whole frame) draws the plain replay's
   picture and `--passes 1` stops the walk at pass 2; the second level's draw window: `--passes 1-P

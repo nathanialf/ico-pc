@@ -593,8 +593,7 @@ int rd__crack_fill_place(const RdFrame *f, const RdCmd *c, const RdStateBlock *s
     if (placePinned()) {
         return RD_CRACK_PLACE_HERE;
     }
-    if (c->type == RDC_NOP || c->type == RDC_AA1 ||
-        (c->type > RDC_NOP && c->type <= RDC_STATE_LAST)) {
+    if (rd__cmd_is_state(c->type)) {
         return RD_CRACK_PLACE_HOLD; /* state: the GPU sees none of it */
     }
     /* a staticBlur sprite (rd__blur_post_sprite) other than the reduction;
