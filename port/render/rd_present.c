@@ -96,6 +96,7 @@
 #include "rd_submit.h"
 #include "rd_fsr1.h"
 #include "rd_tone.h"
+#include "rd_upscale.h"
 #include "shader_consts.h"
 
 typedef struct RdPresentPreset {
@@ -390,6 +391,11 @@ bool rd__apply_display(void)
         w = gw;
         h = gh;
     }
+    /* A temporal upscaler (rd_upscale.h): the size so far is the display's
+     * (DISPLAY, DISPLAY_HELD, UPSCALED); the scene-class targets take it
+     * over the upscaler's ratio below (sx, sy), with no supersampling or
+     * MSAA (rd__aa_mode) and no Downsampling.  Off: nothing changes */
+    const bool temporal = rd__upscale_wanted();
     /* supersampling (RdSettings.antiAlias, rd__aa_mode: never under the
      * Original preset): the scene at 2 or 4 times the Resolution row's
      * size, before the GPU's limit below (and the halving fallback after
@@ -408,8 +414,8 @@ bool rd__apply_display(void)
      * measured against it: perPx is the scale (the smaller axis of a
      * fixed size), 4x + SSAA2 adds nothing, 2x + SSAA4 draws 4x, 1x +
      * SSAA2 draws 2x, and one reduce, the downsample, does both */
-    const bool down =
-        st->downsample && !rd__crt_on() && (scale > 0.0f || (st->sceneWidth && st->sceneHeight));
+    const bool down = st->downsample && !rd__crt_on() && !temporal &&
+                      (scale > 0.0f || (st->sceneWidth && st->sceneHeight));
     if (ssaa > 1.0f && down) {
         perPx = scale > 0.0f ? scale : (w / gw < h / gh ? w / gw : h / gh);
         const float need = ceilf(ssaa / perPx - 1e-4f);
@@ -463,8 +469,15 @@ bool rd__apply_display(void)
             h *= 0.5f;
         }
     }
-    const float sx = w / gw < 1.0f ? 1.0f : w / gw;
-    const float sy = h / gh < 1.0f ? 1.0f : h / gh;
+    /* the display scale; the scene's (the render scale) is it, but under a
+     * temporal upscaler, which draws the scene at it over its ratio (not
+     * below 1x, Auto's step its cap: rd__upscale_render_scale) */
+    const float dsx = w / gw < 1.0f ? 1.0f : w / gw;
+    const float dsy = h / gh < 1.0f ? 1.0f : h / gh;
+    float sx = dsx, sy = dsy;
+    if (temporal) {
+        rd__upscale_render_scale(dsx, dsy, rd__upscale_ratio(), st->upscaleRenderCap, &sx, &sy);
+    }
     uint8_t filter = st->filterUpgrade <= RD_FILTER_UPGRADE_ANISOTROPIC ? st->filterUpgrade : 0;
     if (g_rd.hasDevice && !rhi_limits()->textureMips) {
         filter = 0;
@@ -475,7 +488,8 @@ bool rd__apply_display(void)
      * allocation fallback (createNamedTargets) settled on, so an unrelated
      * change does not recreate the targets just to fail the same way again */
     const bool changed = sx != g_rd.sceneReqSx || sy != g_rd.sceneReqSy ||
-                         full != g_rd.fullHeight || cropWe != g_rd.frameCropWe;
+                         full != g_rd.fullHeight || cropWe != g_rd.frameCropWe ||
+                         rd__upscale_split_differs(temporal, dsx, dsy);
     /* one line when what the options give differs from what was in force:
      * this runs on a settings change or a resize (rd_begin_frame's
      * settingsPending) and at init, never per frame */
@@ -504,10 +518,22 @@ bool rd__apply_display(void)
          * is a whole number of GS pixels shows the border's columns) */
         char frameNote[160];
         frameWords(frameNote, sizeof(frameNote), (uint32_t)gw, wexactFor(aspect));
-        rd__log("display: scene %gx%g (%.0fx%.0f)%s, aspect %.3f, filter %u, %s height, "
+        /* under a temporal upscaler the two scales (rd_upscale.h) */
+        char upNote[160] = "";
+        if (temporal) {
+            const float dispW = (cropWe > 0.0f ? cropWe : gw) * dsx;
+            snprintf(upNote, sizeof(upNote),
+                     " (render scale %gx%g), display %.0fx%.0f (scale %gx%g; upscaler ratio %.2f "
+                     "asked, %.2f in force%s)",
+                     (double)sx, (double)sy, floor((double)dispW + 0.5),
+                     floor((double)(gh * dsy) + 0.5), (double)dsx, (double)dsy,
+                     (double)rd__upscale_ratio(), (double)(dsy / sy),
+                     st->upscaleRenderCap > 0.0f ? ", under Auto's cap" : "");
+        }
+        rd__log("display: scene %gx%g (%.0fx%.0f)%s%s, aspect %.3f, filter %u, %s height, "
                 "full pixel %s, vsync %s%s%s%s%s%s, %s",
                 (double)sx, (double)sy, floor((double)sceneW + 0.5), floor((double)(gh * sy) + 0.5),
-                crtLock ? " (CRT: 1x)" : "", (double)aspect, (unsigned)filter,
+                upNote, crtLock ? " (CRT: 1x)" : "", (double)aspect, (unsigned)filter,
                 full ? "full" : "half", st->fullPixel ? "on" : "off", st->vsync ? "on" : "off",
                 aaMode == RD_AA_OFF ? "" : rd__aa_label(aaMode),
                 rd_aa_samples(aaMode) > 1u ? " (asked)" : "", ssaaNote,
@@ -521,6 +547,7 @@ bool rd__apply_display(void)
         g_rd.sceneSx = sx;
         g_rd.sceneSy = sy;
         g_rd.sceneFellBack = false;
+        rd__upscale_split_set(temporal, dsx, dsy);
     }
     g_rd.ssaa = ssaa;
     g_rd.downsample = down;
@@ -865,7 +892,9 @@ static bool reduceRecord(RhiCommandList cl, RhiTexture *src, uint32_t *sw, uint3
     }
     /* without anti-aliasing at scale 1: the plain box blit, byte for byte
      * as before (the Original preset, every 1x present) */
-    if (rd__aa_mode() == RD_AA_OFF && g_rd.sceneSx == 1.0f && g_rd.sceneSy == 1.0f) {
+    float dx, dy;
+    rd__display_scale(&dx, &dy); /* DISPLAY's (rd_upscale.h): the scene's, but under an upscaler */
+    if (rd__aa_mode() == RD_AA_OFF && dx == 1.0f && dy == 1.0f) {
         return false;
     }
     const float ew = (float)*sw - 2.0f * (crop > 0.0f ? crop : 0.0f);
@@ -2586,6 +2615,7 @@ void rd__present_shutdown(void)
      * tests that read them after rd_shutdown */
     rd__crt_shutdown();  /* the CRT filter */
     rd__fsr1_shutdown(); /* FSR 1.0's two textures */
+    rd__upscale_free();  /* UPSCALED (rd_upscale.c) */
     /* the overlay's prims (the registration stays), the deferred text's list */
     free(s_ov.buf.v);
     free(s_ov.buf.b);

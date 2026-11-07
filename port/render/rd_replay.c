@@ -66,6 +66,7 @@
 #include "rd_passring.h"
 #include "rd_replay.h"
 #include "rd_submit.h"
+#include "rd_upscale.h"
 #include "rd_mesh.h"
 #include "rd_tex.h"
 #include "shader_consts.h"
@@ -5679,6 +5680,7 @@ bool rd__replay_frame_here(const RdFrame *f, int keep, bool present)
 {
     const double t0 = rd__now_ms(), made0 = rd__pipeline_create_ms();
     rd__perf_begin(f, keep, present);
+    rd__upscale_replay_begin(keep, present); /* the jitter, between replays (rd_upscale.c) */
     const bool ok = replayFrame(f, keep, present);
     rd__blur_smooth_replay_end(keep); /* the trail ends where no sprite drew */
     g_rdPerf.uploadBytes = s_ringOff;
@@ -5814,6 +5816,12 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
             if (c->type == RDC_TARGET) {
                 /* before the state takes the new target */
                 r.perfPost = r.perfTargetEffect = perfTargetPost(&r, c);
+            }
+            if (c->type == RDC_UPSCALE_POINT && rd__upscale_point_on()) {
+                flushScreenRun(&r); /* SCENE's last draws before the upscaler reads it */
+                rd__replay_vu_flush(&r);
+                endPass(&r);
+                rd__upscale_point(&r, f, c, s_ms.active); /* rd_upscale.c */
             }
             if (rd__apply_state(&r.st, c)) {
                 if (c->type == RDC_TARGET) {

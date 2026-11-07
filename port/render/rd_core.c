@@ -34,6 +34,7 @@
 #include "rd_tex.h"
 #include "rd_tex_decode.h"
 #include "rd_tone.h"
+#include "rd_upscale.h"
 #include "rd_velocity.h"
 #include "rd_vis.h"
 #include "rd_vu_skin_check.h"
@@ -482,6 +483,8 @@ bool rd__apply_state(RdStateBlock *s, const RdCmd *c)
     case RDC_AA1:
         s->aa1 = c->b[0];
         return true;
+    case RDC_UPSCALE_POINT: /* a marker: no state (rd_upscale.h) */
+        return true;
     default:
         return false;
     }
@@ -779,12 +782,17 @@ void rd__target_scale_of(RdTargetRec *t, int named)
 {
     float sx = 1.0f, sy = 1.0f;
     int scene = named >= 0 ? sceneClass(named) : (t->w == g_rd.gsW && t->h == g_rd.gsH);
-    if (scene) {
-        sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;
-        sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
+    if (scene && (displayClass(named) || named == RD_UPSCALED_NAMED)) {
+        /* DISPLAY, its held copy and the upscaler's output UPSCALED: the
+         * display scale, the scene's own but while a temporal upscaler
+         * draws the scene below it (rd_upscale.h) */
+        rd__display_scale(&sx, &sy);
         if (displayClass(named) && g_rd.fullHeight) {
             sy *= 2.0f; /* the full-height scene: no vertical halving */
         }
+    } else if (scene) {
+        sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;
+        sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
     } else if (named < 0 && t->block && g_rd.settings.waterSharp) {
         sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;
         sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
@@ -1076,6 +1084,7 @@ static void createNamedTargets(void)
         rd__temp_target_pool_clear();
         rd__scene_caches_free();
         rd__effects_depth_free();
+        rd__upscale_free(); /* UPSCALED, at the old display size (rd_upscale.c) */
         rhi_collect_garbage_now();
     }
     for (;;) {
@@ -2160,6 +2169,9 @@ int rd__aa_mode(void)
 {
     const int aa = rd__aa_requested();
 
+    if (rd__upscale_wanted()) {
+        return RD_AA_OFF; /* the temporal upscaler is the anti-aliasing (rd_upscale.h) */
+    }
     return g_rd.msaaBlocked && rd_aa_samples(aa) > 1u ? RD_AA_OFF : aa;
 }
 
@@ -2192,6 +2204,11 @@ int rd_scene_scale_lowered(void)
        fallback brought it down; in the Resolution row's terms (the
        supersampling factor divided out) */
     const float m = g_rd.ssaa > 1.0f ? g_rd.ssaa : 1.0f;
+    if (rd__upscale_point_on()) {
+        /* a temporal upscaler draws the scene below the row's scale by
+         * design (rd_upscale.h): lowered only by the allocation fallback */
+        return !g_rd.sceneFellBack ? 0 : (g_rd.sceneSy < 1.0f ? 1 : (int)g_rd.sceneSy);
+    }
     if (g_rd.settings.sceneScale <= 0.0f || g_rd.sceneSy + 0.5f >= g_rd.settings.sceneScale * m) {
         return 0;
     }

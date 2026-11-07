@@ -84,6 +84,20 @@
  *                         jitter_test = X,Y in the game); 0,0 adds 0.0 and
  *                         draws the picture without it byte for byte;
  *                         --stats names it ("jitter X, Y: N frame groups")
+ *   --upscale-test [R]    the upscale point (rd_upscale.h, [dev]
+ *                         upscale_test): the scene-class targets at the
+ *                         display scale (the --resolution row's) over R
+ *                         (1..3, default 1.5), and at the reduction SCENE
+ *                         upscaled into UPSCALED by the test's bilinear
+ *                         hook, which the reduction then reads; no
+ *                         supersampling or MSAA; the motion vectors on (as
+ *                         --velocity).  A dump from before version 17 has
+ *                         no marker: nothing is upscaled.  --stats names
+ *                         it ("upscale point: SCENE WxH -> UPSCALED wxh,
+ *                         ...", or "upscale point off")
+ *   --upscale-phases N    (with --upscale-test) the jitter's phase count:
+ *                         the replay's present takes Halton (2, 3) at index
+ *                         0 (0, -1/6) as a temporal upscaler's first frame
  *   --full-pixel          the reduction draws the whole frame: no black border
  *   --border-mask         the game's Full pixel off: the same picture, the
  *                         border masked over it at present (rd__border_mask)
@@ -475,6 +489,7 @@
 #include "rd_fsr1.h"
 #include "rd_internal.h"
 #include "rd_jitter.h"
+#include "rd_upscale.h"
 #include "rd_velocity.h"
 #include "rd_mesh.h"
 #include "rd_vis.h"
@@ -491,12 +506,12 @@ static const char *const kNames[] = {
     "AURA_TAP", "WORK2_PAD", "FEED_HELD", "DISPLAY_HELD", "WORK3_HELD"};
 
 static const char *const kCmdNames[RDC_COUNT] = {
-    "NOP",          "TEST",           "BLEND",     "ABE",         "ZWRITE",       "FBA",
-    "PABE",         "COLCLAMP",       "TEXA",      "FILTER",      "WRAP",         "TEXTURE",
-    "TEXTURE_OFF",  "UVOFFSET",       "COLORMASK", "TARGET",      "SCISSOR",      "ALPHA",
-    "SHADE",        "CLEAR",          "SCREEN",    "EXACT_BLEND", "COPY",         "MESH",
-    "SKINNED",      "GRID",           "PARTICLES", "WORLD_PRIMS", "SHADOW_STRIP", "POST_STUB",
-    "SHADOW_RESET", "SHADOW_RESOLVE", "AA1",       "OVERLAY_TEXT"};
+    "NOP",          "TEST",           "BLEND",     "ABE",          "ZWRITE",       "FBA",
+    "PABE",         "COLCLAMP",       "TEXA",      "FILTER",       "WRAP",         "TEXTURE",
+    "TEXTURE_OFF",  "UVOFFSET",       "COLORMASK", "TARGET",       "SCISSOR",      "ALPHA",
+    "SHADE",        "CLEAR",          "SCREEN",    "EXACT_BLEND",  "COPY",         "MESH",
+    "SKINNED",      "GRID",           "PARTICLES", "WORLD_PRIMS",  "SHADOW_STRIP", "POST_STUB",
+    "SHADOW_RESET", "SHADOW_RESOLVE", "AA1",       "OVERLAY_TEXT", "UPSCALE_POINT"};
 
 static const char *const kPrimNames[] = {"points",   "lines",  "linestrip", "tris",
                                          "tristrip", "trifan", "sprites"};
@@ -753,6 +768,8 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
     } else if (c->type == RDC_SCISSOR) {
         printf(" (%d,%d)-(%d,%d)", (int32_t)c->u[0], (int32_t)c->u[1], (int32_t)c->u[2],
                (int32_t)c->u[3]);
+    } else if (c->type == RDC_UPSCALE_POINT) {
+        printf(" src %u dst %u", c->u[0], c->u[1]);
     } else if (c->type <= RDC_STATE_LAST || c->type == RDC_AA1) {
         if (c->type != RDC_TEXTURE_OFF && c->type != RDC_NOP && c->type != RDC_UVOFFSET) {
             printf(" %u", c->b[0]);
@@ -2035,7 +2052,8 @@ int main(int argc, char **argv)
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
                 "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n"
                 "       [--downsample (with --resolution above 1x)] [--fsr1 [0..100]]\n"
-                "       [--jitter X,Y (texels, each -0.5..0.5)]\n",
+                "       [--jitter X,Y (texels, each -0.5..0.5)]\n"
+                "       [--upscale-test [1..3] [--upscale-phases N]]\n",
                 argv[0]);
         return 1;
     }
@@ -2123,6 +2141,28 @@ int main(int argc, char **argv)
                 return 1;
             }
             rd__frame_jitter_set(j[0], j[1]);
+        } else if (strcmp(argv[i], "--upscale-test") == 0) {
+            /* the upscale point's test (rd_upscale.h), at the ratio given */
+            float ratio = 1.5f;
+            char *end = NULL;
+            const float v = i + 1 < argc ? strtof(argv[i + 1], &end) : 0.0f;
+            if (i + 1 < argc && end && end != argv[i + 1] && *end == '\0') {
+                if (!(v >= 1.0f && v <= 3.0f)) {
+                    fprintf(stderr, "--upscale-test: the ratio is 1..3 (\"%s\")\n", argv[i + 1]);
+                    return 1;
+                }
+                ratio = v;
+                i++;
+            }
+            rd__upscale_set(true, ratio);
+        } else if (strcmp(argv[i], "--upscale-phases") == 0 && i + 1 < argc) {
+            char *end = NULL;
+            const long n = strtol(argv[++i], &end, 10);
+            if (!end || *end != '\0' || n < 1 || n > 1024) {
+                fprintf(stderr, "--upscale-phases: 1..1024 (\"%s\")\n", argv[i]);
+                return 1;
+            }
+            rd__upscale_set_phases((uint32_t)n);
         } else if (strcmp(argv[i], "--full-pixel") == 0) {
             s.fullPixel = 1;
         } else if (strcmp(argv[i], "--border-mask") == 0) {
@@ -2825,6 +2865,20 @@ int main(int argc, char **argv)
                    (double)jit[1], rd__frame_jitter_groups());
         } else {
             printf("%s: stats: jitter off\n", dump);
+        }
+        /* the upscale point (--upscale-test; rd_upscale.h) */
+        if (rd__upscale_point_on()) {
+            const RdUpscaleStats *us = rd__upscale_stats();
+            float dx, dy;
+            rd__display_scale(&dx, &dy);
+            printf("%s: stats: upscale point: SCENE %ux%u -> UPSCALED %ux%u (render scale %gx%g, "
+                   "display scale %gx%g), markers %u, dispatched %u, refused %u, reductions "
+                   "remapped %u, edge guard %u columns %u rows, jittered presents %u\n",
+                   dump, us->colorW, us->colorH, us->outW, us->outH, (double)g_rd.sceneSx,
+                   (double)g_rd.sceneSy, (double)dx, (double)dy, us->points, us->dispatched,
+                   us->refused, us->remapped, us->guardCols, us->guardRows, us->jittered);
+        } else {
+            printf("%s: stats: upscale point off\n", dump);
         }
         /* the tiler passes (rd_replay.c: DATE through the stencil bit, the
          * fog's local read, the blur pairs folded) */

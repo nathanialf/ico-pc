@@ -130,6 +130,7 @@ typedef enum RdCmdType {
      * RD_OTEXT_OP: a post pass after text (b[1] RdPostKind), u[1] offset of
      * an RdTextOp, u[2] its size.  Keyed */
     RDC_OVERLAY_TEXT,
+    RDC_UPSCALE_POINT, /* u[0] src, u[1] dst: no state (rd_upscale.h) */
     RDC_COUNT
 } RdCmdType;
 
@@ -191,7 +192,7 @@ _Static_assert(sizeof(RdTextOp) == 12, "RdTextOp is dumped as raw bytes");
 /* Whether a command is a state delta (rd__apply_state) rather than an action. */
 static inline int rd__cmd_is_state(uint8_t type)
 {
-    return type <= RDC_STATE_LAST || type == RDC_AA1;
+    return type <= RDC_STATE_LAST || type == RDC_AA1 || type == RDC_UPSCALE_POINT;
 }
 
 /* RDC_SHADOW_STRIP's b[0]. */
@@ -4421,12 +4422,12 @@ bool rd__read_texture(RdTex t, void *dst, size_t dstSize, uint32_t *w, uint32_t 
  * an older dump is "pal", RdDumpInfo.region); 13 RD_TARGET_WORK3_HELD, a
  * 19th fixed target (the glow held between ticks); 14 RdFrame.hasTickCams
  * and tickCams after the meshes (a blended present's frame, rd.h
- * rd_dump_blended_arm).
+ * rd_dump_blended_arm); 17 RDC_UPSCALE_POINT.
  * rd__dump_frame writes this version; rd__load_frame reads 3 to it, and a
  * dump before 10 loads as the 4:3 frame (aspect 4/3, wExact 512, cullW 512).
  * A dump holds the picture as drawn at its width: a replay can crop it to a
  * narrower aspect, never widen it (rd_replay_tool). */
-#define RD_DUMP_VERSION 16u
+#define RD_DUMP_VERSION 17u
 #define RD_DUMP_REGION_BYTES 8
 bool rd__dump_frame(const RdFrame *f, const char *path);
 bool rd__load_frame(const char *path, RdFrame *out);

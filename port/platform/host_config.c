@@ -596,6 +596,10 @@ static const struct {
        upscaler takes them with (port/render/rd_velocity.c) */
     {"dev.velocity_test", "velocity_test"},
     {"dev.velocity_sign", "velocity_sign"},
+    /* true: the upscale point's test: the scene drawn below the display's
+       scale and upscaled at the reduction by a plain bilinear pass (a
+       developer switch; port/render/rd_upscale.c) */
+    {"dev.upscale_test", "upscale_test"},
     /* false: every VU draw one GPU draw instead of consecutive ones with the
        same state merged into one (an A/B; port/render/rd_replay_vu.c
        vuMergeInit) */
@@ -782,6 +786,9 @@ static const struct {
        vectors; rd__velocity_sign: -1 or 1 */
     {"velocity_test", "ICO_RD_VELOCITY"},
     {"velocity_sign", "ICO_RD_VELOCITY_SIGN"},
+    /* port/render/rd_upscale.c readSwitch: 1 draws the scene at the display
+       scale over 1.5 and upscales it at the reduction */
+    {"upscale_test", "ICO_RD_UPSCALE_TEST"},
     /* port/render/rd_replay_vu.c vuMergeInit: 0 draws every VU draw as a
        GPU draw of its own, through the programs' plain builds */
     {"vu_merge", "ICO_RD_VU_MERGE"},

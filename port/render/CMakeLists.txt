@@ -236,6 +236,8 @@ add_library(ico_render STATIC
     rd_window.c
     rd_upload.c # the upload ring and the uploads before a replay's first pass
     rd_velocity.c # the scene's motion vectors: each VU draw's previous transform, VELOCITY
+    rd_upscale.c # the upscale point: the render/display scale split, the marker's replay, UPSCALED
+    rd_upscale_hook.c # the temporal upscaler's dispatch (the test's bilinear stand-in)
     rd_screen_planes.c # the screen-prim triangles' planes
     rd_shadow.c
     rd_shadow_one.c # the shadow count resolved in one draw from the stencil view

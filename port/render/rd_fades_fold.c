@@ -109,6 +109,7 @@
 #include <string.h>
 
 #include "rd_replay.h"
+#include "rd_upscale.h"
 
 /* off from here on: a reduction that did not take a planned fold */
 static bool s_off;
@@ -594,6 +595,18 @@ void rd__fades_fold_scan(const RdFrame *f, int keep)
             rd__log("fades fold: off under GS state as shader data (the reduction's sprite "
                     "draws through the colour read, which has no fold); list 11's sprites are "
                     "drawn into SCENE");
+        }
+        return;
+    }
+    if (rd__upscale_point_on()) {
+        /* a temporal upscaler takes SCENE at the reduction (rd_upscale.h):
+           the fades must be in SCENE before it, not applied by the
+           reduction after it */
+        static bool saidUp; /* once a run */
+        if (!saidUp) {
+            saidUp = true;
+            rd__log("fades fold: off while a temporal upscaler takes SCENE at the reduction; "
+                    "list 11's sprites are drawn into SCENE");
         }
         return;
     }

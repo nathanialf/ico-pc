@@ -416,6 +416,13 @@ typedef struct RdSettings {
      * past 2x a side.  0 in a zeroed RdSettings: off, nothing changes */
     uint8_t upscale;
     uint8_t upscaleSharpness;
+    /* A temporal upscaler (rd_upscale.h; [dev] upscale_test this release):
+     * the Resolution row is the display's scale and the scene is drawn at it
+     * over the upscaler's ratio.  Resolution "auto" keeps the display at the
+     * window and steps this cap on the scene's vertical scale down instead
+     * (the host, window_host.c video_settings).  0 in a zeroed RdSettings:
+     * no cap */
+    float upscaleRenderCap;
     /* Full pixel off in the game (the host sets it with fullPixel 0): the
      * picture is Full pixel on's, the reduction drawing the whole frame as
      * above (rd_replay.c), and the presenter draws the game's border over
@@ -654,6 +661,12 @@ void rd_get_scene_scale(float *sx, float *sy);
  * allocation that failed); 0 when they are as asked.  The
  * Resolution row shows it after the asked scale, "16x (8x)". */
 int rd_scene_scale_lowered(void);
+
+/* A temporal upscaler's ratio, the display scale over the scene's (1..3),
+ * while one is asked (rd_upscale.h: [dev] upscale_test) and the CRT filter
+ * is off; 0 otherwise.  The host divides Auto's window scale by it, so
+ * Auto's steps lower the scene below the window (RdSettings.upscaleRenderCap). */
+float rd_upscale_ratio(void);
 
 /* gsb_SetGsDefault / dl_Swap at the start of a tick: clears the 13 lists and
  * records the per-list defaults listed above. */

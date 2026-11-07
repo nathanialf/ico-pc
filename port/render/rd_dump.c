@@ -110,6 +110,11 @@
  *            appended to the payload; a version 3 to 15 dump has none and
  *            replays with velocity 0.  A VuPrevCB whose bytes do not hold
  *            the draw's own header shape is dropped at load)
+ *   (version 17: no new section: list 12 carries RDC_UPSCALE_POINT (u[0]
+ *            the target the reduction reads, u[1] the one it writes) before
+ *            the reduction binds DISPLAY, a state command with no state
+ *            (rd_upscale.h); a version 3 to 16 dump has none, and replays
+ *            with no upscale point: nothing is upscaled, as before)
  *   (version 15: u32 facing table count; per table: u32 mesh id (one of
  *            the meshes above), u32 vertexCount, then (vertexCount + 7) / 8
  *            bytes, bit v (LSB first) set when the triangle kicked at
