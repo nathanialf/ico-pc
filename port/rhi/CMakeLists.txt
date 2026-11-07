@@ -657,6 +657,11 @@ if(_ico_have_vk)
     endif()
 endif()
 
+# The FidelityFX FSR 3.1 upscaler (option ICO_FFX): the SDK built from the
+# fetched source, its shader compiler for the build host and ffx_link_test.
+# After the Vulkan tests: the test takes their validation environment.
+add_subdirectory(ffx)
+
 # rhi_gl_test: the same cells on OpenGL with the driver's debug output on
 # (headless: a hidden window of the backend's own), the copies the cells do
 # not make, then the swapchain on an SDL offscreen window; exits 77 (skipped)

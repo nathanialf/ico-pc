@@ -1,0 +1,231 @@
+diff --git a/ffx-api/include/ffx_api/ffx_api.h b/ffx-api/include/ffx_api/ffx_api.h
+index e136191..6eb8d39 100644
+--- a/ffx-api/include/ffx_api/ffx_api.h
++++ b/ffx-api/include/ffx_api/ffx_api.h
+@@ -26,7 +26,11 @@
+ extern "C" {
+ #endif  // #if defined(__cplusplus)
+ 
++#if defined(_WIN32) && !defined(FFX_API_STATIC)
+ #define FFX_API_ENTRY __declspec(dllexport)
++#else
++#define FFX_API_ENTRY
++#endif
+ #include <stdint.h>
+ 
+ enum FfxApiReturnCodes
+diff --git a/ffx-api/include/ffx_api/vk/ffx_api_vk.h b/ffx-api/include/ffx_api/vk/ffx_api_vk.h
+index 1f56ea6..8d13b17 100644
+--- a/ffx-api/include/ffx_api/vk/ffx_api_vk.h
++++ b/ffx-api/include/ffx_api/vk/ffx_api_vk.h
+@@ -25,6 +25,14 @@
+ #include "../ffx_api_types.h"
+ #include <vulkan/vulkan.h>
+ 
++#ifndef __cplusplus
++// C: the struct names this header uses without the struct keyword
++#include <stdbool.h>
++typedef struct VkQueueInfoFFXAPI VkQueueInfoFFXAPI;
++typedef struct FfxApiResourceDescription FfxApiResourceDescription;
++typedef struct FfxApiResource FfxApiResource;
++#endif
++
+ /// FFX specific callback type when submitting a command buffer to a queue.
+ typedef VkResult (*PFN_vkQueueSubmitFFXAPI)(uint32_t submitCount, const VkSubmitInfo* pSubmits, VkFence fence);
+ 
+diff --git a/ffx-api/src/backends.h b/ffx-api/src/backends.h
+index 4ac2a54..7c8c1b3 100644
+--- a/ffx-api/src/backends.h
++++ b/ffx-api/src/backends.h
+@@ -23,7 +23,7 @@
+ #pragma once
+ #include "ffx_provider.h"
+ #include <ffx_api/ffx_api.hpp>
+-#include <FidelityFx/host/ffx_interface.h>
++#include <FidelityFX/host/ffx_interface.h>
+ 
+ ffxReturnCode_t CreateBackend(const ffxCreateContextDescHeader* desc, bool& backendFound, FfxInterface* iface, size_t contexts, Allocator& alloc);
+ 
+diff --git a/ffx-api/src/ffx_provider.h b/ffx-api/src/ffx_provider.h
+index d501887..4e7d869 100644
+--- a/ffx-api/src/ffx_provider.h
++++ b/ffx-api/src/ffx_provider.h
+@@ -23,7 +23,7 @@
+ #pragma once
+ #include <ffx_api/ffx_api.hpp>
+ #include <ffx_api/ffx_api_types.h>
+-#include <FidelityFx/host/ffx_types.h>
++#include <FidelityFX/host/ffx_types.h>
+ 
+ #define VERIFY(_cond, _retcode) \
+     if (!(_cond)) return _retcode
+diff --git a/ffx-api/src/ffx_provider_fsr3upscale.cpp b/ffx-api/src/ffx_provider_fsr3upscale.cpp
+index c1e140c..d23338c 100644
+--- a/ffx-api/src/ffx_provider_fsr3upscale.cpp
++++ b/ffx-api/src/ffx_provider_fsr3upscale.cpp
+@@ -69,7 +69,7 @@ bool ffxProvider_FSR3Upscale::CanProvide(uint64_t type) const
+ uint64_t ffxProvider_FSR3Upscale::GetId() const
+ {
+     // FSR Scale, version from header
+-    return 0xF5A5'CA1Eui64 << 32 | (FFX_SDK_MAKE_VERSION(FFX_FSR3UPSCALER_VERSION_MAJOR, FFX_FSR3UPSCALER_VERSION_MINOR, FFX_FSR3UPSCALER_VERSION_PATCH) & 0xFFFF'FFFF);
++    return 0xF5A5'CA1Eull << 32 | (FFX_SDK_MAKE_VERSION(FFX_FSR3UPSCALER_VERSION_MAJOR, FFX_FSR3UPSCALER_VERSION_MINOR, FFX_FSR3UPSCALER_VERSION_PATCH) & 0xFFFF'FFFF);
+ }
+ 
+ const char* ffxProvider_FSR3Upscale::GetVersionName() const
+diff --git a/sdk/include/FidelityFX/host/ffx_fsr3upscaler.h b/sdk/include/FidelityFX/host/ffx_fsr3upscaler.h
+index 25cbef5..2102fb7 100644
+--- a/sdk/include/FidelityFX/host/ffx_fsr3upscaler.h
++++ b/sdk/include/FidelityFX/host/ffx_fsr3upscaler.h
+@@ -55,7 +55,13 @@
+ /// The size of the context specified in 32bit values.
+ ///
+ /// @ingroup ffxFsr3Upscaler
++#ifdef _WIN32
+ #define FFX_FSR3UPSCALER_CONTEXT_SIZE (FFX_SDK_DEFAULT_CONTEXT_SIZE)
++#else
++// wchar_t is 4 bytes outside Windows: the private context (its resource
++// names) is 837848 bytes on x86-64 Linux, past the 512 KiB default
++#define FFX_FSR3UPSCALER_CONTEXT_SIZE (FFX_SDK_DEFAULT_CONTEXT_SIZE * 2)
++#endif
+ 
+ #if defined(__cplusplus)
+ extern "C" {
+@@ -253,9 +259,18 @@ typedef struct FfxFsr3UpscalerSharedResourceDescriptions {
+ /// FSR3 context.
+ ///
+ /// @ingroup ffxFsr3Upscaler
++// The context's storage holds an FfxFsr3UpscalerContext_Private, which has
++// 8-byte members: aligned for it, wherever the context is embedded
++// (ffx-api's InternalFsr3UpscalerUContext puts it after an odd number of
++// 4-byte handles; gcc's vector copies of a misaligned context fault).
++#if defined(__cplusplus)
++#define FFX_FSR3UPSCALER_CONTEXT_ALIGN alignas(16)
++#else
++#define FFX_FSR3UPSCALER_CONTEXT_ALIGN _Alignas(16)
++#endif
+ typedef struct FfxFsr3UpscalerContext
+ {
+-    uint32_t data[FFX_FSR3UPSCALER_CONTEXT_SIZE];  ///< An opaque set of <c>uint32_t</c> which contain the data for the context.
++    FFX_FSR3UPSCALER_CONTEXT_ALIGN uint32_t data[FFX_FSR3UPSCALER_CONTEXT_SIZE];  ///< An opaque set of <c>uint32_t</c> which contain the data for the context.
+ } FfxFsr3UpscalerContext;
+ 
+ 
+diff --git a/sdk/src/backends/vk/ffx_vk.cpp b/sdk/src/backends/vk/ffx_vk.cpp
+index d914479..7813d48 100644
+--- a/sdk/src/backends/vk/ffx_vk.cpp
++++ b/sdk/src/backends/vk/ffx_vk.cpp
+@@ -272,6 +272,12 @@ typedef struct BackendContext_VK {
+ 
+ } BackendContext_VK;
+ 
++// The scratch buffer's arrays start on a 32-byte boundary each:
++// BackendContext_VK::EffectContext is alignas(32), and the arrays were
++// packed at 4-byte offsets (undefined behaviour; gcc's aligned vector
++// stores into a misplaced EffectContext fault).
++#define FFX_VK_SCRATCH_ALIGN 32
++
+ FFX_API size_t ffxGetScratchMemorySizeVK(VkPhysicalDevice physicalDevice, size_t maxContexts)
+ {
+     uint32_t numExtensions = 0;
+@@ -280,14 +286,15 @@ FFX_API size_t ffxGetScratchMemorySizeVK(VkPhysicalDevice physicalDevice, size_t
+         vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &numExtensions, nullptr);
+ 
+     uint32_t extensionPropArraySize = sizeof(VkExtensionProperties) * numExtensions;
+-    uint32_t gpuJobDescArraySize = FFX_ALIGN_UP(maxContexts * FFX_MAX_GPU_JOBS * sizeof(FfxGpuJobDescription), sizeof(uint32_t));
+-    uint32_t resourceViewArraySize = FFX_ALIGN_UP(((maxContexts * FFX_MAX_QUEUED_FRAMES * FFX_MAX_RESOURCE_COUNT * 2) + FFX_MAX_BINDLESS_DESCRIPTOR_COUNT) * sizeof(BackendContext_VK::VkResourceView), sizeof(uint32_t));
+-    uint32_t stagingRingBufferArraySize = FFX_ALIGN_UP(maxContexts * FFX_CONSTANT_BUFFER_RING_BUFFER_SIZE, sizeof(uint32_t));
+-    uint32_t pipelineArraySize = FFX_ALIGN_UP(maxContexts * FFX_MAX_PASS_COUNT * sizeof(BackendContext_VK::PipelineLayout), sizeof(uint32_t));
+-    uint32_t resourceArraySize = FFX_ALIGN_UP(maxContexts * FFX_MAX_RESOURCE_COUNT * sizeof(BackendContext_VK::Resource), sizeof(uint32_t));
+-    uint32_t contextArraySize = FFX_ALIGN_UP(maxContexts * sizeof(BackendContext_VK::EffectContext), sizeof(uint32_t));
++    uint32_t gpuJobDescArraySize = FFX_ALIGN_UP(maxContexts * FFX_MAX_GPU_JOBS * sizeof(FfxGpuJobDescription), FFX_VK_SCRATCH_ALIGN);
++    uint32_t resourceViewArraySize = FFX_ALIGN_UP(((maxContexts * FFX_MAX_QUEUED_FRAMES * FFX_MAX_RESOURCE_COUNT * 2) + FFX_MAX_BINDLESS_DESCRIPTOR_COUNT) * sizeof(BackendContext_VK::VkResourceView), FFX_VK_SCRATCH_ALIGN);
++    uint32_t stagingRingBufferArraySize = FFX_ALIGN_UP(maxContexts * FFX_CONSTANT_BUFFER_RING_BUFFER_SIZE, FFX_VK_SCRATCH_ALIGN);
++    uint32_t pipelineArraySize = FFX_ALIGN_UP(maxContexts * FFX_MAX_PASS_COUNT * sizeof(BackendContext_VK::PipelineLayout), FFX_VK_SCRATCH_ALIGN);
++    uint32_t resourceArraySize = FFX_ALIGN_UP(maxContexts * FFX_MAX_RESOURCE_COUNT * sizeof(BackendContext_VK::Resource), FFX_VK_SCRATCH_ALIGN);
++    uint32_t contextArraySize = FFX_ALIGN_UP(maxContexts * sizeof(BackendContext_VK::EffectContext), FFX_VK_SCRATCH_ALIGN);
+     
+-    return FFX_ALIGN_UP(sizeof(BackendContext_VK) + extensionPropArraySize + gpuJobDescArraySize + resourceViewArraySize + stagingRingBufferArraySize +
++    // FFX_VK_SCRATCH_ALIGN more: room to align the first array up
++    return FFX_ALIGN_UP(sizeof(BackendContext_VK) + FFX_VK_SCRATCH_ALIGN + extensionPropArraySize + gpuJobDescArraySize + resourceViewArraySize + stagingRingBufferArraySize +
+                             pipelineArraySize + resourceArraySize + contextArraySize,
+                         sizeof(uint64_t));
+ }
+@@ -402,13 +409,21 @@ uint32_t findMemoryTypeIndex(VkPhysicalDevice physicalDevice, VkMemoryRequiremen
+     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+ 
+     uint32_t bestCandidate = UINT32_MAX;
++    // a device whose device-local types are all host-visible (unified
++    // memory: integrated GPUs, lavapipe) has no invisible heap: the first
++    // host-visible device-local type is taken then
++    uint32_t visibleCandidate = UINT32_MAX;
+ 
+     for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+         if ((memRequirements.memoryTypeBits & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & requestedProperties)) {
+ 
+             // if just device-local memory is requested, make sure this is the invisible heap to prevent over-subscribing the local heap
+             if (requestedProperties == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT && (memProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT))
++            {
++                if (visibleCandidate == UINT32_MAX)
++                    visibleCandidate = i;
+                 continue;
++            }
+ 
+             bestCandidate = i;
+             outProperties = memProperties.memoryTypes[i].propertyFlags;
+@@ -419,6 +434,11 @@ uint32_t findMemoryTypeIndex(VkPhysicalDevice physicalDevice, VkMemoryRequiremen
+         }
+     }
+ 
++    if (bestCandidate == UINT32_MAX && visibleCandidate != UINT32_MAX)
++    {
++        bestCandidate = visibleCandidate;
++        outProperties = memProperties.memoryTypes[visibleCandidate].propertyFlags;
++    }
+     return bestCandidate;
+ }
+ 
+@@ -1402,13 +1422,13 @@ FfxErrorCode CreateBackendContextVK(FfxInterface* backendInterface, FfxEffect ef
+         new (&backendContext->uniformBufferMutex) std::mutex();
+ 
+         // Map all of our pointers
+-        uint32_t gpuJobDescArraySize   = FFX_ALIGN_UP(backendContext->maxEffectContexts * FFX_MAX_GPU_JOBS * sizeof(FfxGpuJobDescription), sizeof(uint32_t));
+-        uint32_t resourceViewArraySize = FFX_ALIGN_UP(((backendContext->maxEffectContexts * FFX_MAX_QUEUED_FRAMES * FFX_MAX_RESOURCE_COUNT * 2) + FFX_MAX_BINDLESS_DESCRIPTOR_COUNT) * sizeof(BackendContext_VK::VkResourceView), sizeof(uint32_t));
+-        uint32_t stagingRingBufferArraySize = FFX_ALIGN_UP(backendContext->maxEffectContexts * FFX_CONSTANT_BUFFER_RING_BUFFER_SIZE, sizeof(uint32_t));
+-        uint32_t pipelineArraySize = FFX_ALIGN_UP(backendContext->maxEffectContexts * FFX_MAX_PASS_COUNT * sizeof(BackendContext_VK::PipelineLayout), sizeof(uint32_t));
+-        uint32_t resourceArraySize = FFX_ALIGN_UP(backendContext->maxEffectContexts * FFX_MAX_RESOURCE_COUNT * sizeof(BackendContext_VK::Resource), sizeof(uint32_t));
+-        uint32_t contextArraySize = FFX_ALIGN_UP(backendContext->maxEffectContexts * sizeof(BackendContext_VK::EffectContext), sizeof(uint32_t));
+-        uint8_t* pMem = (uint8_t*)((BackendContext_VK*)(backendContext + 1));
++        uint32_t gpuJobDescArraySize   = FFX_ALIGN_UP(backendContext->maxEffectContexts * FFX_MAX_GPU_JOBS * sizeof(FfxGpuJobDescription), FFX_VK_SCRATCH_ALIGN);
++        uint32_t resourceViewArraySize = FFX_ALIGN_UP(((backendContext->maxEffectContexts * FFX_MAX_QUEUED_FRAMES * FFX_MAX_RESOURCE_COUNT * 2) + FFX_MAX_BINDLESS_DESCRIPTOR_COUNT) * sizeof(BackendContext_VK::VkResourceView), FFX_VK_SCRATCH_ALIGN);
++        uint32_t stagingRingBufferArraySize = FFX_ALIGN_UP(backendContext->maxEffectContexts * FFX_CONSTANT_BUFFER_RING_BUFFER_SIZE, FFX_VK_SCRATCH_ALIGN);
++        uint32_t pipelineArraySize = FFX_ALIGN_UP(backendContext->maxEffectContexts * FFX_MAX_PASS_COUNT * sizeof(BackendContext_VK::PipelineLayout), FFX_VK_SCRATCH_ALIGN);
++        uint32_t resourceArraySize = FFX_ALIGN_UP(backendContext->maxEffectContexts * FFX_MAX_RESOURCE_COUNT * sizeof(BackendContext_VK::Resource), FFX_VK_SCRATCH_ALIGN);
++        uint32_t contextArraySize = FFX_ALIGN_UP(backendContext->maxEffectContexts * sizeof(BackendContext_VK::EffectContext), FFX_VK_SCRATCH_ALIGN);
++        uint8_t* pMem = (uint8_t*)FFX_ALIGN_UP((uintptr_t)(backendContext + 1), (uintptr_t)FFX_VK_SCRATCH_ALIGN);
+ 
+         // Map gpu job array
+         backendContext->pGpuJobs = (FfxGpuJobDescription*)pMem;
+diff --git a/sdk/src/shared/ffx_message.cpp b/sdk/src/shared/ffx_message.cpp
+index 7dd5127..a43cfb1 100644
+--- a/sdk/src/shared/ffx_message.cpp
++++ b/sdk/src/shared/ffx_message.cpp
+@@ -21,6 +21,7 @@
+ // THE SOFTWARE.
+ 
+ #include <FidelityFX/host/ffx_message.h>
++#include <FidelityFX/host/ffx_util.h>
+ 
+ #ifdef _WIN32
+ #ifndef WIN32_LEAN_AND_MEAN
+@@ -57,8 +58,8 @@ void ffxPrintMessage(uint32_t type, const wchar_t* message)
+         s_messageCallback(type, message);
+     }
+ #else
+-    FFX_UNUSED(type);
+-    FFX_UNUSED(message);
++    if (s_messageCallback)
++        s_messageCallback(type, message);
+ #endif
+     return;
+ }
+\ No newline at end of file

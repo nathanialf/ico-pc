@@ -102,13 +102,19 @@ fi
 # (docs/BUILDING.md, "Compilers"). Debian's mingw-w64
 # cross gcc 14 and binutils for the x86_64 target, unpacked with fetch_deb;
 # gcc finds its own pieces relative to its executable, so the tree works
-# from any directory.
+# from any directory. The g++ package (cc1plus, libstdc++.a and its headers,
+# the same Debian revision as the gcc beside it) is for the FidelityFX FSR 3.1
+# upscaler, the one C++ part of the program (port/rhi/ffx); the Windows
+# program links the C++ runtime statically, so no libstdc++-6.dll ships. The
+# trailing "g++" of the stamp makes a tree unpacked without it fetch again
+# (CI's cache key hashes this file, so its cache rebuilds too).
 MINGW_GCC="$DEST/mingw-gcc"
-MINGW_GCC_ID="gcc-mingw-w64-14.2.0-19+27+b1/mingw-w64-12.0.0-5/binutils-2.44-3+12+b1/x86_64"
+MINGW_GCC_ID="gcc-mingw-w64-14.2.0-19+27+b1/mingw-w64-12.0.0-5/binutils-2.44-3+12+b1/x86_64/g++"
 MINGW_DEBS=(
     "pool/main/g/gcc-mingw-w64/gcc-mingw-w64-base_14.2.0-19+27+b1_amd64.deb 8d2c64b886ab4a435a78ddc4cd3b510f149b65fbd6be8472e8f460627562718a"
     "pool/main/g/gcc-mingw-w64/gcc-mingw-w64-x86-64-win32_14.2.0-19+27+b1_amd64.deb a4d7abc5c9c97380eeac348d3b94d522a04e80028bb825cd44df09d9ba90092f"
     "pool/main/g/gcc-mingw-w64/gcc-mingw-w64-x86-64-win32-runtime_14.2.0-19+27+b1_amd64.deb 73a27ee935bec4c81331c3e92c2399e11f161e75fe27898524dcf2bae77f97cb"
+    "pool/main/g/gcc-mingw-w64/g++-mingw-w64-x86-64-win32_14.2.0-19+27+b1_amd64.deb 9d84ad232f7e63ac297287b273653b443a3cd7a0613c43a30b3de9f9e20b6425"
     "pool/main/b/binutils-mingw-w64/binutils-mingw-w64-x86-64_2.44-3+12+b1_amd64.deb b53f4a091b16a0d0952b8e3bd6027931641386258f96b37db1f0c62c787221d3"
     "pool/main/m/mingw-w64/mingw-w64-common_12.0.0-5_all.deb 97dce5d0d8aff1cade4786ad4ef5078345477a598829afcac2e7f2fbc5399990"
     "pool/main/m/mingw-w64/mingw-w64-x86-64-dev_12.0.0-5_all.deb 0bf89cf7454cccb49cd2a46a6f7b33896f6ae3a1a2fe33e02c40be6155bbb385"

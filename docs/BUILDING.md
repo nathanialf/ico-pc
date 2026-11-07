@@ -42,10 +42,10 @@ and fills `tools/toolchain/` (gitignored, about 1.6 GB):
 | directory | what | from |
 | --- | --- | --- |
 | `llvm-mingw/` | clang 23, lld and the mingw-w64 UCRT runtime for x86-64 Windows; the same clang targets Linux | [llvm-mingw](https://github.com/mstorsjo/llvm-mingw) release 20260922, `ucrt-ubuntu-22.04-x86_64`, SHA-256 pinned (not fetched on an arm64 host unless `SKIP_LLVM_MINGW=0`, which takes the pinned `-aarch64` build) |
-| `mingw-gcc/` | mingw-w64 gcc 14 and binutils for x86-64 Windows (x86-64 hosts only) | Debian 13 `gcc-mingw-w64-*-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
+| `mingw-gcc/` | mingw-w64 gcc 14, g++ and binutils for x86-64 Windows (x86-64 hosts only) | Debian 13 `gcc-mingw-w64-*-win32` and `g++-mingw-w64-x86-64-win32` 14.2.0-19+27+b1, `binutils-mingw-w64-*` 2.44-3+12+b1, `mingw-w64-*-dev` 12.0.0-5, SHA-256 pinned |
 | `cmake/` | CMake 4.4.4 (`cmake`, `ctest`) | [Kitware's release](https://github.com/Kitware/CMake/releases/tag/v4.4.4) `cmake-4.4.4-linux-x86_64.tar.gz` (`-linux-aarch64` on an arm64 host), SHA-256 pinned |
 | `ccache/` | ccache 4.11.3, the compiler launcher every preset names (`tools/toolchain/ccache/bin/ccache`) | [ccache's release](https://github.com/ccache/ccache/releases/tag/v4.11.3) `ccache-4.11.3-linux-x86_64.tar.xz`, SHA-256 pinned (no arm64 build exists: that host builds without it; `SKIP_CCACHE=1` skips it elsewhere) |
-| `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC, SPIRV-Cross, libmpeg2, libchdr and the AppImage tools (`deps/appimage/<x86_64\|aarch64>/`: appimagetool unpacked, and the AppImage runtime) | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`THIRD_PARTY.md`](THIRD_PARTY.md)) |
+| `deps/` | SDL3, volk, the Vulkan headers, the validation layer, DXC, SPIRV-Cross, libmpeg2, libchdr, the FidelityFX SDK with glslang (`deps/fidelityfx/<tag>/`, x86-64 hosts, [below](#fidelityfx-upscaler-fsr-31)) and the AppImage tools (`deps/appimage/<x86_64\|aarch64>/`: appimagetool unpacked, and the AppImage runtime) | `tools/fetch_deps.sh`, which `fetch_toolchain.sh` runs last ([`THIRD_PARTY.md`](THIRD_PARTY.md)) |
 
 The pins the fetch scripts share (the SDL3 version and its SHA-256,
 `DEB_SNAPSHOT`, and the `fetch_deb` helper that downloads a Debian package
@@ -327,6 +327,7 @@ and macOS).
 | `ICO_SHADERS_GLSL` | `ON` with `ICO_RHI_OPENGL` when `tools/fetch_deps.sh` fetched SPIRV-Cross, else `OFF` | also translates the shaders to GLSL 4.30 with SPIRV-Cross for the OpenGL backend (`ICO_SPIRV_CROSS` names another executable; `SKIP_SPIRV_CROSS=1` skips the fetch). With `ICO_RHI_OPENGL` on and this off, the configure step warns: the OpenGL backend is built but has no shaders and cannot draw |
 | `ICO_VERSION_LABEL` | empty | with `ICO_LINK_EXE`: the package label (`vX.Y.Z` or `vX.Y.Z-rcN`). Its numbers go into the Windows version information and the Apple bundles' Info.plist; the label itself, written to `generated/ico_version.h`, is shown in the log header and on the Settings menu's Main page, and is empty (nothing shown) when it does not parse as a version (`CMakeLists.txt`, `ICO_VERSION_LABEL_C`). The package scripts and `android/app/build.gradle` pass it; a build without it has an all-zero version |
 | `ICO_STATE_FIXED_IMAGE` | `ON` in `linux-x64`, `linux-x64-clang`, `win-x64`, `win-x64-clang` (and `asan`, `fptrap`, which inherit `linux-x64`); `OFF` otherwise | links the programs at a fixed image address ([Fixed image](#fixed-image)); `ICO_STATE_FIXED_IMAGE=1` in every source |
+| `ICO_FFX` | `ON` in `linux-x64` (and `asan`, `linux-x64-asan`, `fptrap`, which inherit it) and `win-x64`; `OFF` otherwise | builds the FidelityFX FSR 3.1 upscaler from the fetched SDK source: `ico_ffx_sc`, the Vulkan permutation headers, `ico_ffx_upscaler` and `ffx_link_test` ([FidelityFX upscaler](#fidelityfx-upscaler-fsr-31)). `ICO_FFX_DIR` and `ICO_FFX_GLSLANG` name another SDK install or glslangValidator |
 | `ICO_RC_TOOLS` | `OFF` | the release candidates' own tooling, for rc packages alone ([Release candidate tools](#release-candidate-tools)); `ON` defines `ICO_RC_TOOLS=1` for every source, and a non-empty `ICO_VERSION_LABEL` that does not end in `-rcN` is refused |
 | `ICO_BASE_ELF` | `baserom/pal/baseelf.elf` | the base ELF the data loader's reference tests read; without it they are not built |
 | `ICO_BASE_ELF_JPN` | `baserom/jpn/baseelf.elf` | the Japanese disc's base ELF (SCPS-11003), for the same tests on that disc |
@@ -427,6 +428,80 @@ ships no Linux sanitizer runtimes, so the `asan` preset is GCC either way.
 Windows builds target mingw (gcc or llvm-mingw), never MSVC (clang-cl or a `*-windows-msvc`
 triple): the presets and toolchain files are the GNU ABI ones (`CMakePresets.json`,
 `cmake/toolchains/`), and only those are built and tested in CI.
+
+## FidelityFX upscaler (FSR 3.1)
+
+The temporal upscaler is AMD's FidelityFX SDK built from source (MIT; tag `v1.1.4`, FSR 3.1.4;
+[THIRD_PARTY.md](THIRD_PARTY.md) has the pins and why this release), never the SDK's prebuilt
+Windows DLLs. Only the upscaler is built: ffx-api, the FSR 3.1 component, the SDK's shared code and
+its Vulkan backend; not frame generation, optical flow or the other effects (the release has no
+FSR 4). `port/rhi/ffx/CMakeLists.txt` holds the build and says why each piece is there.
+
+**The fetch.** `tools/fetch_deps.sh` (section 10, x86-64 hosts; `SKIP_FFX=1` skips it) fetches the
+tag with git, checks the commit and the SHA-256 of its `git archive`, installs the source subset
+the port compiles into `tools/toolchain/deps/fidelityfx/v1.1.4/src/` and applies
+`tools/ffx/patches/*.patch` in name order:
+
+| patch | what |
+| --- | --- |
+| `0001-shader-compiler-posix.patch` | the shader compiler (`FidelityFX_SC`) on Linux: its Windows-only headers, path calls (`PathAllocCanonicalize`, `CreateDirectoryW`, `_wfopen_s`) and `wmain` get POSIX equivalents, its DXC/FXC compilers (Windows COM) are left out off Windows, glslang's output is split into lines once the process has exited (a pipe read could split a line) |
+| `0002-runtime-gcc-clang.patch` | the library under gcc and clang, and three faults found running it on lavapipe: `ffx_api.h`'s entry points without `__declspec(dllexport)` (`FFX_API_STATIC`), the `FidelityFx/` include spelling (Linux file names are case-sensitive), the message callback called outside Windows, a `ui64` literal, `ffx_api_vk.h` usable from C; the FSR 3.1 context's opaque size doubled outside Windows (4-byte `wchar_t` makes the private context 837848 bytes, past the 512 KiB default) and aligned to 16 bytes (ffx-api embeds it at a 4-byte offset; gcc's vector copies fault there); the Vulkan backend's scratch arrays started on 32-byte boundaries (its `alignas(32)` effect contexts were packed at 4-byte offsets); and a device-local memory type that is also host-visible accepted when the device has no other (unified-memory GPUs and lavapipe: the backend refused every texture) |
+
+The SDK's own files are never edited by hand: a change is a new patch (made with `git diff` in a
+copy of the installed tree, `-p1` paths from the tree's root) or a line in
+`port/rhi/ffx/ico_ffx_compat.h`, the header forced into every SDK source for the MSVC library
+names (`wcscpy_s`, `strcpy_s`, `sprintf_s`, `_countof`) and the C and C++ headers the SDK
+expects `<Windows.h>` to include. The install's stamp carries the patches' SHA-256, so a changed patch re-installs the
+tree. The same section builds glslang (`vulkan-sdk-1.4.363.0`, with SPIRV-Tools for its `-Os`)
+at `-j2` into `deps/fidelityfx/v1.1.4/glslang/bin/glslangValidator`, about 15 minutes once.
+
+**The build** (`ICO_FFX=ON`): `ico_ffx_sc` is compiled for the build host (an ExternalProject
+with the host's compilers when the preset cross-compiles); it runs glslang on the ten FSR 3.1
+passes in upstream's 64 option permutations and four variants (wave32/wave64, 32/16-bit), drops
+duplicate modules and writes the permutation headers into the build directory's
+`port/rhi/ffx/vk/`: 200 headers, 160 unique SPIR-V modules, 3.3 MB of SPIR-V as 17.7 MB of C
+text, in about a minute at `-j2`. `ico_ffx_upscaler` compiles them into the static library;
+volk's function pointers stand in for the few Vulkan entry points the backend calls by name, and
+on Linux its users link the C++ runtime statically (`tools/package_linux.sh` allows no
+`libstdc++.so.6`). `ffx_link_test` creates the backend and an upscale context on the first Vulkan
+1.2 device (lavapipe here) and skips (77) when there is none. On this container (gcc 14, lavapipe)
+it passes, with the validation layer and synchronisation validation on and under the sanitizers:
+the context takes 32.3 MB of GPU memory at 640x480 to 1280x960. The library's code and data are
+3.3 MB (the SPIR-V nearly all of it); the test program, stripped, is 4.3 MB with the static C++
+runtime, and needs only `libc`, `libm` and the loader.
+
+The device the backend is given must have every extension the backend reads enabled when the device
+lists it: it decides from the device's extension list, not from what was enabled. Those are
+`VK_KHR_shader_float16_int8` (with `shaderFloat16`), `VK_EXT_subgroup_size_control`,
+`VK_KHR_synchronization2`, `VK_EXT_descriptor_indexing`, `VK_KHR_dedicated_allocation` with
+`VK_KHR_get_memory_requirements2` (left off, the backend calls a NULL
+`vkGetBufferMemoryRequirements2KHR`), `VK_AMD_buffer_marker` and `VK_AMD_device_coherent_memory`;
+`ffx_link_test.c` is the reference.
+
+**When the shader compiler fails on a host.** Its output names the shader, the permutation and
+glslang's message. Check `deps/fidelityfx/v1.1.4/glslang/bin/glslangValidator --version` runs
+(else re-run `tools/fetch_deps.sh`), then run the failing command from `ninja -v` by hand in the
+build directory; `-debugcmdline` prints the arguments it parsed. A host where it cannot be made to
+work builds with `-DICO_FFX=OFF`: the FSR 3.1 row is then not offered, and nothing else changes.
+
+**Windows (Vulkan only).** `win-x64` builds it with `ICO_FFX=ON`: the library is compiled by the
+mingw-w64 g++ that `tools/fetch_toolchain.sh` unpacks into `tools/toolchain/mingw-gcc` (Debian
+`g++-mingw-w64-x86-64-win32` 14.2.0-19+27+b1, the revision of the gcc beside it; the stamp ends in
+`/g++`, so a tree unpacked without it fetches again, and CI's toolchain cache key, which hashes the
+script, rebuilds). `cmake/toolchains/mingw-gcc-common.cmake` sets `CMAKE_CXX_COMPILER` when the g++
+is there; without it `ICO_FFX=ON` stops at configure with the command to run. The shader compiler
+is a build-host tool: `ico_ffx_sc` is an ExternalProject built with the host's gcc and g++ (found by
+`find_program`; `ICO_FFX_HOST_CC` and `ICO_FFX_HOST_CXX` name others, no toolchain file), and it
+runs on Linux during the cross build, so the permutation headers are the host build's, and the glslang
+it drives is the Linux `glslangValidator` of the deps tree. The program links `-static`, which takes
+libstdc++ and libgcc in; `tools/package_win.sh` fails when `ico_pc.exe` imports `libstdc++-6.dll`,
+`libgcc_s_seh-1.dll` or `libwinpthread-1.dll`, so no DLL joins the zip. `ffx_link_test` is not built
+for Windows (the Vulkan loader there is the player's; the cross build proves the compile and the
+link). The llvm-mingw presets (`win-x64-clang`) keep `ICO_FFX=OFF`.
+
+**Direct3D 12.** Not built: the SDK makes its Direct3D 12 permutations (DXIL) with DXC through
+Windows COM, which the POSIX shader compiler leaves out; llvm-mingw's clang++ compiles the Vulkan
+sources (checked with `-fsyntax-only` only).
 
 ## How the game is compiled
 

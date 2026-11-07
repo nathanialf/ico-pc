@@ -76,6 +76,14 @@
  *                         at the box's size; S the Sharpness row, 0..100
  *                         (default 80); --stats names the pass ("present:
  *                         fsr1 WxH -> wxh", or "present: fsr1 off")
+ *   --jitter X,Y          the scene's sub-pixel jitter (rd_jitter.h), X right
+ *                         and Y down in texels of the bound target, each
+ *                         -0.5..0.5, added after the GS's snap in the
+ *                         frame groups of SCENE, WORK2 and AURA_WORK (what a
+ *                         temporal upscaler's jitter does; [dev]
+ *                         jitter_test = X,Y in the game); 0,0 adds 0.0 and
+ *                         draws the picture without it byte for byte;
+ *                         --stats names it ("jitter X, Y: N frame groups")
  *   --full-pixel          the reduction draws the whole frame: no black border
  *   --border-mask         the game's Full pixel off: the same picture, the
  *                         border masked over it at present (rd__border_mask)
@@ -451,6 +459,7 @@
 #include "dump_zip.h" /* port/platform: the F12 zip */
 #include "rd_fsr1.h"
 #include "rd_internal.h"
+#include "rd_jitter.h"
 #include "rd_mesh.h"
 #include "rd_vis.h"
 #include "rd_vu_skin_check.h"
@@ -1933,7 +1942,8 @@ int main(int argc, char **argv)
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
                 "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n"
-                "       [--downsample (with --resolution above 1x)] [--fsr1 [0..100]]\n",
+                "       [--downsample (with --resolution above 1x)] [--fsr1 [0..100]]\n"
+                "       [--jitter X,Y (texels, each -0.5..0.5)]\n",
                 argv[0]);
         return 1;
     }
@@ -2013,6 +2023,13 @@ int main(int argc, char **argv)
                 s.upscaleSharpness = (uint8_t)v;
                 i++;
             }
+        } else if (strcmp(argv[i], "--jitter") == 0 && i + 1 < argc) {
+            float j[2];
+            if (!rd__frame_jitter_parse(argv[++i], j)) {
+                fprintf(stderr, "--jitter: X,Y with each -0.5..0.5 (\"%s\")\n", argv[i]);
+                return 1;
+            }
+            rd__frame_jitter_set(j[0], j[1]);
         } else if (strcmp(argv[i], "--full-pixel") == 0) {
             s.fullPixel = 1;
         } else if (strcmp(argv[i], "--border-mask") == 0) {
@@ -2695,6 +2712,15 @@ int main(int argc, char **argv)
             } else {
                 printf("%s: stats: present: fsr1 off\n", dump);
             }
+        }
+        /* the scene's jitter (--jitter, [dev] jitter_test; rd_jitter.h): the
+         * frame groups of the scene-class passes it moved */
+        float jit[2];
+        if (rd__frame_jitter_get(jit)) {
+            printf("%s: stats: jitter %.4g, %.4g: %u frame groups\n", dump, (double)jit[0],
+                   (double)jit[1], rd__frame_jitter_groups());
+        } else {
+            printf("%s: stats: jitter off\n", dump);
         }
         /* the tiler passes (rd_replay.c: DATE through the stencil bit, the
          * fog's local read, the blur pairs folded) */

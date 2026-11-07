@@ -238,8 +238,9 @@ static struct {
        drawn the old way (rd.h RdPerfRecord.vuPre*) */
     uint64_t vuPreVerts, vuPreDraws, vuPreFallbacks;
     uint64_t vuDraws, vuTris; /* the VU draws and their triangles (rd.h RdPerfRecord) */
-    /* the timed replays' (VU triangles, list 0's GPU ms) for the VU line's
-       least-squares line (window_scene.h SceneVuFit, issue 179) */
+    /* the timed replays' (vertex invocations, GPU work ms) for the VU line's
+       least-squares line (window_scene.h SceneVuFit, issue 179): vertex
+       invocations against the GPU's work */
     SceneVuFit vuFit;
     /* the pixel diet's draws: the alpha/blend planner's one-pass and
        opaque draws, the frame-size plan's constant, additive and local-read
@@ -4781,7 +4782,10 @@ static void perf_drain(void)
             for (int l = 0; l < GPU_LISTS; l++) {
                 s_perf.gpuList[l] += r.gpuListMs[l];
             }
-            window_scene_vu_fit_add(&s_perf.vuFit, r.vuTris, r.gpuListMs[0]);
+            window_scene_vu_fit_add(
+                &s_perf.vuFit,
+                window_scene_vu_invocations(r.vuTris, r.vuPreVertices, rd_vu_prepass_on()),
+                window_scene_gpu_work_ms(r.gpuMs, r.gpuDisplayWaitMs, r.gpuPresentMs));
             for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
                 s_perf.gpuPost[p] += r.gpuPostMs[p];
             }
@@ -4988,11 +4992,12 @@ static void perf_log(void)
            list's start (rd_submit.c), where a GPU that waits whole batches
            for the window's image waits */
         snprintf(gpu, sizeof(gpu),
-                 "GPU %.2f ms (max %.2f): uploads %.2f, lists 0-10 %.2f, 11-12 %.2f, display wait "
+                 "GPU %.2f ms (max %.2f): %s %.2f, lists 0-10 %.2f, 11-12 %.2f, display wait "
                  "%.2f, present %.2f",
-                 s_perf.gpu / g, s_perf.maxGpu, s_perf.gpuUpload / g, scene / g,
-                 (s_perf.gpuList[11] + s_perf.gpuList[12]) / g, s_perf.gpuDisplayWait / g,
-                 s_perf.gpuPresent / g);
+                 s_perf.gpu / g, s_perf.maxGpu,
+                 rd_perf_pass_kind_display(RD_PERF_PASS_UPLOAD, rhi_limits()->tiler),
+                 s_perf.gpuUpload / g, scene / g, (s_perf.gpuList[11] + s_perf.gpuList[12]) / g,
+                 s_perf.gpuDisplayWait / g, s_perf.gpuPresent / g);
     }
     /* the region rule's card verdicts the steps decided on the CPU
        (rd_mesh.c), a step's average */
@@ -5018,11 +5023,27 @@ static void perf_log(void)
 
         (void)window_scene_vu_text(vu, sizeof(vu), s_perf.vuDraws, s_perf.vuTris, s_perf.vuPreVerts,
                                    b->n, rd_vu_prepass_on());
-        /* and list 0's GPU time against the triangles: what the vertex work
-           costs this GPU (the VU pre-pass question, docs/port/
+        /* and the GPU's work against the vertex invocations: what the vertex
+           work costs this GPU (the VU pre-pass question, docs/port/
            ANDROID_DIAGNOSTICS.md) */
         (void)window_scene_vu_fit_text(fit, sizeof(fit), &s_perf.vuFit);
         fprintf(stderr, "window: %s%s\n", vu, fit);
+    }
+    {
+        /* Vulkan: whether the display's image was already free when the
+           present's list was submitted (the acquire's fence, vk_cmd.c): the
+           block's pictures, from the counters' difference */
+        static uint64_t s_acqReadyAt, s_acqNotReadyAt;
+        char acq[160];
+        RhiStats st;
+
+        rhi_get_stats(&st);
+        if (window_scene_acquire_text(acq, sizeof(acq), st.acquireReadyAtSubmit - s_acqReadyAt,
+                                      st.acquireNotReady - s_acqNotReadyAt) > 0) {
+            fprintf(stderr, "window: %s\n", acq);
+        }
+        s_acqReadyAt = st.acquireReadyAtSubmit;
+        s_acqNotReadyAt = st.acquireNotReady;
     }
     if (s_perf.presentBlocked != 0) {
         char fr[16];
@@ -5063,11 +5084,15 @@ static void perf_log(void)
             snprintf(partial, sizeof(partial), " (not all timed apart in %u replays)",
                      s_perf.gpuPostPartial);
         }
+        char pre[24] = "off"; /* an off pre-pass has no cost to print: "0.00" reads as one */
+
+        if (rd_vu_prepass_on()) {
+            snprintf(pre, sizeof(pre), "%.2f", s_perf.gpuPrepass / g);
+        }
         fprintf(stderr,
                 "window: GPU ms per replay: lists 0-12 %s; effects: %s%s; present %.2f; VU "
-                "pre-pass %.2f%s\n",
-                lists, posts, partial, s_perf.gpuPresent / g, s_perf.gpuPrepass / g,
-                window_tiler_words());
+                "pre-pass %s%s\n",
+                lists, posts, partial, s_perf.gpuPresent / g, pre, window_tiler_words());
     }
     if (s_perf.gpuGap.n) {
         /* whether the spans overlap (the step rule's GPU time a picture

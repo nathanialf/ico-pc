@@ -1120,6 +1120,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`windingDiscChecks`).
 - `rd_mip_test.c`: the Enhanced mip chain's size and its builder staying inside it (`rd_mip`).
 - `rd_mirror_test.c`: mirror mode's flag and the flipped presenter output (`rd_mirror`).
+- `rd_jitter_test.c`: the scene's sub-pixel jitter (`rd_jitter`; [RENDER.md](RENDER.md#jitter)). Without a device: `rd__jitter_halton`'s first 8 terms of base 2 and base 3 exact (each less 0.5), 1000 more inside -0.5..0.5; `rd__frame_jitter_parse` taking `x,y` with each -0.5..0.5 and refusing the rest; set, get and clear. On a device: SCENE at Original 1x and Enhanced 2x with 24 rows of quads whose left edges step 1/16 GS pixel a row and 24 columns whose top edges do: with a jitter (0.25, -0.25), then (-0.25, 0.25), every row's first lit texel is the unjittered run's of row f + 16 jx / s (the columns' of f + 16 jy / s), and a GS pixel on is s texels on; 0, 0 SCENE byte for byte as without; a Gouraud triangle (the screen planes), a nearest and a bilinear textured sprite: with a whole-texel jitter (1, 1) SCENE is the picture moved one texel right and down at every texel (the planes evaluated at the jittered position) and WORK1 (a work buffer) unchanged; with (1, 0) DISPLAY moved one texel right (the reduction not jittered) and the present at 1024 x 768 two pixels right (the present not jittered); no validation error.
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
   replays printed (the last three, whole at 430 passes a replay), the line format (the VU
   vertex pre-pass's entry among them, `testVuPre`) and the loss bisect's line; the pipeline
@@ -1203,7 +1204,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   left out of the passes' counts; the GPU time pacing reads, the span less the display wait,
   `rd_perf_pace_gpu_ms`, never below 0, 0 without GPU times), the block's mean of a piece (`rd_perf_pass_agg_mean`) and the
   arm line with its backend, the arm's backend gate (`rd_perf_passes_arm_backend`: Vulkan and MoltenVK
-  with a present split only, never OpenGL or Direct3D), a failure of these counted without a device (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`).
+  with a present split only, never OpenGL or Direct3D), a failure of these counted without a device (`checkPassTexts`). The reachable set is made with the pre-pass (`rd_perf`, `rd_perf_mali`). The log name of a pass kind (`rd_perf_pass_kind_display`: the uploads print `before list 0` on a tile-based GPU, `uploads` elsewhere, every other kind and the CSV's `rd_perf_pass_kind_name` unchanged, issue 179).
 - `rd_pixel_test.c`: rd through the Vulkan [RHI](ARCHITECTURE.md#terms), pixel by pixel; leaves the
   dump the tool tests replay (`rd_pixel`). Its pipelines case holds the reachable set under
   `RD_PIPELINE_REACHABLE_MAX` with both blends, the tile-based GPU's set too (its profile with

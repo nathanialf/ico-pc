@@ -102,17 +102,31 @@ question it decides:
   100 % through a scene is the GPU at its limit (the vertex work below decides what to cut); a
   clock well under `the fastest clock` with the long frames is the GPU's governor not raising it;
   the game thread's core's clock low during a stall is the CPU side throttled.
-- **List 0 against the triangles** (the 10 s `window: VU: ...` line gains `; list 0 GPU 41.2 ms a
-  replay, 12.3 ms + 0.41 ms a thousand triangles (R^2 0.80, 38 replays)`: the block's timed
-  replays' scene list GPU time fitted by least squares to their VU triangles,
-  `window_scene_vu_fit`). Read it as: each thousand triangles of the VU draws cost the second
-  number of ms of list 0 on this GPU, and the first number is the rest (pixels, passes). A high
-  R^2 (0.7 and over) with a large slope says the vertex work sets list 0's time: on a tiler with
-  the VU pre-pass off each triangle shades 9 vertex invocations (the VU line's words), so the
-  pre-pass (each vertex once) would cut most of it; a low R^2 or a small slope says it would not.
-  Issue 179's log decided it (9 invocations a triangle, the span following the vertex
-  invocations): tile-based GPUs take the pre-pass (below). The fit needs 3 timed replays with
-  different triangle counts; with fewer the mean alone (`(2 replays)`).
+- **The GPU's work against the vertex invocations** (the 10 s `window: VU: ...` line gains `; GPU work
+  51.8 ms a replay, 16.0 ms + 0.17 ms a thousand vertex invocations (R^2 0.81, 70 replays)`: the
+  block's timed replays' GPU work, the span less the display wait and the present (the slow-scene
+  rule's quantity), fitted by least squares to the invocations the VU line counts: the pre-pass's
+  vertices with it on, 9 a triangle with it off; `window_scene_vu_fit`). It replaced the line of
+  list 0 against the triangles: on a Mali the stamps trade work between the stretch before list 0
+  and list 0 at a constant sum, so list 0 alone measures where a stamp landed (issue 179's log:
+  `uploads` 7.9 and list 0 83.3, then 55.9 and 33.2). Read it as: each thousand invocations cost
+  the second number of ms of GPU work, and the first number is the rest (pixels, passes). A high
+  R^2 (0.7 and over) with a large slope says the vertex work sets the GPU's time; the same line
+  with the pre-pass on (the invocation count then smaller) says what the pre-pass bought. The fit
+  needs 3 timed replays with different counts; with fewer the mean alone (`(2 replays)`).
+- **Before list 0** (the replays line's GPU part and the top passes on a tile-based GPU: `before
+  list 0 2.1` where other devices print `uploads 2.1`; the passes CSV's `kind` stays `uploads`).
+  The stretch up to the first scene list's stamp: the uploads and the GPU's work still in flight.
+  On a Mali it moves against list 0 at a constant sum, so read the span and the GPU work line,
+  not that figure.
+- **The acquire line** (`window: acquire: the display's image was free at the present's submit in
+  41 of 60 pictures`, once a 10 s block, Vulkan only; the acquire's fence, asked at the submit of
+  the present's list). All or nearly all: the presentation engine returns the image before the
+  picture needs it, so the wait on the display's image is not what holds the pictures (issue 179's
+  Mali: a wait of 0.06 to 0.15 ms and the GPU idle 0.0 to 0.1 ms between pictures). A low share:
+  the pictures wait for the display's image. Absent: not Vulkan, or every acquire was made ahead.
+  The replays line's GPU part also says `VU pre-pass off` where the GPU line showed `0.00` for an
+  off pre-pass.
 - **The VU pre-pass's verdict** (start lines; [PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
   A tile-based GPU takes the pre-pass as any other device, and the start-up self-test judges
   it. Read, in order: `rd: VU pre-pass: on: each mesh and grid vertex and triangle

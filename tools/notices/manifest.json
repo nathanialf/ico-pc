@@ -118,6 +118,15 @@
       ]
     },
     {
+      "name": "AMD FidelityFX SDK (the FSR 3.1 upscaler)",
+      "version": "v1.1.4 (c6efa6bf7f2027b3ec94f28578bb5965eabb9e55), FSR 3.1.4, with the port's patches (tools/ffx/patches)",
+      "licence": "MIT",
+      "used_for": "the FSR 3.1 temporal upscaler (Vulkan), compiled into the program with the SPIR-V shaders built from its GLSL",
+      "platforms": ["linux"],
+      "arch": ["x64"],
+      "texts": [{"file": "tools/toolchain/deps/fidelityfx/v1.1.4/src/LICENSE.txt"}]
+    },
+    {
       "name": "Zstandard decoder (libchdr's bundled zstd)",
       "version": "1.5.7 (zstddeclib.c), unmodified",
       "licence": "BSD-3-Clause OR GPL-2.0; BSD-3-Clause chosen",

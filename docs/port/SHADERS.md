@@ -247,10 +247,15 @@ size in [GS](ARCHITECTURE.md#terms) pixels, its GS origin, `g_frameRegs[0]` (`g_
 scale, the drawing camera's picture half-width and half-height about 2048, the exact viewport's half
 texel) and `g_frameRegs[1]` (`g_vp`: the exact viewport, a power of two centred on the target, so
 positions on the GS's 1/16 grid map to the same texel at every frame width), `g_z` (the Z scale,
-texels per GS pixel), `g_misc` (frame counter, preset) and `g_vpo` (the exact viewport's centre
-offset; the texels a [Full pixel](ARCHITECTURE.md#terms) target leaves out at its left). Nothing
-transforms a position: a GS X is drawn where the game put it, at every aspect
-(`port/shaders/common.hlsli`, FrameCB).
+texels per GS pixel), `g_misc` (frame counter, preset), `g_vpo` (the exact viewport's centre
+offset; the texels a [Full pixel](ARCHITECTURE.md#terms) target leaves out at its left) and
+`g_jitter` (xy: the sub-pixel jitter in texels of a jittered frame's scene-class passes, already
+added to `g_vpo.xy` so every position the exact viewport maps takes it after the GS's snap;
+`gs_plane_offset`, `vu_pixel_in_picture` and `fullscreen_triangle` subtract it, so a pixel is
+evaluated at its jittered GS position and a full-target pass keeps its texels; 0 in every other
+frame group, where the subtraction leaves every value as it was:
+[RENDER.md](RENDER.md#jitter)). Nothing transforms a position: a GS X is drawn where the game put
+it, at every aspect (`port/shaders/common.hlsli`, FrameCB).
 
 **DrawCB** (b1, 112 bytes): `g_col` (a constant colour), `g_mode` (the `DF_*` flags,
 [TEXA](ARCHITECTURE.md#terms) mode and texel format, alpha test and AFAIL split, AREF), `g_blend`
@@ -298,7 +303,7 @@ packing (each member a 16-byte register or a 64-byte matrix, so the packing is u
 
 | struct | register | bytes | notes |
 | --- | --- | --- | --- |
-| `IcoFrameCB` | b0 space0 | 336 | view, proj, viewProj, cameraPos, clip, target, origin, frame, vp, z, misc, vpo |
+| `IcoFrameCB` | b0 space0 | 352 | view, proj, viewProj, cameraPos, clip, target, origin, frame, vp, z, misc, vpo, jitter |
 | `IcoDrawCB` | b1 space1 | 112 | col, mode, blend, uvRect, tex, param (the tone blits: the colour adjustment's factors), scale |
 | `IcoCrtCB` | b1 space1 | 112 | the CRT filter's block in DrawCB's place: src, box, beam, mask, glow, tone, pass; pad[0..3] the colour adjustment's factors (`c_toneAdj`), pad[4] 1 with it on (`c_toneOn`) |
 | `IcoFsrCB` | b1 space1 | 144 | FSR 1.0's block in DrawCB's place and size (`blit_vs` reads it as DrawCB: pad[11], aux1.w, the quarter turns, is 0): con0..con3 (AMD's `FsrEasuConOffset`), rcas (`FsrRcasCon`), last (RCAS's load clamp), pad |
