@@ -36,11 +36,15 @@ extern "C" {
  * native handles. */
 bool rd__fsr3_dispatch(RhiCommandList cl, const RdUpscaleIn *in);
 
-/* The context given back and the support answer asked again at the next
- * question: from rd__upscale_free (a display change).  The context is
- * destroyed once the pictures that used it have finished (a later
- * dispatch), or at rd__fsr3_shutdown */
-void rd__fsr3_free(void);
+/* The support answer asked again at the next question, and the context
+ * given back unless keep: from rd__upscale_free (a display change, the
+ * targets made again).  keep (FSR 3.1 stays in force): the context stays,
+ * and the next dispatch uses it when its render size, display size and
+ * flags are the ones asked (a window drag at the same sizes, a remade
+ * scene of the same size: no ffxCreateContext, RdFsr3Stats.kept), else
+ * retires it.  A context given back is destroyed once the pictures that
+ * used it have finished (a later dispatch), or at rd__fsr3_shutdown */
+void rd__fsr3_free(bool keep);
 /* Every context destroyed, the GPU idle first: the present's shutdown
  * (rd_shutdown, the render thread stopped) */
 void rd__fsr3_shutdown(void);
@@ -65,6 +69,8 @@ void rd__fsr3_test_unsupported(bool on);
 
 typedef struct RdFsr3Stats {
     uint32_t made, destroyed;    /* contexts */
+    uint32_t kept;               /* contexts kept across rd__fsr3_free(true) */
+    double createMs;             /* the last ffxCreateContext and its queries, ms */
     uint32_t dispatched;         /* ffxDispatch returned OK */
     uint32_t failed;             /* ffxDispatch or a context failed */
     uint32_t refused;            /* not dispatched: an input or a handle missing */

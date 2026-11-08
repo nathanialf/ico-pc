@@ -1846,11 +1846,15 @@ the game's own GS Z rather than a projective depth. A re-shown present (the stil
 stays and the next dispatch is told how many presents passed.
 
 **The context** (one per render size, display size and flags): made at the first dispatch of a size
-on the render thread (`upscaling: FSR 3.1 context made at frame N: render WxH -> display WxH (ratio
-R), jitter phase count P, FidelityFX 3.1.4, GPU memory M MB (A MB aliasable)`), given back with
-UPSCALED at a display change and destroyed once the pictures that used it have finished (a few
-replays later; `... destroyed (the pictures that used it finished)`), or at the renderer's shutdown
-with the GPU idle. **Memory:** FSR's own textures, 23.5 MB at 640x480 -> 960x720 and 32.3 MB at
+on the render thread, where `ffxCreateContext` builds FSR's compute pipelines (`upscaling: FSR 3.1
+context made at frame N in T ms: render WxH -> display WxH (ratio R), jitter phase count P,
+FidelityFX 3.1.4, GPU memory M MB (A MB aliasable)`; T is the stall it cost). When the targets are
+made again (a display change, a window drag) and FSR 3.1 stays in force, the context is kept and the
+next dispatch uses it if the render size, display size and flags are the same (`upscaling: FSR 3.1
+context WxH -> WxH kept at frame N (the targets made again at the same sizes; K times so far)`, the
+first 8 then every 100th); otherwise, and when FSR 3.1 leaves force, it is given back and destroyed
+once the pictures that used it have finished (a few replays later; `... destroyed (the pictures
+that used it finished)`), or at the renderer's shutdown with the GPU idle. **Memory:** FSR's own textures, 23.5 MB at 640x480 -> 960x720 and 32.3 MB at
 640x480 -> 1280x960 on lavapipe, growing with the display size (AMD gives 45 to 300 MB at the
 usual PC sizes); the line names it.
 

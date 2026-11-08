@@ -28,6 +28,9 @@
  *             1024 x 1024 (display-sized: 512 x 2), UPSCALED and the
  *             present not black, the anti-aliasing off for it, the jitter's
  *             phase count FSR's (ceil(8 x 1.5^2) = 18 or near);
+ *   kept      the targets made again at the same sizes (rd_reset_scene):
+ *             the context kept (RdFsr3Stats.kept), none made, a dispatch;
+ *             the create time noted;
  *   resize    the same at 3x: a second context (UPSCALED 1536 x 1536), the
  *             first destroyed once the pictures that used it finished (a few
  *             replays later);
@@ -188,6 +191,17 @@ static void checkFsr3Device(void)
     }
     printf("  fsr3: %ux%u -> %ux%u, phase count %d, FFX %s, GPU memory %.1f MB\n", fs->renderW,
            fs->renderH, fs->displayW, fs->displayH, (int)fs->phases, fs->version, fs->memoryMb);
+
+    /* kept: the targets made again at the same sizes (rd_reset_scene at the
+     * same GS size, as a window drag at one size): the context kept, no
+     * ffxCreateContext; its create time on the stats (the context line) */
+    const uint32_t madeK = fs->made, keptK = fs->kept, dispK = fs->dispatched;
+    rd_reset_scene(512, 512);
+    recordRichFrame(t, 1);
+    CHECK(fs->made == madeK && fs->kept == keptK + 1u && fs->dispatched == dispK + 1u,
+          "fsr3 kept: contexts %u -> %u, kept %u -> %u, dispatched %u -> %u", madeK, fs->made,
+          keptK, fs->kept, dispK, fs->dispatched);
+    CHECK(fs->createMs > 0.0, "fsr3 kept: the context's create time %.3f ms", fs->createMs);
 
     /* resize: a new context, the old one destroyed once its pictures are done */
     s.sceneScale = 3.0f;

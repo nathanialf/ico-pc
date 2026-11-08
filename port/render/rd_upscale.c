@@ -554,5 +554,9 @@ void rd__upscale_free(void)
     s_up.lastW = s_up.lastH = 0;
     memset(&s_up.geom, 0, sizeof(s_up.geom));
     rd__depth_copy_free(&s_up.depth);
-    rd__fsr3_free(); /* FSR 3.1's context (rd_fsr3.c): destroyed once the GPU is done with it */
+    /* FSR 3.1's context (rd_fsr3.c): kept while FSR 3.1 stays in force with
+     * the split (the next dispatch uses it at the same sizes and flags),
+     * else destroyed once the GPU is done with it.  rd__apply_display has
+     * put the new state in force before the targets are made again */
+    rd__fsr3_free(s_up.split && rd__upscale_by_fsr3());
 }
