@@ -1096,27 +1096,22 @@ bool rd_dump_on_demand(const char *dumpPath, const char *pngPath)
 
 /* ------------------------------------------------------- loss dump */
 
-bool rd_dump_retained(const char *lostPath, const char *beforePath, uint32_t *lostFrame,
-                      uint32_t *beforeFrame)
+void rd_dump_retained_frames(RdRetainedFrame *last, RdRetainedFrame *prev)
 {
-    const RdFrame *last = rd__last_frame();
-    const RdFrame *prev = rd__prev_frame();
-    if (lostFrame) {
-        *lostFrame = 0;
+    /* read once each: on the watchdog's thread (the loss dump of a GPU
+     * hang) the game thread may be closing frames meanwhile */
+    const RdFrame *l = rd__last_frame();
+    const RdFrame *p = rd__prev_frame();
+    if (last) {
+        last->held = l != NULL;
+        last->closed = l && l->closed;
+        last->number = l ? l->number : 0u;
     }
-    if (beforeFrame) {
-        *beforeFrame = 0;
+    if (prev) {
+        prev->held = p != NULL;
+        prev->closed = p && p->closed;
+        prev->number = p ? p->number : 0u;
     }
-    if (!last || !last->closed || !lostPath || !rd__dump_frame(last, lostPath)) {
-        return false;
-    }
-    if (lostFrame) {
-        *lostFrame = last->number;
-    }
-    if (beforePath && prev && rd__dump_frame(prev, beforePath) && beforeFrame) {
-        *beforeFrame = prev->number;
-    }
-    return true;
 }
 
 const RdFrame *rd__retained_frame(uint32_t number)

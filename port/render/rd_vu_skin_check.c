@@ -811,7 +811,24 @@ typedef struct SkSlot {
     uint32_t pitch;
     SkTwin twins[SK_TWINS_MAX];
     uint32_t nTwins;
+    /* the backend's submissions when the slot was recorded (before its
+     * replay's own submit) and the newest finished when it was read
+     * (rhi_gpu_progress; 0 where it does not track them): the H2 lines'
+     * "after submission N, read with M finished" (issue 123: the ring read
+     * back as zeros or stale values, whose order against the GPU's work
+     * these two place) */
+    uint64_t submitted, readFinished;
 } SkSlot;
+
+/* rhi_gpu_progress's submitted or finished count, 0 when not tracked */
+static uint64_t gpuCount(bool finished)
+{
+    RhiGpuProgress gp;
+    if (!rhi_gpu_progress(&gp)) {
+        return 0;
+    }
+    return finished ? gp.finished : gp.submitted;
+}
 
 static SkSlot s_slots[RHI_FRAMES_IN_FLIGHT];
 
@@ -968,6 +985,14 @@ void rd__vu_skin_pick(const RdFrame *f, const RdCmd *c, const RdMeshRec *m)
     g_rdSkinTwin = false;
     s_cur = NULL;
     if (!f || !c || !m || !rd__vu_skin_check_on()) {
+        return;
+    }
+    if (rd__vu_prepass_selftest_running()) {
+        /* the pre-pass self-test's replays (issue 123's v0.11.0 log: its
+         * skinned toy mesh twinned, armed the capture and a frame dump and
+         * made a target of a mesh never seen again): neither checked nor
+         * counted, so the round robin below moves with the game's replays
+         * alone */
         return;
     }
     if (s_seenReplay != g_rd.replayCounter) {
@@ -1538,6 +1563,7 @@ void rd__vu_skin_end(void)
         sl->counter = g_rd.replayCounter;
         sl->rhiSlot = rhi_frame_slot();
         sl->ringId = g_rd.ring[slot].id;
+        sl->submitted = gpuCount(false);
         return;
     }
     const RhiCommandList cl = rd__replay_cl();
@@ -1668,6 +1694,7 @@ void rd__vu_skin_end(void)
     sl->counter = g_rd.replayCounter;
     sl->rhiSlot = rhi_frame_slot();
     sl->ringId = g_rd.ring[slot].id;
+    sl->submitted = gpuCount(false);
     /* the schedule's cursor on by the golden ratio of the last total: the
      * next probe lands in another part of the skinned vertices */
     s_cursorV += s_lastV ? (uint64_t)((double)s_lastV * 0.6180339887) + 1u : 1u;
@@ -1935,6 +1962,16 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
                 snprintf(rw, sizeof(rw), "not read (the ring's slot was used again)");
             }
             moduleName(k->vs, mod, sizeof(mod));
+            /* when it was recorded and read against the GPU's work (H2: a
+             * read with the record's own submission not yet finished is
+             * the port reading early, one past it the bytes changing
+             * after) */
+            char when[160];
+            snprintf(when, sizeof(when),
+                     "recorded in replay %u (frame slot %u) after submission %llu, read with %llu "
+                     "finished",
+                     sl->counter, sl->rhiSlot, (unsigned long long)sl->submitted,
+                     (unsigned long long)sl->readFinished);
             if (v[0].wrong) {
                 /* the address named: the one whose zero matrix gives the
                  * most wrong vertices, else the one whose non-finite matrix
@@ -1959,13 +1996,13 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
                         "vertices wrong of %u, address %u: got (%.1f, %.1f, %d) want (%.1f, "
                         "%.1f, %d) (a zero matrix at %u gives it: %s; it gives %u of them%s); "
                         "the bone block as the GPU copied it: %s; as the CPU reads it after the "
-                        "fence: %s; code %d through %s (wrong check %llu%s)",
+                        "fence: %s; code %d through %s (wrong check %llu%s); %s",
                         k->frame, place, k->mesh, k->meshId, k->meshVertices, v[0].wrong,
                         v[0].compared, a, v[0].got[0] / 16.0, v[0].got[1] / 16.0, v[0].got[2],
                         v[0].want.x / 16.0, v[0].want.y / 16.0, v[0].want.z, a,
                         v[0].explains ? "yes" : "no", v[0].explained, drop, cw, rw, k->code, mod,
                         (unsigned long long)ev,
-                        k->targeted ? "; the probe targeted after a twin event" : "");
+                        k->targeted ? "; the probe targeted after a twin event" : "", when);
                 const uint64_t phase = k->c1Off & 4095u;
                 const char *c2w =
                     k->c2 ? varWords(c2)
@@ -1985,9 +2022,9 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
             } else {
                 rd__log("VU skin check: frame %u command %s mesh %s #%u (%u vertices): every "
                         "vertex right (%u compared); the bone block as the GPU copied it: %s; as "
-                        "the CPU reads it after the fence: %s; reads as: %s (bytes event %llu)",
+                        "the CPU reads it after the fence: %s; reads as: %s (bytes event %llu); %s",
                         k->frame, place, k->mesh, k->meshId, k->meshVertices, v[0].compared, cw, rw,
-                        decision, (unsigned long long)ev);
+                        decision, (unsigned long long)ev, when);
             }
         }
     }
@@ -2191,6 +2228,7 @@ static void thinNote(uint32_t read, uint32_t differ)
 
 static void readSlot(SkSlot *sl, uint32_t slot, bool intact, bool occ)
 {
+    sl->readFinished = gpuCount(true);
     static uint64_t samples[SK_QUERIES];
     uint32_t ns = 0;
     bool anyBox = sl->nTwins != 0;

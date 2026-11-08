@@ -42,7 +42,12 @@
  *      colour-target bound leave the pre-pass on (a tile-based GPU takes
  *      it since v0.11.0; ICO_VK_FAKE_LIMITS=mali does not set tiler, so no
  *      other test sees this rule), colorBytesPerPixel 32 (below the
- *      record's ICO_VU_REC_BYTES) leaves it off with the bytes in its why.
+ *      record's ICO_VU_REC_BYTES) leaves it off with the bytes in its why;
+ *      the device table's row (RhiLimits.vuPrepassOff, issue 123) leaves
+ *      it off with the row's reason unless ICO_RD_VU_PREPASS=on, which
+ *      does not pass the byte bound.
+ * notrun with ICO_VK_FAKE_NO_PREPASS=1 is the row on this device: the
+ * summary says "off by the device table (ICO_VK_FAKE_NO_PREPASS; ...)".
  * The log lines are matched by test/rd_vuprepass_selftest.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -129,6 +134,66 @@ static void checkCleared(void)
           seen);
 }
 
+static void putEnv(const char *name, const char *value)
+{
+#ifdef _WIN32
+    (void)_putenv_s(name, value ? value : "");
+#else
+    if (value) {
+        (void)setenv(name, value, 1);
+    } else {
+        (void)unsetenv(name);
+    }
+#endif
+}
+
+/* 6b. the device table's no-pre-pass row (RhiLimits.vuPrepassOff, issue
+ * 123): off with the row's reason; ICO_RD_VU_PREPASS=on ([dev] vu_prepass
+ * = true written in the file) over the row, never over the colour-target
+ * bound; =0 (the settings) and =1 (the old export of true) do not pass it */
+static void checkTable(RhiLimits *lim)
+{
+    const char *had = getenv("ICO_RD_VU_PREPASS");
+    char saved[64] = "";
+    if (had) {
+        snprintf(saved, sizeof(saved), "%s", had);
+    }
+    lim->vuPrepassOff = "a test row, issue 123";
+    lim->colorBytesPerPixel = 0u;
+
+    static const struct {
+        const char *env;
+        bool on;
+        const char *why;
+    } cases[] = {
+        {NULL, false,
+         "by the device table (a test row, issue 123; [dev] vu_prepass = true draws "
+         "with it anyway)"},
+        {"1", false, "by the device table (a test row, issue 123; "},
+        {"0", false, "by the settings ([dev] vu_prepass = false"},
+        {"on", true, ""},
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        putEnv("ICO_RD_VU_PREPASS", cases[i].env);
+        rd__vu_prepass_init(lim);
+        CHECK(g_rd.vuPrepass == cases[i].on &&
+                  strncmp(g_rd.vuPrepassWhy, cases[i].why, strlen(cases[i].why)) == 0 &&
+                  (cases[i].on || cases[i].why[0] != '\0'),
+              "the device table's row with ICO_RD_VU_PREPASS=%s: the pre-pass %s (\"%s\"), %s "
+              "(\"%s\") expected",
+              cases[i].env ? cases[i].env : "(unset)", g_rd.vuPrepass ? "on" : "off",
+              g_rd.vuPrepassWhy, cases[i].on ? "on" : "off", cases[i].why);
+    }
+    /* on over the row, but not over the colour targets' bound */
+    lim->colorBytesPerPixel = 32u;
+    rd__vu_prepass_init(lim);
+    CHECK(!g_rd.vuPrepass && strstr(g_rd.vuPrepassWhy, "hold 32 bytes a pixel") != NULL,
+          "the row with ICO_RD_VU_PREPASS=on and 32 bytes a pixel: the pre-pass %s (%s)",
+          g_rd.vuPrepass ? "on" : "off", g_rd.vuPrepassWhy);
+    putEnv("ICO_RD_VU_PREPASS", had ? saved : NULL);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -167,7 +232,14 @@ int main(int argc, char **argv)
     char sum[2048];
     rd_summary_text(sum, sizeof(sum));
     printf("  summary: %s\n", sum);
-    const char *want = wantOn   ? "; VU pre-pass on (self-test: ok); "
+    /* ICO_VK_FAKE_NO_PREPASS=1: the device table's no-pre-pass row on
+       this device (vk_device.c kVuPlainOnly, issue 123) */
+    const char *fakeRow = getenv("ICO_VK_FAKE_NO_PREPASS");
+    const bool tableOff = fakeRow && fakeRow[0] && fakeRow[0] != '0';
+    const char *want = wantOn ? "; VU pre-pass on (self-test: ok); "
+                       : notRun && tableOff
+                           ? "; VU pre-pass off by the device table (ICO_VK_FAKE_NO_PREPASS; [dev] "
+                             "vu_prepass = true draws with it anyway) (self-test not run); "
                        : notRun ? "; VU pre-pass off by the settings ("
                                 : "; VU pre-pass off (self-test: the pictures differ: ";
     CHECK(strstr(sum, want) != NULL, "the summary lacks \"%s\"", want);
@@ -242,6 +314,7 @@ int main(int argc, char **argv)
         CHECK(!g_rd.vuPrepass && strstr(g_rd.vuPrepassWhy, want) != NULL,
               "32 bytes a pixel of colour targets: the pre-pass %s (%s), off with \"%s\" expected",
               g_rd.vuPrepass ? "on" : "off", g_rd.vuPrepassWhy, want);
+        checkTable(&lim);
     }
     rd_shutdown();
     if (failures) {

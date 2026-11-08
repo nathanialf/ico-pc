@@ -2009,10 +2009,37 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vuprepass_selftest_unmerged
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}" -P "${_vst}")
+    # the device table's no-pre-pass row (vk_device.c kVuPlainOnly, issue
+    # 123: the Adreno 740 under Qualcomm's own driver), given to lavapipe by
+    # ICO_VK_FAKE_NO_PREPASS=1: devtable the pre-pass off by the table and
+    # the self-test not run; devtable_on the same with ICO_RD_VU_PREPASS=on
+    # ([dev] vu_prepass = true written in config.toml): on over the table,
+    # the self-test passed, the start line naming the override
+    add_test(NAME rd_vuprepass_selftest_devtable
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test>
+                     -DMODE=notrun "-DLINE=off \\(self-test not run\\)"
+                     "-DEXTRA=rd: VU pre-pass: off by the device table \\(ICO_VK_FAKE_NO_PREPASS, \\[dev\\] vu_prepass = true draws with it anyway\\): every VU draw"
+                     -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_devtable_on
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}"
+                     "-DEXTRA=rd: VU pre-pass: on: each mesh .*\\[dev\\] vu_prepass = true over the device table \\(ICO_VK_FAKE_NO_PREPASS\\)"
+                     -P "${_vst}")
+    # the skin check at its every-draw mode around the self-test (issue
+    # 123's v0.11.0 log: the self-test's skinned toy mesh twinned, armed the
+    # capture and a frame dump): the self-test's replays are neither checked
+    # nor twinned, so no check of a frame and no end-of-run count is logged
+    add_test(NAME rd_vuprepass_selftest_skincheck
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}"
+                     "-DEXTRA=rd: VU skin check: on "
+                     "-DNOT_=VU skin check: (frame|at the end of the run|twins at the end of the run)"
+                     -P "${_vst}")
     set(_vst_tests rd_vuprepass_selftest rd_vuprepass_selftest_plain
                    rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off
                    rd_vuprepass_selftest_unbatched rd_vuprepass_selftest_unmerged
-                   rd_vuprepass_selftest_sabotage_straddle)
+                   rd_vuprepass_selftest_sabotage_straddle rd_vuprepass_selftest_devtable
+                   rd_vuprepass_selftest_devtable_on rd_vuprepass_selftest_skincheck)
     set_tests_properties(${_vst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     if(_env)
         set_tests_properties(rd_vuprepass_selftest rd_vuprepass_selftest_plain
@@ -2028,6 +2055,12 @@ if(ICO_RUN_TESTS)
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_MERGE=0")
     set_tests_properties(rd_vuprepass_selftest_off
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_PREPASS=0")
+    set_tests_properties(rd_vuprepass_selftest_devtable
+                         PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_NO_PREPASS=1")
+    set_tests_properties(rd_vuprepass_selftest_devtable_on
+                         PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_NO_PREPASS=1;ICO_RD_VU_PREPASS=on")
+    set_tests_properties(rd_vuprepass_selftest_skincheck
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_CHECK=2;ICO_RD_VU_SKIN_INTERVAL_MS=0")
     # the skinned draws' bone-block check (issue 163; rd_vu_skin_check.c,
     # docs/port/VU_SKIN_CHECK.md, test/rd_vu_skin_check.cmake): judge the
     # judgement alone (no device: a fake probe at the zero matrix's point

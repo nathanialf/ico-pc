@@ -1065,16 +1065,30 @@ the one `rd_replay_tool` and the loss bisect take. The newest three loss zips ar
 ones deleted, so a device lost at every start cannot fill a phone. The activity file then records
 the loss with the zip's path (or that none was written) for the next start
 ([PLATFORM.md](PLATFORM.md#diagnostics)); the message names the file and asks for it with the log
-(`port/render/rd_dump.c` (`rd_dump_retained`; `rd_dump_retained_frame` writes one retained frame by number for the slow-scene dump, nothing when that number has left the ring, `rd_frame_retained` says which); `port/platform/dump_zip.c` (`ico_loss_dump_zip`,
-`ico_loss_dump_prune`); `port/platform/window_host.c` (`loss_dump`, `device_lost_quit`)).
+(`port/render/rd_dump.c` (`rd_dump_retained_frames` names the two frames, held and closed, and
+`rd_dump_retained_frame` writes one retained frame by number, for the loss dump and the slow-scene
+dump, nothing when that number has left the ring, `rd_frame_retained` says which);
+`port/platform/dump_zip.c` (`ico_loss_dump_zip`, `ico_loss_dump_prune`);
+`port/platform/window_host.c` (`loss_dump`, `device_lost_quit`)). The loss zip's
+entries are stored, not deflated (F12's and the slow scene's keep the deflate), and each slow step
+is logged and the log flushed before it begins: `window: loss dump: writing frame N to <path>`,
+`window: loss dump: writing frame M (the one before) to <path>`, `window: loss dump: zipping K MB
+(the two frames and the log) at store level`, then `window: loss dump: frames N and M (the one
+before) written to <zip> in T s` (issue 123: after a GPU hang no loss dump line followed the pass
+ring in 10 s of log, so whether a write or the deflate held it could not be told).
 
 A GPU hang writes the same zip: when the watchdog ends a run whose main thread waits for work the
 GPU never finishes ([PLATFORM.md](PLATFORM.md#diagnostics), "A GPU hang"), the window writes the pass
-ring and the loss dump from the watchdog thread. The main thread, the only one that writes the
-frame ring, the texture and mesh records and the pass ring, is blocked inside the driver, so they
+ring and the loss dump from the watchdog thread. When the main thread is the one blocked inside
+the driver, the frame ring, the texture and mesh records and the pass ring, which it alone writes,
 stand still while they are written; the texture pack's loader thread fills only its own queue, and
-the pipeline compiler threads run only inside a batch the main thread waits for. Nothing in the
-dump needs the device, so none of it calls the hung one. The lost frame is then the last closed
+the pipeline compiler threads run only inside a batch the main thread waits for. With the render
+thread on, the wait can be the render thread's while the game thread goes on stepping (issue 123's
+hang log: 30 game frames a second for 10 s after the hang, none presented): it then closes new
+frames into the ring (`rd_begin_frame` resets the slot after the last closed one) and changes the
+texture and mesh records while the watchdog's thread reads them, so the frames written can be torn
+and a write can read a reset frame's storage. Holding the game thread while the dump is written is
+a follow-up, not done. Nothing in the dump needs the device, so none of it calls the hung one. The lost frame is then the last closed
 frame, the one whose replay the wait belongs to or the one after it. The activity file notes it with
 the hang's own line, which the next start counts as a loss but does not bisect: the bisect runs
 before the watchdog and waits for the GPU with no limit, and a driver that hangs at that frame would

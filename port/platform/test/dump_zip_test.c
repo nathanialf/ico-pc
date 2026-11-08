@@ -10,7 +10,8 @@
  * aspect missing a file is left out; none to zip writes nothing.  The
  * device-loss zip (ico_loss_dump_zip): the lost frame's dump first, the one
  * before it, the log, the loose dumps gone after; without the one before,
- * the lost one and the log; the second .rddump (ico_dump_zip_extract_nth),
+ * the lost one and the log; its entries stored (the F12 and slow-scene
+ * zips deflated); the second .rddump (ico_dump_zip_extract_nth),
  * also of F12's pair (ico_frame_dump_zip with the tick before); its path
  * (ico_loss_dump_path); the pruning
  * (ico_loss_dump_prune) keeps the newest loss zips by name and leaves
@@ -70,6 +71,27 @@ static int entry_is(mz_zip_archive *z, const char *name, const void *data, size_
            memcmp(back, data, n) == 0;
 }
 
+/* entry name's compression method in the zip at path (0 stored,
+   MZ_DEFLATED), or -1; a stored entry's compressed size is its size */
+static int entry_method(const char *path, const char *name)
+{
+    mz_zip_archive z;
+    mz_zip_archive_file_stat st;
+    int m = -1;
+
+    memset(&z, 0, sizeof(z));
+    if (!mz_zip_reader_init_file(&z, path, 0)) {
+        return -1;
+    }
+    const int i = find(&z, name);
+    if (i >= 0 && mz_zip_reader_file_stat(&z, (mz_uint)i, &st) &&
+        (st.m_method != 0 || st.m_comp_size == st.m_uncomp_size)) {
+        m = (int)st.m_method;
+    }
+    mz_zip_reader_end(&z);
+    return m;
+}
+
 static void test_loss(const char *base)
 {
     char dir[1200], lost[1300], before[1300], log[1300], zip[1300], name[64], why[160];
@@ -89,7 +111,7 @@ static void test_loss(const char *base)
     CHECK(put(lost, a, sizeof(a)) == 0);
     CHECK(put(before, b, sizeof(b)) == 0);
     CHECK(put(log, text, sizeof(text) - 1) == 0);
-    CHECK(ico_loss_dump_zip(zip, lost, before, log, why, sizeof(why)) == 0);
+    CHECK(ico_loss_dump_zip(zip, lost, before, log, 1, why, sizeof(why)) == 0);
     memset(&z, 0, sizeof(z));
     CHECK(mz_zip_reader_init_file(&z, zip, 0));
     CHECK(mz_zip_reader_get_num_files(&z) == 3);
@@ -122,14 +144,31 @@ static void test_loss(const char *base)
     CHECK(ico_path_kind(before, NULL, NULL) == -1);
     /* no frame before it: the lost one and the log */
     CHECK(put(lost, a, sizeof(a)) == 0);
-    CHECK(ico_loss_dump_zip(zip, lost, NULL, log, why, sizeof(why)) == 0);
+    CHECK(ico_loss_dump_zip(zip, lost, NULL, log, 1, why, sizeof(why)) == 0);
     memset(&z, 0, sizeof(z));
     CHECK(mz_zip_reader_init_file(&z, zip, 0));
     CHECK(mz_zip_reader_get_num_files(&z) == 2);
     mz_zip_reader_end(&z);
+    /* the levels (issue 123): the loss zip stored, its entries' bytes as
+       they are (the watchdog's thread writes it after a GPU hang), F12's
+       and the slow scene's deflated */
+    {
+        static char big[4096];
+        memset(big, 'x', sizeof(big));
+        CHECK(put(lost, big, sizeof(big)) == 0);
+        CHECK(ico_loss_dump_zip(zip, lost, NULL, log, 1, why, sizeof(why)) == 0);
+        CHECK(entry_method(zip, "frame-121-lost.rddump") == 0);
+        CHECK(entry_method(zip, "ico-pc.log") == 0);
+        CHECK(put(lost, big, sizeof(big)) == 0);
+        CHECK(ico_loss_dump_zip(zip, lost, NULL, log, 0, why, sizeof(why)) == 0);
+        CHECK(entry_method(zip, "frame-121-lost.rddump") == MZ_DEFLATED);
+        CHECK(put(lost, big, sizeof(big)) == 0);
+        CHECK(ico_frame_dump_zip(zip, lost, NULL, log, why, sizeof(why)) == 0);
+        CHECK(entry_method(zip, "frame-121-lost.rddump") == MZ_DEFLATED);
+    }
     /* a missing lost dump writes nothing */
     remove(zip);
-    CHECK(ico_loss_dump_zip(zip, lost, NULL, log, why, sizeof(why)) == -1);
+    CHECK(ico_loss_dump_zip(zip, lost, NULL, log, 1, why, sizeof(why)) == -1);
     CHECK(ico_path_kind(zip, NULL, NULL) == -1);
     /* the pruning: five loss zips, the newest three kept, the log and a
        zip of another name untouched */
@@ -180,7 +219,7 @@ static void test_slow(const char *base)
     CHECK(ico_slow_dump_path(zip, sizeof(zip), dir, "20261106-120000") == 0);
     CHECK(put(dump, a, sizeof(a)) == 0);
     CHECK(put(log, text, sizeof(text) - 1) == 0);
-    CHECK(ico_loss_dump_zip(zip, dump, NULL, log, why, sizeof(why)) == 0);
+    CHECK(ico_loss_dump_zip(zip, dump, NULL, log, 0, why, sizeof(why)) == 0);
     memset(&z, 0, sizeof(z));
     CHECK(mz_zip_reader_init_file(&z, zip, 0));
     CHECK(mz_zip_reader_get_num_files(&z) == 2);

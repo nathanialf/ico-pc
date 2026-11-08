@@ -699,6 +699,14 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
     t->clearPending = 1;
 }
 
+/* runSelftest is replaying (rd__vu_prepass_selftest_running) */
+static bool s_vtRunning;
+
+bool rd__vu_prepass_selftest_running(void)
+{
+    return s_vtRunning;
+}
+
 bool rd_vuprepass_selftest(void)
 {
     if (!g_rd.inited || !g_rd.hasDevice) {
@@ -722,7 +730,9 @@ bool rd_vuprepass_selftest(void)
     readSabotage();
     const double t0 = rd__now_ms();
     Verdict v;
+    s_vtRunning = true; /* the skin check leaves these replays out */
     runSelftest(t, &v);
+    s_vtRunning = false;
     if (!v.on) {
         g_rd.vuPrepass = false;
         snprintf(g_rd.vuPrepassWhy, sizeof g_rd.vuPrepassWhy, "by its self-test");
