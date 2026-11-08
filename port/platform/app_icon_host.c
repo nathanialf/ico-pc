@@ -11,7 +11,8 @@
 
 #include "app_icon.h"
 #include "host_config.h"
-#include "ico_version.h" /* ICO_VERSION_LABEL, generated ("" in a development build) */
+#include "ico_version.h"  /* ICO_VERSION_LABEL, generated ("" in a development build) */
+#include "../render/rd.h" /* rd_upscale_ratio */
 #include "../render/rd_png.h"
 #include "../core/region.h"
 #include "video_options.h"
@@ -38,21 +39,25 @@ int ico_app_icon_wanted(void)
     if (!ico_app_icon_wanted_at(dir, disc, ICO_VERSION_LABEL)) {
         return 0;
     }
-    /* the capture needs the plain picture: with the CRT filter or a colour
-       adjustment on, the white background would not come back white and the
-       matte would be wrong.  The title is visited again, so a later visit
-       (the settings changed, or the next run) makes the icon. */
+    /* the capture needs the plain picture: with the CRT filter, a colour
+       adjustment or Upscaling on, the white background would not come back
+       white and the matte would be wrong.  The capture asks again (the
+       settings changed, a later title visit, or the next run).  Upscaling
+       counts as on with FSR 1.0 chosen, or with a temporal upscaler in
+       force (rd_upscale_ratio: FSR 3.1 where the device runs it, [dev]
+       upscale_test); an FSR 3.1 the device cannot run is drawn as Off. */
     IcoVideoOptions v;
     ico_video_get(&v);
+    const int upscaleOn = v.upscale == ICO_UPSCALE_FSR1 || rd_upscale_ratio() > 0.0f;
     if (!ico_app_icon_picture_plain(v.crt, v.crtStrength, v.toneGamma, v.toneBrightness,
-                                    v.toneContrast, v.toneSaturation)) {
+                                    v.toneContrast, v.toneSaturation, upscaleOn)) {
         static int s_logged;
         if (!s_logged) {
             s_logged = 1;
-            fprintf(stderr,
-                    "ico_pc: icon: waiting for a plain picture (CRT filter or Brightness on)\n");
+            fprintf(stderr, "ico_pc: icon: waiting for a plain picture (CRT filter, Brightness "
+                            "or Upscaling on)\n");
         }
-        return 0;
+        return ICO_APP_ICON_NOT_PLAIN;
     }
     return 1;
 }

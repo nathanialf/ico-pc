@@ -107,22 +107,21 @@ double window_slow_scene_work_ms(const SlowSceneBlock *b);
    last dump's block (so a run of climbing blocks ends with the worst one's
    file, the zips being pruned to the newest three) */
 bool window_slow_scene_due(const SlowSceneBlock *b);
-/* Whether a replay is the block's heavy part: its GPU span at or above the
-   block's mean span (the frame the dump is to hold is the first such replay
-   after the block's end, window_host.c slow_scene_arm).  False for a span
-   or a mean that is not above 0 */
-bool window_slow_scene_pick(double spanMs, double meanMs);
+/* Whether a replay is the block's heavy part: its CPU-side vertex work
+   (window_scene_vu_invocations of its own counts) at or above the block's
+   mean of that a replay (the frame the dump is to hold is the first such
+   replay after the block's end, window_host.c slow_scene_poll).  False for
+   a work or a mean that is not above 0 */
+bool window_slow_scene_pick(double work, double meanWork);
 /* "slow scene: the block's GPU work 52.3 ms a replay (bound 40; display
-   wait 3.1, present 2.0, span 55.4) in a scene layout: frame 4812 (its span
-   71.0 ms, the block's mean 55.4) written to logs/slow-20261106-120000.zip
-   (dump 2 of 3 this run); attach it with the log" (the name is the file
-   name alone; dump is count + 1).  frameSpanMs below 0 (the dump was not
-   made from a replay of the picked frame) leaves the span out and names
-   the frame as the last the renderer closed: "frame 4812 (the last the
-   renderer closed, not the picked one; the block's mean 55.4)".  The length
+   wait 3.1, present 2.0, span 55.4) in a scene layout: frame 4812 (its
+   vertex work 682.1 thousand against the block's mean 598.0 thousand)
+   written to logs/slow-20261106-120000.zip (dump 2 of 3 this run); attach
+   it with the log" (the works in vertex invocations, printed in thousands;
+   the name is the file name alone; dump is count + 1).  The length
    written */
 size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, unsigned frame,
-                              double frameSpanMs, const char *zipName);
+                              double frameWork, double meanWork, const char *zipName);
 
 /* The slow step's game threads part: "game threads 199.3 in 39 switches
    (longest Main 171.2 ms; on core 2)".  longestMs 0 (no switch timed) leaves
@@ -182,9 +181,22 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f);
 /* "acquire: the display's image was free at the present's submit in 41 of 60
    pictures": the pictures whose present list's submit found the acquire's
    fence signalled (RhiStats acquireReadyAtSubmit) of those it asked
-   (that and acquireNotReady); "" with none asked (every backend but Vulkan,
-   or a block of acquires ahead).  The length written */
+   (that and acquireNotReady); "" with none asked (every backend but Vulkan).
+   The length written */
 size_t window_scene_acquire_text(char *out, size_t cap, uint64_t ready, uint64_t notReady);
+/* window_tiler_words' text (window_lines.c, the end of the 10 s GPU lines):
+   on a tile-based GPU (tiler nonzero) where a pass's time and the display
+   wait land, ending ": the stretch before list 0 is the uploads and the
+   GPU's work still in flight"; "" elsewhere */
+const char *window_scene_tiler_words(int tiler);
+/* The VU pre-pass's part of the "GPU ms per replay" line: its GPU ms a
+   replay ("%.2f") with it on, the word "off" with it off (a 0.00 read as a
+   cost).  The length written */
+size_t window_scene_prepass_gpu_text(char *out, size_t cap, int on, double msPerReplay);
+/* A block's share of a counter that only grows, from its value now and its
+   value at the block before: now less that, or now itself when now is below
+   it (the backend was made again and its counters started from 0) */
+uint64_t window_scene_counter_delta(uint64_t now, uint64_t snapshot);
 
 /* " (images: 10, in use 1)": the swapchain's images and those acquired and
    not yet handed back to the presentation engine; "" with no image count

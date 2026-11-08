@@ -21,7 +21,9 @@
 /* The entry's text for the program at exe into out: the desktop entry
    specification's Exec quoting (the path in double quotes; inside them
    backslash, double quote, backtick and dollar are backslash-escaped and a
-   percent sign is doubled).  0, or -1 when exe is NULL or empty, holds a
+   percent sign is doubled), then the string value's escaping over that
+   (every backslash doubled: a literal backslash is written as four, a
+   dollar as two backslashes and the dollar).  0, or -1 when exe is NULL or empty, holds a
    control character (a newline would end the line) or the text does not
    fit in size (out is then ""). */
 int ico_desktop_entry_text(char *out, size_t size, const char *exe);

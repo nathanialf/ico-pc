@@ -2283,10 +2283,12 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_upscale_off_tiler COMMAND rd_upscale_test off)
     set_tests_properties(rd_upscale_off_tiler PROPERTIES SKIP_RETURN_CODE 77
                                               ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
-    # issue 179: the VU vertex pre-pass on a phone's limits, as every
-    # tile-based GPU takes it since v0.11.0 (rd_replay_vu.c
-    # rd__vu_prepass_init; ICO_RD_VU_PREPASS=1 as the phone's [dev]
-    # vu_prepass = true would export it).  rd_vuprepass_selftest_mali: the
+    # issue 179: the VU vertex pre-pass under a phone's limits
+    # (ICO_VK_FAKE_LIMITS=mali clamps the limits; RhiLimits.tiler stays the
+    # device's, so these are the desktop runs under those limits: the
+    # tiler rule itself, rd__vu_prepass_init on RhiLimits.tiler, is
+    # rd_vuprepass_selftest_test's step 6 in every run).
+    # rd_vuprepass_selftest_mali: the
     # start-up self-test passes over its four replays under synchronisation
     # validation with the submit-time checks (a hazard between two lists of
     # the record's copies and reads: the open barrier's job across lists);
@@ -2294,10 +2296,8 @@ if(ICO_RUN_TESTS)
     # _mali_vk11: the same self-test through VkRenderPass objects (the
     # legacy render passes of a Vulkan 1.1 phone without dynamic rendering
     # and without dynamic state, ICO_VK_FAKE_API=1.1 and
-    # ICO_VK_FAKE_NO_DYNAMIC=1, vk_device.c, vk_renderpass.c).
-    # rd_pixel_mali_prepass: rd_pixel's frames and expectations, byte for
-    # byte, under the same limits with the pre-pass asked for (its own
-    # folder: rd_pixel_mali writes in mali/)
+    # ICO_VK_FAKE_NO_DYNAMIC=1, vk_device.c, vk_renderpass.c): the one of
+    # the three that adds coverage the desktop runs lack.
     set(_env_mali_pre ${_env_mali} "ICO_RD_VU_PREPASS=1")
     if(_env)
         list(APPEND _env_mali_pre "VK_KHRONOS_VALIDATION_SYNCVAL_SUBMIT_TIME_VALIDATION=true")
@@ -2322,11 +2322,6 @@ if(ICO_RUN_TESTS)
     set_tests_properties(
         rd_vuprepass_selftest_mali_vk11
         PROPERTIES ENVIRONMENT "${_env_mali_pre};ICO_VK_FAKE_API=1.1;ICO_VK_FAKE_NO_DYNAMIC=1")
-    set(_mlp "${CMAKE_CURRENT_BINARY_DIR}/mali_prepass")
-    file(MAKE_DIRECTORY "${_mlp}")
-    add_test(NAME rd_pixel_mali_prepass COMMAND rd_pixel_test "${_mlp}")
-    set_tests_properties(rd_pixel_mali_prepass PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY
-                                                          "${_mlp}" ENVIRONMENT "${_env_mali_pre}")
     # the same tests and expectations at the limits every Vulkan device is
     # required to meet (ICO_VK_FAKE_LIMITS=min, vk_device.c: 256-byte offset
     # alignment, 2^27-byte storage ranges, 4096-texel images), where phone

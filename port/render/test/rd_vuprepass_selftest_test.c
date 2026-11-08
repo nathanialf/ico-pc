@@ -36,7 +36,13 @@
  *      the pre-passes' keys;
  *   4. a frame drawn after it starts SCENE from its clear (no pixel of the
  *      self-test's block is left);
- *   5. no validation error.
+ *   5. no validation error;
+ *   6. (not in notrun) rd__vu_prepass_init's choice on its limits alone,
+ *      called again with the device's limits changed: tiler true and no
+ *      colour-target bound leave the pre-pass on (a tile-based GPU takes
+ *      it since v0.11.0; ICO_VK_FAKE_LIMITS=mali does not set tiler, so no
+ *      other test sees this rule), colorBytesPerPixel 32 (below the
+ *      record's ICO_VU_REC_BYTES) leaves it off with the bytes in its why.
  * The log lines are matched by test/rd_vuprepass_selftest.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -218,6 +224,25 @@ int main(int argc, char **argv)
     /* 5. */
     CHECK(rhi_vk_validation_error_count() == 0, "%u validation errors",
           rhi_vk_validation_error_count());
+
+    /* 6. (last: it remakes the pre-pass's batch and merge modules; nothing
+       is drawn after it) */
+    if (!notRun) {
+        RhiLimits lim = *rhi_limits();
+        const char *want = "hold 32 bytes a pixel together, the record ";
+
+        lim.tiler = true;
+        lim.colorBytesPerPixel = 0u; /* no bound known (Vulkan off MoltenVK reports 0) */
+        rd__vu_prepass_init(&lim);
+        CHECK(g_rd.vuPrepass, "a tile-based GPU's limits: the pre-pass off (%s)",
+              g_rd.vuPrepassWhy);
+        lim.tiler = false;
+        lim.colorBytesPerPixel = 32u;
+        rd__vu_prepass_init(&lim);
+        CHECK(!g_rd.vuPrepass && strstr(g_rd.vuPrepassWhy, want) != NULL,
+              "32 bytes a pixel of colour targets: the pre-pass %s (%s), off with \"%s\" expected",
+              g_rd.vuPrepass ? "on" : "off", g_rd.vuPrepassWhy, want);
+    }
     rd_shutdown();
     if (failures) {
         printf("rd_vuprepass_selftest_test: %d failures\n", failures);

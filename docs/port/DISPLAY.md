@@ -763,7 +763,9 @@ tiler ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-eac
 On Vulkan the block adds `window: acquire: the display's image was free at the present's submit in N
 of M pictures` (once a block; `RhiStats.acquireReadyAtSubmit`/`acquireNotReady`: each frame slot's
 acquire is given a fence, and the submit of the present's list asks it; an acquire made ahead of
-the submit thread, which has no wait, is in neither; no line on the other backends). N of M near M
+the submit thread is counted too: its timeout of 0 only means it does not wait for an image to be
+handed out, and the image it gets may still be in the presentation engine's hands, its semaphore and
+fence signalled later; no line on the other backends). N of M near M
 says the presentation engine hands the image back before the picture needs it, the wait is not the
 limit; N well under M says the pictures wait for the display's image.
 The GPU ms per replay line prints `VU pre-pass off` when the pre-pass is off (it read `0.00`, which

@@ -168,9 +168,10 @@ question it decides:
   present says the presentation engine's hold was our own backlog, not the compositor's. Decides
   whether the image wait was the limit of the scenes.
 - **The slow-scene file** (`window: slow scene: the block's GPU work 50.3 ms a replay (bound 40;
-  display wait 3.1, present 2.0, span 55.4) in a scene layout: frame 4812 (its span 71.0 ms, the
-  block's mean 55.4) written to logs/slow-20261106-120000.zip (dump 2 of 3 this run); attach it
-  with the log`; `slow_scene_check` and `slow_scene_write` in `window_host.c`, the rule in
+  display wait 3.1, present 2.0, span 55.4) in a scene layout: frame 4812 (its vertex work 682.1
+  thousand against the block's mean 598.0 thousand) written to logs/slow-20261106-120000.zip (dump
+  2 of 3 this run); attach it with the log`; `slow_scene_check`, `slow_scene_poll` and
+  `slow_scene_write` in `window_host.c`, the rule in
   `window_scene.h` (`window_slow_scene_due`, `window_slow_scene_pick`)). A cutscene cannot be
   dumped by hand (no pause menu, F12 needs the keyboard), and the issue's cage scene (stage 40)
   spent 22 to 35 ms in list 3 for 103 to 132 draws with no frame to look at. At the end of a 10 s
@@ -183,16 +184,21 @@ question it decides:
   a later block arms another only when its work is at least 1.5 times the work of the block of
   the last dump, up to three a run (the issue's run wrote one dump, for the first block over 40 ms, a
   44.9 ms stage, and none of the 112 to 144 ms boat blocks after it). An armed dump waits for the
-  first timed replay after the block whose GPU span is at or above the block's mean span and
-  writes that replay's frame (the renderer keeps the last closed frame and the one before; if
-  the picked one has left the ring the last closed is written and the line says "the last the
-  renderer closed, not the picked one"); an arm that finds no such replay is dropped at the next
-  block's end, where the rule runs again. The file is that one frame and a copy of the log,
+  first replay after the block whose CPU-side vertex work (the VU line's quantity: the pre-pass's
+  vertices with it on, the triangles times 9 with it off) is at or above the block's mean of it a
+  replay, and writes that replay's frame. The renderer notes a replay's counts as it ends it
+  (`rd_perf_last_replay_work`) and the window looks at the note every vsync, while the frame is
+  still the last closed or the one before (the two the renderer keeps); a GPU span cannot pick
+  it, as a replay's timestamps come two or more replays later, after the ring has dropped its
+  frame. A replay whose frame has left the ring by the next look is passed over for the next one
+  (`window: slow scene: frame F had left the renderer's ring before it was looked at: ...`, the
+  first 8 times and every 100th); an arm that finds no such replay is dropped at the next block's
+  end, where the rule runs again. The file is that one frame and a copy of the log,
   `logs/slow-<date>-<time>.zip`, pruned to the newest three, and the newest goes into a crash or
   hang report and the rc share menu's set. Written in releases. What to send: the log and the
   zips; replay one with `rd_replay_tool` as a loss dump (the frame is the zip's first
   `.rddump`). The line's work and span against the block's `GPU` line say whether the frame is
-  the cost or the wait; the frame number matches the replays after it, and the line's frame span
+  the cost or the wait; the frame number matches the replays after it, and the line's vertex work
   against the block's mean says how heavy the picked replay was. When three files exist, the
   last is the heaviest block of the run (each needed 1.5 times the one before). Decides what the
   cage's list 3 draws are, and what the boat scene's 109 to 144 ms are.

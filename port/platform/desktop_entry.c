@@ -14,7 +14,7 @@
 
 int ico_desktop_entry_text(char *out, size_t size, const char *exe)
 {
-    char q[PATH_MAX_ICO * 2 + 8];
+    char q[PATH_MAX_ICO * 4 + 8];
     size_t n = 0;
     int w;
 
@@ -24,16 +24,27 @@ int ico_desktop_entry_text(char *out, size_t size, const char *exe)
     if (exe == NULL || exe[0] == '\0' || size == 0) {
         return -1;
     }
+    /* two levels, in the order the specification reads them back in
+       reverse: the Exec quoting first (inside the double quotes a
+       backslash, double quote, backtick or dollar takes a backslash, a
+       percent sign is doubled), then the string value's own escaping,
+       which doubles every backslash of that result (the reader unescapes
+       the string before it applies the quoting rule).  So a literal
+       backslash is four, and a dollar is two backslashes and the dollar */
     for (const unsigned char *p = (const unsigned char *)exe; *p != '\0'; p++) {
         const int escape = *p == '\\' || *p == '"' || *p == '`' || *p == '$';
 
-        if (*p < 0x20 || *p == 0x7f || n + 3 >= sizeof(q)) {
+        if (*p < 0x20 || *p == 0x7f || n + 5 >= sizeof(q)) {
             return -1;
         }
         if (escape) {
+            q[n++] = '\\'; /* the quoting's backslash, doubled */
             q[n++] = '\\';
         } else if (*p == '%') {
             q[n++] = '%';
+        }
+        if (*p == '\\') {
+            q[n++] = '\\'; /* the literal backslash, doubled */
         }
         q[n++] = (char)*p;
     }

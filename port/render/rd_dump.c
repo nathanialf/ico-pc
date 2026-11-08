@@ -1130,16 +1130,17 @@ const RdFrame *rd__retained_frame(uint32_t number)
     return prev && prev->closed && prev->number == number ? prev : NULL;
 }
 
+bool rd_frame_retained(uint32_t number)
+{
+    return rd__retained_frame(number) != NULL;
+}
+
 bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped)
 {
-    const RdFrame *last = rd__last_frame();
     const RdFrame *f = rd__retained_frame(number);
 
     if (dumped) {
         *dumped = 0;
-    }
-    if (!f) {
-        f = last; /* the picked frame is gone from the ring: the last closed */
     }
     if (!f || !f->closed || !path || !rd__dump_frame(f, path)) {
         return false;
