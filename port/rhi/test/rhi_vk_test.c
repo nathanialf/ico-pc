@@ -1224,16 +1224,26 @@ static int adapterCell(void)
     return failures != 0;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     const RhiTestConfig cfg = {"vulkan", "rhi_vk_test", true, NULL, rhi_vk_validation_error_count};
+    if (argc > 1 && strcmp(argv[1], "stores") == 0) {
+        /* rhi_vk_stores: the vertex shaders' stores alone (rhi_test_stores.c),
+           77 without them */
+        return rhi_test_vertex_stores(&cfg);
+    }
+    if (argc > 1 && strcmp(argv[1], "nostores") == 0) {
+        /* rhi_vk_nostores (ICO_VK_FAKE_NO_VERTEX_STORES=1): the device
+           reports none and the bracket refuses */
+        return rhi_test_vertex_stores(&cfg) == 77 ? 0 : 1;
+    }
     int rc = rhi_test_run_cells(&cfg);
     if (rc != 0) {
         return rc;
     }
     return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell() ||
             poolCell() || renderAreaCell() || occlusionCell() || syncCell() || d32fCell() ||
-            adapterCell())
+            adapterCell() || rhi_test_vertex_stores(&cfg) == 1)
                ? 1
                : 0;
 }

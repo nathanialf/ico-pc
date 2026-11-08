@@ -1378,3 +1378,19 @@ bool rhi_readback_texture(RhiTexture h, RhiViewAspect aspect, void *dst, size_t 
     rhi_destroy_buffer(rb);
     return ok;
 }
+
+/* rhi.h rhi_cmd_buffer_store_begin / _end: no vertex stores on D3D12 this release (RhiLimits.vertexStores false), so
+ * nothing is bracketed: the renderer draws the VU record into render targets */
+bool rhi_cmd_buffer_store_begin(RhiCommandList cl, RhiBuffer buf)
+{
+    (void)cl;
+    (void)buf;
+    return false;
+}
+
+bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf)
+{
+    (void)cl;
+    (void)buf;
+    return false;
+}

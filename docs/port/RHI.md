@@ -207,6 +207,20 @@ into the copy's own hazard barrier and holds its visibility back as a memory bar
 copy or command issues with its own (`VkrCmdList.pendMemDst`); D3D12 moves the buffer to
 COPY_DEST and back to GENERIC_READ around the copy (`port/rhi/rhi.h`, commands
 (`rhi_cmd_copy_texture_to_buffer`); `port/rhi/vk/vk_cmd.c` (`vkr_hz_copy`, `vkr_flush_barriers`)).
+The one other buffer write is a vertex shader's store into a buffer made with
+`RHI_BUF_STORAGE_WRITE` and bound as `RHI_BIND_STORAGE_BUFFER_RW` (the VU record written by the
+pre-pass's vertex shaders, [PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the record's two writes), only where
+`RhiLimits.vertexStores`; the passes that store are bracketed by `rhi_cmd_buffer_store_begin` (the
+stores after every earlier read, copy and store of the buffer) and `rhi_cmd_buffer_store_end` (the
+stores visible to every later vertex, index, uniform, storage and copy read). On Vulkan each is a
+memory barrier held back with the list's deferred barriers (`pendMemDst`, with
+`VK_ACCESS_SHADER_WRITE_BIT` in `pendMemSrc`), so the end of one store pass and the begin of the
+next go out as one barrier with the next pass's own; the first scope of a pipeline barrier holds
+every command submitted before it, so the other frame slot's reads are ordered too. D3D12,
+Direct3D 11 and OpenGL report `vertexStores` false in this release and their bracket returns false
+(Direct3D 11 for good: feature level 11_0 has no vertex shader UAVs; D3D12 would need the buffer's
+UNORDERED_ACCESS transitions and UAV barriers, OpenGL `glMemoryBarrier`) (`port/rhi/rhi.h`, commands
+(`rhi_cmd_buffer_store_begin`); `port/rhi/vk/vk_cmd.c` (`rhi_cmd_buffer_store_begin`)).
 
 **Bind groups.** One fixed slot model for every program: group 0 the per-frame uniforms (b0), group
 1 the per-draw uniforms (b1; the VU programs' b2, b3), the VU vertex stream (t0) and the vertex
@@ -215,7 +229,10 @@ textures t1..t4 and samplers s1..s4. Backends map these onto descriptor sets or 
 never sees the mapping. Binding types: uniform buffer, storage buffer, sampled texture, sampler, a
 dynamic uniform buffer whose offset is given at bind time (`rhi_cmd_set_bind_group_offsets`, at most
 `RHI_MAX_DYNAMIC_OFFSETS` (4) a layout, so one group serves every draw reading a block of one size
-from one buffer), storage texture and input attachment. Bind groups are transient: valid for the
+from one buffer), storage texture, input attachment, and a storage buffer vertex shaders write
+(`RHI_BIND_STORAGE_BUFFER_RW`, a u register: Vulkan a storage buffer descriptor at binding 48 +
+slot, D3D12 a UAV range, OpenGL the SSBO binding 16 + slot, where `tools/spirv_to_glsl.py` moves the
+SPIR-V's 48 + u; Direct3D 11 refuses the layout). Bind groups are transient: valid for the
 current frame only (`port/rhi/rhi.h`, bind groups).
 
 **Pipelines and passes.** `RhiPipelineDesc` carries the two shaders, the layouts, vertex bindings
@@ -225,7 +242,11 @@ pass one target) blend states with dual-source factors (`RHI_BF_SRC1_*`, only wi
 `RhiLimits.dualSourceBlend`), the depth-stencil state (depth grows with GS Z: GS GEQUAL is GEQUAL),
 colour and depth formats, a sample count and `dstRead`: NONE, STORAGE (the target bound as a
 rasterizer-ordered storage texture, no colour target) or ATTACHMENT (colour attachment 0 read as an
-input attachment in rasterization order, Vulkan only). Culling is always off: the GS has none. A
+input attachment in rasterization order, Vulkan only), and `noRaster`: no rasterization, no
+fragment shader and no colour target, the vertex shader's stores the pipeline's whole work (Vulkan
+`rasterizerDiscardEnable`, OpenGL `GL_RASTERIZER_DISCARD` while it is bound, ignored by D3D12 and
+Direct3D 11, which never report vertex stores), drawn in a pass without attachments (a size and
+nothing else; the legacy path's subpass without attachments). Culling is always off: the GS has none. A
 render pass names its colour and depth attachments with load ops (LOAD, CLEAR, DONT_CARE) and store
 ops (STORE, or DONT_CARE so a tile-based GPU can skip the write-back) (`port/rhi/rhi.h`, pipelines,
 passes), its size, and optionally an area inside it (`RhiRenderPassDesc.area`, x, y, w, h; w or h 0,
@@ -683,7 +704,9 @@ fog's depth and DATE's alpha this way ([RENDER.md](RENDER.md#the-replay)).
 
 ## Native handles for external compute
 
-The RHI has no compute stage and gets none. Code that brings its own compute pipelines (AMD
+The RHI has no compute stage and gets none (the VU record, the one GPU-written buffer of the
+renderer's own, is written by vertex shaders under `RhiLimits.vertexStores`, above, not by a compute
+pass). Code that brings its own compute pipelines (AMD
 FidelityFX through its Vulkan and Direct3D 12 backends) works from the RHI's native objects instead,
 recorded into the RHI's own command list. `port/rhi/rhi_native.h` is additive: a caller that never
 asks sees every texture, barrier and pipeline exactly as before.
