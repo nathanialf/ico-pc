@@ -2481,7 +2481,7 @@ pump and the start-up screens' pump end the session through the normal quit path
 [pass ring](RENDER.md#the-pass-ring) (the last replays and the passes of the last three, with the
 sequence numbers the checkpoint markers carry and each effect's name from `rd_perf_post_name`), a
 flush of the log, the [loss dump](RENDER.md#the-loss-dump) (`logs/loss-<date>-<time>.zip`, logged as
-`window: loss dump: frames N and M (the one before) written to <zip>`, and noted in the activity
+`window: loss dump: frames N and M (the one before) written to <zip> in T s`, and noted in the activity
 file), the [report file](#the-report-file) (which holds the loss dump and the log), and one message
 box: the card stopped responding, the game has to close, the save is kept, "If the graphics card is
 overclocked, try its stock clocks first.", and a request to attach the newest file in logs that
@@ -2898,8 +2898,9 @@ Log lines (stderr, one per event):
   start: the game data is ready; opening the window and the renderer`, `window: start: creating the
   <backend> window`, `window: start: starting the renderer on <backend> (the device and its
   shaders)`, `window: start: the blend and VU pre-pass self-tests`, `window: start: the pipeline
-  set`, `window: start: the fog self-test`. The crash and watchdog reports repeat the last one
-  (`ico_pc: the last step: <line>`)
+  set`, `window: start: the fog self-test`, `window: start: up in T s; the game runs`. The crash
+  and watchdog reports repeat the last one (`ico_pc: the last step: <line>`; a watchdog's not in a
+  switch `the last start-up step:`)
 - `window: Graphics API <new>: the driver stalled compiling <shader>; the box says so`
 - `window: the opengl device stopped while it started (the lines above say why); the switch goes
   back`

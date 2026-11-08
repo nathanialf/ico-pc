@@ -1,7 +1,10 @@
 /*
  * port/platform/dump_zip.c
  *
- * F12's zip (dump_zip.h), written with miniz at its default compression.
+ * F12's zip (dump_zip.h), written with miniz at its default compression;
+ * the device-loss zip stored (no compression: the watchdog's thread writes
+ * it after a GPU hang, where the time a deflate takes is time the hung run
+ * is not ended in; issue 123).
  */
 #include "dump_zip.h"
 #include <stdio.h>
@@ -74,10 +77,11 @@ static const char *base_name(const char *path)
 }
 
 /* the files paths[0..n) and, when it can be read, log_path, each under its
-   own name, into zip_path; the loose files deleted after; as
+   own name, into zip_path at miniz's level (MZ_DEFAULT_LEVEL deflated,
+   MZ_NO_COMPRESSION stored); the loose files deleted after; as
    ico_frame_dump_zip's result (0, 1 or -1) */
 static int files_zip(const char *zip_path, const char *const *paths, int n, const char *log_path,
-                     char *why, size_t why_size)
+                     mz_uint level, char *why, size_t why_size)
 {
     mz_zip_archive z;
     void *out = NULL;
@@ -109,12 +113,10 @@ static int files_zip(const char *zip_path, const char *const *paths, int n, cons
         int ok = 1;
 
         for (int i = 0; i < n && ok; i++) {
-            ok = mz_zip_writer_add_mem(&z, base_name(paths[i]), data[i], size[i],
-                                       MZ_DEFAULT_LEVEL) != 0;
+            ok = mz_zip_writer_add_mem(&z, base_name(paths[i]), data[i], size[i], level) != 0;
         }
         if (ok && log != NULL) {
-            ok = mz_zip_writer_add_mem(&z, base_name(log_path), log, log_size, MZ_DEFAULT_LEVEL) !=
-                 0;
+            ok = mz_zip_writer_add_mem(&z, base_name(log_path), log, log_size, level) != 0;
         }
         if (!ok) {
             say(why, why_size, "cannot add to the archive",
@@ -158,7 +160,7 @@ int ico_frame_dump_zip(const char *zip_path, const char *dump_path, const char *
     const char *paths[ICO_LOSS_DUMP_FILES] = {dump_path, prev_path};
     const int n = prev_path != NULL && prev_path[0] != '\0' ? 2 : 1;
 
-    return files_zip(zip_path, paths, n, log_path, why, why_size);
+    return files_zip(zip_path, paths, n, log_path, MZ_DEFAULT_LEVEL, why, why_size);
 }
 
 int ico_zip_add_file(const char *zip_path, const char *file_path, const char *entry, char *why,
@@ -232,12 +234,14 @@ int ico_zip_move_file(const char *zip_path, const char *path, char *why, size_t 
 }
 
 int ico_loss_dump_zip(const char *zip_path, const char *lost_path, const char *before_path,
-                      const char *log_path, char *why, size_t why_size)
+                      const char *log_path, int stored, char *why, size_t why_size)
 {
     const char *paths[ICO_LOSS_DUMP_FILES] = {lost_path, before_path};
     const int n = before_path != NULL && before_path[0] != '\0' ? 2 : 1;
 
-    return files_zip(zip_path, paths, n, log_path, why, why_size);
+    return files_zip(zip_path, paths, n, log_path,
+                     stored ? (mz_uint)MZ_NO_COMPRESSION : (mz_uint)MZ_DEFAULT_LEVEL, why,
+                     why_size);
 }
 
 int ico_loss_dump_path(char *out, size_t size, const char *dir, const char *stamp)

@@ -586,7 +586,8 @@ static const struct {
     {"dev.clear_skip", "clear_skip"},
     {"dev.last_store", "last_store"},
     /* false: the VU vertex pre-pass off, every VU draw the old way (an
-       A/B; port/render/rd_replay_vu.c rd__vu_prepass_init) */
+       A/B; port/render/rd_replay_vu.c rd__vu_prepass_init); true written
+       here: on over the device table's row (issue 123) */
     {"dev.vu_prepass", "vu_prepass"},
     /* false: the VU pre-pass's draws one an entry and stage instead of one a
        batch (an A/B; port/render/rd_replay_vu.c preBatchInit) */
@@ -766,7 +767,8 @@ static const struct {
     /* port/render/rd_dst_read.c rd__dst_merge_ok, rd_core.c rd_init */
     {"storage_pass_merge", "ICO_RD_PASS_MERGE"},
     /* port/render/rd_replay_vu.c rd__vu_prepass_init: 0 draws without the
-       vertex pre-pass */
+       vertex pre-pass; on (true written in the file) draws with it on a
+       device the device table keeps it off (issue 123) */
     {"vu_prepass", "ICO_RD_VU_PREPASS"},
     /* port/render/rd_pipeline.c rd__vu_policy_init: auto, plain or
        extended (the program entries' set) */
@@ -1086,6 +1088,13 @@ const char *ico_dev_env_value(const char *key, const char *value)
     if (strcmp(key, "velocity_sign") == 0) {
         /* 1 (current to previous, the default) or -1 as they are */
         return strcmp(value, "1") == 0 || strcmp(value, "-1") == 0 ? value : NULL;
+    }
+    if (strcmp(key, "vu_prepass") == 0) {
+        /* written in the file (the default, true, is never written): true
+           exports "on", which also passes the device table's no-pre-pass
+           row (rd_replay_vu.c rd__vu_prepass_init, vk_device.c
+           kVuPlainOnly, issue 123); false "0" */
+        return value_is(value, on) ? "on" : value_is(value, off) ? "0" : NULL;
     }
     if (strcmp(key, "pass_split") == 0) {
         /* a count of VU draws, 1..65536; 0 or off: none */

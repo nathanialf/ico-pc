@@ -74,14 +74,17 @@ int ui_settings_title_return_pending(void);
 int ui_settings_title_decided(void);
 /* A Settings page opened from the title is the current layout (Extras and
    its Music page, Achievements and the remap list among them); not from
-   the pause menu (port/game/title_logo.c hides the title's logo under it). */
+   the pause menu (port/game/title_logo.c hides the title's logo under it).
+   Also 1 on the New Game screen (below), whatever the stage. */
 int ui_settings_covers_title(void);
 
 /* The New Game screen: la_vibe_select (common/src/layout_action.c)
    switches to it after the vibration choice.  Two rows, Mirror mode (row
-   0) and New Game+ (row 1), each "Off" or "On"; Cross or START anywhere
-   confirms both: it sets the run's mirror mode (ico_opt_set_mirror) and
-   New Game+ (gFlagGameClear), then calls la_host_new_game_go
+   0) and New Game+ (row 1), each "Off" or "On", and a Start row below
+   them.  Cross on an Off/On item picks it and moves the cursor down; Cross
+   on Start, or START anywhere, confirms both: it sets the run's mirror mode
+   (ico_opt_set_mirror) and New Game+ (gFlagGameClear), then calls
+   la_host_new_game_go
    (gflagOn(382), what the vibration screen did).  Triangle goes back to
    the vibration screen (layout 9).  Enter returns the screen's layout with
    the cursor on Mirror mode's "Off" and the run's value reset
@@ -92,6 +95,8 @@ int ui_new_game_screen_layout(void);
 /* row 0 (Mirror mode) or 1 (New Game+): the "Off" (on = 0) and "On"
    (on = 1) items; -1 for a row the screen does not have (tests) */
 int ui_new_game_screen_row(int row, int on);
+/* the Start row's item (tests) */
+int ui_new_game_screen_start(void);
 
 /* "Quit to desktop": a port row under the title's Options row (layouts 12 and 13, in the same
    chained entry layout) whose Cross opens a confirmation screen, "Quit to

@@ -204,6 +204,8 @@ const char *const ui_strings_fr[UI_STR_COUNT] =
         [UI_STR_OPT_NEWGAME_PLUS] = "Nouvelle partie +",
         [UI_STR_NEWGAME_PLUS_SCREEN] =
             "Nouvelle partie + joue le second voyage : paroles de Yorda traduites, fin et objets changés. Désactivé, c’est le premier voyage, même après avoir fini le jeu.",
+        [UI_STR_NEWGAME_START] = "Commencer",
+        [UI_STR_NEWGAME_START_SCREEN] = "Lance la nouvelle partie avec les choix ci-dessus.",
         [UI_STR_OPT_CRT] = "Filtre CRT",
         [UI_STR_OPT_CRT_STRENGTH] = "Intensité CRT",
         [UI_STR_OPT_TONE_GAMMA] = "Gamma",

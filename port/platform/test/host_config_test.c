@@ -696,7 +696,10 @@ static void test_dev_env(void)
        rd__vu_prepass_init) */
     CHECK(strcmp(ico_dev_env_name("vu_prepass"), "ICO_RD_VU_PREPASS") == 0);
     CHECK(strcmp(ico_dev_env_value("vu_prepass", "false"), "0") == 0);
-    CHECK(strcmp(ico_dev_env_value("vu_prepass", "true"), "1") == 0);
+    /* written true: "on", over the device table's row too (issue 123) */
+    CHECK(strcmp(ico_dev_env_value("vu_prepass", "true"), "on") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_prepass", "1"), "on") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_prepass", "off"), "0") == 0);
     CHECK(ico_dev_env_value("vu_prepass", "maybe") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.vu_prepass"), "vu_prepass") == 0);
     /* vu_prepass_batch: the pre-pass's batches' A/B switch
@@ -1236,7 +1239,8 @@ static void test_retry_blend(void)
 /* ICO_RD_VU_PREPASS in a restart: 0 at the crash order's noprepass step
    and every step after it (fixedblend, d3d12, lazy) and at every loss
    step (lossnoprepass without the fixed blend), over the ini's
-   vu_prepass=; the cache step and a first run keep the ini's */
+   vu_prepass=; the cache step and a first run keep the ini's ("on": the
+   key written true, over the device table's row) */
 static void test_retry_prepass(void)
 {
     static const struct {
@@ -1247,7 +1251,7 @@ static void test_retry_prepass(void)
         {"d3d12:d3d12", "0", NULL},         {"lazy:vulkan", "0", NULL},
         {"lossnoprepass:d3d12", "0", NULL}, {"robust:vulkan", "0", NULL},
         {"blend:vulkan", "0", "fixed"},     {"backend:d3d12", "0", "fixed"},
-        {"cache:vulkan", "1", NULL},        {NULL, "1", NULL},
+        {"cache:vulkan", "on", NULL},       {NULL, "on", NULL},
     };
 
     IcoIni ini;
@@ -1256,7 +1260,7 @@ static void test_retry_prepass(void)
     CHECK(strcmp(ico_dev_env_export_value("vu_prepass", "true", "noprepass:vulkan"), "0") == 0);
     CHECK(strcmp(ico_dev_env_export_value("vu_prepass", NULL, "lossnoprepass:vulkan"), "0") == 0);
     CHECK(ico_dev_env_export_value("vu_prepass", NULL, "cache:vulkan") == NULL);
-    CHECK(strcmp(ico_dev_env_export_value("vu_prepass", "true", "cache:vulkan"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_export_value("vu_prepass", "true", "cache:vulkan"), "on") == 0);
     CHECK(ico_dev_env_export_value("blend", NULL, "lossnoprepass:vulkan") == NULL);
     CHECK(ico_dev_env_export_value("blend", NULL, "noprepass:vulkan") == NULL);
     for (size_t i = 0; i < sizeof(runs) / sizeof(runs[0]); i++) {

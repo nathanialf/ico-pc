@@ -10,8 +10,11 @@
  * drawn.  Its animation runs on (op.c's actTitleCamera2 waits on
  * opTitleLogoMode), so back on the title it shows settled, with no intro.
  *
- * Once hidden it stays hidden until the title's own menu (layout 12 or 13)
- * is back or the stage changes, so Extras > Credits and a model's stage
+ * The New Game screen (settings.h ui_new_game_screen_enter) hides it too;
+ * its way back, the vibration screen, shows it again.
+ *
+ * Once hidden it stays hidden until the title's own menu (layout 12 or 13),
+ * the file select or the vibration screen is back or the stage changes, so Extras > Credits and a model's stage
  * load do not show it again while the title fades out.  The pause menu's
  * Settings (any other stage) never hides anything.
  *

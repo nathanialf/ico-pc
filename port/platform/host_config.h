@@ -162,7 +162,9 @@ const char *ico_config_ini_key(const char *toml_path);
    device compiles one set of 3D shaders); ignored", not exported);
    ico_dev_env_value the
    value exported for an ini value, NULL when nothing is set: aura_box
-   pass_area, clear_carry, clear_skip and last_store "auto" as it is (else the default branch's 1 / 0); blend
+   pass_area, clear_carry, clear_skip and last_store "auto" as it is (else the default branch's 1 / 0);
+   vu_prepass true/on -> "on" (the key written in the file: over the device
+   table's no-pre-pass row too, issue 123), false/off -> "0"; blend
    "fixed", "attachment", "storage" or "exact" as they are (the
    fixed-function blend is the default: nothing set; exact opts into the
    device's best exact mode); uber "auto" as it is (else the default
@@ -179,7 +181,7 @@ const char *ico_config_ini_key(const char *toml_path);
    "x,y" (each -0.5..0.5) as it is; pass_split a
    count; velocity_sign 1 or -1 as it is; gpu_*, attachment_read, storage_pass_merge, store_plan,
    blur_fold, uint_view, alpha_plan, fx_plan, fx_dst_local, vu_planes,
-   shadow_one, shadow_bspline, vu_prepass, vu_prepass_batch, velocity_test, upscale_test, upscale_debug_view,
+   shadow_one, shadow_bspline, vu_prepass_batch, velocity_test, upscale_test, upscale_debug_view,
    upscale_debug_checks, still_represent, glow_redraw, glow_fold,
    crack_fill, joystick_directinput and bind_cache (every other key: the default branch) 1/true/on/yes ->
    "1", 0/false/off/no -> "0". ico_ini_export sets them. */

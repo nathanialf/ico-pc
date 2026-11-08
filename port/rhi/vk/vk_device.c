@@ -2674,12 +2674,31 @@ static bool vkr_is_tiler(uint32_t vendor)
  *   device frozen (issue 107); the same since v0.5.3, while v0.5.2 and
  *   v0.6.1 started.  No one module explains it (font_sheet_ps and yuv_ps
  *   were as large in v0.6.1); memory pressure from the parallel compiles
- *   is the hypothesis the careful policy answers (inferred, not measured). */
+ *   is the hypothesis the careful policy answers (inferred, not measured).
+ *
+ * The noPrepass column: the devices that draw without the VU vertex
+ * pre-pass (its reason for RhiLimits.vuPrepassOff; the renderer's
+ * rd__vu_prepass_init logs "off by the device table (<reason>)" and
+ * [dev] vu_prepass = true written in config.toml, exported as
+ * ICO_RD_VU_PREPASS=on, draws with it anyway).
+ *   Adreno 740 under Qualcomm's own driver (issue 123, a Xiaomi Pad 6S Pro
+ *   on driver 512.676.1, compiler E031.41.03.64): v0.11.0 is the first
+ *   build to run the pre-pass there, and the record path's modules have
+ *   one build on every device (vu_tri_rule_pre_vs 17,289 words,
+ *   vu_tri_tick_pre_vs 16,627: the card test and the tick cameras the
+ *   plain set exists to keep from this compiler; docs/port/SHADERS.md).
+ *   Its self-test passed on its one-row frame, then the first scene's 8
+ *   replays drew a full-screen noise picture and submission 369 never
+ *   finished (the GPU hang at 25.5 s).  Turnip on the same GPU keeps the
+ *   pre-pass (the row's qualcomm flag: "runs better and no graphical
+ *   glitches").  ICO_VK_FAKE_NO_PREPASS=1 gives any device the column's
+ *   reason (the ctests). */
 static const struct {
     uint32_t vendor, deviceMask, device;
     bool qualcomm;
     const char *reason;
-    const char *careful; /* NULL: the start-up set as usual */
+    const char *careful;   /* NULL: the start-up set as usual */
+    const char *noPrepass; /* NULL: the pre-pass as everywhere */
 } kVuPlainOnly[] = {
     /* the Adreno 740 by the whole chip id both devices report (0x43050A01,
      * the issue 93 and 107 logs), nothing near it: Mesa's freedreno
@@ -2687,7 +2706,7 @@ static const struct {
      * 0x43050A00 to the Adreno A32, 0x43050B00 to the 740v3 and
      * 0x43051401 to the Adreno 750, none of them seen failing */
     {RHI_VENDOR_QUALCOMM, 0xFFFFFFFFu, 0x43050A01u, true, "Adreno 740, issue 107",
-     "Adreno 740, issues 93 and 107"},
+     "Adreno 740, issues 93 and 107", "Adreno 740 on Qualcomm's driver, issue 123"},
 };
 
 static void vkr_vu_plain_only(void)
@@ -2695,6 +2714,13 @@ static void vkr_vu_plain_only(void)
     const uint32_t v = g_vkr.props.vendorID, d = g_vkr.props.deviceID;
     g_vkr.vuFallbackPlain[0] = '\0';
     g_vkr.carefulPipelines[0] = '\0';
+    g_vkr.noVuPrepass[0] = '\0';
+    {
+        const char *fake = getenv("ICO_VK_FAKE_NO_PREPASS");
+        if (fake && fake[0] && fake[0] != '0') {
+            snprintf(g_vkr.noVuPrepass, sizeof g_vkr.noVuPrepass, "ICO_VK_FAKE_NO_PREPASS");
+        }
+    }
     for (size_t i = 0; i < sizeof(kVuPlainOnly) / sizeof(kVuPlainOnly[0]); i++) {
         if (kVuPlainOnly[i].vendor == v &&
             (d & kVuPlainOnly[i].deviceMask) == kVuPlainOnly[i].device &&
@@ -2704,6 +2730,10 @@ static void vkr_vu_plain_only(void)
             if (kVuPlainOnly[i].careful != NULL) {
                 snprintf(g_vkr.carefulPipelines, sizeof g_vkr.carefulPipelines, "%s",
                          kVuPlainOnly[i].careful);
+            }
+            if (kVuPlainOnly[i].noPrepass != NULL) {
+                snprintf(g_vkr.noVuPrepass, sizeof g_vkr.noVuPrepass, "%s",
+                         kVuPlainOnly[i].noPrepass);
             }
             return;
         }
@@ -2804,6 +2834,7 @@ static void vkr_fill_limits(void)
     vkr_vu_plain_only();
     o->vuFallbackPlain = g_vkr.vuFallbackPlain[0] ? g_vkr.vuFallbackPlain : NULL;
     o->carefulPipelines = g_vkr.carefulPipelines[0] ? g_vkr.carefulPipelines : NULL;
+    o->vuPrepassOff = g_vkr.noVuPrepass[0] ? g_vkr.noVuPrepass : NULL;
     o->compilerVersion = g_vkr.compilerVersion[0] ? g_vkr.compilerVersion : NULL;
     /* ICO_VK_FAKE_LIMITS=min: the limits the renderer reads at the values
      * every Vulkan device is required to meet (the specification's Required

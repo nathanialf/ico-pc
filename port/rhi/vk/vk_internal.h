@@ -490,6 +490,10 @@ typedef struct VkrState {
      * careful column: "Adreno 740, issues 93 and 107"), "" otherwise, for
      * RhiLimits.carefulPipelines */
     char carefulPipelines[96];
+    /* why this device draws without the VU vertex pre-pass (the same
+     * table's noPrepass column: "Adreno 740 on Qualcomm's driver, issue
+     * 123"), "" otherwise, for RhiLimits.vuPrepassOff */
+    char noVuPrepass[96];
     /* the dynamic state (vk_device.c vkr_create_device; RhiLimits.dynamicDepth,
      * dynamicBlend): dynDepth the depth test, write and compare (Vulkan 1.3,
      * or VK_EXT_extended_dynamic_state's extendedDynamicState), dynBlend the

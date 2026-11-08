@@ -3337,7 +3337,13 @@ static void vuMergeInit(void)
  * record, a blanket rule placed in front of the self-test, which never
  * judged that phone; reading and synchronisation validation find no rule
  * the record's passes, copies and reads break (issue 179: a Mali phone
- * drew 9 vertex shader invocations a triangle without it). */
+ * drew 9 vertex shader invocations a triangle without it).  The order: the
+ * host's reason (a restart's step), [dev] vu_prepass = false, the device
+ * table (RhiLimits.vuPrepassOff: the Adreno 740 under Qualcomm's own
+ * driver, issue 123, where v0.11.0's record path drew noise and hung the
+ * GPU; [dev] vu_prepass = true written in config.toml, ICO_RD_VU_PREPASS=on,
+ * passes it), then the colour targets' byte bound (the record drawn into
+ * render targets only; the vertex stores hold it in buffers). */
 void rd__vu_prepass_init(const RhiLimits *lim)
 {
     g_rd.vuPrepassWhy[0] = '\0';
@@ -3349,6 +3355,13 @@ void rd__vu_prepass_init(const RhiLimits *lim)
     } else if (env && strcmp(env, "0") == 0) {
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "by the settings ([dev] vu_prepass = false, ICO_RD_VU_PREPASS=0)");
+    } else if (lim && lim->vuPrepassOff && !(env && strcmp(env, "on") == 0)) {
+        /* the device table (vk_device.c kVuPlainOnly's noPrepass column,
+         * issue 123); "on" is [dev] vu_prepass = true written in the file
+         * (host_config.c), over the table alone, never the byte bound */
+        snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
+                 "by the device table (%s; [dev] vu_prepass = true draws with it anyway)",
+                 lim->vuPrepassOff);
     } else if (!g_rdRec.stores && bytes != 0u && bytes < ICO_VU_REC_BYTES) {
         /* an Apple A9 or A10 GPU under MoltenVK (rhi_metal_color_bytes);
          * Direct3D 11 reports 0 since v0.10.0 (its record copies are a
@@ -3387,8 +3400,11 @@ void rd__vu_prepass_init(const RhiLimits *lim)
         rd__log("VU pre-pass: on: each mesh and grid vertex and triangle and each sprite "
                 "evaluated once before the lists (two passes), %u bytes a record slot in %u "
                 "planes, two slots a triangle (three under the tick cameras); [dev] "
-                "vu_prepass = false draws the old way; its draws %s; the record %s",
-                ICO_VU_REC_BYTES, ICO_VU_REC_PLANES, s_preBatchWhy, g_rdRec.why);
+                "vu_prepass = false draws the old way; its draws %s; the record %s%s%s%s",
+                ICO_VU_REC_BYTES, ICO_VU_REC_PLANES, s_preBatchWhy, g_rdRec.why,
+                lim && lim->vuPrepassOff ? "; [dev] vu_prepass = true over the device table (" : "",
+                lim && lim->vuPrepassOff ? lim->vuPrepassOff : "",
+                lim && lim->vuPrepassOff ? ")" : "");
     } else {
         rd__log("VU pre-pass: off %s: every VU draw evaluates its triangle's corners in the "
                 "triangle's own vertex shader",

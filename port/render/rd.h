@@ -2112,17 +2112,23 @@ bool rd_dump_prev_frame(const char *path);
  *                         (nothing reported) */
 bool rd_dump_blended_arm(const char *path);
 int rd_dump_blended_result(uint32_t *frame, float *alpha);
-/* The device-loss dump (port/platform/window_host.c device_lost_quit;
+
+/* The device-loss dump (port/platform/window_host.c loss_dump;
  * docs/port/RENDER.md, "The loss dump"): the frames the renderer still holds
- * as two ordinary dumps, the last closed frame (the one the lost replay
- * drew, or the tick it was blended towards) to lostPath and the one before
- * it, when the ring still holds it, to beforePath (NULL: not written).  CPU
- * data only (the commands, the payload, the image texels and VU streams the
- * renderer keeps), so it works after the device is gone.  The frames'
- * numbers into *lostFrame and *beforeFrame (0: not written; either may be
- * NULL).  True when the lost frame was written. */
-bool rd_dump_retained(const char *lostPath, const char *beforePath, uint32_t *lostFrame,
-                      uint32_t *beforeFrame);
+ * are written as two ordinary dumps, the last closed frame (the one the lost
+ * replay drew, or the tick it was blended towards) and the one before it
+ * when the ring still holds it.  CPU data only (the commands, the payload,
+ * the image texels and VU streams the renderer keeps), so it works after the
+ * device is gone.  rd_dump_retained_frames says which frames those are
+ * (held: the ring has one there; closed; its number), and the window writes
+ * each with rd_dump_retained_frame below, logging before each write, so a
+ * write that never returns names its frame and file (issue 123). */
+typedef struct RdRetainedFrame {
+    bool held, closed;
+    uint32_t number;
+} RdRetainedFrame;
+
+void rd_dump_retained_frames(RdRetainedFrame *last, RdRetainedFrame *prev);
 /* One retained frame by number (the slow-scene dump, window_host.c
  * slow_scene_write, issue 179): the frame `number` to path when the ring
  * still holds it as the last closed frame or the one before; nothing when

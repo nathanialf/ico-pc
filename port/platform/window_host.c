@@ -1927,6 +1927,7 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
 {
     RdSettings rs;
     int w = 0, h = 0;
+    const uint64_t openNs = SDL_GetTicksNS(); /* the last start-up step's time */
 
     ico_cdvd_host_set_windowed(1);
 
@@ -2680,6 +2681,11 @@ open_window:
     }
     ui_touch_set_source(ico_input_sdl_touch_overlay);
     ui_touch_set_layout_source(ico_input_sdl_touch_safe_layout);
+    /* the start's last step: a crash or hang report after it repeats this
+       line, not the fog self-test's (issue 123's v0.11.0 hang, 25 s into
+       the game, said "the last step: window: start: the fog self-test") */
+    ico_diag_step("window: start: up in %.1f s; the game runs",
+                  (double)(SDL_GetTicksNS() - openNs) / 1e9);
     return 0;
 }
 
@@ -2971,18 +2977,24 @@ static void toggle_fullscreen(void)
 /* The loss dump (docs/port/RENDER.md, "The loss dump"): the frames the
    renderer still holds, the lost one and the one before it, as one zip in
    the logs folder, logs/loss-<date>-<time>.zip, with a copy of the log
-   (rd_dump_retained, dump_zip.h ico_loss_dump_zip), so a report carries the
-   frame the next start's loss bisect replays and the developers can replay
-   it too. The oldest loss zips go beyond ICO_LOSS_DUMP_KEEP. Its name
-   (the file name alone) into name, "" when none was written; the activity
-   file notes the loss either way (diag_host.h ico_diag_note_device_loss). */
+   (rd_dump_retained_frames and rd_dump_retained_frame, dump_zip.h
+   ico_loss_dump_zip, stored: no deflate), so a report carries the frame
+   the next start's loss bisect replays and the developers can replay it
+   too. Each slow step is logged and flushed before it begins (the frames'
+   writes, the zip), so a step that never returns names itself (issue 123:
+   after a GPU hang no loss dump line ever followed the pass ring). The
+   oldest loss zips go beyond ICO_LOSS_DUMP_KEEP. Its name (the file name
+   alone) into name, "" when none was written; the activity file notes the
+   loss either way (diag_host.h ico_diag_note_device_loss). */
 static void loss_dump(char *name, size_t name_size)
 {
     char logs[ICO_PATH_MAX], zip[ICO_PATH_MAX], lost[ICO_PATH_MAX + 64], before[ICO_PATH_MAX + 64],
         stamp[32], why[160];
     const time_t now = time(NULL);
     const struct tm *tm = localtime(&now);
+    const uint64_t t0 = SDL_GetTicksNS();
     uint32_t lostFrame = 0, beforeFrame = 0;
+    RdRetainedFrame last, prev;
 
     name[0] = '\0';
     if (tm == NULL || strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", tm) == 0) {
@@ -2996,17 +3008,50 @@ static void loss_dump(char *name, size_t name_size)
     }
     snprintf(lost, sizeof(lost), "%s/loss-%s-lost.rddump", logs, stamp);
     snprintf(before, sizeof(before), "%s/loss-%s-before.rddump", logs, stamp);
-    if (!rd_dump_retained(lost, before, &lostFrame, &beforeFrame)) {
+    rd_dump_retained_frames(&last, &prev);
+    if (!last.held || !last.closed) {
         fprintf(stderr, "window: loss dump: the renderer holds no frame to write\n");
+        ico_diag_note_device_loss(NULL);
+        return;
+    }
+    fprintf(stderr, "window: loss dump: writing frame %u to %s\n", (unsigned)last.number, lost);
+    ico_host_log_flush();
+    if (!rd_dump_retained_frame(last.number, lost, &lostFrame)) {
+        fprintf(stderr,
+                "window: loss dump: frame %u not written (no longer held, or the write "
+                "failed)\n",
+                (unsigned)last.number);
         ico_remove(lost);
         ico_diag_note_device_loss(NULL);
         return;
     }
+    if (prev.held && prev.closed) {
+        fprintf(stderr, "window: loss dump: writing frame %u (the one before) to %s\n",
+                (unsigned)prev.number, before);
+        ico_host_log_flush();
+        if (!rd_dump_retained_frame(prev.number, before, &beforeFrame)) {
+            beforeFrame = 0;
+        }
+    }
     if (beforeFrame == 0) {
         ico_remove(before);
     }
+    {
+        unsigned long long a = 0, b = 0, l = 0;
+
+        (void)ico_path_kind(lost, &a, NULL);
+        if (beforeFrame) {
+            (void)ico_path_kind(before, &b, NULL);
+        }
+        if (ico_diag_log_path() != NULL && ico_diag_log_path()[0] != '\0') {
+            (void)ico_path_kind(ico_diag_log_path(), &l, NULL);
+        }
+        fprintf(stderr, "window: loss dump: zipping %.1f MB (%s and the log) at store level\n",
+                (double)(a + b + l) / (1024.0 * 1024.0),
+                beforeFrame ? "the two frames" : "the frame");
+    }
     ico_host_log_flush();
-    if (ico_loss_dump_zip(zip, lost, beforeFrame ? before : NULL, ico_diag_log_path(), why,
+    if (ico_loss_dump_zip(zip, lost, beforeFrame ? before : NULL, ico_diag_log_path(), 1, why,
                           sizeof(why)) < 0) {
         fprintf(stderr, "window: loss dump: zip not written: %s\n", why);
         ico_remove(lost);
@@ -3015,13 +3060,15 @@ static void loss_dump(char *name, size_t name_size)
         return;
     }
     const int pruned = ico_loss_dump_prune(logs, ICO_LOSS_DUMP_KEEP);
+    const double secs = (double)(SDL_GetTicksNS() - t0) / 1e9;
     if (beforeFrame) {
-        fprintf(stderr, "window: loss dump: frames %u and %u (the one before) written to %s%s\n",
-                (unsigned)lostFrame, (unsigned)beforeFrame, zip,
+        fprintf(stderr,
+                "window: loss dump: frames %u and %u (the one before) written to %s in %.1f s%s\n",
+                (unsigned)lostFrame, (unsigned)beforeFrame, zip, secs,
                 pruned > 0 ? "; older loss dumps deleted" : "");
     } else {
-        fprintf(stderr, "window: loss dump: frame %u written to %s%s\n", (unsigned)lostFrame, zip,
-                pruned > 0 ? "; older loss dumps deleted" : "");
+        fprintf(stderr, "window: loss dump: frame %u written to %s in %.1f s%s\n",
+                (unsigned)lostFrame, zip, secs, pruned > 0 ? "; older loss dumps deleted" : "");
     }
     snprintf(name, name_size, "loss-%s.zip", stamp);
     ico_diag_note_device_loss(zip);
@@ -4826,7 +4873,7 @@ static void slow_scene_write(const RdReplayWork *w, double work)
         return;
     }
     ico_host_log_flush();
-    if (ico_loss_dump_zip(zip, dump, NULL, ico_diag_log_path(), why, sizeof(why)) < 0) {
+    if (ico_loss_dump_zip(zip, dump, NULL, ico_diag_log_path(), 0, why, sizeof(why)) < 0) {
         fprintf(stderr, "window: slow scene: zip not written: %s\n", why);
         ico_remove(dump);
         return;

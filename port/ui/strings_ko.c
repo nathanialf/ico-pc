@@ -205,6 +205,8 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_NEWGAME_PLUS] = "뉴 게임+",
     [UI_STR_NEWGAME_PLUS_SCREEN] =
         "뉴 게임+에서는 두 번째 여정을 플레이합니다. 요르다의 말이 번역되고, 엔딩과 아이템이 바뀝니다. 끄면 클리어한 뒤에도 첫 번째 여정을 플레이합니다.",
+    [UI_STR_NEWGAME_START] = "시작",
+    [UI_STR_NEWGAME_START_SCREEN] = "위에서 고른 설정으로 새 게임을 시작합니다.",
     [UI_STR_OPT_CRT] = "CRT 필터",
     [UI_STR_OPT_CRT_STRENGTH] = "CRT 강도",
     [UI_STR_OPT_TONE_GAMMA] = "감마",

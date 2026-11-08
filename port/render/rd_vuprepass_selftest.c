@@ -716,6 +716,14 @@ static void runSelftest(RdTargetRec *t, Verdict *v)
     t->clearPending = 1;
 }
 
+/* runSelftest is replaying (rd__vu_prepass_selftest_running) */
+static bool s_vtRunning;
+
+bool rd__vu_prepass_selftest_running(void)
+{
+    return s_vtRunning;
+}
+
 bool rd_vuprepass_selftest(void)
 {
     if (!g_rd.inited || !g_rd.hasDevice) {
@@ -742,8 +750,10 @@ bool rd_vuprepass_selftest(void)
     /* the record's write is judged as it starts (rd_vu_record.h): under the
      * stores a failure is logged with its first differing texel and the
      * test run again with the render targets, whose verdict decides; [dev]
-     * vu_prepass_min never skips the test's own frames */
+     * vu_prepass_min never skips the test's own frames; the skin check
+     * leaves both runs' replays out */
     g_rdRec.minHeld = true;
+    s_vtRunning = true;
     runSelftest(t, &v);
     bool storesFailed = false;
     if (!v.on && g_rdRec.stores) {
@@ -754,6 +764,7 @@ bool rd_vuprepass_selftest(void)
         rd__vu_record_to_targets("they failed the start-up self-test");
         runSelftest(t, &v);
     }
+    s_vtRunning = false;
     g_rdRec.minHeld = false;
     if (!v.on) {
         g_rd.vuPrepass = false;

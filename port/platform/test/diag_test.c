@@ -1096,6 +1096,8 @@ static void hang_child(const char *mode, const char *log)
                                         : NULL);
     ico_diag_set_fatal_ui(loss_box, NULL);
     fake_ticks = 1;
+    /* the start's last step (window_host.c ico_window_open's end) */
+    ico_diag_step("window: start: up in 1.0 s; the game runs");
     if (strcmp(mode, "hanglimit") == 0) {
         ico_diag_set_gpu_hang_limit(2.0);
         ico_diag_start(0, 60);
@@ -2175,6 +2177,9 @@ int main(int argc, char **argv)
         CHECK(strstr(s, " | waiting for the GPU 60 s (submission 263; the newest 263, the newest "
                         "seen finished 262)") != NULL);
         CHECK(strstr(s, "test: hang dump\n") != NULL);
+        /* the step it repeats is the start's last, named as one (issue 123) */
+        CHECK(strstr(s, "ico_pc: the last start-up step: window: start: up in 1.0 s; the game "
+                        "runs\n") != NULL);
         CHECK(strstr(s, "ico_pc: report: report-") != NULL);
         CHECK(strstr(s, "test: hang dump\n") < strstr(s, "ico_pc: report: report-"));
         CHECK(strstr(s, "ico_pc: the run ended: the graphics driver stopped responding "

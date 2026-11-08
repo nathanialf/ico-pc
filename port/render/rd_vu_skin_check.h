@@ -52,6 +52,11 @@
 extern "C" {
 #endif
 
+/* The VU pre-pass's start-up self-test is replaying its frames
+ * (rd_vuprepass_selftest.c, set around its runs): rd__vu_skin_pick leaves
+ * those replays out (issue 123) */
+bool rd__vu_prepass_selftest_running(void);
+
 /* ------------------------------------------------------- the judgement
  * rd_vu_skin_judge.c: pure functions over vu1_ref (no device). */
 
