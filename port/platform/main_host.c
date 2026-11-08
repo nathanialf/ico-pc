@@ -156,6 +156,9 @@ extern int systemStatus[]; /* common/src/main.c: [0] the video mode word */
 #include "window_switch.h" /* ico_window_switch_end_text */
 #include "popup.h"         /* port/ui: the save states' results */
 #include "strings.h"
+#ifdef _WIN32
+#include "app_icon_exe.h" /* the exe's own icon, stamped by a helper after the run */
+#endif
 
 #endif
 /* Android's window build: the window opens before the game
@@ -1844,6 +1847,14 @@ static int open_window(void)
                        more);
 #endif
     }
+#ifdef _WIN32
+    /* the exe's icon (app_icon_exe.h): its stamp now; the helper that
+       stamps it is started after the window has closed (atexit runs the
+       last registered first), once this run's capture has written its
+       files, while the summary's lines still go to the log */
+    ico_app_icon_exe_start();
+    at_shutdown(ico_app_icon_exe_at_exit);
+#endif
     at_shutdown(ico_window_close);
     return 0;
 }
