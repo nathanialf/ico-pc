@@ -334,9 +334,9 @@ typedef struct VkrAcquire {
     bool acquired;
     bool waitPending;
     bool signalled;
-    /* the acquire passed the slot's acquireFence (not the ahead form, which
-     * has none): the present's list's submit asks it whether the image was
-     * free already (acquireReadyAtSubmit) */
+    /* the acquire passed the slot's acquireFence (the ahead form too): the
+     * present's list's submit asks it whether the image was free already
+     * (acquireReadyAtSubmit) */
     bool fenced;
     uint32_t image;
     uint64_t seq;

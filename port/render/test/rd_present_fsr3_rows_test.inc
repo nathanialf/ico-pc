@@ -17,7 +17,8 @@
  *   byte (the row changes nothing where it cannot run).
  * On a device that runs it (Vulkan 1.2 with the FidelityFX extensions, a
  * build with the upscaler; otherwise the reason is printed and these are
- * skipped):
+ * skipped, except that a build with the upscaler on a Vulkan 1.2 device
+ * that refuses it fails, rd__fsr3_not_expected):
  *   off       Enhanced 2x with Downsampling: FSR 3.1 asked is not in force
  *             (one or the other) and the present is the one with Upscaling
  *             Off byte for byte; no context made, nothing dispatched;
@@ -27,6 +28,9 @@
  *             1024 x 1024 (display-sized: 512 x 2), UPSCALED and the
  *             present not black, the anti-aliasing off for it, the jitter's
  *             phase count FSR's (ceil(8 x 1.5^2) = 18 or near);
+ *   kept      the targets made again at the same sizes (rd_reset_scene):
+ *             the context kept (RdFsr3Stats.kept), none made, a dispatch;
+ *             the create time noted;
  *   resize    the same at 3x: a second context (UPSCALED 1536 x 1536), the
  *             first destroyed once the pictures that used it finished (a few
  *             replays later);
@@ -134,8 +138,15 @@ static void checkFsr3Device(void)
         return;
     }
     if (!rd_upscale_temporal_supported()) {
-        printf("  fsr3: not available here (%s): the device cases are skipped\n",
-               rd_upscale_temporal_why());
+        /* skipped only where it cannot be expected (no FidelityFX in the
+           build, not Vulkan, below 1.2); a build with it on lavapipe 1.2+
+           that refuses it fails */
+        const char *notExpected = rd__fsr3_not_expected();
+        CHECK(notExpected != NULL,
+              "fsr3: the build has FSR 3.1 on a Vulkan 1.2 device but it is not available (%s)",
+              rd_upscale_temporal_why());
+        printf("  fsr3: not available here (%s; %s): the device cases are skipped\n",
+               notExpected ? notExpected : "expected", rd_upscale_temporal_why());
         rd_shutdown();
         return;
     }
@@ -180,6 +191,17 @@ static void checkFsr3Device(void)
     }
     printf("  fsr3: %ux%u -> %ux%u, phase count %d, FFX %s, GPU memory %.1f MB\n", fs->renderW,
            fs->renderH, fs->displayW, fs->displayH, (int)fs->phases, fs->version, fs->memoryMb);
+
+    /* kept: the targets made again at the same sizes (rd_reset_scene at the
+     * same GS size, as a window drag at one size): the context kept, no
+     * ffxCreateContext; its create time on the stats (the context line) */
+    const uint32_t madeK = fs->made, keptK = fs->kept, dispK = fs->dispatched;
+    rd_reset_scene(512, 512);
+    recordRichFrame(t, 1);
+    CHECK(fs->made == madeK && fs->kept == keptK + 1u && fs->dispatched == dispK + 1u,
+          "fsr3 kept: contexts %u -> %u, kept %u -> %u, dispatched %u -> %u", madeK, fs->made,
+          keptK, fs->kept, dispK, fs->dispatched);
+    CHECK(fs->createMs > 0.0, "fsr3 kept: the context's create time %.3f ms", fs->createMs);
 
     /* resize: a new context, the old one destroyed once its pictures are done */
     s.sceneScale = 3.0f;

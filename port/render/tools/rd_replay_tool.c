@@ -2593,9 +2593,20 @@ int main(int argc, char **argv)
     }
     rd__set_not_implemented_fatal(false);
     if (fsr3Asked && !noDevice && !rd_upscale_temporal_supported()) {
-        printf("skip: --fsr3: FSR 3.1 is not available (%s)\n", rd_upscale_temporal_why());
+        /* a skip only where FSR 3.1 cannot be expected; a build with it on a
+           Vulkan 1.2 device that refuses it is a failure */
+        const char *notExpected = rd__fsr3_not_expected();
+        if (notExpected) {
+            printf("skip: --fsr3: %s (FSR 3.1: %s)\n", notExpected, rd_upscale_temporal_why());
+            rd_shutdown();
+            return 77;
+        }
+        fprintf(stderr,
+                "--fsr3: this build has FSR 3.1 and the device is Vulkan 1.2 or later, but FSR "
+                "3.1 is not available (%s)\n",
+                rd_upscale_temporal_why());
         rd_shutdown();
-        return 77;
+        return 1;
     }
     if (overlay) {
         rd_set_present_overlay(overlayTest, NULL);

@@ -58,21 +58,34 @@ capture once a tick (`ico_title_icon_tick`). Once the title's menu (Continue / N
   deferred text (the menus) and makes the frame head clear SCENE to the colour, black first; world
   draws and post passes are untouched;
 - the curtain: `ui_host_curtain(1)` puts an opaque black quad over the whole output at the start of
-  the presenter's top overlay layer, so the player sees black frames.
+  the presenter's top overlay layer, so the player sees black frames. It does not cover the popups:
+  without the CRT filter the top layer is drawn under the main overlay layer (`overlayRecord`,
+  `rd_present.c`: the touch controls under the HUD and the popups), so a popup that shows during
+  the capture is drawn over the black; with the filter the main layer is drawn into the filter's
+  grid, under the top layer (the capture waits for the filter to be off, below, so that case does
+  not arise).
 
 The shot is armed (`rd_capture_shot`, with its own answer slot: the pause picture's deferred slot is
 polled by `state_host.c` every host step) after three ticks with the colour in force, because the tick
 the colour changed had already recorded the menus and an in-between picture also reads the tick
 before. The shot copies the presentation box before the overlay, so the curtain is never in it. Once
 the picture over black is back, the clear turns white and the same wait and shot follow. Then the
-pass goes off, the pair goes to `ico_app_icon_deliver`, and the curtain comes off two ticks later
-(pictures of the pass's frames may still be presented). A pair refused as moved
+pass goes off, the pair goes to `ico_app_icon_deliver`, and the curtain comes off at the first
+present past the pass's frames: `rd_icon_pass_last_frame()` at the pass's off is the newest frame
+number given out (the frame open then), and the curtain stays while `rd_last_present_info()` names
+that frame or an older one, or blends a later one with it (alpha under 1 and the frame before at or
+under it; `ico_title_icon_present_clean`). A frame walked before the pass went off may be
+presented several ticks later, and its picture shows white or the bare letter. After
+`ICO_TITLE_ICON_HOLD_MAX` (60) ticks without such a present the curtain comes off anyway, with the
+line `ico_pc: icon: no picture past the pass's frames (frame N) was presented in 60 ticks: the
+curtain comes off`. A pair refused as moved
 (`ICO_APP_ICON_GHOST`, or the two pictures of different sizes) is taken again once; a second refusal
 cuts the icon from the picture over black alone (`ico_app_icon_deliver_single`). An empty answer
 (the present dropped it) or none within 60 ticks arms the shot again, at most three times in a run;
 then the run gives up. Leaving the menu during the pass (New Game, Continue, a Settings page) ends
-it, and the next time the menu has been up for 30 ticks it starts again. Only the window build
-captures; on Android nothing is captured (the launcher icon is the package's).
+it, and the next time the menu has been up for 30 ticks it starts again. Only the desktop window
+build captures; on Android and iOS nothing is captured (the launcher icon is the package's; the
+capture is compiled out under `__ANDROID__` and `ICO_IOS`).
 
 The log lines: `ico_pc: icon: capturing the title's I (pass 1 of 2)` and `(pass 2 of 2)`;
 `ico_pc: icon: made from the title's I (<w>x<h> pictures)`; `ico_pc: icon: the two pictures
@@ -88,15 +101,20 @@ finds the file before the first frame.
 
 ## When the capture waits
 
-`ico_app_icon_wanted()` also answers 0 while the presented picture is not plain
-(`ico_app_icon_picture_plain`, `app_icon.c`): the CRT filter on (strength above 0), or any of the four
-Picture-page adjustments (Gamma, Brightness, Contrast, Saturation) off the game's own 50 (a stored 0
-reads as 50). Both act on the finished picture before the capture's copy, so the white background
-would not come back as 255 and the matte would be wrong (the box of alpha could grow to the whole
-frame). Screen softening does not matter: a blur of a flat field is flat. The first refusal logs
-`ico_pc: icon: waiting for a plain picture (CRT filter or Brightness on)`; the title's capture asks
-again at each title visit, so the icon is made at a later visit once the settings are plain (or on
-a run with them plain). `app_icon_host.c` reads the settings with `ico_video_get`; the rule itself is
+`ico_app_icon_wanted()` answers `ICO_APP_ICON_NOT_PLAIN` while an icon is due but the presented
+picture is not plain (`ico_app_icon_picture_plain`, `app_icon.c`): the CRT filter on (strength above
+0), or any of the four Picture-page adjustments (Gamma, Brightness, Contrast, Saturation) off the
+game's own 50 (a stored 0 reads as 50), or Upscaling on (FSR 1.0 chosen, or FSR 3.1 in force:
+`rd_upscale_ratio()` above 0; an FSR 3.1 the device cannot run is drawn as Off and does not count).
+The filter and the tone act on the finished picture before the capture's copy, so the white
+background would not come back as 255 and the matte would be wrong (the box of alpha could grow to
+the whole frame); FSR 1.0's edge-adaptive scale and sharpening are not linear in the background
+colour (fringes at the letter's edge), and FSR 3.1 carries its history and jitter from the shot over
+black to the one over white. Screen softening does not matter: a blur of a flat field is flat. The
+first refusal logs `ico_pc: icon: waiting for a plain picture (CRT filter, Brightness or Upscaling
+on)`; the capture goes back to idle with its count of menu ticks at 0 (not done for the run), so it
+asks again after another `ICO_TITLE_ICON_WAIT` ticks of the title's menu, on this visit or a later
+one, and the icon is made once the settings are plain (or on a run with them plain). `app_icon_host.c` reads the settings with `ico_video_get`; the rule itself is
 tested without the settings (`app_icon_files_test`).
 
 ## Applying the icon
@@ -111,7 +129,7 @@ a file that does not decode: nothing is done and SDL's default stays. It logs `w
 renderer, and in `ico_window_pump` whenever `ico_app_icon_changed_take()` is 1, which is the run
 that made the icon (`SDL_SetWindowIcon` is main-thread only; the pump is the main thread). Android
 and iOS keep their packaged launcher icons (the function does nothing there; the capture is not
-compiled on Android either).
+compiled on either).
 
 | platform | what the icon reaches |
 | --- | --- |
@@ -153,7 +171,10 @@ the test runs on a fake folder:
   `Name=ICO`, `Exec="<exe>"`, `Icon=com.defnf.icopc`, `Categories=Game;`, `Terminal=false`,
   `StartupWMClass=com.defnf.icopc`, one per line. Inside the quotes of `Exec` the desktop entry
   specification's rules apply: backslash, double quote, backtick and dollar get a backslash, and a
-  percent sign is doubled (a lone `%` would be a field code). A path with a control character (a
+  percent sign is doubled (a lone `%` would be a field code); then the string value's own escaping
+  doubles every backslash of that, because a reader unescapes the string before it applies the
+  quoting rule (the specification's own note: a literal backslash in a quoted argument is four
+  backslashes, a dollar `\\$`). A path with a control character (a
   newline would end the line and let the rest be read as another key) or too long for the buffer is
   refused.
 - `ico_desktop_entry_install(dataHome, exe, pngPath)`: the PNG first, copied to

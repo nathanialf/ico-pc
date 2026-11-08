@@ -111,7 +111,9 @@
  *            replays with velocity 0.  A VuPrevCB whose bytes do not hold
  *            the draw's own header shape is dropped at load)
  *   (version 17: no new section: list 12 carries RDC_UPSCALE_POINT (u[0]
- *            the target the reduction reads, u[1] the one it writes) before
+ *            the target the reduction reads, u[1] the one it writes, u[2]
+ *            RD_UPSCALE_NO_HISTORY when the frame begins a new history,
+ *            rd_velocity.h; 0 in a dump made before that was set) before
  *            the reduction binds DISPLAY, a state command with no state
  *            (rd_upscale.h); a version 3 to 16 dump has none, and replays
  *            with no upscale point: nothing is upscaled, as before)
@@ -1128,16 +1130,17 @@ const RdFrame *rd__retained_frame(uint32_t number)
     return prev && prev->closed && prev->number == number ? prev : NULL;
 }
 
+bool rd_frame_retained(uint32_t number)
+{
+    return rd__retained_frame(number) != NULL;
+}
+
 bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped)
 {
-    const RdFrame *last = rd__last_frame();
     const RdFrame *f = rd__retained_frame(number);
 
     if (dumped) {
         *dumped = 0;
-    }
-    if (!f) {
-        f = last; /* the picked frame is gone from the ring: the last closed */
     }
     if (!f || !f->closed || !path || !rd__dump_frame(f, path)) {
         return false;

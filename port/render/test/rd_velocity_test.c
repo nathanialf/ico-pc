@@ -9,7 +9,10 @@
  *             x, "current to previous"); a draw of a key the tick before did
  *             not draw has none; a particle batch has none; the stats say so
  *   cut       a frame after rd_camera_cut starts a new history: no VuPrevCB,
- *             rd__velocity_reset
+ *             the stats' reset
+ *   again     a frame already attached given again with nothing to pair
+ *             (after rd__velocity_forget): every VU draw's RD_VU_PREV is
+ *             cleared, the tick cameras' bit kept
  *   off       the switch off: a recorded frame's VU draws keep u[3] 0
  *   interp    two presents between the ticks (alpha 0.25 then 0.75): the
  *             second's VuPrevCB is the first's blended block (x 1794), its
@@ -197,7 +200,7 @@ static void testSource(RdMesh moving, RdMesh fresh)
     CHECK(pc && (pc->u[3] & RD_VU_PREV) == 0u, "source: a particle batch has none");
     const RdVelocityStats *st = rd__velocity_stats();
     CHECK(st->vuDraws == 2u && st->paired == 1u && st->moved == 1u && st->unpaired == 1u &&
-              !st->reset && !rd__velocity_reset(),
+              !st->reset,
           "source: stats (draws %u paired %u moved %u unpaired %u reset %u)", st->vuDraws,
           st->paired, st->moved, st->unpaired, st->reset);
 
@@ -205,12 +208,41 @@ static void testSource(RdMesh moving, RdMesh fresh)
     tick(moving, fresh, 16.0, 1, 1);
     f = rd__last_frame();
     c = findKey(f, 0, RD_KEY(&kMoving, 0, 32));
-    CHECK(c && !rd__velocity_prev(f, c) && rd__velocity_reset() && rd__velocity_stats()->reset,
+    CHECK(c && !rd__velocity_prev(f, c) && rd__velocity_stats()->reset,
           "cut: a new history, no VuPrevCB");
     tick(moving, fresh, 24.0, 1, 0);
     f = rd__last_frame();
     c = findKey(f, 0, RD_KEY(&kMoving, 0, 32));
-    CHECK(c && rd__velocity_prev(f, c) && !rd__velocity_reset(), "cut: the frame after pairs");
+    CHECK(c && rd__velocity_prev(f, c) && !rd__velocity_stats()->reset,
+          "cut: the frame after pairs");
+
+    /* again: the frame just attached (its moving draw paired) given again
+     * after the picture before was dropped: nothing pairs, so nothing may
+     * keep the old VuPrevCB (the tick cameras' bit stays) */
+    {
+        RdFrame *g = (RdFrame *)rd__last_frame();
+        RdCmd *gc = g ? (RdCmd *)findKey(g, 0, RD_KEY(&kMoving, 0, 32)) : NULL;
+        CHECK(gc && (gc->u[3] & RD_VU_PREV), "again: the frame was attached (%#x)",
+              gc ? gc->u[3] : 0u);
+        if (gc) {
+            gc->u[3] |= RD_VU_TICK_CAMERAS;
+            rd__velocity_forget();
+            rd__velocity_attach(g, 0);
+            CHECK(gc->u[3] == RD_VU_TICK_CAMERAS && !rd__velocity_prev(g, gc) &&
+                      rd__velocity_stats()->reset,
+                  "again: a stale VuPrevCB kept (u[3] %#x)", gc->u[3]);
+            for (int l = 0; l < RD_LIST_COUNT; l++) {
+                for (uint32_t i = 0; i < g->lists[l].count; i++) {
+                    const RdCmd *x = &g->lists[l].cmds[i];
+                    if (x->type >= RDC_MESH && x->type <= RDC_PARTICLES) {
+                        CHECK((x->u[3] & RD_VU_PREV) == 0u, "again: list %d draw %u u[3] %#x", l, i,
+                              x->u[3]);
+                    }
+                }
+            }
+            gc->u[3] &= ~RD_VU_TICK_CAMERAS;
+        }
+    }
 
     /* off */
     rd__velocity_set(false);
@@ -240,12 +272,12 @@ static void testInterp(RdMesh moving, RdMesh fresh)
     rd__velocity_set(true); /* a new history */
     const RdFrame *a = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.25f, 1, NULL);
     const RdCmd *c = a ? findKey(a, 0, RD_KEY(&kMoving, 0, 32)) : NULL;
-    CHECK(c && !rd__velocity_prev(a, c) && rd__velocity_reset(),
+    CHECK(c && !rd__velocity_prev(a, c) && rd__velocity_stats()->reset,
           "interp: the first present begins the history");
     const RdFrame *b = rd__interp_frame(rd__prev_frame(), rd__last_frame(), 0.75f, 0, NULL);
     c = b ? findKey(b, 0, RD_KEY(&kMoving, 0, 32)) : NULL;
     const uint8_t *prev = c ? rd__velocity_prev(b, c) : NULL;
-    CHECK(prev != NULL && !rd__velocity_reset(), "interp: the second present pairs");
+    CHECK(prev != NULL && !rd__velocity_stats()->reset, "interp: the second present pairs");
     if (prev && c) {
         const float (*pb)[4] = blockOf(prev);
         const float (*cb)[4] = blockOf(b->payload + c->u[1]);

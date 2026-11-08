@@ -4733,28 +4733,44 @@ static void present_blocked(const RdPerfRecord *r)
    one's file (ICO_SLOW_DUMP_KEEP newest zips are kept). It is written in
    releases too: a reporter's cutscene is the frame that explains the slow
    picture, and F12 cannot be pressed in a scene. A due block ARMS the
-   dump with its mean GPU span; the first replay after it whose span is at
-   or above that mean (window_slow_scene_pick; perf_drain) is the frame:
-   the one the block's heavy part looks like, not the one that closed last
-   (the issue's boat blocks took 112 to 144 ms against a 45 ms first dump).
-   An arm that found no such replay before the next block's end is dropped
-   there, where the rule runs again. The block's dominant kind is
-   s_blockKind, taken where the layout share is written; a crash or hang
-   report carries the zip (ico_diag_note_slow_scene). */
+   dump with the block's mean CPU-side vertex work a replay (the VU line's
+   quantity, window_scene_vu_invocations: the pre-pass's vertices with it
+   on, the triangles times 9 with it off); the first replay after it whose
+   own vertex work is at or above that mean (window_slow_scene_pick,
+   slow_scene_poll) is the frame: the one the block's heavy part looks
+   like (the issue's boat blocks took 112 to 144 ms against a 45 ms first
+   dump). The renderer notes a replay's counts as it ends it
+   (rd_perf_last_replay_work), before its GPU times, which come two or
+   more replays later, after the ring of frames has dropped it; the
+   poll runs every vsync, so the frame the note names is still the last
+   closed or the one before, and one that is not (more frames closed
+   between two polls) is passed over for the next replay. An arm that
+   found no such replay before the next block's end is dropped there,
+   where the rule runs again. The block's dominant kind is s_blockKind,
+   taken where the layout share is written; a crash or hang report
+   carries the zip (ico_diag_note_slow_scene). */
 static SceneKind s_blockKind = SCENE_OTHER;
 
 static struct {
     int armed;
     SlowSceneBlock b; /* the due block's figures (count is the dumps before it) */
-    double meanSpanMs;
+    double meanWork;  /* the block's vertex work a replay, in invocations */
+    uint32_t seen;    /* the replay last looked at (the pick takes a later one) */
 } s_slowArm;
 
 static int s_slowCount;         /* the dumps this run has been made (written or not) */
 static double s_slowLastWorkMs; /* the work of the block of the last */
 
+/* A replay's vertex work, as the VU line counts it */
+static double slow_scene_vertex_work(uint64_t tris, uint64_t preVertices)
+{
+    return (double)window_scene_vu_invocations(tris, preVertices, rd_vu_prepass_on());
+}
+
 static void slow_scene_check(void)
 {
     SlowSceneBlock b;
+    RdReplayWork w;
 
     memset(&b, 0, sizeof(b));
     b.dominant = s_blockKind;
@@ -4773,15 +4789,18 @@ static void slow_scene_check(void)
         return;
     }
     s_slowArm.b = b;
-    s_slowArm.meanSpanMs = b.spanSumMs / (double)b.gpuN;
+    s_slowArm.meanWork =
+        s_perf.ph.n ? slow_scene_vertex_work(s_perf.vuTris, s_perf.vuPreVerts) / s_perf.ph.n : 0.0;
+    s_slowArm.seen = rd_perf_last_replay_work(&w) ? w.replay : 0u;
     s_slowArm.armed = 1;
 }
 
-/* The armed dump's frame has come: the timed replay r, whose span passed
-   window_slow_scene_pick */
-static void slow_scene_write(const RdPerfRecord *r)
+/* The armed dump's frame has come: frame w's replay, whose vertex work
+   passed window_slow_scene_pick */
+static void slow_scene_write(const RdReplayWork *w, double work)
 {
     const SlowSceneBlock b = s_slowArm.b;
+    const double mean = s_slowArm.meanWork;
 
     s_slowArm.armed = 0;
     s_slowCount++; /* counted whether or not the file is written */
@@ -4801,8 +4820,8 @@ static void slow_scene_write(const RdPerfRecord *r)
         return;
     }
     snprintf(dump, sizeof(dump), "%s/slow-%s.rddump", logs, stamp);
-    if (!rd_dump_retained_frame(r->frame, dump, &frame)) {
-        fprintf(stderr, "window: slow scene: the renderer holds no frame to write\n");
+    if (!rd_dump_retained_frame(w->frame, dump, &frame)) {
+        fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)w->frame);
         ico_remove(dump);
         return;
     }
@@ -4818,9 +4837,40 @@ static void slow_scene_write(const RdPerfRecord *r)
     char name[64], line[640];
 
     snprintf(name, sizeof(name), "slow-%s.zip", stamp);
-    (void)window_slow_scene_text(line, sizeof(line), &b, (unsigned)frame,
-                                 frame == r->frame ? r->gpuMs : -1.0, name);
+    (void)window_slow_scene_text(line, sizeof(line), &b, (unsigned)frame, work, mean, name);
     fprintf(stderr, "window: %s\n", line);
+}
+
+/* Every vsync while armed: the replay the renderer finished last, when it
+   is a new one, its frame still held and its vertex work at or above the
+   block's mean */
+static void slow_scene_poll(void)
+{
+    RdReplayWork w;
+
+    if (!s_slowArm.armed || !rd_perf_last_replay_work(&w) || w.replay == s_slowArm.seen) {
+        return;
+    }
+    s_slowArm.seen = w.replay;
+    const double work = slow_scene_vertex_work(w.vuTris, w.vuPreVertices);
+
+    if (!window_slow_scene_pick(work, s_slowArm.meanWork)) {
+        return;
+    }
+    if (!rd_frame_retained(w.frame)) {
+        static unsigned s_gone;
+        const unsigned n = ++s_gone;
+
+        if (n <= 8u || n % 100u == 0u) {
+            fprintf(stderr,
+                    "window: slow scene: frame %u had left the renderer's ring before it was "
+                    "looked at: the next replay at or above the mean is taken (%u times so "
+                    "far)\n",
+                    (unsigned)w.frame, n);
+        }
+        return;
+    }
+    slow_scene_write(&w, work);
 }
 
 /* The finished records into the block's sums and the CSV */
@@ -4831,6 +4881,7 @@ static void perf_drain(void)
 
     window_video_memory_watch();
     window_stall_poll(); /* the kernel GPU driver around the presents that blocked */
+    slow_scene_poll();
     while (rd_perf_pop(&r)) {
         auto_res_sample(&r);
         if (r.presented && r.gpuValid) {
@@ -4889,9 +4940,6 @@ static void perf_drain(void)
             }
         }
         if (r.gpuValid) {
-            if (s_slowArm.armed && window_slow_scene_pick(r.gpuMs, s_slowArm.meanSpanMs)) {
-                slow_scene_write(&r);
-            }
             s_perf.gpuN++;
             s_perf.gpu += r.gpuMs;
             s_perf.maxGpu = r.gpuMs > s_perf.maxGpu ? r.gpuMs : s_perf.maxGpu;
@@ -5093,8 +5141,12 @@ static void perf_log(void)
         RhiStats st;
 
         rhi_get_stats(&st);
-        if (window_scene_acquire_text(acq, sizeof(acq), st.acquireReadyAtSubmit - s_acqReadyAt,
-                                      st.acquireNotReady - s_acqNotReadyAt) > 0) {
+        /* the counters start again from 0 when the backend is made again
+           (rhi_init and rhi_shutdown clear g_vkr: Apply, the ladder's
+           restart, a loss rebuild, a switch to another backend) */
+        if (window_scene_acquire_text(
+                acq, sizeof(acq), window_scene_counter_delta(st.acquireReadyAtSubmit, s_acqReadyAt),
+                window_scene_counter_delta(st.acquireNotReady, s_acqNotReadyAt)) > 0) {
             fprintf(stderr, "window: %s\n", acq);
         }
         s_acqReadyAt = st.acquireReadyAtSubmit;
@@ -5139,11 +5191,10 @@ static void perf_log(void)
             snprintf(partial, sizeof(partial), " (not all timed apart in %u replays)",
                      s_perf.gpuPostPartial);
         }
-        char pre[24] = "off"; /* an off pre-pass has no cost to print: "0.00" reads as one */
+        char pre[24]; /* an off pre-pass has no cost to print: "0.00" reads as one */
 
-        if (rd_vu_prepass_on()) {
-            snprintf(pre, sizeof(pre), "%.2f", s_perf.gpuPrepass / g);
-        }
+        (void)window_scene_prepass_gpu_text(pre, sizeof(pre), rd_vu_prepass_on(),
+                                            s_perf.gpuPrepass / g);
         fprintf(stderr,
                 "window: GPU ms per replay: lists 0-12 %s; effects: %s%s; present %.2f; VU "
                 "pre-pass %s%s\n",

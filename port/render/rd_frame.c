@@ -25,10 +25,16 @@
 static struct {
     int on;
     uint8_t rgba[4];
+    uint32_t lastFrame; /* rd_icon_pass_last_frame */
 } s_iconPass;
 
 void rd_set_icon_pass(const uint8_t *clearRgba)
 {
+    if (s_iconPass.on || clearRgba != NULL) {
+        /* the newest frame number given out: the frame open now, or the
+           last begun, holds the pass's draws in part or whole */
+        s_iconPass.lastFrame = g_rd.frameCounter;
+    }
     s_iconPass.on = clearRgba != NULL;
     if (clearRgba) {
         memcpy(s_iconPass.rgba, clearRgba, 4);
@@ -40,6 +46,11 @@ void rd_set_icon_pass(const uint8_t *clearRgba)
 bool rd_icon_pass_on(void)
 {
     return s_iconPass.on != 0;
+}
+
+uint32_t rd_icon_pass_last_frame(void)
+{
+    return s_iconPass.lastFrame;
 }
 
 static void recordHead(RdFrame *f, int copy, int list, const RdFrameHead *h)

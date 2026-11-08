@@ -69,12 +69,17 @@ int main(int argc, char **argv)
 
     exec_case("/games/ico_pc", "Exec=\"/games/ico_pc\"");
     exec_case("/games/my dir/ico_pc", "Exec=\"/games/my dir/ico_pc\"");
-    exec_case("/g/a$b", "Exec=\"/g/a\\$b\"");
-    exec_case("/g/a\"b", "Exec=\"/g/a\\\"b\"");
-    exec_case("/g/a\\b", "Exec=\"/g/a\\\\b\"");
-    exec_case("/g/a`b", "Exec=\"/g/a\\`b\"");
+    /* the Exec quoting's backslash, then every backslash doubled by the
+       string value's escaping (the specification unescapes the string
+       first): a dollar, a double quote and a backtick take two
+       backslashes, a literal backslash is four */
+    exec_case("/g/a$b", "Exec=\"/g/a\\\\$b\"");
+    exec_case("/g/a\"b", "Exec=\"/g/a\\\\\"b\"");
+    exec_case("/g/a\\b", "Exec=\"/g/a\\\\\\\\b\"");
+    exec_case("/g/a`b", "Exec=\"/g/a\\\\`b\"");
     exec_case("/g/100%/x", "Exec=\"/g/100%%/x\"");
-    exec_case("/g/$\"\\%", "Exec=\"/g/\\$\\\"\\\\%%\"");
+    exec_case("/g/$\"\\%", "Exec=\"/g/\\\\$\\\\\"\\\\\\\\%%\"");
+    exec_case("C:\\\\x", "Exec=\"C:\\\\\\\\\\\\\\\\x\""); /* two literal backslashes: eight */
 
     /* refusals: empty, NULL, a line break, no room (out left empty) */
     strcpy(got, "x");

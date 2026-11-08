@@ -888,7 +888,12 @@ the bones, a grid's stream: the "VuPrevCB") appended to the frame's payload, and
 it: `RD_VU_PREV` (bit 1) beside `RD_VU_TICK_CAMERAS` (bit 0) and the payload offset in the bits
 above (offsets are 8-aligned). No pair, a jump past `RD_INTERP_JUMP_WORLD`, a particle batch, an
 unkeyed draw and every draw of the first frame or a frame after a camera cut carry none: their
-velocity is 0. A cut also sets `rd__velocity_reset`, the upscaler's history reset. The picture
+velocity is 0. Every VU draw loses any `RD_VU_PREV` it carried before the pairing (a frame given
+again: an attached tick frame copied when the interpolation goes on, a dump replayed with
+`--velocity`). A frame that begins a new history (a cut, the first frame, a frame after the switch
+went on or `rd__velocity_forget`) gets `RD_UPSCALE_NO_HISTORY` in its upscale point's `u[2]`: the
+upscaler's history reset travels with the frame, so the replay of that frame reads it and never a
+value the game thread's attach of the next frame has already changed. The picture
 before is kept as a list of its VU draws and their fixed parts (two buffers, swapped a frame).
 Dumps carry the VuPrevCBs (version 16, [Dumps and the replay tool](#dumps-and-the-replay-tool));
 an older dump replays with velocity 0. A morphing mesh's previous transform is drawn with the
@@ -968,7 +973,7 @@ row 0 made a copy of column or row 1 through a one-texel strip; nothing with no 
 left or up, or a Full pixel window), then the hook `rd__upscale_dispatch` gets SCENE's colour, its
 depth through `rd__sampled_depth` (in place, or the D32F_S8 copy the effects depth also takes),
 VELOCITY ([Velocity](#velocity)) when the motion vectors are on, the jitter, a reset (the first
-dispatch, a new size, `rd__velocity_reset`) and the presents since the last dispatch, and writes
+dispatch, a new size, the replayed frame's own cut or its marker's `RD_UPSCALE_NO_HISTORY`) and the presents since the last dispatch, and writes
 UPSCALED: RGBA8, SCENE's GS size at the display scale (the Full pixel window too), render target,
 sampled, copy source and storage (made again without storage where the backend refuses it),
 owned by `rd_upscale.c` (not a named target: a new named id would shift every dump's temporary
@@ -1060,7 +1065,7 @@ the one `rd_replay_tool` and the loss bisect take. The newest three loss zips ar
 ones deleted, so a device lost at every start cannot fill a phone. The activity file then records
 the loss with the zip's path (or that none was written) for the next start
 ([PLATFORM.md](PLATFORM.md#diagnostics)); the message names the file and asks for it with the log
-(`port/render/rd_dump.c` (`rd_dump_retained`; `rd_dump_retained_frame` writes one retained frame by number for the slow-scene dump, the last closed when that number has left the ring); `port/platform/dump_zip.c` (`ico_loss_dump_zip`,
+(`port/render/rd_dump.c` (`rd_dump_retained`; `rd_dump_retained_frame` writes one retained frame by number for the slow-scene dump, nothing when that number has left the ring, `rd_frame_retained` says which); `port/platform/dump_zip.c` (`ico_loss_dump_zip`,
 `ico_loss_dump_prune`); `port/platform/window_host.c` (`loss_dump`, `device_lost_quit`)).
 
 A GPU hang writes the same zip: when the watchdog ends a run whose main thread waits for work the

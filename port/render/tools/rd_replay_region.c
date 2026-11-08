@@ -707,7 +707,7 @@ static void regionCmd(void *user, int l, uint32_t idx, const RdCmd *c, const RdS
     const double frame[4] = {2048.0 - (double)(st->gsW >> 1), 2048.0 + (double)(st->gsW >> 1),
                              2048.0 - (double)(st->gsH >> 1), 2048.0 + (double)(st->gsH >> 1)};
     const int freeCam = f->camera.freeCamera != 0;
-    const int ticks = f->hasTickCams && c->u[3] == RD_VU_TICK_CAMERAS;
+    const int ticks = f->hasTickCams && (c->u[3] & RD_VU_TICK_CAMERAS) != 0u;
     const int paint = w->canvas && !c->b[3] && !c->b[6] && st->gsW == f->gsW && st->gsH == f->gsH;
     /* --region-mask: every draw on a target of the frame's size (a
        reflection camera's picture included: its triangles land on the same

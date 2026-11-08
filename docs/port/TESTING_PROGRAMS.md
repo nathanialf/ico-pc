@@ -484,9 +484,13 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   capture (`title_icon.c`) with the renderer, the curtain and the icon files stubbed: the pass leaves
   out every model but `I` (`title_back`, `st26a_p1`, `C`, `I_f`, `I_sd`) and off leaves the old
   table; the capture starts after `ICO_TITLE_ICON_WAIT` ticks of layout 12 or 13 (counted again
-  after a Settings page or the model viewer) when an icon is wanted, never when not; the shot over
-  black after the settle, white once it came, the shot over white, then the pass off, the pair
-  delivered and the curtain off after the hold, done for the run; an empty answer or none within
+  after a Settings page or the model viewer) when an icon is wanted, never when not, and a picture
+  not plain (`ICO_APP_ICON_NOT_PLAIN`) leaving it idle with the count from 0 (the capture starting
+  once it is plain); the shot over black after the settle, white once it came, the shot over
+  white, then the pass off, the pair delivered and the curtain off at the first present past the
+  pass's frames (held over older frames and over a blend with the pass's last; the rule
+  `ico_title_icon_present_clean` alone; after `ICO_TITLE_ICON_HOLD_MAX` ticks without such a
+  present), done for the run; an empty answer or none within
   the wait armed again and the run given up after three retries; a pair that differs (or a picture
   of another size) taken again once, then the picture over black alone; the menu left during the
   pass ending it and the next visit starting again (`title_logo`).
@@ -1077,8 +1081,10 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   the slow-scene dump's trigger over a block's figures (each condition alone: kind, window, movie,
   three a run, 30 s, 8 replays, the bound off; the bound itself is not over; the display wait taken from
   the work; no negative work; a later dump at 1.5 times the last block's work: 74.9 against 50
-  not due, 75 due, the count at 3 not due, the first at any last work), the replay pick (a span
-  at or above the block's mean) and its log line with the span and "dump 2 of 3" (`window_scene`).
+  not due, 75 due, the count at 3 not due, the first at any last work), the replay pick (a vertex
+  work at or above the block's mean) and its log line with the vertex work and "dump 2 of 3", and
+  a block's share of a counter (the difference, or the value itself after a restart from 0)
+  (`window_scene`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the
   crash chain to the box, the variable and the relaunch environment, the `dst` field of a
   pipeline's or a start-up batch's note, its VU vertex pre-pass keys and modules, the skin check's
@@ -1098,7 +1104,7 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   store, wanted on another label, not on an empty label with the files present, wanted on an empty
   label without the PNG; the paths, the copies, the stamp (`dev` for an empty label), no `.tmp`
   left, the refusals, and the capture guard `ico_app_icon_picture_plain` (CRT filter on or off at
-  strength 0, each of the four tone values off 50, 0 read as 50) (`app_icon_files`).
+  strength 0, each of the four tone values off 50, 0 read as 50, Upscaling on) (`app_icon_files`).
 - `rd_png_mem_test.c` (`port/render/test`): `rd_write_png_mem` against the exact bytes the file
   writer produced before the split (a 2 x 2 image, RGBA and RGB), equal to the file writer's bytes
   for a multi-block image, a round trip through `texpack_load_png` with a padded pitch, and the

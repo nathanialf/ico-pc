@@ -342,6 +342,22 @@ static void edgeGuard(Replay *r, RhiCommandList cl, RdTargetRec *t)
 
 /* ----------------------------------------------------------- the marker */
 
+/* FSR 3.1 dispatched while the VU vertex pre-pass is off ([dev] vu_prepass
+ * = false, a failed self-test, a record that could not be made): no draw
+ * gets its second record, so VELOCITY stays 0 and every moving object
+ * trails.  One line each time that state begins. */
+static void prepassNote(void)
+{
+    static bool told;
+    const bool off = rd__upscale_by_fsr3() && !g_rd.vuPrepass;
+    if (off && !told) {
+        rd__log("FSR 3.1: the vertex pre-pass is off, so moving objects carry no motion: expect "
+                "trails (%s)",
+                g_rd.vuPrepassWhy[0] ? g_rd.vuPrepassWhy : "no reason recorded");
+    }
+    told = off;
+}
+
 void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
 {
     if (!s_up.split) {
@@ -404,7 +420,13 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
     in.displaySy = s_up.geom.sy;
     (void)rd__frame_jitter_get(in.jitter);
     const bool resized = in.outW != s_up.lastW || in.outH != s_up.lastH;
-    in.reset = s_up.stats.dispatched == 0u || resized || rd__velocity_reset();
+    /* a new history: decided from the frame replayed here (its cut, and the
+     * attach's mark on its own marker: the first frame, a frame after the
+     * motion vectors went on), never from a value the game thread's attach
+     * of a later frame may already have changed (interpolation off) */
+    const bool frameCut = f && (f->cut != 0 || (f->hasCamera && f->camera.cut != 0));
+    in.reset = s_up.stats.dispatched == 0u || resized || frameCut ||
+               (c->u[2] & RD_UPSCALE_NO_HISTORY) != 0u;
     in.presents = s_up.since + 1u;
     in.frame = frame;
     /* the frame camera (rd_frame.c rd__fill_camera_cb's): near, far, and
@@ -423,11 +445,13 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
         return;
     }
     rd__transition(cl, s_up.out, &s_up.outState, RHI_STATE_SHADER_READ);
+    prepassNote();
     s_up.madeReplay = g_rd.replayCounter;
     s_up.since = 0;
     s_up.lastW = in.outW;
     s_up.lastH = in.outH;
     s_up.stats.dispatched++;
+    s_up.stats.resets += in.reset ? 1u : 0u;
     s_up.stats.outW = in.outW;
     s_up.stats.outH = in.outH;
     s_up.stats.colorW = in.colorW;
@@ -530,5 +554,9 @@ void rd__upscale_free(void)
     s_up.lastW = s_up.lastH = 0;
     memset(&s_up.geom, 0, sizeof(s_up.geom));
     rd__depth_copy_free(&s_up.depth);
-    rd__fsr3_free(); /* FSR 3.1's context (rd_fsr3.c): destroyed once the GPU is done with it */
+    /* FSR 3.1's context (rd_fsr3.c): kept while FSR 3.1 stays in force with
+     * the split (the next dispatch uses it at the same sizes and flags),
+     * else destroyed once the GPU is done with it.  rd__apply_display has
+     * put the new state in force before the targets are made again */
+    rd__fsr3_free(s_up.split && rd__upscale_by_fsr3());
 }

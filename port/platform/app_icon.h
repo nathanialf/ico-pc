@@ -64,10 +64,14 @@ int ico_app_icon_wanted_at(const char *dir, const char *discId, const char *labe
  * adjustments (Picture page: gamma, brightness, contrast, saturation, 1..100,
  * 50 the game's own, 0 read as 50) are all neutral.  The capture's white
  * background must come back as 255; the filter or the tone would move it and
- * the matte with it.  Screen softening is fine (a blur of a flat field is
- * flat).  ico_app_icon_wanted adds this to its answer. */
+ * the matte with it.  Upscaling must be off too (upscaleOn 0): FSR 1.0's
+ * edge-adaptive scale and sharpening are not linear in the background
+ * colour (fringes at the letter's edge), and FSR 3.1 carries its history
+ * and its jitter from the shot over black to the one over white.  Screen
+ * softening is fine (a blur of a flat field is flat).  ico_app_icon_wanted
+ * adds this to its answer. */
 int ico_app_icon_picture_plain(int crtOn, float crtStrength, int gamma, int brightness,
-                               int contrast, int saturation);
+                               int contrast, int saturation, int upscaleOn);
 
 /* Writes the set for a disc into <dir>/icon/: the PNG (png[0..pngN), the
  * 256 x 256 file as encoded), the .ico, the current copies, then the
@@ -83,7 +87,11 @@ int ico_app_icon_path_at(char *out, size_t size, const char *dir, const char *na
 
 /* 1 when the current disc's icon is to be made: the user folder
  * (ico_host_pref_dir), ico_region_cur()->disc_id and ICO_VERSION_LABEL
- * through ico_app_icon_wanted_at. */
+ * through ico_app_icon_wanted_at; 0 when it is not (made and current, or no
+ * user folder or disc); ICO_APP_ICON_NOT_PLAIN when it is to be made but the
+ * picture is not plain now (ico_app_icon_picture_plain: the CRT filter, a
+ * colour adjustment or Upscaling on), so the capture asks again later. */
+#define ICO_APP_ICON_NOT_PLAIN (-1)
 int ico_app_icon_wanted(void);
 
 /* a = the title frame over black, b = the same tick over white (RGBA8, w x

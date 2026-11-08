@@ -18,7 +18,10 @@
  *             however many draws; a steady replay records
  *             exactly BARRIERS_REPLAY pipeline barriers (BARRIERS_RECORD
  *             below); the screen-prim commands make
- *             SCREEN_CMDS draws one by one and SCREEN_DRAWS merged;
+ *             SCREEN_CMDS draws one by one and SCREEN_DRAWS merged; the
+ *             note a replay leaves at its end for the slow-scene dump
+ *             (rd_perf_last_replay_work) is that replay's frame and VU
+ *             counts, here and in the prepass phase (its vertices not 0);
  *   record    200 frames recorded and closed as the game does (rd_end_frame
  *             replays each): from the fifth on, when the frame ring and the
  *             temporary target pool are warm, nothing is created or
@@ -473,6 +476,25 @@ static RdPerfRecord replayOnce(const RdFrame *f)
     const RdPerfRecord r = g_rdPerf; /* the record the replay just closed */
     while (rd_perf_pop(NULL)) {}
     return r;
+}
+
+/* The slow-scene dump's pick (rd_perf_last_replay_work, issue 179): the
+ * note a replay leaves at its end is that replay's own, its frame and its
+ * CPU-side VU counts, there before the record's GPU times; with the
+ * pre-pass (pre true) its vertices are the record's and not 0 */
+static void checkReplayWork(const RdFrame *f, const char *what, bool pre)
+{
+    const RdPerfRecord r = replayOnce(f);
+    RdReplayWork w;
+
+    memset(&w, 0, sizeof(w));
+    CHECK(rd_perf_last_replay_work(&w) && w.replay == r.replay && w.frame == r.frame &&
+              w.frame == f->number && w.vuTris == r.vuTris && w.vuPreVertices == r.vuPreVertices,
+          "%s: the replay's work note says replay %u frame %u, %u triangles, %u pre-pass vertices; "
+          "the record replay %u frame %u, %u, %u",
+          what, w.replay, w.frame, w.vuTris, w.vuPreVertices, r.replay, r.frame, r.vuTris,
+          r.vuPreVertices);
+    CHECK(!pre || w.vuPreVertices > 0, "%s: no pre-pass vertices in the work note", what);
 }
 
 static void checkExactCounters(const RdFrame *f)
@@ -1468,6 +1490,7 @@ static int synthetic(void)
         while (rd_perf_pop(&r)) {}
     }
     checkExactCounters(rd__last_frame());
+    checkReplayWork(rd__last_frame(), "replay", false);
     print("replay (first 2)", &first);
     print("replay (steady)", &rest);
     CHECK(rest.created == 0 && rest.destroyed == 0 && rest.allocs == 0,
@@ -1558,6 +1581,9 @@ static int synthetic(void)
         }
         checkGroups("prepass", &rest);
         checkScreen("prepass", &rest);
+        if (pf) {
+            checkReplayWork(pf, "prepass", true);
+        }
         rd__set_vu_prepass(false);
     }
 

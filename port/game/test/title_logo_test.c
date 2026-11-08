@@ -20,12 +20,16 @@
  *             renderer, the curtain and the icon files stubbed: the pass
  *             off leaves the old table; ICO_TITLE_ICON_WAIT ticks on layout
  *             12 or 13 (counted again after the menu left) start it when
- *             an icon is wanted, never when not; on, every model but "I"
+ *             an icon is wanted, never when not; a picture not plain
+ *             (ICO_APP_ICON_NOT_PLAIN) leaves it idle and asks again after
+ *             another wait, not done for the run; on, every model but "I"
  *             is left out (title_back, st26a_p1, C, I_f, I_sd); the shot over
  *             black is armed after the settle, the clear turns white once
  *             it came, the shot over white after the settle again, then the
- *             pass off, the pair delivered, the curtain off after the
- *             hold, done for the run; an empty answer or none within the
+ *             pass off, the pair delivered, the curtain off at the first
+ *             present past the pass's frames (not over a blend with one;
+ *             after ICO_TITLE_ICON_HOLD_MAX ticks without one), done for
+ *             the run; an empty answer or none within the
  *             wait is armed again, and after ICO_TITLE_ICON_RETRIES the
  *             run gives up; "the frames differ" takes the pair again once,
  *             then the picture over black alone; the menu left during the
@@ -211,9 +215,13 @@ static struct {
     int answer; /* the next take's: none, NULL, a picture of answerByte */
     uint8_t answerByte;
     uint32_t answerW;
-    int deliverR[2];  /* deliver's answers in turn */
-    int seenA, seenB; /* the first byte of the pair deliver got */
-    int seenSingle;   /* the first byte deliver_single got */
+    int deliverR[2];       /* deliver's answers in turn */
+    int seenA, seenB;      /* the first byte of the pair deliver got */
+    int seenSingle;        /* the first byte deliver_single got */
+    uint32_t passLast;     /* pass_last's answer */
+    int presentValid;      /* presented's: a present was made */
+    uint32_t presentFrame; /* and its frame and alpha */
+    float presentAlpha;
 } st;
 
 static int stWanted(void)
@@ -279,8 +287,20 @@ static int stSingle(const uint8_t *a, int w, int h)
     return ICO_APP_ICON_OK;
 }
 
-static const IcoTitleIconOps kStub = {stWanted, stArm,     stTake,    stCancel,
-                                      stPass,   stCurtain, stDeliver, stSingle};
+static uint32_t stPassLast(void)
+{
+    return st.passLast;
+}
+
+static int stPresented(uint32_t *frame, float *alpha)
+{
+    *frame = st.presentFrame;
+    *alpha = st.presentAlpha;
+    return st.presentValid;
+}
+
+static const IcoTitleIconOps kStub = {stWanted,  stArm,     stTake,   stCancel,   stPass,
+                                      stCurtain, stDeliver, stSingle, stPassLast, stPresented};
 
 static void iconStart(int wanted)
 {
@@ -289,6 +309,12 @@ static void iconStart(int wanted)
     st.wanted = wanted;
     st.answerW = 4;
     st.deliverR[0] = st.deliverR[1] = ICO_APP_ICON_OK;
+    /* the presents already past the pass's frames: the curtain comes off
+       at the first tick after the pass (testIconCurtain holds them back) */
+    st.passLast = 10;
+    st.presentValid = 1;
+    st.presentFrame = 12;
+    st.presentAlpha = 1.0f;
     ico_title_icon_set_ops(&kStub);
 }
 
@@ -365,6 +391,21 @@ static void testIconSteps(void)
     CHECK(ico_title_icon_state() == ICO_TITLE_ICON_DONE && !st.pass && !st.curtain && st.arms == 0,
           "icon: not wanted, nothing captured");
 
+    /* wanted but the picture not plain (the CRT filter, a colour
+       adjustment or Upscaling on): idle, not done for the run; asked again
+       after another wait, and the capture starts once the picture is plain */
+    iconStart(ICO_APP_ICON_NOT_PLAIN);
+    menuTicks(ICO_TITLE_ICON_WAIT);
+    CHECK(ico_title_icon_state() == ICO_TITLE_ICON_IDLE && !st.pass && !st.curtain && st.arms == 0,
+          "icon: not plain: idle, nothing captured");
+    menuTicks(ICO_TITLE_ICON_WAIT - 1);
+    CHECK(ico_title_icon_state() == ICO_TITLE_ICON_IDLE && !st.pass,
+          "icon: not plain: the wait counted again from 0");
+    st.wanted = 1; /* the settings changed */
+    menuTicks(1);
+    CHECK(ico_title_icon_pass_on() && isBlack() && st.curtain,
+          "icon: plain again: the capture starts at the next wait's end");
+
     /* the wait: counted on layout 12/13 only, again after the menu left */
     iconStart(1);
     frame(TITLE, 55, 0); /* the intro's layout */
@@ -402,9 +443,9 @@ static void testIconSteps(void)
           "icon: the pair delivered (over black, over white)");
     CHECK(!st.pass && !ico_title_icon_pass_on() && st.curtain,
           "icon: the pass off at once, the curtain held");
-    menuTicks(ICO_TITLE_ICON_HOLD);
+    menuTicks(1);
     CHECK(!st.curtain && ico_title_icon_state() == ICO_TITLE_ICON_DONE,
-          "icon: the curtain off after %d ticks, done", ICO_TITLE_ICON_HOLD);
+          "icon: the curtain off at the first present past the pass, done");
     menuTicks(ICO_TITLE_ICON_WAIT * 2);
     CHECK(st.arms == 2 && !st.pass, "icon: done for the run");
     ico_title_icon_set_ops(NULL);
@@ -425,7 +466,7 @@ static void testIconRetries(void)
     answer(ANS_NULL, 0);
     CHECK(!st.pass && st.curtain && st.delivers == 0 && st.singles == 0,
           "icon: drop %d: given up, the pass off", ICO_TITLE_ICON_RETRIES + 1);
-    menuTicks(ICO_TITLE_ICON_HOLD);
+    menuTicks(1);
     CHECK(!st.curtain && ico_title_icon_state() == ICO_TITLE_ICON_DONE,
           "icon: given up for the run");
 
@@ -456,7 +497,7 @@ static void testIconRetries(void)
     answer(ANS_PICTURE, 0xC2);
     CHECK(st.delivers == 2 && st.singles == 1 && st.seenSingle == 0x32 && !st.pass,
           "icon: it differs again: the second picture over black alone");
-    menuTicks(ICO_TITLE_ICON_HOLD);
+    menuTicks(1);
     CHECK(ico_title_icon_state() == ICO_TITLE_ICON_DONE && !st.curtain, "icon: then done");
 
     /* a picture of another size over white: as the pair differing */
@@ -498,6 +539,63 @@ static void testIconRetries(void)
     ico_title_icon_set_ops(NULL);
 }
 
+/* the curtain comes off at the first present past the pass's frames, not
+   after a count of ticks; a blend with a pass frame is not past them; the
+   safety net lifts it after ICO_TITLE_ICON_HOLD_MAX ticks */
+static void testIconCurtain(void)
+{
+    /* the rule alone */
+    CHECK(!ico_title_icon_present_clean(10, 1.0f, 10), "icon: the pass's last frame is not clean");
+    CHECK(!ico_title_icon_present_clean(3, 1.0f, 10), "icon: an older frame is not clean");
+    CHECK(ico_title_icon_present_clean(11, 1.0f, 10), "icon: the next frame at alpha 1 is clean");
+    CHECK(!ico_title_icon_present_clean(11, 0.5f, 10) &&
+              !ico_title_icon_present_clean(11, 0.0f, 10),
+          "icon: the next frame blended with the pass's last is not clean");
+    CHECK(ico_title_icon_present_clean(12, 0.25f, 10),
+          "icon: a blend of two later frames is clean");
+
+    iconStart(1);
+    menuTicks(ICO_TITLE_ICON_WAIT);
+    untilArmed(20);
+    answer(ANS_PICTURE, 0x61);
+    untilArmed(20);
+    st.passLast = 40; /* the pass ends with frame 40 open */
+    st.presentFrame = 38;
+    answer(ANS_PICTURE, 0xE1); /* the pair: the pass off, the curtain held */
+    CHECK(!st.pass && st.curtain && st.delivers == 1, "icon: curtain: the pass off, held");
+    menuTicks(5); /* presents of frames walked before the pass went off */
+    st.presentFrame = 40;
+    menuTicks(5);
+    CHECK(st.curtain && ico_title_icon_state() == ICO_TITLE_ICON_CURTAIN,
+          "icon: curtain: held while the presents show the pass's frames (10 ticks)");
+    st.presentFrame = 41;
+    st.presentAlpha = 0.5f; /* frame 41 blended with 40 */
+    menuTicks(1);
+    CHECK(st.curtain, "icon: curtain: held over a blend with the pass's last frame");
+    st.presentAlpha = 1.0f;
+    menuTicks(1);
+    CHECK(!st.curtain && ico_title_icon_state() == ICO_TITLE_ICON_DONE,
+          "icon: curtain: off at the first present past the pass, done");
+
+    /* no present past the pass at all (none made, or the frames stopped):
+       the safety net */
+    iconStart(1);
+    menuTicks(ICO_TITLE_ICON_WAIT);
+    untilArmed(20);
+    answer(ANS_PICTURE, 0x62);
+    untilArmed(20);
+    st.presentValid = 0;
+    answer(ANS_PICTURE, 0xE2);
+    menuTicks(ICO_TITLE_ICON_HOLD_MAX - 1);
+    CHECK(st.curtain, "icon: curtain: no present yet after %d ticks: held",
+          ICO_TITLE_ICON_HOLD_MAX - 1);
+    menuTicks(1);
+    CHECK(!st.curtain && ico_title_icon_state() == ICO_TITLE_ICON_DONE,
+          "icon: curtain: off after %d ticks without a present past the pass",
+          ICO_TITLE_ICON_HOLD_MAX);
+    ico_title_icon_set_ops(NULL);
+}
+
 int main(void)
 {
     testModels();
@@ -508,6 +606,7 @@ int main(void)
     testIconSkip();
     testIconSteps();
     testIconRetries();
+    testIconCurtain();
     if (failures) {
         printf("title_logo_test: %d failure(s)\n", failures);
         return 1;

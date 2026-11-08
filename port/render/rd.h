@@ -423,7 +423,7 @@ typedef struct RdSettings {
      * Original preset's 1x only Native AA applies.  0 in a zeroed
      * RdSettings: Native AA */
     uint8_t upscaleQuality;
-    /* A temporal upscaler (rd_upscale.h; [dev] upscale_test this release):
+    /* A temporal upscaler (rd_upscale.h; FSR 3.1 by Upscaling, or [dev] upscale_test):
      * the Resolution row is the display's scale and the scene is drawn at it
      * over the upscaler's ratio.  Resolution "auto" keeps the display at the
      * window and steps this cap on the scene's vertical scale down instead
@@ -542,9 +542,10 @@ typedef enum RdUpscaleQuality {
     RD_UPSCALE_Q_COUNT
 } RdUpscaleQuality;
 
-/* Whether the device can run FSR 3.1 (rd_upscale_temporal.c): false on every
- * backend in this version (the temporal upscaler is not built in), logging
- * why once.  The Options page offers the value only when this is true. */
+/* Whether the device can run FSR 3.1 (rd_fsr3.c): a build with the
+ * FidelityFX SDK (ICO_FFX) on Vulkan 1.2 with the compute capabilities and
+ * the FidelityFX extensions; false elsewhere, logging why once.  The Options
+ * page offers the value only when this is true. */
 bool rd_upscale_temporal_supported(void);
 /* True when FSR 3.1 is in force, so MSAA and SSAA are drawn off (the
  * Anti-aliasing row says "(off: FSR 3.1)") */
@@ -1492,9 +1493,15 @@ bool rd_draw_filter_keeps(RdKey key);
  *                     untouched.  NULL: off (the default), everything as
  *                     before: a frame recorded after it is byte-identical
  *                     to one recorded with the pass never on
- * rd_icon_pass_on       whether it is on (the recording thread's view) */
+ * rd_icon_pass_on       whether it is on (the recording thread's view)
+ * rd_icon_pass_last_frame  the newest frame number given out when the pass
+ *                     was last turned on or off (the frame open then, or
+ *                     the last begun): a frame numbered above it at the
+ *                     pass's off was begun after it and holds none of it
+ *                     (title_icon.c lifts its curtain at a present past it) */
 void rd_set_icon_pass(const uint8_t *clearRgba);
 bool rd_icon_pass_on(void);
+uint32_t rd_icon_pass_last_frame(void);
 
 /* ------------------------------------------------------------- lists */
 
@@ -2110,11 +2117,14 @@ bool rd_dump_retained(const char *lostPath, const char *beforePath, uint32_t *lo
                       uint32_t *beforeFrame);
 /* One retained frame by number (the slow-scene dump, window_host.c
  * slow_scene_write, issue 179): the frame `number` to path when the ring
- * still holds it as the last closed frame or the one before; otherwise the
- * last closed frame is written instead.  The number written into *dumped
- * (0: nothing written; may be NULL), so a caller sees which of the two
- * happened (dumped != number).  True when a frame was written. */
+ * still holds it as the last closed frame or the one before; nothing when
+ * it does not (rd_frame_retained says which beforehand).  The number
+ * written into *dumped (0: nothing written; may be NULL).  True when the
+ * frame was written. */
 bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped);
+/* Whether the ring holds frame `number` as the last closed frame or the one
+ * before (the thread that records frames) */
+bool rd_frame_retained(uint32_t number);
 
 /* The loss bisect (docs/port/RENDER.md, "The loss bisect"): the frame of
  * the dump at path replayed in this renderer one pass longer each time
@@ -2982,6 +2992,19 @@ const char *rd_glow_fold_why_text(uint32_t why);
  * popped or not; a picture handed over is still running when the step
  * ends, so the window's pacing reads rd_frame_post_last_take instead). */
 double rd_last_replay_ms(void);
+
+/* The CPU-side vertex work of the replay finished last (the slow-scene
+ * dump's pick, window_host.c slow_scene_poll, issue 179): its replay number,
+ * the frame it drew (RdPerfRecord.frame), its VU triangles and the
+ * pre-pass's vertices (vuTris, vuPreVertices), noted at the replay's end
+ * (rd__perf_end), before its GPU times come and while the ring still holds
+ * that frame as the last closed or the one before.  Any thread.  False when
+ * no replay has been noted yet or the note was being written. */
+typedef struct RdReplayWork {
+    uint32_t replay, frame, vuTris, vuPreVertices;
+} RdReplayWork;
+
+bool rd_perf_last_replay_work(RdReplayWork *out);
 
 /* The game thread's own cost of closing a frame since the last take:
  * rd_end_frame's walk of the frame for its end state and the rest of its

@@ -183,8 +183,9 @@ dispatched, none refused and a reduction remapped ([RENDER.md](RENDER.md#the-ups
 `rd_replay_tool_fsr3`, which replays the dump at `--enhanced --fsr3 quality --present 1280x960
 --stats` under the validation layer and passes on `upscale: fsr3 ran N presents (context render WxH
 -> display WxH, ..., refused 0, failed 0, ...), validation errors 0` (FSR 3.1 dispatched by the
-FidelityFX upscaler; 77 where it cannot run: a build without it, a device without Vulkan 1.2 or the
-extensions; [DISPLAY.md](DISPLAY.md#fsr-31-upscaling)).
+FidelityFX upscaler; 77 only where it cannot be expected: a build without it, not Vulkan, a device
+below Vulkan 1.2; a build with it on a 1.2 device that refuses it exits 1 with the reason, and
+`rd_present`'s FSR 3.1 cases fail there too; [DISPLAY.md](DISPLAY.md#fsr-31-upscaling)).
 
 ## The render suite on OpenGL
 

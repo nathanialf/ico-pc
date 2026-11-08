@@ -148,9 +148,9 @@ static int tone_neutral(int v)
 }
 
 int ico_app_icon_picture_plain(int crtOn, float crtStrength, int gamma, int brightness,
-                               int contrast, int saturation)
+                               int contrast, int saturation, int upscaleOn)
 {
-    if (crtOn && crtStrength > 0.0f) {
+    if ((crtOn && crtStrength > 0.0f) || upscaleOn) {
         return 0;
     }
     return tone_neutral(gamma) && tone_neutral(brightness) && tone_neutral(contrast) &&

@@ -10,6 +10,6 @@
 
 (kept current after every merge; player words only)
 
-- On phones and tablets with Mali, PowerVR or Adreno graphics the game now works out each corner of the 3D scenery once a picture instead of up to nine times, as it already did on computers: cutscenes and busy scenes on slower phones should run faster. At start the game checks that the chip draws this way exactly as the slower way does, over several pictures in a row, and goes back to the slower way by itself if not.
+- On phones and tablets with Mali, PowerVR, Adreno or Samsung Xclipse graphics, on Macs with Apple chips and on the Raspberry Pi, the game now works out each corner of the 3D scenery once a picture instead of up to nine times, as it already did on other computers: cutscenes and busy scenes on slower phones should run faster. At start the game checks that the chip draws this way exactly as the slower way does, over several pictures in a row, and goes back to the slower way by itself if not.
 - On Snapdragon phones and tablets, the check that watches the characters for missing parts now steps back once it has seen nothing wrong for a while, so it costs less each picture, and the driver setting it may have saved is tried again at a later start instead of kept forever. The log now shows what the check costs each picture.
 - The file the game saves by itself from a slow scene now holds a picture from the heavy part of the scene, and up to three such files are written each time you start the game, each from a heavier moment than the one before.

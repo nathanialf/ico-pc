@@ -1268,10 +1268,46 @@ static void walkBreakdown(const RdPerfRecord *r)
             s_slow == 8u ? "; from here every 100th is written" : "");
 }
 
+/* rd_perf_last_replay_work's note: written by the thread that replays
+   (rd__perf_end), read by any; seq is odd while a write is in progress.
+   Every field is read and written with the atomic builtins */
+static struct {
+    uint32_t seq, replay, frame, vuTris, vuPreVertices;
+} s_work;
+
+static void workNote(const RdPerfRecord *r)
+{
+    const uint32_t seq = __atomic_load_n(&s_work.seq, __ATOMIC_RELAXED);
+
+    __atomic_store_n(&s_work.seq, seq + 1u, __ATOMIC_RELAXED);
+    __atomic_thread_fence(__ATOMIC_RELEASE);
+    __atomic_store_n(&s_work.replay, r->replay, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_work.frame, r->frame, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_work.vuTris, r->vuTris, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_work.vuPreVertices, r->vuPreVertices, __ATOMIC_RELAXED);
+    __atomic_store_n(&s_work.seq, seq + 2u, __ATOMIC_RELEASE);
+}
+
+bool rd_perf_last_replay_work(RdReplayWork *out)
+{
+    const uint32_t s1 = __atomic_load_n(&s_work.seq, __ATOMIC_ACQUIRE);
+
+    if (s1 & 1u) {
+        return false;
+    }
+    out->replay = __atomic_load_n(&s_work.replay, __ATOMIC_RELAXED);
+    out->frame = __atomic_load_n(&s_work.frame, __ATOMIC_RELAXED);
+    out->vuTris = __atomic_load_n(&s_work.vuTris, __ATOMIC_RELAXED);
+    out->vuPreVertices = __atomic_load_n(&s_work.vuPreVertices, __ATOMIC_RELAXED);
+    __atomic_thread_fence(__ATOMIC_ACQUIRE);
+    return __atomic_load_n(&s_work.seq, __ATOMIC_RELAXED) == s1 && out->replay != 0;
+}
+
 void rd__perf_end(void)
 {
     RdPerfRecord *r = &g_rdPerf;
     s_recOpen = false;
+    workNote(r); /* its CPU-side counts are final here, its GPU times come later */
     r->totalMs = rd__now_ms() - s_t0 + r->interpMs;
     r->pipelineCreates = rd__stats_here()->pipelineCreates - s_pipelineCreates;
     r->a1xDraws = g_rd.above1xDraws - s_a1xDraws;

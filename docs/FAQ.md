@@ -262,8 +262,8 @@ a Wayland desktop that entry is also what gives the window its icon). The progra
 Mac app in Finder) keeps a plain icon, because the icon does not exist
 until your disc has made it. It is made again after an update, and
 waits while the CRT filter or a Picture colour setting (Gamma, Brightness,
-Contrast or Saturation) is changed: it is made at a later title screen once
-they are back to normal. On Android the app keeps its plain icon, and
+Contrast or Saturation) is changed, or while Upscaling is on: it is made at
+the title screen once they are back to normal. On Android the app keeps its plain icon, and
 a Wayland session shows no window icon until the menu entry exists.
 
 ## My browser or Windows says the download is dangerous

@@ -145,7 +145,8 @@ typedef struct RdUpscaleIn {
     uint32_t outW, outH;
     float renderSx, renderSy, displaySx, displaySy;
     float jitter[2];   /* texels of the render target, x right, y down (rd_jitter.h) */
-    bool reset;        /* a new history: a cut, the first dispatch, a new size */
+    bool reset;        /* a new history: the frame's cut or its marker's RD_UPSCALE_NO_HISTORY,
+                          the first dispatch, a new size */
     uint32_t presents; /* presents since the last dispatch, this one included (re-shown ones) */
     uint32_t frame;    /* the frame's number */
     /* the frame camera (false: none): near and far planes in the game's
@@ -167,6 +168,7 @@ const char *rd__upscale_hook_name(void);
 typedef struct RdUpscaleStats {
     uint32_t points;               /* markers met with the split in force */
     uint32_t dispatched;           /* of them, UPSCALED written */
+    uint32_t resets;               /* of them, told a new history (RdUpscaleIn.reset) */
     uint32_t refused;              /* not dispatched (logged: the first 8, then every 100th) */
     uint32_t remapped;             /* reduction sprites that read UPSCALED */
     uint32_t guardCols, guardRows; /* edge guard copies */
