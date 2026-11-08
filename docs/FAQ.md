@@ -341,6 +341,15 @@ take several minutes. [The Android guide](ANDROID.md) has the details.
 On an iPhone with iOS 15 or newer, it runs inside LiveContainer.
 [How to install it](../README.md#iphone).
 
+## Does it work on my ARM Linux handheld?
+
+Only if its graphics driver offers Vulkan 1.1 or later and the system is
+fairly new (Debian 13, Ubuntu 24.04 or newer). The game does not draw with
+OpenGL ES, which is all that many handhelds offer (for example the ones built
+on the RK3326 chip with Mali-G31 graphics), so on those it stops with the
+message that it needs a graphics driver with Vulkan 1.1 or later. On an older
+system it does not start at all; the libraries it needs are too new.
+
 ## Can I use ReShade?
 
 Yes, on Windows. On Linux, vkBasalt does a similar job.

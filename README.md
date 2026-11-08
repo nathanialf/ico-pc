@@ -60,7 +60,7 @@ the PS2's unless you choose Original. The mouse camera starts on.
 | Windows 10 or 11, 64-bit, with a graphics card from NVIDIA, AMD or Intel | `-win.zip` (or `-win-portable.zip`) | The main test machine. Draws with Vulkan, or Direct3D 12 or OpenGL if you choose it in Options > Graphics ([how](docs/OPTIONS.md#choosing-the-renderer)). A Direct3D 11 choice is there too but has not been tried on any computer. |
 | Linux PC, 64-bit x86: Debian 13, Ubuntu 24.04 or newer | `-linux-x86_64.AppImage`, or `-linux.tar.gz` (or `-linux-portable.tar.gz`) | Built and checked by the automatic tests for every release. Draws with Vulkan, or OpenGL if your graphics driver has no Vulkan ([how](docs/OPTIONS.md#choosing-the-renderer)); OpenGL has only been checked on a software renderer. |
 | Steam Deck | `-linux-x86_64.AppImage` or `-linux.tar.gz` | Supported; [Steam Deck tips](docs/TROUBLESHOOTING.md#steam-deck). |
-| Linux handheld or board, 64-bit ARM: Debian 13, Ubuntu 24.04 or newer | `-linux-aarch64.AppImage`, or `-linux-arm64.tar.gz` (or `-linux-arm64-portable.tar.gz`) | Built for every release. |
+| Linux handheld or board, 64-bit ARM: Debian 13, Ubuntu 24.04 or newer, with a Vulkan graphics driver | `-linux-aarch64.AppImage`, or `-linux-arm64.tar.gz` (or `-linux-arm64-portable.tar.gz`) | Built for every release. The graphics driver must offer Vulkan 1.1; a device whose driver offers only OpenGL ES (many Mali handhelds, such as the RK3326 family) cannot run the game. |
 | Android phone or tablet, 64-bit, Android 8 or newer with Vulkan 1.0 graphics (usually 2017 or newer) | `-android.apk` | Supported. It can be slower than on a PC. Graphics driver packages need Android 9 or newer. [The Android guide](docs/ANDROID.md). |
 | iPhone, iOS 15 or newer, through [LiveContainer](https://github.com/LiveContainer/LiveContainer) | `-ios-unsigned.ipa` | The maintainer has no Apple device, so these builds are not tested here; problem reports are welcome. |
 | Apple-silicon Mac, macOS 12 or newer | `-macos-arm64.dmg` (or `-macos-arm64.zip`) | Not tested by the maintainer either. The first time, right-click **ICO** and choose **Open** ([how](#mac)). |
@@ -129,8 +129,9 @@ Deck tips](docs/TROUBLESHOOTING.md#steam-deck).
 
 On a 64-bit ARM Linux handheld or board, download the file whose name ends
 in `-linux-aarch64.AppImage` (or `-linux-arm64.tar.gz`) instead and follow
-the same steps. It also needs a fairly new system: Debian 13, Ubuntu 24.04
-or newer.
+the same steps. It also needs a fairly new system (Debian 13, Ubuntu 24.04
+or newer) and a graphics driver with Vulkan 1.1 or later: the game does not
+draw with OpenGL ES, which is all that many ARM handhelds offer.
 
 ### Android
 
