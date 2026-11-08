@@ -83,9 +83,11 @@ curtain comes off`. A pair refused as moved
 cuts the icon from the picture over black alone (`ico_app_icon_deliver_single`). An empty answer
 (the present dropped it) or none within 60 ticks arms the shot again, at most three times in a run;
 then the run gives up. Leaving the menu during the pass (New Game, Continue, a Settings page) ends
-it, and the next time the menu has been up for 30 ticks it starts again. Only the desktop window
-build captures; on Android and iOS nothing is captured (the launcher icon is the package's; the
-capture is compiled out under `__ANDROID__` and `ICO_IOS`).
+it, and the next time the menu has been up for 30 ticks it starts again. The desktop window builds
+and Android capture (the files land in `<files>/icon/` on Android, `ico_host_pref_dir`); iOS captures
+nothing (the capture is compiled out under `ICO_IOS`). The Android video defaults are the plain
+picture (Original preset: no Upscaling, CRT off, the four Picture colour settings at their defaults),
+so the capture does not wait there.
 
 The log lines: `ico_pc: icon: capturing the title's I (pass 1 of 2)` and `(pass 2 of 2)`;
 `ico_pc: icon: made from the title's I (<w>x<h> pictures)`; `ico_pc: icon: the two pictures
@@ -127,9 +129,10 @@ a file that does not decode: nothing is done and SDL's default stays. It logs `w
 <path>` on success and a `window: icon: ...` line on a read or SDL failure. It runs at the end of
 `window_attach` (`window_host.c`), so at the start and again when Apply reopens the window for another
 renderer, and in `ico_window_pump` whenever `ico_app_icon_changed_take()` is 1, which is the run
-that made the icon (`SDL_SetWindowIcon` is main-thread only; the pump is the main thread). Android
-and iOS keep their packaged launcher icons (the function does nothing there; the capture is not
-compiled on either).
+that made the icon (`SDL_SetWindowIcon` is main-thread only; the pump is the main thread). iOS keeps its packaged launcher icon (the function does nothing there; the capture is not
+compiled). On Android the function hands the PNG's path to `ico_android_task_icon`
+(`host_android.c`), which calls `IcoActivity.setTaskIcon` (the recents card, below); the log line is
+`window: icon: the recents card is set from <path>`, or `window: icon: <reason>`.
 
 | platform | what the icon reaches |
 | --- | --- |
@@ -137,7 +140,8 @@ compiled on either).
 | Linux, X11 | the window and the taskbar through `_NET_WM_ICON` |
 | Linux, Wayland | nothing from the window: SDL 3.4's Wayland has no toplevel-icon support (its library holds no `xdg_toplevel_icon`), so a Wayland desktop takes the icon from the applications-menu entry named after the app id (`com.defnf.icopc`), which the Extras row writes ([below](#the-applications-menu)) |
 | macOS | SDL's Cocoa windows have no icon of their own, so `app_icon_mac.m` calls `[NSApp setApplicationIconImage:]` with the PNG: the Dock icon while the game runs. The bundle's Finder icon stays the generic one: no `CFBundleIconFile`, and the bundle is ad-hoc signed with nothing in `Resources` that is made at run time. CMake compiles the `.m` (`enable_language(OBJC)`) and links `-framework AppKit` |
-| Android, iOS | unchanged: on Android the app keeps its plain icon (the launcher icon is a compiled resource, and the recents icon would need JNI plumbing and an untested capture on phones) |
+| Android | the recents card (the task switcher): `ActivityManager.TaskDescription` with the PNG as a bitmap, set again in `onStart` because a recreated activity resets it. The launcher (home-screen) icon is a compiled resource and stays the plain one; some OEM launchers ignore a task description's icon |
+| iOS | unchanged: the app keeps its packaged icon |
 
 ### Add to Steam
 

@@ -263,8 +263,8 @@ Mac app in Finder) keeps a plain icon, because the icon does not exist
 until your disc has made it. It is made again after an update, and
 waits while the CRT filter or a Picture colour setting (Gamma, Brightness,
 Contrast or Saturation) is changed, or while Upscaling is on: it is made at
-the title screen once they are back to normal. On Android the app keeps its plain icon, and
-a Wayland session shows no window icon until the menu entry exists.
+the title screen once they are back to normal. On Android the home-screen icon stays plain; the recent-apps card shows the I. A
+Wayland session shows no window icon until the menu entry exists.
 
 ## My browser or Windows says the download is dangerous
 

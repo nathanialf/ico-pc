@@ -18,11 +18,27 @@
 #include "host_fs.h"
 #include "../render/texpack.h"
 
-#if defined(__ANDROID__) || defined(ICO_IOS)
+#if defined(ICO_IOS)
 int ico_app_icon_apply(SDL_Window *win)
 {
     (void)win;
     return 0;
+}
+#elif defined(__ANDROID__)
+/* no window icon on Android: the recents card (the task switcher) takes the
+   PNG through IcoActivity.setTaskIcon.  Called on SDL's main thread (the
+   window attach and the pump), where the JNI environment is the caller's. */
+#include "android/host_android.h" /* ico_android_task_icon */
+
+int ico_app_icon_apply(SDL_Window *win)
+{
+    char path[1024];
+
+    (void)win;
+    if (ico_app_icon_current_path(path, sizeof(path), 0) != 0) {
+        return 0;
+    }
+    return ico_android_task_icon(path);
 }
 #else
 
