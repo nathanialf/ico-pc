@@ -4442,7 +4442,8 @@ static int s_mirrorChoice, s_ngpChoice; /* each row's Off (0) or On (1) */
 #define LAYOUT_VIBE_SELECT (ico_region_cur()->layout_vibe) /* la_vibe_select's screen (9) */
 #define NEW_GAME_ROW_Y 70
 #define NEW_GAME_ROW_H 34
-#define NEW_GAME_NOTE_Y 182 /* with its 30 lines, clear of the layout's bottom (212) */
+#define NEW_GAME_START_Y 146 /* eight lines under the value rows */
+#define NEW_GAME_NOTE_Y 182  /* 30 lines, clear of the bottom (212) */
 
 static int newGameScreenProc(int first, int item);
 
@@ -4463,9 +4464,8 @@ static void buildNewGameScreen(void)
         P(s_newGameRow[r][1])->leftItem = s_newGameRow[r][0];
     }
     /* the note stays the last row built */
-    s_newGameStart =
-        ui_settings_add_row(200, NEW_GAME_ROW_Y + 2 * NEW_GAME_ROW_H, 240, NEW_GAME_ROW_H, 1, -1,
-                            UI_STR_NEWGAME_START, NULL, 0.0f, UI_ALIGN_CENTER);
+    s_newGameStart = ui_settings_add_row(200, NEW_GAME_START_Y, 240, NEW_GAME_ROW_H, 1, -1,
+                                         UI_STR_NEWGAME_START, NULL, 0.0f, UI_ALIGN_CENTER);
     s_newGameNote = ui_settings_add_row(20, NEW_GAME_NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE,
                                         UI_ALIGN_CENTER);
     P(s_newGameNote)->centerX = 1;
