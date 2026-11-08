@@ -55,6 +55,10 @@ void rd__fsr3_collect(void);
 /* Why FSR 3.1 is not available ("" when it is): the log's words */
 const char *rd_upscale_temporal_why(void);
 
+/* The device runs FSR 3.1's 16-bit shaders (shaderFloat16 offered and enabled by the RHI: the
+ * compute caps' float16 with the external extensions); false in a build without it */
+bool rd__fsr3_fp16(void);
+
 /* The build carries FSR 3.1 (ICO_FFX: the FidelityFX SDK linked) */
 bool rd__fsr3_built(void);
 /* The tests and rd_replay_tool --fsr3: why FSR 3.1 cannot be expected on
