@@ -324,6 +324,7 @@ static RhiPipeline gl_pipe_create(const RhiPipelineDesc *d, float *ms)
     p->depthFormat = d->depthFormat;
     p->samples = d->samples > 1u ? d->samples : 1u;
     p->dstRead = d->dstRead;
+    p->noRaster = d->noRaster;
     /* as Vulkan's (vk_pipeline.c): depth dynamic only with a depth target,
      * blend only on a pipeline with one colour target */
     if ((d->dynamic & RHI_DYN_DEPTH) && g_gl.limits.dynamicDepth &&

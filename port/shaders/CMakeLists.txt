@@ -200,6 +200,24 @@ foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:sk
     ico_add_shader(vu_${_e}_batch_pre_vs vu_${_f}.hlsl vu_${_e}_pre_vs vertex
                    DEFINES ICO_VU_PRE_BATCH=1)
 endforeach()
+# The record's store builds (vu_X_store_pre_vs, vu_X_batch_store_pre_vs)
+# the same fourteen entries and their batch builds writing the record into
+# the frame slot's record buffer from the vertex shader (ICO_VU_REC_STORES,
+# vu_common.hlsli vu_rec_store: RWStructuredBuffer u6, a position outside
+# the clip volume), drawn by pipelines without rasterization and without a
+# fragment shader in a pass without attachments, wherever the device has
+# vertex stores (RhiLimits.vertexStores; port/render/rd_vu_record.c, [dev]
+# vu_record = targets keeps vu_pre_ps and the three RGBA32_UINT targets)
+foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:skin skin_debug:skin
+        grid:grid grid_lit:grid grid_spec:grid tri_rule:tri tri_tick:tri tri_planes:tri
+        particle:particle)
+    string(REGEX REPLACE ":.*" "" _e "${_v}")
+    string(REGEX REPLACE ".*:" "" _f "${_v}")
+    ico_add_shader(vu_${_e}_store_pre_vs vu_${_f}.hlsl vu_${_e}_pre_vs vertex
+                   DEFINES ICO_VU_REC_STORES=1)
+    ico_add_shader(vu_${_e}_batch_store_pre_vs vu_${_f}.hlsl vu_${_e}_pre_vs vertex
+                   DEFINES ICO_VU_PRE_BATCH=1 ICO_VU_REC_STORES=1)
+endforeach()
 # The draw merge's builds (vu_X_merge_vs, vu_X_merge_plain_vs, vu_merge_main_vs)
 # the mesh and grid programs' entries (both variants) and vu_main_vs read
 # every draw's VuCB and VuBoneCB from the upload ring at t5 through the run's

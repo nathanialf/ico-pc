@@ -187,6 +187,13 @@ static void testVuPre(void)
     if (strstr(line, "VU pre-pass, 1200") == NULL) {
         fprintf(stderr, "got: %s\n", line);
     }
+    /* the record stored by the vertex shaders (rd_vu_record.h): colour 1 */
+    rd__passring_push(RD_PASSK_VU_TRI, 1, 1024, 3, 0, 900, 0, 0, -1);
+    rd_passring_format(rd_passring_get(1), NULL, line, sizeof(line));
+    CHECK(strstr(line, "900 triangle slots into the record (1024x3) (stores)") != NULL);
+    if (strstr(line, "(stores)") == NULL) {
+        fprintf(stderr, "got: %s\n", line);
+    }
 }
 
 static void testBisect(void)

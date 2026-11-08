@@ -468,7 +468,7 @@ RhiCommandList rhi_begin_commands(void)
     c->externalOpen = false;
     c->pendCount = 0;
     c->pendSrc = c->pendDst = 0;
-    c->pendMemDst = 0;
+    c->pendMemDst = c->pendMemSrc = 0;
     c->presentImage = VK_NULL_HANDLE;
     c->swapImage = VK_NULL_HANDLE;
     /* a new hazard-tracking epoch ("Hazards") */
@@ -687,9 +687,15 @@ static void vkr_flush_barriers_to(VkrCmdList *c, bool late)
     if (c->pendCount == 0 && c->pendMemDst == 0) {
         return;
     }
+    /* the transfer write only with the transfer stage in the first scope: a
+       store bracket's end alone (rhi_cmd_buffer_store_end) has the vertex
+       shader there, and the validation layer refuses an access its stage
+       mask does not support */
     const VkMemoryBarrier mb = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .srcAccessMask =
+            ((c->pendSrc & VK_PIPELINE_STAGE_TRANSFER_BIT) ? VK_ACCESS_TRANSFER_WRITE_BIT : 0u) |
+            c->pendMemSrc,
         .dstAccessMask = c->pendMemDst,
     };
     vkCmdPipelineBarrier(c->cb, c->pendSrc, c->pendDst, 0, c->pendMemDst ? 1u : 0u, &mb, 0, NULL,
@@ -701,7 +707,7 @@ static void vkr_flush_barriers_to(VkrCmdList *c, bool late)
     }
     c->pendCount = 0;
     c->pendSrc = c->pendDst = 0;
-    c->pendMemDst = 0;
+    c->pendMemDst = c->pendMemSrc = 0;
 }
 
 /* The stages and accesses of t in state s (a barrier's scope on that
@@ -908,6 +914,7 @@ typedef struct VkrHz {
      * execution dependency with no barrier of its own (a copy into a
      * buffer shaders read waits for their earlier reads) */
     VkAccessFlags memDst;
+    VkAccessFlags memSrc; /* beside the transfer writes (VkrCmdList.pendMemSrc) */
     bool force;
 } VkrHz;
 
@@ -924,9 +931,10 @@ static void vkr_hz_take_pending(VkrHz *h, VkrCmdList *c)
     h->src |= c->pendSrc;
     h->dst |= c->pendDst;
     h->memDst |= c->pendMemDst;
+    h->memSrc |= c->pendMemSrc;
     c->pendCount = 0;
     c->pendSrc = c->pendDst = 0;
-    c->pendMemDst = 0;
+    c->pendMemDst = c->pendMemSrc = 0;
 }
 
 static void vkr_hz_touch(const VkrCmdList *c, VkrTexture *t)
@@ -1022,7 +1030,9 @@ static void vkr_hz_flush(VkCommandBuffer cb, const VkrHz *h)
     }
     const VkMemoryBarrier mb = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .srcAccessMask =
+            ((h->src & VK_PIPELINE_STAGE_TRANSFER_BIT) ? VK_ACCESS_TRANSFER_WRITE_BIT : 0u) |
+            h->memSrc, /* as vkr_flush_barriers_to: the access with its stage */
         .dstAccessMask = h->memDst,
     };
     vkCmdPipelineBarrier(cb, h->src, h->dst, 0, h->memDst ? 1u : 0u, &mb, h->bufCount, h->buf,
@@ -1047,7 +1057,7 @@ static void vkr_hz_copy(VkrCmdList *c, VkrTexture *srcTex, VkrBuffer *srcBuf, Vk
     VkrHz h;
     h.imgCount = h.bufCount = 0;
     h.src = h.dst = 0;
-    h.memDst = 0;
+    h.memDst = h.memSrc = 0;
     h.force = false;
     vkr_hz_take_pending(&h, c);
     if (dstBuf && dstBuf->shaderRead) {
@@ -1301,7 +1311,7 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         VkrHz h;
         h.imgCount = h.bufCount = 0;
         h.src = h.dst = 0;
-        h.memDst = 0;
+        h.memDst = h.memSrc = 0;
         h.force = false;
         vkr_hz_take_pending(&h, c);
         for (uint32_t i = 0; i < pass->colorCount; i++) {
@@ -2055,6 +2065,74 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
             vkr_flush_barriers(c);
         }
     }
+}
+
+/* ------------------------------------------------------------ vertex stores
+ * rhi.h rhi_cmd_buffer_store_begin / _end: the passes whose vertex shaders
+ * store to a buffer (the VU record, port/render/rd_replay_vu.c
+ * vuRecPassBegin), outside render passes.  Each is a memory barrier held
+ * back with the list's deferred barriers (VkrCmdList.pendMemDst, with the
+ * shader writes in pendMemSrc), so it goes out in the next pass's or
+ * copy's one vkCmdPipelineBarrier (vkr_hz_take_pending): _end's of pass V
+ * and _begin's of pass T are one call.  _begin: every earlier read of a
+ * buffer shaders read (the stages and accesses of the copy's barrier,
+ * rhi_cmd_copy_texture_to_buffer), copy and store before the vertex
+ * shader's reads and stores (write after read, write after write, and a
+ * store pass reading the last pass's stores); _end: the stores before
+ * every later read, as a copy into the buffer is.  A pipeline barrier's
+ * first scope holds every command submitted to the queue before it, so the
+ * lists of the other frame slot and of earlier replays are ordered too. */
+#define VKR_BUF_READ_ACCESS                                                                        \
+    (VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT | \
+     VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)
+#define VKR_BUF_READ_STAGES                                                                        \
+    (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |                    \
+     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT)
+
+static VkrCmdList *vkr_store_list(RhiCommandList cl, RhiBuffer buf, const char *what)
+{
+    VkrCmdList *c = vkr_get_cmd(cl);
+    VkrBuffer *b = vkr_get_buffer(buf);
+    if (!c || !b || !g_vkr.vertexStores) {
+        return NULL;
+    }
+    if (c->inPass) {
+        VKR_LOG("%s: inside a render pass (the bracket goes around the passes)", what);
+        return NULL;
+    }
+    return c;
+}
+
+bool rhi_cmd_buffer_store_begin(RhiCommandList cl, RhiBuffer buf)
+{
+    VkrCmdList *c = vkr_store_list(cl, buf, "rhi_cmd_buffer_store_begin");
+    if (!c) {
+        return false;
+    }
+    c->pendMemSrc |= VK_ACCESS_SHADER_WRITE_BIT;
+    c->pendMemDst |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+    c->pendSrc |= VKR_BUF_READ_STAGES;
+    c->pendDst |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+    if (c->globalOrder) {
+        vkr_flush_barriers(c);
+    }
+    return true;
+}
+
+bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf)
+{
+    VkrCmdList *c = vkr_store_list(cl, buf, "rhi_cmd_buffer_store_end");
+    if (!c) {
+        return false;
+    }
+    c->pendMemSrc |= VK_ACCESS_SHADER_WRITE_BIT;
+    c->pendMemDst |= VKR_BUF_READ_ACCESS | VK_ACCESS_SHADER_WRITE_BIT;
+    c->pendSrc |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+    c->pendDst |= VKR_BUF_READ_STAGES;
+    if (c->globalOrder) {
+        vkr_flush_barriers(c);
+    }
+    return true;
 }
 
 /* ------------------------------------------------------------ debug labels */

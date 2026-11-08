@@ -1011,6 +1011,16 @@ RhiBindGroupLayout rhi_create_bind_group_layout(const RhiBindGroupLayoutDesc *de
     if (!desc) {
         return out;
     }
+    for (uint32_t i = 0; desc->slots && i < desc->slotCount; i++) {
+        if (desc->slots[i].type == RHI_BIND_STORAGE_BUFFER_RW) {
+            /* rhi.h: feature level 11_0 has no vertex shader UAVs
+             * (RhiLimits.vertexStores false) */
+            D11_LOG("bind group layout %s: a written storage buffer (u%u) is not taken on "
+                    "Direct3D 11",
+                    desc->debugName ? desc->debugName : "?", desc->slots[i].slot);
+            return out;
+        }
+    }
     D3dpLayout l;
     if (!d3dp_layout_build(desc->slots, desc->slotCount, &l)) {
         D11_LOG("bind group layout %s: invalid", desc->debugName ? desc->debugName : "?");

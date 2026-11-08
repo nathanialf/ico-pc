@@ -157,6 +157,7 @@ D3dpRegClass d3dp_reg_class(RhiBindType t)
     case RHI_BIND_SAMPLER:
         return D3DP_REG_S;
     case RHI_BIND_STORAGE_TEXTURE:
+    case RHI_BIND_STORAGE_BUFFER_RW:
         return D3DP_REG_U;
     case RHI_BIND_STORAGE_BUFFER:
     case RHI_BIND_SAMPLED_TEXTURE:

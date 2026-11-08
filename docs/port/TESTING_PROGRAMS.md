@@ -1189,6 +1189,15 @@ The renderer's test programs have a page of their own:
   1.0 loader without `VK_KHR_get_physical_device_properties2`, review finding 5) the same, the device
   made with no extended queries (`rhi_vk_vk10bare`); the D32F cell (`d32fCell`) checks
   `RhiLimits.depth32Attachment` against `ICO_VK_FAKE_NO_D32F_ATTACHMENT` (`rhi_vk_vk10_nod32f`).
+  Every run ends with the vertex stores' cell (`rhi_test_stores.c`, `rhi_test_vertex_stores`; alone
+  with the argument `stores`: `rhi_vk_stores`, `rhi_vk_stores_vk11` under `ICO_VK_FAKE_API=1.1`,
+  `rhi_vk_stores_global` under `ICO_VK_GLOBAL_BARRIERS=1`): 64 points of `vs_store` (each writes
+  its four words at its element) through a pipeline with no fragment shader, no target and
+  `noRaster`, in a pass without attachments, inside `rhi_cmd_buffer_store_begin` / `_end`; a copy
+  over the buffer, the stores again, a copy out to a readback buffer, every word read back, no
+  validation message (synchronisation validation on); 77 where the device reports no
+  vertex stores, after checking that the bracket refuses (`rhi_vk_nostores`, the argument
+  `nostores` under `ICO_VK_FAKE_NO_VERTEX_STORES=1`, passes only on that refusal).
 - `rhi_d3d12_test.c`: the same checks on D3D12, a Windows GUI program that writes a log and shows
   a message box (`rhi_d3d12`).
 - `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP; WARP again with
@@ -1251,7 +1260,8 @@ The renderer's test programs have a page of their own:
   (`rhi_gl`, and `rhi_gl_nodual` under `ICO_GL_FAKE_NO_DUAL=1`). ctest runs both on Mesa's llvmpipe
   (`LIBGL_ALWAYS_SOFTWARE=1`, `SDL_VIDEO_DRIVER=offscreen`); they skip (77) without an OpenGL
   context. On llvmpipe the destination-read cells skip (no fragment shader interlock; GLSL has no
-  attachment read).
+  attachment read). `rhi_gl_stores` (the argument `stores`) is `rhi_vk_stores`' twin: it skips (77)
+  while the OpenGL backend reports no vertex stores, having checked that its bracket refuses.
 - `rhi_gl_sync_wait_test.c`: the OpenGL backend's fence wait with a limit on the CPU
   (`port/rhi/gl/gl_sync_wait.c`, `gl_device.c` `gl_wait_sync`) over a stub fence and a fake clock: one
   that never signals ends at the 15 s limit in 300 slices of 50 ms, the pump between them, the 2 s

@@ -145,4 +145,20 @@ static const char glsl_ps_rov[] =
 /* ps_subpass: no GLSL (an input attachment) */
 static const char glsl_ps_subpass[] = "";
 
+static const char glsl_vs_store[] =
+    "#version 430\n"
+    "\n"
+    "layout(binding = 16, std430) buffer type_RWStructuredBuffer_v4uint\n"
+    "{\n"
+    "    uvec4 _m0[];\n"
+    "} g_store;\n"
+    "\n"
+    "void main()\n"
+    "{\n"
+    "    g_store._m0[uint(gl_VertexID)] = uvec4(uint(gl_VertexID), (uint(gl_VertexID) * 3u) + 1u, 3235774464u + uint(gl_VertexID), 24301u);\n"
+    "    gl_Position = vec4(2.0, 2.0, 0.0, 1.0);\n"
+    "    gl_PointSize = 1.0;\n"
+    "}\n"
+    "\n";
+
 #endif
