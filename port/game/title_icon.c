@@ -14,7 +14,7 @@
 static const uint8_t kBlack[4] = {0, 0, 0, 0x80};
 static const uint8_t kWhite[4] = {0xFF, 0xFF, 0xFF, 0x80};
 
-#if defined(ICO_RD) && !defined(__ANDROID__)
+#if defined(ICO_RD) && !defined(__ANDROID__) && !defined(ICO_IOS)
 #include "rd.h"
 #include "ui_host.h"
 
@@ -74,6 +74,18 @@ static void realPass(const uint8_t *clearRgba)
     rd_set_icon_pass(clearRgba);
 }
 
+static int realPresented(uint32_t *frame, float *alpha)
+{
+    RdPresentInfo pi;
+
+    if (!rd_last_present_info(&pi)) {
+        return 0;
+    }
+    *frame = pi.frame;
+    *alpha = pi.alpha;
+    return 1;
+}
+
 static const IcoTitleIconOps kReal = {
     ico_app_icon_wanted,
     realArm,
@@ -83,6 +95,8 @@ static const IcoTitleIconOps kReal = {
     ui_host_curtain,
     ico_app_icon_deliver,
     ico_app_icon_deliver_single,
+    rd_icon_pass_last_frame,
+    realPresented,
 };
 static const IcoTitleIconOps *const kDefault = &kReal;
 #else
@@ -98,9 +112,10 @@ static struct {
     int drops;     /* shots armed again in this run */
     int ghostRetried;
     int pass, curtain;
-    int armed;     /* a shot armed and not answered */
-    int doneAfter; /* the curtain step's end: done for the run, or idle */
-    uint8_t *a;    /* the frame over black */
+    int armed;         /* a shot armed and not answered */
+    int doneAfter;     /* the curtain step's end: done for the run, or idle */
+    uint32_t passLast; /* the newest frame that may hold the pass (at its off) */
+    uint8_t *a;        /* the frame over black */
     uint32_t aw, ah;
 } s;
 
@@ -116,7 +131,8 @@ static void curtainSet(int on)
     s_ops->curtain(on);
 }
 
-/* the pass off; the curtain held a few ticks more, then done or idle */
+/* the pass off; the curtain held until a present shows none of the pass's
+   frames, then done or idle */
 static void finish(int doneForRun)
 {
     if (s.armed) {
@@ -128,6 +144,7 @@ static void finish(int doneForRun)
     if (s.pass) {
         passSet(NULL);
     }
+    s.passLast = s_ops->pass_last();
     s.doneAfter = doneForRun;
     s.state = ICO_TITLE_ICON_CURTAIN;
     s.ticks = 0;
@@ -227,22 +244,51 @@ void ico_title_icon_tick(int onMenu)
         if (++s.menuTicks < ICO_TITLE_ICON_WAIT) {
             return;
         }
-        if (!s_ops->wanted()) {
-            s.state = ICO_TITLE_ICON_DONE; /* this disc's icon is there and current */
-            return;
+        {
+            const int wanted = s_ops->wanted();
+
+            if (wanted == ICO_APP_ICON_NOT_PLAIN) {
+                /* wanted, but the picture is not plain now (the CRT filter,
+                   a colour adjustment or Upscaling on): idle, asked again
+                   after another ICO_TITLE_ICON_WAIT ticks of the menu, this
+                   visit or a later one */
+                s.menuTicks = 0;
+                return;
+            }
+            if (!wanted) {
+                s.state = ICO_TITLE_ICON_DONE; /* this disc's icon is there and current */
+                return;
+            }
         }
         fprintf(stderr, "ico_pc: icon: capturing the title's I (pass 1 of 2)\n");
         s.drops = 0;
         s.ghostRetried = 0;
         startPair();
         return;
-    case ICO_TITLE_ICON_CURTAIN:
-        if (++s.ticks >= ICO_TITLE_ICON_HOLD) {
+    case ICO_TITLE_ICON_CURTAIN: {
+        /* the curtain is read as each present is recorded: a picture of a
+           pass frame (a walk begun before the pass went off, recorded some
+           ticks later; a blend with one) shows white or the bare letter, so
+           it comes off once a present past them was recorded */
+        uint32_t frame = 0;
+        float alpha = 1.0f;
+        const int clean = s_ops->presented(&frame, &alpha) &&
+                          ico_title_icon_present_clean(frame, alpha, s.passLast);
+
+        ++s.ticks;
+        if (!clean && s.ticks >= ICO_TITLE_ICON_HOLD_MAX) {
+            fprintf(stderr,
+                    "ico_pc: icon: no picture past the pass's frames (frame %u) was presented "
+                    "in %d ticks: the curtain comes off\n",
+                    (unsigned)s.passLast, ICO_TITLE_ICON_HOLD_MAX);
+        }
+        if (clean || s.ticks >= ICO_TITLE_ICON_HOLD_MAX) {
             curtainSet(0);
             s.state = s.doneAfter ? ICO_TITLE_ICON_DONE : ICO_TITLE_ICON_IDLE;
             s.menuTicks = 0;
         }
         return;
+    }
     default:
         break;
     }
@@ -297,6 +343,14 @@ void ico_title_icon_tick(int onMenu)
 int ico_title_icon_pass_on(void)
 {
     return s.pass;
+}
+
+int ico_title_icon_present_clean(uint32_t frame, float alpha, uint32_t passLast)
+{
+    if (frame <= passLast) {
+        return 0;
+    }
+    return alpha >= 1.0f || frame - 1u > passLast;
 }
 
 void ico_title_icon_reset(void)

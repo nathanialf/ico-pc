@@ -301,6 +301,20 @@ static void testOrderAndLeakage(void)
     CHECK(rd__retained_frame(rd__last_frame()->number + 1) == NULL &&
               rd__retained_frame(rd__prev_frame()->number - 1) == NULL,
           "retained frame: a number outside the ring is none");
+    {
+        uint32_t dumped = 7;
+
+        CHECK(rd_frame_retained(rd__last_frame()->number) &&
+                  rd_frame_retained(rd__prev_frame()->number) &&
+                  !rd_frame_retained(rd__last_frame()->number + 1),
+              "retained frame: rd_frame_retained says the same");
+        /* a frame the ring no longer holds is not written, and no other
+           frame is written in its place */
+        CHECK(!rd_dump_retained_frame(rd__last_frame()->number + 1, "rd_state_test_unused.rddump",
+                                      &dumped) &&
+                  dumped == 0,
+              "retained frame: a number outside the ring writes nothing");
+    }
 }
 
 static void testKeep(void)

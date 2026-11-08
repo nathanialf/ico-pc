@@ -276,6 +276,35 @@ size_t window_scene_acquire_text(char *out, size_t cap, uint64_t ready, uint64_t
     return (size_t)w < cap ? (size_t)w : cap - 1;
 }
 
+const char *window_scene_tiler_words(int tiler)
+{
+    return tiler ? " (tile-based GPU: the last scene pass carries the earlier passes' tile work; "
+                   "the present's own list alone waits for the display's image: the display "
+                   "wait, or the present where the GPU holds only its colour writes): the "
+                   "stretch before list 0 is the uploads and the GPU's work still in flight"
+                 : "";
+}
+
+size_t window_scene_prepass_gpu_text(char *out, size_t cap, int on, double msPerReplay)
+{
+    int w;
+
+    if (cap == 0) {
+        return 0;
+    }
+    w = on ? snprintf(out, cap, "%.2f", msPerReplay) : snprintf(out, cap, "off");
+    if (w < 0) {
+        out[0] = '\0';
+        return 0;
+    }
+    return (size_t)w < cap ? (size_t)w : cap - 1;
+}
+
+uint64_t window_scene_counter_delta(uint64_t now, uint64_t snapshot)
+{
+    return now >= snapshot ? now - snapshot : now;
+}
+
 SceneKind window_scene_dominant(const SceneShare *s)
 {
     SceneKind best = SCENE_OTHER;
@@ -315,28 +344,24 @@ bool window_slow_scene_due(const SlowSceneBlock *b)
            (b->count < SLOW_SCENE_DUMPS && work >= SLOW_SCENE_STEP * b->lastWorkMs);
 }
 
-bool window_slow_scene_pick(double spanMs, double meanMs)
+bool window_slow_scene_pick(double work, double meanWork)
 {
-    return spanMs > 0.0 && meanMs > 0.0 && spanMs >= meanMs;
+    return work > 0.0 && meanWork > 0.0 && work >= meanWork;
 }
 
 size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, unsigned frame,
-                              double frameSpanMs, const char *zipName)
+                              double frameWork, double meanWork, const char *zipName)
 {
     if (cap == 0) {
         return 0;
     }
     const double n = b->gpuN ? (double)b->gpuN : 1.0;
     const double mean = b->spanSumMs / n;
-    char which[128];
+    char which[160];
 
-    if (frameSpanMs >= 0.0) {
-        snprintf(which, sizeof(which), "its span %.1f ms, the block's mean %.1f", frameSpanMs,
-                 mean);
-    } else {
-        snprintf(which, sizeof(which),
-                 "the last the renderer closed, not the picked one; the block's mean %.1f", mean);
-    }
+    snprintf(which, sizeof(which),
+             "its vertex work %.1f thousand against the block's mean %.1f thousand",
+             frameWork / 1000.0, meanWork / 1000.0);
     const int c =
         snprintf(out, cap,
                  "slow scene: the block's GPU work %.1f ms a replay (bound %.0f; display "

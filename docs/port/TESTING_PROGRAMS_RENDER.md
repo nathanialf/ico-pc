@@ -306,12 +306,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   names the replay. `rd_vuprepass_selftest_sabotage_straddle` (`ICO_RD_VU_PREPASS_SABOTAGE=stale`:
   the record's copies left out from the second replay on) must fail in replay 2, 3 or 4, never 1:
   a self-test of one replay passes that sabotage, so the test shows the four replays see a record
-  that straddles two pictures. Issue 179's phone form: `rd_vuprepass_selftest_mali`
-  (`ICO_VK_FAKE_LIMITS=mali`, `ICO_RD_VU_PREPASS=1`, synchronisation validation with its
-  submit-time checks), `rd_vuprepass_selftest_mali_sabotage_straddle`, and
-  `rd_vuprepass_selftest_mali_vk11` (the same through VkRenderPass objects and all-static
-  pipelines: `ICO_VK_FAKE_API=1.1`, `ICO_VK_FAKE_NO_DYNAMIC=1`); `rd_pixel_mali_prepass` runs
-  `rd_pixel_test` under the same limits with the pre-pass asked for, its expectations unchanged.
+  that straddles two pictures. `rd_vuprepass_selftest_mali` (`ICO_VK_FAKE_LIMITS=mali`,
+  synchronisation validation with its submit-time checks) and
+  `rd_vuprepass_selftest_mali_sabotage_straddle` are the desktop runs under a Mali's limits: the
+  fake limits clamp sizes and alignments, `RhiLimits.tiler` stays the device's, and nothing reads
+  `ICO_RD_VU_PREPASS=1`, so they take the path a desktop GPU takes. The real coverage under a
+  phone's form is `rd_vuprepass_selftest_mali_vk11` (the same through VkRenderPass objects and
+  all-static pipelines: `ICO_VK_FAKE_API=1.1`, `ICO_VK_FAKE_NO_DYNAMIC=1`). The tiler rule itself is
+  step 6 of every run: `rd__vu_prepass_init` called again with the device's limits but
+  `tiler = true` and no colour-target bound must leave the pre-pass on, and with
+  `colorBytesPerPixel = 32` (below the record's 48) must leave it off with the bytes in its words
+  (not in the `notrun` mode, where `ICO_RD_VU_PREPASS=0` keeps it off).
 - `rd_vu_skin_check_test.c` with `rd_vu_skin_check.cmake`: the skinned draws' bone-block check
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)). `judge` (no device): a case of 60 bones and 120 vertices
   through `vu1_ref`, the CPU's positions as the probe all right; one vertex on address 200 moved to
@@ -1195,7 +1200,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the EE's table turning it to the eye, drawn clipped inside the picture and (wider than 4:3)
   beside it; turned away, nothing; without a table nothing, counted no-table at every width
   (`rd_native`).
-- `rd_perf_test.c`: the renderer's CPU cost per replay and its steady state, and the start-up set
+- `rd_perf_test.c`: the renderer's CPU cost per replay and its steady state, the note a replay leaves for the slow-scene dump (`rd_perf_last_replay_work`: that replay's frame and VU counts, with the pre-pass its vertices not 0), and the start-up set
   through `rhi_create_pipelines`: its progress calls (from 0, never back, the total once at the
   end), a stop after the first batch and the rest made by the next call; last, the background
   finisher (`checkBackgroundSet`): the set stopped after its first batch by the low-memory function
@@ -1463,7 +1468,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   composited level not constant over level texels i0 - 2 to i0 + 3, the kernels' joint support and
   a tie: N = 3 level texels), some texels differing; the |d| histogram printed (`checkEdges2x`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-edges-above-1x)).
-- `rd_state_test.c`: the recording half of rd without a GPU: the retained-frame lookup of the slow-scene dump (`rd__retained_frame`: the last closed and the one before by number, other numbers none), the payload arena's alignment gap
+- `rd_state_test.c`: the recording half of rd without a GPU: the retained-frame lookup of the slow-scene dump (`rd__retained_frame` and `rd_frame_retained`: the last closed and the one before by number, other numbers none; `rd_dump_retained_frame` writes nothing for a number outside the ring), the payload arena's alignment gap
   zeroed over a reused buffer's bytes (`testPayloadPad`), the sheet shader's keys in the set
   (`testSheetSet`, issue 188: no `font_sheet_ps` key on a tile-based profile at 1x and 2x with a
   1008-line output, the frame's 8 at a 3x scene, the overlay's 4 at 1080 lines, 10 with `[dev]

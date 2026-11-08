@@ -1060,7 +1060,7 @@ the one `rd_replay_tool` and the loss bisect take. The newest three loss zips ar
 ones deleted, so a device lost at every start cannot fill a phone. The activity file then records
 the loss with the zip's path (or that none was written) for the next start
 ([PLATFORM.md](PLATFORM.md#diagnostics)); the message names the file and asks for it with the log
-(`port/render/rd_dump.c` (`rd_dump_retained`; `rd_dump_retained_frame` writes one retained frame by number for the slow-scene dump, the last closed when that number has left the ring); `port/platform/dump_zip.c` (`ico_loss_dump_zip`,
+(`port/render/rd_dump.c` (`rd_dump_retained`; `rd_dump_retained_frame` writes one retained frame by number for the slow-scene dump, nothing when that number has left the ring, `rd_frame_retained` says which); `port/platform/dump_zip.c` (`ico_loss_dump_zip`,
 `ico_loss_dump_prune`); `port/platform/window_host.c` (`loss_dump`, `device_lost_quit`)).
 
 A GPU hang writes the same zip: when the watchdog ends a run whose main thread waits for work the

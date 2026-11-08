@@ -211,6 +211,31 @@ int main(void)
 
         CHECK(n < sizeof(t) && strlen(t) == n);
     }
+    /* the end of the 10 s GPU lines on a tile-based GPU (window_tiler_words):
+       the stretch before list 0 named; nothing elsewhere */
+    CHECK(window_scene_tiler_words(0)[0] == '\0');
+    CHECK(text_is(window_scene_tiler_words(1),
+                  " (tile-based GPU: the last scene pass carries the earlier passes' tile work; "
+                  "the present's own list alone waits for the display's image: the display "
+                  "wait, or the present where the GPU holds only its colour writes): the "
+                  "stretch before list 0 is the uploads and the GPU's work still in flight"));
+    /* the GPU ms line's pre-pass part: its cost on, the word off */
+    CHECK(window_scene_prepass_gpu_text(b, sizeof(b), 1, 3.456) == 4 && text_is(b, "3.46"));
+    CHECK(window_scene_prepass_gpu_text(b, sizeof(b), 0, 0.0) == 3 && text_is(b, "off"));
+    CHECK(window_scene_prepass_gpu_text(b, sizeof(b), 0, 2.5) == 3 && text_is(b, "off"));
+    {
+        char t[3];
+
+        CHECK(window_scene_prepass_gpu_text(t, sizeof(t), 0, 0.0) == 2 && strlen(t) == 2);
+    }
+    /* the block's share of a counter: the difference, or the value itself
+       after a restart from 0 (a renderer rebuild or a backend switch: no
+       wrap to 18446744073709551xxx) */
+    CHECK(window_scene_counter_delta(60, 41) == 19);
+    CHECK(window_scene_counter_delta(41, 41) == 0);
+    CHECK(window_scene_counter_delta(7, 41) == 7);
+    CHECK(window_scene_counter_delta(0, 41) == 0);
+    CHECK(window_scene_counter_delta(UINT64_MAX, 0) == UINT64_MAX);
     /* the slow-scene dump's trigger (issue 179): a scene-dominant block on a
        window, no movie, 30 s up, 8 timed replays, the work (span less the
        display wait, a replay's mean) over the bound, and up to three dumps a run,
@@ -318,32 +343,33 @@ int main(void)
         t.waitSumMs = 180.0; /* work 40.0 exactly */
         CHECK(!window_slow_scene_due(&t));
         t.waitSumMs = 100.0;
-        /* the replay the dump is to hold: a span at or above the block's mean */
-        CHECK(window_slow_scene_pick(60.0, 60.0));
-        CHECK(window_slow_scene_pick(112.5, 60.0));
-        CHECK(!window_slow_scene_pick(59.9, 60.0));
+        /* the replay the dump is to hold: its vertex work at or above the
+           block's mean a replay */
+        CHECK(window_slow_scene_pick(598000.0, 598000.0));
+        CHECK(window_slow_scene_pick(682100.0, 598000.0));
+        CHECK(!window_slow_scene_pick(597999.0, 598000.0));
         CHECK(!window_slow_scene_pick(0.0, 0.0)); /* no figures: no pick */
-        CHECK(!window_slow_scene_pick(50.0, 0.0));
-        CHECK(!window_slow_scene_pick(-1.0, 60.0));
+        CHECK(!window_slow_scene_pick(5000.0, 0.0));
+        CHECK(!window_slow_scene_pick(-1.0, 598000.0));
         /* the line */
         t.count = 1;
-        window_slow_scene_text(b, sizeof(b), &t, 4812, 71.04, "slow-20261106-120000.zip");
+        window_slow_scene_text(b, sizeof(b), &t, 4812, 682100.0, 598000.0,
+                               "slow-20261106-120000.zip");
         CHECK(text_is(b, "slow scene: the block's GPU work 48.0 ms a replay (bound 40; display "
                          "wait 10.0, present 2.0, span 60.0) in a scene layout: frame 4812 "
-                         "(its span 71.0 ms, the block's mean 60.0) written to "
-                         "logs/slow-20261106-120000.zip (dump 2 of 3 this run); attach it with "
-                         "the log"));
-        /* the picked frame gone from the ring: the last closed, said so */
+                         "(its vertex work 682.1 thousand against the block's mean 598.0 "
+                         "thousand) written to logs/slow-20261106-120000.zip (dump 2 of 3 this "
+                         "run); attach it with the log"));
         t.count = 0;
-        window_slow_scene_text(b, sizeof(b), &t, 4813, -1.0, "slow-x.zip");
+        window_slow_scene_text(b, sizeof(b), &t, 4813, 9.0, 4.5, "slow-x.zip");
         CHECK(text_is(b, "slow scene: the block's GPU work 48.0 ms a replay (bound 40; display "
                          "wait 10.0, present 2.0, span 60.0) in a scene layout: frame 4813 "
-                         "(the last the renderer closed, not the picked one; the block's mean "
-                         "60.0) written to logs/slow-x.zip (dump 1 of 3 this run); attach it "
-                         "with the log"));
+                         "(its vertex work 0.0 thousand against the block's mean 0.0 thousand) "
+                         "written to logs/slow-x.zip (dump 1 of 3 this run); attach it with "
+                         "the log"));
         {
             char c[20];
-            const size_t n = window_slow_scene_text(c, sizeof(c), &t, 1, 5.0, "slow-x.zip");
+            const size_t n = window_slow_scene_text(c, sizeof(c), &t, 1, 5.0, 4.0, "slow-x.zip");
 
             CHECK(n < sizeof(c) && strlen(c) == n);
         }
