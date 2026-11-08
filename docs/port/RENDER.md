@@ -869,9 +869,9 @@ reduction and the present take none) and `rd_replay_tool_jitter`
 
 A temporal upscaler (FidelityFX's FSR 3.1, issue 99) needs to know where each pixel's surface was
 in the picture before. rd draws that as a motion vector a texel into VELOCITY while the temporal
-upscaler's switch is on; this release has no row for it: only `[dev] velocity_test = true`
-(`ICO_RD_VELOCITY=1`, [CONFIG.md](CONFIG.md)) and `rd_replay_tool --velocity` turn it on, and
-nothing reads it yet (`port/render/rd_velocity.h`). With the switch off nothing of it runs: no
+upscaler's switch is on (FSR 3.1 in force, `[dev] velocity_test = true` (`ICO_RD_VELOCITY=1`,
+[CONFIG.md](CONFIG.md)), `rd_replay_tool --velocity`), and FSR 3.1 reads it
+(`port/render/rd_velocity.h`, `rd_fsr3.c`). With the switch off nothing of it runs: no
 payload is added to a frame, no texture or pipeline is made, the pictures are the same bytes.
 
 **The source rule.** Every picture's frame goes through `rd__velocity_attach` before it is
@@ -938,9 +938,10 @@ game's reduction (`postReduction`, the end of list 12, [RENDER_POST.md](RENDER_P
 reads SCENE: the glow, the depth of field, the fog, the motion blur and list 11's UI, subtitles,
 fades, letterbox and film noise are all in SCENE by then. Before the post chain was rejected: the
 fog's LUT, the depth of field and the crack filler need the depth at the scale they draw at, and
-the upscaler outputs none. This release has no row for it: only `[dev] upscale_test = true`
-(`ICO_RD_UPSCALE_TEST=1`, [CONFIG.md](CONFIG.md)) and `rd_replay_tool --upscale-test [R]` turn it
-on, with a stand-in for the upscaler (below) (`port/render/rd_upscale.h`).
+the upscaler outputs none. FSR 3.1 in force turns it on (Options > Picture > Upscaling,
+[DISPLAY.md](DISPLAY.md#fsr-31-upscaling)); so do `[dev] upscale_test = true`
+(`ICO_RD_UPSCALE_TEST=1`, [CONFIG.md](CONFIG.md)) and `rd_replay_tool --upscale-test [R]`, with a
+stand-in for the upscaler (below) (`port/render/rd_upscale.h`).
 
 **The marker.** `postReduction` records `RDC_UPSCALE_POINT` (`u[0]` the target the reduction
 reads, `u[1]` the one it writes) right before it binds DISPLAY. It is a state command with no
@@ -1004,7 +1005,7 @@ Off again, the sequence's jitter is cleared (never `[dev] jitter_test`'s).
 
 **What goes through the upscaler.** Everything in SCENE at the reduction: the glow, fog and depth
 of field (fine), the motion blur's ghost and the fades (they smear a little more), film noise and
-the UI (temporally accumulated: accepted in this release under the Native AA default; moving list
+the UI (temporally accumulated: accepted under the Native AA default; moving list
 11's noise and UI after the upscaler is the follow-up). Particles and the glow's composites have
 no motion vectors: fast particles ghost (a reactive mask from the particle draws' alpha is the
 follow-up).
