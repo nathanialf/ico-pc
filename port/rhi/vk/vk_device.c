@@ -514,6 +514,7 @@ static bool s_debugUtilsExt;
  * enabled on the instance; its two queries, found through the instance
  * (NULL when the extension is not enabled: a 1.1 or later instance) */
 static PFN_vkGetPhysicalDeviceFeatures2KHR s_features2Khr;
+
 static PFN_vkGetPhysicalDeviceProperties2KHR s_props2Khr;
 
 /* Whether the core Vulkan 1.1 queries (vkGetPhysicalDeviceFeatures2,
@@ -539,6 +540,7 @@ static bool vkr_has_props2(VkPhysicalDevice pd)
 }
 
 #ifndef ICO_RHI_MOLTENVK
+
 /* ICO_VK_FAKE_API=1.0: the core Vulkan 1.1 entry points volk loaded,
  * cleared, as a Vulkan 1.0 loader and driver have none (the system's loader
  * still hands out the instance-level ones for an instance created at 1.0).
@@ -578,6 +580,7 @@ static void vkr_fake_10_entry_points(bool device)
     vkTrimCommandPool = NULL;
     vkUpdateDescriptorSetWithTemplate = NULL;
 }
+
 #endif
 
 /* vkGetPhysicalDeviceFeatures2 by the core or the KHR entry point; with
@@ -911,8 +914,9 @@ static bool vkr_format_ok(VkPhysicalDevice pd, VkFormat f, VkFormatFeatureFlags 
  * also takes compute work, RGBA16F and RGBA16 UNORM are storage images,
  * and the two without-format features are enabled.  shaderFloat16 is
  * reported as offered (VkPhysicalDeviceVulkan12Features, 1.2 and later); the
- * device is made with it only with the FidelityFX extensions
- * (vkr_create_device, ICO_FFX builds). */
+ * device is made with it (and with shaderInt16, which the upscaler's 16-bit
+ * shaders declare) only with the FidelityFX extensions (vkr_create_device,
+ * ICO_FFX builds). */
 static void vkr_probe_compute(const VkPhysicalDeviceFeatures avail)
 {
     RhiComputeCaps *c = &g_vkr.compute;
@@ -1079,9 +1083,11 @@ static VkFormat vkr_choose_depth_stencil(VkPhysicalDevice pd, bool *fake)
  * rhi_driver_version.h reads as unknown, the vendor id deciding), and
  * driverVersion decoded the vendor's way (rhi_driver_version.h) */
 static char s_driverText[768];
+
 /* the robust access in force, for RhiLimits.robustText, and whether it is
    off by the default (RhiLimits.robustDefaultOff) */
 static char s_robustText[160];
+
 static bool s_robustDefaultOff;
 
 static void vkr_driver_text(VkPhysicalDevice pd, const VkPhysicalDeviceProperties *p)
@@ -1286,7 +1292,9 @@ static int vkr_rate_device(VkPhysicalDevice pd, uint32_t *outQueue, const char *
    adapter (rhi_set_adapter_wanted, from the dispatcher before each
    rhi_init) */
 static RhiAdapterInfo s_adapters[RHI_MAX_ADAPTERS];
+
 static uint32_t s_adapterCount;
+
 static char s_adapterWanted[256];
 
 /* The device: ICO_VK_DEVICE=<index> or a substring of the device name
@@ -2163,7 +2171,10 @@ static bool vkr_create_device(void)
      * listed VK_KHR_dedicated_allocation left off made it call a NULL
      * vkGetBufferMemoryRequirements2KHR.  So on a Vulkan 1.2 device every
      * extension it acts on is enabled when listed, with the feature it uses:
-     * shader_float16_int8 (shaderFloat16, through Vulkan12Features),
+     * shader_float16_int8 (shaderFloat16, through Vulkan12Features, and
+     * the base feature shaderInt16: the upscaler's 16-bit shader
+     * permutations, chosen whenever the listed extension reports
+     * shaderFloat16, declare the Int16 capability too),
      * subgroup_size_control (subgroupSizeControl), synchronization2,
      * descriptor_indexing (shaderStorageBufferArrayNonUniformIndexing,
      * Vulkan12Features), dedicated_allocation with
@@ -2181,7 +2192,8 @@ static bool vkr_create_device(void)
     VkPhysicalDeviceCoherentMemoryFeaturesAMD qCoherent = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD};
     bool extSubgroup = false, extSync2 = false, extCoherent = false;
-    VkBool32 extFloat16 = VK_FALSE, extNonUniform = VK_FALSE, extDescIndexing = VK_FALSE;
+    VkBool32 extFloat16 = VK_FALSE, extInt16 = VK_FALSE, extNonUniform = VK_FALSE,
+             extDescIndexing = VK_FALSE;
     g_vkr.externalExts = false;
 #ifdef ICO_FFX
     if (core12 && vkr_has_props2(g_vkr.phys)) {
@@ -2261,23 +2273,33 @@ static bool vkr_create_device(void)
             used += w > 0 && (size_t)w < sizeof(said) - used ? (size_t)w : 0u;
         }
         extFloat16 = listed[0] ? q12.shaderFloat16 : VK_FALSE;
+        /* the backend reads shaderFloat16 from the physical device, not from
+         * what was enabled, and then builds its 16-bit permutations, whose
+         * SPIR-V declares Int16 as well (VkPhysicalDeviceFeatures::shaderInt16,
+         * else vkCreateShaderModule is a validation error): a driver
+         * reporting shaderFloat16 without shaderInt16 cannot run them */
+        extInt16 = extFloat16 ? avail.shaderInt16 : VK_FALSE;
+        const bool float16NoInt16 = extFloat16 && !extInt16;
         extSubgroup = listed[1] && qSubgroup.subgroupSizeControl;
         extSync2 = listed[2] && qSync2.synchronization2;
         extCoherent = listed[7] && qCoherent.deviceCoherentMemory;
-        g_vkr.externalExts = !dedicatedAlone;
-        VKR_LOG("external compute extensions: %s%s (features: float16 %s, subgroup size control "
-                "%s, synchronization2 %s, storage buffer non-uniform indexing %s, descriptor "
-                "indexing %s, AMD coherent memory %s)%s%s",
+        g_vkr.externalExts = !dedicatedAlone && !float16NoInt16;
+        VKR_LOG("external compute extensions: %s%s (features: float16 %s, int16 %s, subgroup "
+                "size control %s, synchronization2 %s, storage buffer non-uniform indexing %s, "
+                "descriptor indexing %s, AMD coherent memory %s)%s%s%s",
                 used ? "enabled " : "none listed beyond the RHI's own", said,
-                extFloat16 ? "on" : "off", extSubgroup ? "on" : "off", extSync2 ? "on" : "off",
-                extNonUniform ? "on" : "off", extDescIndexing ? "on" : "off",
-                extCoherent ? "on" : "off",
+                extFloat16 ? "on" : "off", extInt16 ? "on" : "off", extSubgroup ? "on" : "off",
+                extSync2 ? "on" : "off", extNonUniform ? "on" : "off",
+                extDescIndexing ? "on" : "off", extCoherent ? "on" : "off",
                 dedicatedAlone ? "; dedicated_allocation is listed without "
                                  "get_memory_requirements2: left off, FSR 3.1 not offered"
                                : "",
                 descIndexingDropped ? "; descriptor_indexing is listed without the "
                                       "descriptorIndexing feature: left off"
-                                    : "");
+                                    : "",
+                float16NoInt16 ? "; shaderFloat16 is offered without shaderInt16, which the "
+                                 "upscaler's 16-bit shaders declare: FSR 3.1 not offered"
+                               : "");
     }
 #endif
     /* each feature structure carries only the one feature asked */
@@ -2413,6 +2435,9 @@ static bool vkr_create_device(void)
                  * pipelines) */
                 .shaderStorageImageReadWithoutFormat = avail.shaderStorageImageReadWithoutFormat,
                 .shaderStorageImageWriteWithoutFormat = avail.shaderStorageImageWriteWithoutFormat,
+                /* with shaderFloat16 (above): the upscaler's 16-bit shader
+                 * permutations declare the Int16 capability */
+                .shaderInt16 = extInt16,
             },
     };
 #ifdef ICO_RHI_MOLTENVK
