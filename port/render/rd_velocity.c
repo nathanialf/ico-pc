@@ -50,7 +50,8 @@ bool rd__velocity_on(void)
             on) {
             rd__log("velocity: on ([dev] velocity_test, ICO_RD_VELOCITY=1): every VU draw "
                     "carries its previous picture's transform and the replay draws the "
-                    "scene's motion vectors (a developer switch; nothing reads them yet)");
+                    "scene's motion vectors (a developer switch; only a temporal upscaler, "
+                    "FSR 3.1 or the test's, reads them)");
         }
     }
     return __atomic_load_n(&s_on, __ATOMIC_ACQUIRE) == 1;

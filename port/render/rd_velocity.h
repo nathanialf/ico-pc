@@ -3,8 +3,9 @@
  *
  * Per-pixel motion vectors of the scene (docs/port/RENDER.md, "Velocity"):
  * the temporal upscaler's input, made only while the temporal upscaler is
- * on (this release: only the developer switch [dev] velocity_test,
- * ICO_RD_VELOCITY=1, and rd_replay_tool --velocity).  Off, nothing here
+ * on (FSR 3.1 in force, the test upscaler, rd_upscale.c syncVelocity) or
+ * the developer switch asks ([dev] velocity_test, ICO_RD_VELOCITY=1,
+ * rd_replay_tool --velocity).  Off, nothing here
  * runs: no payload is added to a frame, no texture or pipeline is made and
  * the pictures are byte for byte those of a build without it.
  *

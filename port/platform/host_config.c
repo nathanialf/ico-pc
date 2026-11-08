@@ -592,7 +592,7 @@ static const struct {
        batch (an A/B; port/render/rd_replay_vu.c preBatchInit) */
     {"dev.vu_prepass_batch", "vu_prepass_batch"},
     /* true: the temporal upscaler's motion vectors drawn (VELOCITY; a
-       developer switch, nothing reads them yet), and -1 or 1: the sign the
+       developer switch, FSR 3.1 turns them on by itself), and -1 or 1: the sign the
        upscaler takes them with (port/render/rd_velocity.c) */
     {"dev.velocity_test", "velocity_test"},
     {"dev.velocity_sign", "velocity_sign"},
