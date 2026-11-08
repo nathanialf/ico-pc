@@ -210,6 +210,8 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_NEWGAME_PLUS] = "Novo Jogo+",
     [UI_STR_NEWGAME_PLUS_SCREEN] =
         NULL, /* longer than its space (170 bytes): English until shortened */
+    [UI_STR_NEWGAME_START] = "Iniciar",
+    [UI_STR_NEWGAME_START_SCREEN] = "Inicia o novo jogo com as escolhas acima.",
     [UI_STR_OPT_CRT] = "Filtro CRT",
     [UI_STR_OPT_CRT_STRENGTH] = "Intensidade do Filtro CRT",
     [UI_STR_OPT_TONE_GAMMA] = NULL,                     /* newer than the translation: English */

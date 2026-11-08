@@ -480,8 +480,8 @@ static void testExtras(void)
 
 /* ui_settings_covers_title, which hides the title's logo
    (port/game/title_logo.c): every page opened from the title, Extras and
-   its Music page among them; not the title's own layouts, the mirror or
-   quit screens, nor any page opened from the pause menu */
+   its Music page among them, and the New Game screen; not the title's own
+   layouts, the quit screen, nor any page opened from the pause menu */
 static void testCoversTitle(void)
 {
     for (int title = 0; title < 2; title++) {
@@ -495,8 +495,8 @@ static void testCoversTitle(void)
             CHECK(ui_settings_covers_title() == title, "title %d: page %d covers %d", title, p,
                   ui_settings_covers_title());
         }
-        int others[3] = {title ? 13 : 57, ui_quit_screen_layout(), ui_new_game_screen_layout()};
-        for (int k = 0; k < 3; k++) {
+        int others[2] = {title ? 13 : 57, ui_quit_screen_layout()};
+        for (int k = 0; k < 2; k++) {
             if (others[k] < 0) {
                 continue;
             }
@@ -504,6 +504,16 @@ static void testCoversTitle(void)
             CHECK(settle(others[k], 60), "layout %d up", others[k]);
             CHECK(!ui_settings_covers_title(), "title %d: layout %d does not cover", title,
                   others[k]);
+        }
+        /* the New Game screen is keyed on its layout, whichever way it was
+           reached (the vibration screen's, not a page): the lettering is
+           hidden on it with or without the title's menu behind */
+        {
+            const int ng = ui_new_game_screen_layout();
+            CHECK(ng >= 0, "title %d: the New Game screen has a layout", title);
+            lt_switch_layout(ng);
+            CHECK(settle(ng, 60), "title %d: the New Game screen up", title);
+            CHECK(ui_settings_covers_title() == 1, "title %d: the New Game screen covers", title);
         }
         /* the menu again from where it was entered: covering again */
         lt_switch_layout(mainL);

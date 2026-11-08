@@ -4426,23 +4426,21 @@ static void build(void)
 }
 
 /* ------------------------------------------------------ the New Game screen
- * The New Game screen, between the vibration choice and the start
- * (settings.h ui_new_game_screen_enter): two labelled rows, "Mirror mode" and
- * "New Game+", each with "Off" and "On" side by side (left/right through
- * their item links, up/down between the rows), and a line of explanation
- * for the row the cursor is on, in the lower half where the vibration
- * screen has its rows (the title stage's logo is above).  Each row keeps
- * its own choice: the cursor moving down or up lands on the other row's
- * chosen item, and that row's choice stays lit while the cursor is away. */
+ * Between the vibration choice and the start (settings.h
+ * ui_new_game_screen_enter): Mirror mode and New Game+ with Off and On side
+ * by side, a centred Start row, and a note for the cursor's row.  Each row
+ * keeps its choice: up and down land on it, and it stays lit while the
+ * cursor is away. */
 
 static int s_newGameLayout = -1;
 static int s_newGameRow[2][2] = {{-1, -1}, {-1, -1}}; /* [row][off, on] */
 static int s_newGameNote = -1;
+static int s_newGameStart = -1; /* the centred Start row */
 static int s_newGameChosen;
 static int s_mirrorChoice, s_ngpChoice; /* each row's Off (0) or On (1) */
 
 #define LAYOUT_VIBE_SELECT (ico_region_cur()->layout_vibe) /* la_vibe_select's screen (9) */
-#define NEW_GAME_ROW_Y 112
+#define NEW_GAME_ROW_Y 70
 #define NEW_GAME_ROW_H 34
 #define NEW_GAME_NOTE_Y 182 /* with its 30 lines, clear of the layout's bottom (212) */
 
@@ -4464,6 +4462,10 @@ static void buildNewGameScreen(void)
         P(s_newGameRow[r][0])->rightItem = s_newGameRow[r][1];
         P(s_newGameRow[r][1])->leftItem = s_newGameRow[r][0];
     }
+    /* the note stays the last row built */
+    s_newGameStart =
+        ui_settings_add_row(200, NEW_GAME_ROW_Y + 2 * NEW_GAME_ROW_H, 240, NEW_GAME_ROW_H, 1, -1,
+                            UI_STR_NEWGAME_START, NULL, 0.0f, UI_ALIGN_CENTER);
     s_newGameNote = ui_settings_add_row(20, NEW_GAME_NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE,
                                         UI_ALIGN_CENTER);
     P(s_newGameNote)->centerX = 1;
@@ -4472,16 +4474,13 @@ static void buildNewGameScreen(void)
     s_newGameLayout = addLayout(first, last + 1, 0.6f, newGameScreenProc, s_newGameRow[0][0]);
 }
 
-/* The rows' state from the cursor: the cursor's row takes the item it is
-   on as its choice; up and down land on the other row's choice (the two
-   rows in a loop, as the Settings pages'); the choice of the row the
-   cursor is not on stays lit (an item whose owner is the cursor's item is
-   not dimmed, layout_texture.c display_texture); the note explains the
-   cursor's row. */
+/* The cursor's row takes the item it is on as its choice (curRow -1 on
+   Start); up and down loop Mirror mode, New Game+, Start; the other rows'
+   choices stay lit (ownerItem, layout_texture.c display_texture). */
 static void newGameSync(void)
 {
     const int cur = lt_ext_layout(s_newGameLayout)->curItem;
-    int curRow = 0;
+    int curRow = cur == s_newGameStart ? -1 : 0;
     for (int r = 0; r < 2; r++) {
         for (int c = 0; c < 2; c++) {
             if (cur == s_newGameRow[r][c]) {
@@ -4492,14 +4491,20 @@ static void newGameSync(void)
     }
     const int choice[2] = {s_mirrorChoice, s_ngpChoice};
     for (int r = 0; r < 2; r++) {
-        const int other = s_newGameRow[1 - r][choice[1 - r]];
         for (int c = 0; c < 2; c++) {
             LtProperty *e = P(s_newGameRow[r][c]);
-            e->downItem = e->upItem = other;
+            e->upItem = r == 0 ? s_newGameStart : s_newGameRow[0][choice[0]];
+            e->downItem = r == 0 ? s_newGameRow[1][choice[1]] : s_newGameStart;
             e->ownerItem = r != curRow && c == choice[r] ? cur : -1;
         }
     }
-    setNote(s_newGameNote, curRow == 0 ? UI_STR_MIRROR_SCREEN : UI_STR_NEWGAME_PLUS_SCREEN);
+    LtProperty *st = P(s_newGameStart);
+    st->upItem = s_newGameRow[1][choice[1]];
+    st->downItem = s_newGameRow[0][choice[0]];
+    st->leftItem = st->rightItem = -1;
+    setNote(s_newGameNote, curRow == 0   ? UI_STR_MIRROR_SCREEN
+                           : curRow == 1 ? UI_STR_NEWGAME_PLUS_SCREEN
+                                         : UI_STR_NEWGAME_START_SCREEN);
 }
 
 int ui_new_game_screen_enter(void)
@@ -4510,14 +4515,10 @@ int ui_new_game_screen_enter(void)
     LtProp *l = lt_ext_layout(s_newGameLayout);
     l->defaultItem = l->curItem = s_newGameRow[0][0];
     s_newGameChosen = 0;
-    /* no run until the choice: a cleared save's new game (la_load_processing
-       returns to the vibration screen) does not keep the loaded slot's flag
-       on the title stage behind this screen */
+    /* no run until the choice (a cleared save's flag does not carry over) */
     ico_opt_mirror_reset();
     s_mirrorChoice = 0;
-    /* New Game+ follows how the player came here: on from a finished save
-       (la_load_processing carries its cleared flag into the new game), off
-       from the title's New Game (which clears the flag) */
+    /* New Game+: on from a finished save, off from the title's New Game */
     s_ngpChoice = gFlagGameClear ? 1 : 0;
     newGameSync();
     return s_newGameLayout;
@@ -4526,6 +4527,11 @@ int ui_new_game_screen_enter(void)
 int ui_new_game_screen_layout(void)
 {
     return s_newGameLayout;
+}
+
+int ui_new_game_screen_start(void)
+{
+    return s_newGameStart;
 }
 
 int ui_new_game_screen_row(int row, int on)
@@ -4541,19 +4547,24 @@ static int newGameScreenProc(int first, int item)
         s_newGameChosen = 0;
     }
     newGameSync();
-    /* as la_vibe_select: input only once faded in, and the choice once (the
-       stage change stops the layout procs in the same tick) */
+    /* as la_vibe_select: input once faded in, the choice once */
     if (s_newGameChosen || lt_fade_status() != 2) {
         return -1;
     }
     int flags = pad[0].flags;
+    const int cur = lt_ext_layout(s_newGameLayout)->curItem;
+    if ((flags & PAD_OK) && cur != s_newGameStart && !(flags & LT_PAD_START)) {
+        /* Cross on an Off/On item picks it and moves on */
+        POSITIVE_SE();
+        lt_ext_layout(s_newGameLayout)->curItem = P(cur)->downItem;
+        return -1;
+    }
     if (flags & (PAD_OK | LT_PAD_START)) {
         s_newGameChosen = 1;
         POSITIVE_SE();
         ico_opt_set_mirror(s_mirrorChoice);
         /* the game's only record of a second playthrough: the chosen value
-           wins over the save's (la_host_new_game_go's gflagInit leaves it),
-           and the save and every place the game checks it follow */
+           wins over the save's */
         gFlagGameClear = s_ngpChoice;
         la_host_new_game_go();
         return -1;
@@ -6705,6 +6716,10 @@ int ui_settings_covers_title(void)
     /* from the first frame of a pending return to the switch
        to its page, the logo is down too */
     if (s_built && (s_titleReturn >= 0 || s_titleHandoff)) {
+        return 1;
+    }
+    /* reached from the vibration screen, not a page: keyed on its layout */
+    if (s_built && s_newGameLayout >= 0 && current_layout_id == s_newGameLayout) {
         return 1;
     }
     return s_built && onTitle() && pageOfLayout(current_layout_id, NULL) != NULL;

@@ -200,6 +200,8 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_OPT_NEWGAME_PLUS] = "New Game+",
     [UI_STR_NEWGAME_PLUS_SCREEN] =
         "New Game+ plays the second journey: Yorda’s words translated, the ending and items changed. Off plays the first journey even after finishing.",
+    [UI_STR_NEWGAME_START] = "Start",
+    [UI_STR_NEWGAME_START_SCREEN] = "Begins the new game with the choices above.",
     [UI_STR_OPT_CRT] = "CRT filter",
     [UI_STR_OPT_CRT_STRENGTH] = "CRT strength",
     [UI_STR_OPT_TONE_GAMMA] = "Gamma",
