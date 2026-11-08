@@ -156,7 +156,12 @@ typedef enum RhiBufferUsage {
     RHI_BUF_STORAGE_READ = 1 << 3, /* bone matrices, particle arrays */
     RHI_BUF_COPY_SRC = 1 << 4,
     RHI_BUF_COPY_DST = 1 << 5,
-    RHI_BUF_READBACK = 1 << 6 /* host-visible, for frame dumps */
+    RHI_BUF_READBACK = 1 << 6, /* host-visible, for frame dumps */
+    /* written by vertex shaders (RHI_BIND_STORAGE_BUFFER_RW: the VU
+     * record's stores, only where RhiLimits.vertexStores) as well as read
+     * as RHI_BIND_STORAGE_BUFFER.  Vulkan: the same STORAGE_BUFFER usage
+     * (counted as a buffer shaders read); D3D12: ALLOW_UNORDERED_ACCESS */
+    RHI_BUF_STORAGE_WRITE = 1 << 7
 } RhiBufferUsage;
 
 typedef enum RhiMemory {
@@ -338,6 +343,15 @@ typedef enum RhiBindType {
      * RHI_STATE_RENDER_TARGET_READ, made with RHI_TEX_INPUT_ATTACHMENT. */
     RHI_BIND_STORAGE_TEXTURE,
     RHI_BIND_INPUT_ATTACHMENT,
+    /* A storage buffer vertex shaders write (HLSL RWStructuredBuffer, a u
+     * register: the VU record's stores, port/render/rd_vu_record.c), the
+     * buffer made with RHI_BUF_STORAGE_WRITE, only where
+     * RhiLimits.vertexStores.  The writes are ordered against the buffer's
+     * other uses by rhi_cmd_buffer_store_begin / _end.  Vulkan:
+     * VK_DESCRIPTOR_TYPE_STORAGE_BUFFER at the u binding (slot + 48); D3D12
+     * a UAV range; OpenGL the SSBO binding 16 + slot (the GLSL translation
+     * moves the SPIR-V's 48 + u there); Direct3D 11 refuses the layout. */
+    RHI_BIND_STORAGE_BUFFER_RW,
     RHI_BIND_COUNT
 } RhiBindType;
 
@@ -523,6 +537,14 @@ typedef struct RhiPipelineDesc {
      * skin check's variant (port/render/rd_vu_skin_check.h, issue 163).
      * In-range reads are the same either way. */
     bool uniformRobustOff;
+    /* no rasterization: the vertex shader's stores are the pipeline's whole
+     * work (the VU record, RHI_BIND_STORAGE_BUFFER_RW), no fragment shader
+     * (fragment 0), colorCount 0, drawn in a pass without attachments.
+     * Vulkan rasterizerDiscardEnable; OpenGL GL_RASTERIZER_DISCARD while
+     * the pipeline is bound; D3D12 and Direct3D 11 ignore it (they never
+     * report RhiLimits.vertexStores: the shader's position lies outside the
+     * clip volume, so nothing would be drawn there either) */
+    bool noRaster;
 } RhiPipelineDesc;
 
 enum { RHI_DYN_DEPTH = 1u, RHI_DYN_BLEND = 2u };
@@ -701,6 +723,14 @@ typedef struct RhiLimits {
     bool rov;
     bool rasterOrderAttachment;
     const char *rasterOrderOff;
+    /* Vertex shaders may store to storage buffers (RHI_BIND_STORAGE_BUFFER_RW,
+     * RhiPipelineDesc.noRaster, rhi_cmd_buffer_store_begin / _end): Vulkan
+     * vertexPipelineStoresAndAtomics, enabled with it (ICO_VK_FAKE_NO_VERTEX_STORES=1
+     * reports it absent); false on D3D12 and OpenGL in this release (the
+     * bracket is a no-op there), and on Direct3D 11 always (feature level
+     * 11_0 has no vertex shader UAVs).  The VU record is written by the
+     * vertex shaders where it is true (port/render/rd_vu_record.c). */
+    bool vertexStores;
     /* The device is MoltenVK (Vulkan over Metal: macOS, iOS): the exact
      * blend's pass switching costs 3 to 4 times the frame there (issue
      * 102), so the renderer's default blend is the fixed-function one
@@ -1248,7 +1278,8 @@ void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t first
  * game's VRAM-to-VRAM moves (gif_MoveImage, ZFog's Z copy, queen barrier's
  * framebuffer grab).  Textures must be in COPY_SRC / COPY_DST state. */
 /* Buffer copy: fills RHI_MEM_DEVICE buffers (meshes) from an UPLOAD buffer.
- * Buffers have no rhi_cmd_barrier; the backend makes the written range
+ * Buffers have no rhi_cmd_barrier (a vertex shader's stores have their own
+ * bracket, rhi_cmd_buffer_store_begin / _end below); the backend makes the written range
  * visible to every later vertex, index, uniform, storage and copy read, and
  * the copy waits for every earlier read or copy of the
  * destination recorded or submitted before it, so a range the GPU may still
@@ -1271,6 +1302,22 @@ void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, 
 void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAspect aspect,
                                     RhiRect region, RhiBuffer dst, uint64_t dstOffset,
                                     uint32_t rowPitch);
+
+/* The bracket around the passes whose vertex shaders store to buf
+ * (RHI_BIND_STORAGE_BUFFER_RW; the VU record, port/render/rd_replay_vu.c
+ * vuRecPassBegin), outside render passes: _begin before the first such
+ * pass, _end after the last.  _begin orders the stores after every
+ * earlier read, copy and store of the buffer (recorded or submitted
+ * before it); _end makes them visible to every later vertex, index,
+ * uniform, storage and copy read, as a copy into the buffer would be
+ * (rhi_cmd_copy_texture_to_buffer).  Vulkan: memory barriers from the read
+ * stages to the vertex shader's stores and back, the second held back with
+ * the next pass's or copy's barriers.  Both return false and do nothing
+ * where the backend has no vertex stores (RhiLimits.vertexStores false:
+ * D3D12, Direct3D 11 and OpenGL in this release), so a caller never
+ * stores there. */
+bool rhi_cmd_buffer_store_begin(RhiCommandList cl, RhiBuffer buf);
+bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf);
 
 /* Multisampling: src, a multisampled RGBA8_UNORM texture in
  * RHI_STATE_COPY_SRC, into dst, a single-sampled one of its size and format

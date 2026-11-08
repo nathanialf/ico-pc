@@ -1642,6 +1642,23 @@ static bool vkr_create_device(void)
         VKR_LOG("no dualSrcBlend%s: blending takes the two-pass fallback",
                 avail.dualSrcBlend == VK_TRUE ? " (ICO_VK_FAKE_NO_DUAL)" : "");
     }
+    /* vertex shaders that store (rhi.h RhiLimits.vertexStores: the VU
+     * record written by the pre-pass's vertex shaders, port/render/
+     * rd_vu_record.c), enabled where offered; ICO_VK_FAKE_NO_VERTEX_STORES=1
+     * leaves it off, as on a device without it (tests:
+     * rd_vuprepass_selftest_nostores_fallback) */
+    {
+        const char *noVs = getenv("ICO_VK_FAKE_NO_VERTEX_STORES");
+        const bool fakeNoVs = noVs && noVs[0] && noVs[0] != '0';
+        g_vkr.vertexStores = avail.vertexPipelineStoresAndAtomics == VK_TRUE && !fakeNoVs;
+        if (!g_vkr.vertexStores) {
+            VKR_LOG("no vertexPipelineStoresAndAtomics%s: the VU record is drawn into render "
+                    "targets and copied",
+                    avail.vertexPipelineStoresAndAtomics == VK_TRUE
+                        ? " (ICO_VK_FAKE_NO_VERTEX_STORES)"
+                        : "");
+        }
+    }
     /* multisampling: a fragment shader reading SV_SampleIndex (the per-sample
      * fog) needs sampleRateShading; ICO_VK_FAKE_NO_MSAA=1 reports single
      * sampling only (tests) */
@@ -2425,6 +2442,9 @@ static bool vkr_create_device(void)
                 /* a fragment shader storing to an image (the interlock's
                  * destination read) */
                 .fragmentStoresAndAtomics = g_vkr.interlock ? VK_TRUE : VK_FALSE,
+                /* a vertex shader storing to a buffer (the VU record's
+                 * stores, RhiLimits.vertexStores) */
+                .vertexPipelineStoresAndAtomics = g_vkr.vertexStores ? VK_TRUE : VK_FALSE,
                 /* gpu_robust (on by default on Android): out-of-range
                  * buffer reads give zero and writes are dropped instead of
                  * reaching other memory */
@@ -2764,6 +2784,8 @@ static void vkr_fill_limits(void)
     o->rov = false;
     o->rasterOrderAttachment = g_vkr.rasterOrder;
     o->rasterOrderOff = g_vkr.rasterOrderOff[0] ? g_vkr.rasterOrderOff : NULL;
+    /* the vertex shaders' stores (vkr_create_device) */
+    o->vertexStores = g_vkr.vertexStores;
     o->moltenvk = g_vkr.moltenvk;
     /* v0.7.10: the device profile's facts (rhi.h) */
     o->localRead = g_vkr.localRead;

@@ -267,8 +267,11 @@ typedef struct VkrCmdList {
     /* the accesses a copy into a buffer shaders read must be made visible
      * to (rhi.h rhi_cmd_copy_texture_to_buffer), 0 for none: a memory
      * barrier from the transfer writes, issued with the pending image
-     * barriers */
+     * barriers; pendMemSrc the accesses it waits for beside the transfer
+     * writes (the vertex shaders' stores of rhi_cmd_buffer_store_begin /
+     * _end: VK_ACCESS_SHADER_WRITE_BIT), 0 for none */
     VkAccessFlags pendMemDst;
+    VkAccessFlags pendMemSrc;
     /* the dynamic depth and blend state (vk_cmd.c vkr_flush_dynamic):
      * dynValid the RHI_DYN_* groups whose values in dynHave the command
      * buffer holds (a bind of a pipeline with the group static clears its
@@ -456,6 +459,8 @@ typedef struct VkrState {
      * rasterOrderAttachment): the features enabled */
     bool interlock;
     bool rasterOrder;
+    /* vertexPipelineStoresAndAtomics enabled (RhiLimits.vertexStores) */
+    bool vertexStores;
     /* the attachment read the device has but is not offered on (Qualcomm's
      * own driver, rhi_driver_is_qualcomm_proprietary; ICO_VK_FAKE_ADRENO=1
      * takes that branch, ICO_VK_ATTACHMENT_READ=1 offers it anyway): why,
