@@ -391,9 +391,9 @@ New Game+, Start and round; each row's chosen value stays lit (the cursor's puls
 item, the game's own lit and dim scheme). Cross on an Off or On item picks it and moves the cursor
 to the item below; Cross on Start, or the Start button on any row, confirms both, sets the run's
 mirror mode and `gFlagGameClear`, then calls `la_host_new_game_go`, which starts the game as the
-vibration screen did. The title's lettering is hidden while the screen is up
-(`ui_settings_covers_title` is keyed on the screen's layout, since the screen is reached from the
-vibration screen and not from a page) and shown again back on the vibration screen. The rows are
+vibration screen did. The title's lettering is left alone on the screen (the game's own title
+animation has taken it away by the vibration screen; `ui_settings_covers_title` does not count the
+screen, which is not a page). The rows are
 port props, so the mouse and touch take them with no extra code. Triangle goes back to the vibration screen (`port/ui/settings.h`
 (`ui_new_game_screen_enter`); `ico2/common/src/layout_action.c` (`la_host_new_game_screen`,
 `la_host_new_game_go`)).
@@ -1226,7 +1226,7 @@ the loanword as each language spells it) for mode 5 (`port/ui/photo_ui.c` (`phot
 
 ## The title
 
-While a page opened from the title, or the New Game screen, is up the title's logo is hidden
+While a page opened from the title is up the title's logo is hidden
 ([GAME_FEATURES.md](GAME_FEATURES.md#the-title-logo)); Settings reports it with
 `ui_settings_covers_title` (`port/ui/settings.h`).
 

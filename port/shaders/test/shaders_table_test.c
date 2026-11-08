@@ -138,6 +138,41 @@ static const char *const expectedBatch[] = {
     "vu_tri_planes_batch_pre_vs", "vu_particle_batch_pre_vs",
 };
 
+/* the record's store builds (ICO_VU_REC_STORES, vu_common.hlsli: the
+ * pre-pass entries storing their slots into the frame slot's record buffer
+ * from the vertex shader, no render target; rd_vu_record.h), one for the
+ * one-entry draw and one for the batch */
+static const char *const expectedStore[] = {
+    "vu_prelit_store_pre_vs",
+    "vu_lit_store_pre_vs",
+    "vu_lit_spec_store_pre_vs",
+    "vu_reflect_store_pre_vs",
+    "vu_skin_store_pre_vs",
+    "vu_skin_spec_store_pre_vs",
+    "vu_skin_debug_store_pre_vs",
+    "vu_grid_store_pre_vs",
+    "vu_grid_lit_store_pre_vs",
+    "vu_grid_spec_store_pre_vs",
+    "vu_tri_rule_store_pre_vs",
+    "vu_tri_tick_store_pre_vs",
+    "vu_tri_planes_store_pre_vs",
+    "vu_particle_store_pre_vs",
+    "vu_prelit_batch_store_pre_vs",
+    "vu_lit_batch_store_pre_vs",
+    "vu_lit_spec_batch_store_pre_vs",
+    "vu_reflect_batch_store_pre_vs",
+    "vu_skin_batch_store_pre_vs",
+    "vu_skin_spec_batch_store_pre_vs",
+    "vu_skin_debug_batch_store_pre_vs",
+    "vu_grid_batch_store_pre_vs",
+    "vu_grid_lit_batch_store_pre_vs",
+    "vu_grid_spec_batch_store_pre_vs",
+    "vu_tri_rule_batch_store_pre_vs",
+    "vu_tri_tick_batch_store_pre_vs",
+    "vu_tri_planes_batch_store_pre_vs",
+    "vu_particle_batch_store_pre_vs",
+};
+
 /* the draw merge's builds (ICO_VU_MERGE, vu_common.hlsli: the mesh and grid
  * programs' entries, both variants, and vu_main_vs reading every draw's
  * VuCB and VuBoneCB from the ring at t5 for a draw of many; rd_replay_vu.c
@@ -554,6 +589,13 @@ int main(void)
             failures++;
         }
     }
+    const size_t nStore = sizeof(expectedStore) / sizeof(expectedStore[0]);
+    for (size_t i = 0; i < nStore; i++) {
+        if (!ico_find_shader(expectedStore[i])) {
+            printf("FAIL %s: not in the table\n", expectedStore[i]);
+            failures++;
+        }
+    }
     const size_t nDst = sizeof(expectedDst) / sizeof(expectedDst[0]);
     for (size_t i = 0; i < nDst; i++) {
         if (!ico_find_shader(expectedDst[i])) {
@@ -564,7 +606,7 @@ int main(void)
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
                         nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nMerge +
                         nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone + nFsr1 +
-                        nVelocity;
+                        nVelocity + nStore;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;
