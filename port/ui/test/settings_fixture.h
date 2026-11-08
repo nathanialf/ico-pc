@@ -108,6 +108,7 @@ int fxRow(int palRow);
 void frame(int flags);
 int settle(int layout, int max);
 void press(int flags);
+void hold(int flags, int ticks); /* flags pressed, then held for ticks frames */
 extern char s_dir[1024];
 void path(char *out, size_t n, const char *name);
 void writeFile(const char *p, const char *text);
