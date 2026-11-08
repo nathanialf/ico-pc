@@ -1533,7 +1533,7 @@ static RhiTexture vkr_acquire_backbuffer(bool ahead, bool *lost, bool *busy)
         }
     }
     uint32_t idx = 0;
-    if (!ahead && f->acquireFenceUsed) {
+    if (f->acquireFenceUsed) {
         /* the last acquire's fence was never reset (its picture was given
          * up, or the swapchain went with it): an acquire may only be given
          * an unsignalled fence, so make a fresh one */
@@ -1545,7 +1545,12 @@ static RhiTexture vkr_acquire_backbuffer(bool ahead, bool *lost, bool *busy)
             f->acquireFenceUsed = false;
         }
     }
-    const bool fenced = !ahead && !f->acquireFenceUsed && f->acquireFence != VK_NULL_HANDLE;
+    /* the ahead form takes the fence too: a timeout-0 success can hand back
+     * an image the presentation engine has not freed yet (its semaphore
+     * and this fence signal when it is), so the acquire line
+     * (RhiStats.acquireReadyAtSubmit) counts those pictures as well; a
+     * VK_NOT_READY or VK_TIMEOUT leaves the fence unsignalled and unused */
+    const bool fenced = !f->acquireFenceUsed && f->acquireFence != VK_NULL_HANDLE;
     const uint64_t t0 = vkr_now_ns();
     VkResult r =
         vkAcquireNextImageKHR(g_vkr.device, g_vkr.swapchain, ahead ? 0u : UINT64_MAX, f->acquireSem,
