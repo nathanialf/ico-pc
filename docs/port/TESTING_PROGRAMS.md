@@ -1503,6 +1503,13 @@ The renderer's test programs have a page of their own:
   confirming, Cross and Triangle going back, the title's rows, the notes' serial, the mouse,
   the prompts and the boot's hand-over to the title with Skip the opening
   (`testSkipOpeningTitle`).
+- `settings_step_test.c` (`settings_step`, `_jpn`, `_kor`, `_cn`): Options > Picture stepping (issue 202),
+  CPU only over the shared fixture (`hold` presses a button and holds it): holding Left or Right on
+  Gamma (the press alone for 15 ticks, the first repeat at the 16th, one every 3 ticks after,
+  release and hold again, the other direction, the stick's d-pad emulation, held at 1 and 100,
+  1 to 100 in 98 repeats, presses with gaps never repeating), a wrapping row (Filter) held for 75
+  ticks stepping once, L1/R1 by 10 on the four colour rows (held at 1 and 100, nothing on Filter,
+  written on leaving the page), and the list of the rows that repeat.
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
   (`settings_render`, which also draws the Touch screen page, the editor page and the main page
   scrolled by nine Downs, `settings_main_scrolled.png`, the Picture and Developer pages, `settings_picture.png` and `settings_developer.png`, and Gameplay's Yorda, Shadows and Cutscenes pages opened through Gameplay, `settings_gameplay_yorda.png`, `settings_gameplay_shadows.png` and `settings_gameplay_cutscenes.png`, also at 1080p); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,
