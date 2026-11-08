@@ -481,13 +481,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `shadow_spawn_test.c`: the depth a shadow rises from, read at the generator kind's word as the
   PS2 reads it; with the disc, every generator row (`shadow_spawn`).
 - `title_logo_test.c`: the logo's models and the hidden state's steps; the application icon's
-  capture (`title_icon.c`) with the renderer, the curtain and the icon files stubbed: the pass leaves
+  capture (`title_icon.c`) with the renderer and the icon files stubbed: the pass leaves
   out every model but `I` (`title_back`, `st26a_p1`, `C`, `I_f`, `I_sd`) and off leaves the old
   table; the capture starts after `ICO_TITLE_ICON_WAIT` ticks of layout 12 or 13 (counted again
   after a Settings page or the model viewer) when an icon is wanted, never when not, and a picture
   not plain (`ICO_APP_ICON_NOT_PLAIN`) leaving it idle with the count from 0 (the capture starting
-  once it is plain); the shot over black after the settle, white once it came, the shot over
-  white, then the pass off, the pair delivered and the curtain off at the first present past the
+  once it is plain); the renderer's hold first and the pass on at the tick it holds a picture
+  (after `ICO_TITLE_ICON_HELD_WAIT` ticks without one; the menu left while waiting ends it with no
+  pass); the shot over black after the settle, white once it came, the shot over
+  white, then the pass off, the pair delivered and the hold released at the first present past the
   pass's frames (held over older frames and over a blend with the pass's last; the rule
   `ico_title_icon_present_clean` alone; after `ICO_TITLE_ICON_HOLD_MAX` ticks without such a
   present), done for the run; an empty answer or none within

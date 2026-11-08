@@ -1533,6 +1533,10 @@ frame begun by the time it was asked (`g_rd.frameCounter` then; the present's fr
 CRT filter's box under the filter) and hands the RGBA to the caller, which frees it; a second
 request, a failed copy or the shutdown tell the caller none. `rd_present_box_size` is the last
 present's box size, the picture's shape on screen.
+After the captures' copy and before the overlay, the title's icon capture's hold
+(`rd_icon_hold`, `port/render/rd_icon_hold.c`) draws the last picture presented before the icon
+pass over a present of a pass frame, so the shot reads the pass while the screen keeps the title
+([APP_ICON.md](APP_ICON.md#the-capture-on-the-title)); without a hold nothing there runs.
 
 **Present modes.** The window asks for mailbox through `rhi_prefer_mailbox`; what each backend then
 takes is [RHI.md](RHI.md#vulkan)'s (Vulkan: mailbox when preferred, FIFO latest ready with

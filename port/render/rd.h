@@ -1506,10 +1506,27 @@ bool rd_draw_filter_keeps(RdKey key);
  *                     was last turned on or off (the frame open then, or
  *                     the last begun): a frame numbered above it at the
  *                     pass's off was begun after it and holds none of it
- *                     (title_icon.c lifts its curtain at a present past it) */
+ *                     (the hold below ends at a present past it) */
 void rd_set_icon_pass(const uint8_t *clearRgba);
 bool rd_icon_pass_on(void);
 uint32_t rd_icon_pass_last_frame(void);
+
+/* The pass's frames are never seen (rd_icon_hold.h): they are rendered and
+ * presented as any other, and the capture reads them, but while a hold is
+ * on each present whose picture holds the pass draws the last picture
+ * presented before it over the whole output (before the overlay, after the
+ * capture's copy), until the first present past the pass's frames.
+ *
+ * rd_icon_hold          on: from now on every present copies its output,
+ *                     until the pass's first frame is presented (the copy
+ *                     the player saw last); then the copy is shown in place
+ *                     of the pass's pictures.  Off: the copy freed (the
+ *                     capture's end, title_icon.c, once a present past the
+ *                     pass was seen).  Game thread
+ * rd_icon_hold_ready    a copy was taken since the hold came on: the pass
+ *                     may start (title_icon.c waits for it a few ticks) */
+void rd_icon_hold(bool on);
+bool rd_icon_hold_ready(void);
 
 /* ------------------------------------------------------------- lists */
 

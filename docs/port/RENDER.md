@@ -60,6 +60,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/vu1_ref/` | the VU1 programs' CPU references ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-cpu-oracles)) |
 | `port/render/test/` | the renderer's tests ([TESTING_PROGRAMS.md](TESTING_PROGRAMS_RENDER.md)) |
 | `port/render/rd_interp.c`, `rd_present.c`, `rd_present_info.c`, `rd_crt.c`, `rd_fsr1.c`, `rd_video.c` | presentation ([DISPLAY.md](DISPLAY.md)); `rd_present_info.c` holds `rd_last_present_info`'s record |
+| `port/render/rd_icon_hold.c`, `rd_icon_hold.h` | the title's last picture held on screen while the icon capture's frames are presented ([APP_ICON.md](APP_ICON.md#the-capture-on-the-title)) |
 | `port/render/rd_present_clock.c` | the present clock the timer path takes alpha from (`rd_present_clock_alpha`), the values it notes for `rd_present` (the alpha before its clamp, the time since the present before, the tick) and Motion blur: Smooth's presents a tick (`rd__present_clock_k`) ([DISPLAY.md](DISPLAY.md#interpolation-between-ticks)) |
 | `port/render/rd_interp_mesh.c` | the interpolation's reads of a mesh's stream kept while its serial holds: a skinned mesh's bone pivots, a rigid mesh's centroid, the same-shape answer of two streams ([Performance notes](#performance-notes)) |
 | `port/render/texpack*.c`, `modelpack.c`, `gltf.c`, `xxh3.c` | texture and model packs ([PACKS.md](PACKS.md)) |
@@ -250,8 +251,11 @@ filtered (`port/render/rd.h` ("the draw filter")).
 
 **The icon pass.** While the title's "I" is captured for the application icon,
 `rd_set_icon_pass(colour)` leaves out the UI and full-screen screen prims and the deferred text and
-clears SCENE to the colour at the frame head; off, a frame records byte-identically
-(`port/render/rd.h` ("the title's icon pass"); [APP_ICON.md](APP_ICON.md#the-capture-on-the-title)).
+clears SCENE to the colour at the frame head; off, a frame records byte-identically. Its frames are
+presented but never seen: with `rd_icon_hold` on, a present of a pass frame is covered by the last
+picture presented before the pass (`port/render/rd_icon_hold.c`, drawn after the capture's copy and
+before the overlay) until a present past the pass (`port/render/rd.h` ("the title's icon pass");
+[APP_ICON.md](APP_ICON.md#the-capture-on-the-title)).
 
 ## The state
 

@@ -17,8 +17,10 @@
  *
  * No SDL, heap only: the game thread runs on 256 KB fiber stacks.
  *
- * Thread use: ico_app_icon_deliver runs on the game thread behind the
- * capture's curtain (about 30 to 50 ms); ico_app_icon_changed_take is read
+ * Thread use: ico_app_icon_deliver runs on the game thread while the
+ * renderer still shows the title's held picture (rd.h rd_icon_hold; about
+ * 30 to 130 ms at 3840 x 2160: the pair test and the matte over every
+ * pixel); ico_app_icon_changed_take is read
  * by the window host's pump.  The *_at functions take the folder and the
  * names explicitly (the tests use a fake folder under the build folder);
  * ico_app_icon_wanted / _deliver read the user folder, the current disc and

@@ -16,7 +16,6 @@ static const uint8_t kWhite[4] = {0xFF, 0xFF, 0xFF, 0x80};
 
 #if defined(ICO_RD) && !defined(__ANDROID__) && !defined(ICO_IOS)
 #include "rd.h"
-#include "ui_host.h"
 
 /* the shot's answer, stored by the presenting thread (rd_capture_shot's fn
    runs there after the present) and taken here on the game thread */
@@ -74,6 +73,16 @@ static void realPass(const uint8_t *clearRgba)
     rd_set_icon_pass(clearRgba);
 }
 
+static void realHold(int on)
+{
+    rd_icon_hold(on != 0);
+}
+
+static int realHeld(void)
+{
+    return rd_icon_hold_ready() ? 1 : 0;
+}
+
 static int realPresented(uint32_t *frame, float *alpha)
 {
     RdPresentInfo pi;
@@ -92,7 +101,8 @@ static const IcoTitleIconOps kReal = {
     realTake,
     realCancel,
     realPass,
-    ui_host_curtain,
+    realHold,
+    realHeld,
     ico_app_icon_deliver,
     ico_app_icon_deliver_single,
     rd_icon_pass_last_frame,
@@ -111,9 +121,9 @@ static struct {
     int ticks;     /* in the state */
     int drops;     /* shots armed again in this run */
     int ghostRetried;
-    int pass, curtain;
+    int pass, hold;
     int armed;         /* a shot armed and not answered */
-    int doneAfter;     /* the curtain step's end: done for the run, or idle */
+    int doneAfter;     /* the resume step's end: done for the run, or idle */
     uint32_t passLast; /* the newest frame that may hold the pass (at its off) */
     uint8_t *a;        /* the frame over black */
     uint32_t aw, ah;
@@ -125,13 +135,13 @@ static void passSet(const uint8_t *clearRgba)
     s_ops->pass(clearRgba);
 }
 
-static void curtainSet(int on)
+static void holdSet(int on)
 {
-    s.curtain = on;
-    s_ops->curtain(on);
+    s.hold = on;
+    s_ops->hold(on);
 }
 
-/* the pass off; the curtain held until a present shows none of the pass's
+/* the pass off; the hold kept until a present shows none of the pass's
    frames, then done or idle */
 static void finish(int doneForRun)
 {
@@ -146,7 +156,7 @@ static void finish(int doneForRun)
     }
     s.passLast = s_ops->pass_last();
     s.doneAfter = doneForRun;
-    s.state = ICO_TITLE_ICON_CURTAIN;
+    s.state = ICO_TITLE_ICON_RESUME;
     s.ticks = 0;
 }
 
@@ -162,9 +172,6 @@ static void startPair(void)
     free(s.a);
     s.a = NULL;
     passSet(kBlack);
-    if (!s.curtain) {
-        curtainSet(1);
-    }
     settle(ICO_TITLE_ICON_SETTLE_A);
 }
 
@@ -260,16 +267,20 @@ void ico_title_icon_tick(int onMenu)
                 return;
             }
         }
-        fprintf(stderr, "ico_pc: icon: capturing the title's I (pass 1 of 2)\n");
+        /* the renderer keeps the picture on screen first (rd_icon_hold):
+           the pass starts once it holds one */
         s.drops = 0;
         s.ghostRetried = 0;
-        startPair();
+        holdSet(1);
+        s.state = ICO_TITLE_ICON_HOLD;
+        s.ticks = 0;
         return;
-    case ICO_TITLE_ICON_CURTAIN: {
-        /* the curtain is read as each present is recorded: a picture of a
-           pass frame (a walk begun before the pass went off, recorded some
-           ticks later; a blend with one) shows white or the bare letter, so
-           it comes off once a present past them was recorded */
+    case ICO_TITLE_ICON_RESUME: {
+        /* read as each present is recorded: a picture of a pass frame (a
+           walk begun before the pass went off, recorded some ticks later; a
+           blend with one) is covered by the held picture, so the hold is
+           released once a present past them was recorded (the renderer
+           shows the live picture from that present on by itself) */
         uint32_t frame = 0;
         float alpha = 1.0f;
         const int clean = s_ops->presented(&frame, &alpha) &&
@@ -279,11 +290,11 @@ void ico_title_icon_tick(int onMenu)
         if (!clean && s.ticks >= ICO_TITLE_ICON_HOLD_MAX) {
             fprintf(stderr,
                     "ico_pc: icon: no picture past the pass's frames (frame %u) was presented "
-                    "in %d ticks: the curtain comes off\n",
+                    "in %d ticks: the held picture is released\n",
                     (unsigned)s.passLast, ICO_TITLE_ICON_HOLD_MAX);
         }
         if (clean || s.ticks >= ICO_TITLE_ICON_HOLD_MAX) {
-            curtainSet(0);
+            holdSet(0);
             s.state = s.doneAfter ? ICO_TITLE_ICON_DONE : ICO_TITLE_ICON_IDLE;
             s.menuTicks = 0;
         }
@@ -299,6 +310,23 @@ void ico_title_icon_tick(int onMenu)
         return;
     }
     switch (s.state) {
+    case ICO_TITLE_ICON_HOLD: {
+        const int held = s_ops->held();
+
+        ++s.ticks;
+        if (!held && s.ticks < ICO_TITLE_ICON_HELD_WAIT) {
+            return;
+        }
+        if (!held) {
+            fprintf(stderr,
+                    "ico_pc: icon: no picture of the title was presented in %d ticks to keep on "
+                    "screen: the capture's frames show black\n",
+                    ICO_TITLE_ICON_HELD_WAIT);
+        }
+        fprintf(stderr, "ico_pc: icon: capturing the title's I (pass 1 of 2)\n");
+        startPair();
+        return;
+    }
     case ICO_TITLE_ICON_SETTLE_A:
     case ICO_TITLE_ICON_SETTLE_B:
         if (++s.ticks >= ICO_TITLE_ICON_SETTLE) {
@@ -362,8 +390,8 @@ void ico_title_icon_reset(void)
         if (s.pass) {
             s_ops->pass(NULL);
         }
-        if (s.curtain) {
-            s_ops->curtain(0);
+        if (s.hold) {
+            s_ops->hold(0);
         }
     }
     free(s.a);

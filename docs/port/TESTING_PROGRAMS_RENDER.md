@@ -1000,6 +1000,16 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   colour over the flip's (also when the flip sends no clear, and when the pass comes on inside the
   open frame); off again, a frame byte-identical (every list's commands and the payload) to one
   recorded with the pass never on, and no clear without one from the flip (`rd_icon_pass`).
+- `rd_icon_hold_test.c`: the title's picture held on screen during the icon capture
+  (`rd_icon_hold`, `rd_icon_hold.h`): the rule `rd__icon_hold_tainted` (no pass, frames before it,
+  the pass's frames while on and after its off, a blend with its last, the frames past it); on a
+  Vulkan device (77 without one), frames drawn into DISPLAY and presented to a 1024 x 768 output in
+  the Original preset: a pass frame with no hold presents as drawn; with the hold on and a title
+  frame presented (`rd_icon_hold_ready` only then) both pass frames (black, then white clear)
+  present the title frame's picture byte for byte while the state picture armed in the first
+  (`rd_capture_shot`) is the pass frame's own picture, the next title frame past the pass presents
+  live, and after the release too; the hold and the pass on with no present between present black;
+  no validation errors (`rd_icon_hold`, and `rd_icon_hold_gl` on OpenGL).
 - `rd_fog_selftest_test.c` with `rd_fog_selftest.cmake`: the fog's self-test and probe; its log line
   matched for each path, MSAA counts, odd widths and [Full pixel](ARCHITECTURE.md#terms)
   (`rd_fog_selftest*`; the local read's first under `ICO_RD_FOG_PATH=local`,

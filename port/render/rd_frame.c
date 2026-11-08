@@ -17,6 +17,7 @@
  */
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_icon_hold.h"
 #include "shader_consts.h"
 
 /* ------------------------------------------------------------ frame head */
@@ -34,6 +35,8 @@ void rd_set_icon_pass(const uint8_t *clearRgba)
         /* the newest frame number given out: the frame open now, or the
            last begun, holds the pass's draws in part or whole */
         s_iconPass.lastFrame = g_rd.frameCounter;
+        /* the held picture's frames (rd_icon_hold.h) */
+        rd__icon_hold_pass(clearRgba != NULL, g_rd.frameCounter);
     }
     s_iconPass.on = clearRgba != NULL;
     if (clearRgba) {
