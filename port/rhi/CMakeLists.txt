@@ -99,7 +99,11 @@ target_include_directories(rhi_d3d11_shader_plan_test PRIVATE "${CMAKE_CURRENT_S
                            "${CMAKE_CURRENT_SOURCE_DIR}/test/shaders")
 target_compile_definitions(rhi_d3d11_shader_plan_test PRIVATE
     ICO_RHI_TEST_SHADER_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/shaders"
-    ICO_GAME_SHADER_DIR="${CMAKE_SOURCE_DIR}/port/shaders")
+    ICO_GAME_SHADER_DIR="${CMAKE_SOURCE_DIR}/port/shaders"
+    # the vendored shader headers the sources include by base name
+    # (cmake/IcoShaders.cmake ICO_SHADER_THIRD_PARTY_DIRS; the Direct3D 11
+    # sources embed them too)
+    ICO_GAME_SHADER_THIRD_PARTY_DIR="${CMAKE_SOURCE_DIR}/port/third_party/fsr1")
 target_compile_options(rhi_d3d11_shader_plan_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
                        ${ICO_PORT_WARNINGS})
 # the table's entries (hlslFile and defines are in every table; the sources

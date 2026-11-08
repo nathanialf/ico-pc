@@ -38,8 +38,13 @@ target_include_directories(ico_ffx_sc PRIVATE "${_sc}/src" "${_sc}/libs/MD5"
                                               "${_sc}/libs/SPIRV-Reflect"
                                               "${_sc}/libs/tiny-process-library")
 # third-party code: its warnings are not ours to fix; no sanitizer (a build
-# tool, run by the build)
-target_compile_options(ico_ffx_sc PRIVATE -w -fno-sanitize=all)
+# tool, run by the build); no _FORTIFY_SOURCE either: Ubuntu's gcc turns
+# level 3 on by default, and glsl_compiler.cpp:39 writes an MD5 digest as
+# hex with `std::snprintf(out_ptr, 32, "%02x", ...)` along a buffer, so the
+# size told to snprintf exceeds the space left after the first byte pair
+# and the fortified call aborts ("buffer overflow detected", CI 2026-11-08)
+# though it writes three bytes each time (clean under AddressSanitizer).
+target_compile_options(ico_ffx_sc PRIVATE -w -fno-sanitize=all -U_FORTIFY_SOURCE)
 target_link_options(ico_ffx_sc PRIVATE -fno-sanitize=all)
 find_package(Threads REQUIRED)
 target_link_libraries(ico_ffx_sc PRIVATE Threads::Threads)

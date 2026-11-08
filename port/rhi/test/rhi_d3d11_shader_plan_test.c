@@ -26,14 +26,19 @@
 #include <string.h>
 
 #ifdef _WIN32
+
 #include <direct.h>
+
 #else
+
 #include <dirent.h>
 #include <unistd.h>
-#endif
 
+#endif
 #ifdef ICO_HAVE_SHADER_TABLE
+
 #include "shaders_gen.h"
+
 #endif
 
 static int failures;
@@ -189,9 +194,13 @@ static void testTestShaders(void)
  * from the source tree (the same set embed_shaders.py takes: *.hlsl,
  * *.hlsli, *.h, sorted by name). */
 #define GAME_SOURCES_MAX 48
+
 static RhiShaderSource s_game[GAME_SOURCES_MAX];
+
 static char *s_gameText[GAME_SOURCES_MAX];
+
 static char s_gameName[GAME_SOURCES_MAX][64];
+
 static unsigned s_gameCount;
 
 static int byName(const void *a, const void *b)
@@ -216,30 +225,40 @@ static void loadGameSources(void)
     }
     printf("rhi_d3d11_shader_plan_test: %u embedded sources\n", s_gameCount);
 #elif defined(ICO_GAME_SHADER_DIR) && !defined(_WIN32)
-    DIR *dir = opendir(ICO_GAME_SHADER_DIR);
-    struct dirent *e;
-    while (dir && (e = readdir(dir)) != NULL && s_gameCount < GAME_SOURCES_MAX) {
-        if (!(hasSuffix(e->d_name, ".hlsl") || hasSuffix(e->d_name, ".hlsli") ||
-              hasSuffix(e->d_name, ".h")) ||
-            strlen(e->d_name) >= sizeof(s_gameName[0])) {
-            continue;
+    /* the shader directory, then the vendored headers its sources include
+     * by base name (the Direct3D 11 build embeds both, IcoShaders.cmake) */
+    static const char *const dirs[] = {
+        ICO_GAME_SHADER_DIR,
+#ifdef ICO_GAME_SHADER_THIRD_PARTY_DIR
+        ICO_GAME_SHADER_THIRD_PARTY_DIR,
+#endif
+    };
+    for (unsigned d = 0; d < sizeof(dirs) / sizeof(dirs[0]); d++) {
+        DIR *dir = opendir(dirs[d]);
+        struct dirent *e;
+        while (dir && (e = readdir(dir)) != NULL && s_gameCount < GAME_SOURCES_MAX) {
+            if (!(hasSuffix(e->d_name, ".hlsl") || hasSuffix(e->d_name, ".hlsli") ||
+                  hasSuffix(e->d_name, ".h")) ||
+                strlen(e->d_name) >= sizeof(s_gameName[0])) {
+                continue;
+            }
+            char path[1024];
+            size_t len = 0;
+            snprintf(path, sizeof(path), "%s/%s", dirs[d], e->d_name);
+            char *text = readFile(path, &len);
+            if (!text) {
+                continue;
+            }
+            const unsigned k = s_gameCount++;
+            memcpy(s_gameName[k], e->d_name, strlen(e->d_name) + 1); /* shorter: checked above */
+            s_gameText[k] = text;
+            s_game[k].name = s_gameName[k];
+            s_game[k].text = text;
+            s_game[k].len = len;
         }
-        char path[1024];
-        size_t len = 0;
-        snprintf(path, sizeof(path), "%s/%s", ICO_GAME_SHADER_DIR, e->d_name);
-        char *text = readFile(path, &len);
-        if (!text) {
-            continue;
+        if (dir) {
+            closedir(dir);
         }
-        const unsigned k = s_gameCount++;
-        memcpy(s_gameName[k], e->d_name, strlen(e->d_name) + 1); /* shorter: checked above */
-        s_gameText[k] = text;
-        s_game[k].name = s_gameName[k];
-        s_game[k].text = text;
-        s_game[k].len = len;
-    }
-    if (dir) {
-        closedir(dir);
     }
     qsort(s_game, s_gameCount, sizeof(s_game[0]), byName);
     printf("rhi_d3d11_shader_plan_test: %u sources read from %s\n", s_gameCount,
@@ -335,6 +354,7 @@ static void testKeyInputs(void)
 }
 
 #ifdef ICO_HAVE_SHADER_TABLE
+
 /* every entry of the table: its HLSL file among the sources, its macros
  * parsed, its key its own */
 static void testShaderTable(void)
@@ -387,8 +407,8 @@ static void testShaderTable(void)
            g_icoShaderCount, macros);
     CHECK(g_icoShaderCount > 0, "the table has entries");
 }
-#endif
 
+#endif
 /* ---------------------------------------------------------- the file */
 #define CACHE_DIR "rhi_d3d11_shader_plan_cache"
 
