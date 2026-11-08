@@ -527,6 +527,20 @@ int main(void)
             failures++;
         }
     }
+    /* the record's store builds (ICO_VU_REC_STORES, vu_common.hlsli
+     * vu_rec_store; port/render/rd_vu_record.c): each batch build's name
+     * vu_X_batch_pre_vs gives vu_X_store_pre_vs and vu_X_batch_store_pre_vs */
+    for (size_t i = 0; i < nBatch; i++) {
+        const char *b = expectedBatch[i];
+        const size_t n = strlen(b) - strlen("_batch_pre_vs");
+        char one[64], batch[64];
+        snprintf(one, sizeof(one), "%.*s_store_pre_vs", (int)n, b);
+        snprintf(batch, sizeof(batch), "%.*s_batch_store_pre_vs", (int)n, b);
+        if (!ico_find_shader(one) || !ico_find_shader(batch)) {
+            printf("FAIL %s or %s: not in the table\n", one, batch);
+            failures++;
+        }
+    }
     const size_t nMerge = sizeof(expectedMerge) / sizeof(expectedMerge[0]);
     for (size_t i = 0; i < nMerge; i++) {
         if (!ico_find_shader(expectedMerge[i])) {

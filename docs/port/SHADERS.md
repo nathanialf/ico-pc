@@ -231,6 +231,7 @@ number the RHI slot (`port/shaders/common.hlsli`, header comment; `port/rhi/rhi.
 | 0 | `b0` | FrameCB, once per frame |
 | 1 | `b1` | DrawCB, per draw or post pass (crt.hlsl's CrtCB and fsr1.hlsl's FsrCB take the same slot) |
 | 1 | `b2`, `b3`, `t0`, `t4` | the VU programs' VuCB and VuBoneCB (bones, card bits; `uint4 vu_bone[240]`), the VU vertex stream (`vu_stream`, `StructuredBuffer<uint4>`), and the pre-passes' record (`vu_rec_buf`, `StructuredBuffer<uint4>`, three planes), every one declared `uint4` so integer lanes are read as integers ([Integer lanes](#integer-lanes-never-through-a-float-load)); VuCB and the record are visible to the pixel stage too (`vu_ps` reads the planes) |
+| 1 | `u6` | the store builds' record (`vu_rec_out`, `RWStructuredBuffer<uint4>`, vertex stage; `ICO_VU_REC_STORES`: `vu_X_store_pre_vs`, `vu_X_batch_store_pre_vs`), the frame slot's record buffer written by the pre-pass's points and read by pass T's stages in place of `t4` (`vu_rec_buf` is a name of it in those builds), in group 1's store layout (`rd_vu_record.c` `layoutVuPre`: t0, b1, b2, b3, t5, u6) ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the record's two writes) |
 | 1 | `t5` | the upload ring from the replay's VU base on (`vu_ring`, `StructuredBuffer<uint4>`, vertex stage; `rd_replay_vu.c` `s_ringBase`, 256-aligned, after the uploads): the pre-pass's batch builds (`vu_X_batch_pre_vs`, `ICO_VU_PRE_BATCH`) read each entry's VuCB and VuBoneCB and the batch's table there, the table found through DrawCB's `aux0` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)); the draw merge's builds (`vu_X_merge_vs`, `vu_X_merge_plain_vs`, `vu_merge_main_vs`, `ICO_VU_MERGE`) read each draw's VuCB and VuBoneCB and the run's table there, the table found through b2's `mark.w` ([VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-draw-merge)); every VU group binds it (Direct3D 11's leave it unbound only with the pre-pass's batches, the merge and the ring builds off), the cluster entries' ring builds (`vu_X_ring_plain_vs`, `ICO_VU_BONES_RING`: issue 123's ladder, under `[dev] vu_bones = ring` or the skin check's column 3 and twin C) read the bones there from b2's `mark.w`, the other builds do not read it |
 | 2 | `t1`..`t4`, `s1`..`s4` | textures and samplers |
 | 3 | `u0` | the destination read's target (`_dstrov`); `_dstatt` reads binding 16 of set 3 as an input attachment |
@@ -796,6 +797,22 @@ shaders (`_main_vs`) to the plain budget and asks a plain variant only of the te
 entries (`tools/check_spirv.py` `PROGRAM_ENTRIES`, gates `size per variant` and `variants`). With
 the pre-passes a device compiles the two main shaders, the ten pre-pass entries and the five
 record stages in place of the program entries, none over 16,515 words.
+
+The store builds (`ICO_VU_REC_STORES`, [PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes),
+the record's two writes) of the fourteen pre-pass entries and record stages and of their batch
+builds store the record from the vertex shader: `OpAccessChain` into the `u6` buffer and `OpStore`,
+both in the envelope's set already (a vertex shader's stores were never outside it: the 2D and VU
+shaders store their outputs), three `uint4` stores a point, the tick stage one 32-bit store of its
+lane in a branch (the other lane is the other tick's draw in the same pass). They have no flat
+varyings (the position, outside the clip volume, and `PointSize`) and a few dozen words fewer than
+the targets' builds (this DXC and the build's flags; words): `vu_prelit_store_pre_vs` 2,095,
+`vu_lit_store_pre_vs` 2,497, `vu_lit_spec_store_pre_vs` 2,150, `vu_reflect_store_pre_vs` 2,331,
+`vu_skin_store_pre_vs` 2,735, `vu_skin_spec_store_pre_vs` 2,750, `vu_skin_debug_store_pre_vs`
+2,817, `vu_grid_store_pre_vs` 1,795, `vu_grid_lit_store_pre_vs` 2,163, `vu_grid_spec_store_pre_vs`
+2,182, `vu_tri_rule_store_pre_vs` 17,229, `vu_tri_tick_store_pre_vs` 16,535,
+`vu_tri_planes_store_pre_vs` 4,185, `vu_particle_store_pre_vs` 8,805; the batch store builds
+1,795 to 17,589 (`vu_tri_rule_batch_store_pre_vs`), within the plain budget (25,700). The targets'
+builds are unchanged word for word. `tools/check_spirv.py`'s envelope passes them unchanged.
 
 The draw merge's builds (`ICO_VU_MERGE`: `vu_X_merge_vs` and `vu_X_merge_plain_vs` of the seven
 mesh and grid programs but the skinned ones, `vu_merge_main_vs`;
