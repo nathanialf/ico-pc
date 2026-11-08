@@ -676,7 +676,12 @@ x), and every function runs as in the item's own draw on the same bytes, so each
 words it wrote alone, at the same texels. The items of a pass write disjoint texels, so their new
 order does not change the record. Skinned (cluster) items batch like the others: their bones are
 read from their VuBoneCB in the ring. The batch builds are 2,338 to 17,220 words, within the
-pre-pass entries' plain budget.
+pre-pass entries' plain budget. Where the record is stored by the vertex shaders (`[dev]
+vu_record`, [PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the record's two
+writes) a batch is still one point draw, through the batch's store build `vu_X_batch_store_pre_vs`
+(`ICO_VU_PRE_BATCH` and `ICO_VU_REC_STORES`, 2,292 to 17,589 words): each item stores the words it
+would have drawn, at the same slots, so the order of the items still changes nothing, and group 1
+is the store layout (the record at u6 in place of t4), one group for the batch as before.
 
 An item whose VuCB or VuBoneCB lies past the range t5 binds, or a batch whose table or DrawCB does
 not fit the ring, leaves its command to the old way (its program's entry), as a ring that is full

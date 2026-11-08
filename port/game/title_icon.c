@@ -14,7 +14,7 @@
 static const uint8_t kBlack[4] = {0, 0, 0, 0x80};
 static const uint8_t kWhite[4] = {0xFF, 0xFF, 0xFF, 0x80};
 
-#if defined(ICO_RD) && !defined(__ANDROID__) && !defined(ICO_IOS)
+#if defined(ICO_RD) && !defined(ICO_IOS)
 #include "rd.h"
 #include "ui_host.h"
 

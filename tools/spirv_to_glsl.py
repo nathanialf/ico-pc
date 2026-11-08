@@ -20,6 +20,13 @@ or shipped). The SPIR-V binding map the HLSL sources are compiled to
                        (SPIRV-Cross writes the SPIR-V's 48 + u; the script
                        takes 48 off: OpenGL 4.3 guarantees only 8 image
                        units, so unit 48 would exist on no driver)
+  written storage      layout(binding = 16 + u, std430)    SSBO binding 16 + u
+  buffer               (an HLSL RWStructuredBuffer at u: the VU record's store
+                       builds, ICO_VU_REC_STORES; SPIRV-Cross writes 48 + u,
+                       the script moves it beside the read storage buffers,
+                       where port/rhi/gl/gl_internal.h gl_bind_point binds
+                       RHI_BIND_STORAGE_BUFFER_RW: OpenGL 4.3 guarantees 8
+                       SSBO bindings, 48 + u would bind on few drivers)
   dual-source output   layout(location = 0, index = 1)
 
 A module that queries a multisampled texture's sample count (OpImageQuerySamples:
@@ -119,6 +126,30 @@ def remap_images(text):
     return text
 
 
+SSBO_BASE = 16  # the -fvk-t-shift: a read storage buffer's binding, 16 + t
+SSBO_DECL = re.compile(r"^layout\(binding = (\d+), std430\) ((?:readonly |writeonly |restrict |coherent |volatile )*buffer\b.*)$",
+                       re.M)
+SSBO_ANY = re.compile(r"^.*\blayout\s*\([^)]*\bbinding\s*=\s*(\d+)[^)]*\)[^;{]*\bbuffer\b.*$", re.M)
+
+
+def remap_written_buffers(text):
+    """A storage buffer at a u register (48 + u, an HLSL RWStructuredBuffer)
+    becomes SSBO binding 16 + u (port/rhi/gl/gl_internal.h gl_bind_point);
+    the t registers' buffers keep 16 + t (the shaders use no t and u of one
+    number in a group, port/shaders/reg.hlsli)."""
+    def sub(m):
+        b = int(m.group(1))
+        if b >= IMAGE_BASE:
+            b = b - IMAGE_BASE + SSBO_BASE
+        return f"layout(binding = {b}, std430) {m.group(2)}"
+    text = SSBO_DECL.sub(sub, text)
+    for m in SSBO_ANY.finditer(text):
+        if int(m.group(1)) >= IMAGE_BASE:
+            sys.exit(f"spirv_to_glsl: a storage buffer still at binding {m.group(1)} after the "
+                     f"remap (a declaration form SSBO_DECL does not match): {m.group(0).strip()}")
+    return text
+
+
 def translate(exe, src, out):
     """Returns (text, nocontraction, precise, extensions) or None for a module
     GLSL cannot express (the output is then an empty file)."""
@@ -142,6 +173,7 @@ def translate(exe, src, out):
     if not text.startswith(f"#version {version}"):
         sys.exit(f"spirv_to_glsl: {src}: output does not start with #version {version}")
     text = remap_images(text)
+    text = remap_written_buffers(text)
     precise = len(re.findall(r"\bprecise\b", text))
     if nocontr and not precise:
         sys.exit(f"spirv_to_glsl: {src}: {nocontr} NoContraction decorations, no `precise` in the GLSL")

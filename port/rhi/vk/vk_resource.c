@@ -442,7 +442,8 @@ static RhiBuffer createBuffer(const RhiBufferDesc *desc)
     if (desc->usage & RHI_BUF_UNIFORM) {
         usage |= VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
     }
-    if (desc->usage & RHI_BUF_STORAGE_READ) {
+    if (desc->usage & (RHI_BUF_STORAGE_READ | RHI_BUF_STORAGE_WRITE)) {
+        /* read or written by shaders: one usage bit (rhi.h RHI_BUF_STORAGE_WRITE) */
         usage |= VK_BUFFER_USAGE_STORAGE_BUFFER_BIT;
     }
     if (desc->usage & RHI_BUF_COPY_SRC) {
@@ -491,7 +492,8 @@ static RhiBuffer createBuffer(const RhiBufferDesc *desc)
     b->kind = desc->memory;
     /* a device buffer a shader reads: a texture copied into it is made
      * visible to those reads (vk_cmd.c rhi_cmd_copy_texture_to_buffer) */
-    const uint32_t reads = RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM | RHI_BUF_STORAGE_READ;
+    const uint32_t reads = RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM | RHI_BUF_STORAGE_READ |
+                           RHI_BUF_STORAGE_WRITE;
     b->shaderRead = desc->memory == RHI_MEM_DEVICE && (desc->usage & reads) != 0;
     if (desc->memory != RHI_MEM_DEVICE) {
         if (!VKR_CHECK(vkMapMemory(g_vkr.device, b->memory, 0, VK_WHOLE_SIZE, 0, &b->mapped))) {

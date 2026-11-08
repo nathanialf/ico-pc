@@ -275,6 +275,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   255)` with the GS's arithmetic shift (`gs_blend_reg_ch`'s arithmetic, checked against the
   formula), COLCLAMP on, PABE off, the alpha As with FBA's MSB: through the colour read 0 pixels
   differ; on the blender (`rd_pixel`, `rd_pixel_attachment`, `rd_pixel_storage`, `rd_pixel_nodual`,
+  `rd_pixel_stores` and `rd_pixel_targets`, the last two with the VU record stored by the vertex
+  shaders and drawn into render targets, `ICO_RD_VU_RECORD`,
   where the subtracts stay there) every pixel is `clamp(Cd - ((Cs F) >> 7), 0, 255)`, one level
   above the oracle exactly where `Cs F` is not a multiple of 128 and never below (the first
   differing pixel is printed with its cell, Cd, Cs and F), `testDateStencil` checking the
@@ -319,15 +321,32 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (not in the `notrun` mode, where `ICO_RD_VU_PREPASS=0` keeps it off); then the device table's
   row (`RhiLimits.vuPrepassOff`, issue 123) leaves it off with the row's reason with
   `ICO_RD_VU_PREPASS` unset, `1` or `0` (the settings' words), on with `on` (`[dev] vu_prepass =
-  true` written), and `on` does not pass the 32-byte bound. `rd_vuprepass_selftest_devtable`
-  (`ICO_VK_FAKE_NO_PREPASS=1`: the row on lavapipe) is the `notrun` mode with the start line `off by
-  the device table (ICO_VK_FAKE_NO_PREPASS; ...)` and the summary's `off by the device table (...)
-  (self-test not run)`; `rd_vuprepass_selftest_devtable_on` adds `ICO_RD_VU_PREPASS=on`: on, the
-  self-test passed, the on line ending `[dev] vu_prepass = true over the device table
-  (ICO_VK_FAKE_NO_PREPASS)`. `rd_vuprepass_selftest_skincheck` runs the self-test with the skin
-  check on for every skinned command (`ICO_RD_VU_SKIN_CHECK=2`, `ICO_RD_VU_SKIN_INTERVAL_MS=0`):
-  no `VU skin check: frame` line and no end-of-run count (`NOT_`), the self-test's replays left out
-  of the check (issue 123).
+  true` written), and `on` does not pass the 32-byte bound (checked without vertex stores: the
+  bound is the render targets'). `rd_vuprepass_selftest_devtable` (`ICO_VK_FAKE_NO_PREPASS=1`: the
+  row on lavapipe) is the `notrun` mode with the start line `off by the device table
+  (ICO_VK_FAKE_NO_PREPASS; ...)` and the summary's `off by the device table (...) (self-test not
+  run)`; `rd_vuprepass_selftest_devtable_on` adds `ICO_RD_VU_PREPASS=on`: on, the self-test passed,
+  the on line ending `; the record <why>; [dev] vu_prepass = true over the device table
+  (ICO_VK_FAKE_NO_PREPASS)` (the override after the record's words).
+  `rd_vuprepass_selftest_skincheck` runs the self-test with the skin check on for every skinned
+  command (`ICO_RD_VU_SKIN_CHECK=2`, `ICO_RD_VU_SKIN_INTERVAL_MS=0`): no `VU skin check: frame` line
+  and no end-of-run count (`NOT_`), the self-test's replays (both runs when the stores fail and the
+  targets run again) left out of the check (issue 123).
+  The record's two writes ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)):
+  lavapipe offers vertex stores, so the runs above judge the record stored by the vertex shaders
+  (`[dev] vu_record = auto`, the shipped path) and their verdict lines end `, record stores`;
+  `rd_vuprepass_selftest_stores` and `_stores_plain` (`ICO_RD_VU_RECORD=stores`) must say so,
+  `rd_vuprepass_selftest_targets` (`=targets`) must end `, record targets`;
+  `rd_vuprepass_selftest_stores_sabotage_straddle` (the stores with `=stale`: replays 2 to 4 store
+  into a sink buffer) must log the stores' failure from replay 2 on (`the record stored by the
+  vertex shaders failed the self-test (the pictures differ: in replay 2..4 ...`) and fail again with
+  the targets in replay 2, 3 or 4; `rd_vuprepass_selftest_nostores_fallback`
+  (`ICO_VK_FAKE_NO_VERTEX_STORES=1`) must name the missing feature on the start line, keep the
+  targets and pass; `rd_vuprepass_selftest_stores_mali` and `_stores_vk11` are the stores under the
+  Mali limits with the submit-time synchronisation checks and through VkRenderPass objects (the
+  record's passes without attachments as legacy subpasses). The existing expectations change only
+  in the verdict line's `, record stores` end; the pipeline counts are the same (the same fifteen
+  pre-pass and stage keys, `colorFmt` UNKNOWN under the stores).
 - `rd_vu_skin_check_test.c` with `rd_vu_skin_check.cmake`: the skinned draws' bone-block check
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)). `judge` (no device): a case of 60 bones and 120 vertices
   through `vu1_ref`, the CPU's positions as the probe all right; one vertex on address 200 moved to
@@ -430,6 +449,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   and fewer where one an entry made two or more; each run's draws printed, and the totals
   (`rd_vubatch_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-pre-passs-batches)). SKIP as
   `rd_vustage_ab`.
+- `rd_vu_env_ab.cmake`: two runs of `rd_replay_tool --pass-dump --stats` over rd_pixel's dump and
+  the dumps of `tools/vustage_dumps.txt`, at Original 4:3 1x and Enhanced 16:9 2x under
+  `ICO_RD_BLEND=fixed`, under two environments, every named target's PNG byte for byte and each
+  run's stats matching its regex: `rd_vurecord_ab` the VU record drawn into the render targets and
+  copied (`ICO_RD_VU_RECORD=targets`) against stored by the vertex shaders (`=stores`), each
+  drawing every VU command through the record and naming its write (`stats: VU record targets` /
+  `stores`); `rd_vuprepass_min_ab` `[dev] vu_prepass_min` under every frame
+  (`ICO_RD_VU_PREPASS_MIN=0`) against above every frame (2147483647: the pre-pass skipped, 0
+  passes, every VU command the old way, `pre-pass skipped N frames under 2147483647 slots`)
+  ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). SKIP without a dump or a
+  device.
 - `rd_vumerge_ab.cmake`: the same dumps twice, every VU draw a GPU draw of its own
   (`ICO_RD_VU_MERGE=0`) and with the draw merge, through the record and through the programs' own
   entries (`ICO_RD_VU_PREPASS=0`, the path after a failed self-test), at Original 4:3 1x, Enhanced 4:3 2x

@@ -141,6 +141,7 @@ typedef struct GlPipeline {
     RhiFormat depthFormat;
     uint32_t samples;
     RhiDstRead dstRead;
+    bool noRaster;    /* RhiPipelineDesc.noRaster: GL_RASTERIZER_DISCARD at the draw */
     uint32_t dynamic; /* RHI_DYN_* */
     uint32_t layoutCount;
     uint32_t layoutIds[RHI_MAX_BIND_SLOTS];
@@ -189,7 +190,7 @@ typedef struct GlBindGroup {
 } GlBindGroup;
 
 /* The binding point of an RHI slot of a type (the map above):
- * b -> b, storage buffer t -> 16 + t, sampled texture t -> unit 16 + t,
+ * b -> b, storage buffer t -> 16 + t (a written one, u: 16 + u), sampled texture t -> unit 16 + t,
  * storage texture u -> image unit u (the translation step takes the SPIR-V's 48 off). */
 static inline uint32_t gl_bind_point(RhiBindType type, uint32_t slot)
 {
@@ -198,6 +199,7 @@ static inline uint32_t gl_bind_point(RhiBindType type, uint32_t slot)
     case RHI_BIND_UNIFORM_BUFFER_DYNAMIC:
         return slot;
     case RHI_BIND_STORAGE_BUFFER:
+    case RHI_BIND_STORAGE_BUFFER_RW: /* u -> 16 + u (tools/spirv_to_glsl.py moves the SSBO there) */
         return GL_UNIT_STORAGE_BASE + slot;
     case RHI_BIND_STORAGE_TEXTURE:
         return GL_UNIT_IMAGE_BASE + slot;

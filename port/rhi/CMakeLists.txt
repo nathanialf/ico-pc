@@ -438,7 +438,7 @@ endif()
 
 # --- Tests ----------------------------------------------------------------------
 # rhi_test_common.c: the exact-texel cells every backend must pass.
-set(_ico_rhi_test_common test/rhi_test_common.c test/rhi_test_native.c)
+set(_ico_rhi_test_common test/rhi_test_common.c test/rhi_test_native.c test/rhi_test_stores.c)
 
 if(_ico_have_vk)
     set(_ico_vk_test_env "")
@@ -534,6 +534,31 @@ if(_ico_have_vk)
         if(_ico_vk_test_env)
             set_tests_properties(rhi_vk PROPERTIES ENVIRONMENT "${_ico_vk_test_env}")
         endif()
+        # the vertex shaders' stores alone (rhi_test_stores.c; the VU record's
+        # write, port/render/rd_vu_record.h), under synchronisation validation:
+        # a point draw stores through a pipeline without rasterization in a
+        # pass without attachments, after and before copies of the buffer,
+        # read back word for word; _vk11 through VkRenderPass objects (an
+        # attachment-less legacy pass, ICO_VK_FAKE_API=1.1), _global with a
+        # global barrier before every pass and copy (ICO_VK_GLOBAL_BARRIERS=1:
+        # the bracket's barriers recorded at once); rhi_vk_nostores: a device
+        # made without vertexPipelineStoresAndAtomics
+        # (ICO_VK_FAKE_NO_VERTEX_STORES=1) reports none and the bracket refuses
+        add_test(NAME rhi_vk_stores COMMAND rhi_vk_test stores)
+        add_test(NAME rhi_vk_stores_vk11 COMMAND rhi_vk_test stores)
+        add_test(NAME rhi_vk_stores_global COMMAND rhi_vk_test stores)
+        add_test(NAME rhi_vk_nostores COMMAND rhi_vk_test nostores)
+        set_tests_properties(rhi_vk_stores PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_test_env}")
+        set(_ico_vk_stores11_env ${_ico_vk_test_env} "ICO_VK_FAKE_API=1.1")
+        set_tests_properties(rhi_vk_stores_vk11 PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_stores11_env}")
+        set(_ico_vk_storesg_env ${_ico_vk_test_env} "ICO_VK_GLOBAL_BARRIERS=1")
+        set_tests_properties(rhi_vk_stores_global PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_storesg_env}")
+        set(_ico_vk_nostores_env ${_ico_vk_test_env} "ICO_VK_FAKE_NO_VERTEX_STORES=1")
+        set_tests_properties(rhi_vk_nostores PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_nostores_env}")
         # rhi_native.h on the same layer setup (a validation message fails it)
         add_test(NAME rhi_native COMMAND rhi_native_test)
         set_tests_properties(rhi_native PROPERTIES SKIP_RETURN_CODE 77)
@@ -701,6 +726,12 @@ if(_ico_have_gl)
         set(_ico_gl_nobindcache_env ${_ico_gl_test_env} "ICO_RHI_BIND_CACHE=0")
         set_tests_properties(rhi_gl_nobindcache PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_gl_nobindcache_env}")
+        # rhi_vk_stores' twin (rhi_test_stores.c): SKIP (77) while the OpenGL
+        # backend reports no vertex stores, which also checks that its store
+        # bracket refuses
+        add_test(NAME rhi_gl_stores COMMAND rhi_gl_test stores)
+        set_tests_properties(rhi_gl_stores PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_gl_test_env}")
     endif()
 endif()
 

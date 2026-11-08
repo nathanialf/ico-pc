@@ -5,7 +5,10 @@ header is the interface the capture and the window host use), `app_icon_image.c`
 (the image maths), `app_icon_ico.c` (the `.ico` writer and the `.tmp` + rename write), and
 `app_icon_host.c` (the window build's wrappers: the user folder, the disc and the package label, the
 PNG, the "icon changed" flag), `app_icon_window.c`/`.h` (the icon on the window) and
-`macos/app_icon_mac.m` (the Dock icon), and `desktop_entry.c`/`.h` (the Linux applications-menu entry).
+`macos/app_icon_mac.m` (the Dock icon), `desktop_entry.c`/`.h` (the Linux applications-menu entry),
+and for the Windows exe's own icon `app_icon_exe.c`/`.h` (the game's side), `icon_stamp.c`/`.h` (the
+resources built from the `.ico`, the stamp, the command-line quoting) and `tools/ico_icon_stamp.c`
+(the helper that writes them).
 
 The program's icon is the title lettering's "I", made from the player's own disc and kept as files in
 the user folder; nothing of it is in the repository or the download
@@ -83,9 +86,11 @@ curtain comes off`. A pair refused as moved
 cuts the icon from the picture over black alone (`ico_app_icon_deliver_single`). An empty answer
 (the present dropped it) or none within 60 ticks arms the shot again, at most three times in a run;
 then the run gives up. Leaving the menu during the pass (New Game, Continue, a Settings page) ends
-it, and the next time the menu has been up for 30 ticks it starts again. Only the desktop window
-build captures; on Android and iOS nothing is captured (the launcher icon is the package's; the
-capture is compiled out under `__ANDROID__` and `ICO_IOS`).
+it, and the next time the menu has been up for 30 ticks it starts again. The desktop window builds
+and Android capture (the files land in `<files>/icon/` on Android, `ico_host_pref_dir`); iOS captures
+nothing (the capture is compiled out under `ICO_IOS`). The Android video defaults are the plain
+picture (Original preset: no Upscaling, CRT off, the four Picture colour settings at their defaults),
+so the capture does not wait there.
 
 The log lines: `ico_pc: icon: capturing the title's I (pass 1 of 2)` and `(pass 2 of 2)`;
 `ico_pc: icon: made from the title's I (<w>x<h> pictures)`; `ico_pc: icon: the two pictures
@@ -127,17 +132,89 @@ a file that does not decode: nothing is done and SDL's default stays. It logs `w
 <path>` on success and a `window: icon: ...` line on a read or SDL failure. It runs at the end of
 `window_attach` (`window_host.c`), so at the start and again when Apply reopens the window for another
 renderer, and in `ico_window_pump` whenever `ico_app_icon_changed_take()` is 1, which is the run
-that made the icon (`SDL_SetWindowIcon` is main-thread only; the pump is the main thread). Android
-and iOS keep their packaged launcher icons (the function does nothing there; the capture is not
-compiled on either).
+that made the icon (`SDL_SetWindowIcon` is main-thread only; the pump is the main thread). iOS keeps its packaged launcher icon (the function does nothing there; the capture is not
+compiled). On Android the function hands the PNG's path to `ico_android_task_icon`
+(`host_android.c`), which calls `IcoActivity.setTaskIcon` (the recents card, below); the log line is
+`window: icon: the recents card is set from <path>`, or `window: icon: <reason>`.
 
 | platform | what the icon reaches |
 | --- | --- |
-| Windows | the window's title bar and the taskbar button (SDL sets the window's big and small icons); `ico_pc.exe` in Explorer keeps the generic icon: it carries no icon resource and is not rewritten (the icon does not exist until the player's disc has made it) |
+| Windows | the window's title bar and the taskbar button (SDL sets the window's big and small icons); the program file (`ico_pc_x64.exe` in Explorer, its shortcuts and a pinned taskbar button) from the first exit after the icon was made: `tools\ico_icon_stamp.exe` writes the `.ico` into the exe once the game has closed ([below](#the-exes-icon)); until then, or with the program in a folder the player cannot write to, the generic icon |
 | Linux, X11 | the window and the taskbar through `_NET_WM_ICON` |
 | Linux, Wayland | nothing from the window: SDL 3.4's Wayland has no toplevel-icon support (its library holds no `xdg_toplevel_icon`), so a Wayland desktop takes the icon from the applications-menu entry named after the app id (`com.defnf.icopc`), which the Extras row writes ([below](#the-applications-menu)) |
 | macOS | SDL's Cocoa windows have no icon of their own, so `app_icon_mac.m` calls `[NSApp setApplicationIconImage:]` with the PNG: the Dock icon while the game runs. The bundle's Finder icon stays the generic one: no `CFBundleIconFile`, and the bundle is ad-hoc signed with nothing in `Resources` that is made at run time. CMake compiles the `.m` (`enable_language(OBJC)`) and links `-framework AppKit` |
-| Android, iOS | unchanged: on Android the app keeps its plain icon (the launcher icon is a compiled resource, and the recents icon would need JNI plumbing and an untested capture on phones) |
+| Android | the recents card (the task switcher): `ActivityManager.TaskDescription` with the PNG as a bitmap, set again in `onStart` because a recreated activity resets it. The launcher (home-screen) icon is a compiled resource and stays the plain one; some OEM launchers ignore a task description's icon |
+| iOS | unchanged: the app keeps its packaged icon |
+
+### The exe's icon
+
+A running Windows program cannot rewrite its own file, and the icon does not exist until the player's
+disc has made it, so the package's exe carries no icon and a helper beside it gives it the icon after
+a run: `x64\tools\ico_icon_stamp.exe` (`tools/ico_icon_stamp.c`, CMake target `ico_icon_stamp`,
+Windows only, shipped by `tools/package_win.sh`).
+
+- **At start** (`ico_app_icon_exe_start`, `app_icon_exe.c`, called from `main_host.c`'s
+  `open_window`): the exe's own `RT_RCDATA` resource `ICO_ICON_STAMP` (`FindResourceW` on
+  `GetModuleHandleW(NULL)`) is read and logged, `window: icon: the exe carries the icon (stamp
+  <S>)` or `window: icon: the exe has no icon yet`, and the helper's last line from
+  `logs\icon-stamp.log` is repeated as `window: icon: the stamp helper's last line
+  (logs\icon-stamp.log): <line>` (the helper's result of the run before reaches the reporter's log).
+- **At the end of the run** (`ico_app_icon_exe_at_exit`, an end-of-run step `open_window` registers
+  before the window's own, so it runs after the window has closed and before the summary's lines):
+  the wanted stamp is `<the icon's .txt> <disc id>` (`ico_icon_stamp_text`: for example `<package label>
+  SCES-50760`) for the current disc's `ico-pc-<disc id>.ico`. The files are read then, so the icon
+  this run's capture made counts. When the `.ico` exists and the stamp differs from the exe's, the
+  helper is started with `CreateProcessW` (`DETACHED_PROCESS | CREATE_NO_WINDOW`, below-normal
+  priority, no handles inherited, out of the game's job when the job allows it:
+  `CREATE_BREAKAWAY_FROM_JOB`, then without it) as `ico_icon_stamp <exe> <ico> <stamp>
+  <logs\icon-stamp.log>` (each argument quoted by `ico_icon_stamp_quote` as
+  `CommandLineToArgvW` splits it). One line says what happened: `window: icon: the exe's icon is
+  stamped after this run (tools\ico_icon_stamp.exe, stamp <S>; its result in
+  logs\icon-stamp.log)`, `... is current (stamp <S>)`, `... is not stamped: the title screen has
+  not made this disc's icon yet` (or another reason), `window: icon: tools\ico_icon_stamp.exe is
+  missing: the exe keeps its icon`, or `... did not start (error <n>)`. It runs once a run; a folder
+  the helper could not write is tried again only at the next exit.
+- **The helper** waits up to 10 s (100 ms steps) for the exe to open for writing (the game still
+  exiting, a virus scanner reading it); a sharing violation for the whole wait, or at once any other
+  error (access denied: a folder the account cannot write to, as under Program Files), ends it with
+  exit 1 and nothing changed. It reads the `.ico` and builds the resources with
+  `ico_icon_stamp_build` (`icon_stamp.c`, no Windows call): one `RT_ICON` per image, ids 1..n, each
+  the image's bytes as the `.ico` holds them (the BMP entries' `BITMAPINFOHEADER` data and the 256
+  PNG are both legal payloads), and `RT_GROUP_ICON` 1, the `ICONDIR` with each entry's 4-byte file
+  offset replaced by its 2-byte id (`GRPICONDIR`, 6 + 14 bytes an image); a file that is not an icon,
+  has no images or more than 32, or runs past its end is exit 2. It copies the exe to
+  `<exe>.stamp-<pid>.tmp` beside it, writes the icon resources and `RT_RCDATA "ICO_ICON_STAMP"` (the
+  stamp text, no terminator) into the copy (`BeginUpdateResourceW(copy, FALSE)`, all language
+  neutral, the manifest and the version information kept, `EndUpdateResourceW`), reads the copy's
+  stamp and group back (`LoadLibraryExW` as an image resource), checks that what runs is unchanged
+  (`ico_icon_stamp_pe_check` on both files mapped: the same machine, image base and entry point,
+  every section that starts below the old resource section at the same place with the same bytes,
+  the import, exception, TLS and import address table directories the same, every section of the
+  copy inside its file and `SizeOfImage`; `EndUpdateResourceW` rewrites `.rsrc` and moves what
+  follows it, which in the game's exe is `.reloc`, the DWARF sections and the COFF symbol table the
+  map-based crash symbols do not use), and puts the copy in the exe's place
+  (`ReplaceFileW`, which keeps the file's attributes and security; `MoveFileExW` when that fails), so
+  a failure at any step leaves the exe as it was and removes the copy. Then
+  `SHChangeNotify(SHCNE_UPDATEITEM)` on the exe and `SHChangeNotify(SHCNE_ASSOCCHANGED)` tell
+  Explorer to draw it again. Each run appends one line to `logs\icon-stamp.log`: the local time,
+  the result (`stamped: 4 images (1 PNG), stamp "<S>", after <ms> ms`, `not stamped: ...` with the
+  system's words for the error, `refused: ...`), the exe and the `.ico`. Exit 0 stamped, 1 not
+  written, 2 a bad `.ico` or arguments.
+
+The exe takes the icon of the disc played last (each disc's icon is its own stamp), and a release
+that makes the icon again (a new label in the `.txt`) stamps the exe again; a portable copy works the
+same (its folder is writable). The crash report's symbols come from `ico_pc_x64.map` by name, not
+from a hash of the exe, so a stamped exe is symbolised as before; Steam's entry keeps the `.ico`
+path ([Add to Steam](#add-to-steam)).
+
+Risks: an exe that rewrites another exe is a pattern antivirus heuristics may flag (the helper is
+small, unsigned, and only touches the file it is given). A helper a scanner stopped leaves the
+game's "stamped after this run" line with no new line in `logs\icon-stamp.log`, which the next
+start's log shows (the last line repeated is the older one). Explorer caches icons: the change notifications and the new file
+time usually refresh the picture at once, but a view may show the old icon until it is refreshed or
+the icon cache is rebuilt. The resource update itself runs only on Windows and is checked there by
+hand (an rc check: the exe's icon after the first exit, `logs\icon-stamp.log`); the ctest covers the
+resource building, the stamp and the quoting.
 
 ### Add to Steam
 
@@ -208,7 +285,9 @@ menu, after Add to Steam, Cross and the popups, the strings), with the row count
 and the other Extras tests.
 
 The tests are `app_icon_image_test` (`app_icon_image`), `ico_icon_test` (`ico_icon`),
-`app_icon_files_test` (`app_icon_files`) and `rd_png_mem_test` (`rd_png_mem`)
+`app_icon_files_test` (`app_icon_files`), `icon_stamp_test` (`icon_stamp`: the exe's resources from
+an `.ico` the writer made, the refusals, the stamp text and the quoting) and `rd_png_mem_test`
+(`rd_png_mem`)
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)), with the guard's cases in `app_icon_files_test` and the
 icon field's in `steam_shortcut_test` (`steam_shortcut`: `ico_steam_vdf_set_icon` on every outcome, the
 whole job with an old entry, a new entry, the player's icon and no icon file); the capture's are `title_logo_test` (`title_logo`: the
