@@ -1,6 +1,7 @@
 ## New
 
 - The New Game screen now shows which Mirror mode and New Game+ choices are set, hides the title lettering, and starts the game from its own Start row; pressing Cross on a choice only picks it and moves down.
+- The menus' words have a solid dark-grey outline that fades out quickly, like the lettering at the foot of the title screen, instead of a soft grey halo.
 
 ## Fixed
 
