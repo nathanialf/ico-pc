@@ -94,7 +94,7 @@ set(_ui_sources
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
 set_source_files_properties(layout_ext.c menu_font.c menu_text.c popup.c settings.c
-                            settings_states.c ui_list.c
+                            settings_states.c settings_step.c ui_list.c
                             ui_hint.c gallery.c photo_ui.c ui_mouse.c touch_ui.c ui_fps.c
                             touch_edit_ui.c subtitle_text.c PROPERTIES
                             COMPILE_OPTIONS "-Wno-strict-prototypes")
