@@ -2530,7 +2530,8 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vuprepass_min_ab
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      -DNAME=rd_vuprepass_min_ab
-                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     # no fixture dump: rd_pixel_frame.rddump has no VU draws (0 passes either way);
+                     # the list's dumps alone, SKIP where none exist
                      "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vuprepass_min_ab"
                      "-DENV_A=ICO_RD_VU_PREPASS_MIN=0" "-DENV_B=ICO_RD_VU_PREPASS_MIN=2147483647"

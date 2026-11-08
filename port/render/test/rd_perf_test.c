@@ -75,6 +75,7 @@
 #include <time.h>
 #endif
 #include "rd_internal.h"
+#include "rd_vu_record.h"
 #include "rd_mesh.h"
 #include "rd_passring.h"
 #include "rd_pipe_finish.h"
@@ -557,11 +558,20 @@ static void checkExactCounters(const RdFrame *f)
  * the input attachment or storage texture). */
 #define UNIFORM_LAYOUTS 3
 
+/* the record stores add the pre-pass's own layout (rd_vu_record.h
+   g_rdRec.layoutVuPre: the stream slots and the record buffer), one more
+   group a replay while the record is stored by the vertex shaders */
+static int uniformLayouts(void)
+{
+    return UNIFORM_LAYOUTS + (g_rdRec.stores ? 1 : 0);
+}
+
 static void checkGroups(const char *what, const Sum *s)
 {
-    CHECK(s->n > 0 && s->uniformMin == UNIFORM_LAYOUTS && s->uniformMax == UNIFORM_LAYOUTS,
-          "%s: %u..%u uniform bind groups a replay, %d expected (one per layout)", what,
-          s->uniformMin, s->uniformMax, UNIFORM_LAYOUTS);
+    const int want = uniformLayouts();
+    CHECK(s->n > 0 && (int)s->uniformMin == want && (int)s->uniformMax == want,
+          "%s: %u..%u uniform bind groups a replay, %d expected (one per layout%s)", what,
+          s->uniformMin, s->uniformMax, want, g_rdRec.stores ? ", the record's too" : "");
     CHECK(s->groups == s->uniformGroups + s->textureGroups,
           "%s: %llu bind groups, %llu uniform + %llu texture", what, (unsigned long long)s->groups,
           (unsigned long long)s->uniformGroups, (unsigned long long)s->textureGroups);
