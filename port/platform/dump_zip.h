@@ -41,10 +41,13 @@ int ico_zip_move_file(const char *zip_path, const char *path, char *why, size_t 
    its own name, as ico_frame_dump_zip writes its one dump (the same
    result, and the loose dumps deleted after a 0 or 1).  The lost frame is
    the first .rddump, so rd_replay_tool and the loss bisect
-   (ico_dump_zip_extract) take it. */
+   (ico_dump_zip_extract) take it.  stored: the entries stored, not
+   deflated (the loss dump: written on the watchdog's thread after a GPU
+   hang, issue 123, where a deflate's seconds delay the run's end); 0
+   deflated at F12's level (the slow-scene dump). */
 #define ICO_LOSS_DUMP_FILES 2
 int ico_loss_dump_zip(const char *zip_path, const char *lost_path, const char *before_path,
-                      const char *log_path, char *why, size_t why_size);
+                      const char *log_path, int stored, char *why, size_t why_size);
 /* dir/loss-<stamp>.zip into out; 0, or -1 when it does not fit */
 int ico_loss_dump_path(char *out, size_t size, const char *dir, const char *stamp);
 /* Deletes the oldest loss-*.zip files in dir until keep remain (a device

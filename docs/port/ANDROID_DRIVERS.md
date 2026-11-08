@@ -111,6 +111,27 @@ phone's own driver runs; it then says `window: VU skin check ladder: step 2 of 2
 `ico_gpu_driver_android_turnip_package` tells the ladder whether this start runs such a package
 (the start the variable can reach).
 
+### Qualcomm's own driver on the Adreno 740
+
+The Adreno 740 (device id `0x43050A01`: AYN Thor, AYN Odin 2 Portal, Xiaomi Pad 6S Pro) under the
+phone's own Qualcomm driver draws without the VU vertex pre-pass: the device table's
+`noPrepass` column (`port/rhi/vk/vk_device.c` `kVuPlainOnly`, beside the row's plain set and
+careful start-up set; [PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). The first build to run the
+pre-pass there, on a Xiaomi Pad 6S Pro (driver 512.676.1, compiler
+E031.41.03.64; issue 123), drew in its first scene a full-screen grey and black noise picture and the
+GPU then stopped finishing work (the watchdog's GPU hang at 25.5 s), while the pre-pass's start-up
+self-test had passed on its one-row frame. The record path's modules are built once for every
+device ([SHADERS.md](SHADERS.md#the-variants)), with the card test and the tick cameras the plain
+set exists to keep from that compiler. The log says `rd: VU pre-pass: off by the device table
+(Adreno 740 on Qualcomm's driver, issue 123; [dev] vu_prepass = true draws with it anyway): ...`
+and the summary `VU pre-pass off by the device table (...) (self-test not run)`. A Turnip package
+on the same tablet keeps the pre-pass (the row matches Qualcomm's driver only; the reporter: "runs
+better and no graphical glitches so far"). Nothing is asked of the player; `[dev] vu_prepass =
+true` written in `config.toml` turns it on there for a developer's A/B
+([CONFIG.md](CONFIG.md#ico-pcini)). The Android build has no FSR 3.1 (`ICO_FFX` is not set by
+`android/app/build.gradle` nor the `android-arm64` preset; the option defaults to off,
+`port/rhi/ffx/CMakeLists.txt`), so no motion vectors are lost with the pre-pass there.
+
 ### The file picker
 
 Android has the app's own file picker, not SDL's (issue 135). SDL's `SDL_ShowOpenFileDialog`

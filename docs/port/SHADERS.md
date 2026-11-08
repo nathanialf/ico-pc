@@ -702,7 +702,10 @@ strip.
 
 ### The variants
 
-The record path's modules have one build each, on every device. The ten mesh program entries,
+The record path's modules have one build each, on every device; where they cannot be trusted the
+device table turns the record path off rather than building plain record modules (the Adreno 740
+under Qualcomm's own driver, issue 123: `RhiLimits.vuPrepassOff`,
+[PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). The ten mesh program entries,
 which only the fallback draws through, have two (issue 107): the extended one, `vu_X_vs`, the file
 as it reads, and the plain one, `vu_X_plain_vs`, the same entry compiled with `ICO_VU_PLAIN=1`
 (`port/shaders/CMakeLists.txt`, the ten mesh entries only), which leaves out the card test's step

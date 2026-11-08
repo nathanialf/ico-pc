@@ -766,6 +766,13 @@ typedef struct RhiLimits {
      * rd_set_pipeline_policy (small batches on one thread, the cache written
      * after each, the set stopped past a memory budget; port/render/rd.h). */
     const char *carefulPipelines;
+    /* Why this device draws without the VU vertex pre-pass ("Adreno 740 on
+     * Qualcomm's driver, issue 123": its first scene drew noise and hung;
+     * Vulkan, vk_device.c kVuPlainOnly's noPrepass column), NULL otherwise
+     * (every other backend: their fill functions zero the limits).  The
+     * renderer's rd__vu_prepass_init turns the pre-pass off with it unless
+     * [dev] vu_prepass = true is written in config.toml (ICO_RD_VU_PREPASS=on). */
+    const char *vuPrepassOff;
     /* Why this device's pipelines are compiled one at a time ("PowerVR
      * B-Series": the driver's compiler is not thread-safe, issue 188;
      * rhi_driver_version.h rhi_driver_compiler_serial), NULL otherwise:

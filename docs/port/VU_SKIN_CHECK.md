@@ -304,11 +304,16 @@ At start, from `rd_vuprepass_selftest`:
 
 On an event, the first 8, then every 100th, of each kind on its own count (a wrong check's two lines, a check whose bytes differed with every vertex right, a box check's samples outside), so the many changed blocks of an H2 run never use up a wrong check's lines:
 
-- `rd: VU skin check: frame F command L:I mesh NAME #ID (V vertices): N vertices wrong of M, address A: got (x, y, z) want (x, y, z) (a zero matrix at A gives it: yes|no; it gives K of them); the bone block as the GPU copied it: equal | differs at qwords Q..R; as the CPU reads it after the fence: equal | differs at qwords Q..R | not read (...); code C through MODULE (wrong check E)`
+- `rd: VU skin check: frame F command L:I mesh NAME #ID (V vertices): N vertices wrong of M, address A: got (x, y, z) want (x, y, z) (a zero matrix at A gives it: yes|no; it gives K of them); the bone block as the GPU copied it: equal | differs at qwords Q..R; as the CPU reads it after the fence: equal | differs at qwords Q..R | not read (...); code C through MODULE (wrong check E); recorded in replay R (frame slot S) after submission N, read with M finished`
   (X and Y in GS pixels, absolute; Z the GS Z; A the address whose zero matrix gives the most wrong
-  vertices, else the first wrong vertex's lane x)
+  vertices, else the first wrong vertex's lane x). The last clause (for issue 123's H2
+  lines, the ring read back as zeros or stale values) places the check against the GPU's work:
+  N is the backend's submissions when the check was recorded (`rhi_gpu_progress`, before its
+  replay's own submit, so that replay is submission N + 1 or later), M the newest finished when it
+  was read; M at or past N + 1 says the GPU had finished the replay when its bytes were read, below
+  it that the port read early. 0 and 0 where the backend does not count them.
 - `rd: VU skin check: frame F command L:I variants: (c1) the block at a fresh ring offset (page phase P, the draw's D): right|wrong (N wrong); (c2) uniform robustness off: right | wrong | not run (robust access off) | not offered (no VK_EXT_pipeline_robustness) | not run (its pipeline not made yet) (N wrong); (c3) the bones through the ring: right | wrong | not drawn (N wrong); reads as: WORDS`
-- `rd: VU skin check: frame F command L:I mesh ...: every vertex right (M compared); the bone block as the GPU copied it: ...; reads as: WORDS (bytes event E)` (bytes that differed, every vertex right)
+- `rd: VU skin check: frame F command L:I mesh ...: every vertex right (M compared); the bone block as the GPU copied it: ...; reads as: WORDS (bytes event E); recorded in replay R (frame slot S) after submission N, read with M finished` (bytes that differed, every vertex right; the last clause as above)
 - `rd: VU skin check: frame F command L:I mesh NAME #ID (V vertices): twins differ: A (the draw's
   offset, page phase P) N samples, B (fresh, phase Q) M samples[, C (ring read) K samples]; through
   FS with the draw's attachment read (its own pipeline) | with colour and Z writes off (the program's
@@ -510,7 +515,10 @@ The lines:
   A/B; `true` (`=1`, `true`, `on`, `yes`): on on any Vulkan device, headless too (the tests);
   `ICO_RD_VU_SKIN_CHECK=2`: every skinned command of every replay (`rd_vu_skin_check_ab`)
   ([CONFIG.md](CONFIG.md)). `rd_replay_tool --skin-check` turns it on for its own replays. Not on
-  Direct3D or OpenGL.
+  Direct3D or OpenGL. The VU pre-pass's start-up self-test's replays are never picked, checked,
+  twinned or counted in the round robin (`rd__vu_prepass_selftest_running`: issue
+  123's hang log twinned the self-test's skinned toy mesh, `rd vu pre-pass self-tes`, which armed
+  the capture and a frame dump and made a probe target of a mesh never seen again).
 - `[dev] vu_bones = ring` (`ICO_RD_VU_BONES=ring`; `cbuffer` or absent: VuBoneCB), with its mark
   `vu_bones_by`, and `[dev] turnip_debug = nobin | retest | off` with `turnip_debug_by`: the ladder's keys,
   written by the game ([The ladder](#the-ladder), [CONFIG.md](CONFIG.md)); a player may set or
@@ -559,7 +567,10 @@ the device's wrong read.
 `rd_vu_skin_check_twin_nan`, `rd_vu_skin_check_capture`, `rd_vu_skin_check_thin` (the thinning:
 three twins a replay until the clean replays, one after, re-armed by the zeroed bone), and the
 ladder's `rd_vu_skin_check_probe_c3`, `rd_vu_skin_check_twin_c`, `rd_vu_skin_check_twin_bones_ring`,
-`rd_vu_skin_check_twin_record` (a pre-pass record draw's twins through the ring build))
+`rd_vu_skin_check_twin_record` (a pre-pass record draw's twins through the ring build)),
+`rd_vuprepass_selftest_skincheck` (`rd_vuprepass_selftest.cmake`: the check on for every skinned
+command around the pre-pass's self-test, no check of a frame and no end-of-run count logged: the
+self-test's replays are left out)
 and `rd_vu_skin_check_dump.cmake` (`rd_vu_skin_check_dump`, `rd_vu_skin_check_163`,
 `rd_vu_skin_check_163_probe`, `rd_vu_skin_check_163_ring`, `rd_vu_skin_check_163_patched`, `rd_vu_skin_check_123`,
 `rd_vu_skin_check_123_nan`, `rd_vu_skin_check_123_attach`, `rd_vu_skin_check_123_nan_attach`,

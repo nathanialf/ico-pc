@@ -316,7 +316,18 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   step 6 of every run: `rd__vu_prepass_init` called again with the device's limits but
   `tiler = true` and no colour-target bound must leave the pre-pass on, and with
   `colorBytesPerPixel = 32` (below the record's 48) must leave it off with the bytes in its words
-  (not in the `notrun` mode, where `ICO_RD_VU_PREPASS=0` keeps it off).
+  (not in the `notrun` mode, where `ICO_RD_VU_PREPASS=0` keeps it off); then the device table's
+  row (`RhiLimits.vuPrepassOff`, issue 123) leaves it off with the row's reason with
+  `ICO_RD_VU_PREPASS` unset, `1` or `0` (the settings' words), on with `on` (`[dev] vu_prepass =
+  true` written), and `on` does not pass the 32-byte bound. `rd_vuprepass_selftest_devtable`
+  (`ICO_VK_FAKE_NO_PREPASS=1`: the row on lavapipe) is the `notrun` mode with the start line `off by
+  the device table (ICO_VK_FAKE_NO_PREPASS; ...)` and the summary's `off by the device table (...)
+  (self-test not run)`; `rd_vuprepass_selftest_devtable_on` adds `ICO_RD_VU_PREPASS=on`: on, the
+  self-test passed, the on line ending `[dev] vu_prepass = true over the device table
+  (ICO_VK_FAKE_NO_PREPASS)`. `rd_vuprepass_selftest_skincheck` runs the self-test with the skin
+  check on for every skinned command (`ICO_RD_VU_SKIN_CHECK=2`, `ICO_RD_VU_SKIN_INTERVAL_MS=0`):
+  no `VU skin check: frame` line and no end-of-run count (`NOT_`), the self-test's replays left out
+  of the check (issue 123).
 - `rd_vu_skin_check_test.c` with `rd_vu_skin_check.cmake`: the skinned draws' bone-block check
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)). `judge` (no device): a case of 60 bones and 120 vertices
   through `vu1_ref`, the CPU's positions as the probe all right; one vertex on address 200 moved to

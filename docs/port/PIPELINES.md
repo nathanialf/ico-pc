@@ -981,6 +981,22 @@ ICO_RD_VU_PREPASS=0): ...` or `off on this device (its colour targets hold 32 by
 together, the record 48: an Apple A9 or A10 GPU): ...` (`port/render/rd_replay_vu.c`
 (`rd__vu_prepass_init`)).
 
+One device draws without it by the device table (`port/rhi/vk/vk_device.c` `kVuPlainOnly`, the
+`noPrepass` column, `RhiLimits.vuPrepassOff`; NULL on every other device and backend): the Adreno
+740 under Qualcomm's own driver (issue 123: the first build to run the pre-pass there drew a
+full-screen noise picture in its first scene and the GPU then hung on driver 512.676.1; the
+record path's modules are built once for every device, with the card test and the tick cameras the
+plain set keeps from that compiler, [SHADERS.md](SHADERS.md)). Turnip on the same GPU keeps the
+pre-pass (the row matches Qualcomm's driver only). The start line there is `rd: VU pre-pass: off
+by the device table (Adreno 740 on Qualcomm's driver, issue 123; [dev] vu_prepass = true draws
+with it anyway): ...`, the summary `VU pre-pass off by the device table (...) (self-test not
+run)`. `[dev] vu_prepass = true` written in `config.toml` (exported as `ICO_RD_VU_PREPASS=on`;
+the default, never written, exports nothing) passes the table for an A/B, and the on line then
+ends `; [dev] vu_prepass = true over the device table (<reason>)`; it never passes the
+colour-target bound above, a restart's step without the pre-pass or the self-test.
+`ICO_VK_FAKE_NO_PREPASS=1` gives any device the column's reason (the ctests
+`rd_vuprepass_selftest_devtable` and `_devtable_on`).
+
 **The self-test.** The pre-passes' pipelines are shapes no other draw of the port has (vertex
 shaders writing `PointSize` into a point list, flat `uint4` varyings into three `RGBA32_UINT`
 targets under a one-channel mask, texture-to-buffer copies the next pass's vertex shaders and the

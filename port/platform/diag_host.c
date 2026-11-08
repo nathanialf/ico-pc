@@ -5420,6 +5420,16 @@ static void watchdog_fire(const char *reason)
              "this end counts as a device loss (the loss dump; the next start counts the loss "
              "and does not replay the frame)",
              render_hang_seq, render_hang_s);
+        if (tracked && gpu.submitted != 0) {
+            /* the backend's count as the watchdog sees it: whether the
+               GPU is behind (a wait in progress above finished) or the
+               driver's submit or present call has not returned */
+            flog("ico_pc: the GPU: the newest submission is %llu (replay %u, frame %u, made %.0f s "
+                 "ago), the newest seen finished %llu; %s",
+                 gpu.submitted, gpu.replay, gpu.frame, gpu.submitted_ago_s, gpu.finished,
+                 gpu.waiting_for != 0 ? "a wait for one in progress"
+                                      : "no wait for it in progress");
+        }
     } else if (hang) {
         flog("ico_pc: the graphics driver did not finish the picture (submission %llu has not "
              "finished after a %.0f s wait)",
@@ -5473,7 +5483,17 @@ static void watchdog_fire(const char *reason)
         flog("ico_pc: while: %s", activity);
     }
     if (step_line[0] != '\0') {
-        flog("ico_pc: the last step: %s", step_line);
+        /* the steps other than a renderer switch's are the start's, the
+           last "window: start: up in T s; the game runs" once it is over
+           (issue 123: a hang in the game said "the last step: ... the fog
+           self-test", which reads as a hang there); the hung wait's
+           submission, finished and seconds are in the GPU lines above */
+        flog("ico_pc: the last %sstep: %s",
+             strncmp(step_line, "window: switch", 14) == 0 ||
+                     strncmp(step_line, "window: backend switch", 22) == 0
+                 ? ""
+                 : "start-up ",
+             step_line);
     }
     if (failure[0] != '\0') {
         flog("ico_pc: last failure message: %s", failure);

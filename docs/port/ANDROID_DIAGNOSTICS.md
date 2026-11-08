@@ -293,6 +293,27 @@ lines and what each decides:
   twins' counts under it are the answer. The kept-keys start line (`ico_pc: [dev] keys kept from an
   earlier start: ... vu_bones = ring, vu_bones_by = ...`) shows the chain in a reporter's log.
 
+## Issue 123's GPU hang: the loss dump's lines
+
+A GPU hang (the watchdog's `ico_pc: WATCHDOG: the GPU: submission N not finished after 15 s`)
+writes the pass ring and then the loss dump from the watchdog's thread
+([RENDER.md](RENDER.md#the-loss-dump)). Each slow step is logged and the log flushed before it
+begins, so the last line says which one a hang of the handler itself is in:
+
+- `window: loss dump: writing frame N to .../logs/loss-<stamp>-lost.rddump`, then `... writing
+  frame M (the one before) to ...-before.rddump`: the frames' writes (the CPU's copies of the
+  commands, texels and meshes, onto the phone's shared storage);
+- `window: loss dump: zipping K MB (the two frames and the log) at store level`: the zip, stored
+  (no deflate), K the files' size together;
+- `window: loss dump: frames N and M (the one before) written to <zip> in T s`: done, T from the
+  first step.
+
+Issue 123's hang log had none of these lines (the zip was deflated then) although the game thread
+went on for 10 s (`0 presents ... 300 game frames`), so the write or the deflate on the watchdog's
+thread held the run's end; which one is what the next such log says. The report's `ico_pc: the last
+start-up step:` line is `window: start: up in T s; the game runs` once the start is over, not the
+fog self-test's step.
+
 ## The thermal state and screen recording
 
 The thermal state and screen recording come from the app's Java side (issue 123;
