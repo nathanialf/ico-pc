@@ -1633,6 +1633,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
 - `texpack_name_test.c`: XXH3, the swizzle and the names against PCSX2's rules (`texpack_name`).
 - `texpack_test.c`: the pack's index and loader on fake files (`texpack`).
 - Helpers: `mesh_env.h` (the mesh tests' game stubs), `vu_models.h` (synthetic models),
-  `sheet_ref.c`/`.h` (the sheet-text shader on the CPU), `above1x_ref.c`/`.h` (the above-1x
+  `sheet_ref.c`/`.h` (the sheet-text shader on the CPU; its constants also as data, `SheetLook`,
+  for candidate looks the shader does not have, the default look the constants:
+  `rd_sheet_bake`'s looks section), `above1x_ref.c`/`.h` (the above-1x
   kernels and the fog's formula on the CPU, written from their definitions).
 
