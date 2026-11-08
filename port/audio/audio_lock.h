@@ -14,7 +14,7 @@
  * SDL's stream functions, so it is a leaf; the audio thread takes it inside
  * SDL's stream lock (out_sdl.c pull_cb), never the other way round.
  *
- * Installed by the SDL output (out_sdl.c ico_audio_sdl_open: SDL's mutex,
+ * Installed by the SDL output (out_sdl.c ico_audio_sdl_open_begin: SDL's mutex,
  * which is recursive, so a nested take is legal); until then, in the
  * headless build and in every unit test that installs none, both calls do
  * nothing, and everything runs on the one simulation thread as before.

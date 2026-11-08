@@ -14,7 +14,7 @@
  * the backend's real-time callback).  It renders what SDL asks for plus a
  * lead of one device period (lead_frames, at least 480), so after each
  * take the lead stays queued, through the render audio_host.c hands to
- * ico_audio_sdl_open (spu2_render and the mirror swap), under the audio
+ * ico_audio_sdl_open_begin (spu2_render and the mirror swap), under the audio
  * lock (audio_lock.h, an SDL mutex installed here).  The lock is tried for
  * at most a quarter of the device period: when the game's side holds it
  * longer the callback renders nothing and the SPU2's time stands still
@@ -85,6 +85,22 @@
  * Settings menu is heard within the queued audio (the lead or the cushion,
  * and a vsync).
  *
+ * The open (the start).  A device can take long to open, or not return
+ * (WASAPI did not return for 30 s on a reporter's machine, twice, and the
+ * boot watchdog ended the run before the game's first tick), so only SDL's
+ * audio subsystem starts on the main thread (ico_audio_sdl_open_begin,
+ * timed); a thread of its own (open_thread) opens the stream, without the
+ * callback and paused, and publishes it (OpenJob).  audio_host.c waits at
+ * most 2 s for it; past that the game starts on the game's clock with the
+ * output discarded (no stream: the push does nothing), and every vsync
+ * tries the adoption (ico_audio_sdl_open_adopt, main thread): the
+ * callback set on the paused stream, the pull path's accounting or the
+ * cushion, the resume, the start line.  Nothing renders before the
+ * adoption but the vsync, and nothing on the vsync after it on the pull
+ * path.  The Settings menu's move is refused while the open runs, and the
+ * shutdown waits for it at most 2 s, then leaves the thread behind (it
+ * closes what it opens itself) with SDL's audio up under it.
+ *
  * Device ([audio] device): the stream
  * is opened on the playback device with that name, or on SDL's default
  * device (which follows the system's default) when the name is empty or no
@@ -134,7 +150,7 @@
 #define BLOCK_DEFAULT_FRAMES 800
 
 static SDL_AudioStream *stream;
-static int subsystem;            /* SDL_INIT_AUDIO is up */
+static int subsystem; /* the output is open: SDL_INIT_AUDIO up and the start's stream adopted */
 static SDL_AudioDeviceID chosen; /* the named device the stream is on, 0: the default */
 static int logged_unknown;
 static unsigned long underruns;
@@ -152,7 +168,7 @@ static int16_t push_last[CHANNELS]; /* the last pushed frame (the dry refill's r
 
 /* --- the pull path's state --------------------------------------------------- */
 
-static IcoAudioRender pull_render; /* non-NULL: the pull path (ico_audio_sdl_open) */
+static IcoAudioRender pull_render; /* non-NULL: the pull path (set at the adoption) */
 static const char *sync_why = "";  /* the sync path's reason, for the start line */
 static SDL_Mutex *audio_mutex;     /* the audio lock (audio_lock.h) on the pull path */
 static char stream_name[ICO_AUDIO_DEVICE_NAME_MAX]; /* the device the stream was asked for */
@@ -584,22 +600,25 @@ static SDL_AudioDeviceID find_device(const char *name)
     return found != 0 ? found : prefixed;
 }
 
-/* the stream on `name`'s device, or the default; playing.  The pull path
-   (pull_render set) opens it with the callback and primes nothing; the
-   sync path primes the cushion with silence. */
-static int open_stream(const char *name)
+/* The stream on `name`'s device, or the default, with the callback `cb`,
+   in *out (NULL when none opens) and the named device it is on in
+   *named (0: the default); paused, as SDL_OpenAudioDeviceStream leaves
+   it.  No state of the output's is touched but the unknown name's
+   once-a-run flag: the open's thread runs it (open_thread) while the main
+   thread renders, and SDL's device and stream calls here are safe from
+   any thread (SDL_audio.h). */
+static void open_device(const char *name, SDL_AudioStreamCallback cb, SDL_AudioStream **out,
+                        SDL_AudioDeviceID *named)
 {
     SDL_AudioSpec spec;
     SDL_AudioDeviceID id = 0;
-    SDL_AudioStreamCallback cb = pull_render != NULL ? pull_cb : NULL;
+    SDL_AudioStream *s = NULL;
 
     memset(&spec, 0, sizeof(spec));
     spec.format = SDL_AUDIO_S16LE;
     spec.channels = CHANNELS;
     spec.freq = 48000;
-    if (name != stream_name) {
-        snprintf(stream_name, sizeof(stream_name), "%s", name != NULL ? name : "");
-    }
+    *named = 0;
     if (name != NULL && name[0] != '\0') {
         id = find_device(name);
         if (id == 0 && !logged_unknown) {
@@ -607,23 +626,29 @@ static int open_stream(const char *name)
             fprintf(stderr, "audio: no output device called \"%s\"; using the default\n", name);
         }
     }
-    chosen = 0;
     if (id != 0) {
-        stream = SDL_OpenAudioDeviceStream(id, &spec, cb, NULL);
-        if (stream != NULL) {
-            chosen = id;
+        s = SDL_OpenAudioDeviceStream(id, &spec, cb, NULL);
+        if (s != NULL) {
+            *named = id;
         } else {
             fprintf(stderr, "audio: cannot open \"%s\" (%s); using the default\n", name,
                     SDL_GetError());
         }
     }
-    if (stream == NULL) {
-        stream = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, cb, NULL);
+    if (s == NULL) {
+        s = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, cb, NULL);
     }
-    if (stream == NULL) {
+    if (s == NULL) {
         fprintf(stderr, "audio: no audio device (%s); no sound\n", SDL_GetError());
-        return -1;
     }
+    *out = s;
+}
+
+/* The opened stream (`stream`, on `chosen`) started: the rate ratio, the
+   pull path's accounting (pull_render set: the callback is on the stream)
+   or the sync path's cushion of silence, then playing.  Main thread. */
+static void start_stream(void)
+{
     applied_ratio = rate_ratio;
     if (rate_ratio != 1.0f) {
         SDL_SetAudioStreamFrequencyRatio(stream, rate_ratio);
@@ -636,8 +661,25 @@ static int open_stream(const char *name)
     }
     SDL_ResumeAudioStreamDevice(stream);
     if (chosen != 0) {
-        fprintf(stderr, "audio: output on \"%s\"\n", name);
+        fprintf(stderr, "audio: output on \"%s\"\n", stream_name);
     }
+}
+
+/* the stream on `name`'s device, or the default; playing.  The pull path
+   (pull_render set) opens it with the callback and primes nothing; the
+   sync path primes the cushion with silence.  Main thread, at run time
+   (the Settings menu's move, a removed device, the fall-back); the start's
+   open runs on its own thread (ico_audio_sdl_open_begin). */
+static int open_stream(const char *name)
+{
+    if (name != stream_name) {
+        snprintf(stream_name, sizeof(stream_name), "%s", name != NULL ? name : "");
+    }
+    open_device(stream_name, pull_render != NULL ? pull_cb : NULL, &stream, &chosen);
+    if (stream == NULL) {
+        return -1;
+    }
+    start_stream();
     return 0;
 }
 
@@ -685,30 +727,234 @@ static void log_drivers(void)
 #endif
 }
 
-int ico_audio_sdl_open(IcoAudioRender pull, const char *why)
+/* --- the start's open ----------------------------------------------------------- */
+
+/* The open's thread is waited for this long at the shutdown before it is
+   left behind (ico_audio_sdl_close); a test may set it shorter. */
+#ifndef OPEN_CLOSE_WAIT_MS
+#define OPEN_CLOSE_WAIT_MS 2000
+#endif
+
+/* One open on its own thread: the result, and who frees the job.  The
+   thread writes stream, named, done_ns and done under m; the main thread
+   reads them once done is 1 (release/acquire).  abandoned (under m): the
+   main thread gave up at the shutdown; the thread then closes what it
+   opened and frees the job itself. */
+typedef struct OpenJob {
+    SDL_Mutex *m;
+    SDL_Condition *cv;
+    SDL_Thread *thread;
+    char name[ICO_AUDIO_DEVICE_NAME_MAX]; /* the device asked for (a copy) */
+    SDL_AudioStream *stream;              /* NULL: no device opened */
+    SDL_AudioDeviceID named;
+    Uint64 begin_ns, done_ns;
+    int done;
+    int abandoned;
+} OpenJob;
+
+static OpenJob *open_job;        /* the open under way, until the adoption or the close */
+static IcoAudioRender open_pull; /* the pull path's render, set at the adoption */
+static int audio_up;             /* SDL_INIT_AUDIO up (from the begin to the close) */
+/* the tests' stand-in for the device open (on the open's thread); NULL:
+   open_device */
+static SDL_AudioStream *(*open_hook)(SDL_AudioDeviceID *named);
+/* open threads that returned (the tests wait for a thread left behind) */
+static int open_threads_out;
+/* the app went to the background while the device opened (Android): the
+   adoption pauses the device again (ico_audio_sdl_pause) */
+static int open_paused;
+
+static void open_job_free(OpenJob *j)
 {
+    if (j->cv != NULL) {
+        SDL_DestroyCondition(j->cv);
+    }
+    if (j->m != NULL) {
+        SDL_DestroyMutex(j->m);
+    }
+    SDL_free(j);
+}
+
+/* The open's thread: the device opened without the callback (push mode:
+   nothing renders before the adoption sets the callback) and paused, the
+   result published. */
+static int SDLCALL open_thread(void *arg)
+{
+    OpenJob *j = (OpenJob *)arg;
+    SDL_AudioStream *s = NULL;
+    SDL_AudioDeviceID named = 0;
+    int abandoned;
+
+    if (open_hook != NULL) {
+        s = open_hook(&named);
+        if (s == NULL) {
+            fprintf(stderr, "audio: no audio device (%s); no sound\n", SDL_GetError());
+        }
+    } else {
+        open_device(j->name, NULL, &s, &named);
+    }
+    SDL_LockMutex(j->m);
+    j->stream = s;
+    j->named = named;
+    j->done_ns = SDL_GetTicksNS();
+    __atomic_store_n(&j->done, 1, __ATOMIC_RELEASE);
+    abandoned = j->abandoned;
+    SDL_BroadcastCondition(j->cv);
+    SDL_UnlockMutex(j->m);
+    if (abandoned) {
+        /* the main thread left at the shutdown: this thread's to close */
+        if (s != NULL) {
+            SDL_DestroyAudioStream(s);
+        }
+        open_job_free(j);
+    }
+    __atomic_fetch_add(&open_threads_out, 1, __ATOMIC_RELEASE);
+    return 0;
+}
+
+int ico_audio_sdl_open_begin(IcoAudioRender pull, const char *why)
+{
+    const char *dev = getenv("ICO_AUDIO_DEVICE");
+    const char *drv;
+    OpenJob *j;
+    Uint64 t0;
+
+    if (audio_up) {
+        return -1; /* once a run */
+    }
     SDL_SetHint(SDL_HINT_AUDIO_DEVICE_SAMPLE_FRAMES, "480");
+    t0 = SDL_GetTicksNS();
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
         fprintf(stderr, "audio: SDL audio unavailable (%s); no sound\n", SDL_GetError());
         return -1;
     }
+    fprintf(stderr, "audio: SDL audio subsystem up in %.1f ms\n",
+            (double)(SDL_GetTicksNS() - t0) / 1e6);
+    audio_up = 1;
     log_drivers();
-    cushion_level = 0; /* before the open primes it */
-    pull_render = pull;
+    cushion_level = 0; /* before the adoption primes it */
+    open_pull = pull;
     sync_why = why != NULL ? why : "";
-    if (pull_render != NULL && lock_create() != 0) {
+    if (open_pull != NULL && lock_create() != 0) {
         fprintf(stderr, "audio: no lock for the device's thread (%s); on the game's clock\n",
                 SDL_GetError());
-        pull_render = NULL;
+        open_pull = NULL;
         sync_why = "no lock";
     }
-    if (open_stream(getenv("ICO_AUDIO_DEVICE")) != 0) {
+    snprintf(stream_name, sizeof(stream_name), "%s", dev != NULL ? dev : "");
+    j = (OpenJob *)SDL_calloc(1, sizeof(*j));
+    if (j != NULL) {
+        j->m = SDL_CreateMutex();
+        j->cv = SDL_CreateCondition();
+        snprintf(j->name, sizeof(j->name), "%s", stream_name);
+    }
+    if (j == NULL || j->m == NULL || j->cv == NULL) {
+        fprintf(stderr, "audio: no memory for the device's open (%s); no sound\n", SDL_GetError());
+        if (j != NULL) {
+            open_job_free(j);
+        }
         lock_destroy();
-        pull_render = NULL;
+        open_pull = NULL;
+        audio_up = 0;
         SDL_QuitSubSystem(SDL_INIT_AUDIO);
         return -1;
     }
+    drv = SDL_GetCurrentAudioDriver();
+    fprintf(stderr, "audio: opening the output device (SDL %s)...\n", drv != NULL ? drv : "?");
+    j->begin_ns = SDL_GetTicksNS();
+    open_job = j;
+    j->thread = SDL_CreateThread(open_thread, "ico-audio-open", j);
+    if (j->thread == NULL) {
+        /* no thread: the open here, as before (the wait finds it done) */
+        fprintf(stderr, "audio: no thread for the device's open (%s); opening it here\n",
+                SDL_GetError());
+        open_thread(j);
+    }
+    return 0;
+}
+
+int ico_audio_sdl_open_wait_ms(int ms)
+{
+    OpenJob *j = open_job;
+    Uint64 deadline;
+    int done;
+
+    if (j == NULL) {
+        return 1;
+    }
+    deadline = SDL_GetTicksNS() + (Uint64)(ms > 0 ? ms : 0) * 1000000u;
+    SDL_LockMutex(j->m);
+    while (!(done = __atomic_load_n(&j->done, __ATOMIC_ACQUIRE))) {
+        const Uint64 now = SDL_GetTicksNS();
+
+        if (now >= deadline) {
+            break;
+        }
+        SDL_WaitConditionTimeout(j->cv, j->m, (Sint32)((deadline - now + 999999u) / 1000000u));
+    }
+    SDL_UnlockMutex(j->m);
+    return done;
+}
+
+int ico_audio_sdl_open_pending(void)
+{
+    return open_job != NULL;
+}
+
+int ico_audio_sdl_open_elapsed_ms(void)
+{
+    return open_job != NULL ? (int)((SDL_GetTicksNS() - open_job->begin_ns) / 1000000u) : 0;
+}
+
+/* The finished job's thread joined (it has published: it returns at
+   once), the job freed; its stream and the time it took handed back. */
+static SDL_AudioStream *open_reap(SDL_AudioDeviceID *named, double *ms)
+{
+    OpenJob *j = open_job;
+    SDL_AudioStream *s;
+
+    if (j->thread != NULL) {
+        SDL_WaitThread(j->thread, NULL);
+    }
+    s = j->stream;
+    *named = j->named;
+    *ms = (double)(j->done_ns - j->begin_ns) / 1e6;
+    open_job = NULL;
+    open_job_free(j);
+    return s;
+}
+
+int ico_audio_sdl_open_adopt(void)
+{
+    SDL_AudioDeviceID named = 0;
+    SDL_AudioStream *s;
+    double ms = 0.0;
+
+    if (open_job == NULL) {
+        return stream != NULL ? 1 : -1;
+    }
+    if (!__atomic_load_n(&open_job->done, __ATOMIC_ACQUIRE)) {
+        return 0;
+    }
+    s = open_reap(&named, &ms);
+    if (s == NULL) {
+        fprintf(stderr, "audio: the output device did not open (%.0f ms)\n", ms);
+        lock_destroy();
+        open_pull = NULL;
+        audio_up = 0;
+        SDL_QuitSubSystem(SDL_INIT_AUDIO);
+        return -1;
+    }
+    stream = s;
+    chosen = named;
+    pull_render = open_pull;
     subsystem = 1;
+    if (pull_render != NULL) {
+        /* the device is paused: no callback runs before the resume in
+           start_stream (SDL takes the stream's lock to set it) */
+        SDL_SetAudioStreamGetCallback(stream, pull_cb, NULL);
+    }
+    start_stream();
     underruns = drops = 0;
     last_push_ns = 0;
     quiet_frames = 0;
@@ -727,6 +973,54 @@ int ico_audio_sdl_open(IcoAudioRender pull, const char *why)
                 SDL_GetCurrentAudioDriver() != NULL ? SDL_GetCurrentAudioDriver() : "?",
                 cushion_frames() * 1000 / RATE, CUSHION_MAX_FRAMES * 1000 / RATE, sync_why);
     }
+    fprintf(stderr, "audio: the device opened after %.0f ms\n", ms);
+    if (open_paused) {
+        open_paused = 0;
+        ico_audio_sdl_pause(1);
+    }
+    return 1;
+}
+
+/* The shutdown with the open still under way: waited for at most
+   OPEN_CLOSE_WAIT_MS, then closed unused; 1 when its thread was left
+   behind (SDL's audio must stay up under it). */
+static int open_abandon(void)
+{
+    SDL_AudioDeviceID named = 0;
+    SDL_AudioStream *s;
+    SDL_Thread *t = NULL;
+    double ms = 0.0;
+    int elapsed = 0;
+    int left = 0;
+
+    ico_audio_sdl_open_wait_ms(OPEN_CLOSE_WAIT_MS);
+    SDL_LockMutex(open_job->m);
+    if (!__atomic_load_n(&open_job->done, __ATOMIC_ACQUIRE)) {
+        /* the thread closes and frees from here: nothing of the job is
+           read after the unlock */
+        open_job->abandoned = 1;
+        t = open_job->thread;
+        elapsed = ico_audio_sdl_open_elapsed_ms();
+        left = 1;
+    }
+    SDL_UnlockMutex(open_job->m);
+    if (left) {
+        open_job = NULL;
+        fprintf(stderr,
+                "audio: at the exit the output device had not opened after %d ms; its open is "
+                "left running (SDL's audio stays up)\n",
+                elapsed);
+        if (t != NULL) {
+            SDL_DetachThread(t);
+        }
+        return 1;
+    }
+    s = open_reap(&named, &ms);
+    if (s != NULL) {
+        SDL_DestroyAudioStream(s);
+    }
+    fprintf(stderr, "audio: the output device opened after %.0f ms, at the exit; closed unused\n",
+            ms);
     return 0;
 }
 
@@ -754,6 +1048,10 @@ int ico_audio_sdl_devices(char names[][ICO_AUDIO_DEVICE_NAME_MAX], int max)
 
 int ico_audio_sdl_reopen(const char *name)
 {
+    if (open_job != NULL) {
+        fprintf(stderr, "audio: the output device is still opening; try again when it has\n");
+        return -1;
+    }
     if (!subsystem) {
         return -1;
     }
@@ -790,6 +1088,8 @@ void ico_audio_sdl_flush(void)
 void ico_audio_sdl_pause(int paused)
 {
     if (stream == NULL) {
+        /* the start's open still under way: the adoption pauses it */
+        open_paused = open_job != NULL && paused;
         return;
     }
     if (paused) {
@@ -1093,7 +1393,22 @@ void ico_audio_sdl_log_summary(void)
 
 void ico_audio_sdl_close(void)
 {
+    if (open_job != NULL && open_abandon()) {
+        /* its thread may still be inside SDL's device open: SDL's audio
+           stays up under it; the lock goes (no callback was ever set) */
+        lock_destroy();
+        open_pull = NULL;
+        audio_up = 0;
+        return;
+    }
     if (stream == NULL && !subsystem) {
+        if (audio_up) {
+            /* opened at the exit and closed unused (open_abandon) */
+            lock_destroy();
+            open_pull = NULL;
+            audio_up = 0;
+            SDL_QuitSubSystem(SDL_INIT_AUDIO);
+        }
         return;
     }
     if (stream != NULL) {
@@ -1103,6 +1418,8 @@ void ico_audio_sdl_close(void)
     lock_destroy();
     chosen = 0;
     subsystem = 0;
+    audio_up = 0;
+    open_pull = NULL;
     SDL_QuitSubSystem(SDL_INIT_AUDIO);
     if (pull_render != NULL) {
         fprintf(stderr,

@@ -98,9 +98,25 @@ if(NOT ICO_HEADLESS AND TARGET SDL3::SDL3)
     target_compile_options(audio_pull_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
     target_link_libraries(audio_pull_test PRIVATE ico_audio SDL3::SDL3)
     ico_copy_sdl3_dll(audio_pull_test)
+    # audio_open_test: the start's device open on its own thread (out_sdl.c
+    # and audio_host.c included, their waits shortened; the device open
+    # replaced by a fake on the dummy driver): adopted in the init, adopted
+    # by a later vsync (the game's clock until then), failing, never
+    # returning (the 10 s line, the shutdown's bound, the thread left behind)
+    add_executable(audio_open_test test/audio_open_test.c
+                   "${CMAKE_SOURCE_DIR}/port/platform/host_config.c")
+    target_include_directories(audio_open_test PRIVATE "${CMAKE_SOURCE_DIR}/sce/libsndn2"
+                               "${ICO_COMPAT_DIR}" "${CMAKE_SOURCE_DIR}/port/platform")
+    target_compile_definitions(audio_open_test PRIVATE ICO_AUDIO_SDL=1)
+    target_compile_options(audio_open_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    # ico_sndn2's audio_host and out_sdl objects are never pulled: the test
+    # defines every symbol they do
+    target_link_libraries(audio_open_test PRIVATE ico_sndn2 SDL3::SDL3)
+    ico_copy_sdl3_dll(audio_open_test)
     if(ICO_RUN_TESTS)
         add_test(NAME audio_queue COMMAND audio_queue_test)
         add_test(NAME audio_pull COMMAND audio_pull_test)
+        add_test(NAME audio_open COMMAND audio_open_test)
     endif()
 endif()
 if(TARGET ico_pc)
