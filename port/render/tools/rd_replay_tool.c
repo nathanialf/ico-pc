@@ -2068,7 +2068,7 @@ int main(int argc, char **argv)
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
                 "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n"
                 "       [--downsample (with --resolution above 1x)] [--fsr1 [0..100]]\n"
-                "       [--fsr3 native|quality|balanced|performance]\n"
+                "       [--fsr3 native|quality|balanced|performance [0..100 sharpness]]\n"
                 "       [--jitter X,Y (texels, each -0.5..0.5)]\n"
                 "       [--upscale-test [1..3] [--upscale-phases N]]\n",
                 argv[0]);
@@ -2176,6 +2176,17 @@ int main(int argc, char **argv)
             s.upscaleSharpness = 80; /* the row's default */
             fsr3Asked = true;
             i++;
+            /* an optional sharpness 0..100 after the quality (the row's) */
+            char *end = NULL;
+            const long v = i + 1 < argc ? strtol(argv[i + 1], &end, 10) : -1;
+            if (i + 1 < argc && end && end != argv[i + 1] && *end == '\0') {
+                if (v < 0 || v > 100) {
+                    fprintf(stderr, "--fsr3: the sharpness is 0..100\n");
+                    return 1;
+                }
+                s.upscaleSharpness = (uint8_t)v;
+                i++;
+            }
         } else if (strcmp(argv[i], "--upscale-test") == 0) {
             /* the upscale point's test (rd_upscale.h), at the ratio given */
             float ratio = 1.5f;
