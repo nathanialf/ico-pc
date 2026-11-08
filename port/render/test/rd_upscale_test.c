@@ -37,7 +37,11 @@
  *             x 1.5): the scene 1.5 / 1.5 = 1 down; Auto's cap 1 at ratio
  *             1.25 (the scene 1.2 uncapped) gives the scene 1 down and keeps
  *             DISPLAY at the window's 384 rows
- * Any validation error fails the test. */
+ * Any validation error fails the test.  "rd_upscale_test off" runs the
+ * scales, marker and off cases alone (rd_upscale_off_mali and
+ * rd_upscale_off_tiler: the marker a NOP under a phone's limits and under
+ * the tile-based device profile's list walkers, which no corpus dump with a
+ * marker covers). */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -581,8 +585,9 @@ static void testWindow(void)
     fillFrame();
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    const bool offOnly = argc > 1 && strcmp(argv[1], "off") == 0;
     testScales();
     for (int i = 0; i < 16 * 16; i++) {
         uint32_t v = (uint32_t)i * 2654435761u + 7u;
@@ -609,11 +614,13 @@ int main(void)
     s_tex = rd_create_texture(16, 16, s_texel, RD_TEXA_80_80, "upscale test");
     testMarker();
     testOff();
-    testUpscale();
-    testGuard();
-    testJitter();
-    testReset();
-    testWindow();
+    if (!offOnly) {
+        testUpscale();
+        testGuard();
+        testJitter();
+        testReset();
+        testWindow();
+    }
     CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
     const uint32_t verr = rhi_vk_validation_error_count();
     CHECK(verr == 0, "%u validation errors", verr);
@@ -622,6 +629,6 @@ int main(void)
         printf("rd_upscale_test: %d failures\n", failures);
         return 1;
     }
-    printf("rd_upscale_test: ok\n");
+    printf("rd_upscale_test: ok%s\n", offOnly ? " (the off cases)" : "");
     return 0;
 }

@@ -2264,8 +2264,25 @@ if(ICO_RUN_TESTS)
     endforeach()
     ico_add_sharded_test(rd_mesh_mali 4 PROGRAM rd_mesh_test ARGS "${ICO_DISC_IMAGE}")
     list(APPEND _ico_mali_tests ${rd_mesh_mali_SHARDS})
+    # the upscale marker's Off identity (rd_upscale_test off: the frame
+    # replayed with RDC_UPSCALE_POINT an RDC_NOP gives DISPLAY and the
+    # present byte for byte) under these limits; the corpus's dumps (version
+    # 16 and older) carry no marker.  rd_upscale_off_tiler, below: the same
+    # on the tile-based device profile
+    add_test(NAME rd_upscale_off_mali COMMAND rd_upscale_test off)
+    list(APPEND _ico_mali_tests rd_upscale_off_mali)
     set_tests_properties(${_ico_mali_tests} PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_ml}"
                                                        ENVIRONMENT "${_env_mali}")
+    # rd_upscale_off_tiler: rd_upscale_test off on the tile-based device
+    # profile (ICO_VK_FAKE_LIMITS=moltenvk, the Apple class of rd_profile.c:
+    # pass areas, the aura box, no glow fold, no UINT views; the class the
+    # mali limits alone do not give on lavapipe), so the list walkers that
+    # pass over the marker on a tiler (the store plan, the pass areas, the
+    # folds' look-ahead, the crack fill's place) leave the picture as with
+    # the marker a NOP
+    add_test(NAME rd_upscale_off_tiler COMMAND rd_upscale_test off)
+    set_tests_properties(rd_upscale_off_tiler PROPERTIES SKIP_RETURN_CODE 77
+                                              ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
     # issue 179: the VU vertex pre-pass on a phone's limits, as every
     # tile-based GPU takes it since v0.11.0 (rd_replay_vu.c
     # rd__vu_prepass_init; ICO_RD_VU_PREPASS=1 as the phone's [dev]
