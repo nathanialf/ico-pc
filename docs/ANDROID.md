@@ -94,7 +94,9 @@ first ([where it is](#where-your-files-are)).
    (a bar), then **Preparing the game's data** (a bar) and **Finishing the
    game's data**.
 5. **Starting the game** shows on every start. A few seconds of black can
-   follow it, until the game's own logo appears.
+   follow it, until the game's own logo appears. The first time the title
+   screen is up, the game also makes the recent-apps icon from it, which
+   shows as about half a second of black.
 
 At each step the screen says what the game is doing. Where it shows no
 bar, the step is short and its length cannot be told in advance. Leave the
@@ -176,6 +178,10 @@ In that folder:
   not open ([Using a different graphics
   driver](#using-a-different-graphics-driver)). The game makes the folder
   when it starts.
+- `icon` holds the picture the game makes from your disc's title screen (a
+  `.png` named after the disc). The recent-apps card uses it; the
+  home-screen icon stays the plain one. Some phones' launchers ignore the
+  card's icon.
 - `logs` holds the log file, `ico-pc.log`, which helps with problem
   reports. When the graphics driver stops responding, the game also saves
   a copy of the picture it was drawing there, a file whose name starts

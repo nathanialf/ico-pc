@@ -3,6 +3,7 @@
 // libmain.so (the CMake target ico_pc), whose SDL_main SDL calls.
 package com.defnf.icopc;
 
+import android.app.ActivityManager;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.ComponentName;
@@ -10,6 +11,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.database.Cursor;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Build;
@@ -218,6 +221,7 @@ public class IcoActivity extends SDLActivity {
     @Override
     protected void onStart() {
         super.onStart();
+        applyTaskIcon();
         startThermalWatch();
         try {
             if (mLayoutTracker == null) {
@@ -344,6 +348,45 @@ public class IcoActivity extends SDLActivity {
             sVibrator.vibrate(VibrationEffect.createOneShot(ms, Math.min(amplitude, 255)));
         } catch (RuntimeException e) {
             // no vibration is better than a crash
+        }
+    }
+
+    // The recents card's icon (host_android.c ico_android_task_icon, on SDL's
+    // main thread): the PNG the game made from the title's I
+    // (<files>/icon/ico-pc-<disc>.png), decoded, kept, and set as the task's
+    // icon on the UI thread.  null when it was started, else the reason,
+    // which the native side logs.  The launcher icon is a compiled resource
+    // and stays; some launchers ignore a task description's icon.
+    private static Bitmap sTaskIcon;
+
+    public static String setTaskIcon(String path) {
+        IcoActivity a = sInstance;
+        if (a == null) {
+            return "no activity";
+        }
+        Bitmap bmp = BitmapFactory.decodeFile(path);
+        if (bmp == null) {
+            return "the PNG could not be decoded";
+        }
+        sTaskIcon = bmp;
+        a.runOnUiThread(() -> a.applyTaskIcon());
+        return null;
+    }
+
+    // A recreated activity resets its description, so onStart sets it again.
+    // The Bitmap constructor is deprecated from 33, but it is the only form
+    // that takes a run-time image (the int and Builder forms take a resource
+    // id).
+    @SuppressWarnings("deprecation")
+    private void applyTaskIcon() {
+        Bitmap bmp = sTaskIcon;
+        if (bmp == null) {
+            return;
+        }
+        try {
+            setTaskDescription(new ActivityManager.TaskDescription(getString(R.string.app_name), bmp));
+        } catch (RuntimeException e) {
+            // a plain card is better than a crash
         }
     }
 
