@@ -13,7 +13,7 @@
  *                     falloff printed beside the shipped tables), then pins
  *                     the port's look, not a match to the sheets: the
  *                     outline picked in v0.11.1 (kSheetInk's European rows'
- *                     rim grey 72, their fill the survey's white; the
+ *                     rim grey 100, their fill the survey's white; the
  *                     tables ICO_SHEET_RX / RY, WX / WY, ICO_SHEET_LEVELS 8
  *                     and ICO_SHEET_SOLID_ABOVE as sheetref_default_look
  *                     reads them; menu_font.h's margin).
@@ -110,7 +110,7 @@
 /* ------------------------------------------------------------- limits */
 /* The limits of testCompareItems pin the port's look, not a match to the
    sheets: the outline picked in v0.11.1 (a solid dark-grey band, rim grey
-   72, that fades out quickly) is not the sheets' halo, so the blur, plain
+   100, that fades out quickly) is not the sheets' halo, so the blur, plain
    and share limits hold the strips to what that look measured, the
    largest + 25 %.  The values below are still the v0.10 look's (not
    re-measured: the run needs the disc); the run on main prints the
@@ -178,7 +178,7 @@ static const float kExpMassY[UI_LANG_PAL_COUNT] = {2.15f, 2.83f, 2.99f, 2.90f, 2
 #define TOL_MASS 0.08f
 /* The outline picked in v0.11.1 on the Menu Outline Lab: one rim grey for
    the five European rows of kSheetInk, eight levels. */
-#define PICK_RIM 72
+#define PICK_RIM 100
 #define PICK_LEVELS 8
 #define EXP_STEPS 3 /* the median number of antialiasing steps of a sheet's white */
 

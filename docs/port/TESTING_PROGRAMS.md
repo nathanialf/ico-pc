@@ -1430,7 +1430,7 @@ The renderer's test programs have a page of their own:
   Asian disc's expectation is the Japanese numbers until `menu_look_cn` has been run on it).
 - `menu_look_test.c`: the menus' Arimo text against the game's menu sheets from the disc
   (`menu_look`): the sheets' survey held to its record, the port's outline pinned (the European
-  rows' rim grey 72, the falloff tables as `sheetref_default_look` reads them, eight levels, the
+  rows' rim grey 100, the falloff tables as `sheetref_default_look` reads them, eight levels, the
   solid threshold), each item's strip against its sheet rectangle within limits that pin the
   port's look; `menu_sheets.c`/`.h` decode the sheets. Three development modes run from the
   environment on the same binary instead of the checks (exit 0 unless a row does not resolve):

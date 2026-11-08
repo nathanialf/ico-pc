@@ -90,7 +90,7 @@ enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
 /* The light ink per language (UiLang order: EN FR DE IT ES): rimOn,
    rimLevel, fillLevel, dither.  The one table to retune.
 
-   The pick (v0.11.1): the European rows take one rim grey, 72, with the
+   The pick (v0.11.1): the European rows take one rim grey, 100, with the
    outline the user picked on the Menu Outline Lab (the menus' words in
    candidate looks beside the title screen's lettering; shader_consts.h
    ICO_SHEET_WX / WY, ICO_SHEET_SOLID_ABOVE): a solid dark-grey band that

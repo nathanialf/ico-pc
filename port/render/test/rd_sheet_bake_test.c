@@ -13,7 +13,7 @@
  *            each line a strip at the menus' two em sizes, packed the same
  *            way: the same, every texel;
  *   styles   the light inks' rim and fill levels (menu_font.c kSheetInk:
- *            the European rows' grey 72, the Japanese, Korean and Chinese
+ *            the European rows' grey 100, the Japanese, Korean and Chinese
  *            rows), three other rim greys (61 and 56, the European sheets'
  *            survey, and black), the faint rim (16 64ths) and the plain
  *            style (no rim), each with the dither on and off;
@@ -180,15 +180,15 @@ typedef struct Style {
     RdSheetStyle st;
 } Style;
 
-/* menu_font.c kSheetInk's rim and fill levels (the European rows' 72, the
+/* menu_font.c kSheetInk's rim and fill levels (the European rows' 100, the
    Asian rows'), three other rim greys (61 and 56, the European sheets'
    survey, which kSheetInk held before v0.11.1, and black), the faint class
    (FAINT_WEIGHT) and the plain style (kPlainInk) */
 static const Style kStyles[] = {
-    {"European", {1, 72, 255, 1, 0, 1}}, {"grey 61", {1, 61, 255, 1, 0, 1}},
-    {"grey 56", {1, 56, 255, 1, 0, 1}},  {"black", {1, 0, 255, 1, 0, 1}},
-    {"Japanese", {1, 34, 252, 1, 0, 1}}, {"Korean", {1, 42, 253, 1, 0, 1}},
-    {"Chinese", {1, 39, 251, 1, 0, 1}},  {"faint", {1, 72, 255, 1, FAINT_WEIGHT, 1}},
+    {"European", {1, 100, 255, 1, 0, 1}}, {"grey 61", {1, 61, 255, 1, 0, 1}},
+    {"grey 56", {1, 56, 255, 1, 0, 1}},   {"black", {1, 0, 255, 1, 0, 1}},
+    {"Japanese", {1, 34, 252, 1, 0, 1}},  {"Korean", {1, 42, 253, 1, 0, 1}},
+    {"Chinese", {1, 39, 251, 1, 0, 1}},   {"faint", {1, 100, 255, 1, FAINT_WEIGHT, 1}},
     {"plain", {0, 0, 255, 1, 0, 1}},
 };
 #define STYLE_COUNT (int)(sizeof(kStyles) / sizeof(kStyles[0]))
