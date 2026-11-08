@@ -22,19 +22,19 @@
 #define SHEET_RY 4
 #define SHEET_WX_0 1000
 #define SHEET_WX_1 1000
-#define SHEET_WX_2 500
-#define SHEET_WX_3 150
-#define SHEET_WX_4 0
-#define SHEET_WX_5 0
+#define SHEET_WX_2 1000
+#define SHEET_WX_3 600
+#define SHEET_WX_4 300
+#define SHEET_WX_5 100
 #define SHEET_WX_6 0
 #define SHEET_WY_0 1000
 #define SHEET_WY_1 1000
-#define SHEET_WY_2 300
-#define SHEET_WY_3 0
-#define SHEET_WY_4 0
+#define SHEET_WY_2 700
+#define SHEET_WY_3 350
+#define SHEET_WY_4 100
 // The levels the opacity and the rim-to-fill mix are quantised to (the
 // sheets' 16 colours hold three antialiasing steps between none and full).
-#define SHEET_LEVELS 8
+#define SHEET_LEVELS 4
 // The 4x4 Bayer matrix, one row a constant, the texel at x & 3 in nibble
 // x (row 0 is 0 8 2 10, row 1 12 4 14 6, row 2 3 11 1 9, row 3 15 7 13 5).
 #define SHEET_BAYER_ROW0 0xA280

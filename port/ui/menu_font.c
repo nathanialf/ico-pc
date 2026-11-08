@@ -122,11 +122,11 @@ enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
             (shader_consts.h).
    ctest menu_look's survey re-measures these numbers within 0.1. */
 static const UiSheetInk kSheetInk[UI_LANG_SHEET_COUNT] = {
-    {1, 0, 255, 1, 0}, /* English */
-    {1, 0, 255, 1, 0}, /* French */
-    {1, 0, 255, 1, 0}, /* German */
-    {1, 0, 255, 1, 0}, /* Italian */
-    {1, 0, 255, 1, 0}, /* Spanish */
+    {1, 72, 255, 1, 0}, /* English */
+    {1, 72, 255, 1, 0}, /* French */
+    {1, 72, 255, 1, 0}, /* German */
+    {1, 72, 255, 1, 0}, /* Italian */
+    {1, 72, 255, 1, 0}, /* Spanish */
     /* the Japanese disc's sheets (UI_SHEET_JA), measured by ctest
        menu_look_jpn (menu_region_test.c) on Tex_menu01's option, mc04, title
        and scei sheets: fill 251.5 (the letters' palette white is fcfcfc,

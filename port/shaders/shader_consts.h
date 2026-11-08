@@ -237,22 +237,22 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 #define ICO_SHEET_RY 4 /* rim: texels (field lines) down */
 #define ICO_SHEET_WX_0 1000
 #define ICO_SHEET_WX_1 1000
-#define ICO_SHEET_WX_2 500
-#define ICO_SHEET_WX_3 150
-#define ICO_SHEET_WX_4 0
-#define ICO_SHEET_WX_5 0
+#define ICO_SHEET_WX_2 1000
+#define ICO_SHEET_WX_3 600
+#define ICO_SHEET_WX_4 300
+#define ICO_SHEET_WX_5 100
 #define ICO_SHEET_WX_6 0
 #define ICO_SHEET_WY_0 1000
 #define ICO_SHEET_WY_1 1000
-#define ICO_SHEET_WY_2 300
-#define ICO_SHEET_WY_3 0
-#define ICO_SHEET_WY_4 0
+#define ICO_SHEET_WY_2 700
+#define ICO_SHEET_WY_3 350
+#define ICO_SHEET_WY_4 100
 /* opacity and rim-to-fill levels: the sheets' white takes three steps
    between none and full (five levels), but once the strips' letters sat on
    the sheets' (ctest menu_look) eight gave the smaller difference on every
    language (the blurred difference's median 8.7 .. 9.4 where five give
    9.0 .. 9.5), a finer grain still dithered */
-#define ICO_SHEET_LEVELS 8
+#define ICO_SHEET_LEVELS 4
 /* the 4x4 Bayer matrix, row y in one constant, column x in nibble x */
 #define ICO_SHEET_BAYER_ROW0 0xA280
 #define ICO_SHEET_BAYER_ROW1 0x6E4C
