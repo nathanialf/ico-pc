@@ -1516,9 +1516,11 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   player's sheets through the sheet shader's CPU reference; pins the sheet constants. Its
   development modes, from the environment: `ICO_MENU_LOOK_FIT=1` (the levels and greys),
   `ICO_MENU_LOOK_GEOFIT=1` (the table's geometry), `ICO_MENU_LOOK_REF46=1` (the title's publisher
-  plate measured: its outline's falloff, steps and dither) and `ICO_MENU_LOOK_OUTLINE=1` (the
+  plate measured: its outline's falloff, steps and dither), `ICO_MENU_LOOK_OUTLINE=1` (the
   menus' words in candidate outline looks beside the plate, through `sheet_ref.h`'s `SheetLook`;
-  contact sheets to choose the menu look from) ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
+  contact sheets to choose the menu look from) and `ICO_MENU_LOOK_COVERAGE=1` (those words'
+  strip coverage and the plate's rows as PGM files, the outline design page's material)
+  ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 - `menu_text_jpn`, `menu_look_jpn`, `menu_text_kor`, `menu_look_kor`, `menu_text_cn`,
   `menu_look_cn` (`test/menu_region_test.c` with a slug, and `test/menu_sheets.c`): over the disc's
   boot ELF's tables (`ICO_BASE_ELF_JPN`, `ICO_BASE_ELF_KOR`, `ICO_BASE_ELF_CN`), the region's layouts by their procedures, the title, pause and memory card

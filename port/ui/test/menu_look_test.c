@@ -60,6 +60,13 @@
  * at the top) and contact.txt (the legend: the order, each block's y and
  * tables).  No shader has these looks: they are pictures to choose from.
  *
+ * ICO_MENU_LOOK_COVERAGE=1 (development only): the material of the outline
+ * design page, instead of the checks: each of the outline mode's words as
+ * its strip's coverage (the raster before the rim, the dither's phase kept)
+ * and the title's rows 46 and 48 (English) as grey and alpha, P5 PGM files
+ * under OUT_DIR/menu_look/coverage with index.txt (each word's strip size
+ * and trim box, each row's sheet and corner).
+ *
  * ICO_MENU_LOOK_GEOFIT=1 (development only): fits each item's em, width,
  * anchor and capital middle per language to its sheet (geoFit) and prints
  * them, instead of the checks; =2 keeps the width.  The menu text table's
@@ -2451,6 +2458,61 @@ static void lookText(FILE *f, const Cand *c)
                                  : "none");
 }
 
+/* ICO_MENU_LOOK_COVERAGE=1: the material of the outline design page: each
+   word's strip coverage (the raster before the rim, the dither's phase kept)
+   and the title's two reference rows (46 the publisher plate, 48 the
+   copyright line) as grey and alpha, all as P5 PGM files, with an index. */
+static void writePgm(const char *path, const uint8_t *p, int w, int h)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        return;
+    }
+    fprintf(f, "P5\n%d %d\n255\n", w, h);
+    fwrite(p, 1, (size_t)w * (size_t)h, f);
+    fclose(f);
+}
+
+static void coverage(const char *dir)
+{
+    ref46Dirs(dir, "coverage");
+    Word wd[WORD_MAX];
+    const int nw = words(wd);
+    char path[1100];
+    snprintf(path, sizeof(path), "%s/menu_look/coverage/index.txt", dir);
+    FILE *txt = fopen(path, "w");
+    for (int i = 0; i < nw; i++) {
+        Word *w = &wd[i];
+        snprintf(path, sizeof(path), "%s/menu_look/coverage/word%d.pgm", dir, i);
+        writePgm(path, w->cov, w->w, w->h);
+        if (txt) {
+            fprintf(txt, "word%d: %s; strip %dx%d; trim %d %d %d %d\n", i, w->label, w->w, w->h,
+                    w->x0, w->y0, w->tw, w->th);
+        }
+        free(w->cov);
+    }
+    static const int kRows[2] = {REF_ROW_PLATE, REF_ROW_COPYRIGHT};
+    for (int k = 0; k < 2; k++) {
+        Rect r;
+        if (rectOfRow(kRows[k], UI_LANG_EN, &r) != 0) {
+            continue;
+        }
+        snprintf(path, sizeof(path), "%s/menu_look/coverage/row%d-grey.pgm", dir, kRows[k]);
+        writePgm(path, r.grey, r.w, r.h);
+        snprintf(path, sizeof(path), "%s/menu_look/coverage/row%d-alpha.pgm", dir, kRows[k]);
+        writePgm(path, r.alpha, r.w, r.h);
+        if (txt) {
+            fprintf(txt, "row%d: %s; %dx%d at %d,%d\n", kRows[k], r.sheet, r.w, r.h, r.u, r.v);
+        }
+    }
+    if (txt) {
+        fclose(txt);
+    }
+    printf(
+        "menu_look: coverage: %d words and the reference rows written under %s/menu_look/coverage\n",
+        nw, dir);
+}
+
 /* ICO_MENU_LOOK_OUTLINE=1: outline/<candidate>.png (x1 block above, x4
    nearest below; the row-46 crop the first column), contact.png (every
    candidate's x1 block, the crop once at the top) and contact.txt (the
@@ -2677,6 +2739,7 @@ int main(int argc, char **argv)
     const char *geoEnv = getenv("ICO_MENU_LOOK_GEOFIT");
     const char *ref46Env = getenv("ICO_MENU_LOOK_REF46");
     const char *outlineEnv = getenv("ICO_MENU_LOOK_OUTLINE");
+    const char *coverageEnv = getenv("ICO_MENU_LOOK_COVERAGE");
     const char *boldEnv = getenv("ICO_MENU_LOOK_BOLD");
     if (boldEnv) {
         float bx = 0.0f, by = 0.0f;
@@ -2697,6 +2760,8 @@ int main(int argc, char **argv)
         ref46(argv[3]);
     } else if (outlineEnv && *outlineEnv == '1') {
         outline(argv[3]);
+    } else if (coverageEnv && *coverageEnv == '1') {
+        coverage(argv[3]);
     } else {
         testSurvey();
         testFitCopy();
