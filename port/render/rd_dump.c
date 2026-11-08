@@ -111,7 +111,9 @@
  *            replays with velocity 0.  A VuPrevCB whose bytes do not hold
  *            the draw's own header shape is dropped at load)
  *   (version 17: no new section: list 12 carries RDC_UPSCALE_POINT (u[0]
- *            the target the reduction reads, u[1] the one it writes) before
+ *            the target the reduction reads, u[1] the one it writes, u[2]
+ *            RD_UPSCALE_NO_HISTORY when the frame begins a new history,
+ *            rd_velocity.h; 0 in a dump made before that was set) before
  *            the reduction binds DISPLAY, a state command with no state
  *            (rd_upscale.h); a version 3 to 16 dump has none, and replays
  *            with no upscale point: nothing is upscaled, as before)

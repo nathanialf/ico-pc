@@ -31,7 +31,6 @@
 static int s_on = -1; /* -1: ICO_RD_VELOCITY not read yet */
 static int s_signRead;
 static float s_sign = 1.0f;
-static bool s_reset = true;
 
 static bool envTrue(const char *e)
 {
@@ -77,11 +76,6 @@ float rd__velocity_sign(void)
         }
     }
     return s_sign;
-}
-
-bool rd__velocity_reset(void)
-{
-    return s_reset;
 }
 
 /* ------------------------------------------------------- the stats, log */
@@ -349,9 +343,6 @@ static bool collect(RdFrame *f, int keep)
     for (int l = rd__first_list(keep); l < RD_LIST_COUNT; l++) {
         for (uint32_t i = 0; i < f->lists[l].count; i++) {
             RdCmd *c = &f->lists[l].cmds[i];
-            if (c->type == RDC_MESH || c->type == RDC_SKINNED || c->type == RDC_GRID) {
-                c->u[3] &= RD_VU_TICK_CAMERAS;
-            }
             RdVuPayload h;
             if (!isVelDraw(c) || !headerOf(f, c, &h)) {
                 continue;
@@ -551,22 +542,46 @@ static bool keepFrame(const RdFrame *f)
     return true;
 }
 
+/* Every VU draw of f loses the VuPrevCB it may carry from an earlier attach
+ * (a frame given again: rd_interp.c copyFrame's copy of an attached tick
+ * frame after the interpolation went on, a dump's frame replayed with
+ * --velocity, dumpEvery's half-way frame); only the pairs below set one.
+ * Each RDC_UPSCALE_POINT of f carries whether this frame begins a new
+ * history (u[2] RD_UPSCALE_NO_HISTORY): the replay of this frame reads it
+ * there (rd_upscale.c rd__upscale_point), never a value a later frame's
+ * attach on the game thread could have changed meanwhile. */
+static void clearFrame(RdFrame *f, bool reset)
+{
+    for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count; i++) {
+            RdCmd *c = &f->lists[l].cmds[i];
+            if (c->type == RDC_MESH || c->type == RDC_SKINNED || c->type == RDC_GRID) {
+                c->u[3] &= RD_VU_TICK_CAMERAS;
+            } else if (c->type == RDC_UPSCALE_POINT) {
+                c->u[2] = reset ? RD_UPSCALE_NO_HISTORY : 0u;
+            }
+        }
+    }
+}
+
 void rd__velocity_attach(RdFrame *f, int keep)
 {
     memset(&s_st, 0, sizeof(s_st));
     if (!f || !rd__velocity_on()) {
         return;
     }
-    if (keep) {
-        /* lists 11 and 12 over the kept picture: no scene, nothing to pair,
-           the picture before kept for the next scene */
-        return;
-    }
     /* rd_camera_cut or the wall's (RdFrame.cut, RdCamera.cut once closed;
        FrameCB's eye w 1) */
     const bool cut = f->cut != 0 || (f->hasCamera && f->camera.cut != 0);
-    s_reset = !s_have || cut;
-    s_st.reset = s_reset ? 1u : 0u;
+    /* a keep frame (lists 11 and 12 over the kept picture: no scene,
+       nothing to pair, the picture before kept for the next scene) begins
+       no history */
+    const bool reset = !keep && (!s_have || cut);
+    clearFrame(f, reset);
+    if (keep) {
+        return;
+    }
+    s_st.reset = reset ? 1u : 0u;
     if (!collect(f, keep)) {
         s_have = false;
         static uint32_t lines; /* the first 8 */
@@ -577,7 +592,7 @@ void rd__velocity_attach(RdFrame *f, int keep)
     }
     s_st.vuDraws = s_cur.n;
     Snap *pv = &s_snap[s_read];
-    if (!s_reset && s_cur.n && pv->n && sortOf(&s_cur, 0) && sortOf(pv, 1)) {
+    if (!reset && s_cur.n && pv->n && sortOf(&s_cur, 0) && sortOf(pv, 1)) {
         for (uint32_t i = 0; i < pv->n; i++) {
             pv->e[i].taken = 0;
         }
@@ -605,7 +620,7 @@ void rd__velocity_attach(RdFrame *f, int keep)
     }
     for (uint32_t i = 0; i < s_cur.n; i++) {
         const Ent *c = &s_cur.e[i];
-        if (s_reset) {
+        if (reset) {
             continue;
         }
         if (c->pick < 0) {

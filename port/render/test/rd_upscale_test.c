@@ -27,6 +27,11 @@
  *   jitter    the phase count 8: each present that draws takes Halton
  *             (2, 3) at its index % 8; a re-shown present (a keep replay)
  *             takes none and is counted; off again, the jitter is cleared
+ *   reset     the history reset is the replayed frame's own: four frames
+ *             at a settled split, the third a camera cut, dispatched in
+ *             order: the reset is given at the third alone (its marker's
+ *             u[2] RD_UPSCALE_NO_HISTORY set by the attach, the others 0),
+ *             and at the frame after rd__velocity_forget
  *   window    the "window" resolution at 4:3 in a 1024 x 768 output (the
  *             box 1024 x 768 over the 512 x 512 frame: the display scale 2
  *             x 1.5): the scene 1.5 / 1.5 = 1 down; Auto's cap 1 at ratio
@@ -40,6 +45,7 @@
 #include "rd_internal.h"
 #include "rd_jitter.h"
 #include "rd_upscale.h"
+#include "rd_velocity.h"
 #include "vk/rhi_vk.h"
 
 static int failures;
@@ -203,10 +209,14 @@ static void richFrame(uint8_t fade)
     rd_end_frame(0);
 }
 
-/* a full-frame untextured sprite over a black clear, then the reduction */
-static void fillFrame(void)
+/* a full-frame untextured sprite over a black clear, then the reduction;
+ * cut: after rd_camera_cut */
+static void fillFrameCut(int cut)
 {
     rd_begin_frame();
+    if (cut) {
+        rd_camera_cut();
+    }
     rd_select_list(0);
     rd_set_target(rd_target(RD_TARGET_SCENE), (RdTarget){0}, GS, GS, 0);
     rd_clear_target(rd_target(RD_TARGET_SCENE), kBlack, 0, 0);
@@ -215,6 +225,11 @@ static void fillFrame(void)
     sprite(0, 0, GS * 16, GS * 16, kFill, 0, 0, 0, 0);
     reduction();
     rd_end_frame(0);
+}
+
+static void fillFrame(void)
+{
+    fillFrameCut(0);
 }
 
 static void settings(RdPreset preset, float scale, float cap)
@@ -500,6 +515,40 @@ static void testJitter(void)
     printf("  jitter: Halton (2, 3) at the present's index %% 8, a re-shown present none\n");
 }
 
+static void testReset(void)
+{
+    rd__upscale_set(true, 1.5f);
+    settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
+    fillFrame(); /* the split applied, the sizes settled */
+    fillFrame();
+    static const int kCut[4] = {0, 0, 1, 0};
+    for (int i = 0; i < 4; i++) {
+        const uint32_t r0 = rd__upscale_stats()->resets, d0 = rd__upscale_stats()->dispatched;
+        fillFrameCut(kCut[i]);
+        const RdUpscaleStats *st = rd__upscale_stats();
+        const RdCmd *next = NULL;
+        const RdCmd *m = rd__last_frame() ? markerOf(rd__last_frame(), &next) : NULL;
+        CHECK(st->dispatched == d0 + 1u, "reset: frame %d not dispatched", i);
+        CHECK(st->resets == r0 + (uint32_t)kCut[i],
+              "reset: frame %d (cut %d) given %u resets, want %d", i, kCut[i], st->resets - r0,
+              kCut[i]);
+        CHECK(m && (m->u[2] & RD_UPSCALE_NO_HISTORY) == (kCut[i] ? RD_UPSCALE_NO_HISTORY : 0u),
+              "reset: frame %d marker u[2] %u", i, m ? m->u[2] : 0u);
+    }
+    /* the first frame after the picture before is dropped: no cut, the
+     * attach's mark alone */
+    rd__velocity_forget();
+    const uint32_t r0 = rd__upscale_stats()->resets;
+    fillFrame();
+    CHECK(rd__upscale_stats()->resets == r0 + 1u, "reset: none after rd__velocity_forget");
+    fillFrame();
+    CHECK(rd__upscale_stats()->resets == r0 + 1u, "reset: the frame after it reset too");
+    rd__upscale_set(false, 0.0f);
+    settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
+    fillFrame();
+    printf("  reset: at the cut frame alone and after the history was dropped\n");
+}
+
 static void testWindow(void)
 {
     uint32_t dw = 0, dh = 0;
@@ -563,6 +612,7 @@ int main(void)
     testUpscale();
     testGuard();
     testJitter();
+    testReset();
     testWindow();
     CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
     const uint32_t verr = rhi_vk_validation_error_count();

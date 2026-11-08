@@ -25,7 +25,7 @@
  * vertex counts: blendVu's header test).  A draw with no pair, a jump past
  * RD_INTERP_JUMP_WORLD, a particle batch and every draw of a frame after a
  * camera cut carry none: their velocity is 0 (the cut also asks the
- * upscaler to drop its history: rd__velocity_reset).
+ * upscaler to drop its history: RD_UPSCALE_NO_HISTORY).
  */
 #ifndef RD_VELOCITY_H
 #define RD_VELOCITY_H
@@ -48,6 +48,15 @@ extern "C" {
  * before version 16. */
 #define RD_VU_PREV 2u
 #define RD_VU_PREV_OFF (~7u)
+
+/* An RDC_UPSCALE_POINT's u[2] (rd__velocity_attach sets it, 0 in a frame
+ * never attached and in every dump made before it was set): the frame
+ * begins a new history (a camera cut, RdCamera.cut, FrameCB's eye w == 1;
+ * the first frame; a frame after the switch went on or after
+ * rd__velocity_forget), so the temporal upscaler drops its history at this
+ * frame's dispatch (rd_upscale.c rd__upscale_point, which also takes the
+ * frame's own cut). */
+#define RD_UPSCALE_NO_HISTORY 1u
 
 /* The bytes of a VU payload's fixed part that VuPrevCB copies: the header,
  * the VU block, the bones and the stream (not the materials and cards). */
@@ -76,13 +85,8 @@ void rd__velocity_set(bool on);
  * desktop check with FSR's debug view). */
 float rd__velocity_sign(void);
 
-/* The last frame given to rd__velocity_attach began a new history: a camera
- * cut (RdCamera.cut, FrameCB's eye w == 1), the first frame, a frame after
- * the switch went on or after rd__velocity_forget (the plan's
- * g_rd.velocityReset; the upscaler's reset). */
-bool rd__velocity_reset(void);
-
 /* The source rule: every VU draw of f gets its VuPrevCB or none (above),
+ * f's upscale point whether it begins a new history (RD_UPSCALE_NO_HISTORY),
  * then f's draws are kept as the picture before for the next call.
  * rd_interp.c calls it on each present's blended frame; rd_end_frame on the
  * tick's frame when the interpolation is off.  Nothing when the switch is
@@ -100,7 +104,7 @@ typedef struct RdVelocityStats {
     uint32_t paired;                /* with a VuPrevCB */
     uint32_t moved;                 /* of them, whose VuPrevCB differs from their own fixed part */
     uint32_t unpaired, shape, jump; /* without one: no pair, another shape, a jump */
-    uint32_t reset;                 /* the frame began a new history */
+    uint32_t reset;                 /* the frame began a new history (its marker's u[2]) */
     /* the replay (rd_replay_vu.c): draws drawn into VELOCITY, draws of list 0
        into SCENE with depth writes left out (drawn the old way, without the
        record, or multisampled), the passes */

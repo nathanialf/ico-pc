@@ -404,7 +404,13 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
     in.displaySy = s_up.geom.sy;
     (void)rd__frame_jitter_get(in.jitter);
     const bool resized = in.outW != s_up.lastW || in.outH != s_up.lastH;
-    in.reset = s_up.stats.dispatched == 0u || resized || rd__velocity_reset();
+    /* a new history: decided from the frame replayed here (its cut, and the
+     * attach's mark on its own marker: the first frame, a frame after the
+     * motion vectors went on), never from a value the game thread's attach
+     * of a later frame may already have changed (interpolation off) */
+    const bool frameCut = f && (f->cut != 0 || (f->hasCamera && f->camera.cut != 0));
+    in.reset = s_up.stats.dispatched == 0u || resized || frameCut ||
+               (c->u[2] & RD_UPSCALE_NO_HISTORY) != 0u;
     in.presents = s_up.since + 1u;
     in.frame = frame;
     /* the frame camera (rd_frame.c rd__fill_camera_cb's): near, far, and
@@ -428,6 +434,7 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
     s_up.lastW = in.outW;
     s_up.lastH = in.outH;
     s_up.stats.dispatched++;
+    s_up.stats.resets += in.reset ? 1u : 0u;
     s_up.stats.outW = in.outW;
     s_up.stats.outH = in.outH;
     s_up.stats.colorW = in.colorW;
