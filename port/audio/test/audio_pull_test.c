@@ -5,7 +5,7 @@
  * stream without a device, over the real SPU2.  SDL runs a stream's
  * get-callback from SDL_GetAudioStreamData, so the "device" is a thread
  * that takes 480 frames at a time; the audio lock is out_sdl.c's own SDL
- * mutex (lock_create), as ico_audio_sdl_open installs it.
+ * mutex (lock_create), as ico_audio_sdl_open_begin installs it.
  *
  *   - bit for bit: a scene of timed register writes rendered on one thread,
  *     then the same writes pushed by a writer thread under the audio lock

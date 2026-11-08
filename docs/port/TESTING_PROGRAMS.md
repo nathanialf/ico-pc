@@ -36,6 +36,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`, which turns address-space
   randomization off for the run (the build host's kernel randomizes more than ThreadSanitizer
   accepts); a report is a failure.
+- `audio_open_test.c` (window build): the start's device open on its own thread (`out_sdl.c` and
+  `audio_host.c` included, the start's wait shortened to 200 ms and the shutdown's to 300 ms, the
+  device open replaced by a fake on the dummy driver that hands back a device-less stream when the
+  test opens its gate): adopted inside the init on the device's clock; adopted by the first vsync
+  after the fake returns, the game's clock rendering every vsync until then, the Settings move
+  refused, the watchdog's vsync reset at the adoption and nothing rendered on that vsync; a failed
+  open at once and after the wait (the game's clock, "no device"); an open that never returns
+  (two still-waiting lines in 20 s of vsyncs, the shutdown back within its bound, the thread left
+  behind closing what it opens) (`audio_open`). Its one wall-clock check is the shutdown's bound.
 - `audio_queue_test.c` (window build): the output on the game's clock (`out_sdl.c`'s push) on a
   device-less SDL stream: the cushion, the refill after a dry queue and its ramp with frames still
   queued, plain silence after a queue run empty, the trim and the drop limit (`audio_queue`).
