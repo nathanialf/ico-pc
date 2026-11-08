@@ -79,6 +79,7 @@
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_pipe_finish.h"
+#include "rd_vu_record.h"
 #include "rd_vu_skin_check.h"
 #include "shader_consts.h"
 #include "shaders_gen.h"
@@ -807,6 +808,27 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         layouts[1] = g_rd.layoutVu;
         layouts[2] = g_rd.layoutTex;
         memset(d, 0, sizeof(*d));
+        if (k->colorFmt == RHI_FMT_UNKNOWN) {
+            /* the record stored by the vertex shaders (rd_vu_record.h; the
+             * key's colorFmt UNKNOWN, rd__vu_pre_key): the store build, group
+             * 1's store layout, no fragment shader, no target, no
+             * rasterization; the tick stage's lane is vu_tri.w (the key's
+             * two masks stay two keys, the same pipeline twice) */
+            layouts[1] = g_rdRec.layoutVuPre;
+            d->vertex = rd__vu_record_vs(k->vs, g_rd.vuPreBatch && g_rd.vsBatch[k->vs].id);
+            if (!d->vertex.id || !layouts[1].id) {
+                return false;
+            }
+            d->layouts = layouts;
+            d->layoutCount = 3;
+            d->topology = RHI_TOPO_POINT_LIST;
+            d->cullNone = true;
+            d->colorCount = 0;
+            d->depthFormat = RHI_FMT_UNKNOWN;
+            d->noRaster = true;
+            d->debugName = "rd vu pre-pass (stores)";
+            return true;
+        }
         /* the batch build under the pre-pass's batches (g_rd.vuPreBatch,
          * set once a run before any pipeline; rd_replay_vu.c vuPrepassRun) */
         d->vertex =
@@ -3593,7 +3615,11 @@ RdPipeKeyInt rd__vu_pre_key(uint8_t preVs)
     k.gs.prim = RD_PRIM_POINTS;
     k.vs = preVs;
     k.fs = RD_FS_VU_PRE;
-    k.colorFmt = RHI_FMT_RGBA32_UINT;
+    /* the record's write (rd_vu_record.h): the three RGBA32_UINT targets,
+     * or none under the stores (the pipeline stores from its vertex
+     * shader; both kinds may be in the cache across the self-test's
+     * fallback) */
+    k.colorFmt = g_rdRec.stores ? RHI_FMT_UNKNOWN : RHI_FMT_RGBA32_UINT;
     k.depthFmt = RHI_FMT_UNKNOWN;
     return k;
 }

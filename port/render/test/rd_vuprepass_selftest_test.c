@@ -19,7 +19,7 @@
  *   1. rd_vuprepass_selftest leaves the pre-pass on or off as <mode> says
  *      (g_rd.vuPrepass) and returns false only when it turned it off;
  *   2. the summary text (rd_summary_text) says so: "VU pre-pass on
- *      (self-test: ok)", "VU pre-pass off (self-test: the pictures differ"
+ *      (self-test: ok; record stores)" (or targets), "VU pre-pass off (self-test: the pictures differ"
  *      or "VU pre-pass off by the settings"; with it on, its draws batched
  *      (g_rd.vuPreBatch) unless ICO_RD_VU_PREPASS_BATCH=0; the draw merge
  *      on (g_rd.vuMerge, "VU merge on") unless ICO_RD_VU_MERGE=0 (on
@@ -42,13 +42,16 @@
  *      colour-target bound leave the pre-pass on (a tile-based GPU takes
  *      it since v0.11.0; ICO_VK_FAKE_LIMITS=mali does not set tiler, so no
  *      other test sees this rule), colorBytesPerPixel 32 (below the
- *      record's ICO_VU_REC_BYTES) leaves it off with the bytes in its why.
+ *      record's ICO_VU_REC_BYTES) without vertex stores leaves it off with
+ *      the bytes in its why, and with them (rd_vu_record.h: the record
+ *      stored, no colour target) on.
  * The log lines are matched by test/rd_vuprepass_selftest.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_vu_record.h"
 #include "vk/rhi_vk.h"
 
 static int failures;
@@ -167,7 +170,8 @@ int main(int argc, char **argv)
     char sum[2048];
     rd_summary_text(sum, sizeof(sum));
     printf("  summary: %s\n", sum);
-    const char *want = wantOn   ? "; VU pre-pass on (self-test: ok); "
+    /* the record's write after the verdict (rd_vu_record.h) */
+    const char *want = wantOn   ? "; VU pre-pass on (self-test: ok; record "
                        : notRun ? "; VU pre-pass off by the settings ("
                                 : "; VU pre-pass off (self-test: the pictures differ: ";
     CHECK(strstr(sum, want) != NULL, "the summary lacks \"%s\"", want);
@@ -238,10 +242,25 @@ int main(int argc, char **argv)
               g_rd.vuPrepassWhy);
         lim.tiler = false;
         lim.colorBytesPerPixel = 32u;
+        /* the bound is the render targets' (the record drawn into them):
+           without vertex stores the pre-pass is off */
+        const bool stores = lim.vertexStores;
+        lim.vertexStores = false;
         rd__vu_prepass_init(&lim);
         CHECK(!g_rd.vuPrepass && strstr(g_rd.vuPrepassWhy, want) != NULL,
               "32 bytes a pixel of colour targets: the pre-pass %s (%s), off with \"%s\" expected",
               g_rd.vuPrepass ? "on" : "off", g_rd.vuPrepassWhy, want);
+        CHECK(!g_rdRec.stores, "no vertex stores, yet the record is stored (%s)", g_rdRec.why);
+        /* with vertex stores (rd_vu_record.h, unless [dev] vu_record =
+           targets) the record needs no colour target: on, stored */
+        lim.vertexStores = stores;
+        if (stores && g_rdRec.asked != RD_VU_RECORD_TARGETS) {
+            rd__vu_prepass_init(&lim);
+            CHECK(g_rd.vuPrepass && g_rdRec.stores,
+                  "32 bytes a pixel with vertex stores: the pre-pass %s, the record %s (%s %s)",
+                  g_rd.vuPrepass ? "on" : "off", rd__vu_record_name(), g_rd.vuPrepassWhy,
+                  g_rdRec.why);
+        }
     }
     rd_shutdown();
     if (failures) {

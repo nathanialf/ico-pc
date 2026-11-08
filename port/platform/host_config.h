@@ -173,7 +173,9 @@ const char *ico_config_ini_key(const char *toml_path);
    present_fallback auto, off or fifo as they are (0/false/no -> "off");
    frame_rate_pin auto or off as they are (0/false/no -> "off");
    disc_reader thread or sync as they are (0/false/off/no -> "sync");
-   disc_read_ahead_kb 0 to 4096 as it is (false/off/no -> "0"); jitter_test
+   disc_read_ahead_kb 0 to 4096 as it is (false/off/no -> "0"); vu_record
+   auto, targets or stores as they are; vu_prepass_min a count as it is
+   (false/off/no -> "0"); jitter_test
    "x,y" (each -0.5..0.5) as it is; pass_split a
    count; velocity_sign 1 or -1 as it is; gpu_*, attachment_read, storage_pass_merge, store_plan,
    blur_fold, uint_view, alpha_plan, fx_plan, fx_dst_local, vu_planes,

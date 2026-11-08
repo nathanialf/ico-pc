@@ -5130,7 +5130,16 @@ static void perf_log(void)
            work costs this GPU (the VU pre-pass question, docs/port/
            ANDROID_DIAGNOSTICS.md) */
         (void)window_scene_vu_fit_text(fit, sizeof(fit), &s_perf.vuFit);
-        fprintf(stderr, "window: %s%s%s\n", vu, twins, fit);
+        /* how the record was written, the frames [dev] vu_prepass_min skipped */
+        char rec[112];
+        uint32_t minS = 0, maxS = 0;
+        const uint32_t skip = rd_vu_prepass_skips(&minS, &maxS);
+        int at = snprintf(rec, sizeof(rec), "; record %s", rd_vu_record_mode());
+        if (skip && at > 0 && (size_t)at < sizeof(rec)) {
+            snprintf(rec + at, sizeof(rec) - (size_t)at,
+                     "; pre-pass skipped %u frames under %u slots", (unsigned)skip, (unsigned)minS);
+        }
+        fprintf(stderr, "window: %s%s%s%s\n", vu, twins, fit, rec);
     }
     {
         /* Vulkan: whether the display's image was already free when the

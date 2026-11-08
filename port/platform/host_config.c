@@ -591,6 +591,14 @@ static const struct {
     /* false: the VU pre-pass's draws one an entry and stage instead of one a
        batch (an A/B; port/render/rd_replay_vu.c preBatchInit) */
     {"dev.vu_prepass_batch", "vu_prepass_batch"},
+    /* auto (the default: stored by the vertex shaders where the device
+       can), targets or stores: how the VU pre-pass writes its record (an
+       A/B; port/render/rd_vu_record.c) */
+    {"dev.vu_record", "vu_record"},
+    /* N: a frame whose pre-pass would record fewer than N vertex and
+       triangle slots draws every VU command the old way (0, the default:
+       never; port/render/rd_vu_record.c rd__vu_record_skip) */
+    {"dev.vu_prepass_min", "vu_prepass_min"},
     /* true: the temporal upscaler's motion vectors drawn (VELOCITY; a
        developer switch, FSR 3.1 turns them on by itself), and -1 or 1: the sign the
        upscaler takes them with (port/render/rd_velocity.c) */
@@ -787,6 +795,10 @@ static const struct {
     /* port/render/rd_replay_vu.c preBatchInit: 0 draws the pre-pass one
        draw an entry and stage */
     {"vu_prepass_batch", "ICO_RD_VU_PREPASS_BATCH"},
+    /* port/render/rd_vu_record.c rd__vu_record_init: auto, targets or stores */
+    {"vu_record", "ICO_RD_VU_RECORD"},
+    /* port/render/rd_vu_record.c rd__vu_record_init: a count of record slots */
+    {"vu_prepass_min", "ICO_RD_VU_PREPASS_MIN"},
     /* port/render/rd_velocity.c rd__velocity_on: 1 draws the motion
        vectors; rd__velocity_sign: -1 or 1 */
     {"velocity_test", "ICO_RD_VELOCITY"},
@@ -908,6 +920,7 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const pins[] = {"auto", "off", NULL};
     static const char *const readers[] = {"thread", "sync", NULL};
     static const char *const vuSets[] = {"auto", "plain", "extended", NULL};
+    static const char *const vuRecords[] = {"auto", "targets", "stores", NULL};
     static const char *const auraKernels[] = {"box", "gs", NULL};
     static const char *const culls[] = {"off", "frustum", "full", NULL};
     static const char *const regionRules[] = {"camera", "ps2", NULL};
@@ -960,6 +973,19 @@ const char *ico_dev_env_value(const char *key, const char *value)
     if (strcmp(key, "vu_set") == 0) {
         /* auto, plain or extended as they are (no boolean form) */
         return value_is(value, vuSets) ? value : NULL;
+    }
+    if (strcmp(key, "vu_record") == 0) {
+        /* auto, targets or stores as they are (no boolean form) */
+        return value_is(value, vuRecords) ? value : NULL;
+    }
+    if (strcmp(key, "vu_prepass_min") == 0) {
+        /* a whole count of record slots, 0 (never) to 2^31; false/off/no is 0 */
+        char *end = NULL;
+        const long n = strtol(value, &end, 10);
+        if (end != value && *end == '\0' && n >= 0 && n <= 2147483647L) {
+            return value;
+        }
+        return value_is(value, off) ? "0" : NULL;
     }
     if (strcmp(key, "vu_bones") == 0) {
         /* ring or cbuffer as they are (no boolean form) */

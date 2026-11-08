@@ -229,6 +229,7 @@ add_library(ico_render STATIC
     rd_replay_tiler.c # the replay's tiler passes: DATE through the stencil bit, the blur fold
     rd_replay_vu.c # the replay's VU draws
     rd_vuprepass_selftest.c # the VU vertex pre-pass's start-up check on the device
+    rd_vu_record.c # the VU record's write: render targets and copies, or vertex stores
     rd_vu_skin_check.c # the skinned draws' bone-block check in the game (issue 163)
     rd_vu_skin_capture.c # its capture on failure: the sidecar, the frame dump asked (issue 123)
     rd_vu_bones.c # issue 123's ladder: the bones through the ring, the evidence for the window
@@ -1467,6 +1468,18 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_pixel_fixed rd_fog_fixed rd_present_fixed rd_crt_fixed
                          PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_bf}"
                                     ENVIRONMENT "${_env_blend_fixed}")
+    # the VU record's two writes (rd_vu_record.h): rd_pixel's pictures and
+    # hashes with the record stored by the vertex shaders (the default on
+    # lavapipe, asked by name) and drawn into the render targets and copied
+    set(_vrs "${CMAKE_CURRENT_BINARY_DIR}/vu_record_stores")
+    set(_vrt "${CMAKE_CURRENT_BINARY_DIR}/vu_record_targets")
+    file(MAKE_DIRECTORY "${_vrs}" "${_vrt}")
+    add_test(NAME rd_pixel_stores COMMAND rd_pixel_test "${_vrs}")
+    add_test(NAME rd_pixel_targets COMMAND rd_pixel_test "${_vrt}")
+    set_tests_properties(rd_pixel_stores PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_vrs}"
+                                                    ENVIRONMENT "${_env};ICO_RD_VU_RECORD=stores")
+    set_tests_properties(rd_pixel_targets PROPERTIES SKIP_RETURN_CODE 77 WORKING_DIRECTORY "${_vrt}"
+                                                     ENVIRONMENT "${_env};ICO_RD_VU_RECORD=targets")
     # the fog on the 24-bit depth buffer a phone GPU without a sampled
     # D32S8 gets (ICO_VK_FAKE_D24S8=1, port/rhi/vk/vk_device.c): the same
     # pixels as on D32S8, one-pass and two-pass blends
@@ -2009,10 +2022,54 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vuprepass_selftest_unmerged
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}" -P "${_vst}")
+    # the record's two writes (rd_vu_record.h; issue 179): lavapipe has
+    # vertexPipelineStoresAndAtomics, so the runs above take the stores (the
+    # shipped path, [dev] vu_record = auto).  _stores and _stores_plain ask
+    # for them by name and must say so on the verdict line; _targets keeps
+    # the render targets and copies; _stores_sabotage_straddle: a stale
+    # record under the stores (replays 2 on store into the sink buffer) fails
+    # the stores' run from replay 2 on, which is logged with its first
+    # texel, and the targets' run after it fails the same way (the final
+    # verdict); _nostores_fallback: a device made without the feature
+    # (ICO_VK_FAKE_NO_VERTEX_STORES=1) says so on the start line, keeps the
+    # targets and passes
+    set(_vst_stores_line "rd: VU pre-pass: on \\(self-test: [^\n]* ms, record stores")
+    set(_vst_targets_line "rd: VU pre-pass: on \\(self-test: [^\n]* ms, record targets")
+    add_test(NAME rd_vuprepass_selftest_stores
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}" "-DEXTRA=${_vst_stores_line}" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_stores_plain
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     -DVARIANT=plain "-DLINE=${_vst_on}" "-DEXTRA=${_vst_stores_line}" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_targets
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}" "-DEXTRA=${_vst_targets_line}" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_stores_sabotage_straddle
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=off
+                     "-DLINE=${_vst_stale}"
+                     "-DEXTRA=rd: VU pre-pass: the record stored by the vertex shaders failed the self-test \\(the pictures differ: in replay [2-4] of 4"
+                     -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_nostores_fallback
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}"
+                     "-DEXTRA=the record drawn into 3 RGBA32_UINT render targets and copied into the frame slot's record buffer \\(no vertex stores: the device has no vertexPipelineStoresAndAtomics"
+                     -P "${_vst}")
+    set_tests_properties(rd_vuprepass_selftest_stores rd_vuprepass_selftest_stores_plain
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_RECORD=stores")
+    set_tests_properties(rd_vuprepass_selftest_targets
+                         PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_RECORD=targets")
+    set_tests_properties(rd_vuprepass_selftest_stores_sabotage_straddle
+                         PROPERTIES ENVIRONMENT
+                                    "${_env};ICO_RD_VU_RECORD=stores;ICO_RD_VU_PREPASS_SABOTAGE=stale")
+    set_tests_properties(rd_vuprepass_selftest_nostores_fallback
+                         PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_NO_VERTEX_STORES=1")
     set(_vst_tests rd_vuprepass_selftest rd_vuprepass_selftest_plain
                    rd_vuprepass_selftest_sabotage rd_vuprepass_selftest_off
                    rd_vuprepass_selftest_unbatched rd_vuprepass_selftest_unmerged
-                   rd_vuprepass_selftest_sabotage_straddle)
+                   rd_vuprepass_selftest_sabotage_straddle rd_vuprepass_selftest_stores
+                   rd_vuprepass_selftest_stores_plain rd_vuprepass_selftest_targets
+                   rd_vuprepass_selftest_stores_sabotage_straddle
+                   rd_vuprepass_selftest_nostores_fallback)
     set_tests_properties(${_vst_tests} PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     if(_env)
         set_tests_properties(rd_vuprepass_selftest rd_vuprepass_selftest_plain
@@ -2318,8 +2375,25 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vuprepass_selftest_mali_vk11
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}" -P "${_vst}")
+    # the record stored by the vertex shaders under the phone's limits
+    # (_stores_mali) and through VkRenderPass objects (_stores_vk11: the
+    # record's passes without attachments as legacy subpasses), both named
+    # on the verdict line, under the same validation
+    add_test(NAME rd_vuprepass_selftest_stores_mali
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}" "-DEXTRA=${_vst_stores_line}" -P "${_vst}")
+    add_test(NAME rd_vuprepass_selftest_stores_vk11
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                     "-DLINE=${_vst_on}" "-DEXTRA=${_vst_stores_line}" -P "${_vst}")
+    set_tests_properties(rd_vuprepass_selftest_stores_mali
+                         PROPERTIES ENVIRONMENT "${_env_mali_pre};ICO_RD_VU_RECORD=stores")
+    set_tests_properties(
+        rd_vuprepass_selftest_stores_vk11
+        PROPERTIES ENVIRONMENT
+                   "${_env_mali_pre};ICO_RD_VU_RECORD=stores;ICO_VK_FAKE_API=1.1;ICO_VK_FAKE_NO_DYNAMIC=1")
     set_tests_properties(rd_vuprepass_selftest_mali rd_vuprepass_selftest_mali_sabotage_straddle
-                         rd_vuprepass_selftest_mali_vk11
+                         rd_vuprepass_selftest_mali_vk11 rd_vuprepass_selftest_stores_mali
+                         rd_vuprepass_selftest_stores_vk11
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
     set_tests_properties(rd_vuprepass_selftest_mali PROPERTIES ENVIRONMENT "${_env_mali_pre}")
     set_tests_properties(rd_vuprepass_selftest_mali_sabotage_straddle
@@ -2397,6 +2471,42 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_vubatch_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600)
     if(_env)
         set_tests_properties(rd_vubatch_ab PROPERTIES ENVIRONMENT "${_env}")
+    endif()
+    # rd_vurecord_ab (test/rd_vu_env_ab.cmake): rd_pixel's dump and the same
+    # dumps with the VU record drawn into the render targets and copied
+    # (ICO_RD_VU_RECORD=targets) and stored by the vertex shaders (=stores;
+    # rd_vu_record.h) at Original 4:3 1x and Enhanced 16:9 2x under
+    # ICO_RD_BLEND=fixed: every named target byte for byte, both runs every VU
+    # command through the record, each naming its write.  rd_vuprepass_min_ab:
+    # the same dumps with [dev] vu_prepass_min under every frame
+    # (ICO_RD_VU_PREPASS_MIN=0) and above every frame (2147483647: each frame
+    # skipped, every VU command the old way): byte for byte, the skips counted
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/vurecord_ab"
+         "${CMAKE_CURRENT_BINARY_DIR}/vuprepass_min_ab")
+    add_test(NAME rd_vurecord_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> -DNAME=rd_vurecord_ab
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vurecord_ab"
+                     "-DENV_A=ICO_RD_VU_RECORD=targets" "-DENV_B=ICO_RD_VU_RECORD=stores"
+                     "-DREQ_A=0 mesh and grid draws the old way.*stats: VU record targets: drawn into 3"
+                     "-DREQ_B=0 mesh and grid draws the old way.*stats: VU record stores: stored by"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
+    add_test(NAME rd_vuprepass_min_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     -DNAME=rd_vuprepass_min_ab
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vuprepass_min_ab"
+                     "-DENV_A=ICO_RD_VU_PREPASS_MIN=0" "-DENV_B=ICO_RD_VU_PREPASS_MIN=2147483647"
+                     "-DREQ_A=stats: VU pre-pass on: [12] passes.*pre-pass skipped 0 frames under 0 slots"
+                     "-DREQ_B=stats: VU pre-pass on: 0 passes.*pre-pass skipped [1-9][0-9]* frames under 2147483647 slots"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
+    set_tests_properties(rd_vurecord_ab rd_vuprepass_min_ab
+                         PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600
+                                    FIXTURES_REQUIRED rd_dump)
+    if(_env)
+        set_tests_properties(rd_vurecord_ab rd_vuprepass_min_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()
     # rd_vumerge_ab (test/rd_vumerge_ab.cmake): the same dumps with every VU
     # draw a GPU draw of its own (ICO_RD_VU_MERGE=0) and with the draw merge
