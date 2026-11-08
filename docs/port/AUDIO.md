@@ -676,7 +676,7 @@ most ([The pull path](#the-pull-path)).
 | mode | when | who renders |
 | --- | --- | --- |
 | the device's clock (`ICO_AUDIO_MODE_PULL`) | the window build with an audio device, by default | SDL's audio thread, when the device asks (`port/audio/out_sdl.c` (`pull_cb`)); `ico_audio_host_vsync` renders nothing |
-| the game's clock (`ICO_AUDIO_MODE_SYNC`) | the headless build; `audio=0`; a WAV dump (the WAV is a function of the driver's writes and their times only on the game's step); a run meant to repeat, with the fixed clock on (`ICO_FIXED_CLOCK=1`: a trace to a path, `headless=1`, `[dev] fixed_clock`), since the envelopes and stream offsets the game reads follow the render's clock; `[dev] audio_sync`; no device opens | `ico_audio_host_vsync`, once per vsync |
+| the game's clock (`ICO_AUDIO_MODE_SYNC`) | the headless build; `audio=0`; a WAV dump (the WAV is a function of the driver's writes and their times only on the game's step); a run meant to repeat, with the fixed clock on (`ICO_FIXED_CLOCK=1`: a trace to a path, `headless=1`, `[dev] fixed_clock`), since the envelopes and stream offsets the game reads follow the render's clock; `[dev] audio_sync`; no device opens; until a device slow to open is open ([The open](#the-open)) | `ico_audio_host_vsync`, once per vsync |
 
 On the device's clock `ico_audio_host_vsync` watches the device instead: when the device has not
 asked for sound for 300 ms (2 s before its first request after an open or a resume, for a device
@@ -720,7 +720,7 @@ two ways, the pull path on the device's clock and the push on the game's
 - The Linux build of SDL3 carries the PipeWire, PulseAudio and ALSA backends, each loaded by soname
   at run time (`tools/fetch_deps.sh`, stamp `+audio3`; `tools/package_linux.sh` refuses a
   `libSDL3.so.0` without the three names); SDL prefers the sound server when its daemon runs.
-  `ico_audio_sdl_open` logs once a run, as soon as the audio subsystem starts and before the device
+  `ico_audio_sdl_open_begin` logs once a run, as soon as the audio subsystem starts and before the device
   is opened (so a failed open still names the driver), `audio: SDL audio drivers built in: <names>;
   using <driver>` (`port/audio/out_sdl.c` (`log_drivers`)) and, on Linux when the driver is `alsa`,
   `audio: no sound server found (PipeWire or PulseAudio); playing through ALSA's default device`,
@@ -740,6 +740,63 @@ two ways, the pull path on the device's clock and the push on the game's
   the presents' cost, not the queue, with or without a stream ([DISPLAY.md](DISPLAY.md#pacing);
   `port/platform/pace_policy.h` (`pace_late_skip`)). `ico_audio_sdl_queued_ms` and
   `ico_audio_sdl_cushion_ms` report the queue and the cushion (the pull path: its lead and 0).
+
+### The open
+
+A device can take long to open or not return at all: on a reporter's Windows machine (a DualSense on
+USB) WASAPI's open of the default device took more than 30 s, twice, so the game never reached its
+first tick and the boot watchdog ended the run (issue 203; in the report attached there the return address
+in `ico_audio_sdl_open` is the call of `open_stream`, and the one in `open_stream` the call of
+`SDL_OpenAudioDeviceStream` for the default device; the previous log's start line follows the
+watchdog's report, so that open returned after about 33 s). The start's open is therefore three steps
+(`port/audio/out_sdl.c`, header comment and `ico_audio_sdl_open_begin`, `ico_audio_sdl_open_wait_ms`,
+`ico_audio_sdl_open_adopt`; `port/audio/audio_host.c` (`ico_audio_host_init`, `open_adopt`,
+`open_step`)):
+
+1. On the main thread: SDL's audio subsystem (`SDL_InitSubSystem(SDL_INIT_AUDIO)`, timed), the
+   drivers line, the audio lock for the pull path, then a thread of its own (`open_thread`) opens
+   the stream on the device `[audio] device` names or the default, without the callback; SDL leaves
+   a stream it opens paused. `SDL_OpenAudioDeviceStream`, `SDL_GetAudioPlaybackDevices` and
+   `SDL_GetAudioDeviceName` are safe from any thread (SDL3's `SDL_audio.h`); the thread touches no
+   state of the output's but the result it publishes under the job's mutex.
+2. `ico_audio_host_init` waits at most 2 s for it. In the common case the device is open by then
+   and is adopted at once, so the log reads as before.
+3. Past the wait the game starts on the game's clock with the output discarded (mode
+   `ICO_AUDIO_MODE_SYNC`, why `the device is opening`; there is no stream, so nothing is pushed), and
+   each vsync first tries the adoption, one atomic load while the thread runs. Once the open is
+   done the adoption, on the main thread before the vsync renders, sets the get-callback on the
+   paused stream (pull path), primes the accounting or the cushion as a run-time open does, resumes
+   the device and takes the mode the init picked; on the pull path that vsync renders nothing,
+   and the watchdog's clock starts there. No callback exists before the adoption, so the SPU2 is
+   never rendered twice.
+
+While the open runs, `ico_audio_sdl_reopen` (the Settings menu's move) is refused and the device
+list is empty, so the main thread makes no SDL device call beside the open. At the shutdown the
+open is waited for at most 2 s; a thread that has not returned is left behind (it closes what it
+opens and frees its job itself) and SDL's audio subsystem is left up under it. The boot watchdog
+needs nothing: its first limit counts the game's Main ticks
+(`port/platform/diag_host.c`, `no Main tick %u s after boot started`), which now start after the
+2 s wait at most.
+
+The lines, in order:
+
+    audio: SDL audio subsystem up in 3.2 ms
+    audio: SDL audio drivers built in: wasapi directsound disk dummy; using wasapi
+    audio: opening the output device (SDL wasapi)...
+    audio: SDL driver wasapi, 48 kHz stereo, played on the device's clock: 480 frames a callback (10.0 ms at the device's 48000 Hz), 10.0 ms kept ahead
+    audio: the device opened after 41 ms
+
+and for a slow device, after `opening`:
+
+    audio: the output device has not opened in 2000 ms; the game starts with the sound on the game's clock and no output until it does
+    audio: still waiting for the device, 10 s: playing on the game's clock with no output
+
+(every 10 s of vsyncs), then the start line and `audio: the device opened after 31250 ms` when it
+opens; `audio: the output device did not open (T ms)` after SDL's `audio: no audio device (...); no
+sound` when it fails; `audio: the output device is still opening; try again when it has` for a
+refused move; `audio: at the exit the output device had not opened after T ms; its open is left
+running (SDL's audio stays up)` or `audio: the output device opened after T ms, at the exit; closed
+unused` at the shutdown.
 
 ### The pull path
 
@@ -930,6 +987,7 @@ port"):
 | `spu2` (`spu2_test.c`) | the SPU2 and the libsd front end: the Gaussian table, ADSR lengths against psx-spx's closed forms, a sine at several pitches, loop flags and ENDX, the voices cut short (a key-off at release rate 0 counted with the peak of the frame before, chunked and frame by frame; the envelope at 0 two frames on; another rate not counted), mixing, sweeps, core 0 into core 1, the AutoDMA input, noise, timed writes, transfers and IRQ, the reverb impulse, a determinism checksum |
 | `spu2_render_crc` (`spu2_bench --check`) | five 10 s scenes against golden CRCs of everything observable from the frame-by-frame renderer, and 24 random 2 s scenes rendered both chunked and frame by frame |
 | `volume` (`volume_test.c`) | the output volume's mapping, clamp and integer scaling; the trim's play ratio against a target |
+| `audio_open` (`audio_open_test.c`, window build) | the start's open ([The open](#the-open)) with the device open replaced by a fake on its thread and the waits shortened: adopted in the init on the device's clock (the next vsync renders nothing, a device's take renders); adopted by the first vsync after a late open (the game's clock rendering each vsync until then, the move refused, the watchdog's vsync reset, nothing rendered on that vsync); failing at once and late (the game's clock, `no device`); never returning (the 10 s line twice in 20 s of vsyncs, the shutdown back within its bound, the thread left behind) |
 | `audio_queue` (`audio_queue_test.c`, window build) | `out_sdl.c`'s push on a real SDL stream without a device: the first cushion of two vsyncs, the refill and doubling after a dry queue up to 120 ms with its ramp down from the last pushed frame after the frames still queued, plain silence after a queue run empty, the resume's prime, the halving after 20 s, the trim and drop limit following the cushion, the queued-ms query |
 | `audio_pull` (`audio_pull_test.c`, window build) | `out_sdl.c`'s pull path on a real SDL stream without a device over the real SPU2: a writer thread under the audio lock and a pulling thread, fenced so no write lands late, render the frames one thread renders; 10 s free-running with the writes stamped as the serve stamps them: every pull full, the frames rendered and the silence equal to the frames taken plus the lead left, no miss (the lock's wait bound at 500 ms there, so scheduler delays cannot make one); with the lock held elsewhere the lead, then a 96-frame ramp to 0, then silence, two misses, and the ramp in after; the lead as the queue and a cushion of 0; the 10 s line's numbers and the mode choice; with the game's frames frozen, exactly the bound's 120 ms rendered, then the ramp and silence held back and counted, the hold kept until 40 ms under the bound, the sound ramping in after, and the trim on over 64 ms ahead and off under 32 (every other part steps the game by the frames each pull takes). The program to run under ThreadSanitizer ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md#portaudiotest)) |
 | `mix_gain` (`mix_gain_test.c`) | the gains: identity at 100 %, scaling, sweep words, the stream categories, the cache and its re-issue |
@@ -951,5 +1009,5 @@ the named scenes' frame-by-frame CRCs, which replace the golden table `scene_gol
 
 Run the set with
 `ctest --preset linux-x64 -R '^(adpcm|spu2|spu2_render_crc|volume|mix_gain|adpcm_slots|adpcm_stream|sndn2|libsd_irx|audio_pan)$'`;
-the window build adds `audio_queue` and `audio_pull` ([TESTING.md](TESTING.md) has the presets and
+the window build adds `audio_queue`, `audio_pull` and `audio_open` ([TESTING.md](TESTING.md) has the presets and
 labels).
