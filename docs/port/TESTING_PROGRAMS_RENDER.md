@@ -1335,7 +1335,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   differ; under the CRT filter and at the window resolution on is off byte for byte; after
   Downsampling at 2x the 512 x 512 picture is upscaled; at 16:9 with Full pixel off (688 GS
   pixels) the pass takes the frame's 688 columns into the box and everything outside the border
-  mask is black; both keys in the start-up set in both blend modes, in the CRT family;
+  mask is black; both keys in the start-up set at Upscaling FSR 1.0 in both blend modes, neither with Upscaling
+  Off, in the CRT family;
   the open border's outer columns (`rd_present_border_test.inc`, `checkOpenBorderEdges`): at
   2340x1080 (832 columns, the frame its exact width) and 4:3, 1x and 2x, the mirror on and off,
   SCENE red with green over GS columns 1 .. W - 2 presents green outer columns, byte for byte the

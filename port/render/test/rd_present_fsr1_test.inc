@@ -27,7 +27,8 @@
  *   Downsampling at 2x: the downsampled 512 x 256 picture, line-doubled,
  *   upscaled (the phone's case);
  *   the "window" resolution and the CRT filter: on is off byte for byte;
- *   the keys: both passes in the start-up set (both blend modes). */
+ *   the keys: both passes in the start-up set at Upscaling FSR 1.0 (both
+ *   blend modes), neither with Upscaling Off. */
 
 #include "rd_fsr1.h"
 
@@ -327,9 +328,18 @@ static void checkFsr1(void)
         if (rd_init(512, 512, &o, NULL)) {
             const RdPipeKeyInt e = rd__post_key(RD_VS_BLIT, RD_FS_FSR1_EASU, RHI_FMT_RGBA8_UNORM);
             const RdPipeKeyInt r = rd__post_key(RD_VS_BLIT, RD_FS_FSR1_RCAS, RHI_FMT_RGBA8_UNORM);
+            CHECK(!reachable(&e, false) && !reachable(&r, false),
+                  "fsr1: EASU and RCAS in the start-up set with Upscaling Off");
+            rd_shutdown();
+        }
+        o.upscale = RD_UPSCALE_FSR1;
+        if (rd_init(512, 512, &o, NULL)) {
+            const RdPipeKeyInt e = rd__post_key(RD_VS_BLIT, RD_FS_FSR1_EASU, RHI_FMT_RGBA8_UNORM);
+            const RdPipeKeyInt r = rd__post_key(RD_VS_BLIT, RD_FS_FSR1_RCAS, RHI_FMT_RGBA8_UNORM);
             for (int m = 0; m < 2; m++) {
                 CHECK(reachable(&e, m != 0) && reachable(&r, m != 0),
-                      "fsr1: EASU and RCAS in the start-up set%s", m ? " (two-pass blend)" : "");
+                      "fsr1: EASU and RCAS not in the start-up set at FSR 1.0%s",
+                      m ? " (two-pass blend)" : "");
             }
             CHECK(rd__pipe_key_family(&e) == RD_KF_CRT && rd__pipe_key_family(&r) == RD_KF_CRT,
                   "fsr1: the present-stage filters' family");

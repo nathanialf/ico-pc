@@ -4395,10 +4395,13 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
     const RdPipeKeyInt reduce = rd__post_key(RD_VS_BLIT, RD_FS_AA_REDUCE, RHI_FMT_RGBA8_UNORM);
     n = rd__add_pipe_key(out, max, n, &reduce);
     /* FSR 1.0 (Options > Picture > Upscaling, rd_fsr1.c): EASU and RCAS into
-     * RGBA8 textures of the box's size, made at start-up whatever the
-     * settings, as the reduce; not where a module is missing (OpenGL
+     * RGBA8 textures of the box's size, only while Upscaling is FSR 1.0 (a
+     * change of the row reruns this set, rd_core.c displayPipelines, before
+     * the next replay), so no other start compiles them (FXC on D3D11, two
+     * more pipelines on a phone); not where a module is missing (OpenGL
      * without its GLSL) */
-    if (g_rd.fs[RD_FS_FSR1_EASU].id && g_rd.fs[RD_FS_FSR1_RCAS].id) {
+    if (g_rd.settings.upscale == RD_UPSCALE_FSR1 && g_rd.fs[RD_FS_FSR1_EASU].id &&
+        g_rd.fs[RD_FS_FSR1_RCAS].id) {
         const RdPipeKeyInt easu = rd__post_key(RD_VS_BLIT, RD_FS_FSR1_EASU, RHI_FMT_RGBA8_UNORM);
         const RdPipeKeyInt rcas = rd__post_key(RD_VS_BLIT, RD_FS_FSR1_RCAS, RHI_FMT_RGBA8_UNORM);
         n = rd__add_pipe_key(out, max, n, &easu);

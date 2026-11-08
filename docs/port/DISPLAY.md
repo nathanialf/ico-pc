@@ -1787,7 +1787,9 @@ position (EASU filters colour alone). The constants are computed on the CPU by a
 (`rd__fsr1_easu_con`, `rd__fsr1_rcas_con`). Two RGBA8 textures of the box's size (about 12 MB at
 2340 x 1080), made on first use and remade on a change of size, freed at shutdown
 (`rd__fsr1_shutdown`). Both keys are in the start-up set on every device that has the modules
-(`rd__enumerate_reachable_screen`, the CRT family).
+while Upscaling is FSR 1.0 (`rd__enumerate_reachable_screen`, the CRT family); a change of the row
+reruns the set before the next replay (`displayPipelines`), so a start with Upscaling Off or FSR 3.1
+compiles neither (no FXC run on `fsr1.hlsl` on Direct3D 11, two pipelines fewer on a phone).
 
 **Log lines.** The display line ends its options with `, upscaling fsr1 (sharpness S)` in force,
 `, upscaling fsr1 off (the CRT filter draws its own box)` or `(the window resolution)` asked but
