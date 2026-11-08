@@ -917,9 +917,9 @@ static void testLooks(void)
     }
     CHECK(bad == 0, "looks: the default look draws sheetref_texel's texels (%ld off)", bad);
     /* the reach: entries past rx / ry are not read */
-    const SheetLook shortA = {2, 1, {1000, 700, 300, 0, 0, 0, 0}, {1000, 500, 0, 0, 0}, 8, 4};
+    const SheetLook shortA = {2, 1, {1000, 700, 300, 0, 0, 0, 0}, {1000, 500, 0, 0, 0}, 8, 4, 0};
     const SheetLook shortB = {
-        2, 1, {1000, 700, 300, 900, 900, 900, 900}, {1000, 500, 900, 900, 900}, 8, 4};
+        2, 1, {1000, 700, 300, 900, 900, 900, 900}, {1000, 500, 900, 900, 900}, 8, 4, 0};
     CHECK(looksDiffer(cov, W, H, &st, &shortA, &shortB) == 0,
           "looks: the tables are read within the reach only");
     /* the level counts' alphas; nothing past the reach */
@@ -951,7 +951,7 @@ static void testLooks(void)
     CHECK(off == 0, "looks: %ld alphas off the 3 and 2 levels' (0 64 128, 0 128)", off);
     CHECK(far == 0, "looks: %ld texels past the reach with alpha", far);
     /* a hard outline: full two texels across and one down, none past */
-    const SheetLook hard = {6, 4, {1000, 1000, 1000, 0, 0, 0, 0}, {1000, 1000, 0, 0, 0}, 8, 4};
+    const SheetLook hard = {6, 4, {1000, 1000, 1000, 0, 0, 0, 0}, {1000, 1000, 0, 0, 0}, 8, 4, 0};
     const RdSheetStyle black = {1, 0, 255, 0, 0, 1};
     int hardBad = 0;
     for (int y = 8; y < 16; y++) {
@@ -979,7 +979,7 @@ static void testLooks(void)
     memset(field, 100, sizeof(field));
     for (int m = 0; m < 3; m++) {
         const int n = m == 0 ? 0 : m == 1 ? 4 : 8, den = n == 8 ? 128 : 32;
-        const SheetLook l = {6, 4, {1000, 0, 0, 0, 0, 0, 0}, {1000, 0, 0, 0, 0}, 2, n};
+        const SheetLook l = {6, 4, {1000, 0, 0, 0, 0, 0, 0}, {1000, 0, 0, 0, 0}, 2, n, 0};
         for (int dith = 0; dith < 2; dith++) {
             const RdSheetStyle plain = {0, 0, 255, (uint8_t)dith, 0, 1};
             int wrong = 0, lit = 0;
