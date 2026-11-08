@@ -2181,7 +2181,7 @@ static bool vkr_create_device(void)
     VkPhysicalDeviceCoherentMemoryFeaturesAMD qCoherent = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD};
     bool extSubgroup = false, extSync2 = false, extCoherent = false;
-    VkBool32 extFloat16 = VK_FALSE, extNonUniform = VK_FALSE;
+    VkBool32 extFloat16 = VK_FALSE, extNonUniform = VK_FALSE, extDescIndexing = VK_FALSE;
     g_vkr.externalExts = false;
 #ifdef ICO_FFX
     if (core12 && vkr_has_props2(g_vkr.phys)) {
@@ -2237,6 +2237,17 @@ static bool vkr_create_device(void)
         VkPhysicalDeviceFeatures2 q = {.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
                                        .pNext = chain};
         vkr_features2(g_vkr.phys, &q);
+        /* VK_EXT_descriptor_indexing enabled with VkPhysicalDeviceVulkan12Features
+         * chained needs its descriptorIndexing set (VUID-VkDeviceCreateInfo-
+         * ppEnabledExtensionNames-02833): a device listing the extension
+         * without the aggregate feature does not get the extension (its
+         * non-uniform indexing feature stays, it is core 1.2) */
+        const bool descIndexingDropped = listed[3] && !q12.descriptorIndexing;
+        extNonUniform = listed[3] ? q12.shaderStorageBufferArrayNonUniformIndexing : VK_FALSE;
+        if (descIndexingDropped) {
+            listed[3] = false;
+        }
+        extDescIndexing = listed[3] ? VK_TRUE : VK_FALSE;
         const bool dedicatedAlone = listed[4] && !listed[5];
         char said[256] = "";
         size_t used = 0;
@@ -2250,20 +2261,23 @@ static bool vkr_create_device(void)
             used += w > 0 && (size_t)w < sizeof(said) - used ? (size_t)w : 0u;
         }
         extFloat16 = listed[0] ? q12.shaderFloat16 : VK_FALSE;
-        extNonUniform = listed[3] ? q12.shaderStorageBufferArrayNonUniformIndexing : VK_FALSE;
         extSubgroup = listed[1] && qSubgroup.subgroupSizeControl;
         extSync2 = listed[2] && qSync2.synchronization2;
         extCoherent = listed[7] && qCoherent.deviceCoherentMemory;
         g_vkr.externalExts = !dedicatedAlone;
         VKR_LOG("external compute extensions: %s%s (features: float16 %s, subgroup size control "
-                "%s, synchronization2 %s, storage buffer non-uniform indexing %s, AMD coherent "
-                "memory %s)%s",
+                "%s, synchronization2 %s, storage buffer non-uniform indexing %s, descriptor "
+                "indexing %s, AMD coherent memory %s)%s%s",
                 used ? "enabled " : "none listed beyond the RHI's own", said,
                 extFloat16 ? "on" : "off", extSubgroup ? "on" : "off", extSync2 ? "on" : "off",
-                extNonUniform ? "on" : "off", extCoherent ? "on" : "off",
+                extNonUniform ? "on" : "off", extDescIndexing ? "on" : "off",
+                extCoherent ? "on" : "off",
                 dedicatedAlone ? "; dedicated_allocation is listed without "
                                  "get_memory_requirements2: left off, FSR 3.1 not offered"
-                               : "");
+                               : "",
+                descIndexingDropped ? "; descriptor_indexing is listed without the "
+                                      "descriptorIndexing feature: left off"
+                                    : "");
     }
 #endif
     /* each feature structure carries only the one feature asked */
@@ -2354,13 +2368,16 @@ static bool vkr_create_device(void)
     }
     void *featHead = g_vkr.legacyPasses ? dyn.pNext : (void *)&dyn;
     /* Vulkan12Features: the timeline semaphore, and external compute's
-     * float16 and non-uniform indexing (above) */
+     * float16, non-uniform indexing and descriptorIndexing (above; the last
+     * is required whenever VK_EXT_descriptor_indexing is enabled and this
+     * structure is chained) */
     VkPhysicalDeviceVulkan12Features f12 = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES,
         .pNext = featHead,
         .timelineSemaphore = g_vkr.syncKind == VKR_SYNC_TIMELINE ? VK_TRUE : VK_FALSE,
         .shaderFloat16 = extFloat16,
         .shaderStorageBufferArrayNonUniformIndexing = extNonUniform,
+        .descriptorIndexing = extDescIndexing,
     };
     VkPhysicalDeviceTimelineSemaphoreFeaturesKHR fTimeline = {
         .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR,
@@ -2370,7 +2387,7 @@ static bool vkr_create_device(void)
     void *syncFeatures = featHead;
     if (g_vkr.syncKind == VKR_SYNC_TIMELINE) {
         syncFeatures = g_vkr.apiVersion >= VK_API_VERSION_1_2 ? (void *)&f12 : (void *)&fTimeline;
-    } else if (extFloat16 || extNonUniform) {
+    } else if (extFloat16 || extNonUniform || extDescIndexing) {
         syncFeatures = &f12; /* 1.2 (the external set's condition), no timeline */
     }
     VkPhysicalDeviceFeatures2 f2 = {
