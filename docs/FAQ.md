@@ -125,6 +125,26 @@ then start the game again. If the picture is still black, send a report as
 described in [When something goes wrong](TROUBLESHOOTING.md#send-a-problem-report)
 and attach the log and say which disc you play (the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo).
 
+## The game starts without sound, or the sound starts late
+
+**The game started, but for the first seconds there was no sound. Or the
+sound only started after a while.**
+
+Some sound devices take a long time to get ready (one report had a
+controller with a headphone socket plugged in by USB). The game does not
+wait for them: if the sound device is not ready within 2 seconds, the game
+starts anyway, runs silently, and the sound joins as soon as the device is
+ready.
+Nothing is lost but the sound of those first seconds.
+
+To see how long your device took, look in `ico-pc.log` for the line
+`audio: the device opened after` (the time is in milliseconds). If the
+sound never starts, the log says `audio: still waiting for the device`
+every 10 seconds; unplug the controller or headset, or choose another
+output in the Windows sound settings, and start the game again. If that
+does not help, send a report as described in
+[When something goes wrong](TROUBLESHOOTING.md#send-a-problem-report).
+
 ## How do I use a texture pack?
 
 A texture pack is a set of sharper pictures that fans made to replace the
@@ -258,13 +278,20 @@ download. Windows and Linux (X11) show it on the game's window and
 taskbar, [Add to Steam](OPTIONS.md#extras) uses it, and on a Mac it is the Dock
 icon while the game runs. On Linux, Options > Extras > Add to the
 applications menu puts the game in your desktop's menu with the icon (on
-a Wayland desktop that entry is also what gives the window its icon). The program file itself (`ico_pc.exe`, or the
-Mac app in Finder) keeps a plain icon, because the icon does not exist
-until your disc has made it. It is made again after an update, and
+a Wayland desktop that entry is also what gives the window its icon). On
+Windows the program file (`ico_pc_x64.exe`, its shortcuts and a pinned
+taskbar button) takes the icon too, from the next start after the title
+screen has made it: a small helper in the `tools` folder puts it into the
+file as the game closes. If the game is in a folder you cannot write to
+(such as Program Files), or the helper has been deleted, the file keeps
+the plain icon; `logs\icon-stamp.log` says what happened. Windows may show
+the old icon for a while until Explorer refreshes it. The Mac app in Finder
+keeps a plain icon, because the icon does not exist until your disc has
+made it. It is made again after an update, and
 waits while the CRT filter or a Picture colour setting (Gamma, Brightness,
 Contrast or Saturation) is changed, or while Upscaling is on: it is made at
-the title screen once they are back to normal. On Android the app keeps its plain icon, and
-a Wayland session shows no window icon until the menu entry exists.
+the title screen once they are back to normal. On Android the home-screen icon stays plain; the recent-apps card shows the I. A
+Wayland session shows no window icon until the menu entry exists.
 
 ## My browser or Windows says the download is dangerous
 

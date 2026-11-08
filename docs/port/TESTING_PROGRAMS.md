@@ -36,6 +36,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`, which turns address-space
   randomization off for the run (the build host's kernel randomizes more than ThreadSanitizer
   accepts); a report is a failure.
+- `audio_open_test.c` (window build): the start's device open on its own thread (`out_sdl.c` and
+  `audio_host.c` included, the start's wait shortened to 200 ms and the shutdown's to 300 ms, the
+  device open replaced by a fake on the dummy driver that hands back a device-less stream when the
+  test opens its gate): adopted inside the init on the device's clock; adopted by the first vsync
+  after the fake returns, the game's clock rendering every vsync until then, the Settings move
+  refused, the watchdog's vsync reset at the adoption and nothing rendered on that vsync; a failed
+  open at once and after the wait (the game's clock, "no device"); an open that never returns
+  (two still-waiting lines in 20 s of vsyncs, the shutdown back within its bound, the thread left
+  behind closing what it opens) (`audio_open`). Its one wall-clock check is the shutdown's bound.
 - `audio_queue_test.c` (window build): the output on the game's clock (`out_sdl.c`'s push) on a
   device-less SDL stream: the cushion, the refill after a dry queue and its ramp with frames still
   queued, plain silence after a queue run empty, the trim and the drop limit (`audio_queue`).
@@ -1105,6 +1114,20 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   label without the PNG; the paths, the copies, the stamp (`dev` for an empty label), no `.tmp`
   left, the refusals, and the capture guard `ico_app_icon_picture_plain` (CRT filter on or off at
   strength 0, each of the four tone values off 50, 0 read as 50, Upscaling on) (`app_icon_files`).
+- `icon_stamp_test.c`: the Windows exe's icon resources (`icon_stamp.c`) from an `.ico` that
+  `ico_icon_write` made of a 256 x 256 RGBA test image: four `RT_ICON` images with ids 1..4, each
+  the `.ico` image's bytes in place (the 16/32/48 `BITMAPINFOHEADER`s with height 2*h and their
+  sizes, the 256 entry the given PNG with its signature), the `RT_GROUP_ICON` directory (6 + 4 x 14
+  bytes, each entry the `.ico` entry's first 12 bytes and then its id); the refusals (a cursor file,
+  0 or 33 images, a cut directory, a cut image, an empty image, an offset inside the directory or
+  past the end, no output); the stamp text (`<label> <disc>`, `dev` for an empty label, the refusals)
+  read back from the resource's bytes with no terminator, a line end or a NUL; and the command-line
+  quoting of paths with spaces, a trailing backslash, quotes, backslashes before a quote and an empty
+  argument, split back by the C runtime's rules, and the too-long refusal keeping the line so far;
+  the stamped copy's PE check (`ico_icon_stamp_pe_check`) on a small PE32+ laid out as the game's
+  exe (`.text`, `.rsrc`, `.reloc`): passing with `.rsrc` grown and `.reloc` moved, refusing a changed
+  code byte, entry point, import directory, section name or flags, no resource directory, a cut file,
+  a short `SizeOfImage`, another machine and a file that is not PE (`icon_stamp`). The resource update itself (`tools/ico_icon_stamp.c`) runs only on Windows.
 - `rd_png_mem_test.c` (`port/render/test`): `rd_write_png_mem` against the exact bytes the file
   writer produced before the split (a 2 x 2 image, RGBA and RGB), equal to the file writer's bytes
   for a multi-block image, a round trip through `texpack_load_png` with a padded pitch, and the
@@ -1489,6 +1512,13 @@ The renderer's test programs have a page of their own:
   confirming, Cross and Triangle going back, the title's rows, the notes' serial, the mouse,
   the prompts and the boot's hand-over to the title with Skip the opening
   (`testSkipOpeningTitle`).
+- `settings_step_test.c` (`settings_step`, `_jpn`, `_kor`, `_cn`): Options > Picture stepping (issue 202),
+  CPU only over the shared fixture (`hold` presses a button and holds it): holding Left or Right on
+  Gamma (the press alone for 15 ticks, the first repeat at the 16th, one every 3 ticks after,
+  release and hold again, the other direction, the stick's d-pad emulation, held at 1 and 100,
+  1 to 100 in 98 repeats, presses with gaps never repeating), a wrapping row (Filter) held for 75
+  ticks stepping once, L1/R1 by 10 on the four colour rows (held at 1 and 100, nothing on Filter,
+  written on leaving the page), and the list of the rows that repeat.
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
   (`settings_render`, which also draws the Touch screen page, the editor page and the main page
   scrolled by nine Downs, `settings_main_scrolled.png`, the Picture and Developer pages, `settings_picture.png` and `settings_developer.png`, and Gameplay's Yorda, Shadows and Cutscenes pages opened through Gameplay, `settings_gameplay_yorda.png`, `settings_gameplay_shadows.png` and `settings_gameplay_cutscenes.png`, also at 1080p); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,
