@@ -201,6 +201,8 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_NEWGAME_PLUS] = "ニューゲーム+",
     [UI_STR_NEWGAME_PLUS_SCREEN] =
         "ニューゲーム+では2周目の旅を遊びます。ヨルダの言葉が訳され、エンディングとアイテムが変わります。オフにすると、クリア後も1周目の旅を遊びます。",
+    [UI_STR_NEWGAME_START] = "はじめる",
+    [UI_STR_NEWGAME_START_SCREEN] = "上の設定でニューゲームをはじめます。",
     [UI_STR_OPT_CRT] = "CRTフィルタ",
     [UI_STR_OPT_CRT_STRENGTH] = "CRTの強さ",
     [UI_STR_OPT_TONE_GAMMA] = "ガンマ",

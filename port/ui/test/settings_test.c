@@ -336,15 +336,30 @@ static void testBuild(void)
               lt_ext_prop(ui_new_game_screen_row(0, 0))->dispY,
           "New Game+ under Mirror mode");
     CHECK(ui_new_game_screen_row(2, 0) == -1 && ui_new_game_screen_row(-1, 1) == -1,
-          "no third row");
+          "no third Off/On row");
+    {
+        /* the Start row, centred under New Game+ */
+        const int st = ui_new_game_screen_start();
+        CHECK(st >= 0 && strcmp(lt_ext_row_text(st), "Start") == 0, "the Start row (%d)", st);
+        CHECK(lt_ext_prop(st)->dispY > lt_ext_prop(ui_new_game_screen_row(1, 0))->dispY &&
+                  lt_ext_prop(st)->dispY == 146,
+              "Start under New Game+ (y %d)", lt_ext_prop(st)->dispY);
+        const int m0 = ui_new_game_screen_enter();
+        CHECK(m0 == ml, "entered");
+        const int mo = ui_new_game_screen_row(0, 0), no = ui_new_game_screen_row(1, 0);
+        CHECK(lt_ext_prop(mo)->upItem == st && lt_ext_prop(mo)->downItem == no &&
+                  lt_ext_prop(no)->upItem == mo && lt_ext_prop(no)->downItem == st &&
+                  lt_ext_prop(st)->upItem == no && lt_ext_prop(st)->downItem == mo,
+              "up/down: Mirror mode, New Game+, Start, round");
+    }
     {
         /* every row of the screen inside the layout, the note's bottom
            at 212 at most */
         const LtProp *l = lt_ext_layout(ml);
         for (int k = l->first; k < l->last; k++) {
-            CHECK(lt_ext_prop(k)->dispY >= 100 &&
+            CHECK(lt_ext_prop(k)->dispY >= 60 &&
                       lt_ext_prop(k)->dispY + lt_ext_prop(k)->dispH <= 212,
-                  "New Game screen row %d in 100..212 (%d+%d)", k, lt_ext_prop(k)->dispY,
+                  "New Game screen row %d in 60..212 (%d+%d)", k, lt_ext_prop(k)->dispY,
                   lt_ext_prop(k)->dispH);
         }
     }
@@ -1673,12 +1688,29 @@ static void testNewGameScreen(void)
     CHECK(lt_ext_prop(nOn)->ownerItem == mOn, "New Game+ On lit");
     press(0x4000);
     CHECK(l->curItem == nOn, "down again: New Game+ On, kept");
+    const int start = ui_new_game_screen_start();
+    press(0x4000); /* Start under the last row */
+    CHECK(l->curItem == start, "down from New Game+: Start");
+    CHECK(lt_ext_prop(mOn)->ownerItem == start && lt_ext_prop(nOn)->ownerItem == start &&
+              lt_ext_prop(mOff)->ownerItem == -1 && lt_ext_prop(nOff)->ownerItem == -1,
+          "on Start both chosen values stay lit");
+    CHECK(strncmp(lt_ext_row_text(note), "Begins", 6) == 0, "the note explains Start (%s)",
+          lt_ext_row_text(note));
+    press(0x2000);
+    CHECK(l->curItem == start, "no left/right on Start");
     press(0x4000); /* the rows in a loop */
-    CHECK(l->curItem == mOn, "down from the last row: Mirror mode's choice");
+    CHECK(l->curItem == mOn, "down from Start: Mirror mode's choice");
+    press(0x1000);
+    CHECK(l->curItem == start, "up from Mirror mode: Start");
+    press(0x4000);
     int games = s_newGames;
     ico_opt_set_mirror(0);
-    press(0x40); /* Cross */
-    CHECK(ico_opt_mirror() == 1, "Cross: the run is mirrored");
+    press(0x40); /* Cross picks Mirror mode On and moves down */
+    CHECK(l->curItem == nOn && s_newGames == games, "Cross on a value: on to New Game+'s choice");
+    press(0x40);
+    CHECK(l->curItem == start && s_newGames == games, "Cross on New Game+ On: on to Start");
+    press(0x40); /* Cross on Start */
+    CHECK(ico_opt_mirror() == 1, "Cross on Start: the run is mirrored");
     CHECK(gFlagGameClear == 1, "Cross: New Game+ On sets the cleared flag");
     CHECK(s_newGames == games + 1, "the game starts (gflagOn(382))");
     CHECK(s_lastStartFlag == 382, "the European disc's own start flag (%d)", s_lastStartFlag);
@@ -1717,6 +1749,8 @@ static void testNewGameScreen(void)
     press(0x4000);
     CHECK(l->curItem == nOff, "a plain New Game: New Game+ Off");
     press(0x2000);
+    press(0x40);
+    CHECK(l->curItem == start && s_newGames == games + 2, "Cross on a value does not start");
     press(0x40);
     CHECK(gFlagGameClear == 1 && ico_opt_mirror() == 0 && s_newGames == games + 3,
           "New Game+ On from a plain New Game");

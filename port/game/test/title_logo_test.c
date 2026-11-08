@@ -7,7 +7,8 @@
  *   title     on the title's menu nothing hides; a Settings page over the
  *             title hides the logo's models, never another stage object;
  *             back on layout 12 or 13 the logo shows on the first frame,
- *             and back on the Continue screen (19) from the Save states page
+ *             and back on the Continue screen (19) from the Save states page;
+ *             the New Game screen hides it, the vibration screen (9) shows it
  *   extras    the model list over the title hides it; Credits and a
  *             model's stage load (the title fading out on a layout of
  *             neither) keep it hidden until the stage changes, and the next
@@ -78,6 +79,8 @@ int ico_mv_title_list_layout(void)
 #define EMPTY 0           /* the game's empty layout, while a stage changes */
 #define PAUSE 58          /* the Options screen */
 #define CONTINUE_FILES 19 /* the Continue screen's file select */
+#define VIBE 9            /* the vibration screen (the European disc's) */
+#define NEWGAME 320       /* the New Game screen (a port layout) */
 
 /* one frame of draws: the logo's I and a castle mesh of the stage */
 static int s_logoShown, s_castleShown;
@@ -129,6 +132,20 @@ static void testTitle(void)
     CHECK(!s_logoShown, "the Save states page over it: hidden");
     frame(TITLE, CONTINUE_FILES, 0);
     CHECK(s_logoShown, "back on the Continue screen: shown on the first frame");
+    /* the New Game screen, reached from the vibration screen: hidden on it
+       (the screen covers the title), shown again back on the vibration
+       screen, hidden once more, and a stage change clears it */
+    frame(TITLE, 13, 0);
+    frame(TITLE, VIBE, 0);
+    CHECK(s_logoShown, "the vibration screen: shown");
+    frame(TITLE, NEWGAME, 1);
+    CHECK(!s_logoShown && s_castleShown, "the New Game screen: the logo hidden, the stage drawn");
+    frame(TITLE, VIBE, 0);
+    CHECK(s_logoShown, "back on the vibration screen: shown on the first frame");
+    frame(TITLE, NEWGAME, 1);
+    CHECK(!s_logoShown, "the New Game screen again: hidden");
+    frame(46, EMPTY, 0);
+    CHECK(s_logoShown, "a stage change: shown");
 }
 
 static void testExtras(void)

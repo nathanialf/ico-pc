@@ -206,6 +206,8 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     [UI_STR_OPT_NEWGAME_PLUS] = "Новая игра+",
     [UI_STR_NEWGAME_PLUS_SCREEN] =
         "Диалоги Йорды будут отображаться с переводом, а концовка и предметы отличаться от оригинала. Работает и при первом прохождении.",
+    [UI_STR_NEWGAME_START] = "Начать",
+    [UI_STR_NEWGAME_START_SCREEN] = "Начинает новую игру с выбранными выше настройками.",
     [UI_STR_OPT_CRT] = "ЭЛТ-фильтр",
     [UI_STR_OPT_CRT_STRENGTH] = "Сила ЭЛТ-фильтра",
     [UI_STR_OPT_TONE_GAMMA] = NULL,      /* newer than the translation: English */

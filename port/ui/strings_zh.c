@@ -202,6 +202,8 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_NEWGAME_PLUS] = "新遊戲+",
     [UI_STR_NEWGAME_PLUS_SCREEN] =
         "新遊戲+會進行第二次旅程：Yorda 的話語有了翻譯，結局與道具也有所不同。關閉時，即使通關後也進行第一次旅程。",
+    [UI_STR_NEWGAME_START] = "開始",
+    [UI_STR_NEWGAME_START_SCREEN] = "以上述選擇開始新遊戲。",
     [UI_STR_OPT_CRT] = "CRT 濾鏡",
     [UI_STR_OPT_CRT_STRENGTH] = "CRT 強度",
     [UI_STR_OPT_TONE_GAMMA] = "伽瑪",

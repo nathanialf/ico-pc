@@ -23,6 +23,9 @@ extern int current_layout_id; /* common/src/layout_texture.c */
 /* the Continue screen's file select (19), which the Save states page opened
    from it returns to: the logo as it was there before (shown) */
 #define LAYOUT_LOAD_FILES (ico_region_cur()->layout_load_files)
+/* the vibration screen (9): the New Game screen's way back, the lettering
+   shows again there */
+#define LAYOUT_VIBE_SELECT (ico_region_cur()->layout_vibe)
 
 int ico_title_logo_model(const char *model)
 {
@@ -43,7 +46,7 @@ int ico_title_logo_step(int *hidden, int stage, int layout, int covered)
     } else if (covered) {
         *hidden = 1;
     } else if (layout == LAYOUT_TITLE_CONTINUE || layout == LAYOUT_TITLE_NEW ||
-               layout == LAYOUT_LOAD_FILES) {
+               layout == LAYOUT_LOAD_FILES || layout == LAYOUT_VIBE_SELECT) {
         *hidden = 0;
     }
     return *hidden;

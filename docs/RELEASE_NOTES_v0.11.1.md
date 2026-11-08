@@ -2,6 +2,8 @@
 
 (kept current after every merge; player words only)
 
+- The New Game screen now shows which Mirror mode and New Game+ choices are set, hides the title lettering, and starts the game from its own Start row; pressing Cross on a choice only picks it and moves down.
+
 ## Fixed
 
 (kept current after every merge; player words only)

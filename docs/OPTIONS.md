@@ -1040,8 +1040,9 @@ hidden until you start a New Game.
 
 **Mirror mode** and **New Game+** are not in Options. When you start a New
 Game, the screen after the Vibration question has a row for each, Off or
-On. Up and Down move between them, Left and Right pick, and Cross or Start
-starts the game.
+On, and a Start row under them. Up and Down move between them, Left and
+Right pick, Cross accepts a row and moves on, and the Start row (or the
+Start button on any row) begins the game.
 
 - **Mirror mode** plays the whole game flipped left to right. The sticks
   and the D-pad both walk the way you press.

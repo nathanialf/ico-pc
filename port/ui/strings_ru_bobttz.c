@@ -207,6 +207,8 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     /* longer than a note holds (two lines, 255 bytes): English until shortened */
     [UI_STR_NEWGAME_PLUS_SCREEN] =
         "«Новая игра+»: второе путешествие (перевод слов Йорды, новые предметы и концовка). «Выкл» оставляет первое путешествие даже после финала.",
+    [UI_STR_NEWGAME_START] = "Начать",
+    [UI_STR_NEWGAME_START_SCREEN] = "Начинает новую игру с выбранными выше настройками.",
     [UI_STR_OPT_CRT] = "ЭЛТ фильтр",
     [UI_STR_OPT_CRT_STRENGTH] = "Сила ЭЛТ фильтра",
     [UI_STR_OPT_TONE_GAMMA] = "Гамма",
