@@ -1007,7 +1007,8 @@ static void testLooks(void)
         }
     }
     /* the texel from coverage and rim is the 1x texel */
-    const SheetLook c3 = {6, 4, {1000, 1000, 700, 400, 150, 0, 0}, {1000, 900, 450, 150, 0}, 8, 8};
+    const SheetLook c3 = {6, 4, {1000, 1000, 700, 400, 150, 0, 0}, {1000, 900, 450, 150, 0}, 8,
+                          8, 0};
     long crBad = 0;
     for (int y = -6; y < H + 6; y++) {
         for (int x = -8; x < W + 8; x++) {
