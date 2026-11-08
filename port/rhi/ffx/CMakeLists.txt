@@ -32,14 +32,16 @@
 # vkEnumerateDeviceExtensionProperties, ...); volk.h is forced into every
 # source, so those names are volk's function pointers, loaded by whoever
 # links the library (ico_rhi_vulkan's volk.c in the program; the test
-# compiles its own). On Linux the C++ runtime is linked statically into the
-# consumer (-static-libstdc++ -static-libgcc), because
-# tools/package_linux.sh allows no libstdc++.so.6 or libgcc_s.so.1 in the
-# shipped program's NEEDED list; not under the sanitizers (test programs
-# only, and libasan replaces operator new). Windows (mingw): the program is
-# linked -static already (CMakeLists.txt), which takes libstdc++ in too;
+# compiles its own). The C++ runtime is linked statically into the consumer
+# on Linux and on Windows (mingw gcc), below: tools/package_linux.sh allows
+# no libstdc++.so.6 or libgcc_s.so.1 in the shipped program's NEEDED list and
 # tools/package_win.sh refuses a program that imports libstdc++-6.dll,
-# libgcc_s_seh-1.dll or libwinpthread-1.dll.
+# libgcc_s_seh-1.dll or libwinpthread-1.dll. The consumers are C programs
+# linked by the C driver, which never adds the C++ runtime by itself: not
+# through -static-libstdc++ (a g++ driver flag) and not through -static
+# (the Windows program's: it only makes the libraries named static), so the
+# archive is named outright. Not under the sanitizers (test programs only,
+# and libasan replaces operator new).
 #
 # The D3D12 backend: not built yet. The pinned SDK makes its DXIL
 # permutations with DXC through Windows COM (hlsl_compiler.cpp), which the
@@ -231,7 +233,8 @@ target_compile_options(ico_ffx_upscaler PRIVATE
 # The consumers are C programs linked by the C driver, which never adds
 # the C++ runtime (and ignores -static-libstdc++, a g++ driver flag): name
 # the archive itself, and libgcc's unwinder for its exceptions.
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
+if((CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
+   OR (WIN32 AND CMAKE_C_COMPILER_ID STREQUAL "GNU"))
     if(ICO_SANITIZE)
         target_link_libraries(ico_ffx_upscaler INTERFACE stdc++)
     else()
