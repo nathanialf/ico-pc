@@ -1389,34 +1389,28 @@ int rd__sheet_bake_scaled_rect(const uint8_t *tex, uint32_t w, uint32_t h, const
         return 0;
     }
     const int32_t W = (int32_t)w, HH = (int32_t)(h / 2u), S = (int32_t)scale;
-    /* the bilinear's denominator on an axis (2 s: font.hlsl sheet_scaled's
-       g = (n - 2 s q0) / (2 s)), and on both */
-    const uint32_t D = 2u * scale;
-    /* a texel without coverage whose four rims are 0: c 0 and every level 0
-       (quantise(0, th) is 0 for th <= 31), so its grey is the rim level and
-       its alpha 0 at any threshold (sheet_texel_scaled with tq 0, cq 0) */
+    /* a texel without coverage whose sheet texel's rim is 0: c 0 and the
+       level 0 (quantise(0, th) is 0 for th <= 31), so its grey is the rim
+       level and its alpha 0 at any threshold (sheet_texel_scaled with tq 0,
+       cq 0) */
     uint8_t blank[4];
     blank[0] = blank[1] = blank[2] = (uint8_t)(((uint32_t)style[1] * 255u + 127u) / 255u);
     blank[3] = 0;
     for (int32_t yy = y; yy < y + rh; yy++) {
         uint8_t *o = out + (size_t)(yy - y) * pitch;
-        /* the texel's centre in 2s-ths of a sheet texel, the sheet texel
-           before it and the weight of the one after (sheet_scaled: n, q0,
-           n - 2 s q0) */
-        const int32_t ny = 2 * yy + 1 - S;
-        const int32_t qy = sheetFloorDiv(ny, (int32_t)D);
+        /* the sheet row the texel lies in (sheet_scaled: floor(p / s)) */
+        const int32_t qy1 = sheetFloorDiv(yy, S);
         /* the coverage row: the top half only (sheet_cov4 and the in-half
            test), 0 outside the texture */
         const uint8_t *crow = yy >= 0 && yy < HH ? tex + (size_t)yy * w : NULL;
-        /* a row whose coverage and the two rim rows it blends are 0 across
-           the page (most rows: the shelves' gaps, the empty bands) is
-           blank */
+        /* a row whose coverage and whose sheet row's rim are 0 across the
+           page (most rows: the shelves' gaps, the empty bands) is blank */
         int ink = 0;
         for (int32_t k = 0; crow && k < W && !ink; k++) {
             ink = crow[k] != 0;
         }
-        for (int j = 0; j < 2 && !ink; j++) {
-            const int32_t ty = (qy + j) * S;
+        {
+            const int32_t ty = qy1 * S;
             const uint8_t *rr = ty >= 0 && ty < HH ? tex + (size_t)(HH + ty) * w : NULL;
             for (int32_t k = 0; rr && k < W && !ink; k++) {
                 ink = rr[k] != 0;
@@ -1433,7 +1427,7 @@ int rd__sheet_bake_scaled_rect(const uint8_t *tex, uint32_t w, uint32_t h, const
             /* the rim: the level of the sheet texel q the texel lies in,
                at its own Bayer threshold, magnified as blocks (font.hlsl
                sheet_scaled); 0 where q s is outside the top half's texels */
-            const int32_t qx = sheetFloorDiv(xx, S), qy1 = sheetFloorDiv(yy, S);
+            const int32_t qx = sheetFloorDiv(xx, S);
             const int32_t tx = qx * S, ty = qy1 * S;
             const uint32_t r = tx >= 0 && tx < W && ty >= 0 && ty < HH
                                    ? tex[(size_t)(HH + ty) * w + (size_t)tx]
@@ -1487,10 +1481,12 @@ void rd__sheet_bake_grow(const RdTexRec *t, uint32_t dw, uint32_t dh, uint32_t *
         py0 = y0 - ICO_SHEET_BAKE_AY;
         py1 = y1 + ICO_SHEET_BAKE_AY;
     } else {
-        /* a texel reads its own coverage and the rims of the sheet texels
-           q0, q0 + 1 around its centre, kept at texel q s of the bottom
-           half: a changed rim row hh + r moves the texels of rows r - s ..
-           r + 2 s (2 s each way, the bottom half's own texels with them) */
+        /* a texel reads its own coverage and the rim of the sheet texel q
+           it lies in, kept at texel q s of the bottom half: a changed rim
+           row hh + r moves the texels of rows r .. r + s - 1; the 2 s each
+           way (the bottom half's own texels with them) is the reach of the
+           bilinear magnification before v0.11.1, kept: wider than the
+           blocks need, never narrower */
         const int64_t g = 2 * (int64_t)t->sheetScale, hh = t->h / 2u;
         px0 = x0 - g;
         px1 = x1 + g;

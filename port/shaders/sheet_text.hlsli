@@ -7,17 +7,16 @@
 // reads; the two must hold the same values (sheet_ref.c includes this file
 // with ICO_SHEET_TEXT_C defined, which leaves the defines alone, and
 // static-asserts each pair).  Every step is integer arithmetic, so the GPU
-// and the CPU agree exactly on the texels; only the bilinear weights are
-// float.
+// and the CPU agree exactly on the texels.
 #ifndef ICO_SHEET_TEXT_HLSLI
 #define ICO_SHEET_TEXT_HLSLI
 
 // The rim: a weighted dilation of the coverage, the largest of
 // c(p + d) * WX[|dx|] * WY[|dy|] (per mille each) within SHEET_RX texels
 // across and SHEET_RY texels down (a sheet texel is one x unit wide and one
-// field line tall), so the dark halo fades out with the distance from the
-// letters.  The reach and the falloff are the sheets' survey
-// (port/ui/menu_font.c, above kSheetInk): the English sheets' rim alpha.
+// field line tall).  The falloff is the outline picked in v0.11.1
+// (shader_consts.h says more): a solid dark band that fades out quickly;
+// until then the sheets' survey, a soft halo.
 #define SHEET_RX 6
 #define SHEET_RY 4
 #define SHEET_WX_0 1000
@@ -33,7 +32,8 @@
 #define SHEET_WY_3 350
 #define SHEET_WY_4 100
 // The levels the opacity and the rim-to-fill mix are quantised to (the
-// sheets' 16 colours hold three antialiasing steps between none and full).
+// sheets' 16 colours hold three antialiasing steps between none and full;
+// eight are finer, the pick's).
 #define SHEET_LEVELS 8
 // The 4x4 Bayer matrix, one row a constant, the texel at x & 3 in nibble
 // x (row 0 is 0 8 2 10, row 1 12 4 14 6, row 2 3 11 1 9, row 3 15 7 13 5).
@@ -153,10 +153,11 @@ uint sheet_rim_level(uint r, uint4 style, uint th)
     return sheet_quantise(a, sheet_solid_threshold(a, th));
 }
 
-// The texel of a scaled strip from its own coverage c and the rim levels
-// of the four sheet texels around its centre blended bilinearly: rq on the
-// 0..255 scale, ra in GS units (each sheet texel's (level * 128 + 127) /
-// 255), at the threshold th of the sheet texel it lies in.  The alpha is
+// The texel of a scaled strip from its own coverage c and the rim level of
+// the sheet texel it lies in (font.hlsl sheet_scaled: magnified as blocks;
+// floats holding whole numbers since v0.11.1, when the bilinear blend of
+// four went): rq on the 0..255 scale, ra in GS units ((level * 128 + 127)
+// / 255), at that sheet texel's threshold th.  The alpha is
 // the larger of the magnified rim's and the fill's (c quantised), rounded;
 // the grey mixes the rim level to the fill level by the fill's share of
 // max(c, rim), quantised, so the letter's edge is the texel's own.

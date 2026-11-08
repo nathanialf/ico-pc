@@ -5,9 +5,12 @@
  * menu shows, the game's own (the rows of the menu text table, menu_text.h)
  * and the port's (its layout rows, popups and the photo panel), is Arimo
  * rasterised on the sheets' own texel grid and drawn with rd's sheet
- * shader (rd.h rd_create_texture_sheet: a rim around the letters,
- * the antialiasing quantised to a few levels against a fixed Bayer
- * threshold), so it reads like the sheets in every preset and scale.
+ * shader (rd.h rd_create_texture_sheet: a solid dark-grey outline round
+ * the letters that fades out quickly, picked in v0.11.1 to match the
+ * lettering at the foot of the title screen; the antialiasing quantised to
+ * a few levels against a fixed Bayer threshold, only the outline's faint
+ * fringe dithered), so it reads like the game's lettering in every preset
+ * and scale.
  *
  * The recipe.  A sheet texel is one x unit wide and one field line (two y
  * units) tall (font.h's grid); the menu rows' em is 13.5 texels, 27 y units
@@ -58,14 +61,16 @@
 extern "C" {
 #endif
 
-/* The margin round a port text's ink, texels: the rim's reach (rd's
-   ICO_SHEET_RX and ICO_SHEET_RY) plus the bilinear read's texel. */
+/* The margin round a port text's ink, texels: the rim's tables' reach
+   (rd's ICO_SHEET_RX and ICO_SHEET_RY) plus one (once the scaled rim's
+   bilinear read; kept, the strips' layout derives from it). */
 #define UI_MENU_RIM_X 7
 #define UI_MENU_RIM_Y 5
-/* A faint halo's weight, 64ths of the full one (rd.h RdSheetStyle
+/* A faint rim's weight, 64ths of the full one (rd.h RdSheetStyle
    rimWeight): the 31 faint words' halo is 0.44 of their fill on the sheets
    (mostly English, menu_PAL_03), the strips' at 16 / 64 too (ctest
-   menu_look, ICO_MENU_LOOK_RIM=1). */
+   menu_look, ICO_MENU_LOOK_RIM=1, measured on the v0.10 halo; kept with
+   the v0.11.1 outline). */
 #define UI_MENU_FAINT_WEIGHT 16
 
 /* A sheet style, rd.h RdSheetStyle's fields (rd.h is not included here:
@@ -80,8 +85,8 @@ typedef struct UiSheetInk {
 const UiSheetInk *ui_menu_sheet_ink(int lang);
 
 /* The rim a game row's words have on its sheet (UiMenuTextItem.rim, per
-   language): none, a faint halo (UI_MENU_FAINT_WEIGHT 64ths of the full
-   one) or the full halo.  The port's own text always has the full one. */
+   language): none, a faint rim (UI_MENU_FAINT_WEIGHT 64ths of the full
+   one) or the full rim.  The port's own text always has the full one. */
 enum { UI_RIM_NONE = 0, UI_RIM_FAINT = 1, UI_RIM_FULL = 2 };
 
 /* The style an item's words are drawn in: ink (UiMenuTextInk), rim

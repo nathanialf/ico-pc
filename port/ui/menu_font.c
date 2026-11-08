@@ -77,9 +77,9 @@ _Static_assert(MF_ORIGIN >= MF_GAP_X && MF_ORIGIN >= MF_GAP_Y && MF_ORIGIN % MF_
 #define MF_EVICT_FRAMES 4 /* rd frames a page or a shelf must go undrawn before it is emptied */
 #define MF_LINES 16       /* lines of one text */
 #define MF_SHELVES 128    /* shelves of one page (a 1x page holds about 50 of a menu's rows) */
-/* texels of margin round a port text's ink: the rim (rd's ICO_SHEET_RX and
-   ICO_SHEET_RY, 6 and 4; ctest menu_look checks the pair) and the bilinear
-   read one texel past it */
+/* texels of margin round a port text's ink: the rim's tables (rd's
+   ICO_SHEET_RX and ICO_SHEET_RY, 6 and 4; ctest menu_look checks the pair)
+   and one texel past them */
 #define MF_RIM_X UI_MENU_RIM_X
 #define MF_RIM_Y UI_MENU_RIM_Y
 
@@ -90,10 +90,20 @@ enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
 /* The light ink per language (UiLang order: EN FR DE IT ES): rimOn,
    rimLevel, fillLevel, dither.  The one table to retune.
 
-   Measured on the game's sheets (the PAL sheets menu_PAL_01..04, scei and
+   The pick (v0.11.1): the European rows take one rim grey, 72, with the
+   outline the user picked on the Menu Outline Lab (the menus' words in
+   candidate looks beside the title screen's lettering; shader_consts.h
+   ICO_SHEET_WX / WY, ICO_SHEET_SOLID_ABOVE): a solid dark-grey band that
+   fades out quickly, like the lettering at the foot of the title screen,
+   instead of the sheets' soft halo below.  ctest menu_look pins the grey,
+   the tables and the levels; the survey below is the record it keeps
+   measuring.
+
+   The survey (v0.10 to v0.11.0, the table's values then: rim 24 61 56 61
+   62), measured on the game's sheets (the PAL sheets menu_PAL_01..04, scei and
    title, the 79 light-ink items of the menu text table, texels as (grey,
    alpha) with the GS alpha 0x80 = 1; ctest menu_look testSurvey re-measures
-   them and pins this table, RX, RY and LEVELS):
+   them):
      fill   the letters are white: palette entries ffffff at alpha 0x80 on
             every sheet; the fill texels (grey >= 200, alpha >= 0.7) average
             251 (EN) and 249 (FR DE IT ES), so the fill level is 255.
@@ -108,10 +118,10 @@ enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
             below 1..4: EN .77 .44 .36 .27, FR .89 .67 .49 .30, DE .91 .70 .51
             .36).  The mass of the first six texels is 3.1 (EN) to 4.1 (DE) across
             and 2.0 (EN) to 3.1 (DE) down, 3.7 and 2.7 averaged over the five.
-            The rim is the coverage dilated with the English falloff
-            (shader_consts.h: ICO_SHEET_RX 6, ICO_SHEET_RY 4, ICO_SHEET_WX
-            1 .76 .61 .54 .50 .39 .33, ICO_SHEET_WY 1 .77 .44 .36 .27), one
-            shape for every language; the stronger French and German halo is
+            The rim was the coverage dilated with the English falloff
+            (until v0.11.1 shader_consts.h: ICO_SHEET_RX 6, ICO_SHEET_RY 4,
+            ICO_SHEET_WX 1 .76 .61 .54 .50 .39 .33, ICO_SHEET_WY 1 .77 .44
+            .36 .27), one shape for every language; the stronger French and German halo is
             not modelled (the style has a rim grey, not a rim strength).  A
             hard rim of the same mass (4 x 3) filled the gaps between the
             letters and drew each word in a dark box.
@@ -120,7 +130,8 @@ enum { MF_LIGHT = 0, MF_FAINT = 1, MF_PLAIN = 2, MF_CLASSES };
             0x5E then 0x7E): five levels; ICO_SHEET_LEVELS is 8, which
             matches the sheets better with the fitted geometry
             (shader_consts.h).
-   ctest menu_look's survey re-measures these numbers within 0.1. */
+   ctest menu_look's survey re-measures these numbers within 0.1 (the
+   survey's record; the table's European rims are the pick's). */
 static const UiSheetInk kSheetInk[UI_LANG_SHEET_COUNT] = {
     {1, 72, 255, 1, 0}, /* English */
     {1, 72, 255, 1, 0}, /* French */
