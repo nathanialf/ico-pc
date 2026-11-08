@@ -1105,6 +1105,20 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   label without the PNG; the paths, the copies, the stamp (`dev` for an empty label), no `.tmp`
   left, the refusals, and the capture guard `ico_app_icon_picture_plain` (CRT filter on or off at
   strength 0, each of the four tone values off 50, 0 read as 50, Upscaling on) (`app_icon_files`).
+- `icon_stamp_test.c`: the Windows exe's icon resources (`icon_stamp.c`) from an `.ico` that
+  `ico_icon_write` made of a 256 x 256 RGBA test image: four `RT_ICON` images with ids 1..4, each
+  the `.ico` image's bytes in place (the 16/32/48 `BITMAPINFOHEADER`s with height 2*h and their
+  sizes, the 256 entry the given PNG with its signature), the `RT_GROUP_ICON` directory (6 + 4 x 14
+  bytes, each entry the `.ico` entry's first 12 bytes and then its id); the refusals (a cursor file,
+  0 or 33 images, a cut directory, a cut image, an empty image, an offset inside the directory or
+  past the end, no output); the stamp text (`<label> <disc>`, `dev` for an empty label, the refusals)
+  read back from the resource's bytes with no terminator, a line end or a NUL; and the command-line
+  quoting of paths with spaces, a trailing backslash, quotes, backslashes before a quote and an empty
+  argument, split back by the C runtime's rules, and the too-long refusal keeping the line so far;
+  the stamped copy's PE check (`ico_icon_stamp_pe_check`) on a small PE32+ laid out as the game's
+  exe (`.text`, `.rsrc`, `.reloc`): passing with `.rsrc` grown and `.reloc` moved, refusing a changed
+  code byte, entry point, import directory, section name or flags, no resource directory, a cut file,
+  a short `SizeOfImage`, another machine and a file that is not PE (`icon_stamp`). The resource update itself (`tools/ico_icon_stamp.c`) runs only on Windows.
 - `rd_png_mem_test.c` (`port/render/test`): `rd_write_png_mem` against the exact bytes the file
   writer produced before the split (a 2 x 2 image, RGBA and RGB), equal to the file writer's bytes
   for a multi-block image, a round trip through `texpack_load_png` with a padded pitch, and the
