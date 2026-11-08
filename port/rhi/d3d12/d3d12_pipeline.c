@@ -106,7 +106,8 @@ static DxRootSig *dx_root_signature(const RhiBindGroupLayout *layouts, uint32_t 
                 dr->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SAMPLER;
                 break;
             case RHI_BIND_STORAGE_TEXTURE:
-                /* the destination read's ROV (u register) */
+            case RHI_BIND_STORAGE_BUFFER_RW:
+                /* the destination read's ROV, a buffer shaders write (u registers) */
                 dr->RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_UAV;
                 break;
             default:
@@ -218,6 +219,15 @@ static void dx_null_view(const RhiBindSlot *s, D3D12_CPU_DESCRIPTOR_HANDLE h)
         ID3D12Device_CreateUnorderedAccessView(g_dx.device, NULL, NULL, &u, h);
         return;
     }
+    if (s->type == RHI_BIND_STORAGE_BUFFER_RW) {
+        D3D12_UNORDERED_ACCESS_VIEW_DESC u;
+        memset(&u, 0, sizeof(u));
+        u.Format = DXGI_FORMAT_UNKNOWN;
+        u.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+        u.Buffer.StructureByteStride = 16;
+        ID3D12Device_CreateUnorderedAccessView(g_dx.device, NULL, NULL, &u, h);
+        return;
+    }
     D3D12_SHADER_RESOURCE_VIEW_DESC v;
     memset(&v, 0, sizeof(v));
     v.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
@@ -273,6 +283,33 @@ static bool dx_write_resource(const RhiBindSlot *s, const RhiBinding *b,
         v.Buffer.NumElements = (UINT)(size / 16u);
         v.Buffer.StructureByteStride = 16;
         ID3D12Device_CreateShaderResourceView(g_dx.device, buf->res, &v, h);
+        return true;
+    }
+    case RHI_BIND_STORAGE_BUFFER_RW: {
+        /* RWStructuredBuffer<uint4> (vu_common.hlsli vu_rec_out): 16-byte
+         * elements, the buffer made with RHI_BUF_STORAGE_WRITE.  Not drawn
+         * through on D3D12 this release (RhiLimits.vertexStores false: the
+         * record's stores need the state transitions and UAV barriers that
+         * rhi_cmd_buffer_store_begin / _end do not make here) */
+        DxBuffer *buf = dx_get_buffer(b->buffer);
+        uint64_t size = 0;
+        if (buf && b->offset < buf->size) {
+            size = b->size ? b->size : buf->size - b->offset;
+        }
+        if (!buf || !buf->uav || (b->offset & 15u) || size < 16 || size > buf->size - b->offset) {
+            DX_LOG("bind group: u%u: invalid written storage buffer (a range of a buffer made "
+                   "with RHI_BUF_STORAGE_WRITE)",
+                   s->slot);
+            return false;
+        }
+        D3D12_UNORDERED_ACCESS_VIEW_DESC u;
+        memset(&u, 0, sizeof(u));
+        u.Format = DXGI_FORMAT_UNKNOWN;
+        u.ViewDimension = D3D12_UAV_DIMENSION_BUFFER;
+        u.Buffer.FirstElement = b->offset / 16u;
+        u.Buffer.NumElements = (UINT)(size / 16u);
+        u.Buffer.StructureByteStride = 16;
+        ID3D12Device_CreateUnorderedAccessView(g_dx.device, buf->res, NULL, &u, h);
         return true;
     }
     case RHI_BIND_SAMPLED_TEXTURE: {

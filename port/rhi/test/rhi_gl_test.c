@@ -397,9 +397,14 @@ static int swapchainPass(void)
     return failures ? 1 : 0;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
     const RhiTestConfig cfg = {"opengl", "rhi_gl_test", true, NULL, rhi_gl_debug_error_count};
+    if (argc > 1 && strcmp(argv[1], "stores") == 0) {
+        /* rhi_gl_stores: the vertex shaders' stores (rhi_test_stores.c): 77
+           until the OpenGL backend reports them (RhiLimits.vertexStores) */
+        return rhi_test_vertex_stores(&cfg);
+    }
     const int rc = rhi_test_run_cells(&cfg);
     if (rc == 77) {
         rhi_test_log("SKIP rhi_gl_test: no OpenGL context\n");

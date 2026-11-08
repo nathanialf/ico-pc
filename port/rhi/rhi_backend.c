@@ -699,6 +699,16 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
     be()->cmd_copy_texture_to_buffer(cl, src, aspect, region, dst, dstOffset, rowPitch);
 }
 
+bool rhi_cmd_buffer_store_begin(RhiCommandList cl, RhiBuffer buf)
+{
+    return be()->cmd_buffer_store_begin(cl, buf);
+}
+
+bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf)
+{
+    return be()->cmd_buffer_store_end(cl, buf);
+}
+
 void rhi_cmd_resolve_color(RhiCommandList cl, RhiTexture src, RhiTexture dst)
 {
     be()->cmd_resolve_color(cl, src, dst);

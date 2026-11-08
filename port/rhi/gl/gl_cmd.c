@@ -66,6 +66,7 @@ static struct {
     bool rasterValid; /* raster is what OpenGL holds */
     GlRaster raster;
     GLuint ppo, vao;   /* bound now; GL_UNKNOWN_NAME when not known */
+    bool discard;      /* GL_RASTERIZER_DISCARD enabled (GlPipeline.noRaster) */
     GlCmdList *active; /* the list the last command was on */
     /* what gl_bind_groups last gave each binding point, so a bind of the
      * same is skipped (gl_forget_units: every name GL_UNKNOWN_NAME) */
@@ -1250,6 +1251,15 @@ static const GlPipeline *gl_flush(GlCmdList *c, bool indexed)
         glf.BindVertexArray(p->vao);
         s.vao = p->vao;
     }
+    if (!cache || s.discard != p->noRaster) {
+        /* rhi.h RhiPipelineDesc.noRaster: on while such a pipeline draws */
+        if (p->noRaster) {
+            glf.Enable(GL_RASTERIZER_DISCARD);
+        } else {
+            glf.Disable(GL_RASTERIZER_DISCARD);
+        }
+        s.discard = p->noRaster;
+    }
     if (!cache || c->vbVao != p->vao) {
         /* the buffer bindings are the VAO's state */
         c->vbVao = p->vao;
@@ -1569,4 +1579,21 @@ void rhi_cmd_resolve_color(RhiCommandList cl, RhiTexture src, RhiTexture dst)
         gl_copy_refused(what, "a texture cannot be used through a framebuffer");
     }
     glf.BindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+/* rhi.h rhi_cmd_buffer_store_begin / _end: no vertex stores on OpenGL this release (RhiLimits.vertexStores false;
+ * a later one would put glMemoryBarrier(GL_SHADER_STORAGE_BARRIER_BIT | ...)
+ * here): the renderer draws the VU record into render targets */
+bool rhi_cmd_buffer_store_begin(RhiCommandList cl, RhiBuffer buf)
+{
+    (void)cl;
+    (void)buf;
+    return false;
+}
+
+bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf)
+{
+    (void)cl;
+    (void)buf;
+    return false;
 }

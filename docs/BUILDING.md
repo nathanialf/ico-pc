@@ -415,7 +415,8 @@ stay the gate on `main`.
   from the compiler itself (`dxc -MF` depfile), so editing one header
   rebuilds only the shaders that include it.
 - **Packages.** `tools/package_win.sh` and `tools/package_linux.sh` build
-  `ico_pc mc_import`; the
+  `ico_pc mc_import` (and `package_win.sh` the exe's icon helper `ico_icon_stamp`, a Windows-only
+  target); the
   Android package goes through Gradle, which builds `ico_pc` and the three
   libadrenotools hook libraries (`main_hook`, `hook_impl`, `file_redirect_hook`).
 
@@ -709,7 +710,8 @@ Build and deployment > Source: **GitHub Actions**), a one-time setting.
 clean worktree (`dist/ico-pc-<label>-win.zip`, `dist/ico-pc-<label>-linux.tar.gz`, and the
 AppImage below). Neither contains
 game data; both carry the README, the player guides, the licence files and the save importer
-(`x64/tools/mc_import.exe` with its `SDL3.dll` and a short `README.txt`), and a make-portable script
+(`x64/tools/mc_import.exe` with its `SDL3.dll` and a short `README.txt`; the Windows zips also
+`x64/tools/ico_icon_stamp.exe`, below), and a make-portable script
 (`x64/make_portable.cmd` in the zip, `make_portable.sh` in the tar; the sources are
 `tools/portable/`). Each script also writes a second archive from the same stage, the portable
 download: `dist/ico-pc-<label>-win-portable.zip` and `dist/ico-pc-<label>-linux-portable.tar.gz`. It
@@ -722,13 +724,19 @@ hold no developer programs: no `rhi_d3d12_test`, `rd_replay_tool` or `compare_ba
 absence). The link map ships beside the program in both archives (`x64/ico_pc_x64.map`,
 `ico_pc.map`; the scripts assert it is there): a crash or watchdog report names its functions from
 it on the player's machine ([PLATFORM.md](port/PLATFORM.md#the-symbol-lines)). It stays in
-`dist/stage` too, and `tools/package_win.sh` builds only `ico_pc` and `mc_import`. The
+`dist/stage` too, and `tools/package_win.sh` builds only `ico_pc`, `mc_import` and `ico_icon_stamp`. The
 Windows program carries version information (company, product, file version `x.y.z.N`: N is the
 release candidate's number for a label `vX.Y.Z-rcN`, 0 for `vX.Y.Z`; `ico_version_from_label` in
 `cmake/IcoVersion.cmake`), from `-DICO_VERSION_LABEL=<label>` which `package_win.sh` passes
 (`port/platform/win/ico_pc.rc`; a build without the label has an all-zero version). It has no icon
-and no signature: the game's icon is made from the player's disc at run time (`docs/port/APP_ICON.md`) and set on
-the window, so there is nothing to put in a resource, and the program file is not rewritten. `ico_pc.manifest` has no `dpiAwareness`: SDL3 sets the process's DPI awareness
+and no signature as built: the game's icon is made from the player's disc at run time
+(`docs/port/APP_ICON.md`) and set on the window, so there is nothing to put in a resource at build
+time. The exe's own icon comes later, on the player's machine: `x64/tools/ico_icon_stamp.exe`
+(`tools/ico_icon_stamp.c`, CMake target `ico_icon_stamp`, built on Windows only: C on the Windows
+API, a program with no window, no SDL3.dll and no mingw runtime DLL, which `package_win.sh` checks
+in its imports) is started by the game as it exits and writes the captured `.ico` into the exe's
+icon resources ([APP_ICON.md](port/APP_ICON.md#the-exes-icon)). The package's exe is the unstamped
+one; `check_rc_text.py` reads it at package time, before any stamp. `ico_pc.manifest` has no `dpiAwareness`: SDL3 sets the process's DPI awareness
 itself when the window system starts. `tools/package_linux.sh` packages for the host's architecture:
 on an arm64 host it builds `linux-arm64` into `dist/ico-pc-<label>-linux-arm64.tar.gz` (stage
 `dist/stage/linux-arm64/`, log `build-host/pkg-linux-arm64-<label>.log`) and the portable

@@ -1105,6 +1105,20 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   label without the PNG; the paths, the copies, the stamp (`dev` for an empty label), no `.tmp`
   left, the refusals, and the capture guard `ico_app_icon_picture_plain` (CRT filter on or off at
   strength 0, each of the four tone values off 50, 0 read as 50, Upscaling on) (`app_icon_files`).
+- `icon_stamp_test.c`: the Windows exe's icon resources (`icon_stamp.c`) from an `.ico` that
+  `ico_icon_write` made of a 256 x 256 RGBA test image: four `RT_ICON` images with ids 1..4, each
+  the `.ico` image's bytes in place (the 16/32/48 `BITMAPINFOHEADER`s with height 2*h and their
+  sizes, the 256 entry the given PNG with its signature), the `RT_GROUP_ICON` directory (6 + 4 x 14
+  bytes, each entry the `.ico` entry's first 12 bytes and then its id); the refusals (a cursor file,
+  0 or 33 images, a cut directory, a cut image, an empty image, an offset inside the directory or
+  past the end, no output); the stamp text (`<label> <disc>`, `dev` for an empty label, the refusals)
+  read back from the resource's bytes with no terminator, a line end or a NUL; and the command-line
+  quoting of paths with spaces, a trailing backslash, quotes, backslashes before a quote and an empty
+  argument, split back by the C runtime's rules, and the too-long refusal keeping the line so far;
+  the stamped copy's PE check (`ico_icon_stamp_pe_check`) on a small PE32+ laid out as the game's
+  exe (`.text`, `.rsrc`, `.reloc`): passing with `.rsrc` grown and `.reloc` moved, refusing a changed
+  code byte, entry point, import directory, section name or flags, no resource directory, a cut file,
+  a short `SizeOfImage`, another machine and a file that is not PE (`icon_stamp`). The resource update itself (`tools/ico_icon_stamp.c`) runs only on Windows.
 - `rd_png_mem_test.c` (`port/render/test`): `rd_write_png_mem` against the exact bytes the file
   writer produced before the split (a 2 x 2 image, RGBA and RGB), equal to the file writer's bytes
   for a multi-block image, a round trip through `texpack_load_png` with a padded pitch, and the
@@ -1189,6 +1203,15 @@ The renderer's test programs have a page of their own:
   1.0 loader without `VK_KHR_get_physical_device_properties2`, review finding 5) the same, the device
   made with no extended queries (`rhi_vk_vk10bare`); the D32F cell (`d32fCell`) checks
   `RhiLimits.depth32Attachment` against `ICO_VK_FAKE_NO_D32F_ATTACHMENT` (`rhi_vk_vk10_nod32f`).
+  Every run ends with the vertex stores' cell (`rhi_test_stores.c`, `rhi_test_vertex_stores`; alone
+  with the argument `stores`: `rhi_vk_stores`, `rhi_vk_stores_vk11` under `ICO_VK_FAKE_API=1.1`,
+  `rhi_vk_stores_global` under `ICO_VK_GLOBAL_BARRIERS=1`): 64 points of `vs_store` (each writes
+  its four words at its element) through a pipeline with no fragment shader, no target and
+  `noRaster`, in a pass without attachments, inside `rhi_cmd_buffer_store_begin` / `_end`; a copy
+  over the buffer, the stores again, a copy out to a readback buffer, every word read back, no
+  validation message (synchronisation validation on); 77 where the device reports no
+  vertex stores, after checking that the bracket refuses (`rhi_vk_nostores`, the argument
+  `nostores` under `ICO_VK_FAKE_NO_VERTEX_STORES=1`, passes only on that refusal).
 - `rhi_d3d12_test.c`: the same checks on D3D12, a Windows GUI program that writes a log and shows
   a message box (`rhi_d3d12`).
 - `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP; WARP again with
@@ -1251,7 +1274,8 @@ The renderer's test programs have a page of their own:
   (`rhi_gl`, and `rhi_gl_nodual` under `ICO_GL_FAKE_NO_DUAL=1`). ctest runs both on Mesa's llvmpipe
   (`LIBGL_ALWAYS_SOFTWARE=1`, `SDL_VIDEO_DRIVER=offscreen`); they skip (77) without an OpenGL
   context. On llvmpipe the destination-read cells skip (no fragment shader interlock; GLSL has no
-  attachment read).
+  attachment read). `rhi_gl_stores` (the argument `stores`) is `rhi_vk_stores`' twin: it skips (77)
+  while the OpenGL backend reports no vertex stores, having checked that its bracket refuses.
 - `rhi_gl_sync_wait_test.c`: the OpenGL backend's fence wait with a limit on the CPU
   (`port/rhi/gl/gl_sync_wait.c`, `gl_device.c` `gl_wait_sync`) over a stub fence and a fake clock: one
   that never signals ends at the 15 s limit in 300 slices of 50 ms, the pump between them, the 2 s
