@@ -209,42 +209,23 @@ void sheetref_texel_look(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, 
     /* the threshold: the Bayer entry's centre, or a half; above 1x the
        sheet texel's, one entry for the sc x sc strip texels in it */
     const uint32_t th = thresholdAt(s, l, floorDiv(x, (int32_t)sc), floorDiv(y, (int32_t)sc));
-    /* the rim levels of the four sheet texels around the texel's centre
-       ((x + 0.5) / sc - 0.5, in 2sc-ths 2x + 1 - sc), each the rim alone
-       quantised at its own threshold, blended bilinearly (font.hlsl
-       sheet_scaled): on the 0..255 scale and in GS units */
-    const int32_t nx = 2 * x + 1 - (int32_t)sc, ny = 2 * y + 1 - (int32_t)sc;
-    const int32_t qx = floorDiv(nx, 2 * (int32_t)sc), qy = floorDiv(ny, 2 * (int32_t)sc);
-    const float gx = (float)(nx - 2 * (int32_t)sc * qx) / (float)(2 * sc);
-    const float gy = (float)(ny - 2 * (int32_t)sc * qy) / (float)(2 * sc);
-    float lq[2][2], la[2][2];
-    for (int j = 0; j < 2; j++) {
-        for (int i = 0; i < 2; i++) {
-            const uint32_t r =
-                s->rimOn ? sheetRimAt(cov, w, h, qx + i, qy + j, sc, l) * rimWeight(s) : 0u;
-            const uint32_t ra = s->rimOn ? (r + 32u) / 64u : 0u;
-            const uint32_t lv =
-                quantise(l, ra, solidThreshold(l, ra, thresholdAt(s, l, qx + i, qy + j)));
-            lq[j][i] = (float)lv;
-            la[j][i] = (float)((lv * 128u + 127u) / 255u);
-        }
-    }
-    const float q0 = lq[0][0] + (lq[0][1] - lq[0][0]) * gx,
-                q1 = lq[1][0] + (lq[1][1] - lq[1][0]) * gx;
-    const float a0 = la[0][0] + (la[0][1] - la[0][0]) * gx,
-                a1 = la[1][0] + (la[1][1] - la[1][0]) * gx;
-    const float lm = q0 + (q1 - q0) * gy, am = a0 + (a1 - a0) * gy;
+    /* the rim: the level of the sheet texel the texel lies in, quantised
+       at its own threshold, magnified as blocks (font.hlsl sheet_scaled) */
+    const int32_t qx = floorDiv(x, (int32_t)sc), qy = floorDiv(y, (int32_t)sc);
+    const uint32_t r = s->rimOn ? sheetRimAt(cov, w, h, qx, qy, sc, l) * rimWeight(s) : 0u;
+    const uint32_t ra = s->rimOn ? (r + 32u) / 64u : 0u;
+    const uint32_t rm = quantise(l, ra, solidThreshold(l, ra, th));
+    const uint32_t am = (rm * 128u + 127u) / 255u;
     /* the fill on top: the texel's own coverage */
-    const uint32_t rm = (uint32_t)floorf(lm + 0.5f);
     const uint32_t a = c > rm ? c : rm;
     const uint32_t t = a ? (c * 255u + a / 2u) / a : 0u;
     const uint32_t ths = solidThreshold(l, a, th);
     const uint32_t cq = quantise(l, c, ths), tq = quantise(l, t, ths);
-    const float af = (float)((cq * 128u + 127u) / 255u);
+    const uint32_t af = (cq * 128u + 127u) / 255u;
     *outGrey =
         (uint8_t)(((uint32_t)s->rimLevel * (255u - tq) + (uint32_t)s->fillLevel * tq + 127u) /
                   255u);
-    *outAlpha = (uint8_t)floorf((am > af ? am : af) + 0.5f);
+    *outAlpha = (uint8_t)(am > af ? am : af);
 }
 
 void sheetref_texel(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, int32_t y,

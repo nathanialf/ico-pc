@@ -582,35 +582,18 @@ static void shaderTexel(const uint8_t *tex, int w, int h, int si, const uint8_t 
 {
     const int hh = h / 2;
     const uint32_t c = px >= 0 && px < w && py >= 0 && py < hh ? tex[(size_t)py * w + px] : 0u;
-    /* the rim: the four sheet texels round the texel's centre, each
-       quantised at its own threshold, blended bilinearly (font.hlsl
+    /* the rim: the sheet texel the texel lies in, as blocks (font.hlsl
        sheet_scaled) */
-    (void)form;
-    const int nx = 2 * px + 1 - si, ny = 2 * py + 1 - si;
-    const int q0x = (nx + 8192 * si) / (2 * si) - 4096, q0y = (ny + 8192 * si) / (2 * si) - 4096;
-    const float gx = (float)(nx - 2 * si * q0x) / (float)(2 * si);
-    const float gy = (float)(ny - 2 * si * q0y) / (float)(2 * si);
-    float rq[2][2], ra[2][2];
-    for (int j = 0; j < 2; j++) {
-        for (int i = 0; i < 2; i++) {
-            const int tx = (q0x + i) * si, ty = (q0y + j) * si;
-            const int inside = tx >= 0 && tx < w && ty >= 0 && ty < hh;
-            const uint32_t r = inside ? tex[(size_t)(hh + ty) * w + tx] : 0u;
-            const uint32_t rw = st[0] != 0 ? (r * st[0] + 32u) / 64u : 0u;
-            const uint32_t l = refQuantise(rw, refSolid(rw, refThreshold(q0x + i, q0y + j, st[3])));
-            rq[j][i] = (float)l;
-            ra[j][i] = (float)((l * 128u + 127u) / 255u);
-        }
-    }
-    const float rq0 = rq[0][0] + (rq[0][1] - rq[0][0]) * gx,
-                rq1 = rq[1][0] + (rq[1][1] - rq[1][0]) * gx;
-    const float ra0 = ra[0][0] + (ra[0][1] - ra[0][0]) * gx,
-                ra1 = ra[1][0] + (ra[1][1] - ra[1][0]) * gx;
-    const float rqv = rq0 + (rq1 - rq0) * gy, rav = ra0 + (ra1 - ra0) * gy;
     const int qx = (px + 4096 * si) / si - 4096, qy = (py + 4096 * si) / si - 4096;
-    const uint32_t rm = (uint32_t)floorf(rqv + 0.5f);
+    const int tx = qx * si, ty = qy * si;
+    const int inside = tx >= 0 && tx < w && ty >= 0 && ty < hh;
+    const uint32_t r = inside ? tex[(size_t)(hh + ty) * w + tx] : 0u;
+    const uint32_t rw = st[0] != 0 ? (r * st[0] + 32u) / 64u : 0u;
+    const uint32_t th0 = refThreshold(qx, qy, st[3]);
+    const uint32_t rm = refQuantise(rw, refSolid(rw, th0));
+    const float rav = (float)((rm * 128u + 127u) / 255u);
     const uint32_t a = c > rm ? c : rm;
-    const uint32_t th = refSolid(a, refThreshold(qx, qy, st[3]));
+    const uint32_t th = refSolid(a, th0);
     const uint32_t t = a != 0u ? (c * 255u + a / 2u) / a : 0u;
     const uint32_t cq = refQuantise(c, th), tq = refQuantise(t, th);
     *grey = (uint8_t)((st[1] * (255u - tq) + st[2] * tq + 127u) / 255u);
