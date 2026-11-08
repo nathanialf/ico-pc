@@ -670,6 +670,14 @@ const RdPipelineSetPolicy *rd_pipeline_policy_careful(void);
 /* Whether the run draws with the VU vertex pre-pass now (after rd_init and
  * rd_vuprepass_selftest) */
 bool rd_vu_prepass_on(void);
+/* How the VU pre-pass writes its record this run (rd_vu_record.h):
+ * "stores" (the vertex shaders store it) or "targets" (render targets and
+ * copies) */
+const char *rd_vu_record_mode(void);
+/* The frames whose pre-pass [dev] vu_prepass_min skipped since the last
+ * call (the window's 10 s VU line), the threshold in *minSlots and the
+ * most slots one of them had in *maxSlots (either may be NULL) */
+uint32_t rd_vu_prepass_skips(uint32_t *minSlots, uint32_t *maxSlots);
 const RdSettings *rd_get_settings(void);
 /* The scene's scale in force (rd_present.c
  * rd__apply_display, from the settings applied at the last rd_begin_frame):

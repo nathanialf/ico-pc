@@ -507,6 +507,7 @@
 #include "rd_velocity.h"
 #include "rd_mesh.h"
 #include "rd_vis.h"
+#include "rd_vu_record.h"
 #include "rd_vu_skin_check.h"
 #include "../core/region.h"              /* the dump's disc (version 12) */
 #include "../vu1_ref/vu1_ref.h"          /* --vu-ref: the CPU mirror of the VU programs */
@@ -3059,6 +3060,15 @@ int main(int argc, char **argv)
                dump, g_rd.vuPrepass ? "on" : "off", pr->vuPrePasses, pr->vuPreVertices,
                pr->vuPreDraws, pr->vuPreFallbacks, pr->vuPreSprites, pr->vuTriSlots,
                pr->vuTickDraws);
+        /* how the record was written (rd_vu_record.h) and the frames [dev]
+         * vu_prepass_min skipped */
+        {
+            uint32_t minSlots = 0, maxSlots = 0;
+            const uint32_t skipped = rd_vu_prepass_skips(&minSlots, &maxSlots);
+            printf("%s: stats: VU record %s: %s; pre-pass skipped %u frames under %u slots "
+                   "(the largest %u)\n",
+                   dump, rd_vu_record_mode(), g_rdRec.why, skipped, minSlots, maxSlots);
+        }
         /* the region rule's mode: under region_rule = ps2 the side bands
          * (rd_replay_vu.c vuDropMode, vuSource): the draws that had them and
          * carried card verdicts, whose cards stay off the sides (issue

@@ -273,6 +273,10 @@ int main(void)
     CHECK_EQ(vkr_bindTypeMap[RHI_BIND_STORAGE_TEXTURE].shift, 48u);
     CHECK_EQ(vkr_bindTypeMap[RHI_BIND_INPUT_ATTACHMENT].vk, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT);
     CHECK_EQ(vkr_bindTypeMap[RHI_BIND_INPUT_ATTACHMENT].shift, 16u);
+    /* a storage buffer the vertex shaders write (the VU record's stores):
+     * a storage buffer descriptor at the u binding (48 + slot) */
+    CHECK_EQ(vkr_bindTypeMap[RHI_BIND_STORAGE_BUFFER_RW].vk, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+    CHECK_EQ(vkr_bindTypeMap[RHI_BIND_STORAGE_BUFFER_RW].shift, 48u);
     CHECK_EQ(vkr_state_layout(RHI_STATE_STORAGE, RHI_FMT_RGBA8_UNORM), VK_IMAGE_LAYOUT_GENERAL);
     CHECK_EQ(vkr_state_layout(RHI_STATE_RENDER_TARGET_READ, RHI_FMT_RGBA8_UNORM),
              VK_IMAGE_LAYOUT_RENDERING_LOCAL_READ_KHR);

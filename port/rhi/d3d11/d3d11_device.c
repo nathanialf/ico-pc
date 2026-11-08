@@ -572,6 +572,8 @@ static void d11_fill_limits(void)
     /* D3D11.3 has ROVs, left off in this version (opt-in, untested) */
     o->rov = false;
     o->fragmentInterlock = false;
+    /* feature level 11_0 has no vertex shader UAVs (rhi.h RhiLimits.vertexStores) */
+    o->vertexStores = false;
     o->rasterOrderAttachment = false;
     o->rasterOrderOff = NULL;
     o->moltenvk = false;

@@ -2341,8 +2341,11 @@ static void logDerived(void)
             rd__region_camera() ? (rd__vu_extended() ? "the camera's (extended)" : "the camera's")
             : rd__vu_extended() ? "extended"
                                 : "the PS2's",
-            (unsigned)g_rd.filterUpgrade, g_rd.vuPrepass ? "on" : "off", (unsigned)g_rd.fogPath,
-            rd__profile_text());
+            (unsigned)g_rd.filterUpgrade,
+            !g_rd.vuPrepass                              ? "off"
+            : strcmp(rd_vu_record_mode(), "stores") == 0 ? "on (record stores)"
+                                                         : "on (record targets)",
+            (unsigned)g_rd.fogPath, rd__profile_text());
 }
 
 typedef struct ReplayCall {

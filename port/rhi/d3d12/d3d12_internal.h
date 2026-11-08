@@ -34,6 +34,7 @@ typedef struct DxBuffer {
     void *mapped;
     D3D12_GPU_VIRTUAL_ADDRESS gpu;
     D3dpBufferTrack track; /* RHI_MEM_DEVICE only */
+    bool uav;              /* made with RHI_BUF_STORAGE_WRITE: a UAV can view it */
 } DxBuffer;
 
 typedef struct DxTexture {

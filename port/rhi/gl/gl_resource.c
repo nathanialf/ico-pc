@@ -826,7 +826,8 @@ static bool gl_make_entry(const RhiBindGroupDesc *d, const D3dpLayout *l, uint32
         e->dyn = dynamic ? l->offset[i] : GL_BIND_STATIC;
         return true;
     }
-    case RHI_BIND_STORAGE_BUFFER: {
+    case RHI_BIND_STORAGE_BUFFER:
+    case RHI_BIND_STORAGE_BUFFER_RW: {
         GlBuffer *buf = b ? gl_get_buffer(b->buffer) : NULL;
         uint64_t size = 0;
         if (buf && b->offset < buf->size) {
