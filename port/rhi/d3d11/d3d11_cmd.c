@@ -1456,3 +1456,19 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
                                               (ID3D11Resource *)t->res, 0, depth ? NULL : &box);
     g_d11.counts.copies++;
 }
+
+/* rhi.h rhi_cmd_buffer_store_begin / _end: feature level 11_0 has no vertex shader UAVs
+ * (RhiLimits.vertexStores false): the renderer never stores here */
+bool rhi_cmd_buffer_store_begin(RhiCommandList cl, RhiBuffer buf)
+{
+    (void)cl;
+    (void)buf;
+    return false;
+}
+
+bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf)
+{
+    (void)cl;
+    (void)buf;
+    return false;
+}

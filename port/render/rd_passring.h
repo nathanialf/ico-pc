@@ -42,10 +42,11 @@ typedef enum RdPassKind {
     RD_PASSK_UPLOAD,  /* the replay's texture and mesh uploads */
     RD_PASSK_PRESENT, /* the present onto the window */
     /* the VU vertex pre-pass (rd_replay_vu.c rd__vu_prepass): cw x ch the record's
-     * texels drawn, dw its vertices (no target id) */
+     * texels drawn, dw its vertices; color 1 when the vertex shaders stored
+     * the record (rd_vu_record.h, no target), 0 drawn into its targets */
     RD_PASSK_VU_PRE,
     /* the VU triangle pre-pass after it (the same): cw x ch the record's
-     * texels drawn, dw the triangles' record slots */
+     * texels drawn, dw the triangles' record slots, color as above */
     RD_PASSK_VU_TRI,
     RD_PASSK_COUNT
 } RdPassKind;

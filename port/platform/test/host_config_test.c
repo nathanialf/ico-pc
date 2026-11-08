@@ -708,6 +708,19 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_prepass_batch", "false"), "0") == 0);
     CHECK(strcmp(ico_dev_env_value("vu_prepass_batch", "true"), "1") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.vu_prepass_batch"), "vu_prepass_batch") == 0);
+    /* the VU record's write and the pre-pass's floor (port/render/rd_vu_record.c) */
+    CHECK(strcmp(ico_dev_env_name("vu_record"), "ICO_RD_VU_RECORD") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_record", "stores"), "stores") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_record", "targets"), "targets") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_record", "auto"), "auto") == 0);
+    CHECK(ico_dev_env_value("vu_record", "true") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_record"), "vu_record") == 0);
+    CHECK(strcmp(ico_dev_env_name("vu_prepass_min"), "ICO_RD_VU_PREPASS_MIN") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_prepass_min", "4096"), "4096") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_prepass_min", "off"), "0") == 0);
+    CHECK(ico_dev_env_value("vu_prepass_min", "-1") == NULL);
+    CHECK(ico_dev_env_value("vu_prepass_min", "lots") == NULL);
+    CHECK(strcmp(ico_config_ini_key("dev.vu_prepass_min"), "vu_prepass_min") == 0);
     /* velocity_test and velocity_sign: the temporal upscaler's motion vectors
        and their sign (port/render/rd_velocity.c) */
     CHECK(strcmp(ico_dev_env_name("velocity_test"), "ICO_RD_VELOCITY") == 0);

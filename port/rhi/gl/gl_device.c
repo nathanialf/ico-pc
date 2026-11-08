@@ -377,6 +377,9 @@ static void gl_fill_limits(void)
     o->rov = false;
     o->rasterOrderAttachment = false;
     o->rasterOrderOff = NULL;
+    /* no vertex stores this release (rhi.h RhiLimits.vertexStores): the
+     * bracket is a no-op here, the record drawn into render targets */
+    o->vertexStores = false;
     o->moltenvk = false;
     o->localRead = false;
     o->vendorId = gl_vendor_id(gl_str(GL_VENDOR), gl_str(GL_RENDERER));
@@ -1009,16 +1012,18 @@ bool rhi_init(const RhiDeviceDesc *desc)
         gl_loader_count(), optionalMissing, g_gl.debug ? "on" : "off");
     /* the translated shaders' storage buffers (bindings 16 + t, t up to 5,
      * read by the VU vertex shaders: the stream t0, the record t4, the
-     * ring t5 in the pre-pass's batch builds, three in one vertex shader)
-     * against limits OpenGL 4.3 lets a driver keep small (8 bindings, no
-     * vertex storage blocks) */
+     * ring t5 in the pre-pass's batch builds, three in one vertex shader;
+     * and 16 + 6, the record the store builds write, u6, which tools/
+     * spirv_to_glsl.py moves from the SPIR-V's 48 + 6) against limits
+     * OpenGL 4.3 lets a driver keep small (8 bindings, no vertex storage
+     * blocks) */
     const GLint ssboBindings = gl_int(GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS);
     const GLint vertexSsbos = gl_int(GL_MAX_VERTEX_SHADER_STORAGE_BLOCKS);
     const GLint units = gl_int(GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS);
-    if (ssboBindings <= (GLint)GL_UNIT_STORAGE_BASE + 5 || vertexSsbos < 3 ||
+    if (ssboBindings <= (GLint)GL_UNIT_STORAGE_BASE + 6 || vertexSsbos < 3 ||
         units <= (GLint)GL_UNIT_TEXTURE_BASE + 4) {
         GL_LOG("this driver's limits are below the shaders' bindings: storage buffer bindings %d "
-               "(22 needed), vertex shader storage blocks %d (3 needed), texture units %d (21 "
+               "(23 needed), vertex shader storage blocks %d (3 needed), texture units %d (21 "
                "needed); the draws that use them will fail",
                ssboBindings, vertexSsbos, units);
     }

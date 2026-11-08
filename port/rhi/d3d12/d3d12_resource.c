@@ -144,6 +144,11 @@ static RhiBuffer createBuffer(const RhiBufferDesc *desc)
     rd.Format = DXGI_FORMAT_UNKNOWN;
     rd.SampleDesc.Count = 1;
     rd.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
+    if (desc->memory == RHI_MEM_DEVICE && (desc->usage & RHI_BUF_STORAGE_WRITE)) {
+        /* a UAV of it (RHI_BIND_STORAGE_BUFFER_RW; no vertex stores on
+         * D3D12 this release: RhiLimits.vertexStores false) */
+        rd.Flags |= D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS;
+    }
     if (!DX_CHECK(ID3D12Device_CreateCommittedResource(g_dx.device, &hp, D3D12_HEAP_FLAG_NONE, &rd,
                                                        initial, NULL, &IID_ID3D12Resource,
                                                        (void **)&b->res))) {
@@ -152,6 +157,7 @@ static RhiBuffer createBuffer(const RhiBufferDesc *desc)
     }
     b->size = size;
     b->kind = desc->memory;
+    b->uav = (rd.Flags & D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS) != 0;
     b->gpu = ID3D12Resource_GetGPUVirtualAddress(b->res);
     if (desc->memory != RHI_MEM_DEVICE) {
         /* persistently mapped; the CPU does not read upload memory */

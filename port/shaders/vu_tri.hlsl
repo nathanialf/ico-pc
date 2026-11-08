@@ -121,7 +121,8 @@ VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
     return vu_rec_point_out(vu_tri.x + kick, r0, asuint(p.x1), asuint(p.y1));
 }
 
-// slot C, the component vu_tri.w (the draw's colour mask writes it alone):
+// slot C, the component vu_tri.w (the draw's colour mask writes it alone;
+// the store builds store that lane alone, vu_rec_lane_store):
 // whether tick vu_tri.w showed the triangle (vu_tick_shown), for a
 // triangle of a VU_F_TICKS draw in the region mode the blended camera's
 // verdict can drop, else 0; vu_main_vs reads it only where that verdict
@@ -148,8 +149,12 @@ VuPreOut vu_tri_tick_pre_vs(uint vid : SV_VertexID)
         float4 frame = vu_frame_ndc();
         s = vu_tick_shown(a, b, c, vu_tri.w, vu_lo, vu_hi, pic, frame);
     }
+#ifdef ICO_VU_REC_STORES
+    return vu_rec_lane_store(vu_tri.z + kick, vu_tri.w, s);
+#else
     uint4 z4 = uint4(0u, 0u, 0u, 0u);
     return vu_rec_point_out(vu_tri.z + kick, uint4(s, s, 0u, 0u), z4, z4);
+#endif
 }
 
 // slot B: the STQ planes' values at the anchor with the plane distance's,
