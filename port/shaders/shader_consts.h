@@ -236,17 +236,17 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 #define ICO_SHEET_RX 6 /* rim: texels across */
 #define ICO_SHEET_RY 4 /* rim: texels (field lines) down */
 #define ICO_SHEET_WX_0 1000
-#define ICO_SHEET_WX_1 760
-#define ICO_SHEET_WX_2 610
-#define ICO_SHEET_WX_3 540
-#define ICO_SHEET_WX_4 500
-#define ICO_SHEET_WX_5 390
-#define ICO_SHEET_WX_6 330
+#define ICO_SHEET_WX_1 1000
+#define ICO_SHEET_WX_2 500
+#define ICO_SHEET_WX_3 150
+#define ICO_SHEET_WX_4 0
+#define ICO_SHEET_WX_5 0
+#define ICO_SHEET_WX_6 0
 #define ICO_SHEET_WY_0 1000
-#define ICO_SHEET_WY_1 770
-#define ICO_SHEET_WY_2 440
-#define ICO_SHEET_WY_3 360
-#define ICO_SHEET_WY_4 270
+#define ICO_SHEET_WY_1 1000
+#define ICO_SHEET_WY_2 300
+#define ICO_SHEET_WY_3 0
+#define ICO_SHEET_WY_4 0
 /* opacity and rim-to-fill levels: the sheets' white takes three steps
    between none and full (five levels), but once the strips' letters sat on
    the sheets' (ctest menu_look) eight gave the smaller difference on every

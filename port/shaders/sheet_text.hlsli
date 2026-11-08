@@ -21,17 +21,17 @@
 #define SHEET_RX 6
 #define SHEET_RY 4
 #define SHEET_WX_0 1000
-#define SHEET_WX_1 760
-#define SHEET_WX_2 610
-#define SHEET_WX_3 540
-#define SHEET_WX_4 500
-#define SHEET_WX_5 390
-#define SHEET_WX_6 330
+#define SHEET_WX_1 1000
+#define SHEET_WX_2 500
+#define SHEET_WX_3 150
+#define SHEET_WX_4 0
+#define SHEET_WX_5 0
+#define SHEET_WX_6 0
 #define SHEET_WY_0 1000
-#define SHEET_WY_1 770
-#define SHEET_WY_2 440
-#define SHEET_WY_3 360
-#define SHEET_WY_4 270
+#define SHEET_WY_1 1000
+#define SHEET_WY_2 300
+#define SHEET_WY_3 0
+#define SHEET_WY_4 0
 // The levels the opacity and the rim-to-fill mix are quantised to (the
 // sheets' 16 colours hold three antialiasing steps between none and full).
 #define SHEET_LEVELS 8
