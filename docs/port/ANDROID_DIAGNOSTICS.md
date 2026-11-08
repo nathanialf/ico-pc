@@ -181,8 +181,12 @@ question it decides:
   trigger it even on a driver whose stamps run ahead of that wait and put it in the present
   figure, as the Mali's do) is over `[dev] slow_scene_dump_ms` (default 40, the Original rate's
   period; 0 is off) and the run is 30 s old. The first block over the bound arms the first dump;
-  a later block arms another only when its work is at least 1.5 times the work of the block of
-  the last dump, up to three a run (the issue's run wrote one dump, for the first block over 40 ms, a
+  a later block arms another when its work is at least 1.5 times the work of the block of
+  the last dump, or when it is the first block over the bound in a stage other than the last
+  dump's block's (the line then reads `in a scene layout (the first slow block of stage 40): frame
+  ...`; `window_slow_scene_new_stage`), up to three a run (the issue 179 run's cage, stage 40 at
+  90.9 ms after the boat's 99.7 ms, was refused by the 1.5 times rule alone and so its list 3,
+  36 % of its picture, was never dumped) (the issue's run wrote one dump, for the first block over 40 ms, a
   44.9 ms stage, and none of the 112 to 144 ms boat blocks after it). An armed dump waits for the
   first replay after the block whose CPU-side vertex work (the VU line's quantity: the pre-pass's
   vertices with it on, the triangles times 9 with it off) is at or above the block's mean of it a

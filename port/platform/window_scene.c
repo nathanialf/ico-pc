@@ -341,7 +341,13 @@ bool window_slow_scene_due(const SlowSceneBlock *b)
         return false;
     }
     return b->count == 0 ||
-           (b->count < SLOW_SCENE_DUMPS && work >= SLOW_SCENE_STEP * b->lastWorkMs);
+           (b->count < SLOW_SCENE_DUMPS &&
+            (window_slow_scene_new_stage(b) || work >= SLOW_SCENE_STEP * b->lastWorkMs));
+}
+
+bool window_slow_scene_new_stage(const SlowSceneBlock *b)
+{
+    return b->count > 0 && b->stage != b->lastStage;
 }
 
 bool window_slow_scene_pick(double work, double meanWork)
@@ -357,18 +363,21 @@ size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, un
     }
     const double n = b->gpuN ? (double)b->gpuN : 1.0;
     const double mean = b->spanSumMs / n;
-    char which[160];
+    char which[160], layout[96] = "";
 
+    if (window_slow_scene_new_stage(b)) {
+        snprintf(layout, sizeof(layout), " (the first slow block of stage %d)", b->stage);
+    }
     snprintf(which, sizeof(which),
              "its vertex work %.1f thousand against the block's mean %.1f thousand",
              frameWork / 1000.0, meanWork / 1000.0);
     const int c =
         snprintf(out, cap,
                  "slow scene: the block's GPU work %.1f ms a replay (bound %.0f; display "
-                 "wait %.1f, present %.1f, span %.1f) in a scene layout: frame %u (%s) "
+                 "wait %.1f, present %.1f, span %.1f) in a scene layout%s: frame %u (%s) "
                  "written to logs/%s (dump %d of %d this run); attach it with the log",
                  window_slow_scene_work_ms(b), b->boundMs, b->waitSumMs / n, b->presentSumMs / n,
-                 mean, frame, which, zipName, b->count + 1, SLOW_SCENE_DUMPS);
+                 mean, layout, frame, which, zipName, b->count + 1, SLOW_SCENE_DUMPS);
 
     return c < 0 ? 0 : ((size_t)c < cap ? (size_t)c : cap - 1);
 }

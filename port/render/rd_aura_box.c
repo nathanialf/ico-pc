@@ -80,6 +80,13 @@
  * or 0, auto the default).  Its two keys are in the start-up set while it
  * is on (rd__aura_box_keys, the fx family).
  *
+ * "Above 1x" is exact: at 1x this file does nothing, and the aura is still
+ * about four passes a replay in the perf line ("render passes ... aura 4.0":
+ * the game's own sprites, FEED128 three passes and SCENE's paste one, the
+ * table in WORK_BUFFERS.md "The aura's feedback read"); ROWBOX's pass is a
+ * fifth only above 1x, where "aura box: N feedback reads" is also logged
+ * (issue 179's 1x run shows four passes and no such line).
+ *
  * The lines:
  *   rd: aura box: the feedback read of the picture above 1x in two passes
  *       (...) (<why>)                     (start; or "in one pass (<why>)")

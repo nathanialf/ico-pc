@@ -92,6 +92,8 @@ typedef struct SlowSceneBlock {
     double presentSumMs; /* and their present passes: on a driver whose stamps do
                             not wait (a Mali) the display wait lands here */
     double boundMs;
+    int stage;     /* the game's stage_no at the block's end */
+    int lastStage; /* the stage of the last dump's block (unused with count 0) */
 } SlowSceneBlock;
 
 /* The mean GPU work a replay: (span less the display wait less the present
@@ -105,8 +107,15 @@ double window_slow_scene_work_ms(const SlowSceneBlock *b);
    work over the bound (not at it) and either no dump yet this run or fewer
    than SLOW_SCENE_DUMPS with the work at least SLOW_SCENE_STEP times the
    last dump's block (so a run of climbing blocks ends with the worst one's
-   file, the zips being pruned to the newest three) */
+   file, the zips being pruned to the newest three); or a later dump (fewer
+   than SLOW_SCENE_DUMPS) whose block is in another stage than the last
+   dump's (window_slow_scene_new_stage), at any work over the bound: the
+   first slow block of each stage gets a file (issue 179: the cage, 90.9 ms,
+   after the boat's 99.7 ms, which the 1.5 times rule alone refused) */
 bool window_slow_scene_due(const SlowSceneBlock *b);
+/* true when a dump has been made this run and the block's stage differs from
+   the last dump's block's: the block is the first slow one of its stage */
+bool window_slow_scene_new_stage(const SlowSceneBlock *b);
 /* Whether a replay is the block's heavy part: its CPU-side vertex work
    (window_scene_vu_invocations of its own counts) at or above the block's
    mean of that a replay (the frame the dump is to hold is the first such
@@ -117,7 +126,8 @@ bool window_slow_scene_pick(double work, double meanWork);
    wait 3.1, present 2.0, span 55.4) in a scene layout: frame 4812 (its
    vertex work 682.1 thousand against the block's mean 598.0 thousand)
    written to logs/slow-20261106-120000.zip (dump 2 of 3 this run); attach
-   it with the log" (the works in vertex invocations, printed in thousands;
+   it with the log" (a new-stage block reads "in a scene layout (the first
+   slow block of stage 40): frame ..."; the works in vertex invocations, printed in thousands;
    the name is the file name alone; dump is count + 1).  The length
    written */
 size_t window_slow_scene_text(char *out, size_t cap, const SlowSceneBlock *b, unsigned frame,

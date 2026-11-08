@@ -4777,7 +4777,10 @@ static void present_blocked(const RdPerfRecord *r)
    over [dev] slow_scene_dump_ms (default 40, the Original rate's period; 0
    off), and the first dump needs no more; a later one needs 1.5 times the
    work of the dump before, so a run of climbing blocks leaves the worst
-   one's file (ICO_SLOW_DUMP_KEEP newest zips are kept). It is written in
+   one's file (ICO_SLOW_DUMP_KEEP newest zips are kept); the first slow
+   block of a stage other than the last dump's also arms one, at any work
+   over the bound (the cage after the boat, issue 179), the line naming the
+   stage. It is written in
    releases too: a reporter's cutscene is the frame that explains the slow
    picture, and F12 cannot be pressed in a scene. A due block ARMS the
    dump with the block's mean CPU-side vertex work a replay (the VU line's
@@ -4807,6 +4810,7 @@ static struct {
 
 static int s_slowCount;         /* the dumps this run has been made (written or not) */
 static double s_slowLastWorkMs; /* the work of the block of the last */
+static int s_slowLastStage;     /* the stage of the block of the last */
 
 /* A replay's vertex work, as the VU line counts it */
 static double slow_scene_vertex_work(uint64_t tris, uint64_t preVertices)
@@ -4831,6 +4835,8 @@ static void slow_scene_check(void)
     b.waitSumMs = s_perf.gpuDisplayWait;
     b.presentSumMs = s_perf.gpuPresent;
     b.boundMs = ico_config_get_float("dev.slow_scene_dump_ms", 40.0);
+    b.stage = stage_no;
+    b.lastStage = s_slowLastStage;
     s_slowArm.armed = 0; /* an arm lives to the next block's end */
     if (!window_slow_scene_due(&b)) {
         return;
@@ -4852,6 +4858,7 @@ static void slow_scene_write(const RdReplayWork *w, double work)
     s_slowArm.armed = 0;
     s_slowCount++; /* counted whether or not the file is written */
     s_slowLastWorkMs = window_slow_scene_work_ms(&b);
+    s_slowLastStage = b.stage;
 
     char logs[ICO_PATH_MAX], zip[ICO_PATH_MAX], dump[ICO_PATH_MAX + 64], stamp[32], why[160];
     const time_t now = time(NULL);
