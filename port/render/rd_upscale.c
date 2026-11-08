@@ -342,6 +342,22 @@ static void edgeGuard(Replay *r, RhiCommandList cl, RdTargetRec *t)
 
 /* ----------------------------------------------------------- the marker */
 
+/* FSR 3.1 dispatched while the VU vertex pre-pass is off ([dev] vu_prepass
+ * = false, a failed self-test, a record that could not be made): no draw
+ * gets its second record, so VELOCITY stays 0 and every moving object
+ * trails.  One line each time that state begins. */
+static void prepassNote(void)
+{
+    static bool told;
+    const bool off = rd__upscale_by_fsr3() && !g_rd.vuPrepass;
+    if (off && !told) {
+        rd__log("FSR 3.1: the vertex pre-pass is off, so moving objects carry no motion: expect "
+                "trails (%s)",
+                g_rd.vuPrepassWhy[0] ? g_rd.vuPrepassWhy : "no reason recorded");
+    }
+    told = off;
+}
+
 void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
 {
     if (!s_up.split) {
@@ -429,6 +445,7 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
         return;
     }
     rd__transition(cl, s_up.out, &s_up.outState, RHI_STATE_SHADER_READ);
+    prepassNote();
     s_up.madeReplay = g_rd.replayCounter;
     s_up.since = 0;
     s_up.lastW = in.outW;

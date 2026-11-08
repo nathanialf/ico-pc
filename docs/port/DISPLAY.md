@@ -1839,7 +1839,10 @@ last dispatch; `reset` on a camera cut, the first dispatch and a new size; the f
 and far (passed swapped, as FSR takes them under inverted depth) and the vertical angle from the
 game's projection distance (`2 atan(gsH / 2 / zoom)`); pre-exposure 1; auto exposure on. The depth
 is not the standard projective depth FSR models (GS Z, `z * 2^-33` on D32), so FSR's depth-based
-disocclusion is approximate. A re-shown present (the still re-present) does not dispatch: UPSCALED
+disocclusion is approximate. In one sentence, three inputs are not what FSR assumes and are
+accepted as quality-only, checked on hardware: the gamma-encoded RGBA8 colour is given as linear
+(no `NON_LINEAR_COLOR` flag), auto exposure is on for a picture that is not HDR, and the depth is
+the game's own GS Z rather than a projective depth. A re-shown present (the still re-present) does not dispatch: UPSCALED
 stays and the next dispatch is told how many presents passed.
 
 **The context** (one per render size, display size and flags): made at the first dispatch of a size
@@ -1856,7 +1859,13 @@ sprites and particles (the glow composites, the smoke, the sparks: zero velocity
 the motion blur's ghost (drawn into SCENE before the upscale point, the fades fold off for it), film
 noise and the UI (list 11, drawn into SCENE too). Moving particles leave a trail; the fades and the
 film grain smear a little; the menus and subtitles hold sharp only while still. The follow-ups:
-the UI and film noise after the upscaler, a reactive mask from the particle draws.
+the UI and film noise after the upscaler, a reactive mask from the particle draws. The motion
+vectors come from the VU vertex pre-pass's second record of each draw (`rd_replay_vu.c`): with the
+pre-pass off (`[dev] vu_prepass = false`, a failed self-test, a record that could not be made)
+FSR 3.1 still runs, but VELOCITY stays zero and every moving object trails; the first dispatch in
+that state logs `FSR 3.1: the vertex pre-pass is off, so moving objects carry no motion: expect
+trails (REASON)` (`rd_upscale.c prepassNote`), and the 10 s velocity line counts the draws left
+at 0.
 
 - **Support.** `rd_upscale_temporal_supported()` (`port/render/rd_fsr3.c`): a build with the
   upscaler (`ICO_FFX`), the Vulkan backend, a Vulkan 1.2 or later device, external compute offered
