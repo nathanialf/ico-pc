@@ -71,6 +71,13 @@ int ico_android_message_box_buttons(void *window, const char *text, const char *
    nothing when the phone has no vibrator or the call is not available. */
 void ico_host_vibrate(int amplitude, int ms);
 
+/* Sets the recents card's (task switcher's) icon from the PNG at pngPath
+   (IcoActivity.setTaskIcon).  Returns 1 when the activity took it (and logs
+   `window: icon: the recents card is set from <path>`), else 0 with the
+   reason logged (`window: icon: <reason>`).  Must be called on SDL's main
+   thread, as ico_host_vibrate. */
+int ico_android_task_icon(const char *pngPath);
+
 /* The phone's thermal state and screen recording (IcoActivity.thermalHeadroom,
    thermalStatus and the two listeners' last pushes, issue 123;
    thermal_text.h): the headroom and status asked of the Java side now, the

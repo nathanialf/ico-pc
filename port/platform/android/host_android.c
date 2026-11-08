@@ -514,6 +514,87 @@ void ico_host_vibrate(int amplitude, int ms)
     (*env)->DeleteLocalRef(env, act);
 }
 
+/* --- the recents card's icon (app_icon_window.c) -------------------------- */
+
+/* Calls the static Java method IcoActivity.setTaskIcon(String path) -> String
+   (null when the card's icon was started, else the reason), as ico_host_vibrate
+   calls its method: on SDL's main thread, the method id looked up once (a
+   failed lookup is remembered), every local reference deleted, a pending
+   exception cleared.  Logs the outcome; returns 1 when the icon was started. */
+int ico_android_task_icon(const char *pngPath)
+{
+    static jmethodID s_mid;
+    static int s_failed;
+    JNIEnv *env;
+    jobject act;
+    jclass cls;
+    jstring jpath = NULL;
+    jstring answer = NULL;
+    char reason[160] = "";
+    int ok = 0;
+
+    if (pngPath == NULL || s_failed) {
+        return 0;
+    }
+    env = (JNIEnv *)SDL_GetAndroidJNIEnv();
+    act = env != NULL ? (jobject)SDL_GetAndroidActivity() : NULL;
+    if (env == NULL || act == NULL) {
+        fprintf(stderr, "window: icon: the recents card could not be set (no activity)\n");
+        return 0;
+    }
+    cls = (*env)->GetObjectClass(env, act);
+    if (cls != NULL) {
+        if (s_mid == NULL) {
+            s_mid = (*env)->GetStaticMethodID(env, cls, "setTaskIcon",
+                                              "(Ljava/lang/String;)Ljava/lang/String;");
+            if (s_mid == NULL) {
+                s_failed = 1;
+                snprintf(reason, sizeof(reason), "this app has no IcoActivity.setTaskIcon");
+            }
+        }
+        if (s_mid != NULL) {
+            jpath = (*env)->NewStringUTF(env, pngPath);
+            if (jpath == NULL) {
+                snprintf(reason, sizeof(reason), "no memory for the file's name");
+            } else {
+                answer = (jstring)(*env)->CallStaticObjectMethod(env, cls, s_mid, jpath);
+                if ((*env)->ExceptionCheck(env)) {
+                    snprintf(reason, sizeof(reason), "a Java exception in setTaskIcon");
+                } else if (answer == NULL) {
+                    ok = 1;
+                } else {
+                    const char *s = (*env)->GetStringUTFChars(env, answer, NULL);
+                    snprintf(reason, sizeof(reason), "%s", s != NULL ? s : "setTaskIcon failed");
+                    if (s != NULL) {
+                        (*env)->ReleaseStringUTFChars(env, answer, s);
+                    }
+                }
+            }
+        }
+    } else {
+        snprintf(reason, sizeof(reason), "no activity class");
+    }
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+    }
+    if (answer != NULL) {
+        (*env)->DeleteLocalRef(env, answer);
+    }
+    if (jpath != NULL) {
+        (*env)->DeleteLocalRef(env, jpath);
+    }
+    if (cls != NULL) {
+        (*env)->DeleteLocalRef(env, cls);
+    }
+    (*env)->DeleteLocalRef(env, act);
+    if (ok) {
+        fprintf(stderr, "window: icon: the recents card is set from %s\n", pngPath);
+    } else {
+        fprintf(stderr, "window: icon: %s\n", reason);
+    }
+    return ok;
+}
+
 /* --- the phone's thermal state and screen recording (issue 123) ----------- */
 
 /* The static Java methods IcoActivity.thermalHeadroom ()F and thermalStatus

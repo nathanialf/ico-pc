@@ -49,9 +49,9 @@
  * Continue, a Settings page) ends it at once: the pass off, the curtain off
  * as above, and the next time the menu is up the count starts again.
  *
- * Only the desktop window build captures (ICO_RD, the renderer and the icon
- * files); on Android and iOS the launcher icon is the package's, so nothing
- * is captured there.  The steps reach the renderer, the curtain and the files
+ * Only the window builds capture (ICO_RD, the renderer and the icon files):
+ * the desktop's and Android's (where the picture sets the recents card's
+ * icon; the launcher icon is the package's); iOS captures nothing.  The steps reach the renderer, the curtain and the files
  * through IcoTitleIconOps, which the test replaces.
  */
 #ifndef PORT_GAME_TITLE_ICON_H
