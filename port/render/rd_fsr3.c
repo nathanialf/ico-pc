@@ -138,6 +138,38 @@ bool rd_upscale_temporal_supported(void)
     return s_supported == 1;
 }
 
+bool rd__fsr3_built(void)
+{
+#ifdef ICO_FFX
+    return true;
+#else
+    return false;
+#endif
+}
+
+const char *rd__fsr3_not_expected(void)
+{
+#ifndef ICO_FFX
+    return "this build has no FSR 3.1 (built without the FidelityFX SDK)";
+#else
+    static char why[96];
+    RhiNativeDevice nd;
+    memset(&nd, 0, sizeof(nd));
+    if (!g_rd.hasDevice || !rhi_native_device(&nd)) {
+        return "no graphics device";
+    }
+    if (nd.kind != RHI_NATIVE_VULKAN) {
+        return "the graphics API in use is not Vulkan";
+    }
+    if (nd.apiVersion < VK_API_VERSION_1_2) {
+        snprintf(why, sizeof(why), "the Vulkan device is %u.%u, below 1.2",
+                 VK_API_VERSION_MAJOR(nd.apiVersion), VK_API_VERSION_MINOR(nd.apiVersion));
+        return why;
+    }
+    return NULL;
+#endif
+}
+
 #ifdef ICO_FFX
 
 static struct {
@@ -145,6 +177,7 @@ static struct {
     uint32_t rw, rh, dw, dh, flags; /* the context's */
     PFN_vkCmdPipelineBarrier barrier;
     bool debugRead, debugView, debugChecks;
+    bool keptAsked; /* rd__fsr3_free(true) since the last dispatch */
 } s_f;
 
 static void onMessage(uint32_t type, const wchar_t *message)
@@ -245,11 +278,24 @@ static bool ensureContext(const RhiNativeDevice *nd, uint32_t rw, uint32_t rh, u
     readDebug();
     const uint32_t flags = FFX_UPSCALE_ENABLE_DEPTH_INVERTED | FFX_UPSCALE_ENABLE_AUTO_EXPOSURE |
                            (s_f.debugChecks ? FFX_UPSCALE_ENABLE_DEBUG_CHECKING : 0u);
+    const bool keptAsked = s_f.keptAsked;
+    s_f.keptAsked = false;
     if (s_f.ctx && s_f.rw == rw && s_f.rh == rh && s_f.dw == dw && s_f.dh == dh &&
         s_f.flags == flags) {
+        if (keptAsked) {
+            /* the targets were made again at the same sizes: no new context
+               (the first 8, then every 100th) */
+            const uint32_t n = ++s_stats.kept;
+            if (n <= 8u || n % 100u == 0u) {
+                rd__log("upscaling: FSR 3.1 context %ux%u -> %ux%u kept at frame %u (the targets "
+                        "made again at the same sizes; %u times so far)",
+                        rw, rh, dw, dh, frame, n);
+            }
+        }
         return true;
     }
     retireContext(); /* a size or a flag changed: destroyed once the GPU is done with it */
+    const double t0 = rd__now_ms();
     PFN_vkGetDeviceProcAddr gdp = NULL;
     memcpy(&gdp, &nd->getDeviceProcAddr, sizeof(gdp));
     VkDevice device = (VkDevice)nd->device;
@@ -324,11 +370,15 @@ static bool ensureContext(const RhiNativeDevice *nd, uint32_t rw, uint32_t rh, u
     }
     s_stats.phases = phases;
     rd__upscale_set_phases((uint32_t)phases); /* the next presents' jitter (rd_upscale.c) */
-    rd__log("upscaling: FSR 3.1 context made at frame %u: render %ux%u -> display %ux%u (ratio "
-            "%.2f), jitter phase count %d, FidelityFX %s, GPU memory %.1f MB (%.1f MB "
-            "aliasable)%s",
-            frame, rw, rh, dw, dh, rh ? (double)dh / (double)rh : 0.0, (int)phases, s_stats.version,
-            s_stats.memoryMb, s_stats.aliasableMb, s_f.debugChecks ? ", debug checks on" : "");
+    /* ffxCreateContext builds its compute pipelines here, on the render
+       thread: the time is the stall a context costs */
+    s_stats.createMs = rd__now_ms() - t0;
+    rd__log("upscaling: FSR 3.1 context made at frame %u in %.1f ms: render %ux%u -> display "
+            "%ux%u (ratio %.2f), jitter phase count %d, FidelityFX %s, GPU memory %.1f MB (%.1f "
+            "MB aliasable)%s",
+            frame, s_stats.createMs, rw, rh, dw, dh, rh ? (double)dh / (double)rh : 0.0,
+            (int)phases, s_stats.version, s_stats.memoryMb, s_stats.aliasableMb,
+            s_f.debugChecks ? ", debug checks on" : "");
     return true;
 }
 
@@ -500,17 +550,24 @@ void rd__fsr3_collect(void)
     destroyRetired();
 }
 
-void rd__fsr3_free(void)
+void rd__fsr3_free(bool keep)
 {
-    if (s_f.ctx) {
-        rd__upscale_set_phases(0); /* the next context's count, at its first dispatch */
+    if (keep && s_f.ctx) {
+        /* FSR 3.1 stays in force: the next dispatch keeps the context when
+           its sizes and flags are the same (ensureContext) */
+        s_f.keptAsked = true;
+    } else {
+        if (s_f.ctx) {
+            rd__upscale_set_phases(0); /* the next context's count, at its first dispatch */
+        }
+        retireContext();
     }
-    retireContext();
     s_supported = -1;
 }
 
 void rd__fsr3_shutdown(void)
 {
+    s_f.keptAsked = false;
     retireContext();
     bool any = false;
     for (int i = 0; i < RD_FSR3_RETIRED; i++) {
@@ -538,8 +595,9 @@ bool rd__fsr3_dispatch(RhiCommandList cl, const RdUpscaleIn *in)
 
 void rd__fsr3_collect(void) {}
 
-void rd__fsr3_free(void)
+void rd__fsr3_free(bool keep)
 {
+    (void)keep;
     s_supported = -1;
 }
 

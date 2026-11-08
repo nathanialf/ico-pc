@@ -12,9 +12,10 @@
  * a pixel is evaluated at its jittered GS position and a pass's reads by
  * pixel stay on their texels.
  *
- * Here: the jitter set (a temporal upscaler's per present later; in this
- * build only the developer switch ICO_RD_JITTER_TEST=x,y, [dev]
- * jitter_test, and rd_replay_tool's --jitter x,y), which targets take it,
+ * Here: the jitter set (the temporal upscaler's per present, Halton (2, 3)
+ * over its phase count, rd_upscale.c rd__upscale_replay_begin; the
+ * developer switch ICO_RD_JITTER_TEST=x,y, [dev] jitter_test, and
+ * rd_replay_tool's --jitter x,y), which targets take it,
  * the count of the frame groups it moved, and the Halton (2, 3) table. */
 #include "rd_jitter.h"
 

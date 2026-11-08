@@ -228,8 +228,16 @@ target_compile_definitions(ico_ffx_upscaler
 target_compile_options(ico_ffx_upscaler PRIVATE
     "SHELL:-include \"${CMAKE_CURRENT_SOURCE_DIR}/ico_ffx_compat.h\""
     "SHELL:-include volk.h" -w)
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID AND NOT ICO_SANITIZE)
-    target_link_options(ico_ffx_upscaler INTERFACE -static-libstdc++ -static-libgcc)
+# The consumers are C programs linked by the C driver, which never adds
+# the C++ runtime (and ignores -static-libstdc++, a g++ driver flag): name
+# the archive itself, and libgcc's unwinder for its exceptions.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
+    if(ICO_SANITIZE)
+        target_link_libraries(ico_ffx_upscaler INTERFACE stdc++)
+    else()
+        target_link_libraries(ico_ffx_upscaler INTERFACE -l:libstdc++.a)
+        target_link_options(ico_ffx_upscaler INTERFACE -static-libgcc)
+    endif()
 endif()
 
 # --- ffx_link_test -----------------------------------------------------------

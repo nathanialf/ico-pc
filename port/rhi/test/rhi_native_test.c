@@ -286,6 +286,13 @@ int main(void)
 #ifdef ICO_FFX
         CHECK(caps.externalExts == v12, "the FidelityFX extensions on a 1.2 device (%d, 1.2 %d)",
               (int)caps.externalExts, (int)v12);
+        /* the device was made with them (descriptor_indexing among them on
+         * lavapipe) and VkPhysicalDeviceVulkan12Features chained: no
+         * validation message at creation (VUID-...-02833 needs its
+         * descriptorIndexing set) */
+        CHECK(rhi_vk_validation_error_count() == 0,
+              "device creation with the FidelityFX extensions: %u validation errors",
+              (unsigned)rhi_vk_validation_error_count());
 #else
         (void)v12;
         CHECK(!caps.externalExts, "no FidelityFX extensions without the upscaler");

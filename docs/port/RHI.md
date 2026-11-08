@@ -761,7 +761,7 @@ lists, with the one feature the upscaler uses from it:
 
 | extension | feature enabled with it |
 | --- | --- |
-| `VK_KHR_shader_float16_int8` | `shaderFloat16` (through `VkPhysicalDeviceVulkan12Features`) |
+| `VK_KHR_shader_float16_int8` | `shaderFloat16` (through `VkPhysicalDeviceVulkan12Features`) and the base feature `shaderInt16`: the backend reads `shaderFloat16` from the physical device, not from what was enabled, and then builds its 16-bit shader permutations, whose SPIR-V declares the Int16 capability as well |
 | `VK_EXT_subgroup_size_control` | `subgroupSizeControl` |
 | `VK_KHR_synchronization2` | `synchronization2` |
 | `VK_EXT_descriptor_indexing` | `shaderStorageBufferArrayNonUniformIndexing` (through `VkPhysicalDeviceVulkan12Features`) |
@@ -772,10 +772,11 @@ lists, with the one feature the upscaler uses from it:
 The list read is the driver's own, not the one `ICO_VK_FAKE_API` shortens (the backend would see
 the extension anyway; a faked 1.1 or 1.0 device takes none of the set); an extension the RHI already enabled for itself is not named
 twice. `RhiComputeCaps.externalExts` is true when the set is whole; a driver listing
-`VK_KHR_dedicated_allocation` without `VK_KHR_get_memory_requirements2` leaves it false (the
-upscaler is then not offered). The RHI's own pipelines use none of these. One line at device
+`VK_KHR_dedicated_allocation` without `VK_KHR_get_memory_requirements2` leaves it false, and so
+does one reporting `shaderFloat16` without `shaderInt16` (the upscaler is then not offered: its
+16-bit shaders could not be made). The RHI's own pipelines use none of these. One line at device
 creation names what was enabled: `external compute extensions: enabled KHR_shader_float16_int8,
-... (features: float16 on, ...)`, and the `external compute:` line ends with `the FidelityFX
+... (features: float16 on, int16 on, ...)`, and the `external compute:` line ends with `the FidelityFX
 extensions enabled yes|no`. Builds without the upscaler (`ICO_FFX` off: Android, macOS, iOS,
 arm64 Linux, the clang presets) make the device as before. `rhi_native_test` checks the set is
 whole on a 1.2 device in an `ICO_FFX` build and absent otherwise.
