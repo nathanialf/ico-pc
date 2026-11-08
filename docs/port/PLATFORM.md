@@ -243,7 +243,12 @@ thread running in between (`port/platform/sched.c` (`ico_sched_call_on_host`)).
 the signatures of `sce/libkernl/eekernel.h` and the 64-bit [GS](ARCHITECTURE.md#terms) registers as
 `unsigned long long`. Threads and semaphores map onto the scheduler (`CreateThread` to
 `ico_sched_create_thread`, `WaitSema` to `ico_sched_wait_sema`, ...); each call notes itself for the
-diagnostics (`ico_sched_note`). Interrupts are a table: `AddIntcHandler` and `AddDmacHandler` build
+diagnostics (`ico_sched_note`). On Windows six of the names (`CreateThread`, `ExitThread`,
+`GetThreadId`, `ResumeThread`, `SuspendThread`, `TerminateThread`) are kernel32 calls as well, and
+the kernel32 import library defines each as a call thunk; the header gives those six the linker
+symbols `ico_ps2_<name>` (an `__asm__` label, `ICO_PS2_SYM`) so that the game's definition and a
+thunk pulled in by a library (libgcc's thread shim imports `GetThreadId`) never meet in one link;
+the C names stay as the game wrote them. Interrupts are a table: `AddIntcHandler` and `AddDmacHandler` build
 handler lists per [INTC](ARCHITECTURE.md#terms) cause and [DMA](ARCHITECTURE.md#terms) channel,
 `EnableIntc` and `DisableIntc` set masks, and `ico_kernel_raise_intc` runs an enabled cause's
 handlers in order as [interrupt code](ARCHITECTURE.md#terms); for vblank start it first completes a

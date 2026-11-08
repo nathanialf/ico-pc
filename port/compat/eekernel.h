@@ -66,23 +66,37 @@ int SetAlarm(unsigned short time, void (*handler)(int id, unsigned short time, v
 
 int DIntr(void);
 int EIntr(void);
-/* Threads. */
-int CreateThread(struct ThreadParam *param);
+
+/* Threads.  Six of these names are Windows kernel32 calls too, and the
+ * kernel32 import library defines each as a call thunk in an object of its
+ * own; libgcc's thread shim (gthr-win32, linked with the C++ runtime the
+ * upscaler brings) imports GetThreadId, so the game's GetThreadId and the
+ * thunk met in one link (tools/package_win.sh, v0.11.0).  On Windows the C
+ * names stay as the game wrote them and the linker symbols are prefixed
+ * (port/platform/kernel_host.c defines them through this header); the
+ * other platforms are untouched. */
+#if defined(_WIN32) && (defined(__GNUC__) || defined(__clang__))
+#define ICO_PS2_SYM(name) __asm__("ico_ps2_" name)
+#else
+#define ICO_PS2_SYM(name)
+#endif
+
+int CreateThread(struct ThreadParam *param) ICO_PS2_SYM("CreateThread");
 int DeleteThread(int id);
 int StartThread(int id, void *arg);
-void ExitThread(void);
+void ExitThread(void) ICO_PS2_SYM("ExitThread");
 void ExitDeleteThread(void);
-int TerminateThread(int id);
+int TerminateThread(int id) ICO_PS2_SYM("TerminateThread");
 int ChangeThreadPriority(int id, int priority);
 int RotateThreadReadyQueue(int priority);
-int GetThreadId(void);
+int GetThreadId(void) ICO_PS2_SYM("GetThreadId");
 int ReferThreadStatus(int id, struct ThreadParam *info);
 int SleepThread(void);
 int WakeupThread(int id);
 int iWakeupThread(int id);
 int CancelWakeupThread(int id);
-int SuspendThread(int id);
-int ResumeThread(int id);
+int SuspendThread(int id) ICO_PS2_SYM("SuspendThread");
+int ResumeThread(int id) ICO_PS2_SYM("ResumeThread");
 /* Semaphores. */
 int CreateSema(struct SemaParam *param);
 int DeleteSema(int sema);
