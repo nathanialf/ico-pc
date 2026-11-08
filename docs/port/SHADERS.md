@@ -320,7 +320,8 @@ VuCB and VuBoneCB filled from the draw's VuPrevCB (the picture before's `RdVuPay
 bones and grid stream in the frame's payload, `port/render/rd_velocity.h`), and the velocity draw's
 VuCB is the draw's own with `mark.w` (`IcoVuCB.mark[3]`, a lane no cbuffer build of `vu_main_vs`
 reads) the second record's texel distance. FrameCB is the draw's own: its eye's w (1 on a camera
-cut) is what `rd__velocity_reset` follows on the CPU side (`RdCamera.cut`)
+cut) is what the upscaler's history reset follows on the CPU side (`RdCamera.cut`, the marker's
+`RD_UPSCALE_NO_HISTORY`)
 ([RENDER.md](RENDER.md#velocity)).
 
 Constants mirrored from the HLSL keep the same values: `ICO_DF_*` (`common.hlsli`),

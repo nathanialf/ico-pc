@@ -200,8 +200,11 @@ How the picture is drawn and finished: smoothing, the picture's size and sharpne
   **(off: FSR 3.1)** after the name. Because it builds each picture from
   the ones before, things the game draws flat on the screen without
   depth, such as the fades, the film grain, sparks, smoke and the menus,
-  can leave a faint trail while they move. It uses some of the graphics
-  card's memory (tens of megabytes, more at large window sizes).
+  can leave a faint trail while they move. If the log says "the vertex
+  pre-pass is off", every moving thing trails, not only those (a
+  developer setting or a graphics card problem turned that pass off). It
+  uses some of the graphics card's memory (tens of megabytes, more at
+  large window sizes).
 - **Upscaling quality** (shown while Upscaling is FSR 3.1) is how much
   smaller than your screen the picture is drawn: **Native AA** (the picture
   is drawn at your screen's size and only smoothed, the default), **Quality**

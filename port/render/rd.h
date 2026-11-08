@@ -423,7 +423,7 @@ typedef struct RdSettings {
      * Original preset's 1x only Native AA applies.  0 in a zeroed
      * RdSettings: Native AA */
     uint8_t upscaleQuality;
-    /* A temporal upscaler (rd_upscale.h; [dev] upscale_test this release):
+    /* A temporal upscaler (rd_upscale.h; FSR 3.1 by Upscaling, or [dev] upscale_test):
      * the Resolution row is the display's scale and the scene is drawn at it
      * over the upscaler's ratio.  Resolution "auto" keeps the display at the
      * window and steps this cap on the scene's vertical scale down instead
@@ -542,9 +542,10 @@ typedef enum RdUpscaleQuality {
     RD_UPSCALE_Q_COUNT
 } RdUpscaleQuality;
 
-/* Whether the device can run FSR 3.1 (rd_upscale_temporal.c): false on every
- * backend in this version (the temporal upscaler is not built in), logging
- * why once.  The Options page offers the value only when this is true. */
+/* Whether the device can run FSR 3.1 (rd_fsr3.c): a build with the
+ * FidelityFX SDK (ICO_FFX) on Vulkan 1.2 with the compute capabilities and
+ * the FidelityFX extensions; false elsewhere, logging why once.  The Options
+ * page offers the value only when this is true. */
 bool rd_upscale_temporal_supported(void);
 /* True when FSR 3.1 is in force, so MSAA and SSAA are drawn off (the
  * Anti-aliasing row says "(off: FSR 3.1)") */

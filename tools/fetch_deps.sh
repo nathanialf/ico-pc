@@ -59,7 +59,7 @@
 #                          upscaler needs (src/, patched by tools/ffx/patches)
 #                          and glslang (glslang/bin/glslangValidator, built
 #                          from source: the SDK's shader compiler runs it);
-#                          compiled by port/ffx/CMakeLists.txt (ICO_FFX);
+#                          compiled by port/rhi/ffx/CMakeLists.txt (ICO_FFX);
 #                          x86-64 hosts only
 #
 # docs/THIRD_PARTY.md records the versions and licences.
@@ -1013,7 +1013,7 @@ fi
 # tools/ffx/patches/*.patch are applied in name order (the POSIX build of
 # the shader compiler; gcc/clang fixes; two Vulkan backend fixes); the
 # stamp carries their SHA-256, so a changed patch re-installs the tree.
-# port/ffx/CMakeLists.txt builds it (ICO_FFX). docs/THIRD_PARTY.md and
+# port/rhi/ffx/CMakeLists.txt builds it (ICO_FFX). docs/THIRD_PARTY.md and
 # docs/BUILDING.md have the details.
 #
 # glslang (BSD-3-Clause and others, Khronos) at the Vulkan SDK tag the other
