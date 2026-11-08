@@ -138,6 +138,38 @@ bool rd_upscale_temporal_supported(void)
     return s_supported == 1;
 }
 
+bool rd__fsr3_built(void)
+{
+#ifdef ICO_FFX
+    return true;
+#else
+    return false;
+#endif
+}
+
+const char *rd__fsr3_not_expected(void)
+{
+#ifndef ICO_FFX
+    return "this build has no FSR 3.1 (built without the FidelityFX SDK)";
+#else
+    static char why[96];
+    RhiNativeDevice nd;
+    memset(&nd, 0, sizeof(nd));
+    if (!g_rd.hasDevice || !rhi_native_device(&nd)) {
+        return "no graphics device";
+    }
+    if (nd.kind != RHI_NATIVE_VULKAN) {
+        return "the graphics API in use is not Vulkan";
+    }
+    if (nd.apiVersion < VK_API_VERSION_1_2) {
+        snprintf(why, sizeof(why), "the Vulkan device is %u.%u, below 1.2",
+                 VK_API_VERSION_MAJOR(nd.apiVersion), VK_API_VERSION_MINOR(nd.apiVersion));
+        return why;
+    }
+    return NULL;
+#endif
+}
+
 #ifdef ICO_FFX
 
 static struct {

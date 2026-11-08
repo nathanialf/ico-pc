@@ -1161,9 +1161,9 @@ if(ICO_RUN_TESTS)
     # point, under the validation layer (the environment below): --stats
     # names the presents it ran and the layer's errors.  A dump holds no
     # history (each run starts FSR from empty), so this proves the dispatch
-    # runs, not FSR's picture.  77 where FSR 3.1 cannot run (a build without
-    # the upscaler, a device without Vulkan 1.2 or the extensions), with the
-    # reason
+    # runs, not FSR's picture.  77 only where FSR 3.1 cannot be expected (a
+    # build without the upscaler, not Vulkan, a device below Vulkan 1.2), with
+    # the reason; a build with it on a 1.2 device that refuses it fails
     add_test(NAME rd_replay_tool_fsr3
              COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
                      "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_fsr3.png" --enhanced

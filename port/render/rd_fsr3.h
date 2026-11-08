@@ -51,6 +51,14 @@ void rd__fsr3_collect(void);
 /* Why FSR 3.1 is not available ("" when it is): the log's words */
 const char *rd_upscale_temporal_why(void);
 
+/* The build carries FSR 3.1 (ICO_FFX: the FidelityFX SDK linked) */
+bool rd__fsr3_built(void);
+/* The tests and rd_replay_tool --fsr3: why FSR 3.1 cannot be expected on
+ * the device in use (no FidelityFX in the build, no device, not Vulkan, a
+ * Vulkan device below 1.2), NULL when it must be available: a test then
+ * fails, rather than skips, when rd_upscale_temporal_supported() says no */
+const char *rd__fsr3_not_expected(void);
+
 /* The tests: true makes rd_upscale_temporal_supported() false (the row's
  * unsupported path on a device that can run it) until called with false */
 void rd__fsr3_test_unsupported(bool on);

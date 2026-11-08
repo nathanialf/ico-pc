@@ -17,7 +17,8 @@
  *   byte (the row changes nothing where it cannot run).
  * On a device that runs it (Vulkan 1.2 with the FidelityFX extensions, a
  * build with the upscaler; otherwise the reason is printed and these are
- * skipped):
+ * skipped, except that a build with the upscaler on a Vulkan 1.2 device
+ * that refuses it fails, rd__fsr3_not_expected):
  *   off       Enhanced 2x with Downsampling: FSR 3.1 asked is not in force
  *             (one or the other) and the present is the one with Upscaling
  *             Off byte for byte; no context made, nothing dispatched;
@@ -134,8 +135,15 @@ static void checkFsr3Device(void)
         return;
     }
     if (!rd_upscale_temporal_supported()) {
-        printf("  fsr3: not available here (%s): the device cases are skipped\n",
-               rd_upscale_temporal_why());
+        /* skipped only where it cannot be expected (no FidelityFX in the
+           build, not Vulkan, below 1.2); a build with it on lavapipe 1.2+
+           that refuses it fails */
+        const char *notExpected = rd__fsr3_not_expected();
+        CHECK(notExpected != NULL,
+              "fsr3: the build has FSR 3.1 on a Vulkan 1.2 device but it is not available (%s)",
+              rd_upscale_temporal_why());
+        printf("  fsr3: not available here (%s; %s): the device cases are skipped\n",
+               notExpected ? notExpected : "expected", rd_upscale_temporal_why());
         rd_shutdown();
         return;
     }
