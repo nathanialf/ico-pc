@@ -687,9 +687,15 @@ static void vkr_flush_barriers_to(VkrCmdList *c, bool late)
     if (c->pendCount == 0 && c->pendMemDst == 0) {
         return;
     }
+    /* the transfer write only with the transfer stage in the first scope: a
+       store bracket's end alone (rhi_cmd_buffer_store_end) has the vertex
+       shader there, and the validation layer refuses an access its stage
+       mask does not support */
     const VkMemoryBarrier mb = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | c->pendMemSrc,
+        .srcAccessMask =
+            ((c->pendSrc & VK_PIPELINE_STAGE_TRANSFER_BIT) ? VK_ACCESS_TRANSFER_WRITE_BIT : 0u) |
+            c->pendMemSrc,
         .dstAccessMask = c->pendMemDst,
     };
     vkCmdPipelineBarrier(c->cb, c->pendSrc, c->pendDst, 0, c->pendMemDst ? 1u : 0u, &mb, 0, NULL,
@@ -1024,7 +1030,9 @@ static void vkr_hz_flush(VkCommandBuffer cb, const VkrHz *h)
     }
     const VkMemoryBarrier mb = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT | h->memSrc,
+        .srcAccessMask =
+            ((h->src & VK_PIPELINE_STAGE_TRANSFER_BIT) ? VK_ACCESS_TRANSFER_WRITE_BIT : 0u) |
+            h->memSrc, /* as vkr_flush_barriers_to: the access with its stage */
         .dstAccessMask = h->memDst,
     };
     vkCmdPipelineBarrier(cb, h->src, h->dst, 0, h->memDst ? 1u : 0u, &mb, h->bufCount, h->buf,
