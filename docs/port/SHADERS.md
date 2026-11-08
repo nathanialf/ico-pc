@@ -258,7 +258,7 @@ frame group, where the subtraction leaves every value as it was:
 [RENDER.md](RENDER.md#jitter)). Nothing transforms a position: a GS X is drawn where the game put
 it, at every aspect (`port/shaders/common.hlsli`, FrameCB).
 
-**DrawCB** (b1, 112 bytes): `g_col` (a constant colour), `g_mode` (the `DF_*` flags,
+**DrawCB** (b1, 144 bytes): `g_col` (a constant colour), `g_mode` (the `DF_*` flags,
 [TEXA](ARCHITECTURE.md#terms) mode and texel format, alpha test and AFAIL split, AREF), `g_blend`
 (the ALPHA register, FIX, COLCLAMP, and TEX1's mipmap fields with `DF_GS_LOD`), `g_uvRect`, `g_tex`
 (t1's size), `g_param` (per entry) and `g_scale` (t1 texels per GS texel; a Full pixel crop)
@@ -305,8 +305,8 @@ packing (each member a 16-byte register or a 64-byte matrix, so the packing is u
 | struct | register | bytes | notes |
 | --- | --- | --- | --- |
 | `IcoFrameCB` | b0 space0 | 352 | view, proj, viewProj, cameraPos, clip, target, origin, frame, vp, z, misc, vpo, jitter |
-| `IcoDrawCB` | b1 space1 | 112 | col, mode, blend, uvRect, tex, param (the tone blits: the colour adjustment's factors), scale |
-| `IcoCrtCB` | b1 space1 | 112 | the CRT filter's block in DrawCB's place: src, box, beam, mask, glow, tone, pass; pad[0..3] the colour adjustment's factors (`c_toneAdj`), pad[4] 1 with it on (`c_toneOn`) |
+| `IcoDrawCB` | b1 space1 | 144 | col, mode, blend, uvRect, tex, param (the tone blits: the colour adjustment's factors), scale |
+| `IcoCrtCB` | b1 space1 | 144 | the CRT filter's block in DrawCB's place: src, box, beam, mask, glow, tone, pass; pad[0..3] the colour adjustment's factors (`c_toneAdj`), pad[4] 1 with it on (`c_toneOn`) |
 | `IcoFsrCB` | b1 space1 | 144 | FSR 1.0's block in DrawCB's place and size (`blit_vs` reads it as DrawCB: pad[11], aux1.w, the quarter turns, is 0): con0..con3 (AMD's `FsrEasuConOffset`), rcas (`FsrRcasCon`), last (RCAS's load clamp), pad |
 | `IcoSpriteVertex` | vertex | 20 | XY 12.4 (U16x2), Z (U32), RGBA (U8x4, 0x80 = 1.0), UV in texels (F32x2) |
 | `IcoSpriteAa1Vertex` | vertex | 40 | plus the AA1 coverage and a triangle edge's clip, flat: the sorted first vertex (U16x2), the other two less it (two int16 in a U32 each) and the flags (U32) |
