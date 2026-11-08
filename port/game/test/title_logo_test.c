@@ -8,7 +8,7 @@
  *             title hides the logo's models, never another stage object;
  *             back on layout 12 or 13 the logo shows on the first frame,
  *             and back on the Continue screen (19) from the Save states page;
- *             the New Game screen hides it, the vibration screen (9) shows it
+ *             the New Game screen (from the vibration screen, 9) leaves it
  *   extras    the model list over the title hides it; Credits and a
  *             model's stage load (the title fading out on a layout of
  *             neither) keep it hidden until the stage changes, and the next
@@ -132,18 +132,22 @@ static void testTitle(void)
     CHECK(!s_logoShown, "the Save states page over it: hidden");
     frame(TITLE, CONTINUE_FILES, 0);
     CHECK(s_logoShown, "back on the Continue screen: shown on the first frame");
-    /* the New Game screen, reached from the vibration screen: hidden on it
-       (the screen covers the title), shown again back on the vibration
-       screen, hidden once more, and a stage change clears it */
+    /* the New Game screen, reached from the vibration screen: not a page,
+       the logo is left as the vibration screen had it (the game's own title
+       animation has taken the lettering away by then); a page over the title
+       before it still keeps it hidden until a stage change */
     frame(TITLE, 13, 0);
     frame(TITLE, VIBE, 0);
     CHECK(s_logoShown, "the vibration screen: shown");
-    frame(TITLE, NEWGAME, 1);
-    CHECK(!s_logoShown && s_castleShown, "the New Game screen: the logo hidden, the stage drawn");
+    frame(TITLE, NEWGAME, 0);
+    CHECK(s_logoShown && s_castleShown,
+          "the New Game screen: the logo left shown, the stage drawn");
     frame(TITLE, VIBE, 0);
-    CHECK(s_logoShown, "back on the vibration screen: shown on the first frame");
-    frame(TITLE, NEWGAME, 1);
-    CHECK(!s_logoShown, "the New Game screen again: hidden");
+    CHECK(s_logoShown, "back on the vibration screen: shown");
+    frame(TITLE, PAGE, 1);
+    CHECK(!s_logoShown, "a page over the title: hidden");
+    frame(TITLE, NEWGAME, 0);
+    CHECK(!s_logoShown, "the New Game screen after a page: stays hidden");
     frame(46, EMPTY, 0);
     CHECK(s_logoShown, "a stage change: shown");
 }

@@ -6718,9 +6718,5 @@ int ui_settings_covers_title(void)
     if (s_built && (s_titleReturn >= 0 || s_titleHandoff)) {
         return 1;
     }
-    /* reached from the vibration screen, not a page: keyed on its layout */
-    if (s_built && s_newGameLayout >= 0 && current_layout_id == s_newGameLayout) {
-        return 1;
-    }
     return s_built && onTitle() && pageOfLayout(current_layout_id, NULL) != NULL;
 }
