@@ -1249,11 +1249,19 @@ static uint32_t sheetThreshold(int32_t x, int32_t y, uint32_t dither)
 /* sheet_text.hlsli sheet_texel: coverage c and rim r (0..255) under style
    at threshold th into an RGBA8 texel (grey, grey, grey, alpha in GS
    units) */
+/* sheet_text.hlsli sheet_solid_threshold: th under ICO_SHEET_SOLID_ABOVE,
+   plain rounding from it up (the dark band solid, the fringe dithered) */
+static uint32_t sheetSolidThreshold(uint32_t a, uint32_t th)
+{
+    return a >= ICO_SHEET_SOLID_ABOVE ? ICO_SHEET_T_OFF : th;
+}
+
 static void sheetTexel(uint32_t c, uint32_t r, const uint8_t style[4], uint32_t th, uint8_t *o)
 {
     const uint32_t rw = (r * style[0] + 32u) / 64u;
     const uint32_t a = style[0] != 0 ? (c > rw ? c : rw) : c;
     const uint32_t t = a != 0 ? (c * 255u + a / 2u) / a : 0u;
+    th = sheetSolidThreshold(a, th);
     const uint32_t aq = sheetQuantise(a, th), tq = sheetQuantise(t, th);
     const uint32_t grey =
         ((uint32_t)style[1] * (255u - tq) + (uint32_t)style[2] * tq + 127u) / 255u;
@@ -1359,7 +1367,8 @@ int rd__sheet_bake_rect(const uint8_t *cov, uint32_t w, uint32_t h, const uint8_
    under the style's weight at threshold th */
 static uint32_t sheetRimLevel(uint32_t r, const uint8_t style[4], uint32_t th)
 {
-    return sheetQuantise(style[0] != 0 ? (r * style[0] + 32u) / 64u : 0u, th);
+    const uint32_t a = style[0] != 0 ? (r * style[0] + 32u) / 64u : 0u;
+    return sheetQuantise(a, sheetSolidThreshold(a, th));
 }
 
 /* floor(v / d) for d > 0, as the shader keeps its operands positive */
@@ -1455,9 +1464,9 @@ int rd__sheet_bake_scaled_rect(const uint8_t *tex, uint32_t w, uint32_t h, const
             const uint32_t rm = (2u * q + DD) / (2u * DD);
             /* sheet_texel_scaled at the threshold of the sheet texel the
                texel lies in */
-            const uint32_t th =
-                sheetThreshold(sheetFloorDiv(xx, S), sheetFloorDiv(yy, S), style[3]);
             const uint32_t a = c > rm ? c : rm;
+            const uint32_t th = sheetSolidThreshold(
+                a, sheetThreshold(sheetFloorDiv(xx, S), sheetFloorDiv(yy, S), style[3]));
             const uint32_t t = a != 0 ? (c * 255u + a / 2u) / a : 0u;
             const uint32_t cq = sheetQuantise(c, th), tq = sheetQuantise(t, th);
             const uint32_t grey =

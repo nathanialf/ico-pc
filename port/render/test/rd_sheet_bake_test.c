@@ -572,6 +572,12 @@ static uint32_t refThreshold(int x, int y, uint32_t dither)
     return 2u * ((kRows[(uint32_t)y & 3u] >> (4u * ((uint32_t)x & 3u))) & 15u) + 1u;
 }
 
+/* sheet_text.hlsli sheet_solid_threshold */
+static uint32_t refSolid(uint32_t a, uint32_t th)
+{
+    return a >= ICO_SHEET_SOLID_ABOVE ? ICO_SHEET_T_OFF : th;
+}
+
 static void shaderTexel(const uint8_t *tex, int w, int h, int si, const uint8_t st[4], int px,
                         int py, int form, uint8_t *grey, uint8_t *alpha)
 {
@@ -587,8 +593,8 @@ static void shaderTexel(const uint8_t *tex, int w, int h, int si, const uint8_t 
             const int tx = (q0x + i) * si, ty = (q0y + j) * si;
             const int inside = tx >= 0 && tx < w && ty >= 0 && ty < hh;
             const uint32_t r = inside ? tex[(size_t)(hh + ty) * w + tx] : 0u;
-            const uint32_t l = refQuantise(st[0] != 0 ? (r * st[0] + 32u) / 64u : 0u,
-                                           refThreshold(q0x + i, q0y + j, st[3]));
+            const uint32_t ra = st[0] != 0 ? (r * st[0] + 32u) / 64u : 0u;
+            const uint32_t l = refQuantise(ra, refSolid(ra, refThreshold(q0x + i, q0y + j, st[3])));
             rq[j][i] = (float)l;
             ra[j][i] = (float)((l * 128u + 127u) / 255u);
         }
@@ -599,9 +605,9 @@ static void shaderTexel(const uint8_t *tex, int w, int h, int si, const uint8_t 
     const float ra1 = lerpForm(ra[1][0], ra[1][1], gx, form);
     const float rqv = lerpForm(rq0, rq1, gy, form), rav = lerpForm(ra0, ra1, gy, form);
     const int qx = (px + 4096 * si) / si - 4096, qy = (py + 4096 * si) / si - 4096;
-    const uint32_t th = refThreshold(qx, qy, st[3]);
     const uint32_t rm = (uint32_t)floorf(rqv + 0.5f);
     const uint32_t a = c > rm ? c : rm;
+    const uint32_t th = refSolid(a, refThreshold(qx, qy, st[3]));
     const uint32_t t = a != 0u ? (c * 255u + a / 2u) / a : 0u;
     const uint32_t cq = refQuantise(c, th), tq = refQuantise(t, th);
     *grey = (uint8_t)((st[1] * (255u - tq) + st[2] * tq + 127u) / 255u);

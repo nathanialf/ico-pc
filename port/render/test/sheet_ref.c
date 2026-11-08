@@ -35,6 +35,7 @@ _Static_assert(SHEET_BAYER_ROW2 == ICO_SHEET_BAYER_ROW2, "sheet_text.hlsli SHEET
 _Static_assert(SHEET_BAYER_ROW3 == ICO_SHEET_BAYER_ROW3, "sheet_text.hlsli SHEET_BAYER_ROW3");
 _Static_assert(SHEET_T_OFF == ICO_SHEET_T_OFF, "sheet_text.hlsli SHEET_T_OFF");
 _Static_assert(ICO_SHEET_T_OFF == 16, "dither off is a half of thDen's 32nds");
+_Static_assert(SHEET_SOLID_ABOVE == ICO_SHEET_SOLID_ABOVE, "sheet_text.hlsli SHEET_SOLID_ABOVE");
 _Static_assert(SHEET_SCALE_MAX == ICO_SHEET_SCALE_MAX, "sheet_text.hlsli SHEET_SCALE_MAX");
 _Static_assert(SHEET_BAKE_AX == ICO_SHEET_BAKE_AX, "sheet_text.hlsli SHEET_BAKE_AX");
 _Static_assert(SHEET_BAKE_AY == ICO_SHEET_BAKE_AY, "sheet_text.hlsli SHEET_BAKE_AY");
@@ -50,6 +51,7 @@ static const SheetLook kDefaultLook = {
     {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2, ICO_SHEET_WY_3, ICO_SHEET_WY_4},
     ICO_SHEET_LEVELS,
     4,
+    ICO_SHEET_SOLID_ABOVE,
 };
 
 const SheetLook *sheetref_default_look(void)
@@ -117,6 +119,13 @@ static uint32_t thresholdAt(const RdSheetStyle *s, const SheetLook *l, int32_t x
     return 2u * kBayer[(uint32_t)y & 3u][(uint32_t)x & 3u] + 1u;
 }
 
+/* sheet_solid_threshold: the dither's th under the look's solidAbove, a
+   half (plain rounding) from it up; solidAbove 0 never */
+static uint32_t solidThreshold(const SheetLook *l, uint32_t a, uint32_t th)
+{
+    return l->solidAbove > 0 && a >= (uint32_t)l->solidAbove ? thDen(l) / 2u : th;
+}
+
 /* the rim's weight in 64ths */
 static uint32_t rimWeight(const RdSheetStyle *s)
 {
@@ -169,9 +178,9 @@ void sheetref_texel_cr(uint32_t c, uint32_t r, int32_t x, int32_t y, const RdShe
     static const RdSheetStyle kDefault = {1, 0, 0xFF, 1, 0, 1};
     s = s ? s : &kDefault;
     l = l ? l : &kDefaultLook;
-    const uint32_t th = thresholdAt(s, l, x, y);
     const uint32_t rw = (r * rimWeight(s) + 32u) / 64u;
     const uint32_t a = s->rimOn ? (c > rw ? c : rw) : c;
+    const uint32_t th = solidThreshold(l, a, thresholdAt(s, l, x, y));
     const uint32_t t = a ? (c * 255u + a / 2u) / a : 0u;
     const uint32_t aq = quantise(l, a, th), tq = quantise(l, t, th);
     const uint32_t grey =
@@ -213,8 +222,9 @@ void sheetref_texel_look(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, 
         for (int i = 0; i < 2; i++) {
             const uint32_t r =
                 s->rimOn ? sheetRimAt(cov, w, h, qx + i, qy + j, sc, l) * rimWeight(s) : 0u;
+            const uint32_t ra = s->rimOn ? (r + 32u) / 64u : 0u;
             const uint32_t lv =
-                quantise(l, s->rimOn ? (r + 32u) / 64u : 0u, thresholdAt(s, l, qx + i, qy + j));
+                quantise(l, ra, solidThreshold(l, ra, thresholdAt(s, l, qx + i, qy + j)));
             lq[j][i] = (float)lv;
             la[j][i] = (float)((lv * 128u + 127u) / 255u);
         }
@@ -228,7 +238,8 @@ void sheetref_texel_look(const uint8_t *cov, uint32_t w, uint32_t h, int32_t x, 
     const uint32_t rm = (uint32_t)floorf(lm + 0.5f);
     const uint32_t a = c > rm ? c : rm;
     const uint32_t t = a ? (c * 255u + a / 2u) / a : 0u;
-    const uint32_t cq = quantise(l, c, th), tq = quantise(l, t, th);
+    const uint32_t ths = solidThreshold(l, a, th);
+    const uint32_t cq = quantise(l, c, ths), tq = quantise(l, t, ths);
     const float af = (float)((cq * 128u + 127u) / 255u);
     *outGrey =
         (uint8_t)(((uint32_t)s->rimLevel * (255u - tq) + (uint32_t)s->fillLevel * tq + 127u) /

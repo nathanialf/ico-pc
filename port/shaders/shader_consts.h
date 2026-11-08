@@ -238,9 +238,9 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 #define ICO_SHEET_WX_0 1000
 #define ICO_SHEET_WX_1 1000
 #define ICO_SHEET_WX_2 1000
-#define ICO_SHEET_WX_3 600
-#define ICO_SHEET_WX_4 300
-#define ICO_SHEET_WX_5 100
+#define ICO_SHEET_WX_3 1000
+#define ICO_SHEET_WX_4 90
+#define ICO_SHEET_WX_5 0
 #define ICO_SHEET_WX_6 0
 #define ICO_SHEET_WY_0 1000
 #define ICO_SHEET_WY_1 1000
@@ -252,13 +252,16 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
    the sheets' (ctest menu_look) eight gave the smaller difference on every
    language (the blurred difference's median 8.7 .. 9.4 where five give
    9.0 .. 9.5), a finer grain still dithered */
-#define ICO_SHEET_LEVELS 4
+#define ICO_SHEET_LEVELS 8
 /* the 4x4 Bayer matrix, row y in one constant, column x in nibble x */
 #define ICO_SHEET_BAYER_ROW0 0xA280
 #define ICO_SHEET_BAYER_ROW1 0x6E4C
 #define ICO_SHEET_BAYER_ROW2 0x91B3
 #define ICO_SHEET_BAYER_ROW3 0x5D7F
 #define ICO_SHEET_T_OFF 16 /* the threshold (32nds) with dither off: rounding */
+/* alpha from which a texel is quantised at ICO_SHEET_T_OFF, undithered: the
+   rim's dark band is solid, its faint fringe dithers (sheet_text.hlsli) */
+#define ICO_SHEET_SOLID_ABOVE 32
 /* A strip rasterised at s strip texels a sheet texel across and down (the
  * scene's or the output's scale, port/ui/menu_font.c), 1..ICO_SHEET_SCALE_MAX:
  * the letters are the strip's texels, the rim is the 1x rim of the sheet
