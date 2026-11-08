@@ -718,7 +718,8 @@ RhiBindGroup rhi_create_bind_group(const RhiBindGroupDesc *desc)
         switch (b->type) {
         case RHI_BIND_UNIFORM_BUFFER:
         case RHI_BIND_UNIFORM_BUFFER_DYNAMIC:
-        case RHI_BIND_STORAGE_BUFFER: {
+        case RHI_BIND_STORAGE_BUFFER:
+        case RHI_BIND_STORAGE_BUFFER_RW: {
             VkrBuffer *buf = vkr_get_buffer(b->buffer);
             if (!buf) {
                 VKR_LOG("bind group: slot %u: invalid buffer", b->slot);
@@ -913,7 +914,7 @@ static bool vkr_pipeline_fits(const RhiPipelineDesc *d)
     const char *name = d->debugName ? d->debugName : "?";
     /* per stage (vertex, fragment): uniform, storage, sampled image, sampler */
     uint32_t n[2][6] = {{0}};
-    uint32_t dyn = 0, ubo = 0, ssbo = 0, img = 0, smp = 0, stoImg = 0, inAtt = 0;
+    uint32_t dyn = 0, ubo = 0, ssbo = 0, img = 0, smp = 0, stoImg = 0, inAtt = 0, written = 0;
     if (d->layoutCount > l->maxBoundDescriptorSets) {
         VKR_LOG("pipeline %s: %u descriptor sets, the device binds %u (maxBoundDescriptorSets)",
                 name, d->layoutCount, l->maxBoundDescriptorSets);
@@ -937,6 +938,9 @@ static bool vkr_pipeline_fits(const RhiPipelineDesc *d)
                 ubo++;
                 k = 0;
                 break;
+            case RHI_BIND_STORAGE_BUFFER_RW:
+                written++;
+                /* fall through */
             case RHI_BIND_STORAGE_BUFFER:
                 ssbo++;
                 k = 1;
@@ -966,6 +970,14 @@ static bool vkr_pipeline_fits(const RhiPipelineDesc *d)
                 }
             }
         }
+    }
+    if (written && !g_vkr.vertexStores) {
+        /* rhi.h RHI_BIND_STORAGE_BUFFER_RW: only with the feature enabled */
+        VKR_LOG("pipeline %s: %u storage buffers its vertex shader writes, without "
+                "vertexPipelineStoresAndAtomics (RhiLimits.vertexStores)",
+                name, written);
+        g_vkr.lastLimit = "vertexPipelineStoresAndAtomics";
+        return false;
     }
     const uint32_t stageMax[6] = {
         l->maxPerStageDescriptorUniformBuffers, l->maxPerStageDescriptorStorageBuffers,
@@ -1211,6 +1223,8 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
         .cullMode = VK_CULL_MODE_NONE,
         .frontFace = VK_FRONT_FACE_CLOCKWISE,
         .lineWidth = 1.0f,
+        /* the vertex shader's stores alone (rhi.h RhiPipelineDesc.noRaster) */
+        .rasterizerDiscardEnable = d->noRaster ? VK_TRUE : VK_FALSE,
     };
     j->ms_ = (VkPipelineMultisampleStateCreateInfo){
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,

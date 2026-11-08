@@ -788,6 +788,8 @@ static void dx_fill_limits(void)
     /* the destination read: ROVs (no interlock or attachment read here) */
     o->rov = dx_rov_supported();
     o->fragmentInterlock = false;
+    /* no vertex stores this release (rhi.h RhiLimits.vertexStores) */
+    o->vertexStores = false;
     o->rasterOrderAttachment = false;
     o->rasterOrderOff = NULL;
     o->moltenvk = false;

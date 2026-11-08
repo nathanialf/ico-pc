@@ -157,7 +157,7 @@ static const VkrLoadOpMap vkr_loadOpMap[RHI_LOAD_COUNT] = {
 #define VKR_SHIFT_B 0u
 #define VKR_SHIFT_T 16u
 #define VKR_SHIFT_S 32u
-#define VKR_SHIFT_U 48u /* -fvk-u-shift 48: the u registers (storage images) */
+#define VKR_SHIFT_U 48u /* -fvk-u-shift 48: the u registers (storage images, written buffers) */
 
 typedef struct VkrBindTypeMap {
     bool set;
@@ -177,6 +177,9 @@ static const VkrBindTypeMap vkr_bindTypeMap[RHI_BIND_COUNT] = {
      * a SubpassInput (declared with the t register's binding) */
     [RHI_BIND_STORAGE_TEXTURE] = {true, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VKR_SHIFT_U},
     [RHI_BIND_INPUT_ATTACHMENT] = {true, VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, VKR_SHIFT_T},
+    /* a storage buffer the vertex shaders write (RWStructuredBuffer, a u
+     * register: the VU record's stores) */
+    [RHI_BIND_STORAGE_BUFFER_RW] = {true, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VKR_SHIFT_U},
 };
 
 /* Resource states: the image layout, and the pipeline stages and accesses

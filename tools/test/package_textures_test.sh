@@ -89,11 +89,12 @@ rm "$m/game/userdata/f"
 ok "make_portable.sh refuses and creates"
 # The player archives carry no developer files (browsers and Windows flag a
 # bundle that does): the zip file list of package_win.sh and the tar list
-# of package_linux.sh name only the game, mc_import, the notes and the docs,
-# and both scripts assert the developer files are absent.
+# of package_linux.sh name only the game, mc_import (on Windows also the
+# exe's icon helper, ico_icon_stamp), the notes and the docs, and both
+# scripts assert the developer files are absent.
 zl="$(sed -n '/^    files=(/,/^    \[\[ "\$variant" == portable \]\] || files/p' "$here/tools/package_win.sh")"
 [[ -n "$zl" ]] || bad "package_win.sh: the zip file list was not found"
-for n in tools/mc_import.exe tools/SDL3.dll tools/README.txt ico_pc_; do grep -q "$n" <<<"$zl" || bad "package_win.sh: the zip list lacks $n"; done
+for n in tools/mc_import.exe tools/SDL3.dll tools/ico_icon_stamp.exe tools/README.txt ico_pc_; do grep -q "$n" <<<"$zl" || bad "package_win.sh: the zip list lacks $n"; done
 for n in rhi_d3d12_test rd_replay_tool compare_backends compare_png; do
     if grep -q "$n" <<<"$zl"; then bad "package_win.sh: the zip list names $n"; fi
     grep -q "pkg_assert_zip_lacks.*\$n\|\"[^\"]*$n" "$here/tools/package_win.sh" || bad "package_win.sh does not assert $n absent"

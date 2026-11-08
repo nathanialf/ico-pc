@@ -2061,7 +2061,25 @@ VuVSOut vu_mesh_out(VuVtx a, VuVtx b, VuVtx c, uint kick, uint corner, uint mark
 // floats as their bits: plane 0 h; plane 1 p.x, p.y, GS Z, RGBA (a byte a
 // channel, R lowest); plane 2 S, T, Q and the flags (bit 0 inside, bit 1
 // gsOk, bits 2..7 clipf).  GS X and Y are vu_divide's vu_ftoi4 of p.
+#ifdef ICO_VU_REC_STORES
+// The store builds (ICO_VU_REC_STORES: vu_X_store_pre_vs and
+// vu_X_batch_store_pre_vs, docs/port/PIPELINES.md "The record stages"):
+// the pre-pass's points write their record words straight into the frame
+// slot's record buffer, bound writable at u6 (rd_vu_record.c layoutVuPre:
+// the six slots of group 1 but t4, and u6), plane k of slot t at k *
+// vu_rec.y + t, the layout the targets' copies give (rd_replay_vu.c
+// vuRecPassEnd), so the readers below and the main shaders are the same.
+// The record stages of pass T read the vertex records through the same
+// binding (Direct3D 12 cannot bind a resource's SRV and UAV in one pass;
+// in Vulkan both are storage buffer descriptors).  Under robust buffer
+// access off a store past the buffer is undefined, so each store is held
+// to the record's planes (t < vu_rec.y), as the targets' viewport held a
+// point to the texture.
+RWStructuredBuffer<uint4> vu_rec_out : ICO_REG(u6, 1);
+#define vu_rec_buf vu_rec_out
+#else
 StructuredBuffer<uint4> vu_rec_buf : ICO_REG(t4, 1);
+#endif
 
 // Vertex v of the draw as the pre-pass recorded it (vu_rec.x + v, a
 // texel of each plane, vu_rec.y texels apart)
@@ -2087,7 +2105,68 @@ VuVtx vu_rec_vertex(uint v)
 
 // The pre-pass's point: vertex vu_rec.z + id at its record texel
 // (vu_rec.x + vu_rec.z + id), a pixel of the VU_REC_W x vu_rec.y / VU_REC_W
-// targets (the viewport the replay sets), the record as flat varyings
+// targets (the viewport the replay sets), the record as flat varyings.
+// The store builds write the record (vu_rec_store) and return a position
+// outside the clip volume: the pipeline has no rasterization
+// (RhiPipelineDesc.noRaster), and a backend that rasterised anyway would
+// draw nothing
+#ifdef ICO_VU_REC_STORES
+struct VuPreOut {
+    float4 pos : SV_Position;
+#ifdef __spirv__
+    [[vk::builtin("PointSize")]] float size : PSIZE;
+#endif
+};
+
+// slot t's three planes (k * vu_rec.y + t), inside the record
+VuPreOut vu_rec_store(uint t, uint4 r0, uint4 r1, uint4 r2)
+{
+    if (t < vu_rec.y) {
+        vu_rec_out[t] = r0;
+        vu_rec_out[vu_rec.y + t] = r1;
+        vu_rec_out[vu_rec.y * 2u + t] = r2;
+    }
+    VuPreOut o;
+    o.pos = float4(2.0, 2.0, 0.0, 1.0);
+#ifdef __spirv__
+    o.size = 1.0;
+#endif
+    return o;
+}
+
+// The tick stage's word (slot C, plane 0): lane x for tick 0, y for tick 1
+// (vu_tri.w), one 32-bit store, as the colour mask R or G wrote one channel
+// of the target (the other tick's draw writes the other lane, in the same
+// pass and without a barrier between them, so the store is of the lane
+// alone, never of the whole texel)
+VuPreOut vu_rec_lane_store(uint t, uint lane, uint s)
+{
+    if (t < vu_rec.y) {
+        if (lane == 0u) {
+            vu_rec_out[t].x = s;
+        } else {
+            vu_rec_out[t].y = s;
+        }
+    }
+    VuPreOut o;
+    o.pos = float4(2.0, 2.0, 0.0, 1.0);
+#ifdef __spirv__
+    o.size = 1.0;
+#endif
+    return o;
+}
+
+VuPreOut vu_pre_out(uint id, VuVtx v)
+{
+    uint t = vu_rec.x + vu_rec.z + id;
+    uint4 r0 = asuint(v.h);
+    uint4 r1 = uint4(asuint(v.p.x), asuint(v.p.y), asuint(v.gz),
+                     v.rgba.x | (v.rgba.y << 8) | (v.rgba.z << 16) | (v.rgba.w << 24));
+    uint4 r2 = uint4(asuint(v.stq.x), asuint(v.stq.y), asuint(v.stq.z),
+                     v.inside | (v.gsOk << 1) | (v.clipf << 2));
+    return vu_rec_store(t, r0, r1, r2);
+}
+#else
 struct VuPreOut {
     float4 pos : SV_Position;
     VK_LOC(0) nointerpolation uint4 r0 : TEXCOORD0;
@@ -2118,6 +2197,7 @@ VuPreOut vu_pre_out(uint id, VuVtx v)
 #endif
     return o;
 }
+#endif
 
 // ------------------------------------------------- the record stages
 // The triangle pre-pass (docs/port/RENDER.md, "The vertex and triangle
@@ -2163,7 +2243,14 @@ VuPreOut vu_pre_out(uint id, VuVtx v)
 #define VU_TF_BESIDE 32768u // a drop would be drawn beside the picture (vu_drop_fate 1; region mode)
 #define VU_TF_CAMERA 65536u // a drop the camera rule draws (vu_drop_fate 2; region mode)
 
-// A record stage's point: texel t of the three planes (vu_pre_out's mapping)
+// A record stage's point: texel t of the three planes (vu_pre_out's mapping;
+// the store builds: vu_rec_store)
+#ifdef ICO_VU_REC_STORES
+VuPreOut vu_rec_point_out(uint t, uint4 r0, uint4 r1, uint4 r2)
+{
+    return vu_rec_store(t, r0, r1, r2);
+}
+#else
 VuPreOut vu_rec_point_out(uint t, uint4 r0, uint4 r1, uint4 r2)
 {
     VuPreOut o;
@@ -2179,6 +2266,7 @@ VuPreOut vu_rec_point_out(uint t, uint4 r0, uint4 r1, uint4 r2)
 #endif
     return o;
 }
+#endif
 
 // The anchor's RGBA (VuVSOut.a0: integers 0..255) as bytes, R lowest
 uint vu_rec_pack_rgba(float4 c)

@@ -258,13 +258,20 @@ download. Windows and Linux (X11) show it on the game's window and
 taskbar, [Add to Steam](OPTIONS.md#extras) uses it, and on a Mac it is the Dock
 icon while the game runs. On Linux, Options > Extras > Add to the
 applications menu puts the game in your desktop's menu with the icon (on
-a Wayland desktop that entry is also what gives the window its icon). The program file itself (`ico_pc.exe`, or the
-Mac app in Finder) keeps a plain icon, because the icon does not exist
-until your disc has made it. It is made again after an update, and
+a Wayland desktop that entry is also what gives the window its icon). On
+Windows the program file (`ico_pc_x64.exe`, its shortcuts and a pinned
+taskbar button) takes the icon too, from the next start after the title
+screen has made it: a small helper in the `tools` folder puts it into the
+file as the game closes. If the game is in a folder you cannot write to
+(such as Program Files), or the helper has been deleted, the file keeps
+the plain icon; `logs\icon-stamp.log` says what happened. Windows may show
+the old icon for a while until Explorer refreshes it. The Mac app in Finder
+keeps a plain icon, because the icon does not exist until your disc has
+made it. It is made again after an update, and
 waits while the CRT filter or a Picture colour setting (Gamma, Brightness,
 Contrast or Saturation) is changed, or while Upscaling is on: it is made at
-the title screen once they are back to normal. On Android the app keeps its plain icon, and
-a Wayland session shows no window icon until the menu entry exists.
+the title screen once they are back to normal. On Android the home-screen icon stays plain; the recent-apps card shows the I. A
+Wayland session shows no window icon until the menu entry exists.
 
 ## My browser or Windows says the download is dangerous
 

@@ -86,7 +86,22 @@
  * every replay; stale the record's copies left out from the second replay
  * on (RD_VU_SABOTAGE_STALE: each such replay reads what an earlier replay
  * left in its frame slot's buffer, or nothing), which only the replays
- * after the first can show.
+ * after the first can show; under the stores the record of those replays
+ * is stored into a sink buffer of its size instead (rd_replay_vu.c
+ * recStoreBuffer), so the slot's buffer is left as the copies would leave
+ * it.
+ *
+ * The record's write (rd_vu_record.h): the test runs in the mode the run
+ * starts with.  Under the stores (the vertex shaders store the record) a
+ * failure is logged first, with its own words and first differing texel,
+ *   rd: VU pre-pass: the record stored by the vertex shaders failed the
+ *     self-test (the pictures differ: ...) in T ms: the self-test again
+ *     with the render targets and copies
+ *   rd: VU record: drawn into 3 RGBA32_UINT render targets ... (the stores
+ *     off: they failed the start-up self-test)
+ * and the test is run again with the render targets; the line above (on
+ * or off) is then that second run's, its "record" part saying so.  [dev]
+ * vu_prepass_min is held off while the test runs.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -94,6 +109,7 @@
 
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_vu_record.h"
 #include "rd_vu_skin_check.h"
 
 #define ST_W 256 /* the block, GS pixels */
@@ -501,7 +517,8 @@ static void readSabotage(void)
                                         "slot off",
                                         "the tick stage tests tick 1 at tick 0's camera",
                                         "the record's copies are left out from the second "
-                                        "replay on"};
+                                        "replay on (under the stores: the record stored into "
+                                        "a sink buffer)"};
     const char *sb = getenv("ICO_RD_VU_PREPASS_SABOTAGE");
     s_vt.sabotage = RD_VU_SABOTAGE_OFF;
     if (sb != NULL && strcmp(sb, "tri") == 0) {
@@ -730,9 +747,25 @@ bool rd_vuprepass_selftest(void)
     readSabotage();
     const double t0 = rd__now_ms();
     Verdict v;
-    s_vtRunning = true; /* the skin check leaves these replays out */
+    /* the record's write is judged as it starts (rd_vu_record.h): under the
+     * stores a failure is logged with its first differing texel and the
+     * test run again with the render targets, whose verdict decides; [dev]
+     * vu_prepass_min never skips the test's own frames; the skin check
+     * leaves both runs' replays out */
+    g_rdRec.minHeld = true;
+    s_vtRunning = true;
     runSelftest(t, &v);
+    bool storesFailed = false;
+    if (!v.on && g_rdRec.stores) {
+        storesFailed = true;
+        rd__log("VU pre-pass: the record stored by the vertex shaders failed the self-test (%s) "
+                "in %.1f ms: the self-test again with the render targets and copies",
+                v.text, rd__now_ms() - t0);
+        rd__vu_record_to_targets("they failed the start-up self-test");
+        runSelftest(t, &v);
+    }
     s_vtRunning = false;
+    g_rdRec.minHeld = false;
     if (!v.on) {
         g_rd.vuPrepass = false;
         snprintf(g_rd.vuPrepassWhy, sizeof g_rd.vuPrepassWhy, "by its self-test");
@@ -750,9 +783,16 @@ bool rd_vuprepass_selftest(void)
         }
     }
     const char *head = v.on ? "on (" : "off (self-test: ";
-    snprintf(g_rdSumPrepass, sizeof g_rdSumPrepass, "%s%s)", head,
-             v.pass ? "self-test: ok" : v.text);
-    rd__log("VU pre-pass: %s%s) on SCENE %ux%u at %ux%u texels in %.1f ms", head, v.text, t->w,
-            t->h, t->tw, t->th, rd__now_ms() - t0);
+    const char *rec =
+        storesFailed ? "targets, the stores failed the self-test" : rd__vu_record_name();
+    /* the result is read so gcc 14's -Wformat-truncation at -O2 sees a cut
+       verdict text is deliberate (the buffer holds the usual words whole) */
+    const int sumN = snprintf(g_rdSumPrepass, sizeof g_rdSumPrepass, "%s%s; record %s)", head,
+                              v.pass ? "self-test: ok" : v.text, rec);
+    if (sumN < 0 || sumN >= (int)sizeof g_rdSumPrepass) {
+        g_rdSumPrepass[sizeof g_rdSumPrepass - 1] = '\0';
+    }
+    rd__log("VU pre-pass: %s%s) on SCENE %ux%u at %ux%u texels in %.1f ms, record %s", head, v.text,
+            t->w, t->h, t->tw, t->th, rd__now_ms() - t0, rec);
     return v.on;
 }

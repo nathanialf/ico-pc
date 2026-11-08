@@ -1462,7 +1462,8 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | `localRead` | as offered | none | as offered | as offered | as offered | as offered | as offered |
 | `uintViewWork`, `uintViewScene` | on where the backend has the view | off (`RhiLimits.uintView` false on D3D12) | off | off | off | off | off |
 | `carefulSet` | off | off | off | off | off | off | off |
-| the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | on (issue 179); off for the run when the start-up self-test's four replays fail ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) | on, the same | on, the same | on, the same | on, the same; off on an Apple A9 or A10 (32 bytes of colour targets a pixel) |
+| the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | on (issue 179); off for the run when the start-up self-test's four replays fail ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) | on, the same | on, the same | on, the same | on, the same; off on an Apple A9 or A10 (32 bytes of colour targets a pixel) under the targets |
+| the record's write (`[dev] vu_record`) | stored by the vertex shaders where Vulkan offers `vertexPipelineStoresAndAtomics` | render targets and copies (no vertex stores this release; Direct3D 11 never) | stored where offered, else targets ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the record's two writes) | same | same | same | same |
 | dynamic state (`[dev] dynamic_state`) | on where offered | none | off (the PowerVR phone whose pictures shook; `[dev] dynamic_state = true` turns it on) | off | off | off | off |
 | `alphaPlan` (`[dev] alpha_plan`) | on | on | on | on | on | on | on |
 | `fxPlan` (`[dev] fx_plan`) | on | on | on | on | on | on | on |
@@ -1859,7 +1860,8 @@ A record (`RdPerfRecord`) is filled while a replay runs (its CPU phases and coun
 RHI's counters, and then waits in a slot per frame in flight until its GPU timestamps can be read
 without waiting. The timestamps carry the effect whose work they end, so the record has a GPU time
 per list, for the uploads, for the VU vertex pre-pass (`gpuPrepassMs`, from `RD_PERF_TS_PREPASS`
-after the uploads to list 0: its pass and its copies), for the present, and per picture effect
+after the uploads to list 0: its passes and, under the render targets, its copies; under the
+vertex stores the passes alone), for the present, and per picture effect
 (`RD_PERF_POST_*`: reduction,
 fog, motion blur, aura, glow, depth of field, softening, CRT, MSAA resolve, crack fill)
 (`port/render/rd_perf.c`; `port/render/rd.h` (`RdPerfRecord`, `rd_perf_pop`)). An effect is the
@@ -1918,7 +1920,11 @@ VU pre-pass on: 2 passes, V vertices in D draws; F mesh and grid draws the old w
 triangle slots; K VU draws with the ticks' cameras` (`vuPrePasses`, `vuPreVertices`, `vuPreDraws`,
 `vuPreFallbacks`, `vuPreSprites`, `vuTriSlots`, `vuTickDraws`: the draws a frame blended between
 two ticks draws under the ticks' cameras, `port/render/rd_replay_vu.c` (`doVuDraw`);
-[The vertex and triangle pre-passes](PIPELINES.md#the-vertex-and-triangle-pre-passes));
+[The vertex and triangle pre-passes](PIPELINES.md#the-vertex-and-triangle-pre-passes)), with the
+record's write after it, `<dump>: stats: VU record stores: stored by the vertex shaders into the
+frame slot's record buffer: ...; pre-pass skipped N frames under M slots (the largest L)` (`targets`
+and its words under the render targets; the skips are `[dev] vu_prepass_min`'s,
+`port/render/rd_vu_record.c`);
 the GPU line (`window: GPU ms per replay: ...`) ends with `; VU pre-pass <ms>`, as `--stats`'s
 `gpu:` line does
 (`port/render/rd.h` (`RdPerfRecord`); `port/platform/window_host.c` (`perf_log`)).

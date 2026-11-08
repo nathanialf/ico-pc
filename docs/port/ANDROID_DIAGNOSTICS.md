@@ -138,7 +138,7 @@ question it decides:
   it drew against the one it should have (`the pictures differ: in replay 2 of 4 (frame slot 1),
   ...`: a record read stale or across two pictures differs from replay 2 on; replay 1 says the
   record is wrong within one picture), or `a pipeline could not be made (replay <k> of 4: ...)`;
-  the summary line repeats it (`VU pre-pass on (self-test: ok)`). In play: `rd: VU pre-pass: the
+  the summary line repeats it (`VU pre-pass on (self-test: ok; record stores)`). In play: `rd: VU pre-pass: the
   record holds N slots (R rows, K KB a frame slot)` each time the record grows (the scene's
   memory for it, twice: one a frame slot), the 10 s `window: VU: ...` line's `(pre-pass: each
   vertex once)` in place of `(pre-pass off: 9 a triangle)`, and the per-replay line's `VU pre-pass
@@ -146,6 +146,28 @@ question it decides:
   (past its 1,024 rows, a missing pipeline, a state mismatch; each logged once as `rd: VU pre-pass:
   ...`). Decides whether the record path draws the Mali's scenes, and at what cost (the VU line's
   slope and the span against issue 179's log of 9 a triangle).
+- **The record's write** ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the
+  record's two writes). Issue 179's Mali log spent 34 ms of the boat's 130 in the pre-pass itself:
+  three 16-byte render targets a point (48 bytes a pixel) and six texture-to-buffer copies a replay
+  (`14 copies` in the per-replay line). Where the driver offers vertex stores, the pre-pass's
+  vertex shaders store the record into its buffer themselves. Read, in order: the start line's end,
+  `...; the record stored by the vertex shaders into the frame slot's record buffer: no render
+  targets, no copies (...)`, or `the record drawn into 3 RGBA32_UINT render targets and copied ...
+  (no vertex stores: the device has no vertexPipelineStoresAndAtomics ...)`, with the Vulkan
+  backend's own `no vertexPipelineStoresAndAtomics: the VU record is drawn into render targets and
+  copied` before it (the driver does not offer the feature: the targets stay); the self-test's
+  verdict ending `, record stores` (or a line `rd: VU pre-pass: the record stored by the vertex
+  shaders failed the self-test (<reason, first texel>) ...` and the verdict ending `, record
+  targets, the stores failed the self-test`: the driver stores wrong, the targets were judged
+  instead); the summary's `VU pre-pass on (self-test: ok; record stores)`. In play: the per-replay
+  line's `copies` 6 fewer a replay than with the targets (8 where that log's boat had 14); the GPU
+  top passes' two `VU pre-pass record 1024xN ... ms` entries (pass V and pass T: their sum against
+  that log's 7 to 13 ms each is what the stores bought); the 10 s `window: VU: ...` line, which
+  ends `; record stores`, its fit's first number (the fixed cost: 21.5 ms in that log against 15.2
+  without the triangle pass) and its slope. With `[dev] vu_prepass_min` set, the same line's `;
+  pre-pass skipped N frames under M slots` says how many frames drew the old way for being small.
+  Decides whether the stores are the faster write on the phone, and whether a floor for small
+  frames is worth setting.
 - **Images in use** (the 10 s first line's `present mailbox (images: 10, in use 1)`;
   `RhiStats.swapAcquired`, Vulkan only). The swapchain's images and those the game holds
   (acquired, not yet presented) as the block ends; while the render thread is busy, the count at
