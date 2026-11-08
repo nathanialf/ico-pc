@@ -484,7 +484,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   capture (`title_icon.c`) with the renderer and the icon files stubbed: the pass leaves
   out every model but `I` (`title_back`, `st26a_p1`, `C`, `I_f`, `I_sd`) and off leaves the old
   table; the capture starts after `ICO_TITLE_ICON_WAIT` ticks of layout 12 or 13 (counted again
-  after a Settings page or the model viewer) when an icon is wanted, never when not, and a picture
+  after a Settings page or the model viewer, and not while a game fade runs: counted from its end, a
+  fade held at level 0 counting as none) when an icon is wanted, never when not, and a picture
   not plain (`ICO_APP_ICON_NOT_PLAIN`) leaving it idle with the count from 0 (the capture starting
   once it is plain); the renderer's hold first and the pass on at the tick it holds a picture
   (after `ICO_TITLE_ICON_HELD_WAIT` ticks without one; the menu left while waiting ends it with no

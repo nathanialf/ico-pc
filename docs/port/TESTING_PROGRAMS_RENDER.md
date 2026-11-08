@@ -999,7 +999,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   not recorded while the world draws are, and both copies of the frame head clear to the pass's
   colour over the flip's (also when the flip sends no clear, and when the pass comes on inside the
   open frame); off again, a frame byte-identical (every list's commands and the payload) to one
-  recorded with the pass never on, and no clear without one from the flip (`rd_icon_pass`).
+  recorded with the pass never on, and no clear without one from the flip; on, the fog, a flare
+  sprite and the motion blur (`rd_post`) record nothing and are counted as three post effects, the
+  fade's full-frame sprite is counted as a screen prim, and the reduction's two sprites are recorded;
+  off, the same calls record their commands; the kinds `rd__icon_pass_drops_post` leaves out
+  (`rd_icon_pass`).
 - `rd_icon_hold_test.c`: the title's picture held on screen during the icon capture
   (`rd_icon_hold`, `rd_icon_hold.h`): the rule `rd__icon_hold_tainted` (no pass, frames before it,
   the pass's frames while on and after its off, a blend with its last, the frames past it); on a
@@ -1009,6 +1013,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   present the title frame's picture byte for byte while the state picture armed in the first
   (`rd_capture_shot`) is the pass frame's own picture, the next title frame past the pass presents
   live, and after the release too; the hold and the pass on with no present between present black;
+  a pass frame with the game's fade sprite over it (`RD_POST_FADE`, a full-frame lerp of the
+  title's pale colour) presents the letter alone byte for byte under the pass and the fade without it;
   no validation errors (`rd_icon_hold`, and `rd_icon_hold_gl` on OpenGL).
 - `rd_fog_selftest_test.c` with `rd_fog_selftest.cmake`: the fog's self-test and probe; its log line
   matched for each path, MSAA counts, odd widths and [Full pixel](ARCHITECTURE.md#terms)

@@ -21,7 +21,9 @@
  * The steps (ico_title_icon_tick, once a Main tick from
  * ico_title_logo_update, with whether the title's menu is up and the logo
  * shown):
- *   idle      counts the ticks the menu has been up; at
+ *   idle      counts the ticks the menu has been up with no fade running
+ *             (the title fades in from its pale colour for some seconds
+ *             after the menu shows: a picture under it is that colour); at
  *             ICO_TITLE_ICON_WAIT (the intro is over) asks the icon files
  *             whether an icon is wanted (none for this disc, or one made by
  *             another version): no, done for the run; not now (the picture
@@ -114,8 +116,11 @@ enum {
 
 /* One Main tick (ico_title_logo_update): onMenu nonzero when the title's
    stage is up with its Continue/New Game menu, the logo shown and the model
-   viewer off. */
-void ico_title_icon_tick(int onMenu);
+   viewer off; settled nonzero when no game fade is drawn over the picture
+   (gsb_fade off, or held at level 0).  The idle count runs only while both
+   hold: the capture starts ICO_TITLE_ICON_WAIT ticks after the title's
+   fade-in ended. */
+void ico_title_icon_tick(int onMenu, int settled);
 
 /* Whether the pass is on: title_logo.c's skip rule leaves out every object
    but "I" */

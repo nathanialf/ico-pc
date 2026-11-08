@@ -1497,8 +1497,17 @@ bool rd_draw_filter_keeps(RdKey key);
  *                     clearRgba (RGBAQ, GS units: rd_frame_head records the
  *                     clear even when the flip sends none, rd_frame_flip
  *                     writes clearRgba over the BG colour it is given).
- *                     World draws, post passes, state and targets are
- *                     untouched.  NULL: off (the default), everything as
+ *                     rd_post leaves out the post effects over SCENE
+ *                     that are not the letter's (rd_icon_hold.h
+ *                     rd__icon_pass_drops_post: the fog, which over the
+ *                     pass's cleared far depth covers the whole frame in
+ *                     its colour, the glow and flare, the depth of field,
+ *                     the motion blur, the aura, the eye blur, the film
+ *                     noise); the fade, the brightness and the letterbox
+ *                     go as full-frame screen prims.  World draws, the
+ *                     reduction, copies, state and targets are untouched;
+ *                     one log line at the off counts what was left out.
+ *                     NULL: off (the default), everything as
  *                     before: a frame recorded after it is byte-identical
  *                     to one recorded with the pass never on
  * rd_icon_pass_on       whether it is on (the recording thread's view)

@@ -71,6 +71,26 @@ void rd__icon_hold_record(RhiCommandList cl, RhiTexture out, RhiState *outState,
 /* rd__present_shutdown: the hold's texture freed, the hold forgotten */
 void rd__icon_hold_shutdown(void);
 
+/* What the icon pass left out of its frames (rd_frame.c; rd.h
+ * rd_set_icon_pass), counted where it is left out and logged in one line at
+ * the pass's off: RD_ICON_DROP_PRIMS a UI or full-frame screen prim call
+ * (rd_core.c: the menus, the layouts, the fade, the brightness, the
+ * letterbox, rd_post's other full-frame sprites), RD_ICON_DROP_TEXT a
+ * deferred text item, RD_ICON_DROP_POST a post effect rd_post leaves out
+ * (the fog, the glow and flare, the depth of field, the motion blur, the
+ * aura, the eye blur, the film noise) */
+enum { RD_ICON_DROP_PRIMS = 0, RD_ICON_DROP_TEXT, RD_ICON_DROP_POST, RD_ICON_DROP_COUNT };
+
+void rd__icon_pass_drop(int what);
+/* the counts since the pass last came on (the test's) */
+void rd__icon_pass_drops(uint32_t out[RD_ICON_DROP_COUNT]);
+
+/* Whether rd_post leaves this kind out in the icon pass: every post effect
+ * drawn over SCENE that is not the letter's (above); the reduction, the
+ * copies and the keep pass stay (the keep's and the other full-frame
+ * sprites go as screen prims) */
+bool rd__icon_pass_drops_post(int kind);
+
 #ifdef __cplusplus
 }
 #endif

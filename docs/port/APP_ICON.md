@@ -50,7 +50,10 @@ picture held on screen).
 The letter is geometry (a stage model), not a texture, and the screen-space transform runs in the
 vertex shaders, so the icon is cut from the title as it is drawn. `ico_title_logo_update` steps the
 capture once a tick (`ico_title_icon_tick`). Once the title's menu (Continue / New Game, layout 12 or
-13 on the European disc) has been up for 30 ticks with the logo shown and the model viewer off, and
+13 on the European disc) has been up for 30 ticks with the logo shown, the model viewer off and no
+game fade running (`gsb_fade`'s `fadeStatus` 0, or 3 held at level 0: the title fades in from its
+pale colour for some seconds after the menu shows; the ticks under it are not counted, the line
+`ico_pc: icon: waiting for the title's fade to end` once a run), and
 `ico_app_icon_wanted()` says so, the renderer is asked to hold the title's picture
 (`rd_icon_hold(true)`: from then on every present copies its output, before the overlay, into an
 output-sized texture), and once it holds one (`rd_icon_hold_ready()`, the tick after; at most
@@ -59,9 +62,20 @@ presented in 10 ticks to keep on screen: the capture's frames show black`) the p
 
 - the game side: `ico_title_logo_skip` answers 1 for every model but `I`, so `reg_DispObj` draws the
   letter alone (no game code changes);
-- the renderer: `rd_set_icon_pass(colour)` leaves out the UI and full-frame screen prims and the
-  deferred text (the menus) and makes the frame head clear SCENE to the colour, black first; world
-  draws and post passes are untouched;
+- the renderer: `rd_set_icon_pass(colour)` leaves out the UI and full-frame screen prims (the menus,
+  the game's fade, brightness and letterbox sprites), the deferred text and the post effects over
+  SCENE that are not the letter's (`rd_post`'s fog, glow and flare, depth of field, motion blur,
+  aura, eye blur and film noise: `rd__icon_pass_drops_post`, `port/render/rd_icon_hold.h`), and makes
+  the frame head clear SCENE to the colour, black first; world draws, the reduction (with its tint)
+  and copies are untouched. The fog matters most: it is drawn by depth, and with the backdrop and
+  the castle left out the pass's depth is the cleared far plane over the whole frame, so with the
+  fog drawn the pass frames would be the fog colour (the title's table entry 0, `DFDBCD`, about
+  86 % over the clear) through the reduction's tint on every pixel, in both pictures, and the matte
+  would cut that as the letter: a box of the whole frame and one colour, `(255, 247, 227)` at alpha
+  215, on every pixel of the icon (the arithmetic is in the comment at `rd_post`'s drop).
+  At the off one line counts what the pass left out: `rd: icon pass: frames A..B drew the title's
+  letter alone: N screen prim calls (the menus, the fade, the brightness), N text items and N post
+  effects (the fog, the glow, the blurs) left out`;
 - the hold: every present whose picture holds the pass (its frame at or past the frame open when
   the pass came on, and not yet past the pass's last frame by `ico_title_icon_present_clean`'s rule;
   `rd__icon_hold_tainted`) is rendered and copied for the shot as any other, then the held picture is

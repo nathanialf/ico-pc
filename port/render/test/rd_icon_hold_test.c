@@ -22,6 +22,11 @@
  *   black     the hold on and the pass on with no present between: the
  *             pass frame's present is black, not the pass's picture
  *   none      a pass frame without a hold presents as it is drawn
+ *   fade      a pass frame with the game's fade over it (rd_post
+ *             RD_POST_FADE: a full-frame lerp sprite of the title's pale
+ *             colour at 0x6C, into DISPLAY here) presents the letter alone,
+ *             the same bytes as with no fade, while with the pass off the
+ *             same frame shows the fade
  * Exit 0, 1 on a mismatch. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -130,7 +135,7 @@ static void shotForget(void)
 /* one frame into DISPLAY, presented by rd_end_frame: the title (dx its
    sprites' offset) or the pass's picture; shot: the state picture armed
    in the open frame */
-static void frameOf(int pass, int dx, int shot)
+static void frameFade(int pass, int dx, int shot, int fade)
 {
     rd_begin_frame();
     if (shot) {
@@ -146,7 +151,24 @@ static void frameOf(int pass, int dx, int shot)
         sprite(20 + dx, 30, 120 + dx, 90, kRed);
         sprite(300, 100 + dx, 380, 180 + dx, kBlue);
     }
+    if (fade) {
+        /* gsb_fade's sprite, list 11 */
+        RdPostParams pp;
+        memset(&pp, 0, sizeof(pp));
+        pp.dst = rd_target(RD_TARGET_DISPLAY);
+        pp.rgba[0] = 0xFF;
+        pp.rgba[1] = 0xF7;
+        pp.rgba[2] = 0xE3;
+        pp.rgba[3] = 0x6C;
+        rd_select_list(11);
+        rd_post(RD_POST_FADE, &pp);
+    }
     rd_end_frame(0);
+}
+
+static void frameOf(int pass, int dx, int shot)
+{
+    frameFade(pass, dx, shot, 0);
 }
 
 static int readOut(uint8_t *dst)
@@ -224,6 +246,22 @@ static void testHeld(void)
     frameOf(1, 0, 0);
     if (readOut(s_out)) {
         CHECK(differ(s_out, s_pass) == 0, "none: the pass frame presented as drawn (%zu differ)",
+              differ(s_out, s_pass));
+    }
+    rd_set_icon_pass(NULL);
+
+    /* fade: the pass frame with the fade over it, the pass off and on */
+    frameFade(1, 0, 0, 1);
+    if (readOut(s_out)) {
+        CHECK(differ(s_out, s_pass) > 10000,
+              "fade, pass off: the fade over the frame shows (%zu pixels differ)",
+              differ(s_out, s_pass));
+    }
+    rd_set_icon_pass(kBlack);
+    frameFade(1, 0, 0, 1);
+    if (readOut(s_out)) {
+        CHECK(differ(s_out, s_pass) == 0,
+              "fade, pass on: the letter alone, no fade (%zu pixels differ)",
               differ(s_out, s_pass));
     }
     rd_set_icon_pass(NULL);

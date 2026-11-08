@@ -21,7 +21,9 @@
  *             renderer and the icon files stubbed: the pass off leaves the
  *             old table; ICO_TITLE_ICON_WAIT ticks on layout 12 or 13
  *             (counted again after the menu left) start it when an icon is
- *             wanted, never when not: the renderer's hold on first, the
+ *             wanted, never when not, and only while no game fade runs
+ *             (counted again from its end; a fade held at level 0 counts
+ *             as none): the renderer's hold on first, the
  *             pass on once it holds a picture (or after
  *             ICO_TITLE_ICON_HELD_WAIT ticks without one; the menu left
  *             meanwhile ends it); a picture not plain
@@ -62,8 +64,10 @@ static int failures;
 /* the game's globals and the menus' answers */
 int stage_no;
 int current_layout_id;
-int ico_mv_active;   /* options.h */
-static int s_covers; /* ui_settings_covers_title */
+int ico_mv_active;          /* options.h */
+int fadeStatus;             /* seki/src/Basic.c: gsb_fade's state */
+unsigned char fadeColor[4]; /* and its colour */
+static int s_covers;        /* ui_settings_covers_title */
 static int s_list = -1;
 
 int ui_settings_covers_title(void)
@@ -673,6 +677,36 @@ static void testIconHold(void)
     ico_title_icon_set_ops(NULL);
 }
 
+/* the capture waits for the game's fade (gsb_fade) to end: the ticks with
+   one running are not counted, and the count starts again at its end; a
+   fade held at an end at level 0 is none, at a level above 0 one */
+static void testIconFade(void)
+{
+    iconStart(1);
+    fadeStatus = 2; /* the title's fade-in running */
+    menuTicks(ICO_TITLE_ICON_WAIT * 2);
+    CHECK(!st.hold && st.holds == 0 && ico_title_icon_state() == ICO_TITLE_ICON_IDLE,
+          "icon: fade: nothing while the fade runs");
+    fadeStatus = 3;
+    fadeColor[3] = 40; /* held at a level: still over the picture */
+    menuTicks(ICO_TITLE_ICON_WAIT);
+    CHECK(st.holds == 0, "icon: fade: a fade held above level 0 still waits");
+    fadeColor[3] = 0;
+    menuTicks(ICO_TITLE_ICON_WAIT - 1);
+    CHECK(st.holds == 0, "icon: fade: %d ticks after its end: not yet", ICO_TITLE_ICON_WAIT - 1);
+    fadeStatus = 1; /* a new fade: the count from 0 again */
+    menuTicks(1);
+    fadeStatus = 0;
+    menuTicks(ICO_TITLE_ICON_WAIT - 1);
+    CHECK(st.holds == 0, "icon: fade: the count started again after another fade");
+    menuTicks(1);
+    CHECK(st.hold && st.holds == 1 && ico_title_icon_state() == ICO_TITLE_ICON_HOLD,
+          "icon: fade: the capture starts %d ticks after the fade ended", ICO_TITLE_ICON_WAIT);
+    fadeColor[3] = 0;
+    ico_title_icon_reset();
+    ico_title_icon_set_ops(NULL);
+}
+
 int main(void)
 {
     testModels();
@@ -685,6 +719,7 @@ int main(void)
     testIconRetries();
     testIconResume();
     testIconHold();
+    testIconFade();
     if (failures) {
         printf("title_logo_test: %d failure(s)\n", failures);
         return 1;

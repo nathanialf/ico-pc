@@ -121,6 +121,7 @@ static struct {
     int ticks;     /* in the state */
     int drops;     /* shots armed again in this run */
     int ghostRetried;
+    int fadeLogged; /* the fade's wait logged once in the run */
     int pass, hold;
     int armed;         /* a shot armed and not answered */
     int doneAfter;     /* the resume step's end: done for the run, or idle */
@@ -235,7 +236,7 @@ static void deliverPair(uint8_t *b, uint32_t w, uint32_t h)
     finish(1);
 }
 
-void ico_title_icon_tick(int onMenu)
+void ico_title_icon_tick(int onMenu, int settled)
 {
     if (!s_ops) {
         return;
@@ -245,6 +246,15 @@ void ico_title_icon_tick(int onMenu)
         return;
     case ICO_TITLE_ICON_IDLE:
         if (!onMenu) {
+            s.menuTicks = 0;
+            return;
+        }
+        if (!settled) {
+            /* a fade over the picture: counted again from its end */
+            if (!s.fadeLogged) {
+                s.fadeLogged = 1;
+                fprintf(stderr, "ico_pc: icon: waiting for the title's fade to end\n");
+            }
             s.menuTicks = 0;
             return;
         }
