@@ -785,8 +785,13 @@ bool rd_vuprepass_selftest(void)
     const char *head = v.on ? "on (" : "off (self-test: ";
     const char *rec =
         storesFailed ? "targets, the stores failed the self-test" : rd__vu_record_name();
-    snprintf(g_rdSumPrepass, sizeof g_rdSumPrepass, "%s%s; record %s)", head,
-             v.pass ? "self-test: ok" : v.text, rec);
+    /* the result is read so gcc 14's -Wformat-truncation at -O2 sees a cut
+       verdict text is deliberate (the buffer holds the usual words whole) */
+    const int sumN = snprintf(g_rdSumPrepass, sizeof g_rdSumPrepass, "%s%s; record %s)", head,
+                              v.pass ? "self-test: ok" : v.text, rec);
+    if (sumN < 0 || sumN >= (int)sizeof g_rdSumPrepass) {
+        g_rdSumPrepass[sizeof g_rdSumPrepass - 1] = '\0';
+    }
     rd__log("VU pre-pass: %s%s) on SCENE %ux%u at %ux%u texels in %.1f ms, record %s", head, v.text,
             t->w, t->h, t->tw, t->th, rd__now_ms() - t0, rec);
     return v.on;
