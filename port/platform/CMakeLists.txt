@@ -253,6 +253,31 @@ if(ICO_RUN_TESTS)
     add_test(NAME app_icon_files COMMAND app_icon_files_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
+# The exe's own icon (icon_stamp.h): the RT_GROUP_ICON directory and the
+# RT_ICON images built from an .ico the writer made, the stamp text and the
+# command-line quoting. The resource update itself (tools/ico_icon_stamp.c,
+# Windows only) is checked on Windows by hand (docs/port/APP_ICON.md).
+add_executable(icon_stamp_test test/icon_stamp_test.c icon_stamp.c app_icon_ico.c app_icon_image.c)
+target_include_directories(icon_stamp_test PRIVATE .)
+target_compile_options(icon_stamp_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(icon_stamp_test PRIVATE ico_host_fs)
+if(ICO_RUN_TESTS)
+    add_test(NAME icon_stamp COMMAND icon_stamp_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+# tools\ico_icon_stamp.exe, shipped by tools/package_win.sh: gives the game's
+# exe the captured icon after the game exits (app_icon_exe.c starts it).
+# A program with no window (GUI subsystem); kernel32 and shell32 only.
+if(WIN32)
+    add_executable(ico_icon_stamp "${CMAKE_SOURCE_DIR}/tools/ico_icon_stamp.c" icon_stamp.c)
+    target_include_directories(ico_icon_stamp PRIVATE .)
+    target_compile_options(ico_icon_stamp PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+    target_link_options(ico_icon_stamp PRIVATE -mwindows)
+    if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        target_link_options(ico_icon_stamp PRIVATE -static-libgcc)
+    endif()
+    target_link_libraries(ico_icon_stamp PRIVATE shell32)
+endif()
+
 # Extras > Add to the applications menu (desktop_entry.c): the entry's text
 # and the install over a fake data folder under the build folder
 # (Linux and the other Unixes: the test sets environment variables with setenv)

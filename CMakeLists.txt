@@ -586,9 +586,12 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
     # DXGI output's on Windows, none elsewhere
     if(WIN32)
         # and the window's messages for the event pump's long-call lines,
-        # the display and the computer kept awake (window_pump_win.h)
+        # the display and the computer kept awake (window_pump_win.h), and
+        # the exe's own icon: its stamp read at start, the helper
+        # tools/ico_icon_stamp.c started at the end (app_icon_exe.h)
         target_sources(ico_pc PRIVATE port/platform/display_clock_win.c
-                                      port/platform/window_pump_win.c)
+                                      port/platform/window_pump_win.c
+                                      port/platform/app_icon_exe.c port/platform/icon_stamp.c)
     else()
         target_sources(ico_pc PRIVATE port/platform/display_clock_none.c)
     endif()
