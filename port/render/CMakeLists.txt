@@ -1381,6 +1381,11 @@ if(ICO_RUN_TESTS)
                                                                            "${_env}")
         set_tests_properties(${rd_blur_SHARDS} PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_velocity PROPERTIES ENVIRONMENT "${_env}")
+        # the jitter and the upscale point under the layer too; their OpenGL
+        # twins inherit the environment, with ASAN_OPTIONS=detect_leaks=0
+        # (llvmpipe's LLVM leaks under LeakSanitizer: CI's asan shards failed
+        # rd_jitter_gl and rd_upscale_gl, 2026-11-08)
+        set_tests_properties(rd_jitter rd_upscale PROPERTIES ENVIRONMENT "${_env}")
         if(TEST rd_replay_tool_fsr3)
             # FSR 3.1's dispatch under the layer (rd_replay_tool's --stats
             # counts its errors)
