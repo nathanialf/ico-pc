@@ -31,6 +31,7 @@
 #include "rd_internal.h"
 #include "rd_icon_hold.h" /* rd__icon_pass_drop */
 #include "rd_layer.h"     /* the display layer's reserved slots */
+#include "rd_fsr3.h"      /* rd__fsr3_fp16_word, the summary's precision */
 #include "modelpack.h"    /* the model pack switch */
 #include "rd_mesh.h"
 #include "rd_tex.h"
@@ -142,7 +143,7 @@ void rd_summary_text(char *out, size_t size)
     snprintf(out, size,
              "blend %s; profile %s; index values dense (marks in the stream); fog %s; VU shaders "
              "%s%s%s%s; VU pre-pass %s%s; VU merge %s; VU fuse %s; constant reads %s; fades "
-             "fold %s; cull %s; pipelines %s (pool %d, cache %d); menu text %s",
+             "fold %s; cull %s; pipelines %s (pool %d, cache %d); menu text %s; FSR 3.1 fp16 %s",
              g_rdSumBlend[0] ? g_rdSumBlend : "(self-test not reached)",
              rd__profile_text()[0] ? rd__profile_text() : "(not decided)",
              g_rdSumFog[0] ? g_rdSumFog : "(self-test not reached)",
@@ -169,7 +170,9 @@ void rd_summary_text(char *out, size_t size)
                 rd__sheet_baked) */
              g_rd.sheetShader           ? "shader"
              : g_rd.profile.sheetBake2x ? "baked at 1x and 2x (the shader above)"
-                                        : "baked at 1x (the shader above)");
+                                        : "baked at 1x (the shader above)",
+             /* FSR 3.1's precision (rd_fsr3.c, issue 203) */
+             rd__fsr3_fp16_word());
 }
 
 /* ------------------------------------------------ the VU index spans

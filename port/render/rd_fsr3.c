@@ -94,6 +94,32 @@ bool rd__fsr3_fp16(void)
 #endif
 }
 
+bool rd__fsr3_fp16_dev_on(void)
+{
+    static int s_on = -1;
+    if (s_on < 0) {
+        /* the port runs FSR 3.1 in full precision on every device (issue
+         * 203: thin vertical lines from its fp16 maths on a GTX 1660; AMD's
+         * FSR 2.1 moved half-precision work to full precision for colour
+         * range and temporal stability). [dev] fsr3_fp16 = on (host_config.c
+         * exports 1) opts into the half-precision speed path; the FidelityFX
+         * backend reads the same variable when the context is made
+         * (tools/ffx/patches/0004-vk-fp32-default.patch,
+         * GetDeviceCapabilitiesVK): fp16 only for 1 or on */
+        const char *e = getenv("ICO_RD_FSR3_FP16");
+        s_on = e && (strcmp(e, "1") == 0 || strcmp(e, "on") == 0);
+    }
+    return s_on == 1;
+}
+
+const char *rd__fsr3_fp16_word(void)
+{
+    if (!rd__fsr3_fp16_dev_on()) {
+        return "off (the port's default; [dev] fsr3_fp16 = on for the half-precision path)";
+    }
+    return rd__fsr3_fp16() ? "on (dev)" : "off ([dev] fsr3_fp16 = on, the device offers no fp16)";
+}
+
 bool rd_upscale_temporal_supported(void)
 {
     if (s_testUnsupported) {

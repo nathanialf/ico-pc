@@ -71,6 +71,15 @@
  *             first present) and back (the later one), the plan reads
  *             DISPLAY without copying it, DISPLAY's record lends
  *             PRE_DISPLAY's, and both presents leave the same DISPLAY
+ *   capture   F12's upscaler pictures (rd_upscale_capture.h, issue 203)
+ *             under the test's upscaler at Enhanced 3x, 1.5: armed, the
+ *             next frame's dispatch writes <stem>-scene.png 1024 x 1024,
+ *             -velocity.png 1024 x 1024, -composite.png 1536 x 1536 and
+ *             -depth.png when SCENE's depth was given (1024 x 1024, else
+ *             named "not given"); DISPLAY byte for byte the frame's without
+ *             the capture; armed with a width limit of 1000 the composite
+ *             is halved to 768 x 768; with the upscaler off the arm is
+ *             dropped at the next present and nothing is written
  * Any validation error fails the test.  "rd_upscale_test off" runs the
  * scales, marker and off cases alone (rd_upscale_off_mali and
  * rd_upscale_off_tiler: the marker a NOP under a phone's limits and under
@@ -84,6 +93,7 @@
 #include "rd_jitter.h"
 #include "rd_layer.h"
 #include "rd_upscale.h"
+#include "rd_upscale_capture.h"
 #include "rd_velocity.h"
 #include "vk/rhi_vk.h"
 
@@ -607,6 +617,97 @@ static void testUpscale(void)
            foldedOn);
 }
 
+/* a PNG's size from its IHDR (bytes 16..23, big-endian); 0 when the file
+ * is not a PNG */
+static int pngSize(const char *path, uint32_t *w, uint32_t *h)
+{
+    uint8_t b[24];
+    FILE *f = fopen(path, "rb");
+    const size_t n = f ? fread(b, 1, sizeof(b), f) : 0;
+    if (f) {
+        fclose(f);
+    }
+    if (n != sizeof(b) || b[0] != 0x89 || b[1] != 'P' || b[2] != 'N' || b[3] != 'G') {
+        return 0;
+    }
+    *w = (uint32_t)b[16] << 24 | (uint32_t)b[17] << 16 | (uint32_t)b[18] << 8 | b[19];
+    *h = (uint32_t)b[20] << 24 | (uint32_t)b[21] << 16 | (uint32_t)b[22] << 8 | b[23];
+    return 1;
+}
+
+static void testCapture(void)
+{
+    static const char stem[] = "rd_upscale_capture_test";
+    char path[64];
+    uint32_t w = 0, h = 0, dw = 0, dh = 0;
+    for (int i = 0; i < RD_UPSCALE_CAPTURE_PICTURES; i++) {
+        snprintf(path, sizeof(path), "%s%s", stem, rd__upscale_capture_suffix(i));
+        remove(path);
+    }
+    rd__upscale_set(true, 1.5f);
+    settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
+    richFrame(0);
+    richFrame(0);
+    if (!readTarget(RD_TARGET_DISPLAY, s_dispA, sizeof(s_dispA), &dw, &dh)) {
+        return;
+    }
+    const RdUpscaleCaptureStats before = *rd__upscale_capture_stats();
+    CHECK(rd_capture_upscale(stem, 0), "capture: not armed");
+    richFrame(0);
+    (void)rd__upscale_capture_finish(); /* the test presents nothing: here */
+    const RdUpscaleCaptureStats *cs = rd__upscale_capture_stats();
+    CHECK(cs->taken == before.taken + 1u && cs->written == before.written + 1u &&
+              cs->failed == before.failed,
+          "capture: taken %u -> %u, written %u -> %u, failed %u -> %u", before.taken, cs->taken,
+          before.written, cs->written, before.failed, cs->failed);
+    if (readTarget(RD_TARGET_DISPLAY, s_dispB, sizeof(s_dispB), &dw, &dh)) {
+        CHECK(memcmp(s_dispA, s_dispB, (size_t)dw * dh * 4) == 0,
+              "capture: DISPLAY differs from the frame's without the capture");
+    }
+    static const uint32_t ew[4] = {1024, 1024, 1024, 1536}, eh[4] = {1024, 1024, 1024, 1536};
+    for (int i = 0; i < RD_UPSCALE_CAPTURE_PICTURES; i++) {
+        snprintf(path, sizeof(path), "%s%s", stem, rd__upscale_capture_suffix(i));
+        const int have = pngSize(path, &w, &h);
+        if (i == 2 && !have) {
+            /* SCENE's depth not given to the upscaler (no draw tested it) */
+            CHECK(cs->w[2] == 0, "capture: depth counted %u wide but not written", cs->w[2]);
+            printf("  capture: %s not written (no depth given to the upscaler)\n", path);
+            continue;
+        }
+        CHECK(have && w == ew[i] && h == eh[i] && cs->w[i] == w && cs->h[i] == h,
+              "capture: %s %s %ux%u (want %ux%u)", path, have ? "is" : "missing, stats", w, h,
+              ew[i], eh[i]);
+    }
+    printf("  capture: scene %ux%u, velocity %ux%u, depth %ux%u, composite %ux%u\n", cs->w[0],
+           cs->h[0], cs->w[1], cs->h[1], cs->w[2], cs->h[2], cs->w[3], cs->h[3]);
+    /* a width limit: the composite halved until it fits */
+    CHECK(rd_capture_upscale(stem, 1000u), "capture: not armed (limit)");
+    richFrame(0);
+    (void)rd__upscale_capture_finish();
+    snprintf(path, sizeof(path), "%s-composite.png", stem);
+    CHECK(pngSize(path, &w, &h) && w == 768 && h == 768, "capture: limited composite %ux%u", w, h);
+    snprintf(path, sizeof(path), "%s-scene.png", stem);
+    CHECK(pngSize(path, &w, &h) && w == 512 && h == 512, "capture: limited scene %ux%u", w, h);
+    /* the upscaler off: the arm dropped, nothing written */
+    for (int i = 0; i < RD_UPSCALE_CAPTURE_PICTURES; i++) {
+        snprintf(path, sizeof(path), "%s%s", stem, rd__upscale_capture_suffix(i));
+        remove(path);
+    }
+    rd__upscale_set(false, 0.0f);
+    settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
+    richFrame(0);
+    const uint32_t dropped = rd__upscale_capture_stats()->dropped;
+    CHECK(rd_capture_upscale(stem, 0), "capture: not armed (off)");
+    richFrame(0);
+    (void)rd__upscale_capture_finish();
+    snprintf(path, sizeof(path), "%s-scene.png", stem);
+    CHECK(rd__upscale_capture_stats()->dropped == dropped + 1u && !pngSize(path, &w, &h),
+          "capture: the arm without an upscaler was not dropped");
+    rd__upscale_set(true, 1.5f);
+    settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
+    richFrame(0);
+}
+
 static void testGuard(void)
 {
     uint32_t w = 0, h = 0;
@@ -1110,6 +1211,7 @@ int main(int argc, char **argv)
     testOff();
     if (!offOnly) {
         testUpscale();
+        testCapture();
         testGuard();
         testJitter();
         testReset();

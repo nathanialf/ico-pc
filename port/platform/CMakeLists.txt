@@ -309,7 +309,7 @@ endif()
 
 # F12's zip (dump_zip.c): the dump and the log in one archive, read back
 # with miniz's reader; it writes under the build folder
-add_executable(dump_zip_test test/dump_zip_test.c dump_zip.c)
+add_executable(dump_zip_test test/dump_zip_test.c dump_zip.c upscale_pictures.c)
 target_compile_options(dump_zip_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(dump_zip_test PRIVATE ico_host_fs ico_miniz)
 if(ICO_RUN_TESTS)

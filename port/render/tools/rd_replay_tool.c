@@ -94,6 +94,20 @@
  *                         dispatch runs, not FSR's picture.  --stats names
  *                         it ("upscale: fsr3 ran N presents (...),
  *                         validation errors E", or "upscale: fsr3 off")
+ *   --fsr3-dump DIR       (with --fsr3 or --upscale-test) the pictures F12
+ *                         saves under an upscaler (rd_upscale_capture.h), of
+ *                         the last replay's dispatch (the last of --repeat,
+ *                         the last of --presents): DIR/<dump>-scene.png
+ *                         (SCENE before the upscale, render size),
+ *                         -velocity.png, -depth.png (the 24-bit step in R,
+ *                         G, B) and -composite.png (the upscaler's output
+ *                         before the display layer, display size), full
+ *                         size; prints "fsr3-dump: <stem>-scene.png WxH,
+ *                         ..."; exit 1 when the replay held no dispatch or a
+ *                         picture was not written.  The same pictures as a
+ *                         reporter's zip, for a side-by-side (under the
+ *                         display layer --target SCENE reads the composite:
+ *                         this is the way to the pre-upscale SCENE)
  *   --jitter X,Y          the scene's sub-pixel jitter (rd_jitter.h), X right
  *                         and Y down in texels of the bound target, each
  *                         -0.5..0.5, added after the GS's snap in the
@@ -517,6 +531,7 @@
 #include "rd_jitter.h"
 #include "rd_layer.h"
 #include "rd_upscale.h"
+#include "rd_upscale_capture.h" /* --fsr3-dump */
 #include "rd_velocity.h"
 #include "rd_mesh.h"
 #include "rd_vis.h"
@@ -1267,6 +1282,58 @@ static bool motionSmooth;
 static int presentsN;
 /* --repeat N: the presented picture made N times in a row (1: once) */
 static int repeatN = 1;
+/* --fsr3-dump DIR: the upscaler's four pictures of the last replay (the
+ * game's F12 capture, rd_upscale_capture.h) as DIR/<dump>-scene.png etc. */
+static const char *fsr3Dump;
+static char fsr3Stem[1100];
+static uint32_t fsr3Written0, fsr3Taken0;
+
+static void fsr3DumpArm(const char *dump)
+{
+    if (!fsr3Dump) {
+        return;
+    }
+    const char *b = strrchr(dump, '/');
+    b = b ? b + 1 : dump;
+    char base[512];
+    snprintf(base, sizeof(base), "%s", b);
+    char *dot = strrchr(base, '.');
+    if (dot && (strcmp(dot, ".rddump") == 0 || strcmp(dot, ".zip") == 0)) {
+        *dot = '\0';
+    }
+    snprintf(fsr3Stem, sizeof(fsr3Stem), "%s/%s", fsr3Dump, base);
+    fsr3Written0 = rd__upscale_capture_stats()->written;
+    fsr3Taken0 = rd__upscale_capture_stats()->taken;
+    if (!rd_capture_upscale(fsr3Stem, 0)) {
+        fprintf(stderr, "%s: --fsr3-dump: not armed (no device)\n", dump);
+    }
+}
+
+/* after the last replay: the pictures written (by the present's finish or
+ * here), each named with its size; false when they were not */
+static bool fsr3DumpFinish(const char *dump)
+{
+    if (!fsr3Dump) {
+        return true;
+    }
+    rhi_wait_frame();
+    (void)rd__upscale_capture_finish();
+    const RdUpscaleCaptureStats *cs = rd__upscale_capture_stats();
+    if (cs->taken == fsr3Taken0) {
+        fprintf(stderr,
+                "%s: --fsr3-dump: no dispatch of the upscale point in the replay (no "
+                "upscaler in force, or a dump without the marker)\n",
+                dump);
+        return false;
+    }
+    const bool ok = cs->written > fsr3Written0;
+    printf("%s: fsr3-dump: %s%s %ux%u, %s %ux%u, %s %ux%u, %s %ux%u%s\n", dump, fsr3Stem,
+           rd__upscale_capture_suffix(0), cs->w[0], cs->h[0], rd__upscale_capture_suffix(1),
+           cs->w[1], cs->h[1], rd__upscale_capture_suffix(2), cs->w[2], cs->h[2],
+           rd__upscale_capture_suffix(3), cs->w[3], cs->h[3],
+           ok ? "" : " (not all written: the log line says which)");
+    return ok;
+}
 
 /* --no-half: every TARGET command without the field's half pixel
    (RD_TARGET_HALF_Y), as a flip in the other field sends the frame */
@@ -2041,6 +2108,9 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
             break;
         }
         rd__blur_smooth_arm(k == 0, (uint32_t)presentsN, 0.0, 0.0);
+        if (k == presentsN - 1) {
+            fsr3DumpArm(dump); /* --fsr3-dump: the last present's dispatch */
+        }
         char name[1100];
         snprintf(name, sizeof(name), "%s-p%d.png", stem, k);
         uint32_t w = 0, h = 0;
@@ -2067,6 +2137,9 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
         rc = ok ? 0 : 1;
     }
     free(px);
+    if (rc == 0 && !fsr3DumpFinish(dump)) {
+        rc = 1;
+    }
     return rc;
 }
 
@@ -2098,6 +2171,7 @@ int main(int argc, char **argv)
                 "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n"
                 "       [--downsample (with --resolution above 1x)] [--fsr1 [0..100]]\n"
                 "       [--fsr3 native|quality|balanced|performance [0..100 sharpness]]\n"
+                "       [--fsr3-dump DIR (with --fsr3 or --upscale-test)]\n"
                 "       [--jitter X,Y (texels, each -0.5..0.5)]\n"
                 "       [--upscale-test [1..3] [--upscale-phases N]]\n",
                 argv[0]);
@@ -2118,6 +2192,7 @@ int main(int argc, char **argv)
     bool skinCheck = false;          /* --skin-check */
     bool skinFailed = false;         /* a replay of its check failed */
     bool velFailed = false;          /* --velocity-dump: no VELOCITY or no PNG */
+    bool fsr3Failed = false;         /* --fsr3-dump: no dispatch or a picture not written */
     bool regionStats = false;        /* --region-stats (rd_replay_region.c) */
     RdRegionOpts regionOpts = {NULL, NULL, NULL, NULL};
     bool regionFailed = false; /* its picture or spec could not be written */
@@ -2216,6 +2291,8 @@ int main(int argc, char **argv)
                 s.upscaleSharpness = (uint8_t)v;
                 i++;
             }
+        } else if (strcmp(argv[i], "--fsr3-dump") == 0 && i + 1 < argc) {
+            fsr3Dump = argv[++i];
         } else if (strcmp(argv[i], "--upscale-test") == 0) {
             /* the upscale point's test (rd_upscale.h), at the ratio given */
             float ratio = 1.5f;
@@ -2789,6 +2866,9 @@ int main(int argc, char **argv)
            submit thread (rd_submit_thread.h), read back after the drain;
            --repeat's pictures back to back, nothing drained between them */
         for (int k = 0; k < repeatN; k++) {
+            if (k == repeatN - 1) {
+                fsr3DumpArm(dump); /* --fsr3-dump: the last picture's dispatch */
+            }
             (void)rd__replay_frame_async(rf, (int)rf->keep, true);
         }
         (void)rd_thread_drain();
@@ -2796,6 +2876,9 @@ int main(int argc, char **argv)
     } else {
         replayed = true;
         for (int k = 0; k < repeatN && replayed; k++) {
+            if (k == repeatN - 1) {
+                fsr3DumpArm(dump); /* --fsr3-dump: the last picture's dispatch */
+            }
             replayed = rd__replay_frame(rf, (int)rf->keep, pw != 0 && !passDir);
         }
     }
@@ -2878,6 +2961,9 @@ int main(int argc, char **argv)
     }
     if (replayed && velocityOn && !velocityReport(dump, rf, velocityPng)) {
         velFailed = true;
+    }
+    if (replayed && fsr3Dump && !fsr3DumpFinish(dump)) {
+        fsr3Failed = true;
     }
     if (passA) {
         RdReplayWindowStats ws;
@@ -3437,7 +3523,7 @@ int main(int argc, char **argv)
     if (rc == 0 && timeN > 0 && !timeReplays(dump, &pf, &f, rf, timeN, pw != 0)) {
         rc = 1;
     }
-    if (occFailed || regionFailed || skinFailed || velFailed) {
+    if (occFailed || regionFailed || skinFailed || velFailed || fsr3Failed) {
         rc = 1;
     }
     rd__frame_free(&f);

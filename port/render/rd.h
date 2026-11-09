@@ -1394,6 +1394,17 @@ bool rd_capture_presented(const char *png);
  * bug-report picture, which goes in a zip a phone shares. */
 bool rd_capture_presented_max(const char *png, uint32_t maxW);
 int rd_capture_result(char *path, uint32_t pathSize);
+/* With a temporal upscaler in force (FSR 3.1, or the test's), the next
+ * dispatch of the upscale point also gives four pictures, written after the
+ * submit of the present that follows it (before that present's own
+ * picture): <stem>-scene.png (SCENE before the upscale, render size),
+ * -velocity.png (the motion vectors), -depth.png (the depth the upscaler
+ * received) and -composite.png (its output, before the display layer);
+ * pictures wider than maxW (0: none) halved until they fit. Copies only:
+ * no picture changes. false: no device or no stem. Without an upscaler at
+ * the next present the request is dropped with a line
+ * (rd_upscale_capture.h, docs/port/DISPLAY.md "The upscaler's pictures") */
+bool rd_capture_upscale(const char *stem, uint32_t maxW);
 
 /* ------------------------------------------------- a save state's picture
  * The picture a save state keeps (port/game/state_host.c): the game as it

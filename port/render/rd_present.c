@@ -98,6 +98,7 @@
 #include "rd_upscale_temporal.h"
 #include "rd_tone.h"
 #include "rd_upscale.h"
+#include "rd_upscale_capture.h"
 #include "rd_fsr3.h"
 #include "rd_icon_hold.h"
 #include "shader_consts.h"
@@ -2215,7 +2216,10 @@ bool rd__capture_armed(void)
 
 bool rd__capture_pending(void)
 {
-    return s_cap.copied != 0 || s_shot.copied != 0 || s_shot.dropped != 0;
+    /* the upscaler's pictures copied (rd_upscale_capture.h): their picture's
+     * submit stays here, where rd__capture_finish writes them */
+    return s_cap.copied != 0 || s_shot.copied != 0 || s_shot.dropped != 0 ||
+           rd__upscale_capture_copied();
 }
 
 int rd_capture_result(char *path, uint32_t pathSize)
@@ -2314,6 +2318,9 @@ static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState,
 
 void rd__capture_finish(void)
 {
+    /* the upscaler's pictures F12 asked for (rd_upscale_capture.h): written
+     * before this present's picture, so the bug-report zip finds them */
+    (void)rd__upscale_capture_finish();
     if (s_shot.dropped) {
         s_shot.dropped = 0;
         if (shotLogNow()) {

@@ -19,7 +19,12 @@
  * a finished zip, its entries kept; ico_zip_move_file: F12's blended
  * present's frame added third, the loose file gone.  The slow-scene zip
  * (ico_slow_dump_path, ico_slow_dump_prune): its name, its contents (the
- * frame, then the log), one kept, the loss zips left alone.
+ * frame, then the log), one kept, the loss zips left alone.  The
+ * upscaler's pictures (upscale_pictures.h, issue 203): the stem of
+ * <stem>-present.png; the four found beside it and added to the bug-report
+ * zip in their order, the zip under the cap; with a cap the second picture
+ * would pass, the first alone added and the line naming the refusal; none
+ * beside the picture (no upscaler) adds nothing.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -28,6 +33,7 @@
 #include "dump_zip.h"
 #include "host_fs.h"
 #include "miniz.h"
+#include "upscale_pictures.h"
 
 static int fails;
 
@@ -349,6 +355,99 @@ static void test_add(const char *base)
     }
 }
 
+static void test_upscale_pictures(const char *base)
+{
+    char dump[1200], present[1200], zip[1200], why[160], stem[1200], path[1300], line[1400];
+    char rd[300], pic[3000];
+    int added = -1;
+    mz_zip_archive z;
+
+    snprintf(dump, sizeof(dump), "%s/up-v1.rddump", base);
+    snprintf(present, sizeof(present), "%s/up-present.png", base);
+    snprintf(zip, sizeof(zip), "%s/up-v1.zip", base);
+    CHECK(ico_upscale_pictures_stem(present, stem, sizeof(stem)) == 0);
+    CHECK(strlen(stem) + strlen("-present.png") == strlen(present));
+    CHECK(ico_upscale_pictures_stem("up.png", stem, sizeof(stem)) == -1);
+    for (size_t i = 0; i < sizeof(rd); i++) {
+        rd[i] = (char)(i * 11 + 3);
+    }
+    /* incompressible bytes: the zip grows by about each picture's size */
+    uint32_t x = 2463534242u;
+    for (size_t i = 0; i < sizeof(pic); i++) {
+        x ^= x << 13;
+        x ^= x >> 17;
+        x ^= x << 5;
+        pic[i] = (char)(x >> 24);
+    }
+    CHECK(put(dump, rd, sizeof(rd)) == 0);
+    CHECK(put(present, pic, sizeof(pic)) == 0);
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) >= 0);
+    /* no picture beside the present yet: none found, none added */
+    CHECK(ico_upscale_pictures_zip(present, zip, ICO_REPORT_ZIP_CAP, 0, &added, line,
+                                   sizeof(line)) == 0);
+    CHECK(added == 0);
+    (void)ico_upscale_pictures_stem(present, stem, sizeof(stem));
+    for (int i = 0; i < ICO_UPSCALE_PICTURES; i++) {
+        snprintf(path, sizeof(path), "%s%s", stem, ico_upscale_picture_suffix(i));
+        CHECK(put(path, pic, sizeof(pic) - (size_t)i * 100u) == 0);
+    }
+    /* all four into the zip, in order, the bytes kept, under the cap */
+    CHECK(ico_upscale_pictures_zip(present, zip, ICO_REPORT_ZIP_CAP, sizeof(pic), &added, line,
+                                   sizeof(line)) == 4);
+    CHECK(added == 4);
+    CHECK(strstr(line, "up-scene.png") != NULL && strstr(line, "up-composite.png") != NULL);
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 5);
+    CHECK(entry_is(&z, "up-scene.png", pic, sizeof(pic)));
+    CHECK(entry_is(&z, "up-velocity.png", pic, sizeof(pic) - 100u));
+    CHECK(entry_is(&z, "up-depth.png", pic, sizeof(pic) - 200u));
+    CHECK(entry_is(&z, "up-composite.png", pic, sizeof(pic) - 300u));
+    mz_zip_reader_end(&z);
+    remove(zip);
+    /* a cap the second picture would pass: the first alone, the refusal
+       named, the zip within the cap */
+    CHECK(put(dump, rd, sizeof(rd)) == 0);
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) >= 0);
+    {
+        FILE *f = fopen(zip, "rb");
+        long have = 0;
+
+        if (f != NULL) {
+            fseek(f, 0, SEEK_END);
+            have = ftell(f);
+            fclose(f);
+        }
+        const uint64_t cap = (uint64_t)have + sizeof(pic) + 512u + sizeof(pic) / 2u;
+
+        CHECK(ico_upscale_pictures_zip(present, zip, cap, 0, &added, line, sizeof(line)) == 4);
+        CHECK(added == 1);
+        CHECK(strstr(line, "up-velocity.png not added") != NULL);
+        f = fopen(zip, "rb");
+        have = 0;
+        if (f != NULL) {
+            fseek(f, 0, SEEK_END);
+            have = ftell(f);
+            fclose(f);
+        }
+        CHECK(have > 0 && (uint64_t)have <= cap);
+    }
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 2);
+    CHECK(find(&z, "up-scene.png") >= 0 && find(&z, "up-velocity.png") < 0);
+    mz_zip_reader_end(&z);
+    /* F12 without a zip: the four named, nothing written */
+    CHECK(ico_upscale_pictures_zip(present, NULL, 0, 0, &added, line, sizeof(line)) == 4);
+    CHECK(added == 0 && strstr(line, "-composite.png") != NULL);
+    remove(zip);
+    remove(present);
+    for (int i = 0; i < ICO_UPSCALE_PICTURES; i++) {
+        snprintf(path, sizeof(path), "%s%s", stem, ico_upscale_picture_suffix(i));
+        remove(path);
+    }
+}
+
 int main(int argc, char **argv)
 {
     char dump[1200], log[1200], zip[1200], why[160];
@@ -517,6 +616,7 @@ int main(int argc, char **argv)
     test_loss(argv[1]);
     test_slow(argv[1]);
     test_add(argv[1]);
+    test_upscale_pictures(argv[1]);
 
     printf("dump_zip_test: %s\n", fails ? "FAILED" : "ok");
     return fails ? 1 : 0;
