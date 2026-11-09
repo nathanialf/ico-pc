@@ -1130,7 +1130,14 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   the stamped copy's PE check (`ico_icon_stamp_pe_check`) on a small PE32+ laid out as the game's
   exe (`.text`, `.rsrc`, `.reloc`): passing with `.rsrc` grown and `.reloc` moved, refusing a changed
   code byte, entry point, import directory, section name or flags, no resource directory, a cut file,
-  a short `SizeOfImage`, another machine and a file that is not PE (`icon_stamp`). The resource update itself (`tools/ico_icon_stamp.c`) runs only on Windows.
+  a short `SizeOfImage`, another machine and a file that is not PE, sections that overlap, a
+  relocation directory outside every section or past its section's end, a symbol table pointer
+  inside the sections (as a stamped exe kept it before the helper zeroed it), past the file's end or with its
+  symbols cut, and accepting one right after the sections and a program that carries symbols;
+  `ico_icon_stamp_clear_symbols` zeroing the two header fields and refusing a cut or non-PE head;
+  the helper's refusal line (`ico_icon_stamp_refusal`) and the game's reading of it
+  (`ico_icon_stamp_refused`: the same stamp only, not a new label, another disc, a prefix of the
+  stamp, an in-use line, a stamped line, an empty or missing line) (`icon_stamp`). The resource update itself (`tools/ico_icon_stamp.c`) runs only on Windows.
 - `rd_png_mem_test.c` (`port/render/test`): `rd_write_png_mem` against the exact bytes the file
   writer produced before the split (a 2 x 2 image, RGBA and RGB), equal to the file writer's bytes
   for a multi-block image, a round trip through `texpack_load_png` with a padded pitch, and the

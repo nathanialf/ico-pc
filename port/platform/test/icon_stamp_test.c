@@ -404,6 +404,79 @@ static void test_pe(void)
     CHECK(ico_icon_stamp_pe_check(a, an, b, bn, &why) == -1);
     CHECK(ico_icon_stamp_pe_check(a, an, NULL, 0, &why) == -1);
     CHECK(ico_icon_stamp_pe_check(a, 0x100, a, an, &why) == -1); /* the program cut */
+
+    /* the sections out of order or overlapping */
+    bn = make_pe(b, 1);
+    wr32(b + 0x188 + 40 * 2 + 12, 0x2800); /* .reloc inside the grown .rsrc */
+    wr32(b + 0x98 + 112 + 8 * 5, 0x2800);
+    CHECK(ico_icon_stamp_pe_check(a, an, b, bn, &why) == -1);
+    /* the relocations outside every section */
+    bn = make_pe(b, 1);
+    wr32(b + 0x98 + 112 + 8 * 5, 0x3800); /* between .rsrc and .reloc */
+    CHECK(ico_icon_stamp_pe_check(a, an, b, bn, &why) == -1);
+    bn = make_pe(b, 1);
+    wr32(b + 0x98 + 112 + 8 * 5 + 4, 0x20); /* past .reloc's 0x10 bytes */
+    CHECK(ico_icon_stamp_pe_check(a, an, b, bn, &why) == -1);
+    /* the COFF symbol table pointer: as rc5's stamped exe had it (unchanged
+       from the program, so inside the moved sections), refused; zeroed by
+       ico_icon_stamp_clear_symbols, accepted; past the sections with the
+       symbols in the file, accepted; past the file's end, refused */
+    bn = make_pe(b, 1);
+    wr32(b + 0x84 + 8, 0x600 + 0x200 + 0x200); /* the program's end of sections */
+    wr32(b + 0x84 + 12, 81634);
+    CHECK(ico_icon_stamp_pe_check(a, an, b, bn, &why) == -1);
+    CHECK(ico_icon_stamp_clear_symbols(b, 0x400) == 0);
+    CHECK(rd32(b + 0x84 + 8) == 0 && rd32(b + 0x84 + 12) == 0);
+    CHECK(ico_icon_stamp_pe_check(a, an, b, bn, &why) == 0);
+    {
+        static uint8_t c[0x4000];
+        size_t cn = make_pe(c, 1);
+        wr32(c + 0x84 + 8, (uint32_t)cn); /* right after the sections */
+        wr32(c + 0x84 + 12, 2);
+        CHECK(ico_icon_stamp_pe_check(a, an, c, cn + 40, &why) == 0);
+        CHECK(ico_icon_stamp_pe_check(a, an, c, cn + 30, &why) == -1); /* symbols cut */
+        wr32(c + 0x84 + 8, (uint32_t)cn + 0x100);
+        CHECK(ico_icon_stamp_pe_check(a, an, c, cn + 40, &why) == -1); /* past the end */
+    }
+    /* the program itself may carry symbols */
+    {
+        static uint8_t d[0x4000];
+        const size_t dn = make_pe(d, 0);
+        wr32(d + 0x84 + 8, (uint32_t)dn);
+        wr32(d + 0x84 + 12, 1);
+        bn = make_pe(b, 1);
+        CHECK(ico_icon_stamp_pe_check(d, dn + 18, b, bn, &why) == 0);
+    }
+    CHECK(ico_icon_stamp_clear_symbols(b, 0x20) == -1);
+    b[0] = 'X';
+    CHECK(ico_icon_stamp_clear_symbols(b, 0x400) == -1);
+    CHECK(ico_icon_stamp_clear_symbols(NULL, 0x400) == -1);
+}
+
+/* the helper's refusal line and the game's reading of it */
+static void test_refusal(void)
+{
+    char out[64];
+    CHECK(ico_icon_stamp_refusal(out, sizeof(out), "v0.11.1 SCES-50760") == 0 &&
+          strcmp(out, "refused stamp \"v0.11.1 SCES-50760\":") == 0);
+    CHECK(ico_icon_stamp_refusal(out, sizeof(out), "") == -1 && out[0] == '\0');
+    CHECK(ico_icon_stamp_refusal(out, 8, "v0.11.1 SCES-50760") == -1 && out[0] == '\0');
+    const char *line = "2026-11-09 10:00:00 ico_icon_stamp: refused stamp \"v0.11.1 SCES-50760\": "
+                       "the stamped copy is not the same program (x); the game does not try "
+                       "this icon again | exe C:\\g\\ico_pc_x64.exe | icon C:\\u\\a.ico";
+    CHECK(ico_icon_stamp_refused(line, "v0.11.1 SCES-50760") == 1);
+    CHECK(ico_icon_stamp_refused(line, "v0.11.2 SCES-50760") == 0); /* a new icon */
+    CHECK(ico_icon_stamp_refused(line, "v0.11.1 SCES-5076") == 0);
+    CHECK(ico_icon_stamp_refused(line, "v0.11.1 SCPS-15101") == 0); /* another disc */
+    CHECK(ico_icon_stamp_refused("2026-11-09 10:00:00 ico_icon_stamp: not stamped: the program "
+                                 "file was still in use after 10000 ms | exe x | icon y",
+                                 "v0.11.1 SCES-50760") == 0);
+    CHECK(ico_icon_stamp_refused("2026-11-09 10:00:00 ico_icon_stamp: stamped: 4 images (1 PNG), "
+                                 "stamp \"v0.11.1 SCES-50760\"",
+                                 "v0.11.1 SCES-50760") == 0);
+    CHECK(ico_icon_stamp_refused("", "v0.11.1 SCES-50760") == 0);
+    CHECK(ico_icon_stamp_refused(NULL, "v0.11.1 SCES-50760") == 0);
+    CHECK(ico_icon_stamp_refused(line, "") == 0);
 }
 
 int main(int argc, char **argv)
@@ -416,6 +489,7 @@ int main(int argc, char **argv)
     test_stamp();
     test_quote();
     test_pe();
+    test_refusal();
     if (fails) {
         printf("icon_stamp_test: %d failures\n", fails);
         return 1;
