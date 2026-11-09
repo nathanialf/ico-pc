@@ -1,5 +1,5 @@
-/* rd_layer.c: the display layer (rd_layer.h; docs/port/RENDER.md "The
- * upscale point"): under a temporal upscaler the game's 2D layer (lists 11
+/* rd_layer.c: the display layer (rd_layer.h; docs/port/DISPLAY_LAYER.md):
+ * under a temporal upscaler the game's 2D layer (lists 11
  * and 12 after their last scene-class command) is drawn into COMPOSITE,
  * the upscaler's output at the display scale, and a keep frame holds the
  * composite instead of sending the picture through the upscaler again.

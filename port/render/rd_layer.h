@@ -1,7 +1,7 @@
 /*
  * port/render/rd_layer.h
  *
- * The display layer (issue 203; docs/port/RENDER.md "The upscale point").
+ * The display layer (issue 203; docs/port/DISPLAY_LAYER.md).
  * While a temporal upscaler is in force (rd_upscale.h: the scene drawn at
  * the render scale, upscaled where the reduction reads it), the game's own
  * 2D layer is not drawn into SCENE: SCENE holds the 3D picture and the post

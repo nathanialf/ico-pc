@@ -179,7 +179,11 @@ environment's run byte for byte the `--jitter` one, each run's `jitter` stats li
 `rd_replay_tool_upscale_test`, which replays the dump at `--enhanced --resolution 3x
 --upscale-test 1.5 --upscale-phases 8 --present 960x720 --stats` and passes on `upscale point:
 SCENE 1024x1024 -> UPSCALED 1536x1536 (render scale 2x2, display scale 3x3)` with a marker
-dispatched, none refused and a reduction remapped ([RENDER.md](RENDER.md#the-upscale-point)), and
+dispatched, none refused and a reduction remapped ([RENDER.md](RENDER.md#the-upscale-point)),
+`rd_replay_tool_upscale_keep` and `rd_replay_tool_fsr3_keep` (`port/render/test/rd_replay_tool_keep.cmake`),
+which replay `rd_pixel_keep.rddump` 20 times after `--prev rd_pixel_frame.rddump` under the test's
+upscaler at 1.5 or FSR 3.1 Quality and pass on one dispatch and `keep frames held 20 (keep copies
+20, no keep sprite 0)` with nothing refused ([DISPLAY_LAYER.md](DISPLAY_LAYER.md#keep-frames)), and
 `rd_replay_tool_fsr3`, which replays the dump at `--enhanced --fsr3 quality [sharpness 0..100] --present 1280x960
 --stats` under the validation layer and passes on `upscale: fsr3 ran N presents (context render WxH
 -> display WxH, ..., refused 0, failed 0, ...), validation errors 0` (FSR 3.1 dispatched by the
