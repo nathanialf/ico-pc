@@ -87,6 +87,12 @@ void window_robust_start(const char *cfgName)
                       ico_diag_startup_prev_watchdog();
 
     if (mark_read(&old) != 0) {
+        /* robust access on with no mark of the game's: set by hand, or by a
+           game that wrote no mark: never touched, said every start */
+        if (ico_config_get_bool(KEY_ON, 0) &&
+            robust_unmarked_line(line, sizeof(line), cfgName) == 0) {
+            ico_diag_log("%s", line);
+        }
         return;
     }
     step = robust_persist_step(&old, game_version(), lost, ended);

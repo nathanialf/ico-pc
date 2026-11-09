@@ -1938,8 +1938,57 @@ static void checkMsaaEpoch(void)
     rd__frame_free(&f);
 }
 
+/* The default mode per device class (issue 179): a tile-based device
+ * (RdProfile.tiler) takes frustum, every other device full, and [dev] cull
+ * (ICO_RD_CULL) rules on both; the 10 s line names the profile's default.
+ * The picture is the same either way: the occlusion test skips only draws
+ * hidden by the depth (checkHizFrame, rd_vis_hiz_corpus; _mali and _tiler
+ * runs of the replay tests draw the dump fixtures under each class). */
+static void checkProfileDefault(void)
+{
+    const bool tiler = g_rd.profile.tiler;
+    RdPerfCullSum sum;
+    char text[512];
+
+    setEnvVar("ICO_RD_CULL", NULL);
+    g_rd.profile.tiler = true;
+    rd__vis_set_mode(-1);
+    rd__vis_init();
+    CHECK(rd__vis_profile_default() && rd__vis_mode() == RD_VIS_FRUSTUM,
+          "profile default: tile-based takes frustum (mode %d)", rd__vis_mode());
+    memset(&sum, 0, sizeof(sum));
+    sum.draws = 100;
+    sum.skipped = 30;
+    sum.frustum = 30;
+    rd_perf_cull_text(text, sizeof(text), &sum, 1.0);
+    CHECK(strstr(text, "(profile default)") != NULL && strstr(text, "([dev] cull)") == NULL,
+          "profile default: the 10 s line says so: %s", text);
+    setEnvVar("ICO_RD_CULL", "full");
+    rd__vis_init();
+    CHECK(!rd__vis_profile_default() && rd__vis_mode() == RD_VIS_FULL,
+          "profile default: [dev] cull = full keeps the test on a tiler");
+    rd_perf_cull_text(text, sizeof(text), &sum, 1.0);
+    CHECK(strstr(text, "([dev] cull)") != NULL, "profile default: set by hand: %s", text);
+    setEnvVar("ICO_RD_CULL", "off");
+    rd__vis_init();
+    CHECK(rd__vis_mode() == RD_VIS_OFF, "profile default: [dev] cull = off on a tiler");
+    setEnvVar("ICO_RD_CULL", NULL);
+    g_rd.profile.tiler = false;
+    rd__vis_init();
+    CHECK(!rd__vis_profile_default() && rd__vis_mode() == RD_VIS_FULL,
+          "profile default: immediate-mode keeps full (mode %d)", rd__vis_mode());
+    setEnvVar("ICO_RD_CULL", "frustum");
+    rd__vis_init();
+    CHECK(rd__vis_mode() == RD_VIS_FRUSTUM, "profile default: [dev] cull = frustum on desktop");
+    setEnvVar("ICO_RD_CULL", NULL);
+    g_rd.profile.tiler = tiler;
+    rd__vis_set_mode(-1);
+    rd__vis_init();
+}
+
 int main(void)
 {
+    checkProfileDefault();
     checkBounds();
     checkMargins();
     checkPlanes();

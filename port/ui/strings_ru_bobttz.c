@@ -821,4 +821,59 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     [UI_STR_LANG_RU_BOBTTZ] = "Русский (bob-ttz)",
     [UI_STR_LANG_RU_COBRA838] = "Русский (cobra838)",
     [UI_STR_LANG_PT_BR] = "Português (Brasil) (ichagas7)",
+    /* ---- new since v0.10.2: English until translated ---- */
+    /* Written by the maintainer, please check: UI_STR_NEWGAME_START, UI_STR_NEWGAME_START_SCREEN (above). */
+    [UI_STR_VAL_ALWAYS_SCENES] = NULL,         /* "Always, Start only in scenes" */
+    [UI_STR_OPT_UPSCALE] = NULL,               /* "Upscaling" */
+    [UI_STR_VAL_UPSCALE_FSR1] = NULL,          /* "FSR 1.0" */
+    [UI_STR_VAL_UPSCALE_FSR3] = NULL,          /* "FSR 3.1" */
+    [UI_STR_OPT_UPSCALE_QUALITY] = NULL,       /* "Upscaling quality" */
+    [UI_STR_VAL_UPSCALE_Q_NATIVE] = NULL,      /* "Native AA" */
+    [UI_STR_VAL_UPSCALE_Q_QUALITY] = NULL,     /* "Quality" */
+    [UI_STR_VAL_UPSCALE_Q_BALANCED] = NULL,    /* "Balanced" */
+    [UI_STR_VAL_UPSCALE_Q_PERFORMANCE] = NULL, /* "Performance" */
+    [UI_STR_OPT_UPSCALE_SHARPNESS] = NULL,     /* "Sharpness" */
+    /* "FSR (AMD) sharpens a picture drawn smaller than the screen. Not with the CRT filter or at Window. 3.1: no Downsampling; anti-aliasing off." */
+    [UI_STR_OPT_UPSCALE_NOTE] = NULL,
+    [UI_STR_AA_FSR3] = NULL,            /* " (off: FSR 3.1)" */
+    [UI_STR_EXTRAS_DESKTOP] = NULL,     /* "Add to the applications menu" */
+    [UI_STR_DESKTOP_ADDED] = NULL,      /* "Added to the menu" */
+    [UI_STR_DESKTOP_ADDED_BODY] = NULL, /* "The game is in your\napplications menu." */
+    [UI_STR_DESKTOP_FAILED] = NULL,     /* "Could not add to the menu" */
+    /* "The menu entry could not be\nwritten to your user folder." */
+    [UI_STR_DESKTOP_FAILED_BODY] = NULL,
+    [UI_STR_SECTION_COMBAT] = NULL,     /* "Combat" */
+    [UI_STR_OPT_VAR_AUTO_GUARD] = NULL, /* "Automatic guard" */
+    /* "Off: Ico no longer blocks a Shadow’s attack from the front; it lands as an attack from behind does. Achievements stay on." */
+    [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] = NULL,
+    [UI_STR_OPT_VAR_ATTACK_TURN] = NULL, /* "Turn to face shadows" */
+    /* "Off: Ico swings straight ahead instead of turning toward the nearest Shadow; the swing’s reach is unchanged. Achievements stay on." */
+    [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] = NULL,
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = NULL, /* "Shadows wait while Ico is down" */
+    /* "Off: the Shadows no longer hold back while Ico is knocked down, so they can hit him again before he is up. Achievements stay on." */
+    [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] = NULL,
+    [UI_STR_OPT_VAR_SWORD_COLOUR] = NULL, /* "Light sword colour" */
+    /* "Red: the light sword leaves a red trail, as its unused twin in the game does; nothing else changes. From the next room." */
+    [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] = NULL,
+    [UI_STR_OPT_VAR_WEAPON] = NULL, /* "Stick" */
+    /* "Insect net: each stick is the game’s unused insect net; it cannot be swung or lit and never hurts a Shadow. From the next room." */
+    [UI_STR_OPT_VAR_WEAPON_NOTE] = NULL,
+    [UI_STR_VAL_VAR_INSECT_NET] = NULL,    /* "Insect net" */
+    [UI_STR_VAL_VAR_THIRD_JOURNEY] = NULL, /* "Third journey" */
+    /* "Shadows as tough as on a third playthrough, which the game never reaches (twice the first journey’s). Achievements stay on." */
+    [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] = NULL,
+    [UI_STR_OPT_VAR_PEACEFUL] = NULL, /* "Peaceful shadows" */
+    /* "On: Shadows stay where they appear and never go after Ico or Yorda. Switches achievements off." */
+    [UI_STR_OPT_VAR_PEACEFUL_NOTE] = NULL,
+    [UI_STR_OPT_VAR_CHAIN_SPEED] = NULL, /* "Chain swing speed" */
+    /* "How fast a chain swings when Ico hangs on it and swings it. 1 is the slowest, 10 the fastest, 4 the game’s own. Achievements stay on." */
+    [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] = NULL,
+    [UI_STR_OPT_VAR_CHAIN_DAMPING] = NULL, /* "Chain swing slowdown" */
+    /* "How quickly a swing dies down while Ico is not swinging the chain. 1 is the slowest, 10 the quickest, 4 the game’s own. Achievements stay on." */
+    [UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE] = NULL,
+    [UI_STR_VAL_VAR_CHAIN_ORIGINAL] = NULL, /* "4 (original)" */
+    [UI_STR_OPT_FREE_MOVEMENT] = NULL,      /* "Free movement" */
+    /* "Press L2 to fly Ico with the sticks: the left stick moves him, the right stick goes up and down, L3 sets him on the floor. Switches achievements off." */
+    [UI_STR_OPT_FREE_MOVEMENT_NOTE] = NULL,
+    [UI_STR_REMAP_ASK_HINT] = NULL, /* "Ask Yorda for a hint" */
 };

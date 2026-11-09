@@ -167,6 +167,12 @@ void window_scene_vu_fit_add(SceneVuFit *f, uint64_t invocations, double workMs)
     const double x = (double)invocations / 1000.0;
     const double list0Ms = workMs;
 
+    if (f->n == 0 || x < f->xMin) {
+        f->xMin = x;
+    }
+    if (f->n == 0 || x > f->xMax) {
+        f->xMax = x;
+    }
     f->n++;
     f->sx += x;
     f->sy += list0Ms;
@@ -191,6 +197,9 @@ bool window_scene_vu_fit(const SceneVuFit *f, double *a, double *b, double *r2)
     if (!(vx > 1e-9 * (f->sxx > 1.0 ? f->sxx : 1.0))) {
         return false;
     }
+    if (!(f->xMax >= 2.0 * f->xMin)) {
+        return false;
+    }
     *b = cxy / vx;
     *a = (f->sy - *b * f->sx) / n;
     *r2 = vy > 1e-12 ? cxy * cxy / (vx * vy) : -1.0;
@@ -213,7 +222,12 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f)
         return 0;
     }
     if (!window_scene_vu_fit(f, &a, &b, &r2)) {
-        w = snprintf(out, cap, "; GPU work %.1f ms a replay (%u replays)", f->sy / f->n, f->n);
+        w = f->n < 3
+                ? snprintf(out, cap, "; GPU work %.1f ms a replay (%u replays)", f->sy / f->n, f->n)
+                : snprintf(out, cap,
+                           "; GPU work %.1f ms a replay (%u replays); fit: not enough spread "
+                           "(x %.1f..%.1f thousand vertex invocations)",
+                           f->sy / f->n, f->n, f->xMin, f->xMax);
     } else if (r2 < 0.0) {
         w = snprintf(
             out, cap,
