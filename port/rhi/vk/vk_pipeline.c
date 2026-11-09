@@ -265,10 +265,31 @@ static void *vkr_cache_load(size_t *size)
     uint32_t h[4];
     memcpy(h, blob, sizeof(h));
     const uint8_t *uuid = (const uint8_t *)blob + 16;
-    if (h[0] < 32 || h[0] > (uint32_t)n || h[1] != VK_PIPELINE_CACHE_HEADER_VERSION_ONE ||
-        h[2] != g_vkr.props.vendorID || h[3] != g_vkr.props.deviceID ||
-        memcmp(uuid, g_vkr.props.pipelineCacheUUID, VK_UUID_SIZE) != 0) {
-        VKR_LOG("pipeline cache %s is for another device or driver: starting empty", s_cachePath);
+    if (h[0] < 32 || h[0] > (uint32_t)n || h[1] != VK_PIPELINE_CACHE_HEADER_VERSION_ONE) {
+        VKR_LOG("pipeline cache %s is not a cache this driver reads (header %u bytes, version "
+                "%u): starting empty",
+                s_cachePath, h[0], h[1]);
+        free(blob);
+        return NULL;
+    }
+    if (h[2] != g_vkr.props.vendorID || h[3] != g_vkr.props.deviceID) {
+        /* the file is named after the shader set (rd_cache_name.h), so a
+         * header for another GPU is a device change (a restored backup, a
+         * shared folder) */
+        VKR_LOG("pipeline cache %s is for another device (vendor 0x%x device 0x%x; this one 0x%x "
+                "0x%x): starting empty",
+                s_cachePath, h[2], h[3], g_vkr.props.vendorID, g_vkr.props.deviceID);
+        free(blob);
+        return NULL;
+    }
+    if (memcmp(uuid, g_vkr.props.pipelineCacheUUID, VK_UUID_SIZE) != 0) {
+        /* the same GPU, the driver's cache id differs (issue 123: the file
+         * written under another driver picked in the app, or before a driver
+         * update): the shader set is the same, the name says so */
+        VKR_LOG("pipeline cache %s is from another driver for this GPU (the driver's cache id "
+                "differs: a driver update, or another driver picked; the shader set is the "
+                "same): starting empty, every pipeline compiled once",
+                s_cachePath);
         free(blob);
         return NULL;
     }
@@ -319,7 +340,7 @@ void vkr_pipeline_cache_init(void)
                     vkr_base_name(s_cachePath));
         }
     }
-    vkr_cache_drop_others(s_cachePath, NULL, 0);
+    const uint32_t dropped = vkr_cache_drop_others(s_cachePath, NULL, 0);
     void *blob = vkr_cache_load(&size);
     VkPipelineCacheCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO,
@@ -344,6 +365,13 @@ void vkr_pipeline_cache_init(void)
         /* the size at the start either way (issues 93 and 107: a start the
            system ended keeps what the last write saved) */
         VKR_LOG("pipeline cache: starting empty (%s holds none for this device)", s_cachePath);
+        if (dropped > 0) {
+            /* the name is the shader set's: an older set's file was dropped
+             * and none of this one's is there (issue 123) */
+            VKR_LOG("pipeline cache: the shader set changed with this version (%u older "
+                    "file%s dropped): the cache starts empty once",
+                    dropped, dropped == 1 ? "" : "s");
+        }
     }
     free(blob);
 }

@@ -604,6 +604,18 @@ target_compile_options(rd_display_change_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${
 target_include_directories(rd_display_change_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_display_change_test PRIVATE ico_render)
 
+# rd_set_resume_test: the start-up set resumed after a low-memory stop (issue
+# 123; rd_pipeline.c rd_set_pipeline_resume, rd_pipeline_set_stop): a set
+# stopped after its first batch, then resumed there in half the batch with
+# the keys before it made after the rest (the progress the whole set), in a
+# batch of 8 with them left to the cache (the progress the rest), from past
+# the set's end (from its first), a batch under 4 made 4, and the whole set
+# with no stop.  77 without a device.
+add_executable(rd_set_resume_test test/rd_set_resume_test.c)
+target_compile_options(rd_set_resume_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_set_resume_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_set_resume_test PRIVATE ico_render)
+
 # rd_perf_test: a synthetic game-shaped frame replayed 200
 # times and recorded 200 times: no resource is created or destroyed and no
 # texture or static mesh uploaded again in steady state, and the CPU time of
@@ -1054,7 +1066,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_icon_pass_test rd_icon_hold_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_jitter_test rd_upscale_test
-                  rd_perf_test rd_display_change_test rd_boot_present_test rd_crt_test
+                  rd_perf_test rd_display_change_test rd_set_resume_test rd_boot_present_test rd_crt_test
                   texpack_load_test rd_png_mem_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
                   rd_fx_frame_test rd_vu_frac_test rd_crack_test rd_local_probe_test rd_vis_test
@@ -1390,6 +1402,8 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_display_change COMMAND rd_display_change_test)
     set_tests_properties(rd_display_change PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_set_resume COMMAND rd_set_resume_test)
+    set_tests_properties(rd_set_resume PROPERTIES SKIP_RETURN_CODE 77)
     foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold rd_vis rd_vis_hiz)
         add_test(NAME ${_t} COMMAND ${_t}_test)
         set_tests_properties(${_t} PROPERTIES SKIP_RETURN_CODE 77)
@@ -1415,7 +1429,7 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_tex_pool rd_gsbase ${rd_mesh_SHARDS} modelpack
-                             rd_shadow rd_shadow_edges rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_display_change rd_native rd_icon_hold PROPERTIES ENVIRONMENT
+                             rd_shadow rd_shadow_edges rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_display_change rd_set_resume rd_native rd_icon_hold PROPERTIES ENVIRONMENT
                                                                            "${_env}")
         set_tests_properties(${rd_blur_SHARDS} PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_velocity PROPERTIES ENVIRONMENT "${_env}")

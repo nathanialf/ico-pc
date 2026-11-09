@@ -47,3 +47,7 @@ docs/port/PACKS.md: xxHash v0\.8\.2
 # the turned swapchain leaves out, not a comparison with an earlier tree.
 docs/port/*.md: the compositor no longer rotates
 docs/port/*.md: no longer pre-rotated
+
+# The Vulkan backend's log line for a pipeline cache file of an older shader
+# set (issue 123), quoted word for word.
+docs/port/*.md: shader set changed with this version

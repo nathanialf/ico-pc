@@ -810,6 +810,33 @@ void rd_set_memory_fn(RdMemoryFn fn);
  * pipelines on one thread).  NULL (the default): never asked. */
 typedef int (*RdLowMemoryFn)(char *why, size_t size);
 void rd_set_low_memory_fn(RdLowMemoryFn fn);
+/* The start-up set resumed where an earlier start's stopped for memory
+ * (issue 123; port/platform/pipe_resume.h, docs/port/PIPELINES.md "Stop
+ * and resume"): the window calls it before rd_precreate_pipelines.  at is
+ * the first pipeline not made, in the set's order as rd_precreate_pipelines
+ * makes it (the careful set's sprite planes builds last); a value at or past
+ * the set's size starts from the first.  batch caps the set's batches (0:
+ * half of the policy's batch, at least 4).  skipBefore: the pipelines before
+ * at are left to first use (this shader set's pipeline cache file was
+ * loaded: the driver answers them from it), the progress counting the rest
+ * only; else they are made after the rest (the set from at to its end, then
+ * from its first to at), the progress counting the whole set.  One call
+ * covers the next rd_precreate_pipelines only; the line "pipelines: the
+ * start-up set resumes at pipeline N of M ..." says what it did. */
+void rd_set_pipeline_resume(uint32_t at, uint32_t batch, bool skipBefore);
+
+/* Where the last rd_precreate_pipelines stopped when its policy's bound or
+ * the low-memory function stopped it (the rest made on first use): true
+ * with at the first pipeline not made in the set's order (the resume's
+ * rotation undone), total the set's size, batch the batch it made them in,
+ * why the stop's words (rd_pipelines_lazy's); false when it made the whole
+ * set or was not run (out zeroed). */
+typedef struct RdPipelineSetStop {
+    uint32_t at, total, batch;
+    char why[256];
+} RdPipelineSetStop;
+
+bool rd_pipeline_set_stop(RdPipelineSetStop *out);
 /* No start-up set (issues 93 and 107; docs/port/PIPELINES.md, "The start-up
  * set"): the window calls it instead of rd_precreate_pipelines, why saying
  * why ("on this device (Adreno 740, issues 93 and 107)", "by the settings

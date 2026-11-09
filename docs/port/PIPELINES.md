@@ -330,7 +330,8 @@ start-up activity file then says `set: careful`, so an end inside the careful se
 start lazy rather than careful again. When the budget stops the set (`rd_pipelines_lazy_on`), the
 rest of the run is recorded as a lazy run's for that start only
 (`ico_diag_startup_activity_budget_stop`); when the system's low-memory signal stopped it, as a lazy
-run whose next start makes no set ([PLATFORM.md](PLATFORM.md#diagnostics)). Sprite planes last,
+run whose next start resumes the set where it stopped ([Stop and resume](#stop-and-resume);
+[PLATFORM.md](PLATFORM.md#diagnostics)). Sprite planes last,
 `[dev] pipeline_skip` (byte-identical): [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes).
 
 With the set made, a pipeline a draw needs later is a key the set did not hold, made on the thread
@@ -387,7 +388,7 @@ step (the `slow step` line's `texture decodes`) and the replay's texture and mes
 | the previous start, of any version, ended without a word in the foreground while a pipeline of its careful set was being made (its activity file says `set: careful`), the first such end in a row: this start only, nothing written (after a full set's end the next start is careful instead, above; [PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them in the careful set; for this start only)` |
 | such an end, whatever the set, the second in a row: the setting is written once the device is made ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; [dev] pipeline_set = "lazy" from now on)` |
 | the last run, of the same version, ran without the set and ended, or exited from it | `(the last run made them that way)` |
-| the same, its set having stopped at the system's low-memory signal (its activity file's `set: stopped at the system's low-memory signal`) | `(the previous start's set stopped when the system ran low on memory)` |
+| the same, its set having stopped at the system's low-memory signal (its activity file's `set: stopped at the system's low-memory signal`): not reached, the window resumes the set instead ([Stop and resume](#stop-and-resume)) | `(the previous start's set stopped when the system ran low on memory)` |
 | the crash order's `lazy` step | `(a restart after a graphics driver crash)` |
 
 **The set against the pool.** The set's size depends on the device's profile and the scale: 446
@@ -544,7 +545,12 @@ start the system ends or a device that freezes keeps every batch before it and t
 compiles only the rest, and the batch's line goes to the log and to the activity file as a
 `compiled: ` line ([PLATFORM.md](PLATFORM.md#diagnostics)): `rd: pipelines: compiled lazy batch 3,
 pipelines 41-57 of this run (compiler E031.41.03.47): 17 pipelines 0.02-0.61 s, mean 0.14 s, over
-1.8 s; memory 210 MB (most 214 MB), pipeline cache 3104 KB; slowest 0.61 s <key> (<modules>)`. In
+1.8 s; memory 210 MB (most 214 MB), pipeline cache 3104 KB; slowest 0.61 s <key> (<modules>); by
+family vu 12, program 5; 15 of them in the start-up set` (issue 123: the batch's keys by family,
+`rd__pipe_key_family`, and how many of them `rd__enumerate_reachable` holds, the set taken at the
+run's first creation on first use and each key made the way the draw's was, under the pass in
+force: those a resumed set made before play would have made; one outside it is a key only a
+frame's walk reaches). In
 such a run each first-use pipeline's note goes to the disc before its compile (fsync,
 `act_sync_note`), so a freeze inside one still names it. The cache's size at the start is logged
 twice: by the backend (`rhi_vk: pipeline cache: <n> bytes from <path>`, or `rhi_vk: pipeline
@@ -574,6 +580,68 @@ where the system does not say), the cache's size `rhi_pipeline_cache_size` (Vulk
 on Direct3D 12) on a phone or a tablet, on the lazy path and on a device of the table (`pipeline
 cache 3104 KB`), `not measured` in a desktop's set (the paragraph above). A start the system ended shows whether the memory grew with the batches, and the
 next start logs the last one again as `ico_pc: the previous run's last finished batch: <line>`.
+
+#### Stop and resume
+
+Issue 123 (Adreno 740 on Qualcomm's driver 512.676.1, the log of 2026-11-09): a start's set stopped at the
+free-memory floor, and from then on every start of the version made no set (the stopped start's
+activity file line was copied into each lazy start's own file); with the pipeline cache file
+refused (written under another driver, [RHI.md](RHI.md#vulkan)), the first scene compiled 29
+pipelines inside one picture's walk (`slow replay 1391.9 ms ... walk 1359.6 ms, 29 pipelines
+created`; the game step late by 1409 ms). The floor's one retry (`memory_floor.h`
+`ico_memory_floor_retry`) needed a cache file the renderer had loaded, which that one was not.
+
+A stop the next start follows (the system's low-memory signal, or the floor on
+Qualcomm's own driver) records where it stopped. The stopped start's window
+(`window_pipe_finish.c` `window_pipe_finish_start`, after `ico_diag_startup_activity_budget_stop`)
+asks the renderer (`rd_pipeline_set_stop`: the first key not made in the set's own order, the set's
+size, the batch it was made in, the stop's words) and appends to the activity file's stop line
+(`ico_diag_startup_set_resume_part`, `port/platform/pipe_resume.h`; the file's place counts from 0,
+the log lines' from 1):
+
+    set: stopped at the system's low-memory signal (1890 MB available of 11453 MB, floor 1947 MB); resume at pipeline 312 of 1196, batches of 8, stop 1, 2026-11-09 20:45
+
+with one log line holding the memory numbers and the place:
+
+    window: pipelines: the start-up set stopped for memory at pipeline 313 of 1196 (batches of 8, stop 1 in a row): memory 271 MB (most 284 MB); device 1890 MB available of 11453 MB; (memory budget: ...); the rest is made as the game needs it, and the next start resumes at pipeline 313 in batches of 4
+
+The rest of that start is made on first use, as before (the one start that ran out of memory inside
+its own set). The next start of the version (`ICO_DIAG_PIPESET_LAZY_LOW_MEMORY`) does not go lazy:
+`window_pipe_floor_retry` reads the line (`ico_pipe_resume_parse`), clears it from this start's
+file (`ico_diag_startup_resume`) and resumes the set there (`rd_set_pipeline_resume`) in batches of
+half the stopped start's (`ico_pipe_resume_batch`: the careful set's 8 becomes 4, the default 32
+becomes 16, then 8, then 4; never under 4), the memory asked between batches as in any set (before
+each pipeline under the careful policy). The pipelines before the place are made after the rest
+(the set from the place to its end, then from its first key to the place; the screen counts the
+whole set), from the pipeline cache where it holds them (a moment each): a resumed set that stops
+leaves keys before its own place that no start made, so the window does not leave the head to
+first use even with the cache loaded (`rd_set_pipeline_resume`'s `skipBefore`, which does and
+counts the rest only, stays for a caller that knows the head is cached; `rd_set_resume_test`). A line without the place (written
+before the place was recorded) resumes from the first key in half the set's batches. Lines:
+
+    window: start-up set: resumed at pipeline 313 of 1196 after the low-memory stop of 2026-11-09 20:45 (batches of 4, stop 1 in a row; the pipelines before it made after the rest, from the pipeline cache where it holds them; the pipeline cache file 1201581 bytes, loaded by the renderer: no): set: stopped at ...
+    rd: pipelines: the start-up set resumes at pipeline 313 of 1196 after an earlier start's stop for memory, in batches of 4 (the set's own 8); the pipelines before it are made after the rest
+
+A resumed set that finishes deletes the activity file (the next start makes the whole set); one
+that stops again writes its own line with `stop 2` and its own place, and the next start halves the
+batch again. A careful set's own growth budget or slow batch, and the floor on another driver than
+Qualcomm's own, stay for that start only (`ico_diag_startup_set_resume_part` answers 0, the line
+says `the next start makes the whole set again`). An end inside a creation of a resumed set counts
+towards the ends' rule as any set's (`LAZY_ONCE`, then `[dev] pipeline_set = "lazy"`). The shader
+modules stay made for the whole run (a first-use creation or a display change needs any of them),
+so the set does not release them between batches.
+
+**Compiling ahead of the walk.** A pipeline's key is made inside the walk, from the replay's state
+as each command changes it (`r->st`), the pass's target format and sample count (`beginPass`,
+`g_rd.passSamples`), the alpha plan from the draw's data, and the VU draw's program, merge and fuse
+choices (`rd_replay_vu.c`); a frame's lists at the hand-over hold the commands, not the keys, and
+the only way to name the keys without the walk is a replay that names them (`rd__pipeline_gather`,
+the loss bisect's and `rd_replay_tool --keys`' rounds), which draws nothing and would cost a second
+walk a picture. The Vulkan command list binds a `VkPipeline` as it records, so a draw cannot wait
+for a compile queued on another thread without a deferred bind. So no request queue fed at the
+hand-over: the set made before play (resumed after a stop) is what keeps the compiles out of the
+walk, and the background finisher (next section) where the floor allows. The lazy batch line's
+`N of them in the start-up set` says how many of a walk's compiles the set would have made.
 
 ### The background finisher
 

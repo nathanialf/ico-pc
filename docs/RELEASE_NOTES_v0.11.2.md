@@ -12,3 +12,4 @@
 - On phones the game no longer spends time testing which scenery is hidden behind other scenery, a check that found almost nothing there; and a safety setting that a crash recovery turned on is switched off again after a few clean starts.
 - On phones whose graphics driver does not let the drawing stage write the 3D scenery's pre-computation directly (the Mali-G52 of issue 179), the game now writes it with a compute step instead of through the screen's drawing hardware; busy scenes there should run faster.
 - With "Shadows wait while Ico is down" set to Off, the Shadows' swings now land while Ico is on the ground as well; before, they passed through him until he stood up.
+- On Android a start that had run low on memory while preparing the graphics programs no longer leaves the next start preparing them in the middle of play, where each batch could freeze the picture for a second.

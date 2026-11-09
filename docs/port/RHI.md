@@ -1121,8 +1121,14 @@ line each: `pipeline cache: dropped <name> (made for other shaders, or named aft
 (`port/rhi/vk/vk_pipeline.c` (`vkr_cache_drop_others`); not done for a path whose file name does
 not start `pipelines` and end `.vkcache`). It then loads the file when the file is 32 bytes to 64 MB and its
 header (`VkPipelineCacheHeaderVersionOne`: header size, version one, vendor id, device id,
-`pipelineCacheUUID`) names this device; anything else logs "is for another device or driver" and
-starts empty, as does data the driver refuses. Every pipeline is created through it, and
+`pipelineCacheUUID`) names this device; anything else starts empty with the part that differs
+(issue 123): "is not a
+cache this driver reads (header N bytes, version V)", "is for another device (vendor 0x.. device
+0x..; this one 0x.. 0x..)", or, the same GPU with another cache id, "is from another driver for
+this GPU (the driver's cache id differs: a driver update, or another driver picked; the shader set
+is the same)"; data the driver refuses starts empty too. When no file of this shader set is there
+and the drop removed an older set's, `pipeline cache: the shader set changed with this version (N
+older files dropped): the cache starts empty once` follows the `starting empty` line. Every pipeline is created through it, and
 `rhi_shutdown` writes it back to `<path>.tmp` and renames it over the file, not synced to the disk
 (`pipeline cache: N bytes written to <path> at exit in T ms`), and not at all when its data's size
 is the one this run loaded or last wrote (`pipeline cache unchanged, not written (N bytes in

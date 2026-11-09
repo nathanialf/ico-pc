@@ -687,6 +687,12 @@ static void pipeset_then(int set)
            window's budget_stop, then the frames' first-use pipelines */
         ico_diag_set_activity(NOTE_2D);
         ico_diag_startup_activity_budget_stop();
+        /* the window's resume part (issue 123): not for a stop for this
+           start only */
+        ico_diag_log(
+            "test: resume part %d",
+            ico_diag_startup_set_resume_part(
+                "; resume at pipeline 144 of 568, batches of 8, stop 1, 2026-11-09 20:45"));
         ico_diag_set_activity("creating pipeline fog test");
         if (strcmp(then, "budget") == 0) {
             _exit(0);
@@ -706,6 +712,12 @@ static void pipeset_then(int set)
         ico_diag_log("test: low memory stop %d (%s)", stop, why);
         ico_diag_set_pipelines(0, 0, 0);
         ico_diag_startup_activity_budget_stop();
+        /* the window's resume part (issue 123, window_pipe_finish.c):
+           where the set stopped, for the next start */
+        ico_diag_log(
+            "test: resume part %d",
+            ico_diag_startup_set_resume_part(
+                "; resume at pipeline 144 of 568, batches of 8, stop 1, 2026-11-09 20:45"));
         ico_diag_set_activity("creating pipeline fog test");
         if (strcmp(then, "lowmemdie") == 0) {
             _exit(0);
@@ -930,8 +942,8 @@ static void activity_child(const char *mode, const char *log)
            the window passes none) */
         const int relaunch = strcmp(mode, "actpipesetrelaunch") == 0;
         const int pre = relaunch ? 0 : ico_diag_startup_vu_prepass();
-        const int set = ico_diag_startup_pipeline_set(relaunch, pre > 0 ? 0 : lazy,
-                                                      getenv("ICO_TEST_PIPESET"), "config.toml");
+        int set = ico_diag_startup_pipeline_set(relaunch, pre > 0 ? 0 : lazy,
+                                                getenv("ICO_TEST_PIPESET"), "config.toml");
         if (set == ICO_DIAG_PIPESET_LAZY_ONCE || set == ICO_DIAG_PIPESET_LAZY_NOW ||
             set == ICO_DIAG_PIPESET_CAREFUL_ONCE) {
             (void)ico_diag_startup_end_persist(ICO_DIAG_END_PIPELINES,
@@ -950,6 +962,14 @@ static void activity_child(const char *mode, const char *log)
         ico_diag_log("test: pipeline set %d", set);
         ico_diag_log("test: prev floor stop %d", ico_diag_startup_prev_floor_stop());
         ico_diag_log("test: prev floor retried %d", ico_diag_startup_prev_floor_retried());
+        ico_diag_log("test: prev low memory line [%s]", ico_diag_startup_prev_low_memory_line());
+        if (set == ICO_DIAG_PIPESET_LAZY_LOW_MEMORY && getenv("ICO_TEST_RESUME") != NULL) {
+            /* the window's resume (issue 123, window_pipe_floor_retry): the
+               set made again from where it stopped */
+            ico_diag_startup_resume();
+            ico_diag_log("test: resumed");
+            set = ICO_DIAG_PIPESET_FULL;
+        }
         pipeset_then(set);
         child_quit(0);
     } else if (strcmp(mode, "actlossnext") == 0) {
@@ -3030,6 +3050,9 @@ int main(int argc, char **argv)
         s = read_file(act);
         CHECK(strcmp(s, "test 1\ncreating pipeline fog test\nset: careful") == 0);
         CHECK(read_file(ends)[0] == '\0');
+        /* the careful set's own budget: for this start only, no resume
+           part (issue 123) */
+        CHECK(strstr(read_file(log), "test: resume part 0\n") != NULL);
         r = run(argv[0], "actpipeset", log);
         s = read_file(log);
         CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
@@ -3077,19 +3100,27 @@ int main(int argc, char **argv)
         CHECK(r == 0);
         CHECK(strstr(s, "test: low memory stop 1 (running critical)\n") != NULL);
         CHECK(strstr(s, "ico_pc: the start-up set stopped at the system's low-memory signal "
-                        "(running critical); the next start makes the pipelines as the game "
-                        "needs them, with no start-up set\n") != NULL);
+                        "(running critical); this start makes the rest as the game needs them, "
+                        "and the next start resumes the set where this one stopped, in smaller "
+                        "batches\n") != NULL);
+        CHECK(strstr(s, "test: resume part 1\n") != NULL);
         s = read_file(act);
-        CHECK(strncmp(s,
-                      "test 1\nexited with the pipelines created as the frames needed them\nset: "
-                      "careful\nset: stopped at the system's low-memory signal (running "
-                      "critical)\nsystem: low memory (onTrimMemory level 15, running critical; "
-                      "signal 1 of this run) at pipelines 144 of 568 of the start-up set; memory ",
-                      strlen("test 1\nexited with the pipelines created as the frames needed "
-                             "them\nset: careful\nset: stopped at the system's low-memory signal "
-                             "(running critical)\nsystem: low memory (onTrimMemory level 15, "
-                             "running critical; signal 1 of this run) at pipelines 144 of 568 of "
-                             "the start-up set; memory ")) == 0);
+        CHECK(
+            strncmp(
+                s,
+                "test 1\nexited with the pipelines created as the frames needed them\nset: "
+                "careful\nset: stopped at the system's low-memory signal (running "
+                "critical)"
+                "; resume at pipeline 144 of 568, batches of 8, stop 1, 2026-11-09 20:45\nsystem: low memory (onTrimMemory level 15, "
+                "running critical; signal 1 of this run) at pipelines 144 of 568 of the "
+                "start-up set; memory ",
+                strlen(
+                    "test 1\nexited with the pipelines created as the frames needed "
+                    "them\nset: careful\nset: stopped at the system's low-memory signal "
+                    "(running critical)"
+                    "; resume at pipeline 144 of 568, batches of 8, stop 1, 2026-11-09 20:45\nsystem: low memory (onTrimMemory level 15, "
+                    "running critical; signal 1 of this run) at pipelines 144 of 568 of "
+                    "the start-up set; memory ")) == 0);
         CHECK(read_file(ends)[0] == '\0');
         setenv("ICO_TEST_THEN", "clean", 1);
         r = run(argv[0], "actpipeset", log);
@@ -3097,14 +3128,23 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "ico_pc: the previous start stopped preparing the graphics when the system "
                         "ran low on memory (exited with the pipelines created as the frames "
-                        "needed them); this start prepares them as the game needs them\n") != NULL);
+                        "needed them); this start resumes them where it stopped\n") != NULL);
         CHECK(strstr(s, "test: lazy 1\n") != NULL);
         CHECK(strstr(s, "test: pipeline set 7\n") != NULL);
+        CHECK(
+            strstr(s,
+                   "test: prev low memory line [set: stopped at the system's low-memory "
+                   "signal (running critical)"
+                   "; resume at pipeline 144 of 568, batches of 8, stop 1, 2026-11-09 20:45]\n") !=
+            NULL);
         CHECK(strstr(s, "test: config write") == NULL);
         s = read_file(act);
-        CHECK(strcmp(s, "test 1\nexited with the pipelines created as the frames needed "
-                        "them\nset: stopped at the system's low-memory signal (running "
-                        "critical)") == 0);
+        CHECK(strcmp(s,
+                     "test 1\nexited with the pipelines created as the frames needed "
+                     "them\nset: stopped at the system's low-memory signal (running "
+                     "critical)"
+                     "; resume at pipeline 144 of 568, batches of 8, stop 1, 2026-11-09 20:45") ==
+              0);
         /* ... that lazy start ended inside a first-use pipeline: the first
            end in a row, stepping from no set (lazy for that start only),
            not back to the careful set */
@@ -3115,9 +3155,13 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "test: pipeline set 7\n") != NULL);
         r = run(argv[0], "actpipeset", log);
         s = read_file(log);
-        CHECK(strstr(s, "ico_pc: the previous start had stopped preparing the graphics when the "
-                        "system ran low on memory (set: stopped at the system's low-memory signal "
-                        "(running critical))\n") != NULL);
+        CHECK(
+            strstr(s,
+                   "ico_pc: the previous start had stopped preparing the graphics when the "
+                   "system ran low on memory (set: stopped at the system's low-memory signal "
+                   "(running critical)"
+                   "; resume at pipeline 144 of 568, batches of 8, stop 1, 2026-11-09 20:45)\n") !=
+            NULL);
         CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
                         "pipelines): 1\n") != NULL);
         CHECK(strstr(s, "test: pipeline set 4\n") != NULL);
@@ -3185,6 +3229,43 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "test: pipeline set 7\n") != NULL);
         CHECK(strstr(s, "test: prev floor stop 1\n") != NULL);
         CHECK(strstr(s, "test: prev floor retried 1\n") != NULL);
+        remove(act);
+        /* issue 123: the window resumes the set of a start whose set
+           stopped for memory (ICO_TEST_RESUME: window_pipe_floor_retry's
+           ico_diag_startup_resume): that start records as a start-up set,
+           its file without the stop line until it stops itself; a resumed
+           set that finishes deletes the file (the next start makes the
+           full set), one that stops again writes its own line */
+        remove(ends);
+        remove(act);
+        setenv("ICO_TEST_THEN", "lowmemclean", 1);
+        r = run(argv[0], "actpipeset", log);
+        setenv("ICO_TEST_RESUME", "1", 1);
+        setenv("ICO_TEST_THEN", "clean", 1);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 7\n") != NULL);
+        CHECK(strstr(s, "test: resumed\n") != NULL);
+        CHECK(read_file(act)[0] == '\0');
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: pipeline set 6\n") != NULL);
+        CHECK(strstr(s, "test: prev low memory line []\n") != NULL);
+        remove(act);
+        setenv("ICO_TEST_THEN", "lowmemclean", 1);
+        r = run(argv[0], "actpipeset", log);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: resumed\n") != NULL);
+        CHECK(strstr(s, "test: resume part 1\n") != NULL);
+        s = read_file(act);
+        CHECK(strstr(s,
+                     "\nset: stopped at the system's low-memory signal (running critical)"
+                     "; resume at pipeline 144 of 568, batches of 8, stop 1, 2026-11-09 20:45\n") !=
+              NULL);
+        CHECK(strstr(s, ")" ICO_MEMORY_FLOOR_RETRIED_MARK) == NULL);
+        unsetenv("ICO_TEST_RESUME");
+        unsetenv("ICO_TEST_THEN");
         remove(act);
         /* ... another version tries the set again */
         remove(ends);

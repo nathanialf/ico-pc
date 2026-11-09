@@ -1465,10 +1465,13 @@ static int act_prev_careful;
 /* this start's set stopped at the system's low-memory signal
    (ico_diag_startup_activity_budget_stop after ico_diag_low_memory_stop):
    the file's line after the note for the rest of the run, with the level
-   ("set: stopped at the system's low-memory signal (running critical)");
-   the previous run's, read by begin, makes this start lazy
-   (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY) */
-static char act_low_memory[160];
+   ("set: stopped at the system's low-memory signal (running critical)"),
+   and where the set stopped for the next start's resume (issue 123,
+   pipe_resume.h: "; resume at pipeline N of M, batches of B, stop K,
+   <date>", ico_diag_startup_set_resume_part); the previous run's, read by
+   begin, is ICO_DIAG_PIPESET_LAZY_LOW_MEMORY, which the window turns into
+   the set resumed there (window_pipe_finish.c) */
+static char act_low_memory[256];
 static const char act_set_low_memory[] = "set: stopped at the system's low-memory signal";
 static int act_prev_low_memory;
 static char act_prev_low_memory_line[sizeof act_low_memory];
@@ -2891,10 +2894,11 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
         (strcmp(prev, act_lazy_exit) == 0 || strcmp(prev, act_between) == 0)) {
         /* issue 128: the set stopped at the system's low-memory signal and
            the run went on lazily (exited, or was ended between two
-           creations): this start makes no set
-           (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY) */
+           creations): ICO_DIAG_PIPESET_LAZY_LOW_MEMORY, which the window
+           makes the set resumed where it stopped (issue 123,
+           window_pipe_finish.c: its line says where and how) */
         ico_diag_log("ico_pc: the previous start stopped preparing the graphics when the system "
-                     "ran low on memory (%s); this start prepares them as the game needs them",
+                     "ran low on memory (%s); this start resumes them where it stopped",
                      prev);
         return 1;
     }
@@ -2990,6 +2994,41 @@ void ico_diag_startup_floor_retry(void)
        says it was a retry */
     act_low_memory[0] = '\0';
     act_floor_retried = 1;
+}
+
+void ico_diag_startup_resume(void)
+{
+    /* this start makes the set again from where the last one stopped: its
+       file does not say "stopped" until it stops itself
+       (ico_diag_startup_activity_budget_stop, then the window's
+       ico_diag_startup_set_resume_part) */
+    act_low_memory[0] = '\0';
+    act_floor_retried = 0;
+}
+
+const char *ico_diag_startup_prev_low_memory_line(void)
+{
+    return act_prev_low_memory ? act_prev_low_memory_line : "";
+}
+
+int ico_diag_startup_set_resume_part(const char *part)
+{
+    size_t n, k;
+
+    if (act_low_memory[0] == '\0' || part == NULL) {
+        return 0;
+    }
+    n = strlen(act_low_memory);
+    k = strlen(part);
+    if (n + k >= sizeof act_low_memory) {
+        k = sizeof act_low_memory - 1 - n;
+    }
+    memcpy(act_low_memory + n, part, k);
+    act_low_memory[n + k] = '\0';
+    if (act_mode != 0) {
+        act_write(act_current());
+    }
+    return 1;
 }
 
 int ico_diag_startup_prev_floor_retried(void)
@@ -3225,14 +3264,10 @@ void ico_diag_startup_activity_budget_stop(void)
                  act_floor_retried && floor_why[0] != '\0' ? ICO_MEMORY_FLOOR_RETRIED_MARK : "");
         act_once = 0;
         ico_diag_log(
-            "ico_pc: the start-up set stopped at %s (%s); the next start makes the "
-            "pipelines as the game needs them, with no start-up set",
+            "ico_pc: the start-up set stopped at %s (%s); this start makes the rest as the game "
+            "needs them, and the next start resumes the set where this one stopped, in smaller "
+            "batches",
             floor_why[0] != '\0' ? "the free-memory floor" : "the system's low-memory signal", lv);
-        if (floor_why[0] != '\0' && floor_driver == ICO_MEMORY_FLOOR_DRIVER_QUALCOMM) {
-            ico_diag_log("ico_pc: the next start makes the set again instead when the pipeline "
-                         "cache file for this shader set is on disk and not empty (the driver's "
-                         "compiler is not run for what the cache holds)");
-        }
     } else {
         act_nbatches = 0;
         act_once = 1;

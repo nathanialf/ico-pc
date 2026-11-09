@@ -1684,24 +1684,19 @@ start skip the set (the pipelines made on first use), which never healed: on the
 the set stopped at 485 of 671 with 1940 MB available of 11453 MB (floor 1947 MB) while that
 driver's compiler held about 3.1 GB, and the 1.4 MB cache file the stop had written held those
 485. The compiler is what ran the device low, and a pipeline the cache holds is created from it
-without the compiler. So the start after a floor stop (not after the system's signal: the file's
-line carries the floor's figures, `ico_memory_floor_line_is_floor`) makes the set again when the
-driver is Qualcomm's own and this shader set's cache file (`pipelines-<key>.vkcache`, the window's
-`ico_diag_pipeline_cache_path`) exists and is not empty and the renderer loaded it at this start
-(`rhi_pipeline_cache_loaded`: a file the driver refused, another driver after a system update or
-another shader set, answers nothing, so the compiler would run) (`ico_memory_floor_retry`, called
-by `window_pipe_floor_retry` in `port/platform/window_pipe_finish.c` after the device is made). At
-most one retry in a row: a retried start that stops at the floor again writes its stop line with
-the mark ` after a retry` after the floor's figures (`ICO_MEMORY_FLOOR_RETRIED_MARK`,
-`ico_memory_floor_line_retried`, `ico_diag_startup_prev_floor_retried`), and the next start makes
-no set, as before the retry existed (its lazy run's file keeps the marked line, so the starts after
-it stay lazy too). One
-line says which way and why, whenever the previous start stopped at the floor: `window: pipelines:
-the previous start stopped at the free-memory floor; this start makes the set again (the
-pipeline cache file for this shader set is on disk, N bytes, loaded by the renderer: yes): <path>`,
-or `this start makes no set (<why>, ...)`. The retry's start does not carry the old "stopped" line
-in its own activity file; a start that ends inside the retry steps as an end in the careful set
-does (`diag_host.c` `ico_diag_startup_pipeline_set`).
+without the compiler. `ico_memory_floor_retry` (kept with its test, `memory_floor_test`) holds the
+rule that made the set again after a floor stop only on Qualcomm's own driver with this shader
+set's cache file on disk, not empty and loaded by the renderer (`rhi_pipeline_cache_loaded`), and
+at most once in a row (the stop line's ` after a retry` mark, `ICO_MEMORY_FLOOR_RETRIED_MARK`,
+`ico_memory_floor_line_retried`, `ico_diag_startup_prev_floor_retried`). Issue 123's file had been
+written under another driver and was refused, so that rule made no set, and every later start of
+the version none either. The window resumes the set instead ([PIPELINES.md](PIPELINES.md#stop-and-resume)):
+a start after any stop the next start follows (the floor on Qualcomm's own driver or the system's
+signal) makes the set again from the place the stop recorded, in half the batches, whether or not
+the cache file loaded (`window_pipe_floor_retry` in `port/platform/window_pipe_finish.c`, after
+the device is made: `window: start-up set: resumed at pipeline N of M ...`); a start that ends
+inside the resumed set steps as an end in a set does (`diag_host.c`
+`ico_diag_startup_pipeline_set`).
 
 **Why two rules.** The 17 % rule was tuned for issue 161: the Retroid Pocket 6 (11265 MB, Adreno
 740 on Qualcomm's own driver) stalled inside that driver's pipeline compiler at 1693 MB available

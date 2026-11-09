@@ -1012,6 +1012,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   render-thread job, and it is called when the change made pipelines; `rhi_call_guard_settle`
   makes a busy guard's wait. The window's half (the
   present allowance started again) has no test: the window is not run in the tests.
+- `rd_set_resume_test.c`: the start-up set resumed after a low-memory stop (`rd_set_resume`; issue
+  123, `rd_set_pipeline_resume`, `rd_pipeline_set_stop`; [PIPELINES.md](PIPELINES.md#stop-and-resume)):
+  each start a fresh `rd_init` at Original with a low-memory function that says yes after the
+  set's first batch. The whole set stops past its first key in a batch of 32 (1 to 32 made, the
+  rest on first use, the stop's words kept); resumed there with batch 0 (half: 16) and the keys
+  before the place made after the rest, the progress counts the whole set and the stop's place
+  moves on in the set's own order; resumed in batches of 8 with the keys before it left to the
+  cache, the progress counts the rest only and the stop lands past the place; a place past the
+  set's end starts from its first key, a batch of 2 is made 4; the whole set with no stop reports
+  none. 77 without a device. The window's half (the activity file's line across starts) is
+  `diag_test`'s and `pipe_resume_test`'s.
 - `rd_filter_test.c`: the model viewer's draw filter on synthetic keys (`rd_filter`).
 - `rd_icon_pass_test.c`: the title's icon pass (`rd_set_icon_pass`) recorded without a device: on,
   the UI and full-frame screen prims (also a world prim drawn as UI space) and the deferred text are
