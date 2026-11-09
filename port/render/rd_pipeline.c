@@ -808,6 +808,22 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         layouts[1] = g_rd.layoutVu;
         layouts[2] = g_rd.layoutTex;
         memset(d, 0, sizeof(*d));
+        if (k->colorFmt == RHI_FMT_UNKNOWN && k->fs == RD_FS_VU_PRE_CS) {
+            /* the record written by compute dispatches (rd_vu_record.h; the
+             * key's fs RD_FS_VU_PRE_CS, rd__vu_pre_key): the compute build,
+             * group 0 (FrameCB) and group 1's store layout alone (the
+             * compute builds read sets 0 and 1); the tick stage's two keys
+             * the same pipeline twice, as under the stores */
+            layouts[1] = g_rdRec.layoutVuPre;
+            d->compute = rd__vu_record_cs(k->vs, g_rd.vuPreBatch && g_rd.vsBatch[k->vs].id);
+            if (!d->compute.id || !layouts[1].id) {
+                return false;
+            }
+            d->layouts = layouts;
+            d->layoutCount = 2;
+            d->debugName = "rd vu pre-pass (compute)";
+            return true;
+        }
         if (k->colorFmt == RHI_FMT_UNKNOWN) {
             /* the record stored by the vertex shaders (rd_vu_record.h; the
              * key's colorFmt UNKNOWN, rd__vu_pre_key): the store build, group
@@ -1125,8 +1141,15 @@ static void keyVsName(const RdPipeKeyInt *k, char *out, size_t size)
     const char *v = rd__vs_name(k->vs);
     const size_t n = strlen(v);
     const bool batched = g_rd.vuPreBatch && k->vs < RD_VS_COUNT && g_rd.vsBatch[k->vs].id;
-    if ((rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) && k->colorFmt == RHI_FMT_UNKNOWN &&
-        n > 7 && rd__vu_record_vs(k->vs, batched).id) {
+    if ((rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) && k->fs == RD_FS_VU_PRE_CS &&
+        n > 7) {
+        /* the record's compute build (pipelineDesc): vu_X_compute_pre_cs
+         * or vu_X_batch_compute_pre_cs (rd_vu_record.c), so a crash's note
+         * names it (startup_retry.h startup_retry_note_has_vu_store: the
+         * restart takes the render targets' record) */
+        snprintf(out, size, "%.*s%s_compute_pre_cs", (int)(n - 7), v, batched ? "_batch" : "");
+    } else if ((rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) &&
+               k->colorFmt == RHI_FMT_UNKNOWN && n > 7 && rd__vu_record_vs(k->vs, batched).id) {
         /* the record stored by the vertex shaders (pipelineDesc): the store
          * build it draws through, vu_X_store_pre_vs or
          * vu_X_batch_store_pre_vs (rd_vu_record.c), so a crash's note names
@@ -3623,12 +3646,13 @@ RdPipeKeyInt rd__vu_pre_key(uint8_t preVs)
     k.gs.colorMask = 0xF;
     k.gs.prim = RD_PRIM_POINTS;
     k.vs = preVs;
-    k.fs = RD_FS_VU_PRE;
     /* the record's write (rd_vu_record.h): the three RGBA32_UINT targets,
      * or none under the stores (the pipeline stores from its vertex
-     * shader; both kinds may be in the cache across the self-test's
-     * fallback) */
-    k.colorFmt = g_rdRec.stores ? RHI_FMT_UNKNOWN : RHI_FMT_RGBA32_UINT;
+     * shader) and the compute dispatches (fs RD_FS_VU_PRE_CS, no module:
+     * the key's own mark, the key having no spare byte); every kind may be
+     * in the cache across the self-test's fallback */
+    k.fs = rd__vu_record_compute() ? RD_FS_VU_PRE_CS : RD_FS_VU_PRE;
+    k.colorFmt = rd__vu_record_buffered() ? RHI_FMT_UNKNOWN : RHI_FMT_RGBA32_UINT;
     k.depthFmt = RHI_FMT_UNKNOWN;
     return k;
 }

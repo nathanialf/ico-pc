@@ -2573,7 +2573,7 @@ open_window:
        above may have turned it off); losstargets before it under the
        record stores */
     ico_diag_set_vu_prepass(rd_vu_prepass_on());
-    ico_diag_set_vu_record_stores(rd_vu_prepass_on() && strcmp(rd_vu_record_mode(), "stores") == 0);
+    ico_diag_set_vu_record_stores(rd_vu_prepass_on() && rd_vu_record_buffered());
     /* which way of reading the depth gives the fog its distances on this
        GPU, tried on the real scene size; logged ("fog: depth path") */
     ico_diag_step("window: start: the fog self-test");
@@ -2831,7 +2831,7 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
         }
     }
     ico_diag_set_vu_prepass(rd_vu_prepass_on());
-    ico_diag_set_vu_record_stores(rd_vu_prepass_on() && strcmp(rd_vu_record_mode(), "stores") == 0);
+    ico_diag_set_vu_record_stores(rd_vu_prepass_on() && rd_vu_record_buffered());
     window_pipe_skin_check(-1);
     ico_diag_step("window: switch to %s: the fog self-test", backend);
     rd_fog_selftest();

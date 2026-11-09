@@ -975,6 +975,33 @@ static void vkr_probe_compute(const VkPhysicalDeviceFeatures avail)
             c->float16 ? "yes" : "no", c->externalExts ? "yes" : "no");
 }
 
+/* Compute pipelines that store (rhi.h RhiLimits.computeStores: the VU
+ * record written by compute dispatches where the vertex shaders cannot
+ * store, port/render/rd_vu_record.c), after vkr_probe_compute: wherever
+ * the graphics queue's family takes compute work.  A compute shader's
+ * storage buffer writes need no feature bit (unlike the vertex stage's
+ * vertexPipelineStoresAndAtomics), and nothing here depends on the
+ * external compute's set (RhiComputeCaps.ok: subgroups, storage image
+ * formats).  ICO_VK_FAKE_NO_COMPUTE_STORES=1 leaves it off, as on a device
+ * without it (tests: rhi_vk_nocompute, rd_vuprepass_selftest_nocompute_
+ * fallback); the device table's noComputeRecord column (vkr_vu_plain_only)
+ * turns it off for a listed device later, in vkr_fill_limits.  The line
+ * says which, so a reporter's log names the record's write by itself. */
+static void vkr_compute_stores(void)
+{
+    const char *fake = getenv("ICO_VK_FAKE_NO_COMPUTE_STORES");
+    const bool fakeOff = fake && fake[0] && fake[0] != '0';
+    g_vkr.computeStores = g_vkr.queueCompute && !fakeOff;
+    snprintf(g_vkr.computeStoresOff, sizeof g_vkr.computeStoresOff, "%s",
+             g_vkr.computeStores ? ""
+             : fakeOff           ? "ICO_VK_FAKE_NO_COMPUTE_STORES"
+                                 : "the graphics queue takes no compute work");
+    VKR_LOG("compute record stores: %s%s%s (queue compute %s, vertex stores %s)",
+            g_vkr.computeStores ? "offered" : "not offered", g_vkr.computeStores ? "" : ": ",
+            g_vkr.computeStoresOff, g_vkr.queueCompute ? "yes" : "no",
+            g_vkr.vertexStores ? "yes" : "no");
+}
+
 /* The one read of ICO_VK_FAKE_LIMITS.  =min is noted for vkr_fill_limits
  * (the RhiLimits at the spec's required values).  =mali clamps the
  * device's limits to a Mali-G68's (Samsung A36 class: four descriptor
@@ -2508,6 +2535,7 @@ static bool vkr_create_device(void)
 #endif
     vkGetDeviceQueue(g_vkr.device, g_vkr.queueFamily, 0, &g_vkr.queue);
     vkr_probe_compute(avail);
+    vkr_compute_stores();
     if (g_vkr.presentWait) {
         g_vkr.waitForPresent =
             (PFN_vkWaitForPresentKHR)vkGetDeviceProcAddr(g_vkr.device, "vkWaitForPresentKHR");
@@ -2692,13 +2720,22 @@ static bool vkr_is_tiler(uint32_t vendor)
  *   finished (the GPU hang at 25.5 s).  Turnip on the same GPU keeps the
  *   pre-pass (the row's qualcomm flag: "runs better and no graphical
  *   glitches").  ICO_VK_FAKE_NO_PREPASS=1 gives any device the column's
- *   reason (the ctests). */
+ *   reason (the ctests).
+ *
+ * The noComputeRecord column: the devices whose VU record is never written
+ * by compute dispatches (its reason for RhiLimits.computeStoresOff; the
+ * renderer then takes the render targets where the vertex shaders cannot
+ * store, rd_vu_record.c).  The hook for a driver whose compute builds
+ * fail or hang; no device is listed (v0.11.2: the Mali-G52 of issue 179 is
+ * the reason the compute record exists, and its start-up self-test falls
+ * back to the targets on a wrong picture by itself). */
 static const struct {
     uint32_t vendor, deviceMask, device;
     bool qualcomm;
     const char *reason;
-    const char *careful;   /* NULL: the start-up set as usual */
-    const char *noPrepass; /* NULL: the pre-pass as everywhere */
+    const char *careful;         /* NULL: the start-up set as usual */
+    const char *noPrepass;       /* NULL: the pre-pass as everywhere */
+    const char *noComputeRecord; /* NULL: the compute record where offered */
 } kVuPlainOnly[] = {
     /* the Adreno 740 by the whole chip id both devices report (0x43050A01,
      * the issue 93 and 107 logs), nothing near it: Mesa's freedreno
@@ -2706,7 +2743,7 @@ static const struct {
      * 0x43050A00 to the Adreno A32, 0x43050B00 to the 740v3 and
      * 0x43051401 to the Adreno 750, none of them seen failing */
     {RHI_VENDOR_QUALCOMM, 0xFFFFFFFFu, 0x43050A01u, true, "Adreno 740, issue 107",
-     "Adreno 740, issues 93 and 107", "Adreno 740 on Qualcomm's driver, issue 123"},
+     "Adreno 740, issues 93 and 107", "Adreno 740 on Qualcomm's driver, issue 123", NULL},
 };
 
 static void vkr_vu_plain_only(void)
@@ -2734,6 +2771,12 @@ static void vkr_vu_plain_only(void)
             if (kVuPlainOnly[i].noPrepass != NULL) {
                 snprintf(g_vkr.noVuPrepass, sizeof g_vkr.noVuPrepass, "%s",
                          kVuPlainOnly[i].noPrepass);
+            }
+            if (kVuPlainOnly[i].noComputeRecord != NULL && g_vkr.computeStores) {
+                g_vkr.computeStores = false;
+                snprintf(g_vkr.computeStoresOff, sizeof g_vkr.computeStoresOff,
+                         "the device table: %s", kVuPlainOnly[i].noComputeRecord);
+                VKR_LOG("compute record stores: not offered (%s)", g_vkr.computeStoresOff);
             }
             return;
         }
@@ -2816,6 +2859,7 @@ static void vkr_fill_limits(void)
     o->rasterOrderOff = g_vkr.rasterOrderOff[0] ? g_vkr.rasterOrderOff : NULL;
     /* the vertex shaders' stores (vkr_create_device) */
     o->vertexStores = g_vkr.vertexStores;
+
     o->validationLayer = g_vkr.validationOn;
     o->moltenvk = g_vkr.moltenvk;
     /* v0.7.10: the device profile's facts (rhi.h) */
@@ -2836,6 +2880,9 @@ static void vkr_fill_limits(void)
     o->vuFallbackPlain = g_vkr.vuFallbackPlain[0] ? g_vkr.vuFallbackPlain : NULL;
     o->carefulPipelines = g_vkr.carefulPipelines[0] ? g_vkr.carefulPipelines : NULL;
     o->vuPrepassOff = g_vkr.noVuPrepass[0] ? g_vkr.noVuPrepass : NULL;
+    /* the compute stores (vkr_compute_stores; the table's column above) */
+    o->computeStores = g_vkr.computeStores;
+    o->computeStoresOff = g_vkr.computeStores ? NULL : g_vkr.computeStoresOff;
     o->compilerVersion = g_vkr.compilerVersion[0] ? g_vkr.compilerVersion : NULL;
     /* ICO_VK_FAKE_LIMITS=min: the limits the renderer reads at the values
      * every Vulkan device is required to meet (the specification's Required

@@ -492,6 +492,14 @@ static void test_note_vu_pre(void)
         "2600 words (600 instructions); largest fragment vu_pre_ps 300 words",
         "creating pipeline program 0 blend 0 vs 46 fs 41 fmt 0/0 msaa 0 dst 0 "
         "(vu_particle_store_pre_vs 2100 words + vu_pre_ps 300 words)",
+        /* the record by compute dispatches (keyVsName: the compute build
+           a key with fs RD_FS_VU_PRE_CS dispatches through) */
+        "creating pipeline program 0 blend 0 vs 31 fs 57 fmt 0/0 msaa 0 dst 0 pre "
+        "(vu_prelit_compute_pre_cs 2229 words + vu_pre_cs 0 words)",
+        "creating pipelines 300-331 of 730: program 0 blend 0 vs 31 fs 57 fmt 0/0 msaa 0 dst 0 "
+        "pre to program 0 blend 0 vs 38 fs 57 fmt 0/0 msaa 0 dst 0 pre; vertex "
+        "vu_prelit_batch_compute_pre_cs 2619 words (597 instructions); largest fragment "
+        "vu_pre_cs 0 words",
     };
     for (size_t i = 0; i < sizeof stores / sizeof stores[0]; i++) {
         CHECK(startup_retry_note_has_vu_store(stores[i]), "\"%s\"", stores[i]);
@@ -500,6 +508,7 @@ static void test_note_vu_pre(void)
     CHECK(!startup_retry_note_has_vu_store(NULL) && !startup_retry_note_has_vu_store(""));
     CHECK(!startup_retry_note_has_vu_store("loading vu_prelit_store_pre_vs"));
     CHECK(!startup_retry_note_has_vu_store("creating pipelinesX vu_prelit_store_pre_vs"));
+    CHECK(!startup_retry_note_has_vu_store("loading vu_prelit_compute_pre_cs"));
     /* the skin check's start-up probe (rd_vu_skin_selftest.c): its
        compile's note and its draw's, neither the pre-pass's nor a
        destination read's */

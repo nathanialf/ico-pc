@@ -373,7 +373,7 @@ static void testShaderTable(void)
         const IcoShaderBlob *b = &g_icoShaders[i];
         RhiShaderDesc d;
         memset(&d, 0, sizeof(d));
-        d.stage = b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT;
+        d.stage = (RhiShaderStage)b->stage; /* ICO_SHADER_STAGE_* equal RhiShaderStage */
         d.entryPoint = b->entry;
         d.debugName = b->name;
         d.hlslFile = b->hlslFile;

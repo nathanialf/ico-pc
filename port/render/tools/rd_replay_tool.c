@@ -2882,12 +2882,12 @@ int main(int argc, char **argv)
          * once its timestamps are in, RHI_FRAMES_IN_FLIGHT replays later) */
         const RdPerfRecord *pr = &g_rdPerf;
         printf("%s: stats: %u draws, %u passes, %u bind groups (%u uniform, %u texture), %u bind "
-               "group binds, %u pipeline binds, %llu ring bytes, %u barriers, %u copies; screen "
-               "prims %u draws merged into %u\n",
+               "group binds, %u pipeline binds, %llu ring bytes, %u barriers, %u copies, %u "
+               "dispatches; screen prims %u draws merged into %u\n",
                dump, pr->draws, pr->renderPasses, pr->bindGroups, pr->uniformGroups,
                pr->textureGroups, pr->bindGroupBinds, pr->pipelineBinds,
-               (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->screenCmds,
-               pr->screenDraws);
+               (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->dispatches,
+               pr->screenCmds, pr->screenDraws);
         printf("%s: stats: bind cache: %u pipeline, %u bind group and %u state repeats skipped\n",
                dump, pr->pipelineBindsSkipped, pr->bindGroupBindsSkipped, pr->stateSetsSkipped);
         if (pr->backendWriteBytes) {

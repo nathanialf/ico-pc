@@ -93,10 +93,11 @@ static uint32_t s_recTexRows;
 static RhiBuffer s_recBuf[RHI_FRAMES_IN_FLIGHT];
 static uint32_t s_recBufRows[RHI_FRAMES_IN_FLIGHT];
 static RhiBuffer s_recNull;
-/* Under the stores (rd_vu_record.h; g_rdRec.stores) there are no textures:
- * the pre-pass's vertex shaders store into the slot's buffer, bound at u6
- * of group 1's store layout (g_rdRec.layoutVuPre) while a record pass is
- * open (s_groupPre).  s_recRows: the record's rows in either mode (the
+/* Under the stores and the compute dispatches (rd_vu_record.h;
+ * rd__vu_record_buffered) there are no textures: the pre-pass's vertex or
+ * compute shaders store into the slot's buffer, bound at u6 of group 1's
+ * store layout (g_rdRec.layoutVuPre) while a record pass is open
+ * (s_groupPre).  s_recRows: the record's rows in either mode (the
  * textures' under the targets).  s_recSink: the self-test's STALE
  * sabotage's buffer under the stores, the record's size, made on demand:
  * replays k > 0 store there, so the slot's buffer keeps an earlier
@@ -161,11 +162,12 @@ static void recFree(void)
 /* The textures (the targets only) and every slot's buffer hold rows rows
  * (every slot's at once, so the replays after the one that grew them create
  * nothing); false when this replay's could not be made (it then draws the
- * old way).  Under the stores the buffers are written by the vertex
- * shaders too (RHI_BUF_STORAGE_WRITE) */
+ * old way).  Under the stores and the compute dispatches the buffers are
+ * written by the shaders too (RHI_BUF_STORAGE_WRITE) */
 static bool recEnsure(uint32_t rows)
 {
-    if (!g_rdRec.stores && s_recTexRows < rows) {
+    const bool buffered = rd__vu_record_buffered();
+    if (!buffered && s_recTexRows < rows) {
         for (uint32_t i = 0; i < ICO_VU_REC_PLANES; i++) {
             if (s_recTex[i].id) {
                 rhi_destroy_texture(s_recTex[i]);
@@ -187,7 +189,9 @@ static bool recEnsure(uint32_t rows)
         s_recRows = rows;
         rd__log("VU pre-pass: the record holds %u slots (%u rows, %llu KB a frame slot; %s)",
                 rows * ICO_VU_REC_W, rows, (unsigned long long)(recBytes(rows) / 1024u),
-                g_rdRec.stores ? "stored by the vertex shaders" : "3 render targets copied");
+                rd__vu_record_compute() ? "stored by compute dispatches"
+                : buffered              ? "stored by the vertex shaders"
+                                        : "3 render targets copied");
     }
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
         if (s_recBufRows[i] >= rows) {
@@ -197,7 +201,7 @@ static bool recEnsure(uint32_t rows)
             rhi_destroy_buffer(s_recBuf[i]); /* deferred past the frames that read it */
         }
         const uint32_t use = RHI_BUF_STORAGE_READ | RHI_BUF_COPY_DST |
-                             (g_rdRec.stores ? (uint32_t)RHI_BUF_STORAGE_WRITE : 0u);
+                             (buffered ? (uint32_t)RHI_BUF_STORAGE_WRITE : 0u);
         s_recBuf[i] = rhi_create_buffer(
             &(RhiBufferDesc){recBytes(rows), use, RHI_MEM_DEVICE, "rd vu record"});
         s_recBufRows[i] = s_recBuf[i].id ? rows : 0u;
@@ -284,9 +288,10 @@ static RhiBindGroup vuGroupMake(RhiBuffer streamBuf, uint64_t streamOff, uint64_
         b[1 + i].size = size[i];
     }
     if (s_groupPre) {
-        /* a record pass under the stores (vuRecPassBegin): group 1's store
-         * layout, the record written at u6 (the slot's buffer, or the
-         * STALE sabotage's sink) and read there by pass T's stages, no t4 */
+        /* a record pass under the stores or the compute dispatches
+         * (vuRecPassBegin): group 1's store layout, the record written at
+         * u6 (the slot's buffer, or the STALE sabotage's sink) and read
+         * there by pass T's stages, no t4 */
         uint64_t recSize;
         (void)recBinding(&recSize);
         b[4].slot = 5;
@@ -1942,6 +1947,16 @@ static bool vuStageDraw(const VuPre *e, IcoVuCB *vcb, uint64_t dOff, const RdPip
     if (!p.id) {
         return true; /* only naming keys */
     }
+    if (rd__vu_record_compute()) {
+        /* a dispatch's point count is its DrawCB's aux0.z (vu_common.hlsli
+           VU_PRE_CS): a DrawCB of its own, the pass's zeros but that */
+        IcoDrawCB cb = s_preDrawCB;
+        cb.aux0[2] = count;
+        dOff = cbCopy(&cb, sizeof(cb), rhi_limits()->uniformAlign);
+        if (dOff == ~0ull) {
+            return false;
+        }
+    }
     const uint32_t offs[3] = {(uint32_t)dOff, (uint32_t)vOff, (uint32_t)e->src.bonesOff};
     recDrawGap(); /* under the stores: a pass of its own after the first */
     rd__set_pipeline(rd__replay_cl(), p, key);
@@ -1960,7 +1975,11 @@ static bool vuStageDraw(const VuPre *e, IcoVuCB *vcb, uint64_t dOff, const RdPip
         g_rdVuCur.mesh = e->src.m ? e->src.m->name : NULL;
         rd__win_vu_note(0, key, vcb, e->src.vs, 0, e->first, count);
     }
-    rd__replay_draw(rd__replay_cl(), count, 0, 1);
+    if (rd__vu_record_compute()) {
+        rd__replay_dispatch(rd__replay_cl(), count); /* (count + 63) / 64 groups */
+    } else {
+        rd__replay_draw(rd__replay_cl(), count, 0, 1);
+    }
     vuBatchNote(e, key);
     return true;
 }
@@ -2004,11 +2023,26 @@ static RhiBuffer recStoreBuffer(void)
 /* the stores: the bracket's begin (after every earlier use of the buffer),
  * then a pass without attachments, ICO_VU_REC_W x 1, its whole area; the
  * pass's default viewport and scissor stand (no point is rasterised:
- * RhiPipelineDesc.noRaster, the shaders' position outside the clip volume) */
+ * RhiPipelineDesc.noRaster, the shaders' position outside the clip volume).
+ * The compute dispatches: the compute bracket's begin alone (dispatches are
+ * recorded outside render passes) */
 static bool s_recDrawn; /* a draw in the open store pass (recDrawGap) */
 
 static void recStorePassOpen(void)
 {
+    if (rd__vu_record_compute()) {
+        if (!rhi_cmd_buffer_compute_begin(rd__replay_cl(), recStoreBuffer())) {
+            static bool saidCompute; /* once a run */
+            if (!saidCompute) {
+                saidCompute = true;
+                rd__log("VU pre-pass: the backend refused the compute bracket (%s): the "
+                        "record's dispatches go unordered",
+                        rhi_limits()->computeStores ? "the buffer" : "no compute stores");
+            }
+        }
+        s_recDrawn = false;
+        return;
+    }
     if (!rhi_cmd_buffer_store_begin(rd__replay_cl(), recStoreBuffer())) {
         static bool said; /* once a run */
         if (!said) {
@@ -2040,24 +2074,38 @@ static void recStorePassOpen(void)
  * every draw binds the whole buffer at u6 and synchronisation validation
  * takes a descriptor's whole range as what the draw writes (it cannot see
  * the ranges are disjoint), so two draws in one pass would be a
- * write-after-write hazard to it.  Nothing under the targets (the draws
- * write colour attachments, in rasterization order) */
+ * write-after-write hazard to it.  The compute dispatches likewise: the
+ * second and later of a pass each get the compute bracket's end and begin
+ * before them (dispatches are unordered without a barrier, and their slots
+ * as disjoint).  Nothing under the targets (the draws write colour
+ * attachments, in rasterization order) */
 static void recDrawGap(void)
 {
     if (!s_groupPre || !rhi_limits()->validationLayer) {
         return;
     }
     if (s_recDrawn) {
-        rhi_cmd_end_render_pass(rd__replay_cl());
-        (void)rhi_cmd_buffer_store_end(rd__replay_cl(), recStoreBuffer());
+        if (rd__vu_record_compute()) {
+            (void)rhi_cmd_buffer_compute_end(rd__replay_cl(), recStoreBuffer());
+        } else {
+            rhi_cmd_end_render_pass(rd__replay_cl());
+            (void)rhi_cmd_buffer_store_end(rd__replay_cl(), recStoreBuffer());
+        }
         recStorePassOpen();
     }
     s_recDrawn = true;
 }
 
+/* the pass ring's colour field of a record pass (rd_passring.c): the
+ * record's write, 0 targets, 1 stores, 2 compute dispatches */
+static uint32_t recPassMode(void)
+{
+    return rd__vu_record_compute() ? 2u : rd__vu_record_buffered() ? 1u : 0u;
+}
+
 static void vuRecPassBegin(uint32_t row0, uint32_t rows)
 {
-    if (g_rdRec.stores) {
+    if (rd__vu_record_buffered()) {
         recStorePassOpen();
         s_groupPre = true;
         (void)row0;
@@ -2095,8 +2143,19 @@ static void vuRecPassBegin(uint32_t row0, uint32_t rows)
  * draws out and the sabotage stores into the sink, recStoreBuffer) */
 static void vuRecPassEnd(uint32_t row0, uint32_t rows, bool muted)
 {
+    if (rd__vu_record_compute()) {
+        /* no render pass: the compute bracket's end (the stores visible to
+           every later read, compute ones too: rhi.h
+           rhi_cmd_buffer_compute_end) */
+        s_groupPre = false;
+        (void)rhi_cmd_buffer_compute_end(rd__replay_cl(), recStoreBuffer());
+        (void)row0;
+        (void)rows;
+        (void)muted;
+        return;
+    }
     rhi_cmd_end_render_pass(rd__replay_cl());
-    if (g_rdRec.stores) {
+    if (rd__vu_record_buffered()) {
         s_groupPre = false;
         (void)rhi_cmd_buffer_store_end(rd__replay_cl(), recStoreBuffer());
         (void)row0;
@@ -2263,6 +2322,7 @@ static int preBatchDraw(const uint32_t *order, uint32_t n)
     memset(&cb, 0, sizeof(cb));
     cb.aux0[0] = tAt;
     cb.aux0[1] = n;
+    cb.aux0[2] = points; /* a compute dispatch's point count (vu_common.hlsli VU_PRE_CS) */
     const uint64_t dOff = cbCopy(&cb, sizeof(cb), ua);
     if (dOff == ~0ull) {
         return -1;
@@ -2288,7 +2348,11 @@ static int preBatchDraw(const uint32_t *order, uint32_t n)
         g_rdVuCur.mesh = e->src.m ? e->src.m->name : NULL;
         rd__win_vu_note(0, &f->key, &e->src.vcb, e->src.vs, 0, e->first, points);
     }
-    rd__replay_draw(rd__replay_cl(), points, 0, 1);
+    if (rd__vu_record_compute()) {
+        rd__replay_dispatch(rd__replay_cl(), points); /* (points + 63) / 64 groups */
+    } else {
+        rd__replay_draw(rd__replay_cl(), points, 0, 1);
+    }
     return 1;
 }
 
@@ -2826,8 +2890,8 @@ static void vuPrepassRun(const RdFrame *f, int keep)
     rd__perf_pass(rd__replay_cl(), RD_PERF_PASS_PREPASS, RD_PERF_ID_RECORD, ICO_VU_REC_W, usedV,
                   -1);
     rhi_cmd_checkpoint(rd__replay_cl(),
-                       rd__replay_pass_push(RD_PASSK_VU_PRE, g_rdRec.stores ? 1u : 0u, ICO_VU_REC_W,
-                                            usedV, 0, vEnd, 0, 0, -1));
+                       rd__replay_pass_push(RD_PASSK_VU_PRE, recPassMode(), ICO_VU_REC_W, usedV, 0,
+                                            vEnd, 0, 0, -1));
     bool muted = rd__win_muted();
     vuVelReserve(); /* the second records' entries */
     vuRecPassBegin(0, usedV);
@@ -2948,8 +3012,8 @@ static void vuPrepassRun(const RdFrame *f, int keep)
         rd__perf_pass(rd__replay_cl(), RD_PERF_PASS_PREPASS, RD_PERF_ID_RECORD, ICO_VU_REC_W, usedT,
                       -1);
         rhi_cmd_checkpoint(rd__replay_cl(),
-                           rd__replay_pass_push(RD_PASSK_VU_TRI, g_rdRec.stores ? 1u : 0u,
-                                                ICO_VU_REC_W, usedT, 0, tEnd - t0, 0, 0, -1));
+                           rd__replay_pass_push(RD_PASSK_VU_TRI, recPassMode(), ICO_VU_REC_W, usedT,
+                                                0, tEnd - t0, 0, 0, -1));
         muted = rd__win_muted();
         vuRecPassBegin(rowsV, usedT);
         bool firstTri = true;
@@ -3376,7 +3440,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "by the device table (%s; [dev] vu_prepass = true draws with it anyway)",
                  lim->vuPrepassOff);
-    } else if (!g_rdRec.stores && bytes != 0u && bytes < ICO_VU_REC_BYTES) {
+    } else if (!rd__vu_record_buffered() && bytes != 0u && bytes < ICO_VU_REC_BYTES) {
         /* an Apple A9 or A10 GPU under MoltenVK (rhi_metal_color_bytes);
          * Direct3D 11 reports 0 since v0.10.0 (its record copies are a
          * compute shader, d3d11_cmd.c), 32 only below feature level 11_0,
@@ -3408,7 +3472,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
                 rhi_adapter_name());
     }
     preBatchInit();
-    rd__vu_record_shaders(); /* the store builds, under the stores */
+    rd__vu_record_shaders(); /* the store or compute builds (rd_vu_record.h) */
     vuMergeInit();           /* the draw merge's modules (the fallback's variant is chosen) */
     if (g_rd.vuPrepass) {
         rd__log("VU pre-pass: on: each mesh and grid vertex and triangle and each sprite "
@@ -3429,7 +3493,7 @@ void rd__vu_prepass_init(const RhiLimits *lim)
 void rd__set_vu_prepass(bool on)
 {
     const uint32_t bytes = g_rd.hasDevice ? rhi_limits()->colorBytesPerPixel : 0u;
-    g_rd.vuPrepass = on && (g_rdRec.stores || bytes == 0u || bytes >= ICO_VU_REC_BYTES);
+    g_rd.vuPrepass = on && (rd__vu_record_buffered() || bytes == 0u || bytes >= ICO_VU_REC_BYTES);
     snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy), "%s",
              g_rd.vuPrepass ? "" : "by the tests (rd__set_vu_prepass)");
 }
