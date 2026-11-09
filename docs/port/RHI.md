@@ -221,6 +221,9 @@ Direct3D 11 and OpenGL report `vertexStores` false in this release and their bra
 (Direct3D 11 for good: feature level 11_0 has no vertex shader UAVs; D3D12 would need the buffer's
 UNORDERED_ACCESS transitions and UAV barriers, OpenGL `glMemoryBarrier`) (`port/rhi/rhi.h`, commands
 (`rhi_cmd_buffer_store_begin`); `port/rhi/vk/vk_cmd.c` (`rhi_cmd_buffer_store_begin`)).
+`RhiLimits.validationLayer` says the Khronos validation layer is loaded (Vulkan only), for the
+ordering only its synchronisation checks need (the record's draws each in a pass of their own,
+[PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
 
 **Bind groups.** One fixed slot model for every program: group 0 the per-frame uniforms (b0), group
 1 the per-draw uniforms (b1; the VU programs' b2, b3), the VU vertex stream (t0) and the vertex
@@ -244,7 +247,7 @@ colour and depth formats, a sample count and `dstRead`: NONE, STORAGE (the targe
 rasterizer-ordered storage texture, no colour target) or ATTACHMENT (colour attachment 0 read as an
 input attachment in rasterization order, Vulkan only), and `noRaster`: no rasterization, no
 fragment shader and no colour target, the vertex shader's stores the pipeline's whole work (Vulkan
-`rasterizerDiscardEnable`, OpenGL `GL_RASTERIZER_DISCARD` while it is bound, ignored by D3D12 and
+`rasterizerDiscardEnable`, OpenGL `GL_RASTERIZER_DISCARD` while it is bound and off again at the pass's end, since it makes `glClear` a no-op, ignored by D3D12 and
 Direct3D 11, which never report vertex stores), drawn in a pass without attachments (a size and
 nothing else; the legacy path's subpass without attachments). Culling is always off: the GS has none. A
 render pass names its colour and depth attachments with load ops (LOAD, CLEAR, DONT_CARE) and store

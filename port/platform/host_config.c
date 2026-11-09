@@ -1125,6 +1125,12 @@ const char *ico_dev_env_export_value(const char *key, const char *value, const c
     if (key != NULL && strcmp(key, "vu_prepass") == 0 && startup_retry_value_no_prepass(retry)) {
         return "0";
     }
+    /* ... and a run at the crash order's targets step or the loss order's
+       losstargets draws the pre-pass's record into render targets
+       (startup_retry.h startup_retry_value_targets): the same pictures */
+    if (key != NULL && strcmp(key, "vu_record") == 0 && startup_retry_value_targets(retry)) {
+        return "targets";
+    }
     /* ... and the loss order's robust step draws with robust access on
        (startup_retry.h startup_retry_value_robust) */
     if (key != NULL && strcmp(key, "gpu_robust") == 0 && startup_retry_value_robust(retry)) {
@@ -1333,6 +1339,11 @@ void ico_ini_export(const IcoIni *ini, const char *path, int r)
         v = ico_dev_env_export_value("vu_prepass", NULL, getenv(STARTUP_RETRY_ENV));
         if (v != NULL) {
             put_env("ICO_RD_VU_PREPASS", v);
+        }
+        /* ICO_RD_VU_RECORD=targets at the targets and losstargets steps */
+        v = ico_dev_env_export_value("vu_record", NULL, getenv(STARTUP_RETRY_ENV));
+        if (v != NULL) {
+            put_env("ICO_RD_VU_RECORD", v);
         }
         /* ICO_GPU_ROBUST=1 at the loss order's robust step */
         v = ico_dev_env_export_value("gpu_robust", NULL, getenv(STARTUP_RETRY_ENV));

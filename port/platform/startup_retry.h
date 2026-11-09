@@ -14,6 +14,15 @@
  * taken only when the run before crashed:
  *   cache       the crashing run had loaded the pipeline cache file: it is
  *               deleted and the same backend tries again;
+ *   targets     the crash's activity note names a pipeline of the VU
+ *               pre-pass's record stored by the vertex shaders (a
+ *               vu_X_store_pre_vs or vu_X_batch_store_pre_vs module:
+ *               startup_retry_note_has_vu_store; port/render/rd_vu_record.h):
+ *               the same backend with the record drawn into render targets
+ *               (ICO_RD_VU_RECORD=targets, host_config.c ico_ini_export),
+ *               the pre-pass kept, so a driver that mishandles the stores
+ *               keeps the pre-pass v0.11.0 drew with; a crash in the
+ *               targets' own pre-pass pipelines then takes noprepass;
  *   noprepass   the crash's activity note names a pipeline of the VU
  *               vertex pre-pass (a " pre" key, a vu_X_pre_vs or vu_tri
  *               module: startup_retry_note_has_vu_pre;
@@ -43,7 +52,8 @@
  *               one is built when a frame first needs it, on the same
  *               backend.
  * After lazy, or in a run started after a device loss, there is nothing
- * left: the crash box is shown.  The runs of noprepass and of every step
+ * left: the crash box is shown.  The run of targets draws the pre-pass's
+ * record into render targets.  The runs of noprepass and of every step
  * after it (fixedblend, d3d12, lazy) draw without the pre-pass
  * (startup_retry_draws_no_prepass), so a later step never makes its
  * pipelines again.
@@ -60,10 +70,21 @@
  * ended one was careful.  The second such end in a row, in the foreground,
  * makes it last ([dev] vu_prepass = false or [dev] pipeline_set = "lazy"
  * written to config.toml, ico_diag_startup_end_persist); an end in the
- * background is not counted (ico_diag_startup_activity_background).
+ * background is not counted (ico_diag_startup_activity_background).  An
+ * end inside a pipeline of the record stored by the vertex shaders
+ * (startup_retry_note_has_vu_store) takes a rung before that instead: the
+ * next start draws the record into render targets with the pre-pass kept
+ * (ICO_RD_VU_RECORD=targets; diag_host.h ico_diag_startup_vu_store), the
+ * second such end in a row writes [dev] vu_record = "targets"; only an end
+ * in the targets' own pre-pass pipelines then counts towards
+ * [dev] vu_prepass = false.
  *
  * After a device loss (STARTUP_RETRY_LOSS) the steps, in order; each is
  * taken only when the run before lost the device:
+ *   losstargets  the same backend with the pre-pass's record drawn into
+ *            render targets (ICO_RD_VU_RECORD=targets), the pre-pass
+ *            kept, when the losing run drew with the pre-pass and its
+ *            record stored by the vertex shaders (storesWereOn);
  *   lossnoprepass  the same backend without the VU vertex pre-pass
  *            (ICO_RD_VU_PREPASS=0), when the losing run drew with it;
  *   robust   the same backend with robust buffer and image access
@@ -86,8 +107,8 @@
  *            blending other than fixed; when Direct3D 12 cannot start, that
  *            run goes on with Vulkan itself (window_host.c).
  * After backend there is nothing left: the device-loss box is shown.
- * Every loss step's run draws without the pre-pass, robust with robust
- * access on, and blend and backend with the fixed-function blend.  A
+ * Every loss step's run but losstargets' draws without the pre-pass
+ * (losstargets' with the targets' record), robust with robust access on, and blend and backend with the fixed-function blend.  A
  * loss restart follows a crash step too (lazy, then blend; fixedblend,
  * whose run already draws with the fixed-function blend, then backend):
  * the step only grows, so a chain always ends.  The restarted run starts at the title as
@@ -116,11 +137,14 @@
 typedef enum {
     STARTUP_RETRY_NONE = 0, /* the first run; as a result: no step left */
     STARTUP_RETRY_CACHE,
+    STARTUP_RETRY_TARGETS,     /* "targets": the crash order's record into render targets */
     STARTUP_RETRY_NO_PREPASS,  /* "noprepass": the crash order's run without the pre-pass */
     STARTUP_RETRY_CRASH_BLEND, /* "fixedblend": the crash order's fixed-function blend */
     STARTUP_RETRY_D3D12,
     STARTUP_RETRY_LAZY,
-    STARTUP_RETRY_LOSS_NO_PREPASS, /* "lossnoprepass": the loss order's first */
+    STARTUP_RETRY_LOSS_TARGETS,    /* "losstargets": the loss order's first, the record into
+                                      render targets */
+    STARTUP_RETRY_LOSS_NO_PREPASS, /* "lossnoprepass": without the pre-pass */
     STARTUP_RETRY_LOSS_ROBUST,     /* "robust": robust access on (ICO_GPU_ROBUST=1) */
     STARTUP_RETRY_LOSS_BLEND,
     STARTUP_RETRY_LOSS_BACKEND,
@@ -146,7 +170,13 @@ typedef struct {
                                 (startup_retry_note_has_dst) */
     bool prepassPipeline;    /* a crash: its note names a pipeline of the VU vertex
                                 pre-pass (startup_retry_note_has_vu_pre) */
+    bool storePipeline;      /* a crash: its note names a pipeline of the pre-pass's
+                                record stored by the vertex shaders
+                                (startup_retry_note_has_vu_store): the targets step */
     bool prepassWasOn;       /* the run drew with the VU vertex pre-pass */
+    bool storesWereOn;       /* ... with its record stored by the vertex shaders
+                                (rd.h rd_vu_record_mode "stores"): a loss takes
+                                losstargets first */
     bool robustOffDefault;   /* a loss: the run drew with robust access off by the
                                 platform's default (not gpu_robust): the robust step */
     const char *backendName; /* the run's backend; NULL or "": vulkan */
@@ -155,8 +185,9 @@ typedef struct {
 /* the loss steps */
 static inline bool startup_retry_is_loss(StartupRetry step)
 {
-    return step == STARTUP_RETRY_LOSS_NO_PREPASS || step == STARTUP_RETRY_LOSS_ROBUST ||
-           step == STARTUP_RETRY_LOSS_BLEND || step == STARTUP_RETRY_LOSS_BACKEND;
+    return step == STARTUP_RETRY_LOSS_TARGETS || step == STARTUP_RETRY_LOSS_NO_PREPASS ||
+           step == STARTUP_RETRY_LOSS_ROBUST || step == STARTUP_RETRY_LOSS_BLEND ||
+           step == STARTUP_RETRY_LOSS_BACKEND;
 }
 
 /* value starts with the step name name and a ':' */
@@ -171,12 +202,13 @@ static inline bool startup_retry_value_names(const char *value, const char *name
 }
 
 /* Whether a value of ICO_STARTUP_RETRY (startup_retry_value) names a loss
- * step: "lossnoprepass:...", "robust:...", "blend:..." or "backend:...".  Inline, so
- * host_config.c, which some programs compile without the platform library,
- * can ask. */
+ * step: "losstargets:...", "lossnoprepass:...", "robust:...", "blend:..." or
+ * "backend:...".  Inline, so host_config.c, which some programs compile
+ * without the platform library, can ask. */
 static inline bool startup_retry_value_is_loss(const char *value)
 {
-    return startup_retry_value_names(value, "lossnoprepass") ||
+    return startup_retry_value_names(value, "losstargets") ||
+           startup_retry_value_names(value, "lossnoprepass") ||
            startup_retry_value_names(value, "robust") ||
            startup_retry_value_names(value, "blend") || startup_retry_value_names(value, "backend");
 }
@@ -211,10 +243,26 @@ static inline bool startup_retry_value_draws_fixed(const char *value)
 /* The steps whose runs draw without the VU vertex pre-pass
  * (ICO_RD_VU_PREPASS=0 set by host_config.c ico_ini_export; window_host.c
  * rd_set_vu_prepass_off): the crash order's noprepass and every step after
- * it, and every loss step */
+ * it, and every loss step but losstargets */
 static inline bool startup_retry_draws_no_prepass(StartupRetry step)
 {
-    return step >= STARTUP_RETRY_NO_PREPASS;
+    return step >= STARTUP_RETRY_NO_PREPASS && step != STARTUP_RETRY_LOSS_TARGETS;
+}
+
+/* The steps whose runs draw the pre-pass's record into render targets
+ * (ICO_RD_VU_RECORD=targets set by host_config.c ico_ini_export): targets
+ * and losstargets */
+static inline bool startup_retry_draws_targets(StartupRetry step)
+{
+    return step == STARTUP_RETRY_TARGETS || step == STARTUP_RETRY_LOSS_TARGETS;
+}
+
+/* Whether a value of ICO_STARTUP_RETRY names such a step: "targets:..." or
+ * "losstargets:...".  Inline, as startup_retry_value_is_loss. */
+static inline bool startup_retry_value_targets(const char *value)
+{
+    return startup_retry_value_names(value, "targets") ||
+           startup_retry_value_names(value, "losstargets");
 }
 
 /* Whether a value of ICO_STARTUP_RETRY names such a step.  Inline, as
@@ -257,6 +305,16 @@ bool startup_retry_note_has_dst(const char *note);
  * ico_diag_startup_vu_prepass).  Tolerant as startup_retry_note_has_dst. */
 bool startup_retry_note_has_vu_pre(const char *note);
 
+/* Whether an activity note names a pipeline of the pre-pass's record
+ * stored by the vertex shaders (port/render/rd_vu_record.h): it starts
+ * with "creating pipeline " or "creating pipelines " and names a store
+ * build ("_store_pre_vs": vu_X_store_pre_vs, vu_X_batch_store_pre_vs;
+ * port/render/rd_pipeline.c keyVsName names the build a store key draws
+ * through).  Every such note is also startup_retry_note_has_vu_pre's; the
+ * crash order's targets step and the ends' targets rung read this one
+ * first.  Tolerant as startup_retry_note_has_dst. */
+bool startup_retry_note_has_vu_store(const char *note);
+
 /* Whether an activity note names the skinned draws' bone-block check's
  * start-up probe (port/render/rd_vu_skin_selftest.c; issue 163): it holds
  * "rd vu skin probe" ("creating pipeline rd vu skin probe (...)" while its
@@ -275,8 +333,9 @@ bool startup_retry_note_has_skin_probe(const char *note);
  * nothing is left). */
 StartupRetry startup_retry_next(const StartupRetryRun *run, char *reason, size_t reasonLen);
 
-/* "cache", "noprepass", "fixedblend", "d3d12", "lazy", "lossnoprepass",
- * "robust", "blend", "backend"; "" for NONE */
+/* "cache", "targets", "noprepass", "fixedblend", "d3d12", "lazy",
+ * "losstargets", "lossnoprepass", "robust", "blend", "backend"; "" for
+ * NONE */
 const char *startup_retry_name(StartupRetry step);
 
 /* The variable's value for the run after a crash or loss on backendName

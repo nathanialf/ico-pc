@@ -796,7 +796,11 @@ opens; `audio: the output device did not open (T ms)` after SDL's `audio: no aud
 sound` when it fails; `audio: the output device is still opening; try again when it has` for a
 refused move; `audio: at the exit the output device had not opened after T ms; its open is left
 running (SDL's audio stays up)` or `audio: the output device opened after T ms, at the exit; closed
-unused` at the shutdown.
+unused` at the shutdown. In the first case the thread may still be inside
+`SDL_OpenAudioDeviceStream`, and `SDL_Quit` destroys every audio device and the state that call
+returns into, so the window's exit quits every other SDL subsystem and leaves the audio to the
+process's end (`ico_audio_sdl_open_left`; `port/platform/window_host.c` (`ico_window_close`):
+`window: SDL's audio left to the process's end`).
 
 ### The pull path
 

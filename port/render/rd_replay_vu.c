@@ -2028,18 +2028,23 @@ static void recStorePassOpen(void)
 }
 
 /* Before each record draw under the stores (vuStageDraw, preBatchDraw),
- * ahead of its pipeline and groups: the second and later draws of a record
- * pass each get a pass of their own, the bracket's end and begin between
- * them (one barrier, the vertex shaders' stores before the next draw's).
- * The draws of a pass write disjoint slots of the buffer, which needs no
- * order, but every draw binds the whole buffer at u6 and synchronisation
- * validation takes a descriptor's whole range as what the draw writes, so
- * two draws in one pass would be a write-after-write hazard to it; a pass
- * without attachments is only its begin and end.  Nothing under the
- * targets (the draws write colour attachments, in rasterization order) */
+ * ahead of its pipeline and groups, only under the validation layer
+ * (RhiLimits.validationLayer): the second and later draws of a record pass
+ * each get a pass of their own, the bracket's end and begin between them
+ * (one barrier, the vertex shaders' stores before the next draw's).  The
+ * draws of a pass write disjoint slots of the buffer (vuPrepassRun's step
+ * 3: pass V's commands at vAt, each its vuPreVSlots; pass T's slots A, B
+ * and C at tAt, each its vuPreTSlots, the two tick draws different lanes of
+ * slot C; pass T reads only pass V's slots), which the memory model does
+ * not order, so a release run draws them in one pass with no barrier; but
+ * every draw binds the whole buffer at u6 and synchronisation validation
+ * takes a descriptor's whole range as what the draw writes (it cannot see
+ * the ranges are disjoint), so two draws in one pass would be a
+ * write-after-write hazard to it.  Nothing under the targets (the draws
+ * write colour attachments, in rasterization order) */
 static void recDrawGap(void)
 {
-    if (!s_groupPre) {
+    if (!s_groupPre || !rhi_limits()->validationLayer) {
         return;
     }
     if (s_recDrawn) {

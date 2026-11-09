@@ -903,12 +903,19 @@ have no fragment shader, no target and no rasterization (`RhiPipelineDesc.noRast
 `g_rdRec.layoutVuPre`: t0, b1, b2, b3, t5 and u6, no t4), and each pass is a pass without
 attachments, 1024 x 1, inside the store bracket (`rhi_cmd_buffer_store_begin` before it,
 `rhi_cmd_buffer_store_end` after: [RHI.md](RHI.md#the-interface)), so a replay has no record
-texture, no layout transition and no copy. Each draw of a record pass after its first is a pass of
-its own, the bracket's end and begin between them (one barrier: `recDrawGap`): the draws write
-disjoint slots, which needs no order, but each binds the whole buffer at u6 and synchronisation
-validation takes a descriptor's whole range as what a draw writes, so two draws in one pass would
-be a write-after-write hazard to it; a pass without attachments is only its begin and end, and the
-batches keep the draws few (the per-replay line's `passes` and `barriers` count them)
+texture, no layout transition and no copy. The draws of a record pass write disjoint slots
+(`vuPrepassRun`'s slots: pass V's commands each at its own `vuPreVSlots`, pass T's slots A, B and C
+each at its own `vuPreTSlots`, the two tick draws different 32-bit lanes of slot C; pass T reads
+only pass V's slots, which the bracket between the passes orders), which the memory model does not
+order, so a release run draws them all in one pass with no barrier between them. Only under the
+validation layer (`RhiLimits.validationLayer`, Vulkan's `ICO_VK_VALIDATION` or the debug layers:
+the lavapipe synchronisation-validation tests) is each draw after the first a pass of its own, the
+bracket's end and begin between them (one barrier: `recDrawGap`): each draw binds the whole buffer
+at u6 and synchronisation validation takes a descriptor's whole range as what a draw writes, so it
+cannot see the ranges are disjoint and two draws in one pass would be a write-after-write hazard
+to it; the start then logs `rd: VU record: each record store draw in a pass of its own (the
+validation layer is loaded: ...)`. On a tiler each such barrier serialises the vertex work, which
+is why a release run has none (the per-replay line's `passes` and `barriers` count them)
 (`vuRecPassBegin`, `vuRecPassEnd`: the copies' muted
 semantic is unchanged, the loss bisect's window leaves the draws out and the self-test's STALE
 sabotage stores replays 2 to 4 into a sink buffer of the record's size, `recStoreBuffer`). The
@@ -1118,12 +1125,58 @@ of its pipelines is noted as the start-up set's would be and takes the crash ord
 step; a start that ended without a word in one of the pre-pass's pipelines or batches makes the
 next start draw without it, and the second such end in a row writes `[dev] vu_prepass = false`; a
 device loss in a run drawing with it takes the loss order's `lossnoprepass` step first
-([PLATFORM.md](PLATFORM.md#diagnostics)) (`port/render/rd_vuprepass_selftest.c`;
+([PLATFORM.md](PLATFORM.md#diagnostics)); under the record stores each of the three takes a rung
+before it ([the record stores' restart rung](#the-record-stores-restart-rung)) (`port/render/rd_vuprepass_selftest.c`;
 `port/render/rd.h` (`rd_vuprepass_selftest`); `ICO_RD_VU_PREPASS_SABOTAGE=1` draws the first
 command's vertex records a texel off, `=tri` its triangles' slot A a slot off, `=ticks` the tick
 stage's tick 1 at tick 0's camera, each in every replay, `=stale` the record's copies left out from
 the second replay on (under the stores: those replays' records stored into a sink buffer), which only the replays after the first can catch (a self-test of one replay
 passes it); [TESTING.md](TESTING.md#environment-switches)).
+
+#### The record stores' restart rung
+
+The record stored by the vertex shaders is new on every Vulkan device that offers
+`vertexPipelineStoresAndAtomics`: 28 store builds (`vu_X_store_pre_vs`, `vu_X_batch_store_pre_vs`)
+and a pipeline shape of its own (no rasterization, an attachment-less pass). The self-test turns a
+wrong picture to the render targets, but a driver crash, an end without a word or a device loss
+inside those pipelines would otherwise take the pre-pass's own steps and leave the device drawing
+without the pre-pass, possibly for good. So each of the three ladders tries the render targets'
+record first, the pre-pass kept (the way the Mali-G52 of issue 179 drew before the stores), and only a
+failure there gives the pre-pass up:
+
+- **A driver crash** whose note names a store build (`startup_retry_note_has_vu_store`:
+  `_store_pre_vs`; `port/render/rd_pipeline.c` (`keyVsName`) names the store build a key with no
+  colour format draws through, in every pipeline and batch note) takes the crash order's `targets`
+  step, after `cache` and before `noprepass`: the relaunch runs with `ICO_STARTUP_RETRY=targets:<backend>`,
+  `ico_ini_export` sets `ICO_RD_VU_RECORD=targets`, and the run logs `ico_pc: restarted after a
+  graphics driver crash while preparing the shaders: this run draws the 3D vertex pre-pass's record
+  into render targets (ICO_RD_VU_RECORD=targets) on the same graphics backend, the pre-pass kept`.
+  A crash in the targets' own pre-pass pipelines then takes `noprepass`.
+- **A device loss** in a run that drew with the pre-pass and the stores after its self-test
+  (`ico_diag_set_vu_record_stores`, `StartupRetryRun.storesWereOn`) takes the loss order's
+  `losstargets` step before `lossnoprepass` (`ICO_STARTUP_RETRY=losstargets:<backend>`, the same
+  `ICO_RD_VU_RECORD=targets`); a loss in that run, which draws with the targets, then takes
+  `lossnoprepass`.
+- **An end without a word** inside a store build's pipeline or batch counts in the pre-pass's row
+  as before, but the next start draws the record into render targets with the pre-pass kept
+  (`ico_diag_startup_vu_store`; the window sets `ICO_RD_VU_RECORD=targets` instead of
+  `rd_set_vu_prepass_off`), and the second such end in a row writes `[dev] vu_record = "targets"`
+  (`vu_record_persist`) instead of `[dev] vu_prepass = false`, which clears the row. The lines:
+  `ico_pc: the previous start ended while the graphics driver compiled the 3D vertex pre-pass's
+  record stores (<note>); this start only draws the record into render targets instead, the
+  pre-pass kept (ICO_RD_VU_RECORD=targets; nothing is written to <path>); if a start that compiles
+  them ends there again, [dev] vu_record = "targets" is written for good`, then `... this start and
+  every start after it draw the record into render targets, the pre-pass kept ([dev] vu_record =
+  "targets" in <path>); delete that line to try the stores again`. An end in the targets' own
+  pre-pass pipelines after it counts towards `[dev] vu_prepass = false` as before (the row it
+  starts is the pre-pass's).
+
+The renderer's pre-pass line then ends `the record drawn into 3 RGBA32_UINT render targets and
+copied into the frame slot's record buffer ([dev] vu_record = targets)` (the variable reads as the
+key there), and the 10 s line says `record targets` (`port/platform/startup_retry.h` (`startup_retry_note_has_vu_store`,
+`startup_retry_draws_targets`, `startup_retry_value_targets`); `port/platform/host_config.c`
+(`ico_dev_env_export_value`); `port/platform/diag_host.c` (`ico_diag_startup_vu_store`,
+`ico_diag_startup_end_persist`); ctests `startup_retry`, `host_config`, `diag`).
 
 **Why the picture is the same.** The pre-pass entry calls the program's vertex function, the same
 source with the same `precise` operations, so each recorded word is the value the old entry

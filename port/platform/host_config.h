@@ -196,7 +196,9 @@ const char *ico_dev_env_value(const char *key, const char *value);
    only ever replaces nothing or "fixed". vu_prepass gets "0" when retry
    names a step that draws without the VU vertex pre-pass (the crash
    order's noprepass and the steps after it, every loss step:
-   startup_retry_value_no_prepass). gpu_robust gets "1" when retry names the
+   startup_retry_value_no_prepass). vu_record gets "targets" when retry
+   names the crash order's targets step or the loss order's losstargets
+   (startup_retry_value_targets). gpu_robust gets "1" when retry names the
    loss order's robust step (startup_retry_value_robust). */
 const char *ico_dev_env_export_value(const char *key, const char *value, const char *retry);
 /* Whether the clock should be fixed (ICO_FIXED_CLOCK): fixed_clock= when

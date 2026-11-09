@@ -38,6 +38,17 @@ static StartupRetry crash_next(const StartupRetryRun *run, const char *name, boo
                  name);
         return STARTUP_RETRY_CACHE;
     }
+    /* a store build of the pre-pass's record (rd_vu_record.h): the record
+       drawn into render targets first, the pre-pass kept (v0.11.0's way);
+       a crash in the targets' own pre-pass pipelines then takes noprepass */
+    if (step < STARTUP_RETRY_TARGETS && run->storePipeline) {
+        snprintf(reason, reasonLen,
+                 "the pipeline being built stored the 3D vertex pre-pass's record from its "
+                 "vertex shader; the next try on %s draws the record into render targets "
+                 "instead",
+                 name);
+        return STARTUP_RETRY_TARGETS;
+    }
     if (step < STARTUP_RETRY_NO_PREPASS && run->prepassPipeline) {
         snprintf(reason, reasonLen,
                  "the pipeline being built was one of the 3D vertex pre-pass's; the next try on "
@@ -84,6 +95,15 @@ static StartupRetry loss_next(const StartupRetryRun *run, const char *name, bool
     const char *other = onD3d12 ? "vulkan" : "d3d12";
     /* the backend step keeps the player's blending: only a fixed one */
     const bool blendFree = !run->blendExplicit || run->blendWasFixed;
+    /* the record stored by the vertex shaders (rd_vu_record.h): the render
+       targets' record first, the pre-pass kept */
+    if (step < STARTUP_RETRY_LOSS_TARGETS && run->prepassWasOn && run->storesWereOn) {
+        snprintf(reason, reasonLen,
+                 "the next run on %s draws the 3D vertex pre-pass's record into render targets "
+                 "instead of storing it from the vertex shaders",
+                 name);
+        return STARTUP_RETRY_LOSS_TARGETS;
+    }
     if (step < STARTUP_RETRY_LOSS_NO_PREPASS && run->prepassWasOn) {
         snprintf(reason, reasonLen, "the next run on %s draws without the 3D vertex pre-pass",
                  name);
@@ -181,6 +201,20 @@ bool startup_retry_note_has_vu_pre(const char *note)
     return false;
 }
 
+bool startup_retry_note_has_vu_store(const char *note)
+{
+    static const char head[] = "creating pipeline";
+    const char *p;
+    if (note == NULL || strncmp(note, head, sizeof head - 1) != 0) {
+        return false;
+    }
+    p = note + (sizeof head - 1);
+    if (*p == 's') {
+        p++;
+    }
+    return *p == ' ' && strstr(p, "_store_pre_vs") != NULL;
+}
+
 bool startup_retry_note_has_skin_probe(const char *note)
 {
     return note != NULL && strstr(note, "rd vu skin probe") != NULL;
@@ -209,6 +243,8 @@ const char *startup_retry_name(StartupRetry step)
     switch (step) {
     case STARTUP_RETRY_CACHE:
         return "cache";
+    case STARTUP_RETRY_TARGETS:
+        return "targets";
     case STARTUP_RETRY_NO_PREPASS:
         return "noprepass";
     case STARTUP_RETRY_CRASH_BLEND:
@@ -217,6 +253,8 @@ const char *startup_retry_name(StartupRetry step)
         return "d3d12";
     case STARTUP_RETRY_LAZY:
         return "lazy";
+    case STARTUP_RETRY_LOSS_TARGETS:
+        return "losstargets";
     case STARTUP_RETRY_LOSS_NO_PREPASS:
         return "lossnoprepass";
     case STARTUP_RETRY_LOSS_ROBUST:
@@ -250,9 +288,10 @@ int startup_retry_value(StartupRetry next, const char *backendName, char *out, s
 int startup_retry_parse(const char *value, StartupRetry *step, char *backend, size_t size)
 {
     static const StartupRetry steps[] = {
-        STARTUP_RETRY_CACHE,       STARTUP_RETRY_NO_PREPASS, STARTUP_RETRY_CRASH_BLEND,
-        STARTUP_RETRY_D3D12,       STARTUP_RETRY_LAZY,       STARTUP_RETRY_LOSS_NO_PREPASS,
-        STARTUP_RETRY_LOSS_ROBUST, STARTUP_RETRY_LOSS_BLEND, STARTUP_RETRY_LOSS_BACKEND};
+        STARTUP_RETRY_CACHE,        STARTUP_RETRY_TARGETS,         STARTUP_RETRY_NO_PREPASS,
+        STARTUP_RETRY_CRASH_BLEND,  STARTUP_RETRY_D3D12,           STARTUP_RETRY_LAZY,
+        STARTUP_RETRY_LOSS_TARGETS, STARTUP_RETRY_LOSS_NO_PREPASS, STARTUP_RETRY_LOSS_ROBUST,
+        STARTUP_RETRY_LOSS_BLEND,   STARTUP_RETRY_LOSS_BACKEND};
     const char *colon;
     size_t i, n;
     *step = STARTUP_RETRY_NONE;
@@ -289,6 +328,9 @@ const char *startup_retry_what(StartupRetry step)
     switch (step) {
     case STARTUP_RETRY_CACHE:
         return "the pipeline cache file was deleted; the shaders are prepared again from scratch";
+    case STARTUP_RETRY_TARGETS:
+        return "this run draws the 3D vertex pre-pass's record into render targets "
+               "(ICO_RD_VU_RECORD=targets) on the same graphics backend, the pre-pass kept";
     case STARTUP_RETRY_NO_PREPASS:
         return "this run draws without the 3D vertex pre-pass on the same graphics backend";
     case STARTUP_RETRY_CRASH_BLEND:
@@ -301,6 +343,11 @@ const char *startup_retry_what(StartupRetry step)
     case STARTUP_RETRY_LAZY:
         return "this run builds the shaders as the game needs them, not all at the start, "
                "without the 3D vertex pre-pass";
+    case STARTUP_RETRY_LOSS_TARGETS:
+        return "this run draws the 3D vertex pre-pass's record into render targets "
+               "(ICO_RD_VU_RECORD=targets) on the same graphics backend, the pre-pass kept; it "
+               "starts at the title as a fresh launch (what was not saved was lost when the "
+               "card stopped)";
     case STARTUP_RETRY_LOSS_NO_PREPASS:
         return "this run draws without the 3D vertex pre-pass on the same graphics backend; it "
                "starts at the title as a fresh launch (what was not saved was lost when the "

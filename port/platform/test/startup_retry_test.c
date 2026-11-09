@@ -17,6 +17,9 @@
  *   - the robust step: its place before blend, its value, that it draws
  *     with robust access and without the pre-pass, not with the fixed
  *     blend, and that no run without robustOffDefault takes it;
+ *   - the record stores' rung (targets, losstargets): a crash in a store
+ *     build's pipeline, a loss in a run drawing with the stores, each
+ *     before the pre-pass is given up, their values and what they draw;
  *   - the chains with the pre-pass: a crash in one of its pipelines
  *     (cache, noprepass, then the rest without it) and a loss in a run
  *     drawing with it (lossnoprepass, blend, backend), each value written
@@ -44,27 +47,35 @@
 
 /* the crash order, written out independently of startup_retry.c */
 static StartupRetry expected_crash(StartupRetry step, bool cache, bool d3d12, bool expl,
-                                   bool blendExpl, bool wasFixed, bool dst, bool pre,
+                                   bool blendExpl, bool wasFixed, bool dst, bool pre, bool store,
                                    const char *backend)
 {
     const bool onD3d12 = strcmp(backend, "d3d12") == 0;
-    if (step == STARTUP_RETRY_LOSS_NO_PREPASS || step == STARTUP_RETRY_LOSS_ROBUST ||
-        step == STARTUP_RETRY_LOSS_BLEND || step == STARTUP_RETRY_LOSS_BACKEND) {
+    if (step == STARTUP_RETRY_LOSS_TARGETS || step == STARTUP_RETRY_LOSS_NO_PREPASS ||
+        step == STARTUP_RETRY_LOSS_ROBUST || step == STARTUP_RETRY_LOSS_BLEND ||
+        step == STARTUP_RETRY_LOSS_BACKEND) {
         return STARTUP_RETRY_NONE; /* a crash after a loss restart: the box */
     }
     if (step == STARTUP_RETRY_NONE && cache) {
         return STARTUP_RETRY_CACHE;
     }
-    if ((step == STARTUP_RETRY_NONE || step == STARTUP_RETRY_CACHE) && pre) {
+    /* a record store build: the targets' record first, the pre-pass kept */
+    if ((step == STARTUP_RETRY_NONE || step == STARTUP_RETRY_CACHE) && store) {
+        return STARTUP_RETRY_TARGETS;
+    }
+    if ((step == STARTUP_RETRY_NONE || step == STARTUP_RETRY_CACHE ||
+         step == STARTUP_RETRY_TARGETS) &&
+        pre) {
         return STARTUP_RETRY_NO_PREPASS;
     }
     if ((step == STARTUP_RETRY_NONE || step == STARTUP_RETRY_CACHE ||
-         step == STARTUP_RETRY_NO_PREPASS) &&
+         step == STARTUP_RETRY_TARGETS || step == STARTUP_RETRY_NO_PREPASS) &&
         dst && !blendExpl && !wasFixed) {
         return STARTUP_RETRY_CRASH_BLEND;
     }
     if ((step == STARTUP_RETRY_NONE || step == STARTUP_RETRY_CACHE ||
-         step == STARTUP_RETRY_NO_PREPASS || step == STARTUP_RETRY_CRASH_BLEND) &&
+         step == STARTUP_RETRY_TARGETS || step == STARTUP_RETRY_NO_PREPASS ||
+         step == STARTUP_RETRY_CRASH_BLEND) &&
         d3d12 && !expl && !onD3d12) {
         return STARTUP_RETRY_D3D12;
     }
@@ -82,11 +93,16 @@ static StartupRetry expected_crash(StartupRetry step, bool cache, bool d3d12, bo
    build when the player chose neither the backend nor a blending other
    than fixed; then the box */
 static StartupRetry expected_loss(StartupRetry step, bool d3d12, bool expl, bool blendExpl,
-                                  bool wasFixed, bool preOn, bool robustOff)
+                                  bool wasFixed, bool preOn, bool storesOn, bool robustOff)
 {
     const bool beforeBlend = step != STARTUP_RETRY_LOSS_BLEND && step != STARTUP_RETRY_LOSS_BACKEND;
     const bool beforeRobust = beforeBlend && step != STARTUP_RETRY_LOSS_ROBUST;
-    if (beforeRobust && step != STARTUP_RETRY_LOSS_NO_PREPASS && preOn) {
+    const bool beforeNoPrepass = beforeRobust && step != STARTUP_RETRY_LOSS_NO_PREPASS;
+    /* the record stored by the vertex shaders: the targets' record first */
+    if (beforeNoPrepass && step != STARTUP_RETRY_LOSS_TARGETS && preOn && storesOn) {
+        return STARTUP_RETRY_LOSS_TARGETS;
+    }
+    if (beforeNoPrepass && preOn) {
         return STARTUP_RETRY_LOSS_NO_PREPASS;
     }
     if (beforeRobust && robustOff) {
@@ -112,12 +128,12 @@ static void test_table(void)
     int combos = 0;
     for (int why = STARTUP_RETRY_CRASH; why <= STARTUP_RETRY_LOSS; why++) {
         for (int step = STARTUP_RETRY_NONE; step <= STARTUP_RETRY_LOSS_BACKEND; step++) {
-            for (int bits = 0; bits < 1024; bits++) {
+            for (int bits = 0; bits < 4096; bits++) {
                 for (int b = 0; b < 2; b++) {
                     const bool cache = bits & 1, d3d12 = bits & 2, expl = bits & 4,
                                blendExpl = bits & 8, wasFixed = bits & 16, relaunch = bits & 32,
                                dst = bits & 64, pre = bits & 128, preOn = bits & 256,
-                               robustOff = bits & 512;
+                               robustOff = bits & 512, store = bits & 1024, storesOn = bits & 2048;
                     const StartupRetryRun run = {
                         .why = (StartupRetryWhy)why,
                         .step = (StartupRetry)step,
@@ -129,7 +145,9 @@ static void test_table(void)
                         .blendWasFixed = wasFixed,
                         .dstPipeline = dst,
                         .prepassPipeline = pre,
+                        .storePipeline = store,
                         .prepassWasOn = preOn,
+                        .storesWereOn = storesOn,
                         .robustOffDefault = robustOff,
                         .backendName = backends[b],
                     };
@@ -138,18 +156,19 @@ static void test_table(void)
                     const StartupRetry got = startup_retry_next(&run, reason, sizeof reason);
                     StartupRetry want = STARTUP_RETRY_NONE;
                     if (relaunch) {
-                        want = why == STARTUP_RETRY_CRASH
-                                   ? expected_crash((StartupRetry)step, cache, d3d12, expl,
-                                                    blendExpl, wasFixed, dst, pre, backends[b])
-                                   : expected_loss((StartupRetry)step, d3d12, expl, blendExpl,
-                                                   wasFixed, preOn, robustOff);
+                        want =
+                            why == STARTUP_RETRY_CRASH
+                                ? expected_crash((StartupRetry)step, cache, d3d12, expl, blendExpl,
+                                                 wasFixed, dst, pre, store, backends[b])
+                                : expected_loss((StartupRetry)step, d3d12, expl, blendExpl,
+                                                wasFixed, preOn, storesOn, robustOff);
                     }
                     CHECK(got == want,
                           "why %d step %d cache %d d3d12 %d explicit %d blend explicit %d "
-                          "fixed %d relaunch %d dst %d pre %d pre on %d robust off %d %s: got %d, "
-                          "want %d",
+                          "fixed %d relaunch %d dst %d pre %d pre on %d robust off %d store %d "
+                          "stores on %d %s: got %d, want %d",
                           why, step, cache, d3d12, expl, blendExpl, wasFixed, relaunch, dst, pre,
-                          preOn, robustOff, backends[b], (int)got, (int)want);
+                          preOn, robustOff, store, storesOn, backends[b], (int)got, (int)want);
                     CHECK(reason[0] != '\0', "why %d step %d: empty reason", why, step);
                     /* a loss step only grows, and never comes from a crash */
                     if (got != STARTUP_RETRY_NONE) {
@@ -161,7 +180,7 @@ static void test_table(void)
             }
         }
     }
-    CHECK(combos == 2 * 10 * 1024 * 2);
+    CHECK(combos == 2 * 12 * 4096 * 2);
     /* no name means the default backend; a NULL reason is allowed */
     {
         StartupRetryRun run = {.canRelaunch = true, .haveD3d12 = true};
@@ -457,8 +476,30 @@ static void test_note_vu_pre(void)
     for (size_t i = 0; i < sizeof notes / sizeof notes[0]; i++) {
         CHECK(startup_retry_note_has_vu_pre(notes[i].note) == notes[i].pre, "\"%s\"",
               notes[i].note);
+        /* none of these names a record store build */
+        CHECK(!startup_retry_note_has_vu_store(notes[i].note), "\"%s\"", notes[i].note);
     }
     CHECK(!startup_retry_note_has_vu_pre(NULL));
+    /* the record stored by the vertex shaders (rd_pipeline.c keyVsName names
+       the store build a key with no colour format draws through): a store
+       note, and a pre-pass note too (the ends' count and noprepass read it) */
+    static const char *const stores[] = {
+        "creating pipeline program 0 blend 0 vs 31 fs 41 fmt 0/0 msaa 0 dst 0 pre "
+        "(vu_prelit_store_pre_vs 1900 words + vu_pre_ps 300 words)",
+        "creating pipelines 300-331 of 730: program 0 blend 0 vs 31 fs 41 fmt 0/0 msaa 0 dst 0 "
+        "pre to program 0 blend 0 vs 38 fs 41 fmt 0/0 msaa 0 dst 0 pre; vertex "
+        "vu_prelit_batch_store_pre_vs 2000 words (420 instructions), vu_skin_batch_store_pre_vs "
+        "2600 words (600 instructions); largest fragment vu_pre_ps 300 words",
+        "creating pipeline program 0 blend 0 vs 46 fs 41 fmt 0/0 msaa 0 dst 0 "
+        "(vu_particle_store_pre_vs 2100 words + vu_pre_ps 300 words)",
+    };
+    for (size_t i = 0; i < sizeof stores / sizeof stores[0]; i++) {
+        CHECK(startup_retry_note_has_vu_store(stores[i]), "\"%s\"", stores[i]);
+        CHECK(startup_retry_note_has_vu_pre(stores[i]), "\"%s\"", stores[i]);
+    }
+    CHECK(!startup_retry_note_has_vu_store(NULL) && !startup_retry_note_has_vu_store(""));
+    CHECK(!startup_retry_note_has_vu_store("loading vu_prelit_store_pre_vs"));
+    CHECK(!startup_retry_note_has_vu_store("creating pipelinesX vu_prelit_store_pre_vs"));
     /* the skin check's start-up probe (rd_vu_skin_selftest.c): its
        compile's note and its draw's, neither the pre-pass's nor a
        destination read's */
@@ -671,6 +712,114 @@ static void test_prepass_chain(void)
                        "vulkan") == STARTUP_RETRY_LOSS_NO_PREPASS);
     CHECK(prepass_step(STARTUP_RETRY_LOSS, STARTUP_RETRY_LOSS_NO_PREPASS, false, false, false,
                        false, true, "vulkan") == STARTUP_RETRY_NONE);
+}
+
+/* the record stored by the vertex shaders (rd_vu_record.h): a crash in a
+ * store build's pipeline takes targets (the pre-pass kept, its record into
+ * render targets), then a crash in the targets' own pre-pass pipeline
+ * noprepass, then the rest; after a cache step targets still comes before
+ * noprepass; a loss in a run drawing with the stores takes losstargets,
+ * then (that run draws with the targets) lossnoprepass, then the rest; a
+ * loss in a run whose self-test already turned the stores off goes to
+ * lossnoprepass at once */
+static void test_targets_chain(void)
+{
+    char v[32], be[16];
+    StartupRetry p;
+    StartupRetryRun run = {.why = STARTUP_RETRY_CRASH,
+                           .canRelaunch = true,
+                           .blendWasFixed = true,
+                           .prepassPipeline = true,
+                           .storePipeline = true,
+                           .prepassWasOn = true,
+                           .storesWereOn = true,
+                           .backendName = "vulkan"};
+    char reason[200];
+    reason[0] = '\0';
+    StartupRetry s = startup_retry_next(&run, reason, sizeof reason);
+    CHECK(s == STARTUP_RETRY_TARGETS, "store crash: %d", (int)s);
+    CHECK(strstr(reason, "render targets") != NULL, "reason: %s", reason);
+    CHECK(startup_retry_value(s, "vulkan", v, sizeof v) == 0);
+    CHECK_STR(v, "targets:vulkan");
+    CHECK(startup_retry_parse(v, &p, be, sizeof be) == 0 && p == STARTUP_RETRY_TARGETS);
+    CHECK(startup_retry_value_targets(v) && startup_retry_draws_targets(s));
+    CHECK(!startup_retry_value_no_prepass(v) && !startup_retry_draws_no_prepass(s));
+    CHECK(!startup_retry_value_is_loss(v) && !startup_retry_is_loss(s));
+    CHECK(!startup_retry_value_draws_fixed(v) && !startup_retry_draws_fixed(s));
+    CHECK(strstr(startup_retry_what(s), "render targets") != NULL);
+    /* the targets run crashes in its own pre-pass pipeline: noprepass */
+    run.step = s;
+    run.storePipeline = false;
+    run.storesWereOn = false;
+    s = startup_retry_next(&run, reason, sizeof reason);
+    CHECK(s == STARTUP_RETRY_NO_PREPASS, "targets run's crash: %d", (int)s);
+    /* a store note at targets or later: the order goes on */
+    run.storePipeline = true;
+    run.step = STARTUP_RETRY_TARGETS;
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_NO_PREPASS);
+    /* the cache first, then targets */
+    run.step = STARTUP_RETRY_NONE;
+    run.cacheWasLoaded = true;
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_CACHE);
+    run.step = STARTUP_RETRY_CACHE;
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_TARGETS);
+    /* a pre-pass note without a store build (the targets record's own
+       pipelines): noprepass, as before */
+    run = (StartupRetryRun){.why = STARTUP_RETRY_CRASH,
+                            .canRelaunch = true,
+                            .prepassPipeline = true,
+                            .storesWereOn = true,
+                            .backendName = "vulkan"};
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_NO_PREPASS);
+
+    /* the losses */
+    run = (StartupRetryRun){.why = STARTUP_RETRY_LOSS,
+                            .canRelaunch = true,
+                            .blendWasFixed = true,
+                            .prepassWasOn = true,
+                            .storesWereOn = true,
+                            .backendName = "vulkan"};
+    reason[0] = '\0';
+    s = startup_retry_next(&run, reason, sizeof reason);
+    CHECK(s == STARTUP_RETRY_LOSS_TARGETS, "stores loss: %d", (int)s);
+    CHECK(strstr(reason, "render targets") != NULL, "reason: %s", reason);
+    CHECK(startup_retry_value(s, "vulkan", v, sizeof v) == 0);
+    CHECK_STR(v, "losstargets:vulkan");
+    CHECK(startup_retry_parse(v, &p, be, sizeof be) == 0 && p == STARTUP_RETRY_LOSS_TARGETS);
+    CHECK(startup_retry_value_targets(v) && startup_retry_draws_targets(s));
+    CHECK(startup_retry_value_is_loss(v) && startup_retry_is_loss(s));
+    CHECK(!startup_retry_value_no_prepass(v) && !startup_retry_draws_no_prepass(s));
+    CHECK(!startup_retry_value_draws_fixed(v) && !startup_retry_draws_fixed(s));
+    CHECK(!startup_retry_value_robust(v));
+    CHECK(strstr(startup_retry_what(s), "fresh launch") != NULL);
+    /* the losstargets run (the targets' record) loses it again */
+    run.step = s;
+    run.storesWereOn = false;
+    s = startup_retry_next(&run, NULL, 0);
+    CHECK(s == STARTUP_RETRY_LOSS_NO_PREPASS, "losstargets run's loss: %d", (int)s);
+    run.step = STARTUP_RETRY_LOSS_TARGETS;
+    run.storesWereOn = true; /* cannot happen: the order still goes on */
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_LOSS_NO_PREPASS);
+    /* the self-test turned the stores off: lossnoprepass at once */
+    run.step = STARTUP_RETRY_NONE;
+    run.storesWereOn = false;
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_LOSS_NO_PREPASS);
+    /* a crash in a losstargets run: the box */
+    run.why = STARTUP_RETRY_CRASH;
+    run.step = STARTUP_RETRY_LOSS_TARGETS;
+    run.storePipeline = true;
+    CHECK(startup_retry_next(&run, NULL, 0) == STARTUP_RETRY_NONE);
+    /* the order of the steps */
+    CHECK(STARTUP_RETRY_CACHE < STARTUP_RETRY_TARGETS &&
+          STARTUP_RETRY_TARGETS < STARTUP_RETRY_NO_PREPASS);
+    CHECK(STARTUP_RETRY_LAZY < STARTUP_RETRY_LOSS_TARGETS &&
+          STARTUP_RETRY_LOSS_TARGETS < STARTUP_RETRY_LOSS_NO_PREPASS);
+    CHECK_STR(startup_retry_name(STARTUP_RETRY_TARGETS), "targets");
+    CHECK_STR(startup_retry_name(STARTUP_RETRY_LOSS_TARGETS), "losstargets");
+    CHECK(!startup_retry_value_targets("lazy:vulkan") && !startup_retry_value_targets("targets"));
+    CHECK(!startup_retry_value_targets("losstarget:vulkan") && !startup_retry_value_targets(NULL));
+    CHECK(!startup_retry_draws_targets(STARTUP_RETRY_NO_PREPASS) &&
+          !startup_retry_draws_targets(STARTUP_RETRY_NONE));
 }
 
 static void test_values(void)
@@ -908,6 +1057,7 @@ int main(void)
     test_note();
     test_note_vu_pre();
     test_prepass_chain();
+    test_targets_chain();
     test_values();
     test_robust_step();
     test_envp();

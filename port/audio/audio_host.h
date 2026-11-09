@@ -213,6 +213,13 @@ int ico_audio_sdl_cushion_ms(void);
    at most 2 s; a thread that has not returned by then is left behind (it
    closes what it opens later itself) and SDL's audio is left up, logged. */
 void ico_audio_sdl_close(void);
+/* 1 when the close left such a thread behind: it may still be inside
+   SDL_OpenAudioDeviceStream, so the window's exit quits every SDL
+   subsystem but the audio (SDL_Quit would destroy the device and the
+   state the thread returns into) and leaves that to the process's end
+   (window_host.c ico_window_close, logged); 0 otherwise and without the
+   SDL output. */
+int ico_audio_sdl_open_left(void);
 /* The pull path's watchdog input: milliseconds since the device last asked
    for sound, or since the stream opened, moved or resumed; -1 on the sync
    path, while paused or without a stream.  *asked: whether it has asked

@@ -2816,6 +2816,7 @@ static void vkr_fill_limits(void)
     o->rasterOrderOff = g_vkr.rasterOrderOff[0] ? g_vkr.rasterOrderOff : NULL;
     /* the vertex shaders' stores (vkr_create_device) */
     o->vertexStores = g_vkr.vertexStores;
+    o->validationLayer = g_vkr.validationOn;
     o->moltenvk = g_vkr.moltenvk;
     /* v0.7.10: the device profile's facts (rhi.h) */
     o->localRead = g_vkr.localRead;

@@ -1044,66 +1044,157 @@ static void checkRamp(void)
     CHECK(badRgb == 0, "%dx: %d texels' colour beyond 2 LSB", RAMP_S, badRgb);
 }
 
-/* (j) the dither follows the jittered picture (issue 203): a flat quad at a Z
- * between two LUT entries that differ, fogged at 2x with the scene jittered
- * by 0, 0 (SCENE byte for byte as without a jitter) and by a whole texel
- * 1, 0 (past the range a real jitter takes, so the effect is a whole cell):
- * every interior texel of the second is the first's one texel to the left
- * (the picture moved right by the jitter and the pattern with it), and each
- * is the formula's alpha at the texel less the jitter (a1x_fog with
- * a1x_bayer8 at the unjittered cell).  The first has more than one level
- * and differs from itself shifted (the test could not pass on a constant) */
+/* (j) the dither's phase follows the frame's jitter (issue 203): a flat quad
+ * at a Z between two LUT entries that differ, fogged at 2x with the scene
+ * jittered by 0, 0 (SCENE byte for byte as without a jitter) and by real
+ * jitters, inside the (-0.5, 0.5) texel range FSR's sequence takes (the
+ * fixture's fraction chosen so the pattern has period 8, jitterFixtureOk): the Bayer
+ * cell moves by floor(jitter * 16 + 0.5) cells, so every interior texel at
+ * jitter (0.25, 0) is the 0, 0 picture's 4 texels to the right, at (0.125, 0)
+ * 2, at (-0.25, 0) 4 to the left and at (0, 0.25) 4 down, each alpha the
+ * formula's at the moved cell.  The 0, 0 picture has more than one level and
+ * differs from itself moved 2 and 4 texels (the test could not pass on a
+ * constant, or on a jitter that left the cell where it was: the index at the
+ * pixel less the jitter floored back to the same cell for every jitter under
+ * half a texel) */
+/* case j's fixture check on the CPU: the alpha a1x_fog gives over the 8x8
+ * Bayer sheet at entries n, n + 1 and fraction f has two levels and differs
+ * from itself shifted 2 and 4 cells in x and in y */
+static bool jitterFixtureOk(const uint8_t *lut, uint32_t n, uint32_t f)
+{
+    const uint32_t lo = lut[n * 4 + 3], hi = lut[(n < 255u ? n + 1u : 255u) * 4 + 3];
+    uint32_t a[8][8];
+    bool two = false;
+    for (uint32_t y = 0; y < 8; y++) {
+        for (uint32_t x = 0; x < 8; x++) {
+            a[y][x] = a1x_fog(lo, hi, f, (uint32_t)kFog[2][8], a1x_bayer8(x, y));
+            two |= a[y][x] != a[0][0];
+        }
+    }
+    if (!two) {
+        return false;
+    }
+    static const uint32_t kShift[] = {2, 4};
+    for (int k = 0; k < 2; k++) {
+        bool dx = false, dy = false;
+        for (uint32_t y = 0; y < 8; y++) {
+            for (uint32_t x = 0; x < 8; x++) {
+                dx |= a[y][x] != a[y][(x + kShift[k]) & 7u];
+                dy |= a[y][x] != a[(y + kShift[k]) & 7u][x];
+            }
+        }
+        if (!dx || !dy) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static void checkJitter(void)
 {
+    static const struct {
+        float jx, jy;
+        int dx, dy;
+    } kCase[] = {
+        {0.25f, 0.0f, 4, 0}, {0.125f, 0.0f, 2, 0}, {-0.25f, 0.0f, -4, 0}, {0.0f, 0.25f, 0, 4}};
+
+    enum { NCASE = sizeof(kCase) / sizeof(kCase[0]), M = 8 };
+
     uint8_t lut[256 * 4];
     logicalLut(2, lut);
-    uint32_t n = 0x37;
-    while (n < 254 && lut[n * 4 + 3] == lut[(n + 1) * 4 + 3]) {
-        n++;
+    /* the fixture: entries n, n + 1 and a fraction f whose alpha pattern
+     * (a1x_fog over the 8x8 Bayer sheet) has period 8 in both axes, at f
+     * and at f - 1 (the 24-bit depth's step): a shift of 2 or 4 cells
+     * changes it.  A fraction near 1/2 lights every other cell (gs_bayer8's
+     * top bit is (x ^ y) & 1: a checkerboard), which shifts of 2 and 4
+     * leave as it was */
+    uint32_t n = 0x37, f = 0;
+    for (; n < 255 && f == 0; n++) {
+        if (lut[n * 4 + 3] == lut[(n + 1) * 4 + 3]) {
+            continue;
+        }
+        for (uint32_t c = 2; c < 256 && f == 0; c++) {
+            f = jitterFixtureOk(lut, n, c) && jitterFixtureOk(lut, n, c - 1) ? c : 0;
+        }
+        if (f) {
+            break;
+        }
     }
-    CHECK(lut[n * 4 + 3] != lut[(n + 1) * 4 + 3], "(j) no adjacent LUT entries differ");
-    const uint32_t z = (n << 16) | 0x8000u, tw = W * RAMP_S, th = H * RAMP_S;
-    static uint8_t img[3][W * RAMP_S * H * RAMP_S * 4];
+    CHECK(f != 0, "(j) no LUT entries and fraction give a dither of period 8");
+    if (f == 0) {
+        return;
+    }
+    printf("  (j) the fixture: entries %u and %u (alpha %u, %u) at the fraction %u/256\n", n, n + 1,
+           lut[n * 4 + 3], lut[(n + 1) * 4 + 3], f);
+    const uint32_t z = (n << 16) | (f << 8), tw = W * RAMP_S, th = H * RAMP_S;
+    static uint8_t img[2 + NCASE][W * RAMP_S * H * RAMP_S * 4];
     uint32_t w = 0, h = 0;
+    bool ok = true;
     s_flatZ = z;
     rd__frame_jitter_clear();
     recordRamp();
-    const bool ok0 = rd__read_target(rd_target(RD_TARGET_SCENE), img[0], sizeof(img[0]), &w, &h);
+    ok &= rd__read_target(rd_target(RD_TARGET_SCENE), img[0], sizeof(img[0]), &w, &h);
     rd__frame_jitter_set(0.0f, 0.0f);
     recordRamp();
-    const bool ok1 = rd__read_target(rd_target(RD_TARGET_SCENE), img[1], sizeof(img[1]), &w, &h);
-    rd__frame_jitter_set(1.0f, 0.0f);
-    recordRamp();
-    const bool ok2 = rd__read_target(rd_target(RD_TARGET_SCENE), img[2], sizeof(img[2]), &w, &h);
+    ok &= rd__read_target(rd_target(RD_TARGET_SCENE), img[1], sizeof(img[1]), &w, &h);
+    for (int c = 0; c < NCASE; c++) {
+        rd__frame_jitter_set(kCase[c].jx, kCase[c].jy);
+        recordRamp();
+        ok &= rd__read_target(rd_target(RD_TARGET_SCENE), img[2 + c], sizeof(img[0]), &w, &h);
+    }
     rd__frame_jitter_clear();
     s_flatZ = 0;
-    if (!ok0 || !ok1 || !ok2 || w != tw || h != th) {
+    if (!ok || w != tw || h != th) {
         CHECK(0, "(j) SCENE readback (%ux%u)", w, h);
         return;
     }
     CHECK(memcmp(img[0], img[1], tw * th * 4) == 0, "(j) jitter 0, 0 differs from no jitter");
-    int levels[256] = {0}, distinct = 0, moved = 0, bad = 0, badFormula = 0;
-    for (uint32_t y = 8; y < th - 8; y++) {
-        for (uint32_t x = 8; x < tw - 8; x++) {
-            const uint8_t *a = &img[0][(y * tw + x) * 4], *b = &img[2][(y * tw + x + 1) * 4];
+    const bool d24 = rd__depth_unorm_steps() > 0.0f;
+    int levels[256] = {0}, distinct = 0, moved2 = 0, moved4 = 0;
+    for (uint32_t y = M; y < th - M; y++) {
+        for (uint32_t x = M; x < tw - M; x++) {
+            const uint8_t *a = &img[0][(y * tw + x) * 4];
             levels[a[3]]++;
-            moved += memcmp(a, &img[0][(y * tw + x + 1) * 4], 4) != 0;
-            bad += memcmp(a, b, 4) != 0;
-            badFormula +=
-                b[3] != rampAlpha(lut, z, x, y, tw, th) &&
-                (rd__depth_unorm_steps() == 0.0f || b[3] != rampAlpha(lut, z - 256u, x, y, tw, th));
+            moved2 += memcmp(a, &img[0][(y * tw + x + 2) * 4], 4) != 0;
+            moved4 += memcmp(a, &img[0][(y * tw + x + 4) * 4], 4) != 0;
         }
     }
     for (int v = 0; v < 256; v++) {
         distinct += levels[v] > 0;
     }
-    printf("  (j) jitter 1, 0: %d alpha levels, %d interior texels not the 0, 0 picture shifted a "
-           "texel, %d beyond the formula at the unjittered cell, %d texels the shift changes\n",
-           distinct, bad, badFormula, moved);
+    printf("  (j) %d alpha levels at 0, 0; %d interior texels the pattern moved 2 texels "
+           "changes, %d moved 4\n",
+           distinct, moved2, moved4);
     CHECK(distinct >= 2, "(j) the flat quad's fog has %d levels (no dither to follow)", distinct);
-    CHECK(moved > 0, "(j) the pattern is the same one texel over (the test could not tell)");
-    CHECK(bad == 0, "(j) %d texels are not the unjittered picture moved by the jitter", bad);
-    CHECK(badFormula == 0, "(j) %d texels beyond the formula at the unjittered cell", badFormula);
+    CHECK(moved2 > 0 && moved4 > 0, "(j) the pattern is the same 2 or 4 texels over (the test "
+                                    "could not tell)");
+    for (int c = 0; c < NCASE; c++) {
+        const int dx = kCase[c].dx, dy = kCase[c].dy;
+        int bad = 0, badFormula = 0, same = 0;
+        for (uint32_t y = M; y < th - M; y++) {
+            for (uint32_t x = M; x < tw - M; x++) {
+                const uint32_t sx = (uint32_t)((int)x + dx), sy = (uint32_t)((int)y + dy);
+                const uint8_t *b = &img[2 + c][(y * tw + x) * 4];
+                bad += memcmp(b, &img[0][(sy * tw + sx) * 4], 4) != 0;
+                same += memcmp(b, &img[0][(y * tw + x) * 4], 4) == 0;
+                badFormula += b[3] != rampAlpha(lut, z, sx, sy, tw, th) &&
+                              (!d24 || b[3] != rampAlpha(lut, z - 256u, sx, sy, tw, th));
+            }
+        }
+        const uint32_t interior = (tw - 2 * M) * (th - 2 * M);
+        printf("  (j) jitter %.3f, %.3f: %d interior texels not the 0, 0 picture moved %d, %d "
+               "cells, %d beyond the formula at the moved cell, %u of %u as at 0, 0\n",
+               (double)kCase[c].jx, (double)kCase[c].jy, bad, dx, dy, badFormula, (unsigned)same,
+               (unsigned)interior);
+        CHECK(bad == 0, "(j) jitter %.3f, %.3f: %d texels are not the 0, 0 pattern moved %d, %d",
+              (double)kCase[c].jx, (double)kCase[c].jy, bad, dx, dy);
+        CHECK(badFormula == 0,
+              "(j) jitter %.3f, %.3f: %d texels beyond the formula at the moved "
+              "cell",
+              (double)kCase[c].jx, (double)kCase[c].jy, badFormula);
+        CHECK((uint32_t)same < interior, "(j) jitter %.3f, %.3f: the pattern did not move",
+              (double)kCase[c].jx, (double)kCase[c].jy);
+    }
 }
 
 static void checkPipelines(void)

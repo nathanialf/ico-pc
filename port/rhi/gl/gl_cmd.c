@@ -860,6 +860,14 @@ void rhi_cmd_end_render_pass(RhiCommandList cl)
          * resolve, the present's) depends on whether a driver applies the
          * last draw's colour mask to it; nothing is called when they are */
         gl_open_masks((1u << RHI_MAX_COLOR_TARGETS) - 1u, false, false);
+        if (s.discard) {
+            /* a noRaster pipeline's GL_RASTERIZER_DISCARD (gl_flush)
+             * ends with its pass: under it glClear and glClearBuffer* are
+             * ignored (the glEnable reference page), so the next pass's
+             * load-op clear would not happen */
+            glf.Disable(GL_RASTERIZER_DISCARD);
+            s.discard = false;
+        }
     }
 }
 

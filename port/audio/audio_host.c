@@ -622,6 +622,11 @@ unsigned long long ico_audio_sdl_held_ms(void)
 {
     return 0;
 }
+
+int ico_audio_sdl_open_left(void)
+{
+    return 0;
+}
 #endif
 
 /* Left and right swapped in place (mirror mode, audio_host.h). */
