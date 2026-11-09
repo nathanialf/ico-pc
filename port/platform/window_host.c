@@ -1773,6 +1773,13 @@ static int vu_prepass_persist(void)
     return ico_config_set_bool("dev.vu_prepass", 0) == 0 && ico_config_save() == 0 ? 0 : -1;
 }
 
+/* [dev] vu_record = "targets" (the same inside a record store build) */
+static int vu_record_persist(void)
+{
+    return ico_config_set_string("dev.vu_record", "targets") == 0 && ico_config_save() == 0 ? 0
+                                                                                            : -1;
+}
+
 /* [dev] vu_skin_check = false in config.toml, for good (issue 163's skin
    check: its start-up probe crashed, froze or lost the device; the setting
    is a diagnostic's, the picture is the same without it): said in one line
@@ -2008,7 +2015,11 @@ int ico_window_open(unsigned int gsW, unsigned int gsH)
        (startup_retry_draws_no_prepass: the crash order's noprepass and the
        steps after it, every loss step) */
     const int preEnds = retry == STARTUP_RETRY_NONE ? ico_diag_startup_vu_prepass() : 0;
-    if (preEnds > 0) {
+    if (preEnds > 0 && ico_diag_startup_vu_store()) {
+        /* inside a record store build: the targets' record, pre-pass kept */
+        window_setenv("ICO_RD_VU_RECORD", "targets");
+        lazyStart = false;
+    } else if (preEnds > 0) {
         rd_set_vu_prepass_off(preEnds == 1 ? "for this start: the last start ended while the "
                                              "graphics driver compiled its pipelines"
                                            : "[dev] vu_prepass = false: the last two starts "
@@ -2414,7 +2425,9 @@ open_window:
                                                  pipeline_set_persist_lazy, cfgName);
     }
     if (preEnds >= 1) {
-        (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_PRE, NULL, vu_prepass_persist, cfgName);
+        (void)ico_diag_startup_end_persist(
+            ICO_DIAG_END_VU_PRE, NULL,
+            ico_diag_startup_vu_store() ? vu_record_persist : vu_prepass_persist, cfgName);
     }
     const bool carefulPolicy = pipePolicy == ICO_DIAG_PIPESET_FULL ||
                                pipePolicy == ICO_DIAG_PIPESET_CAREFUL_ONCE ||
@@ -2557,8 +2570,10 @@ open_window:
     window_pipe_skin_check(pipePolicy);
     /* a device loss from here takes the loss order's lossnoprepass step
        first when the run draws with the VU vertex pre-pass (its self-test
-       above may have turned it off) */
+       above may have turned it off); losstargets before it under the
+       record stores */
     ico_diag_set_vu_prepass(rd_vu_prepass_on());
+    ico_diag_set_vu_record_stores(rd_vu_prepass_on() && strcmp(rd_vu_record_mode(), "stores") == 0);
     /* which way of reading the depth gives the fog its distances on this
        GPU, tried on the real scene size; logged ("fog: depth path") */
     ico_diag_step("window: start: the fog self-test");
@@ -2816,6 +2831,7 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
         }
     }
     ico_diag_set_vu_prepass(rd_vu_prepass_on());
+    ico_diag_set_vu_record_stores(rd_vu_prepass_on() && strcmp(rd_vu_record_mode(), "stores") == 0);
     window_pipe_skin_check(-1);
     ico_diag_step("window: switch to %s: the fog self-test", backend);
     rd_fog_selftest();

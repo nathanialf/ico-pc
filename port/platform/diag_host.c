@@ -3003,13 +3003,23 @@ int ico_diag_startup_vu_prepass(void)
     return n > 2 ? 2 : (int)n;
 }
 
+int ico_diag_startup_vu_store(void)
+{
+    return act_end_n[ICO_DIAG_END_VU_PRE] != 0 && startup_retry_note_has_vu_store(act_prev);
+}
+
 int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(void),
                                  const char *config_name)
 {
     const char *cfg = config_name != NULL ? config_name : "config.toml";
     const int pre = kind == ICO_DIAG_END_VU_PRE;
     const int loss = kind == ICO_DIAG_END_LOSS;
-    const char *setting = pre ? "[dev] vu_prepass = false" : "[dev] pipeline_set = \"lazy\"";
+    /* inside a build of the record stored by the vertex shaders: the rung
+       before (the render targets' record, the pre-pass kept) */
+    const int store = pre && ico_diag_startup_vu_store();
+    const char *setting = store ? "[dev] vu_record = \"targets\""
+                          : pre ? "[dev] vu_prepass = false"
+                                : "[dev] pipeline_set = \"lazy\"";
     const char *rule = pre ? "the device already draws without the 3D vertex pre-pass"
                            : "the device table already makes the pipelines as the game needs "
                              "them on this device";
@@ -3050,6 +3060,14 @@ int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(voi
                          "nothing is written to %s); if a start loses it again before one runs "
                          "without a loss, [dev] gpu_robust = true is written for good",
                          cfg);
+        } else if (store) {
+            ico_diag_log("ico_pc: the previous start ended while the graphics driver compiled the "
+                         "3D vertex pre-pass's record stores (%s); this start only draws the "
+                         "record into render targets instead, the pre-pass kept "
+                         "(ICO_RD_VU_RECORD=targets; nothing is written to %s); if a start that "
+                         "compiles them ends there again, [dev] vu_record = \"targets\" is "
+                         "written for good",
+                         act_prev, cfg);
         } else if (pre) {
             ico_diag_log("ico_pc: the previous start ended while the graphics driver compiled the "
                          "3D vertex pre-pass's shaders (%s); this start only draws without it "
@@ -3092,6 +3110,12 @@ int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(voi
                      "every start after it check the bounds of every buffer and image read ([dev] "
                      "gpu_robust = true in %s%s); delete that line to turn it off again",
                      cfg, saved ? "" : ", which could not be written: this start only");
+    } else if (store) {
+        ico_diag_log("ico_pc: the previous start ended while the graphics driver compiled the 3D "
+                     "vertex pre-pass's record stores (%s); this start and every start after it "
+                     "draw the record into render targets, the pre-pass kept ([dev] vu_record = "
+                     "\"targets\" in %s%s); delete that line to try the stores again",
+                     act_prev, cfg, saved ? "" : ", which could not be written: this start only");
     } else if (pre) {
         ico_diag_log("ico_pc: the previous start ended while the graphics driver compiled the 3D "
                      "vertex pre-pass's shaders (%s); this start and every start after it draw "
@@ -3728,6 +3752,9 @@ static int retry_cache_loaded;
 static char retry_cache_path[1024];
 /* ico_diag_set_vu_prepass: the run draws with the VU vertex pre-pass */
 static int retry_prepass_on;
+/* ico_diag_set_vu_record_stores: ... its record stored by the vertex
+   shaders */
+static int retry_stores_on;
 /* ico_diag_set_robust_off_default: robust access off by the device's
    default */
 static int retry_robust_off;
@@ -3764,6 +3791,11 @@ void ico_diag_set_backend_trial(const char *backend)
 void ico_diag_set_vu_prepass(int on)
 {
     retry_prepass_on = on != 0;
+}
+
+void ico_diag_set_vu_record_stores(int on)
+{
+    retry_stores_on = on != 0;
 }
 
 void ico_diag_set_robust_off_default(int on)
@@ -4056,6 +4088,7 @@ static void driver_crash_plan(void)
         .blendExplicit = retry_blend_explicit != 0,
         .dstPipeline = startup_retry_note_has_dst(activity),
         .prepassPipeline = startup_retry_note_has_vu_pre(activity),
+        .storePipeline = startup_retry_note_has_vu_store(activity),
         .backendName = retry_backend,
     };
     relaunch_value[0] = '\0';
@@ -4130,6 +4163,7 @@ int ico_diag_device_lost_restart(int blend_was_fixed)
         .blendExplicit = retry_blend_explicit != 0,
         .blendWasFixed = blend_was_fixed != 0,
         .prepassWasOn = retry_prepass_on != 0,
+        .storesWereOn = retry_stores_on != 0,
         .robustOffDefault = retry_robust_off != 0,
         .backendName = retry_backend,
     };

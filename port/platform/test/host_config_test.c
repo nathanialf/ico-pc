@@ -1286,6 +1286,66 @@ static void test_retry_prepass(void)
     unset_env("ICO_GPU_ROBUST"); /* the robust step's */
 }
 
+/* ICO_RD_VU_RECORD in a restart: "targets" at the crash order's targets
+   step and the loss order's losstargets, over the ini's vu_record=, the
+   pre-pass kept (the ini's vu_prepass=); every other step and a first run
+   keep the ini's record (the steps after them draw without the pre-pass) */
+static void test_retry_record(void)
+{
+    static const struct {
+        const char *retry;
+        const char *record, *prepass;
+    } runs[] = {
+        {"targets:vulkan", "targets", "on"},
+        {"losstargets:vulkan", "targets", "on"},
+        {"noprepass:vulkan", "stores", "0"},
+        {"lossnoprepass:vulkan", "stores", "0"},
+        {"cache:vulkan", "stores", "on"},
+        {"robust:vulkan", "stores", "0"},
+        {NULL, "stores", "on"},
+    };
+
+    IcoIni ini;
+
+    /* the pure rule */
+    CHECK(strcmp(ico_dev_env_export_value("vu_record", NULL, "targets:vulkan"), "targets") == 0);
+    CHECK(strcmp(ico_dev_env_export_value("vu_record", "stores", "losstargets:d3d12"), "targets") ==
+          0);
+    CHECK(ico_dev_env_export_value("vu_record", NULL, "noprepass:vulkan") == NULL);
+    CHECK(strcmp(ico_dev_env_export_value("vu_record", "stores", "cache:vulkan"), "stores") == 0);
+    CHECK(ico_dev_env_export_value("vu_prepass", NULL, "targets:vulkan") == NULL);
+    CHECK(ico_dev_env_export_value("vu_prepass", NULL, "losstargets:vulkan") == NULL);
+    CHECK(ico_dev_env_export_value("blend", NULL, "losstargets:vulkan") == NULL);
+    CHECK(ico_dev_env_export_value("gpu_robust", NULL, "losstargets:vulkan") == NULL);
+    for (size_t i = 0; i < sizeof(runs) / sizeof(runs[0]); i++) {
+        unset_env("ICO_RD_VU_RECORD");
+        unset_env("ICO_RD_VU_PREPASS");
+        if (runs[i].retry != NULL) {
+            set_env("ICO_STARTUP_RETRY", runs[i].retry);
+        } else {
+            unset_env("ICO_STARTUP_RETRY");
+        }
+        ico_ini_parse(&ini, "vu_prepass=true\nvu_record=stores\n");
+        ico_ini_export(&ini, "dev-env-test.ini", 0);
+        if (!env_is("ICO_RD_VU_RECORD", runs[i].record) ||
+            !env_is("ICO_RD_VU_PREPASS", runs[i].prepass)) {
+            fprintf(stderr, "retry %s:\n", runs[i].retry != NULL ? runs[i].retry : "(none)");
+        }
+        CHECK(env_is("ICO_RD_VU_RECORD", runs[i].record));
+        CHECK(env_is("ICO_RD_VU_PREPASS", runs[i].prepass));
+    }
+    /* no ini: the restart's alone */
+    unset_env("ICO_RD_VU_RECORD");
+    set_env("ICO_STARTUP_RETRY", "losstargets:vulkan");
+    memset(&ini, 0, sizeof(ini));
+    ico_ini_export(&ini, "dev-env-test.ini", -1);
+    CHECK(env_is("ICO_RD_VU_RECORD", "targets"));
+    unset_env("ICO_STARTUP_RETRY");
+    unset_env("ICO_RD_VU_RECORD");
+    unset_env("ICO_RD_VU_PREPASS");
+    unset_env("ICO_GPU_ROBUST"); /* the robust step's */
+}
+
 /* ico_host_choose_disc: the rules in order (pin, the image given, the only
    archive, the disc played last, the European disc) and the words for the
    log; values outside the rows name none. ico_host_choose_image: the image
@@ -1508,6 +1568,7 @@ int main(void)
     test_dev_env();
     test_retry_blend();
     test_retry_prepass();
+    test_retry_record();
     test_logs_override();
 #if defined(__linux__) && !defined(__ANDROID__)
     test_appimage();

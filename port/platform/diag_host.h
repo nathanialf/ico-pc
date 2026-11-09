@@ -490,6 +490,16 @@ int ico_diag_startup_pipeline_set(int relaunched, int file_lazy, const char *set
    draw without it ([dev] vu_prepass = false in <config_name>); delete that
    line to try it again"); 0: neither. */
 int ico_diag_startup_vu_prepass(void);
+/* 1 when that count is not 0 and the end's note names a build of the
+   pre-pass's record stored by the vertex shaders
+   (startup_retry_note_has_vu_store): the rung before. This start draws the
+   record into render targets with the pre-pass kept (the window sets
+   ICO_RD_VU_RECORD=targets instead of turning the pre-pass off), and the
+   second such end writes [dev] vu_record = "targets" instead of [dev]
+   vu_prepass = false (ico_diag_startup_end_persist's lines name the record
+   stores and that key). An end in the targets' own pre-pass pipelines
+   after it counts towards [dev] vu_prepass = false as before. 0 otherwise. */
+int ico_diag_startup_vu_store(void);
 /* After the device is made, for a kind this start counted (else nothing,
    0): the window calls it for the pipelines on ICO_DIAG_PIPESET_CAREFUL_ONCE,
    ICO_DIAG_PIPESET_LAZY_ONCE and ICO_DIAG_PIPESET_LAZY_NOW, for the
@@ -816,6 +826,12 @@ int ico_diag_loss_bisect2(const char *dump_zip, uint32_t pass, uint32_t draws, u
    lossnoprepass step first (startup_retry.h StartupRetryRun.prepassWasOn).
    0 until set. */
 void ico_diag_set_vu_prepass(int on);
+/* Whether that pre-pass's record is stored by the vertex shaders (rd.h
+   rd_vu_record_mode "stores", after the self-test, which may turn it to
+   the render targets): a device loss then takes the loss order's
+   losstargets step first (startup_retry.h StartupRetryRun.storesWereOn).
+   0 until set. */
+void ico_diag_set_vu_record_stores(int on);
 /* Whether the run draws with robust access off by the device's default
    (port/rhi/rhi.h RhiLimits.robustDefaultOff), not by
    gpu_robust or ICO_GPU_ROBUST: a device loss then takes the loss order's

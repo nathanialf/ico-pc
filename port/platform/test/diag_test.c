@@ -279,6 +279,13 @@ static void segv_thread(void *arg)
     "creating pipelines 297-328 of 702: program 0 blend 0 vs 31 fs 41 fmt 3/0 msaa 0 dst 0 pre "   \
     "to program 0 blend 4 vs 30 fs 19 fmt 1/8 msaa 0 dst 0 ext 0; vertex vu_prelit_pre_vs 1820 "   \
     "words, vu_tri_plain_vs 19519 words; largest fragment vu_texa_ps 21000 words"
+/* a batch of the pre-pass's record stored by the vertex shaders
+   (rd_pipeline.c keyVsName names the store builds): the pre-pass's kind,
+   with the targets' rung first (startup_retry_note_has_vu_store) */
+#define VU_STORE_NOTE                                                                              \
+    "creating pipelines 297-310 of 730: program 0 blend 0 vs 31 fs 41 fmt 0/0 msaa 0 dst 0 pre "   \
+    "to program 0 blend 0 vs 38 fs 41 fmt 0/0 msaa 0 dst 0 pre; vertex "                           \
+    "vu_prelit_batch_store_pre_vs 2000 words; largest fragment vu_pre_ps 300 words"
 /* a batch of the record path's drawing shaders (rd_pipeline.c
    batchModules: vu_main_vs, made only with the pre-pass): the pre-pass's
    kind */
@@ -629,6 +636,13 @@ static int persist_pre_stub(void)
     return getenv("ICO_TEST_PERSIST_FAIL") != NULL ? -1 : 0;
 }
 
+/* window_host.c vu_record_persist, stubbed the same way */
+static int persist_record_stub(void)
+{
+    ico_diag_log("test: config write dev.vu_record = targets");
+    return getenv("ICO_TEST_PERSIST_FAIL") != NULL ? -1 : 0;
+}
+
 /* The run after the policy (ICO_TEST_THEN): "die" ends it without a word
    inside a pipeline, "between" between two creations of a lazy run
    ("betweenbg": there in the background), "clean" ends it cleanly (a lazy
@@ -805,7 +819,7 @@ static void activity_child(const char *mode, const char *log)
         child_quit(0);
     } else if (strcmp(mode, "actvuext") == 0 || strcmp(mode, "actvuplain") == 0 ||
                strcmp(mode, "actvupre") == 0 || strcmp(mode, "actvumain") == 0 ||
-               strcmp(mode, "actskinprobe") == 0) {
+               strcmp(mode, "actskinprobe") == 0 || strcmp(mode, "actvustore") == 0) {
         /* the start-up set ended without a word inside a VU batch (the
            device froze): the batch's note is in the file */
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
@@ -813,6 +827,7 @@ static void activity_child(const char *mode, const char *log)
         ico_diag_set_activity(strcmp(mode, "actvuext") == 0       ? VU_EXT_NOTE
                               : strcmp(mode, "actvupre") == 0     ? VU_PRE_NOTE
                               : strcmp(mode, "actvumain") == 0    ? VU_MAIN_NOTE
+                              : strcmp(mode, "actvustore") == 0   ? VU_STORE_NOTE
                               : strcmp(mode, "actskinprobe") == 0 ? SKIN_PROBE_NOTE
                                                                   : VU_PLAIN_NOTE);
         _exit(0);
@@ -924,10 +939,14 @@ static void activity_child(const char *mode, const char *log)
                                                "config.toml");
         }
         if (pre >= 1) {
-            (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_PRE, NULL, persist_pre_stub,
+            /* the window's choice: the record stores' rung first */
+            (void)ico_diag_startup_end_persist(ICO_DIAG_END_VU_PRE, NULL,
+                                               ico_diag_startup_vu_store() ? persist_record_stub
+                                                                           : persist_pre_stub,
                                                "config.toml");
         }
         ico_diag_log("test: vu prepass %d", pre);
+        ico_diag_log("test: vu store %d", ico_diag_startup_vu_store());
         ico_diag_log("test: pipeline set %d", set);
         ico_diag_log("test: prev floor stop %d", ico_diag_startup_prev_floor_stop());
         ico_diag_log("test: prev floor retried %d", ico_diag_startup_prev_floor_retried());
@@ -3349,6 +3368,48 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(s, "test: vu prepass 1\n") != NULL);
+        CHECK(strstr(s, "test: vu store 0\n") != NULL);
+        remove(ends);
+        /* inside a build of the record stored by the vertex shaders: the
+           rung before (the window draws the record into render targets, the
+           pre-pass kept); the second such end writes [dev] vu_record =
+           "targets", which clears the row, so a later end in the targets'
+           own pre-pass pipelines starts its count again */
+        run(argv[0], "actvustore", log);
+        setenv("ICO_TEST_THEN", "clean", 1);
+        r = run(argv[0], "actpipeset", log);
+        unsetenv("ICO_TEST_THEN");
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: starts in a row that ended while preparing the graphics (the "
+                        "vertex pre-pass): 1\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous start ended while the graphics driver compiled the "
+                        "3D vertex pre-pass's record stores (" VU_STORE_NOTE "); this start only "
+                        "draws the record into render targets instead, the pre-pass kept "
+                        "(ICO_RD_VU_RECORD=targets; nothing is written to config.toml); if a "
+                        "start that compiles them ends there again, [dev] vu_record = "
+                        "\"targets\" is written for good\n") != NULL);
+        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(s, "test: vu prepass 1\n") != NULL);
+        CHECK(strstr(s, "test: vu store 1\n") != NULL);
+        CHECK(strstr(s, "test: pipeline set 0\n") != NULL);
+        run(argv[0], "actvustore", log);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: config write dev.vu_record = targets\n") != NULL);
+        CHECK(strstr(s, "test: config write dev.vu_prepass") == NULL);
+        CHECK(strstr(s, "ico_pc: the previous start ended while the graphics driver compiled the "
+                        "3D vertex pre-pass's record stores (" VU_STORE_NOTE "); this start and "
+                        "every start after it draw the record into render targets, the pre-pass "
+                        "kept ([dev] vu_record = \"targets\" in config.toml); delete that line "
+                        "to try the stores again\n") != NULL);
+        CHECK(strstr(s, "test: vu prepass 2\n") != NULL);
+        CHECK(strstr(s, "test: vu store 1\n") != NULL);
+        run(argv[0], "actvupre", log);
+        r = run(argv[0], "actpipeset", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(s, "test: vu prepass 1\n") != NULL);
+        CHECK(strstr(s, "test: vu store 0\n") != NULL);
         remove(ends);
         /* no file: the set; the setting "lazy": none, nothing written */
         r = run(argv[0], "actpipeset", log);

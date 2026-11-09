@@ -1746,7 +1746,8 @@ Windows, Linux and macOS the handler then starts the program again at once, with
 folder or the settings (an end without a crash report has a step of its own, which writes one
 on the second such end in a row: below). The steps come in order, each taken only when the run before crashed:
 `cache` (the crashed run had loaded the pipeline cache file: it is deleted and the same backend
-tries again), `noprepass` (the note names a pipeline of the VU vertex pre-pass or of the record
+tries again), `targets` (a `_store_pre_vs` build:
+[PIPELINES.md](PIPELINES.md#the-record-stores-restart-rung)), `noprepass` (the note names a pipeline of the VU vertex pre-pass or of the record
 path that draws from it: a ` pre` key, a `_pre_vs` module (the pre-pass's entries, the record
 stages' `vu_tri_*_pre_vs` and `vu_particle_pre_vs`), a `_main_vs` module (`vu_main_vs`,
 `vu_particle_main_vs`, made only with the pre-pass) or the old triangle stage's `vu_tri_vs` or
@@ -1787,7 +1788,7 @@ A lost graphics device (the driver reset the card, `DXGI_ERROR_DEVICE_HUNG`, `VK
 logs the loss and the renderer's pass ring, then asks for the loss step
 (`port/platform/window_host.c` (`device_lost_quit`); `port/platform/diag_host.c`
 (`ico_diag_device_lost_restart`)); the steps come in order, each taken only when the run before
-lost the device: `lossnoprepass` (the same backend without the VU vertex pre-pass,
+lost the device: `losstargets` (a run with the stores), `lossnoprepass` (the same backend without the VU vertex pre-pass,
 `ICO_RD_VU_PREPASS=0`, when the losing run drew with it after its self-test:
 `ico_diag_set_vu_prepass`, `StartupRetryRun.prepassWasOn`), `robust` (the same backend with robust
 buffer and image access, `ICO_GPU_ROBUST=1`, when the losing run drew with it off by the device's
@@ -2557,7 +2558,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 | `ico-pc-previous.log` | the run before's |
 | `startup-activity.txt` | when there is one |
 | `config.toml`, `ico-pc.ini` | the settings |
-| `loss-<stamp>.zip` | this run's [loss dump](RENDER.md#the-loss-dump), else the one the previous run left, deflated (taken stored, issue 123's made a 28 MB report; GitHub takes 25 MB) |
+| `loss-<stamp>.zip` | this run's [loss dump](RENDER.md#the-loss-dump), else the one the previous run left, deflated |
 | `slow-<stamp>.zip` | this run's [slow-scene dumps](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides), up to three (the newest three are kept), each stored as it is |
 
 `port/platform/report.c` writes it without allocation: raw file calls (`open`/`read`/`write`/`lseek`,

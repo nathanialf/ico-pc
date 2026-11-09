@@ -1124,7 +1124,16 @@ static void keyVsName(const RdPipeKeyInt *k, char *out, size_t size)
 {
     const char *v = rd__vs_name(k->vs);
     const size_t n = strlen(v);
-    if (g_rd.vuMerge && g_rd.vsMerge[k->vs].id) {
+    const bool batched = g_rd.vuPreBatch && k->vs < RD_VS_COUNT && g_rd.vsBatch[k->vs].id;
+    if ((rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) && k->colorFmt == RHI_FMT_UNKNOWN &&
+        n > 7 && rd__vu_record_vs(k->vs, batched).id) {
+        /* the record stored by the vertex shaders (pipelineDesc): the store
+         * build it draws through, vu_X_store_pre_vs or
+         * vu_X_batch_store_pre_vs (rd_vu_record.c), so a crash's note names
+         * it (startup_retry.h startup_retry_note_has_vu_store: the restart
+         * takes the render targets' record before giving up the pre-pass) */
+        snprintf(out, size, "%.*s%s_store_pre_vs", (int)(n - 7), v, batched ? "_batch" : "");
+    } else if (g_rd.vuMerge && g_rd.vsMerge[k->vs].id) {
         rd__vu_merge_name(k->vs, keyPlain(k), out, size); /* the draw merge's build */
     } else if (keyPlain(k) && g_rd.vuBonesRing && k->vs >= RD_VS_VU_SKIN &&
                k->vs <= RD_VS_VU_SKIN_DEBUG) {
