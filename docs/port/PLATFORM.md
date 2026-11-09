@@ -2557,7 +2557,7 @@ the newest file in logs that starts with report-" and name it (`port/platform/di
 | `ico-pc-previous.log` | the run before's |
 | `startup-activity.txt` | when there is one |
 | `config.toml`, `ico-pc.ini` | the settings |
-| `loss-<stamp>.zip` | this run's [loss dump](RENDER.md#the-loss-dump), else the one the previous run left, stored as it is |
+| `loss-<stamp>.zip` | this run's [loss dump](RENDER.md#the-loss-dump), else the one the previous run left, deflated (taken stored, issue 123's made a 28 MB report; GitHub takes 25 MB) |
 | `slow-<stamp>.zip` | this run's [slow-scene dumps](ANDROID_DIAGNOSTICS.md#issue-179s-lines-what-each-decides), up to three (the newest three are kept), each stored as it is |
 
 `port/platform/report.c` writes it without allocation: raw file calls (`open`/`read`/`write`/`lseek`,
@@ -2569,8 +2569,8 @@ dump's writer (`dump_zip.c`) is not used: miniz's zip writer allocates, which a 
 explicitly by stamp, then by `k` (the plain name is `k = 0`, so a same-second `-1` is newer; the
 folder's order and byte order are not age), and removes the oldest. It lists the folder and so runs
 only on the normal paths (at start, after a lost device's or a failed start's report)
-(`port/platform/report.h`). The line `ico_pc: report: report-<stamp>.zip in the logs folder (...)`
-names it in the log.
+(`port/platform/report.h`). The line `ico_pc: report: report-<stamp>.zip (N.N MB) in the logs folder (...)`
+names it and its size.
 
 ### The summary line
 

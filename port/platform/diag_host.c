@@ -4642,15 +4642,19 @@ static void report_file(const char *what, int fatal)
     }
 #endif
     if (ico_report_write(&in, name, sizeof name) == 0) {
+        /* its size: a report over GitHub's 25 MB attachment limit cannot be
+           attached (a stored loss dump taken stored made 28 MB, report.c) */
+        const double mb = (double)ico_report_last_bytes() / (1024.0 * 1024.0);
+
         snprintf(report_name, sizeof report_name, "%s", name);
         if (fatal) {
-            flog("ico_pc: report: %s in the logs folder (this log, the previous one, the "
-                 "settings and a summary): the file to attach to an issue",
-                 name);
+            flog("ico_pc: report: %s (%.1f MB) in the logs folder (this log, the previous one, "
+                 "the settings and a summary): the file to attach to an issue",
+                 name, mb);
         } else {
-            ico_diag_log("ico_pc: report: %s in the logs folder (this log, the previous one, the "
-                         "settings and a summary): the file to attach to an issue",
-                         name);
+            ico_diag_log("ico_pc: report: %s (%.1f MB) in the logs folder (this log, the previous "
+                         "one, the settings and a summary): the file to attach to an issue",
+                         name, mb);
         }
     } else if (fatal) {
         flog("ico_pc: report: not written (%s)", name);

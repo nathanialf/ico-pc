@@ -325,6 +325,9 @@ static struct {
     uint16_t dos_time, dos_date;
 } s_zip;
 
+/* the last report's size in bytes (ico_report_last_bytes) */
+static uint64_t s_last_bytes;
+
 static tdefl_compressor s_deflate;
 static unsigned char s_in[65536];
 static unsigned char s_out[65536];
@@ -886,7 +889,13 @@ int ico_report_write(const IcoReportInputs *in, char *name, size_t name_size)
         while (b > in->loss_zip && b[-1] != '/' && b[-1] != '\\') {
             b--;
         }
-        (void)zip_add_file(b, in->loss_zip, 1);
+        /* deflated: the loss dump is written stored (window_host.c: a hang's
+           dump is zipped on the watchdog thread, possibly on a slow core),
+           and stored again here a report of issue 123's real loss zip was
+           28 MB, over GitHub's 25 MB attachment limit (deflated here at the
+           report's own level 3: 4.1 MB, about 0.2 s on a desktop core; the
+           hang handler's report pays that once, before the run ends) */
+        (void)zip_add_file(b, in->loss_zip, 0);
     }
     if (in->slow_zip != NULL && in->slow_zip[0] != '\0') {
         const char *b = in->slow_zip + strlen(in->slow_zip);
@@ -901,8 +910,14 @@ int ico_report_write(const IcoReportInputs *in, char *name, size_t name_size)
         snprintf(name, name_size, "%s could not be written", zname);
         return -1;
     }
+    s_last_bytes = s_zip.at;
     snprintf(name, name_size, "%s", zname);
     return 0;
+}
+
+unsigned long long ico_report_last_bytes(void)
+{
+    return (unsigned long long)s_last_bytes;
 }
 
 /* --- Pruning (normal paths) ------------------------------------------------------------- */

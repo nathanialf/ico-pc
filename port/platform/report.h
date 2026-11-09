@@ -24,7 +24,8 @@
  *   startup-activity.txt     when there is one (diag_host.h);
  *   config.toml, ico-pc.ini  the settings;
  *   loss-<stamp>.zip         the newest loss dump, when there is one
- *                            (stored as it is);
+ *                            (deflated: the loss dump writes its zip
+ *                            stored);
  *   slow-<stamp>.zip         this run's slow-scene dump, when one was
  *                            written (stored as it is).
  *
@@ -79,6 +80,10 @@ typedef struct IcoReportInputs {
    (no logs folder, a write failed) with why in name. Async-signal-safe in
    practice: open/read/write/lseek and static buffers. */
 int ico_report_write(const IcoReportInputs *in, char *name, size_t name_size);
+/* The size in bytes of the last report ico_report_write wrote (0: none
+   yet): the log line names it, so a report over an issue's attachment
+   limit (GitHub's 25 MB) shows in the log. */
+unsigned long long ico_report_last_bytes(void);
 /* Deletes the oldest report-*.zip files beyond keep (normal paths only);
    the number deleted, -1 when the folder cannot be read. */
 int ico_report_prune(int keep);

@@ -291,6 +291,16 @@ if(UNIX)
     endif()
 endif()
 
+# The bug report's zip (report.c): the stored loss dump deflated into it,
+# the slow-scene zip stored, read back with miniz's reader; it writes under
+# the build folder
+add_executable(report_test test/report_test.c)
+target_compile_options(report_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(report_test PRIVATE ico_platform ico_host_fs ico_miniz)
+if(ICO_RUN_TESTS)
+    add_test(NAME report COMMAND report_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 # F12's zip (dump_zip.c): the dump and the log in one archive, read back
 # with miniz's reader; it writes under the build folder
 add_executable(dump_zip_test test/dump_zip_test.c dump_zip.c)

@@ -1078,7 +1078,8 @@ the loss with the zip's path (or that none was written) for the next start
 dump, nothing when that number has left the ring, `rd_frame_retained` says which);
 `port/platform/dump_zip.c` (`ico_loss_dump_zip`, `ico_loss_dump_prune`);
 `port/platform/window_host.c` (`loss_dump`, `device_lost_quit`)). The loss zip's
-entries are stored, not deflated (F12's and the slow scene's keep the deflate), and each slow step
+entries are stored, not deflated (F12's and the slow scene's keep the deflate; the bug report
+deflates the loss zip when it takes it, [PLATFORM.md](PLATFORM.md#the-report-file)), and each slow step
 is logged and the log flushed before it begins: `window: loss dump: writing frame N to <path>`,
 `window: loss dump: writing frame M (the one before) to <path>`, `window: loss dump: zipping K MB
 (the two frames and the log) at store level`, then `window: loss dump: frames N and M (the one

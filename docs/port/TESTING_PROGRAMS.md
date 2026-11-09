@@ -601,6 +601,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   the player's data, the rest as it was, the next start naming the copy, and an old copy of a place
   beside the data named at every start while another name is not; an unfinished unpacking deleted
   at the start; `ico_remove_tree` taking hidden files; the suggested file name (`backup`).
+- `report_test.c` (ctest `report`): the bug report's zip (`ico_report_write`): a stored loss dump is deflated when the report takes it (issue 123's 28 MB stored loss zip made a report over GitHub's 25 MB attachment limit), the slow-scene zip is stored as it is, both read back byte for byte with miniz
 - `dump_zip_test.c`: F12's zip (with the tick before as its second `.rddump`, and the blended present's frame moved in third by `ico_zip_move_file`, the loose file gone), the aspect sweep's zip, the device-loss zip (the lost frame first, the second `.rddump` the frame before, its entries stored with the stored flag and deflated without it, F12's deflated, the pruning to the newest three) and the slow-scene zip (its name, the frame then the log, the pruning to the newest three with the loss zips left alone), written and read back with miniz
   (`dump_zip`).
 - `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
