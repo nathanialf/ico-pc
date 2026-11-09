@@ -111,11 +111,10 @@ Each [fiber](ARCHITECTURE.md#terms) is an asymmetric coroutine over minicoro: `i
 runs it on its own stack until it calls `ico_fiber_yield` (`port/platform/fiber.h`). The scheduler
 is the only resumer, so every switch between two game threads goes fiber, scheduler, fiber. Stacks
 are 256 KB (`ICO_FIBER_STACK_SIZE`). Every preset uses minicoro's assembly backend (x86-64 Linux
-and Windows, arm64), and the stack has a no-access guard page below it, so an overflow faults
-instead of corrupting the fiber's control block (`ico_fiber_has_guard_page`; the `fiber_guard`
-test). The iOS entry point uses `ico_fiber_create_host` for UIKit's main thread: that host fiber has
-a guarded 32 MB stack outside the save-state pool, so it does not affect a game thread's slot or
-image.
+and Windows, arm64); a no-access guard page below each stack makes an overflow fault instead of
+corrupting the control block (`ico_fiber_has_guard_page`; the `fiber_guard` test). iOS runs UIKit's
+main thread as a host fiber (`ico_fiber_create_host`): a guarded 32 MB stack outside the pool,
+touching no game thread's slot or save image.
 
 ### The pool
 
@@ -124,32 +123,30 @@ Every fiber lives in one of 256 slots (`ICO_FIBER_POOL_SLOTS`) of one address sp
 minicoro's `mco_coro` and switch context, placed where minicoro's `_mco_create_context` puts them
 in its one-block layout), the guard page (minicoro's storage area, one page long), the stack and
 minicoro's 16 spare bytes, rounded up to 64 KB, the Windows reservation granularity (320 KB with
-4 KB pages, about 80 MB of address space for the pool). A slot is committed when a fiber is
-created in it and decommitted when the fiber is destroyed (a fresh no-access mapping over it on
-POSIX, `MEM_DECOMMIT` on Windows), so a long session keeps only the live fibers' pages
-(`port/platform/vm_reserve.c`). `ico_fiber_create_in_slot(slot, fn, arg)` takes a given slot and
+4 KB pages, about 80 MB for the pool). A slot is committed when a fiber is created in it and
+decommitted when it is destroyed (a fresh no-access mapping on POSIX, `MEM_DECOMMIT` on Windows), so
+a long session keeps only the live fibers' pages (`port/platform/vm_reserve.c`). `ico_fiber_create_in_slot(slot, fn, arg)` takes a given slot and
 refuses a used one; `ico_fiber_create` takes the highest free slot, for the tests and tools, so it
 stays clear of the scheduler's slots, which count up from 1.
 
 The pool is reserved at `ICO_FIBER_POOL_BASE` (0x3C10000000, 256 MB above the arena's pinned base)
 when that address is free: `mmap` with `MAP_FIXED_NOREPLACE` on Linux and Android (an older
-kernel takes the flag as a hint, so the address is checked and a miss unmapped), `mmap` with the
-address as a hint on Apple (checked), `VirtualAlloc` at the address on Windows. When it is taken
-the pool goes anywhere, with one line: `fiber: pool reserved at <address> (the pinned base was
-taken)`. `ico_fiber_pool_pinned` says which; `ico_fiber_pool_init_at` moves an empty pool (the
-tests' second pool at another address).
+kernel takes the flag as a hint: the address is checked, a miss unmapped), `mmap` with the address
+as a hint on Apple (checked), `VirtualAlloc` at the address on Windows. Taken, the pool goes
+anywhere, with one line: `fiber: pool reserved at <address> (the pinned base was taken)`.
+`ico_fiber_pool_pinned` says which; `ico_fiber_pool_init_at` moves an empty pool (the tests).
 
 ### Save state images
 
 A save state (`port/platform/state.h`) holds each game thread's fiber as its slot's header
-page and its stack from the deepest word the stack ever held to its top, and at least from the
-saved stack pointer minus 128 bytes (the System V red zone) (`ico_fiber_slot_save`, which points
-into the live slot and copies nothing). A slot's stack is committed zeroed and a restore commits
+page and its stack from the deepest word it ever held to its top, and at least from the saved
+stack pointer minus 128 bytes (the System V red zone) (`ico_fiber_slot_save` points into the live
+slot and copies nothing). A slot's stack is committed zeroed and a restore commits
 it zeroed again, so the bytes below the first nonzero word need no saving and the restored stack
 is the saved one byte for byte, the dead frames under the stack pointer included: the game's code
-reads them when it reads a local it never set, and a save that dropped them would give the
-loaded run other values there than the saved run had. `ico_fiber_slot_restore` commits the same slot of the current pool and copies both back
-at the same offsets, then moves the addresses they hold (`port/platform/state_reloc.h`):
+reads them when it reads a local it never set, so a save that dropped them would change the loaded
+run. `ico_fiber_slot_restore` commits the same slot of the current pool and copies both back at the
+same offsets, then moves the addresses they hold (`port/platform/state_reloc.h`):
 
 - typed: the saved return address (`rip`; `lr` and `x30` on arm64) by the module delta; the stack
   pointer (`rsp`; `sp`) and, on Windows, the TEB stack words minicoro's switch swaps
