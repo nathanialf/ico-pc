@@ -761,6 +761,12 @@ if(_ico_have_gl)
         add_test(NAME rhi_gl_stores COMMAND rhi_gl_test stores)
         set_tests_properties(rhi_gl_stores PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_gl_test_env}")
+        # and rhi_vk_compute's (rhi_test_compute.c): SKIP (77) while the
+        # OpenGL backend reports no compute stores, after checking that its
+        # compute bracket refuses and a dispatch counts nothing (1 if not)
+        add_test(NAME rhi_gl_compute COMMAND rhi_gl_test compute)
+        set_tests_properties(rhi_gl_compute PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_gl_test_env}")
     endif()
 endif()
 

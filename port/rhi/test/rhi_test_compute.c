@@ -32,6 +32,7 @@
 #include "rhi_test_dxil.h"
 #include "rhi_test_spv.h"
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 
 #define CS_POINTS 64u
@@ -147,17 +148,23 @@ int rhi_test_compute_stores(const RhiTestConfig *cfg)
         RhiStats st;
         memset(&st, 0, sizeof(st));
         rhi_get_stats(&st);
-        const char *off = rhi_limits()->computeStoresOff;
+        /* the reason, copied before the shutdown clears the backend's state */
+        char off[128] = "";
+        if (rhi_limits()->computeStoresOff != NULL) {
+            if (snprintf(off, sizeof off, "%s", rhi_limits()->computeStoresOff) < 0) {
+                off[0] = '\0';
+            }
+        }
         if (bufA.id) {
             rhi_destroy_buffer(bufA);
         }
         rhi_shutdown();
-        if (b || e || st.dispatches != 0 || off == NULL || off[0] == '\0') {
+        if (b || e || st.dispatches != 0 || off[0] == '\0') {
             rhi_test_log("FAIL %s compute stores: none reported, yet the bracket took a buffer "
                          "(begin %d, end %d), %llu dispatches were recorded or no reason was "
                          "given (%s)\n",
                          cfg->label, (int)b, (int)e, (unsigned long long)st.dispatches,
-                         off ? off : "NULL");
+                         off[0] ? off : "none");
             return 1;
         }
         rhi_test_log("SKIP %s compute stores: the backend reports none (%s; the bracket "
