@@ -64,7 +64,9 @@ typedef struct RdVuRecord {
     uint32_t prepassMin;
     bool minHeld;
     /* the frames skipped under prepassMin since rd_vu_prepass_skips last
-     * took them, and the most slots one of them had */
+     * took them, and the most slots one of them had (atomics: the replay
+     * counts on the render thread, the 10 s line takes them on the main
+     * thread) */
     uint32_t skipped, skippedMaxSlots;
     uint64_t skippedRun; /* for the run */
 } RdVuRecord;

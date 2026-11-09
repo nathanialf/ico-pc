@@ -221,11 +221,15 @@ bool rd__vu_record_skip(uint64_t slots)
     if (g_rdRec.prepassMin == 0 || g_rdRec.minHeld || slots >= g_rdRec.prepassMin) {
         return false;
     }
-    g_rdRec.skipped++;
+    /* the replay (the render thread) counts, rd_vu_prepass_skips (the
+       main thread's 10 s line) takes and resets: atomics, as rd_velocity.c
+       (skippedRun only the replay touches) */
+    __atomic_fetch_add(&g_rdRec.skipped, 1u, __ATOMIC_RELAXED);
     g_rdRec.skippedRun++;
-    if (slots > g_rdRec.skippedMaxSlots) {
-        g_rdRec.skippedMaxSlots = (uint32_t)slots;
-    }
+    uint32_t most = __atomic_load_n(&g_rdRec.skippedMaxSlots, __ATOMIC_RELAXED);
+    while ((uint32_t)slots > most &&
+           !__atomic_compare_exchange_n(&g_rdRec.skippedMaxSlots, &most, (uint32_t)slots, true,
+                                        __ATOMIC_RELAXED, __ATOMIC_RELAXED)) {}
     return true;
 }
 
@@ -236,14 +240,15 @@ const char *rd_vu_record_mode(void)
 
 uint32_t rd_vu_prepass_skips(uint32_t *minSlots, uint32_t *maxSlots)
 {
-    const uint32_t n = g_rdRec.skipped;
+    /* taken and reset in one step each (the replay may count between
+       them: a frame then lands in the next line's count) */
+    const uint32_t n = __atomic_exchange_n(&g_rdRec.skipped, 0u, __ATOMIC_RELAXED);
+    const uint32_t most = __atomic_exchange_n(&g_rdRec.skippedMaxSlots, 0u, __ATOMIC_RELAXED);
     if (minSlots) {
         *minSlots = g_rdRec.prepassMin;
     }
     if (maxSlots) {
-        *maxSlots = g_rdRec.skippedMaxSlots;
+        *maxSlots = most;
     }
-    g_rdRec.skipped = 0;
-    g_rdRec.skippedMaxSlots = 0;
     return n;
 }
