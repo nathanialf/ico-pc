@@ -17,6 +17,7 @@
  */
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_icon_hold.h"
 #include "shader_consts.h"
 
 /* ------------------------------------------------------------ frame head */
@@ -25,15 +26,59 @@
 static struct {
     int on;
     uint8_t rgba[4];
-    uint32_t lastFrame; /* rd_icon_pass_last_frame */
+    uint32_t lastFrame;                 /* rd_icon_pass_last_frame */
+    uint32_t firstFrame;                /* the frame open when it came on (the log line's) */
+    uint32_t drops[RD_ICON_DROP_COUNT]; /* rd_icon_hold.h rd__icon_pass_drop, since it came on */
 } s_iconPass;
+
+void rd__icon_pass_drop(int what)
+{
+    if (what >= 0 && what < RD_ICON_DROP_COUNT) {
+        s_iconPass.drops[what]++;
+    }
+}
+
+void rd__icon_pass_drops(uint32_t out[RD_ICON_DROP_COUNT])
+{
+    memcpy(out, s_iconPass.drops, sizeof(s_iconPass.drops));
+}
+
+bool rd__icon_pass_drops_post(int kind)
+{
+    switch (kind) {
+    case RD_POST_FOG:         /* by depth: the cleared depth is the far plane, all fog */
+    case RD_POST_FILM_NOISE:  /* grain over the frame */
+    case RD_POST_MOTION_BLUR: /* DISPLAY of the frame before drawn back over SCENE */
+    case RD_POST_DOF:         /* SCENE blurred into planes over itself */
+    case RD_POST_FLARE:       /* the glow and flare passes over SCENE */
+    case RD_POST_BLOOM:
+    case RD_POST_AURA:
+    case RD_POST_EYE_BLUR:
+        return true;
+    default:
+        return false;
+    }
+}
 
 void rd_set_icon_pass(const uint8_t *clearRgba)
 {
+    if (!s_iconPass.on && clearRgba != NULL) {
+        s_iconPass.firstFrame = g_rd.frameCounter;
+        memset(s_iconPass.drops, 0, sizeof(s_iconPass.drops));
+    } else if (s_iconPass.on && clearRgba == NULL) {
+        /* the pass's frames held the letter alone: what was left out */
+        rd__log("icon pass: frames %u..%u drew the title's letter alone: %u screen prim calls "
+                "(the menus, the fade, the brightness), %u text items and %u post effects (the "
+                "fog, the glow, the blurs) left out",
+                s_iconPass.firstFrame, g_rd.frameCounter, s_iconPass.drops[RD_ICON_DROP_PRIMS],
+                s_iconPass.drops[RD_ICON_DROP_TEXT], s_iconPass.drops[RD_ICON_DROP_POST]);
+    }
     if (s_iconPass.on || clearRgba != NULL) {
         /* the newest frame number given out: the frame open now, or the
            last begun, holds the pass's draws in part or whole */
         s_iconPass.lastFrame = g_rd.frameCounter;
+        /* the held picture's frames (rd_icon_hold.h) */
+        rd__icon_hold_pass(clearRgba != NULL, g_rd.frameCounter);
     }
     s_iconPass.on = clearRgba != NULL;
     if (clearRgba) {

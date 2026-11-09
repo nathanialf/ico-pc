@@ -801,8 +801,9 @@ endif()
 # title_logo_test: the title's logo hidden under Settings and
 # Extras from the title, never by the pause menu's, and shown again on the
 # title's menu; the game's globals and the menus' answers stubbed; the
-# icon capture's pass (I alone) and steps (title_icon.c) with the renderer,
-# the curtain and the icon files stubbed. CPU only.
+# icon capture's pass (I alone) and steps (title_icon.c) with the renderer
+# (its pass and its hold of the title's picture) and the icon files stubbed.
+# CPU only.
 add_executable(title_logo_test test/title_logo_test.c title_logo.c title_icon.c)
 target_include_directories(title_logo_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/platform")

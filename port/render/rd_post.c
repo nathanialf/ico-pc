@@ -75,6 +75,7 @@
  */
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_icon_hold.h"   /* the icon pass's post effects */
 #include "../core/region.h" /* the running disc's reduction crop */
 
 /* The RdKey the next post sprites carry, so the presenter
@@ -639,6 +640,19 @@ void rd_post(RdPostKind kind, const RdPostParams *params)
     if (!params) {
         memset(&zero, 0, sizeof(zero));
         params = &zero;
+    }
+    if (rd_icon_pass_on() && rd__icon_pass_drops_post((int)kind)) {
+        /* the title's icon pass draws the letter alone: the fog, the glow
+         * and the blurs are not recorded (the register writes the game
+         * makes around them are; rd.h rd_set_icon_pass).  The fog matters
+         * most: the pass's depth is the cleared far plane wherever the
+         * letter is not, so the fog's table entry 0 (DFDBCD on the title,
+         * about 0.86 over the clear) through the reduction's tint (149,
+         * 142, 139) covered both pictures alike, and the matte made it a
+         * whole-frame icon of (255, 247, 227) at alpha 215: B - A = 255 x
+         * 0.14 x 1.11 = 40 on green, the largest channel */
+        rd__icon_pass_drop(RD_ICON_DROP_POST);
+        return;
     }
     switch (kind) {
     case RD_POST_REDUCTION:

@@ -33,33 +33,9 @@ extern int ScreenWidth;
 extern int ScreenHeight;
 extern float center_X;
 extern float center_Y;
-/* ui_host_curtain: read by the top overlay on the thread that collects it */
-static int s_curtain;
-
-void ui_host_curtain(int on)
-{
-    __atomic_store_n(&s_curtain, on ? 1 : 0, __ATOMIC_RELEASE);
-}
 
 #ifdef ICO_RD
 extern void gif_HostFlush(void); /* GifHost.h */
-
-/* the icon capture's curtain: two triangles of opaque black over the whole
-   output (12.4 output pixels), under the touch controls and the counter */
-static void drawCurtain(const RdOverlayCtx *ctx)
-{
-    const int32_t w = (int32_t)ctx->outW * 16, h = (int32_t)ctx->outH * 16;
-    static const int32_t kXy[6][2] = {{0, 0}, {1, 0}, {0, 1}, {1, 0}, {1, 1}, {0, 1}};
-    RdScreenVtx v[6];
-    memset(v, 0, sizeof(v));
-    for (int i = 0; i < 6; i++) {
-        v[i].x = kXy[i][0] ? w : 0;
-        v[i].y = kXy[i][1] ? h : 0;
-        v[i].q = 1.0f;
-        v[i].rgba[3] = 0x80; /* GS 1.0: opaque */
-    }
-    rd_overlay_prims(RD_PRIM_TRIANGLES, v, 6, (RdTex){0}, RD_BLEND_LERP_AS);
-}
 
 /* the presenter's overlay, at every present (rd.h
    rd_set_present_overlay): the popup on the output (inside the picture under
@@ -83,9 +59,6 @@ static void hostOverlayTop(const RdOverlayCtx *ctx, void *user)
        (the pointer's place is a fraction of the window) */
     const RdRect ui = rd_ui_box_of(&ctx->box); /* the 4:3 box the menus are drawn in */
     ui_mouse_set_view((int)ctx->outW, (int)ctx->outH, ui.x, ui.y, (int)ui.w, (int)ui.h);
-    if (__atomic_load_n(&s_curtain, __ATOMIC_ACQUIRE)) {
-        drawCurtain(ctx);
-    }
     ui_touch_draw_overlay(ctx);
     /* the Frame rate counter, over the touch controls (Options > Display) */
     if (ico_video_show_fps()) {
