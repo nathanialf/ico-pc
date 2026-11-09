@@ -91,6 +91,15 @@
 #ifndef ICO_VU_COMMON_HLSLI
 #define ICO_VU_COMMON_HLSLI
 
+// The compute builds (ICO_VU_REC_COMPUTE: vu_X_compute_pre_cs and
+// vu_X_batch_compute_pre_cs, below at vu_rec_store) are the store builds
+// run as compute dispatches: everything the store builds write they write
+#ifdef ICO_VU_REC_COMPUTE
+#ifndef ICO_VU_REC_STORES
+#define ICO_VU_REC_STORES 1
+#endif
+#endif
+
 #include "common.hlsli"
 
 // VuCB.vu_mem: VU1 data memory 0..35 as the program reads it.
@@ -2111,12 +2120,26 @@ VuVtx vu_rec_vertex(uint v)
 // (RhiPipelineDesc.noRaster), and a backend that rasterised anyway would
 // draw nothing
 #ifdef ICO_VU_REC_STORES
+#ifdef ICO_VU_REC_COMPUTE
+// The compute builds (ICO_VU_REC_COMPUTE: vu_X_compute_pre_cs and
+// vu_X_batch_compute_pre_cs; rd_vu_record.c, the record written by compute
+// dispatches where the vertex shaders cannot store, issue 179): each entry
+// below is called as a function by its compute entry (VU_PRE_CS), one
+// invocation a point, so VuPreOut is a plain value nothing reads; the
+// stores (vu_rec_store, vu_rec_lane_store) are the store builds' own, the
+// same words at the same places
+struct VuPreOut {
+    float4 pos;
+    float size;
+};
+#else
 struct VuPreOut {
     float4 pos : SV_Position;
 #ifdef __spirv__
     [[vk::builtin("PointSize")]] float size : PSIZE;
 #endif
 };
+#endif
 
 // slot t's three planes (k * vu_rec.y + t), inside the record
 VuPreOut vu_rec_store(uint t, uint4 r0, uint4 r1, uint4 r2)
@@ -2166,6 +2189,24 @@ VuPreOut vu_pre_out(uint id, VuVtx v)
                      v.inside | (v.gsOk << 1) | (v.clipf << 2));
     return vu_rec_store(t, r0, r1, r2);
 }
+
+#ifdef ICO_VU_REC_COMPUTE
+// A pre-pass entry vs (vu_X_pre_vs) as the compute entry cs: invocation
+// t.x of the dispatch is the point SV_VertexID t.x of the store build's
+// draw, 64 to a group.  The dispatch's point count is g_aux0.z of its
+// DrawCB (rd_replay_vu.c vuStageDraw, preBatchDraw: the groups cover it
+// rounded up to 64); the spare invocations of the last group return
+// before the entry runs, ahead of VU_PRE_ENTRY's search (a batch build
+// clamps a vertex past its table to the last entry, whose slots a spare
+// invocation would then write again) and of any store
+#define VU_PRE_CS(cs, vs)                                                                          \
+    [numthreads(64, 1, 1)] void cs(uint3 t : SV_DispatchThreadID)                                  \
+    {                                                                                              \
+        if (t.x < g_aux0.z) {                                                                      \
+            vs(t.x);                                                                               \
+        }                                                                                          \
+    }
+#endif
 #else
 struct VuPreOut {
     float4 pos : SV_Position;

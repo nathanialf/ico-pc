@@ -120,7 +120,7 @@ static RhiShader makeShader(const char *name)
         return (RhiShader){0};
     }
     RhiShaderDesc d = {0};
-    d.stage = b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT;
+    d.stage = (RhiShaderStage)b->stage; /* ICO_SHADER_STAGE_* equal RhiShaderStage */
     d.bytecode = b->spirv;
     d.bytecodeSize = b->spirv_len;
     d.entryPoint = b->entry;

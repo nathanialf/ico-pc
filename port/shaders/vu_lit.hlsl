@@ -143,14 +143,29 @@ VuPreOut vu_lit_pre_vs(uint vid : SV_VertexID)
     return vu_pre_out(id, vu_lit_vertex(vu_rec.z + id, vu_lit_mode(VU_LIT), VU_LIT));
 }
 
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_lit_pre_cs, vu_lit_pre_vs)
+#endif
+
 VuPreOut vu_lit_spec_pre_vs(uint vid : SV_VertexID)
 {
     uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_lit_vertex(vu_rec.z + id, vu_lit_mode(VU_LIT_SPEC), VU_LIT_SPEC));
 }
 
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_lit_spec_pre_cs, vu_lit_spec_pre_vs)
+#endif
+
 VuPreOut vu_reflect_pre_vs(uint vid : SV_VertexID)
 {
     uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_lit_vertex(vu_rec.z + id, vu_lit_mode(VU_REFLECT), VU_REFLECT));
 }
+
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_reflect_pre_cs, vu_reflect_pre_vs)
+#endif

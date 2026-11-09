@@ -153,7 +153,7 @@ RhiShader rd__make_shader(const char *name)
     }
     RhiShaderDesc d;
     memset(&d, 0, sizeof(d));
-    d.stage = b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT;
+    d.stage = (RhiShaderStage)b->stage; /* ICO_SHADER_STAGE_* equal RhiShaderStage */
     switch (rhi_backend()) {
     case RHI_BACKEND_D3D12:
         d.bytecode = b->dxil;
