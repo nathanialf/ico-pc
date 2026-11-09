@@ -11,7 +11,9 @@
 # rd_vubatch_ab.cmake reads it); none here, or no device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DOUT=<a folder the test may write> -DNAME=<label>
 # -DENV_A=<VAR=VALUE[|VAR=VALUE]> -DENV_B=<...> -DREQ_A=<regex> -DREQ_B=<regex>
-# [-DDUMP=<dump>] [-DLIST=<dump list>]
+# [-DDUMP=<dump>] [-DLIST=<dump list>] [-DSKIP_UNLESS=<regex>: a dump whose
+# first run prints no line matching it is skipped, not compared (the list's
+# frames without VU commands print no pre-pass line)]
 set(dumps "")
 if(DUMP AND EXISTS "${DUMP}")
   list(APPEND dumps "${DUMP}")
@@ -66,6 +68,12 @@ foreach(dump IN LISTS dumps)
     endif()
     if(NOT rcA EQUAL 0 AND "${errA}" MATCHES "cannot show")
       message(STATUS "${dump} ${s}: skipped (${errA})")
+      continue()
+    endif()
+    if(SKIP_UNLESS AND NOT "${outA}" MATCHES "${SKIP_UNLESS}")
+      # a dump the comparison cannot speak about (the list's 2D-only frames
+      # have no VU command, so no pre-pass line): skipped, not failed
+      message(STATUS "${dump} ${s}: skipped (no line matching \"${SKIP_UNLESS}\")")
       continue()
     endif()
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ${envB}
