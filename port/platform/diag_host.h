@@ -456,8 +456,11 @@ int ico_diag_startup_end_count(int kind);
                                       saying its set stopped at the
                                       system's low-memory signal (issue 128,
                                       ico_diag_startup_activity_budget_stop;
-                                      not after a restart): no set, the
-                                      line kept in this start's file;
+                                      not after a restart): the window
+                                      resumes the set where it stopped
+                                      (issue 123, window_pipe_finish.c),
+                                      the line kept in this start's file
+                                      until it does;
      ICO_DIAG_PIPESET_CAREFUL_SETTING setting is "careful" (and none of the
                                       above);
      ICO_DIAG_PIPESET_FULL            the start-up set.
@@ -690,13 +693,17 @@ void ico_diag_startup_activity_careful(int on);
    lazy run that is not for this start only, with the line "set: stopped
    at the system's low-memory signal (running critical)" after the note
    (and the careful line), and logs "ico_pc: the start-up set stopped at
-   the system's low-memory signal (running critical); the next start
-   makes the pipelines as the game needs them, with no start-up set". The
-   next start of the same version that finds the line beside the lazy
-   run's exit or its note between two creations logs "ico_pc: the previous
-   start stopped preparing the graphics when the system ran low on memory
-   (<note>); this start prepares them as the game needs them" and is lazy
-   (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY), its own file keeping the line; one
+   the system's low-memory signal (running critical); this start makes the
+   rest as the game needs them, and the next start resumes the set where
+   this one stopped, in smaller batches" (the window then appends where it
+   stopped to the line: ico_diag_startup_set_resume_part). The next start
+   of the same version that finds the line beside the lazy run's exit or
+   its note between two creations logs "ico_pc: the previous start stopped
+   preparing the graphics when the system ran low on memory (<note>); this
+   start resumes them where it stopped" and is
+   ICO_DIAG_PIPESET_LAZY_LOW_MEMORY, its own file keeping the line until
+   the window resumes the set (issue 123, window_pipe_finish.c
+   window_pipe_floor_retry: ico_diag_startup_resume clears it); one
    ended inside a creation logs "ico_pc: the previous start had stopped
    preparing the graphics when the system ran low on memory (<line>)" and
    counts as an end while preparing the graphics, stepping from no set
@@ -893,6 +900,22 @@ void ico_diag_startup_floor_retry(void);
    again (its line ends with ICO_MEMORY_FLOOR_RETRIED_MARK): this start
    does not retry (at most one in a row) */
 int ico_diag_startup_prev_floor_retried(void);
+/* Issue 123 (pipe_resume.h): the stop line of the previous start's set
+   ("set: stopped at the system's low-memory signal (<why>)" and, from
+   v0.11.2, "; resume at pipeline N of M, batches of B, stop K, <date>"),
+   "" when it had none; valid after ico_diag_startup_pipeline_set */
+const char *ico_diag_startup_prev_low_memory_line(void);
+/* the window resumes the set (ICO_DIAG_PIPESET_LAZY_LOW_MEMORY made the
+   set again from where it stopped): this start's file does not carry the
+   previous start's stop line until its own set stops */
+void ico_diag_startup_resume(void);
+/* After ico_diag_startup_activity_budget_stop: part (pipe_resume.h's
+   "; resume at ...") appended to this start's stop line and the file
+   written again, 1; 0 (nothing) when the stop was not one for memory that
+   the next start follows (the careful set's growth or slow batch, or the
+   free-memory floor on another driver than Qualcomm's own: those are for
+   this start only).  A part past the line's 255 bytes is cut. */
+int ico_diag_startup_set_resume_part(const char *part);
 /* Captures what starting the program again needs (Windows: the module
    path, GetCommandLineW and the environment block; Linux and macOS: the
    executable's path, argv and the environment's pointers), so the crash

@@ -7,12 +7,64 @@
 #include "window_pipe_finish.h"
 
 #include <stdio.h>
+#include <string.h>
 #include <SDL3/SDL_filesystem.h>
+#include <SDL3/SDL_time.h>
 #include "diag_host.h"
 #include "host_config.h"
 #include "memory_floor.h"
+#include "pipe_resume.h"
 #include "rd.h"
 #include "rhi.h"
+
+/* this start resumed the set (window_pipe_floor_retry), and the stop it
+   resumed after (its count steps the next stop's) */
+static int s_resumed;
+static IcoPipeResume s_prevStop;
+
+/* The stop's place for the next start (issue 123): appended to this
+   start's stop line in the activity file when the stop is one the next
+   start follows (the system's signal, or the free-memory floor on
+   Qualcomm's own driver), with its memory numbers in the log */
+static void resume_note_stop(void)
+{
+    RdPipelineSetStop st;
+    IcoPipeResume r;
+    SDL_Time now;
+    SDL_DateTime dt;
+    char part[128], mem[160];
+
+    if (!rd_pipeline_set_stop(&st)) {
+        return;
+    }
+    memset(&r, 0, sizeof(r));
+    r.at = st.at;
+    r.total = st.total;
+    r.batch = st.batch;
+    r.stops = ico_pipe_resume_stops(s_resumed, &s_prevStop);
+    if (SDL_GetCurrentTime(&now) && SDL_TimeToDateTime(now, &dt, true)) {
+        const int put = snprintf(r.date, sizeof(r.date), "%04d-%02d-%02d %02d:%02d", dt.year,
+                                 dt.month, dt.day, dt.hour, dt.minute);
+        (void)put;
+    }
+    (void)ico_pipe_resume_part(part, sizeof(part), &r);
+    ico_diag_memory_text(mem, sizeof(mem));
+    if (!ico_diag_startup_set_resume_part(part)) {
+        /* for this start only (the careful set's own budget, or the floor
+           on another driver): the next start makes the set again */
+        fprintf(stderr,
+                "window: pipelines: the start-up set stopped at pipeline %u of %u (batches of "
+                "%u; %s) %s; the next start makes the whole set again\n",
+                st.at + 1u, st.total, st.batch, mem[0] ? mem : "memory unknown", st.why);
+        return;
+    }
+    fprintf(stderr,
+            "window: pipelines: the start-up set stopped for memory at pipeline %u of %u "
+            "(batches of %u, stop %u in a row): %s; %s; the rest is made as the game needs it, "
+            "and the next start resumes at pipeline %u in batches of %u\n",
+            st.at + 1u, st.total, st.batch, r.stops, mem[0] ? mem : "memory unknown", st.why,
+            st.at + 1u, ico_pipe_resume_batch(st.batch));
+}
 
 void window_pipe_floor_driver(void)
 {
@@ -27,6 +79,9 @@ void window_pipe_finish_start(void)
 {
     const int driver = ico_diag_memory_floor_driver();
 
+    if (rd_pipelines_lazy_on()) {
+        resume_note_stop();
+    }
     if (!rd_pipelines_lazy_on() || !ico_diag_floor_stopped()) {
         return;
     }
@@ -79,25 +134,84 @@ static long long cache_file_bytes(const char *path)
 
 int window_pipe_floor_retry(int pipePolicy)
 {
-    char why[200];
-    const char *path = ico_diag_pipeline_cache_path();
-    const long long bytes = cache_file_bytes(path);
-    int retry;
+    const char *line = ico_diag_startup_prev_low_memory_line();
+    const int loaded = rhi_pipeline_cache_loaded() ? 1 : 0;
+    char where[160];
+    unsigned at = 0, batch = 0;
 
-    if (pipePolicy != ICO_DIAG_PIPESET_LAZY_LOW_MEMORY || !ico_diag_startup_prev_floor_stop()) {
+    s_resumed = 0;
+    memset(&s_prevStop, 0, sizeof(s_prevStop));
+    if (pipePolicy != ICO_DIAG_PIPESET_LAZY_LOW_MEMORY) {
         return pipePolicy;
     }
-    retry = ico_memory_floor_retry(1, ico_diag_startup_prev_floor_retried(),
-                                   ico_diag_memory_floor_driver(), bytes,
-                                   rhi_pipeline_cache_loaded() ? 1 : 0, why, sizeof why);
-    fprintf(stderr,
-            "window: pipelines: the previous start stopped at the free-memory floor; %s (%s, %lld "
-            "bytes, loaded by the renderer: %s): %s\n",
-            retry ? "this start makes the set again" : "this start makes no set", why, bytes,
-            rhi_pipeline_cache_loaded() ? "yes" : "no", path != NULL && path[0] ? path : "no path");
-    if (!retry) {
-        return pipePolicy;
+    /* issue 123: the set resumed where the last start's stopped for memory,
+       in half its batches (at least 4), the memory asked between batches as
+       in any set; before v0.11.2 such a stop turned the set off for every
+       later start of the version, and with the pipeline cache empty (another
+       driver's file) each new pipeline was compiled inside a picture's
+       walk (a 1.4 s freeze for 29 of them) */
+    if (ico_pipe_resume_parse(line, &s_prevStop)) {
+        at = s_prevStop.at;
+        batch = ico_pipe_resume_batch(s_prevStop.batch);
+        snprintf(where, sizeof(where), "at pipeline %u of %u after the low-memory stop of %s",
+                 at + 1u, s_prevStop.total,
+                 s_prevStop.date[0] ? s_prevStop.date : "an unknown date");
+    } else {
+        /* a line without the place (written by an older version): from the
+           first, in half the set's batches */
+        snprintf(where, sizeof(where),
+                 "at pipeline 1 after the low-memory stop of an earlier start (its line names "
+                 "no place)");
     }
-    ico_diag_startup_floor_retry();
+    rd_set_pipeline_resume(at, batch, loaded != 0);
+    ico_diag_startup_resume();
+    s_resumed = 1;
+    {
+        char b[32];
+
+        if (batch > 0) {
+            snprintf(b, sizeof(b), "batches of %u", batch);
+        } else {
+            snprintf(b, sizeof(b), "batches of half the set's");
+        }
+        fprintf(stderr,
+                "window: start-up set: resumed %s (%s, stop %u in a row; %s; the pipeline cache "
+                "file %lld bytes, loaded by the renderer: %s): %s\n",
+                where, b, s_prevStop.stops ? s_prevStop.stops : 1u,
+                at == 0  ? "the whole set"
+                : loaded ? "the pipelines before it from the pipeline cache when the game needs "
+                           "them"
+                         : "the pipelines before it made after the rest: the pipeline cache file "
+                           "was not loaded",
+                cache_file_bytes(ico_diag_pipeline_cache_path()), loaded ? "yes" : "no",
+                line[0] ? line : "no stop line");
+    }
     return ICO_DIAG_PIPESET_FULL;
+}
+
+void window_pipe_lazy_why(char *why, size_t size, int pipePolicy, int relaunch, int saved)
+{
+    if (relaunch) {
+        snprintf(why, size, "(a restart after a graphics driver crash)");
+    } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_SETTING) {
+        snprintf(why, size, "by the settings ([dev] pipeline_set = \"lazy\")");
+    } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_ONCE) {
+        snprintf(why, size,
+                 "(the previous start ended while preparing them in the careful set; for this "
+                 "start only)");
+    } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW && saved) {
+        snprintf(why, size,
+                 "(the previous start ended while preparing them; [dev] pipeline_set = \"lazy\" "
+                 "from now on)");
+    } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW) {
+        snprintf(why, size,
+                 "(the previous start ended while preparing them; [dev] pipeline_set = \"lazy\" "
+                 "could not be written, so for this start only)");
+    } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_LOW_MEMORY) {
+        /* not reached since issue 123's resume (window_pipe_floor_retry
+           makes such a start the set resumed), kept for the words */
+        snprintf(why, size, "(the previous start's set stopped when the system ran low on memory)");
+    } else {
+        snprintf(why, size, "(the last run made them that way)");
+    }
 }

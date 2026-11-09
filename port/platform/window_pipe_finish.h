@@ -9,6 +9,8 @@
 #ifndef ICO_PLATFORM_WINDOW_PIPE_FINISH_H
 #define ICO_PLATFORM_WINDOW_PIPE_FINISH_H
 
+#include <stddef.h>
+
 /* After rd_init made the device, before the self-tests and the start-up
    set: the floor's driver class from the device (rhi_limits' vendor id and
    driver text; diag_host.h ico_diag_set_memory_floor_driver), and whether
@@ -43,5 +45,12 @@ int window_pipe_floor_retry(int pipePolicy);
    -1 for none: the backend switch) on a driver other than
    ICO_MEMORY_FLOOR_DRIVER_OTHER, as window_pipe_finish_start rules */
 void window_pipe_skin_check(int pipePolicy);
+
+/* The words of a start without the start-up set for rd_pipelines_lazy
+   ("(a restart after a graphics driver crash)", "by the settings ([dev]
+   pipeline_set = \"lazy\")", ...): pipePolicy as the window has it,
+   relaunch a restart after a driver crash (startup_retry.h), saved the
+   lazy setting written (ico_diag_startup_end_persist) */
+void window_pipe_lazy_why(char *why, size_t size, int pipePolicy, int relaunch, int saved);
 
 #endif
