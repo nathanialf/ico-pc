@@ -365,9 +365,9 @@ causes in it, each on its own lines. The lines to read, in the log's order:
   files dropped): the cache starts empty once`: why the cache started empty (the reporter's log
   read "for another device or driver", one line for the first two). The reporter's previous run
   named no compiler in its batches (`compiler unnamed by the driver`) and built the VU pre-pass's
-  record modules, which Qualcomm's driver does not (the device table turns the pre-pass off
-  there): that run was under another driver (a driver picked in the app), so its cache file was
-  refused.
+  record modules, which this start's driver does not (the device table turns the pre-pass off on
+  Qualcomm's driver 512.676.1): that run was under another driver (one picked in the app's driver
+  list: which one the log does not say), so its cache file was refused.
 - `rd: pipelines: compiled lazy batch B, pipelines ...; slowest ...; by family vu 17, program 12;
   27 of them in the start-up set`: in a run without the set, the families compiled in play and how
   many of them a set made before play would have made.
