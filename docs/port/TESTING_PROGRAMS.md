@@ -1314,7 +1314,9 @@ The renderer's test programs have a page of their own:
   (`LIBGL_ALWAYS_SOFTWARE=1`, `SDL_VIDEO_DRIVER=offscreen`); they skip (77) without an OpenGL
   context. On llvmpipe the destination-read cells skip (no fragment shader interlock; GLSL has no
   attachment read). `rhi_gl_stores` (the argument `stores`) is `rhi_vk_stores`' twin: it skips (77)
-  while the OpenGL backend reports no vertex stores, having checked that its bracket refuses.
+  while the OpenGL backend reports no vertex stores, having checked that its bracket refuses;
+  `rhi_gl_compute` (the argument `compute`) is `rhi_vk_compute`'s: 77 while it reports no compute
+  stores, having checked that its compute bracket refuses and a dispatch counts nothing.
 - `rhi_gl_sync_wait_test.c`: the OpenGL backend's fence wait with a limit on the CPU
   (`port/rhi/gl/gl_sync_wait.c`, `gl_device.c` `gl_wait_sync`) over a stub fence and a fake clock: one
   that never signals ends at the 15 s limit in 300 slices of 50 ms, the pump between them, the 2 s
