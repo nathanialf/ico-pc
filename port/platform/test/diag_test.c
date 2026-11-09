@@ -3502,7 +3502,7 @@ int main(int argc, char **argv)
     CHECK(strstr(s, "the game starts again at the title when this run has closed, with "
                     "ICO_STARTUP_RETRY=blend:vulkan: ") != NULL);
     CHECK(strstr(s, "test: restart 1\n") != NULL);
-    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=blend:vulkan (parse 0, step 8, backend "
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=blend:vulkan (parse 0, step 10, backend "
                     "vulkan, blend fixed)\n") != NULL);
     /* the normal quit path first, then the relaunch */
     CHECK(strstr(s, "test: restart 1") != NULL && strstr(s, "test: the end-of-run steps") != NULL &&
@@ -3522,7 +3522,7 @@ int main(int argc, char **argv)
     s = read_file(log);
     CHECK(r == 0);
     CHECK(strstr(s, "test: restart 1\n") != NULL);
-    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=backend:d3d12 (parse 0, step 9, backend "
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=backend:d3d12 (parse 0, step 11, backend "
                     "d3d12, blend fixed)\n") != NULL);
     CHECK(strstr(s, "ico_pc: started the game again") != NULL);
     if (fails) {
@@ -3536,7 +3536,7 @@ int main(int argc, char **argv)
     s = read_file(log);
     CHECK(r == 0);
     CHECK(strstr(s, "test: restart 1\n") != NULL);
-    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=robust:vulkan (parse 0, step 7, backend "
+    CHECK(strstr(s, "test: relaunch ICO_STARTUP_RETRY=robust:vulkan (parse 0, step 9, backend "
                     "vulkan, blend not fixed)\n") != NULL);
     if (fails) {
         printf("--- lossrobust log ---\n%s\n", s);

@@ -1047,7 +1047,8 @@ static void checkRamp(void)
 /* (j) the dither's phase follows the frame's jitter (issue 203): a flat quad
  * at a Z between two LUT entries that differ, fogged at 2x with the scene
  * jittered by 0, 0 (SCENE byte for byte as without a jitter) and by real
- * jitters, inside the (-0.5, 0.5) texel range FSR's sequence takes: the Bayer
+ * jitters, inside the (-0.5, 0.5) texel range FSR's sequence takes (the
+ * fixture's fraction chosen so the pattern has period 8, jitterFixtureOk): the Bayer
  * cell moves by floor(jitter * 16 + 0.5) cells, so every interior texel at
  * jitter (0.25, 0) is the 0, 0 picture's 4 texels to the right, at (0.125, 0)
  * 2, at (-0.25, 0) 4 to the left and at (0, 0.25) 4 down, each alpha the
@@ -1056,6 +1057,39 @@ static void checkRamp(void)
  * constant, or on a jitter that left the cell where it was: the index at the
  * pixel less the jitter floored back to the same cell for every jitter under
  * half a texel) */
+/* case j's fixture check on the CPU: the alpha a1x_fog gives over the 8x8
+ * Bayer sheet at entries n, n + 1 and fraction f has two levels and differs
+ * from itself shifted 2 and 4 cells in x and in y */
+static bool jitterFixtureOk(const uint8_t *lut, uint32_t n, uint32_t f)
+{
+    const uint32_t lo = lut[n * 4 + 3], hi = lut[(n < 255u ? n + 1u : 255u) * 4 + 3];
+    uint32_t a[8][8];
+    bool two = false;
+    for (uint32_t y = 0; y < 8; y++) {
+        for (uint32_t x = 0; x < 8; x++) {
+            a[y][x] = a1x_fog(lo, hi, f, (uint32_t)kFog[2][8], a1x_bayer8(x, y));
+            two |= a[y][x] != a[0][0];
+        }
+    }
+    if (!two) {
+        return false;
+    }
+    static const uint32_t kShift[] = {2, 4};
+    for (int k = 0; k < 2; k++) {
+        bool dx = false, dy = false;
+        for (uint32_t y = 0; y < 8; y++) {
+            for (uint32_t x = 0; x < 8; x++) {
+                dx |= a[y][x] != a[y][(x + kShift[k]) & 7u];
+                dy |= a[y][x] != a[(y + kShift[k]) & 7u][x];
+            }
+        }
+        if (!dx || !dy) {
+            return false;
+        }
+    }
+    return true;
+}
+
 static void checkJitter(void)
 {
     static const struct {
@@ -1068,12 +1102,31 @@ static void checkJitter(void)
 
     uint8_t lut[256 * 4];
     logicalLut(2, lut);
-    uint32_t n = 0x37;
-    while (n < 254 && lut[n * 4 + 3] == lut[(n + 1) * 4 + 3]) {
-        n++;
+    /* the fixture: entries n, n + 1 and a fraction f whose alpha pattern
+     * (a1x_fog over the 8x8 Bayer sheet) has period 8 in both axes, at f
+     * and at f - 1 (the 24-bit depth's step): a shift of 2 or 4 cells
+     * changes it.  A fraction near 1/2 lights every other cell (gs_bayer8's
+     * top bit is (x ^ y) & 1: a checkerboard), which shifts of 2 and 4
+     * leave as it was */
+    uint32_t n = 0x37, f = 0;
+    for (; n < 255 && f == 0; n++) {
+        if (lut[n * 4 + 3] == lut[(n + 1) * 4 + 3]) {
+            continue;
+        }
+        for (uint32_t c = 2; c < 256 && f == 0; c++) {
+            f = jitterFixtureOk(lut, n, c) && jitterFixtureOk(lut, n, c - 1) ? c : 0;
+        }
+        if (f) {
+            break;
+        }
     }
-    CHECK(lut[n * 4 + 3] != lut[(n + 1) * 4 + 3], "(j) no adjacent LUT entries differ");
-    const uint32_t z = (n << 16) | 0x8000u, tw = W * RAMP_S, th = H * RAMP_S;
+    CHECK(f != 0, "(j) no LUT entries and fraction give a dither of period 8");
+    if (f == 0) {
+        return;
+    }
+    printf("  (j) the fixture: entries %u and %u (alpha %u, %u) at the fraction %u/256\n", n, n + 1,
+           lut[n * 4 + 3], lut[(n + 1) * 4 + 3], f);
+    const uint32_t z = (n << 16) | (f << 8), tw = W * RAMP_S, th = H * RAMP_S;
     static uint8_t img[2 + NCASE][W * RAMP_S * H * RAMP_S * 4];
     uint32_t w = 0, h = 0;
     bool ok = true;

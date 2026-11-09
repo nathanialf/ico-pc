@@ -1054,8 +1054,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the same bytes); at 2x a depth ramp's fog alpha equals the above-1x formula (the table
   interpolated, the ordered dither) texel for texel, and the 1x cases count no above-1x draw
   (`checkRamp`); case j (`checkJitter`, issue 203): a flat quad at a Z between two differing table
-  entries, fogged at 2x with the scene jittered by 0, 0 (SCENE byte for byte as without a jitter)
-  and by real jitters (0.25, 0), (0.125, 0), (-0.25, 0) and (0, 0.25): every interior texel is the
+  entries at a fraction whose dither has period 8 in both axes at it and one below (chosen on the
+  CPU by `jitterFixtureOk` with `a1x_fog` over the Bayer sheet: a fraction near 1/2 gives a
+  checkerboard that shifts of 2 and 4 cells leave as it was), fogged at 2x with the scene
+  jittered by 0, 0 (SCENE byte for byte as without a jitter) and by real jitters (0.25, 0), (0.125, 0), (-0.25, 0) and (0, 0.25): every interior texel is the
   0, 0 picture's 4, 2, -4 texels over in x and 4 down, its alpha the formula's at that cell (the
   dither's phase moves by the jitter in sixteenths of a texel), and the 0, 0 pattern differs from
   itself moved 2 and 4 texels; the outer columns' probe: its count of GS Z 0 rows on D32F and D24 words, the texel
