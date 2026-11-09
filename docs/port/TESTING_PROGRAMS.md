@@ -1455,7 +1455,23 @@ The renderer's test programs have a page of their own:
   `menu_look_kor`, `menu_look_cn`; the Korean ink 252.8 fill, 41.8 rim, measured on the disc; the
   Asian disc's expectation is the Japanese numbers until `menu_look_cn` has been run on it).
 - `menu_look_test.c`: the menus' Arimo text against the game's menu sheets from the disc
-  (`menu_look`); `menu_sheets.c`/`.h` decode the sheets.
+  (`menu_look`); `menu_sheets.c`/`.h` decode the sheets. Two development modes run from the
+  environment on the same binary instead of the checks (exit 0 unless a row does not resolve):
+  `ICO_MENU_LOOK_REF46=1` measures the title's publisher plate (texProperty row 46, "Sony Computer
+  Entertainment Europe Presents", and row 48, the copyright line) on each language's sheet once:
+  the grey/alpha histogram, then per distance from the letters (0 the ink, 1..8 texels across in
+  the row and down in the column) the mean alpha, the alpha-weighted darkness, the count, the
+  variance, the alpha histogram and the agreement with the 4x4 and 8x8 Bayer orders at their best
+  phase (the 8x8 told from the 4x4 by its fine pairs), the outline's alpha steps and grey, and the
+  falloff normalised to the ink (`WX'`, `WY'`); `ICO_MENU_LOOK_INK=<grey>` lowers the ink rule
+  (200), `ICO_MENU_LOOK_BG=g1,g2` adds backdrop greys to the pictures
+  (`menu_look/ref46/<row>-<lang>.png`, x1 and x4 on black, the greys and 128).
+  `ICO_MENU_LOOK_OUTLINE=1` draws the menus' words (Continue, New Game, Options, the save prompt,
+  the card warning, one French row, the port's "Mirror mode", "Picture" and a note) in candidate
+  looks through `sheet_ref.h`'s `SheetLook` (C1..C3 and C6 fixed tables, C4 the plate's measured
+  profile, C5 the shader's constants) with the full and the faint rim, rim black and the
+  language's grey, beside the plate's crop: `menu_look/outline/<candidate>.png`, `contact.png`
+  and the legend `contact.txt`.
 - `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look; the
   Models viewer's counter drawn for 600 frames at 3x and 1x (`testCounterStream`: shelves
   reclaimed, no plain-font word, no second page, the steady rows in place; at 3x the counter's

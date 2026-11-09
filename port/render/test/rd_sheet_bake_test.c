@@ -41,7 +41,20 @@
  *            menu_font.c placeCoverage places it (its coverage and rim
  *            rectangles) and baked over rd__sheet_bake_grow's rectangle
  *            gives a fresh bake's page; scale 3 (6ths, which round) and
- *            the device rule (rd__sheet_bake_scale: 1, and 2 on the tile-based profile) refused.
+ *            the device rule (rd__sheet_bake_scale: 1, and 2 on the tile-based profile) refused;
+ *   looks    sheet_ref.h's SheetLook (the parametrised reference ctest
+ *            menu_look's outline mode draws candidate looks with): the
+ *            default look is the constants and draws sheetref_texel's and
+ *            sheetref_sample's texels at 1x and 2x; sheetref_bayer8 is
+ *            common.hlsli gs_bayer8 (row 0, every value once in a block,
+ *            over 4 the 4x4 matrix); the tables are read only within the
+ *            reach; 3 and 2 levels give only their alphas; texels past the
+ *            reach have alpha 0 under every matrix and level count; a hard
+ *            outline is full to its edge and none past it; a uniform field
+ *            under the 8x8 and the 4x4 matrix lights exactly the texels
+ *            whose threshold passes (2b + 1 in 128ths, 32nds), rounding with
+ *            the dither off; sheetref_texel_cr over sheetref_rim_look is
+ *            sheetref_texel_look.
  */
 #include <math.h>
 #include <stdio.h>
@@ -829,10 +842,210 @@ static void testScaled(void)
     rd__set_sheet_bake_2x(false);
 }
 
+/* ------------------------------------------------------------- looks */
+
+static const uint8_t kBayer4[4][4] = {{0, 8, 2, 10}, {12, 4, 14, 6}, {3, 11, 1, 9}, {15, 7, 13, 5}};
+
+/* the texels of a look that differ from another look's, over the strip and
+   a margin past the reach */
+static long looksDiffer(const uint8_t *cov, int w, int h, const RdSheetStyle *st,
+                        const SheetLook *a, const SheetLook *b)
+{
+    long bad = 0;
+    for (int y = -ICO_SHEET_RY - 2; y < h + ICO_SHEET_RY + 2; y++) {
+        for (int x = -ICO_SHEET_RX - 2; x < w + ICO_SHEET_RX + 2; x++) {
+            uint8_t g0, a0, g1, a1;
+            sheetref_texel_look(cov, (uint32_t)w, (uint32_t)h, x, y, st, a, &g0, &a0);
+            sheetref_texel_look(cov, (uint32_t)w, (uint32_t)h, x, y, st, b, &g1, &a1);
+            bad += g0 != g1 || a0 != a1;
+        }
+    }
+    return bad;
+}
+
+static void testLooks(void)
+{
+    const SheetLook *d = sheetref_default_look();
+    static const uint16_t kWx[ICO_SHEET_RX + 1] = {ICO_SHEET_WX_0, ICO_SHEET_WX_1, ICO_SHEET_WX_2,
+                                                   ICO_SHEET_WX_3, ICO_SHEET_WX_4, ICO_SHEET_WX_5,
+                                                   ICO_SHEET_WX_6};
+    static const uint16_t kWy[ICO_SHEET_RY + 1] = {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2,
+                                                   ICO_SHEET_WY_3, ICO_SHEET_WY_4};
+    CHECK(d->rx == ICO_SHEET_RX && d->ry == ICO_SHEET_RY && d->levels == ICO_SHEET_LEVELS &&
+              d->bayer == 4 && memcmp(d->wx, kWx, sizeof(kWx)) == 0 &&
+              memcmp(d->wy, kWy, sizeof(kWy)) == 0,
+          "looks: the default look is the constants");
+    /* gs_bayer8 */
+    static const uint32_t kRow0[8] = {0, 32, 8, 40, 2, 34, 10, 42};
+    int seen[64] = {0}, row0 = 0, coarse = 0, period = 0;
+    for (uint32_t y = 0; y < 8; y++) {
+        for (uint32_t x = 0; x < 8; x++) {
+            const uint32_t v = sheetref_bayer8(x, y);
+            if (v < 64) {
+                seen[v]++;
+            }
+            row0 += y == 0 && v != kRow0[x];
+            coarse += v >> 2 != kBayer4[y & 3][x & 3];
+            period += sheetref_bayer8(x + 8, y + 16) != v;
+        }
+    }
+    int once = 0;
+    for (int v = 0; v < 64; v++) {
+        once += seen[v] == 1;
+    }
+    CHECK(row0 == 0 && once == 64 && coarse == 0 && period == 0,
+          "looks: sheetref_bayer8 is gs_bayer8 (row 0 %d off, %d of 64 values once, %d over 4 "
+          "off the 4x4, %d off the period)",
+          row0, once, coarse, period);
+
+    /* a strip: a block of ink, a ramp, a stroke */
+    enum { W = 72, H = 28 };
+
+    static uint8_t cov[W * H];
+    memset(cov, 0, sizeof(cov));
+    for (int y = 8; y < 16; y++) {
+        for (int x = 10; x < 18; x++) {
+            cov[y * W + x] = 255;
+        }
+        for (int x = 30; x < 62; x++) {
+            cov[y * W + x] = (uint8_t)((x - 30) * 8);
+        }
+    }
+    for (int y = 4; y < 22; y++) {
+        cov[y * W + 66] = 200;
+    }
+    const RdSheetStyle st = {1, 24, 255, 1, 0, 1};
+    long bad = 0;
+    for (int sc = 1; sc <= 2; sc++) {
+        RdSheetStyle ss = st;
+        ss.scale = (uint8_t)sc;
+        for (int y = -6; y < H + 6; y++) {
+            for (int x = -8; x < W + 8; x++) {
+                uint8_t g0, a0, g1, a1, p0[4], p1[4];
+                sheetref_texel(cov, W, H, x, y, &ss, &g0, &a0);
+                sheetref_texel_look(cov, W, H, x, y, &ss, NULL, &g1, &a1);
+                const float u = ((float)x + 0.3f) / W, v = ((float)y + 0.7f) / H;
+                sheetref_sample(cov, W, H, u, v, &ss, p0);
+                sheetref_sample_look(cov, W, H, u, v, &ss, d, p1);
+                bad += g0 != g1 || a0 != a1 || memcmp(p0, p1, 4) != 0;
+            }
+        }
+    }
+    CHECK(bad == 0, "looks: the default look draws sheetref_texel's texels (%ld off)", bad);
+    /* the reach: entries past rx / ry are not read */
+    const SheetLook shortA = {2, 1, {1000, 700, 300, 0, 0, 0, 0}, {1000, 500, 0, 0, 0}, 8, 4};
+    const SheetLook shortB = {
+        2, 1, {1000, 700, 300, 900, 900, 900, 900}, {1000, 500, 900, 900, 900}, 8, 4};
+    CHECK(looksDiffer(cov, W, H, &st, &shortA, &shortB) == 0,
+          "looks: the tables are read within the reach only");
+    /* the level counts' alphas; nothing past the reach */
+    static const int kLevels[] = {2, 3, 5, 8, 256};
+    static const int kBayers[] = {0, 4, 8};
+    long off = 0, far = 0;
+    for (size_t li = 0; li < sizeof(kLevels) / sizeof(kLevels[0]); li++) {
+        for (size_t bi = 0; bi < sizeof(kBayers) / sizeof(kBayers[0]); bi++) {
+            SheetLook l = *d;
+            l.levels = kLevels[li];
+            l.bayer = kBayers[bi];
+            for (int y = -8; y < H + 8; y++) {
+                for (int x = -10; x < W + 10; x++) {
+                    uint8_t g, a;
+                    sheetref_texel_look(cov, W, H, x, y, &st, &l, &g, &a);
+                    if (l.levels == 3) {
+                        off += a != 0 && a != 64 && a != 128;
+                    } else if (l.levels == 2) {
+                        off += a != 0 && a != 128;
+                    }
+                    if (x < -ICO_SHEET_RX || y < -ICO_SHEET_RY || x >= W + ICO_SHEET_RX ||
+                        y >= H + ICO_SHEET_RY) {
+                        far += a != 0;
+                    }
+                }
+            }
+        }
+    }
+    CHECK(off == 0, "looks: %ld alphas off the 3 and 2 levels' (0 64 128, 0 128)", off);
+    CHECK(far == 0, "looks: %ld texels past the reach with alpha", far);
+    /* a hard outline: full two texels across and one down, none past */
+    const SheetLook hard = {6, 4, {1000, 1000, 1000, 0, 0, 0, 0}, {1000, 1000, 0, 0, 0}, 8, 4};
+    const RdSheetStyle black = {1, 0, 255, 0, 0, 1};
+    int hardBad = 0;
+    for (int y = 8; y < 16; y++) {
+        for (int dx = 1; dx <= 3; dx++) {
+            uint8_t g, a;
+            sheetref_texel_look(cov, W, H, 10 - dx, y, &black, &hard, &g, &a);
+            hardBad += dx <= 2 ? a != 128 || g != 0 : a != 0;
+        }
+    }
+    for (int x = 10; x < 18; x++) {
+        for (int dy = 1; dy <= 2; dy++) {
+            uint8_t g, a;
+            sheetref_texel_look(cov, W, H, x, 16 - 1 + dy, &black, &hard, &g, &a);
+            hardBad += dy == 1 ? a != 128 || g != 0 : a != 0;
+        }
+    }
+    CHECK(hardBad == 0, "looks: the hard outline's edge (%d texels off)", hardBad);
+
+    /* a uniform field (no rim) dithered to 2 levels: the texels whose
+       threshold passes are full, the rest empty; rounding with the dither
+       off */
+    enum { F = 16 };
+
+    static uint8_t field[F * F];
+    memset(field, 100, sizeof(field));
+    for (int m = 0; m < 3; m++) {
+        const int n = m == 0 ? 0 : m == 1 ? 4 : 8, den = n == 8 ? 128 : 32;
+        const SheetLook l = {6, 4, {1000, 0, 0, 0, 0, 0, 0}, {1000, 0, 0, 0, 0}, 2, n};
+        for (int dith = 0; dith < 2; dith++) {
+            const RdSheetStyle plain = {0, 0, 255, (uint8_t)dith, 0, 1};
+            int wrong = 0, lit = 0;
+            for (int y = 0; y < F; y++) {
+                for (int x = 0; x < F; x++) {
+                    uint8_t g, a;
+                    sheetref_texel_look(field, F, F, x, y, &plain, &l, &g, &a);
+                    const int b = !dith || n == 0 ? -1
+                                  : n == 8        ? (int)sheetref_bayer8((uint32_t)x, (uint32_t)y)
+                                                  : kBayer4[y & 3][x & 3];
+                    const int th = b < 0 ? den / 2 : 2 * b + 1;
+                    const int on = 100 * den + th * 255 >= 255 * den;
+                    wrong += a != (on ? 128 : 0);
+                    lit += a == 128;
+                }
+            }
+            CHECK(wrong == 0,
+                  "looks: a uniform field under matrix %d, dither %d: %d texels off "
+                  "the threshold's",
+                  n, dith, wrong);
+            if (n == 8 && dith) {
+                /* 2b + 1 >= 78: b 39 .. 63, 25 of 64 */
+                CHECK(lit == 25 * 4, "looks: the 8x8 field lights %d of 256, expected 100", lit);
+            }
+        }
+    }
+    /* the texel from coverage and rim is the 1x texel */
+    const SheetLook c3 = {6, 4, {1000, 1000, 700, 400, 150, 0, 0}, {1000, 900, 450, 150, 0}, 8, 8};
+    long crBad = 0;
+    for (int y = -6; y < H + 6; y++) {
+        for (int x = -8; x < W + 8; x++) {
+            const uint32_t c = x >= 0 && y >= 0 && x < W && y < H ? cov[y * W + x] : 0u;
+            uint8_t g0, a0, g1, a1;
+            sheetref_texel_look(cov, W, H, x, y, &st, &c3, &g0, &a0);
+            sheetref_texel_cr(c, sheetref_rim_look(cov, W, H, x, y, &c3), x, y, &st, &c3, &g1, &a1);
+            crBad += g0 != g1 || a0 != a1;
+        }
+    }
+    CHECK(crBad == 0, "looks: sheetref_texel_cr over sheetref_rim_look differs at %ld texels",
+          crBad);
+    printf("  looks: the default look, gs_bayer8, the reach, %d level counts x 3 matrices, a hard "
+           "outline, uniform fields, the coverage-and-rim texel\n",
+           (int)(sizeof(kLevels) / sizeof(kLevels[0])));
+}
+
 int main(int argc, char **argv)
 {
     const char *corpus = argc > 1 ? argv[1] : "port/ui/test/font_corpus";
     CHECK(ui_font_init(), "the embedded fonts parse");
+    testLooks();
     testScaled();
     testRects();
     testEdges();
