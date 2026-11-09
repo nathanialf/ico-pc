@@ -22,8 +22,10 @@
  *     audio closed again;
  *   - never opens: 1201 vsyncs at 60 Hz on the game's clock write the
  *     still-waiting line twice (every 10 s of vsyncs); the shutdown returns
- *     after its bound, the thread left behind, which closes and frees what
- *     it opens once the gate opens.
+ *     after its bound, the thread left behind (ico_audio_sdl_open_left, so
+ *     the window's exit leaves SDL's audio up; 0 after an open that
+ *     returned), which closes and frees what it opens once the gate
+ *     opens.
  *
  * Every check is a state, a count or the SPU2's time, except the
  * shutdown's bound (between 300 ms and 300 ms plus 2 s).
@@ -128,6 +130,7 @@ static void test_opens_at_once(void)
     CHECK(n >= PULL_MIN_FRAMES, "the device's take rendered %llu frames", (unsigned long long)n);
     ico_audio_host_shutdown();
     check_closed("at once");
+    CHECK(!ico_audio_sdl_open_left(), "at once: an open's thread reported left at the exit");
 }
 
 static void test_opens_late(void)
@@ -227,6 +230,9 @@ static void test_never_opens(void)
     CHECK(ms + 10 >= OPEN_CLOSE_WAIT_MS && ms < OPEN_CLOSE_WAIT_MS + 2000,
           "the shutdown took %llu ms (bound %d ms)", (unsigned long long)ms, OPEN_CLOSE_WAIT_MS);
     check_closed("never");
+    /* the window's exit then keeps SDL's audio up (window_host.c
+       ico_window_close: no SDL_Quit under the thread) */
+    CHECK(ico_audio_sdl_open_left(), "never: the thread left behind not reported");
     /* the thread left behind closes what it opens and frees its job */
     open_gate();
     for (i = 0; i < 5000 && __atomic_load_n(&open_threads_out, __ATOMIC_ACQUIRE) == out0; i++) {

@@ -981,6 +981,10 @@ int ico_audio_sdl_open_adopt(void)
     return 1;
 }
 
+/* an open's thread left running at the exit (open_abandon):
+   ico_audio_sdl_open_left */
+static int open_left;
+
 /* The shutdown with the open still under way: waited for at most
    OPEN_CLOSE_WAIT_MS, then closed unused; 1 when its thread was left
    behind (SDL's audio must stay up under it). */
@@ -1013,6 +1017,7 @@ static int open_abandon(void)
         if (t != NULL) {
             SDL_DetachThread(t);
         }
+        open_left = 1;
         return 1;
     }
     s = open_reap(&named, &ms);
@@ -1022,6 +1027,11 @@ static int open_abandon(void)
     fprintf(stderr, "audio: the output device opened after %.0f ms, at the exit; closed unused\n",
             ms);
     return 0;
+}
+
+int ico_audio_sdl_open_left(void)
+{
+    return open_left;
 }
 
 int ico_audio_sdl_devices(char names[][ICO_AUDIO_DEVICE_NAME_MAX], int max)

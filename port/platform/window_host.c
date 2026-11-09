@@ -6024,5 +6024,10 @@ void ico_window_close(void)
         SDL_DestroyWindow(s_window);
         s_window = NULL;
     }
-    SDL_Quit();
+    if (ico_audio_sdl_open_left()) { /* audio_host.h */
+        fprintf(stderr, "window: SDL's audio left to the process's end\n");
+        SDL_QuitSubSystem(SDL_WasInit(0) & ~SDL_INIT_AUDIO);
+    } else {
+        SDL_Quit();
+    }
 }

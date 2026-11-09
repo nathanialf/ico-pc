@@ -43,7 +43,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   after the fake returns, the game's clock rendering every vsync until then, the Settings move
   refused, the watchdog's vsync reset at the adoption and nothing rendered on that vsync; a failed
   open at once and after the wait (the game's clock, "no device"); an open that never returns
-  (two still-waiting lines in 20 s of vsyncs, the shutdown back within its bound, the thread left
+  (two still-waiting lines in 20 s of vsyncs, the shutdown back within its bound,
+  `ico_audio_sdl_open_left` 1 so the window's exit leaves SDL's audio up (0 after an open that
+  returned), the thread left
   behind closing what it opens) (`audio_open`). Its one wall-clock check is the shutdown's bound.
 - `audio_queue_test.c` (window build): the output on the game's clock (`out_sdl.c`'s push) on a
   device-less SDL stream: the cushion, the refill after a dry queue and its ramp with frames still
