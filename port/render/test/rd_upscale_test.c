@@ -58,6 +58,19 @@
  *             composite held 1:1, darkened once a tick); again at 688 x 448
  *             (16:9) in a 1280 x 720 window, the composite a Full pixel
  *             crop (ox > 0)
+ *   resets    the history resets by reason under the layer: the picture
+ *             after three keep frames (keep run), after a keep frame with
+ *             a camera cut and after a discarded frame with one (cut: the
+ *             cut carried by the marker, rd_discard_frame's carry), at the
+ *             wall's cut and after the interpolator's camera snap (camera),
+ *             after rd__velocity_forget (forgotten); none at the picture
+ *             after each
+ *   feedback  the interpolation's presents of a frame whose list 7 reads
+ *             DISPLAY under the layer: from the tick after PRE_DISPLAY
+ *             was made, the head copies PRE_DISPLAY into PRE_HELD (the
+ *             first present) and back (the later one), the plan reads
+ *             DISPLAY without copying it, DISPLAY's record lends
+ *             PRE_DISPLAY's, and both presents leave the same DISPLAY
  * Any validation error fails the test.  "rd_upscale_test off" runs the
  * scales, marker and off cases alone (rd_upscale_off_mali and
  * rd_upscale_off_tiler: the marker a NOP under a phone's limits and under
@@ -236,11 +249,13 @@ static void richFrame(uint8_t fade)
 }
 
 /* a full-frame untextured sprite over a black clear, then the reduction;
- * cut: after rd_camera_cut */
+ * cut: after rd_camera_cut (1) or rd_camera_cut_wall (2) */
 static void fillFrameCut(int cut)
 {
     rd_begin_frame();
-    if (cut) {
+    if (cut == 2) {
+        rd_camera_cut_wall();
+    } else if (cut) {
         rd_camera_cut();
     }
     rd_select_list(0);
@@ -260,6 +275,8 @@ static void fillFrame(void)
 
 /* the frame's GS size for the keep frames and the wide frame (rd_init's) */
 static int32_t s_W = GS, s_H = GS;
+/* the next keep frame is a camera cut (rd_camera_cut) */
+static int s_keepCut;
 
 /* a game-shaped keep frame (StageManager.c's fade: fbKeep): the head's
  * clear in list 11 (rd_frame_head), the brightness at level 0, the keep
@@ -280,6 +297,9 @@ static void keepFrame(float aspect)
     h.wExact = s_W != GS ? 384.0f * aspect : 0.0f; /* GsBase.c gsFrame.wExact */
     h.clear = 1;
     rd_frame_head(&h);
+    if (s_keepCut) {
+        rd_camera_cut();
+    }
     rd_select_list(11);
     RdPostParams p;
     memset(&p, 0, sizeof(p));
@@ -871,6 +891,165 @@ static void testKeepHold(void)
           st->resetsBy[RD_UPSCALE_RESET_KEEP]);
 }
 
+/* (b) the resets by reason: one dispatch with a new history for each, of
+ * the reason named, and none at the picture after */
+static void resetBy(const char *what, const RdUpscaleStats *b, int why)
+{
+    static const char *const kWhy[6] = {"first", "size", "cut", "keep run", "camera", "forgotten"};
+    const RdUpscaleStats *st = rd__upscale_stats();
+    CHECK(st->dispatched == b->dispatched + 1u && st->resets == b->resets + 1u &&
+              st->resetsBy[why] == b->resetsBy[why] + 1u,
+          "reset %s: dispatched %u -> %u, resets %u -> %u, %s %u -> %u", what, b->dispatched,
+          st->dispatched, b->resets, st->resets, kWhy[why], b->resetsBy[why], st->resetsBy[why]);
+    const RdUpscaleStats a = *st;
+    fillFrame();
+    CHECK(rd__upscale_stats()->resets == a.resets, "reset %s: the picture after it reset too",
+          what);
+}
+
+static void testKeepRunReset(void)
+{
+    rd__upscale_set(true, 1.5f);
+    settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
+    rd__upscale_set_phases(0);
+    sceneFrame(0, 0, 0); /* the split applied */
+    sceneFrame(0, 0, 0); /* settled: the composite holds the picture */
+    RdUpscaleStats b = *rd__upscale_stats();
+    for (int k = 0; k < 3; k++) {
+        keepFrame(4.0f / 3.0f);
+    }
+    CHECK(rd__upscale_stats()->dispatched == b.dispatched &&
+              rd__upscale_stats()->keepHeld == b.keepHeld + 3u,
+          "reset: three keep ticks dispatched %u, held %u",
+          rd__upscale_stats()->dispatched - b.dispatched,
+          rd__upscale_stats()->keepHeld - b.keepHeld);
+    fillFrame();
+    resetBy("after three keep ticks", &b, RD_UPSCALE_RESET_KEEP);
+    /* a cut on a keep frame: its replay dispatches nothing, the cut is the
+     * reason the next picture's marker carries (rd__velocity_keep) */
+    b = *rd__upscale_stats();
+    s_keepCut = 1;
+    keepFrame(4.0f / 3.0f);
+    s_keepCut = 0;
+    fillFrame();
+    resetBy("after a cut on a keep frame", &b, RD_UPSCALE_RESET_CUT);
+    /* a cut on a discarded frame: carried into the next frame (rd_core.c
+     * rd_discard_frame) */
+    b = *rd__upscale_stats();
+    rd_begin_frame();
+    rd_camera_cut();
+    rd_discard_frame();
+    fillFrame();
+    resetBy("after a cut on a discarded frame", &b, RD_UPSCALE_RESET_CUT);
+    /* the camera jumped: the wall's cut, and the interpolator's snap
+     * (rd_interp.c forgets the picture before as CAMERA at a tick's first
+     * present snapped by RD_SNAP_CAMERA or RD_SNAP_WALL) */
+    b = *rd__upscale_stats();
+    fillFrameCut(2);
+    resetBy("at the wall's cut", &b, RD_UPSCALE_RESET_CAMERA);
+    b = *rd__upscale_stats();
+    rd__velocity_forget_as(RD_UPSCALE_RESET_CAMERA);
+    fillFrame();
+    resetBy("after the interpolator's camera snap", &b, RD_UPSCALE_RESET_CAMERA);
+    b = *rd__upscale_stats();
+    rd__velocity_forget();
+    fillFrame();
+    resetBy("after rd__velocity_forget", &b, RD_UPSCALE_RESET_FORGOTTEN);
+    const RdCmd *next = NULL;
+    const RdCmd *m = rd__last_frame() ? markerOf(rd__last_frame(), &next) : NULL;
+    CHECK(m && m->u[2] == 0u, "reset: a settled picture's marker u[2] %u", m ? m->u[2] : 0u);
+    printf("  reset by reason: a keep run, a cut on a keep frame and on a discarded one, the "
+           "wall's cut, the camera snap, forgotten\n");
+}
+
+/* a frame whose list 7 samples DISPLAY (the motion blur's read of the
+ * picture before) over a full-frame fill, then the reduction */
+static void displayReadFrame(void)
+{
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), (RdTarget){0}, GS, GS, 0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kBlack, 0, 0);
+    opaque2D();
+    rd_texture_off();
+    sprite(0, 0, GS * 16, GS * 16, kFill, 0, 0, 0, 0);
+    rd_select_list(7);
+    rd_set_target(rd_target(RD_TARGET_SCENE), (RdTarget){0}, GS, GS, 0);
+    opaque2D();
+    rd_sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(rd_target_texture(rd_target(RD_TARGET_DISPLAY), RD_VIEW_RGB24_TA0),
+               RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    sprite(64 * 16, 64 * 16, 448 * 16, 448 * 16, kGrey, 0, 0, GS * 16, GS / 2 * 16);
+    rd_texture_off();
+    reduction();
+    rd_end_frame(0);
+}
+
+/* (b) the held copy under the layer: with the interpolation's presents a
+ * frame reading DISPLAY in lists 0-10 holds PRE_DISPLAY in PRE_HELD at its
+ * head (rd_interp.c feedback), not DISPLAY in DISPLAY_HELD, so the read is
+ * PRE_DISPLAY's (the scene before the upscale) and every present of a tick
+ * draws the same picture */
+static void testFeedbackPre(void)
+{
+    uint32_t w = 0, h = 0, w2 = 0, h2 = 0;
+    rd__upscale_set(true, 1.5f);
+    settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
+    rd__upscale_set_phases(0);
+    fillFrame(); /* the split applied */
+    fillFrame();
+    g_rd.settings.interpolate = 1; /* rd_end_frame leaves the replays to the presents */
+    for (int tick = 0; tick < 3; tick++) {
+        displayReadFrame();
+        for (int k = 0; k < 2; k++) {
+            const RdUpscaleStats b = *rd__upscale_stats();
+            const RdFrame *f =
+                rd__interp_frame(rd__prev_frame(), rd__last_frame(), 1.0f, k == 0, NULL);
+            if (!f) {
+                CHECK(0, "feedback: tick %d present %d not built", tick, k);
+                break;
+            }
+            uint32_t pre = 0, preHeld = 0;
+            const bool held = rd__layer_feedback_ids(&pre, &preHeld, false);
+            const RdCmdList *l0 = &f->lists[0];
+            const bool copiesPre = l0->count && l0->cmds[0].type == RDC_COPY && pre &&
+                                   l0->cmds[0].u[0] == (k == 0 ? pre : preHeld) &&
+                                   l0->cmds[0].u[1] == (k == 0 ? preHeld : pre);
+            RdLayerPlan p;
+            rd__layer_plan(f, 0, false, NULL, &p);
+            CHECK(rd__replay_frame(f, 0, false), "feedback: tick %d present %d replay", tick, k);
+            const RdUpscaleStats *st = rd__upscale_stats();
+            CHECK(st->preReductions == b.preReductions + 1u && st->dispatched == b.dispatched + 1u,
+                  "feedback: tick %d present %d: pre-upscale reductions %u -> %u, dispatched %u "
+                  "-> %u",
+                  tick, k, b.preReductions, st->preReductions, b.dispatched, st->dispatched);
+            if (tick == 0) {
+                continue; /* PRE_DISPLAY made at this tick's first boundary: DISPLAY held */
+            }
+            CHECK(held && copiesPre && p.feedsDisplay && !p.displayCopied && p.preCopyOrd != ~0u &&
+                      st->preLent == b.preLent + 1u,
+                  "feedback: tick %d present %d: PRE ids %u/%u (%d), head copy of PRE %d, plan "
+                  "reads %d copies DISPLAY %d copies PRE at %u, lent %u -> %u",
+                  tick, k, pre, preHeld, held, copiesPre, p.feedsDisplay, p.displayCopied,
+                  p.preCopyOrd, b.preLent, st->preLent);
+            if (!readTarget(RD_TARGET_DISPLAY, k == 0 ? s_dispA : s_dispB, sizeof(s_dispA),
+                            k == 0 ? &w : &w2, k == 0 ? &h : &h2)) {
+                break;
+            }
+        }
+        if (tick > 0) {
+            CHECK(w == w2 && h == h2 && memcmp(s_dispA, s_dispB, (size_t)w * h * 4) == 0,
+                  "feedback: tick %d: the later present's DISPLAY differs from the first's", tick);
+        }
+    }
+    g_rd.settings.interpolate = 0;
+    rd__upscale_set(false, 0.0f);
+    settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
+    fillFrame();
+    printf("  feedback: the motion blur's held copy under the layer is PRE_DISPLAY's, every "
+           "present of a tick the same picture\n");
+}
+
 /* (a) at 16:9: the frame 688 x 448 in a 1280 x 720 window (Enhanced, the
  * window's resolution): DISPLAY and the composite a Full pixel crop */
 static void testKeepHoldWide(void)
@@ -937,6 +1116,8 @@ int main(int argc, char **argv)
         testWindow();
         testLayerPixels();
         testKeepHold();
+        testKeepRunReset();
+        testFeedbackPre();
         testKeepHoldWide(); /* last: rd_init again at 688 x 448 */
     }
     CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
