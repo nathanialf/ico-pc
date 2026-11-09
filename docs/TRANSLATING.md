@@ -77,7 +77,8 @@ can go missing.
    result is what is reviewed):
    - `port/ui/strings_<language>_<translator>.c`: the table `ui_strings_<language>_<translator>`,
      every id of `port/ui/strings.h` in order, the translation's words, and `NULL` with a comment
-     for an empty row and for an id newer than the template; an id is `menu_` and the id's name in
+     for an empty row, and for an id newer than the template the end block (see "Keeping a
+     translation up to date"); an id is `menu_` and the id's name in
      lower case without `UI_STR_` (`menu_settings` is `UI_STR_SETTINGS`);
    - `port/game/subtitles_<language>_<translator>.c`: the table `ico_subtitles_<language>_<translator>`,
      one `IcoSubtitle` a row in the file's order (the line's number, 1 for a "second play only"
@@ -118,16 +119,40 @@ can go missing.
   held to 255 bytes the same way, a message to 383.
 - The `%` codes are the English row's, in the same order (ctest `strings_complete`).
 - A row the port gains after a translation came in (Options > Gameplay > Shadows attack together,
-  for one) is `NULL` in that translation's table, with the comment `newer than the CSV: English`,
-  and shows in English until the translator sends its words; the eight languages of the program's
-  own text get it with the row.
+  for one) is `NULL` in that translation's table, in the end block (below), and shows in English
+  until the translator sends its words; the eight languages of the program's own text get it with
+  the row.
 - Every character has a glyph (ctests `font_audit`, `font_coverage`).
 - The subtitles: one or two lines of at most 50 characters, the CSV's records and second-play rows
   (the new `subtitles_*` ctest).
 
-The tests to run: `strings_complete`, `font_audit`, `font_coverage`, `font_subset_arimo`, the
+The tests to run: `strings_complete`, `strings_sync`, `font_audit`, `font_coverage`, `font_subset_arimo`, the
 translation's `subtitles_*` and its other-disc runs, `settings`, `settings_extra`, `options`,
 `jimaku_text`.
+
+## Keeping a translation up to date
+
+The program gains rows with every release. A row a translation has no words for shows in English,
+so nothing breaks, but a translator needs to see which rows are new. Each translation's file ends
+with a dated block:
+
+    /* ---- new since <release>: English until translated ---- */
+    [UI_STR_OPT_VAR_PEACEFUL] = NULL, /* "Peaceful shadows" */
+
+one line for every row added after the file came in: `NULL` (English at run time) with the English
+words beside it. The maintainer makes the block with `tools/strings_sync.py --write --since
+<release>` when a release adds rows. `python3 -I tools/strings_sync.py --check` lists the rows a file
+has no line for; ctest `strings_sync` runs it, so a new row without its line fails the tests. A
+row stays in the block it first came in, under that release's heading, until it is translated.
+
+A block's header may also name words the maintainer wrote for a row before the translator sent
+any (`UI_STR_NEWGAME_START` and `UI_STR_NEWGAME_START_SCREEN`, written by the maintainer and left where
+they are in the file): please check those.
+
+To send words: open a pull request on the file (replace the `NULL` and its comment with the words,
+keeping `\n` and the `%` codes as described above; the line may stay in the block), or write them
+on the [issues page](https://github.com/nathanialf/ico-pc/issues) with the row's name (`UI_STR_...`)
+and the words, and the maintainer puts them in.
 
 ## How it works
 

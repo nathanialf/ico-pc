@@ -2699,8 +2699,12 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   test is far smaller and costs more: after the alpha proof of the occluders (a texture not
   uploaded yet is scanned from the CPU copy), the replay tool's second replay on this machine
   (lavapipe, x86) found 0 to 1 draw hidden a dump, at 0.5 to 2.3 ms a picture, above the 0.4 ms a
-  phone's big core can spare. The default is nevertheless `full` (the maintainer's call: the occlusion test
-  ships on, and the phone's rc logs decide whether it stays). If it must pay, the next steps are
+  phone's big core can spare. The default is `full` on an immediate-mode GPU (the maintainer's call: the occlusion test
+  ships on). The phone's log decided the other half (issue 179, a Mali-G52: the cull cost 7.49 ms of
+  CPU a replay, 6.80 of it the occlusion test, for 0 occluded in the block): a tile-based
+  profile (`RdProfile.tiler`) defaults to `frustum`; `[dev] cull = full` keeps the test there. The pictures
+  are the same either way (the test only skips what the depth hides: `rd_cull_ab`, `rd_vis_hiz_corpus`;
+  `rd_vis` checks the default per class). If it must pay, the next steps are
   a union rule over adjacent triangles (a cell is covered today only by one triangle whole, so the
   cells on a wall's internal diagonals never count) and the occludee's box per batch.
 - *The gate.* `rd_cull_ab` ([TESTING.md](TESTING.md)) replays the dumps of
@@ -2713,7 +2717,9 @@ cost no pre-pass entry, no VU draw, no ring bytes and no GPU work.
   occlusion test's vertex and occludee bounds against the float product, the rasterisation's
   inner rule against every corner placement, its verdicts and the frame cases.
 - *The key and the lines.* `[dev] cull = off | frustum | full` (`ICO_RD_CULL`; full by default:
-  the frustum skip with the occlusion test). The start line `rd: cull: full ([dev] cull, ICO_RD_CULL): ...`
+  the frustum skip with the occlusion test; frustum by default on a tile-based profile, where the start
+  line adds `the profile's default: ...`, the profile line `cull frustum (the profile: ...)` and the 10 s
+  line `(profile default)` in place of `([dev] cull)`). The start line `rd: cull: full ([dev] cull, ICO_RD_CULL): ...`
   (under full a second, `rd: cull: the occlusion test: up to N occluder triangles a picture
   (ICO_RD_CULL_HIZ_TRIS), cells of 2 GS pixels`), the summary's `cull frustum`, the backend's 10 s
   line `; cull: N of M scene draws skipped a replay (F frustum, O occluded), T ms (occlusion H)

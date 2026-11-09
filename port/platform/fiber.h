@@ -10,12 +10,13 @@
  * goes fiber -> scheduler -> fiber.
  *
  * Backends (minicoro's own selection, minicoro.h "MCO_USE_*"): assembly
- * switch on x86-64 Linux and Windows and arm64. Stacks are
- * ICO_FIBER_STACK_SIZE bytes. The stack has a no-access guard page directly
+ * switch on x86-64 Linux and Windows and arm64. Pooled stacks are
+ * ICO_FIBER_STACK_SIZE bytes; the host fiber has a 32 MB stack. Each has a
+ * no-access guard page directly
  * below it, so an overflow faults instead of corrupting the fiber's control
  * block.
  *
- * The pool. Every fiber lives in one of ICO_FIBER_POOL_SLOTS slots of one
+ * The pool. Every pooled fiber lives in one of ICO_FIBER_POOL_SLOTS slots of one
  * address space reservation, pinned at ICO_FIBER_POOL_BASE (anywhere, with
  * one log line, when that address is taken). A slot is, from its start:
  * a header page (the IcoFiber record, minicoro's mco_coro and its switch
@@ -45,6 +46,7 @@
 #include "state_reloc.h"
 
 #define ICO_FIBER_STACK_SIZE (256 * 1024)
+#define ICO_FIBER_HOST_STACK_SIZE (32 * 1024 * 1024)
 /* sched.h's ICO_SCHED_MAX_THREADS (sched.c checks they agree) */
 #define ICO_FIBER_POOL_SLOTS 256
 /* The arena's pinned base (arena.h ICO_ARENA_PIN_BASE) + 256 MB */
@@ -60,6 +62,8 @@ IcoFiber *ico_fiber_create(void (*fn)(void *arg), void *arg, size_t stack_size);
 /* The same in slot `slot` (0..ICO_FIBER_POOL_SLOTS-1); NULL when the slot
    is in use or out of range, or the memory is not there. */
 IcoFiber *ico_fiber_create_in_slot(int slot, void (*fn)(void *arg), void *arg);
+/* Creates a guarded 32 MB host fiber outside the save-state pool. */
+IcoFiber *ico_fiber_create_host(void (*fn)(void *arg), void *arg);
 /* Runs the fiber until it yields or finishes. Returns 0, or -1 if the fiber
    cannot be resumed (finished, running, or its stack overflowed). */
 int ico_fiber_resume(IcoFiber *f);
@@ -97,7 +101,7 @@ size_t ico_fiber_pool_slot_bytes(void);
 int ico_fiber_pool_pinned(void);
 /* The fiber in a slot, NULL when the slot is free. */
 IcoFiber *ico_fiber_in_slot(int slot);
-/* The slot a fiber lives in. */
+/* The slot a fiber lives in, or -1 for a host fiber. */
 int ico_fiber_slot(const IcoFiber *f);
 
 /* --- Save states --------------------------------------------------------------

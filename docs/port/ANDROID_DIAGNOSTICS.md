@@ -113,7 +113,7 @@ question it decides:
   the second number of ms of GPU work, and the first number is the rest (pixels, passes). A high
   R^2 (0.7 and over) with a large slope says the vertex work sets the GPU's time; the same line
   with the pre-pass on (the invocation count then smaller) says what the pre-pass bought. The fit
-  needs 3 timed replays with different counts; with fewer the mean alone (`(2 replays)`).
+  needs 3 timed replays whose largest count is at least twice the smallest; with fewer replays the mean alone (`(2 replays)`), and with a narrower spread (a cutscene: issue 179's `-64.0 ms + 2.42 ms (R^2 0.07)` was noise read as a cost) the mean and `; fit: not enough spread (x N..M thousand vertex invocations)`.
 - **Before list 0** (the replays line's GPU part and the top passes on a tile-based GPU: `before
   list 0 2.1` where other devices print `uploads 2.1`; the passes CSV's `kind` stays `uploads`).
   The stretch up to the first scene list's stamp: the uploads and the GPU's work still in flight.
@@ -253,6 +253,7 @@ question it decides:
   against the block's mean says how heavy the picked replay was. When three files exist, the
   last is the heaviest block of the run (each needed 1.5 times the one before). Decides what the
   cage's list 3 draws are, and what the boat scene's 109 to 144 ms are.
+- **The cull on a phone** (a tile-based profile defaults to `frustum`: the start line says `rd: cull: frustum (...; the profile's default: ...)`, the profile line ends `cull frustum (the profile: ...)`, and the 10 s cull line ends `(profile default)` instead of `([dev] cull)` with no `; occlusion:` part; `[dev] cull = full` turns the test on). **gpu_robust in the log:** `ico_pc: [dev] keys kept from an earlier start: gpu_robust = true` followed (after the config line) by `ico_pc: [dev] gpu_robust = true in <config.toml> has no gpu_robust_by mark: set by hand ...` says the key is the player's or was left without the mark and costs bounds checks on every 3D load; with the mark (`gpu_robust_by = "losses; <version>; <clean starts>; <run or ->"`) the game's own lines `robust access on (set by the game ...): N clean starts of 3` and `robust access turned off ...` say where it is.
 - **The occlusion test's cost** (the 10 s line's cull part, `; cull: N of M scene draws skipped a
   replay (F frustum, O occluded), T ms (occlusion H) ([dev] cull)`, now followed by `; occlusion:
   collect C ms (settle S, alpha A, vertices V ms for Nv vertices, Nt triangles kept of Na; cache Hc
