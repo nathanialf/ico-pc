@@ -225,6 +225,7 @@ add_library(ico_render STATIC
     rd_present.c
     rd_prerotate.c # the present turned into a swapchain made in the surface's own turn
     rd_present_info.c # rd_last_present_info's record: what the last present drew
+    rd_icon_hold.c # the title's last picture held on screen while the icon capture's frames are drawn
     rd_replay.c
     rd_replay_tiler.c # the replay's tiler passes: DATE through the stencil bit, the blur fold
     rd_replay_vu.c # the replay's VU draws
@@ -511,6 +512,16 @@ add_executable(rd_icon_pass_test test/rd_icon_pass_test.c)
 target_compile_options(rd_icon_pass_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_icon_pass_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_icon_pass_test PRIVATE ico_render)
+
+# rd_icon_hold_test: the title's last picture held on screen while the icon
+# capture's frames are drawn (rd.h rd_icon_hold): the rule, and on a device
+# the pass frames' presents showing the title's last picture while the
+# state picture reads the pass's own, black with no picture held, live
+# again past the pass.
+add_executable(rd_icon_hold_test test/rd_icon_hold_test.c)
+target_compile_options(rd_icon_hold_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_icon_hold_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_icon_hold_test PRIVATE ico_render)
 
 # rd_still_test: the still re-present (rd_reshow.c): the frame hash that is the
 # proof a between-tick picture repeats the tick's last rendered one, and the
@@ -1040,7 +1051,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_shadow_test rd_fog_test rd_fog_selftest_test rd_blend_selftest_test
                   rd_vuprepass_selftest_test rd_vu_skin_check_test rd_blur_test rd_water_test
                   rd_raw_test rd_debug_test
-                  rd_present_test rd_filter_test rd_icon_pass_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
+                  rd_present_test rd_filter_test rd_icon_pass_test rd_icon_hold_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_jitter_test rd_upscale_test
                   rd_perf_test rd_display_change_test rd_boot_present_test rd_crt_test
                   texpack_load_test rd_png_mem_test gsb_cull_test
@@ -1335,6 +1346,8 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_crt PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_filter COMMAND rd_filter_test)
     add_test(NAME rd_icon_pass COMMAND rd_icon_pass_test)
+    add_test(NAME rd_icon_hold COMMAND rd_icon_hold_test)
+    set_tests_properties(rd_icon_hold PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_interp COMMAND rd_interp_test)
     # the motion vectors; leaves rd_velocity_moving.rddump (a frame with
     # VuPrevCBs) for rd_replay_tool_velocity
@@ -1378,7 +1391,7 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_tex_pool rd_gsbase ${rd_mesh_SHARDS} modelpack
-                             rd_shadow rd_shadow_edges rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_display_change rd_native PROPERTIES ENVIRONMENT
+                             rd_shadow rd_shadow_edges rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_display_change rd_native rd_icon_hold PROPERTIES ENVIRONMENT
                                                                            "${_env}")
         set_tests_properties(${rd_blur_SHARDS} PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_velocity PROPERTIES ENVIRONMENT "${_env}")
@@ -3749,7 +3762,7 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
         rd_state rd_pixel rd_native rd_layout rd_tex rd_gsbase ${rd_mesh_SHARDS} modelpack
         rd_shadow rd_shadow_edges rd_fog ${rd_blur_SHARDS} rd_water rd_raw rd_debug rd_present
         rd_crt rd_mirror rd_msaa rd_perf rd_display_change rd_interp rd_boot_present rd_dst_usage
-        rd_jitter rd_upscale
+        rd_jitter rd_upscale rd_icon_hold
         # the two-pass blend (ICO_RD_NO_DUAL=1 is the renderer's own switch, not a Vulkan fake)
         rd_pixel_nodual rd_present_nodual rd_fog_nodual rd_shadow_nodual rd_water_nodual
         rd_raw_nodual rd_mirror_nodual rd_interp_nodual rd_msaa_nodual rd_crack_nodual

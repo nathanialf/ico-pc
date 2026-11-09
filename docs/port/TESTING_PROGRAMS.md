@@ -490,13 +490,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `shadow_spawn_test.c`: the depth a shadow rises from, read at the generator kind's word as the
   PS2 reads it; with the disc, every generator row (`shadow_spawn`).
 - `title_logo_test.c`: the logo's models and the hidden state's steps; the application icon's
-  capture (`title_icon.c`) with the renderer, the curtain and the icon files stubbed: the pass leaves
+  capture (`title_icon.c`) with the renderer and the icon files stubbed: the pass leaves
   out every model but `I` (`title_back`, `st26a_p1`, `C`, `I_f`, `I_sd`) and off leaves the old
   table; the capture starts after `ICO_TITLE_ICON_WAIT` ticks of layout 12 or 13 (counted again
-  after a Settings page or the model viewer) when an icon is wanted, never when not, and a picture
+  after a Settings page or the model viewer, and not while a game fade runs: counted from its end, a
+  fade held at level 0 counting as none) when an icon is wanted, never when not, and a picture
   not plain (`ICO_APP_ICON_NOT_PLAIN`) leaving it idle with the count from 0 (the capture starting
-  once it is plain); the shot over black after the settle, white once it came, the shot over
-  white, then the pass off, the pair delivered and the curtain off at the first present past the
+  once it is plain); the renderer's hold first and the pass on at the tick it holds a picture
+  (after `ICO_TITLE_ICON_HELD_WAIT` ticks without one; the menu left while waiting ends it with no
+  pass); the shot over black after the settle, white once it came, the shot over
+  white, then the pass off, the pair delivered and the hold released at the first present past the
   pass's frames (held over older frames and over a blend with the pass's last; the rule
   `ico_title_icon_present_clean` alone; after `ICO_TITLE_ICON_HOLD_MAX` ticks without such a
   present), done for the run; an empty answer or none within
@@ -1452,7 +1455,23 @@ The renderer's test programs have a page of their own:
   `menu_look_kor`, `menu_look_cn`; the Korean ink 252.8 fill, 41.8 rim, measured on the disc; the
   Asian disc's expectation is the Japanese numbers until `menu_look_cn` has been run on it).
 - `menu_look_test.c`: the menus' Arimo text against the game's menu sheets from the disc
-  (`menu_look`); `menu_sheets.c`/`.h` decode the sheets.
+  (`menu_look`); `menu_sheets.c`/`.h` decode the sheets. Two development modes run from the
+  environment on the same binary instead of the checks (exit 0 unless a row does not resolve):
+  `ICO_MENU_LOOK_REF46=1` measures the title's publisher plate (texProperty row 46, "Sony Computer
+  Entertainment Europe Presents", and row 48, the copyright line) on each language's sheet once:
+  the grey/alpha histogram, then per distance from the letters (0 the ink, 1..8 texels across in
+  the row and down in the column) the mean alpha, the alpha-weighted darkness, the count, the
+  variance, the alpha histogram and the agreement with the 4x4 and 8x8 Bayer orders at their best
+  phase (the 8x8 told from the 4x4 by its fine pairs), the outline's alpha steps and grey, and the
+  falloff normalised to the ink (`WX'`, `WY'`); `ICO_MENU_LOOK_INK=<grey>` lowers the ink rule
+  (200), `ICO_MENU_LOOK_BG=g1,g2` adds backdrop greys to the pictures
+  (`menu_look/ref46/<row>-<lang>.png`, x1 and x4 on black, the greys and 128).
+  `ICO_MENU_LOOK_OUTLINE=1` draws the menus' words (Continue, New Game, Options, the save prompt,
+  the card warning, one French row, the port's "Mirror mode", "Picture" and a note) in candidate
+  looks through `sheet_ref.h`'s `SheetLook` (C1..C3 and C6 fixed tables, C4 the plate's measured
+  profile, C5 the shader's constants) with the full and the faint rim, rim black and the
+  language's grey, beside the plate's crop: `menu_look/outline/<candidate>.png`, `contact.png`
+  and the legend `contact.txt`.
 - `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look; the
   Models viewer's counter drawn for 600 frames at 3x and 1x (`testCounterStream`: shelves
   reclaimed, no plain-font word, no second page, the steady rows in place; at 3x the counter's

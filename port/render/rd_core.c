@@ -29,7 +29,8 @@
 #include <time.h>
 #include "../fmv/rd_video.h"
 #include "rd_internal.h"
-#include "modelpack.h" /* the model pack switch */
+#include "rd_icon_hold.h" /* rd__icon_pass_drop */
+#include "modelpack.h"    /* the model pack switch */
 #include "rd_mesh.h"
 #include "rd_tex.h"
 #include "rd_tex_decode.h"
@@ -3133,7 +3134,11 @@ void rd_screen_prims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace 
     if ((g_rd.spaceOverride > 0 ? g_rd.spaceOverride - 1 : (int)space) == RD_SPACE_WORLD
             ? !rd__draw_filter_pass(key)
             : rd_icon_pass_on()) {
-        return; /* a world draw the filter leaves out; UI and full-screen in the icon pass */
+        /* a world draw the filter leaves out; UI and full-screen in the icon pass */
+        if (rd_icon_pass_on()) {
+            rd__icon_pass_drop(RD_ICON_DROP_PRIMS);
+        }
+        return;
     }
     RdFrame *f = rd__rec_frame();
     if (!f) {
@@ -3165,6 +3170,7 @@ void rd_screen_prims(RdPrim type, const RdScreenVtx *v, uint32_t count, RdSpace 
 void rd_deferred_text(const RdTextItem *item, RdKey key)
 {
     if (rd_icon_pass_on()) {
+        rd__icon_pass_drop(RD_ICON_DROP_TEXT);
         return; /* the menus' text: not in the title's icon pass (rd.h rd_set_icon_pass) */
     }
     RdFrame *f = rd__rec_frame();

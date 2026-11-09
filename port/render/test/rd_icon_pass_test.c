@@ -6,6 +6,11 @@
  *   - on: the frame head's clear (both copies, lists 0 and 11) is the
  *     pass's colour at the head and after rd_frame_flip with the game's
  *     colour, and a head whose flip sends no clear records one;
+ *   - on: the post effects over SCENE that are not the letter's (rd_post's
+ *     fog, glow and flare, motion blur: rd_icon_hold.h
+ *     rd__icon_pass_drops_post) record nothing, the fade's full-frame
+ *     sprite neither, and the counts name each one; the reduction is
+ *     recorded; off, the same calls record their commands;
  *   - off: a frame recorded after the pass was on and off is byte-identical
  *     (every list's commands, the payload) to one recorded with the pass
  *     never on, the head's clear back to the game's colour and absent
@@ -15,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_icon_hold.h"
 
 static int failures;
 
@@ -176,6 +182,101 @@ static void titleFrame(int clear, Snap *s)
     }
 }
 
+/* the open frame's commands in all lists */
+static uint32_t allCommands(void)
+{
+    const RdFrame *f = rd__rec_frame();
+    uint32_t n = 0;
+    for (int l = 0; f && l < RD_LIST_COUNT; l++) {
+        n += f->lists[l].count;
+    }
+    return n;
+}
+
+/* the post effects the title draws in list 11 (rd.h rd_post): the fog (a
+   LUT by depth), one flare sprite, the motion blur's, the fade; then the
+   reduction.  Returns the commands recorded by the four effects */
+static uint32_t postEffects(void)
+{
+    static uint8_t lut[256 * 4];
+    RdPostParams p;
+    rd_select_list(11);
+    const uint32_t n0 = allCommands();
+    memset(&p, 0, sizeof(p));
+    for (int i = 0; i < 256; i++) {
+        lut[i * 4] = 0xDF; /* the title's fog colour, DFDBCD at entry 0 */
+        lut[i * 4 + 1] = 0xDB;
+        lut[i * 4 + 2] = 0xCD;
+        lut[i * 4 + 3] = 0x6E;
+    }
+    p.lut = lut;
+    rd_post(RD_POST_FOG, &p);
+    memset(&p, 0, sizeof(p));
+    p.rgba[3] = 0x80;
+    rd_post(RD_POST_FLARE, &p);
+    rd_post(RD_POST_MOTION_BLUR, &p);
+    const uint32_t effects = allCommands() - n0;
+    memset(&p, 0, sizeof(p));
+    p.rgba[0] = 0xFF;
+    p.rgba[1] = 0xF7;
+    p.rgba[2] = 0xE3;
+    p.rgba[3] = 0x6C;
+    rd_post(RD_POST_FADE, &p);
+    return effects;
+}
+
+/* the reduction's commands of the open frame (RDC_POST_STUB of kind
+   RD_POST_REDUCTION) */
+static int reductions(void)
+{
+    const RdFrame *f = rd__rec_frame();
+    int n = 0;
+    for (int l = 0; f && l < RD_LIST_COUNT; l++) {
+        for (uint32_t i = 0; i < f->lists[l].count; i++) {
+            const RdCmd *c = &f->lists[l].cmds[i];
+            n += c->type == RDC_POST_STUB && c->b[0] == RD_POST_REDUCTION;
+        }
+    }
+    return n;
+}
+
+static void testPost(void)
+{
+    uint32_t d[RD_ICON_DROP_COUNT];
+    rd_begin_frame();
+    head(1);
+    const uint32_t offEffects = postEffects();
+    rd_select_list(12);
+    rd_post(RD_POST_REDUCTION, NULL);
+    CHECK(offEffects >= 3 && reductions() == 2,
+          "post, off: the effects recorded (%u commands), the reduction's two sprites (%d)",
+          offEffects, reductions());
+    rd_end_frame(0);
+
+    rd_set_icon_pass(kBlack);
+    rd_begin_frame();
+    head(1);
+    rd__icon_pass_drops(d);
+    const uint32_t prims0 = d[RD_ICON_DROP_PRIMS];
+    const uint32_t onEffects = postEffects();
+    rd_select_list(12);
+    rd_post(RD_POST_REDUCTION, NULL);
+    rd__icon_pass_drops(d);
+    CHECK(onEffects == 0, "post, on: the fog, the flare and the motion blur record nothing (%u)",
+          onEffects);
+    CHECK(d[RD_ICON_DROP_POST] == 3, "post, on: three post effects counted (%u)",
+          d[RD_ICON_DROP_POST]);
+    CHECK(d[RD_ICON_DROP_PRIMS] == prims0 + 1, "post, on: the fade's sprite counted (%u -> %u)",
+          prims0, d[RD_ICON_DROP_PRIMS]);
+    CHECK(reductions() == 2, "post, on: the reduction recorded (%d)", reductions());
+    rd_end_frame(0);
+    rd_set_icon_pass(NULL);
+    CHECK(!rd__icon_pass_drops_post(RD_POST_REDUCTION) && !rd__icon_pass_drops_post(RD_POST_COPY) &&
+              !rd__icon_pass_drops_post(RD_POST_KEEP) && rd__icon_pass_drops_post(RD_POST_FOG) &&
+              rd__icon_pass_drops_post(RD_POST_BLOOM) && rd__icon_pass_drops_post(RD_POST_DOF),
+          "post: the kinds left out");
+}
+
 int main(void)
 {
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
@@ -249,6 +350,8 @@ int main(void)
     uint8_t col[4];
     CHECK(!headClear(0, col) && !headClear(1, col), "off again, no fbClear: no clear recorded");
     rd_end_frame(0);
+
+    testPost();
 
     rd_shutdown();
     if (failures == 0) {

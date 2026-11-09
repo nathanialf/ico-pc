@@ -649,7 +649,10 @@ endif()
 # compared per item in the five languages, with the survey that pinned the
 # sheet constants.  Needs the base ELF to configure, and the disc image to
 # run (exit 77 without it, so a worktree skips it); writes its pictures to
-# <build>/menu_look/<lang>/.  ICO_MENU_LOOK_FIT=1 runs the constants' search.
+# <build>/menu_look/<lang>/.  ICO_MENU_LOOK_FIT=1 runs the constants' search;
+# ICO_MENU_LOOK_REF46=1 measures the title's publisher plate and
+# ICO_MENU_LOOK_OUTLINE=1 draws candidate outline looks beside it (ico_miniz:
+# their pictures compressed).
 if(_ico_cov_elf AND TARGET ico_sheet_ref)
     add_executable(menu_look_test test/menu_look_test.c test/menu_sheets.c menu_font.c menu_text.c
         ${_ui_string_srcs} $<TARGET_OBJECTS:ico_ui_font_rd>
@@ -669,7 +672,7 @@ if(_ico_cov_elf AND TARGET ico_sheet_ref)
     target_compile_options(menu_look_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                            ${ICO_GAME_WARNINGS})
     target_link_libraries(menu_look_test PRIVATE ico_render ico_sheet_ref ico_port_data ico_platform
-                          ico_region)
+                          ico_region ico_miniz)
     if(NOT WIN32)
         target_link_libraries(menu_look_test PRIVATE m)
     endif()

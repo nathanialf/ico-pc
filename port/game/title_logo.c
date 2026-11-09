@@ -12,8 +12,10 @@
 #include "settings.h"
 #include "title_icon.h"
 
-extern int stage_no;          /* common/src/main.c */
-extern int current_layout_id; /* common/src/layout_texture.c */
+extern int stage_no;               /* common/src/main.c */
+extern int current_layout_id;      /* common/src/layout_texture.c */
+extern int fadeStatus;             /* seki/src/Basic.c: gsb_fade's state */
+extern unsigned char fadeColor[4]; /* seki/src/Basic.c: its colour, [3] the level drawn */
 
 /* the title's stage and menu (Continue and New Game, New Game only): the
    running disc's (port/core/region.h; 1, 12 and 13 on the European disc) */
@@ -66,7 +68,11 @@ void ico_title_logo_update(void)
         stage_no == TITLE_STAGE && !s_hidden &&
         (current_layout_id == LAYOUT_TITLE_CONTINUE || current_layout_id == LAYOUT_TITLE_NEW) &&
         ico_mv_active == 0;
-    ico_title_icon_tick(onMenu);
+    /* no fade over the picture (GsBase.c gsb_fade: 0 off; 3 held at an end,
+       drawn at fadeColor[3]; 1 and 2 running): the title fades in from its
+       pale colour for some seconds after the menu is up */
+    const int settled = fadeStatus == 0 || (fadeStatus == 3 && fadeColor[3] == 0);
+    ico_title_icon_tick(onMenu, settled);
 }
 
 int ico_title_logo_skip(const char *model)
