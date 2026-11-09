@@ -82,6 +82,18 @@ const RdFsr3Stats *rd__fsr3_stats(void)
     return &s_stats;
 }
 
+bool rd__fsr3_fp16(void)
+{
+#ifdef ICO_FFX
+    RhiComputeCaps caps;
+    memset(&caps, 0, sizeof(caps));
+    /* offered by the device, and enabled by the RHI only with the external extensions */
+    return g_rd.hasDevice && rhi_device_compute_caps(&caps) && caps.float16 && caps.externalExts;
+#else
+    return false;
+#endif
+}
+
 bool rd_upscale_temporal_supported(void)
 {
     if (s_testUnsupported) {

@@ -44,6 +44,7 @@
 #include "settings_unused.h"   /* Extras > Unused content's host */
 #include "settings_variants.h" /* the game variants rows' values, notes and rule */
 #include "settings_upscale.h"  /* the Upscaling rows: FSR 3.1, quality */
+#include "settings_step.h"     /* held Left/Right, L1/R1 */
 #include "touch_edit_ui.h"     /* the Edit layout page */
 #include "variants.h"          /* the game variants rows (Gameplay and its pages) */
 #include "ui_hint.h"
@@ -475,15 +476,6 @@ static double stepTenth(double v, int dir)
 {
     int t = (int)(v * 10.0 + 0.5) + dir;
     return (t < 0 ? 0 : t > 10 ? 10 : t) / 10.0;
-}
-
-/* the colour adjustment's field of o for one of its four rows */
-static int *toneField(IcoVideoOptions *o, int opt)
-{
-    return opt == UI_OPT_TONE_GAMMA        ? &o->toneGamma
-           : opt == UI_OPT_TONE_BRIGHTNESS ? &o->toneBrightness
-           : opt == UI_OPT_TONE_CONTRAST   ? &o->toneContrast
-                                           : &o->toneSaturation;
 }
 
 /* [audio] output (port/game/options.h) in force: the game's mode set from
@@ -1916,7 +1908,7 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     case UI_OPT_TONE_BRIGHTNESS:
     case UI_OPT_TONE_CONTRAST:
     case UI_OPT_TONE_SATURATION: {
-        const int v = *toneField(&o, opt);
+        const int v = *ui__tone_field(&o, opt);
         if (v == ICO_TONE_DEFAULT) {
             snprintf(buf, size, "%d (%s)", v, ui_str(UI_STR_VAL_DEFAULT));
         } else {
@@ -2576,11 +2568,8 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
     case UI_OPT_TONE_BRIGHTNESS:
     case UI_OPT_TONE_CONTRAST:
     case UI_OPT_TONE_SATURATION: {
-        /* ICO_TONE_STEP (1) a press, held at 1 and 100 (issue 194: a step of
-           5 was too coarse to match a display) */
-        int *const f = toneField(&o, opt);
-
-        *f = ico_video_tone_clamp(*f + (dir > 0 ? ICO_TONE_STEP : -ICO_TONE_STEP));
+        /* ICO_TONE_STEP (1) a press, held at 1 and 100 (issue 194) */
+        ui__tone_add(&o, opt, dir * ICO_TONE_STEP);
         video = 1;
         break;
     }
@@ -6565,8 +6554,17 @@ static int settingsProc(int first, int item)
         if (r->label != lay->curItem) {
             continue;
         }
-        if ((flags & (LT_PAD_LEFT | LT_PAD_RIGHT)) && canStep(r->opt)) {
-            ui_settings_step((UiSettingsOpt)r->opt, (flags & LT_PAD_LEFT) ? -1 : 1);
+        const int rep = ui__step_repeat(first, r->label, r->opt, (unsigned)pad[0].now);
+        const int stepFlags = flags | rep;
+        if ((stepFlags & (LT_PAD_LEFT | LT_PAD_RIGHT)) && canStep(r->opt) &&
+            ui__step_row(r->opt, (stepFlags & LT_PAD_LEFT) ? -1 : 1, rep)) {
+            CUR_SE();
+            refreshPage(pg, id, lay->curItem);
+        }
+        if ((flags & (LT_PAD_L1 | LT_PAD_R1)) && canStep(r->opt) &&
+            ui__tone_step(r->opt,
+                          (flags & LT_PAD_L1) ? -ICO_TONE_STEP_COARSE : ICO_TONE_STEP_COARSE)) {
+            s_dirtyVideo = 1; /* the colour rows by 10 */
             CUR_SE();
             refreshPage(pg, id, lay->curItem);
         }
@@ -6578,11 +6576,7 @@ static int settingsProc(int first, int item)
         }
         if ((flags & LT_PAD_SQUARE) && r->opt >= UI_OPT_TONE_GAMMA &&
             r->opt <= UI_OPT_TONE_SATURATION && canStep(r->opt)) {
-            /* the colour adjustment's 50, the game's own picture */
-            IcoVideoOptions v;
-            ico_video_get(&v);
-            *toneField(&v, r->opt) = ICO_TONE_DEFAULT;
-            ico_video_set(&v);
+            ui__tone_step(r->opt, 0); /* the colour adjustment's 50, the game's own picture */
             s_dirtyVideo = 1;
             CUR_SE();
             refreshPage(pg, id, lay->curItem);
@@ -6716,10 +6710,6 @@ int ui_settings_covers_title(void)
     /* from the first frame of a pending return to the switch
        to its page, the logo is down too */
     if (s_built && (s_titleReturn >= 0 || s_titleHandoff)) {
-        return 1;
-    }
-    /* reached from the vibration screen, not a page: keyed on its layout */
-    if (s_built && s_newGameLayout >= 0 && current_layout_id == s_newGameLayout) {
         return 1;
     }
     return s_built && onTitle() && pageOfLayout(current_layout_id, NULL) != NULL;

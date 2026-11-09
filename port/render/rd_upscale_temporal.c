@@ -41,6 +41,7 @@ float rd__upscale_temporal_ratio(const RdSettings *st, float sceneScale)
 static uint8_t s_asked;
 static bool s_on, s_inited;
 static float s_ratio;
+static uint8_t s_sharp;
 
 bool rd__upscale_temporal_apply(const RdSettings *st, bool crt, bool down, float displayScale,
                                 const char *detail, char *note, size_t noteSize)
@@ -54,8 +55,9 @@ bool rd__upscale_temporal_apply(const RdSettings *st, bool crt, bool down, float
             static const char *const names[RD_UPSCALE_Q_COUNT] = {"native AA", "quality",
                                                                   "balanced", "performance"};
             const int q = st->upscaleQuality < RD_UPSCALE_Q_COUNT ? st->upscaleQuality : 0;
-            snprintf(note, noteSize, ", upscaling fsr3 %s (ratio %.1f%s)", names[q], (double)ratio,
-                     detail ? detail : "");
+            snprintf(note, noteSize, ", upscaling fsr3 %s (ratio %.1f%s), sharpness %u, fp16 %s",
+                     names[q], (double)ratio, detail ? detail : "", (unsigned)st->upscaleSharpness,
+                     rd__fsr3_fp16() ? "on" : "off");
         } else if (asked) {
             snprintf(note, noteSize, ", upscaling fsr3 off (%s%s)",
                      crt                        ? "the CRT filter draws its own box"
@@ -64,10 +66,12 @@ bool rd__upscale_temporal_apply(const RdSettings *st, bool crt, bool down, float
                      crt || down || st->downsample ? "" : rd_upscale_temporal_why());
         }
     }
-    const bool changed = !s_inited || st->upscale != s_asked || on != s_on || ratio != s_ratio;
+    const bool changed = !s_inited || st->upscale != s_asked || on != s_on || ratio != s_ratio ||
+                         (on && st->upscaleSharpness != s_sharp);
     s_inited = true;
     s_asked = st->upscale;
     s_on = on;
     s_ratio = ratio;
+    s_sharp = st->upscaleSharpness;
     return changed;
 }
