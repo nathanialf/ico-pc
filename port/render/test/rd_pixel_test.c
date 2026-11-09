@@ -3273,6 +3273,30 @@ static void testDump(const char *dir)
     }
     rd__frame_free(&f);
     rd_destroy_texture(t);
+    /* rd_pixel_keep.rddump: a game-shaped keep frame after it (the head's
+     * clear, brightness, KEEP, a fade, the reduction; rd_upscale_test's):
+     * the keep loop of rd_replay_tool_fsr3_keep and _upscale_keep */
+    RdFrameHead kh;
+    memset(&kh, 0, sizeof(kh));
+    memset(kh.rgba, 0x80, 4);
+    kh.gsW = kh.gsH = 512;
+    kh.aspect = 4.0f / 3.0f;
+    kh.clear = 1;
+    rd_begin_frame();
+    rd_frame_head(&kh);
+    rd_select_list(11);
+    static const RdPostKind kk[4] = {RD_POST_BRIGHTNESS, RD_POST_KEEP, RD_POST_FADE,
+                                     RD_POST_REDUCTION};
+    for (int k = 0; k < 4; k++) {
+        RdPostParams pp;
+        memset(&pp, 0, sizeof(pp));
+        memset(pp.rgba, k == 3 ? 0x80 : 0, 3);
+        rd_select_list(k == 3 ? 12 : 11);
+        rd_post(kk[k], &pp);
+    }
+    rd_end_frame(1);
+    snprintf(path, sizeof(path), "%s/rd_pixel_keep.rddump", dir);
+    CHECK(rd_dump_frame(path), "rd_dump_frame (keep)");
 }
 
 /* ---------------------------------------------------------------- present */
