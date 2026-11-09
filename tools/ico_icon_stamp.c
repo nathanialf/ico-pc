@@ -12,22 +12,37 @@
  *
  *   1. waits up to 10 s for EXE to open for writing (the game still
  *      exiting, a virus scanner reading the new file)
- *   2. copies EXE to EXE.stamp-<pid>.tmp beside it and, in the copy:
+ *   2. removes what a run killed half-way left beside EXE (EXE.stamp-*
+ *      files made before this run started), copies EXE to
+ *      EXE.stamp-<pid>.tmp beside it and, in the copy:
  *      one RT_ICON a .ico image (ids 1..n), RT_GROUP_ICON 1 (the ICONDIR
  *      as a GRPICONDIR, port/platform/icon_stamp.c) and RT_RCDATA
  *      "ICO_ICON_STAMP" = STAMP (the icon's label and disc, which the game
  *      compares at its next start), all language neutral; the program's
  *      other resources (the manifest, the version information) are kept
- *   3. reads the copy's stamp and icon group back, checks that what runs
+ *   3. zeroes the copy's COFF symbol table pointer (EndUpdateResourceW
+ *      drops the symbol table that followed the sections but keeps the
+ *      header's pointer, which then points into the moved sections),
+ *      reads the copy's stamp and icon group back, checks that what runs
  *      is unchanged (the sections before the resources byte for byte, the
  *      entry point and the import, exception and TLS directories:
  *      ico_icon_stamp_pe_check), then puts the copy in EXE's place
- *      (ReplaceFileW: the file's attributes and security kept), so a
- *      failure at any step leaves EXE as it was
+ *      (ReplaceFileW with the old EXE kept as EXE.stamp-old-<pid> until
+ *      the replace is done: the file's attributes and security kept), so a
+ *      failure at any step leaves EXE as it was; when a failed replace
+ *      leaves no EXE (Microsoft's ReplaceFileW page: errors 1176 and 1177
+ *      can leave the old file renamed), the backup, or else the stamped
+ *      copy, is put back in EXE's place, and a copy is never deleted while
+ *      EXE is missing
  *   4. tells the shell the icons changed (SHChangeNotify)
  *
  * Each run appends a line to LOG (logs\icon-stamp.log beside the game's
- * log, which is closed by then): the time, EXE, ICO and the result.
+ * log, which is closed by then): the time, EXE, ICO and the result, and a
+ * line for each recovery step.  A refusal that the same icon and program
+ * would meet again (an unusable icon file, a copy that does not read back
+ * or is not the same program) is written "refused stamp \"STAMP\": ..."
+ * (ico_icon_stamp_refusal): the game reads the log's last line at start
+ * and does not start the helper again for that stamp.
  * Exit 0 stamped, 1 EXE could not be written (a folder the player cannot
  * write to, still in use after 10 s: nothing changed), 2 a bad ICO or bad
  * arguments.
@@ -38,14 +53,12 @@
 #include <windows.h>
 #include <shellapi.h>
 #include <shlobj.h>
-
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <wchar.h>
-
 #include "icon_stamp.h"
 
 #define WAIT_MS 10000
@@ -53,7 +66,9 @@
 #define ICO_MAX_BYTES (16u << 20)
 
 static const wchar_t *s_logPath;
+
 static const wchar_t *s_exe = L"?";
+
 static const wchar_t *s_ico = L"?";
 
 /* UTF-16 to UTF-8 into out ("?" when it does not convert) */
@@ -161,6 +176,98 @@ static DWORD wait_writable(const wchar_t *exe, DWORD *waitedMs)
         }
         Sleep(WAIT_STEP_MS);
     }
+}
+
+static int exists(const wchar_t *path)
+{
+    return GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
+}
+
+/* a refusal for good: the line the game reads (icon_stamp.h
+   ico_icon_stamp_refused), then the reason */
+static void log_refused(const char *stamp, const char *fmt, ...)
+{
+    char head[300], text[900];
+    va_list ap;
+    va_start(ap, fmt);
+    vsnprintf(text, sizeof(text), fmt, ap);
+    va_end(ap);
+    if (ico_icon_stamp_refusal(head, sizeof(head), stamp) != 0) {
+        snprintf(head, sizeof(head), "refused:");
+    }
+    log_line("%s %s; the game does not try this icon again", head, text);
+}
+
+/* EXE.stamp-* files beside exe made before this run started (a helper
+   killed between its copy and the replace: a 64 MB copy, or the old
+   program kept as the backup after EXE was put back) removed.  Runs once
+   exe is free, so EXE exists. */
+static void remove_leftovers(const wchar_t *exe)
+{
+    static wchar_t pattern[32768], path[32768];
+    FILETIME created, exited, kernel, user;
+    WIN32_FIND_DATAW fd;
+    if (!GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user) ||
+        _snwprintf(pattern, sizeof(pattern) / sizeof(pattern[0]), L"%ls.stamp-*", exe) < 0) {
+        return;
+    }
+    pattern[sizeof(pattern) / sizeof(pattern[0]) - 1] = L'\0';
+    /* the folder part of exe, for the found names */
+    const wchar_t *slash = wcsrchr(exe, L'\\');
+    const wchar_t *fwd = wcsrchr(exe, L'/');
+    if (fwd != NULL && (slash == NULL || fwd > slash)) {
+        slash = fwd;
+    }
+    const size_t dirLen = slash != NULL ? (size_t)(slash - exe) + 1 : 0;
+    HANDLE f = FindFirstFileW(pattern, &fd);
+    if (f == INVALID_HANDLE_VALUE) {
+        return;
+    }
+    int removed = 0, kept = 0;
+    do {
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0 ||
+            CompareFileTime(&fd.ftCreationTime, &created) >= 0) {
+            continue; /* this run's, or another helper's that started after it */
+        }
+        if (_snwprintf(path, sizeof(path) / sizeof(path[0]), L"%.*ls%ls", (int)dirLen, exe,
+                       fd.cFileName) < 0) {
+            continue;
+        }
+        path[sizeof(path) / sizeof(path[0]) - 1] = L'\0';
+        if (DeleteFileW(path)) {
+            removed++;
+        } else {
+            kept++;
+        }
+    } while (FindNextFileW(f, &fd));
+    FindClose(f);
+    if (removed > 0 || kept > 0) {
+        log_line("note: %d file(s) an earlier run left beside the program removed, %d could not be",
+                 removed, kept);
+    }
+}
+
+/* the copy's COFF symbol table pointer and count zeroed (icon_stamp.h
+   ico_icon_stamp_clear_symbols): 0, or the error */
+static DWORD clear_symbols(const wchar_t *path)
+{
+    uint8_t head[4096];
+    DWORD got = 0, put = 0, err = 0;
+    HANDLE h = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, 0, NULL, OPEN_EXISTING,
+                           FILE_ATTRIBUTE_NORMAL, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        return GetLastError();
+    }
+    if (!ReadFile(h, head, sizeof(head), &got, NULL)) {
+        err = GetLastError();
+    } else if (ico_icon_stamp_clear_symbols(head, got) != 0) {
+        err = ERROR_BAD_EXE_FORMAT;
+    } else if (SetFilePointer(h, 0, NULL, FILE_BEGIN) == INVALID_SET_FILE_POINTER ||
+               !WriteFile(h, head, got, &put, NULL) || put != got) {
+        err = GetLastError() != 0 ? GetLastError() : ERROR_WRITE_FAULT;
+    }
+    CloseHandle(h);
+    return err;
 }
 
 /* the copy's own resources read back: the stamp's bytes and the group's
@@ -316,7 +423,7 @@ int main(void)
     static IcoIconStampResources res;
     const char *why = "";
     if (ico_icon_stamp_build(ico, icoN, &res, &why) != 0) {
-        log_line("refused: the icon file is not usable: %s (%lu bytes)", why, (unsigned long)icoN);
+        log_refused(stamp, "the icon file is not usable: %s (%lu bytes)", why, (unsigned long)icoN);
         free(ico);
         return 2;
     }
@@ -338,14 +445,18 @@ int main(void)
         return 1;
     }
 
-    static wchar_t tmp[32768];
+    remove_leftovers(s_exe);
+    static wchar_t tmp[32768], old[32768];
     if (_snwprintf(tmp, sizeof(tmp) / sizeof(tmp[0]), L"%ls.stamp-%lu.tmp", s_exe,
+                   (unsigned long)GetCurrentProcessId()) < 0 ||
+        _snwprintf(old, sizeof(old) / sizeof(old[0]), L"%ls.stamp-old-%lu", s_exe,
                    (unsigned long)GetCurrentProcessId()) < 0) {
         log_line("not stamped: the path is too long");
         free(ico);
         return 1;
     }
     tmp[sizeof(tmp) / sizeof(tmp[0]) - 1] = L'\0';
+    old[sizeof(old) / sizeof(old[0]) - 1] = L'\0';
     if (!CopyFileW(s_exe, tmp, FALSE)) {
         error_text(GetLastError(), err, sizeof(err));
         log_line("not stamped: the copy beside the program could not be made (%s)", err);
@@ -360,31 +471,89 @@ int main(void)
         free(ico);
         return 1;
     }
+    e = clear_symbols(tmp);
+    if (e != 0) {
+        error_text(e, err, sizeof(err));
+        log_line("not stamped: the copy's symbol table pointer could not be cleared (%s)", err);
+        DeleteFileW(tmp);
+        free(ico);
+        return 1;
+    }
     if (!verify(tmp, stamp, stampN, res.groupSize)) {
-        log_line("not stamped: the copy's resources did not read back as written");
+        log_refused(stamp, "the copy's resources did not read back as written");
         DeleteFileW(tmp);
         free(ico);
         return 1;
     }
     if (!same_program(s_exe, tmp, err, sizeof(err))) {
-        log_line("not stamped: the stamped copy is not the same program (%s)", err);
+        log_refused(stamp, "the stamped copy is not the same program (%s)", err);
         DeleteFileW(tmp);
         free(ico);
         return 1;
     }
-    if (!ReplaceFileW(s_exe, tmp, NULL, REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL)) {
+    if (!ReplaceFileW(s_exe, tmp, old, REPLACEFILE_IGNORE_MERGE_ERRORS, NULL, NULL)) {
+        const DWORD re = GetLastError();
         char err2[600];
-        error_text(GetLastError(), err, sizeof(err));
-        if (!MoveFileExW(tmp, s_exe, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        error_text(re, err, sizeof(err));
+        if (!exists(s_exe)) {
+            /* 1177 (the old program kept under the backup's name) or a
+               failure part-way: the program file is put back first */
+            if (exists(old) && MoveFileExW(old, s_exe, MOVEFILE_WRITE_THROUGH)) {
+                log_line("not stamped: the replace failed (%s) and left no program file; the "
+                         "program was put back from its backup; the next exit tries again",
+                         err);
+                DeleteFileW(tmp);
+                free(ico);
+                return 1;
+            }
             error_text(GetLastError(), err2, sizeof(err2));
+            if (MoveFileExW(tmp, s_exe, MOVEFILE_WRITE_THROUGH)) {
+                log_line("note: the replace failed (%s) and left no program file, the backup "
+                         "could not be put back (%s): the stamped copy was moved into its place",
+                         err, err2);
+                DeleteFileW(old);
+            } else {
+                char err3[600], oldU[1024], tmpU[1024];
+                error_text(GetLastError(), err3, sizeof(err3));
+                narrow(old, oldU, (int)sizeof(oldU));
+                narrow(tmp, tmpU, (int)sizeof(tmpU));
+                log_line("FAILED: the replace failed (%s) and left no program file; neither the "
+                         "backup (%s) nor the stamped copy (%s) could be moved back: the "
+                         "program is %s (the stamped one %s): rename either to the program's "
+                         "name",
+                         err, err2, err3, oldU, tmpU);
+                free(ico);
+                return 1;
+            }
+        } else if (!MoveFileExW(tmp, s_exe, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+            error_text(GetLastError(), err2, sizeof(err2));
+            if (!exists(s_exe)) {
+                char tmpU[1024];
+                narrow(tmp, tmpU, (int)sizeof(tmpU));
+                log_line("FAILED: the replace (%s) and the move (%s) failed and the program "
+                         "file is gone; the stamped copy is kept as %s: rename it to the "
+                         "program's name",
+                         err, err2, tmpU);
+                free(ico);
+                return 1;
+            }
             log_line("not stamped: the stamped copy could not take the program's place (replace: "
-                     "%s; move: %s)",
+                     "%s; move: %s); the program is unchanged, the next exit tries again",
                      err, err2);
             DeleteFileW(tmp);
+            DeleteFileW(old);
             free(ico);
             return 1;
+        } else {
+            log_line("note: the replace failed (%s); the stamped copy was moved over the program",
+                     err);
         }
-        log_line("note: the replace failed (%s); the stamped copy was moved over the program", err);
+    }
+    if (exists(old) && !DeleteFileW(old)) {
+        error_text(GetLastError(), err, sizeof(err));
+        log_line("note: the old program's backup could not be removed (%s); the next run removes "
+                 "it",
+                 err);
     }
     int pngs = 0;
     for (int i = 0; i < res.count; i++) {

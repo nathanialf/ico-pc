@@ -13,7 +13,7 @@
 (kept current after every merge; player words only)
 
 - On tablets and handhelds with the Adreno 740 chip running its own graphics driver, v0.11.0 drew a screen of noise and froze within seconds of the first scene. The game now draws the 3D scenery the old way on that chip and driver; a Turnip driver package keeps the faster way. When the graphics driver stops responding, the log now says which file the game is writing while it saves its report.
-- On phones and other tile-based graphics chips the pre-computation of the 3D scenery no longer goes through the screen's drawing hardware and back; cutscenes and busy scenes on slower phones should run faster again.
+- On phones the pre-computation of the 3D scenery no longer goes through the screen's drawing hardware and back, where the phone's graphics driver allows it; cutscenes and busy scenes on slower phones should run faster.
 - On Windows a sound device that took a long time to open (seen with a DualSense controller on USB) could stop the game from starting at all. The game now starts at once and the sound joins when the device is ready.
 - With Upscaling set to FSR 3.1, the distance fog could show thin vertical lines that stayed in place while the picture moved; the fog's fine pattern now changes with each frame's tiny picture shift so the upscaler smooths it out.
 - The short cut to black on the title screen while the game made its icon is gone; the title stays on screen. The icon itself is now the title's letter I instead of a plain cream square; it is made again after this update.
