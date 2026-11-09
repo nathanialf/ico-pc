@@ -1113,12 +1113,14 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   not due, 75 due, the count at 3 not due, the first at any last work), the replay pick (a vertex
   work at or above the block's mean) and its log line with the vertex work and "dump 2 of 3", and
   a block's share of a counter (the difference, or the value itself after a restart from 0), and
-  the GPU-bound hint at the end of the 10 s presents line (issue 123: the reporter's 3x blocks,
-  25.7 presented fps against 30 game fps, 217 late skips, GPU 37.7 ms, the fit 0.01 ms a thousand
-  over 376k: 2x, 3.8 + 33.9 x (2/3)^2 = 18.8 ms, word for word; nothing at the game's rate, without
-  late skips, with the GPU inside the step or with no game rate; the vertex work alone past the
-  budget: no step; 1x; a fractional scale of 2.5 rounding down to 2x; 4x of 6x at 25 game fps, the
-  largest offered step that fits; a cut buffer) (`window_scene`).
+  the GPU-bound hint at the end of the 10 s presents line (issue 123: the reporter's 3x figures,
+  25.7 presented fps against 30 game fps, 217 late skips, GPU 37.7 ms, a fit of 0.01 ms a thousand
+  over invocations spread 200k..552k (mean 376k): 2x, 3.8 + 33.9 x (2/3)^2 = 18.8 ms, word for
+  word; nothing at the game's rate, without late skips, with the GPU inside the step or with no
+  game rate; the reporter's own narrow 370k..382k and no fit at all: GPU-bound, no step named, the
+  reason given; the vertex work alone past the budget: no step; a flat line at 1x, at 2.5x rounding
+  down to 2x, and 4x of 6x at 25 game fps, the largest offered step that fits; a cut buffer)
+  (`window_scene`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the
   crash chain to the box, the variable and the relaunch environment, the `dst` field of a
   pipeline's or a start-up batch's note, its VU vertex pre-pass keys and modules, the skin check's

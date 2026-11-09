@@ -198,8 +198,8 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f);
    (gpuMs: the present allowance's median span less the display wait, the
    line's "GPU span") is over the game's step (1000 / gameFps ms); "" else.
    The arithmetic: the fit's vertex part V = b x the block's mean
-   invocations (window_scene_vu_fit; 0 without a line or with b not above
-   0, at most gpuMs) does not change with the resolution; the rest P =
+   invocations (window_scene_vu_fit; 0 with b not above 0, at most gpuMs)
+   does not change with the resolution; the rest P =
    gpuMs - V scales with the pixels, (K / scale)^2 at a scale K for the
    scene's scale now (scale, the scene's texels a GS pixel down); the hint
    names the largest offered resolution step (1, 2, 3, 4, 6, 8, 12, 16)
@@ -211,7 +211,12 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f);
    itself)"; with none "...: no lower resolution step would fit the game's
    rate (3.8 ms of vertex work by the fit + 33.9 ms that scales with the
    pixels: 3.8 + 33.9 x (1/3)^2 = 7.5 ms at 1x against 30.0 ms ...)" (or
-   "at 1x already" for a scale of 1 or less).  A hint only: the resolution
+   "at 1x already" for a scale of 1 or less).  Without a line (fit NULL,
+   under 3 replays, or window_scene_vu_fit refusing: the invocations not
+   spread enough) no step is named, since a vertex-bound block would read
+   as pixels: "; GPU-bound at 3x (the GPU takes 37.7 ms a picture, the step
+   33.3 ms at 30.0 game fps): no resolution hint (fit: not enough spread)"
+   ("fit: under 3 timed replays").  A hint only: the resolution
    never changes by itself (the v0.7.9 decision).  The length written */
 size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, double gameFps,
                                   unsigned skippedLate, double gpuMs, double scale,

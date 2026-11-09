@@ -270,7 +270,23 @@ size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, do
         return 0;
     }
     budget = 0.9 * period;
-    if (fit != NULL && fit->n > 0 && window_scene_vu_fit(fit, &a, &b, &r2) && b > 0.0) {
+    if (fit == NULL || fit->n < 3 || !window_scene_vu_fit(fit, &a, &b, &r2)) {
+        /* no line to split the time by (fewer than 3 timed replays, or
+           the invocations not spread enough: window_scene_vu_fit): a
+           vertex-bound block would be read as pixels and a lower step
+           named that does not help, so no step is named */
+        w = snprintf(out, cap,
+                     "; GPU-bound at %.4gx (the GPU takes %.1f ms a picture, the step %.1f ms at "
+                     "%.1f game fps): no resolution hint (fit: %s)",
+                     scale, gpuMs, period, gameFps,
+                     fit == NULL || fit->n < 3 ? "under 3 timed replays" : "not enough spread");
+        if (w < 0) {
+            out[0] = '\0';
+            return 0;
+        }
+        return (size_t)w < cap ? (size_t)w : cap - 1;
+    }
+    if (b > 0.0) {
         v = b * (fit->sx / fit->n);
         v = v < gpuMs ? v : gpuMs;
     }

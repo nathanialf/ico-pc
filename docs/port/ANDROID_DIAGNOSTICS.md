@@ -383,7 +383,11 @@ causes in it, each on its own lines. The lines to read, in the log's order:
   (`port/platform/window_scene.c` `window_scene_gpu_hint_text`): the vertex part is the block's VU
   fit's slope times its mean invocations (the `window: VU: ...` line's fit), the rest is taken to
   scale with the pixels, and the step is the largest offered Resolution step whose estimate is at
-  most 0.9 of the step. A hint only: the resolution never changes by itself (the owner's rule).
+  most 0.9 of the step. Without a fit line (under 3 timed replays, or the block's invocations not
+  spread by a factor of 2, which the fit needs) no step is named, since a vertex-bound block would
+  read as pixels: `; GPU-bound at 3x (the GPU takes 37.7 ms a picture, the step 33.3 ms at 30.0 game
+  fps): no resolution hint (fit: not enough spread)`; the reporter's heavy blocks (370k-382k
+  invocations) read that way. A hint only: the resolution never changes by itself (the owner's rule).
   The reporter's blocks at 3x: 25.6-25.8 presented fps against 30.0 game fps, 210-218 late skips,
   GPU span 35.5-38.0 ms; the fit `34.4 ms + 0.01 ms a thousand vertex invocations` over 376k
   (R^2 0.05: the invocations hardly varied in that scene, so the slope is small and uncertain; a
