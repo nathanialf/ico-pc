@@ -47,41 +47,67 @@ delivery raises a flag that `ico_app_icon_changed_take()` reads and clears.
 
 Files: `port/game/title_icon.c`, `title_icon.h` (the steps), `port/game/title_logo.c` (the name
 rule), `port/render/rd_frame.c` and `rd_core.c` (`rd_set_icon_pass`, `port/render/rd.h` "the
-title's icon pass"), `port/ui/ui_host.c` (`ui_host_curtain`).
+title's icon pass"), `port/render/rd_icon_hold.c`, `rd_icon_hold.h` (`rd_icon_hold`: the title's
+picture held on screen).
 
 The letter is geometry (a stage model), not a texture, and the screen-space transform runs in the
 vertex shaders, so the icon is cut from the title as it is drawn. `ico_title_logo_update` steps the
 capture once a tick (`ico_title_icon_tick`). Once the title's menu (Continue / New Game, layout 12 or
-13 on the European disc) has been up for 30 ticks with the logo shown and the model viewer off, and
-`ico_app_icon_wanted()` says so, the pass comes on:
+13 on the European disc) has been up for 30 ticks with the logo shown, the model viewer off and no
+game fade running (`gsb_fade`'s `fadeStatus` 0, or 3 held at level 0: the title fades in from its
+pale colour for some seconds after the menu shows; the ticks under it are not counted, the line
+`ico_pc: icon: waiting for the title's fade to end` once a run), and
+`ico_app_icon_wanted()` says so, the renderer is asked to hold the title's picture
+(`rd_icon_hold(true)`: from then on every present copies its output, before the overlay, into an
+output-sized texture), and once it holds one (`rd_icon_hold_ready()`, the tick after; at most
+`ICO_TITLE_ICON_HELD_WAIT` (10) ticks, then the line `ico_pc: icon: no picture of the title was
+presented in 10 ticks to keep on screen: the capture's frames show black`) the pass comes on:
 
 - the game side: `ico_title_logo_skip` answers 1 for every model but `I`, so `reg_DispObj` draws the
   letter alone (no game code changes);
-- the renderer: `rd_set_icon_pass(colour)` leaves out the UI and full-frame screen prims and the
-  deferred text (the menus) and makes the frame head clear SCENE to the colour, black first; world
-  draws and post passes are untouched;
-- the curtain: `ui_host_curtain(1)` puts an opaque black quad over the whole output at the start of
-  the presenter's top overlay layer, so the player sees black frames. It does not cover the popups:
-  without the CRT filter the top layer is drawn under the main overlay layer (`overlayRecord`,
-  `rd_present.c`: the touch controls under the HUD and the popups), so a popup that shows during
-  the capture is drawn over the black; with the filter the main layer is drawn into the filter's
-  grid, under the top layer (the capture waits for the filter to be off, below, so that case does
-  not arise).
+- the renderer: `rd_set_icon_pass(colour)` leaves out the UI and full-frame screen prims (the menus,
+  the game's fade, brightness and letterbox sprites), the deferred text and the post effects over
+  SCENE that are not the letter's (`rd_post`'s fog, glow and flare, depth of field, motion blur,
+  aura, eye blur and film noise: `rd__icon_pass_drops_post`, `port/render/rd_icon_hold.h`), and makes
+  the frame head clear SCENE to the colour, black first; world draws, the reduction (with its tint)
+  and copies are untouched. The fog matters most: it is drawn by depth, and with the backdrop and
+  the castle left out the pass's depth is the cleared far plane over the whole frame, so with the
+  fog drawn the pass frames would be the fog colour (the title's table entry 0, `DFDBCD`, about
+  86 % over the clear) through the reduction's tint on every pixel, in both pictures, and the matte
+  would cut that as the letter: a box of the whole frame and one colour, `(255, 247, 227)` at alpha
+  215, on every pixel of the icon (the arithmetic is in the comment at `rd_post`'s drop).
+  At the off one line counts what the pass left out: `rd: icon pass: frames A..B drew the title's
+  letter alone: N screen prim calls (the menus, the fade, the brightness), N text items and N post
+  effects (the fog, the glow, the blurs) left out`;
+- the hold: every present whose picture holds the pass (its frame at or past the frame open when
+  the pass came on, and not yet past the pass's last frame by `ico_title_icon_present_clean`'s rule;
+  `rd__icon_hold_tainted`) is rendered and copied for the shot as any other, then the held picture is
+  drawn over the whole output, one texel a pixel (`rd_present.c` `rd__present_record`, after
+  `captureRecord`, before the overlay: the popups, the HUD and the touch controls stay live). The
+  player sees the title's last picture, still, for the half second the capture takes; nothing turns
+  black. With no picture held (no present between the hold and the pass: the window minimised) those
+  presents are cleared to black instead, the old curtain's look. The first present past the pass's
+  frames shows the live picture again. The frames, their replay and the pictures the shot reads are
+  the same with and without the hold, so the icon files are too.
 
 The shot is armed (`rd_capture_shot`, with its own answer slot: the pause picture's deferred slot is
 polled by `state_host.c` every host step) after three ticks with the colour in force, because the tick
 the colour changed had already recorded the menus and an in-between picture also reads the tick
-before. The shot copies the presentation box before the overlay, so the curtain is never in it. Once
-the picture over black is back, the clear turns white and the same wait and shot follow. Then the
-pass goes off, the pair goes to `ico_app_icon_deliver`, and the curtain comes off at the first
-present past the pass's frames: `rd_icon_pass_last_frame()` at the pass's off is the newest frame
-number given out (the frame open then), and the curtain stays while `rd_last_present_info()` names
-that frame or an older one, or blends a later one with it (alpha under 1 and the frame before at or
-under it; `ico_title_icon_present_clean`). A frame walked before the pass went off may be
-presented several ticks later, and its picture shows white or the bare letter. After
-`ICO_TITLE_ICON_HOLD_MAX` (60) ticks without such a present the curtain comes off anyway, with the
-line `ico_pc: icon: no picture past the pass's frames (frame N) was presented in 60 ticks: the
-curtain comes off`. A pair refused as moved
+before. The shot copies the presentation box before the held picture is drawn, so the shot is the
+pass's own picture. Once the picture over black is back, the clear turns white and the same wait and
+shot follow. Then the pair goes to `ico_app_icon_deliver` (on the game thread, 30 to 130 ms at
+3840 x 2160: the ghost test and the matte read every pixel of both pictures; the PNG and the `.ico`
+are of the 256 x 256 image; the presents of that step still show the held picture, the pass being on),
+the pass goes off, and the hold is released at the first present past the pass's frames:
+`rd_icon_pass_last_frame()` at the pass's off is the newest frame number given out (the frame open
+then), and the hold stays while `rd_last_present_info()` names that frame or an older one, or blends
+a later one with it (alpha under 1 and the frame before at or under it;
+`ico_title_icon_present_clean`; the renderer applies the same rule to each present, so the live
+picture is back from that present on whether or not the game thread has released the hold yet). A
+frame walked before the pass went off may be presented several ticks later, and its picture is the
+white field or the bare letter. After `ICO_TITLE_ICON_HOLD_MAX` (60) ticks without such a present
+the hold is released anyway, with the line `ico_pc: icon: no picture past the pass's frames (frame
+N) was presented in 60 ticks: the held picture is released`. A pair refused as moved
 (`ICO_APP_ICON_GHOST`, or the two pictures of different sizes) is taken again once; a second refusal
 cuts the icon from the picture over black alone (`ico_app_icon_deliver_single`). An empty answer
 (the present dropped it) or none within 60 ticks arms the shot again, at most three times in a run;
@@ -99,6 +125,12 @@ black alone`; `ico_pc: icon: could not be made (the lines above say why) ...`;
 `ico_pc: icon: the title's picture was not taken (<why>): trying again`; `ico_pc: icon: no picture of
 the title came back (<why>; <n> tries): no icon made this run, the next start tries again`;
 `ico_pc: icon: the title's menu was left during the capture: tried again the next time it shows`.
+The renderer's lines say the capture never showed: `rd: icon: the capture's frames are drawn off
+screen from frame N: the title's last picture stays on screen` at the pass's first present, and
+`rd: icon: the title held on screen for N presents while the capture ran (its frames A..B drawn off
+screen, the held picture frame F's, copied C times): the live picture is back at frame M` (or `the
+hold released at frame M` when the safety net released it first); presents cleared to black for
+want of a held picture add `rd: icon: N presents of the capture's frames were black: ...`.
 
 The capture needs the renderer and the title stage, which are up only at the title, so the first
 run's icon (and the first run's after an update) appears at its first title screen; the next start
@@ -291,6 +323,7 @@ an `.ico` the writer made, the refusals, the stamp text and the quoting) and `rd
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)), with the guard's cases in `app_icon_files_test` and the
 icon field's in `steam_shortcut_test` (`steam_shortcut`: `ico_steam_vdf_set_icon` on every outcome, the
 whole job with an old entry, a new entry, the player's icon and no icon file); the capture's are `title_logo_test` (`title_logo`: the
-name rule and the steps with the renderer and the files stubbed) and `rd_icon_pass_test`
-(`rd_icon_pass`: the renderer's pass recorded without a device,
-[TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+name rule and the steps with the renderer and the files stubbed), `rd_icon_pass_test`
+(`rd_icon_pass`: the renderer's pass recorded without a device) and `rd_icon_hold_test`
+(`rd_icon_hold`, `rd_icon_hold_gl`: the held picture presented on a device while the shot reads the
+pass's own, [TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).

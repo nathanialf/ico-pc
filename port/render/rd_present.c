@@ -99,6 +99,7 @@
 #include "rd_tone.h"
 #include "rd_upscale.h"
 #include "rd_fsr3.h"
+#include "rd_icon_hold.h"
 #include "shader_consts.h"
 
 typedef struct RdPresentPreset {
@@ -2591,6 +2592,10 @@ void rd__present_record(RhiCommandList cl)
      * CRT filter with UI in the grid it was taken above, from a pass
      * without that UI (a no-op here then) */
     captureRecord(cl, out, outState, open, filtered ? &crtBox : &box);
+    /* the title's icon capture: a picture of its pass, copied above for the
+     * capture, is covered by the last picture shown before it (rd.h
+     * rd_icon_hold; nothing without a hold) */
+    rd__icon_hold_record(cl, out, outState, s_outFormat, s_outW, s_outH, open);
     overlayRecord(cl, out, &box, uiInPicture, open);
     if (open) {
         rhi_cmd_end_render_pass(cl);
@@ -2631,6 +2636,7 @@ void rd__present_shutdown(void)
         shotHand(NULL, 0, 0); /* a shot no present took: dropped */
     }
     memset(&s_shot, 0, sizeof(s_shot));
+    rd__icon_hold_shutdown(); /* the held picture's texture */
     if (s_probe.tex.id) {
         rhi_destroy_texture(s_probe.tex); /* rd_display_probe's */
     }

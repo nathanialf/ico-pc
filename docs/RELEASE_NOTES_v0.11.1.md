@@ -17,3 +17,4 @@
 - On phones and other tile-based graphics chips the pre-computation of the 3D scenery no longer goes through the screen's drawing hardware and back; cutscenes and busy scenes on slower phones should run faster again.
 - On Windows a sound device that took a long time to open (seen with a DualSense controller on USB) could stop the game from starting at all. The game now starts at once and the sound joins when the device is ready.
 - With Upscaling set to FSR 3.1, the distance fog could show thin vertical lines that stayed in place while the picture moved; the fog's fine pattern now moves with the picture.
+- The short cut to black on the title screen while the game made its icon is gone; the title stays on screen. The icon itself is now the title's letter I instead of a plain cream square; it is made again after this update.
