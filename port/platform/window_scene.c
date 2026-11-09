@@ -234,6 +234,70 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f)
     return (size_t)w < cap ? (size_t)w : cap - 1;
 }
 
+/* the Resolution row's whole scales (port/ui/settings.c kResScales) */
+static const int kHintScales[] = {1, 2, 3, 4, 6, 8, 12, 16};
+
+size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, double gameFps,
+                                  unsigned skippedLate, double gpuMs, double scale,
+                                  const SceneVuFit *fit)
+{
+    double a, b, r2, v = 0.0, p, period, budget;
+    int k = 0, w;
+
+    if (cap == 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (!(gameFps > 0.0) || !(presentedFps < gameFps) || skippedLate == 0 || !(scale > 0.0)) {
+        return 0;
+    }
+    period = 1000.0 / gameFps;
+    if (!(gpuMs > period)) {
+        return 0;
+    }
+    budget = 0.9 * period;
+    if (fit != NULL && fit->n > 0 && window_scene_vu_fit(fit, &a, &b, &r2) && b > 0.0) {
+        v = b * (fit->sx / fit->n);
+        v = v < gpuMs ? v : gpuMs;
+    }
+    p = gpuMs - v;
+    for (size_t i = 0; i < sizeof kHintScales / sizeof kHintScales[0]; i++) {
+        const double kk = (double)kHintScales[i];
+        if (kk < scale - 1e-6 && v + p * (kk / scale) * (kk / scale) <= budget) {
+            k = kHintScales[i];
+        }
+    }
+    if (scale <= 1.0 + 1e-6) {
+        w = snprintf(out, cap,
+                     "; the GPU takes %.1f ms a picture at this resolution (%.4gx): at 1x "
+                     "already, no lower resolution step is offered (%.1f ms of vertex work by the "
+                     "fit + %.1f ms that scales with the pixels, against %.1f ms, 0.9 of the %.1f "
+                     "ms step at %.1f game fps)",
+                     gpuMs, scale, v, p, budget, period, gameFps);
+    } else if (k == 0) {
+        w = snprintf(out, cap,
+                     "; the GPU takes %.1f ms a picture at this resolution (%.4gx): no lower "
+                     "resolution step would fit the game's rate (%.1f ms of vertex work by the fit "
+                     "+ %.1f ms that scales with the pixels: %.1f + %.1f x (1/%.4g)^2 = %.1f ms at "
+                     "1x against %.1f ms, 0.9 of the %.1f ms step at %.1f game fps)",
+                     gpuMs, scale, v, p, v, p, scale, v + p / (scale * scale), budget, period,
+                     gameFps);
+    } else {
+        w = snprintf(out, cap,
+                     "; the GPU takes %.1f ms a picture at this resolution (%.4gx): %dx would fit "
+                     "the game's rate (%.1f ms = %.1f ms of vertex work by the fit + %.1f ms that "
+                     "scales with the pixels: %.1f + %.1f x (%d/%.4g)^2 = %.1f ms, under %.1f ms, "
+                     "0.9 of the %.1f ms step at %.1f game fps; a hint: nothing changes by itself)",
+                     gpuMs, scale, k, gpuMs, v, p, v, p, k, scale,
+                     v + p * ((double)k / scale) * ((double)k / scale), budget, period, gameFps);
+    }
+    if (w < 0) {
+        out[0] = '\0';
+        return 0;
+    }
+    return (size_t)w < cap ? (size_t)w : cap - 1;
+}
+
 size_t window_scene_images_text(char *out, size_t cap, uint64_t images, uint64_t inUse)
 {
     int w;
