@@ -13,13 +13,19 @@
  *   off       Enhanced 2x with a fade: the marker turned into an RDC_NOP
  *             and the frame replayed again gives DISPLAY and the present
  *             byte for byte (the marker is nothing without the split); no
- *             marker counted, no UPSCALED, the display scale the scene's
+ *             marker counted, no UPSCALED, the display scale the scene's;
+ *             a game-shaped keep frame (the head's clear, the brightness,
+ *             the keep sprite, a fade; rd_end_frame(1)) the same with its
+ *             marker a NOP, from the same DISPLAY; no display layer begun
+ *             and no keep frame held
  *   test      the upscaler's test at Enhanced 3x, ratio 1.5 (FSR's
  *             Quality): SCENE at 2x (1024 x 1024), DISPLAY at 3x
  *             (1536 x 768), UPSCALED 1536 x 1536 and within 3 levels of
  *             SCENE upscaled bilinearly on the CPU at all but 0.1 % of its
- *             texels; one dispatch and one reduction remapped a frame; the
- *             fades fold off (it folds the same frame with the switch off)
+ *             texels (a frame without list 11: the composite is the
+ *             upscale alone); one dispatch and one reduction reading the
+ *             composite a frame; the fades fold off (it folds the same
+ *             frame with the switch off)
  *   guard     ratio 2 at Enhanced 2x (the scene at 1x), a full-frame sprite
  *             over a black clear: with the jitter (0.25, 0.25) SCENE's
  *             column 0 equals column 1 and row 0 row 1 everywhere (the
@@ -37,6 +43,21 @@
  *             x 1.5): the scene 1.5 / 1.5 = 1 down; Auto's cap 1 at ratio
  *             1.25 (the scene 1.2 uncapped) gives the scene 1 down and keeps
  *             DISPLAY at the window's 384 rows
+ *   layer     the display layer (rd_layer.h) at Enhanced 3x: a 64 x 64
+ *             nearest-filtered opaque UI sprite in list 11 with the
+ *             brightness and a fade (both of level 0) over a scene: the
+ *             sprite's inside on DISPLAY (2 texels in from its edges) byte
+ *             for byte with the upscaler off and with the test's upscaler
+ *             at 1.5 (drawn into the display-scale composite after the
+ *             upscale), while the scene around it differs; one layer frame
+ *             a picture
+ *   keep      ten game-shaped keep frames after a picture under the
+ *             upscaler (Enhanced 3x, 1.5): no dispatch, one keep frame held
+ *             and one keep copy each, and DISPLAY each tick within 2 levels
+ *             of the tick before's times 112 / 128 at every texel (the
+ *             composite held 1:1, darkened once a tick); again at 688 x 448
+ *             (16:9) in a 1280 x 720 window, the composite a Full pixel
+ *             crop (ox > 0)
  * Any validation error fails the test.  "rd_upscale_test off" runs the
  * scales, marker and off cases alone (rd_upscale_off_mali and
  * rd_upscale_off_tiler: the marker a NOP under a phone's limits and under
@@ -48,6 +69,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_jitter.h"
+#include "rd_layer.h"
 #include "rd_upscale.h"
 #include "rd_velocity.h"
 #include "vk/rhi_vk.h"
@@ -236,6 +258,98 @@ static void fillFrame(void)
     fillFrameCut(0);
 }
 
+/* the frame's GS size for the keep frames and the wide frame (rd_init's) */
+static int32_t s_W = GS, s_H = GS;
+
+/* a game-shaped keep frame (StageManager.c's fade: fbKeep): the head's
+ * clear in list 11 (rd_frame_head), the brightness at level 0, the keep
+ * sprite (rd_post.c postKeep: DISPLAY at 112), a fade of level 0, the
+ * reduction; lists 11-12 replayed alone */
+static void keepFrame(float aspect)
+{
+    rd_begin_frame();
+    RdFrameHead h;
+    memset(&h, 0, sizeof(h));
+    h.rgba[0] = 232;
+    h.rgba[1] = 240;
+    h.rgba[2] = 248;
+    h.rgba[3] = 0x80;
+    h.gsW = (uint32_t)s_W;
+    h.gsH = (uint32_t)s_H;
+    h.aspect = aspect;
+    h.wExact = s_W != GS ? 384.0f * aspect : 0.0f; /* GsBase.c gsFrame.wExact */
+    h.clear = 1;
+    rd_frame_head(&h);
+    rd_select_list(11);
+    RdPostParams p;
+    memset(&p, 0, sizeof(p));
+    rd_post(RD_POST_BRIGHTNESS, &p); /* level 0: the picture as it is */
+    memset(&p, 0, sizeof(p));
+    rd_post(RD_POST_KEEP, &p); /* DISPLAY at 112 */
+    memset(&p, 0, sizeof(p));
+    memcpy(p.rgba, kFade, 3);
+    rd_post(RD_POST_FADE, &p); /* level 0 */
+    reduction();
+    rd_end_frame(1);
+}
+
+/* 12.4 window coordinates of the frame's (x, y) at the frame size in force */
+static int32_t wx(int32_t x16)
+{
+    return (2048 - s_W / 2) * 16 + x16;
+}
+
+static int32_t wy(int32_t y16)
+{
+    return (2048 - s_H / 2) * 16 + y16;
+}
+
+/* a scene over the whole frame at the frame size in force: a Gouraud
+ * triangle and a bilinear textured sprite over a grey clear; list 11: a
+ * 64 x 64 nearest-filtered opaque UI sprite at (ux, uy) when ui, with the
+ * brightness and a fade of level 0; the reduction */
+static void sceneFrame(int ui, int32_t ux, int32_t uy)
+{
+    static const uint8_t kBack[4] = {0x30, 0x38, 0x40, 0x80};
+    rd_begin_frame();
+    rd_select_list(0);
+    rd_set_target(rd_target(RD_TARGET_SCENE), (RdTarget){0}, (uint32_t)s_W, (uint32_t)s_H, 0);
+    rd_clear_target(rd_target(RD_TARGET_SCENE), kBack, 0, 0);
+    opaque2D();
+    rd_texture_off();
+    const RdScreenVtx t[3] = {vtx(wx(20 * 16 + 3), wy(10 * 16 + 5), kRed, 0, 0),
+                              vtx(wx((s_W - 10) * 16 + 9), wy(60 * 16 + 1), kGreen, 0, 0),
+                              vtx(wx(90 * 16 + 14), wy((s_H - 8) * 16 + 7), kBlue, 0, 0)};
+    rd_screen_prims(RD_PRIM_TRIANGLES, t, 3, RD_SPACE_WORLD, 1, 0);
+    rd_sampler(RD_FILTER_LINEAR, RD_FILTER_LINEAR, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    rd_texture(s_tex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+    const RdScreenVtx q[2] = {
+        vtx(wx((s_W / 2) * 16 + 4), wy(200 * 16 + 4), kGrey, 8, 8),
+        vtx(wx((s_W / 2 + 160) * 16 + 4), wy(360 * 16 + 4), kGrey, 16 * 16 + 8, 16 * 16 + 8)};
+    rd_screen_prims(RD_PRIM_SPRITES, q, 2, RD_SPACE_WORLD, 1, 0);
+    rd_texture_off();
+    if (ui) {
+        rd_select_list(11);
+        rd_set_target(rd_target(RD_TARGET_SCENE), (RdTarget){0}, (uint32_t)s_W, (uint32_t)s_H, 0);
+        opaque2D();
+        rd_sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+        rd_texture(s_tex, RD_TEXFN_MODULATE, RD_TCC_RGBA);
+        const RdScreenVtx u[2] = {
+            vtx(wx(ux * 16), wy(uy * 16), kGrey, 0, 0),
+            vtx(wx((ux + 64) * 16), wy((uy + 64) * 16), kGrey, 16 * 16, 16 * 16)};
+        rd_screen_prims(RD_PRIM_SPRITES, u, 2, RD_SPACE_UI, 1, 0);
+        rd_texture_off();
+        RdPostParams p;
+        memset(&p, 0, sizeof(p));
+        rd_post(RD_POST_BRIGHTNESS, &p);
+        memset(&p, 0, sizeof(p));
+        memcpy(p.rgba, kFade, 3);
+        rd_post(RD_POST_FADE, &p);
+    }
+    reduction();
+    rd_end_frame(0);
+}
+
 static void settings(RdPreset preset, float scale, float cap)
 {
     RdSettings s;
@@ -343,10 +457,39 @@ static void testOff(void)
         CHECK(memcmp(s_outA, s_outB, sizeof(s_outA)) == 0,
               "off: the present differs with the marker a NOP");
     }
+    /* a keep frame (lists 11-12 over DISPLAY) the same with its marker a
+     * NOP, both from the rich frame's DISPLAY (the frame replayed again
+     * before each: a keep frame darkens what it finds) */
+    const RdFrame *rich = rd__last_frame();
+    keepFrame(4.0f / 3.0f);
+    RdFrame *k = (RdFrame *)rd__last_frame();
+    CHECK(k && k->keep, "off: the keep frame is not a keep frame");
+    if (k && k->keep && rich && rich != k &&
+        readTarget(RD_TARGET_DISPLAY, s_dispA, sizeof(s_dispA), &w, &h) && readOut(s_outA)) {
+        RdCmd *km = markerOf(k, &next);
+        CHECK(km != NULL, "off: no marker in the keep frame");
+        if (km && rd__replay_frame(rich, 0, true)) {
+            km->type = RDC_NOP;
+            const bool kok = rd__replay_frame(k, 1, true);
+            km->type = RDC_UPSCALE_POINT;
+            CHECK(kok, "off: the keep frame's replay with the marker a NOP");
+            if (kok && readTarget(RD_TARGET_DISPLAY, s_dispB, sizeof(s_dispB), &w2, &h2) &&
+                readOut(s_outB)) {
+                CHECK(w2 == w && h2 == h && memcmp(s_dispA, s_dispB, (size_t)w * h * 4) == 0,
+                      "off: the keep frame's DISPLAY differs with the marker a NOP");
+                CHECK(memcmp(s_outA, s_outB, sizeof(s_outA)) == 0,
+                      "off: the keep frame's present differs with the marker a NOP");
+            }
+        }
+    }
     const RdUpscaleStats *after = rd__upscale_stats();
     CHECK(after->points == before.points && after->dispatched == before.dispatched,
           "off: the marker counted (%u -> %u)", before.points, after->points);
-    printf("  off: DISPLAY and the present byte for byte with the marker a NOP\n");
+    CHECK(after->layerFrames == before.layerFrames && after->keepHeld == before.keepHeld,
+          "off: the display layer began (%u -> %u frames, %u -> %u keep frames held)",
+          before.layerFrames, after->layerFrames, before.keepHeld, after->keepHeld);
+    printf("  off: DISPLAY and the present byte for byte with the marker a NOP, a keep frame "
+           "too; no display layer\n");
 }
 
 /* UPSCALED (uw x uh) against SCENE (sw x sh) upscaled bilinearly on the
@@ -399,9 +542,12 @@ static void testUpscale(void)
 
     rd__upscale_set(true, 1.5f);
     settings(RD_PRESET_ENHANCED, 3.0f, 0.0f); /* applied at the next frame, the split with it */
-    const RdUpscaleStats before = *rd__upscale_stats();
     richFrame(0x40);
     const uint32_t foldedOn = g_rdPerf.fadesFolded;
+    /* without list 11 the composite is the upscale alone (the display
+     * layer draws list 11's fade into it after the dispatch) */
+    const RdUpscaleStats before = *rd__upscale_stats();
+    richFrame(0);
     float dx = 0.0f, dy = 0.0f;
     rd__display_scale(&dx, &dy);
     CHECK(rd__upscale_point_on() && near(g_rd.sceneSx, 2.0f) && near(g_rd.sceneSy, 2.0f) &&
@@ -410,9 +556,10 @@ static void testUpscale(void)
           (double)dx, (double)dy);
     const RdUpscaleStats *st = rd__upscale_stats();
     CHECK(st->dispatched == before.dispatched + 1u && st->remapped == before.remapped + 1u &&
-              st->refused == before.refused,
-          "test: dispatched %u -> %u, remapped %u -> %u, refused %u -> %u", before.dispatched,
-          st->dispatched, before.remapped, st->remapped, before.refused, st->refused);
+              st->refused == before.refused && st->layerFrames == before.layerFrames + 1u,
+          "test: dispatched %u -> %u, remapped %u -> %u, refused %u -> %u, layer frames %u -> %u",
+          before.dispatched, st->dispatched, before.remapped, st->remapped, before.refused,
+          st->refused, before.layerFrames, st->layerFrames);
     if (!readTarget(RD_TARGET_SCENE, s_scene, sizeof(s_scene), &sw, &sh) ||
         !readTarget(RD_TARGET_DISPLAY, s_dispA, sizeof(s_dispA), &dw, &dh) ||
         !rd__upscale_read(s_up, sizeof(s_up), &uw, &uh)) {
@@ -585,6 +732,174 @@ static void testWindow(void)
     fillFrame();
 }
 
+/* (c) the display layer's pixels: the UI sprite drawn after the upscale at
+ * the display scale is the sprite drawn into SCENE at that scale without
+ * the upscaler, byte for byte inside it */
+static void testLayerPixels(void)
+{
+    enum { UX = 300, UY = 100 };
+
+    uint32_t w = 0, h = 0, w2 = 0, h2 = 0;
+    rd__upscale_set(false, 0.0f);
+    settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
+    sceneFrame(1, UX, UY);
+    sceneFrame(1, UX, UY);
+    if (!readTarget(RD_TARGET_DISPLAY, s_dispA, sizeof(s_dispA), &w, &h)) {
+        return;
+    }
+    rd__upscale_set(true, 1.5f);
+    settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
+    sceneFrame(1, UX, UY); /* the split applied */
+    const RdUpscaleStats before = *rd__upscale_stats();
+    sceneFrame(1, UX, UY);
+    const RdUpscaleStats *st = rd__upscale_stats();
+    CHECK(st->dispatched == before.dispatched + 1u && st->layerFrames == before.layerFrames + 1u &&
+              st->layerDraws >= before.layerDraws + 3u && st->layerLate == before.layerLate,
+          "layer: dispatched %u -> %u, layer frames %u -> %u, draws %u -> %u, late %u -> %u",
+          before.dispatched, st->dispatched, before.layerFrames, st->layerFrames, before.layerDraws,
+          st->layerDraws, before.layerLate, st->layerLate);
+    CHECK(g_rdPerf.layerDraws >= 3u, "layer: RdPerfRecord.layerDraws %u", g_rdPerf.layerDraws);
+    if (!readTarget(RD_TARGET_DISPLAY, s_dispB, sizeof(s_dispB), &w2, &h2)) {
+        return;
+    }
+    CHECK(w == 1536 && h == 768 && w2 == w && h2 == h, "layer: DISPLAY %ux%u and %ux%u", w, h, w2,
+          h2);
+    if (w != 1536 || h != 768 || w2 != w || h2 != h) {
+        return;
+    }
+    /* the sprite on DISPLAY: GS x * 3, GS y / 2 * 3 (the reduction halves
+     * the rows), 2 texels in from each edge */
+    const uint32_t x0 = UX * 3 + 2, x1 = (UX + 64) * 3 - 2;
+    const uint32_t y0 = UY * 3 / 2 + 2, y1 = (UY + 64) * 3 / 2 - 2;
+    uint32_t badRows = 0, firstBad = ~0u;
+    for (uint32_t y = y0; y < y1; y++) {
+        const size_t at = ((size_t)y * w + x0) * 4;
+        if (memcmp(&s_dispA[at], &s_dispB[at], (size_t)(x1 - x0) * 4) != 0) {
+            badRows++;
+            firstBad = firstBad == ~0u ? y : firstBad;
+        }
+    }
+    CHECK(badRows == 0, "layer: the UI sprite differs on %u rows of %u (the first %u)", badRows,
+          y1 - y0, firstBad);
+    /* the scene around it went through the upscaler: not the same bytes */
+    CHECK(memcmp(s_dispA, s_dispB, (size_t)w * 100 * 4) != 0,
+          "layer: the scene above the sprite is the same with and without the upscaler");
+    printf("  layer: the UI sprite's %ux%u texels on DISPLAY byte for byte with and without the "
+           "upscaler, the scene not\n",
+           x1 - x0, y1 - y0);
+}
+
+/* (a) keep frames hold the composite: DISPLAY_n within 2 levels of
+ * DISPLAY_{n-1} * 112 / 128 at every texel (RGB), no dispatch */
+static void keepRun(const char *what, float aspect)
+{
+    uint32_t w = 0, h = 0, w2 = 0, h2 = 0;
+    if (!readTarget(RD_TARGET_DISPLAY, s_dispA, sizeof(s_dispA), &w, &h)) {
+        return;
+    }
+    uint64_t sum0 = 0;
+    for (size_t i = 0; i < (size_t)w * h * 4; i++) {
+        sum0 += (i & 3u) != 3u ? s_dispA[i] : 0u;
+    }
+    CHECK(sum0 > (uint64_t)w * h * 3u * 16u, "keep %s: DISPLAY nearly black before the run (%llu)",
+          what, (unsigned long long)sum0);
+    uint8_t *prev = s_dispA, *cur = s_dispB;
+    for (int n = 0; n < 10; n++) {
+        const RdUpscaleStats before = *rd__upscale_stats();
+        keepFrame(aspect);
+        const RdUpscaleStats *st = rd__upscale_stats();
+        CHECK(st->dispatched == before.dispatched && st->keepHeld == before.keepHeld + 1u &&
+                  st->keepCopies == before.keepCopies + 1u &&
+                  st->layerRefused == before.layerRefused,
+              "keep %s tick %d: dispatched %u -> %u, held %u -> %u, copies %u -> %u, refused %u -> "
+              "%u",
+              what, n, before.dispatched, st->dispatched, before.keepHeld, st->keepHeld,
+              before.keepCopies, st->keepCopies, before.layerRefused, st->layerRefused);
+        if (!readTarget(RD_TARGET_DISPLAY, cur, sizeof(s_dispA), &w2, &h2)) {
+            return;
+        }
+        CHECK(w2 == w && h2 == h, "keep %s tick %d: DISPLAY %ux%u, was %ux%u", what, n, w2, h2, w,
+              h);
+        if (w2 != w || h2 != h) {
+            return;
+        }
+        uint32_t bad = 0, worstAt = 0;
+        int worst = 0;
+        for (size_t i = 0; i < (size_t)w * h * 4; i++) {
+            if ((i & 3u) == 3u) {
+                continue;
+            }
+            const int want = prev[i] * 112 / 128;
+            const int e = abs((int)cur[i] - want);
+            if (e > worst) {
+                worst = e;
+                worstAt = (uint32_t)(i / 4);
+            }
+            bad += e > 2;
+        }
+        CHECK(bad == 0,
+              "keep %s tick %d: %u channels more than 2 levels from 112/128 of the tick before "
+              "(worst %d at %u,%u)",
+              what, n, bad, worst, worstAt % w, worstAt / w);
+        if (n == 9) {
+            printf("  keep %s: ten keep frames held without a dispatch, DISPLAY %ux%u darkened "
+                   "112/128 a tick (the last tick's worst %d levels)\n",
+                   what, w, h, worst);
+        }
+        uint8_t *t = prev;
+        prev = cur;
+        cur = t;
+    }
+}
+
+static void testKeepHold(void)
+{
+    rd__upscale_set(true, 1.5f);
+    settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
+    rd__upscale_set_phases(0);
+    sceneFrame(0, 0, 0); /* the split applied */
+    sceneFrame(0, 0, 0); /* the composite holds the picture */
+    keepRun("4:3 3x", 4.0f / 3.0f);
+    /* the picture after the run: dispatched again, with a new history */
+    const RdUpscaleStats before = *rd__upscale_stats();
+    fillFrame();
+    const RdUpscaleStats *st = rd__upscale_stats();
+    CHECK(st->dispatched == before.dispatched + 1u &&
+              st->resetsBy[RD_UPSCALE_RESET_KEEP] == before.resetsBy[RD_UPSCALE_RESET_KEEP] + 1u,
+          "keep: the picture after the run: dispatched %u -> %u, keep-run resets %u -> %u",
+          before.dispatched, st->dispatched, before.resetsBy[RD_UPSCALE_RESET_KEEP],
+          st->resetsBy[RD_UPSCALE_RESET_KEEP]);
+}
+
+/* (a) at 16:9: the frame 688 x 448 in a 1280 x 720 window (Enhanced, the
+ * window's resolution): DISPLAY and the composite a Full pixel crop */
+static void testKeepHoldWide(void)
+{
+    rd_shutdown();
+    s_W = 688;
+    s_H = 448;
+    RdSettings s;
+    memset(&s, 0, sizeof(s));
+    s.preset = RD_PRESET_ENHANCED;
+    s.outputWidth = 1280;
+    s.outputHeight = 720;
+    s.aspect = 16.0f / 9.0f;
+    s.vsync = 1;
+    s.fullPixel = 1;
+    rd__upscale_set(true, 1.5f);
+    if (!rd_init((uint32_t)s_W, (uint32_t)s_H, &s, NULL)) {
+        CHECK(0, "keep 16:9: rd_init 688x448");
+        return;
+    }
+    s_tex = rd_create_texture(16, 16, s_texel, RD_TEXA_80_80, "upscale test");
+    sceneFrame(0, 0, 0); /* the split applied */
+    sceneFrame(0, 0, 0);
+    const RdTargetRec *c = rd__layer_rec(RD_LAYER_SLOT_COMPOSITE);
+    CHECK(c->live && c->ox > 0.0f, "keep 16:9: the composite %ux%u ox %g (want a Full pixel crop)",
+          c->tw, c->th, (double)c->ox);
+    keepRun("16:9 Full pixel", 16.0f / 9.0f);
+}
+
 int main(int argc, char **argv)
 {
     const bool offOnly = argc > 1 && strcmp(argv[1], "off") == 0;
@@ -620,6 +935,9 @@ int main(int argc, char **argv)
         testJitter();
         testReset();
         testWindow();
+        testLayerPixels();
+        testKeepHold();
+        testKeepHoldWide(); /* last: rd_init again at 688 x 448 */
     }
     CHECK(rd__not_implemented_count() == 0, "no stubbed command replayed");
     const uint32_t verr = rhi_vk_validation_error_count();

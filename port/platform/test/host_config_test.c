@@ -737,6 +737,11 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("upscale_test", "true"), "1") == 0);
     CHECK(strcmp(ico_dev_env_value("upscale_test", "false"), "0") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.upscale_test"), "upscale_test") == 0);
+    /* display_layer: the display layer's A/B (port/render/rd_layer.c) */
+    CHECK(strcmp(ico_dev_env_name("display_layer"), "ICO_RD_DISPLAY_LAYER") == 0);
+    CHECK(strcmp(ico_dev_env_value("display_layer", "false"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("display_layer", "true"), "1") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.display_layer"), "display_layer") == 0);
     /* upscale_debug_view, upscale_debug_checks: FSR 3.1's debug view and
        input checks (port/render/rd_fsr3.c) */
     CHECK(strcmp(ico_dev_env_name("upscale_debug_view"), "ICO_RD_UPSCALE_DEBUG_VIEW") == 0);

@@ -39,8 +39,12 @@
  * texture and texel geometry (tw, th, sx, sy, ox) for that draw only, so
  * the UV mapping follows UPSCALED's texels; nothing recorded changes
  * (never rd_alias_target, which is record-time and would land in dumps).
- * The fades fold is off while the split is in force (rd_fades_fold.c): the
- * fades are drawn into SCENE before the dispatch.
+ * The fades fold is off while the split is in force (rd_fades_fold.c).
+ * With the display layer (rd_layer.h, the default) the dispatch is at the
+ * layer's boundary instead, lists 11-12 after it are drawn into COMPOSITE
+ * (SCENE's record lends the composite's to the end of the replay) and the
+ * marker does nothing; without it ([dev] display_layer = false) the fades
+ * are drawn into SCENE before the dispatch, as above.
  *
  * The jitter (rd_jitter.h).  With a phase count set (rd__upscale_set_phases:
  * the upscaler's own, FSR's ceil(8 ratio^2)), each replay that presents a
@@ -119,11 +123,26 @@ void rd__upscale_replay_begin(int keep, bool present);
 
 struct Replay;
 /* rd_replay.c's list loop at an RDC_UPSCALE_POINT c of frame f, the split
- * in force, the open pass ended: the edge guard, the dispatch; msaa: SCENE
- * is drawn multisampled (no dispatch) */
+ * in force, or at the display layer's boundary (rd_layer.h, any command
+ * c), the open pass ended: the layer begun at its boundary; at the marker,
+ * with no layer begun, the edge guard and the dispatch; msaa: SCENE is
+ * drawn multisampled (no dispatch) */
 void rd__upscale_point(struct Replay *r, const RdFrame *f, const RdCmd *c, bool msaa);
+/* The dispatch for frame f's marker (the edge guard, the hook's inputs,
+ * COMPOSITE written, once a replay): from rd__upscale_point, or from the
+ * display layer's boundary (rd_layer.c) with keepRun the keep frames held
+ * since the last dispatch (a new history when any).  False when nothing
+ * was written (refused, logged) */
+bool rd__upscale_dispatch_at(struct Replay *r, const RdFrame *f, const RdCmd *marker, bool msaa,
+                             uint32_t keepRun);
+/* COMPOSITE (the hook's output, UPSCALED in the logs) made at the display
+ * scale in its reserved slot (rd_layer.h RD_LAYER_SLOT_COMPOSITE): SCENE's
+ * GS size, DISPLAY's scale, Full pixel's ox and guard; false without it */
+bool rd__upscale_composite_ensure(void);
 /* rd_blur_border.c: the reduction's sprite under state st samples UPSCALED
- * in SCENE's place (true: SCENE's record lent until rd__upscale_remap_end) */
+ * in SCENE's place (true: SCENE's record lent until rd__upscale_remap_end);
+ * under the display layer SCENE's record already holds the composite
+ * (counted, false) */
 bool rd__upscale_remap_begin(const RdStateBlock *st);
 void rd__upscale_remap_end(void);
 
@@ -175,13 +194,38 @@ typedef struct RdUpscaleStats {
     uint32_t reshown;              /* presents without a scene replay */
     uint32_t jittered;             /* presents given a jitter from the sequence */
     uint32_t outW, outH, colorW, colorH; /* the last dispatch's sizes */
+    /* the resets by their first reason (RD_UPSCALE_RESET_*) */
+    uint32_t resetsBy[6];
+    /* the display layer (rd_layer.h) */
+    uint32_t keepHeld;      /* keep frames held: no dispatch */
+    uint32_t layerFrames;   /* replays whose layer began */
+    uint32_t layerDraws;    /* the actions drawn into COMPOSITE */
+    uint32_t layerTextured; /* of them, textured */
+    uint32_t keepCopies;    /* keep sprites drawn as the 1:1 copy of the held composite */
+    uint32_t keepNoSprite;  /* keep frames held with no keep sprite in the layer */
+    uint32_t layerLate;     /* layers begun after a scene-class command of lists 11-12 */
+    uint32_t preReductions; /* the reduction replayed into PRE_DISPLAY (the motion blur's read) */
+    uint32_t layerRefused;  /* layers planned and not begun (logged: the first 8, every 100th) */
 } RdUpscaleStats;
 
+/* RdUpscaleStats.resetsBy: the first reason that holds */
+enum {
+    RD_UPSCALE_RESET_FIRST = 0, /* the first dispatch */
+    RD_UPSCALE_RESET_SIZE,      /* a new size */
+    RD_UPSCALE_RESET_CUT,       /* the frame's camera cut */
+    RD_UPSCALE_RESET_KEEP,      /* the first picture after a run of keep frames */
+    RD_UPSCALE_RESET_CAMERA,    /* the interpolator's camera snap */
+    RD_UPSCALE_RESET_FORGOTTEN  /* the attach's mark (RD_UPSCALE_NO_HISTORY) */
+};
+
 const RdUpscaleStats *rd__upscale_stats(void);
-/* UPSCALED read back (RGBA8, w * h * 4), false without it */
+/* the same counters for the display layer to count into (rd_layer.c) */
+RdUpscaleStats *rd__upscale_stats_layer(void);
+/* COMPOSITE (UPSCALED) read back (RGBA8, w * h * 4), false without it */
 bool rd__upscale_read(void *dst, size_t size, uint32_t *w, uint32_t *h);
-/* rd_core.c createNamedTargets and the present's shutdown: UPSCALED, the
- * edge guard's strips and the depth copy given back */
+/* rd_core.c createNamedTargets and the present's shutdown: COMPOSITE and
+ * the display layer's other slots (rd_layer.h), the edge guard's strips and
+ * the depth copy given back */
 void rd__upscale_free(void);
 
 #ifdef __cplusplus

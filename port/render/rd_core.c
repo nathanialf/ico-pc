@@ -30,6 +30,7 @@
 #include "../fmv/rd_video.h"
 #include "rd_internal.h"
 #include "rd_icon_hold.h" /* rd__icon_pass_drop */
+#include "rd_layer.h"     /* the display layer's reserved slots */
 #include "modelpack.h"    /* the model pack switch */
 #include "rd_mesh.h"
 #include "rd_tex.h"
@@ -846,7 +847,8 @@ const char *rd__target_name(uint32_t id)
         return "block";
     }
     const uint32_t slot = (id & 0xFFFF) - 1;
-    return slot < RD_TARGET_COUNT ? s_targetNames[slot] : "temporary";
+    const char *layer = rd__layer_slot_name(slot); /* COMPOSITE, PRE_DISPLAY, ... */
+    return slot < RD_TARGET_COUNT ? s_targetNames[slot] : layer ? layer : "temporary";
 }
 
 uint8_t rd__target_code(uint32_t id)
@@ -1192,7 +1194,8 @@ uint32_t rd__temp_target_alloc_ex(uint32_t w, uint32_t h, int withDepth, int kee
     want.block = block ? 1 : 0;
     rd__target_scale_of(&want, -1);
     int pick = -1, empty = -1, other = -1;
-    for (int i = RD_TARGET_COUNT; i < RD_MAX_TARGETS; i++) {
+    /* not the display layer's reserved slots (rd_layer.h) */
+    for (int i = RD_TARGET_COUNT; i < RD_LAYER_SLOT_FIRST; i++) {
         const RdTargetRec *t = &g_rd.targets[i];
         if (t->live) {
             continue;
@@ -1213,7 +1216,7 @@ uint32_t rd__temp_target_alloc_ex(uint32_t w, uint32_t h, int withDepth, int kee
     }
     if (pick < 0) {
         rd__log_once(RD_ONCE_TEMP_FULL, "out of temporary targets (%d)",
-                     RD_MAX_TARGETS - RD_TARGET_COUNT);
+                     RD_LAYER_SLOT_FIRST - RD_TARGET_COUNT);
         return 0;
     }
     RdTargetRec *t = &g_rd.targets[pick];

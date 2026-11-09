@@ -240,6 +240,7 @@ add_library(ico_render STATIC
     rd_upload.c # the upload ring and the uploads before a replay's first pass
     rd_velocity.c # the scene's motion vectors: each VU draw's previous transform, VELOCITY
     rd_upscale.c # the upscale point: the render/display scale split, the marker's replay, UPSCALED
+    rd_layer.c # the display layer: lists 11-12 into the display-scale composite after the upscale, keep frames held
     rd_upscale_hook.c # the temporal upscaler's dispatch: FSR 3.1, or the test's bilinear stand-in
     rd_fsr3.c # FSR 3.1 (the FidelityFX SDK, port/rhi/ffx): support, context, dispatch
     rd_screen_planes.c # the screen-prim triangles' planes
@@ -2393,6 +2394,14 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_upscale_off_tiler COMMAND rd_upscale_test off)
     set_tests_properties(rd_upscale_off_tiler PROPERTIES SKIP_RETURN_CODE 77
                                               ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
+    # rd_upscale_layer_tiler: the whole of rd_upscale_test (the display
+    # layer's pixels and keep hold among it, rd_layer.c) on the same profile:
+    # its store plan, pass areas, pass cuts and folds plan SCENE's passes
+    # before the walk, and the layer lends SCENE's record to the
+    # display-scale composite mid-walk
+    add_test(NAME rd_upscale_layer_tiler COMMAND rd_upscale_test)
+    set_tests_properties(rd_upscale_layer_tiler PROPERTIES SKIP_RETURN_CODE 77
+                                                ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
     # issue 179: the VU vertex pre-pass under a phone's limits
     # (ICO_VK_FAKE_LIMITS=mali clamps the limits; RhiLimits.tiler stays the
     # device's, so these are the desktop runs under those limits: the
