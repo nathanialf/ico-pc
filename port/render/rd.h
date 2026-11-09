@@ -671,9 +671,13 @@ const RdPipelineSetPolicy *rd_pipeline_policy_careful(void);
  * rd_vuprepass_selftest) */
 bool rd_vu_prepass_on(void);
 /* How the VU pre-pass writes its record this run (rd_vu_record.h):
- * "stores" (the vertex shaders store it) or "targets" (render targets and
- * copies) */
+ * "stores" (the vertex shaders store it), "compute" (compute dispatches
+ * store it) or "targets" (render targets and copies) */
 const char *rd_vu_record_mode(void);
+/* The record written without render targets (stores or compute: a device
+ * loss takes the restart's losstargets step first, startup_retry.h
+ * StartupRetryRun.storesWereOn) */
+bool rd_vu_record_buffered(void);
 /* The frames whose pre-pass [dev] vu_prepass_min skipped since the last
  * call (the window's 10 s VU line), the threshold in *minSlots and the
  * most slots one of them had in *maxSlots (either may be NULL) */
@@ -1047,7 +1051,8 @@ void rd_set_replay_gate(RdReplayGate gate);
 /* dl_Clear without dl_Swap (gsb_UpdateGSSystem(1)
  * on the movie path, gsb_UpdateGSSystem before gsSystemReady): the lists
  * recorded since rd_begin_frame are dropped unreplayed, as the PS2 drops a
- * display list it never kicks.  No-op when no frame is open. */
+ * display list it never kicks; its camera cut (rd_camera_cut) is carried
+ * to the next frame.  No-op when no frame is open. */
 void rd_discard_frame(void);
 /* True between rd_begin_frame and rd_end_frame / rd_discard_frame. */
 bool rd_frame_open(void);
@@ -2595,6 +2600,9 @@ typedef struct RdPerfRecord {
      * dualLeftovers) */
     uint32_t blendEqOffSets, dualLeftovers;
     uint32_t draws, renderPasses, barriers, copies, fenceWaits, waitIdles, readbacks;
+    /* compute dispatches (RhiStats.dispatches: the VU record's under the
+     * compute builds, rd_vu_record.h; not in draws) */
+    uint32_t dispatches;
     /* the queue submits (RhiStats.submits; the submit thread's land in the
      * record closed after them): a presenting picture's two lists, its
      * scene's and its present's (rd_submit.c), on Vulkan an empty one

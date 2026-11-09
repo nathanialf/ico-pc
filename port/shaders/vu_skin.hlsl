@@ -120,14 +120,29 @@ VuPreOut vu_skin_pre_vs(uint vid : SV_VertexID)
     return vu_pre_out(id, vu_skin_vertex(vu_rec.z + id, VU_SKIN));
 }
 
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_skin_pre_cs, vu_skin_pre_vs)
+#endif
+
 VuPreOut vu_skin_spec_pre_vs(uint vid : SV_VertexID)
 {
     uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_skin_vertex(vu_rec.z + id, VU_SKIN_SPEC));
 }
 
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_skin_spec_pre_cs, vu_skin_spec_pre_vs)
+#endif
+
 VuPreOut vu_skin_debug_pre_vs(uint vid : SV_VertexID)
 {
     uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_skin_vertex(vu_rec.z + id, VU_SKIN_DEBUG));
 }
+
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_skin_debug_pre_cs, vu_skin_debug_pre_vs)
+#endif

@@ -1472,3 +1472,34 @@ bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf)
     (void)buf;
     return false;
 }
+
+/* rhi.h rhi_cmd_buffer_compute_begin / _end, rhi_cmd_dispatch: no compute
+ * stores on Direct3D 11 this release (RhiLimits.computeStores false; CS 5.0 dispatches are later work), so
+ * the renderer never dispatches here: the bracket refuses and a dispatch
+ * is a no-op, said once */
+bool rhi_cmd_buffer_compute_begin(RhiCommandList cl, RhiBuffer buf)
+{
+    (void)cl;
+    (void)buf;
+    return false;
+}
+
+bool rhi_cmd_buffer_compute_end(RhiCommandList cl, RhiBuffer buf)
+{
+    (void)cl;
+    (void)buf;
+    return false;
+}
+
+void rhi_cmd_dispatch(RhiCommandList cl, uint32_t gx, uint32_t gy, uint32_t gz)
+{
+    static bool s_said;
+    (void)cl;
+    if (!s_said) {
+        s_said = true;
+        D11_LOG(
+            "rhi_cmd_dispatch: no compute dispatches on Direct3D 11 in this release (%u x %u x %u "
+            "groups not recorded)",
+            gx, gy, gz);
+    }
+}

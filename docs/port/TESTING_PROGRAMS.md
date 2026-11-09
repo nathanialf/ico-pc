@@ -1237,7 +1237,20 @@ The renderer's test programs have a page of their own:
   over the buffer, the stores again, a copy out to a readback buffer, every word read back, no
   validation message (synchronisation validation on); 77 where the device reports no
   vertex stores, after checking that the bracket refuses (`rhi_vk_nostores`, the argument
-  `nostores` under `ICO_VK_FAKE_NO_VERTEX_STORES=1`, passes only on that refusal).
+  `nostores` under `ICO_VK_FAKE_NO_VERTEX_STORES=1`, passes only on that refusal). Then the
+  compute stores' cell (`rhi_test_compute.c`, `rhi_test_compute_stores`; the VU record's
+  dispatches, issue 179; alone with the argument `compute`: `rhi_vk_compute`, `_vk11`
+  (`ICO_VK_FAKE_API=1.1`), `_global` (`ICO_VK_GLOBAL_BARRIERS=1`), `_novs` (no vertex stores: the
+  dispatches alone, as on the Mali-G52)): one group of 64 invocations of `cs_store` (`vs_store`'s
+  words) through a compute pipeline (`RhiPipelineDesc.compute`) inside
+  `rhi_cmd_buffer_compute_begin` / `_end`, over a copy's fill, a fill again and a second dispatch,
+  a copy out, every word read back, the dispatches counted (`RhiStats.dispatches`); with vertex
+  stores too, the bind-point rule: one layout (u0 to the vertex and compute stages), a store draw
+  into A, a dispatch into B, A refilled, a store draw into B: B holds the stores and A the fill
+  (a bind cache that skipped B's second bind would leave the graphics bind point on A); no
+  validation message; 77 where the device reports no compute stores, after checking that the
+  bracket refuses, a dispatch counts nothing and a reason is given (`rhi_vk_nocompute`, the
+  argument `nocompute` under `ICO_VK_FAKE_NO_COMPUTE_STORES=1`, passes only on that refusal).
 - `rhi_d3d12_test.c`: the same checks on D3D12, a Windows GUI program that writes a log and shows
   a message box (`rhi_d3d12`).
 - `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP; WARP again with
@@ -1301,7 +1314,9 @@ The renderer's test programs have a page of their own:
   (`LIBGL_ALWAYS_SOFTWARE=1`, `SDL_VIDEO_DRIVER=offscreen`); they skip (77) without an OpenGL
   context. On llvmpipe the destination-read cells skip (no fragment shader interlock; GLSL has no
   attachment read). `rhi_gl_stores` (the argument `stores`) is `rhi_vk_stores`' twin: it skips (77)
-  while the OpenGL backend reports no vertex stores, having checked that its bracket refuses.
+  while the OpenGL backend reports no vertex stores, having checked that its bracket refuses;
+  `rhi_gl_compute` (the argument `compute`) is `rhi_vk_compute`'s: 77 while it reports no compute
+  stores, having checked that its compute bracket refuses and a dispatch counts nothing.
 - `rhi_gl_sync_wait_test.c`: the OpenGL backend's fence wait with a limit on the CPU
   (`port/rhi/gl/gl_sync_wait.c`, `gl_device.c` `gl_wait_sync`) over a stub fence and a fake clock: one
   that never signals ends at the 15 s limit in 300 slices of 50 ms, the pump between them, the 2 s

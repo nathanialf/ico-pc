@@ -23,6 +23,7 @@ In reading order.
 | [VU1_PROGRAMS.md](VU1_PROGRAMS.md) | The five VU1 microprograms, their shaders, their CPU oracles and the region rule. |
 | [RENDER.md](RENDER.md) | rd: recording, state, the replay, the device profile, camera blending, performance records, dumps and the replay tool. |
 | [RENDER_POST.md](RENDER_POST.md) | rd's post passes: the fades fold, the motion blur, above 1x, shadows, water blocks, the fog path and crack filling. |
+| [DISPLAY_LAYER.md](DISPLAY_LAYER.md) | The display layer under a temporal upscaler: the game's 2D drawn over the upscaled picture at the display scale, keep frames held 1:1, the history resets by reason, the motion blur's pre-upscale copy, its lines and tests. |
 | [PIPELINES.md](PIPELINES.md) | the pipeline key and blend paths, the start-up set, the fallback entries, the vertex and triangle pre-passes. |
 | [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md) | The skinned draws' bone-block check: a skinned draw probed beside the picture every 100 ms against the CPU, its variants, the box check, the start-up probe, the decision table and its lines. |
 | [MSAA.md](MSAA.md) | The MSAA resolve: where the multisampled part of a frame ends, the covered-majority rule, one resolve a picture, its lines and tests. |

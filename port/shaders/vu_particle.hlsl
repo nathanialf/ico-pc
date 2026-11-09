@@ -271,6 +271,11 @@ VuPreOut vu_particle_pre_vs(uint vid : SV_VertexID)
     return vu_rec_point_out((sb ? vu_tri.y : vu_tri.x) + id, r0, r1, r2);
 }
 
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_particle_pre_cs, vu_particle_pre_vs)
+#endif
+
 // Sprite vid / 6 as vu_particle_vs draws it, its drop verdict and planes
 // from its record (slot A's flags; the planes from slots A and B,
 // vu_rec_planes)

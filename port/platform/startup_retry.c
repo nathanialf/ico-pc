@@ -186,8 +186,8 @@ bool startup_retry_note_has_vu_pre(const char *note)
     }
     /* a module of the pre-pass, a record stage or the old triangle stage,
        or a drawing shader of the record path (keyModules, batchModules) */
-    if (strstr(p, "_pre_vs") != NULL || strstr(p, "vu_tri_") != NULL ||
-        strstr(p, "_main_vs") != NULL) {
+    if (strstr(p, "_pre_vs") != NULL || strstr(p, "_pre_cs") != NULL ||
+        strstr(p, "vu_tri_") != NULL || strstr(p, "_main_vs") != NULL) {
         return true;
     }
     /* a pre-pass key's field (keyWords: " pre" after the dst field), a
@@ -212,7 +212,10 @@ bool startup_retry_note_has_vu_store(const char *note)
     if (*p == 's') {
         p++;
     }
-    return *p == ' ' && strstr(p, "_store_pre_vs") != NULL;
+    /* the vertex shaders' store builds, or the compute builds (the record
+       by compute dispatches: the same targets rung) */
+    return *p == ' ' &&
+           (strstr(p, "_store_pre_vs") != NULL || strstr(p, "_compute_pre_cs") != NULL);
 }
 
 bool startup_retry_note_has_skin_probe(const char *note)

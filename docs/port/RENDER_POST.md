@@ -360,11 +360,16 @@ columns before it, which the steps, the same on every column, commute with). No 
 window, in a frame with MSAA (the epoch's resolve is not the lerp's), past four steps, or above 1x
 for a bar while the reduction resamples SCENE through the above-1x kernels (foreseen as
 `doBlurSpriteDraw` picks them, `rd__set_a1x_gs_keep` included). No fold while a temporal upscaler
-takes SCENE at the reduction ([RENDER.md](RENDER.md#the-upscale-point): the split in force,
-`rd__upscale_point_on`): the upscaler must see the fades, the brightness and the bars in SCENE,
-and the reduction reads its output, not SCENE, so the plan is not made, `rd__fades_fold_skip`
-draws every sprite and the reduction applies none (`fades fold: off while a temporal upscaler
-takes SCENE at the reduction; list 11's sprites are drawn into SCENE`, once a run).
+is in force ([RENDER.md](RENDER.md#the-upscale-point): the split, `rd__upscale_point_on`): the plan
+is not made, `rd__fades_fold_skip` draws every sprite and the reduction applies none. Under the
+display layer ([DISPLAY_LAYER.md](DISPLAY_LAYER.md)) the fades, the brightness and the bars are drawn
+into the display-scale composite after the upscale, and the reduction reads the composite (`fades
+fold: off while a temporal upscaler is in force; lists 11-12's sprites are drawn into the
+display-scale composite after the upscale (the display layer)`, once a run); with `[dev]
+display_layer = false` the upscaler must see them in SCENE and the reduction reads its output
+(`fades fold: off while a temporal upscaler takes SCENE at the reduction; list 11's sprites are
+drawn into SCENE`). Folding them over the composite is not done: the fold's list-12 rule fails on
+the game's text in list 12 there.
 
 The rounding (`roundingRefusal`): a step whose factor is 0 (Cd kept) or 0x80 (Cs) stores the same
 level under every blend and every filter, one value over the rows it covers; a step between them

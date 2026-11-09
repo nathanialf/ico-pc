@@ -169,6 +169,16 @@ static const char rhi_test_hlsl[] =
     "#endif\n"
     "    return o;\n"
     "}\n"
+    "\n"
+    "// The compute shader's stores (RhiPipelineDesc.compute, rhi.h\n"
+    "// RhiLimits.computeStores; rhi_test_compute.c): invocation i of a group of\n"
+    "// 64 writes vs_store's record for i into element i of the same buffer (the\n"
+    "// VU record's compute builds, port/shaders/vu_common.hlsli VU_PRE_CS)\n"
+    "[numthreads(64, 1, 1)]\n"
+    "void cs_store(uint3 t : SV_DispatchThreadID)\n"
+    "{\n"
+    "    g_store[t.x] = uint4(t.x, t.x * 3u + 1u, 0xC0DE0000u + t.x, 0x5EEDu);\n"
+    "}\n"
     "#endif\n";
 
 #endif

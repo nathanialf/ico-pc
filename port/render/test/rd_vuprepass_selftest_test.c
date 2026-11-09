@@ -19,7 +19,7 @@
  *   1. rd_vuprepass_selftest leaves the pre-pass on or off as <mode> says
  *      (g_rd.vuPrepass) and returns false only when it turned it off;
  *   2. the summary text (rd_summary_text) says so: "VU pre-pass on
- *      (self-test: ok; record stores)" (or targets), "VU pre-pass off (self-test: the pictures differ"
+ *      (self-test: ok; record stores)" (or compute, targets), "VU pre-pass off (self-test: the pictures differ"
  *      or "VU pre-pass off by the settings"; with it on, its draws batched
  *      (g_rd.vuPreBatch) unless ICO_RD_VU_PREPASS_BATCH=0; the draw merge
  *      on (g_rd.vuMerge, "VU merge on") unless ICO_RD_VU_MERGE=0 (on
@@ -189,12 +189,14 @@ static void checkTable(RhiLimits *lim)
               g_rd.vuPrepassWhy, cases[i].on ? "on" : "off", cases[i].why);
     }
     /* on over the row, but not over the colour targets' bound (the record
-       drawn into them: no vertex stores) */
-    const bool stores = lim->vertexStores;
+       drawn into them: no vertex stores, no compute stores) */
+    const bool stores = lim->vertexStores, compute = lim->computeStores;
     lim->colorBytesPerPixel = 32u;
     lim->vertexStores = false;
+    lim->computeStores = false;
     rd__vu_prepass_init(lim);
     lim->vertexStores = stores;
+    lim->computeStores = compute;
     CHECK(!g_rd.vuPrepass && strstr(g_rd.vuPrepassWhy, "hold 32 bytes a pixel") != NULL,
           "the row with ICO_RD_VU_PREPASS=on and 32 bytes a pixel: the pre-pass %s (%s)",
           g_rd.vuPrepass ? "on" : "off", g_rd.vuPrepassWhy);
@@ -319,24 +321,41 @@ int main(int argc, char **argv)
         lim.tiler = false;
         lim.colorBytesPerPixel = 32u;
         /* the bound is the render targets' (the record drawn into them):
-           without vertex stores the pre-pass is off */
-        const bool stores = lim.vertexStores;
+           without vertex stores and compute stores the pre-pass is off */
+        const bool stores = lim.vertexStores, compute = lim.computeStores;
         lim.vertexStores = false;
+        lim.computeStores = false;
         rd__vu_prepass_init(&lim);
         CHECK(!g_rd.vuPrepass && strstr(g_rd.vuPrepassWhy, want) != NULL,
               "32 bytes a pixel of colour targets: the pre-pass %s (%s), off with \"%s\" expected",
               g_rd.vuPrepass ? "on" : "off", g_rd.vuPrepassWhy, want);
-        CHECK(!g_rdRec.stores, "no vertex stores, yet the record is stored (%s)", g_rdRec.why);
+        CHECK(!rd__vu_record_buffered(), "no vertex or compute stores, yet the record is %s (%s)",
+              rd__vu_record_name(), g_rdRec.why);
         /* with vertex stores (rd_vu_record.h, unless [dev] vu_record =
-           targets) the record needs no colour target: on, stored */
+           targets or compute) the record needs no colour target: on,
+           stored; with compute stores alone (the Mali-G52 of issue 179) on,
+           stored by compute dispatches */
         lim.vertexStores = stores;
-        if (stores && g_rdRec.asked != RD_VU_RECORD_TARGETS) {
+        if (stores && g_rdRec.asked != RD_VU_RECORD_TARGETS &&
+            g_rdRec.asked != RD_VU_RECORD_COMPUTE) {
             rd__vu_prepass_init(&lim);
-            CHECK(g_rd.vuPrepass && g_rdRec.stores,
+            CHECK(g_rd.vuPrepass && g_rdRec.mode == RD_VU_RECORD_STORES,
                   "32 bytes a pixel with vertex stores: the pre-pass %s, the record %s (%s %s)",
                   g_rd.vuPrepass ? "on" : "off", rd__vu_record_name(), g_rd.vuPrepassWhy,
                   g_rdRec.why);
         }
+        lim.vertexStores = false;
+        lim.computeStores = compute;
+        if (compute && g_rdRec.asked != RD_VU_RECORD_TARGETS) {
+            rd__vu_prepass_init(&lim);
+            CHECK(g_rd.vuPrepass && rd__vu_record_compute() &&
+                      strstr(g_rdRec.why, "stored by compute dispatches") != NULL,
+                  "32 bytes a pixel with compute stores alone: the pre-pass %s, the record %s "
+                  "(%s %s)",
+                  g_rd.vuPrepass ? "on" : "off", rd__vu_record_name(), g_rd.vuPrepassWhy,
+                  g_rdRec.why);
+        }
+        lim.vertexStores = stores;
         checkTable(&lim);
     }
     rd_shutdown();

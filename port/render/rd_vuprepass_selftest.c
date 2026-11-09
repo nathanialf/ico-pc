@@ -747,21 +747,26 @@ bool rd_vuprepass_selftest(void)
     readSabotage();
     const double t0 = rd__now_ms();
     Verdict v;
-    /* the record's write is judged as it starts (rd_vu_record.h): under the
-     * stores a failure is logged with its first differing texel and the
-     * test run again with the render targets, whose verdict decides; [dev]
+    /* the record's write is judged as it starts (rd_vu_record.h): a
+     * failure of the stores or the compute dispatches is logged with its
+     * first differing texel and the test run again one rung down
+     * (rd__vu_record_fall_back: stores, compute, targets), whose verdict
+     * decides; the targets' failure turns the pre-pass off.  [dev]
      * vu_prepass_min never skips the test's own frames; the skin check
-     * leaves both runs' replays out */
+     * leaves every run's replays out */
     g_rdRec.minHeld = true;
     s_vtRunning = true;
+    const size_t failed0 = strlen(g_rdRec.failed); /* rungs given up before (a build) */
     runSelftest(t, &v);
-    bool storesFailed = false;
-    if (!v.on && g_rdRec.stores) {
-        storesFailed = true;
-        rd__log("VU pre-pass: the record stored by the vertex shaders failed the self-test (%s) "
-                "in %.1f ms: the self-test again with the render targets and copies",
-                v.text, rd__now_ms() - t0);
-        rd__vu_record_to_targets("they failed the start-up self-test");
+    while (!v.on && rd__vu_record_buffered()) {
+        const bool compute = rd__vu_record_compute();
+        rd__log("VU pre-pass: the record %s failed the self-test (%s) in %.1f ms: the "
+                "self-test again one rung down",
+                compute ? "stored by compute dispatches" : "stored by the vertex shaders", v.text,
+                rd__now_ms() - t0);
+        if (!rd__vu_record_fall_back("they failed the start-up self-test")) {
+            break;
+        }
         runSelftest(t, &v);
     }
     s_vtRunning = false;
@@ -783,8 +788,26 @@ bool rd_vuprepass_selftest(void)
         }
     }
     const char *head = v.on ? "on (" : "off (self-test: ";
-    const char *rec =
-        storesFailed ? "targets, the stores failed the self-test" : rd__vu_record_name();
+    /* the final mode, and the rungs that failed before it ("targets, the
+       stores and compute failed the self-test") */
+    char rec[160];
+    const char *failed = g_rdRec.failed + failed0;
+    failed += failed[0] == ',' ? 2 : 0;
+    const char *comma = strrchr(failed, ',');
+    /* each result read (gcc 14's -Wformat-truncation: the words fit) */
+    int recN;
+    if (failed[0] == '\0') {
+        recN = snprintf(rec, sizeof rec, "%s", rd__vu_record_name());
+    } else if (comma == NULL) {
+        recN = snprintf(rec, sizeof rec, "%s, the %s failed the self-test", rd__vu_record_name(),
+                        failed);
+    } else {
+        recN = snprintf(rec, sizeof rec, "%s, the %.*s and %s failed the self-test",
+                        rd__vu_record_name(), (int)(comma - failed), failed, comma + 2);
+    }
+    if (recN < 0 || recN >= (int)sizeof rec) {
+        rec[sizeof rec - 1] = '\0';
+    }
     /* the result is read so gcc 14's -Wformat-truncation at -O2 sees a cut
        verdict text is deliberate (the buffer holds the usual words whole) */
     const int sumN = snprintf(g_rdSumPrepass, sizeof g_rdSumPrepass, "%s%s; record %s)", head,
