@@ -628,6 +628,13 @@ int main(void)
             failures++;
         }
     }
+    /* the record's compute builds: two for each batch build's entry (checked
+       by name above), the only compute-stage entries of the table */
+    const size_t nCompute = 2 * nBatch;
+    if (computeCount != nCompute) {
+        printf("FAIL %u compute-stage entries, expected %zu\n", computeCount, nCompute);
+        failures++;
+    }
     const size_t nDst = sizeof(expectedDst) / sizeof(expectedDst[0]);
     for (size_t i = 0; i < nDst; i++) {
         if (!ico_find_shader(expectedDst[i])) {
@@ -638,7 +645,7 @@ int main(void)
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
                         nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nMerge +
                         nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone + nFsr1 +
-                        nVelocity + nStore;
+                        nVelocity + nStore + nCompute;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;
