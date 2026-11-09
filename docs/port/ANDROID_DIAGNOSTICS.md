@@ -168,6 +168,31 @@ question it decides:
   pre-pass skipped N frames under M slots` says how many frames drew the old way for being small.
   Decides whether the stores are the faster write on the phone, and whether a floor for small
   frames is worth setting.
+- **The record by compute dispatches** ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes),
+  the record's three writes; [RHI.md](RHI.md#compute-dispatch-the-vu-record)). Issue 179's log
+  of 2026-11-09 (stage 3 cutscene) showed the Mali-G52 MC2 (r32p1) without vertex stores (`no vertex
+  stores: the device has no vertexPipelineStoresAndAtomics` on the start line): the record stayed
+  in the targets, `VU pre-pass record 1024x103 ... 7.14 ms` in the top passes, 14.6 ms of 64 ms GPU
+  a replay. There the record is now written by compute dispatches. The lines to read in the next
+  Mali log, in order: the Vulkan backend's `compute record stores: offered (queue compute yes,
+  vertex stores no)` (or `not offered: <why>`: the targets stay); the start line's end `...; the
+  record stored by compute dispatches into the frame slot's record buffer: no render targets, no
+  copies (no vertex stores: ...)`; `rd: VU pre-pass: the record holds N slots (... stored by
+  compute dispatches)` as the record grows; the self-test's verdict ending `, record compute` (or
+  `rd: VU pre-pass: the record stored by compute dispatches failed the self-test (<reason, first
+  texel>) ...` and `, record targets, the compute failed the self-test`: the driver's compute builds
+  store wrong, the targets were judged instead; a compute pipeline that could not be made is a
+  `pipeline rd vu pre-pass (compute): ...` line from the backend with the driver's error); the
+  summary's `VU pre-pass on (self-test: ok; record compute)`; the display line's `VU pre-pass on
+  (record compute)`. In play: the per-replay counts' `copies` 6 fewer and `passes` 2 fewer a replay
+  than with the targets, `dispatches` the pre-pass's draws (`rd_replay_tool --stats`: `..., N
+  copies, D dispatches; ...`); the GPU top passes' two `VU pre-pass record 1024xN ... ms` entries
+  (the two dispatch runs: their sum against the 14.6 ms of that log is what the compute write
+  bought); the 10 s `window: VU: ...` line ending `; record compute`. A start that ends in the
+  driver's compile of a compute build, or a crash or device loss in one, takes the restart's
+  targets rung first ([PIPELINES.md](PIPELINES.md#the-record-stores-restart-rung)): `[dev]
+  vu_record = "targets"` in `config.toml` after two such ends. Decides whether the compute
+  write runs on the phone, draws right, and how much of the 64 ms it saves.
 - **Images in use** (the 10 s first line's `present mailbox (images: 10, in use 1)`;
   `RhiStats.swapAcquired`, Vulkan only). The swapchain's images and those the game holds
   (acquired, not yet presented) as the block ends; while the render thread is busy, the count at

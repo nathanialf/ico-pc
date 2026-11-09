@@ -1237,7 +1237,20 @@ The renderer's test programs have a page of their own:
   over the buffer, the stores again, a copy out to a readback buffer, every word read back, no
   validation message (synchronisation validation on); 77 where the device reports no
   vertex stores, after checking that the bracket refuses (`rhi_vk_nostores`, the argument
-  `nostores` under `ICO_VK_FAKE_NO_VERTEX_STORES=1`, passes only on that refusal).
+  `nostores` under `ICO_VK_FAKE_NO_VERTEX_STORES=1`, passes only on that refusal). Then the
+  compute stores' cell (`rhi_test_compute.c`, `rhi_test_compute_stores`; the VU record's
+  dispatches, issue 179; alone with the argument `compute`: `rhi_vk_compute`, `_vk11`
+  (`ICO_VK_FAKE_API=1.1`), `_global` (`ICO_VK_GLOBAL_BARRIERS=1`), `_novs` (no vertex stores: the
+  dispatches alone, as on the Mali-G52)): one group of 64 invocations of `cs_store` (`vs_store`'s
+  words) through a compute pipeline (`RhiPipelineDesc.compute`) inside
+  `rhi_cmd_buffer_compute_begin` / `_end`, over a copy's fill, a fill again and a second dispatch,
+  a copy out, every word read back, the dispatches counted (`RhiStats.dispatches`); with vertex
+  stores too, the bind-point rule: one layout (u0 to the vertex and compute stages), a store draw
+  into A, a dispatch into B, A refilled, a store draw into B: B holds the stores and A the fill
+  (a bind cache that skipped B's second bind would leave the graphics bind point on A); no
+  validation message; 77 where the device reports no compute stores, after checking that the
+  bracket refuses, a dispatch counts nothing and a reason is given (`rhi_vk_nocompute`, the
+  argument `nocompute` under `ICO_VK_FAKE_NO_COMPUTE_STORES=1`, passes only on that refusal).
 - `rhi_d3d12_test.c`: the same checks on D3D12, a Windows GUI program that writes a log and shows
   a message box (`rhi_d3d12`).
 - `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP; WARP again with
