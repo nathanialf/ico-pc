@@ -15,6 +15,7 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | `port/ui/settings_desktop.h`, `settings_desktop.c` | Settings > Extras > Add to the applications menu (Linux): the host's handler (`ui_settings_set_desktop_handler`), Cross and the done / failed popups |
 | `port/ui/settings_backup.h`, `settings_backup.c` | Settings > Extras > Back up your data and Restore from a backup: the rows' words and notes, Cross, the confirmations, the popups |
 | `port/ui/settings_unused.h`, `settings_unused.c` | Settings > Extras > Unused content's host: whether each row and the link show, Cross's open ([Extras > Unused content](#extras--unused-content)) |
+| `port/ui/settings_step.h`, `settings_step.c` | holding Left or Right on the value rows (the tracker and the rows that repeat), L1/R1 on the Picture colour rows, the colour rows' field and step |
 | `port/ui/settings_variants.h`, `settings_variants.c` | the game variants rows' helpers: which options they are, their value text, the disc's note and whether a row shows on the disc ([Gameplay > Yorda, Shadows, Combat and Cutscenes](#gameplay--yorda-shadows-combat-and-cutscenes)) |
 | `port/ui/settings_states.h`, `settings_states.c` | the Save states page's host, cards' texts and pictures, actions on a slot with their second press, and F6's latch (`settings.c` builds, opens, leaves and ticks the page) |
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
@@ -312,6 +313,21 @@ settings are written by the game's saves, never into `config.toml`, except Hold 
 (the video mode from the pause menu, the resolution under the CRT filter, a pack row with no pack
 installed) shows its value and ignores the press (`canStep`).
 
+Holding Left or Right on a value row keeps stepping it (issue 202; `port/ui/settings_step.c`,
+`settings_step.h`). `settingsProc` hands the tracker `pad[0].now` (not the game's `rep` word,
+which fires every tick once past its delay, is never filled by the test fixture and is not set by
+the stick's d-pad emulation, `lt_analog2Pad`): after `UI_STEP_REPEAT_DELAY` (15) ticks on the same
+row and direction, and then every `UI_STEP_REPEAT_EVERY` (3), `ui__step_repeat` answers a
+synthetic Left or Right bit that goes into a local step word beside `flags`, so the cursor moves,
+Back and the page handlers never repeat. Only `ui__step_repeats` rows repeat (the four colour
+rows, CRT strength, Upscaling sharpness, Motion blur strength, Volume, Music, Effects, the game's
+Brightness, Pit time, Mouse sensitivity and Mouse camera speed: all held at both ends); the
+enumerations that wrap step once a press. A repeat that leaves the value text as it was (held at
+an end) plays no sound; each repeat logs `settings: held step` (the first 8, then every 100th).
+L1 and R1 move the four Picture colour rows by `ICO_TONE_STEP_COARSE` (10), held at 1 and 100
+(`ui__tone_step`); L1/R1 are used elsewhere only by the gallery and Characters' Switch, pages that
+have no colour row.
+
 What changed is written when a page is left (`leaveTo`), before an action that leaves the menu,
 and on quit: `ui_settings_save` writes `[video]` through `ico_video_save`, the bindings through
 `ico_input_write_bindings`, the rest through `ico_config_save`; `ui_settings_save_on_quit` also
@@ -375,9 +391,9 @@ New Game+, Start and round; each row's chosen value stays lit (the cursor's puls
 item, the game's own lit and dim scheme). Cross on an Off or On item picks it and moves the cursor
 to the item below; Cross on Start, or the Start button on any row, confirms both, sets the run's
 mirror mode and `gFlagGameClear`, then calls `la_host_new_game_go`, which starts the game as the
-vibration screen did. The title's lettering is hidden while the screen is up
-(`ui_settings_covers_title` is keyed on the screen's layout, since the screen is reached from the
-vibration screen and not from a page) and shown again back on the vibration screen. The rows are
+vibration screen did. The title's lettering is left alone on the screen (the game's own title
+animation has taken it away by the vibration screen; `ui_settings_covers_title` does not count the
+screen, which is not a page). The rows are
 port props, so the mouse and touch take them with no extra code. Triangle goes back to the vibration screen (`port/ui/settings.h`
 (`ui_new_game_screen_enter`); `ico2/common/src/layout_action.c` (`la_host_new_game_screen`,
 `la_host_new_game_go`)).
@@ -1210,7 +1226,7 @@ the loanword as each language spells it) for mode 5 (`port/ui/photo_ui.c` (`phot
 
 ## The title
 
-While a page opened from the title, or the New Game screen, is up the title's logo is hidden
+While a page opened from the title is up the title's logo is hidden
 ([GAME_FEATURES.md](GAME_FEATURES.md#the-title-logo)); Settings reports it with
 `ui_settings_covers_title` (`port/ui/settings.h`).
 
@@ -1491,6 +1507,12 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
   feature, kept in their own file under the source size cap of `tools/check_no_rom.sh`; new
   Settings tests go here (`port/ui/CMakeLists.txt`), or into a program of their own once it is
   near the cap.
+- `settings_step` (`test/settings_step_test.c`, and `_jpn`, `_kor`, `_cn`): holding Left or Right
+  on Gamma (the press alone at 15 ticks, the first repeat at 16, every 3rd tick after, release and
+  hold again, the other direction, the stick's emulation, held at 1 and 100, 1..100 in 98 repeats,
+  presses with gaps), a wrapping row (Filter) held for 75 ticks stepping once, L1/R1 by 10 on the
+  four colour rows (held at 1 and 100, nothing on Filter, written on leaving the page), Square's 50,
+  the repeating rows list.
 - `settings_adapter` (`test/settings_adapter_test.c`): the Graphics card row and Apply on another
   card over a fake host ([Graphics > Apply](#graphics--apply)).
 - `settings_desktop` (`test/settings_desktop_test.c`): Extras' Add to the applications menu row over a fake

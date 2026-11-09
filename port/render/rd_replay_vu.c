@@ -2378,11 +2378,20 @@ static void vuVelBegin(void)
 /* command c of list l under state st has a second record */
 static bool vuVelWanted(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, int l)
 {
-    if (!s_vel.on || l != 0 || c->type == RDC_PARTICLES || st->ds.zwrite != RD_ZWRITE_ON) {
+    if (!s_vel.on) {
+        return false;
+    }
+    if (l != 0 || c->type == RDC_PARTICLES) {
+        rd__velocity_note_skip(0);
+        return false;
+    }
+    if (st->ds.zwrite != RD_ZWRITE_ON) {
+        rd__velocity_note_skip(1);
         return false;
     }
     const RdTargetRec *scene = &g_rd.targets[RD_TARGET_SCENE];
     if (rd__target_rec(st->color) != scene || rd__target_rec(st->depth) != scene) {
+        rd__velocity_note_skip(2);
         return false;
     }
     return rd__velocity_prev(f, c) != NULL;

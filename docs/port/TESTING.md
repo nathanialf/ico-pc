@@ -180,7 +180,7 @@ environment's run byte for byte the `--jitter` one, each run's `jitter` stats li
 --upscale-test 1.5 --upscale-phases 8 --present 960x720 --stats` and passes on `upscale point:
 SCENE 1024x1024 -> UPSCALED 1536x1536 (render scale 2x2, display scale 3x3)` with a marker
 dispatched, none refused and a reduction remapped ([RENDER.md](RENDER.md#the-upscale-point)), and
-`rd_replay_tool_fsr3`, which replays the dump at `--enhanced --fsr3 quality --present 1280x960
+`rd_replay_tool_fsr3`, which replays the dump at `--enhanced --fsr3 quality [sharpness 0..100] --present 1280x960
 --stats` under the validation layer and passes on `upscale: fsr3 ran N presents (context render WxH
 -> display WxH, ..., refused 0, failed 0, ...), validation errors 0` (FSR 3.1 dispatched by the
 FidelityFX upscaler; 77 only where it cannot be expected: a build without it, not Vulkan, a device
