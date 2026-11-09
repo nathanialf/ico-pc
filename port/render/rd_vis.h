@@ -32,6 +32,12 @@ extern "C" {
 /* the mode ([dev] cull, ICO_RD_CULL) */
 enum { RD_VIS_OFF = 0, RD_VIS_FRUSTUM = 1, RD_VIS_FULL = 2 };
 
+/* true when the mode is the profile's default and not the player's: a
+ * tile-based device (g_rd.profile.tiler) with no [dev] cull / ICO_RD_CULL
+ * set, where the default is frustum (the occlusion test costs more than it
+ * saves there); every other device defaults to full */
+bool rd__vis_profile_default(void);
+
 /* a command's verdict: drawn, or skipped beyond a plane of the target's
  * rectangle or behind the eye */
 enum {
