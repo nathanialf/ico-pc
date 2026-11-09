@@ -939,10 +939,13 @@ changes), for the desktop check of the sign with FSR's debug view.
 size` and `rd: velocity: the velocity pass's pipeline made ...` (or why not); every 10 s while on
 `rd: velocity: N pictures, VU draws D: with their previous transform P (moved M), without U (no
 pair, another shape, a jump), new histories R; replays drew X into VELOCITY, Y of list 0 left at
-0 (no record or multisampled), Z passes; VU draws with no motion vector: A outside list 0, B with Z
-write off, C not into SCENE`. The last three count the VU draws `vuVelWanted`
-(`port/render/rd_replay_vu.c`) refused, one counter per gate (`rd__velocity_note_skip`), for a
-report of ghosting or lines on a surface the vectors do not reach (issue 203).
+0 (no record or multisampled), Z passes; of the VU draws through the pre-pass (particles and the
+old way's not counted), with no motion vector: A outside list 0, B with Z write off, C not into
+SCENE`. The last three count the VU draws `vuVelWanted` (`port/render/rd_replay_vu.c`) refused,
+one counter per gate (`rd__velocity_note_skip`), for a report of ghosting or lines on a surface
+the vectors do not reach (issue 203). Only the non-particle entries the pre-pass gathers reach
+`vuVelWanted`: particles, the commands drawn the old way and every draw while the pre-pass is off
+are not counted, so the three are a floor, not the whole figure.
 
 ### The upscale point
 

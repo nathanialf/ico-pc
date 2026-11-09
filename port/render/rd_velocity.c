@@ -129,8 +129,9 @@ static void blockLog(void)
         "velocity: %llu pictures, VU draws %llu: with their previous transform %llu (moved "
         "%llu), without %llu (no pair %llu, another shape %llu, a jump %llu), new histories "
         "%llu; replays drew %llu into VELOCITY, %llu of list 0 left at 0 (no record or "
-        "multisampled), %llu passes; VU draws with no motion vector: %llu outside list 0, %llu with "
-        "Z write off, %llu not into SCENE",
+        "multisampled), %llu passes; of the VU draws through the pre-pass (particles and the old "
+        "way's not counted), with no motion vector: %llu outside list 0, %llu with Z write off, "
+        "%llu not into SCENE",
         (unsigned long long)s_blk.frames, (unsigned long long)s_blk.draws,
         (unsigned long long)s_blk.paired, (unsigned long long)s_blk.moved,
         (unsigned long long)(s_blk.unpaired + s_blk.shape + s_blk.jump),
