@@ -1416,6 +1416,11 @@ median GPU time; its 10 s lines say the same, `aura FEED128 212x128 3.0 passes 3
 | FEED128, 1 draw | the bottom strip's clear (`systemStatus[0] == 0`) | 0.02 ms |
 | FEED128, 1 draw | `copyCurrentFBToFeedBackArea`, SCENE read through the box: 10.2 MB, 27 136 texels of about 20 x 10 taps (5.4 M) | 4.9 ms |
 
+At 1x (the box is not used: the feedback read takes the GS's own bilinear, four taps) the aura is
+still these passes: the perf line's `aura 4.0` (`render passes 13.0 (lists 8.0, reduction 1.0, aura
+4.0)`) is the three FEED128 passes and SCENE's paste, as in the issue 179 log of a Mali at 1x, and
+`rd: aura box: ...` lines for ROWBOX appear only above 1x.
+
 The last one is skipped while the game is paused (`systemStatus[5]`): the pause menu's pictures
 have the aura at 3.0 ms. 4.9 ms is not its 10.2 MB: the reduction reads the same SCENE 1:1 with
 four taps a texel (2.5 M texels, 10 M taps, and DISPLAY's 10.2 MB written) in 0.72 ms, and the

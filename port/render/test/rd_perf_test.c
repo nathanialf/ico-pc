@@ -75,6 +75,7 @@
 #include <time.h>
 #endif
 #include "rd_internal.h"
+#include "rd_vu_record.h"
 #include "rd_mesh.h"
 #include "rd_passring.h"
 #include "rd_pipe_finish.h"
@@ -557,11 +558,17 @@ static void checkExactCounters(const RdFrame *f)
  * the input attachment or storage texture). */
 #define UNIFORM_LAYOUTS 3
 
-static void checkGroups(const char *what, const Sum *s)
+/* prePass: the frame replayed with the VU pre-pass, whose record stores add
+   the pre-pass's own layout (rd_vu_record.h g_rdRec.layoutVuPre: the stream
+   slots and the record buffer), one more group a replay while the record is
+   stored by the vertex shaders */
+static void checkGroups(const char *what, const Sum *s, int prePass)
 {
-    CHECK(s->n > 0 && s->uniformMin == UNIFORM_LAYOUTS && s->uniformMax == UNIFORM_LAYOUTS,
-          "%s: %u..%u uniform bind groups a replay, %d expected (one per layout)", what,
-          s->uniformMin, s->uniformMax, UNIFORM_LAYOUTS);
+    const int extra = prePass && g_rdRec.stores ? 1 : 0;
+    const int want = UNIFORM_LAYOUTS + extra;
+    CHECK(s->n > 0 && (int)s->uniformMin == want && (int)s->uniformMax == want,
+          "%s: %u..%u uniform bind groups a replay, %d expected (one per layout%s)", what,
+          s->uniformMin, s->uniformMax, want, extra ? ", the record's too" : "");
     CHECK(s->groups == s->uniformGroups + s->textureGroups,
           "%s: %llu bind groups, %llu uniform + %llu texture", what, (unsigned long long)s->groups,
           (unsigned long long)s->uniformGroups, (unsigned long long)s->textureGroups);
@@ -1507,7 +1514,7 @@ static int synthetic(void)
               "replay: %.3f ms of CPU a replay (without the GPU wait), over 20 ms",
               rest.n ? (rest.total - rest.wait) / rest.n : 0.0);
     }
-    checkGroups("replay", &rest);
+    checkGroups("replay", &rest, 0);
     checkBarriers("replay", &rest, BARRIERS_REPLAY, BARRIERS_REPLAY_GLOBAL);
     checkScreen("replay", &rest);
 
@@ -1579,7 +1586,7 @@ static int synthetic(void)
                   "prepass: %u..%u barriers a replay (%u without the pre-pass)", rest.barrierMin,
                   rest.barrierMax, barriersOff);
         }
-        checkGroups("prepass", &rest);
+        checkGroups("prepass", &rest, 1);
         checkScreen("prepass", &rest);
         if (pf) {
             checkReplayWork(pf, "prepass", true);
@@ -1624,7 +1631,7 @@ static int synthetic(void)
               "record: %.3f ms of CPU a replay (without the GPU wait), over 20 ms",
               rest.n ? (rest.total - rest.wait) / rest.n : 0.0);
     }
-    checkGroups("record", &rest);
+    checkGroups("record", &rest, 0);
     checkBarriers("record", &rest, BARRIERS_RECORD, BARRIERS_RECORD_GLOBAL);
     checkScreen("record", &rest);
 
