@@ -57,7 +57,7 @@ bool rd__upscale_temporal_apply(const RdSettings *st, bool crt, bool down, float
             const int q = st->upscaleQuality < RD_UPSCALE_Q_COUNT ? st->upscaleQuality : 0;
             snprintf(note, noteSize, ", upscaling fsr3 %s (ratio %.1f%s), sharpness %u, fp16 %s",
                      names[q], (double)ratio, detail ? detail : "", (unsigned)st->upscaleSharpness,
-                     rd__fsr3_fp16() ? "on" : "off");
+                     rd__fsr3_fp16_word());
         } else if (asked) {
             snprintf(note, noteSize, ", upscaling fsr3 off (%s%s)",
                      crt                        ? "the CRT filter draws its own box"

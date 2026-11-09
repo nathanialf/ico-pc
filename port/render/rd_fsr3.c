@@ -94,6 +94,25 @@ bool rd__fsr3_fp16(void)
 #endif
 }
 
+bool rd__fsr3_fp16_dev_off(void)
+{
+    static int s_off = -1;
+    if (s_off < 0) {
+        /* [dev] fsr3_fp16 = off (host_config.c exports 0): read by the
+         * FidelityFX backend itself when the context is made
+         * (tools/ffx/patches/0004, GetDeviceCapabilitiesVK), so every pass
+         * takes its fp32 build; read here for the lines */
+        const char *e = getenv("ICO_RD_FSR3_FP16");
+        s_off = e && (strcmp(e, "0") == 0 || strcmp(e, "off") == 0);
+    }
+    return s_off == 1;
+}
+
+const char *rd__fsr3_fp16_word(void)
+{
+    return rd__fsr3_fp16_dev_off() ? "off (dev)" : (rd__fsr3_fp16() ? "on" : "off");
+}
+
 bool rd_upscale_temporal_supported(void)
 {
     if (s_testUnsupported) {

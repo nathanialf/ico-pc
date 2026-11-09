@@ -58,6 +58,11 @@ const char *rd_upscale_temporal_why(void);
 /* The device runs FSR 3.1's 16-bit shaders (shaderFloat16 offered and enabled by the RHI: the
  * compute caps' float16 with the external extensions); false in a build without it */
 bool rd__fsr3_fp16(void);
+/* [dev] fsr3_fp16 = off (ICO_RD_FSR3_FP16=0): the FidelityFX context made
+ * without fp16 (tools/ffx/patches/0004); the word for the lines: "on",
+ * "off" (the device offers none) or "off (dev)" */
+bool rd__fsr3_fp16_dev_off(void);
+const char *rd__fsr3_fp16_word(void);
 
 /* The build carries FSR 3.1 (ICO_FFX: the FidelityFX SDK linked) */
 bool rd__fsr3_built(void);

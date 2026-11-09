@@ -1011,7 +1011,8 @@ fi
 # Reflect, tiny-process-library); not the samples, frame generation, FSR 4
 # (not in this release), the Windows binaries or the media. The files under
 # tools/ffx/patches/*.patch are applied in name order (the POSIX build of
-# the shader compiler; gcc/clang fixes; two Vulkan backend fixes); the
+# the shader compiler; gcc/clang fixes; two Vulkan backend fixes; the
+# [dev] fsr3_fp16 switch); the
 # stamp carries their SHA-256, so a changed patch re-installs the tree.
 # port/rhi/ffx/CMakeLists.txt builds it (ICO_FFX). docs/THIRD_PARTY.md and
 # docs/BUILDING.md have the details.
