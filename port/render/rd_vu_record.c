@@ -2,6 +2,7 @@
  * and copies or the vertex shaders' own stores (rd_vu_record.h; issue 179:
  * on a Mali-G52 the record's 48 bytes a pixel and six texture-to-buffer
  * copies a replay were a quarter of the boat scene's GPU time). */
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,6 +60,23 @@ static void freeShaders(void)
     }
 }
 
+/* the record's reason, cut to its buffer if ever longer (vsnprintf with the
+   result read: gcc 14's -Wformat-truncation at -O1 and -O2 cannot size the
+   six sites' words, and a cut reason is only words; the usual ones fit) */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((format(printf, 1, 2)))
+#endif
+static void whySet(const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    const int n = vsnprintf(g_rdRec.why, sizeof g_rdRec.why, fmt, ap);
+    va_end(ap);
+    if (n < 0 || n >= (int)sizeof g_rdRec.why) {
+        g_rdRec.why[sizeof g_rdRec.why - 1] = '\0';
+    }
+}
+
 static const char kTargetsWords[] = "drawn into 3 RGBA32_UINT render targets and copied into the "
                                     "frame slot's record buffer";
 static const char kStoresWords[] = "stored by the vertex shaders into the frame slot's record "
@@ -78,12 +96,10 @@ void rd__vu_record_init(const RhiLimits *lim)
     g_rdRec.asked = askedFromEnv();
     const bool can = lim != NULL && lim->vertexStores;
     if (g_rdRec.asked == RD_VU_RECORD_TARGETS) {
-        snprintf(g_rdRec.why, sizeof(g_rdRec.why), "%s ([dev] vu_record = targets)", kTargetsWords);
+        whySet("%s ([dev] vu_record = targets)", kTargetsWords);
     } else if (!can) {
-        snprintf(g_rdRec.why, sizeof(g_rdRec.why), "%s (no vertex stores: %s%s)", kTargetsWords,
-                 noStoresWhy(lim),
-                 g_rdRec.asked == RD_VU_RECORD_STORES ? "; [dev] vu_record = stores not taken"
-                                                      : "");
+        whySet("%s (no vertex stores: %s%s)", kTargetsWords, noStoresWhy(lim),
+               g_rdRec.asked == RD_VU_RECORD_STORES ? "; [dev] vu_record = stores not taken" : "");
     } else {
         /* group 1 of the store pipelines: layoutVu's slots but t4, and u6 */
         enum { VS = 1u << RHI_STAGE_VERTEX, FS = 1u << RHI_STAGE_FRAGMENT };
@@ -104,13 +120,12 @@ void rd__vu_record_init(const RhiLimits *lim)
                     "without it draws them in one pass with no barrier)");
         }
         if (g_rdRec.stores) {
-            snprintf(g_rdRec.why, sizeof(g_rdRec.why), "%s (%s)", kStoresWords,
-                     g_rdRec.asked == RD_VU_RECORD_STORES ? "[dev] vu_record = stores"
-                                                          : "[dev] vu_record = targets keeps "
-                                                            "the render targets");
+            whySet("%s (%s)", kStoresWords,
+                   g_rdRec.asked == RD_VU_RECORD_STORES ? "[dev] vu_record = stores"
+                                                        : "[dev] vu_record = targets keeps "
+                                                          "the render targets");
         } else {
-            snprintf(g_rdRec.why, sizeof(g_rdRec.why),
-                     "%s (the stores' bind group layout could not be made)", kTargetsWords);
+            whySet("%s (the stores' bind group layout could not be made)", kTargetsWords);
         }
     }
     g_rdRec.prepassMin = 0;
@@ -137,8 +152,7 @@ void rd__vu_record_to_targets(const char *why)
         return;
     }
     g_rdRec.stores = false;
-    snprintf(g_rdRec.why, sizeof(g_rdRec.why), "%s (the stores off: %s)", kTargetsWords,
-             why != NULL ? why : "?");
+    whySet("%s (the stores off: %s)", kTargetsWords, why != NULL ? why : "?");
     rd__log("VU record: %s", g_rdRec.why);
 }
 
@@ -150,7 +164,7 @@ void rd__vu_record_shaders(void)
     }
     if (!g_rd.vuPrepass) {
         g_rdRec.stores = false;
-        snprintf(g_rdRec.why, sizeof(g_rdRec.why), "%s (the pre-pass is off)", kTargetsWords);
+        whySet("%s (the pre-pass is off)", kTargetsWords);
         return;
     }
     uint32_t planned = 0;
