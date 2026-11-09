@@ -903,12 +903,19 @@ have no fragment shader, no target and no rasterization (`RhiPipelineDesc.noRast
 `g_rdRec.layoutVuPre`: t0, b1, b2, b3, t5 and u6, no t4), and each pass is a pass without
 attachments, 1024 x 1, inside the store bracket (`rhi_cmd_buffer_store_begin` before it,
 `rhi_cmd_buffer_store_end` after: [RHI.md](RHI.md#the-interface)), so a replay has no record
-texture, no layout transition and no copy. Each draw of a record pass after its first is a pass of
-its own, the bracket's end and begin between them (one barrier: `recDrawGap`): the draws write
-disjoint slots, which needs no order, but each binds the whole buffer at u6 and synchronisation
-validation takes a descriptor's whole range as what a draw writes, so two draws in one pass would
-be a write-after-write hazard to it; a pass without attachments is only its begin and end, and the
-batches keep the draws few (the per-replay line's `passes` and `barriers` count them)
+texture, no layout transition and no copy. The draws of a record pass write disjoint slots
+(`vuPrepassRun`'s slots: pass V's commands each at its own `vuPreVSlots`, pass T's slots A, B and C
+each at its own `vuPreTSlots`, the two tick draws different 32-bit lanes of slot C; pass T reads
+only pass V's slots, which the bracket between the passes orders), which the memory model does not
+order, so a release run draws them all in one pass with no barrier between them. Only under the
+validation layer (`RhiLimits.validationLayer`, Vulkan's `ICO_VK_VALIDATION` or the debug layers:
+the lavapipe synchronisation-validation tests) is each draw after the first a pass of its own, the
+bracket's end and begin between them (one barrier: `recDrawGap`): each draw binds the whole buffer
+at u6 and synchronisation validation takes a descriptor's whole range as what a draw writes, so it
+cannot see the ranges are disjoint and two draws in one pass would be a write-after-write hazard
+to it; the start then logs `rd: VU record: each record store draw in a pass of its own (the
+validation layer is loaded: ...)`. On a tiler each such barrier serialises the vertex work, which
+is why a release run has none (the per-replay line's `passes` and `barriers` count them)
 (`vuRecPassBegin`, `vuRecPassEnd`: the copies' muted
 semantic is unchanged, the loss bisect's window leaves the draws out and the self-test's STALE
 sabotage stores replays 2 to 4 into a sink buffer of the record's size, `recStoreBuffer`). The

@@ -731,6 +731,12 @@ typedef struct RhiLimits {
      * 11_0 has no vertex shader UAVs).  The VU record is written by the
      * vertex shaders where it is true (port/render/rd_vu_record.c). */
     bool vertexStores;
+    /* The Khronos validation layer is loaded (Vulkan: ICO_VK_VALIDATION,
+     * the debug layers; false elsewhere): the renderer then adds the
+     * ordering only its synchronisation checks need, which a release run
+     * leaves out (port/render/rd_replay_vu.c recDrawGap: a pass of its own
+     * for each record store draw) */
+    bool validationLayer;
     /* The device is MoltenVK (Vulkan over Metal: macOS, iOS): the exact
      * blend's pass switching costs 3 to 4 times the frame there (issue
      * 102), so the renderer's default blend is the fixed-function one

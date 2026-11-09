@@ -97,6 +97,12 @@ void rd__vu_record_init(const RhiLimits *lim)
         g_rdRec.layoutVuPre =
             rhi_create_bind_group_layout(&(RhiBindGroupLayoutDesc){s, 6, "rd vu pre-pass stores"});
         g_rdRec.stores = g_rdRec.layoutVuPre.id != 0;
+        if (g_rdRec.stores && lim->validationLayer) {
+            rd__log("VU record: each record store draw in a pass of its own (the validation "
+                    "layer is loaded: its synchronisation checks take the whole bound buffer as "
+                    "each draw's write and cannot see the draws' slots are disjoint; a run "
+                    "without it draws them in one pass with no barrier)");
+        }
         if (g_rdRec.stores) {
             snprintf(g_rdRec.why, sizeof(g_rdRec.why), "%s (%s)", kStoresWords,
                      g_rdRec.asked == RD_VU_RECORD_STORES ? "[dev] vu_record = stores"

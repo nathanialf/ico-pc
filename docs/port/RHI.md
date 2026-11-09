@@ -221,6 +221,9 @@ Direct3D 11 and OpenGL report `vertexStores` false in this release and their bra
 (Direct3D 11 for good: feature level 11_0 has no vertex shader UAVs; D3D12 would need the buffer's
 UNORDERED_ACCESS transitions and UAV barriers, OpenGL `glMemoryBarrier`) (`port/rhi/rhi.h`, commands
 (`rhi_cmd_buffer_store_begin`); `port/rhi/vk/vk_cmd.c` (`rhi_cmd_buffer_store_begin`)).
+`RhiLimits.validationLayer` says the Khronos validation layer is loaded (Vulkan only), for the
+ordering only its synchronisation checks need (the record's draws each in a pass of their own,
+[PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
 
 **Bind groups.** One fixed slot model for every program: group 0 the per-frame uniforms (b0), group
 1 the per-draw uniforms (b1; the VU programs' b2, b3), the VU vertex stream (t0) and the vertex
