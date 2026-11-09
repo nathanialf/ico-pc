@@ -108,6 +108,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_layer.h"
 #include "rd_replay.h"
 #include "rd_upscale.h"
 
@@ -605,8 +606,12 @@ void rd__fades_fold_scan(const RdFrame *f, int keep)
         static bool saidUp; /* once a run */
         if (!saidUp) {
             saidUp = true;
-            rd__log("fades fold: off while a temporal upscaler takes SCENE at the reduction; "
-                    "list 11's sprites are drawn into SCENE");
+            rd__log(rd__layer_on()
+                        ? "fades fold: off while a temporal upscaler is in force; lists 11-12's "
+                          "sprites are drawn into the display-scale composite after the upscale "
+                          "(the display layer)"
+                        : "fades fold: off while a temporal upscaler takes SCENE at the "
+                          "reduction; list 11's sprites are drawn into SCENE");
         }
         return;
     }

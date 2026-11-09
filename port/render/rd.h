@@ -2754,6 +2754,9 @@ typedef struct RdPerfRecord {
     /* The fades fold (rd_fades_fold.c): list 11's last full-frame lerp
      * sprites the reduction applied instead of drawing them into SCENE */
     uint32_t fadesFolded;
+    /* The display layer (rd_layer.h): the actions of lists 11-12 drawn into
+     * the display-scale composite after a temporal upscaler, 0 without it */
+    uint32_t layerDraws;
     /* The glow's mask folded into its reduction (rd_glow_fold.c): glowFolded
      * 1 when this replay's reduction computed the mask in its box (WORK2
      * neither drawn nor read), glowKept 1 when a glow frame drew the mask
