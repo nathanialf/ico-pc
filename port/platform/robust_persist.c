@@ -129,6 +129,18 @@ int robust_persist_line(char *out, size_t size, const RobustStep *step, const Ro
     return n > 0 && (size_t)n < size ? 0 : -1;
 }
 
+int robust_unmarked_line(char *out, size_t size, const char *cfgName)
+{
+    const int n =
+        snprintf(out, size,
+                 "ico_pc: [dev] gpu_robust = true in %s has no gpu_robust_by mark: set by "
+                 "hand (or by a build before v0.10.2), so it is never dropped; it costs "
+                 "bounds checks on every 3D load (delete the line to turn it off)",
+                 cfgName != NULL ? cfgName : "config.toml");
+
+    return n > 0 && (size_t)n < size ? 0 : -1;
+}
+
 /* the key of a `key = value` line, trimmed, into out ("" when the line has
    no '=' or is a comment or a header) */
 static void line_key(const char *line, size_t len, char *out, size_t size)
