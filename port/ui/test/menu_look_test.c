@@ -165,12 +165,13 @@
    inside the common limits): Arimo's 1 has a foot and a long flag the
    sheets' 1 has not, so its ink and box differ whatever the size; worst
    blur 52.5 and plain 62.0 (Italian row 76), edge 7 (German row 52), ink
-   0.64 .. 1.37 */
+   0.64 .. 1.37 with the v0.10 look; the v0.11.1 look's solid band counts as
+   ink: row 304 up to 1.86 (English) + 25 % */
 #define T_ONE_BLUR 66.0f
 #define T_ONE_PLAIN 78.0f
 #define T_ONE_EDGE 9.0f
 #define T_ONE_AMOUNT_LO 0.5f
-#define T_ONE_AMOUNT_HI 1.7f
+#define T_ONE_AMOUNT_HI 2.35f
 #define MIN_INK_AMOUNT 6.0f /* a sheet rectangle with less ink than this is not compared */
 
 /* The survey's expectations (testSurvey): what the scratch survey measured on
