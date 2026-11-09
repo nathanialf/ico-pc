@@ -31,7 +31,8 @@
 #define HELPER_REL "tools\\ico_icon_stamp.exe"
 #define STAMP_LOG "icon-stamp.log"
 
-static char s_exeStamp[256]; /* "" when the exe has none */
+static char s_exeStamp[256];  /* "" when the exe has none */
+static char s_lastLine[1024]; /* the helper log's last line at start, "" */
 static int s_ran;
 
 /* the exe's RT_RCDATA "ICO_ICON_STAMP" into out: 0, or -1 when there is none */
@@ -111,6 +112,7 @@ void ico_app_icon_exe_start(void)
     if (stamp_log_path(path, sizeof(path)) == 0 && last_line(path, line, sizeof(line)) == 0) {
         fprintf(stderr, "window: icon: the stamp helper's last line (logs\\" STAMP_LOG "): %s\n",
                 line);
+        snprintf(s_lastLine, sizeof(s_lastLine), "%s", line);
     }
 }
 
@@ -195,6 +197,16 @@ void ico_app_icon_exe_at_exit(void)
     }
     if (strcmp(stamp, s_exeStamp) == 0) {
         fprintf(stderr, "window: icon: the exe's icon is current (stamp %s)\n", stamp);
+        return;
+    }
+    /* the helper refused this stamp for good last time (an unusable icon,
+       a copy that was not the same program): no 64 MB copy at every exit;
+       a new icon (a new stamp) is tried */
+    if (ico_icon_stamp_refused(s_lastLine, stamp)) {
+        fprintf(stderr,
+                "window: icon: the exe's icon is not stamped: the helper refused stamp %s "
+                "(logs\\" STAMP_LOG "); it is not tried again until the icon changes\n",
+                stamp);
         return;
     }
     const DWORD n = GetModuleFileNameW(NULL, w, (DWORD)(sizeof(w) / sizeof(w[0])));

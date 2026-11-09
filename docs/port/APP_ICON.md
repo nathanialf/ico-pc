@@ -205,11 +205,18 @@ Windows only, shipped by `tools/package_win.sh`).
   logs\icon-stamp.log)`, `... is current (stamp <S>)`, `... is not stamped: the title screen has
   not made this disc's icon yet` (or another reason), `window: icon: tools\ico_icon_stamp.exe is
   missing: the exe keeps its icon`, or `... did not start (error <n>)`. It runs once a run; a folder
-  the helper could not write is tried again only at the next exit.
+  the helper could not write is tried again only at the next exit. When the helper log's last line
+  at start is the helper's refusal of the wanted stamp (`ico_icon_stamp_refused`: the text after
+  `ico_icon_stamp: ` starts `refused stamp "<S>":`), the helper is not started again (`window:
+  icon: the exe's icon is not stamped: the helper refused stamp <S> (logs\icon-stamp.log); it is
+  not tried again until the icon changes`): a refusal the same icon and exe would meet again costs
+  no 64 MB copy at every exit, and a new icon (a new stamp) is tried.
 - **The helper** waits up to 10 s (100 ms steps) for the exe to open for writing (the game still
   exiting, a virus scanner reading it); a sharing violation for the whole wait, or at once any other
   error (access denied: a folder the account cannot write to, as under Program Files), ends it with
-  exit 1 and nothing changed. It reads the `.ico` and builds the resources with
+  exit 1 and nothing changed. Once the exe is free it removes the `<exe>.stamp-*` files beside it
+  made before this run started (a helper killed between its copy and the replace leaves a 64 MB
+  `.tmp`; `note: N file(s) an earlier run left beside the program removed, M could not be`). It reads the `.ico` and builds the resources with
   `ico_icon_stamp_build` (`icon_stamp.c`, no Windows call): one `RT_ICON` per image, ids 1..n, each
   the image's bytes as the `.ico` holds them (the BMP entries' `BITMAPINFOHEADER` data and the 256
   PNG are both legal payloads), and `RT_GROUP_ICON` 1, the `ICONDIR` with each entry's 4-byte file
@@ -217,21 +224,36 @@ Windows only, shipped by `tools/package_win.sh`).
   has no images or more than 32, or runs past its end is exit 2. It copies the exe to
   `<exe>.stamp-<pid>.tmp` beside it, writes the icon resources and `RT_RCDATA "ICO_ICON_STAMP"` (the
   stamp text, no terminator) into the copy (`BeginUpdateResourceW(copy, FALSE)`, all language
-  neutral, the manifest and the version information kept, `EndUpdateResourceW`), reads the copy's
+  neutral, the manifest and the version information kept, `EndUpdateResourceW`), zeroes the copy's
+  COFF header `PointerToSymbolTable` and `NumberOfSymbols` (`ico_icon_stamp_clear_symbols`:
+  `EndUpdateResourceW` drops the symbol and string tables that followed the sections, 2.9 MB in
+  the game's exe, but keeps the header's pointer, which then pointed into the moved
+  `.debug_rnglists`), reads the copy's
   stamp and group back (`LoadLibraryExW` as an image resource), checks that what runs is unchanged
   (`ico_icon_stamp_pe_check` on both files mapped: the same machine, image base and entry point,
   every section that starts below the old resource section at the same place with the same bytes,
   the import, exception, TLS and import address table directories the same, every section of the
-  copy inside its file and `SizeOfImage`; `EndUpdateResourceW` rewrites `.rsrc` and moves what
-  follows it, which in the game's exe is `.reloc`, the DWARF sections and the COFF symbol table the
-  map-based crash symbols do not use), and puts the copy in the exe's place
-  (`ReplaceFileW`, which keeps the file's attributes and security; `MoveFileExW` when that fails), so
-  a failure at any step leaves the exe as it was and removes the copy. Then
+  copy inside its file and `SizeOfImage`, the copy's sections in address order without overlap, its
+  relocation directory inside one of its sections, and its symbol table pointer 0 or past the end of
+  its sections' bytes with the symbols inside the file; `EndUpdateResourceW` rewrites `.rsrc` and
+  moves what follows it, which in the game's exe is `.reloc` and the DWARF sections the map-based
+  crash symbols do not use), and puts the copy in the exe's place (`ReplaceFileW` with the backup
+  name `<exe>.stamp-old-<pid>`, which keeps the file's attributes and security), so a failure at any
+  step leaves the exe as it was and removes the copy. After a failed replace the helper checks that
+  the exe still exists (`GetFileAttributesW`): Microsoft's ReplaceFileW page says errors 1176 and 1177
+  can leave the old file renamed or gone. With the exe in place the copy is moved over it
+  (`MoveFileExW`), and when that fails too the copy is removed and the next exit tries again. With
+  no exe the backup is moved back, or else the copy is moved into its place; a copy is never removed
+  while the exe is missing, and when neither can be moved the log line starts `FAILED:` and names
+  the backup's and the copy's paths for the player to rename. The backup is removed once the exe is
+  in place. Then
   `SHChangeNotify(SHCNE_UPDATEITEM)` on the exe and `SHChangeNotify(SHCNE_ASSOCCHANGED)` tell
   Explorer to draw it again. Each run appends one line to `logs\icon-stamp.log`: the local time,
   the result (`stamped: 4 images (1 PNG), stamp "<S>", after <ms> ms`, `not stamped: ...` with the
-  system's words for the error, `refused: ...`), the exe and the `.ico`. Exit 0 stamped, 1 not
-  written, 2 a bad `.ico` or arguments.
+  system's words for the error, `refused stamp "<S>": ...; the game does not try this icon again`
+  for an `.ico` that is not usable, a copy whose resources do not read back or a copy that is not
+  the same program, `note: ...` for each recovery step), the exe and the `.ico`. Exit 0 stamped, 1
+  not written, 2 a bad `.ico` or arguments.
 
 The exe takes the icon of the disc played last (each disc's icon is its own stamp), and a release
 that makes the icon again (a new label in the `.txt`) stamps the exe again; a portable copy works the
@@ -318,7 +340,9 @@ and the other Extras tests.
 
 The tests are `app_icon_image_test` (`app_icon_image`), `ico_icon_test` (`ico_icon`),
 `app_icon_files_test` (`app_icon_files`), `icon_stamp_test` (`icon_stamp`: the exe's resources from
-an `.ico` the writer made, the refusals, the stamp text and the quoting) and `rd_png_mem_test`
+an `.ico` the writer made, the refusals, the stamp text, the quoting, the PE check on a PE built in
+memory with the symbol pointer as a stamped exe kept it, overlapping sections and stray
+relocations, the symbol fields zeroed, and the refusal line the game reads) and `rd_png_mem_test`
 (`rd_png_mem`)
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)), with the guard's cases in `app_icon_files_test` and the
 icon field's in `steam_shortcut_test` (`steam_shortcut`: `ico_steam_vdf_set_icon` on every outcome, the

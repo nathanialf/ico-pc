@@ -27,6 +27,8 @@
  * (settings_render).
  */
 #include "settings_fixture.h"
+#include "pointer.h"
+#include "ui_mouse.h"
 #include "ico_rows.h"
 #include "popup.h"
 #include "ui_lang.h" /* ui_settings_text_language */
@@ -1773,6 +1775,92 @@ static void testNewGameScreen(void)
     /* not built: -1 (la_vibe_select then starts the game itself) */
     ui_settings_reset();
     CHECK(ui_new_game_screen_enter() == -1 && ui_new_game_screen_layout() == -1, "not built: -1");
+}
+
+/* the pointer on the middle of item j (a 640 x 480 view) */
+static void ngPointAt(int j)
+{
+    const LtProperty *e = lt_ext_prop(j);
+    const int w = e->dispW ? e->dispW : e->texW;
+    const int h = e->dispH ? e->dispH : e->texH;
+    const float gx = e->centerX ? 320.0f : (float)e->dispX + (float)w * 0.5f;
+    const float gy = 2.0f * (float)e->dispY + (float)h * 0.5f;
+    ico_pointer_move(gx / 640.0f, (gy - 2.0f) / 448.0f);
+}
+
+/* one Main tick as main.c runs it: the pointer's tick, then the layouts */
+static void ngMouseFrame(int click)
+{
+    if (click) {
+        ico_pointer_button(1);
+        ico_pointer_button(0);
+    }
+    pad[0].flags = pad[0].now = 0;
+    ui_mouse_tick();
+    frame(pad[0].flags);
+}
+
+/* The New Game screen and the mouse: the cursor's row takes the item the
+ * cursor is on as its choice, so a hover there moves nothing (the way from
+ * New Game+'s "On" to Start crosses its "Off"); a click on a value picks
+ * it and moves on with the picked value lit in the same tick; a click on
+ * Start begins with the clicked values. */
+static void testNewGameMouse(void)
+{
+    useConfig("version = 1\n");
+    fakeTables();
+    lt_ext_reset();
+    ui_settings_reset();
+    memset(pad, 0, sizeof(pad));
+    pad[0].ana[0] = pad[0].ana[1] = pad[0].ana[2] = pad[0].ana[3] = 128;
+    NonLinearCameraMove = 2;
+    gFlagGameClear = 0;
+    init_layout_texture(2);
+    settle(54, 4);
+    ui_mouse_reset();
+    ui_mouse_set_view(640, 480, 0, 0, 640, 480);
+    const int ml = ui_new_game_screen_enter();
+    const int mOff = ui_new_game_screen_row(0, 0), mOn = ui_new_game_screen_row(0, 1);
+    const int nOff = ui_new_game_screen_row(1, 0), nOn = ui_new_game_screen_row(1, 1);
+    const int start = ui_new_game_screen_start();
+    lt_switch_layout(ml);
+    CHECK(settle(ml, 60), "mouse: the New Game screen (%d)", current_layout_id);
+    LtProp *l = lt_ext_layout(ml);
+    ngMouseFrame(0);
+    ngMouseFrame(0);
+    CHECK(ui_mouse_menu_active(), "mouse: the screen is a menu");
+    ngPointAt(mOn);
+    ngMouseFrame(0);
+    CHECK(l->curItem == mOff, "hover over Mirror mode's On: the choice stays Off (%d)", l->curItem);
+    ngPointAt(nOn);
+    ngMouseFrame(0);
+    CHECK(l->curItem == mOff && lt_ext_prop(nOff)->ownerItem == mOff,
+          "hover over New Game+ On: nothing moves (%d)", l->curItem);
+    const int games = s_newGames;
+    ngMouseFrame(1);
+    CHECK(l->curItem == start && s_newGames == games,
+          "click on New Game+ On: picked, on to Start (%d)", l->curItem);
+    CHECK(lt_ext_prop(nOn)->ownerItem == start && lt_ext_prop(mOff)->ownerItem == start,
+          "the picked values lit in the click's tick");
+    ngPointAt(nOff); /* on the way to Start */
+    ngMouseFrame(0);
+    CHECK(l->curItem == start && lt_ext_prop(nOn)->ownerItem == start,
+          "hover over New Game+ Off: New Game+ stays On (%d)", l->curItem);
+    ngPointAt(mOn);
+    ngMouseFrame(1);
+    CHECK(l->curItem == nOn && lt_ext_prop(mOn)->ownerItem == nOn,
+          "click on Mirror mode On: picked, on to New Game+'s choice (%d)", l->curItem);
+    ngPointAt(start);
+    ngMouseFrame(0);
+    CHECK(l->curItem == nOn, "hover over Start: the cursor stays (%d)", l->curItem);
+    ngMouseFrame(1);
+    CHECK(s_newGames == games + 1 && gFlagGameClear == 1 && ico_opt_mirror() == 1,
+          "click on Start: mirrored, New Game+ (%d %d %d)", s_newGames - games, gFlagGameClear,
+          ico_opt_mirror());
+    gFlagGameClear = 0;
+    ico_opt_set_mirror(0);
+    ui_mouse_reset();
+    ico_pointer_reset();
 }
 
 /* the title's "Quit to desktop" row under Settings (layouts 12 and 13,
@@ -4450,6 +4538,7 @@ int main(int argc, char **argv)
     testPhoto();
     testPauseStats();
     testNewGameScreen();
+    testNewGameMouse();
     testNewGameStartFlags();
     testQuit();
     testCirclePortScreens();

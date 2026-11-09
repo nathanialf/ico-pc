@@ -1674,6 +1674,22 @@ static void testOtherDisc(const char *slug)
           "the European disc again");
 }
 
+/* the menus' outline: the user's pick of 2026-11-08 (rc3, grey from rc5).
+   kSheetInk's five European rows carry rim grey 100 and full white fill
+   with the rim on and the dither on (the falloff, levels, solid rule and
+   Bayer matrix are pinned by sheet_ref.c's static asserts) */
+static void testPickedOutline(void)
+{
+    static const int kEuropean[] = {UI_LANG_EN, UI_LANG_FR, UI_LANG_DE, UI_LANG_IT, UI_LANG_ES};
+    for (size_t i = 0; i < sizeof(kEuropean) / sizeof(kEuropean[0]); i++) {
+        const UiSheetInk *ink = ui_menu_sheet_ink(kEuropean[i]);
+        CHECK(ink != NULL && ink->rimOn == 1 && ink->rimLevel == 100 && ink->fillLevel == 255 &&
+                  ink->dither == 1 && ink->rimWeight == 0,
+              "kSheetInk row %d: the picked rim grey 100 (%d)", kEuropean[i],
+              ink != NULL ? ink->rimLevel : -1);
+    }
+}
+
 int main(int argc, char **argv)
 {
     if (argc > 1) {
@@ -1690,6 +1706,7 @@ int main(int argc, char **argv)
     testOverlay();
     testAtlasUploads();
     testSizeSets();
+    testPickedOutline();
     if (failures) {
         printf("ui_test: %d failures\n", failures);
         return 1;

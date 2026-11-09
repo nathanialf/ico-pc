@@ -22,6 +22,10 @@
  *   ico_icon_stamp_pe_check  the stamped copy of the exe against the exe:
  *                          what the loader runs is unchanged (the check
  *                          before the copy takes the exe's place)
+ *   ico_icon_stamp_clear_symbols  the stamped copy's dangling COFF symbol
+ *                          table pointer zeroed
+ *   ico_icon_stamp_refusal / _refused  the helper's log line for a stamp
+ *                          it refuses for good, and the game's test of it
  *
  * Plain C, no allocation: the resources point into the caller's .ico bytes.
  */
@@ -91,10 +95,30 @@ int ico_icon_stamp_quote(char *out, size_t size, size_t *used, const char *arg);
    a that starts below a's resource section is in b at the same index with
    the same name, addresses, sizes and flags and the same bytes; the import,
    exception, TLS and import address table directories the same; b has a
-   resource directory, and every section of b lies inside the file and
-   inside its SizeOfImage. */
+   resource directory, every section of b lies inside the file and inside
+   its SizeOfImage, b's sections are in address order without overlap, b's
+   relocation directory lies inside one of its sections, and b's COFF
+   symbol table pointer is 0 or past the end of its sections' bytes (with
+   the symbols inside the file). */
 int ico_icon_stamp_pe_check(const uint8_t *a, size_t an, const uint8_t *b, size_t bn,
                             const char **why);
+
+/* head[0..n) the start of a PE file (its headers): the COFF header's
+   PointerToSymbolTable and NumberOfSymbols set to 0 (the stamped copy:
+   EndUpdateResourceW drops the symbol table after the sections but keeps
+   the pointer).  0, or -1 when head is not a PE file's start. */
+int ico_icon_stamp_clear_symbols(uint8_t *head, size_t n);
+
+/* The helper's log text when it refuses a stamp for good (the icon or the
+   stamped copy unusable): "refused stamp \"<stamp>\":" into out.  0, or
+   -1 when stamp is empty or it does not fit (out ""). */
+int ico_icon_stamp_refusal(char *out, size_t size, const char *stamp);
+
+/* 1 when line (a line of logs\icon-stamp.log) is the helper's refusal of
+   stamp (the text after "ico_icon_stamp: " starts with
+   ico_icon_stamp_refusal's), else 0: the game then does not start the
+   helper again for that stamp; a new stamp is tried. */
+int ico_icon_stamp_refused(const char *line, const char *stamp);
 
 #ifdef __cplusplus
 }

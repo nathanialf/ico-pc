@@ -1130,7 +1130,14 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   the stamped copy's PE check (`ico_icon_stamp_pe_check`) on a small PE32+ laid out as the game's
   exe (`.text`, `.rsrc`, `.reloc`): passing with `.rsrc` grown and `.reloc` moved, refusing a changed
   code byte, entry point, import directory, section name or flags, no resource directory, a cut file,
-  a short `SizeOfImage`, another machine and a file that is not PE (`icon_stamp`). The resource update itself (`tools/ico_icon_stamp.c`) runs only on Windows.
+  a short `SizeOfImage`, another machine and a file that is not PE, sections that overlap, a
+  relocation directory outside every section or past its section's end, a symbol table pointer
+  inside the sections (as a stamped exe kept it before the helper zeroed it), past the file's end or with its
+  symbols cut, and accepting one right after the sections and a program that carries symbols;
+  `ico_icon_stamp_clear_symbols` zeroing the two header fields and refusing a cut or non-PE head;
+  the helper's refusal line (`ico_icon_stamp_refusal`) and the game's reading of it
+  (`ico_icon_stamp_refused`: the same stamp only, not a new label, another disc, a prefix of the
+  stamp, an in-use line, a stamped line, an empty or missing line) (`icon_stamp`). The resource update itself (`tools/ico_icon_stamp.c`) runs only on Windows.
 - `rd_png_mem_test.c` (`port/render/test`): `rd_write_png_mem` against the exact bytes the file
   writer produced before the split (a 2 x 2 image, RGBA and RGB), equal to the file writer's bytes
   for a multi-block image, a round trip through `texpack_load_png` with a padded pitch, and the
@@ -1562,6 +1569,12 @@ The renderer's test programs have a page of their own:
   it off with one more call; the cleared page still fits. `settings_test.c`'s `testBuild` reads
   the Gameplay page's ten rows, `testGameOptions` four Downs from the stick fix to Film effect, and
   `settings_discs` (every disc) shows the row from both entries.
+- `settings_test.c`'s `testNewGameMouse` (`settings`): the New Game screen with the mouse
+  (`ui_mouse_tick` over a 640 x 480 view): a hover over Mirror mode's On or New Game+'s On moves
+  nothing; a click on New Game+ On picks it and moves to Start with both chosen values lit in the
+  click's own tick; a hover over New Game+ Off on the way to Start leaves New Game+ On; a click on
+  Mirror mode On picks it and moves to New Game+'s choice; a hover over Start leaves the cursor; a
+  click on it starts the game mirrored with New Game+.
 - `settings_test.c`: Gameplay > Yorda's seven rows (the Chain swing speed and Chain swing slowdown rows
   after Natural chains), their value text ("4 (original)", else the number), ten steps round
   4..10, 1..4 with the key written as the number and the achievements untouched, and their notes after
@@ -1647,7 +1660,10 @@ The renderer's test programs have a page of their own:
   to English) and the strips with his words (`subtitles_pt_br`, `subtitles_pt_br_jpn`, `_kor`,
   `_cn`, in the `settings_toml` lock).
 - `ui_mouse_test.c`: the pointer's arithmetic in the menus (`ui_mouse`).
-- `ui_test.c`: the embedded fonts, UTF-8, the runtime text; each language's own Deja vu string
+- `ui_test.c`: the embedded fonts, UTF-8, the runtime text; `testPickedOutline`: `kSheetInk`'s
+  five European rows are the user's pick of 2026-11-08 (rim on, rim grey 100, fill 255, dither on;
+  the falloff, levels, solid rule and Bayer matrix of that pick are `_Static_assert`s in
+  `port/render/test/sheet_ref.c`); each language's own Deja vu string
   (`UI_STR_PHOTO_FILM_DEJA`); a Japanese popup body wider than the panel takes a second line, an
   English one keeps its one; the popups' timing in seconds at the default 50 Hz and at 60 Hz
   (`ui_popup_set_vsync_hz`) (`ui`); with `jpn` or `kor`, the glyph rows, the table sizes and the pad

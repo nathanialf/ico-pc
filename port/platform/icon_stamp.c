@@ -191,10 +191,11 @@ typedef struct Pe {
     size_t n;
     unsigned machine;
     unsigned sections;
-    const uint8_t *opt; /* the optional header */
-    const uint8_t *sec; /* the section table */
-    unsigned dirs;      /* NumberOfRvaAndSizes */
-    const uint8_t *dir; /* the data directories */
+    const uint8_t *opt;  /* the optional header */
+    const uint8_t *sec;  /* the section table */
+    unsigned dirs;       /* NumberOfRvaAndSizes */
+    const uint8_t *dir;  /* the data directories */
+    const uint8_t *coff; /* the COFF file header */
     uint64_t imageBase;
     uint32_t entry;
     uint32_t sizeOfImage;
@@ -211,6 +212,7 @@ static int pe_parse(const uint8_t *p, size_t n, Pe *pe)
         return -1;
     }
     const uint8_t *coff = p + at + 4;
+    pe->coff = coff;
     const unsigned optSize = rd16(coff + 16);
     pe->machine = rd16(coff);
     pe->sections = rd16(coff + 2);
@@ -290,6 +292,45 @@ int ico_icon_stamp_pe_check(const uint8_t *a, size_t an, const uint8_t *b, size_
             return refuse(why, "a section of the stamped copy lies outside the file or the image");
         }
     }
+    /* the sections in address order, none overlapping the next; the end of
+       the last one's bytes in the file */
+    uint64_t rawEnd = 0;
+    for (unsigned i = 0; i < y.sections; i++) {
+        const uint8_t *s = y.sec + 40 * (size_t)i;
+        const uint32_t va = rd32(s + 12), vsize = rd32(s + 8), raw = rd32(s + 16);
+        const uint64_t end = (uint64_t)va + (vsize != 0 ? vsize : raw);
+        if (i + 1 < y.sections && end > rd32(s + 40 + 12)) {
+            return refuse(why, "the stamped copy's sections overlap or are out of order");
+        }
+        if (raw != 0 && (uint64_t)rd32(s + 20) + raw > rawEnd) {
+            rawEnd = (uint64_t)rd32(s + 20) + raw;
+        }
+    }
+    /* the relocations (moved with .reloc) inside one section */
+    uint32_t relocRva, relocSize;
+    pe_dir(&y, 5, &relocRva, &relocSize);
+    if (relocRva != 0 || relocSize != 0) {
+        int inside = 0;
+        for (unsigned i = 0; i < y.sections && !inside; i++) {
+            const uint8_t *s = y.sec + 40 * (size_t)i;
+            const uint32_t va = rd32(s + 12), vsize = rd32(s + 8);
+            const uint32_t span = vsize != 0 ? vsize : rd32(s + 16);
+            inside = relocRva >= va && (uint64_t)relocRva + relocSize <= (uint64_t)va + span;
+        }
+        if (!inside) {
+            return refuse(why, "the stamped copy's relocations lie outside its sections");
+        }
+    }
+    /* the COFF symbol table (18 bytes a symbol, its string table after it)
+       follows the sections when there is one: EndUpdateResourceW drops it
+       and leaves the header pointing into the moved sections, so the helper
+       zeroes the two fields (ico_icon_stamp_clear_symbols) */
+    const uint32_t symAt = rd32(y.coff + 8), symN = rd32(y.coff + 12);
+    if (symAt != 0 &&
+        (symAt < rawEnd || symAt > bn || (uint64_t)symN * 18u > (uint64_t)(bn - symAt))) {
+        return refuse(why, "the stamped copy's symbol table pointer lies inside its sections or "
+                           "past its end");
+    }
     for (unsigned i = 0; i < x.sections; i++) {
         const uint8_t *s = x.sec + 40 * (size_t)i;
         const uint32_t va = rd32(s + 12);
@@ -315,4 +356,40 @@ int ico_icon_stamp_pe_check(const uint8_t *a, size_t an, const uint8_t *b, size_
         }
     }
     return 0;
+}
+
+int ico_icon_stamp_clear_symbols(uint8_t *head, size_t n)
+{
+    if (head == NULL || n < 0x40 || head[0] != 'M' || head[1] != 'Z') {
+        return -1;
+    }
+    const uint32_t at = rd32(head + 0x3C);
+    if (at > n || n - at < 24 || memcmp(head + at, "PE\0\0", 4) != 0) {
+        return -1;
+    }
+    memset(head + at + 4 + 8, 0, 8); /* PointerToSymbolTable, NumberOfSymbols */
+    return 0;
+}
+
+int ico_icon_stamp_refusal(char *out, size_t size, const char *stamp)
+{
+    if (out == NULL || size == 0) {
+        return -1;
+    }
+    const int w = snprintf(out, size, "refused stamp \"%s\":", stamp != NULL ? stamp : "");
+    if (stamp == NULL || stamp[0] == '\0' || w < 0 || (size_t)w >= size) {
+        out[0] = '\0';
+        return -1;
+    }
+    return 0;
+}
+
+int ico_icon_stamp_refused(const char *line, const char *stamp)
+{
+    char want[300];
+    if (line == NULL || ico_icon_stamp_refusal(want, sizeof(want), stamp) != 0) {
+        return 0;
+    }
+    const char *at = strstr(line, "ico_icon_stamp: ");
+    return at != NULL && strncmp(at + 16, want, strlen(want)) == 0;
 }
