@@ -1909,8 +1909,9 @@ at 0.
   upscale_debug_checks = true` makes the context check its inputs, with FidelityFX's messages in the
   log (`upscaling: FidelityFX warning: ...`, the first 8 then every 100th).
 - **Log lines.** The display line ends with `, upscaling fsr3 quality (ratio 1.5, render 1280x672 ->
-  display 1920x1008, FFX 3.1.4, GPU memory N MB)` in force (the memory once a context of those sizes
-  was made, else "GPU memory on the context's line") and `, upscaling fsr3 off (not available:
+  display 1920x1008, FFX 3.1.4, GPU memory N MB), sharpness S, fp16 on|off` in force (the memory once a context of those sizes
+  was made, else "GPU memory on the context's line"; fp16 is whether the device runs FSR's 16-bit
+  shaders, `rd__fsr3_fp16`; the line is logged again when the sharpness changes) and `, upscaling fsr3 off (not available:
   REASON | the CRT filter draws its own box | Downsampling is on)` asked for but not in force, and is
   logged again when that changes. A dispatch not made says why: `upscaling: FSR 3.1 not run at frame
   N (no depth | no motion vectors | no native handles | ...; K times so far)`, the first 8 then every

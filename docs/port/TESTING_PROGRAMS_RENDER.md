@@ -1053,7 +1053,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_fog`, `rd_fog_*`; the local read from the start in `rd_fog_local`, the other paths' replays
   the same bytes); at 2x a depth ramp's fog alpha equals the above-1x formula (the table
   interpolated, the ordered dither) texel for texel, and the 1x cases count no above-1x draw
-  (`checkRamp`); the outer columns' probe: its count of GS Z 0 rows on D32F and D24 words, the texel
+  (`checkRamp`); case j (`checkJitter`, issue 203): a flat quad at a Z between two differing table
+  entries, fogged at 2x with the scene jittered by 0, 0 (SCENE byte for byte as without a jitter)
+  and by a whole texel (1, 0): every interior texel is the unjittered picture one texel over and
+  its alpha the formula's at the cell less the jitter (the dither follows the picture); the outer columns' probe: its count of GS Z 0 rows on D32F and D24 words, the texel
   each GS column is read at (1x, 2.8125x, and Full pixel's window with GS column 0 left out) and
   the line of the first 8 and last 8 GS columns on the CPU with each of the places those columns
   go (open, cropped, closed at 512 and at a wide 832, Full pixel's window with its `-` columns:

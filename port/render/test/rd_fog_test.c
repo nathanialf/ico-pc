@@ -71,6 +71,7 @@
 
 #include "above1x_ref.h"
 #include "rd_internal.h"
+#include "rd_jitter.h"
 #include "shader_consts.h"
 #include "vk/rhi_vk.h"
 /* the game's side */
@@ -950,6 +951,9 @@ static uint32_t rampZ(int c)
     return 0x370000u + (uint32_t)c * 0x5000u;
 }
 
+/* not 0: every texel at this GS Z (case j's flat quad), else the ramp */
+static uint32_t s_flatZ;
+
 static void recordRamp(void)
 {
     dl_SetDLPriority(0);
@@ -961,7 +965,8 @@ static void recordRamp(void)
     rd_z_write(1);
     rd_fba(0);
     for (int c = 0; c < W; c++) {
-        RdScreenVtx v[2] = {sv(c, 0, rampZ(c), kClear), sv(c + 1, H, rampZ(c), kClear)};
+        const uint32_t z = s_flatZ ? s_flatZ : rampZ(c);
+        RdScreenVtx v[2] = {sv(c, 0, z, kClear), sv(c + 1, H, z, kClear)};
         rd_screen_prims(RD_PRIM_SPRITES, v, 2, RD_SPACE_WORLD, 0, 0);
     }
     setFog(2);
@@ -1037,6 +1042,68 @@ static void checkRamp(void)
     }
     CHECK(bad == 0, "%dx: %d texels' alpha beyond the formula", RAMP_S, bad);
     CHECK(badRgb == 0, "%dx: %d texels' colour beyond 2 LSB", RAMP_S, badRgb);
+}
+
+/* (j) the dither follows the jittered picture (issue 203): a flat quad at a Z
+ * between two LUT entries that differ, fogged at 2x with the scene jittered
+ * by 0, 0 (SCENE byte for byte as without a jitter) and by a whole texel
+ * 1, 0 (past the range a real jitter takes, so the effect is a whole cell):
+ * every interior texel of the second is the first's one texel to the left
+ * (the picture moved right by the jitter and the pattern with it), and each
+ * is the formula's alpha at the texel less the jitter (a1x_fog with
+ * a1x_bayer8 at the unjittered cell).  The first has more than one level
+ * and differs from itself shifted (the test could not pass on a constant) */
+static void checkJitter(void)
+{
+    uint8_t lut[256 * 4];
+    logicalLut(2, lut);
+    uint32_t n = 0x37;
+    while (n < 254 && lut[n * 4 + 3] == lut[(n + 1) * 4 + 3]) {
+        n++;
+    }
+    CHECK(lut[n * 4 + 3] != lut[(n + 1) * 4 + 3], "(j) no adjacent LUT entries differ");
+    const uint32_t z = (n << 16) | 0x8000u, tw = W * RAMP_S, th = H * RAMP_S;
+    static uint8_t img[3][W * RAMP_S * H * RAMP_S * 4];
+    uint32_t w = 0, h = 0;
+    s_flatZ = z;
+    rd__frame_jitter_clear();
+    recordRamp();
+    const bool ok0 = rd__read_target(rd_target(RD_TARGET_SCENE), img[0], sizeof(img[0]), &w, &h);
+    rd__frame_jitter_set(0.0f, 0.0f);
+    recordRamp();
+    const bool ok1 = rd__read_target(rd_target(RD_TARGET_SCENE), img[1], sizeof(img[1]), &w, &h);
+    rd__frame_jitter_set(1.0f, 0.0f);
+    recordRamp();
+    const bool ok2 = rd__read_target(rd_target(RD_TARGET_SCENE), img[2], sizeof(img[2]), &w, &h);
+    rd__frame_jitter_clear();
+    s_flatZ = 0;
+    if (!ok0 || !ok1 || !ok2 || w != tw || h != th) {
+        CHECK(0, "(j) SCENE readback (%ux%u)", w, h);
+        return;
+    }
+    CHECK(memcmp(img[0], img[1], tw * th * 4) == 0, "(j) jitter 0, 0 differs from no jitter");
+    int levels[256] = {0}, distinct = 0, moved = 0, bad = 0, badFormula = 0;
+    for (uint32_t y = 8; y < th - 8; y++) {
+        for (uint32_t x = 8; x < tw - 8; x++) {
+            const uint8_t *a = &img[0][(y * tw + x) * 4], *b = &img[2][(y * tw + x + 1) * 4];
+            levels[a[3]]++;
+            moved += memcmp(a, &img[0][(y * tw + x + 1) * 4], 4) != 0;
+            bad += memcmp(a, b, 4) != 0;
+            badFormula +=
+                b[3] != rampAlpha(lut, z, x, y, tw, th) &&
+                (rd__depth_unorm_steps() == 0.0f || b[3] != rampAlpha(lut, z - 256u, x, y, tw, th));
+        }
+    }
+    for (int v = 0; v < 256; v++) {
+        distinct += levels[v] > 0;
+    }
+    printf("  (j) jitter 1, 0: %d alpha levels, %d interior texels not the 0, 0 picture shifted a "
+           "texel, %d beyond the formula at the unjittered cell, %d texels the shift changes\n",
+           distinct, bad, badFormula, moved);
+    CHECK(distinct >= 2, "(j) the flat quad's fog has %d levels (no dither to follow)", distinct);
+    CHECK(moved > 0, "(j) the pattern is the same one texel over (the test could not tell)");
+    CHECK(bad == 0, "(j) %d texels are not the unjittered picture moved by the jitter", bad);
+    CHECK(badFormula == 0, "(j) %d texels beyond the formula at the unjittered cell", badFormula);
 }
 
 static void checkPipelines(void)
@@ -1370,6 +1437,7 @@ int main(void)
         dl_Clear();
         checkEdge();
         checkRamp();
+        checkJitter();
         CHECK(rhi_vk_validation_error_count() == 0, "%dx: %u validation errors", EDGE_S,
               rhi_vk_validation_error_count());
         rd_shutdown();

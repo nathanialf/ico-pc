@@ -580,11 +580,13 @@ int s_reduce;
 
 #endif
 
+static int s_heldNow; /* buttons held beyond this frame's trigger word (hold) */
+
 void frame(int flags)
 {
     frame_count++;
     pad[0].flags = flags;
-    pad[0].now = flags;
+    pad[0].now = flags | s_heldNow;
 #ifdef SETTINGS_RENDER
     dl_SetDLPriority(0);
     rd_set_target(rd_target(RD_TARGET_SCENE), rd_target(RD_TARGET_SCENE), 512, 512, 1);
@@ -613,6 +615,17 @@ int settle(int layout, int max)
         frame(0);
     }
     return current_layout_id == layout && lt_fade_status() == 2;
+}
+
+/* flags pressed at the first of `ticks` frames and held through all of them
+   (the trigger word only on the first, as keyInput.c fills it) */
+void hold(int flags, int ticks)
+{
+    for (int i = 0; i < ticks; i++) {
+        s_heldNow = flags;
+        frame(i == 0 ? flags : 0);
+    }
+    s_heldNow = 0;
 }
 
 void press(int flags)
