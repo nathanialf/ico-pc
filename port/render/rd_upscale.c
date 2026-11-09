@@ -1,8 +1,10 @@
 /* rd_upscale.c: the upscale point (rd_upscale.h; docs/port/RENDER.md "The
  * upscale point"): the switch, the scale split rd__apply_display applies,
- * the per-present jitter, the marker's replay (the edge guard, the
- * hook's inputs, UPSCALED) and the reduction's read of UPSCALED in SCENE's
- * place.  The hook itself is rd_upscale_hook.c. */
+ * the per-present jitter, the dispatch (the edge guard, the hook's inputs,
+ * COMPOSITE: UPSCALED in the logs, a target record in a reserved slot,
+ * rd_layer.h) at the marker or at the display layer's boundary, and the
+ * reduction's read of COMPOSITE in SCENE's place without the layer.  The
+ * hook itself is rd_upscale_hook.c. */
 #include "rd_upscale.h"
 
 #include <math.h>
@@ -12,6 +14,7 @@
 
 #include "rd_fsr3.h"
 #include "rd_jitter.h"
+#include "rd_layer.h"
 #include "rd_replay.h"
 #include "rd_thread.h"
 #include "rd_upscale_temporal.h"
@@ -37,10 +40,8 @@ static struct {
     uint32_t index;
     bool jitterOurs;
     uint32_t since; /* presents since the last dispatch */
-    /* UPSCALED and what the replay made of it */
-    RhiTexture out;
-    RhiState outState;
-    RdTargetRec geom;      /* its texel geometry (tw, th, sx, sy, ox) */
+    /* COMPOSITE (the record in its reserved slot, rd_layer.h) and what the
+     * replay made of it */
     bool storage;          /* made with RHI_TEX_STORAGE */
     uint32_t madeReplay;   /* g_rd.replayCounter of the replay that wrote it, 0 none */
     uint32_t pointReplay;  /* the replay whose marker dispatched (once a replay) */
@@ -249,42 +250,44 @@ static void refuse(const char *why, uint32_t frame)
     }
 }
 
-/* -------------------------------------------------------------- UPSCALED */
+/* ------------------------------------------------------------- COMPOSITE */
 
-static bool outEnsure(void)
+static RdTargetRec *outRec(void)
+{
+    return rd__layer_rec(RD_LAYER_SLOT_COMPOSITE);
+}
+
+bool rd__upscale_composite_ensure(void)
 {
     RdTargetRec g;
     memset(&g, 0, sizeof(g));
     g.w = g_rd.gsW;
     g.h = g_rd.gsH;
     rd__target_scale_of(&g, RD_UPSCALED_NAMED);
-    if (s_up.out.id && s_up.geom.tw == g.tw && s_up.geom.th == g.th) {
-        s_up.geom = g; /* the same texels; the geometry as now */
+    RdTargetRec *t = outRec();
+    if (t->live && t->color.id && t->tw == g.tw && t->th == g.th) {
+        /* the same texels; the geometry as now */
+        t->w = g.w;
+        t->h = g.h;
+        t->sx = g.sx;
+        t->sy = g.sy;
+        t->ox = g.ox;
         return true;
-    }
-    if (s_up.out.id) {
-        rd__retire_texture(s_up.out);
-        s_up.out = (RhiTexture){0};
     }
     /* storage too, for an upscaler that writes it from a compute dispatch
      * (rhi.h RHI_TEX_STORAGE; a backend that refuses it gets the texture
      * without, which a pixel-shader hook needs no more than) */
-    const uint32_t usage = RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC;
-    s_up.out = rhi_create_texture(&(RhiTextureDesc){g.tw, g.th, 1, RHI_FMT_RGBA8_UNORM,
-                                                    usage | RHI_TEX_STORAGE, "rd upscaled", 0});
-    s_up.storage = s_up.out.id != 0;
-    if (!s_up.out.id) {
-        s_up.out = rhi_create_texture(
-            &(RhiTextureDesc){g.tw, g.th, 1, RHI_FMT_RGBA8_UNORM, usage, "rd upscaled", 0});
+    s_up.storage = rd__layer_slot_make(RD_LAYER_SLOT_COMPOSITE, &g, RHI_TEX_STORAGE, "rd upscaled");
+    if (!s_up.storage) {
+        (void)rd__layer_slot_make(RD_LAYER_SLOT_COMPOSITE, &g, 0u, "rd upscaled");
     }
-    s_up.outState = RHI_STATE_UNDEFINED;
-    s_up.geom = g;
+    rd__layer_composite_new(); /* no picture held in it yet */
     rd__log("upscale point: UPSCALED %ux%u (display scale %gx%g%s)%s", g.tw, g.th, (double)g.sx,
             (double)g.sy, g.ox > 0.0f ? ", the Full pixel window" : "",
-            !s_up.out.id   ? ": not made, no upscaling"
+            !t->color.id   ? ": not made, no upscaling"
             : s_up.storage ? ", a storage texture too"
                            : ", without storage (the backend refused it)");
-    return s_up.out.id != 0;
+    return t->color.id != 0;
 }
 
 /* ------------------------------------------------------------ edge guard */
@@ -358,15 +361,45 @@ static void prepassNote(void)
     told = off;
 }
 
+/* the first reason a dispatch is told a new history (RD_UPSCALE_RESET_*) */
+static int resetWhy(bool resized, bool frameCut, uint32_t keepRun, uint32_t mark)
+{
+    return s_up.stats.dispatched == 0u ? RD_UPSCALE_RESET_FIRST
+           : resized                   ? RD_UPSCALE_RESET_SIZE
+           : frameCut                  ? RD_UPSCALE_RESET_CUT
+           : keepRun > 0u              ? RD_UPSCALE_RESET_KEEP
+           : mark                      ? RD_UPSCALE_RESET_FORGOTTEN
+                                       : -1;
+}
+
 void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
 {
     if (!s_up.split) {
         return;
     }
+    if (rd__layer_due(g_rdStoreOrd)) {
+        rd__layer_begin(r, f, msaa); /* the display layer's boundary (rd_layer.c) */
+        return;
+    }
+    if (c->type != RDC_UPSCALE_POINT) {
+        return;
+    }
     s_up.stats.points++;
+    if (rd__layer_active()) {
+        return; /* dispatched (or held) at the layer's boundary; the reduction reads SCENE's record */
+    }
+    (void)rd__upscale_dispatch_at(r, f, c, msaa, 0u);
+}
+
+bool rd__upscale_dispatch_at(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa,
+                             uint32_t keepRun)
+{
     const uint32_t frame = f ? f->number : 0u;
+    if (!s_up.split || !c) {
+        return false;
+    }
     if (s_up.pointReplay == g_rd.replayCounter) {
-        return; /* a second reduction of the frame: UPSCALED as the first left it */
+        return false; /* a second reduction of the frame: COMPOSITE as the first left it */
     }
     s_up.pointReplay = g_rd.replayCounter;
     s_up.madeReplay = 0;
@@ -374,20 +407,21 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
     RdTargetRec *ts = rd__target_rec(sceneId);
     if (c->u[0] != sceneId) {
         refuse("the reduction reads another target", frame);
-        return;
+        return false;
     }
     if (!ts || !ts->color.id) {
         refuse("no SCENE", frame);
-        return;
+        return false;
     }
     if (msaa) {
         refuse("SCENE is multisampled", frame);
-        return;
+        return false;
     }
-    if (!outEnsure()) {
+    if (!rd__upscale_composite_ensure()) {
         refuse("no UPSCALED", frame);
-        return;
+        return false;
     }
+    RdTargetRec *out = outRec();
     const RhiCommandList cl = rd__replay_cl();
     edgeGuard(r, cl, ts);
     RdUpscaleIn in;
@@ -410,23 +444,25 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
         in.velocityW = vw;
         in.velocityH = vh;
     }
-    in.out = s_up.out;
-    in.outState = &s_up.outState;
-    in.outW = s_up.geom.tw;
-    in.outH = s_up.geom.th;
+    in.out = out->color;
+    in.outState = &out->colorState;
+    in.outW = out->tw;
+    in.outH = out->th;
     in.renderSx = ts->sx;
     in.renderSy = ts->sy;
-    in.displaySx = s_up.geom.sx;
-    in.displaySy = s_up.geom.sy;
+    in.displaySx = out->sx;
+    in.displaySy = out->sy;
     (void)rd__frame_jitter_get(in.jitter);
     const bool resized = in.outW != s_up.lastW || in.outH != s_up.lastH;
     /* a new history: decided from the frame replayed here (its cut, and the
      * attach's mark on its own marker: the first frame, a frame after the
      * motion vectors went on), never from a value the game thread's attach
-     * of a later frame may already have changed (interpolation off) */
+     * of a later frame may already have changed (interpolation off); and
+     * the first picture after keep frames (the display layer held the
+     * composite through a fade: the scene after it is another one) */
     const bool frameCut = f && (f->cut != 0 || (f->hasCamera && f->camera.cut != 0));
-    in.reset = s_up.stats.dispatched == 0u || resized || frameCut ||
-               (c->u[2] & RD_UPSCALE_NO_HISTORY) != 0u;
+    const int why = resetWhy(resized, frameCut, keepRun, c->u[2] & RD_UPSCALE_NO_HISTORY);
+    in.reset = why >= 0;
     in.presents = s_up.since + 1u;
     in.frame = frame;
     /* the frame camera (rd_frame.c rd__fill_camera_cb's): near, far, and
@@ -442,9 +478,9 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
     }
     if (!rd__upscale_dispatch(cl, &in)) {
         refuse("the hook wrote nothing", frame);
-        return;
+        return false;
     }
-    rd__transition(cl, s_up.out, &s_up.outState, RHI_STATE_SHADER_READ);
+    rd__transition(cl, out->color, &out->colorState, RHI_STATE_SHADER_READ);
     prepassNote();
     s_up.madeReplay = g_rd.replayCounter;
     s_up.since = 0;
@@ -452,6 +488,9 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
     s_up.lastH = in.outH;
     s_up.stats.dispatched++;
     s_up.stats.resets += in.reset ? 1u : 0u;
+    if (why >= 0) {
+        s_up.stats.resetsBy[why]++;
+    }
     s_up.stats.outW = in.outW;
     s_up.stats.outH = in.outH;
     s_up.stats.colorW = in.colorW;
@@ -469,14 +508,14 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
                 s_up.phases, (unsigned)g_rd.settings.upscaleQuality,
                 (unsigned)g_rd.settings.upscaleSharpness, rd__fsr3_fp16() ? "on" : "off");
     }
+    return true;
 }
 
 /* ------------------------------------------------------- the reduction */
 
 bool rd__upscale_remap_begin(const RdStateBlock *st)
 {
-    if (s_swapped || !s_up.split || s_up.madeReplay == 0u ||
-        s_up.madeReplay != g_rd.replayCounter || !st->ds.texEnabled) {
+    if (s_swapped || !s_up.split || !st->ds.texEnabled) {
         return false;
     }
     const RdTexRec *t = rd__tex_rec(st->tex);
@@ -484,18 +523,27 @@ bool rd__upscale_remap_begin(const RdStateBlock *st)
     if (!t || t->kind != RD_TEXKIND_TARGET || t->view == RD_VIEW_DEPTH || t->target != sceneId) {
         return false;
     }
+    if (rd__layer_active()) {
+        /* the display layer: SCENE's record holds the composite already */
+        s_up.stats.remapped++;
+        return false;
+    }
+    if (s_up.madeReplay == 0u || s_up.madeReplay != g_rd.replayCounter) {
+        return false;
+    }
     RdTargetRec *sc = rd__target_rec(sceneId);
-    if (!sc) {
+    const RdTargetRec *out = outRec();
+    if (!sc || !out->live || !out->color.id) {
         return false;
     }
     s_saved = *sc;
-    sc->color = s_up.out;
-    sc->colorState = s_up.outState;
-    sc->tw = s_up.geom.tw;
-    sc->th = s_up.geom.th;
-    sc->sx = s_up.geom.sx;
-    sc->sy = s_up.geom.sy;
-    sc->ox = s_up.geom.ox;
+    sc->color = out->color;
+    sc->colorState = out->colorState;
+    sc->tw = out->tw;
+    sc->th = out->th;
+    sc->sx = out->sx;
+    sc->sy = out->sy;
+    sc->ox = out->ox;
     sc->uintView = 0;           /* UPSCALED has no integer view */
     sc->snap = (RhiTexture){0}; /* nor a snapshot (the reduction draws into DISPLAY) */
     sc->snapState = RHI_STATE_UNDEFINED;
@@ -511,7 +559,7 @@ void rd__upscale_remap_end(void)
     }
     RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (sc) {
-        s_up.outState = sc->colorState; /* where the sprite left UPSCALED */
+        outRec()->colorState = sc->colorState; /* where the sprite left UPSCALED */
         *sc = s_saved;
     }
     s_swapped = false;
@@ -524,36 +572,38 @@ const RdUpscaleStats *rd__upscale_stats(void)
     return &s_up.stats;
 }
 
+RdUpscaleStats *rd__upscale_stats_layer(void)
+{
+    return &s_up.stats;
+}
+
 bool rd__upscale_read(void *dst, size_t size, uint32_t *w, uint32_t *h)
 {
-    if (!s_up.out.id || !dst || size < (size_t)s_up.geom.tw * s_up.geom.th * 4u) {
+    RdTargetRec *out = outRec();
+    if (!out->live || !out->color.id || !dst || size < (size_t)out->tw * out->th * 4u) {
         return false;
     }
-    const bool ok =
-        rd__read_rhi_texture(s_up.out, &s_up.outState, s_up.geom.tw, s_up.geom.th, dst, size);
+    const bool ok = rd__read_rhi_texture(out->color, &out->colorState, out->tw, out->th, dst, size);
     if (ok) {
-        *w = s_up.geom.tw;
-        *h = s_up.geom.th;
+        *w = out->tw;
+        *h = out->th;
     }
     return ok;
 }
 
 void rd__upscale_free(void)
 {
-    if (s_up.out.id) {
-        rd__retire_texture(s_up.out);
-    }
+    rd__layer_free(); /* COMPOSITE and the layer's other slots (rd_layer.c) */
     if (s_up.col.id) {
         rd__retire_texture(s_up.col);
     }
     if (s_up.row.id) {
         rd__retire_texture(s_up.row);
     }
-    s_up.out = s_up.col = s_up.row = (RhiTexture){0};
+    s_up.col = s_up.row = (RhiTexture){0};
     s_up.colH = s_up.rowW = 0;
     s_up.madeReplay = 0;
     s_up.lastW = s_up.lastH = 0;
-    memset(&s_up.geom, 0, sizeof(s_up.geom));
     rd__depth_copy_free(&s_up.depth);
     /* FSR 3.1's context (rd_fsr3.c): kept while FSR 3.1 stays in force with
      * the split (the next dispatch uses it at the same sizes and flags),

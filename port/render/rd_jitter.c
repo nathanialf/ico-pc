@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_layer.h"
 
 static float s_jitter[2];
 static bool s_on;    /* a jitter set (0, 0 among them) */
@@ -128,6 +129,11 @@ const float *rd__frame_jitter_of(const struct RdTargetRec *tc)
      * buffers and the shadow levels hold the post chain's reductions */
     if (tc != &g_rd.targets[RD_TARGET_SCENE] && tc != &g_rd.targets[RD_TARGET_WORK2] &&
         tc != &g_rd.targets[RD_TARGET_AURA_WORK]) {
+        return NULL;
+    }
+    /* SCENE's record holding the display layer's composite (rd_layer.h):
+     * the display-scale 2D after the upscale, never moved */
+    if (tc == &g_rd.targets[RD_TARGET_SCENE] && rd__layer_active()) {
         return NULL;
     }
     s_groups++;

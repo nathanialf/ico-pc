@@ -340,6 +340,10 @@ int rd__sprite_above1x(const Replay *r, const RdDrawPass *dp, const DrawSetup *d
 bool rd__fx_reduction_clears(Replay *r, const RdScreenVtx v[2], float col[4]);
 void rd__replay_end_pass(Replay *r);
 void rd__replay_end_pass_for(Replay *r, uint32_t tex);
+/* rd_replay.c s_vpExact: the lists' exact viewport for the passes begun
+ * from here (true), or the plain one (the upscale hook's); rd_layer.c's
+ * pre-upscale reduction draws as the lists do inside rd__upscale_point */
+void rd__replay_vp_exact(bool on);
 /* box_reduce_ps's DrawCB for the count target tc, its scaled texels into
  * its GS size (shadowReduce; shadow_count_ps reads the same fields): the
  * source texels per output pixel, the source size, a Full pixel source's
