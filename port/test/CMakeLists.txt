@@ -31,6 +31,10 @@ endif()
 # string literals and the font corpus lies in the subset's unicode ranges
 if(Python3_FOUND)
     add_test(NAME font_audit COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/font_audit.py")
+    # strings_sync: every string id has a line in every community translation table
+    # (tools/strings_sync.py --check): a new id appended to the enum without its
+    # `[UI_STR_X] = NULL` line in the end block of each table fails here
+    add_test(NAME strings_sync COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/strings_sync.py" --check)
 endif()
 
 # font_subset_arimo: the port's main font (tools/subset_font_arimo.py --check):
