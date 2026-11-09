@@ -85,6 +85,7 @@
 #include "desktop_entry.h"
 #endif
 #endif
+#include "upscale_pictures.h"
 #if ICO_RC_TOOLS && defined(__ANDROID__)
 #include "share_report.h" /* an rc build's Share a bug report (settings.h) */
 #include "strings.h"
@@ -3283,16 +3284,12 @@ static int device_lost_quit(void)
 #define REPORT_PICTURE_MAX_W 1920u
 
 /* F12, the frame on the screen for a bug report, in <pref>/dumps: a PNG
-   and a zip of the rd dump, the tick before's (rd_dump_prev_frame: with it
-   rd_replay_tool --interp rebuilds the pictures between the two, where the
-   presenter blends) and a copy of the log (GitHub issues refuse
-   .rddump files but take a .zip; the PNG stays a loose file, it is too big
-   for a zip at high scales). The dump is written first, zipped, and the
-   loose .rddump deleted by ico_frame_dump_zip once the zip is written; when the zip fails the
-   .rddump is kept. The log is logs/ico-pc.log, a file on Android too; with
-   --console there is none and the zip holds the dump alone. */
-/* forReport: Settings' bug-report capture (the presented picture goes into
-   the zip too); F12 leaves the PNG loose as ever */
+   and a zip of the rd dump, the tick before's (rd_dump_prev_frame:
+   rd_replay_tool --interp rebuilds the pictures between) and the log
+   (GitHub takes a .zip, not an .rddump; the PNGs stay loose). The loose
+   .rddump is deleted once the zip is written, kept when it fails. With
+   --console there is no log file. forReport: Settings' bug-report row
+   (the pictures go into the zip too) */
 /* the skin check's sidecar for the next frame_dump (skin_capture_pump):
    added to its zip, "" none */
 static char s_skinSidecar[ICO_PATH_MAX];
@@ -3336,6 +3333,7 @@ static void frame_dump(int forReport)
         s_pres.presentPng[0] = '\0';
     }
     s_pres.presentInfoPending = s_pres.presentPng[0] != '\0';
+    ico_upscale_pictures_arm(s_pres.presentPng, forReport); /* issue 203 */
     s_pres.presentInfoHave = 0;
     s_pres.presentDumpFrame = rd_frame_number();
     s_pres.presentDumpPrev = 0;
@@ -3587,6 +3585,7 @@ static void photo_pump(void)
                 }
                 fprintf(stderr, "window: F12: %s %s%s\n", r > 0 ? "wrote" : "could not write", path,
                         what);
+                ico_upscale_pictures_done(path, s_pres.reportZip);
                 if (s_pres.reportZip[0] != '\0') {
                     char why[160], entry[ICO_PATH_MAX];
                     size_t bytes = 0;
