@@ -13,7 +13,7 @@
 # -DENV_A=<VAR=VALUE[|VAR=VALUE]> -DENV_B=<...> -DREQ_A=<regex> -DREQ_B=<regex>
 # [-DDUMP=<dump>] [-DLIST=<dump list>] [-DSKIP_UNLESS=<regex>: a dump whose
 # first run prints no line matching it is skipped, not compared (the list's
-# frames without VU commands print no pre-pass line)]
+# frames without VU commands: 0 pre-passes, nothing for a floor to skip)]
 set(dumps "")
 if(DUMP AND EXISTS "${DUMP}")
   list(APPEND dumps "${DUMP}")
@@ -72,7 +72,7 @@ foreach(dump IN LISTS dumps)
     endif()
     if(SKIP_UNLESS AND NOT "${outA}" MATCHES "${SKIP_UNLESS}")
       # a dump the comparison cannot speak about (the list's 2D-only frames
-      # have no VU command, so no pre-pass line): skipped, not failed
+      # have no VU command: 0 pre-passes either way): skipped, not failed
       message(STATUS "${dump} ${s}: skipped (no line matching \"${SKIP_UNLESS}\")")
       continue()
     endif()

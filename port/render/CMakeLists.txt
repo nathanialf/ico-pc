@@ -2532,10 +2532,11 @@ if(ICO_RUN_TESTS)
                      -DNAME=rd_vuprepass_min_ab
                      # no fixture dump: rd_pixel_frame.rddump has no VU draws (0 passes either way);
                      # the list's dumps alone, SKIP where none exist, and a listed frame without
-                     # VU commands (the corpus's 2D-only frames print no pre-pass line) skipped
+                     # VU commands (the corpus's 2D-only frames: 0 passes with the floor at 0,
+                     # nothing to skip above it) skipped
                      "-DLIST=${CMAKE_SOURCE_DIR}/tools/vustage_dumps.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/vuprepass_min_ab"
-                     "-DSKIP_UNLESS=stats: VU pre-pass "
+                     "-DSKIP_UNLESS=stats: VU pre-pass on: [1-9][0-9]* passes"
                      "-DENV_A=ICO_RD_VU_PREPASS_MIN=0" "-DENV_B=ICO_RD_VU_PREPASS_MIN=2147483647"
                      "-DREQ_A=stats: VU pre-pass on: [12] passes.*pre-pass skipped 0 frames under 0 slots"
                      "-DREQ_B=stats: VU pre-pass on: 0 passes.*pre-pass skipped [1-9][0-9]* frames under 2147483647 slots"
