@@ -611,14 +611,16 @@ its own set). The next start of the version (`ICO_DIAG_PIPESET_LAZY_LOW_MEMORY`)
 file (`ico_diag_startup_resume`) and resumes the set there (`rd_set_pipeline_resume`) in batches of
 half the stopped start's (`ico_pipe_resume_batch`: the careful set's 8 becomes 4, the default 32
 becomes 16, then 8, then 4; never under 4), the memory asked between batches as in any set (before
-each pipeline under the careful policy). The pipelines before the place are left to first use when
-the renderer loaded this shader set's cache file (the driver answers them from it; the progress
-screen counts the rest only), else made after the rest (the set from the place to its end, then
-from its first key to the place; the screen counts the whole set). A line without the place (written
+each pipeline under the careful policy). The pipelines before the place are made after the rest
+(the set from the place to its end, then from its first key to the place; the screen counts the
+whole set), from the pipeline cache where it holds them (a moment each): a resumed set that stops
+leaves keys before its own place that no start made, so the window does not leave the head to
+first use even with the cache loaded (`rd_set_pipeline_resume`'s `skipBefore`, which does and
+counts the rest only, stays for a caller that knows the head is cached; `rd_set_resume_test`). A line without the place (written
 before the place was recorded) resumes from the first key in half the set's batches. Lines:
 
-    window: start-up set: resumed at pipeline 313 of 1196 after the low-memory stop of 2026-11-09 20:45 (batches of 4, stop 1 in a row; the pipelines before it made after the rest: the pipeline cache file was not loaded; the pipeline cache file 1201581 bytes, loaded by the renderer: no): set: stopped at ...
-    rd: pipelines: the start-up set resumes at pipeline 313 of 1196 after an earlier start's stop for memory, in batches of 4 (the set's own 8); the pipelines before it are made after the rest (the pipeline cache file did not hold them)
+    window: start-up set: resumed at pipeline 313 of 1196 after the low-memory stop of 2026-11-09 20:45 (batches of 4, stop 1 in a row; the pipelines before it made after the rest, from the pipeline cache where it holds them; the pipeline cache file 1201581 bytes, loaded by the renderer: no): set: stopped at ...
+    rd: pipelines: the start-up set resumes at pipeline 313 of 1196 after an earlier start's stop for memory, in batches of 4 (the set's own 8); the pipelines before it are made after the rest
 
 A resumed set that finishes deletes the activity file (the next start makes the whole set); one
 that stops again writes its own line with `stop 2` and its own place, and the next start halves the

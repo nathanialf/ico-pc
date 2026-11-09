@@ -163,7 +163,12 @@ int window_pipe_floor_retry(int pipePolicy)
                  "at pipeline 1 after the low-memory stop of an earlier start (its line names "
                  "no place)");
     }
-    rd_set_pipeline_resume(at, batch, loaded != 0);
+    /* the pipelines before the place made after the rest, whatever the
+       cache: a stop of a resumed set (itself from a place) leaves keys
+       before its own place that no start made, and a key the cache holds
+       is made from it in a moment (rd.h rd_set_pipeline_resume's
+       skipBefore stays for a caller that knows the whole head is cached) */
+    rd_set_pipeline_resume(at, batch, false);
     ico_diag_startup_resume();
     s_resumed = 1;
     {
@@ -178,11 +183,9 @@ int window_pipe_floor_retry(int pipePolicy)
                 "window: start-up set: resumed %s (%s, stop %u in a row; %s; the pipeline cache "
                 "file %lld bytes, loaded by the renderer: %s): %s\n",
                 where, b, s_prevStop.stops ? s_prevStop.stops : 1u,
-                at == 0  ? "the whole set"
-                : loaded ? "the pipelines before it from the pipeline cache when the game needs "
-                           "them"
-                         : "the pipelines before it made after the rest: the pipeline cache file "
-                           "was not loaded",
+                at == 0 ? "the whole set"
+                        : "the pipelines before it made after the rest, from the pipeline cache "
+                          "where it holds them",
                 cache_file_bytes(ico_diag_pipeline_cache_path()), loaded ? "yes" : "no",
                 line[0] ? line : "no stop line");
     }

@@ -3096,8 +3096,7 @@ uint32_t rd_precreate_pipelines(void)
                 base == 0u            ? ""
                 : s_resume.skipBefore ? "; the pipelines before it are left to first use (the "
                                         "pipeline cache file holds them)"
-                                      : "; the pipelines before it are made after the rest "
-                                        "(the pipeline cache file did not hold them)");
+                                      : "; the pipelines before it are made after the rest");
         s_resume.armed = false;
     }
     createKeys(setKeys, setN, false, &times, &c);
