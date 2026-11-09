@@ -737,6 +737,10 @@ thread; many switches and none long, or a long one on a thread that waits, with 
 span and present blocked beside it, is the system holding the whole process (issue 179). The
 words are `window_scene.c` (`window_scene_threads_text`).
 
+The slow-scene file's arming (a block over `[dev] slow_scene_dump_ms`, the first slow block of each
+new stage as well as a block 1.5 times heavier, three a run) is in
+[ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md).
+
 **The layout line** (`window: layout: play 6.2 s, scene 3.1 s, pause 0.7 s`), after the first
 line: the block's simulation steps' time by the game's layout when each step ended: `play` (the
 game's play layout), `scene` (a scene's empty layout, or any layout while a movie plays), `title`

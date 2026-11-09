@@ -343,6 +343,34 @@ int main(void)
         t.waitSumMs = 180.0; /* work 40.0 exactly */
         CHECK(!window_slow_scene_due(&t));
         t.waitSumMs = 100.0;
+        /* issue 179: the boat's 99.7 ms block (stage 42) dumped, then the cage's
+           90.9 ms in a new stage is the first slow block of that stage: due though
+           not 1.5 times the boat's; the same stage is not */
+        t.count = 1;
+        t.lastStage = 42;
+        t.stage = 42;
+        t.lastWorkMs = 99.7;
+        t.spanSumMs = 1029.0; /* work (1029 - 100 - 20) / 10 = 90.9 */
+        CHECK(window_slow_scene_work_ms(&t) > 90.8 && window_slow_scene_work_ms(&t) < 91.0);
+        CHECK(!window_slow_scene_new_stage(&t));
+        CHECK(!window_slow_scene_due(&t));
+        t.stage = 40;
+        CHECK(window_slow_scene_new_stage(&t));
+        CHECK(window_slow_scene_due(&t));
+        window_slow_scene_text(b, sizeof(b), &t, 7, 2000.0, 1000.0, "slow-x.zip");
+        CHECK(strstr(b, "in a scene layout (the first slow block of stage 40): frame 7 (") != NULL);
+        t.count = 0; /* the first dump of a run is no new stage's */
+        CHECK(!window_slow_scene_new_stage(&t));
+        t.count = SLOW_SCENE_DUMPS; /* and three a run still holds */
+        CHECK(!window_slow_scene_due(&t));
+        t.count = 1;
+        t.stage = 40;
+        t.waitSumMs = 180.0; /* a new stage under the bound is not due either */
+        t.spanSumMs = 600.0;
+        CHECK(!window_slow_scene_due(&t));
+        t.stage = t.lastStage = 0;
+        t.count = 0;
+        t.waitSumMs = 100.0;
         /* the replay the dump is to hold: its vertex work at or above the
            block's mean a replay */
         CHECK(window_slow_scene_pick(598000.0, 598000.0));
