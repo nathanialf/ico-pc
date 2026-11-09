@@ -242,6 +242,14 @@ static void testLines(void)
     CHECK(robust_persist_line(line, sizeof(line), &s, &old, "0.10.2", NULL) == -1);
     s = robust_persist_step(&old, "0.10.1", 0, 0);
     CHECK(robust_persist_line(line, 20, &s, &old, "0.10.1", NULL) == -1);
+    /* an unmarked true (the player's, or an older build's) is said, never dropped */
+    CHECK(robust_unmarked_line(line, sizeof(line), "/x/config.toml") == 0);
+    CHECK(strstr(line, "/x/config.toml has no gpu_robust_by mark") != NULL);
+    CHECK(strstr(line, "never dropped") != NULL);
+    CHECK(strstr(line, "bounds checks on every 3D load") != NULL);
+    CHECK(robust_unmarked_line(line, 20, NULL) == -1);
+    CHECK(robust_mark_parse("by hand", &old) == -1);
+    CHECK(robust_mark_parse("", &old) == -1);
 }
 
 int main(void)
