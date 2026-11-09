@@ -675,6 +675,27 @@ bool vkr_submit_present_signal(VkrFrame *f)
  * the global barrier path (ICO_VK_GLOBAL_BARRIERS=1, or recorded
  * interleaved: vkr_order_writes) defers nothing and records each barrier
  * at once.  stats.barriers counts vkCmdPipelineBarrier calls. */
+/* The stages that read a buffer shaders read (vertex input, vertex and
+ * fragment shaders; with the compute record's stores offered the compute
+ * shader too: the VU record's compute builds read the stream at t0 and the
+ * ring at t5, which copies rewrite, and their stores are read by the later
+ * vertex shaders, rhi.h RhiLimits.computeStores), and with the transfer
+ * stage (copies); the first scope of a copy into such a buffer and the
+ * second of a copy's or store's visibility.  Without the compute stage here
+ * a compute read of an arena range a copy rewrote would be unordered, which
+ * only the validation layer under the compute tests would show. */
+static VkPipelineStageFlags vkr_buf_shader_stages(void)
+{
+    return VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+           (g_vkr.computeStores ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : 0u);
+}
+
+static VkPipelineStageFlags vkr_buf_read_stages(void)
+{
+    return vkr_buf_shader_stages() | VK_PIPELINE_STAGE_TRANSFER_BIT;
+}
+
 static void vkr_flush_barriers(VkrCmdList *c)
 {
     vkr_flush_barriers_to(c, false);
@@ -1063,8 +1084,7 @@ static void vkr_hz_copy(VkrCmdList *c, VkrTexture *srcTex, VkrBuffer *srcBuf, Vk
     if (dstBuf && dstBuf->shaderRead) {
         /* rhi.h: a copy into a buffer shaders read waits for their earlier
          * reads, as rhi_cmd_copy_buffer does */
-        h.src |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                 VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        h.src |= vkr_buf_shader_stages();
         h.dst |= VK_PIPELINE_STAGE_TRANSFER_BIT;
         h.force = true;
     }
@@ -1478,12 +1498,19 @@ void rhi_cmd_set_pipeline(RhiCommandList cl, RhiPipeline p)
     if (!cache || c->pipelineId != p.id) {
         /* the cache off (rhi_bind_cache.h): every group bound again at
          * every pipeline bind, whatever the layouts share */
-        c->groupDirty |=
-            cache ? vkr_groups_disturbed(c->pipeline == pp ? NULL : c->pipeline, pp) : 0xFFu;
+        /* descriptor sets are bound per bind point in Vulkan and the list's
+         * cache (c->groups) is not: a change between a graphics and a
+         * compute pipeline (the VU record's dispatches) binds every group
+         * again, else the first draw after the record would find the
+         * graphics bind point's sets as they were before it */
+        const bool otherPoint = c->pipeline && c->pipeline->bindPoint != pp->bindPoint;
+        c->groupDirty |= cache && !otherPoint
+                             ? vkr_groups_disturbed(c->pipeline == pp ? NULL : c->pipeline, pp)
+                             : 0xFFu;
         c->pipeline = pp;
         c->pipelineId = p.id;
         vkr_flush_barriers(c);
-        vkCmdBindPipeline(c->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, pp->pipeline);
+        vkCmdBindPipeline(c->cb, pp->bindPoint, pp->pipeline);
         g_vkr.stats.pipelineBinds++;
         /* a group the new pipeline has static: its own values replaced the
          * ones set before, which a later dynamic pipeline must set again */
@@ -1546,8 +1573,8 @@ static void vkr_flush_bind_groups(VkrCmdList *c)
     }
     for (uint32_t g = 0; g < c->pipeline->layoutCount; g++) {
         if ((c->groupDirty & (1u << g)) && c->groups[g]) {
-            vkCmdBindDescriptorSets(c->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, c->pipeline->layout, g,
-                                    1, &c->groups[g], c->dynCount[g], c->offsets[g]);
+            vkCmdBindDescriptorSets(c->cb, c->pipeline->bindPoint, c->pipeline->layout, g, 1,
+                                    &c->groups[g], c->dynCount[g], c->offsets[g]);
             g_vkr.stats.bindGroupBinds++;
         }
     }
@@ -1851,8 +1878,10 @@ void rhi_cmd_draw(RhiCommandList cl, uint32_t vertexCount, uint32_t firstVertex,
 {
     VkrCmdList *c = vkr_get_cmd(cl);
     /* no open pass (the legacy pass begin failed, vk_renderpass.c): the draws
-     * until the pass end are skipped */
-    if (!c || !c->pipeline || !c->inPass) {
+     * until the pass end are skipped; so is a draw with a compute pipeline
+     * bound (the VU record's, rhi_cmd_dispatch's) */
+    if (!c || !c->pipeline || !c->inPass ||
+        c->pipeline->bindPoint != VK_PIPELINE_BIND_POINT_GRAPHICS) {
         return;
     }
     vkr_flush_barriers(c);
@@ -1868,8 +1897,10 @@ void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t first
 {
     VkrCmdList *c = vkr_get_cmd(cl);
     /* no open pass (the legacy pass begin failed, vk_renderpass.c): the draws
-     * until the pass end are skipped */
-    if (!c || !c->pipeline || !c->inPass) {
+     * until the pass end are skipped; so is a draw with a compute pipeline
+     * bound (the VU record's, rhi_cmd_dispatch's) */
+    if (!c || !c->pipeline || !c->inPass ||
+        c->pipeline->bindPoint != VK_PIPELINE_BIND_POINT_GRAPHICS) {
         return;
     }
     vkr_flush_barriers(c);
@@ -1901,11 +1932,8 @@ void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, R
         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
         .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
     };
-    vkCmdPipelineBarrier(c->cb,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_VERTEX_INPUT_BIT |
-                             VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &pre, 0, NULL, 0, NULL);
+    vkCmdPipelineBarrier(c->cb, vkr_buf_read_stages(), VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &pre,
+                         0, NULL, 0, NULL);
     g_vkr.stats.barriers++;
     vkCmdCopyBuffer(c->cb, s->buffer, d->buffer, 1, &r);
     g_vkr.stats.copies++;
@@ -1917,10 +1945,8 @@ void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, R
                          VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
                          VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
     };
-    vkCmdPipelineBarrier(c->cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         0, 1, &mb, 0, NULL, 0, NULL);
+    vkCmdPipelineBarrier(c->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, vkr_buf_read_stages(), 0, 1, &mb, 0,
+                         NULL, 0, NULL);
     g_vkr.stats.barriers++;
 }
 
@@ -2036,9 +2062,7 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
     const VkAccessFlags reads = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
                                 VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
                                 VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-    const VkPipelineStageFlags readStages =
-        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT;
+    const VkPipelineStageFlags readStages = vkr_buf_read_stages();
     if (d->shaderRead && c->globalOrder) {
         /* rhi.h: into a buffer shaders read, after their earlier reads (the
          * hazard path folds this into vkr_hz_copy's barrier) */
@@ -2085,15 +2109,15 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
 #define VKR_BUF_READ_ACCESS                                                                        \
     (VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT | \
      VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)
-#define VKR_BUF_READ_STAGES                                                                        \
-    (VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |                    \
-     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT)
 
-static VkrCmdList *vkr_store_list(RhiCommandList cl, RhiBuffer buf, const char *what)
+/* the list, outside a pass, where the stores of the kind are offered
+   (compute: rhi_cmd_buffer_compute_begin / _end) */
+static VkrCmdList *vkr_store_list_of(RhiCommandList cl, RhiBuffer buf, const char *what,
+                                     bool compute)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
     VkrBuffer *b = vkr_get_buffer(buf);
-    if (!c || !b || !g_vkr.vertexStores) {
+    if (!c || !b || !(compute ? g_vkr.computeStores : g_vkr.vertexStores)) {
         return NULL;
     }
     if (c->inPass) {
@@ -2103,36 +2127,99 @@ static VkrCmdList *vkr_store_list(RhiCommandList cl, RhiBuffer buf, const char *
     return c;
 }
 
-bool rhi_cmd_buffer_store_begin(RhiCommandList cl, RhiBuffer buf)
+/* the bracket's two halves for the writing stage ws (the vertex shader,
+ * or the compute shader: rhi_cmd_buffer_compute_begin / _end, the same
+ * barriers with the compute stage writing; the read stages include the
+ * compute shader wherever the compute stores are offered,
+ * vkr_buf_read_stages) */
+static void vkr_store_open(VkrCmdList *c, VkPipelineStageFlags ws)
 {
-    VkrCmdList *c = vkr_store_list(cl, buf, "rhi_cmd_buffer_store_begin");
-    if (!c) {
-        return false;
-    }
     c->pendMemSrc |= VK_ACCESS_SHADER_WRITE_BIT;
     c->pendMemDst |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    c->pendSrc |= VKR_BUF_READ_STAGES;
-    c->pendDst |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
+    c->pendSrc |= vkr_buf_read_stages() | ws;
+    c->pendDst |= ws;
     if (c->globalOrder) {
         vkr_flush_barriers(c);
     }
+}
+
+static void vkr_store_close(VkrCmdList *c, VkPipelineStageFlags ws)
+{
+    c->pendMemSrc |= VK_ACCESS_SHADER_WRITE_BIT;
+    c->pendMemDst |= VKR_BUF_READ_ACCESS | VK_ACCESS_SHADER_WRITE_BIT;
+    c->pendSrc |= ws;
+    c->pendDst |= vkr_buf_read_stages() | ws;
+    if (c->globalOrder) {
+        vkr_flush_barriers(c);
+    }
+}
+
+bool rhi_cmd_buffer_store_begin(RhiCommandList cl, RhiBuffer buf)
+{
+    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_store_begin", false);
+    if (!c) {
+        return false;
+    }
+    vkr_store_open(c, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
     return true;
 }
 
 bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf)
 {
-    VkrCmdList *c = vkr_store_list(cl, buf, "rhi_cmd_buffer_store_end");
+    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_store_end", false);
     if (!c) {
         return false;
     }
-    c->pendMemSrc |= VK_ACCESS_SHADER_WRITE_BIT;
-    c->pendMemDst |= VKR_BUF_READ_ACCESS | VK_ACCESS_SHADER_WRITE_BIT;
-    c->pendSrc |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT;
-    c->pendDst |= VKR_BUF_READ_STAGES;
-    if (c->globalOrder) {
-        vkr_flush_barriers(c);
-    }
+    vkr_store_close(c, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
     return true;
+}
+
+/* ------------------------------------------------------------ compute stores
+ * rhi.h rhi_cmd_buffer_compute_begin / _end and rhi_cmd_dispatch: the VU
+ * record written by compute dispatches (port/render/rd_replay_vu.c
+ * vuRecPassBegin), outside render passes, where RhiLimits.computeStores.
+ * The bracket is the store bracket's with the compute shader as the writing
+ * stage; held back the same way, so it goes out with the first dispatch's
+ * (rhi_cmd_dispatch flushes the list's deferred barriers) or the next
+ * pass's or copy's barrier. */
+bool rhi_cmd_buffer_compute_begin(RhiCommandList cl, RhiBuffer buf)
+{
+    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_compute_begin", true);
+    if (!c) {
+        return false;
+    }
+    vkr_store_open(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    return true;
+}
+
+bool rhi_cmd_buffer_compute_end(RhiCommandList cl, RhiBuffer buf)
+{
+    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_compute_end", true);
+    if (!c) {
+        return false;
+    }
+    vkr_store_close(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    return true;
+}
+
+void rhi_cmd_dispatch(RhiCommandList cl, uint32_t gx, uint32_t gy, uint32_t gz)
+{
+    VkrCmdList *c = vkr_get_cmd(cl);
+    if (!c || !g_vkr.computeStores || gx == 0 || gy == 0 || gz == 0) {
+        return;
+    }
+    if (c->inPass || !c->pipeline || c->pipeline->bindPoint != VK_PIPELINE_BIND_POINT_COMPUTE) {
+        static uint32_t s_refused;
+        if (s_refused++ < 8u) {
+            VKR_LOG("rhi_cmd_dispatch: %s: refused (%u)",
+                    c->inPass ? "inside a render pass" : "no compute pipeline bound", s_refused);
+        }
+        return;
+    }
+    vkr_flush_barriers(c);
+    vkr_flush_bind_groups(c);
+    vkCmdDispatch(c->cb, gx, gy, gz);
+    g_vkr.stats.dispatches++;
 }
 
 /* ------------------------------------------------------------ debug labels */
@@ -2522,7 +2609,7 @@ void rhi_cmd_external_end(RhiCommandList cl)
     c->dynFresh = 0;
     c->groupDirty = 0xFFu;
     if (c->pipeline) {
-        vkCmdBindPipeline(c->cb, VK_PIPELINE_BIND_POINT_GRAPHICS, c->pipeline->pipeline);
+        vkCmdBindPipeline(c->cb, c->pipeline->bindPoint, c->pipeline->pipeline);
         g_vkr.stats.pipelineBinds++;
     }
 }

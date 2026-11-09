@@ -545,6 +545,10 @@ static VkShaderStageFlags vkr_stages(uint32_t rhiStages)
     if (rhiStages & (1u << RHI_STAGE_FRAGMENT)) {
         f |= VK_SHADER_STAGE_FRAGMENT_BIT;
     }
+    if (rhiStages & (1u << RHI_STAGE_COMPUTE)) {
+        /* the VU record's compute builds (rhi.h RhiPipelineDesc.compute) */
+        f |= VK_SHADER_STAGE_COMPUTE_BIT;
+    }
     return f ? f : (VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT);
 }
 
@@ -940,8 +944,11 @@ static bool vkr_pipeline_fits(const RhiPipelineDesc *d)
 {
     const VkPhysicalDeviceLimits *l = &g_vkr.props.limits;
     const char *name = d->debugName ? d->debugName : "?";
-    /* per stage (vertex, fragment): uniform, storage, sampled image, sampler */
-    uint32_t n[2][6] = {{0}};
+    /* per stage (vertex, fragment, compute): uniform, storage, sampled
+     * image, sampler; a compute pipeline is held to the compute stage's
+     * count, a graphics one to the other two */
+    uint32_t n[3][6] = {{0}};
+    const bool compute = d->compute.id != 0;
     uint32_t dyn = 0, ubo = 0, ssbo = 0, img = 0, smp = 0, stoImg = 0, inAtt = 0, written = 0;
     if (d->layoutCount > l->maxBoundDescriptorSets) {
         VKR_LOG("pipeline %s: %u descriptor sets, the device binds %u (maxBoundDescriptorSets)",
@@ -992,14 +999,21 @@ static bool vkr_pipeline_fits(const RhiPipelineDesc *d)
             default:
                 continue;
             }
-            for (int s = 0; s < 2; s++) {
+            for (int s = 0; s < 3; s++) {
                 if (st & (1u << s)) {
                     n[s][k]++;
                 }
             }
         }
     }
-    if (written && !g_vkr.vertexStores) {
+    if (compute && !g_vkr.computeStores) {
+        /* rhi.h RhiPipelineDesc.compute: only with RhiLimits.computeStores */
+        VKR_LOG("pipeline %s: a compute pipeline without RhiLimits.computeStores (%s)", name,
+                g_vkr.computeStoresOff);
+        g_vkr.lastLimit = "computeStores";
+        return false;
+    }
+    if (written && !compute && !g_vkr.vertexStores) {
         /* rhi.h RHI_BIND_STORAGE_BUFFER_RW: only with the feature enabled */
         VKR_LOG("pipeline %s: %u storage buffers its vertex shader writes, without "
                 "vertexPipelineStoresAndAtomics (RhiLimits.vertexStores)",
@@ -1015,21 +1029,22 @@ static bool vkr_pipeline_fits(const RhiPipelineDesc *d)
         "maxPerStageDescriptorUniformBuffers", "maxPerStageDescriptorStorageBuffers",
         "maxPerStageDescriptorSampledImages",  "maxPerStageDescriptorSamplers",
         "maxPerStageDescriptorStorageImages",  "maxPerStageDescriptorInputAttachments"};
-    for (int s = 0; s < 2; s++) {
+    static const char *const stageWord[3] = {"vertex", "fragment", "compute"};
+    for (int s = compute ? 2 : 0; s < (compute ? 3 : 2); s++) {
         uint32_t all = 0;
         for (int k = 0; k < 6; k++) {
             all += n[s][k];
             if (n[s][k] > stageMax[k]) {
                 VKR_LOG("pipeline %s: %u in the %s stage, the device allows %u (%s)", name, n[s][k],
-                        s ? "fragment" : "vertex", stageMax[k], stageName[k]);
+                        stageWord[s], stageMax[k], stageName[k]);
                 g_vkr.lastLimit = stageName[k];
                 return false;
             }
         }
-        if (all + (s ? d->colorCount : 0) > l->maxPerStageResources) {
+        if (all + (s == 1 ? d->colorCount : 0) > l->maxPerStageResources) {
             VKR_LOG("pipeline %s: %u resources in the %s stage, the device allows %u "
                     "(maxPerStageResources)",
-                    name, all, s ? "fragment" : "vertex", l->maxPerStageResources);
+                    name, all, stageWord[s], l->maxPerStageResources);
             g_vkr.lastLimit = "maxPerStageResources";
             return false;
         }
@@ -1110,6 +1125,10 @@ typedef struct VkrPipeJob {
     VkPipelineRenderingCreateInfo ri;
     VkPipelineRobustnessCreateInfoEXT rob;
     VkGraphicsPipelineCreateInfo ci;
+    /* a compute pipeline (rhi.h RhiPipelineDesc.compute): cci instead of ci,
+     * stages[0] its compute stage */
+    bool compute;
+    VkComputePipelineCreateInfo cci;
 } VkrPipeJob;
 
 static const VkDynamicState vkr_pipe_dynamic[] = {
@@ -1150,8 +1169,11 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
     }
     VkrShader *vs = vkr_pool_get(&g_vkr.shaders, d->vertex.id);
     VkrShader *fs = vkr_pool_get(&g_vkr.shaders, d->fragment.id);
-    if (!vs) {
-        VKR_LOG("pipeline %s: no vertex shader", d->debugName ? d->debugName : "?");
+    /* a compute pipeline (rhi.h RhiPipelineDesc.compute): its shader alone */
+    VkrShader *cs = d->compute.id ? vkr_pool_get(&g_vkr.shaders, d->compute.id) : NULL;
+    if (d->compute.id ? !cs : !vs) {
+        VKR_LOG("pipeline %s: no %s shader", d->debugName ? d->debugName : "?",
+                d->compute.id ? "compute" : "vertex");
         vkr_pipe_failed(VK_SUCCESS);
         return false;
     }
@@ -1188,6 +1210,33 @@ static bool vkr_pipe_prepare(const RhiPipelineDesc *d, VkrPipeJob *j)
     }
     p->layoutCount = d->layoutCount;
     p->dstRead = (uint8_t)d->dstRead;
+    p->bindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    if (cs) {
+        /* the pipeline layout as a graphics pipeline's; no vertex input,
+         * rasterization, blend or dynamic state (the VU record's dispatches,
+         * rhi_cmd_dispatch; vkr_pipe_compile takes cci) */
+        p->bindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
+        p->dstRead = 0;
+        p->dynamic = 0;
+        p->intTarget = false;
+        memset(&p->depthDefault, 0, sizeof(p->depthDefault));
+        memset(&p->blendDefault, 0, sizeof(p->blendDefault));
+        j->id = id;
+        j->layout = p->layout;
+        j->compute = true;
+        j->cci = (VkComputePipelineCreateInfo){
+            .sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO,
+            .stage =
+                {
+                    .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+                    .stage = VK_SHADER_STAGE_COMPUTE_BIT,
+                    .module = cs->module,
+                    .pName = cs->entry,
+                },
+            .layout = j->layout,
+        };
+        return true;
+    }
     /* the dynamic groups this device takes; the blend only with one colour
      * target (rhi_cmd_set_blend_state sets attachment 0) */
     p->dynamic = 0;
@@ -1381,8 +1430,10 @@ static void vkr_pipe_compile(VkrPipeJob *j)
        time is the compile's own, not the wait for the lock */
     vkr_compile_lock();
     const uint64_t t0 = vkr_now_ns();
-    j->result =
-        vkCreateGraphicsPipelines(g_vkr.device, g_vkr.pipelineCache, 1, &j->ci, NULL, &j->pipeline);
+    j->result = j->compute ? vkCreateComputePipelines(g_vkr.device, g_vkr.pipelineCache, 1, &j->cci,
+                                                      NULL, &j->pipeline)
+                           : vkCreateGraphicsPipelines(g_vkr.device, g_vkr.pipelineCache, 1, &j->ci,
+                                                       NULL, &j->pipeline);
     j->ms = (float)((double)(vkr_now_ns() - t0) / 1e6);
     vkr_compile_unlock();
 }
@@ -1394,7 +1445,9 @@ static RhiPipeline vkr_pipe_finish(const RhiPipelineDesc *d, VkrPipeJob *j)
         return out;
     }
     VkrPipeline *p = vkr_pool_get(&g_vkr.pipelines, j->id);
-    if (!vkr_check(j->result, "vkCreateGraphicsPipelines", __FILE__, __LINE__) || !p) {
+    if (!vkr_check(j->result, j->compute ? "vkCreateComputePipelines" : "vkCreateGraphicsPipelines",
+                   __FILE__, __LINE__) ||
+        !p) {
         if (j->result == VK_SUCCESS) {
             vkDestroyPipeline(g_vkr.device, j->pipeline, NULL);
         }

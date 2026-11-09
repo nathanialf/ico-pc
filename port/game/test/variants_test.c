@@ -302,6 +302,14 @@ static void test_combat(void)
         CHECK(ico_variants_suspend_achievements() == 0);
         CHECK(ico_variant_step(rows[i].id, 1) == 1 && rows[i].hook() == 1);
         CHECK(ico_config_get_bool(path, 0) == 1);
+        /* the down action's invincibility follows the third row only, and
+           only for Ico: Off leaves his hit flag clear, any other actor keeps
+           the game's rule either way */
+        CHECK(ico_variant_down_keeps_hit(1) == 1 && ico_variant_down_keeps_hit(0) == 1);
+        ico_variant_set(rows[i].id, 0);
+        CHECK(ico_variant_down_keeps_hit(1) == (i == 2 ? 0 : 1));
+        CHECK(ico_variant_down_keeps_hit(0) == 1);
+        ico_variant_set(rows[i].id, 1);
         /* a reload goes back to the file */
         ico_variant_set(rows[i].id, 0);
         ico_opt_reload();

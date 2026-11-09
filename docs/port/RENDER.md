@@ -27,6 +27,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_vu_skin_check.h`, `rd_vu_skin_check.c`, `rd_vu_skin_judge.c`, `rd_vu_skin_selftest.c`, `rd_vu_skin_capture.c` | the skinned draws' bone-block check: a skinned draw probed beside the picture against the CPU, the twins of every skinned draw inside its pass (Turnip), the box check, the start-up probe, the capture on failure ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
 | `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
 | `port/render/rd_upscale.h`, `rd_upscale.c`, `rd_upscale_hook.c` | the upscale point: the render/display scale split, the marker's replay (the edge guard, the hook's inputs, UPSCALED), the reduction's read of UPSCALED, the per-present jitter; the hook (FSR 3.1, `rd_fsr3.c`, or the test's bilinear stand-in) ([The upscale point](#the-upscale-point)) |
+| `port/render/rd_layer.h`, `rd_layer.c` | the display layer: under a temporal upscaler, lists 11-12 after their last scene-class command drawn into the display-scale COMPOSITE after the upscale, keep frames held 1:1, PRE_DISPLAY for the motion blur ([DISPLAY_LAYER.md](DISPLAY_LAYER.md)) |
 | `port/render/rd_velocity.c` | the scene's motion vectors for a temporal upscaler: each VU draw's previous transform (VuPrevCB), the VELOCITY texture, the velocity pass's pipeline ([Velocity](#velocity)) |
 | `port/render/rd_pipeline.c` | pipeline keys from the state block, the pipeline cache, the reachable set |
 | `port/render/rd_dst_read.c` | the exact GS blend read from the destination in the fragment shader |
@@ -896,9 +897,17 @@ unkeyed draw and every draw of the first frame or a frame after a camera cut car
 velocity is 0. Every VU draw loses any `RD_VU_PREV` it carried before the pairing (a frame given
 again: an attached tick frame copied when the interpolation goes on, a dump replayed with
 `--velocity`). A frame that begins a new history (a cut, the first frame, a frame after the switch
-went on or `rd__velocity_forget`) gets `RD_UPSCALE_NO_HISTORY` in its upscale point's `u[2]`: the
-upscaler's history reset travels with the frame, so the replay of that frame reads it and never a
-value the game thread's attach of the next frame has already changed. The picture
+went on, `rd__velocity_forget`, a keep frame before it, the interpolator's camera snap) gets
+`RD_UPSCALE_NO_HISTORY` in its upscale point's `u[2]` and the reason above it (`u[2] >>
+RD_UPSCALE_WHY_SHIFT`, three bits, `RD_UPSCALE_WHY`: the `RD_UPSCALE_RESET_*` of
+[the display layer](DISPLAY_LAYER.md#history-resets)'s resets; a dump made before the reasons carries 0 there):
+the upscaler's history reset travels with the frame, so the replay of that frame reads it and never a
+value the game thread's attach of the next frame has already changed. A keep frame drops the picture
+before (`rd__velocity_keep`: in the attach without the interpolation, in `rd_present`'s keep path at a
+tick's first present with it), the reason the keep frame's own cut (CUT, CAMERA for the wall's) or
+KEEP, so the first picture after a fade begins a new history with the display layer off too; a
+tick's first present the interpolator snaps for the camera (`RD_SNAP_CAMERA`, `RD_SNAP_WALL`) calls
+`rd__velocity_forget_as(RD_UPSCALE_RESET_CAMERA)` before its attach. The picture
 before is kept as a list of its VU draws and their fixed parts (two buffers, swapped a frame).
 Dumps carry the VuPrevCBs (version 16, [Dumps and the replay tool](#dumps-and-the-replay-tool));
 an older dump replays with velocity 0. A morphing mesh's previous transform is drawn with the
@@ -949,10 +958,14 @@ are not counted, so the three are a floor, not the whole figure.
 
 ### The upscale point
 
-A temporal upscaler (issue 99) takes the scene after the whole post chain, at the moment the
-game's reduction (`postReduction`, the end of list 12, [RENDER_POST.md](RENDER_POST.md)) first
-reads SCENE: the glow, the depth of field, the fog, the motion blur and list 11's UI, subtitles,
-fades, letterbox and film noise are all in SCENE by then. Before the post chain was rejected: the
+A temporal upscaler (issue 99) takes the scene after the whole post chain: the glow, the depth of
+field, the fog and the motion blur are in SCENE by then. The point is the display layer's boundary
+([DISPLAY_LAYER.md](DISPLAY_LAYER.md)): the first command after the last scene-class command of lists 11-12,
+so the game's 2D layer (list 11's brightness, keep sprite, fades, letterbox, film noise and save
+tile, list 12's text) is drawn over the upscaled picture at the display scale; with `[dev]
+display_layer = false` it is the moment the game's reduction (`postReduction`, the end of list 12,
+[RENDER_POST.md](RENDER_POST.md)) first reads SCENE, the 2D layer in SCENE and upscaled with it.
+Before the post chain was rejected: the
 fog's LUT, the depth of field and the crack filler need the depth at the scale they draw at, and
 the upscaler outputs none. FSR 3.1 in force turns it on (Options > Picture > Upscaling,
 [DISPLAY.md](DISPLAY.md#fsr-31-upscaling)); so do `[dev] upscale_test = true`
@@ -969,7 +982,7 @@ nothing upscaled ([Dumps and the replay tool](#dumps-and-the-replay-tool)).
 
 **The scale split.** While the upscaler is asked (`rd__upscale_wanted`: its switch, not under the
 CRT filter), the size `rd__apply_display` computes from the Resolution row, the "window"
-resolution or Auto is the display's (`d`): DISPLAY, DISPLAY_HELD and UPSCALED are made at it. The
+resolution or Auto is the display's (`d`): DISPLAY, DISPLAY_HELD and UPSCALED (the composite) are made at it. The
 scene-class targets (SCENE, WORK2, AURA_WORK, the DATE snapshot, a frame-sized temporary) take the
 render scale `r = d / ratio`, not below 1 (the GS size) nor `d / 3`, capped by Auto's step
 (`RdSettings.upscaleRenderCap`); supersampling, MSAA (`rd__aa_mode`) and Downsampling are off.
@@ -978,17 +991,26 @@ render scale `r = d / ratio`, not below 1 (the GS size) nor `d / 3`, capped by A
 every expression is the one before, so every picture is the same bytes
 ([DISPLAY.md](DISPLAY.md#the-render-and-display-scales)).
 
-**At the marker** (`port/render/rd_upscale.c`), once a replay, when the reduction reads SCENE and
-SCENE is not multisampled: the edge guard (with a jitter right or down, SCENE's texel column or
+**At the marker** (`port/render/rd_upscale.c`; under the display layer at its boundary instead,
+`rd__upscale_dispatch_at` from `rd__layer_begin`, and the marker then only counts), once a replay,
+when the reduction reads SCENE and SCENE is not multisampled: the edge guard (with a jitter right or down, SCENE's texel column or
 row 0 made a copy of column or row 1 through a one-texel strip; nothing with no jitter, a jitter
 left or up, or a Full pixel window), then the hook `rd__upscale_dispatch` gets SCENE's colour, its
 depth through `rd__sampled_depth` (in place, or the D32F_S8 copy the effects depth also takes),
-VELOCITY ([Velocity](#velocity)) when the motion vectors are on, the jitter, a reset (the first
-dispatch, a new size, the replayed frame's own cut or its marker's `RD_UPSCALE_NO_HISTORY`) and the presents since the last dispatch, and writes
+VELOCITY ([Velocity](#velocity)) when the motion vectors are on, the jitter, a reset (one reason
+counted, the first that holds in this order: the first dispatch, a new size, a cut (the frame's
+own `rd_camera_cut`, or one its marker carries from a keep frame or a discarded frame), the camera
+(the wall's cut, or the interpolator's camera snap its marker carries), a keep run (keep frames held
+since the last dispatch, or its marker's KEEP), forgotten (any other `RD_UPSCALE_NO_HISTORY`:
+`rd__velocity_forget`, the switch, a dump made before the reasons); `resetWhy`,
+`RdUpscaleStats.resetsBy[]`) and the presents since the last dispatch, and writes
 UPSCALED: RGBA8, SCENE's GS size at the display scale (the Full pixel window too), render target,
-sampled, copy source and storage (made again without storage where the backend refuses it),
-owned by `rd_upscale.c` (not a named target: a new named id would shift every dump's temporary
-ids). The hook (`port/render/rd_upscale_hook.c`) runs FSR 3.1 (`port/render/rd_fsr3.c`) when the
+sampled, copy source, copy destination and storage (made again without storage where the backend
+refuses it). UPSCALED is the record in the reserved slot COMPOSITE
+(`rd__upscale_composite_ensure`; the log and `--stats` keep the name UPSCALED): not a named target
+(a new named id would shift every dump's temporary ids). The top four of `g_rd.targets`' 96 slots
+are reserved (`RD_LAYER_SLOTS`: COMPOSITE, COMPOSITE_HELD, PRE_DISPLAY, PRE_HELD; `rd_layer.h`),
+named by `rd__target_name` and never taken by the temporary allocator, which has 73. The hook (`port/render/rd_upscale_hook.c`) runs FSR 3.1 (`port/render/rd_fsr3.c`) when the
 switch is the settings' (Upscaling = FSR 3.1 in force, `rd__upscale_follow`; `rd__upscale_by_fsr3`),
 on Vulkan: the colour, the depth through its depth aspect, VELOCITY and the jitter
 ([DISPLAY.md](DISPLAY.md#fsr-31-upscaling)). With `rd__upscale_set`'s switch (`rd_replay_tool
@@ -1000,7 +1022,10 @@ a pass it draws sets its own viewport, and `rd__frame_group`'s fullscreen triang
 (under the exact viewport the triangle covered only tw / 16384 of UPSCALED about its centre).
 Turning either switch on turns the motion vectors on.
 
-**The reduction reads UPSCALED.** `rd__blur_post_sprite` (`port/render/rd_blur_border.c`): for
+**The reduction reads UPSCALED.** Under the display layer SCENE's record already holds the
+composite's from the boundary on, so the reduction reads it as any command after the boundary does
+([DISPLAY_LAYER.md](DISPLAY_LAYER.md)). With `[dev] display_layer = false`, or a frame the layer refused,
+`rd__blur_post_sprite` (`port/render/rd_blur_border.c`): for
 the reduction's textured sprite of a replay whose marker wrote UPSCALED, SCENE's target record
 lends UPSCALED's texture, state and texel geometry (`tw`, `th`, `sx`, `sy`, `ox`) for that draw
 only and takes them back after it, so the sprite's UVs, the GS sprite model or its hardware
@@ -1008,23 +1033,26 @@ fallback and the scissor are the reduction's at the display scale. Nothing recor
 `rd_alias_target`, which is record-time and would land in dumps and redirect every
 `rd_set_target(SCENE)` of the list. Everything after (DISPLAY, the motion blur's copy, the
 present) is as before at the display scale. The fades fold is off while the split is in force
-([RENDER_POST.md](RENDER_POST.md#the-fades-fold)): the fades are drawn into SCENE before the
-dispatch. The store plan keeps SCENE's depth stored as for the effects depth.
+([RENDER_POST.md](RENDER_POST.md#the-fades-fold)): the fades are drawn into the composite after the
+dispatch (into SCENE before it with the layer off). The store plan keeps SCENE's depth stored as for
+the effects depth.
 
 **The jitter a present.** With a phase count set (`rd__upscale_set_phases`; the stand-in sets
 none, the upscaler its own: FSR's `ceil(8 ratio^2)`), each replay that presents a newly drawn
 picture sets the jitter to `rd__jitter_halton(index % phase count)` before it replays
-(`rd__upscale_replay_begin` from `rd__replay_frame_here`: between replays, never during one). A
+(`rd__upscale_replay_begin` from `rd__replay_frame_here`: between replays, never during one). The
+jitter moves SCENE's record only while it is SCENE's own: `rd__frame_jitter_of` gives none while it
+lends the composite's (`port/render/rd_jitter.c`), so the display layer is drawn unjittered. A
 re-shown present (the still re-present's keep replay) draws no scene: no jitter is taken, no
 dispatch, UPSCALED and DISPLAY stay, and the next dispatch is told how many presents passed.
 Off again, the sequence's jitter is cleared (never `[dev] jitter_test`'s).
 
-**What goes through the upscaler.** Everything in SCENE at the reduction: the glow, fog and depth
-of field (fine), the motion blur's ghost and the fades (they smear a little more), film noise and
-the UI (temporally accumulated: accepted under the Native AA default; moving list
-11's noise and UI after the upscaler is the follow-up). Particles and the glow's composites have
-no motion vectors: fast particles ghost (a reactive mask from the particle draws' alpha is the
-follow-up).
+**What goes through the upscaler.** Everything in SCENE at the boundary: the glow, fog and depth
+of field (fine), the motion blur's ghost (it smears a little more). The fades, film noise, letterbox,
+save tile, subtitles and text are the display layer's, drawn after it; in a frame whose lists 11-12
+hold a scene-class command what lies before that command goes through the upscaler that frame
+(counted as begun after a scene-class command). Particles and the glow's composites have no motion
+vectors: fast particles ghost (a reactive mask from the particle draws' alpha is the follow-up).
 
 **The lines.** `rd: upscale point: UPSCALED WxH (display scale ...)` at each creation (or why
 not); `rd: upscale point: SCENE WxH (render scale ...) -> UPSCALED wxh (display scale ...) by
@@ -1032,9 +1060,14 @@ not); `rd: upscale point: SCENE WxH (render scale ...) -> UPSCALED wxh (display 
 count P); quality Q, sharpness S, fp16 on|off` at the first dispatch and at each new size; `rd: upscale point: frame N not upscaled
 (<why>): the reduction reads SCENE at the render scale` (the first 8, then every 100th); the
 display line's `(render scale r), display WxH (scale d; upscaler ratio ...)`; the fades fold's
-once-a-run line. `rd_replay_tool --stats`: `upscale point: SCENE WxH -> UPSCALED wxh (render
-scale, display scale), markers, dispatched, refused, reductions remapped, edge guard, jittered
-presents` or `upscale point off`. Tests: `rd_upscale` and `rd_replay_tool_upscale_test`
+once-a-run line; the display layer's lines and the 10 s line ([DISPLAY_LAYER.md](DISPLAY_LAYER.md)).
+`rd_replay_tool --stats`: `upscale point: SCENE WxH -> UPSCALED wxh (render scale, display scale),
+markers, dispatched, refused, reductions remapped, edge guard, jittered presents; resets R (first,
+size, cut, keep run, camera, forgotten); display layer on|off: frames (draws, textured), keep frames
+held (keep copies, no keep sprite), begun after a scene-class command, pre-upscale reductions (read
+as DISPLAY by N), refused` (the first `refused` the dispatches the hook refused, the last the frames
+the layer refused) or `upscale point off`. Tests: `rd_upscale`, `rd_upscale_layer_tiler`,
+`rd_replay_tool_upscale_test`, `rd_replay_tool_upscale_keep` and `rd_replay_tool_fsr3_keep`
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ### The pass ring
@@ -1475,7 +1508,7 @@ immediate-mode GPUs (NVIDIA, AMD, Intel, lavapipe) on Vulkan. OpenGL and Direct3
 | `uintViewWork`, `uintViewScene` | on where the backend has the view | off (`RhiLimits.uintView` false on D3D12) | off | off | off | off | off |
 | `carefulSet` | off | off | off | off | off | off | off |
 | the record path (the triangle pre-pass, `[dev] vu_prepass`) | on | on | on (issue 179); off for the run when the start-up self-test's four replays fail ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)) | on, the same | on, the same | on, the same | on, the same; off on an Apple A9 or A10 (32 bytes of colour targets a pixel) under the targets |
-| the record's write (`[dev] vu_record`) | stored by the vertex shaders where Vulkan offers `vertexPipelineStoresAndAtomics` | render targets and copies (no vertex stores this release; Direct3D 11 never) | stored where offered, else targets ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the record's two writes) | same | same | same | same |
+| the record's write (`[dev] vu_record`) | stored by the vertex shaders where Vulkan offers `vertexPipelineStoresAndAtomics`, else by compute dispatches | render targets and copies (no vertex or compute stores this release; Direct3D 11 never stores from its vertex shaders) | stored where offered, else compute dispatches, else targets ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the record's three writes) | same | same (the Mali-G52 of issue 179: compute dispatches, no vertex stores) | same | same |
 | dynamic state (`[dev] dynamic_state`) | on where offered | none | off (the PowerVR phone whose pictures shook; `[dev] dynamic_state = true` turns it on) | off | off | off | off |
 | `alphaPlan` (`[dev] alpha_plan`) | on | on | on | on | on | on | on |
 | `fxPlan` (`[dev] fx_plan`) | on | on | on | on | on | on | on |
@@ -1935,8 +1968,11 @@ two ticks draws under the ticks' cameras, `port/render/rd_replay_vu.c` (`doVuDra
 [The vertex and triangle pre-passes](PIPELINES.md#the-vertex-and-triangle-pre-passes)), with the
 record's write after it, `<dump>: stats: VU record stores: stored by the vertex shaders into the
 frame slot's record buffer: ...; pre-pass skipped N frames under M slots (the largest L)` (`targets`
-and its words under the render targets; the skips are `[dev] vu_prepass_min`'s,
-`port/render/rd_vu_record.c`);
+and its words under the render targets, `compute` and its words under the compute dispatches; the
+skips are `[dev] vu_prepass_min`'s, `port/render/rd_vu_record.c`); the first stats line counts the
+replay's compute dispatches after its copies (`..., C copies, N dispatches; screen prims ...`:
+`RdPerfRecord.dispatches`, `RhiStats.dispatches`, the record's under the compute dispatches, 0
+otherwise);
 the GPU line (`window: GPU ms per replay: ...`) ends with `; VU pre-pass <ms>`, as `--stats`'s
 `gpu:` line does
 (`port/render/rd.h` (`RdPerfRecord`); `port/platform/window_host.c` (`perf_log`)).
@@ -2799,7 +2835,7 @@ The options:
 | `--present WxH` | renders the presenter into a W x H output |
 | `--backend vulkan\|d3d12` | picks the RHI backend, to compare backends |
 | `--enhanced`, `--aspect`, `--resolution`, `--full-height`, `--full-pixel`, `--border-mask` (Full pixel off as the game has it), `--water-sharp` (Water reflections: Sharp), `--filter`, `--mirror`, `--crt` | the display options a dump does not carry; the PS2 picture by default |
-| `--list` | every command of the replayed lists, with textures, prims, boxes and state, then the water summary (`water: ...`, [above](RENDER_POST.md#water-and-render-to-texture-blocks)) |
+| `--list` | every command of the replayed lists, with textures, prims, boxes and state, then the water summary (`water: ...`, [above](RENDER_POST.md#water-and-render-to-texture-blocks)); `[display layer begins]` before the command where a temporal upscaler's display layer would begin, `[keep copy]` after a keep frame's keep sprite the layer holds 1:1, and ` new history (<reason>)` after an upscale point's `src ... dst ...` that resets the upscaler's history (first, size, cut, keep run, camera, forgotten) ([DISPLAY_LAYER.md](DISPLAY_LAYER.md)); the plan needs no device |
 | `--no-device` | loads into a record-only renderer for `--list`, `--mesh`, `--dump-textures`, `--region-stats` |
 | `--nop SPEC` | turns commands into NOPs, to find the draw behind a pixel; SPEC is `L:A[-B]`, several separated by commas (`0:12-14,0:40`), or `@FILE` for a spec in a file; the state commands in a range stay |
 | `--occlusion` | the hidden-draw measurement of list 0 ([Culling](#culling)): `<dump>: occlusion: hidden N of M list-0 draws, T of U triangles (index count / 3); hidden commands: SPEC` (SPEC a `--nop` spec, `none` when empty), then `<dump>: occlusion: H of K draw commands hidden; P % of the draws, Q % of the triangles; Q queries, X without a count, Y draws past the 8192 queries; Z draws of other commands not counted; measured under ...`; it sets `ICO_RD_VU_MERGE=0` and `ICO_RD_BLEND=fixed` and turns the screen-prim runs off (the `note:` line says so); Vulkan only (exit 77 elsewhere); not with `--presents`, `--loss-bisect`, `--keys` or `--no-device` |
@@ -2809,7 +2845,8 @@ The options:
 | `--gpu-repeat K` | with `--stats`: RHI_FRAMES_IN_FLIGHT + 1 + K replays after the picture and, after the `gpu:` line, `<dump>: gpu median of R replays: total X ms, list 0 Y ms, VU pre-pass Z ms` over the warm records that came back (the first replay after the picture left out) |
 | `--mesh NAME` | a VU mesh vertex by vertex, with the kick, overlap and joined marks |
 | `--dump-textures DIR` | every image texture as decoded |
-| `--stats` | the replay's performance record, with GPU times |
+| `--stats` | the replay's performance record, with GPU times; with an upscaler, the upscale point's line ([The upscale point](#the-upscale-point)) |
+| `--repeat N` | (1..1000) the presented picture made N times in a row, the PNG read after the last (with `--render-thread on` handed over back to back up to 8, one after the other past 8). On a keep frame (lists 11-12 over the picture before, a stage switch's fade) N ticks of the keep loop: each replay reads the DISPLAY, or under a temporal upscaler the composite, the one before left; give the picture before with `--prev` (under a temporal upscaler a keep frame with no picture held is refused). `--presents` re-shows one tick's picture as the window's later presents do and does not iterate it; on a keep dump with `--presents` the tool says `<dump>: keep frame: --presents re-shows as the window does; --repeat iterates the keep loop` |
 | `--pass-times` | with `--stats`, the warm replay timed pass by pass ([The per-pass timing](#the-per-pass-timing)) |
 | `--time N` | after the picture, the frame replayed N more times and the mean and least of each CPU phase of their records printed (below) |
 | `--prev DUMP` | replays earlier dumps first so retained targets hold the run's pictures |

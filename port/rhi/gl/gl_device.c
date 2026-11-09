@@ -380,6 +380,9 @@ static void gl_fill_limits(void)
     /* no vertex stores this release (rhi.h RhiLimits.vertexStores): the
      * bracket is a no-op here, the record drawn into render targets */
     o->vertexStores = false;
+    /* no compute dispatches either (rhi.h RhiLimits.computeStores) */
+    o->computeStores = false;
+    o->computeStoresOff = "OpenGL: not in this release";
     o->moltenvk = false;
     o->localRead = false;
     o->vendorId = gl_vendor_id(gl_str(GL_VENDOR), gl_str(GL_RENDERER));

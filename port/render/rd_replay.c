@@ -108,7 +108,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
     "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
     "crack_fill_ps", "crack_count_ps", "shadow_count_ps", "crack_fill1_ps", "fx_aura_rows_ps",
-    "fx_aura_sum_ps", "shadow_count_load_ps", "fsr1_easu_ps", "fsr1_rcas_ps"};
+    "fx_aura_sum_ps", "shadow_count_load_ps", "fsr1_easu_ps", "fsr1_rcas_ps", "vu_pre_cs"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -154,7 +154,7 @@ RhiShader rd__make_shader(const char *name)
     }
     RhiShaderDesc d;
     memset(&d, 0, sizeof(d));
-    d.stage = b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT;
+    d.stage = (RhiShaderStage)b->stage; /* ICO_SHADER_STAGE_* equal RhiShaderStage */
     switch (rhi_backend()) {
     case RHI_BACKEND_D3D12:
         d.bytecode = b->dxil;
@@ -241,7 +241,12 @@ bool rd__gpu_init(void *sdlWindow)
         return false;
     }
 
-    enum { VS = 1u << RHI_STAGE_VERTEX, FS = 1u << RHI_STAGE_FRAGMENT };
+    /* CS: the VU record's compute builds read FrameCB (rd_vu_record.h) */
+    enum {
+        VS = 1u << RHI_STAGE_VERTEX,
+        FS = 1u << RHI_STAGE_FRAGMENT,
+        CS = 1u << RHI_STAGE_COMPUTE
+    };
 
     s_layoutSlotCount = 0;
     /* FrameCB, DrawCB, VuCB and VuBoneCB take dynamic offsets into the
@@ -251,7 +256,7 @@ bool rd__gpu_init(void *sdlWindow)
         rd__log("device has %u dynamic uniform buffers, 4 needed", lim->maxDynamicUniforms);
         return false;
     }
-    static const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS}};
+    static const RhiBindSlot s0[1] = {{0, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS | CS}};
     static const RhiBindSlot s1[1] = {{1, RHI_BIND_UNIFORM_BUFFER_DYNAMIC, VS | FS}};
     /* t2: sprite_ps's DATE snapshot */
     static const RhiBindSlot s2[3] = {{1, RHI_BIND_SAMPLED_TEXTURE, FS},

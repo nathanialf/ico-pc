@@ -855,7 +855,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "No: Ico golpea al frente sin girarse hacia la sombra más cercana; el alcance sigue igual. Los logros siguen activos.",
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Las sombras esperan si Ico cae",
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
-            "No: las sombras ya no se contienen mientras Ico está en el suelo y pueden golpearlo antes de que se levante. Los logros siguen activos.",
+            "No: las sombras ya no se contienen mientras Ico está en el suelo, y sus golpes lo alcanzan tanto tendido como al levantarse. Los logros siguen activos.",
         [UI_STR_OPT_VAR_SWORD_COLOUR] = "Color de la espada de luz",
         [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
             "Rojo: la espada de luz deja una estela roja, como su gemela sin usar del juego; nada más cambia. Desde la siguiente sala.",

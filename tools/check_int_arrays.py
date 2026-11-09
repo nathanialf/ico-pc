@@ -137,6 +137,8 @@ EXEMPT = {
     ("port/rhi/test/shaders/rhi_test_spv.h", "spv_ps_subpass"): _PORT + _SHADER,
     ("port/rhi/test/shaders/rhi_test_dxil.h", "dxil_vs_store"): _PORT + _SHADER,
     ("port/rhi/test/shaders/rhi_test_spv.h", "spv_vs_store"): _PORT + _SHADER,
+    ("port/rhi/test/shaders/rhi_test_dxil.h", "dxil_cs_store"): _PORT + _SHADER,
+    ("port/rhi/test/shaders/rhi_test_spv.h", "spv_cs_store"): _PORT + _SHADER,
 }
 
 INT_TYPE = (

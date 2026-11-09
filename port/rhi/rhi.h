@@ -6,7 +6,11 @@
  * picks the one the calls below go to (port/rhi/rhi_backend.h).
  * The surface is deliberately small: the game needs about a dozen shader
  * programs, under a hundred pipelines, about fifteen render targets, ring
- * buffers for per-frame vertex and uniform data, and no compute.
+ * buffers for per-frame vertex and uniform data, and one compute use: the
+ * VU record's dispatches (RhiPipelineDesc.compute, rhi_cmd_dispatch,
+ * rhi_cmd_buffer_compute_begin / _end; port/render/rd_vu_record.h) on a
+ * device whose vertex shaders cannot store (docs/port/RHI.md, "Compute
+ * dispatch (the VU record)").
  *
  * Rules for additions:
  *  - Nothing Vulkan-only: no input attachments, no framebuffer feedback
@@ -271,7 +275,15 @@ typedef struct RhiTextureBarrier {
 } RhiTextureBarrier;
 
 /* ------------------------------------------------------------- shaders */
-typedef enum RhiShaderStage { RHI_STAGE_VERTEX = 0, RHI_STAGE_FRAGMENT = 1 } RhiShaderStage;
+/* RHI_STAGE_COMPUTE: the VU record's compute builds alone (the one compute
+ * use, above); a bind slot naming it is visible to compute pipelines, which
+ * the backends without compute dispatches ignore (their slots read the
+ * vertex and fragment bits) */
+typedef enum RhiShaderStage {
+    RHI_STAGE_VERTEX = 0,
+    RHI_STAGE_FRAGMENT = 1,
+    RHI_STAGE_COMPUTE = 2
+} RhiShaderStage;
 
 /* Shaders are precompiled at build time by DXC from one HLSL source to
  * SPIR-V (Vulkan) and DXIL (D3D12), translated to GLSL (OpenGL) from the
@@ -545,6 +557,14 @@ typedef struct RhiPipelineDesc {
      * report RhiLimits.vertexStores: the shader's position lies outside the
      * clip volume, so nothing would be drawn there either) */
     bool noRaster;
+    /* a compute pipeline: this shader (RHI_STAGE_COMPUTE) and the layouts
+     * alone; vertex, fragment and every fixed-function field are ignored
+     * (left zero).  The same RhiPipeline handle, cache and naming as a
+     * graphics pipeline; dispatched outside render passes by
+     * rhi_cmd_dispatch.  Only where RhiLimits.computeStores (the VU
+     * record's compute builds, port/render/rd_vu_record.c); a backend
+     * without it fails the creation */
+    RhiShader compute;
 } RhiPipelineDesc;
 
 enum { RHI_DYN_DEPTH = 1u, RHI_DYN_BLEND = 2u };
@@ -731,6 +751,19 @@ typedef struct RhiLimits {
      * 11_0 has no vertex shader UAVs).  The VU record is written by the
      * vertex shaders where it is true (port/render/rd_vu_record.c). */
     bool vertexStores;
+    /* Compute pipelines may store to storage buffers (RhiPipelineDesc.compute,
+     * RHI_BIND_STORAGE_BUFFER_RW visible to RHI_STAGE_COMPUTE,
+     * rhi_cmd_dispatch, rhi_cmd_buffer_compute_begin / _end): Vulkan, where
+     * the graphics queue's family takes compute work (no feature bit: a
+     * compute shader's storage writes need none), never gated on the
+     * external compute's RhiComputeCaps.ok; ICO_VK_FAKE_NO_COMPUTE_STORES=1
+     * reports it absent.  False on D3D12, Direct3D 11 and OpenGL in this
+     * release.  The VU record is written by compute dispatches where it is
+     * true and vertexStores is not (port/render/rd_vu_record.c).
+     * computeStoresOff: why it is false ("ICO_VK_FAKE_NO_COMPUTE_STORES",
+     * "Direct3D 12: not in this release", ...), NULL when it is true */
+    bool computeStores;
+    const char *computeStoresOff;
     /* The Khronos validation layer is loaded (Vulkan: ICO_VK_VALIDATION,
      * the debug layers; false elsewhere): the renderer then adds the
      * ordering only its synchronisation checks need, which a release run
@@ -1332,6 +1365,24 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
 bool rhi_cmd_buffer_store_begin(RhiCommandList cl, RhiBuffer buf);
 bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf);
 
+/* The compute twin of the store bracket: around the dispatches whose
+ * compute shaders store to buf (the VU record's compute builds), outside
+ * render passes: _begin orders the stores after every earlier read, copy
+ * and store of the buffer; _end makes them visible to every later vertex,
+ * index, uniform, storage (compute ones too) and copy read.  Vulkan: memory
+ * barriers from the read stages to the compute shader and back, held back
+ * with the next pass's, copy's or dispatch's barriers.  Both return false
+ * and do nothing where RhiLimits.computeStores is false. */
+bool rhi_cmd_buffer_compute_begin(RhiCommandList cl, RhiBuffer buf);
+bool rhi_cmd_buffer_compute_end(RhiCommandList cl, RhiBuffer buf);
+
+/* gx x gy x gz workgroups of the bound compute pipeline
+ * (RhiPipelineDesc.compute; its bind groups as a draw's), outside render
+ * passes, inside the compute bracket above.  Refused (logged, the first
+ * few) inside a pass or without a compute pipeline bound; a no-op where
+ * RhiLimits.computeStores is false.  Counted in RhiStats.dispatches. */
+void rhi_cmd_dispatch(RhiCommandList cl, uint32_t gx, uint32_t gy, uint32_t gz);
+
 /* Multisampling: src, a multisampled RGBA8_UNORM texture in
  * RHI_STATE_COPY_SRC, into dst, a single-sampled one of its size and format
  * in RHI_STATE_COPY_DST, each pixel the mean of its samples (Vulkan
@@ -1455,6 +1506,9 @@ typedef struct RhiStats {
      * gl_bind_groups); 0 on the other backends, which bind a group whole */
     uint64_t entryBinds, entryBindsSkipped;
     uint64_t draws, renderPasses, barriers, copies;
+    /* compute dispatches recorded (rhi_cmd_dispatch: the VU record's under
+     * the compute builds; Vulkan, 0 elsewhere); not in draws */
+    uint64_t dispatches;
     uint64_t submits, presents;
     uint64_t fenceWaits, fenceWaitNs;
     uint64_t waitIdles, readbacks;

@@ -243,8 +243,9 @@ computer and phone, whatever the graphics card.
 only smooths edges at your screen's size. **Quality**, **Balanced** and **Performance** draw the
 picture 1.5, 1.7 or 2 times smaller than your screen first and rebuild it, which costs the graphics
 card less. It is offered on Windows and Linux computers that run the game with Vulkan; on a Mac, a
-phone, or the Direct3D and OpenGL renderers the row stays at Off. Things drawn flat on the screen,
-such as the fades, the film grain, sparks and smoke, can leave a faint trail.
+phone, or the Direct3D and OpenGL renderers the row stays at Off. The game's text, fades and
+film grain are drawn over the finished picture and stay sharp; sparks and smoke can leave a faint
+trail.
 [Details](OPTIONS.md#picture).
 
 DLSS (NVIDIA) and XeSS (Intel) are not offered because this port ships only open-source code. Both

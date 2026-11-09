@@ -163,10 +163,17 @@ int ico_variant_ignore_cutscene_cameras(void);
    blocked (commonact.c's guard rule); attack_turn, Ico's swing does not turn
    him toward the nearest Shadow (boyact.c's actBoyAttack); shadows_wait_down,
    the down act and its get-up timer no longer hold the Shadows' brains
-   (boyact.c IsBoyStatus_EnemyMustWait, read by ebrain.c). */
+   (boyact.c IsBoyStatus_EnemyMustWait, read by ebrain.c) and Ico's down
+   action no longer makes him invincible (ico_variant_down_keeps_hit). */
 int ico_variant_auto_guard(void);
 int ico_variant_attack_turn(void);
 int ico_variant_shadows_wait_down(void);
+/* The down action (commonact.c's actCommonDown, the four disc copies) sets the
+   actor's `hit` flag, the game's invincibility that AttackGenerate* skips,
+   every frame it lies.  1 = keep setting it: any actor but Ico, and Ico while
+   shadows_wait_down is On (the game's rule); 0 for Ico with it Off, so the
+   Shadows' swings land while he is on the ground.  is_boy: self == boyGObj. */
+int ico_variant_down_keeps_hit(int is_boy);
 /* Peaceful shadows: 1 when a Shadow gets its brain thread (the game's
    own, the default), 0 with Peaceful shadows on.  Read at the four places
    enemy_act.c starts a Shadow (one per disc copy) beside debug_brain_flag, so

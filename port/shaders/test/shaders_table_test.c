@@ -173,6 +173,14 @@ static const char *const expectedStore[] = {
     "vu_particle_batch_store_pre_vs",
 };
 
+/* the record's compute builds (ICO_VU_REC_COMPUTE, vu_common.hlsli
+ * VU_PRE_CS: each store build's entry called by a compute entry, one
+ * invocation a point; rd_vu_record.h, the record written by compute
+ * dispatches where the vertex shaders cannot store): compute stage, no
+ * GLSL (tools/spirv_to_glsl.py), one for the one-entry dispatch and one for
+ * the batch */
+static unsigned computeCount;
+
 /* the draw merge's builds (ICO_VU_MERGE, vu_common.hlsli: the mesh and grid
  * programs' entries, both variants, and vu_main_vs reading every draw's
  * VuCB and VuBoneCB from the ring at t5 for a draw of many; rd_replay_vu.c
@@ -318,7 +326,8 @@ int main(void)
         }
         glslCount += b->glsl != NULL;
         {
-            int expectNone = 0;
+            /* the listed entries, and every compute build */
+            int expectNone = b->stage == ICO_SHADER_STAGE_COMPUTE;
             for (size_t k = 0; k < sizeof expectedNoGlsl / sizeof expectedNoGlsl[0]; k++) {
                 expectNone |= strcmp(expectedNoGlsl[k], b->name) == 0;
             }
@@ -351,32 +360,41 @@ int main(void)
             }
         }
 #endif
-        if (b->stage != ICO_SHADER_STAGE_VERTEX && b->stage != ICO_SHADER_STAGE_FRAGMENT) {
+        if (b->stage != ICO_SHADER_STAGE_VERTEX && b->stage != ICO_SHADER_STAGE_FRAGMENT &&
+            b->stage != ICO_SHADER_STAGE_COMPUTE) {
             printf("FAIL %s: stage\n", b->name);
             failures++;
         }
+        computeCount += b->stage == ICO_SHADER_STAGE_COMPUTE;
         if (!b->entry || !b->entry[0] || ico_find_shader(b->name) != b) {
             printf("FAIL %s: entry or lookup\n", b->name);
             failures++;
         }
         size_t n = strlen(b->name);
         int suffixVs = n > 3 && strcmp(b->name + n - 3, "_vs") == 0;
-        if (suffixVs != (b->stage == ICO_SHADER_STAGE_VERTEX)) {
+        int suffixCs = n > 3 && strcmp(b->name + n - 3, "_cs") == 0;
+        if (suffixVs != (b->stage == ICO_SHADER_STAGE_VERTEX) ||
+            suffixCs != (b->stage == ICO_SHADER_STAGE_COMPUTE)) {
             printf("FAIL %s: stage does not match the name\n", b->name);
             failures++;
         }
         printf("  %-16s %-8s spirv %6zu B  dxil %6zu B  glsl %6zu B (%6zu B text)  %s %s\n",
-               b->name, b->stage == ICO_SHADER_STAGE_VERTEX ? "vertex" : "fragment", b->spirv_len,
-               b->dxil_len, b->glsl_len, b->glsl_text_len, b->hlslFile, b->defines);
+               b->name,
+               b->stage == ICO_SHADER_STAGE_VERTEX    ? "vertex"
+               : b->stage == ICO_SHADER_STAGE_COMPUTE ? "compute"
+                                                      : "fragment",
+               b->spirv_len, b->dxil_len, b->glsl_len, b->glsl_text_len, b->hlslFile, b->defines);
     }
 #ifndef ICO_SHADERS_NO_GLSL
     if (glslCount == 0) {
         printf("FAIL: a table built with GLSL has no GLSL\n");
         failures++;
     }
-    printf("GLSL: %u entries with, %u without (expected without: %zu)\n", glslCount,
-           g_icoShaderCount - glslCount, sizeof expectedNoGlsl / sizeof expectedNoGlsl[0]);
-    if (g_icoShaderCount - glslCount != sizeof expectedNoGlsl / sizeof expectedNoGlsl[0]) {
+    printf("GLSL: %u entries with, %u without (expected without: %zu and %u compute builds)\n",
+           glslCount, g_icoShaderCount - glslCount,
+           sizeof expectedNoGlsl / sizeof expectedNoGlsl[0], computeCount);
+    if (g_icoShaderCount - glslCount !=
+        sizeof expectedNoGlsl / sizeof expectedNoGlsl[0] + computeCount) {
         printf("FAIL: the entries without GLSL are not the expected set\n");
         failures++;
     }
@@ -575,6 +593,20 @@ int main(void)
             printf("FAIL %s or %s: not in the table\n", one, batch);
             failures++;
         }
+        /* and the compute builds: vu_X_compute_pre_cs, vu_X_batch_compute_pre_cs
+           (compute stage, entry vu_X_pre_cs) */
+        char cOne[64], cBatch[64], cEntry[64];
+        snprintf(cOne, sizeof(cOne), "%.*s_compute_pre_cs", (int)n, b);
+        snprintf(cBatch, sizeof(cBatch), "%.*s_batch_compute_pre_cs", (int)n, b);
+        snprintf(cEntry, sizeof(cEntry), "%.*s_pre_cs", (int)n, b);
+        const IcoShaderBlob *c1 = ico_find_shader(cOne), *c2 = ico_find_shader(cBatch);
+        if (!c1 || !c2 || c1->stage != ICO_SHADER_STAGE_COMPUTE ||
+            c2->stage != ICO_SHADER_STAGE_COMPUTE || strcmp(c1->entry, cEntry) != 0 ||
+            strcmp(c2->entry, cEntry) != 0) {
+            printf("FAIL %s or %s: not in the table, not compute or not entry %s\n", cOne, cBatch,
+                   cEntry);
+            failures++;
+        }
     }
     const size_t nMerge = sizeof(expectedMerge) / sizeof(expectedMerge[0]);
     for (size_t i = 0; i < nMerge; i++) {
@@ -596,6 +628,13 @@ int main(void)
             failures++;
         }
     }
+    /* the record's compute builds: two for each batch build's entry (checked
+       by name above), the only compute-stage entries of the table */
+    const size_t nCompute = 2 * nBatch;
+    if (computeCount != nCompute) {
+        printf("FAIL %u compute-stage entries, expected %zu\n", computeCount, nCompute);
+        failures++;
+    }
     const size_t nDst = sizeof(expectedDst) / sizeof(expectedDst[0]);
     for (size_t i = 0; i < nDst; i++) {
         if (!ico_find_shader(expectedDst[i])) {
@@ -606,7 +645,7 @@ int main(void)
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
                         nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nMerge +
                         nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone + nFsr1 +
-                        nVelocity + nStore;
+                        nVelocity + nStore + nCompute;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;

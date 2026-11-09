@@ -3591,6 +3591,11 @@ inline void actCommonDamage(GObj *volatile self)
     }
 }
 
+/* PC port: port/game/variants.h: whether the down action keeps the actor
+   invincible (the game's `hit` flag, set every frame he lies).  Ico keeps it
+   only while Shadows wait while Ico is down is On; every other actor always. */
+extern int ico_variant_down_keeps_hit(int is_boy);
+
 static void actCommonDown_ntsc(GObj *volatile self)
 {
     float v[4];
@@ -3609,7 +3614,7 @@ static void actCommonDown_ntsc(GObj *volatile self)
     }
     DownFunc(self);
     while (1) {
-        if (self->kind != 4) {
+        if (self->kind != 4 && ico_variant_down_keeps_hit(self == boyGObj)) {
             GOBJ_ACT(self)->hit = 1;
         }
         ACTSendMailCorrect(self, 183);
@@ -3632,7 +3637,7 @@ inline static void actCommonDown_jun26(GObj *volatile self)
     }
     DownFunc(self);
     while (1) {
-        if (self->kind != 4) {
+        if (self->kind != 4 && ico_variant_down_keeps_hit(self == boyGObj)) {
             GOBJ_ACT(self)->hit = 1;
         }
         ACTSendMailCorrect(self, 177);
@@ -3658,7 +3663,7 @@ static void actCommonDown_aug6(GObj *volatile self)
     }
     DownFunc(self);
     while (1) {
-        if (self->kind != 4) {
+        if (self->kind != 4 && ico_variant_down_keeps_hit(self == boyGObj)) {
             GOBJ_ACT(self)->hit = 1;
         }
         ACTSendMailCorrect(self, 180);
@@ -3700,7 +3705,7 @@ void actCommonDown(GObj *volatile self)
     }
     GOBJ_ACT(self)->enemy->liftLevel = 16;
     while (1) {
-        if (self->kind != 4) {
+        if (self->kind != 4 && ico_variant_down_keeps_hit(self == boyGObj)) {
             GOBJ_ACT(self)->hit = 1;
         }
         ACTSendMailCorrect(self, 0xC7);

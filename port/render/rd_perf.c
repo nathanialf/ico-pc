@@ -1337,6 +1337,7 @@ void rd__perf_end(void)
         r->renderPasses = D(renderPasses);
         r->barriers = D(barriers);
         r->copies = D(copies);
+        r->dispatches = D(dispatches);
         r->fenceWaits = D(fenceWaits);
         r->waitIdles = D(waitIdles);
         r->readbacks = D(readbacks);
