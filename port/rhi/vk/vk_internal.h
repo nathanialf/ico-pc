@@ -133,6 +133,11 @@ typedef struct VkrPipeline {
      * set layouts, no push constants; vk_cmd.c vkr_groups_disturbed) */
     uint32_t setLayoutIds[RHI_MAX_BIND_SLOTS];
     uint8_t dstRead; /* RhiDstRead (vk_cmd.c vkr_dst_order) */
+    /* GRAPHICS, or COMPUTE for a compute pipeline (RhiPipelineDesc.compute):
+     * the bind point of its vkCmdBindPipeline and descriptor sets (vk_cmd.c
+     * rhi_cmd_set_pipeline: a change of bind point binds every group again,
+     * descriptor sets being bound per bind point) */
+    VkPipelineBindPoint bindPoint;
     /* the RHI_DYN_* states the pipeline leaves dynamic (only where the
      * device has them: g_vkr.dynDepth, dynBlend), their values in the
      * description (a draw's until rhi_cmd_set_depth_state /
@@ -461,6 +466,12 @@ typedef struct VkrState {
     bool rasterOrder;
     /* vertexPipelineStoresAndAtomics enabled (RhiLimits.vertexStores) */
     bool vertexStores;
+    /* compute pipelines that store (RhiLimits.computeStores: the VU record's
+     * compute builds; vk_device.c vkr_compute_stores), and why not when
+     * false ("" when true); the compute stage then joins the buffer read
+     * stages of copies and brackets (vk_cmd.c vkr_buf_read_stages) */
+    bool computeStores;
+    char computeStoresOff[96];
     /* the attachment read the device has but is not offered on (Qualcomm's
      * own driver, rhi_driver_is_qualcomm_proprietary; ICO_VK_FAKE_ADRENO=1
      * takes that branch, ICO_VK_ATTACHMENT_READ=1 offers it anyway): why,

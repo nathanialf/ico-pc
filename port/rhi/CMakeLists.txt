@@ -438,7 +438,8 @@ endif()
 
 # --- Tests ----------------------------------------------------------------------
 # rhi_test_common.c: the exact-texel cells every backend must pass.
-set(_ico_rhi_test_common test/rhi_test_common.c test/rhi_test_native.c test/rhi_test_stores.c)
+set(_ico_rhi_test_common test/rhi_test_common.c test/rhi_test_native.c test/rhi_test_stores.c
+    test/rhi_test_compute.c)
 
 if(_ico_have_vk)
     set(_ico_vk_test_env "")
@@ -559,6 +560,34 @@ if(_ico_have_vk)
         set(_ico_vk_nostores_env ${_ico_vk_test_env} "ICO_VK_FAKE_NO_VERTEX_STORES=1")
         set_tests_properties(rhi_vk_nostores PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_nostores_env}")
+        # the compute shaders' stores (rhi_test_compute.c; the VU record's
+        # write where the vertex shaders cannot store), under synchronisation
+        # validation: one group stores after and before copies of the
+        # buffer, read back word for word, and (with vertex stores too) the
+        # bind-point rule: a store draw after a dispatch binds its own group
+        # again; _vk11 on a Vulkan 1.1 device (ICO_VK_FAKE_API=1.1: legacy
+        # passes around the store draws), _global with every barrier
+        # recorded at once (ICO_VK_GLOBAL_BARRIERS=1), _novs on a device
+        # without vertexPipelineStoresAndAtomics (the Mali-G52 of issue 179:
+        # the dispatches alone); rhi_vk_nocompute: a device under
+        # ICO_VK_FAKE_NO_COMPUTE_STORES=1 reports none, the bracket refuses
+        # and a dispatch records nothing
+        add_test(NAME rhi_vk_compute COMMAND rhi_vk_test compute)
+        add_test(NAME rhi_vk_compute_vk11 COMMAND rhi_vk_test compute)
+        add_test(NAME rhi_vk_compute_global COMMAND rhi_vk_test compute)
+        add_test(NAME rhi_vk_compute_novs COMMAND rhi_vk_test compute)
+        add_test(NAME rhi_vk_nocompute COMMAND rhi_vk_test nocompute)
+        set_tests_properties(rhi_vk_compute PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_test_env}")
+        set_tests_properties(rhi_vk_compute_vk11 PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_stores11_env}")
+        set_tests_properties(rhi_vk_compute_global PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_storesg_env}")
+        set_tests_properties(rhi_vk_compute_novs PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_nostores_env}")
+        set(_ico_vk_nocompute_env ${_ico_vk_test_env} "ICO_VK_FAKE_NO_COMPUTE_STORES=1")
+        set_tests_properties(rhi_vk_nocompute PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_nocompute_env}")
         # rhi_native.h on the same layer setup (a validation message fails it)
         add_test(NAME rhi_native COMMAND rhi_native_test)
         set_tests_properties(rhi_native PROPERTIES SKIP_RETURN_CODE 77)
