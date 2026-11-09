@@ -505,15 +505,15 @@ static void testCoversTitle(void)
             CHECK(!ui_settings_covers_title(), "title %d: layout %d does not cover", title,
                   others[k]);
         }
-        /* the New Game screen is keyed on its layout, whichever way it was
-           reached (the vibration screen's, not a page): the lettering is
-           hidden on it with or without the title's menu behind */
+        /* the New Game screen is not a page: it never covers (the title's own
+           animation has the lettering away by then) */
         {
             const int ng = ui_new_game_screen_layout();
             CHECK(ng >= 0, "title %d: the New Game screen has a layout", title);
             lt_switch_layout(ng);
             CHECK(settle(ng, 60), "title %d: the New Game screen up", title);
-            CHECK(ui_settings_covers_title() == 1, "title %d: the New Game screen covers", title);
+            CHECK(!ui_settings_covers_title(), "title %d: the New Game screen does not cover",
+                  title);
         }
         /* the menu again from where it was entered: covering again */
         lt_switch_layout(mainL);

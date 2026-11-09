@@ -29,11 +29,11 @@ usual job, and the original button for its own.
 | Circle (in menus, goes back like Triangle) | right face button | E | right button |
 | Square | left face button | Q | |
 | Triangle (back) | top face button | R | |
-| L1 / R1 (R1 holds Yorda's hand) | shoulder buttons | Tab or the ` key (left of 1) / F | middle button (R1) |
+| L1 / R1 (R1 holds Yorda's hand; in Options > Picture they change a colour row by 10) | shoulder buttons | Tab or the ` key (left of 1) / F | middle button (R1) |
 | L2 / R2 | triggers | Z / X | |
 | L3 / R3 (press a stick in) | press a stick in | V / B | |
 | Start / Select | start / back (or view) | Enter / Backspace | |
-| D-pad (menus) | d-pad | arrow keys | |
+| D-pad (menus) | d-pad (hold Left or Right on a slider row in Options to keep changing it) | arrow keys | |
 | Left stick (move) | left stick | W A S D (hold Left Shift to walk) | |
 | Right stick (look) | right stick | I J K L | move the mouse |
 

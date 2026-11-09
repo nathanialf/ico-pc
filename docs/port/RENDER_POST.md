@@ -689,7 +689,13 @@ the next eight bits interpolate `LUT[n]`..`LUT[n + 1]`, MODULATE (or DECAL) appl
 fixed point, and a one-unit 8x8 ordered dither carries the fraction the 8-bit alpha cannot hold,
 `floor(ramp * factor / 128 + (bayer + 0.5) / 64)`, at most 255 (`port/shaders/common.hlsli`
 (`gs_fog_channel`), `port/shaders/fog_lut.hlsl` (`fog_lut_ps`)). The dither is indexed from the
-target's centre texel, so the 4:3 columns of a wide frame carry the pattern of the 4:3 frame. At
+target's centre texel, so the 4:3 columns of a wide frame carry the pattern of the 4:3 frame, at the
+pixel less the scene's jitter (`g_jitter`, [Jitter](RENDER.md#jitter)): the cell of the unjittered
+GS grid, so the pattern moves with the picture under a temporal upscaler instead of sitting on the
+render grid (issue 203: a fixed pattern under a picture that moves a fraction of a texel a frame is
+the thin lines FSR 3.1 would pick out). `g_jitter` is exactly 0.0 without an upscaler, so every
+other picture is the same byte for byte (`rd_fog`'s case j, the fog self-tests and the pass-dump
+corpus unchanged). At
 an entry (`f = 0`) with factor 128 the value is the entry's own. Every fog variant (the dual-source,
 `_nodual`, `_dstrov` and `_dstatt` entries, `FOG_BUFFER`, `FOG_MS`) shares the code before the
 output. At scale 1 `param[3]` is 0 and the entry is read as the GS reads it; so it is for the fog

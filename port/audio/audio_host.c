@@ -38,8 +38,21 @@ static IcoWav *wav;
 static int mode = ICO_AUDIO_MODE_SYNC;
 static const char *mode_why = ""; /* the sync path's reason (ico_audio_pick_mode) */
 #ifdef ICO_AUDIO_SDL
+/* the start waits this long for the device to open (out_sdl.c, the open);
+   a test may set it shorter */
+#ifndef OPEN_WAIT_MS
+#define OPEN_WAIT_MS 2000
+#endif
 static int sdl_open;
 static unsigned int pull_seen_vsync; /* the last vsync the device was not silent too long */
+/* the device still opening past the start's wait: the mode and reason the
+   init picked, taken at the adoption; the vsync the wait ended at; the
+   10 s marks of vsyncs since then that wrote the still-waiting line */
+static int open_pending;
+static int open_mode;
+static const char *open_why = "";
+static unsigned int open_since_vsync;
+static unsigned int open_lines;
 #endif
 /* mirror mode: the host's copy of the option (ico_audio_host_set_mirror, set
    by the host loop before the device opens and every step), so this library
@@ -181,9 +194,10 @@ void ico_audio_host_shutdown(void)
 #ifdef ICO_AUDIO_SDL
     /* the device first: after it no thread renders, so the SPU2's
        statistics below are read alone */
-    if (sdl_open) {
+    if (sdl_open || open_pending) {
         ico_audio_sdl_close();
         sdl_open = 0;
+        open_pending = 0;
     }
 #endif
     ico_audio_stream_stats(&ss);
@@ -277,6 +291,9 @@ const char *ico_audio_mode_text(void)
     if (strcmp(why, "no lock") == 0) {
         return "audio on the game's clock (no lock)";
     }
+    if (strcmp(why, "the device is opening") == 0) {
+        return "audio on the game's clock (the device is opening)";
+    }
     return "audio on the game's clock (no device)";
 }
 
@@ -336,6 +353,51 @@ static int pull_watch(int hz)
     pull_fall_back(NULL, idle);
     return 1;
 }
+
+/* The device's open finished (out_sdl.c ico_audio_sdl_open_adopt): the
+   mode the init picked from here, or the game's clock when no device
+   opened (or the pull path got no lock); 0 while it is still opening.
+   Main thread, at the init and at the top of each vsync until then. */
+static int open_adopt(void)
+{
+    const int r = ico_audio_sdl_open_adopt();
+
+    if (r == 0) {
+        return 0;
+    }
+    open_pending = 0;
+    sdl_open = r > 0;
+    mode = open_mode;
+    mode_why = open_why;
+    if (!sdl_open) {
+        mode = ICO_AUDIO_MODE_SYNC;
+        mode_why = "no device";
+    } else if (mode == ICO_AUDIO_MODE_PULL && ico_audio_sdl_pull_idle_ms(NULL) < 0) {
+        /* the open took the push instead (no lock, logged) */
+        mode = ICO_AUDIO_MODE_SYNC;
+        mode_why = "no lock";
+    }
+    pull_seen_vsync = vsync_index;
+    return 1;
+}
+
+/* Each vsync while the device opens: the adoption tried, and every 10 s of
+   the game's vsyncs one line saying how long it has been. */
+static void open_step(int hz)
+{
+    const unsigned int waited = vsync_index - open_since_vsync;
+
+    if (open_adopt()) {
+        return;
+    }
+    if (hz > 0 && waited / (10u * (unsigned int)hz) > open_lines) {
+        open_lines = waited / (10u * (unsigned int)hz);
+        fprintf(stderr,
+                "audio: still waiting for the device, %d s: playing on the game's clock with no "
+                "output\n",
+                ico_audio_sdl_open_elapsed_ms() / 1000);
+    }
+}
 #endif
 
 void ico_audio_host_init(void)
@@ -376,16 +438,30 @@ void ico_audio_host_init(void)
         fprintf(stderr, "audio: audio=0: no audio device (the driver still runs)\n");
     } else {
         /* the pull path: the device's thread renders (device_render) with
-           the mirror copy the host set before this init */
-        sdl_open =
-            ico_audio_sdl_open(mode == ICO_AUDIO_MODE_PULL ? device_render : NULL, mode_why) == 0;
-        if (!sdl_open) {
+           the mirror copy the host set before this init.  The device opens
+           on a thread of its own (out_sdl.c, the open): waited for at most
+           OPEN_WAIT_MS, then the game starts on its own clock with the
+           output discarded and the vsyncs adopt the device once it is
+           open (open_step) */
+        open_mode = mode;
+        open_why = mode_why;
+        sdl_open = 0;
+        if (ico_audio_sdl_open_begin(mode == ICO_AUDIO_MODE_PULL ? device_render : NULL,
+                                     mode_why) != 0) {
             mode = ICO_AUDIO_MODE_SYNC;
             mode_why = "no device";
-        } else if (mode == ICO_AUDIO_MODE_PULL && ico_audio_sdl_pull_idle_ms(NULL) < 0) {
-            /* the open took the push instead (no lock, logged) */
-            mode = ICO_AUDIO_MODE_SYNC;
-            mode_why = "no lock";
+        } else {
+            open_pending = 1;
+            if (!ico_audio_sdl_open_wait_ms(OPEN_WAIT_MS) || !open_adopt()) {
+                mode = ICO_AUDIO_MODE_SYNC;
+                mode_why = "the device is opening";
+                open_since_vsync = vsync_index;
+                open_lines = 0;
+                fprintf(stderr,
+                        "audio: the output device has not opened in %d ms; the game starts with "
+                        "the sound on the game's clock and no output until it does\n",
+                        OPEN_WAIT_MS);
+            }
         }
         pull_seen_vsync = vsync_index;
     }
@@ -415,6 +491,13 @@ void ico_audio_host_vsync(int hz)
     if (!started) {
         ico_audio_host_init();
     }
+#ifdef ICO_AUDIO_SDL
+    if (open_pending) {
+        /* adopted here, before this vsync renders: on the pull path the
+           device's thread renders from here and this vsync does not */
+        open_step(hz);
+    }
+#endif
     frames = ico_audio_host_frames(hz, vsync_index);
     /* the game's frames, which the pull path's render may lead by its bound
        at most (out_sdl.c) */

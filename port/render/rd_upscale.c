@@ -459,14 +459,15 @@ void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
     if (s_up.stats.dispatched == 1u || resized) {
         rd__log("upscale point: SCENE %ux%u (render scale %gx%g) -> UPSCALED %ux%u (display scale "
                 "%gx%g) by %s at frame %u; depth %s, motion vectors %s, jitter %.4g, %.4g "
-                "(phase count %u)",
+                "(phase count %u); quality %u, sharpness %u, fp16 %s",
                 in.colorW, in.colorH, (double)in.renderSx, (double)in.renderSy, in.outW, in.outH,
                 (double)in.displaySx, (double)in.displaySy, rd__upscale_hook_name(), frame,
                 !in.depth.id                  ? "none"
                 : in.depth.id == ts->depth.id ? "in place"
                                               : "a copy",
                 in.velocity.id ? "VELOCITY" : "none", (double)in.jitter[0], (double)in.jitter[1],
-                s_up.phases);
+                s_up.phases, (unsigned)g_rd.settings.upscaleQuality,
+                (unsigned)g_rd.settings.upscaleSharpness, rd__fsr3_fp16() ? "on" : "off");
     }
 }
 

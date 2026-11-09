@@ -137,6 +137,9 @@ bool rd__velocity_read(float *dst, size_t floats, uint32_t *w, uint32_t *h);
 
 /* the replay's counters (rd_replay_vu.c), at the end of each velocity pass */
 void rd__velocity_note_replay(uint32_t drawn, uint32_t noRecord);
+/* a VU draw that gets no motion vector, by the gate that refused it: 0 outside list 0 (or a
+ * particle draw), 1 with Z write off, 2 not into SCENE (the 10 s velocity line's counts) */
+void rd__velocity_note_skip(int why);
 /* The replay (g_rd.replayCounter) whose velocity pass last cleared and drew
  * VELOCITY, 0 before any: a replay with no VU work runs no pass, and the
  * upscaler then clears VELOCITY itself (rd_fsr3.c) rather than read the
