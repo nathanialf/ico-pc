@@ -118,6 +118,96 @@ static void test_deep_stack(void)
     ico_fiber_destroy(f);
 }
 
+#define HOST_NESTED_SLOT 11
+
+static IcoFiber *host_test_fiber;
+static IcoFiber *host_nested_fiber;
+static int host_stack_used;
+static int host_nested_runs;
+
+static int host_recurse(int depth)
+{
+    volatile unsigned char frame[4096];
+    int result = 0;
+    frame[0] = (unsigned char)depth;
+    frame[sizeof frame - 1] = (unsigned char)depth;
+    if (depth == 0) {
+        void *lo;
+        void *hi;
+        CHECK(ico_fiber_current_stack(&lo, &hi) == 0);
+        host_stack_used = (uintptr_t)&frame[0] >= (uintptr_t)lo &&
+                          (uintptr_t)&frame[0] < (uintptr_t)hi &&
+                          (uintptr_t)hi - (uintptr_t)&frame[0] > ICO_FIBER_STACK_SIZE;
+        ico_fiber_yield();
+    } else {
+        result = host_recurse(depth - 1) + 1;
+    }
+    CHECK(frame[0] == (unsigned char)depth && frame[sizeof frame - 1] == (unsigned char)depth);
+    return result;
+}
+
+static void host_nested(void *arg)
+{
+    (void)arg;
+    host_nested_runs++;
+    ico_fiber_yield();
+    host_nested_runs++;
+}
+
+static void host_large_stack(void *arg)
+{
+    void *lo;
+    void *hi;
+    (void)arg;
+    CHECK(ico_fiber_current() == host_test_fiber);
+    CHECK(ico_fiber_slot(host_test_fiber) == -1);
+    CHECK(ico_fiber_current_stack(&lo, &hi) == 0);
+    CHECK((uintptr_t)hi - (uintptr_t)lo == ICO_FIBER_HOST_STACK_SIZE);
+    CHECK(host_recurse(80) == 80);
+    CHECK(ico_fiber_resume(host_nested_fiber) == 0);
+    CHECK(ico_fiber_current() == host_test_fiber);
+    CHECK(!ico_fiber_finished(host_nested_fiber));
+    ico_fiber_yield();
+    CHECK(ico_fiber_in_slot(HOST_NESTED_SLOT) == NULL);
+}
+
+static void test_host_stack(void)
+{
+    IcoFiberImage img;
+    IcoFiber *host;
+    IcoFiber *nested;
+
+    host_nested_runs = 0;
+    host_stack_used = 0;
+    nested = ico_fiber_create_in_slot(HOST_NESTED_SLOT, host_nested, NULL);
+    host = ico_fiber_create_host(host_large_stack, NULL);
+    CHECK(nested != NULL && host != NULL);
+    if (nested == NULL || host == NULL) {
+        if (nested != NULL)
+            ico_fiber_destroy(nested);
+        if (host != NULL)
+            ico_fiber_destroy(host);
+        return;
+    }
+    host_test_fiber = host;
+    host_nested_fiber = nested;
+    CHECK(ico_fiber_resume(host) == 0);
+    CHECK(host_stack_used);
+    CHECK(!ico_fiber_finished(host));
+    CHECK(ico_fiber_resume(host) == 0);
+    CHECK(host_nested_runs == 1);
+    CHECK(!ico_fiber_finished(host));
+    CHECK(ico_fiber_slot_save(HOST_NESTED_SLOT, &img) == 0);
+    CHECK(img.stack_bytes > 0);
+    CHECK(ico_fiber_resume(nested) == 0);
+    CHECK(host_nested_runs == 2 && ico_fiber_finished(nested));
+    ico_fiber_slot_discard(HOST_NESTED_SLOT);
+    CHECK(ico_fiber_in_slot(HOST_NESTED_SLOT) == NULL);
+    CHECK(ico_fiber_resume(host) == 0);
+    CHECK(ico_fiber_finished(host));
+    ico_fiber_destroy(host);
+}
+
 static void forever(void *arg)
 {
     (void)arg;
@@ -193,18 +283,18 @@ static void runaway(void *arg)
     printf("unreachable %d\n", overflow(0));
 }
 
-static int guard_test(void)
+static int guard_case(int host)
 {
     pid_t pid;
     int st;
-    if (!ico_fiber_has_guard_page()) {
-        printf("no guard page on this backend (%s)\n", ico_fiber_backend());
-        return 77;
-    }
     fflush(stdout);
     pid = fork();
     if (pid == 0) {
-        IcoFiber *f = ico_fiber_create(runaway, NULL, ICO_FIBER_STACK_SIZE);
+        IcoFiber *f = host ? ico_fiber_create_host(runaway, NULL)
+                           : ico_fiber_create(runaway, NULL, ICO_FIBER_STACK_SIZE);
+        if (f == NULL) {
+            _exit(2); /* a failed allocation is not evidence for a working guard */
+        }
         ico_fiber_resume(f);
         _exit(0); /* the overflow went unnoticed */
     }
@@ -214,12 +304,27 @@ static int guard_test(void)
     }
     /* SIGSEGV, or the sanitizer's report and its exit status */
     if (WIFEXITED(st) && WEXITSTATUS(st) == 0) {
-        printf("FAIL: a stack overflow in a fiber was not caught\n");
+        printf("FAIL: a stack overflow in a %s fiber was not caught\n", host ? "host" : "pool");
         return 1;
     }
-    printf("overflow stopped (%s %d)\n", WIFSIGNALED(st) ? "signal" : "exit status",
+    if (WIFEXITED(st) && WEXITSTATUS(st) == 2) {
+        printf("FAIL: could not allocate the %s fiber for the guard test\n",
+               host ? "host" : "pool");
+        return 1;
+    }
+    printf("%s overflow stopped (%s %d)\n", host ? "host" : "pool",
+           WIFSIGNALED(st) ? "signal" : "exit status",
            WIFSIGNALED(st) ? WTERMSIG(st) : WEXITSTATUS(st));
     return 0;
+}
+
+static int guard_test(void)
+{
+    if (!ico_fiber_has_guard_page()) {
+        printf("no guard page on this backend (%s)\n", ico_fiber_backend());
+        return 77;
+    }
+    return guard_case(0) != 0 || guard_case(1) != 0;
 }
 #endif
 
@@ -236,6 +341,7 @@ int main(int argc, char **argv)
            ico_fiber_has_guard_page() ? "yes" : "no");
     test_round_robin();
     test_deep_stack();
+    test_host_stack();
     test_destroy_suspended();
     test_fp_state();
     if (fails != 0) {

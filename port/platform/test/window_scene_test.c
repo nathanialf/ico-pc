@@ -182,7 +182,23 @@ int main(void)
         }
         CHECK(!window_scene_vu_fit(&f, &a, &k, &r2));
         window_scene_vu_fit_text(b, sizeof(b), &f);
-        CHECK(text_is(b, "; GPU work 6.0 ms a replay (3 replays)"));
+        CHECK(text_is(b, "; GPU work 6.0 ms a replay (3 replays); fit: not enough spread (x "
+                         "10.0..10.0 thousand vertex invocations)"));
+        /* the spread under a factor of 2 (a cutscene: the log's -64 ms + 2.42): no line;
+           exactly 2 fits */
+        memset(&f, 0, sizeof(f));
+        window_scene_vu_fit_add(&f, 40000, 60.0);
+        window_scene_vu_fit_add(&f, 50000, 64.0);
+        window_scene_vu_fit_add(&f, 79000, 70.0);
+        CHECK(!window_scene_vu_fit(&f, &a, &k, &r2));
+        window_scene_vu_fit_text(b, sizeof(b), &f);
+        CHECK(text_is(b, "; GPU work 64.7 ms a replay (3 replays); fit: not enough spread (x "
+                         "40.0..79.0 thousand vertex invocations)"));
+        memset(&f, 0, sizeof(f));
+        window_scene_vu_fit_add(&f, 40000, 60.0);
+        window_scene_vu_fit_add(&f, 60000, 64.0);
+        window_scene_vu_fit_add(&f, 80000, 70.0);
+        CHECK(window_scene_vu_fit(&f, &a, &k, &r2));
         /* list 0 not varying: the line, no R^2 */
         memset(&f, 0, sizeof(f));
         for (int i = 1; i <= 3; i++) {

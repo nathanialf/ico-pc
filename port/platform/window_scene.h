@@ -173,13 +173,15 @@ double window_scene_gpu_work_ms(double spanMs, double waitMs, double presentMs);
 typedef struct SceneVuFit {
     unsigned n;
     double sx, sy, sxx, sxy, syy;
+    double xMin, xMax; /* the smallest and largest x (thousands of invocations) */
 } SceneVuFit;
 
 void window_scene_vu_fit_add(SceneVuFit *f, uint64_t invocations, double workMs);
 /* The line's a (ms), b (ms a thousand invocations) and r2 (the share of the
    work's variance the invocations explain; -1 when the work did not vary):
    false with fewer than 3 replays or the invocations' count not varying
-   (no slope to be had) */
+   (no slope to be had), or the invocations' largest not at least twice the
+   smallest (a cutscene's replays: the line would be noise read as a cost) */
 bool window_scene_vu_fit(const SceneVuFit *f, double *a, double *b, double *r2);
 /* "; GPU work 51.8 ms a replay, 16.0 ms + 0.17 ms a thousand vertex
    invocations (R^2 0.81, 70 replays)": the mean, then the line where it is
