@@ -340,6 +340,23 @@ thread held the run's end; which one is what the next such log says. The report'
 start-up step:` line is `window: start: up in T s; the game runs` once the start is over, not the
 fog self-test's step.
 
+## The upscaler's pictures in a phone's bug report
+
+FSR 3.1 runs on a phone's Vulkan driver too (Adreno, Mali, Xclipse with Vulkan 1.2). With it in
+force, Settings > Save a picture for a bug report also writes, beside `-present.png` in the dumps
+folder, `-scene.png` (the picture before the upscaler, render size), `-velocity.png` (the motion
+vectors), `-depth.png` (the depth the upscaler received, a 24-bit step in R, G, B; not written
+where the driver cannot read depth back, which the line says) and `-composite.png` (the upscaler's
+output, before the game's 2D layer), each halved until at most 2560 wide, and adds them to the
+report's zip while it stays under 24 MB (Share a bug report offers the zip). Lines:
+`upscale capture: frame N: ...` (the sizes, or why a picture is missing) and `window: bug report:
+the upscaler's pictures: ... K of 4 in <zip>`. Reading them: a flaw in `-scene.png` is the port's;
+one only in `-composite.png` is the upscaler's; on a phone, `[dev] fsr3_fp16 = off` in the
+config's `[dev]` table makes the upscaler's passes run at full precision for an A/B (the display
+line then says `fp16 off (dev)`). The 10 s line `upscale point: 10 s: the N pictures dispatched
+held: ...` names the effects the upscaled frames held ([DISPLAY.md](DISPLAY.md#fsr-31-upscaling),
+"The upscaler's pictures").
+
 ## The thermal state and screen recording
 
 The thermal state and screen recording come from the app's Java side (issue 123;

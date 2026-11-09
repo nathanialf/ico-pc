@@ -15,6 +15,7 @@ are [RHI.md](RHI.md).
 | `port/include/ico_frame.h` | the native frame: its width for an aspect, the exact width, the TEX0 helpers |
 | `port/game/video_options.h`, `video_options.c` | the `[video]` keys, the presets, Auto aspect, the frame for the options in force |
 | `port/platform/window_host.h`, `window_host.c` | the SDL window, the device on it, the pacing loop, the 10 s stats lines, F11 and F12 |
+| `port/platform/upscale_pictures.h`, `upscale_pictures.c`, `upscale_pictures_arm.c` | F12's and the bug-report row's upscaler pictures: the request, the line naming them, the zip under its cap ([FSR 3.1 upscaling](#fsr-31-upscaling), "The upscaler's pictures") |
 | `port/platform/window_video.h`, `window_video.c` | window mode requests (windowed, borderless over the display, fullscreen at the desktop's mode) and their readback |
 | `port/platform/pace_policy.h`, `pace_policy.c` | the pacing decisions, free of SDL: slow presents, the gap, the vsync lock, the display's intervals, Auto resolution |
 | `port/platform/present_fallback.h`, `present_fallback.c` | the FIFO fallback's decision and lines, free of SDL ([The FIFO fallback](#the-fifo-fallback)) |
@@ -1880,6 +1881,64 @@ FSR 3.1 still runs, but VELOCITY stays zero and every moving object trails; the 
 that state logs `FSR 3.1: the vertex pre-pass is off, so moving objects carry no motion: expect
 trails (REASON)` (`rd_upscale.c prepassNote`), and the 10 s velocity line counts the draws left
 at 0.
+
+**The upscaler's pictures** (issue 203; `port/render/rd_upscale_capture.c`,
+`port/platform/upscale_pictures.c`). A dump holds no history, so a replay here cannot show what
+FSR 3.1 built on the reporter's GPU over many frames. With an upscaler in force, F12 and Settings'
+bug-report row also write four pictures beside `frame-<stamp>-present.png`, taken at the next
+dispatch of the upscale point (copies on the replay's command list after the dispatch, outside any
+pass, into textures of the capture's own; read back and written after the submit of the present
+that follows, before that present's own picture; no picture changes, `rd_replay_tool_fsr3_dump`
+compares the present with and without them):
+
+| file | what | how to read it |
+| --- | --- | --- |
+| `-scene.png` | SCENE as the upscaler received it: render size, the whole post chain drawn, jittered, opaque | the port's picture before the upscaler: a flaw here is the port's (a pass, the fog, the water) |
+| `-velocity.png` | VELOCITY, render size: x and y in R and G about 128 (8 levels a texel), the length in B (16 a texel), black where no draw wrote a motion vector (`rd_replay_tool --velocity-dump`'s mapping) | what moves for the upscaler; black areas are drawn without motion vectors (list 2's sea, particles, list 11) |
+| `-depth.png` | SCENE's depth as the upscaler received it, the 24-bit step (depth x 16777215): R its top 8 bits (a grey picture of the depth), G the next 8, B the low 8 | the depth FSR's disocclusion reads; a pattern in G or B the eye cannot see in R is still there; not written where the device cannot read depth back (D24S8; the line says so) |
+| `-composite.png` | COMPOSITE right after the dispatch, display size, before the display layer's draws | the upscaler's output alone: a flaw here and not in `-scene.png` is the upscaler's |
+
+The bug-report row's pictures are halved (a 2 x 2 box) until they are at most 2560 wide and go into
+its zip while the zip stays under 24 MB (GitHub's limit is 25 MB; a picture that would pass it is
+left out and named); F12's are full size and stay loose, as its present picture. The lines: the
+renderer's `upscale capture: frame N: <stem>-scene.png, -velocity.png, -depth.png, -composite.png:
+scene.png WxH, ... (read back in T ms; the upscaler's inputs and output: lines in -scene.png are the
+port's, lines only in -composite.png are the upscaler's)`, a picture not given to the upscaler named
+"none (not given to the upscaler)"; the window's `window: F12: wrote <stem>-scene.png, -velocity.png,
+-depth.png, -composite.png (the upscaler's inputs and output: lines in -scene.png are the port's,
+lines only in -composite.png are the upscaler's)` and, for a report, `window: bug report: the
+upscaler's pictures: <name> (N bytes) added; ... K of 4 in <zip>`. Without an upscaler the request is
+dropped at the next present (`upscale capture: no upscaler in force at the present after the
+request: ...`); a present shown again without a replay (the still re-present) leaves it for the next
+replay, said once (those pictures then miss a zip already written). `rd_replay_tool --fsr3-dump DIR`
+writes the same four from a dump (the last replay's dispatch), for a side-by-side with a reporter's.
+
+**What the frames held** (the 10 s line under an upscaler, `rd__upscale_note_frame`): `upscale
+point: 10 s: the N pictures dispatched held: the fog in F, the glow chain in G, the aura in A, the
+depth of field in D, the motion blur in M, film noise in K, render-to-texture blocks (the water's
+reflections) in R; FSR 3.1 fp16 on|off|off (dev)` (each frame's lists scanned once a frame number:
+the post stubs by kind, a TARGET naming a block, the film noise), beside the velocity line's counts
+of the draws left without motion vectors. Two A/B switches go with it, neither a row: `[dev]
+fsr3_fp16 = off` (`ICO_RD_FSR3_FP16=0`, [CONFIG.md](CONFIG.md)): the FidelityFX context made
+without fp16, every pass in its fp32 build (`tools/ffx/patches/0004-vk-fp16-dev-switch.patch`), the
+display line saying `fp16 off (dev)`; and the environment's `ICO_RD_FOG_JITTER=0`: the fog's draws
+take no jitter, so the fog dither's Bayer phase (`fog_lut.hlsl`) stays at 0 while the scene is
+jittered (`rd_jitter.c rd__fog_jitter_in`, one line when it acts).
+
+**Issue 203's lines** (a GTX 1660, FSR 3.1 Quality at 2560x1440; the reporter's present
+picture measured, `build-host/tmp/v0112/evidence/203/lines-work/`): dark columns exactly vertical
+on the screen (the column profiles of 60-row bands align at shift 0 with correlation 0.84 to 0.97
+from the horizon to the grass), over the sea and the fogged cliff foot, absent where the sun's haze
+is. Their spacing doubles at 1/16, 1/8 and 1/4 of the picture's width (about 4, 8, 15.5 and 31
+window pixels in the four octaves left of the middle) and starts again at 1/2: a pattern keyed to
+power-of-two fractions of a coordinate normalised to the width, the mark of reduced-precision
+arithmetic on it; the port's shaders hold no half-precision type, FSR 3.1 runs every pass but RCAS
+in fp16 on that GPU. No lavapipe replay of the dumps shows them (FSR 3.1 at Quality 80 and 0,
+Native, `--presents 8|64`, `--repeat 8`, the blended dump, the reporter's filter, height, fog path
+and DATE path, 2560x1440 and 1920x1080, without `--water-sharp`, the column high-pass 0.12 to 0.14
+levels against the reporter's 0.9 to 1.4), and the dump draws the sea's three pack-textured layers
+blank (the reporter's texture pack). The pictures above and `fsr3_fp16` decide it on the next
+report.
 
 - **Support.** `rd_upscale_temporal_supported()` (`port/render/rd_fsr3.c`): a build with the
   upscaler (`ICO_FFX`), the Vulkan backend, a Vulkan 1.2 or later device, external compute offered

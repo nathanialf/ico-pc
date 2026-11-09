@@ -2,6 +2,8 @@
 
 (kept current after every merge; player words only)
 
+- A bug-report picture taken with Upscaling on now also saves the picture before the upscaler and the upscaler's own output, so a report can show where a flaw is born.
+
 ## Fixed
 
 (kept current after every merge; player words only)
