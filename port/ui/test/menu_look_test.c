@@ -112,12 +112,15 @@
    sheets: the outline picked in v0.11.1 (a solid dark-grey band, rim grey
    100, that fades out quickly) is not the sheets' halo, so the blur, plain
    and share limits hold the strips to what that look measured, the
-   largest + 25 %.  The values below are still the v0.10 look's (not
-   re-measured: the run needs the disc); the run on main prints the
-   per-language medians and maxima (statPrint, "menu_look: limits <lang>")
-   and the worst blur and plain ("menu_look: N items ..."), from which they
-   are set.  The geometry limits (edge, line, amount) do not depend on the
-   look.  Set from the run on main after the
+   largest + 25 %.  Re-measured 2026-11-09 on main (7ba079530) with the
+   disc, median / max per language EN FR DE IT ES: blur 9.0/38.9 13.7/27.9
+   11.1/22.7 11.2/28.2 13.4/30.2; plain 12.5/40.5 17.3/35.2 15.2/25.1
+   15.1/35.3 16.5/44.3; ink amount 1.02/1.76 1.08/1.76 1.07/1.55 1.07/1.77
+   1.10/1.75 (min 0.82); shares 0.18/0.44 0.34/0.47 0.23/0.45 0.23/0.43
+   0.33/0.47.  The run prints them (statPrint, "menu_look: limits <lang>")
+   and the worst blur and plain ("menu_look: N items ...").  The geometry
+   limits (edge, line) do not depend on the look; the ink amount does (the
+   solid band is ink the sheets' halo was not).  Set from the run on main after the
    geometry fit (the sheets' width UI_SHEET_WIDTH, the letters'
    weight, the table's em, anchor, capital middle, width and spacing per
    language fitted to each sheet, the halo per item, 8 levels; 100 items a
@@ -128,11 +131,13 @@
    strip / sheet median 1.000 on every language (1.12 .. 1.25), height 1.000
    (0.93 on German; 0.83 .. 0.92), the first line's capital height 0.98 ..
    1.00 (0.82 .. 0.95), its top +0.00 .. +0.10 rows (+0.5 .. +1.0). */
-/* blur 7.9/21.2 8.4/27.3 8.3/15.8 8.1/23.5 8.7/29.3 (27.8 .. 31.9 / 56.2);
-   the worst Spanish rows 173 and 142 (menu_PAL_02) */
-#define T_BLUR 37.0f
-/* plain 11.2/26.9 11.9/34.8 11.7/22.8 11.3/30.7 12.2/44.3 (35.7 .. 41.3 /
-   73.6) */
+/* blur, the v0.10 look: 7.9/21.2 8.4/27.3 8.3/15.8 8.1/23.5 8.7/29.3 (27.8 ..
+   31.9 / 56.2), the worst Spanish rows 173 and 142 (menu_PAL_02); the
+   v0.11.1 look's worst 38.9 (English) + 25 % */
+#define T_BLUR 49.0f
+/* plain, the v0.10 look: 11.2/26.9 11.9/34.8 11.7/22.8 11.3/30.7 12.2/44.3
+   (35.7 .. 41.3 / 73.6); the v0.11.1 look's worst 44.3 (Spanish) + 25 % is
+   55.4: the limit stands */
 #define T_PLAIN 56.0f
 /* the ink box's worst edge, texels: 1/3 1/3 1/3 1/11 1/4 (6 .. 10 / 50); the
    worst Italian row 220 (Vuoi salvare?: the sheet's words are set looser,
@@ -146,10 +151,11 @@
    rows 142 and 173 (menu_PAL_02: the baseline under a descender-heavy
    word) */
 #define T_LINE 2.9f
-/* the ink amount, strip / sheet: median 1.01 1.04 0.94 1.03 1.02, min 0.82,
-   max 1.21 (0.76 .. 0.84, 0.23 .. 1.10) */
+/* the ink amount, strip / sheet: the v0.10 look median 1.01 1.04 0.94 1.03
+   1.02, min 0.82, max 1.21 (0.76 .. 0.84, 0.23 .. 1.10); the v0.11.1 look's
+   solid band counts as ink, max 1.77 (Italian) + 25 % */
 #define T_AMOUNT_LO 0.65f
-#define T_AMOUNT_HI 1.5f
+#define T_AMOUNT_HI 2.25f
 /* the rim / fill / edge shares, the worst of the three, absolute: median
    0.13 0.07 0.08 0.08 0.07, max 0.53 (0.07 .. 0.21, 0.80): the rimless
    sheets' antialiasing is grey at full opacity where the strips' is white
@@ -170,7 +176,11 @@
 /* The survey's expectations (testSurvey): what the scratch survey measured on
    the PAL sheets, per language EN FR DE IT ES. */
 static const float kExpFill[UI_LANG_PAL_COUNT] = {254.7f, 253.7f, 253.3f, 254.4f, 253.5f};
-static const float kExpRim[UI_LANG_PAL_COUNT] = {23.9f, 61.1f, 55.7f, 60.8f, 61.7f};
+/* the English rim re-measured 2026-11-09 on the disc: 27.3 (the v0.10
+   survey measured 23.9; the measure, the mean grey of the dark texels not
+   beside the fill, is unchanged, the rectangles the test loads for English
+   are not the same set) */
+static const float kExpRim[UI_LANG_PAL_COUNT] = {27.3f, 61.1f, 55.7f, 60.8f, 61.7f};
 /* the first six texels' alpha, summed: left and right averaged, above and below averaged */
 static const float kExpMassX[UI_LANG_PAL_COUNT] = {3.10f, 3.73f, 3.99f, 3.78f, 3.64f};
 static const float kExpMassY[UI_LANG_PAL_COUNT] = {2.15f, 2.83f, 2.99f, 2.90f, 2.74f};
