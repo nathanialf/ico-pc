@@ -19,7 +19,7 @@
  *   1. rd_vuprepass_selftest leaves the pre-pass on or off as <mode> says
  *      (g_rd.vuPrepass) and returns false only when it turned it off;
  *   2. the summary text (rd_summary_text) says so: "VU pre-pass on
- *      (self-test: ok; record stores)" (or targets), "VU pre-pass off (self-test: the pictures differ"
+ *      (self-test: ok; record stores)" (or compute, targets), "VU pre-pass off (self-test: the pictures differ"
  *      or "VU pre-pass off by the settings"; with it on, its draws batched
  *      (g_rd.vuPreBatch) unless ICO_RD_VU_PREPASS_BATCH=0; the draw merge
  *      on (g_rd.vuMerge, "VU merge on") unless ICO_RD_VU_MERGE=0 (on
