@@ -689,11 +689,14 @@ the next eight bits interpolate `LUT[n]`..`LUT[n + 1]`, MODULATE (or DECAL) appl
 fixed point, and a one-unit 8x8 ordered dither carries the fraction the 8-bit alpha cannot hold,
 `floor(ramp * factor / 128 + (bayer + 0.5) / 64)`, at most 255 (`port/shaders/common.hlsli`
 (`gs_fog_channel`), `port/shaders/fog_lut.hlsl` (`fog_lut_ps`)). The dither is indexed from the
-target's centre texel, so the 4:3 columns of a wide frame carry the pattern of the 4:3 frame, at the
-pixel less the scene's jitter (`g_jitter`, [Jitter](RENDER.md#jitter)): the cell of the unjittered
-GS grid, so the pattern moves with the picture under a temporal upscaler instead of sitting on the
-render grid (issue 203: a fixed pattern under a picture that moves a fraction of a texel a frame is
-the thin lines FSR 3.1 would pick out). `g_jitter` is exactly 0.0 without an upscaler, so every
+target's centre texel, so the 4:3 columns of a wide frame carry the pattern of the 4:3 frame, and
+its phase moves with the frame's jitter (`g_jitter`, [Jitter](RENDER.md#jitter)) in sixteenths of
+a texel: the cell is the pixel's plus `floor(g_jitter * 16 + 0.5)` (a jitter of 0.25 texel moves
+the pattern 4 cells, 0.125 two). Under a temporal upscaler the pattern then changes frame to frame
+and the accumulation averages it out (issue 203: one pattern fixed on the render grid under a
+picture that moves a fraction of a texel a frame is the thin lines FSR 3.1 picks out). Indexing at
+the pixel less the jitter does not do it: a pixel centre `k + 0.5` less any jitter under half a
+texel floors to `k`. `g_jitter` is exactly 0.0 without an upscaler, where the term is 0, so every
 other picture is the same byte for byte (`rd_fog`'s case j, the fog self-tests and the pass-dump
 corpus unchanged). At
 an entry (`f = 0`) with factor 128 the value is the entry's own. Every fog variant (the dual-source,

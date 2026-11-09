@@ -181,10 +181,17 @@ GS_PS_ATTR GS_PS_OUT fog_lut_ps(FogPSIn i)
         const uint4 hi =
             uint4(floor(g_fogLut.Load(int3(int(min(idx + 1u, 255u)), 0, 0)) * 255.0 + 0.5));
         const uint f = (z >> 8) & 0xFFu;
-        // the cell of the unjittered GS grid (g_jitter is the shift this
-        // pass's triangles took, exactly 0 with no upscaler), so the
-        // pattern moves with the picture instead of sitting on the render grid
-        const int2 p = int2(floor(i.pos.xy - g_jitter.xy)) - int2(g_uvRect.xy);
+        // the Bayer cell's phase follows the frame's jitter in sixteenths of
+        // a texel (g_jitter: the sub-texel shift a temporal upscaler gives
+        // each frame, inside (-0.5, 0.5)): one pattern fixed on the render
+        // grid is what FSR's accumulation sharpens into still vertical
+        // lines (issue 203), a phase that changes frame to frame is averaged
+        // out. Indexing at floor(pos - jitter) moved nothing: a pixel centre
+        // k + 0.5 less a jitter under half a texel floors to k. g_jitter is
+        // exactly 0.0 without an upscaler, where the term is 0 and the
+        // pattern is byte for byte the one before
+        const int2 p = int2(floor(i.pos.xy)) - int2(g_uvRect.xy) +
+                       int2(floor(g_jitter.xy * 16.0 + 0.5));
         const uint b = gs_bayer8(uint(p.x), uint(p.y));
         const bool decal = (g_mode.x & DF_DECAL) != 0u;
         uint4 o;

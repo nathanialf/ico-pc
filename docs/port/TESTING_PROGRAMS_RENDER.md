@@ -1055,8 +1055,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   interpolated, the ordered dither) texel for texel, and the 1x cases count no above-1x draw
   (`checkRamp`); case j (`checkJitter`, issue 203): a flat quad at a Z between two differing table
   entries, fogged at 2x with the scene jittered by 0, 0 (SCENE byte for byte as without a jitter)
-  and by a whole texel (1, 0): every interior texel is the unjittered picture one texel over and
-  its alpha the formula's at the cell less the jitter (the dither follows the picture); the outer columns' probe: its count of GS Z 0 rows on D32F and D24 words, the texel
+  and by real jitters (0.25, 0), (0.125, 0), (-0.25, 0) and (0, 0.25): every interior texel is the
+  0, 0 picture's 4, 2, -4 texels over in x and 4 down, its alpha the formula's at that cell (the
+  dither's phase moves by the jitter in sixteenths of a texel), and the 0, 0 pattern differs from
+  itself moved 2 and 4 texels; the outer columns' probe: its count of GS Z 0 rows on D32F and D24 words, the texel
   each GS column is read at (1x, 2.8125x, and Full pixel's window with GS column 0 left out) and
   the line of the first 8 and last 8 GS columns on the CPU with each of the places those columns
   go (open, cropped, closed at 512 and at a wide 832, Full pixel's window with its `-` columns:
