@@ -642,8 +642,10 @@ Shadows page. The last two change Ico's weapons and start at **Original**.
   itself is the weapon's own, so a Shadow beside him can still be caught by
   it. Achievements stay on.
 - **Shadows wait while Ico is down:** in the game the Shadows hold back while
-  Ico is knocked down and getting up. Off: they do not hold back, so they
-  can attack him again before he is on his feet. Achievements stay on.
+  Ico is knocked down and getting up, and while he lies there the game also
+  makes him untouchable, so a swing that reaches him passes through. Off: they
+  do not hold back, and their swings land while he is on the ground and
+  getting up. Achievements stay on.
 - **One hit per swing:** a swing of Ico's weapon can hurt a Shadow only once.
   Switches achievements off.
 - **Shadows never dodge:** Shadows never step aside from Ico's swings.

@@ -267,7 +267,7 @@ or number that is no value reads as the default and is logged once.
 | `ignore_cutscene_cameras` | bool | `false` | the cutscenes' cameras are ignored (`debug_ignore_demo_camera`); suspends achievements |
 | `auto_guard` | bool | `true` | Ico blocks a Shadow's attack from the front; `false` = he does not (does not suspend achievements) |
 | `attack_turn` | bool | `true` | Ico's swing turns him toward the nearest Shadow; `false` = he swings straight ahead (does not suspend achievements) |
-| `shadows_wait_down` | bool | `true` | the Shadows hold back while Ico is knocked down; `false` = they do not (does not suspend achievements) |
+| `shadows_wait_down` | bool | `true` | the Shadows hold back while Ico is knocked down, and his down action makes him invincible; `false` = they do not hold back and their swings land while he lies and gets up (`ico_variant_down_keeps_hit`; does not suspend achievements) |
 | `sword_colour` | string | `"original"` | `"original"` or `"red"`: the light sword (weapon kind 9) is made as its red twin, kind 8, from the next room; offered on pal, jpn, kor and cn only (the other tables have no kinds 8 and 9: `"red"` reads as `"original"` there, logged once); does not suspend achievements |
 | `weapon` | string | `"original"` | `"original"` or `"net"`: the stick (kind 1) is made as the insect net (kind 7, 6 on jun26), from the next room: held, never swung, never lit, power 0; does not suspend achievements |
 | `peaceful_shadows` | bool | `false` | a Shadow is started without its brain thread (the game's `BrainOnOff` switch, for Shadows only; Yorda's brain is untouched); suspends achievements |

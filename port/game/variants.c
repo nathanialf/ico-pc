@@ -620,6 +620,21 @@ int ico_variant_shadows_wait_down(void)
     return on;
 }
 
+int ico_variant_down_keeps_hit(int is_boy)
+{
+    static unsigned n;
+    if (!is_boy) {
+        return 1;
+    }
+    if (!ico_variant_shadows_wait_down()) {
+        count_off(
+            "down_keeps_hit: Ico's down action leaves his hit flag clear (hittable while down)", &n,
+            600);
+        return 0;
+    }
+    return 1;
+}
+
 int ico_variant_shadow_brain(void)
 {
     static unsigned n;
