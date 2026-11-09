@@ -1249,11 +1249,19 @@ static uint32_t sheetThreshold(int32_t x, int32_t y, uint32_t dither)
 /* sheet_text.hlsli sheet_texel: coverage c and rim r (0..255) under style
    at threshold th into an RGBA8 texel (grey, grey, grey, alpha in GS
    units) */
+/* sheet_text.hlsli sheet_solid_threshold: th under ICO_SHEET_SOLID_ABOVE,
+   plain rounding from it up (the dark band solid, the fringe dithered) */
+static uint32_t sheetSolidThreshold(uint32_t a, uint32_t th)
+{
+    return a >= ICO_SHEET_SOLID_ABOVE ? ICO_SHEET_T_OFF : th;
+}
+
 static void sheetTexel(uint32_t c, uint32_t r, const uint8_t style[4], uint32_t th, uint8_t *o)
 {
     const uint32_t rw = (r * style[0] + 32u) / 64u;
     const uint32_t a = style[0] != 0 ? (c > rw ? c : rw) : c;
     const uint32_t t = a != 0 ? (c * 255u + a / 2u) / a : 0u;
+    th = sheetSolidThreshold(a, th);
     const uint32_t aq = sheetQuantise(a, th), tq = sheetQuantise(t, th);
     const uint32_t grey =
         ((uint32_t)style[1] * (255u - tq) + (uint32_t)style[2] * tq + 127u) / 255u;
@@ -1359,7 +1367,8 @@ int rd__sheet_bake_rect(const uint8_t *cov, uint32_t w, uint32_t h, const uint8_
    under the style's weight at threshold th */
 static uint32_t sheetRimLevel(uint32_t r, const uint8_t style[4], uint32_t th)
 {
-    return sheetQuantise(style[0] != 0 ? (r * style[0] + 32u) / 64u : 0u, th);
+    const uint32_t a = style[0] != 0 ? (r * style[0] + 32u) / 64u : 0u;
+    return sheetQuantise(a, sheetSolidThreshold(a, th));
 }
 
 /* floor(v / d) for d > 0, as the shader keeps its operands positive */
@@ -1380,35 +1389,28 @@ int rd__sheet_bake_scaled_rect(const uint8_t *tex, uint32_t w, uint32_t h, const
         return 0;
     }
     const int32_t W = (int32_t)w, HH = (int32_t)(h / 2u), S = (int32_t)scale;
-    /* the bilinear's denominator on an axis (2 s: font.hlsl sheet_scaled's
-       g = (n - 2 s q0) / (2 s)), and on both */
-    const uint32_t D = 2u * scale, DD = D * D;
-    /* a texel without coverage whose four rims are 0: c 0 and every level 0
-       (quantise(0, th) is 0 for th <= 31), so its grey is the rim level and
-       its alpha 0 at any threshold (sheet_texel_scaled with tq 0, cq 0) */
+    /* a texel without coverage whose sheet texel's rim is 0: c 0 and the
+       level 0 (quantise(0, th) is 0 for th <= 31), so its grey is the rim
+       level and its alpha 0 at any threshold (sheet_texel_scaled with tq 0,
+       cq 0) */
     uint8_t blank[4];
     blank[0] = blank[1] = blank[2] = (uint8_t)(((uint32_t)style[1] * 255u + 127u) / 255u);
     blank[3] = 0;
     for (int32_t yy = y; yy < y + rh; yy++) {
         uint8_t *o = out + (size_t)(yy - y) * pitch;
-        /* the texel's centre in 2s-ths of a sheet texel, the sheet texel
-           before it and the weight of the one after (sheet_scaled: n, q0,
-           n - 2 s q0) */
-        const int32_t ny = 2 * yy + 1 - S;
-        const int32_t qy = sheetFloorDiv(ny, (int32_t)D);
-        const uint32_t gy = (uint32_t)(ny - (int32_t)D * qy);
+        /* the sheet row the texel lies in (sheet_scaled: floor(p / s)) */
+        const int32_t qy1 = sheetFloorDiv(yy, S);
         /* the coverage row: the top half only (sheet_cov4 and the in-half
            test), 0 outside the texture */
         const uint8_t *crow = yy >= 0 && yy < HH ? tex + (size_t)yy * w : NULL;
-        /* a row whose coverage and the two rim rows it blends are 0 across
-           the page (most rows: the shelves' gaps, the empty bands) is
-           blank */
+        /* a row whose coverage and whose sheet row's rim are 0 across the
+           page (most rows: the shelves' gaps, the empty bands) is blank */
         int ink = 0;
         for (int32_t k = 0; crow && k < W && !ink; k++) {
             ink = crow[k] != 0;
         }
-        for (int j = 0; j < 2 && !ink; j++) {
-            const int32_t ty = (qy + j) * S;
+        {
+            const int32_t ty = qy1 * S;
             const uint8_t *rr = ty >= 0 && ty < HH ? tex + (size_t)(HH + ty) * w : NULL;
             for (int32_t k = 0; rr && k < W && !ink; k++) {
                 ink = rr[k] != 0;
@@ -1422,50 +1424,32 @@ int rd__sheet_bake_scaled_rect(const uint8_t *tex, uint32_t w, uint32_t h, const
         }
         for (int32_t i = 0; i < rw; i++, o += 4) {
             const int32_t xx = x + i;
-            const int32_t nx = 2 * xx + 1 - S;
-            const int32_t qx = sheetFloorDiv(nx, (int32_t)D);
-            const uint32_t gx = (uint32_t)(nx - (int32_t)D * qx);
-            /* the four sheet texels' rim levels: sheet texel q's rim at
-               texel q s of the bottom half, 0 where q s is outside the top
-               half's texels; each at its own Bayer threshold */
-            uint32_t lq[2][2], la[2][2];
-            for (int j = 0; j < 2; j++) {
-                for (int k = 0; k < 2; k++) {
-                    const int32_t tx = (qx + k) * S, ty = (qy + j) * S;
-                    const uint32_t r = tx >= 0 && tx < W && ty >= 0 && ty < HH
-                                           ? tex[(size_t)(HH + ty) * w + (size_t)tx]
-                                           : 0u;
-                    const uint32_t l =
-                        sheetRimLevel(r, style, sheetThreshold(qx + k, qy + j, style[3]));
-                    lq[j][k] = l;
-                    la[j][k] = (l * 128u + 127u) / 255u;
-                }
-            }
+            /* the rim: the level of the sheet texel q the texel lies in,
+               at its own Bayer threshold, magnified as blocks (font.hlsl
+               sheet_scaled); 0 where q s is outside the top half's texels */
+            const int32_t qx = sheetFloorDiv(xx, S);
+            const int32_t tx = qx * S, ty = qy1 * S;
+            const uint32_t r = tx >= 0 && tx < W && ty >= 0 && ty < HH
+                                   ? tex[(size_t)(HH + ty) * w + (size_t)tx]
+                                   : 0u;
+            const uint32_t th0 = sheetThreshold(qx, qy1, style[3]);
+            const uint32_t rm = sheetRimLevel(r, style, th0);
+            const uint32_t la = (rm * 128u + 127u) / 255u;
             const uint32_t c = crow && xx >= 0 && xx < W ? crow[xx] : 0u;
-            if (c == 0u && (lq[0][0] | lq[0][1] | lq[1][0] | lq[1][1]) == 0u) {
+            if (c == 0u && rm == 0u) {
                 memcpy(o, blank, 4);
                 continue;
             }
-            /* the two lerps in DD-ths (exact: the shader's floats hold
-               them without a rounding), then floor(v + 0.5) */
-            const uint32_t q = (lq[0][0] * (D - gx) + lq[0][1] * gx) * (D - gy) +
-                               (lq[1][0] * (D - gx) + lq[1][1] * gx) * gy;
-            const uint32_t qa = (la[0][0] * (D - gx) + la[0][1] * gx) * (D - gy) +
-                                (la[1][0] * (D - gx) + la[1][1] * gx) * gy;
-            const uint32_t rm = (2u * q + DD) / (2u * DD);
-            /* sheet_texel_scaled at the threshold of the sheet texel the
-               texel lies in */
-            const uint32_t th =
-                sheetThreshold(sheetFloorDiv(xx, S), sheetFloorDiv(yy, S), style[3]);
+            /* sheet_texel_scaled at that threshold */
             const uint32_t a = c > rm ? c : rm;
+            const uint32_t th = sheetSolidThreshold(a, th0);
             const uint32_t t = a != 0 ? (c * 255u + a / 2u) / a : 0u;
             const uint32_t cq = sheetQuantise(c, th), tq = sheetQuantise(t, th);
             const uint32_t grey =
                 ((uint32_t)style[1] * (255u - tq) + (uint32_t)style[2] * tq + 127u) / 255u;
             const uint32_t af = (cq * 128u + 127u) / 255u;
-            const uint32_t m = qa > af * DD ? qa : af * DD;
             o[0] = o[1] = o[2] = (uint8_t)grey;
-            o[3] = (uint8_t)((2u * m + DD) / (2u * DD));
+            o[3] = (uint8_t)(la > af ? la : af);
         }
     }
     return 1;
@@ -1497,10 +1481,12 @@ void rd__sheet_bake_grow(const RdTexRec *t, uint32_t dw, uint32_t dh, uint32_t *
         py0 = y0 - ICO_SHEET_BAKE_AY;
         py1 = y1 + ICO_SHEET_BAKE_AY;
     } else {
-        /* a texel reads its own coverage and the rims of the sheet texels
-           q0, q0 + 1 around its centre, kept at texel q s of the bottom
-           half: a changed rim row hh + r moves the texels of rows r - s ..
-           r + 2 s (2 s each way, the bottom half's own texels with them) */
+        /* a texel reads its own coverage and the rim of the sheet texel q
+           it lies in, kept at texel q s of the bottom half: a changed rim
+           row hh + r moves the texels of rows r .. r + s - 1; the 2 s each
+           way (the bottom half's own texels with them) is the reach of the
+           bilinear magnification before v0.11.1, kept: wider than the
+           blocks need, never narrower */
         const int64_t g = 2 * (int64_t)t->sheetScale, hh = t->h / 2u;
         px0 = x0 - g;
         px1 = x1 + g;

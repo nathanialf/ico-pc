@@ -807,13 +807,11 @@ int rd__sheet_bake_rect(const uint8_t *cov, uint32_t w, uint32_t h, const uint8_
                         int32_t x, int32_t y, int32_t rw, int32_t rh, uint8_t *out, size_t pitch);
 /* rd__sheet_bake_scaled_rect: the texels font_sheet_ps makes above 1x
  * (font.hlsl sheet_scaled: the texel's own coverage from the top half, the
- * rim levels of the sheet texels q0 and q0 + 1 around its centre from
- * texel q s of the bottom half, blended bilinearly, sheet_texel_scaled at
- * the threshold of the sheet texel it lies in) for the texels [x, x + rw) x
- * [y, y + rh) (any integers, both halves' rows) of a w x h sheet texture tex
- * of strip scale scale (2 or 4; 0 for any other, nothing written), in
- * integers: the shader's lerps by odd 4ths and 8ths are exact floats, so
- * these are its values.  rd__sheet_bake_texels: t's texels by its scale.
+ * rim level of the sheet texel q it lies in from texel q s of the bottom
+ * half, magnified as blocks, sheet_texel_scaled at that sheet texel's
+ * threshold) for the texels [x, x + rw) x [y, y + rh) (any integers, both
+ * halves' rows) of a w x h sheet texture tex of strip scale scale (2 or 4;
+ * 0 for any other, nothing written), in integers: the shader's values.  rd__sheet_bake_texels: t's texels by its scale.
  * rd__sheet_bake_grow: t's changed rectangle (*rx, *ry, *rw, *rh, in the
  * texture's texels) turned into the device rectangle of every baked texel
  * that reads a changed one, clipped to the dw x dh device texture. */

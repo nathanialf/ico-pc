@@ -12,10 +12,11 @@
  *   corpus   the words of port/ui/test/font_corpus/<lang>.txt (argv[1]),
  *            each line a strip at the menus' two em sizes, packed the same
  *            way: the same, every texel;
- *   styles   each of the eight light inks' rim and fill levels (menu_font.c
- *            kSheetInk: English, French and Italian, German, Spanish,
- *            Japanese, Korean, Chinese), the faint rim (16 64ths) and the
- *            plain style (no rim), each with the dither on and off;
+ *   styles   the light inks' rim and fill levels (menu_font.c kSheetInk:
+ *            the European rows' grey 100, the Japanese, Korean and Chinese
+ *            rows), three other rim greys (61 and 56, the European sheets'
+ *            survey, and black), the faint rim (16 64ths) and the plain
+ *            style (no rim), each with the dither on and off;
  *   updates  a strip placed and a strip's band cleared on a baked page:
  *            the changed rectangle grown by the apron (rd_upload.c's rule:
  *            the device rectangle [x, x + w + 2 AX) x [y, y + h + 2 AY)),
@@ -32,15 +33,14 @@
  *            half, rd_sheet_rim's rim in the bottom one) with blocks,
  *            ramps, noise and ink on its four edges, baked whole (both
  *            halves and the apron) by rd__sheet_bake_scaled_rect: every
- *            texel is font.hlsl sheet_scaled's, transcribed here in floats
- *            with lerp as x (1 - a) + y a and as x + a (y - x) (the two
- *            forms a driver may compile: the same bits, as the blend
- *            weights are odd 4ths and 8ths); away from the edges also
+ *            texel is font.hlsl sheet_scaled's, transcribed here (the rim
+ *            of the sheet texel the texel lies in, magnified as blocks,
+ *            the letters' coverage on top); away from the edges also
  *            sheetref_texel's; past the apron the outermost texel's;
  *            sub-rectangles the whole bake's; a strip placed as
  *            menu_font.c placeCoverage places it (its coverage and rim
  *            rectangles) and baked over rd__sheet_bake_grow's rectangle
- *            gives a fresh bake's page; scale 3 (6ths, which round) and
+ *            gives a fresh bake's page; scale 3 and
  *            the device rule (rd__sheet_bake_scale: 1, and 2 on the tile-based profile) refused;
  *   looks    sheet_ref.h's SheetLook (the parametrised reference ctest
  *            menu_look's outline mode draws candidate looks with): the
@@ -54,7 +54,14 @@
  *            under the 8x8 and the 4x4 matrix lights exactly the texels
  *            whose threshold passes (2b + 1 in 128ths, 32nds), rounding with
  *            the dither off; sheetref_texel_cr over sheetref_rim_look is
- *            sheetref_texel_look.
+ *            sheetref_texel_look;
+ *   solid    the solid band (ICO_SHEET_SOLID_ABOVE): uniform pages of
+ *            every coverage (plain style) and the looks' strip (the
+ *            European ink, its rim) baked with the dither on and off: a
+ *            texel whose alpha (the larger of its coverage and its rim)
+ *            is at least ICO_SHEET_SOLID_ABOVE bakes the same bytes either
+ *            way at every Bayer phase; one under it (half of it, and one
+ *            less) differs at some phase.
  */
 #include <math.h>
 #include <stdio.h>
@@ -173,13 +180,15 @@ typedef struct Style {
     RdSheetStyle st;
 } Style;
 
-/* menu_font.c kSheetInk's rim and fill levels, the faint class
+/* menu_font.c kSheetInk's rim and fill levels (the European rows' 100, the
+   Asian rows'), three other rim greys (61 and 56, the European sheets'
+   survey, which kSheetInk held before v0.11.1, and black), the faint class
    (FAINT_WEIGHT) and the plain style (kPlainInk) */
 static const Style kStyles[] = {
-    {"English", {1, 24, 255, 1, 0, 1}},  {"French, Italian", {1, 61, 255, 1, 0, 1}},
-    {"German", {1, 56, 255, 1, 0, 1}},   {"Spanish", {1, 62, 255, 1, 0, 1}},
-    {"Japanese", {1, 34, 252, 1, 0, 1}}, {"Korean", {1, 42, 253, 1, 0, 1}},
-    {"Chinese", {1, 39, 251, 1, 0, 1}},  {"faint", {1, 24, 255, 1, FAINT_WEIGHT, 1}},
+    {"European", {1, 100, 255, 1, 0, 1}}, {"grey 61", {1, 61, 255, 1, 0, 1}},
+    {"grey 56", {1, 56, 255, 1, 0, 1}},   {"black", {1, 0, 255, 1, 0, 1}},
+    {"Japanese", {1, 34, 252, 1, 0, 1}},  {"Korean", {1, 42, 253, 1, 0, 1}},
+    {"Chinese", {1, 39, 251, 1, 0, 1}},   {"faint", {1, 100, 255, 1, FAINT_WEIGHT, 1}},
     {"plain", {0, 0, 255, 1, 0, 1}},
 };
 #define STYLE_COUNT (int)(sizeof(kStyles) / sizeof(kStyles[0]))
@@ -545,16 +554,6 @@ static void testRects(void)
 
 /* ---- scaled: strips at 2 and 4 texels a sheet texel ---- */
 
-/* font.hlsl sheet_scaled for one texel p, in floats as the shader writes
-   it: c from the top half, the rim levels of the sheet texels q0, q0 + 1
-   around p's centre read at texel q s of the bottom half, the two lerps,
-   sheet_texel_scaled; form 0 lerps as x (1 - a) + y a, form 1 as
-   x + a (y - x) */
-static float lerpForm(float x, float y, float a, int form)
-{
-    return form ? x + a * (y - x) : x * (1.0f - a) + y * a;
-}
-
 static uint32_t refQuantise(uint32_t v, uint32_t th)
 {
     const uint32_t n = ICO_SHEET_LEVELS - 1u;
@@ -572,36 +571,29 @@ static uint32_t refThreshold(int x, int y, uint32_t dither)
     return 2u * ((kRows[(uint32_t)y & 3u] >> (4u * ((uint32_t)x & 3u))) & 15u) + 1u;
 }
 
+/* sheet_text.hlsli sheet_solid_threshold */
+static uint32_t refSolid(uint32_t a, uint32_t th)
+{
+    return a >= ICO_SHEET_SOLID_ABOVE ? ICO_SHEET_T_OFF : th;
+}
+
 static void shaderTexel(const uint8_t *tex, int w, int h, int si, const uint8_t st[4], int px,
-                        int py, int form, uint8_t *grey, uint8_t *alpha)
+                        int py, uint8_t *grey, uint8_t *alpha)
 {
     const int hh = h / 2;
     const uint32_t c = px >= 0 && px < w && py >= 0 && py < hh ? tex[(size_t)py * w + px] : 0u;
-    const int nx = 2 * px + 1 - si, ny = 2 * py + 1 - si;
-    const int q0x = (nx + 8192 * si) / (2 * si) - 4096, q0y = (ny + 8192 * si) / (2 * si) - 4096;
-    const float gx = (float)(nx - 2 * si * q0x) / (float)(2 * si);
-    const float gy = (float)(ny - 2 * si * q0y) / (float)(2 * si);
-    float rq[2][2], ra[2][2];
-    for (int j = 0; j < 2; j++) {
-        for (int i = 0; i < 2; i++) {
-            const int tx = (q0x + i) * si, ty = (q0y + j) * si;
-            const int inside = tx >= 0 && tx < w && ty >= 0 && ty < hh;
-            const uint32_t r = inside ? tex[(size_t)(hh + ty) * w + tx] : 0u;
-            const uint32_t l = refQuantise(st[0] != 0 ? (r * st[0] + 32u) / 64u : 0u,
-                                           refThreshold(q0x + i, q0y + j, st[3]));
-            rq[j][i] = (float)l;
-            ra[j][i] = (float)((l * 128u + 127u) / 255u);
-        }
-    }
-    const float rq0 = lerpForm(rq[0][0], rq[0][1], gx, form);
-    const float rq1 = lerpForm(rq[1][0], rq[1][1], gx, form);
-    const float ra0 = lerpForm(ra[0][0], ra[0][1], gx, form);
-    const float ra1 = lerpForm(ra[1][0], ra[1][1], gx, form);
-    const float rqv = lerpForm(rq0, rq1, gy, form), rav = lerpForm(ra0, ra1, gy, form);
+    /* the rim: the sheet texel the texel lies in, as blocks (font.hlsl
+       sheet_scaled) */
     const int qx = (px + 4096 * si) / si - 4096, qy = (py + 4096 * si) / si - 4096;
-    const uint32_t th = refThreshold(qx, qy, st[3]);
-    const uint32_t rm = (uint32_t)floorf(rqv + 0.5f);
+    const int tx = qx * si, ty = qy * si;
+    const int inside = tx >= 0 && tx < w && ty >= 0 && ty < hh;
+    const uint32_t r = inside ? tex[(size_t)(hh + ty) * w + tx] : 0u;
+    const uint32_t rw = st[0] != 0 ? (r * st[0] + 32u) / 64u : 0u;
+    const uint32_t th0 = refThreshold(qx, qy, st[3]);
+    const uint32_t rm = refQuantise(rw, refSolid(rw, th0));
+    const float rav = (float)((rm * 128u + 127u) / 255u);
     const uint32_t a = c > rm ? c : rm;
+    const uint32_t th = refSolid(a, th0);
     const uint32_t t = a != 0u ? (c * 255u + a / 2u) / a : 0u;
     const uint32_t cq = refQuantise(c, th), tq = refQuantise(t, th);
     *grey = (uint8_t)((st[1] * (255u - tq) + st[2] * tq + 127u) / 255u);
@@ -683,14 +675,14 @@ static void testScaledAt(int S)
                 for (int y = -AY; y < H + AY; y++) {
                     for (int x = -AX; x < W + AX; x++) {
                         const uint8_t *o = &dev[((size_t)(y + AY) * dw + (size_t)(x + AX)) * 4];
-                        for (int form = 0; form < 2; form++) {
+                        {
                             uint8_t g, a;
-                            shaderTexel(tex, W, H, S, sb, x, y, form, &g, &a);
+                            shaderTexel(tex, W, H, S, sb, x, y, &g, &a);
                             if (o[0] != g || o[1] != g || o[2] != g || o[3] != a) {
                                 if (badShader < 8) {
-                                    printf("  scaled %d (%s, dither %d, form %d): texel (%d, %d) "
+                                    printf("  scaled %d (%s, dither %d): texel (%d, %d) "
                                            "baked %u %u, sheet_scaled %u %u\n",
-                                           S, kStyles[k].name, d, form, x, y, o[0], o[3], g, a);
+                                           S, kStyles[k].name, d, x, y, o[0], o[3], g, a);
                                 }
                                 badShader++;
                             }
@@ -714,7 +706,7 @@ static void testScaledAt(int S)
                         const int cx = x < -AX ? -AX : x >= W + AX ? W + AX - 1 : x;
                         const int cy = y < -AY ? -AY : y >= H + AY ? H + AY - 1 : y;
                         uint8_t g, a;
-                        shaderTexel(tex, W, H, S, sb, x, y, 0, &g, &a);
+                        shaderTexel(tex, W, H, S, sb, x, y, &g, &a);
                         const uint8_t *o = &dev[((size_t)(cy + AY) * dw + (size_t)(cx + AX)) * 4];
                         badFar += o[0] != g || o[3] != a;
                     }
@@ -820,8 +812,8 @@ static void testScaled(void)
 {
     testScaledAt(2);
     testScaledAt(4);
-    /* 3: the shader's blend by 6ths rounds; the bake refuses it, and the
-       device bakes 1x and 2x only (4x pages are 34 MB baked) */
+    /* 3: the bake refuses it (2 and 4 only: rd_tex.c), and the device
+       bakes 1x and 2x only (4x pages are 34 MB baked) */
     uint8_t px[4] = {9, 9, 9, 9}, cov[16] = {0};
     const uint8_t sb[4] = {64, 0, 255, 1};
     CHECK(rd__sheet_bake_scaled_rect(cov, 2, 8, sb, 3, 0, 0, 1, 1, px, 4) == 0 && px[0] == 9,
@@ -872,8 +864,8 @@ static void testLooks(void)
     static const uint16_t kWy[ICO_SHEET_RY + 1] = {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2,
                                                    ICO_SHEET_WY_3, ICO_SHEET_WY_4};
     CHECK(d->rx == ICO_SHEET_RX && d->ry == ICO_SHEET_RY && d->levels == ICO_SHEET_LEVELS &&
-              d->bayer == 4 && memcmp(d->wx, kWx, sizeof(kWx)) == 0 &&
-              memcmp(d->wy, kWy, sizeof(kWy)) == 0,
+              d->bayer == 4 && d->solidAbove == ICO_SHEET_SOLID_ABOVE &&
+              memcmp(d->wx, kWx, sizeof(kWx)) == 0 && memcmp(d->wy, kWy, sizeof(kWy)) == 0,
           "looks: the default look is the constants");
     /* gs_bayer8 */
     static const uint32_t kRow0[8] = {0, 32, 8, 40, 2, 34, 10, 42};
@@ -933,9 +925,9 @@ static void testLooks(void)
     }
     CHECK(bad == 0, "looks: the default look draws sheetref_texel's texels (%ld off)", bad);
     /* the reach: entries past rx / ry are not read */
-    const SheetLook shortA = {2, 1, {1000, 700, 300, 0, 0, 0, 0}, {1000, 500, 0, 0, 0}, 8, 4};
+    const SheetLook shortA = {2, 1, {1000, 700, 300, 0, 0, 0, 0}, {1000, 500, 0, 0, 0}, 8, 4, 0};
     const SheetLook shortB = {
-        2, 1, {1000, 700, 300, 900, 900, 900, 900}, {1000, 500, 900, 900, 900}, 8, 4};
+        2, 1, {1000, 700, 300, 900, 900, 900, 900}, {1000, 500, 900, 900, 900}, 8, 4, 0};
     CHECK(looksDiffer(cov, W, H, &st, &shortA, &shortB) == 0,
           "looks: the tables are read within the reach only");
     /* the level counts' alphas; nothing past the reach */
@@ -967,7 +959,7 @@ static void testLooks(void)
     CHECK(off == 0, "looks: %ld alphas off the 3 and 2 levels' (0 64 128, 0 128)", off);
     CHECK(far == 0, "looks: %ld texels past the reach with alpha", far);
     /* a hard outline: full two texels across and one down, none past */
-    const SheetLook hard = {6, 4, {1000, 1000, 1000, 0, 0, 0, 0}, {1000, 1000, 0, 0, 0}, 8, 4};
+    const SheetLook hard = {6, 4, {1000, 1000, 1000, 0, 0, 0, 0}, {1000, 1000, 0, 0, 0}, 8, 4, 0};
     const RdSheetStyle black = {1, 0, 255, 0, 0, 1};
     int hardBad = 0;
     for (int y = 8; y < 16; y++) {
@@ -995,7 +987,7 @@ static void testLooks(void)
     memset(field, 100, sizeof(field));
     for (int m = 0; m < 3; m++) {
         const int n = m == 0 ? 0 : m == 1 ? 4 : 8, den = n == 8 ? 128 : 32;
-        const SheetLook l = {6, 4, {1000, 0, 0, 0, 0, 0, 0}, {1000, 0, 0, 0, 0}, 2, n};
+        const SheetLook l = {6, 4, {1000, 0, 0, 0, 0, 0, 0}, {1000, 0, 0, 0, 0}, 2, n, 0};
         for (int dith = 0; dith < 2; dith++) {
             const RdSheetStyle plain = {0, 0, 255, (uint8_t)dith, 0, 1};
             int wrong = 0, lit = 0;
@@ -1023,7 +1015,8 @@ static void testLooks(void)
         }
     }
     /* the texel from coverage and rim is the 1x texel */
-    const SheetLook c3 = {6, 4, {1000, 1000, 700, 400, 150, 0, 0}, {1000, 900, 450, 150, 0}, 8, 8};
+    const SheetLook c3 = {6, 4, {1000, 1000, 700, 400, 150, 0, 0}, {1000, 900, 450, 150, 0}, 8,
+                          8, 0};
     long crBad = 0;
     for (int y = -6; y < H + 6; y++) {
         for (int x = -8; x < W + 8; x++) {
@@ -1041,11 +1034,101 @@ static void testLooks(void)
            (int)(sizeof(kLevels) / sizeof(kLevels[0])));
 }
 
+/* ------------------------------------------------------------- solid */
+
+/* the bytes of page cov (w x h, its texels only) under st baked with the
+   dither on (1) and off (0), into on and off */
+static int bakeBoth(const uint8_t *cov, int w, int h, const RdSheetStyle *st, uint8_t *on,
+                    uint8_t *off)
+{
+    RdSheetStyle s = *st;
+    uint8_t sb[4];
+    s.dither = 1;
+    styleBytes(&s, sb);
+    int ok = rd__sheet_bake_rect(cov, (uint32_t)w, (uint32_t)h, sb, 0, 0, w, h, on, (size_t)w * 4);
+    s.dither = 0;
+    styleBytes(&s, sb);
+    ok &= rd__sheet_bake_rect(cov, (uint32_t)w, (uint32_t)h, sb, 0, 0, w, h, off, (size_t)w * 4);
+    return ok;
+}
+
+static void testSolid(void)
+{
+    /* uniform pages of every coverage, plain style (no rim: the alpha is
+       the coverage), the 16 Bayer phases inside */
+    enum { F = 8 };
+
+    static const RdSheetStyle kPlain = {0, 0, 255, 1, 0, 1};
+    uint8_t field[F * F], on[F * F * 4], off[F * F * 4];
+    int solidOff = 0, faintSame = 0, ok = 1;
+    for (int v = 1; v < 256; v++) {
+        memset(field, v, sizeof(field));
+        ok &= bakeBoth(field, F, F, &kPlain, on, off);
+        const int same = memcmp(on, off, sizeof(on)) == 0;
+        if (v >= ICO_SHEET_SOLID_ABOVE) {
+            solidOff += !same;
+        } else if (v == ICO_SHEET_SOLID_ABOVE / 2 || v == ICO_SHEET_SOLID_ABOVE - 1) {
+            faintSame += same;
+        }
+    }
+    CHECK(ok, "solid: the uniform pages baked");
+    CHECK(solidOff == 0, "solid: %d coverages from %d differ with the dither on and off", solidOff,
+          ICO_SHEET_SOLID_ABOVE);
+    CHECK(faintSame == 0, "solid: %d of the coverages %d and %d bake the same either way",
+          faintSame, ICO_SHEET_SOLID_ABOVE / 2, ICO_SHEET_SOLID_ABOVE - 1);
+
+    /* a strip under the European ink (its rim): every texel whose alpha
+       before the quantiser, max(c, rim), is at least ICO_SHEET_SOLID_ABOVE
+       bakes the same bytes with the dither on and off; some texel under it
+       differs (the faint fringe dithers) */
+    enum { W = 48, H = 24 };
+
+    static uint8_t cov[W * H], son[W * H * 4], soff[W * H * 4];
+    memset(cov, 0, sizeof(cov));
+    for (int y = 8; y < 16; y++) {
+        for (int x = 10; x < 18; x++) {
+            cov[y * W + x] = 255;
+        }
+        for (int x = 24; x < 40; x++) {
+            cov[y * W + x] = (uint8_t)((x - 24) * 16);
+        }
+    }
+    const RdSheetStyle *eu = &kStyles[0].st;
+    long solidDiff = 0, faintDiff = 0, solidN = 0, faintN = 0;
+    if (bakeBoth(cov, W, H, eu, son, soff)) {
+        for (int y = 0; y < H; y++) {
+            for (int x = 0; x < W; x++) {
+                const uint32_t c = cov[y * W + x];
+                const uint32_t r = sheetref_rim_look(cov, W, H, x, y, NULL);
+                const uint32_t a = c > r ? c : r;
+                const int d = memcmp(&son[(y * W + x) * 4], &soff[(y * W + x) * 4], 4) != 0;
+                if (a >= ICO_SHEET_SOLID_ABOVE) {
+                    solidDiff += d;
+                    solidN++;
+                } else if (a > 0) {
+                    faintDiff += d;
+                    faintN++;
+                }
+            }
+        }
+    } else {
+        CHECK(0, "solid: the strip baked");
+    }
+    printf("  solid: coverages %d..255 the same with the dither on and off; the strip's %ld solid "
+           "texels %ld differ, its %ld faint ones %ld differ\n",
+           ICO_SHEET_SOLID_ABOVE, solidN, solidDiff, faintN, faintDiff);
+    CHECK(solidN > 0 && solidDiff == 0,
+          "solid: %ld of the strip's %ld texels of alpha >= %d differ with the dither on and off",
+          solidDiff, solidN, ICO_SHEET_SOLID_ABOVE);
+    CHECK(faintDiff > 0, "solid: none of the strip's %ld faint texels dithers", faintN);
+}
+
 int main(int argc, char **argv)
 {
     const char *corpus = argc > 1 ? argv[1] : "port/ui/test/font_corpus";
     CHECK(ui_font_init(), "the embedded fonts parse");
     testLooks();
+    testSolid();
     testScaled();
     testRects();
     testEdges();

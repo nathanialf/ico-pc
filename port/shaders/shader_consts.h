@@ -226,32 +226,37 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
  * At 1x the renderer computes the same texels on the CPU instead
  * (rd_tex.c rd__sheet_bake_rect, into an RGBA8 texture font_sheet_baked_ps
  * reads), with the same constants. */
-/* The values are the sheets' survey (the comment above kSheetInk in
- * port/ui/menu_font.c; ctest menu_look testSurvey).  The rim is
- * a weighted dilation: the largest coverage within ICO_SHEET_RX texels across
- * and ICO_SHEET_RY down, each scaled by WX[|dx|] * WY[|dy|] (per mille), so
- * the dark halo fades out as the sheets' does instead of filling the gaps
- * between letters.  The falloff is the English sheets' mean rim alpha at
- * each distance outside the letters (across 1..6, down 1..4). */
+/* The rim is a weighted dilation: the largest coverage within ICO_SHEET_RX
+ * texels across and ICO_SHEET_RY down, each scaled by WX[|dx|] * WY[|dy|]
+ * (per mille).  The values are the outline the user picked in v0.11.1 on
+ * the Menu Outline Lab (a page drawing the menus' words in candidate looks
+ * beside the title screen's lettering): a solid dark band four texels
+ * across (the fifth at 90) and two field lines down, then 700 350 100,
+ * that fades out quickly like the lettering at the foot of the title
+ * screen.  Until v0.11.1 the tables were the sheets' survey (the English
+ * sheets' mean rim alpha at each distance, WX 1000 760 610 540 500 390 330,
+ * WY 1000 770 440 360 270: a soft halo; the comment above kSheetInk in
+ * port/ui/menu_font.c keeps the survey).  The reach stays 6 x 4: the
+ * strips' margins, the pages' gaps and the shader's unrolled loops derive
+ * from it. */
 #define ICO_SHEET_RX 6 /* rim: texels across */
 #define ICO_SHEET_RY 4 /* rim: texels (field lines) down */
 #define ICO_SHEET_WX_0 1000
-#define ICO_SHEET_WX_1 760
-#define ICO_SHEET_WX_2 610
-#define ICO_SHEET_WX_3 540
-#define ICO_SHEET_WX_4 500
-#define ICO_SHEET_WX_5 390
-#define ICO_SHEET_WX_6 330
+#define ICO_SHEET_WX_1 1000
+#define ICO_SHEET_WX_2 1000
+#define ICO_SHEET_WX_3 1000
+#define ICO_SHEET_WX_4 90
+#define ICO_SHEET_WX_5 0
+#define ICO_SHEET_WX_6 0
 #define ICO_SHEET_WY_0 1000
-#define ICO_SHEET_WY_1 770
-#define ICO_SHEET_WY_2 440
-#define ICO_SHEET_WY_3 360
-#define ICO_SHEET_WY_4 270
+#define ICO_SHEET_WY_1 1000
+#define ICO_SHEET_WY_2 700
+#define ICO_SHEET_WY_3 350
+#define ICO_SHEET_WY_4 100
 /* opacity and rim-to-fill levels: the sheets' white takes three steps
-   between none and full (five levels), but once the strips' letters sat on
-   the sheets' (ctest menu_look) eight gave the smaller difference on every
-   language (the blurred difference's median 8.7 .. 9.4 where five give
-   9.0 .. 9.5), a finer grain still dithered */
+   between none and full (five levels); eight (the v0.10 fit's: the smaller
+   blurred difference against the sheets on every language, median 8.7 ..
+   9.4 where five give 9.0 .. 9.5) is also the v0.11.1 pick's */
 #define ICO_SHEET_LEVELS 8
 /* the 4x4 Bayer matrix, row y in one constant, column x in nibble x */
 #define ICO_SHEET_BAYER_ROW0 0xA280
@@ -259,6 +264,9 @@ enum { ICO_TEXFMT_RGBA32 = 0, ICO_TEXFMT_RGB24 = 1, ICO_TEXFMT_RGBA16 = 2 };
 #define ICO_SHEET_BAYER_ROW2 0x91B3
 #define ICO_SHEET_BAYER_ROW3 0x5D7F
 #define ICO_SHEET_T_OFF 16 /* the threshold (32nds) with dither off: rounding */
+/* alpha from which a texel is quantised at ICO_SHEET_T_OFF, undithered: the
+   rim's dark band is solid, its faint fringe dithers (sheet_text.hlsli) */
+#define ICO_SHEET_SOLID_ABOVE 32
 /* A strip rasterised at s strip texels a sheet texel across and down (the
  * scene's or the output's scale, port/ui/menu_font.c), 1..ICO_SHEET_SCALE_MAX:
  * the letters are the strip's texels, the rim is the 1x rim of the sheet

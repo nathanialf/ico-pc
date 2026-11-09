@@ -800,8 +800,8 @@ pre-rendered menu sheets (`port/ui/menu_font.h`, header comment). A sheet texel 
 and one field line tall; the menu rows' em is 13.5 texels, 27 y units. A text is rasterised on
 that grid, its lettering 0.8 as wide as the typeface (`UI_SHEET_WIDTH`, the sheets having been
 lettered for the GS's 512-wide frame) and a little heavier (`UI_MENU_BOLD_X`, `UI_MENU_BOLD_Y`),
-then drawn with rd's sheet [shader](SHADERS.md): a rim around the letters and the antialiasing
-quantised against a fixed dither, as the sheets read (`port/ui/menu_font.h`;
+then drawn with rd's sheet [shader](SHADERS.md): an outline round the letters and the antialiasing
+quantised against a fixed dither (`port/ui/menu_font.h`;
 `port/ui/ui_internal.h` (`UI_SHEET_WIDTH`, `UI_MENU_BOLD_X`)). At 1x rd computes a page's finished
 texels on the CPU when it uploads the strips placed on it, and the shader reads four of them a pixel
 ([SHADERS.md](SHADERS.md#sheet_texthlsli), **The 1x bake**): a 1x page is 1038 x 1034 RGBA8 on the
@@ -811,6 +811,22 @@ again whole. At 2x (the strips of a scene twice the PS2's height or a little mor
 Resolution Auto or 2x) rd bakes the pages the same way ([SHADERS.md](SHADERS.md#sheet_texthlsli),
 **The 2x bake**): a 2x page is 2062 x 1034 RGBA8 (8.5 MB, the 2048 x 1024 texture and its apron)
 where its coverage and rim are 2 MB; at 3x and 4x the shader rebuilds each pixel.
+
+The outline is the one the user picked on the Menu Outline Lab, a page that drew the menus'
+words in candidate looks beside the title screen's lettering (ctest `menu_look`'s
+`ICO_MENU_LOOK_OUTLINE` and `ICO_MENU_LOOK_COVERAGE` modes made its material): a solid dark-grey
+band (grey 100 on every European language) four texels across and two field lines down, then a
+quick fade (`ICO_SHEET_WX` 1000 1000 1000 1000 90 0 0, `ICO_SHEET_WY` 1000 1000 700 350 100 per
+mille), like the lettering at the foot of the title screen. A texel whose alpha is at least
+`ICO_SHEET_SOLID_ABOVE` (32 of 255) is rounded to the eight levels with no dither, so the band is
+solid and only its faint fringe carries the Bayer grain; above 1x the outline is magnified as
+blocks, each strip texel the level of the sheet texel it lies in, so the band and the grain are the
+1x strip's at any resolution (`port/shaders/shader_consts.h`, `port/shaders/sheet_text.hlsli`
+(`sheet_solid_threshold`), `port/shaders/font.hlsl` (`sheet_scaled`)). It is the port's look, not
+the menu sheets': their outline is a soft halo, which `menu_look`'s survey measures (the alpha
+falling off over six texels across and four down, a rim grey per language from 24 to 62); the
+survey's numbers are the record in `port/ui/menu_font.c` (above `kSheetInk`), and `menu_look`'s
+picture limits pin the port's look, not a match to the sheets.
 
 The strips are rasterised at the [scene scale](ARCHITECTURE.md#terms), the scene's texels per GS
 line rounded to whole strip texels per sheet texel, from 1 up to `ICO_SHEET_SCALE_MAX` (on the
@@ -856,8 +872,8 @@ once-a-run `ui: the menu text pages are full` (`ui_menu_font_fallbacks`,
 The inks (`UiMenuTextInk`): light letters with the dark rim (the menu rows; the port's text always
 has the full rim), and dark, plain and grey letters without one (the white panel's prompts, the
 save screens' play time and slot numbers). The light ink's rim level and fill are per sheet
-language (`kSheetInk`, `ui_menu_sheet_ink`: the European disc's five measured on their sheets by
-`menu_look`, and `UI_SHEET_JA`, the Japanese disc's, measured by `menu_look_jpn` on the pause and
+language (`kSheetInk`, `ui_menu_sheet_ink`: the European disc's five the outline's grey 100 and the
+sheets' white 255, `menu_look` pinning both, and `UI_SHEET_JA`, the Japanese disc's, measured by `menu_look_jpn` on the pause and
 title words of `Tex_menu01`'s sheets: fill 251.5, so the level is 252, the letters' palette white
 being fcfcfc on these sheets where the European ones have ffffff; rim 34.3, a black-grey near the
 English sheets' 24; one antialiasing step where the European sheets have three, which the shared
@@ -1535,12 +1551,16 @@ Each is a ctest of `port/ui/CMakeLists.txt`; the Settings tests share a fixture:
 - `menu_text` (`test/menu_text_test.c`): the menu text table against the boot ELF's rows, every
   string drawable, the hook through the real `layout_texture.c`.
 - `menu_look` (`test/menu_look_test.c`, `test/menu_sheets.c`): the menus' strips against the
-  player's sheets through the sheet shader's CPU reference; pins the sheet constants. Its
+  player's sheets through the sheet shader's CPU reference; the sheets' survey is its record, and
+  it pins the port's look (the outline's grey 100, the falloff tables, the eight levels, the solid
+  threshold) and the picture limits that look measures, not a match to the sheets. Its
   development modes, from the environment: `ICO_MENU_LOOK_FIT=1` (the levels and greys),
   `ICO_MENU_LOOK_GEOFIT=1` (the table's geometry), `ICO_MENU_LOOK_REF46=1` (the title's publisher
-  plate measured: its outline's falloff, steps and dither) and `ICO_MENU_LOOK_OUTLINE=1` (the
+  plate measured: its outline's falloff, steps and dither), `ICO_MENU_LOOK_OUTLINE=1` (the
   menus' words in candidate outline looks beside the plate, through `sheet_ref.h`'s `SheetLook`;
-  contact sheets to choose the menu look from) ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
+  contact sheets to choose the menu look from) and `ICO_MENU_LOOK_COVERAGE=1` (those words'
+  strip coverage and the plate's rows as PGM files, the outline design page's material)
+  ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 - `menu_text_jpn`, `menu_look_jpn`, `menu_text_kor`, `menu_look_kor`, `menu_text_cn`,
   `menu_look_cn` (`test/menu_region_test.c` with a slug, and `test/menu_sheets.c`): over the disc's
   boot ELF's tables (`ICO_BASE_ELF_JPN`, `ICO_BASE_ELF_KOR`, `ICO_BASE_ELF_CN`), the region's layouts by their procedures, the title, pause and memory card

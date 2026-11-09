@@ -7,33 +7,33 @@
 // reads; the two must hold the same values (sheet_ref.c includes this file
 // with ICO_SHEET_TEXT_C defined, which leaves the defines alone, and
 // static-asserts each pair).  Every step is integer arithmetic, so the GPU
-// and the CPU agree exactly on the texels; only the bilinear weights are
-// float.
+// and the CPU agree exactly on the texels.
 #ifndef ICO_SHEET_TEXT_HLSLI
 #define ICO_SHEET_TEXT_HLSLI
 
 // The rim: a weighted dilation of the coverage, the largest of
 // c(p + d) * WX[|dx|] * WY[|dy|] (per mille each) within SHEET_RX texels
 // across and SHEET_RY texels down (a sheet texel is one x unit wide and one
-// field line tall), so the dark halo fades out with the distance from the
-// letters.  The reach and the falloff are the sheets' survey
-// (port/ui/menu_font.c, above kSheetInk): the English sheets' rim alpha.
+// field line tall).  The falloff is the outline picked in v0.11.1
+// (shader_consts.h says more): a solid dark band that fades out quickly;
+// until then the sheets' survey, a soft halo.
 #define SHEET_RX 6
 #define SHEET_RY 4
 #define SHEET_WX_0 1000
-#define SHEET_WX_1 760
-#define SHEET_WX_2 610
-#define SHEET_WX_3 540
-#define SHEET_WX_4 500
-#define SHEET_WX_5 390
-#define SHEET_WX_6 330
+#define SHEET_WX_1 1000
+#define SHEET_WX_2 1000
+#define SHEET_WX_3 1000
+#define SHEET_WX_4 90
+#define SHEET_WX_5 0
+#define SHEET_WX_6 0
 #define SHEET_WY_0 1000
-#define SHEET_WY_1 770
-#define SHEET_WY_2 440
-#define SHEET_WY_3 360
-#define SHEET_WY_4 270
+#define SHEET_WY_1 1000
+#define SHEET_WY_2 700
+#define SHEET_WY_3 350
+#define SHEET_WY_4 100
 // The levels the opacity and the rim-to-fill mix are quantised to (the
-// sheets' 16 colours hold three antialiasing steps between none and full).
+// sheets' 16 colours hold three antialiasing steps between none and full;
+// eight are finer, the pick's).
 #define SHEET_LEVELS 8
 // The 4x4 Bayer matrix, one row a constant, the texel at x & 3 in nibble
 // x (row 0 is 0 8 2 10, row 1 12 4 14 6, row 2 3 11 1 9, row 3 15 7 13 5).
@@ -44,6 +44,11 @@
 // The quantiser's threshold, in 32nds: 2 * bayer + 1 dithered (1..31),
 // SHEET_T_OFF (16, a half: rounding) with dither off.
 #define SHEET_T_OFF 16
+// The rim's dark band is solid: a texel whose alpha (the larger of its
+// coverage and its rim) is at least this is quantised at SHEET_T_OFF, with
+// no dither; only the faint fringe below it dithers (the user's pick on the
+// title's copyright line, v0.11.1).
+#define SHEET_SOLID_ABOVE 32
 // The largest scale of a strip (texels a sheet texel; shader_consts.h
 // ICO_SHEET_SCALE_MAX).  Above 1 the rim comes precomputed in the texture's
 // bottom half (rd.h rd_sheet_rim), one value a sheet texel.
@@ -114,6 +119,14 @@ uint sheet_quantise(uint v, uint th)
     return (min(q, n) * 255u + n / 2u) / n;
 }
 
+// The threshold a texel of alpha a is quantised at: th (the dither's) under
+// SHEET_SOLID_ABOVE, SHEET_T_OFF (plain rounding) from it up: the dark band
+// is solid, the faint fringe dithers.
+uint sheet_solid_threshold(uint a, uint th)
+{
+    return ICO_SELECT(a >= (uint)SHEET_SOLID_ABOVE, (uint)SHEET_T_OFF, th);
+}
+
 // The sheet texel from its coverage c and rim r (both 0..255) under the
 // style (the rim's weight 0..64, rimLevel, fillLevel, dither) at threshold
 // th: x grey 0..255, y alpha in GS units (0x80 full).
@@ -123,7 +136,8 @@ uint2 sheet_texel(uint c, uint r, uint4 style, uint th)
     const uint a = max(c, (r * style.x + 32u) / 64u);
     // 0 where a is 0, the division made by 1 there (never by 0)
     const uint t = ICO_SELECT(a != 0u, (c * 255u + a / 2u) / max(a, 1u), 0u);
-    const uint aq = sheet_quantise(a, th), tq = sheet_quantise(t, th);
+    const uint ths = sheet_solid_threshold(a, th);
+    const uint aq = sheet_quantise(a, ths), tq = sheet_quantise(t, ths);
     const uint grey = (style.y * (255u - tq) + style.z * tq + 127u) / 255u;
     return uint2(grey, (aq * 128u + 127u) / 255u);
 }
@@ -135,13 +149,15 @@ uint2 sheet_texel(uint c, uint r, uint4 style, uint th)
 uint sheet_rim_level(uint r, uint4 style, uint th)
 {
     // a weight of 0 gives (0 + 32) / 64 = 0
-    return sheet_quantise((r * style.x + 32u) / 64u, th);
+    const uint a = (r * style.x + 32u) / 64u;
+    return sheet_quantise(a, sheet_solid_threshold(a, th));
 }
 
-// The texel of a scaled strip from its own coverage c and the rim levels
-// of the four sheet texels around its centre blended bilinearly: rq on the
-// 0..255 scale, ra in GS units (each sheet texel's (level * 128 + 127) /
-// 255), at the threshold th of the sheet texel it lies in.  The alpha is
+// The texel of a scaled strip from its own coverage c and the rim level of
+// the sheet texel it lies in (font.hlsl sheet_scaled: magnified as blocks;
+// floats holding whole numbers since v0.11.1, when the bilinear blend of
+// four went): rq on the 0..255 scale, ra in GS units ((level * 128 + 127)
+// / 255), at that sheet texel's threshold th.  The alpha is
 // the larger of the magnified rim's and the fill's (c quantised), rounded;
 // the grey mixes the rim level to the fill level by the fill's share of
 // max(c, rim), quantised, so the letter's edge is the texel's own.
@@ -150,7 +166,8 @@ uint2 sheet_texel_scaled(uint c, float rq, float ra, uint4 style, uint th)
     const uint rm = (uint)floor(rq + 0.5);
     const uint a = max(c, rm);
     const uint t = ICO_SELECT(a != 0u, (c * 255u + a / 2u) / max(a, 1u), 0u);
-    const uint cq = sheet_quantise(c, th), tq = sheet_quantise(t, th);
+    const uint ths = sheet_solid_threshold(a, th);
+    const uint cq = sheet_quantise(c, ths), tq = sheet_quantise(t, ths);
     const uint grey = (style.y * (255u - tq) + style.z * tq + 127u) / 255u;
     const float af = (float)((cq * 128u + 127u) / 255u);
     return uint2(grey, (uint)floor(max(ra, af) + 0.5));

@@ -1455,7 +1455,10 @@ The renderer's test programs have a page of their own:
   `menu_look_kor`, `menu_look_cn`; the Korean ink 252.8 fill, 41.8 rim, measured on the disc; the
   Asian disc's expectation is the Japanese numbers until `menu_look_cn` has been run on it).
 - `menu_look_test.c`: the menus' Arimo text against the game's menu sheets from the disc
-  (`menu_look`); `menu_sheets.c`/`.h` decode the sheets. Two development modes run from the
+  (`menu_look`): the sheets' survey held to its record, the port's outline pinned (the European
+  rows' rim grey 100, the falloff tables as `sheetref_default_look` reads them, eight levels, the
+  solid threshold), each item's strip against its sheet rectangle within limits that pin the
+  port's look; `menu_sheets.c`/`.h` decode the sheets. Three development modes run from the
   environment on the same binary instead of the checks (exit 0 unless a row does not resolve):
   `ICO_MENU_LOOK_REF46=1` measures the title's publisher plate (texProperty row 46, "Sony Computer
   Entertainment Europe Presents", and row 48, the copyright line) on each language's sheet once:
@@ -1471,7 +1474,10 @@ The renderer's test programs have a page of their own:
   looks through `sheet_ref.h`'s `SheetLook` (C1..C3 and C6 fixed tables, C4 the plate's measured
   profile, C5 the shader's constants) with the full and the faint rim, rim black and the
   language's grey, beside the plate's crop: `menu_look/outline/<candidate>.png`, `contact.png`
-  and the legend `contact.txt`.
+  and the legend `contact.txt`. `ICO_MENU_LOOK_COVERAGE=1` writes the outline design page's
+  material: each of those words' strip coverage (before the rim, the dither's phase kept) and the
+  English rows 46 and 48 as grey and alpha, binary PGM files under `menu_look/coverage/` with
+  `index.txt` (each word's strip size and trim box, each row's sheet and corner).
 - `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look; the
   Models viewer's counter drawn for 600 frames at 3x and 1x (`testCounterStream`: shelves
   reclaimed, no plain-font word, no second page, the steady rows in place; at 3x the counter's

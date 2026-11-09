@@ -352,13 +352,19 @@ Functions: `gs_tfx_mod`, `gs_texa_alpha` (the alpha of a 24- or 16-bit texel und
 
 The texel arithmetic of `font_sheet_ps`: the menu sheets' text style as integer steps, so the GPU
 and `port/render/test/sheet_ref.c` (the tests' oracle, which includes the file with
-`ICO_SHEET_TEXT_C`) agree exactly; only the bilinear weights are float. The rim is a weighted
-dilation of the coverage: the largest `c(p + d) * WX[|dx|] * WY[|dy|]` (per mille) within `SHEET_RX`
-(6) texels across and `SHEET_RY` (4) down, the falloff following the English sheets' rim alpha.
-Opacity and the rim-to-fill mix are quantised to `SHEET_LEVELS` (8) with a 4x4 Bayer threshold; a
-strip drawn at a scale of 1..`ICO_SHEET_SCALE_MAX` (4) keeps the 1x rim magnified. Functions:
-`sheet_wx`, `sheet_wy`, `sheet_rim`, `sheet_threshold`, `sheet_quantise`, `sheet_texel`,
-`sheet_rim_level`, `sheet_texel_scaled` (`port/shaders/sheet_text.hlsli`;
+`ICO_SHEET_TEXT_C`) agree exactly. The rim is a weighted dilation of the coverage: the largest
+`c(p + d) * WX[|dx|] * WY[|dy|]` (per mille) within `SHEET_RX` (6) texels across and `SHEET_RY` (4)
+down. The tables are the outline the user picked (WX 1000 1000 1000 1000 90 0 0, WY 1000 1000
+700 350 100: a solid dark band that fades out quickly, like the lettering at the foot of the title
+screen; [UI.md](UI.md#the-menus-look)), not the English sheets' soft halo. Opacity and the
+rim-to-fill mix are quantised to `SHEET_LEVELS` (8) with a 4x4 Bayer threshold, except that a texel
+whose alpha (the larger of its coverage and its rim) is at least `SHEET_SOLID_ABOVE` (32) is
+rounded (`sheet_solid_threshold`): the band is solid and only its faint fringe dithers. A strip
+drawn at a scale of 2..`ICO_SHEET_SCALE_MAX` (4) keeps the 1x rim magnified as blocks, each texel
+the level of the sheet texel it lies in (`font.hlsl` `sheet_scaled`: a bilinear blend of the four
+round its centre would turn the band and the grain into a soft gradient at 4K). Functions: `sheet_wx`, `sheet_wy`, `sheet_rim`, `sheet_threshold`, `sheet_quantise`,
+`sheet_solid_threshold`, `sheet_texel`, `sheet_rim_level`, `sheet_texel_scaled`
+(`port/shaders/sheet_text.hlsli`;
 `port/shaders/shader_consts.h`, the sheet constants). What a sheet texture is: `port/render/rd.h`
 (`rd_create_texture_sheet`).
 
@@ -377,36 +383,36 @@ the whole page (`port/render/rd_upload.c` (`rd__upload_dirty_textures`)); `ICO_R
 (`[dev] sheet_shader = true`) draws every scale through `font_sheet_ps` instead, the A/B
 (`port/render/rd_core.c` (`rd_init`)).
 `ctest rd_sheet_bake` checks the bake against `sheet_ref.c` at every texel of pages of glyphs and
-words, and `rd_pixel` the two shaders' pictures byte for byte
+words, and that a texel of alpha `SHEET_SOLID_ABOVE` or more bakes the same bytes with the dither
+on and off while one under it dithers (its solid section), and `rd_pixel` the two shaders' pictures
+byte for byte
 ([UI.md](UI.md#the-menus-look) for the pages).
 
 **The 2x bake.** Above 1x the pixel's four strip texels come from font.hlsl `sheet_scaled`: the
-texel's own coverage, the rim levels of the sheet texels q0 and q0 + 1 around its centre (read at
-texel q s of the bottom half) blended bilinearly by g = (n - 2 s q0) / (2 s), then
-`sheet_texel_scaled`. Each texel's value again depends on the texel alone, so the renderer bakes
-pages of strip scale 2 the same way (`rd__sheet_bake_scaled_rect`, `port/render/rd_tex.c`, in
-integers): at s = 2 the weights are odd 4ths, the first lerp of two integer levels a multiple of
-1/4 and the second of 1/16, all within a float's 24 bits, so the shader's floats are those
-integers on any device and in any order of its operations (x (1 - a) + y a, x + a (y - x), a fused
-multiply-add), and `floor(v + 0.5)` of an exact value is the integer `(2 N + DD) / (2 DD)`.
+texel's own coverage, the rim level of the sheet texel q = floor(p / s) it lies in (read at texel
+q s of the bottom half, magnified as blocks), then `sheet_texel_scaled`. Each texel's value again
+depends on the texel alone, so the renderer bakes pages of strip scale 2 the same way
+(`rd__sheet_bake_scaled_rect`, `port/render/rd_tex.c`, in integers): every value the shader holds
+in a float is a whole number below 256, so its floats are those integers on any device.
 The baked texture covers both halves' rows ((w + 2 AX) x (h + 2 AY) for the w x h texture, coverage
 and rim), so `font_sheet_baked_ps`'s page size is `font_sheet_ps`'s texture size and the shader is
-the 1x one unchanged; past the apron every texel is the blank one (no coverage, the four rims 0:
-the rim level's grey, alpha 0). A changed rectangle bakes again with the texels that read it
+the 1x one unchanged; past the apron every texel is the blank one (no coverage, the rim 0: the
+rim level's grey, alpha 0). A changed rectangle bakes again with the texels that read it
 (`rd__sheet_bake_grow`: 2 s round the coverage rows, and the top-half rows 2 s round a changed rim
-row). s = 4 is exact the same way (odd 8ths) but not baked: its pages are 4096 x 2048, 34 MB baked,
-a 4K desktop's; s = 3 blends by 6ths, which round, and stays the shader's. The phone at Resolution
+row, wider than the s rows a rim row's blocks cover). s = 4 is exact the same way but not baked:
+its pages are 4096 x 2048, 34 MB baked, a 4K desktop's; s = 3 is not baked either (the bake takes
+2 and 4) and stays the shader's. The phone at Resolution
 Auto or 2x has a scene 2.1 times the PS2's height, so its menus' strips are at s = 2
 (`port/ui/menu_font.c` (`mfScale`)): the pause menu's and the Options pages' words, which the
 PowerVR phone's 10 s lines show as list 11 at 5.4 to 9.6 ms a picture there (its pass timing: list
 11 with the menus' 7 or 8 draws 9.3 to 10.0 ms, with the fades' 2 to 4 draws 1.0 to 3.0 ms;
-[WORK_BUFFERS.md](WORK_BUFFERS.md#the-menus-on-the-phone)), drop from a gather, nine loads and
-about sixteen integer divisions a pixel to four loads. Only the tile-based classes bake s = 2
+[WORK_BUFFERS.md](WORK_BUFFERS.md#the-menus-on-the-phone)), drop from the shader's gather and rim reads a pixel to four
+loads. Only the tile-based classes bake s = 2
 (`RdProfile.sheetBake2x`, `port/render/rd_profile.c`): on the others the bake was a 4 to 18 MB upload
 on the render thread whenever new text appeared (10 to 111 ms on a GTX 750 Ti, issue 126), and
 `font_sheet_ps` costs nothing one sees there, for the same bytes. `ctest rd_sheet_bake` checks the 2x and 4x
-bake at every texel (both halves and the apron) against a float transcription of `sheet_scaled` in
-both lerp forms and against `sheet_ref.c`, and `rd_pixel` the 2x frame through both shaders byte for
+bake at every texel (both halves and the apron) against a transcription of `sheet_scaled` and
+against `sheet_ref.c`, and `rd_pixel` the 2x frame through both shaders byte for
 byte.
 
 ## Bounded loops
@@ -540,7 +546,11 @@ The text sheet entries (DXC v1.9.2609, the build's flags; `tools/check_spirv.py 
 
 Most of what remains is the 1x path written out (35 gathers, 296 multiplies and maxima); the
 scaled path (`sheet_scaled`, scales 2 to 4) is about 5,500 words of it: without it
-`font_sheet_ps_nodual` measures 15,397 words. The macros change no other module: every other
+`font_sheet_ps_nodual` measures 15,397 words. Those figures are of the scaled rim blended
+bilinearly (nine rim reads for the four texels); magnified as blocks (one rim read a texel) and
+with the solid threshold the entries measure 17,783 words (`font_sheet_ps`), 17,864 (`_nodual`),
+18,771 (`_dstrov`) and 18,812 (`_dstatt`), the baked entries the same (DXC v1.9.2609, the build's
+flags). The macros change no other module: every other
 one of the 181 is the same bytes either way (`tools/spirv_header_diff.py`).
 
 ## Integer lanes: never through a float load

@@ -1693,8 +1693,9 @@ void rd_update_texture_rect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_
  *                             texels across and ICO_SHEET_RY down, each
  *                             scaled by the falloff ICO_SHEET_WX[|dx|] *
  *                             ICO_SHEET_WY[|dy|] (per mille,
- *                             shader_consts.h), rounded: the rim, a dark
- *                             halo that fades out;
+ *                             shader_consts.h), rounded: the rim, a solid
+ *                             dark band that fades out quickly (the
+ *                             outline picked in v0.11.1);
  *                          a  rimOn ? max(c, r * w) : c, the texel's
  *                             opacity, w the rim's weight (rimWeight / 64,
  *                             rounded; 1 when rimWeight is 0 or 64 or more);
@@ -1703,7 +1704,10 @@ void rd_update_texture_rect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_
  *                          against a 4x4 Bayer threshold picked by (x, y)
  *                          (the sheets' mottled antialiasing; fixed to the
  *                          texel, so the grain moves with the text) or, with
- *                          dither 0, rounded;
+ *                          dither 0, rounded; a texel whose a is at least
+ *                          ICO_SHEET_SOLID_ABOVE is rounded whatever the
+ *                          dither (sheet_solid_threshold: the band is
+ *                          solid, only its faint fringe dithers);
  *                          grey  the rim level lerped to the fill level by t;
  *                          alpha a in GS units (full = 0x80).
  *                        A sampled pixel blends the four sheet texels around
@@ -1729,8 +1733,8 @@ void rd_update_texture_rect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_
  *                        a fraction of the cost (issue 173).  A
  *                        scaled strip's page of scale 2 is baked the
  *                        same way (rd_tex.c rd__sheet_bake_scaled_rect:
- *                        its rim's magnification blends by odd 4ths,
- *                        exact in the shader's floats), both halves'
+ *                        its rim magnified as blocks, in integers as
+ *                        the shader computes it), both halves'
  *                        rows with the apron; 3 and 4 are drawn by
  *                        font_sheet_ps.  ICO_RD_SHEET_SHADER=1 ([dev]
  *                        sheet_shader) draws every scale through
@@ -1748,27 +1752,28 @@ void rd_update_texture_rect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_
  *                        for each sheet texel (a strip rasterised s times
  *                        finer for a scene or an output s times the GS's).
  *                        The letters are those texels' own and the rim is
- *                        the sheet's, magnified as the GS magnified a
- *                        sheet: each sheet texel (X, Y) (texels sX ..
+ *                        the sheet's, magnified as blocks: each sheet
+ *                        texel (X, Y) (texels sX ..
  *                        sX + s - 1 across, sY .. down) has the coverage
  *                        C, the mean of its s x s texels rounded, and the
  *                        rim R, the 1x dilation of C (ICO_SHEET_RX and
  *                        ICO_SHEET_RY sheet texels, the per-mille tables as
  *                        they are); its rim level is
  *                        L = quantise(rimOn ? R * weight : 0) against its
- *                        own Bayer threshold (X & 3, Y & 3).  A texel
- *                        (x, y) blends the L of the four sheet texels
- *                        around its centre, ((x + 0.5) / s - 0.5,
- *                        (y + 0.5) / s - 0.5), bilinearly: Lm on the
- *                        0..255 scale and Am of the GS units
- *                        (L * 128 + 127) / 255.  With c the texel's own
- *                        coverage and th the threshold of the sheet texel
- *                        it lies in (floor(x / s), floor(y / s)):
+ *                        own Bayer threshold (X & 3, Y & 3; rounded from
+ *                        ICO_SHEET_SOLID_ABOVE up).  A texel (x, y) takes
+ *                        the L of the sheet texel it lies in
+ *                        (floor(x / s), floor(y / s)), until v0.11.1 the
+ *                        bilinear blend of the four round its centre (the
+ *                        blend turned the solid band and the dither's
+ *                        grain into a soft gradient at 4K): Am is
+ *                        (L * 128 + 127) / 255 in GS units.  With c the
+ *                        texel's own coverage and th that sheet texel's
+ *                        threshold:
  *                          alpha  the larger of Am and the fill's
- *                                 quantise(c) in GS units, rounded;
+ *                                 quantise(c) in GS units;
  *                          grey   the rim level lerped to the fill level
- *                                 by t = c / max(c, Lm rounded),
- *                                 quantised;
+ *                                 by t = c / max(c, L), quantised;
  *                        so outside the letters a texel is the 1x strip's
  *                        rim magnified s times (its steps, its grain the
  *                        sheet texel's), and the letters' edge is the fine
@@ -1791,7 +1796,7 @@ void rd_update_texture_rect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_
  * A dump keeps a sheet texture's coverage and style (rd_dump.c). */
 typedef struct RdSheetStyle {
     uint8_t rimOn;     /* nonzero: the rim is drawn (light ink: the menus' words) */
-    uint8_t rimLevel;  /* grey of the rim, 0..255 (English sheets 0, French ~62) */
+    uint8_t rimLevel;  /* grey of the rim, 0..255 (the menus' European rows 72) */
     uint8_t fillLevel; /* grey of the letters' fill, 0..255 */
     uint8_t dither;    /* nonzero: the Bayer threshold; 0: rounded to the levels */
     uint8_t rimWeight; /* the rim's strength in 64ths (a faint halo); 0 or 64 and more:

@@ -8,10 +8,15 @@
  * (port/render/test/sheet_ref.c), and the two pictures are compared.
  *
  *   testSurvey        measures the sheets (the light-ink items of the menu
- *                     text table on the five languages' sheets) and pins
- *                     the constants that came from it: kSheetInk (menu_font.c),
- *                     ICO_SHEET_RX / RY, the rim's falloff ICO_SHEET_WX / WY
- *                     and the floor of ICO_SHEET_LEVELS (shader_consts.h).
+ *                     text table on the five languages' sheets) and holds
+ *                     the survey to its record (the numbers below; the rim's
+ *                     falloff printed beside the shipped tables), then pins
+ *                     the port's look, not a match to the sheets: the
+ *                     outline picked in v0.11.1 (kSheetInk's European rows'
+ *                     rim grey 100, their fill the survey's white; the
+ *                     tables ICO_SHEET_RX / RY, WX / WY, ICO_SHEET_LEVELS 8
+ *                     and ICO_SHEET_SOLID_ABOVE as sheetref_default_look
+ *                     reads them; menu_font.h's margin).
  *   testFitCopy       the fit's texels and the outline mode's control look
  *                     against sheetref_texel.
  *   testCompareItems  every item of ui_menu_text_items in the five languages:
@@ -29,7 +34,7 @@
  *
  * ICO_MENU_LOOK_FIT=1 (development only): searches the levels and each
  * language's rim and fill grey (the rim's reach and falloff are the
- * survey's) for the smallest blurred difference over the light-ink items and
+ * shipped tables') for the smallest blurred difference over the light-ink items and
  * prints the best, instead of the checks (sheet_ref.c's arithmetic, each
  * item's rim computed once; testFitCopy holds it to sheetref_texel).  The constants it finds are then
  * written into shader_consts.h, sheet_text.hlsli and kSheetInk by hand.
@@ -59,6 +64,13 @@
  * x4 nearest below), contact.png (every candidate's x1 block, the crop once
  * at the top) and contact.txt (the legend: the order, each block's y and
  * tables).  No shader has these looks: they are pictures to choose from.
+ *
+ * ICO_MENU_LOOK_COVERAGE=1 (development only): the material of the outline
+ * design page, instead of the checks: each of the outline mode's words as
+ * its strip's coverage (the raster before the rim, the dither's phase kept)
+ * and the title's rows 46 and 48 (English) as grey and alpha, P5 PGM files
+ * under OUT_DIR/menu_look/coverage with index.txt (each word's strip size
+ * and trim box, each row's sheet and corner).
  *
  * ICO_MENU_LOOK_GEOFIT=1 (development only): fits each item's em, width,
  * anchor and capital middle per language to its sheet (geoFit) and prints
@@ -96,7 +108,16 @@
 #include "host_fs.h"
 
 /* ------------------------------------------------------------- limits */
-/* The limits of testCompareItems, set from the run on main after the
+/* The limits of testCompareItems pin the port's look, not a match to the
+   sheets: the outline picked in v0.11.1 (a solid dark-grey band, rim grey
+   100, that fades out quickly) is not the sheets' halo, so the blur, plain
+   and share limits hold the strips to what that look measured, the
+   largest + 25 %.  The values below are still the v0.10 look's (not
+   re-measured: the run needs the disc); the run on main prints the
+   per-language medians and maxima (statPrint, "menu_look: limits <lang>")
+   and the worst blur and plain ("menu_look: N items ..."), from which they
+   are set.  The geometry limits (edge, line, amount) do not depend on the
+   look.  Set from the run on main after the
    geometry fit (the sheets' width UI_SHEET_WIDTH, the letters'
    weight, the table's em, anchor, capital middle, width and spacing per
    language fitted to each sheet, the halo per item, 8 levels; 100 items a
@@ -155,9 +176,10 @@ static const float kExpMassX[UI_LANG_PAL_COUNT] = {3.10f, 3.73f, 3.99f, 3.78f, 3
 static const float kExpMassY[UI_LANG_PAL_COUNT] = {2.15f, 2.83f, 2.99f, 2.90f, 2.74f};
 #define TOL_LEVEL 0.6f /* grey levels */
 #define TOL_MASS 0.08f
-/* the rim's falloff (ICO_SHEET_WX / WY, per mille) against the English
-   sheets' mean rim alpha at each distance, per entry */
-#define TOL_FALLOFF 0.08f
+/* The outline picked in v0.11.1 on the Menu Outline Lab: one rim grey for
+   the five European rows of kSheetInk, eight levels. */
+#define PICK_RIM 100
+#define PICK_LEVELS 8
 #define EXP_STEPS 3 /* the median number of antialiasing steps of a sheet's white */
 
 static int failures;
@@ -503,10 +525,12 @@ static void testSurvey(void)
               kLang[l], sv[l].massX, kExpMassX[l]);
         CHECK(fabs(sv[l].massY - kExpMassY[l]) <= TOL_MASS, "%s: massY %.2f, expected %.2f",
               kLang[l], sv[l].massY, kExpMassY[l]);
-        /* kSheetInk is the measurement, rounded; the fill is the palette's white */
+        /* kSheetInk: the pick's rim grey on every European row (not the
+           survey's, which stays the record above); the fill is the
+           palette's white */
         CHECK(ink->rimOn == 1, "%s: the light ink has its rim", kLang[l]);
-        CHECK(fabs(sv[l].rim - (double)ink->rimLevel) <= 1.0, "%s: kSheetInk rim %d, measured %.1f",
-              kLang[l], ink->rimLevel, sv[l].rim);
+        CHECK(ink->rimLevel == PICK_RIM, "%s: kSheetInk rim %d, the pick's %d (the sheets' %.1f)",
+              kLang[l], ink->rimLevel, PICK_RIM, sv[l].rim);
         CHECK(fabs(sv[l].fill - (double)ink->fillLevel) <= 3.0,
               "%s: kSheetInk fill %d, measured %.1f", kLang[l], ink->fillLevel, sv[l].fill);
         meanX += sv[l].massX / UI_LANG_PAL_COUNT;
@@ -520,31 +544,44 @@ static void testSurvey(void)
     const int median = nsteps ? steps[nsteps / 2] : 0;
     printf("menu_look: survey: rim mass %.2f x %.2f, median %d steps (rim %d x %d, %d levels)\n",
            meanX, meanY, median, ICO_SHEET_RX, ICO_SHEET_RY, ICO_SHEET_LEVELS);
-    /* the rim's reach and falloff: the English sheets' rim alpha at each
-       distance (six across, four down; the survey measures six, the
-       falloff past four field lines is in the noise of the rows below) */
+    /* the rim's reach and falloff: the tables the shader, the bake and the
+       reference read (sheetref_default_look: the constants, which
+       sheet_ref.c static-asserts against sheet_text.hlsli's), printed
+       beside the English sheets' rim alpha at each distance, the survey's
+       record (the v0.10 tables were fitted to it; the pick is not) */
     static const int kWx[7] = {ICO_SHEET_WX_0, ICO_SHEET_WX_1, ICO_SHEET_WX_2, ICO_SHEET_WX_3,
                                ICO_SHEET_WX_4, ICO_SHEET_WX_5, ICO_SHEET_WX_6};
     static const int kWy[5] = {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2, ICO_SHEET_WY_3,
                                ICO_SHEET_WY_4};
+    const SheetLook *look = sheetref_default_look();
     CHECK(ICO_SHEET_RX == 6 && ICO_SHEET_RY == 4, "the rim's reach %d x %d, the survey's 6 x 4",
           ICO_SHEET_RX, ICO_SHEET_RY);
+    CHECK(look->rx == ICO_SHEET_RX && look->ry == ICO_SHEET_RY,
+          "sheetref_default_look's reach %d x %d", look->rx, look->ry);
     CHECK(kWx[0] == 1000 && kWy[0] == 1000, "the falloff is 1 at the texel itself");
+    printf("menu_look: survey: the shipped falloff against the English sheets' across");
     for (int d = 1; d <= 6; d++) {
-        CHECK(fabs(sv[UI_LANG_EN].profX[d] - kWx[d] / 1000.0) <= TOL_FALLOFF,
-              "ICO_SHEET_WX_%d %d, the English sheets' %.2f", d, kWx[d], sv[UI_LANG_EN].profX[d]);
+        printf(" %.2f/%.2f", kWx[d] / 1000.0, sv[UI_LANG_EN].profX[d]);
+        CHECK(look->wx[d] == kWx[d], "sheetref_default_look WX %d: %d, ICO_SHEET_WX_%d %d", d,
+              look->wx[d], d, kWx[d]);
     }
+    printf(", down");
     for (int d = 1; d <= 4; d++) {
-        CHECK(fabs(sv[UI_LANG_EN].profY[d] - kWy[d] / 1000.0) <= TOL_FALLOFF,
-              "ICO_SHEET_WY_%d %d, the English sheets' %.2f", d, kWy[d], sv[UI_LANG_EN].profY[d]);
+        printf(" %.2f/%.2f", kWy[d] / 1000.0, sv[UI_LANG_EN].profY[d]);
+        CHECK(look->wy[d] == kWy[d], "sheetref_default_look WY %d: %d, ICO_SHEET_WY_%d %d", d,
+              look->wy[d], d, kWy[d]);
     }
+    printf("\n");
     CHECK(median == EXP_STEPS, "the sheets' white has %d antialiasing steps, expected %d", median,
           EXP_STEPS);
-    /* the levels are not the survey's five (shader_consts.h: eight matched the
-       sheets better in testCompareItems) but never fewer */
-    CHECK(ICO_SHEET_LEVELS >= median + 2, "ICO_SHEET_LEVELS %d, fewer than the survey's %d",
-          ICO_SHEET_LEVELS, median + 2);
-    /* the strips' margin covers the rim's reach and the bilinear texel */
+    /* the levels: the pick's eight (the survey's sheets show five) */
+    CHECK(ICO_SHEET_LEVELS == PICK_LEVELS && look->levels == ICO_SHEET_LEVELS,
+          "ICO_SHEET_LEVELS %d (the look's %d), the pick's %d", ICO_SHEET_LEVELS, look->levels,
+          PICK_LEVELS);
+    CHECK(look->solidAbove == ICO_SHEET_SOLID_ABOVE && look->bayer == 4,
+          "sheetref_default_look: solid from %d, the %dx%d matrix", look->solidAbove, look->bayer,
+          look->bayer);
+    /* the strips' margin covers the rim's reach and one texel */
     CHECK(UI_MENU_RIM_X == ICO_SHEET_RX + 1 && UI_MENU_RIM_Y == ICO_SHEET_RY + 1,
           "menu_font.h's rim margin %d x %d for a rim of %d x %d", UI_MENU_RIM_X, UI_MENU_RIM_Y,
           ICO_SHEET_RX, ICO_SHEET_RY);
@@ -1444,7 +1481,7 @@ typedef struct FitItem {
 } FitItem;
 
 /* the rim of every texel, once per item (sheet_ref.c's, the default look:
-   the rim's reach and falloff are the survey's) */
+   the rim's reach and falloff are the shipped tables') */
 static void maxFilter(const FitItem *f)
 {
     const int w = f->r->w, h = f->r->h;
@@ -2192,22 +2229,22 @@ typedef struct Cand {
 static Cand s_cand[] = {
     {"C1-L8",
      "plateau 1, fall 2",
-     {6, 4, {1000, 1000, 500, 150, 0, 0, 0}, {1000, 1000, 300, 0, 0}, 8, 4}},
+     {6, 4, {1000, 1000, 500, 150, 0, 0, 0}, {1000, 1000, 300, 0, 0}, 8, 4, 0}},
     {"C1-L3",
      "plateau 1, fall 2, 3 levels",
-     {6, 4, {1000, 1000, 500, 150, 0, 0, 0}, {1000, 1000, 300, 0, 0}, 3, 4}},
+     {6, 4, {1000, 1000, 500, 150, 0, 0, 0}, {1000, 1000, 300, 0, 0}, 3, 4, 0}},
     {"C2-L8",
      "plateau 2, fall 2",
-     {6, 4, {1000, 1000, 1000, 500, 150, 0, 0}, {1000, 1000, 600, 200, 0}, 8, 4}},
+     {6, 4, {1000, 1000, 1000, 500, 150, 0, 0}, {1000, 1000, 600, 200, 0}, 8, 4, 0}},
     {"C2-L3",
      "plateau 2, fall 2, 3 levels",
-     {6, 4, {1000, 1000, 1000, 500, 150, 0, 0}, {1000, 1000, 600, 200, 0}, 3, 4}},
+     {6, 4, {1000, 1000, 1000, 500, 150, 0, 0}, {1000, 1000, 600, 200, 0}, 3, 4, 0}},
     {"C3-L8",
      "plateau 1, fall 3, the 8x8 matrix",
-     {6, 4, {1000, 1000, 700, 400, 150, 0, 0}, {1000, 900, 450, 150, 0}, 8, 8}},
+     {6, 4, {1000, 1000, 700, 400, 150, 0, 0}, {1000, 900, 450, 150, 0}, 8, 8, 0}},
     {"C4",
      "the measured row-46 profile (WX', WY', its steps + 2 levels, its matrix)",
-     {6, 4, {1000, 0, 0, 0, 0, 0, 0}, {1000, 0, 0, 0, 0}, 0, 0}},
+     {6, 4, {1000, 0, 0, 0, 0, 0, 0}, {1000, 0, 0, 0, 0}, 0, 0, 0}},
     {"C5",
      "today's constants (the control)",
      {ICO_SHEET_RX,
@@ -2216,8 +2253,11 @@ static Cand s_cand[] = {
        ICO_SHEET_WX_5, ICO_SHEET_WX_6},
       {ICO_SHEET_WY_0, ICO_SHEET_WY_1, ICO_SHEET_WY_2, ICO_SHEET_WY_3, ICO_SHEET_WY_4},
       ICO_SHEET_LEVELS,
-      4}},
-    {"C6", "a hard outline", {6, 4, {1000, 1000, 1000, 0, 0, 0, 0}, {1000, 1000, 0, 0, 0}, 8, 4}},
+      4,
+      ICO_SHEET_SOLID_ABOVE}},
+    {"C6",
+     "a hard outline",
+     {6, 4, {1000, 1000, 1000, 0, 0, 0, 0}, {1000, 1000, 0, 0, 0}, 8, 4, 0}},
 };
 #define CAND_COUNT (int)(sizeof(s_cand) / sizeof(s_cand[0]))
 #define CAND_C4 5
@@ -2449,6 +2489,61 @@ static void lookText(FILE *f, const Cand *c)
                                  : "none");
 }
 
+/* ICO_MENU_LOOK_COVERAGE=1: the material of the outline design page: each
+   word's strip coverage (the raster before the rim, the dither's phase kept)
+   and the title's two reference rows (46 the publisher plate, 48 the
+   copyright line) as grey and alpha, all as P5 PGM files, with an index. */
+static void writePgm(const char *path, const uint8_t *p, int w, int h)
+{
+    FILE *f = fopen(path, "wb");
+    if (!f) {
+        return;
+    }
+    fprintf(f, "P5\n%d %d\n255\n", w, h);
+    fwrite(p, 1, (size_t)w * (size_t)h, f);
+    fclose(f);
+}
+
+static void coverage(const char *dir)
+{
+    ref46Dirs(dir, "coverage");
+    Word wd[WORD_MAX];
+    const int nw = words(wd);
+    char path[1100];
+    snprintf(path, sizeof(path), "%s/menu_look/coverage/index.txt", dir);
+    FILE *txt = fopen(path, "w");
+    for (int i = 0; i < nw; i++) {
+        Word *w = &wd[i];
+        snprintf(path, sizeof(path), "%s/menu_look/coverage/word%d.pgm", dir, i);
+        writePgm(path, w->cov, w->w, w->h);
+        if (txt) {
+            fprintf(txt, "word%d: %s; strip %dx%d; trim %d %d %d %d\n", i, w->label, w->w, w->h,
+                    w->x0, w->y0, w->tw, w->th);
+        }
+        free(w->cov);
+    }
+    static const int kRows[2] = {REF_ROW_PLATE, REF_ROW_COPYRIGHT};
+    for (int k = 0; k < 2; k++) {
+        Rect r;
+        if (rectOfRow(kRows[k], UI_LANG_EN, &r) != 0) {
+            continue;
+        }
+        snprintf(path, sizeof(path), "%s/menu_look/coverage/row%d-grey.pgm", dir, kRows[k]);
+        writePgm(path, r.grey, r.w, r.h);
+        snprintf(path, sizeof(path), "%s/menu_look/coverage/row%d-alpha.pgm", dir, kRows[k]);
+        writePgm(path, r.alpha, r.w, r.h);
+        if (txt) {
+            fprintf(txt, "row%d: %s; %dx%d at %d,%d\n", kRows[k], r.sheet, r.w, r.h, r.u, r.v);
+        }
+    }
+    if (txt) {
+        fclose(txt);
+    }
+    printf(
+        "menu_look: coverage: %d words and the reference rows written under %s/menu_look/coverage\n",
+        nw, dir);
+}
+
 /* ICO_MENU_LOOK_OUTLINE=1: outline/<candidate>.png (x1 block above, x4
    nearest below; the row-46 crop the first column), contact.png (every
    candidate's x1 block, the crop once at the top) and contact.txt (the
@@ -2675,6 +2770,7 @@ int main(int argc, char **argv)
     const char *geoEnv = getenv("ICO_MENU_LOOK_GEOFIT");
     const char *ref46Env = getenv("ICO_MENU_LOOK_REF46");
     const char *outlineEnv = getenv("ICO_MENU_LOOK_OUTLINE");
+    const char *coverageEnv = getenv("ICO_MENU_LOOK_COVERAGE");
     const char *boldEnv = getenv("ICO_MENU_LOOK_BOLD");
     if (boldEnv) {
         float bx = 0.0f, by = 0.0f;
@@ -2695,6 +2791,8 @@ int main(int argc, char **argv)
         ref46(argv[3]);
     } else if (outlineEnv && *outlineEnv == '1') {
         outline(argv[3]);
+    } else if (coverageEnv && *coverageEnv == '1') {
+        coverage(argv[3]);
     } else {
         testSurvey();
         testFitCopy();

@@ -7,6 +7,7 @@
 - On Android the recent-apps card now shows the icon made from your disc, made at the first title screen; the home-screen icon stays the plain one.
 - Holding Left or Right on a slider row in Options now keeps changing it, and L1 and R1 change the Picture colour rows in steps of 10.
 - The New Game screen now shows which Mirror mode and New Game+ choices are set and starts the game from its own Start row; pressing Cross on a choice only picks it and moves down.
+- The menus' words have a solid dark-grey outline that fades out quickly, like the lettering at the foot of the title screen, instead of a soft grey halo.
 
 ## Fixed
 

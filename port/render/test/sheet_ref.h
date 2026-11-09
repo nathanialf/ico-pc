@@ -55,7 +55,8 @@ typedef struct SheetLook {
     int rx, ry;
     uint16_t wx[ICO_SHEET_RX + 1], wy[ICO_SHEET_RY + 1];
     int levels;
-    int bayer; /* 0 none, 4, 8 */
+    int bayer;      /* 0 none, 4, 8 */
+    int solidAbove; /* alpha from which a texel is quantised undithered; 0: never */
 } SheetLook;
 
 /* the shader's constants as a look */
