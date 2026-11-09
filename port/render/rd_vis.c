@@ -633,10 +633,20 @@ static struct {
     uint32_t orderCap;
 } s_hiz;
 
+bool rd__vis_profile_default(void)
+{
+    const char *e = getenv("ICO_RD_CULL");
+
+    return g_rd.profile.tiler && !(e && e[0]);
+}
+
 static int modeOf(const char *v)
 {
     if (!v || !v[0]) {
-        return RD_VIS_FULL; /* the default: the frustum skip and the occlusion test */
+        /* the default: the frustum skip and the occlusion test; on a tile-based
+         * GPU's phone the frustum skip alone (the test cost 6.8 ms of the
+         * Mali-G52's CPU a replay and hid 0 to 1 draws, issue 179) */
+        return rd__vis_profile_default() ? RD_VIS_FRUSTUM : RD_VIS_FULL;
     }
     if (strcmp(v, "off") == 0 || strcmp(v, "0") == 0 || strcmp(v, "false") == 0) {
         return RD_VIS_OFF;
@@ -691,8 +701,12 @@ void rd__vis_init(void)
     const char *rg = getenv("ICO_RD_CULL_RANGE"); /* 0: the stream's box alone, a comparison */
     s_vis.range = !(rg && (strcmp(rg, "0") == 0 || strcmp(rg, "off") == 0));
     hizSwitches();
-    rd__log("cull: %s ([dev] cull, ICO_RD_CULL%s%s)%s", rd__vis_mode_name(s_vis.mode),
+    rd__log("cull: %s ([dev] cull, ICO_RD_CULL%s%s%s)%s", rd__vis_mode_name(s_vis.mode),
             e && e[0] ? " = " : "", e && e[0] ? e : "",
+            rd__vis_profile_default()
+                ? "; the profile's default: the occlusion test costs more on this chip's CPU than "
+                  "it saves, [dev] cull = full turns it on"
+                : "",
             s_vis.mode == RD_VIS_OFF ? ": every scene draw replayed"
             : s_vis.mode == RD_VIS_FULL
                 ? ": a scene draw wholly outside its target or behind the eye is not replayed, "

@@ -77,6 +77,12 @@ RobustStep robust_persist_step(const RobustMark *old, const char *version, int p
 int robust_persist_line(char *out, size_t size, const RobustStep *step, const RobustMark *old,
                         const char *version, const char *cfgName);
 
+/* The start's log line for a [dev] gpu_robust = true that has no mark of
+   the game's (the player's, or written by a build before the mark): it is
+   never dropped, and every start says what it costs; 0, or -1 when out is
+   too small */
+int robust_unmarked_line(char *out, size_t size, const char *cfgName);
+
 /* The file text without its [dev] gpu_robust and gpu_robust_by lines,
    everything else byte for byte; malloc'd, NULL on out of memory */
 char *robust_persist_strip(const char *text);
