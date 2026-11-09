@@ -240,6 +240,7 @@ add_library(ico_render STATIC
     rd_upload.c # the upload ring and the uploads before a replay's first pass
     rd_velocity.c # the scene's motion vectors: each VU draw's previous transform, VELOCITY
     rd_upscale.c # the upscale point: the render/display scale split, the marker's replay, UPSCALED
+    rd_upscale_capture.c # F12's upscaler pictures: SCENE, VELOCITY, the depth, COMPOSITE at a dispatch
     rd_layer.c # the display layer: lists 11-12 into the display-scale composite after the upscale, keep frames held
     rd_upscale_hook.c # the temporal upscaler's dispatch: FSR 3.1, or the test's bilinear stand-in
     rd_fsr3.c # FSR 3.1 (the FidelityFX SDK, port/rhi/ffx): support, context, dispatch
@@ -1184,6 +1185,18 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_replay_tool_fsr3 PROPERTIES
                          PASS_REGULAR_EXPRESSION "upscale: fsr3 ran [1-9][0-9]* presents \\(context render [0-9]+x[0-9]+ -> display [0-9]+x[0-9]+, [^)]*, refused 0, failed 0, [^)]*\\), validation errors 0"
                          SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    # --fsr3-dump (issue 203; rd_upscale_capture.h;
+    # test/rd_replay_tool_fsr3_dump.cmake): the four pictures F12 saves under
+    # an upscaler, at FSR's render and display sizes, the present unchanged
+    # by the capture; refused without an upscaler.  SKIP where FSR 3.1
+    # cannot run
+    add_test(NAME rd_replay_tool_fsr3_dump
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_fsr3_dump"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_fsr3_dump.cmake")
+    set_tests_properties(rd_replay_tool_fsr3_dump PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                                                             FIXTURES_REQUIRED rd_dump TIMEOUT 600)
     # the scene's jitter (rd_jitter.h; test/rd_replay_tool_jitter.cmake): at
     # Original 1x and Enhanced 2x, --jitter 0,0 draws every target and the
     # present byte for byte as without it, --jitter 0.25,0.25 moves SCENE and

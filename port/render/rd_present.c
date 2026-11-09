@@ -98,6 +98,7 @@
 #include "rd_upscale_temporal.h"
 #include "rd_tone.h"
 #include "rd_upscale.h"
+#include "rd_upscale_capture.h"
 #include "rd_fsr3.h"
 #include "rd_icon_hold.h"
 #include "shader_consts.h"
@@ -2314,6 +2315,9 @@ static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState,
 
 void rd__capture_finish(void)
 {
+    /* the upscaler's pictures F12 asked for (rd_upscale_capture.h): written
+     * before this present's picture, so the bug-report zip finds them */
+    (void)rd__upscale_capture_finish();
     if (s_shot.dropped) {
         s_shot.dropped = 0;
         if (shotLogNow()) {

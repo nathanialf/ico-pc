@@ -34,6 +34,12 @@ bool rd__frame_jitter_get(float out[2]);
  * reduction's target, nor DISPLAY_HELD, the work buffers, the shadow levels
  * or a temporary target).  Counts the frame groups it jitters. */
 const float *rd__frame_jitter_of(const struct RdTargetRec *tc);
+/* The fog's draw (rd_replay.c, around doFog): with ICO_RD_FOG_JITTER=0 (a
+ * developer A/B for issue 203) rd__frame_jitter_of gives the fog's frame
+ * groups no jitter, so the fog's dither keeps one phase (fog_lut.hlsl's
+ * Bayer cell follows g_jitter) while the scene stays jittered; unset, the
+ * call changes nothing (logged once when it acts) */
+void rd__fog_jitter_in(bool inFog);
 /* The frame groups rd__frame_jitter_of jittered since rd__frame_jitter_set
  * (--stats' "jitter" line) */
 uint32_t rd__frame_jitter_groups(void);

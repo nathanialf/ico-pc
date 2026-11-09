@@ -112,8 +112,28 @@ bool rd__frame_jitter_get(float out[2])
     return s_on;
 }
 
+static int s_fogFrozen = -1; /* ICO_RD_FOG_JITTER=0, read once */
+static bool s_inFog;
+
+void rd__fog_jitter_in(bool inFog)
+{
+    if (s_fogFrozen < 0) {
+        const char *e = getenv("ICO_RD_FOG_JITTER");
+        s_fogFrozen = e && strcmp(e, "0") == 0;
+        if (s_fogFrozen) {
+            rd__log("jitter: ICO_RD_FOG_JITTER=0: the fog's draws take no jitter (its dither's "
+                    "phase held at 0 while the scene is jittered: an A/B for issue 203, not a "
+                    "setting)");
+        }
+    }
+    s_inFog = inFog && s_fogFrozen == 1;
+}
+
 const float *rd__frame_jitter_of(const struct RdTargetRec *tc)
 {
+    if (s_inFog) {
+        return NULL; /* ICO_RD_FOG_JITTER=0: the fog's dither phase held */
+    }
     if (!s_asked) {
         readSwitch();
     }

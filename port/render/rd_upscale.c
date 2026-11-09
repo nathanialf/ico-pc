@@ -17,6 +17,7 @@
 #include "rd_layer.h"
 #include "rd_replay.h"
 #include "rd_thread.h"
+#include "rd_upscale_capture.h"
 #include "rd_upscale_temporal.h"
 #include "rd_velocity.h"
 
@@ -481,6 +482,10 @@ bool rd__upscale_dispatch_at(Replay *r, const RdFrame *f, const RdCmd *c, bool m
         return false;
     }
     rd__transition(cl, out->color, &out->colorState, RHI_STATE_SHADER_READ);
+    /* F12's upscaler pictures (rd_upscale_capture.h): copies after the
+     * dispatch, before the display layer draws into the composite */
+    rd__upscale_capture_take(cl, &in, ts);
+    rd__upscale_note_frame(f);
     prepassNote();
     s_up.madeReplay = g_rd.replayCounter;
     s_up.since = 0;
@@ -506,7 +511,7 @@ bool rd__upscale_dispatch_at(Replay *r, const RdFrame *f, const RdCmd *c, bool m
                                               : "a copy",
                 in.velocity.id ? "VELOCITY" : "none", (double)in.jitter[0], (double)in.jitter[1],
                 s_up.phases, (unsigned)g_rd.settings.upscaleQuality,
-                (unsigned)g_rd.settings.upscaleSharpness, rd__fsr3_fp16() ? "on" : "off");
+                (unsigned)g_rd.settings.upscaleSharpness, rd__fsr3_fp16_word());
     }
     return true;
 }
@@ -593,7 +598,8 @@ bool rd__upscale_read(void *dst, size_t size, uint32_t *w, uint32_t *h)
 
 void rd__upscale_free(void)
 {
-    rd__layer_free(); /* COMPOSITE and the layer's other slots (rd_layer.c) */
+    rd__layer_free();           /* COMPOSITE and the layer's other slots (rd_layer.c) */
+    rd__upscale_capture_free(); /* the bug-report capture's copies */
     if (s_up.col.id) {
         rd__retire_texture(s_up.col);
     }

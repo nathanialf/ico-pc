@@ -5892,7 +5892,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 break;
             case RDC_POST_STUB:
                 if (c->b[0] == RD_POST_FOG) {
+                    rd__fog_jitter_in(true); /* ICO_RD_FOG_JITTER=0 */
                     doFog(&r, f, c);
+                    rd__fog_jitter_in(false);
                     break;
                 }
                 if (rd__is_blur_kind(c->b[0])) {
