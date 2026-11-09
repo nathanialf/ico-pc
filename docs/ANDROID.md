@@ -95,8 +95,8 @@ first ([where it is](#where-your-files-are)).
    game's data**.
 5. **Starting the game** shows on every start. A few seconds of black can
    follow it, until the game's own logo appears. The first time the title
-   screen is up, the game also makes the recent-apps icon from it, which
-   shows as about half a second of black.
+   screen is up, the game also makes the recent-apps icon from it; the
+   title holds still for about half a second.
 
 At each step the screen says what the game is doing. Where it shows no
 bar, the step is short and its length cannot be told in advance. Leave the

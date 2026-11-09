@@ -272,7 +272,8 @@ Mode. If Steam is open, the game tells you to close it first.
 ## Where does the game's icon come from? Why is the file's icon plain?
 
 The icon is the I of the title lettering. The game makes it from your own
-disc the first time the title screen shows (about half a second of black),
+disc the first time the title screen shows (the title holds still for about
+half a second),
 and keeps it in the game's `icon` folder, so nothing of it is in the
 download. Windows and Linux (X11) show it on the game's window and
 taskbar, [Add to Steam](OPTIONS.md#extras) uses it, and on a Mac it is the Dock

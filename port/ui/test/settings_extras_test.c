@@ -480,7 +480,7 @@ static void testExtras(void)
 
 /* ui_settings_covers_title, which hides the title's logo
    (port/game/title_logo.c): every page opened from the title, Extras and
-   its Music page among them, and the New Game screen; not the title's own
+   its Music page among them; not the New Game screen, the title's own
    layouts, the quit screen, nor any page opened from the pause menu */
 static void testCoversTitle(void)
 {

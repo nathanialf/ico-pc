@@ -2,7 +2,6 @@
 
 (kept current after every merge; player words only)
 
-- The New Game screen now shows which Mirror mode and New Game+ choices are set, hides the title lettering, and starts the game from its own Start row; pressing Cross on a choice only picks it and moves down.
 - On Windows the game's program file now takes the icon made from your disc: it is put into the file as the game closes, after the title screen has made the icon, so it shows from the next start. A copy in a folder you cannot write to keeps the plain icon.
 - On Android the recent-apps card now shows the icon made from your disc, made at the first title screen; the home-screen icon stays the plain one.
 - Holding Left or Right on a slider row in Options now keeps changing it, and L1 and R1 change the Picture colour rows in steps of 10.

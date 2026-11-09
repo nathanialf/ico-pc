@@ -75,7 +75,8 @@ int ui_settings_title_decided(void);
 /* A Settings page opened from the title is the current layout (Extras and
    its Music page, Achievements and the remap list among them); not from
    the pause menu (port/game/title_logo.c hides the title's logo under it).
-   Also 1 on the New Game screen (below), whatever the stage. */
+   Not the New Game screen (below): it is not a page, and the game's own
+   title animation has taken the lettering away by then. */
 int ui_settings_covers_title(void);
 
 /* The New Game screen: la_vibe_select (common/src/layout_action.c)
