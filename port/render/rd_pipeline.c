@@ -808,6 +808,22 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
         layouts[1] = g_rd.layoutVu;
         layouts[2] = g_rd.layoutTex;
         memset(d, 0, sizeof(*d));
+        if (k->colorFmt == RHI_FMT_UNKNOWN && k->fs == RD_FS_VU_PRE_CS) {
+            /* the record written by compute dispatches (rd_vu_record.h; the
+             * key's fs RD_FS_VU_PRE_CS, rd__vu_pre_key): the compute build,
+             * group 0 (FrameCB) and group 1's store layout alone (the
+             * compute builds read sets 0 and 1); the tick stage's two keys
+             * the same pipeline twice, as under the stores */
+            layouts[1] = g_rdRec.layoutVuPre;
+            d->compute = rd__vu_record_cs(k->vs, g_rd.vuPreBatch && g_rd.vsBatch[k->vs].id);
+            if (!d->compute.id || !layouts[1].id) {
+                return false;
+            }
+            d->layouts = layouts;
+            d->layoutCount = 2;
+            d->debugName = "rd vu pre-pass (compute)";
+            return true;
+        }
         if (k->colorFmt == RHI_FMT_UNKNOWN) {
             /* the record stored by the vertex shaders (rd_vu_record.h; the
              * key's colorFmt UNKNOWN, rd__vu_pre_key): the store build, group
@@ -1037,6 +1053,38 @@ const RdPipelineSetPolicy *rd_pipeline_policy_careful(void)
     return &careful;
 }
 
+/* rd_set_pipeline_resume (issue 123): the next start-up set from at, its
+ * batches capped (s_setBatchCap while rd_precreate_pipelines runs; 0 none);
+ * rd_pipeline_set_stop: where the last set stopped */
+static struct {
+    bool armed, skipBefore;
+    uint32_t at, batch;
+} s_resume;
+
+static uint32_t s_setBatchCap;
+/* the batch the last createKeys of the start-up set made its keys in */
+static uint32_t s_setBatchUsed;
+static RdPipelineSetStop s_setStop;
+static bool s_setStopped;
+
+void rd_set_pipeline_resume(uint32_t at, uint32_t batch, bool skipBefore)
+{
+    s_resume.armed = true;
+    s_resume.at = at;
+    s_resume.batch = batch;
+    s_resume.skipBefore = skipBefore;
+}
+
+bool rd_pipeline_set_stop(RdPipelineSetStop *out)
+{
+    if (!s_setStopped) {
+        memset(out, 0, sizeof(*out));
+        return false;
+    }
+    *out = s_setStop;
+    return true;
+}
+
 /* Whether the pipeline cache is measured for the batches' lines and written
  * between the start-up set's batches (issues 93 and 107): on a phone or a
  * tablet (Android, iOS) always, so a set the system ends keeps what it
@@ -1125,8 +1173,15 @@ static void keyVsName(const RdPipeKeyInt *k, char *out, size_t size)
     const char *v = rd__vs_name(k->vs);
     const size_t n = strlen(v);
     const bool batched = g_rd.vuPreBatch && k->vs < RD_VS_COUNT && g_rd.vsBatch[k->vs].id;
-    if ((rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) && k->colorFmt == RHI_FMT_UNKNOWN &&
-        n > 7 && rd__vu_record_vs(k->vs, batched).id) {
+    if ((rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) && k->fs == RD_FS_VU_PRE_CS &&
+        n > 7) {
+        /* the record's compute build (pipelineDesc): vu_X_compute_pre_cs
+         * or vu_X_batch_compute_pre_cs (rd_vu_record.c), so a crash's note
+         * names it (startup_retry.h startup_retry_note_has_vu_store: the
+         * restart takes the render targets' record) */
+        snprintf(out, size, "%.*s%s_compute_pre_cs", (int)(n - 7), v, batched ? "_batch" : "");
+    } else if ((rd__vs_is_vu_pre(k->vs) || rd__vs_is_vu_stage(k->vs)) &&
+               k->colorFmt == RHI_FMT_UNKNOWN && n > 7 && rd__vu_record_vs(k->vs, batched).id) {
         /* the record stored by the vertex shaders (pipelineDesc): the store
          * build it draws through, vu_X_store_pre_vs or
          * vu_X_batch_store_pre_vs (rd_vu_record.c), so a crash's note names
@@ -1628,7 +1683,18 @@ static struct {
     float slowMs;
     RdPipeKeyInt slow;
     double t0, tLast; /* the open batch's first and last creation */
+    /* the open batch's keys by family (rd__pipe_key_family) and how many
+       of them the start-up set holds (issue 123: lazyBatchKeys) */
+    uint32_t fam[RD_KF_COUNT];
+    uint32_t inSet;
 } s_lazy;
+
+/* the start-up set's keys as rd__enumerate_reachable gives them, taken at
+ * the run's first creation on first use (lazyCount, on the thread that
+ * draws; a display change later is not followed) */
+static RdPipeKeyInt s_lazySet[RD_PIPELINE_CACHE_MAX];
+static uint32_t s_lazySetN;
+static bool s_lazySetMade;
 
 bool rd__pipelines_lazy_on(void)
 {
@@ -1655,6 +1721,25 @@ static void lazyCount(const RdPipeKeyInt *k, float ms)
     if (ms > s_lazy.slowMs) {
         s_lazy.slowMs = ms;
         s_lazy.slow = *k;
+    }
+    if (s_lazy.n == 0) {
+        memset(s_lazy.fam, 0, sizeof(s_lazy.fam));
+        s_lazy.inSet = 0;
+    }
+    if (!s_lazySetMade) {
+        const uint32_t n = rd__enumerate_reachable(s_lazySet, RD_PIPELINE_CACHE_MAX);
+        s_lazySetN = n < RD_PIPELINE_CACHE_MAX ? n : RD_PIPELINE_CACHE_MAX;
+        s_lazySetMade = true;
+    }
+    s_lazy.fam[rd__pipe_key_family(k)]++;
+    /* k is drawKey's: each set key made the same way, under the pass in
+       force (its sample count) */
+    for (uint32_t j = 0; j < s_lazySetN; j++) {
+        RdPipeKeyInt tmp;
+        if (keyEqual(drawKey(&s_lazySet[j], &tmp), k)) {
+            s_lazy.inSet++;
+            break;
+        }
     }
     s_lazy.n++;
     s_lazy.made++;
@@ -2233,9 +2318,16 @@ static void createKeys(const RdPipeKeyInt *keys, uint32_t m, bool resolved, PreT
     finJoin();
     /* the policy (rd_set_pipeline_policy): the batch's size, its threads,
      * the memory bound of the start-up set (times: not a replay's keys) */
-    const uint32_t batchMax = s_setPolicy.batch > 0u && s_setPolicy.batch < RD_PIPE_BATCH
-                                  ? s_setPolicy.batch
-                                  : RD_PIPE_BATCH;
+    const uint32_t policyBatch = s_setPolicy.batch > 0u && s_setPolicy.batch < RD_PIPE_BATCH
+                                     ? s_setPolicy.batch
+                                     : RD_PIPE_BATCH;
+    /* a resumed start-up set's smaller batches (rd_set_pipeline_resume) */
+    const uint32_t batchMax = times != NULL && s_setBatchCap > 0u && s_setBatchCap < policyBatch
+                                  ? s_setBatchCap
+                                  : policyBatch;
+    if (times != NULL) {
+        s_setBatchUsed = batchMax;
+    }
     const bool budgeted = times != NULL && s_setPolicy.memoryBudgetMB > 0u;
     const long startKb = budgeted ? residentKb() : -1;
     static RdPipeKeyInt bk[RD_PIPE_BATCH];
@@ -2998,10 +3090,53 @@ uint32_t rd_precreate_pipelines(void)
                     moved);
         }
     }
-    createKeys(keys, m, false, &times, &c);
+    /* issue 123: resumed where an earlier start's set stopped for memory
+       (rd_set_pipeline_resume): from at, in smaller batches; the keys
+       before it left to the pipeline cache, or made after the rest */
+    static RdPipeKeyInt rot[RD_PIPELINE_CACHE_MAX];
+    const RdPipeKeyInt *setKeys = keys;
+    uint32_t setN = m, base = 0;
+    s_setStopped = false;
+    s_setBatchCap = 0;
+    if (s_resume.armed) {
+        const uint32_t pol = s_setPolicy.batch > 0u && s_setPolicy.batch < RD_PIPE_BATCH
+                                 ? s_setPolicy.batch
+                                 : RD_PIPE_BATCH;
+        const uint32_t half = s_resume.batch > 0u ? s_resume.batch : pol / 2u;
+        base = s_resume.at < m ? s_resume.at : 0u;
+        s_setBatchCap = half > 4u ? half : 4u; /* pipe_resume.h's floor */
+        if (base > 0u && s_resume.skipBefore) {
+            setKeys = keys + base;
+            setN = m - base;
+        } else if (base > 0u) {
+            memcpy(rot, keys + base, (size_t)(m - base) * sizeof(keys[0]));
+            memcpy(rot + (m - base), keys, (size_t)base * sizeof(keys[0]));
+            setKeys = rot;
+        }
+        rd__log("pipelines: the start-up set resumes at pipeline %u of %u after an earlier "
+                "start's stop for memory, in batches of %u (the set's own %u)%s",
+                base + 1u, m, s_setBatchCap < pol ? s_setBatchCap : pol, pol,
+                base == 0u            ? ""
+                : s_resume.skipBefore ? "; the pipelines before it are left to first use (the "
+                                        "pipeline cache file holds them)"
+                                      : "; the pipelines before it are made after the rest");
+        s_resume.armed = false;
+    }
+    createKeys(setKeys, setN, false, &times, &c);
+    s_setBatchCap = 0;
+    if (c.budget[0]) {
+        /* where it stopped in the set's own order (the rotation undone),
+           for the next start's resume (the window's activity file) */
+        s_setStopped = true;
+        s_setStop.at =
+            setKeys == keys + base && base > 0u ? base + c.stoppedAt : (base + c.stoppedAt) % m;
+        s_setStop.total = m;
+        s_setStop.batch = s_setBatchUsed;
+        snprintf(s_setStop.why, sizeof(s_setStop.why), "%s", c.budget);
+    }
     if (c.stop) {
         rd__log("pipelines: the start-up set stopped at %u of %u (the game is closing)",
-                c.stoppedAt, m);
+                c.stoppedAt, setN);
     }
     const double ms = rd__now_ms() - t0;
     s_startupSet = true;
@@ -3015,7 +3150,7 @@ uint32_t rd_precreate_pipelines(void)
         rd_pipelines_lazy(c.budget);
         /* the window may finish the rest in the background (a stop at the
            free-memory floor: rd_pipelines_background_start) */
-        finOffer(keys, m, c.stoppedAt);
+        finOffer(setKeys, setN, c.stoppedAt);
     }
     if (c.compiled) {
         preTimesLog(&times);
@@ -3163,6 +3298,7 @@ void rd_pipelines_lazy(const char *why)
 {
     memset(&s_lazy, 0, sizeof(s_lazy));
     s_lazy.on = true;
+    s_lazySetMade = false;
     rd__log("pipelines: no start-up set %s: pipelines are made as the game needs them%s",
             why != NULL && why[0] != '\0' ? why : "(no reason given)", dynamicWords());
     rd__log("pipelines: the pipeline cache holds %llu KB at the start; it is written after each "
@@ -3176,13 +3312,36 @@ void rd_pipelines_lazy(const char *why)
  * pipelines 0.02-0.61 s, mean 0.14 s, over 1.8 s; memory 210 MB (most 214
  * MB), pipeline cache 3104 KB; slowest 0.61 s program ... (font_sheet_ps
  * ...)") to the log and the activity file (rd_set_batch_fn) */
+/* The lazy batch's keys by family and how many of them the start-up set
+ * holds (lazyCount): "; by family program 12, vu 17; 27 of them in the
+ * start-up set" (issue 123: a resumed set made before play would have made
+ * those; one outside it is a key only a frame's walk reaches) */
+static void lazyBatchKeys(char *out, size_t size)
+{
+    size_t at = 0;
+    out[0] = '\0';
+    for (int f = 0; f < RD_KF_COUNT && at < size; f++) {
+        if (s_lazy.fam[f] != 0) {
+            const int put = snprintf(out + at, size - at, "%s %s %u", at ? "," : "; by family",
+                                     rd__pipe_family_name((RdKeyFamily)f), s_lazy.fam[f]);
+            at += put > 0 ? (size_t)put : 0;
+        }
+    }
+    if (at < size) {
+        const int put =
+            snprintf(out + at, size - at, "; %u of them in the start-up set", s_lazy.inSet);
+        (void)put;
+    }
+}
+
 static void lazyBatchEnd(double now)
 {
-    char line[600], mem[96], w[96], mods[160];
+    char line[600], mem[96], w[96], mods[160], fams[192];
     (void)rhi_pipeline_cache_save();
     memoryText(mem, sizeof(mem));
     keyWords(&s_lazy.slow, w, sizeof(w));
     keyModules(&s_lazy.slow, mods, sizeof(mods));
+    lazyBatchKeys(fams, sizeof(fams));
     s_lazy.batches++;
     snprintf(line, sizeof(line),
              "lazy batch %u, pipelines %u-%u of this run (compiler %s): %u pipelines %.2f-%.2f "
@@ -3191,6 +3350,16 @@ static void lazyBatchEnd(double now)
              s_compiler[0] ? s_compiler : "unnamed by the driver", s_lazy.n, s_lazy.lo / 1000.0,
              s_lazy.hi / 1000.0, s_lazy.sum / s_lazy.n / 1000.0, (now - s_lazy.t0) / 1000.0, mem,
              s_lazy.slowMs / 1000.0, w, mods);
+    {
+        /* the family words after it, cut at the line's end (copied by
+           hand: a format with them all made gcc 14's -Wformat-truncation
+           at -O1 with fortify see a possible cut) */
+        size_t len = strlen(line);
+        for (size_t i = 0; fams[i] != '\0' && len + 1 < sizeof(line); i++) {
+            line[len++] = fams[i];
+        }
+        line[len] = '\0';
+    }
     s_lazy.n = 0;
     if (s_batchFn != NULL) {
         s_batchFn(line);
@@ -3623,12 +3792,13 @@ RdPipeKeyInt rd__vu_pre_key(uint8_t preVs)
     k.gs.colorMask = 0xF;
     k.gs.prim = RD_PRIM_POINTS;
     k.vs = preVs;
-    k.fs = RD_FS_VU_PRE;
     /* the record's write (rd_vu_record.h): the three RGBA32_UINT targets,
      * or none under the stores (the pipeline stores from its vertex
-     * shader; both kinds may be in the cache across the self-test's
-     * fallback) */
-    k.colorFmt = g_rdRec.stores ? RHI_FMT_UNKNOWN : RHI_FMT_RGBA32_UINT;
+     * shader) and the compute dispatches (fs RD_FS_VU_PRE_CS, no module:
+     * the key's own mark, the key having no spare byte); every kind may be
+     * in the cache across the self-test's fallback */
+    k.fs = rd__vu_record_compute() ? RD_FS_VU_PRE_CS : RD_FS_VU_PRE;
+    k.colorFmt = rd__vu_record_buffered() ? RHI_FMT_UNKNOWN : RHI_FMT_RGBA32_UINT;
     k.depthFmt = RHI_FMT_UNKNOWN;
     return k;
 }

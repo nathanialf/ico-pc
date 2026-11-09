@@ -405,6 +405,12 @@ int main(int argc, char **argv)
            until the OpenGL backend reports them (RhiLimits.vertexStores) */
         return rhi_test_vertex_stores(&cfg);
     }
+    if (argc > 1 && strcmp(argv[1], "compute") == 0) {
+        /* rhi_gl_compute: the compute stores (rhi_test_compute.c): 77 after
+           checking that the bracket refuses and a dispatch counts nothing,
+           until the OpenGL backend reports them (RhiLimits.computeStores) */
+        return rhi_test_compute_stores(&cfg);
+    }
     const int rc = rhi_test_run_cells(&cfg);
     if (rc == 77) {
         rhi_test_log("SKIP rhi_gl_test: no OpenGL context\n");

@@ -39,12 +39,19 @@
  * goes as the window's presents go, its submit and present on the submit
  * thread, rd_submit_thread.h).  Not with
  * OpenGL (its context stays on the main thread; the line says so and the
- * replays stay on it).  --repeat N (1..8) makes that picture N times in a
- * row, the PNG read after the last: with --render-thread on the N are
- * handed over back to back, so with the frame slots apart each one's end,
- * submit and present on the submit thread go on while the next one
- * records (rd_submit_thread.h "the slots"); off and sync make the same N
- * one after the other, so the last picture's bytes compare as one.
+ * replays stay on it).  --repeat N (1..1000) makes that picture N times in
+ * a row, the PNG read after the last: with --render-thread on (N up to 8)
+ * the N are handed over back to back, so with the frame slots apart each
+ * one's end, submit and present on the submit thread go on while the next
+ * one records (rd_submit_thread.h "the slots"); off and sync (and on, past
+ * 8) make the same N one after the other, so the last picture's bytes
+ * compare as one.  On a keep frame (fbKeep: lists 11-12 over the picture
+ * before, a stage switch's fade) --repeat N is N ticks of the keep loop:
+ * each replay reads the DISPLAY (or, under a temporal upscaler, the
+ * composite) the one before left, as the game's ticks do (give the
+ * picture before with --prev: under a temporal upscaler a keep frame with
+ * no picture held is refused); --presents re-shows one tick's picture, as
+ * the window's later presents of a tick do, and does not iterate it.
  *
  * The display options: a dump does not carry them, so the replay takes them
  * here, the PS2 picture by default:
@@ -811,6 +818,13 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
                (int32_t)c->u[3]);
     } else if (c->type == RDC_UPSCALE_POINT) {
         printf(" src %u dst %u", c->u[0], c->u[1]);
+        if (c->u[2] & RD_UPSCALE_NO_HISTORY) {
+            /* the attach's mark and its reason (rd_velocity.h; 0 = first in a
+             * dump made before the reasons) */
+            static const char *const kWhy[8] = {"first",  "size",      "cut", "keep run",
+                                                "camera", "forgotten", "?",   "?"};
+            printf(" new history (%s)", kWhy[RD_UPSCALE_WHY(c->u[2])]);
+        }
     } else if (c->type <= RDC_STATE_LAST || c->type == RDC_AA1) {
         if (c->type != RDC_TEXTURE_OFF && c->type != RDC_NOP && c->type != RDC_UVOFFSET) {
             printf(" %u", c->b[0]);
@@ -2344,8 +2358,8 @@ int main(int argc, char **argv)
             rd_thread_local_want(m); /* every rd_init from here (rd_thread.h) */
         } else if (strcmp(argv[i], "--repeat") == 0 && i + 1 < argc) {
             const int n = atoi(argv[++i]);
-            if (n < 1 || n > 8) {
-                fprintf(stderr, "bad --repeat (1..8)\n");
+            if (n < 1 || n > 1000) {
+                fprintf(stderr, "bad --repeat (1..1000)\n");
                 return 1;
             }
             repeatN = n;
@@ -2811,6 +2825,11 @@ int main(int argc, char **argv)
     } else if (maskMarks) {
         rd__replay_set_window_draws(1, UINT32_MAX, 0, 0, 1, 0);
     }
+    if (presentsN && rf->keep) {
+        printf("%s: keep frame: --presents re-shows as the window does; --repeat iterates the keep "
+               "loop\n",
+               dump);
+    }
     if (presentsN && !list) {
         rc = presentsRun(dump, png, &pf, &f, target, ow, oh, want, pw, ph);
         rd__frame_free(&f);
@@ -2840,7 +2859,8 @@ int main(int argc, char **argv)
         rd__occlusion_arm(0);
     }
     bool replayed;
-    if (rd_thread_host_on() && pw != 0 && !passDir && !occlusion && !saveBlended && !tempsDir) {
+    if (rd_thread_host_on() && pw != 0 && !passDir && !occlusion && !saveBlended && !tempsDir &&
+        repeatN <= 8) {
         /* --render-thread: the presented picture handed over as the
            window's are (sync: waited), its submit and present on the
            submit thread (rd_submit_thread.h), read back after the drain;
@@ -2968,12 +2988,12 @@ int main(int argc, char **argv)
          * once its timestamps are in, RHI_FRAMES_IN_FLIGHT replays later) */
         const RdPerfRecord *pr = &g_rdPerf;
         printf("%s: stats: %u draws, %u passes, %u bind groups (%u uniform, %u texture), %u bind "
-               "group binds, %u pipeline binds, %llu ring bytes, %u barriers, %u copies; screen "
-               "prims %u draws merged into %u\n",
+               "group binds, %u pipeline binds, %llu ring bytes, %u barriers, %u copies, %u "
+               "dispatches; screen prims %u draws merged into %u\n",
                dump, pr->draws, pr->renderPasses, pr->bindGroups, pr->uniformGroups,
                pr->textureGroups, pr->bindGroupBinds, pr->pipelineBinds,
-               (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->screenCmds,
-               pr->screenDraws);
+               (unsigned long long)pr->uploadBytes, pr->barriers, pr->copies, pr->dispatches,
+               pr->screenCmds, pr->screenDraws);
         printf("%s: stats: bind cache: %u pipeline, %u bind group and %u state repeats skipped\n",
                dump, pr->pipelineBindsSkipped, pr->bindGroupBindsSkipped, pr->stateSetsSkipped);
         if (pr->backendWriteBytes) {
@@ -3042,7 +3062,7 @@ int main(int argc, char **argv)
                    "(first %u, size %u, cut %u, keep run %u, camera %u, forgotten %u); display "
                    "layer %s: frames %u (draws %u, textured %u), keep frames held %u (keep copies "
                    "%u, no keep sprite %u), begun after a scene-class command %u, pre-upscale "
-                   "reductions %u, refused %u\n",
+                   "reductions %u (read as DISPLAY by %u), refused %u\n",
                    dump, us->colorW, us->colorH, us->outW, us->outH, (double)g_rd.sceneSx,
                    (double)g_rd.sceneSy, (double)dx, (double)dy, us->points, us->dispatched,
                    us->refused, us->remapped, us->guardCols, us->guardRows, us->jittered,
@@ -3051,7 +3071,8 @@ int main(int argc, char **argv)
                    us->resetsBy[RD_UPSCALE_RESET_KEEP], us->resetsBy[RD_UPSCALE_RESET_CAMERA],
                    us->resetsBy[RD_UPSCALE_RESET_FORGOTTEN], rd__layer_on() ? "on" : "off",
                    us->layerFrames, us->layerDraws, us->layerTextured, us->keepHeld, us->keepCopies,
-                   us->keepNoSprite, us->layerLate, us->preReductions, us->layerRefused);
+                   us->keepNoSprite, us->layerLate, us->preReductions, us->preLent,
+                   us->layerRefused);
         } else {
             printf("%s: stats: upscale point off\n", dump);
         }

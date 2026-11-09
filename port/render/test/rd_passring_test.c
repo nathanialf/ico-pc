@@ -194,6 +194,13 @@ static void testVuPre(void)
     if (strstr(line, "(stores)") == NULL) {
         fprintf(stderr, "got: %s\n", line);
     }
+    /* written by compute dispatches: colour 2 */
+    rd__passring_push(RD_PASSK_VU_PRE, 2, 1024, 2, 0, 1200, 0, 0, -1);
+    rd_passring_format(rd_passring_get(2), NULL, line, sizeof(line));
+    CHECK(strstr(line, "1200 vertices into the record (1024x2) (compute)") != NULL);
+    if (strstr(line, "(compute)") == NULL) {
+        fprintf(stderr, "got: %s\n", line);
+    }
 }
 
 static void testBisect(void)

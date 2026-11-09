@@ -362,15 +362,22 @@ static void prepassNote(void)
     told = off;
 }
 
-/* the first reason a dispatch is told a new history (RD_UPSCALE_RESET_*) */
-static int resetWhy(bool resized, bool frameCut, uint32_t keepRun, uint32_t mark)
+/* the first reason a dispatch is told a new history (RD_UPSCALE_RESET_*),
+ * by rank: the first dispatch, a new size, a cut (the frame's own, or the
+ * one its marker carries: a cut on a keep frame or a discarded one), a
+ * camera jump (the wall's cut, the interpolator's snap), a keep run, the
+ * attach's mark otherwise (u2: the marker's u[2], rd_velocity.h) */
+static int resetWhy(bool resized, int frameCut, uint32_t keepRun, uint32_t u2)
 {
+    const int mark = (u2 & RD_UPSCALE_NO_HISTORY) ? RD_UPSCALE_WHY(u2) : -1;
     return s_up.stats.dispatched == 0u ? RD_UPSCALE_RESET_FIRST
            : resized                   ? RD_UPSCALE_RESET_SIZE
-           : frameCut                  ? RD_UPSCALE_RESET_CUT
-           : keepRun > 0u              ? RD_UPSCALE_RESET_KEEP
-           : mark                      ? RD_UPSCALE_RESET_FORGOTTEN
-                                       : -1;
+           : frameCut == RD_UPSCALE_RESET_CUT || mark == RD_UPSCALE_RESET_CUT ? RD_UPSCALE_RESET_CUT
+           : frameCut == RD_UPSCALE_RESET_CAMERA || mark == RD_UPSCALE_RESET_CAMERA
+               ? RD_UPSCALE_RESET_CAMERA
+           : keepRun > 0u || mark == RD_UPSCALE_RESET_KEEP ? RD_UPSCALE_RESET_KEEP
+           : mark >= 0                                     ? RD_UPSCALE_RESET_FORGOTTEN
+                                                           : -1;
 }
 
 void rd__upscale_point(Replay *r, const RdFrame *f, const RdCmd *c, bool msaa)
@@ -461,8 +468,8 @@ bool rd__upscale_dispatch_at(Replay *r, const RdFrame *f, const RdCmd *c, bool m
      * of a later frame may already have changed (interpolation off); and
      * the first picture after keep frames (the display layer held the
      * composite through a fade: the scene after it is another one) */
-    const bool frameCut = f && (f->cut != 0 || (f->hasCamera && f->camera.cut != 0));
-    const int why = resetWhy(resized, frameCut, keepRun, c->u[2] & RD_UPSCALE_NO_HISTORY);
+    const int frameCut = f ? rd__velocity_cut_why(f) : -1;
+    const int why = resetWhy(resized, frameCut, keepRun, c->u[2]);
     in.reset = why >= 0;
     in.presents = s_up.since + 1u;
     in.frame = frame;

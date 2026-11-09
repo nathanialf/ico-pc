@@ -7,7 +7,8 @@
 # target preset is, and nothing links against it.
 #
 #   ico_add_shader(<name> <file.hlsl> <entry> <stage>)
-#       stage: vertex | fragment (vs | ps accepted). <file> is relative to
+#       stage: vertex | fragment | compute (vs | ps | cs accepted; compute:
+#       the VU record's compute builds alone). <file> is relative to
 #       the calling directory. <name> is the lookup key in the table.
 #   ico_add_shader(<name> <file.hlsl> <entry> <stage> DEFINES <D=V>... SUFFIX <s>)
 #       the same entry compiled with the macros given (DXC -D); the table key
@@ -145,8 +146,12 @@ function(ico_add_shader name file entry stage)
     elseif(stage_l STREQUAL "fragment" OR stage_l STREQUAL "ps" OR stage_l STREQUAL "pixel")
         set(stage_n fragment)
         set(profile ps_6_0)
+    elseif(stage_l STREQUAL "compute" OR stage_l STREQUAL "cs")
+        # the VU record's compute builds alone (port/rhi/rhi.h RHI_STAGE_COMPUTE)
+        set(stage_n compute)
+        set(profile cs_6_0)
     else()
-        message(FATAL_ERROR "ico_add_shader(${name}): stage must be vertex or fragment")
+        message(FATAL_ERROR "ico_add_shader(${name}): stage must be vertex, fragment or compute")
     endif()
     get_filename_component(src "${file}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
     set(spv "${ICO_SHADER_OUT_DIR}/${name}.spv")

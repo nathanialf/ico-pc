@@ -671,9 +671,13 @@ const RdPipelineSetPolicy *rd_pipeline_policy_careful(void);
  * rd_vuprepass_selftest) */
 bool rd_vu_prepass_on(void);
 /* How the VU pre-pass writes its record this run (rd_vu_record.h):
- * "stores" (the vertex shaders store it) or "targets" (render targets and
- * copies) */
+ * "stores" (the vertex shaders store it), "compute" (compute dispatches
+ * store it) or "targets" (render targets and copies) */
 const char *rd_vu_record_mode(void);
+/* The record written without render targets (stores or compute: a device
+ * loss takes the restart's losstargets step first, startup_retry.h
+ * StartupRetryRun.storesWereOn) */
+bool rd_vu_record_buffered(void);
 /* The frames whose pre-pass [dev] vu_prepass_min skipped since the last
  * call (the window's 10 s VU line), the threshold in *minSlots and the
  * most slots one of them had in *maxSlots (either may be NULL) */
@@ -806,6 +810,33 @@ void rd_set_memory_fn(RdMemoryFn fn);
  * pipelines on one thread).  NULL (the default): never asked. */
 typedef int (*RdLowMemoryFn)(char *why, size_t size);
 void rd_set_low_memory_fn(RdLowMemoryFn fn);
+/* The start-up set resumed where an earlier start's stopped for memory
+ * (issue 123; port/platform/pipe_resume.h, docs/port/PIPELINES.md "Stop
+ * and resume"): the window calls it before rd_precreate_pipelines.  at is
+ * the first pipeline not made, in the set's order as rd_precreate_pipelines
+ * makes it (the careful set's sprite planes builds last); a value at or past
+ * the set's size starts from the first.  batch caps the set's batches (0:
+ * half of the policy's batch, at least 4).  skipBefore: the pipelines before
+ * at are left to first use (this shader set's pipeline cache file was
+ * loaded: the driver answers them from it), the progress counting the rest
+ * only; else they are made after the rest (the set from at to its end, then
+ * from its first to at), the progress counting the whole set.  One call
+ * covers the next rd_precreate_pipelines only; the line "pipelines: the
+ * start-up set resumes at pipeline N of M ..." says what it did. */
+void rd_set_pipeline_resume(uint32_t at, uint32_t batch, bool skipBefore);
+
+/* Where the last rd_precreate_pipelines stopped when its policy's bound or
+ * the low-memory function stopped it (the rest made on first use): true
+ * with at the first pipeline not made in the set's order (the resume's
+ * rotation undone), total the set's size, batch the batch it made them in,
+ * why the stop's words (rd_pipelines_lazy's); false when it made the whole
+ * set or was not run (out zeroed). */
+typedef struct RdPipelineSetStop {
+    uint32_t at, total, batch;
+    char why[256];
+} RdPipelineSetStop;
+
+bool rd_pipeline_set_stop(RdPipelineSetStop *out);
 /* No start-up set (issues 93 and 107; docs/port/PIPELINES.md, "The start-up
  * set"): the window calls it instead of rd_precreate_pipelines, why saying
  * why ("on this device (Adreno 740, issues 93 and 107)", "by the settings
@@ -1047,7 +1078,8 @@ void rd_set_replay_gate(RdReplayGate gate);
 /* dl_Clear without dl_Swap (gsb_UpdateGSSystem(1)
  * on the movie path, gsb_UpdateGSSystem before gsSystemReady): the lists
  * recorded since rd_begin_frame are dropped unreplayed, as the PS2 drops a
- * display list it never kicks.  No-op when no frame is open. */
+ * display list it never kicks; its camera cut (rd_camera_cut) is carried
+ * to the next frame.  No-op when no frame is open. */
 void rd_discard_frame(void);
 /* True between rd_begin_frame and rd_end_frame / rd_discard_frame. */
 bool rd_frame_open(void);
@@ -2606,6 +2638,9 @@ typedef struct RdPerfRecord {
      * dualLeftovers) */
     uint32_t blendEqOffSets, dualLeftovers;
     uint32_t draws, renderPasses, barriers, copies, fenceWaits, waitIdles, readbacks;
+    /* compute dispatches (RhiStats.dispatches: the VU record's under the
+     * compute builds, rd_vu_record.h; not in draws) */
+    uint32_t dispatches;
     /* the queue submits (RhiStats.submits; the submit thread's land in the
      * record closed after them): a presenting picture's two lists, its
      * scene's and its present's (rd_submit.c), on Vulkan an empty one

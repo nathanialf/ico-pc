@@ -90,6 +90,9 @@
     X(cmd_copy_texture_to_buffer)                                                                  \
     X(cmd_buffer_store_begin)                                                                      \
     X(cmd_buffer_store_end)                                                                        \
+    X(cmd_buffer_compute_begin)                                                                    \
+    X(cmd_buffer_compute_end)                                                                      \
+    X(cmd_dispatch)                                                                                \
     X(cmd_resolve_color)                                                                           \
     X(cmd_begin_label)                                                                             \
     X(cmd_end_label)                                                                               \

@@ -2436,28 +2436,7 @@ open_window:
     if (retry == STARTUP_RETRY_LAZY || !carefulPolicy) {
         char why[160];
 
-        if (retry == STARTUP_RETRY_LAZY) {
-            snprintf(why, sizeof(why), "(a restart after a graphics driver crash)");
-        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_SETTING) {
-            snprintf(why, sizeof(why), "by the settings ([dev] pipeline_set = \"lazy\")");
-        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_ONCE) {
-            snprintf(why, sizeof(why),
-                     "(the previous start ended while preparing them in the careful set; for "
-                     "this start only)");
-        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW && pipeSaved) {
-            snprintf(why, sizeof(why),
-                     "(the previous start ended while preparing them; [dev] pipeline_set = "
-                     "\"lazy\" from now on)");
-        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_NOW) {
-            snprintf(why, sizeof(why),
-                     "(the previous start ended while preparing them; [dev] pipeline_set = "
-                     "\"lazy\" could not be written, so for this start only)");
-        } else if (pipePolicy == ICO_DIAG_PIPESET_LAZY_LOW_MEMORY) {
-            snprintf(why, sizeof(why),
-                     "(the previous start's set stopped when the system ran low on memory)");
-        } else {
-            snprintf(why, sizeof(why), "(the last run made them that way)");
-        }
+        window_pipe_lazy_why(why, sizeof(why), pipePolicy, retry == STARTUP_RETRY_LAZY, pipeSaved);
         /* each first-use pipeline's note in the file, for the whole run, so
            a further end names the pipeline; no further step follows */
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_LAZY);
@@ -2574,7 +2553,7 @@ open_window:
        above may have turned it off); losstargets before it under the
        record stores */
     ico_diag_set_vu_prepass(rd_vu_prepass_on());
-    ico_diag_set_vu_record_stores(rd_vu_prepass_on() && strcmp(rd_vu_record_mode(), "stores") == 0);
+    ico_diag_set_vu_record_stores(rd_vu_prepass_on() && rd_vu_record_buffered());
     /* which way of reading the depth gives the fog its distances on this
        GPU, tried on the real scene size; logged ("fog: depth path") */
     ico_diag_step("window: start: the fog self-test");
@@ -2832,7 +2811,7 @@ int ico_window_reopen(const char *backend, bool backendExplicit)
         }
     }
     ico_diag_set_vu_prepass(rd_vu_prepass_on());
-    ico_diag_set_vu_record_stores(rd_vu_prepass_on() && strcmp(rd_vu_record_mode(), "stores") == 0);
+    ico_diag_set_vu_record_stores(rd_vu_prepass_on() && rd_vu_record_buffered());
     window_pipe_skin_check(-1);
     ico_diag_step("window: switch to %s: the fog self-test", backend);
     rd_fog_selftest();
@@ -5711,6 +5690,16 @@ void window_pace_log(Uint64 now)
         rhi_get_stats(&st);
         (void)window_scene_images_text(images, sizeof(images), st.swapImages, st.swapAcquired);
     }
+    /* issue 123: a GPU-bound block's hint, the scale that would fit */
+    char hint[400];
+    {
+        float sx = 1.0f, sy = 1.0f;
+
+        rd_get_scene_scale(&sx, &sy);
+        (void)window_scene_gpu_hint_text(hint, sizeof(hint), s_pres.statPresents / sec,
+                                         s_pres.statFrames / sec, s_pres.statSkipLate,
+                                         (double)s_pres.gpuNs / 1e6, sy, &s_perf.vuFit);
+    }
 
     fprintf(
         stderr,
@@ -5721,7 +5710,7 @@ void window_pace_log(Uint64 now)
         "over a refresh; %u steps over %.0f ms; "
         "framerate %s%s, present "
         "%s%s, display %.2f Hz (%.3f presents a refresh), window %dx%d%s; step late max %.1f "
-        "ms; pump max %.1f ms; %s\n",
+        "ms; pump max %.1f ms; %s%s\n",
         s_pres.statPresents, movie - s_pres.statMovie, movieFailed, s_pres.statFrames,
         fn - s_pres.statFrameNo, sec, s_pres.statPresents / sec, s_pres.statFrames / sec,
         s_pres.statVsyncs, s_pres.statVsyncs / sec, s_pres.statResyncs,
@@ -5731,7 +5720,7 @@ void window_pace_log(Uint64 now)
         held, rhi_present_mode_name(), images, dm != NULL ? (double)dm->refresh_rate : 0.0,
         dm != NULL && dm->refresh_rate > 1.0f ? s_pres.statPresents / sec / dm->refresh_rate : 0.0,
         pw, ph, window_fullscreen() ? " fullscreen" : "", (double)s_pres.lateMaxNs / 1e6,
-        s_pres.pumpMaxMs, lock);
+        s_pres.pumpMaxMs, lock, hint);
     {
         /* which part of the game the block's steps were in */
         char layouts[160];

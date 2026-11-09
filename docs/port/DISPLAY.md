@@ -1830,9 +1830,11 @@ Resolution row, "window" or Auto gives; [The render and display scales](#the-ren
 with a sub-pixel jitter a present (Halton (2, 3) at index % FSR's phase count,
 `ceil(8 ratio^2)` for the pair of widths: 18 at 1.5); its colour, depth and motion vectors
 ([RENDER.md](RENDER.md), "Velocity") go to FSR 3.1 at the upscale point, after the whole post
-chain, where the game's reduction first reads SCENE ([RENDER.md](RENDER.md), "The upscale
-point"), and FSR writes UPSCALED at the display scale from the jittered pictures it has
-accumulated; the reduction reads UPSCALED in SCENE's place. **Native AA (ratio 1.0) is the
+chain, before the game's own 2D layer ([RENDER.md](RENDER.md), "The upscale point"), and FSR
+writes UPSCALED (the composite) at the display scale from the jittered pictures it has accumulated;
+the 2D layer (the brightness, fades, letterbox, film noise, save tile and text of lists 11-12) is
+then drawn into it at the display scale and the reduction reads it in SCENE's place
+([DISPLAY_LAYER.md](DISPLAY_LAYER.md)). **Native AA (ratio 1.0) is the
 default**: the scene at the Resolution row's own scale, FSR as a temporal anti-aliasing of it. The
 other qualities draw the scene smaller and rebuild it; this game's 512x448 picture costs little to
 draw, so they buy little time and cost sharpness. MSAA and supersampling are off while it runs
@@ -1846,7 +1848,10 @@ of the render target from the current picture to the one before, FSR's own conve
 vector scale (1, 1) times `[dev] velocity_sign`), cleared to zero motion by the upscaler when the
 replay drew no velocity pass; UPSCALED (RGBA8, a storage texture). The jitter in texels (x right, y
 down; FSR's convention); `frameTimeDelta` the present clock's step times the presents since the
-last dispatch; `reset` on a camera cut, the first dispatch and a new size; the frame camera's near
+last dispatch; `reset` on the first dispatch, a new size, a camera cut (a discarded frame's
+carried), the wall's cut or the interpolator's camera snap, the first picture after keep frames,
+and a forgotten history, one reason counted ([DISPLAY_LAYER.md](DISPLAY_LAYER.md#history-resets));
+the frame camera's near
 and far (passed swapped, as FSR takes them under inverted depth) and the vertical angle from the
 game's projection distance (`2 atan(gsH / 2 / zoom)`); pre-exposure 1; auto exposure on. The depth
 is not the standard projective depth FSR models (GS Z, `z * 2^-33` on D32), so FSR's depth-based
@@ -1869,12 +1874,22 @@ that used it finished)`), or at the renderer's shutdown with the GPU idle. **Mem
 640x480 -> 1280x960 on lavapipe, growing with the display size (AMD gives 45 to 300 MB at the
 usual PC sizes); the line names it.
 
-**What ghosts.** Everything drawn without motion vectors is accumulated as if it stood still:
-sprites and particles (the glow composites, the smoke, the sparks: zero velocity), the fades and
-the motion blur's ghost (drawn into SCENE before the upscale point, the fades fold off for it), film
-noise and the UI (list 11, drawn into SCENE too). Moving particles leave a trail; the fades and the
-film grain smear a little; the menus and subtitles hold sharp only while still. The follow-ups:
-the UI and film noise after the upscaler, a reactive mask from the particle draws. The motion
+**What ghosts.** Everything drawn into SCENE without motion vectors is accumulated as if it stood
+still: sprites and particles of the scene (the glow composites, the smoke, the sparks: zero
+velocity) and the motion blur's ghost. Moving particles leave a trail; the motion blur's ghost smears
+a little. The game's 2D layer is not among them: the brightness, the fades, the letterbox, the film
+noise, the save tile, the subtitles and the game's text (lists 11-12 after their
+last scene-class command) are drawn over the upscaled picture at the display scale, the display
+layer ([DISPLAY_LAYER.md](DISPLAY_LAYER.md)), so they are neither accumulated nor sharpened. What
+can still reach FSR of them: a frame whose lists 11-12 hold a scene-class command (a Z-tested world
+line, mostly the game's debug draws) sends what precedes that command through FSR that frame
+(counted in the 10 s line as `frames with the layer begun after a scene-class command`), and a frame
+the layer refuses (`display layer: frame N: not begun (<why>)`) is upscaled whole, 2D included.
+Keep frames (a stage switch's fade, the picture before darkened 112/128 a tick) do not dispatch: the
+composite is held 1:1 and darkened once a tick, so the fade stays sharp while it darkens and the
+next picture after it starts a new history. With `[dev] display_layer = false` the 2D layer is drawn
+into SCENE and upscaled with it, and a keep frame upscales the darkened picture again each tick,
+for an A/B. The follow-up: a reactive mask from the particle draws. The motion
 vectors come from the VU vertex pre-pass's second record of each draw (`rd_replay_vu.c`): with the
 pre-pass off (`[dev] vu_prepass = false`, a failed self-test, a record that could not be made)
 FSR 3.1 still runs, but VELOCITY stays zero and every moving object trails; the first dispatch in
@@ -1989,7 +2004,8 @@ confirm it on the next report.
   100th.
 - **Tests.** `rd_present` (the FSR 3.1 cases: not supported and identical to Off; on: display-sized
   and not black; the context made again at a new size, the old one destroyed; every context destroyed
-  at shutdown), `rd_replay_tool_fsr3`, `ffx_link_test` (the dispatch with the port's formats under
+  at shutdown), `rd_replay_tool_fsr3`, `rd_replay_tool_fsr3_keep` (20 keep frames held after one
+dispatch), `ffx_link_test` (the dispatch with the port's formats under
   the validation layer), `rhi_native` (the extensions)
   ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
@@ -2005,13 +2021,17 @@ scene below the picture's size and upscales it where the game's reduction reads 
 - **The display scale `d`** is what the Resolution row gives today: a scale (`2x`: 2), a fixed
   size, or the "window" resolution's box (one texel a window pixel, the frame's exact width over
   the box across, the PS2's pixel shape kept down, the [Full pixel](#the-native-frame) window's crop as
-  without an upscaler); then the GPU's size limit. DISPLAY, its held copy (the motion blur) and
-  the upscaler's output UPSCALED are made at it, and everything from the reduction on (the
-  present, FSR 1.0, the effects depth's box) is as at that scale without an upscaler.
+  without an upscaler); then the GPU's size limit. DISPLAY, its held copy and the upscaler's
+  output UPSCALED (the composite, with its held copy for keep frames) are made at it, the game's
+  2D layer is drawn into the composite at it ([DISPLAY_LAYER.md](DISPLAY_LAYER.md)), and everything
+  from the reduction on (the present, FSR 1.0, the effects depth's box) is as at that scale
+  without an upscaler. The motion blur's read of DISPLAY takes PRE_DISPLAY under the display layer,
+  the reduction drawn at the render scale.
 - **The render scale `r`** is `d` over the upscaler's ratio (1.5 is FSR's Quality, 1 a
   native-resolution pass), not below 1 (the game's own size: `2x` at ratio 3 draws at 1x) nor
   below `d / 3`. The scene-class targets (SCENE, WORK2, AURA_WORK, the DATE snapshot, a
-  frame-sized render-to-texture block) are made at it; `g_rd.sceneSx/Sy` hold it. A fractional
+  frame-sized render-to-texture block, and the display layer's PRE_DISPLAY and PRE_HELD) are made
+  at it; `g_rd.sceneSx/Sy` hold it. A fractional
   `r` is drawn as any fractional scale is.
 - **Supersampling and MSAA** are off (`rd__aa_mode`: the upscaler is the anti-aliasing), and
   **Downsampling** with them.

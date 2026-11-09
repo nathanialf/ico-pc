@@ -154,6 +154,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_vis.h"
 #include "rd_vu_skin_check.h"
 
 /* the device classes of the table */
@@ -366,7 +367,7 @@ static void makeText(RdProfile *p)
              "%s: fog local %s%s, DATE %s%s, depth stores %s%s, blur fold %s%s, glow fold %s%s, "
              "local read %s, "
              "uint views %s%s, alpha plan %s%s, fx plan %s%s, fx local %s%s, VU planes %s%s, "
-             "shadow count %s%s, shadow edges: %s%s%s%s",
+             "shadow count %s%s, shadow edges: %s%s%s%s%s",
              p->cls, p->fogLocal ? "on" : "off", mark(p, RD_PROFILE_FOG_LOCAL),
              p->dateStencil ? "stencil" : "snapshot", mark(p, RD_PROFILE_DATE_STENCIL),
              storeWords(p), mark(p, RD_PROFILE_STORE_PLAN), p->blurFold ? "on" : "off",
@@ -377,7 +378,11 @@ static void makeText(RdProfile *p)
              mark(p, RD_PROFILE_FX_DST_LOCAL), planesWords(p), mark(p, RD_PROFILE_VU_PLANES),
              shadowWords(p), mark(p, RD_PROFILE_SHADOW_ONE), edgeWords(p),
              mark(p, RD_PROFILE_SHADOW_BSPLINE), p->localWords[0] ? ", desktop local read " : "",
-             p->localWords);
+             p->localWords,
+             rd__vis_profile_default()
+                 ? ", cull frustum (the profile: the occlusion test costs more on this chip's CPU "
+                   "than it saves)"
+                 : "");
 }
 
 void rd__profile_init(void)

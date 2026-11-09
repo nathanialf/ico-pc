@@ -330,7 +330,8 @@ start-up activity file then says `set: careful`, so an end inside the careful se
 start lazy rather than careful again. When the budget stops the set (`rd_pipelines_lazy_on`), the
 rest of the run is recorded as a lazy run's for that start only
 (`ico_diag_startup_activity_budget_stop`); when the system's low-memory signal stopped it, as a lazy
-run whose next start makes no set ([PLATFORM.md](PLATFORM.md#diagnostics)). Sprite planes last,
+run whose next start resumes the set where it stopped ([Stop and resume](#stop-and-resume);
+[PLATFORM.md](PLATFORM.md#diagnostics)). Sprite planes last,
 `[dev] pipeline_skip` (byte-identical): [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes).
 
 With the set made, a pipeline a draw needs later is a key the set did not hold, made on the thread
@@ -387,7 +388,7 @@ step (the `slow step` line's `texture decodes`) and the replay's texture and mes
 | the previous start, of any version, ended without a word in the foreground while a pipeline of its careful set was being made (its activity file says `set: careful`), the first such end in a row: this start only, nothing written (after a full set's end the next start is careful instead, above; [PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them in the careful set; for this start only)` |
 | such an end, whatever the set, the second in a row: the setting is written once the device is made ([PLATFORM.md](PLATFORM.md#diagnostics)) | `(the previous start ended while preparing them; [dev] pipeline_set = "lazy" from now on)` |
 | the last run, of the same version, ran without the set and ended, or exited from it | `(the last run made them that way)` |
-| the same, its set having stopped at the system's low-memory signal (its activity file's `set: stopped at the system's low-memory signal`) | `(the previous start's set stopped when the system ran low on memory)` |
+| the same, its set having stopped at the system's low-memory signal (its activity file's `set: stopped at the system's low-memory signal`): not reached, the window resumes the set instead ([Stop and resume](#stop-and-resume)) | `(the previous start's set stopped when the system ran low on memory)` |
 | the crash order's `lazy` step | `(a restart after a graphics driver crash)` |
 
 **The set against the pool.** The set's size depends on the device's profile and the scale: 446
@@ -544,7 +545,12 @@ start the system ends or a device that freezes keeps every batch before it and t
 compiles only the rest, and the batch's line goes to the log and to the activity file as a
 `compiled: ` line ([PLATFORM.md](PLATFORM.md#diagnostics)): `rd: pipelines: compiled lazy batch 3,
 pipelines 41-57 of this run (compiler E031.41.03.47): 17 pipelines 0.02-0.61 s, mean 0.14 s, over
-1.8 s; memory 210 MB (most 214 MB), pipeline cache 3104 KB; slowest 0.61 s <key> (<modules>)`. In
+1.8 s; memory 210 MB (most 214 MB), pipeline cache 3104 KB; slowest 0.61 s <key> (<modules>); by
+family vu 12, program 5; 15 of them in the start-up set` (issue 123: the batch's keys by family,
+`rd__pipe_key_family`, and how many of them `rd__enumerate_reachable` holds, the set taken at the
+run's first creation on first use and each key made the way the draw's was, under the pass in
+force: those a resumed set made before play would have made; one outside it is a key only a
+frame's walk reaches). In
 such a run each first-use pipeline's note goes to the disc before its compile (fsync,
 `act_sync_note`), so a freeze inside one still names it. The cache's size at the start is logged
 twice: by the backend (`rhi_vk: pipeline cache: <n> bytes from <path>`, or `rhi_vk: pipeline
@@ -574,6 +580,68 @@ where the system does not say), the cache's size `rhi_pipeline_cache_size` (Vulk
 on Direct3D 12) on a phone or a tablet, on the lazy path and on a device of the table (`pipeline
 cache 3104 KB`), `not measured` in a desktop's set (the paragraph above). A start the system ended shows whether the memory grew with the batches, and the
 next start logs the last one again as `ico_pc: the previous run's last finished batch: <line>`.
+
+#### Stop and resume
+
+Issue 123 (Adreno 740 on Qualcomm's driver 512.676.1, the log of 2026-11-09): a start's set stopped at the
+free-memory floor, and from then on every start of the version made no set (the stopped start's
+activity file line was copied into each lazy start's own file); with the pipeline cache file
+refused (written under another driver, [RHI.md](RHI.md#vulkan)), the first scene compiled 29
+pipelines inside one picture's walk (`slow replay 1391.9 ms ... walk 1359.6 ms, 29 pipelines
+created`; the game step late by 1409 ms). The floor's one retry (`memory_floor.h`
+`ico_memory_floor_retry`) needed a cache file the renderer had loaded, which that one was not.
+
+A stop the next start follows (the system's low-memory signal, or the floor on
+Qualcomm's own driver) records where it stopped. The stopped start's window
+(`window_pipe_finish.c` `window_pipe_finish_start`, after `ico_diag_startup_activity_budget_stop`)
+asks the renderer (`rd_pipeline_set_stop`: the first key not made in the set's own order, the set's
+size, the batch it was made in, the stop's words) and appends to the activity file's stop line
+(`ico_diag_startup_set_resume_part`, `port/platform/pipe_resume.h`; the file's place counts from 0,
+the log lines' from 1):
+
+    set: stopped at the system's low-memory signal (1890 MB available of 11453 MB, floor 1947 MB); resume at pipeline 312 of 1196, batches of 8, stop 1, 2026-11-09 20:45
+
+with one log line holding the memory numbers and the place:
+
+    window: pipelines: the start-up set stopped for memory at pipeline 313 of 1196 (batches of 8, stop 1 in a row): memory 271 MB (most 284 MB); device 1890 MB available of 11453 MB; (memory budget: ...); the rest is made as the game needs it, and the next start resumes at pipeline 313 in batches of 4
+
+The rest of that start is made on first use, as before (the one start that ran out of memory inside
+its own set). The next start of the version (`ICO_DIAG_PIPESET_LAZY_LOW_MEMORY`) does not go lazy:
+`window_pipe_floor_retry` reads the line (`ico_pipe_resume_parse`), clears it from this start's
+file (`ico_diag_startup_resume`) and resumes the set there (`rd_set_pipeline_resume`) in batches of
+half the stopped start's (`ico_pipe_resume_batch`: the careful set's 8 becomes 4, the default 32
+becomes 16, then 8, then 4; never under 4), the memory asked between batches as in any set (before
+each pipeline under the careful policy). The pipelines before the place are made after the rest
+(the set from the place to its end, then from its first key to the place; the screen counts the
+whole set), from the pipeline cache where it holds them (a moment each): a resumed set that stops
+leaves keys before its own place that no start made, so the window does not leave the head to
+first use even with the cache loaded (`rd_set_pipeline_resume`'s `skipBefore`, which does and
+counts the rest only, stays for a caller that knows the head is cached; `rd_set_resume_test`). A line without the place (written
+before the place was recorded) resumes from the first key in half the set's batches. Lines:
+
+    window: start-up set: resumed at pipeline 313 of 1196 after the low-memory stop of 2026-11-09 20:45 (batches of 4, stop 1 in a row; the pipelines before it made after the rest, from the pipeline cache where it holds them; the pipeline cache file 1201581 bytes, loaded by the renderer: no): set: stopped at ...
+    rd: pipelines: the start-up set resumes at pipeline 313 of 1196 after an earlier start's stop for memory, in batches of 4 (the set's own 8); the pipelines before it are made after the rest
+
+A resumed set that finishes deletes the activity file (the next start makes the whole set); one
+that stops again writes its own line with `stop 2` and its own place, and the next start halves the
+batch again. A careful set's own growth budget or slow batch, and the floor on another driver than
+Qualcomm's own, stay for that start only (`ico_diag_startup_set_resume_part` answers 0, the line
+says `the next start makes the whole set again`). An end inside a creation of a resumed set counts
+towards the ends' rule as any set's (`LAZY_ONCE`, then `[dev] pipeline_set = "lazy"`). The shader
+modules stay made for the whole run (a first-use creation or a display change needs any of them),
+so the set does not release them between batches.
+
+**Compiling ahead of the walk.** A pipeline's key is made inside the walk, from the replay's state
+as each command changes it (`r->st`), the pass's target format and sample count (`beginPass`,
+`g_rd.passSamples`), the alpha plan from the draw's data, and the VU draw's program, merge and fuse
+choices (`rd_replay_vu.c`); a frame's lists at the hand-over hold the commands, not the keys, and
+the only way to name the keys without the walk is a replay that names them (`rd__pipeline_gather`,
+the loss bisect's and `rd_replay_tool --keys`' rounds), which draws nothing and would cost a second
+walk a picture. The Vulkan command list binds a `VkPipeline` as it records, so a draw cannot wait
+for a compile queued on another thread without a deferred bind. So no request queue fed at the
+hand-over: the set made before play (resumed after a stop) is what keeps the compiles out of the
+walk, and the background finisher (next section) where the floor allows. The lazy batch line's
+`N of them in the start-up set` says how many of a walk's compiles the set would have made.
 
 ### The background finisher
 
@@ -885,7 +953,7 @@ the per-pass timing has a pre-pass piece for each ([The pass ring](RENDER.md#the
 timing](RENDER.md#the-per-pass-timing); `port/render/rd_replay_vu.c` (`vuPrepassRun`, `vuSource`,
 `vuPreRange`, `vuPreRecord`, `recEnsure`)).
 
-**The record's two writes.** What is written above into three render targets and copied is, on a
+**The record's three writes.** What is written above into three render targets and copied is, on a
 device with vertex stores (`RhiLimits.vertexStores`: Vulkan's `vertexPipelineStoresAndAtomics`,
 enabled where offered), stored by the pre-pass's vertex shaders themselves into the frame slot's
 record buffer (`port/render/rd_vu_record.c`, `rd_vu_record.h`; issue 179: on a Mali-G52 the
@@ -920,20 +988,51 @@ is why a release run has none (the per-replay line's `passes` and `barriers` cou
 semantic is unchanged, the loss bisect's window leaves the draws out and the self-test's STALE
 sabotage stores replays 2 to 4 into a sink buffer of the record's size, `recStoreBuffer`). The
 records are the same bits either way, so every picture is the same (the A/B tests `rd_vurecord_ab`,
-`rd_pixel_stores` / `rd_pixel_targets`). `[dev] vu_record` (`ICO_RD_VU_RECORD`, [CONFIG.md](CONFIG.md#ico-pcini))
-= `auto` (the default: the stores wherever the device has them and the backend the bracket, on
-every device: Vulkan in this release, so the desktop and lavapipe runs take the path the phones
-take), `targets` or `stores`; D3D12 and OpenGL report no vertex stores yet and Direct3D 11 never
-(feature level 11_0 has no vertex shader UAVs), so they keep the targets. The start line names the
-write (`...; the record stored by the vertex shaders into the frame slot's record buffer: no render
-targets, no copies (...)`, or `the record drawn into 3 RGBA32_UINT render targets and copied into
-the frame slot's record buffer (no vertex stores: <why>)`), as do the self-test's verdict (`...
-ms, record stores`), the summary (`VU pre-pass on (self-test: ok; record stores)`), the display
-change's derived line (`VU pre-pass on (record stores)`), the window's 10 s VU line (`; record
-stores`), `rd_replay_tool --stats` (`stats: VU record stores: ...`) and the pass ring (`... into the
-record (1024xR) (stores)`). Without a device's colour-target bound to meet, the stores also take
-the pre-pass to an Apple A9 or A10 GPU under MoltenVK where the targets' 48 bytes a pixel did not
-fit (below).
+`rd_pixel_stores` / `rd_pixel_targets`).
+
+The third write is for a device whose vertex shaders cannot store: the same fourteen entries and
+batch builds as **compute dispatches** (`vu_X_compute_pre_cs`, `vu_X_batch_compute_pre_cs`;
+`ICO_VU_REC_COMPUTE`, which implies `ICO_VU_REC_STORES`, `vu_common.hlsli` `VU_PRE_CS`; issue 179:
+the Mali-G52 MC2 under driver r32p1 offers no `vertexPipelineStoresAndAtomics`, so the stores
+never engaged there and the targets stayed, 14.6 of its 64 ms GPU a picture). Invocation `t.x` of a dispatch of 64-wide
+groups is the point `SV_VertexID` `t.x` of the store build's draw, its count `aux0.z` of the
+dispatch's DrawCB (`vuStageDraw` writes a DrawCB of its own, `preBatchDraw` sets it beside the
+batch table), and the spare invocations of the last group return before the entry's own search
+(a batch build clamps a point past its table to the last entry, whose slots a spare invocation
+would otherwise store again); the stores are the store builds' (`vu_rec_store`,
+`vu_rec_lane_store`), the same words at the same places, so every reader is unchanged. The record's
+passes are the compute bracket (`rhi_cmd_buffer_compute_begin` / `_end`, [RHI.md](RHI.md#compute-dispatch-the-vu-record))
+and no render pass: a replay has two render passes fewer than under the stores and the same
+barriers (the bracket's halves where the store bracket's were); under the validation layer each
+dispatch after a pass's first gets the bracket's end and begin before it (`recDrawGap`), as the
+stores' draws get a pass of their own. The pipelines are compute pipelines
+(`RhiPipelineDesc.compute`) of group 0 (FrameCB) and `g_rdRec.layoutVuPre` (every slot visible to
+the vertex and compute stages, so one layout serves both kinds); a compute key is the stores' key
+with `fs` `RD_FS_VU_PRE_CS` (no module: the key's mark, so the stores' and the compute's
+pipelines are different cache entries across a fallback). `rd__vu_prepass`'s `draws` count the
+dispatches (`vuPreDraws`); `RhiStats.dispatches` counts them for the backend (`rd_replay_tool
+--stats`: `..., N copies, N dispatches; ...`).
+
+`[dev] vu_record` (`ICO_RD_VU_RECORD`, [CONFIG.md](CONFIG.md#ico-pcini)) = `auto` (the default:
+the stores wherever the device has vertex stores, else the compute dispatches wherever it has
+compute stores (`RhiLimits.computeStores`: Vulkan where the graphics queue takes compute work),
+else the targets, on every device: Vulkan in this release, so the desktop and lavapipe runs take
+the paths the phones take), `targets`, `stores` (where the vertex shaders cannot store: auto's next
+rung, with `[dev] vu_record = stores not taken` in the words) or `compute` (where the device has
+no compute stores: the targets, `[dev] vu_record = compute not taken`); D3D12 and OpenGL report
+neither yet and Direct3D 11 never stores from its vertex shaders, so they keep the targets. The
+start line names the write (`...; the record stored by the vertex shaders into the frame slot's
+record buffer: no render targets, no copies (...)`; `the record stored by compute dispatches into
+the frame slot's record buffer: no render targets, no copies (no vertex stores: <why>; [dev]
+vu_record = targets keeps the render targets)`; or `the record drawn into 3 RGBA32_UINT render
+targets and copied into the frame slot's record buffer (no vertex stores: <why>; no compute stores:
+<why>)`), as do the Vulkan device line (`compute record stores: offered (queue compute yes, vertex
+stores no)`), the self-test's verdict (`... ms, record compute`), the summary (`VU pre-pass on
+(self-test: ok; record compute)`), the display change's derived line (`VU pre-pass on (record
+compute)`), the window's 10 s VU line (`; record compute`), `rd_replay_tool --stats` (`stats: VU
+record compute: ...`) and the pass ring (`... into the record (1024xR) (compute)`). Without a
+device's colour-target bound to meet, the stores and the compute dispatches also take the pre-pass
+to an Apple A9 or A10 GPU under MoltenVK where the targets' 48 bytes a pixel did not fit (below).
 
 `[dev] vu_prepass_min = N` (`ICO_RD_VU_PREPASS_MIN`, default 0: never) skips the pre-pass for a
 frame whose record would hold fewer than N vertex and triangle slots: every VU command of it draws
@@ -1014,11 +1113,12 @@ VU command the old way, for an A/B on a device.
 point lists, a colour write mask of one channel, vertex and pixel shaders reading a read-only
 storage buffer (as the stream already is), and buffer copies (a texture into a buffer: on
 Direct3D 11, which has no such copy, the backend's own compute shader, [RHI.md](RHI.md#direct3d-11)).
-No compute in the renderer (the RHI has none), storage writes from a vertex shader only where the
+One compute use in the renderer (the record's dispatches, above, where the vertex shaders cannot
+store), storage writes from a vertex shader only where the
 device offers them (`vertexPipelineStoresAndAtomics`, enabled where offered and used for the
-record's stores, above; phones' drivers do not all offer it, and a device without it keeps the
-targets and copies, logged on the Vulkan backend's start as `no vertexPipelineStoresAndAtomics:
-the VU record is drawn into render targets and copied`), no vertex texture fetch (`tools/check_spirv.py`'s
+record's stores, above; phones' drivers do not all offer it, and a device without it takes the
+compute dispatches, logged on the Vulkan backend's start as `no vertexPipelineStoresAndAtomics:
+...` and `compute record stores: offered (...)`), no vertex texture fetch (`tools/check_spirv.py`'s
 vertex-shader opcode set holds no image instruction). `RGBA32_UINT` is a colour attachment and a
 sampled format on every Vulkan device (the specification's required format support) and a render
 target on Direct3D 12 and Direct3D 11 at feature level 11_0; three targets are inside every device's colour
@@ -1105,14 +1205,18 @@ rd: VU pre-pass: off (self-test: a pipeline could not be made (replay <k> of 4: 
 rd: VU pre-pass: off (self-test: the device failed in the replays with the pre-pass) on SCENE ...
 ```
 
-The test judges the record's write the run starts with (above). Under the stores a failure is
-logged with its own reason and first differing texel and the test runs again with the targets and
-copies, whose verdict then decides; the verdict line ends with the write it judged:
+The test judges the record's write the run starts with (above) and falls back one rung at a time
+(`rd__vu_record_fall_back`: the stores, the compute dispatches where offered, the targets, then
+the pre-pass off): a failure of the stores or the compute dispatches is logged with its own reason
+and first differing texel and the test runs again one rung down, whose verdict then decides; the
+verdict line ends with the write it judged and the rungs that failed:
 
 ```
-rd: VU pre-pass: the record stored by the vertex shaders failed the self-test (the pictures differ: in replay <k> of 4 ...) in <t> ms: the self-test again with the render targets and copies
-rd: VU record: drawn into 3 RGBA32_UINT render targets and copied into the frame slot's record buffer (the stores off: they failed the start-up self-test)
-rd: VU pre-pass: on (self-test: ...) on SCENE <w>x<h> at <tw>x<th> texels in <t> ms, record targets, the stores failed the self-test
+rd: VU pre-pass: the record stored by the vertex shaders failed the self-test (the pictures differ: in replay <k> of 4 ...) in <t> ms: the self-test again one rung down
+rd: VU record: stored by compute dispatches into the frame slot's record buffer: no render targets, no copies (the stores off: they failed the start-up self-test)
+rd: VU pre-pass: the record stored by compute dispatches failed the self-test (...) in <t> ms: the self-test again one rung down
+rd: VU record: drawn into 3 RGBA32_UINT render targets and copied into the frame slot's record buffer (the compute off: they failed the start-up self-test)
+rd: VU pre-pass: on (self-test: ...) on SCENE <w>x<h> at <tw>x<th> texels in <t> ms, record targets, the stores and compute failed the self-test
 ```
 
 A start whose pre-pass is already off (the settings, the device, the host's
@@ -1137,7 +1241,12 @@ passes it); [TESTING.md](TESTING.md#environment-switches)).
 
 The record stored by the vertex shaders is new on every Vulkan device that offers
 `vertexPipelineStoresAndAtomics`: 28 store builds (`vu_X_store_pre_vs`, `vu_X_batch_store_pre_vs`)
-and a pipeline shape of its own (no rasterization, an attachment-less pass). The self-test turns a
+and a pipeline shape of its own (no rasterization, an attachment-less pass); the record by compute
+dispatches likewise on every other Vulkan device (28 compute builds, `vu_X_compute_pre_cs`,
+`vu_X_batch_compute_pre_cs`, and compute pipelines). The rung below covers both: a compute build
+counts as a store build (`startup_retry_note_has_vu_store` also matches `_compute_pre_cs`;
+`keyVsName` names the compute build a key with `fs` `RD_FS_VU_PRE_CS` dispatches through), and
+`storesWereOn` is the stores or the compute dispatches (`rd.h` `rd_vu_record_buffered`). The self-test turns a
 wrong picture to the render targets, but a driver crash, an end without a word or a device loss
 inside those pipelines would otherwise take the pre-pass's own steps and leave the device drawing
 without the pre-pass, possibly for good. So each of the three ladders tries the render targets'

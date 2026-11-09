@@ -167,6 +167,12 @@ void window_scene_vu_fit_add(SceneVuFit *f, uint64_t invocations, double workMs)
     const double x = (double)invocations / 1000.0;
     const double list0Ms = workMs;
 
+    if (f->n == 0 || x < f->xMin) {
+        f->xMin = x;
+    }
+    if (f->n == 0 || x > f->xMax) {
+        f->xMax = x;
+    }
     f->n++;
     f->sx += x;
     f->sy += list0Ms;
@@ -191,6 +197,9 @@ bool window_scene_vu_fit(const SceneVuFit *f, double *a, double *b, double *r2)
     if (!(vx > 1e-9 * (f->sxx > 1.0 ? f->sxx : 1.0))) {
         return false;
     }
+    if (!(f->xMax >= 2.0 * f->xMin)) {
+        return false;
+    }
     *b = cxy / vx;
     *a = (f->sy - *b * f->sx) / n;
     *r2 = vy > 1e-12 ? cxy * cxy / (vx * vy) : -1.0;
@@ -213,7 +222,12 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f)
         return 0;
     }
     if (!window_scene_vu_fit(f, &a, &b, &r2)) {
-        w = snprintf(out, cap, "; GPU work %.1f ms a replay (%u replays)", f->sy / f->n, f->n);
+        w = f->n < 3
+                ? snprintf(out, cap, "; GPU work %.1f ms a replay (%u replays)", f->sy / f->n, f->n)
+                : snprintf(out, cap,
+                           "; GPU work %.1f ms a replay (%u replays); fit: not enough spread "
+                           "(x %.1f..%.1f thousand vertex invocations)",
+                           f->sy / f->n, f->n, f->xMin, f->xMax);
     } else if (r2 < 0.0) {
         w = snprintf(
             out, cap,
@@ -226,6 +240,86 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f)
             "; GPU work %.1f ms a replay, %.1f ms %s %.2f ms a thousand vertex invocations "
             "(R^2 %.2f, %u replays)",
             f->sy / f->n, a, b < 0.0 ? "-" : "+", b < 0.0 ? -b : b, r2, f->n);
+    }
+    if (w < 0) {
+        out[0] = '\0';
+        return 0;
+    }
+    return (size_t)w < cap ? (size_t)w : cap - 1;
+}
+
+/* the Resolution row's whole scales (port/ui/settings.c kResScales) */
+static const int kHintScales[] = {1, 2, 3, 4, 6, 8, 12, 16};
+
+size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, double gameFps,
+                                  unsigned skippedLate, double gpuMs, double scale,
+                                  const SceneVuFit *fit)
+{
+    double a, b, r2, v = 0.0, p, period, budget;
+    int k = 0, w;
+
+    if (cap == 0) {
+        return 0;
+    }
+    out[0] = '\0';
+    if (!(gameFps > 0.0) || !(presentedFps < gameFps) || skippedLate == 0 || !(scale > 0.0)) {
+        return 0;
+    }
+    period = 1000.0 / gameFps;
+    if (!(gpuMs > period)) {
+        return 0;
+    }
+    budget = 0.9 * period;
+    if (fit == NULL || fit->n < 3 || !window_scene_vu_fit(fit, &a, &b, &r2)) {
+        /* no line to split the time by (fewer than 3 timed replays, or
+           the invocations not spread enough: window_scene_vu_fit): a
+           vertex-bound block would be read as pixels and a lower step
+           named that does not help, so no step is named */
+        w = snprintf(out, cap,
+                     "; GPU-bound at %.4gx (the GPU takes %.1f ms a picture, the step %.1f ms at "
+                     "%.1f game fps): no resolution hint (fit: %s)",
+                     scale, gpuMs, period, gameFps,
+                     fit == NULL || fit->n < 3 ? "under 3 timed replays" : "not enough spread");
+        if (w < 0) {
+            out[0] = '\0';
+            return 0;
+        }
+        return (size_t)w < cap ? (size_t)w : cap - 1;
+    }
+    if (b > 0.0) {
+        v = b * (fit->sx / fit->n);
+        v = v < gpuMs ? v : gpuMs;
+    }
+    p = gpuMs - v;
+    for (size_t i = 0; i < sizeof kHintScales / sizeof kHintScales[0]; i++) {
+        const double kk = (double)kHintScales[i];
+        if (kk < scale - 1e-6 && v + p * (kk / scale) * (kk / scale) <= budget) {
+            k = kHintScales[i];
+        }
+    }
+    if (scale <= 1.0 + 1e-6) {
+        w = snprintf(out, cap,
+                     "; the GPU takes %.1f ms a picture at this resolution (%.4gx): at 1x "
+                     "already, no lower resolution step is offered (%.1f ms of vertex work by the "
+                     "fit + %.1f ms that scales with the pixels, against %.1f ms, 0.9 of the %.1f "
+                     "ms step at %.1f game fps)",
+                     gpuMs, scale, v, p, budget, period, gameFps);
+    } else if (k == 0) {
+        w = snprintf(out, cap,
+                     "; the GPU takes %.1f ms a picture at this resolution (%.4gx): no lower "
+                     "resolution step would fit the game's rate (%.1f ms of vertex work by the fit "
+                     "+ %.1f ms that scales with the pixels: %.1f + %.1f x (1/%.4g)^2 = %.1f ms at "
+                     "1x against %.1f ms, 0.9 of the %.1f ms step at %.1f game fps)",
+                     gpuMs, scale, v, p, v, p, scale, v + p / (scale * scale), budget, period,
+                     gameFps);
+    } else {
+        w = snprintf(out, cap,
+                     "; the GPU takes %.1f ms a picture at this resolution (%.4gx): %dx would fit "
+                     "the game's rate (%.1f ms = %.1f ms of vertex work by the fit + %.1f ms that "
+                     "scales with the pixels: %.1f + %.1f x (%d/%.4g)^2 = %.1f ms, under %.1f ms, "
+                     "0.9 of the %.1f ms step at %.1f game fps; a hint: nothing changes by itself)",
+                     gpuMs, scale, k, gpuMs, v, p, v, p, k, scale,
+                     v + p * ((double)k / scale) * ((double)k / scale), budget, period, gameFps);
     }
     if (w < 0) {
         out[0] = '\0';

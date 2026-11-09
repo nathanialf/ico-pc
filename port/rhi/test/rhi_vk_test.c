@@ -1237,13 +1237,24 @@ int main(int argc, char **argv)
            reports none and the bracket refuses */
         return rhi_test_vertex_stores(&cfg) == 77 ? 0 : 1;
     }
+    if (argc > 1 && strcmp(argv[1], "compute") == 0) {
+        /* rhi_vk_compute*: the compute shaders' stores alone
+           (rhi_test_compute.c), 77 without them */
+        return rhi_test_compute_stores(&cfg);
+    }
+    if (argc > 1 && strcmp(argv[1], "nocompute") == 0) {
+        /* rhi_vk_nocompute (ICO_VK_FAKE_NO_COMPUTE_STORES=1): the device
+           reports none, the bracket refuses, a dispatch records nothing */
+        return rhi_test_compute_stores(&cfg) == 77 ? 0 : 1;
+    }
     int rc = rhi_test_run_cells(&cfg);
     if (rc != 0) {
         return rc;
     }
     return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell() ||
             poolCell() || renderAreaCell() || occlusionCell() || syncCell() || d32fCell() ||
-            adapterCell() || rhi_test_vertex_stores(&cfg) == 1)
+            adapterCell() || rhi_test_vertex_stores(&cfg) == 1 ||
+            rhi_test_compute_stores(&cfg) == 1)
                ? 1
                : 0;
 }

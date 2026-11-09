@@ -28,6 +28,7 @@
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_perf_gap.h"
+#include "rd_vis.h"
 
 RdPerfRecord g_rdPerf;
 
@@ -440,9 +441,10 @@ void rd_perf_cull_text(char *buf, size_t size, const RdPerfCullSum *s, double re
     const double n = replays;
     int k = snprintf(buf, size,
                      "; cull: %.0f of %.0f scene draws skipped a replay (%.0f frustum, "
-                     "%.0f occluded), %.2f ms (occlusion %.2f) ([dev] cull)",
+                     "%.0f occluded), %.2f ms (occlusion %.2f) (%s)",
                      (double)s->skipped / n, (double)s->draws / n, (double)s->frustum / n,
-                     (double)s->occluded / n, s->ms / n, s->hizMs / n);
+                     (double)s->occluded / n, s->ms / n, s->hizMs / n,
+                     rd__vis_profile_default() ? "profile default" : "[dev] cull");
     size_t at = k > 0 && (size_t)k < size ? (size_t)k : size - 1;
     uint64_t cands = 0;
     for (int j = 0; j < RD_PERF_HIZ_OCC; j++) {
@@ -1335,6 +1337,7 @@ void rd__perf_end(void)
         r->renderPasses = D(renderPasses);
         r->barriers = D(barriers);
         r->copies = D(copies);
+        r->dispatches = D(dispatches);
         r->fenceWaits = D(fenceWaits);
         r->waitIdles = D(waitIdles);
         r->readbacks = D(readbacks);

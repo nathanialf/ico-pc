@@ -1294,7 +1294,7 @@ typedef struct RdProfile {
     bool localProbe;
     uint16_t probeOff;
     char localWords[96];
-    char text[640]; /* the summary's words, as in force */
+    char text[768]; /* the summary's words, as in force */
 } RdProfile;
 
 /* RdProfile's flags, for its marks (devSet, selfTestOff) */
@@ -1575,6 +1575,7 @@ typedef enum RdFsId {
     /* FSR 1.0's EASU and RCAS behind blit_vs (rd_fsr1.c, fsr1.hlsl) */
     RD_FS_FSR1_EASU,
     RD_FS_FSR1_RCAS,
+    RD_FS_VU_PRE_CS, /* the VU record's compute keys, no module (rd_vu_record.h) */
     RD_FS_COUNT
 } RdFsId;
 

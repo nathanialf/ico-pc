@@ -205,6 +205,7 @@ typedef struct RdUpscaleStats {
     uint32_t keepNoSprite;  /* keep frames held with no keep sprite in the layer */
     uint32_t layerLate;     /* layers begun after a scene-class command of lists 11-12 */
     uint32_t preReductions; /* the reduction replayed into PRE_DISPLAY (the motion blur's read) */
+    uint32_t preLent;       /* replays whose lists 0-10 read PRE_DISPLAY as DISPLAY */
     uint32_t layerRefused;  /* layers planned and not begun (logged: the first 8, every 100th) */
 } RdUpscaleStats;
 
@@ -212,10 +213,13 @@ typedef struct RdUpscaleStats {
 enum {
     RD_UPSCALE_RESET_FIRST = 0, /* the first dispatch */
     RD_UPSCALE_RESET_SIZE,      /* a new size */
-    RD_UPSCALE_RESET_CUT,       /* the frame's camera cut */
+    RD_UPSCALE_RESET_CUT,       /* a camera cut: the frame's, or one carried by its marker (a cut
+                                   on a keep frame) */
     RD_UPSCALE_RESET_KEEP,      /* the first picture after a run of keep frames */
-    RD_UPSCALE_RESET_CAMERA,    /* the interpolator's camera snap */
-    RD_UPSCALE_RESET_FORGOTTEN  /* the attach's mark (RD_UPSCALE_NO_HISTORY) */
+    RD_UPSCALE_RESET_CAMERA,    /* the camera jumped: the wall's cut, the interpolator's snap
+                                   (rd_interp.c, a tick's first present) */
+    RD_UPSCALE_RESET_FORGOTTEN  /* the attach's mark otherwise (rd__velocity_forget, a dump's
+                                   mark made before the reasons) */
 };
 
 const RdUpscaleStats *rd__upscale_stats(void);

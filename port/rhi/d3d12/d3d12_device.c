@@ -788,8 +788,11 @@ static void dx_fill_limits(void)
     /* the destination read: ROVs (no interlock or attachment read here) */
     o->rov = dx_rov_supported();
     o->fragmentInterlock = false;
-    /* no vertex stores this release (rhi.h RhiLimits.vertexStores) */
+    /* no vertex stores this release (rhi.h RhiLimits.vertexStores), no
+     * compute dispatches (RhiLimits.computeStores) */
     o->vertexStores = false;
+    o->computeStores = false;
+    o->computeStoresOff = "Direct3D 12: not in this release";
     o->rasterOrderAttachment = false;
     o->rasterOrderOff = NULL;
     o->moltenvk = false;

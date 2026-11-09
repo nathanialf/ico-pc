@@ -201,10 +201,11 @@ How the picture is drawn and finished: smoothing, the picture's size and sharpne
   file. FSR 3.1 is off with the CRT filter and while **Downsampling** is
   on (one or the other), and at the Original Preset (1x) only Native AA
   applies. While it runs, Anti-aliasing is off, and says
-  **(off: FSR 3.1)** after the name. Because it builds each picture from
-  the ones before, things the game draws flat on the screen without
-  depth, such as the fades, the film grain, sparks, smoke and the menus,
-  can leave a faint trail while they move. If the log says "the vertex
+  **(off: FSR 3.1)** after the name. The game's own text, save tiles,
+  subtitles, fades, film grain and cinematic bars are drawn over the
+  finished picture at your screen's size, not through the upscaler, so
+  they stay sharp, and an area change fades to black cleanly. Because it builds each picture from the ones before, sparks
+  and smoke can leave a faint trail while they move. If the log says "the vertex
   pre-pass is off", every moving thing trails, not only those (a
   developer setting or a graphics card problem turned that pass off). It
   uses some of the graphics card's memory (tens of megabytes, more at
@@ -641,8 +642,10 @@ Shadows page. The last two change Ico's weapons and start at **Original**.
   itself is the weapon's own, so a Shadow beside him can still be caught by
   it. Achievements stay on.
 - **Shadows wait while Ico is down:** in the game the Shadows hold back while
-  Ico is knocked down and getting up. Off: they do not hold back, so they
-  can attack him again before he is on his feet. Achievements stay on.
+  Ico is knocked down and getting up, and while he lies there the game also
+  makes him untouchable, so a swing that reaches him passes through. Off: they
+  do not hold back, and their swings land while he is on the ground and
+  getting up. Achievements stay on.
 - **One hit per swing:** a swing of Ico's weapon can hurt a Shadow only once.
   Switches achievements off.
 - **Shadows never dodge:** Shadows never step aside from Ico's swings.

@@ -218,6 +218,25 @@ foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:sk
     ico_add_shader(vu_${_e}_batch_store_pre_vs vu_${_f}.hlsl vu_${_e}_pre_vs vertex
                    DEFINES ICO_VU_PRE_BATCH=1 ICO_VU_REC_STORES=1)
 endforeach()
+# The record's compute builds (vu_X_compute_pre_cs, vu_X_batch_compute_pre_cs)
+# the same fourteen entries and their batch builds as compute entries
+# (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS: one invocation a point, 64
+# to a group, the count in the DrawCB's aux0.z), storing the record words as
+# the store builds do, dispatched where the vertex shaders cannot store and
+# the device takes compute work (RhiLimits.computeStores; the Mali-G52 of
+# issue 179; port/render/rd_vu_record.c, [dev] vu_record = compute). No
+# GLSL (tools/spirv_to_glsl.py writes none for a compute module: OpenGL has
+# no compute dispatches in this release)
+foreach(_v prelit:prelit lit:lit lit_spec:lit reflect:lit skin:skin skin_spec:skin skin_debug:skin
+        grid:grid grid_lit:grid grid_spec:grid tri_rule:tri tri_tick:tri tri_planes:tri
+        particle:particle)
+    string(REGEX REPLACE ":.*" "" _e "${_v}")
+    string(REGEX REPLACE ".*:" "" _f "${_v}")
+    ico_add_shader(vu_${_e}_compute_pre_cs vu_${_f}.hlsl vu_${_e}_pre_cs compute
+                   DEFINES ICO_VU_REC_COMPUTE=1)
+    ico_add_shader(vu_${_e}_batch_compute_pre_cs vu_${_f}.hlsl vu_${_e}_pre_cs compute
+                   DEFINES ICO_VU_PRE_BATCH=1 ICO_VU_REC_COMPUTE=1)
+endforeach()
 # The draw merge's builds (vu_X_merge_vs, vu_X_merge_plain_vs, vu_merge_main_vs)
 # the mesh and grid programs' entries (both variants) and vu_main_vs read
 # every draw's VuCB and VuBoneCB from the upload ring at t5 through the run's

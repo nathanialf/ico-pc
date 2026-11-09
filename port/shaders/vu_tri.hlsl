@@ -121,6 +121,11 @@ VuPreOut vu_tri_rule_pre_vs(uint vid : SV_VertexID)
     return vu_rec_point_out(vu_tri.x + kick, r0, asuint(p.x1), asuint(p.y1));
 }
 
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_tri_rule_pre_cs, vu_tri_rule_pre_vs)
+#endif
+
 // slot C, the component vu_tri.w (the draw's colour mask writes it alone;
 // the store builds store that lane alone, vu_rec_lane_store):
 // whether tick vu_tri.w showed the triangle (vu_tick_shown), for a
@@ -157,6 +162,11 @@ VuPreOut vu_tri_tick_pre_vs(uint vid : SV_VertexID)
 #endif
 }
 
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_tri_tick_pre_cs, vu_tri_tick_pre_vs)
+#endif
+
 // slot B: the STQ planes' values at the anchor with the plane distance's,
 // the colour planes (vu_attr_planes, vu_plane_out)
 VuPreOut vu_tri_planes_pre_vs(uint vid : SV_VertexID)
@@ -173,6 +183,11 @@ VuPreOut vu_tri_planes_pre_vs(uint vid : SV_VertexID)
     }
     return vu_rec_point_out(vu_tri.y + kick, asuint(p.a1), asuint(p.x0), asuint(p.y0));
 }
+
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_tri_planes_pre_cs, vu_tri_planes_pre_vs)
+#endif
 
 // ------------------------------------------------------- the main shader
 

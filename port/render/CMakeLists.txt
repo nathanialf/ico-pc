@@ -240,7 +240,7 @@ add_library(ico_render STATIC
     rd_upload.c # the upload ring and the uploads before a replay's first pass
     rd_velocity.c # the scene's motion vectors: each VU draw's previous transform, VELOCITY
     rd_upscale.c # the upscale point: the render/display scale split, the marker's replay, UPSCALED
-    rd_upscale_capture.c # F12's upscaler pictures: SCENE, VELOCITY, the depth, COMPOSITE at a dispatch
+    rd_upscale_capture.c # F12's upscaler pictures
     rd_layer.c # the display layer: lists 11-12 into the display-scale composite after the upscale, keep frames held
     rd_upscale_hook.c # the temporal upscaler's dispatch: FSR 3.1, or the test's bilinear stand-in
     rd_fsr3.c # FSR 3.1 (the FidelityFX SDK, port/rhi/ffx): support, context, dispatch
@@ -604,6 +604,18 @@ add_executable(rd_display_change_test test/rd_display_change_test.c)
 target_compile_options(rd_display_change_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_include_directories(rd_display_change_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
 target_link_libraries(rd_display_change_test PRIVATE ico_render)
+
+# rd_set_resume_test: the start-up set resumed after a low-memory stop (issue
+# 123; rd_pipeline.c rd_set_pipeline_resume, rd_pipeline_set_stop): a set
+# stopped after its first batch, then resumed there in half the batch with
+# the keys before it made after the rest (the progress the whole set), in a
+# batch of 8 with them left to the cache (the progress the rest), from past
+# the set's end (from its first), a batch under 4 made 4, and the whole set
+# with no stop.  77 without a device.
+add_executable(rd_set_resume_test test/rd_set_resume_test.c)
+target_compile_options(rd_set_resume_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_set_resume_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi")
+target_link_libraries(rd_set_resume_test PRIVATE ico_render)
 
 # rd_perf_test: a synthetic game-shaped frame replayed 200
 # times and recorded 200 times: no resource is created or destroyed and no
@@ -1055,7 +1067,7 @@ ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_to
                   rd_raw_test rd_debug_test
                   rd_present_test rd_filter_test rd_icon_pass_test rd_icon_hold_test rd_interp_test rd_still_test rd_mirror_test rd_msaa_test rd_mip_test
                   rd_jitter_test rd_upscale_test
-                  rd_perf_test rd_display_change_test rd_boot_present_test rd_crt_test
+                  rd_perf_test rd_display_change_test rd_set_resume_test rd_boot_present_test rd_crt_test
                   texpack_load_test rd_png_mem_test gsb_cull_test
                   rd_native_test rd_passring_test rd_stream_audit_test rd_alpha_plan_test
                   rd_fx_frame_test rd_vu_frac_test rd_crack_test rd_local_probe_test rd_vis_test
@@ -1185,11 +1197,8 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_replay_tool_fsr3 PROPERTIES
                          PASS_REGULAR_EXPRESSION "upscale: fsr3 ran [1-9][0-9]* presents \\(context render [0-9]+x[0-9]+ -> display [0-9]+x[0-9]+, [^)]*, refused 0, failed 0, [^)]*\\), validation errors 0"
                          SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
-    # FSR 3.1's half-precision path opted into (issue 203: the port's default
-    # is full precision, tools/ffx/patches/0004-vk-fp32-default.patch):
-    # ICO_RD_FSR3_FP16=on ([dev] fsr3_fp16 = on) on rd_replay_tool_fsr3's
-    # run: the dispatch runs and its line says "fp16 on (dev)" (lavapipe
-    # offers fp16); the default is checked by rd_replay_tool_fsr3_dump
+    # rd_replay_tool_fsr3's run with [dev] fsr3_fp16 = on (issue 203; full
+    # precision is the default): it dispatches and says "fp16 on (dev)"
     add_test(NAME rd_replay_tool_fsr3_fp16
              COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
                      "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_fsr3_fp16.png" --enhanced
@@ -1198,11 +1207,7 @@ if(ICO_RUN_TESTS)
                          ENVIRONMENT "ICO_RD_FSR3_FP16=on"
                          PASS_REGULAR_EXPRESSION "by FSR 3.1 at frame [0-9]+;[^\n]*fp16 on \\(dev\\)"
                          SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
-    # --fsr3-dump (issue 203; rd_upscale_capture.h;
-    # test/rd_replay_tool_fsr3_dump.cmake): the four pictures F12 saves under
-    # an upscaler, at FSR's render and display sizes, the present unchanged
-    # by the capture; refused without an upscaler.  SKIP where FSR 3.1
-    # cannot run
+    # --fsr3-dump (issue 203; test/rd_replay_tool_fsr3_dump.cmake)
     add_test(NAME rd_replay_tool_fsr3_dump
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
@@ -1233,6 +1238,29 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_replay_tool_upscale_test PROPERTIES
                          PASS_REGULAR_EXPRESSION "upscale point: SCENE 1024x1024 -> UPSCALED 1536x1536 \\(render scale 2x2, display scale 3x3\\), markers [1-9][0-9]*, dispatched [1-9][0-9]*, refused 0, reductions remapped [1-9]"
                          SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    # the keep loop of a stage switch's fade under a temporal upscaler (the
+    # display layer, rd_layer.h; test/rd_replay_tool_keep.cmake): rd_pixel's
+    # keep frame replayed 20 times (--repeat 20) after rd_pixel's frame
+    # (--prev), at Enhanced in the 1280x960 box: one dispatch (the picture
+    # before), 20 keep frames held as 1:1 copies of the composite, none
+    # refused; under FSR 3.1 Quality (77 where FSR 3.1 cannot run, as
+    # rd_replay_tool_fsr3) and under the test's upscaler at 1.5 (every
+    # backend)
+    foreach(_keep fsr3 upscale)
+        set(_mode test)
+        if(_keep STREQUAL "fsr3")
+            set(_mode fsr3)
+        endif()
+        add_test(NAME rd_replay_tool_${_keep}_keep
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                         "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_keep.rddump"
+                         "-DPREV=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_${_keep}_keep.png"
+                         "-DMODE=${_mode}"
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_keep.cmake")
+        set_tests_properties(rd_replay_tool_${_keep}_keep PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                             FIXTURES_REQUIRED rd_dump TIMEOUT 600)
+    endforeach()
     # the same dump listed without a device (--list --no-device)
     add_test(NAME rd_replay_tool_list
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
@@ -1393,6 +1421,8 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_perf PROPERTIES SKIP_RETURN_CODE 77)
     add_test(NAME rd_display_change COMMAND rd_display_change_test)
     set_tests_properties(rd_display_change PROPERTIES SKIP_RETURN_CODE 77)
+    add_test(NAME rd_set_resume COMMAND rd_set_resume_test)
+    set_tests_properties(rd_set_resume PROPERTIES SKIP_RETURN_CODE 77)
     foreach(_t rd_alpha_plan rd_fx_frame rd_vu_frac rd_fades_fold rd_vis rd_vis_hiz)
         add_test(NAME ${_t} COMMAND ${_t}_test)
         set_tests_properties(${_t} PROPERTIES SKIP_RETURN_CODE 77)
@@ -1418,7 +1448,7 @@ if(ICO_RUN_TESTS)
     if(_env)
         set_tests_properties(rd_water PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_pixel rd_replay_tool rd_layout rd_tex rd_tex_pool rd_gsbase ${rd_mesh_SHARDS} modelpack
-                             rd_shadow rd_shadow_edges rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_display_change rd_native rd_icon_hold PROPERTIES ENVIRONMENT
+                             rd_shadow rd_shadow_edges rd_fog rd_raw rd_debug rd_present rd_crt rd_interp rd_mirror rd_msaa rd_perf rd_display_change rd_set_resume rd_native rd_icon_hold PROPERTIES ENVIRONMENT
                                                                            "${_env}")
         set_tests_properties(${rd_blur_SHARDS} PROPERTIES ENVIRONMENT "${_env}")
         set_tests_properties(rd_velocity PROPERTIES ENVIRONMENT "${_env}")
@@ -1431,6 +1461,11 @@ if(ICO_RUN_TESTS)
             # FSR 3.1's dispatch under the layer (rd_replay_tool's --stats
             # counts its errors)
             set_tests_properties(rd_replay_tool_fsr3 PROPERTIES ENVIRONMENT "${_env}")
+        endif()
+        if(TEST rd_replay_tool_fsr3_keep)
+            # and the keep loop's (the composite held, one dispatch)
+            set_tests_properties(rd_replay_tool_fsr3_keep rd_replay_tool_upscale_keep
+                                 PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
     # rd_blur's glow fold case (k) alone on the tile class's fake
@@ -2062,17 +2097,18 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vuprepass_selftest_unmerged
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}" -P "${_vst}")
-    # the record's two writes (rd_vu_record.h; issue 179): lavapipe has
+    # the record's writes (rd_vu_record.h; issue 179): lavapipe has
     # vertexPipelineStoresAndAtomics, so the runs above take the stores (the
     # shipped path, [dev] vu_record = auto).  _stores and _stores_plain ask
     # for them by name and must say so on the verdict line; _targets keeps
     # the render targets and copies; _stores_sabotage_straddle: a stale
     # record under the stores (replays 2 on store into the sink buffer) fails
     # the stores' run from replay 2 on, which is logged with its first
-    # texel, and the targets' run after it fails the same way (the final
-    # verdict); _nostores_fallback: a device made without the feature
-    # (ICO_VK_FAKE_NO_VERTEX_STORES=1) says so on the start line, keeps the
-    # targets and passes
+    # texel, then the compute dispatches' run, then the targets' (the final
+    # verdict names both failed rungs); _nostores_fallback: a device made
+    # without the feature (ICO_VK_FAKE_NO_VERTEX_STORES=1) says so on the
+    # start line, takes the compute dispatches and passes (the compute rows:
+    # test/rd_vu_compute_tests.cmake)
     set(_vst_stores_line "rd: VU pre-pass: on \\(self-test: [^\n]* ms, record stores")
     set(_vst_targets_line "rd: VU pre-pass: on \\(self-test: [^\n]* ms, record targets")
     add_test(NAME rd_vuprepass_selftest_stores
@@ -2087,12 +2123,12 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_vuprepass_selftest_stores_sabotage_straddle
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=off
                      "-DLINE=${_vst_stale}"
-                     "-DEXTRA=rd: VU pre-pass: the record stored by the vertex shaders failed the self-test \\(the pictures differ: in replay [2-4] of 4"
+                     "-DEXTRA=rd: VU pre-pass: the record stored by the vertex shaders failed the self-test \\(the pictures differ: in replay [2-4] of 4.*rd: VU pre-pass: the record stored by compute dispatches failed the self-test \\(the pictures differ: in replay [2-4] of 4.*, record targets, the stores and compute failed the self-test"
                      -P "${_vst}")
     add_test(NAME rd_vuprepass_selftest_nostores_fallback
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                      "-DLINE=${_vst_on}"
-                     "-DEXTRA=the record drawn into 3 RGBA32_UINT render targets and copied into the frame slot's record buffer \\(no vertex stores: the device has no vertexPipelineStoresAndAtomics"
+                     "-DEXTRA=the record stored by compute dispatches into the frame slot's record buffer: no render targets, no copies \\(no vertex stores: the device has no vertexPipelineStoresAndAtomics.*, record compute"
                      -P "${_vst}")
     set_tests_properties(rd_vuprepass_selftest_stores rd_vuprepass_selftest_stores_plain
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_RECORD=stores")
@@ -2592,6 +2628,9 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_vurecord_ab rd_vuprepass_min_ab
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600
                                     FIXTURES_REQUIRED rd_dump)
+    # the record by compute dispatches (issue 179): rd_pixel_compute, the
+    # self-test's compute rows, rd_vurecord_ab_compute
+    include("${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_compute_tests.cmake")
     if(_env)
         set_tests_properties(rd_vurecord_ab rd_vuprepass_min_ab PROPERTIES ENVIRONMENT "${_env}")
     endif()

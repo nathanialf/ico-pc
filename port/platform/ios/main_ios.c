@@ -39,7 +39,7 @@ int main(int argc, char **argv)
     }
 
     /* Keep UIKit and rendering on this thread, with a guarded 32 MB host stack. */
-    IcoFiber *host = ico_fiber_create(run_host, &args, 32 * 1024 * 1024);
+    IcoFiber *host = ico_fiber_create_host(run_host, &args);
     if (!host) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "ICO", "Cannot allocate the game stack.",
                                  NULL);

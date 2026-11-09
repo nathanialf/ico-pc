@@ -67,6 +67,11 @@ VuPreOut vu_prelit_pre_vs(uint vid : SV_VertexID)
     return vu_pre_out(id, vu_prelit_vertex(vu_rec.z + id, vu_draw.z & VU_CLIP_MASK));
 }
 
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_prelit_pre_cs, vu_prelit_pre_vs)
+#endif
+
 // VuPSIn: VuVSOut, or its first three locations alone under
 // ICO_VU_NO_PLANES (vu_common.hlsli)
 GS_PS_ATTR GS_PS_OUT vu_ps(VuPSIn i)

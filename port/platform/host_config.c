@@ -593,8 +593,9 @@ static const struct {
        batch (an A/B; port/render/rd_replay_vu.c preBatchInit) */
     {"dev.vu_prepass_batch", "vu_prepass_batch"},
     /* auto (the default: stored by the vertex shaders where the device
-       can), targets or stores: how the VU pre-pass writes its record (an
-       A/B; port/render/rd_vu_record.c) */
+       can, else by compute dispatches where it can), targets, stores or
+       compute: how the VU pre-pass writes its record (an A/B; issue 179;
+       port/render/rd_vu_record.c) */
     {"dev.vu_record", "vu_record"},
     /* N: a frame whose pre-pass would record fewer than N vertex and
        triangle slots draws every VU command the old way (0, the default:
@@ -808,7 +809,7 @@ static const struct {
     /* port/render/rd_replay_vu.c preBatchInit: 0 draws the pre-pass one
        draw an entry and stage */
     {"vu_prepass_batch", "ICO_RD_VU_PREPASS_BATCH"},
-    /* port/render/rd_vu_record.c rd__vu_record_init: auto, targets or stores */
+    /* port/render/rd_vu_record.c rd__vu_record_init: auto, targets, stores or compute */
     {"vu_record", "ICO_RD_VU_RECORD"},
     /* port/render/rd_vu_record.c rd__vu_record_init: a count of record slots */
     {"vu_prepass_min", "ICO_RD_VU_PREPASS_MIN"},
@@ -940,7 +941,7 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const pins[] = {"auto", "off", NULL};
     static const char *const readers[] = {"thread", "sync", NULL};
     static const char *const vuSets[] = {"auto", "plain", "extended", NULL};
-    static const char *const vuRecords[] = {"auto", "targets", "stores", NULL};
+    static const char *const vuRecords[] = {"auto", "targets", "stores", "compute", NULL};
     static const char *const auraKernels[] = {"box", "gs", NULL};
     static const char *const culls[] = {"off", "frustum", "full", NULL};
     static const char *const regionRules[] = {"camera", "ps2", NULL};
@@ -998,7 +999,7 @@ const char *ico_dev_env_value(const char *key, const char *value)
         return value_is(value, vuSets) ? value : NULL;
     }
     if (strcmp(key, "vu_record") == 0) {
-        /* auto, targets or stores as they are (no boolean form) */
+        /* auto, targets, stores or compute as they are (no boolean form) */
         return value_is(value, vuRecords) ? value : NULL;
     }
     if (strcmp(key, "vu_prepass_min") == 0) {

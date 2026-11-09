@@ -65,7 +65,8 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 
 `rhi.h` keeps the surface small: fourteen shader files, a reachable set of a few hundred to about
 1150 pipelines (held under `RD_PIPELINE_REACHABLE_MAX`, 2048, `port/render/rd_state.h`), about twenty render
-targets, ring buffers for per-frame data and no compute. Its rules for additions: nothing
+targets, ring buffers for per-frame data and one compute use, the VU record's dispatches
+([Compute dispatch (the VU record)](#compute-dispatch-the-vu-record)). Its rules for additions: nothing
 Vulkan-only (no input attachments, no framebuffer feedback loops, no push descriptors; anything
 added must be expressible in D3D12 and Metal); explicit state transitions (`rhi_cmd_barrier`: the
 caller knows the frame graph and records every texture transition; a backend adds none of its own
@@ -223,7 +224,62 @@ UNORDERED_ACCESS transitions and UAV barriers, OpenGL `glMemoryBarrier`) (`port/
 (`rhi_cmd_buffer_store_begin`); `port/rhi/vk/vk_cmd.c` (`rhi_cmd_buffer_store_begin`)).
 `RhiLimits.validationLayer` says the Khronos validation layer is loaded (Vulkan only), for the
 ordering only its synchronisation checks need (the record's draws each in a pass of their own,
-[PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)).
+its dispatches each in a bracket of their own,
+[PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). The same record written by
+compute dispatches where the vertex shaders cannot store has the compute twin of this bracket,
+below.
+
+### Compute dispatch (the VU record)
+
+The RHI's one compute use (issue 179: the Mali-G52 MC2 under driver r32p1 offers no
+`vertexPipelineStoresAndAtomics`, so the record stores above never engaged there and the record
+went on through three `RGBA32_UINT` targets and six copies, 14.6 of 64 ms GPU a picture). A
+compute shader's storage writes need no feature bit, and the pre-pass's entries have no vertex
+input, so the same entries run as compute entries and store the same words
+([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes), the record's three writes).
+
+- **The pipeline.** `RhiPipelineDesc.compute` (a shader made with `RHI_STAGE_COMPUTE`) makes a
+  compute pipeline from the same description, layouts alone (every fixed-function field left
+  zero): the same `RhiPipeline` handle, pool, cache file and debug name as a graphics one, so the
+  renderer's pipeline cache, `rhi_create_pipelines*` and the crash notes need nothing new. Vulkan:
+  `vkCreateComputePipelines` under the same compile lock, `VkrPipeline.bindPoint` COMPUTE;
+  `vkr_pipeline_fits` counts the compute stage's descriptors for it and refuses one without
+  `computeStores` (`computeStores` in the log's limit name).
+- **Bind slots.** `RhiBindSlot.stages` may name `1 << RHI_STAGE_COMPUTE`; Vulkan maps it to
+  `VK_SHADER_STAGE_COMPUTE_BIT`; Direct3D 12 (`dx_visibility` masks the vertex and fragment bits),
+  Direct3D 11 (`d11_bind_entry` binds by those bits) and OpenGL (no stages) ignore it. The
+  renderer's group 0 and the pre-pass's group 1 name it beside the vertex stage, so one layout
+  serves both kinds.
+- **The bind point.** Vulkan binds pipelines and descriptor sets per bind point, and the list's
+  bind cache is one per list: `rhi_cmd_set_pipeline` marks every group dirty when the bind point
+  changes (else the first graphics draw after the record would find the graphics bind point's sets
+  as they were before it), descriptor binds and `rhi_cmd_external_end`'s rebind use the pipeline's
+  bind point, and a draw with a compute pipeline bound is skipped. `rhi_test_compute.c` checks it
+  (a store draw after a dispatch must store into its own group's buffer).
+- **The dispatch.** `rhi_cmd_dispatch(cl, gx, gy, gz)` outside render passes, the list's deferred
+  barriers and dirty groups flushed first; refused (logged, the first 8) inside a pass or without
+  a compute pipeline; counted in `RhiStats.dispatches` (not in `draws`).
+- **The bracket.** `rhi_cmd_buffer_compute_begin` / `_end` are the store bracket with the compute
+  shader as the writing stage, held back the same way (the first dispatch or `set_pipeline` flushes
+  the begin; V's end and T's begin go out as one call). Wherever the compute stores are offered the
+  buffer read stages of every copy's barriers and of both brackets include the compute shader
+  (`vk_cmd.c` `vkr_buf_read_stages`): the compute builds read the arena's stream (t0) and the
+  ring (t5), which copies rewrite, and their stores are read by the next vertex shaders; without the
+  stage those reads would be unordered, which only the validation layer under the compute tests
+  would show.
+- **The offer.** `RhiLimits.computeStores` (with `computeStoresOff`, why not): Vulkan where the
+  graphics queue's family takes compute work, never gated on the external compute's
+  `RhiComputeCaps.ok` (subgroups and storage image formats are not needed here);
+  `ICO_VK_FAKE_NO_COMPUTE_STORES=1` reports it absent; the device table's `noComputeRecord` column
+  (`vk_device.c` `kVuPlainOnly`) is the hook for a driver whose compute builds misbehave (no row).
+  The device line: `compute record stores: offered (queue compute yes, vertex stores no)` or `not
+  offered: <why> (...)`. Direct3D 12, Direct3D 11 and OpenGL report false in this release (their
+  bracket refuses, a dispatch is a no-op logged once: D3D12 compute pipelines and UAV barriers,
+  Direct3D 11 CS 5.0 and OpenGL 4.3 compute are later work; the renderer never asks there).
+
+(`port/rhi/rhi.h` (`RhiPipelineDesc.compute`, `RhiLimits.computeStores`, `rhi_cmd_dispatch`);
+`port/rhi/vk/vk_pipeline.c` (`vkr_pipe_prepare`), `vk_cmd.c` (`rhi_cmd_set_pipeline`,
+`rhi_cmd_dispatch`, `rhi_cmd_buffer_compute_begin`), `vk_device.c` (`vkr_compute_stores`).)
 
 **Bind groups.** One fixed slot model for every program: group 0 the per-frame uniforms (b0), group
 1 the per-draw uniforms (b1; the VU programs' b2, b3), the VU vertex stream (t0) and the vertex
@@ -707,9 +763,8 @@ fog's depth and DATE's alpha this way ([RENDER.md](RENDER.md#the-replay)).
 
 ## Native handles for external compute
 
-The RHI has no compute stage and gets none (the VU record, the one GPU-written buffer of the
-renderer's own, is written by vertex shaders under `RhiLimits.vertexStores`, above, not by a compute
-pass). Code that brings its own compute pipelines (AMD
+The RHI's own compute is the one use above (the VU record's dispatches, where the vertex shaders
+cannot store); everything else that brings compute pipelines (AMD
 FidelityFX through its Vulkan and Direct3D 12 backends) works from the RHI's native objects instead,
 recorded into the RHI's own command list. `port/rhi/rhi_native.h` is additive: a caller that never
 asks sees every texture, barrier and pipeline exactly as before.
@@ -993,6 +1048,8 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_FAKE_LIMITS=moltenvk` | no limit clamped: the device is reported as MoltenVK (`RhiLimits.moltenvk`) without the attachment read (`rd_blend_selftest_moltenvk_storage`) |
 | `ICO_VK_FAKE_D24S8` | 1 takes D24S8 where the device has it |
 | `ICO_VK_FAKE_NO_DUAL` | 1 leaves dual-source blending off |
+| `ICO_VK_FAKE_NO_VERTEX_STORES` | 1 leaves `vertexPipelineStoresAndAtomics` off (`RhiLimits.vertexStores` false: the VU record by compute dispatches or render targets) |
+| `ICO_VK_FAKE_NO_COMPUTE_STORES` | 1 reports no compute stores (`RhiLimits.computeStores` false, `computeStoresOff` names it; the line `compute record stores: not offered: ICO_VK_FAKE_NO_COMPUTE_STORES (...)`): the compute bracket refuses, a dispatch records nothing ([Compute dispatch (the VU record)](#compute-dispatch-the-vu-record); `rhi_vk_nocompute`, `rd_vuprepass_selftest_nocompute_fallback`) |
 | `ICO_VK_FAKE_NO_D32F_ATTACHMENT` | 1 hides the D32F depth-attachment bit: the device is still picked, `RhiLimits.depth32Attachment` is false (`rhi_vk_vk10_nod32f`) |
 | `ICO_VK_FAKE_NO_DYNAMIC` | 1 leaves the dynamic depth and blend state off, `blend` the blend alone ([Dynamic state](#dynamic-state)) |
 | `ICO_VK_FAKE_NO_MSAA` | 1 reports single sampling only |
@@ -1064,8 +1121,14 @@ line each: `pipeline cache: dropped <name> (made for other shaders, or named aft
 (`port/rhi/vk/vk_pipeline.c` (`vkr_cache_drop_others`); not done for a path whose file name does
 not start `pipelines` and end `.vkcache`). It then loads the file when the file is 32 bytes to 64 MB and its
 header (`VkPipelineCacheHeaderVersionOne`: header size, version one, vendor id, device id,
-`pipelineCacheUUID`) names this device; anything else logs "is for another device or driver" and
-starts empty, as does data the driver refuses. Every pipeline is created through it, and
+`pipelineCacheUUID`) names this device; anything else starts empty with the part that differs
+(issue 123): "is not a
+cache this driver reads (header N bytes, version V)", "is for another device (vendor 0x.. device
+0x..; this one 0x.. 0x..)", or, the same GPU with another cache id, "is from another driver for
+this GPU (the driver's cache id differs: a driver update, or another driver picked; the shader set
+is the same)"; data the driver refuses starts empty too. When no file of this shader set is there
+and the drop removed an older set's, `pipeline cache: the shader set changed with this version (N
+older files dropped): the cache starts empty once` follows the `starting empty` line. Every pipeline is created through it, and
 `rhi_shutdown` writes it back to `<path>.tmp` and renames it over the file, not synced to the disk
 (`pipeline cache: N bytes written to <path> at exit in T ms`), and not at all when its data's size
 is the one this run loaded or last wrote (`pipeline cache unchanged, not written (N bytes in

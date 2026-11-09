@@ -58,6 +58,12 @@ extern "C" {
  * frame's dispatch (rd_upscale.c rd__upscale_point, which also takes the
  * frame's own cut). */
 #define RD_UPSCALE_NO_HISTORY 1u
+/* and above it, why (RD_UPSCALE_RESET_*, rd_upscale.h): the cut (CUT), the
+ * wall's cut or the interpolator's camera snap (CAMERA), a keep run before
+ * it (KEEP), the first frame (FIRST), rd__velocity_forget (FORGOTTEN).  A
+ * dump made before the reason was set carries 0 there (FIRST). */
+#define RD_UPSCALE_WHY_SHIFT 1u
+#define RD_UPSCALE_WHY(u2) ((int)(((u2) >> RD_UPSCALE_WHY_SHIFT) & 7u))
 
 /* The bytes of a VU payload's fixed part that VuPrevCB copies: the header,
  * the VU block, the bones and the stream (not the materials and cards). */
@@ -94,8 +100,19 @@ float rd__velocity_sign(void);
  * off. */
 void rd__velocity_attach(RdFrame *f, int keep);
 
-/* Drops the picture before (the next frame is a new history). */
+/* Drops the picture before (the next frame is a new history), the reason
+ * FORGOTTEN; rd__velocity_forget_as with another reason (RD_UPSCALE_RESET_*:
+ * rd_interp.c's camera snap gives CAMERA). */
 void rd__velocity_forget(void);
+void rd__velocity_forget_as(int why);
+/* A keep frame f presented (rd__velocity_attach's keep, rd_interp.c's keep
+ * present): the picture before dropped, the reason f's cut (CUT, or CAMERA
+ * for the wall's) or KEEP, so the first picture after the run begins a new
+ * history for that reason. */
+void rd__velocity_keep(const RdFrame *f);
+/* The cut of f as a reason: the plain one (rd_camera_cut, RdCamera.cut 1)
+ * CUT, the wall's (the eye went through the stage) CAMERA, none -1 */
+int rd__velocity_cut_why(const RdFrame *f);
 
 /* The counters of the last rd__velocity_attach and of the replays since the
  * last 10 s line ("velocity: ...", written by rd__velocity_attach while the

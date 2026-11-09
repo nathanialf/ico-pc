@@ -113,7 +113,7 @@ question it decides:
   the second number of ms of GPU work, and the first number is the rest (pixels, passes). A high
   R^2 (0.7 and over) with a large slope says the vertex work sets the GPU's time; the same line
   with the pre-pass on (the invocation count then smaller) says what the pre-pass bought. The fit
-  needs 3 timed replays with different counts; with fewer the mean alone (`(2 replays)`).
+  needs 3 timed replays whose largest count is at least twice the smallest; with fewer replays the mean alone (`(2 replays)`), and with a narrower spread (a cutscene: issue 179's `-64.0 ms + 2.42 ms (R^2 0.07)` was noise read as a cost) the mean and `; fit: not enough spread (x N..M thousand vertex invocations)`.
 - **Before list 0** (the replays line's GPU part and the top passes on a tile-based GPU: `before
   list 0 2.1` where other devices print `uploads 2.1`; the passes CSV's `kind` stays `uploads`).
   The stretch up to the first scene list's stamp: the uploads and the GPU's work still in flight.
@@ -168,6 +168,31 @@ question it decides:
   pre-pass skipped N frames under M slots` says how many frames drew the old way for being small.
   Decides whether the stores are the faster write on the phone, and whether a floor for small
   frames is worth setting.
+- **The record by compute dispatches** ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes),
+  the record's three writes; [RHI.md](RHI.md#compute-dispatch-the-vu-record)). Issue 179's log
+  of 2026-11-09 (stage 3 cutscene) showed the Mali-G52 MC2 (r32p1) without vertex stores (`no vertex
+  stores: the device has no vertexPipelineStoresAndAtomics` on the start line): the record stayed
+  in the targets, `VU pre-pass record 1024x103 ... 7.14 ms` in the top passes, 14.6 ms of 64 ms GPU
+  a replay. There the record is now written by compute dispatches. The lines to read in the next
+  Mali log, in order: the Vulkan backend's `compute record stores: offered (queue compute yes,
+  vertex stores no)` (or `not offered: <why>`: the targets stay); the start line's end `...; the
+  record stored by compute dispatches into the frame slot's record buffer: no render targets, no
+  copies (no vertex stores: ...)`; `rd: VU pre-pass: the record holds N slots (... stored by
+  compute dispatches)` as the record grows; the self-test's verdict ending `, record compute` (or
+  `rd: VU pre-pass: the record stored by compute dispatches failed the self-test (<reason, first
+  texel>) ...` and `, record targets, the compute failed the self-test`: the driver's compute builds
+  store wrong, the targets were judged instead; a compute pipeline that could not be made is a
+  `pipeline rd vu pre-pass (compute): ...` line from the backend with the driver's error); the
+  summary's `VU pre-pass on (self-test: ok; record compute)`; the display line's `VU pre-pass on
+  (record compute)`. In play: the per-replay counts' `copies` 6 fewer and `passes` 2 fewer a replay
+  than with the targets, `dispatches` the pre-pass's draws (`rd_replay_tool --stats`: `..., N
+  copies, D dispatches; ...`); the GPU top passes' two `VU pre-pass record 1024xN ... ms` entries
+  (the two dispatch runs: their sum against the 14.6 ms of that log is what the compute write
+  bought); the 10 s `window: VU: ...` line ending `; record compute`. A start that ends in the
+  driver's compile of a compute build, or a crash or device loss in one, takes the restart's
+  targets rung first ([PIPELINES.md](PIPELINES.md#the-record-stores-restart-rung)): `[dev]
+  vu_record = "targets"` in `config.toml` after two such ends. Decides whether the compute
+  write runs on the phone, draws right, and how much of the 64 ms it saves.
 - **Images in use** (the 10 s first line's `present mailbox (images: 10, in use 1)`;
   `RhiStats.swapAcquired`, Vulkan only). The swapchain's images and those the game holds
   (acquired, not yet presented) as the block ends; while the render thread is busy, the count at
@@ -228,6 +253,7 @@ question it decides:
   against the block's mean says how heavy the picked replay was. When three files exist, the
   last is the heaviest block of the run (each needed 1.5 times the one before). Decides what the
   cage's list 3 draws are, and what the boat scene's 109 to 144 ms are.
+- **The cull on a phone** (a tile-based profile defaults to `frustum`: the start line says `rd: cull: frustum (...; the profile's default: ...)`, the profile line ends `cull frustum (the profile: ...)`, and the 10 s cull line ends `(profile default)` instead of `([dev] cull)` with no `; occlusion:` part; `[dev] cull = full` turns the test on). **gpu_robust in the log:** `ico_pc: [dev] keys kept from an earlier start: gpu_robust = true` followed (after the config line) by `ico_pc: [dev] gpu_robust = true in <config.toml> has no gpu_robust_by mark: set by hand ...` says the key is the player's or was left without the mark and costs bounds checks on every 3D load; with the mark (`gpu_robust_by = "losses; <version>; <clean starts>; <run or ->"`) the game's own lines `robust access on (set by the game ...): N clean starts of 3` and `robust access turned off ...` say where it is.
 - **The occlusion test's cost** (the 10 s line's cull part, `; cull: N of M scene draws skipped a
   replay (F frustum, O occluded), T ms (occlusion H) ([dev] cull)`, now followed by `; occlusion:
   collect C ms (settle S, alpha A, vertices V ms for Nv vertices, Nt triangles kept of Na; cache Hc
@@ -356,6 +382,58 @@ every device; `[dev] fsr3_fp16 = on` in the config's `[dev]` table opts into its
 speed path (the display line then says `fp16 on (dev)`). The 10 s line `upscale point: 10 s: the N pictures dispatched
 held: ...` names the effects the upscaled frames held ([DISPLAY.md](DISPLAY.md#fsr-31-upscaling),
 "The upscaler's pictures").
+
+## Issue 123's freezes: the start-up set and the GPU's time
+
+The issue's log of 2026-11-09 (Adreno 740 on Qualcomm's driver 512.676.1, Custom 3x, 3048x2032 at
+120 Hz) had two
+causes in it, each on its own lines. The lines to read, in the log's order:
+
+- `ico_pc: the previous start stopped preparing the graphics when the system ran low on memory
+  (...); this start resumes them where it stopped`, then `window: start-up set: resumed at pipeline
+  N of M after the low-memory stop of <date> (batches of B, stop K in a row; ...; the pipeline cache
+  file <n> bytes, loaded by the renderer: yes|no)` and `rd: pipelines: the start-up set resumes at
+  pipeline N of M ...`: the set is made before play again after an earlier start stopped it
+  ([PIPELINES.md](PIPELINES.md#stop-and-resume)). The reporter's log read "this start prepares
+  them as the game needs them" there, then `rd: pipelines: no start-up set (the previous start's
+  set stopped when the system ran low on memory)`: every pipeline was compiled in play.
+- `window: pipelines: the start-up set stopped for memory at pipeline N of M (batches of B, stop K
+  in a row): memory <process> MB (most <peak> MB); device <avail> MB available of <total> MB;
+  (memory budget: ...); ... the next start resumes at pipeline N in batches of B/2`: a start that
+  still cannot finish the set, with the process's and the device's memory and the place; `stop K`
+  counts the starts in a row (each halves the batch, never under 4).
+- `rhi_vk: pipeline cache <path> is from another driver for this GPU (the driver's cache id
+  differs: ...)`, `... is for another device (vendor ... device ...)`, `... is not a cache this
+  driver reads`, or `rhi_vk: pipeline cache: the shader set changed with this version (N older
+  files dropped): the cache starts empty once`: why the cache started empty (the reporter's log
+  read "for another device or driver", one line for the first two). The reporter's previous run
+  named no compiler in its batches (`compiler unnamed by the driver`) and built the VU pre-pass's
+  record modules, which this start's driver does not (the device table turns the pre-pass off on
+  Qualcomm's driver 512.676.1): that run was under another driver (one picked in the app's driver
+  list: which one the log does not say), so its cache file was refused.
+- `rd: pipelines: compiled lazy batch B, pipelines ...; slowest ...; by family vu 17, program 12;
+  27 of them in the start-up set`: in a run without the set, the families compiled in play and how
+  many of them a set made before play would have made.
+- `rd: slow walk T ms (replay R, frame F): pipelines made P ms (N), ...` and `window: slow replay
+  ... walk W, ... N pipelines created`: a picture that compiled pipelines in its walk (the
+  reporter's freeze: 29 pipelines, 1311.9 of 1359.6 ms).
+- The 10 s presents line's end: `; the GPU takes 37.7 ms a picture at this resolution (3x): 2x
+  would fit the game's rate (37.7 ms = 3.8 ms of vertex work by the fit + 33.9 ms that scales with
+  the pixels: 3.8 + 33.9 x (2/3)^2 = 18.8 ms, under 30.0 ms, 0.9 of the 33.3 ms step at 30.0 game
+  fps; a hint: nothing changes by itself)`, written only when the block presented fewer pictures
+  than the game made, skipped presents for lateness and the GPU span is over the step
+  (`port/platform/window_scene.c` `window_scene_gpu_hint_text`): the vertex part is the block's VU
+  fit's slope times its mean invocations (the `window: VU: ...` line's fit), the rest is taken to
+  scale with the pixels, and the step is the largest offered Resolution step whose estimate is at
+  most 0.9 of the step. Without a fit line (under 3 timed replays, or the block's invocations not
+  spread by a factor of 2, which the fit needs) no step is named, since a vertex-bound block would
+  read as pixels: `; GPU-bound at 3x (the GPU takes 37.7 ms a picture, the step 33.3 ms at 30.0 game
+  fps): no resolution hint (fit: not enough spread)`; the reporter's heavy blocks (370k-382k
+  invocations) read that way. A hint only: the resolution never changes by itself (the owner's rule).
+  The reporter's blocks at 3x: 25.6-25.8 presented fps against 30.0 game fps, 210-218 late skips,
+  GPU span 35.5-38.0 ms; the fit `34.4 ms + 0.01 ms a thousand vertex invocations` over 376k
+  (R^2 0.05: the invocations hardly varied in that scene, so the slope is small and uncertain; a
+  block of play read `3.5 ms + 0.10 ms`, R^2 0.94, over 159k).
 
 ## The thermal state and screen recording
 

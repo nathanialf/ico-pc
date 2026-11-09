@@ -851,7 +851,7 @@ const char *const ui_strings_it[UI_STR_COUNT] =
             "No: Ico colpisce dritto senza girarsi verso l’ombra più vicina; la portata resta. Gli obiettivi restano attivi.",
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Le ombre aspettano che Ico si rialzi",
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
-            "No: le ombre non si trattengono più mentre Ico è a terra e possono colpirlo prima che si rialzi. Gli obiettivi restano attivi.",
+            "No: le ombre non si trattengono più mentre Ico è a terra, e i loro colpi lo raggiungono mentre è a terra e mentre si rialza. Gli obiettivi restano attivi.",
         [UI_STR_OPT_VAR_SWORD_COLOUR] = "Colore della spada di luce",
         [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
             "Rosso: la spada di luce lascia una scia rossa come la gemella inutilizzata; nient’altro cambia. Dalla stanza seguente.",

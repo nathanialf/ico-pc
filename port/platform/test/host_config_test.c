@@ -713,6 +713,8 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("vu_record", "stores"), "stores") == 0);
     CHECK(strcmp(ico_dev_env_value("vu_record", "targets"), "targets") == 0);
     CHECK(strcmp(ico_dev_env_value("vu_record", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("vu_record", "compute"), "compute") == 0);
+    CHECK(ico_dev_env_value("vu_record", "computes") == NULL);
     CHECK(ico_dev_env_value("vu_record", "true") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.vu_record"), "vu_record") == 0);
     CHECK(strcmp(ico_dev_env_name("vu_prepass_min"), "ICO_RD_VU_PREPASS_MIN") == 0);

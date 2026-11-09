@@ -15,8 +15,9 @@
  *   cache       the crashing run had loaded the pipeline cache file: it is
  *               deleted and the same backend tries again;
  *   targets     the crash's activity note names a pipeline of the VU
- *               pre-pass's record stored by the vertex shaders (a
- *               vu_X_store_pre_vs or vu_X_batch_store_pre_vs module:
+ *               pre-pass's record stored by the vertex shaders or by
+ *               compute dispatches (a vu_X_store_pre_vs,
+ *               vu_X_batch_store_pre_vs or vu_X_(batch_)compute_pre_cs module:
  *               startup_retry_note_has_vu_store; port/render/rd_vu_record.h):
  *               the same backend with the record drawn into render targets
  *               (ICO_RD_VU_RECORD=targets, host_config.c ico_ini_export),
@@ -175,7 +176,8 @@ typedef struct {
                                 (startup_retry_note_has_vu_store): the targets step */
     bool prepassWasOn;       /* the run drew with the VU vertex pre-pass */
     bool storesWereOn;       /* ... with its record stored by the vertex shaders
-                                (rd.h rd_vu_record_mode "stores"): a loss takes
+                                or compute dispatches (rd.h
+                                rd_vu_record_buffered): a loss takes
                                 losstargets first */
     bool robustOffDefault;   /* a loss: the run drew with robust access off by the
                                 platform's default (not gpu_robust): the robust step */
@@ -306,11 +308,13 @@ bool startup_retry_note_has_dst(const char *note);
 bool startup_retry_note_has_vu_pre(const char *note);
 
 /* Whether an activity note names a pipeline of the pre-pass's record
- * stored by the vertex shaders (port/render/rd_vu_record.h): it starts
- * with "creating pipeline " or "creating pipelines " and names a store
- * build ("_store_pre_vs": vu_X_store_pre_vs, vu_X_batch_store_pre_vs;
- * port/render/rd_pipeline.c keyVsName names the build a store key draws
- * through).  Every such note is also startup_retry_note_has_vu_pre's; the
+ * stored by the vertex shaders or by compute dispatches
+ * (port/render/rd_vu_record.h): it starts with "creating pipeline " or
+ * "creating pipelines " and names a store build ("_store_pre_vs":
+ * vu_X_store_pre_vs, vu_X_batch_store_pre_vs) or a compute build
+ * ("_compute_pre_cs": vu_X_compute_pre_cs, vu_X_batch_compute_pre_cs;
+ * port/render/rd_pipeline.c keyVsName names the build a key draws or
+ * dispatches through).  Every such note is also startup_retry_note_has_vu_pre's; the
  * crash order's targets step and the ends' targets rung read this one
  * first.  Tolerant as startup_retry_note_has_dst. */
 bool startup_retry_note_has_vu_store(const char *note);

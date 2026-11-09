@@ -709,6 +709,21 @@ bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf)
     return be()->cmd_buffer_store_end(cl, buf);
 }
 
+bool rhi_cmd_buffer_compute_begin(RhiCommandList cl, RhiBuffer buf)
+{
+    return be()->cmd_buffer_compute_begin(cl, buf);
+}
+
+bool rhi_cmd_buffer_compute_end(RhiCommandList cl, RhiBuffer buf)
+{
+    return be()->cmd_buffer_compute_end(cl, buf);
+}
+
+void rhi_cmd_dispatch(RhiCommandList cl, uint32_t gx, uint32_t gy, uint32_t gz)
+{
+    be()->cmd_dispatch(cl, gx, gy, gz);
+}
+
 void rhi_cmd_resolve_color(RhiCommandList cl, RhiTexture src, RhiTexture dst)
 {
     be()->cmd_resolve_color(cl, src, dst);
