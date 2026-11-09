@@ -2550,14 +2550,14 @@ static int cov1At(int x, int y)
 /* the W x H pixels at (ax, ay) (grey from the RGB draw's row ay, alpha
    from the RGBA draw's row aa) over a grey, each pixel 4 x 4, at column ox
    of out (ow wide) */
-static void rimPngPut(const uint8_t *img, uint32_t w, int ax, int ay, int aa, int W, int H,
+static void rimPngPut(const uint8_t *img, uint32_t w, int ax, int ay, int aa, int W, int H, int mag,
                       uint8_t *out, int ow, int ox)
 {
     static const int bg[3] = {150, 140, 120};
-    for (int y = 0; y < H * 4; y++) {
-        for (int x = 0; x < W * 4; x++) {
-            const uint8_t *pc = &img[((size_t)(ay + y / 4) * w + (size_t)(ax + x / 4)) * 4];
-            const uint8_t *pa = &img[((size_t)(aa + y / 4) * w + (size_t)(ax + x / 4)) * 4];
+    for (int y = 0; y < H * mag; y++) {
+        for (int x = 0; x < W * mag; x++) {
+            const uint8_t *pc = &img[((size_t)(ay + y / mag) * w + (size_t)(ax + x / mag)) * 4];
+            const uint8_t *pa = &img[((size_t)(aa + y / mag) * w + (size_t)(ax + x / mag)) * 4];
             const int a = pa[3] > 128 ? 128 : pa[3];
             uint8_t *o = &out[((size_t)y * (size_t)ow + (size_t)(ox + x)) * 4];
             for (int c = 0; c < 3; c++) {
@@ -2662,12 +2662,14 @@ static void testSheetScaledOne(int S, const char *dir, int bake)
        sheet and reference side by side, RGB then RGBA */
     const int yA = 8 + H + 4, yM = yA + H + 8, mw = W * 3 / 2, mh = H * 3 / 2;
     const int yMA = yM + mh + 8;
-    /* right of the 1:1 strip the 1x strip magnified S times, RGB
-       then RGBA, nudged by half a pixel (8 / S sixteenths of a sheet
-       texel: a pixel samples at its corner) so pixel x samples sheet
-       texel position (x + 0.5) / S, where the scaled strip's texel x
-       reads its rim; and the plain strip 1:1 (RGBA) */
-    const int x1x = 8 + W + 8, xPl = x1x + W + 8, n1 = 8 / S;
+    /* right of the 1:1 strip the 1x strip of the sheet texels' mean
+       coverage, 1:1 (nudged to the texel centres like the scaled strip),
+       RGB then RGBA: the scaled strip's texel (x, y) reads sheet texel
+       (x / S, y / S)'s rim (font.hlsl sheet_scaled: blocks), so a pixel of
+       the scaled strip is compared with that texel of this strip, not
+       with a magnified draw of it (the GS sprite's bilinear filter would
+       blend neighbouring texels); and the plain strip 1:1 (RGBA) */
+    const int x1x = 8 + W + 8, xPl = x1x + W + 8;
     /* the frame twice: as drawn (a 2x sheet's texels baked on the CPU,
      * rd__sheet_baked, font_sheet_baked_ps; 4x through font_sheet_ps),
      * then every scale through font_sheet_ps (ICO_RD_SHEET_SHADER's switch,
@@ -2697,8 +2699,8 @@ static void testSheetScaledOne(int S, const char *dir, int bake)
         }
         for (int k = 0; k < 2; k++) {
             rd_texture(sheet1, RD_TEXFN_MODULATE, k ? RD_TCC_RGBA : RD_TCC_RGB);
-            sprite(512, 512, x1x * 16, (k ? yA : 8) * 16, (x1x + W) * 16, ((k ? yA : 8) + H) * 16,
-                   grey, n1, n1, SHEET_W * 16 + n1, SHEET_H * 16 + n1);
+            sprite(512, 512, x1x * 16, (k ? yA : 8) * 16, (x1x + SHEET_W) * 16,
+                   ((k ? yA : 8) + SHEET_H) * 16, grey, 8, 8, SHEET_W * 16 + 8, SHEET_H * 16 + 8);
         }
         rd_texture(sheetPlain, RD_TEXFN_MODULATE, RD_TCC_RGBA);
         sprite(512, 512, xPl * 16, yA * 16, (xPl + W) * 16, (yA + H) * 16, grey, 8, 8, W * 16 + 8,
@@ -2785,8 +2787,9 @@ static void testSheetScaledOne(int S, const char *dir, int bake)
         const int wA = sheetWorst(img, w, 1, 8, yMA, 8 + mw + 8, yMA, mw, mh, 3, 3);
         /* outside the letters (no coverage in the sheet texels round
            the pixel: there its fill is the strip's own, finer than the
-           1x strip's) the scaled strip is the 1x strip magnified, grey
-           and alpha */
+           1x strip's) the scaled strip is the 1x strip magnified as
+           blocks (pixel (x, y) = the 1x strip's texel (x / S, y / S)),
+           grey and alpha */
         int out1x = 0, rim1x = 0, worst1x = 0;
         for (int y = 0; y < H; y++) {
             const int qy = floorDivI(2 * y + 1 - S, 2 * S);
@@ -2798,8 +2801,8 @@ static void testSheetScaledOne(int S, const char *dir, int bake)
                 }
                 const uint8_t *sc = &img[((size_t)(8 + y) * w + (size_t)(8 + x)) * 4];
                 const uint8_t *sa = &img[((size_t)(yA + y) * w + (size_t)(8 + x)) * 4];
-                const uint8_t *oc = &img[((size_t)(8 + y) * w + (size_t)(x1x + x)) * 4];
-                const uint8_t *oa = &img[((size_t)(yA + y) * w + (size_t)(x1x + x)) * 4];
+                const uint8_t *oc = &img[((size_t)(8 + y / S) * w + (size_t)(x1x + x / S)) * 4];
+                const uint8_t *oa = &img[((size_t)(yA + y / S) * w + (size_t)(x1x + x / S)) * 4];
                 const int d[4] = {abs(sc[0] - oc[0]), abs(sc[1] - oc[1]), abs(sc[2] - oc[2]),
                                   abs(sa[3] - oa[3])};
                 for (int c = 0; c < 4; c++) {
@@ -2848,12 +2851,12 @@ static void testSheetScaledOne(int S, const char *dir, int bake)
     }
     if (img && dir) {
         char path[1024];
-        /* the scaled strip (left) and the 1x strip magnified */
+        /* the scaled strip (left) and the 1x strip magnified to its size */
         const int ow = W * 4 * 2 + 16, oh = H * 4;
         uint8_t *png = calloc((size_t)ow * (size_t)oh, 4);
         if (png) {
-            rimPngPut(img, w, 8, 8, yA, W, H, png, ow, 0);
-            rimPngPut(img, w, x1x, 8, yA, W, H, png, ow, W * 4 + 16);
+            rimPngPut(img, w, 8, 8, yA, W, H, 4, png, ow, 0);
+            rimPngPut(img, w, x1x, 8, yA, SHEET_W, SHEET_H, 4 * S, png, ow, W * 4 + 16);
             snprintf(path, sizeof(path), "%s/rd_pixel_rim_s%d.png", dir, S);
             CHECK(rd_write_png(path, png, (uint32_t)ow, (uint32_t)oh, (uint32_t)ow * 4, 0),
                   "scaled sheet %d: %s", S, path);
