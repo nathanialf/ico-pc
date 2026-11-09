@@ -2394,6 +2394,14 @@ if(ICO_RUN_TESTS)
     add_test(NAME rd_upscale_off_tiler COMMAND rd_upscale_test off)
     set_tests_properties(rd_upscale_off_tiler PROPERTIES SKIP_RETURN_CODE 77
                                               ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
+    # rd_upscale_layer_tiler: the whole of rd_upscale_test (the display
+    # layer's pixels and keep hold among it, rd_layer.c) on the same profile:
+    # its store plan, pass areas, pass cuts and folds plan SCENE's passes
+    # before the walk, and the layer lends SCENE's record to the
+    # display-scale composite mid-walk
+    add_test(NAME rd_upscale_layer_tiler COMMAND rd_upscale_test)
+    set_tests_properties(rd_upscale_layer_tiler PROPERTIES SKIP_RETURN_CODE 77
+                                                ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk")
     # issue 179: the VU vertex pre-pass under a phone's limits
     # (ICO_VK_FAKE_LIMITS=mali clamps the limits; RhiLimits.tiler stays the
     # device's, so these are the desktop runs under those limits: the
