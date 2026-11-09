@@ -24,6 +24,7 @@
 #include <string.h>
 #include "rd_camera_blend.h"
 #include "rd_thread.h"
+#include "rd_upscale.h"
 #include "rd_velocity.h"
 
 /* ------------------------------------------------------------ the switch */
@@ -277,13 +278,36 @@ typedef struct Snap {
 static Snap s_snap[2];
 static int s_read;  /* s_snap[s_read]: the picture before */
 static bool s_have; /* it holds one */
-static Snap s_cur;  /* this frame's draws (Ent.off its payload offsets) */
+/* why it holds none (RD_UPSCALE_RESET_*): the reason the next attach's
+ * marker carries (RD_UPSCALE_WHY) */
+static int s_why = RD_UPSCALE_RESET_FIRST;
+static Snap s_cur; /* this frame's draws (Ent.off its payload offsets) */
 static uint32_t *s_ord[2];
 static uint32_t s_ordCap[2];
 
-void rd__velocity_forget(void)
+void rd__velocity_forget_as(int why)
 {
     s_have = false;
+    s_why = why;
+}
+
+void rd__velocity_forget(void)
+{
+    rd__velocity_forget_as(RD_UPSCALE_RESET_FORGOTTEN);
+}
+
+int rd__velocity_cut_why(const RdFrame *f)
+{
+    if (f->cut == 1 || (f->hasCamera && f->camera.cut == 1)) {
+        return RD_UPSCALE_RESET_CUT;
+    }
+    return f->cut != 0 || (f->hasCamera && f->camera.cut != 0) ? RD_UPSCALE_RESET_CAMERA : -1;
+}
+
+void rd__velocity_keep(const RdFrame *f)
+{
+    const int cut = f ? rd__velocity_cut_why(f) : -1;
+    rd__velocity_forget_as(cut >= 0 ? cut : RD_UPSCALE_RESET_KEEP);
 }
 
 static bool grow(void **p, uint32_t *cap, uint32_t n, size_t size)
@@ -565,7 +589,7 @@ static bool keepFrame(const RdFrame *f)
  * history (u[2] RD_UPSCALE_NO_HISTORY): the replay of this frame reads it
  * there (rd_upscale.c rd__upscale_point), never a value a later frame's
  * attach on the game thread could have changed meanwhile. */
-static void clearFrame(RdFrame *f, bool reset)
+static void clearFrame(RdFrame *f, bool reset, int why)
 {
     for (int l = 0; l < RD_LIST_COUNT; l++) {
         for (uint32_t i = 0; i < f->lists[l].count; i++) {
@@ -573,7 +597,8 @@ static void clearFrame(RdFrame *f, bool reset)
             if (c->type == RDC_MESH || c->type == RDC_SKINNED || c->type == RDC_GRID) {
                 c->u[3] &= RD_VU_TICK_CAMERAS;
             } else if (c->type == RDC_UPSCALE_POINT) {
-                c->u[2] = reset ? RD_UPSCALE_NO_HISTORY : 0u;
+                c->u[2] =
+                    reset ? RD_UPSCALE_NO_HISTORY | (uint32_t)why << RD_UPSCALE_WHY_SHIFT : 0u;
             }
         }
     }
@@ -587,18 +612,22 @@ void rd__velocity_attach(RdFrame *f, int keep)
     }
     /* rd_camera_cut or the wall's (RdFrame.cut, RdCamera.cut once closed;
        FrameCB's eye w 1) */
-    const bool cut = f->cut != 0 || (f->hasCamera && f->camera.cut != 0);
+    const int cutAs = rd__velocity_cut_why(f);
+    const bool cut = cutAs >= 0;
     /* a keep frame (lists 11 and 12 over the kept picture: no scene,
-       nothing to pair, the picture before kept for the next scene) begins
-       no history */
+       nothing to pair) begins no history itself, and the picture after it
+       begins a new one (a keep run is a fade between two scenes; its own
+       cut, which the keep frame's replay never dispatches, is carried as
+       the reason) */
     const bool reset = !keep && (!s_have || cut);
-    clearFrame(f, reset);
+    clearFrame(f, reset, cut ? cutAs : s_why);
     if (keep) {
+        rd__velocity_keep(f);
         return;
     }
     s_st.reset = reset ? 1u : 0u;
     if (!collect(f, keep)) {
-        s_have = false;
+        rd__velocity_forget_as(RD_UPSCALE_RESET_FORGOTTEN);
         static uint32_t lines; /* the first 8 */
         if (lines++ < 8u) {
             rd__log("velocity: out of memory: no motion vectors this frame");
@@ -667,6 +696,7 @@ void rd__velocity_attach(RdFrame *f, int keep)
         s_st.paired++;
     }
     s_have = keepFrame(f);
+    s_why = s_have ? s_why : RD_UPSCALE_RESET_FORGOTTEN;
     s_blk.frames++;
     s_blk.draws += s_st.vuDraws;
     s_blk.paired += s_st.paired;
@@ -852,5 +882,5 @@ void rd__velocity_shutdown(void)
         rhi_destroy_shader(s_gpu.fs);
     }
     memset(&s_gpu, 0, sizeof(s_gpu));
-    s_have = false;
+    rd__velocity_forget_as(RD_UPSCALE_RESET_FIRST);
 }

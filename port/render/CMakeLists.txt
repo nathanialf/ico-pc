@@ -1207,6 +1207,29 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_replay_tool_upscale_test PROPERTIES
                          PASS_REGULAR_EXPRESSION "upscale point: SCENE 1024x1024 -> UPSCALED 1536x1536 \\(render scale 2x2, display scale 3x3\\), markers [1-9][0-9]*, dispatched [1-9][0-9]*, refused 0, reductions remapped [1-9]"
                          SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    # the keep loop of a stage switch's fade under a temporal upscaler (the
+    # display layer, rd_layer.h; test/rd_replay_tool_keep.cmake): rd_pixel's
+    # keep frame replayed 20 times (--repeat 20) after rd_pixel's frame
+    # (--prev), at Enhanced in the 1280x960 box: one dispatch (the picture
+    # before), 20 keep frames held as 1:1 copies of the composite, none
+    # refused; under FSR 3.1 Quality (77 where FSR 3.1 cannot run, as
+    # rd_replay_tool_fsr3) and under the test's upscaler at 1.5 (every
+    # backend)
+    foreach(_keep fsr3 upscale)
+        set(_mode test)
+        if(_keep STREQUAL "fsr3")
+            set(_mode fsr3)
+        endif()
+        add_test(NAME rd_replay_tool_${_keep}_keep
+                 COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                         "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_keep.rddump"
+                         "-DPREV=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                         "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_${_keep}_keep.png"
+                         "-DMODE=${_mode}"
+                         -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_replay_tool_keep.cmake")
+        set_tests_properties(rd_replay_tool_${_keep}_keep PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                             FIXTURES_REQUIRED rd_dump TIMEOUT 600)
+    endforeach()
     # the same dump listed without a device (--list --no-device)
     add_test(NAME rd_replay_tool_list
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
@@ -1405,6 +1428,11 @@ if(ICO_RUN_TESTS)
             # FSR 3.1's dispatch under the layer (rd_replay_tool's --stats
             # counts its errors)
             set_tests_properties(rd_replay_tool_fsr3 PROPERTIES ENVIRONMENT "${_env}")
+        endif()
+        if(TEST rd_replay_tool_fsr3_keep)
+            # and the keep loop's (the composite held, one dispatch)
+            set_tests_properties(rd_replay_tool_fsr3_keep rd_replay_tool_upscale_keep
+                                 PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
     # rd_blur's glow fold case (k) alone on the tile class's fake
