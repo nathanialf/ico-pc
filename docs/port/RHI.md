@@ -247,7 +247,7 @@ colour and depth formats, a sample count and `dstRead`: NONE, STORAGE (the targe
 rasterizer-ordered storage texture, no colour target) or ATTACHMENT (colour attachment 0 read as an
 input attachment in rasterization order, Vulkan only), and `noRaster`: no rasterization, no
 fragment shader and no colour target, the vertex shader's stores the pipeline's whole work (Vulkan
-`rasterizerDiscardEnable`, OpenGL `GL_RASTERIZER_DISCARD` while it is bound, ignored by D3D12 and
+`rasterizerDiscardEnable`, OpenGL `GL_RASTERIZER_DISCARD` while it is bound and off again at the pass's end, since it makes `glClear` a no-op, ignored by D3D12 and
 Direct3D 11, which never report vertex stores), drawn in a pass without attachments (a size and
 nothing else; the legacy path's subpass without attachments). Culling is always off: the GS has none. A
 render pass names its colour and depth attachments with load ops (LOAD, CLEAR, DONT_CARE) and store
