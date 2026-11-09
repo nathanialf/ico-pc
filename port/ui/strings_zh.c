@@ -818,7 +818,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "關閉：Ico 揮擊時不再轉向最近的影子，而是直直揮出；身旁的影子仍可能被打中。成就維持開啟。",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Ico 倒下時影子等待",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
-        "關閉：Ico 倒下時影子不再等待，可能在他站起來之前再次打中他。成就維持開啟。",
+        "關閉：Ico 倒下時影子不再等待，他躺在地上與起身時，影子的攻擊都會打中他。成就維持開啟。",
     [UI_STR_OPT_VAR_SWORD_COLOUR] = "光之劍顏色",
     [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
         "紅：光之劍的軌跡變成紅色，如同遊戲中未使用的另一把；只有顏色改變。從下一個房間起生效。",

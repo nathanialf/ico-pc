@@ -856,7 +856,7 @@ const char *const ui_strings_fr[UI_STR_COUNT] =
             "Désactivé : Ico frappe droit devant sans se tourner vers l’ombre la plus proche ; la portée reste. Les succès restent actifs.",
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Les ombres attendent qu’Ico se relève",
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
-            "Désactivé : les ombres ne se retiennent plus quand Ico est à terre et peuvent le frapper avant qu’il soit debout. Les succès restent actifs.",
+            "Désactivé : les ombres ne se retiennent plus quand Ico est à terre, et leurs coups l’atteignent quand il est au sol et quand il se relève. Les succès restent actifs.",
         [UI_STR_OPT_VAR_SWORD_COLOUR] = "Couleur de l’épée de lumière",
         [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
             "Rouge : l’épée de lumière laisse la traînée rouge de sa jumelle inutilisée ; seule la couleur change. Dès la salle suivante.",

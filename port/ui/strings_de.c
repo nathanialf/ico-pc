@@ -860,7 +860,7 @@ const char *const ui_strings_de[UI_STR_COUNT] = {
         "Aus: Ico schlägt geradeaus, statt sich zum nächsten Schatten zu drehen; die Reichweite bleibt. Die Erfolge bleiben aktiv.",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Schatten warten bei Icos Sturz",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
-        "Aus: Die Schatten halten sich nicht mehr zurück, solange Ico am Boden liegt, und können ihn treffen, bevor er wieder steht. Die Erfolge bleiben aktiv.",
+        "Aus: Die Schatten halten sich nicht mehr zurück, solange Ico am Boden liegt, und ihre Hiebe treffen ihn, während er am Boden liegt und aufsteht. Die Erfolge bleiben aktiv.",
     [UI_STR_OPT_VAR_SWORD_COLOUR] = "Farbe des Lichtschwerts",
     [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
         "Rot: Das Lichtschwert zieht eine rote Spur wie sein ungenutzter Zwilling; sonst ändert sich nichts. Ab dem nächsten Raum.",
