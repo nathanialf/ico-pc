@@ -63,6 +63,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_jitter.h"
+#include "rd_layer.h"
 #include "rd_passring.h"
 #include "rd_replay.h"
 #include "rd_submit.h"
@@ -904,6 +905,11 @@ static uint32_t vpExtent(uint32_t n)
 
 /* a replay pass's viewport for a target w x h texels: the exact one while
  * replayFrame records, else the target */
+void rd__replay_vp_exact(bool on)
+{
+    s_vpExact = on;
+}
+
 static void setViewport(uint32_t w, uint32_t h)
 {
     RhiViewport vp = {0.0f, 0.0f, (float)w, (float)h, 0.0f, 1.0f};
@@ -3513,6 +3519,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     const uint32_t n = c->u[1];
     const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
+    v = rd__layer_keep_verts(r, c, v); /* a keep frame's 1:1 hold (rd_layer.c) */
     v = extendFullFrame(r, rd__target_rec(r->st.color), v, n, c->b[0], c->b[1]);
     RhiRect dateArea;
     const RhiRect *dateAt = dateAreaFor(r, c, v, n, &dateArea) ? &dateArea : NULL;
@@ -5822,7 +5829,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
                 /* before the state takes the new target */
                 r.perfPost = r.perfTargetEffect = perfTargetPost(&r, c);
             }
-            if (c->type == RDC_UPSCALE_POINT && rd__upscale_point_on()) {
+            /* the marker, or the display layer's boundary (rd_layer.c) */
+            if (rd__layer_due(g_rdStoreOrd) ||
+                (c->type == RDC_UPSCALE_POINT && rd__upscale_point_on())) {
                 flushScreenRun(&r); /* SCENE's last draws before the upscaler reads it */
                 rd__replay_vu_flush(&r);
                 endPass(&r);
@@ -5929,6 +5938,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     msaaEnd(&r,
             RD_MSAA_CLOSE_END); /* an epoch still open: SCENE resolved before anything reads it */
     endPass(&r);
+    rd__layer_end(&r); /* SCENE's record its own again (rd_layer.c) */
     rd__store_plan_end();
     rd__vu_skin_end(); /* outside every pass */
     s_ms.r = NULL;

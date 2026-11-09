@@ -610,6 +610,11 @@ static const struct {
        scale and upscaled at the reduction by a plain bilinear pass (a
        developer switch; port/render/rd_upscale.c) */
     {"dev.upscale_test", "upscale_test"},
+    /* false: under a temporal upscaler the game's 2D (lists 11-12: the text,
+       the save tile, the fades) drawn into the scene and upscaled with it,
+       and keep frames upscaled again, as before the display layer (an A/B;
+       port/render/rd_layer.c) */
+    {"dev.display_layer", "display_layer"},
     /* true: FSR 3.1 draws its debug view in place of the picture, and
        checks its inputs with its messages in the log (Upscaling = FSR 3.1;
        port/render/rd_fsr3.c) */
@@ -809,6 +814,9 @@ static const struct {
     /* port/render/rd_upscale.c readSwitch: 1 draws the scene at the display
        scale over 1.5 and upscales it at the reduction */
     {"upscale_test", "ICO_RD_UPSCALE_TEST"},
+    /* port/render/rd_layer.c rd__layer_on: 0 draws lists 11-12 into SCENE
+       under a temporal upscaler (the path before the display layer) */
+    {"display_layer", "ICO_RD_DISPLAY_LAYER"},
     /* port/render/rd_fsr3.c readDebug: 1 sets FSR 3.1's
        FFX_UPSCALE_FLAG_DRAW_DEBUG_VIEW, and FFX_UPSCALE_ENABLE_DEBUG_CHECKING */
     {"upscale_debug_view", "ICO_RD_UPSCALE_DEBUG_VIEW"},

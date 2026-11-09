@@ -78,6 +78,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_layer.h"
 #include "rd_replay.h"
 #include "rd_upscale.h"
 
@@ -373,6 +374,7 @@ static void planLate(uint32_t ord, int l, uint32_t i)
 
 void rd__store_plan_scan(const RdFrame *f, int keep)
 {
+    rd__layer_scan(f, keep);       /* the display layer's plan (rd_layer.c; the upscaler only) */
     rd__fades_fold_scan(f, keep);  /* the sprites the reduction draws (rd_fades_fold.c) */
     rd__shadow_merge_scan_begin(); /* the resets the volumes' merge looks for */
     /* one walk of the lists for the passes' areas (after the fold, whose

@@ -168,7 +168,12 @@
  *                         list, index, type and key; for a draw its texture
  *                         (id and size), and for screen prims the prim,
  *                         space, vertex count, the bounding box in GS pixels
- *                         and the texel rectangle (UV, or STQ times the size)
+ *                         and the texel rectangle (UV, or STQ times the size);
+ *                         "[display layer begins]" before the command where
+ *                         a temporal upscaler's display layer would begin
+ *                         (rd_layer.h: after the last scene-class command
+ *                         of lists 11-12) and "[keep copy]" after a keep
+ *                         frame's keep sprite the layer holds 1:1
  *   --no-device           no device: the dump is loaded into a record-only
  *                         renderer (rd__init_record_only) for
  *                         --list, --mesh and --dump-textures and nothing is
@@ -503,6 +508,7 @@
 #include "vk/rhi_vk.h" /* the validation layer's count (--fsr3's stats) */
 #include "rd_internal.h"
 #include "rd_jitter.h"
+#include "rd_layer.h"
 #include "rd_upscale.h"
 #include "rd_velocity.h"
 #include "rd_mesh.h"
@@ -754,10 +760,15 @@ static void skinnedPlace(const RdFrame *f, const RdCmd *c, const RdStateBlock *s
 }
 
 static uint32_t s_listed;
+/* --list: the display layer's plan of the frame (rd_layer.h) */
+static RdLayerPlan s_layerPlan;
 
 static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *st)
 {
     const RdFrame *f = user;
+    if (s_listed == s_layerPlan.boundaryOrd) {
+        printf("   [display layer begins]\n");
+    }
     s_listed++;
     char nb[2][16];
     printf("%2d:%-5u %-14s key %08x%08x", list, index,
@@ -912,6 +923,9 @@ static void listCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
         }
     }
     printf("\n");
+    if (s_listed - 1u == s_layerPlan.keepOrd) {
+        printf("   [keep copy]\n");
+    }
 }
 
 /* --mesh NAME: every vertex of the VU meshes of that name, per batch: the
@@ -2672,6 +2686,8 @@ int main(int argc, char **argv)
     if (list) {
         RdStateBlock st = rf->startState;
         s_listed = 0;
+        bool carried = false;
+        rd__layer_plan(rf, (int)rf->keep, false, &carried, &s_layerPlan);
         rd__walk(rf, (int)rf->keep, &st, listCmd, (void *)rf);
         printf("dump: version %u, GS %ux%u, aspect %.4f (%s), visible width %g, cull width %u, "
                "region %s\n",
@@ -2936,10 +2952,20 @@ int main(int argc, char **argv)
             rd__display_scale(&dx, &dy);
             printf("%s: stats: upscale point: SCENE %ux%u -> UPSCALED %ux%u (render scale %gx%g, "
                    "display scale %gx%g), markers %u, dispatched %u, refused %u, reductions "
-                   "remapped %u, edge guard %u columns %u rows, jittered presents %u\n",
+                   "remapped %u, edge guard %u columns %u rows, jittered presents %u; resets %u "
+                   "(first %u, size %u, cut %u, keep run %u, camera %u, forgotten %u); display "
+                   "layer %s: frames %u (draws %u, textured %u), keep frames held %u (keep copies "
+                   "%u, no keep sprite %u), begun after a scene-class command %u, pre-upscale "
+                   "reductions %u, refused %u\n",
                    dump, us->colorW, us->colorH, us->outW, us->outH, (double)g_rd.sceneSx,
                    (double)g_rd.sceneSy, (double)dx, (double)dy, us->points, us->dispatched,
-                   us->refused, us->remapped, us->guardCols, us->guardRows, us->jittered);
+                   us->refused, us->remapped, us->guardCols, us->guardRows, us->jittered,
+                   us->resets, us->resetsBy[RD_UPSCALE_RESET_FIRST],
+                   us->resetsBy[RD_UPSCALE_RESET_SIZE], us->resetsBy[RD_UPSCALE_RESET_CUT],
+                   us->resetsBy[RD_UPSCALE_RESET_KEEP], us->resetsBy[RD_UPSCALE_RESET_CAMERA],
+                   us->resetsBy[RD_UPSCALE_RESET_FORGOTTEN], rd__layer_on() ? "on" : "off",
+                   us->layerFrames, us->layerDraws, us->layerTextured, us->keepHeld, us->keepCopies,
+                   us->keepNoSprite, us->layerLate, us->preReductions, us->layerRefused);
         } else {
             printf("%s: stats: upscale point off\n", dump);
         }
