@@ -1975,17 +1975,13 @@ before `rd_init` on Android only; desktops never get the signal), so the batch i
 (the careful policy's batches are 8 pipelines on one thread, so nothing cuts a batch short), the
 pipeline cache is written, and the rest of the set is made on first use
 ([RENDER.md](PIPELINES.md#the-start-up-set)). The window's `ico_diag_startup_activity_budget_stop` then
-logs `ico_pc: the start-up set stopped at the system's low-memory signal (running critical); the
-next start makes the pipelines as the game needs them, with no start-up set` and records the rest of
-the run as a lazy run that is not for this start only, with the line `set: stopped at the system's
-low-memory signal (running critical)` after the note (and after `set: careful`), the set's
-`compiled: ` and `system: ` lines kept. The next start of the same version that finds the line
-beside the lazy run's clean exit or its note between two creations logs `ico_pc: the previous start
-stopped preparing the graphics when the system ran low on memory (<note>); this start prepares them
-as the game needs them` and makes no set (`ICO_DIAG_PIPESET_LAZY_LOW_MEMORY`; the renderer's `rd:
-pipelines: no start-up set (the previous start's set stopped when the system ran low on memory)`),
-so the "Preparing graphics" screen does not come; that start's own file keeps the line, so the
-decision lasts until the version changes. A start whose file has the line and that ended inside a
+logs that it stopped (the next start resumes the set) and records the rest of the run as a lazy
+run not for this start only, with the line `set: stopped at the system's low-memory signal
+(running critical)` after the note (and after `set: careful`), the set's `compiled: ` and `system: `
+lines kept, and the window appends where it stopped (issue 123, `ico_diag_startup_set_resume_part`).
+The next start of the version that finds the line beside the lazy run's clean exit or its note
+between two creations is `ICO_DIAG_PIPESET_LAZY_LOW_MEMORY`, which the window turns into the set
+resumed at that place ([PIPELINES.md](PIPELINES.md#stop-and-resume)). A start whose file has the line and that ended inside a
 first-use pipeline logs `ico_pc: the previous start had stopped preparing the graphics when the
 system ran low on memory (<line>)` and counts as an end while preparing the graphics: the line
 counts as `set: careful` does, so the first end in a row makes the next start lazy for that start
