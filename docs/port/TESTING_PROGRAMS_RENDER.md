@@ -275,8 +275,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   255)` with the GS's arithmetic shift (`gs_blend_reg_ch`'s arithmetic, checked against the
   formula), COLCLAMP on, PABE off, the alpha As with FBA's MSB: through the colour read 0 pixels
   differ; on the blender (`rd_pixel`, `rd_pixel_attachment`, `rd_pixel_storage`, `rd_pixel_nodual`,
-  `rd_pixel_stores` and `rd_pixel_targets`, the last two with the VU record stored by the vertex
-  shaders and drawn into render targets, `ICO_RD_VU_RECORD`,
+  `rd_pixel_stores`, `rd_pixel_targets` and `rd_pixel_compute`, the last three with the VU record
+  stored by the vertex shaders, drawn into render targets and stored by compute dispatches,
+  `ICO_RD_VU_RECORD`,
   where the subtracts stay there) every pixel is `clamp(Cd - ((Cs F) >> 7), 0, 255)`, one level
   above the oracle exactly where `Cs F` is not a multiple of 128 and never below (the first
   differing pixel is printed with its cell, Cd, Cs and F), `testDateStencil` checking the
@@ -339,14 +340,30 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `rd_vuprepass_selftest_targets` (`=targets`) must end `, record targets`;
   `rd_vuprepass_selftest_stores_sabotage_straddle` (the stores with `=stale`: replays 2 to 4 store
   into a sink buffer) must log the stores' failure from replay 2 on (`the record stored by the
-  vertex shaders failed the self-test (the pictures differ: in replay 2..4 ...`) and fail again with
-  the targets in replay 2, 3 or 4; `rd_vuprepass_selftest_nostores_fallback`
-  (`ICO_VK_FAKE_NO_VERTEX_STORES=1`) must name the missing feature on the start line, keep the
-  targets and pass; `rd_vuprepass_selftest_stores_mali` and `_stores_vk11` are the stores under the
+  vertex shaders failed the self-test (the pictures differ: in replay 2..4 ...`), then the compute
+  dispatches' (`the record stored by compute dispatches failed the self-test ...`), and fail again
+  with the targets in replay 2, 3 or 4, the verdict ending `, record targets, the stores and compute
+  failed the self-test`; `rd_vuprepass_selftest_nostores_fallback`
+  (`ICO_VK_FAKE_NO_VERTEX_STORES=1`) must name the missing feature on the start line, take the
+  compute dispatches (`the record stored by compute dispatches into the frame slot's record buffer:
+  no render targets, no copies (no vertex stores: ...`) and pass with `, record compute`;
+  `rd_vuprepass_selftest_stores_mali` and `_stores_vk11` are the stores under the
   Mali limits with the submit-time synchronisation checks and through VkRenderPass objects (the
   record's passes without attachments as legacy subpasses). The existing expectations change only
   in the verdict line's `, record stores` end; the pipeline counts are the same (the same fifteen
   pre-pass and stage keys, `colorFmt` UNKNOWN under the stores).
+  The record by compute dispatches (issue 179; `port/render/test/rd_vu_compute_tests.cmake`,
+  included from the render CMakeLists): `rd_vuprepass_selftest_compute` and `_compute_plain`
+  (`ICO_RD_VU_RECORD=compute`) end `, record compute`; `_compute_sabotage_straddle` (`=stale`)
+  logs the compute dispatches' failure from replay 2 on and ends `, record targets, the compute
+  failed the self-test`; `_nocompute_fallback` (`ICO_VK_FAKE_NO_VERTEX_STORES=1` and
+  `ICO_VK_FAKE_NO_COMPUTE_STORES=1`) names both reasons on the start line (`(no vertex stores:
+  ...; no compute stores: ICO_VK_FAKE_NO_COMPUTE_STORES)`) and passes with the targets;
+  `_compute_mali` and `_compute_vk11` are the compute run under the Mali limits (the compute
+  stage's three storage buffers of four) and on a Vulkan 1.1 device without dynamic rendering,
+  with the submit-time checks. Step 6 of the test also checks the bound with compute stores alone:
+  on, `record compute`. Every compute key is its own (`fs` `RD_FS_VU_PRE_CS`), so the pipeline
+  counts of the other runs are unchanged.
 - `rd_vu_skin_check_test.c` with `rd_vu_skin_check.cmake`: the skinned draws' bone-block check
   ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)). `judge` (no device): a case of 60 bones and 120 vertices
   through `vu1_ref`, the CPU's positions as the probe all right; one vertex on address 200 moved to
@@ -455,7 +472,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   run's stats matching its regex: `rd_vurecord_ab` the VU record drawn into the render targets and
   copied (`ICO_RD_VU_RECORD=targets`) against stored by the vertex shaders (`=stores`), each
   drawing every VU command through the record and naming its write (`stats: VU record targets` /
-  `stores`); `rd_vuprepass_min_ab` `[dev] vu_prepass_min` under every frame
+  `stores`); `rd_vurecord_ab_compute` the targets against the compute dispatches (`=compute`: B's
+  stats line counts `N dispatches` and names `stats: VU record compute: stored by compute
+  dispatches`); `rd_vuprepass_min_ab` `[dev] vu_prepass_min` under every frame
   (`ICO_RD_VU_PREPASS_MIN=0`) against above every frame (2147483647: the pre-pass skipped, 0
   passes, every VU command the old way, `pre-pass skipped N frames under 2147483647 slots`)
   ([PIPELINES.md](PIPELINES.md#the-vertex-and-triangle-pre-passes)). SKIP without a dump or a
@@ -1275,6 +1294,14 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   to the end leaves every key of the reachable set with a pipeline and none made on first use
   after it; off Vulkan (`rd_perf_gl`, `rd_perf_attachment_gl`: no background creation) the start
   returns 0 with the finisher off and the memory never asked, and every key is made on first use;
+  the prepass phase's compute sub-phase (`checkCompute`, where the run took the stores and the
+  device offers compute stores): the record turned one rung down to the compute dispatches
+  (`rd__vu_record_fall_back`), the frame replayed again: DISPLAY byte for byte, every replay the
+  same dispatches (one a record draw of the stores), the record's render passes gone (two a replay,
+  or one a record draw under the validation layer), the barriers a replay equal to the stores',
+  one uniform group more than without the pre-pass, nothing created after the first two replays;
+  the line `prepass (compute): N replays, passes a..b (stores c..d, r record passes), barriers ...`
+  gives the numbers; the stores restored after;
   the exact blend's
   counters (`RdPerfRecord.dstDraws`, `storagePasses`, `dstSwitches`) under each blend path the
   device has (none under the fixed-function blend, no storage pass or switch under the attachment

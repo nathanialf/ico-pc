@@ -91,14 +91,29 @@ VuPreOut vu_grid_pre_vs(uint vid : SV_VertexID)
     return vu_pre_out(id, vu_grid_vertex(vu_rec.z + id, VU_GRID));
 }
 
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_grid_pre_cs, vu_grid_pre_vs)
+#endif
+
 VuPreOut vu_grid_lit_pre_vs(uint vid : SV_VertexID)
 {
     uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_grid_vertex(vu_rec.z + id, VU_GRID_LIT));
 }
 
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_grid_lit_pre_cs, vu_grid_lit_pre_vs)
+#endif
+
 VuPreOut vu_grid_spec_pre_vs(uint vid : SV_VertexID)
 {
     uint id = VU_PRE_ENTRY(vid);
     return vu_pre_out(id, vu_grid_vertex(vu_rec.z + id, VU_GRID_SPEC));
 }
+
+// its compute build (ICO_VU_REC_COMPUTE, vu_common.hlsli VU_PRE_CS)
+#ifdef ICO_VU_REC_COMPUTE
+VU_PRE_CS(vu_grid_spec_pre_cs, vu_grid_spec_pre_vs)
+#endif

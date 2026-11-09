@@ -66,7 +66,7 @@ int main(int argc, char **argv)
         }
         RhiShaderDesc d;
         memset(&d, 0, sizeof(d));
-        d.stage = b->stage == ICO_SHADER_STAGE_VERTEX ? RHI_STAGE_VERTEX : RHI_STAGE_FRAGMENT;
+        d.stage = (RhiShaderStage)b->stage; /* ICO_SHADER_STAGE_* equal RhiShaderStage */
         d.bytecode = b->glsl;
         d.bytecodeSize = b->glsl_len;
         d.textSize = b->glsl_text_len;

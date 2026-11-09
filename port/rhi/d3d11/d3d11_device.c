@@ -574,6 +574,9 @@ static void d11_fill_limits(void)
     o->fragmentInterlock = false;
     /* feature level 11_0 has no vertex shader UAVs (rhi.h RhiLimits.vertexStores) */
     o->vertexStores = false;
+    /* no compute dispatches this release (rhi.h RhiLimits.computeStores) */
+    o->computeStores = false;
+    o->computeStoresOff = "Direct3D 11: not in this release";
     o->rasterOrderAttachment = false;
     o->rasterOrderOff = NULL;
     o->moltenvk = false;

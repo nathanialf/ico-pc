@@ -319,6 +319,8 @@ typedef struct Sum {
     uint32_t uniformMin, uniformMax;
     /* pipeline barriers recorded per replay (least, most) */
     uint32_t barrierMin, barrierMax;
+    /* render passes and compute dispatches per replay (least, most) */
+    uint32_t passMin, passMax, dispatchMin, dispatchMax;
     /* screen-prim draws per replay, one per command and merged
      * (least, most) */
     uint32_t screenCmdMin, screenCmdMax, screenDrawMin, screenDrawMax;
@@ -359,6 +361,18 @@ static void add(Sum *s, const RdPerfRecord *r)
     }
     if (s->n == 1 || r->barriers < s->barrierMin) {
         s->barrierMin = r->barriers;
+    }
+    if (s->n == 1 || r->renderPasses < s->passMin) {
+        s->passMin = r->renderPasses;
+    }
+    if (s->n == 1 || r->renderPasses > s->passMax) {
+        s->passMax = r->renderPasses;
+    }
+    if (s->n == 1 || r->dispatches < s->dispatchMin) {
+        s->dispatchMin = r->dispatches;
+    }
+    if (s->n == 1 || r->dispatches > s->dispatchMax) {
+        s->dispatchMax = r->dispatches;
     }
     if (s->n == 1 || r->barriers > s->barrierMax) {
         s->barrierMax = r->barriers;
@@ -558,13 +572,91 @@ static void checkExactCounters(const RdFrame *f)
  * the input attachment or storage texture). */
 #define UNIFORM_LAYOUTS 3
 
+static void checkGroups(const char *what, const Sum *s, int prePass);
+
+/* prepass under the record's compute dispatches (rd_vu_record.h; issue
+ * 179): the stores' phase just measured (stores), the record turned one
+ * rung down (rd__vu_record_fall_back: the compute builds) and the frame
+ * replayed again: the picture byte for byte, every replay the same
+ * dispatches (one a stage draw or batch of the stores: the pre-pass's
+ * draws), the record's render passes gone (two a replay, one a record draw
+ * under the validation layer: recDrawGap), the barriers the same (the
+ * compute bracket's two halves where the store bracket's were, each gap's
+ * end and begin one call either way), no group more.  The stores restored
+ * after (their builds and pipelines are kept by the fallback) */
+static void checkCompute(const RdFrame *pf, const Sum *stores, const uint8_t *ref)
+{
+    const int was = g_rdRec.mode;
+    if (!rd__vu_record_fall_back("rd_perf: the compute phase") || !rd__vu_record_compute()) {
+        CHECK(0,
+              "prepass (compute): the fallback from the stores did not take the compute "
+              "dispatches (%s)",
+              g_rdRec.why);
+        g_rdRec.mode = was;
+        return;
+    }
+    Sum first, rest;
+    memset(&first, 0, sizeof(first));
+    memset(&rest, 0, sizeof(rest));
+    unsigned seen = 0, stale = 0;
+    const uint32_t last = g_rdPerf.replay;
+    for (int i = 0; i < 20 + RHI_FRAMES_IN_FLIGHT + 1; i++) {
+        rd__replay_frame(pf, 0, true);
+        drainAfter(&first, &rest, 2, &seen, last, &stale);
+    }
+    uint8_t *px = readDisplay();
+    samePixels("the VU record by compute dispatches", ref, px);
+    free(px);
+    const bool vl = rhi_limits()->validationLayer;
+    const double nS = stores->n ? (double)stores->n : 1.0, nC = rest.n ? (double)rest.n : 1.0;
+    /* the stores' record passes: two a replay, or one a record draw under
+       the validation layer (each draw after a pass's first in a pass of
+       its own) */
+    const uint32_t recPasses =
+        vl ? (uint32_t)(stores->preDraws / (stores->n ? stores->n : 1u)) : 2u;
+    printf("prepass (compute): %u replays, passes %u..%u (stores %u..%u, %u record passes), "
+           "barriers %u..%u (stores %u..%u), dispatches %u..%u, %.1f record draws a replay "
+           "(stores %.1f), validation layer %s\n",
+           rest.n, rest.passMin, rest.passMax, stores->passMin, stores->passMax, recPasses,
+           rest.barrierMin, rest.barrierMax, stores->barrierMin, stores->barrierMax,
+           rest.dispatchMin, rest.dispatchMax, (double)rest.preDraws / nC,
+           (double)stores->preDraws / nS, vl ? "loaded" : "not loaded");
+    CHECK(rest.n > 0 && rest.preFallbacks == 0 &&
+              rest.preDraws * stores->n == stores->preDraws * rest.n,
+          "prepass (compute): %llu draws in %u replays, the stores %llu in %u, %llu the old way",
+          (unsigned long long)rest.preDraws, rest.n, (unsigned long long)stores->preDraws,
+          stores->n, (unsigned long long)rest.preFallbacks);
+    CHECK(rest.dispatchMin == rest.dispatchMax && rest.dispatchMin > 0 &&
+              (uint64_t)rest.dispatchMin * rest.n == rest.preDraws && stores->dispatchMax == 0,
+          "prepass (compute): %u..%u dispatches a replay for %llu record draws in %u replays (the "
+          "stores %u)",
+          rest.dispatchMin, rest.dispatchMax, (unsigned long long)rest.preDraws, rest.n,
+          stores->dispatchMax);
+    CHECK(rest.passMin == rest.passMax && stores->passMin == stores->passMax &&
+              rest.passMin + recPasses == stores->passMin,
+          "prepass (compute): %u..%u passes a replay, the stores %u..%u less their %u record "
+          "passes expected",
+          rest.passMin, rest.passMax, stores->passMin, stores->passMax, recPasses);
+    if (stores->barrierMax != 0) {
+        CHECK(rest.barrierMin == rest.barrierMax && rest.barrierMin == stores->barrierMin,
+              "prepass (compute): %u..%u barriers a replay, the stores' %u..%u expected",
+              rest.barrierMin, rest.barrierMax, stores->barrierMin, stores->barrierMax);
+    }
+    CHECK(rest.created == 0 && rest.destroyed == 0 && rest.allocs == 0,
+          "prepass (compute): %llu created, %llu destroyed, %llu allocations after the first two",
+          (unsigned long long)rest.created, (unsigned long long)rest.destroyed,
+          (unsigned long long)rest.allocs);
+    checkGroups("prepass (compute)", &rest, 1);
+    g_rdRec.mode = was;
+}
+
 /* prePass: the frame replayed with the VU pre-pass, whose record stores add
    the pre-pass's own layout (rd_vu_record.h g_rdRec.layoutVuPre: the stream
    slots and the record buffer), one more group a replay while the record is
    stored by the vertex shaders */
 static void checkGroups(const char *what, const Sum *s, int prePass)
 {
-    const int extra = prePass && g_rdRec.stores ? 1 : 0;
+    const int extra = prePass && rd__vu_record_buffered() ? 1 : 0;
     const int want = UNIFORM_LAYOUTS + extra;
     CHECK(s->n > 0 && (int)s->uniformMin == want && (int)s->uniformMax == want,
           "%s: %u..%u uniform bind groups a replay, %d expected (one per layout%s)", what,
@@ -1590,6 +1682,9 @@ static int synthetic(void)
         checkScreen("prepass", &rest);
         if (pf) {
             checkReplayWork(pf, "prepass", true);
+        }
+        if (g_rdRec.mode == RD_VU_RECORD_STORES && g_rdRec.canCompute && pf) {
+            checkCompute(pf, &rest, ref);
         }
         rd__set_vu_prepass(false);
     }

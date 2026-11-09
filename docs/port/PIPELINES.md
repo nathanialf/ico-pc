@@ -885,7 +885,7 @@ the per-pass timing has a pre-pass piece for each ([The pass ring](RENDER.md#the
 timing](RENDER.md#the-per-pass-timing); `port/render/rd_replay_vu.c` (`vuPrepassRun`, `vuSource`,
 `vuPreRange`, `vuPreRecord`, `recEnsure`)).
 
-**The record's two writes.** What is written above into three render targets and copied is, on a
+**The record's three writes.** What is written above into three render targets and copied is, on a
 device with vertex stores (`RhiLimits.vertexStores`: Vulkan's `vertexPipelineStoresAndAtomics`,
 enabled where offered), stored by the pre-pass's vertex shaders themselves into the frame slot's
 record buffer (`port/render/rd_vu_record.c`, `rd_vu_record.h`; issue 179: on a Mali-G52 the
@@ -920,20 +920,51 @@ is why a release run has none (the per-replay line's `passes` and `barriers` cou
 semantic is unchanged, the loss bisect's window leaves the draws out and the self-test's STALE
 sabotage stores replays 2 to 4 into a sink buffer of the record's size, `recStoreBuffer`). The
 records are the same bits either way, so every picture is the same (the A/B tests `rd_vurecord_ab`,
-`rd_pixel_stores` / `rd_pixel_targets`). `[dev] vu_record` (`ICO_RD_VU_RECORD`, [CONFIG.md](CONFIG.md#ico-pcini))
-= `auto` (the default: the stores wherever the device has them and the backend the bracket, on
-every device: Vulkan in this release, so the desktop and lavapipe runs take the path the phones
-take), `targets` or `stores`; D3D12 and OpenGL report no vertex stores yet and Direct3D 11 never
-(feature level 11_0 has no vertex shader UAVs), so they keep the targets. The start line names the
-write (`...; the record stored by the vertex shaders into the frame slot's record buffer: no render
-targets, no copies (...)`, or `the record drawn into 3 RGBA32_UINT render targets and copied into
-the frame slot's record buffer (no vertex stores: <why>)`), as do the self-test's verdict (`...
-ms, record stores`), the summary (`VU pre-pass on (self-test: ok; record stores)`), the display
-change's derived line (`VU pre-pass on (record stores)`), the window's 10 s VU line (`; record
-stores`), `rd_replay_tool --stats` (`stats: VU record stores: ...`) and the pass ring (`... into the
-record (1024xR) (stores)`). Without a device's colour-target bound to meet, the stores also take
-the pre-pass to an Apple A9 or A10 GPU under MoltenVK where the targets' 48 bytes a pixel did not
-fit (below).
+`rd_pixel_stores` / `rd_pixel_targets`).
+
+The third write is for a device whose vertex shaders cannot store: the same fourteen entries and
+batch builds as **compute dispatches** (`vu_X_compute_pre_cs`, `vu_X_batch_compute_pre_cs`;
+`ICO_VU_REC_COMPUTE`, which implies `ICO_VU_REC_STORES`, `vu_common.hlsli` `VU_PRE_CS`; issue 179:
+the Mali-G52 MC2 under driver r32p1 offers no `vertexPipelineStoresAndAtomics`, so the stores
+never engaged there and the targets stayed, 14.6 of its 64 ms GPU a picture). Invocation `t.x` of a dispatch of 64-wide
+groups is the point `SV_VertexID` `t.x` of the store build's draw, its count `aux0.z` of the
+dispatch's DrawCB (`vuStageDraw` writes a DrawCB of its own, `preBatchDraw` sets it beside the
+batch table), and the spare invocations of the last group return before the entry's own search
+(a batch build clamps a point past its table to the last entry, whose slots a spare invocation
+would otherwise store again); the stores are the store builds' (`vu_rec_store`,
+`vu_rec_lane_store`), the same words at the same places, so every reader is unchanged. The record's
+passes are the compute bracket (`rhi_cmd_buffer_compute_begin` / `_end`, [RHI.md](RHI.md#compute-dispatch-the-vu-record))
+and no render pass: a replay has two render passes fewer than under the stores and the same
+barriers (the bracket's halves where the store bracket's were); under the validation layer each
+dispatch after a pass's first gets the bracket's end and begin before it (`recDrawGap`), as the
+stores' draws get a pass of their own. The pipelines are compute pipelines
+(`RhiPipelineDesc.compute`) of group 0 (FrameCB) and `g_rdRec.layoutVuPre` (every slot visible to
+the vertex and compute stages, so one layout serves both kinds); a compute key is the stores' key
+with `fs` `RD_FS_VU_PRE_CS` (no module: the key's mark, so the stores' and the compute's
+pipelines are different cache entries across a fallback). `rd__vu_prepass`'s `draws` count the
+dispatches (`vuPreDraws`); `RhiStats.dispatches` counts them for the backend (`rd_replay_tool
+--stats`: `..., N copies, N dispatches; ...`).
+
+`[dev] vu_record` (`ICO_RD_VU_RECORD`, [CONFIG.md](CONFIG.md#ico-pcini)) = `auto` (the default:
+the stores wherever the device has vertex stores, else the compute dispatches wherever it has
+compute stores (`RhiLimits.computeStores`: Vulkan where the graphics queue takes compute work),
+else the targets, on every device: Vulkan in this release, so the desktop and lavapipe runs take
+the paths the phones take), `targets`, `stores` (where the vertex shaders cannot store: auto's next
+rung, with `[dev] vu_record = stores not taken` in the words) or `compute` (where the device has
+no compute stores: the targets, `[dev] vu_record = compute not taken`); D3D12 and OpenGL report
+neither yet and Direct3D 11 never stores from its vertex shaders, so they keep the targets. The
+start line names the write (`...; the record stored by the vertex shaders into the frame slot's
+record buffer: no render targets, no copies (...)`; `the record stored by compute dispatches into
+the frame slot's record buffer: no render targets, no copies (no vertex stores: <why>; [dev]
+vu_record = targets keeps the render targets)`; or `the record drawn into 3 RGBA32_UINT render
+targets and copied into the frame slot's record buffer (no vertex stores: <why>; no compute stores:
+<why>)`), as do the Vulkan device line (`compute record stores: offered (queue compute yes, vertex
+stores no)`), the self-test's verdict (`... ms, record compute`), the summary (`VU pre-pass on
+(self-test: ok; record compute)`), the display change's derived line (`VU pre-pass on (record
+compute)`), the window's 10 s VU line (`; record compute`), `rd_replay_tool --stats` (`stats: VU
+record compute: ...`) and the pass ring (`... into the record (1024xR) (compute)`). Without a
+device's colour-target bound to meet, the stores and the compute dispatches also take the pre-pass
+to an Apple A9 or A10 GPU under MoltenVK where the targets' 48 bytes a pixel did not fit (below).
 
 `[dev] vu_prepass_min = N` (`ICO_RD_VU_PREPASS_MIN`, default 0: never) skips the pre-pass for a
 frame whose record would hold fewer than N vertex and triangle slots: every VU command of it draws
@@ -1014,11 +1045,12 @@ VU command the old way, for an A/B on a device.
 point lists, a colour write mask of one channel, vertex and pixel shaders reading a read-only
 storage buffer (as the stream already is), and buffer copies (a texture into a buffer: on
 Direct3D 11, which has no such copy, the backend's own compute shader, [RHI.md](RHI.md#direct3d-11)).
-No compute in the renderer (the RHI has none), storage writes from a vertex shader only where the
+One compute use in the renderer (the record's dispatches, above, where the vertex shaders cannot
+store), storage writes from a vertex shader only where the
 device offers them (`vertexPipelineStoresAndAtomics`, enabled where offered and used for the
-record's stores, above; phones' drivers do not all offer it, and a device without it keeps the
-targets and copies, logged on the Vulkan backend's start as `no vertexPipelineStoresAndAtomics:
-the VU record is drawn into render targets and copied`), no vertex texture fetch (`tools/check_spirv.py`'s
+record's stores, above; phones' drivers do not all offer it, and a device without it takes the
+compute dispatches, logged on the Vulkan backend's start as `no vertexPipelineStoresAndAtomics:
+...` and `compute record stores: offered (...)`), no vertex texture fetch (`tools/check_spirv.py`'s
 vertex-shader opcode set holds no image instruction). `RGBA32_UINT` is a colour attachment and a
 sampled format on every Vulkan device (the specification's required format support) and a render
 target on Direct3D 12 and Direct3D 11 at feature level 11_0; three targets are inside every device's colour
@@ -1105,14 +1137,18 @@ rd: VU pre-pass: off (self-test: a pipeline could not be made (replay <k> of 4: 
 rd: VU pre-pass: off (self-test: the device failed in the replays with the pre-pass) on SCENE ...
 ```
 
-The test judges the record's write the run starts with (above). Under the stores a failure is
-logged with its own reason and first differing texel and the test runs again with the targets and
-copies, whose verdict then decides; the verdict line ends with the write it judged:
+The test judges the record's write the run starts with (above) and falls back one rung at a time
+(`rd__vu_record_fall_back`: the stores, the compute dispatches where offered, the targets, then
+the pre-pass off): a failure of the stores or the compute dispatches is logged with its own reason
+and first differing texel and the test runs again one rung down, whose verdict then decides; the
+verdict line ends with the write it judged and the rungs that failed:
 
 ```
-rd: VU pre-pass: the record stored by the vertex shaders failed the self-test (the pictures differ: in replay <k> of 4 ...) in <t> ms: the self-test again with the render targets and copies
-rd: VU record: drawn into 3 RGBA32_UINT render targets and copied into the frame slot's record buffer (the stores off: they failed the start-up self-test)
-rd: VU pre-pass: on (self-test: ...) on SCENE <w>x<h> at <tw>x<th> texels in <t> ms, record targets, the stores failed the self-test
+rd: VU pre-pass: the record stored by the vertex shaders failed the self-test (the pictures differ: in replay <k> of 4 ...) in <t> ms: the self-test again one rung down
+rd: VU record: stored by compute dispatches into the frame slot's record buffer: no render targets, no copies (the stores off: they failed the start-up self-test)
+rd: VU pre-pass: the record stored by compute dispatches failed the self-test (...) in <t> ms: the self-test again one rung down
+rd: VU record: drawn into 3 RGBA32_UINT render targets and copied into the frame slot's record buffer (the compute off: they failed the start-up self-test)
+rd: VU pre-pass: on (self-test: ...) on SCENE <w>x<h> at <tw>x<th> texels in <t> ms, record targets, the stores and compute failed the self-test
 ```
 
 A start whose pre-pass is already off (the settings, the device, the host's
@@ -1137,7 +1173,12 @@ passes it); [TESTING.md](TESTING.md#environment-switches)).
 
 The record stored by the vertex shaders is new on every Vulkan device that offers
 `vertexPipelineStoresAndAtomics`: 28 store builds (`vu_X_store_pre_vs`, `vu_X_batch_store_pre_vs`)
-and a pipeline shape of its own (no rasterization, an attachment-less pass). The self-test turns a
+and a pipeline shape of its own (no rasterization, an attachment-less pass); the record by compute
+dispatches likewise on every other Vulkan device (28 compute builds, `vu_X_compute_pre_cs`,
+`vu_X_batch_compute_pre_cs`, and compute pipelines). The rung below covers both: a compute build
+counts as a store build (`startup_retry_note_has_vu_store` also matches `_compute_pre_cs`;
+`keyVsName` names the compute build a key with `fs` `RD_FS_VU_PRE_CS` dispatches through), and
+`storesWereOn` is the stores or the compute dispatches (`rd.h` `rd_vu_record_buffered`). The self-test turns a
 wrong picture to the render targets, but a driver crash, an end without a word or a device loss
 inside those pipelines would otherwise take the pre-pass's own steps and leave the device drawing
 without the pre-pass, possibly for good. So each of the three ladders tries the render targets'

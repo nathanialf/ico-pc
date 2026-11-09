@@ -40,6 +40,7 @@
 #include "rd_upscale.h"
 #include "rd_velocity.h"
 #include "rd_vis.h"
+#include "rd_vu_record.h" /* the record's write on the display line */
 #include "rd_vu_skin_check.h"
 #include "texpack.h"
 
@@ -2346,9 +2347,10 @@ static void logDerived(void)
             : rd__vu_extended() ? "extended"
                                 : "the PS2's",
             (unsigned)g_rd.filterUpgrade,
-            !g_rd.vuPrepass                              ? "off"
-            : strcmp(rd_vu_record_mode(), "stores") == 0 ? "on (record stores)"
-                                                         : "on (record targets)",
+            !g_rd.vuPrepass            ? "off"
+            : rd__vu_record_compute()  ? "on (record compute)"
+            : rd__vu_record_buffered() ? "on (record stores)"
+                                       : "on (record targets)",
             (unsigned)g_rd.fogPath, rd__profile_text());
 }
 
