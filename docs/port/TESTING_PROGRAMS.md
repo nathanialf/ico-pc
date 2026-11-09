@@ -354,7 +354,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   all its values, saves and reads back, a word or number that is no value reads as the default, the
   setters clamp and the steps wrap, and the achievements rule (One hit per swing, Shadows never
   dodge, Cutscene cameras ignored and a Debug menu press suspend; toughness, aggression, No hints,
-  the barrier and the look-around do not; Peaceful shadows does, as `peaceful_shadows`; a reload clears the Debug menu's mark), `test_peaceful` (the
+  the barrier and the look-around do not; Peaceful shadows does, as `peaceful_shadows`; a reload clears the Debug menu's mark), `test_combat` also checks `ico_variant_down_keeps_hit` (the down action's `hit` flag: Ico keeps it only with Shadows wait while Ico is down On, every other actor always), `test_peaceful` (the
   `ico_variant_shadow_brain` hook the four Shadow starts read: 1 by default, 0 with the key on, a bad
   word reads 1, a step writes the key and the achievements rule, the other rows untouched),
   the chain rows (`test_chain`: the game's 4 and 4 by default, `ico_variants_bind_debug_chain` leaves
