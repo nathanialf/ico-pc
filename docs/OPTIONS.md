@@ -9,7 +9,11 @@ There are two ways in, and both open the same menu:
 - On the title screen, choose **Options**.
 - During play, press Start and choose **Options**.
 
-Up and Down move between rows. Left and Right change a value. Cross opens
+Up and Down move between rows. Left and Right change a value. On the
+slider rows, holding Left or Right keeps changing the value: Brightness,
+Gamma, Picture brightness, Contrast, Saturation, CRT strength, Sharpness
+(upscaling), Motion blur strength, Volume, Music volume, Effects volume,
+Time to rescue Yorda, Mouse sensitivity and Mouse camera speed. Cross opens
 a page or confirms. Triangle goes back, and so does Circle (see **Circle
 goes back** under [Controls](#controls)). On the Japanese, Korean and Asian
 discs it is the other way round, as on those PS2 releases: Circle opens a

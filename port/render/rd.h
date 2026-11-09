@@ -1796,7 +1796,7 @@ void rd_update_texture_rect(RdTex t, uint32_t x, uint32_t y, uint32_t w, uint32_
  * A dump keeps a sheet texture's coverage and style (rd_dump.c). */
 typedef struct RdSheetStyle {
     uint8_t rimOn;     /* nonzero: the rim is drawn (light ink: the menus' words) */
-    uint8_t rimLevel;  /* grey of the rim, 0..255 (the menus' European rows 72) */
+    uint8_t rimLevel;  /* grey of the rim, 0..255 (the menus' European rows 100) */
     uint8_t fillLevel; /* grey of the letters' fill, 0..255 */
     uint8_t dither;    /* nonzero: the Bayer threshold; 0: rounded to the levels */
     uint8_t rimWeight; /* the rim's strength in 64ths (a faint halo); 0 or 64 and more:
