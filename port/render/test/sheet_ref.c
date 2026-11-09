@@ -40,6 +40,22 @@ _Static_assert(SHEET_SCALE_MAX == ICO_SHEET_SCALE_MAX, "sheet_text.hlsli SHEET_S
 _Static_assert(SHEET_BAKE_AX == ICO_SHEET_BAKE_AX, "sheet_text.hlsli SHEET_BAKE_AX");
 _Static_assert(SHEET_BAKE_AY == ICO_SHEET_BAKE_AY, "sheet_text.hlsli SHEET_BAKE_AY");
 _Static_assert(ICO_SHEET_LEVELS >= 2 && ICO_SHEET_LEVELS <= 256, "sheet levels");
+/* the user's pick of 2026-11-08 (rc3, grey from rc5), pinned by value so a
+   stray edit of shader_consts.h fails the build: the falloff across and
+   down, eight levels, solid from alpha 32, the 4x4 Bayer matrix (the rim
+   grey 100 is kSheetInk's, checked by ui_test) */
+_Static_assert(ICO_SHEET_WX_0 == 1000 && ICO_SHEET_WX_1 == 1000 && ICO_SHEET_WX_2 == 1000 &&
+                   ICO_SHEET_WX_3 == 1000 && ICO_SHEET_WX_4 == 90 && ICO_SHEET_WX_5 == 0 &&
+                   ICO_SHEET_WX_6 == 0,
+               "the picked falloff across: 1000 1000 1000 1000 90 0 0");
+_Static_assert(ICO_SHEET_WY_0 == 1000 && ICO_SHEET_WY_1 == 1000 && ICO_SHEET_WY_2 == 700 &&
+                   ICO_SHEET_WY_3 == 350 && ICO_SHEET_WY_4 == 100,
+               "the picked falloff down: 1000 1000 700 350 100");
+_Static_assert(ICO_SHEET_LEVELS == 8, "the picked levels: 8");
+_Static_assert(ICO_SHEET_SOLID_ABOVE == 32, "the picked solid rule: from alpha 32");
+_Static_assert(ICO_SHEET_BAYER_ROW0 == 0xA280 && ICO_SHEET_BAYER_ROW1 == 0x6E4C &&
+                   ICO_SHEET_BAYER_ROW2 == 0x91B3 && ICO_SHEET_BAYER_ROW3 == 0x5D7F,
+               "the picked 4x4 Bayer matrix");
 
 /* the shader's constants as a look: the rim's falloff across (|dx|) and
    down (|dy|), per mille, the levels and the 4x4 matrix */

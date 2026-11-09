@@ -1660,7 +1660,10 @@ The renderer's test programs have a page of their own:
   to English) and the strips with his words (`subtitles_pt_br`, `subtitles_pt_br_jpn`, `_kor`,
   `_cn`, in the `settings_toml` lock).
 - `ui_mouse_test.c`: the pointer's arithmetic in the menus (`ui_mouse`).
-- `ui_test.c`: the embedded fonts, UTF-8, the runtime text; each language's own Deja vu string
+- `ui_test.c`: the embedded fonts, UTF-8, the runtime text; `testPickedOutline`: `kSheetInk`'s
+  five European rows are the user's pick of 2026-11-08 (rim on, rim grey 100, fill 255, dither on;
+  the falloff, levels, solid rule and Bayer matrix of that pick are `_Static_assert`s in
+  `port/render/test/sheet_ref.c`); each language's own Deja vu string
   (`UI_STR_PHOTO_FILM_DEJA`); a Japanese popup body wider than the panel takes a second line, an
   English one keeps its one; the popups' timing in seconds at the default 50 Hz and at 60 Hz
   (`ui_popup_set_vsync_hz`) (`ui`); with `jpn` or `kor`, the glyph rows, the table sizes and the pad
