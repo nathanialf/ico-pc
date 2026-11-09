@@ -158,13 +158,32 @@ uint64_t ico_wav_close(IcoWav *w);
 
 /* --- SDL3 output (out_sdl.c, window build) --------------------------------- */
 
-/* 0 when a 48 kHz stereo S16 device stream is open and playing, on the
+/* The start's open, in three steps, so a device that is slow to open (or
+   never returns) does not hold the game's start (out_sdl.c, "the open").
+   ico_audio_sdl_open_begin (main thread): SDL's audio subsystem up (timed
+   and logged), the drivers line, the audio lock installed for the pull
+   path, then a thread opens a 48 kHz stereo S16 device stream on the
    device ICO_AUDIO_DEVICE names ([audio] device), or the default one when
-   that is empty or names no device (logged once).  pull: the pull path's
-   render (the stream gets the get-callback, an SDL mutex is installed as
-   the audio lock, nothing is primed), or NULL for the sync path (the push
-   below); sync_why: the sync path's reason, for the start line. */
-int ico_audio_sdl_open(IcoAudioRender pull, const char *sync_why);
+   that is empty or names no device (logged once), without the callback and
+   paused.  pull: the pull path's render (the stream gets the get-callback
+   at the adoption, nothing is primed), or NULL for the sync path (the push
+   below); sync_why: the sync path's reason, for the start line.  0 when
+   the open is under way, -1 when SDL's audio is unavailable (no sound).
+   ico_audio_sdl_open_wait_ms: waits at most `ms` for the open's thread; 1
+   when it has finished (opened or not).
+   ico_audio_sdl_open_adopt (main thread, cheap: one atomic load while the
+   thread runs): 0 while the device is still opening; once it finished, 1
+   when the stream is the output's from here (the callback set, playing,
+   the start line and "audio: the device opened after T ms" logged) and -1
+   when no device opened (SDL's audio closed again).
+   ico_audio_sdl_open_pending: 1 while the thread runs or its result waits
+   for the adoption; ico_audio_sdl_open_elapsed_ms: the time since the
+   begin. */
+int ico_audio_sdl_open_begin(IcoAudioRender pull, const char *sync_why);
+int ico_audio_sdl_open_wait_ms(int ms);
+int ico_audio_sdl_open_adopt(void);
+int ico_audio_sdl_open_pending(void);
+int ico_audio_sdl_open_elapsed_ms(void);
 /* The sync path: queue one vsync of frames, keeping a cushion queued: two
    vsyncs, doubled after each dry queue up to 120 ms, halved again after
    20 s without one (out_sdl.c). */
@@ -190,6 +209,9 @@ int ico_audio_sdl_active(void);
    and a cushion of 0. */
 int ico_audio_sdl_queued_ms(void);
 int ico_audio_sdl_cushion_ms(void);
+/* The output closed (the shutdown).  An open still running is waited for
+   at most 2 s; a thread that has not returned by then is left behind (it
+   closes what it opens later itself) and SDL's audio is left up, logged. */
 void ico_audio_sdl_close(void);
 /* The pull path's watchdog input: milliseconds since the device last asked
    for sound, or since the stream opened, moved or resumed; -1 on the sync
@@ -220,12 +242,14 @@ unsigned long long ico_audio_sdl_held_ms(void);
    fails, removal does nothing. */
 #define ICO_AUDIO_DEVICE_NAME_MAX 128
 /* The playback devices' names (cut to fit), at most `max`; their count.
-   0 when the output is not open. */
+   0 when the output is not open (also while the start's open runs: the main
+   thread makes no SDL device call beside a device open in progress). */
 int ico_audio_sdl_devices(char names[][ICO_AUDIO_DEVICE_NAME_MAX], int max);
 /* Close the stream and open it again on the device called `name` ("" or
    NULL: the system's default; a name no device has: the default, logged
    once), playing.  0 on success; -1 when the output is not open (audio=0,
-   no SDL audio) or no device opens. */
+   no SDL audio, the start's open still under way: logged) or no device
+   opens. */
 int ico_audio_sdl_reopen(const char *name);
 /* SDL_EVENT_AUDIO_DEVICE_REMOVED (window_host.c): when `which` is the
    device the stream plays on, the stream moves to the default device (the

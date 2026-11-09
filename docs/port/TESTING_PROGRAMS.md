@@ -36,6 +36,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `TSAN_OPTIONS=halt_on_error=1` under `setarch x86_64 -R`, which turns address-space
   randomization off for the run (the build host's kernel randomizes more than ThreadSanitizer
   accepts); a report is a failure.
+- `audio_open_test.c` (window build): the start's device open on its own thread (`out_sdl.c` and
+  `audio_host.c` included, the start's wait shortened to 200 ms and the shutdown's to 300 ms, the
+  device open replaced by a fake on the dummy driver that hands back a device-less stream when the
+  test opens its gate): adopted inside the init on the device's clock; adopted by the first vsync
+  after the fake returns, the game's clock rendering every vsync until then, the Settings move
+  refused, the watchdog's vsync reset at the adoption and nothing rendered on that vsync; a failed
+  open at once and after the wait (the game's clock, "no device"); an open that never returns
+  (two still-waiting lines in 20 s of vsyncs, the shutdown back within its bound, the thread left
+  behind closing what it opens) (`audio_open`). Its one wall-clock check is the shutdown's bound.
 - `audio_queue_test.c` (window build): the output on the game's clock (`out_sdl.c`'s push) on a
   device-less SDL stream: the cushion, the refill after a dry queue and its ramp with frames still
   queued, plain silence after a queue run empty, the trim and the drop limit (`audio_queue`).
@@ -1443,7 +1452,23 @@ The renderer's test programs have a page of their own:
   `menu_look_kor`, `menu_look_cn`; the Korean ink 252.8 fill, 41.8 rim, measured on the disc; the
   Asian disc's expectation is the Japanese numbers until `menu_look_cn` has been run on it).
 - `menu_look_test.c`: the menus' Arimo text against the game's menu sheets from the disc
-  (`menu_look`); `menu_sheets.c`/`.h` decode the sheets.
+  (`menu_look`); `menu_sheets.c`/`.h` decode the sheets. Two development modes run from the
+  environment on the same binary instead of the checks (exit 0 unless a row does not resolve):
+  `ICO_MENU_LOOK_REF46=1` measures the title's publisher plate (texProperty row 46, "Sony Computer
+  Entertainment Europe Presents", and row 48, the copyright line) on each language's sheet once:
+  the grey/alpha histogram, then per distance from the letters (0 the ink, 1..8 texels across in
+  the row and down in the column) the mean alpha, the alpha-weighted darkness, the count, the
+  variance, the alpha histogram and the agreement with the 4x4 and 8x8 Bayer orders at their best
+  phase (the 8x8 told from the 4x4 by its fine pairs), the outline's alpha steps and grey, and the
+  falloff normalised to the ink (`WX'`, `WY'`); `ICO_MENU_LOOK_INK=<grey>` lowers the ink rule
+  (200), `ICO_MENU_LOOK_BG=g1,g2` adds backdrop greys to the pictures
+  (`menu_look/ref46/<row>-<lang>.png`, x1 and x4 on black, the greys and 128).
+  `ICO_MENU_LOOK_OUTLINE=1` draws the menus' words (Continue, New Game, Options, the save prompt,
+  the card warning, one French row, the port's "Mirror mode", "Picture" and a note) in candidate
+  looks through `sheet_ref.h`'s `SheetLook` (C1..C3 and C6 fixed tables, C4 the plate's measured
+  profile, C5 the shader's constants) with the full and the faint rim, rim black and the
+  language's grey, beside the plate's crop: `menu_look/outline/<candidate>.png`, `contact.png`
+  and the legend `contact.txt`.
 - `menu_text_test.c`: the game's menu words and the port's rows drawn in the sheets' look; the
   Models viewer's counter drawn for 600 frames at 3x and 1x (`testCounterStream`: shelves
   reclaimed, no plain-font word, no second page, the steady rows in place; at 3x the counter's
@@ -1503,6 +1528,13 @@ The renderer's test programs have a page of their own:
   confirming, Cross and Triangle going back, the title's rows, the notes' serial, the mouse,
   the prompts and the boot's hand-over to the title with Skip the opening
   (`testSkipOpeningTitle`).
+- `settings_step_test.c` (`settings_step`, `_jpn`, `_kor`, `_cn`): Options > Picture stepping (issue 202),
+  CPU only over the shared fixture (`hold` presses a button and holds it): holding Left or Right on
+  Gamma (the press alone for 15 ticks, the first repeat at the 16th, one every 3 ticks after,
+  release and hold again, the other direction, the stick's d-pad emulation, held at 1 and 100,
+  1 to 100 in 98 repeats, presses with gaps never repeating), a wrapping row (Filter) held for 75
+  ticks stepping once, L1/R1 by 10 on the four colour rows (held at 1 and 100, nothing on Filter,
+  written on leaving the page), and the list of the rows that repeat.
 - `settings_photo_test.c`: the Settings screens through rd on a device, written as PNGs
   (`settings_render`, which also draws the Touch screen page, the editor page and the main page
   scrolled by nine Downs, `settings_main_scrolled.png`, the Picture and Developer pages, `settings_picture.png` and `settings_developer.png`, and Gameplay's Yorda, Shadows and Cutscenes pages opened through Gameplay, `settings_gameplay_yorda.png`, `settings_gameplay_shadows.png` and `settings_gameplay_cutscenes.png`, also at 1080p); with `jpn` or `kor`, that disc's title and main page (`settings_render_jpn`,

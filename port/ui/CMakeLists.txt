@@ -94,7 +94,7 @@ set(_ui_sources
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
 set_source_files_properties(layout_ext.c menu_font.c menu_text.c popup.c settings.c
-                            settings_states.c ui_list.c
+                            settings_states.c settings_step.c ui_list.c
                             ui_hint.c gallery.c photo_ui.c ui_mouse.c touch_ui.c ui_fps.c
                             touch_edit_ui.c subtitle_text.c PROPERTIES
                             COMPILE_OPTIONS "-Wno-strict-prototypes")
@@ -135,11 +135,12 @@ function(ico_ui_settings name)
     # Extras > Unused content's host (settings_unused.c)
     # the game variants rows' values, notes and per-disc rule (settings_variants.c)
     # the Upscaling rows: FSR 3.1 and its quality (settings_upscale.c)
+    # held Left/Right on the value rows, L1/R1 on the colour rows (settings_step.c)
     # a community translation's subtitles as text (subtitle_text.c, jimaku.c's
     # hook, over port/game's tables: subtitles_ru_bobttz.c, subtitles_ru_cobra838.c,
     # subtitles_pt_br.c)
     target_sources(${name} PRIVATE settings.c settings_graphics.c settings_backup.c settings_desktop.c
-                                   settings_states.c settings_unused.c settings_variants.c settings_upscale.c ui_list.c
+                                   settings_states.c settings_unused.c settings_variants.c settings_upscale.c settings_step.c ui_list.c
                                    ui_hint.c gallery.c photo_ui.c ui_mouse.c ui_mouse_geom.c
                                    ui_lang.c touch_edit_ui.c subtitle_text.c
                                    "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_bobttz.c"
@@ -244,6 +245,9 @@ ico_settings_test(settings_extra_test test/settings_extra_test.c)
 # settings_adapter_test: Options > Graphics > Graphics card (the row, its
 # names, Apply on another card with Keep and Revert, a fake host)
 ico_settings_test(settings_adapter_test test/settings_adapter_test.c)
+# settings_step_test: holding Left or Right on the Picture colour rows and
+# L1/R1 by 10 (settings_step.c)
+ico_settings_test(settings_step_test test/settings_step_test.c)
 # settings_backup_test: Extras > Back up your data and Restore from a backup
 # (settings_backup.c) over a fake host: the rows, the confirmations, the
 # backup read and the end popups
@@ -297,6 +301,7 @@ if(ICO_RUN_TESTS)
                          settings_states settings_states_jpn settings_states_kor settings_states_cn
                          settings_states_ntsc settings_states_aug6 settings_states_jun26
                          settings_adapter settings_adapter_jpn settings_adapter_kor settings_adapter_cn
+                         settings_step settings_step_jpn settings_step_kor settings_step_cn
                          settings_backup settings_backup_jpn settings_backup_kor settings_backup_cn
                          settings_desktop settings_desktop_jpn settings_desktop_kor settings_desktop_cn
                          subtitles_ru subtitles_ru_jpn subtitles_ru_kor subtitles_ru_cn
@@ -644,7 +649,10 @@ endif()
 # compared per item in the five languages, with the survey that pinned the
 # sheet constants.  Needs the base ELF to configure, and the disc image to
 # run (exit 77 without it, so a worktree skips it); writes its pictures to
-# <build>/menu_look/<lang>/.  ICO_MENU_LOOK_FIT=1 runs the constants' search.
+# <build>/menu_look/<lang>/.  ICO_MENU_LOOK_FIT=1 runs the constants' search;
+# ICO_MENU_LOOK_REF46=1 measures the title's publisher plate and
+# ICO_MENU_LOOK_OUTLINE=1 draws candidate outline looks beside it (ico_miniz:
+# their pictures compressed).
 if(_ico_cov_elf AND TARGET ico_sheet_ref)
     add_executable(menu_look_test test/menu_look_test.c test/menu_sheets.c menu_font.c menu_text.c
         ${_ui_string_srcs} $<TARGET_OBJECTS:ico_ui_font_rd>
@@ -664,7 +672,7 @@ if(_ico_cov_elf AND TARGET ico_sheet_ref)
     target_compile_options(menu_look_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
                            ${ICO_GAME_WARNINGS})
     target_link_libraries(menu_look_test PRIVATE ico_render ico_sheet_ref ico_port_data ico_platform
-                          ico_region)
+                          ico_region ico_miniz)
     if(NOT WIN32)
         target_link_libraries(menu_look_test PRIVATE m)
     endif()

@@ -103,6 +103,14 @@ const RdVelocityStats *rd__velocity_stats(void)
     return &s_out;
 }
 
+/* the VU draws vuVelWanted refused, by gate, since the last line (any thread) */
+static uint64_t s_skip[3];
+
+void rd__velocity_note_skip(int why)
+{
+    __atomic_fetch_add(&s_skip[why], 1u, __ATOMIC_RELAXED);
+}
+
 static void blockLog(void)
 {
     const double now = rd__now_ms();
@@ -117,18 +125,23 @@ static void blockLog(void)
     if (s_blk.frames == 0) {
         return;
     }
-    rd__log("velocity: %llu pictures, VU draws %llu: with their previous transform %llu (moved "
-            "%llu), without %llu (no pair %llu, another shape %llu, a jump %llu), new histories "
-            "%llu; replays drew %llu into VELOCITY, %llu of list 0 left at 0 (no record or "
-            "multisampled), %llu passes",
-            (unsigned long long)s_blk.frames, (unsigned long long)s_blk.draws,
-            (unsigned long long)s_blk.paired, (unsigned long long)s_blk.moved,
-            (unsigned long long)(s_blk.unpaired + s_blk.shape + s_blk.jump),
-            (unsigned long long)s_blk.unpaired, (unsigned long long)s_blk.shape,
-            (unsigned long long)s_blk.jump, (unsigned long long)s_blk.resets,
-            (unsigned long long)__atomic_exchange_n(&s_rbDrawn, 0, __ATOMIC_ACQ_REL),
-            (unsigned long long)__atomic_exchange_n(&s_rbNoRecord, 0, __ATOMIC_ACQ_REL),
-            (unsigned long long)__atomic_exchange_n(&s_rbPasses, 0, __ATOMIC_ACQ_REL));
+    rd__log(
+        "velocity: %llu pictures, VU draws %llu: with their previous transform %llu (moved "
+        "%llu), without %llu (no pair %llu, another shape %llu, a jump %llu), new histories "
+        "%llu; replays drew %llu into VELOCITY, %llu of list 0 left at 0 (no record or "
+        "multisampled), %llu passes; VU draws with no motion vector: %llu outside list 0, %llu with "
+        "Z write off, %llu not into SCENE",
+        (unsigned long long)s_blk.frames, (unsigned long long)s_blk.draws,
+        (unsigned long long)s_blk.paired, (unsigned long long)s_blk.moved,
+        (unsigned long long)(s_blk.unpaired + s_blk.shape + s_blk.jump),
+        (unsigned long long)s_blk.unpaired, (unsigned long long)s_blk.shape,
+        (unsigned long long)s_blk.jump, (unsigned long long)s_blk.resets,
+        (unsigned long long)__atomic_exchange_n(&s_rbDrawn, 0, __ATOMIC_ACQ_REL),
+        (unsigned long long)__atomic_exchange_n(&s_rbNoRecord, 0, __ATOMIC_ACQ_REL),
+        (unsigned long long)__atomic_exchange_n(&s_rbPasses, 0, __ATOMIC_ACQ_REL),
+        (unsigned long long)__atomic_exchange_n(&s_skip[0], 0, __ATOMIC_ACQ_REL),
+        (unsigned long long)__atomic_exchange_n(&s_skip[1], 0, __ATOMIC_ACQ_REL),
+        (unsigned long long)__atomic_exchange_n(&s_skip[2], 0, __ATOMIC_ACQ_REL));
     const double keep = s_blk.at;
     memset(&s_blk, 0, sizeof(s_blk));
     s_blk.at = keep;

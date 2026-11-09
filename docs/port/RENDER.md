@@ -860,7 +860,8 @@ temporal upscaler runs with a phase count ([The upscale point](#the-upscale-poin
 set no frame group changes; a jitter of 0, 0 adds 0.0,
 which leaves every finite float as it is, so the picture is the same byte for byte
 (`rd_replay_tool_jitter`). `rd__jitter_halton` is the Halton (2, 3) sequence less 0.5, FSR's
-jitter at a frame index reduced by the phase count. Tests: `rd_jitter` (the sub-pixel edges move
+jitter at a frame index reduced by the phase count. The fog's above-1x dither is indexed at the
+pixel less the jitter, so it moves with the picture ([RENDER_POST.md](RENDER_POST.md)). Tests: `rd_jitter` (the sub-pixel edges move
 by the jitter exactly at 1x and 2x, a whole-texel jitter moves SCENE exactly while WORK1, the
 reduction and the present take none) and `rd_replay_tool_jitter`
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
@@ -934,7 +935,10 @@ changes), for the desktop check of the sign with FSR's debug view.
 size` and `rd: velocity: the velocity pass's pipeline made ...` (or why not); every 10 s while on
 `rd: velocity: N pictures, VU draws D: with their previous transform P (moved M), without U (no
 pair, another shape, a jump), new histories R; replays drew X into VELOCITY, Y of list 0 left at
-0 (no record or multisampled), Z passes`.
+0 (no record or multisampled), Z passes; VU draws with no motion vector: A outside list 0, B with Z
+write off, C not into SCENE`. The last three count the VU draws `vuVelWanted`
+(`port/render/rd_replay_vu.c`) refused, one counter per gate (`rd__velocity_note_skip`), for a
+report of ghosting or lines on a surface the vectors do not reach (issue 203).
 
 ### The upscale point
 
@@ -1018,7 +1022,7 @@ follow-up).
 **The lines.** `rd: upscale point: UPSCALED WxH (display scale ...)` at each creation (or why
 not); `rd: upscale point: SCENE WxH (render scale ...) -> UPSCALED wxh (display scale ...) by
 <hook> at frame N; depth in place|a copy|none, motion vectors VELOCITY|none, jitter X, Y (phase
-count P)` at the first dispatch and at each new size; `rd: upscale point: frame N not upscaled
+count P); quality Q, sharpness S, fp16 on|off` at the first dispatch and at each new size; `rd: upscale point: frame N not upscaled
 (<why>): the reduction reads SCENE at the render scale` (the first 8, then every 100th); the
 display line's `(render scale r), display WxH (scale d; upscaler ratio ...)`; the fades fold's
 once-a-run line. `rd_replay_tool --stats`: `upscale point: SCENE WxH -> UPSCALED wxh (render

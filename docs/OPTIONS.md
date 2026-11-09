@@ -243,8 +243,8 @@ How the picture is drawn and finished: smoothing, the picture's size and sharpne
   50 Hz the border at the top and bottom is a little taller. With Aspect
   ratio at 4:3, or at a shape the game's picture fills exactly (such as
   48:9), Off is the PS2's own picture and border, exactly as before.
-- **Brightness** sets how bright the picture is. Square puts back the
-  normal value, 7.
+- **Brightness** sets how bright the picture is. Holding Left or Right
+  keeps changing it. Square puts back the normal value, 7.
 - **CRT filter** makes the picture look like an old tube television. Off
   turns it off; the other choices are the styles Scanlines, Consumer TV,
   Trinitron, PVM and Shadow mask. **CRT strength** is how strong it is. It
@@ -259,7 +259,8 @@ How the picture is drawn and finished: smoothing, the picture's size and sharpne
   darker, Picture brightness lightens or darkens everything, Contrast
   pulls the light and dark tones apart or together, and Saturation changes
   how strong the colours are (1 is almost black and white). Left or Right
-  changes a row by 1. Square puts the row back to 50. They apply with
+  changes a row by 1, and holding it keeps changing the row; L1 or R1
+  changes it by 10. Square puts the row back to 50. They apply with
   every Preset and with the CRT filter, which gets the same colours. With
   the Enhanced preset, the menu text and subtitles, which are drawn sharp
   on top of the picture, keep their own colours. The films are not

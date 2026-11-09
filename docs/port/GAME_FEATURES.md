@@ -1383,10 +1383,9 @@ with the flag's stub).
 ## The title logo
 
 The logo is nine stage animations of the title's stage (I, C and O, their glows and shadows). While
-a Settings or Extras page opened from the title is up, or the model list the Extras page opens, or
-the New Game screen, it is not drawn; its animation runs on, so back on the title it shows settled. Once hidden it stays
-hidden until the title's menu (layout 12 or 13), the file select or the vibration screen (the New
-Game screen's way back) is back or the stage changes, so Extras > Credits
+a Settings or Extras page opened from the title is up, or the model list the Extras page opens, it
+is not drawn; its animation runs on, so back on the title it shows settled. Once hidden it stays
+hidden until the title's menu (layout 12 or 13) or the file select is back or the stage changes, so Extras > Credits
 and a model's stage load do not show it while the title fades. The pause menu's Settings never
 hides anything (`port/game/title_logo.h`, header comment).
 

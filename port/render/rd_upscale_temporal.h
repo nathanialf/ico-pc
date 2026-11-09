@@ -28,7 +28,7 @@ bool rd__upscale_temporal_on(const RdSettings *st, bool crt);
 float rd__upscale_temporal_ratio(const RdSettings *st, float sceneScale);
 
 /* rd__apply_display's part: note gets ", upscaling fsr3 quality (ratio
- * R<detail>)" in force (detail: rd_present.c's ", render WxH -> display WxH,
+ * R<detail>), sharpness S, fp16 on|off" in force (detail: rd_present.c's ", render WxH -> display WxH,
  * FFX 3.1.4, GPU memory N MB", or NULL), ", upscaling fsr3 off (REASON)"
  * asked for but not in force, "" otherwise; true when the value asked, the
  * state or the ratio changed since the last call (the display line is logged
