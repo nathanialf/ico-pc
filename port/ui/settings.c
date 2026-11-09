@@ -4546,6 +4546,7 @@ static int newGameScreenProc(int first, int item)
         /* Cross on an Off/On item picks it and moves on */
         POSITIVE_SE();
         lt_ext_layout(s_newGameLayout)->curItem = P(cur)->downItem;
+        newGameSync(); /* lit for this tick's draw */
         return -1;
     }
     if (flags & (PAD_OK | LT_PAD_START)) {
@@ -4940,7 +4941,7 @@ void ui_settings_reset(void)
     /* the wrapped notes are set again on the rebuilt rows */
     memset(s_noteStr, 0, sizeof(s_noteStr));
     memset(s_noteLang, 0, sizeof(s_noteLang));
-    s_newGameLayout = -1;
+    s_newGameLayout = s_newGameStart = -1;
     s_newGameRow[0][0] = s_newGameRow[0][1] = s_newGameRow[1][0] = s_newGameRow[1][1] = -1;
     s_newGameNote = -1;
     s_newGameChosen = s_mirrorChoice = s_ngpChoice = 0;

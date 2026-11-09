@@ -1562,6 +1562,12 @@ The renderer's test programs have a page of their own:
   it off with one more call; the cleared page still fits. `settings_test.c`'s `testBuild` reads
   the Gameplay page's ten rows, `testGameOptions` four Downs from the stick fix to Film effect, and
   `settings_discs` (every disc) shows the row from both entries.
+- `settings_test.c`'s `testNewGameMouse` (`settings`): the New Game screen with the mouse
+  (`ui_mouse_tick` over a 640 x 480 view): a hover over Mirror mode's On or New Game+'s On moves
+  nothing; a click on New Game+ On picks it and moves to Start with both chosen values lit in the
+  click's own tick; a hover over New Game+ Off on the way to Start leaves New Game+ On; a click on
+  Mirror mode On picks it and moves to New Game+'s choice; a hover over Start leaves the cursor; a
+  click on it starts the game mirrored with New Game+.
 - `settings_test.c`: Gameplay > Yorda's seven rows (the Chain swing speed and Chain swing slowdown rows
   after Natural chains), their value text ("4 (original)", else the number), ten steps round
   4..10, 1..4 with the key written as the number and the achievements untouched, and their notes after
