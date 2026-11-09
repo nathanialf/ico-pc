@@ -1294,7 +1294,7 @@ typedef struct RdProfile {
     bool localProbe;
     uint16_t probeOff;
     char localWords[96];
-    char text[640]; /* the summary's words, as in force */
+    char text[768]; /* the summary's words, as in force */
 } RdProfile;
 
 /* RdProfile's flags, for its marks (devSet, selfTestOff) */

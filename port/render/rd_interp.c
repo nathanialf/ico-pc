@@ -161,7 +161,9 @@
 #include <string.h>
 #include "rd_camera_blend.h"
 #include "rd_internal.h"
+#include "rd_layer.h"
 #include "rd_mesh.h"
+#include "rd_upscale.h"
 #include "rd_velocity.h"
 #include "rd_vu_skin_check.h"
 #include "xxh3.h"
@@ -5714,17 +5716,18 @@ bool rd__interp_copy_at(int l, uint32_t at, uint32_t from, uint32_t to, uint32_t
  * frame.)  For the motion blur, the same for DISPLAY when the frame reads it (the
  * motion blur's old frame, the file header): DISPLAY into DISPLAY_HELD at the
  * first present's head, back at the later ones', so every present draws the
- * tick's FIX over the previous tick's picture.  Under Motion blur: Smooth
+ * tick's FIX over the previous tick's picture (under the display layer,
+ * PRE_DISPLAY into PRE_HELD: rd_layer.h).  Under Motion blur: Smooth
  * (rd__blur_smooth_active) the sprite reads its accumulator instead and
  * DISPLAY is left alone (FEED128's copies as ever). */
 static void feedback(int firstOfTick)
 {
     const uint32_t feed = rd_target(RD_TARGET_FEED128).id;
     const uint32_t held = rd_target(RD_TARGET_FEED_HELD).id;
-    const uint32_t disp = rd_target(RD_TARGET_DISPLAY).id;
-    const uint32_t dispHeld = rd_target(RD_TARGET_DISPLAY_HELD).id;
+    uint32_t disp = rd_target(RD_TARGET_DISPLAY).id;
+    uint32_t dispHeld = rd_target(RD_TARGET_DISPLAY_HELD).id;
     const int head = rd__first_list((int)s_out.keep);
-    int fed = 0, read = 0;
+    int fed = 0, read = 0, early = 0;
     RdStateBlock st = s_out.startState;
     for (int l = head; l < RD_LIST_COUNT; l++) {
         const RdCmdList *cl = &s_out.lists[l];
@@ -5734,8 +5737,22 @@ static void feedback(int firstOfTick)
                 continue;
             }
             fed |= feed && writesTarget(c, &st, feed);
-            read |= disp && readsTarget(c, &st, disp);
+            const int r = disp && readsTarget(c, &st, disp);
+            read |= r;
+            early |= r && l < 11;
         }
+    }
+    /* the display layer (rd_layer.h): lists 0-10 read PRE_DISPLAY, the
+     * reduction of the scene before the upscale, for DISPLAY; it is held
+     * (a later present only when the tick's first held it) */
+    static int preTick;
+    uint32_t pre, preHeld;
+    const int usePre =
+        early && rd__layer_feedback_ids(&pre, &preHeld, false) && (firstOfTick || preTick);
+    preTick = firstOfTick ? usePre : preTick;
+    if (usePre) {
+        disp = pre;
+        dispHeld = preHeld;
     }
     if (fed && held) {
         headCopy(head, firstOfTick ? feed : held, firstOfTick ? held : feed, feed);
@@ -6065,6 +6082,9 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     /* the glow kept from the tick's first present (rd_glow_hold.c): after
      * the hash too, which the held glow leaves exact */
     (void)rd__glow_hold(&s_out, firstOfTick);
+    if (firstOfTick && (st.snap == RD_SNAP_CAMERA || st.snap == RD_SNAP_WALL)) {
+        rd__velocity_forget_as(RD_UPSCALE_RESET_CAMERA); /* the upscaler's history too */
+    }
     rd__velocity_attach(&s_out, 0); /* VuPrevCB: the last present's (rd_velocity.h) */
     if (stats) {
         *stats = st;
@@ -6530,6 +6550,7 @@ bool rd_present(float alpha)
         rd__blur_smooth_arm(first, k, gap[0], gap[1]);   /* a keep frame draws no motion blur */
         blendedDumpTake(NULL, true, cur->number, alpha); /* the tick's own picture */
         if (first) {
+            rd__velocity_keep(cur); /* the next picture begins a new history */
             return rd__replay_frame_async(cur, 1, true);
         }
         static RdFrame empty;

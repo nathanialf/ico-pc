@@ -171,7 +171,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   folding), the effects depth or a depth read by a later frame (the bars drawn, a fade after them
   folds), a draw into SCENE in list 12, MSAA, a factor above 0x80 (`rd_fades_fold`).
 - `rd_vis_test.c`: the scene draws' visibility test ([RENDER.md](RENDER.md#culling)) on the CPU,
-  without a device (also the MSAA epoch, `checkMsaaEpoch`: `rd__vis_msaa_may_close` true for DATE,
+  without a device (the default mode per device class, `checkProfileDefault`: a tile-based profile takes `frustum`, every other `full`, `ICO_RD_CULL` rules on both, and the 10 s line says `(profile default)` or `([dev] cull)`; also the MSAA epoch, `checkMsaaEpoch`: `rd__vis_msaa_may_close` true for DATE,
   a texture of SCENE's depth (texturing off too), SCENE's colour with another depth and SCENE's
   depth with another colour, false for SCENE's own pair, SCENE without a depth and another target's
   pair; on a recorded frame of off-screen draws under `rd__vis_set_msaa(1)` the four that may close

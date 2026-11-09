@@ -2750,7 +2750,13 @@ void rd_discard_frame(void)
         return;
     }
     /* the state the dropped lists would have left is not applied: nothing
-     * of them reached the GS */
+     * of them reached the GS.  Its camera cut is the next frame's (as
+     * rd_camera_cut between frames): the camera moved all the same, so the
+     * next picture snaps and the temporal upscaler drops its history (a
+     * plain cut wins over the wall's) */
+    if (f->cut && g_rd.cutPending != 1) {
+        g_rd.cutPending = f->cut;
+    }
     rd__frame_reset(f);
     g_rd.recIndex = -1;
     g_rd.discardOpen = false;

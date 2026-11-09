@@ -50,6 +50,12 @@ struct IcoFiber {
     int slot;
 };
 
+typedef struct HostFiber {
+    IcoFiber fiber;
+    void *reservation;
+    size_t reservation_bytes;
+} HostFiber;
+
 /* --- The pool -------------------------------------------------------------
  *
  * minicoro lays a coroutine out in one block (minicoro.h,
@@ -87,6 +93,8 @@ static Pool pool;
 static void fiber_main(mco_coro *co);
 static void *slot_alloc(size_t size, void *allocator_data);
 static void slot_dealloc(void *ptr, size_t size, void *allocator_data);
+static void *host_alloc(size_t size, void *allocator_data);
+static void host_dealloc(void *ptr, size_t size, void *allocator_data);
 
 static size_t align_up(size_t v, size_t a)
 {
@@ -212,6 +220,51 @@ static void slot_dealloc(void *ptr, size_t size, void *allocator_data)
     slot_release((int)((s - pool.base) / pool.slot_bytes));
 }
 
+/* A host fiber has its own header, one-page guard, and committed stack. */
+static void *host_alloc(size_t size, void *allocator_data)
+{
+    HostFiber *host = allocator_data;
+    size_t page = ico_vm_page_size();
+    size_t head;
+    size_t bytes;
+    void *base;
+
+    if (size < ICO_FIBER_HOST_STACK_SIZE + page + 16) {
+        return NULL;
+    }
+    head = size - ICO_FIBER_HOST_STACK_SIZE - page - 16;
+    if (head > page) {
+        return NULL;
+    }
+    bytes = align_up(size + page, page);
+    base = ico_vm_reserve(0, bytes, 0);
+    if (base == NULL) {
+        return NULL;
+    }
+    if (ico_vm_commit(base, page) != 0 ||
+        ico_vm_commit((char *)base + 2 * page, align_up(ICO_FIBER_HOST_STACK_SIZE + 16, page)) !=
+            0) {
+        ico_vm_release(base, bytes);
+        return NULL;
+    }
+    host->reservation = base;
+    host->reservation_bytes = bytes;
+    return (char *)base + page - head;
+}
+
+static void host_dealloc(void *ptr, size_t size, void *allocator_data)
+{
+    HostFiber *host = allocator_data;
+    (void)ptr;
+    (void)size;
+#ifdef ICO_FIBER_ASAN
+    __asan_unpoison_memory_region(host->reservation, host->reservation_bytes);
+#endif
+    ico_vm_release(host->reservation, host->reservation_bytes);
+    host->reservation = NULL;
+    host->reservation_bytes = 0;
+}
+
 static int slot_ok(int slot)
 {
     return slot >= 0 && slot < ICO_FIBER_POOL_SLOTS;
@@ -284,6 +337,35 @@ IcoFiber *ico_fiber_create(void (*fn)(void *arg), void *arg, size_t stack_size)
     return NULL;
 }
 
+IcoFiber *ico_fiber_create_host(void (*fn)(void *arg), void *arg)
+{
+    HostFiber *host = calloc(1, sizeof *host);
+    mco_desc desc;
+    mco_result res;
+    size_t page = ico_vm_page_size();
+
+    if (host == NULL) {
+        return NULL;
+    }
+    desc = mco_desc_init(fiber_main, ICO_FIBER_HOST_STACK_SIZE);
+    desc.coro_size += page - MCO_DEFAULT_STORAGE_SIZE;
+    desc.storage_size = page;
+    desc.alloc_cb = host_alloc;
+    desc.dealloc_cb = host_dealloc;
+    desc.user_data = &host->fiber;
+    desc.allocator_data = host;
+    host->fiber.fn = fn;
+    host->fiber.arg = arg;
+    host->fiber.slot = -1;
+    res = mco_create(&host->fiber.co, &desc);
+    if (res != MCO_SUCCESS) {
+        fprintf(stderr, "fiber: host mco_create: %s\n", mco_result_description(res));
+        free(host);
+        return NULL;
+    }
+    return &host->fiber;
+}
+
 int ico_fiber_resume(IcoFiber *f)
 {
     mco_result res = mco_resume(f->co);
@@ -314,13 +396,18 @@ void ico_fiber_yield(void)
 
 void ico_fiber_destroy(IcoFiber *f)
 {
+    int host;
     if (f == NULL) {
         return;
     }
+    host = f->slot == -1;
     /* the slot (and f with it) is decommitted by slot_dealloc */
     if (mco_destroy(f->co) != MCO_SUCCESS) {
         fprintf(stderr, "fiber: destroying a running fiber\n");
         abort();
+    }
+    if (host) {
+        free((HostFiber *)f);
     }
 }
 

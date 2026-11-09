@@ -32,6 +32,9 @@ static struct {
     /* DISPLAY's record while it lends a slot's (RD_LAYER_SLOT_*), -1 none */
     int dispLent;
     RdTargetRec dispSaved;
+    /* PRE_DISPLAY lent to DISPLAY from this ordinal (after the held copy
+     * at the lists' head, RdLayerPlan.preCopyOrd), ~0u none */
+    uint32_t lendAt;
     /* the keep sprite's filters, put back after it */
     bool filterSaved;
     uint8_t mag, min;
@@ -44,7 +47,7 @@ static struct {
     /* the 10 s line */
     double blockAt;
     RdUpscaleStats blockFrom;
-} s_ly = {.dispLent = -1};
+} s_ly = {.dispLent = -1, .lendAt = ~0u};
 
 /* ---------------------------------------------------------------- slots */
 
@@ -240,7 +243,7 @@ const char *rd__layer_sc_name(int kind)
 typedef struct PlanWalk {
     RdLayerPlan *p;
     const RdFrame *f;
-    uint32_t ord, scene, display;
+    uint32_t ord, scene, display, pre, preHeld;
     bool barsFree, sceneDepthCleared;
     bool *carried;
     uint32_t lastScene; /* the ordinal after the last scene-class command, 0 none */
@@ -373,8 +376,12 @@ static void planCmd(void *user, int list, uint32_t index, const RdCmd *c, const 
     }
     if (list < 11) {
         /* lists 0-10: what reads DISPLAY there */
-        if ((c->type == RDC_COPY || c->type == RDC_EXACT_BLEND) &&
-            (c->u[0] == w->display || c->u[1] == w->display)) {
+        if (c->type == RDC_COPY && w->pre && w->preHeld &&
+            (c->u[0] == w->pre || c->u[0] == w->preHeld) &&
+            (c->u[1] == w->pre || c->u[1] == w->preHeld)) {
+            p->preCopyOrd = ord;
+        } else if ((c->type == RDC_COPY || c->type == RDC_EXACT_BLEND) &&
+                   (c->u[0] == w->display || c->u[1] == w->display)) {
             p->displayCopied = true;
             p->feedsDisplay |= c->u[0] == w->display;
         } else if (isAction(c->type) && c->type != RDC_CLEAR) {
@@ -435,7 +442,7 @@ void rd__layer_plan(const RdFrame *f, int keep, bool effectsDepth, bool *depthCa
 {
     memset(p, 0, sizeof(*p));
     p->list11Ord = p->markerOrd = p->boundaryOrd = p->keepOrd = p->keepAtOrd = ~0u;
-    p->redOrd[0] = p->redOrd[1] = ~0u;
+    p->redOrd[0] = p->redOrd[1] = p->preCopyOrd = ~0u;
     bool carried = depthCarried ? *depthCarried : false;
     PlanWalk w;
     memset(&w, 0, sizeof(w));
@@ -443,6 +450,8 @@ void rd__layer_plan(const RdFrame *f, int keep, bool effectsDepth, bool *depthCa
     w.f = f;
     w.scene = rd_target(RD_TARGET_SCENE).id;
     w.display = rd_target(RD_TARGET_DISPLAY).id;
+    w.pre = rd__layer_id(RD_LAYER_SLOT_PRE);
+    w.preHeld = rd__layer_id(RD_LAYER_SLOT_PRE_HELD);
     w.carried = &carried;
     w.barsFree = !effectsDepth && !carried;
     RdStateBlock st = f->startState;
@@ -503,6 +512,7 @@ void rd__layer_scan(const RdFrame *f, int keep)
     s_ly.planned = false;
     s_ly.keep = keep != 0;
     s_ly.r = NULL;
+    s_ly.lendAt = ~0u;
     g_rdPerf.layerDraws = 0;
     if (s_ly.active || s_ly.dispLent >= 0) {
         rd__layer_end(NULL); /* a replay that ended early (never with a device lost) */
@@ -543,14 +553,21 @@ void rd__layer_scan(const RdFrame *f, int keep)
     }
     s_ly.planned = true;
     /* the motion blur reads PRE_DISPLAY where it reads DISPLAY: DISPLAY's
-     * record lends PRE_DISPLAY's until the boundary.  Not while the lists
-     * copy DISPLAY (the interpolator's held copy, which names DISPLAY and
-     * DISPLAY_HELD at the display scale), nor before PRE_DISPLAY holds a
-     * picture, nor while DISPLAY waits for its first clear */
+     * record lends PRE_DISPLAY's until the boundary (from after the
+     * interpolator's held copy of PRE_DISPLAY at the lists' head when the
+     * frame has one: rd__layer_due).  Not while the lists copy DISPLAY
+     * (a held copy made before PRE_DISPLAY existed, at the display scale),
+     * nor before PRE_DISPLAY holds a picture, nor while DISPLAY waits for
+     * its first clear */
     const RdTargetRec *d = displayRec();
     if (!keep && s_ly.p.feedsDisplay && !s_ly.p.displayCopied && s_ly.preValid &&
         rd__layer_rec(RD_LAYER_SLOT_PRE)->live && d && !d->clearPending) {
-        lendDisplay(RD_LAYER_SLOT_PRE);
+        rd__upscale_stats_layer()->preLent++;
+        if (s_ly.p.preCopyOrd == ~0u) {
+            lendDisplay(RD_LAYER_SLOT_PRE);
+        } else {
+            s_ly.lendAt = s_ly.p.preCopyOrd + 1u;
+        }
     } else if (!keep && s_ly.p.feedsDisplay && s_ly.p.displayCopied) {
         static bool saidCopy;
         if (!saidCopy) {
@@ -564,6 +581,13 @@ void rd__layer_scan(const RdFrame *f, int keep)
 
 bool rd__layer_due(uint32_t ord)
 {
+    if (ord >= s_ly.lendAt) {
+        /* past the held copy of PRE_DISPLAY: the reads take it as DISPLAY */
+        s_ly.lendAt = ~0u;
+        if (s_ly.planned) {
+            lendDisplay(RD_LAYER_SLOT_PRE);
+        }
+    }
     if (s_ly.filterSaved && ord > s_ly.p.keepOrd) {
         /* the walk is past the keep sprite: its run drawn, DISPLAY its own */
         if (s_ly.r) {
@@ -619,6 +643,13 @@ static void preDisplay(Replay *r, const RdFrame *f)
     rd__replay_vp_exact(false);
     r->st = keep;
     giveBackDisplay();
+    if (rd_interpolation_active()) {
+        /* the held copy of a tick's first present (rd_interp.c feedback):
+         * PRE_DISPLAY's geometry (DISPLAY's GS size, the render scale,
+         * SCENE's ox, sy doubled under the full height), made here because
+         * the interpolation makes no GPU call */
+        (void)rd__layer_feedback_ids(NULL, NULL, true);
+    }
     s_ly.preValid = true;
     rd__upscale_stats_layer()->preReductions++;
 }
@@ -805,7 +836,7 @@ static void blockLog(void)
                 "resets %u (first %u, size %u, cut %u, keep run %u, camera %u, forgotten %u), "
                 "display layer draws %u (textured %u, keep copies %u), %u frames with the layer "
                 "begun after a scene-class command, %u pre-upscale reductions for the motion "
-                "blur, refused %u",
+                "blur (read as DISPLAY by %u frames), refused %u",
                 disp, kept, n->resets - o->resets,
                 n->resetsBy[RD_UPSCALE_RESET_FIRST] - o->resetsBy[RD_UPSCALE_RESET_FIRST],
                 n->resetsBy[RD_UPSCALE_RESET_SIZE] - o->resetsBy[RD_UPSCALE_RESET_SIZE],
@@ -815,7 +846,7 @@ static void blockLog(void)
                 n->resetsBy[RD_UPSCALE_RESET_FORGOTTEN] - o->resetsBy[RD_UPSCALE_RESET_FORGOTTEN],
                 n->layerDraws - o->layerDraws, n->layerTextured - o->layerTextured,
                 n->keepCopies - o->keepCopies, n->layerLate - o->layerLate,
-                n->preReductions - o->preReductions,
+                n->preReductions - o->preReductions, n->preLent - o->preLent,
                 (n->refused - o->refused) + (n->layerRefused - o->layerRefused));
     }
     s_ly.blockAt = now;
@@ -854,21 +885,25 @@ void rd__layer_end(Replay *r)
     }
     s_ly.planned = false;
     s_ly.r = NULL;
+    s_ly.lendAt = ~0u;
     if (r && rd__upscale_point_on()) {
         blockLog();
     }
 }
 
-void rd__layer_feedback_ids(uint32_t *pre, uint32_t *preHeld, bool makeHeld)
+bool rd__layer_feedback_ids(uint32_t *pre, uint32_t *preHeld, bool makeHeld)
 {
     const RdTargetRec *p = rd__layer_rec(RD_LAYER_SLOT_PRE);
     if (makeHeld && p->live) {
         (void)rd__layer_slot_make(RD_LAYER_SLOT_PRE_HELD, p, 0u, "rd pre-upscale display held");
     }
+    const uint32_t a = rd__layer_id(RD_LAYER_SLOT_PRE), b = rd__layer_id(RD_LAYER_SLOT_PRE_HELD);
     if (pre) {
-        *pre = rd__layer_id(RD_LAYER_SLOT_PRE);
+        *pre = a;
     }
     if (preHeld) {
-        *preHeld = rd__layer_id(RD_LAYER_SLOT_PRE_HELD);
+        *preHeld = b;
     }
+    const RdTargetRec *h = rd__layer_rec(RD_LAYER_SLOT_PRE_HELD);
+    return a && b && h->tw == p->tw && h->th == p->th && rd__upscale_point_on() && rd__layer_on();
 }

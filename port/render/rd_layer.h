@@ -122,8 +122,13 @@ typedef struct RdLayerPlan {
     RdStateBlock redSt[2];
     bool feedsDisplay;  /* a list 0-10 command samples DISPLAY */
     bool displayCopied; /* a list 0-10 copy or exact blend names DISPLAY */
-    bool depthRead;     /* SCENE's depth tested before this frame clears it */
-    int late;           /* the last scene-class command in lists 11-12: its kind (RD_LAYER_SC_*) */
+    /* the last list 0-10 copy naming PRE_DISPLAY or PRE_HELD (rd_interp.c
+     * feedback's held copy under the layer), ~0u none: DISPLAY's record
+     * lends PRE_DISPLAY's after it, so the copy and the reads never see
+     * one texture through two records */
+    uint32_t preCopyOrd;
+    bool depthRead; /* SCENE's depth tested before this frame clears it */
+    int late;       /* the last scene-class command in lists 11-12: its kind (RD_LAYER_SC_*) */
     int lateList;
     uint8_t lateType;
     uint32_t draws, textured; /* the actions from the boundary to the marker */
@@ -179,8 +184,13 @@ const RdScreenVtx *rd__layer_keep_verts(struct Replay *r, const RdCmd *c, const 
  * 10 s line */
 void rd__layer_end(struct Replay *r);
 /* PRE_DISPLAY's and PRE_HELD's ids (0 when not made), PRE_HELD made at
- * PRE_DISPLAY's geometry when asked (rd_interp.c feedback) */
-void rd__layer_feedback_ids(uint32_t *pre, uint32_t *preHeld, bool makeHeld);
+ * PRE_DISPLAY's geometry when asked.  True when the layer is in force
+ * (a temporal upscaler, the dev switch on) and both are made: rd_interp.c
+ * feedback then holds PRE_DISPLAY in PRE_HELD instead of DISPLAY in
+ * DISPLAY_HELD (it asks without makeHeld: the interpolation makes no GPU
+ * call; the boundary makes PRE_HELD beside PRE_DISPLAY while the
+ * interpolation is on). */
+bool rd__layer_feedback_ids(uint32_t *pre, uint32_t *preHeld, bool makeHeld);
 /* The composite holds a picture (a layer frame or a dispatch since it was
  * made); false after it was made again */
 bool rd__layer_held(void);
