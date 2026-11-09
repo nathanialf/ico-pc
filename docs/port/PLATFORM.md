@@ -113,7 +113,9 @@ is the only resumer, so every switch between two game threads goes fiber, schedu
 are 256 KB (`ICO_FIBER_STACK_SIZE`). Every preset uses minicoro's assembly backend (x86-64 Linux
 and Windows, arm64), and the stack has a no-access guard page below it, so an overflow faults
 instead of corrupting the fiber's control block (`ico_fiber_has_guard_page`; the `fiber_guard`
-test).
+test). The iOS entry point uses `ico_fiber_create_host` for UIKit's main thread: that host fiber has
+a guarded 32 MB stack outside the save-state pool, so it does not affect a game thread's slot or
+image.
 
 ### The pool
 
