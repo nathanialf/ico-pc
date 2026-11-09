@@ -134,7 +134,7 @@ int robust_unmarked_line(char *out, size_t size, const char *cfgName)
     const int n =
         snprintf(out, size,
                  "ico_pc: [dev] gpu_robust = true in %s has no gpu_robust_by mark: set by "
-                 "hand (or by a build before v0.10.2), so it is never dropped; it costs "
+                 "hand (or left by a game that wrote no mark), so it is never dropped; it costs "
                  "bounds checks on every 3D load (delete the line to turn it off)",
                  cfgName != NULL ? cfgName : "config.toml");
 

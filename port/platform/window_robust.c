@@ -88,7 +88,7 @@ void window_robust_start(const char *cfgName)
 
     if (mark_read(&old) != 0) {
         /* robust access on with no mark of the game's: set by hand, or by a
-           build before the mark (v0.10.2): never touched, said every start */
+           game that wrote no mark: never touched, said every start */
         if (ico_config_get_bool(KEY_ON, 0) &&
             robust_unmarked_line(line, sizeof(line), cfgName) == 0) {
             ico_diag_log("%s", line);
