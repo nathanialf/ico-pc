@@ -57,6 +57,11 @@ const char *rd__upscale_capture_suffix(int i)
     return i >= 0 && i < RD_UPSCALE_CAPTURE_PICTURES ? kSuffix[i] : "";
 }
 
+bool rd__upscale_capture_copied(void)
+{
+    return s_uc.copied != 0;
+}
+
 const RdUpscaleCaptureStats *rd__upscale_capture_stats(void)
 {
     return &s_uc.st;

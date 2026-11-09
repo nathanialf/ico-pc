@@ -71,6 +71,9 @@ void rd__upscale_capture_take(RhiCommandList cl, const RdUpscaleIn *in, RdTarget
  * when one failed, 0 when none was due. An arm that met a present without
  * an upscaler in force is dropped with its line. */
 int rd__upscale_capture_finish(void);
+/* copies recorded and not yet written (rd_present.c rd__capture_pending:
+ * the picture's submit is not handed to the submit thread) */
+bool rd__upscale_capture_copied(void);
 /* rd__upscale_dispatch_at's note of the frame it dispatched: the post
  * passes, blocks and film noise it held, counted for the 10 s line
  * "upscale point: 10 s: the N frames dispatched held: ..." */

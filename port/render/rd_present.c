@@ -2216,7 +2216,10 @@ bool rd__capture_armed(void)
 
 bool rd__capture_pending(void)
 {
-    return s_cap.copied != 0 || s_shot.copied != 0 || s_shot.dropped != 0;
+    /* the upscaler's pictures copied (rd_upscale_capture.h): their picture's
+     * submit stays here, where rd__capture_finish writes them */
+    return s_cap.copied != 0 || s_shot.copied != 0 || s_shot.dropped != 0 ||
+           rd__upscale_capture_copied();
 }
 
 int rd_capture_result(char *path, uint32_t pathSize)
