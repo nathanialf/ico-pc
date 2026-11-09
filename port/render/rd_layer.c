@@ -496,7 +496,7 @@ static void note(uint32_t *count, const char *fmt, const char *what, uint32_t fr
     }
 }
 
-static uint32_t s_nRefused, s_nLate, s_nNoKeep;
+static uint32_t s_nRefused, s_nLate, s_nNoKeep, s_nCopied;
 
 static void refuse(const char *why, uint32_t frame)
 {
@@ -569,13 +569,17 @@ void rd__layer_scan(const RdFrame *f, int keep)
             s_ly.lendAt = s_ly.p.preCopyOrd + 1u;
         }
     } else if (!keep && s_ly.p.feedsDisplay && s_ly.p.displayCopied) {
-        static bool saidCopy;
-        if (!saidCopy) {
-            saidCopy = true;
-            rd__log("display layer: frame %u reads DISPLAY in lists 0-10 and copies it there (the "
-                    "held copy of the interpolation): the read stays DISPLAY's (reported once)",
-                    f->number);
-        }
+        /* the interpolator's held copy was made of DISPLAY: PRE_DISPLAY and
+         * PRE_HELD did not hold a picture at the tick's head (the first
+         * tick under the layer, the first after the targets are made
+         * again), or the frame copies DISPLAY itself.  Expected once each
+         * time; a count that keeps growing is the motion blur reading the
+         * upscaled picture */
+        note(&s_nCopied, "%s",
+             "lists 0-10 copy DISPLAY (the interpolation's held copy made before PRE_DISPLAY "
+             "and PRE_HELD held a picture): the motion blur reads the upscaled DISPLAY this "
+             "tick, not PRE_DISPLAY",
+             f->number);
     }
 }
 
