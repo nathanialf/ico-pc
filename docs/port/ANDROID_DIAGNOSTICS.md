@@ -351,9 +351,9 @@ output, before the game's 2D layer), each halved until at most 2560 wide, and ad
 report's zip while it stays under 24 MB (Share a bug report offers the zip). Lines:
 `upscale capture: frame N: ...` (the sizes, or why a picture is missing) and `window: bug report:
 the upscaler's pictures: ... K of 4 in <zip>`. Reading them: a flaw in `-scene.png` is the port's;
-one only in `-composite.png` is the upscaler's; on a phone, `[dev] fsr3_fp16 = off` in the
-config's `[dev]` table makes the upscaler's passes run at full precision for an A/B (the display
-line then says `fp16 off (dev)`). The 10 s line `upscale point: 10 s: the N pictures dispatched
+one only in `-composite.png` is the upscaler's. The upscaler runs in full precision by default on
+every device; `[dev] fsr3_fp16 = on` in the config's `[dev]` table opts into its half-precision
+speed path (the display line then says `fp16 on (dev)`). The 10 s line `upscale point: 10 s: the N pictures dispatched
 held: ...` names the effects the upscaled frames held ([DISPLAY.md](DISPLAY.md#fsr-31-upscaling),
 "The upscaler's pictures").
 

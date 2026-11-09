@@ -1918,12 +1918,20 @@ point: 10 s: the N pictures dispatched held: the fog in F, the glow chain in G, 
 depth of field in D, the motion blur in M, film noise in K, render-to-texture blocks (the water's
 reflections) in R; FSR 3.1 fp16 on|off|off (dev)` (each frame's lists scanned once a frame number:
 the post stubs by kind, a TARGET naming a block, the film noise), beside the velocity line's counts
-of the draws left without motion vectors. Two A/B switches go with it, neither a row: `[dev]
-fsr3_fp16 = off` (`ICO_RD_FSR3_FP16=0`, [CONFIG.md](CONFIG.md)): the FidelityFX context made
-without fp16, every pass in its fp32 build (`tools/ffx/patches/0004-vk-fp16-dev-switch.patch`), the
-display line saying `fp16 off (dev)`; and the environment's `ICO_RD_FOG_JITTER=0`: the fog's draws
-take no jitter, so the fog dither's Bayer phase (`fog_lut.hlsl`) stays at 0 while the scene is
-jittered (`rd_jitter.c rd__fog_jitter_in`, one line when it acts).
+of the draws left without motion vectors. **Precision.** FSR 3.1 runs in full precision on every GPU (`[dev] fsr3_fp16`, default `off`):
+the FidelityFX context is made as on a device without fp16, so every pass takes its fp32 build
+(`tools/ffx/patches/0004-vk-fp32-default.patch`: `GetDeviceCapabilitiesVK` reports fp16 only for
+`ICO_RD_FSR3_FP16=1` or `on`, which the port exports for `[dev] fsr3_fp16 = on`; `rd_fsr3.c
+rd__fsr3_fp16_dev_on` reads the same variable). Why: the lines below carry the mark of reduced
+precision, and AMD's FSR 2.1 notes moved half-precision computations to full precision for colour
+range and temporal stability; fp16 is only a speed path, and this game's picture is cheap. To opt
+in: `[dev] fsr3_fp16 = on` (`auto`, the old default's word, reads as `off`). The display line, the
+first dispatch's line, the summary and the 10 s line say `fp16 off (the port's default; [dev]
+fsr3_fp16 = on for the half-precision path)` or `fp16 on (dev)` (`off ([dev] fsr3_fp16 = on, the
+device offers no fp16)` where it asked and the device has none). One A/B switch, not a row: the
+environment's `ICO_RD_FOG_JITTER=0`: the fog's draws take no jitter, so the fog dither's Bayer
+phase (`fog_lut.hlsl`) stays at 0 while the scene is jittered (`rd_jitter.c rd__fog_jitter_in`, one
+line when it acts).
 
 **Issue 203's lines** (a GTX 1660, FSR 3.1 Quality at 2560x1440; the reporter's present
 picture measured, `build-host/tmp/v0112/evidence/203/lines-work/`): dark columns exactly vertical
@@ -1933,12 +1941,12 @@ is. Their spacing doubles at 1/16, 1/8 and 1/4 of the picture's width (about 4, 
 window pixels in the four octaves left of the middle) and starts again at 1/2: a pattern keyed to
 power-of-two fractions of a coordinate normalised to the width, the mark of reduced-precision
 arithmetic on it; the port's shaders hold no half-precision type, FSR 3.1 runs every pass but RCAS
-in fp16 on that GPU. No lavapipe replay of the dumps shows them (FSR 3.1 at Quality 80 and 0,
+in fp16 on that GPU (before this default). No lavapipe replay of the dumps shows them (FSR 3.1 at Quality 80 and 0,
 Native, `--presents 8|64`, `--repeat 8`, the blended dump, the reporter's filter, height, fog path
 and DATE path, 2560x1440 and 1920x1080, without `--water-sharp`, the column high-pass 0.12 to 0.14
 levels against the reporter's 0.9 to 1.4), and the dump draws the sea's three pack-textured layers
-blank (the reporter's texture pack). The pictures above and `fsr3_fp16` decide it on the next
-report.
+blank (the reporter's texture pack). Hence the full-precision default above; the pictures above
+confirm it on the next report.
 
 - **Support.** `rd_upscale_temporal_supported()` (`port/render/rd_fsr3.c`): a build with the
   upscaler (`ICO_FFX`), the Vulkan backend, a Vulkan 1.2 or later device, external compute offered

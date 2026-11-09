@@ -614,10 +614,11 @@ static const struct {
        and keep frames upscaled again, as before the display layer (an A/B;
        port/render/rd_layer.c) */
     {"dev.display_layer", "display_layer"},
-    /* off: FSR 3.1's context made as on a device without fp16, so every
-       pass runs its fp32 build (issue 203's A/B for the lines on a GTX
-       1660; auto, the default, takes fp16 where the device offers it;
-       tools/ffx/patches/0004, port/render/rd_fsr3.c) */
+    /* on: FSR 3.1's context takes the device's fp16, the half-precision
+       speed path; off (the default; auto, the old default's word, is the
+       same): every pass in full precision (issue 203: thin vertical lines
+       from the fp16 maths on a GTX 1660; tools/ffx/patches/0004,
+       port/render/rd_fsr3.c) */
     {"dev.fsr3_fp16", "fsr3_fp16"},
     /* true: FSR 3.1 draws its debug view in place of the picture, and
        checks its inputs with its messages in the log (Upscaling = FSR 3.1;
@@ -822,7 +823,8 @@ static const struct {
        under a temporal upscaler (the path before the display layer) */
     {"display_layer", "ICO_RD_DISPLAY_LAYER"},
     /* tools/ffx/patches/0004 (GetDeviceCapabilitiesVK) and rd_fsr3.c
-       rd__fsr3_fp16_word: 0 makes FSR 3.1's context without fp16 */
+       rd__fsr3_fp16_dev_on: 1 gives FSR 3.1's context the device's fp16,
+       anything else (0, unset) full precision */
     {"fsr3_fp16", "ICO_RD_FSR3_FP16"},
     /* port/render/rd_fsr3.c readDebug: 1 sets FSR 3.1's
        FFX_UPSCALE_FLAG_DRAW_DEBUG_VIEW, and FFX_UPSCALE_ENABLE_DEBUG_CHECKING */
@@ -958,7 +960,7 @@ const char *ico_dev_env_value(const char *key, const char *value)
         return value_is(value, paths) ? value : NULL;
     }
     if (strcmp(key, "fsr3_fp16") == 0 && strcmp(value, "auto") == 0) {
-        return "auto"; /* else off as 0 below (rd_fsr3.c rd__fsr3_fp16_dev_off) */
+        return "0"; /* the old default's word: the default, full precision */
     }
     if (strcmp(key, "uber") == 0 && strcmp(value, "auto") == 0) {
         return "auto"; /* else on/off as 1/0 below (rd_uber.c rd__uber_asked_env) */

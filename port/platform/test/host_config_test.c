@@ -742,11 +742,16 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("display_layer", "false"), "0") == 0);
     CHECK(strcmp(ico_dev_env_value("display_layer", "true"), "1") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.display_layer"), "display_layer") == 0);
-    /* fsr3_fp16: FSR 3.1's fp16 builds off (issue 203; tools/ffx/patches/0004) */
+    /* fsr3_fp16: FSR 3.1 in full precision unless on (issue 203;
+       tools/ffx/patches/0004): on exports 1, off and auto (the old default's
+       word, now the default) 0; unset, the patch and rd_fsr3.c take full
+       precision */
     CHECK(strcmp(ico_dev_env_name("fsr3_fp16"), "ICO_RD_FSR3_FP16") == 0);
+    CHECK(strcmp(ico_dev_env_value("fsr3_fp16", "on"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("fsr3_fp16", "true"), "1") == 0);
     CHECK(strcmp(ico_dev_env_value("fsr3_fp16", "off"), "0") == 0);
     CHECK(strcmp(ico_dev_env_value("fsr3_fp16", "false"), "0") == 0);
-    CHECK(strcmp(ico_dev_env_value("fsr3_fp16", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("fsr3_fp16", "auto"), "0") == 0);
     CHECK(ico_dev_env_value("fsr3_fp16", "half") == NULL);
     CHECK(strcmp(ico_config_ini_key("dev.fsr3_fp16"), "fsr3_fp16") == 0);
     /* upscale_debug_view, upscale_debug_checks: FSR 3.1's debug view and

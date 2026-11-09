@@ -1185,6 +1185,19 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_replay_tool_fsr3 PROPERTIES
                          PASS_REGULAR_EXPRESSION "upscale: fsr3 ran [1-9][0-9]* presents \\(context render [0-9]+x[0-9]+ -> display [0-9]+x[0-9]+, [^)]*, refused 0, failed 0, [^)]*\\), validation errors 0"
                          SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+    # FSR 3.1's half-precision path opted into (issue 203: the port's default
+    # is full precision, tools/ffx/patches/0004-vk-fp32-default.patch):
+    # ICO_RD_FSR3_FP16=on ([dev] fsr3_fp16 = on) on rd_replay_tool_fsr3's
+    # run: the dispatch runs and its line says "fp16 on (dev)" (lavapipe
+    # offers fp16); the default is checked by rd_replay_tool_fsr3_dump
+    add_test(NAME rd_replay_tool_fsr3_fp16
+             COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_fsr3_fp16.png" --enhanced
+                     --fsr3 quality --present 1280x960 --stats)
+    set_tests_properties(rd_replay_tool_fsr3_fp16 PROPERTIES
+                         ENVIRONMENT "ICO_RD_FSR3_FP16=on"
+                         PASS_REGULAR_EXPRESSION "by FSR 3.1 at frame [0-9]+;[^\n]*fp16 on \\(dev\\)"
+                         SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
     # --fsr3-dump (issue 203; rd_upscale_capture.h;
     # test/rd_replay_tool_fsr3_dump.cmake): the four pictures F12 saves under
     # an upscaler, at FSR's render and display sizes, the present unchanged

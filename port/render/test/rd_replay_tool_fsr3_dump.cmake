@@ -9,6 +9,8 @@
 #   - the capture changes no picture: the present the same bytes with and
 #     without --fsr3-dump
 #   - without an upscaler --fsr3-dump fails (exit 1, no dispatch named)
+#   - FSR 3.1 runs in full precision by default: the dispatch line says
+#     "fp16 off (the port's default; [dev] fsr3_fp16 = on ...)"
 # 77 (SKIP) where FSR 3.1 cannot run, as rd_replay_tool_fsr3.
 # -DTOOL=<rd_replay_tool> -DDUMP=<rd_pixel_frame.rddump> -DOUT=<a folder>
 if(NOT EXISTS "${DUMP}")
@@ -32,6 +34,10 @@ execute_process(COMMAND "${TOOL}" "${DUMP}" "${OUT}/dumped.png" ${run} --fsr3-du
                 RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
 if(NOT rc EQUAL 0)
   message(FATAL_ERROR "--fsr3-dump exited ${rc}:\n${out}\n${err}")
+endif()
+# the port's default precision (issue 203): FSR 3.1 in full precision
+if(NOT "${out}${err}" MATCHES "fp16 off \\(the port's default; \\[dev\\] fsr3_fp16 = on for the half-precision path\\)")
+  message(FATAL_ERROR "FSR 3.1 not in full precision by default (no \"fp16 off (the port's default\" line):\n${err}")
 endif()
 if(NOT out MATCHES "context render ([0-9]+)x([0-9]+) -> display ([0-9]+)x([0-9]+)")
   message(FATAL_ERROR "--stats: no FSR 3.1 context line:\n${out}")

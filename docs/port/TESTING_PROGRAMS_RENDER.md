@@ -1461,8 +1461,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `-depth.png` and `-composite.png` with their sizes, the four are PNGs of those sizes (SCENE,
   VELOCITY and the depth at the context's render size, the composite at its display size, both from
   `--stats`), the present is the same bytes with and without `--fsr3-dump`, and without an upscaler
-  the flag fails (exit 1, "no dispatch of the upscale point"); SKIP where FSR 3.1 cannot run
-  (`rd_replay_tool_fsr3_dump`; fixture `rd_dump`). The flag itself: with `--fsr3` or
+  the flag fails (exit 1, "no dispatch of the upscale point"), and the dispatch line says FSR 3.1
+  runs in full precision by default (`fp16 off (the port's default; ...)`); SKIP where FSR 3.1
+  cannot run (`rd_replay_tool_fsr3_dump`; fixture `rd_dump`). `rd_replay_tool_fsr3_fp16`: the
+  same run as `rd_replay_tool_fsr3` under `ICO_RD_FSR3_FP16=on` (`[dev] fsr3_fp16 = on`, the
+  half-precision path) dispatches and says `fp16 on (dev)`. The flag itself: with `--fsr3` or
   `--upscale-test`, the last replay's dispatch (the last of `--repeat`, of `--presents`), full size;
   under the display layer `--target SCENE` reads the composite, so this is the way to the
   pre-upscale SCENE at its render size. `ICO_RD_FOG_JITTER=0` (the environment) holds the fog

@@ -9,16 +9,17 @@ diff --git a/sdk/src/backends/vk/ffx_vk.cpp b/sdk/src/backends/vk/ffx_vk.cpp
  
  #ifdef _WIN32
  #include <windows.h>
-@@ -2113,6 +2114,15 @@
+@@ -2113,6 +2114,16 @@
          }
      }
  
-+    // the ICO port's [dev] fsr3_fp16 = off (ICO_RD_FSR3_FP16=0 or off; port/render/rd_fsr3.c):
-+    // the context is made as on a device without fp16, so every pass takes its fp32
-+    // permutation (issue 203: the vertical lines under FSR 3.1 on a GTX 1660)
++    // the ICO port runs the upscaler in full precision on every device (issue 203: thin
++    // vertical lines from the fp16 maths on a GTX 1660): fp16 is reported only when the
++    // port's [dev] fsr3_fp16 = on exports ICO_RD_FSR3_FP16=1 (or on); port/render/rd_fsr3.c
++    // rd__fsr3_fp16_dev_on reads the same variable for its lines
 +    {
 +        const char* fp16 = getenv("ICO_RD_FSR3_FP16");
-+        if (fp16 && (strcmp(fp16, "0") == 0 || strcmp(fp16, "off") == 0))
++        if (!fp16 || (strcmp(fp16, "1") != 0 && strcmp(fp16, "on") != 0))
 +            deviceCapabilities->fp16Supported = false;
 +    }
 +
