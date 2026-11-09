@@ -240,6 +240,7 @@ add_library(ico_render STATIC
     rd_upload.c # the upload ring and the uploads before a replay's first pass
     rd_velocity.c # the scene's motion vectors: each VU draw's previous transform, VELOCITY
     rd_upscale.c # the upscale point: the render/display scale split, the marker's replay, UPSCALED
+    rd_layer.c # the display layer: lists 11-12 into the display-scale composite after the upscale, keep frames held
     rd_upscale_hook.c # the temporal upscaler's dispatch: FSR 3.1, or the test's bilinear stand-in
     rd_fsr3.c # FSR 3.1 (the FidelityFX SDK, port/rhi/ffx): support, context, dispatch
     rd_screen_planes.c # the screen-prim triangles' planes
