@@ -37,14 +37,24 @@ PRE_DISPLAY and PRE_HELD (`preCopyOrd`).
 
 A scene-class command stays in SCENE, before the upscale (`rd__layer_sc_name` gives the log's
 words): a VU draw (mesh, skinned, grid, particles), a shadow command, the fog, a copy or exact blend
-naming SCENE, a command type the layer does not know; for a screen prim or world prims drawn into
-SCENE's colour or depth: the Z test on SCENE's depth (ZTE with ZTST not ALWAYS), Z write on SCENE's
-depth, DATE, a blend reading the destination alpha (the three Ad blends with ABE), PRIM.AA1; SCENE's
-depth view sampled; a draw into another target that samples SCENE. A clear is never scene-class. Z
+naming SCENE, a command type the layer does not know (a post stub other than the fog is not one: it
+goes through the draw-state rules below as a screen prim does); for a screen prim, world prims or a
+post stub drawn into SCENE's colour or depth: the Z test on SCENE's depth (ZTE with ZTST not
+ALWAYS), Z write on SCENE's depth, DATE, a blend reading the destination alpha (the three Ad blends
+with ABE), PRIM.AA1 with SCENE's depth bound; SCENE's depth view sampled; a draw into another target
+that samples SCENE. A clear is never scene-class. Z
 write without the Z test (the letterbox's bars) is not scene-class while "the bars are free": the
 present does not read SCENE's depth (`rd__effects_depth_wanted`) and no frame has read SCENE's depth
-before its clear (the walk sees it; once seen it holds for the run, logged once), so their Z goes
-nowhere and is dropped with SCENE's depth (the composite has none). In the game, lists 11-12 hold
+before its clear (the walk sees it; once seen it holds for the run, logged once; a SCENE new this
+replay, which `rd__clear_new_targets` clears before the walk, holds no carried depth, the store
+plan's rule), so their Z goes nowhere and is dropped with SCENE's depth (the composite has none).
+On a keep frame the full-frame sprites that write Z untested (the brightness, the keep sprite, a
+fade: the game sets ZWRITE 1 before them) stay in the layer even when the bars are not free (the
+next frame's head clear writes SCENE's depth over theirs; as scene-class they would refuse the keep
+frame and send it through the upscaler again, the smear of issue 203): counted in
+`RdLayerPlan.keepZFree`, logged (`... : a keep frame's full-frame sprites that write Z kept in the
+layer, not in SCENE`), and a keep frame still refused for another Z writer past its keep sprite is
+logged on its own line. In the game, lists 11-12 hold
 scene-class commands for Z-tested world lines (mostly debug and tool draws); such a frame begins the
 layer after the last one, and what lies before it goes through the upscaler that frame (counted,
 logged).
@@ -71,20 +81,26 @@ swap) are copied back so the composite keeps its own storage-capable texture.
 
 On a keep frame (fbKeep: lists 11-12 over the picture before, a stage switch's fade;
 `gsb_KeepFrameBuffer`, `RD_POST_KEEP`) there is no dispatch; `keepHeld` counts it. When the keep
-sprite lies in the layer with no draw sampling SCENE between the boundary and it, the composite (the
+sprite lies in the layer with no draw sampling SCENE between the boundary and it (and no more than
+16 draws sampling SCENE in lists 11-12 at all: past 16 the walk keeps no ordinals, `readsOver`, and
+the keep copy is not planned), the composite (the
 last picture, its layer included) is copied whole into COMPOSITE_HELD (the composite's geometry,
 outside any pass) at the boundary; the head's clear, the brightness and the fades are drawn into the
 composite as recorded, and at the keep sprite (`rd__layer_keep_verts` from `doScreen`) DISPLAY's
 record lends COMPOSITE_HELD's for that draw, the filters are NEAREST and its two vertices are
 replaced: x from (2048 - W/2 - 1) x 16 to (2048 + W/2 + 1) x 16, y the same with H (a GS pixel of
-margin past the frame, as the recorded sprite's), less 8 under `RD_TARGET_HALF_Y`; the UVs the GS
-position less the frame's corner, plus k x 16 with k = (s - 1) / 2s per axis at the composite's
-scale s (`rd_replay.c`'s `snapAxis` takes that sample shift off a scaled sprite's UVs), so every
-texel samples its own centre: a 1:1 copy at any scale and any Full pixel `ox`. The recorded z, q,
-colour (112, 112, 112, 128) and state stay: the darkening is the GS MODULATE floor(c x 112 / 128),
+margin past the frame; the recorded sprite has 12/16 before and 20/16 after it, `rd_post.c`
+`postKeep`), plus 8 under `RD_TARGET_HALF_Y` (FrameCB's half line moves the draw up half a GS
+pixel; the game never sets it); the UVs the GS position less the frame's corner, plus half a GS
+pixel (8 in 12.4): `rd_replay.c`'s `snapAxis` takes (s - 1) / 2s off a scaled sprite's UVs, leaving
+u = x + 1/2s, which the target samples at u x s = i + 0.5, texel i's centre, at any scale s and
+any Full pixel `ox` (at s <= 1, no snap, x + 0.5, the centre too; the game's own 1:1 sprites carry
+the same + 0.5), so NEAREST never meets a texel's edge over a fade's ticks. q is 1 (the recorded
+sprite's too); the recorded z, colour (112, 112, 112, 128) and state stay: the darkening is the GS MODULATE floor(c x 112 / 128),
 once a tick, as on the PS2. At the next command the run is drawn and the filters and DISPLAY's
-record are given back. A keep frame whose keep sprite is not in the layer holds the composite and
-draws its layer over it (counted, logged). The PS2's loop also stretched its reduced picture over
+record are given back. A keep frame with no keep sprite at all holds the composite and draws its
+layer over it (`keepNoSprite`, counted, logged); one whose keep sprite is not in the layer is
+refused (below). The PS2's loop also stretched its reduced picture over
 the frame and reduced it again each tick; the hold does not
 ([DIVERGENCES.md](DIVERGENCES.md#options-that-change-behaviour), `[video] upscaling`).
 
@@ -134,7 +150,8 @@ once a keep frame is held.
 
 A refused frame takes the path without the layer (lists 11-12 into SCENE, the marker
 dispatches). The refusals: the replay tool's pass window; a keep frame whose keep sprite lies before a
-scene-class command, or after a draw sampling SCENE; at the boundary, SCENE multisampled, no
+scene-class command, or after a draw sampling SCENE (or with more than 16 draws sampling SCENE in
+lists 11-12); at the boundary, SCENE multisampled, no
 COMPOSITE, a keep frame before the composite holds a picture (the first after the targets are made
 again, a keep dump replayed without `--prev`), no COMPOSITE_HELD. A dispatch the hook refuses at the
 boundary leaves the reduction reading SCENE (the upscale point's own line). **`[dev] display_layer =
@@ -148,8 +165,9 @@ Once a run and at each new composite size: `rd: display layer: on under <hook>: 
 ox N) after the upscale; keep frames hold the composite 1:1 darkened, no dispatch`. Once: `rd:
 display layer: off ([dev] display_layer = false): lists 11-12 are drawn into SCENE and upscaled with
 it (the path before the layer, for an A/B)`; `rd: display layer: SCENE's depth is read before frame
-N clears it: draws that write Z without testing it (the letterbox bars) stay in SCENE from now on
-(reported once)`. The first 8 then every 100th, `rd: display layer: frame N: ... (K times so far)`
+N clears it: draws that write Z without testing it (the letterbox bars) stay in SCENE from now on,
+but a keep frame's full-frame sprites (the brightness, the keep sprite, a fade) stay in the layer
+(reported once; each such keep frame is counted on its own line)`. The first 8 then every 100th, `rd: display layer: frame N: ... (K times so far)`
 with `not begun (<why>): lists 11-12 drawn into SCENE and upscaled with it`, `the layer begun after a
 scene-class command, <kind> in list L (command type T): what lies before it is upscaled with the
 scene`, `a keep frame with no keep sprite: the composite held, its layer drawn over it`, or `lists
@@ -165,7 +183,9 @@ fold: off while a temporal upscaler is in force; lists 11-12's sprites are drawn
 display-scale composite after the upscale (the display layer)`. `RdPerfRecord.layerDraws` is the
 replay's layer draw count. `rd_replay_tool --list` prints `[display layer begins]` before the
 boundary's command, `[keep copy]` after the keep sprite the layer holds, and ` new history
-(<reason>)` after a marker's `src ... dst ...` that carries a reset; `--stats` the upscale line above.
+(<reason>)` after a marker's `src ... dst ...` that carries a reset; `--stats` prints its own line,
+`<dump>: stats: upscale point: SCENE WxH -> UPSCALED WxH (render scale ...` (or `<dump>: stats:
+upscale point off`), not the 10 s line above.
 
 ## Tests
 
