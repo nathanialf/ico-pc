@@ -3,6 +3,9 @@
  *
  *   rd: msaa: the epoch closes at list L (why): ... (reported once a list
  *       and cause)                                            (events)
+ *       (the causes: a read or copy of SCENE, the shadow count's pass
+ *       after the resolve, a pass on SCENE with another depth, the shadow
+ *       count's reset, its count on SCENE_MS after it: rd_msaa_shadow.c)
  *   rd: msaa: the epoch stays open to the replay's end: ... (reported once)
  *                                                             (events)
  *   rd: msaa: the epoch's depth was loaded from the scene, not cleared in
@@ -140,9 +143,10 @@ uint8_t rd__msaa_close_note(int cause)
     if (l < 0 || l > RD_LIST_COUNT || cause < 0 || cause >= RD_MSAA_CLOSE_COUNT) {
         return 0;
     }
-    if (cause == RD_MSAA_CLOSE_SHADOW) {
+    if (cause == RD_MSAA_CLOSE_SHADOW && !g_rd.profile.shadowOne) {
         /* the seven draws' passes on SCENE's depth closed it: the stencil
-         * they test is SCENE's own, single-sampled (rd_shadow_one.c) */
+         * they test is SCENE's own, single-sampled (rd_shadow_one.c; the one
+         * draw says its own form when it runs) */
         rd__shadow_msaa_note(0, g_rdPerf.msaaSamples);
     }
     const uint32_t bit = 1u << (uint32_t)l;
@@ -159,7 +163,8 @@ uint8_t rd__msaa_close_note(int cause)
         ("a read or copy of the scene's colour or depth (a texture read, a copy, a DATE snapshot, "
          "the fog's depth read)"),
         "the shadow count's pass: the scene's depth with another colour",
-        "a pass on the scene's colour with another depth"};
+        "a pass on the scene's colour with another depth",
+        "a shadow reset: the count drawn after it on the multisampled scene's own depth and stencil"};
     char lists[64];
     if (l > 0) {
         snprintf(lists, sizeof(lists), "lists 0-%d anti-aliased and list %d up to there", l - 1, l);

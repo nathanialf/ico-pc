@@ -12,24 +12,81 @@ epoch itself (which passes draw multisampled, the sprites' half-texel move, the 
 | --- | --- |
 | `port/render/rd_replay.c` | the epoch (the section "the MSAA epoch"; `msaaPass`, `msaaAttach`, `msaaEnd`) and the transition hook that closes it (`rd__transition`) |
 | `port/render/rd_msaa.c` | the resolve pass (`rd__msaa_resolve`) and the close line (`rd__msaa_close_note`) |
+| `port/render/rd_msaa_shadow.c` | the shadow count drawn on SCENE_MS's own depth and stencil (`rd__msaa_shadow_reset`, `rd__msaa_shadow_pass`, `rd__msaa_shadow_done`) and its self-test (`rd__msaa_shadow_selftest`) |
 | `port/shaders/blit.hlsl` | the resolves (`msaa_resolve_ps`, `depth_resolve_ps`) and the depth spread over the samples (`depth_upsample_ps`) |
 | `port/render/rd_pipeline.c` | the resolves' keys (`rd__msaa_resolve_key`), in the fog's family of the start-up set (`rd__enumerate_reachable_fog`) |
 | `port/render/rd_core.c` | the counts offered (`rd_aa_supported_mask`) |
 | `port/render/test/rd_msaa_test.c` | the epoch against the frame without anti-aliasing |
+| `port/render/rd_msaa_shadow.cmake` | the shadow count's source and the `rd_msaa` rows under issue 209's profiles |
 
 ## Where the epoch closes
 
 The epoch closes at the first command that reads or writes SCENE's own colour or depth outside a
-pass into SCENE_MS (`port/render/rd_replay.c` (`msaaPass`, `rd__transition`)). In gameplay that is
-the shadow count's pass in list 3, which binds SCENE's depth with the count's colour: lists 0 to 2
-are anti-aliased, and the fog, the list 5 additive meshes, the glow and the aura draw on the
-resolved picture. A frame without a shadow keeps the epoch open to the fog, which then runs per
-sample where the device shades per sample.
+pass into SCENE_MS (`port/render/rd_replay.c` (`msaaPass`, `rd__transition`)), or at the shadow
+count's reset (`port/render/rd_msaa_shadow.c`, below). In gameplay that is the reset in list 3:
+lists 0 to 2 are anti-aliased, and the fog, the list 5 additive meshes, the glow and the aura draw
+on the resolved picture. A frame without a shadow keeps the epoch open to the fog, which then runs
+per sample where the device shades per sample.
 
-The shadow count is read after that close, from SCENE's single-sampled stencil, whichever way it
-is resolved (the seven stencil-tested draws or the one draw through the stencil view,
-[WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-count-in-one-draw)): the two give the same bytes with
-anti-aliasing on or off, so the one draw needs no MSAA fallback.
+## The shadow count in the epoch
+
+Shadow.c's count in list 3 is a reset of the stencil, the volumes (INCR and DECR of the stencil's
+bits 0-5 where they pass the GEQUAL test against the scene's depth) and the resolve that turns the
+stencil into the count's colours ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-count-in-one-draw)).
+Under MSAA the reset closes the epoch (`RD_MSAA_CLOSE_COUNTED`: SCENE resolved at the same point of
+the frame as before) and the count is drawn on SCENE_MS itself, whose colour the resolve has just
+read and nothing reads again in the replay: one pass on SCENE_MS's colour (cleared to 0) and depth
+(loaded; its stencil cleared to 0, the reset), the volumes and then the seven stencil-tested draws
+in it at the epoch's sample count, then the colour resolve (`rhi_cmd_resolve_color`: each pixel
+the mean of its samples) into the count target, which `shadowReduce` box-averages to the GS size
+above 1x as before. Each volume is tested at every sample against the depth the scene's own draws
+rasterised there; no depth `msaa_resolve_ps` wrote is depth-tested before the count is read, no
+target is added (the count uses the epoch's own pair), and no pass sequence is left that only MSAA
+makes. Inside a shadow every sample holds one count: the bytes of the frame without
+anti-aliasing. On a shadow's edge the pixel takes the mean of its samples' counts, so the edge is
+anti-aliased like the scene's ([DIVERGENCES.md](DIVERGENCES.md) VD-22).
+
+Why (issues 209 and 182): the count after the resolve (the fallback below) closes the epoch at
+its first volume's pass, `msaa_resolve_ps` writes SCENE's single-sampled depth by the shader (its
+load DONT_CARE, the stencil loaded and kept), and the volumes are tested against that depth in a
+pass of their own and the count read from SCENE's stencil. Two drivers failed at that point of
+the frame and nowhere else: an Adreno 740 under a Turnip build ("PurpleVK" 26.3.0-devel) drew no
+character shadow at MSAA 2x or 4x with the rest of the picture right (issue 209), and an RTX 4060
+laptop on NVIDIA 610.74 lost the device at the first frame with a shadow (issue 182, with the
+stencil clear then recorded as an empty pass of its own between the epoch's last pass and the
+resolve; whether the sequence without it runs on that laptop was not reported). On lavapipe, under the validation layer with its synchronisation
+checks, the same sequence drew the same shadows with and without MSAA4 under both reporters'
+profiles (the main gate dump `maingate/frame-20261104-123603-v10827.rddump` at Enhanced 2x 16:9
+with `--aa msaa4`: SHADOW0 equal to the frame without MSAA but at 618 of its 262144 texels, all at
+the shadows' edges, by at most 57 levels; the corpus room `lightning/rd-00300.rddump` likewise),
+so the device's handling of that sequence is the failing part; which step it is cannot be told
+without the device. With the count in the epoch the same dump's SHADOW0 differs from the frame
+without MSAA at 731 edge texels by at most 15 levels (SHADOW2 at 47 by at most 2), and every pass
+target without MSAA is the same bytes as before.
+
+The count after the resolve stays, as before, when the epoch closed before the reset (a read of
+SCENE, no 3D draw yet), the reset is on another depth than SCENE's, the count target is not
+SCENE's size and RGBA8, or the self-test below found the count in the epoch wrong on the device; a
+line says which (the first 8, then every 100th). A command between the reset and the count that
+ends the count's pass begins it again with its colour and stencil loaded (both are stored).
+
+The self-test (`rd__msaa_shadow_selftest`, at start, at a change of the sample count and at a
+remake of SCENE, with MSAA asked for and not held off by the fog's path; `port/render/rd_fog_path.c`)
+draws a frame of its own: a ground at GS Z 0x40000000 over two thirds of the frame, the clear (Z 0)
+elsewhere, then on WORK2 with SCENE's depth a reset and volumes whose front faces lie in front of
+the ground and back faces behind it under GEQUAL, over the ground (counts 2 and 1) and over the
+clear (count 0). It is replayed without MSAA (the reference), in the epoch and, when that differs,
+after the resolve; a way passes when its count equals the reference's at every texel whose 3x3 is
+one count there and the reference holds 2, 1 and 0 at its centres. The epoch's way stays when it
+passes, else the resolve's when that passes, else the epoch's, with the line saying the shadows may
+be missing. Unlike the shadow count's own self-test (Z ALWAYS, single-sampled), it depth-tests the
+volumes against a depth the scene drew, under MSAA. `ICO_RD_MSAA_SHADOW=0|1` (the tests' way, no
+config key) forces a way; `ICO_RD_MSAA_SHADOW_SABOTAGE=1` clears the epoch's stencil to 1 so its
+self-test fails.
+
+The count after the resolve (the fallback) reads SCENE's single-sampled stencil, whichever way it
+is resolved (the seven stencil-tested draws or the one draw through the stencil view): the two
+give the same bytes with anti-aliasing on or off.
 
 ## The resolve rule
 
@@ -107,7 +164,7 @@ scalar accumulators only: no array-typed value, which some drivers' compilers fa
 
 ## One resolve a picture
 
-The close records what is open into SCENE_MS first (the pass, a clear pending on SCENE), then
+On the count after the resolve (the fallback above), the close records what is open into SCENE_MS first (the pass, a clear pending on SCENE), then
 resolves once (`port/render/rd_replay.c` (`msaaEnd`)); `s_ms.closing` keeps a transition of
 SCENE's textures during the close from closing it a second time (without the guard every frame
 with a shadow resolved twice). A shadow reset pending on SCENE's depth stays pending through the
@@ -152,6 +209,10 @@ make either module offers no MSAA count, the supersampling ones stay (`port/rend
 | `msaa: the epoch stays open to the replay's end: every list anti-aliased ... (reported once)` | a replay whose epoch lasted to its end |
 | `msaa: the epoch's depth was loaded from the scene, not cleared in it: ... (reported once)` | the rule off |
 | `shadow count: under MSAA Nx the count reads the scene's own single-sampled stencil after the epoch's resolve: FORM (reported once a form and count)` | the first count of each form under each sample count (`port/render/rd_shadow_one.c` (`rd__shadow_msaa_note`)); FORM is `the seven stencil-tested draws, the volumes' pass taking the shadow reset as its stencil clear`, `one draw, the stencil four texels a gather`, or `one draw, a texel a load (...)` |
+| `shadow count: under MSAA Nx drawn in the epoch on the multisampled scene's own depth and stencil (WxH, N samples): ... (reported once a count)` | the first count drawn in the epoch at each sample count (`port/render/rd_msaa_shadow.c`); the close line then names `a shadow reset: the count drawn after it on the multisampled scene's own depth and stencil` |
+| `shadow count: under MSAA Nx after the epoch's resolve in frame F: WHY (the first 8, then every 100th: K so far)` | a count drawn the old way, and why |
+| `shadow count: under MSAA Nx drawn in the epoch (self-test: in the epoch equal to the count without anti-aliasing at T texels away from edges; ...) on SCENE WxH at TWxTH texels` | each self-test: the way chosen (`drawn in the epoch`, `drawn after the epoch's resolve`, or `drawn in the epoch, but neither way matched: the shadows may be missing ...`), each way's result, the first texel that differed |
+| `shadow count: the epoch's count pass begun again in frame F (...)` | a command between the reset and the count ended its pass (the first 8, then every 100th) |
 | `window: msaa: N samples, resolves R per replay, the last closed at list L` | the 10 s summary (`port/platform/window_host.c`); R is 1.0 or below |
 | `fog: in the MSAA epoch on the resolved picture (each pixel's smallest covered sample unless more than half its samples were uncovered: ...)` | once a run (`port/render/rd_replay.c` (`doFog`)) |
 | `msaa: msaa_resolve_ps was not made on this device ...` | start-up, a module missing |
@@ -160,12 +221,20 @@ make either module offers no MSAA count, the supersampling ones stay (`port/rend
 
 ## Tests
 
-`rd_msaa` (`port/render/test/rd_msaa_test.c`): `testShadowReset` (one resolve a replay with a
+`rd_msaa` (`port/render/test/rd_msaa_test.c`): `testShadowEpoch` (issue 209: the self-test
+passes and keeps the epoch's way, the frame's count is drawn in the epoch, `rd__msaa_shadow_counts`
+1, no one draw reads SCENE's stencil, the close at list 3; with `ICO_RD_MSAA_SHADOW=0`, the old
+sequence, it fails), `testShadowReset` (one resolve a replay with a
 shadow reset, the close at list 3, SCENE byte for byte the frame's without the reset, no stencil
 reset pass of its own under MSAA), `testShadowCount` (the count by the seven draws, the one draw's
 gathers and its loads, without anti-aliasing and with MSAA4: the forms byte for byte one count,
-MSAA4's equal to the count without anti-aliasing away from edges, gathers only where
-`RhiLimits.stencilGather`), run again as `rd_msaa_nvpath` with the reporter's NVIDIA profile
+MSAA4's equal to the count without anti-aliasing away from edges, under MSAA every form the count
+in the epoch, gathers only where `RhiLimits.stencilGather`), run again as `rd_msaa_tiler` (issue
+209's profile bits on lavapipe: `ICO_RD_BLEND=attachment ICO_RD_UBER=on ICO_RD_FOG_PATH=copy
+ICO_RD_DATE_PATH=stencil ICO_RD_SHADOW_MERGE=1`, the pass cuts on, `ICO_RD_STORE_POISON=1`,
+`ICO_VK_FAKE_NO_DYNAMIC=1`), `rd_msaa_mvk` (the tile-based class, `ICO_VK_FAKE_LIMITS=moltenvk`),
+`rd_msaa_shadow_sabotage` (`ICO_RD_MSAA_SHADOW_SABOTAGE=1`: the self-test chooses the count after
+the resolve, whose counts stay right; `port/render/rd_msaa_shadow.cmake`), as `rd_msaa_nvpath` with the reporter's NVIDIA profile
 forced (`ICO_RD_FOG_PATH=local`, `ICO_RD_DATE_PATH=stencil`, `ICO_RD_FX_DST_LOCAL=1`,
 `ICO_RD_SHADOW_ONE=0`) under the validation layer, and
 `testSkySlit` (the crack and `cleanUpFB`'s mask: no more glow sources along the crack with MSAA4

@@ -1510,6 +1510,7 @@ static void msaaFree(void)
     }
     s_ms.color = s_ms.depth = (RhiTexture){0};
     s_ms.w = s_ms.h = s_ms.samples = 0;
+    rd__msaa_shadow_free();
     s_ms.active = s_ms.ended = false;
 }
 
@@ -4379,6 +4380,9 @@ static void doShadowReset(Replay *r)
     }
     s_shadowRedFor = 0; /* a new count starts */
     s_shadowCountFor = 0;
+    if (rd__msaa_shadow_reset(r, tc, td)) {
+        return; /* in the MSAA epoch (rd_msaa_shadow.c) */
+    }
     /* the volumes in the scene's open pass, whose stencil is the reset's
      * (rd_shadow_merge.c): no pass of their own, nothing pending */
     if (rd__shadow_merge_take(r->passOpen, r->passSerial, r->passColor, r->passDepth, &r->st,
@@ -4419,6 +4423,7 @@ static void doShadowStripIn(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!prepareDraw(r, &ds, NULL) || !ds.tdId) {
         return;
     }
+    (void)rd__msaa_shadow_pass(r);
     uint32_t count[2];
     uint64_t vOff;
     static const float noOff[2] = {0.0f, 0.0f};
@@ -4609,15 +4614,18 @@ static void doShadowResolve(Replay *r, const RdCmd *c)
     }
     s_shadowRedFor = 0;
     const uint32_t step = rd__shadow_step(c); /* rd_shadow.c "The step" */
-    if (g_rd.profile.shadowOne && shadowCountOne(r, tc, td, step)) {
+    const bool ms = rd__msaa_shadow_pass(r);  /* the count in the MSAA epoch */
+    if (g_rd.profile.shadowOne && !ms && shadowCountOne(r, tc, td, step)) {
         rd__stencil_close(&s_stencil.w, td->depth.id);
         s_shadowCountFor = r->st.color;
         return;
     }
     static const float zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     r->writeSerial++;
-    beginPass(r, tc, td, r->st.color, r->st.depth, RHI_LOAD_CLEAR, zero, RHI_LOAD_LOAD, 0.0f,
-              false);
+    if (!ms) {
+        beginPass(r, tc, td, r->st.color, r->st.depth, RHI_LOAD_CLEAR, zero, RHI_LOAD_LOAD, 0.0f,
+                  false);
+    }
     const RhiRect all = {0, 0, tc->tw, tc->th};
     rhi_cmd_set_scissor(s_cl, &all);
     RdUniform g0 = rd__frame_group(tc->tw, tc->th, 0.0f, 0.0f);
@@ -4642,6 +4650,9 @@ static void doShadowResolve(Replay *r, const RdCmd *c)
         drawCmd(s_cl, 3, 0, 1);
     }
     endPass(r);
+    if (ms) {
+        rd__msaa_shadow_done(r, tc);
+    }
     /* the count has been read: the window closes, and later passes on the
      * depth neither load nor store its stencil until the next reset */
     rd__stencil_close(&s_stencil.w, td->depth.id);
@@ -6249,6 +6260,21 @@ bool rd__replay_prepare_draw(Replay *r, DrawSetup *ds, const RhiRect *dateArea)
 uint32_t rd__replay_msaa_want(void)
 {
     return s_ms.want;
+}
+
+bool rd__msaa_pair(RhiTexture t[2], RhiState *st[2], uint32_t *samples)
+{
+    t[0] = s_ms.color;
+    t[1] = s_ms.depth;
+    st[0] = &s_ms.colorState;
+    st[1] = &s_ms.depthState;
+    *samples = s_ms.samples;
+    return s_ms.active && s_ms.depthLive && !s_ms.closing && !s_ms.internal;
+}
+
+void rd__msaa_close(Replay *r)
+{
+    msaaEnd(r, RD_MSAA_CLOSE_COUNTED);
 }
 
 /* rd_replay_tiler.c's and rd_fx_plan.c's helpers (rd_replay.h): the

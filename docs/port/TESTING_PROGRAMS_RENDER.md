@@ -1310,14 +1310,30 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_passring`).
 - `rd_msaa_test.c`: the anti-aliasing's MSAA against the frame without it (`rd_msaa`); with
   `msaa_resolve_ps` or `depth_resolve_ps` cleared for one call (a backend that cannot make one)
-  the supported mask holds the supersampling values only; `testShadowReset`: a frame whose list 3
+  the supported mask holds the supersampling values only; `testShadowEpoch` (issue 209): with
+  MSAA4 the MSAA shadow self-test (`rd__msaa_shadow_selftest`: a ground, volumes in front of and
+  behind it under GEQUAL, counts 2, 1 and 0) passes and keeps the count in the epoch, the frame's
+  count is drawn on SCENE_MS's own depth and stencil (`rd__msaa_shadow_counts` 1), no one draw
+  reads SCENE's stencil, the epoch closes at list 3; under `ICO_RD_MSAA_SHADOW=0` (the old
+  sequence: the volumes tested against the resolve shader's depth) it fails;
+  `rd_msaa_shadow_sabotage` (`ICO_RD_MSAA_SHADOW_SABOTAGE=1`: the epoch's stencil cleared to 1)
+  must see the self-test choose the count after the resolve, with the counts still right;
+  `rd_msaa_tiler` runs the program under issue 209's profile bits on lavapipe
+  (`ICO_RD_BLEND=attachment ICO_RD_UBER=on ICO_RD_FOG_PATH=copy ICO_RD_DATE_PATH=stencil
+  ICO_RD_SHADOW_MERGE=1 ICO_RD_CLEAR_CARRY=on ICO_RD_CLEAR_SKIP=on ICO_RD_LAST_STORE=on
+  ICO_RD_PASS_AREA=on ICO_RD_STORE_POISON=1 ICO_VK_FAKE_NO_DYNAMIC=1`) and `rd_msaa_mvk` under the
+  tile-based class (`ICO_VK_FAKE_LIMITS=moltenvk ICO_VK_FAKE_NO_DYNAMIC=1 ICO_RD_STORE_POISON=1`),
+  each under the validation layer with its synchronisation checks
+  (`port/render/rd_msaa_shadow.cmake`); `testShadowReset`: a frame whose list 3
   holds the shadow count with a reset on SCENE's depth resolves once a replay
   (`RdPerfRecord.msaaResolves` 1, two when the reset's stencil clear closes the epoch again from
   inside `msaaEnd`), closes at list 3 (`msaaCloseAt` 4), records no shadow reset as a pass of its
   own under MSAA (`passKinds[RD_PERF_PASS_STENCIL]` 0: the volumes' pass takes it, issue 182) and
   leaves SCENE byte for byte as the same frame without the reset; `testShadowCount`: that frame's
   count (`rd__shadow_count_read`) by the seven draws, the one draw's gathers and its loads,
-  without anti-aliasing and with MSAA4: the forms' counts byte for byte one count, MSAA4's equal
+  without anti-aliasing and with MSAA4 (where every form is the count in the epoch, the seven
+  draws on SCENE_MS, unless its self-test chose otherwise): the forms' counts byte for byte one
+  count, MSAA4's equal
   to the count without anti-aliasing wherever the frame without it is one colour and one count
   over a 3x3, the epoch closed at list 3, no stencil reset pass, and gathers counted
   (`shadowGathered`) only where the stencil view takes them (`RhiLimits.stencilGather`; never on

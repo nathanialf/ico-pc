@@ -80,6 +80,7 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_replay.h" /* rd__msaa_shadow_selftest */
 
 static const char *const s_pathNames[RD_FOG_PATH_COUNT] = {"inplace", "copy", "buffer", "local"};
 
@@ -1453,6 +1454,10 @@ bool rd_fog_selftest(void)
     if (first && rd__local_probe(probeOffPath()) == 0) {
         ok = runSelftest();
     }
+    if (first) {
+        /* the shadow count in the MSAA epoch, where it is asked for */
+        (void)rd__msaa_shadow_selftest(rd_aa_samples(rd__aa_requested()));
+    }
     return ok;
 }
 
@@ -1477,6 +1482,8 @@ void rd__fog_aa_reconcile(void)
         return;
     }
     (void)runSelftest();
+    /* the shadow count in the epoch at this count (rd_msaa_shadow.c) */
+    (void)rd__msaa_shadow_selftest(n);
 }
 
 void rd__fog_scene_remade(void)
@@ -1497,6 +1504,8 @@ void rd__fog_scene_remade(void)
     if (s_st.armed) {
         (void)rd__shadow_selftest(); /* the count's one draw at the new size and scale */
         (void)runSelftest();
+        /* and in the MSAA epoch, where it is asked for (rd_msaa_shadow.c) */
+        (void)rd__msaa_shadow_selftest(rd_aa_samples(rd__aa_requested()));
     }
 }
 
