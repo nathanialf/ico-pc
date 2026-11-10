@@ -162,10 +162,11 @@ uint32_t rd__replay_msaa_want(void);
  * replay's end), its line once a list and cause; returns
  * RdPerfRecord.msaaCloseAt's value */
 enum {
-    RD_MSAA_CLOSE_READ,   /* SCENE's colour or depth read, copied or snapshot (the hook) */
-    RD_MSAA_CLOSE_SHADOW, /* a pass on SCENE's depth with another colour (the shadow count's) */
-    RD_MSAA_CLOSE_DEPTH,  /* a pass on SCENE with another depth */
-    RD_MSAA_CLOSE_END,    /* the replay's end */
+    RD_MSAA_CLOSE_READ,    /* SCENE's colour or depth read, copied or snapshot (the hook) */
+    RD_MSAA_CLOSE_SHADOW,  /* a pass on SCENE's depth with another colour (the shadow count's) */
+    RD_MSAA_CLOSE_DEPTH,   /* a pass on SCENE with another depth */
+    RD_MSAA_CLOSE_COUNTED, /* a shadow reset: the count on SCENE_MS after it (rd_msaa_shadow.c) */
+    RD_MSAA_CLOSE_END,     /* the replay's end */
     RD_MSAA_CLOSE_COUNT
 };
 
@@ -550,5 +551,41 @@ void rd__vu_prepass_shutdown(void);
 const RdFrame *rd__vis_frame(const RdFrame *f, int keep);
 const RdFrame *rd__vis_source(const RdFrame *f);
 const RdCmd *rd__vis_culled(const RdFrame *f, int l, uint32_t i);
+
+/* rd_msaa_shadow.c: the shadow count drawn in the MSAA epoch, on SCENE_MS's
+ * own depth and stencil (docs/port/MSAA.md "The shadow count in the epoch").
+ * rd__msaa_shadow_reset  doShadowReset: the reset taken in the epoch (true:
+ *                        the epoch closed, then the count's pass begun on
+ *                        SCENE_MS's colour and depth, its colour and stencil
+ *                        cleared; false: the count after the epoch's
+ *                        resolve, as before, with the line saying why)
+ * rd__msaa_shadow_pass   the strips and the resolve: the count's pass open
+ *                        (begun again when a command ended it); false
+ *                        outside the count
+ * rd__msaa_shadow_done   doShadowResolve after the seven draws: the count
+ *                        resolved into its target
+ * rd__msaa_shadow_selftest  the count in the epoch against the count without
+ *                        anti-aliasing, the volumes' depth test included, on
+ *                        SCENE at samples (rd_fog_path.c rd__fog_aa_reconcile)
+ * rd__msaa_shadow_force  the tests' switch: -1 the self-test's choice, 0 the
+ *                        count after the resolve, 1 in the epoch;
+ *                        rd__msaa_shadow_mode the way in force
+ * rd__msaa_shadow_counts the counts drawn in the epoch in the last replay
+ * rd__msaa_shadow_retest the self-test runs again at its next call
+ * rd__msaa_shadow_free   SCENE_MS goes (rd_replay.c msaaFree): no count open
+ * and from rd_replay.c: rd__msaa_pair (SCENE_MS's colour and depth, their
+ * states and count; true while the epoch is open with its depth drawn) and
+ * rd__msaa_close (msaaEnd for RD_MSAA_CLOSE_COUNTED) */
+bool rd__msaa_shadow_reset(Replay *r, RdTargetRec *tc, RdTargetRec *td);
+bool rd__msaa_shadow_pass(Replay *r);
+void rd__msaa_shadow_done(Replay *r, RdTargetRec *tc);
+bool rd__msaa_shadow_selftest(uint32_t samples);
+void rd__msaa_shadow_force(int mode);
+int rd__msaa_shadow_mode(void);
+uint32_t rd__msaa_shadow_counts(void);
+void rd__msaa_shadow_retest(void);
+void rd__msaa_shadow_free(void);
+bool rd__msaa_pair(RhiTexture t[2], RhiState *st[2], uint32_t *samples);
+void rd__msaa_close(Replay *r);
 
 #endif /* PORT_RENDER_RD_REPLAY_H */

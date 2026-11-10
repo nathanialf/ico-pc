@@ -81,6 +81,7 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_replay.h" /* rd_msaa_shadow.c's calls */
 #include "vk/rhi_vk.h"
 
 static int failures;
@@ -633,7 +634,7 @@ static void testShadowReset(void)
  * replay's record's facts out.  0 when the form cannot run or the count
  * is not read back. */
 typedef struct CountRun {
-    uint32_t one, seven, gathered, stencilPasses, closeAt;
+    uint32_t one, seven, gathered, stencilPasses, closeAt, epoch;
 } CountRun;
 
 static uint8_t s_cnt[3][2][GW * GH * 4]; /* [form][aa: 0 off, 1 MSAA4] */
@@ -652,6 +653,7 @@ static int shadowCountRun(int aa, int form, uint8_t *dst, CountRun *o)
     o->gathered = g_rdPerf.shadowGathered;
     o->stencilPasses = g_rdPerf.passKinds[RD_PERF_PASS_STENCIL];
     o->closeAt = g_rdPerf.msaaCloseAt;
+    o->epoch = rd__msaa_shadow_counts();
     rhi_wait_idle();
     uint32_t w = 0, h = 0;
     int ok = rd__shadow_count_read(s_cntTarget.id, dst, (size_t)GW * GH * 4, &w, &h) && w == GW &&
@@ -674,10 +676,17 @@ static void testShadowCount(void)
         for (int form = 0; form < forms; form++) {
             CountRun o;
             done[form][aa] = shadowCountRun(aa, form, s_cnt[form][aa], &o);
-            CHECK(form ? (o.one == 1 && o.seven == 0) : (o.seven == 1 && o.one == 0),
-                  "shadowcount: form %d aa %d: one %u seven %u", form, aa, o.one, o.seven);
+            /* under MSAA every form is the count in the epoch: the seven
+             * draws on SCENE_MS's stencil (rd_msaa_shadow.c), unless its
+             * self-test chose the count after the resolve */
+            const bool epoch = aa && rd__msaa_shadow_mode() == 1;
+            CHECK(epoch  ? (o.seven == 1 && o.one == 0 && o.epoch == 1)
+                  : form ? (o.one == 1 && o.seven == 0 && o.epoch == 0)
+                         : (o.seven == 1 && o.one == 0 && o.epoch == 0),
+                  "shadowcount: form %d aa %d: one %u seven %u in the epoch %u", form, aa, o.one,
+                  o.seven, o.epoch);
             /* a gather only where the view takes one, and only when asked */
-            const uint32_t wantGathered = form == 1 && lim->stencilGather ? 1u : 0u;
+            const uint32_t wantGathered = form == 1 && lim->stencilGather && !epoch ? 1u : 0u;
             CHECK(o.gathered == wantGathered,
                   "shadowcount: form %d aa %d: %u one draws by gathers (%u expected; the view "
                   "takes gathers %d)",
@@ -734,6 +743,41 @@ static void testShadowCount(void)
           firstX, firstY);
     g_rd.profile.shadowOne = keepOne;
     g_rd.shadowLoad = keepLoad;
+}
+
+/* testShadowEpoch (issue 209): under MSAA4 the shadow count is drawn in the
+ * epoch, on SCENE_MS's own depth and stencil (rd_msaa_shadow.c): its
+ * self-test (the volumes' GEQUAL test against the scene's depth, counts 0, 1
+ * and 2) passes and keeps the epoch's way, the game's frame then draws its
+ * count there (rd__msaa_shadow_counts 1), the epoch closes at list 3 after
+ * it, and no one draw reads SCENE's stencil through its view.  Before the
+ * change the volumes were tested against the depth msaa_resolve_ps had
+ * written, in a pass only MSAA makes (issues 182 and 209).  Under
+ * ICO_RD_MSAA_SHADOW_SABOTAGE=1 (rd_msaa_shadow_sabotage) the epoch's
+ * stencil is cleared to 1: the self-test must find it and choose the count
+ * after the epoch's resolve, and testShadowCount's counts stay right. */
+static void testShadowEpoch(void)
+{
+    const char *e = getenv("ICO_RD_MSAA_SHADOW_SABOTAGE");
+    const bool sab = e && strcmp(e, "1") == 0;
+    settings(RD_PRESET_ENHANCED, RD_AA_MSAA4);
+    rd__msaa_shadow_retest();
+    const bool passed = rd__msaa_shadow_selftest(4);
+    const int mode = rd__msaa_shadow_mode();
+    shadowFrame(1); /* the settings' first replay */
+    shadowFrame(1);
+    const uint32_t epoch = rd__msaa_shadow_counts(), one = g_rdPerf.shadowOne,
+                   closeAt = g_rdPerf.msaaCloseAt;
+    printf("  shadowepoch: self-test %s, the count %s; in the epoch %u, one draws %u, the epoch "
+           "closed at %u%s\n",
+           passed ? "passed" : "failed", mode ? "in the epoch" : "after the epoch's resolve", epoch,
+           one, closeAt, sab ? " (sabotaged)" : "");
+    CHECK(passed, "shadowepoch: the self-test found no way right");
+    CHECK(mode == (sab ? 0 : 1), "shadowepoch: the way %d (%d expected)", mode, sab ? 0 : 1);
+    CHECK(epoch == (sab ? 0u : 1u), "shadowepoch: %u counts in the epoch (%u expected)", epoch,
+          sab ? 0u : 1u);
+    CHECK(sab || one == 0, "shadowepoch: %u one draws read SCENE's stencil under MSAA", one);
+    CHECK(closeAt == 4, "shadowepoch: the epoch closed at %u (list 3 + 1 expected)", closeAt);
 }
 
 /* testSkySlit's frame: the crack's two triangles (colours a and b), the
@@ -952,6 +996,7 @@ int main(void)
     testDate();
     testFog();
     testRedraw();
+    testShadowEpoch();
     testShadowReset();
     testShadowCount();
     testSkySlit();

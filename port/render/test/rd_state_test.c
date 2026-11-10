@@ -3374,6 +3374,27 @@ static void testVuSetPolicy(void)
         CHECK(!c.noBeside, "vu set: \"%s\" overridden: side bands still off", turnip[i]);
     }
 
+    /* a Turnip build that renamed itself keeps Mesa's driver id (issue 209:
+     * "PurpleVK public driver", VK_DRIVER_ID_MESA_TURNIP 18): Turnip by the id,
+     * as rhi_driver_is_qualcomm_proprietary reads it; Qualcomm's own driver
+     * (id 8) with the same chip is not */
+    lim = vuSetLimits(0x5143u,
+                      "device 5143:43050a01; driver PurpleVK public driver PurpleVK 26.3.0-devel "
+                      "(git-62ac221a33), version 26.2.99",
+                      NULL);
+    CHECK(!rd__driver_is_turnip(&lim), "vu set: PurpleVK without its driver id taken for Turnip");
+    lim.driverId = 18u;
+    CHECK(rd__driver_is_turnip(&lim), "vu set: PurpleVK (driver id 18) is not Turnip");
+    rd__vu_set_choose(&lim, false, false, "", &c);
+    CHECK(c.plain && strcmp(c.why, kTurnipWhy) == 0 && c.noBeside,
+          "vu set: PurpleVK (driver id 18): plain %d, \"%s\"", c.plain, c.why);
+    lim = vuSetLimits(0x5143u,
+                      "device 5143:43050a01; driver Qualcomm Technologies Inc. Adreno Vulkan "
+                      "Driver, version 512.744.0",
+                      NULL);
+    lim.driverId = 8u;
+    CHECK(!rd__driver_is_turnip(&lim), "vu set: Qualcomm's driver (id 8) taken for Turnip");
+
     /* the desktop drivers */
     static const struct {
         uint32_t vendor;
