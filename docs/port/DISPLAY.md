@@ -21,6 +21,7 @@ are [RHI.md](RHI.md).
 | `port/platform/present_fallback.h`, `present_fallback.c` | the FIFO fallback's decision and lines, free of SDL ([The FIFO fallback](#the-fifo-fallback)) |
 | `port/platform/window_present_fallback.h`, `window_present_fallback.c` | the window's side of the FIFO fallback: the gate, the switch, the lines |
 | `port/platform/display_rate.h`, `display_rate.c` | the refresh rate's log lines and the frame rate pin's decisions, free of SDL ([The refresh rate and the frame rate pin](#the-refresh-rate-and-the-frame-rate-pin)) |
+| `port/platform/present_stall_block.h`, `present_stall_block.c` | the present stalls per 10 s block and per run against the GPU span band and the display's rate, free of SDL ([The refresh rate and the frame rate pin](#the-refresh-rate-and-the-frame-rate-pin)) |
 | `port/platform/window_display_rate.h`, `window_display_rate.c` | the window's side: SDL's display mode in the log, the Android pin through the NDK |
 | `port/platform/present_hist.h`, `present_hist.c` | the 10 s block's histogram of the driver's present call (over 20, 50, 100 and 300 ms); the texts of the lines around a present that blocked (its split, the replay after it) |
 | `port/platform/window_stall.h`, `window_stall.c` | the window's lines around a present that blocked (issue 123), from the replays' records as they pop; the kernel GPU driver's lines on Android |
@@ -1739,6 +1740,28 @@ rate, so the next log carries it (`port/platform/display_rate.h`, `window_displa
   60 Hz (fixed source; the Frame rate row is 60) with <call>: returned 0`. A new surface with no
   rate wanted asks and says nothing. Nothing runs on any other platform. It is a hint to the system's refresh rate governor: it does not
   change the game's own pacing, and nothing about it is measured on a device yet.
+
+- `window: present stalls: 1 over 250 ms in 10.0 s (340 ms at 120.00 Hz: the replay before began
+  33.4 ms earlier, the present held 253.3 ms past the replay's GPU span, GPU idle before it not
+  measured (the GPU clock restarted)); GPU clock restarts 1; GPU span 27.4 ms a replay (26.7-28.7
+  ms, band 25-30 ms; stalled replays 87.1 ms); display 120.00 Hz; GPU clock not readable` in every
+  10 s block from the run's first stall on, on every platform (`port/platform/present_stall_block.h`,
+  fed every record from `window_stall_after`, closed in `window_stall_gpu_block`). Per stall (a
+  present of 250 ms or more): its length, the display's rate as it popped (read, never asked:
+  `window_refresh_ns`), the CPU-side interval since the replay before began (`RdPerfRecord.startMs`;
+  it bounds the GPU's idle before the stall where the GPU's own counter cannot), the time the
+  present held past the replay's GPU span, and the GPU idle before it (or why not measured: the
+  clock restart of `rd_perf_gap_step_ex`). Then the block's GPU clock restarts (at a stall or not),
+  its GPU span over the replays that did not stall (mean, range, 5 ms band) against the stalled
+  spans, the display's rate at the block's end and the kernel driver's GPU clock where readable.
+  The blocks before the first stall write nothing and still count. At the window's close:
+  `window: present stalls this run: 7 over 250 ms in 3.3 min (2.1 a minute); 7 with the GPU clock
+  restarted, 1 after a CPU-side gap of 80 ms or more (6 under, 0 not known), held past the GPU span
+  248-262 ms; by display rate: 120.00 Hz 7 in 3.3 min (2.1 a minute); by the block's GPU span:
+  25-30 ms 7 in 3.0 min (2.3 a minute), ...` (`window_stall_run_summary`; the last part block joins
+  first; each stall counts at its own display rate, each block's time at the rate at its end).
+  What each figure decides is in [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-123s-present-stalls-what-the-mechanisms-predict)
+  (`present_stall_block_test`).
 
 ### Downsampling
 

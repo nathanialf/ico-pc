@@ -71,6 +71,7 @@ target_include_directories(ico_bisect_plan PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_bisect_plan PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 # the platform's state file of the second level (diag_host.c)
 target_link_libraries(ico_platform PUBLIC ico_bisect_plan)
+include(rd_passring.cmake) # ico_passring
 
 # rd_bisect_plan_test: the planner against oracles (a draw that faults with
 # every draw before it found within 12 steps, random verdicts end within 16)
@@ -210,7 +211,6 @@ add_library(ico_render STATIC
     rd_mesh.c
     rd_occlusion.c # the replay's GPU draw issue and the hidden-draw measurement around it
     rd_msaa.c # the MSAA epoch's resolve pass (the covered-majority rule) and its close line
-    rd_passring.c # the last passes recorded, for the device-loss report
     rd_profile.c # the device profile: what this device class gets 
     rd_content_hide.c # the content table: stage geometry made for the 4:3 picture
     rd_content_extend.c # the content table's sheets: overlays continued to the frame's edges
@@ -231,10 +231,12 @@ add_library(ico_render STATIC
     rd_replay_vu.c # the replay's VU draws
     rd_vuprepass_selftest.c # the VU vertex pre-pass's start-up check on the device
     rd_vu_record.c # the VU record's write: render targets and copies, or vertex stores
+    rd_vu_rec_sink.c # the store passes' throwaway target
     rd_vu_skin_check.c # the skinned draws' bone-block check in the game (issue 163)
     rd_vu_skin_capture.c # its capture on failure: the sidecar, the frame dump asked (issue 123)
     rd_vu_bones.c # issue 123's ladder: the bones through the ring, the evidence for the window
     rd_vu_skin_judge.c # its judgement against vu1_ref (pure)
+    rd_vu_skin_trace.c # its stamps, the search of a wrong copy (pure)
     rd_vu_skin_selftest.c # its start-up probe on the device
     rd_window.c
     rd_upload.c # the upload ring and the uploads before a replay's first pass
@@ -271,7 +273,7 @@ target_include_directories(ico_render
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 target_compile_options(ico_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref ico_texpack_name
-                      ico_cache_name ico_pipe_finish)
+                      ico_cache_name ico_pipe_finish ico_passring)
 # rd_fsr3.c: FSR 3.1 (issue 99) from the FidelityFX SDK built in port/rhi/ffx
 # (option ICO_FFX, docs/BUILDING.md).  ico_ffx_upscaler is EXCLUDE_FROM_ALL;
 # linked here, it is built for every program and test that links the
@@ -1468,6 +1470,7 @@ if(ICO_RUN_TESTS)
                                  PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
+    include(test/rd_display_change_2x.cmake)
     # rd_blur's glow fold case (k) alone on the tile class's fake
     # (ICO_VK_FAKE_LIMITS=moltenvk: the Apple row of the device profile):
     # the profile's glow fold off by default there (rd_profile.c, the
@@ -2196,18 +2199,11 @@ if(ICO_RUN_TESTS)
                          PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_NO_PREPASS=1;ICO_RD_VU_PREPASS=on")
     set_tests_properties(rd_vuprepass_selftest_skincheck
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_CHECK=2;ICO_RD_VU_SKIN_INTERVAL_MS=0")
-    # the skinned draws' bone-block check (issue 163; rd_vu_skin_check.c,
-    # docs/port/VU_SKIN_CHECK.md, test/rd_vu_skin_check.cmake): judge the
-    # judgement alone (no device: a fake probe at the zero matrix's point
-    # names address 200, the byte windows, the decision table's words);
-    # clean the start-up probe right on lavapipe and a frame of one skinned
-    # command checked right with its box check; probe and ring the same
-    # frame with the bone at 200 read as zeros by the probe alone (H1,
-    # address-dependent: c1 right) or in the ring under the GPU (H2, a port
-    # race); robust the clean frame under robust access with the c2 variant
-    # drawn where the device offers VK_EXT_pipeline_robustness, probe_robust
-    # the probe's sabotage there with c2 right (the pipeline robustness
-    # chain read back)
+    # the skinned draws' bone-block check (issue 163; docs/port/VU_SKIN_CHECK.md
+    # "Tests", test/rd_vu_skin_check.cmake): judge the judgement and the
+    # trace alone (no device); clean a frame of one skinned command checked
+    # right; probe and ring the bone at 200 read as zeros by the probe alone
+    # (H1) or in the ring (H2); robust and probe_robust with the c2 variant
     set(_vsk "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_check.cmake")
     set(_vsk_wrong "rd: VU skin check: frame [0-9]+ command 0:[0-9]+ mesh rd vu skin check test #[0-9]+ \\(120 vertices\\): [0-9]+ vertices wrong of 120, address 200: got \\([-0-9., ]+\\) want \\([-0-9., ]+\\) \\(a zero matrix at 200 gives it: yes")
     add_test(NAME rd_vu_skin_check_judge
@@ -2229,7 +2225,7 @@ if(ICO_RUN_TESTS)
                      -P "${_vsk}")
     add_test(NAME rd_vu_skin_check_ring
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=ring
-                     "-DEXTRA=${_vsk_wrong}.*the bone block as the GPU copied it: differs at qwords 184..187[;,] as the CPU reads it after the fence: differs at qwords 184..187.*reads as: H2, a port race"
+                     "-DEXTRA=${_vsk_wrong}.*the bone block as the GPU copied it: differs at qwords 184..187[;,] as the CPU reads it after the fence: differs at qwords 184..187.*reads as: H2, a port race.*the GPU's copy of the bone block .*as it is now \\(replay [0-9]+'s, the draw's own offset"
                      -P "${_vsk}")
     # the twins (issue 123): twin the frame replayed three times under the
     # game's mode with the twins on and the scheduled probe off, the bone at
@@ -2312,6 +2308,7 @@ if(ICO_RUN_TESTS)
                          "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring;ICO_RD_VU_SKIN_INTERVAL_MS=off;ICO_RD_VU_SET=plain;ICO_RD_VU_PREPASS=0")
     set_tests_properties(rd_vu_skin_check_twin_bones_ring PROPERTIES ENVIRONMENT
                          "${_env};ICO_RD_VU_SKIN_SABOTAGE=200,ring;ICO_RD_VU_SKIN_INTERVAL_MS=off;ICO_RD_VU_SET=plain;ICO_RD_VU_BONES=ring")
+    include("${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_skin_trace_tests.cmake")
     set_tests_properties(rd_vu_skin_check_judge rd_vu_skin_check rd_vu_skin_check_robust
                          rd_vu_skin_check_probe rd_vu_skin_check_probe_robust
                          rd_vu_skin_check_ring rd_vu_skin_check_twin rd_vu_skin_check_twin_nan

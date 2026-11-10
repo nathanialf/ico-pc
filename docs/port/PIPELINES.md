@@ -977,9 +977,15 @@ position outside the clip volume; pass T's stages read the vertex records throug
 binding. The tick stage stores its one lane (x for tick 0, y for tick 1, by `vu_tri.w`) as one
 32-bit store in a branch, never the whole texel: the two tick draws of a triangle run in one pass
 with no barrier between them, as the colour masks R and G wrote one channel each. The pipelines
-have no fragment shader, no target and no rasterization (`RhiPipelineDesc.noRaster`; group 1 is
-`g_rdRec.layoutVuPre`: t0, b1, b2, b3, t5 and u6, no t4), and each pass is a pass without
-attachments, 1024 x 1, inside the store bracket (`rhi_cmd_buffer_store_begin` before it,
+have no fragment shader and no rasterization (`RhiPipelineDesc.noRaster`; group 1 is
+`g_rdRec.layoutVuPre`: t0, b1, b2, b3, t5 and u6, no t4) and name one colour target, the throwaway
+one their passes begin on (`port/render/rd_vu_rec_sink.h`: 1024 x 1 texels of `R8_UNORM`, loaded and
+stored `DONT_CARE`, its write mask 0, never written or read: no fragment runs), so no render pass
+begins without an attachment, the shape the Intel `vkCmdBeginRendering` crash reports share
+([RHI.md](RHI.md#vulkan), **Render passes**); the target is made at the first store pass (`rd: VU
+pre-pass: the store passes begin on a throwaway 1024x1 R8 target ...`; one that could not be made is
+said once and the passes begin without it), and each pass is 1024 x 1 inside the store bracket
+(`rhi_cmd_buffer_store_begin` before it,
 `rhi_cmd_buffer_store_end` after: [RHI.md](RHI.md#the-interface)), so a replay has no record
 texture, no layout transition and no copy. The draws of a record pass write disjoint slots
 (`vuPrepassRun`'s slots: pass V's commands each at its own `vuPreVSlots`, pass T's slots A, B and C
@@ -1111,8 +1117,8 @@ pipelines.
 (`rd__vu_pre_key`: the program's `vu_X_pre_vs` with `vu_pre_ps`, three `RGBA32_UINT` targets, no
 depth, points, no blend) and the five record stage keys (`rd__vu_stage_key`: the rule, the tick
 stage under the masks R and G, the planes and the sprite stage); under the stores the same fifteen
-keys with `colorFmt` UNKNOWN (no target: the pipeline the store build, no fragment shader,
-`noRaster`; the tick stage's two masks stay two keys of the same pipeline, its lane chosen by
+keys with `colorFmt` UNKNOWN (the pipeline the store build, no fragment shader,
+`noRaster`, the throwaway `R8_UNORM` target with a write mask of 0; the tick stage's two masks stay two keys of the same pipeline, its lane chosen by
 `vu_tri.w`), so both writes' pipelines can stand in the cache across the self-test's fallback
 (`rd_pipeline.c` (`rd__vu_pre_key`)); the program entries' keys (with
 the same `vu_ps`, `vu_texa_ps`) are made only for a command drawn the old way.

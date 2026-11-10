@@ -1539,8 +1539,7 @@ Options > Extras > Back up your data and Restore from a backup move the player's
 zip (`port/platform/backup.h`, header comment). A backup holds, from the user folder: every
 folder named `memcard` or `memcard` followed by letters, digits, `-` or `_` (`memcard`,
 `memcard-preview`), `states/` without a slot's developer dumps (`states/<slug>/dump-*`),
-`config.toml`, `achievements.toml` and `difficulty.toml` (each save's difficulty,
-[SAVES.md](SAVES.md#the-difficulty-of-each-save)); never a file still being written (`*.tmp`, `*.part`), the
+`config.toml`, `achievements.toml`, `difficulty.toml`; never a file still being written (`*.tmp`, `*.part`), the
 logs, `ico-pc.ini` (this device's disc image and folders), the pipeline caches, `dumps/`, the
 texture and model packs or the extracted game data (`backup.c` (`top_visit`, `collect_add`)). A
 card folder that `saves=` or `[paths] saves` puts outside the user folder is not in it; the start
@@ -1729,7 +1728,9 @@ comment); `port/platform/window_host.c` (the perf record comment)).
 and the unhandled-exception filter on Windows, SIGSEGV, SIGBUS, SIGILL, SIGFPE and SIGTRAP on an
 alternate stack on POSIX, and `abort` (asserts, `ico_assert`, the scheduler's fatal errors). A crash
 writes the cause, the faulting address as module+offset, the current game thread and its last
-kernel call, return-address candidates, the heartbeat line and every thread, then the
+kernel call, the Vulkan render pass last begun and the renderer's last 16 pass ring entries
+([RHI.md](RHI.md#device-loss), **The crash report's pass**), return-address candidates, the
+heartbeat line and every thread, then the
 [symbol lines](#the-symbol-lines) naming each offset and the [report file](#the-report-file), then
 on Windows shows a message box naming the report and exits with code 3 (`port/platform/diag_host.h`;
 `port/platform/CMakeLists.txt` (the link map)). Every
