@@ -369,7 +369,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   through `vu1_ref`, the CPU's positions as the probe all right; one vertex on address 200 moved to
   where a zero matrix at 200 puts it: one wrong, address 200 named, `gives it: yes`; one moved where
   no zero matrix puts it: no address; the 16/16 pixel bound; the byte windows (`equal`, `differs at
-  qword 5`, `differs at qwords 184..187`); every row of the decision table's words
+  qword 5`, `differs at qwords 184..187`); every row of the decision table's words; the trace
+  (`rd_vu_skin_trace.c`, issue 123): the clear stamp read back as its replay, an earlier
+  one's, none; the ring stamp's states and the stamp line's words; a differing copy searched (the
+  slot's readback as before, zeros, nowhere, the other slot's ring at the draw's offset, the own
+  ring at another offset, a block checked two replays before, the trace's last 64)
   (`rd_vu_skin_check_judge`); the default (`rd__skin_check_default`): on only for vendor 0x5143
   with a window, off on Mali, PowerVR, NVIDIA, lavapipe, through MoltenVK and headless,
   `ICO_RD_VU_SKIN_CHECK` 1/true on anywhere, 0/false/off off, 2 every command. On a device at
@@ -383,7 +387,16 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd_vu_skin_check_probe`; under robust access c2 right too, the pipeline robustness chain read
   back, `rd_vu_skin_check_probe_robust`); with `=200,ring`
   wrong at 200, the GPU's copy and the CPU's re-read `differs at qwords 184..187`, `reads as: H2, a
-  port race` (`rd_vu_skin_check_ring`); no validation error. `twin` (issue 123): the same frame
+  port race` and the copy found in the check's own ring at the draw's offset (`the GPU's copy of
+  the bone block ...: the block at ring offset O of frame slot S's ring as it is now (replay R's, the
+  draw's own offset)`) (`rd_vu_skin_check_ring`); every frame's stamps its replay's; no validation
+  error. `stale` (issue 123, `ICO_RD_VU_SKIN_INTERVAL_MS=0`): first the careful compile rule
+  (`rd_vu_skin_background` with a reason, as the window passes it after a start-up set stopped for
+  memory on Qualcomm's own driver) still compiles the box check's pipeline in the background and
+  draws a box check; then four replays under the game's mode with each slot's
+  readback not written again (`rd__vu_skin_sabotage_copy`): four `the readback was not written by
+  this replay's copies (the probe target's clear stamp: replay R's ...; the ring's stamp: replay
+  R's)` lines, then two replays without it with both stamps right (`rd_vu_skin_check_stale`). `twin` (issue 123): the same frame
   under the game's mode with the twins on (`rd__vu_skin_twins_set`), the scheduled probe off
   (`ICO_RD_VU_SKIN_INTERVAL_MS=off`) and `ICO_RD_VU_SKIN_SABOTAGE=200,ring`, replayed three times
   through `rd__vu_skin_check_replays`: the first replay's twins differ with nothing probed (`twins
