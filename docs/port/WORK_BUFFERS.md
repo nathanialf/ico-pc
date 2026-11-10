@@ -27,6 +27,7 @@ sprite model ([RENDER_POST.md](RENDER_POST.md#post-passes), "The staticBlur spri
 | `port/render/rd_profile.c`, `port/render/rd_local_probe.c` | the desktop's local reads (`RdProfile.desktopLocal`) and their start-up cost probe (`rd__local_probe`) |
 | `ico2/sugipon/src/puddle.c`, `port/render/rd_interp.c` | the ripples' texture shift between ticks (`drawRipples`; `reprojStShift`) |
 | `port/render/rd_replay.c`, `port/render/rd_shadow_one.c`, `port/render/rd_shadow_selftest.c`, `port/shaders/blit.hlsl` | the shadow count in one draw (`shadowCountOne` picks the destination, `rd__shadow_one_draw` draws `shadow_count_ps`) and its start-up self-test (`rd__shadow_selftest`) |
+| `port/render/rd_msaa_shadow.c` | the shadow count under MSAA: the volumes and the seven draws on SCENE_MS's own depth and stencil, its colour resolved into the count target, and its self-test ([MSAA.md](MSAA.md#the-shadow-count-in-the-epoch)) |
 | `port/render/rd_fx_plan.c`, `port/render/rd_profile.c` | the shadow composites above 1x: one bilinear tap unless `RdProfile.shadowBspline` (`rd__sprite_above1x`) |
 | `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
 | `port/render/rd_pass_area.c`, `port/render/rd_replay.c`, `port/rhi/vk/vk_cmd.c` | the pass area: the commands' boxes before the walk (`rd__pass_area_scan`, from `rd__store_plan_scan`), each pass's area (`rd__pass_area_begin` from `beginPass`), the end of its commands (`rd__pass_area_due`), the render area and the cut scissors (`rhi_cmd_begin_render_pass`, `rhi_cmd_set_scissor`) |
@@ -478,6 +479,12 @@ with `ICO_RD_LOCAL_PROBE=1`, the local reads' time counted a quarter or four tim
 GPU is measured by the probe line of a reporter's log; no hardware number exists before it.
 
 ## The shadow count in one draw
+
+Under MSAA the count is drawn on the multisampled scene's own depth and stencil instead, by the
+seven draws at the epoch's sample count, and the count target is that colour's resolve (each
+pixel the mean of its samples; the one draw cannot read a multisampled stencil):
+[MSAA.md](MSAA.md#the-shadow-count-in-the-epoch). Without MSAA, and under MSAA where that way
+does not apply, the following holds.
 
 The shadow volumes count on the stencil of SCENE's depth, bits 0-5 holding n mod 64 for n the net
 count of faces in front of the scene ([RENDER_POST.md](RENDER_POST.md#shadows)). The resolve
