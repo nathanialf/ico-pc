@@ -316,6 +316,18 @@ if(ICO_RUN_TESTS)
     add_test(NAME dump_zip COMMAND dump_zip_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
+# The automatic dumps' worker (dump_auto.c, issues 123 and 179): a job written
+# whole off the calling thread, a second job while one is written dropped
+# with its line, the join at shutdown, the zip from memory and the bug
+# report's bundle of the run's automatic zips (dump_zip.c)
+add_executable(dump_auto_test test/dump_auto_test.c dump_auto.c dump_zip.c)
+target_include_directories(dump_auto_test PRIVATE "${ICO_COMPAT_DIR}")
+target_compile_options(dump_auto_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(dump_auto_test PRIVATE ico_host_fs ico_miniz ico_thread)
+if(ICO_RUN_TESTS)
+    add_test(NAME dump_auto COMMAND dump_auto_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
 # Options > Extras > Back up your data and Restore from a backup (backup.c):
 # a user folder under the build folder backed up, inspected, unpacked and
 # put in place, byte for byte, and the refusals (not a backup, a path that

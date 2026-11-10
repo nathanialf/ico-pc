@@ -282,6 +282,28 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   zone 20's box top, neither with the collision attached after the create; skipped (77) without
   the image (`collision_carrier_disc`, `collision_carrier_disc_jpn`, `_kor`, `_cn`, `_ntsc`,
   `_aug6`, `_jun26`).
+- `difficulty_test.c`: each journey's difficulty record (`port/game/difficulty.h`) on the CPU,
+  one run per disc: the presets row by row (Hard's Shadow toughness per disc), each classified as
+  itself and one changed row Custom (the disc's own barrier and seconds equal to Normal's), every
+  row's Left/Right step, the rows text's round trip (a row left out Normal's, a bad word counted,
+  the earlier `pit_time` words), the carry-over from the fifteen retired config keys (Normal when
+  all are the game's own, else Custom) and from an old state's keys text (the same text the same
+  journey id), begin / reset / `set_active` / `set_row`, the accessors of `options.h` and
+  `variants.h` reading the record (a moved variant's step writes no config key, no row switches
+  achievements off), the knock-down limit (off counts nothing; once a fall: a chained hit, a
+  landing, a knock-down before the get-up timer is out, a fall longer than the timer; another
+  actor never; the limit's return and `over_pending`; each room and the whole journey, whose count
+  goes back to 0 after the game over the limit causes), Permadeath on any game over and the
+  states lock, No Shadows, the `difficulty.record` state block (a restored record, a damaged
+  version and a missing block rebuilt from the state's keys) (`difficulty`, `difficulty_jpn`,
+  `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
+- `difficulty_file_test.c`, `difficulty_knock_test.c`, `knockdown_disc_test.c`,
+  `no_shadows_disc_test.c`, `no_shadows_census_test.c`: registered with their ctests for the
+  packages that fill them (the sidecar, the knock-down limit's game side, the disc's
+  mails, No Shadows on each disc, the script census); until then each passes without a check
+  (`difficulty_file`, `difficulty_file_<disc>`, `difficulty_knock`, `difficulty_knock_<disc>`,
+  `knockdown_disc`, `knockdown_disc_<disc>`, `no_shadows_disc`, `no_shadows_disc_<disc>`,
+  `no_shadows_census`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
 - `ico_rows_test.c`: Developer > Free movement and the Ask Yorda for a hint button
@@ -350,13 +372,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   loaded slot's picture copied to `pause.png` with its size from the PNG header (none without a
   picture, no size for a header that is not a PNG's) and on to a later save's slot (`state_host`).
 - `variants_test.c`: the game variants (`port/game/variants.h`) on the CPU: every default is the game as
-  shipped (the barrier's number the disc's: 5, 7 on `jun26`), every `[variants]` key steps through
-  all its values, saves and reads back, a word or number that is no value reads as the default, the
-  setters clamp and the steps wrap, and the achievements rule (One hit per swing, Shadows never
-  dodge, Cutscene cameras ignored and a Debug menu press suspend; toughness, aggression, No hints,
-  the barrier and the look-around do not; Peaceful shadows does, as `peaceful_shadows`; a reload clears the Debug menu's mark), `test_combat` also checks `ico_variant_down_keeps_hit` (the down action's `hit` flag: Ico keeps it only with Shadows wait while Ico is down On, every other actor always), `test_peaceful` (the
-  `ico_variant_shadow_brain` hook the four Shadow starts read: 1 by default, 0 with the key on, a bad
-  word reads 1, a step writes the key and the achievements rule, the other rows untouched),
+  shipped (the barrier's number the disc's: 5, 7 on `jun26`), every variant steps through
+  all its values, saves and reads back (a global one's `[variants]` key written, a difficulty row's
+  not: the journey's record keeps it across a config reload and the title puts the game's own
+  back), the retired keys' words through the carry-over (a word or number that is no value reads
+  as the default), the setters clamp and the steps wrap, and the achievements rule (Cutscene
+  cameras ignored and a Debug menu press suspend; no difficulty row does, One hit per swing,
+  Shadows never dodge and Peaceful shadows included; a reload clears the Debug menu's mark), `test_combat` also checks `ico_variant_down_keeps_hit` (the down action's `hit` flag: Ico keeps it only with Shadows wait while Ico is down On, every other actor always), `test_peaceful` (the
+  `ico_variant_shadow_brain` hook the four Shadow starts read: 1 by default, 0 with the journey's row
+  or a carried-over key on, a bad word reads 1, a step writes no key and keeps the achievements on,
+  the other rows untouched),
   the chain rows (`test_chain`: the game's 4 and 4 by default, `ico_variants_bind_debug_chain` leaves
   the switches alone at 4, every value 1 to 10 reaches its own switch, 4 puts the game's value back,
   a step wraps and writes the number, a file's value is written at the bind, 0, 11 or a word read as 4,
@@ -611,6 +636,17 @@ that stops again writing its own line without the retry mark); a stop at the fre
 - `report_test.c` (ctest `report`): the bug report's zip (`ico_report_write`): a stored loss dump is deflated when the report takes it (issue 123's 28 MB stored loss zip made a report over GitHub's 25 MB attachment limit), the slow-scene zip is stored as it is, both read back byte for byte with miniz
 - `dump_zip_test.c`: F12's zip (with the tick before as its second `.rddump`, and the blended present's frame moved in third by `ico_zip_move_file`, the loose file gone), the aspect sweep's zip, the device-loss zip (the lost frame first, the second `.rddump` the frame before, its entries stored with the stored flag and deflated without it, F12's deflated, the pruning to the newest three) and the slow-scene zip (its name, the frame then the log, the pruning to the newest three with the loss zips left alone), written and read back with miniz; the upscaler's pictures (`upscale_pictures.c`, issue 203): the stem of `<stem>-present.png`, the four found beside it added to the bug-report zip with their bytes in the order composite, scene, velocity, depth, a cap the second would pass leaving the composite alone in and the scene's refusal named, none beside the picture adding nothing, F12's (no zip) naming the four, the wait for a capture the present after the request did not dispatch (`ico_upscale_pictures_after` with a pending outcome: the present in the zip first, nothing added while it stays pending, the four after it when written; another outcome adds at once; expired with none on disk adds nothing), and in a folder named "José" the four found (sized through `ico_path_kind`)
   (`dump_zip`).
+- `dump_auto_test.c` (ctest `dump_auto`): the automatic dumps' worker (`dump_auto.h`, issues 123 and
+  179) and the zip from memory (`ico_zip_mem_files`, `ico_zip_add_bundle`): the entries and the log
+  read back, a missing log leaving the entries alone, nothing deleted; a job written whole (the
+  frame, the tick before, the log byte for byte, the sidecar, both costs in the result, the slow
+  zips pruned to three); a second job while one is written dropped with its line and counted, never
+  queued, its block the caller's, the first finishing whole, a new job taken after the result is
+  polled; a zip that cannot be written keeping the frame loose; the join at shutdown with a job in
+  flight, twice safe, a later job starting a new worker; the report's bundle (the newest three of
+  five recorded zips stored with `automatic-captures.txt` naming each and why one is left out, the
+  report zip's own entries kept, a zip gone from the disk not listed, none recorded adding nothing).
+  Run under the asan and thread presets as well.
 - `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
   on this toolchain's compiler and linker, over a stand-in game library (`game_data_fixture.c`)
   given `ico_game`'s section treatment and the game's options: the ranges exist; every writable
@@ -702,8 +738,10 @@ that stops again writing its own line without the retry mark); a stop at the fre
   (equal unset or at the default, `key=(absent) (now cur)` otherwise; only unset for a key without
   one fixed default); every key's default (`ico_sim_key_default`, `ico_sim_key_is_default`), and
   the first-run `config.toml` writing every listed key it holds at that default (`sim_keys`); a
-  state saved before `gameplay.shadows_together` existed equal with the option off and differing
-  (`gameplay.shadows_together=(absent) (now true)`) with it on.
+  state saved before `gameplay.skip_opening` existed equal with the option off and differing
+  (`gameplay.skip_opening=(absent) (now true)`) with it on; the fifteen difficulty keys out of the
+  list and in `ICO_SIM_KEYS_RETIRED` (`ico_sim_key_retired`), out of the hash and the text, an older
+  state's text that lists them at any value equal.
   The same for `developer.free_movement` (`developer.free_movement=(absent) (now true)`); `config_test.c` checks the first-run file's `[developer]` block.
 - `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 and the
   Continue screen's Square prompt ([UI.md](UI.md#save-states)), the pictures' box at their own
@@ -1073,7 +1111,8 @@ that stops again writing its own line without the retry mark); a stop at the fre
   26.7, with its `other` time, the block's first timed replay, the lock without a present call, `other`
   never under 0, a gap under 0, the call not timed apart, no gap, no GPU span) and the after line (`present_after_text`: the replay after the stall, its gap across one
   and two untimed replays, no GPU span, a short buffer cut); the stall lines' threshold
-  (`present_stall_lines`: from 250 ms on, never from 50 to 250 ms nor for NaN) (`present_hist`).
+  (`present_stall_lines`: from 250 ms on, never from 50 to 250 ms nor for NaN); a clock that went
+  back (issue 123: "the GPU's timestamp clock went back 20699.4 ms ...", no gap words) (`present_hist`).
 - `bones_ladder_test.c`: issue 123's ladder across starts (`bones_ladder.h`,
   [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)): the step for each run's evidence over sequences
   of starts as `window_bones.c` applies them (step 1 written and healed over 2,000 presents; step 1
@@ -1119,8 +1158,9 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   word; nothing at the game's rate, without late skips, with the GPU inside the step or with no
   game rate; the reporter's own narrow 370k..382k and no fit at all: GPU-bound, no step named, the
   reason given; the vertex work alone past the budget: no step; a flat line at 1x, at 2.5x rounding
-  down to 2x, and 4x of 6x at 25 game fps, the largest offered step that fits; a cut buffer)
-  (`window_scene`).
+  down to 2x, and 4x of 6x at 25 game fps, the largest offered step that fits; a cut buffer; the
+  frames not presented counted as late plus render-thread-busy ones (`window_scene_hint_skips`,
+  issue 179: 157 busy and no late skip still prints the hint) (`window_scene`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the
   crash chain to the box, the variable and the relaunch environment, the `dst` field of a
   pipeline's or a start-up batch's note, its VU vertex pre-pass keys and modules, the skin check's

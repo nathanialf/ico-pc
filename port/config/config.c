@@ -42,9 +42,19 @@ void ico_config_reset(const char *toml_path, const char *ini_path)
    they always keep their texels. [dev] hand_probe names a log of the
    characters' hand-holding numbers, which the port does not write.
    [video] effect_glow_size named the glow's size above 1x; the glow is
-   drawn at the PS2's size at every resolution. */
-static const char *const retired_keys[] = {"game.classic_menu_text", "game.port_font",
-                                           "dev.hand_probe", "video.effect_glow_size"};
+   drawn at the PS2's size at every resolution.  The fifteen gameplay keys
+   from [gameplay] yorda_safe to [variants] peaceful_shadows are rows of each
+   save's difficulty record since v0.11.3 (port/game/difficulty.h, chosen on
+   the New Game screen); their getters still read them, once, for the
+   carry-over of a save that has no record yet, and no file is rewritten. */
+static const char *const retired_keys[] = {
+    "game.classic_menu_text",   "game.port_font",       "dev.hand_probe",
+    "video.effect_glow_size",   "gameplay.yorda_safe",  "gameplay.pit_time",
+    "gameplay.shadow_speed",    "gameplay.yorda_trips", "gameplay.shadows_together",
+    "variants.shade_toughness", "variants.one_hit",     "variants.never_dodge",
+    "variants.aggression",      "variants.no_hints",    "variants.barrier_hits",
+    "variants.auto_guard",      "variants.attack_turn", "variants.shadows_wait_down",
+    "variants.peaceful_shadows"};
 
 static void log_retired(void)
 {
@@ -421,37 +431,15 @@ static const char first_run_text[] =
     "# to let go on the North American disc and the 2001 previews); \"hold\": keep\n"
     "# R1 held; \"toggle\": press R1 once to take it, again to let go.\n"
     "hold_type = \"disc\"\n"
-    "# How long a shadow takes to pull Yorda into a pit, from when it starts to\n"
-    "# sink with her: 4 to 30 (seconds) or \"original\" (the game's own, 15 s).\n"
-    "pit_time = \"original\"\n"
-    "# How fast shadows walk, run and fly: \"slower\", \"original\", \"faster\" or\n"
-    "# \"fastest\". It does not change how often they attack.\n"
-    "shadow_speed = \"original\"\n"
-    "# true: several shadows may attack at the same time; false: they take\n"
-    "# turns, as the original.\n"
-    "shadows_together = false\n"
-    "# true: running hand in hand for three seconds makes Yorda fall, as she\n"
-    "# does after the main gate opens. From the next room.\n"
-    "yorda_trips = false\n"
     "# true: a second memory card with ten more saves (the folder memcard2\n"
     "# beside memcard); the game's save and load screens offer both cards.\n"
     "second_memory_card = false\n"
     "\n"
     "[variants]\n"
-    "# Options > Gameplay (No hints), Gameplay > Shadows, Combat and\n"
-    "# Cutscenes. Every line is the game as the disc\n"
-    "# ships it. shade_toughness: \"original\", \"american\" (every Shadow as tough\n"
-    "# as on the North American disc, and no tougher on later playthroughs),\n"
-    "# \"no_plus\" (no tougher on later playthroughs) or \"third_journey\" (as tough\n"
-    "# as on a third playthrough, twice the first journey's: the PAL, Japanese,\n"
-    "# Korean and Chinese discs only). aggression: \"own\" (each\n"
-    "# Shadow's own), \"bold_patient\", \"bold_quick\", \"wary_patient\" or\n"
-    "# \"wary_quick\". barrier_hits (5 or 7, the Queen's barrier) is not written:\n"
-    "# without it the disc's own number is used. one_hit, never_dodge,\n"
-    "# ignore_cutscene_cameras and peaceful_shadows switch achievements off while\n"
-    "# they are on (peaceful_shadows: the Shadows never come for Ico or Yorda).\n"
-    "# auto_guard, attack_turn and shadows_wait_down (Combat) are the game as\n"
-    "# shipped while true; false makes it harder and keeps achievements.\n"
+    "# Gameplay > Cutscenes, the weapon rows and Gameplay > Yorda. Every line is\n"
+    "# the game as the disc ships it. The Shadow, Combat and Rules rows are\n"
+    "# chosen for each journey on the New Game screen, not here.\n"
+    "# ignore_cutscene_cameras switches achievements off while it is on.\n"
     "# sword_colour: \"original\" or \"red\" (the light sword's trail is red;\n"
     "# the European, Japanese, Korean and Asian discs). weapon: \"original\" or\n"
     "# \"net\" (every stick is the makers' unused insect net: it is never swung,\n"
@@ -459,19 +447,10 @@ static const char first_run_text[] =
     "# chain_swing_speed and chain_swing_damping (Gameplay > Yorda): 1 to 10, the\n"
     "# game's own debug values, 4 and 4. A higher speed is a shorter swing; a\n"
     "# higher damping lets a swing die down quicker while Ico is not swinging.\n"
-    "shade_toughness = \"original\"\n"
-    "one_hit = false\n"
-    "never_dodge = false\n"
-    "aggression = \"own\"\n"
-    "no_hints = false\n"
     "no_cutscene_look = false\n"
     "ignore_cutscene_cameras = false\n"
-    "auto_guard = true\n"
-    "attack_turn = true\n"
-    "shadows_wait_down = true\n"
     "sword_colour = \"original\"\n"
     "weapon = \"original\"\n"
-    "peaceful_shadows = false\n"
     "chain_swing_speed = 4\n"
     "chain_swing_damping = 4\n"
     "\n"

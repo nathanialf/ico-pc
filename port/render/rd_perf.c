@@ -1147,10 +1147,21 @@ static void gpuGap(RdPerfRecord *r, uint64_t t0, uint64_t last)
     int64_t gap;
     uint32_t skipped;
 
-    if (rd_perf_gap_step(&s_gap, r->replay, t0, last, &gap, &skipped)) {
+    uint64_t back;
+    static uint32_t s_backLogged;
+
+    if (rd_perf_gap_step_ex(&s_gap, r->replay, t0, last, &gap, &skipped, &back)) {
         r->gpuGapNs = gap;
         r->gpuGapSkipped = skipped;
         r->gpuGapValid = 1;
+    } else if (back != 0) {
+        r->gpuGapBackNs = back;
+        const uint32_t n = ++s_backLogged;
+        if (n <= 8u || n % 100u == 0u) {
+            rd__log("GPU timestamps: the clock went back %.1f ms at replay %u (restart %u of the "
+                    "run; the time a restarted counter had run, not an overlap of replays)",
+                    (double)back / 1e6, r->replay, n);
+        }
     }
 }
 

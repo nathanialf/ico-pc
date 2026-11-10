@@ -76,36 +76,22 @@ static const char *base_name(const char *path)
     return b;
 }
 
-/* the files paths[0..n) and, when it can be read, log_path, each under its
-   own name, into zip_path at miniz's level (MZ_DEFAULT_LEVEL deflated,
-   MZ_NO_COMPRESSION stored); the loose files deleted after; as
-   ico_frame_dump_zip's result (0, 1 or -1) */
-static int files_zip(const char *zip_path, const char *const *paths, int n, const char *log_path,
-                     mz_uint level, char *why, size_t why_size)
+/* The entries e[0..n) and, when it can be read, log_path (under its own
+   name) into zip_path at miniz's level (MZ_DEFAULT_LEVEL deflated,
+   MZ_NO_COMPRESSION stored): 0 both, 1 the entries alone (no log), -1 nothing
+   written (why). Nothing is deleted. */
+static int mem_zip(const char *zip_path, const IcoZipMem *e, int n, const char *log_path,
+                   mz_uint level, char *why, size_t why_size)
 {
     mz_zip_archive z;
     void *out = NULL;
     size_t out_size = 0, log_size = 0;
-    void *data[ICO_LOSS_DUMP_FILES] = {NULL, NULL};
-    size_t size[ICO_LOSS_DUMP_FILES] = {0, 0};
     void *log = log_path != NULL && log_path[0] != '\0' ? read_all(log_path, &log_size) : NULL;
-    int r = -1, have = 1;
+    int r = -1;
 
-    if (n < 1 || n > ICO_LOSS_DUMP_FILES) {
-        say(why, why_size, "no dump to add", NULL);
-        free(log);
-        return -1;
-    }
-    for (int i = 0; i < n && have; i++) {
-        data[i] = read_all(paths[i], &size[i]);
-        if (data[i] == NULL) {
-            say(why, why_size, "cannot read the dump", paths[i]);
-            have = 0;
-        }
-    }
     memset(&z, 0, sizeof(z));
-    if (!have) {
-        /* said above */
+    if (n < 1 || n > ICO_ZIP_MEM_MAX) {
+        say(why, why_size, "no dump to add", NULL);
     } else if (!mz_zip_writer_init_heap(&z, 0, 0)) {
         say(why, why_size, "cannot start the archive",
             mz_zip_get_error_string(mz_zip_get_last_error(&z)));
@@ -113,7 +99,7 @@ static int files_zip(const char *zip_path, const char *const *paths, int n, cons
         int ok = 1;
 
         for (int i = 0; i < n && ok; i++) {
-            ok = mz_zip_writer_add_mem(&z, base_name(paths[i]), data[i], size[i], level) != 0;
+            ok = mz_zip_writer_add_mem(&z, e[i].name, e[i].data, e[i].size, level) != 0;
         }
         if (ok && log != NULL) {
             ok = mz_zip_writer_add_mem(&z, base_name(log_path), log, log_size, level) != 0;
@@ -139,18 +125,55 @@ static int files_zip(const char *zip_path, const char *const *paths, int n, cons
             if (r < 0) {
                 say(why, why_size, "cannot write", zip_path);
                 ico_remove(zip_path);
-            } else {
-                for (int i = 0; i < n; i++) {
-                    ico_remove(paths[i]);
-                }
             }
             mz_free(out);
+        }
+    }
+    free(log);
+    return r;
+}
+
+int ico_zip_mem_files(const char *zip_path, const IcoZipMem *e, int n, const char *log_path,
+                      int stored, char *why, size_t why_size)
+{
+    return mem_zip(zip_path, e, n, log_path,
+                   stored ? (mz_uint)MZ_NO_COMPRESSION : (mz_uint)MZ_DEFAULT_LEVEL, why, why_size);
+}
+
+/* the files paths[0..n) and, when it can be read, log_path, each under its
+   own name, as mem_zip; the loose files deleted after; as
+   ico_frame_dump_zip's result (0, 1 or -1) */
+static int files_zip(const char *zip_path, const char *const *paths, int n, const char *log_path,
+                     mz_uint level, char *why, size_t why_size)
+{
+    void *data[ICO_LOSS_DUMP_FILES] = {NULL, NULL};
+    size_t size[ICO_LOSS_DUMP_FILES] = {0, 0};
+    IcoZipMem e[ICO_LOSS_DUMP_FILES];
+    int r = -1, have = 1;
+
+    if (n < 1 || n > ICO_LOSS_DUMP_FILES) {
+        say(why, why_size, "no dump to add", NULL);
+        return -1;
+    }
+    for (int i = 0; i < n && have; i++) {
+        data[i] = read_all(paths[i], &size[i]);
+        if (data[i] == NULL) {
+            say(why, why_size, "cannot read the dump", paths[i]);
+            have = 0;
+        }
+        e[i].name = base_name(paths[i]);
+        e[i].data = data[i];
+        e[i].size = size[i];
+    }
+    if (have) {
+        r = mem_zip(zip_path, e, n, log_path, level, why, why_size);
+        for (int i = 0; r >= 0 && i < n; i++) {
+            ico_remove(paths[i]);
         }
     }
     for (int i = 0; i < n; i++) {
         free(data[i]);
     }
-    free(log);
     return r;
 }
 
@@ -220,6 +243,69 @@ int ico_zip_add_file(const char *zip_path, const char *file_path, const char *en
     }
     free(zdata);
     free(fdata);
+    return r;
+}
+
+int ico_zip_add_bundle(const char *zip_path, const char *const *paths, int n, const char *note_name,
+                       const char *note, char *why, size_t why_size)
+{
+    mz_zip_archive rd, wr;
+    size_t zsize = 0, osize = 0;
+    void *zdata = read_all(zip_path, &zsize), *out = NULL;
+    int r = -1;
+
+    memset(&rd, 0, sizeof(rd));
+    memset(&wr, 0, sizeof(wr));
+    if (zdata == NULL) {
+        say(why, why_size, "cannot read the zip", zip_path);
+    } else if (!mz_zip_reader_init_mem(&rd, zdata, zsize, 0)) {
+        say(why, why_size, "cannot open the zip",
+            mz_zip_get_error_string(mz_zip_get_last_error(&rd)));
+    } else {
+        int ok = mz_zip_writer_init_heap(&wr, 0, 0) != 0;
+        const mz_uint cnt = mz_zip_reader_get_num_files(&rd);
+
+        for (mz_uint i = 0; ok && i < cnt; i++) {
+            ok = mz_zip_writer_add_from_zip_reader(&wr, &rd, i) != 0;
+        }
+        /* the files are zips already: stored */
+        for (int i = 0; ok && i < n; i++) {
+            size_t fsize = 0;
+            void *fdata = read_all(paths[i], &fsize);
+
+            ok = fdata != NULL && fsize > 0 &&
+                 mz_zip_writer_add_mem(&wr, base_name(paths[i]), fdata, fsize, MZ_NO_COMPRESSION) !=
+                     0;
+            free(fdata);
+        }
+        ok = ok &&
+             (note == NULL || note_name == NULL ||
+              mz_zip_writer_add_mem(&wr, note_name, note, strlen(note), MZ_DEFAULT_LEVEL) != 0);
+        ok = ok && mz_zip_writer_finalize_heap_archive(&wr, &out, &osize) != 0;
+        mz_zip_writer_end(&wr);
+        mz_zip_reader_end(&rd);
+        if (!ok) {
+            say(why, why_size, "cannot rebuild the zip", NULL);
+        } else {
+            char tmp[4200];
+
+            snprintf(tmp, sizeof(tmp), "%s.tmp", zip_path);
+            FILE *f = ico_fopen(tmp, "wb");
+            const int wrote = f != NULL && fwrite(out, 1, osize, f) == osize;
+
+            if (f != NULL && fclose(f) != 0) {
+                r = -1;
+            } else if (wrote && ico_rename_replace(tmp, zip_path) == 0) {
+                r = 0;
+            }
+            if (r < 0) {
+                ico_remove(tmp);
+                say(why, why_size, "cannot write", zip_path);
+            }
+        }
+        mz_free(out);
+    }
+    free(zdata);
     return r;
 }
 

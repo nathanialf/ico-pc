@@ -6,8 +6,8 @@
  * hashes them (xxh3-64 over "key=value\n" in this order, the value as
  * ico_config_get_string gives it; "" when unset).  A state whose hash
  * differs is refused with the first differing key named.  Add a key here
- * when an option changes what the game computes (SPEED adds
- * gameplay.shadow_speed), with its default (sim_keys.c kDefaults): a state
+ * when an option changes what the game computes (DOOR added
+ * gameplay.door_fix), with its default (sim_keys.c kDefaults): a state
  * saved before the key existed lacks it and is accepted while the key is
  * unset or at that default (state_file.c's header check, through
  * ico_state_set_key_default).
@@ -20,6 +20,14 @@
 
 /* NULL-terminated, "section.key" form. */
 extern const char *const ICO_SIM_KEYS[];
+/* The keys that left the list in v0.11.3 (the fifteen difficulty rows, now
+   each save's record, port/game/difficulty.h, carried by a state as its own
+   block): NULL-terminated.  A state's keys text may still list them (a state
+   of v0.11.2 or older); the key check skips them. */
+extern const char *const ICO_SIM_KEYS_RETIRED[];
+/* 1 when the key (key_n bytes, not NUL-terminated) is in
+   ICO_SIM_KEYS_RETIRED. */
+int ico_sim_key_retired(const char *key, size_t key_n);
 /* The hash over the current config; also writes the "key=value\n" text into
    text (when non-NULL, size bytes, truncated) for the state header. */
 uint64_t ico_sim_keys_hash(char *text, size_t size);

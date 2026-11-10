@@ -232,6 +232,11 @@ void window_orig_step(bool late)
     s_origLate += late ? 1u : 0u;
 }
 
+unsigned window_orig_skip_busy(void)
+{
+    return s_origSkipBusy;
+}
+
 const char *window_orig_words(bool original)
 {
     static char words[128];

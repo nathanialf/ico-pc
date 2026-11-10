@@ -1045,6 +1045,41 @@ typedef enum UiStrId {
     UI_STR_OPT_FREE_MOVEMENT,
     UI_STR_OPT_FREE_MOVEMENT_NOTE,
     UI_STR_REMAP_ASK_HINT,
+    /* v0.11.3, per-save difficulty (port/game/difficulty.h): the New Game screen's
+       Difficulty row (the mode names and a note each, the Customize link, the Rules
+       page), the rows new with it (No Shadows, Knock-down limit and what it counts,
+       Permadeath), the read-only note and pause-menu words, the toasts and the
+       refused save-state text; the community tables carry English */
+    UI_STR_DIFF,
+    UI_STR_DIFF_NOTE,
+    UI_STR_DIFF_EASY,
+    UI_STR_DIFF_NORMAL,
+    UI_STR_DIFF_HARD,
+    UI_STR_DIFF_CUSTOM,
+    UI_STR_DIFF_EASY_NOTE,
+    UI_STR_DIFF_NORMAL_NOTE,
+    UI_STR_DIFF_HARD_NOTE,
+    UI_STR_DIFF_CUSTOM_NOTE,
+    UI_STR_DIFF_CUSTOMIZE,
+    UI_STR_DIFF_CUSTOMIZE_NOTE,
+    UI_STR_DIFF_RULES,
+    UI_STR_DIFF_NO_SHADOWS,
+    UI_STR_DIFF_NO_SHADOWS_NOTE,
+    UI_STR_DIFF_KNOCK_LIMIT,
+    UI_STR_DIFF_KNOCK_LIMIT_NOTE,
+    UI_STR_DIFF_KNOCK_SCOPE,
+    UI_STR_DIFF_KNOCK_SCOPE_NOTE,
+    UI_STR_DIFF_SCOPE_ROOM,
+    UI_STR_DIFF_SCOPE_JOURNEY,
+    UI_STR_DIFF_PERMADEATH,
+    UI_STR_DIFF_PERMADEATH_NOTE,
+    UI_STR_DIFF_LOCKED_NOTE,
+    UI_STR_DIFF_LINE,
+    UI_STR_DIFF_LINK,
+    UI_STR_DIFF_TOAST_ENDED,
+    UI_STR_DIFF_TOAST_KNOCK,
+    UI_STR_DIFF_STATES_LOCKED,
+    UI_STR_DIFF_WORD_PERMADEATH,
     UI_STR_COUNT
 } UiStrId;
 

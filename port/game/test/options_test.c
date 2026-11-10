@@ -2,7 +2,9 @@
  * port/game/test/options_test.c
  *
  * The gameplay options on the CPU: the defaults are
- * the original game's, the config and run-time setters, and eBrainGetTarget
+ * the original game's, the config and run-time setters (the five difficulty
+ * rows, port/game/difficulty.h, kept by the journey's record across a config
+ * reload, their old keys read through the carry-over), and eBrainGetTarget
  * (ico2/omori/src/ebrain.c, compiled in below so its statics are in reach)
  * with yorda_safe off and on, on a synthetic slot set.
  */
@@ -12,6 +14,7 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include "config.h"
+#include "difficulty.h"
 #include "options.h"
 /* the region table (port/core/region.h, by its path: the game's include
    directories hold the game's own region.h) */
@@ -99,6 +102,16 @@ static EBSlot *setup(int status, int message, int chase)
     return p;
 }
 
+/* the journey's record carried over from the config as it reads now (the
+   retired keys, difficulty.h ico_difficulty_from_config) */
+static void carry(void)
+{
+    IcoDifficulty d;
+
+    ico_difficulty_from_config(&d);
+    ico_difficulty_set_active(&d);
+}
+
 static void test_defaults(void)
 {
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
@@ -122,11 +135,14 @@ static void test_defaults(void)
     CHECK(ico_opt_door_fix() == 1);
     ico_opt_reload();
     CHECK(ico_opt_door_fix() == 0);
-    /* Yorda trips: the same (off, the setter's 0 or 1, back on reload) */
+    /* Yorda trips: a difficulty row (off, the setter's 0 or 1, kept by a
+       config reload, back at the title) */
     CHECK(ico_opt_yorda_trips() == 0);
     ico_opt_set_yorda_trips(6);
     CHECK(ico_opt_yorda_trips() == 1);
     ico_opt_reload();
+    CHECK(ico_opt_yorda_trips() == 1);
+    ico_opt_mirror_reset();
     CHECK(ico_opt_yorda_trips() == 0);
     /* Natural chains: the same (off, the setter's 0 or 1, back on reload) */
     CHECK(ico_opt_natural_chains() == 0);
@@ -219,11 +235,16 @@ static void test_config(const char *dir)
     fclose(f);
     ico_config_reset(path, "/nonexistent/options_test.ini");
     ico_opt_reload();
+    ico_difficulty_reset();
     CHECK(ico_opt_stick_fix() == 1);
-    CHECK(ico_opt_yorda_safe() == 1);
     CHECK(ico_opt_door_fix() == 1);
     CHECK(ico_opt_natural_chains() == 1);
     CHECK(ico_opt_skip_opening() == 1);
+    /* yorda_safe and yorda_trips are retired keys: the journey's rows, read
+       from the file only by a save's carry-over */
+    CHECK(ico_opt_yorda_safe() == 0 && ico_opt_yorda_trips() == 0);
+    carry();
+    CHECK(ico_opt_yorda_safe() == 1);
     CHECK(ico_opt_yorda_trips() == 1);
     CHECK(ico_opt_second_memory_card() == 1);
     /* its listener hears the current value at registration, then each set
@@ -251,8 +272,9 @@ static void test_config(const char *dir)
     ico_opt_set_yorda_safe(0); /* the run-time value wins until a reload */
     CHECK(ico_opt_yorda_safe() == 0);
     remove(path);
-    /* pit_time: seconds, "original", the earlier words (that many times the disc's 15.4 s,
-       in whole seconds, held to 4..30), an unknown word reads original */
+    /* pit_time (a retired key, read by the carry-over): seconds, "original", the earlier
+       words (that many times the disc's 15.4 s, in whole seconds, held to 4..30), an
+       unknown word reads original */
     {
         static const char *const names[] = {"half",  "original", "longer", "double", "triple",
                                             "bogus", "8",        "4",      "30",     "2",
@@ -270,6 +292,7 @@ static void test_config(const char *dir)
             fclose(f);
             ico_config_reset(path, "/nonexistent/options_test.ini");
             ico_opt_reload();
+            carry();
             CHECK(ico_opt_pit_time() == want[i]);
         }
         /* an integer in the file, as the Settings menu writes it */
@@ -279,13 +302,14 @@ static void test_config(const char *dir)
             fclose(f);
             ico_config_reset(path, "/nonexistent/options_test.ini");
             ico_opt_reload();
+            carry();
             CHECK(ico_opt_pit_time() == 8);
         } else {
             failures++;
         }
         remove(path);
     }
-    /* shadow_speed: each name reads its factor; an unknown word reads original */
+    /* shadow_speed (the same): each name reads its factor; an unknown word reads original */
     {
         static const char *const names[] = {"slower", "original", "faster", "fastest", "bogus"};
         static const float want[] = {0.75f, 1.0f, 1.25f, 1.5f, 1.0f};
@@ -301,6 +325,7 @@ static void test_config(const char *dir)
             fclose(f);
             ico_config_reset(path, "/nonexistent/options_test.ini");
             ico_opt_reload();
+            carry();
             CHECK(ico_opt_shadow_speed_factor() == want[i]);
             CHECK(ico_opt_shadow_speed() == (i < 4 ? i : ICO_SPEED_ORIGINAL));
         }
@@ -348,6 +373,7 @@ static void test_config(const char *dir)
     }
     ico_config_reset("/nonexistent/options_test.toml", "/nonexistent/options_test.ini");
     ico_opt_reload();
+    ico_difficulty_reset();
 }
 
 /* [gameplay] hold_type per disc: "disc" (and no key) is A on the European,
@@ -781,6 +807,9 @@ static void test_shadow_speed(void)
     snprintf(want, sizeof(want), "gameplay: shadow speed %s (x%.2f)\n", name[ICO_SPEED_FASTEST],
              (double)factor[ICO_SPEED_FASTEST]);
     while (lf != NULL && fgets(line, sizeof(line), lf) != NULL) {
+        if (strncmp(line, "gameplay: ", 10) != 0) {
+            continue; /* the record's own line (difficulty: ...) */
+        }
         got++;
         if (got == 1) {
             CHECK(strcmp(line, want) == 0);
@@ -839,8 +868,9 @@ static void test_shadow_speed(void)
               3);
         free(text);
     }
-    /* the simulation keys name it (the pad recording's header and a save
-       state's validity: port/platform/sim_keys.c ICO_SIM_KEYS) */
+    /* the simulation keys name it among the retired ones (a difficulty row:
+       an older state's keys text lists it; port/platform/sim_keys.c
+       ICO_SIM_KEYS_RETIRED) */
     text = read_source(ICO_SIM_KEYS_SRC);
     CHECK(text != NULL);
     if (text != NULL) {
@@ -868,10 +898,11 @@ static void test_shadows_together(const char *dir)
     remove(path);
     ico_config_reset(path, "no-such.ini");
     ico_opt_reload();
+    ico_difficulty_reset();
     CHECK(ico_opt_shadows_together() == 0);
     CHECK(ico_opt_shadow_waits(1) == 1 && ico_opt_shadow_waits(0) == 0);
     CHECK(ico_opt_shadows_together_went() == 0);
-    /* from the file */
+    /* from the file (a retired key: through the carry-over) */
     f = fopen(path, "wb");
     CHECK(f != NULL);
     if (f != NULL) {
@@ -880,8 +911,10 @@ static void test_shadows_together(const char *dir)
     }
     ico_config_reset(path, "no-such.ini");
     ico_opt_reload();
+    CHECK(ico_opt_shadows_together() == 0);
+    carry();
     CHECK(ico_opt_shadows_together() == 1);
-    ico_opt_set_shadows_together(0); /* the run-time value wins until a reload */
+    ico_opt_set_shadows_together(0); /* the journey's row */
     CHECK(ico_opt_shadows_together() == 0 && ico_opt_shadow_waits(1) == 1);
     remove(path);
 
@@ -918,6 +951,9 @@ static void test_shadows_together(const char *dir)
     while (f != NULL && fgets(line, sizeof(line), f) != NULL) {
         char want[160];
 
+        if (strncmp(line, "gameplay: ", 10) != 0) {
+            continue; /* the record's own line (difficulty: ...) */
+        }
         got++;
         if (got == 1) {
             CHECK(strcmp(line, "gameplay: shadows attack together: all at once (no turns)\n") == 0);

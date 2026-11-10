@@ -1933,7 +1933,11 @@ last stamp of the timed replay before it, the same GPU clock) and, issue 123, ho
 without timestamps came between (`gpuGapSkipped`: a record whose slot was recycled before its stamps
 were read is queued without them, and those are the stall's neighbours); the gap is kept across
 them, then holding their GPU work too, and refused only past 60 s either way (`rd_perf_gap_step`,
-`port/render/rd_perf_gap.h`; a new device starts it again). The present is timed apart where the
+`port/render/rd_perf_gap.h`; a new device starts it again). A replay whose first stamp is before the
+first stamp of the replay before it is not a gap but a restarted clock (the Adreno's counter at a
+stall, issue 123: the stall lines printed the counter's run time as "begun 20699.4 ms before the one
+before ended"): no gap is measured and `gpuGapBackNs` holds how far back it went
+(`rd_perf_gap_step_ex`). The present is timed apart where the
 backend can (`presentSplit`: 1 with the driver's call, 2 the lock's wait only, no present call
 made; `presentLockMs`, `presentCallMs`, `presentPollMs`: the swapchain
 lock's wait, `vkQueuePresentKHR`, the surface poll, `rhi_present_split` on Vulkan) with its end on

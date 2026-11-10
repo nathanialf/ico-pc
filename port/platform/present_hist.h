@@ -82,6 +82,8 @@ typedef struct PresentStallRec {
     int gapValid;        /* gapMs measured (rd.h RdPerfRecord.gpuGapValid) */
     double gapMs;        /* the GPU idle before it; under 0 begun before the one before ended */
     unsigned gapSkipped; /* replays without timestamps between (rd.h RdPerfRecord.gpuGapSkipped) */
+    double
+        gapBackMs; /* the GPU's clock went back this much (rd.h RdPerfRecord.gpuGapBackNs), 0 not */
 } PresentStallRec;
 
 /* blockGpuN, blockGpuMs: the block's timed replays before this one and

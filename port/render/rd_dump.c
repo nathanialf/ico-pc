@@ -275,18 +275,66 @@ static void collectRefs(const RdFrame *f, IdSet *texs, IdSet *temps, IdSet *mesh
     }
 }
 
-static bool w32(FILE *fp, uint32_t v)
+/* Where a dump's bytes go: a file (rd__dump_frame: F12, the loss dump, which
+ * streams as it always did) or a growing memory block (dumpFrameMem), so the
+ * game thread pays a memory copy and a worker the disk (issues 123 and 179:
+ * the automatic dumps' 0.8-1.5 s hitches were the file write and the zip on
+ * the game thread). A memory dump is at most RD_DUMP_MEM_MAX bytes: a bigger
+ * one fails. */
+typedef struct DumpOut {
+    FILE *file; /* set: the bytes go to it */
+    uint8_t *buf;
+    size_t len, cap;
+    bool bad;
+} DumpOut;
+
+#define RD_DUMP_MEM_MAX ((size_t)192u << 20)
+
+static bool dumpPut(DumpOut *o, const void *p, size_t n)
+{
+    if (o->file) {
+        return fwrite(p, 1, n, o->file) == n;
+    }
+    if (o->bad) {
+        return false;
+    }
+    if (n > RD_DUMP_MEM_MAX - o->len) {
+        o->bad = true;
+        return false;
+    }
+    if (o->len + n > o->cap) {
+        size_t ncap = o->cap ? o->cap : (size_t)1 << 20;
+        while (ncap < o->len + n) {
+            ncap *= 2;
+        }
+        if (ncap > RD_DUMP_MEM_MAX) {
+            ncap = RD_DUMP_MEM_MAX;
+        }
+        uint8_t *nb = realloc(o->buf, ncap);
+        if (!nb) {
+            o->bad = true;
+            return false;
+        }
+        o->buf = nb;
+        o->cap = ncap;
+    }
+    memcpy(o->buf + o->len, p, n);
+    o->len += n;
+    return true;
+}
+
+static bool w32(DumpOut *fp, uint32_t v)
 {
     uint8_t b[4] = {(uint8_t)v, (uint8_t)(v >> 8), (uint8_t)(v >> 16), (uint8_t)(v >> 24)};
-    return fwrite(b, 1, 4, fp) == 4;
+    return dumpPut(fp, b, 4);
 }
 
-static bool wraw(FILE *fp, const void *p, size_t n)
+static bool wraw(DumpOut *fp, const void *p, size_t n)
 {
-    return n == 0 || fwrite(p, 1, n, fp) == n;
+    return n == 0 || dumpPut(fp, p, n);
 }
 
-static bool wf32(FILE *fp, float v)
+static bool wf32(DumpOut *fp, float v)
 {
     uint32_t u;
     memcpy(&u, &v, sizeof(u));
@@ -294,7 +342,7 @@ static bool wf32(FILE *fp, float v)
 }
 
 /* version 12: the disc's slug, NUL-padded to RD_DUMP_REGION_BYTES */
-static bool wRegion(FILE *fp)
+static bool wRegion(DumpOut *fp)
 {
     char slug[RD_DUMP_REGION_BYTES] = {0};
     const char *s = ico_region_cur()->slug;
@@ -303,11 +351,9 @@ static bool wRegion(FILE *fp)
     return wraw(fp, slug, sizeof(slug));
 }
 
-bool rd__dump_frame(const RdFrame *f, const char *path)
+/* the frame into out (a file or memory); false when a write failed */
+static bool dumpFrame(const RdFrame *f, DumpOut *out)
 {
-    if (!f || !path) {
-        return false;
-    }
     /* the frames, textures and meshes as no present of the render thread
      * reads or changes them (rd_thread.h): the game thread's dump waits */
     (void)rd_thread_drain();
@@ -315,11 +361,7 @@ bool rd__dump_frame(const RdFrame *f, const char *path)
     static IdSet texs, temps, meshes;
     texs.n = temps.n = meshes.n = 0;
     collectRefs(f, &texs, &temps, &meshes);
-    FILE *fp = ico_fopen(path, "wb");
-    if (!fp) {
-        rd__log("dump: cannot open %s", path);
-        return false;
-    }
+    DumpOut *fp = out;
     bool ok = wraw(fp, RD_DUMP_MAGIC, 8) && w32(fp, RD_DUMP_VERSION) &&
               w32(fp, (uint32_t)sizeof(RdCmd)) && w32(fp, (uint32_t)sizeof(RdStateBlock)) &&
               w32(fp, (uint32_t)sizeof(RdScreenVtx)) && w32(fp, f->gsW) && w32(fp, f->gsH) &&
@@ -447,11 +489,73 @@ bool rd__dump_frame(const RdFrame *f, const char *path)
              w32(fp, m->vertexCount) && wraw(fp, bits, bytes);
         free(bits);
     }
+    return ok;
+}
+
+static bool dumpFrameMem(const RdFrame *f, void **outBuf, size_t *outLen)
+{
+    DumpOut out = {0};
+
+    if (!f || !outBuf || !outLen) {
+        return false;
+    }
+    if (!dumpFrame(f, &out) || out.bad) {
+        rd__log("dump: the frame did not fit in memory (%zu bytes so far, the limit %zu)", out.len,
+                (size_t)RD_DUMP_MEM_MAX);
+        free(out.buf);
+        return false;
+    }
+    *outBuf = out.buf;
+    *outLen = out.len;
+    return true;
+}
+
+bool rd__dump_frame(const RdFrame *f, const char *path)
+{
+    if (!f || !path) {
+        return false;
+    }
+    FILE *fp = ico_fopen(path, "wb");
+    if (!fp) {
+        rd__log("dump: cannot open %s", path);
+        return false;
+    }
+    DumpOut out = {0};
+    out.file = fp;
+    bool ok = dumpFrame(f, &out);
     ok = fclose(fp) == 0 && ok;
     if (!ok) {
         rd__log("dump: write to %s failed", path);
     }
     return ok;
+}
+
+bool rd_dump_frame_mem(void **buf, size_t *len)
+{
+    const RdFrame *f = rd__last_frame();
+    return f ? dumpFrameMem(f, buf, len) : false;
+}
+
+bool rd_dump_prev_frame_mem(void **buf, size_t *len)
+{
+    const RdFrame *f = rd__last_frame(), *p = rd__prev_frame();
+    return f && p && p->closed && p->number + 1 == f->number ? dumpFrameMem(p, buf, len) : false;
+}
+
+bool rd_dump_retained_frame_mem(uint32_t number, void **buf, size_t *len, uint32_t *dumped)
+{
+    const RdFrame *f = rd__retained_frame(number);
+
+    if (dumped) {
+        *dumped = 0;
+    }
+    if (!f || !f->closed || !dumpFrameMem(f, buf, len)) {
+        return false;
+    }
+    if (dumped) {
+        *dumped = f->number;
+    }
+    return true;
 }
 
 /* ------------------------------------------------------------------ load */
@@ -1065,9 +1169,8 @@ static void logCullDrops(const RdFrame *f)
     rd__log("dump: %s", line);
 }
 
-bool rd_dump_on_demand(const char *dumpPath, const char *pngPath)
+void rd_dump_on_demand_log(void)
 {
-    bool ok = true;
     const RdFrame *last = rd__last_frame();
     if (last) {
         logCullDrops(last);
@@ -1076,6 +1179,12 @@ bool rd_dump_on_demand(const char *dumpPath, const char *pngPath)
         rd__water_dump_line(last, line, sizeof(line));
         rd__log("dump: %s", line);
     }
+}
+
+bool rd_dump_on_demand(const char *dumpPath, const char *pngPath)
+{
+    bool ok = true;
+    rd_dump_on_demand_log();
     if (dumpPath) {
         ok = rd_dump_frame(dumpPath);
     }
