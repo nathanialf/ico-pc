@@ -2,11 +2,22 @@
  * port/game/variants.h
  *
  * The game variants: Options > Gameplay (No hints) and its Shadows,
- * Combat and Cutscenes pages, the Debug menu on Developer.  Fourteen settings
- * that change how the game plays, each read once from config.toml
- * ([variants], via ico_config_get_*) the first time it is asked for and
- * settable at run time, as the options of options.h.  Every default is the
- * game as the disc ships it.
+ * Combat and Cutscenes pages, the Debug menu on Developer.  Sixteen settings
+ * that change how the game plays.  Every default is the game as the disc
+ * ships it.
+ *
+ * Ten of them are rows of the journey's difficulty record (difficulty.h),
+ * chosen per save on the New Game screen: shade_toughness, one_hit,
+ * never_dodge, aggression, no_hints, barrier_hits, auto_guard, attack_turn,
+ * shadows_wait_down, peaceful_shadows.  ico_variant_get and the accessors
+ * read them from the active record, ico_variant_set and ico_variant_step
+ * edit the active record (no config key is written); their [variants] keys
+ * below are retired (config.c logs them as not used; read once more only by
+ * a save's carry-over, ico_difficulty_from_config).  The other six
+ * (no_cutscene_look, ignore_cutscene_cameras, sword_colour, weapon and the
+ * two chain rows) stay in config.toml, each read once ([variants], via
+ * ico_config_get_*) the first time it is asked for and settable at run time,
+ * as the options of options.h.
  *
  *   [variants] shade_toughness
  *                          "original"   "original" (the disc's table),
@@ -81,15 +92,13 @@
  * With every row at its shipped value the game runs as before.
  *
  * Achievements are suspended (ico_variants_suspend_achievements, read by
- * gamestate.c beside developer mode) while One hit per swing, Shadows never
- * dodge, Peaceful shadows or Cutscene cameras ignored is on, and from the Debug menu's being
- * opened until the options are reloaded or ico_variants_debug_menu_clear.
- * Shadow toughness, aggression, No hints, the barrier, the look-around and the
- * three Combat rows (Automatic guard, Turn to face shadows, Shadows wait while
- * Ico is down: each makes the game harder, none is a cheat) and the two weapon
- * rows (Light sword colour, a colour only; Stick, a weapon that cannot hurt)
- * and the two chain rows (the swing's pace, the game's own debug values) do
- * not suspend them.
+ * gamestate.c beside developer mode) while Cutscene cameras ignored is on,
+ * and from the Debug menu's being opened until the options are reloaded or
+ * ico_variants_debug_menu_clear.  No difficulty row ever suspends them (One
+ * hit per swing, Shadows never dodge and Peaceful shadows did before
+ * v0.11.3), nor do the look-around, the two weapon rows (Light sword colour,
+ * a colour only; Stick, a weapon that cannot hurt) and the two chain rows
+ * (the swing's pace, the game's own debug values).
  */
 #ifndef ICO_PORT_GAME_VARIANTS_H
 #define ICO_PORT_GAME_VARIANTS_H
@@ -207,7 +216,8 @@ int ico_variant_net_kind(void);
    the others as their enums above).  ico_variant_get is the index in force,
    ico_variant_set sets it (clamped; no config write), ico_variant_step moves
    it by dir (wrapping), writes [variants] <key> in memory (the caller saves
-   the file), logs the change and returns the new index. */
+   the file; a difficulty row writes no key: it edits the active record),
+   logs the change and returns the new index. */
 int ico_variant_count(IcoVariantId id);
 int ico_variant_get(IcoVariantId id);
 void ico_variant_set(IcoVariantId id, int index);
@@ -228,9 +238,9 @@ const char *ico_variant_value_name(IcoVariantId id, int index);
    it. The indices stay the enum's. */
 int ico_variant_offered(IcoVariantId id, int index);
 
-/* 1 while a variant that switches achievements off is in force: One hit per
-   swing, Shadows never dodge, Peaceful shadows, Cutscene cameras ignored, or the Debug menu
-   opened.  Logs "variants: achievements are off ..." when that changes. */
+/* 1 while a variant that switches achievements off is in force: Cutscene
+   cameras ignored, or the Debug menu opened (no difficulty row).  Logs
+   "variants: achievements are off ..." when that changes. */
 int ico_variants_suspend_achievements(void);
 
 /* The Debug menu row (shown with Developer mode on) was pressed: marks the
@@ -247,7 +257,7 @@ void ico_variants_debug_menu_clear(void);
 int ico_variants_open_debug_menu(void);
 
 /* Back to the config's values (ico_opt_reload calls it), then
-   ico_variants_apply. */
+   ico_variants_apply.  The difficulty rows are the journey's and are kept. */
 void ico_variants_reload(void);
 
 /* The game's half (ico2/common/src/debug.c debug_VariableInit, after the

@@ -1407,12 +1407,12 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, cid, c->tw, c->th, r->perfPost);
     rd__pass_area_begin(&p, c, cid, r->passSerial + 1u, ms, storage); /* rd_pass_area.c */
     rd__shadow_merge_arm(&p, cid, d ? did : 0u, r->passSerial + 1u, ms, storage);
+    rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_PASS, cid, c->tw, c->th, d ? did : 0, d ? d->tw : 0,
+                                      d ? d->th : 0, storage, r->perfPost));
     rhi_cmd_begin_render_pass(s_cl, &p);
     if (uber && readable && colorLoad == RHI_LOAD_CLEAR) {
         rhi_cmd_local_read_barrier(s_cl, RHI_LOCAL_READ_COLOR); /* the clear, then reads */
     }
-    rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_PASS, cid, c->tw, c->th, d ? did : 0, d ? d->tw : 0,
-                                      d ? d->th : 0, storage, r->perfPost));
     setViewport(c->tw, c->th);
     if (storage) {
         g_rdPerf.storagePasses++;

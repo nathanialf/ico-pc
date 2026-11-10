@@ -282,6 +282,28 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   zone 20's box top, neither with the collision attached after the create; skipped (77) without
   the image (`collision_carrier_disc`, `collision_carrier_disc_jpn`, `_kor`, `_cn`, `_ntsc`,
   `_aug6`, `_jun26`).
+- `difficulty_test.c`: each journey's difficulty record (`port/game/difficulty.h`) on the CPU,
+  one run per disc: the presets row by row (Hard's Shadow toughness per disc), each classified as
+  itself and one changed row Custom (the disc's own barrier and seconds equal to Normal's), every
+  row's Left/Right step, the rows text's round trip (a row left out Normal's, a bad word counted,
+  the earlier `pit_time` words), the carry-over from the fifteen retired config keys (Normal when
+  all are the game's own, else Custom) and from an old state's keys text (the same text the same
+  journey id), begin / reset / `set_active` / `set_row`, the accessors of `options.h` and
+  `variants.h` reading the record (a moved variant's step writes no config key, no row switches
+  achievements off), the knock-down limit (off counts nothing; once a fall: a chained hit, a
+  landing, a knock-down before the get-up timer is out, a fall longer than the timer; another
+  actor never; the limit's return and `over_pending`; each room and the whole journey, whose count
+  goes back to 0 after the game over the limit causes), Permadeath on any game over and the
+  states lock, No Shadows, the `difficulty.record` state block (a restored record, a damaged
+  version and a missing block rebuilt from the state's keys) (`difficulty`, `difficulty_jpn`,
+  `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
+- `difficulty_file_test.c`, `difficulty_knock_test.c`, `knockdown_disc_test.c`,
+  `no_shadows_disc_test.c`, `no_shadows_census_test.c`: registered with their ctests for the
+  packages that fill them (the sidecar, the knock-down limit's game side, the disc's
+  mails, No Shadows on each disc, the script census); until then each passes without a check
+  (`difficulty_file`, `difficulty_file_<disc>`, `difficulty_knock`, `difficulty_knock_<disc>`,
+  `knockdown_disc`, `knockdown_disc_<disc>`, `no_shadows_disc`, `no_shadows_disc_<disc>`,
+  `no_shadows_census`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
 - `ico_rows_test.c`: Developer > Free movement and the Ask Yorda for a hint button
@@ -350,13 +372,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   loaded slot's picture copied to `pause.png` with its size from the PNG header (none without a
   picture, no size for a header that is not a PNG's) and on to a later save's slot (`state_host`).
 - `variants_test.c`: the game variants (`port/game/variants.h`) on the CPU: every default is the game as
-  shipped (the barrier's number the disc's: 5, 7 on `jun26`), every `[variants]` key steps through
-  all its values, saves and reads back, a word or number that is no value reads as the default, the
-  setters clamp and the steps wrap, and the achievements rule (One hit per swing, Shadows never
-  dodge, Cutscene cameras ignored and a Debug menu press suspend; toughness, aggression, No hints,
-  the barrier and the look-around do not; Peaceful shadows does, as `peaceful_shadows`; a reload clears the Debug menu's mark), `test_combat` also checks `ico_variant_down_keeps_hit` (the down action's `hit` flag: Ico keeps it only with Shadows wait while Ico is down On, every other actor always), `test_peaceful` (the
-  `ico_variant_shadow_brain` hook the four Shadow starts read: 1 by default, 0 with the key on, a bad
-  word reads 1, a step writes the key and the achievements rule, the other rows untouched),
+  shipped (the barrier's number the disc's: 5, 7 on `jun26`), every variant steps through
+  all its values, saves and reads back (a global one's `[variants]` key written, a difficulty row's
+  not: the journey's record keeps it across a config reload and the title puts the game's own
+  back), the retired keys' words through the carry-over (a word or number that is no value reads
+  as the default), the setters clamp and the steps wrap, and the achievements rule (Cutscene
+  cameras ignored and a Debug menu press suspend; no difficulty row does, One hit per swing,
+  Shadows never dodge and Peaceful shadows included; a reload clears the Debug menu's mark), `test_combat` also checks `ico_variant_down_keeps_hit` (the down action's `hit` flag: Ico keeps it only with Shadows wait while Ico is down On, every other actor always), `test_peaceful` (the
+  `ico_variant_shadow_brain` hook the four Shadow starts read: 1 by default, 0 with the journey's row
+  or a carried-over key on, a bad word reads 1, a step writes no key and keeps the achievements on,
+  the other rows untouched),
   the chain rows (`test_chain`: the game's 4 and 4 by default, `ico_variants_bind_debug_chain` leaves
   the switches alone at 4, every value 1 to 10 reaches its own switch, 4 puts the game's value back,
   a step wraps and writes the number, a file's value is written at the bind, 0, 11 or a word read as 4,
@@ -713,8 +738,10 @@ that stops again writing its own line without the retry mark); a stop at the fre
   (equal unset or at the default, `key=(absent) (now cur)` otherwise; only unset for a key without
   one fixed default); every key's default (`ico_sim_key_default`, `ico_sim_key_is_default`), and
   the first-run `config.toml` writing every listed key it holds at that default (`sim_keys`); a
-  state saved before `gameplay.shadows_together` existed equal with the option off and differing
-  (`gameplay.shadows_together=(absent) (now true)`) with it on.
+  state saved before `gameplay.skip_opening` existed equal with the option off and differing
+  (`gameplay.skip_opening=(absent) (now true)`) with it on; the fifteen difficulty keys out of the
+  list and in `ICO_SIM_KEYS_RETIRED` (`ico_sim_key_retired`), out of the hash and the text, an older
+  state's text that lists them at any value equal.
   The same for `developer.free_movement` (`developer.free_movement=(absent) (now true)`); `config_test.c` checks the first-run file's `[developer]` block.
 - `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 and the
   Continue screen's Square prompt ([UI.md](UI.md#save-states)), the pictures' box at their own
@@ -1382,6 +1409,19 @@ The renderer's test programs have a page of their own:
   name's index, the first of two equal names, no match for another case, a part of a name, a
   longer name, `""`, NULL or a NULL entry; the device-list text with and without scores, the
   unsuitable reasons, a short buffer cut (`rhi_adapter_match`).
+- `rhi_vk_pass_row_test.c`: the render pass driver row (`port/rhi/rhi_pass_row.c`), pure: Intel's
+  Windows driver (driver id 5, or no id on a Windows build) at Vulkan 1.3.215 (the issue 123
+  report's HD 530 on 101.2125), 1.3.200 and 1.2.182 takes `VkRenderPass` objects; 1.3.216, 1.3.289
+  and 1.4, Mesa's ANV on the same GPU, an Intel GPU on a non-Windows build without an id, NVIDIA,
+  AMD and Qualcomm keep dynamic rendering; the reason names the driver and `vkCmdBeginRendering`;
+  the `[dev] legacy_passes` words (`1`, `true`, `on`, `yes` in any case; `0`, `false`, `off`, `no`;
+  anything else, empty and NULL none) (`rhi_vk_pass_row`).
+- `rhi_vk_pass_crumb_test.c`: the render pass breadcrumb the crash report prints
+  (`port/rhi/rhi_pass_crumb.c`), pure: none before a pass; a pass stored is inside the driver's
+  begin until marked begun, then ended; the line word for word for the crack fill's shape at 2x (one
+  colour, no depth, dynamic rendering) and for two colours with one view missing and a read-only
+  D32S8 on a `VkRenderPass`; the attachment-less record pass; a short buffer cut and terminated with
+  the full length returned; the reset (`rhi_vk_pass_crumb`).
 - `rhi_vk_enum_test.c`: every `rhi.h` enumeration has a Vulkan mapping, `RGBA32_UINT` among them
   (`rhi_vk_enum`).
 - `rhi_vk_present_mode_test.c`: the present-mode choice over the sets drivers offer, and FIFO

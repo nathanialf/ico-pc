@@ -41,7 +41,9 @@
 #include "memory_floor.h"
 #include "host_fs.h"
 #include "rd_bisect_plan.h"
+#include "rd_passring.h"
 #include "report.h"
+#include "rhi_pass_crumb.h"
 #include "sched.h"
 #include "startup_retry.h"
 #include "symmap.h"
@@ -4922,6 +4924,39 @@ static void finish(const char *reason, const char *box_text, int code)
 #endif
 }
 
+/* The GPU work being recorded when the crash came (issue 123's Intel HD 530
+   report: a crash inside the driver's vkCmdBeginRendering, which the
+   stack could not name): the render pass the Vulkan backend last began
+   (rhi_pass_crumb.h, "inside the driver's begin call" when the crash is in
+   it) and the renderer's last REPORT_PASSRING_LAST pass ring entries
+   (rd_passring.h, numbers only), oldest first.  Nothing when neither has
+   anything (another backend, a crash before the first replay). */
+#define REPORT_PASSRING_LAST 16u
+
+static void report_gpu_passes(char *line, size_t n)
+{
+    const RhiPassCrumb *pc = rhi_pass_crumb_last();
+    if (pc->seq != 0) {
+        rhi_pass_crumb_format(pc, line, n);
+        flog("ico_pc: %s", line);
+    }
+    const uint32_t count = rd_passring_count();
+    if (count == 0) {
+        return;
+    }
+    const uint32_t from = count > REPORT_PASSRING_LAST ? count - REPORT_PASSRING_LAST : 0u;
+    flog("ico_pc: the renderer's last %u passes recorded, oldest first (the pass ring; the "
+         "newest is the one being recorded):",
+         count - from);
+    for (uint32_t i = from; i < count; i++) {
+        const RdPassRec *e = rd_passring_get(i);
+        if (e != NULL) {
+            rd_passring_format(e, NULL, line, n);
+            flog("ico_pc:   %s", line);
+        }
+    }
+}
+
 /* the crash block in the log, without the end */
 static void report_crash_block(void)
 {
@@ -4958,6 +4993,7 @@ static void report_crash_block(void)
     if (failure[0] != '\0') {
         flog("ico_pc: last failure message: %s", failure);
     }
+    report_gpu_passes(line, sizeof line);
     if (crash.stack_hi > crash.stack_lo) {
         scan_stack((const unsigned char *)crash.stack_lo, (const unsigned char *)crash.stack_hi);
     }

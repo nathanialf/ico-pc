@@ -248,6 +248,11 @@ The OpenGL runs of the renderer's suite are the `_gl` tests ([TESTING.md](TESTIN
 - The equation fix on a Radeon RX 7000 card with Mesa 25 RADV: the cause is read from Mesa's
   source; lavapipe, NVIDIA and Intel have not shown the fault, so only the counters and
   the colours at an even and an odd column are checked here.
+- The Intel driver row on Vulkan (`port/rhi/rhi_pass_row.h`: Intel's Windows driver at Vulkan
+  1.3.215 or older takes `VkRenderPass` objects): the path itself runs on lavapipe at Vulkan 1.3
+  (`rd_display_change_2x_legacy`, `ICO_VK_LEGACY_PASSES=1`), the row's choice in
+  `rhi_vk_pass_row`; no Intel GPU on that driver has run it, and the crash it avoids (inside
+  `vkCmdBeginRendering` after a live switch to 2x) is not reproduced anywhere here.
 - Direct3D 11: nothing has run on Windows; the profile text, the pre-pass line and the robust
   words are from the limits `d3d11_device.c` reports.
 - The VU vertex pre-pass on Direct3D 11 on hardware: CI's WARP job runs its self-test (batched,

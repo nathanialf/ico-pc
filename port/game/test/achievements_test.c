@@ -4,7 +4,9 @@
  * The achievements on the CPU: the game-state
  * view over a synthetic snapshot, the signals, every achievement's
  * condition through crafted transitions (unlocked once, suspended in developer
- * mode, yorda_safe counting), the achievements.toml round trip, the
+ * mode, yorda_safe counting, no difficulty row suspending: One hit per swing,
+ * Shadows never dodge and Peaceful shadows among them, Ignore cutscene
+ * cameras still does), the achievements.toml round trip, the
  * popup rate limit and [game] achievements = false; the two discs' keys
  * in one file (stats.stages / stats.stages_jpn / stats.stages_kor, run.slot_N_* /
  * run.jpn_slot_N_* / run.kor_slot_N_*, one set of unlocks) and the popup gap in Main ticks.
@@ -17,11 +19,13 @@
 
 #include "achievements.h"
 #include "config.h"
+#include "difficulty.h"
 #include "host_config.h"
 #include "ico_credits.h"
 #include "ico_gamestate.h"
 #include "options.h"
 #include "popup.h"
+#include "variants.h"
 #include "region.h" /* port/core: the selected disc and its keys */
 #define R (ico_region_cur())
 /* the stages the achievements name, the selected disc's (region.h
@@ -397,6 +401,35 @@ static void test_signals(void)
     ticks(1);
     CHECK(!ico_gs_run_suspended());
     ico_opt_set_yorda_safe(0);
+    /* no difficulty row switches them off: One hit per swing, Shadows never
+       dodge and Peaceful shadows did before v0.11.3; Ignore cutscene cameras
+       (a global variant) still does */
+    {
+        IcoDifficulty d;
+
+        ico_difficulty_preset(ICO_DIFF_HARD, &d);
+        d.row[ICO_DIFF_ONE_HIT] = d.row[ICO_DIFF_NEVER_DODGE] = d.row[ICO_DIFF_PEACEFUL] = 1;
+        d.row[ICO_DIFF_YORDA_SAFE] = d.row[ICO_DIFF_NO_SHADOWS] = 1;
+        ico_difficulty_begin(&d);
+        CHECK(ico_variant_one_hit() && ico_variant_never_dodge() && !ico_variant_shadow_brain());
+        CHECK(!ico_gs_achievements_suspended());
+        ticks(1);
+        CHECK(!ico_gs_run_suspended());
+        ico_variant_set(ICO_VARIANT_ONE_HIT, 0);
+        ico_variant_set(ICO_VARIANT_NEVER_DODGE, 1);
+        ico_variant_set(ICO_VARIANT_PEACEFUL_SHADOWS, 1);
+        CHECK(!ico_gs_achievements_suspended());
+        ico_difficulty_reset();
+        ico_variant_set(ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS, 1);
+        CHECK(ico_gs_achievements_suspended());
+        ticks(1);
+        ico_variant_set(ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS, 0);
+        ticks(1);
+        /* the cameras' row was on for a tick: the run is suspended */
+        CHECK(!ico_gs_achievements_suspended() && ico_gs_run_suspended());
+        new_game();
+        CHECK(!ico_gs_run_suspended());
+    }
     ico_opt_set_developer_mode(1);
     CHECK(ico_gs_developer_mode() && ico_gs_achievements_suspended());
     ticks(1);

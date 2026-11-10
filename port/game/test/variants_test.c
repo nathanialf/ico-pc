@@ -2,10 +2,14 @@
  * port/game/test/variants_test.c
  *
  * The game variants (port/game/variants.h) on the CPU: every default is the
- * game as shipped, every key round trips through config.toml, a word or a
- * number that is not a value reads as the default, and the achievements rule
- * (One hit per swing, Shadows never dodge, Cutscene cameras ignored and the
- * Debug menu switch them off; the other four do not).  The game hooks: the
+ * game as shipped, every global key round trips through config.toml, the ten
+ * difficulty rows (port/game/difficulty.h) live in the journey's record (a
+ * step writes no key, a config reload keeps them, the title puts the game's
+ * own back), the old config words still read through the carry-over (a word
+ * or a number that is not a value reads as the default), and the
+ * achievements rule (Cutscene cameras ignored and the Debug menu switch them
+ * off; no difficulty row does: One hit per swing, Shadows never dodge and
+ * Peaceful shadows no longer).  The game hooks: the
  * debug switches the game binds (written only while a variant holds them,
  * the game's value back after), the Debug menu's opener, the hint rule per
  * disc, the enemy row reader on the disc's tables (ico2/sugipon/src/
@@ -25,6 +29,7 @@
 #include <string.h>
 
 #include "config.h"
+#include "difficulty.h"
 #include "options.h"
 #include "../../core/region.h"
 #include "../../../ico2/sugipon/include/enemy.h"
@@ -84,6 +89,40 @@ static void use_config(const char *text)
     }
     ico_config_reset(s_path, "/nonexistent/variants_test.ini");
     ico_opt_reload();
+    ico_difficulty_reset(); /* the title: the journey's rows the game's own */
+}
+
+/* a journey whose rows are TEXT (the rows text, difficulty.h; Normal for
+   every row it does not name) */
+static void use_rows(const char *text)
+{
+    IcoDifficulty d;
+
+    use_config(NULL);
+    ico_difficulty_preset(ICO_DIFF_NORMAL, &d);
+    ico_difficulty_rows_parse(text, &d);
+    ico_difficulty_begin(&d);
+}
+
+/* a journey carried over from config.toml with TEXT as its body (the
+   retired [variants] keys, read as the old readers did) */
+static void use_carry(const char *text)
+{
+    IcoDifficulty d;
+
+    use_config(text);
+    ico_difficulty_from_config(&d);
+    ico_difficulty_set_active(&d);
+}
+
+/* 1 for a variant that is a row of the journey's difficulty record */
+static int moved(int id)
+{
+    return id == ICO_VARIANT_SHADE_TOUGHNESS || id == ICO_VARIANT_ONE_HIT ||
+           id == ICO_VARIANT_NEVER_DODGE || id == ICO_VARIANT_AGGRESSION ||
+           id == ICO_VARIANT_NO_HINTS || id == ICO_VARIANT_BARRIER_HITS ||
+           id == ICO_VARIANT_AUTO_GUARD || id == ICO_VARIANT_ATTACK_TURN ||
+           id == ICO_VARIANT_SHADOWS_WAIT_DOWN || id == ICO_VARIANT_PEACEFUL_SHADOWS;
 }
 
 static void test_defaults(void)
@@ -180,8 +219,9 @@ static void test_names(void)
           strcmp(ico_variant_value_name(ICO_VARIANT_WEAPON, 1), "net") == 0);
 }
 
-/* every key: step through every value, save, reload, the same value back;
-   the file names the key under [variants] */
+/* every variant: step through every value, save, reload, the same value
+   back; the file names a global one's key under [variants], never a
+   difficulty row's (the journey keeps it across the reload) */
 static void test_round_trip(void)
 {
     for (int id = 0; id < ICO_VARIANT_COUNT; id++) {
@@ -206,7 +246,7 @@ static void test_round_trip(void)
             {
                 char path[64];
                 snprintf(path, sizeof(path), "variants.%s", ico_variant_key((IcoVariantId)id));
-                CHECK((ico_config_get_string(path, NULL) != NULL) == stepped);
+                CHECK((ico_config_get_string(path, NULL) != NULL) == (stepped && !moved(id)));
             }
             ico_config_reset(s_path, "/nonexistent/variants_test.ini");
             ico_opt_reload();
@@ -235,16 +275,24 @@ static void test_round_trip(void)
     CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, -1) ==
           (third_offered() ? ICO_TOUGHNESS_THIRD_JOURNEY : ICO_TOUGHNESS_NO_PLUS));
     CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, 1) == ICO_TOUGHNESS_ORIGINAL);
-    /* a reload goes back to the config's */
+    /* a config reload keeps the journey's rows; the title puts the game's back */
     ico_opt_reload();
+    CHECK(ico_variant_no_hints() == 1 && ico_variant_aggression() == ICO_AGGRESSION_WARY_QUICK &&
+          ico_variant_barrier_hits() == 7);
+    CHECK(ico_variant_no_cutscene_look() == 0); /* a global row: the config's again */
+    ico_variant_set(ICO_VARIANT_AGGRESSION, ICO_AGGRESSION_BOLD_QUICK);
+    ico_opt_reload();
+    CHECK(ico_variant_aggression() == ICO_AGGRESSION_BOLD_QUICK);
+    ico_difficulty_reset();
     CHECK(ico_variant_no_hints() == 0 && ico_variant_aggression() == ICO_AGGRESSION_OWN);
 }
 
-/* what a file may say */
+/* what a file may say: the retired keys read once more by a save's
+   carry-over; the record's rows text names the same values */
 static void test_file_words(void)
 {
-    use_config("[variants]\nshade_toughness = \"american\"\naggression = \"bold_quick\"\n"
-               "barrier_hits = 7\none_hit = true\nno_hints = true\n");
+    use_carry("[variants]\nshade_toughness = \"american\"\naggression = \"bold_quick\"\n"
+              "barrier_hits = 7\none_hit = true\nno_hints = true\n");
     /* the June 2001 demo reads American as Original (test_offered) */
     CHECK(ico_variant_shade_toughness() ==
           (on_jun26() ? ICO_TOUGHNESS_ORIGINAL : ICO_TOUGHNESS_AMERICAN));
@@ -252,22 +300,36 @@ static void test_file_words(void)
     CHECK(ico_variant_barrier_hits() == 7);
     CHECK(ico_variant_one_hit() == 1 && ico_variant_no_hints() == 1);
     CHECK(ico_variant_never_dodge() == 0);
+    /* the same as a journey's rows */
+    use_rows("shade_toughness=american aggression=bold_quick barrier_hits=7 one_hit=true "
+             "no_hints=true");
+    CHECK(ico_variant_shade_toughness() ==
+          (on_jun26() ? ICO_TOUGHNESS_ORIGINAL : ICO_TOUGHNESS_AMERICAN));
+    CHECK(ico_variant_aggression() == ICO_AGGRESSION_BOLD_QUICK &&
+          ico_variant_barrier_hits() == 7 && ico_variant_one_hit() == 1 &&
+          ico_variant_no_hints() == 1 && ico_variant_never_dodge() == 0);
     /* barrier_hits = 5 names 5 whatever the disc ships */
-    use_config("[variants]\nbarrier_hits = 5\n");
+    use_carry("[variants]\nbarrier_hits = 5\n");
+    CHECK(ico_variant_barrier_hits() == 5);
+    use_rows("barrier_hits=5");
     CHECK(ico_variant_barrier_hits() == 5);
     /* a word or a number that is no value reads as the default */
-    use_config("[variants]\nshade_toughness = \"sideways\"\naggression = \"furious\"\n"
-               "barrier_hits = 6\n");
+    use_carry("[variants]\nshade_toughness = \"sideways\"\naggression = \"furious\"\n"
+              "barrier_hits = 6\n");
     CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL);
     CHECK(ico_variant_aggression() == ICO_AGGRESSION_OWN);
     CHECK(ico_variant_barrier_hits() == (strcmp(ico_region_cur()->slug, "jun26") == 0 ? 7 : 5));
+    /* the keys alone (no carry-over) change nothing: they are retired */
+    use_config("[variants]\none_hit = true\nauto_guard = false\n");
+    CHECK(ico_variant_one_hit() == 0 && ico_variant_auto_guard() == 1);
+    use_config(NULL);
 }
 
-/* The Combat rows through the config path: each hook is 1 with no key, 0 when
-   the file says false (the others stay 1), steps to 0 and writes its key, and
-   none of the three suspends achievements. The hooks are the externs the game's
-   commonact.c, boyact.c (twice) read, so their value here is the value the
-   game's conjunct sees. */
+/* The Combat rows: each hook is 1 with no record row set, 0 when the
+   journey's row (or a carried-over key) says false (the others stay 1), a
+   step to 0 writes no config key, and none of the three suspends
+   achievements. The hooks are the externs the game's commonact.c, boyact.c
+   (twice) read, so their value here is the value the game's conjunct sees. */
 static void test_combat(void)
 {
     static const struct {
@@ -285,23 +347,28 @@ static void test_combat(void)
         use_config(NULL);
         CHECK(rows[i].hook() == 1);
         snprintf(text, sizeof(text), "[variants]\n%s = false\n", rows[i].key);
-        use_config(text);
+        use_carry(text);
         for (int j = 0; j < 3; j++) {
             CHECK(rows[j].hook() == (j == i ? 0 : 1));
         }
         CHECK(ico_variants_suspend_achievements() == 0);
+        snprintf(text, sizeof(text), "%s=false", rows[i].key);
+        use_rows(text);
+        for (int j = 0; j < 3; j++) {
+            CHECK(rows[j].hook() == (j == i ? 0 : 1));
+        }
         /* a bad word reads as the default (On) */
         snprintf(text, sizeof(text), "[variants]\n%s = \"sideways\"\n", rows[i].key);
-        use_config(text);
+        use_carry(text);
         CHECK(rows[i].hook() == 1);
-        /* the page's step: On -> Off writes the key, Off -> On puts it back */
+        /* the page's step: On -> Off, Off -> On, the journey's row; no key */
         use_config(NULL);
         snprintf(path, sizeof(path), "variants.%s", rows[i].key);
         CHECK(ico_variant_step(rows[i].id, 1) == 0 && rows[i].hook() == 0);
-        CHECK(ico_config_get_bool(path, 1) == 0);
+        CHECK(ico_config_get_string(path, NULL) == NULL);
         CHECK(ico_variants_suspend_achievements() == 0);
         CHECK(ico_variant_step(rows[i].id, 1) == 1 && rows[i].hook() == 1);
-        CHECK(ico_config_get_bool(path, 0) == 1);
+        CHECK(ico_config_get_string(path, NULL) == NULL);
         /* the down action's invincibility follows the third row only, and
            only for Ico: Off leaves his hit flag clear, any other actor keeps
            the game's rule either way */
@@ -310,9 +377,9 @@ static void test_combat(void)
         CHECK(ico_variant_down_keeps_hit(1) == (i == 2 ? 0 : 1));
         CHECK(ico_variant_down_keeps_hit(0) == 1);
         ico_variant_set(rows[i].id, 1);
-        /* a reload goes back to the file */
+        /* the title goes back to the game's own */
         ico_variant_set(rows[i].id, 0);
-        ico_opt_reload();
+        ico_difficulty_reset();
         CHECK(rows[i].hook() == 1);
     }
     use_config(NULL);
@@ -397,25 +464,23 @@ static void test_weapons(void)
     use_config(NULL);
 }
 
-/* the achievements rule */
+/* the achievements rule: Ignore cutscene cameras and the Debug menu; no
+   difficulty row (One hit, Never dodge, Peaceful among them) */
 static void test_suspend(void)
 {
-    static const IcoVariantId cheats[] = {ICO_VARIANT_ONE_HIT, ICO_VARIANT_NEVER_DODGE,
-                                          ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS,
-                                          ICO_VARIANT_PEACEFUL_SHADOWS};
-    static const IcoVariantId harmless[] = {ICO_VARIANT_NO_HINTS, ICO_VARIANT_NO_CUTSCENE_LOOK,
-                                            ICO_VARIANT_BARRIER_HITS};
+    static const IcoVariantId harmless[] = {
+        ICO_VARIANT_ONE_HIT,    ICO_VARIANT_NEVER_DODGE,      ICO_VARIANT_PEACEFUL_SHADOWS,
+        ICO_VARIANT_NO_HINTS,   ICO_VARIANT_NO_CUTSCENE_LOOK, ICO_VARIANT_BARRIER_HITS,
+        ICO_VARIANT_AUTO_GUARD, ICO_VARIANT_ATTACK_TURN,      ICO_VARIANT_SHADOWS_WAIT_DOWN};
 
-    for (int i = 0; i < 4; i++) {
-        use_config(NULL);
-        CHECK(ico_variants_suspend_achievements() == 0);
-        ico_variant_set(cheats[i], 1);
-        CHECK(ico_variants_suspend_achievements() == 1);
-        ico_variant_set(cheats[i], 0);
-        CHECK(ico_variants_suspend_achievements() == 0);
-    }
+    use_config(NULL);
+    CHECK(ico_variants_suspend_achievements() == 0);
+    ico_variant_set(ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS, 1);
+    CHECK(ico_variants_suspend_achievements() == 1);
+    ico_variant_set(ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS, 0);
+    CHECK(ico_variants_suspend_achievements() == 0);
     /* each of the others, at every value, leaves them on */
-    for (int i = 0; i < 3; i++) {
+    for (size_t i = 0; i < sizeof(harmless) / sizeof(harmless[0]); i++) {
         use_config(NULL);
         for (int v = 0; v < 2; v++) {
             ico_variant_set(harmless[i], v);
@@ -431,16 +496,17 @@ static void test_suspend(void)
         ico_variant_set(ICO_VARIANT_AGGRESSION, v);
         CHECK(ico_variants_suspend_achievements() == 0);
     }
-    /* two cheats, one off: still suspended */
-    ico_variant_set(ICO_VARIANT_ONE_HIT, 1);
-    ico_variant_set(ICO_VARIANT_NEVER_DODGE, 1);
-    ico_variant_set(ICO_VARIANT_ONE_HIT, 0);
-    CHECK(ico_variants_suspend_achievements() == 1);
-    /* a file with one on starts suspended */
+    /* the three that did before v0.11.3, on together in a journey: still on */
+    use_rows("one_hit=true never_dodge=true peaceful_shadows=true");
+    CHECK(ico_variant_one_hit() == 1 && ico_variant_never_dodge() == 1 &&
+          ico_variant_shadow_brain() == 0);
+    CHECK(ico_variants_suspend_achievements() == 0);
+    /* a file with the cameras' row on starts suspended; the retired keys
+       carried over do not */
     use_config("[variants]\nignore_cutscene_cameras = true\n");
     CHECK(ico_variants_suspend_achievements() == 1);
-    use_config("[variants]\npeaceful_shadows = true\n");
-    CHECK(ico_variants_suspend_achievements() == 1);
+    use_carry("[variants]\npeaceful_shadows = true\none_hit = true\nnever_dodge = true\n");
+    CHECK(ico_variant_shadow_brain() == 0 && ico_variants_suspend_achievements() == 0);
     /* the Debug menu: the press marks it used until cleared or reloaded */
     use_config(NULL);
     CHECK(ico_variants_suspend_achievements() == 0);
@@ -510,7 +576,9 @@ static void test_apply(void)
     ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_AMERICAN);
     ico_variant_set(ICO_VARIANT_NO_HINTS, 1);
     ico_variant_set(ICO_VARIANT_BARRIER_HITS, 1);
-    /* a reload: the config's (shipped) values, the game's values back */
+    /* the title (the journey's rows the game's own) and a reload (the
+       config's shipped values): the game's values back */
+    ico_difficulty_reset();
     ico_opt_reload();
     CHECK(retail());
     /* a value the game set while no variant held the switch (the debug
@@ -520,13 +588,21 @@ static void test_apply(void)
     CHECK(s_battle == 2);
     ico_variant_set(ICO_VARIANT_AGGRESSION, ICO_AGGRESSION_OWN);
     CHECK(s_battle == 1);
-    /* a file with a variant on: written at the bind */
-    use_config("[variants]\none_hit = true\naggression = \"wary_patient\"\n");
+    /* a journey with a variant on: written at the bind */
+    use_rows("one_hit=true aggression=wary_patient");
     bind_retail();
     CHECK(s_one_hit == 1 && s_battle == 1 && s_dodge == 0 && s_hand == 1);
+    /* a journey begun after the bind: written at once; the title puts the
+       game's values back */
+    use_config(NULL);
+    bind_retail();
+    use_rows("never_dodge=true aggression=bold_patient");
+    CHECK(s_dodge == 1 && s_battle == 0 && s_one_hit == 0);
+    ico_difficulty_reset();
+    CHECK(retail());
     /* the Debug menu through the bound opener */
     s_opens = 0;
-    CHECK(ico_variants_suspend_achievements() == 1); /* one_hit from the file */
+    CHECK(ico_variants_suspend_achievements() == 0); /* no difficulty row suspends */
     use_config("[variants]\n");
     bind_retail();
     CHECK(ico_variants_suspend_achievements() == 0);
@@ -690,7 +766,7 @@ static void test_restart_life(void)
     CHECK(restart_index(3) == (on_jun26() ? 41 : 38));
     /* Third journey: the table's entry 40 on every playthrough, on the discs
        that offer it; Original (the playthrough's own) where they do not */
-    use_config("[variants]\nshade_toughness = \"third_journey\"\n");
+    use_rows("shade_toughness=third_journey");
     for (int c = 0; c < 8; c++) {
         CHECK(restart_index(c) == (third_offered() ? 40 : (c < 5 ? 38 + c : 43)));
     }
@@ -698,31 +774,33 @@ static void test_restart_life(void)
 }
 
 /* Peaceful shadows: the hook the four Shadow starts read (enemy_act.c, beside
-   debug_brain_flag) is 1 by default, 0 with the key on; stepping writes the key;
-   it is a cheat (achievements off); Yorda's own brain thread (girl_act.c) reads
-   no variant, so nothing here touches it */
+   debug_brain_flag) is 1 by default, 0 with the journey's row on (or the
+   carried-over key); stepping writes no key; it no longer switches
+   achievements off; Yorda's own brain thread (girl_act.c) reads no variant,
+   so nothing here touches it */
 static void test_peaceful(void)
 {
-    char path[64] = "variants.peaceful_shadows";
+    const char *path = "variants.peaceful_shadows";
 
     use_config(NULL);
     CHECK(ico_variant_shadow_brain() == 1 && ico_variants_suspend_achievements() == 0);
-    use_config("[variants]\npeaceful_shadows = true\n");
-    CHECK(ico_variant_shadow_brain() == 0 && ico_variants_suspend_achievements() == 1);
-    use_config("[variants]\npeaceful_shadows = \"sideways\"\n");
+    use_carry("[variants]\npeaceful_shadows = true\n");
+    CHECK(ico_variant_shadow_brain() == 0 && ico_variants_suspend_achievements() == 0);
+    use_carry("[variants]\npeaceful_shadows = \"sideways\"\n");
     CHECK(ico_variant_shadow_brain() == 1);
+    use_rows("peaceful_shadows=true");
+    CHECK(ico_variant_shadow_brain() == 0);
     use_config(NULL);
     CHECK(ico_variant_step(ICO_VARIANT_PEACEFUL_SHADOWS, 1) == 1);
-    CHECK(ico_variant_shadow_brain() == 0 && ico_config_get_bool(path, 0) == 1 &&
-          ico_variants_suspend_achievements() == 1);
-    CHECK(ico_variant_step(ICO_VARIANT_PEACEFUL_SHADOWS, 1) == 0);
-    CHECK(ico_variant_shadow_brain() == 1 && ico_config_get_bool(path, 1) == 0 &&
+    CHECK(ico_variant_shadow_brain() == 0 && ico_config_get_string(path, NULL) == NULL &&
           ico_variants_suspend_achievements() == 0);
+    CHECK(ico_variant_step(ICO_VARIANT_PEACEFUL_SHADOWS, 1) == 0);
+    CHECK(ico_variant_shadow_brain() == 1 && ico_config_get_string(path, NULL) == NULL);
     /* the other Shadow rows are untouched by it */
     ico_variant_set(ICO_VARIANT_PEACEFUL_SHADOWS, 1);
     CHECK(ico_variant_shade_toughness() == ICO_TOUGHNESS_ORIGINAL &&
           ico_variant_aggression() == ICO_AGGRESSION_OWN && ico_variant_auto_guard() == 1);
-    ico_opt_reload();
+    ico_difficulty_reset();
     CHECK(ico_variant_shadow_brain() == 1);
     use_config(NULL);
 }
@@ -851,8 +929,9 @@ static void test_offered(void)
         for (int k = 1; k <= n; k++) {
             CHECK(ico_variant_step(ICO_VARIANT_SHADE_TOUGHNESS, 1) == offs[k % n]);
             if (k == 1) {
-                CHECK(strcmp(ico_config_get_string("variants.shade_toughness", ""),
-                             ico_variant_value_name(ICO_VARIANT_SHADE_TOUGHNESS, offs[1])) == 0);
+                /* the journey's row: no config key */
+                CHECK(ico_config_get_string("variants.shade_toughness", NULL) == NULL);
+                CHECK(ico_difficulty_row(ICO_DIFF_SHADE_TOUGHNESS) == offs[1]);
             }
         }
         for (int k = n - 1; k >= 0; k--) {
@@ -862,7 +941,7 @@ static void test_offered(void)
         ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_THIRD_JOURNEY);
         CHECK(ico_variant_shade_toughness() ==
               (third_offered() ? ICO_TOUGHNESS_THIRD_JOURNEY : ICO_TOUGHNESS_ORIGINAL));
-        use_config("[variants]\nshade_toughness = \"third_journey\"\n");
+        use_carry("[variants]\nshade_toughness = \"third_journey\"\n");
         CHECK(ico_variant_shade_toughness() ==
               (third_offered() ? ICO_TOUGHNESS_THIRD_JOURNEY : ICO_TOUGHNESS_ORIGINAL));
         use_config(NULL);
@@ -870,7 +949,7 @@ static void test_offered(void)
     ico_variant_set(ICO_VARIANT_SHADE_TOUGHNESS, ICO_TOUGHNESS_AMERICAN);
     CHECK(ico_variant_shade_toughness() ==
           (demo ? ICO_TOUGHNESS_ORIGINAL : ICO_TOUGHNESS_AMERICAN));
-    use_config("[variants]\nshade_toughness = \"american\"\n");
+    use_carry("[variants]\nshade_toughness = \"american\"\n");
     CHECK(ico_variant_shade_toughness() ==
           (demo ? ICO_TOUGHNESS_ORIGINAL : ICO_TOUGHNESS_AMERICAN));
     use_config(NULL);

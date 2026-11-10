@@ -15,6 +15,7 @@
 #include "rd_replay.h"
 #include "rd_velocity.h"
 #include "rd_vu_record.h"
+#include "rd_vu_rec_sink.h"
 #include "rd_vu_skin_check.h"
 #include "shader_consts.h"
 #include "vu1_ref.h" /* vu1ref_region_mirror: ICO_VU_MIRROR */
@@ -2021,7 +2022,8 @@ static RhiBuffer recStoreBuffer(void)
 }
 
 /* the stores: the bracket's begin (after every earlier use of the buffer),
- * then a pass without attachments, ICO_VU_REC_W x 1, its whole area; the
+ * then a pass on the throwaway target alone (rd_vu_rec_sink.h; without
+ * attachments before v0.11.3), ICO_VU_REC_W x 1, its whole area; the
  * pass's default viewport and scissor stand (no point is rasterised:
  * RhiPipelineDesc.noRaster, the shaders' position outside the clip volume).
  * The compute dispatches: the compute bracket's begin alone (dispatches are
@@ -2043,6 +2045,9 @@ static void recStorePassOpen(void)
         s_recDrawn = false;
         return;
     }
+    /* the throwaway target the store pipelines name (rd_vu_rec_sink.h), in
+     * its state before the bracket: no pass begins without an attachment */
+    const RhiTexture sink = rd__vu_rec_sink(rd__replay_cl());
     if (!rhi_cmd_buffer_store_begin(rd__replay_cl(), recStoreBuffer())) {
         static bool said; /* once a run */
         if (!said) {
@@ -2054,6 +2059,10 @@ static void recStorePassOpen(void)
     }
     RhiRenderPassDesc rp;
     memset(&rp, 0, sizeof(rp));
+    rp.color[0].texture = sink;
+    rp.color[0].load = RHI_LOAD_DONT_CARE;
+    rp.color[0].store = RHI_STORE_DONT_CARE;
+    rp.colorCount = sink.id ? 1u : 0u;
     rp.width = ICO_VU_REC_W;
     rp.height = 1;
     rp.area = (RhiRect){0, 0, ICO_VU_REC_W, 1};
@@ -3131,6 +3140,7 @@ void rd__vu_prepass_shutdown(void)
     s_zeroBones = 0;
     s_run.n = 0;
     recFree();
+    rd__vu_rec_sink_free(); /* the store passes' throwaway target */
     s_groupPre = false;
     rd__vu_record_shutdown(); /* the store builds and their layout */
     for (int v = 0; v < RD_VS_COUNT; v++) {
