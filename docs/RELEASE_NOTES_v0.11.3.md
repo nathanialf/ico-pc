@@ -2,6 +2,8 @@
 
 (kept current after every merge; player words only)
 
+- A knock-down limit for a journey: the game is over once Ico has been knocked down a chosen number of times, in one room or over the whole journey (three in each room on Hard). He lies for two seconds first and cannot be hit meanwhile; a stumble at a ledge does not count.
+
 ## Fixed
 
 (kept current after every merge; player words only)
