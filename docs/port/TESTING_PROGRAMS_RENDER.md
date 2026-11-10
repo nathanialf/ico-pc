@@ -1508,7 +1508,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   and 2x byte for byte, and on smooth gradients the downsampled presents are within 4 LSB of the
   1x present (`checkDownsample`).
 - `rd_raw_test.c`: the raw packet builders outside `seki` (`rd_raw`).
-- `weapon_draw_test.c`: the insect net of Gameplay > Combat's Stick row through the game's own
+- `weapon_draw_test.c`: the insect net of Gameplay's Stick row through the game's own
   `ico2/sugipon/src/weapon.c` (with `lineManager.c`, `matrixDrive.c` and the 2D layer, the rest of the
   game stubbed; recording only, no device), one run per disc for its copies of `InitWeaponGeo`,
   `WeaponGeo` and `WeaponDL`: at Insect net the layout stick is the net's kind with no torch, the boy
