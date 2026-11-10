@@ -16,6 +16,8 @@ screen recording the app's Java side reports. The window's lines that use them a
 | `port/platform/android/host_android.c` | `ico_host_thermal` and the two native methods the Java listeners call |
 | `port/platform/window_stall.c`, `window_stall.h` | the window's side: the open line, the block lines, the around lines, the present stall lines |
 | `port/platform/present_stall_block.c`, `present_stall_block.h` | the present stalls per 10 s block and per run (`present_stall_block_test`, every platform) |
+| `port/render/rd_perf_clock.c`, `rd_perf_clock.h` | a replay's GPU clock against the CPU's and the `rd: GPU clock` line (`rd_perf_clock_test`, every platform; [Issue 123: what the GPU did during a stall](#issue-123-what-the-gpu-did-during-a-stall)) |
+| `port/rhi/vk/vk_tsclock.c`, `vk_range.c` | the slot's clock (submit times, calibrated timestamps, the polled wait's trace) and the ranges robust access does not cover (`rhi_vk`) |
 | `android/app/src/main/java/com/defnf/icopc/IcoActivity.java` | the thermal getters and the two listeners |
 
 ## The kernel GPU driver's sampler
@@ -580,6 +582,111 @@ the producer throttling ("vkQueuePresentKHR() calls will stall the CPU until the
 processing the previous frame", `ANativeWindow_setProducerThrottlingEnabled`,
 https://developer.android.com/ndk/reference/group/a-native-window). These are vendor and
 upstream kernel sources, not the Xiaomi kernel the phone runs; its values may differ.
+
+## Issue 123: what the GPU did during a stall
+
+These lines ask the one question the earlier ones could not answer: during the ~340 ms the GPU
+finished nothing, did it not begin the stalled replay, or did it run part of it, stop, and run it
+again? The second is the driver's reset and replay of the work in flight that the section above
+ranks first; the first puts the cause outside the replay. Each answer is a line of its own.
+
+What the two reporter logs settle (build-host/tmp/v0113/evidence/123/ico-pc-20261110.log, the latest;
+build-host/tmp/v0112/evidence/123/ico-pc-v0111.log, the run before):
+
+- **Nothing in the stalled replay's own work differs from its neighbours'.** Every one of the eight
+  stalls (785, 1572, 2021, 3097, 3242, 5289, 5639; the run before's 2994) is in stage 12, and each stalled
+  replay's line reads like the 300 around it: 2 textures and 6 meshes (57 KB) uploaded (12 meshes,
+  143 KB in the run before), 0 pipelines created, 0 allocations, 0 buffers and 0 textures created, 3 DATE
+  snapshots, the upload 1.3-1.5 ms, the walk 3.6-4.8 ms, the submit 0.2-0.3 ms. They come 145-2047
+  replays apart with no period. Only 785 follows an event of the port's own (the skin check's
+  capture and its 818 ms step). So no rare piece of the port's work (a creation, a cache write, a
+  dump) lines up with them.
+- **The present held 253-313 ms past the replay's own GPU span** (340 - 87.1, 344 - 30.9, ...; 404 -
+  93.0 = 311 in the run before), and the replay after began 0.7-1.7 ms after it ended: for a quarter of a
+  second the GPU ran none of the replay (or ran it and threw the result away).
+- **The slow replays are slow by pass kind, not by a constant**: shadow count 5.1x, glow WORK2 5.6x,
+  list 0 2.8x, the display wait 1.3x (replay 2021). A timestamp clock running at another rate would
+  scale every pass alike, so the stamps are right; the bandwidth-bound passes slowing most fits a
+  GPU and memory restarted at low clocks.
+
+The port's own timestamps, checked against the specification
+(https://docs.vulkan.org/spec/latest/chapters/queries.html):
+
+- One pool per frame slot, reset at the start of the slot's first list on every use, after the
+  slot's last submission was waited for (`vk_cmd.c` `rhi_begin_commands`, `vkr_recycle_frame`); the
+  reset "defines an execution dependency between other query commands that reference the same
+  query", in submission order (Query Operation), so the stamps of the slot's later lists and
+  submissions follow it; each index written once a use (`rhi_ts_has`), as "all queries used by the
+  command must be unavailable" asks; read once the slot's last submission finished, with the
+  availability bit and no wait bit ("may return VK_NOT_READY if there are queries in the
+  unavailable state"). No read races a reset in flight and none blocks; the occlusion pool is used
+  the same way (indices past the range reset are dropped, `rhi_cmd_begin_occlusion`).
+- The restart is not the port's: a pool reset clears availability, never the device's counter;
+  the stalled replay's stamps are ordered among themselves; and each restart's figure is the time
+  since the stall before (20.7 s since the counter's earlier start, then 26.2 s from 785 to 1572,
+  14.9 s from 1572 to 2021): the counter starts again from about zero at each stall.
+- Without `VK_KHR/EXT_calibrated_timestamps` the specification orders only timestamp writes "in the
+  same submission"; with either enabled "this extends to timestamp writes across all submissions
+  on the same logical device" (Timestamp Queries). The renderer compares the scene's list with the
+  present's and one replay with the next, so a restart between submissions was legal driver
+  behaviour all along. The backend enables the extension where offered and places the stamps
+  on the CPU's clock.
+
+On lavapipe, under the validation layer with synchronisation validation (the replay tool, serial,
+on the two Adreno dumps of /primary/dev/ico-dumps/163 at 3x and 3048x2032, the Adreno branch faked,
+robust access on, the plain VU set, the pre-pass off, the submit thread on, 4 replays each, the
+skin check and every pass timed; once in lavapipe's own shape and once with the tile-based
+profile's paths forced: aura box, pass area, the three pass cuts, the shadow volumes in the scene's
+pass, glow fold off, UINT views off, fog copy, DATE snapshot): 0 errors and 0 warnings, and with
+the slot clock and the range checks in the RHI the same pictures byte for byte and no command past its resource. Not covered there:
+the profile class itself (chosen by the vendor id), the VkRenderPass path (the phone renders
+dynamically) and pre-rotation (the phone's swapchain reports the identity transform, 0x1).
+
+The new lines:
+
+- **`rd: GPU clock: replay R: ...`** (`port/render/rd_perf_clock.c`, from the slot's clock,
+  [RHI.md](RHI.md#vulkan)) when the CPU's wait for the replay blocked 100 ms or more, its first list
+  ran twice, a stamp came back unwritten, or the counter restarted (the first 8, then every 100th):
+
+      rd: GPU clock: replay 2021: its first stamp 254.6 ms after its first submit (the calibrated
+      clocks, within 2.5 us), the counter at 5.0 ms then (it went back 14936.7 ms since the replay
+      before: a restart); 2 submissions; waited 300.0 ms for it from 38.0 ms after its last
+      submit: at +50.0 ms 31 of 47 written (the last: the start of piece 30 of 46, glow SCENE
+      1728x1344), none of its submissions finished; nothing changed for 230.0 ms from +50.0 ms
+      with 31 written; its written stamps fell from 31 at +280.0 ms: its queries were reset again,
+      its first list ran a second time (a reset and replay of the work in flight); points 31@+50.0
+      0@+280.0 4@+284.0 ...; all 47 recorded stamps written
+
+  How to read it:
+
+  | The line says | Then |
+  | --- | --- |
+  | the first point "the previous use's", nothing changed for ~250 ms, no fall, the start ~250 ms after the submit | the GPU had not begun the replay: it was held by something before it, the GPU's own power path or another context's work (the compositor, another app); the replay's commands are not the cause |
+  | the replay's own k stamps, nothing changed with k, the stamps fell and were written again | the replay's first list ran twice: a reset and replay. The piece after "the last" was in flight when the GPU stopped: the candidate for the fault |
+  | stamps that "came back unwritten after its work was signalled finished" | the GPU skipped part of the replay (a driver skips the work that faulted): the first one named is where |
+  | "its first stamp N ms after its first submit" with N a few ms | the GPU began at once: the stall is after the work (the present's queue) |
+
+  The start comes "(the calibrated clocks)" where the device offers them (`rhi_vk: timestamps: ...;
+  calibrated with the CPU's clock: on`), else "about ... (from its wait's end)", taken from when the
+  CPU's wait returned, good to the wait's wake-up. On a driver whose query read waits for the GPU
+  (lavapipe does) the trace has one point, after the work.
+- **The stall's entry** in `window: present stalls:` adds `the GPU began it N ms after its submit`
+  and `its first list ran twice (a reset and replay)`, and the run's line adds `the GPU began the
+  replay A-B ms after its submit (K placed), M whose first list ran twice`.
+- **`rhi_vk: a command past its resource: ...`** (`port/rhi/vk/vk_range.c`): an indexed draw whose
+  indices, or a copy whose buffer range or texture region, reaches past what it names. Robust
+  access covers the shaders' reads and the vertex input ("access to vertex input data is bounds
+  checked against the bound vertex buffer range", Robust Buffer Access,
+  https://docs.vulkan.org/spec/latest/chapters/shaders.html), not the index fetch or a transfer,
+  which a GPU may fault on. Any such line in a reporter's log is a port bug and the fault source
+  to fix first; none was seen on lavapipe.
+
+What remains unproven: which of the mechanisms above is the stall. Nothing in the port's code or
+its lavapipe replays is a fault source; the code the audit did not read pass by pass is covered on
+the device by the range checks, and descriptors cannot outlive their views (bind groups come from
+the slot's own pools, reset after its fence; destroyed objects wait for their slot's next fence).
+The next log's `GPU clock` line on a stalled replay decides between "not begun" and "run twice",
+and in the second case names the piece in flight.
 
 ## The thermal state and screen recording
 
