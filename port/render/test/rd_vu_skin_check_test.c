@@ -61,10 +61,35 @@
  *      twin differs, the twins re-armed; the next replay twins all three
  *      again;
  *   17. the sabotage off, four clean replays: thinned again, one a replay.
+ * judge also runs the trace (rd_vu_skin_trace.c; issue 123 v0.11.3):
+ *   18. the clear stamp's colour read back as its replay, an earlier
+ *      replay's, none;
+ *   19. the ring stamp's states and the stamp line's words;
+ *   20. a differing copy searched: the slot's readback as before, zeros, a
+ *      block nowhere, the other slot's ring at the draw's offset, the own
+ *      ring at another offset, a block checked two replays before (the
+ *      check's own block never the answer), the trace's 64 kept.
+ * stale (a device): 21. the frame replayed four times under the game's
+ *   mode with a probe each replay (ICO_RD_VU_SKIN_INTERVAL_MS=0) and each
+ *   slot's readback written by its first check alone
+ *   (rd__vu_skin_sabotage_copy; both written in 22. before): the four
+ *   checks read as not written by their replay; then two more replays
+ *   without the sabotage, both stamps right.
+ *   The clean, probe and ring frames' stamps are their replay's; ring's
+ *   differing copy is found in the check's own ring.
+ *   22. (first) under the careful rule (rd_vu_skin_background with a
+ *   reason: the start-up set stopped for memory on Qualcomm's own driver)
+ *   the box check's pipeline is compiled in the background and the box
+ *   check drawn (before v0.11.3 none was compiled).
  * The log lines are matched by test/rd_vu_skin_check.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <time.h>
+#endif
 
 #include "rd_internal.h"
 #include "rd_mesh.h"
@@ -72,6 +97,26 @@
 #include "vk/rhi_vk.h"
 
 static int failures;
+
+static void sleepMs(unsigned ms)
+{
+#ifdef _WIN32
+    Sleep(ms);
+#else
+    const struct timespec ts = {0, (long)ms * 1000000L};
+    nanosleep(&ts, NULL);
+#endif
+}
+
+/* the window's memory function (rd_vu_skin_background) as it answers above
+ * the floor */
+static int memoryFine(char *why, size_t size)
+{
+    if (why && size) {
+        snprintf(why, size, "the test's memory: fine");
+    }
+    return 0;
+}
 
 #define CHECK(c, ...)                                                                              \
     do {                                                                                           \
@@ -172,6 +217,151 @@ static RdSkinCase skinCase(void)
                         &s_batch,
                         1u,
                         NV};
+}
+
+/* 18.-20.: the trace (rd_vu_skin_trace.c): the stamps and the search */
+static void traceTests(void)
+{
+    /* 18. the clear stamp */
+    float cl[4];
+    const uint32_t replay = 0x01123456u;
+    rd__skin_clear_stamp(replay, cl);
+    uint8_t tx[4];
+    for (int c = 0; c < 4; c++) {
+        tx[c] = (uint8_t)cl[c];
+    }
+    uint32_t seen = 0;
+    CHECK(rd__skin_clear_stamp_state(tx, replay, &seen) == RD_SKIN_STAMP_OK && seen == 0x123456u,
+          "the clear stamp of replay 0x%x read back as 0x%x", replay, seen);
+    CHECK(rd__skin_clear_stamp_state(tx, replay + 2u, &seen) == RD_SKIN_STAMP_OLD &&
+              seen == 0x123456u,
+          "a later replay's harvest: not OLD");
+    static const uint8_t none[4] = {0, 0, 0, 0};
+    CHECK(rd__skin_clear_stamp_state(none, replay, &seen) == RD_SKIN_STAMP_NONE,
+          "a texel without the tag read as a stamp");
+    /* 19. the ring stamp and the words */
+    const RdSkinRingStamp rs = {RD_SKIN_RING_STAMP_MAGIC, 785u, 1u, 7u};
+    CHECK(rd__skin_ring_stamp_state(&rs, 785u, 1u, 7u, &seen) == RD_SKIN_STAMP_OK,
+          "the ring stamp of its own replay");
+    CHECK(rd__skin_ring_stamp_state(&rs, 787u, 1u, 7u, &seen) == RD_SKIN_STAMP_OLD && seen == 785u,
+          "an earlier replay's ring stamp");
+    CHECK(rd__skin_ring_stamp_state(&rs, 785u, 0u, 7u, &seen) == RD_SKIN_STAMP_OLD,
+          "another slot's ring stamp");
+    static const uint8_t zeros16[16];
+    CHECK(rd__skin_ring_stamp_state(zeros16, 785u, 1u, 7u, &seen) == RD_SKIN_STAMP_NONE,
+          "zeros read as a ring stamp");
+    char w[512];
+    rd__skin_stamp_words(RD_SKIN_STAMP_OK, 0, RD_SKIN_STAMP_OK, 0, w, sizeof(w));
+    CHECK(w[0] == '\0', "both stamps right: \"%s\"", w);
+    rd__skin_stamp_words(RD_SKIN_STAMP_OLD, 783u, RD_SKIN_STAMP_OLD, 783u, w, sizeof(w));
+    printf("  19. %s\n", w);
+    CHECK(strstr(w, "the readback was not written by this replay's copies") == w &&
+              strstr(w, "clear stamp: replay 783's") != NULL,
+          "\"%s\"", w);
+    rd__skin_stamp_words(RD_SKIN_STAMP_OK, 0, RD_SKIN_STAMP_NONE, 0, w, sizeof(w));
+    printf("  19. %s\n", w);
+    CHECK(strstr(w, "the copies ran") == w && strstr(w, "no stamp") != NULL, "\"%s\"", w);
+    /* 20. the search: the bones kept, another replay's block x (the bones
+     * moved), each place it can come from */
+    bones(s_bones);
+    static uint8_t kept[3840], x[3840], gpu[3840], prev[3840];
+    memcpy(kept, s_bones, sizeof(kept));
+    static float moved[240][4];
+    memcpy(moved, s_bones, sizeof(moved));
+    for (uint32_t b = 0; b < NB; b++) {
+        moved[4 * b + 3][0] += 0.25f; /* every bone moved a little: a later pose */
+    }
+    memcpy(x, moved, sizeof(x));
+    memset(prev, 0x3C, sizeof(prev));
+    RdSkinTrace tr;
+    memset(&tr, 0, sizeof(tr));
+    RdSkinCopyFind in;
+    memset(&in, 0, sizeof(in));
+    in.gpu = gpu;
+    in.kept = kept;
+    in.bytes = sizeof(gpu);
+    in.replay = 787u;
+    in.slot = 1u;
+    in.off = 512u;
+    in.prev = prev;
+    in.prevReplay = 781u;
+    in.trace = &tr;
+    in.align = 256u;
+    static uint8_t ring0[65536], ring1[65536];
+    memset(ring0, 0x11, sizeof(ring0));
+    memset(ring1, 0x22, sizeof(ring1));
+    in.ring[0] = ring0;
+    in.ring[1] = ring1;
+    in.ringUsed[0] = in.ringUsed[1] = sizeof(ring0);
+    in.ringReplay[0] = 788u;
+    in.ringReplay[1] = 787u;
+    RdSkinCopyFound fd;
+    memcpy(gpu, prev, sizeof(gpu));
+    rd__skin_copy_find(&in, &fd);
+    rd__skin_copy_words(&fd, 3840u, w, sizeof(w));
+    printf("  20. the slot's readback as before: %s\n", w);
+    CHECK(fd.kind == RD_SKIN_FOUND_PREV && fd.replay == 781u, "kind %d replay %u", fd.kind,
+          fd.replay);
+    memset(gpu, 0, sizeof(gpu));
+    rd__skin_copy_find(&in, &fd);
+    CHECK(fd.kind == RD_SKIN_FOUND_ZERO && fd.zeroQw == 240u, "zeros: kind %d, %u zero qwords",
+          fd.kind, fd.zeroQw);
+    memcpy(gpu, x, sizeof(gpu));
+    rd__skin_copy_find(&in, &fd);
+    CHECK(fd.kind == RD_SKIN_FOUND_NONE && fd.scanned > 0u && fd.keptQw > 0u,
+          "a block found nowhere: kind %d, %llu scanned, %u kept", fd.kind,
+          (unsigned long long)fd.scanned, fd.keptQw);
+    rd__skin_copy_words(&fd, 3840u, w, sizeof(w));
+    printf("  20. nowhere: %s\n", w);
+    CHECK(strstr(w, "no block the check kept or the rings hold") == w, "\"%s\"", w);
+    /* in the other slot's ring at the draw's own offset */
+    memcpy(ring0 + 512, x, sizeof(x));
+    rd__skin_copy_find(&in, &fd);
+    CHECK(fd.kind == RD_SKIN_FOUND_RING && fd.slot == 0u && fd.off == 512u && fd.sameOff &&
+              fd.replay == 788u,
+          "the other slot's block: kind %d slot %u offset %llu replay %u", fd.kind, fd.slot,
+          (unsigned long long)fd.off, fd.replay);
+    /* in the check's own ring at another offset (searched first) */
+    memcpy(ring1 + 8192, x, sizeof(x));
+    rd__skin_copy_find(&in, &fd);
+    rd__skin_copy_words(&fd, 3840u, w, sizeof(w));
+    printf("  20. in a ring: %s\n", w);
+    CHECK(fd.kind == RD_SKIN_FOUND_RING && fd.slot == 1u && fd.off == 8192u && !fd.sameOff,
+          "the own slot's block: kind %d slot %u offset %llu", fd.kind, fd.slot,
+          (unsigned long long)fd.off);
+    /* a block checked two replays before at the draw's offset (the trace
+     * is asked before the rings) */
+    RdSkinTraceEntry te;
+    memset(&te, 0, sizeof(te));
+    te.hash = rd__skin_block_hash(x, sizeof(x));
+    te.off = 512u;
+    te.replay = 785u;
+    te.slot = 1u;
+    te.meshId = 65622u;
+    snprintf(te.mesh, sizeof(te.mesh), "boymodel");
+    rd__skin_trace_note(&tr, &te);
+    /* the check's own block (its bytes kept) is never the answer */
+    te.hash = rd__skin_block_hash(kept, sizeof(kept));
+    te.replay = 787u;
+    rd__skin_trace_note(&tr, &te);
+    rd__skin_copy_find(&in, &fd);
+    rd__skin_copy_words(&fd, 3840u, w, sizeof(w));
+    printf("  20. checked before: %s\n", w);
+    CHECK(fd.kind == RD_SKIN_FOUND_TRACE && fd.replay == 785u && fd.sameOff &&
+              strcmp(fd.mesh, "boymodel") == 0,
+          "the trace: kind %d replay %u", fd.kind, fd.replay);
+    CHECK(strstr(w, "the block checked in replay 785 (frame slot 1, ring offset 512, the draw's "
+                    "own offset; mesh boymodel") != NULL,
+          "\"%s\"", w);
+    /* the trace keeps the last RD_SKIN_TRACE_KEEP */
+    for (uint32_t i = 0; i < RD_SKIN_TRACE_KEEP; i++) {
+        te.hash = i + 1u;
+        rd__skin_trace_note(&tr, &te);
+    }
+    rd__skin_copy_find(&in, &fd);
+    CHECK(tr.count == RD_SKIN_TRACE_KEEP && fd.kind == RD_SKIN_FOUND_RING,
+          "the trace kept %u, kind %d", tr.count, fd.kind);
+    printf("  18.-20. the trace's stamps and search\n");
 }
 
 static int judgeTests(void)
@@ -329,6 +519,7 @@ static int judgeTests(void)
               envs[i].v ? envs[i].v : "(unset)", e, envs[i].want);
     }
     printf("  10. on by default only on an Adreno with a window; =false off, =1 on anywhere\n");
+    traceTests();
     return failures ? 1 : 0;
 }
 
@@ -520,6 +711,7 @@ static int deviceTests(const char *mode, const char *folder)
     rd__set_not_implemented_fatal(true);
     rd__vu_skin_check_set(1);
     const bool thin = strcmp(mode, "thin") == 0;
+    const bool stale = strcmp(mode, "stale") == 0;
     const bool twins = strcmp(mode, "twin") == 0 || strcmp(mode, "capture") == 0 || thin;
     if (twins) {
         rd__vu_skin_twins_set(1);
@@ -538,6 +730,42 @@ static int deviceTests(const char *mode, const char *folder)
     CHECK(mesh.id != 0, "the mesh");
     if (mesh.id && thin && buildFrame(&f, mesh, 3)) {
         thinTests(&f);
+        rd__frame_free(&f);
+    } else if (mesh.id && stale && buildFrame(&f, mesh, 1)) {
+        /* 22. the careful rule (the window's after a start-up set stopped
+         * for memory on Qualcomm's own driver): the box check's pipeline is
+         * still compiled in the background, and the box check drawn */
+        rd_vu_skin_background(memoryFine, "the test's careful rule");
+        uint32_t box = 0;
+        for (int i = 0; i < 200 && box == 0; i++) {
+            RdSkinSummary sb;
+            (void)rd__vu_skin_check_replays(&f, 0, 1, &sb);
+            box += sb.boxChecks;
+            if (box == 0) {
+                sleepMs(10);
+            }
+        }
+        printf("  22. the careful rule: %u box checks drawn\n", box);
+        CHECK(box > 0, "no box check drawn under the careful rule");
+        rd_vu_skin_background(NULL, NULL);
+        /* 21. each slot's readback written by its first check alone (both
+         * written in 22.): the four checks read as not written by their
+         * replay */
+        rd__vu_skin_sabotage_copy(true);
+        RdSkinSummary s;
+        const int rc = rd__vu_skin_check_replays(&f, 0, 4, &s);
+        rd__vu_skin_sabotage_copy(false);
+        printf("  21. stale: %u checks, %u wrong, %u not written by their replay, %u ring "
+               "stamps old\n",
+               s.checks, s.wrong, s.unwritten, s.ringOld);
+        CHECK(rc >= 0 && s.checks == 4 && s.unwritten == 4 && s.ringOld == 0,
+              "rc %d, %u checks, %u unwritten, %u ring stamps old", rc, s.checks, s.unwritten,
+              s.ringOld);
+        /* written again: both stamps right */
+        const int rc2 = rd__vu_skin_check_replays(&f, 0, 2, &s);
+        CHECK(rc2 >= 0 && s.checks == 2 && s.unwritten == 0 && s.ringOld == 0 && s.wrong == 0,
+              "rc %d, %u checks, %u unwritten, %u ring stamps old, %u wrong", rc2, s.checks,
+              s.unwritten, s.ringOld, s.wrong);
         rd__frame_free(&f);
     } else if (mesh.id && twins && !thin && buildFrame(&f, mesh, 1)) {
         /* 11., 12. */
@@ -578,6 +806,9 @@ static int deviceTests(const char *mode, const char *folder)
                s.decision[0] ? s.decision : "-");
         CHECK(rc >= 0 && s.commands == 1 && s.checks == 1, "rc %d, %u commands, %u checks", rc,
               s.commands, s.checks);
+        /* the trace's stamps: the readback is this replay's */
+        CHECK(s.unwritten == 0 && s.ringOld == 0, "%u readbacks not written, %u ring stamps old",
+              s.unwritten, s.ringOld);
         /* c2 drawn wherever the device offers uniform robustness off
          * (robust access on, VK_EXT_pipeline_robustness: _robust,
          * _probe_robust) */
@@ -599,6 +830,9 @@ static int deviceTests(const char *mode, const char *folder)
             CHECK(s.wrong == 1 && s.lastAddr == 200 && s.blocksDiffer == 1 && s.rereadDiffer == 1 &&
                       strncmp(s.decision, "H2, a port race", 15) == 0,
                   "the ring's zeros at 200 not named as H2");
+            /* the copy is the sabotaged ring's bytes at the draw's offset:
+             * the search finds them in the check's own ring */
+            CHECK(s.lastFound == RD_SKIN_FOUND_RING, "the differing copy found as %d", s.lastFound);
         }
         rd__frame_free(&f);
     } else {
@@ -617,7 +851,7 @@ static int deviceTests(const char *mode, const char *folder)
 int main(int argc, char **argv)
 {
     if (argc < 2) {
-        printf("usage: rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture|thin> "
+        printf("usage: rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture|thin|stale> "
                "[folder]\n");
         return 2;
     }

@@ -550,6 +550,10 @@ static const struct {
     {"dev.gpu_robust", "gpu_robust"},
     {"dev.pass_split", "pass_split"},
     {"dev.attachment_read", "attachment_read"},
+    /* the render passes as VkRenderPass objects: true on any device, false
+       dynamic rendering wherever offered; unset, the Intel driver row
+       (port/rhi/rhi_pass_row.h) */
+    {"dev.legacy_passes", "legacy_passes"},
     {"dev.storage_pass_merge", "storage_pass_merge"},
     /* retired: the VU vertex shaders' plain variants only and the override
        of the device table (one module set on every device now); read so a
@@ -776,6 +780,10 @@ static const struct {
     {"gpu_robust", "ICO_GPU_ROBUST"},              /* port/rhi/vk/vk_device.c */
     {"pass_split", "ICO_RD_PASS_SPLIT"},           /* port/render/rd_replay_vu.c passSplit */
     {"attachment_read", "ICO_VK_ATTACHMENT_READ"}, /* port/rhi/vk/vk_device.c */
+    /* port/rhi/vk/vk_device.c vkr_pass_row_apply (port/rhi/rhi_pass_row.h):
+       1 the render passes as VkRenderPass objects on any device, 0 dynamic
+       rendering wherever offered (the Intel driver row off) */
+    {"legacy_passes", "ICO_VK_LEGACY_PASSES"},
     /* port/render/rd_dst_read.c rd__dst_merge_ok, rd_core.c rd_init */
     {"storage_pass_merge", "ICO_RD_PASS_MERGE"},
     /* port/render/rd_replay_vu.c rd__vu_prepass_init: 0 draws without the

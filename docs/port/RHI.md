@@ -18,6 +18,8 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/rhi_backend_names.h` | the renaming of every entry point to `rhi_<prefix>_*` inside a backend |
 | `port/rhi/rhi_backend.c` | the real `rhi_*` functions, forwarding to the selected table; the layer classifiers |
 | `port/rhi/rhi_driver_version.h`, `rhi_driver_version.c` | a Vulkan `driverVersion` decoded the way its vendor writes it, for the adapter log line |
+| `port/rhi/rhi_pass_row.h`, `rhi_pass_row.c` | the render pass driver row (Intel's Windows driver at Vulkan 1.3.215 or older takes `VkRenderPass` objects) and the `[dev] legacy_passes` override's words, pure ([Vulkan](#vulkan), **Render passes**) |
+| `port/rhi/rhi_pass_crumb.h`, `rhi_pass_crumb.c` | the render pass the backend last began, stored before the driver's begin call and printed by the crash report (library `ico_pass_crumb`; [Device loss](#device-loss), **The crash report's pass**) |
 | `port/rhi/rhi_adapter.h`, `rhi_adapter.c` | the `[video] adapter` name match and the device-list line's text, linked by the Vulkan and Direct3D backends |
 | `port/rhi/CMakeLists.txt` | the libraries, SDL3's prefix per target, the tests |
 | `port/rhi/vk/rhi_vk.h` | Vulkan extras for tests and tools only |
@@ -305,7 +307,9 @@ input attachment in rasterization order, Vulkan only), and `noRaster`: no raster
 fragment shader and no colour target, the vertex shader's stores the pipeline's whole work (Vulkan
 `rasterizerDiscardEnable`, OpenGL `GL_RASTERIZER_DISCARD` while it is bound and off again at the pass's end, since it makes `glClear` a no-op, ignored by D3D12 and
 Direct3D 11, which never report vertex stores), drawn in a pass without attachments (a size and
-nothing else; the legacy path's subpass without attachments). Culling is always off: the GS has none. A
+nothing else; the legacy path's subpass without attachments) or in one whose colour target the
+pipeline names with a write mask of 0 (the renderer's store passes: `port/render/rd_vu_rec_sink.h`,
+no pass of its begins without an attachment). Culling is always off: the GS has none. A
 render pass names its colour and depth attachments with load ops (LOAD, CLEAR, DONT_CARE) and store
 ops (STORE, or DONT_CARE so a tile-based GPU can skip the write-back) (`port/rhi/rhi.h`, pipelines,
 passes), its size, and optionally an area inside it (`RhiRenderPassDesc.area`, x, y, w, h; w or h 0,
@@ -1057,6 +1061,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_FAKE_ADRENO` | 1 takes the Qualcomm driver's branch: the attachment read not offered |
 | `ICO_VK_FAKE_API` | `1.1` uses the device as a stock Vulkan 1.1 driver (Adreno 618 class): the instance and the device held to 1.1 (the KHR and EXT names of what is core later), and `VK_KHR_timeline_semaphore`, `VK_KHR_dynamic_rendering_local_read`, `VK_KHR_driver_properties`, `VK_KHR_image_format_list`, `VK_KHR_load_store_op_none`, `VK_EXT_load_store_op_none` and `VK_QCOM_render_pass_store_ops` reported absent (`vkr_fake_hidden`): the fence ring ([Bindings and synchronisation](#vulkan)), no local read, the driver unnamed; `VK_KHR_dynamic_rendering` is hidden too (`VKR_LEGACY_PASSES`), so the passes are `VkRenderPass` objects ([Render passes](#vulkan)) and the device line says `render passes legacy`; the line `ICO_VK_FAKE_API=1.1: the device is used as a Vulkan 1.1 driver without timeline semaphores, dynamic rendering, local read, driver properties, image format list or store op none`. `1.1ext` holds the versions to 1.1 and hides nothing (a 1.1 driver with the extensions: the timeline through `VK_KHR_timeline_semaphore`, dynamic rendering through `VK_KHR_dynamic_rendering`), local read off (it needs 1.3). `1.0` (issue 158) creates the instance at Vulkan 1.0 with `VK_KHR_get_physical_device_properties2`, as a 1.0 loader would, uses the device at 1.0 with `VK_KHR_maintenance1` and `VK_KHR_maintenance2`, hides what `1.1` hides, and clears volk's core 1.1 entry points after the instance and the device are made (`vkr_fake_10_entry_points`: the system's loader still hands out the instance-level ones at 1.0, so a core 1.1 call left unguarded stops the test at a NULL call); the line `ICO_VK_FAKE_API=1.0: the device is used as a Vulkan 1.0 driver (a 1.0 instance with VK_KHR_get_physical_device_properties2) without ...` (`rhi_vk_vk10`, `rhi_vk_swapchain_vk10`, the render twins `rd_*_vk10`, all with `ICO_VK_FAKE_NO_DYNAMIC=1` as on Android, label `vk10`: [TESTING.md](TESTING.md#the-render-suite-on-a-vulkan-10-driver)). `1.0bare` is `1.0` on a loader without `VK_KHR_get_physical_device_properties2`: the instance is made without it and the device without the extended queries (`rhi_vk_vk10bare`, review finding 5). All compose with `ICO_VK_FAKE_LIMITS=mali`; the device line ends `; ICO_VK_FAKE_API=<profile>`; another value is logged and hides nothing (`rhi_vk_vk11`, `rhi_vk_swapchain_vk11`, the render twins `rd_*_vk11` and `rd_pixel_vk11ext`, `rd_present_vk11ext`, label `vk11`: [TESTING.md](TESTING.md#the-render-suite-on-a-vulkan-11-driver)) |
 | `ICO_VK_ATTACHMENT_READ` | 1 offers the attachment read on Qualcomm's driver too; ico-pc.ini `attachment_read` |
+| `ICO_VK_LEGACY_PASSES` | 1 records the render passes as `VkRenderPass` objects on any device (the Intel driver row's path, `rd_display_change_2x_legacy`), 0 keeps dynamic rendering on a device of the row; unset, the row; ico-pc.ini `[dev] legacy_passes` ([Vulkan](#vulkan), **Render passes**) |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
 | `ICO_VK_GLOBAL_BARRIERS` | 1 records a global barrier before every render pass and copy (`vk_cmd.c`) |
 | `ICO_VK_DEPTH_ALWAYS` | 1 makes every depth test compare `ALWAYS`, static and dynamic (`vk_pipeline.c`, `rhi_cmd_set_depth_state`), with the line `ICO_VK_DEPTH_ALWAYS: every depth test passes (...)`: the occlusion measurement's run without the depth ([RENDER.md](RENDER.md#culling)); the picture is not the game's |
@@ -1178,7 +1183,25 @@ issues the hazard barriers from it and records it with `vkr_pass_begin`: with dy
 (`VkrState.legacyPasses`, the device line's `render passes legacy`) `vkCmdBeginRenderPass` with a
 cached `VkRenderPass` (one subpass, no dependencies, every attachment's initial, subpass and final
 layout the one it is already in, so the pass makes no transition and the barriers before it order
-it; a pass without attachments a subpass without them) and a cached `VkFramebuffer`. A read-only
+it; a pass without attachments a subpass without them) and a cached `VkFramebuffer`. The path is
+also taken by a device of the driver row (`port/rhi/rhi_pass_row.h`: Intel's own Windows driver,
+vendor 0x8086 with `VK_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS` or no driver id on a Windows build, at
+Vulkan 1.3.215 or older, the final drivers for 6th to 10th gen graphics, whose `vkCmdBeginRendering`
+crashed in the first picture after a live switch from 1x to 2x: issue 123's Intel HD 530 report,
+`igvk64.dll+0x5cfab9` reading 0x68, and other ports' reports on the same drivers) and by any device
+with `[dev] legacy_passes = true` (`ICO_VK_LEGACY_PASSES=1`); `legacy_passes = false` (`0`) keeps
+dynamic rendering wherever the device offers it (`vk_device.c` (`vkr_pass_row_apply`)). Its line:
+`rhi_vk: render passes: VkRenderPass objects, not dynamic rendering: Intel's Windows driver at
+Vulkan 1.3.215 or older (...); [dev] legacy_passes = false (ICO_VK_LEGACY_PASSES=0) gives dynamic
+rendering`, and the device line's `render passes legacy (<the reason>)`. Such a 1.3 device keeps
+everything else of 1.3 (the timeline, `STORE_OP_NONE`, the dynamic depth state); local read, which
+is dynamic rendering's, is off on that path (those Intel drivers offer none). Before either path's
+driver call `vkr_pass_begin` stores the pass's shape for the crash report ([Device
+loss](#device-loss)); the dynamic path's `pColorAttachments` is NULL when the pass has no colour
+target and its attachment array is zeroed. `rhi_cmd_begin_render_pass` refuses a target without an
+attachment view before any barrier or driver call, the pass's draws skipped (`rhi_vk: render pass:
+target without an attachment view (colour 0, WxH, format F; the pass's draws are skipped; N so
+far)`, the first 8 then every 100th; nothing in the RHI makes such a texture today). A read-only
 depth stores with `STORE_OP_NONE` at 1.3 or where `VK_KHR_load_store_op_none`,
 `VK_EXT_load_store_op_none` or `VK_QCOM_render_pass_store_ops` gave it (`storeOpNone`), else with
 `STORE` (dynamic rendering keeps its 1.3 check). A pipeline on that path names the render pass of
@@ -2055,6 +2078,18 @@ renderer's [pass ring](RENDER.md#the-pass-ring) after it, before the message box
   the report names the resource holding the address, or the nearest below it
   (`port/rhi/vk/vk_resource.c` (`vkr_alloc_note`, `vkr_alloc_bound`, `vkr_alloc_nearest`);
   `port/rhi/vk/vk_device.c` (`vkr_report_fault`, `vkr_bind_callback`)).
+- **The crash report's pass** (Vulkan). A crash is not a device loss: the driver can fault inside a
+  command's recording (issue 123's Intel HD 530 report: an access violation in `igvk64.dll` inside
+  `vkCmdBeginRendering`, the stack naming nothing). `vkr_pass_begin` stores the pass it is about to
+  begin (`port/rhi/rhi_pass_crumb.h`: its number on this device, the last marker
+  `rhi_cmd_checkpoint` was given, kept with the checkpoints off too, which is the renderer's pass
+  ring sequence number; each colour target's format and size, the depth's format and layout, stencil
+  and read-only, a target without a view, the area and the framebuffer, the path), marks it begun
+  after the call and ended at `vkr_pass_end`; the crash block prints it (`ico_pc: the last render
+  pass begun: #N (the renderer's pass ring M), dynamic rendering (vkCmdBeginRendering), 1 colour
+  (format 37 1024x896), no depth, area 0,0 1024x896, framebuffer 1024x896; inside the driver's begin
+  call (a crash here is in the begin)`) and the renderer's last 16 pass ring entries after it
+  (`port/platform/diag_host.c` (`report_gpu_passes`); [RENDER.md](RENDER.md#the-pass-ring)).
 - **Checkpoints** (`gpu_checkpoints`). `rhi_cmd_checkpoint(cl, marker)` records
   `vkCmdSetCheckpointNV` where `VK_NV_device_diagnostic_checkpoints` is offered; the renderer gives
   every render pass, copy, snapshot, exact blend, upload batch and present a marker, the pass ring's

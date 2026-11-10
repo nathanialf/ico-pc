@@ -5,7 +5,9 @@
  *            the VkRenderingInfo the backend has always recorded, field for
  *            field, and calls vkCmdBeginRendering.
  *   legacy   (g_vkr.legacyPasses: a device without dynamic rendering, a
- *            stock Vulkan 1.1 driver; ICO_VK_FAKE_API=1.1) a classic
+ *            stock Vulkan 1.1 driver; ICO_VK_FAKE_API=1.1; the driver row
+ *            of ../rhi_pass_row.h, Intel's Windows driver at 1.3.215 or
+ *            older; ICO_VK_LEGACY_PASSES=1) a classic
  *            VkRenderPass and VkFramebuffer, both from caches here, and
  *            vkCmdBeginRenderPass.
  *
@@ -40,8 +42,14 @@
  *                  (logged once).
  * Both are used on the thread that records and creates pipelines (the
  * RHI's one thread); a compile thread only reads the immutable handle
- * vkr_pipe_prepare put in its create info. */
+ * vkr_pipe_prepare put in its create info.
+ *
+ * Before either path's driver call vkr_pass_begin stores the pass's shape
+ * for the crash report (../rhi_pass_crumb.h: the pass number, the
+ * renderer's last checkpoint marker, the formats, views, area); after the
+ * call returns it is marked begun, at vkr_pass_end ended. */
 #include "vk_internal.h"
+#include "../rhi_pass_crumb.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -331,8 +339,41 @@ void vkr_renderpass_shutdown(void)
 }
 
 /* ------------------------------------------------------------ begin and end */
+/* The crash report's breadcrumb (rhi_pass_crumb.h) of the pass d, stored
+ * before the driver's begin call: a crash inside it names the pass */
+static void vkr_pass_crumb(const VkrPassDesc *d)
+{
+    RhiPassCrumb b;
+    memset(&b, 0, sizeof(b));
+    b.seq = ++g_vkr.passSeq;
+    b.marker = g_vkr.lastMarker;
+    b.colorCount = d->colorCount;
+    b.legacy = g_vkr.legacyPasses ? 1u : 0u;
+    for (uint32_t i = 0; i < d->colorCount && i < RHI_PASS_CRUMB_COLORS; i++) {
+        b.colorFormat[i] = (uint32_t)d->color[i].format;
+        b.colorW[i] = d->color[i].tex ? d->color[i].tex->width : 0u;
+        b.colorH[i] = d->color[i].tex ? d->color[i].tex->height : 0u;
+        b.viewMissing |= d->color[i].view ? 0u : (uint8_t)(1u << i);
+    }
+    if (d->hasDepth) {
+        b.depthFormat = (uint32_t)d->depth.format;
+        b.depthLayout = (uint32_t)d->depth.layout;
+        b.hasStencil = d->hasStencil ? 1u : 0u;
+        b.readOnlyDepth = d->readOnlyDepth ? 1u : 0u;
+        b.viewMissing |= d->depth.view ? 0u : 0x80u;
+    }
+    b.areaX = d->areaX;
+    b.areaY = d->areaY;
+    b.areaW = d->areaW;
+    b.areaH = d->areaH;
+    b.fbW = d->fbW;
+    b.fbH = d->fbH;
+    rhi_pass_crumb_begin(&b);
+}
+
 bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d)
 {
+    vkr_pass_crumb(d);
     if (g_vkr.legacyPasses) {
         const VkRenderPass rp = vkr_renderpass_get(d);
         const VkFramebuffer fb = rp ? vkr_framebuffer_get(d) : VK_NULL_HANDLE;
@@ -366,9 +407,15 @@ bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d)
             .pClearValues = n ? clear : NULL,
         };
         vkCmdBeginRenderPass(c->cb, &bi, VK_SUBPASS_CONTENTS_INLINE);
+        rhi_pass_crumb_phase(RHI_PASS_CRUMB_BEGUN);
         return true;
     }
+    /* zeroed, and no pointer without an attachment: a driver that reads
+     * past the count (one hypothesis for the Intel crash in
+     * vkCmdBeginRendering, rhi_pass_row.h) finds null handles, not the
+     * stack's leftovers */
     VkRenderingAttachmentInfo color[RHI_MAX_COLOR_TARGETS];
+    memset(color, 0, sizeof(color));
     for (uint32_t i = 0; i < d->colorCount; i++) {
         const VkrPassAttach *a = &d->color[i];
         color[i] = (VkRenderingAttachmentInfo){
@@ -399,11 +446,12 @@ bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d)
         .renderArea = {{(int32_t)d->areaX, (int32_t)d->areaY}, {d->areaW, d->areaH}},
         .layerCount = 1,
         .colorAttachmentCount = d->colorCount,
-        .pColorAttachments = color,
+        .pColorAttachments = d->colorCount ? color : NULL,
         .pDepthAttachment = d->hasDepth ? &depth : NULL,
         .pStencilAttachment = d->hasStencil ? &stencil : NULL,
     };
     g_vkr.cmdBeginRendering(c->cb, &ri);
+    rhi_pass_crumb_phase(RHI_PASS_CRUMB_BEGUN);
     return true;
 }
 
@@ -414,4 +462,5 @@ void vkr_pass_end(VkrCmdList *c)
     } else {
         g_vkr.cmdEndRendering(c->cb);
     }
+    rhi_pass_crumb_phase(RHI_PASS_CRUMB_ENDED);
 }

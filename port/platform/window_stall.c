@@ -11,8 +11,10 @@
 #include "gpu_sysfs.h"
 #include "ico_thread.h"
 #include "present_hist.h"
+#include "present_stall_block.h"
 #include "rhi.h"
 #include "thermal_text.h"
+#include "window_present.h" /* window_refresh_ns */
 #ifdef __ANDROID__
 #include "gpu_sysfs_android.h"
 #include "host_android.h"
@@ -75,6 +77,47 @@ static int s_gpuOn;
 #ifdef __ANDROID__
 static double s_gpuBlockMs = -1.0; /* the last block line's time, ico_thread_now_ms */
 #endif
+
+/* the stalls per block and per run (present_stall_block.h); s_stallT0 the
+   block's start, ico_thread_now_ms (0: the first record not yet seen) */
+static StallBlock s_stall;
+static double s_stallT0;
+
+/* the display's rate now (SDL's current mode, as the 10 s lines read it),
+   0 not known */
+static double display_hz_now(void)
+{
+    const Uint64 ns = window_refresh_ns(0);
+
+    return ns > 0 ? 1e9 / (double)ns : 0.0;
+}
+
+/* the block's stall line and its join into the run's sums; clock the
+   kernel driver's GPU clock in the block, NULL when not read */
+static void stall_block_close(const StallBlockClock *clock)
+{
+    const double now = ico_thread_now_ms();
+    char text[2048];
+
+    if (s_stallT0 <= 0.0) {
+        return; /* no record yet: nothing presented, nothing to say */
+    }
+    if (stall_block_end(&s_stall, (now - s_stallT0) / 1000.0, display_hz_now(), clock, text,
+                        sizeof(text))) {
+        fprintf(stderr, "window: %s\n", text);
+    }
+    s_stallT0 = now;
+}
+
+void window_stall_run_summary(void)
+{
+    char text[1536];
+
+    stall_block_close(NULL); /* the last part block (its clock not read) */
+    if (stall_block_run_text(&s_stall, text, sizeof(text)) > 0) {
+        fprintf(stderr, "window: %s\n", text);
+    }
+}
 
 static void around_queue(const RdPerfRecord *r)
 {
@@ -170,12 +213,19 @@ void window_stall_gpu_block(void)
     const char *why = "";
     ThermalState t;
     GpuSysfsBlock b;
+    StallBlockClock clock = {0};
     char text[512];
 
     if (s_gpuOn && gpu_sysfs_android_block(s_gpuBlockMs, &b)) {
         s_gpuBlockMs = now;
         gpu_sysfs_block_text(&b, text, sizeof(text));
         fprintf(stderr, "window: %s\n", text);
+        if (b.clockN > 0) {
+            clock.n = b.clockN;
+            clock.minMhz = (int)b.clockMin;
+            clock.maxMhz = (int)b.clockMax;
+            clock.meanMhz = b.clockMean;
+        }
     }
     /* the thermal line each block, after the driver's; "not available"
        only once */
@@ -185,6 +235,9 @@ void window_stall_gpu_block(void)
         fprintf(stderr, "window: %s\n", text);
         s_thermalSaid = 1;
     }
+    stall_block_close(&clock);
+#else
+    stall_block_close(NULL);
 #endif
 }
 
@@ -211,7 +264,23 @@ void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap)
 {
     char text[448];
     PresentStallRec o;
+    /* the display's rate read only for a stall (SDL's mode, as the 10 s
+       lines read it): the stall's own rate in the run's sums */
+    const StallBlockRec sr = {r->presented != 0,
+                              r->presentMs,
+                              r->gpuValid != 0,
+                              r->gpuMs,
+                              r->gpuGapValid != 0,
+                              (double)r->gpuGapNs / 1e6,
+                              (double)r->gpuGapBackNs / 1e6,
+                              r->startMs,
+                              r->presented && r->presentMs >= STALL_BLOCK_MS ? display_hz_now()
+                                                                             : 0.0};
 
+    if (s_stallT0 <= 0.0) {
+        s_stallT0 = ico_thread_now_ms(); /* the first block starts with the first record */
+    }
+    stall_block_add(&s_stall, &sr);
     if (!s_after.pending) {
         return;
     }

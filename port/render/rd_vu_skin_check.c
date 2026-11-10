@@ -254,6 +254,10 @@ static struct {
     uint32_t addr;
     bool ring;
     uint32_t fill; /* the ring's bone filled with: zeros, or ",nan" a NaN */
+    /* rd__vu_skin_sabotage_copy (the tests): a slot's copies into its
+     * readback recorded once, never again (the readback holds that
+     * replay's: the stamps' "not written" form) */
+    bool noCopy;
 } s_sab;
 
 void rd__vu_skin_sabotage_set(uint32_t addr)
@@ -262,6 +266,11 @@ void rd__vu_skin_sabotage_set(uint32_t addr)
     s_sab.addr = addr >= 16u && addr <= 252u && (addr & 3u) == 0 ? addr : 0u;
     s_sab.ring = s_sab.addr != 0u;
     s_sab.fill = 0u;
+}
+
+void rd__vu_skin_sabotage_copy(bool on)
+{
+    s_sab.noCopy = on;
 }
 
 static void sabRead(void)
@@ -402,6 +411,11 @@ static struct {
     /* twin C (issue 123's ladder: the ring read in the pass): drawn, read,
      * differing from B */
     uint64_t ringDrawn, ringTwins, ringDiffer;
+    /* the trace (issue 123 v0.11.3): checks whose readback was not written
+     * by their replay (the clear stamp an earlier replay's or none), whose
+     * ring stamp was not their replay's with the rows written; the stamp
+     * lines' budget */
+    uint64_t unwritten, ringOld, stampEvents;
 } s_run;
 
 static struct {
@@ -417,6 +431,7 @@ static struct {
     uint64_t ringTwins, ringDiffer; /* twin C read, differing from B */
     uint32_t firstDiffer;
     bool anyDiffer;
+    uint64_t unwritten, ringOld; /* the trace's stamps (s_run's) */
 } s_blk;
 
 /* the box check's pipelines: the draw's key without its writes, compiled
@@ -441,19 +456,25 @@ static RdSkinSummary *s_collect; /* rd__vu_skin_check_frame's */
 
 /* ----------------------------------------- the background compiles' rule
  * Issue 161's memory rule for the check's own compiles (c2's three, the
- * box check's): one job at a time; each begun only when the window's
- * memory function (rd.h rd_vu_skin_background: diag_host.h
- * ico_diag_background_memory, as the background finisher asks it) says
- * neither the system's low-memory signal (2: none for the run) nor the
- * free-memory floor now (1: asked again at the next check), and none at
- * all where the start-up set stopped for memory on Qualcomm's own driver
+ * box check's, twin C's, column 3's): one job at a time; each begun only
+ * when the window's memory function (rd.h rd_vu_skin_background:
+ * diag_host.h ico_diag_background_memory, as the background finisher asks
+ * it) says neither the system's low-memory signal (2: none for the run)
+ * nor the free-memory floor now (1: asked again at the next check).
+ * Where the start-up set stopped for memory on Qualcomm's own driver
  * (window_pipe_finish.c: that driver's compiler ran the device out of
- * memory).  Until a pipeline exists its part is not drawn (the box check,
- * c2), said once. */
+ * memory; the window passes the reason) they are compiled carefully, not
+ * left out: one at a time, each begun only above the floor and at least
+ * SK_CAREFUL_GAP_MS after the last one began (issue 123's v0.11.2 run
+ * stopped its set 4 MB under the floor, played with 2.2 GB free and had
+ * no box check and no twins when its check failed).  Until a pipeline
+ * exists its part is not drawn (the box check, c2), said once. */
+#define SK_CAREFUL_GAP_MS 2000.0
 static RdBackgroundMemoryFn s_memFn;
-static char s_noBg[192]; /* why none is compiled in the background: "" allowed */
-static bool s_memStop;   /* the system's signal: none for the run */
-static bool s_bgSaid[3]; /* the lines said: the rule, the signal, the floor */
+static char s_noBg[192];  /* why the compiles are careful: "" not */
+static bool s_memStop;    /* the system's signal: none for the run */
+static bool s_bgSaid[3];  /* the lines said: the rule, the signal, the floor */
+static double s_bgLastMs; /* the careful rule's last begin */
 
 void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground)
 {
@@ -492,11 +513,14 @@ static bool bgMay(bool wait)
     if (s_noBg[0]) {
         if (!s_bgSaid[0]) {
             s_bgSaid[0] = true;
-            rd__log("VU skin check: its box check and its c2 variant are not compiled in the "
-                    "background (%s): the check runs without them",
-                    s_noBg);
+            rd__log("VU skin check: its box check, its twins' pipelines and its c2 variant are "
+                    "compiled carefully (%s): one at a time, each only above the free-memory "
+                    "floor and %.0f s after the last; until then the check runs without them",
+                    s_noBg, SK_CAREFUL_GAP_MS / 1000.0);
         }
-        return false;
+        if (!s_memFn || (s_bgLastMs != 0.0 && rd__now_ms() - s_bgLastMs < SK_CAREFUL_GAP_MS)) {
+            return false;
+        }
     }
     if (s_memStop) {
         return false;
@@ -523,6 +547,9 @@ static bool bgMay(bool wait)
             }
             return false;
         }
+    }
+    if (s_noBg[0]) {
+        s_bgLastMs = rd__now_ms(); /* the careful rule: the caller begins one now */
     }
     return true;
 }
@@ -818,7 +845,25 @@ typedef struct SkSlot {
      * back as zeros or stale values, whose order against the GPU's work
      * these two place) */
     uint64_t submitted, readFinished;
+    /* the trace (rd_vu_skin_trace.c, issue 123 v0.11.3): the ring stamp's
+     * offset in the check's replay, whether a replay's copies were ever
+     * recorded into this readback, and check 0's block as the last harvest
+     * whose clear stamp was its own read it (the "not written again" test) */
+    uint64_t stampOff;
+    bool wrote;
+    bool prevHas;
+    uint32_t prevReplay;
+    uint8_t prev[sizeof(IcoVuBoneCB)];
 } SkSlot;
+
+/* each frame slot's ring as its last replay left it (rd__vu_skin_end):
+ * the bytes written and the replay, for the search of a wrong copy */
+static uint64_t s_ringUsed[RHI_FRAMES_IN_FLIGHT];
+static uint32_t s_ringReplay[RHI_FRAMES_IN_FLIGHT];
+static RdSkinTrace s_trace;
+/* the search's limit in each ring (a ring may be uncached memory on the
+ * device: a read is slow; only on an event line) */
+#define SK_SCAN_MAX (64ull << 20)
 
 /* rhi_gpu_progress's submitted or finished count, 0 when not tracked */
 static uint64_t gpuCount(bool finished)
@@ -1454,6 +1499,19 @@ void rd__vu_skin_note(Replay *r, const DrawSetup *ds, const RdSkinDraw *d)
     const uint64_t ua = rhi_limits()->uniformAlign ? rhi_limits()->uniformAlign : 256u;
     const uint64_t fresh = ringFresh(ring + d->bonesOff, d->bonesOff, ua);
     if (check) {
+        /* the trace: the block checked, so a later wrong copy holding it is
+         * named (rd_vu_skin_trace.c; from the cached copy, not the ring) */
+        RdSkinTraceEntry te;
+        memset(&te, 0, sizeof(te));
+        te.hash = rd__skin_block_hash(k->bones, SK_BONE_BYTES);
+        te.off = d->bonesOff;
+        te.replay = g_rd.replayCounter;
+        te.slot = slot;
+        te.meshId = k->meshId;
+        te.list = k->list;
+        te.index = k->index;
+        memcpy(te.mesh, k->mesh, sizeof(te.mesh));
+        rd__skin_trace_note(&s_trace, &te);
         memcpy(&k->vcb, d->vcb, sizeof(k->vcb));
         k->g1 = d->g1;
         k->dOff = d->dOff;
@@ -1492,19 +1550,22 @@ uint64_t rd__vu_skin_ring_bytes(void)
      * under the ring builds, C's otherwise) */
     const uint64_t twin =
         SK_BONE_BYTES + 4096u + ua + sizeof(IcoDrawCB) + ua + 2u * (sizeof(IcoVuCB) + ua);
+    /* the ring stamp (rd_vu_skin_trace.c): one a replay */
     return (skMode() == 2 ? SK_CHECKS_ALL : 1u) * one +
-           (rd__vu_skin_twins_on() ? SK_TWINS_MAX * twin : 0u) + 4096u;
+           (rd__vu_skin_twins_on() ? SK_TWINS_MAX * twin : 0u) + 4096u + sizeof(RdSkinRingStamp) +
+           16u;
 }
 
 /* the slot's target and readback buffer for cols columns of RD_SKIN_MAXV
- * rows and n bone blocks */
+ * rows and n bone blocks, the ring stamp after them (rd_vu_skin_trace.c) */
 static bool slotEnsure(SkSlot *sl, uint32_t cols, uint32_t n)
 {
     const uint32_t w = ICO_VU_PROBE_FIELDS * cols, h = RD_SKIN_MAXV;
     const RhiLimits *lim = rhi_limits();
     const uint32_t a = lim->copyRowPitchAlign ? lim->copyRowPitchAlign : 1u;
     const uint32_t pitch = (w * 4u + a - 1u) / a * a;
-    const uint64_t rowsOff = ((uint64_t)n * SK_BONE_BYTES + 255u) & ~(uint64_t)255u;
+    const uint64_t rowsOff =
+        ((uint64_t)n * SK_BONE_BYTES + sizeof(RdSkinRingStamp) + 255u) & ~(uint64_t)255u;
     const uint64_t need = rowsOff + (uint64_t)pitch * h;
     if (sl->tex.id && sl->texW >= w && sl->rb.id && sl->rbSize >= need && sl->pitch == pitch) {
         sl->rowsOff = rowsOff;
@@ -1516,6 +1577,8 @@ static bool slotEnsure(SkSlot *sl, uint32_t cols, uint32_t n)
     if (sl->rb.id) {
         rhi_destroy_buffer(sl->rb);
     }
+    sl->wrote = false; /* a new readback: nothing of an earlier replay in it */
+    sl->prevHas = false;
     sl->tex = rhi_create_texture(&(RhiTextureDesc){w, h, 1, RHI_FMT_RGBA8_UINT,
                                                    RHI_TEX_RENDER_TARGET | RHI_TEX_COPY_SRC,
                                                    "rd vu skin probe", 0});
@@ -1550,6 +1613,12 @@ void rd__vu_skin_end(void)
     g_rdSkinTwin = false;
     const uint32_t slot = rd__ring_slot();
     SkSlot *sl = &s_slots[slot];
+    /* the bytes this replay wrote into the slot's ring so far (an empty
+     * allocation returns the ring's offset) and the replay: the search of
+     * a wrong copy reads the ring as this left it (rd_vu_skin_trace.c) */
+    s_ringUsed[slot] = rd__ring_alloc(0, 1);
+    s_ringUsed[slot] = s_ringUsed[slot] == ~0ull ? 0u : s_ringUsed[slot];
+    s_ringReplay[slot] = g_rd.replayCounter;
     if (s_target.left) {
         s_target.left--; /* the targeted probe's replays */
     }
@@ -1639,6 +1708,13 @@ void rd__vu_skin_end(void)
         }
         ok = ok && k->c1Off != ~0ull && k->sabOff != ~0ull;
     }
+    /* the ring stamp (rd_vu_skin_trace.c): written last into the ring and
+     * copied last into the readback, so the harvest names the replay whose
+     * ring the GPU read */
+    const RdSkinRingStamp stamp = {RD_SKIN_RING_STAMP_MAGIC, g_rd.replayCounter, slot,
+                                   g_rd.ring[slot].id};
+    sl->stampOff = ok ? ringPut(&stamp, sizeof(stamp), 16u) : ~0ull;
+    ok = ok && sl->stampOff != ~0ull;
     if (!ok) {
         sl->n = 0;
         sl->nTwins = 0;
@@ -1647,8 +1723,11 @@ void rd__vu_skin_end(void)
     rd__transition(cl, sl->tex, &sl->texState, RHI_STATE_RENDER_TARGET);
     RhiRenderPassDesc rp;
     memset(&rp, 0, sizeof(rp));
-    rp.color[0] =
-        (RhiColorAttachment){sl->tex, RHI_LOAD_CLEAR, {0, 0, 0, 0}, RHI_STORE_STORE, false};
+    /* cleared to the replay's stamp: field 15 of every column is never
+     * drawn (the probes write fields 0..2), so the harvest reads which
+     * replay's copy wrote the rows (rd_vu_skin_trace.c) */
+    rp.color[0] = (RhiColorAttachment){sl->tex, RHI_LOAD_CLEAR, {0}, RHI_STORE_STORE, false};
+    rd__skin_clear_stamp(g_rd.replayCounter, rp.color[0].clear);
     rp.colorCount = 1;
     rp.width = sl->texW;
     rp.height = sl->texH;
@@ -1681,13 +1760,20 @@ void rd__vu_skin_end(void)
     }
     rhi_cmd_end_render_pass(cl);
     rd__transition(cl, sl->tex, &sl->texState, RHI_STATE_COPY_SRC);
-    rhi_cmd_copy_texture_to_buffer(cl, sl->tex, RHI_ASPECT_COLOR,
-                                   (RhiRect){0, 0, sl->texW, sl->texH}, sl->rb, sl->rowsOff,
-                                   sl->pitch);
-    for (uint32_t i = 0; i < n; i++) {
-        /* the bytes the GPU sees at the draw's offset, after its draws */
-        rhi_cmd_copy_buffer(cl, g_rd.ring[slot], sl->checks[i].bonesOff, sl->rb,
-                            (uint64_t)i * SK_BONE_BYTES, SK_BONE_BYTES);
+    /* the tests' sabotage (rd__vu_skin_sabotage_copy): a readback written
+     * once is not written again (its stamps say so at the harvest) */
+    if (!(s_sab.noCopy && sl->wrote)) {
+        rhi_cmd_copy_texture_to_buffer(cl, sl->tex, RHI_ASPECT_COLOR,
+                                       (RhiRect){0, 0, sl->texW, sl->texH}, sl->rb, sl->rowsOff,
+                                       sl->pitch);
+        for (uint32_t i = 0; i < n; i++) {
+            /* the bytes the GPU sees at the draw's offset, after its draws */
+            rhi_cmd_copy_buffer(cl, g_rd.ring[slot], sl->checks[i].bonesOff, sl->rb,
+                                (uint64_t)i * SK_BONE_BYTES, SK_BONE_BYTES);
+        }
+        rhi_cmd_copy_buffer(cl, g_rd.ring[slot], sl->stampOff, sl->rb, (uint64_t)n * SK_BONE_BYTES,
+                            sizeof(RdSkinRingStamp));
+        sl->wrote = true;
     }
     sl->pending = true;
     s_run.drawn += n;
@@ -1853,10 +1939,54 @@ static void captureWrite(const SkCheck *k, const SkTwin *tw, const uint64_t tc[3
     }
 }
 
-static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool intact,
-                      const uint8_t *ringNow, const uint64_t *samples, uint32_t nSamples)
+/* the slot's stamps as the harvest read them (rd_vu_skin_trace.c) */
+typedef struct SkStamps {
+    int clear, ring;
+    uint32_t clearSeen, ringSeen;
+} SkStamps;
+
+/* where check i's differing copy came from: the line's words, the kind */
+static int copyFind(const SkSlot *sl, uint32_t slot, const uint8_t *map, uint32_t i, bool intact,
+                    char *out, size_t size)
 {
     const SkCheck *k = &sl->checks[i];
+    RdSkinCopyFind in;
+    memset(&in, 0, sizeof(in));
+    in.gpu = map + (size_t)i * SK_BONE_BYTES;
+    in.kept = (const uint8_t *)k->bones;
+    in.bytes = SK_BONE_BYTES;
+    in.replay = sl->counter;
+    in.slot = slot;
+    in.off = k->bonesOff;
+    in.prev = i == 0 && sl->prevHas ? sl->prev : NULL;
+    in.prevReplay = sl->prevReplay;
+    in.trace = &s_trace;
+    for (uint32_t s = 0; s < RHI_FRAMES_IN_FLIGHT && s < 2u; s++) {
+        /* the check's own ring only while its replay's bytes are in it */
+        if (g_rd.ringMap[s] && (s != slot || intact)) {
+            in.ring[s] = g_rd.ringMap[s];
+            in.ringUsed[s] = s_ringUsed[s] < g_rd.ringCap[s] ? s_ringUsed[s] : g_rd.ringCap[s];
+            in.ringReplay[s] = s_ringReplay[s];
+        }
+    }
+    in.align = rhi_limits()->uniformAlign ? rhi_limits()->uniformAlign : 256u;
+    in.scanMax = SK_SCAN_MAX;
+    RdSkinCopyFound f;
+    rd__skin_copy_find(&in, &f);
+    rd__skin_copy_words(&f, SK_BONE_BYTES, out, size);
+    return f.kind;
+}
+
+static void readCheck(const SkSlot *sl, uint32_t slot, const uint8_t *map, uint32_t i, bool intact,
+                      const uint8_t *ringNow, const uint64_t *samples, uint32_t nSamples,
+                      const SkStamps *st)
+{
+    const SkCheck *k = &sl->checks[i];
+    /* the stamps (rd_vu_skin_trace.c): rows an earlier replay's copy wrote
+     * (the readback not written by this one), or the ring read as an
+     * earlier replay left it */
+    const bool unwritten = st->clear != RD_SKIN_STAMP_OK;
+    const bool ringOld = !unwritten && st->ring != RD_SKIN_STAMP_OK;
     static int32_t got[SK_COLS][RD_SKIN_MAXV][3];
     for (uint32_t c = 0; c < SK_COLS; c++) {
         probeRead(sl, map, i, c, got[c], k->n);
@@ -1890,7 +2020,13 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
     const bool rereadDiff =
         reread && rd__skin_bytes_differ(ringNow + k->bonesOff, k->bones, SK_BONE_BYTES, &r0, &r1);
     const int c1 = varState(k, &v[1], true), c2 = varState(k, &v[2], k->c2);
-    const char *decision = rd__skin_decision(copyDiff, rereadDiff, v[0].wrong != 0, c1, c2);
+    const char *decision =
+        unwritten
+            ? "the readback was not written by this replay's copies: its rows and bytes are an "
+              "earlier replay's (the stamps' line)"
+        : ringOld && copyDiff
+            ? "H2, the memory: the GPU read the ring as an earlier replay left it (the ring stamp)"
+            : rd__skin_decision(copyDiff, rereadDiff, v[0].wrong != 0, c1, c2);
     /* the box check */
     const uint32_t qi = i;
     const bool boxRead = k->boxRun && samples && qi < nSamples && samples[qi] != RHI_OCCLUSION_NONE;
@@ -1940,9 +2076,10 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
             snprintf(o->decision, sizeof(o->decision), "%s", decision);
         }
     }
-    if (v[0].wrong) {
+    if (v[0].wrong && !unwritten) {
         /* issue 123's ladder: whether the ring read (column 3) clears a
-         * wrong read whose bytes were right (rd_vu_bones.c) */
+         * wrong read whose bytes were right (rd_vu_bones.c); not from a
+         * readback its replay did not write */
         rd__vu_bones_check(copyDiff || rereadDiff, k->c3 ? (v[3].wrong ? 0 : 1) : -1, named);
     }
     char place[48];
@@ -2025,6 +2162,22 @@ static void readCheck(const SkSlot *sl, const uint8_t *map, uint32_t i, bool int
                         "the CPU reads it after the fence: %s; reads as: %s (bytes event %llu); %s",
                         k->frame, place, k->mesh, k->meshId, k->meshVertices, v[0].compared, cw, rw,
                         decision, (unsigned long long)ev, when);
+            }
+            if (copyDiff) {
+                /* issue 123 (v0.11.3): which bytes the GPU copied, so "another
+                 * block" against "other memory" is one log's answer
+                 * (rd_vu_skin_trace.c) */
+                char found[512];
+                const int kind = copyFind(sl, slot, map, i, intact, found, sizeof(found));
+                if (s_collect) {
+                    s_collect->lastFound = kind;
+                }
+                rd__log("VU skin check: frame %u command %s the GPU's copy of the bone block "
+                        "(frame slot %u's ring, offset %llu of %llu written, %llu MB; recorded in "
+                        "replay %u): %s",
+                        k->frame, place, slot, (unsigned long long)k->bonesOff,
+                        (unsigned long long)s_ringUsed[slot],
+                        (unsigned long long)(g_rd.ringCap[slot] >> 20), sl->counter, found);
             }
         }
     }
@@ -2226,6 +2379,40 @@ static void thinNote(uint32_t read, uint32_t differ)
     }
 }
 
+/* the slot's two stamps from its readback (rd_vu_skin_trace.c), and their
+ * line when either is not the check's replay's (the first 8, then every
+ * 100th) */
+static void stampsRead(const SkSlot *sl, const uint8_t *map, SkStamps *st)
+{
+    const uint8_t *texel =
+        map + sl->rowsOff + (size_t)(sl->texH - 1u) * sl->pitch + (size_t)(sl->texW - 1u) * 4u;
+    st->clear = rd__skin_clear_stamp_state(texel, sl->counter, &st->clearSeen);
+    st->ring = rd__skin_ring_stamp_state(map + (size_t)sl->n * SK_BONE_BYTES, sl->counter,
+                                         (uint32_t)(sl - s_slots), sl->ringId, &st->ringSeen);
+    const bool unwritten = st->clear != RD_SKIN_STAMP_OK;
+    const bool ringOld = !unwritten && st->ring != RD_SKIN_STAMP_OK;
+    s_run.unwritten += unwritten;
+    s_blk.unwritten += unwritten;
+    s_run.ringOld += ringOld;
+    s_blk.ringOld += ringOld;
+    if (s_collect) {
+        s_collect->unwritten += unwritten;
+        s_collect->ringOld += ringOld;
+    }
+    if ((unwritten || ringOld) && sayNth(++s_run.stampEvents)) {
+        char words[384];
+        rd__skin_stamp_words(st->clear, st->clearSeen, st->ring, st->ringSeen, words,
+                             sizeof(words));
+        const SkCheck *k = &sl->checks[0];
+        rd__log("VU skin check: frame %u command %u:%u replay %u (frame slot %u, readback of "
+                "%u checks): %s; recorded after submission %llu, read with %llu finished (stamp "
+                "event %llu)",
+                k->frame, k->list, k->index, sl->counter, sl->rhiSlot, sl->n, words,
+                (unsigned long long)sl->submitted, (unsigned long long)sl->readFinished,
+                (unsigned long long)s_run.stampEvents);
+    }
+}
+
 static void readSlot(SkSlot *sl, uint32_t slot, bool intact, bool occ)
 {
     sl->readFinished = gpuCount(true);
@@ -2241,8 +2428,17 @@ static void readSlot(SkSlot *sl, uint32_t slot, bool intact, bool occ)
     const uint8_t *ringNow = intact ? g_rd.ringMap[slot] : NULL;
     const uint8_t *map = sl->n && sl->rb.id ? rhi_map_buffer(sl->rb) : NULL;
     if (map) {
+        SkStamps st;
+        stampsRead(sl, map, &st);
         for (uint32_t i = 0; i < sl->n; i++) {
-            readCheck(sl, map, i, intact, ringNow, ns ? samples : NULL, ns);
+            readCheck(sl, slot, map, i, intact, ringNow, ns ? samples : NULL, ns, &st);
+        }
+        if (st.clear == RD_SKIN_STAMP_OK) {
+            /* check 0's copy as this replay's copies left it: the next
+             * harvest of the slot tells a readback not written again */
+            memcpy(sl->prev, map, SK_BONE_BYTES);
+            sl->prevHas = true;
+            sl->prevReplay = sl->counter;
         }
         rhi_unmap_buffer(sl->rb);
     }
@@ -2336,23 +2532,32 @@ void rd__vu_skin_block(void)
                  (unsigned long long)s_blk.twins, (unsigned long long)s_blk.twinsDiffer, first,
                  (unsigned long long)s_blk.twinsNot, ring, thin);
     }
+    /* the trace's stamps (issue 123 v0.11.3), only when one was wrong */
+    char stamps[160] = "";
+    if (s_blk.unwritten || s_blk.ringOld) {
+        snprintf(stamps, sizeof(stamps),
+                 "; readbacks not written by their replay %llu, ring stamps of an earlier replay "
+                 "%llu",
+                 (unsigned long long)s_blk.unwritten, (unsigned long long)s_blk.ringOld);
+    }
     rd__log("VU skin check: %llu checks, %llu wrong, %llu blocks whose bytes differed (%llu "
             "changed after the draw); %llu box checks, %llu with samples outside the box, %llu "
             "not drawn (their pipeline not made yet; %llu with no slot left for the key); "
             "variants on the wrong ones: c1 right %llu, c2 right %llu (c2 drawn in %llu checks); "
-            "largest difference on a right vertex %d/16 pixel%s",
+            "largest difference on a right vertex %d/16 pixel%s%s",
             (unsigned long long)s_blk.checks, (unsigned long long)s_blk.wrong,
             (unsigned long long)s_blk.blocks, (unsigned long long)s_blk.reread,
             (unsigned long long)s_blk.box, (unsigned long long)s_blk.boxOut,
             (unsigned long long)s_blk.boxNot, (unsigned long long)s_blk.boxFull,
             (unsigned long long)s_blk.c1Right, (unsigned long long)s_blk.c2Right,
-            (unsigned long long)s_blk.c2Run, s_blk.maxRight, twins);
+            (unsigned long long)s_blk.c2Run, s_blk.maxRight, stamps, twins);
     memset(&s_blk, 0, sizeof(s_blk));
 }
 
 int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out)
 {
     memset(out, 0, sizeof(*out));
+    out->lastFound = -1;
     if (!f || !g_rd.hasDevice || rhi_backend() != RHI_BACKEND_VULKAN) {
         return -1;
     }
@@ -2389,6 +2594,7 @@ int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out)
 int rd__vu_skin_check_replays(const RdFrame *f, int keep, uint32_t replays, RdSkinSummary *out)
 {
     memset(out, 0, sizeof(*out));
+    out->lastFound = -1;
     if (!f || !g_rd.hasDevice || rhi_backend() != RHI_BACKEND_VULKAN) {
         return -1;
     }
@@ -2420,10 +2626,12 @@ void rd__vu_skin_shutdown(void)
          * (rd_vu_skin_check_ab) */
         rd__log("VU skin check: at the end of the run: %llu checks drawn (%llu box checks drawn), "
                 "%llu read, %llu wrong, %llu blocks whose bytes differed, %llu box checks with "
-                "samples outside",
+                "samples outside; %llu readbacks not written by their replay, %llu ring stamps of "
+                "an earlier replay",
                 (unsigned long long)s_run.drawn, (unsigned long long)s_run.boxDrawn,
                 (unsigned long long)s_run.checks, (unsigned long long)s_run.wrong,
-                (unsigned long long)s_run.blocks, (unsigned long long)s_run.boxOut);
+                (unsigned long long)s_run.blocks, (unsigned long long)s_run.boxOut,
+                (unsigned long long)s_run.unwritten, (unsigned long long)s_run.ringOld);
     }
     if (s_run.twinsDrawn) {
         /* the A/B's proof that the attachment-read draws were twinned
@@ -2497,6 +2705,9 @@ void rd__vu_skin_shutdown(void)
     memset(&s_run, 0, sizeof(s_run));
     memset(&s_blk, 0, sizeof(s_blk));
     memset(&s_sab, 0, sizeof(s_sab));
+    memset(&s_trace, 0, sizeof(s_trace));
+    memset(s_ringUsed, 0, sizeof(s_ringUsed));
+    memset(s_ringReplay, 0, sizeof(s_ringReplay));
     s_cur = NULL;
     g_rdSkinArm = false;
     s_seenReplay = s_seen = 0;
@@ -2523,5 +2734,6 @@ void rd__vu_skin_shutdown(void)
     s_dev = -1;
     s_memStop = false;
     memset(s_bgSaid, 0, sizeof(s_bgSaid));
+    s_bgLastMs = 0.0;
     s_boxDstSaid = false;
 }
