@@ -128,7 +128,12 @@ typedef struct RdLayerPlan {
      * one texture through two records */
     uint32_t preCopyOrd;
     bool depthRead; /* SCENE's depth tested before this frame clears it */
-    int late;       /* the last scene-class command in lists 11-12: its kind (RD_LAYER_SC_*) */
+    /* a keep frame's full-frame sprites that write Z untested (the
+     * brightness, the keep sprite, a fade) kept in the layer while SCENE's
+     * depth is carried or an effects program reads it (else Z write would
+     * make them scene-class and refuse the keep frame) */
+    uint32_t keepZFree;
+    int late; /* the last scene-class command in lists 11-12: its kind (RD_LAYER_SC_*) */
     int lateList;
     uint8_t lateType;
     uint32_t draws, textured; /* the actions from the boundary to the marker */

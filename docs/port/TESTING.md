@@ -784,7 +784,10 @@ hand; on single files (`check_spirv.py a.spv b.spv`) it skips the variants gate.
   settings cases go in `port/ui/test/settings_extra_test.c` (its header). `settings_render` draws
   every screen, `menu_text` the rows in the sheets' look, and `font_audit` (every code point inside the
   font subsets, `tools/font_audit.py`) and `font_coverage` (a glyph for each) check the row's text
-  in the eight languages; `strings_complete` fails until every table has the new strings. A new
+  in the eight languages; `strings_complete` fails until every table has the new strings, and
+  `strings_sync` until every community table has the new row's line in its end block with the
+  current English quoted (`tools/strings_sync.py --write` / `--refresh-comments`;
+  `strings_sync_selftest` checks the tool's parse on fixed inputs). A new
   Japanese character needs `tools/subset_font_ja.py` run again (`font_subset_ja` fails until it
   is), a new Hangul syllable `tools/subset_font_ko.py` (`font_subset_ko`), a new character of the Chinese
   table `tools/subset_font_zh.py` (`font_subset_zh`), a community translation's character outside

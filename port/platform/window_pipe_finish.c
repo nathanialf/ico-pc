@@ -7,6 +7,7 @@
 #include "window_pipe_finish.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <SDL3/SDL_filesystem.h>
 #include <SDL3/SDL_time.h>
@@ -136,6 +137,10 @@ int window_pipe_floor_retry(int pipePolicy)
 {
     const char *line = ico_diag_startup_prev_low_memory_line();
     const int loaded = rhi_pipeline_cache_loaded() ? 1 : 0;
+    /* the player's [dev] pipeline_set = "careful" stays on the resumed
+       start (ico_diag_startup_pipeline_set returns the low-memory policy
+       before it reads the setting) */
+    const int careful = ico_pipe_resume_careful(getenv("ICO_PIPELINE_SET"));
     char where[160];
     unsigned at = 0, batch = 0;
 
@@ -180,16 +185,18 @@ int window_pipe_floor_retry(int pipePolicy)
             snprintf(b, sizeof(b), "batches of half the set's");
         }
         fprintf(stderr,
-                "window: start-up set: resumed %s (%s, stop %u in a row; %s; the pipeline cache "
-                "file %lld bytes, loaded by the renderer: %s): %s\n",
+                "window: start-up set: resumed %s (%s, stop %u in a row; %s; %s; the pipeline "
+                "cache file %lld bytes, loaded by the renderer: %s): %s\n",
                 where, b, s_prevStop.stops ? s_prevStop.stops : 1u,
                 at == 0 ? "the whole set"
                         : "the pipelines before it made after the rest, from the pipeline cache "
                           "where it holds them",
+                careful ? "the careful set kept ([dev] pipeline_set = \"careful\")"
+                        : "the set's policy as for any start",
                 cache_file_bytes(ico_diag_pipeline_cache_path()), loaded ? "yes" : "no",
                 line[0] ? line : "no stop line");
     }
-    return ICO_DIAG_PIPESET_FULL;
+    return careful ? ICO_DIAG_PIPESET_CAREFUL_SETTING : ICO_DIAG_PIPESET_FULL;
 }
 
 void window_pipe_lazy_why(char *why, size_t size, int pipePolicy, int relaunch, int saved)

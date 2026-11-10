@@ -11,7 +11,10 @@
  * The copies are read back (the reads wait for the GPU) and the PNGs
  * written after the submit of the present that followed the dispatch
  * (rd_present.c rd__capture_finish), before that present's own picture is
- * written, so F12's line and the bug-report zip find all five. */
+ * written, so F12's line and the bug-report zip find all five.  A present
+ * without a dispatch (a keep frame) leaves the arm waiting, bounded
+ * (rd__upscale_capture_wait_over); the still re-present is refused while it
+ * waits (rd_reshow.c); rd_upscale_capture_state tells the window. */
 #include "rd_upscale_capture.h"
 
 #include <math.h>
@@ -37,7 +40,10 @@ typedef struct CapTex {
 } CapTex;
 
 static struct {
-    int armed;       /* waiting for a dispatch */
+    int armed;       /* waiting for a dispatch (atomic: rd__upscale_capture_armed) */
+    int state;       /* RD_UPSCALE_CAPTURE_* (atomic: rd_upscale_capture_state) */
+    uint32_t waited; /* presents without a dispatch since the arm */
+    double armedAt;  /* rd__now_ms at the arm */
     int copied;      /* the copies are recorded: read them after the submit */
     int waitedTold;  /* the "no dispatch at this present" line given for this arm */
     char stem[1024]; /* the pictures' path without the suffix */
@@ -62,6 +68,31 @@ bool rd__upscale_capture_copied(void)
     return s_uc.copied != 0;
 }
 
+bool rd__upscale_capture_armed(void)
+{
+    return __atomic_load_n(&s_uc.armed, __ATOMIC_ACQUIRE) != 0;
+}
+
+int rd_upscale_capture_state(void)
+{
+    return __atomic_load_n(&s_uc.state, __ATOMIC_ACQUIRE);
+}
+
+static void setArmed(int on)
+{
+    __atomic_store_n(&s_uc.armed, on, __ATOMIC_RELEASE);
+}
+
+static void setState(int st)
+{
+    __atomic_store_n(&s_uc.state, st, __ATOMIC_RELEASE);
+}
+
+bool rd__upscale_capture_wait_over(uint32_t presents, double ms)
+{
+    return presents >= RD_UPSCALE_CAPTURE_WAIT_PRESENTS && ms >= RD_UPSCALE_CAPTURE_WAIT_MS;
+}
+
 const RdUpscaleCaptureStats *rd__upscale_capture_stats(void)
 {
     return &s_uc.st;
@@ -75,10 +106,13 @@ bool rd_capture_upscale(const char *stem, uint32_t maxW)
     (void)rd_thread_drain(); /* no replay of the render thread reads the request now */
     snprintf(s_uc.stem, sizeof(s_uc.stem), "%s", stem);
     s_uc.maxW = maxW;
-    s_uc.armed = 1;
     s_uc.copied = 0;
     s_uc.waitedTold = 0;
+    s_uc.waited = 0;
+    s_uc.armedAt = rd__now_ms();
     s_uc.st.armed++;
+    setState(RD_UPSCALE_CAPTURE_PENDING);
+    setArmed(1);
     return true;
 }
 
@@ -117,7 +151,7 @@ void rd__upscale_capture_take(RhiCommandList cl, const RdUpscaleIn *in, RdTarget
     if (!s_uc.armed || !in || !cl.id) {
         return;
     }
-    s_uc.armed = 0;
+    setArmed(0);
     s_uc.frame = in->frame;
     s_uc.given[0] = in->color.id != 0;
     s_uc.given[1] = in->velocity.id != 0;
@@ -323,18 +357,34 @@ int rd__upscale_capture_finish(void)
 {
     if (!s_uc.copied) {
         if (s_uc.armed && !rd__upscale_point_on()) {
-            s_uc.armed = 0;
+            setArmed(0);
             s_uc.st.dropped++;
+            setState(RD_UPSCALE_CAPTURE_NO_UPSCALER);
             rd__log("upscale capture: no upscaler in force at the present after the request: "
                     "%s-scene.png and the rest not written (Upscaling off, or the Original "
                     "preset)",
                     s_uc.stem);
-        } else if (s_uc.armed && !s_uc.waitedTold) {
-            s_uc.waitedTold = 1;
-            rd__log("upscale capture: the present after the request showed a picture again "
-                    "without a replay (no dispatch): the upscaler's pictures are taken at the "
-                    "next replay, beside the present's picture but after it (not in a "
-                    "bug-report zip already written)");
+        } else if (s_uc.armed) {
+            const double ms = rd__now_ms() - s_uc.armedAt;
+            s_uc.waited++;
+            if (!s_uc.waitedTold) {
+                s_uc.waitedTold = 1;
+                rd__log("upscale capture: the present after the request did not dispatch the "
+                        "upscaler (a keep frame: a fade or a loading picture): the pictures are "
+                        "taken at the next present that does, and the bug-report zip waits for "
+                        "them (at most %u presents and %.0f s; the still re-present is refused "
+                        "meanwhile)",
+                        RD_UPSCALE_CAPTURE_WAIT_PRESENTS, RD_UPSCALE_CAPTURE_WAIT_MS / 1000.0);
+            }
+            if (rd__upscale_capture_wait_over(s_uc.waited, ms)) {
+                setArmed(0);
+                s_uc.st.expired++;
+                setState(RD_UPSCALE_CAPTURE_EXPIRED);
+                rd__log("upscale capture: no dispatch of the upscaler in %u presents over %.1f s "
+                        "after the request (keep frames throughout): %s-scene.png and the rest "
+                        "not written; the bug-report zip goes without them",
+                        s_uc.waited, ms / 1000.0, s_uc.stem);
+            }
         }
         return 0;
     }
@@ -352,11 +402,14 @@ int rd__upscale_capture_finish(void)
     } else {
         s_uc.st.failed++;
     }
-    rd__log("upscale capture: frame %u: %s%s, %s, %s, %s: %s (read back in %.1f ms; the "
-            "upscaler's inputs and output: lines in -scene.png are the port's, lines only in "
-            "-composite.png are the upscaler's)",
+    const uint32_t waited = s_uc.waited;
+    rd__log("upscale capture: frame %u: %s%s, %s, %s, %s: %s (read back in %.1f ms; %u "
+            "presents without a dispatch before it; the upscaler's inputs and output: lines in "
+            "-scene.png are the port's, lines only in -composite.png are the upscaler's)",
             s_uc.frame, s_uc.stem, kSuffix[0], kSuffix[1], kSuffix[2], kSuffix[3], line,
-            rd__now_ms() - t0);
+            rd__now_ms() - t0, waited);
+    /* after the files: the window reads the state and then the files */
+    setState(ok ? RD_UPSCALE_CAPTURE_WRITTEN : RD_UPSCALE_CAPTURE_FAILED);
     return ok ? 1 : -1;
 }
 
@@ -370,6 +423,14 @@ void rd__upscale_capture_free(void)
         s_uc.have[i] = false;
     }
     rd__depth_copy_free(&s_uc.depth);
+    if (s_uc.copied) {
+        /* copies lost with the textures: the window stops waiting */
+        s_uc.st.failed++;
+        setState(RD_UPSCALE_CAPTURE_FAILED);
+        rd__log("upscale capture: the copies were freed before they were written (the renderer "
+                "was made again): %s-scene.png and the rest not written",
+                s_uc.stem);
+    }
     s_uc.copied = 0;
     s_uc.depthOk = false;
 }

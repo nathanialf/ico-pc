@@ -50,10 +50,19 @@ int ico_pipe_resume_parse(const char *line, IcoPipeResume *out);
    halves its own) */
 unsigned ico_pipe_resume_batch(unsigned stopped);
 /* Where the next start resumes in a set of total pipelines: r->at when it
-   is inside the set, else 0 (the set shrank under it: from the start) */
+   is inside the set, else 0 (the set shrank under it: from the start).
+   No caller in the window (the renderer refuses a place at or past its set,
+   rd_set_pipeline_resume); kept with its test for a caller that knows the
+   set's size before the renderer does */
 unsigned ico_pipe_resume_at(const IcoPipeResume *r, unsigned total);
 /* The stop count of a start's own stop: the previous stop's count + 1 when
    this start was a resume (resumed != 0), else 1 */
 unsigned ico_pipe_resume_stops(int resumed, const IcoPipeResume *prev);
+/* Whether a resumed set is made under the careful policy by the player's
+   setting: 1 when setting ([dev] pipeline_set, ICO_PIPELINE_SET) is
+   "careful", else 0.  Only the port's own choice after a stop (no set)
+   becomes the full set; a player's "careful", meant for a phone short of
+   memory, stays on exactly the start that follows a low-memory stop */
+int ico_pipe_resume_careful(const char *setting);
 
 #endif /* ICO_PIPE_RESUME_H */

@@ -30,6 +30,15 @@
  * (rd__upscale_capture_finish, from rd_present.c rd__capture_finish).
  * Pictures wider than the limit given to the arm are halved (a 2 x 2 box)
  * until they fit, so the bug-report zip stays under GitHub's 25 MB.
+ *
+ * A present that does not dispatch (a keep frame: a fade, a loading
+ * picture) leaves the arm waiting for the next one that does, and while it
+ * waits the still re-present is refused (rd_reshow.c), so a still camera's
+ * between-tick present replays and dispatches.  The arm waits at most
+ * RD_UPSCALE_CAPTURE_WAIT_PRESENTS presents and RD_UPSCALE_CAPTURE_WAIT_MS
+ * (both must pass), then is dropped with its line.  The window reads the
+ * outcome (rd.h rd_upscale_capture_state) and holds the bug-report zip's
+ * pictures until it is known (port/platform/upscale_pictures.h).
  */
 #ifndef RD_UPSCALE_CAPTURE_H
 #define RD_UPSCALE_CAPTURE_H
@@ -57,6 +66,7 @@ typedef struct RdUpscaleCaptureStats {
     uint32_t written; /* captures whose pictures were all written */
     uint32_t failed;  /* captures with a picture not written */
     uint32_t dropped; /* arms dropped: no upscaler in force at the next present */
+    uint32_t expired; /* arms dropped: no dispatch within the wait's bound */
     uint32_t w[RD_UPSCALE_CAPTURE_PICTURES], h[RD_UPSCALE_CAPTURE_PICTURES]; /* the last written */
 } RdUpscaleCaptureStats;
 
@@ -71,6 +81,14 @@ void rd__upscale_capture_take(RhiCommandList cl, const RdUpscaleIn *in, RdTarget
  * when one failed, 0 when none was due. An arm that met a present without
  * an upscaler in force is dropped with its line. */
 int rd__upscale_capture_finish(void);
+/* the bound of an arm's wait for a dispatch: both must pass */
+#define RD_UPSCALE_CAPTURE_WAIT_PRESENTS 60u
+#define RD_UPSCALE_CAPTURE_WAIT_MS 2000.0
+/* whether an arm waited presents presents over ms milliseconds is over */
+bool rd__upscale_capture_wait_over(uint32_t presents, double ms);
+/* an arm waits for a dispatch (rd_reshow.c refuses the still re-present
+ * meanwhile); read on the thread that builds the presents, so atomic */
+bool rd__upscale_capture_armed(void);
 /* copies recorded and not yet written (rd_present.c rd__capture_pending:
  * the picture's submit is not handed to the submit thread) */
 bool rd__upscale_capture_copied(void);

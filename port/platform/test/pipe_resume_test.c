@@ -16,6 +16,8 @@
  *   at       inside the set kept, at or past a set that shrank 0;
  *   stops    a start's own stop counts 1, a resumed start's stop the
  *            previous count + 1;
+ *   careful  a resumed start keeps the player's [dev] pipeline_set =
+ *            "careful" ("careful" 1; "full", "lazy", "", unset 0);
  *   size     the longest line the activity file holds (diag_host.c
  *            act_low_memory, 256 bytes) with the floor's words, the retry
  *            mark and the largest numbers fits.
@@ -120,6 +122,16 @@ static void testAt(void)
     CHECK(ico_pipe_resume_at(&r, 100) == 0);
 }
 
+static void testCareful(void)
+{
+    CHECK(ico_pipe_resume_careful("careful") == 1);
+    CHECK(ico_pipe_resume_careful("full") == 0);
+    CHECK(ico_pipe_resume_careful("lazy") == 0);
+    CHECK(ico_pipe_resume_careful("") == 0);
+    CHECK(ico_pipe_resume_careful("Careful ") == 0);
+    CHECK(ico_pipe_resume_careful(NULL) == 0);
+}
+
 static void testStops(void)
 {
     const IcoPipeResume r = {312, 1196, 8, 3, ""};
@@ -150,6 +162,7 @@ int main(void)
     testBatch();
     testAt();
     testStops();
+    testCareful();
     testSize();
     printf("pipe_resume_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;

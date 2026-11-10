@@ -95,12 +95,13 @@ static StartupRetry loss_next(const StartupRetryRun *run, const char *name, bool
     const char *other = onD3d12 ? "vulkan" : "d3d12";
     /* the backend step keeps the player's blending: only a fixed one */
     const bool blendFree = !run->blendExplicit || run->blendWasFixed;
-    /* the record stored by the vertex shaders (rd_vu_record.h): the render
-       targets' record first, the pre-pass kept */
+    /* the record stored by the vertex shaders or by the compute record
+       (rd_vu_record.h; storesWereOn covers both): the render targets'
+       record first, the pre-pass kept */
     if (step < STARTUP_RETRY_LOSS_TARGETS && run->prepassWasOn && run->storesWereOn) {
         snprintf(reason, reasonLen,
                  "the next run on %s draws the 3D vertex pre-pass's record into render targets "
-                 "instead of storing it from the vertex shaders",
+                 "instead of storing it from the shaders (vertex or compute)",
                  name);
         return STARTUP_RETRY_LOSS_TARGETS;
     }

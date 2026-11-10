@@ -611,7 +611,13 @@ its own set). The next start of the version (`ICO_DIAG_PIPESET_LAZY_LOW_MEMORY`)
 file (`ico_diag_startup_resume`) and resumes the set there (`rd_set_pipeline_resume`) in batches of
 half the stopped start's (`ico_pipe_resume_batch`: the careful set's 8 becomes 4, the default 32
 becomes 16, then 8, then 4; never under 4), the memory asked between batches as in any set (before
-each pipeline under the careful policy). The pipelines before the place are made after the rest
+each pipeline under the careful policy). The resumed set's policy is the full set's
+(`ICO_DIAG_PIPESET_FULL`), the careful one on a device of the table, and the careful one when the
+player set `[dev] pipeline_set = "careful"` (`ICO_DIAG_PIPESET_CAREFUL_SETTING`,
+`ico_pipe_resume_careful`: `ico_diag_startup_pipeline_set` answers the low-memory policy before it
+reads that setting, and the setting meant for a phone short of memory stays on exactly this start;
+the resumed line says `the careful set kept ([dev] pipeline_set = "careful")` or `the set's policy
+as for any start`). The pipelines before the place are made after the rest
 (the set from the place to its end, then from its first key to the place; the screen counts the
 whole set), from the pipeline cache where it holds them (a moment each): a resumed set that stops
 leaves keys before its own place that no start made, so the window does not leave the head to
@@ -619,7 +625,7 @@ first use even with the cache loaded (`rd_set_pipeline_resume`'s `skipBefore`, w
 counts the rest only, stays for a caller that knows the head is cached; `rd_set_resume_test`). A line without the place (written
 before the place was recorded) resumes from the first key in half the set's batches. Lines:
 
-    window: start-up set: resumed at pipeline 313 of 1196 after the low-memory stop of 2026-11-09 20:45 (batches of 4, stop 1 in a row; the pipelines before it made after the rest, from the pipeline cache where it holds them; the pipeline cache file 1201581 bytes, loaded by the renderer: no): set: stopped at ...
+    window: start-up set: resumed at pipeline 313 of 1196 after the low-memory stop of 2026-11-09 20:45 (batches of 4, stop 1 in a row; the pipelines before it made after the rest, from the pipeline cache where it holds them; the set's policy as for any start; the pipeline cache file 1201581 bytes, loaded by the renderer: no): set: stopped at ...
     rd: pipelines: the start-up set resumes at pipeline 313 of 1196 after an earlier start's stop for memory, in batches of 4 (the set's own 8); the pipelines before it are made after the rest
 
 A resumed set that finishes deletes the activity file (the next start makes the whole set); one
@@ -627,7 +633,11 @@ that stops again writes its own line with `stop 2` and its own place, and the ne
 batch again. A careful set's own growth budget or slow batch, and the floor on another driver than
 Qualcomm's own, stay for that start only (`ico_diag_startup_set_resume_part` answers 0, the line
 says `the next start makes the whole set again`). An end inside a creation of a resumed set counts
-towards the ends' rule as any set's (`LAZY_ONCE`, then `[dev] pipeline_set = "lazy"`). The shader
+towards the ends' rule as any set's: the resumed start's file holds no stop line
+(`ico_diag_startup_resume` clears it), so the first such end makes the next start careful for that
+start only (`CAREFUL_ONCE`), or lazy for that start (`LAZY_ONCE`) when the resumed set was careful
+(its file's `set: careful`: the device table or `[dev] pipeline_set = "careful"`); a second end in a
+row writes `[dev] pipeline_set = "lazy"` (`LAZY_NOW`). The shader
 modules stay made for the whole run (a first-use creation or a display change needs any of them),
 so the set does not release them between batches.
 
