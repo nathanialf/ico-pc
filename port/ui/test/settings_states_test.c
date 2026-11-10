@@ -1086,6 +1086,68 @@ static void testNoHost(void)
     CHECK(s_requests == 0, "Back leaves");
 }
 
+/* a Permadeath journey in force (ico_difficulty_states_locked): no state
+   saves or loads, so the pause menu's row is greyed (it still opens the
+   page, for Delete), the page's line says so in place of "pick the
+   action", and the Continue screen's prompt is not shown and Square there
+   opens nothing; Normal again: all as before */
+static void testPermadeath(void)
+{
+    char log[2048];
+    startMenus(1, 11);
+    ico_difficulty_reset();
+    toPause();
+    const int st = ui_settings_states_row();
+    CHECK(st >= 0 && !lt_ext_row_dim(st), "Normal: the Save states row not greyed");
+    ico_difficulty_set_row(ICO_DIFF_PERMADEATH, 1);
+    CHECK(ico_difficulty_states_locked(), "Permadeath in force");
+    frame(0);
+    CHECK(lt_ext_row_dim(st) && !lt_ext_prop(st)->masked && !lt_ext_prop(st)->defaultMask,
+          "Permadeath: the row greyed, still shown");
+    const int sl = pauseToStates();
+    moveTo(sl, 1); /* the empty slot */
+    int c[8];
+    if (cardRows(1, c)) {
+        const char *want = ui_str(UI_STR_DIFF_STATES_SAVE_LOCKED), *line = txt(c[7]);
+        const size_t n = strcspn(line, "\n");
+        CHECK(n > 0 && strncmp(line, want, n) == 0, "Permadeath: the page's line \"%s\"", line);
+    }
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(fxLayout(57), 60), "Back: the pause menu");
+    ico_difficulty_reset();
+    frame(0);
+    CHECK(!lt_ext_row_dim(st), "Normal again: the row not greyed");
+
+    /* the Continue screen: the prompt held back while locked */
+    startMenus(1, 1);
+    s_canSave = 0;
+    const int pl = ui_settings_states_prompt_layout();
+    CHECK(pl >= 0, "the prompt's layout (%d)", pl);
+    if (pl < 0) {
+        return;
+    }
+    const int lf = fxLayout(19), words = lt_ext_layout(pl)->first + 1;
+    ico_difficulty_set_row(ICO_DIFF_PERMADEATH, 1);
+    lt_switch_layout(lf);
+    CHECK(settle(lf, 60), "the Continue screen (%d)", current_layout_id);
+    errCapture();
+    s_mcFilesShown = 1;
+    frame(0);
+    frame(0);
+    errRelease(log, sizeof(log));
+    CHECK(lt_ext_prop(words)->masked && lt_ext_prop(words - 1)->masked,
+          "Permadeath: the files shown, the prompt not");
+    CHECK(strstr(log, "Save states prompt not shown") != NULL, "its line (\"%s\")", log);
+    frame(LT_PAD_SQUARE);
+    frame(0);
+    frame(0);
+    CHECK(current_layout_id == lf, "Permadeath: Square opens nothing (%d)", current_layout_id);
+    ico_difficulty_reset();
+    frame(0);
+    CHECK(!lt_ext_prop(words)->masked, "Normal: the prompt shown again");
+    s_mcFilesShown = 0;
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -1098,6 +1160,7 @@ int main(int argc, char **argv)
         testPauseRows();
         testExtrasRows();
         testContinue();
+        testPermadeath();
         testStatesKey();
         CHECK(ico_region_select("pal") == 0, "the European region again");
         printf("settings_states_test %s: %s\n", argv[2], failures ? "failed" : "ok");
@@ -1106,6 +1169,7 @@ int main(int argc, char **argv)
     testPauseRows();
     testExtrasRows();
     testContinue();
+    testPermadeath();
     testCards();
     testActions();
     testConfirm();

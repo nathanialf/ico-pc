@@ -407,7 +407,11 @@ starts on Difficulty at Normal; a cleared save's New Game+ (`gFlagGameClear` set
 record, with a journey, is in force) starts from that save's rows, copied before
 `ico_opt_mirror_reset` puts Normal in force and kept while the player goes back to the vibration
 screen and here again. Left and Right on Difficulty step the mode: a preset replaces the draft's rows,
-and a Custom draft is kept aside, so stepping back to Custom restores it (`ui__diff_step_mode`). Cross on
+and a Custom draft is kept aside, so stepping back to Custom restores it (`ui__diff_step_mode`). The
+left stick (and the keys and touch stick bound to it) steps it too: the screen's proc runs the game's
+d-pad emulation (`lt_analog2Pad`) before it reads the pad word, as `settingsProc` does (the game's own
+call is in `default_item_select`, after the proc); one step a push, held or not, as the Settings rows
+that wrap (`newgame: Difficulty stepped by the stick (N)`, the first 8 then every 100th). Cross on
 Customize opens [Customize](#customize-the-new-game-drafts-pages) on its first row; its Back returns with
 the cursor on Customize. Cross on Difficulty or an Off or On item picks it and moves the cursor to the
 item below; Cross on Start, or the Start button on any row, confirms: `ico_difficulty_begin` makes the
@@ -1474,7 +1478,10 @@ tick's shell (`statesProc`); `port/ui/settings_states.c` holds the host, the car
   returns the `item` it is given unchanged (the file `la_mc_file_select` picked on a confirm, which
   `la_mc_load_file_select` indexes as `file[item]`). The line is shown while
   `la_host_mc_files_shown()` (`layout_action.c`: `fileMask` and `actionStarted` set, the card check
-  done and the tiles up) and sits at field line 183 (`CONT_HINT_Y`), under the frame of the file
+  done and the tiles up) and the journey in force does not lock states (`ico_difficulty_states_locked`:
+  Permadeath, the condition the load checks first; then Square there opens nothing either, logged
+  `settings: the Save states prompt not shown on the card's files: the journey has Permadeath on (N)`
+  each time the files show, the first 8 then every 100th; the title's Normal shows it) and sits at field line 183 (`CONT_HINT_Y`), under the frame of the file
   picture (lines 60 to 180 on the European disc, to 169 on the others), clear of the memory card
   slot words (112 / 110), the area name (135 / 124) and the play time (160 / 150), above the OK and
   Back bar (200), centred. Square (0x80: no proc of the screen reads it on any disc; not taken with
@@ -1490,7 +1497,10 @@ tick's shell (`statesProc`); `port/ui/settings_states.c` holds the host, the car
 - **Pause rows** (`placePause`): the port rows (Photo mode while a stage runs, Save states) are
   chained one `PAUSE_PITCH` (20) apart under Options, or `PAUSE_PITCH_STATES` (16) when the states
   row shows: Options 50, Photo mode 66, Save states 82, Back 98, End Game 120 where the data has it.
-  A row not shown is masked and skipped by the item links. `pauseRowsOk` accepts Back at 1 or 2 pitches
+  A row not shown is masked and skipped by the item links. On a Permadeath journey
+  (`ico_difficulty_states_locked`) the Save states row is greyed (`lt_ext_set_dim`) and still opens
+  the page (Delete), whose status line then reads `UI_STR_DIFF_STATES_SAVE_LOCKED` in place of the
+  note. `pauseRowsOk` accepts Back at 1 or 2 pitches
   of 20, or (with the row) 1 to 3 of 16, and still wants End Game three pitches of 20 below Options.
   The boxes keep Options' height, so the letters stay where they are in them and overlap
   4 lines at the narrower pitch.

@@ -27,6 +27,7 @@
 #include "settings_states.h"
 
 #include "ico_unused.h" /* a test room of Extras > Unused content: no save, no load */
+#include "difficulty.h" /* ico_difficulty_states_locked: a Permadeath journey's page */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -456,6 +457,10 @@ void ui__states_refresh(int cur)
                s_stInfo[on].refusal_str > 0) {
         statesPlain(s_stInfo[on].refusal_str, buf, sizeof(buf));
         statesStatus(buf);
+    } else if (ico_difficulty_states_locked()) {
+        /* a Permadeath journey: no save or load here, so no "pick the
+           action" (a slot's own line above says it cannot load) */
+        statesStatus(ui_str(UI_STR_DIFF_STATES_SAVE_LOCKED));
     } else {
         statesStatus(
             ui_str(ui__settings_on_title() ? UI_STR_STATES_TITLE_HINT : UI_STR_STATES_NOTE));

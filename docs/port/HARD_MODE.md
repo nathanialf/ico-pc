@@ -116,7 +116,15 @@ A row of its own (`permadeath`, Rules; never greyed, since it covers every game 
 over ends the journey: `ico_difficulty_game_over_certain` / `ico_difficulty_game_over` set the record's
 finished flag and write the journey id to `difficulty.toml`'s `[finished]` list. The game over screens of
 all three Continue twins hide Continue and act as Quit (`la_host_game_over_quit_only`,
-`ico2/common/src/layout_action.c`); the Continue list refuses an ended save and the load has a backstop
+`ico2/common/src/layout_action.c`). Every disc's game over layout (62 European, 59 Japanese, Korean and
+Asian, 58 on the 2001 discs; read off each ELF's `texLayout`/`texProperty`) has Continue and Quit side by
+side on line 202, Continue first and the layout's default, its own mask 0, a 0.2 s fade-in and a 0.5 s
+fade-out (after a 0.25 s hold on the European, Japanese, Korean and Asian discs). No proc runs while the
+layout fades and `exec_layout_texture` puts each mask back to the layout's own every tick, so the helper
+sets Continue's own mask (`lt_default_mask_property`) as well as its mask, and puts the disc's 0 back on a
+game over of a journey that has not ended: before, Continue came back for the fade-out after Quit was
+chosen (the first fade-in tick draws at alpha 0). With the cursor on Quit, Left and the stick's x are
+cleared (Quit's left item is Continue; Up and Down lead nowhere there). The Continue list refuses an ended save and the load has a backstop
 by the save's checksum (`la_host_load_refused`, [SAVES.md](SAVES.md#the-difficulty-of-each-save)); save
 states can be neither saved nor loaded while the active record has it on, and a state made on such a
 journey is refused ([SAVES.md](SAVES.md#save-states-and-difficulty)). The memory card file is never

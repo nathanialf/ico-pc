@@ -270,10 +270,22 @@ static int newGameScreenProc(int first, int item)
     if (s_newGameChosen || lt_fade_status() != 2) {
         return -1;
     }
+    /* the stick's left and right as the d-pad's, before the word is read
+       (settingsProc does the same): the game's own call comes later, in
+       default_item_select after this proc, so without it the stick moved
+       the Off/On rows but never stepped Difficulty.  One step a push, as
+       the Settings pages' rows that wrap (lastButton keeps a held stick
+       from repeating); the second call in the same tick adds nothing. */
+    const int digital = pad[0].flags & (LT_PAD_LEFT | LT_PAD_RIGHT);
+    lt_analog2Pad();
     int flags = pad[0].flags;
     const int cur = lt_ext_layout(s_newGameLayout)->curItem;
     if (cur == s_diffRow && (flags & (LT_PAD_LEFT | LT_PAD_RIGHT)) && !(flags & LT_PAD_START)) {
         /* the mode: a preset's rows, or the kept Custom draft */
+        static unsigned s_stickSteps;
+        if (!digital && (++s_stickSteps <= 8 || s_stickSteps % 100 == 0)) {
+            fprintf(stderr, "newgame: Difficulty stepped by the stick (%u)\n", s_stickSteps);
+        }
         CUR_SE();
         ui__diff_step_mode((flags & LT_PAD_LEFT) ? -1 : 1);
         newGameSync();
