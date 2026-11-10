@@ -23,9 +23,63 @@ static void block_reset(StallBlock *b)
     b->spanSum = b->spanMin = b->spanMax = 0.0;
 }
 
+/* the run's bucket for a display rate (> 0): found, made, or the last one
+   once STALL_BLOCK_RATES are made */
+static unsigned rate_bucket(StallBlock *b, double hz)
+{
+    unsigned i;
+
+    for (i = 0; i < b->rateN; i++) {
+        if (fabs(b->rateHz[i] - hz) <= 0.05) {
+            return i;
+        }
+    }
+    if (b->rateN < STALL_BLOCK_RATES) {
+        b->rateHz[b->rateN] = hz;
+        return b->rateN++;
+    }
+    return STALL_BLOCK_RATES - 1; /* counted with the last */
+}
+
+/* a stall into the run's sums, at its own display rate */
+static void run_stall(StallBlock *b, const StallBlockRec *r, double sinceMs)
+{
+    b->runStalls++;
+    if (r->gapBackMs > 0.0) {
+        b->runRestartStalls++;
+    }
+    if (sinceMs >= STALL_BLOCK_SLUMBER_MS) {
+        b->runLongGap++;
+    } else if (sinceMs >= 0.0) {
+        b->runShortGap++;
+    }
+    if (r->gpuValid) {
+        const double held = r->presentMs - r->gpuMs;
+
+        if (b->runHeldN == 0 || held < b->runHeldMin) {
+            b->runHeldMin = held;
+        }
+        if (b->runHeldN == 0 || held > b->runHeldMax) {
+            b->runHeldMax = held;
+        }
+        b->runHeldN++;
+    }
+    if (r->displayHz > 0.0) {
+        b->rateStalls[rate_bucket(b, r->displayHz)]++;
+    } else {
+        b->rateUnknownStalls++;
+    }
+}
+
 void stall_block_add(StallBlock *b, const StallBlockRec *r)
 {
     const int stalled = r->presented && r->presentMs >= STALL_BLOCK_MS;
+    const double sinceMs =
+        r->startMs > 0.0 && b->lastStartMs > 0.0 ? r->startMs - b->lastStartMs : -1.0;
+
+    if (r->startMs > 0.0) {
+        b->lastStartMs = r->startMs;
+    }
 
     if (r->gapBackMs > 0.0) {
         b->restarts++;
@@ -42,8 +96,11 @@ void stall_block_add(StallBlock *b, const StallBlockRec *r)
             b->stallGpuMs[i] = r->gpuMs;
             b->stallGap[i] = r->gapValid ? 1 : r->gapBackMs > 0.0 ? 2 : 0;
             b->stallGapMs[i] = r->gapMs;
+            b->stallHz[i] = r->displayHz;
+            b->stallSinceMs[i] = sinceMs;
         }
         b->stalls++;
+        run_stall(b, r, sinceMs);
         return; /* a stalled replay's span is not the block's band */
     }
     if (r->presented && r->gpuValid && r->gpuMs > 0.0) {
@@ -100,14 +157,12 @@ static void band_name(int i, char *out, size_t size)
 static void run_join(StallBlock *b, double blockSeconds, double displayHz)
 {
     const int band = stall_block_band(b);
-    unsigned i;
 
     if (!(blockSeconds > 0.0)) {
         blockSeconds = 0.0;
     }
     b->runBlocks++;
     b->runSeconds += blockSeconds;
-    b->runStalls += b->stalls;
     if (band < 0) {
         b->bandNoneSeconds += blockSeconds;
         b->bandNoneStalls += b->stalls;
@@ -115,28 +170,14 @@ static void run_join(StallBlock *b, double blockSeconds, double displayHz)
         b->bandSeconds[band] += blockSeconds;
         b->bandStalls[band] += b->stalls;
     }
-    if (!(displayHz > 0.0)) {
+    if (displayHz > 0.0) {
+        b->rateSeconds[rate_bucket(b, displayHz)] += blockSeconds;
+    } else {
         b->rateUnknownSeconds += blockSeconds;
-        b->rateUnknownStalls += b->stalls;
-        return;
     }
-    for (i = 0; i < b->rateN; i++) {
-        if (fabs(b->rateHz[i] - displayHz) <= 0.05) {
-            break;
-        }
-    }
-    if (i == b->rateN) {
-        if (b->rateN < STALL_BLOCK_RATES) {
-            b->rateHz[b->rateN++] = displayHz;
-        } else {
-            i = STALL_BLOCK_RATES - 1; /* counted with the last */
-        }
-    }
-    b->rateSeconds[i] += blockSeconds;
-    b->rateStalls[i] += b->stalls;
 }
 
-int stall_block_end(StallBlock *b, double blockSeconds, double displayHz, int askedMhz,
+int stall_block_end(StallBlock *b, double blockSeconds, double displayHz,
                     const StallBlockClock *clock, char *buf, size_t size)
 {
     size_t at = 0;
@@ -157,25 +198,32 @@ int stall_block_end(StallBlock *b, double blockSeconds, double displayHz, int as
     if (b->stalls > 0) {
         put(buf, size, &at, " (");
         for (i = 0; i < listed; i++) {
-            put(buf, size, &at, "%s%.0f", i ? ", " : "", b->stallMs[i]);
-        }
-        put(buf, size, &at, " ms%s; GPU idle before the stalled replay: ",
-            b->stalls > listed ? ", the first listed" : "");
-        for (i = 0; i < listed; i++) {
-            const char *sep = i ? ", " : "";
-
+            put(buf, size, &at, "%s%.0f ms", i ? "; " : "", b->stallMs[i]);
+            if (b->stallHz[i] > 0.0) {
+                put(buf, size, &at, " at %.2f Hz", b->stallHz[i]);
+            }
+            if (b->stallSinceMs[i] >= 0.0) {
+                put(buf, size, &at, ": the replay before began %.1f ms earlier",
+                    b->stallSinceMs[i]);
+            } else {
+                put(buf, size, &at, ": the replay before not known");
+            }
+            if (b->stallGpu[i]) {
+                put(buf, size, &at, ", the present held %.1f ms past the replay's GPU span",
+                    b->stallMs[i] - b->stallGpuMs[i]);
+            }
             if (b->stallGap[i] == 1 && b->stallGapMs[i] >= 0.0) {
-                put(buf, size, &at, "%s%.1f ms", sep, b->stallGapMs[i]);
+                put(buf, size, &at, ", GPU idle before it %.1f ms", b->stallGapMs[i]);
             } else if (b->stallGap[i] == 1) {
-                put(buf, size, &at, "%sbegun %.1f ms before the one before ended", sep,
+                put(buf, size, &at, ", begun %.1f ms before the one before ended",
                     -b->stallGapMs[i]);
             } else if (b->stallGap[i] == 2) {
-                put(buf, size, &at, "%snot measured (the GPU clock restarted)", sep);
+                put(buf, size, &at, ", GPU idle before it not measured (the GPU clock restarted)");
             } else {
-                put(buf, size, &at, "%snot measured", sep);
+                put(buf, size, &at, ", GPU idle before it not measured");
             }
         }
-        put(buf, size, &at, ")");
+        put(buf, size, &at, "%s)", b->stalls > listed ? "; the first listed" : "");
     }
     put(buf, size, &at, "; GPU clock restarts %u", b->restarts);
     band_name(stall_block_band(b), band, sizeof band);
@@ -203,11 +251,6 @@ int stall_block_end(StallBlock *b, double blockSeconds, double displayHz, int as
         put(buf, size, &at, "; display %.2f Hz", displayHz);
     } else {
         put(buf, size, &at, "; display rate not known");
-    }
-    if (askedMhz > 0) {
-        put(buf, size, &at, ", frame rate pin %.2f Hz asked", (double)askedMhz / 1000.0);
-    } else {
-        put(buf, size, &at, ", no frame rate asked");
     }
     if (clock != NULL && clock->n > 0) {
         put(buf, size, &at, "; GPU clock %d-%d MHz (mean %.0f, %u samples)", clock->minMhz,
@@ -241,6 +284,17 @@ int stall_block_run_text(const StallBlock *b, char *buf, size_t size)
     put(buf, size, &at, "present stalls this run: %u over %.0f ms in %.1f min (%.1f a minute)",
         b->runStalls, STALL_BLOCK_MS, b->runSeconds / 60.0,
         b->runSeconds > 0.0 ? b->runStalls * 60.0 / b->runSeconds : 0.0);
+    if (b->runStalls > 0) {
+        put(buf, size, &at,
+            "; %u with the GPU clock restarted, %u after a CPU-side gap of %.0f ms or more (%u "
+            "under, %u not known)",
+            b->runRestartStalls, b->runLongGap, STALL_BLOCK_SLUMBER_MS, b->runShortGap,
+            b->runStalls - b->runLongGap - b->runShortGap);
+        if (b->runHeldN > 0) {
+            put(buf, size, &at, ", held past the GPU span %.0f-%.0f ms", b->runHeldMin,
+                b->runHeldMax);
+        }
+    }
     put(buf, size, &at, "; by display rate:");
     for (unsigned i = 0; i < b->rateN; i++) {
         snprintf(name, sizeof name, "%s%.2f Hz", first ? " " : ", ", b->rateHz[i]);

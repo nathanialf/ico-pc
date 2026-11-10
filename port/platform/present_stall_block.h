@@ -10,21 +10,37 @@
  * alone: per 10 s block, and once a run at exit, the stalls against the
  * block's GPU span band and the display's rate.
  *
+ * Three mechanisms survive the logs (docs/port/ANDROID_DIAGNOSTICS.md
+ * "Issue 123's present stalls"), and each stall's entry carries the
+ * figure that tells them apart:
+ *   - the kernel driver's slumber needs the GPU idle for its idle timer
+ *     (80 ms by default): "the replay before began N ms earlier" on the
+ *     CPU's clock bounds that idle, as the GPU's counter cannot (it
+ *     restarts at the stall);
+ *   - a GPU fault and the driver's reset and replay: a long time the GPU
+ *     ran none of the replay's work ("the present held N ms past the
+ *     replay's GPU span") with the counter restarted and the clock low
+ *     after it;
+ *   - the present's queue alone: the same held time with no restart and
+ *     a span like the block's.
+ *
  * The window feeds every popped replay record (window_stall.c, from
  * window_stall_after) and closes each 10 s block.  The block's line, from
  * the run's first stall on (a block with a stall always; the blocks before
  * the first are counted into the run's sums without a line):
- *     window: present stalls: 2 over 250 ms in 10.0 s (340, 338 ms; GPU
- *     idle before the stalled replay: not measured (the GPU clock
- *     restarted), 0.9 ms; GPU clock restarts 2); GPU span 27.4 ms a
- *     replay (26.7-28.7 ms, band 25-30 ms; stalled replays 85.1, 88.5 ms);
- *     display 120.00 Hz, frame rate pin 59.94 Hz asked; GPU clock not
- *     readable
+ *     window: present stalls: 1 over 250 ms in 10.0 s (340 ms at 120.00
+ *     Hz: the replay before began 33.4 ms earlier, the present held 253.3
+ *     ms past the replay's GPU span, GPU idle before it not measured (the
+ *     GPU clock restarted)); GPU clock restarts 1; GPU span 27.4 ms a
+ *     replay (26.7-28.7 ms, band 25-30 ms; stalled replays 87.1 ms);
+ *     display 120.00 Hz; GPU clock not readable
  * The run's line at exit:
  *     window: present stalls this run: 7 over 250 ms in 3.3 min (2.1 a
- *     minute); by display rate: 120.00 Hz 7 in 3.3 min (2.1 a minute); by
- *     the block's GPU span: 25-30 ms 7 in 3.0 min (2.3 a minute), 20-25 ms
- *     0 in 0.3 min (0.0 a minute)
+ *     minute); 7 with the GPU clock restarted, 1 after a CPU-side gap of
+ *     80 ms or more (6 under, 0 not known), held past the GPU span
+ *     248-262 ms; by display rate: 120.00 Hz 7 in 3.3 min (2.1 a
+ *     minute); by the block's GPU span: 25-30 ms 7 in 3.0 min (2.3 a
+ *     minute), 20-25 ms 0 in 0.3 min (0.0 a minute)
  *
  * Pure C, no globals: the unit test is test/present_stall_block_test.c.
  */
@@ -33,6 +49,9 @@
 
 #include <stddef.h>
 
+/* the kernel driver's GPU idle timeout before slumber, ms (the
+   QCOM_KGSL_IDLE_TIMEOUT default; a vendor kernel may set another) */
+#define STALL_BLOCK_SLUMBER_MS 80.0
 /* a present this long or longer is a stall (present_hist.h
    PRESENT_STALL_LINE_MS: the blocked line's own size) */
 #define STALL_BLOCK_MS 250.0
@@ -54,6 +73,8 @@ typedef struct StallBlockRec {
     int gapValid;     /* gapMs measured (RdPerfRecord.gpuGapValid) */
     double gapMs;     /* the GPU idle before it; under 0 begun before the one before ended */
     double gapBackMs; /* the GPU's timestamp clock went back this much (a restart), 0 not */
+    double startMs; /* the replay's start on the CPU's clock (RdPerfRecord.startMs), 0 not known */
+    double displayHz; /* the display's rate as the record popped, 0 not known */
 } StallBlockRec;
 
 typedef struct StallBlock {
@@ -62,11 +83,19 @@ typedef struct StallBlock {
     double stallMs[STALL_BLOCK_LIST], stallGpuMs[STALL_BLOCK_LIST], stallGapMs[STALL_BLOCK_LIST];
     /* per listed stall: 1 the gap measured, 2 the clock restarted, 0 not measured */
     int stallGap[STALL_BLOCK_LIST];
-    int stallGpu[STALL_BLOCK_LIST]; /* stallGpuMs valid */
-    unsigned spanN;                 /* timed replays that did not stall */
+    int stallGpu[STALL_BLOCK_LIST];   /* stallGpuMs valid */
+    double stallHz[STALL_BLOCK_LIST]; /* the display's rate at the stall, 0 not known */
+    double stallSinceMs
+        [STALL_BLOCK_LIST]; /* the replay before began this long before, < 0 not known */
+    unsigned spanN;         /* timed replays that did not stall */
     double spanSum, spanMin, spanMax;
+    double lastStartMs; /* the record before's startMs (0 none) */
     /* the run */
     unsigned runStalls, runBlocks;
+    unsigned runRestartStalls;        /* stalls whose replay saw the GPU clock restart */
+    unsigned runLongGap, runShortGap; /* stalls after a CPU-side gap >= / < the idle timeout */
+    unsigned runHeldN;                /* stalls with a GPU span: held time known */
+    double runHeldMin, runHeldMax;
     double runSeconds;
     unsigned rateN;
     double rateHz[STALL_BLOCK_RATES], rateSeconds[STALL_BLOCK_RATES];
@@ -97,8 +126,9 @@ typedef struct StallBlockClock {
 /* The block's end, after blockSeconds: its line (without "window: ") into
    buf when the run has had a stall (returns 1), else buf "" (0); the block
    then joins the run's sums (displayHz the display's rate now, 0 not
-   known; askedMhz the frame rate pin's ask, 0 none) and starts again */
-int stall_block_end(StallBlock *b, double blockSeconds, double displayHz, int askedMhz,
+   known: the block's time is counted at it, each stall at its own rate)
+   and starts again */
+int stall_block_end(StallBlock *b, double blockSeconds, double displayHz,
                     const StallBlockClock *clock, char *buf, size_t size);
 /* the run's line at exit (without "window: "); "" (0) when no block
    closed */

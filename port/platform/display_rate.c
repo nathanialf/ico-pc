@@ -93,17 +93,12 @@ DisplayPinMode display_pin_mode(const char *value)
     return DISPLAY_PIN_AUTO;
 }
 
-int display_pin_rate(int framerate, DisplayPinMode mode, int vsyncHz)
+int display_pin_rate(int framerate, DisplayPinMode mode)
 {
-    if (mode == DISPLAY_PIN_OFF || framerate < 0 || framerate > 1000) {
+    if (mode == DISPLAY_PIN_OFF || framerate <= 0 || framerate > 1000) {
         return 0;
     }
-    if (framerate == 0) {
-        /* Original: the game's own field rate, which its 30 and 60 (25 and
-           50) pictures a second divide */
-        return vsyncHz == 50 ? DISPLAY_PIN_PAL_MHZ : DISPLAY_PIN_NTSC_MHZ;
-    }
-    return framerate * 1000;
+    return framerate;
 }
 
 int display_pin_surface(DisplayPin *p, const void *surface, int resumed)
@@ -143,44 +138,32 @@ void display_pin_failed(DisplayPin *p)
     p->asked = 0;
 }
 
-static void row_name(int framerate, char *row, size_t size)
-{
-    if (framerate == 0) {
-        snprintf(row, size, "Original");
-    } else if (framerate < 0) {
-        snprintf(row, size, "Uncapped");
-    } else {
-        snprintf(row, size, "%d", framerate);
-    }
-}
-
-/* what the asked rate is, for the line */
-static const char *rate_kind(int framerate)
-{
-    return framerate == 0 ? "the game's own field rate" : "the frame rate cap";
-}
-
 int display_pin_text(DisplayPinAct act, int rate, int framerate, const char *call, int ret,
                      char *buf, size_t size)
 {
     char row[24];
-    const double hz = (double)rate / 1000.0;
 
-    row_name(framerate, row, sizeof row);
+    if (framerate == 0) {
+        snprintf(row, sizeof row, "Original");
+    } else if (framerate < 0) {
+        snprintf(row, sizeof row, "Uncapped");
+    } else {
+        snprintf(row, sizeof row, "%d", framerate);
+    }
     if (call == NULL) {
         call = "(no call)";
     }
     if (act == DISPLAY_PIN_SET_AGAIN) {
         return snprintf(buf, size,
-                        "frame rate pin: asked again for a new surface: %.2f Hz (%s; the Frame "
-                        "rate row is %s) with %s: returned %d%s",
-                        hz, rate_kind(framerate), row, call, ret, ret == 0 ? "" : " (refused)");
+                        "frame rate pin: asked again for a new surface: %d Hz (fixed source; the "
+                        "Frame rate row is %s) with %s: returned %d%s",
+                        rate, row, call, ret, ret == 0 ? "" : " (refused)");
     }
     if (act == DISPLAY_PIN_SET) {
         return snprintf(buf, size,
-                        "frame rate pin: asked %.2f Hz (%s; the Frame rate row is %s) with %s: "
-                        "returned %d%s",
-                        hz, rate_kind(framerate), row, call, ret, ret == 0 ? "" : " (refused)");
+                        "frame rate pin: asked %d Hz (fixed source; the Frame rate row is %s) with "
+                        "%s: returned %d%s",
+                        rate, row, call, ret, ret == 0 ? "" : " (refused)");
     }
     if (act == DISPLAY_PIN_RELEASE) {
         return snprintf(buf, size,
@@ -191,66 +174,4 @@ int display_pin_text(DisplayPinAct act, int rate, int framerate, const char *cal
         buf[0] = '\0';
     }
     return 0;
-}
-
-int display_pin_none_text(int framerate, DisplayPinMode mode, char *buf, size_t size)
-{
-    char row[24];
-
-    row_name(framerate, row, sizeof row);
-    if (mode == DISPLAY_PIN_OFF) {
-        return snprintf(buf, size,
-                        "frame rate pin: nothing asked ([dev] frame_rate_pin = off; the Frame rate "
-                        "row is %s)",
-                        row);
-    }
-    return snprintf(buf, size,
-                    "frame rate pin: nothing asked (the Frame rate row is %s: the display's own "
-                    "choice)",
-                    row);
-}
-
-int display_pin_took(int askedMhz, double displayHz)
-{
-    const double asked = (double)askedMhz / 1000.0;
-    double n;
-
-    if (!(displayHz > 0.0) || askedMhz <= 0) {
-        return -2;
-    }
-    if (fabs(displayHz - asked) <= 0.5) {
-        return 0;
-    }
-    n = floor(displayHz / asked + 0.5);
-    if (n >= 2.0 && fabs(displayHz - n * asked) <= 0.005 * displayHz) {
-        return (int)n;
-    }
-    return -1;
-}
-
-int display_pin_took_text(int askedMhz, double displayHz, double runSeconds, char *buf, size_t size)
-{
-    const int took = display_pin_took(askedMhz, displayHz);
-    const double asked = (double)askedMhz / 1000.0;
-    char what[128];
-
-    if (took == -2) {
-        return snprintf(buf, size,
-                        "frame rate pin: %.2f Hz asked; the display's rate not known (run time "
-                        "%.1f s)",
-                        asked, runSeconds);
-    }
-    if (took == 0) {
-        snprintf(what, sizeof what, "the ask taken");
-    } else if (took > 0) {
-        snprintf(what, sizeof what,
-                 "%d x the ask (the system kept a multiple; the pictures still divide it)", took);
-    } else {
-        snprintf(what, sizeof what,
-                 "not a multiple of the ask (the pictures do not divide it: uneven spacing)");
-    }
-    return snprintf(buf, size,
-                    "frame rate pin: the display runs %.2f Hz with %.2f Hz asked: %s (run time "
-                    "%.1f s)",
-                    displayHz, asked, what, runSeconds);
 }

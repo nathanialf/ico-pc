@@ -15,7 +15,7 @@ screen recording the app's Java side reports. The window's lines that use them a
 | `port/platform/thermal_text.c`, `thermal_text.h` | the thermal status names and the thermal and screen recording lines (`thermal_text_test`, every platform) |
 | `port/platform/android/host_android.c` | `ico_host_thermal` and the two native methods the Java listeners call |
 | `port/platform/window_stall.c`, `window_stall.h` | the window's side: the open line, the block lines, the around lines, the present stall lines |
-| `port/platform/present_stall_block.c`, `present_stall_block.h` | the present stalls per 10 s block and per run against the GPU span band and the display's rate (`present_stall_block_test`, every platform) |
+| `port/platform/present_stall_block.c`, `present_stall_block.h` | the present stalls per 10 s block and per run (`present_stall_block_test`, every platform) |
 | `android/app/src/main/java/com/defnf/icopc/IcoActivity.java` | the thermal getters and the two listeners |
 
 ## The kernel GPU driver's sampler
@@ -479,41 +479,93 @@ causes in it, each on its own lines. The lines to read, in the log's order:
   ...)` (first 8, then every 100th). A restart at every stall is more evidence for a power-state
   change of the GPU at the stall (a hypothesis; the kernel nodes are unreadable there).
 
-## Issue 123's present stalls: the frame rate pin and the stall lines
+## Issue 123's present stalls: what the mechanisms predict
 
-- **Why the pin left the display at 120 Hz.** The latest issue 123 log's Frame rate row was Original
-  and the one before's Uncapped; the pin asked a rate only for a number, so both logs say `frame rate
-  pin: on` with no `asked` line after it, and `display refresh: 120.00 Hz ... 0 changes this run`
-  in every block: no vote was ever made. It also asked with FIXED_SOURCE, the video value (the NDK
-  reference: DEFAULT "should be used when displaying game content"). Original now asks the game's
-  own field rate, 59.94 Hz (50 Hz in a European disc's 50 Hz mode), which the 30 pictures a second
-  divide, with DEFAULT and the exact rate, and the window says what the display took:
-  `window: frame rate pin: the display runs 60.00 Hz with 59.94 Hz asked: the ask taken (run time
-  10.2 s)`, or `2 x the ask (the system kept a multiple; ...)`, or `not a multiple of the ask`.
-  The system may keep 120 Hz all the same (a multiple, which Android's guide says it may pick);
-  the line says which. The words and the documentation lines are in
-  [DISPLAY.md](DISPLAY.md#the-refresh-rate-and-the-frame-rate-pin).
-- **The stall lines.** From the run's first present of 250 ms or more, every 10 s block has
-  `window: present stalls: N over 250 ms in 10.0 s (...)`: each stall's length, the GPU idle before
-  the stalled replay (`not measured (the GPU clock restarted)` when the Adreno's counter restarted,
-  as it did at every stall of the latest log), the GPU clock restarts in the block, the block's GPU
-  span (mean, range, 5 ms band) against the stalled replays' spans, the display's rate, the pin's
-  ask and the kernel driver's GPU clock where readable (`GPU clock not readable` on the reporter's
-  phone: KGSL is EACCES there). At exit: `window: present stalls this run: ... a minute; by display
-  rate: ...; by the block's GPU span: ...`.
-- **Reading them.** The hypothesis is a GPU power-state change at the stall (each stalled replay's
-  passes about 3x their block's means, the timestamp counter restarted, the GPU idle about 6 ms
-  before nearly every replay at 30 fps). The run line answers two questions from one log: are the
-  stalls a minute different at 60 Hz than at 120 Hz (the pin taken against not), and do they sit in
-  one span band (the 26-35 ms band of an earlier deep dive) while other bands have none. Restarts
-  without a stall in the same blocks would say the power change happens without the stall too.
-- **No keep-busy attempt.** Nothing in the logs ties the stalls to the GPU's idle time:
-  the replays before each stall were steady (5.8 ms idle on average, the same as the blocks without
-  a stall), only the first stall followed a long pause (the 818 ms late step of the skin-check
-  dump), and the idle before the stalled replay itself cannot be measured because the counter
-  restarted. Android documents no app-side control of the GPU's power state, so work submitted
-  only to keep the GPU awake would cost power and heat on every phone against a cause not shown.
-  The lines above are what would show it.
+The reporter's run (Adreno 740, Qualcomm's own driver, Frame rate Original, a 120 Hz display that
+never changed) has seven presents of 336-344 ms inside `vkQueuePresentKHR`, 5-69 s apart; the
+run before (Frame rate Uncapped, a 37 ms GPU span) one of 404 ms in 150 s. What the two logs
+settle:
+
+- **The GPU completed nothing for the whole stall.** After every stall the next replay's wait for
+  GPU completion (`fence` in the after line) is the stall's own length (341.4, 344.0, 340.9, 341.6,
+  338.8, 337.1, 337.9 ms; 405.5 in the earlier run), while the present call held the submit
+  thread: two threads blocked on the GPU for the same time. The swapchain lock and the surface poll
+  were 0.0 ms and the display's image was free in every picture. So it is not the present queue
+  alone (a display that holds buffers would leave the GPU completing work) and not a wait of the
+  port's own around the present.
+- **The GPU's timestamp counter restarted between two replays.** In six of the seven stalls the
+  stalled replay's first stamp is earlier than the replay before's first (the restart words); its
+  whole span is coherent, so the restart came before the stalled replay's first command, after
+  the replay before's last. Its commands ran (all its stamps were written): none were dropped.
+- **The clock was low after it.** Five stalled replays ran 85-91 ms against 27.5 (every pass
+  about 3x), one ran 72 ms, and replay 1572 ran 30.9 ms (normal): the 3x is not universal; the
+  replays after ran 30-71 ms, then normal.
+- **The stall's length is nearly constant** (336-344 ms in one run whatever the content), which
+  points at a timeout or a fixed recovery cost in the driver more than at work.
+- **No device loss and no error**, and stalls never came 3 in 3 s.
+
+Candidate mechanisms, against those facts:
+
+1. **Slumber (the kernel driver's idle power-down).** The driver re-arms an idle timer each time
+   the GPU goes idle and powers the GPU down when it expires; the default is 80 ms
+   (`QCOM_KGSL_IDLE_TIMEOUT`). A wake starts the clocks low and the counter restarts (the counter
+   is in the GX power domain, below). It needs the GPU idle 80 ms. At 30 pictures a second the
+   replays were 33 ms apart in every stalled block but the first (replay 785 came after the 818 ms
+   step of the skin check's dump), so slumber explains at most the first stall, and a wake is
+   milliseconds, not 340. The new `the replay before began N ms earlier` figure settles it per
+   stall: under 80 ms the GPU cannot have idled 80 ms.
+2. **Inter-frame power collapse (IFPC).** The GMU collapses the GX domain between frames after a
+   hysteresis of tens to hundreds of microseconds, well inside the 6 ms the GPU idles before almost
+   every replay, so by those values it would happen on ordinary frames too, without a stall or
+   a counter restart; a stall is not simply an IFPC. A failed or
+   slow IFPC exit that the driver recovers from would look like mechanism 3.
+3. **A GPU fault or hang and the driver's reset and replay.** Qualcomm's hardware-scheduler path
+   restarts the GMU and the GPU and resubmits the in-flight submissions; a context that is not
+   invalidated sees no error; the older dispatcher invalidated a context only after 3 recoveries
+   in 3 s. This fits every fact: the GPU completes nothing for a fixed time (detection, snapshot,
+   restart), the counter restarts (the GX domain is power-cycled), the replayed work runs at the
+   restart's low clock, nothing is lost, no error. It is the best fit and it is not proven: the
+   reset count is in the kernel's sysfs, which the app cannot read on that phone (EACCES), and the
+   device offers no fault report (`VK_EXT_device_fault` not offered, the log's loss diagnostics
+   line). What faulted is not known; the skin check's bone block that the GPU copied differently
+   from the CPU's bytes in the first stall's replay is the one sign of a fault in the port's own
+   work, and it was seen once.
+4. **The present path (the window's buffer queue).** By default a Vulkan producer on Android is
+   throttled at the present until the consumer has done with the buffer before; that makes a
+   present wait for earlier work, which is what the 340 ms is, but it does not restart the GPU's
+   counter or hold the GPU's other completions. Killed as the cause; it is how the stall reaches
+   the present.
+5. **Something the port submits around the present.** Killed by the split (lock 0.0, poll 0.0,
+   call 340) and by the render thread's fence wait of the same length.
+
+What the next log will say on its own (`present stalls:` per block, `present stalls this run:` at
+exit, [DISPLAY.md](DISPLAY.md#the-refresh-rate-and-the-frame-rate-pin)): per stall the CPU-side
+interval since the replay before (mechanism 1 needs 80 ms or more), the time the present held
+past the replay's GPU span (mechanism 3: about the stall's length; mechanism 1: a few ms) and
+whether the counter restarted, the display's rate, and at exit the counts of each kind and the
+stalls a minute by display rate and by the block's GPU span band. Not done: a check that the
+picture after a stall is the right picture (the skin check is the only GPU-side content check)
+and the kernel's reset count (unreadable).
+
+Sources: the kernel driver's idle timeout default (`QCOM_KGSL_IDLE_TIMEOUT` 80; `idle_timer`
+re-armed with `jiffies + interval_timeout` when the GPU goes idle): Qualcomm's graphics-kernel
+`kgsl_pwrctrl` in vendor trees, e.g.
+https://git.evolution-x.org/Evolution-X-Devices/kernel_oneplus_8750-modules/src/branch/bka/qcom/opensource/graphics-kernel/kgsl_pwrctrl.h;
+the counter's power domain: "CP_ALWAYS_ON counter falls under GX domain which is collapsed during
+IFPC" (drm/msm "Switch to GMU AO counter",
+https://lkml.indiana.edu/hypermail/linux/kernel/2507.2/09476.html); the IFPC hysteresis (about
+78 us on a6xx, `GMU_PWR_COL_HYST`; about 300 us for the long hysteresis on a6xx-a8xx, drm/msm "Add
+support for IFPC", https://lkml.indiana.edu/hypermail/linux/kernel/2507.2/09496.html); the reset
+and replay ("Restart the gmu and gpu" and replay in-flight commands, `a6xx_hwsched_reset_replay` /
+`gen7_hwsched_reset_replay`, Qualcomm graphics-kernel `adreno_gen7_hwsched.h`; resubmission after
+hwsched recovery,
+https://gitlab.e.foundation/e/devices/android_kernel_fairphone_fp5/-/commit/44ed382d7f42d2b8da5ef5850a12e80a5fff5e5a);
+the fault throttle (3 recoveries in 3000 ms, the older `adreno_dispatch.c`,
+https://android.googlesource.com/kernel/msm/+/4b39d42e9b31b3cded28ba71d1d979a8ea70de37/drivers/gpu/msm/adreno_dispatch.c);
+the producer throttling ("vkQueuePresentKHR() calls will stall the CPU until the GPU is done
+processing the previous frame", `ANativeWindow_setProducerThrottlingEnabled`,
+https://developer.android.com/ndk/reference/group/a-native-window). These are vendor and
+upstream kernel sources, not the Xiaomi kernel the phone runs; its values may differ.
 
 ## The thermal state and screen recording
 

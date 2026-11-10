@@ -423,7 +423,7 @@ static void video_settings(RdSettings *rs, int w, int h)
         window_timer_budget_reset();
     }
     s_pres.framerate = ico_video_framerate();
-    window_frame_rate_pin(s_window, s_pres.framerate); /* Android: the pictures' rate */
+    window_frame_rate_pin(s_window, s_pres.framerate); /* Android: the cap as a fixed rate */
     rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
     /* presenting between ticks with vsync on, the swapchain prefers the
        mailbox mode: no tearing, and a present never waits for the display,
