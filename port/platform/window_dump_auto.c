@@ -114,9 +114,10 @@ static void skin_capture(const char *sidecar)
     ico_input_record_flush();
     snprintf(j->logPath, sizeof(j->logPath), "%s", ico_diag_log_path());
     snprintf(j->sidecar, sizeof(j->sidecar), "%s", sidecar);
+    /* the two paths cut to what the line holds (-Wformat-truncation) */
     snprintf(j->text, sizeof(j->text),
-             "skin check: the capture: %s and the frame dump %s, the presented picture at the "
-             "next present%s%s",
+             "skin check: the capture: %.220s and the frame dump %.220s, the presented picture at "
+             "the next present%s%s",
              sidecar[0] != '\0' ? sidecar : "no sidecar", j->zip,
              havePrev ? "" : " (without the tick before)",
              s_pres.presentPng[0] != '\0' ? "" : " (not armed)");
@@ -167,7 +168,11 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
         fprintf(stderr, "window: slow scene: no usable logs folder\n");
         return 0;
     }
-    snprintf(j->dumpName, sizeof(j->dumpName), "%s/slow-%s.rddump", logs, stamp);
+    if (snprintf(j->dumpName, sizeof(j->dumpName), "%s/slow-%s.rddump", logs, stamp) >=
+        (int)sizeof(j->dumpName)) {
+        fprintf(stderr, "window: slow scene: the logs folder's path is too long\n");
+        return 0;
+    }
     use_flush();
     if (!rd_dump_retained_frame_mem(frame, &j->dump, &j->dumpLen, &got)) {
         fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)frame);
