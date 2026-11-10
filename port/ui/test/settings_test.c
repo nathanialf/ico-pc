@@ -31,7 +31,8 @@
 #include "ui_mouse.h"
 #include "ico_rows.h"
 #include "popup.h"
-#include "ui_lang.h" /* ui_settings_text_language */
+#include "ui_lang.h"             /* ui_settings_text_language */
+#include "settings_difficulty.h" /* the New Game draft */
 
 static void testBuild(void)
 {
@@ -154,56 +155,59 @@ static void testBuild(void)
         UI_STR_OPT_TOUCH_MODE, UI_STR_OPT_TOUCH_SIZE,  UI_STR_OPT_TOUCH_OPACITY,
         UI_STR_OPT_TOUCH_EDIT, UI_STR_OPT_TOUCH_SNAP,  UI_STR_OPT_TOUCH_GRID,
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
-    /* Gameplay: its own six rows, the three pages' links, Back */
-    static const int gameOpts[] = {UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_SECOND_CARD,
-                                   UI_OPT_VAR_NO_HINTS, UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,
-                                   UI_OPT_LINK,         UI_OPT_LINK,        UI_OPT_LINK,
-                                   UI_OPT_LINK,         UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,
-                                   UI_STR_OPT_DOOR_FIX,
-                                   UI_STR_OPT_SECOND_CARD,
-                                   UI_STR_OPT_VAR_NO_HINTS,
-                                   UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS,
-                                   UI_STR_SECTION_YORDA,
-                                   UI_STR_SECTION_SHADOWS,
-                                   UI_STR_SECTION_COMBAT,
-                                   UI_STR_SECTION_CUTSCENES,
-                                   UI_STR_BACK};
-    static const int yordaOpts[] = {UI_OPT_PIT_TIME,          UI_OPT_YORDA_TRIPS,
-                                    UI_OPT_NATURAL_CHAINS,    UI_OPT_VAR_CHAIN_SPEED,
+    /* Gameplay: its own seven rows, the two pages' links, Back */
+    static const int gameOpts[] = {UI_OPT_STICK_FIX,   UI_OPT_DOOR_FIX, UI_OPT_SECOND_CARD,
+                                   UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,  UI_OPT_VAR_SWORD_COLOUR,
+                                   UI_OPT_VAR_WEAPON,  UI_OPT_LINK,     UI_OPT_LINK,
+                                   UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,     UI_STR_OPT_DOOR_FIX,
+                                   UI_STR_OPT_SECOND_CARD,   UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,       UI_STR_OPT_VAR_SWORD_COLOUR,
+                                   UI_STR_OPT_VAR_WEAPON,    UI_STR_SECTION_YORDA,
+                                   UI_STR_SECTION_CUTSCENES, UI_STR_BACK};
+    static const int yordaOpts[] = {UI_OPT_NATURAL_CHAINS, UI_OPT_VAR_CHAIN_SPEED,
                                     UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
-    static const int yordaStrs[] = {UI_STR_OPT_PIT_TIME,          UI_STR_OPT_YORDA_TRIPS,
-                                    UI_STR_OPT_NATURAL_CHAINS,    UI_STR_OPT_VAR_CHAIN_SPEED,
+    static const int yordaStrs[] = {UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_VAR_CHAIN_SPEED,
                                     UI_STR_OPT_VAR_CHAIN_DAMPING, UI_STR_BACK};
-    static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED,   UI_OPT_VAR_TOUGHNESS,
-                                     UI_OPT_VAR_AGGRESSION, UI_OPT_YORDA,
-                                     UI_OPT_VAR_PEACEFUL,   UI_OPT_BACK};
+    /* the New Game's Customize and its three pages: every row of the draft */
+    static const int custOpts[] = {UI_OPT_LINK, UI_OPT_LINK, UI_OPT_LINK, UI_OPT_BACK};
+    static const int custStrs[] = {UI_STR_SECTION_SHADOWS, UI_STR_SECTION_COMBAT, UI_STR_DIFF_RULES,
+                                   UI_STR_BACK};
+    static const int shadowOpts[] = {
+        UI_OPT_SHADOW_SPEED, UI_OPT_VAR_TOUGHNESS,    UI_OPT_VAR_AGGRESSION,  UI_OPT_VAR_PEACEFUL,
+        UI_OPT_YORDA,        UI_OPT_SHADOWS_TOGETHER, UI_OPT_DIFF_NO_SHADOWS, UI_OPT_BACK};
     static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED,   UI_STR_OPT_VAR_TOUGHNESS,
-                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_YORDA,
-                                     UI_STR_OPT_VAR_PEACEFUL,   UI_STR_BACK};
-    /* the two weapon rows after Queen barrier (Light sword colour is built on
-       every disc and hidden where there is no light sword) */
+                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_PEACEFUL,
+                                     UI_STR_OPT_YORDA,          UI_STR_OPT_SHADOWS_TOGETHER,
+                                     UI_STR_DIFF_NO_SHADOWS,    UI_STR_BACK};
     static const int combatOpts[] = {UI_OPT_VAR_AUTO_GUARD,
                                      UI_OPT_VAR_ATTACK_TURN,
                                      UI_OPT_VAR_SHADOWS_WAIT_DOWN,
                                      UI_OPT_VAR_ONE_HIT,
                                      UI_OPT_VAR_NEVER_DODGE,
-                                     UI_OPT_SHADOWS_TOGETHER,
                                      UI_OPT_VAR_BARRIER,
-                                     UI_OPT_VAR_SWORD_COLOUR,
-                                     UI_OPT_VAR_WEAPON,
                                      UI_OPT_BACK};
     static const int combatStrs[] = {UI_STR_OPT_VAR_AUTO_GUARD,
                                      UI_STR_OPT_VAR_ATTACK_TURN,
                                      UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN,
                                      UI_STR_OPT_VAR_ONE_HIT,
                                      UI_STR_OPT_VAR_NEVER_DODGE,
-                                     UI_STR_OPT_SHADOWS_TOGETHER,
                                      UI_STR_OPT_VAR_BARRIER,
-                                     UI_STR_OPT_VAR_SWORD_COLOUR,
-                                     UI_STR_OPT_VAR_WEAPON,
                                      UI_STR_BACK};
+    static const int rulesOpts[] = {UI_OPT_PIT_TIME,
+                                    UI_OPT_YORDA_TRIPS,
+                                    UI_OPT_VAR_NO_HINTS,
+                                    UI_OPT_DIFF_KNOCK_LIMIT,
+                                    UI_OPT_DIFF_KNOCK_SCOPE,
+                                    UI_OPT_DIFF_PERMADEATH,
+                                    UI_OPT_BACK};
+    static const int rulesStrs[] = {UI_STR_OPT_PIT_TIME,
+                                    UI_STR_OPT_YORDA_TRIPS,
+                                    UI_STR_OPT_VAR_NO_HINTS,
+                                    UI_STR_DIFF_KNOCK_LIMIT,
+                                    UI_STR_DIFF_KNOCK_SCOPE,
+                                    UI_STR_DIFF_PERMADEATH,
+                                    UI_STR_BACK};
     static const int cutOpts[] = {UI_OPT_SKIP_OPENING, UI_OPT_VAR_NO_LOOK, UI_OPT_VAR_IGNORE_CAMS,
                                   UI_OPT_BACK};
     static const int cutStrs[] = {UI_STR_OPT_SKIP_OPENING, UI_STR_OPT_VAR_NO_LOOK,
@@ -262,23 +266,44 @@ static void testBuild(void)
                   lt_ext_prop(cl[12])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
               "Touch screen opens its page");
     }
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
-    CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 6), "Gameplay > Yorda rows");
-    CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 6), "Gameplay > Shadows rows");
-    CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 10), "Gameplay > Combat rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 10), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 4), "Gameplay > Yorda rows");
     CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
+    CHECK(labelsAre(UI_PAGE_CUSTOMIZE, custOpts, custStrs, 4), "Customize rows");
+    CHECK(labelsAre(UI_PAGE_SHADOWS, shadowOpts, shadowStrs, 8), "Customize > Shadows rows");
+    CHECK(labelsAre(UI_PAGE_COMBAT, combatOpts, combatStrs, 7), "Customize > Combat rows");
+    CHECK(labelsAre(UI_PAGE_RULES, rulesOpts, rulesStrs, 7), "Customize > Rules rows");
     {
-        /* Yorda, Shadows, Combat and Cutscenes open their pages, right before
-           Back (settings_extra's testGameplayPages walks them and back) */
-        static const UiSettingsPage kSub[4] = {UI_PAGE_YORDA, UI_PAGE_SHADOWS, UI_PAGE_COMBAT,
-                                               UI_PAGE_CUTSCENES};
+        /* Yorda and Cutscenes open their pages, right before Back (settings_extra's
+           testNaturalChains and testSkipOpening walk them and back); Customize's
+           three links its pages, which no Settings page leads to */
+        static const UiSettingsPage kSub[2] = {UI_PAGE_YORDA, UI_PAGE_CUTSCENES};
+        static const UiSettingsPage kCust[3] = {UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_RULES};
         int gl[16], go[16];
         const int gn = ui_settings_page_rows(UI_PAGE_GAMEPLAY, gl, go, NULL, 16);
-        CHECK(gn == 11, "Gameplay: eleven rows (%d)", gn);
-        for (int k = 0; k < 4 && gn == 11; k++) {
-            CHECK(go[6 + k] == UI_OPT_LINK &&
-                      lt_ext_prop(gl[6 + k])->right == ui_settings_page_layout(kSub[k]),
-                  "Gameplay row %d opens page %d", 6 + k, kSub[k]);
+        CHECK(gn == 10, "Gameplay: ten rows (%d)", gn);
+        for (int k = 0; k < 2 && gn == 10; k++) {
+            CHECK(go[7 + k] == UI_OPT_LINK &&
+                      lt_ext_prop(gl[7 + k])->right == ui_settings_page_layout(kSub[k]),
+                  "Gameplay row %d opens page %d", 7 + k, kSub[k]);
+        }
+        const int cn = ui_settings_page_rows(UI_PAGE_CUSTOMIZE, gl, go, NULL, 16);
+        for (int k = 0; k < 3 && cn == 4; k++) {
+            CHECK(go[k] == UI_OPT_LINK &&
+                      lt_ext_prop(gl[k])->right == ui_settings_page_layout(kCust[k]),
+                  "Customize row %d opens page %d", k, kCust[k]);
+        }
+        for (int p = 0; p < UI_PAGE_COUNT; p++) {
+            int pl[24];
+            const int pn = ui_settings_page_rows((UiSettingsPage)p, pl, NULL, NULL, 24);
+            for (int k = 0; k < pn && p != UI_PAGE_CUSTOMIZE; k++) {
+                for (int c = 0; c < 3; c++) {
+                    CHECK(lt_ext_prop(pl[k])->right != ui_settings_page_layout(kCust[c]),
+                          "page %d row %d does not open Customize's page %d", p, k, kCust[c]);
+                }
+                CHECK(lt_ext_prop(pl[k])->right != ui_settings_page_layout(UI_PAGE_CUSTOMIZE),
+                      "page %d row %d does not open Customize", p, k);
+            }
         }
     }
     /* the pop-ups switch is an item of the list (first, before the achievements), not a row of its own */
@@ -299,7 +324,7 @@ static void testBuild(void)
                   l->first >= LT_GAME_PROPERTY_COUNT && l->last > l->first && l->proc != NULL,
               "page %d layout", p);
     }
-    /* Yorda safe on Gameplay > Shadows (v0.10.5), on neither Gameplay nor the Yorda page */
+    /* Shadows never take Yorda on Customize > Shadows, on neither Gameplay nor its Yorda page */
     int yorda = ui_settings_row_of(UI_PAGE_SHADOWS, UI_OPT_YORDA);
     CHECK(yorda >= 0 && ui_settings_row_of(UI_PAGE_GAMEPLAY, UI_OPT_YORDA) < 0 &&
               ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_YORDA) < 0,
@@ -340,28 +365,47 @@ static void testBuild(void)
     CHECK(ui_new_game_screen_row(2, 0) == -1 && ui_new_game_screen_row(-1, 1) == -1,
           "no third Off/On row");
     {
-        /* the Start row, centred under New Game+ */
+        /* Difficulty (its value and two arrows after it, owned by it),
+           Customize, Mirror mode, New Game+ at pitch 24 from y 46, the Start
+           row centred under them at 148 */
+        const int d = ui_new_game_screen_difficulty(), c = ui_new_game_screen_customize();
         const int st = ui_new_game_screen_start();
+        CHECK(d >= 0 && strcmp(lt_ext_row_text(d), "Difficulty") == 0 &&
+                  lt_ext_prop(d)->selectable && lt_ext_prop(d + 1)->ownerItem == d &&
+                  lt_ext_prop(d + 2)->ownerItem == d && lt_ext_prop(d + 3)->ownerItem == d &&
+                  lt_ext_pointer_role(d + 1) == LT_POINTER_STEP &&
+                  lt_ext_pointer_role(d + 2) == LT_POINTER_LEFT &&
+                  lt_ext_pointer_role(d + 3) == LT_POINTER_RIGHT,
+              "the Difficulty row, its value and arrows (%d)", d);
+        CHECK(c >= 0 && strcmp(lt_ext_row_text(c), "Customize") == 0, "the Customize row (%d)", c);
+        CHECK(lt_ext_prop(d)->dispY == 46 && lt_ext_prop(c)->dispY == 70 &&
+                  lt_ext_prop(ui_new_game_screen_row(0, 0))->dispY == 94 &&
+                  lt_ext_prop(ui_new_game_screen_row(1, 0))->dispY == 118 &&
+                  lt_ext_prop(st)->dispY == 148,
+              "the rows at 46, 70, 94, 118, Start at 148 (%d %d %d)", lt_ext_prop(d)->dispY,
+              lt_ext_prop(c)->dispY, lt_ext_prop(st)->dispY);
         CHECK(st >= 0 && strcmp(lt_ext_row_text(st), "Start") == 0, "the Start row (%d)", st);
-        CHECK(lt_ext_prop(st)->dispY > lt_ext_prop(ui_new_game_screen_row(1, 0))->dispY &&
-                  lt_ext_prop(st)->dispY == 146,
-              "Start under New Game+ (y %d)", lt_ext_prop(st)->dispY);
+        gFlagGameClear = 0;
         const int m0 = ui_new_game_screen_enter();
-        CHECK(m0 == ml, "entered");
+        CHECK(m0 == ml && lt_ext_layout(ml)->curItem == d &&
+                  strcmp(lt_ext_row_text(d + 1), "Normal") == 0,
+              "entered: the cursor on Difficulty, Normal (\"%s\")", lt_ext_row_text(d + 1));
         const int mo = ui_new_game_screen_row(0, 0), no = ui_new_game_screen_row(1, 0);
-        CHECK(lt_ext_prop(mo)->upItem == st && lt_ext_prop(mo)->downItem == no &&
+        CHECK(lt_ext_prop(d)->upItem == st && lt_ext_prop(d)->downItem == c &&
+                  lt_ext_prop(c)->upItem == d && lt_ext_prop(c)->downItem == mo &&
+                  lt_ext_prop(mo)->upItem == c && lt_ext_prop(mo)->downItem == no &&
                   lt_ext_prop(no)->upItem == mo && lt_ext_prop(no)->downItem == st &&
-                  lt_ext_prop(st)->upItem == no && lt_ext_prop(st)->downItem == mo,
-              "up/down: Mirror mode, New Game+, Start, round");
+                  lt_ext_prop(st)->upItem == no && lt_ext_prop(st)->downItem == d,
+              "up/down: Difficulty, Customize, Mirror mode, New Game+, Start, round");
     }
     {
         /* every row of the screen inside the layout, the note's bottom
            at 212 at most */
         const LtProp *l = lt_ext_layout(ml);
         for (int k = l->first; k < l->last; k++) {
-            CHECK(lt_ext_prop(k)->dispY >= 60 &&
+            CHECK(lt_ext_prop(k)->dispY >= 40 &&
                       lt_ext_prop(k)->dispY + lt_ext_prop(k)->dispH <= 212,
-                  "New Game screen row %d in 60..212 (%d+%d)", k, lt_ext_prop(k)->dispY,
+                  "New Game screen row %d in 40..212 (%d+%d)", k, lt_ext_prop(k)->dispY,
                   lt_ext_prop(k)->dispH);
         }
     }
@@ -1638,15 +1682,18 @@ static void testPauseStats(void)
     ico_gs_reset();
 }
 
-/* the New Game screen, run by the real layout code: two rows, Mirror
- * mode and New Game+.  The cursor starts on Mirror mode's Off, Right moves
- * to On, Down to New Game+'s choice and Up back to Mirror mode's; each row
- * keeps its own choice, the other row's choice stays lit, and the note
- * follows the cursor's row.  New Game+ starts on when the game was
- * finished (gFlagGameClear set: a finished save's new game), off
- * otherwise; Cross or START writes both choices (the run's mirror mode,
- * gFlagGameClear) and starts the game once; Triangle goes back to the
- * vibration screen (layout 9). */
+/* the New Game screen, run by the real layout code: Difficulty and
+ * Customize above the two rows Mirror mode and New Game+.  The cursor
+ * starts on Difficulty (Normal), Down goes to Customize, then to Mirror
+ * mode's Off; Right moves to On, Down to New Game+'s choice and Up back to
+ * Mirror mode's; each row keeps its own choice, the other row's choice
+ * stays lit, and the note follows the cursor's row.  New Game+ starts on
+ * when the game was finished (gFlagGameClear set: a finished save's new
+ * game), off otherwise; Cross or START writes both choices (the run's
+ * mirror mode, gFlagGameClear), hands the draft to the journey
+ * (ico_difficulty_begin) and starts the game once; Triangle goes back to the
+ * vibration screen (layout 9).  The Difficulty row's own steps and Customize
+ * are settings_difficulty_test.c's. */
 static void testNewGameScreen(void)
 {
     useConfig("version = 1\n");
@@ -1662,14 +1709,24 @@ static void testNewGameScreen(void)
     int ml = ui_new_game_screen_enter();
     const int mOff = ui_new_game_screen_row(0, 0), mOn = ui_new_game_screen_row(0, 1);
     const int nOff = ui_new_game_screen_row(1, 0), nOn = ui_new_game_screen_row(1, 1);
+    const int diff = ui_new_game_screen_difficulty(), cust = ui_new_game_screen_customize();
     const int note = lt_ext_layout(ml)->last - 1;
     CHECK(ml >= 0, "the screen is there once installed");
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "the New Game screen (%d)", current_layout_id);
     LtProp *l = lt_ext_layout(ml);
-    CHECK(l->curItem == mOff, "the cursor on Mirror mode's Off");
-    CHECK(lt_ext_prop(nOff)->ownerItem == mOff && lt_ext_prop(nOn)->ownerItem == -1,
-          "New Game+ Off lit (a plain New Game)");
+    CHECK(l->curItem == diff && strcmp(lt_ext_row_text(diff + 1), "Normal") == 0,
+          "the cursor on Difficulty, Normal");
+    CHECK(lt_ext_prop(nOff)->ownerItem == diff && lt_ext_prop(mOff)->ownerItem == diff &&
+              lt_ext_prop(nOn)->ownerItem == -1,
+          "Mirror mode Off and New Game+ Off lit (a plain New Game)");
+    CHECK(strncmp(lt_ext_row_text(note), "The game as it shipped", 22) == 0,
+          "the note says what Normal is (%s)", lt_ext_row_text(note));
+    press(0x4000); /* down */
+    CHECK(l->curItem == cust && strncmp(lt_ext_row_text(note), "Change each rule", 16) == 0,
+          "down: Customize, its note (%s)", lt_ext_row_text(note));
+    press(0x4000);
+    CHECK(l->curItem == mOff, "down: Mirror mode's Off");
     CHECK(strncmp(lt_ext_row_text(note), "Plays the game flipped", 22) == 0,
           "the note explains Mirror mode (%s)", lt_ext_row_text(note));
     press(0x2000); /* right */
@@ -1688,6 +1745,9 @@ static void testNewGameScreen(void)
     press(0x1000); /* up */
     CHECK(l->curItem == mOn, "up: Mirror mode's choice, On, kept");
     CHECK(lt_ext_prop(nOn)->ownerItem == mOn, "New Game+ On lit");
+    press(0x1000);
+    CHECK(l->curItem == cust, "up from Mirror mode: Customize");
+    press(0x4000);
     press(0x4000);
     CHECK(l->curItem == nOn, "down again: New Game+ On, kept");
     const int start = ui_new_game_screen_start();
@@ -1701,12 +1761,16 @@ static void testNewGameScreen(void)
     press(0x2000);
     CHECK(l->curItem == start, "no left/right on Start");
     press(0x4000); /* the rows in a loop */
-    CHECK(l->curItem == mOn, "down from Start: Mirror mode's choice");
+    CHECK(l->curItem == diff, "down from Start: Difficulty");
     press(0x1000);
-    CHECK(l->curItem == start, "up from Mirror mode: Start");
+    CHECK(l->curItem == start, "up from Difficulty: Start");
     press(0x4000);
+    press(0x4000);
+    press(0x4000);
+    CHECK(l->curItem == mOn, "down three times: Mirror mode's choice");
     int games = s_newGames;
     ico_opt_set_mirror(0);
+    ico_difficulty_reset();
     press(0x40); /* Cross picks Mirror mode On and moves down */
     CHECK(l->curItem == nOn && s_newGames == games, "Cross on a value: on to New Game+'s choice");
     press(0x40);
@@ -1716,6 +1780,9 @@ static void testNewGameScreen(void)
     CHECK(gFlagGameClear == 1, "Cross: New Game+ On sets the cleared flag");
     CHECK(s_newGames == games + 1, "the game starts (gflagOn(382))");
     CHECK(s_lastStartFlag == 382, "the European disc's own start flag (%d)", s_lastStartFlag);
+    CHECK(ico_difficulty_active()->mode == ICO_DIFF_NORMAL && ico_difficulty_has_journey() &&
+              ico_difficulty_active()->origin == ICO_DIFF_ORIGIN_NEW,
+          "the journey begins at Normal, a New Game's");
     press(0x40);
     press(0x800);
     CHECK(s_newGames == games + 1, "once");
@@ -1728,9 +1795,11 @@ static void testNewGameScreen(void)
     ml = ui_new_game_screen_enter();
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "the New Game screen again");
-    CHECK(l->curItem == mOff, "the cursor on Mirror mode's Off again");
-    CHECK(lt_ext_prop(nOn)->ownerItem == mOff && lt_ext_prop(nOff)->ownerItem == -1,
+    CHECK(l->curItem == diff, "the cursor on Difficulty again");
+    CHECK(lt_ext_prop(nOn)->ownerItem == diff && lt_ext_prop(nOff)->ownerItem == -1,
           "New Game+ On lit (a finished save)");
+    press(0x4000);
+    press(0x4000);
     press(0x4000);
     CHECK(l->curItem == nOn, "down: New Game+ On");
     press(0x8000); /* left */
@@ -1748,6 +1817,8 @@ static void testNewGameScreen(void)
     ml = ui_new_game_screen_enter();
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "the New Game screen a third time");
+    press(0x4000);
+    press(0x4000);
     press(0x4000);
     CHECK(l->curItem == nOff, "a plain New Game: New Game+ Off");
     press(0x2000);
@@ -1771,6 +1842,8 @@ static void testNewGameScreen(void)
     CHECK(s_newGames == games + 3, "no game started");
     CHECK(gFlagGameClear == 1, "Triangle: the cleared flag untouched");
     gFlagGameClear = 0;
+    ico_opt_set_mirror(0);
+    ico_difficulty_reset();
 
     /* not built: -1 (la_vibe_select then starts the game itself) */
     ui_settings_reset();
@@ -1823,6 +1896,7 @@ static void testNewGameMouse(void)
     const int mOff = ui_new_game_screen_row(0, 0), mOn = ui_new_game_screen_row(0, 1);
     const int nOff = ui_new_game_screen_row(1, 0), nOn = ui_new_game_screen_row(1, 1);
     const int start = ui_new_game_screen_start();
+    const int diff = ui_new_game_screen_difficulty();
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "mouse: the New Game screen (%d)", current_layout_id);
     LtProp *l = lt_ext_layout(ml);
@@ -1831,10 +1905,11 @@ static void testNewGameMouse(void)
     CHECK(ui_mouse_menu_active(), "mouse: the screen is a menu");
     ngPointAt(mOn);
     ngMouseFrame(0);
-    CHECK(l->curItem == mOff, "hover over Mirror mode's On: the choice stays Off (%d)", l->curItem);
+    CHECK(l->curItem == diff && lt_ext_prop(mOff)->ownerItem == diff,
+          "hover over Mirror mode's On: the choice stays Off (%d)", l->curItem);
     ngPointAt(nOn);
     ngMouseFrame(0);
-    CHECK(l->curItem == mOff && lt_ext_prop(nOff)->ownerItem == mOff,
+    CHECK(l->curItem == diff && lt_ext_prop(nOff)->ownerItem == diff,
           "hover over New Game+ On: nothing moves (%d)", l->curItem);
     const int games = s_newGames;
     ngMouseFrame(1);
@@ -1850,13 +1925,33 @@ static void testNewGameMouse(void)
     ngMouseFrame(1);
     CHECK(l->curItem == nOn && lt_ext_prop(mOn)->ownerItem == nOn,
           "click on Mirror mode On: picked, on to New Game+'s choice (%d)", l->curItem);
+    /* Difficulty's arrows and value: a click steps (Right on the value), a
+       hover over them moves nothing */
+    ngPointAt(diff + 3);
+    ngMouseFrame(0);
+    CHECK(l->curItem == nOn, "hover over Difficulty's right arrow: the cursor stays (%d)",
+          l->curItem);
+    ngMouseFrame(1);
+    CHECK(l->curItem == diff && strcmp(lt_ext_row_text(diff + 1), "Hard") == 0,
+          "click on the right arrow: the cursor on Difficulty, Hard (\"%s\")",
+          lt_ext_row_text(diff + 1));
+    ngPointAt(diff + 2);
+    ngMouseFrame(1);
+    CHECK(strcmp(lt_ext_row_text(diff + 1), "Normal") == 0, "click on the left arrow: Normal");
+    ngPointAt(diff + 1);
+    ngMouseFrame(1);
+    CHECK(strcmp(lt_ext_row_text(diff + 1), "Hard") == 0 && lt_ext_prop(mOn)->ownerItem == diff &&
+              lt_ext_prop(nOn)->ownerItem == diff,
+          "click on the value: Right, Hard; the Off/On choices kept");
     ngPointAt(start);
     ngMouseFrame(0);
-    CHECK(l->curItem == nOn, "hover over Start: the cursor stays (%d)", l->curItem);
+    CHECK(l->curItem == diff, "hover over Start: the cursor stays (%d)", l->curItem);
     ngMouseFrame(1);
-    CHECK(s_newGames == games + 1 && gFlagGameClear == 1 && ico_opt_mirror() == 1,
-          "click on Start: mirrored, New Game+ (%d %d %d)", s_newGames - games, gFlagGameClear,
-          ico_opt_mirror());
+    CHECK(s_newGames == games + 1 && gFlagGameClear == 1 && ico_opt_mirror() == 1 &&
+              ico_difficulty_active()->mode == ICO_DIFF_HARD,
+          "click on Start: mirrored, New Game+, Hard (%d %d %d)", s_newGames - games,
+          gFlagGameClear, ico_opt_mirror());
+    ico_difficulty_reset();
     gFlagGameClear = 0;
     ico_opt_set_mirror(0);
     ui_mouse_reset();
@@ -2250,18 +2345,25 @@ static void testValues(void)
     ui_settings_step(UI_OPT_STICK_FIX, 1);
     CHECK(ico_opt_stick_fix() == 1 && strstr(ui_settings_value_text(UI_OPT_STICK_FIX), "On"),
           "stick fix on");
+    /* the New Game draft's rows (Customize's pages): a step edits the
+       draft, never the journey in force nor the config */
+    ico_difficulty_reset();
+    ui__diff_draft_start(NULL);
     ui_settings_step(UI_OPT_YORDA, 1);
-    CHECK(ico_opt_yorda_safe() == 1, "yorda_safe on");
+    CHECK(ui__diff_draft()->row[ICO_DIFF_YORDA_SAFE] == 1 && ico_opt_yorda_safe() == 0 &&
+              strcmp(ui_settings_value_text(UI_OPT_YORDA), "On") == 0 &&
+              ico_config_get_string("gameplay.yorda_safe", NULL) == NULL,
+          "Shadows never take Yorda: the draft's, no key");
     /* Time to rescue Yorda: whole seconds a step from the 15 s Original shows, held at 4
-       and 30, the base Original again; the file keeps "original" or the integer */
+       and 30, the base Original again */
     {
         char want[32];
         int k;
 
-        CHECK(ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_PIT_TIME) >= 0 &&
-                  ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_PIT_TIME) <
-                      ui_settings_row_of(UI_PAGE_YORDA, UI_OPT_YORDA_TRIPS),
-              "the Time to rescue Yorda row sits before Yorda trips");
+        CHECK(ui_settings_row_of(UI_PAGE_RULES, UI_OPT_PIT_TIME) >= 0 &&
+                  ui_settings_row_of(UI_PAGE_RULES, UI_OPT_PIT_TIME) <
+                      ui_settings_row_of(UI_PAGE_RULES, UI_OPT_YORDA_TRIPS),
+              "the Time to rescue Yorda row sits before Yorda trips on Rules");
         CHECK(strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), "15 s (Original)") == 0,
               "pit time default (%s)", ui_settings_value_text(UI_OPT_PIT_TIME));
         for (k = 14; k >= 2; k--) {
@@ -2269,79 +2371,51 @@ static void testValues(void)
 
             ui_settings_step(UI_OPT_PIT_TIME, -1);
             snprintf(want, sizeof(want), "%d s", v);
-            CHECK(ico_opt_pit_time() == v &&
-                      strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), want) == 0 &&
-                      ico_config_get_int("gameplay.pit_time", 0) == v,
+            CHECK(ui__diff_draft()->row[ICO_DIFF_PIT_TIME] == v &&
+                      strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), want) == 0,
                   "pit time step down to %d (%s)", v, ui_settings_value_text(UI_OPT_PIT_TIME));
         }
         /* back up past the base: 14 is seconds, 15 Original, 16 seconds */
         for (k = 5; k <= 16; k++) {
             ui_settings_step(UI_OPT_PIT_TIME, 1);
         }
-        CHECK(ico_opt_pit_time() == 16, "pit time 16 (%d)", ico_opt_pit_time());
+        CHECK(ui__diff_draft()->row[ICO_DIFF_PIT_TIME] == 16, "pit time 16");
         ui_settings_step(UI_OPT_PIT_TIME, -1);
-        CHECK(ico_opt_pit_time() == ICO_PIT_ORIGINAL &&
-                  strcmp(ico_config_get_string("gameplay.pit_time", ""), "original") == 0 &&
-                  ico_opt_pit_time_factor() == 1.0f,
-              "pit time back to Original");
+        CHECK(ui__diff_draft()->row[ICO_DIFF_PIT_TIME] == ICO_PIT_ORIGINAL &&
+                  ico_opt_pit_time() == ICO_PIT_ORIGINAL &&
+                  ico_config_get_string("gameplay.pit_time", NULL) == NULL,
+              "pit time back to Original, the journey's and the config untouched");
         for (k = 16; k <= 40; k++) {
             ui_settings_step(UI_OPT_PIT_TIME, 1);
         }
-        CHECK(ico_opt_pit_time() == ICO_PIT_MAX_SECONDS &&
-                  strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), "30 s") == 0,
+        CHECK(strcmp(ui_settings_value_text(UI_OPT_PIT_TIME), "30 s") == 0,
               "pit time held at 30 s");
-        /* the 8 s of issue 186: the whole pull-in over 8 s */
-        for (k = 30; k > 8; k--) {
-            ui_settings_step(UI_OPT_PIT_TIME, -1);
-        }
-        CHECK(ico_opt_pit_time() == 8 &&
-                  ico_opt_pit_time_factor() == 240.0f / (float)ico_opt_pit_chain_ticks(),
-              "pit time 8 s");
-        ico_opt_set_pit_time(ICO_PIT_ORIGINAL);
-        ico_config_set_string("gameplay.pit_time", "original");
     }
-    /* Shadow speed: first on Gameplay > Shadows, Shadows attack together on Gameplay > Combat;
+    /* Shadow speed: first on Customize > Shadows, Shadows attack together sixth there;
        Original, Faster, Fastest, Slower, Original */
     {
-        static const char *const kWord[4] = {"slower", "original", "faster", "fastest"};
         static const char *const kText[4] = {"Slower", "Original", "Faster", "Fastest"};
-        static const float kFactor[4] = {0.75f, 1.0f, 1.25f, 1.5f};
-        int k;
+        int rl[16], ro[16], k, together = -1, speed = -1;
+        const int rn = ui_settings_page_rows(UI_PAGE_SHADOWS, rl, ro, NULL, 16);
 
-        {
-            /* the rows in page order (ui_settings_row_of gives a layout item, and a
-               row's note item sits between two rows' labels) */
-            int rl[16], ro[16], rn, together = -1, speed = -1;
-
-            rn = ui_settings_page_rows(UI_PAGE_SHADOWS, rl, ro, NULL, 16);
-            for (k = 0; k < rn; k++) {
-                if (ro[k] == UI_OPT_SHADOW_SPEED) {
-                    speed = k;
-                }
-            }
-            rn = ui_settings_page_rows(UI_PAGE_COMBAT, rl, ro, NULL, 16);
-            for (k = 0; k < rn; k++) {
-                if (ro[k] == UI_OPT_SHADOWS_TOGETHER) {
-                    together = k;
-                }
-            }
-            CHECK(speed == 0 && together == 5,
-                  "Shadow speed first on Shadows, Shadows attack together sixth on Combat (%d, %d)",
-                  speed, together);
+        for (k = 0; k < rn; k++) {
+            speed = ro[k] == UI_OPT_SHADOW_SPEED ? k : speed;
+            together = ro[k] == UI_OPT_SHADOWS_TOGETHER ? k : together;
         }
+        CHECK(speed == 0 && together == 5,
+              "Shadow speed first, Shadows attack together sixth on Shadows (%d, %d)", speed,
+              together);
         CHECK(strcmp(ui_settings_value_text(UI_OPT_SHADOW_SPEED), "Original") == 0,
               "shadow speed default");
         for (k = 2; k < 7; k++) {
             ui_settings_step(UI_OPT_SHADOW_SPEED, 1);
-            CHECK(ico_opt_shadow_speed() == k % 4 &&
-                      ico_opt_shadow_speed_factor() == kFactor[k % 4] &&
-                      strcmp(ui_settings_value_text(UI_OPT_SHADOW_SPEED), kText[k % 4]) == 0 &&
-                      strcmp(ico_config_get_string("gameplay.shadow_speed", ""), kWord[k % 4]) == 0,
+            CHECK(ui__diff_draft()->row[ICO_DIFF_SHADOW_SPEED] == k % 4 &&
+                      ico_opt_shadow_speed() == ICO_SPEED_ORIGINAL &&
+                      strcmp(ui_settings_value_text(UI_OPT_SHADOW_SPEED), kText[k % 4]) == 0,
                   "shadow speed step %d", k);
         }
-        /* five steps from Original end on Faster; back once is Original */
-        ui_settings_step(UI_OPT_SHADOW_SPEED, -1);
-        CHECK(ico_opt_shadow_speed() == ICO_SPEED_ORIGINAL, "shadow speed steps back");
+        CHECK(ico_config_get_string("gameplay.shadow_speed", NULL) == NULL, "shadow speed: no key");
+        ui__diff_draft_start(NULL);
     }
     /* Chain swing speed and slowdown (Gameplay > Yorda, after Natural chains): the
        game's own 4 reads "4 (original)", the others are their numbers, 1 to 10 around
@@ -2464,9 +2538,9 @@ static void testValues(void)
               "[video] preset");
         CHECK(ico_toml_get_bool(t, "video.fullscreen", 0) == 1, "[video] fullscreen");
         CHECK(ico_toml_get_bool(t, "gameplay.stick_fix", 0) == 1 &&
-                  ico_toml_get_bool(t, "gameplay.yorda_safe", 0) == 1 &&
+                  !ico_toml_has(t, "gameplay.yorda_safe") &&
                   ico_toml_get_bool(t, "gameplay.developer_mode", 0) == 1,
-              "[gameplay]");
+              "[gameplay] (no journey row: the draft's)");
         CHECK(ico_toml_get_float(t, "audio.volume", 0) > 0.89 &&
                   ico_toml_get_float(t, "audio.volume", 0) < 0.91,
               "[audio] volume");
@@ -3330,12 +3404,12 @@ static void testGameOptions(void)
               rowShown(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS),
           "cleared: Film effect and Players");
     checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (cleared)");
-    for (int k = 0; k < 4; k++) {
+    for (int k = 0; k < 3; k++) {
         press(0x4000);
     }
     CHECK(lt_ext_layout(gameL)->curItem == film,
-          "down four times from the stick fix (past the door fix, Second memory card and No "
-          "hints): Film effect");
+          "down three times from the stick fix (past the door fix and Second memory card): "
+          "Film effect");
     optionScreenMode = 0;
     s_filmCalls = 0;
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FILM_EFFECT), "Off") == 0, "film effect Off (%s)",
@@ -4306,11 +4380,16 @@ static int jpnRowShown(UiSettingsPage page, UiSettingsOpt opt)
    table's number as the game's does; Start confirms on every disc. */
 static void testNewGameStartFlags(void)
 {
+    /* and Hard's Shadow toughness on each (plan "Presets"): American on
+       the two 2001 discs that have it, the demo's own, Third journey on the
+       others */
     static const struct {
         const char *slug;
-        int flag;
-    } discs[] = {{"ntsc", 349}, {"aug6", 348}, {"jun26", 333},
-                 {"jpn", 382},  {"kor", 382},  {"cn", 382}};
+        int flag, tough;
+    } discs[] = {
+        {"ntsc", 349, ICO_TOUGHNESS_AMERICAN},     {"aug6", 348, ICO_TOUGHNESS_AMERICAN},
+        {"jun26", 333, ICO_TOUGHNESS_ORIGINAL},    {"jpn", 382, ICO_TOUGHNESS_THIRD_JOURNEY},
+        {"kor", 382, ICO_TOUGHNESS_THIRD_JOURNEY}, {"cn", 382, ICO_TOUGHNESS_THIRD_JOURNEY}};
 
     for (size_t d = 0; d < sizeof(discs) / sizeof(discs[0]); d++) {
         CHECK(ico_region_select(discs[d].slug) == 0, "the %s disc selected", discs[d].slug);
@@ -4331,8 +4410,15 @@ static void testNewGameStartFlags(void)
         CHECK(ml >= 0, "%s: the New Game screen is installed", discs[d].slug);
         lt_switch_layout(ml);
         CHECK(settle(ml, 60), "%s: the New Game screen (%d)", discs[d].slug, current_layout_id);
-        press(0x800); /* Start */
+        press(0x2000); /* Right on Difficulty: Hard */
+        press(0x800);  /* Start */
         CHECK(s_newGames == games + 1, "%s: the game starts", discs[d].slug);
+        CHECK(ico_difficulty_active()->mode == ICO_DIFF_HARD &&
+                  ico_difficulty_row(ICO_DIFF_SHADE_TOUGHNESS) == discs[d].tough &&
+                  ico_difficulty_row(ICO_DIFF_KNOCK_LIMIT) == 3,
+              "%s: Hard in force, toughness %d (got %d)", discs[d].slug, discs[d].tough,
+              ico_difficulty_row(ICO_DIFF_SHADE_TOUGHNESS));
+        ico_difficulty_reset();
         CHECK(s_lastStartFlag == discs[d].flag, "%s: start flag %d (got %d)", discs[d].slug,
               discs[d].flag, s_lastStartFlag);
         CHECK(ico_region_cur()->gflag_new_game == discs[d].flag, "%s: the table's number",

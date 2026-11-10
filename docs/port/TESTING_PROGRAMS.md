@@ -297,6 +297,25 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   states lock, No Shadows, the `difficulty.record` state block (a restored record, a damaged
   version and a missing block rebuilt from the state's keys) (`difficulty`, `difficulty_jpn`,
   `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
+- `difficulty_file_test.c`: the difficulty sidecar, `difficulty.toml` (`port/game/difficulty_file.c`;
+  [SAVES.md](SAVES.md#the-difficulty-of-each-save)) on the CPU, one run per disc in a folder of its
+  own: a save's record written under the disc's key prefix and the card and read back by a load
+  with the same checksum (rows, mode, journey, origin, preview, count); the same slot on card 1 and
+  card 2 two records; a moved file found by its checksum; the carry-over written once, found by the
+  second load with config changed, its origin kept by a later save, Normal when every key is the
+  game's own; a slot that is no save slot changing nothing; a Permadeath game over writing
+  `[finished]`, the Continue list's preview match (the slot's own entry, a file moved to card 2, a
+  newer save of the slot and another journey's save not refused) and the backstop by checksum, a
+  load of such a save finished; the whole-journey count at a save and written through as 0 after
+  the limit's game over (not into another journey's entry); a damaged file and a later version's
+  read as empty and not written over by a load, kept as `difficulty.toml.bad` by the next save or
+  a Permadeath end, an empty file no damage; the disc's preview words (`mc_preview_play`,
+  `mc_preview_sofa`) the ones `layout_action.c`'s `la_preview_play` / `la_preview_sofa` read; a
+  text scan of the hooks in `layout_action.c` (the save hook, both load twins' hook and backstop
+  before `gflagKeepState`, the Continue list's refusal in both twins with the negative sound, the
+  three game over twins' Quit only) and of `backup.c`; the log lines (found by slot / by sum /
+  carry-over / none, the writes, the refusals, the damaged file) (`difficulty_file`,
+  `difficulty_file_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
 - `difficulty_knock_test.c`: the knock-down limit's game side
   ([GAME_FEATURES.md](GAME_FEATURES.md#knock-down-limit)) on the CPU, `gamestate.c` compiled in over a
   synthetic sampler, one run per disc: the snapshot's act mode and get-up timer (unknown while the boy's
@@ -317,11 +336,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   knock-down mail in list 3 (291, 275 ntsc, 272 aug6, 264 jun26), on the European family also the
   landing's 55 (list 3) and 56 (FALL's list), on the 2001 discs nothing else; skipped (77) without the
   image (`knockdown_disc`, `knockdown_disc_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
-- `difficulty_file_test.c`, `difficulty_knock_test.c`, `knockdown_disc_test.c`,
-  `no_shadows_disc_test.c`, `no_shadows_census_test.c`: registered with their ctests for the
-  packages that fill them (the sidecar, the knock-down limit's game side, the disc's
+- `no_shadows_disc_test.c`, `no_shadows_census_test.c`: registered with their ctests for the
+  packages that fill them (the knock-down limit's game side, the disc's
   mails, No Shadows on each disc, the script census); until then each passes without a check
-  (`difficulty_file`, `difficulty_file_<disc>`, `difficulty_knock`, `difficulty_knock_<disc>`,
+  (`difficulty_knock`, `difficulty_knock_<disc>`,
   `knockdown_disc`, `knockdown_disc_<disc>`, `no_shadows_disc`, `no_shadows_disc_<disc>`,
   `no_shadows_census`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
@@ -637,8 +655,8 @@ that stops again writing its own line without the retry mark); a stop at the fre
   to the greater name, missing folders skipped, the names line and a short buffer (`share_report`).
 - `backup_test.c`: Options > Extras' backup and restore (`backup.h`) on a user folder of its own
   under the build folder: the names a backup may hold (no `..`, no absolute or drive path, no `\`,
-  no empty part, the places only); a backup holding the card folders, `states/`, `config.toml` and
-  `achievements.toml` and none of `ico-pc.ini`, `logs/`, `dumps/`, the textures, a slot's
+  no empty part, the places only); a backup holding the card folders, `states/`, `config.toml`,
+  `achievements.toml` and `difficulty.toml` and none of `ico-pc.ini`, `logs/`, `dumps/`, the textures, a slot's
   developer dump or a `.tmp` file, save states and pictures stored and text deflated, the manifest
   last with the version, platform, discs, time and count; inspect reading it back and saying when
   another disc made it; the restore unpacking into `backup-restore/` and changing nothing else, the
@@ -1698,30 +1716,43 @@ The renderer's test programs have a page of their own:
   click's own tick; a hover over New Game+ Off on the way to Start leaves New Game+ On; a click on
   Mirror mode On picks it and moves to New Game+'s choice; a hover over Start leaves the cursor; a
   click on it starts the game mirrored with New Game+.
-- `settings_test.c`: Gameplay > Yorda's seven rows (the Chain swing speed and Chain swing slowdown rows
+- `settings_test.c`: Gameplay > Yorda's four rows (the Chain swing speed and Chain swing slowdown rows
   after Natural chains), their value text ("4 (original)", else the number), ten steps round
   4..10, 1..4 with the key written as the number and the achievements untouched, and their notes after
   Natural chains' note.
 - `settings_extra_test.c`'s `testNaturalChains` and `testSkipOpening`: Options > Gameplay > Yorda >
-  Natural chains (after Yorda trips, before Back) and Gameplay > Cutscenes > Skip the opening (the
+  Natural chains (the page's first row, before the chain rows) and Gameplay > Cutscenes > Skip the opening (the
   page's first row), each opened through Gameplay (`openGameplayPage`, `openLink` in
   `settings_fixture.c`) from the title and the pause menu, Off by default, Right on and the key,
   saved, the note on the cursor, Left off, the page fitting, Back to Gameplay and then to the main
   page.
 - `settings_extra_test.c`'s `testVariantsPage` (`testVariants`, and `testVariantsOtherDisc` on
   `jpn`, `kor`, `ntsc`, `aug6`, `jun26`), from the title and the pause menu: no Game variants row
-  on Extras (ten rows); Gameplay's labels with No hints and the three links; Gameplay > Shadows'
-  five rows and their shipped values, Peaceful shadows Off, On (the hook 0, the key, the note
-  "Switches achievements off.", the rule suspended) and Off again, Shadow toughness round its
-  values (no American on the demo, no Third journey on `ntsc`, `aug6`, `jun26`; the Third journey
-  key and note), aggression's five; Gameplay > Combat's eight rows and their shipped values (the demo's
-  7-hit barrier), the three combat rows Off and On with their notes, the barrier's two, One hit
-  per swing and Shadows never dodge on and off with the achievements rule and the notes, the
-  saved file;
+  on Extras; Gameplay's ten labels and the two links, no journey row on Gameplay or its Yorda page;
+  Light sword colour (shown with a light sword) and Stick stepped with their keys, kinds and notes;
   Gameplay > Cutscenes' four rows, No cutscene look-around and Ignore cutscene cameras on and off
-  (the 2001 discs' own notes); `checkPageFits` on each; Developer's Debug menu hidden without
-  Developer mode, shown with it (not on the demo) before Back, its note, unbound staying on
-  Developer, bound opening the game's menu once and closing Options into the title or the game.
+  with the achievements rule (the 2001 discs' own notes); `checkPageFits` on each; Developer's Debug
+  menu hidden without Developer mode, shown with it (not on the demo) before Back, its note, unbound
+  staying on Developer, bound opening the game's menu once and closing Options into the title or
+  the game.
+- `settings_difficulty_test.c` (`settings_difficulty`, and on every other disc
+  `settings_difficulty_<slug>`): the New Game screen's Difficulty row and Customize's pages run by the
+  real layout code: Normal, Hard (three knock-downs in a room), Easy round with their notes, nothing in
+  force before the confirm; Customize opened on its first row, Shadows from it, Right on Shadow speed
+  turning the draft Custom (no config key, the journey in force untouched), No Shadows' row and note,
+  Back to Customize on the link and to the screen on Customize, Difficulty from Custom to Easy and back
+  to the kept Custom rows, an edit back to Normal's rows; Rules: the count greyed while the limit is Off
+  and not after, the limit around 0..9, Whole journey, Permadeath On and its note; START hands the draft
+  to the journey (`ico_difficulty_begin`: its rows, Custom, a New Game's origin and journey, counts 0);
+  a cleared Hard save's New Game+ starting at Hard, kept through Triangle and back, a cleared Custom
+  save's at Custom, the title's at Normal; the screen's five notes in two lines in every table; no
+  Customize note naming achievements.
+- `settings_test.c`'s `testNewGameScreen`, `testNewGameMouse` and `testNewGameStartFlags`: the
+  screen's rows from Difficulty round to Start, the journey Normal after a plain confirm, the mouse's
+  click on Difficulty's arrows and value (a hover moving nothing) and the start with Hard, and on every
+  other disc Right then START putting Hard in force with that disc's Shadow toughness;
+  `settings_discs_test.c`'s `checkDraftRows`: every draft row on Customize's pages shown on every disc,
+  Hard's toughness, the toughness values the disc offers, the disc's toughness and No hints notes.
 - `settings_test.c`'s `testFreeMovement`: Options > Developer > Free movement after the Debug
   menu, shown with Developer mode, Off by default, Right turning it on (`ico_free_movement`, the
   key set and saved), its note on the cursor, Developer mode off leaving the row's value and
@@ -1731,12 +1762,6 @@ The renderer's test programs have a page of their own:
   hint discs (pal, jpn, kor, cn), Reset to defaults straight after it on ntsc, aug6 and jun26
   (`settings_discs`, `settings_discs_<slug>`); `strings_complete_test.c` checks the three new
   strings in the eight tables.
-- `settings_extra_test.c`'s `testShadowsTogether`: Options > Gameplay > Combat > Shadows attack
-  together from the title and the pause menu, after Shadows never dodge and before Queen
-  barrier, Off by default; Right turns it on (`ico_opt_shadows_together`, and a Shadow does not wait:
-  `ico_opt_shadow_waits(1)` is 0) and sets `gameplay.shadows_together`, the saved file has it,
-  its note shows on the cursor, Left turns it off (the game's turns again); the cleared page still
-  fits. `settings_discs` shows the row on every disc from both entries.
 - `settings_extra_test.c`'s `testScroll` (the Options window, [UI.md](UI.md#the-window)): Controls
   from the pause menu, with a touch screen, opens at the top with the down mark only (Effects and Display fit in the window and do not scroll); Down on the window's last row scrolls one
   row, Up on its first scrolls back; Up on the first row wraps to Back and Up on Back shows the end

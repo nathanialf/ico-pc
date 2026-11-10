@@ -6,8 +6,8 @@
  * not backup_test: that is the test program itself there):
  *   - the names a backup may hold (ico_backup_name_ok): its places, no
  *     "..", no absolute or drive path, no '\\', no empty part;
- *   - a backup holds the memory card folders, states/, config.toml and
- *     achievements.toml, and none of ico-pc.ini, logs/, dumps/, the
+ *   - a backup holds the memory card folders, states/, config.toml,
+ *     achievements.toml and difficulty.toml, and none of ico-pc.ini, logs/, dumps/, the
  *     textures, a slot's developer dump or a file still being written; its
  *     manifest comes last and says the version, platform, discs, time and
  *     the file count; a save state is stored, a text deflated;
@@ -105,6 +105,7 @@ static const char *const kKept[][2] = {
     {"user/states/jpn/slot2.ics", "ICS1 a Japanese state"},
     {"user/config.toml", "version = 1\n[game]\ndisc = \"pal\"\n"},
     {"user/achievements.toml", "[achievements]\nfirst = 1\n"},
+    {"user/difficulty.toml", "version = 1\n[finished]\n9f3a6c0e5d2b7a11 = true\n"},
 };
 static const char *const kLeft[][2] = {
     {"user/ico-pc.ini", "iso=D:/Ico_PAL.iso\n"},
@@ -176,6 +177,8 @@ static void test_names(void)
         {"memcard2/a", 0, 1},
         {"config.toml", 0, 1},
         {"achievements.toml", 0, 1},
+        {"difficulty.toml", 0, 1},
+        {"difficulty.toml.tmp", 0, 0},
         {"backup.txt", 0, 1},
         {"states", 1, 1},
         {"memcard", 1, 1},
@@ -262,10 +265,10 @@ static void test_round_trip(void)
     }
     IcoBackupResult r = ico_backup_write(user, zip, &kInfo, &kIdle, NULL, NULL, &rep);
     CHECK(r == ICO_BACKUP_OK, "write: %s (%s)", ico_backup_result_text(r), rep.why);
-    CHECK(rep.files == 9, "write: %d files", rep.files);
+    CHECK(rep.files == 10, "write: %d files", rep.files);
     CHECK(!there("out/ico-pc-backup.zip.part"), "write: no .part left");
     zip_names(zip, names, sizeof(names));
-    CHECK(strcmp(names, "achievements.toml:8;config.toml:8;"
+    CHECK(strcmp(names, "achievements.toml:8;config.toml:8;difficulty.toml:8;"
                         "memcard/BESCES-50760ico/BESCES-50760ico:8;"
                         "memcard/BESCES-50760ico/icon.sys:8;memcard/_pcsx2_superblock:8;"
                         "memcard-preview/BASLUS-20718ico/x:8;"
@@ -277,11 +280,13 @@ static void test_round_trip(void)
     CHECK(r == ICO_BACKUP_OK, "inspect: %s (%s)", ico_backup_result_text(r), rep.why);
     CHECK(m.format == 1 && strcmp(m.version, "v0.10.0") == 0 && strcmp(m.commit, "abc123") == 0 &&
               strcmp(m.platform, "linux-x64") == 0 && strcmp(m.disc, "pal") == 0 &&
-              strcmp(m.discs, "pal jpn") == 0 && m.time == 1793530000ll && m.files == 9 &&
+              strcmp(m.discs, "pal jpn") == 0 && m.time == 1793530000ll && m.files == 10 &&
               !m.other_disc,
           "inspect: the manifest (%s %s %s disc %s discs \"%s\" %lld %d %d)", m.version, m.commit,
           m.platform, m.disc, m.discs, m.time, m.files, m.other_disc);
-    CHECK(strcmp(m.items, "achievements.toml config.toml memcard memcard-preview states") == 0,
+    CHECK(strcmp(m.items,
+                 "achievements.toml config.toml difficulty.toml memcard memcard-preview states") ==
+              0,
           "inspect: items \"%s\"", m.items);
     CHECK(ico_backup_inspect(zip, "jpn", &m, &rep) == ICO_BACKUP_OK && m.other_disc == 1,
           "inspect: another disc said");
@@ -306,7 +311,7 @@ static void test_round_trip(void)
           "restore with the card busy refused");
 
     r = ico_backup_restore(zip, "ico-pc-backup.zip", user, "pal", &kIdle, NULL, NULL, &m, &rep);
-    CHECK(r == ICO_BACKUP_OK && rep.files == 9, "restore: %s, %d files (%s)",
+    CHECK(r == ICO_BACKUP_OK && rep.files == 10, "restore: %s, %d files (%s)",
           ico_backup_result_text(r), rep.files, rep.why);
     CHECK(there("user/" ICO_BACKUP_STAGING "/states/pal/slot1.ics") &&
               !there("user/" ICO_BACKUP_STAGING_PART),
@@ -317,7 +322,7 @@ static void test_round_trip(void)
 
     r = ico_backup_apply_pending(user, 1000, &m, &rep);
     CHECK(r == ICO_BACKUP_OK, "apply: %s (%s)", ico_backup_result_text(r), rep.why);
-    CHECK(rep.files == 9 && strcmp(m.from, "ico-pc-backup.zip") == 0 &&
+    CHECK(rep.files == 10 && strcmp(m.from, "ico-pc-backup.zip") == 0 &&
               strcmp(m.version, "v0.10.0") == 0,
           "apply: %d files from \"%s\" (%s)", rep.files, m.from, m.version);
     CHECK(kept_identical(), "apply: every file byte-identical to the backup's");
@@ -437,11 +442,12 @@ static void test_failed_apply(void)
     at(zip, sizeof(zip), "out/second.zip");
     CHECK(ico_backup_write(user, zip, &kInfo, &kIdle, NULL, NULL, &rep) == ICO_BACKUP_OK,
           "second backup");
-    /* five things move, two moves each: fail each of the first eight */
+    /* six things move, two moves each: fail each of the first eight */
     for (int nth = 1; nth <= 8; nth++) {
         static const char *const kNow[][2] = {
             {"user/config.toml", "now"},
             {"user/achievements.toml", "now too"},
+            {"user/difficulty.toml", "version = 1\n[finished]\n"},
             {"user/memcard/BESCES-50760ico/BESCES-50760ico", "a later save"},
             {"user/memcard/.hidden", "hidden"},
             {"user/states/pal/slot1.ics", "a later state"},
