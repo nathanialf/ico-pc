@@ -512,7 +512,9 @@ static void test_upscale_pictures(const char *base)
     }
 
     /* a user folder whose name is not ASCII: the four found by their sizes */
-    char dir[1200];
+    /* 1100: present[1200] takes dir + "/up-present.png" without truncation (gcc's
+       -Wformat-truncation at -O2 refused 1200) */
+    char dir[1100];
 
     snprintf(dir, sizeof(dir), "%s/up-Jos\xc3\xa9", base);
     ico_mkdir(dir);
