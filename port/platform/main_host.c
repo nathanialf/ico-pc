@@ -133,6 +133,7 @@
 #include "tables.h"
 #include "trace_host.h"
 #include "options.h"       /* the recording's effective stick_fix */
+#include "difficulty.h"    /* an older recording's difficulty rows; Permadeath's state lock */
 #include "mc_host.h"       /* ico_mc_host_second_card_changed */
 #include "video_options.h" /* the recording's frame: ico_video_frame */
 
@@ -541,10 +542,16 @@ static void record_check(const char *path)
     int diffs = 0;
     IcoFrame frame_now;
     char fixmsg[96];
+    /* an earlier version's recording lists the difficulty rows among its
+       config keys (sim_keys.h ICO_SIM_KEYS_RETIRED): "key=value\n" each */
+    char retired[1024];
+    size_t retired_n = 0;
+    int retired_keys = 0;
 
     if (f == NULL) {
         return;
     }
+    retired[0] = '\0';
     ico_video_frame(&frame_now, ScreenHeight);
     while (fgets(line, sizeof(line), f) != NULL && line[0] == '#') {
         char key[128], value[256], fixbuf[8];
@@ -559,7 +566,19 @@ static void record_check(const char *path)
             recording = 1;
             continue;
         }
-        if (sscanf(line, "# config %127s = %255[^\n]", key, value) == 2) {
+        if (sscanf(line, "# config %127s = %255[^\n]", key, value) == 2 &&
+            ico_sim_key_retired(key, strlen(key))) {
+            /* each journey's own now, not config.toml's: compared below */
+            retired_keys++;
+            if (strcmp(value, "(unset)") != 0 && retired_n + 1 < sizeof(retired)) {
+                const int w = snprintf(retired + retired_n, sizeof(retired) - retired_n, "%s=%s\n",
+                                       key, value);
+
+                retired_n = w < 0                                     ? retired_n
+                            : retired_n + (size_t)w < sizeof(retired) ? retired_n + (size_t)w
+                                                                      : sizeof(retired) - 1;
+            }
+        } else if (sscanf(line, "# config %127s = %255[^\n]", key, value) == 2) {
             now = ico_config_get_string(key, "(unset)");
         } else if (sscanf(line, "# effective %127s = %255[^\n]", key, value) == 2 &&
                    strcmp(key, "fixed_clock") == 0) {
@@ -583,6 +602,24 @@ static void record_check(const char *path)
         }
     }
     fclose(f);
+    if (recording && retired_keys > 0) {
+        /* the rows the recording ran with, against the Normal a run starts
+           at (its New Game screen may choose another, as it did then) */
+        IcoDifficulty d;
+
+        fprintf(stderr,
+                "ico_pc: pad script lists %d difficulty rows among its config keys (each "
+                "journey's own now), read as a state's keys:\n",
+                retired_keys);
+        ico_difficulty_from_keys(retired, &d);
+        if (ico_difficulty_classify(&d) != ICO_DIFF_NORMAL) {
+            fprintf(stderr,
+                    "ico_pc: pad script recorded with the difficulty rows above; this run's "
+                    "journey takes the New Game screen's choice (Normal unless the script picks "
+                    "another)\n");
+            diffs++;
+        }
+    }
     if (recording && diffs == 0) {
         fprintf(stderr, "ico_pc: pad script is a recording made with this build and settings\n");
     }
@@ -1995,6 +2032,8 @@ static int state_refusal_str(IcoStateResult r)
         return UI_STR_STATES_REFUSED_CHECK;
     case ICO_STATE_IO:
         return UI_STR_STATES_SAVE_FAILED;
+    case ICO_STATE_PERMADEATH:
+        return UI_STR_DIFF_STATES_LOCKED;
     case ICO_STATE_STAGE_SWITCH:
     case ICO_STATE_CARD_BUSY:
     case ICO_STATE_DISC_BUSY:
@@ -2028,6 +2067,16 @@ static int states_request(int action, int slot, int *refusal_str)
 {
     if (!ico_state_available()) {
         *refusal_str = UI_STR_STATES_OFF;
+        return -1;
+    }
+    if (action != UI_STATES_ACT_DELETE && ico_difficulty_states_locked()) {
+        /* a Permadeath journey: the poll would refuse it the same
+           (ico_state_conditions); said at once, nothing requested.  The
+           save's refusal shares the load's words for now */
+        fprintf(stderr, "state: refused %s slot %d: %s (the page)\n",
+                action == UI_STATES_ACT_SAVE ? "save" : "load", slot,
+                ico_state_result_text(ICO_STATE_PERMADEATH));
+        *refusal_str = UI_STR_DIFF_STATES_LOCKED;
         return -1;
     }
     if (action == UI_STATES_ACT_SAVE && !ico_state_can_save_here()) {
