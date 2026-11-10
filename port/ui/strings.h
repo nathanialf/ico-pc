@@ -1080,6 +1080,7 @@ typedef enum UiStrId {
     UI_STR_DIFF_TOAST_KNOCK,
     UI_STR_DIFF_STATES_LOCKED,
     UI_STR_DIFF_WORD_PERMADEATH,
+    UI_STR_DIFF_STATES_SAVE_LOCKED, /* a save state's save refused on a Permadeath journey */
     UI_STR_COUNT
 } UiStrId;
 

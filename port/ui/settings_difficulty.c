@@ -481,7 +481,9 @@ static void onDifficulty(IcoDiffEvent ev, int a, int b)
 {
     char buf[96];
 
-    if (ev == ICO_DIFF_EV_REFUSED) {
+    if (ev == ICO_DIFF_EV_REFUSED || ev == ICO_DIFF_EV_ENDED) {
+        /* a save of an ended journey refused, or a Permadeath journey ending
+           now (its game over, or the moment one became certain) */
         toast(ui_str(UI_STR_DIFF_TOAST_ENDED));
     } else if (ev == ICO_DIFF_EV_KNOCK && b > 0 && a < b) {
         /* not the one at the limit: the game over follows */

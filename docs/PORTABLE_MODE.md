@@ -39,13 +39,16 @@ In the user folder:
   (`BASCUS-97113ico`), but they are not the same kind of save, so the game
   keeps them in this folder of their own.
 - `config.toml` holds your settings.
+- `difficulty.toml` holds the difficulty each of your saves was started on,
+  and which Permadeath journeys have ended. Copy it with `memcard` when you
+  move your saves to another device ([Difficulty](OPTIONS.md#difficulty)).
 - The game's own data, copied from your disc image at the first start: one
   large file for each disc you set up.
 - `screenshots` holds the pictures you take in photo mode.
 - Your achievements, and any texture or model pack you put there.
 
 **Back up your saves** by copying the `memcard` folder (and `memcard-preview`,
-if you play the August 2001 preview) somewhere safe.
+if you play the August 2001 preview) and `difficulty.toml` somewhere safe.
 
 **To uninstall,** delete the program's folder (or the AppImage file) and
 the user folder. On a

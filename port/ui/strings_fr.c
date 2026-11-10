@@ -933,4 +933,6 @@ const char *const
             [UI_STR_DIFF_STATES_LOCKED] =
                 "Les états sauvegardés ne peuvent pas être chargés pendant un voyage en mort définitive.",
             [UI_STR_DIFF_WORD_PERMADEATH] = "Mort définitive",
+            [UI_STR_DIFF_STATES_SAVE_LOCKED] =
+                "Les états sauvegardés ne peuvent pas être créés pendant un voyage en mort définitive.",
 };

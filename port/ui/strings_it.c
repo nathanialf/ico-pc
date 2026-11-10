@@ -915,4 +915,6 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_DIFF_STATES_LOCKED] =
             "Gli stati salvati non si possono caricare in un viaggio con morte permanente.",
         [UI_STR_DIFF_WORD_PERMADEATH] = "Morte permanente",
+        [UI_STR_DIFF_STATES_SAVE_LOCKED] =
+            "Gli stati salvati non si possono creare in un viaggio con morte permanente.",
 };

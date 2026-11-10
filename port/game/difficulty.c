@@ -30,6 +30,12 @@ static IcoDifficulty s_active;
 static int s_init;
 static IcoDiffListener s_listener;
 
+/* the load whose read of difficulty.toml failed (ico_difficulty_set_unknown) */
+static struct {
+    int on, port, slot;
+    uint32_t sum;
+} s_unknown;
+
 static const char *const kModeNames[ICO_DIFF_MODE_COUNT] = {"easy", "normal", "hard", "custom"};
 /* the log's words for a mode */
 static const char *const kModeShown[ICO_DIFF_MODE_COUNT] = {"Easy", "Normal", "Hard", "Custom"};
@@ -664,6 +670,7 @@ void ico_difficulty_begin(const IcoDifficulty *draft)
     d.run_sum = 0;
     memset(d.reserved, 0, sizeof(d.reserved));
     s_active = d;
+    s_unknown.on = 0;
     log_record("a New Game", &s_active);
     apply();
 }
@@ -673,6 +680,7 @@ void ico_difficulty_reset(void)
     IcoDifficulty n;
 
     ensure();
+    s_unknown.on = 0;
     ico_difficulty_preset(ICO_DIFF_NORMAL, &n);
     if (memcmp(&n, &s_active, sizeof(n)) == 0) {
         return;
@@ -701,6 +709,7 @@ void ico_difficulty_set_active(const IcoDifficulty *d)
     }
     ensure();
     s_active = *d;
+    s_unknown.on = 0;
     s_active.version = ICO_DIFF_VERSION;
     make_valid(&s_active, "a save's record");
     log_record("a save's record", &s_active);
@@ -737,6 +746,32 @@ void ico_difficulty_set_run(int port, int slot, uint32_t sum)
     s_active.run_slot = slot;
     s_active.run_has_slot = 1;
     s_active.run_sum = sum;
+}
+
+void ico_difficulty_set_unknown(int port, int slot, uint32_t sum)
+{
+    ensure();
+    s_unknown.on = 1;
+    s_unknown.port = port;
+    s_unknown.slot = slot;
+    s_unknown.sum = sum;
+}
+
+int ico_difficulty_unknown(int *port, int *slot, uint32_t *sum)
+{
+    if (!s_unknown.on) {
+        return 0;
+    }
+    if (port != NULL) {
+        *port = s_unknown.port;
+    }
+    if (slot != NULL) {
+        *slot = s_unknown.slot;
+    }
+    if (sum != NULL) {
+        *sum = s_unknown.sum;
+    }
+    return 1;
 }
 
 /* --- the carry-over ------------------------------------------------------------- */
@@ -865,6 +900,25 @@ void ico_difficulty_from_keys(const char *state_keys, IcoDifficulty *out)
 
 /* --- the knock-down limit -------------------------------------------------------- */
 
+/* Permadeath: the journey ends (once): finished, its id into [finished] at
+   once, the listener told.  Nothing while the row is off. */
+static void end_journey(const char *why)
+{
+    char id[20];
+
+    if (!s_active.row[ICO_DIFF_PERMADEATH] || s_active.finished) {
+        return;
+    }
+    s_active.finished = 1;
+    ico_difficulty_journey_text(&s_active, id, sizeof(id));
+    fprintf(stderr,
+            "difficulty: Permadeath: the game over ends journey %s (%s; no Continue, its "
+            "saves no longer load)\n",
+            id, why);
+    ico_difficulty_file_journey_ended();
+    tell(ICO_DIFF_EV_ENDED, 0, 0);
+}
+
 static int scope_count(void)
 {
     return s_active.row[ICO_DIFF_KNOCK_SCOPE] == ICO_DIFF_SCOPE_JOURNEY ? s_active.knocks_journey
@@ -889,8 +943,9 @@ int ico_difficulty_knockdown(int is_boy, int landing, int down_timer)
         /* another mail replaced the act before the game over fired */
         return 1;
     }
+    (void)down_timer; /* the caller logs it: getting up, he can be knocked down anew */
     limit = s_active.row[ICO_DIFF_KNOCK_LIMIT];
-    if (limit <= 0 || landing || s_active.in_fall || down_timer != 0) {
+    if (limit <= 0 || landing || s_active.in_fall) {
         return 0; /* off, or the same fall going on */
     }
     s_active.in_fall = 1;
@@ -905,6 +960,9 @@ int ico_difficulty_knockdown(int is_boy, int landing, int down_timer)
         fprintf(stderr, "difficulty: the knock-down limit (%d %s) is reached: game over\n", limit,
                 scope_words());
         tell(ICO_DIFF_EV_LIMIT, n, limit);
+        /* the game over is certain from here: a Permadeath journey ends now,
+           not when the game-over screen comes after he lies */
+        end_journey("the knock-down limit");
         return 1;
     }
     return 0;
@@ -912,12 +970,25 @@ int ico_difficulty_knockdown(int is_boy, int landing, int down_timer)
 
 void ico_difficulty_tick(int valid, int boy_act_mode, int boy_down_timer)
 {
+    (void)boy_down_timer;
     if (!valid || !s_init || !s_active.in_fall) {
         return;
     }
-    if (boy_act_mode != ICO_DIFF_DOWN_ACT_MODE && boy_down_timer == 0) {
-        s_active.in_fall = 0; /* back on his feet: the next knock-down counts */
+    if (boy_act_mode != ICO_DIFF_DOWN_ACT_MODE && boy_act_mode != ICO_DIFF_FALL_ACT_MODE &&
+        boy_act_mode != ICO_DIFF_DEAD_ACT_MODE) {
+        /* back on his feet (his get-up timer may still run): the next
+           knock-down counts */
+        s_active.in_fall = 0;
     }
+}
+
+void ico_difficulty_game_over_certain(const char *why)
+{
+    ensure();
+    if (!s_active.row[ICO_DIFF_PERMADEATH] || s_active.finished || !ico_difficulty_has_journey()) {
+        return;
+    }
+    end_journey(why != NULL ? why : "a game over to come");
 }
 
 void ico_difficulty_stage_enter(int stage)
@@ -950,18 +1021,7 @@ void ico_difficulty_game_over(void)
             fprintf(stderr, "difficulty: the knock-down limit's game over\n");
         }
     }
-    if (s_active.row[ICO_DIFF_PERMADEATH] && !s_active.finished) {
-        char id[20];
-
-        s_active.finished = 1;
-        ico_difficulty_journey_text(&s_active, id, sizeof(id));
-        fprintf(stderr,
-                "difficulty: Permadeath: the game over ends journey %s (%s; no Continue, its "
-                "saves no longer load)\n",
-                id, caused ? "the knock-down limit" : "a game over");
-        ico_difficulty_file_journey_ended();
-        tell(ICO_DIFF_EV_ENDED, 0, 0);
-    }
+    end_journey(caused ? "the knock-down limit" : "a game over");
 }
 
 int ico_difficulty_finished(void)
@@ -989,6 +1049,7 @@ int ico_difficulty_state_register(void)
 void ico_difficulty_state_loaded(int block_absent, const char *saved_keys)
 {
     s_init = 1; /* the registry wrote the record's bytes (or kept this run's) */
+    s_unknown.on = 0;
     if (!block_absent && s_active.version == ICO_DIFF_VERSION) {
         if (make_valid(&s_active, "a state's record") != 0) {
             fprintf(stderr, "difficulty: a state's record had values it cannot hold (above)\n");

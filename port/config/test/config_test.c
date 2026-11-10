@@ -339,6 +339,31 @@ static void test_save(void)
     write_file(toml, "version = 1\n[gameplay]\nyorda_safe = true\npit_time = 8\n"
                      "[variants]\none_hit = true\naggression = \"bold_quick\"\n");
     ico_config_reset(toml, "no-such.ini");
+    {
+        /* the load's log: one line naming them as kept for old saves, not
+           "is not used; ignored" (they are read for the carry-over) */
+        char log[ICO_PATH_MAX];
+        int saved;
+        char *got;
+
+        path_in(log, "retired.log");
+        fflush(stderr);
+        saved = dup(2);
+        CHECK(saved >= 0 && freopen(log, "w", stderr) != NULL);
+        CHECK(ico_config_get_bool("gameplay.yorda_safe", 0) == 1);
+        fflush(stderr);
+        dup2(saved, 2);
+        close(saved);
+        clearerr(stderr);
+        got = read_file(log);
+        CHECK(got != NULL &&
+              strstr(got, "config: gameplay.yorda_safe, gameplay.pit_time, variants.one_hit, "
+                          "variants.aggression: kept for saves made before v0.11.3: they give "
+                          "such a save its difficulty the first time it is loaded\n") != NULL &&
+              strstr(got, "is not used") == NULL);
+        free(got);
+        remove(log);
+    }
     CHECK(ico_config_get_bool("gameplay.yorda_safe", 0) == 1);
     CHECK(ico_config_get_int("gameplay.pit_time", 0) == 8);
     CHECK_STR(ico_config_get_string("variants.aggression", "?"), "bold_quick");

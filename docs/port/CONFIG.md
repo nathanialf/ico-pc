@@ -89,7 +89,9 @@ larger one is read, its unknown keys kept, and a log line says so (`port/config/
 below: `[gameplay] yorda_safe`, `pit_time`, `shadow_speed`, `yorda_trips`, `shadows_together` and
 `[variants] shade_toughness`, `one_hit`, `never_dodge`, `aggression`, `no_hints`, `barrier_hits`,
 `auto_guard`, `attack_turn`, `shadows_wait_down`, `peaceful_shadows`) are kept in the file and
-logged once a load as `config: <key> is not used; ignored` (`port/config/config.c`
+logged once a load: the first four as `config: <key> is not used; ignored`, the fifteen the file
+holds in one line that names them and says they are kept for saves made before the difficulty
+records, giving such a save its difficulty the first time it is loaded (`port/config/config.c`
 (`retired_keys`, `log_retired`)). The fifteen are rows of each save's difficulty record now
 (`port/game/difficulty.h`, chosen on the New Game screen); the game reads them once more, through
 the getters, only for the one-time carry-over of a save that has no record yet

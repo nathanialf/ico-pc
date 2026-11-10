@@ -475,6 +475,12 @@ static void testToasts(void)
     ico_difficulty_notify(ICO_DIFF_EV_REFUSED, 0, 0);
     CHECK(ui_popup_active() && strstr(ui_popup_title(), ui_str(UI_STR_DIFF_TOAST_ENDED)) != NULL,
           "the refusal's toast (%s)", ui_popup_active() ? ui_popup_title() : "");
+    /* a Permadeath journey ending (its game over, or the knock-down limit
+       reached): the same words */
+    ui_popup_reset();
+    ico_difficulty_notify(ICO_DIFF_EV_ENDED, 0, 0);
+    CHECK(ui_popup_active() && strstr(ui_popup_title(), ui_str(UI_STR_DIFF_TOAST_ENDED)) != NULL,
+          "the end's toast (%s)", ui_popup_active() ? ui_popup_title() : "");
     ui_popup_reset();
     ico_difficulty_reset();
 }

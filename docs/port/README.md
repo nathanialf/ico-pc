@@ -36,12 +36,12 @@ In reading order.
 | [AUDIO.md](AUDIO.md) | The software SPU2, libsd, the sound driver as a host server, streams, mixing and the output. |
 | [FMV.md](FMV.md) | The movie player: the PSS demuxer, the MPEG-2 decoder, pacing and the picture on screen. |
 | [INPUT.md](INPUT.md) | Devices, bindings, the virtual pad and libpad, pad scripts and recordings, mouse and touch. |
-| [SAVES.md](SAVES.md) | The memory cards as folders, where they live and the PS2 save importer. |
+| [SAVES.md](SAVES.md) | The memory cards as folders, where they live, each save's difficulty and the PS2 save importer. |
 | [APP_ICON.md](APP_ICON.md) | The application icon: the files under the user folder, the stamp, the two-frame matte, the .ico writer and the tests. |
 | [CONFIG.md](CONFIG.md) | Every key of `config.toml` and `ico-pc.ini`, which layer wins and when the files are written. |
 | [UI.md](UI.md) | The port's menus: the layout extension, the Settings menu, strings, the font, popups, touch and mouse. |
 | [GAME_FEATURES.md](GAME_FEATURES.md) | Gameplay options and their hooks, achievements, photo mode, the model viewer, gallery and credits. |
-| [HARD_MODE.md](HARD_MODE.md) | Design note: every lever a harder game could use, by Options page, with its mechanism and discs. |
+| [HARD_MODE.md](HARD_MODE.md) | The difficulty's levers and presets: every row by Customize page with its mechanism and discs, the knock-down limit, Permadeath and the presets as shipped. |
 | [PACKS.md](PACKS.md) | Texture and model packs: names, loading, formats, log lines and dumping. |
 | [TESTING.md](TESTING.md) | The test framework, the render gates, the suites per backend, the disc tests, switches, dumps, traces, audits and CI. |
 | [TESTING_PROGRAMS.md](TESTING_PROGRAMS.md) | Every test program by area: what it checks and its ctest names. |
