@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "options.h"
+#include "popup.h"
 #include "strings.h"
 #include "variants.h"
 #include "../core/region.h" /* ICO_JUN26, ICO_NTSCAUG6JUN26 */
@@ -27,6 +28,9 @@
 
 static IcoDifficulty s_draft, s_custom;
 static int s_haveDraft, s_haveCustom;
+/* the pause menu's view: the pages show the journey in force, greyed, and a
+   step changes nothing */
+static int s_readOnly;
 
 /* the options of the draft's rows, IcoDiffRow order */
 static const int kRowOpt[ICO_DIFF_ROW_COUNT] = {UI_OPT_SHADOW_SPEED,
@@ -144,6 +148,27 @@ static IcoDifficulty *draft(void)
         ui__diff_draft_start(NULL);
     }
     return &s_draft;
+}
+
+/* the rows the pages show: the draft's, or the journey's in the pause menu */
+static const IcoDifficulty *viewed(void)
+{
+    return s_readOnly ? ico_difficulty_active() : draft();
+}
+
+void ui__diff_set_readonly(int on)
+{
+    on = on != 0;
+    if (on != s_readOnly) {
+        fprintf(stderr, "settings: the Customize pages are %s\n",
+                on ? "read-only (the journey in force)" : "the New Game draft's");
+    }
+    s_readOnly = on;
+}
+
+int ui__diff_readonly(void)
+{
+    return s_readOnly;
 }
 
 static const char *const kModeLog[ICO_DIFF_MODE_COUNT] = {"Easy", "Normal", "Hard", "Custom"};
@@ -277,7 +302,7 @@ const char *ui__diff_text(int opt, char *buf, unsigned size)
     if (row < 0) {
         return "";
     }
-    const int v = draft()->row[row];
+    const int v = viewed()->row[row];
     switch (row) {
     case ICO_DIFF_SHADOW_SPEED:
         return ui_str(kSpeed[v >= 0 && v < ICO_SPEED_COUNT ? v : ICO_SPEED_ORIGINAL]);
@@ -315,20 +340,23 @@ const char *ui__diff_text(int opt, char *buf, unsigned size)
 void ui__diff_step(int opt, int dir)
 {
     const int row = ui__diff_row(opt);
-    IcoDifficulty *d = draft();
+    IcoDifficulty *d;
+    static int ignored;
     if (row < 0 || dir == 0) {
         return;
     }
-    const int was = d->row[row];
-    if (row == ICO_DIFF_BARRIER_HITS) {
-        /* the two numbers the game knows, the disc's own stored as 0 (the
-           record's "the disc's"), so a step always changes what shows */
-        const int shown = was == 0 ? shippedBarrier() : was;
-        const int to = shown == 7 ? 5 : 7;
-        d->row[row] = to == shippedBarrier() ? 0 : to;
-    } else {
-        (void)ico_difficulty_row_step(d, (IcoDiffRow)row, dir);
+    if (s_readOnly) {
+        /* chosen when the journey began: nothing to step */
+        if (ignored++ < 8 || ignored % 100 == 0) {
+            fprintf(stderr, "settings: %s not stepped: chosen when the journey began (%d)\n",
+                    ico_difficulty_row_key((IcoDiffRow)row), ignored);
+        }
+        return;
     }
+    d = draft();
+    const int was = d->row[row];
+    /* the barrier has two steps (the disc's own number and the other one) */
+    (void)ico_difficulty_row_step(d, (IcoDiffRow)row, dir);
     classified();
     fprintf(stderr, "newgame: Customize: %s %d -> %d (the draft is %s)\n",
             ico_difficulty_row_key((IcoDiffRow)row), was, (int)d->row[row], modeLog(s_draft.mode));
@@ -345,6 +373,9 @@ int ui__diff_shown(int opt)
 int ui__diff_note(int opt)
 {
     const int row = ui__diff_row(opt);
+    if (s_readOnly && row >= 0) {
+        return UI_STR_DIFF_LOCKED_NOTE;
+    }
     switch (row) {
     case ICO_DIFF_SHADOW_SPEED:
         return UI_STR_OPT_SHADOW_SPEED_NOTE;
@@ -354,7 +385,7 @@ int ui__diff_note(int opt)
         if (ICO_JUN26) {
             return UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO;
         }
-        return draft()->row[row] == ICO_TOUGHNESS_THIRD_JOURNEY
+        return viewed()->row[row] == ICO_TOUGHNESS_THIRD_JOURNEY
                    ? UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD
                    : UI_STR_OPT_VAR_TOUGHNESS_NOTE;
     case ICO_DIFF_AGGRESSION:
@@ -399,7 +430,63 @@ int ui__diff_note(int opt)
 
 int ui__diff_dimmed(int opt)
 {
-    /* the count does nothing while there is no limit; Permadeath covers
-       every game over, so it is never dimmed */
+    /* the journey's own rows are all greyed; in the New Game draft the count
+       does nothing while there is no limit; Permadeath covers every game
+       over, so it is never dimmed */
+    if (s_readOnly) {
+        return ui__diff_opt(opt);
+    }
     return opt == UI_OPT_DIFF_KNOCK_SCOPE && draft()->row[ICO_DIFF_KNOCK_LIMIT] <= 0;
+}
+
+/* --- the pause menu's journey line and the toasts ------------------------------- */
+
+int ui__diff_line_text(char *buf, unsigned size)
+{
+    const IcoDifficulty *d = ico_difficulty_active();
+    const int limit = d->row[ICO_DIFF_KNOCK_LIMIT];
+    size_t at;
+
+    if (buf == NULL || size == 0) {
+        return 0;
+    }
+    at = (size_t)snprintf(buf, size, "%s", ui_str(ui__diff_mode_str((IcoDiffMode)d->mode)));
+    if (limit > 0 && at < size) {
+        /* the room's or the journey's count, by the scope */
+        const int n = d->row[ICO_DIFF_KNOCK_SCOPE] == ICO_DIFF_SCOPE_JOURNEY ? d->knocks_journey
+                                                                             : d->knocks_room;
+        at += (size_t)snprintf(buf + at, size - at, " %d / %d", n, limit);
+    }
+    if (d->row[ICO_DIFF_PERMADEATH] && at < size) {
+        at += (size_t)snprintf(buf + at, size - at, ", %s", ui_str(UI_STR_DIFF_WORD_PERMADEATH));
+    }
+    return 1;
+}
+
+static void toast(const char *text)
+{
+    static int shown;
+    if (shown++ < 8 || shown % 100 == 0) {
+        fprintf(stderr, "settings: toast \"%s\" (%d)\n", text, shown);
+    }
+    (void)ui_popup_push(text, "");
+}
+
+/* port/game/difficulty.h's listener: the journey's events as toasts */
+static void onDifficulty(IcoDiffEvent ev, int a, int b)
+{
+    char buf[96];
+
+    if (ev == ICO_DIFF_EV_REFUSED) {
+        toast(ui_str(UI_STR_DIFF_TOAST_ENDED));
+    } else if (ev == ICO_DIFF_EV_KNOCK && b > 0 && a < b) {
+        /* not the one at the limit: the game over follows */
+        snprintf(buf, sizeof(buf), ui_str(UI_STR_DIFF_TOAST_KNOCK), a, b);
+        toast(buf);
+    }
+}
+
+void ui__diff_listen(void)
+{
+    ico_difficulty_set_listener(onDifficulty);
 }

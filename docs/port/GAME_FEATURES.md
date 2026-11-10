@@ -258,6 +258,9 @@ fall counts once: while he lies, while his get-up timer runs, and the landing of
 (the European family's mails 55 and 56) are the same fall; a fall no hit caused (losing his balance at a
 ledge) and Yorda's and the Shadows' falls never count. At the limit he lies 2 s, unhittable, as the game's own
 death lies, then the game over comes as any other (Continue, or Quit; with Permadeath the journey ends).
+Each counted knock-down short of the limit shows the toast "Knocked down n of N"; the pause menu's journey
+lines show the difficulty with "n / N" (the scope's count) and the Permadeath word, and Settings > Gameplay >
+Difficulty (pause menu only) shows the journey's rows read-only ([UI.md](UI.md#customize-the-new-game-drafts-pages)).
 
 The hooks: `ico_gs_knockdown` at the entry of each `actCommonDown` copy (`ico2/fumi/src/commonact.c`:
 European body, `_ntsc`, `_aug6`, `_jun26`), `actDownGameOver` and `actDownGameOverNow` there (the game over:

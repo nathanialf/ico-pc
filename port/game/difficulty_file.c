@@ -497,6 +497,7 @@ int ico_difficulty_slot_finished(int port, int slot, int stage, uint32_t play, i
                 "difficulty: the Continue list refuses card %d slot %d (preview %s): journey "
                 "%s has ended (Permadeath; entry card %d slot %d)\n",
                 port + 1, slot, preview, id != NULL ? id : "?", hit_port + 1, hit_slot);
+        ico_difficulty_notify(ICO_DIFF_EV_REFUSED, 0, 0);
     }
     file_close(&f);
     return hit_port >= 0;
@@ -524,6 +525,7 @@ int ico_difficulty_sum_finished(uint32_t sum)
                         "difficulty: the load refuses the save with sum %u: journey %s has "
                         "ended (Permadeath; entry card %d slot %d): back to the file list\n",
                         (unsigned)sum, id, p + 1, s);
+                ico_difficulty_notify(ICO_DIFF_EV_REFUSED, 0, 0);
                 hit = 1;
                 break;
             }

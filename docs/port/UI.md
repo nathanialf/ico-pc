@@ -206,9 +206,9 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Controls | Remap (a list, ending with Ask Yorda for a hint on the discs with hints: `REMAP_TARGETS` in `settings.c`), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, Touch screen (a link, with a touch screen only), Back |
 | Touch screen (`UI_PAGE_TOUCH`) | Touch controls, Touch size, Touch opacity, Edit layout (`UI_OPT_TOUCH_EDIT`), Snap to grid, Grid size, Reset layout, Reset all layouts, Back |
 | Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
-| Gameplay | Stick fix, Door fix, Second memory card (`UI_OPT_SECOND_CARD`, `[gameplay] second_memory_card`, its note `UI_STR_OPT_SECOND_CARD_NOTE`; the step calls `ico_opt_set_second_memory_card`, whose listener puts the card in at once), Film effect, Players, Light sword colour (`UI_OPT_VAR_SWORD_COLOUR`: Original, Red; hidden on ntsc, aug6 and jun26, `ui__variant_shown`), Stick (`UI_OPT_VAR_WEAPON`: Original, Insect net), Yorda (`UI_PAGE_YORDA`), Cutscenes (`UI_PAGE_CUTSCENES`), Back: the two links before Back as Controls' Touch screen; ten rows once the game is cleared, the window's ten slots. The rows a journey's difficulty holds are Customize's (below) |
+| Gameplay | Stick fix, Door fix, Second memory card (`UI_OPT_SECOND_CARD`, `[gameplay] second_memory_card`, its note `UI_STR_OPT_SECOND_CARD_NOTE`; the step calls `ico_opt_set_second_memory_card`, whose listener puts the card in at once), Film effect, Players, Light sword colour (`UI_OPT_VAR_SWORD_COLOUR`: Original, Red; hidden on ntsc, aug6 and jun26, `ui__variant_shown`), Stick (`UI_OPT_VAR_WEAPON`: Original, Insect net), Yorda (`UI_PAGE_YORDA`), Cutscenes (`UI_PAGE_CUTSCENES`), Difficulty (a link to `UI_PAGE_CUSTOMIZE`, shown from the pause menu only: `optShown` hides it while `onTitle()`), Back: the three links before Back as Controls' Touch screen; eleven rows once the game is cleared, the window's ten slots scroll. The rows a journey's difficulty holds are Customize's (below) |
 | Yorda (`UI_PAGE_YORDA`) | Natural chains, Chain swing speed (`UI_OPT_VAR_CHAIN_SPEED`) and Chain swing slowdown (`UI_OPT_VAR_CHAIN_DAMPING`) (`[variants] chain_swing_speed` and `chain_swing_damping`, `ICO_VARIANT_CHAIN_SWING_SPEED` / `_DAMPING`: the value is the game's number 1 to 10 as text, the game's own 4 reads `UI_STR_VAL_VAR_CHAIN_ORIGINAL`, "4 (original)"; Left and Right wrap 10 and 1; notes `UI_STR_OPT_VAR_CHAIN_SPEED_NOTE` / `_DAMPING_NOTE`; their text is in `settings_variants.c`), Back |
-| Customize (`UI_PAGE_CUSTOMIZE`) | Shadows (`UI_PAGE_SHADOWS`), Combat (`UI_PAGE_COMBAT`), Rules (`UI_PAGE_RULES`), Back; reached only from the New Game screen's Customize row, its Back returns there ([Customize: the New Game draft's pages](#customize-the-new-game-drafts-pages)) |
+| Customize (`UI_PAGE_CUSTOMIZE`) | Shadows (`UI_PAGE_SHADOWS`), Combat (`UI_PAGE_COMBAT`), Rules (`UI_PAGE_RULES`), Back; reached from the New Game screen's Customize row (its Back returns there) and, read-only, from the pause menu's Gameplay > Difficulty link (its Back returns to Gameplay, the cursor on the link) ([Customize: the New Game draft's pages](#customize-the-new-game-drafts-pages)) |
 | Shadows (`UI_PAGE_SHADOWS`) | Shadow speed, Shadow toughness, Shadow aggression, Peaceful shadows, Shadows never take Yorda (`UI_OPT_YORDA`), Shadows attack together, No Shadows (`UI_OPT_DIFF_NO_SHADOWS`), Back: the New Game draft's rows |
 | Combat (`UI_PAGE_COMBAT`) | Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge, Queen barrier, Back: the draft's rows |
 | Rules (`UI_PAGE_RULES`) | Time to rescue Yorda (`UI_OPT_PIT_TIME`: `"15 s (Original)"` for Original with the base from `ico_opt_pit_base_seconds`, else `"8 s"`; a second a step, held at 4 and 30), Yorda trips, No hints (`UI_OPT_VAR_NO_HINTS`), Knock-down limit (`UI_OPT_DIFF_KNOCK_LIMIT`: Off, 1 .. 9 around), Knock-downs count (`UI_OPT_DIFF_KNOCK_SCOPE`: Each room, Whole journey; greyed while the limit is Off), Permadeath (`UI_OPT_DIFF_PERMADEATH`, never greyed), Back: the draft's rows |
@@ -1174,11 +1174,32 @@ switches them off). Knock-downs count is greyed while the limit is Off (`ui__dif
 is never greyed. Every row shows on every disc.
 
 - Places: Customize 4 rows, Shadows 8, Combat 7, Rules 7, inside the window with slots to spare.
+- The pause menu's read-only view: Gameplay > Difficulty opens the same pages on the journey in force
+  (`ico_difficulty_active`), not the draft. `settingsProc` sets `ui__diff_set_readonly(1)` each tick
+  Gameplay is up in the pause menu and the New Game screen's Customize clears it, so the pages know
+  which way they were entered whichever page is on screen. Read-only: every draft row reads the
+  journey's value (`ui__diff_text`), is greyed (`ui__diff_dimmed`), has the note "Chosen when the
+  journey began" (`UI_STR_DIFF_LOCKED_NOTE`, `ui__diff_note`) and ignores Left and Right (`ui__diff_step`
+  logs `<key> not stepped: chosen when the journey began`, the first 8 then every 100th);
+  `parentLayout` sends Customize's Back to Gameplay and `leaveTo` puts the cursor on the link.
+- The pause menu's journey lines (`pauseStats`, 13 lines at most): one line `STAT_DIFFICULTY`
+  (label `UI_STR_DIFF_LINE`) after Achievements shows the mode, " n / N" while a knock-down limit is on
+  (the room's count, or the journey's with the Whole journey count; `ui__diff_line_text`) and
+  ", Permadeath" (`UI_STR_DIFF_WORD_PERMADEATH`); it took the third assist slot, and Shadows never take
+  Yorda is not an assist any more (it is a row of the difficulty).
+- Toasts (`ui__diff_listen`, called by `ui_settings_install`): the difficulty listener
+  (`ico_difficulty_set_listener`) pushes a popup (`ui_popup_push`) for `ICO_DIFF_EV_REFUSED` ("This
+  journey has ended.", `UI_STR_DIFF_TOAST_ENDED`: difficulty_file.c raises it through
+  `ico_difficulty_notify` at the Continue list's refusal and at the load's backstop) and for each
+  counted `ICO_DIFF_EV_KNOCK` short of the limit ("Knocked down %d of %d", `UI_STR_DIFF_TOAST_KNOCK`;
+  the one that reaches the limit has none, the game over follows). Log: `settings: toast "<text>" (<n>)`,
+  the first 8 then every 100th. The refused-state text is main_host.c's (STATE).
 
 ctests `settings` (each page's rows, the links, no page but Customize leading to its pages),
 `settings_difficulty` and its disc runs (each preset's draft, Customize's walk and Back, an edit
 turning the mode Custom and back, the greyed count, the confirm handing the draft over, a cleared
-save's draft, the screen's notes in every table), `settings_discs*` (every draft row on every disc,
+save's draft, the pause menu's read-only view and Back, the journey line text, the toasts, the screen's
+notes in every table), `settings_discs*` (every draft row on every disc,
 Hard's toughness, the toughness values offered, the disc's notes).
 
 ### Gameplay rows: values, notes, the Debug menu

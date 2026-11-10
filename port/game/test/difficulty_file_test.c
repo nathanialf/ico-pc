@@ -382,6 +382,35 @@ static void test_finished(void)
     CHECK(ico_difficulty_sum_finished(6666u) == 0);
 }
 
+/* the refusals raise REFUSED for the UI's "This journey has ended." toast */
+static int s_refused, s_other_events;
+
+static void refusalListener(IcoDiffEvent ev, int a, int b)
+{
+    (void)a;
+    (void)b;
+    if (ev == ICO_DIFF_EV_REFUSED) {
+        s_refused++;
+    } else if (ev == ICO_DIFF_EV_KNOCK || ev == ICO_DIFF_EV_LIMIT) {
+        s_other_events++;
+    }
+}
+
+static void test_refusal_toast(void)
+{
+    /* the journey of the previous test is on file: slot 0/4 (preview 20:1000:1,
+       sum 4444) ended, slot 0/6 (sum 6666) did not */
+    ico_difficulty_set_listener(refusalListener);
+    s_refused = s_other_events = 0;
+    CHECK(ico_difficulty_slot_finished(0, 6, 21, 2000u, 3) == 0);
+    CHECK(ico_difficulty_sum_finished(6666u) == 0 && s_refused == 0);
+    CHECK(ico_difficulty_slot_finished(0, 4, 20, 1000u, 1) == 1 && s_refused == 1);
+    CHECK(ico_difficulty_sum_finished(4444u) == 1 && s_refused == 2);
+    CHECK(ico_difficulty_slot_finished(0, 4, 20, 1001u, 1) == 0 && s_refused == 2);
+    CHECK(s_other_events == 0);
+    ico_difficulty_set_listener(NULL);
+}
+
 static void test_knocks(void)
 {
     IcoDifficulty d;
@@ -672,6 +701,7 @@ int main(int argc, char **argv)
     test_round_trip();
     test_carry_over();
     test_finished();
+    test_refusal_toast();
     test_knocks();
     test_damaged();
     test_preview();
