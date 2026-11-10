@@ -27,6 +27,14 @@
  *     the global path, where each goes out alone).  The renderer keeps them
  *     apart with the timestamp it writes between the record and list 0
  *     (rd_replay.c RD_PERF_TS_LISTS flushes the held-back barriers);
+ *   G a texture upload over the sampled texture, a mesh upload and the
+ *     record, then in the same list the mesh upload, the record and the
+ *     texture upload: in the order before v0.11.3 (the texture first) the
+ *     texture's hold is recorded before the record (1), and in Vulkan's
+ *     synchronisation scopes every later copy, the mesh upload's, waits
+ *     behind it, the record behind the copy; in the renderer's order now
+ *     (the mesh upload and the record first, port/render/
+ *     rd_upload_late.h) none is (0); the hold itself stays (2 in all);
  *   D a fragment shader that declares a storage buffer is made
  *     (rhi_vk_ps_storage.h; vk_resource.c): from then on the copy into the
  *     arena and the bracket wait for fragment work too (1 + 1 with the
@@ -187,6 +195,28 @@ static void fillC2(RhiCommandList cl, const ScRes *r)
     record(cl, r);
     barrier(cl, r->target, RHI_STATE_SHADER_READ, RHI_STATE_RENDER_TARGET);
     colourPass(cl, r);
+}
+
+/* G: a texture upload over the sampled texture, a mesh upload and the
+   record, in the order before v0.11.3 (the texture first) and then, in the
+   same list, in the renderer's order now (the mesh upload and the record
+   first, port/render/rd_upload_late.h); s_holdsBefore[0], [1]: the holds
+   recorded before each record's first command since that order began (one
+   list: the slot holds VKR_MAX_CMD_LISTS) */
+static uint64_t s_holdsBefore[2];
+
+static void fillG(RhiCommandList cl, const ScRes *r)
+{
+    uint64_t h0 = holdsNow();
+    texUpload(cl, r, RHI_STATE_SHADER_READ);
+    upload(cl, r);
+    s_holdsBefore[0] = holdsNow() - h0;
+    record(cl, r);
+    h0 = holdsNow();
+    upload(cl, r);
+    s_holdsBefore[1] = holdsNow() - h0;
+    record(cl, r);
+    texUpload(cl, r, RHI_STATE_SHADER_READ);
 }
 
 static void fillD(RhiCommandList cl, const ScRes *r)
@@ -432,6 +462,17 @@ int rhi_vk_scope_cell(const RhiTestConfig *cfg)
                  "list C2 (the record's end joined to a transition out of SHADER_READ): %llu, "
                  "%llu expected\n",
                  (unsigned long long)c2, (unsigned long long)c2want);
+        /* G: the texture upload's hold before the record in the old order
+           (every later copy, the mesh upload's, waits behind it, and the
+           record behind the copy), none before it in the new; the hold
+           itself stays (one in each order) */
+        const uint64_t g = runList(cfg, "G", &r, fillG);
+        const uint64_t g1Before = s_holdsBefore[0], g2Before = s_holdsBefore[1];
+        SC_CHECK(g1Before == 1 && g2Before == 0 && g == 2,
+                 "list G (a texture upload over a sampled texture, a mesh upload, the record): "
+                 "before the record %llu in the old order (1 expected), %llu in the new (0 "
+                 "expected); in all %llu (2 expected)\n",
+                 (unsigned long long)g1Before, (unsigned long long)g2Before, (unsigned long long)g);
         /* a fragment module that declares a storage buffer */
         RhiShaderDesc sd;
         memset(&sd, 0, sizeof(sd));
@@ -473,11 +514,13 @@ int rhi_vk_scope_cell(const RhiTestConfig *cfg)
                 rhi_unmap_buffer(r.rb);
             }
         }
-        rhi_test_log("%s scopes: fragment holds A %llu, B %llu, C %llu, C2 %llu, D %llu, F %llu "
-                     "(compute %d, vertex stores %d, global barriers %d)\n",
+        rhi_test_log("%s scopes: fragment holds A %llu, B %llu, C %llu, C2 %llu, G before the "
+                     "record %llu old order / %llu new, D %llu, F %llu (compute %d, vertex "
+                     "stores %d, global barriers %d)\n",
                      cfg->label, (unsigned long long)a, (unsigned long long)b,
-                     (unsigned long long)c, (unsigned long long)c2, (unsigned long long)d,
-                     (unsigned long long)f, (int)r.compute, (int)r.vstores, (int)global);
+                     (unsigned long long)c, (unsigned long long)c2, (unsigned long long)g1Before,
+                     (unsigned long long)g2Before, (unsigned long long)d, (unsigned long long)f,
+                     (int)r.compute, (int)r.vstores, (int)global);
     }
     teardown(&r);
     rhi_shutdown();

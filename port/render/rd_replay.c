@@ -62,6 +62,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_upload_late.h"
 #include "rd_jitter.h"
 #include "rd_layer.h"
 #include "rd_passring.h"
@@ -671,8 +672,25 @@ static RhiBindGroup bindGroup(RhiBindGroupLayout layout, const RhiBinding *b, ui
     return g;
 }
 
+/* the stretch of the ring rd__ring_window reserved: taken first while it
+ * holds the allocation (rd_upload_late.h) */
+static uint64_t s_winOff, s_winEnd;
+
+uint64_t rd__ring_window(uint64_t off, uint64_t end)
+{
+    const uint64_t was = s_winOff;
+    s_winOff = off;
+    s_winEnd = end;
+    return was;
+}
+
 uint64_t rd__ring_alloc(uint64_t size, uint64_t align)
 {
+    const uint64_t w = (s_winOff + align - 1) / align * align;
+    if (s_winEnd && w + size <= s_winEnd) {
+        s_winOff = w + size;
+        return w;
+    }
     uint64_t off = (s_ringOff + align - 1) / align * align;
     if (off + size > g_rd.ringCap[s_slot]) {
         rd__log("upload ring overflow (%llu + %llu > %llu)", (unsigned long long)off,
@@ -4537,10 +4555,10 @@ static void shadowReduce(Replay *r, RdTargetRec *tc)
     p.width = tc->w;
     p.height = tc->h;
     rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, RD_PERF_ID_SHADOW_COUNT, tc->w, tc->h, r->perfPost);
-    rhi_cmd_begin_render_pass(s_cl, &p);
-    /* the ring as the one draw's */
+    /* the ring as the one draw's, before the begin (the crash report's) */
     rhi_cmd_checkpoint(s_cl,
                        passPush(RD_PASSK_PASS, r->st.color, tc->w, tc->h, 0, 0, 0, 0, r->perfPost));
+    rhi_cmd_begin_render_pass(s_cl, &p);
     (void)rd__get_pipeline(&k);
     setViewport(tc->w, tc->h);
     const RhiRect all = {0, 0, tc->w, tc->h};
@@ -5776,11 +5794,10 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     memset(&s_stencil, 0, sizeof(s_stencil));
     rhi_cmd_checkpoint(s_cl, rd__passring_push(RD_PASSK_UPLOAD, 0, 0, 0, 0, 0, 0, 0, -1));
     rd__perf_pass(s_cl, RD_PERF_PASS_UPLOAD, 0, 0, 0, -1);
-    const uint64_t texOff = s_ringOff;
-    rd__upload_dirty_textures();
-    g_rdPerf.uploadTextureBytes = s_ringOff - texOff;
-    rd__fog_lut_upload(f, keep); /* the fog's table, outside any pass (doFog) */
-    rd__join_parts(f, keep);     /* the card test over a part's packets (rd_join.c) */
+    /* the texture uploads and the fog's table after the pre-pass, their
+       ring bytes here, before t5's base (rd_upload_late.h) */
+    const uint64_t lateWin = rd__upload_late_reserve();
+    rd__join_parts(f, keep); /* the card test over a part's packets (rd_join.c) */
     rd__upload_meshes(f, keep);
     rd__passring_bytes(s_ringOff);
     rd__store_plan_scan(f, keep); /* before the new targets' clears */
@@ -5792,6 +5809,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     rd__thread_phase(RD_READ_WALK);
     rd__perf_stamp(s_cl, RD_PERF_TS_PREPASS);
     rd__vu_prepass(f, keep); /* each mesh and grid vertex once (rd_replay_vu.c) */
+    rd__upload_late(f, keep, lateWin);
     rd__perf_stamp(s_cl, RD_PERF_TS_LISTS);
 
     g_rd.frameWExact = f->wExact; /* the present's exact width (rd__frame_wexact) */

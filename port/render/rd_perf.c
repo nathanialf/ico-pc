@@ -269,6 +269,12 @@ static uint32_t s_storeWhy[RD_STORE_WHY_COUNT];
  * (RdPerfRecord.pipeFamily, uber) */
 static uint16_t s_pipeFamily[RD_PERF_PIPE_FAMILIES];
 static uint8_t s_pipeUber;
+/* the barriers that held fragment work (RhiStats.holdSites: Vulkan's
+ * vk_cmd.c vkr_hold_note) by kind and site, summed over the replays since
+ * the last summary; written at each replay's end (rd__perf_end, the render
+ * thread), read and cleared by rd_perf_backend_text, both under qLock */
+static uint64_t s_holdAcc[2][RHI_HOLD_SITES];
+static uint32_t s_holdReplays;
 
 bool rd_perf_pop(RdPerfRecord *out)
 {
@@ -490,6 +496,50 @@ void rd_perf_cull_text(char *buf, size_t size, const RdPerfCullSum *s, double re
     (void)k;
 }
 
+/* "; barriers holding fragment work per replay: ..." (the replays since the
+ * last summary; nothing when none held any) at *at of out, then cleared */
+static void holdText(char *out, size_t n, size_t *at)
+{
+    static const char *const site[RHI_HOLD_SITES] = {
+        "the lists' opening",       "the held-back barriers", "the passes' and copies' own",
+        "the buffer copies' waits", "the global barriers",    "the external compute's",
+    };
+    uint64_t acc[2][RHI_HOLD_SITES];
+    qLock();
+    memcpy(acc, s_holdAcc, sizeof(acc));
+    const uint32_t replays = s_holdReplays;
+    memset(s_holdAcc, 0, sizeof(s_holdAcc));
+    s_holdReplays = 0;
+    qUnlock();
+    uint64_t sum[2] = {0, 0};
+    for (int i = 0; i < RHI_HOLD_SITES; i++) {
+        sum[0] += acc[RHI_HOLD_KIND_VERTEX][i];
+        sum[1] += acc[RHI_HOLD_KIND_COPY][i];
+    }
+    if (!replays || (!sum[0] && !sum[1]) || *at >= n) {
+        return;
+    }
+    const double r = (double)replays;
+    int k = snprintf(out + *at, n - *at,
+                     "; barriers holding fragment work per replay: %.2f before vertex or compute "
+                     "work, %.2f before copies only (vertex/copy by site:",
+                     (double)sum[0] / r, (double)sum[1] / r);
+    *at += k > 0 && (size_t)k < n - *at ? (size_t)k : 0;
+    bool first = true;
+    for (int i = 0; i < RHI_HOLD_SITES && *at < n; i++) {
+        if (!acc[RHI_HOLD_KIND_VERTEX][i] && !acc[RHI_HOLD_KIND_COPY][i]) {
+            continue;
+        }
+        k = snprintf(out + *at, n - *at, "%s %s %.2f/%.2f", first ? "" : ",", site[i],
+                     (double)acc[RHI_HOLD_KIND_VERTEX][i] / r,
+                     (double)acc[RHI_HOLD_KIND_COPY][i] / r);
+        *at += k > 0 && (size_t)k < n - *at ? (size_t)k : 0;
+        first = false;
+    }
+    k = snprintf(out + *at, n - *at, ")");
+    *at += k > 0 && (size_t)k < n - *at ? (size_t)k : 0;
+}
+
 const char *rd_perf_backend_text(void)
 {
     static char s_text[3072];
@@ -680,6 +730,7 @@ const char *rd_perf_backend_text(void)
                                (double)s_smArmed / n, (double)s_smClears / n);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
+    holdText(s_text, sizeof(s_text), &at); /* before the families' tail, which ends the text */
     if (s_backendReplays) {
         /* the pipelines made so far by family (rd_uber.c rd__uber_perf_note:
            where GS state as shader data shrinks the set, which part) */
@@ -1213,6 +1264,8 @@ static void clockName(uint32_t index, void *user, char *buf, size_t n)
         snprintf(buf, n, "the VU pre-pass's start");
     } else if (index == RD_PERF_TS_PRESENT_BEGIN) {
         snprintf(buf, n, "the present's list's start");
+    } else if (index == RD_PERF_TS_LATE) {
+        snprintf(buf, n, "the texture uploads' start, after the VU pre-pass");
     } else {
         snprintf(buf, n, "effect stamp %u", index);
     }
@@ -1277,6 +1330,7 @@ void rd__perf_collect_gpu(void)
         uint32_t lastIndex = RD_PERF_TS_BEGIN;
         double stretch = 0.0; /* since the last RD_PERF_TS_* stamp */
         bool prepass = false; /* RD_PERF_TS_PREPASS came: LISTS ends the pre-pass */
+        bool late = false;    /* RD_PERF_TS_LATE came: LISTS ends the late uploads */
         for (uint32_t k = 0; k < ps->count; k++) {
             const uint32_t i = ps->order[k];
             if (i == RD_PERF_TS_BEGIN || i >= n || ts[i] == 0 || ts[i] < prev) {
@@ -1290,8 +1344,19 @@ void rd__perf_collect_gpu(void)
             if (i == RD_PERF_TS_PREPASS) {
                 r->gpuUploadMs = stretch;
                 prepass = true;
-            } else if (i == RD_PERF_TS_LISTS) {
+            } else if (i == RD_PERF_TS_LATE) {
+                /* the texture uploads after the pre-pass (rd_upload_late.h)
+                   count as uploads, as when they came before it */
                 if (prepass) {
+                    r->gpuPrepassMs = stretch;
+                } else {
+                    r->gpuUploadMs = stretch;
+                }
+                late = true;
+            } else if (i == RD_PERF_TS_LISTS) {
+                if (late) {
+                    r->gpuUploadMs += stretch;
+                } else if (prepass) {
                     r->gpuPrepassMs = stretch;
                 } else {
                     r->gpuUploadMs = stretch;
@@ -1445,6 +1510,14 @@ void rd__perf_end(void)
         r->readbacks = D(readbacks);
         r->submits = D(submits);
 #undef D
+        qLock();
+        for (int k = 0; k < 2; k++) {
+            for (int i = 0; i < RHI_HOLD_SITES; i++) {
+                s_holdAcc[k][i] += s.holdSites[k][i] - s_last.holdSites[k][i];
+            }
+        }
+        s_holdReplays++;
+        qUnlock();
         r->fenceWaitMs = (double)(s.fenceWaitNs - s_last.fenceWaitNs) / 1e6;
         r->backendWriteBytes = s.uploadWriteBytes - s_last.uploadWriteBytes;
         if (r->walkMs > WALK_SLOW_MS) {
@@ -1491,7 +1564,7 @@ static void stamp(RhiCommandList cl, uint32_t index)
        then hold the lists: the display wait reads 0), for the A/B of what a stamp inside an open pass costs
        a tile-based GPU (one that ends the pass there and begins it again) */
     if (s_noListStamps && index != RD_PERF_TS_BEGIN && index != RD_PERF_TS_LISTS &&
-        index != RD_PERF_TS_PREPASS && index != RD_PERF_TS_PRESENT) {
+        index != RD_PERF_TS_PREPASS && index != RD_PERF_TS_LATE && index != RD_PERF_TS_PRESENT) {
         return;
     }
     /* a replay timed pass by pass: each stamp's issue time too, for the busy

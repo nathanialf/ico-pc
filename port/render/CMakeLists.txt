@@ -2262,7 +2262,7 @@ if(ICO_RUN_TESTS)
     # off: thinned again after four more
     add_test(NAME rd_vu_skin_check_thin
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=thin
-                     "-DEXTRA=rd: VU skin check: twins thinned to one a picture after 4 clean replays \\(through the box check's pipeline.*twins differ: .*rd: VU skin check: twins re-armed by a twin event: every skinned draw twinned again until 4 replays with none differing \\(re-armed 1 times\\).*rd: VU skin check: twins thinned to one a picture after 4 clean replays.*thinned 2 times, re-armed 1 times \\(thinned at the end\\)"
+                     "-DEXTRA=rd: VU skin check: twins thinned to one a picture after 4 clean replays \\(through the box check's pipeline.*twins differ: .*rd: VU skin check: twins re-armed by a twin event: every skinned draw twinned again until 4 replays with none differing \\(re-armed 1 times\\).*rd: VU skin check: twins thinned to one a picture after 4 clean replays.*thinned 2 times, re-armed 2 times \\(thinned at the end\\)"
                      -P "${_vsk}")
     set_tests_properties(rd_vu_skin_check_thin
                          PROPERTIES ENVIRONMENT "${_env};ICO_RD_VU_SKIN_INTERVAL_MS=off"

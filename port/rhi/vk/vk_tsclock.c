@@ -121,8 +121,13 @@ const char *vkr_tsclock_pick(bool hasKhr, bool hasExt)
     return g_vkr.tsCalibExt;
 }
 
+/* vkr_tsclock_recycled's calibrated reads still to make (1 at a device's
+ * start: its first recycle) */
+static uint32_t s_calibLeft = 1u;
+
 void vkr_tsclock_init(uint32_t validBits)
 {
+    s_calibLeft = 1u;
     g_vkr.tsValidBits = validBits;
     if (g_vkr.tsCalibExt != NULL) {
         const bool khr = strcmp(g_vkr.tsCalibExt, VK_KHR_CALIBRATED_TIMESTAMPS_EXTENSION_NAME) == 0;
@@ -282,6 +287,16 @@ static uint64_t cpu_ns(uint64_t v)
 #endif
 }
 
+/* The calibrated pair costs a driver call a recycle (on a phone perhaps a
+ * kernel call), and a line wants it only where it places a replay's
+ * stamps on the CPU's clock (port/render/rd_perf_clock.c: a blocked wait,
+ * a second run, unwritten stamps, a counter restart).  So it is read at
+ * the first recycle of a device (a reference), at a recycle whose wait
+ * blocked past RHI_TS_TRACE_AFTER_MS, and at the RHI_FRAMES_IN_FLIGHT + 1
+ * recycles after one: the replays that were in flight through the stall,
+ * among them the one whose counter restarted (every restart in issue 123's
+ * logs came with such a stall).  s_calibLeft (above vkr_tsclock_init):
+ * the recycles still to read it at */
 void vkr_tsclock_recycled(VkrFrame *f)
 {
     RhiTimestampClock *k = &g_vkr.tsClock;
@@ -289,7 +304,17 @@ void vkr_tsclock_recycled(VkrFrame *f)
     k->submits = f->tsSubmits;
     k->firstSubmitNs = f->tsFirstSubmitNs;
     k->lastSubmitNs = f->tsLastSubmitNs;
-    if (g_vkr.tsCalib && !g_vkr.deviceLost) {
+    const bool blocked =
+        k->waitBeginNs != 0 && k->waitEndNs >= k->waitBeginNs &&
+        k->waitEndNs - k->waitBeginNs >= (uint64_t)RHI_TS_TRACE_AFTER_MS * 1000000u;
+    if (blocked) {
+        s_calibLeft = RHI_FRAMES_IN_FLIGHT + 2u; /* this recycle and the ones after it */
+    }
+    const bool calib = s_calibLeft > 0u;
+    if (calib) {
+        s_calibLeft--;
+    }
+    if (calib && g_vkr.tsCalib && !g_vkr.deviceLost) {
         const VkCalibratedTimestampInfoKHR in[2] = {
             {.sType = VK_STRUCTURE_TYPE_CALIBRATED_TIMESTAMP_INFO_KHR,
              .timeDomain = VK_TIME_DOMAIN_DEVICE_KHR},

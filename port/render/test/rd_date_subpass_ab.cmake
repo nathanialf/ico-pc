@@ -7,9 +7,12 @@
 # --stats twice under ICO_VK_FAKE_API=1.1 (VkRenderPass objects, the fence ring)
 # and ICO_VK_FAKE_LIMITS=moltenvk (a tile-based profile: DATE's stencil path is
 # the profile's own): ICO_RD_DATE_PATH=stencil and =snapshot, the fog in place
-# (ICO_RD_FOG_PATH=inplace: the subpass read has no fog read).  Every named
-# target's PNG of the stencil run must equal the snapshot run's; the stencil
-# run says "the subpass read" (the device line) and draws no DATE snapshot
+# (ICO_RD_FOG_PATH=inplace: the subpass read has no fog read); the stencil run
+# with ICO_VK_SUBPASS_READ=1 (the read is an experiment, off by default), the
+# snapshot run with =0 (as shipped: no input usage, no GENERAL, no
+# self-dependency).  Every named target's PNG of the stencil run must equal
+# the snapshot run's; the stencil run says "the subpass read" (the device
+# line), the snapshot run "the subpass read off"; the stencil run draws no DATE snapshot
 # where the snapshot run drew some, with fewer passes by at least that many
 # (each snapshot ends the scene's pass and begins it again); over the list at
 # least one dump draws DATE through the bit.  No validation error in either
@@ -67,8 +70,18 @@ foreach(dump IN LISTS dumps)
     set(dir_${run} "${OUT}/${index}-${run}")
     file(REMOVE_RECURSE "${dir_${run}}")
     file(MAKE_DIRECTORY "${dir_${run}}")
+    # the stencil run with the subpass read on (an experiment, off by
+    # default: [dev] subpass_read = on), the snapshot run with it off
+    if(run STREQUAL "stencil")
+      set(sub 1)
+      set(subRe "render passes: the subpass read:")
+    else()
+      set(sub 0)
+      set(subRe "render passes: the subpass read off")
+    endif()
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_VK_FAKE_API=1.1
                             ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_FOG_PATH=inplace
+                            ICO_VK_SUBPASS_READ=${sub}
                             ICO_RD_DATE_PATH=${run} "${TOOL}" "${dump}" - --pass-dump
                             "${dir_${run}}" --stats
                     RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
@@ -87,8 +100,8 @@ foreach(dump IN LISTS dumps)
       set(ok FALSE)
       break()
     endif()
-    if(NOT flat MATCHES "render passes: the subpass read:")
-      message(SEND_ERROR "${dump} ${run}: no \"render passes: the subpass read:\" line:\n${err}")
+    if(NOT flat MATCHES "${subRe}")
+      message(SEND_ERROR "${dump} ${run}: no \"${subRe}\" line:\n${err}")
       set(ok FALSE)
       break()
     endif()

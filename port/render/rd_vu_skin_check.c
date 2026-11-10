@@ -204,7 +204,26 @@ static struct {
     uint32_t clean, at, count;
     bool thin;
     uint64_t thinned, rearmed;
+    /* the careful rule (rd_vu_skin_background with a reason): thinned from
+     * the start, a twin event re-arming for at most RD_SKIN_CAREFUL_REARM
+     * replays (left: those still to go) and at most RD_SKIN_CAREFUL_REARMS
+     * times a run (used), then the events counted while thinned (held) */
+    bool careful;
+    uint32_t left, used;
+    uint64_t held, cRearmed, cBack;
 } s_thin;
+
+static uint32_t s_carefulRearm; /* rd__vu_skin_careful_rearm_set; 0: RD_SKIN_CAREFUL_REARM */
+
+void rd__vu_skin_careful_rearm_set(uint32_t replays)
+{
+    s_carefulRearm = replays;
+}
+
+static uint32_t carefulRearm(void)
+{
+    return s_carefulRearm ? s_carefulRearm : RD_SKIN_CAREFUL_REARM;
+}
 
 static uint32_t s_thinAfter; /* rd__vu_skin_thin_set; 0: RD_SKIN_THIN_REPLAYS */
 
@@ -480,6 +499,17 @@ void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground
 {
     s_memFn = memory;
     snprintf(s_noBg, sizeof(s_noBg), "%s", noBackground ? noBackground : "");
+    /* the careful rule: on a GPU-bound phone (issue 123: 26.7-28.7 of 33.3 ms
+     * a picture) the twins' extra draws must not cost it time, so they
+     * start thinned (one a picture, the rate they reach after
+     * RD_SKIN_THIN_REPLAYS clean replays) and a twin event re-arms them for
+     * a bounded stretch only (thinNote) */
+    const bool careful = s_noBg[0] != '\0';
+    if (careful && !s_thin.careful) {
+        s_thin.thin = true;
+        s_thin.left = 0;
+    }
+    s_thin.careful = careful;
 }
 
 static bool jobBusy(void)
@@ -1024,6 +1054,33 @@ static bool checkBuild(SkCheck *k, const RdFrame *f, const RdCmd *c, const RdMes
     return true;
 }
 
+/* the twins' first draw of the run: which rule put them on and at what
+ * rate (once a device) */
+static bool s_twinsSaid;
+
+static void twinsOnSay(void)
+{
+    if (s_twinsSaid) {
+        return;
+    }
+    s_twinsSaid = true;
+    const char *rule = s_twinSet >= 0  ? "asked (the tests' or the tool's)"
+                       : skMode() == 2 ? "every command (mode 2)"
+                                       : "the probe check's rule: an Adreno with a window";
+    if (skMode() != 1) {
+        rd__log("VU skin check: twins on (%s): every skinned draw of every replay", rule);
+    } else if (s_thin.careful) {
+        rd__log("VU skin check: twins on (%s) at one skinned draw a picture from the start (the "
+                "careful rule: %s); a twin event twins every skinned draw for %u replays, at "
+                "most %u times a run",
+                rule, s_noBg, carefulRearm(), (unsigned)RD_SKIN_CAREFUL_REARMS);
+    } else {
+        rd__log("VU skin check: twins on (%s): every skinned draw until %u replays with none "
+                "differing, then one a picture",
+                rule, rd__vu_skin_thin_after());
+    }
+}
+
 void rd__vu_skin_pick(const RdFrame *f, const RdCmd *c, const RdMeshRec *m)
 {
     g_rdSkinArm = false;
@@ -1074,6 +1131,7 @@ void rd__vu_skin_pick(const RdFrame *f, const RdCmd *c, const RdMeshRec *m)
         s_twinCmd.meshVertices = m->vertexCount;
         snprintf(s_twinCmd.mesh, sizeof(s_twinCmd.mesh), "%s", m->name[0] ? m->name : "?");
         g_rdSkinTwin = true;
+        twinsOnSay();
     }
     bool targeted = false;
     if (skMode() == 2) {
@@ -2351,6 +2409,45 @@ static void thinNote(uint32_t read, uint32_t differ)
     if (!read || skMode() != 1) {
         return;
     }
+    if (s_thin.careful) {
+        /* the careful rule: a twin event twins every skinned draw for
+         * carefulRearm() replays, at most RD_SKIN_CAREFUL_REARMS times a
+         * run; the events inside a stretch do not lengthen it */
+        if (!s_thin.thin) {
+            if (s_thin.left > 0u) {
+                s_thin.left--;
+            }
+            if (s_thin.left == 0u) {
+                s_thin.thin = true;
+                if (sayNth(++s_thin.cBack)) {
+                    rd__log("VU skin check: twins back to one a picture after the careful "
+                            "rule's %u replays of every skinned draw (%u of %u such stretches "
+                            "this run used)",
+                            carefulRearm(), s_thin.used, (unsigned)RD_SKIN_CAREFUL_REARMS);
+                }
+            }
+            return;
+        }
+        if (!differ) {
+            return;
+        }
+        if (s_thin.used < RD_SKIN_CAREFUL_REARMS) {
+            s_thin.used++;
+            s_thin.thin = false;
+            s_thin.left = carefulRearm();
+            if (sayNth(++s_thin.cRearmed)) {
+                rd__log("VU skin check: twins re-armed by a twin event under the careful rule: "
+                        "every skinned draw twinned for %u replays, then one a picture again "
+                        "(stretch %u of at most %u this run)",
+                        s_thin.left, s_thin.used, (unsigned)RD_SKIN_CAREFUL_REARMS);
+            }
+        } else if (sayNth(++s_thin.held)) {
+            rd__log("VU skin check: a twin event under the careful rule: the twins stay at one "
+                    "a picture (its %u stretches of every skinned draw used; %llu such events)",
+                    (unsigned)RD_SKIN_CAREFUL_REARMS, (unsigned long long)s_thin.held);
+        }
+        return;
+    }
     if (differ) {
         if (s_thin.thin) {
             s_thin.thin = false;
@@ -2636,16 +2733,25 @@ void rd__vu_skin_shutdown(void)
     if (s_run.twinsDrawn) {
         /* the A/B's proof that the attachment-read draws were twinned
          * through their own pipelines (rd_vu_skin_check_ab, attach) */
+        /* the careful rule's stretches (thinNote), when it was ever in force */
+        char careful[160] = "";
+        if (s_thin.careful || s_thin.used || s_thin.held) {
+            snprintf(careful, sizeof(careful),
+                     "; under the careful rule %u stretches of every skinned draw (of %u), %llu "
+                     "twin events with the twins kept at one a picture",
+                     s_thin.used, (unsigned)RD_SKIN_CAREFUL_REARMS,
+                     (unsigned long long)s_thin.held);
+        }
         rd__log("VU skin check: twins at the end of the run: %llu drawn (%llu through the draw's "
                 "own pipeline with its attachment read), %llu read, %llu differ; %llu checks "
                 "targeted after a twin event; the ring read's twin (C) %llu drawn, %llu read, %llu "
-                "differ from B; thinned %llu times, re-armed %llu times%s",
+                "differ from B; thinned %llu times, re-armed %llu times%s%s",
                 (unsigned long long)s_run.twinsDrawn, (unsigned long long)s_run.twinsOwn,
                 (unsigned long long)s_run.twins, (unsigned long long)s_run.twinsDiffer,
                 (unsigned long long)s_run.targeted, (unsigned long long)s_run.ringDrawn,
                 (unsigned long long)s_run.ringTwins, (unsigned long long)s_run.ringDiffer,
                 (unsigned long long)s_thin.thinned, (unsigned long long)s_thin.rearmed,
-                s_thin.thin ? " (thinned at the end)" : "");
+                s_thin.thin ? " (thinned at the end)" : "", careful);
     }
     if (g_rd.hasDevice) {
         if (s_p.roJob) {
@@ -2727,7 +2833,15 @@ void rd__vu_skin_shutdown(void)
     s_interval = -2.0;
     /* the thinning starts again with the renderer (the ladder's step 1
      * switch in the run starts its evidence from zero too) */
-    memset(&s_thin, 0, sizeof(s_thin));
+    {
+        /* under the careful rule thinned again from the start; its
+         * stretches are a run's */
+        const uint32_t used = s_thin.used;
+        memset(&s_thin, 0, sizeof(s_thin));
+        s_thin.careful = s_thin.thin = s_noBg[0] != '\0';
+        s_thin.used = used;
+    }
+    s_twinsSaid = false;
     s_pickedThis = false;
     s_lastMs = 0.0;
     s_env = -2;

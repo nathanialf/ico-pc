@@ -51,6 +51,9 @@ int rhi_pass_crumb_format(const RhiPassCrumb *c, char *out, size_t n)
         "inside the driver's begin call (a crash here is in the begin)",
         "begun (its draws were being recorded)",
         "ended",
+        ("making its VkRenderPass or framebuffer (a crash here is in vkCreateRenderPass or "
+         "vkCreateFramebuffer, before the begin)"),
+        "not begun: no VkRenderPass or framebuffer could be made (its draws skipped)",
     };
     const char *phase = c->phase < sizeof phases / sizeof phases[0] ? phases[c->phase] : "?";
     size_t u = 0;

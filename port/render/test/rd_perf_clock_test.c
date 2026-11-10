@@ -13,7 +13,8 @@
  *              wait's end; and calibrated clocks read across a counter
  *              restart (the pair older than the stamps) fall back to it;
  *   missing    recorded stamps that came back unwritten (the first one
- *              named), every one unwritten;
+ *              named), every one unwritten; a list never submitted: its
+ *              stamps not recorded, the lists said apart;
  *   quiet      a replay that had finished when the CPU came to wait: no line
  *              due, the backend's unrecorded indices ignored;
  *   short      a small buffer is cut and terminated.
@@ -191,6 +192,18 @@ static void testMissing(void)
     CHECK(v.missing == 6 && v.firstMissing == 0 && v.lateValid == 0);
     rd_perf_clock_text(&in, &v, line, sizeof line);
     CHECK(strstr(line, "(the first: S0): none written") != NULL);
+    /* a list with stamps recorded and never submitted (vk_cmd.c: its stamps
+       are not among the recorded, so not unwritten): said apart */
+    sixStamps(&c);
+    c.recorded[0] &= ~((1u << 4) | (1u << 5));
+    c.available[0] &= ~((1u << 4) | (1u << 5));
+    c.listsUnsubmitted = 1;
+    in = inOf(&c, 0);
+    rd_perf_clock_judge(&in, &v);
+    CHECK(v.recorded == 4 && v.missing == 0);
+    rd_perf_clock_text(&in, &v, line, sizeof line);
+    CHECK(strstr(line, "; all 4 recorded stamps written; 1 of the slot's lists with stamps were "
+                       "recorded and not submitted (left out)") != NULL);
 }
 
 static void testQuietAndShort(void)

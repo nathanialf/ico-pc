@@ -20,7 +20,9 @@
  *   bundle     ico_dump_auto_bundle: of five recorded zips the newest three
  *              go into the report zip, stored, with a note naming each; a
  *              size cap leaves one out and the note says so; none recorded
- *              adds nothing; the report zip's own entries are kept.
+ *              adds nothing; the report zip's own entries are kept; a
+ *              capture gone as the zip is rebuilt is left out and named
+ *              "left out: gone" in the note, the others still in.
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -286,6 +288,34 @@ static void test_bundle(const char *base)
         CHECK(strstr(note, "slow-gone") == NULL); /* not on disk: not listed */
     }
     mz_zip_reader_end(&z);
+    /* a capture that cannot be read as the report is made (gone since it
+       was listed): left out and named in the note, the other still in */
+    {
+        char rep2[640];
+        const char *two[2] = {p[4], p[5]};
+        int gone = -1;
+
+        snprintf(rep2, sizeof(rep2), "%s/report-gone.zip", dir);
+        CHECK(ico_zip_mem_files(rep2, &e, 1, NULL, 0, why, sizeof(why)) == 1);
+        CHECK(ico_zip_add_bundle(rep2, two, 2, "automatic-captures.txt", "the note\n", &gone, why,
+                                 sizeof(why)) == 0);
+        CHECK(gone == 1);
+        memset(&z, 0, sizeof(z));
+        CHECK(mz_zip_reader_init_file(&z, rep2, 0));
+        CHECK(entry_is(&z, "report.txt", keep, sizeof(keep)));
+        CHECK(mz_zip_reader_locate_file(&z, "slow-20261114-000000.zip", NULL, 0) >= 0);
+        CHECK(mz_zip_reader_locate_file(&z, "slow-gone.zip", NULL, 0) < 0);
+        {
+            const int i = mz_zip_reader_locate_file(&z, "automatic-captures.txt", NULL, 0);
+            char note[2048] = "";
+
+            CHECK(i >= 0 &&
+                  mz_zip_reader_extract_to_mem(&z, (mz_uint)i, note, sizeof(note) - 1, 0));
+            CHECK(strncmp(note, "the note\n", 9) == 0);
+            CHECK(strstr(note, "slow-gone.zip: left out: gone") != NULL);
+        }
+        mz_zip_reader_end(&z);
+    }
 }
 
 int main(int argc, char **argv)

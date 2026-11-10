@@ -1887,6 +1887,11 @@ void rd__vu_prepass(const RdFrame *f, int keep)
     if (!g_rd.vuPrepass) {
         return;
     }
+    if (rd__vu_record_buffered() && !rd__vu_record_compute() && !rd__vu_rec_sink_ready()) {
+        /* the store passes' targets could not be made: the stores off for
+           the run before this replay's record (rd_vu_rec_sink.h) */
+        (void)rd__vu_record_fall_back("the store passes' throwaway targets could not be made");
+    }
     s_preRunning = true;
     vuPrepassRun(f, keep);
     s_preRunning = false;
