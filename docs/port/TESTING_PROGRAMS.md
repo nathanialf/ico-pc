@@ -1098,7 +1098,7 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
 - `sched_test.c`: the fiber scheduler against the EE kernel's rules through the SDK calls
   (`sched`); the longest single switch (`ico_sched_switch_max`: a 30 ms thread against a 1 ms
   one names the long one, its time at least 30 ms, the reset empties it, a NULL id).
-- `window_scene_test.c`: the window's scene lines (`window_scene.h`, issue 179; the cost-model fit only over a spread of 2 or more in the vertex invocations, else `fit: not enough spread (x N..M ...)`): the layout kinds
+- `window_scene_test.c`: the window's scene lines (`window_scene.h`, issue 179; the cost-model fit only over a spread of 2 or more in the vertex invocations, the smallest counted above 0 (a block with keep frames' zero-invocation replays beside narrow scene replays: no fit), else `fit: not enough spread (x N..M ...)`): the layout kinds
   of the European disc's ids (a movie over any layout is a scene, the title's two, the pause menu,
   the options and button configuration, anything else `other`), the block's layout share over a
   sequence of steps (`layout: play 6.2 s, scene 3.1 s, pause 0.7 s, other 0.0 s`, the empty block,

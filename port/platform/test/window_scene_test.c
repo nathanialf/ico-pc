@@ -15,8 +15,10 @@
  * reporter's 3x figures with invocations spread a factor of 2, 2x fits; each
  * condition that leaves it out; the reporter's own narrow invocations and no
  * fit at all: GPU-bound, no step named; the vertex work alone past the
- * budget; a flat line at 1x, at a fractional scale rounding down, the
- * largest offered step that fits; a cut buffer).
+ * budget; a flat line at 1x, at a fractional scale (not a Resolution
+ * row's: Window, Auto or an upscaler) a lower Resolution at a render scale
+ * rounded down, the largest offered step that fits; a cut buffer; replays
+ * with no VU work in the block (keep frames) do not pass the spread guard).
  */
 #include <stdio.h>
 #include <string.h>
@@ -201,6 +203,23 @@ int main(void)
         window_scene_vu_fit_add(&f, 60000, 64.0);
         window_scene_vu_fit_add(&f, 80000, 70.0);
         CHECK(window_scene_vu_fit(&f, &a, &k, &r2));
+        /* a cutscene block with a fade's keep frames (no VU work, a few ms):
+           the zeros do not make the narrow scene replays a spread */
+        memset(&f, 0, sizeof(f));
+        window_scene_vu_fit_add(&f, 0, 3.0);
+        window_scene_vu_fit_add(&f, 150000, 40.0);
+        window_scene_vu_fit_add(&f, 0, 2.5);
+        window_scene_vu_fit_add(&f, 152000, 41.0);
+        window_scene_vu_fit_add(&f, 155000, 40.5);
+        CHECK(!window_scene_vu_fit(&f, &a, &k, &r2));
+        window_scene_vu_fit_text(b, sizeof(b), &f);
+        CHECK(strstr(b, "fit: not enough spread (x 150.0..155.0 thousand") != NULL);
+        /* none with VU work: no line */
+        memset(&f, 0, sizeof(f));
+        for (int i = 0; i < 3; i++) {
+            window_scene_vu_fit_add(&f, 0, 3.0 + i);
+        }
+        CHECK(!window_scene_vu_fit(&f, &a, &k, &r2));
         /* list 0 not varying: the line, no R^2 */
         memset(&f, 0, sizeof(f));
         for (int i = 1; i <= 3; i++) {
@@ -283,13 +302,16 @@ int main(void)
                          "already, no lower resolution step is offered (0.0 ms of vertex work by "
                          "the fit + 40.0 ms that scales with the pixels, against 30.0 ms, 0.9 of "
                          "the 33.3 ms step at 30.0 game fps)"));
-        /* a fractional scale rounds down to an offered step */
+        /* a fractional scale (Window, Auto, an upscaler's render scale) is
+           no Resolution row: a lower Resolution, the render scale rounded
+           down to an offered step */
         window_scene_gpu_hint_text(b, sizeof(b), 25.7, 30.0, 217, 40.0, 2.5, &flat);
-        CHECK(text_is(b, "; the GPU takes 40.0 ms a picture at this resolution (2.5x): 2x would "
-                         "fit the game's rate (40.0 ms = 0.0 ms of vertex work by the fit + 40.0 "
-                         "ms that scales with the pixels: 0.0 + 40.0 x (2/2.5)^2 = 25.6 ms, under "
-                         "30.0 ms, 0.9 of the 33.3 ms step at 30.0 game fps; a hint: nothing "
-                         "changes by itself)"));
+        CHECK(text_is(b, "; the GPU takes 40.0 ms a picture at this render scale (2.5x, not a "
+                         "Resolution row's: Window, Auto or an upscaler): a lower Resolution (or "
+                         "Upscaling quality) would fit the game's rate at a render scale of 2x or "
+                         "under (40.0 ms = 0.0 ms of vertex work by the fit + 40.0 ms that scales "
+                         "with the pixels: 0.0 + 40.0 x (2/2.5)^2 = 25.6 ms, under 30.0 ms, 0.9 of "
+                         "the 33.3 ms step at 30.0 game fps; a hint: nothing changes by itself)"));
         /* the largest step that fits (4x of 6x at 25 game fps), 5x not offered */
         window_scene_gpu_hint_text(b, sizeof(b), 20.0, 25.0, 9, 50.0, 6.0, &flat);
         CHECK(text_is(b, "; the GPU takes 50.0 ms a picture at this resolution (6x): 4x would fit "

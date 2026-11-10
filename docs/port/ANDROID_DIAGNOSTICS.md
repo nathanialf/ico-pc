@@ -113,7 +113,7 @@ question it decides:
   the second number of ms of GPU work, and the first number is the rest (pixels, passes). A high
   R^2 (0.7 and over) with a large slope says the vertex work sets the GPU's time; the same line
   with the pre-pass on (the invocation count then smaller) says what the pre-pass bought. The fit
-  needs 3 timed replays whose largest count is at least twice the smallest; with fewer replays the mean alone (`(2 replays)`), and with a narrower spread (a cutscene: issue 179's `-64.0 ms + 2.42 ms (R^2 0.07)` was noise read as a cost) the mean and `; fit: not enough spread (x N..M thousand vertex invocations)`.
+  needs 3 timed replays whose largest count is at least twice the smallest above 0 (a replay with no VU work, a keep frame or a menu, does not count as the smallest); with fewer replays the mean alone (`(2 replays)`), and with a narrower spread (a cutscene: issue 179's `-64.0 ms + 2.42 ms (R^2 0.07)` was noise read as a cost) the mean and `; fit: not enough spread (x N..M thousand vertex invocations)`.
 - **Before list 0** (the replays line's GPU part and the top passes on a tile-based GPU: `before
   list 0 2.1` where other devices print `uploads 2.1`; the passes CSV's `kind` stays `uploads`).
   The stretch up to the first scene list's stamp: the uploads and the GPU's work still in flight.
@@ -425,7 +425,10 @@ causes in it, each on its own lines. The lines to read, in the log's order:
   (`port/platform/window_scene.c` `window_scene_gpu_hint_text`): the vertex part is the block's VU
   fit's slope times its mean invocations (the `window: VU: ...` line's fit), the rest is taken to
   scale with the pixels, and the step is the largest offered Resolution step whose estimate is at
-  most 0.9 of the step. Without a fit line (under 3 timed replays, or the block's invocations not
+  most 0.9 of the step. At a scale that is not a Resolution row's (Window, Auto, or an upscaler's
+  render scale such as 3.02) no row is named: `; the GPU takes 40.0 ms a picture at this render
+  scale (2.5x, not a Resolution row's: Window, Auto or an upscaler): a lower Resolution (or
+  Upscaling quality) would fit the game's rate at a render scale of 2x or under (...)`. Without a fit line (under 3 timed replays, or the block's invocations not
   spread by a factor of 2, which the fit needs) no step is named, since a vertex-bound block would
   read as pixels: `; GPU-bound at 3x (the GPU takes 37.7 ms a picture, the step 33.3 ms at 30.0 game
   fps): no resolution hint (fit: not enough spread)`; the reporter's heavy blocks (370k-382k
