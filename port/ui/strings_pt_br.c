@@ -41,8 +41,8 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_YORDA_NOTE] =
         "Para uma experiência menos estressante. Algumas cenas roteirizadas ainda mostrarão a captura.",
     [UI_STR_OPT_PIT_TIME] = "Tempo para resgatar a Yorda",
-    [UI_STR_OPT_PIT_TIME_NOTE] =
-        "Quanto tempo leva para uma sombra levar a Yorda para um abismo. A opção acima pode impedir que isso aconteça.",
+    /* the English now names the row: "The Shadows never take Yorda row stops it." */
+    [UI_STR_OPT_PIT_TIME_NOTE] = NULL,
     [UI_STR_OPT_SHADOW_SPEED] = "Velocidade das Sombras",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "Quão rápido as Sombras se andam, correm e voam. Não altera a frequência dos ataques.",
@@ -722,11 +722,9 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_VAL_VAR_AMERICAN] = "Americana",
     [UI_STR_VAL_VAR_NOT_TOUGHER] = "Sem aumento de resistência",
     [UI_STR_OPT_VAR_ONE_HIT] = "Um golpe por ataque",
-    [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
-        "Cada golpe da arma de Ico só pode atingir uma sombra uma vez. Desativa as conquistas.",
+    [UI_STR_OPT_VAR_ONE_HIT_NOTE] = "Cada golpe da arma de Ico só pode atingir uma sombra uma vez.",
     [UI_STR_OPT_VAR_NEVER_DODGE] = "Sombras não se esquivam",
-    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] =
-        "As sombras nunca desviam dos golpes de Ico. Desativa as conquistas.",
+    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] = "As sombras nunca desviam dos golpes de Ico.",
     [UI_STR_OPT_VAR_AGGRESSION] = "Agressividade das sombras",
     [UI_STR_VAL_VAR_AGG_OWN] = "Original",
     [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "Ousadas e pacientes",
@@ -737,12 +735,12 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
         NULL, /* longer than its space (172 bytes): English until shortened */
     [UI_STR_OPT_VAR_NO_HINTS] = "Sem dicas",
     [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
-        "Yorda não dará dicas sobre para onde ir, como na versão norte-americana do disco. As conquistas continuam ativadas.",
+        "Yorda não dará dicas sobre para onde ir, como na versão norte-americana do disco.",
     [UI_STR_OPT_VAR_BARRIER] = "Barreira da Rainha",
     [UI_STR_VAL_VAR_HITS_5] = "5 golpes",
     [UI_STR_VAL_VAR_HITS_7] = "7 golpes",
     [UI_STR_OPT_VAR_BARRIER_NOTE] =
-        "Quantos golpes são necessários para destruir a barreira da Rainha. As conquistas continuam ativadas.",
+        "Quantos golpes são necessários para destruir a barreira da Rainha.",
     [UI_STR_OPT_VAR_NO_LOOK] = "Sem movimento de câmera nas cenas",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
         "O analógico direito não controlará mais a câmera durante as cenas. As conquistas continuam ativadas.",
@@ -755,7 +753,7 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
         NULL, /* longer than its space (276 bytes): English until shortened */
     [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
-        "Esta versão do jogo não oferece dicas, portanto esta opção não altera nada. As conquistas continuam ativadas.",
+        "Esta versão do jogo não oferece dicas, portanto esta opção não altera nada.",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "Esta versão do jogo não permite movimentar a câmera durante as cenas, portanto esta opção não altera nada. As conquistas continuam ativadas.",
     [UI_STR_GPU_HANG_TURNIP] =
@@ -830,13 +828,13 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_DESKTOP_FAILED_BODY] = NULL,
     [UI_STR_SECTION_COMBAT] = NULL,     /* "Combat" */
     [UI_STR_OPT_VAR_AUTO_GUARD] = NULL, /* "Automatic guard" */
-    /* "Off: Ico no longer blocks a Shadow’s attack from the front; it lands as an attack from behind does. Achievements stay on." */
+    /* "Off: Ico no longer blocks a Shadow’s attack from the front; it lands as an attack from behind does." */
     [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] = NULL,
     [UI_STR_OPT_VAR_ATTACK_TURN] = NULL, /* "Turn to face shadows" */
-    /* "Off: Ico swings straight ahead instead of turning toward the nearest Shadow; the swing’s reach is unchanged. Achievements stay on." */
+    /* "Off: Ico swings straight ahead instead of turning toward the nearest Shadow; the swing’s reach is unchanged." */
     [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] = NULL,
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = NULL, /* "Shadows wait while Ico is down" */
-    /* "Off: the Shadows no longer hold back while Ico is knocked down, and their swings land while he is on the ground and getting up. Achievements stay on." */
+    /* "Off: the Shadows no longer hold back while Ico is knocked down, and their swings land while he is on the ground and getting up." */
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] = NULL,
     [UI_STR_OPT_VAR_SWORD_COLOUR] = NULL, /* "Light sword colour" */
     /* "Red: the light sword leaves a red trail, as its unused twin in the game does; nothing else changes. From the next room." */
@@ -846,10 +844,10 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_WEAPON_NOTE] = NULL,
     [UI_STR_VAL_VAR_INSECT_NET] = NULL,    /* "Insect net" */
     [UI_STR_VAL_VAR_THIRD_JOURNEY] = NULL, /* "Third journey" */
-    /* "Shadows as tough as on a third playthrough, which the game never reaches (twice the first journey’s). Achievements stay on." */
+    /* "Shadows as tough as on a third playthrough, which the game never reaches (twice the first journey’s)." */
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] = NULL,
     [UI_STR_OPT_VAR_PEACEFUL] = NULL, /* "Peaceful shadows" */
-    /* "On: Shadows stay where they appear and never go after Ico or Yorda. Switches achievements off." */
+    /* "On: Shadows stay where they appear and never go after Ico or Yorda." */
     [UI_STR_OPT_VAR_PEACEFUL_NOTE] = NULL,
     [UI_STR_OPT_VAR_CHAIN_SPEED] = NULL, /* "Chain swing speed" */
     /* "How fast a chain swings when Ico hangs on it and swings it. 1 is the slowest, 10 the fastest, 4 the game’s own. Achievements stay on." */
@@ -862,4 +860,44 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     /* "Press L2 to fly Ico with the sticks: the left stick moves him, the right stick goes up and down, L3 sets him on the floor. Switches achievements off." */
     [UI_STR_OPT_FREE_MOVEMENT_NOTE] = NULL,
     [UI_STR_REMAP_ASK_HINT] = NULL, /* "Ask Yorda for a hint" */
+    /* ---- new since v0.11.2: English until translated ---- */
+    [UI_STR_DIFF] = NULL, /* "Difficulty" */
+    /* "Sets the Shadows, the rescue time and the rules for this new journey. The save keeps the choice." */
+    [UI_STR_DIFF_NOTE] = NULL,
+    [UI_STR_DIFF_EASY] = NULL,   /* "Easy" */
+    [UI_STR_DIFF_NORMAL] = NULL, /* "Normal" */
+    [UI_STR_DIFF_HARD] = NULL,   /* "Hard" */
+    [UI_STR_DIFF_CUSTOM] = NULL, /* "Custom" */
+    /* "Slower, gentler Shadows that never take Yorda and never dodge, and more time to rescue her." */
+    [UI_STR_DIFF_EASY_NOTE] = NULL,
+    [UI_STR_DIFF_NORMAL_NOTE] = NULL, /* "The game as it shipped." */
+    /* "Faster, tougher Shadows that attack together, no automatic guard, less time to rescue Yorda, game over after 3 knock-downs in a room." */
+    [UI_STR_DIFF_HARD_NOTE] = NULL,
+    [UI_STR_DIFF_CUSTOM_NOTE] = NULL, /* "Your own rules. Change every row under Customize." */
+    [UI_STR_DIFF_CUSTOMIZE] = NULL,   /* "Customize" */
+    /* "Change each rule on its own. A mix that matches no preset shows as Custom." */
+    [UI_STR_DIFF_CUSTOMIZE_NOTE] = NULL,
+    [UI_STR_DIFF_RULES] = NULL,      /* "Rules" */
+    [UI_STR_DIFF_NO_SHADOWS] = NULL, /* "No Shadows" */
+    /* "On: no Shadows ever appear. The story still plays out as usual." */
+    [UI_STR_DIFF_NO_SHADOWS_NOTE] = NULL,
+    [UI_STR_DIFF_KNOCK_LIMIT] = NULL, /* "Knock-down limit" */
+    /* "A game over once Ico has been knocked down this many times. Off sets no limit." */
+    [UI_STR_DIFF_KNOCK_LIMIT_NOTE] = NULL,
+    [UI_STR_DIFF_KNOCK_SCOPE] = NULL, /* "Knock-downs count" */
+    /* "Whether knock-downs are counted in each room (the count starts again when Ico enters a room) or across the whole journey. Does nothing while the limit is Off." */
+    [UI_STR_DIFF_KNOCK_SCOPE_NOTE] = NULL,
+    [UI_STR_DIFF_SCOPE_ROOM] = NULL,    /* "Each room" */
+    [UI_STR_DIFF_SCOPE_JOURNEY] = NULL, /* "Whole journey" */
+    [UI_STR_DIFF_PERMADEATH] = NULL,    /* "Permadeath" */
+    /* "On: any game over ends this journey. There is no Continue, and the save can no longer be loaded." */
+    [UI_STR_DIFF_PERMADEATH_NOTE] = NULL,
+    [UI_STR_DIFF_LOCKED_NOTE] = NULL, /* "Chosen when the journey began" */
+    [UI_STR_DIFF_LINE] = NULL,        /* "Difficulty" */
+    [UI_STR_DIFF_LINK] = NULL,        /* "Difficulty" */
+    [UI_STR_DIFF_TOAST_ENDED] = NULL, /* "This journey has ended." */
+    [UI_STR_DIFF_TOAST_KNOCK] = NULL, /* "Knocked down %d of %d" */
+    /* "Save states cannot be loaded on a Permadeath journey." */
+    [UI_STR_DIFF_STATES_LOCKED] = NULL,
+    [UI_STR_DIFF_WORD_PERMADEATH] = NULL, /* "Permadeath" */
 };

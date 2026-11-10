@@ -39,7 +39,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_YORDA_NOTE] = "適合想輕鬆遊玩的玩家。部分劇情場景仍會出現被抓走的畫面。",
     [UI_STR_OPT_PIT_TIME] = "救出 Yorda 的時間",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "影子開始帶著 Yorda 沉下去到把她帶走的秒數（部分場景按比例較短）。上方的 Yorda 選項可讓她不被抓走。",
+        "影子開始帶著 Yorda 沉下去到把她帶走的秒數（部分場景按比例較短）。開啟「影子不會抓走 Yorda」可讓她不被抓走。",
     [UI_STR_OPT_SHADOW_SPEED] = "影子速度",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] = "影子行走、奔跑和飛行的速度。不會改變它們攻擊的頻率。",
     [UI_STR_VAL_SPEED_SLOWER] = "較慢",
@@ -724,13 +724,13 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_SECTION_CUTSCENES] = "過場動畫",
     [UI_STR_OPT_VAR_TOUGHNESS] = "影子的強韌度",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
-        "「美版」：每隻影子都和北美版光碟一樣強韌，之後的遊玩也不會變得更強。成就維持開啟。",
+        "「美版」：每隻影子都和北美版光碟一樣強韌，之後的遊玩也不會變得更強。",
     [UI_STR_VAL_VAR_AMERICAN] = "美版",
     [UI_STR_VAL_VAR_NOT_TOUGHER] = "之後不變強",
     [UI_STR_OPT_VAR_ONE_HIT] = "每次揮擊只命中一次",
-    [UI_STR_OPT_VAR_ONE_HIT_NOTE] = "Ico 的武器每揮一次，只能傷到同一隻影子一次。會關閉成就。",
+    [UI_STR_OPT_VAR_ONE_HIT_NOTE] = "Ico 的武器每揮一次，只能傷到同一隻影子一次。",
     [UI_STR_OPT_VAR_NEVER_DODGE] = "影子絕不閃避",
-    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] = "影子不會閃開 Ico 的揮擊。會關閉成就。",
+    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] = "影子不會閃開 Ico 的揮擊。",
     [UI_STR_OPT_VAR_AGGRESSION] = "影子的攻擊性",
     [UI_STR_VAL_VAR_AGG_OWN] = "各自原樣",
     [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "大膽、沉著",
@@ -738,13 +738,13 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "謹慎、沉著",
     [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "謹慎、迅速",
     [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
-        "影子的戰鬥方式：大膽或謹慎，沉著或迅速。「各自原樣」保留每隻影子本來的習性。成就維持開啟。",
+        "影子的戰鬥方式：大膽或謹慎，沉著或迅速。「各自原樣」保留每隻影子本來的習性。",
     [UI_STR_OPT_VAR_NO_HINTS] = "無提示",
-    [UI_STR_OPT_VAR_NO_HINTS_NOTE] = "與北美版光碟一樣，Yorda 不會提示該往哪裡走。成就維持開啟。",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE] = "與北美版光碟一樣，Yorda 不會提示該往哪裡走。",
     [UI_STR_OPT_VAR_BARRIER] = "女王的屏障",
     [UI_STR_VAL_VAR_HITS_5] = "5下",
     [UI_STR_VAL_VAR_HITS_7] = "7下",
-    [UI_STR_OPT_VAR_BARRIER_NOTE] = "需要擊中幾下才能打破女王的屏障。成就維持開啟。",
+    [UI_STR_OPT_VAR_BARRIER_NOTE] = "需要擊中幾下才能打破女王的屏障。",
     [UI_STR_OPT_VAR_NO_LOOK] = "過場動畫不可環顧",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE] = "過場動畫中，右搖桿不再能環顧四周。成就維持開啟。",
     [UI_STR_OPT_VAR_IGNORE_CAMS] = "忽略過場動畫鏡頭",
@@ -753,9 +753,8 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_DEBUG_MENU] = "除錯選單",
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] = "遊戲本身的除錯選單，供開發者使用。會關閉成就。",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
-        "這張試玩光碟沒有「美版」：它的影子和北美版光碟不同。「之後不變強」：之後的遊玩也不會變得更強。成就維持開啟。",
-    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
-        "這個版本的遊戲沒有提示，所以不會有任何改變。成就維持開啟。",
+        "這張試玩光碟沒有「美版」：它的影子和北美版光碟不同。「之後不變強」：之後的遊玩也不會變得更強。",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] = "這個版本的遊戲沒有提示，所以不會有任何改變。",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "這個版本的過場動畫本來就不能環顧四周，所以不會有任何改變。成就維持開啟。",
     [UI_STR_GPU_HANG_TURNIP] =
@@ -812,13 +811,13 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_SECTION_COMBAT] = "戰鬥",
     [UI_STR_OPT_VAR_AUTO_GUARD] = "自動防禦",
     [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
-        "關閉：Ico 不再擋下影子從正面的攻擊，會像從背後被打到一樣受傷。成就維持開啟。",
+        "關閉：Ico 不再擋下影子從正面的攻擊，會像從背後被打到一樣受傷。",
     [UI_STR_OPT_VAR_ATTACK_TURN] = "轉向影子",
     [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
-        "關閉：Ico 揮擊時不再轉向最近的影子，而是直直揮出；身旁的影子仍可能被打中。成就維持開啟。",
+        "關閉：Ico 揮擊時不再轉向最近的影子，而是直直揮出；身旁的影子仍可能被打中。",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Ico 倒下時影子等待",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
-        "關閉：Ico 倒下時影子不再等待，他躺在地上與起身時，影子的攻擊都會打中他。成就維持開啟。",
+        "關閉：Ico 倒下時影子不再等待，他躺在地上與起身時，影子的攻擊都會打中他。",
     [UI_STR_OPT_VAR_SWORD_COLOUR] = "光之劍顏色",
     [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
         "紅：光之劍的軌跡變成紅色，如同遊戲中未使用的另一把；只有顏色改變。從下一個房間起生效。",
@@ -828,10 +827,9 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
         "捕蟲網：每根木棒都變成遊戲中未使用的捕蟲網。無法揮動或點火，也傷不了影子。從下一個房間起生效。",
     [UI_STR_VAL_VAR_THIRD_JOURNEY] = "第三輪",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
-        "影子和第三輪遊玩一樣強韌（第一輪的兩倍），遊戲本身永遠不會進入第三輪。成就維持開啟。",
+        "影子和第三輪遊玩一樣強韌（第一輪的兩倍），遊戲本身永遠不會進入第三輪。",
     [UI_STR_OPT_VAR_PEACEFUL] = "和平的影子",
-    [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
-        "開啟：影子停留在出現的地方，不會去攻擊 Ico 或 Yorda。會關閉成就。",
+    [UI_STR_OPT_VAR_PEACEFUL_NOTE] = "開啟：影子停留在出現的地方，不會去攻擊 Ico 或 Yorda。",
     [UI_STR_OPT_VAR_CHAIN_SPEED] = "鎖鏈擺動速度",
     [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
         "Ico 抓住鎖鏈擺盪時，鎖鏈擺動的快慢。1 最慢，10 最快，4 是遊戲原本的值。成就不受影響。",
@@ -846,4 +844,37 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_OPT_FREE_MOVEMENT_NOTE] =
         "按 L2 後可用搖桿自由移動 Ico：左搖桿移動，右搖桿上下，L3 讓他落到地面。會關閉成就。",
     [UI_STR_REMAP_ASK_HINT] = "向 Yorda 詢問提示",
+    [UI_STR_DIFF] = "難度",
+    [UI_STR_DIFF_NOTE] = "決定這趟新旅程的影子、救援時間與規則。存檔會記住這個選擇。",
+    [UI_STR_DIFF_EASY] = "簡單",
+    [UI_STR_DIFF_NORMAL] = "普通",
+    [UI_STR_DIFF_HARD] = "困難",
+    [UI_STR_DIFF_CUSTOM] = "自訂",
+    [UI_STR_DIFF_EASY_NOTE] = "影子更慢、更溫和，不會抓走 Yorda 也不會閃躲，救她的時間更充裕。",
+    [UI_STR_DIFF_NORMAL_NOTE] = "遊戲原本的樣子。",
+    [UI_STR_DIFF_HARD_NOTE] =
+        "影子更快、更強韌，還會一起攻擊；沒有自動防禦，救援時間更短，同一房間倒下 3 次就遊戲結束。",
+    [UI_STR_DIFF_CUSTOM_NOTE] = "自訂你的規則，可在「自訂細項」中更改每一列。",
+    [UI_STR_DIFF_CUSTOMIZE] = "自訂細項",
+    [UI_STR_DIFF_CUSTOMIZE_NOTE] = "逐項更改規則。不符合任何預設的組合會顯示為「自訂」。",
+    [UI_STR_DIFF_RULES] = "規則",
+    [UI_STR_DIFF_NO_SHADOWS] = "沒有影子",
+    [UI_STR_DIFF_NO_SHADOWS_NOTE] = "開啟：影子完全不會出現，劇情照常進行。",
+    [UI_STR_DIFF_KNOCK_LIMIT] = "倒下次數上限",
+    [UI_STR_DIFF_KNOCK_LIMIT_NOTE] = "Ico 倒下達這個次數就遊戲結束。關閉表示沒有上限。",
+    [UI_STR_DIFF_KNOCK_SCOPE] = "倒下次數計算",
+    [UI_STR_DIFF_KNOCK_SCOPE_NOTE] =
+        "依每個房間計算（進入房間時重新計）或整趟旅程。上限關閉時不起作用。",
+    [UI_STR_DIFF_SCOPE_ROOM] = "每個房間",
+    [UI_STR_DIFF_SCOPE_JOURNEY] = "整趟旅程",
+    [UI_STR_DIFF_PERMADEATH] = "永久死亡",
+    [UI_STR_DIFF_PERMADEATH_NOTE] =
+        "開啟：任何遊戲結束都會終結這趟旅程。無法再「途中開始」，這個存檔也無法再讀取。",
+    [UI_STR_DIFF_LOCKED_NOTE] = "旅程開始時選定",
+    [UI_STR_DIFF_LINE] = "難度",
+    [UI_STR_DIFF_LINK] = "難度",
+    [UI_STR_DIFF_TOAST_ENDED] = "這趟旅程已經結束。",
+    [UI_STR_DIFF_TOAST_KNOCK] = "已倒下 %d / %d",
+    [UI_STR_DIFF_STATES_LOCKED] = "永久死亡的旅程無法讀取存檔狀態。",
+    [UI_STR_DIFF_WORD_PERMADEATH] = "永久死亡",
 };

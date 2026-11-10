@@ -38,7 +38,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "부담 없이 즐기고 싶은 분께. 일부 이벤트 장면에서는 요르다가 잡혀가는 모습이 나옵니다.",
     [UI_STR_OPT_PIT_TIME] = "요르다를 구할 시간",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "그림자가 요르다와 가라앉기 시작해 데려가기까지의 시간(초)으로, 일부 장면은 비례해 짧습니다. 위 요르다 항목을 켜면 잡혀가지 않습니다.",
+        "그림자가 요르다와 가라앉기 시작해 데려가기까지의 시간(초)으로, 일부 장면은 비례해 짧습니다. ‘요르다가 그림자에게 잡혀가지 않음’을 켜면 잡혀가지 않습니다.",
     [UI_STR_OPT_SHADOW_SPEED] = "그림자 속도",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "그림자가 걷고, 달리고, 나는 속도입니다. 공격하는 빈도는 바뀌지 않습니다.",
@@ -742,14 +742,13 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_SECTION_CUTSCENES] = "컷신",
     [UI_STR_OPT_VAR_TOUGHNESS] = "그림자 강도",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
-        "북미판: 그림자가 북미판 디스크와 같은 강도가 되고, 이후 플레이에서도 강해지지 않습니다. 업적은 그대로 유지됩니다.",
+        "북미판: 그림자가 북미판 디스크와 같은 강도가 되고, 이후 플레이에서도 강해지지 않습니다.",
     [UI_STR_VAL_VAR_AMERICAN] = "북미판",
     [UI_STR_VAL_VAR_NOT_TOUGHER] = "강해지지 않음",
     [UI_STR_OPT_VAR_ONE_HIT] = "휘두르기당 한 번 적중",
-    [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
-        "이코가 한 번 휘두르면 그림자에게 한 번만 맞습니다. 업적이 꺼집니다.",
+    [UI_STR_OPT_VAR_ONE_HIT_NOTE] = "이코가 한 번 휘두르면 그림자에게 한 번만 맞습니다.",
     [UI_STR_OPT_VAR_NEVER_DODGE] = "그림자가 피하지 않음",
-    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] = "그림자가 이코의 공격을 피하지 않습니다. 업적이 꺼집니다.",
+    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] = "그림자가 이코의 공격을 피하지 않습니다.",
     [UI_STR_OPT_VAR_AGGRESSION] = "그림자의 공격성",
     [UI_STR_VAL_VAR_AGG_OWN] = "기본",
     [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "대담, 느긋하게",
@@ -757,15 +756,13 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "신중, 느긋하게",
     [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "신중, 빠르게",
     [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
-        "그림자의 싸움 방식을 대담하거나 신중하게, 느긋하거나 빠르게 바꿉니다. 업적은 그대로 유지됩니다.",
+        "그림자의 싸움 방식을 대담하거나 신중하게, 느긋하거나 빠르게 바꿉니다.",
     [UI_STR_OPT_VAR_NO_HINTS] = "힌트 없음",
-    [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
-        "북미판처럼 요르다가 갈 곳을 알려 주지 않습니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE] = "북미판처럼 요르다가 갈 곳을 알려 주지 않습니다.",
     [UI_STR_OPT_VAR_BARRIER] = "여왕의 방벽",
     [UI_STR_VAL_VAR_HITS_5] = "5회",
     [UI_STR_VAL_VAR_HITS_7] = "7회",
-    [UI_STR_OPT_VAR_BARRIER_NOTE] =
-        "여왕의 방벽을 부수는 데 필요한 공격 횟수입니다. 업적은 그대로 유지됩니다.",
+    [UI_STR_OPT_VAR_BARRIER_NOTE] = "여왕의 방벽을 부수는 데 필요한 공격 횟수입니다.",
     [UI_STR_OPT_VAR_NO_LOOK] = "컷신 중 둘러보기 끄기",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
         "컷신 중에 오른쪽 스틱으로 둘러볼 수 없습니다. 업적은 그대로 유지됩니다.",
@@ -775,9 +772,8 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_DEBUG_MENU] = "디버그 메뉴",
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] = "게임 자체의 디버그 메뉴입니다(개발자용). 업적이 꺼집니다.",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
-        "이 데모에서는 북미판을 고를 수 없습니다. 그림자가 북미판 디스크와 같지 않습니다. 강해지지 않음: 이후 플레이에서도 강해지지 않습니다. 업적은 그대로 유지됩니다.",
-    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
-        "이 버전에는 힌트가 없어서 효과가 없습니다. 업적은 그대로 유지됩니다.",
+        "이 데모에서는 북미판을 고를 수 없습니다. 그림자가 북미판 디스크와 같지 않습니다. 강해지지 않음: 이후 플레이에서도 강해지지 않습니다.",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] = "이 버전에는 힌트가 없어서 효과가 없습니다.",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "이 버전은 컷신 중에 둘러볼 수 없어서 효과가 없습니다. 업적은 그대로 유지됩니다.",
     [UI_STR_GPU_HANG_TURNIP] =
@@ -839,13 +835,13 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_SECTION_COMBAT] = "전투",
     [UI_STR_OPT_VAR_AUTO_GUARD] = "자동 방어",
     [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
-        "끔: 이코가 앞쪽에서 오는 그림자의 공격을 막지 않으며, 뒤에서 맞을 때처럼 맞습니다. 업적은 그대로 유지됩니다.",
+        "끔: 이코가 앞쪽에서 오는 그림자의 공격을 막지 않으며, 뒤에서 맞을 때처럼 맞습니다.",
     [UI_STR_OPT_VAR_ATTACK_TURN] = "그림자 쪽으로 돌아봄",
     [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
-        "끔: 이코가 휘두를 때 가장 가까운 그림자 쪽으로 돌지 않고 정면으로 휘두릅니다. 옆에 있는 그림자는 여전히 맞을 수 있습니다. 업적은 그대로 유지됩니다.",
+        "끔: 이코가 휘두를 때 가장 가까운 그림자 쪽으로 돌지 않고 정면으로 휘두릅니다. 옆에 있는 그림자는 여전히 맞을 수 있습니다.",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "이코가 쓰러지면 그림자 대기",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
-        "끔: 이코가 쓰러져 있는 동안에도 그림자가 기다리지 않으며, 바닥에 쓰러져 있을 때와 일어나는 중에도 공격이 적중합니다. 업적은 그대로 유지됩니다.",
+        "끔: 이코가 쓰러져 있는 동안에도 그림자가 기다리지 않으며, 바닥에 쓰러져 있을 때와 일어나는 중에도 공격이 적중합니다.",
     [UI_STR_OPT_VAR_SWORD_COLOUR] = "빛의 검 색",
     [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
         "빨강: 빛의 검이 쓰이지 않은 쌍둥이 검처럼 붉은 궤적을 남깁니다. 색만 바뀝니다. 다음 방부터 적용됩니다.",
@@ -855,10 +851,10 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "잠자리채: 모든 막대기가 쓰이지 않은 잠자리채가 됩니다. 휘두르거나 불을 붙일 수 없고 그림자를 해치지 못합니다. 다음 방부터 적용됩니다.",
     [UI_STR_VAL_VAR_THIRD_JOURNEY] = "3회차",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
-        "그림자가 3회차와 같은 강도(첫 플레이의 2배)가 됩니다. 게임에서는 3회차에 도달할 수 없습니다. 업적은 그대로 유지됩니다.",
+        "그림자가 3회차와 같은 강도(첫 플레이의 2배)가 됩니다. 게임에서는 3회차에 도달할 수 없습니다.",
     [UI_STR_OPT_VAR_PEACEFUL] = "얌전한 그림자",
     [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
-        "켬: 그림자가 나타난 자리에 머물며 이코나 요르다를 쫓지 않습니다. 업적이 꺼집니다.",
+        "켬: 그림자가 나타난 자리에 머물며 이코나 요르다를 쫓지 않습니다.",
     [UI_STR_OPT_VAR_CHAIN_SPEED] = "사슬 흔들림 속도",
     [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
         "이코가 매달려 흔들 때 사슬이 흔들리는 속도입니다. 1이 가장 느리고 10이 가장 빠르며 4가 게임 원래 값입니다. 업적은 그대로 유지됩니다.",
@@ -873,4 +869,43 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_OPT_FREE_MOVEMENT_NOTE] =
         "L2를 누르면 스틱으로 이코를 자유롭게 움직입니다. 왼쪽 스틱은 이동, 오른쪽 스틱은 위아래, L3는 바닥에 내려놓습니다. 업적이 꺼집니다.",
     [UI_STR_REMAP_ASK_HINT] = "요르다에게 힌트 묻기",
+    [UI_STR_DIFF] = "난이도",
+    [UI_STR_DIFF_NOTE] =
+        "이번 새 여정의 그림자, 구출 시간, 규칙을 정합니다. 저장 데이터에 선택이 남습니다.",
+    [UI_STR_DIFF_EASY] = "쉬움",
+    [UI_STR_DIFF_NORMAL] = "보통",
+    [UI_STR_DIFF_HARD] = "어려움",
+    [UI_STR_DIFF_CUSTOM] = "사용자 설정",
+    [UI_STR_DIFF_EASY_NOTE] =
+        "더 느리고 순한 그림자가 요르다를 데려가지 않고 피하지도 않으며, 구출할 시간이 더 많습니다.",
+    [UI_STR_DIFF_NORMAL_NOTE] = "발매 당시 그대로의 게임입니다.",
+    [UI_STR_DIFF_HARD_NOTE] =
+        "더 빠르고 단단한 그림자가 함께 공격하고, 자동 방어가 없으며, 구출 시간이 짧고, 한 방에서 3번 쓰러지면 게임 오버입니다.",
+    [UI_STR_DIFF_CUSTOM_NOTE] =
+        "직접 정하는 규칙입니다. 세부 조정에서 모든 항목을 바꿀 수 있습니다.",
+    [UI_STR_DIFF_CUSTOMIZE] = "세부 조정",
+    [UI_STR_DIFF_CUSTOMIZE_NOTE] =
+        "규칙을 하나씩 바꿉니다. 어떤 난이도와도 맞지 않는 조합은 사용자 설정으로 표시됩니다.",
+    [UI_STR_DIFF_RULES] = "규칙",
+    [UI_STR_DIFF_NO_SHADOWS] = "그림자 없음",
+    [UI_STR_DIFF_NO_SHADOWS_NOTE] =
+        "켬: 그림자가 전혀 나타나지 않습니다. 이야기는 그대로 진행됩니다.",
+    [UI_STR_DIFF_KNOCK_LIMIT] = "쓰러짐 제한",
+    [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
+        "이코가 이 횟수만큼 쓰러지면 게임 오버입니다. 끔이면 제한이 없습니다.",
+    [UI_STR_DIFF_KNOCK_SCOPE] = "쓰러짐 집계",
+    [UI_STR_DIFF_KNOCK_SCOPE_NOTE] =
+        "방마다(방에 들어갈 때마다 다시 셈) 또는 여정 전체로 셉니다. 제한이 꺼져 있으면 효과가 없습니다.",
+    [UI_STR_DIFF_SCOPE_ROOM] = "방마다",
+    [UI_STR_DIFF_SCOPE_JOURNEY] = "여정 전체",
+    [UI_STR_DIFF_PERMADEATH] = "영구 사망",
+    [UI_STR_DIFF_PERMADEATH_NOTE] =
+        "켬: 게임 오버가 되면 이 여정이 끝납니다. 불러오기를 할 수 없고, 이 저장 데이터는 다시 불러올 수 없습니다.",
+    [UI_STR_DIFF_LOCKED_NOTE] = "여정을 시작할 때 정한 설정입니다",
+    [UI_STR_DIFF_LINE] = "난이도",
+    [UI_STR_DIFF_LINK] = "난이도",
+    [UI_STR_DIFF_TOAST_ENDED] = "이 여정은 끝났습니다.",
+    [UI_STR_DIFF_TOAST_KNOCK] = "쓰러짐 %d / %d",
+    [UI_STR_DIFF_STATES_LOCKED] = "영구 사망 여정에서는 저장 상태를 불러올 수 없습니다.",
+    [UI_STR_DIFF_WORD_PERMADEATH] = "영구 사망",
 };
