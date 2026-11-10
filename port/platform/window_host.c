@@ -3515,7 +3515,8 @@ static void photo_pump(void)
             photo_capture();
         }
     }
-    window_blended_pump(); /* F12's blended present's frame into its zip */
+    window_blended_pump();       /* F12's blended present's frame into its zip */
+    ico_upscale_pictures_pump(); /* the upscaler's pictures that came later */
     {
         char path[ICO_PATH_MAX];
         const int r = rd_capture_result(path, sizeof(path));
@@ -3564,7 +3565,7 @@ static void photo_pump(void)
                 }
                 fprintf(stderr, "window: F12: %s %s%s\n", r > 0 ? "wrote" : "could not write", path,
                         what);
-                ico_upscale_pictures_done(path, s_pres.reportZip);
+                ico_upscale_pictures_after_present(path, s_pres.reportZip);
                 if (s_pres.reportZip[0] != '\0') {
                     char why[160], entry[ICO_PATH_MAX];
                     size_t bytes = 0;

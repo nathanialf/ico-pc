@@ -22,9 +22,14 @@
  * frame, then the log), one kept, the loss zips left alone.  The
  * upscaler's pictures (upscale_pictures.h, issue 203): the stem of
  * <stem>-present.png; the four found beside it and added to the bug-report
- * zip in their order, the zip under the cap; with a cap the second picture
- * would pass, the first alone added and the line naming the refusal; none
- * beside the picture (no upscaler) adds nothing; in a folder whose name is
+ * zip, composite first, then scene, velocity, depth, the zip under the cap;
+ * with a cap the second picture would pass, the composite alone added and
+ * the line naming the scene's refusal; none beside the picture (no
+ * upscaler) adds nothing; the wait for a capture the present after the
+ * request did not dispatch (ico_upscale_pictures_after with PENDING): the
+ * present kept, nothing added while the outcome stays PENDING, the four
+ * added after the present when it is WRITTEN; an outcome other than
+ * PENDING adds at once, an EXPIRED one with none on disk adds nothing; in a folder whose name is
  * not ASCII ("José", UTF-8) the four are found (sized through
  * ico_path_kind: a plain stat() missed them on Windows).
  * argv[1]: a folder the test may write in (the build folder).
@@ -405,6 +410,14 @@ static void test_upscale_pictures(const char *base)
     CHECK(entry_is(&z, "up-velocity.png", pic, sizeof(pic) - 100u));
     CHECK(entry_is(&z, "up-depth.png", pic, sizeof(pic) - 200u));
     CHECK(entry_is(&z, "up-composite.png", pic, sizeof(pic) - 300u));
+    {
+        /* the zip's order: the dump, then composite, scene, velocity, depth */
+        static const char *const order[] = {"up-composite.png", "up-scene.png", "up-velocity.png",
+                                            "up-depth.png"};
+        for (int k = 0; k < 4; k++) {
+            CHECK(find(&z, order[k]) == k + 1);
+        }
+    }
     mz_zip_reader_end(&z);
     remove(zip);
     /* a cap the second picture would pass: the first alone, the refusal
@@ -424,7 +437,7 @@ static void test_upscale_pictures(const char *base)
 
         CHECK(ico_upscale_pictures_zip(present, zip, cap, 0, &added, line, sizeof(line)) == 4);
         CHECK(added == 1);
-        CHECK(strstr(line, "up-velocity.png not added") != NULL);
+        CHECK(strstr(line, "up-scene.png not added") != NULL);
         f = fopen(zip, "rb");
         have = 0;
         if (f != NULL) {
@@ -437,11 +450,60 @@ static void test_upscale_pictures(const char *base)
     memset(&z, 0, sizeof(z));
     CHECK(mz_zip_reader_init_file(&z, zip, 0));
     CHECK(mz_zip_reader_get_num_files(&z) == 2);
-    CHECK(find(&z, "up-scene.png") >= 0 && find(&z, "up-velocity.png") < 0);
+    CHECK(find(&z, "up-composite.png") >= 0 && find(&z, "up-scene.png") < 0);
     mz_zip_reader_end(&z);
     /* F12 without a zip: the four named, nothing written */
     CHECK(ico_upscale_pictures_zip(present, NULL, 0, 0, &added, line, sizeof(line)) == 4);
     CHECK(added == 0 && strstr(line, "-composite.png") != NULL);
+    remove(zip);
+    /* the wait: the present after the request did not dispatch (a keep
+       frame); the present goes in first, the four when the outcome comes */
+    CHECK(put(dump, rd, sizeof(rd)) == 0);
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) >= 0);
+    for (int i = 0; i < ICO_UPSCALE_PICTURES; i++) {
+        snprintf(path, sizeof(path), "%s%s", stem, ico_upscale_picture_suffix(i));
+        remove(path);
+    }
+    CHECK(ico_upscale_pictures_after(present, zip, ICO_UPSCALE_OUTCOME_PENDING) == 1);
+    CHECK(ico_upscale_pictures_waiting() == 1);
+    CHECK(ico_zip_add_file(zip, present, "up-present.png", why, sizeof(why), NULL) == 0);
+    CHECK(ico_upscale_pictures_step(ICO_UPSCALE_OUTCOME_PENDING) == 0);
+    CHECK(ico_upscale_pictures_waiting() == 1);
+    for (int i = 0; i < ICO_UPSCALE_PICTURES; i++) {
+        snprintf(path, sizeof(path), "%s%s", stem, ico_upscale_picture_suffix(i));
+        CHECK(put(path, pic, sizeof(pic) / 4u) == 0);
+    }
+    CHECK(ico_upscale_pictures_step(ICO_UPSCALE_OUTCOME_WRITTEN) == 1);
+    CHECK(ico_upscale_pictures_waiting() == 0);
+    CHECK(ico_upscale_pictures_step(ICO_UPSCALE_OUTCOME_WRITTEN) == 0);
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 6);
+    CHECK(find(&z, "up-present.png") == 1 && find(&z, "up-composite.png") == 2);
+    CHECK(entry_is(&z, "up-depth.png", pic, sizeof(pic) / 4u));
+    mz_zip_reader_end(&z);
+    remove(zip);
+    /* an outcome other than PENDING: at once, nothing kept */
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) >= 0);
+    CHECK(ico_upscale_pictures_after(present, zip, ICO_UPSCALE_OUTCOME_WRITTEN) == 0);
+    CHECK(ico_upscale_pictures_waiting() == 0);
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 5);
+    mz_zip_reader_end(&z);
+    remove(zip);
+    /* expired with none on disk: nothing added, nothing kept */
+    for (int i = 0; i < ICO_UPSCALE_PICTURES; i++) {
+        snprintf(path, sizeof(path), "%s%s", stem, ico_upscale_picture_suffix(i));
+        remove(path);
+    }
+    CHECK(ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) >= 0);
+    CHECK(ico_upscale_pictures_after(present, zip, ICO_UPSCALE_OUTCOME_PENDING) == 1);
+    CHECK(ico_upscale_pictures_step(ICO_UPSCALE_OUTCOME_EXPIRED) == 1);
+    memset(&z, 0, sizeof(z));
+    CHECK(mz_zip_reader_init_file(&z, zip, 0));
+    CHECK(mz_zip_reader_get_num_files(&z) == 1);
+    mz_zip_reader_end(&z);
     remove(zip);
     remove(present);
     for (int i = 0; i < ICO_UPSCALE_PICTURES; i++) {

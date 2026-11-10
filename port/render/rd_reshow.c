@@ -22,7 +22,12 @@
  *   rendered      otherwise: the camera moved (no hash), a tick's first
  *                 present, a different frame, Motion blur: Smooth (its trail
  *                 is a per-present accumulator), a video, [dev]
- *                 still_represent = false (ICO_RD_STILL_REPRESENT=0).
+ *                 still_represent = false (ICO_RD_STILL_REPRESENT=0), or
+ *                 an upscaler capture waiting for a dispatch (F12's
+ *                 pictures, rd_upscale_capture.h: a re-shown present does
+ *                 not dispatch, so the bug report would wait for the next
+ *                 replay; the re-show is the same bytes, so the present's
+ *                 picture is too).
  *
  * The tick's feedback passes (FEED128, DISPLAY) are left where the rendered
  * present left them, which is where the skipped one would have: it starts
@@ -32,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_upscale_capture.h"
 
 static bool switchOn(void)
 {
@@ -94,6 +100,7 @@ static struct {
 } s_ref;
 
 static uint64_t s_why[RD_RESHOW_COUNT];
+static uint64_t s_capture; /* of RD_RESHOW_OFF: an upscaler capture waiting */
 
 bool rd__present_blended(const RdFrame *rf, int first, bool present)
 {
@@ -101,8 +108,9 @@ bool rd__present_blended(const RdFrame *rf, int first, bool present)
     const uint64_t hash = rd__interp_frame_hash(&hashOk);
     static Snap now;
     snapNow(&now);
+    const bool capture = rd__upscale_capture_armed();
     const RdReshowIn in = {
-        .enabled = switchOn() && g_rd.hasDevice && !rhi_device_lost(),
+        .enabled = switchOn() && g_rd.hasDevice && !rhi_device_lost() && !capture,
         .smooth = g_rd.settings.motionBlurSmooth != 0,
         .video = g_rd.videoShown != 0,
         .hashOk = hashOk,
@@ -119,6 +127,7 @@ bool rd__present_blended(const RdFrame *rf, int first, bool present)
     };
     const int why = rd__reshow_why(&in);
     s_why[why]++;
+    s_capture += why == RD_RESHOW_OFF && capture;
     if (why == RD_RESHOW_SHOWN) {
         if (!present) {
             return true; /* nothing drawn: the targets are as the last present left them */
@@ -161,13 +170,15 @@ void rd__reshow_block(void)
             "again without a replay; rendered: %llu first of a tick, %llu with the camera moving, "
             "%llu with the frame differing from the last rendered one's, %llu with no such "
             "picture of the tick or another replay since, %llu after the settings, targets or "
-            "textures changed, %llu with it off, Motion blur: Smooth or a video",
+            "textures changed, %llu with it off, Motion blur: Smooth or a video (%llu of them "
+            "for an upscaler capture waiting for a dispatch)",
             switchOn() ? "true" : "false", (unsigned long long)s_why[RD_RESHOW_SHOWN],
             (unsigned long long)n, (unsigned long long)s_why[RD_RESHOW_FIRST],
             (unsigned long long)s_why[RD_RESHOW_MOVING], (unsigned long long)s_why[RD_RESHOW_DIFF],
             (unsigned long long)s_why[RD_RESHOW_STALE], (unsigned long long)s_why[RD_RESHOW_STATE],
-            (unsigned long long)s_why[RD_RESHOW_OFF]);
+            (unsigned long long)s_why[RD_RESHOW_OFF], (unsigned long long)s_capture);
     memset(s_why, 0, sizeof(s_why));
+    s_capture = 0;
 }
 
 uint64_t rd__reshow_count(int why)

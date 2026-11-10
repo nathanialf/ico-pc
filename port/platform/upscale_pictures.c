@@ -13,6 +13,11 @@
 
 static const char *const kSuffix[ICO_UPSCALE_PICTURES] = {"-scene.png", "-velocity.png",
                                                           "-depth.png", "-composite.png"};
+/* the order the zip takes them in: the pictures barely compress (about 3
+   bytes a pixel), so under the cap the last are the ones left out: the
+   composite and the scene first (the pair that tells the port's lines from
+   the upscaler's), then the motion vectors, the depth last */
+static const int kZipOrder[ICO_UPSCALE_PICTURES] = {3, 0, 1, 2};
 
 const char *ico_upscale_picture_suffix(int i)
 {
@@ -98,7 +103,8 @@ int ico_upscale_pictures_zip(const char *present_png, const char *zip, uint64_t 
         put(line, size, &at, "the zip cannot be read; ");
         return 0;
     }
-    for (int i = 0; i < ICO_UPSCALE_PICTURES; i++) {
+    for (int k = 0; k < ICO_UPSCALE_PICTURES; k++) {
+        const int i = kZipOrder[k];
         uint64_t bytes = 0;
 
         snprintf(path, sizeof(path), "%s%s", stem, kSuffix[i]);
@@ -134,20 +140,45 @@ int ico_upscale_pictures_zip(const char *present_png, const char *zip, uint64_t 
     return found;
 }
 
-void ico_upscale_pictures_done(const char *present_png, const char *zip)
+static const char *outcome_words(int outcome)
+{
+    switch (outcome) {
+    case ICO_UPSCALE_OUTCOME_WRITTEN:
+        return "the renderer wrote them";
+    case ICO_UPSCALE_OUTCOME_FAILED:
+        return "the renderer could not write them all (its \"upscale capture:\" line says which)";
+    case ICO_UPSCALE_OUTCOME_EXPIRED:
+        return "no upscaler dispatch within the wait after the request (keep frames throughout: "
+               "a fade or a loading picture)";
+    default:
+        return "the renderer's \"upscale capture:\" line says why";
+    }
+}
+
+/* the pictures beside present_png named, and added to zip; present_in: the
+   present's own picture is in the zip already (else its bytes reserved) */
+static int pictures_done(const char *present_png, const char *zip, int present_in, int outcome)
 {
     char line[1400];
     int added = 0;
     uint64_t reserve = 0;
+    const int zipping = zip != NULL && zip[0] != '\0';
 
     /* the present's own picture goes into the zip after these */
-    if (zip != NULL && zip[0] != '\0' && file_size(present_png, &reserve) != 0) {
+    if (!zipping || present_in || file_size(present_png, &reserve) != 0) {
         reserve = 0;
     }
     const int found = ico_upscale_pictures_zip(present_png, NULL, 0, 0, NULL, line, sizeof(line));
 
     if (found == 0) {
-        return; /* no upscaler in force: nothing was asked of it */
+        /* no upscaler in force: nothing was asked of it, nothing said; an
+           upscaler that was asked and gave nothing is said */
+        if (outcome != ICO_UPSCALE_OUTCOME_NONE && outcome != ICO_UPSCALE_OUTCOME_NO_UPSCALER) {
+            fprintf(stderr, "window: F12: the upscaler's pictures are not beside %s: %s%s\n",
+                    present_png, outcome_words(outcome),
+                    zipping ? "; the bug-report zip goes without them" : "");
+        }
+        return 0;
     }
     fprintf(stderr,
             "window: F12: wrote %s (the upscaler's inputs and output: lines in -scene.png are the "
@@ -160,4 +191,64 @@ void ico_upscale_pictures_done(const char *present_png, const char *zip)
         fprintf(stderr, "window: bug report: the upscaler's pictures: %s%d of %d in %s\n", line,
                 added, found, zip);
     }
+    return found;
+}
+
+void ico_upscale_pictures_done(const char *present_png, const char *zip)
+{
+    (void)pictures_done(present_png, zip, 0, ICO_UPSCALE_OUTCOME_NONE);
+}
+
+/* the present picture whose upscaler pictures are awaited, and its zip */
+static struct {
+    int waiting;
+    unsigned polls;
+    char present[1100];
+    char zip[1100];
+} s_wait;
+
+int ico_upscale_pictures_after(const char *present_png, const char *zip, int outcome)
+{
+    if (outcome != ICO_UPSCALE_OUTCOME_PENDING) {
+        (void)pictures_done(present_png, zip, 0, outcome);
+        s_wait.waiting = 0;
+        return 0;
+    }
+    if (strlen(present_png) >= sizeof(s_wait.present) ||
+        (zip != NULL && strlen(zip) >= sizeof(s_wait.zip))) {
+        fprintf(stderr, "window: F12: the upscaler's pictures are not awaited (the path is too "
+                        "long)\n");
+        return 0;
+    }
+    snprintf(s_wait.present, sizeof(s_wait.present), "%s", present_png);
+    snprintf(s_wait.zip, sizeof(s_wait.zip), "%s", zip != NULL ? zip : "");
+    s_wait.waiting = 1;
+    s_wait.polls = 0;
+    fprintf(stderr,
+            "window: F12: the upscaler's pictures are not taken yet (the present after the request "
+            "did not dispatch the upscaler); %s when they are\n",
+            s_wait.zip[0] ? "the bug-report zip gets them" : "they are named");
+    return 1;
+}
+
+int ico_upscale_pictures_step(int outcome)
+{
+    if (!s_wait.waiting) {
+        return 0;
+    }
+    s_wait.polls++;
+    if (outcome == ICO_UPSCALE_OUTCOME_PENDING) {
+        return 0;
+    }
+    s_wait.waiting = 0;
+    fprintf(stderr, "window: F12: the upscaler's pictures came %u pumps after the present's\n",
+            s_wait.polls);
+    /* the present's picture went into the zip when it was written */
+    (void)pictures_done(s_wait.present, s_wait.zip, 1, outcome);
+    return 1;
+}
+
+int ico_upscale_pictures_waiting(void)
+{
+    return s_wait.waiting;
 }

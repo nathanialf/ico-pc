@@ -80,6 +80,12 @@
  *             the capture; armed with a width limit of 1000 the composite
  *             is halved to 768 x 768; with the upscaler off the arm is
  *             dropped at the next present and nothing is written
+ *             (rd_upscale_capture_state NO_UPSCALER); the wait: armed,
+ *             presents without a dispatch (finish with no frame) keep it
+ *             armed and PENDING (the still re-present refused meanwhile:
+ *             rd__upscale_capture_armed), the next frame's dispatch writes
+ *             it (WRITTEN, disarmed); the bound needs both 60 presents and
+ *             2 s (rd__upscale_capture_wait_over)
  * Any validation error fails the test.  "rd_upscale_test off" runs the
  * scales, marker and off cases alone (rd_upscale_off_mali and
  * rd_upscale_off_tiler: the marker a NOP under a phone's limits and under
@@ -703,9 +709,42 @@ static void testCapture(void)
     snprintf(path, sizeof(path), "%s-scene.png", stem);
     CHECK(rd__upscale_capture_stats()->dropped == dropped + 1u && !pngSize(path, &w, &h),
           "capture: the arm without an upscaler was not dropped");
+    CHECK(rd_upscale_capture_state() == RD_UPSCALE_CAPTURE_NO_UPSCALER,
+          "capture: state %d after the drop", rd_upscale_capture_state());
     rd__upscale_set(true, 1.5f);
     settings(RD_PRESET_ENHANCED, 3.0f, 0.0f);
     richFrame(0);
+    /* the wait: presents without a dispatch (a keep frame's) keep the arm */
+    CHECK(rd_capture_upscale(stem, 0), "capture: not armed (wait)");
+    CHECK(rd__upscale_capture_armed() && rd_upscale_capture_state() == RD_UPSCALE_CAPTURE_PENDING,
+          "capture: armed %d state %d after the arm", rd__upscale_capture_armed(),
+          rd_upscale_capture_state());
+    for (int k = 0; k < 3; k++) {
+        (void)rd__upscale_capture_finish(); /* a present that did not dispatch */
+    }
+    CHECK(rd__upscale_capture_armed() && rd_upscale_capture_state() == RD_UPSCALE_CAPTURE_PENDING,
+          "capture: the wait ended after 3 presents without a dispatch (armed %d state %d)",
+          rd__upscale_capture_armed(), rd_upscale_capture_state());
+    const uint32_t written = rd__upscale_capture_stats()->written;
+    richFrame(0);
+    (void)rd__upscale_capture_finish();
+    CHECK(!rd__upscale_capture_armed() &&
+              rd_upscale_capture_state() == RD_UPSCALE_CAPTURE_WRITTEN &&
+              rd__upscale_capture_stats()->written == written + 1u,
+          "capture: the dispatch after the wait: armed %d state %d", rd__upscale_capture_armed(),
+          rd_upscale_capture_state());
+    /* the bound: both the presents and the time */
+    CHECK(!rd__upscale_capture_wait_over(RD_UPSCALE_CAPTURE_WAIT_PRESENTS - 1u, 1.0e6),
+          "capture: the wait over before 60 presents");
+    CHECK(!rd__upscale_capture_wait_over(1000u, RD_UPSCALE_CAPTURE_WAIT_MS - 1.0),
+          "capture: the wait over before 2 s");
+    CHECK(
+        rd__upscale_capture_wait_over(RD_UPSCALE_CAPTURE_WAIT_PRESENTS, RD_UPSCALE_CAPTURE_WAIT_MS),
+        "capture: the wait not over at the bound");
+    for (int i = 0; i < RD_UPSCALE_CAPTURE_PICTURES; i++) {
+        snprintf(path, sizeof(path), "%s%s", stem, rd__upscale_capture_suffix(i));
+        remove(path);
+    }
 }
 
 static void testGuard(void)

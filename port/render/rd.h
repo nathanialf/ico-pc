@@ -1406,6 +1406,23 @@ int rd_capture_result(char *path, uint32_t pathSize);
  * (rd_upscale_capture.h, docs/port/DISPLAY.md "The upscaler's pictures") */
 bool rd_capture_upscale(const char *stem, uint32_t maxW);
 
+/* The last rd_capture_upscale's outcome, readable from any thread:
+ * RD_UPSCALE_CAPTURE_PENDING while it waits for a dispatch or for its
+ * pictures to be written (a keep frame does not dispatch; the wait is
+ * bounded: rd_upscale_capture.h), then one of the others; NONE before any
+ * arm. The window holds the bug-report zip's pictures until it is not
+ * PENDING (port/platform/upscale_pictures.h) */
+enum {
+    RD_UPSCALE_CAPTURE_NONE = 0,
+    RD_UPSCALE_CAPTURE_PENDING,
+    RD_UPSCALE_CAPTURE_WRITTEN,     /* all four (or those given) written */
+    RD_UPSCALE_CAPTURE_FAILED,      /* a picture not written: the renderer's line says which */
+    RD_UPSCALE_CAPTURE_NO_UPSCALER, /* no upscaler in force at the next present */
+    RD_UPSCALE_CAPTURE_EXPIRED      /* no dispatch within the wait's bound */
+};
+
+int rd_upscale_capture_state(void);
+
 /* ------------------------------------------------- a save state's picture
  * The picture a save state keeps (port/game/state_host.c): the game as it
  * was the moment before the pause menu came up, taken without the menu.
