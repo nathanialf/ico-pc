@@ -238,7 +238,11 @@ static int64_t infNext(Inflater *f, const uint8_t **p)
                                            f->dict + f->dictOff, &outSize, (mz_uint32)more);
         f->inOff += inSize;
         f->inAvail -= inSize;
-        if (st < TINFL_STATUS_DONE) {
+        if (st == TINFL_STATUS_FAILED_CANNOT_MAKE_PROGRESS) {
+            /* the stream ends before its last block does (the Korean disc's
+               STGST26A.DF, 144 bytes short): what came out is still handed */
+            f->done = 1;
+        } else if (st < TINFL_STATUS_DONE) {
             return -1;
         }
         if (st == TINFL_STATUS_DONE) {

@@ -775,6 +775,7 @@ typedef struct {
     uint32_t zeroSize;
     uint8_t *cl;
     uint32_t clSize;
+    int handed; /* members of the pack being read handed so far */
 } Scan;
 
 static int endsWith(const char *s, const char *t)
@@ -806,6 +807,7 @@ static int scanMember(void *user, int member, const char *name, const IcoDfMembe
     Scan *s = (Scan *)user;
 
     (void)member;
+    s->handed++;
     if (modelName(name) && m->size >= 12 && memcmp(data, "PS2O", 4) == 0 && le32(data + 8) == 0) {
         if (s->zero == 0) {
             snprintf(s->zeroPack, sizeof(s->zeroPack), "%s", s->pack);
@@ -884,6 +886,15 @@ static int runDisc(const char *image)
             continue;
         }
         s.pack = ico_df_index_entry_name(idx, e);
+        s.handed = 0;
+        if (strcmp(s_slug, "kor") == 0 && strcmp(s.pack, "STGST26A.DF") == 0) {
+            /* this disc's stream of the pack stops 144 bytes short, inside
+               its last member (camdata/end_check.zzz): every member before
+               it is handed */
+            CHECK(ico_df_index_read_pack(idx, e, scanMember, &s) == -1 && s.handed == n - 1,
+                  "pack %s hands all but its cut last member (%d of %d)", s.pack, s.handed, n);
+            continue;
+        }
         CHECK(ico_df_index_read_pack(idx, e, scanMember, &s) == 0, "pack %s reads", s.pack);
     }
     if (want < 0) {
