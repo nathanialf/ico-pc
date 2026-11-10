@@ -261,6 +261,21 @@ int sekizo_13b_ntscaug6jun26 = 0;
 
 unsigned char sekizo_13b_vol_ntscaug6jun26 = 0;
 
+/* PC port: port/game/no_shadows.h: No Shadows (the journey's Customize row).  ico_no_shadows: 1
+   while it is on; ico_no_shadows_forced: the log line of a forced condition (1 the final fight
+   let through, 2 the June 2001 demo's).  The final fight has no Shadow to beat, so its waiters
+   (actSt13bBossAfterChk and its twins) would pass at once and close the boss stream before the
+   code that plays it had played it: ico_no_shadows_fight_held keeps each waiting until the fight
+   is under way (ico_no_shadows_fight_begun: its music played in actSt13bBossChk / actConte10b,
+   the June 2001 demo's cutscene over in actConte10b_jun26, or the room entered with the fight
+   begun in actSt13bBoss) and four seconds more; ico_no_shadows_fight_reset at the room's first
+   tick.  The state is the port's (no game variable is added). */
+extern int ico_no_shadows(void);
+extern void ico_no_shadows_forced(int what, int a);
+extern void ico_no_shadows_fight_reset(void);
+extern void ico_no_shadows_fight_begun(int hold_ticks);
+extern int ico_no_shadows_fight_held(void);
+
 int st13b_yure = 0;
 
 unsigned char st13b_yure_vol = 0;
@@ -1834,6 +1849,9 @@ static void actSt13bBoss_jun26(GObj *volatile self)
 {
     GObj *x = self;
     Act *act = actInitialize(self);
+    /* PC port: No Shadows: the fight's start is this room load's own: cleared at the room's
+       first tick, before actSt13bBossAfter's waiter first looks (ico_no_shadows_fight_held) */
+    ico_no_shadows_fight_reset();
     _ACTWait(1);
 
     fightSoundProcessRequestPause();
@@ -1854,6 +1872,8 @@ static void actSt13bBoss_jun26(GObj *volatile self)
     } else if (gflagChk(14) == 0) {
         CameraSetCameraSet(5);
         scpAdpcmPlayRequestFunc(39, 0, 1, 0, 1);
+        /* PC port: No Shadows: entered with the fight begun */
+        ico_no_shadows_fight_begun((60 - systemStatus[0] * 10) / systemStatus[1] * 4);
     }
 }
 
@@ -1865,6 +1885,9 @@ void actSt13bBoss(GObj *volatile self)
     }
     GObj *x = self;
     Act *act = actInitialize(self);
+    /* PC port: No Shadows: the fight's start is this room load's own: cleared at the room's
+       first tick, before actSt13bBossAfter's waiter first looks (ico_no_shadows_fight_held) */
+    ico_no_shadows_fight_reset();
     _ACTWait(1);
 
     ScpCallCameraSetTarget(-1886.0f, PAL_AUG6JUN26(625.0f, 651.0f), -4.0f);
@@ -1885,6 +1908,12 @@ void actSt13bBoss(GObj *volatile self)
     } else if (gflagChk(14) == 0) {
         scpAdpcmPlayRequestFunc(PAL_NTSCAUG6JUN26(37, 36), &boss, 1, 0, 1);
         scpSeEnvMasterVolRate = 0.5f;
+        /* PC port: No Shadows: entered with the fight begun: InqCapsuleGhostBossEnd answers
+           from the fight's start flag, which a load clears (itouGflagLoad) */
+        if (ico_no_shadows()) {
+            CapsuleGhostBossStart();
+            ico_no_shadows_fight_begun((60 - systemStatus[0] * 10) / systemStatus[1] * 4);
+        }
     }
 }
 
@@ -2007,6 +2036,8 @@ void actSt13bBossChk(GObj *volatile self)
     }
 
     AdpcmPlay(boss->stream);
+    /* PC port: No Shadows: the fight is under way */
+    ico_no_shadows_fight_begun((60 - systemStatus[0] * 10) / systemStatus[1] * 4);
 }
 
 static void actConte10b_jun26(GObj *volatile self)
@@ -2059,6 +2090,8 @@ static void actConte10b_jun26(GObj *volatile self)
     scpBoyControlReadDisable = 0;
     lt_switch_layout(50);
     scpWakeupEnemyAll();
+    /* PC port: No Shadows: the fight is under way */
+    ico_no_shadows_fight_begun((60 - systemStatus[0] * 10) / systemStatus[1] * 4);
 }
 
 void actConte10b(GObj *volatile self)
@@ -2083,6 +2116,8 @@ void actConte10b(GObj *volatile self)
     }
 
     AdpcmPlay(boss->stream);
+    /* PC port: No Shadows: the fight is under way */
+    ico_no_shadows_fight_begun((60 - systemStatus[0] * 10) / systemStatus[1] * 4);
 
     scpPlayMot(boyGObj, 0);
     scpPlayEnd(boyGObj);
@@ -2092,8 +2127,12 @@ void actConte10b(GObj *volatile self)
 
 static void actSt13bBossAfterChk_ntsc(GObj *volatile self)
 {
-    while (InqCapsuleGhostBossEnd() == 0) {
+    /* PC port: No Shadows: held until the fight is under way (ico_no_shadows_fight_held) */
+    while (InqCapsuleGhostBossEnd() == 0 || ico_no_shadows_fight_held()) {
         _ACTWait(1);
+    }
+    if (ico_no_shadows()) {
+        ico_no_shadows_forced(1, stage_no);
     }
 
     lt_switch_layout(51);
@@ -2119,9 +2158,15 @@ static void actSt13bBossAfterChk_ntsc(GObj *volatile self)
 
 static inline void actSt13bBossAfterChk_jun26(GObj *volatile self)
 {
+    /* PC port: No Shadows: 2139 and 2140 start as killed ones (actEnemyStart), and this waiter is
+       armed at the room's load: held until the fight is under way (ico_no_shadows_fight_held), or
+       the post-fight scene would play on entry */
     while (actEnemyFlagCheckDead(scpSearchGobj(2139)) == 0 ||
-           actEnemyFlagCheckDead(scpSearchGobj(2140)) == 0) {
+           actEnemyFlagCheckDead(scpSearchGobj(2140)) == 0 || ico_no_shadows_fight_held()) {
         _ACTWait(1);
+    }
+    if (ico_no_shadows()) {
+        ico_no_shadows_forced(2, stage_no);
     }
 
     lt_switch_layout(51);
@@ -2142,8 +2187,12 @@ static inline void actSt13bBossAfterChk_jun26(GObj *volatile self)
 
 static inline void actSt13bBossAfterChk_aug6(GObj *volatile self)
 {
-    while (InqCapsuleGhostBossEnd() == 0) {
+    /* PC port: No Shadows: held until the fight is under way (ico_no_shadows_fight_held) */
+    while (InqCapsuleGhostBossEnd() == 0 || ico_no_shadows_fight_held()) {
         _ACTWait(1);
+    }
+    if (ico_no_shadows()) {
+        ico_no_shadows_forced(1, stage_no);
     }
 
     lt_switch_layout(51);
@@ -2183,8 +2232,12 @@ void actSt13bBossAfterChk(GObj *volatile self)
     }
     GProc *th;
 
-    while (InqCapsuleGhostBossEnd() == 0) {
+    /* PC port: No Shadows: held until the fight is under way (ico_no_shadows_fight_held) */
+    while (InqCapsuleGhostBossEnd() == 0 || ico_no_shadows_fight_held()) {
         _ACTWait(1);
+    }
+    if (ico_no_shadows()) {
+        ico_no_shadows_forced(1, stage_no);
     }
 
     lt_switch_layout(PAL_JPNKORCN(55, 52));
