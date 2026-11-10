@@ -35,6 +35,9 @@
 
 #define S(x) ((unsigned long long)((x) * 1e9))
 
+/* issue 209's driver text (Turnip underneath, driver id 18) */
+static const char k_purple[] = "device 5143:43050a01; driver PurpleVK public driver PurpleVK "
+                               "26.3.0-devel (git-62ac221a33), version 26.2.99";
 static const char k_qcom[] = "Qualcomm Technologies Inc. Adreno Vulkan Driver Driver Build: "
                              "bad34dcf83, I1064ae0a1f, 1764326394\nDate: 11/28/25";
 
@@ -118,7 +121,7 @@ static void testShort(void)
 static void testTurnip(void)
 {
     IcoPresentFallback f = {0};
-    const int gate = ico_present_fallback_driver_eligible(0x5143u, "turnip Mesa driver")
+    const int gate = ico_present_fallback_driver_eligible(0x5143u, 0u, "turnip Mesa driver")
                          ? ICO_PRESENT_FALLBACK_GATE_YES
                          : ICO_PRESENT_FALLBACK_GATE_NO;
     char line[128];
@@ -205,22 +208,37 @@ static void testOther(void)
 
 static void testDriver(void)
 {
-    CHECK(ico_present_fallback_driver_eligible(0x5143u, k_qcom));
-    CHECK(ico_present_fallback_driver_eligible(0x13b5u, "ARM Mali driver"));
-    CHECK(ico_present_fallback_driver_eligible(0x5143u, NULL));
+    CHECK(ico_present_fallback_driver_eligible(0x5143u, 8u, k_qcom));
+    CHECK(ico_present_fallback_driver_eligible(0x13b5u, 0u, "ARM Mali driver"));
+    CHECK(ico_present_fallback_driver_eligible(0x5143u, 0u, NULL));
     /* the Mali-G52 stays eligible (the Mesa/Turnip exclusion) but is not Qualcomm's own: the
        blocks' switch needs the vendor too */
-    CHECK(ico_present_fallback_driver_eligible(0x13b5u, k_mali));
-    CHECK(!ico_present_fallback_qualcomm_own(0x13b5u, k_mali));
-    CHECK(!ico_present_fallback_qualcomm_own(0x13b5u, "ARM Mali driver"));
-    CHECK(!ico_present_fallback_qualcomm_own(0x1002u, "AMD proprietary"));
-    CHECK(!ico_present_fallback_qualcomm_own(0x10deu, "NVIDIA 570"));
-    CHECK(ico_present_fallback_qualcomm_own(0x5143u, k_qcom));
-    CHECK(!ico_present_fallback_driver_eligible(0x5143u, "turnip Mesa driver"));
-    CHECK(!ico_present_fallback_driver_eligible(0x5143u, "TURNIP"));
-    CHECK(!ico_present_fallback_driver_eligible(0x1002u, "radv Mesa 25.1.0"));
-    CHECK(!ico_present_fallback_driver_eligible(0x10005u, "llvmpipe MESA 24.0"));
-    CHECK(!ico_present_fallback_driver_eligible(0u, k_qcom));
+    CHECK(ico_present_fallback_driver_eligible(0x13b5u, 0u, k_mali));
+    CHECK(!ico_present_fallback_qualcomm_own(0x13b5u, 0u, k_mali));
+    CHECK(!ico_present_fallback_qualcomm_own(0x13b5u, 0u, "ARM Mali driver"));
+    CHECK(!ico_present_fallback_qualcomm_own(0x1002u, 0u, "AMD proprietary"));
+    CHECK(!ico_present_fallback_qualcomm_own(0x10deu, 0u, "NVIDIA 570"));
+    CHECK(ico_present_fallback_qualcomm_own(0x5143u, 8u, k_qcom));
+    CHECK(!ico_present_fallback_driver_eligible(0x5143u, 0u, "turnip Mesa driver"));
+    CHECK(!ico_present_fallback_driver_eligible(0x5143u, 0u, "TURNIP"));
+    CHECK(!ico_present_fallback_driver_eligible(0x1002u, 0u, "radv Mesa 25.1.0"));
+    CHECK(!ico_present_fallback_driver_eligible(0x10005u, 0u, "llvmpipe MESA 24.0"));
+    CHECK(!ico_present_fallback_driver_eligible(0u, 8u, k_qcom));
+    /* issue 209: a Turnip build that renamed itself ("PurpleVK public
+       driver") is Turnip by its Vulkan driver id (18), as rd_profile.c's
+       rd__driver_is_turnip has it: not eligible, not Qualcomm's own, no FIFO
+       from the start, no switch; without the id its text alone reads as
+       Qualcomm's own; Qualcomm's own driver (id 8) unchanged */
+    CHECK(!ico_present_fallback_driver_eligible(0x5143u, 18u, k_purple));
+    CHECK(!ico_present_fallback_qualcomm_own(0x5143u, 18u, k_purple));
+    CHECK(ico_present_fallback_qualcomm_own(0x5143u, 0u, k_purple));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0x5143u, 18u, k_purple));
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, 18u, k_purple, ICO_PRESENT_FALLBACK_AUTO) ==
+          ICO_PRESENT_FALLBACK_GATE_NO);
+    CHECK(ico_present_fallback_qualcomm_own(0x5143u, 8u, k_qcom));
+    CHECK(ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0x5143u, 8u, k_qcom));
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, 8u, k_qcom, ICO_PRESENT_FALLBACK_AUTO) ==
+          ICO_PRESENT_FALLBACK_GATE_YES);
 }
 
 /* the window's gate (window_present_fallback.c gate()): only Qualcomm's own
@@ -230,32 +248,32 @@ static void testGate(void)
 {
     const IcoPresentFallbackMode autoM = ICO_PRESENT_FALLBACK_AUTO;
 
-    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, k_qcom, autoM) ==
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, 8u, k_qcom, autoM) ==
           ICO_PRESENT_FALLBACK_GATE_YES);
-    CHECK(ico_present_fallback_gate(0, 1, 1, 0x13b5u, k_mali, autoM) ==
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x13b5u, 0u, k_mali, autoM) ==
           ICO_PRESENT_FALLBACK_GATE_OTHER);
-    CHECK(ico_present_fallback_gate(0, 1, 1, 0x1010u, "PowerVR Rogue", autoM) ==
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x1010u, 0u, "PowerVR Rogue", autoM) ==
           ICO_PRESENT_FALLBACK_GATE_OTHER);
-    CHECK(ico_present_fallback_gate(0, 1, 1, 0x10deu, "NVIDIA 570", autoM) ==
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x10deu, 0u, "NVIDIA 570", autoM) ==
           ICO_PRESENT_FALLBACK_GATE_OTHER);
-    CHECK(ico_present_fallback_gate(0, 1, 1, 0x1002u, "AMD proprietary", autoM) ==
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x1002u, 0u, "AMD proprietary", autoM) ==
           ICO_PRESENT_FALLBACK_GATE_OTHER);
-    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, "turnip Mesa driver", autoM) ==
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, 0u, "turnip Mesa driver", autoM) ==
           ICO_PRESENT_FALLBACK_GATE_NO);
-    CHECK(ico_present_fallback_gate(0, 1, 1, 0x1002u, "radv Mesa 25.1.0", autoM) ==
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x1002u, 0u, "radv Mesa 25.1.0", autoM) ==
           ICO_PRESENT_FALLBACK_GATE_NO);
-    CHECK(ico_present_fallback_gate(1, 1, 1, 0x5143u, k_qcom, autoM) ==
+    CHECK(ico_present_fallback_gate(1, 1, 1, 0x5143u, 8u, k_qcom, autoM) ==
           ICO_PRESENT_FALLBACK_GATE_NO);
-    CHECK(ico_present_fallback_gate(0, 0, 1, 0x5143u, k_qcom, autoM) ==
+    CHECK(ico_present_fallback_gate(0, 0, 1, 0x5143u, 8u, k_qcom, autoM) ==
           ICO_PRESENT_FALLBACK_GATE_NO);
-    CHECK(ico_present_fallback_gate(0, 1, 0, 0x5143u, k_qcom, autoM) ==
+    CHECK(ico_present_fallback_gate(0, 1, 0, 0x5143u, 8u, k_qcom, autoM) ==
           ICO_PRESENT_FALLBACK_GATE_NO);
-    CHECK(ico_present_fallback_gate(0, 1, 1, 0u, NULL, autoM) == ICO_PRESENT_FALLBACK_GATE_NO);
-    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, k_qcom, ICO_PRESENT_FALLBACK_OFF) ==
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0u, 0u, NULL, autoM) == ICO_PRESENT_FALLBACK_GATE_NO);
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, 8u, k_qcom, ICO_PRESENT_FALLBACK_OFF) ==
           ICO_PRESENT_FALLBACK_GATE_KEPT);
-    CHECK(ico_present_fallback_gate(0, 1, 1, 0x13b5u, k_mali, ICO_PRESENT_FALLBACK_OFF) ==
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x13b5u, 0u, k_mali, ICO_PRESENT_FALLBACK_OFF) ==
           ICO_PRESENT_FALLBACK_GATE_KEPT);
-    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, k_qcom, ICO_PRESENT_FALLBACK_FIFO) ==
+    CHECK(ico_present_fallback_gate(0, 1, 1, 0x5143u, 8u, k_qcom, ICO_PRESENT_FALLBACK_FIFO) ==
           ICO_PRESENT_FALLBACK_GATE_NO);
 }
 
@@ -288,26 +306,29 @@ static void testStart(void)
     const unsigned qcom = 0x5143u;
 
     /* eligible + auto + vsync off: FIFO from the start */
-    CHECK(ico_present_fallback_qualcomm_own(qcom, k_qcom));
-    CHECK(ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, k_qcom));
+    CHECK(ico_present_fallback_qualcomm_own(qcom, 8u, k_qcom));
+    CHECK(ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, 8u, k_qcom));
     /* the reporter's A/B: off keeps mailbox for the whole run */
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_OFF, 1, 0, qcom, k_qcom));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_OFF, 1, 0, qcom, 8u, k_qcom));
     /* fifo is FIFO from the start by its own path, not this one */
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_FIFO, 1, 0, qcom, k_qcom));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_FIFO, 1, 0, qcom, 8u, k_qcom));
     /* vsync on: unchanged */
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 1, qcom, k_qcom));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 1, qcom, 8u, k_qcom));
     /* Mesa's and Turnip's drivers on the same vendor id keep mailbox */
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, "turnip Mesa driver"));
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, "Mesa 25.1.0"));
-    CHECK(!ico_present_fallback_qualcomm_own(qcom, "TURNIP"));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, 0u,
+                                      "turnip Mesa driver"));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, 0u, "Mesa 25.1.0"));
+    CHECK(!ico_present_fallback_qualcomm_own(qcom, 0u, "TURNIP"));
     /* other vendors keep mailbox and the blocks' fallback */
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0x13b5u, "ARM Mali driver"));
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0x1002u, "AMD proprietary"));
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0x10deu, NULL));
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0u, k_qcom));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0x13b5u, 0u,
+                                      "ARM Mali driver"));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0x1002u, 0u,
+                                      "AMD proprietary"));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0x10deu, 0u, NULL));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, 0u, 8u, k_qcom));
     /* a Qualcomm device with no driver text is the stock driver (the rule
        that exists: only Mesa's and Turnip's texts are excluded) */
-    CHECK(ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, NULL));
+    CHECK(ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 1, 0, qcom, 0u, NULL));
     /* phones only: Windows on Snapdragon (the same vendor id, Qualcomm's
        own Vulkan driver, a surface offering immediate) is never asked, so
        its Vsync Off stays immediate */
@@ -315,8 +336,8 @@ static void testStart(void)
     CHECK(!ico_present_fallback_start_asked(ICO_PRESENT_FALLBACK_AUTO, 0));
     CHECK(!ico_present_fallback_start_asked(ICO_PRESENT_FALLBACK_OFF, 1));
     CHECK(!ico_present_fallback_start_asked(ICO_PRESENT_FALLBACK_FIFO, 1));
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0, qcom, k_qcom));
-    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0, qcom, NULL));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0, qcom, 8u, k_qcom));
+    CHECK(!ico_present_fallback_start(ICO_PRESENT_FALLBACK_AUTO, 0, 0, qcom, 0u, NULL));
     /* the build's own platform */
 #ifdef __ANDROID__
     CHECK(ICO_PRESENT_FALLBACK_ANDROID == 1);

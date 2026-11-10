@@ -28,12 +28,13 @@ static int has_word(const char *s, const char *word)
     return 0;
 }
 
-int ico_memory_floor_driver(unsigned vendor_id, const char *driver_text)
+int ico_memory_floor_driver(unsigned vendor_id, unsigned driver_id, const char *driver_text)
 {
     if (vendor_id == 0u) {
         return ICO_MEMORY_FLOOR_DRIVER_UNKNOWN;
     }
-    if (vendor_id == 0x5143u && !has_word(driver_text, "mesa") &&
+    /* 18: VkDriverId VK_DRIVER_ID_MESA_TURNIP (port/rhi/rhi_driver_version.h) */
+    if (vendor_id == 0x5143u && driver_id != 18u && !has_word(driver_text, "mesa") &&
         !has_word(driver_text, "turnip")) {
         return ICO_MEMORY_FLOOR_DRIVER_QUALCOMM;
     }

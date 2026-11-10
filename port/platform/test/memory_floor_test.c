@@ -97,14 +97,23 @@ static void testFloor(void)
 
 static void testDriver(void)
 {
-    CHECK(ico_memory_floor_driver(0x5143u, "driver Qualcomm 512.676.53, version 512.676.53") == Q);
-    CHECK(ico_memory_floor_driver(0x5143u, NULL) == Q);
-    CHECK(ico_memory_floor_driver(0x5143u, "turnip Mesa driver") == O);
-    CHECK(ico_memory_floor_driver(0x5143u, "Turnip Mesa 26.3.0") == O);
-    CHECK(ico_memory_floor_driver(0x5143u, "Mesa 25.1.0") == O);
-    CHECK(ico_memory_floor_driver(0x1010u, "PowerVR D-Series Vulkan Driver 26.1@7036548") == O);
-    CHECK(ico_memory_floor_driver(0x13B5u, "Mali-G52") == O);
-    CHECK(ico_memory_floor_driver(0u, "anything") == U);
+    CHECK(ico_memory_floor_driver(0x5143u, 8u, "driver Qualcomm 512.676.53, version 512.676.53") ==
+          Q);
+    CHECK(ico_memory_floor_driver(0x5143u, 8u, NULL) == Q);
+    CHECK(ico_memory_floor_driver(0x5143u, 0u, "turnip Mesa driver") == O);
+    CHECK(ico_memory_floor_driver(0x5143u, 0u, "Turnip Mesa 26.3.0") == O);
+    CHECK(ico_memory_floor_driver(0x5143u, 0u, "Mesa 25.1.0") == O);
+    CHECK(ico_memory_floor_driver(0x1010u, 0u, "PowerVR D-Series Vulkan Driver 26.1@7036548") == O);
+    CHECK(ico_memory_floor_driver(0x13B5u, 0u, "Mali-G52") == O);
+    CHECK(ico_memory_floor_driver(0u, 0u, "anything") == U);
+    /* issue 209: a renamed Turnip build is another driver by its Vulkan
+       driver id (18), whatever its text; by the text alone it reads as
+       Qualcomm's own */
+    CHECK(ico_memory_floor_driver(0x5143u, 18u,
+                                  "device 5143:43050a01; driver PurpleVK public driver PurpleVK "
+                                  "26.3.0-devel (git-62ac221a33), version 26.2.99") == O);
+    CHECK(ico_memory_floor_driver(0x5143u, 0u, "driver PurpleVK public driver PurpleVK") == Q);
+    CHECK(ico_memory_floor_driver(0x5143u, 18u, NULL) == O);
     CHECK(strcmp(ico_memory_floor_driver_words(Q), "Qualcomm's own driver") == 0);
     CHECK(strcmp(ico_memory_floor_driver_words(O), "another driver than Qualcomm's own") == 0);
     CHECK(strcmp(ico_memory_floor_driver_words(U), "the driver not known yet") == 0);

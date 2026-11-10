@@ -480,6 +480,15 @@ GPU is measured by the probe line of a reporter's log; no hardware number exists
 
 ## The shadow count in one draw
 
+The shadow commands need the count target and the depth target of one texel size
+(`port/render/rd_replay.c` (`shadowTargets`), `port/render/rd_msaa_shadow.c`
+(`rd__shadow_size_agree`)). A temporary of the scene's GS size made at another scale (a frame
+recorded before the targets were made again at a scale change, replayed after it) is made again
+at the scale in force (`shadow count: the count target made at WxH texels before the scale
+changed is made again at the scene's WxH ...`); any other mismatch skips the command with both
+sizes in the line (`shadow count: the count target is WxH texels (GS ...), its depth target ...:
+the shadow command skipped`, the first 8, then every 100th).
+
 Under MSAA the count is drawn on the multisampled scene's own depth and stencil instead, by the
 seven draws at the epoch's sample count, and the count target is that colour's resolve (each
 pixel the mean of its samples; the one draw cannot read a multisampled stencil):
@@ -1670,7 +1679,7 @@ driver text, set by the window before the set: `window_pipe_finish.c` `window_pi
 
 | driver | floor | a stop at it |
 | --- | --- | --- |
-| Qualcomm's own (vendor 0x5143, the driver text naming neither Mesa nor Turnip), and a driver not known yet | 17 % of MemTotal, at most 2048 MB on a device of more than 8 GB (696 MB on 4 GB, 1392 MB on 8 GB, 1915 MB on the Retroid Pocket 6's 11265 MB, 2048 MB on 12 and 16 GB) | as the low-memory signal's: the rest made on first use, `set: stopped at the system's low-memory signal (<words>)` in the activity file, the next start lazy |
+| Qualcomm's own (vendor 0x5143, the driver text naming neither Mesa nor Turnip, the Vulkan driver id not Turnip's 18), and a driver not known yet | 17 % of MemTotal, at most 2048 MB on a device of more than 8 GB (696 MB on 4 GB, 1392 MB on 8 GB, 1915 MB on the Retroid Pocket 6's 11265 MB, 2048 MB on 12 and 16 GB) | as the low-memory signal's: the rest made on first use, `set: stopped at the system's low-memory signal (<words>)` in the activity file, the next start lazy |
 | any other (Turnip, PowerVR, Mali, Adreno under Mesa, ...) | the set's need with a margin: 17 % of MemTotal, at most 512 MB on a device of more than 8 GB | for this start only: the rest made in the background ([PIPELINES.md](PIPELINES.md#the-background-finisher)), the next start makes the set again |
 
 Up to 8 GB the two rules give the same 17 % (with the game running a 4 GB phone has 0.8 to 1.5 GB

@@ -2268,9 +2268,10 @@ static volatile int floor_driver = ICO_MEMORY_FLOOR_DRIVER_UNKNOWN;
    pipeline is made; ico_diag_note_low_memory), 0 none */
 static volatile int bg_signal_level;
 
-void ico_diag_set_memory_floor_driver(unsigned vendor_id, const char *driver_text)
+void ico_diag_set_memory_floor_driver(unsigned vendor_id, unsigned driver_id,
+                                      const char *driver_text)
 {
-    floor_driver = ico_memory_floor_driver(vendor_id, driver_text);
+    floor_driver = ico_memory_floor_driver(vendor_id, driver_id, driver_text);
 }
 
 /* issue 188: the driver's compiles one at a time (the longer pipeline limit

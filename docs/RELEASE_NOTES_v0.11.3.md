@@ -16,4 +16,4 @@
 
 - The game no longer hitches when it saves a diagnostic capture; on phones the pictures it saves automatically for a report are written in the background, and the Settings bug-report picture now brings the newest of them along, so one attachment is enough.
 - A crash on older Intel graphics (6th to 10th generation, on Intel's last drivers for them) when raising the resolution while playing.
-- With MSAA anti-aliasing on, Ico's and Yorda's shadows went missing on some phones (seen on an Adreno 740 with a Turnip driver); their edges are now smoothed like the rest of the picture.
+- With MSAA anti-aliasing on, Ico's and Yorda's shadows went missing on some phones (seen on an Adreno 740 with a Turnip driver); their edges are now smoothed like the rest of the picture. The shadows could also drop out for a moment when switching to a supersampling setting. A Turnip driver that goes by another name is now recognised as Turnip, so it gets the same display and memory settings as other Turnip drivers.

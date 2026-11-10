@@ -29,6 +29,10 @@
 #define ICO_PRESENT_FALLBACK_SLOW_MS 50.0
 /* the PCI vendor id Qualcomm's Adreno driver reports */
 #define ICO_PRESENT_FALLBACK_QCOM_VENDOR 0x5143u
+/* VkDriverId VK_DRIVER_ID_MESA_TURNIP (port/rhi/rhi_driver_version.h
+   RHI_DRIVER_ID_MESA_TURNIP): a Turnip build keeps it when it renames
+   itself (issue 209's "PurpleVK public driver") */
+#define ICO_PRESENT_FALLBACK_TURNIP_ID 18u
 
 /* [dev] present_fallback (ICO_PRESENT_FALLBACK, host_config.c) */
 typedef enum IcoPresentFallbackMode {
@@ -75,15 +79,20 @@ typedef struct IcoPresentFallback {
 IcoPresentFallbackMode ico_present_fallback_mode(const char *value);
 
 /* Whether the driver may take the switch: a device (vendorId not 0) whose
-   driver text names neither "Mesa" nor "turnip" (any case).  Mesa's drivers
-   (Turnip on the same Adreno) block far less under mailbox; a few blocks of
-   230 ms there are not the stock driver's queue wait. */
-int ico_present_fallback_driver_eligible(unsigned vendorId, const char *driverText);
+   driver text names neither "Mesa" nor "turnip" (any case) and whose Vulkan
+   driver id (driverId, 0 when the driver gives none) is not Turnip's (18),
+   the rule port/render/rd_profile.c rd__driver_is_turnip has.  Mesa's
+   drivers (Turnip on the same Adreno) block far less under mailbox; a few
+   blocks of 230 ms there are not the stock driver's queue wait. */
+int ico_present_fallback_driver_eligible(unsigned vendorId, unsigned driverId,
+                                         const char *driverText);
 
 /* Qualcomm's own driver: vendorId 0x5143 (ICO_PRESENT_FALLBACK_QCOM_VENDOR)
-   and an eligible driver text (neither Mesa nor turnip).  The rhi calls it
-   (rhi_present_fifo_start) when it makes a swapchain, before any present. */
-int ico_present_fallback_qualcomm_own(unsigned vendorId, const char *driverText);
+   and an eligible driver (neither Mesa nor Turnip by its text, not Turnip by
+   its driver id).  The window's rhi_present_fifo_start callback
+   (window_present_fallback.c) asks it with rhi_limits()'s driver id when the
+   rhi makes a swapchain, before any present. */
+int ico_present_fallback_qualcomm_own(unsigned vendorId, unsigned driverId, const char *driverText);
 
 /* The window's gate for the present it notes (window_present_fallback.c):
    GATE_NO with vsync on, a swapchain not in mailbox mode, a backend other
@@ -94,7 +103,8 @@ int ico_present_fallback_qualcomm_own(unsigned vendorId, const char *driverText)
    switch was measured on Qualcomm's own driver only, and on a Mali-G52 it
    lengthened the blocks, issue 179). */
 IcoPresentFallbackGate ico_present_fallback_gate(int vsync, int mailbox, int vulkan,
-                                                 unsigned vendorId, const char *driverText,
+                                                 unsigned vendorId, unsigned driverId,
+                                                 const char *driverText,
                                                  IcoPresentFallbackMode mode);
 
 /* 1 in the Android build (the phones FIFO from the start is for), 0
@@ -122,7 +132,7 @@ int ico_present_fallback_start_asked(IcoPresentFallbackMode mode, int android);
    draws nothing that is never shown.  It is not known to remove the
    stalls issue 123 reports (they continued under FIFO in three logs). */
 int ico_present_fallback_start(IcoPresentFallbackMode mode, int android, int vsync,
-                               unsigned vendorId, const char *driverText);
+                               unsigned vendorId, unsigned driverId, const char *driverText);
 
 /* The start line, once, after the first swapchain when
    ico_present_fallback_start said yes: "window: present fifo (Qualcomm's

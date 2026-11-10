@@ -4361,8 +4361,8 @@ static RdTargetRec *shadowTargets(Replay *r, RdTargetRec **depth)
 {
     RdTargetRec *tc = rd__target_rec(r->st.color);
     RdTargetRec *td = rd__target_rec(r->st.depth);
-    if (!tc || !tc->color.id || !td || !td->withDepth || !td->depth.id || tc->tw != td->tw ||
-        tc->th != td->th) {
+    if (!tc || !tc->color.id || !td || !td->withDepth || !td->depth.id ||
+        !rd__shadow_size_agree(tc, td)) {
         rd__log_once(RD_ONCE_SHADOW, "shadow command without a depth-stencil target of the colour "
                                      "target's size: skipped");
         return NULL;

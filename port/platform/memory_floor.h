@@ -63,9 +63,12 @@ typedef enum IcoMemoryFloorDriver {
 
 /* The class of a device: vendor 0x5143 (Qualcomm) whose driver text names
    neither "Mesa" nor "turnip" (any case; Mesa's Turnip reports Qualcomm's
-   vendor id and names itself there) Qualcomm's own; vendor 0 unknown; any
-   other vendor other */
-int ico_memory_floor_driver(unsigned vendor_id, const char *driver_text);
+   vendor id and names itself there) and whose Vulkan driver id (0 when the
+   driver gives none) is not Turnip's, 18 (a renamed Turnip build keeps it:
+   issue 209's "PurpleVK public driver"; port/render/rd_profile.c
+   rd__driver_is_turnip's rule) Qualcomm's own; vendor 0 unknown; any other
+   other */
+int ico_memory_floor_driver(unsigned vendor_id, unsigned driver_id, const char *driver_text);
 /* The class's words for the log lines: "Qualcomm's own driver", "another
    driver than Qualcomm's own", "the driver not known yet" */
 const char *ico_memory_floor_driver_words(int driver);
