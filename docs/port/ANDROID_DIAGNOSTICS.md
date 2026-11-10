@@ -421,7 +421,9 @@ causes in it, each on its own lines. The lines to read, in the log's order:
   would fit the game's rate (37.7 ms = 3.8 ms of vertex work by the fit + 33.9 ms that scales with
   the pixels: 3.8 + 33.9 x (2/3)^2 = 18.8 ms, under 30.0 ms, 0.9 of the 33.3 ms step at 30.0 game
   fps; a hint: nothing changes by itself)`, written only when the block presented fewer pictures
-  than the game made, skipped presents for lateness and the GPU span is over the step
+  than the game made, skipped presents (late ones and, at frame rate Original, those the render
+  thread's busy picture left out: `frames not presented N: ..., the render thread busy N`; the
+  Mali-G52 run of issue 179 had only busy ones and no hint printed) and the GPU span is over the step
   (`port/platform/window_scene.c` `window_scene_gpu_hint_text`): the vertex part is the block's VU
   fit's slope times its mean invocations (the `window: VU: ...` line's fit), the rest is taken to
   scale with the pixels, and the step is the largest offered Resolution step whose estimate is at
@@ -437,6 +439,44 @@ causes in it, each on its own lines. The lines to read, in the log's order:
   GPU span 35.5-38.0 ms; the fit `34.4 ms + 0.01 ms a thousand vertex invocations` over 376k
   (R^2 0.05: the invocations hardly varied in that scene, so the slope is small and uncertain; a
   block of play read `3.5 ms + 0.10 ms`, R^2 0.94, over 159k).
+
+## The dump worker, the report's bundle and the clock-back words (issues 123 and 179)
+
+- **Who writes the automatic dumps.** The skin check's capture and the slow-scene
+  dump are written by a worker; the cost the game paid for them was the issue 123 run's "the
+  game step was late by 818 ms" after the capture and the issue 179 run's resyncs dropping 890 /
+  1460 / 841 ms, the file write, the log flush and the zip on the game thread. The game thread now copies the frame (and the tick before) into
+  memory (`rd_dump_frame_mem`, `rd_dump_retained_frame_mem`: a memory copy and the wait for the
+  render thread every dump has, at most 192 MiB) and hands it to one worker thread
+  (`port/platform/dump_auto.c`), which builds the zip, adds the skin check's sidecar, prunes the
+  slow zips to the newest three and notes the result; the game thread prints it at its next vsync.
+  F12 and the Settings bug-report picture (user actions) are unchanged.
+- **The line.** `window: slow-scene dump: 3.1 ms on the game thread, 912 ms on the worker (7234408
+  bytes of frame into slow-20261110-120000.zip)` (and `skin-check capture` the same), then the
+  existing text line. Read the game-thread figure against the "late by" lines: it is the whole cost
+  the game paid. `window: <tag>: zip not written: <why> (...; the .rddump is kept)` keeps the frame
+  as a loose file in `logs/`. A job offered while one is written is dropped, never queued:
+  `window: slow-scene dump: dropped, the worker is still writing the one before (N dropped so far;
+  one dump is written at a time)` (the first 8, then every 100th). The skin check's capture waits
+  for the worker instead (once a run). The worker is joined when the window closes; a crash while it
+  writes can leave a partly written zip.
+- **The bug report brings the run's zips.** The Settings picture's zip also holds the newest three
+  of this run's automatic zips that are still on disk (stored, within 12 MiB together) and
+  `automatic-captures.txt` naming every one: its size and `included` or why it was left out. The log
+  says the same: `window: bug report: 3 of 5 automatic captures added (...)`, or `no automatic
+  capture of this run is still on disk`. The 179 reporter attached the report zip while three
+  slow-scene zips stayed on the phone.
+- **"the GPU's timestamp clock went back N ms".** The stall line's old words were `begun 20699.4 ms
+  before the one before ended`: the first stamp of the stalled replay was 14-36 s before the last
+  stamp of the replay before it, about the time since the previous stall (replays 785, 1572, 2021 at
+  30 a second are 26 s apart, the figures were 20.7, 26.2, 14.9 s). A replay cannot begin before
+  the one before it began, so the clock was not read wrong: the Adreno's timestamp counter was
+  restarted at the stall, and the figure was how long it had run since its last restart. The gap is
+  now not measured in that case (`rd_perf_gap_step_ex`): the stall line reads `the GPU's timestamp
+  clock went back 20699.4 ms since the replay before (a counter restart: no gap to measure)` and the
+  log gets `rd: GPU timestamps: the clock went back 20699.4 ms at replay 785 (restart 1 of the run;
+  ...)` (first 8, then every 100th). A restart at every stall is more evidence for a power-state
+  change of the GPU at the stall (a hypothesis; the kernel nodes are unreadable there).
 
 ## The thermal state and screen recording
 

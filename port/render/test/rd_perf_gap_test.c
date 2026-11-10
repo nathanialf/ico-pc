@@ -35,7 +35,7 @@ static int failures;
 
 int main(void)
 {
-    RdPerfGap g = {0, 0};
+    RdPerfGap g = {0, 0, 0, 0};
     int64_t gap = 7;
     uint32_t skipped = 7;
 
@@ -68,6 +68,31 @@ int main(void)
     CHECK(!rd_perf_gap_step(&g, 1, 200000 * MS, 200027 * MS, &gap, &skipped));
     CHECK(rd_perf_gap_step(&g, 2, 200028 * MS, 200055 * MS, &gap, &skipped));
     CHECK(gap == 1000000ll && skipped == 0);
+    /* issue 123: the Adreno's timestamp counter restarts at a stall. The
+       logs' stalled replays printed "begun 20699.4 ms before the one before
+       ended": the time the counter had run (20.7 s) since its last restart,
+       not an overlap. A replay cannot begin before the one before began. */
+    {
+        RdPerfGap h = {0, 0, 0, 0};
+        int64_t gp = 7;
+        uint32_t sk = 7;
+        uint64_t back = 7;
+
+        CHECK(!rd_perf_gap_step_ex(&h, 784, 20672 * MS, 20699 * MS, &gp, &sk, &back));
+        CHECK(back == 0);
+        /* replay 785: its stamps in the restarted counter, 0.4 s on */
+        CHECK(!rd_perf_gap_step_ex(&h, 785, 400 * MS, 472 * MS, &gp, &sk, &back));
+        CHECK(gp == 0 && sk == 0 && back == 20699 * MS - 400 * MS && h.restarts == 1);
+        /* the replay after: measured against the restarted counter */
+        CHECK(rd_perf_gap_step_ex(&h, 786, 473 * MS, 523 * MS, &gp, &sk, &back));
+        CHECK(gp == 1 * (int64_t)MS && back == 0 && h.restarts == 1);
+        /* a real overlap (begun before the one before ENDED, after it began)
+           is still a gap, not a restart */
+        CHECK(rd_perf_gap_step_ex(&h, 787, 500 * MS, 560 * MS, &gp, &sk, &back));
+        CHECK(gp == -23 * (int64_t)MS && back == 0 && h.restarts == 1);
+        /* the wrapper reports a restart as no gap */
+        CHECK(!rd_perf_gap_step(&h, 788, 10 * MS, 40 * MS, &gp, &sk) && h.restarts == 2);
+    }
     printf("rd_perf_gap_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

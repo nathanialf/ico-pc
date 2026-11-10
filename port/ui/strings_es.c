@@ -35,7 +35,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "Para una partida menos estresante. Algunas escenas guionizadas siguen mostrando el secuestro.",
         [UI_STR_OPT_PIT_TIME] = "Tiempo para rescatar a Yorda",
         [UI_STR_OPT_PIT_TIME_NOTE] =
-            "Segundos desde que una sombra se hunde con Yorda hasta que se la lleva; menos en algunas escenas, en proporción. La fila Yorda lo impide.",
+            "Segundos desde que una sombra se hunde con Yorda hasta que se la lleva; menos en algunas escenas, en proporción. Nada si nunca se la llevan.",
         [UI_STR_OPT_SHADOW_SPEED] = "Velocidad de las sombras",
         [UI_STR_OPT_SHADOW_SPEED_NOTE] =
             "Qué tan rápido caminan, corren y vuelan las sombras. No cambia la frecuencia con que atacan.",
@@ -751,15 +751,13 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_SECTION_CUTSCENES] = "Escenas",
         [UI_STR_OPT_VAR_TOUGHNESS] = "Dureza de las sombras",
         [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
-            "Americana: cada sombra tan resistente como en el disco norteamericano, y no más resistente en las partidas siguientes. Los logros siguen activos.",
+            "Americana: cada sombra tan resistente como en el disco norteamericano, y no más resistente en las partidas siguientes.",
         [UI_STR_VAL_VAR_AMERICAN] = "Americana",
         [UI_STR_VAL_VAR_NOT_TOUGHER] = "Sin aumento",
         [UI_STR_OPT_VAR_ONE_HIT] = "Un golpe por ataque",
-        [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
-            "Cada ataque de Ico solo puede herir a una sombra una vez. Desactiva los logros.",
+        [UI_STR_OPT_VAR_ONE_HIT_NOTE] = "Cada ataque de Ico solo puede herir a una sombra una vez.",
         [UI_STR_OPT_VAR_NEVER_DODGE] = "Las sombras nunca esquivan",
-        [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] =
-            "Las sombras nunca esquivan los golpes de Ico. Desactiva los logros.",
+        [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] = "Las sombras nunca esquivan los golpes de Ico.",
         [UI_STR_OPT_VAR_AGGRESSION] = "Agresividad de las sombras",
         [UI_STR_VAL_VAR_AGG_OWN] = "Propia",
         [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "Audaz, paciente",
@@ -767,15 +765,15 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "Cauto, paciente",
         [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "Cauto, rápido",
         [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
-            "Cómo luchan las sombras: audaces o cautas, pacientes o rápidas. Los logros siguen activos.",
+            "Cómo luchan las sombras: audaces o cautas, pacientes o rápidas.",
         [UI_STR_OPT_VAR_NO_HINTS] = "Sin pistas",
         [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
-            "Yorda no da pistas sobre adónde ir, como en el disco norteamericano. Los logros siguen activos.",
+            "Yorda no da pistas sobre adónde ir, como en el disco norteamericano.",
         [UI_STR_OPT_VAR_BARRIER] = "Barrera de la Reina",
         [UI_STR_VAL_VAR_HITS_5] = "5 golpes",
         [UI_STR_VAL_VAR_HITS_7] = "7 golpes",
         [UI_STR_OPT_VAR_BARRIER_NOTE] =
-            "Cuántos golpes hacen falta para romper la barrera de la Reina. Los logros siguen activos.",
+            "Cuántos golpes hacen falta para romper la barrera de la Reina.",
         [UI_STR_OPT_VAR_NO_LOOK] = "Sin cámara libre en escenas",
         [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
             "El stick derecho ya no mueve la cámara durante las escenas. Los logros siguen activos.",
@@ -786,9 +784,9 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
             "El menú de depuración del juego, para desarrolladores. Desactiva los logros.",
         [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
-            "Americana no está disponible en esta demo: sus sombras no son las del disco norteamericano. Sin aumento: no más resistentes en las partidas siguientes. Los logros siguen activos.",
+            "Americana no está disponible en esta demo: sus sombras no son las del disco norteamericano. Sin aumento: no más resistentes en las partidas siguientes.",
         [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
-            "Esta versión del juego no da pistas, así que no cambia nada. Los logros siguen activos.",
+            "Esta versión del juego no da pistas, así que no cambia nada.",
         [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
             "En esta versión del juego la cámara no se mueve durante las escenas, así que no cambia nada. Los logros siguen activos.",
         [UI_STR_GPU_HANG_TURNIP] =
@@ -816,7 +814,8 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_STATES_SAVE_FAILED] = "No se pudo guardar el estado",
         [UI_STR_STATES_XB_OLD] =
             "Este estado guardado se creó con la versión %s,\nantes de que los estados guardados pudieran\npasar a versiones nuevas.\nTus partidas de la memory card siguen funcionando.",
-        [UI_STR_STATES_XB_CODE] = "Este estado guardado se creó con la versión %s.\nLa versión %s cambió la parte del juego\nen la que se guardó, así que no se puede reanudar.\nTus partidas de la memory card siguen funcionando.",
+        [UI_STR_STATES_XB_CODE] =
+            "Este estado guardado se creó con la versión %s.\nLa versión %s cambió la parte del juego\nen la que se guardó, así que no se puede reanudar.\nTus partidas de la memory card siguen funcionando.",
         [UI_STR_STATES_XB_DATA] =
             "Este estado guardado se creó con la versión %s.\nLa versión %s cambió cómo el juego guarda\nsu progreso en memoria, así que no se puede\nreanudar.\nTus partidas de la memory card siguen funcionando.",
         [UI_STR_STATES_XB_PINNED] =
@@ -849,13 +848,13 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_SECTION_COMBAT] = "Combate",
         [UI_STR_OPT_VAR_AUTO_GUARD] = "Guardia automática",
         [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
-            "No: Ico ya no bloquea de frente el ataque de una sombra; le golpea como por detrás. Los logros siguen activos.",
+            "No: Ico ya no bloquea de frente el ataque de una sombra; le golpea como por detrás.",
         [UI_STR_OPT_VAR_ATTACK_TURN] = "Girarse hacia las sombras",
         [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
-            "No: Ico golpea al frente sin girarse hacia la sombra más cercana; el alcance sigue igual. Los logros siguen activos.",
+            "No: Ico golpea al frente sin girarse hacia la sombra más cercana; el alcance sigue igual.",
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Las sombras esperan si Ico cae",
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
-            "No: las sombras ya no se contienen mientras Ico está en el suelo, y sus golpes lo alcanzan tanto tendido como al levantarse. Los logros siguen activos.",
+            "No: las sombras ya no se contienen mientras Ico está en el suelo, y sus golpes lo alcanzan tanto tendido como al levantarse.",
         [UI_STR_OPT_VAR_SWORD_COLOUR] = "Color de la espada de luz",
         [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
             "Rojo: la espada de luz deja una estela roja, como su gemela sin usar del juego; nada más cambia. Desde la siguiente sala.",
@@ -865,10 +864,10 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "Cazamariposas: cada palo es la red sin usar del juego; no se blande ni se enciende y no hiere a las sombras. Desde la siguiente sala.",
         [UI_STR_VAL_VAR_THIRD_JOURNEY] = "Tercer viaje",
         [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
-            "Sombras tan resistentes como en una tercera partida, que el juego nunca alcanza (el doble que en el primer viaje). Los logros siguen activos.",
+            "Sombras tan resistentes como en una tercera partida, que el juego nunca alcanza (el doble que en el primer viaje).",
         [UI_STR_OPT_VAR_PEACEFUL] = "Sombras pacíficas",
         [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
-            "Sí: las sombras se quedan donde aparecen y nunca van a por Ico ni Yorda. Desactiva los logros.",
+            "Sí: las sombras se quedan donde aparecen y nunca van a por Ico ni Yorda.",
         [UI_STR_OPT_VAR_CHAIN_SPEED] = "Velocidad de la cadena",
         [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
             "Lo rápido que se balancea una cadena con Ico colgado. 1 es lo más lento, 10 lo más rápido y 4 como en el juego. Los logros siguen activos.",
@@ -883,4 +882,43 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_OPT_FREE_MOVEMENT_NOTE] =
             "Pulsa L2 para mover a Ico con los sticks: el izquierdo lo desplaza, el derecho lo sube y baja, L3 lo apoya en el suelo. Desactiva los logros.",
         [UI_STR_REMAP_ASK_HINT] = "Pedir una pista a Yorda",
+        [UI_STR_DIFF] = "Dificultad",
+        [UI_STR_DIFF_NOTE] =
+            "Define las sombras, el tiempo de rescate y las reglas de este viaje nuevo. La partida guarda la elección.",
+        [UI_STR_DIFF_EASY] = "Fácil",
+        [UI_STR_DIFF_NORMAL] = "Normal",
+        [UI_STR_DIFF_HARD] = "Difícil",
+        [UI_STR_DIFF_CUSTOM] = "Personalizado",
+        [UI_STR_DIFF_EASY_NOTE] =
+            "Sombras más lentas y suaves que nunca se llevan a Yorda ni esquivan, y más tiempo para rescatarla.",
+        [UI_STR_DIFF_NORMAL_NOTE] = "El juego tal como salió.",
+        [UI_STR_DIFF_HARD_NOTE] =
+            "Sombras más rápidas y duras que atacan juntas, sin guardia automática, menos tiempo para rescatar a Yorda y fin de partida tras 3 derribos por sala.",
+        [UI_STR_DIFF_CUSTOM_NOTE] = "Tus propias reglas. Cambia cada fila en Personalizar.",
+        [UI_STR_DIFF_CUSTOMIZE] = "Personalizar",
+        [UI_STR_DIFF_CUSTOMIZE_NOTE] =
+            "Cambia cada regla por separado. Una mezcla que no coincide con ningún nivel aparece como Personalizado.",
+        [UI_STR_DIFF_RULES] = "Reglas",
+        [UI_STR_DIFF_NO_SHADOWS] = "Sin sombras",
+        [UI_STR_DIFF_NO_SHADOWS_NOTE] =
+            "Sí: no aparece ninguna sombra. La historia sigue su curso.",
+        [UI_STR_DIFF_KNOCK_LIMIT] = "Límite de derribos",
+        [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
+            "Fin de partida cuando Ico ha sido derribado tantas veces. Desactivado: sin límite.",
+        [UI_STR_DIFF_KNOCK_SCOPE] = "Derribos que cuentan",
+        [UI_STR_DIFF_KNOCK_SCOPE_NOTE] =
+            "Por sala (la cuenta vuelve a empezar al entrar en una sala) o en todo el viaje. No hace nada con el límite desactivado.",
+        [UI_STR_DIFF_SCOPE_ROOM] = "Cada sala",
+        [UI_STR_DIFF_SCOPE_JOURNEY] = "Todo el viaje",
+        [UI_STR_DIFF_PERMADEATH] = "Muerte permanente",
+        [UI_STR_DIFF_PERMADEATH_NOTE] =
+            "Sí: cualquier fin de partida termina este viaje. Ya no hay Cargar y la partida no se puede volver a cargar.",
+        [UI_STR_DIFF_LOCKED_NOTE] = "Elegido al empezar el viaje",
+        [UI_STR_DIFF_LINE] = "Dificultad",
+        [UI_STR_DIFF_LINK] = "Dificultad",
+        [UI_STR_DIFF_TOAST_ENDED] = "Este viaje ha terminado.",
+        [UI_STR_DIFF_TOAST_KNOCK] = "Derribado: %d de %d",
+        [UI_STR_DIFF_STATES_LOCKED] =
+            "Los estados guardados no se pueden cargar en un viaje con muerte permanente.",
+        [UI_STR_DIFF_WORD_PERMADEATH] = "Muerte permanente",
 };

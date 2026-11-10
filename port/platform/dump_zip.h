@@ -36,6 +36,30 @@ int ico_zip_add_file(const char *zip_path, const char *file_path, const char *en
 int ico_zip_move_file(const char *zip_path, const char *path, char *why, size_t why_size,
                       size_t *added_size);
 
+/* A zip from entries held in memory (the automatic dumps' worker,
+   dump_auto.c: the rddump was copied on the game thread, the zip is built on
+   the worker): the entries e[0..n) (n at most ICO_ZIP_MEM_MAX, the first is
+   the frame so rd_replay_tool takes it) and, when it can be read, log_path
+   under its own name. The same result as ico_loss_dump_zip (0 both, 1 the
+   entries alone, -1 nothing written); no file is deleted. */
+#define ICO_ZIP_MEM_MAX 4
+
+typedef struct IcoZipMem {
+    const char *name;
+    const void *data;
+    size_t size;
+} IcoZipMem;
+
+int ico_zip_mem_files(const char *zip_path, const IcoZipMem *e, int n, const char *log_path,
+                      int stored, char *why, size_t why_size);
+
+/* Adds the n files paths (each under its own name, stored: they are zips
+   already) and, when note is not NULL, a text entry note_name holding note
+   to the zip zip_path in one rebuild (the bug report's bundled captures,
+   dump_auto.c). 0: added; -1: the zip is as it was, why holding the reason. */
+int ico_zip_add_bundle(const char *zip_path, const char *const *paths, int n, const char *note_name,
+                       const char *note, char *why, size_t why_size);
+
 /* The device-loss dump (window_host.c device_lost_quit): zip_path holding
    lost_path, then before_path (NULL or "": none), then log_path, each under
    its own name, as ico_frame_dump_zip writes its one dump (the same

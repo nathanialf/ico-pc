@@ -636,6 +636,17 @@ that stops again writing its own line without the retry mark); a stop at the fre
 - `report_test.c` (ctest `report`): the bug report's zip (`ico_report_write`): a stored loss dump is deflated when the report takes it (issue 123's 28 MB stored loss zip made a report over GitHub's 25 MB attachment limit), the slow-scene zip is stored as it is, both read back byte for byte with miniz
 - `dump_zip_test.c`: F12's zip (with the tick before as its second `.rddump`, and the blended present's frame moved in third by `ico_zip_move_file`, the loose file gone), the aspect sweep's zip, the device-loss zip (the lost frame first, the second `.rddump` the frame before, its entries stored with the stored flag and deflated without it, F12's deflated, the pruning to the newest three) and the slow-scene zip (its name, the frame then the log, the pruning to the newest three with the loss zips left alone), written and read back with miniz; the upscaler's pictures (`upscale_pictures.c`, issue 203): the stem of `<stem>-present.png`, the four found beside it added to the bug-report zip with their bytes in the order composite, scene, velocity, depth, a cap the second would pass leaving the composite alone in and the scene's refusal named, none beside the picture adding nothing, F12's (no zip) naming the four, the wait for a capture the present after the request did not dispatch (`ico_upscale_pictures_after` with a pending outcome: the present in the zip first, nothing added while it stays pending, the four after it when written; another outcome adds at once; expired with none on disk adds nothing), and in a folder named "José" the four found (sized through `ico_path_kind`)
   (`dump_zip`).
+- `dump_auto_test.c` (ctest `dump_auto`): the automatic dumps' worker (`dump_auto.h`, issues 123 and
+  179) and the zip from memory (`ico_zip_mem_files`, `ico_zip_add_bundle`): the entries and the log
+  read back, a missing log leaving the entries alone, nothing deleted; a job written whole (the
+  frame, the tick before, the log byte for byte, the sidecar, both costs in the result, the slow
+  zips pruned to three); a second job while one is written dropped with its line and counted, never
+  queued, its block the caller's, the first finishing whole, a new job taken after the result is
+  polled; a zip that cannot be written keeping the frame loose; the join at shutdown with a job in
+  flight, twice safe, a later job starting a new worker; the report's bundle (the newest three of
+  five recorded zips stored with `automatic-captures.txt` naming each and why one is left out, the
+  report zip's own entries kept, a zip gone from the disk not listed, none recorded adding nothing).
+  Run under the asan and thread presets as well.
 - `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
   on this toolchain's compiler and linker, over a stand-in game library (`game_data_fixture.c`)
   given `ico_game`'s section treatment and the game's options: the ranges exist; every writable
@@ -1100,7 +1111,8 @@ that stops again writing its own line without the retry mark); a stop at the fre
   26.7, with its `other` time, the block's first timed replay, the lock without a present call, `other`
   never under 0, a gap under 0, the call not timed apart, no gap, no GPU span) and the after line (`present_after_text`: the replay after the stall, its gap across one
   and two untimed replays, no GPU span, a short buffer cut); the stall lines' threshold
-  (`present_stall_lines`: from 250 ms on, never from 50 to 250 ms nor for NaN) (`present_hist`).
+  (`present_stall_lines`: from 250 ms on, never from 50 to 250 ms nor for NaN); a clock that went
+  back (issue 123: "the GPU's timestamp clock went back 20699.4 ms ...", no gap words) (`present_hist`).
 - `bones_ladder_test.c`: issue 123's ladder across starts (`bones_ladder.h`,
   [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-ladder)): the step for each run's evidence over sequences
   of starts as `window_bones.c` applies them (step 1 written and healed over 2,000 presents; step 1
@@ -1146,8 +1158,9 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   word; nothing at the game's rate, without late skips, with the GPU inside the step or with no
   game rate; the reporter's own narrow 370k..382k and no fit at all: GPU-bound, no step named, the
   reason given; the vertex work alone past the budget: no step; a flat line at 1x, at 2.5x rounding
-  down to 2x, and 4x of 6x at 25 game fps, the largest offered step that fits; a cut buffer)
-  (`window_scene`).
+  down to 2x, and 4x of 6x at 25 game fps, the largest offered step that fits; a cut buffer; the
+  frames not presented counted as late plus render-thread-busy ones (`window_scene_hint_skips`,
+  issue 179: 157 busy and no late skip still prints the hint) (`window_scene`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the
   crash chain to the box, the variable and the relaunch environment, the `dst` field of a
   pipeline's or a start-up batch's note, its VU vertex pre-pass keys and modules, the skin check's

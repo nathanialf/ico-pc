@@ -66,7 +66,12 @@ static void gap_words(const PresentStallRec *r, char *buf, size_t size)
         snprintf(across, sizeof across, " (across %u untimed replay%s)", r->gapSkipped,
                  r->gapSkipped == 1 ? "" : "s");
     }
-    if (!r->gapValid) {
+    if (r->gapBackMs > 0.0) {
+        snprintf(buf, size,
+                 ", the GPU's timestamp clock went back %.1f ms since the replay before (a counter "
+                 "restart: no gap to measure)",
+                 r->gapBackMs);
+    } else if (!r->gapValid) {
         snprintf(buf, size, ", the GPU's time before it not measured");
     } else if (r->gapMs >= 0.0) {
         snprintf(buf, size, ", the GPU idle %.1f ms before it%s", r->gapMs, across);
@@ -78,7 +83,7 @@ static void gap_words(const PresentStallRec *r, char *buf, size_t size)
 int present_split_text(const PresentStallRec *r, unsigned blockGpuN, double blockGpuMs, char *buf,
                        size_t size)
 {
-    char split[192], gpu[96], gap[96];
+    char split[192], gpu[96], gap[160];
     double other = r->presentMs - r->lockMs - r->callMs - r->pollMs;
 
     other = other > 0.0 ? other : 0.0;
@@ -114,7 +119,7 @@ int present_split_text(const PresentStallRec *r, unsigned blockGpuN, double bloc
 int present_after_text(unsigned blockedReplay, double blockedMs, const PresentStallRec *r,
                        char *buf, size_t size)
 {
-    char gpu[64], gap[96];
+    char gpu[64], gap[160];
 
     gap[0] = '\0';
     if (r->gpuValid) {

@@ -4759,7 +4759,10 @@ static void varSwitch(const char *who, const VarSwitch *sw, int pl, const int *l
     CHECK(ico_variants_suspend_achievements() == sw->suspends, "%s: %s: achievements %s", who,
           sw->label, sw->suspends ? "off" : "on");
     CHECK(varNoteHas(sw->page, sw->notePrefix,
-                     sw->suspends ? "Switches achievements off." : "Achievements stay on."),
+                     /* the rows that move to the save carry no achievements tail (v0.11.3) */
+                     sw->page != UI_PAGE_CUTSCENES ? ""
+                     : sw->suspends                ? "Switches achievements off."
+                                                   : "Achievements stay on."),
           "%s: %s: the note says %s", who, sw->label, sw->suspends ? "off" : "stay on");
     press(0x8000);
     CHECK(strcmp(lt_ext_row_text(lv[sw->row]), "Off") == 0 && ico_variant_get(sw->id) == 0 &&
@@ -4946,8 +4949,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                       strcmp(ico_config_get_string("variants.shade_toughness", ""),
                              "third_journey") == 0,
                   "%s: Right: Third journey and its key", who);
-            CHECK(varNoteHas(UI_PAGE_SHADOWS, "Shadows as tough as on a third playthrough",
-                             "Achievements stay on.") &&
+            CHECK(varNoteHas(UI_PAGE_SHADOWS, "Shadows as tough as on a third playthrough", "") &&
                       !ico_variants_suspend_achievements(),
                   "%s: the Third journey note, achievements stay on", who);
         } else {
@@ -4963,10 +4965,10 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
         CHECK(!ico_variants_suspend_achievements(), "%s: Toughness keeps the achievements", who);
         press(0x2000);
         CHECK(demo ? varNoteHas(UI_PAGE_SHADOWS, "American is not offered on this demo",
-                                "no tougher on later playthroughs. Achievements stay on.")
+                                "no tougher on later playthroughs.")
                    : varNoteHas(UI_PAGE_SHADOWS,
                                 "American: every Shadow as tough as on the North American disc",
-                                "no tougher on later playthroughs. Achievements stay on."),
+                                "no tougher on later playthroughs."),
               "%s: the toughness note, achievements stay on", who);
 
         /* the aggression row: five values around */
@@ -5050,7 +5052,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                   "%s: Combat row %d: Right: Off and the key", who, i);
             CHECK(!ico_variants_suspend_achievements(), "%s: Combat row %d keeps achievements", who,
                   i);
-            CHECK(varNoteHas(UI_PAGE_COMBAT, kCombat[i].notePrefix, "Achievements stay on."),
+            CHECK(varNoteHas(UI_PAGE_COMBAT, kCombat[i].notePrefix, ""),
                   "%s: Combat row %d: the note", who, i);
             press(0x8000);
             CHECK(strcmp(lt_ext_row_text(ov[i]), "On") == 0 &&
@@ -5119,8 +5121,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
             }
             CHECK(!ico_variants_suspend_achievements(), "%s: the barrier keeps the achievements",
                   who);
-            CHECK(varNoteHas(UI_PAGE_COMBAT, "How many hits it takes to break the Queen",
-                             "Achievements stay on."),
+            CHECK(varNoteHas(UI_PAGE_COMBAT, "How many hits it takes to break the Queen", ""),
                   "%s: the barrier note", who);
             press(0x2000);
             {
