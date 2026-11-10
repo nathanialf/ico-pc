@@ -93,6 +93,15 @@ static int finish(uint8_t *matte, uint8_t *out, int w, int h, const char *how)
     int r = ICO_APP_ICON_FAILED;
     if (ico_icon_make256(matte, w, h, out) != 0) {
         fprintf(stderr, "ico_pc: icon: refused: no letter in the %s (%d x %d)\n", how, w, h);
+    } else if (ico_icon_flat(out)) {
+        /* a letter has clear corners; a flat wash (the fog's cream at alpha 215
+           on every pixel) would be drawn as a coloured square on
+           the recents card and the shortcuts */
+        const uint8_t *c = out;
+        fprintf(stderr,
+                "ico_pc: icon: refused: the %s is opaque in all four corners of the image "
+                "(corner colour %d %d %d, alpha %d): not a letter on a clear background\n",
+                how, c[0], c[1], c[2], c[3]);
     } else {
         r = store(out);
     }

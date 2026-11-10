@@ -346,3 +346,18 @@ int ico_icon_make256(const uint8_t *matte, int w, int h, uint8_t *out256)
     }
     return ico_icon_resample(matte, w, h, &sq, out256, ICO_ICON_SIZE);
 }
+
+int ico_icon_flat(const uint8_t *out256)
+{
+    if (out256 == NULL) {
+        return 0;
+    }
+    const size_t last = (size_t)(ICO_ICON_SIZE - 1);
+    const size_t at[4] = {0, last * 4, last * ICO_ICON_SIZE * 4, (last * ICO_ICON_SIZE + last) * 4};
+    for (int i = 0; i < 4; i++) {
+        if (out256[at[i] + 3] < 128) {
+            return 0;
+        }
+    }
+    return 1;
+}

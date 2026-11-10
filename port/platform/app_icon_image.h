@@ -62,6 +62,12 @@ int ico_icon_downscale(const uint8_t *src, int sw, int sh, uint8_t *dst, int dw,
  * no letter. */
 int ico_icon_make256(const uint8_t *matte, int w, int h, uint8_t *out256);
 
+/* 1 when all four corner texels of a 256 x 256 image are at least half
+ * opaque: the image is a wash over the whole frame, not a letter on a
+ * transparent background (the letter's square keeps a 10 % margin, so its
+ * corners are clear). */
+int ico_icon_flat(const uint8_t *out256);
+
 #ifdef __cplusplus
 }
 #endif

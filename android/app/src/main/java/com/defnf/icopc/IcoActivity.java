@@ -364,9 +364,16 @@ public class IcoActivity extends SDLActivity {
         if (a == null) {
             return "no activity";
         }
-        Bitmap bmp = BitmapFactory.decodeFile(path);
+        // Straight alpha kept: the PNG's background is alpha 0, so the card's
+        // own colour shows round the letter (no RGB_565, no fill).
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inPreferredConfig = Bitmap.Config.ARGB_8888;
+        Bitmap bmp = BitmapFactory.decodeFile(path, opts);
         if (bmp == null) {
             return "the PNG could not be decoded";
+        }
+        if (!bmp.hasAlpha()) {
+            return "the PNG decoded without an alpha channel";
         }
         sTaskIcon = bmp;
         a.runOnUiThread(() -> a.applyTaskIcon());

@@ -43,6 +43,16 @@ from one frame (alpha = the brightest channel), logged as such. The PNG is encod
 `rd_write_png_mem` (`port/render/rd_png.c`, the same bytes `rd_write_png` writes to a file); a
 delivery raises a flag that `ico_app_icon_changed_take()` reads and clears.
 
+The PNG is straight alpha with the background at alpha 0 in both paths (the matte and the luma key
+alike): no cream or other colour is composited into it, and the `.ico` takes the same texels. The
+Android recents card draws the PNG over its own colour (`IcoActivity.setTaskIcon` decodes it as
+ARGB_8888 and refuses a PNG without an alpha channel). An image whose four corner texels are all at
+least half opaque (`ico_icon_flat`: a wash over the whole frame, the shape of an early test file,
+`(255, 247, 227)` at alpha 215 on every pixel, made before the icon pass left out the fog) is a
+square, not a letter: `finish` refuses it, writes nothing and logs `ico_pc: icon: refused: the
+<matte|luma key> is opaque in all four corners of the image (corner colour R G B, alpha A): not a
+letter on a clear background`.
+
 ## The capture on the title
 
 Files: `port/game/title_icon.c`, `title_icon.h` (the steps), `port/game/title_logo.c` (the name
