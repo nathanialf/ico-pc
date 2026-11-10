@@ -15,3 +15,4 @@
 - On phones whose graphics driver does not let the drawing stage write the 3D scenery's pre-computation directly (such as the Mali-G52), the game now writes it with a compute step instead of through the screen's drawing hardware; busy scenes there should run faster.
 - With "Shadows wait while Ico is down" set to Off, the Shadows' swings now land while Ico is on the ground as well; before, they passed through him until he stood up.
 - On Android a start that had run low on memory while preparing the graphics programs no longer leaves the next start preparing them in the middle of play, where each batch could freeze the picture for a second.
+- On iPhone and iPad the game starts again; v0.11.1 stopped at once with "Cannot allocate the game stack".
