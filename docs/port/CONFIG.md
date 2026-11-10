@@ -82,8 +82,18 @@ anything malformed gives the caller's default (`ico_toml_get_bool`).
 The top-level `version` is `1` (`port/config/config.h` (`ICO_CONFIG_VERSION`)); a file with a
 larger one is read, its unknown keys kept, and a log line says so (`port/config/config.c`
 (`ensure`)). Keys in `retired_keys` (`[game] classic_menu_text`, `[game] port_font`,
-`[dev] hand_probe`, `[video] effect_glow_size`) are kept in the file, read by nothing and logged once a load
-(`port/config/config.c` (`retired_keys`, `log_retired`)).
+`[dev] hand_probe`, `[video] effect_glow_size`, and the fifteen difficulty keys
+below: `[gameplay] yorda_safe`, `pit_time`, `shadow_speed`, `yorda_trips`, `shadows_together` and
+`[variants] shade_toughness`, `one_hit`, `never_dodge`, `aggression`, `no_hints`, `barrier_hits`,
+`auto_guard`, `attack_turn`, `shadows_wait_down`, `peaceful_shadows`) are kept in the file and
+logged once a load as `config: <key> is not used; ignored` (`port/config/config.c`
+(`retired_keys`, `log_retired`)). The fifteen are rows of each save's difficulty record now
+(`port/game/difficulty.h`, chosen on the New Game screen); the game reads them once more, through
+the getters, only for the one-time carry-over of a save that has no record yet
+(`ico_difficulty_from_config`: a value that is no value reads as the game's own with a
+`difficulty: config.toml's <key> = "<value>" is not a value; the game's own` line), and no file is
+rewritten. They are not in the first-run template and not simulation keys any more
+(`ICO_SIM_KEYS_RETIRED`, `port/platform/sim_keys.c`).
 
 ### When the file is written
 
@@ -229,12 +239,12 @@ original game's behaviour (`port/game/options.h`, header comment).
 | key | type | default | meaning |
 | --- | --- | --- | --- |
 | `stick_fix` | bool | `false` | the stick fix (`ico_opt_stick_fix_default`); the input layer reads it too |
-| `yorda_safe` | bool | `false` | the shadows never take Yorda |
-| `pit_time` | integer or string | `"original"` | how long a shadow takes to pull Yorda into a pit, in whole seconds `4` to `30` (the Settings menu writes an integer), or `"original"`: the pull-in is the five SINK motions A to E (`port/game/pit_time.h`: 462 game ticks = 15.4 s on every released disc and the August 2001 preview, 463 on the June 2001 demo), the time factor is seconds x 30 / ticks and their play speed is 1/factor, so the whole pull-in lasts the seconds set; the camera effect's 5 s timeout scales by the same factor; `15` (the base in whole seconds) reads as `"original"`; the earlier words still read: `"half"`, `"longer"`, `"double"`, `"triple"` are 1/2, 1.5, 2, 3 times the disc's time in whole seconds held to the range (8, 23, 30, 30; `"double"` and `"triple"` log `options: [gameplay] pit_time = "double" is past 30 seconds: held to 30 s`, not the unknown-value line); an unknown word or a number out of range logs and reads `"original"` or the nearest end; logs `gameplay: pit time <value> (this disc's pull-in <ticks> ticks = <s> s, shown as 15 s; x<factor>)` at load and on change; recorded in the pad recording's header |
-| `shadow_speed` | string | `"original"` | how fast shadows walk, run and fly: `"slower"`, `"original"`, `"faster"` or `"fastest"` (factors 0.75, 1, 1.25, 1.5), on each disc's locomotion motions only (`port/game/options.h` `ico_opt_shadow_speed_motion`: attacks, grabs, hits, the dissolve and the pit dive keep the game's speed); an unknown word reads `"original"` and logs; recorded in the pad recording's header |
-| `shadows_together` | bool | `false` | no turns between the shadows: the game holds a shadow back from its attack while another is attacking (`enemy_act.c` `EnemyUtil_isOtherStatus`); with this on none is held back ([GAME_FEATURES.md](GAME_FEATURES.md#shadows-attack-together)); read at each check, so a change acts at once; a simulation key (pad recording header, save state check) |
+| `yorda_safe` | bool | `false` | retired (a row of each save's difficulty record, read only by the carry-over): the shadows never take Yorda |
+| `pit_time` | integer or string | `"original"` | retired (a row of each save's difficulty record, read only by the carry-over): how long a shadow takes to pull Yorda into a pit, in whole seconds `4` to `30` (the Settings menu writes an integer), or `"original"`: the pull-in is the five SINK motions A to E (`port/game/pit_time.h`: 462 game ticks = 15.4 s on every released disc and the August 2001 preview, 463 on the June 2001 demo), the time factor is seconds x 30 / ticks and their play speed is 1/factor, so the whole pull-in lasts the seconds set; the camera effect's 5 s timeout scales by the same factor; `15` (the base in whole seconds) reads as `"original"`; the earlier words still read: `"half"`, `"longer"`, `"double"`, `"triple"` are 1/2, 1.5, 2, 3 times the disc's time in whole seconds held to the range (8, 23, 30, 30; `"double"` and `"triple"` log `options: [gameplay] pit_time = "double" is past 30 seconds: held to 30 s`, not the unknown-value line); an unknown word or a number out of range logs and reads `"original"` or the nearest end; logs `gameplay: pit time <value> (this disc's pull-in <ticks> ticks = <s> s, shown as 15 s; x<factor>)` at load and on change; recorded in the pad recording's header |
+| `shadow_speed` | string | `"original"` | retired (a row of each save's difficulty record, read only by the carry-over): how fast shadows walk, run and fly: `"slower"`, `"original"`, `"faster"` or `"fastest"` (factors 0.75, 1, 1.25, 1.5), on each disc's locomotion motions only (`port/game/options.h` `ico_opt_shadow_speed_motion`: attacks, grabs, hits, the dissolve and the pit dive keep the game's speed); an unknown word reads `"original"` and logs; recorded in the pad recording's header |
+| `shadows_together` | bool | `false` | retired (a row of each save's difficulty record, read only by the carry-over): no turns between the shadows: the game holds a shadow back from its attack while another is attacking (`enemy_act.c` `EnemyUtil_isOtherStatus`); with this on none is held back ([GAME_FEATURES.md](GAME_FEATURES.md#shadows-attack-together)); read at each check, so a change acts at once; a simulation key (pad recording header, save state check) |
 | `door_fix` | bool | `false` | an arrival holding hands does not send the pair back through the door |
-| `yorda_trips` | bool | `false` | Yorda trips and falls as she does after the main gate opens: after 3 s of Ico running pulling her by the hand (the main gate scene's own count, again every further 3 s of it; no random roll); her fall's motions are added at each stage load, so a change takes effect from the next one ([GAME_FEATURES.md](GAME_FEATURES.md#yorda-trips)); a pad recording's header records it |
+| `yorda_trips` | bool | `false` | retired (a row of each save's difficulty record, read only by the carry-over): Yorda trips and falls as she does after the main gate opens: after 3 s of Ico running pulling her by the hand (the main gate scene's own count, again every further 3 s of it; no random roll); her fall's motions are added at each stage load, so a change takes effect from the next one ([GAME_FEATURES.md](GAME_FEATURES.md#yorda-trips)); a pad recording's header records it |
 | `mirror` | bool | `false` | mirrored play, the value a run starts from until New Game or a load |
 | `natural_chains` | bool | `false` | a chain let down keeps its links' size |
 | `skip_opening` | bool | `false` | the boot starts at the title screen, without the Sony presents sign and the opening scene (from the next start); a pad recording's header records it |
@@ -251,26 +261,31 @@ Shadow toughness, Shadow aggression and Peaceful shadows on Gameplay > Shadows, 
 Queen barrier and the two weapon rows) on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
 [OPTIONS.md](../OPTIONS.md#gameplay)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
-the game as the disc ships it. All sixteen are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
-`port/platform/sim_keys.c`). A word
-or number that is no value reads as the default and is logged once.
+the game as the disc ships it. Ten of the sixteen are rows of each save's difficulty record
+(`port/game/difficulty.h`) and retired here (marked below): `variants.c` reads them from the
+active record, a Settings step edits the record and writes no key, and none of them switches
+achievements off (One hit per swing, Shadows never dodge and Peaceful shadows included). The six
+that stay (`no_cutscene_look`, `ignore_cutscene_cameras`, `sword_colour`, `weapon`, the two chain
+rows) are in a pad recording's header and a save state's settings hash (`ICO_SIM_KEYS`,
+`port/platform/sim_keys.c`). A word or number that is no value reads as the default and is logged
+once.
 
 | key | type | default | meaning |
 | --- | --- | --- | --- |
-| `shade_toughness` | string | `"original"` | `"original"` (the disc's table), `"american"` (every Shadow as tough as on the North American disc, and no tougher on later playthroughs) or `"no_plus"` (the disc's Shadows, no tougher on later playthroughs) or `"third_journey"` (the factor of a third playthrough, `gameParam[40]`, twice the first journey's; the PAL, Japanese, Korean and Chinese discs only: elsewhere it reads as `"original"` with a log line) |
-| `one_hit` | bool | `false` | a swing hurts a Shadow only once (`debug_one_hit_only`); suspends achievements |
-| `never_dodge` | bool | `false` | the Shadows never dodge (`debug_ignore_dodge`); suspends achievements |
-| `aggression` | string | `"own"` | `"own"` (each Shadow's own), `"bold_patient"`, `"bold_quick"`, `"wary_patient"` or `"wary_quick"` (`debug_enemy_battle_type`) |
-| `no_hints` | bool | `false` | no hints, as on the North American disc |
-| `barrier_hits` | int | absent (not in the template) | `5` or `7`: the hits the Queen's barrier takes; absent, the disc's own (`7` on `jun26`, else `5`); the Settings row writes it |
+| `shade_toughness` | string | `"original"` | retired (a difficulty row, read only by the carry-over): `"original"` (the disc's table), `"american"` (every Shadow as tough as on the North American disc, and no tougher on later playthroughs) or `"no_plus"` (the disc's Shadows, no tougher on later playthroughs) or `"third_journey"` (the factor of a third playthrough, `gameParam[40]`, twice the first journey's; the PAL, Japanese, Korean and Chinese discs only: elsewhere it reads as `"original"` with a log line) |
+| `one_hit` | bool | `false` | retired (a difficulty row, read only by the carry-over): a swing hurts a Shadow only once (`debug_one_hit_only`); does not suspend achievements |
+| `never_dodge` | bool | `false` | retired (a difficulty row, read only by the carry-over): the Shadows never dodge (`debug_ignore_dodge`); does not suspend achievements |
+| `aggression` | string | `"own"` | retired (a difficulty row, read only by the carry-over): `"own"` (each Shadow's own), `"bold_patient"`, `"bold_quick"`, `"wary_patient"` or `"wary_quick"` (`debug_enemy_battle_type`) |
+| `no_hints` | bool | `false` | retired (a difficulty row, read only by the carry-over): no hints, as on the North American disc |
+| `barrier_hits` | int | absent (not in the template) | retired (a difficulty row, read only by the carry-over): `5` or `7`: the hits the Queen's barrier takes; absent, the disc's own (`7` on `jun26`, else `5`); the Settings row writes it |
 | `no_cutscene_look` | bool | `false` | no camera look-around in cutscenes |
 | `ignore_cutscene_cameras` | bool | `false` | the cutscenes' cameras are ignored (`debug_ignore_demo_camera`); suspends achievements |
-| `auto_guard` | bool | `true` | Ico blocks a Shadow's attack from the front; `false` = he does not (does not suspend achievements) |
-| `attack_turn` | bool | `true` | Ico's swing turns him toward the nearest Shadow; `false` = he swings straight ahead (does not suspend achievements) |
-| `shadows_wait_down` | bool | `true` | the Shadows hold back while Ico is knocked down, and his down action makes him invincible; `false` = they do not hold back and their swings land while he lies and gets up (`ico_variant_down_keeps_hit`; does not suspend achievements) |
+| `auto_guard` | bool | `true` | retired (a difficulty row, read only by the carry-over): Ico blocks a Shadow's attack from the front; `false` = he does not (does not suspend achievements) |
+| `attack_turn` | bool | `true` | retired (a difficulty row, read only by the carry-over): Ico's swing turns him toward the nearest Shadow; `false` = he swings straight ahead (does not suspend achievements) |
+| `shadows_wait_down` | bool | `true` | retired (a difficulty row, read only by the carry-over): the Shadows hold back while Ico is knocked down, and his down action makes him invincible; `false` = they do not hold back and their swings land while he lies and gets up (`ico_variant_down_keeps_hit`; does not suspend achievements) |
 | `sword_colour` | string | `"original"` | `"original"` or `"red"`: the light sword (weapon kind 9) is made as its red twin, kind 8, from the next room; offered on pal, jpn, kor and cn only (the other tables have no kinds 8 and 9: `"red"` reads as `"original"` there, logged once); does not suspend achievements |
 | `weapon` | string | `"original"` | `"original"` or `"net"`: the stick (kind 1) is made as the insect net (kind 7, 6 on jun26), from the next room: held, never swung, never lit, power 0; does not suspend achievements |
-| `peaceful_shadows` | bool | `false` | a Shadow is started without its brain thread (the game's `BrainOnOff` switch, for Shadows only; Yorda's brain is untouched); suspends achievements |
+| `peaceful_shadows` | bool | `false` | retired (a difficulty row, read only by the carry-over): a Shadow is started without its brain thread (the game's `BrainOnOff` switch, for Shadows only; Yorda's brain is untouched); does not suspend achievements |
 | `chain_swing_speed` | int | `4` | `1` to `10`: the game's debug row `CHAIN CYCLE SPEED` (`debug_chain_cycle_speed`), the swing's period when Ico takes hold of a chain; higher is a shorter swing, `4` the game's own (leaves the game's value alone); anything else reads as `4` with a log line; does not suspend achievements |
 | `chain_swing_damping` | int | `4` | `1` to `10`: the game's debug row `CHAIN SLOW SPEED` (`debug_chain_slow_speed`), how fast a swing dies down while Ico is not swinging it (`0.05` of swing amplitude per tick per step); `4` the game's own; same reading and rule as above |
 

@@ -1,8 +1,10 @@
 /*
  * port/game/variants.c
  *
- * The game variants' values (variants.h): read lazily from [variants],
- * set by the Settings page, the achievements rule; the game's debug switches
+ * The game variants' values (variants.h): the global ones read lazily from
+ * [variants], the ten that are rows of the journey's difficulty record
+ * (difficulty.h) read from the active record, set by the Settings page, the
+ * achievements rule; the game's debug switches
  * they hold (ico_variants_apply), the enemy row reader (ico_variant_enemy_def),
  * the hint rule (ico_hints_on) and the weapon kinds (ico_variant_weapon_kind).
  *
@@ -21,6 +23,7 @@
 #include <string.h>
 
 #include "config.h"
+#include "difficulty.h"
 
 static const char *const kToughness[ICO_TOUGHNESS_COUNT] = {"original", "american", "no_plus",
                                                             "third_journey"};
@@ -44,6 +47,7 @@ static const char *const kKeys[ICO_VARIANT_COUNT] = {
 
 /* 0: not read yet */
 static int s_loaded;
+/* the global variants' values; a moved one's entry is unused (val) */
 static int s_value[ICO_VARIANT_COUNT];
 static int s_debug_menu_used;
 static int s_suspend_logged; /* the achievements rule's last mask */
@@ -192,6 +196,55 @@ int ico_variant_offered(IcoVariantId id, int index)
                                                   : 1;
 }
 
+/* The variants that are rows of the journey's difficulty record
+   (difficulty.h): their row, or -1 for a global one ([variants] in
+   config.toml: the cutscene rows, the weapon rows, the chain rows). */
+static int moved_row(IcoVariantId id)
+{
+    switch (id) {
+    case ICO_VARIANT_SHADE_TOUGHNESS:
+        return ICO_DIFF_SHADE_TOUGHNESS;
+    case ICO_VARIANT_ONE_HIT:
+        return ICO_DIFF_ONE_HIT;
+    case ICO_VARIANT_NEVER_DODGE:
+        return ICO_DIFF_NEVER_DODGE;
+    case ICO_VARIANT_AGGRESSION:
+        return ICO_DIFF_AGGRESSION;
+    case ICO_VARIANT_NO_HINTS:
+        return ICO_DIFF_NO_HINTS;
+    case ICO_VARIANT_BARRIER_HITS:
+        return ICO_DIFF_BARRIER_HITS;
+    case ICO_VARIANT_AUTO_GUARD:
+        return ICO_DIFF_AUTO_GUARD;
+    case ICO_VARIANT_ATTACK_TURN:
+        return ICO_DIFF_ATTACK_TURN;
+    case ICO_VARIANT_SHADOWS_WAIT_DOWN:
+        return ICO_DIFF_SHADOWS_WAIT_DOWN;
+    case ICO_VARIANT_PEACEFUL_SHADOWS:
+        return ICO_DIFF_PEACEFUL;
+    default:
+        return -1;
+    }
+}
+
+/* The value index in force: a moved variant's from the active record (the
+   barrier's row 0 is the disc's own, 5 and 7 its indices 0 and 1), a global
+   one's from [variants] */
+static int val(IcoVariantId id)
+{
+    const int row = moved_row(id);
+    int v;
+
+    if (row < 0) {
+        return s_value[id];
+    }
+    v = ico_difficulty_row((IcoDiffRow)row);
+    if (id == ICO_VARIANT_BARRIER_HITS) {
+        return v == 0 ? shipped_barrier() : v == 7;
+    }
+    return v;
+}
+
 static int word_index(const char *const *names, int n, const char *word, int def, const char *key)
 {
     for (int i = 0; i < n; i++) {
@@ -207,17 +260,11 @@ static int word_index(const char *const *names, int n, const char *word, int def
 static void log_summary(void)
 {
     fprintf(stderr,
-            "variants: shade_toughness=%s one_hit=%d never_dodge=%d aggression=%s no_hints=%d "
-            "barrier_hits=%s no_cutscene_look=%d ignore_cutscene_cameras=%d auto_guard=%d "
-            "attack_turn=%d shadows_wait_down=%d sword_colour=%s weapon=%s peaceful_shadows=%d "
-            "chain_swing_speed=%s chain_swing_damping=%s\n",
-            kToughness[s_value[ICO_VARIANT_SHADE_TOUGHNESS]], s_value[ICO_VARIANT_ONE_HIT],
-            s_value[ICO_VARIANT_NEVER_DODGE], kAggression[s_value[ICO_VARIANT_AGGRESSION]],
-            s_value[ICO_VARIANT_NO_HINTS], kBarrier[s_value[ICO_VARIANT_BARRIER_HITS]],
+            "variants: no_cutscene_look=%d ignore_cutscene_cameras=%d sword_colour=%s weapon=%s "
+            "chain_swing_speed=%s chain_swing_damping=%s (the Shadow, Combat, hints and "
+            "barrier rows are the journey's difficulty: difficulty.h)\n",
             s_value[ICO_VARIANT_NO_CUTSCENE_LOOK], s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS],
-            s_value[ICO_VARIANT_AUTO_GUARD], s_value[ICO_VARIANT_ATTACK_TURN],
-            s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN], kSword[s_value[ICO_VARIANT_SWORD_COLOUR]],
-            kWeapon[s_value[ICO_VARIANT_WEAPON]], s_value[ICO_VARIANT_PEACEFUL_SHADOWS],
+            kSword[s_value[ICO_VARIANT_SWORD_COLOUR]], kWeapon[s_value[ICO_VARIANT_WEAPON]],
             kChain[s_value[ICO_VARIANT_CHAIN_SWING_SPEED]],
             kChain[s_value[ICO_VARIANT_CHAIN_SWING_DAMPING]]);
 }
@@ -245,45 +292,15 @@ static void load(void)
         return;
     }
     s_loaded = 1;
-    s_value[ICO_VARIANT_SHADE_TOUGHNESS] = word_index(
-        kToughness, ICO_TOUGHNESS_COUNT,
-        ico_config_get_string("variants.shade_toughness", kToughness[0]), 0, "shade_toughness");
-    if (!ico_variant_offered(ICO_VARIANT_SHADE_TOUGHNESS, s_value[ICO_VARIANT_SHADE_TOUGHNESS])) {
-        fprintf(stderr,
-                "variants: shade_toughness = %s is not offered on this disc (%s); using "
-                "original\n",
-                kToughness[s_value[ICO_VARIANT_SHADE_TOUGHNESS]],
-                s_value[ICO_VARIANT_SHADE_TOUGHNESS] == ICO_TOUGHNESS_AMERICAN
-                    ? "the June 2001 demo's enemy rows are its own"
-                    : "its restart life has no playthrough factor");
-        s_value[ICO_VARIANT_SHADE_TOUGHNESS] = ICO_TOUGHNESS_ORIGINAL;
-    }
-    s_value[ICO_VARIANT_ONE_HIT] = ico_config_get_bool("variants.one_hit", 0) != 0;
-    s_value[ICO_VARIANT_NEVER_DODGE] = ico_config_get_bool("variants.never_dodge", 0) != 0;
-    s_value[ICO_VARIANT_AGGRESSION] =
-        word_index(kAggression, ICO_AGGRESSION_COUNT,
-                   ico_config_get_string("variants.aggression", kAggression[0]), 0, "aggression");
-    s_value[ICO_VARIANT_NO_HINTS] = ico_config_get_bool("variants.no_hints", 0) != 0;
-    {
-        const long long b = ico_config_get_int("variants.barrier_hits", 0);
-        const int named = b == 5 || b == 7;
-        if (!named && b != 0) {
-            fprintf(stderr,
-                    "variants: [variants] barrier_hits = %lld is not 5 or 7; using the "
-                    "disc's\n",
-                    b);
-        }
-        s_value[ICO_VARIANT_BARRIER_HITS] = named ? (b == 7) : shipped_barrier();
-    }
+    /* the ten rows of the journey's difficulty record (shade_toughness,
+       one_hit, never_dodge, aggression, no_hints, barrier_hits, auto_guard,
+       attack_turn, shadows_wait_down, peaceful_shadows) are not read here:
+       their keys are retired (config.c), read once more only by the
+       carry-over of a save without a record (difficulty.h) */
     s_value[ICO_VARIANT_NO_CUTSCENE_LOOK] =
         ico_config_get_bool("variants.no_cutscene_look", 0) != 0;
     s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS] =
         ico_config_get_bool("variants.ignore_cutscene_cameras", 0) != 0;
-    /* the Combat rows: On is the game as shipped */
-    s_value[ICO_VARIANT_AUTO_GUARD] = ico_config_get_bool("variants.auto_guard", 1) != 0;
-    s_value[ICO_VARIANT_ATTACK_TURN] = ico_config_get_bool("variants.attack_turn", 1) != 0;
-    s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN] =
-        ico_config_get_bool("variants.shadows_wait_down", 1) != 0;
     /* the weapon rows: Original is the game as shipped */
     s_value[ICO_VARIANT_SWORD_COLOUR] =
         word_index(kSword, ICO_SWORD_COUNT,
@@ -296,9 +313,6 @@ static void load(void)
     s_value[ICO_VARIANT_WEAPON] =
         word_index(kWeapon, ICO_WEAPON_COUNT, ico_config_get_string("variants.weapon", kWeapon[0]),
                    0, "weapon");
-    /* a switch the game ships Off (a cheat: achievements are suspended) */
-    s_value[ICO_VARIANT_PEACEFUL_SHADOWS] =
-        ico_config_get_bool("variants.peaceful_shadows", 0) != 0;
     /* the chain rows: 4 is the game's own value */
     s_value[ICO_VARIANT_CHAIN_SWING_SPEED] = chain_index("chain_swing_speed");
     s_value[ICO_VARIANT_CHAIN_SWING_DAMPING] = chain_index("chain_swing_damping");
@@ -311,8 +325,11 @@ int ico_variant_get(IcoVariantId id)
         return 0;
     }
     load();
-    /* a value read before the disc was chosen and not offered on it */
-    return ico_variant_offered(id, s_value[id]) ? s_value[id] : 0;
+    {
+        const int v = val(id);
+        /* a value read before the disc was chosen and not offered on it */
+        return ico_variant_offered(id, v) ? v : 0;
+    }
 }
 
 void ico_variant_set(IcoVariantId id, int index)
@@ -322,9 +339,16 @@ void ico_variant_set(IcoVariantId id, int index)
         return;
     }
     load();
-    s_value[id] = index < 0 ? 0 : index >= n ? n - 1 : index;
-    if (!ico_variant_offered(id, s_value[id])) {
-        s_value[id] = 0; /* American on the June 2001 demo: Original */
+    index = index < 0 ? 0 : index >= n ? n - 1 : index;
+    if (!ico_variant_offered(id, index)) {
+        index = 0; /* American on the June 2001 demo: Original */
+    }
+    if (moved_row(id) >= 0) {
+        /* the active record's row (the barrier's index 0 and 1 are 5 and 7) */
+        ico_difficulty_set_row((IcoDiffRow)moved_row(id),
+                               id == ICO_VARIANT_BARRIER_HITS ? (index == 1 ? 7 : 5) : index);
+    } else {
+        s_value[id] = index;
     }
     ico_variants_apply();
 }
@@ -334,11 +358,11 @@ static int dbg_wanted(int i)
 {
     switch (i) {
     case DBG_ONE_HIT:
-        return s_value[ICO_VARIANT_ONE_HIT] ? 1 : -1;
+        return val(ICO_VARIANT_ONE_HIT) ? 1 : -1;
     case DBG_IGNORE_DODGE:
-        return s_value[ICO_VARIANT_NEVER_DODGE] ? 1 : -1;
+        return val(ICO_VARIANT_NEVER_DODGE) ? 1 : -1;
     case DBG_BATTLE_TYPE:
-        return kBattleType[s_value[ICO_VARIANT_AGGRESSION]];
+        return kBattleType[val(ICO_VARIANT_AGGRESSION)];
     case DBG_IGNORE_DEMO_CAMERA:
         return s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS] ? 1 : -1;
     case DBG_HAND_CAMERA:
@@ -395,15 +419,14 @@ void ico_variants_apply(void)
             "ignore_cutscene_cameras=%d auto_guard=%d attack_turn=%d shadows_wait_down=%d "
             "sword_colour=%s weapon=%s (net kind %d) peaceful_shadows=%d chain_swing_speed=%s "
             "chain_swing_damping=%s;%s\n",
-            kToughness[s_value[ICO_VARIANT_SHADE_TOUGHNESS]], s_value[ICO_VARIANT_ONE_HIT],
-            s_value[ICO_VARIANT_NEVER_DODGE], kAggression[s_value[ICO_VARIANT_AGGRESSION]],
-            s_value[ICO_VARIANT_NO_HINTS], ico_hints_on() ? "on" : "off",
-            ico_variant_barrier_hits(), s_value[ICO_VARIANT_NO_CUTSCENE_LOOK],
-            s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS], s_value[ICO_VARIANT_AUTO_GUARD],
-            s_value[ICO_VARIANT_ATTACK_TURN], s_value[ICO_VARIANT_SHADOWS_WAIT_DOWN],
-            kSword[s_value[ICO_VARIANT_SWORD_COLOUR]], kWeapon[s_value[ICO_VARIANT_WEAPON]],
-            ico_variant_net_kind(), s_value[ICO_VARIANT_PEACEFUL_SHADOWS],
-            kChain[s_value[ICO_VARIANT_CHAIN_SWING_SPEED]],
+            kToughness[val(ICO_VARIANT_SHADE_TOUGHNESS)], val(ICO_VARIANT_ONE_HIT),
+            val(ICO_VARIANT_NEVER_DODGE), kAggression[val(ICO_VARIANT_AGGRESSION)],
+            val(ICO_VARIANT_NO_HINTS), ico_hints_on() ? "on" : "off", ico_variant_barrier_hits(),
+            s_value[ICO_VARIANT_NO_CUTSCENE_LOOK], s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS],
+            val(ICO_VARIANT_AUTO_GUARD), val(ICO_VARIANT_ATTACK_TURN),
+            val(ICO_VARIANT_SHADOWS_WAIT_DOWN), kSword[s_value[ICO_VARIANT_SWORD_COLOUR]],
+            kWeapon[s_value[ICO_VARIANT_WEAPON]], ico_variant_net_kind(),
+            val(ICO_VARIANT_PEACEFUL_SHADOWS), kChain[s_value[ICO_VARIANT_CHAIN_SWING_SPEED]],
             kChain[s_value[ICO_VARIANT_CHAIN_SWING_DAMPING]], sw);
 }
 
@@ -484,10 +507,10 @@ const EnemyDef *ico_variant_enemy_def(const EnemyDef *disc, int rows, const Enem
        table of the same kinds, row for row (the same row count): never on
        the June 2001 demo, whose 18 rows are kinds of its own (PC port:
        american_offered) */
-    american = s_value[ICO_VARIANT_SHADE_TOUGHNESS] == ICO_TOUGHNESS_AMERICAN && usa != NULL &&
+    american = val(ICO_VARIANT_SHADE_TOUGHNESS) == ICO_TOUGHNESS_AMERICAN && usa != NULL &&
                american_offered() && rows == usaRows && kind < usaRows &&
                row->model != disc[rows - 1].model;
-    battle = kBattleType[s_value[ICO_VARIANT_AGGRESSION]];
+    battle = kBattleType[val(ICO_VARIANT_AGGRESSION)];
     if ((!american && battle < 0) || kind >= ENEMY_ROWS_MAX) {
         return row; /* the disc's own row, as the game read it */
     }
@@ -510,19 +533,27 @@ int ico_variant_step(IcoVariantId id, int dir)
 {
     const int n = ico_variant_count(id);
     char path[64];
-    int v;
+    int v, from;
 
     if (n == 0) {
         return 0;
     }
     load();
-    v = s_value[id];
+    from = val(id);
+    v = from;
     do {
         /* past a value this disc does not offer (American on the June 2001
            demo: Original <-> Not tougher later) */
         v = ((v + dir) % n + n) % n;
-    } while (!ico_variant_offered(id, v) && v != s_value[id] && dir != 0);
+    } while (!ico_variant_offered(id, v) && v != from && dir != 0);
     ico_variant_set(id, v);
+    if (moved_row(id) >= 0) {
+        /* a row of the journey's difficulty record: no config key (the New
+           Game screen chooses it; difficulty.h) */
+        fprintf(stderr, "variants: %s = %s (the journey's difficulty; config.toml unchanged)\n",
+                kKeys[id], ico_variant_value_name(id, v));
+        return v;
+    }
     snprintf(path, sizeof(path), "variants.%s", kKeys[id]);
     if (id == ICO_VARIANT_BARRIER_HITS) {
         ico_config_set_int(path, v == 1 ? 7 : 5);
@@ -713,16 +744,15 @@ int ico_variants_suspend_achievements(void)
 {
     int mask;
     load();
-    mask = (s_value[ICO_VARIANT_ONE_HIT] ? 1 : 0) | (s_value[ICO_VARIANT_NEVER_DODGE] ? 2 : 0) |
-           (s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS] ? 4 : 0) | (s_debug_menu_used ? 8 : 0) |
-           (s_value[ICO_VARIANT_PEACEFUL_SHADOWS] ? 16 : 0);
+    /* the difficulty rows (One hit per swing, Shadows never dodge, Peaceful
+       shadows among them) never switch achievements off: only Ignore
+       cutscene cameras and the Debug menu do */
+    mask = (s_value[ICO_VARIANT_IGNORE_CUTSCENE_CAMERAS] ? 4 : 0) | (s_debug_menu_used ? 8 : 0);
     if (mask != s_suspend_logged) {
         s_suspend_logged = mask;
         if (mask != 0) {
-            fprintf(stderr, "variants: achievements are off (%s%s%s%s%s)\n",
-                    mask & 1 ? "one_hit " : "", mask & 2 ? "never_dodge " : "",
-                    mask & 4 ? "ignore_cutscene_cameras " : "", mask & 8 ? "debug_menu " : "",
-                    mask & 16 ? "peaceful_shadows" : "");
+            fprintf(stderr, "variants: achievements are off (%s%s)\n",
+                    mask & 4 ? "ignore_cutscene_cameras " : "", mask & 8 ? "debug_menu" : "");
         } else {
             fprintf(stderr, "variants: achievements are back on\n");
         }
