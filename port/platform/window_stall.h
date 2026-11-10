@@ -26,6 +26,9 @@
  *     level sampled every 250 ms (gpu_sysfs.h): which nodes were readable
  *     at the open, the 10 s block's line, and the samples before, during
  *     and after each present that blocked;
+ *   - per 10 s block from the run's first stall on, and once at exit, the
+ *     stalls against the block's GPU span band and the display's rate
+ *     (present_stall_block.h), every record counted from window_stall_after;
  *   - on Android, the app's own thermal headroom and status and whether
  *     the screen is being recorded (thermal_text.h, host_android.h
  *     ico_host_thermal): the block's "window: thermal: ..." line after the
@@ -86,10 +89,20 @@ void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const 
 void window_stall_gpu_open(void);
 /* The window's close: the sampler's thread stopped and joined (Android) */
 void window_stall_gpu_close(void);
-/* The 10 s block's line ("window: kernel GPU driver: clock A-B MHz ...;
-   CPU clocks: cores 0-5 1000-1800 MHz (average 1500), cores 6-7 ..."),
-   when a node or a CPU clock is sampled */
+/* The 10 s block's lines: on Android the kernel driver's ("window: kernel
+   GPU driver: clock A-B MHz ...; CPU clocks: cores 0-5 1000-1800 MHz
+   (average 1500), cores 6-7 ...", when a node or a CPU clock is sampled)
+   and the thermal line; on every platform then the block's present stall
+   line from the run's first stall on (present_stall_block.h: the stalls'
+   lengths, the GPU idle before each stalled replay, the GPU clock
+   restarts, the block's GPU span band, the display's rate, the frame rate
+   pin's ask, the GPU clock where readable), the block joined into the
+   run's sums */
 void window_stall_gpu_block(void);
+/* At the window's close: the run's line, the stalls per minute by display
+   rate and by the block's GPU span band ("window: present stalls this
+   run: ...") */
+void window_stall_run_summary(void);
 /* At each drain: the around lines of the presents that blocked whose
    sample after them came (or that waited a second for it): "window: kernel
    GPU driver around the present that blocked (replay N): 0.12 s before:

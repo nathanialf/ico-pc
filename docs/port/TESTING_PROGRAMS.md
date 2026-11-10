@@ -1095,6 +1095,14 @@ that stops again writing its own line without the retry mark); a stop at the fre
   again, a new native window or a resume forgetting the ask and the next set made again
   (`DISPLAY_PIN_SET_AGAIN`; none wanted then: nothing asked or said), the pin's lines
   (`display_rate`).
+- `present_stall_block_test.c`: the present stalls per 10 s block and per run
+  (`present_stall_block.h`, issue 123): blocks before the run's first stall write no line and join
+  the run's sums; the issue 123 log's stalled block (a 340 ms present 33.4 ms after the replay
+  before, a stalled span of 87.1 ms kept out of the band, the GPU clock restarted) word for word;
+  the block after it still writes; a stall after an 818 ms CPU-side pause with a measured gap, an
+  overlap, one with no start time, a GPU clock read; more stalls than the list holds; the band
+  index; the run's line (restarts, CPU-side gaps against the 80 ms idle timeout, the held range,
+  by the stall's display rate and by band) word for word; a short buffer (`present_stall_block`).
 - `gpu_sysfs_test.c`: the kernel GPU driver's nodes, the pure part (`gpu_sysfs.h`, issue 123): the nodes' texts parsed (`905000000`, `42 %`, leading blanks, a sign, empty, no digit first, a 4 KB text, a buffer read to its length only, digits past a long long's room), Hz to MHz rounded; the ring of 64 (70 samples, the oldest dropped); the 10 s block (the clock's range and mean, busy's mean, the resets in the block against the last before it and from the ring's start, the thermal level's highest, a temperature, only busy read, a steady clock, an empty block); around a present (the sample before, the ones during, the one after, samples exactly at its start and end, none before, none after, nothing read); the open line (the usual readable set, every node denied, the directory missing, nothing present, only the once nodes with errnos named), the block and around lines word for word, a short buffer cut; issue 179: the devfreq name rule and lines, the CPU clocks by class and around a present (`gpu_sysfs`).
 - `thermal_text_test.c`: the thermal and screen recording words (`thermal_text.h`, issue 123): the
   status name table (NONE 0 to SHUTDOWN 6, -1 and 7 UNKNOWN), the change line (`MODERATE (2) ->
