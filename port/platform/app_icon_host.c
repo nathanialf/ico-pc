@@ -36,6 +36,13 @@ int ico_app_icon_wanted(void)
     if (userAndDisc(dir, sizeof(dir), &disc) != 0) {
         return 0;
     }
+    /* a stored icon that is a wash over the whole frame (written by an earlier
+       build) is removed once a run, so the check below sees it missing */
+    static int s_washChecked;
+    if (!s_washChecked) {
+        s_washChecked = 1;
+        (void)ico_app_icon_drop_wash(dir, disc);
+    }
     if (!ico_app_icon_wanted_at(dir, disc, ICO_VERSION_LABEL)) {
         return 0;
     }

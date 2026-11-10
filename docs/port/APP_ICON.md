@@ -361,3 +361,10 @@ name rule and the steps with the renderer and the files stubbed), `rd_icon_pass_
 (`rd_icon_pass`: the renderer's pass recorded without a device) and `rd_icon_hold_test`
 (`rd_icon_hold`, `rd_icon_hold_gl`: the held picture presented on a device while the shot reads the
 pass's own, [TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+
+A stored icon from an earlier build can be such a wash. Once a run, before the wanted test
+(`ico_app_icon_wanted`), `ico_app_icon_drop_wash` reads the disc's PNG (the form `rd_write_png_mem`
+writes) and, when `ico_app_icon_png_flat` finds all four corners at least half opaque, removes it
+with the `.ico`, the stamp and the current copies and logs `ico_pc: icon: the stored icon <path> is
+a wash over the whole frame (corner colour R G B, alpha A): removed; made again at the next title
+screen`; the icon is then wanted as if missing. A PNG of another form is kept.

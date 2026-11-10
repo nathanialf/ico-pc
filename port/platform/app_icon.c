@@ -9,6 +9,7 @@
  */
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "app_icon.h"
@@ -155,4 +156,123 @@ int ico_app_icon_picture_plain(int crtOn, float crtStrength, int gamma, int brig
     }
     return tone_neutral(gamma) && tone_neutral(brightness) && tone_neutral(contrast) &&
            tone_neutral(saturation);
+}
+
+/* the four corner texels of a PNG this port wrote (rd_write_png_mem: 8-bit
+   RGBA, filter 0, one IDAT of stored deflate blocks) into flat; 1 when all
+   four are at least half opaque, 0 when not, -1 when the file is not of that
+   form (kept as it is) */
+int ico_app_icon_png_flat(const uint8_t *png, size_t n, uint8_t corner[4])
+{
+    enum { S = ICO_ICON_SIZE, ROW = S * 4 + 1, RAW = ROW * S };
+
+    static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    if (png == NULL || n < 8 + 25 || memcmp(png, sig, 8) != 0) {
+        return -1;
+    }
+    const uint8_t *ihdr = png + 16;
+    if (memcmp(png + 12, "IHDR", 4) != 0 || ihdr[0] || ihdr[1] || ihdr[2] != 1 || ihdr[3] ||
+        ihdr[4] || ihdr[5] || ihdr[6] != 1 || ihdr[7] || ihdr[8] != 8 || ihdr[9] != 6 ||
+        ihdr[12] != 0) {
+        return -1;
+    }
+    size_t at = 8 + 25;
+    while (at + 12 <= n && memcmp(png + at + 4, "IDAT", 4) != 0) {
+        const size_t len = ((size_t)png[at] << 24) | ((size_t)png[at + 1] << 16) |
+                           ((size_t)png[at + 2] << 8) | png[at + 3];
+        if (len > n) {
+            return -1;
+        }
+        at += 12 + len;
+    }
+    if (at + 12 > n) {
+        return -1;
+    }
+    size_t len = ((size_t)png[at] << 24) | ((size_t)png[at + 1] << 16) |
+                 ((size_t)png[at + 2] << 8) | png[at + 3];
+    if (len > n || at + 8 + len > n || len < 6) {
+        return -1;
+    }
+    const uint8_t *z = png + at + 8, *end = z + len;
+    z += 2; /* zlib header */
+    uint8_t *raw = malloc(RAW);
+    if (raw == NULL) {
+        return -1;
+    }
+    size_t got = 0;
+    for (;;) {
+        if (end - z < 5 || (z[0] & 6) != 0) { /* BTYPE 00 only */
+            got = 0;
+            break;
+        }
+        const int last = z[0] & 1;
+        const size_t bl = (size_t)z[1] | ((size_t)z[2] << 8);
+        z += 5;
+        if ((size_t)(end - z) < bl || got + bl > RAW) {
+            got = 0;
+            break;
+        }
+        memcpy(raw + got, z, bl);
+        got += bl;
+        z += bl;
+        if (last) {
+            break;
+        }
+    }
+    int r = -1;
+    if (got == RAW) {
+        const size_t at4[4] = {1, 1 + (S - 1) * 4, (size_t)(S - 1) * ROW + 1,
+                               (size_t)(S - 1) * ROW + 1 + (S - 1) * 4};
+        r = 1;
+        for (int i = 0; i < 4; i++) {
+            if (raw[at4[i] + 3] < 128) {
+                r = 0;
+            }
+        }
+        if (corner != NULL) {
+            memcpy(corner, raw + at4[0], 4);
+        }
+    }
+    free(raw);
+    return r;
+}
+
+int ico_app_icon_drop_wash(const char *dir, const char *discId)
+{
+    char png[1024];
+    if (dir == NULL || discId == NULL || discPath(png, sizeof(png), dir, discId, "png") != 0) {
+        return 0;
+    }
+    FILE *f = ico_fopen(png, "rb");
+    if (f == NULL) {
+        return 0;
+    }
+    uint8_t *buf = malloc(300000);
+    const size_t n = buf != NULL ? fread(buf, 1, 300000, f) : 0;
+    fclose(f);
+    uint8_t c[4] = {0, 0, 0, 0};
+    const int flat = n > 0 ? ico_app_icon_png_flat(buf, n, c) : -1;
+    free(buf);
+    if (flat != 1) {
+        return 0;
+    }
+    char other[1024];
+    fprintf(stderr,
+            "ico_pc: icon: the stored icon %s is a wash over the whole frame (corner colour %d %d "
+            "%d, alpha %d): removed; made again at the next title screen\n",
+            png, c[0], c[1], c[2], c[3]);
+    (void)ico_remove(png);
+    if (discPath(other, sizeof(other), dir, discId, "ico") == 0) {
+        (void)ico_remove(other);
+    }
+    if (discPath(other, sizeof(other), dir, discId, "txt") == 0) {
+        (void)ico_remove(other);
+    }
+    if (ico_app_icon_path_at(other, sizeof(other), dir, "ico-pc.png") == 0) {
+        (void)ico_remove(other);
+    }
+    if (ico_app_icon_path_at(other, sizeof(other), dir, "ico-pc.ico") == 0) {
+        (void)ico_remove(other);
+    }
+    return 1;
 }
