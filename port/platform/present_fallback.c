@@ -38,23 +38,26 @@ static int has_word(const char *s, const char *word)
     return 0;
 }
 
-int ico_present_fallback_driver_eligible(unsigned vendorId, const char *driverText)
+int ico_present_fallback_driver_eligible(unsigned vendorId, unsigned driverId,
+                                         const char *driverText)
 {
-    return vendorId != 0 && !has_word(driverText, "mesa") && !has_word(driverText, "turnip");
+    return vendorId != 0 && driverId != ICO_PRESENT_FALLBACK_TURNIP_ID &&
+           !has_word(driverText, "mesa") && !has_word(driverText, "turnip");
 }
 
-int ico_present_fallback_qualcomm_own(unsigned vendorId, const char *driverText)
+int ico_present_fallback_qualcomm_own(unsigned vendorId, unsigned driverId, const char *driverText)
 {
     return vendorId == ICO_PRESENT_FALLBACK_QCOM_VENDOR &&
-           ico_present_fallback_driver_eligible(vendorId, driverText);
+           ico_present_fallback_driver_eligible(vendorId, driverId, driverText);
 }
 
 IcoPresentFallbackGate ico_present_fallback_gate(int vsync, int mailbox, int vulkan,
-                                                 unsigned vendorId, const char *driverText,
+                                                 unsigned vendorId, unsigned driverId,
+                                                 const char *driverText,
                                                  IcoPresentFallbackMode mode)
 {
     if (vsync || !mailbox || !vulkan ||
-        !ico_present_fallback_driver_eligible(vendorId, driverText) ||
+        !ico_present_fallback_driver_eligible(vendorId, driverId, driverText) ||
         mode == ICO_PRESENT_FALLBACK_FIFO) {
         return ICO_PRESENT_FALLBACK_GATE_NO;
     }
@@ -63,7 +66,7 @@ IcoPresentFallbackGate ico_present_fallback_gate(int vsync, int mailbox, int vul
     }
     /* the switch was measured on Qualcomm's own driver only; on a Mali-G52 it
        lengthened the blocks (issue 179) */
-    return ico_present_fallback_qualcomm_own(vendorId, driverText)
+    return ico_present_fallback_qualcomm_own(vendorId, driverId, driverText)
                ? ICO_PRESENT_FALLBACK_GATE_YES
                : ICO_PRESENT_FALLBACK_GATE_OTHER;
 }
@@ -74,10 +77,10 @@ int ico_present_fallback_start_asked(IcoPresentFallbackMode mode, int android)
 }
 
 int ico_present_fallback_start(IcoPresentFallbackMode mode, int android, int vsync,
-                               unsigned vendorId, const char *driverText)
+                               unsigned vendorId, unsigned driverId, const char *driverText)
 {
     return ico_present_fallback_start_asked(mode, android) && !vsync &&
-           ico_present_fallback_qualcomm_own(vendorId, driverText);
+           ico_present_fallback_qualcomm_own(vendorId, driverId, driverText);
 }
 
 void ico_present_fallback_start_line(char *out, size_t size)

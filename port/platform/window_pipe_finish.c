@@ -71,7 +71,7 @@ void window_pipe_floor_driver(void)
 {
     const RhiLimits *l = rhi_limits();
 
-    ico_diag_set_memory_floor_driver(l != NULL ? l->vendorId : 0u,
+    ico_diag_set_memory_floor_driver(l != NULL ? l->vendorId : 0u, l != NULL ? l->driverId : 0u,
                                      l != NULL ? l->driverText : NULL);
     ico_diag_set_pipe_compiler_serial(l != NULL ? l->serialPipelines : NULL);
 }

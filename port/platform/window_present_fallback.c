@@ -17,6 +17,17 @@ static IcoPresentFallbackMode s_mode;
 static int s_modeRead;
 static int s_pending; /* the switch asked for, applied at the step's end */
 
+/* the rhi's question when it makes a swapchain (rhi_present_fifo_start: the
+   vendor id and driver text it passes), with the driver id from the same
+   limits (rhi_limits() is filled before the first swapchain): a renamed
+   Turnip build is Turnip by its id, not Qualcomm's own driver */
+static int qualcomm_own_now(unsigned vendorId, const char *driverText)
+{
+    const RhiLimits *l = rhi_limits();
+
+    return ico_present_fallback_qualcomm_own(vendorId, l != NULL ? l->driverId : 0u, driverText);
+}
+
 void window_fifo_set(void)
 {
     if (!s_modeRead) {
@@ -39,7 +50,7 @@ void window_fifo_set(void)
        mailbox, fifo needs no question; elsewhere (Windows on Snapdragon)
        no question, so Vsync Off stays immediate there */
     rhi_present_fifo_start(ico_present_fallback_start_asked(s_mode, ICO_PRESENT_FALLBACK_ANDROID)
-                               ? ico_present_fallback_qualcomm_own
+                               ? qualcomm_own_now
                                : NULL);
 }
 
@@ -54,7 +65,7 @@ static int start_active(void)
     return rhi_backend() == RHI_BACKEND_VULKAN && l != NULL && !rhi_present_mailbox() &&
            !s_fallback.taken &&
            ico_present_fallback_start(s_mode, ICO_PRESENT_FALLBACK_ANDROID, o.vsync, l->vendorId,
-                                      l->driverText);
+                                      l->driverId, l->driverText);
 }
 
 /* What the window says about a present it notes (present_fallback.h
@@ -68,9 +79,10 @@ static int gate(void)
     const RhiLimits *l = rhi_limits();
 
     ico_video_get(&o);
-    return ico_present_fallback_gate(
-        o.vsync, rhi_present_mailbox(), rhi_backend() == RHI_BACKEND_VULKAN,
-        l != NULL ? l->vendorId : 0u, l != NULL ? l->driverText : NULL, s_mode);
+    return ico_present_fallback_gate(o.vsync, rhi_present_mailbox(),
+                                     rhi_backend() == RHI_BACKEND_VULKAN,
+                                     l != NULL ? l->vendorId : 0u, l != NULL ? l->driverId : 0u,
+                                     l != NULL ? l->driverText : NULL, s_mode);
 }
 
 const char *window_fifo_words(void)

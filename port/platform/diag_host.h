@@ -602,14 +602,15 @@ void ico_diag_note_low_memory(int level);
    ico_diag_startup_activity_budget_stop. Any thread. */
 int ico_diag_low_memory_stop(char *why, size_t size);
 /* The free-memory floor's driver class (memory_floor.h
-   ico_memory_floor_driver: vendor id and driver text, the window's
+   ico_memory_floor_driver: vendor id, Vulkan driver id and driver text, the window's
    rhi_limits() before the start-up set): Qualcomm's own driver keeps 17 %
    of total, at most 2048 MB above 8 GB; any other driver at most 512 MB
    above 8 GB; until set, the cautious rule.  A stop at the floor on
    another driver is for this start only
    (ico_diag_startup_activity_budget_stop: "the next start makes the set
    again"). */
-void ico_diag_set_memory_floor_driver(unsigned vendor_id, const char *driver_text);
+void ico_diag_set_memory_floor_driver(unsigned vendor_id, unsigned driver_id,
+                                      const char *driver_text);
 /* The class set (IcoMemoryFloorDriver) */
 int ico_diag_memory_floor_driver(void);
 /* Issue 188: the driver's compiles run one at a time (rhi.h
