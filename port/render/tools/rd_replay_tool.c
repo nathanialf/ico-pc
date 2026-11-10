@@ -542,7 +542,6 @@
 #include "../../shaders/shader_consts.h" /* ICO_VU_MARK_*: the marks --mesh shows */
 #include "font.h"                        /* port/ui: the overlay test's text */
 #include "rd_replay_region.h"            /* --region-stats */
-#include "rd_replay.h"                   /* rd__msaa_shadow_counts (--stats) */
 
 static const char *const kNames[] = {
     "SCENE",    "DISPLAY",   "SHADOW0",   "SHADOW1",      "SHADOW2",   "WORK0", "WORK1",
@@ -2143,6 +2142,10 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
     }
     return rc;
 }
+
+/* rd_msaa_shadow.c (rd_replay.h needs the shaders' include path, which this
+   tool does not have): the counts drawn in the MSAA epoch in the last replay (--stats) */
+uint32_t rd__msaa_shadow_counts(void);
 
 int main(int argc, char **argv)
 {
