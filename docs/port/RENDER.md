@@ -1084,7 +1084,8 @@ destination; the present's DISPLAY and window sizes), the storage-pass flag, the
 and destination read, and an upload batch's bytes. A table of the last 8 replays keeps each one's
 first and last sequence numbers, so a number the ring has moved past still names its replay and
 frame. Each entry's sequence number is also the marker the replay gives `rhi_cmd_checkpoint` right
-after the pass begins (or before the copy), and every replay sets `rhi_set_submit_tag` to its replay
+before the pass begins (`beginPass` pushes its entry first, as the crack fill does, so a crash
+inside the driver's begin finds the pass's entry the newest; or before the copy), and every replay sets `rhi_set_submit_tag` to its replay
 and frame numbers, so the backend's [loss report](RHI.md#device-loss) and the ring name the same
 passes. Once the device is lost the replay returns before recording anything (`replayFrame`), so
 the ring ends at the last replay given to the GPU. A replay records about 430 entries, so the ring
@@ -1092,7 +1093,11 @@ holds the last three replays whole while each stays under about 680: the last on
 two before it, the oldest of them the submission whose wait failed (`RHI_FRAMES_IN_FLIGHT` back).
 The window prints the replay table and then the entries of those three replays (from the oldest
 entry held when the ring has moved past the start of the first; at most the ring's 2048 lines)
-after a device loss, before the box ([PLATFORM.md](PLATFORM.md#diagnostics))
+after a device loss, before the box ([PLATFORM.md](PLATFORM.md#diagnostics)). A crash (not a device
+loss) prints the ring's last 16 entries, numbers only, in the crash block after the render pass the
+Vulkan backend last began ([RHI.md](RHI.md#device-loss), **The crash report's pass**;
+`port/platform/diag_host.c` (`report_gpu_passes`); the ring is its own library, `ico_passring`,
+which the platform layer links)
 (`port/render/rd_passring.h`, header comment; `port/render/rd_passring.c`
 (`rd_passring_print_start`, `rd_passring_print`); `port/render/rd_replay.c` (`replayFrame`,
 `beginPass`, `doCopy`, `takeSnap`, `doExact`); `port/render/rd_pipeline.c` (`rd__get_pipeline`)).

@@ -1727,7 +1727,9 @@ comment); `port/platform/window_host.c` (the perf record comment)).
 and the unhandled-exception filter on Windows, SIGSEGV, SIGBUS, SIGILL, SIGFPE and SIGTRAP on an
 alternate stack on POSIX, and `abort` (asserts, `ico_assert`, the scheduler's fatal errors). A crash
 writes the cause, the faulting address as module+offset, the current game thread and its last
-kernel call, return-address candidates, the heartbeat line and every thread, then the
+kernel call, the Vulkan render pass last begun and the renderer's last 16 pass ring entries
+([RHI.md](RHI.md#device-loss), **The crash report's pass**), return-address candidates, the
+heartbeat line and every thread, then the
 [symbol lines](#the-symbol-lines) naming each offset and the [report file](#the-report-file), then
 on Windows shows a message box naming the report and exits with code 3 (`port/platform/diag_host.h`;
 `port/platform/CMakeLists.txt` (the link map)). Every
