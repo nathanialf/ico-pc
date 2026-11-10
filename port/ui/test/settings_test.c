@@ -1652,7 +1652,7 @@ static void testPauseStats(void)
     CHECK(placed, "with the assists, every line between the bars");
     ico_opt_set_stick_fix(1);
     frame(0);
-    CHECK(statsShown(&placed) == 2 * 12 + 1 && placed,
+    CHECK(statsShown(&placed) == 2 * 13 + 1 && placed,
           "every line (the two assists, the difficulty and the area): still between the bars");
     if (as >= 0) {
         CHECK(strcmp(lt_ext_row_text(as + 3), ui_str(UI_STR_OPT_STICK_FIX)) == 0 &&

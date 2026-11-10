@@ -4654,6 +4654,7 @@ void ui_settings_install(void)
 
 void ui_settings_reset(void)
 {
+    ui__diff_set_readonly(0);
     s_built = 0;
     s_warned = 0;
     s_origin = LAYOUT_PAUSE;

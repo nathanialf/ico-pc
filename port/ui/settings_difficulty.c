@@ -195,6 +195,8 @@ void ui__diff_draft_start(const IcoDifficulty *from)
     } else {
         ico_difficulty_preset(ICO_DIFF_NORMAL, &s_draft);
     }
+    /* a draft is the New Game's: the pages are not the pause menu's view */
+    s_readOnly = 0;
     /* the journey's own numbers are the confirm's (ico_difficulty_begin) */
     s_draft.knocks_room = s_draft.knocks_journey = s_draft.in_fall = 0;
     s_draft.over_pending = s_draft.finished = 0;
