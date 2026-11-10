@@ -20,41 +20,61 @@ const char *const ICO_SIM_KEYS[] = {
     "game.language",
     "gameplay.mirror",
     "gameplay.stick_fix",
-    "gameplay.yorda_safe",
-    "gameplay.pit_time",
-    "gameplay.shadow_speed",
     "gameplay.developer_mode",
     "dev.start_stage",
     "gameplay.door_fix",
-    "gameplay.yorda_trips",
     "video.anti_aliasing",
     "gameplay.hold_type",
     "gameplay.hold_type_chosen", /* an earlier "hold" without it is the disc's own */
     "gameplay.skip_opening",
-    /* the game variants (port/game/variants.h): each changes the simulation */
+    /* the game variants that stay in config (port/game/variants.h) */
+    "variants.no_cutscene_look",
+    "variants.ignore_cutscene_cameras",
+    /* Gameplay > Combat's weapon rows: the weapon objects' kinds (weapon.c) */
+    "variants.sword_colour",
+    "variants.weapon",
+    "developer.free_movement", /* Developer > Free movement (ico_rows.h) */
+    /* Gameplay > Yorda's chain rows: the swing's pace (chain.c, debug values 1..10) */
+    "variants.chain_swing_speed",
+    "variants.chain_swing_damping",
+    NULL,
+};
+
+/* The keys that left ICO_SIM_KEYS in v0.11.3: rows of each save's difficulty
+   record (port/game/difficulty.h), which a state carries as its own block
+   ("difficulty.record").  A state saved before lists them in its keys text;
+   state_file.c's key check passes over them (a state is never refused for
+   one), and difficulty.c builds an older state's record from them. */
+const char *const ICO_SIM_KEYS_RETIRED[] = {
+    "gameplay.yorda_safe",
+    "gameplay.pit_time",
+    "gameplay.shadow_speed",
+    "gameplay.yorda_trips",
+    "gameplay.shadows_together", /* the Shadows' turns (enemy_act.c) */
     "variants.shade_toughness",
     "variants.one_hit",
     "variants.never_dodge",
     "variants.aggression",
     "variants.no_hints",
     "variants.barrier_hits",
-    "variants.no_cutscene_look",
-    "variants.ignore_cutscene_cameras",
-    "gameplay.shadows_together", /* the Shadows' turns (enemy_act.c) */
-    /* Gameplay > Combat (port/game/variants.h): on is the game as shipped */
     "variants.auto_guard",
     "variants.attack_turn",
     "variants.shadows_wait_down",
-    /* Gameplay > Combat's weapon rows: the weapon objects' kinds (weapon.c) */
-    "variants.sword_colour",
-    "variants.weapon",
-    "variants.peaceful_shadows", /* no brain thread for a Shadow (a cheat) */
-    "developer.free_movement",   /* Developer > Free movement (ico_rows.h) */
-    /* Gameplay > Yorda's chain rows: the swing's pace (chain.c, debug values 1..10) */
-    "variants.chain_swing_speed",
-    "variants.chain_swing_damping",
+    "variants.peaceful_shadows", /* no brain thread for a Shadow */
     NULL,
 };
+
+int ico_sim_key_retired(const char *key, size_t key_n)
+{
+    for (int i = 0; key != NULL && ICO_SIM_KEYS_RETIRED[i] != NULL; i++) {
+        const char *k = ICO_SIM_KEYS_RETIRED[i];
+
+        if (strlen(k) == key_n && memcmp(k, key, key_n) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
 
 /* Each key's default as the config text gives it (the value the game takes
    when the key is unset), NULL where none is one fixed text (unset is the
@@ -66,32 +86,17 @@ static const char *const kDefaults[] = {
     "auto",     /* game.language */
     "false",    /* gameplay.mirror */
     "false",    /* gameplay.stick_fix (Off on every platform, options.c) */
-    "false",    /* gameplay.yorda_safe */
-    "original", /* gameplay.pit_time */
-    "original", /* gameplay.shadow_speed */
     "false",    /* gameplay.developer_mode */
     NULL,       /* dev.start_stage */
     "false",    /* gameplay.door_fix */
-    "false",    /* gameplay.yorda_trips */
     "off",      /* video.anti_aliasing */
     "disc",     /* gameplay.hold_type */
     "false",    /* gameplay.hold_type_chosen */
     "false",    /* gameplay.skip_opening */
-    "original", /* variants.shade_toughness */
-    "false",    /* variants.one_hit */
-    "false",    /* variants.never_dodge */
-    "own",      /* variants.aggression */
-    "false",    /* variants.no_hints */
-    NULL,       /* variants.barrier_hits: unset is the disc's own number */
     "false",    /* variants.no_cutscene_look */
     "false",    /* variants.ignore_cutscene_cameras */
-    "false",    /* gameplay.shadows_together */
-    "true",     /* variants.auto_guard */
-    "true",     /* variants.attack_turn */
-    "true",     /* variants.shadows_wait_down */
     "original", /* variants.sword_colour */
     "original", /* variants.weapon */
-    "false",    /* variants.peaceful_shadows */
     "false",    /* developer.free_movement */
     "4",        /* variants.chain_swing_speed */
     "4",        /* variants.chain_swing_damping */

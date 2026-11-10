@@ -1162,6 +1162,28 @@ static void vkr_pass_area_fits(uint32_t *w, uint32_t *h, VkrTexture *const *colo
     *h = mh;
 }
 
+/* A pass's target without an attachment view: nothing in the RHI makes one
+ * today (vk_resource.c gives every texture its view, or fails the
+ * texture), but a null view handed to the driver's begin is the shape the
+ * Intel crash reports blame (rhi_pass_row.h), so it is refused here before
+ * any barrier or driver call and the pass's draws are skipped, as a legacy
+ * pass whose objects could not be made.  The line names the target, the
+ * first 8 then every 100th, with the count. */
+static bool vkr_pass_has_view(const VkrTexture *t, const char *what, uint32_t i)
+{
+    static uint32_t s_noView;
+    if (t->view) {
+        return true;
+    }
+    s_noView++;
+    if (s_noView <= 8u || s_noView % 100u == 0u) {
+        VKR_LOG("render pass: target without an attachment view (%s %u, %ux%u, format %d; the "
+                "pass's draws are skipped; %u so far)",
+                what, i, t->width, t->height, (int)t->rhiFormat, s_noView);
+    }
+    return false;
+}
+
 /* The RHI pass as a VkrPassDesc (vk_internal.h), the hazard barriers its
  * attachments need, then vkr_pass_begin (vk_renderpass.c): dynamic
  * rendering, or a VkRenderPass and framebuffer (g_vkr.legacyPasses). */
@@ -1181,6 +1203,9 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         VkrTexture *t = vkr_get_texture(a->texture);
         if (!t) {
             VKR_LOG("render pass: invalid colour target %u", i);
+            return;
+        }
+        if (!vkr_pass_has_view(t, "colour", i)) {
             return;
         }
         colorTex[i] = t;
@@ -1225,6 +1250,9 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         VkrTexture *t = vkr_get_texture(pass->depth.texture);
         if (!t) {
             VKR_LOG("render pass: invalid depth target");
+            return;
+        }
+        if (!vkr_pass_has_view(t, "depth", 0)) {
             return;
         }
         if (pass->depth.readable && (!g_vkr.localRead || pass->depth.readOnlyDepth)) {
@@ -2247,6 +2275,9 @@ void rhi_cmd_end_label(RhiCommandList cl)
 /* ------------------------------------------------------------- checkpoints */
 void rhi_cmd_checkpoint(RhiCommandList cl, const void *marker)
 {
+    /* the crash report's breadcrumb names the next pass by it
+     * (vk_renderpass.c vkr_pass_crumb), checkpoints on or off */
+    g_vkr.lastMarker = (uint64_t)(uintptr_t)marker;
     if (!g_vkr.checkpoints) {
         return;
     }

@@ -71,6 +71,7 @@ target_include_directories(ico_bisect_plan PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_bisect_plan PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 # the platform's state file of the second level (diag_host.c)
 target_link_libraries(ico_platform PUBLIC ico_bisect_plan)
+include(rd_passring.cmake) # ico_passring
 
 # rd_bisect_plan_test: the planner against oracles (a draw that faults with
 # every draw before it found within 12 steps, random verdicts end within 16)
@@ -210,7 +211,6 @@ add_library(ico_render STATIC
     rd_mesh.c
     rd_occlusion.c # the replay's GPU draw issue and the hidden-draw measurement around it
     rd_msaa.c # the MSAA epoch's resolve pass (the covered-majority rule) and its close line
-    rd_passring.c # the last passes recorded, for the device-loss report
     rd_profile.c # the device profile: what this device class gets 
     rd_content_hide.c # the content table: stage geometry made for the 4:3 picture
     rd_content_extend.c # the content table's sheets: overlays continued to the frame's edges
@@ -231,6 +231,7 @@ add_library(ico_render STATIC
     rd_replay_vu.c # the replay's VU draws
     rd_vuprepass_selftest.c # the VU vertex pre-pass's start-up check on the device
     rd_vu_record.c # the VU record's write: render targets and copies, or vertex stores
+    rd_vu_rec_sink.c # the store passes' throwaway target
     rd_vu_skin_check.c # the skinned draws' bone-block check in the game (issue 163)
     rd_vu_skin_capture.c # its capture on failure: the sidecar, the frame dump asked (issue 123)
     rd_vu_bones.c # issue 123's ladder: the bones through the ring, the evidence for the window
@@ -272,7 +273,7 @@ target_include_directories(ico_render
     PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 target_compile_options(ico_render PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 target_link_libraries(ico_render PUBLIC ico_rhi_vk ico_shaders ico_vu1_ref ico_texpack_name
-                      ico_cache_name ico_pipe_finish)
+                      ico_cache_name ico_pipe_finish ico_passring)
 # rd_fsr3.c: FSR 3.1 (issue 99) from the FidelityFX SDK built in port/rhi/ffx
 # (option ICO_FFX, docs/BUILDING.md).  ico_ffx_upscaler is EXCLUDE_FROM_ALL;
 # linked here, it is built for every program and test that links the
@@ -1469,6 +1470,7 @@ if(ICO_RUN_TESTS)
                                  PROPERTIES ENVIRONMENT "${_env}")
         endif()
     endif()
+    include(test/rd_display_change_2x.cmake)
     # rd_blur's glow fold case (k) alone on the tile class's fake
     # (ICO_VK_FAKE_LIMITS=moltenvk: the Apple row of the device profile):
     # the profile's glow fold off by default there (rd_profile.c, the

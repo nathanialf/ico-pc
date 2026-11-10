@@ -19,8 +19,12 @@
 # yorda_trip.c: Yorda trips' rule, its random numbers and their save state
 # blocks ([gameplay] yorda_trips, yorda_trip.h); the game's side is
 # yorda_trip_live.c below
+# difficulty.c: each journey's difficulty record (difficulty.h): the presets,
+# the rows the options and variants above read, the knock-down limit,
+# Permadeath, No Shadows, its save-state block; difficulty_file.c: its
+# sidecar, difficulty.toml.  Neither names a game symbol.
 add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c door_grace.c
-            variants.c yorda_trip.c ico_rows.c)
+            variants.c yorda_trip.c ico_rows.c difficulty.c difficulty_file.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -397,6 +401,52 @@ if(ICO_RUN_TESTS)
     endforeach()
 endif()
 
+# knockdown_disc and no_shadows_disc: off each disc image (the disc's tables
+# loaded from its ELF, port/data/tables.c, as weapon_kinds_disc does): the
+# knock-down limit's mails 55/56 and the down act on the disc's interrupt
+# tables (knockdown_disc, wave 1: KNOCK), each disc's placed Shadows, the
+# kidnap-timer stages and the Queen's stage rows under No Shadows
+# (no_shadows_disc, wave 1: NOSHADOW).  One run per disc image; no game
+# start; skipped (77) without the image.
+foreach(_dt knockdown_disc no_shadows_disc)
+    add_executable(${_dt}_test test/${_dt}_test.c ../platform/host_config.c
+                   "${_yt_data}/tables.c" ${ICO_TABLE_SOURCES})
+    target_include_directories(${_dt}_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${_yt_data}"
+        "${CMAKE_SOURCE_DIR}" "${CMAKE_SOURCE_DIR}/port/platform" "${CMAKE_SOURCE_DIR}/port/include"
+        ${_ico_yorda_trip_disc_incs})
+    target_compile_definitions(${_dt}_test PRIVATE ${_yt_defs} ICO_HOST=1
+        ICO_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+        ICO_COMMONACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/commonact.c"
+        ICO_ENEMY_ACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/enemy_act.c"
+        ICO_GENERATOR_SRC="${CMAKE_SOURCE_DIR}/ico2/omori/src/generator.c"
+        ICO_BACKSTAGE_SRC="${CMAKE_SOURCE_DIR}/ico2/common/src/backStage.c"
+        ICO_ITOU_BOSS_SRC="${CMAKE_SOURCE_DIR}/ico2/ito/src/itou_boss.c"
+        ICO_ST13B_SRC="${CMAKE_SOURCE_DIR}/ico2/script/src/st13b.c")
+    set_source_files_properties(${ICO_TABLE_EE_SYMBOLS} TARGET_DIRECTORY ${_dt}_test
+                                PROPERTIES COMPILE_DEFINITIONS ICO_EE_SYMBOLS_STUBS=1)
+    target_compile_options(${_dt}_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_GAME_LAYOUT_OPTIONS}
+                           ${ICO_GAME_WARNINGS})
+    target_link_libraries(${_dt}_test PRIVATE ico_options ico_port_data ico_region ico_math)
+    if(NOT WIN32)
+        target_link_libraries(${_dt}_test PRIVATE m)
+    endif()
+    if(ICO_RUN_TESTS)
+        if(ICO_DISC_IMAGE)
+            add_test(NAME ${_dt} COMMAND ${_dt}_test "${ICO_DISC_IMAGE}" "${CMAKE_CURRENT_BINARY_DIR}")
+            set_tests_properties(${_dt} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+        endif()
+        foreach(_slug jpn kor cn ntsc aug6 jun26)
+            string(TOUPPER "${_slug}" _up)
+            if(ICO_DISC_IMAGE_${_up})
+                add_test(NAME ${_dt}_${_slug}
+                         COMMAND ${_dt}_test "${ICO_DISC_IMAGE_${_up}}"
+                                 "${CMAKE_CURRENT_BINARY_DIR}")
+                set_tests_properties(${_dt}_${_slug} PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+            endif()
+        endforeach()
+    endif()
+endforeach()
+
 # The doorway fix: the arm and the grace with the option off and
 # on, holding hands or not, the stage it leads to, the frame count, and a copy
 # of the exit check's guard driven through an arrival frame by frame. CPU
@@ -439,6 +489,100 @@ if(ICO_RUN_TESTS)
     foreach(_slug ntsc aug6 jun26 cn)
         add_test(NAME variants_${_slug} COMMAND variants_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
     endforeach()
+endif()
+
+# The journey's difficulty record (difficulty.h): the presets on each disc,
+# the classification, the rows text's round trip, the carry-over from the
+# retired config keys and from an old state's keys, begin / reset / the run's
+# slot, the accessors of options.h and variants.h reading the record, the
+# knock-down limit (once a fall, a fall longer than the get-up timer, a
+# chained hit, each room and the whole journey, the count after the game over
+# the limit causes), Permadeath on any game over, No Shadows, the state block
+# and states_locked, the listener.  CPU only; one run per disc (the presets'
+# toughness and the barrier are the disc's), each in its own folder.
+add_executable(difficulty_test test/difficulty_test.c ../platform/host_config.c)
+target_include_directories(difficulty_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_options(difficulty_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(difficulty_test PRIVATE ico_options)
+if(ICO_RUN_TESTS)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/difficulty_pal")
+    add_test(NAME difficulty COMMAND difficulty_test "${CMAKE_CURRENT_BINARY_DIR}/difficulty_pal" pal)
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/difficulty_${_slug}")
+        add_test(NAME difficulty_${_slug}
+                 COMMAND difficulty_test "${CMAKE_CURRENT_BINARY_DIR}/difficulty_${_slug}" ${_slug})
+    endforeach()
+endif()
+
+# The difficulty sidecar (difficulty_file.c, difficulty.toml): the entries
+# per disc, card and slot, the look-up by sum, the one-time carry-over, the
+# finished list, the Continue list's preview match, the hooks in
+# layout_action.c (a text scan).  CPU only; one run per disc, each in its own
+# folder.  (Wave 1: SAVE fills the test.)
+add_executable(difficulty_file_test test/difficulty_file_test.c ../platform/host_config.c)
+target_include_directories(difficulty_file_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform"
+                           "${CMAKE_SOURCE_DIR}/port/include")
+target_compile_definitions(difficulty_file_test PRIVATE
+    ICO_LAYOUT_ACTION_SRC="${CMAKE_SOURCE_DIR}/ico2/common/src/layout_action.c"
+    ICO_BACKUP_SRC="${CMAKE_SOURCE_DIR}/port/platform/backup.c")
+target_compile_options(difficulty_file_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(difficulty_file_test PRIVATE ico_options)
+if(ICO_RUN_TESTS)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/difficulty_file_pal")
+    add_test(NAME difficulty_file
+             COMMAND difficulty_file_test "${CMAKE_CURRENT_BINARY_DIR}/difficulty_file_pal" pal)
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/difficulty_file_${_slug}")
+        add_test(NAME difficulty_file_${_slug}
+                 COMMAND difficulty_file_test
+                         "${CMAKE_CURRENT_BINARY_DIR}/difficulty_file_${_slug}" ${_slug})
+    endforeach()
+endif()
+
+# The knock-down limit's game side: the record driven through the synthetic
+# sampler (gamestate.c without ICO_GS_LIVE, as achievements_test builds it),
+# the game over event, the latch from the snapshot's act mode and get-up
+# timer, and the hooks in commonact.c (four actCommonDown copies),
+# StageManager.c, host_loop.c and gamestate.c (text scans).  CPU only; one run
+# per disc.  (Wave 1: KNOCK fills the test.)
+add_executable(difficulty_knock_test test/difficulty_knock_test.c gamestate.c
+    ../ui/strings.c ../ui/strings_en.c ../ui/strings_fr.c ../ui/strings_de.c
+    ../ui/strings_it.c ../ui/strings_es.c ../ui/strings_ja.c ../ui/strings_ko.c ../ui/strings_zh.c
+    ../ui/strings_ru_bobttz.c ../ui/strings_ru_cobra838.c ../ui/strings_pt_br.c
+    ../platform/host_config.c)
+target_include_directories(difficulty_knock_test PRIVATE "${CMAKE_SOURCE_DIR}/port/platform")
+target_compile_definitions(difficulty_knock_test PRIVATE
+    ICO_COMMONACT_SRC="${CMAKE_SOURCE_DIR}/ico2/fumi/src/commonact.c"
+    ICO_STAGEMANAGER_SRC="${CMAKE_SOURCE_DIR}/ico2/common/src/StageManager.c"
+    ICO_HOST_LOOP_SRC="${CMAKE_SOURCE_DIR}/port/platform/host_loop.c"
+    ICO_GAMESTATE_SRC="${CMAKE_SOURCE_DIR}/port/game/gamestate.c"
+    ICO_GAMESTATE_HDR="${CMAKE_SOURCE_DIR}/port/include/ico_gamestate.h")
+target_compile_options(difficulty_knock_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
+                       -iquote "${CMAKE_SOURCE_DIR}/port/ui")
+target_link_libraries(difficulty_knock_test PRIVATE ico_achievements ico_region)
+if(ICO_RUN_TESTS)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/difficulty_knock_pal")
+    add_test(NAME difficulty_knock
+             COMMAND difficulty_knock_test "${CMAKE_CURRENT_BINARY_DIR}/difficulty_knock_pal" pal)
+    foreach(_slug jpn kor cn ntsc aug6 jun26)
+        file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/difficulty_knock_${_slug}")
+        add_test(NAME difficulty_knock_${_slug}
+                 COMMAND difficulty_knock_test
+                         "${CMAKE_CURRENT_BINARY_DIR}/difficulty_knock_${_slug}" ${_slug})
+    endforeach()
+endif()
+
+# The No Shadows census: every script site that checks a Shadow
+# (scpCheckExistAliveEnemy, actEnemyFlagCheckDead, isEnemyActive,
+# InqCapsuleGhostBossEnd, ACTEnemyForceSwitchToCarry,
+# WakeUpSpidersFromGenerator) in a reviewed table with its class; an
+# unclassified site fails.  A source scan from ICO_SOURCE_DIR; no game code.
+# (Wave 1: NOSHADOW fills the test.)
+add_executable(no_shadows_census_test test/no_shadows_census_test.c)
+target_compile_definitions(no_shadows_census_test PRIVATE ICO_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+target_compile_options(no_shadows_census_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME no_shadows_census COMMAND no_shadows_census_test "${CMAKE_SOURCE_DIR}")
 endif()
 
 # Photo mode's state and camera: the orbit, the clamps, the

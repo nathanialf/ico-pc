@@ -553,6 +553,12 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("attachment_read", "true"), "1") == 0);
     CHECK(strcmp(ico_dev_env_value("attachment_read", "0"), "0") == 0);
     CHECK(ico_dev_env_value("attachment_read", "maybe") == NULL);
+    /* the render passes as VkRenderPass objects (vk_device.c, the Intel
+       driver row of port/rhi/rhi_pass_row.h) */
+    CHECK(strcmp(ico_dev_env_name("legacy_passes"), "ICO_VK_LEGACY_PASSES") == 0);
+    CHECK(strcmp(ico_dev_env_value("legacy_passes", "true"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("legacy_passes", "false"), "0") == 0);
+    CHECK(ico_dev_env_value("legacy_passes", "maybe") == NULL);
     /* fog_path: the four paths as they are (local: the device profile's
        fogLocal, port/render/rd_profile.c) */
     CHECK(strcmp(ico_dev_env_value("fog_path", "local"), "local") == 0);
@@ -1039,6 +1045,7 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_config_ini_key("dev.gpu_robust"), "gpu_robust") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.pass_split"), "pass_split") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.attachment_read"), "attachment_read") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.legacy_passes"), "legacy_passes") == 0);
 
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);

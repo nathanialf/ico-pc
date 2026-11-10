@@ -74,6 +74,13 @@ STUB_FN(gif_StartPacketPri)
 STUB_FN(ico_ach_slot_loaded)
 STUB_FN(ico_ach_slot_saved)
 STUB_FN(ico_diag_milestone)
+/* port/game/difficulty.h: the sidecar's slot calls and the Continue twins'
+   rule, for the hooks layout_action.c takes in v0.11.3 */
+STUB_FN(ico_difficulty_finished)
+STUB_FN(ico_difficulty_slot_finished)
+STUB_FN(ico_difficulty_slot_loaded)
+STUB_FN(ico_difficulty_slot_saved)
+STUB_FN(ico_difficulty_sum_finished)
 STUB_FN(ico_mirror_slot_loaded)
 STUB_FN(ico_mirror_slot_saved)
 STUB_FN(ico_opt_hold_type_toggled)
