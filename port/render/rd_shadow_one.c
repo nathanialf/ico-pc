@@ -255,11 +255,12 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
      * "list 3 temporary"): one colour attachment, not loaded, stored; no
      * depth attachment (the stencil is a texture here) */
     rd__perf_pass(cl, RD_PERF_PASS_RENDER, RD_PERF_ID_SHADOW_COUNT, tc->w, tc->h, r->perfPost);
-    rhi_cmd_begin_render_pass(cl, &p);
     /* in the pass ring as the count target's pass at its GS size (the
-     * device-loss report; the seven draws' pass was the target's) */
+     * device-loss report; the seven draws' pass was the target's), before
+     * the begin, so the crash report's pass begun is this one */
     rhi_cmd_checkpoint(cl, rd__replay_pass_push(RD_PASSK_PASS, r->st.color, tc->w, tc->h, 0, 0, 0,
                                                 0, r->perfPost));
+    rhi_cmd_begin_render_pass(cl, &p);
     (void)rd__get_pipeline(&k); /* the cache's hit: its pipeline on this entry */
     rd__replay_viewport(tc->w, tc->h);
     const RhiRect all = {0, 0, tc->w, tc->h};

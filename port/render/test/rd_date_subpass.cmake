@@ -4,6 +4,9 @@
 # inside if(ICO_RUN_TESTS) after the tiler self-tests' failure paths (FIXT), with
 # the render tests' validation environment (_env).  A file of its own:
 # port/render/CMakeLists.txt is at the 256 KiB cap (tools/check_no_rom.sh).
+# The subpass read is an experiment, off by default on every device: every
+# test here turns it on (ICO_VK_SUBPASS_READ=1, [dev] subpass_read = on) but
+# rd_date_subpass_ab's snapshot run (off, as shipped).
 #   rd_date_selftest_vk11          DATE's self-test (test/rd_date_selftest.cmake)
 #                                  through VkRenderPass objects
 #                                  (ICO_VK_FAKE_API=1.1), the stencil path
@@ -31,10 +34,13 @@
 #                                  fewer passes through the bit
 #                                  (test/rd_date_subpass_ab.cmake); SKIP without
 #                                  the dumps
+#   rd_pixel_vk11_subpass          rd_pixel on the 1.1 profile with the read on:
+#                                  its DATE stencil case through the bit
 set(_ds_sub "-DEXTRA=render passes: the subpass read: a pass of one RGBA8 colour target")
 set(_ds_words "-DEXTRA2=local read yes \\(the subpass read: a pass's colour with a depth target\\)")
-set(_ds_env11 ${_env} "ICO_VK_FAKE_API=1.1")
-set(_ds_env10 ${_env} "ICO_VK_FAKE_API=1.0" "ICO_VK_FAKE_NO_DYNAMIC=1")
+# the subpass read is an experiment, off by default: [dev] subpass_read = on
+set(_ds_env11 ${_env} "ICO_VK_FAKE_API=1.1" "ICO_VK_SUBPASS_READ=1")
+set(_ds_env10 ${_env} "ICO_VK_FAKE_API=1.0" "ICO_VK_FAKE_NO_DYNAMIC=1" "ICO_VK_SUBPASS_READ=1")
 set(_ds_tiler ${_ds_env11} "ICO_VK_FAKE_LIMITS=moltenvk")
 add_test(NAME rd_date_selftest_vk11
          COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_fog_selftest_test> -DPATH=stencil
@@ -64,6 +70,16 @@ set_tests_properties(rd_date_selftest_vk10 PROPERTIES ENVIRONMENT
 set_tests_properties(rd_date_selftest_tiler_vk11 PROPERTIES ENVIRONMENT "${_ds_tiler}")
 set_tests_properties(rd_date_selftest_sabotage_vk11 PROPERTIES ENVIRONMENT
                      "${_ds_tiler};ICO_RD_DATE_SABOTAGE=1")
+# rd_pixel_vk11_subpass: rd_pixel on the 1.1 profile with the subpass read on
+# (rd_pixel_vk11 runs the profile as shipped, the read off, where its DATE
+# stencil case is skipped: no local read): the DATE case through the bit must
+# run and equal the snapshot's byte for byte, the rest as rd_pixel_vk11
+set(_ds_pix "${CMAKE_CURRENT_BINARY_DIR}/vk11_subpass")
+file(MAKE_DIRECTORY "${_ds_pix}")
+add_test(NAME rd_pixel_vk11_subpass COMMAND rd_pixel_test "${_ds_pix}")
+set_tests_properties(rd_pixel_vk11_subpass PROPERTIES SKIP_RETURN_CODE 77
+                     WORKING_DIRECTORY "${_ds_pix}" ENVIRONMENT "${_ds_env11}"
+                     FAIL_REGULAR_EXPRESSION "DATE stencil: skipped")
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/date_subpass_ab")
 add_test(NAME rd_date_subpass_ab
          COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
@@ -73,7 +89,7 @@ add_test(NAME rd_date_subpass_ab
 set_tests_properties(rd_date_subpass_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 3600
                                                    ENVIRONMENT "${_env}")
 foreach(_t rd_date_selftest_vk11 rd_date_selftest_tiler_vk11 rd_date_selftest_sabotage_vk11
-           rd_date_subpass_ab)
+           rd_date_subpass_ab rd_pixel_vk11_subpass)
     get_test_property(${_t} LABELS _labels)
     set_tests_properties(${_t} PROPERTIES LABELS "${_labels};vk11")
 endforeach()

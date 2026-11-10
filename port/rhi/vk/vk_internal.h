@@ -257,6 +257,9 @@ typedef struct VkrCmdList {
      * query pools through it, not through the current frame index, which
      * the recording thread may have moved on ("Frame slots" in vk_cmd.c) */
     uint8_t slot;
+    /* the timestamp indices this list wrote (rhi_cmd_write_timestamp): the
+     * slot's tsSubmitted takes them at its submit (rhi_submit) */
+    uint32_t tsWritten[RHI_TIMESTAMP_WORDS];
     /* draw-time state */
     VkrPipeline *pipeline;
     VkDescriptorSet groups[RHI_MAX_BIND_SLOTS];
@@ -405,6 +408,13 @@ typedef struct VkrFrame {
     /* the slot's GPU timestamps (rhi_cmd_write_timestamp) */
     VkQueryPool queryPool;
     uint32_t tsWritten[RHI_TIMESTAMP_WORDS]; /* the indices written since the slot was recycled */
+    /* of them, those of the lists submitted (a list recorded and never
+     * submitted wrote none on the GPU), and the lists with stamps recorded
+     * and submitted since the recycle (__atomic: rhi_submit may run on the
+     * submit thread); rhi_read_timestamp_clock's recorded and
+     * listsUnsubmitted */
+    uint32_t tsSubmitted[RHI_TIMESTAMP_WORDS];
+    uint32_t tsListsStamped, tsListsSubmitted;
     bool tsReset; /* the pool's reset is recorded in this slot's first list */
     /* the slot's occlusion queries (rhi_cmd_begin_occlusion): the pool made
      * at the first begin of the run, the indices begun since the slot was
@@ -513,9 +523,11 @@ typedef struct VkrState {
      * second holds a stage before them (vk_cmd.c vkr_hold_note): each
      * makes every later vertex, compute and copy command, the next
      * picture's too, wait for the fragment work recorded or submitted
-     * before it.  Per site (VkrHoldSite), __atomic (a list's end may be
-     * on the submit thread); the totals are RhiStats.fragmentHolds */
-    uint64_t holdSite[8];
+     * before it.  By kind (RHI_HOLD_KIND_VERTEX, RHI_HOLD_KIND_COPY: rhi.h
+     * RhiStats.holdSites) and site (RHI_HOLD_SITE_*), __atomic (a list's
+     * end may be on the submit thread); the totals are
+     * RhiStats.fragmentHolds */
+    uint64_t holdSite[2][8];
     char computeStoresOff[96];
     /* the attachment read the device has but is not offered on (Qualcomm's
      * own driver, rhi_driver_is_qualcomm_proprietary; ICO_VK_FAKE_ADRENO=1

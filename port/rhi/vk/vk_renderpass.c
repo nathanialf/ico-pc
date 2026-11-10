@@ -448,9 +448,12 @@ bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d)
 {
     vkr_pass_crumb(d);
     if (g_vkr.legacyPasses) {
+        /* the crash report's phase: the objects first, then the begin */
+        rhi_pass_crumb_phase(RHI_PASS_CRUMB_OBJECTS);
         const VkRenderPass rp = vkr_renderpass_get(d);
         const VkFramebuffer fb = rp ? vkr_framebuffer_get(d) : VK_NULL_HANDLE;
         if (!fb) {
+            rhi_pass_crumb_phase(RHI_PASS_CRUMB_FAILED);
             static uint32_t s_beginFailed;
             if (s_beginFailed < 8u) { /* the first 8 only; the pass's draws are then skipped */
                 s_beginFailed++;
@@ -479,6 +482,7 @@ bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d)
             .clearValueCount = n,
             .pClearValues = n ? clear : NULL,
         };
+        rhi_pass_crumb_phase(RHI_PASS_CRUMB_BEGINNING);
         vkCmdBeginRenderPass(c->cb, &bi, VK_SUBPASS_CONTENTS_INLINE);
         rhi_pass_crumb_phase(RHI_PASS_CRUMB_BEGUN);
         return true;

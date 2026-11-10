@@ -412,6 +412,24 @@ int main(int argc, char **argv)
     printf("2x: %llu barriers holding later vertex, compute or copy work behind fragment work "
            "over the %u replays after the switch (RhiStats.fragmentHolds)\n",
            (unsigned long long)(st1.fragmentHolds - st0.fragmentHolds), two.n);
+    {
+        /* the same by kind and site, as the 10 s summary prints them
+           (rd_perf.c rd_perf_backend_text): the kinds' sums are the total */
+        uint64_t kinds = 0;
+        for (int k = 0; k < 2; k++) {
+            for (int i = 0; i < RHI_HOLD_SITES; i++) {
+                kinds += st1.holdSites[k][i];
+            }
+        }
+        CHECK(kinds == st1.fragmentHolds, "the holds by kind and site sum to %llu, the total %llu",
+              (unsigned long long)kinds, (unsigned long long)st1.fragmentHolds);
+        const char *text = rd_perf_backend_text();
+        const char *h = strstr(text, "; barriers holding fragment work per replay: ");
+        CHECK(st1.fragmentHolds == 0 || h != NULL, "the 10 s text names no holds: %s", text);
+        if (h) {
+            printf("2x: the summary's%.*s\n", (int)strcspn(h + 1, ";") + 1, h);
+        }
+    }
     if (stores) {
         CHECK(sinkAfter > sinkBefore && sinkWithout == 0,
               "2x: %u store passes on the throwaway target after the switch, %u without it",

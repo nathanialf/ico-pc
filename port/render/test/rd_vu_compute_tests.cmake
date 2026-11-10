@@ -31,6 +31,8 @@
 #   rd_vurecord_ab_compute  rd_vurecord_ab with A the render targets and B the
 #                      compute dispatches: every named target byte for byte,
 #                      B's stats naming the write and counting dispatches
+#   rd_vuprepass_selftest_sink_fail  the store passes' targets refused: the
+#                      stores off for the run, the compute dispatches (below)
 set(_vst_compute_line "rd: VU pre-pass: on \\(self-test: [^\n]* ms, record compute")
 set(_cd "${CMAKE_CURRENT_BINARY_DIR}/vu_record_compute")
 file(MAKE_DIRECTORY "${_cd}")
@@ -95,3 +97,18 @@ set_tests_properties(rd_vurecord_ab_compute PROPERTIES SKIP_REGULAR_EXPRESSION "
 if(_env)
     set_tests_properties(rd_vurecord_ab_compute PROPERTIES ENVIRONMENT "${_env}")
 endif()
+# rd_vuprepass_selftest_sink_fail: the store passes' two throwaway targets
+# refused (ICO_RD_VU_REC_SINK_FAIL=1, rd_vu_rec_sink.h) under the stores asked
+# for: a store pass without them would begin with no attachment while its
+# pipelines name one (invalid usage), so the stores are off for the run before
+# the self-test (rd_vu_record.c rd__vu_record_shaders) and the record takes the
+# compute dispatches: both lines and the self-test's compute verdict, under
+# synchronisation validation
+add_test(NAME rd_vuprepass_selftest_sink_fail
+         COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                 "-DLINE=${_vst_on}"
+                 "-DEXTRA=the store passes' two throwaway 1024x1 R8 targets could not be made: the stores off for the run.*rd: VU record: stored by compute dispatches[^\n]*\\(the stores off: the store passes' throwaway targets could not be made\\).*, record compute"
+                 -P "${_vst}")
+set_tests_properties(rd_vuprepass_selftest_sink_fail
+                     PROPERTIES ENVIRONMENT
+                                "${_env};ICO_RD_VU_RECORD=stores;ICO_RD_VU_REC_SINK_FAIL=1")

@@ -986,8 +986,11 @@ begins without an attachment, the shape the Intel `vkCmdBeginRendering` crash re
 replay's two store passes begins on a target the other wrote (that pending attachment write made
 the second pass's begin hold the vertex stages behind colour output: [RHI.md](RHI.md#buffer-barriers-scopes)),
 made at the first store pass (`rd: VU pre-pass: the store passes begin on two throwaway 1024x1 R8
-targets taken in turn ...`; when they could not be made it is said once and the passes begin
-without them), and each pass is 1024 x 1 inside the store bracket
+targets taken in turn ...`; when they could not be made it is said once and the stores are
+turned off for the run before the replay's record, `rd__vu_record_fall_back` to the compute
+dispatches or the targets, since a pass without them would not match its pipelines, which name
+one: `rd: VU pre-pass: the store passes' two throwaway 1024x1 R8 targets could not be made: the
+stores off for the run ...`; `ICO_RD_VU_REC_SINK_FAIL=1` refuses them for the tests), and each pass is 1024 x 1 inside the store bracket
 (`rhi_cmd_buffer_store_begin` before it,
 `rhi_cmd_buffer_store_end` after: [RHI.md](RHI.md#the-interface)), so a replay has no record
 texture, no layout transition and no copy. The draws of a record pass write disjoint slots

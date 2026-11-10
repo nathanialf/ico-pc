@@ -219,5 +219,11 @@ int rd_perf_clock_text(const RdPerfClockIn *in, const RdPerfClockVerdict *v, cha
     } else {
         put(&o, "; all %u recorded stamps written", v->recorded);
     }
+    if (c->listsUnsubmitted > 0) {
+        /* recorded counts the submitted lists' stamps alone (vk_cmd.c
+           vkr_collect_timestamps), so these are not among the unwritten */
+        put(&o, "; %u of the slot's lists with stamps were recorded and not submitted (left out)",
+            c->listsUnsubmitted);
+    }
     return o.total;
 }

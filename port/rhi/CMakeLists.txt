@@ -561,12 +561,15 @@ if(_ico_have_vk)
         add_test(NAME rhi_vk COMMAND rhi_vk_test)
         set_tests_properties(rhi_vk PROPERTIES SKIP_RETURN_CODE 77)
         # The validation layer tools/fetch_deps.sh unpacks, with
-        # synchronisation validation on; the test fails on any validation
-        # error.
+        # synchronisation validation on and its shader access analysis
+        # (SYNCVAL_SHADER_ACCESSES_HEURISTIC: without it the checks take no
+        # shader's buffer read into account, rhi_vk_scopes* below); the test
+        # fails on any validation error.
         set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
         if(NOT WIN32 AND EXISTS "${_ico_vvl}/VkLayer_khronos_validation.json")
             set(_ico_vk_test_env
-                "VK_ADD_LAYER_PATH=${_ico_vvl};VK_KHRONOS_VALIDATION_VALIDATE_SYNC=true")
+                "VK_ADD_LAYER_PATH=${_ico_vvl};VK_KHRONOS_VALIDATION_VALIDATE_SYNC=true"
+                "VK_KHRONOS_VALIDATION_SYNCVAL_SHADER_ACCESSES_HEURISTIC=true")
         endif()
         if(ICO_SANITIZE MATCHES "address")
             # LeakSanitizer reports 112 bytes the Vulkan driver
@@ -672,18 +675,28 @@ if(_ico_have_vk)
         # synchronisation validation with the shader access analysis on:
         # rhi_vk_subpass through dynamic rendering's local read; _vk11, _vk10
         # (with all-static pipelines) and _mali_vk11 (the Mali-G52's 1.1
-        # limits) through the VkRenderPass path's subpass read (the colour
-        # also input attachment 0, a by-region self-dependency, GENERAL);
-        # _legacy on VkRenderPass objects of a 1.4 device: as the Intel row
-        # gives them, no subpass read (ICO_VK_LEGACY_PASSES=1, the cell not
-        # run), and with ICO_VK_SUBPASS_READ=1 (_legacy_on) the read on them
-        set(_ico_vk_subpass11_env ${_ico_vk_scopes11_env})
+        # limits) through the VkRenderPass path's subpass read, an
+        # experiment off by default, turned on by ICO_VK_SUBPASS_READ=1 ([dev]
+        # subpass_read = on: the colour also input attachment 0, a by-region
+        # self-dependency, GENERAL); _vk11_off the 1.1 profile as shipped (the
+        # read off, no local read: the cell not run); _legacy on VkRenderPass
+        # objects of a 1.4 device as the Intel row gives them (off, the cell
+        # not run), and with ICO_VK_SUBPASS_READ=1 (_legacy_on) the read on
+        # them.  ICO_TEST_SUBPASS_WANT: the cell fails unless the read is on
+        # (1) or off (0) as named
+        set(_ico_vk_subpass_on "ICO_VK_SUBPASS_READ=1" "ICO_TEST_SUBPASS_WANT=1")
+        set(_ico_vk_subpass11_env ${_ico_vk_scopes11_env} ${_ico_vk_subpass_on})
+        set(_ico_vk_subpass11o_env ${_ico_vk_scopes11_env} "ICO_TEST_SUBPASS_WANT=0")
         set(_ico_vk_subpass10_env ${_ico_vk_scopes_env} "ICO_VK_FAKE_API=1.0"
-                                  "ICO_VK_FAKE_NO_DYNAMIC=1")
-        set(_ico_vk_subpassm_env ${_ico_vk_scopes11_env} "ICO_VK_FAKE_LIMITS=mali")
-        set(_ico_vk_subpassl_env ${_ico_vk_scopes_env} "ICO_VK_LEGACY_PASSES=1")
-        set(_ico_vk_subpasslo_env ${_ico_vk_subpassl_env} "ICO_VK_SUBPASS_READ=1")
+                                  "ICO_VK_FAKE_NO_DYNAMIC=1" ${_ico_vk_subpass_on})
+        set(_ico_vk_subpassm_env ${_ico_vk_scopes11_env} "ICO_VK_FAKE_LIMITS=mali"
+                                 ${_ico_vk_subpass_on})
+        set(_ico_vk_subpassl_env ${_ico_vk_scopes_env} "ICO_VK_LEGACY_PASSES=1"
+                                 "ICO_TEST_SUBPASS_WANT=0")
+        set(_ico_vk_subpasslo_env ${_ico_vk_scopes_env} "ICO_VK_LEGACY_PASSES=1"
+                                  ${_ico_vk_subpass_on})
         foreach(_sp IN ITEMS "|${_ico_vk_scopes_env}" "_vk11|${_ico_vk_subpass11_env}"
+                             "_vk11_off|${_ico_vk_subpass11o_env}"
                              "_vk10|${_ico_vk_subpass10_env}" "_mali_vk11|${_ico_vk_subpassm_env}"
                              "_legacy|${_ico_vk_subpassl_env}"
                              "_legacy_on|${_ico_vk_subpasslo_env}")
@@ -695,7 +708,7 @@ if(_ico_have_vk)
             set_tests_properties(rhi_vk_subpass${_spn} PROPERTIES SKIP_RETURN_CODE 77
                                  ENVIRONMENT "${_spe}")
         endforeach()
-        foreach(_spn _vk11 _mali_vk11)
+        foreach(_spn _vk11 _vk11_off _mali_vk11)
             get_test_property(rhi_vk_subpass${_spn} LABELS _ico_sp_labels)
             set_tests_properties(rhi_vk_subpass${_spn} PROPERTIES LABELS "${_ico_sp_labels};vk11")
         endforeach()

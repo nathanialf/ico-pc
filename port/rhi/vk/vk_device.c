@@ -1603,13 +1603,18 @@ static void vkr_pass_row_apply(void)
  * allows, all of it Vulkan 1.0 core, so DATE's stencil setup
  * (port/render/rd_replay_tiler.c) no longer ends the scene's pass for an
  * R8 snapshot on a device without dynamic rendering (issue 179's
- * Mali-G52 on Vulkan 1.1).  On where the VkRenderPass path is the
- * device's own (no dynamic rendering); off where the driver row or [dev]
- * legacy_passes chose it on a device that has dynamic rendering (the
- * Intel row: its fix stays as it was), and under ICO_VK_FAKE_NO_DST.
- * ICO_VK_SUBPASS_READ=1 turns it on on any VkRenderPass path, =0 off.
- * One line either way.  The renderer turns each read on only where its
- * own self-test passes on the device (port/render/rd_date_selftest.c). */
+ * Mali-G52 on Vulkan 1.1).  An experiment, off by default on every
+ * device: its cost on a phone is not measured (every RGBA8 render target
+ * of the device would be in GENERAL with the input-attachment usage, and a
+ * driver may then keep its framebuffer compression off), so by default
+ * nothing of it exists: no usage, no layout, no self-dependency, and the
+ * snapshot path as before v0.11.3.  [dev] subpass_read = on
+ * (ICO_VK_SUBPASS_READ=1) tries it on any VkRenderPass path (the device's
+ * own, the Intel driver row's, [dev] legacy_passes'), but not under
+ * ICO_VK_FAKE_NO_DST; = off (=0) says so.  One line either way.  Even on,
+ * the renderer turns each read on only where its own self-test passes on
+ * the device (port/render/rd_date_selftest.c); a failure keeps the
+ * snapshot path, the shape staying (pictures as before). */
 static void vkr_subpass_read_decide(void)
 {
     g_vkr.subpassRead = false;
@@ -1623,23 +1628,25 @@ static void vkr_subpass_read_decide(void)
     const bool fake = noDst && noDst[0] && noDst[0] != '0';
     const char *why = NULL;
     if (ask == 0) {
-        why = "ICO_VK_SUBPASS_READ=0";
+        why = "[dev] subpass_read = off (ICO_VK_SUBPASS_READ=0)";
+    } else if (ask != 1) {
+        why = "the default; [dev] subpass_read = on tries it";
     } else if (fake) {
-        why = "ICO_VK_FAKE_NO_DST";
-    } else if (g_vkr.legacyWhy && ask != 1) {
-        why = g_vkr.legacyWhy; /* the driver row, [dev] legacy_passes */
+        why = "ICO_VK_FAKE_NO_DST, over [dev] subpass_read = on";
     }
     g_vkr.subpassRead = why == NULL;
     if (g_vkr.subpassRead) {
         VKR_LOG("render passes: the subpass read: a pass of one RGBA8 colour target and a depth "
                 "target names its colour as its subpass's input attachment 0, in GENERAL, with "
                 "a by-region self-dependency (Vulkan 1.0), so a read of the pass's own colour "
-                "(DATE's stencil setup) does not end the pass%s; ICO_VK_SUBPASS_READ=0 turns "
-                "it off",
-                ask == 1 ? " (ICO_VK_SUBPASS_READ=1)" : "");
+                "(DATE's stencil setup) does not end the pass ([dev] subpass_read = on, "
+                "ICO_VK_SUBPASS_READ=1: an experiment; DATE's self-test still decides)%s",
+                g_vkr.legacyWhy ? "; on VkRenderPass objects the driver row or [dev] "
+                                  "legacy_passes chose"
+                                : "");
     } else {
-        VKR_LOG("render passes: no subpass read (%s): a read of a pass's own colour ends the "
-                "pass for a copy, as before v0.11.3; ICO_VK_SUBPASS_READ=1 turns it on",
+        VKR_LOG("render passes: the subpass read off (%s): a read of a pass's own colour ends "
+                "the pass for a copy (DATE's snapshot)",
                 why);
     }
 }
@@ -3320,6 +3327,11 @@ void rhi_get_stats(RhiStats *out)
            thread (VkrState.late) */
         out->barriers += __atomic_load_n(&g_vkr.late.barriers, __ATOMIC_RELAXED);
         out->fragmentHolds += __atomic_load_n(&g_vkr.late.fragmentHolds, __ATOMIC_RELAXED);
+        for (int k = 0; k < 2; k++) {
+            for (int i = 0; i < 8; i++) {
+                out->holdSites[k][i] = __atomic_load_n(&g_vkr.holdSite[k][i], __ATOMIC_RELAXED);
+            }
+        }
         out->submits += __atomic_load_n(&g_vkr.late.submits, __ATOMIC_RELAXED);
         out->presents += __atomic_load_n(&g_vkr.late.presents, __ATOMIC_RELAXED);
         out->presentNs += __atomic_load_n(&g_vkr.late.presentNs, __ATOMIC_RELAXED);

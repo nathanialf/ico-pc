@@ -336,8 +336,11 @@ int main(int argc, char **argv)
            stored; with compute stores alone (the Mali-G52 of issue 179) on,
            stored by compute dispatches */
         lim.vertexStores = stores;
+        /* (not with the store passes' targets refused: the stores are off
+           for the run then, rd_vuprepass_selftest_sink_fail) */
+        const char *sinkFail = getenv("ICO_RD_VU_REC_SINK_FAIL");
         if (stores && g_rdRec.asked != RD_VU_RECORD_TARGETS &&
-            g_rdRec.asked != RD_VU_RECORD_COMPUTE) {
+            g_rdRec.asked != RD_VU_RECORD_COMPUTE && !(sinkFail && sinkFail[0] == '1')) {
             rd__vu_prepass_init(&lim);
             CHECK(g_rd.vuPrepass && g_rdRec.mode == RD_VU_RECORD_STORES,
                   "32 bytes a pixel with vertex stores: the pre-pass %s, the record %s (%s %s)",

@@ -61,6 +61,15 @@
  *      twin differs, the twins re-armed; the next replay twins all three
  *      again;
  *   17. the sabotage off, four clean replays: thinned again, one a replay.
+ *   23. the careful rule (rd_vu_skin_background with a reason;
+ *      rd__vu_skin_careful_rearm_set 2) after an event re-armed the twins:
+ *      thinned at once; three replays, one twin each;
+ *   24. the bone at 200 zeroed: the one twin differs, the twins re-armed;
+ *      the next two replays twin all three (the events in them do not
+ *      lengthen the stretch), then thinned again;
+ *   25. the stretches used up (3 more cycles of an event and two replays
+ *      under the sabotage), then two replays of one twin each: the
+ *      events no longer re-arm them.
  * judge also runs the trace (rd_vu_skin_trace.c; issue 123 v0.11.3):
  *   18. the clear stamp's colour read back as its replay, an earlier
  *      replay's, none;
@@ -644,6 +653,50 @@ static void thinTests(const RdFrame *f)
               t.twinsDiffer == 0,
           "rc %d/%d, %u twins, %u differ, thinned %d, then %u twins", rc, rc2, s.twins,
           s.twinsDiffer, (int)thin, t.twins);
+    /* 23.-25. the careful rule */
+    RdSkinSummary u;
+    int rc3, rc4;
+    rd__vu_skin_careful_rearm_set(2);
+    /* re-armed by an event under the old rule first, so the careful rule
+       must thin them itself */
+    rd__vu_skin_sabotage_set(200);
+    rc3 = rd__vu_skin_check_replays(f, 0, 1, &s);
+    rd__vu_skin_sabotage_set(0);
+    const bool before = rd__vu_skin_thinned();
+    rd_vu_skin_background(memoryFine, "the test's careful rule");
+    CHECK(rc3 >= 0 && !before && rd__vu_skin_thinned(),
+          "rc %d, thinned %d before the careful rule, %d after", rc3, (int)before,
+          (int)rd__vu_skin_thinned());
+    rc3 = rd__vu_skin_check_replays(f, 0, 3, &s);
+    printf("  23. the careful rule: three replays %u twins, %u differ; thinned %d\n", s.twins,
+           s.twinsDiffer, (int)rd__vu_skin_thinned());
+    CHECK(rc3 >= 0 && s.twins == 3 && s.twinsDiffer == 0 && rd__vu_skin_thinned(),
+          "rc %d, %u twins, %u differ, thinned %d", rc3, s.twins, s.twinsDiffer,
+          (int)rd__vu_skin_thinned());
+    rd__vu_skin_sabotage_set(200);
+    rc3 = rd__vu_skin_check_replays(f, 0, 1, &s);
+    const bool rearmed = !rd__vu_skin_thinned();
+    rc4 = rd__vu_skin_check_replays(f, 0, 2, &u);
+    printf("  24. an event: %u twins, %u differ, re-armed %d; two replays %u twins, %u differ, "
+           "thinned %d\n",
+           s.twins, s.twinsDiffer, (int)rearmed, u.twins, u.twinsDiffer,
+           (int)rd__vu_skin_thinned());
+    CHECK(rc3 >= 0 && rc4 >= 0 && s.twins == 1 && s.twinsDiffer == 1 && rearmed && u.twins == 6 &&
+              rd__vu_skin_thinned(),
+          "rc %d/%d, %u twins, %u differ, re-armed %d, then %u twins, thinned %d", rc3, rc4,
+          s.twins, s.twinsDiffer, (int)rearmed, u.twins, (int)rd__vu_skin_thinned());
+    rc3 = rd__vu_skin_check_replays(f, 0, 3u * (RD_SKIN_CAREFUL_REARMS - 1u), &s);
+    rc4 = rd__vu_skin_check_replays(f, 0, 2, &u);
+    printf("  25. %u replays: %u twins; then two replays %u twins, %u differ, thinned %d\n",
+           3u * (RD_SKIN_CAREFUL_REARMS - 1u), s.twins, u.twins, u.twinsDiffer,
+           (int)rd__vu_skin_thinned());
+    CHECK(rc3 >= 0 && rc4 >= 0 && s.twins == 7u * (RD_SKIN_CAREFUL_REARMS - 1u) && u.twins == 2 &&
+              u.twinsDiffer == 2 && rd__vu_skin_thinned(),
+          "rc %d/%d, %u twins, then %u twins, %u differ, thinned %d", rc3, rc4, s.twins, u.twins,
+          u.twinsDiffer, (int)rd__vu_skin_thinned());
+    rd__vu_skin_sabotage_set(0);
+    rd_vu_skin_background(NULL, NULL);
+    rd__vu_skin_careful_rearm_set(0);
     rd__vu_skin_thin_set(0);
 }
 

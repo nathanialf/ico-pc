@@ -334,6 +334,21 @@ void rd__vu_skin_twins_set(int on);
  * Not in mode 2 (every command, the tool's and the A/Bs').  The game's
  * mode (1) only. */
 #define RD_SKIN_THIN_REPLAYS 2000u
+/* Under the careful rule (rd_vu_skin_background with a reason: the
+ * start-up set stopped for memory on Qualcomm's own driver, issue 123's
+ * GPU-bound phone at 26.7-28.7 of 33.3 ms a picture) the twins start
+ * thinned, and a twin event twins every skinned draw for
+ * RD_SKIN_CAREFUL_REARM replays only (about 1 s at 30 fps: the targeted
+ * probe after an event takes 8 replays, so the stretch covers the replays
+ * it reads with room), at most RD_SKIN_CAREFUL_REARMS times a run (later
+ * events are counted and logged, the twins staying at one a picture): at
+ * most 120 replays a run of the full twins (at most 128 skinned draws x
+ * 2-3 draws each), where the rule above gave about 2000 replays (67 s) at
+ * every start and after every event */
+#define RD_SKIN_CAREFUL_REARM 30u
+#define RD_SKIN_CAREFUL_REARMS 4u
+/* the tests' stretch (0: back to RD_SKIN_CAREFUL_REARM) */
+void rd__vu_skin_careful_rearm_set(uint32_t replays);
 /* the tests' threshold (0: back to RD_SKIN_THIN_REPLAYS), and the one in
  * force */
 void rd__vu_skin_thin_set(uint32_t replays);

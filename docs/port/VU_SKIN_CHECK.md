@@ -201,7 +201,20 @@ over the replay's skinned commands, always through the box check's pipeline (col
 off; never the draw's own), and Turnip's scheduled probe is every 100 ms again. A twin event sets
 the count back to zero: every skinned draw is twinned again until 2,000 more clean replays. The
 count starts again with the renderer (the ladder's evidence does too). The game's mode only (mode
-2, the tool's and the A/Bs', twins every command always). The 10 s VU line says what the twins
+2, the tool's and the A/Bs', twins every command always). Under the careful rule (below: the
+start-up set stopped for memory on Qualcomm's own driver, issue 123's GPU-bound phone at 26.7-28.7
+of 33.3 ms a picture, where the owner's rule is that a diagnostic must not cost it measurable time)
+the twins start thinned, one a picture from the first replay, and a twin event twins every skinned
+draw for `RD_SKIN_CAREFUL_REARM` (30) replays only, about 1 s at 30 fps (the targeted probe after
+an event reads 8 replays: the stretch covers them with room), at most `RD_SKIN_CAREFUL_REARMS` (4)
+times a run; events inside a stretch do not lengthen it, and later events are counted and logged
+with the twins kept at one a picture. So at most 120 replays a run carry the full twins there,
+where the rule above gave about 2,000 (67 s) at every start and after every event. The box check,
+the stamps and the search are unchanged. The first twin of a run says which rule put the twins on
+and at what rate: `rd: VU skin check: twins on (the probe check's rule: an Adreno with a window) at
+one skinned draw a picture from the start (the careful rule: <why>); a twin event twins every
+skinned draw for 30 replays, at most 4 times a run`, or `... twins on (<rule>): every skinned draw
+until 2000 replays with none differing, then one a picture`. The 10 s VU line says what the twins
 cost a picture (`window: VU: ...; twins N draws, V vertex invocations a picture; GPU work ...`,
 `RdPerfRecord.skinTwinDraws`, `skinTwinInvocations`, 9 invocations a triangle).
 
@@ -373,7 +386,13 @@ On an event, the first 8, then every 100th, of each kind on its own count (a wro
 - `rd: VU skin check: twins thinned to one a picture after P clean replays (through the box check's
   pipeline, in turn over the skinned draws[; the probe every 100 ms again]; re-armed by a twin
   event)` and `rd: VU skin check: twins re-armed by a twin event: every skinned draw twinned again
-  until 2000 replays with none differing (re-armed N times)`
+  until 2000 replays with none differing (re-armed N times)`; under the careful rule `rd: VU skin
+  check: twins re-armed by a twin event under the careful rule: every skinned draw twinned for 30
+  replays, then one a picture again (stretch K of at most 4 this run)`, `rd: VU skin check: twins
+  back to one a picture after the careful rule's 30 replays of every skinned draw (K of 4 such
+  stretches this run used)` and, once they are used, `rd: VU skin check: a twin event under the
+  careful rule: the twins stay at one a picture (its 4 stretches of every skinned draw used; N such
+  events)` (each the first 8, then every 100th)
 - `rd: VU pre-pass: the skinned commands are drawn the old way, through their entries' ring builds
   ([dev] vu_bones = ring with the pre-pass's batches off: its own entries read VuBoneCB)` (once a
   run)

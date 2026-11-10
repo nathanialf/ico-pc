@@ -26,7 +26,10 @@
  * without local read; 77 without a Vulkan device.  rhi_vk_test runs it in
  * its default run and alone with the argument `subpass` (the rhi_vk_subpass*
  * ctests: dynamic rendering, ICO_VK_FAKE_API=1.1, =1.0, the phone's limits,
- * ICO_VK_LEGACY_PASSES=1 with ICO_VK_SUBPASS_READ=1 and without). */
+ * each with ICO_VK_SUBPASS_READ=1 since the subpass read is an experiment
+ * off by default; the 1.1 profile without it; ICO_VK_LEGACY_PASSES=1 with
+ * ICO_VK_SUBPASS_READ=1 and without).  ICO_TEST_SUBPASS_WANT=1 or 0: the
+ * read must be on or off. */
 #include "rhi.h"
 #include "rhi_test_common.h"
 #include "rhi_test_spv.h"
@@ -191,6 +194,19 @@ int rhi_vk_subpass_cell(const RhiTestConfig *cfg)
     SP_CHECK(!subpass || (lim->localRead && vkr_test_legacy_passes()),
              "the subpass read without local read (%d) or VkRenderPass objects (%d)\n",
              (int)lim->localRead, (int)vkr_test_legacy_passes());
+    /* the ctest's expectation (rhi_vk_subpass*: off by default on every
+     * VkRenderPass path, on with ICO_VK_SUBPASS_READ=1); off on the 1.1
+     * profile also means no local read there, as before v0.11.3 */
+    const char *want = getenv("ICO_TEST_SUBPASS_WANT");
+    if (want && want[0]) {
+        const bool on = want[0] == '1';
+        SP_CHECK(subpass == on, "the subpass read %s, the test wants it %s\n",
+                 subpass ? "on" : "off", on ? "on" : "off");
+        SP_CHECK(on || !vkr_test_legacy_passes() || !lim->localRead,
+                 "the subpass read off on VkRenderPass objects, yet local read offered\n");
+        SP_CHECK(on || lim->localReadSubpass == 0, "localReadSubpass %d with the read off\n",
+                 (int)lim->localReadSubpass);
+    }
     if (!lim->localRead) {
         rhi_test_log("%s subpass read: no local read on this device (render passes %s): not "
                      "run\n",

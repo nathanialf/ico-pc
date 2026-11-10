@@ -343,10 +343,18 @@ int ico_dump_auto_bundle(const char *reportZip, char *line, size_t lineSize)
     for (int i = nc - 1; i >= 0; i--) {
         const char *why1 = NULL;
 
+        FILE *probe = NULL;
+
         if (na >= ICO_BUNDLE_MAX_FILES) {
             why1 = "left out: only the newest three go in";
         } else if (c[i].size == 0 || total + c[i].size > ICO_BUNDLE_MAX_BYTES) {
             why1 = c[i].size == 0 ? "left out: empty" : "left out: over the size limit";
+        } else if ((probe = ico_fopen(c[i].path, "rb")) == NULL) {
+            /* gone or unreadable since it was listed: the others still go in */
+            why1 = "left out: gone";
+        }
+        if (probe != NULL) {
+            fclose(probe);
         }
         if (nu < sizeof(note)) {
             nu += (size_t)snprintf(note + nu, sizeof(note) - nu, "%s: %llu bytes, %s\n",
@@ -360,15 +368,17 @@ int ico_dump_auto_bundle(const char *reportZip, char *line, size_t lineSize)
     if (inFlight && nu < sizeof(note)) {
         snprintf(note + nu, sizeof(note) - nu, "one more capture was still being written\n");
     }
-    if (na == 0 || ico_zip_add_bundle(reportZip, add, na, "automatic-captures.txt", note, why,
-                                      sizeof(why)) != 0) {
+    int gone = 0;
+
+    if (na == 0 || ico_zip_add_bundle(reportZip, add, na, "automatic-captures.txt", note, &gone,
+                                      why, sizeof(why)) != 0) {
         snprintf(line, lineSize, "%d on disk, none added to the report: %s", nc,
-                 na == 0 ? "all over the limits" : why);
+                 na == 0 ? "all over the limits or gone" : why);
         return 0;
     }
     snprintf(line, lineSize,
              "%d of %d automatic captures added (%llu bytes; the rest named in "
-             "automatic-captures.txt)",
-             na, nc, total);
-    return na;
+             "automatic-captures.txt%s)",
+             na - gone, nc, total, gone ? ", those gone as it was made among them" : "");
+    return na - gone;
 }

@@ -56,9 +56,12 @@ int ico_zip_mem_files(const char *zip_path, const IcoZipMem *e, int n, const cha
 /* Adds the n files paths (each under its own name, stored: they are zips
    already) and, when note is not NULL, a text entry note_name holding note
    to the zip zip_path in one rebuild (the bug report's bundled captures,
-   dump_auto.c). 0: added; -1: the zip is as it was, why holding the reason. */
+   dump_auto.c).  A file that cannot be read (gone since it was listed) is
+   left out, a line "<name>: left out: gone ..." added to the note, and
+   counted in *gone (NULL: not asked); the others still go in.  0: added;
+   -1: the zip is as it was, why holding the reason. */
 int ico_zip_add_bundle(const char *zip_path, const char *const *paths, int n, const char *note_name,
-                       const char *note, char *why, size_t why_size);
+                       const char *note, int *gone, char *why, size_t why_size);
 
 /* The device-loss dump (window_host.c device_lost_quit): zip_path holding
    lost_path, then before_path (NULL or "": none), then log_path, each under

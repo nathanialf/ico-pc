@@ -2,6 +2,8 @@
  * passes (rd_vu_rec_sink.h). */
 #include "rd_vu_rec_sink.h"
 
+#include <stdlib.h>
+
 #include "rd_internal.h"
 #include "shader_consts.h" /* ICO_VU_REC_W */
 
@@ -24,9 +26,12 @@ static void sinksFree(void)
     }
 }
 
-RhiTexture rd__vu_rec_sink(RhiCommandList cl)
+bool rd__vu_rec_sink_ready(void)
 {
     if (!s_sink[0].id && !s_failed) {
+        /* ICO_RD_VU_REC_SINK_FAIL=1 (the tests): the targets refused */
+        const char *fail = getenv("ICO_RD_VU_REC_SINK_FAIL");
+        const bool refuse = fail && fail[0] == '1';
         for (uint32_t i = 0; i < RD_VU_REC_SINKS; i++) {
             s_sink[i] = rhi_create_texture(
                 &(RhiTextureDesc){ICO_VU_REC_W, 1, 1, RD_VU_REC_SINK_FMT, RHI_TEX_RENDER_TARGET,
@@ -38,15 +43,15 @@ RhiTexture rd__vu_rec_sink(RhiCommandList cl)
         s_next = 0;
         bool all = true;
         for (uint32_t i = 0; i < RD_VU_REC_SINKS; i++) {
-            all = all && s_sink[i].id != 0;
+            all = all && s_sink[i].id != 0 && !refuse;
         }
         if (!all) {
             /* not tried again on this device: one line */
             sinksFree();
             s_failed = true;
             rd__log("VU pre-pass: the store passes' two throwaway %ux1 R8 targets could not be "
-                    "made: they begin without an attachment, as before v0.11.3 (the shape "
-                    "the Intel vkCmdBeginRendering crash reports share)",
+                    "made: the stores off for the run (a store pass without them would not "
+                    "match its pipelines, which name one)",
                     (unsigned)ICO_VU_REC_W);
         } else if (!s_madeSaid) {
             s_madeSaid = true;
@@ -57,7 +62,12 @@ RhiTexture rd__vu_rec_sink(RhiCommandList cl)
                     (unsigned)ICO_VU_REC_W);
         }
     }
-    if (!s_sink[0].id) {
+    return s_sink[0].id != 0;
+}
+
+RhiTexture rd__vu_rec_sink(RhiCommandList cl)
+{
+    if (!rd__vu_rec_sink_ready()) {
         s_without++;
         return (RhiTexture){0};
     }

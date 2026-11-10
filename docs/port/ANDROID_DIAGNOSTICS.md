@@ -208,18 +208,29 @@ question it decides:
   a driver that keeps the rule ([DISPLAY.md](DISPLAY.md)), and that 0 is what the line reads on any
   such driver. Read instead, in the next Mali log:
   - `rhi_vk: barriers: one holds every later vertex, compute and copy command (the next picture's
-    too) behind the fragment work before it: SITE (first scope 0xS, second 0xD, ...); K at this
-    site, M in all` (each site's first 8, then every 100th). Lines that keep coming every few
-    seconds at one site are the barriers that still serialise the pictures: a texture upload over a
+    too) behind the fragment work before it: SITE (first scope 0xS, second 0xD, ...); K of this
+    kind at this site` and its twin `one holds every later copy (vertex and compute work only
+    through a copy's own barrier)` (each site and kind's first 8 only), and in every 10 s block the
+    `window: CPU walk ms ...` line's `barriers holding fragment work per replay: V before vertex or
+    compute work, C before copies only (vertex/copy by site: ...)`. A site whose per-replay count
+    stays above 0 in play is a barrier that still serialises the pictures: a texture upload over a
     sampled texture (`a render pass's or copy's own barrier`, first scope 0x80, second 0x1000) is
     expected where textures stream; `the barriers held back for the next command` with a first
     scope holding 0x80 (the fragment shader) or 0x400 (colour output) and a second holding 0x800
     (compute) or 0x8 (vertex shader) would be the record or a pass's vertex work held. No such
     lines in a play block say no barrier holds the next picture's vertex and compute work behind
     the picture before's pixels.
+  - The texture uploads and the fog's table are recorded after the VU pre-pass since this
+    version (`port/render/rd_upload_late.h`: a texture upload over a sampled texture waited for
+    the picture before's fragment work, and every later copy with it, the mesh uploads the record
+    reads among them); their time still counts as `uploads` (a stamp of its own between the
+    pre-pass and list 0, `RD_PERF_TS_LATE`), so the figures read as before, but for a pass-timed
+    replay's pieces, where the `VU pre-pass record` piece now holds them (a piece of their own
+    would change every pass count). Whether the record now
+    overlaps the picture before is a hypothesis this log decides.
   - The pre-pass's own GPU time (`VU pre-pass X` in the replays line, the `VU pre-pass record`
     entries of the top passes): both its stamps are bottom-of-pipe, the first written once the
-    uploads and the picture before are done, so a record that ran during the picture before's
+    mesh uploads and the picture before are done, so a record that ran during the picture before's
     fragment work shows as a pre-pass near 0 and a GPU span a replay that is not longer. A pre-pass
     that stays near its cost in that log (2.99 ms in its stage 3 block) with no hold lines says the
     driver ran it after the picture before anyway (or writes its stamps late); with hold lines,
@@ -233,11 +244,14 @@ question it decides:
   `render passes legacy`, `local read no`) drew DATE through the R8 snapshot: `passes per replay
   20.0 (render passes 13, VU pre-pass 2, DATE snapshot 3, present 1)` in its stage 3 block, each
   snapshot a store and reload of SCENE's 912x512 colour and D32S8 depth; list 3 cost 9-12 ms in
-  play and 25-33 ms in the cage. Now the `VkRenderPass` path reads the pass's own colour
-  as an input attachment of its subpass. Read, in the next Mali log:
+  play and 25-33 ms in the cage. The `VkRenderPass` path can read the pass's own colour as an
+  input attachment of its subpass, but that is an experiment, off by default (its cost on a phone
+  is not measured): the default log says `rhi_vk: render passes: the subpass read off (the default;
+  [dev] subpass_read = on tries it)` and DATE stays the snapshot. A reporter who
+  sets `subpass_read = on` under `[dev]` in `config.toml` tries it; read, in that log:
   - `rhi_vk: render passes: the subpass read: ...` after the device line (the RHI offers it), and
     `rhi_vk: render passes: the first with the subpass read: ...` once the scene's first pass is
-    made; `rhi_vk: render passes: no subpass read (<why>)` says why not.
+    made.
   - The profile line's `DATE stencil` and `local read yes (the subpass read: a pass's colour with
     a depth target)`; then `rd: DATE: stencil path (self-test: stencil ok 5, snapshot ok 5)`: the
     device drew the stencil bit right on its SCENE. `DATE: snapshot path (self-test: stencil fail
@@ -253,7 +267,7 @@ question it decides:
   - `rhi_vk: render pass: a local-read barrier in a pass without the subpass read ...` or `... the
     subpass read's class ... begun without its input attachment ...` should never print: either
     is a fault to report. `[dev] date_path = "snapshot"` in `config.toml` goes back to the
-    snapshot for an A/B.
+    snapshot for an A/B with the shape kept; taking `subpass_read` out removes all of it.
   Decides whether the scene's pass now stays open through DATE on the phone, whether the driver
   draws it right, and what it saves.
 - **Images in use** (the 10 s first line's `present mailbox (images: 10, in use 1)`;
@@ -385,7 +399,11 @@ lines and what each decides:
   replay whose present blocked 340 ms. Where the start-up set stopped for memory on Qualcomm's own
   driver the box check and the twins are now compiled carefully (`rd: VU skin check: its box check,
   its twins' pipelines and its c2 variant are compiled carefully (...)`), one at a time above the
-  floor; that report's run had neither.
+  floor; that report's run had neither. There the twins start at one skinned draw a picture and a
+  twin event twins every skinned draw for 30 replays only, at most 4 times a run (`rd: VU skin
+  check: twins on (...) at one skinned draw a picture from the start (the careful rule: ...)`;
+  [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md), the thinning), so the check costs that GPU-bound phone no
+  more than one twin a picture outside those stretches.
 - **The ring read beside the picture** (the variants line's `(c3) the bones through the ring:
   right | wrong`, the event line's `C (ring read) K samples`, the 10 s block's `ring twins differ E
   (of R read)`): where the program entries are the plain set (Turnip's), the same bones read through
@@ -539,7 +557,8 @@ causes in it, each on its own lines. The lines to read, in the log's order:
   writes can leave a partly written zip.
 - **The bug report brings the run's zips.** The Settings picture's zip also holds the newest three
   of this run's automatic zips that are still on disk (stored, within 12 MiB together) and
-  `automatic-captures.txt` naming every one: its size and `included` or why it was left out. The log
+  `automatic-captures.txt` naming every one: its size and `included` or why it was left out (`left
+  out: gone` for one that could not be read as the report was made: the others still go in). The log
   says the same: `window: bug report: 3 of 5 automatic captures added (...)`, or `no automatic
   capture of this run is still on disk`. The 179 reporter attached the report zip while three
   slow-scene zips stayed on the phone.
@@ -727,8 +746,12 @@ The new lines:
   | "its first stamp N ms after its first submit" with N a few ms | the GPU began at once: the stall is after the work (the present's queue) |
 
   The start comes "(the calibrated clocks)" where the device offers them (`rhi_vk: timestamps: ...;
-  calibrated with the CPU's clock: on`), else "about ... (from its wait's end)", taken from when the
-  CPU's wait returned, good to the wait's wake-up. On a driver whose query read waits for the GPU
+  calibrated with the CPU's clock: on`) and the pair was read: at the first recycle, at a recycle
+  whose wait blocked past 50 ms and at the few after it (not every replay), else "about ... (from
+  its wait's end)", taken from when the CPU's wait returned, good to the wait's wake-up. "M of T
+  recorded stamps came back unwritten" counts only the stamps of command lists that were submitted;
+  a list recorded and never submitted is said apart (`N of the slot's lists with stamps were
+  recorded and not submitted (left out)`). On a driver whose query read waits for the GPU
   (lavapipe does) the trace has one point, after the work.
 - **The stall's entry** in `window: present stalls:` adds `the GPU began it N ms after its submit`
   and `its first list ran twice (a reset and replay)`, and the run's line adds `the GPU began the
