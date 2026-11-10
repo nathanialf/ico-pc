@@ -770,6 +770,13 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
     return n;
 }
 
+/* no slot clock here (rhi.h rhi_read_timestamp_clock: Vulkan's) */
+bool rhi_read_timestamp_clock(RhiTimestampClock *out)
+{
+    memset(out, 0, sizeof(*out));
+    return false;
+}
+
 /* ------------------------------------------------------- occlusion queries
  * Not supported here (rhi.h rhi_cmd_begin_occlusion: the replay tool's
  * measurement is Vulkan's); GL_SAMPLES_PASSED queries (glBeginQuery/glEndQuery per index and slot, read once the slot's fence has passed, as the timestamps) would be the form. */

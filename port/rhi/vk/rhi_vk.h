@@ -78,6 +78,26 @@ void vkr_test_fail_texels_above(uint64_t texels);
 uint32_t vkr_test_pass_area_count(void);
 void vkr_test_pass_area_no_assert(bool on);
 
+/* For rhi_vk_test's clock cell (rhi.h rhi_read_timestamp_clock): the next
+ * submission waits on a timeline semaphore of its own until
+ * vkr_test_release_hold signals it from the host (any thread), so the
+ * recycle's wait for its slot blocks while the GPU runs nothing of it (a
+ * driver that runs submissions at once, lavapipe, otherwise never makes a
+ * wait block); false on the fence path or when the semaphore cannot be made.
+ * vkr_test_hold_destroy after the wait. */
+bool vkr_test_hold_next_submit(void);
+bool vkr_test_release_hold(void);
+void vkr_test_hold_destroy(void);
+
+/* For rhi_vk_test's range cell (vk_range.c, issue 123): the checks of the
+ * commands robust access does not cover (an indexed draw's indices, a
+ * buffer copy, a texture region, a copy's buffer rows; 16- and 32-bit
+ * indices, a BC1 texture's blocks), each on made-up resources at the edge
+ * and one past it; returns the cases with the wrong verdict (0: all right).
+ * vkr_test_range_bad counts the lines since the program started. */
+uint32_t vkr_test_range_cases(void);
+uint32_t vkr_test_range_bad(void);
+
 /* For rhi_vk_test's sync cell (vk_sync.c): the submission sync in use,
  * "timeline" or "fences" (ICO_VK_FAKE_API=1.1), and the submits since
  * rhi_init that waited for their fence slot's earlier submission (the

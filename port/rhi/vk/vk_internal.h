@@ -322,6 +322,7 @@ typedef struct VkrCmdList {
     uint32_t ibId;
     uint64_t ibOff;
     bool ib32;
+    uint64_t ibBytes; /* the bound index buffer's bytes from ibOff (vk_range.c) */
     uint8_t stencilRef;
     float blendConst[4];
     uint8_t dynFresh;
@@ -395,6 +396,13 @@ typedef struct VkrFrame {
     uint32_t occWritten[RHI_OCCLUSION_WORDS];
     bool occReset;
     uint32_t occResetN; /* the queries that reset covered: 0 .. occResetN - 1 */
+    /* the slot's submissions since its recycle (vk_tsclock.c
+     * vkr_tsclock_note_submit: rhi_read_timestamp_clock's submit times;
+     * tsFirstValue the first one's number) and the lowest recorded stamp's
+     * value of its previous use (a polled result equal to it is stale) */
+    uint32_t tsSubmits;
+    uint64_t tsFirstSubmitNs, tsLastSubmitNs, tsFirstValue;
+    uint64_t tsPrevFirst;
 } VkrFrame;
 
 /* A render pass as both paths take it (vk_cmd.c rhi_cmd_begin_render_pass
@@ -729,6 +737,18 @@ typedef struct VkrState {
     uint64_t timestampMask; /* the valid bits */
     uint64_t tsResult[RHI_MAX_TIMESTAMPS];
     uint32_t tsCount; /* of the slot rhi_wait_frame recycled last */
+    /* the recycled slot's clock (rhi_read_timestamp_clock, vk_tsclock.c):
+     * calibrated timestamps on (VK_KHR or VK_EXT_calibrated_timestamps,
+     * enabled at the device's creation with the CPU's time domain
+     * tsCalibCpuDomain), the entry point, the queue's valid bits; tsClock
+     * is filled by the slot's recycle (vkr_recycle_frame: its wait's trace,
+     * its stamps' bits, the calibrated pair) */
+    bool tsCalib;
+    const char *tsCalibExt;
+    uint32_t tsCalibCpuDomain;
+    PFN_vkGetCalibratedTimestampsKHR getCalibratedTimestamps;
+    uint32_t tsValidBits;
+    RhiTimestampClock tsClock;
     /* occlusion queries (rhi_cmd_begin_occlusion): the pools exist (made at
      * the first begin), the device counts precisely (occlusionQueryPrecise,
      * enabled), and the counts of the slot rhi_wait_frame recycled last
@@ -876,6 +896,18 @@ void vkr_note_submit(const VkrFrame *f, uint64_t value, uint32_t lists, bool pre
  * watchdog (rhi_gpu_progress); a failed wait is logged and noted
  * (lostWaitValue) */
 void vkr_wait_value(uint64_t value);
+/* vkr_wait_value for a frame slot's last submission, the slot's stamps
+ * polled while the wait blocks (vk_tsclock.c vkr_tsclock_wait) */
+void vkr_wait_slot_value(VkrFrame *f, uint64_t value);
+/* vk_tsclock.c (rhi.h rhi_read_timestamp_clock): the device's choice
+ * before vkCreateDevice (the extension's name to enable, or NULL; hasKhr /
+ * hasExt: offered), its entry point after, a submission of the slot, the
+ * blocking wait with the poll, and the recycle's calibrated pair */
+const char *vkr_tsclock_pick(bool hasKhr, bool hasExt);
+void vkr_tsclock_init(uint32_t validBits);
+void vkr_tsclock_note_submit(VkrFrame *f, uint64_t value);
+VkResult vkr_tsclock_wait(VkrFrame *f, uint64_t value);
+void vkr_tsclock_recycled(VkrFrame *f);
 
 /* vk_sync.c, the submission sync (VkrSyncKind):
  *   vkr_sync_init     the timeline semaphore or the fence ring of
@@ -896,6 +928,20 @@ bool vkr_sync_init(void);
 bool vkr_sync_submit(const VkrSubmitDesc *d, uint64_t *outValue);
 bool vkr_sync_reached(uint64_t *out);
 VkResult vkr_sync_wait(uint64_t value);
+/* vkr_sync_wait within timeoutNs: VK_TIMEOUT when the number has not
+ * finished by then (vk_tsclock.c's poll) */
+VkResult vkr_sync_wait_for(uint64_t value, uint64_t timeoutNs);
+/* vk_range.c: an indexed draw's indices and a copy's regions against the
+ * resources they name (robust access does not cover them), logged when
+ * past them; the command is recorded as before */
+void vkr_range_index(const VkrCmdList *c, uint32_t firstIndex, uint32_t indexCount);
+void vkr_range_buffer(const VkrCmdList *c, const char *what, const VkrBuffer *b, uint64_t offset,
+                      uint64_t size);
+void vkr_range_image(const VkrCmdList *c, const char *what, const VkrTexture *t, uint32_t mip,
+                     RhiRect r);
+void vkr_range_rows(const VkrCmdList *c, const char *what, const VkrBuffer *b, uint64_t offset,
+                    uint32_t rowPitch, const VkrTexture *t, RhiRect r);
+uint32_t vkr_range_bad_count(void);
 void vkr_sync_destroy(void);
 const char *vkr_sync_name(void);
 /* vk_renderpass.c, the render passes (VkrPassDesc; the file's header has

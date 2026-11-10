@@ -105,6 +105,7 @@
     X(cmd_write_timestamp)                                                                         \
     X(read_timestamps)                                                                             \
     X(read_timestamps_busy)                                                                        \
+    X(read_timestamp_clock)                                                                        \
     X(occlusion_supported)                                                                         \
     X(occlusion_prepare)                                                                           \
     X(cmd_begin_occlusion)                                                                         \
