@@ -2,11 +2,13 @@
  * port/ui/settings_variants.h
  *
  * The game variants' rows (port/game/variants.h) on Options > Gameplay and
- * its Shadows, Combat and Cutscenes pages: which options they are, their
- * value text, the note a row shows on the running disc and whether a row
- * shows there (settings_variants.c).  settings.c builds the pages and steps
- * the rows (ico_variant_step); these are its helpers, kept in their own file
- * so settings.c stays under the repository's 256 KiB file cap.
+ * its Cutscenes and Yorda pages: which options they are, their value text,
+ * the note a row shows on the running disc and whether a row shows there
+ * (settings_variants.c).  settings.c builds the pages and steps the rows
+ * (ico_variant_step); these are its helpers, kept in their own file so
+ * settings.c stays under the repository's 256 KiB file cap.  The variants a
+ * journey's difficulty holds are the New Game draft's rows
+ * (settings_difficulty.h), routed there before these.
  */
 #ifndef PORT_UI_SETTINGS_VARIANTS_H
 #define PORT_UI_SETTINGS_VARIANTS_H

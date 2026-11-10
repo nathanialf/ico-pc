@@ -3,6 +3,7 @@
 (kept current after every merge; player words only)
 
 - Each save keeps the difficulty its journey was started on, on either memory card; a save from an earlier version keeps the gameplay options you had chosen, from the first time you load it.
+- Difficulty modes: choose Easy, Normal or Hard when you start a new game, or change every rule yourself under Customize, including three new ones: a limit on how often Ico can be knocked down, No Shadows, and Permadeath (any game over ends the journey). Each save keeps its own choice. The difficulty rows have moved from Settings to the New Game screen.
 
 ## Fixed
 

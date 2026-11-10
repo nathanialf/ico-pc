@@ -258,10 +258,11 @@ original game's behaviour (`port/game/options.h`, header comment).
 
 ### [variants]
 
-Options > Gameplay: No hints on the page, Chain swing speed and Chain swing slowdown on Gameplay > Yorda,
-Shadow toughness, Shadow aggression and Peaceful shadows on Gameplay > Shadows, the combat rows
-(Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge,
-Queen barrier and the two weapon rows) on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
+Options > Gameplay: the two weapon rows on the page, Chain swing speed and Chain swing slowdown on
+Gameplay > Yorda, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-and-cutscenes));
+the ten difficulty rows (Shadow toughness, Shadow aggression, Peaceful shadows, the three combat rows,
+One hit per swing, Shadows never dodge, Queen barrier, No hints) on the New Game screen's Customize
+pages ([UI.md](UI.md#customize-the-new-game-drafts-pages),
 [OPTIONS.md](../OPTIONS.md#gameplay)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
 the game as the disc ships it. Ten of the sixteen are rows of each save's difficulty record

@@ -21,6 +21,7 @@
 #include <libscf.h>
 #include "achievements.h"
 #include "config.h"
+#include "difficulty.h" /* the New Game draft, the journey's record */
 #include "font.h"
 #include "gallery.h"
 #include "host_config.h"

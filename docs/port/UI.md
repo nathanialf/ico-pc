@@ -10,13 +10,15 @@ draws, navigates, fades and sounds it; the port supplies the rows, their words a
 | path | what it holds |
 | --- | --- |
 | `port/ui/layout_ext.h`, `layout_ext.c` | the layout extension: port layouts and rows past the game's tables, text, glyph and rectangle rows, the text hook, the back buttons, pointer roles |
-| `port/ui/settings.h`, `settings.c` | the Settings menu: the pages, the entry rows, the New Game and Quit screens, the values and their setters, the saves |
+| `port/ui/settings.h`, `settings.c` | the Settings menu: the pages, the entry rows, the Quit screen, the values and their setters, the saves |
+| `port/ui/settings_newgame.h`, `settings_newgame.c` | the New Game screen: Difficulty, Customize, Mirror mode, New Game+, Start and its note ([The New Game and Quit screens](#the-new-game-and-quit-screens)) |
+| `port/ui/settings_difficulty.h`, `settings_difficulty.c` | the New Game's difficulty draft and Customize's pages: the draft's rows, their value text, steps, notes and greying, the pages' tables, the Difficulty row's modes ([Customize: the New Game draft's pages](#customize-the-new-game-drafts-pages)) |
 | `port/ui/settings_graphics.h`, `settings_graphics.c` | Settings > Graphics: the Graphics API and Graphics card rows' values and steps, Apply and its countdown |
 | `port/ui/settings_desktop.h`, `settings_desktop.c` | Settings > Extras > Add to the applications menu (Linux): the host's handler (`ui_settings_set_desktop_handler`), Cross and the done / failed popups |
 | `port/ui/settings_backup.h`, `settings_backup.c` | Settings > Extras > Back up your data and Restore from a backup: the rows' words and notes, Cross, the confirmations, the popups |
 | `port/ui/settings_unused.h`, `settings_unused.c` | Settings > Extras > Unused content's host: whether each row and the link show, Cross's open ([Extras > Unused content](#extras--unused-content)) |
 | `port/ui/settings_step.h`, `settings_step.c` | holding Left or Right on the value rows (the tracker and the rows that repeat), L1/R1 on the Picture colour rows, the colour rows' field and step |
-| `port/ui/settings_variants.h`, `settings_variants.c` | the game variants rows' helpers: which options they are, their value text, the disc's note and whether a row shows on the disc ([Gameplay > Yorda, Shadows, Combat and Cutscenes](#gameplay--yorda-shadows-combat-and-cutscenes)) |
+| `port/ui/settings_variants.h`, `settings_variants.c` | the game variants rows' helpers: which options they are, their value text, the disc's note and whether a row shows on the disc ([Gameplay > Yorda and Cutscenes](#gameplay--yorda-and-cutscenes)) |
 | `port/ui/settings_states.h`, `settings_states.c` | the Save states page's host, cards' texts and pictures, actions on a slot with their second press, and F6's latch (`settings.c` builds, opens, leaves and ticks the page) |
 | `port/ui/ui_list.h`, `ui_list.c` | the scrolling list pages (Achievements, Remap, Music) |
 | `port/ui/ui_hint.h`, `ui_hint.c` | a line of button prompts (glyphs and words) |
@@ -204,10 +206,12 @@ tables in step and within the `MAX_ROWS` (17, 18 in an rc build) budget of a pag
 | Controls | Remap (a list, ending with Ask Yorda for a hint on the discs with hints: `REMAP_TARGETS` in `settings.c`), Button configuration, Vibration, Hold type, Stick fix, the mouse camera's six rows, Circle back, Touch screen (a link, with a touch screen only), Back |
 | Touch screen (`UI_PAGE_TOUCH`) | Touch controls, Touch size, Touch opacity, Edit layout (`UI_OPT_TOUCH_EDIT`), Snap to grid, Grid size, Reset layout, Reset all layouts, Back |
 | Edit layout (`UI_PAGE_TOUCH_LAYOUT`) | no shown rows: the editor's own screen ([The touch layout editor](#the-touch-layout-editor)) |
-| Gameplay | Stick fix, Door fix, Second memory card (`UI_OPT_SECOND_CARD`, `[gameplay] second_memory_card`, its note `UI_STR_OPT_SECOND_CARD_NOTE`; the step calls `ico_opt_set_second_memory_card`, whose listener puts the card in at once), No hints (`UI_OPT_VAR_NO_HINTS`), Film effect, Players, Yorda (`UI_PAGE_YORDA`), Shadows (`UI_PAGE_SHADOWS`), Combat (`UI_PAGE_COMBAT`), Cutscenes (`UI_PAGE_CUTSCENES`), Back: the four links before Back as Controls' Touch screen; eleven rows once the game is cleared, inside the window |
-| Yorda (`UI_PAGE_YORDA`) | Yorda safe, Time to rescue Yorda (`UI_OPT_PIT_TIME`, `[gameplay] pit_time`: its value is formatted, `"15 s (Original)"` for Original with the base from `ico_opt_pit_base_seconds` and the word `UI_STR_VAL_ORIGINAL`, else `"8 s"`; Left and Right step a second from the seconds shown, held at 4 and 30 (the Motion blur strength pattern), the base itself is Original again and writes `"original"`, any other value an integer; its note `UI_STR_OPT_PIT_TIME_NOTE`; the value has no words to translate), Yorda trips (`UI_OPT_YORDA_TRIPS`, `[gameplay] yorda_trips`, its note `UI_STR_OPT_YORDA_TRIPS_NOTE`), Natural chains, Chain swing speed (`UI_OPT_VAR_CHAIN_SPEED`) and Chain swing slowdown (`UI_OPT_VAR_CHAIN_DAMPING`) (`[variants] chain_swing_speed` and `chain_swing_damping`, `ICO_VARIANT_CHAIN_SWING_SPEED` / `_DAMPING`: the value is the game's number 1 to 10 as text, the game's own 4 reads `UI_STR_VAL_VAR_CHAIN_ORIGINAL`, "4 (original)"; Left and Right wrap 10 and 1; notes `UI_STR_OPT_VAR_CHAIN_SPEED_NOTE` / `_DAMPING_NOTE`; their text is in `settings_variants.c`; they sit on Yorda because the page has room, Combat is full at ten slots), Back |
-| Shadows (`UI_PAGE_SHADOWS`) | Shadow speed, Shadow toughness, Shadow aggression, Peaceful shadows (`UI_OPT_VAR_PEACEFUL`) (`UI_OPT_VAR_*`), Back |
-| Combat (`UI_PAGE_COMBAT`) | Automatic guard (`UI_OPT_VAR_AUTO_GUARD`), Turn to face shadows (`UI_OPT_VAR_ATTACK_TURN`), Shadows wait while Ico is down (`UI_OPT_VAR_SHADOWS_WAIT_DOWN`), One hit per swing, Shadows never dodge, Shadows attack together (`UI_OPT_SHADOWS_TOGETHER`, `[gameplay] shadows_together`, its note `UI_STR_OPT_SHADOWS_TOGETHER_NOTE`), Queen barrier (`UI_OPT_VAR_*`), Light sword colour (`UI_OPT_VAR_SWORD_COLOUR`: Original, Red; hidden on ntsc, aug6 and jun26, `ui__variant_shown`), Stick (`UI_OPT_VAR_WEAPON`: Original, Insect net), Back; the first three On as the game ships, the weapon rows Original, achievements rules unchanged. The page's rows are `combatOpts` / `combatStrs` in `build`; a later row is one entry in each and one `addNote` in the page's case: ten rows with Back, the window's ten slots |
+| Gameplay | Stick fix, Door fix, Second memory card (`UI_OPT_SECOND_CARD`, `[gameplay] second_memory_card`, its note `UI_STR_OPT_SECOND_CARD_NOTE`; the step calls `ico_opt_set_second_memory_card`, whose listener puts the card in at once), Film effect, Players, Light sword colour (`UI_OPT_VAR_SWORD_COLOUR`: Original, Red; hidden on ntsc, aug6 and jun26, `ui__variant_shown`), Stick (`UI_OPT_VAR_WEAPON`: Original, Insect net), Yorda (`UI_PAGE_YORDA`), Cutscenes (`UI_PAGE_CUTSCENES`), Back: the two links before Back as Controls' Touch screen; ten rows once the game is cleared, the window's ten slots. The rows a journey's difficulty holds are Customize's (below) |
+| Yorda (`UI_PAGE_YORDA`) | Natural chains, Chain swing speed (`UI_OPT_VAR_CHAIN_SPEED`) and Chain swing slowdown (`UI_OPT_VAR_CHAIN_DAMPING`) (`[variants] chain_swing_speed` and `chain_swing_damping`, `ICO_VARIANT_CHAIN_SWING_SPEED` / `_DAMPING`: the value is the game's number 1 to 10 as text, the game's own 4 reads `UI_STR_VAL_VAR_CHAIN_ORIGINAL`, "4 (original)"; Left and Right wrap 10 and 1; notes `UI_STR_OPT_VAR_CHAIN_SPEED_NOTE` / `_DAMPING_NOTE`; their text is in `settings_variants.c`), Back |
+| Customize (`UI_PAGE_CUSTOMIZE`) | Shadows (`UI_PAGE_SHADOWS`), Combat (`UI_PAGE_COMBAT`), Rules (`UI_PAGE_RULES`), Back; reached only from the New Game screen's Customize row, its Back returns there ([Customize: the New Game draft's pages](#customize-the-new-game-drafts-pages)) |
+| Shadows (`UI_PAGE_SHADOWS`) | Shadow speed, Shadow toughness, Shadow aggression, Peaceful shadows, Shadows never take Yorda (`UI_OPT_YORDA`), Shadows attack together, No Shadows (`UI_OPT_DIFF_NO_SHADOWS`), Back: the New Game draft's rows |
+| Combat (`UI_PAGE_COMBAT`) | Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge, Queen barrier, Back: the draft's rows |
+| Rules (`UI_PAGE_RULES`) | Time to rescue Yorda (`UI_OPT_PIT_TIME`: `"15 s (Original)"` for Original with the base from `ico_opt_pit_base_seconds`, else `"8 s"`; a second a step, held at 4 and 30), Yorda trips, No hints (`UI_OPT_VAR_NO_HINTS`), Knock-down limit (`UI_OPT_DIFF_KNOCK_LIMIT`: Off, 1 .. 9 around), Knock-downs count (`UI_OPT_DIFF_KNOCK_SCOPE`: Each room, Whole journey; greyed while the limit is Off), Permadeath (`UI_OPT_DIFF_PERMADEATH`, never greyed), Back: the draft's rows |
 | Cutscenes (`UI_PAGE_CUTSCENES`) | Skip the opening (`UI_OPT_SKIP_OPENING`), No cutscene look-around, Ignore cutscene cameras (`UI_OPT_VAR_*`), Back |
 | Achievements | a list, the popups switch |
 | Extras | Music, Models, Credits, Characters, Unused content (`UI_PAGE_UNUSED`, a link), Add to Steam, Add to the applications menu (`UI_OPT_EXTRAS_DESKTOP`, Linux only), Export textures (`UI_OPT_EXTRAS_EXPORT_TEXTURES`), Back up your data (`UI_OPT_EXTRAS_BACKUP`), Restore from a backup (`UI_OPT_EXTRAS_RESTORE`), Achievement popups, Back |
@@ -358,6 +362,13 @@ A new option row needs:
    `tools/subset_font_ja.py`, `_ko.py` and `_zh.py` run (the `font_subset_*` ctests);
 5. for a config key, the key in its owner's module ([CONFIG.md](CONFIG.md#adding-a-key)).
 
+A row of a journey's difficulty is not a config key: it is a row of the record
+(`port/game/difficulty.h` `IcoDiffRow`, CORE's), an entry in `kRowOpt` and in one of Customize's page
+tables in `port/ui/settings_difficulty.c` (its value text in `ui__diff_text`, its note in
+`ui__diff_note`, a greying rule in `ui__diff_dimmed`); `settings.c` routes `rawValue`,
+`ui_settings_step`, `optShown`, `steppable` and the note to those before its own cases, and builds
+the four pages from `ui__diff_page`. Its tests go in `port/ui/test/settings_difficulty_test.c`.
+
 The `settings` test holds each page's rows as fixed lists (`port/ui/test/settings_test.c`
 (`testBuild`)), which gain the row; new cases go in `port/ui/test/settings_extra_test.c` (ctest
 `settings_extra`, with `checkPageFits` for the page's window: the rows in view exactly one slot
@@ -385,17 +396,35 @@ in the strings table. A development build's empty label shows nothing (`port/pla
 
 ### The New Game and Quit screens
 
-After the game's vibration choice, `la_vibe_select` switches to the port's New Game screen: Mirror
-mode and New Game+, each Off or On, and a centred Start row under them. Up and Down go Mirror mode,
-New Game+, Start and round; each row's chosen value stays lit (the cursor's pulse marks the current
-item, the game's own lit and dim scheme). Cross on an Off or On item picks it and moves the cursor
-to the item below; Cross on Start, or the Start button on any row, confirms both, sets the run's
-mirror mode and `gFlagGameClear`, then calls `la_host_new_game_go`, which starts the game as the
-vibration screen did. The title's lettering is left alone on the screen (the game's own title
-animation has taken it away by the vibration screen; `ui_settings_covers_title` does not count the
-screen, which is not a page). The rows are
-port props, so the mouse and touch take them with no extra code. Triangle goes back to the vibration screen (`port/ui/settings.h`
-(`ui_new_game_screen_enter`); `ico2/common/src/layout_action.c` (`la_host_new_game_screen`,
+After the game's vibration choice, `la_vibe_select` switches to the port's New Game screen
+(`port/ui/settings_newgame.c`), its rows one under the other at pitch 24 from y 46: Difficulty (a
+stepped value between two arrows over the Off and On columns: Easy, Normal, Hard, and Custom while a
+customized draft is kept aside), Customize (a link), Mirror mode and New Game+ (each Off or On), a
+centred Start row at 148 and the cursor row's note at 182 (30 lines, its bottom at 212). Up and Down
+go Difficulty, Customize, Mirror mode, New Game+, Start and round; each Off/On row's chosen value stays
+lit (the cursor's pulse marks the current item, the game's own lit and dim scheme). The cursor
+starts on Difficulty at Normal; a cleared save's New Game+ (`gFlagGameClear` set while that save's
+record, with a journey, is in force) starts from that save's rows, copied before
+`ico_opt_mirror_reset` puts Normal in force and kept while the player goes back to the vibration
+screen and here again. Left and Right on Difficulty step the mode: a preset replaces the draft's rows,
+and a Custom draft is kept aside, so stepping back to Custom restores it (`ui__diff_step_mode`). Cross on
+Customize opens [Customize](#customize-the-new-game-drafts-pages) on its first row; its Back returns with
+the cursor on Customize. Cross on Difficulty or an Off or On item picks it and moves the cursor to the
+item below; Cross on Start, or the Start button on any row, confirms: `ico_difficulty_begin` makes the
+draft the journey's (a new journey id, its counts 0), then the run's mirror mode and `gFlagGameClear` are
+set and `la_host_new_game_go` starts the game as the vibration screen did. The notes: the mode's
+(`UI_STR_DIFF_*_NOTE`) on Difficulty, `UI_STR_DIFF_CUSTOMIZE_NOTE` on Customize, the others as before.
+The title's lettering is left alone on the screen (the game's own title animation has taken it away by
+the vibration screen; `ui_settings_covers_title` does not count the screen, which is not a page). The
+rows are port props, so the mouse and touch take them with no extra code; there a hover moves nothing
+and a click does (`ui_mouse.c`), a click on Difficulty's arrows is Left or Right and on its value Right.
+Triangle goes back to the vibration screen. Log lines: `newgame: the screen opened: Difficulty <mode>
+(<the preset|the cleared save's rows, journey <id>>), New Game+ <on|off>`, `newgame: Difficulty <Mode>
+(was <Mode>...)`, `newgame: Customize opened on Difficulty <mode>`, `newgame: back from Customize:
+Difficulty <mode>`, `newgame: start: Difficulty <mode>, Mirror mode <on|off>, New Game+ <on|off>`, then
+the record's own `difficulty: <Mode> in force (a New Game; ...)` (`port/ui/settings.h`
+(`ui_new_game_screen_enter`, `ui_new_game_screen_difficulty`, `ui_new_game_screen_customize`,
+`ui_new_game_screen_draft`); `ico2/common/src/layout_action.c` (`la_host_new_game_screen`,
 `la_host_new_game_go`)).
 
 Cross on the title's Quit row opens "Quit to desktop?" with Yes and No, the cursor on No. Yes writes
@@ -1104,41 +1133,70 @@ frame (`lt_host_point_item`), and whether a card screen's empty slot is pickable
 (`la_host_mc_slot_pickable`: on the Save screen, not on Load) (`ico2/common/src/layout_texture.c`;
 `ico2/common/src/layout_action.c`).
 
-### Gameplay > Yorda, Shadows, Combat and Cutscenes
+### Gameplay > Yorda and Cutscenes
 
-`UI_PAGE_YORDA`, `UI_PAGE_SHADOWS`, `UI_PAGE_COMBAT` and `UI_PAGE_CUTSCENES`, four links on Gameplay right before
-its Back (`gameLinks` in `build`, the Controls > Touch screen pattern), each page built like
-Controls from its tables (`yordaOpts`, `shadowOpts`, `combatOpts`, `cutOpts` and their strings) with Gameplay as
-its parent, so Back and Triangle return to Gameplay on the link's row (`leaveTo`). All of them show
-from the title and the pause menu on every disc; the game's pause-only rows (Film effect, Players)
-stay on Gameplay. The game variants (`port/game/variants.h`), sixteen stepped rows, one `UI_OPT_VAR_*`
-per `IcoVariantId` (a `_Static_assert` keeps the order), sit on these pages: No hints on Gameplay, Chain swing speed and Chain swing slowdown on Yorda,
-Shadow toughness, Shadow aggression and Peaceful shadows on
-Shadows after Shadow speed; Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge, (Shadows attack together), Queen barrier, Light sword colour and Stick on Combat (the first three On by default: `ico_variant_get` reads 1 when the key is absent; the weapon rows Original), No cutscene look-around and Ignore cutscene
-cameras on Cutscenes after Skip the opening. Debug menu (`UI_OPT_VAR_DEBUG_MENU`, a press row after
-`UI_OPT_DEVELOPER` in the enum, so not stepped) is on Developer before Back. The rows' helpers live in
-`port/ui/settings_variants.c` (moved out of `settings.c`, which sits at the 256 KiB file cap of
-`tools/check_no_rom.sh`): `ui__var_opt`, the value text `ui__variant_text`, the disc's note
-`ui__variant_note` and the per-disc rule `ui__variant_shown`; a step is `ico_variant_step`, which writes `[variants] <key>` in memory and logs
-`variants: <key> = <value>`; the page's leaving saves the file as every page does.
+`UI_PAGE_YORDA` and `UI_PAGE_CUTSCENES`, two links on Gameplay right before its Back (`gameLinks` in
+`build`, the Controls > Touch screen pattern), each page built like Controls from its tables
+(`yordaOpts`, `cutOpts` and their strings) with Gameplay as its parent, so Back and Triangle return
+to Gameplay on the link's row (`leaveTo`). All of them show from the title and the pause menu on every
+disc; the game's pause-only rows (Film effect, Players) stay on Gameplay. The game variants
+(`port/game/variants.h`), sixteen stepped rows, one `UI_OPT_VAR_*` per `IcoVariantId` (a
+`_Static_assert` keeps the order): Light sword colour and Stick on Gameplay, Chain swing speed and
+Chain swing slowdown on Yorda, No cutscene look-around and Ignore cutscene cameras on Cutscenes after
+Skip the opening; the other ten are rows of a journey's difficulty, on Customize's pages (below).
+Debug menu (`UI_OPT_VAR_DEBUG_MENU`, a press row after `UI_OPT_DEVELOPER` in the enum, so not
+stepped) is on Developer before Back. The config rows' helpers live in `port/ui/settings_variants.c`
+(moved out of `settings.c`, which sits near the 256 KiB file cap of `tools/check_no_rom.sh`):
+`ui__var_opt`, the value text `ui__variant_text`, the disc's note `ui__variant_note` and the per-disc
+rule `ui__variant_shown`; a step is `ico_variant_step`, which writes `[variants] <key>` in memory and
+logs `variants: <key> = <value>`; the page's leaving saves the file as every page does.
+
+### Customize: the New Game draft's pages
+
+`UI_PAGE_CUSTOMIZE` (Shadows, Combat, Rules, Back) and its three pages hold every row of a journey's
+difficulty (`port/game/difficulty.h`): ordinary Settings pages (the window, scrolling, held Left and
+Right, the mouse, the languages) whose rows read and step the New Game's draft
+(`port/ui/settings_difficulty.c`), never the config nor the journey in force. `build` makes them from
+`ui__diff_page`; Customize's parent is the New Game screen (`UI__PARENT_NEW_GAME`: `parentLayout`
+asks `ui__newgame_customize_back`, which puts the screen's cursor on Customize), the three pages'
+Customize, and no Settings page links to them. The rows keep the options they had as config rows
+(`UI_OPT_SHADOW_SPEED`, `UI_OPT_YORDA`, `UI_OPT_PIT_TIME`, `UI_OPT_YORDA_TRIPS`,
+`UI_OPT_SHADOWS_TOGETHER` and ten `UI_OPT_VAR_*`) and their strings; No Shadows, Knock-down limit,
+Knock-downs count and Permadeath are `UI_OPT_DIFF_*`, after `UI_OPT_FREE_MOVEMENT`
+(`steppable` takes them through `ui__diff_opt`). A step is `ico_difficulty_row_step` on the draft (the
+values the disc offers: Shadow toughness through `ico_variant_offered`; the Queen barrier between the
+disc's own number and the other, the disc's stored as the record's 0), the mode classified again
+(`ico_difficulty_classify`) and the line `newgame: Customize: <key> <from> -> <to> (the draft is
+<Mode>)` logged; a Custom draft is kept aside for the Difficulty row. Each row's note is
+`ui__diff_note`, chosen at refresh: the June 2001 demo's toughness note, Third journey's while the row
+is on it, the 2001 discs' No hints note; no note ends with an achievements rule (no difficulty row
+switches them off). Knock-downs count is greyed while the limit is Off (`ui__diff_dimmed`); Permadeath
+is never greyed. Every row shows on every disc.
+
+- Places: Customize 4 rows, Shadows 8, Combat 7, Rules 7, inside the window with slots to spare.
+
+ctests `settings` (each page's rows, the links, no page but Customize leading to its pages),
+`settings_difficulty` and its disc runs (each preset's draft, Customize's walk and Back, an edit
+turning the mode Custom and back, the greyed count, the confirm handing the draft over, a cleared
+save's draft, the screen's notes in every table), `settings_discs*` (every draft row on every disc,
+Hard's toughness, the toughness values offered, the disc's notes).
+
+### Gameplay rows: values, notes, the Debug menu
 
 - Values: Shadow toughness Original, American, Not tougher later (`no_plus`), Third journey
-  (`third_journey`, hidden on `ntsc`, `aug6` and `jun26` by `ico_variant_offered`; its own note
-  `UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD` shows in `variantNote` while the row is on it); Shadow aggression Their
-  own, Bold patient, Bold quick, Wary patient, Wary quick; Queen barrier 5 hits, 7 hits (shown as the
-  disc ships it until a step, which writes the number); Light sword colour Original, Red (the
+  (`third_journey`, not offered on `ntsc`, `aug6` and `jun26`: `ico_variant_offered`; its own note
+  `UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD` shows while the row is on it); Shadow aggression Their
+  own, Bold patient, Bold quick, Wary patient, Wary quick; Queen barrier 5 hits, 7 hits (the disc's
+  own number is the record's 0); Light sword colour Original, Red (the
   Characters page's colour word); Stick Original, Insect net (both written as words, `"original"`,
   `"red"`, `"net"`); the others Off, On.
-- Each variants row's note (`UI_STR_OPT_VAR_*_NOTE`, added in the page's case of `buildOptionPage`)
-  is under the page while the cursor is on the row and ends with the rule: "Switches achievements
-  off." for One hit per swing, Shadows never dodge, Peaceful shadows, Ignore cutscene cameras and Debug menu
+- Each config variants row's note (`UI_STR_OPT_VAR_*_NOTE`, added in the page's case of
+  `buildOptionPage`) is under the page while the cursor is on the row; the cutscene rows' and Debug
+  menu's end with the rule: "Switches achievements off." for Ignore cutscene cameras and Debug menu
   (`ico_variants_suspend_achievements`, read by `gamestate.c` beside `ico_opt_developer_mode`),
-  "Achievements stay on." for the others but Light sword colour and Stick, whose notes say what
-  changes and "From the next room" (no room for the rule; neither suspends them). The disc's own
-  notes (`ui__variant_note`, chosen in
-  `refreshPage` by the row's option, whatever page holds it): Shadow toughness on the June 2001 demo
-  (American is not offered), No hints and No cutscene look-around on the three 2001 discs (they
-  change nothing there).
+  "Achievements stay on." for No cutscene look-around; Light sword colour's and Stick's say what
+  changes and "From the next room" (neither suspends them). No cutscene look-around's note on the
+  three 2001 discs is their own (`ui__variant_note`: it changes nothing there).
 - Debug menu is shown only while Developer mode is on and not on the June 2001 demo (`optShown`,
   one log line there). Light sword colour is not shown on the North American disc and the two 2001
   previews (no light sword: `ui__variant_shown`, `settings: no Light sword colour row on <disc
@@ -1155,23 +1213,22 @@ cameras on Cutscenes after Skip the opening. Debug menu (`UI_OPT_VAR_DEBUG_MENU`
 - Free movement (`UI_OPT_FREE_MOVEMENT`) is shown with Developer mode on, on every disc, and steps with
   Left or Right (`ico_free_movement_set`, then `developer.free_movement` set and saved); its note says
   "Switches achievements off." The movement itself needs Developer mode too (`ico_free_movement`).
-- Places: the window's ([The window](#the-window)); Gameplay's eleven rows fill its slots;
-  Yorda (5), Shadows (5) and Cutscenes (4) fit with slots to spare, Combat (10, 9 shown on ntsc, aug6
-  and jun26) fills them; Developer has six rows with
-  Developer mode on (five on the June 2001 demo).
+- Places: the window's ([The window](#the-window)); Gameplay's ten rows fill its slots (nine shown on
+  ntsc, aug6 and jun26); Yorda (4) and Cutscenes (4) fit with slots to spare; Developer has six rows
+  with Developer mode on (five on the June 2001 demo).
 - Log lines: the values once at the first read (`variants: shade_toughness=... ignore_cutscene_cameras=0`),
   each change, the achievements rule when it changes (`variants: achievements are off (one_hit ...)`,
   `... are back on`), a value that is none (`variants: [variants] <key> = "<word>" is not a value; using
   <default>`).
 
-ctests `settings` (each page's rows, the three links before Gameplay's Back, the Developer rows
+ctests `settings` (each page's rows, the two links before Gameplay's Back, the Developer rows
 with Developer mode on), `settings_extra`, `settings_extra_jpn`, `settings_extra_kor`,
 `settings_extra_ntsc`, `_aug6`, `_jun26` (`testVariantsPage`: no Game variants row on Extras,
-Gameplay's labels and the three links, each page opened through Gameplay and Back to it, labels,
-values, a step and the key and the saved file on every variants row, the notes and the
-achievements rule, `checkPageFits` on Gameplay, Shadows, Combat, Cutscenes and Developer, the Debug menu row
-on Developer and its press: unbound it stays on the page, bound to a fake opener it opens once and
-Options closes into the title or the game), `variants`, `config`.
+Gameplay's labels and the two links, no journey row on Gameplay, the weapon rows' steps, keys and
+notes, the cutscene rows' steps, keys, notes and achievements rule, `checkPageFits` on Gameplay,
+Cutscenes and Developer, the Debug menu row on Developer and its press: unbound it stays on the page,
+bound to a fake opener it opens once and Options closes into the title or the game), `variants`,
+`config`.
 
 ### Extras > Unused content
 
