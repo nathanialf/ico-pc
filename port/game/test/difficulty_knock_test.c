@@ -10,6 +10,16 @@
  */
 #include <stdio.h>
 
+/* ico_achievements shows its unlocks through the UI's popup; no UI here */
+int ui_popup_push(const char *title, const char *body);
+
+int ui_popup_push(const char *title, const char *body)
+{
+    (void)title;
+    (void)body;
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     (void)argc;
