@@ -13,6 +13,7 @@ them are [UI.md](UI.md)'s; the picture options are [DISPLAY.md](DISPLAY.md)'s.
 | `port/game/options.h`, `options.c` | the gameplay options, their config keys and defaults, the mirror flag per save slot, the stereo/mono choice |
 | [HARD_MODE.md](HARD_MODE.md) | design note: every lever a harder game could use (the rows above and the mechanisms not exposed yet) |
 | `port/game/door_grace.h`, `door_grace.c` | the doorway fix's arm and arrival grace |
+| `port/game/no_shadows.h`, `no_shadows.c` | No Shadows' counters and log lines for its game-side hooks ([No Shadows](#no-shadows)) |
 | `port/game/ico_rows.h`, `ico_rows.c` | Developer > Free movement and the Ask Yorda for a hint binding: the row's value (Developer mode ANDed in), the hint button's press latch |
 | `port/game/yorda_trip.h`, `yorda_trip.c`, `yorda_trip_live.c`, `yorda_trip_source.c` | Yorda trips: the rule (the main gate scene's 3 s count), the game's side (the stage load's motions, the run-pulled tick), her fall's motions read from the disc |
 | `port/game/pit_time.h` | Time to rescue Yorda: the length of each disc's pull-in (the five SINK motions), header-only so the disc test checks the numbers the option reads |
@@ -247,6 +248,65 @@ together: a shadow did not wait for another's attack (N this run)`.
 `port/game/test/options_test.c` (`test_shadows_together`) runs the answer off and on, its count
 and log lines, and scans `enemy_act.c` for the eleven callers and the hook; `settings_extra`
 (`testShadowsTogether`) the row.
+
+### No Shadows
+
+A Customize row of the journey's difficulty (`ICO_DIFF_NO_SHADOWS`, `port/game/difficulty.h`
+`ico_no_shadows()`; no preset sets it): no Shadow appears in the whole game, and every place the
+story waits on one goes on as after the room's fight. The row is read where the game decides that
+a Shadow exists, not where it acts:
+
+| layer | site | what it does |
+| --- | --- | --- |
+| start | `actEnemyStart` and its `_ntsc`, `_aug6`, `_jun26` copies (`ico2/fumi/src/enemy_act.c`) | every Shadow of the room starts as a killed one does (`actCommonDie`): the dead bit 18 set (`actEnemyFlagOnDead`), then the game's hidden branch (`actEnemyHyde`: out of sight, the display bit 21 clear, which `EnemyDL` and every pit caller read) |
+| pits | `GeneratorGeo` and its three copies (`ico2/omori/src/generator.c`) | the call requests (the scripts' 235 `Generator_Call`s, the generator's automatic call, `gene_enemy`'s) held at 0 before the call switch: `callState` stays 0, the pit never opens (`switch_MainStatus` 1 and its mail 0 never run), `SearchActiveGenerator` never sees one open, so Yorda does not cower (`girl_act.c`) |
+| calls | `DirectCallEnemy`, `Generator_QuickCall`, `UnlockEnemyGenerate` (`generator.c`) | nothing: `DirectCallEnemy` answers 0 before it touches the row (its callers read 0 as "none called"), the quick call opens no pit, a spider group's revive (`spiderGroupManager.c` `tryToRevive`) neither shows the Shadow nor clears its dead bit |
+| left alone | `backStageProcessMain` and its three copies (`ico2/common/src/backStage.c`) | the left-alone kidnap and carry timers do not run (`ico_no_shadows_tick(stage_no) \|\| ico_opt_yorda_safe()`, first so its tick runs every frame) |
+| cage room | `actEnemyForceSwitchToCarry` (the dispatch, both copies) and `ACTEnemyForceSwitchToCarry` (`enemy_act.c`) | the forced grab of the cage room's cutscene (st13c's four `CageFallChk` copies) does not move Yorda to the absent Shadow nor fix her to its hand, and no carry mail is sent |
+| final fight | `InqCapsuleGhostBossEnd` (`ico2/ito/src/itou_boss.c`) | no Shadow comes to fill the 53 capsules: the fight is over once it has started (`gflag[0]`, `CapsuleGhostBossStart`); both `gene_enemy` copies release nothing (no gather effect, no pit call) |
+| final fight's waiters | `actSt13bBossAfterChk` and its three copies (`ico2/script/src/st13b.c`) | held until the fight's music has started (`st13bNoShadowsFightBegun` after `AdpcmPlay(boss->stream)` in `actSt13bBossChk` and `actConte10b`; at the end of `actConte10b_jun26`; on entering the room with the fight begun, `actSt13bBoss`'s second branch, which also calls `CapsuleGhostBossStart` since a load clears `gflag[0]`), then 4 s more: the waiter closes the boss stream, and closing it before the code that plays it had played it would leave that code a closed stream. The June 2001 demo's waiter tests Shadows 2139 and 2140's dead bits; they start killed and the waiter is armed at the room's load, so without the hold the post-fight scene would play on entry |
+
+What stays: the Queen's own `gene_enemy` (`ico2/ito/src/queen.c`, not hooked) counts the room's
+Shadows and calls only while fewer than that are out: the Queen's stage (`st25a (QUEEN)`, 37) has
+no Shadow row on any disc (`no_shadows_disc`), so it calls nothing. The June 2001 demo's spiders
+(`WakeUpSpidersFromGenerator` in its `st00a`, `st01b`, `st04c` copies) still come out and roam;
+nothing waits on them, and the Shadow five of them would become is refused. A save keeps the
+killed state (the generator packet, `MakeGeneratorPacket` / `ReadGeneratorPacket`): the rows read
+as Shadows the player beat, a state every save of the base game can hold.
+
+The proof that the story is not blocked is the census (`no_shadows_census`): every call in the
+stage scripts of `scpCheckExistAliveEnemy`, `actEnemyFlagCheckDead`, `isEnemyActive`,
+`InqCapsuleGhostBossEnd`, `ACTEnemyForceSwitchToCarry`, `WakeUpSpidersFromGenerator`,
+`DirectCallEnemy` and `Generator_QuickCall` (47 calls) is in a reviewed table with its class:
+
+- passes (13): Yorda's way-point toggles switching on (st02a, st03t, st06a, st10r: on once no
+  Shadow is alive and she stands on the floor) and the cage room's hand scene (`HandChk`: the cage
+  Shadow is dead from the room's start; then `SekizoChk` opens the idol door);
+- gated (5): the final fight's waiters above;
+- refused (10): the cage room's grab and its skipped cutscene's call and quick call;
+- unaffected (19): the way-points switching off (they wait for a Shadow or for Yorda to leave), the
+  `isEnemyActive` guards of the refused calls, the aggregate itself, the spiders.
+
+A new or moved site fails the test until it is read and classified. The cutscenes that pose
+Shadows (st13c's `actSt13cConte05` copies, st13b's meeting `actSt13bMeetAgainSub` and
+`actSt13bBossChk`'s rise, deja.c's deja vu scene, the demo's `actConte10b_jun26`) play with the
+Shadows out of sight: they set motions on them but wait only on the stage's animations; the one
+wait on a Shadow's motion (the demo's skipped cage cutscene, `scpPlayWaitMotEnd` on Shadow 104)
+ends, since the demo's `EnemyGeo` plays a hidden Shadow's motion.
+
+Log lines (`port/game/no_shadows.c`; each kind the first 8 then every 100th): `no shadows: room N:
+K Shadow(s) held back (P placed in the room, Q waiting in its pits); ...` two ticks after a room's
+Shadows started; `no shadows: room N left: A pit call(s) held at 0, B direct call(s), C quick
+call(s) and D spider revive(s) refused` when there was any; `no shadows: the forced grab of Yorda
+by Shadow L is skipped: ...`; `no shadows: the final fight (room N) ends with no Shadows: ...`;
+`no shadows: the June 2001 demo's final fight (room N, Shadows 2139 and 2140) ends with no
+Shadows: ...`. The record's own line (`difficulty: ... no_shadows=true`) says the row is on.
+
+Tests: `no_shadows_census` (the census, the hooks in every disc copy, the log lines),
+`no_shadows_disc` and its six other-disc runs (each disc's Shadows placed in their rooms against
+the reviewed list, the cage Shadow in its pit, the left-alone timer's stages and the guard before
+every stage test, the Queen's stage, no preset sets the row), `shadow_spawn` (the four generator
+copies with the row on: no enemy, no open pit, the refused calls leave the row).
 
 ### Natural chains
 

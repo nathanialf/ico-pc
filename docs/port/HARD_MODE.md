@@ -21,6 +21,7 @@ Achievements: a row that makes the game easier or breaks a rule suspends them wh
 | Shadow aggression (`aggression`) | Their own (each kind's battle type in `enemyKind`) | Bold (Positive) with quick (High): `bold_quick` | all | stay on | `debug_enemy_battle_type`, read by `actEnemyStart` and its twins and `GetEnemyBattleType` |
 | Shadows never take Yorda (`yorda_safe`) | off | easy direction: leave off | all | stay on (it is not in the suspension mask) | `ico_opt_yorda_safe` at seven sites (`ebrain.c`, `enemy_act.c`, `backStage.c`) |
 | Peaceful shadows (`peaceful_shadows`) | off | easy direction: leave off | all | suspends | `debug_brain_flag` read at the four Shadow starts (`enemy_act.c`) with `ico_variant_shadow_brain()` |
+| No Shadows (the journey's `no_shadows` row, Customize only) | off | easy direction (no Shadow at all): no preset sets it | all | stay on (no difficulty row switches them off) | every Shadow starts as a killed one (`actEnemyStart` x4), the pits hold their calls at 0 (`GeneratorGeo` x4, `DirectCallEnemy`, `Generator_QuickCall`, `UnlockEnemyGenerate`), the left-alone timer stops (`backStageProcessMain` x4), the cage room's forced grab is skipped (`actEnemyForceSwitchToCarry`), the final fight ends once started and its music has begun (`InqCapsuleGhostBossEnd`, `st13b.c` waiters); the census of every script wait is [GAME_FEATURES.md](GAME_FEATURES.md#no-shadows)'s |
 
 ## Gameplay > Combat
 

@@ -37,6 +37,19 @@
  *             kind), the hips are on the floor at the first tick and end 200
  *             above it.  Each tick's root and lowest and highest node Y are
  *             printed with their bits, for comparing builds.
+ * no shadows  No Shadows (the journey's Customize row; generator.c reads it through
+ *             ico_no_shadows_drop, port/game/no_shadows.h, defined here as a settable
+ *             stub that counts what it is handed), on every disc's copy of the
+ *             generator (the European body, which the Japanese, Korean and Asian
+ *             discs share, the North American, the August 2001 and the June 2001
+ *             copies): after a Generator_Call and 200 ticks of GeneratorGeo no enemy
+ *             is called, the call requests are 0 and the generator never sends
+ *             itself the mail that opens its pit (switch_MainStatus 1, mail 0);
+ *             DirectCallEnemy answers 0 and leaves the enemy's row (flags, revive
+ *             count) as it was; Generator_QuickCall sends no mail;
+ *             UnlockEnemyGenerate leaves the row's display and dead bits.  Each
+ *             refusal is counted under its kind.  The European part above, run
+ *             with the row off, is the control: the same calls bring the enemy out.
  */
 #include <math.h>
 #include <stddef.h>
@@ -100,6 +113,24 @@ typedef struct GenWorkHead {
 void GeneratorGeo(GObj *gobj);
 void Generator_Call(GObj *gobj);
 
+/* No Shadows (port/game/no_shadows.h): the stub generator.c calls; on while
+   s_noShadows is set, counting the refusals by kind (0 pit request, 1
+   DirectCallEnemy, 2 Generator_QuickCall, 3 UnlockEnemyGenerate) */
+static int s_noShadows;
+static int s_drops[4];
+int ico_no_shadows_drop(int what, int n);
+
+int ico_no_shadows_drop(int what, int n)
+{
+    if (!s_noShadows) {
+        return 0;
+    }
+    if (what >= 0 && what < 4 && n > 0) {
+        s_drops[what] += n;
+    }
+    return 1;
+}
+
 /* the vector helpers of ico_math the test uses itself */
 void sceVu0ApplyMatrix(void *out, void *m, void *v);
 void MultiQuaternion(void *out, void *qa, void *qb);
@@ -111,6 +142,7 @@ enum { GEN_LABEL = 511, ENEMY_LABEL = 500 };
 static GObj genObj;
 static GObj enemyObj;
 static float genRoot[4];
+static int genMails; /* the mails the generator sends itself (0 opens its pit) */
 static int restartCalls;
 static int restartKind;
 static float restartPos[4];
@@ -289,9 +321,21 @@ void gamesysObjInfoUniqDataSet(GObj *g)
 
 void iosOmSendMail(GObj *g, int mail, GObj *from)
 {
-    (void)g;
     (void)mail;
     (void)from;
+    if (g == &genObj) {
+        genMails++;
+    }
+}
+
+/* the stage of a layout label (ebrain.c): the generator's mother search on the
+   2001 discs asks it; stage 0, whose label range is empty here */
+int GetStageFromLabel(int label);
+
+int GetStageFromLabel(int label)
+{
+    (void)label;
+    return 0;
 }
 
 void debug_Arrow(float len, void *pos, void *dir, int r, int g, int b)
@@ -329,7 +373,6 @@ void debug_assertMessage(const char *file, int line, const char *msg)
         unexpected(#name);                                                                         \
     }
 UNEXPECTED(GetKidnapInfo)
-UNEXPECTED(GetStageFromLabel)
 UNEXPECTED(ClipFloor)
 UNEXPECTED(ClipFloorE)
 UNEXPECTED(ClipWall)
@@ -383,10 +426,11 @@ static void layoutSetting(SObjSimpleSetting *a, const GenGeo *gen)
 /* the kind's constructor through objKindData's create slot's type */
 typedef void *(*CreateFn)(GObj *, void *);
 
+static Sub15C genSub;
+static Act enemyAct;
+
 static void testGenerator(void)
 {
-    static Sub15C genSub;
-    static Act enemyAct;
     GenGeo *row = &objLayout[GEN_LABEL];
     SObjSimpleSetting a;
     CreateFn create = (CreateFn)InitGeneratorGeo;
@@ -447,6 +491,95 @@ static void testGenerator(void)
           restartPos[2], genRoot[0], genRoot[1], genRoot[2]);
     printf("generator: kind %d, enemy called after %d ticks at %g %g %g\n", restartKind, tick,
            restartPos[0], restartPos[1], restartPos[2]);
+}
+
+/* --- no shadows ----------------------------------------------------------- */
+
+static void testNoShadows(void)
+{
+    static const struct {
+        int region;
+        const char *name;
+    } discs[] = {
+        {ICO_REGION_PAL, "pal"},
+        {ICO_REGION_NTSC, "ntsc"},
+        {ICO_REGION_AUG6, "aug6"},
+        {ICO_REGION_JUN26, "jun26"},
+    };
+
+    const int saved = ico_region;
+    CreateFn create = (CreateFn)InitGeneratorGeo;
+
+    for (size_t d = 0; d < sizeof discs / sizeof discs[0]; d++) {
+        GenGeo *row = &objLayout[GEN_LABEL];
+        GenGeo *enemy = &objLayout[ENEMY_LABEL];
+        SObjSimpleSetting a;
+        GenWorkHead *w;
+        float pos[4] = {0.0f, 0.0f, 0.0f, 1.0f};
+        float dir[4] = {0.0f, 0.0f, 1.0f, 0.0f};
+        unsigned int flags;
+        short revive;
+        int tick;
+
+        ico_region = discs[d].region;
+        s_noShadows = 1;
+        memset(s_drops, 0, sizeof s_drops);
+        restartCalls = 0;
+        genMails = 0;
+
+        layoutSetting(&a, row);
+        w = create(&genObj, &a);
+        CHECK(w != NULL, "%s: no generator work", discs[d].name);
+        if (w == NULL) {
+            continue;
+        }
+        genSub.work = w;
+        enemy->flags = 0;
+        enemy->reviveCount = -1;
+
+        /* a script's call and 200 ticks: the requests held at 0, no enemy, the pit shut */
+        Generator_Call(&genObj);
+        for (tick = 0; tick < 200; tick++) {
+            GeneratorGeo(&genObj);
+        }
+        CHECK(restartCalls == 0, "%s: %d enemies called under No Shadows", discs[d].name,
+              restartCalls);
+        CHECK(w->callRequests == 0, "%s: %d call requests left", discs[d].name, w->callRequests);
+        CHECK(genMails == 0, "%s: the generator sent itself %d mails (the pit opened)",
+              discs[d].name, genMails);
+        CHECK(s_drops[0] >= 1, "%s: the held requests were not counted", discs[d].name);
+
+        /* DirectCallEnemy: 0, the row untouched */
+        enemy->reviveCount = 3;
+        flags = enemy->flags;
+        revive = enemy->reviveCount;
+        CHECK(DirectCallEnemy(&enemyObj, &genObj, pos, dir, 0) == NULL,
+              "%s: DirectCallEnemy called an enemy", discs[d].name);
+        CHECK(enemy->flags == flags && enemy->reviveCount == revive && restartCalls == 0,
+              "%s: DirectCallEnemy changed the row (flags 0x%X, revive %d)", discs[d].name,
+              enemy->flags, enemy->reviveCount);
+        CHECK(s_drops[1] == 1, "%s: %d direct calls counted", discs[d].name, s_drops[1]);
+
+        /* Generator_QuickCall: no mail, the pit shut */
+        Generator_QuickCall(&genObj);
+        CHECK(genMails == 0, "%s: Generator_QuickCall sent a mail", discs[d].name);
+        CHECK(s_drops[2] == 1, "%s: %d quick calls counted", discs[d].name, s_drops[2]);
+
+        /* UnlockEnemyGenerate: the row's display (21) and dead (18) bits kept */
+        enemy->flags = 0x40000;
+        UnlockEnemyGenerate(&enemyObj);
+        CHECK(enemy->flags == 0x40000, "%s: UnlockEnemyGenerate set the row's flags to 0x%X",
+              discs[d].name, enemy->flags);
+        CHECK(s_drops[3] == 1, "%s: %d unlocks counted", discs[d].name, s_drops[3]);
+
+        printf("no shadows: %s: 0 enemies in %d ticks, requests %d, %d held, refusals %d %d %d\n",
+               discs[d].name, tick, w->callRequests, s_drops[0], s_drops[1], s_drops[2],
+               s_drops[3]);
+        enemy->flags = 0;
+        enemy->reviveCount = -1;
+    }
+    s_noShadows = 0;
+    ico_region = saved;
 }
 
 /* --- rise ----------------------------------------------------------------- */
@@ -648,6 +781,7 @@ static int testRise(const char *disc)
 int main(int argc, char **argv)
 {
     testGenerator();
+    testNoShadows();
     if (argc > 1 && argv[1][0] != '\0') {
         testRise(argv[1]);
     } else {

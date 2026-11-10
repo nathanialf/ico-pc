@@ -22,9 +22,10 @@
 # difficulty.c: each journey's difficulty record (difficulty.h): the presets,
 # the rows the options and variants above read, the knock-down limit,
 # Permadeath, No Shadows, its save-state block; difficulty_file.c: its
-# sidecar, difficulty.toml.  Neither names a game symbol.
+# sidecar, difficulty.toml.  Neither names a game symbol.  no_shadows.c: No
+# Shadows' counters and log lines for its game-side hooks (no_shadows.h).
 add_library(ico_options STATIC options.c video_options.c photo_mode.c appearance.c door_grace.c
-            variants.c yorda_trip.c ico_rows.c difficulty.c difficulty_file.c)
+            variants.c yorda_trip.c ico_rows.c difficulty.c difficulty_file.c no_shadows.c)
 target_include_directories(ico_options PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}"
                            "${CMAKE_SOURCE_DIR}/port/render")
 target_compile_options(ico_options PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -577,8 +578,9 @@ endif()
 # InqCapsuleGhostBossEnd, ACTEnemyForceSwitchToCarry,
 # WakeUpSpidersFromGenerator) in a reviewed table with its class; an
 # unclassified site fails.  A source scan from ICO_SOURCE_DIR; no game code.
-# (Wave 1: NOSHADOW fills the test.)
-add_executable(no_shadows_census_test test/no_shadows_census_test.c)
+# Also the hooks' presence in every disc copy, and no_shadows.c's counts and
+# lines (compiled in with the test's own ico_no_shadows).
+add_executable(no_shadows_census_test test/no_shadows_census_test.c no_shadows.c)
 target_compile_definitions(no_shadows_census_test PRIVATE ICO_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 target_compile_options(no_shadows_census_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(ICO_RUN_TESTS)

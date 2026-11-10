@@ -41,6 +41,13 @@ extern float ico_opt_pit_dive_ratio(int camera);
    turn (another Shadow is attacking and the option is off), 0: it may go; counts and
    logs each time the option lets one go (EnemyUtil_isOtherStatus) */
 extern int ico_opt_shadow_waits(int other_attacking);
+/* PC port: port/game/no_shadows.h: No Shadows (the journey's Customize row).  ico_no_shadows:
+   1 while it is on.  ico_no_shadows_hold: the same answer for actEnemyStart, counting one Shadow
+   held back (was_dead: it began in its pit).  ico_no_shadows_forced: the log line of a forced
+   condition (0: a forced grab of Yorda skipped). */
+extern int ico_no_shadows(void);
+extern int ico_no_shadows_hold(int label, int was_dead);
+extern void ico_no_shadows_forced(int what, int a);
 
 /* port/game/gamestate.c: achievement signals */
 #include "ico_gamestate.h"
@@ -1647,6 +1654,14 @@ static int actEnemyForceSwitchToCarry_jun26(void *self)
 
 static int actEnemyForceSwitchToCarry(void *self)
 {
+    /* PC port: No Shadows: the Shadow is not there (actEnemyStart hid it as a killed one), so
+       Yorda is not moved to it nor fixed to its hand: 0, as when the carry cannot start.  The
+       cage room (st13c's CageFallChk twins) then goes on as after the Shadow's death: its
+       GirlCarryChk sees her not carried, HandChk its dead bit, SekizoChk the hand flag */
+    if (ico_no_shadows()) {
+        ico_no_shadows_forced(0, ((GObj *)self)->labelId);
+        return 0;
+    }
     if (ICO_JUN26) {
         return actEnemyForceSwitchToCarry_jun26(self);
     }
@@ -1696,6 +1711,10 @@ inline int ACTEnemyForceSwitchToCarry(GObj *self)
     int r = actEnemyForceSwitchToCarry(self);
     if (r != 0) {
         _BrainMode_SetDirect(self, 0, 0);
+    }
+    /* PC port: No Shadows: no carry act for a Shadow that is not there */
+    if (ico_no_shadows()) {
+        return r;
     }
     ACTSendMailCorrect(self, PAL_NTSC_AUG6_JUN26(0x104, 244, 241, 235));
     return r;
@@ -5732,6 +5751,15 @@ static void actEnemyStart_ntsc(GObj *self)
     if (actEnemyFlagCheckDead(self) != 0) {
         alive = 1;
     }
+    /* PC port: No Shadows: every Shadow of the room starts as a killed one does (actCommonDie:
+       the dead bit 18, then actEnemyHyde below: out of sight with the display bit 21 clear,
+       which EnemyDL and the pits' callers read): a script waiting for no live Shadow
+       (scpCheckExistAliveEnemy, actEnemyFlagCheckDead) passes, nothing calls one out
+       (generator.c), and the generator packet a save writes holds them as killed ones */
+    if (ico_no_shadows_hold(((GObj *)self)->labelId, alive)) {
+        actEnemyFlagOnDead(self);
+        alive = 1;
+    }
     if (alive != 0) {
         act->flags18.ll = act->flags18.ll & ~(1LL << 32);
         act->flags18.ll = act->flags18.ll & ~(1LL << 33);
@@ -5814,6 +5842,15 @@ static void actEnemyStart_jun26(GObj *self)
     if (actEnemyFlagCheckDead(self) != 0) {
         alive = 1;
     }
+    /* PC port: No Shadows: every Shadow of the room starts as a killed one does (actCommonDie:
+       the dead bit 18, then actEnemyHyde below: out of sight with the display bit 21 clear,
+       which EnemyDL and the pits' callers read): a script waiting for no live Shadow
+       (scpCheckExistAliveEnemy, actEnemyFlagCheckDead) passes, nothing calls one out
+       (generator.c), and the generator packet a save writes holds them as killed ones */
+    if (ico_no_shadows_hold(((GObj *)self)->labelId, alive)) {
+        actEnemyFlagOnDead(self);
+        alive = 1;
+    }
     if (alive != 0) {
         act->flags18.ll = act->flags18.ll & ~(1LL << 32);
     }
@@ -5891,6 +5928,15 @@ static void actEnemyStart_aug6(GObj *self)
     setBattleStatus(self);
     alive = 0;
     if (actEnemyFlagCheckDead(self) != 0) {
+        alive = 1;
+    }
+    /* PC port: No Shadows: every Shadow of the room starts as a killed one does (actCommonDie:
+       the dead bit 18, then actEnemyHyde below: out of sight with the display bit 21 clear,
+       which EnemyDL and the pits' callers read): a script waiting for no live Shadow
+       (scpCheckExistAliveEnemy, actEnemyFlagCheckDead) passes, nothing calls one out
+       (generator.c), and the generator packet a save writes holds them as killed ones */
+    if (ico_no_shadows_hold(((GObj *)self)->labelId, alive)) {
+        actEnemyFlagOnDead(self);
         alive = 1;
     }
     if (alive != 0) {
@@ -5986,6 +6032,15 @@ void actEnemyStart(GObj *self)
     setBattleStatus(self);
     alive = 0;
     if (actEnemyFlagCheckDead(self) != 0) {
+        alive = 1;
+    }
+    /* PC port: No Shadows: every Shadow of the room starts as a killed one does (actCommonDie:
+       the dead bit 18, then actEnemyHyde below: out of sight with the display bit 21 clear,
+       which EnemyDL and the pits' callers read): a script waiting for no live Shadow
+       (scpCheckExistAliveEnemy, actEnemyFlagCheckDead) passes, nothing calls one out
+       (generator.c), and the generator packet a save writes holds them as killed ones */
+    if (ico_no_shadows_hold(((GObj *)self)->labelId, alive)) {
+        actEnemyFlagOnDead(self);
         alive = 1;
     }
     if (alive != 0) {

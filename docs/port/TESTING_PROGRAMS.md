@@ -297,13 +297,26 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   states lock, No Shadows, the `difficulty.record` state block (a restored record, a damaged
   version and a missing block rebuilt from the state's keys) (`difficulty`, `difficulty_jpn`,
   `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
-- `difficulty_file_test.c`, `difficulty_knock_test.c`, `knockdown_disc_test.c`,
-  `no_shadows_disc_test.c`, `no_shadows_census_test.c`: registered with their ctests for the
-  packages that fill them (the sidecar, the knock-down limit's game side, the disc's
-  mails, No Shadows on each disc, the script census); until then each passes without a check
-  (`difficulty_file`, `difficulty_file_<disc>`, `difficulty_knock`, `difficulty_knock_<disc>`,
-  `knockdown_disc`, `knockdown_disc_<disc>`, `no_shadows_disc`, `no_shadows_disc_<disc>`,
-  `no_shadows_census`).
+- `difficulty_file_test.c`, `difficulty_knock_test.c`, `knockdown_disc_test.c`: registered with
+  their ctests for the packages that fill them (the sidecar, the knock-down limit's game side,
+  the disc's mails); until then each passes without a check (`difficulty_file`,
+  `difficulty_file_<disc>`, `difficulty_knock`, `difficulty_knock_<disc>`, `knockdown_disc`,
+  `knockdown_disc_<disc>`).
+- `no_shadows_census_test.c`: No Shadows' proof from the source
+  ([GAME_FEATURES.md](GAME_FEATURES.md#no-shadows)): every call in `ico2/script/src` of the eight
+  checks and calls that read or bring out a Shadow is in a reviewed table by file, function and
+  callee with its count and class (passes, gated, refused, unaffected), a new, moved or
+  recounted site failing; each hook in every disc copy of its function, before what it guards,
+  a family with a copy more or fewer failing; `port/game/no_shadows.c` compiled in with the
+  test's own `ico_no_shadows`: off answers 0 and prints nothing, on the room's line after two
+  quiet ticks, the room-left counts, the forced conditions' lines and the rate limit
+  (`no_shadows_census`).
+- `no_shadows_disc_test.c`: off each disc image (the tables from its ELF), the Shadow rows
+  placed in their rooms against the reviewed list of that disc, the cage room's Shadow a row of
+  the cage room starting in its pit, the left-alone timer's stages (26; 25 on the June 2001
+  demo) with `backStageProcessMain`'s guard before every stage test, the Queen's stage (37)
+  without a Shadow row, no preset setting the row and the row on being what the hooks read;
+  skipped (77) without the image (`no_shadows_disc`, `no_shadows_disc_<disc>`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
   (`door_grace`).
 - `ico_rows_test.c`: Developer > Free movement and the Ask Yorda for a hint button
@@ -515,7 +528,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `poly_flat_test.c`: `IsPointIsInScreen`'s x bound is the 4:3 half width at every native width
   (`poly_flat`).
 - `shadow_spawn_test.c`: the depth a shadow rises from, read at the generator kind's word as the
-  PS2 reads it; with the disc, every generator row (`shadow_spawn`).
+  PS2 reads it; with the disc, every generator row; No Shadows on the four copies of the
+  generator (a settable `ico_no_shadows_drop` stub): no enemy called in 200 ticks, the requests
+  0, no pit-opening mail, `DirectCallEnemy` answering 0 with the row unchanged,
+  `Generator_QuickCall` mailing nothing, `UnlockEnemyGenerate` leaving the row's bits
+  (`shadow_spawn`).
 - `title_logo_test.c`: the logo's models and the hidden state's steps; the application icon's
   capture (`title_icon.c`) with the renderer and the icon files stubbed: the pass leaves
   out every model but `I` (`title_back`, `st26a_p1`, `C`, `I_f`, `I_sd`) and off leaves the old

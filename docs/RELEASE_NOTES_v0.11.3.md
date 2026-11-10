@@ -2,6 +2,8 @@
 
 (kept current after every merge; player words only)
 
+- No Shadows, a choice on a new journey's Customize page: no Shadow appears anywhere, and the story goes on as if you had won each fight, the cage room and the final hall included.
+
 
 ## Fixed
 
