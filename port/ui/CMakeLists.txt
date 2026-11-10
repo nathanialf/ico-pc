@@ -94,7 +94,7 @@ set(_ui_sources
 # whose typedef.h has unprototyped declarations the port warnings reject
 ico_include_dirs(common _ico_ui_game_incs)
 set_source_files_properties(layout_ext.c menu_font.c menu_text.c popup.c settings.c
-                            settings_states.c settings_step.c ui_list.c
+                            settings_newgame.c settings_states.c settings_step.c ui_list.c
                             ui_hint.c gallery.c photo_ui.c ui_mouse.c touch_ui.c ui_fps.c
                             touch_edit_ui.c subtitle_text.c PROPERTIES
                             COMPILE_OPTIONS "-Wno-strict-prototypes")
@@ -136,12 +136,13 @@ function(ico_ui_settings name)
     # the game variants rows' values, notes and per-disc rule (settings_variants.c)
     # the Upscaling rows: FSR 3.1 and its quality (settings_upscale.c)
     # held Left/Right on the value rows, L1/R1 on the colour rows (settings_step.c)
+    # the New Game screen (settings_newgame.c)
     # a community translation's subtitles as text (subtitle_text.c, jimaku.c's
     # hook, over port/game's tables: subtitles_ru_bobttz.c, subtitles_ru_cobra838.c,
     # subtitles_pt_br.c)
     target_sources(${name} PRIVATE settings.c settings_graphics.c settings_backup.c settings_desktop.c
                                    settings_states.c settings_unused.c settings_variants.c settings_upscale.c settings_step.c ui_list.c
-                                   ui_hint.c gallery.c photo_ui.c ui_mouse.c ui_mouse_geom.c
+                                   settings_newgame.c ui_hint.c gallery.c photo_ui.c ui_mouse.c ui_mouse_geom.c
                                    ui_lang.c touch_edit_ui.c subtitle_text.c
                                    "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_bobttz.c"
                                    "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_cobra838.c"
