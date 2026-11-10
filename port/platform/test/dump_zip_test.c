@@ -24,7 +24,9 @@
  * <stem>-present.png; the four found beside it and added to the bug-report
  * zip in their order, the zip under the cap; with a cap the second picture
  * would pass, the first alone added and the line naming the refusal; none
- * beside the picture (no upscaler) adds nothing.
+ * beside the picture (no upscaler) adds nothing; in a folder whose name is
+ * not ASCII ("José", UTF-8) the four are found (sized through
+ * ico_path_kind: a plain stat() missed them on Windows).
  * argv[1]: a folder the test may write in (the build folder).
  */
 #include <stdio.h>
@@ -47,7 +49,7 @@ static int fails;
 
 static int put(const char *path, const void *data, size_t n)
 {
-    FILE *f = fopen(path, "wb");
+    FILE *f = ico_fopen(path, "wb");
     const int ok = f != NULL && fwrite(data, 1, n, f) == n;
 
     if (f != NULL) {
@@ -446,6 +448,27 @@ static void test_upscale_pictures(const char *base)
         snprintf(path, sizeof(path), "%s%s", stem, ico_upscale_picture_suffix(i));
         remove(path);
     }
+
+    /* a user folder whose name is not ASCII: the four found by their sizes */
+    char dir[1200];
+
+    snprintf(dir, sizeof(dir), "%s/up-Jos\xc3\xa9", base);
+    ico_mkdir(dir);
+    snprintf(present, sizeof(present), "%s/up-present.png", dir);
+    CHECK(put(present, pic, sizeof(pic)) == 0);
+    CHECK(ico_upscale_pictures_stem(present, stem, sizeof(stem)) == 0);
+    for (int i = 0; i < ICO_UPSCALE_PICTURES; i++) {
+        snprintf(path, sizeof(path), "%s%s", stem, ico_upscale_picture_suffix(i));
+        CHECK(put(path, pic, sizeof(pic)) == 0);
+    }
+    CHECK(ico_upscale_pictures_zip(present, NULL, 0, 0, &added, line, sizeof(line)) == 4);
+    CHECK(strstr(line, "Jos\xc3\xa9") != NULL);
+    ico_remove(present);
+    for (int i = 0; i < ICO_UPSCALE_PICTURES; i++) {
+        snprintf(path, sizeof(path), "%s%s", stem, ico_upscale_picture_suffix(i));
+        ico_remove(path);
+    }
+    ico_rmdir(dir);
 }
 
 int main(int argc, char **argv)

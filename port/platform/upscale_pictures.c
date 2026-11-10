@@ -7,9 +7,9 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
 
 #include "dump_zip.h"
+#include "host_fs.h"
 
 static const char *const kSuffix[ICO_UPSCALE_PICTURES] = {"-scene.png", "-velocity.png",
                                                           "-depth.png", "-composite.png"};
@@ -36,14 +36,16 @@ int ico_upscale_pictures_stem(const char *present_png, char *out, size_t size)
     return 0;
 }
 
+/* through ico_path_kind (host_fs.c): a plain stat() takes the ANSI code page
+   on Windows, so a user folder such as C:\Users\José\ read as absent */
 static int file_size(const char *path, uint64_t *bytes)
 {
-    struct stat st;
+    unsigned long long size = 0;
 
-    if (stat(path, &st) != 0 || st.st_size <= 0) {
+    if (ico_path_kind(path, &size, NULL) != 0 || size == 0) {
         return -1;
     }
-    *bytes = (uint64_t)st.st_size;
+    *bytes = (uint64_t)size;
     return 0;
 }
 
