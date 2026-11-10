@@ -556,7 +556,7 @@ target_compile_definitions(difficulty_knock_test PRIVATE
     ICO_STAGEMANAGER_SRC="${CMAKE_SOURCE_DIR}/ico2/common/src/StageManager.c"
     ICO_HOST_LOOP_SRC="${CMAKE_SOURCE_DIR}/port/platform/host_loop.c"
     ICO_GAMESTATE_SRC="${CMAKE_SOURCE_DIR}/port/game/gamestate.c"
-    ICO_GAMESTATE_H="${CMAKE_SOURCE_DIR}/port/include/ico_gamestate.h")
+    ICO_GAMESTATE_HDR="${CMAKE_SOURCE_DIR}/port/include/ico_gamestate.h")
 target_compile_options(difficulty_knock_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS}
                        -iquote "${CMAKE_SOURCE_DIR}/port/ui")
 target_link_libraries(difficulty_knock_test PRIVATE ico_achievements ico_region)
