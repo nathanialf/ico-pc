@@ -850,7 +850,7 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     /* "Off: Ico swings straight ahead instead of turning toward the nearest Shadow; the swing’s reach is unchanged. Achievements stay on." */
     [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] = NULL,
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = NULL, /* "Shadows wait while Ico is down" */
-    /* "Off: the Shadows no longer hold back while Ico is knocked down, so they can hit him again before he is up. Achievements stay on." */
+    /* "Off: the Shadows no longer hold back while Ico is knocked down, and their swings land while he is on the ground and getting up. Achievements stay on." */
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] = NULL,
     [UI_STR_OPT_VAR_SWORD_COLOUR] = NULL, /* "Light sword colour" */
     /* "Red: the light sword leaves a red trail, as its unused twin in the game does; nothing else changes. From the next room." */
