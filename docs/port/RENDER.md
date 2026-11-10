@@ -51,6 +51,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_camera_blend.h` | the blended camera, shared with the game's cull |
 | `port/render/rd_perf.c` | the per-replay performance records |
 | `port/render/rd_perf_gap.h`, `rd_perf_gap.c` | the GPU's time between two timed replays, across untimed ones (pure) |
+| `port/render/rd_perf_clock.h`, `rd_perf_clock.c`, `rd_perf_clock.cmake` | a replay's GPU clock against the CPU's: its start after its submit, the wait's trace, unwritten stamps, the line (pure; [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-123-what-the-gpu-did-during-a-stall)) |
 | `port/render/rd_vis.c`, `rd_vis.h` | the scene draws' visibility test: a mesh, skinned or grid command wholly off its target or behind the eye replayed as an `RDC_NOP` of a shadow frame ([Culling](#culling)) |
 | `port/render/rd_vis_hiz.c` | its occlusion test (`[dev] cull = full`): a record of list 0's depth from the opaque draws' exact triangles, and a mesh or grid draw of list 0 wholly behind it replayed as an `RDC_NOP` ([Culling](#culling)) |
 | `port/render/rd_vis_hiz_fast.c` | what the occlusion test's collect keeps: the occluder triangles of a draw read as before (the collect cache) and a pending texture's alpha scan once a picture ([Culling](#culling)) |

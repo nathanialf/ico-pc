@@ -2125,6 +2125,21 @@ static bool vkr_create_device(void)
         if (g_vkr.checkpoints) {
             exts[extCount++] = VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME;
         }
+        {
+            /* calibrated timestamps where offered with the device's and the
+             * CPU's time domains (vk_tsclock.c: a stalled replay's stamps
+             * on the CPU's clock, issue 123) */
+            /* (both need VK_KHR_get_physical_device_properties2 or 1.1) */
+            const bool props2 = vkr_has_props2(g_vkr.phys);
+            const char *calib = vkr_tsclock_pick(
+                props2 &&
+                    vkr_device_has_ext(g_vkr.phys, VK_KHR_CALIBRATED_TIMESTAMPS_EXTENSION_NAME),
+                props2 &&
+                    vkr_device_has_ext(g_vkr.phys, VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME));
+            if (calib != NULL) {
+                exts[extCount++] = calib;
+            }
+        }
         /* what is on, and whether gpu_robust named it or it is the
            platform's default */
         char robustSay[160];
@@ -2680,6 +2695,7 @@ static bool vkr_create_device(void)
         g_vkr.timestamps = bits > 0 && g_vkr.props.limits.timestampPeriod > 0.0f;
         g_vkr.timestampPeriod = g_vkr.props.limits.timestampPeriod;
         g_vkr.timestampMask = bits >= 64 ? ~0ull : ((1ull << bits) - 1ull);
+        vkr_tsclock_init(bits); /* its line, and the calibrated clocks' entry point */
     }
     /* the VkRenderPass path (legacyPasses) records vkCmdBeginRenderPass and
      * leaves these NULL (vk_renderpass.c) */

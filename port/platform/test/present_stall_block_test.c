@@ -53,7 +53,7 @@ static double s_t = 1000.0; /* the CPU's clock of the next replay's start, ms */
 static void steady(StallBlock *b, unsigned n, double ms)
 {
     for (unsigned i = 0; i < n; i++) {
-        const StallBlockRec r = {1, 1.5, 1, ms, 1, 5.8, 0.0, s_t, 0.0};
+        const StallBlockRec r = {1, 1.5, 1, ms, 1, 5.8, 0.0, s_t, 0.0, 0, 0.0, 0};
 
         stall_block_add(b, &r);
         s_t += 33.4;
@@ -64,7 +64,7 @@ static void testQuietAndBlock(void)
 {
     StallBlock b;
     char line[1024];
-    const StallBlockRec untimed = {0, 0.0, 0, 0.0, 0, 0.0, 0.0, 0.0, 0.0};
+    const StallBlockRec untimed = {0, 0.0, 0, 0.0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0};
 
     stall_block_init(&b);
     steady(&b, 300, 27.5);
@@ -78,7 +78,7 @@ static void testQuietAndBlock(void)
     /* the stalled block of the issue 123 log */
     steady(&b, 299, 27.4);
     {
-        const StallBlockRec stall = {1, 340.4, 1, 87.1, 0, 0.0, 20699.4, s_t, 120.0};
+        const StallBlockRec stall = {1, 340.4, 1, 87.1, 0, 0.0, 20699.4, s_t, 120.0, 0, 0.0, 0};
 
         stall_block_add(&b, &stall);
         s_t += 33.4;
@@ -102,9 +102,9 @@ static void testQuietAndBlock(void)
        overlap; an untimed stall with no start time; a GPU clock read; 60 Hz */
     {
         const StallBlockClock clock = {40, 220, 680, 412.4};
-        StallBlockRec a = {1, 300.0, 1, 85.0, 1, 86.1, 0.0, 0.0, 60.0};
-        StallBlockRec o = {1, 260.0, 1, 30.0, 1, -3.5, 0.0, 0.0, 60.0};
-        const StallBlockRec n = {1, 255.0, 0, 0.0, 0, 0.0, 0.0, 0.0, 60.0};
+        StallBlockRec a = {1, 300.0, 1, 85.0, 1, 86.1, 0.0, 0.0, 60.0, 0, 0.0, 0};
+        StallBlockRec o = {1, 260.0, 1, 30.0, 1, -3.5, 0.0, 0.0, 60.0, 0, 0.0, 0};
+        const StallBlockRec n = {1, 255.0, 0, 0.0, 0, 0.0, 0.0, 0.0, 60.0, 0, 0.0, 0};
 
         steady(&b, 10, 30.0);
         steady(&b, 10, 34.0);
@@ -130,7 +130,8 @@ static void testQuietAndBlock(void)
     CHECK(stall_block_run_text(&b, line, sizeof line) > 0);
     CHECK_STR(line, "present stalls this run: 4 over 250 ms in 0.7 min (6.0 a minute); 1 with "
                     "the GPU clock restarted, 1 after a CPU-side gap of 80 ms or more (2 under, 1 "
-                    "not known), held past the GPU span 215-253 ms; by display rate: 120.00 Hz 1 "
+                    "not known), held past the GPU span 215-253 ms, 0 whose first list ran twice; "
+                    "by display rate: 120.00 Hz 1 "
                     "in 0.5 min (2.0 a minute), 60.00 Hz 3 in 0.2 min (18.0 a minute); by the "
                     "block's GPU span: 25-30 ms 1 in 0.5 min (2.0 a minute), 30-35 ms 3 in 0.2 "
                     "min (18.0 a minute)");
@@ -149,7 +150,7 @@ static void testListAndBand(void)
 {
     StallBlock b;
     char line[2048];
-    const StallBlockRec s = {1, 400.0, 0, 0.0, 0, 0.0, 0.0, 0.0, 0.0};
+    const StallBlockRec s = {1, 400.0, 0, 0.0, 0, 0.0, 0.0, 0.0, 0.0, 0, 0.0, 0};
 
     stall_block_init(&b);
     CHECK(stall_block_band(&b) == -1);
@@ -166,7 +167,8 @@ static void testListAndBand(void)
     CHECK(strstr(line, "display rate not known") != NULL);
     CHECK(stall_block_run_text(&b, line, sizeof line) > 0);
     CHECK(strstr(line, "0 with the GPU clock restarted, 0 after a CPU-side gap of 80 ms or more "
-                       "(0 under, 8 not known); by display rate: not known 8 in 0.2 min") != NULL);
+                       "(0 under, 8 not known), 0 whose first list ran twice; by display rate: "
+                       "not known 8 in 0.2 min") != NULL);
     CHECK(strstr(line, "by the block's GPU span: not timed 8 in 0.2 min") != NULL);
 
     steady(&b, 4, 27.4);
@@ -179,10 +181,37 @@ static void testListAndBand(void)
     CHECK(stall_block_band(&b) == STALL_BLOCK_BANDS - 1);
 }
 
+/* the GPU's start against the submit (FAULT123: RdPerfRecord.gpuLateMs,
+   calibrated or from the wait's end) and a first list that ran twice: in
+   the stall's entry and the run's line */
+static void testLateAndTwice(void)
+{
+    StallBlock b;
+    char line[2048];
+    const StallBlockRec cal = {1, 340.0, 1, 87.1, 0, 0.0, 26176.4, 0.0, 120.0, 1, 254.6, 1};
+    const StallBlockRec est = {1, 338.0, 1, 85.1, 0, 0.0, 14936.7, 0.0, 120.0, 2, 251.2, 0};
+
+    stall_block_init(&b);
+    steady(&b, 10, 27.4);
+    stall_block_add(&b, &cal);
+    stall_block_add(&b, &est);
+    CHECK(stall_block_end(&b, 10.0, 120.0, NULL, line, sizeof line) == 1);
+    CHECK(strstr(line, "GPU idle before it not measured (the GPU clock restarted), the GPU began "
+                       "it 254.6 ms after its submit, its first list ran twice (a reset and "
+                       "replay); 338 ms") != NULL);
+    CHECK(strstr(line, "the GPU began it about 251.2 ms after its submit); GPU clock restarts 2") !=
+          NULL);
+    CHECK(stall_block_run_text(&b, line, sizeof line) > 0);
+    CHECK(strstr(line, "held past the GPU span 253-253 ms, the GPU began the replay 251-255 ms "
+                       "after its submit (2 placed), 1 whose first list ran twice; by display "
+                       "rate") != NULL);
+}
+
 int main(void)
 {
     testQuietAndBlock();
     testListAndBand();
+    testLateAndTwice();
     printf("present_stall_block_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

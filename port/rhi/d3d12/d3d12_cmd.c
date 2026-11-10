@@ -248,6 +248,13 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
     return 0;
 }
 
+/* no slot clock here (rhi.h rhi_read_timestamp_clock: Vulkan's) */
+bool rhi_read_timestamp_clock(RhiTimestampClock *out)
+{
+    memset(out, 0, sizeof(*out));
+    return false;
+}
+
 /* ------------------------------------------------------- occlusion queries
  * Not supported here (rhi.h rhi_cmd_begin_occlusion: the replay tool's
  * measurement is Vulkan's); an occlusion query heap (D3D12_QUERY_HEAP_TYPE_OCCLUSION, BeginQuery/EndQuery of D3D12_QUERY_TYPE_OCCLUSION) resolved into the slot's readback buffer as the timestamps are would be the form. */

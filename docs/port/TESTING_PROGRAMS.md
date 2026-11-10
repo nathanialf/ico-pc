@@ -1171,7 +1171,9 @@ that stops again writing its own line without the retry mark); a stop at the fre
   the block after it still writes; a stall after an 818 ms CPU-side pause with a measured gap, an
   overlap, one with no start time, a GPU clock read; more stalls than the list holds; the band
   index; the run's line (restarts, CPU-side gaps against the 80 ms idle timeout, the held range,
-  by the stall's display rate and by band) word for word; a short buffer (`present_stall_block`).
+  by the stall's display rate and by band) word for word; a short buffer; the GPU's start against
+  the submit (calibrated, and "about" from the wait's end) and a first list that ran twice in the
+  stall's entry and the run's line (`present_stall_block`).
 - `gpu_sysfs_test.c`: the kernel GPU driver's nodes, the pure part (`gpu_sysfs.h`, issue 123): the nodes' texts parsed (`905000000`, `42 %`, leading blanks, a sign, empty, no digit first, a 4 KB text, a buffer read to its length only, digits past a long long's room), Hz to MHz rounded; the ring of 64 (70 samples, the oldest dropped); the 10 s block (the clock's range and mean, busy's mean, the resets in the block against the last before it and from the ring's start, the thermal level's highest, a temperature, only busy read, a steady clock, an empty block); around a present (the sample before, the ones during, the one after, samples exactly at its start and end, none before, none after, nothing read); the open line (the usual readable set, every node denied, the directory missing, nothing present, only the once nodes with errnos named), the block and around lines word for word, a short buffer cut; issue 179: the devfreq name rule and lines, the CPU clocks by class and around a present (`gpu_sysfs`).
 - `thermal_text_test.c`: the thermal and screen recording words (`thermal_text.h`, issue 123): the
   status name table (NONE 0 to SHUTDOWN 6, -1 and 7 UNKNOWN), the change line (`MODERATE (2) ->
@@ -1360,7 +1362,16 @@ The renderer's test programs have a page of their own:
   beforehand for 4 queries (`rhi_occlusion_prepare`, twice): the same counts, and a query past the
   4 dropped, not read); the adapter cell (`adapterCell`: `rhi_set_adapter_wanted` with a name no device
   has still starts, on the device a plain start picks, one `rhi_adapter_list` entry current and
-  automatic; the plain start's own name picks it again; NULL is automatic); the sync cell (`syncCell`) checks the fence ring under `ICO_VK_FAKE_API=1.1`
+  automatic; the plain start's own name picks it again; NULL is automatic); the clock cell
+  (`clockCell`, issue 123, `rhi_read_timestamp_clock`: a slot's second use with its first list
+  held on the host 150 ms by `vkr_test_hold_next_submit`, so the recycle's wait blocks: the trace
+  (on lavapipe one point after the work, the use's own; a driver whose query read does not wait,
+  the previous use's stale stamps first and the still stretch theirs), no second run, two
+  submissions and their times, both stamps, the calibrated pair after the wait with stamp 0 placed
+  after the release; on the fence path no hold, the rest checked); the range cell (`rangeCell`,
+  `port/rhi/vk/vk_range.c`: no indexed draw or copy of the cells before it past its resource, and
+  each check at the edge and one past it, 16- and 32-bit indices, buffer copies without wrap,
+  texture regions and mips, a copy's buffer rows, BC1 blocks); the sync cell (`syncCell`) checks the fence ring under `ICO_VK_FAKE_API=1.1`
   and `1.0`, and under `1.0` the device's version (1.0), the `VkRenderPass` path and the UINT
   views' usage structure (`VK_KHR_maintenance2`) (`rhi_vk_vk11`, `rhi_vk_vk10`); under `1.0bare` (a
   1.0 loader without `VK_KHR_get_physical_device_properties2`, review finding 5) the same, the device

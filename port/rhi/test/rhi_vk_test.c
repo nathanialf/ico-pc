@@ -17,7 +17,10 @@
  * VK_KHR_get_physical_device_properties2 is taken, the device without the
  * extended queries; review finding 5), and the [video] adapter rule
  * (adapterCell: a wanted name no device has still starts the device, the
- * same one a plain start picks, with one device marked current).
+ * same one a plain start picks, with one device marked current), and the
+ * recycled slot's clock (clockCell: rhi_read_timestamp_clock's submit
+ * times, stamps, calibrated pair and the trace of a blocked wait), and the
+ * range checks of the commands robust access does not cover (rangeCell).
  *
  * Exit 0 on success, 1 on a mismatch or a validation error, 77 (skipped)
  * when no Vulkan device can be created.  Set VK_ICD_FILENAMES to pick a
@@ -26,12 +29,15 @@
 #include "rhi_test_common.h"
 #include "rhi_test_spv.h"
 #include "vk/rhi_vk.h"
+#include "ico_thread.h"
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #ifdef _WIN32
+#include <windows.h>
 #include <direct.h>
 #define MKDIR(d) _mkdir(d)
 #else
@@ -1131,6 +1137,224 @@ static int syncCell(void)
     return failures + (int)rhi_vk_validation_error_count();
 }
 
+/* the CPU's clock as the backend reads it (vk_device.c vkr_now_ns) */
+static uint64_t clockNowNs(void)
+{
+#ifdef _WIN32
+    LARGE_INTEGER f, c;
+    QueryPerformanceFrequency(&f);
+    QueryPerformanceCounter(&c);
+    return (uint64_t)((double)c.QuadPart * 1e9 / (double)f.QuadPart);
+#else
+    struct timespec t;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    return (uint64_t)t.tv_sec * 1000000000ull + (uint64_t)t.tv_nsec;
+#endif
+}
+
+/* The recycled slot's clock (rhi.h rhi_read_timestamp_clock, vk_tsclock.c;
+ * issue 123).  Slot a's first use: stamps 0 and 1 around clears of a
+ * 1024x1024 target; slot b one light list; then slot a again, its first
+ * list (the slot's query reset and stamp 0) held on the host
+ * (vkr_test_hold_next_submit) and released by another thread 150 ms later,
+ * stamp 1 in a second list.  The recycle's wait for that use blocks while
+ * the GPU runs none of it, the slot's results still its first use's: the
+ * trace's first point holds both stamps, stale (the previous use's first
+ * value), and the longest still stretch is stale with both; nothing fell
+ * after the slot's own results came (no second run); the use's two
+ * submissions and their times before the wait, both stamps recorded and
+ * written in the end; with calibrated clocks (where offered: lavapipe's
+ * VK_EXT_calibrated_timestamps) the pair read after the wait and stamp 0
+ * placed after the release and before the wait's end.  On the fence path
+ * (ICO_VK_FAKE_API=1.1 and =1.0) there is no hold: the rest is checked. */
+static void clockList(uint32_t stampA, uint32_t stampB, RhiTexture heavy, uint32_t passes,
+                      RhiState *state, RhiCommandList *out)
+{
+    RhiCommandList cl = rhi_begin_commands();
+    if (stampA != UINT32_MAX) {
+        rhi_cmd_write_timestamp(cl, stampA);
+    }
+    for (uint32_t k = 0; k < passes; k++) {
+        RhiTextureBarrier pre = {heavy, *state, RHI_STATE_RENDER_TARGET};
+        rhi_cmd_barrier(cl, &pre, 1);
+        *state = RHI_STATE_RENDER_TARGET;
+        RhiRenderPassDesc rp = {0};
+        rp.color[0].texture = heavy;
+        rp.color[0].load = RHI_LOAD_CLEAR;
+        rp.color[0].clear[0] = (float)(k & 1u);
+        rp.color[0].clear[3] = 1.0f;
+        rp.colorCount = 1;
+        rp.width = rp.height = 1024;
+        rhi_cmd_begin_render_pass(cl, &rp);
+        rhi_cmd_end_render_pass(cl);
+    }
+    if (stampB != UINT32_MAX) {
+        rhi_cmd_write_timestamp(cl, stampB);
+    }
+    rhi_end_commands(cl);
+    *out = cl;
+}
+
+static void clockSleepMs(unsigned ms)
+{
+#ifdef _WIN32
+    Sleep(ms);
+#else
+    struct timespec t = {(time_t)(ms / 1000u), (long)(ms % 1000u) * 1000000L};
+    nanosleep(&t, NULL);
+#endif
+}
+
+static uint64_t s_releaseNs;
+
+static void clockRelease(void *arg)
+{
+    (void)arg;
+    clockSleepMs(150);
+    s_releaseNs = clockNowNs();
+    if (!vkr_test_release_hold()) {
+        rhi_test_log("FAIL clock cell: the hold not released\n");
+    }
+}
+
+static int clockCell(void)
+{
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test clock", NULL};
+    if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
+        rhi_test_log("FAIL clock cell: init\n");
+        return 1;
+    }
+    int failures = 0;
+#define CLK_CHECK(cond, ...)                                                                       \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            rhi_test_log("FAIL clock cell: " __VA_ARGS__);                                         \
+            failures++;                                                                            \
+        }                                                                                          \
+    } while (0)
+    if (!rhi_timestamps_supported()) {
+        rhi_test_log("clock cell: no timestamps on this device: skipped\n");
+        rhi_shutdown();
+        return 0;
+    }
+    RhiTexture heavy = rhi_create_texture(&(RhiTextureDesc){
+        1024, 1024, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_RENDER_TARGET, "clock heavy", 0});
+    CLK_CHECK(heavy.id != 0, "target\n");
+    RhiState state = RHI_STATE_UNDEFINED;
+    RhiTimestampClock c;
+    RhiCommandList l1, l2;
+    /* slot a, its first use */
+    rhi_wait_frame();
+    clockList(0, 1, heavy, 8, &state, &l1);
+    rhi_submit(l1);
+    /* slot b, no stamps: its recycle reads no query (on lavapipe a query
+       read waits for the queue, the held submission's included) */
+    rhi_wait_frame();
+    clockList(UINT32_MAX, UINT32_MAX, heavy, 1, &state, &l1);
+    rhi_submit(l1);
+    /* slot a again (its first use recycled): the clears before its reset */
+    rhi_wait_frame();
+    CLK_CHECK(rhi_read_timestamp_clock(&c) && c.submits == 1 && rhi_ts_has(c.available, 0) &&
+                  rhi_ts_has(c.available, 1),
+              "the first use: %u submissions, stamps %d %d\n", c.submits,
+              (int)rhi_ts_has(c.available, 0), (int)rhi_ts_has(c.available, 1));
+    clockList(0, UINT32_MAX, heavy, 2, &state, &l1); /* the slot's reset, stamp 0 */
+    clockList(UINT32_MAX, 1, heavy, 0, &state, &l2);
+    const uint64_t t0 = clockNowNs();
+    const bool held = vkr_test_hold_next_submit();
+    s_releaseNs = 0;
+    rhi_submit(l1);
+    rhi_submit(l2);
+    IcoThread *rel = held ? ico_thread_create(clockRelease, NULL) : NULL;
+    CLK_CHECK(!held || rel != NULL, "the release thread\n");
+    rhi_wait_frame(); /* slot b */
+    rhi_wait_frame(); /* slot a: the wait for its second use */
+    const uint64_t t1 = clockNowNs();
+    if (rel != NULL) {
+        ico_thread_join(rel);
+    }
+    vkr_test_hold_destroy();
+    CLK_CHECK(rhi_read_timestamp_clock(&c), "no clock\n");
+    const double waitMs = c.waitBeginNs ? (double)(c.waitEndNs - c.waitBeginNs) / 1e6 : 0.0;
+    rhi_test_log("clock cell: waited %.1f ms, %u trace points (%u more), first %u available "
+                 "stale %u, still %.1f ms (stale %d), again %d, calibrated %d (deviation %llu "
+                 "ns), %u valid bits\n",
+                 waitMs, c.traceN, c.traceMore, c.traceN ? (unsigned)c.trace[0].avail : 0u,
+                 c.traceN ? (unsigned)c.trace[0].stale : 0u, (double)c.stillUs / 1e3,
+                 (int)c.stillStale, (int)c.again, (int)c.calibrated,
+                 (unsigned long long)c.deviationNs, c.validBits);
+    CLK_CHECK(c.submits == 2 && c.firstSubmitNs >= t0 && c.lastSubmitNs >= c.firstSubmitNs &&
+                  c.lastSubmitNs <= t1,
+              "%u submissions (want 2), times %llu .. %llu outside %llu .. %llu\n", c.submits,
+              (unsigned long long)c.firstSubmitNs, (unsigned long long)c.lastSubmitNs,
+              (unsigned long long)t0, (unsigned long long)t1);
+    CLK_CHECK(rhi_ts_has(c.recorded, 0) && rhi_ts_has(c.recorded, 1) &&
+                  rhi_ts_has(c.available, 0) && rhi_ts_has(c.available, 1) && !c.again,
+              "stamps recorded %d %d written %d %d, again %d\n", (int)rhi_ts_has(c.recorded, 0),
+              (int)rhi_ts_has(c.recorded, 1), (int)rhi_ts_has(c.available, 0),
+              (int)rhi_ts_has(c.available, 1), (int)c.again);
+    uint64_t ts[2] = {0, 0};
+    CLK_CHECK(rhi_read_timestamps(ts, 2) == 2 && ts[1] >= ts[0], "stamps %llu %llu\n",
+              (unsigned long long)ts[0], (unsigned long long)ts[1]);
+    if (c.calibrated) {
+        /* stamp 0 after the release (the submit without a hold), and before
+           the pair (read after the wait) */
+        const double at0 = (double)c.cpuNs - (double)(c.gpuNs - ts[0]);
+        const double from = (double)(s_releaseNs ? s_releaseNs : c.firstSubmitNs) - 1e6;
+        CLK_CHECK(c.cpuNs <= t1 && c.gpuNs >= ts[1] &&
+                      (c.waitEndNs == 0 || c.cpuNs >= c.waitEndNs) && at0 >= from &&
+                      at0 <= (double)c.cpuNs + 1e6,
+                  "calibrated pair %llu / %llu, stamp 0 at %.0f outside %.0f .. the pair\n",
+                  (unsigned long long)c.gpuNs, (unsigned long long)c.cpuNs, at0, from);
+    }
+    CLK_CHECK(!held || waitMs >= 100.0, "a held wait of %.1f ms (the release after 150 ms)\n",
+              waitMs);
+    if (waitMs >= (double)RHI_TS_TRACE_AFTER_MS + 2.0 * RHI_TS_TRACE_STEP_MS) {
+        /* a read that does not wait (a phone's driver): the first point
+           before the release holds the first use's stamps, stale, and the
+           still stretch is theirs; lavapipe's read waits for the queue, so
+           its one point comes after the release, the use's own */
+        const bool early = c.traceN >= 1 && c.trace[0].atUs < 140000u;
+        CLK_CHECK(c.traceN >= 1 && c.trace[0].avail == 2 && c.trace[0].firstNs != 0 &&
+                      c.trace[0].atUs >= RHI_TS_TRACE_AFTER_MS * 1000u &&
+                      c.trace[0].stale == (early ? 1u : 0u),
+                  "trace %u points, the first %u available stale %u at %u us\n", c.traceN,
+                  c.traceN ? (unsigned)c.trace[0].avail : 0u,
+                  c.traceN ? (unsigned)c.trace[0].stale : 0u, c.traceN ? c.trace[0].atUs : 0u);
+        CLK_CHECK(!early || (c.stillUs > 0 && c.stillStale && c.stillAvail == 2),
+                  "still %u us with %u available, stale %d\n", c.stillUs, c.stillAvail,
+                  (int)c.stillStale);
+    } else {
+        rhi_test_log("clock cell: the wait did not pass %u ms: the trace not checked\n",
+                     (unsigned)RHI_TS_TRACE_AFTER_MS);
+    }
+    rhi_destroy_texture(heavy);
+#undef CLK_CHECK
+    rhi_wait_idle();
+    rhi_shutdown();
+    return failures + (int)rhi_vk_validation_error_count();
+}
+
+/* The commands robust access does not cover (vk_range.c, issue 123): no
+ * indexed draw or copy of the cells before this one reached past its
+ * resource (no line), and each check's cases at the edge and one past it
+ * (vkr_test_range_cases: 16- and 32-bit indices, buffer copies, texture
+ * regions and mips, a copy's buffer rows, BC1 blocks). */
+static int rangeCell(void)
+{
+    const uint32_t before = vkr_test_range_bad();
+    const uint32_t wrong = vkr_test_range_cases();
+    rhi_test_log("range cell: %u commands past their resource in the cells before, %u cases "
+                 "wrong\n",
+                 before, wrong);
+    if (before != 0 || wrong != 0) {
+        rhi_test_log("FAIL range cell: %u commands past their resource, %u cases wrong\n", before,
+                     wrong);
+        return 1;
+    }
+    return 0;
+}
+
 /* ICO_VK_FAKE_NO_D32F_ATTACHMENT (ctest rhi_vk_vk10_nod32f): the device is
  * still picked and RhiLimits.depth32Attachment is false; without the
  * variable lavapipe (D32F is an attachment there) reports true. */
@@ -1252,8 +1476,8 @@ int main(int argc, char **argv)
         return rc;
     }
     return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell() ||
-            poolCell() || renderAreaCell() || occlusionCell() || syncCell() || d32fCell() ||
-            adapterCell() || rhi_test_vertex_stores(&cfg) == 1 ||
+            poolCell() || renderAreaCell() || occlusionCell() || syncCell() || clockCell() ||
+            d32fCell() || rangeCell() || adapterCell() || rhi_test_vertex_stores(&cfg) == 1 ||
             rhi_test_compute_stores(&cfg) == 1)
                ? 1
                : 0;

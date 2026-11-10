@@ -98,6 +98,7 @@
 #define rhi_cmd_write_timestamp   RHI__NAME(cmd_write_timestamp)
 #define rhi_read_timestamps      RHI__NAME(read_timestamps)
 #define rhi_read_timestamps_busy RHI__NAME(read_timestamps_busy)
+#define rhi_read_timestamp_clock RHI__NAME(read_timestamp_clock)
 #define rhi_occlusion_supported RHI__NAME(occlusion_supported)
 #define rhi_occlusion_prepare   RHI__NAME(occlusion_prepare)
 #define rhi_cmd_begin_occlusion RHI__NAME(cmd_begin_occlusion)

@@ -1748,6 +1748,79 @@ uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max);
  * D3D12 and D3D11 return 0 (their lists are submitted whole). */
 uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max);
 
+/* The same slot's clock and what its GPU work did while the CPU waited for
+ * it (issue 123: presents that blocked about 340 ms on an Adreno while the
+ * GPU finished nothing and its timestamp counter restarted).  CPU times are
+ * the backend's monotonic clock in ns (Vulkan: CLOCK_MONOTONIC, the
+ * performance counter on Windows; the clock of rhi_gpu_progress), 0 when
+ * not known.
+ *   calibrated    gpuNs (the timestamps' clock, as rhi_read_timestamps
+ *                 gives it) and cpuNs were read together at the slot's
+ *                 recycle, within deviationNs (Vulkan
+ *                 VK_KHR/EXT_calibrated_timestamps): stamp t of the slot
+ *                 was written at cpuNs - (gpuNs - t) on the CPU's clock,
+ *                 unless the counter restarted between them;
+ *   submits, firstSubmitNs, lastSubmitNs: the slot's submissions and when
+ *                 the first and the last were made;
+ *   waitBeginNs, waitEndNs: the recycle's wait for the slot's last
+ *                 submission, when it blocked (0 and 0 when the work had
+ *                 finished already);
+ *   recorded, available: the indices the slot's lists recorded, and those
+ *                 whose results came back available (a recorded index not
+ *                 available after the wait: the GPU signalled the work
+ *                 finished without writing it);
+ *   trace, traceN: while the wait blocked past RHI_TS_TRACE_AFTER_MS, the
+ *                 slot's stamps polled every RHI_TS_TRACE_STEP_MS, one point
+ *                 at each change: when (us since waitBeginNs), how many of
+ *                 the recorded indices were available and which, the value
+ *                 of the lowest recorded index then (0 not available),
+ *                 whether those results were still the slot's previous use
+ *                 (stale: its reset had not run yet), and how far the
+ *                 slot's submissions had finished (0 none, 1 some, 2 all);
+ *                 traceMore counts the changes past RHI_TS_TRACE_MAX (the
+ *                 last point is then the latest change);
+ *   again         during the wait the available count fell after the
+ *                 slot's own results had begun to come: its queries were
+ *                 reset a second time, so the slot's first list ran again
+ *                 (a driver's reset and replay of the work in flight);
+ *   againAtUs, againFrom: when the first such fall was seen (us since
+ *                 waitBeginNs) and the available count before it;
+ *   stillUs, stillFromUs, stillAvail, stillStale: the longest stretch of the
+ *                 wait in which the poll saw nothing change, from when, how
+ *                 many stamps were available through it and whether they
+ *                 were the previous use's (the GPU had not begun the slot);
+ *   validBits     the queue's timestampValidBits.
+ * False (and *out zeroed) where the backend keeps none of it (OpenGL,
+ * Direct3D 11 and 12) or timestamps are off. */
+#define RHI_TS_TRACE_MAX 24
+#define RHI_TS_TRACE_AFTER_MS 50u
+#define RHI_TS_TRACE_STEP_MS 4u
+
+typedef struct RhiTsTracePoint {
+    uint32_t atUs;
+    uint16_t avail;
+    uint8_t stale, finished;
+    uint64_t firstNs;
+    uint32_t bits[RHI_TIMESTAMP_WORDS];
+} RhiTsTracePoint;
+
+typedef struct RhiTimestampClock {
+    bool calibrated, again;
+    uint32_t validBits;
+    uint64_t gpuNs, cpuNs, deviationNs;
+    uint32_t submits;
+    uint64_t firstSubmitNs, lastSubmitNs;
+    uint64_t waitBeginNs, waitEndNs;
+    uint32_t recorded[RHI_TIMESTAMP_WORDS], available[RHI_TIMESTAMP_WORDS];
+    uint32_t againAtUs, againFrom;
+    uint32_t stillUs, stillFromUs, stillAvail;
+    bool stillStale;
+    uint32_t traceN, traceMore;
+    RhiTsTracePoint trace[RHI_TS_TRACE_MAX];
+} RhiTimestampClock;
+
+bool rhi_read_timestamp_clock(RhiTimestampClock *out);
+
 /* Occlusion queries (the replay tool's hidden-draw measurement,
  * port/render/rd_occlusion.c).  Each frame slot has RHI_MAX_OCCLUSION of
  * them, apart from the timestamps; rhi_cmd_begin_occlusion(cl, i) and

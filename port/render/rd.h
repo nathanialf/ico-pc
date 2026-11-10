@@ -3054,6 +3054,16 @@ typedef struct RdPerfRecord {
      * one (rd_perf_gap.h rd_perf_gap_step_ex): by this many ns (0: it did
      * not); gpuGapValid is 0 then */
     uint64_t gpuGapBackNs;
+    /* the slot's clock (rd_perf_clock.h, issue 123): the replay's first
+     * stamp after its first submit on the CPU's clock, ms (gpuLateValid 1
+     * from the calibrated clocks, 2 estimated from its wait's end, 0 not
+     * known); gpuRanTwice 1 when its queries were reset again while the CPU
+     * waited for it (its first list ran a second time: a driver's reset and
+     * replay); gpuStampsMissing its recorded stamps that came back unwritten
+     * after its work was signalled finished */
+    double gpuLateMs;
+    uint8_t gpuLateValid, gpuRanTwice;
+    uint16_t gpuStampsMissing;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
