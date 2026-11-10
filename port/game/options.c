@@ -1,7 +1,10 @@
 /*
  * port/game/options.c
  *
- * The port's gameplay options (options.h).
+ * The port's gameplay options (options.h).  Five of them (yorda_safe,
+ * pit_time, shadow_speed, yorda_trips, shadows_together) are rows of the
+ * journey's difficulty record (difficulty.h): their accessors keep their
+ * names and read the active record; their setters edit it.
  */
 #include "options.h"
 
@@ -11,6 +14,7 @@
 
 #include "appearance.h"
 #include "config.h"
+#include "difficulty.h"
 #include "ico_rows.h"
 #include "pit_time.h"
 #include "region.h" /* port/core: the per-disc keys (ico_region_key_prefixed) */
@@ -21,10 +25,7 @@ int ico_mv_active;
 
 /* -1: not read yet; 0 or 1 */
 static int s_stick_fix = -1;
-static int s_yorda_safe = -1;
 static int s_door_fix = -1;
-static int s_yorda_trips = -1;
-static int s_shadows_together = -1;
 static unsigned long s_shadows_together_went; /* the turns the option skipped, this run */
 static int s_natural_chains = -1;
 static int s_skip_opening = -1;
@@ -78,16 +79,17 @@ void ico_opt_set_stick_fix(int on)
 
 int ico_opt_yorda_safe(void)
 {
-    return get(&s_yorda_safe, "gameplay.yorda_safe");
+    return ico_difficulty_row(ICO_DIFF_YORDA_SAFE);
 }
 
 void ico_opt_set_yorda_safe(int on)
 {
-    s_yorda_safe = on != 0;
+    ico_difficulty_set_row(ICO_DIFF_YORDA_SAFE, on != 0);
 }
 
-/* [gameplay] pit_time (options.h): -1 not read yet, else ICO_PIT_ORIGINAL or the seconds */
-static int s_pit_time = -1;
+/* the pit time last logged (-1: none yet): the line comes at the first read
+   and on every change of the journey's row */
+static int s_pit_logged = -1;
 
 /* the ticks a second the pull-in's length is counted in (pit_time.h) */
 #define PIT_TICK_HZ ICO_PIT_TICK_HZ
@@ -183,26 +185,18 @@ static void log_pit_time(int v)
 
 int ico_opt_pit_time(void)
 {
-    if (s_pit_time < 0) {
-        const char *v = ico_config_get_string("gameplay.pit_time", "original");
-        int note = 0;
+    int v = ico_difficulty_row(ICO_DIFF_PIT_TIME);
 
-        s_pit_time = ico_opt_pit_parse(v, ico_opt_pit_chain_ticks(), &note);
-        const int secs = s_pit_time != ICO_PIT_ORIGINAL ? s_pit_time : ico_opt_pit_base_seconds();
-
-        if (note == 2) {
-            fprintf(stderr,
-                    "options: [gameplay] pit_time = \"%s\" is past %d seconds: held to %d s\n", v,
-                    ICO_PIT_MAX_SECONDS, secs);
-        } else if (note) {
-            fprintf(stderr,
-                    "options: [gameplay] pit_time = \"%s\" is not \"original\" or %d to %d "
-                    "seconds: read as %d s\n",
-                    v, ICO_PIT_MIN_SECONDS, ICO_PIT_MAX_SECONDS, secs);
-        }
-        log_pit_time(s_pit_time);
+    /* the disc's own seconds read as Original (a record made on a disc whose
+       base is another) */
+    if (v != ICO_PIT_ORIGINAL) {
+        v = pit_hold(v, ico_opt_pit_chain_ticks(), NULL);
     }
-    return s_pit_time;
+    if (v != s_pit_logged) {
+        s_pit_logged = v;
+        log_pit_time(v);
+    }
+    return v;
 }
 
 void ico_opt_set_pit_time(int seconds)
@@ -210,10 +204,8 @@ void ico_opt_set_pit_time(int seconds)
     const int v = seconds == ICO_PIT_ORIGINAL ? ICO_PIT_ORIGINAL
                                               : pit_hold(seconds, ico_opt_pit_chain_ticks(), NULL);
 
-    if (v != s_pit_time) {
-        s_pit_time = v;
-        log_pit_time(v);
-    }
+    ico_difficulty_set_row(ICO_DIFF_PIT_TIME, v);
+    (void)ico_opt_pit_time(); /* its line on a change */
 }
 
 int ico_opt_pit_seconds(void)
@@ -237,8 +229,8 @@ float ico_opt_pit_dive_ratio(int camera)
     return (camera != 0 ? 2.0f : 1.0f) / ico_opt_pit_time_factor();
 }
 
-/* [gameplay] shadow_speed (options.h): -1 not read yet, else ICO_SPEED_* */
-static int s_shadow_speed = -1;
+/* the shadow speed last logged (-1: none yet) */
+static int s_speed_logged = -1;
 static const char *const kSpeedNames[ICO_SPEED_COUNT] = {"slower", "original", "faster", "fastest"};
 static const float kSpeedFactors[ICO_SPEED_COUNT] = {0.75f, 1.0f, 1.25f, 1.5f};
 
@@ -250,35 +242,21 @@ static void log_shadow_speed(int v)
 
 int ico_opt_shadow_speed(void)
 {
-    if (s_shadow_speed < 0) {
-        const char *v = ico_config_get_string("gameplay.shadow_speed", "original");
-        int i;
+    int v = ico_difficulty_row(ICO_DIFF_SHADOW_SPEED);
 
-        s_shadow_speed = ICO_SPEED_ORIGINAL;
-        for (i = 0; v != NULL && i < ICO_SPEED_COUNT; i++) {
-            if (strcmp(v, kSpeedNames[i]) == 0) {
-                s_shadow_speed = i;
-                break;
-            }
-        }
-        if (v != NULL && i == ICO_SPEED_COUNT) {
-            fprintf(stderr,
-                    "options: [gameplay] shadow_speed = \"%s\" is not one of slower, original, "
-                    "faster, fastest\n",
-                    v);
-        }
-        log_shadow_speed(s_shadow_speed);
+    v = v >= 0 && v < ICO_SPEED_COUNT ? v : ICO_SPEED_ORIGINAL;
+    if (v != s_speed_logged) {
+        s_speed_logged = v;
+        log_shadow_speed(v);
     }
-    return s_shadow_speed;
+    return v;
 }
 
 void ico_opt_set_shadow_speed(int v)
 {
     v = v >= 0 && v < ICO_SPEED_COUNT ? v : ICO_SPEED_ORIGINAL;
-    if (v != s_shadow_speed) {
-        log_shadow_speed(v);
-    }
-    s_shadow_speed = v;
+    ico_difficulty_set_row(ICO_DIFF_SHADOW_SPEED, v);
+    (void)ico_opt_shadow_speed(); /* its line on a change */
 }
 
 float ico_opt_shadow_speed_factor(void)
@@ -338,21 +316,25 @@ void ico_opt_set_door_fix(int on)
     s_door_fix = on != 0;
 }
 
+/* Yorda trips and Shadows attack together last logged (-1: none yet) */
+static int s_trips_logged = -1;
+static int s_together_logged = -1;
+
 int ico_opt_yorda_trips(void)
 {
-    if (s_yorda_trips < 0) {
-        s_yorda_trips = ico_config_get_bool("gameplay.yorda_trips", 0) != 0;
-        fprintf(stderr, "gameplay: yorda trips %s\n", s_yorda_trips ? "on" : "off");
+    const int on = ico_difficulty_row(ICO_DIFF_YORDA_TRIPS) != 0;
+
+    if (on != s_trips_logged) {
+        s_trips_logged = on;
+        fprintf(stderr, "gameplay: yorda trips %s\n", on ? "on" : "off");
     }
-    return s_yorda_trips;
+    return on;
 }
 
 void ico_opt_set_yorda_trips(int on)
 {
-    if ((on != 0) != s_yorda_trips) {
-        fprintf(stderr, "gameplay: yorda trips %s\n", on ? "on" : "off");
-    }
-    s_yorda_trips = on != 0;
+    ico_difficulty_set_row(ICO_DIFF_YORDA_TRIPS, on != 0);
+    (void)ico_opt_yorda_trips(); /* its line on a change */
 }
 
 static void log_shadows_together(int on)
@@ -366,19 +348,19 @@ static void log_shadows_together(int on)
 
 int ico_opt_shadows_together(void)
 {
-    if (s_shadows_together < 0) {
-        s_shadows_together = ico_config_get_bool("gameplay.shadows_together", 0) != 0;
-        log_shadows_together(s_shadows_together);
+    const int on = ico_difficulty_row(ICO_DIFF_SHADOWS_TOGETHER) != 0;
+
+    if (on != s_together_logged) {
+        s_together_logged = on;
+        log_shadows_together(on);
     }
-    return s_shadows_together;
+    return on;
 }
 
 void ico_opt_set_shadows_together(int on)
 {
-    if ((on != 0) != s_shadows_together) {
-        log_shadows_together(on != 0);
-    }
-    s_shadows_together = on != 0;
+    ico_difficulty_set_row(ICO_DIFF_SHADOWS_TOGETHER, on != 0);
+    (void)ico_opt_shadows_together(); /* its line on a change */
 }
 
 int ico_opt_shadow_waits(int other_attacking)
@@ -472,6 +454,8 @@ void ico_opt_set_mirror(int on)
 void ico_opt_mirror_reset(void)
 {
     ico_opt_set_mirror(ico_config_get_bool("gameplay.mirror", 0) != 0);
+    /* the title belongs to no journey: Normal (difficulty.h) */
+    ico_difficulty_reset();
 }
 
 void ico_opt_set_mirror_listener(void (*fn)(int on))
@@ -875,10 +859,10 @@ void ico_opt_hold_type_toggled(int type)
 
 void ico_opt_reload(void)
 {
-    s_stick_fix = s_yorda_safe = s_door_fix = s_mirror = s_developer_mode = s_circle_back = -1;
-    s_pit_time = s_shadow_speed = -1;
-    s_natural_chains = s_skip_opening = s_yorda_trips = s_second_card = -1;
-    s_shadows_together = -1;
+    /* the difficulty rows (yorda_safe, pit_time, shadow_speed, yorda_trips,
+       shadows_together) are the journey's, not the config's: kept */
+    s_stick_fix = s_door_fix = s_mirror = s_developer_mode = s_circle_back = -1;
+    s_natural_chains = s_skip_opening = s_second_card = -1;
     ico_rows_reload();
     s_output = -2;
     s_ui_language = -2;

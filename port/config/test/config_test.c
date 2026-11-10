@@ -333,6 +333,22 @@ static void test_save(void)
     CHECK(text != NULL && strstr(text, "classic_menu_text = true\n") != NULL &&
           strstr(text, "port_font = \"arimo\"\n") != NULL);
     free(text);
+    /* the fifteen gameplay keys retired in v0.11.3 (each save's difficulty
+       record holds them, port/game/difficulty.h): still read (a save's
+       one-time carry-over), kept by a save, the file never rewritten */
+    write_file(toml, "version = 1\n[gameplay]\nyorda_safe = true\npit_time = 8\n"
+                     "[variants]\none_hit = true\naggression = \"bold_quick\"\n");
+    ico_config_reset(toml, "no-such.ini");
+    CHECK(ico_config_get_bool("gameplay.yorda_safe", 0) == 1);
+    CHECK(ico_config_get_int("gameplay.pit_time", 0) == 8);
+    CHECK_STR(ico_config_get_string("variants.aggression", "?"), "bold_quick");
+    ico_config_set_string("game.language", "de");
+    CHECK(ico_config_save() == 0);
+    text = read_file(toml);
+    CHECK(text != NULL && strstr(text, "yorda_safe = true\n") != NULL &&
+          strstr(text, "pit_time = 8\n") != NULL && strstr(text, "one_hit = true\n") != NULL &&
+          strstr(text, "aggression = \"bold_quick\"\n") != NULL);
+    free(text);
     /* a failed save leaves the old file alone */
     {
         char *a = read_file(toml);
@@ -508,46 +524,44 @@ static void test_first_run(void)
     CHECK(text != NULL && strstr(text, "second_memory_card = false") != NULL);
     CHECK_STR(ico_config_get_string("gameplay.hold_type", "?"), "disc"); /* the disc's own */
     CHECK(text != NULL && strstr(text, "hold_type = \"disc\"") != NULL);
-    CHECK_STR(ico_config_get_string("gameplay.pit_time", "?"), "original");
-    CHECK(text != NULL && strstr(text, "pit_time = \"original\"") != NULL);
-    CHECK_STR(ico_config_get_string("gameplay.shadow_speed", "?"), "original");
-    CHECK(text != NULL && strstr(text, "shadow_speed = \"original\"") != NULL);
-    /* Shadows attack together, off: they take turns, as the original */
-    CHECK(ico_config_get_bool("gameplay.shadows_together", 1) == 0);
-    CHECK(text != NULL && strstr(text, "shadows_together = false") != NULL);
+    /* the difficulty rows are each save's (port/game/difficulty.h): the first
+       run writes none of their retired keys */
+    CHECK(ico_config_get_string("gameplay.pit_time", NULL) == NULL);
+    CHECK(ico_config_get_string("gameplay.shadow_speed", NULL) == NULL);
+    CHECK(ico_config_get_string("gameplay.shadows_together", NULL) == NULL);
+    CHECK(ico_config_get_string("gameplay.yorda_trips", NULL) == NULL);
+    CHECK(ico_config_get_string("gameplay.yorda_safe", NULL) == NULL);
+    CHECK(text != NULL && strstr(text, "pit_time") == NULL &&
+          strstr(text, "shadow_speed") == NULL && strstr(text, "shadows_together") == NULL &&
+          strstr(text, "yorda_trips") == NULL && strstr(text, "yorda_safe") == NULL);
     CHECK(ico_config_get_string("gameplay.hold_type_chosen", NULL) == NULL); /* not chosen */
-    /* the game variants: every line the game as shipped; the barrier's
-       number is left out (the disc's own) */
-    CHECK_STR(ico_config_get_string("variants.shade_toughness", "?"), "original");
-    CHECK(ico_config_get_bool("variants.one_hit", 1) == 0);
-    CHECK(ico_config_get_bool("variants.never_dodge", 1) == 0);
-    CHECK_STR(ico_config_get_string("variants.aggression", "?"), "own");
-    CHECK(ico_config_get_bool("variants.no_hints", 1) == 0);
-    CHECK(ico_config_get_string("variants.barrier_hits", NULL) == NULL);
+    /* the game variants that stay in config: every line the game as shipped;
+       the ten that are difficulty rows are not written */
     CHECK(ico_config_get_bool("variants.no_cutscene_look", 1) == 0);
     CHECK(ico_config_get_bool("variants.ignore_cutscene_cameras", 1) == 0);
-    /* the Combat rows: on, the game as shipped */
-    CHECK(ico_config_get_bool("variants.auto_guard", 0) == 1);
-    CHECK(ico_config_get_bool("variants.attack_turn", 0) == 1);
-    CHECK(ico_config_get_bool("variants.shadows_wait_down", 0) == 1);
-    CHECK(ico_config_get_bool("variants.peaceful_shadows", 1) == 0);
-    CHECK(text != NULL && strstr(text, "peaceful_shadows = false") != NULL);
+    {
+        static const char *const kGone[] = {
+            "variants.shade_toughness", "variants.one_hit",     "variants.never_dodge",
+            "variants.aggression",      "variants.no_hints",    "variants.barrier_hits",
+            "variants.auto_guard",      "variants.attack_turn", "variants.shadows_wait_down",
+            "variants.peaceful_shadows"};
+        for (size_t i = 0; i < sizeof(kGone) / sizeof(kGone[0]); i++) {
+            CHECK(ico_config_get_string(kGone[i], NULL) == NULL);
+            CHECK(text != NULL && strstr(text, strchr(kGone[i], '.') + 1) == NULL);
+        }
+    }
     /* the chain rows: the game's own 4 and 4 */
     CHECK(ico_config_get_int("variants.chain_swing_speed", 0) == 4);
     CHECK(ico_config_get_int("variants.chain_swing_damping", 0) == 4);
     CHECK(text != NULL && strstr(text, "chain_swing_speed = 4") != NULL &&
           strstr(text, "chain_swing_damping = 4") != NULL);
-    CHECK(text != NULL && strstr(text, "auto_guard = true") != NULL &&
-          strstr(text, "attack_turn = true") != NULL &&
-          strstr(text, "shadows_wait_down = true") != NULL);
     /* the weapon rows: Original, the game as shipped */
     CHECK_STR(ico_config_get_string("variants.sword_colour", "?"), "original");
     CHECK_STR(ico_config_get_string("variants.weapon", "?"), "original");
     CHECK(text != NULL && strstr(text, "sword_colour = \"original\"") != NULL &&
           strstr(text, "weapon = \"original\"") != NULL);
     CHECK(text != NULL && strstr(text, "\n[variants]\n") != NULL &&
-          strstr(text, "shade_toughness = \"original\"") != NULL &&
-          strstr(text, "aggression = \"own\"") != NULL && strstr(text, "\nbarrier_hits") == NULL);
+          strstr(text, "no_cutscene_look = false") != NULL);
     /* Developer > Free movement, off */
     CHECK(ico_config_get_bool("developer.free_movement", 1) == 0);
     CHECK(text != NULL && strstr(text, "\n[developer]\n") != NULL &&

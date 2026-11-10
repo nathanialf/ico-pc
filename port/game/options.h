@@ -10,19 +10,27 @@
  * time. Every default is the original game's behaviour, except
  * circle_back (default-on port behaviour).
  *
+ * Five options are rows of the journey's difficulty record (difficulty.h),
+ * chosen per save on the New Game screen, not config keys: Shadows never
+ * take Yorda (yorda_safe), Time to rescue Yorda (pit_time), Shadow speed
+ * (shadow_speed), Yorda trips (yorda_trips) and Shadows attack together
+ * (shadows_together).  Their accessors below read the active record and
+ * their setters edit it; their old [gameplay] keys are retired (read once
+ * more only by a save's carry-over, ico_difficulty_from_config).
+ *
  *   [gameplay] stick_fix   false  the stick fix (off on every platform)
- *   [gameplay] yorda_safe  false  the shadows never take Yorda
- *   [gameplay] pit_time    "original"  the time a shadow takes to pull Yorda
+ *   (row)      yorda_safe  off    the shadows never take Yorda
+ *   (row)      pit_time    original  the time a shadow takes to pull Yorda
  *                                 into a pit (4..30 seconds)
- *   [gameplay] shadow_speed "original"  how fast shadows walk, run and fly
+ *   (row)      shadow_speed original  how fast shadows walk, run and fly
  *                                 (slower..fastest)
- *   [gameplay] shadows_together
- *                          false  no turns: a shadow attacks while another
+ *   (row)      shadows_together
+ *                          off    no turns: a shadow attacks while another
  *                                 does (enemy_act.c EnemyUtil_isOtherStatus)
  *   [gameplay] door_fix    false  holding hands, an arrival does not send
  *                                 Ico and Yorda straight back through the
  *                                 door they came in by (door_grace.h)
- *   [gameplay] yorda_trips false  after 3 s of Ico running pulling her by
+ *   (row)      yorda_trips off    after 3 s of Ico running pulling her by
  *                                 the hand Yorda trips and falls, the main
  *                                 gate's second stage's fall and rule
  *                                 (yorda_trip.h)
@@ -97,7 +105,7 @@ int ico_opt_stick_fix_default_for(int android);
 int ico_opt_stick_fix_default(void);
 int ico_opt_yorda_safe(void);
 void ico_opt_set_yorda_safe(int on);
-/* [gameplay] pit_time (default "original"): how long a shadow takes to pull
+/* Time to rescue Yorda (the record's pit_time row, default Original): how long a shadow takes to pull
    Yorda into a pit, in whole seconds ICO_PIT_MIN_SECONDS..ICO_PIT_MAX_SECONDS
    (an integer in the file), or "original" (the disc's own time).  The pull-in
    is the five SINK motions A to E the shadow plays one after the other
@@ -110,7 +118,7 @@ void ico_opt_set_yorda_safe(int on);
    words of the earlier versions still read: half, longer, double, triple are
    1/2, 1.5, 2 and 3 times the disc's own time in whole seconds, held to the
    range.  Logs "gameplay: pit time <value> (...)" with the disc's length and
-   the factor at load and on change. */
+   the factor at the first read and on change. */
 #define ICO_PIT_ORIGINAL 0
 #define ICO_PIT_MIN_SECONDS 4
 #define ICO_PIT_MAX_SECONDS 30
@@ -138,7 +146,7 @@ float ico_opt_pit_time_factor(void);
    under a stage camera effect (the game's own 2x; the game's 5 s timeout there
    is scaled by the factor too) */
 float ico_opt_pit_dive_ratio(int camera);
-/* [gameplay] shadow_speed (default "original"): how fast shadows walk, run and fly.
+/* Shadow speed (the record's shadow_speed row, default Original): how fast shadows walk, run and fly.
    The names are slower, original, faster, fastest (ICO_SPEED_*); the factors 0.75, 1,
    1.25, 1.5.  Walking and running scale by the play speed of the shadow's motion
    (ico2/fumi/src/act-game.c ACTGame_SetMotionPlaySpeedRatio_Exec), flying by the forward
@@ -146,7 +154,8 @@ float ico_opt_pit_dive_ratio(int camera);
    factor (ico_opt_shadow_speed_motion): attacks, grabs, hits, the dissolve, the pit dive
    (pit_time owns it) keep the game's play speed, so the AI's tick-counted
    waits stay in step with them (review finding 15); not a frozen shadow, not how often
-   they attack.  Logs "gameplay: shadow speed <name> (x<factor>)" at load and on change. */
+   they attack.  Logs "gameplay: shadow speed <name> (x<factor>)" at the first read and on
+   change. */
 #define ICO_SPEED_SLOWER 0
 #define ICO_SPEED_ORIGINAL 1
 #define ICO_SPEED_FASTER 2
@@ -170,7 +179,7 @@ float ico_opt_shadow_turn_limit(int kind, int motion, float s);
    North American: 790, 792, 795-800, 888, 889; August 2001: 792, 794, 797-802, 890, 891;
    June 2001: 823, 825, 828-833, 923, 924, 942, 944, 955. */
 int ico_opt_shadow_speed_motion(int motion);
-/* [gameplay] shadows_together (default false): Shadows attack together.  The game
+/* Shadows attack together (the record's shadows_together row, default Off).  The game
    holds a Shadow back from its attack while another Shadow is in its attack (act mode
    15) or has its attack mail out (ico2/fumi/src/enemy_act.c EnemyUtil_isOtherStatus:
    the change to the ATTACK brain, the ATTACK brain's mails, the swipe on the way to
@@ -192,7 +201,7 @@ unsigned long ico_opt_shadows_together_went(void);
 /* [gameplay] door_fix (default false): the doorway fix of door_grace.h */
 int ico_opt_door_fix(void);
 void ico_opt_set_door_fix(int on);
-/* [gameplay] yorda_trips (default false): Yorda trips (yorda_trip.h).  Logs
+/* Yorda trips (the record's yorda_trips row, default Off; yorda_trip.h).  Logs
    "gameplay: yorda trips on|off" at its first read and on a change; the stage
    load adds her motions from the next stage on. */
 int ico_opt_yorda_trips(void);
@@ -228,7 +237,8 @@ void ico_opt_set_mirror(int on);
    renderer's rd_set_mirror).  NULL unregisters.  One listener. */
 void ico_opt_set_mirror_listener(void (*fn)(int on));
 /* The title (layout_action.c, ICO_HOST): no run is in progress, so the
-   value goes back to [gameplay] mirror (default false). */
+   value goes back to [gameplay] mirror (default false), and the journey's
+   difficulty to Normal (ico_difficulty_reset). */
 void ico_opt_mirror_reset(void);
 
 /* The mirror flag of each save slot, kept in config.toml, never in the card
@@ -397,7 +407,8 @@ int ico_opt_hold_choice_store(void);
    the type, writes the key and saves config.toml at once. */
 void ico_opt_hold_type_toggled(int type);
 /* Forget the run-time values: each option is read from the config again on
-   its next use (and the characters' colours, appearance.h). */
+   its next use (and the characters' colours, appearance.h).  The difficulty
+   rows are the journey's and are kept. */
 void ico_opt_reload(void);
 
 #endif /* ICO_PORT_GAME_OPTIONS_H */
