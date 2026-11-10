@@ -45,6 +45,41 @@ the weapon, not the difficulty (Stick: Insect net removes the stick's damage, so
 | Time to rescue Yorda (`pit_time`) | 15 s (462 ticks; 463 on jun26) | 4 s (a shorter pull-in) | all | stay on | the five SINK motions' play speed, `port/game/pit_time.h` and `ico_opt_pit_time_factor` |
 | Chain swing speed / slowdown | 4 / 4 | not a difficulty lever (traversal feel) | all | stay on | `chain.c`, `debug_chain_cycle_speed`, `debug_chain_slow_speed` |
 
+## The knock-down limit
+
+A lever the game does not have: a game over when Ico is knocked down N times (Rules > Knock-down limit,
+Off or 1 to 9; Knock-downs count: each room, or the whole journey). Hard sets 3 in each room. It is a row
+of the journey's difficulty record (`port/game/difficulty.h`, `knock_limit`, `knock_scope`), not a
+config key; achievements stay on.
+
+| part | what it does | where |
+| --- | --- | --- |
+| the hook | each copy of `actCommonDown` (European body, `_ntsc`, `_aug6`, `_jun26`) calls `ico_gs_knockdown(is_boy, landing, by_hit, down_timer, intr_kind)` at its entry, after its after-proc is set | `ico2/fumi/src/commonact.c`; `port/game/gamestate.c` |
+| what counts | the boy's fall when a hit put him down (`Act.attacker` set: `AttackMail`, `ico2/omori/src/attackhit.c`, sets it with the hit's mail 13; `ACTGame_BeforeFunc` clears it while he stands). Not counted: the same fall (the in-fall latch, or the get-up timer `downTimer` still running), the landing of a fall the down act began (the European body's mails 55 and 56, which also skip its `DownFunc`), a fall without a hit (CLIFF_HESITATE's mail into the act when he loses his balance at a ledge, `boyact.c`; the motion-driven down mails of `act-game.c`), Yorda's and the Shadows' falls (the act runs for all three actor kinds) | `ico_gs_knockdown`, `ico_difficulty_knockdown` |
+| the latch | set by a counted fall; cleared once the snapshot shows him out of the down act (act mode 0x15) with `downTimer` 0, polled after the achievements' tick by the host step; not while his object is unreadable | `IcoGsSnapshot.boy_act_mode`, `boy_down_timer` (`ico_gs_game_down_timer`, `commonact.c`); `port/platform/host_loop.c` `ico_difficulty_tick` |
+| the limit | the fall that reaches it (the room's count, or the journey's) returns 1; the copy runs `actDownGameOver` after its own `DownFunc` instead of its loop: he lies, `hit = 1` every frame (unhittable whatever Shadows wait while Ico is down is), no get-up mail, for `((60 - systemStatus[0] * 10) / systemStatus[1]) * 2` frames, the delay `actCommonDie` gives the boy's death (2 s at 50 and 60 Hz alike), then `actDownGameOverNow` asks for the game over: `ACT_LAYOUT_GAMEOVER`, or on the June 2001 demo `ico_gs_signal_game_over_once` + the game-over layout (that disc never clears `gameover_layout_flag`, `sceneManager.c` `InitSceneObjects_jun26`). It sets no pause or control flag (the boy's death sets none either), so nothing can be left locked | `commonact.c` |
+| never missing | while the game over is due every entry of his returns 1 again (`over_pending`); a mail that takes him out of the down act first runs `actAfterDown` (the after-proc `BeforeFunc` runs at every interrupt's mode change, both bodies in `act.c`), which asks for the game over at once; `ico_gs_knock_game_over_take` lets it be asked once | `actAfterDown`, `ico_gs_knock_game_over_take` |
+| room entry | `ico_gs_signal(ICO_GS_EV_STAGE_ENTER)` (the stage manager's one room-entry signal, `StageManager.c` `start_stage_Load_thread`; a Continue comes through it) calls `ico_difficulty_stage_enter`: the room's count starts again | `gamestate.c` |
+| game over | every `ICO_GS_EV_GAME_OVER` (`ACT_LAYOUT_GAMEOVER`'s signal and the demo's) calls `ico_difficulty_game_over` in `ico_gs_tick`: the due game over cleared, the room's count after the limit's game over, the journey's count after the limit's game over in the journey scope, Permadeath ends the journey | `gamestate.c` |
+
+Why the room entry is not a new call beside the stage manager's two port calls: `start_stage_Load_thread`
+is static and called once, from the stage manager's thread loop, so the compiler may fold it into that loop,
+and every save state holds the loop's thread suspended inside it; a state made by a build whose loop
+differs is refused (`port/platform/state_xbuild.h`: a return address needs its function's code hash
+alike). The signal there already runs at the same moment.
+
+Log lines (while a limit is on; the first 8 of each, then every 100th): `difficulty: Ico down N (mail M, hit
+H, landing L, get-up timer T, stage S): counted | not counted: <why> | the limit's game over is due ...; R in
+this room, J on this journey, limit K a room|a journey`; `difficulty: the knock-down limit's game over asked
+for (he lay 2 s | a mail took Ico out of the down act first; stage S)`; `difficulty: the knock-down limit's
+game over is due but Ico is in act mode A (not down, not dead; ...)` when it has been due 2 s with him neither
+down nor dead; the record's own lines (`difficulty: knock-down 2 of 3 in this room ...`).
+
+The mails per disc (read off each disc's `actIntrList` by `knockdown_disc`): the knock-down mail into DOWN in
+the shared list 3 is 291 on the European family, 275 on the North American disc, 272 on the August 2001
+preview, 264 on the June 2001 demo; only the European family has the landing's 55 (list 3) and 56 (FALL's
+list) into DOWN, so the three 2001 copies pass no landing.
+
 ## Not exposed yet
 
 | mechanism | the game's value | what it would do | discs | where |

@@ -19,6 +19,7 @@ files are written, and how libscf's system configuration is answered from them.
 | `port/game/photo_mode.h` | `[photo]` |
 | `port/game/appearance.h` | `[characters]` |
 | `port/game/achievements.h` | `[game] achievements` and `achievements.toml` |
+| `port/game/difficulty.h`, `difficulty_file.c` | `difficulty.toml`, each save's difficulty |
 | `port/render/texpack.h` | what the texture pack keys of `[video]` control |
 | `port/platform/main_host.c` | the start-up keys of `ico-pc.ini` and the command line |
 | `port/platform/window_host.c` | `[video] backend`, `[video] adapter`, `[dev] perf_log`, `slow_step_ms` and `slow_scene_dump_ms` |
@@ -65,7 +66,9 @@ and `--no-verify` (`port/platform/main_host.c`, header comment, the argument loo
 The input layer reads `config.toml` itself, at start, through the TOML reader rather than the
 store: `[input]` and `[gameplay] stick_fix` (`port/input/input_sdl.c` (`ico_input_sdl_init`);
 `port/input/input_config.c` (`ico_input_apply_toml`)). The achievements keep their own file,
-`<user folder>/achievements.toml` (`port/game/achievements.h` (`ico_ach_init`)).
+`<user folder>/achievements.toml` (`port/game/achievements.h` (`ico_ach_init`)), and so does each
+save's difficulty, `<user folder>/difficulty.toml` (`port/game/difficulty_file.c`;
+[SAVES.md](SAVES.md#the-difficulty-of-each-save)): not a config file, no `ico-pc.ini` override.
 
 ## config.toml
 
@@ -255,10 +258,11 @@ original game's behaviour (`port/game/options.h`, header comment).
 
 ### [variants]
 
-Options > Gameplay: No hints on the page, Chain swing speed and Chain swing slowdown on Gameplay > Yorda,
-Shadow toughness, Shadow aggression and Peaceful shadows on Gameplay > Shadows, the combat rows
-(Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge,
-Queen barrier and the two weapon rows) on Gameplay > Combat, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes),
+Options > Gameplay: the two weapon rows on the page, Chain swing speed and Chain swing slowdown on
+Gameplay > Yorda, the two cutscene rows on Gameplay > Cutscenes ([UI.md](UI.md#gameplay--yorda-and-cutscenes));
+the ten difficulty rows (Shadow toughness, Shadow aggression, Peaceful shadows, the three combat rows,
+One hit per swing, Shadows never dodge, Queen barrier, No hints) on the New Game screen's Customize
+pages ([UI.md](UI.md#customize-the-new-game-drafts-pages),
 [OPTIONS.md](../OPTIONS.md#gameplay)).
 Read once by `port/game/variants.c` the first time each is asked for (`ico_variant_*`); every default is
 the game as the disc ships it. Ten of the sixteen are rows of each save's difficulty record
@@ -337,6 +341,13 @@ ntsc_slot_1_sum = 4660
 `stats.stages_jpn`, `stats.stages_kor` (and the other discs' suffixes) for the visited stages; the unlocks (`[unlocked.<id>]`) and the other counters
 are one set for all discs (`port/game/achievements.c` (`run_key`, `write_file`, `read_file`);
 [GAME_FEATURES.md](GAME_FEATURES.md)).
+
+`difficulty.toml` keys each save's difficulty by the disc's prefix, the card (`b_` for port 1)
+and the slot: `save.slot_N_*`, `save.b_slot_N_*`, `save.jpn_slot_N_*`, `save.jpn_b_slot_N_*`
+(and the other discs' prefixes): `sum`, `preview`, `journey`, `mode`, `origin`, `rows`,
+`knocks`; `[finished]` lists the ended journeys' ids. A save with no entry takes the retired
+`[gameplay]` and `[variants]` keys once (the carry-over) and keeps them in its entry from then
+on; `config.toml` is not rewritten ([SAVES.md](SAVES.md#the-difficulty-of-each-save)).
 
 ### [input]
 
@@ -687,7 +698,7 @@ cached answer together (`ico_sysconf_set_language`); the boot's 50/60 Hz value i
 
 ## The user folder and portable mode
 
-`config.toml`, `achievements.toml`, the card folders and the rest of the per-user files are in the
+`config.toml`, `achievements.toml`, `difficulty.toml`, the card folders and the rest of the per-user files are in the
 [user folder](ARCHITECTURE.md#terms) (`port/platform/host_config.h` (`ico_host_pref_dir`));
 [PLATFORM.md](PLATFORM.md#folders-ico-pcini-and-the-user-folder) has where it is on each platform
 and in portable mode, and the Android build's file layout is `IcoAndroidPaths`
