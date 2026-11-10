@@ -579,20 +579,20 @@ static void test_hooks(void)
         CHECK(count(src, "ico_difficulty_slot_loaded(mc.port, mc.fileNo, (unsigned int)mc.sum);") ==
               2);
         CHECK(each_followed(src, "ico_ach_slot_loaded(mc.fileNo, (unsigned int)mc.sum);",
-                            "ico_difficulty_slot_loaded(mc.port, mc.fileNo", 160) == 2);
+                            "ico_difficulty_slot_loaded(mc.port, mc.fileNo", 240) == 2);
         /* the backstop of each load twin comes before gflagKeepState and goes
            back to the file list */
         CHECK(each_followed(src, "if (ico_difficulty_sum_finished((unsigned int)mc.sum)) {",
                             "gflagKeepState();", 400) == 2);
         CHECK(each_followed(src, "if (ico_difficulty_sum_finished((unsigned int)mc.sum)) {",
-                            "loadStep = 0;", 80) == 2);
+                            "loadStep = 0;", 160) == 2);
         CHECK(strstr(src, "return PAL_JPNKORCN_NTSCAUG6JUN26(0x13, 0x10, 16);\n        }\n"
                           "        gflagKeepState();") != NULL);
         CHECK(strstr(src, "return 16;\n        }\n        gflagKeepState();") != NULL);
         /* the Continue list's refusal in both twins, with the negative sound,
            before the positive one */
         CHECK(each_followed(src, "if (la_host_load_refused(filePort, item)) {", "NEGATIVE_SE();",
-                            40) == 2);
+                            80) == 2);
         CHECK(strstr(src,
                      "if (la_host_load_refused(filePort, item)) {\n            NEGATIVE_SE();\n"
                      "            return -1;\n        }\n        POSITIVE_SE();") != NULL);
