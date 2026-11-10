@@ -2,6 +2,7 @@
  * destruction for the Vulkan backend.  Every buffer and texture has its own
  * VkDeviceMemory (vkr_allocate); there is no suballocation. */
 #include "vk_internal.h"
+#include "vk_spirv_scan.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -490,6 +491,7 @@ static RhiBuffer createBuffer(const RhiBufferDesc *desc)
     b->memSize = req.size;
     b->size = desc->size;
     b->kind = desc->memory;
+    b->vkUsage = usage; /* the stages that can reach it (vk_cmd.c barriers) */
     /* a device buffer a shader reads: a texture copied into it is made
      * visible to those reads (vk_cmd.c rhi_cmd_copy_texture_to_buffer) */
     const uint32_t reads = RHI_BUF_VERTEX | RHI_BUF_INDEX | RHI_BUF_UNIFORM | RHI_BUF_STORAGE_READ |
@@ -934,6 +936,31 @@ void rhi_destroy_sampler(RhiSampler h)
 }
 
 /* --------------------------------------------------------------- shaders */
+/* The first fragment module that can read a storage buffer
+ * (vk_spirv_scan.h; one that cannot be read whole counts as one): the
+ * buffer barriers made after it wait for fragment work too
+ * (VkrState.fragmentStorage, vk_cmd.c vkr_buf_earlier_stages).  The flag is
+ * set before the module's handle is returned, so before any pipeline that
+ * holds it exists or any draw of it is recorded.  Said once a device. */
+static void vkr_note_fragment_storage(const RhiShaderDesc *desc)
+{
+    VkrSpirvUse use;
+    const bool read =
+        vkr_spirv_scan((const uint32_t *)desc->bytecode, desc->bytecodeSize / 4u, &use);
+    const bool fragment = desc->stage == RHI_STAGE_FRAGMENT || use.fragment;
+    if (!fragment || (read && !use.storageBuffers) ||
+        __atomic_load_n(&g_vkr.fragmentStorage, __ATOMIC_ACQUIRE)) {
+        return;
+    }
+    if (!__atomic_exchange_n(&g_vkr.fragmentStorage, true, __ATOMIC_ACQ_REL)) {
+        VKR_LOG("buffer barriers: fragment shader %s %s: from here the barriers before a "
+                "copy into or a store to a storage buffer wait for the fragment work before "
+                "them too",
+                desc->debugName ? desc->debugName : "?",
+                read ? "declares a storage buffer" : "could not be read whole");
+    }
+}
+
 RhiShader rhi_create_shader(const RhiShaderDesc *desc)
 {
     RhiShader out = {0};
@@ -966,6 +993,7 @@ RhiShader rhi_create_shader(const RhiShaderDesc *desc)
     s->stage = desc->stage;
     snprintf(s->entry, sizeof(s->entry), "%s", desc->entryPoint ? desc->entryPoint : "main");
     vkr_set_name(VK_OBJECT_TYPE_SHADER_MODULE, VKR_H(s->module), desc->debugName);
+    vkr_note_fragment_storage(desc);
     out.id = id;
     return out;
 }

@@ -17,7 +17,9 @@
  * VK_KHR_get_physical_device_properties2 is taken, the device without the
  * extended queries; review finding 5), and the [video] adapter rule
  * (adapterCell: a wanted name no device has still starts the device, the
- * same one a plain start picks, with one device marked current).
+ * same one a plain start picks, with one device marked current), and after
+ * the vertex and compute stores' cells the buffer barriers' scopes
+ * (rhi_vk_scope.c; alone with the argument `scopes`).
  *
  * Exit 0 on success, 1 on a mismatch or a validation error, 77 (skipped)
  * when no Vulkan device can be created.  Set VK_ICD_FILENAMES to pick a
@@ -1224,9 +1226,17 @@ static int adapterCell(void)
     return failures != 0;
 }
 
+/* rhi_vk_scope.c: the buffer barriers' scopes (RhiStats.fragmentHolds) */
+int rhi_vk_scope_cell(const RhiTestConfig *cfg);
+
 int main(int argc, char **argv)
 {
     const RhiTestConfig cfg = {"vulkan", "rhi_vk_test", true, NULL, rhi_vk_validation_error_count};
+    if (argc > 1 && strcmp(argv[1], "scopes") == 0) {
+        /* rhi_vk_scopes*: the buffer barriers' first scopes alone
+           (rhi_vk_scope.c), 77 without a device */
+        return rhi_vk_scope_cell(&cfg);
+    }
     if (argc > 1 && strcmp(argv[1], "stores") == 0) {
         /* rhi_vk_stores: the vertex shaders' stores alone (rhi_test_stores.c),
            77 without them */
@@ -1254,7 +1264,7 @@ int main(int argc, char **argv)
     return (hazardCell() || passAreaCell() || cacheCell() || cacheDropCell() || limitsCell() ||
             poolCell() || renderAreaCell() || occlusionCell() || syncCell() || d32fCell() ||
             adapterCell() || rhi_test_vertex_stores(&cfg) == 1 ||
-            rhi_test_compute_stores(&cfg) == 1)
+            rhi_test_compute_stores(&cfg) == 1 || rhi_vk_scope_cell(&cfg) == 1)
                ? 1
                : 0;
 }

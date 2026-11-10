@@ -1528,6 +1528,15 @@ typedef struct RhiStats {
      * layer or ICO_VK_STORAGE_BARRIERS=1; vk_cmd.c vkr_dst_order): not in
      * barriers, which counts what a release build records */
     uint64_t orderBarriers;
+    /* Vulkan: of barriers, those whose first scope holds fragment work and
+     * whose second holds the vertex, compute or copy stages (vk_cmd.c
+     * vkr_hold_note): each makes every later vertex, compute and copy
+     * command, the next picture's too, wait for the fragment work before it,
+     * so a picture's uploads, VU record and vertex work cannot overlap the
+     * picture before's fragment work across it (issue 179).  A texture
+     * upload over a sampled texture is one by its nature (the copy waits
+     * for the earlier sampling); 0 on the other backends */
+    uint64_t fragmentHolds;
     /* gauges, not counts: the device memory objects alive now and
      * the most ever, their bytes, and the device's limit on their number
      * (Vulkan; 0 elsewhere) */

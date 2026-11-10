@@ -3237,6 +3237,7 @@ void rhi_get_stats(RhiStats *out)
         /* what a list's end, a submit and a present added, from either
            thread (VkrState.late) */
         out->barriers += __atomic_load_n(&g_vkr.late.barriers, __ATOMIC_RELAXED);
+        out->fragmentHolds += __atomic_load_n(&g_vkr.late.fragmentHolds, __ATOMIC_RELAXED);
         out->submits += __atomic_load_n(&g_vkr.late.submits, __ATOMIC_RELAXED);
         out->presents += __atomic_load_n(&g_vkr.late.presents, __ATOMIC_RELAXED);
         out->presentNs += __atomic_load_n(&g_vkr.late.presentNs, __ATOMIC_RELAXED);

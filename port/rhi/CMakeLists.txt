@@ -166,6 +166,18 @@ if(ICO_RUN_TESTS)
     add_test(NAME rhi_vk_pass_row COMMAND rhi_vk_pass_row_test)
 endif()
 
+# --- The SPIR-V scan (CPU only, every target) --------------------------------
+# vk/vk_spirv_scan.c: whether a module is a fragment shader that declares a
+# storage buffer (the buffer barriers' first scopes, vk_cmd.c), over the RHI
+# tests' modules and hand-built ones.
+add_executable(rhi_vk_spirv_scan_test test/rhi_vk_spirv_scan_test.c vk/vk_spirv_scan.c)
+target_include_directories(rhi_vk_spirv_scan_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
+                           "${CMAKE_CURRENT_SOURCE_DIR}/test/shaders")
+target_compile_options(rhi_vk_spirv_scan_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME rhi_vk_spirv_scan COMMAND rhi_vk_spirv_scan_test)
+endif()
+
 # --- The render pass breadcrumb (CPU only, every target) ---------------------
 # rhi_pass_crumb.c: the pass a backend last began, stored before the driver's
 # begin call (vk_renderpass.c vkr_pass_begin) and printed by the crash report
@@ -320,7 +332,7 @@ endif()
 if(_ico_have_vk)
     set(_ico_vk_sources rhi_adapter.c rhi_bind_cache.c rhi_driver_version.c rhi_pass_row.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c vk/vk_native.c
                         vk/vk_pipeline.c vk/vk_present_mode.c vk/vk_renderpass.c vk/vk_resource.c
-                        vk/vk_swapchain.c vk/vk_sync.c)
+                        vk/vk_spirv_scan.c vk/vk_swapchain.c vk/vk_sync.c)
     if(ANDROID)
         # the window's surface through the loader in use (a
         # driver the program loaded, or the system's)
@@ -510,7 +522,7 @@ if(_ico_have_vk)
 
     # Headless rendering on whatever device is present (lavapipe in the
     # container); exits 77 (skipped) when there is no Vulkan device.
-    add_executable(rhi_vk_test test/rhi_vk_test.c ${_ico_rhi_test_common})
+    add_executable(rhi_vk_test test/rhi_vk_test.c test/rhi_vk_scope.c ${_ico_rhi_test_common})
     # the thread submit cell's second thread (rhi_test_common.c threadSubmitCell)
     target_link_libraries(rhi_vk_test PRIVATE ico_thread)
     target_include_directories(rhi_vk_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/test/shaders")
@@ -619,6 +631,41 @@ if(_ico_have_vk)
         set(_ico_vk_nocompute_env ${_ico_vk_test_env} "ICO_VK_FAKE_NO_COMPUTE_STORES=1")
         set_tests_properties(rhi_vk_nocompute PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_nocompute_env}")
+        # the buffer barriers' first scopes (rhi_vk_scope.c; issue 179), under
+        # synchronisation validation: a picture's uploads, VU record and pass
+        # after the picture before's hold no fragment work
+        # (RhiStats.fragmentHolds 0), a texture upload over a sampled texture
+        # one, and after a fragment shader that declares a storage buffer the
+        # copy and the bracket wait for fragment work; _vk11 on VkRenderPass
+        # objects and the fence ring (ICO_VK_FAKE_API=1.1), _global with every
+        # barrier recorded at once, _novs without vertex stores (the Mali-G52
+        # of issue 179: the compute dispatches alone).  The layer's shader
+        # access analysis on (SYNCVAL_SHADER_ACCESSES_HEURISTIC): without it
+        # the synchronisation checks take no shader's buffer read into
+        # account (layer 1.4.309: a copy over a buffer a fragment shader
+        # read, with no barrier at all, passes), so they could not see the
+        # write after read a fragment stage left out of a copy's first scope
+        # would be; with it they report one (checked with the fragment
+        # stage taken out)
+        set(_ico_vk_scopes_sv "VK_KHRONOS_VALIDATION_SYNCVAL_SHADER_ACCESSES_HEURISTIC=true")
+        set(_ico_vk_scopes_env ${_ico_vk_test_env} ${_ico_vk_scopes_sv})
+        set(_ico_vk_scopes11_env ${_ico_vk_stores11_env} ${_ico_vk_scopes_sv})
+        set(_ico_vk_scopesg_env ${_ico_vk_storesg_env} ${_ico_vk_scopes_sv})
+        set(_ico_vk_scopesn_env ${_ico_vk_nostores_env} ${_ico_vk_scopes_sv})
+        add_test(NAME rhi_vk_scopes COMMAND rhi_vk_test scopes)
+        add_test(NAME rhi_vk_scopes_vk11 COMMAND rhi_vk_test scopes)
+        add_test(NAME rhi_vk_scopes_global COMMAND rhi_vk_test scopes)
+        add_test(NAME rhi_vk_scopes_novs COMMAND rhi_vk_test scopes)
+        set_tests_properties(rhi_vk_scopes PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_scopes_env}")
+        set_tests_properties(rhi_vk_scopes_vk11 PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_scopes11_env}")
+        get_test_property(rhi_vk_scopes_vk11 LABELS _ico_scopes11_labels)
+        set_tests_properties(rhi_vk_scopes_vk11 PROPERTIES LABELS "${_ico_scopes11_labels};vk11")
+        set_tests_properties(rhi_vk_scopes_global PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_scopesg_env}")
+        set_tests_properties(rhi_vk_scopes_novs PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_scopesn_env}")
         # rhi_native.h on the same layer setup (a validation message fails it)
         add_test(NAME rhi_native COMMAND rhi_native_test)
         set_tests_properties(rhi_native PROPERTIES SKIP_RETURN_CODE 77)

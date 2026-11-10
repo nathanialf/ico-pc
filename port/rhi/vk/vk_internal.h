@@ -61,6 +61,14 @@ typedef struct VkrBuffer {
     /* a device buffer made for vertex, index, uniform or storage reads
      * (rhi.h rhi_cmd_copy_texture_to_buffer's ordering) */
     bool shaderRead;
+    /* the Vulkan usage the buffer was made with: the stages that can ever
+     * reach it (vk_cmd.c vkr_buf_earlier_stages, vkr_buf_later_stages;
+     * binding a buffer as a vertex, index, uniform or storage buffer needs
+     * the usage bit) */
+    VkBufferUsageFlags vkUsage;
+    /* a copy has read or written it (any list, since its creation): the
+     * transfer stage joins the first scope of a later store bracket */
+    bool copied;
     /* hazard tracking (vk_cmd.c, "Hazards"): a copy's write or read not yet
      * behind a barrier, valid while hzEpoch is the recording list's */
     uint64_t hzEpoch;
@@ -472,8 +480,21 @@ typedef struct VkrState {
     /* compute pipelines that store (RhiLimits.computeStores: the VU record's
      * compute builds; vk_device.c vkr_compute_stores), and why not when
      * false ("" when true); the compute stage then joins the buffer read
-     * stages of copies and brackets (vk_cmd.c vkr_buf_read_stages) */
+     * stages of copies and brackets (vk_cmd.c vkr_buf_earlier_stages) */
     bool computeStores;
+    /* a fragment shader module that declares a storage buffer was made
+     * (vk_resource.c rhi_create_shader, vk_spirv_scan.h; __atomic, a
+     * module may be made on a compile worker): from then on the first
+     * scope of a buffer barrier holds the fragment stage for a storage
+     * buffer's earlier reads (vk_cmd.c vkr_buf_earlier_stages) */
+    bool fragmentStorage;
+    /* Barriers whose first scope holds fragment-side stages and whose
+     * second holds a stage before them (vk_cmd.c vkr_hold_note): each
+     * makes every later vertex, compute and copy command, the next
+     * picture's too, wait for the fragment work recorded or submitted
+     * before it.  Per site (VkrHoldSite), __atomic (a list's end may be
+     * on the submit thread); the totals are RhiStats.fragmentHolds */
+    uint64_t holdSite[8];
     char computeStoresOff[96];
     /* the attachment read the device has but is not offered on (Qualcomm's
      * own driver, rhi_driver_is_qualcomm_proprietary; ICO_VK_FAKE_ADRENO=1
@@ -716,7 +737,7 @@ typedef struct VkrState {
     RhiStats stats;
 
     struct {
-        uint64_t barriers, submits, presents, presentNs;
+        uint64_t barriers, submits, presents, presentNs, fragmentHolds;
         /* the present's list's submits that found the acquired image free
          * (acquireFence signalled) and those that did not */
         uint64_t acquireReady, acquireNotReady;
