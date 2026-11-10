@@ -1806,16 +1806,37 @@ static int staged_permadeath(const Copy *c, const uint64_t *block_off)
 }
 
 /* The listing's check of a slot's file: its reg section read alone (the
-   record's bytes), 1 when it was saved on a Permadeath journey */
+   record's bytes), 1 when it was saved on a Permadeath journey.  The
+   listing's verdict (block_off NULL) is kept per slot with the file's size and
+   time, so a rebuild of the list does not inflate every slot's reg section
+   again (2 MB and more each) while the file is the same. */
 static int slot_permadeath(int slot, const uint64_t *block_off)
 {
+    static struct {
+        int known, verdict;
+        unsigned long long size;
+        long long mtime;
+    } s_seen[ICO_STATE_SLOTS + 1];
+
     char path[ICO_PATH_MAX];
     Copy c;
     LoadCtx lc;
     int k = 0;
+    unsigned long long size = 0;
+    long long mtime = 0;
+    const int cached = block_off == NULL && slot >= 1 && slot <= ICO_STATE_SLOTS;
 
     if (ico_state_slot_path(path, sizeof path, ico_state_dir(), slot, ".ics") != 0) {
         return 0;
+    }
+    if (cached) {
+        if (ico_path_kind(path, &size, &mtime) != 0) {
+            s_seen[slot].known = 0;
+            return 0;
+        }
+        if (s_seen[slot].known && s_seen[slot].size == size && s_seen[slot].mtime == mtime) {
+            return s_seen[slot].verdict;
+        }
     }
     memset(&c, 0, sizeof c);
     memset(&lc, 0, sizeof lc);
@@ -1826,6 +1847,12 @@ static int slot_permadeath(int slot, const uint64_t *block_off)
         k = staged_permadeath(&c, block_off);
     }
     copy_free(&c);
+    if (cached) {
+        s_seen[slot].known = 1;
+        s_seen[slot].verdict = k;
+        s_seen[slot].size = size;
+        s_seen[slot].mtime = mtime;
+    }
     if (k) {
         fprintf(stderr,
                 "state: slot %d was saved on a Permadeath journey: it cannot be loaded here\n",

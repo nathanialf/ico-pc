@@ -56,12 +56,37 @@ static const char *const retired_keys[] = {
     "variants.auto_guard",      "variants.attack_turn", "variants.shadows_wait_down",
     "variants.peaceful_shadows"};
 
+/* the first of retired_keys that is one of the fifteen gameplay keys */
+#define RETIRED_GAMEPLAY_FIRST 4
+_Static_assert(sizeof(retired_keys) / sizeof(retired_keys[0]) == RETIRED_GAMEPLAY_FIRST + 15,
+               "four keys nothing reads, then the fifteen gameplay keys");
+
+/* one line for the keys nothing reads; one line naming the fifteen gameplay
+   keys the file holds, which are read still (once, for a save's carry-over) */
 static void log_retired(void)
 {
+    char kept[512];
+    size_t at = 0;
+
+    kept[0] = '\0';
     for (size_t i = 0; i < sizeof(retired_keys) / sizeof(retired_keys[0]); i++) {
-        if (ico_toml_has(toml, retired_keys[i])) {
-            fprintf(stderr, "config: %s is not used; ignored\n", retired_keys[i]);
+        if (!ico_toml_has(toml, retired_keys[i])) {
+            continue;
         }
+        if (i < RETIRED_GAMEPLAY_FIRST) {
+            fprintf(stderr, "config: %s is not used; ignored\n", retired_keys[i]);
+        } else if (at < sizeof(kept)) {
+            const int n = snprintf(kept + at, sizeof(kept) - at, "%s%s", at == 0 ? "" : ", ",
+                                   retired_keys[i]);
+
+            at += n > 0 ? (size_t)n : 0;
+        }
+    }
+    if (kept[0] != '\0') {
+        fprintf(stderr,
+                "config: %s: kept for saves made before v0.11.3: they give such a save its "
+                "difficulty the first time it is loaded\n",
+                kept);
     }
 }
 

@@ -97,8 +97,12 @@ typedef enum IcoDiffRow {
 #define ICO_DIFF_KNOCK_MAX 9
 #define ICO_DIFF_SCOPE_ROOM 0
 #define ICO_DIFF_SCOPE_JOURNEY 1
-/* the act mode of the down act (commonact.c actCommonDown, 0x15 = 21) */
+/* the act modes of a fall (actModeTbl, the same on every disc): the down act
+   (commonact.c actCommonDown, 0x15 = 21), FALL (5) and DEAD (actCommonDie,
+   0x16 = 22) */
 #define ICO_DIFF_DOWN_ACT_MODE 0x15
+#define ICO_DIFF_FALL_ACT_MODE 5
+#define ICO_DIFF_DEAD_ACT_MODE 0x16
 
 /* int32 only, no pointers: the save-state block "difficulty.record" as it
    is (ICO_STATE_FRESH: a state of an earlier version lacks it). */
@@ -183,6 +187,14 @@ void ico_difficulty_set_active(const IcoDifficulty *d);
 void ico_difficulty_set_row(IcoDiffRow row, int value);
 /* The run's card slot (difficulty_file.c at a save or a load). */
 void ico_difficulty_set_run(int port, int slot, uint32_t sum);
+/* The run's record is unknown: the load of (port, slot) with this checksum
+   could not read difficulty.toml (difficulty_file.c).  Kept until a record is
+   made the active one (begin, reset, set_active, a state's load); while it is
+   set the next save reads the file again and takes that save's record before
+   it writes.  _unknown: 1 and the load's port, slot and checksum (each may be
+   NULL), or 0. */
+void ico_difficulty_set_unknown(int port, int slot, uint32_t sum);
+int ico_difficulty_unknown(int *port, int *slot, uint32_t *sum);
 /* A new journey id (two random words, never both 0; not the game's rand(),
    whose state is the simulation's). */
 void ico_difficulty_new_journey(uint32_t out[2]);
@@ -233,6 +245,9 @@ void ico_difficulty_from_keys(const char *state_keys, IcoDifficulty *out);
 /* The folder difficulty.toml lives in (NULL: the per-user folder, beside
    achievements.toml); tests pass their own.  Forgets what was read. */
 void ico_difficulty_file_init(const char *dir);
+/* Tests: the next n reads of the file fail as if another program held it
+   (the file stays there). */
+void ico_difficulty_file_fail_reads(int n);
 /* A save was written (layout_action.c, beside ico_ach_slot_saved): the active
    record under (port, slot) with the game block's checksum and the product
    file's preview (stage, play frames, couch: known before a load). */
@@ -260,17 +275,27 @@ void ico_difficulty_file_knocks_reset(void);
 /* Each actCommonDown copy (commonact.c), after its after-proc is set: is_boy
    (self == boyGObj), landing (mails 55/56: the landing of a fall that began
    in mode 21, the same fall going on), down_timer (Ico's get-up timer, 0 for
-   another actor).  Counts when the limit is on, it is Ico, not a landing, the
-   in-fall latch is clear and down_timer is 0 (a knock-down before he is back
-   on his feet is the same fall); counting sets the latch.  Returns 1 when
-   the count in the row's scope reaches the limit (the copy then holds Ico
-   down and calls the game over), and again on every later entry until the
-   game over is seen (over_pending), else 0. */
+   another actor; only logged: a knock-down as he gets up, the timer still
+   running, is a new fall).  Counts when the limit is on, it is Ico, not a
+   landing and the in-fall latch is clear (a hit while he lies is the same
+   fall); counting sets the latch.  Returns 1 when the count in the row's
+   scope reaches the limit (the copy then holds Ico down and calls the game
+   over), and again on every later entry until the game over is seen
+   (over_pending), else 0.  With Permadeath on, reaching the limit ends the
+   journey at once (as ico_difficulty_game_over would): quitting while he
+   lies does not escape it. */
 int ico_difficulty_knockdown(int is_boy, int landing, int down_timer);
 /* The host poll's sample of Ico (IcoGsSnapshot): valid 0 does nothing; the
-   latch clears once his act mode is not ICO_DIFF_DOWN_ACT_MODE and his
-   get-up timer is 0 (back on his feet). */
+   latch clears once his act mode is none of the down act, FALL and DEAD
+   (back on his feet), whatever his get-up timer. */
 void ico_difficulty_tick(int valid, int boy_act_mode, int boy_down_timer);
+/* A game over has become certain before the game shows it (gamestate.c's
+   tick: Yorda taken into the floor, gameover_flag; Ico or Yorda in the DEAD
+   act): with Permadeath on the journey ends now, as at the game over, so a
+   quit in the seconds before the game-over screen does not escape it.  why:
+   the log's words.  Nothing while Permadeath is off, without a journey or
+   once it ended. */
+void ico_difficulty_game_over_certain(const char *why);
 /* Room entry (StageManager.c): the room's count starts again. */
 void ico_difficulty_stage_enter(int stage);
 /* ICO_GS_EV_GAME_OVER: the limit's game over ends the pending state (the

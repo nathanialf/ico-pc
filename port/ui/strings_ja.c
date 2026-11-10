@@ -911,4 +911,5 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_DIFF_TOAST_KNOCK] = "倒された回数 %d / %d",
     [UI_STR_DIFF_STATES_LOCKED] = "パーマデスの旅では、セーブステートをロードできません。",
     [UI_STR_DIFF_WORD_PERMADEATH] = "パーマデス",
+    [UI_STR_DIFF_STATES_SAVE_LOCKED] = "パーマデスの旅では、セーブステートを保存できません。",
 };

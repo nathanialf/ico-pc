@@ -255,10 +255,11 @@ A row of the journey's difficulty (Customize > Rules: Knock-down limit Off or 1 
 room or Whole journey; Hard: 3 in each room; `port/game/difficulty.h` `knock_limit`, `knock_scope`): the game
 is over when Ico has been knocked down that many times by a hit, in the room (the count starts again at each
 room entry, a Continue included) or on the journey (it starts again after the game over it caused). Each
-fall counts once: while he lies, while his get-up timer runs, and the landing of a fall the knock-down began
-(the European family's mails 55 and 56) are the same fall; a fall no hit caused (losing his balance at a
-ledge) and Yorda's and the Shadows' falls never count. At the limit he lies 2 s, unhittable, as the game's own
-death lies, then the game over comes as any other (Continue, or Quit; with Permadeath the journey ends).
+fall counts once, from the first hit until he is back on his feet: a hit while he lies or falls, and the
+landing of a fall the knock-down began (the European family's mails 55 and 56), are the same fall; a hit as
+he gets up is a new one. Losing his balance at a ledge is a fall, not a knock-down, and Yorda's and the
+Shadows' falls never count. At the limit he lies 2 s, unhittable, as the game's own death lies, then the game
+over comes as any other (Continue, or Quit; with Permadeath the journey has ended at the limit already).
 Each counted knock-down short of the limit shows the toast "Knocked down n of N"; the pause menu's journey
 lines show the difficulty with "n / N" (the scope's count) and the Permadeath word, and Settings > Gameplay >
 Difficulty (pause menu only) shows the journey's rows read-only ([UI.md](UI.md#customize-the-new-game-drafts-pages)).

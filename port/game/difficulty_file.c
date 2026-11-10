@@ -30,11 +30,25 @@
  * leaves the old file or the new one, and a restore from a backup
  * (backup.c holds the file) is seen at the next call.
  *
- * A file whose version is missing or not 1 (damaged, or written by a later
- * version) reads as empty, with a log line, and is not written over until
- * the next save or a Permadeath end: then its text is kept as
- * difficulty.toml.bad and a new file is written.  The carry-over of a load
- * is not written into such a file (the save after it writes it).
+ * A file that is there but cannot be read (another program holding it: an
+ * antivirus, a backup, a cloud folder) is never taken for an empty one: the
+ * read is tried once more, then the call gives up (-1, logged) and writes
+ * nothing.  A load whose read failed leaves the run's record unknown
+ * (ico_difficulty_set_unknown): the first save after it reads the file again
+ * and takes the loaded save's record (or its carry-over) before it writes, or
+ * writes nothing while the file still cannot be read.
+ *
+ * A file with no version line that holds [save] or [finished] entries is read
+ * as version 1 (a version line lost by hand editing), with a log line.  A file
+ * whose version is another (damaged) reads as empty, and is not written over
+ * until the next save or a Permadeath end: then its text is kept under a name
+ * of its own (difficulty.toml.bad, then .bad2, .bad3, ...) and a new file is
+ * written with every ended journey the old text listed.  A file of a later
+ * version is never written over: its entries are not read, its ended journeys
+ * are honoured (the Continue list and the load's backstop refuse them), and a
+ * Permadeath end only adds its journey to [finished], every other line kept.
+ * The carry-over of a load is not written into either (the save after it
+ * writes a damaged file; a later version's stays as it is).
  *
  * In ico_options with difficulty.c, so it may use only what that library and
  * the host_config.c every one of its programs compiles provide (the config
@@ -55,6 +69,7 @@
 
 #include "../core/region.h"
 #include "../platform/host_config.h"
+#include "../platform/host_fs.h" /* ico_path_kind: a file there but not readable */
 
 #define FILE_VERSION 1
 #define FILE_NAME "difficulty.toml"
@@ -64,7 +79,8 @@
 #define PORT_MAX 2
 
 static char s_dir[ICO_PATH_MAX]; /* "" until file_init names one: the per-user folder */
-static unsigned s_damaged_reads;
+static unsigned s_damaged_reads, s_unreadable;
+static int s_fail_reads; /* tests: reads that fail as if another program held the file */
 
 /* --- the file ------------------------------------------------------------------- */
 
@@ -81,24 +97,60 @@ static int file_path(char *out, size_t size)
 }
 
 /* The file as read now.  text: the whole file (NULL: none); t: its entries
-   (empty for no file or a damaged one); damaged: the text is no version 1
-   file. */
+   (empty for no file, a damaged one or a later version's); raw: the parsed
+   text of a damaged or later file (its ended journeys are honoured), else
+   NULL; damaged: the text is no version 1 file; later: a later version's. */
 typedef struct {
     char path[ICO_PATH_MAX];
     char *text;
     IcoToml *t;
+    IcoToml *raw;
     int damaged;
+    int later;
 } File;
 
 static void file_close(File *f)
 {
     free(f->text);
     ico_toml_free(f->t);
+    ico_toml_free(f->raw);
     f->text = NULL;
     f->t = NULL;
+    f->raw = NULL;
 }
 
-/* 0, or -1 (no path or no memory; file_close is due either way) */
+static char *read_once(const char *path)
+{
+    if (s_fail_reads > 0) {
+        s_fail_reads--;
+        return NULL;
+    }
+    return ico_toml_read_text(path);
+}
+
+/* a line of text starts (after blanks) with word */
+static int has_line(const char *text, const char *word)
+{
+    const size_t n = strlen(word);
+    const char *p = text;
+
+    while (p != NULL && *p != '\0') {
+        const char *q = p;
+
+        while (*q == ' ' || *q == '\t') {
+            q++;
+        }
+        if (strncmp(q, word, n) == 0) {
+            return 1;
+        }
+        p = strchr(p, '\n');
+        p = p != NULL ? p + 1 : NULL;
+    }
+    return 0;
+}
+
+/* 0, or -1: no path, no memory, or a file that is there and cannot be read
+   (logged; file_close is due either way).  A missing file is an empty one. */
 static int file_open(File *f)
 {
     memset(f, 0, sizeof(*f));
@@ -106,7 +158,24 @@ static int file_open(File *f)
         fprintf(stderr, "difficulty: the folder's path is too long for " FILE_NAME "\n");
         return -1;
     }
-    f->text = ico_toml_read_text(f->path);
+    f->text = read_once(f->path);
+    if (f->text == NULL && ico_path_kind(f->path, NULL, NULL) >= 0) {
+        /* there, but not readable now (another program holds it): once more,
+           then nothing is read or written (an empty table here would be
+           written over every save's entry and the ended journeys) */
+        f->text = read_once(f->path);
+        if (f->text == NULL) {
+            const unsigned n = ++s_unreadable;
+
+            if (n <= 8 || n % 100 == 0) {
+                fprintf(stderr,
+                        "difficulty: %s is there but cannot be read (another program may hold "
+                        "it; tried twice): nothing read or written this time (read %u)\n",
+                        f->path, n);
+            }
+            return -1;
+        }
+    }
     if (f->text != NULL) {
         const char *p = f->text;
         IcoToml *t;
@@ -120,17 +189,34 @@ static int file_open(File *f)
         }
         if (*p != '\0' && ico_toml_get_int(t, "version", -1) != FILE_VERSION) {
             const char *v = ico_toml_get(t, "version");
-            const unsigned n = ++s_damaged_reads;
+            const long long ver = ico_toml_get_int(t, "version", -1);
 
-            f->damaged = 1;
-            if (n <= 8 || n % 100 == 0) {
+            if (v == NULL && (has_line(f->text, "[save]") || has_line(f->text, "[finished]"))) {
                 fprintf(stderr,
-                        "difficulty: %s is damaged or from a later version (version %s): read "
-                        "as empty, not written over until the next save (read %u)\n",
-                        f->path, v != NULL ? v : "missing", n);
+                        "difficulty: %s has no version line but holds [save] or [finished] "
+                        "entries: read as version %d\n",
+                        f->path, FILE_VERSION);
+            } else {
+                const unsigned n = ++s_damaged_reads;
+
+                if (ver > FILE_VERSION) {
+                    f->later = 1;
+                } else {
+                    f->damaged = 1;
+                }
+                if (n <= 8 || n % 100 == 0) {
+                    fprintf(stderr,
+                            f->later ? "difficulty: %s is from a later version (version %s): its "
+                                       "entries are not read, its ended journeys are honoured, it "
+                                       "is not written over (read %u)\n"
+                                     : "difficulty: %s is damaged (version %s): read as empty "
+                                       "but its ended journeys are honoured, not written over "
+                                       "until the next save (read %u)\n",
+                            f->path, v != NULL ? v : "missing", n);
+                }
+                f->raw = t;
+                t = ico_toml_parse("");
             }
-            ico_toml_free(t);
-            t = ico_toml_parse("");
         }
         f->t = t;
     } else {
@@ -139,23 +225,88 @@ static int file_open(File *f)
     return f->t != NULL ? 0 : -1;
 }
 
+/* the table the ended journeys and the Continue list's entries are read
+   from: a damaged or later file's own text, else the entries */
+static const IcoToml *look_table(const File *f)
+{
+    return f->raw != NULL ? f->raw : f->t;
+}
+
+/* every 16-hex-digit word of text that raw lists as an ended journey, into
+   t's [finished]: the count */
+static int copy_finished(const char *text, const IcoToml *raw, IcoToml *t)
+{
+    int copied = 0;
+
+    for (const char *p = text; p != NULL && *p != '\0';) {
+        size_t n = 0;
+
+        while ((p[n] >= '0' && p[n] <= '9') || (p[n] >= 'a' && p[n] <= 'f') ||
+               (p[n] >= 'A' && p[n] <= 'F')) {
+            n++;
+        }
+        if (n == 16) {
+            char key[40];
+
+            snprintf(key, sizeof(key), "finished.%.16s", p);
+            if (ico_toml_get_bool(raw, key, 0) && !ico_toml_get_bool(t, key, 0)) {
+                ico_toml_set_bool(t, key, 1);
+                copied++;
+            }
+        }
+        p += n > 0 ? n : 1;
+    }
+    return copied;
+}
+
+/* the first of <file>.bad, .bad2 ... .bad99 that is not there (the last one
+   when all are) */
+static void bad_name(const File *f, char *out, size_t size)
+{
+    for (int i = 1; i <= 99; i++) {
+        if (i == 1) {
+            snprintf(out, size, "%s.bad", f->path);
+        } else {
+            snprintf(out, size, "%s.bad%d", f->path, i);
+        }
+        if (ico_path_kind(out, NULL, NULL) < 0) {
+            return;
+        }
+    }
+}
+
 /* Writes f->t over the file's text atomically; a damaged file's text is kept
-   as <file>.bad first and the new file starts empty.  0, or -1 (logged). */
+   under a name of its own first and the new file starts with its ended
+   journeys; a later version's file is never written (-1).  0, or -1
+   (logged). */
 static int file_commit(File *f, const char *what)
 {
     char *text;
     int rc;
 
+    if (f->later) {
+        fprintf(stderr, "difficulty: %s is from a later version: not written over (%s)\n", f->path,
+                what);
+        return -1;
+    }
     if (f->damaged && f->text != NULL) {
         char bad[ICO_PATH_MAX + 8];
+        int kept;
 
-        snprintf(bad, sizeof(bad), "%s.bad", f->path);
+        bad_name(f, bad, sizeof(bad));
         if (ico_toml_write_text(f->text, bad) == 0) {
             fprintf(stderr, "difficulty: the damaged %s kept as %s; a new file is written\n",
                     f->path, bad);
         } else {
             fprintf(stderr, "difficulty: cannot keep the damaged %s as %s; a new file is written\n",
                     f->path, bad);
+        }
+        kept = f->raw != NULL ? copy_finished(f->text, f->raw, f->t) : 0;
+        if (kept > 0) {
+            fprintf(stderr,
+                    "difficulty: the new file keeps the %d ended journey(s) the damaged one "
+                    "listed\n",
+                    kept);
         }
         free(f->text);
         f->text = NULL;
@@ -193,22 +344,32 @@ static int entry_key(int port, int slot, const char *field, char *out, size_t si
     return ico_region_key_prefixed("save", base, out, (int)size);
 }
 
-static const char *entry_get(const File *f, int port, int slot, const char *field)
+static const char *table_get(const IcoToml *t, int port, int slot, const char *field)
 {
     char key[96];
 
-    return entry_key(port, slot, field, key, sizeof(key)) == 0 ? ico_toml_get(f->t, key) : NULL;
+    return entry_key(port, slot, field, key, sizeof(key)) == 0 ? ico_toml_get(t, key) : NULL;
 }
 
-/* the entry's checksum, or -1 for no entry */
-static long long entry_sum(const File *f, int port, int slot)
+static const char *entry_get(const File *f, int port, int slot, const char *field)
+{
+    return table_get(f->t, port, slot, field);
+}
+
+/* the entry's checksum in t, or -1 for no entry */
+static long long table_sum(const IcoToml *t, int port, int slot)
 {
     char key[96];
 
     if (entry_key(port, slot, "sum", key, sizeof(key)) != 0) {
         return -1;
     }
-    return ico_toml_get_int(f->t, key, -1);
+    return ico_toml_get_int(t, key, -1);
+}
+
+static long long entry_sum(const File *f, int port, int slot)
+{
+    return table_sum(f->t, port, slot);
 }
 
 static void preview_text(int stage, uint32_t play, int sofa, char *out, size_t size)
@@ -247,7 +408,8 @@ static int journey_finished(const File *f, const char *id)
         return 0;
     }
     snprintf(key, sizeof(key), "finished.%s", id);
-    return ico_toml_get_bool(f->t, key, 0) != 0;
+    return ico_toml_get_bool(f->t, key, 0) != 0 ||
+           (f->raw != NULL && ico_toml_get_bool(f->raw, key, 0) != 0);
 }
 
 /* The entry at (port, slot) as a record: 0, or -1 (no rows or no journey id:
@@ -334,6 +496,118 @@ void ico_difficulty_file_init(const char *dir)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", dir != NULL ? dir : "");
     s_damaged_reads = 0;
+    s_unreadable = 0;
+    s_fail_reads = 0;
+}
+
+void ico_difficulty_file_fail_reads(int n)
+{
+    s_fail_reads = n > 0 ? n : 0;
+}
+
+/* The record of the save (port, slot) with this checksum: the slot's own
+   entry when its checksum matches, else any entry on this disc with it (the
+   file was moved or copied).  1 and *d, *fp, *fs; 0 for none. */
+static int lookup(const File *f, int port, int slot, uint32_t sum, IcoDifficulty *d, int *fp,
+                  int *fs)
+{
+    if (entry_sum(f, port, slot) == (long long)sum && entry_record(f, port, slot, d) == 0) {
+        *fp = port;
+        *fs = slot;
+        return 1;
+    }
+    for (int p = 0; p < PORT_MAX; p++) {
+        for (int s = 0; s < SLOT_MAX; s++) {
+            if ((p != port || s != slot) && entry_sum(f, p, s) == (long long)sum &&
+                entry_record(f, p, s, d) == 0) {
+                *fp = p;
+                *fs = s;
+                return 1;
+            }
+        }
+    }
+    return 0;
+}
+
+/* The loaded save's record made the active one (the load, or the first save
+   after a load whose read failed): its entry's, or the one-time carry-over
+   (written at once).  An entry found by checksum in another slot is copied
+   to this one, so what is written later for this run (the whole-journey
+   count after the limit's game over) reaches the entry the next load finds
+   first. */
+static void take_record(File *f, int port, int slot, uint32_t sum)
+{
+    IcoDifficulty d;
+    int found_port = -1, found_slot = -1;
+    char id[20];
+
+    if (lookup(f, port, slot, sum, &d, &found_port, &found_slot)) {
+        const int moved = found_port != port || found_slot != slot;
+        char preview[48];
+
+        ico_difficulty_journey_text(&d, id, sizeof(id));
+        if (!moved) {
+            fprintf(stderr,
+                    "difficulty: load of card %d slot %d (sum %u): found by slot: %s, journey "
+                    "%s, origin %s, knock-downs %d%s\n",
+                    port + 1, slot, (unsigned)sum, mode_shown(d.mode), id, origin_word(d.origin),
+                    (int)d.knocks_journey, d.finished ? ", the journey has ended" : "");
+        } else {
+            fprintf(stderr,
+                    "difficulty: load of card %d slot %d (sum %u): found by sum at card %d "
+                    "slot %d (the file was moved or copied): %s, journey %s, origin %s, "
+                    "knock-downs %d%s\n",
+                    port + 1, slot, (unsigned)sum, found_port + 1, found_slot, mode_shown(d.mode),
+                    id, origin_word(d.origin), (int)d.knocks_journey,
+                    d.finished ? ", the journey has ended" : "");
+        }
+        {
+            const char *pv = entry_get(f, found_port, found_slot, "preview");
+
+            snprintf(preview, sizeof(preview), "%s", pv != NULL ? pv : "");
+        }
+        d.run_port = port;
+        d.run_slot = slot;
+        d.run_has_slot = 1;
+        d.run_sum = sum;
+        ico_difficulty_set_active(&d);
+        if (moved && !f->damaged && !f->later) {
+            char what[128];
+
+            entry_write(f, port, slot, &d, sum, preview[0] != '\0' ? preview : NULL);
+            snprintf(what, sizeof(what),
+                     "card %d slot %d: the entry found by sum at card %d slot %d "
+                     "copied here",
+                     port + 1, slot, found_port + 1, found_slot);
+            file_commit(f, what);
+        }
+        return;
+    }
+    /* no record: the one-time carry-over of the retired config keys, kept at
+       once so the next load finds it (a save made before the file existed
+       and a slot state_recover rebuilt come here once) */
+    ico_difficulty_from_config(&d);
+    d.run_port = port;
+    d.run_slot = slot;
+    d.run_has_slot = 1;
+    d.run_sum = sum;
+    ico_difficulty_journey_text(&d, id, sizeof(id));
+    fprintf(stderr,
+            "difficulty: load of card %d slot %d (sum %u): no entry on this disc (%s): "
+            "carry-over: %s, journey %s, origin config\n",
+            port + 1, slot, (unsigned)sum, ico_region_cur()->slug, mode_shown(d.mode), id);
+    ico_difficulty_set_active(&d);
+    if (f->damaged || f->later) {
+        fprintf(stderr, "difficulty: the carry-over is not written into the %s file%s\n",
+                f->later ? "later version's" : "damaged",
+                f->later ? "" : ": the next save writes it");
+    } else {
+        char what[96];
+
+        entry_write(f, port, slot, &d, sum, NULL);
+        snprintf(what, sizeof(what), "card %d slot %d: the carry-over", port + 1, slot);
+        file_commit(f, what);
+    }
 }
 
 void ico_difficulty_slot_saved(int port, int slot, uint32_t sum, int stage, uint32_t play, int sofa)
@@ -341,6 +615,8 @@ void ico_difficulty_slot_saved(int port, int slot, uint32_t sum, int stage, uint
     File f;
     const IcoDifficulty *d;
     char preview[48], id[20], what[192];
+    int lport = 0, lslot = 0;
+    uint32_t lsum = 0;
 
     ico_difficulty_set_run(port, slot, sum);
     if (!slot_ok(port, slot)) {
@@ -350,7 +626,23 @@ void ico_difficulty_slot_saved(int port, int slot, uint32_t sum, int stage, uint
     }
     if (file_open(&f) != 0) {
         file_close(&f);
+        if (ico_difficulty_unknown(&lport, &lslot, &lsum)) {
+            fprintf(stderr,
+                    "difficulty: card %d slot %d saved while the run's record is unknown (the "
+                    "load of card %d slot %d could not read " FILE_NAME "): no entry written\n",
+                    port + 1, slot, lport + 1, lslot);
+        }
         return;
+    }
+    if (ico_difficulty_unknown(&lport, &lslot, &lsum)) {
+        /* the load could not read the file: its save's record now, before
+           this save's entry is written (never the title's Normal over it) */
+        fprintf(stderr,
+                "difficulty: card %d slot %d saved: the record of the load of card %d slot %d "
+                "(sum %u) is read now (its read had failed)\n",
+                port + 1, slot, lport + 1, lslot, (unsigned)lsum);
+        take_record(&f, lport, lslot, lsum);
+        ico_difficulty_set_run(port, slot, sum);
     }
     d = ico_difficulty_active();
     preview_text(stage, play, sofa, preview, sizeof(preview));
@@ -368,9 +660,6 @@ void ico_difficulty_slot_saved(int port, int slot, uint32_t sum, int stage, uint
 void ico_difficulty_slot_loaded(int port, int slot, uint32_t sum)
 {
     File f;
-    IcoDifficulty d;
-    int found_port = -1, found_slot = -1;
-    char id[20];
 
     if (!slot_ok(port, slot)) {
         fprintf(stderr,
@@ -382,84 +671,24 @@ void ico_difficulty_slot_loaded(int port, int slot, uint32_t sum)
     if (file_open(&f) != 0) {
         file_close(&f);
         fprintf(stderr,
-                "difficulty: load of card %d slot %d: none (" FILE_NAME
-                " cannot be read); the record is unchanged\n",
-                port + 1, slot);
+                "difficulty: load of card %d slot %d (sum %u): none (" FILE_NAME
+                " cannot be read): the run's record is unknown; the next save reads it again "
+                "and writes no entry until it can\n",
+                port + 1, slot, (unsigned)sum);
+        ico_difficulty_set_unknown(port, slot, sum);
         return;
     }
-    if (entry_sum(&f, port, slot) == (long long)sum && entry_record(&f, port, slot, &d) == 0) {
-        found_port = port;
-        found_slot = slot;
-    }
-    for (int p = 0; found_port < 0 && p < PORT_MAX; p++) {
-        for (int s = 0; s < SLOT_MAX; s++) {
-            if ((p != port || s != slot) && entry_sum(&f, p, s) == (long long)sum &&
-                entry_record(&f, p, s, &d) == 0) {
-                found_port = p;
-                found_slot = s;
-                break;
-            }
-        }
-    }
-    if (found_port >= 0) {
-        ico_difficulty_journey_text(&d, id, sizeof(id));
-        if (found_port == port && found_slot == slot) {
-            fprintf(stderr,
-                    "difficulty: load of card %d slot %d (sum %u): found by slot: %s, journey "
-                    "%s, origin %s, knock-downs %d%s\n",
-                    port + 1, slot, (unsigned)sum, mode_shown(d.mode), id, origin_word(d.origin),
-                    (int)d.knocks_journey, d.finished ? ", the journey has ended" : "");
-        } else {
-            fprintf(stderr,
-                    "difficulty: load of card %d slot %d (sum %u): found by sum at card %d "
-                    "slot %d (the file was moved or copied): %s, journey %s, origin %s, "
-                    "knock-downs %d%s\n",
-                    port + 1, slot, (unsigned)sum, found_port + 1, found_slot, mode_shown(d.mode),
-                    id, origin_word(d.origin), (int)d.knocks_journey,
-                    d.finished ? ", the journey has ended" : "");
-        }
-        d.run_port = port;
-        d.run_slot = slot;
-        d.run_has_slot = 1;
-        d.run_sum = sum;
-        ico_difficulty_set_active(&d);
-        file_close(&f);
-        return;
-    }
-    /* no record: the one-time carry-over of the retired config keys, kept at
-       once so the next load finds it (a save made before the file existed
-       and a slot state_recover rebuilt come here once) */
-    ico_difficulty_from_config(&d);
-    d.run_port = port;
-    d.run_slot = slot;
-    d.run_has_slot = 1;
-    d.run_sum = sum;
-    ico_difficulty_journey_text(&d, id, sizeof(id));
-    fprintf(stderr,
-            "difficulty: load of card %d slot %d (sum %u): no entry on this disc (%s): "
-            "carry-over: %s, journey %s, origin config\n",
-            port + 1, slot, (unsigned)sum, ico_region_cur()->slug, mode_shown(d.mode), id);
-    ico_difficulty_set_active(&d);
-    if (f.damaged) {
-        fprintf(stderr, "difficulty: the carry-over is not written into the damaged file: the "
-                        "next save writes it\n");
-    } else {
-        char what[96];
-
-        entry_write(&f, port, slot, &d, sum, NULL);
-        snprintf(what, sizeof(what), "card %d slot %d: the carry-over", port + 1, slot);
-        file_commit(&f, what);
-    }
+    take_record(&f, port, slot, sum);
     file_close(&f);
 }
 
 /* the entry at (p, s) has this preview and an ended journey */
 static int preview_finished(const File *f, int p, int s, const char *preview)
 {
-    const char *v = entry_get(f, p, s, "preview");
+    const char *v = table_get(look_table(f), p, s, "preview");
 
     return v != NULL && strcmp(v, preview) == 0 &&
-           journey_finished(f, entry_get(f, p, s, "journey"));
+           journey_finished(f, table_get(look_table(f), p, s, "journey"));
 }
 
 int ico_difficulty_slot_finished(int port, int slot, int stage, uint32_t play, int sofa)
@@ -491,7 +720,7 @@ int ico_difficulty_slot_finished(int port, int slot, int stage, uint32_t play, i
         }
     }
     if (hit_port >= 0) {
-        const char *id = entry_get(&f, hit_port, hit_slot, "journey");
+        const char *id = table_get(look_table(&f), hit_port, hit_slot, "journey");
 
         fprintf(stderr,
                 "difficulty: the Continue list refuses card %d slot %d (preview %s): journey "
@@ -516,10 +745,10 @@ int ico_difficulty_sum_finished(uint32_t sum)
         for (int s = 0; s < SLOT_MAX; s++) {
             const char *id;
 
-            if (entry_sum(&f, p, s) != (long long)sum) {
+            if (table_sum(look_table(&f), p, s) != (long long)sum) {
                 continue;
             }
-            id = entry_get(&f, p, s, "journey");
+            id = table_get(look_table(&f), p, s, "journey");
             if (journey_finished(&f, id)) {
                 fprintf(stderr,
                         "difficulty: the load refuses the save with sum %u: journey %s has "
@@ -551,8 +780,31 @@ void ico_difficulty_file_journey_ended(void)
         return;
     }
     snprintf(key, sizeof(key), "finished.%s", id);
-    ico_toml_set_bool(f.t, key, 1);
     snprintf(what, sizeof(what), "journey %s ended", id);
+    if (f.later) {
+        /* a later version's file: only this journey added to its [finished],
+           every other line (its version among them) as it is */
+        IcoToml *only = ico_toml_parse("");
+        char *text = NULL;
+
+        if (only != NULL && ico_toml_set_bool(only, key, 1) == 0) {
+            text = ico_toml_render(only, f.text);
+        }
+        if (text != NULL && ico_toml_write_text(text, f.path) == 0) {
+            fprintf(stderr,
+                    "difficulty: wrote %s (%s; the later version's file kept as it was "
+                    "apart from this line)\n",
+                    f.path, what);
+        } else {
+            fprintf(stderr, "difficulty: cannot write %s (%s); the old file is kept\n", f.path,
+                    what);
+        }
+        free(text);
+        ico_toml_free(only);
+        file_close(&f);
+        return;
+    }
+    ico_toml_set_bool(f.t, key, 1);
     file_commit(&f, what);
     file_close(&f);
 }
@@ -573,7 +825,8 @@ void ico_difficulty_file_knocks_reset(void)
         file_close(&f);
         return;
     }
-    if (f.damaged || journey_parse(entry_get(&f, d->run_port, d->run_slot, "journey"), j) != 0 ||
+    if (f.damaged || f.later ||
+        journey_parse(entry_get(&f, d->run_port, d->run_slot, "journey"), j) != 0 ||
         j[0] != d->journey[0] || j[1] != d->journey[1]) {
         fprintf(stderr,
                 "difficulty: the journey's knock-down count is 0 again; card %d slot %d holds "

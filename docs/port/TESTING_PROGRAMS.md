@@ -292,10 +292,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   journey id), begin / reset / `set_active` / `set_row`, the accessors of `options.h` and
   `variants.h` reading the record (a moved variant's step writes no config key, no row switches
   achievements off), the knock-down limit (off counts nothing; once a fall: a chained hit, a
-  landing, a knock-down before the get-up timer is out, a fall longer than the timer; another
-  actor never; the limit's return and `over_pending`; each room and the whole journey, whose count
-  goes back to 0 after the game over the limit causes), Permadeath on any game over and the
-  states lock, No Shadows, the `difficulty.record` state block (a restored record, a damaged
+  landing, a fall longer than the timer, FALL and DEAD; a knock-down as he gets up a new fall;
+  another actor never; the limit's return and `over_pending`; each room and the whole journey, whose count
+  goes back to 0 after the game over the limit causes), Permadeath on any game over, at once
+  when the limit is reached and at `ico_difficulty_game_over_certain`, told once, and the states
+  lock, No Shadows, the `difficulty.record` state block (a restored record, a damaged
   version and a missing block rebuilt from the state's keys) (`difficulty`, `difficulty_jpn`,
   `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
 - `difficulty_file_test.c`: the difficulty sidecar, `difficulty.toml` (`port/game/difficulty_file.c`;
@@ -309,9 +310,15 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `[finished]`, the Continue list's preview match (the slot's own entry, a file moved to card 2, a
   newer save of the slot and another journey's save not refused) and the backstop by checksum, a
   load of such a save finished; the whole-journey count at a save and written through as 0 after
-  the limit's game over (not into another journey's entry); a damaged file and a later version's
-  read as empty and not written over by a load, kept as `difficulty.toml.bad` by the next save or
-  a Permadeath end, an empty file no damage; the disc's preview words (`mc_preview_play`,
+  the limit's game over (not into another journey's entry), and through an entry found by sum,
+  which the load copies to its own slot; a damaged file read as empty but for its ended journeys,
+  not written over by a load, kept as `difficulty.toml.bad` (then `.bad2`) by the next save, which
+  carries its ended journeys over; a later version's file never written over (its entries not
+  read, its ended journeys refused, a Permadeath end only adds its line); a file with no version
+  line but entries read as version 1; an empty file no damage; a file there but not readable
+  (`ico_difficulty_file_fail_reads`): nothing written, the record unknown until the next save
+  reads it and takes the loaded save's record first (or writes nothing while it still cannot),
+  one failed try read again, a New Game and the title clearing the unknown state; the disc's preview words (`mc_preview_play`,
   `mc_preview_sofa`) the ones `layout_action.c`'s `la_preview_play` / `la_preview_sofa` read; a
   text scan of the hooks in `layout_action.c` (the save hook, both load twins' hook and backstop
   before `gflagKeepState`, the Continue list's refusal in both twins with the negative sound, the
@@ -321,14 +328,16 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `difficulty_knock_test.c`: the knock-down limit's game side
   ([GAME_FEATURES.md](GAME_FEATURES.md#knock-down-limit)) on the CPU, `gamestate.c` compiled in over a
   synthetic sampler, one run per disc: the snapshot's act mode and get-up timer (unknown while the boy's
-  object is unreadable); `ico_gs_knockdown` counts a fall by a hit once (still down, the get-up timer
-  running, a landing, a fall without a hit and another actor's fall do not count) and the latch clears
-  through the snapshot as host_loop.c passes it to `ico_difficulty_tick`; Hard's third fall returns 1 and
+  object is unreadable); `ico_gs_knockdown` counts a fall by a hit once (a chained hit while he lies,
+  falls or is dead, a landing, a fall without a hit and another actor's fall do not count; a hit as he
+  gets up, the timer still running, does) and the latch clears through the snapshot as host_loop.c
+  passes it to `ico_difficulty_tick` once he is on his feet; Hard's third fall returns 1 and
   every later entry while the game over is due, `ico_gs_knock_game_over_take` answers once (again after a
   state's rebaseline), the watch line after 2 s neither down nor dead; a room entry's signal starts the
   room's count again; the game over signal (and the June 2001 demo's `ico_gs_signal_game_over_once`, two
-  calls, one game over) clears the due game over and the counts it should; the journey scope; Permadeath;
-  Normal counts nothing and logs nothing; each log line's text (POSIX hosts); text scans of the hooks in
+  calls, one game over) clears the due game over and the counts it should; the journey scope; Permadeath
+  (any game over; the limit at once, before he lies; the snapshot's certain game overs: `gameover_flag`,
+  Ico or Yorda in DEAD, Ico in STONEDEAD; nothing with the row off); Normal counts nothing and logs nothing; each log line's text (POSIX hosts); text scans of the hooks in
   commonact.c (four copies, the hold, the two game-over forms, `actAfterDown`), act.c (the after-proc at
   every interrupt), StageManager.c, gamestate.c, host_loop.c and the header (`difficulty_knock`,
   `difficulty_knock_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
@@ -1813,7 +1822,7 @@ The renderer's test programs have a page of their own:
   Customize note naming achievements; the pause menu's read-only view (no link from the title, the link
   from the pause menu, the journey's values greyed with their note, a step ignored, Back to Gameplay on
   the link, the New Game pages the draft's again); the journey line's text and the toasts (a counted
-  knock-down short of the limit, none at the limit, the refusal's).
+  knock-down short of the limit, none at the limit, the refusal's, a Permadeath journey's end's).
 - `settings_test.c`'s `testNewGameScreen`, `testNewGameMouse` and `testNewGameStartFlags`: the
   screen's rows from Difficulty round to Start, the journey Normal after a plain confirm, the mouse's
   click on Difficulty's arrows and value (a hover moving nothing) and the start with Hard, and on every

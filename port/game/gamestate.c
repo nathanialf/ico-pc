@@ -115,6 +115,7 @@ void ico_gs_sample_live(IcoGsSnapshot *s)
         Act *g = GOBJ_ACT(girlGObj);
 
         s->girl_present = 1;
+        s->girl_act_mode = g->actMode;
         s->hand_held = ACTGame_FLAG_TETSUNAGI() != 0;
         s->yorda_carried_by_enemy = ico_gs_girl_carried_by_enemy(
             g->actMode, g->carrier != 0 && g->carrier->kind == ENEMY_KIND);
@@ -347,7 +348,8 @@ static int flag_in(const IcoGsSnapshot *s, int n)
 
 /* --- the knock-down limit ------------------------------------------------ */
 
-#define DEAD_ACT_MODE 0x16 /* actModeTbl's DEAD (actCommonDie) on every disc */
+#define DEAD_ACT_MODE 0x16    /* actModeTbl's DEAD (actCommonDie) on every disc */
+#define STONEDEAD_ACT_MODE 24 /* STONEDEAD (actCommonStoneDead) on every disc */
 
 int ico_gs_knockdown(int is_boy, int landing, int by_hit, int down_timer, int intr_kind)
 {
@@ -375,8 +377,8 @@ int ico_gs_knockdown(int is_boy, int landing, int by_hit, int down_timer, int in
         what = "not counted: the landing of the fall the down act began";
     } else if (!by_hit) {
         what = "not counted: no hit put him down";
-    } else if (was_in_fall || down_timer != 0) {
-        what = "not counted: the same fall (down, or getting up)";
+    } else if (was_in_fall) {
+        what = "not counted: the same fall (he has not been on his feet since)";
     } else {
         what = "not counted";
     }
@@ -488,6 +490,24 @@ void ico_gs_tick(void)
         return;
     }
     knock_watch();
+    /* Permadeath: a game over that nothing can stop any more ends the
+       journey now, not seconds later at the game-over screen (a pause and End
+       Game in between would escape it): Yorda taken into the floor (the
+       kidnap's end sets gameover_flag before its 2 to 5 s of effect), Ico or
+       Yorda in the DEAD act (actCommonDie: 2 s, then the game over), Ico in
+       STONEDEAD (actCommonStoneDead: 300 frames; 600 on the June 2001 demo,
+       which leaves the pause on).  Neither act takes a mail but DEAD's and
+       DELETE's (docs/port/HARD_MODE.md "Permadeath") */
+    if (s_snap.gameover_flag) {
+        ico_difficulty_game_over_certain("Yorda was taken");
+    } else if (s_snap.actors_valid && s_snap.boy_act_mode == DEAD_ACT_MODE) {
+        ico_difficulty_game_over_certain("Ico's fatal fall");
+    } else if (s_snap.actors_valid && s_snap.boy_act_mode == STONEDEAD_ACT_MODE) {
+        ico_difficulty_game_over_certain("Ico turned to stone");
+    } else if (s_snap.actors_valid && s_snap.girl_present &&
+               s_snap.girl_act_mode == DEAD_ACT_MODE) {
+        ico_difficulty_game_over_certain("Yorda's death");
+    }
 
     /* polled events */
     s_stage_entered =

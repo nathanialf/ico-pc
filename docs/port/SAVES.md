@@ -390,7 +390,10 @@ and compared. The slot is the lowest one with no `game.00N`, or `--slot`; a slot
 needs `--overwrite`. The icon files are never written (they come from the disc); a directory
 without them gets them at the game's next save. `config.toml`'s `[mirror]`, `achievements.toml`
 and `difficulty.toml` are not touched, so the slot has no mirror flag or achievement run of its
-own, and its first load takes the difficulty carry-over
+own, and its first load takes the difficulty carry-over of the config keys, not the state's own
+`difficulty.record` (neither tool reads that block, and a state made before the record existed
+has none): a journey recovered from a state comes back with the rows `config.toml` still lists and
+no Permadeath or knock-down limit, Normal when it lists none
 ([The difficulty of each save](#the-difficulty-of-each-save)).
 
 Where the game resumes: a load starts the image's stage, `gflagSave`'s `gFlagSaveStage`
@@ -450,9 +453,24 @@ Second card on, both cards have a slot 3) and `slot_N_` (`entry_key`). The rows 
   (`ico_difficulty_from_config`: Normal when every value is the game's own, else Custom), written at
   once with origin `config` ("carry-over"). Later saves keep the origin. A save with no entry (one
   made before the file existed, a slot `state_recover` wrote) takes the carry-over at its first
-  load.
+  load. An entry found by sum is copied to the loaded card and slot at once ("copied here"), so
+  what this run writes to its own slot later (the whole-journey count after the limit's game
+  over) reaches the entry the next load of that slot finds first.
+- **A file that cannot be read** (there, `ico_path_kind`, but the read fails: another program
+  holding it, such as an antivirus, a backup or a cloud folder) is never taken for an empty one:
+  the read is tried once more, then the call reads and writes nothing (`difficulty: <path> is
+  there but cannot be read ...`). A load in that case leaves the run's record unknown
+  (`ico_difficulty_set_unknown`; it plays as the title's Normal until then): the next save reads
+  the file again and first makes the loaded save's record the active one (its entry, or the
+  carry-over), then writes; while the file still cannot be read the save writes no entry, so
+  no entry of the file is ever written over with Normal. The Continue list and the load's
+  backstop let a save through while the file cannot be read.
 - **Permadeath** (any game over ends the journey): the journey's id goes into `[finished]` at once
-  (`ico_difficulty_file_journey_ended`). The Continue list (both `la_mc_load_file_select` twins)
+  (`ico_difficulty_file_journey_ended`), from the moment the game over is certain: the knock-down
+  that reaches the limit (before Ico lies for 2 s), Yorda taken (`gameover_flag`), Ico or Yorda in
+  the DEAD act, Ico in STONEDEAD (`ico_difficulty_game_over_certain`,
+  [HARD_MODE.md](HARD_MODE.md#the-knock-down-limit)), else the game over itself, so a pause and
+  End Game in the seconds before the game-over screen does not keep the journey. The Continue list (both `la_mc_load_file_select` twins)
   refuses a save whose preview matches an entry of an ended journey (the slot's own entry, or any
   entry of the disc with that preview: a moved file) with the negative sound
   (`la_host_load_refused`, `ico_difficulty_slot_finished`); a later save in the same slot has
@@ -467,10 +485,20 @@ Second card on, both cards have a slot 3) and `slot_N_` (`entry_key`). The rows 
   journey's (`ico_difficulty_file_knocks_reset`).
 
 Every call reads the file afresh and every change is written at once and atomically (`.tmp`, then a
-rename: `ico_toml_write_text`). A file whose `version` is missing or not 1 reads as empty with a log
-line (the first 8 reads, then every 100th) and is not written over by a load's carry-over; the next
-save (or a Permadeath end) keeps its text as `difficulty.toml.bad` and writes a new file. The file
-is in a backup ([PLATFORM.md](PLATFORM.md)).
+rename: `ico_toml_write_text`). A file with no `version` line that holds `[save]` or `[finished]`
+entries is read as version 1, with a log line. A damaged file (another `version`) reads as empty
+apart from its ended journeys, which the Continue list and the backstop still refuse, with a log
+line (the first 8 reads, then every 100th), and is not written over by a load's carry-over; the
+next save (or a Permadeath end) keeps its text under a name of its own (`difficulty.toml.bad`,
+then `.bad2` ... `.bad99`) and writes a new file holding every ended journey the old text listed.
+A later version's file (`version` above 1) is never written over: its entries are not read (a
+load takes the carry-over, not written), its ended journeys are honoured, a save writes nothing
+(`... is from a later version: not written over`), and a Permadeath end adds only its journey's
+line to `[finished]`, every other line kept. The file is in a backup ([PLATFORM.md](PLATFORM.md)).
+
+Copying the memory card to another computer or phone: copy `difficulty.toml` from the same user
+folder with it. Without it every save on the card loads with the carry-over (the config's rows, no
+knock-down limit and no Permadeath), and the saves of a Permadeath journey that ended load again.
 
 The log says every lookup's outcome (`difficulty: load of card 1 slot 3 (sum 123456): found by
 slot: Hard, journey ...`, `found by sum at card 2 slot 3 (the file was moved or copied)`, `no
@@ -509,16 +537,18 @@ themselves are [PLATFORM.md](PLATFORM.md#save-states).
     save are refused before anything is read or written: `ico_state_conditions` returns
     `ICO_STATE_PERMADEATH` right after "off" (`IcoStateConds.locked`, sampled by
     `state_host.c`); the slot listing marks every present slot not loadable for that reason; the
-    Save states page refuses both at once with "Save states cannot be loaded on a Permadeath
-    journey." (`UI_STR_DIFF_STATES_LOCKED`, `port/platform/main_host.c`; the save shares the
-    load's words).
+    Save states page refuses both at once, a load with "Save states cannot be loaded on a
+    Permadeath journey." (`UI_STR_DIFF_STATES_LOCKED`) and a save with "Save states cannot be made
+    on a Permadeath journey." (`UI_STR_DIFF_STATES_SAVE_LOCKED`; `port/platform/main_host.c`
+    `states_request`, and `states_done` for a save the poll refused).
   - Whatever journey is in force (the title's Normal included), a state whose own
     `difficulty.record` has Permadeath on is refused with the same result before anything is
     restored: `perform_load` reads the record from the staged reg section (its place by this
     build's block order, or by the translation's offset for another build's state;
     `ico_state_record_permadeath`, `port/game/state_rules.c`: the block's size, place and record
     version must match), and the listing reads each loadable slot's reg section alone for the
-    same check.
+    same check, keeping the verdict per slot with the file's size and time so a rebuild of the
+    list does not read it again (`slot_permadeath`).
   - The port writes no state on its own: every state comes from `perform_save` (the page, the
     hotkey, `[dev] state_save_at`), which the conditions above gate.
 - **Section sizes of another build's state**: its reg and audio sections lack the FRESH blocks
