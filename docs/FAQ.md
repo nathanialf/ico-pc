@@ -339,8 +339,37 @@ is, and you can load it from the pause menu or from the title screen
 slot 1). It does not replace
 the game's own save points: those still write to the memory card. A state
 only loads in the version of the game that saved it, so keep a save point
-too before you update.
+too before you update. On a journey with Permadeath on, save states are off.
 [The details](OPTIONS.md#save-states).
+
+## Can I change the difficulty in the middle of a game?
+
+**I picked Hard and want Normal again. Where is the row?**
+
+No. The difficulty is chosen on the New Game screen, and the save keeps it
+for the whole journey. From the pause menu, **Options > Gameplay >
+Difficulty** shows the rules the journey runs with, greyed, and nothing there
+can be changed. That is so a Permadeath journey cannot be softened halfway,
+and so the knock-down count means the same all the way through. To play the
+same game on other rules, start a New Game and choose them there; your first
+save is not touched. The rows for the Shadows, the Combat rules, Time to
+rescue Yorda and the rest are under **Customize** on the New Game screen,
+not in Options. [The details](OPTIONS.md#difficulty).
+
+## My Permadeath save will not load
+
+**I get "This journey has ended." when I choose my save, or the game over
+screen has no Continue.**
+
+That is Permadeath doing its job: a journey with it on ends at the first game
+over, and the save of that journey is refused from then on. The game
+remembers which journeys have ended in `difficulty.toml`, in your user folder
+([where that is](PORTABLE_MODE.md#where-your-saves-are)); the memory card
+file itself is untouched. Start a New Game to play again. If a save is
+refused that did not have Permadeath on, or you moved your saves to another
+device and want them to load, see
+[moving to another computer or phone](#moving-to-another-computer-or-phone).
+[The details](OPTIONS.md#permadeath).
 
 ## Can I bring my PS2 save over?
 
@@ -422,6 +451,12 @@ closes: start it again) with your data in place. This also works between a
 computer and a phone, and on Android 13 and later, where the game's own folder
 cannot be opened from a file manager.
 [The details](OPTIONS.md#extras).
+
+If you move your saves by copying folders instead, copy `difficulty.toml` from
+your user folder along with `memcard`. It holds the difficulty each save was
+started on, and which Permadeath journeys have ended. Without it every save
+loads with the rules in the other device's `config.toml` (Normal when you
+never changed them), and a Permadeath journey that had ended loads again.
 
 Your save states come with the backup, but a state only loads in a version of
 the game that can resume it, the same as on the device that made it.

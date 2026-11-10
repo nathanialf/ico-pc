@@ -118,8 +118,8 @@ can go missing.
   letter is two bytes): `NULL`, and the translator is asked for a shorter one. A row's words are
   held to 255 bytes the same way, a message to 383.
 - The `%` codes are the English row's, in the same order (ctest `strings_complete`).
-- A row the port gains after a translation came in (Options > Gameplay > Shadows attack together,
-  for one) is `NULL` in that translation's table, in the end block (below), and shows in English
+- A row the port gains after a translation came in (Shadows attack together on the New Game screen's
+  Customize > Shadows page, for one) is `NULL` in that translation's table, in the end block (below), and shows in English
   until the translator sends its words; the eight languages of the program's own text get it with
   the row.
 - Every character has a glyph (ctests `font_audit`, `font_coverage`).

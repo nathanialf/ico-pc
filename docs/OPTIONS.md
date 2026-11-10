@@ -488,17 +488,25 @@ The six mouse rows do not show on phones and tablets.
 ## Gameplay
 
 Every row here plays as the original until you change it, on a phone too.
-The Gameplay page has its own rows, then four pages of their own, each
-opened from its row just above Back: [Yorda](#yorda),
-[Shadows](#shadows), [Combat](#combat) and [Cutscenes](#cutscenes). All of it is there from
+The Gameplay page has its own rows, then two pages of their own, each
+opened from its row just above Back: [Yorda](#yorda) and
+[Cutscenes](#cutscenes). All of it is there from
 the title screen or the pause menu, on every disc.
 
-Some rows change the game more than others. The line under a row says what
-it does, and on the game variants rows (No hints here, two rows on the
-Yorda page, three on the Shadows page, eight on the Combat page and two on the Cutscenes page) whether it switches
-achievements off. Those that switch them off do so for as long as they are
-on, like Developer mode, so you cannot earn an achievement by accident while
-playing a changed game. Turn them off again and achievements come back.
+The rows that make the game easier or harder (how the Shadows fight, how
+long you have to rescue Yorda, the rules about being knocked down, and more)
+are not here. They belong to a journey and are chosen when it begins,
+on the New Game screen: see [Difficulty](#difficulty). From the pause menu,
+the **Difficulty** row at the bottom of this page shows what your journey
+was started with, and changes nothing.
+
+The line under a row says what it does, and whether it switches
+achievements off. Of the rows in Options, only **Ignore cutscene cameras**
+(and the Debug menu, under [Developer mode](#developer-mode)) do so. They
+switch achievements off for as long as they are on, like Developer mode, so
+you cannot earn an achievement by accident while playing a changed game.
+Turn them off again and achievements come back. None of the difficulty rows
+switches achievements off.
 
 - **Analogue stick fix** lets Ico run in any direction you push the stick,
   not only the eight the original game knows. It is also on the Controls
@@ -517,10 +525,19 @@ playing a changed game. Turn them off again and achievements come back.
   come back when you turn it on again. The second card is the folder
   `memcard2` beside `memcard` in your user folder
   ([where that is](PORTABLE_MODE.md#a-second-memory-card)).
-- **No hints:** Yorda gives no hints about where to go, as on the North
-  American disc. Achievements stay on. The North American disc, the August
-  2001 preview and the June 2001 demo have no hints, so there it changes
-  nothing, and the line under it says so.
+- **Light sword colour:** Original or Red. The light sword of a finished game
+  leaves a pale trail when it swings; the game also has a red twin of it that
+  is never handed out. Red gives you that one: the same sword, as strong and
+  as long, with a red trail. Only the colour changes. It takes effect from
+  the next room. The row is on the European, Japanese, Korean and Asian
+  discs; the North American disc and the 2001 previews have no light sword.
+  Achievements stay on.
+- **Stick:** Original or Insect net. Insect net turns every stick into an
+  insect net the makers left in the game unused, drawn as fine grey lines.
+  Ico picks it up and carries it like the stick, but he cannot swing it, it
+  cannot be set alight at a torch, and it never hurts a Shadow. Where the
+  game asks for a burning stick, turn the row back to Original: the sticks
+  return from the next room. On every disc. Achievements stay on.
 
 Two more rows are the game's own, and only show up in the pause menu's
 Options once you have finished the game:
@@ -546,25 +563,6 @@ other discs.
 
 Options > Gameplay > Yorda:
 
-- **Time to rescue Yorda** sets how many seconds a shadow takes to pull Yorda
-  into a pit, from the moment it starts to sink into the ground with her until
-  she is gone (in most scenes; see below): from 4 to 30 seconds, one second a
-  press. It starts at
-  **15 s (Original)**, the game's own time (15.4 seconds). The whole pull-in
-  speeds up or slows down evenly, so a short time leaves less time to reach
-  her at every point of it, and a long one more. Ico taking her hand still
-  pulls her back out. In some scenes, where the game shows the pit with a
-  camera of its own, the pull-in is quicker: the original takes her after 5
-  of its 15 seconds there, and the time you set scales that in the same
-  proportion (at 8 s she is taken after about 2.6 seconds there; at 30 s
-  after about 9.7). Shadows never take Yorda, on the Shadows page, stops it
-  altogether.
-- **Yorda trips** makes Yorda trip and fall the way she does in the original
-  game after the main gate opens: when Ico has run pulling her by the hand
-  for three seconds, she falls, and again after every three more seconds of
-  it. She gets up again when Ico moves on. It takes effect from
-  the next room you go into, or the next time you continue from a save. The
-  June 2001 demo does not have her fall, so on that disc it does nothing.
 - **Natural chains** changes how two chains look as they come down for Ico:
   the one at the Stone Pillar and one underground. In the original game the
   links look squashed until the chain is all the way down. With this on, the
@@ -580,99 +578,8 @@ Options > Gameplay > Yorda:
   lets it swing on the longest and 10 stops it quickest. It starts at
   **4 (original)**, the game's own. It does not switch achievements off.
 
-### Shadows
-
-Options > Gameplay > Shadows. Shadow toughness and Shadow aggression start as
-the game shipped on your disc; Shadows never take Yorda and Peaceful shadows
-start Off. The fight rules (One hit
-per swing, Shadows never dodge, Shadows attack together and Queen barrier) are
-on the [Combat](#combat) page.
-
-- **Shadow speed** sets how fast shadows walk, run and fly: **Slower** (three
-  quarters of the original speed), **Original**, **Faster** (a quarter faster)
-  or **Fastest** (half as fast again). Only their walking, running and flying
-  change: their attacks, grabs, flinches and fading away play at the original
-  speed. It does not change how often they attack, how long they wait before
-  they do, or how long a shadow takes to pull Yorda into a pit (Time to rescue
-  Yorda sets that).
-- **Shadow toughness:** **Original** keeps your disc's Shadows. **American**
-  makes every Shadow as tough as on the North American disc, and no tougher on
-  later playthroughs. **Not tougher later** keeps your disc's Shadows but they
-  do not get tougher on later playthroughs. Achievements stay on. On the June
-  2001 magazine demo there is no **American** choice: the demo's Shadows are
-  not the North American disc's, so the row has Original and Not tougher
-  later only (an `american` set in `config.toml` counts as Original there).
-  **Third journey** makes every Shadow as tough as the game's own table makes
-  them on a third playthrough, which is twice as tough as on the first
-  journey. The game has that number but you can never reach it: finishing the
-  game once is as far as the count goes, and a second journey is only half as
-  much again (one and a half times). Achievements stay on. The row has this
-  choice only on the European, Japanese, Korean and Asian discs, because
-  only their game makes Shadows tougher on a later journey; on the North
-  American disc, the August 2001 preview and the June 2001 demo it is not
-  offered (a `third_journey` set in `config.toml` counts as Original there).
-- **Shadow aggression:** how the Shadows fight. **Their own** leaves each
-  Shadow as the game made it. The other four make them all **Bold** or
-  **Wary**, and **patient** or **quick**. Achievements stay on.
-- **Peaceful shadows:** the Shadows come out of their pits as usual, but they
-  stand where they appear and never go after Ico or Yorda: they do not walk
-  up to you, attack, or carry Yorda off. It is the game's own switch that
-  turns the Shadows' thinking off, used here for the Shadows only; Yorda
-  keeps hers. It is different from **Shadows never take Yorda** (the row
-  above), where the Shadows still come for you and fight but do not carry her
-  off: with Peaceful shadows they do not come at all. Switches achievements
-  off, the same as the other rows that make the game easier. The story's own
-  scenes were checked by reading the game's code, not by playing them all
-  with the row On: if a scene ever stalls waiting for a Shadow, switch the
-  row Off and load your save.
-
-### Combat
-
-Options > Gameplay > Combat. The first three rows start **On**, which is the
-game as it shipped; turning one Off makes a fight harder, and none of them
-switches achievements off. The next four are the fight rules that were on the
-Shadows page. The last two change Ico's weapons and start at **Original**.
-
-- **Automatic guard:** in the game Ico blocks a Shadow's attack by himself
-  when it comes from the front. Off: Ico does not block a Shadow's attack
-  from the front; it lands as an attack from behind does. Achievements stay
-  on.
-- **Turn to face shadows:** in the game Ico's swing turns him toward the
-  nearest Shadow in front of him. Off: Ico swings straight ahead. The swing
-  itself is the weapon's own, so a Shadow beside him can still be caught by
-  it. Achievements stay on.
-- **Shadows wait while Ico is down:** in the game the Shadows hold back while
-  Ico is knocked down and getting up, and while he lies there the game also
-  makes him untouchable, so a swing that reaches him passes through. Off: they
-  do not hold back, and their swings land while he is on the ground and
-  getting up. Achievements stay on.
-- **One hit per swing:** a swing of Ico's weapon can hurt a Shadow only once.
-  Switches achievements off.
-- **Shadows never dodge:** Shadows never step aside from Ico's swings.
-  Switches achievements off.
-- **Shadows attack together** lets several shadows attack Ico at the same
-  time. In the original game they take turns: while one shadow is attacking,
-  the others hold back and wait. With this on, none of them waits for the
-  others. How they come at you, how long they wait before they strike and how
-  they go after Yorda stay as in the original, and still only one shadow at a
-  time can carry Yorda away (several can already go after her at once). It
-  takes effect at once. Off unless you turn it on.
-- **Queen barrier:** how many hits it takes to break the Queen's barrier,
-  5 or 7. Your disc's own number is shown until you choose. Achievements stay
-  on.
-- **Light sword colour:** Original or Red. The light sword of a finished game
-  leaves a pale trail when it swings; the game also has a red twin of it that
-  is never handed out. Red gives you that one: the same sword, as strong and
-  as long, with a red trail. Only the colour changes. It takes effect from
-  the next room. The row is on the European, Japanese, Korean and Asian
-  discs; the North American disc and the 2001 previews have no light sword.
-  Achievements stay on.
-- **Stick:** Original or Insect net. Insect net turns every stick into an
-  insect net the makers left in the game unused, drawn as fine grey lines.
-  Ico picks it up and carries it like the stick, but he cannot swing it, it
-  cannot be set alight at a torch, and it never hurts a Shadow. Where the
-  game asks for a burning stick, turn the row back to Original: the sticks
-  return from the next room. On every disc. Achievements stay on.
+The rows about rescuing Yorda (**Time to rescue Yorda**, **Yorda trips**,
+**Shadows never take Yorda**) are part of a journey's [Difficulty](#difficulty).
 
 ### Cutscenes
 
@@ -692,9 +599,208 @@ Options > Gameplay > Cutscenes:
   Cutscenes can look wrong, and the game may show places it never meant you to
   see. Switches achievements off.
 
-The game variants rows (No hints, the Shadows rows, the Combat rows, the two cutscene rows and the Debug menu under
-[Developer mode](#developer-mode)) are kept in `config.toml`, under the
-heading `[variants]`.
+The Light sword colour, Stick, chain and cutscene rows, and the Debug menu
+under [Developer mode](#developer-mode), are kept in `config.toml`, under the
+heading `[variants]`. A journey's difficulty rows are not: they are kept with
+the save ([Difficulty](#difficulty)).
+
+## Difficulty
+
+A journey's difficulty is chosen once, on the [New Game screen](#starting-a-new-game),
+and stays with that save. There are three modes, and **Customize** under
+them to change every rule on its own. The pause menu cannot change it: a
+journey is played as it began, so a Permadeath journey cannot be softened
+halfway and a knock-down count means the same all the way through. From the
+pause menu, **Options > Gameplay > Difficulty** shows the rules the journey
+was started with, greyed, and the pause screen's journey lines show the mode,
+the knock-down count (as `2 / 3`, when there is a limit) and the word
+Permadeath when it is on.
+
+None of the difficulty rows switches achievements off. Achievements count on
+every mode.
+
+### Easy, Normal and Hard
+
+**Normal** is the game as it shipped. Easy and Hard change these rows and leave
+all the others as in Normal:
+
+| Row | Easy | Normal | Hard |
+| --- | --- | --- | --- |
+| Shadow speed | Slower | Original | Faster |
+| Shadow toughness | Not tougher later | Original | Third journey on the European, Japanese, Korean and Asian discs; American on the North American disc and the August 2001 preview; Original on the June 2001 demo |
+| Shadow aggression | Wary, patient | Their own | Bold, quick |
+| Shadows never take Yorda | On | Off | Off |
+| Shadows never dodge | On | Off | Off |
+| Shadows attack together | Off | Off | On |
+| Automatic guard, Turn to face shadows, Shadows wait while Ico is down | On | On | Off |
+| Queen barrier | your disc's number | your disc's number | 7 |
+| Time to rescue Yorda | 25 s | Original (15 s) | 8 s |
+| Knock-down limit | Off | Off | 3, in each room |
+
+One hit per swing, Peaceful shadows, No Shadows, Yorda trips, No hints and
+Permadeath stay Off in all three. When you change a row under Customize, the
+mode shown is the one whose rows match exactly, or **Custom** when none does.
+The Easy and Hard values are a judgement, not a measured balance.
+
+### Customize
+
+Customize has three pages. Each row's line says what it does.
+
+**Shadows**
+
+- **Shadow speed** sets how fast shadows walk, run and fly: **Slower** (three
+  quarters of the original speed), **Original**, **Faster** (a quarter faster)
+  or **Fastest** (half as fast again). Only their walking, running and flying
+  change: their attacks, grabs, flinches and fading away play at the original
+  speed. It does not change how often they attack, how long they wait before
+  they do, or how long a shadow takes to pull Yorda into a pit (Time to rescue
+  Yorda sets that).
+- **Shadow toughness:** **Original** keeps your disc's Shadows. **American**
+  makes every Shadow as tough as on the North American disc, and no tougher on
+  later playthroughs. **Not tougher later** keeps your disc's Shadows but they
+  do not get tougher on later playthroughs. On the June
+  2001 magazine demo there is no **American** choice: the demo's Shadows are
+  not the North American disc's, so the row has Original and Not tougher
+  later only (an `american` found in an old `config.toml` counts as Original there).
+  **Third journey** makes every Shadow as tough as the game's own table makes
+  them on a third playthrough, which is twice as tough as on the first
+  journey. The game has that number but you can never reach it: finishing the
+  game once is as far as the count goes, and a second journey is only half as
+  much again (one and a half times). The row has this
+  choice only on the European, Japanese, Korean and Asian discs, because
+  only their game makes Shadows tougher on a later journey; on the North
+  American disc, the August 2001 preview and the June 2001 demo it is not
+  offered.
+- **Shadow aggression:** how the Shadows fight. **Their own** leaves each
+  Shadow as the game made it. The other four make them all **Bold** or
+  **Wary**, and **patient** or **quick**.
+- **Peaceful shadows:** the Shadows come out of their pits as usual, but they
+  stand where they appear and never go after Ico or Yorda: they do not walk
+  up to you, attack, or carry Yorda off. It is the game's own switch that
+  turns the Shadows' thinking off, used here for the Shadows only; Yorda
+  keeps hers. It is different from **Shadows never take Yorda**, where the
+  Shadows still come for you and fight but do not carry her
+  off: with Peaceful shadows they do not come at all. The story's own
+  scenes were checked by reading the game's code, not by playing them all
+  with the row On: if a scene ever stalls waiting for a Shadow, please report
+  it. The row cannot be changed on a journey that has begun.
+- **Shadows never take Yorda** stops the Shadows from carrying Yorda off, and
+  the timer that sends one for her while Ico is in another room. A few scripted
+  scenes still show the capture.
+- **Shadows attack together** lets several shadows attack Ico at the same
+  time. In the original game they take turns: while one shadow is attacking,
+  the others hold back and wait. With this on, none of them waits for the
+  others. How they come at you, how long they wait before they strike and how
+  they go after Yorda stay as in the original, and still only one shadow at a
+  time can carry Yorda away (several can already go after her at once).
+- **No Shadows:** no Shadow ever appears, anywhere in the game, and the story
+  goes on as if you had won each fight, the cage room and the final hall
+  included. **Some story moments are lost or play differently without them.**
+  No preset turns it on. On the June 2001 demo the spiders still come out.
+
+**Combat**
+
+- **Automatic guard:** in the game Ico blocks a Shadow's attack by himself
+  when it comes from the front. Off: Ico does not block a Shadow's attack
+  from the front; it lands as an attack from behind does.
+- **Turn to face shadows:** in the game Ico's swing turns him toward the
+  nearest Shadow in front of him. Off: Ico swings straight ahead. The swing
+  itself is the weapon's own, so a Shadow beside him can still be caught by
+  it.
+- **Shadows wait while Ico is down:** in the game the Shadows hold back while
+  Ico is knocked down and getting up, and while he lies there the game also
+  makes him untouchable, so a swing that reaches him passes through. Off: they
+  do not hold back, and their swings land while he is on the ground and
+  getting up.
+- **One hit per swing:** a swing of Ico's weapon can hurt a Shadow only once.
+- **Shadows never dodge:** Shadows never step aside from Ico's swings.
+- **Queen barrier:** how many hits it takes to break the Queen's barrier,
+  5 or 7. Your disc's own number is shown until you choose.
+
+**Rules**
+
+- **Time to rescue Yorda** sets how many seconds a shadow takes to pull Yorda
+  into a pit, from the moment it starts to sink into the ground with her until
+  she is gone (in most scenes; see below): from 4 to 30 seconds, one second a
+  press. It starts at
+  **15 s (Original)**, the game's own time (15.4 seconds). The whole pull-in
+  speeds up or slows down evenly, so a short time leaves less time to reach
+  her at every point of it, and a long one more. Ico taking her hand still
+  pulls her back out. In some scenes, where the game shows the pit with a
+  camera of its own, the pull-in is quicker: the original takes her after 5
+  of its 15 seconds there, and the time you set scales that in the same
+  proportion (at 8 s she is taken after about 2.6 seconds there; at 30 s
+  after about 9.7). Shadows never take Yorda stops it
+  altogether.
+- **Yorda trips** makes Yorda trip and fall the way she does in the original
+  game after the main gate opens: when Ico has run pulling her by the hand
+  for three seconds, she falls, and again after every three more seconds of
+  it. She gets up again when Ico moves on. The June 2001 demo does not have
+  her fall, so on that disc it does nothing.
+- **No hints:** Yorda gives no hints about where to go, as on the North
+  American disc. The North American disc, the August
+  2001 preview and the June 2001 demo have no hints, so there it changes
+  nothing, and the line under it says so.
+- **Knock-down limit** is Off or 1 to 9 ([below](#the-knock-down-limit)).
+- **Knock-downs count** is **Each room** or **Whole journey**. It does nothing,
+  and is greyed, while the limit is Off.
+- **Permadeath** ([below](#permadeath)).
+
+### The knock-down limit
+
+With a limit on, the game is over once Ico has been knocked down that many
+times. Hard sets 3, counted in each room; Customize can set 1 to 9 and count
+the whole journey instead.
+
+- **What counts** is a hit that knocks Ico down onto the ground. That includes
+  the explosions of boxes and bombs. It does not count when Ico stumbles at a
+  ledge and falls (that is a fall, not a hit), when Yorda or a Shadow is
+  knocked down, or for the Queen's attack in the final fight, which never
+  knocks him down.
+- **One count per fall.** A fall lasts until Ico is back on his feet, so being
+  hit again while he lies there, or as he lands, is the same fall. A hit that
+  knocks him down again while he is getting up is a new one.
+- **Each room** starts the count again every time you enter a room, and when
+  you continue from a save. **Whole journey** keeps one count, saved with each
+  save (loading an earlier save brings back the count it had then), and starts
+  it again after the game over it causes.
+- Each knock-down short of the limit shows a message, such as
+  "Knocked down 1 of 3". The count is also on the pause screen.
+- At the limit Ico lies on the ground for two seconds, and cannot be hit
+  meanwhile, and then the game is over as for any other game over: Continue,
+  or Quit (with Permadeath, only Quit).
+
+### Permadeath
+
+**Permadeath** makes any game over the end of that journey. The game over
+screen has no Continue, only Quit. The save of that journey does not load: on
+the title screen's Continue list, choosing it plays the refusal sound and says
+"This journey has ended." The journey ends from the moment a game over cannot
+be avoided, for example once a Shadow has carried Yorda off, or when the knock-down
+limit is reached, so pausing and choosing End Game at that moment does not
+escape it.
+
+Permadeath is an honour system. Your memory card file is not changed or
+deleted. The game remembers which journeys have ended in a file of its own,
+`difficulty.toml`, in your user folder beside `config.toml`
+([where that is](PORTABLE_MODE.md#where-your-saves-are)). If you copy the memory
+card to another device without that file, or delete the file, the saves load
+again. Save states are off on a Permadeath journey: none can be saved or
+loaded (see [Save states](#save-states)).
+
+### Saves you already have
+
+A save that has no difficulty of its own yet (one made before saves kept
+their difficulty) takes it the first time you load it, from the rows your
+`config.toml` holds for the Shadows, the Combat rules, the time to rescue
+Yorda, Yorda trips and No hints: **Normal** if none differs from the game's
+own, **Custom** otherwise. From then on the save keeps those rows, whatever you
+do to the file later. The game does not rewrite `config.toml`. A save state of
+that kind takes the rows it was made with.
+
+Each save keeps its difficulty in `difficulty.toml`. To bring a save to another
+device, copy that file with the memory card folder (Options > Extras > **Back
+up your data** already does).
 
 ## Language
 
@@ -761,7 +867,9 @@ heading `[variants]`.
 
 The list of achievements and what each one asks. Secret ones show as ???
 until you earn them. You cannot earn achievements while Developer mode is
-on. One secret achievement cannot be earned on the North American disc,
+on. The
+[difficulty](#difficulty) you play on does not matter: no difficulty row
+switches achievements off. One secret achievement cannot be earned on the North American disc,
 the August 2001 preview or the June 2001 demo: those versions of the game
 do not have what it asks for.
 
@@ -966,7 +1074,10 @@ only possible from the pause menu, so from the title screen the page only
 loads and deletes. A slot that cannot be loaded (it was saved on another
 disc, with different gameplay settings, or by another version of the game
 that it cannot carry over to) is greyed, and the line under the cards says
-why. After a load the game is back on the pause menu, on **Save states**. On
+why. A state keeps the journey's [Difficulty](#difficulty) with it:
+loading one brings back the difficulty and the knock-down count it was
+saved with. On a journey with Permadeath on, save states are off: none can be
+saved or loaded, and a state made on such a journey never loads. After a load the game is back on the pause menu, on **Save states**. On
 a computer, F5 saves to slot 1 and F9 loads it. On Windows and Android a
 state carries over to a later version of the game when the part of the game
 it was saved in has not changed; states made before the game could carry
@@ -974,7 +1085,9 @@ them over do not.
 On Linux, the Steam Deck and Mac a state loads only in the version that
 saved it, so after you update the game those states are greyed. A gameplay
 setting that a later version adds does not stop an older state from loading
-while you leave that setting as it starts. Your
+while you leave that setting as it starts. A state made before states kept
+their difficulty takes the gameplay rows it was made with as its difficulty.
+Your
 achievements keep counting as before and are not taken back by a load. The
 states are kept in the `states` folder of your
 [user folder](PORTABLE_MODE.md#where-your-saves-are), apart from your memory
@@ -1036,8 +1149,12 @@ Ico about freely:
 
 The pause menu shows your journey's numbers on the right: play time,
 deaths, how often Yorda was taken, saves, enemies defeated, whether New
-Game+ and Mirror mode are on, and how many achievements you have. Any
-helpers you turned on (Shadows never take Yorda, the stick fix, Developer
+Game+ and Mirror mode are on, and how many achievements you have. A
+**Difficulty** line shows the mode the journey was started with, the
+knock-down count when there is a limit (as `2 / 3`: knock-downs so far, and
+the limit) and the word Permadeath when it is on; Options > Gameplay >
+Difficulty shows the rules in full ([Difficulty](#difficulty)). Any
+helpers you turned on (the stick fix, Developer
 mode) are listed too. Where the game has a name for the area you are in,
 the panel shows it.
 
@@ -1046,24 +1163,36 @@ hidden until you start a New Game.
 
 ## Starting a New Game
 
-**Mirror mode** and **New Game+** are not in Options. When you start a New
-Game, the screen after the Vibration question has a row for each, Off or
-On, and a Start row under them. Up and Down move between them, Left and
-Right pick, Cross accepts a row and moves on, and the Start row (or the
-Start button on any row) begins the game.
+**Difficulty**, **Mirror mode** and **New Game+** are not in Options. When you
+start a New Game, the screen after the Vibration question has a row for each,
+a **Customize** row under Difficulty, and a Start row under them. Up and Down
+move between them, Left and Right pick, Cross accepts a row and moves on,
+and the Start row (or the Start button on any row) begins the game. Triangle
+goes back to the Vibration question.
 
+- **Difficulty** is Easy, Normal (the game as it shipped, and what the screen
+  starts on) or Hard. It shows **Custom** once Customize has made a mix that
+  matches none of the three. The line under the row says what the mode does.
+  What each mode changes, every row of Customize, the knock-down limit and
+  Permadeath are under [Difficulty](#difficulty). The choice stays with that
+  save and cannot be changed once the journey has begun.
+- **Customize** opens the Shadows, Combat and Rules pages. Nothing on them is
+  kept until you start the game, and Back returns to this screen. Going back
+  to Easy, Normal or Hard replaces the rows; going back to Custom brings your
+  own rows back.
 - **Mirror mode** plays the whole game flipped left to right. The sticks
   and the D-pad both walk the way you press.
 - **New Game+** plays the second journey, the one the PS2 gives you after
   you finish the game. Yorda's words are translated, and the ending and
   some items change. It starts On when you begin from a finished game's
-  save, and Off otherwise. You can change it either way.
+  save, and Off otherwise. You can change it either way. When you begin from a
+  finished game's save, Difficulty starts with that save's rules.
 
 Two things follow from that choice. If you turn New Game+ On before you
 have finished the game, the ending does not offer to save a finished game,
 and finishing counts for the "Once More" achievement. If you turn it Off
 after finishing, Film effect and Players are not in Options for that
-journey. Both choices stay with that save.
+journey. All of these choices stay with that save.
 
 ## Settings you can only change in a file
 

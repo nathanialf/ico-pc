@@ -846,7 +846,11 @@ be loaded is greyed and the line under the cards gives the reason:
   it had when you saved. Put the setting back (a few, such as Analogue stick
   fix, Skip the opening and the rows on the Gameplay pages, change how the
   game plays),
-  and the state loads.
+  and the state loads. The journey's difficulty is not one of them: a state
+  carries its own.
+- **Save states are off on a Permadeath journey.** None can be saved or
+  loaded while the journey has Permadeath on, and a state made on such a
+  journey never loads. The message says so.
 - **The state could not be restored; the game goes on.** The file is damaged,
   or the game found something wrong in it. Your game carries on as it was.
   Try another slot.
@@ -862,6 +866,20 @@ be loaded is greyed and the line under the cards gives the reason:
 If a state fails to load for any other reason, send a
 [problem report](#send-a-problem-report): the log has lines that start with
 `state:` that say what happened.
+
+## A save says "This journey has ended."
+
+The save belongs to a journey with Permadeath on that has had its game over.
+The game refuses to load it, and the game over screen of such a journey has
+no Continue. That is the rule, not a fault: Start a New Game to play again.
+The memory card file is not changed. The game keeps the list of ended journeys
+in `difficulty.toml` in your user folder, so a card copied to another device
+without that file loads again, and a save refused by mistake loads again if the
+file is moved out of the way (close the game first; every save then takes its
+difficulty from `config.toml` again). The log lines that start
+with `difficulty:` say which save was refused and why, and if the file could not
+be read.
+[Permadeath](OPTIONS.md#permadeath).
 
 ## A backup will not save or restore
 
