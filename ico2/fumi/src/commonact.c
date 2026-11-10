@@ -3596,13 +3596,73 @@ inline void actCommonDamage(GObj *volatile self)
    only while Shadows wait while Ico is down is On; every other actor always. */
 extern int ico_variant_down_keeps_hit(int is_boy);
 
+/* PC port: port/game/difficulty.h's knock-down limit (the journey's
+   difficulty, Rules > Knock-down limit).  Every copy of actCommonDown asks
+   ico_gs_knockdown (port/game/gamestate.c) at its entry whether this fall is
+   the one that reaches the limit.  A fall counts when the boy was put down
+   by a hit (Act.attacker, which AttackMail sets with the hit's mail and
+   ACTGame_BeforeFunc clears while he stands), not when he lands from a fall
+   the down act began (the European body's mails 55 and 56, which skip its
+   DownFunc) nor when he loses his footing at a ledge (CLIFF_HESITATE's mail
+   into this act, boyact.c).  At the limit the copy runs actDownGameOver
+   after its own DownFunc instead of its loop: he lies as the game's own
+   death lies (actCommonDie: the game over after
+   ((60 - systemStatus[0] * 10) / systemStatus[1]) * 2 frames, 2 s at 50 and
+   60 Hz alike) and is unhittable (hit set every frame, whatever Shadows wait
+   while Ico is down is).  No get-up mail is sent, so only a mail from
+   outside can take him out of the act; actAfterDown then asks for the game
+   over at once, so the limit's game over never goes missing. */
+static void actDownGameOverNow(int why)
+{
+    if (!ico_gs_knock_game_over_take(why)) {
+        return; /* asked for already, or the game over came another way */
+    }
+    if (ICO_JUN26) {
+        /* the demo's death paths: InitSceneObjects_jun26 never clears
+           gameover_layout_flag, so ACT_LAYOUT_GAMEOVER works once a session
+           there */
+        ico_gs_signal_game_over_once();
+        lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(62, 59, 58));
+        return;
+    }
+    ACT_LAYOUT_GAMEOVER();
+}
+
+static void actDownGameOver(GObj *volatile self)
+{
+    int cnt;
+
+    for (cnt = 0; cnt <= ((60 - systemStatus[0] * 10) / systemStatus[1]) * 2; cnt++) {
+        GOBJ_ACT(self)->hit = 1;
+        _ACTWait(1);
+    }
+    actDownGameOverNow(ICO_GS_KNOCK_LAY_END);
+    while (1) {
+        GOBJ_ACT(self)->hit = 1;
+        _ACTWait(1);
+    }
+}
+
+/* PC port: port/game/gamestate.c's live sampler (the knock-down limit's
+   in-fall latch): the actor's get-up timer, which actAfterDown sets when the
+   down act is left and ACTGame_BeforeFunc counts down */
+int ico_gs_game_down_timer(GObj *self)
+{
+    return GOBJ_ACT(self)->work != 0 ? GOBJ_WORK(self)->downTimer : 0;
+}
+
 static void actCommonDown_ntsc(GObj *volatile self)
 {
     float v[4];
     Act *s = GOBJ_ACT(self);
+    int over;
 
     debug_StdPrintfDummy("enter actCommonDown\n");
     ACT_AFTER_PROC(s) = (void (*)(GObj *))actAfterDown;
+    /* PC port: the knock-down limit (actDownGameOver, above); this disc has
+       no landing re-entry */
+    over = ico_gs_knockdown(self == boyGObj, 0, GOBJ_ACT(self)->attacker != 0,
+                            ico_gs_game_down_timer(self), s->intrKind);
     if (self == boyGObj) {
         brainAddLevelGirl(1000.0f);
     }
@@ -3613,6 +3673,9 @@ static void actCommonDown_ntsc(GObj *volatile self)
         SetMotionDirection(self, GOBJ_ACT(self)->attackDir);
     }
     DownFunc(self);
+    if (over) {
+        actDownGameOver(self); /* PC port: never returns */
+    }
     while (1) {
         if (self->kind != 4 && ico_variant_down_keeps_hit(self == boyGObj)) {
             GOBJ_ACT(self)->hit = 1;
@@ -3626,9 +3689,14 @@ inline static void actCommonDown_jun26(GObj *volatile self)
 {
     float v[4];
     Act *s = GOBJ_ACT(self);
+    int over;
 
     debug_StdPrintfDummy("enter actCommonDown\n");
     ACT_AFTER_PROC(s) = (void (*)(GObj *))actAfterDown;
+    /* PC port: the knock-down limit (actDownGameOver, above); this disc has
+       no landing re-entry */
+    over = ico_gs_knockdown(self == boyGObj, 0, GOBJ_ACT(self)->attacker != 0,
+                            ico_gs_game_down_timer(self), s->intrKind);
     if (self == girlGObj) {
         sceVu0ScaleVector(v, GOBJ_ACT(self)->attackDir, -1.0f);
         SetMotionDirection(self, v);
@@ -3636,6 +3704,9 @@ inline static void actCommonDown_jun26(GObj *volatile self)
         SetMotionDirection(self, GOBJ_ACT(self)->attackDir);
     }
     DownFunc(self);
+    if (over) {
+        actDownGameOver(self); /* PC port: never returns */
+    }
     while (1) {
         if (self->kind != 4 && ico_variant_down_keeps_hit(self == boyGObj)) {
             GOBJ_ACT(self)->hit = 1;
@@ -3649,9 +3720,14 @@ static void actCommonDown_aug6(GObj *volatile self)
 {
     float v[4];
     Act *s = GOBJ_ACT(self);
+    int over;
 
     debug_StdPrintfDummy("enter actCommonDown\n");
     ACT_AFTER_PROC(s) = (void (*)(GObj *))actAfterDown;
+    /* PC port: the knock-down limit (actDownGameOver, above); this disc has
+       no landing re-entry */
+    over = ico_gs_knockdown(self == boyGObj, 0, GOBJ_ACT(self)->attacker != 0,
+                            ico_gs_game_down_timer(self), s->intrKind);
     if (self == boyGObj) {
         brainAddLevelGirl(1000.0f);
     }
@@ -3662,6 +3738,9 @@ static void actCommonDown_aug6(GObj *volatile self)
         SetMotionDirection(self, GOBJ_ACT(self)->attackDir);
     }
     DownFunc(self);
+    if (over) {
+        actDownGameOver(self); /* PC port: never returns */
+    }
     while (1) {
         if (self->kind != 4 && ico_variant_down_keeps_hit(self == boyGObj)) {
             GOBJ_ACT(self)->hit = 1;
@@ -3688,9 +3767,14 @@ void actCommonDown(GObj *volatile self)
     float v[4];
     Act *s = GOBJ_ACT(self);
     int notDamage = s->intrKind != 55 && s->intrKind != 56;
+    int over;
 
     debug_StdPrintfDummy("enter actCommonDown\n");
     ACT_AFTER_PROC(s) = (void (*)(GObj *))actAfterDown;
+    /* PC port: the knock-down limit (actDownGameOver, above); mails 55 and
+       56 are the landing of a fall this act began */
+    over = ico_gs_knockdown(self == boyGObj, !notDamage, GOBJ_ACT(self)->attacker != 0,
+                            ico_gs_game_down_timer(self), s->intrKind);
     if (notDamage) {
         if (self == boyGObj) {
             brainAddLevelGirl(1000.0f);
@@ -3704,6 +3788,9 @@ void actCommonDown(GObj *volatile self)
         DownFunc(self);
     }
     GOBJ_ACT(self)->enemy->liftLevel = 16;
+    if (over) {
+        actDownGameOver(self); /* PC port: never returns */
+    }
     while (1) {
         if (self->kind != 4 && ico_variant_down_keeps_hit(self == boyGObj)) {
             GOBJ_ACT(self)->hit = 1;
@@ -9777,6 +9864,11 @@ inline void actAfterDown(GObj *volatile self)
 {
     GOBJ_WORK(self)->downTimer = ((60 - systemStatus[0] * 10) / systemStatus[1]) *
                                  PAL_JUN26(0x82, 130) / PAL_JUN26(0x3C, 60);
+    /* PC port: the knock-down limit: a mail took Ico out of the down act
+       while the limit's game over was due (actDownGameOver): it comes now */
+    if (self == boyGObj) {
+        actDownGameOverNow(ICO_GS_KNOCK_LEFT_DOWN);
+    }
 }
 
 inline void afterCommonCling(ICO_WORD_PTR(GObj *) volatile self)

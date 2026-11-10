@@ -66,6 +66,7 @@
 #include "../save/mc_host.h"
 #include "../ui/settings.h"
 #include "achievements.h"
+#include "difficulty.h"
 #include "options.h"
 #include "video_options.h"
 
@@ -293,6 +294,10 @@ static void init(void)
     /* a simulation key a later version added reads as its default in an
        earlier version's state (sim_keys.h) */
     ico_state_set_key_default(ico_sim_key_is_default);
+    /* the difficulty rows an earlier version's state lists among its
+       simulation keys: its record is built from them (difficulty.h), so
+       they never refuse it */
+    ico_state_set_key_retired(ico_sim_key_retired);
     if (!s_on) {
         fprintf(stderr, "state: save states are off: %s\n", s_off_why);
         return;
@@ -392,6 +397,7 @@ static void sample(IcoStateConds *c)
     c->credits = ico_credits_active();
     c->unused = ico_unused_active();
     c->gallery = gallery_playing() >= 0;
+    c->locked = ico_difficulty_states_locked();
 }
 
 int ico_state_can_save_here(void)
@@ -1484,6 +1490,9 @@ static void shot_from_slot(int slot)
 typedef struct LoadCtx {
     Copy *c;
     unsigned want; /* the sections to read (1 << SEC_*), 0 every one */
+    int xb;        /* another build's state: its reg and audio sections lack the FRESH blocks
+                      it was saved without, so their sizes are bounds here (check_sizes does
+                      the exact sum from the translation's offsets) */
     int bad;
     char why[160];
 } LoadCtx;
@@ -1538,6 +1547,10 @@ static void *load_section(void *user, const IcoStateSectionInfo *s)
             (l->want == 0 || (l->want & (1u << i)) != 0)) {
             int exact;
             const uint64_t want = section_size(i, &exact);
+
+            if (l->xb && (i == SEC_REG || i == SEC_AUDIO)) {
+                exact = 0;
+            }
 
             /* review finding 10: the size the file claims against this
                build's before anything is allocated for it */
@@ -1737,6 +1750,88 @@ static void log_fresh_blocks(int slot, const IcoXbVerdict *v)
             "state: slot %d was saved before %u of the blocks registered here existed (%s): they "
             "start from this run's values\n",
             slot, v->fresh, names);
+}
+
+/* 1 when the registered block `name` is one of the FRESH blocks another
+   build's state lacks (v: its translation), so it kept this run's bytes */
+static int state_block_absent(const IcoXbVerdict *v, const char *name)
+{
+    int i;
+
+    if (v->fresh == 0 || v->block_off == NULL) {
+        return 0;
+    }
+    for (i = 0; i < ico_state_registry_count(); i++) {
+        if (strcmp(ico_state_registry_entry(i)->name, name) == 0) {
+            return v->block_off[i] == ICO_XB_BLOCK_ABSENT;
+        }
+    }
+    return 0;
+}
+
+/* The "difficulty.record" block's place in a reg section: this build's
+   order (block_off NULL) or another build's offsets; 0 when the state has
+   none (a FRESH block it lacks) or the block is not registered */
+static int record_place(const uint64_t *block_off, uint64_t *off, uint64_t *n)
+{
+    uint64_t at = 0;
+    int i;
+
+    for (i = 0; i < ico_state_registry_count(); i++) {
+        const IcoStateEntry *e = ico_state_registry_entry(i);
+
+        if ((e->flags & ICO_STATE_AUDIO) != 0) {
+            continue;
+        }
+        if (strcmp(e->name, "difficulty.record") == 0) {
+            if (block_off != NULL && block_off[i] == ICO_XB_BLOCK_ABSENT) {
+                return 0;
+            }
+            *off = block_off != NULL ? block_off[i] : at;
+            *n = e->n;
+            return 1;
+        }
+        at += e->n;
+    }
+    return 0;
+}
+
+/* 1 when the staged reg section holds a record with Permadeath on */
+static int staged_permadeath(const Copy *c, const uint64_t *block_off)
+{
+    uint64_t off = 0, n = 0;
+
+    return c->p[SEC_REG] != NULL && record_place(block_off, &off, &n) &&
+           ico_state_record_permadeath((const unsigned char *)c->p[SEC_REG], c->n[SEC_REG], off, n);
+}
+
+/* The listing's check of a slot's file: its reg section read alone (the
+   record's bytes), 1 when it was saved on a Permadeath journey */
+static int slot_permadeath(int slot, const uint64_t *block_off)
+{
+    char path[ICO_PATH_MAX];
+    Copy c;
+    LoadCtx lc;
+    int k = 0;
+
+    if (ico_state_slot_path(path, sizeof path, ico_state_dir(), slot, ".ics") != 0) {
+        return 0;
+    }
+    memset(&c, 0, sizeof c);
+    memset(&lc, 0, sizeof lc);
+    lc.c = &c;
+    lc.want = 1u << SEC_REG;
+    lc.xb = block_off != NULL;
+    if (ico_state_file_read(path, NULL, load_section, &lc) == ICO_STATE_OK && !lc.bad) {
+        k = staged_permadeath(&c, block_off);
+    }
+    copy_free(&c);
+    if (k) {
+        fprintf(stderr,
+                "state: slot %d was saved on a Permadeath journey: it cannot be loaded here\n",
+                slot);
+    }
+    return k;
 }
 
 /* A state that header_check called another build's: OK when it can be
@@ -1977,11 +2072,23 @@ static void perform_load(int slot)
                     nk > 1 ? "they have" : "it has");
         }
     }
+    {
+        char keys[ICO_STATE_KEYS_MAX];
+        const int nr = ico_state_keys_retired(saved.keys, s_now.keys, keys, sizeof keys);
+
+        if (nr > 0) {
+            fprintf(stderr,
+                    "state: slot %d lists %d difficulty row%s among its settings (made before they "
+                    "were its own block): not compared: %s\n",
+                    slot, nr, nr > 1 ? "s" : "", keys);
+        }
+    }
     t0 = ico_thread_now_ms();
     memset(&stage, 0, sizeof stage);
     memset(&backup, 0, sizeof backup);
     memset(&lc, 0, sizeof lc);
     lc.c = &stage;
+    lc.xb = xb;
     r = ico_state_file_read(path, NULL, load_section, &lc);
     rg = stage.n[SEC_RANGES] == sizeof(StateRanges) ? (const StateRanges *)stage.p[SEC_RANGES]
                                                     : NULL;
@@ -2008,6 +2115,13 @@ static void perform_load(int slot)
         snprintf(detail, sizeof detail, "%s -> %s: %.250s", sv, tv, why);
         set_refusal(ICO_STATE_BLOCK_DATA, saved.commit);
         r = ICO_STATE_OTHER_BUILD;
+    }
+    /* a state saved on a Permadeath journey never loads, whatever journey
+       is in force now (from the title too): its record, read from the
+       file's own bytes, before anything is restored */
+    if (r == ICO_STATE_OK && staged_permadeath(&stage, xb ? xv.block_off : NULL)) {
+        r = ICO_STATE_PERMADEATH;
+        snprintf(detail, sizeof detail, "%s", "the state was saved on a Permadeath journey");
     }
     /* a state without the saving process's thread pointer or stack guard
        where this platform's frames hold them: its fibers would resume with
@@ -2140,6 +2254,19 @@ static void perform_load(int slot)
     ico_video_camera_cut();
     s_cut_next = 1;
     ico_gs_rebaseline();
+    /* the journey's difficulty: the record the state holds (its block put
+       back above), or for a state made before records (another build's
+       without the block: this run's bytes were kept) one built from the
+       state's own keys text, never from config.toml; either way the
+       variants' switches follow (ico_variants_apply inside) */
+    {
+        const int absent = xb && state_block_absent(&xv, "difficulty.record");
+
+        fprintf(stderr, "state: slot %d's difficulty: %s\n", slot,
+                absent ? "no record in the state (made before states held one): built from its keys"
+                       : "the state's record");
+        ico_difficulty_state_loaded(absent, saved.keys);
+    }
     ico_ach_host_state_loaded(ico_host_main_ticks());
     ico_input_record_state_loaded(slot, ico_host_main_ticks());
     ico_fpenv_sim_enter();
@@ -2255,6 +2382,10 @@ static void list_other_build(int slot, IcoStateSlotInfo *info)
     }
     detail[0] = '\0';
     r = other_build(path, &h, &v, &xb, detail, sizeof detail);
+    if (r == ICO_STATE_OK && xb && slot_permadeath(slot, v.block_off)) {
+        r = ICO_STATE_PERMADEATH;
+        snprintf(detail, sizeof detail, "%s", "the state was saved on a Permadeath journey");
+    }
     if (xb) {
         ico_xb_verdict_free(&v);
     }
@@ -2287,12 +2418,29 @@ void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
             if (cache[i].present && !cache[i].loadable &&
                 cache[i].why_not == ICO_STATE_OTHER_BUILD) {
                 list_other_build(i + 1, &cache[i]);
+            } else if (cache[i].present && cache[i].loadable && slot_permadeath(i + 1, NULL)) {
+                /* this build's state of a Permadeath journey */
+                cache[i].loadable = 0;
+                cache[i].why_not = ICO_STATE_PERMADEATH;
             }
         }
         cache_gen = s_list_gen;
         cache_keys = now->settings_hash;
     }
     memcpy(out, cache, sizeof cache);
+    if (ico_difficulty_states_locked()) {
+        /* a Permadeath journey in force: no slot loads (the load refuses
+           the same, ico_state_conditions); the cache keeps each slot's own
+           verdict for when another journey is in force */
+        int i;
+
+        for (i = 0; i < ICO_STATE_SLOTS; i++) {
+            if (out[i].present) {
+                out[i].loadable = 0;
+                out[i].why_not = ICO_STATE_PERMADEATH;
+            }
+        }
+    }
 }
 
 /* --- requests and the poll ----------------------------------------------------- */

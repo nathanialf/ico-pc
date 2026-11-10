@@ -4,13 +4,16 @@
  * other six).  It holds the per-disc matrix of docs/port/GAME_FEATURES.md
  * ("Options on each disc"): which rows a disc shows, from the title and
  * from the pause menu, by the region table field that decides it (and the
- * Hold type row's starting value, the disc's own).  The
+ * Hold type row's starting value, the disc's own), and the New Game
+ * draft's rows on Customize's pages (every one on every disc, Hard's Shadow
+ * toughness, the toughness values the disc offers).  The
  * expectations are written out per disc (kExpect), not read from the
  * table, so a change to a field is a change made here on purpose.  CPU
  * only. */
 #include "settings_fixture.h"
 
 #include "ico_unused.h"
+#include "settings_difficulty.h" /* the New Game draft */
 
 typedef struct {
     const char *slug;
@@ -31,22 +34,27 @@ typedef struct {
        attract movie, the early show art, and the page's link */
     int unused[4];
     int unusedPage;
-    /* Gameplay > Combat > Light sword colour (both entries): the disc has the
+    /* Gameplay > Light sword colour (both entries): the disc has the
        light sword's kinds 8 and 9 (ico_variant_offered); Stick on every disc */
     int lightSword;
     /* Controls > Remap controls > Ask Yorda for a hint: the discs with the
        hint system (not the North American disc or the 2001 builds) */
     int hints;
+    /* Hard's Shadow toughness (plan "Presets"); whether the disc offers
+       American (not the June 2001 demo) and Third journey (not the 2001
+       discs) on Customize > Shadows */
+    int hardTough;
+    int american, third;
 } Expect;
 
 static const Expect kExpect[] = {
-    {"pal", 1, 1, 1, 1, 0, 1, 1, 382, {1, 1, 1, 1}, 1, 1, 1},
-    {"jpn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1, 1},
-    {"kor", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1, 1},
-    {"ntsc", 0, 0, 1, 0, 1, 1, 1, 349, {1, 1, 0, 1}, 1, 0, 0},
-    {"aug6", 0, 0, 1, 0, 1, 1, 1, 348, {1, 1, 0, 1}, 1, 0, 0},
-    {"jun26", 0, 0, 1, 0, 1, 0, 0, 333, {0, 0, 0, 0}, 0, 0, 0},
-    {"cn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1, 1},
+    {"pal", 1, 1, 1, 1, 0, 1, 1, 382, {1, 1, 1, 1}, 1, 1, 1, ICO_TOUGHNESS_THIRD_JOURNEY, 1, 1},
+    {"jpn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1, 1, ICO_TOUGHNESS_THIRD_JOURNEY, 1, 1},
+    {"kor", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1, 1, ICO_TOUGHNESS_THIRD_JOURNEY, 1, 1},
+    {"ntsc", 0, 0, 1, 0, 1, 1, 1, 349, {1, 1, 0, 1}, 1, 0, 0, ICO_TOUGHNESS_AMERICAN, 1, 0},
+    {"aug6", 0, 0, 1, 0, 1, 1, 1, 348, {1, 1, 0, 1}, 1, 0, 0, ICO_TOUGHNESS_AMERICAN, 1, 0},
+    {"jun26", 0, 0, 1, 0, 1, 0, 0, 333, {0, 0, 0, 0}, 0, 0, 0, ICO_TOUGHNESS_ORIGINAL, 0, 0},
+    {"cn", 0, 0, 0, 1, 0, 1, 1, 382, {1, 1, 0, 1}, 1, 1, 1, ICO_TOUGHNESS_THIRD_JOURNEY, 1, 1},
 };
 
 /* Extras > Unused content through the program's CPU side (unused_content.c:
@@ -144,11 +152,63 @@ static const Expect *expectFor(const char *slug)
 
 /* the rows every disc has, from both entries */
 static const UiSettingsOpt kEveryDisc[] = {
-    UI_OPT_MENU_LANGUAGE, UI_OPT_BRIGHTNESS,  UI_OPT_VIBRATION,    UI_OPT_STICK_FIX,
-    UI_OPT_YORDA,         UI_OPT_PIT_TIME,    UI_OPT_SHADOW_SPEED, UI_OPT_SHADOWS_TOGETHER,
-    UI_OPT_DOOR_FIX,      UI_OPT_YORDA_TRIPS, UI_OPT_SKIP_OPENING, UI_OPT_SECOND_CARD,
-    UI_OPT_OUTPUT,        UI_OPT_DEVELOPER,   UI_OPT_VAR_WEAPON,
+    UI_OPT_MENU_LANGUAGE, UI_OPT_BRIGHTNESS,  UI_OPT_VIBRATION, UI_OPT_STICK_FIX, UI_OPT_DOOR_FIX,
+    UI_OPT_SKIP_OPENING,  UI_OPT_SECOND_CARD, UI_OPT_OUTPUT,    UI_OPT_DEVELOPER, UI_OPT_VAR_WEAPON,
 };
+
+/* the New Game draft's rows (Customize's three pages), every one on every
+   disc; Hard's toughness the disc's; the toughness row steps only through
+   the values the disc offers (from Original: American where offered, Not
+   tougher later, Third journey where offered, Original again); the demo's
+   own toughness note, the 2001 discs' No hints note */
+static void checkDraftRows(const Expect *e)
+{
+    static const UiSettingsPage kPages[3] = {UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_RULES};
+    IcoDifficulty hard;
+    int total = 0;
+
+    useConfig("version = 1\n[ui]\nlanguage = \"en\"\n");
+    stage_no = 1;
+    enterMainKeep(1);
+    for (int p = 0; p < 3; p++) {
+        int lb[16], op[16];
+        const int n = ui_settings_page_rows(kPages[p], lb, op, NULL, 16);
+        for (int i = 0; i < n; i++) {
+            if (op[i] != UI_OPT_BACK) {
+                total++;
+                CHECK(ui_settings_row_shown(lb[i]), "%s: Customize page %d row %d shown", e->slug,
+                      kPages[p], i);
+            }
+        }
+    }
+    CHECK(total == ICO_DIFF_ROW_COUNT, "%s: every draft row on a page (%d of %d)", e->slug, total,
+          ICO_DIFF_ROW_COUNT);
+    ico_difficulty_preset(ICO_DIFF_HARD, &hard);
+    CHECK(hard.row[ICO_DIFF_SHADE_TOUGHNESS] == e->hardTough, "%s: Hard's toughness %d, want %d",
+          e->slug, (int)hard.row[ICO_DIFF_SHADE_TOUGHNESS], e->hardTough);
+    ui__diff_draft_start(NULL);
+    static const char *const kTough[4] = {"Original", "American", "Not tougher later",
+                                          "Third journey"};
+    int seen[4] = {0, 0, 0, 0};
+    for (int k = 0; k < 4; k++) {
+        ui_settings_step(UI_OPT_VAR_TOUGHNESS, 1);
+        for (int v = 0; v < 4; v++) {
+            seen[v] += strcmp(ui_settings_value_text(UI_OPT_VAR_TOUGHNESS), kTough[v]) == 0;
+        }
+    }
+    CHECK(seen[0] >= 1 && seen[2] >= 1 && (seen[1] > 0) == e->american && (seen[3] > 0) == e->third,
+          "%s: the toughness values offered (American %d, Third journey %d)", e->slug, seen[1],
+          seen[3]);
+    CHECK(ui__diff_note(UI_OPT_VAR_TOUGHNESS) ==
+                  (ICO_JUN26 ? UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO
+                   : ui__diff_draft()->row[ICO_DIFF_SHADE_TOUGHNESS] == ICO_TOUGHNESS_THIRD_JOURNEY
+                       ? UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD
+                       : UI_STR_OPT_VAR_TOUGHNESS_NOTE) &&
+              ui__diff_note(UI_OPT_VAR_NO_HINTS) ==
+                  (e->hints ? UI_STR_OPT_VAR_NO_HINTS_NOTE : UI_STR_OPT_VAR_NO_HINTS_NOTE_2001),
+          "%s: the disc's toughness and No hints notes", e->slug);
+    ui__diff_draft_start(NULL);
+}
 
 /* the rows the title shows and the pause menu does not (on every disc) */
 static void checkTitleRows(const Expect *e)
@@ -259,8 +319,8 @@ static void checkPauseRows(const Expect *e)
           ui_settings_opt_shown(UI_OPT_FILM_EFFECT), e->film,
           ui_settings_opt_shown(UI_OPT_PLAYERS));
     /* a row that is not shown is not reached: on the page as it opens, its
-       row is masked (layoutPage).  The cleared Gameplay page has its six
-       rows, the three links and Back, inside the window's slots; a disc
+       row is masked (layoutPage).  The cleared Gameplay page has its seven
+       rows, the two links and Back, inside the window's slots; a disc
        with the row has it shown by its rule and in view, unmasked, with the
        cursor on it (and on a page with more rows than the slots, a row out
        of view is masked as the window masks it) */
@@ -315,6 +375,7 @@ int main(int argc, char **argv)
         checkHintRemap(e);
         checkPauseRows(e);
         checkUnusedRows(e);
+        checkDraftRows(e);
     }
     gFlagGameClear = 0;
     ico_opt_set_ui_language(-1);

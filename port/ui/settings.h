@@ -80,15 +80,23 @@ int ui_settings_title_decided(void);
 int ui_settings_covers_title(void);
 
 /* The New Game screen: la_vibe_select (common/src/layout_action.c)
-   switches to it after the vibration choice.  Two rows, Mirror mode (row
-   0) and New Game+ (row 1), each "Off" or "On", and a Start row below
-   them.  Cross on an Off/On item picks it and moves the cursor down; Cross
-   on Start, or START anywhere, confirms both: it sets the run's mirror mode
-   (ico_opt_set_mirror) and New Game+ (gFlagGameClear), then calls
-   la_host_new_game_go
-   (gflagOn(382), what the vibration screen did).  Triangle goes back to
-   the vibration screen (layout 9).  Enter returns the screen's layout with
-   the cursor on Mirror mode's "Off" and the run's value reset
+   switches to it after the vibration choice (settings_newgame.c).  Its rows,
+   one under the other: Difficulty (a stepped value: Easy, Normal, Hard, and
+   Custom while a customized draft exists), Customize (opens the Customize
+   pages, UI_PAGE_CUSTOMIZE, on the draft; their Back returns here with the
+   cursor on Customize), Mirror mode (row 0) and New Game+ (row 1), each
+   "Off" or "On", a Start row, and a note for the cursor's row.  Left and
+   Right on Difficulty step the mode: a preset replaces the draft's rows, the
+   customized draft is kept aside and comes back with Custom.  Cross on
+   Difficulty or on an Off/On item picks it and moves the cursor down; Cross
+   on Start, or START anywhere, confirms: the draft becomes the journey's
+   difficulty (port/game/difficulty.h ico_difficulty_begin), then the run's
+   mirror mode (ico_opt_set_mirror) and New Game+ (gFlagGameClear) are set
+   and la_host_new_game_go called (gflagOn(382), what the vibration screen
+   did).  Triangle goes back to the vibration screen (layout 9).  Enter
+   returns the screen's layout with the cursor on Difficulty, the draft at
+   Normal (a cleared save's own rows when gFlagGameClear is set and that
+   save's record is in force) and the run's mirror value reset
    (ico_opt_mirror_reset), -1 when the menu is not built (the caller then
    starts the game as the original did). */
 int ui_new_game_screen_enter(void);
@@ -98,6 +106,13 @@ int ui_new_game_screen_layout(void);
 int ui_new_game_screen_row(int row, int on);
 /* the Start row's item (tests) */
 int ui_new_game_screen_start(void);
+/* the Difficulty row's item (its value row and two arrows follow it) and
+   the Customize row's (tests) */
+int ui_new_game_screen_difficulty(void);
+int ui_new_game_screen_customize(void);
+/* the draft the screen and the Customize pages show and edit (tests) */
+struct IcoDifficulty;
+const struct IcoDifficulty *ui_new_game_screen_draft(void);
 
 /* "Quit to desktop": a port row under the title's Options row (layouts 12 and 13, in the same
    chained entry layout) whose Cross opens a confirmation screen, "Quit to
@@ -620,12 +635,11 @@ typedef enum UiSettingsPage {
        shows only while the build has more than one renderer
        (ui_settings_set_backend_names) */
     UI_PAGE_GRAPHICS,
-    /* Gameplay's four pages, their links before Gameplay's Back: Yorda
-       (Yorda safe, Time to rescue Yorda, Yorda trips, Natural chains),
-       Shadows (Shadow speed, Shadows attack together and five of the
-       [variants] rows, port/game/variants.h), Combat (the three combat
-       [variants] rows) and Cutscenes (Skip the opening and the two cutscene
-       [variants] rows), each with Back */
+    /* Gameplay's two pages, their links before Gameplay's Back: Yorda
+       (Natural chains and the two chain rows of [variants],
+       port/game/variants.h) and Cutscenes (Skip the opening and the two
+       cutscene [variants] rows), each with Back.  Shadows and Combat are
+       Customize's (below): rows of the New Game draft, not of the config */
     UI_PAGE_YORDA,
     UI_PAGE_SHADOWS,
     UI_PAGE_COMBAT,
@@ -647,6 +661,17 @@ typedef enum UiSettingsPage {
        has none of its rows): the two test rooms, the attract movie, the
        early show title art, Back (ui_settings_set_unused_host) */
     UI_PAGE_UNUSED,
+    /* Customize (the New Game screen's Customize row; its Back returns
+       there): the Shadows, Combat and Rules pages' links, Back.  The four
+       pages edit the New Game's draft (settings_difficulty.c): Shadows
+       (Shadow speed, toughness, aggression, Peaceful shadows, Shadows never
+       take Yorda, Shadows attack together, No Shadows), Combat (Automatic
+       guard, Turn to face shadows, Shadows wait while Ico is down, One hit
+       per swing, Shadows never dodge, Queen barrier), Rules (Time to rescue
+       Yorda, Yorda trips, No hints, Knock-down limit, Knock-downs count,
+       Permadeath) */
+    UI_PAGE_CUSTOMIZE,
+    UI_PAGE_RULES,
     UI_PAGE_COUNT
 } UiSettingsPage;
 
@@ -727,12 +752,12 @@ typedef enum UiSettingsOpt {
     UI_OPT_TOUCH_GRID,    /* [touch] grid: 2, 4 or 8 mm */
     /* Gameplay */
     UI_OPT_STICK_FIX,
-    UI_OPT_YORDA,
-    UI_OPT_PIT_TIME,         /* [gameplay] pit_time: 4 to 30 s, or Original (the disc's 15 s) */
-    UI_OPT_SHADOW_SPEED,     /* [gameplay] shadow_speed: Slower, Original, Faster, Fastest */
-    UI_OPT_SHADOWS_TOGETHER, /* [gameplay] shadows_together: no turns between the Shadows */
+    UI_OPT_YORDA,            /* the draft's Shadows never take Yorda (Customize > Shadows) */
+    UI_OPT_PIT_TIME,         /* the draft's rescue time: 4 to 30 s, or Original (the disc's 15 s) */
+    UI_OPT_SHADOW_SPEED,     /* the draft's Shadow speed: Slower, Original, Faster, Fastest */
+    UI_OPT_SHADOWS_TOGETHER, /* the draft's Shadows attack together: no turns between them */
     UI_OPT_DOOR_FIX,         /* [gameplay] door_fix, the doorway fix */
-    UI_OPT_YORDA_TRIPS,      /* [gameplay] yorda_trips (port/game/yorda_trip.h) */
+    UI_OPT_YORDA_TRIPS,      /* the draft's Yorda trips (port/game/yorda_trip.h) */
     UI_OPT_NATURAL_CHAINS,   /* [gameplay] natural_chains (port/render/rd_chain.h) */
     UI_OPT_SKIP_OPENING,     /* [gameplay] skip_opening: the boot starts at the title */
     UI_OPT_SECOND_CARD,      /* [gameplay] second_memory_card: a card in port 1 */
@@ -760,12 +785,13 @@ typedef enum UiSettingsOpt {
     UI_OPT_CHAR_YORDA_SKIN,
     UI_OPT_CHAR_YORDA_DRESS,
     /* the game variants, one row per IcoVariantId in its order
-       (UI_OPT_VAR_TOUGHNESS + id): [variants] keys, port/game/variants.h;
-       No hints on Gameplay, the two cutscene rows on Gameplay > Cutscenes,
-       the three combat rows and the two weapon rows on Gameplay > Combat,
-       Peaceful shadows and
-       the others on Gameplay > Shadows, the two chain rows on Gameplay >
-       Yorda */
+       (UI_OPT_VAR_TOUGHNESS + id), port/game/variants.h: the ten the
+       journey's difficulty holds are rows of the New Game draft on Customize's
+       pages (Shadow toughness, aggression, Peaceful shadows on Shadows; the
+       three combat rows, One hit, Never dodge, Queen barrier on Combat; No
+       hints on Rules), the others [variants] keys: the two cutscene rows on
+       Gameplay > Cutscenes, the two weapon rows on Gameplay, the two chain
+       rows on Gameplay > Yorda */
     UI_OPT_VAR_TOUGHNESS,
     UI_OPT_VAR_ONE_HIT,
     UI_OPT_VAR_NEVER_DODGE,
@@ -864,6 +890,16 @@ typedef enum UiSettingsOpt {
     /* Developer's Free movement: [developer] free_movement, shown while
        Developer mode is on (port/game/ico_rows.h) */
     UI_OPT_FREE_MOVEMENT,
+    /* Customize's new rows of the New Game draft (port/game/difficulty.h):
+       No Shadows (Shadows), Knock-down limit (Off, 1..9), Knock-downs count
+       (Each room, Whole journey) and Permadeath (Rules).  The draft's other
+       rows are the options above that were config rows before v0.11.3
+       (UI_OPT_SHADOW_SPEED, UI_OPT_YORDA, UI_OPT_PIT_TIME, UI_OPT_VAR_TOUGHNESS
+       ...: settings_difficulty.c ui__diff_opt) */
+    UI_OPT_DIFF_NO_SHADOWS,
+    UI_OPT_DIFF_KNOCK_LIMIT,
+    UI_OPT_DIFF_KNOCK_SCOPE,
+    UI_OPT_DIFF_PERMADEATH,
 } UiSettingsOpt;
 
 /* The entry rows and the menu's layouts (-1 before ui_settings_install):

@@ -150,7 +150,8 @@ const char *ico_difficulty_row_key(IcoDiffRow row);
 int ico_difficulty_row_valid(IcoDiffRow row, int value);
 /* Moves d's row by dir (the Customize page's Left/Right) and returns the new
    value: the switches toggle; the word rows wrap, past values the disc does
-   not offer; the barrier steps disc's -> 5 -> 7 -> disc's; the time to rescue
+   not offer; the barrier has two steps, the disc's own number
+   and the other one; the time to rescue
    steps a second at a time from the disc's own seconds (shown for Original),
    held at 4 and 30, the disc's own seconds reading as Original; the limit
    wraps Off, 1..9.  d's mode is left as it is (the caller classifies). */
@@ -303,12 +304,16 @@ typedef enum IcoDiffEvent {
     ICO_DIFF_EV_ACTIVE = 0, /* the active record changed (a, b: 0) */
     ICO_DIFF_EV_KNOCK,      /* a counted knock-down: a = the count, b = the limit */
     ICO_DIFF_EV_LIMIT,      /* the limit is reached: a = the count, b = the limit */
-    ICO_DIFF_EV_ENDED       /* a Permadeath journey ended (a, b: 0) */
+    ICO_DIFF_EV_ENDED,      /* a Permadeath journey ended (a, b: 0) */
+    ICO_DIFF_EV_REFUSED     /* a save of an ended journey was refused (a, b: 0) */
 } IcoDiffEvent;
 
 typedef void (*IcoDiffListener)(IcoDiffEvent ev, int a, int b);
 /* One listener; NULL unregisters. */
 void ico_difficulty_set_listener(IcoDiffListener fn);
+/* Raises an event to the listener (difficulty_file.c: the Continue list's
+   refusal and the load's backstop raise ICO_DIFF_EV_REFUSED). */
+void ico_difficulty_notify(IcoDiffEvent ev, int a, int b);
 
 #ifdef __cplusplus
 }

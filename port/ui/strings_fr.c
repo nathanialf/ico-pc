@@ -913,7 +913,7 @@ const char *const
             [UI_STR_DIFF_RULES] = "Règles",
             [UI_STR_DIFF_NO_SHADOWS] = "Aucune ombre",
             [UI_STR_DIFF_NO_SHADOWS_NOTE] =
-                "Activé : aucune ombre n’apparaît jamais. L’histoire se déroule quand même.",
+                "Activé : les ombres n’apparaissent jamais. Certains moments de l’histoire sont perdus ou changent sans elles.",
             [UI_STR_DIFF_KNOCK_LIMIT] = "Limite de mises à terre",
             [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
                 "Game over quand Ico a été mis à terre ce nombre de fois. Désactivé : pas de limite.",

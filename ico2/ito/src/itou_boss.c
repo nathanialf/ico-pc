@@ -26,6 +26,9 @@
 #include "tableSin.h"
 #include "motionManager2.h"
 
+/* PC port: port/game/difficulty.h: No Shadows (the journey's Customize row): 1 while it is on */
+extern int ico_no_shadows(void);
+
 /* One capsule: its BGA, its state (0 closed, 1 gathering, 2 open), the
    placement InitBossCtrlGeo gives it, its release point, and whether a
    gene_enemy thread is releasing from it. */
@@ -592,7 +595,8 @@ static void gene_enemy_jun26(volatile ICO_WORD gobj)
                 buf[num++] = p;
             }
         }
-        if (alive + geneReleasing < total && num > 0 && o != 0) {
+        /* PC port: No Shadows: no release (no gather effect, no pit call) */
+        if (!ico_no_shadows() && alive + geneReleasing < total && num > 0 && o != 0) {
             float pp[4];
             float pos[4];
             float dir[4];
@@ -706,7 +710,9 @@ static void gene_enemy(volatile ICO_WORD gobj)
                 gflag[0] = 1;
             }
         }
-        if (gflag[0] != 0) {
+        /* PC port: No Shadows: the fight releases nothing (no gather effect from a capsule, no
+           pit call); InqCapsuleGhostBossEnd answers from gflag[0] alone */
+        if (gflag[0] != 0 && !ico_no_shadows()) {
             c = isysGObjSearchFromObjKindID_begin(4);
             while (c != 0) {
                 total++;
@@ -1104,6 +1110,12 @@ inline int InqCapsuleGhostBossEnd(void)
 {
     if (ICO_JUN26) {
         return InqCapsuleGhostBossEnd_jun26();
+    }
+    /* PC port: No Shadows: no Shadow comes to fill the 53 capsules, so the fight is over once it
+       has started (CapsuleGhostBossStart, gflag[0]); before that 0, as the game's own answer is
+       then (no capsule filled).  st13b.c's waiters also hold for the fight's music */
+    if (ico_no_shadows()) {
+        return gflag[0] != 0;
     }
     int no = 0;
     unsigned int cnt = 0;

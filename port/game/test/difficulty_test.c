@@ -96,11 +96,11 @@ static void use_config(const char *text)
 }
 
 /* the listener's events */
-static int s_ev[4], s_ev_a, s_ev_b;
+static int s_ev[5], s_ev_a, s_ev_b;
 
 static void listener(IcoDiffEvent ev, int a, int b)
 {
-    if (ev >= 0 && ev < 4) {
+    if (ev >= 0 && ev < 5) {
         s_ev[ev]++;
     }
     s_ev_a = a;
@@ -210,6 +210,18 @@ static void test_presets(void)
     CHECK(ico_difficulty_classify(&c) == ICO_DIFF_NORMAL);
     c.row[ICO_DIFF_BARRIER_HITS] = on("jun26") ? 5 : 7;
     CHECK(ico_difficulty_classify(&c) == ICO_DIFF_CUSTOM);
+    /* the knock-down scope means nothing while the limit is Off: stepping it
+       there does not make the draft Custom, and with the limit on it does */
+    for (int m = 0; m < 3; m++) {
+        static const IcoDiffMode kMode[3] = {ICO_DIFF_EASY, ICO_DIFF_NORMAL, ICO_DIFF_HARD};
+        IcoDifficulty p;
+
+        ico_difficulty_preset(kMode[m], &p);
+        ico_difficulty_row_step(&p, ICO_DIFF_KNOCK_SCOPE, 1);
+        CHECK(p.row[ICO_DIFF_KNOCK_SCOPE] == ICO_DIFF_SCOPE_JOURNEY);
+        CHECK(ico_difficulty_classify(&p) ==
+              (p.row[ICO_DIFF_KNOCK_LIMIT] == 0 ? kMode[m] : ICO_DIFF_CUSTOM));
+    }
     /* the names */
     CHECK(strcmp(ico_difficulty_mode_name(ICO_DIFF_HARD), "hard") == 0 &&
           strcmp(ico_difficulty_mode_name(ICO_DIFF_CUSTOM), "custom") == 0 &&
@@ -245,11 +257,20 @@ static void test_steps(void)
     CHECK(d.row[ICO_DIFF_SHADE_TOUGHNESS] == ICO_TOUGHNESS_ORIGINAL);
     CHECK(ico_difficulty_row_step(&d, ICO_DIFF_SHADE_TOUGHNESS, -1) ==
           (on("jun26") || y2001() ? ICO_TOUGHNESS_NO_PLUS : ICO_TOUGHNESS_THIRD_JOURNEY));
-    /* the barrier: disc's, 5, 7, disc's */
-    CHECK(ico_difficulty_row_step(&d, ICO_DIFF_BARRIER_HITS, 1) == 5);
-    CHECK(ico_difficulty_row_step(&d, ICO_DIFF_BARRIER_HITS, 1) == 7);
-    CHECK(ico_difficulty_row_step(&d, ICO_DIFF_BARRIER_HITS, 1) == 0);
-    CHECK(ico_difficulty_row_step(&d, ICO_DIFF_BARRIER_HITS, -1) == 7);
+    /* the barrier has two steps: the disc's own number (0) and the other one,
+       whichever way it is stepped (no "5 hits" twice on the discs of 5) */
+    {
+        const int other = on("jun26") ? 5 : 7;
+
+        d.row[ICO_DIFF_BARRIER_HITS] = 0;
+        CHECK(ico_difficulty_row_step(&d, ICO_DIFF_BARRIER_HITS, 1) == other);
+        CHECK(ico_difficulty_row_step(&d, ICO_DIFF_BARRIER_HITS, 1) == 0);
+        CHECK(ico_difficulty_row_step(&d, ICO_DIFF_BARRIER_HITS, -1) == other);
+        CHECK(ico_difficulty_row_step(&d, ICO_DIFF_BARRIER_HITS, -1) == 0);
+        /* the disc's number stored out loud counts as the disc's */
+        d.row[ICO_DIFF_BARRIER_HITS] = on("jun26") ? 7 : 5;
+        CHECK(ico_difficulty_row_step(&d, ICO_DIFF_BARRIER_HITS, 1) == other);
+    }
     /* the seconds: from Original (the disc's 15) down to 4 and held there, up
        to 30 and held, the disc's own seconds Original again */
     d.row[ICO_DIFF_PIT_TIME] = ICO_PIT_ORIGINAL;
@@ -813,6 +834,20 @@ static void test_state(void)
     use_config(NULL);
 }
 
+/* ico_difficulty_notify: the file module's way to the listener (the Continue
+   list's refusal and the load's backstop raise REFUSED) */
+static void test_notify(void)
+{
+    ico_difficulty_notify(ICO_DIFF_EV_REFUSED, 0, 0); /* no listener: nothing happens */
+    ico_difficulty_set_listener(listener);
+    clear_events();
+    ico_difficulty_notify(ICO_DIFF_EV_REFUSED, 0, 0);
+    CHECK(s_ev[ICO_DIFF_EV_REFUSED] == 1 && s_ev[ICO_DIFF_EV_ENDED] == 0);
+    ico_difficulty_notify(ICO_DIFF_EV_KNOCK, 2, 3);
+    CHECK(s_ev[ICO_DIFF_EV_KNOCK] == 1 && s_ev_a == 2 && s_ev_b == 3);
+    ico_difficulty_set_listener(NULL);
+}
+
 int main(int argc, char **argv)
 {
     const char *dir = argc > 1 ? argv[1] : ".";
@@ -822,6 +857,8 @@ int main(int argc, char **argv)
         return 1;
     }
     snprintf(s_path, sizeof(s_path), "%s/difficulty_test_%s.toml", dir, slug());
+    /* this program's own difficulty.toml: the seven disc runs do not share one */
+    ico_difficulty_file_init(dir);
     use_config(NULL);
     test_presets();
     test_steps();
@@ -832,6 +869,7 @@ int main(int argc, char **argv)
     test_permadeath();
     test_no_shadows();
     test_state();
+    test_notify();
     remove(s_path);
     if (failures != 0) {
         fprintf(stderr, "difficulty_test (%s): %d failure(s)\n", slug(), failures);

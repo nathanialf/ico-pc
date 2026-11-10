@@ -895,7 +895,7 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_DIFF_RULES] = "Regole",
         [UI_STR_DIFF_NO_SHADOWS] = "Niente ombre",
         [UI_STR_DIFF_NO_SHADOWS_NOTE] =
-            "Sì: non compare mai nessuna ombra. La storia si svolge comunque.",
+            "Sì: le ombre non compaiono mai. Alcuni momenti della storia vanno persi o cambiano senza di loro.",
         [UI_STR_DIFF_KNOCK_LIMIT] = "Limite di atterramenti",
         [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
             "Game over quando Ico è stato atterrato questo numero di volte. Disattivato: nessun limite.",

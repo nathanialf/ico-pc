@@ -32,9 +32,11 @@
 # MODE settings (state_roundtrip_headless_settings): a first run saves
 # slot 1 at 440 as above and stops at 460; its states folder is copied
 # into a second run's folder whose config.toml also sets
-# [gameplay] yorda_safe = true, a simulation key (port/platform/sim_keys.c),
-# and that run loads slot 1 at tick 600. Passes when the second log shows
-# "state: refused load slot 1: settings differ: gameplay.yorda_safe=...",
+# [gameplay] door_fix = true, a simulation key (port/platform/sim_keys.c;
+# until v0.11.3 this was yorda_safe, now a difficulty row each state carries
+# in its own block, which no longer refuses a load), and that run loads
+# slot 1 at tick 600. Passes when the second log shows
+# "state: refused load slot 1: settings differ: gameplay.door_fix=...",
 # no "state: loaded" and the run to its last tick (the game went on).
 #
 # Skipped without the disc image and on a sanitizer build (save states are
@@ -203,16 +205,16 @@ else()
     # the load: the same folder of states, one simulation key changed
     file(MAKE_DIRECTORY "${DIR}/load")
     file(COPY "${DIR}/save/states" DESTINATION "${DIR}/load")
-    state_run("${DIR}/load" "state_load_at=600:1\n" "${_config}[gameplay]\nyorda_safe = true\n"
+    state_run("${DIR}/load" "state_load_at=600:1\n" "${_config}[gameplay]\ndoor_fix = true\n"
               660 _text2)
     set(_log2 "${DIR}/load/logs/ico-pc.log")
     state_common("${_text2}" "${_log2}" _bad)
-    string(REGEX MATCH "state: refused load slot 1: settings differ: gameplay\\.yorda_safe=[^\n]*"
+    string(REGEX MATCH "state: refused load slot 1: settings differ: gameplay\\.door_fix=[^\n]*"
            _refused "${_text2}")
     if(NOT _refused)
         string(REGEX MATCH "state: refused load slot 1[^\n]*" _r "${_text2}")
         string(APPEND _bad "\n  no \"state: refused load slot 1: settings differ:"
-               " gameplay.yorda_safe=...\" line ${_r}")
+               " gameplay.door_fix=...\" line ${_r}")
     endif()
     if(_text2 MATCHES "state: loaded slot")
         string(APPEND _bad "\n  the second run loaded the state")

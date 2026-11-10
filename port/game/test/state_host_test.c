@@ -9,7 +9,14 @@
  *                menu, a stage switch, the card, the disc, a movie, photo
  *                mode, the credits, the music gallery) and named; the
  *                order when several hold; a load needs no pause; the pause
- *                menu, a port page over it, a game layout, the title
+ *                menu, a port page over it, a game layout, the title; a
+ *                Permadeath journey in force (the active difficulty
+ *                record): a load and a save refused first (after off)
+ *   record       a state's own "difficulty.record" read by its bytes
+ *                (ico_state_record_permadeath): Permadeath on refuses it,
+ *                off, another record version, another size, a block past
+ *                the section's end and no section do not; the same through
+ *                a state file's reg section written and read back
  *   texts        every result has its own log words
  *   slot paths   slot1.ics .. slot4.png; slot 0, slot 5 and a path that
  *                does not fit refused with ""
@@ -46,6 +53,7 @@
 
 #include "host_fs.h"
 #include "state_file.h"
+#include "difficulty.h"
 #include "state_rules.h"
 #include "../../test/ico_check.h"
 
@@ -153,13 +161,40 @@ static void test_conditions(void)
     CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_PHOTO);
     c.available = 0;
     CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_OFF);
+
+    /* a Permadeath journey in force (ico_difficulty_states_locked): a load
+       and a save refused before anything else is looked at (a state of it
+       could never be loaded) */
+    c = ok_conds();
+    c.locked = 1;
+    what = "";
+    CHECK(ico_state_conditions(&c, 0, &what) == ICO_STATE_PERMADEATH);
+    CHECK_STR(what, "the journey has Permadeath on");
+    what = "";
+    CHECK(ico_state_conditions(&c, 1, &what) == ICO_STATE_PERMADEATH,
+          "a save on a Permadeath journey");
+    CHECK_STR(what, "the journey has Permadeath on: a state of it could never be loaded");
+    c.layout = 58; /* not the pause menu: still the lock's, for both */
+    CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_PERMADEATH);
+    CHECK(ico_state_conditions(&c, 1, NULL) == ICO_STATE_PERMADEATH);
+    c = ok_conds();
+    c.locked = 1;
+    c.stage_switch = 1;
+    c.card_busy = 1;
+    c.movie = 1;
+    c.unused = 1;
+    CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_PERMADEATH, "the lock before the rest");
+    CHECK(ico_state_conditions(&c, 1, NULL) == ICO_STATE_PERMADEATH);
+    c.available = 0;
+    CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_OFF, "off before the lock");
+    CHECK(ico_state_conditions(&c, 1, NULL) == ICO_STATE_OFF);
 }
 
 static void test_texts(void)
 {
     int a, b;
 
-    for (a = ICO_STATE_OK; a <= ICO_STATE_BUSY; a++) {
+    for (a = ICO_STATE_OK; a <= ICO_STATE_PERMADEATH; a++) {
         const char *t = ico_state_result_text((IcoStateResult)a);
 
         CHECK(t != NULL && t[0] != '\0' && strcmp(t, "unknown") != 0, "result %d has no text", a);
@@ -169,6 +204,8 @@ static void test_texts(void)
         }
     }
     CHECK_STR(ico_state_result_text(ICO_STATE_OTHER_SETTINGS), "settings differ");
+    CHECK_STR(ico_state_result_text(ICO_STATE_PERMADEATH),
+              "save states are off on a Permadeath journey");
 }
 
 static void test_paths(void)
@@ -510,6 +547,75 @@ static void test_pause_picture(void)
           "the first poll on the pause menu: none taken");
 }
 
+/* reads the "reg" section of a state file into reg (n bytes): 1 when read */
+static void *reg_out;
+static uint64_t reg_got;
+
+static void *want_reg(void *user, const IcoStateSectionInfo *s)
+{
+    (void)user;
+    if (strcmp(s->name, "reg") != 0 || s->raw_bytes > 4096) {
+        return NULL;
+    }
+    reg_got = s->raw_bytes;
+    return reg_out;
+}
+
+static void test_record(void)
+{
+    static unsigned char reg[1024], back[4096];
+    IcoDifficulty d;
+    const uint64_t off = 300; /* the record after other blocks */
+    IcoStateSection sec[2];
+    IcoStateWriteResult w;
+    IcoStateHeader hd;
+    char p[640];
+
+    memset(&d, 0, sizeof d);
+    d.version = ICO_DIFF_VERSION;
+    d.row[ICO_DIFF_PERMADEATH] = 1;
+    memset(reg, 0x5A, sizeof reg);
+    memcpy(reg + off, &d, sizeof d);
+    CHECK(ico_state_record_permadeath(reg, sizeof reg, off, sizeof d) == 1,
+          "a record with Permadeath on");
+    CHECK(ico_state_record_permadeath(reg, sizeof reg, off, sizeof d - 4) == 0, "another size");
+    CHECK(ico_state_record_permadeath(reg, sizeof reg, sizeof reg - 100, sizeof d) == 0,
+          "past the end");
+    CHECK(ico_state_record_permadeath(reg, sizeof reg, sizeof reg + 8, sizeof d) == 0,
+          "an offset past the end");
+    CHECK(ico_state_record_permadeath(NULL, 0, 0, sizeof d) == 0, "no section");
+    d.version = ICO_DIFF_VERSION + 1;
+    memcpy(reg + off, &d, sizeof d);
+    CHECK(ico_state_record_permadeath(reg, sizeof reg, off, sizeof d) == 0, "another version");
+    d.version = ICO_DIFF_VERSION;
+    d.row[ICO_DIFF_PERMADEATH] = 0;
+    d.row[ICO_DIFF_KNOCK_LIMIT] = 3;
+    memcpy(reg + off, &d, sizeof d);
+    CHECK(ico_state_record_permadeath(reg, sizeof reg, off, sizeof d) == 0, "Permadeath off");
+
+    /* through a file: the reg section written and read back alone */
+    d.row[ICO_DIFF_PERMADEATH] = 1;
+    memcpy(reg + off, &d, sizeof d);
+    make_now();
+    hd = now;
+    memset(sec, 0, sizeof sec);
+    sec[0].name = "arena";
+    sec[0].data = back;
+    sec[0].bytes = 64;
+    sec[1].name = "reg";
+    sec[1].data = reg;
+    sec[1].bytes = sizeof reg;
+    snprintf(p, sizeof p, "%s/state_host_record.ics", base);
+    CHECK(ico_state_file_write(p, &hd, sec, 2) == ICO_STATE_OK);
+    CHECK(ico_state_file_flush(&w) == 1 && w.result == ICO_STATE_OK, "write %s: %s", p, w.why);
+    reg_out = back;
+    reg_got = 0;
+    CHECK(ico_state_file_read(p, NULL, want_reg, NULL) == ICO_STATE_OK && reg_got == sizeof reg);
+    CHECK(ico_state_record_permadeath(back, reg_got, off, sizeof d) == 1,
+          "the file's record with Permadeath on");
+    remove(p);
+}
+
 int main(int argc, char **argv)
 {
     snprintf(base, sizeof base, "%s", argc > 1 ? argv[1] : ".");
@@ -520,5 +626,6 @@ int main(int argc, char **argv)
     test_listing();
     test_thumbnail();
     test_pause_picture();
+    test_record();
     return ico_check_summary("state_host");
 }

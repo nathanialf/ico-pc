@@ -97,6 +97,9 @@ typedef struct IcoGsSnapshot {
     int hand_held;              /* ACTGame_FLAG_TETSUNAGI: holding hands */
     int yorda_carried_by_enemy; /* girl in the disc's carried actMode, carrier an enemy */
     const char *stage_name;     /* stageData[stage_no].name, or NULL */
+    /* the knock-down limit's in-fall latch (port/game/difficulty.h) */
+    int boy_act_mode;   /* the boy's actMode: 0x15 the down act, 0x16 his death */
+    int boy_down_timer; /* his get-up timer (actAfterDown sets it as he gets up) */
 } IcoGsSnapshot;
 
 typedef void (*IcoGsSampler)(IcoGsSnapshot *out);
@@ -118,6 +121,34 @@ int ico_gs_carried_act_mode(void);
    one signal per stage entry */
 void ico_gs_signal_game_over_once(void);
 int ico_gs_girl_carried_by_enemy(int act_mode, int carrier_is_enemy);
+
+/* --- the knock-down limit (port/game/difficulty.h) ------------------------ */
+
+/* The hook at the entry of each actCommonDown copy (commonact.c): is_boy,
+   landing (the European body's mails 55 and 56: the landing of a fall the
+   down act began), by_hit (a hit put him down: Act.attacker is set), his
+   get-up timer and the mail that started the act.  A fall of the boy's is
+   counted when a hit put him down (ico_difficulty_knockdown, a landing or a
+   fall without a hit passed as the same fall); the entries are logged while
+   a limit is on.  Returns 1 when this fall reaches the limit (or the limit's
+   game over is still due): the copy then lies and asks for the game over
+   (actDownGameOver). */
+int ico_gs_knockdown(int is_boy, int landing, int by_hit, int down_timer, int intr_kind);
+/* The limit's game over is due and not asked for yet: 1 once (the caller
+   then asks for it: ACT_LAYOUT_GAMEOVER, or the June 2001 demo's form),
+   then 0 until the next limit.  why: ICO_GS_KNOCK_LAY_END at the end of
+   the lying (actDownGameOver), ICO_GS_KNOCK_LEFT_DOWN from actAfterDown (a
+   mail took him out of the down act first); the log line names it. */
+#define ICO_GS_KNOCK_LAY_END 0
+#define ICO_GS_KNOCK_LEFT_DOWN 1
+int ico_gs_knock_game_over_take(int why);
+/* this tick's snapshot: the boy's actMode, -1 when his object is not
+   readable now; his get-up timer (0 then) */
+int ico_gs_boy_act_mode(void);
+int ico_gs_boy_down_timer(void);
+/* the live sampler's read of an actor's get-up timer (commonact.c) */
+struct GObj;
+int ico_gs_game_down_timer(struct GObj *self);
 
 /* Once per Main tick, before the reads below. */
 void ico_gs_tick(void);
