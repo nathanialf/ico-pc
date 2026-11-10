@@ -61,6 +61,20 @@ int ico_app_icon_write_atomic(const char *path, const uint8_t *data, size_t n);
  * "" in the stamp that is written. */
 int ico_app_icon_wanted_at(const char *dir, const char *discId, const char *label);
 
+/* PNG form check of a stored icon: the four corner texels of a PNG this port
+ * wrote (8-bit RGBA, stored deflate).  1 when all four are at least half
+ * opaque (corner[0..3] = the first corner's RGBA), 0 when not, -1 when the
+ * bytes are not of that form. */
+int ico_app_icon_png_flat(const uint8_t *png, size_t n, uint8_t corner[4]);
+
+/* Removes <dir>/icon/ico-pc-<discId>.png and the files that go with it (the
+ * .ico, the stamp, the current copies) when the PNG is a wash over the whole
+ * frame (ico_app_icon_png_flat 1), logging
+ * `ico_pc: icon: the stored icon <path> is a wash over the whole frame ...:
+ * removed; made again at the next title screen`.  1 when removed (so
+ * ico_app_icon_wanted_at is 1), else 0 (kept, missing or unreadable). */
+int ico_app_icon_drop_wash(const char *dir, const char *discId);
+
 /* 1 when the presented picture is plain enough to cut the icon from: the
  * CRT filter is off (crtOn 0, or its strength 0) and the four colour
  * adjustments (Picture page: gamma, brightness, contrast, saturation, 1..100,

@@ -210,6 +210,42 @@ static void testCrop(void)
     free(out);
 }
 
+/* the recents card draws the PNG over its own colour: the background of both
+   the matte and the single-frame key is alpha 0, a flat wash is recognised */
+static void testClearBackground(void)
+{
+    const int w = 200, h = 160;
+    const Shape s = {100, 80, 60, 40, {255, 247, 227}};
+    uint8_t *a = malloc((size_t)w * h * 4), *b = malloc((size_t)w * h * 4),
+            *m = malloc((size_t)w * h * 4);
+    uint8_t *out = malloc((size_t)ICO_ICON_SIZE * ICO_ICON_SIZE * 4);
+    compose(&s, w, h, 0, a, b);
+    for (int pass = 0; pass < 2; pass++) {
+        CHECK((pass == 0 ? ico_icon_matte(a, b, w, h, m) : ico_icon_luma_key(a, w, h, m)) == 0);
+        CHECK(m[3] == 0 && m[((size_t)w * h - 1) * 4 + 3] == 0);
+        CHECK(ico_icon_make256(m, w, h, out) == 0);
+        const size_t last = ICO_ICON_SIZE - 1;
+        CHECK(out[3] == 0 && out[last * 4 + 3] == 0 && out[last * ICO_ICON_SIZE * 4 + 3] == 0 &&
+              out[(last * ICO_ICON_SIZE + last) * 4 + 3] == 0);
+        CHECK(out[((size_t)128 * ICO_ICON_SIZE + 128) * 4 + 3] > 0);
+        CHECK(!ico_icon_flat(out));
+    }
+    /* the fog wash: one colour at alpha 215 on every pixel */
+    for (size_t i = 0; i < (size_t)w * h; i++) {
+        m[i * 4] = 255;
+        m[i * 4 + 1] = 247;
+        m[i * 4 + 2] = 227;
+        m[i * 4 + 3] = 215;
+    }
+    CHECK(ico_icon_make256(m, w, h, out) == 0);
+    CHECK(ico_icon_flat(out));
+    CHECK(!ico_icon_flat(NULL));
+    free(a);
+    free(b);
+    free(m);
+    free(out);
+}
+
 static void testDownscale(void)
 {
     /* the left half opaque colour (200, 100, 50), the right half clear (0): the
@@ -283,6 +319,7 @@ int main(void)
     testCrop();
     testDownscale();
     testLuma();
+    testClearBackground();
     if (fails) {
         printf("app_icon_image_test: %d failure(s)\n", fails);
         return 1;

@@ -85,6 +85,88 @@ static void checkNoTmp(void)
     }
 }
 
+/* a 256 x 256 RGBA PNG of the form rd_write_png_mem writes (stored deflate,
+   filter 0; the CRCs are zero, the reader does not check them), the image
+   either one opaque colour (a wash) or clear with an opaque centre */
+static size_t makePng(uint8_t *out, int wash)
+{
+    enum { ROW = 256 * 4 + 1, RAW = ROW * 256 };
+
+    static uint8_t raw[RAW];
+    memset(raw, 0, sizeof(raw));
+    for (int y = 0; y < 256; y++) {
+        for (int x = 0; x < 256; x++) {
+            uint8_t *px = raw + (size_t)y * ROW + 1 + x * 4;
+            if (wash || (x > 100 && x < 150 && y > 100 && y < 150)) {
+                px[0] = 255;
+                px[1] = 247;
+                px[2] = 227;
+                px[3] = wash ? 215 : 255;
+            }
+        }
+    }
+    static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+    size_t o = 0;
+    memcpy(out, sig, 8);
+    o += 8;
+    const uint8_t ih[25] = {0, 0, 0, 13, 'I', 'H', 'D', 'R', 0, 0, 1, 0, 0,
+                            0, 1, 0, 8,  6,   0,   0,   0,   0, 0, 0, 0};
+    memcpy(out + o, ih, 25);
+    o += 25;
+    const size_t blocks = (RAW + 65534) / 65535, zl = 2 + blocks * 5 + RAW + 4;
+    out[o++] = (uint8_t)(zl >> 24);
+    out[o++] = (uint8_t)(zl >> 16);
+    out[o++] = (uint8_t)(zl >> 8);
+    out[o++] = (uint8_t)zl;
+    memcpy(out + o, "IDAT", 4);
+    o += 4;
+    out[o++] = 0x78;
+    out[o++] = 0x01;
+    for (size_t at = 0; at < RAW;) {
+        const size_t n = RAW - at > 65535 ? 65535 : RAW - at;
+        out[o++] = (uint8_t)(at + n == RAW);
+        out[o++] = (uint8_t)n;
+        out[o++] = (uint8_t)(n >> 8);
+        out[o++] = (uint8_t)~n;
+        out[o++] = (uint8_t)(~n >> 8);
+        memcpy(out + o, raw + at, n);
+        o += n;
+        at += n;
+    }
+    memset(out + o, 0, 4 + 4); /* adler, IDAT crc */
+    o += 8;
+    const uint8_t iend[12] = {0, 0, 0, 0, 'I', 'E', 'N', 'D', 0, 0, 0, 0};
+    memcpy(out + o, iend, 12);
+    return o + 12;
+}
+
+static void testWash(void)
+{
+    static uint8_t big[300000];
+    uint8_t corner[4];
+    const char *disc = "SCES-50760";
+    const size_t letterN = makePng(big, 0);
+    CHECK(ico_app_icon_png_flat(big, letterN, corner) == 0);
+    CHECK(ico_app_icon_png_flat(big, 100, corner) == -1);
+    uint8_t *img = calloc(256 * 256, 4);
+    /* a letter on disk is kept, and wanted stays 0 */
+    CHECK(ico_app_icon_store_at(s_dir, disc, "v2", big, letterN, img) == 0);
+    CHECK(ico_app_icon_drop_wash(s_dir, disc) == 0);
+    CHECK(ico_app_icon_wanted_at(s_dir, disc, "v2") == 0);
+    CHECK(!absent("ico-pc-SCES-50760.png") && !absent("ico-pc.png"));
+    /* a wash is removed with the files that go with it, and the icon is wanted again */
+    const size_t washN = makePng(big, 1);
+    CHECK(ico_app_icon_png_flat(big, washN, corner) == 1 && corner[0] == 255 && corner[3] == 215);
+    CHECK(ico_app_icon_store_at(s_dir, disc, "v2", big, washN, img) == 0);
+    CHECK(ico_app_icon_wanted_at(s_dir, disc, "v2") == 0);
+    CHECK(ico_app_icon_drop_wash(s_dir, disc) == 1);
+    CHECK(absent("ico-pc-SCES-50760.png") && absent("ico-pc-SCES-50760.ico") &&
+          absent("ico-pc-SCES-50760.txt") && absent("ico-pc.png") && absent("ico-pc.ico"));
+    CHECK(ico_app_icon_wanted_at(s_dir, disc, "v2") == 1);
+    CHECK(ico_app_icon_drop_wash(s_dir, disc) == 0); /* nothing there */
+    free(img);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -214,6 +296,8 @@ int main(int argc, char **argv)
     CHECK(ico_app_icon_picture_plain(0, 1.0f, 50, 50, 50, 50, 1) == 0);
     CHECK(ico_app_icon_picture_plain(1, 0.0f, 0, 0, 0, 0, 1) == 0);
 
+    removeAll();
+    testWash();
     removeAll();
     (void)ico_rmdir(icon);
     (void)ico_rmdir(s_dir);

@@ -1135,7 +1135,7 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   and white: the matte's alpha within 2 and colour within 2 (where alpha >= 192), the box of alpha
   >= 8, the square with its 10 % margin and its shift and shrink at the frame's edge, the 256 x 256
   crop when shrinking and growing, the 48/32/16 downscales keeping colour at clear edges, the ghost
-  refusal at 3 px and acceptance at 0 and 1 px, and the single-frame luma key (`app_icon_image`).
+  refusal at 3 px and acceptance at 0 and 1 px, and the single-frame luma key (`app_icon_image`); the clear background (matte and luma key: corner texels alpha 0, the letter's centre opaque) and `ico_icon_flat` (a flat alpha-215 wash is recognised).
 - `ico_icon_test.c`: `ico_icon_write` read back: the header (count 4), `dwBytesInRes = 40 + w*h*4 +
   mask`, the bottom-up BGRA rows, the clear column kept clear, the zero mask, the 256 entry holding
   the PNG byte for byte, contiguous offsets ending at the file's end, no `.tmp` (`ico_icon`).
