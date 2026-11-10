@@ -25,7 +25,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_replay_vu.c`, `rd_replay.h` | the replay's VU draws and the vertex and triangle pre-passes; what they share with `rd_replay.c` (the replay's state, a draw's setup, its helpers) |
 | `port/render/rd_vuprepass_selftest.c` | the vertex and triangle pre-passes' start-up self-test |
 | `port/render/rd_vu_skin_check.h`, `rd_vu_skin_check.c`, `rd_vu_skin_judge.c`, `rd_vu_skin_selftest.c`, `rd_vu_skin_capture.c` | the skinned draws' bone-block check: a skinned draw probed beside the picture against the CPU, the twins of every skinned draw inside its pass (Turnip), the box check, the start-up probe, the capture on failure ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
-| `port/render/rd_upload.c` | the upload ring and what a replay uploads before its first pass |
+| `port/render/rd_upload.c`, `rd_upload_late.h` | the upload ring and what a replay uploads before its first pass: the meshes before the VU pre-pass, the textures and the fog's table after it, in a ring window reserved before it |
 | `port/render/rd_upscale.h`, `rd_upscale.c`, `rd_upscale_hook.c` | the upscale point: the render/display scale split, the marker's replay (the edge guard, the hook's inputs, UPSCALED), the reduction's read of UPSCALED, the per-present jitter; the hook (FSR 3.1, `rd_fsr3.c`, or the test's bilinear stand-in) ([The upscale point](#the-upscale-point)) |
 | `port/render/rd_upscale_capture.h`, `rd_upscale_capture.c` | F12's upscaler pictures (SCENE, VELOCITY, the depth and the composite copied after a dispatch, written after the present) and the 10 s line of what the dispatched frames held ([DISPLAY.md](DISPLAY.md#fsr-31-upscaling), "The upscaler's pictures") |
 | `port/render/rd_layer.h`, `rd_layer.c` | the display layer: under a temporal upscaler, lists 11-12 after their last scene-class command drawn into the display-scale COMPOSITE after the upscale, keep frames held 1:1, PRE_DISPLAY for the motion blur ([DISPLAY_LAYER.md](DISPLAY_LAYER.md)) |
@@ -615,7 +615,23 @@ jitter to this mapping's centre offset ([Jitter](#jitter)).
 **Uploads.** Before the first pass the replay uploads pending textures and their levels through
 the frame's upload ring, and the static meshes the frame draws into the device arena (once, and
 again only after a morph rewrote them); the interpolation's scratch meshes stay on the ring
-(`port/render/rd_upload.c` (`rd__upload_dirty_textures`, `rd__upload_meshes`)); the ring shrinks again ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-upload-ring-shrinks)). Every
+(`port/render/rd_upload.c` (`rd__upload_dirty_textures`, `rd__upload_meshes`)). The order (issue
+179; `port/render/rd_upload_late.h`): the mesh uploads, the new targets' clears and the VU
+pre-pass first (the dummy texture's one upload still before them), then the texture uploads and the fog's table
+(`rd__upload_late`), then list 0. A texture uploaded over a sampled one first leaves
+`SHADER_READ`, a barrier whose first scope holds the fragment shader: every later copy of the list
+waits behind it, and recorded before the mesh uploads it held them, and the VU record that reads
+the meshes, behind the picture before's fragment work. Nothing the pre-pass draws or dispatches
+reads a texture or the fog's table (its groups are the frame's uniforms and the record's), so the
+order changes no byte. Their ring bytes stay before the VU blocks' storage view (`s_ringBase`): the
+replay reserves them first (`rd__upload_late_reserve`: the bytes the dirty textures take as the
+uploads lay them out, a changed rectangle for one uploaded in place, plus the dummy's and the
+table's) and the uploads take that window (`rd__ring_window`; one it cannot hold takes the ring's
+end). Their GPU time is a stretch of
+its own (`RD_PERF_TS_LATE`, counted in `uploads`). What still holds the record behind the picture
+before: a copy out of a render target at that picture's end (the list's closing barrier orders it
+before the next list's copies); the hold counts name it ([RHI.md](RHI.md#buffer-barriers-scopes)).
+The ring shrinks again ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-upload-ring-shrinks)). Every
 `rd__ring_alloc` caller checks for `~0` (the ring is full) and skips its write and its draw or
 copy, the untextured draws' white texel included, which the next replay uploads
 (`port/render/rd_replay.c` (`rd__ring_alloc`); `port/render/rd_upload.c`
@@ -662,10 +678,12 @@ exactly where a snapshot would be retaken, and the open screen run is drawn befo
 Within one draw the alpha is the one before its first primitive: the snapshot's semantics, the
 same bytes (not PRIM.AA1: **DATE and AA1**). Not inside the MSAA epoch, under the exact blend's storage read, on another target or
 without a depth: the snapshot. On a Vulkan device without dynamic rendering (issue 179's Mali-G52
-at Vulkan 1.1) the read is the RHI's subpass read ([RHI.md](RHI.md#local-read): the scene's passes
-with its depth name its colour as their subpass's input attachment, with a self-dependency), so
-there too DATE ends no pass, where a DATE snapshot ends the scene's pass and begins it again (3
-a replay in the reporter's log, each a 912x512 colour and D32S8 store and reload). The DATE self-test decides per device ([The fog path and its
+at Vulkan 1.1) there is no local read by default, so DATE takes the snapshot, which ends the
+scene's pass and begins it again (3 a replay in the reporter's log, each a 912x512 colour and D32S8
+store and reload). The RHI's subpass read ([RHI.md](RHI.md#local-read): the scene's passes with
+its depth name its colour as their subpass's input attachment, with a self-dependency) gives such a
+device the read, so that DATE ends no pass there either; it is an experiment, off by default
+(its cost on a phone is not measured), turned on by `[dev] subpass_read = on`. The DATE self-test decides per device ([The fog path and its
 self-test](RENDER_POST.md#the-fog-path-and-its-self-test)) (`port/render/rd_replay.c` (`dateStencilFor`,
 `prepareDrawEx`, `bindDrawEx`); `port/render/rd_replay_tiler.c` (`rd__replay_date_take`);
 `port/render/rd_pipeline.c` (`shadowStencil`,
@@ -1089,8 +1107,9 @@ destination; the present's DISPLAY and window sizes), the storage-pass flag, the
 and destination read, and an upload batch's bytes. A table of the last 8 replays keeps each one's
 first and last sequence numbers, so a number the ring has moved past still names its replay and
 frame. Each entry's sequence number is also the marker the replay gives `rhi_cmd_checkpoint` right
-before the pass begins (`beginPass` pushes its entry first, as the crack fill does, so a crash
-inside the driver's begin finds the pass's entry the newest; or before the copy), and every replay sets `rhi_set_submit_tag` to its replay
+before the pass begins (`beginPass` pushes its entry first, as the crack fill and the two
+shadow-count passes do, so a crash inside the driver's begin finds the pass's entry the newest; or
+before the copy), and every replay sets `rhi_set_submit_tag` to its replay
 and frame numbers, so the backend's [loss report](RHI.md#device-loss) and the ring name the same
 passes. Once the device is lost the replay returns before recording anything (`replayFrame`), so
 the ring ends at the last replay given to the GPU. A replay records about 430 entries, so the ring
