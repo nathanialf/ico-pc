@@ -921,4 +921,6 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_DIFF_STATES_LOCKED] =
             "Los estados guardados no se pueden cargar en un viaje con muerte permanente.",
         [UI_STR_DIFF_WORD_PERMADEATH] = "Muerte permanente",
+        [UI_STR_DIFF_STATES_SAVE_LOCKED] =
+            "Los estados guardados no se pueden crear en un viaje con muerte permanente.",
 };

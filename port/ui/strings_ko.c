@@ -908,4 +908,5 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_DIFF_TOAST_KNOCK] = "쓰러짐 %d / %d",
     [UI_STR_DIFF_STATES_LOCKED] = "영구 사망 여정에서는 저장 상태를 불러올 수 없습니다.",
     [UI_STR_DIFF_WORD_PERMADEATH] = "영구 사망",
+    [UI_STR_DIFF_STATES_SAVE_LOCKED] = "영구 사망 여정에서는 저장 상태를 만들 수 없습니다.",
 };

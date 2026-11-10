@@ -9,11 +9,13 @@
  *            object is unreadable or the view invalid
  *   latch    ico_gs_knockdown, the hook each actCommonDown copy calls: a
  *            fall of the boy's put down by a hit counts once; the same fall
- *            (still down, or the get-up timer running), a landing, a fall
- *            no hit caused and another actor's fall do not; the in-fall
- *            latch clears through the snapshot exactly as host_loop.c's poll
- *            passes it to ico_difficulty_tick, and not while his object is
- *            unreadable; one log line per entry of the boy's
+ *            (a chained hit while he lies, falls or is dead), a landing, a
+ *            fall no hit caused and another actor's fall do not; the
+ *            in-fall latch clears through the snapshot exactly as
+ *            host_loop.c's poll passes it to ico_difficulty_tick once he is
+ *            on his feet (his get-up timer may still run: a knock-down then
+ *            is a new fall), and not while his object is unreadable; one log
+ *            line per entry of the boy's
  *   limit    the third fall on Hard returns 1, and so does every later
  *            entry of his while the game over is due; ico_gs_knock_game_
  *            over_take answers 1 once (again after a save state's load);
@@ -25,7 +27,10 @@
  *            after the game over it caused, not after another one; the
  *            June 2001 demo's ico_gs_signal_game_over_once (two calls, one
  *            game over)
- *   perma    Permadeath: a game over ends the journey
+ *   perma    Permadeath: a game over ends the journey; so does reaching the
+ *            limit, at once (before he lies), and the game's own certain
+ *            game overs the snapshot shows (gameover_flag: Yorda taken; Ico
+ *            or Yorda in DEAD), one end each; nothing with Permadeath off
  *   off      Normal: nothing counts, no line
  *   hooks    text scans: the four copies of actCommonDown in commonact.c
  *            (the hook with each disc's landing argument, the lying after
@@ -69,6 +74,7 @@ int ui_popup_push(const char *title, const char *body)
 
 #define DOWN 0x15 /* actModeTbl's DOWN (actCommonDown) on every disc */
 #define DEAD 0x16 /* DEAD (actCommonDie) */
+#define FALL 5    /* FALL */
 #define STAND 1
 #define MAIL 291 /* the European family's knock-down mail (only logged) */
 
@@ -275,29 +281,41 @@ static void test_latch(void)
     CHECK(knock() == 0);
     CHECK(rec()->knocks_room == 1 && rec()->knocks_journey == 1 && rec()->in_fall == 1);
     CHECK(s_ev[ICO_DIFF_EV_KNOCK] == 1 && s_ev_a == 1 && s_ev_b == 3);
-    /* the same fall: another entry while he lies */
+    /* the same fall: another entry while he lies (a chained hit) */
     CHECK(knock() == 0 && rec()->knocks_room == 1);
     ticks(10);
     CHECK(rec()->in_fall == 1, "the latch cleared while he lay");
-    /* up, the get-up timer running: still the same fall */
+    /* falling (FALL) and dead (DEAD) are not on his feet either */
+    g.boy_act_mode = FALL;
+    tick();
+    CHECK(rec()->in_fall == 1, "the latch cleared while he fell");
+    g.boy_act_mode = DEAD;
+    tick();
+    CHECK(rec()->in_fall == 1, "the latch cleared while he was dead");
+    /* his object unreadable: the latch is kept */
     g.boy_act_mode = STAND;
     g.boy_down_timer = 54;
-    tick();
-    CHECK(rec()->in_fall == 1, "the latch cleared while the get-up timer ran");
-    CHECK(ico_gs_knockdown(1, 0, 1, 54, MAIL) == 0 && rec()->knocks_room == 1);
-    /* his object unreadable: the latch is kept */
     g.actors_valid = 0;
-    g.boy_down_timer = 0;
     tick();
     CHECK(rec()->in_fall == 1, "the latch cleared on an unreadable snapshot");
+    /* up, the get-up timer still running: back on his feet, so a knock-down
+       now is a new fall (one count per fall, from the first hit until Ico
+       is back on his feet) */
     g.actors_valid = 1;
     tick();
+    CHECK(rec()->in_fall == 0, "the latch stayed with Ico up while the get-up timer ran");
+    g.boy_act_mode = DOWN;
+    CHECK(ico_gs_knockdown(1, 0, 1, 54, MAIL) == 0 && rec()->knocks_room == 2,
+          "a knock-down as he got up: room %d", (int)rec()->knocks_room);
+    CHECK(rec()->in_fall == 1);
+    g.boy_down_timer = 0;
+    get_up();
     CHECK(rec()->in_fall == 0, "the latch stayed with Ico up and the timer run out");
     /* not counted: no hit put him down (a ledge), a landing, another actor */
     CHECK(ico_gs_knockdown(1, 0, 0, 0, 290) == 0);
     CHECK(ico_gs_knockdown(1, 1, 1, 0, 56) == 0);
     CHECK(ico_gs_knockdown(0, 0, 1, 0, MAIL) == 0);
-    CHECK(rec()->knocks_room == 1 && rec()->knocks_journey == 1 && rec()->in_fall == 0,
+    CHECK(rec()->knocks_room == 2 && rec()->knocks_journey == 2 && rec()->in_fall == 0,
           "room %d journey %d in_fall %d", (int)rec()->knocks_room, (int)rec()->knocks_journey,
           (int)rec()->in_fall);
     log = cap_end();
@@ -306,10 +324,11 @@ static void test_latch(void)
                           "stage 10): counted; 1 in this room, 1 on this journey, limit 3 a "
                           "room") != NULL,
               "no counted line:\n%s", log);
-        CHECK(strstr(log, "Ico down 2 (mail 291, hit 1, landing 0, get-up timer 0, stage 10): "
-                          "not counted: the same fall (down, or getting up)") != NULL);
+        CHECK(strstr(log,
+                     "Ico down 2 (mail 291, hit 1, landing 0, get-up timer 0, stage 10): "
+                     "not counted: the same fall (he has not been on his feet since)") != NULL);
         CHECK(strstr(log, "Ico down 3 (mail 291, hit 1, landing 0, get-up timer 54, stage 10): "
-                          "not counted: the same fall (down, or getting up)") != NULL);
+                          "counted; 2 in this room, 2 on this journey, limit 3 a room") != NULL);
         CHECK(strstr(log, "Ico down 4 (mail 290, hit 0, landing 0, get-up timer 0, stage 10): "
                           "not counted: no hit put him down") != NULL);
         CHECK(strstr(log, "Ico down 5 (mail 56, hit 1, landing 1, get-up timer 0, stage 10): "
@@ -472,6 +491,59 @@ static void test_permadeath(void)
     tick();
     CHECK(ico_difficulty_finished(), "Permadeath: the game over did not end the journey");
     CHECK(s_ev[ICO_DIFF_EV_ENDED] == 1);
+
+    /* the limit reached ends the journey at once, before the 2 s he lies
+       (a pause and End Game then does not escape it); the game over after
+       it ends nothing again */
+    start_hard();
+    ico_difficulty_set_row(ICO_DIFF_PERMADEATH, 1);
+    CHECK(knock() == 0);
+    get_up();
+    CHECK(knock() == 0);
+    get_up();
+    g.boy_act_mode = DOWN;
+    CHECK(!ico_difficulty_finished());
+    CHECK(knock() == 1);
+    CHECK(ico_difficulty_finished() && s_ev[ICO_DIFF_EV_ENDED] == 1,
+          "the limit did not end the Permadeath journey at once (finished %d, ended %d)",
+          ico_difficulty_finished(), s_ev[ICO_DIFF_EV_ENDED]);
+    ico_gs_signal(ICO_GS_EV_GAME_OVER, 0);
+    tick();
+    CHECK(s_ev[ICO_DIFF_EV_ENDED] == 1, "%d ends", s_ev[ICO_DIFF_EV_ENDED]);
+
+    /* the game's own certain game overs end it the tick they are seen: Yorda
+       taken (gameover_flag), Ico's fatal fall and Yorda's death (DEAD) */
+    start_hard();
+    ico_difficulty_set_row(ICO_DIFF_PERMADEATH, 1);
+    g.gameover_flag = 1;
+    tick();
+    CHECK(ico_difficulty_finished() && s_ev[ICO_DIFF_EV_ENDED] == 1, "Yorda taken");
+    tick();
+    CHECK(s_ev[ICO_DIFF_EV_ENDED] == 1, "%d ends", s_ev[ICO_DIFF_EV_ENDED]);
+    start_hard();
+    ico_difficulty_set_row(ICO_DIFF_PERMADEATH, 1);
+    g.boy_act_mode = DEAD;
+    tick();
+    CHECK(ico_difficulty_finished() && s_ev[ICO_DIFF_EV_ENDED] == 1, "Ico's fatal fall");
+    start_hard();
+    ico_difficulty_set_row(ICO_DIFF_PERMADEATH, 1);
+    g.boy_act_mode = 24; /* STONEDEAD */
+    tick();
+    CHECK(ico_difficulty_finished() && s_ev[ICO_DIFF_EV_ENDED] == 1, "Ico turned to stone");
+    start_hard();
+    ico_difficulty_set_row(ICO_DIFF_PERMADEATH, 1);
+    g.girl_present = 1;
+    g.girl_act_mode = DEAD;
+    tick();
+    CHECK(ico_difficulty_finished() && s_ev[ICO_DIFF_EV_ENDED] == 1, "Yorda's death");
+    /* Permadeath off: none of them ends anything */
+    start_hard();
+    g.gameover_flag = 1;
+    g.boy_act_mode = DEAD;
+    g.girl_present = 1;
+    g.girl_act_mode = DEAD;
+    tick();
+    CHECK(!ico_difficulty_finished() && s_ev[ICO_DIFF_EV_ENDED] == 0, "ended with Permadeath off");
 }
 
 static void test_off(void)

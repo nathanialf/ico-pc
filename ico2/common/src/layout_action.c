@@ -5137,6 +5137,13 @@ static void la_host_game_over_quit_only(int cont)
         if (p->curItem == cont && cont >= p->first && cont + 1 < p->last) {
             p->curItem = cont + 1;
         }
+        if (p->curItem == cont + 1 && cont >= p->first && cont + 1 < p->last) {
+            /* the cursor on Quit: Up and Down (the buttons, and the stick
+               default_item_select reads after this proc) would move it onto
+               the hidden Continue for a tick, with the cursor's sound */
+            pad[0].flags &= ~(0x1000 | 0x4000);
+            pad[0].ana[3] = 0x80;
+        }
     }
 }
 

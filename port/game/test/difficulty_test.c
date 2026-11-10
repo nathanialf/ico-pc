@@ -23,13 +23,16 @@
  *               a moved variant's step writes no config key; no difficulty
  *               row switches achievements off
  *   knock-down  the limit off counts nothing; once a fall (a chained hit, a
- *               landing, a knock-down before the get-up timer is out, a fall
- *               longer than the timer); another actor never; the limit's
+ *               landing, a fall longer than the timer, FALL and DEAD); a
+ *               knock-down as he gets up (the timer running) is a new fall;
+ *               another actor never; the limit's
  *               return and over_pending; each room (room entry starts again)
  *               and the whole journey (the count goes back to 0 after the game
  *               over the limit causes, not after another)
  *   Permadeath  any game over ends the journey (finished, the listener),
- *               states locked while the row is on
+ *               the limit at once when it is reached, a certain game over
+ *               (ico_difficulty_game_over_certain) at once; told once; states
+ *               locked while the row is on
  *   No Shadows  ico_no_shadows follows the row
  *   state       the block's name, size and flag; a restored record applied;
  *               a damaged version and a missing block rebuilt from the keys
@@ -612,7 +615,7 @@ static void begin_limit(int limit, int scope, int permadeath)
     ico_difficulty_begin(&d);
 }
 
-/* Ico gets up: the down act left, the get-up timer run out */
+/* Ico gets up: the down act left (the get-up timer running, then run out) */
 static void get_up(void)
 {
     ico_difficulty_tick(1, 0, 10);
@@ -642,25 +645,25 @@ static void test_knockdown(void)
     /* a chained hit while he lies: the same fall */
     CHECK(ico_difficulty_knockdown(1, 0, 0) == 0 && a->knocks_room == 1);
     /* a fall longer than the get-up timer: the timer is out but he is still
-       in the down act: the latch holds */
+       in the down act: the latch holds; falling (FALL) and dead (DEAD) too */
     ico_difficulty_tick(1, ICO_DIFF_DOWN_ACT_MODE, 0);
     CHECK(a->in_fall == 1);
-    /* up, the timer running: not yet back on his feet */
-    ico_difficulty_tick(1, 0, 12);
+    ico_difficulty_tick(1, ICO_DIFF_FALL_ACT_MODE, 0);
     CHECK(a->in_fall == 1);
-    CHECK(ico_difficulty_knockdown(1, 0, 0) == 0 && a->knocks_room == 1);
+    ico_difficulty_tick(1, ICO_DIFF_DEAD_ACT_MODE, 0);
+    CHECK(a->in_fall == 1);
     /* an invalid sample changes nothing */
     ico_difficulty_tick(0, 0, 0);
     CHECK(a->in_fall == 1);
-    ico_difficulty_tick(1, 0, 0);
+    /* up, the get-up timer still running: back on his feet */
+    ico_difficulty_tick(1, 0, 12);
     CHECK(a->in_fall == 0);
-    /* a landing (mails 55/56) is the fall going on; another actor never counts;
-       a knock-down while the get-up timer still runs is the same fall */
+    /* a landing (mails 55/56) is the fall going on; another actor never
+       counts; a knock-down while the get-up timer still runs is a new fall
+       (the second) */
     CHECK(ico_difficulty_knockdown(1, 1, 0) == 0 && a->knocks_room == 1 && a->in_fall == 0);
     CHECK(ico_difficulty_knockdown(0, 0, 0) == 0 && a->knocks_room == 1);
-    CHECK(ico_difficulty_knockdown(1, 0, 7) == 0 && a->knocks_room == 1);
-    /* the second */
-    CHECK(ico_difficulty_knockdown(1, 0, 0) == 0 && a->knocks_room == 2);
+    CHECK(ico_difficulty_knockdown(1, 0, 7) == 0 && a->knocks_room == 2 && a->in_fall == 1);
     get_up();
     /* the third: the limit */
     clear_events();
@@ -740,9 +743,28 @@ static void test_permadeath(void)
     /* the limit's game over on a Permadeath journey ends it too */
     begin_limit(1, ICO_DIFF_SCOPE_ROOM, 1);
     CHECK(ico_difficulty_finished() == 0);
+    clear_events();
     CHECK(ico_difficulty_knockdown(1, 0, 0) == 1);
+    /* ended the moment the limit is reached, before the game over (a quit
+       while he lies does not escape it), and told once */
+    CHECK(ico_difficulty_finished() == 1 && s_ev[ICO_DIFF_EV_ENDED] == 1);
     ico_difficulty_game_over();
-    CHECK(ico_difficulty_finished() == 1);
+    CHECK(ico_difficulty_finished() == 1 && s_ev[ICO_DIFF_EV_ENDED] == 1);
+    /* the game's own certain game over (gamestate.c's tick) ends it at once;
+       off, or with no journey, it does nothing */
+    begin_limit(0, 0, 1);
+    clear_events();
+    ico_difficulty_game_over_certain("Yorda was taken");
+    CHECK(ico_difficulty_finished() == 1 && s_ev[ICO_DIFF_EV_ENDED] == 1);
+    ico_difficulty_game_over_certain("Yorda was taken");
+    ico_difficulty_game_over();
+    CHECK(s_ev[ICO_DIFF_EV_ENDED] == 1);
+    begin_limit(0, 0, 0);
+    ico_difficulty_game_over_certain("Ico's fatal fall");
+    CHECK(ico_difficulty_finished() == 0);
+    ico_difficulty_reset();
+    ico_difficulty_game_over_certain("Ico's fatal fall");
+    CHECK(ico_difficulty_finished() == 0);
     /* the title: no journey, nothing ended, states load */
     ico_difficulty_reset();
     CHECK(ico_difficulty_finished() == 0 && ico_difficulty_states_locked() == 0);

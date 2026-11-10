@@ -2071,12 +2071,13 @@ static int states_request(int action, int slot, int *refusal_str)
     }
     if (action != UI_STATES_ACT_DELETE && ico_difficulty_states_locked()) {
         /* a Permadeath journey: the poll would refuse it the same
-           (ico_state_conditions); said at once, nothing requested.  The
-           save's refusal shares the load's words for now */
+           (ico_state_conditions); said at once, nothing requested, in the
+           save's or the load's words */
         fprintf(stderr, "state: refused %s slot %d: %s (the page)\n",
                 action == UI_STATES_ACT_SAVE ? "save" : "load", slot,
                 ico_state_result_text(ICO_STATE_PERMADEATH));
-        *refusal_str = UI_STR_DIFF_STATES_LOCKED;
+        *refusal_str = action == UI_STATES_ACT_SAVE ? UI_STR_DIFF_STATES_SAVE_LOCKED
+                                                    : UI_STR_DIFF_STATES_LOCKED;
         return -1;
     }
     if (action == UI_STATES_ACT_SAVE && !ico_state_can_save_here()) {
@@ -2134,6 +2135,9 @@ static void states_done(int action, int slot, IcoStateResult r, const char *deta
     } else if (r == ICO_STATE_OTHER_BUILD && action == 1 &&
                states_other_version(body, sizeof body)) {
         /* another version's state: which one, and what in this one blocks it */
+    } else if (r == ICO_STATE_PERMADEATH && action == UI_STATES_ACT_SAVE) {
+        /* a save the poll refused on a Permadeath journey: the save's words */
+        snprintf(body, sizeof body, "%s", ui_str(UI_STR_DIFF_STATES_SAVE_LOCKED));
     } else {
         snprintf(body, sizeof body, "%s", ui_str((UiStrId)state_refusal_str(r)));
     }

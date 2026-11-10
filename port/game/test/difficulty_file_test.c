@@ -65,6 +65,7 @@ static char s_dir[600];
 static char s_config[700];
 static char s_file[700];
 static char s_bad[720];
+static char s_bad2[730];
 static char s_log[700];
 
 static const char *slug(void)
@@ -141,6 +142,17 @@ static void fresh(void)
 {
     remove(s_file);
     remove(s_bad);
+    remove(s_bad2);
+}
+
+/* an entry's key inside [save] on this disc ("<prefix><card>slot_N_<field>") */
+static void save_key(int port, int slot, const char *field, char *out, size_t size)
+{
+    char base[64], key[96];
+
+    snprintf(base, sizeof(base), "%sslot_%d_%s", port == 1 ? "b_" : "", slot, field);
+    ico_region_key_prefixed("save", base, key, (int)sizeof(key));
+    snprintf(out, size, "%s", key + 5); /* past "save." */
 }
 
 /* the value of an entry's field in the file as written ("save.<prefix><card>slot_N_<field>") */
@@ -455,6 +467,32 @@ static void test_knocks(void)
     ico_difficulty_game_over();
     CHECK(file_value(0, 2, "mode") != NULL && strcmp(s_value, "normal") == 0);
     CHECK(file_value(0, 2, "rows") != NULL && strstr(s_value, "knock_limit=0") != NULL);
+
+    /* a save found by its checksum in another slot (the file moved): its
+       entry is copied to the loaded slot, so the count written after the
+       limit's game over reaches the entry the next load finds first */
+    fresh();
+    ico_difficulty_preset(ICO_DIFF_NORMAL, &d);
+    d.row[ICO_DIFF_KNOCK_LIMIT] = 2;
+    d.row[ICO_DIFF_KNOCK_SCOPE] = ICO_DIFF_SCOPE_JOURNEY;
+    ico_difficulty_begin(&d);
+    d = *ico_difficulty_active();
+    CHECK(ico_difficulty_knockdown(1, 0, 0) == 0);
+    ico_difficulty_tick(1, 0, 0);
+    ico_difficulty_slot_saved(1, 6, 8888u, 3, 50u, 0);
+    ico_difficulty_reset();
+    ico_difficulty_slot_loaded(0, 1, 8888u);
+    CHECK(same_journey(ico_difficulty_active(), &d) &&
+          ico_difficulty_active()->knocks_journey == 1);
+    CHECK(file_value(0, 1, "sum") != NULL && strcmp(s_value, "8888") == 0);
+    CHECK(file_value(0, 1, "knocks") != NULL && strcmp(s_value, "1") == 0);
+    CHECK(file_value(0, 1, "preview") != NULL && strcmp(s_value, "3:50:0") == 0);
+    CHECK(ico_difficulty_knockdown(1, 0, 0) == 1);
+    ico_difficulty_game_over();
+    CHECK(file_value(0, 1, "knocks") != NULL && strcmp(s_value, "0") == 0);
+    ico_difficulty_reset();
+    ico_difficulty_slot_loaded(0, 1, 8888u);
+    CHECK(ico_difficulty_active()->knocks_journey == 0);
 }
 
 static void test_damaged(void)
@@ -494,18 +532,96 @@ static void test_damaged(void)
     ico_difficulty_slot_loaded(0, 1, 9999u);
     CHECK(same_journey(ico_difficulty_active(), &d));
 
-    /* a later version's file is not read either, and a Permadeath end keeps it
-       as .bad before it writes */
+    /* a later version's file: its entries are not read, its ended journeys
+       are honoured, it is never written over, and a Permadeath end only adds
+       its journey to [finished] */
     fresh();
-    put(s_file, "version = 2\n[save]\nslot_1_sum = 5\n");
-    CHECK(ico_difficulty_sum_finished(5u) == 0);
+    {
+        char text[1024], k_sum[96], k_journey[96], k_preview[96];
+
+        save_key(0, 1, "sum", k_sum, sizeof(k_sum));
+        save_key(0, 1, "journey", k_journey, sizeof(k_journey));
+        save_key(0, 1, "preview", k_preview, sizeof(k_preview));
+        snprintf(text, sizeof(text),
+                 "version = 2\n[save]\n%s = 5\n%s = \"00000000000000ab\"\n%s = \"3:4:0\"\n"
+                 "[finished]\n00000000000000ab = true\n",
+                 k_sum, k_journey, k_preview);
+        put(s_file, text);
+    }
+    before = slurp(s_file, &n_before);
+    CHECK(ico_difficulty_sum_finished(5u) == 1);
+    CHECK(ico_difficulty_slot_finished(0, 1, 3, 4u, 0) == 1);
+    CHECK(ico_difficulty_slot_finished(1, 7, 3, 4u, 0) == 1);
+    ico_difficulty_slot_loaded(0, 1, 5u);
+    CHECK(ico_difficulty_active()->origin == ICO_DIFF_ORIGIN_CONFIG);
+    ico_difficulty_slot_saved(0, 1, 6u, 3, 9u, 0);
+    after = slurp(s_file, &n_after);
+    CHECK(before != NULL && after != NULL && n_before == n_after &&
+          memcmp(before, after, n_before) == 0);
+    free(after);
+    free(before);
     start(ICO_DIFF_NORMAL, ICO_DIFF_PERMADEATH, 1);
     d = *ico_difficulty_active();
     ico_difficulty_game_over();
-    bad = slurp(s_bad, NULL);
-    CHECK(bad != NULL && strstr(bad, "version = 2") != NULL);
-    free(bad);
     CHECK(file_finished(&d) == 1);
+    after = slurp(s_file, NULL);
+    CHECK(after != NULL && strstr(after, "version = 2") != NULL &&
+          strstr(after, "00000000000000ab = true") != NULL && strstr(after, " = 5") != NULL);
+    free(after);
+    bad = slurp(s_bad, NULL);
+    CHECK(bad == NULL);
+    free(bad);
+
+    /* a damaged file's ended journeys are honoured while it is read, kept in
+       the new file it is replaced by; each damaged text under a name of its
+       own */
+    fresh();
+    put(s_file, "version = \"x\"\n[finished]\n00000000000000cd = true\n");
+    {
+        IcoDifficulty cd;
+
+        memset(&cd, 0, sizeof(cd));
+        cd.journey[1] = 0xcd;
+        ico_difficulty_slot_saved(0, 1, 11u, 1, 1u, 0);
+        bad = slurp(s_bad, NULL);
+        CHECK(bad != NULL && strstr(bad, "version = \"x\"") != NULL);
+        free(bad);
+        CHECK(file_finished(&cd) == 1);
+        put(s_file, "version = 0\n[finished]\n00000000000000ce = true\n");
+        ico_difficulty_slot_saved(0, 1, 12u, 1, 2u, 0);
+        bad = slurp(s_bad2, NULL);
+        CHECK(bad != NULL && strstr(bad, "00000000000000ce") != NULL);
+        free(bad);
+        bad = slurp(s_bad, NULL);
+        CHECK(bad != NULL && strstr(bad, "version = \"x\"") != NULL);
+        free(bad);
+        cd.journey[1] = 0xce;
+        CHECK(file_finished(&cd) == 1);
+    }
+
+    /* no version line but entries: read as version 1 */
+    fresh();
+    {
+        IcoDifficulty hard = start(ICO_DIFF_HARD, -1, 0);
+        char *text, *v;
+
+        ico_difficulty_slot_saved(0, 2, 88u, 4, 5u, 0);
+        text = slurp(s_file, NULL);
+        v = text != NULL ? strstr(text, "version = 1\n") : NULL;
+        CHECK(v != NULL);
+        if (v != NULL) {
+            memmove(v, v + 12, strlen(v + 12) + 1);
+            put(s_file, text);
+        }
+        free(text);
+        ico_difficulty_reset();
+        ico_difficulty_slot_loaded(0, 2, 88u);
+        CHECK(same_journey(ico_difficulty_active(), &hard) &&
+              ico_difficulty_active()->mode == ICO_DIFF_HARD);
+        bad = slurp(s_bad, NULL);
+        CHECK(bad == NULL);
+        free(bad);
+    }
     /* an empty file is no damage */
     fresh();
     put(s_file, "\n");
@@ -520,6 +636,88 @@ static void test_damaged(void)
 }
 
 /* needle starts within `within` bytes of from */
+/* a file that is there but cannot be read (another program holds it) is
+   never an empty one: nothing written, the run's record unknown until the
+   next save reads it */
+static void test_unreadable(void)
+{
+    IcoDifficulty hard, easy, pd;
+    char *before, *after;
+    size_t n_before, n_after;
+    int port = -1, slot = -1;
+    uint32_t sum = 0;
+
+    use_config("[variants]\nnever_dodge = true\n");
+    fresh();
+    hard = start(ICO_DIFF_HARD, -1, 0);
+    ico_difficulty_slot_saved(0, 3, 1234u, 5, 600u, 0);
+    easy = start(ICO_DIFF_EASY, -1, 0);
+    ico_difficulty_slot_saved(0, 4, 5678u, 6, 700u, 0);
+    pd = start(ICO_DIFF_NORMAL, ICO_DIFF_PERMADEATH, 1);
+    ico_difficulty_slot_saved(0, 5, 999u, 7, 800u, 0);
+    ico_difficulty_game_over();
+    CHECK(file_finished(&pd) == 1);
+    before = slurp(s_file, &n_before);
+
+    /* the load's read fails twice (the call tries once more): nothing
+       written, the record unknown (not the carry-over) */
+    ico_difficulty_reset();
+    ico_difficulty_file_fail_reads(2);
+    ico_difficulty_slot_loaded(0, 3, 1234u);
+    CHECK(ico_difficulty_unknown(&port, &slot, &sum) == 1 && port == 0 && slot == 3 &&
+          sum == 1234u);
+    CHECK(ico_difficulty_active()->origin != ICO_DIFF_ORIGIN_CONFIG);
+    after = slurp(s_file, &n_after);
+    CHECK(before != NULL && after != NULL && n_before == n_after &&
+          memcmp(before, after, n_before) == 0);
+    free(after);
+    /* the next save reads it again and takes the loaded save's record first:
+       Hard is written, every other entry and the ended journey kept */
+    ico_difficulty_slot_saved(0, 3, 1235u, 6, 701u, 0);
+    CHECK(ico_difficulty_unknown(NULL, NULL, NULL) == 0);
+    CHECK(same_journey(ico_difficulty_active(), &hard) &&
+          ico_difficulty_active()->mode == ICO_DIFF_HARD);
+    CHECK(file_value(0, 3, "mode") != NULL && strcmp(s_value, "hard") == 0);
+    CHECK(file_value(0, 3, "sum") != NULL && strcmp(s_value, "1235") == 0);
+    CHECK(file_value(0, 4, "mode") != NULL && strcmp(s_value, "easy") == 0);
+    CHECK(file_finished(&pd) == 1);
+    free(before);
+
+    /* the read fails at the load and again at the save: nothing written, the
+       slot's entry kept, the record still unknown */
+    ico_difficulty_reset();
+    ico_difficulty_file_fail_reads(2);
+    ico_difficulty_slot_loaded(0, 4, 5678u);
+    before = slurp(s_file, &n_before);
+    ico_difficulty_file_fail_reads(2);
+    ico_difficulty_slot_saved(0, 4, 5679u, 6, 702u, 0);
+    after = slurp(s_file, &n_after);
+    CHECK(before != NULL && after != NULL && n_before == n_after &&
+          memcmp(before, after, n_before) == 0);
+    free(after);
+    free(before);
+    CHECK(ico_difficulty_unknown(NULL, NULL, NULL) == 1);
+    CHECK(file_value(0, 4, "sum") != NULL && strcmp(s_value, "5678") == 0);
+    /* a New Game, the title and a load that reads clear it */
+    start(ICO_DIFF_NORMAL, -1, 0);
+    CHECK(ico_difficulty_unknown(NULL, NULL, NULL) == 0);
+    ico_difficulty_set_unknown(0, 4, 5678u);
+    ico_difficulty_reset();
+    CHECK(ico_difficulty_unknown(NULL, NULL, NULL) == 0);
+    /* one failed try: the second reads the file (nothing lost) */
+    ico_difficulty_file_fail_reads(1);
+    ico_difficulty_slot_loaded(0, 4, 5678u);
+    CHECK(ico_difficulty_unknown(NULL, NULL, NULL) == 0);
+    CHECK(same_journey(ico_difficulty_active(), &easy));
+    /* a missing file is an empty one, as before */
+    fresh();
+    ico_difficulty_reset();
+    ico_difficulty_slot_loaded(0, 4, 5678u);
+    CHECK(ico_difficulty_unknown(NULL, NULL, NULL) == 0 &&
+          ico_difficulty_active()->origin == ICO_DIFF_ORIGIN_CONFIG);
+    ico_difficulty_file_fail_reads(0);
+}
+
 static int near(const char *from, const char *needle, long within)
 {
     const char *q = from != NULL ? strstr(from, needle) : NULL;
@@ -666,9 +864,24 @@ static void test_log(void)
     CHECK(strstr(log, "difficulty: the Continue list refuses card 2 slot 9 (preview 20:1000:1)") !=
           NULL);
     CHECK(strstr(log, "difficulty: the load refuses the save with sum 4444") != NULL);
-    CHECK(strstr(log, "is damaged or from a later version (version missing)") != NULL);
-    CHECK(strstr(log, "is damaged or from a later version (version 2)") != NULL);
+    CHECK(strstr(log, "is damaged (version missing)") != NULL);
+    CHECK(strstr(log, "is from a later version (version 2)") != NULL);
+    CHECK(strstr(log, "is from a later version: not written over (card 1 slot 1 saved") != NULL);
+    CHECK(strstr(log, "the later version's file kept as it was apart from this line") != NULL);
     CHECK(strstr(log, "the carry-over is not written into the damaged file") != NULL);
+    CHECK(strstr(log, "the carry-over is not written into the later version's file") != NULL);
+    CHECK(strstr(log, "the new file keeps the 1 ended journey(s) the damaged one listed") != NULL);
+    CHECK(strstr(log, ".bad2; a new file is written") != NULL);
+    CHECK(strstr(log, "has no version line but holds [save] or [finished] entries: read as "
+                      "version 1") != NULL);
+    CHECK(strstr(log, "is there but cannot be read (another program may hold it; tried "
+                      "twice)") != NULL);
+    CHECK(strstr(log, "none (difficulty.toml cannot be read): the run's record is unknown") !=
+          NULL);
+    CHECK(strstr(log, "saved while the run's record is unknown") != NULL);
+    CHECK(strstr(log, "(sum 1234) is read now (its read had failed)") != NULL);
+    CHECK(strstr(log, "card 1 slot 1: the entry found by sum at card 2 slot 6 copied here") !=
+          NULL);
     CHECK(strstr(log, " ended)") != NULL);
     CHECK(strstr(log, "the journey's knock-downs back to 0") != NULL);
     CHECK(strstr(log, "holds another journey's entry or none") != NULL);
@@ -690,6 +903,7 @@ int main(int argc, char **argv)
     snprintf(s_config, sizeof(s_config), "%s/config.toml", s_dir);
     snprintf(s_file, sizeof(s_file), "%s/difficulty.toml", s_dir);
     snprintf(s_bad, sizeof(s_bad), "%s.bad", s_file);
+    snprintf(s_bad2, sizeof(s_bad2), "%s.bad2", s_file);
     snprintf(s_log, sizeof(s_log), "%s/difficulty_file_test.log", s_dir);
     if (freopen(s_log, "w", stderr) == NULL) {
         printf("difficulty_file_test: cannot write %s\n", s_log);
@@ -704,6 +918,7 @@ int main(int argc, char **argv)
     test_refusal_toast();
     test_knocks();
     test_damaged();
+    test_unreadable();
     test_preview();
     test_hooks();
     test_log();

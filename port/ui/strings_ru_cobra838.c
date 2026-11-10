@@ -893,4 +893,6 @@ const char *const ui_strings_ru_cobra838[UI_STR_COUNT] = {
     /* "Save states cannot be loaded on a Permadeath journey." */
     [UI_STR_DIFF_STATES_LOCKED] = NULL,
     [UI_STR_DIFF_WORD_PERMADEATH] = NULL, /* "Permadeath" */
+    /* "Save states cannot be made on a Permadeath journey." */
+    [UI_STR_DIFF_STATES_SAVE_LOCKED] = NULL,
 };

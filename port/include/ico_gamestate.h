@@ -100,6 +100,8 @@ typedef struct IcoGsSnapshot {
     /* the knock-down limit's in-fall latch (port/game/difficulty.h) */
     int boy_act_mode;   /* the boy's actMode: 0x15 the down act, 0x16 his death */
     int boy_down_timer; /* his get-up timer (actAfterDown sets it as he gets up) */
+    /* Permadeath's certain game over (difficulty.h ico_difficulty_game_over_certain) */
+    int girl_act_mode; /* the girl's actMode (0x16 her death), 0 while she is not there */
 } IcoGsSnapshot;
 
 typedef void (*IcoGsSampler)(IcoGsSnapshot *out);
