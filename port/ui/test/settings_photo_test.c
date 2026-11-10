@@ -776,14 +776,13 @@ static int render(void)
         CHECK(settle(mainL, 60), "back to the menu from Controls (touch)");
         ui_settings_set_touch_query(NULL);
     }
-    /* Gameplay -> Yorda, Shadows and Cutscenes (its three links before
-       Back), each with the cursor on its first row */
+    /* Gameplay -> Yorda and Cutscenes (its two links before Back), each
+       with the cursor on its first row */
     {
         static const struct {
             UiSettingsPage page;
             const char *name;
         } sub[] = {{UI_PAGE_YORDA, "settings_gameplay_yorda.png"},
-                   {UI_PAGE_SHADOWS, "settings_gameplay_shadows.png"},
                    {UI_PAGE_CUTSCENES, "settings_gameplay_cutscenes.png"}};
 
         for (unsigned i = 0; i < sizeof(sub) / sizeof(sub[0]); i++) {
@@ -816,14 +815,20 @@ static int render(void)
     press(0x40);
     frame(0);
     snap("settings_remap_capture.png");
-    /* the New Game screen, the cursor on Mirror mode's On, New Game+
-       Off lit; then the cursor on New Game+ (its note), Mirror mode On lit */
+    /* the New Game screen, the cursor on Difficulty (Normal, its note),
+       then Hard; the cursor on New Game+ (its note), Mirror mode Off lit;
+       then Customize and its Shadows and Rules pages, back to the screen */
+    gFlagGameClear = 0;
     int ml = ui_new_game_screen_enter();
     lt_switch_layout(ml);
     CHECK(settle(ml, 60), "the New Game screen");
-    press(0x2000);
     frame(0);
     snap("settings_new_game_screen.png");
+    press(0x2000);
+    frame(0);
+    snap("settings_new_game_screen_hard.png");
+    press(0x4000);
+    press(0x4000);
     press(0x4000);
     frame(0);
     snap("settings_new_game_screen_ngp.png");
@@ -833,6 +838,35 @@ static int render(void)
     snap("settings_new_game_screen_ngp_fr.png");
     NonLinearCameraMove = 2;
     frame(0);
+    press(0x1000);
+    press(0x1000);
+    press(0x40); /* Customize */
+    {
+        const int custL = ui_settings_page_layout(UI_PAGE_CUSTOMIZE);
+        CHECK(settle(custL, 60), "Customize from the New Game screen (%d)", current_layout_id);
+        frame(0);
+        snap("settings_customize.png");
+
+        static const struct {
+            UiSettingsPage page;
+            const char *name;
+        } cust[] = {{UI_PAGE_SHADOWS, "settings_customize_shadows.png"},
+                    {UI_PAGE_COMBAT, "settings_customize_combat.png"},
+                    {UI_PAGE_RULES, "settings_customize_rules.png"}};
+
+        for (unsigned i = 0; i < sizeof(cust) / sizeof(cust[0]); i++) {
+            openLink(custL, UI_PAGE_CUSTOMIZE, cust[i].page);
+            for (int k = 0; k < 30; k++) {
+                frame(0);
+            }
+            snap(cust[i].name);
+            press(0x10);
+            CHECK(settle(custL, 60), "back to Customize from %s", cust[i].name);
+        }
+        press(0x10);
+        CHECK(settle(ml, 60), "Customize: back to the New Game screen");
+    }
+    ico_difficulty_reset();
     /* the quit confirmation, the cursor on Yes */
     int ql = ui_quit_screen_layout();
     lt_switch_layout(ql);
@@ -1004,13 +1038,12 @@ static int render(void)
             press(0x10);
             CHECK(settle(mainL, 60), "back to the menu from %s at 1080p", pg[i].name);
         }
-        /* Gameplay's three pages at 1080p, through Gameplay */
+        /* Gameplay's two pages at 1080p, through Gameplay */
         {
             static const struct {
                 UiSettingsPage page;
                 const char *name;
             } sub[] = {{UI_PAGE_YORDA, "settings_gameplay_yorda"},
-                       {UI_PAGE_SHADOWS, "settings_gameplay_shadows"},
                        {UI_PAGE_CUTSCENES, "settings_gameplay_cutscenes"}};
 
             for (unsigned i = 0; i < sizeof(sub) / sizeof(sub[0]); i++) {
@@ -1032,7 +1065,26 @@ static int render(void)
         CHECK(settle(mir, 60), "the New Game screen at 1080p");
         snap1080("settings_new_game_screen");
         press(0x4000);
+        press(0x4000);
+        press(0x4000);
         snap1080("settings_new_game_screen_ngp");
+        /* Customize > Rules (the dimmed Knock-downs count at Normal) */
+        press(0x1000);
+        press(0x1000);
+        press(0x40);
+        {
+            const int custL = ui_settings_page_layout(UI_PAGE_CUSTOMIZE);
+            CHECK(settle(custL, 60), "Customize at 1080p");
+            openLink(custL, UI_PAGE_CUSTOMIZE, UI_PAGE_RULES);
+            for (int k = 0; k < 30; k++) {
+                frame(0);
+            }
+            snap1080("settings_customize_rules");
+            press(0x10);
+            CHECK(settle(custL, 60), "back to Customize at 1080p");
+            press(0x10);
+            CHECK(settle(mir, 60), "back to the New Game screen at 1080p");
+        }
         /* the pause menu with the journey's lines on its right (a
            stage running, an assist on, New Game+ on), then in French (the
            longest labels) */

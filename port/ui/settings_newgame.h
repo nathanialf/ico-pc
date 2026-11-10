@@ -21,11 +21,16 @@ extern "C" {
    note row's text from a string id, wrapped as the pages' notes are */
 int ui__settings_add_layout(int first, int last, float colA, int (*proc)(int, int), int def);
 void ui__settings_set_note(int row, int strId);
+/* settings.c's: the Customize page's layout, it and its three pages on
+   their first rows (the New Game screen's Customize row opens it) */
+int ui__settings_open_customize(void);
 
 /* the screen's rows and layout, built after the pages (ui_settings_install) */
 void ui__newgame_build(void);
 /* forgets them (ui_settings_reset) */
 void ui__newgame_reset(void);
+/* Customize's Back: the screen's layout, its cursor on Customize */
+int ui__newgame_customize_back(void);
 
 #ifdef __cplusplus
 }

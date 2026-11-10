@@ -36,18 +36,19 @@
 #include "popup.h"
 #include "strings.h"
 #include "sysconf.h"
-#include "touch_edit.h"        /* the touch layout edits (port/input) */
-#include "settings_graphics.h" /* the Graphics page's rows and Apply */
-#include "settings_backup.h"   /* Extras' Back up your data and Restore from a backup */
-#include "settings_desktop.h"  /* Extras' Add to the applications menu */
-#include "settings_states.h"   /* the Save states page's cards, actions and F6 latch */
-#include "settings_newgame.h"  /* the New Game screen */
-#include "settings_unused.h"   /* Extras > Unused content's host */
-#include "settings_variants.h" /* the game variants rows' values, notes and rule */
-#include "settings_upscale.h"  /* the Upscaling rows: FSR 3.1, quality */
-#include "settings_step.h"     /* held Left/Right, L1/R1 */
-#include "touch_edit_ui.h"     /* the Edit layout page */
-#include "variants.h"          /* the game variants rows (Gameplay and its pages) */
+#include "touch_edit.h"          /* the touch layout edits (port/input) */
+#include "settings_graphics.h"   /* the Graphics page's rows and Apply */
+#include "settings_backup.h"     /* Extras' Back up your data and Restore from a backup */
+#include "settings_desktop.h"    /* Extras' Add to the applications menu */
+#include "settings_states.h"     /* the Save states page's cards, actions and F6 latch */
+#include "settings_newgame.h"    /* the New Game screen */
+#include "settings_difficulty.h" /* the New Game draft's rows on Customize's pages */
+#include "settings_unused.h"     /* Extras > Unused content's host */
+#include "settings_variants.h"   /* the game variants rows' values, notes and rule */
+#include "settings_upscale.h"    /* the Upscaling rows: FSR 3.1, quality */
+#include "settings_step.h"       /* held Left/Right, L1/R1 */
+#include "touch_edit_ui.h"       /* the Edit layout page */
+#include "variants.h"            /* the game variants rows (Gameplay and its pages) */
 #include "ui_hint.h"
 #include "ui_internal.h" /* ui__font_prefer_chinese */
 #include "ui_list.h"
@@ -392,9 +393,6 @@ static int stepIndex(int i, int n, int dir)
 {
     return ((i + dir) % n + n) % n;
 }
-
-/* [gameplay] shadow_speed's words, in ICO_SPEED_* order */
-static const char *const kSpeedWords[ICO_SPEED_COUNT] = {"slower", "original", "faster", "fastest"};
 
 static const float kMouseSens[] = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f};
 /* the Mouse camera speed row's steps; the last one is "Instant" */
@@ -1771,6 +1769,9 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     if (isCharOpt(opt)) {
         return charValue(opt, buf, size);
     }
+    if (ui__diff_opt(opt)) {
+        return ui__diff_text(opt, buf, size); /* the New Game draft's */
+    }
     switch (opt) {
     case UI_OPT_PRESET: {
         static const int presetStr[3] = {UI_STR_VAL_ORIGINAL, UI_STR_VAL_ENHANCED,
@@ -2028,29 +2029,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return buf;
     case UI_OPT_PLAYERS:
         return girlControlMode != 0 ? "2" : "1";
-    case UI_OPT_YORDA:
-        return onOff(ico_opt_yorda_safe());
-    case UI_OPT_PIT_TIME:
-        /* whole seconds; Original shows the disc's own time with the word */
-        if (ico_opt_pit_time() == ICO_PIT_ORIGINAL) {
-            snprintf(buf, size, "%d s (%s)", ico_opt_pit_base_seconds(),
-                     ui_str(UI_STR_VAL_ORIGINAL));
-        } else {
-            snprintf(buf, size, "%d s", ico_opt_pit_time());
-        }
-        return buf;
-    case UI_OPT_SHADOW_SPEED: {
-        static const int speedStr[ICO_SPEED_COUNT] = {UI_STR_VAL_SPEED_SLOWER, UI_STR_VAL_ORIGINAL,
-                                                      UI_STR_VAL_SPEED_FASTER,
-                                                      UI_STR_VAL_SPEED_FASTEST};
-        return ui_str(speedStr[ico_opt_shadow_speed()]);
-    }
-    case UI_OPT_SHADOWS_TOGETHER:
-        return onOff(ico_opt_shadows_together());
     case UI_OPT_DOOR_FIX:
         return onOff(ico_opt_door_fix());
-    case UI_OPT_YORDA_TRIPS:
-        return onOff(ico_opt_yorda_trips());
     case UI_OPT_NATURAL_CHAINS:
         return onOff(ico_opt_natural_chains());
     case UI_OPT_SKIP_OPENING:
@@ -2077,20 +2057,10 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(ico_opt_developer_mode());
     case UI_OPT_FREE_MOVEMENT:
         return onOff(ico_free_movement_row());
-    case UI_OPT_VAR_TOUGHNESS:
-    case UI_OPT_VAR_ONE_HIT:
-    case UI_OPT_VAR_NEVER_DODGE:
-    case UI_OPT_VAR_AGGRESSION:
-    case UI_OPT_VAR_NO_HINTS:
-    case UI_OPT_VAR_BARRIER:
     case UI_OPT_VAR_NO_LOOK:
     case UI_OPT_VAR_IGNORE_CAMS:
-    case UI_OPT_VAR_AUTO_GUARD:
-    case UI_OPT_VAR_ATTACK_TURN:
-    case UI_OPT_VAR_SHADOWS_WAIT_DOWN:
     case UI_OPT_VAR_SWORD_COLOUR:
     case UI_OPT_VAR_WEAPON:
-    case UI_OPT_VAR_PEACEFUL:
     case UI_OPT_VAR_CHAIN_SPEED:
     case UI_OPT_VAR_CHAIN_DAMPING:
         return ui__variant_text(opt);
@@ -2115,6 +2085,9 @@ static int isGameOpt(int opt)
 
 static int optShown(int opt, int link)
 {
+    if (ui__diff_opt(opt)) {
+        return ui__diff_shown(opt);
+    }
     if (opt == UI_OPT_CIRCLE_BACK) {
         /* the European disc's: Circle confirms on the Japanese and Korean ones */
         return lt_ext_has_circle_back();
@@ -2287,7 +2260,7 @@ static int steppable(int opt)
 {
     return (opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER) /* includes the Effects rows */ ||
            opt == UI_OPT_FREE_MOVEMENT || opt == UI_OPT_GPU_DRIVER || opt == UI_OPT_GPU_ADD_FILE ||
-           opt == UI_OPT_GRAPHICS_API || opt == UI_OPT_GRAPHICS_ADAPTER;
+           opt == UI_OPT_GRAPHICS_API || opt == UI_OPT_GRAPHICS_ADAPTER || ui__diff_opt(opt);
 }
 
 static int resolutionLocked(void)
@@ -2372,6 +2345,10 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         const IcoAppPart p = charPart(opt);
         ico_appearance_set(p, stepIndex(ico_appearance_get(p), ico_appearance_choices(p), dir));
         s_dirtyConfig = 1;
+        return;
+    }
+    if (ui__diff_opt(opt)) {
+        ui__diff_step(opt, dir); /* the New Game draft's row: no config */
         return;
     }
     if (ui__var_opt(opt)) {
@@ -2748,53 +2725,9 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         lt_ext_set_circle_back(ico_opt_circle_back());
         s_dirtyConfig = 1;
         break;
-    case UI_OPT_YORDA:
-        ico_opt_set_yorda_safe(!ico_opt_yorda_safe());
-        ico_config_set_bool("gameplay.yorda_safe", ico_opt_yorda_safe());
-        s_dirtyConfig = 1;
-        break;
-    case UI_OPT_PIT_TIME: {
-        /* a second a step from the seconds shown (Original is the disc's own, 15), held
-           at 4 and 30; the base itself is Original again.  The factor is read every tick
-           of the dive (options.h) */
-        int v = ico_opt_pit_seconds() + dir;
-        v = v < ICO_PIT_MIN_SECONDS   ? ICO_PIT_MIN_SECONDS
-            : v > ICO_PIT_MAX_SECONDS ? ICO_PIT_MAX_SECONDS
-                                      : v;
-        if (v == ico_opt_pit_seconds()) {
-            return;
-        }
-        ico_opt_set_pit_time(v);
-        if (ico_opt_pit_time() == ICO_PIT_ORIGINAL) {
-            ico_config_set_string("gameplay.pit_time", "original");
-        } else {
-            ico_config_set_int("gameplay.pit_time", ico_opt_pit_time());
-        }
-        s_dirtyConfig = 1;
-        break;
-    }
-    case UI_OPT_SHADOW_SPEED:
-        /* Slower, Original, Faster, Fastest around; read every game tick (options.h) */
-        ico_opt_set_shadow_speed(stepIndex(ico_opt_shadow_speed(), ICO_SPEED_COUNT, dir));
-        ico_config_set_string("gameplay.shadow_speed", kSpeedWords[ico_opt_shadow_speed()]);
-        s_dirtyConfig = 1;
-        break;
-    case UI_OPT_SHADOWS_TOGETHER:
-        /* read at each Shadow's turn check (enemy_act.c), so it acts at once */
-        ico_opt_set_shadows_together(!ico_opt_shadows_together());
-        ico_config_set_bool("gameplay.shadows_together", ico_opt_shadows_together());
-        s_dirtyConfig = 1;
-        break;
     case UI_OPT_DOOR_FIX:
         ico_opt_set_door_fix(!ico_opt_door_fix());
         ico_config_set_bool("gameplay.door_fix", ico_opt_door_fix());
-        s_dirtyConfig = 1;
-        break;
-    case UI_OPT_YORDA_TRIPS:
-        /* the motions are added at a stage load, so the next room has them
-           (port/game/yorda_trip.h) */
-        ico_opt_set_yorda_trips(!ico_opt_yorda_trips());
-        ico_config_set_bool("gameplay.yorda_trips", ico_opt_yorda_trips());
         s_dirtyConfig = 1;
         break;
     case UI_OPT_NATURAL_CHAINS:
@@ -3514,39 +3447,16 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_TOUCH_EDIT, UI_STR_TOUCH_EDIT_NOTE);
         break;
     case UI_PAGE_GAMEPLAY:
-        /* No hints says whether it switches achievements off (the 2001
-           discs' own note: refreshPage, ui__variant_note), as every variants
-           row on the three pages below does */
         addNote(pg, UI_OPT_DOOR_FIX, UI_STR_OPT_DOOR_FIX_NOTE);
         addNote(pg, UI_OPT_SECOND_CARD, UI_STR_OPT_SECOND_CARD_NOTE);
-        addNote(pg, UI_OPT_VAR_NO_HINTS, UI_STR_OPT_VAR_NO_HINTS_NOTE);
         addNote(pg, UI_OPT_PLAYERS, UI_STR_PLAYERS_NOTE);
+        addNote(pg, UI_OPT_VAR_SWORD_COLOUR, UI_STR_OPT_VAR_SWORD_COLOUR_NOTE);
+        addNote(pg, UI_OPT_VAR_WEAPON, UI_STR_OPT_VAR_WEAPON_NOTE);
         break;
     case UI_PAGE_YORDA:
-        addNote(pg, UI_OPT_PIT_TIME, UI_STR_OPT_PIT_TIME_NOTE);
-        addNote(pg, UI_OPT_YORDA_TRIPS, UI_STR_OPT_YORDA_TRIPS_NOTE);
         addNote(pg, UI_OPT_NATURAL_CHAINS, UI_STR_OPT_NATURAL_CHAINS_NOTE);
         addNote(pg, UI_OPT_VAR_CHAIN_SPEED, UI_STR_OPT_VAR_CHAIN_SPEED_NOTE);
         addNote(pg, UI_OPT_VAR_CHAIN_DAMPING, UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE);
-        break;
-    case UI_PAGE_SHADOWS:
-        /* the June 2001 demo's own toughness note: refreshPage, ui__variant_note */
-        addNote(pg, UI_OPT_SHADOW_SPEED, UI_STR_OPT_SHADOW_SPEED_NOTE);
-        addNote(pg, UI_OPT_VAR_TOUGHNESS, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
-        addNote(pg, UI_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_AGGRESSION_NOTE);
-        addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
-        addNote(pg, UI_OPT_VAR_PEACEFUL, UI_STR_OPT_VAR_PEACEFUL_NOTE);
-        break;
-    case UI_PAGE_COMBAT:
-        addNote(pg, UI_OPT_VAR_AUTO_GUARD, UI_STR_OPT_VAR_AUTO_GUARD_NOTE);
-        addNote(pg, UI_OPT_VAR_ATTACK_TURN, UI_STR_OPT_VAR_ATTACK_TURN_NOTE);
-        addNote(pg, UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE);
-        addNote(pg, UI_OPT_VAR_ONE_HIT, UI_STR_OPT_VAR_ONE_HIT_NOTE);
-        addNote(pg, UI_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_NEVER_DODGE_NOTE);
-        addNote(pg, UI_OPT_SHADOWS_TOGETHER, UI_STR_OPT_SHADOWS_TOGETHER_NOTE);
-        addNote(pg, UI_OPT_VAR_BARRIER, UI_STR_OPT_VAR_BARRIER_NOTE);
-        addNote(pg, UI_OPT_VAR_SWORD_COLOUR, UI_STR_OPT_VAR_SWORD_COLOUR_NOTE);
-        addNote(pg, UI_OPT_VAR_WEAPON, UI_STR_OPT_VAR_WEAPON_NOTE);
         break;
     case UI_PAGE_CUTSCENES:
         /* the 2001 discs' own No cutscene look-around note: refreshPage,
@@ -3605,6 +3515,13 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     }
     default:
         break;
+    }
+    /* the New Game draft's rows (Customize's pages): each its own note,
+       chosen again at refresh (ui__diff_note) */
+    for (int i = 0; i < pg->count; i++) {
+        if (ui__diff_opt(pg->rows[i].opt)) {
+            addNote(pg, pg->rows[i].opt, ui__diff_note(pg->rows[i].opt));
+        }
     }
     /* the window's marks, on a page that can show more rows than its slots
        (U+25B2, U+25BC) */
@@ -4230,66 +4147,27 @@ static void build(void)
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
     static const int touchLinks[] = {-1, -1, -1, UI_PAGE_TOUCH_LAYOUT, -1, -1, -1, -1, -1};
     /* Gameplay (from both entries): the game's Film effect and Players
-       from the pause menu once the game is cleared; the Yorda, Shadows and
-       Cutscenes pages' links before Back (the Controls > Touch screen
-       pattern) */
-    static const int gameOpts[] = {UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_SECOND_CARD,
-                                   UI_OPT_VAR_NO_HINTS, UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,
-                                   UI_OPT_LINK,         UI_OPT_LINK,        UI_OPT_LINK,
-                                   UI_OPT_LINK,         UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,
-                                   UI_STR_OPT_DOOR_FIX,
-                                   UI_STR_OPT_SECOND_CARD,
-                                   UI_STR_OPT_VAR_NO_HINTS,
-                                   UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS,
-                                   UI_STR_SECTION_YORDA,
-                                   UI_STR_SECTION_SHADOWS,
-                                   UI_STR_SECTION_COMBAT,
-                                   UI_STR_SECTION_CUTSCENES,
-                                   UI_STR_BACK};
-    static const int gameLinks[] = {
-        -1, -1, -1, -1, -1, -1, UI_PAGE_YORDA, UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_CUTSCENES,
-        -1};
-    /* Gameplay > Yorda: how the Shadows take her, how long Ico has to pull
-       her out, her falls, the chains Ico lets down for her and how they swing
+       from the pause menu once the game is cleared, the two weapon rows;
+       the Yorda and Cutscenes pages' links before Back (the Controls >
+       Touch screen pattern).  The rows a journey's difficulty holds are the
+       New Game's Customize pages' (settings_difficulty.c) */
+    static const int gameOpts[] = {UI_OPT_STICK_FIX,   UI_OPT_DOOR_FIX, UI_OPT_SECOND_CARD,
+                                   UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,  UI_OPT_VAR_SWORD_COLOUR,
+                                   UI_OPT_VAR_WEAPON,  UI_OPT_LINK,     UI_OPT_LINK,
+                                   UI_OPT_BACK};
+    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,     UI_STR_OPT_DOOR_FIX,
+                                   UI_STR_OPT_SECOND_CARD,   UI_STR_OPT_FILM_EFFECT,
+                                   UI_STR_OPT_PLAYERS,       UI_STR_OPT_VAR_SWORD_COLOUR,
+                                   UI_STR_OPT_VAR_WEAPON,    UI_STR_SECTION_YORDA,
+                                   UI_STR_SECTION_CUTSCENES, UI_STR_BACK};
+    static const int gameLinks[] = {-1, -1, -1, -1, -1, -1, -1, UI_PAGE_YORDA, UI_PAGE_CUTSCENES,
+                                    -1};
+    /* Gameplay > Yorda: the chains Ico lets down for her and how they swing
        (the [variants] chain rows) */
-    static const int yordaOpts[] = {UI_OPT_PIT_TIME,          UI_OPT_YORDA_TRIPS,
-                                    UI_OPT_NATURAL_CHAINS,    UI_OPT_VAR_CHAIN_SPEED,
+    static const int yordaOpts[] = {UI_OPT_NATURAL_CHAINS, UI_OPT_VAR_CHAIN_SPEED,
                                     UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
-    static const int yordaStrs[] = {UI_STR_OPT_PIT_TIME,          UI_STR_OPT_YORDA_TRIPS,
-                                    UI_STR_OPT_NATURAL_CHAINS,    UI_STR_OPT_VAR_CHAIN_SPEED,
+    static const int yordaStrs[] = {UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_VAR_CHAIN_SPEED,
                                     UI_STR_OPT_VAR_CHAIN_DAMPING, UI_STR_BACK};
-    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness
-       and Shadow aggression, Shadows never take Yorda (moved from the Yorda
-       page in v0.10.5: it is a rule about the Shadows) and Peaceful shadows */
-    static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED,   UI_OPT_VAR_TOUGHNESS,
-                                     UI_OPT_VAR_AGGRESSION, UI_OPT_YORDA,
-                                     UI_OPT_VAR_PEACEFUL,   UI_OPT_BACK};
-    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED,   UI_STR_OPT_VAR_TOUGHNESS,
-                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_YORDA,
-                                     UI_STR_OPT_VAR_PEACEFUL,   UI_STR_BACK};
-    /* Gameplay > Combat: the three combat [variants] rows, then the four
-       fight rules that were on Shadows (One hit per swing, Shadows never
-       dodge, Shadows attack together, Queen barrier), the two weapon rows */
-    static const int combatOpts[] = {
-        UI_OPT_VAR_AUTO_GUARD, UI_OPT_VAR_ATTACK_TURN,  UI_OPT_VAR_SHADOWS_WAIT_DOWN,
-        UI_OPT_VAR_ONE_HIT,    UI_OPT_VAR_NEVER_DODGE,  UI_OPT_SHADOWS_TOGETHER,
-        UI_OPT_VAR_BARRIER,    UI_OPT_VAR_SWORD_COLOUR, UI_OPT_VAR_WEAPON,
-        UI_OPT_BACK,
-    };
-    static const int combatStrs[] = {
-        UI_STR_OPT_VAR_AUTO_GUARD,
-        UI_STR_OPT_VAR_ATTACK_TURN,
-        UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN,
-        UI_STR_OPT_VAR_ONE_HIT,
-        UI_STR_OPT_VAR_NEVER_DODGE,
-        UI_STR_OPT_SHADOWS_TOGETHER,
-        UI_STR_OPT_VAR_BARRIER,
-        UI_STR_OPT_VAR_SWORD_COLOUR,
-        UI_STR_OPT_VAR_WEAPON,
-        UI_STR_BACK,
-    };
     /* Gameplay > Cutscenes: the opening skipped, the two cutscene
        [variants] rows */
     static const int cutOpts[] = {UI_OPT_SKIP_OPENING, UI_OPT_VAR_NO_LOOK, UI_OPT_VAR_IGNORE_CAMS,
@@ -4312,8 +4190,6 @@ static void build(void)
     _Static_assert(sizeof(gameOpts) == sizeof(gameStrs) && sizeof(gameOpts) == sizeof(gameLinks),
                    "a string and a link for each Gameplay row");
     _Static_assert(sizeof(yordaOpts) == sizeof(yordaStrs), "a string for each Yorda row");
-    _Static_assert(sizeof(shadowOpts) == sizeof(shadowStrs), "a string for each Shadows row");
-    _Static_assert(sizeof(combatOpts) == sizeof(combatStrs), "a string for each Combat row");
     _Static_assert(sizeof(cutOpts) == sizeof(cutStrs), "a string for each Cutscenes row");
     _Static_assert(sizeof(extrasOpts) == sizeof(extrasStrs) &&
                        sizeof(extrasOpts) == sizeof(extrasLinks),
@@ -4331,8 +4207,6 @@ static void build(void)
     _Static_assert(N_OF(gameOpts) <= MAX_ROWS, "the gameOpts rows fit the page's row budget");
     _Static_assert(N_OF(extrasOpts) <= MAX_ROWS, "the extrasOpts rows fit the page's row budget");
     _Static_assert(N_OF(yordaOpts) <= MAX_ROWS, "the Yorda rows fit the page's row budget");
-    _Static_assert(N_OF(shadowOpts) <= MAX_ROWS, "the Shadows rows fit the page's row budget");
-    _Static_assert(N_OF(combatOpts) <= MAX_ROWS, "the Combat rows fit the page's row budget");
     _Static_assert(N_OF(cutOpts) <= MAX_ROWS, "the Cutscenes rows fit the page's row budget");
 
     ui_font_init(); /* the notes are wrapped by measuring */
@@ -4360,10 +4234,16 @@ static void build(void)
                     N_OF(gameOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_YORDA, UI_STR_SECTION_YORDA, yordaOpts, yordaStrs, NULL,
                     N_OF(yordaOpts), UI_PAGE_GAMEPLAY);
-    buildOptionPage(UI_PAGE_SHADOWS, UI_STR_SECTION_SHADOWS, shadowOpts, shadowStrs, NULL,
-                    N_OF(shadowOpts), UI_PAGE_GAMEPLAY);
-    buildOptionPage(UI_PAGE_COMBAT, UI_STR_SECTION_COMBAT, combatOpts, combatStrs, NULL,
-                    N_OF(combatOpts), UI_PAGE_GAMEPLAY);
+    /* the New Game's Customize and its three pages (settings_difficulty.c) */
+    for (int p = 0; p < UI_PAGE_COUNT; p++) {
+        const int *o, *t, *k;
+        int head;
+        const int n = ui__diff_page(p, &o, &t, &k, &head);
+        if (n > 0 && n <= MAX_ROWS) {
+            buildOptionPage(p, head, o, t, k, n,
+                            p == UI_PAGE_CUSTOMIZE ? UI__PARENT_NEW_GAME : UI_PAGE_CUSTOMIZE);
+        }
+    }
     buildOptionPage(UI_PAGE_CUTSCENES, UI_STR_SECTION_CUTSCENES, cutOpts, cutStrs, NULL,
                     N_OF(cutOpts), UI_PAGE_GAMEPLAY);
     buildOptionPage(UI_PAGE_EFFECTS, UI_STR_SECTION_EFFECTS, fxOpts, fxStrs, NULL, N_OF(fxOpts),
@@ -5152,7 +5032,25 @@ static int closeForDebugMenu(void)
 
 static int parentLayout(const Page *pg)
 {
+    if (pg->parent == UI__PARENT_NEW_GAME) {
+        return ui__newgame_customize_back(); /* the cursor on Customize */
+    }
     return pg->parent >= 0 ? s_pages[pg->parent].layout : s_origin;
+}
+
+/* settings_newgame.h: the New Game screen's Customize opens its page on its
+   first row, every page under it too */
+int ui__settings_open_customize(void)
+{
+    for (int p = 0; p < UI_PAGE_COUNT; p++) {
+        Page *pg = &s_pages[p];
+        if ((p == UI_PAGE_CUSTOMIZE || pg->parent == UI_PAGE_CUSTOMIZE) && pg->layout >= 0) {
+            lt_ext_layout(pg->layout)->defaultItem = lt_ext_layout(pg->layout)->curItem =
+                pageFirstNav(pg);
+            pg->offset = 0;
+        }
+    }
+    return s_pages[UI_PAGE_CUSTOMIZE].layout;
 }
 
 /* ------------------------------------------------- the Save states page
@@ -6240,10 +6138,12 @@ static void refreshPage(Page *pg, int id, int cur)
                 liveNoteText(r->note, text);
             }
         }
-        if (r->opt == UI_OPT_VAR_TOUGHNESS) {
-            r->noteStr = ui__variant_note(r->opt, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
-        } else if (r->opt == UI_OPT_VAR_NO_HINTS) {
-            r->noteStr = ui__variant_note(r->opt, UI_STR_OPT_VAR_NO_HINTS_NOTE);
+        if (ui__diff_opt(r->opt)) {
+            /* the draft's value and the disc choose the note; the count
+               greyed while there is no limit */
+            r->noteStr = ui__diff_note(r->opt);
+            lt_ext_set_dim(r->label, ui__diff_dimmed(r->opt));
+            lt_ext_set_dim(r->value, ui__diff_dimmed(r->opt));
         } else if (r->opt == UI_OPT_VAR_NO_LOOK) {
             r->noteStr = ui__variant_note(r->opt, UI_STR_OPT_VAR_NO_LOOK_NOTE);
         }

@@ -136,13 +136,14 @@ function(ico_ui_settings name)
     # the game variants rows' values, notes and per-disc rule (settings_variants.c)
     # the Upscaling rows: FSR 3.1 and its quality (settings_upscale.c)
     # held Left/Right on the value rows, L1/R1 on the colour rows (settings_step.c)
-    # the New Game screen (settings_newgame.c)
+    # the New Game screen (settings_newgame.c) and the Customize pages' draft
+    # of the journey's difficulty (settings_difficulty.c)
     # a community translation's subtitles as text (subtitle_text.c, jimaku.c's
     # hook, over port/game's tables: subtitles_ru_bobttz.c, subtitles_ru_cobra838.c,
     # subtitles_pt_br.c)
     target_sources(${name} PRIVATE settings.c settings_graphics.c settings_backup.c settings_desktop.c
                                    settings_states.c settings_unused.c settings_variants.c settings_upscale.c settings_step.c ui_list.c
-                                   settings_newgame.c ui_hint.c gallery.c photo_ui.c ui_mouse.c ui_mouse_geom.c
+                                   settings_newgame.c settings_difficulty.c ui_hint.c gallery.c photo_ui.c ui_mouse.c ui_mouse_geom.c
                                    ui_lang.c touch_edit_ui.c subtitle_text.c
                                    "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_bobttz.c"
                                    "${CMAKE_SOURCE_DIR}/port/game/subtitles_ru_cobra838.c"
@@ -260,6 +261,11 @@ ico_settings_test(settings_desktop_test test/settings_desktop_test.c)
 # the pause menu (docs/port/GAME_FEATURES.md, Options on each disc): the
 # European run and the six others (the three above and the 2001 discs below)
 ico_settings_test(settings_discs_test test/settings_discs_test.c)
+# settings_difficulty_test: the New Game screen's Difficulty row and the
+# Customize pages (settings_difficulty.c): each preset's draft, an edit turning
+# the mode Custom and back, the greyed Knock-downs count, the confirm handing
+# the draft to the journey, a cleared save's draft; every disc's run
+ico_settings_test(settings_difficulty_test test/settings_difficulty_test.c)
 # subtitles_ru_test: the Russian (bob-ttz) community translation: its
 # subtitle table, the words jimaku.c's hook gets (subtitle_text.c) and their
 # layout in the band, the Language row's entry and [game] text_language, the
@@ -282,6 +288,8 @@ if(ICO_RUN_TESTS)
                  COMMAND settings_extra_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
         add_test(NAME settings_discs_${_slug}
                  COMMAND settings_discs_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
+        add_test(NAME settings_difficulty_${_slug}
+                 COMMAND settings_difficulty_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
         # settings_test's and settings_extras_test's other-disc runs (the
         # disc's own confirm face, its title and pause rows, its Extras)
         add_test(NAME settings_${_slug} COMMAND settings_test "${CMAKE_CURRENT_BINARY_DIR}" ${_slug})
@@ -309,6 +317,9 @@ if(ICO_RUN_TESTS)
                          subtitles_ru_cobra838 subtitles_ru_cobra838_jpn subtitles_ru_cobra838_kor
                          subtitles_ru_cobra838_cn subtitles_pt_br subtitles_pt_br_jpn
                          subtitles_pt_br_kor subtitles_pt_br_cn
+                         settings_difficulty settings_difficulty_jpn settings_difficulty_kor
+                         settings_difficulty_cn settings_difficulty_ntsc settings_difficulty_aug6
+                         settings_difficulty_jun26
                          PROPERTIES RESOURCE_LOCK settings_toml)
 endif()
 
