@@ -3404,12 +3404,12 @@ static void testGameOptions(void)
               rowShown(UI_PAGE_GAMEPLAY, UI_OPT_PLAYERS),
           "cleared: Film effect and Players");
     checkPageFits(UI_PAGE_GAMEPLAY, "Gameplay (cleared)");
-    for (int k = 0; k < 4; k++) {
+    for (int k = 0; k < 3; k++) {
         press(0x4000);
     }
     CHECK(lt_ext_layout(gameL)->curItem == film,
-          "down four times from the stick fix (past the door fix, Second memory card and No "
-          "hints): Film effect");
+          "down three times from the stick fix (past the door fix and Second memory card): "
+          "Film effect");
     optionScreenMode = 0;
     s_filmCalls = 0;
     CHECK(strcmp(ui_settings_value_text(UI_OPT_FILM_EFFECT), "Off") == 0, "film effect Off (%s)",
