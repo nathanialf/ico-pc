@@ -14,7 +14,8 @@ screen recording the app's Java side reports. The window's lines that use them a
 | `port/platform/cpu_place.c`, `cpu_place.h` | the game thread's CPU time (`cpu_place_thread_cpu_ns`) and the threads line (`cpu_place_threads_format`; `cpu_place_test`) |
 | `port/platform/thermal_text.c`, `thermal_text.h` | the thermal status names and the thermal and screen recording lines (`thermal_text_test`, every platform) |
 | `port/platform/android/host_android.c` | `ico_host_thermal` and the two native methods the Java listeners call |
-| `port/platform/window_stall.c`, `window_stall.h` | the window's side: the open line, the block lines, the around lines |
+| `port/platform/window_stall.c`, `window_stall.h` | the window's side: the open line, the block lines, the around lines, the present stall lines |
+| `port/platform/present_stall_block.c`, `present_stall_block.h` | the present stalls per 10 s block and per run against the GPU span band and the display's rate (`present_stall_block_test`, every platform) |
 | `android/app/src/main/java/com/defnf/icopc/IcoActivity.java` | the thermal getters and the two listeners |
 
 ## The kernel GPU driver's sampler
@@ -477,6 +478,42 @@ causes in it, each on its own lines. The lines to read, in the log's order:
   log gets `rd: GPU timestamps: the clock went back 20699.4 ms at replay 785 (restart 1 of the run;
   ...)` (first 8, then every 100th). A restart at every stall is more evidence for a power-state
   change of the GPU at the stall (a hypothesis; the kernel nodes are unreadable there).
+
+## Issue 123's present stalls: the frame rate pin and the stall lines
+
+- **Why the pin left the display at 120 Hz.** The latest issue 123 log's Frame rate row was Original
+  and the one before's Uncapped; the pin asked a rate only for a number, so both logs say `frame rate
+  pin: on` with no `asked` line after it, and `display refresh: 120.00 Hz ... 0 changes this run`
+  in every block: no vote was ever made. It also asked with FIXED_SOURCE, the video value (the NDK
+  reference: DEFAULT "should be used when displaying game content"). Original now asks the game's
+  own field rate, 59.94 Hz (50 Hz in a European disc's 50 Hz mode), which the 30 pictures a second
+  divide, with DEFAULT and the exact rate, and the window says what the display took:
+  `window: frame rate pin: the display runs 60.00 Hz with 59.94 Hz asked: the ask taken (run time
+  10.2 s)`, or `2 x the ask (the system kept a multiple; ...)`, or `not a multiple of the ask`.
+  The system may keep 120 Hz all the same (a multiple, which Android's guide says it may pick);
+  the line says which. The words and the documentation lines are in
+  [DISPLAY.md](DISPLAY.md#the-refresh-rate-and-the-frame-rate-pin).
+- **The stall lines.** From the run's first present of 250 ms or more, every 10 s block has
+  `window: present stalls: N over 250 ms in 10.0 s (...)`: each stall's length, the GPU idle before
+  the stalled replay (`not measured (the GPU clock restarted)` when the Adreno's counter restarted,
+  as it did at every stall of the latest log), the GPU clock restarts in the block, the block's GPU
+  span (mean, range, 5 ms band) against the stalled replays' spans, the display's rate, the pin's
+  ask and the kernel driver's GPU clock where readable (`GPU clock not readable` on the reporter's
+  phone: KGSL is EACCES there). At exit: `window: present stalls this run: ... a minute; by display
+  rate: ...; by the block's GPU span: ...`.
+- **Reading them.** The hypothesis is a GPU power-state change at the stall (each stalled replay's
+  passes about 3x their block's means, the timestamp counter restarted, the GPU idle about 6 ms
+  before nearly every replay at 30 fps). The run line answers two questions from one log: are the
+  stalls a minute different at 60 Hz than at 120 Hz (the pin taken against not), and do they sit in
+  one span band (the 26-35 ms band of an earlier deep dive) while other bands have none. Restarts
+  without a stall in the same blocks would say the power change happens without the stall too.
+- **No keep-busy attempt.** Nothing in the logs ties the stalls to the GPU's idle time:
+  the replays before each stall were steady (5.8 ms idle on average, the same as the blocks without
+  a stall), only the first stall followed a long pause (the 818 ms late step of the skin-check
+  dump), and the idle before the stalled replay itself cannot be measured because the counter
+  restarted. Android documents no app-side control of the GPU's power state, so work submitted
+  only to keep the GPU awake would cost power and heat on every phone against a cause not shown.
+  The lines above are what would show it.
 
 ## The thermal state and screen recording
 

@@ -1063,11 +1063,21 @@ that stops again writing its own line without the retry mark); a stop at the fre
   unknown rate not one, 144 -> 60 -> 120 two changes), the block's line and the change's line word
   for word, the 10 s poll (`display_rate_poll`: a change SDL announced written at the event's run
   time, one it did not with its own line, no change and an unknown rate nothing), `[dev] frame_rate_pin` (auto, off, false, 0, no, any case), the rate asked for each
-  Frame rate row (60, 120, 144; Original, Uncapped, off and above 1000 none), the sequence set,
-  nothing, set, release, nothing, a device without the call never asked, a refused ask tried
-  again, a new native window or a resume forgetting the ask and the next set made again
-  (`DISPLAY_PIN_SET_AGAIN`; none wanted then: nothing asked or said), the pin's lines
-  (`display_rate`).
+  Frame rate row in mHz (60, 120, 144, 30, 25 ask themselves; Original the game's field rate,
+  59.94 Hz for NTSC and 50 Hz for PAL's 50 Hz mode; Uncapped, off and above 1000 none), the
+  sequence set, nothing, set, release, nothing, a device without the call never asked, a refused
+  ask tried again, a new native window or a resume forgetting the ask and the next set made again
+  (`DISPLAY_PIN_SET_AGAIN`; none wanted then: nothing asked or said), the pin's lines (Original's
+  59.94 among them), the rate the display took against the ask (`display_pin_took`: 60 on 59.94
+  taken, 120 on 59.94 2x, 120 on 30 4x, 50 on 25 2x, 60 on 25 and 144 on 59.94 not a multiple, an
+  unknown rate) and its line, the "nothing asked" lines (`display_rate`).
+- `present_stall_block_test.c`: the present stalls per 10 s block and per run
+  (`present_stall_block.h`, issue 123): blocks before the run's first stall write no line and join
+  the run's sums; the issue 123 log's stalled block (a 340 ms present, a stalled span of 87.1 ms
+  kept out of the band, the GPU clock restarted) word for word; the block after it still writes;
+  a measured idle gap, an overlap, an unmeasured one and a GPU clock read; more stalls than the
+  list holds; the band index; the run's line by display rate and by band word for word; a short
+  buffer (`present_stall_block`).
 - `gpu_sysfs_test.c`: the kernel GPU driver's nodes, the pure part (`gpu_sysfs.h`, issue 123): the nodes' texts parsed (`905000000`, `42 %`, leading blanks, a sign, empty, no digit first, a 4 KB text, a buffer read to its length only, digits past a long long's room), Hz to MHz rounded; the ring of 64 (70 samples, the oldest dropped); the 10 s block (the clock's range and mean, busy's mean, the resets in the block against the last before it and from the ring's start, the thermal level's highest, a temperature, only busy read, a steady clock, an empty block); around a present (the sample before, the ones during, the one after, samples exactly at its start and end, none before, none after, nothing read); the open line (the usual readable set, every node denied, the directory missing, nothing present, only the once nodes with errnos named), the block and around lines word for word, a short buffer cut; issue 179: the devfreq name rule and lines, the CPU clocks by class and around a present (`gpu_sysfs`).
 - `thermal_text_test.c`: the thermal and screen recording words (`thermal_text.h`, issue 123): the
   status name table (NONE 0 to SHUTDOWN 6, -1 and 7 UNKNOWN), the change line (`MODERATE (2) ->

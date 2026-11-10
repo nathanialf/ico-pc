@@ -21,6 +21,7 @@ are [RHI.md](RHI.md).
 | `port/platform/present_fallback.h`, `present_fallback.c` | the FIFO fallback's decision and lines, free of SDL ([The FIFO fallback](#the-fifo-fallback)) |
 | `port/platform/window_present_fallback.h`, `window_present_fallback.c` | the window's side of the FIFO fallback: the gate, the switch, the lines |
 | `port/platform/display_rate.h`, `display_rate.c` | the refresh rate's log lines and the frame rate pin's decisions, free of SDL ([The refresh rate and the frame rate pin](#the-refresh-rate-and-the-frame-rate-pin)) |
+| `port/platform/present_stall_block.h`, `present_stall_block.c` | the present stalls per 10 s block and per run against the GPU span band and the display's rate, free of SDL ([The refresh rate and the frame rate pin](#the-refresh-rate-and-the-frame-rate-pin)) |
 | `port/platform/window_display_rate.h`, `window_display_rate.c` | the window's side: SDL's display mode in the log, the Android pin through the NDK |
 | `port/platform/present_hist.h`, `present_hist.c` | the 10 s block's histogram of the driver's present call (over 20, 50, 100 and 300 ms); the texts of the lines around a present that blocked (its split, the replay after it) |
 | `port/platform/window_stall.h`, `window_stall.c` | the window's lines around a present that blocked (issue 123), from the replays' records as they pop; the kernel GPU driver's lines on Android |
@@ -1718,27 +1719,72 @@ rate, so the next log carries it (`port/platform/display_rate.h`, `window_displa
   (the submit thread's own timing of its present call, `RdPerfRecord.presentMs`) in every row it
   is over (`port/platform/present_hist.h`). The older `window: present blocked N times over 50 ms`
   line and the first-8-then-every-100th `a present blocked` lines stay.
-- Android, 11 and later: while the Frame rate row is a number the window asks the system for that rate
-  as a fixed source (`window_frame_rate_pin`, from `video_settings`: `ANativeWindow_setFrameRateWithChangeStrategy`
-  with only-if-seamless, or `ANativeWindow_setFrameRate` where that is the only one the phone has;
-  both through `dlopen("libandroid.so")` and `dlsym`, so the APK keeps minSdk 29; the ANativeWindow
-  from `SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER`). Original, Uncapped, `[dev] frame_rate_pin = off`
-  and a rate above 1000 ask for none and release an earlier ask; the window closing releases it.
-  A seamless change only: a mode change that blinks the screen is not asked for. The decisions are
-  `display_pin_mode`, `display_pin_rate` and `display_pin_next` (pure; `display_rate_test`). The first
-  call says `window: frame rate pin: on ([dev] frame_rate_pin = auto); the device offers the call` (or
-  `does not offer`, or `(no native window from SDL)`), then one line each time the ask changes:
-  `window: frame rate pin: asked 60 Hz (fixed source; the Frame rate row is 60) with <call>:
-  returned 0` (`(refused)` after a return other than 0, tried again at the next change), and
-  `window: frame rate pin: released (the Frame rate row is Uncapped) with <call>: returned 0`.
-  The ask is a vote on the Surface: going to the background destroys the SurfaceView's surface and
-  the foreground brings a new native window with no vote. The pin keeps the native window it asked
-  on (`DisplayPin.surface`); a call with another one, or the pump's `resume_recheck` after the app
-  came back (`window_frame_rate_pin_resumed`: the pointer may be reused), forgets the ask
-  (`display_pin_surface`) and asks again: `window: frame rate pin: asked again for a new surface:
-  60 Hz (fixed source; the Frame rate row is 60) with <call>: returned 0`. A new surface with no
-  rate wanted asks and says nothing. Nothing runs on any other platform. It is a hint to the system's refresh rate governor: it does not
-  change the game's own pacing, and nothing about it is measured on a device yet.
+- Android, 11 and later: the window asks the system for the rate its pictures come at
+  (`window_frame_rate_pin`, from `video_settings`: `ANativeWindow_setFrameRateWithChangeStrategy`
+  with only-if-seamless, or `ANativeWindow_setFrameRate` where that is the only one the phone has,
+  the same call with only-if-seamless per the NDK reference; both through `dlopen("libandroid.so")`
+  and `dlsym`, so the APK keeps minSdk 29; the ANativeWindow from
+  `SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER`). The Frame rate row's number asks that number (30 asks
+  30: the system picks the refresh, a multiple of it or not); Original asks the game's own field
+  rate, 59.94 Hz, or 50 Hz while a European disc runs its 50 Hz mode (`ico_host_vsync_hz`), which
+  the game's 30 and 60 (25 and 50) pictures a second divide; Uncapped, `[dev] frame_rate_pin = off`
+  and a rate above 1000 ask none and release an earlier ask; the window closing releases it. The
+  rate is passed exact (59.94, not 60) and with the DEFAULT compatibility. Both follow Android's
+  documentation: the NDK reference's `ANativeWindow_FrameRateCompatibility` says DEFAULT "should be
+  used when displaying game content" and FIXED_SOURCE "should be used for video content"; the frame
+  rate guide (developer.android.com/media/optimize/performance/frame-rate) says
+  "FRAME_RATE_COMPATIBILITY_FIXED_SOURCE is intended only for video apps. For non-video usage, use
+  FRAME_RATE_COMPATIBILITY_DEFAULT", "it's best to pass in the exact frame rate rather than
+  rounding to an integer", gives the game example `setFrameRate(60, ...COMPATIBILITY_DEFAULT)` taking
+  a 90 Hz device to 60 Hz, and warns that "the platform may switch to a multiple of the frame rate
+  the app specified" and that the app "shouldn't change the value it passes to setFrameRate() based
+  on what the platform does". Before this rule the pin asked FIXED_SOURCE and asked nothing for
+  Original: issue 123's two latest logs (Frame rate Original, and Uncapped) say `frame
+  rate pin: on` with no ask after it, and `display refresh: 120.00 Hz ... 0 changes this run`
+  throughout: the pin never voted. The decisions are `display_pin_mode`, `display_pin_rate` (the
+  ask in mHz: `DISPLAY_PIN_NTSC_MHZ` 59940, `DISPLAY_PIN_PAL_MHZ` 50000) and `display_pin_next`
+  (pure; `display_rate_test`). The first call says `window: frame rate pin: on ([dev]
+  frame_rate_pin = auto); the device offers the call` (or `does not offer`, or `(no native window
+  from SDL)`); a first decision that asks none says so once (`window: frame rate pin: nothing asked
+  (the Frame rate row is Uncapped: the display's own choice)`), then one line each time the ask
+  changes: `window: frame rate pin: asked 59.94 Hz (the game's own field rate; the Frame rate row
+  is Original) with <call>: returned 0` (`the frame rate cap` for a number; `(refused)` after a
+  return other than 0, tried again at the next change), and `window: frame rate pin: released (the
+  Frame rate row is Uncapped) with <call>: returned 0`. The 10 s poll asks again when the field
+  rate changed (Original's ask follows a European disc's 50 / 60 Hz choice), and at the poll after
+  each ask, and at each change of the display's rate while one holds, says what the display took
+  (`display_pin_took`, `display_pin_took_text`): `window: frame rate pin: the display runs 60.00 Hz
+  with 59.94 Hz asked: the ask taken (run time 10.2 s)`, `...: 2 x the ask (the system kept a
+  multiple; the pictures still divide it)`, or `...: not a multiple of the ask (the pictures do not
+  divide it: uneven spacing)`. The ask is a vote on the Surface: going to the background destroys
+  the SurfaceView's surface and the foreground brings a new native window with no vote. The pin
+  keeps the native window it asked on (`DisplayPin.surface`); a call with another one, or the
+  pump's `resume_recheck` after the app came back (`window_frame_rate_pin_resumed`: the pointer
+  may be reused), forgets the ask (`display_pin_surface`) and asks again: `window: frame rate pin:
+  asked again for a new surface: 59.94 Hz (the game's own field rate; the Frame rate row is
+  Original) with <call>: returned 0`. A new surface with no rate wanted asks and says nothing.
+  Nothing runs on any other platform. It is a hint to the system's refresh rate governor ("there
+  is no guarantee that your app will get the frame rate you request", the guide): it does not
+  change the game's own pacing (the pacing reads the display's rate live, `window_refresh_ns`).
+  Whether a 60 Hz display changes issue 123's stalls is not measured on the device yet; the stall
+  lines below are what tells.
+- `window: present stalls: N over 250 ms in 10.0 s (340, 338 ms; GPU idle before the stalled
+  replay: not measured (the GPU clock restarted), 0.9 ms); GPU clock restarts 2; GPU span 27.4 ms
+  a replay (26.7-28.7 ms, band 25-30 ms; stalled replays 85.1, 88.5 ms); display 120.00 Hz, frame
+  rate pin 59.94 Hz asked; GPU clock not readable` in every 10 s block from the run's first stall
+  on, on every platform (`port/platform/present_stall_block.h`, fed every record from
+  `window_stall_after`, closed in `window_stall_gpu_block`): the stalls (a present of 250 ms or
+  more), each one's length and the GPU idle before the stalled replay (or why it is not measured:
+  the clock restart of `rd_perf_gap_step_ex`), the GPU timestamp clock's restarts in the block (at
+  a stall or not), the block's GPU span over the replays that did not stall (mean, range and 5 ms
+  band) against the stalled replays' spans, the display's rate (live, `window_refresh_ns`), the
+  pin's ask and the kernel driver's GPU clock where it is readable. The blocks before the first
+  stall write nothing and still count. At the window's close `window: present stalls this run: 7
+  over 250 ms in 3.3 min (2.1 a minute); by display rate: 120.00 Hz 7 in 3.3 min (2.1 a minute);
+  by the block's GPU span: 25-30 ms 7 in 3.0 min (2.3 a minute), 20-25 ms 0 in 0.3 min (0.0 a
+  minute)` (`window_stall_run_summary`; the last part block joins first): the stalls a minute by
+  display rate and by span band, which is what tests the power-state hypothesis and the 26-35 ms
+  band of an earlier deep dive from one log (`present_stall_block_test`).
 
 ### Downsampling
 

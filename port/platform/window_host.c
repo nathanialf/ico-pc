@@ -423,7 +423,7 @@ static void video_settings(RdSettings *rs, int w, int h)
         window_timer_budget_reset();
     }
     s_pres.framerate = ico_video_framerate();
-    window_frame_rate_pin(s_window, s_pres.framerate); /* Android: the cap as a fixed rate */
+    window_frame_rate_pin(s_window, s_pres.framerate); /* Android: the pictures' rate */
     rs->interpolate = (uint8_t)(s_pres.framerate != ICO_FRAMERATE_ORIGINAL);
     /* presenting between ticks with vsync on, the swapchain prefers the
        mailbox mode: no tearing, and a present never waits for the display,
@@ -5904,8 +5904,9 @@ void ico_window_close(void)
         return;
     }
     s_open = 0;
-    ico_render_thread_stop(); /* every picture handed over finished, the thread ended */
-    window_dump_auto_stop();  /* the dump worker joined, its last zip reported */
+    ico_render_thread_stop();   /* every picture handed over finished, the thread ended */
+    window_dump_auto_stop();    /* the dump worker joined, its last zip reported */
+    window_stall_run_summary(); /* issue 123: stalls a minute by display rate */
     window_display_rate_stop(s_window);
     window_stall_gpu_close(); /* Android: the kernel GPU driver's sampler joined */
     /* a clean exit: a lazy run keeps the start-up activity file, so the
