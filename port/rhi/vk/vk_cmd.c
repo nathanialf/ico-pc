@@ -177,7 +177,9 @@ static void vkr_progress_wait(uint64_t value)
     __atomic_store_n(&g_vkr.progWaitingFor, value, __ATOMIC_RELEASE);
 }
 
-void vkr_wait_value(uint64_t value)
+/* vkr_wait_value; poll: the frame slot whose last submission it is, its
+ * stamps polled while the wait blocks (vk_tsclock.c), or NULL */
+static void vkr_wait_value_on(uint64_t value, VkrFrame *poll)
 {
     /* a lost device finishes nothing more: no wait (the first failed one
      * is the report's, vkr_lost_report) */
@@ -197,7 +199,7 @@ void vkr_wait_value(uint64_t value)
         }
     }
     const uint64_t t0 = vkr_now_ns();
-    const VkResult r = vkr_sync_wait(value);
+    const VkResult r = poll ? vkr_tsclock_wait(poll, value) : vkr_sync_wait(value);
     vkr_progress_wait(0);
     const uint64_t waited = vkr_now_ns() - t0;
     if (r == VK_SUCCESS) {
@@ -222,6 +224,16 @@ void vkr_wait_value(uint64_t value)
     VKR_CHECK(r);
     g_vkr.stats.fenceWaits++;
     g_vkr.stats.fenceWaitNs += waited;
+}
+
+void vkr_wait_value(uint64_t value)
+{
+    vkr_wait_value_on(value, NULL);
+}
+
+void vkr_wait_slot_value(VkrFrame *f, uint64_t value)
+{
+    vkr_wait_value_on(value, f);
 }
 
 void vkr_note_submit(const VkrFrame *f, uint64_t value, uint32_t lists, bool present)
@@ -260,6 +272,8 @@ static void vkr_collect_timestamps(VkrFrame *f)
             hi = i + 1;
         }
     }
+    /* what the slot recorded, for rhi_read_timestamp_clock */
+    memcpy(g_vkr.tsClock.recorded, f->tsWritten, sizeof(g_vkr.tsClock.recorded));
     if (!f->queryPool || hi == 0) {
         memset(f->tsWritten, 0, sizeof(f->tsWritten));
         return;
@@ -270,11 +284,23 @@ static void vkr_collect_timestamps(VkrFrame *f)
         g_vkr.device, f->queryPool, 0, hi, sizeof(data[0]) * hi, data, sizeof(data[0]),
         VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT);
     if (r == VK_SUCCESS || r == VK_NOT_READY) {
+        bool first = true;
+        f->tsPrevFirst = 0;
         for (uint32_t i = 0; i < hi; i++) {
             if (rhi_ts_has(f->tsWritten, i) && data[i][1]) {
                 g_vkr.tsResult[i] =
                     (uint64_t)((double)(data[i][0] & g_vkr.timestampMask) * g_vkr.timestampPeriod);
                 g_vkr.tsCount = i + 1;
+                rhi_ts_add(g_vkr.tsClock.available, i);
+                if (first) {
+                    /* the lowest recorded stamp's value: a poll of the
+                     * slot's next use that reads it again reads this use's
+                     * results, before that use's reset ran (vk_tsclock.c) */
+                    f->tsPrevFirst = data[i][0] & g_vkr.timestampMask;
+                }
+            }
+            if (rhi_ts_has(f->tsWritten, i)) {
+                first = false;
             }
         }
     }
@@ -326,8 +352,12 @@ static void vkr_collect_occlusion(VkrFrame *f)
 /* Recycles a frame slot once the GPU is done with it. */
 static void vkr_recycle_frame(VkrFrame *f)
 {
-    vkr_wait_value(f->waitValue);
+    /* the slot's clock (rhi_read_timestamp_clock): the wait's trace, the
+     * stamps' bits, then the submit times and the calibrated pair */
+    memset(&g_vkr.tsClock, 0, sizeof(g_vkr.tsClock));
+    vkr_wait_slot_value(f, f->waitValue);
     vkr_collect_timestamps(f);
+    vkr_tsclock_recycled(f);
     vkr_collect_occlusion(f);
     f->tsReset = false;
     f->occReset = false;
@@ -613,6 +643,7 @@ static bool vkr_submit_batch(VkrFrame *f, const VkCommandBuffer *cbs, uint32_t c
     vkr_late_add(&g_vkr.late.submits, 1u);
     f->waitValue = value;
     vkr_note_submit(f, value, count, forPresent);
+    vkr_tsclock_note_submit(f, value);
     return true;
 }
 
@@ -1838,6 +1869,7 @@ void rhi_cmd_set_index_buffer(RhiCommandList cl, RhiBuffer b, uint64_t offset, b
     }
     vkCmdBindIndexBuffer(c->cb, buf->buffer, offset,
                          u32 ? VK_INDEX_TYPE_UINT32 : VK_INDEX_TYPE_UINT16);
+    c->ibBytes = buf->size > offset ? buf->size - offset : 0;
     c->ibId = b.id;
     c->ibOff = offset;
     c->ib32 = u32;
@@ -2126,6 +2158,7 @@ void rhi_cmd_draw_indexed(RhiCommandList cl, uint32_t indexCount, uint32_t first
     vkr_dst_order(c);
     vkr_flush_bind_groups(c);
     vkr_flush_dynamic(c);
+    vkr_range_index(c, firstIndex, indexCount);
     vkCmdDrawIndexed(c->cb, indexCount, instanceCount ? instanceCount : 1u, firstIndex,
                      vertexOffset, 0);
     g_vkr.stats.draws++;
@@ -2142,6 +2175,8 @@ void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, R
         return;
     }
     VkBufferCopy r = {srcOffset, dstOffset, size};
+    vkr_range_buffer(c, "a buffer copy's source", s, srcOffset, size);
+    vkr_range_buffer(c, "a buffer copy's destination", d, dstOffset, size);
     vkr_flush_barriers(c);
     /* rhi.h: the copy waits for every earlier read of the destination
      * (draws of earlier frames reading a range rewritten now) and write (an
@@ -2242,6 +2277,8 @@ void rhi_cmd_copy_buffer_to_texture(RhiCommandList cl, RhiBuffer src, uint64_t s
         .imageOffset = {region.x, region.y, 0},
         .imageExtent = {region.w, region.h, 1},
     };
+    vkr_range_rows(c, "a buffer-to-texture copy's source rows", s, srcOffset, rowPitch, t, region);
+    vkr_range_image(c, "a buffer-to-texture copy's region", t, mip, region);
     vkr_hz_copy(c, NULL, s, t, mip, NULL);
     vkCmdCopyBufferToImage(c->cb, s->buffer, t->image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r);
     g_vkr.stats.copies++;
@@ -2267,6 +2304,9 @@ void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, 
         .dstOffset = {dstX, dstY, 0},
         .extent = {srcRegion.w, srcRegion.h, 1},
     };
+    vkr_range_image(c, "a texture copy's source region", s, 0, srcRegion);
+    vkr_range_image(c, "a texture copy's destination region", d, 0,
+                    (RhiRect){dstX, dstY, srcRegion.w, srcRegion.h});
     vkr_hz_copy(c, s, NULL, d, 0, NULL);
     vkCmdCopyImage(c->cb, s->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->image,
                    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r);
@@ -2318,6 +2358,9 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
         .imageOffset = {region.x, region.y, 0},
         .imageExtent = {region.w, region.h, 1},
     };
+    vkr_range_image(c, "a texture-to-buffer copy's region", t, 0, region);
+    vkr_range_rows(c, "a texture-to-buffer copy's destination rows", d, dstOffset, rowPitch, t,
+                   region);
     /* the earlier reads' stages, before vkr_hz_copy marks the buffer copied
        (the global path's own barrier below) */
     const VkPipelineStageFlags earlier = vkr_buf_earlier_stages(d) | VK_PIPELINE_STAGE_TRANSFER_BIT;

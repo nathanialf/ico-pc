@@ -31,6 +31,8 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/vk/vk_native.c` | `rhi_native.h` on Vulkan: the device, a texture's `VkImage` and layouts, the `VkCommandBuffer`, the capability answer |
 | `port/rhi/vk/vk_resource.c` | buffers, textures, samplers, shaders, deferred destruction |
 | `port/rhi/vk/vk_spirv_scan.c`, `vk_spirv_scan.h` | whether a SPIR-V module is a fragment shader that declares a storage buffer (the buffer barriers' first scopes), pure |
+| `port/rhi/vk/vk_tsclock.c` | the recycled slot's clock (`rhi_read_timestamp_clock`): submit times, calibrated timestamps, the polled wait's trace |
+| `port/rhi/vk/vk_range.c` | the indexed draws' and copies' ranges against their resources (what robust access does not cover), logged |
 | `port/rhi/vk/vk_enums.h`, `vk_internal.h` | the enum tables; the backend's shared state |
 | `port/rhi/vk/vk_surface_android.c` | the window surface on Android |
 | `port/rhi/ffx/CMakeLists.txt`, `ffx/sc/CMakeLists.txt` | the FidelityFX FSR 3.1 upscaler built from the fetched SDK (`ICO_FFX`): the host shader compiler `ico_ffx_sc`, the Vulkan permutation headers, `ico_ffx_upscaler`, `ffx_link_test` ([BUILDING.md](../BUILDING.md#fidelityfx-upscaler-fsr-31)) |
@@ -1234,7 +1236,47 @@ present batch's wait for the previous number (the semaphore signal already cover
 submission on the queue), and the timeline path's submits are as before, field for field. The
 watchdog and the loss report read the counter on both paths (`vkr_sync_init`, `vkr_sync_submit`,
 `vkr_sync_reached`, `vkr_sync_wait`; `rhi_vk_vk11`'s sync cell: 24 submissions three times around
-the ring, the last clear read back, every one seen finished). Every buffer and
+the ring, the last clear read back, every one seen finished).
+
+**The recycled slot's clock (issue 123).** `rhi_read_timestamp_clock` (rhi.h) hands back, with the
+stamps of the slot `rhi_wait_frame` recycled, what the CPU saw of that slot's GPU work
+(`port/rhi/vk/vk_tsclock.c`): its submissions' CPU times (`vkr_tsclock_note_submit`, from
+`vkr_submit_batch`); the recycle's wait, when it blocked; the indices recorded and those that came
+back available; and, where `VK_KHR_calibrated_timestamps` or `VK_EXT_calibrated_timestamps` is
+offered with the device's and the CPU's time domains (CLOCK_MONOTONIC, the performance counter on
+Windows; both need `VK_KHR_get_physical_device_properties2` or Vulkan 1.1), one calibrated pair read
+at the recycle. Enabling the extension also orders timestamps across submissions: without it the
+specification orders only writes "in the same submission" ("Timestamp Queries"), and the renderer
+compares the scene's and the present's lists and replay with replay. A recycle's wait that blocks
+past `RHI_TS_TRACE_AFTER_MS` (50 ms) becomes timed waits of `RHI_TS_TRACE_STEP_MS` (4 ms) between
+which the slot's query results are read without the wait bit (allowed: "may return VK_NOT_READY if
+there are queries in the unavailable state", "Query Operation"), one trace point at each change:
+which recorded stamps were available, whether they were still the slot's previous use's (its reset,
+the first command of its first list, had not run: the GPU had not begun it), how far its submissions
+had finished; the longest stretch with no change; and `again` when the available count fell after
+the slot's own results had begun to come (its queries reset a second time: its first list ran
+again, which a driver's reset and replay of the work in flight does). The wait returns when the
+same number finishes as before, nothing is recorded, the picture is the same (the 123 dumps
+replay byte-identical on lavapipe). Device line: `rhi_vk: timestamps: 64 valid bits, 52.083 ns a
+tick; calibrated with the CPU's clock: on (VK_KHR_calibrated_timestamps, the device and
+CLOCK_MONOTONIC)` or `...: not offered (a slow replay's start is placed from its wait instead)`;
+`ICO_VK_CALIBRATED_TIMESTAMPS=0` keeps the extension off. On lavapipe a query read waits for the
+queue, so its trace has one point, after the work; a phone's driver need not. The renderer's use:
+[ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-123-what-the-gpu-did-during-a-stall).
+
+**What robust access does not cover (issue 123).** Robust buffer access bounds shader reads and the
+vertex input ("access to vertex input data is bounds checked against the bound vertex buffer
+range", "Robust Buffer Access"); the index fetch and the transfer commands are valid-usage rules
+only, which a driver may fault on. `port/rhi/vk/vk_range.c` checks every indexed draw's
+`(firstIndex + indexCount) * index size` against the bound index buffer's bytes from its offset,
+every buffer copy's source and destination, every buffer-to-texture and texture-to-buffer copy's
+buffer rows (the last row its own texels; BC blocks) and texture region, and every texture copy's
+regions against their mip; one past them is recorded as before and logged: `rhi_vk: a command past
+its resource: an indexed draw's indices reaches 68 of 64 (replay R, frame F; N such commands this
+run): robust access does not cover it, a GPU may fault on it` (the first 8, then every 100th). Every
+device; nothing changes where nothing is past.
+
+Every buffer and
 texture has its own `VkDeviceMemory` (`port/rhi/vk/vk_resource.c`, header comment). Each memory kind
 tries an ordered list of memory types, and a type the driver refuses (a full heap) passes the
 allocation to the next: uploads go to a device-local, host-visible type first, but one whose heap is

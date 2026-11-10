@@ -7,7 +7,8 @@
  * fallbacks, the label box lt_ext_draw_row draws in), and the hit test (a
  * label is Cross, a value Right on its owner, the arrows Left and Right with
  * their padding, headings, masked and hidden rows never hit, the smallest
- * box first, the scroll marks and a button prompt moving no cursor).
+ * box first, the scroll marks and a button prompt moving no cursor), and
+ * the New Game screen's Difficulty row (settings_newgame.c's places).
  */
 #include <stdio.h>
 #include <string.h>
@@ -278,11 +279,54 @@ static void testHits(void)
     CHECK(!ui_mouse_hit_test(&al, 1, 369.0f, 98.0f, &h), "an ownerless arrow is not hit");
 }
 
+/* The New Game screen's Difficulty row at y 46 (its label the item at x
+   40..300, the value 336..536 stepping as Right, the arrows at 320 and 536
+   Left and Right, all owned by the label) over Customize at y 70 and Mirror
+   mode's Off at y 94, boxes 34 high (settings_newgame.c): each arrow is
+   its step on the label, padded but clear of the rows below; the value is
+   Right; the label is Cross on itself */
+static void testNewGameRow(void)
+{
+    UiMouseHit h;
+    UiMouseRow r[6];
+    r[0] = row(700, 40, 46, 260, 34);  /* Difficulty, the item */
+    r[1] = row(701, 336, 46, 200, 34); /* its value */
+    r[2] = row(702, 320, 46, 14, 34);  /* the left arrow */
+    r[3] = row(703, 536, 46, 14, 34);  /* the right arrow */
+    r[4] = row(704, 40, 70, 260, 34);  /* Customize */
+    r[5] = row(705, 320, 94, 110, 34); /* Mirror mode's Off */
+    for (int i = 1; i <= 3; i++) {
+        r[i].ownerItem = 700;
+        r[i].itemLinks = 0;
+    }
+    r[1].role = UI_MOUSE_ROLE_STEP;
+    r[2].role = UI_MOUSE_ROLE_LEFT;
+    r[3].role = UI_MOUSE_ROLE_RIGHT;
+    CHECK(ui_mouse_hit_test(r, 6, 327.0f, 109.0f, &h) && h.item == 700 && h.row == 702 &&
+              h.action == UI_MOUSE_ACT_LEFT,
+          "the left arrow: Left on Difficulty (%d %d %d)", h.row, h.item, h.action);
+    CHECK(ui_mouse_hit_test(r, 6, 543.0f, 109.0f, &h) && h.item == 700 && h.row == 703 &&
+              h.action == UI_MOUSE_ACT_RIGHT,
+          "the right arrow: Right on Difficulty (%d %d %d)", h.row, h.item, h.action);
+    CHECK(ui_mouse_hit_test(r, 6, 436.0f, 109.0f, &h) && h.item == 700 && h.row == 701 &&
+              h.action == UI_MOUSE_ACT_RIGHT,
+          "the value: Right on Difficulty (%d %d %d)", h.row, h.item, h.action);
+    CHECK(ui_mouse_hit_test(r, 6, 200.0f, 109.0f, &h) && h.item == 700 &&
+              h.action == UI_MOUSE_ACT_CROSS,
+          "the label: Cross on Difficulty (%d %d)", h.item, h.action);
+    /* the arrows' padding ends above Customize's and Off's boxes */
+    CHECK(ui_mouse_hit_test(r, 6, 327.0f, 190.0f, &h) && h.item == 705,
+          "under the left arrow's padding: Mirror mode's Off (%d)", h.item);
+    CHECK(ui_mouse_hit_test(r, 6, 200.0f, 141.0f, &h) && h.item == 704,
+          "under Difficulty: Customize (%d)", h.item);
+}
+
 int main(void)
 {
     testGrid();
     testBoxes();
     testHits();
+    testNewGameRow();
     if (failures) {
         printf("ui_mouse_test: %d failure(s)\n", failures);
         return 1;

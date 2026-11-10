@@ -801,6 +801,12 @@ uint32_t rhi_read_timestamps_busy(uint64_t *ns, uint32_t max)
     return be()->read_timestamps_busy(ns, max);
 }
 
+bool rhi_read_timestamp_clock(RhiTimestampClock *out)
+{
+    RHI_GUARD_SLOT(RHI_SLOT_NOW());
+    return be()->read_timestamp_clock(out);
+}
+
 bool rhi_occlusion_supported(void)
 {
     return be()->occlusion_supported();

@@ -914,7 +914,7 @@ const char *const
             [UI_STR_DIFF_RULES] = "Regeln",
             [UI_STR_DIFF_NO_SHADOWS] = "Keine Schatten",
             [UI_STR_DIFF_NO_SHADOWS_NOTE] =
-                "An: Es erscheinen nie Schatten. Die Geschichte läuft trotzdem ab.",
+                "An: Es erscheinen nie Schatten. Manche Momente der Geschichte gehen verloren oder laufen anders ab.",
             [UI_STR_DIFF_KNOCK_LIMIT] = "Grenze für Niederschläge",
             [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
                 "Game Over, sobald Ico so oft niedergeschlagen wurde. Aus: keine Grenze.",

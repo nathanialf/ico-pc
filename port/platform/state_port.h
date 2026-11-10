@@ -28,6 +28,8 @@
  *   pad_script.c    the pad script's tick (CLOCK)
  *   door_grace.c    the doorway fix's arm and grace
  *   yorda_trip.c    Yorda trips' run count and its tick stamp
+ *   no_shadows.c    No Shadows' final-fight hold (FRESH: a state made before
+ *                   it existed keeps this run's words)
  *   gfx_null.c      the DMA channel register blocks
  *   host_loop.c     the vsync count and the next field
  *   audio_host.c    the audio side (ICO_STATE_AUDIO, copied under the
@@ -40,6 +42,9 @@
  *   sound.c         the EE sequencer's .bss (sce/libsndn2, compiled into the
  *                   sound library, outside the game data ranges; AUDIO, the
  *                   pointer blocks scanned)
+ *   difficulty.c    the journey's difficulty record (FRESH: a state made
+ *                   before it existed builds the record from its own keys
+ *                   text, ico_difficulty_state_loaded)
  *
  * Not registered: the scheduler's tables (ico_sched_state_save/restore
  * move their pointers themselves: a scan of them here would move them
@@ -70,11 +75,13 @@ int ico_trace_state_register(void);        /* trace_host.c */
 int ico_pad_script_state_register(void);   /* port/input/pad_script.c */
 int ico_door_grace_state_register(void);   /* port/game/door_grace.c */
 int ico_yorda_trip_state_register(void);   /* port/game/yorda_trip.c */
+int ico_no_shadows_state_register(void);   /* port/game/no_shadows.c */
 int ico_gfx_null_state_register(void);     /* port/null/gfx_null.c */
 int ico_host_loop_state_register(void);    /* host_loop.c */
 /* port/audio/audio_host.c (audio_host.h): the SPU2, the libsd layer, the
    gain tags, the SNDN2DRV host and its streams, the sync path's count */
 int ico_audio_state_register(void);
-int ico_sound_state_register(void); /* sce/libsndn2/sound.c: the EE sequencer's .bss */
+int ico_sound_state_register(void);      /* sce/libsndn2/sound.c: the EE sequencer's .bss */
+int ico_difficulty_state_register(void); /* port/game/difficulty.c: "difficulty.record" */
 
 #endif /* ICO_PLATFORM_STATE_PORT_H */

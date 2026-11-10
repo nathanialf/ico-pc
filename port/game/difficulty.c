@@ -367,10 +367,20 @@ static int canonical(IcoDiffRow row, int v)
     return v;
 }
 
+/* the scope of the knock-down limit means nothing while the limit is Off, so
+   it counts as "each room" then (stepping it must not turn the draft Custom) */
+static int effective(const int32_t *rows, IcoDiffRow row)
+{
+    if (row == ICO_DIFF_KNOCK_SCOPE && rows[ICO_DIFF_KNOCK_LIMIT] == 0) {
+        return ICO_DIFF_SCOPE_ROOM;
+    }
+    return canonical(row, rows[row]);
+}
+
 static int rows_equal(const int32_t *a, const int32_t *b)
 {
     for (int r = 0; r < ICO_DIFF_ROW_COUNT; r++) {
-        if (canonical((IcoDiffRow)r, a[r]) != canonical((IcoDiffRow)r, b[r])) {
+        if (effective(a, (IcoDiffRow)r) != effective(b, (IcoDiffRow)r)) {
             return 0;
         }
     }
@@ -420,9 +430,10 @@ int ico_difficulty_row_step(IcoDifficulty *d, IcoDiffRow row, int dir)
         break;
     }
     case ICO_DIFF_BARRIER_HITS: {
-        static const int kCycle[3] = {0, 5, 7};
-        int i = v == 5 ? 1 : v == 7 ? 2 : 0;
-        v = kCycle[((i + dir) % 3 + 3) % 3];
+        /* two steps: the disc's own number (stored as 0) and the other one */
+        const int own = shipped_barrier();
+
+        v = (v == 0 || v == own) ? (own == 5 ? 7 : 5) : 0;
         break;
     }
     case ICO_DIFF_PIT_TIME: {
@@ -551,7 +562,7 @@ static void diff_text(const IcoDifficulty *d, char *out, size_t size)
         char buf[16];
         int n;
 
-        if (canonical((IcoDiffRow)r, d->row[r]) == canonical((IcoDiffRow)r, normal[r])) {
+        if (effective(d->row, (IcoDiffRow)r) == effective(normal, (IcoDiffRow)r)) {
             continue;
         }
         n = snprintf(out + at, size - at, "%s%s=%s", at == 0 ? "" : " ", kRowKeys[r],
@@ -1007,4 +1018,9 @@ int ico_difficulty_states_locked(void)
 void ico_difficulty_set_listener(IcoDiffListener fn)
 {
     s_listener = fn;
+}
+
+void ico_difficulty_notify(IcoDiffEvent ev, int a, int b)
+{
+    tell(ev, a, b);
 }

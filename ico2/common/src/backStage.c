@@ -58,6 +58,9 @@ extern void SetInfoSpKidnapGenerator(int *info);
 extern void SetInfoSpKidnapEnemy(int *work);
 /* port/game/options.c: [gameplay] yorda_safe */
 extern int ico_opt_yorda_safe(void);
+/* PC port: port/game/no_shadows.h: No Shadows (the journey's Customize row): 1 while it is on;
+   called every tick, it also prints the room's Shadows-held-back line */
+extern int ico_no_shadows_tick(int stage);
 
 #include "eeword.h"
 #include "ios.h"
@@ -544,8 +547,9 @@ static void backStageProcessMain_ntsc(void)
 
     gamesysAnotherStageTsuresari = 0;
     /* yorda_safe: the off-screen kidnap and carry timers do not run, so the
-       shadows never take her while the boy is in another room */
-    if (ico_opt_yorda_safe()) {
+       shadows never take her while the boy is in another room.  PC port: No Shadows
+       (first, so its tick runs every frame) stops them too: no Shadow comes for her */
+    if (ico_no_shadows_tick(stage_no) || ico_opt_yorda_safe()) {
         return;
     }
     if (gflagChk(357) != 0) {
@@ -610,8 +614,9 @@ static void backStageProcessMain_jun26(void)
 {
     gamesysAnotherStageTsuresari = 0;
     /* yorda_safe: the off-screen kidnap and carry timers do not run, so the
-       shadows never take her while the boy is in another room */
-    if (ico_opt_yorda_safe()) {
+       shadows never take her while the boy is in another room.  PC port: No Shadows
+       (first, so its tick runs every frame) stops them too: no Shadow comes for her */
+    if (ico_no_shadows_tick(stage_no) || ico_opt_yorda_safe()) {
         return;
     }
     if (gflagChk(340) != 0) {
@@ -662,8 +667,9 @@ static void backStageProcessMain_aug6(void)
 
     gamesysAnotherStageTsuresari = 0;
     /* yorda_safe: the off-screen kidnap and carry timers do not run, so the
-       shadows never take her while the boy is in another room */
-    if (ico_opt_yorda_safe()) {
+       shadows never take her while the boy is in another room.  PC port: No Shadows
+       (first, so its tick runs every frame) stops them too: no Shadow comes for her */
+    if (ico_no_shadows_tick(stage_no) || ico_opt_yorda_safe()) {
         return;
     }
     if (gflagChk(356) != 0) {
@@ -746,8 +752,9 @@ void backStageProcessMain(void)
 
     gamesysAnotherStageTsuresari = 0;
     /* yorda_safe: the off-screen kidnap and carry timers do not run, so the
-       shadows never take her while the boy is in another room */
-    if (ico_opt_yorda_safe()) {
+       shadows never take her while the boy is in another room.  PC port: No Shadows
+       (first, so its tick runs every frame) stops them too: no Shadow comes for her */
+    if (ico_no_shadows_tick(stage_no) || ico_opt_yorda_safe()) {
         return;
     }
     if (gflagChk(390) != 0) {

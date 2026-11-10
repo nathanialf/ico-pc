@@ -115,7 +115,9 @@ void ico_state_header_init(IcoStateHeader *h, const char *commit);
    later version added) is equal when the key-default function (below)
    says this run's value is its default; the saved text must then be whole
    (its own hash is the saved settings_hash), else "the settings differ".
-   Without the function such a key differs ("key=(absent) (now cur)"). */
+   Without the function such a key differs ("key=(absent) (now cur)").  A
+   key only the saved text lists is equal when this version retired it
+   (ico_state_set_key_retired), under the same whole-text rule. */
 IcoStateResult ico_state_header_check(const IcoStateHeader *saved, const IcoStateHeader *now,
                                       char *detail, size_t n);
 /* The same without the build id: what a state of another build of this
@@ -136,6 +138,21 @@ void ico_state_set_key_default(IcoStateKeyDefaultFn fn);
 /* The keys `now` lists that `saved` lacks, as "a, b" into out (size bytes,
    truncated; "" for none); their count.  For the load's log line. */
 int ico_state_keys_absent(const char *saved, const char *now, char *out, size_t size);
+
+/* 1 when the simulation key (key_n bytes, not NUL-terminated) is one this
+   version retired: sim_keys.h ico_sim_key_retired (v0.11.3: the fifteen
+   difficulty rows, which a state now carries as its own block), set by
+   state_host.c at its start.  A key the saved text lists, `now` lacks and
+   this function names is passed over whatever its value (the saved text
+   must then be whole, as for an absent key).  NULL: none is retired (such
+   a key differs: "key=value (now absent)"). */
+typedef int (*IcoStateKeyRetiredFn)(const char *key, size_t key_n);
+void ico_state_set_key_retired(IcoStateKeyRetiredFn fn);
+
+/* The retired keys (above) `saved` lists and `now` lacks, as
+   "key=value, key=value" into out (size bytes, truncated; "" for none);
+   their count.  For the load's log line. */
+int ico_state_keys_retired(const char *saved, const char *now, char *out, size_t size);
 
 /* --- writing (the writer thread) --- */
 

@@ -27,6 +27,7 @@
 #include "ico_thread.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
+#include "rd_perf_clock.h"
 #include "rd_perf_gap.h"
 #include "rd_vis.h"
 
@@ -86,6 +87,22 @@ static double s_listMs0;
 static PerfStamps s_stamps; /* the replay being recorded */
 
 static PerfStamps s_pendingStamps[RHI_FRAMES_IN_FLIGHT];
+
+/* every timestamp index of the replay being recorded (the list and effect
+   stamps and the pieces'), in the order recorded, and the same of the
+   records waiting for their slot: the slot's clock names the stamps by it
+   (rd_perf_clock.h) */
+static uint8_t s_ord[RHI_MAX_TIMESTAMPS];
+static uint32_t s_ordN;
+static uint8_t s_pendingOrd[RHI_FRAMES_IN_FLIGHT][RHI_MAX_TIMESTAMPS];
+static uint32_t s_pendingOrdN[RHI_FRAMES_IN_FLIGHT];
+
+static void ordAdd(uint32_t index)
+{
+    if (s_ordN < RHI_MAX_TIMESTAMPS && index < RHI_MAX_TIMESTAMPS) {
+        s_ord[s_ordN++] = (uint8_t)index;
+    }
+}
 
 static int s_post = -1;    /* the effect the work being recorded belongs to */
 static uint32_t s_nextTs;  /* the next free index above RD_PERF_TS_COUNT */
@@ -878,6 +895,7 @@ void rd__perf_pass(RhiCommandList cl, int kind, uint32_t target, uint32_t w, uin
     passClose(&st, now);
     rhi_cmd_write_timestamp(cl, (RD_PERF_TS_PASS0 + s_passRec.count) | RHI_TIMESTAMP_KEEP_BARRIERS |
                                     RHI_TIMESTAMP_ISSUE_TIME);
+    ordAdd(RD_PERF_TS_PASS0 + s_passRec.count);
     RdPerfPass *p = &s_passRec.pass[s_passRec.count++];
     memset(p, 0, sizeof(*p));
     p->kind = (uint8_t)kind;
@@ -913,6 +931,7 @@ void rd__perf_pass_end(RhiCommandList cl)
     passClose(&st, rd__now_ms());
     rhi_cmd_write_timestamp(cl, (RD_PERF_TS_PASS0 + s_passRec.count) | RHI_TIMESTAMP_KEEP_BARRIERS |
                                     RHI_TIMESTAMP_ISSUE_TIME);
+    ordAdd(RD_PERF_TS_PASS0 + s_passRec.count);
     s_passRec.closed = true;
 }
 
@@ -1064,6 +1083,7 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
     s_pipelineCreates = rd__stats_here()->pipelineCreates;
     s_a1xDraws = g_rd.above1xDraws;
     memset(&s_stamps, 0, sizeof(s_stamps));
+    s_ordN = 0;
     s_post = -1;
     s_nextTs = RD_PERF_TS_COUNT;
     s_postPartial = false;
@@ -1165,6 +1185,72 @@ static void gpuGap(RdPerfRecord *r, uint64_t t0, uint64_t last)
     }
 }
 
+/* a stamp index's name for the slot's clock line (rd_perf_clock.h); user:
+   the replay's pieces when it was timed pass by pass, else NULL */
+static void clockName(uint32_t index, void *user, char *buf, size_t n)
+{
+    const PassTable *t = user;
+    if (index >= RD_PERF_TS_PASS0) {
+        const uint32_t k = index - RD_PERF_TS_PASS0;
+        if (t != NULL && k < t->count) {
+            char label[96];
+            rd_perf_pass_label(&t->pass[k], label, sizeof label);
+            snprintf(buf, n, "the start of piece %u of %u, %s", k, t->count, label);
+        } else if (t != NULL && k == t->count) {
+            snprintf(buf, n, "the end of its last piece (%u)", t->count);
+        } else {
+            snprintf(buf, n, "piece %u", k);
+        }
+    } else if (index == RD_PERF_TS_BEGIN) {
+        snprintf(buf, n, "its start");
+    } else if (index == RD_PERF_TS_LISTS) {
+        snprintf(buf, n, "list 0's start");
+    } else if (index >= RD_PERF_TS_LIST0 && index < RD_PERF_TS_LIST0 + RD_LIST_COUNT) {
+        snprintf(buf, n, "list %u's end", index - RD_PERF_TS_LIST0);
+    } else if (index == RD_PERF_TS_PRESENT) {
+        snprintf(buf, n, "the present's end");
+    } else if (index == RD_PERF_TS_PREPASS) {
+        snprintf(buf, n, "the VU pre-pass's start");
+    } else if (index == RD_PERF_TS_PRESENT_BEGIN) {
+        snprintf(buf, n, "the present's list's start");
+    } else {
+        snprintf(buf, n, "effect stamp %u", index);
+    }
+}
+
+/* the slot's clock against the CPU's into the record, and its line on a
+   long wait with a trace, a second run, a stamp the GPU never wrote or a
+   counter restart (rd_perf_clock.h; first 8, then every 100th) */
+static void clockNote(RdPerfRecord *r, uint32_t slot, const RhiTimestampClock *clk,
+                      const uint64_t *ts, uint32_t n)
+{
+    static uint32_t s_lines;
+    const RdPerfClockIn in = {clk,
+                              ts,
+                              n,
+                              s_pendingOrd[slot],
+                              s_pendingOrdN[slot],
+                              r->replay,
+                              r->gpuGapBackNs,
+                              clockName,
+                              r->passTimed ? (void *)&s_passPending[slot] : NULL};
+    RdPerfClockVerdict v;
+    rd_perf_clock_judge(&in, &v);
+    r->gpuLateValid = (uint8_t)v.lateValid;
+    r->gpuLateMs = v.lateMs;
+    r->gpuRanTwice = (uint8_t)v.ranTwice;
+    r->gpuStampsMissing = (uint16_t)(v.missing > 65535u ? 65535u : v.missing);
+    if (!v.report) {
+        return;
+    }
+    const uint32_t k = ++s_lines;
+    if (k <= 8u || k % 100u == 0u) {
+        char line[2048];
+        rd_perf_clock_text(&in, &v, line, sizeof line);
+        rd__log("%s (line %u of the run)", line, k);
+    }
+}
+
 /* timestamps of the slot just recycled: the replay RHI_FRAMES_IN_FLIGHT ago */
 void rd__perf_collect_gpu(void)
 {
@@ -1231,6 +1317,11 @@ void rd__perf_collect_gpu(void)
             r->gpuBusyMs = (double)(busy[lastIndex] - busy[RD_PERF_TS_BEGIN]) / 1e6;
             r->gpuBusyValid = 1;
         }
+    }
+    /* the slot's clock (Vulkan) */
+    RhiTimestampClock clk;
+    if (g_rd.hasDevice && rhi_read_timestamp_clock(&clk)) {
+        clockNote(r, slot, &clk, ts, n);
     }
     /* no stamps: the next timed record's gap is measured across this one
        (gpuGapSkipped) */
@@ -1380,6 +1471,8 @@ void rd__perf_end(void)
     s_passOn = false;
     s_pending[slot] = *r;
     s_pendingStamps[slot] = s_stamps;
+    memcpy(s_pendingOrd[slot], s_ord, s_ordN);
+    s_pendingOrdN[slot] = s_ordN;
     s_pendingValid[slot] = true;
 }
 
@@ -1409,6 +1502,7 @@ static void stamp(RhiCommandList cl, uint32_t index)
         cl, (index >= RD_PERF_TS_COUNT ? index | RHI_TIMESTAMP_KEEP_BARRIERS : index) | issue);
     s_stamps.written |= 1u << index;
     s_stamps.order[s_stamps.count++] = (uint8_t)index;
+    ordAdd(index);
     s_stamps.post[index] = (int8_t)s_post;
 }
 

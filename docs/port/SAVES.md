@@ -3,8 +3,8 @@
 How the port keeps the game's saves: [libmc](ARCHITECTURE.md#terms) answered from a folder on the
 host in the layout PCSX2's folder memory cards use, a second card in port 1 when one is configured,
 where those folders are on each platform, each disc's save directory and record, the importer
-that copies an existing PS2 save into a card folder, and the rescue of an old save state's
-progress as a card save. The game's own card code
+that copies an existing PS2 save into a card folder, the rescue of an old save state's
+progress as a card save, and what a save state carries of the journey's difficulty. The game's own card code
 (`ico2/fumi/ios/mcard.c`, `mcdata.c`) runs unchanged but for its region forms.
 
 ## Files
@@ -25,6 +25,8 @@ progress as a card save. The game's own card code
 | `port/save/test/save_test.c` | the same tests |
 | `port/core/region_<slug>.c` (seven rows) | each disc's save directory (`mc_save_dir`) and product record size (`mc_product_size`) |
 | `ico2/fumi/ios/mcard.c`, `mcdata.c` | the game's side: the card manager thread, the save and load steps, the icon files |
+| `port/game/difficulty_file.c` (`port/game/difficulty.h`) | `difficulty.toml`: each save's difficulty record and the ended journeys ([The difficulty of each save](#the-difficulty-of-each-save)) |
+| `port/game/test/difficulty_file_test.c` | the `difficulty_file` tests (one a disc) |
 
 ## The card
 
@@ -49,11 +51,12 @@ stores what the game writes. Nothing else is written, and nothing at
 all before the game's first `sceMcMkdir`: until then a card folder that does not exist is an
 empty card, and `sceMcMkdir` creates the card folder and any missing parent
 (`port/save/mc_host.c` (`sceMcGetDir`, `sceMcMkdir`, `make_root`)). The PC-only facts about a
-save, the mirror-mode flag of each slot and the achievements' run state, live outside the card,
-in `config.toml`'s `[mirror]` and `achievements.toml`, keyed by the slot and the save block's
-checksum, one set of keys per disc ([The seven discs](#the-seven-discs), [CONFIG.md](CONFIG.md);
+save, the mirror-mode flag of each slot, the achievements' run state and the save's difficulty,
+live outside the card, in `config.toml`'s `[mirror]`, `achievements.toml` and `difficulty.toml`,
+keyed by the slot (and, for the difficulty, the card) and the save block's checksum, one set of
+keys per disc ([The seven discs](#the-seven-discs), [CONFIG.md](CONFIG.md);
 `port/game/options.h`, `ico_mirror_slot_saved`; `port/game/achievements.h`,
-`ico_ach_slot_saved`).
+`ico_ach_slot_saved`; [The difficulty of each save](#the-difficulty-of-each-save)).
 
 Names follow the card's rules: at most 31 bytes, none of `\ : * ? " < > |` or a control
 character, at most 8 directories deep; `.` and `..` resolve against each port's current directory
@@ -385,8 +388,10 @@ product file written, then the game block (`gameblock_write`: the image's first 
 the two option words, or the 2001 discs' block) and its sum; the file read back through the card
 and compared. The slot is the lowest one with no `game.00N`, or `--slot`; a slot that holds a save
 needs `--overwrite`. The icon files are never written (they come from the disc); a directory
-without them gets them at the game's next save. `config.toml`'s `[mirror]` and
-`achievements.toml` are not touched, so the slot has no mirror flag or achievement run of its own.
+without them gets them at the game's next save. `config.toml`'s `[mirror]`, `achievements.toml`
+and `difficulty.toml` are not touched, so the slot has no mirror flag or achievement run of its
+own, and its first load takes the difficulty carry-over
+([The difficulty of each save](#the-difficulty-of-each-save)).
 
 Where the game resumes: a load starts the image's stage, `gflagSave`'s `gFlagSaveStage`
 (`layout_action.c` (`la_load_processing`): `stgmgrForceSwitchWithFade(gFlagSaveStage, ...)`),
@@ -406,6 +411,148 @@ state_recover_tool SIDE_FILE --card CARD_FOLDER [--slot N] [--overwrite]
 Both exit 0 when written, 1 when refused (the reason printed), 2 on a usage or card error. The
 tool is built by `port/save/CMakeLists.txt` and kept in every build (`cmake/IcoTests.cmake`
 (`ICO_KEEP_IN_ALL`)); the script finds the newest one under `build-host/*/port/save/`.
+
+## The difficulty of each save
+
+Each journey's difficulty (the New Game screen's mode and rows, `port/game/difficulty.h`) is kept
+per save in `<user folder>/difficulty.toml`, beside `achievements.toml`; the card files are never
+touched for it (`port/game/difficulty_file.c`, header comment). Not `config.toml`: it is journey
+data, has no `ico-pc.ini` override layer, and holds the list of ended journeys.
+
+```toml
+version = 1
+[save]
+slot_3_sum = 123456                 # the game block's checksum (mc.sum), as [mirror]
+slot_3_preview = "12:345678:2"      # stage:play frames:couch, the product file's preview
+slot_3_journey = "9f3a6c0e5d2b7a11"
+slot_3_mode = "hard"                # easy | normal | hard | custom
+slot_3_origin = "new"               # new | config | state
+slot_3_rows = "shadow_speed=faster shade_toughness=third_journey ... knock_limit=3 knock_scope=room permadeath=false"
+slot_3_knocks = 1                   # the whole-journey knock-down count at this save
+b_slot_3_sum = 654321               # card 2's slot 3
+[finished]
+9f3a6c0e5d2b7a11 = true
+```
+
+An entry's key is the disc's key prefix (`key_prefix`: none on the European disc, `jpn_`,
+`kor_`, `cn_`, `ntsc_`, `aug6_`, `jun26_`), the card (none for port 0, `b_` for port 1: with
+Second card on, both cards have a slot 3) and `slot_N_` (`entry_key`). The rows are the
+`ico_difficulty_rows_format` text.
+
+- **Save** (`la_save_processing` step 10, beside `ico_ach_slot_saved`: `la_host_difficulty_saved`):
+  the active record under the card and slot with the game block's checksum and the preview the
+  product file now holds for it (stage, play frames, couch; read through `la_preview_play` and
+  `la_preview_sofa`, the 2001 discs' words, region rows `mc_preview_play` and `mc_preview_sofa`).
+- **Load** (both `la_load_processing` twins' step 10, beside `ico_ach_slot_loaded`:
+  `ico_difficulty_slot_loaded`): the card and slot's entry when its checksum matches ("found by
+  slot"); else any entry of this disc with that checksum, a file moved or copied to another slot or
+  card ("found by sum"); else no record: the one-time carry-over of the fifteen retired config keys
+  (`ico_difficulty_from_config`: Normal when every value is the game's own, else Custom), written at
+  once with origin `config` ("carry-over"). Later saves keep the origin. A save with no entry (one
+  made before the file existed, a slot `state_recover` wrote) takes the carry-over at its first
+  load.
+- **Permadeath** (any game over ends the journey): the journey's id goes into `[finished]` at once
+  (`ico_difficulty_file_journey_ended`). The Continue list (both `la_mc_load_file_select` twins)
+  refuses a save whose preview matches an entry of an ended journey (the slot's own entry, or any
+  entry of the disc with that preview: a moved file) with the negative sound
+  (`la_host_load_refused`, `ico_difficulty_slot_finished`); a later save in the same slot has
+  another preview and is not refused. The load's backstop at the top of step 10 (step 9 on the June
+  2001 demo), before `gflagKeepState`, refuses a game block whose checksum is an ended journey's and
+  goes back to the file list (`ico_difficulty_sum_finished`). The three game over twins
+  (`la_game_over_continue`, `_ntscaug6`, `_jun26`) hide Continue, keep the cursor on Quit and make
+  the Continue case act as Quit (`la_host_game_over_quit_only`; as in a test room of Extras >
+  Unused content).
+- **The knock-down limit's whole-journey count** is the entry's `knocks` at each save; the game
+  over the limit causes sets it back to 0 in memory and in the run's entry when that entry is the
+  journey's (`ico_difficulty_file_knocks_reset`).
+
+Every call reads the file afresh and every change is written at once and atomically (`.tmp`, then a
+rename: `ico_toml_write_text`). A file whose `version` is missing or not 1 reads as empty with a log
+line (the first 8 reads, then every 100th) and is not written over by a load's carry-over; the next
+save (or a Permadeath end) keeps its text as `difficulty.toml.bad` and writes a new file. The file
+is in a backup ([PLATFORM.md](PLATFORM.md)).
+
+The log says every lookup's outcome (`difficulty: load of card 1 slot 3 (sum 123456): found by
+slot: Hard, journey ...`, `found by sum at card 2 slot 3 (the file was moved or copied)`, `no
+entry on this disc (pal): carry-over: Custom, ...`, `none (not a save slot)`), every write
+(`difficulty: wrote <path> (card 1 slot 3 saved: Hard, journey ..., origin new, sum ..., preview
+12:345678:2, knock-downs 0)`) and its failure, and every refusal (`difficulty: the Continue list
+refuses card 1 slot 4 (preview 20:1000:1): journey ... has ended (Permadeath; entry card 1 slot
+4)`, `difficulty: the load refuses the save with sum ...: ... back to the file list`).
+
+## Save states and difficulty
+
+The difficulty a journey runs with is one record (`port/game/difficulty.h`, `IcoDifficulty`, 256
+bytes of int32: the mode, the rows, the journey id, the knock-down counts, the in-fall latch, the
+finished flag, the run's card port, slot and sum). A save state carries it as the registry block
+`difficulty.record` (`ico_difficulty_state_register`, the last call in
+`port/platform/state_port.c`; `ICO_STATE_FRESH`, no host pointers), so a state loads with the rows
+and the counts it was saved with, whatever the journey before the load was. The save states
+themselves are [PLATFORM.md](PLATFORM.md#save-states).
+
+- **After a load** (`port/game/state_host.c`, `perform_load`, beside `ico_gs_rebaseline`):
+  `ico_difficulty_state_loaded(absent, keys)` makes the restored record the active one and runs
+  `ico_variants_apply`, so the variants' switches follow it. `absent` is 1 for another build's
+  state that has no such block (its offset in the translation is `ICO_XB_BLOCK_ABSENT`, the block
+  kept this run's bytes): the record is then built from the state's own keys text
+  (`ico_difficulty_from_keys`: Normal when every row is the game's own, else Custom; origin
+  `state`), never from `config.toml`.
+- **The keys text**: the fifteen difficulty rows are not simulation keys
+  (`port/platform/sim_keys.h`, `ICO_SIM_KEYS_RETIRED`). A state made while they were lists them in
+  its keys text; `ico_state_header_check` passes over a key that only the saved text lists when
+  the retired-key function names it (`ico_state_set_key_retired`, set by `state_host.c` to
+  `ico_sim_key_retired`, since the platform layer does not see the config), at any value. The two
+  hashes then differ by those lines, so the saved text must be whole (its own hash), as for a key a
+  later version adds. A key still listed that differs is refused and named as before.
+- **Permadeath**: a state made on a Permadeath journey never loads, and none is made.
+  - While the active record has Permadeath on (`ico_difficulty_states_locked`), a load and a
+    save are refused before anything is read or written: `ico_state_conditions` returns
+    `ICO_STATE_PERMADEATH` right after "off" (`IcoStateConds.locked`, sampled by
+    `state_host.c`); the slot listing marks every present slot not loadable for that reason; the
+    Save states page refuses both at once with "Save states cannot be loaded on a Permadeath
+    journey." (`UI_STR_DIFF_STATES_LOCKED`, `port/platform/main_host.c`; the save shares the
+    load's words).
+  - Whatever journey is in force (the title's Normal included), a state whose own
+    `difficulty.record` has Permadeath on is refused with the same result before anything is
+    restored: `perform_load` reads the record from the staged reg section (its place by this
+    build's block order, or by the translation's offset for another build's state;
+    `ico_state_record_permadeath`, `port/game/state_rules.c`: the block's size, place and record
+    version must match), and the listing reads each loadable slot's reg section alone for the
+    same check.
+  - The port writes no state on its own: every state comes from `perform_save` (the page, the
+    hotkey, `[dev] state_save_at`), which the conditions above gate.
+- **Section sizes of another build's state**: its reg and audio sections lack the FRESH blocks
+  it was saved without, so the read takes their sizes as bounds (`LoadCtx.xb`) and
+  `check_sizes` checks the exact sum from the translation's offsets.
+- **Pad recordings**: a recording's header lists `ICO_SIM_KEYS`, so the rows are not in it. A
+  recording whose header lists them as config keys has those lines read as a state's keys would be
+  and compared with Normal (the record a run starts with; its New Game screen chooses the
+  journey's); a difference is logged and counted, nothing is refused.
+- **Another version's state**: the translation ([PLATFORM.md](PLATFORM.md#across-versions))
+  refuses a state with a fiber suspended in a function whose code changed. The knock-down limit
+  changes the four copies of `actCommonDown` (`ico2/fumi/src/commonact.c`), in which every lying
+  character waits, and No Shadows the copies of `actEnemyStart` (`ico2/fumi/src/enemy_act.c`), in
+  which a placed Shadow already beaten waits hidden: a state saved with either on a stack is
+  refused as another version's ("the code it was saved in changed"); a state without them loads as
+  long as nothing else it points into changed. A new or resized game global refuses every such
+  state ("the game's data layout changed").
+
+| line | when |
+| --- | --- |
+| `state: slot N's difficulty: the state's record` or `...: no record in the state (made before states held one): built from its keys` | every load, before the record's own `difficulty: ...` line |
+| `state: slot N lists K difficulty row(s) among its settings (made before they were its own block): not compared: <key=value, ...>` | a load of a state whose keys text lists the rows |
+| `state: refused load slot N: save states are off on a Permadeath journey: the journey has Permadeath on` | a load while a Permadeath journey is in force (the poll); `... (the page)` from the Save states page |
+| `state: refused save slot N: save states are off on a Permadeath journey: the journey has Permadeath on: a state of it could never be loaded` | a save while a Permadeath journey is in force; `state: refused save slot N: ... (the page)` from the page |
+| `state: refused load slot N: save states are off on a Permadeath journey: the state was saved on a Permadeath journey` | a load of a state whose own record has Permadeath on |
+| `state: slot N was saved on a Permadeath journey: it cannot be loaded here` | each listing, per such slot |
+| `ico_pc: pad script lists K difficulty rows among its config keys (each journey's own now), read as a state's keys:` | a recording whose header lists the rows; then `difficulty: built from a state's keys ...` and, when they are not Normal's, `ico_pc: pad script recorded with the difficulty rows above; ...` |
+
+The tests: `state_format` and `state_port` (the retired keys in both header checks), `sim_keys`
+(the real fifteen through the header check), `state_host` (the lock for loads and saves, its
+text, a state's own record read by its bytes and through a written file's reg section),
+`difficulty` (the block, a state's record and a state without one); the disc tests
+`state_roundtrip_headless` and `state_roundtrip_headless_settings` (a load restores the record;
+the refusal is by `gameplay.door_fix`).
 
 ## Tests
 

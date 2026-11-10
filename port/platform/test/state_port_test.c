@@ -56,7 +56,10 @@
  *            its default now (the key-default function) the state loads, the
  *            saved text whole by its own hash; changed from the default,
  *            without the function, or with the saved hash off: refused; a
- *            key only the state lists refused; the absent keys named.
+ *            key only the state lists refused; the absent keys named; a
+ *            key only the state lists that this build retired (v0.11.3's
+ *            difficulty rows) passed over by the other-build check, a
+ *            listed key that differs still refused.
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -1420,6 +1423,12 @@ static int fake_default(const char *key, size_t key_n, const char *value, size_t
     return value_n == 0 || (value_n == 5 && memcmp(value, "false", 5) == 0);
 }
 
+/* the retired-key function state_host.c sets (sim_keys.h), for one key */
+static int fake_retired(const char *key, size_t key_n)
+{
+    return key_n == 17 && memcmp(key, "gameplay.pit_time", 17) == 0;
+}
+
 static void keys_header(IcoStateHeader *h, const char *keys)
 {
     ico_state_header_init(h, "build-a");
@@ -1486,6 +1495,24 @@ static void test_keys(void)
     CHECK(ico_state_keys_absent("a=\nb=\n", "a=\nb=\n", names, sizeof names) == 0 &&
               names[0] == '\0',
           "none absent");
+    /* an earlier version's state that lists a key this one retired (a
+       difficulty row, now the state's own block), with a key this one
+       added at its default: both passed over, the other-build check too */
+    keys_header(&sv, "gameplay.mirror=\ngameplay.pit_time=8\n");
+    keys_header(&nw, "gameplay.mirror=\ngameplay.trips=false\n");
+    CHECK(ico_state_header_check_other_build(&sv, &nw, detail, sizeof detail) ==
+                  ICO_STATE_OTHER_SETTINGS &&
+              strcmp(detail, "gameplay.pit_time=8 (now absent)") == 0,
+          "without the retired function the row refuses (%s)", detail);
+    ico_state_set_key_retired(fake_retired);
+    CHECK(ico_state_header_check_other_build(&sv, &nw, detail, sizeof detail) == ICO_STATE_OK,
+          "a retired row and an added key: the other-build check passes (%s)", detail);
+    keys_header(&sv, "gameplay.mirror=true\ngameplay.pit_time=8\n");
+    CHECK(ico_state_header_check_other_build(&sv, &nw, detail, sizeof detail) ==
+                  ICO_STATE_OTHER_SETTINGS &&
+              strcmp(detail, "gameplay.mirror=true (now )") == 0,
+          "a listed key that differs still refuses (%s)", detail);
+    ico_state_set_key_retired(NULL);
     ico_state_set_key_default(NULL);
 }
 

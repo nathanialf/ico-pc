@@ -992,11 +992,11 @@ key-default function says this run's value is the default (`ico_state_set_key_de
 `state_host.c` to `ico_sim_key_is_default`, since the platform layer does not see the config);
 the two hashes then differ by those lines, so the saved text must instead be the whole of what
 its own hash covered (`xxh3_64` of the saved text equal to the saved hash), else `the settings
-differ`. Without the function (the tests, the tools) such a key differs, as `key=(absent) (now
-cur)`.
+differ`. Without the function (tests, tools) such a key differs, as `key=(absent) (now cur)`.
+Retired keys: [SAVES.md](SAVES.md#save-states-and-difficulty).
 
-The rule has two levels. The same build (build id equal) loads a state as it always did: one delta
-per range, nothing else consulted. Another build of the same platform and format goes on to
+The rule has two levels. The same build (build id equal) loads a state with one delta per range,
+nothing else consulted. Another build of the same platform and format goes on to
 `ico_state_header_check_other_build` (the same checks without the build id: the disc and the
 simulation keys must still match) and then to its `syms` section, which loads it only when
 everything the state points into is unchanged in this build ([Across versions](#across-versions)).
@@ -1028,15 +1028,16 @@ what each owner registers and why):
 | `gfx_null.c` | `dma.channels` | |
 | `host_loop.c` | `host_loop.vsyncs`, `host_loop.field` | |
 | `port/audio/audio_host.c` (`ico_audio_state_register`) | `spu2.state` (the SPU2: RAM, cores, register shadow, time, event queue, DMA channels and their callbacks, the IRQ callback, the reverb presets; not the render's scratch or the statistics), `spu2_sd.time`, `spu2_sd.effect_attr`, `mix_gain.tag`, `mix_gain.cache`, `mix_gain.ready` (the gains themselves are the player's settings), `sndn2.host` (the driver's pages, counters, reply and pitch table), `sndn2.carry`, `sndn2.staging`, `sndn2.adpcm`, `sndn2.queue`, `sndn2.q_write`, `sndn2.q_read`, `sndn2.pending`, `sndn2.pcm`, `audio.vsync_index` (which vsyncs render 801 frames at 59.94 Hz) | AUDIO; SCAN on `spu2.state` and `sndn2.host` |
+| `port/game/difficulty.c` | `difficulty.record` (the journey's difficulty) | FRESH |
 | `sce/libsndn2/sound.c` (`ico_sound_state_register`) | the EE sequencer's .bss: `sound.vab`, `sound.slot`, `sound.seq`, `sound.com`, `sound.packet`, `sound.iop2ee`, `sound.iop2ee_p`, `sound.se`, `sound.head`, `sound.client`, `sound.vab_hd`, `sound.seq_body`, `sound.hd_rel` (compiled into the sound library, so outside the game's data ranges) | AUDIO; SCAN on the pointer blocks |
 
-72 blocks, over 4 MB, most of it IOP RAM and the SPU2's RAM (2 MB each). SCAN marks a block that may hold host addresses (the
+73 blocks, over 4 MB, most of it IOP RAM and the SPU2's RAM (2 MB each). SCAN marks a block that may hold host addresses (the
 relocation scans it); AUDIO one copied under the audio lock; CLOCK a counter a load rewinds with
 the game (the Main tick count, and with it the pad script's position); FRESH
 (`ICO_STATE_FRESH`) one that starts from its initial value: a state saved before the block existed
 still loads ([Across versions](#across-versions)) and the block keeps this run's bytes.
-FRESH is for a block without host pointers (a FRESH block with SCAN is still refused when
-absent) whose value the game can start over from, such as a count and its stamp. A version that
+FRESH is for a block without host pointers (FRESH with SCAN is still refused when absent)
+whose value the game can start over from. A version that
 adds a block gives it FRESH when that holds, else every older state is refused naming it. Not registered: the
 scheduler's tables (`ico_sched_state_save` and `_restore` move their pointers themselves; a
 second scan would move them twice), the vsync callback list and `clock.c`'s flag that mirrors
@@ -1237,9 +1238,8 @@ globals; it is not a proof that the later build means the same by the state:
   bytes, so the game sees the same text).
 - A simulation key the later build adds is read as its default in an older state: the state loads
   while the key is at its default and is refused as `ICO_STATE_OTHER_SETTINGS` (`key=(absent)
-  (now cur)`) once the player changed it. A block the later build adds loads only when its owner
-  registered it FRESH ([The registry](#the-registry)); the block then keeps this run's value,
-  which is right only for a value the game can start over from.
+  (now cur)`) once the player changed it. A block the later build adds loads only when
+  registered FRESH ([The registry](#the-registry)), keeping this run's value.
 - Host addresses that are rebuilt rather than saved are untouched by any of this: the vsync hook
   list, the SIF server table and the other host callbacks set up at start-up, files, the
   renderer's handles (the [registry](#the-registry) lists them).
@@ -1539,7 +1539,7 @@ Options > Extras > Back up your data and Restore from a backup move the player's
 zip (`port/platform/backup.h`, header comment). A backup holds, from the user folder: every
 folder named `memcard` or `memcard` followed by letters, digits, `-` or `_` (`memcard`,
 `memcard-preview`), `states/` without a slot's developer dumps (`states/<slug>/dump-*`),
-`config.toml` and `achievements.toml`; never a file still being written (`*.tmp`, `*.part`), the
+`config.toml`, `achievements.toml`, `difficulty.toml`; never a file still being written (`*.tmp`, `*.part`), the
 logs, `ico-pc.ini` (this device's disc image and folders), the pipeline caches, `dumps/`, the
 texture and model packs or the extracted game data (`backup.c` (`top_visit`, `collect_add`)). A
 card folder that `saves=` or `[paths] saves` puts outside the user folder is not in it; the start

@@ -64,6 +64,18 @@ static void run_stall(StallBlock *b, const StallBlockRec *r, double sinceMs)
         }
         b->runHeldN++;
     }
+    if (r->ranTwice) {
+        b->runTwice++;
+    }
+    if (r->lateValid) {
+        if (b->runLateN == 0 || r->lateMs < b->runLateMin) {
+            b->runLateMin = r->lateMs;
+        }
+        if (b->runLateN == 0 || r->lateMs > b->runLateMax) {
+            b->runLateMax = r->lateMs;
+        }
+        b->runLateN++;
+    }
     if (r->displayHz > 0.0) {
         b->rateStalls[rate_bucket(b, r->displayHz)]++;
     } else {
@@ -98,6 +110,9 @@ void stall_block_add(StallBlock *b, const StallBlockRec *r)
             b->stallGapMs[i] = r->gapMs;
             b->stallHz[i] = r->displayHz;
             b->stallSinceMs[i] = sinceMs;
+            b->stallLate[i] = r->lateValid;
+            b->stallLateMs[i] = r->lateMs;
+            b->stallTwice[i] = r->ranTwice;
         }
         b->stalls++;
         run_stall(b, r, sinceMs);
@@ -222,6 +237,13 @@ int stall_block_end(StallBlock *b, double blockSeconds, double displayHz,
             } else {
                 put(buf, size, &at, ", GPU idle before it not measured");
             }
+            if (b->stallLate[i]) {
+                put(buf, size, &at, ", the GPU began it %s%.1f ms after its submit",
+                    b->stallLate[i] == 2 ? "about " : "", b->stallLateMs[i]);
+            }
+            if (b->stallTwice[i]) {
+                put(buf, size, &at, ", its first list ran twice (a reset and replay)");
+            }
         }
         put(buf, size, &at, "%s)", b->stalls > listed ? "; the first listed" : "");
     }
@@ -294,6 +316,12 @@ int stall_block_run_text(const StallBlock *b, char *buf, size_t size)
             put(buf, size, &at, ", held past the GPU span %.0f-%.0f ms", b->runHeldMin,
                 b->runHeldMax);
         }
+        if (b->runLateN > 0) {
+            put(buf, size, &at,
+                ", the GPU began the replay %.0f-%.0f ms after its submit (%u placed)",
+                b->runLateMin, b->runLateMax, b->runLateN);
+        }
+        put(buf, size, &at, ", %u whose first list ran twice", b->runTwice);
     }
     put(buf, size, &at, "; by display rate:");
     for (unsigned i = 0; i < b->rateN; i++) {

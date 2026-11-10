@@ -65,6 +65,10 @@ static int generatorPacket[2820]; /* derived name */
 #include "main.h"
 
 static GObj *IsNeedGeneratorHard(GObj *mother);
+/* PC port: port/game/no_shadows.h: No Shadows (the journey's Customize row). Returns 1 while it
+   is on and counts n refusals of the kind what (0 a pit's call request held at 0, 1
+   DirectCallEnemy, 2 Generator_QuickCall, 3 UnlockEnemyGenerate). */
+extern int ico_no_shadows_drop(int what, int n);
 
 inline int SearchActiveGenerator(void)
 {
@@ -776,6 +780,13 @@ inline GObj *DirectCallEnemy(GObj *gobj, GObj *mother, float *pos, float *dir, i
 {
     GenGeo *gg = &objLayout[gobj->labelId];
 
+    /* PC port: No Shadows: no Shadow comes out (CallEnemy's pits, st13c's three direct calls,
+       a spider group's revive all read 0 as "none called"); the row's flags and revive count
+       stay as the room's start left them (dead, out of sight), so the generator packet a save
+       writes holds no called Shadow */
+    if (ico_no_shadows_drop(1, 1)) {
+        return 0;
+    }
     gg->flags = (gg->flags | 0x200000) & 0xFFFBFFFF;
 
     if (ICO_JUN26) {
@@ -818,6 +829,12 @@ inline void UnlockEnemyGenerate(GObj *gobj)
 {
     Act *p = GOBJ_ACT(gobj);
     GenGeo *g = &objLayout[gobj->labelId];
+    /* PC port: No Shadows: a spider group's revive (spiderGroupManager.c tryToRevive) neither
+       shows the Shadow (bit 21) nor counts it alive (bit 18 cleared) before its DirectCallEnemy,
+       which refuses */
+    if (ico_no_shadows_drop(3, 1)) {
+        return;
+    }
     debug_StdPrintfDummy("unlock! = %d\n", gobj->labelId);
     p->flags18.ll &= ~((unsigned long long)0x8000 * PAL_JUN26((1ULL << 19), (1ULL << 18)));
     g->flags = (g->flags | 0x200000) & 0xFFFBFFFF;
@@ -860,6 +877,10 @@ void Generator_QuickCall(GObj *gobj)
 {
     GenWork *w = GOBJ_SUB(gobj)->work;
 
+    /* PC port: No Shadows: the pit does not open (st13c's skipped cage cutscene) */
+    if (ico_no_shadows_drop(2, 1)) {
+        return;
+    }
     w->status = 1;
     gamesysObjInfoUniqDataSet(gobj);
     iosOmSendMail(gobj, 1, gobj);
@@ -1556,6 +1577,13 @@ static void GeneratorGeo_jun26(GObj *gobj)
         }
     }
 
+    /* PC port: No Shadows: the call requests (the stage scripts' Generator_Call, the automatic
+       call above, gene_enemy's) are held at 0: callState stays 0, the pit never opens
+       (switch_MainStatus 1, the mail that starts its animation) and SearchActiveGenerator
+       never sees one open, so Yorda does not cower */
+    if (ico_no_shadows_drop(0, w->callRequests)) {
+        w->callRequests = 0;
+    }
     switch (w->callState) {
     case 0:
         if (w->callRequests != 0) {
@@ -1658,6 +1686,13 @@ static void GeneratorGeo_aug6(GObj *gobj)
         }
     }
 
+    /* PC port: No Shadows: the call requests (the stage scripts' Generator_Call, the automatic
+       call above, gene_enemy's) are held at 0: callState stays 0, the pit never opens
+       (switch_MainStatus 1, the mail that starts its animation) and SearchActiveGenerator
+       never sees one open, so Yorda does not cower */
+    if (ico_no_shadows_drop(0, w->callRequests)) {
+        w->callRequests = 0;
+    }
     switch (w->callState) {
     case 0:
         if (w->callRequests != 0) {
@@ -1761,6 +1796,13 @@ static void GeneratorGeo_ntsc(GObj *gobj)
             }
         }
 
+        /* PC port: No Shadows: the call requests (the stage scripts' Generator_Call, the automatic
+           call above, gene_enemy's) are held at 0: callState stays 0, the pit never opens
+           (switch_MainStatus 1, the mail that starts its animation) and SearchActiveGenerator
+           never sees one open, so Yorda does not cower */
+        if (ico_no_shadows_drop(0, w->callRequests)) {
+            w->callRequests = 0;
+        }
         switch (w->callState) {
         case 0:
             if (w->callRequests != 0) {
@@ -1884,6 +1926,13 @@ void GeneratorGeo(GObj *gobj)
             }
         }
 
+        /* PC port: No Shadows: the call requests (the stage scripts' Generator_Call, the automatic
+           call above, gene_enemy's) are held at 0: callState stays 0, the pit never opens
+           (switch_MainStatus 1, the mail that starts its animation) and SearchActiveGenerator
+           never sees one open, so Yorda does not cower */
+        if (ico_no_shadows_drop(0, w->callRequests)) {
+            w->callRequests = 0;
+        }
         switch (w->callState) {
         case 0:
             if (w->callRequests != 0) {

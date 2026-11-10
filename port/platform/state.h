@@ -53,7 +53,11 @@ typedef enum IcoStateResult {
     ICO_STATE_OTHER_SETTINGS, /* a simulation setting differs (detail names the key) */
     ICO_STATE_SELF_CHECK, /* the restored memory failed its checks; the game went on as before */
     ICO_STATE_IO,         /* the file could not be written */
-    ICO_STATE_BUSY        /* a save or load is already in flight */
+    ICO_STATE_BUSY,       /* a save or load is already in flight */
+    /* a load on a journey with Permadeath on (port/game/difficulty.h
+       ico_difficulty_states_locked): refused before anything is read or
+       touched; saving stays allowed */
+    ICO_STATE_PERMADEATH
 } IcoStateResult;
 
 /* What the UI shows for a slot (state_host.c fills it from the header). */

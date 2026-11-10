@@ -275,7 +275,10 @@ void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap)
                               (double)r->gpuGapBackNs / 1e6,
                               r->startMs,
                               r->presented && r->presentMs >= STALL_BLOCK_MS ? display_hz_now()
-                                                                             : 0.0};
+                                                                             : 0.0,
+                              r->gpuLateValid,
+                              r->gpuLateMs,
+                              r->gpuRanTwice};
 
     if (s_stallT0 <= 0.0) {
         s_stallT0 = ico_thread_now_ms(); /* the first block starts with the first record */

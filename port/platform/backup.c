@@ -140,7 +140,8 @@ int ico_backup_name_ok(const char *name, int folder)
         }
         return part_is(first, firstLen, ICO_BACKUP_MANIFEST) ||
                part_is(first, firstLen, "config.toml") ||
-               part_is(first, firstLen, "achievements.toml");
+               part_is(first, firstLen, "achievements.toml") ||
+               part_is(first, firstLen, "difficulty.toml");
     }
     return place;
 }
@@ -320,7 +321,8 @@ static int top_visit(const char *name, int kind, void *user)
     if (join(path, sizeof(path), c->root, name) != 0) {
         return 0;
     }
-    if (kind == 0 && (strcmp(name, "config.toml") == 0 || strcmp(name, "achievements.toml") == 0)) {
+    if (kind == 0 && (strcmp(name, "config.toml") == 0 || strcmp(name, "achievements.toml") == 0 ||
+                      strcmp(name, "difficulty.toml") == 0)) {
         return collect_add(c, path);
     }
     if (kind != 0 && (strcmp(name, "states") == 0 || card_name(name, strlen(name)))) {

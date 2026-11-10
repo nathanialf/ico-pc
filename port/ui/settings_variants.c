@@ -2,11 +2,15 @@
  * port/ui/settings_variants.c
  *
  * The game variants' rows (settings_variants.h): one row per IcoVariantId,
- * in its order (UI_OPT_VAR_TOUGHNESS + id), on Gameplay (No hints) and its
- * Shadows, Combat and Cutscenes pages, and the two chain rows on its Yorda
- * page.  Moved out of settings.c unchanged
- * but for the two weapon rows (Light sword colour, Stick) when they were
- * added in v0.10.5.
+ * in its order (UI_OPT_VAR_TOUGHNESS + id): the two weapon rows on
+ * Gameplay, the cutscene rows on Gameplay > Cutscenes, the two chain rows on
+ * Gameplay > Yorda.  The ten a journey's difficulty holds (toughness, One
+ * hit, Never dodge, aggression, No hints, the barrier, the three combat rows,
+ * Peaceful shadows) are rows of the New Game draft on Customize's pages since
+ * v0.11.3: settings_difficulty.c gives their text and notes from the draft;
+ * the texts here read the journey in force (ico_variant_get).  Moved out of
+ * settings.c unchanged but for the two weapon rows (Light sword colour,
+ * Stick) when they were added in v0.10.5.
  */
 #include "settings.h"
 #include "settings_variants.h"

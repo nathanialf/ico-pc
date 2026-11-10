@@ -75,6 +75,13 @@ typedef struct StallBlockRec {
     double gapBackMs; /* the GPU's timestamp clock went back this much (a restart), 0 not */
     double startMs; /* the replay's start on the CPU's clock (RdPerfRecord.startMs), 0 not known */
     double displayHz; /* the display's rate as the record popped, 0 not known */
+    /* the replay's first GPU stamp after its first submit on the CPU's clock
+       (RdPerfRecord.gpuLateMs: lateValid 1 calibrated, 2 from its wait's end,
+       0 not known), and whether its first list ran a second time while the
+       CPU waited for it (RdPerfRecord.gpuRanTwice: a reset and replay) */
+    int lateValid;
+    double lateMs;
+    int ranTwice;
 } StallBlockRec;
 
 typedef struct StallBlock {
@@ -86,8 +93,11 @@ typedef struct StallBlock {
     int stallGpu[STALL_BLOCK_LIST];   /* stallGpuMs valid */
     double stallHz[STALL_BLOCK_LIST]; /* the display's rate at the stall, 0 not known */
     double stallSinceMs
-        [STALL_BLOCK_LIST]; /* the replay before began this long before, < 0 not known */
-    unsigned spanN;         /* timed replays that did not stall */
+        [STALL_BLOCK_LIST];          /* the replay before began this long before, < 0 not known */
+    int stallLate[STALL_BLOCK_LIST]; /* StallBlockRec.lateValid */
+    double stallLateMs[STALL_BLOCK_LIST];
+    int stallTwice[STALL_BLOCK_LIST];
+    unsigned spanN; /* timed replays that did not stall */
     double spanSum, spanMin, spanMax;
     double lastStartMs; /* the record before's startMs (0 none) */
     /* the run */
@@ -95,6 +105,9 @@ typedef struct StallBlock {
     unsigned runRestartStalls;        /* stalls whose replay saw the GPU clock restart */
     unsigned runLongGap, runShortGap; /* stalls after a CPU-side gap >= / < the idle timeout */
     unsigned runHeldN;                /* stalls with a GPU span: held time known */
+    unsigned runTwice;                /* stalls whose first list ran a second time */
+    unsigned runLateN;                /* stalls whose GPU start is placed */
+    double runLateMin, runLateMax;
     double runHeldMin, runHeldMax;
     double runSeconds;
     unsigned rateN;
