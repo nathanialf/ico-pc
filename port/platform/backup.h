@@ -3,8 +3,9 @@
  *
  * Options > Extras > Back up your data and Restore from a backup: the
  * player's data in the user folder (the memory card folders memcard*, the
- * save states under states/, config.toml and achievements.toml) as one zip
- * with a manifest, backup.txt, and such a zip put back. Pure C over
+ * save states under states/, config.toml, achievements.toml and
+ * difficulty.toml) as one zip with a manifest, backup.txt, and such a zip
+ * put back. Pure C over
  * host_fs.h and miniz: no SDL, no game, no log lines (the caller logs from
  * the report). backup_host.c runs it on a worker, asks the system for the
  * file and restarts the game; the backup_test ctest runs it on a folder of
@@ -134,8 +135,8 @@ typedef void (*IcoBackupProgressFn)(void *user, int done, int total);
 /* 1 when name is one a backup may hold: relative, '/' between its parts,
    no empty part, no "." or "..", no '\\' or ':' or control character, at
    most 8 parts and 240 bytes, and under one of the backup's places: the
-   manifest, config.toml, achievements.toml (each alone), a file below
-   states/ or a memory card folder (memcard and memcard followed by '-',
+   manifest, config.toml, achievements.toml, difficulty.toml (each alone),
+   a file below states/ or a memory card folder (memcard and memcard followed by '-',
    '_' or letters and digits). folder 1: a folder's name (a zip's
    directory entry, the trailing '/' taken off), which may be a place alone. */
 int ico_backup_name_ok(const char *name, int folder);

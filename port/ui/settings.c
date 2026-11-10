@@ -36,17 +36,19 @@
 #include "popup.h"
 #include "strings.h"
 #include "sysconf.h"
-#include "touch_edit.h"        /* the touch layout edits (port/input) */
-#include "settings_graphics.h" /* the Graphics page's rows and Apply */
-#include "settings_backup.h"   /* Extras' Back up your data and Restore from a backup */
-#include "settings_desktop.h"  /* Extras' Add to the applications menu */
-#include "settings_states.h"   /* the Save states page's cards, actions and F6 latch */
-#include "settings_unused.h"   /* Extras > Unused content's host */
-#include "settings_variants.h" /* the game variants rows' values, notes and rule */
-#include "settings_upscale.h"  /* the Upscaling rows: FSR 3.1, quality */
-#include "settings_step.h"     /* held Left/Right, L1/R1 */
-#include "touch_edit_ui.h"     /* the Edit layout page */
-#include "variants.h"          /* the game variants rows (Gameplay and its pages) */
+#include "touch_edit.h"          /* the touch layout edits (port/input) */
+#include "settings_graphics.h"   /* the Graphics page's rows and Apply */
+#include "settings_backup.h"     /* Extras' Back up your data and Restore from a backup */
+#include "settings_desktop.h"    /* Extras' Add to the applications menu */
+#include "settings_states.h"     /* the Save states page's cards, actions and F6 latch */
+#include "settings_newgame.h"    /* the New Game screen */
+#include "settings_difficulty.h" /* the New Game draft's rows on Customize's pages */
+#include "settings_unused.h"     /* Extras > Unused content's host */
+#include "settings_variants.h"   /* the game variants rows' values, notes and rule */
+#include "settings_upscale.h"    /* the Upscaling rows: FSR 3.1, quality */
+#include "settings_step.h"       /* held Left/Right, L1/R1 */
+#include "touch_edit_ui.h"       /* the Edit layout page */
+#include "variants.h"            /* the game variants rows (Gameplay and its pages) */
 #include "ui_hint.h"
 #include "ui_internal.h" /* ui__font_prefer_chinese */
 #include "ui_list.h"
@@ -79,9 +81,6 @@ extern void la_host_resume_play(void);
 /* fumi/sound/s_init.c: the PS2's stereo (0) or mono (1) output */
 extern int soundOutputModeGet(void);
 extern void soundOutputModeSet(int mode);
-/* layout_action.c: what la_vibe_select's confirm did after
-   the vibration choice, gflagOn(382): the new game starts */
-extern void la_host_new_game_go(void);
 /* the game's Options screen's settings (common/src/main.c,
    fumi/ios/pad.c): its film effect 0..4 (only once the game is cleared),
    hold type A 0 or B 1, players 1 (0) or 2 (1), and the vibration switch;
@@ -287,10 +286,10 @@ enum {
     STAT_NEWGAME_PLUS,
     STAT_MIRROR,
     STAT_ACHIEVEMENTS,
-    STAT_ASSISTS, /* the heading; the active assists one a line under it */
+    STAT_DIFFICULTY, /* the mode, "n / N" with a knock-down limit, Permadeath */
+    STAT_ASSISTS,    /* the heading; the active assists one a line under it */
     STAT_ASSIST_1,
     STAT_ASSIST_2,
-    STAT_ASSIST_3,
     STAT_AREA,
     STAT_LINES
 };
@@ -394,9 +393,6 @@ static int stepIndex(int i, int n, int dir)
 {
     return ((i + dir) % n + n) % n;
 }
-
-/* [gameplay] shadow_speed's words, in ICO_SPEED_* order */
-static const char *const kSpeedWords[ICO_SPEED_COUNT] = {"slower", "original", "faster", "fastest"};
 
 static const float kMouseSens[] = {0.25f, 0.5f, 0.75f, 1.0f, 1.25f, 1.5f, 2.0f, 2.5f, 3.0f, 4.0f};
 /* the Mouse camera speed row's steps; the last one is "Instant" */
@@ -1773,6 +1769,9 @@ static const char *rawValue(int opt, char *buf, unsigned size)
     if (isCharOpt(opt)) {
         return charValue(opt, buf, size);
     }
+    if (ui__diff_opt(opt)) {
+        return ui__diff_text(opt, buf, size); /* the New Game draft's */
+    }
     switch (opt) {
     case UI_OPT_PRESET: {
         static const int presetStr[3] = {UI_STR_VAL_ORIGINAL, UI_STR_VAL_ENHANCED,
@@ -2030,29 +2029,8 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return buf;
     case UI_OPT_PLAYERS:
         return girlControlMode != 0 ? "2" : "1";
-    case UI_OPT_YORDA:
-        return onOff(ico_opt_yorda_safe());
-    case UI_OPT_PIT_TIME:
-        /* whole seconds; Original shows the disc's own time with the word */
-        if (ico_opt_pit_time() == ICO_PIT_ORIGINAL) {
-            snprintf(buf, size, "%d s (%s)", ico_opt_pit_base_seconds(),
-                     ui_str(UI_STR_VAL_ORIGINAL));
-        } else {
-            snprintf(buf, size, "%d s", ico_opt_pit_time());
-        }
-        return buf;
-    case UI_OPT_SHADOW_SPEED: {
-        static const int speedStr[ICO_SPEED_COUNT] = {UI_STR_VAL_SPEED_SLOWER, UI_STR_VAL_ORIGINAL,
-                                                      UI_STR_VAL_SPEED_FASTER,
-                                                      UI_STR_VAL_SPEED_FASTEST};
-        return ui_str(speedStr[ico_opt_shadow_speed()]);
-    }
-    case UI_OPT_SHADOWS_TOGETHER:
-        return onOff(ico_opt_shadows_together());
     case UI_OPT_DOOR_FIX:
         return onOff(ico_opt_door_fix());
-    case UI_OPT_YORDA_TRIPS:
-        return onOff(ico_opt_yorda_trips());
     case UI_OPT_NATURAL_CHAINS:
         return onOff(ico_opt_natural_chains());
     case UI_OPT_SKIP_OPENING:
@@ -2079,20 +2057,10 @@ static const char *rawValue(int opt, char *buf, unsigned size)
         return onOff(ico_opt_developer_mode());
     case UI_OPT_FREE_MOVEMENT:
         return onOff(ico_free_movement_row());
-    case UI_OPT_VAR_TOUGHNESS:
-    case UI_OPT_VAR_ONE_HIT:
-    case UI_OPT_VAR_NEVER_DODGE:
-    case UI_OPT_VAR_AGGRESSION:
-    case UI_OPT_VAR_NO_HINTS:
-    case UI_OPT_VAR_BARRIER:
     case UI_OPT_VAR_NO_LOOK:
     case UI_OPT_VAR_IGNORE_CAMS:
-    case UI_OPT_VAR_AUTO_GUARD:
-    case UI_OPT_VAR_ATTACK_TURN:
-    case UI_OPT_VAR_SHADOWS_WAIT_DOWN:
     case UI_OPT_VAR_SWORD_COLOUR:
     case UI_OPT_VAR_WEAPON:
-    case UI_OPT_VAR_PEACEFUL:
     case UI_OPT_VAR_CHAIN_SPEED:
     case UI_OPT_VAR_CHAIN_DAMPING:
         return ui__variant_text(opt);
@@ -2117,6 +2085,9 @@ static int isGameOpt(int opt)
 
 static int optShown(int opt, int link)
 {
+    if (ui__diff_opt(opt)) {
+        return ui__diff_shown(opt);
+    }
     if (opt == UI_OPT_CIRCLE_BACK) {
         /* the European disc's: Circle confirms on the Japanese and Korean ones */
         return lt_ext_has_circle_back();
@@ -2145,6 +2116,9 @@ static int optShown(int opt, int link)
     }
     if (opt == UI_OPT_LINK && link == UI_PAGE_TOUCH) {
         return touchPresent(); /* Controls > Touch screen */
+    }
+    if (opt == UI_OPT_LINK && link == UI_PAGE_CUSTOMIZE) {
+        return !onTitle(); /* Gameplay > Difficulty: the journey's, from the pause menu only */
     }
     if (opt == UI_OPT_GPU_ADD) {
         return s_gpuHostSet && s_gpuHost.adreno() != 0;
@@ -2289,7 +2263,7 @@ static int steppable(int opt)
 {
     return (opt >= UI_OPT_PRESET && opt <= UI_OPT_DEVELOPER) /* includes the Effects rows */ ||
            opt == UI_OPT_FREE_MOVEMENT || opt == UI_OPT_GPU_DRIVER || opt == UI_OPT_GPU_ADD_FILE ||
-           opt == UI_OPT_GRAPHICS_API || opt == UI_OPT_GRAPHICS_ADAPTER;
+           opt == UI_OPT_GRAPHICS_API || opt == UI_OPT_GRAPHICS_ADAPTER || ui__diff_opt(opt);
 }
 
 static int resolutionLocked(void)
@@ -2374,6 +2348,10 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         const IcoAppPart p = charPart(opt);
         ico_appearance_set(p, stepIndex(ico_appearance_get(p), ico_appearance_choices(p), dir));
         s_dirtyConfig = 1;
+        return;
+    }
+    if (ui__diff_opt(opt)) {
+        ui__diff_step(opt, dir); /* the New Game draft's row: no config */
         return;
     }
     if (ui__var_opt(opt)) {
@@ -2750,53 +2728,9 @@ void ui_settings_step(UiSettingsOpt opt, int dir)
         lt_ext_set_circle_back(ico_opt_circle_back());
         s_dirtyConfig = 1;
         break;
-    case UI_OPT_YORDA:
-        ico_opt_set_yorda_safe(!ico_opt_yorda_safe());
-        ico_config_set_bool("gameplay.yorda_safe", ico_opt_yorda_safe());
-        s_dirtyConfig = 1;
-        break;
-    case UI_OPT_PIT_TIME: {
-        /* a second a step from the seconds shown (Original is the disc's own, 15), held
-           at 4 and 30; the base itself is Original again.  The factor is read every tick
-           of the dive (options.h) */
-        int v = ico_opt_pit_seconds() + dir;
-        v = v < ICO_PIT_MIN_SECONDS   ? ICO_PIT_MIN_SECONDS
-            : v > ICO_PIT_MAX_SECONDS ? ICO_PIT_MAX_SECONDS
-                                      : v;
-        if (v == ico_opt_pit_seconds()) {
-            return;
-        }
-        ico_opt_set_pit_time(v);
-        if (ico_opt_pit_time() == ICO_PIT_ORIGINAL) {
-            ico_config_set_string("gameplay.pit_time", "original");
-        } else {
-            ico_config_set_int("gameplay.pit_time", ico_opt_pit_time());
-        }
-        s_dirtyConfig = 1;
-        break;
-    }
-    case UI_OPT_SHADOW_SPEED:
-        /* Slower, Original, Faster, Fastest around; read every game tick (options.h) */
-        ico_opt_set_shadow_speed(stepIndex(ico_opt_shadow_speed(), ICO_SPEED_COUNT, dir));
-        ico_config_set_string("gameplay.shadow_speed", kSpeedWords[ico_opt_shadow_speed()]);
-        s_dirtyConfig = 1;
-        break;
-    case UI_OPT_SHADOWS_TOGETHER:
-        /* read at each Shadow's turn check (enemy_act.c), so it acts at once */
-        ico_opt_set_shadows_together(!ico_opt_shadows_together());
-        ico_config_set_bool("gameplay.shadows_together", ico_opt_shadows_together());
-        s_dirtyConfig = 1;
-        break;
     case UI_OPT_DOOR_FIX:
         ico_opt_set_door_fix(!ico_opt_door_fix());
         ico_config_set_bool("gameplay.door_fix", ico_opt_door_fix());
-        s_dirtyConfig = 1;
-        break;
-    case UI_OPT_YORDA_TRIPS:
-        /* the motions are added at a stage load, so the next room has them
-           (port/game/yorda_trip.h) */
-        ico_opt_set_yorda_trips(!ico_opt_yorda_trips());
-        ico_config_set_bool("gameplay.yorda_trips", ico_opt_yorda_trips());
         s_dirtyConfig = 1;
         break;
     case UI_OPT_NATURAL_CHAINS:
@@ -3201,6 +3135,17 @@ static void setNote(int row, int strId)
     }
 }
 
+/* settings_newgame.h: the New Game screen builds with these */
+void ui__settings_set_note(int row, int strId)
+{
+    setNote(row, strId);
+}
+
+int ui__settings_add_layout(int first, int last, float colA, int (*proc)(int, int), int def)
+{
+    return addLayout(first, last, colA, proc, def);
+}
+
 /* ------------------------------------------------------------ building */
 
 static int settingsProc(int first, int item);
@@ -3211,7 +3156,6 @@ static const UiListDef kAchDef, kRemapDef, kGalDef;
 static int s_galFill = -1, s_galTime = -1, s_galTotal = -1;
 static UiHint s_galHint;
 static int entryProc(int first, int item);
-static void buildNewGameScreen(void);
 static void buildQuitScreen(void);
 static int s_quitLayout = -1;
 
@@ -3506,39 +3450,16 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
         addNote(pg, UI_OPT_TOUCH_EDIT, UI_STR_TOUCH_EDIT_NOTE);
         break;
     case UI_PAGE_GAMEPLAY:
-        /* No hints says whether it switches achievements off (the 2001
-           discs' own note: refreshPage, ui__variant_note), as every variants
-           row on the three pages below does */
         addNote(pg, UI_OPT_DOOR_FIX, UI_STR_OPT_DOOR_FIX_NOTE);
         addNote(pg, UI_OPT_SECOND_CARD, UI_STR_OPT_SECOND_CARD_NOTE);
-        addNote(pg, UI_OPT_VAR_NO_HINTS, UI_STR_OPT_VAR_NO_HINTS_NOTE);
         addNote(pg, UI_OPT_PLAYERS, UI_STR_PLAYERS_NOTE);
+        addNote(pg, UI_OPT_VAR_SWORD_COLOUR, UI_STR_OPT_VAR_SWORD_COLOUR_NOTE);
+        addNote(pg, UI_OPT_VAR_WEAPON, UI_STR_OPT_VAR_WEAPON_NOTE);
         break;
     case UI_PAGE_YORDA:
-        addNote(pg, UI_OPT_PIT_TIME, UI_STR_OPT_PIT_TIME_NOTE);
-        addNote(pg, UI_OPT_YORDA_TRIPS, UI_STR_OPT_YORDA_TRIPS_NOTE);
         addNote(pg, UI_OPT_NATURAL_CHAINS, UI_STR_OPT_NATURAL_CHAINS_NOTE);
         addNote(pg, UI_OPT_VAR_CHAIN_SPEED, UI_STR_OPT_VAR_CHAIN_SPEED_NOTE);
         addNote(pg, UI_OPT_VAR_CHAIN_DAMPING, UI_STR_OPT_VAR_CHAIN_DAMPING_NOTE);
-        break;
-    case UI_PAGE_SHADOWS:
-        /* the June 2001 demo's own toughness note: refreshPage, ui__variant_note */
-        addNote(pg, UI_OPT_SHADOW_SPEED, UI_STR_OPT_SHADOW_SPEED_NOTE);
-        addNote(pg, UI_OPT_VAR_TOUGHNESS, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
-        addNote(pg, UI_OPT_VAR_AGGRESSION, UI_STR_OPT_VAR_AGGRESSION_NOTE);
-        addNote(pg, UI_OPT_YORDA, UI_STR_OPT_YORDA_NOTE);
-        addNote(pg, UI_OPT_VAR_PEACEFUL, UI_STR_OPT_VAR_PEACEFUL_NOTE);
-        break;
-    case UI_PAGE_COMBAT:
-        addNote(pg, UI_OPT_VAR_AUTO_GUARD, UI_STR_OPT_VAR_AUTO_GUARD_NOTE);
-        addNote(pg, UI_OPT_VAR_ATTACK_TURN, UI_STR_OPT_VAR_ATTACK_TURN_NOTE);
-        addNote(pg, UI_OPT_VAR_SHADOWS_WAIT_DOWN, UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE);
-        addNote(pg, UI_OPT_VAR_ONE_HIT, UI_STR_OPT_VAR_ONE_HIT_NOTE);
-        addNote(pg, UI_OPT_VAR_NEVER_DODGE, UI_STR_OPT_VAR_NEVER_DODGE_NOTE);
-        addNote(pg, UI_OPT_SHADOWS_TOGETHER, UI_STR_OPT_SHADOWS_TOGETHER_NOTE);
-        addNote(pg, UI_OPT_VAR_BARRIER, UI_STR_OPT_VAR_BARRIER_NOTE);
-        addNote(pg, UI_OPT_VAR_SWORD_COLOUR, UI_STR_OPT_VAR_SWORD_COLOUR_NOTE);
-        addNote(pg, UI_OPT_VAR_WEAPON, UI_STR_OPT_VAR_WEAPON_NOTE);
         break;
     case UI_PAGE_CUTSCENES:
         /* the 2001 discs' own No cutscene look-around note: refreshPage,
@@ -3597,6 +3518,13 @@ static void buildOptionPage(int id, int header, const int *opts, const int *strs
     }
     default:
         break;
+    }
+    /* the New Game draft's rows (Customize's pages): each its own note,
+       chosen again at refresh (ui__diff_note) */
+    for (int i = 0; i < pg->count; i++) {
+        if (ui__diff_opt(pg->rows[i].opt)) {
+            addNote(pg, pg->rows[i].opt, ui__diff_note(pg->rows[i].opt));
+        }
     }
     /* the window's marks, on a page that can show more rows than its slots
        (U+25B2, U+25BC) */
@@ -3728,8 +3656,8 @@ static const int kStatLabel[STAT_LINES] = {UI_STR_STATS_PLAY_TIME,
                                            UI_STR_OPT_NEWGAME_PLUS,
                                            UI_STR_OPT_MIRROR,
                                            UI_STR_SECTION_ACHIEVEMENTS,
+                                           UI_STR_DIFF_LINE,
                                            UI_STR_STATS_ASSISTS,
-                                           0,
                                            0,
                                            0,
                                            UI_STR_STATS_AREA};
@@ -3881,11 +3809,13 @@ static void pauseStats(int show)
                counted from the load, until a New Game */
             on[STAT_SAVES] = on[STAT_ENEMIES] = 0;
         }
-        const int assist[3] = {ico_opt_yorda_safe(), ico_opt_stick_fix(), ico_opt_developer_mode()};
-        static const int kAssistStr[3] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX,
-                                          UI_STR_OPT_DEVELOPER_MODE};
+        /* the journey's difficulty has a line of its own (Shadows never
+           take Yorda is one of its rows, not an assist) */
+        ui__diff_line_text(text[STAT_DIFFICULTY], sizeof(text[0]));
+        const int assist[2] = {ico_opt_stick_fix(), ico_opt_developer_mode()};
+        static const int kAssistStr[2] = {UI_STR_OPT_STICK_FIX, UI_STR_OPT_DEVELOPER_MODE};
         int k = STAT_ASSIST_1;
-        for (int a = 0; a < 3; a++) {
+        for (int a = 0; a < 2; a++) {
             if (assist[a]) {
                 snprintf(text[k], sizeof(text[0]), "%s", ui_str((UiStrId)kAssistStr[a]));
                 on[k++] = 1;
@@ -4222,66 +4152,28 @@ static void build(void)
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
     static const int touchLinks[] = {-1, -1, -1, UI_PAGE_TOUCH_LAYOUT, -1, -1, -1, -1, -1};
     /* Gameplay (from both entries): the game's Film effect and Players
-       from the pause menu once the game is cleared; the Yorda, Shadows and
-       Cutscenes pages' links before Back (the Controls > Touch screen
-       pattern) */
-    static const int gameOpts[] = {UI_OPT_STICK_FIX,    UI_OPT_DOOR_FIX,    UI_OPT_SECOND_CARD,
-                                   UI_OPT_VAR_NO_HINTS, UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,
-                                   UI_OPT_LINK,         UI_OPT_LINK,        UI_OPT_LINK,
-                                   UI_OPT_LINK,         UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,
-                                   UI_STR_OPT_DOOR_FIX,
-                                   UI_STR_OPT_SECOND_CARD,
-                                   UI_STR_OPT_VAR_NO_HINTS,
-                                   UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS,
-                                   UI_STR_SECTION_YORDA,
-                                   UI_STR_SECTION_SHADOWS,
-                                   UI_STR_SECTION_COMBAT,
-                                   UI_STR_SECTION_CUTSCENES,
-                                   UI_STR_BACK};
+       from the pause menu once the game is cleared, the two weapon rows;
+       the Yorda and Cutscenes pages' links before Back (the Controls >
+       Touch screen pattern).  The rows a journey's difficulty holds are the
+       New Game's Customize pages' (settings_difficulty.c); from the pause
+       menu the Difficulty link opens them read-only */
+    static const int gameOpts[] = {UI_OPT_STICK_FIX,   UI_OPT_DOOR_FIX, UI_OPT_SECOND_CARD,
+                                   UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,  UI_OPT_VAR_SWORD_COLOUR,
+                                   UI_OPT_VAR_WEAPON,  UI_OPT_LINK,     UI_OPT_LINK,
+                                   UI_OPT_LINK,        UI_OPT_BACK};
+    static const int gameStrs[] = {
+        UI_STR_OPT_STICK_FIX,   UI_STR_OPT_DOOR_FIX,  UI_STR_OPT_SECOND_CARD,
+        UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,   UI_STR_OPT_VAR_SWORD_COLOUR,
+        UI_STR_OPT_VAR_WEAPON,  UI_STR_SECTION_YORDA, UI_STR_SECTION_CUTSCENES,
+        UI_STR_DIFF_LINK,       UI_STR_BACK};
     static const int gameLinks[] = {
-        -1, -1, -1, -1, -1, -1, UI_PAGE_YORDA, UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_CUTSCENES,
-        -1};
-    /* Gameplay > Yorda: how the Shadows take her, how long Ico has to pull
-       her out, her falls, the chains Ico lets down for her and how they swing
+        -1, -1, -1, -1, -1, -1, -1, UI_PAGE_YORDA, UI_PAGE_CUTSCENES, UI_PAGE_CUSTOMIZE, -1};
+    /* Gameplay > Yorda: the chains Ico lets down for her and how they swing
        (the [variants] chain rows) */
-    static const int yordaOpts[] = {UI_OPT_PIT_TIME,          UI_OPT_YORDA_TRIPS,
-                                    UI_OPT_NATURAL_CHAINS,    UI_OPT_VAR_CHAIN_SPEED,
+    static const int yordaOpts[] = {UI_OPT_NATURAL_CHAINS, UI_OPT_VAR_CHAIN_SPEED,
                                     UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
-    static const int yordaStrs[] = {UI_STR_OPT_PIT_TIME,          UI_STR_OPT_YORDA_TRIPS,
-                                    UI_STR_OPT_NATURAL_CHAINS,    UI_STR_OPT_VAR_CHAIN_SPEED,
+    static const int yordaStrs[] = {UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_VAR_CHAIN_SPEED,
                                     UI_STR_OPT_VAR_CHAIN_DAMPING, UI_STR_BACK};
-    /* Gameplay > Shadows: Shadow speed, then the [variants] Shadow toughness
-       and Shadow aggression, Shadows never take Yorda (moved from the Yorda
-       page in v0.10.5: it is a rule about the Shadows) and Peaceful shadows */
-    static const int shadowOpts[] = {UI_OPT_SHADOW_SPEED,   UI_OPT_VAR_TOUGHNESS,
-                                     UI_OPT_VAR_AGGRESSION, UI_OPT_YORDA,
-                                     UI_OPT_VAR_PEACEFUL,   UI_OPT_BACK};
-    static const int shadowStrs[] = {UI_STR_OPT_SHADOW_SPEED,   UI_STR_OPT_VAR_TOUGHNESS,
-                                     UI_STR_OPT_VAR_AGGRESSION, UI_STR_OPT_YORDA,
-                                     UI_STR_OPT_VAR_PEACEFUL,   UI_STR_BACK};
-    /* Gameplay > Combat: the three combat [variants] rows, then the four
-       fight rules that were on Shadows (One hit per swing, Shadows never
-       dodge, Shadows attack together, Queen barrier), the two weapon rows */
-    static const int combatOpts[] = {
-        UI_OPT_VAR_AUTO_GUARD, UI_OPT_VAR_ATTACK_TURN,  UI_OPT_VAR_SHADOWS_WAIT_DOWN,
-        UI_OPT_VAR_ONE_HIT,    UI_OPT_VAR_NEVER_DODGE,  UI_OPT_SHADOWS_TOGETHER,
-        UI_OPT_VAR_BARRIER,    UI_OPT_VAR_SWORD_COLOUR, UI_OPT_VAR_WEAPON,
-        UI_OPT_BACK,
-    };
-    static const int combatStrs[] = {
-        UI_STR_OPT_VAR_AUTO_GUARD,
-        UI_STR_OPT_VAR_ATTACK_TURN,
-        UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN,
-        UI_STR_OPT_VAR_ONE_HIT,
-        UI_STR_OPT_VAR_NEVER_DODGE,
-        UI_STR_OPT_SHADOWS_TOGETHER,
-        UI_STR_OPT_VAR_BARRIER,
-        UI_STR_OPT_VAR_SWORD_COLOUR,
-        UI_STR_OPT_VAR_WEAPON,
-        UI_STR_BACK,
-    };
     /* Gameplay > Cutscenes: the opening skipped, the two cutscene
        [variants] rows */
     static const int cutOpts[] = {UI_OPT_SKIP_OPENING, UI_OPT_VAR_NO_LOOK, UI_OPT_VAR_IGNORE_CAMS,
@@ -4304,8 +4196,6 @@ static void build(void)
     _Static_assert(sizeof(gameOpts) == sizeof(gameStrs) && sizeof(gameOpts) == sizeof(gameLinks),
                    "a string and a link for each Gameplay row");
     _Static_assert(sizeof(yordaOpts) == sizeof(yordaStrs), "a string for each Yorda row");
-    _Static_assert(sizeof(shadowOpts) == sizeof(shadowStrs), "a string for each Shadows row");
-    _Static_assert(sizeof(combatOpts) == sizeof(combatStrs), "a string for each Combat row");
     _Static_assert(sizeof(cutOpts) == sizeof(cutStrs), "a string for each Cutscenes row");
     _Static_assert(sizeof(extrasOpts) == sizeof(extrasStrs) &&
                        sizeof(extrasOpts) == sizeof(extrasLinks),
@@ -4323,8 +4213,6 @@ static void build(void)
     _Static_assert(N_OF(gameOpts) <= MAX_ROWS, "the gameOpts rows fit the page's row budget");
     _Static_assert(N_OF(extrasOpts) <= MAX_ROWS, "the extrasOpts rows fit the page's row budget");
     _Static_assert(N_OF(yordaOpts) <= MAX_ROWS, "the Yorda rows fit the page's row budget");
-    _Static_assert(N_OF(shadowOpts) <= MAX_ROWS, "the Shadows rows fit the page's row budget");
-    _Static_assert(N_OF(combatOpts) <= MAX_ROWS, "the Combat rows fit the page's row budget");
     _Static_assert(N_OF(cutOpts) <= MAX_ROWS, "the Cutscenes rows fit the page's row budget");
 
     ui_font_init(); /* the notes are wrapped by measuring */
@@ -4352,10 +4240,16 @@ static void build(void)
                     N_OF(gameOpts), UI_PAGE_MAIN);
     buildOptionPage(UI_PAGE_YORDA, UI_STR_SECTION_YORDA, yordaOpts, yordaStrs, NULL,
                     N_OF(yordaOpts), UI_PAGE_GAMEPLAY);
-    buildOptionPage(UI_PAGE_SHADOWS, UI_STR_SECTION_SHADOWS, shadowOpts, shadowStrs, NULL,
-                    N_OF(shadowOpts), UI_PAGE_GAMEPLAY);
-    buildOptionPage(UI_PAGE_COMBAT, UI_STR_SECTION_COMBAT, combatOpts, combatStrs, NULL,
-                    N_OF(combatOpts), UI_PAGE_GAMEPLAY);
+    /* the New Game's Customize and its three pages (settings_difficulty.c) */
+    for (int p = 0; p < UI_PAGE_COUNT; p++) {
+        const int *o, *t, *k;
+        int head;
+        const int n = ui__diff_page(p, &o, &t, &k, &head);
+        if (n > 0 && n <= MAX_ROWS) {
+            buildOptionPage(p, head, o, t, k, n,
+                            p == UI_PAGE_CUSTOMIZE ? UI__PARENT_NEW_GAME : UI_PAGE_CUSTOMIZE);
+        }
+    }
     buildOptionPage(UI_PAGE_CUTSCENES, UI_STR_SECTION_CUTSCENES, cutOpts, cutStrs, NULL,
                     N_OF(cutOpts), UI_PAGE_GAMEPLAY);
     buildOptionPage(UI_PAGE_EFFECTS, UI_STR_SECTION_EFFECTS, fxOpts, fxStrs, NULL, N_OF(fxOpts),
@@ -4404,7 +4298,7 @@ static void build(void)
     if (s_photoRow >= 0) {
         P(s_photoRow)->right = ui_photo_build();
     }
-    buildNewGameScreen();
+    ui__newgame_build();
     if (ico_opt_developer_mode()) {
         /* the layout extension's budget (layout_ext.h): what Settings and
            its screens use of the tables */
@@ -4412,158 +4306,6 @@ static void build(void)
                 lt_ext_prop_count(), LT_EXT_MAX_PROPERTIES, lt_ext_layout_count(),
                 LT_EXT_MAX_LAYOUTS);
     }
-}
-
-/* ------------------------------------------------------ the New Game screen
- * Between the vibration choice and the start (settings.h
- * ui_new_game_screen_enter): Mirror mode and New Game+ with Off and On side
- * by side, a centred Start row, and a note for the cursor's row.  Each row
- * keeps its choice: up and down land on it, and it stays lit while the
- * cursor is away. */
-
-static int s_newGameLayout = -1;
-static int s_newGameRow[2][2] = {{-1, -1}, {-1, -1}}; /* [row][off, on] */
-static int s_newGameNote = -1;
-static int s_newGameStart = -1; /* the centred Start row */
-static int s_newGameChosen;
-static int s_mirrorChoice, s_ngpChoice; /* each row's Off (0) or On (1) */
-
-#define LAYOUT_VIBE_SELECT (ico_region_cur()->layout_vibe) /* la_vibe_select's screen (9) */
-#define NEW_GAME_ROW_Y 70
-#define NEW_GAME_ROW_H 34
-#define NEW_GAME_START_Y 146 /* eight lines under the value rows */
-#define NEW_GAME_NOTE_Y 182  /* 30 lines, clear of the bottom (212) */
-
-static int newGameScreenProc(int first, int item);
-
-static void buildNewGameScreen(void)
-{
-    static const int kLabel[2] = {UI_STR_OPT_MIRROR, UI_STR_OPT_NEWGAME_PLUS};
-    int first = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT;
-    for (int r = 0; r < 2; r++) {
-        const int y = NEW_GAME_ROW_Y + r * NEW_GAME_ROW_H;
-        /* the label right-aligned up to x 300, Off and On after it */
-        ui_settings_add_row(40, y, 260, NEW_GAME_ROW_H, 0, -1, kLabel[r], NULL, 0.0f,
-                            UI_ALIGN_RIGHT);
-        s_newGameRow[r][0] = ui_settings_add_row(320, y, 110, NEW_GAME_ROW_H, 1, -1, UI_STR_OFF,
-                                                 NULL, 0.0f, UI_ALIGN_CENTER);
-        s_newGameRow[r][1] = ui_settings_add_row(440, y, 110, NEW_GAME_ROW_H, 1, -1, UI_STR_ON,
-                                                 NULL, 0.0f, UI_ALIGN_CENTER);
-        P(s_newGameRow[r][0])->rightItem = s_newGameRow[r][1];
-        P(s_newGameRow[r][1])->leftItem = s_newGameRow[r][0];
-    }
-    /* the note stays the last row built */
-    s_newGameStart = ui_settings_add_row(200, NEW_GAME_START_Y, 240, NEW_GAME_ROW_H, 1, -1,
-                                         UI_STR_NEWGAME_START, NULL, 0.0f, UI_ALIGN_CENTER);
-    s_newGameNote = ui_settings_add_row(20, NEW_GAME_NOTE_Y, 600, 30, 0, -1, 0, " ", NOTE_SIZE,
-                                        UI_ALIGN_CENTER);
-    P(s_newGameNote)->centerX = 1;
-    setNote(s_newGameNote, UI_STR_MIRROR_SCREEN);
-    int last = lt_ext_prop_count() + LT_GAME_PROPERTY_COUNT - 1;
-    s_newGameLayout = addLayout(first, last + 1, 0.6f, newGameScreenProc, s_newGameRow[0][0]);
-}
-
-/* The cursor's row takes the item it is on as its choice (curRow -1 on
-   Start); up and down loop Mirror mode, New Game+, Start; the other rows'
-   choices stay lit (ownerItem, layout_texture.c display_texture). */
-static void newGameSync(void)
-{
-    const int cur = lt_ext_layout(s_newGameLayout)->curItem;
-    int curRow = cur == s_newGameStart ? -1 : 0;
-    for (int r = 0; r < 2; r++) {
-        for (int c = 0; c < 2; c++) {
-            if (cur == s_newGameRow[r][c]) {
-                curRow = r;
-                *(r == 0 ? &s_mirrorChoice : &s_ngpChoice) = c;
-            }
-        }
-    }
-    const int choice[2] = {s_mirrorChoice, s_ngpChoice};
-    for (int r = 0; r < 2; r++) {
-        for (int c = 0; c < 2; c++) {
-            LtProperty *e = P(s_newGameRow[r][c]);
-            e->upItem = r == 0 ? s_newGameStart : s_newGameRow[0][choice[0]];
-            e->downItem = r == 0 ? s_newGameRow[1][choice[1]] : s_newGameStart;
-            e->ownerItem = r != curRow && c == choice[r] ? cur : -1;
-        }
-    }
-    LtProperty *st = P(s_newGameStart);
-    st->upItem = s_newGameRow[1][choice[1]];
-    st->downItem = s_newGameRow[0][choice[0]];
-    st->leftItem = st->rightItem = -1;
-    setNote(s_newGameNote, curRow == 0   ? UI_STR_MIRROR_SCREEN
-                           : curRow == 1 ? UI_STR_NEWGAME_PLUS_SCREEN
-                                         : UI_STR_NEWGAME_START_SCREEN);
-}
-
-int ui_new_game_screen_enter(void)
-{
-    if (!s_built || s_newGameLayout < 0) {
-        return -1;
-    }
-    LtProp *l = lt_ext_layout(s_newGameLayout);
-    l->defaultItem = l->curItem = s_newGameRow[0][0];
-    s_newGameChosen = 0;
-    /* no run until the choice (a cleared save's flag does not carry over) */
-    ico_opt_mirror_reset();
-    s_mirrorChoice = 0;
-    /* New Game+: on from a finished save, off from the title's New Game */
-    s_ngpChoice = gFlagGameClear ? 1 : 0;
-    newGameSync();
-    return s_newGameLayout;
-}
-
-int ui_new_game_screen_layout(void)
-{
-    return s_newGameLayout;
-}
-
-int ui_new_game_screen_start(void)
-{
-    return s_newGameStart;
-}
-
-int ui_new_game_screen_row(int row, int on)
-{
-    return row == 0 || row == 1 ? s_newGameRow[row][on ? 1 : 0] : -1;
-}
-
-static int newGameScreenProc(int first, int item)
-{
-    (void)item;
-    ui_settings_apply_language();
-    if (first) {
-        s_newGameChosen = 0;
-    }
-    newGameSync();
-    /* as la_vibe_select: input once faded in, the choice once */
-    if (s_newGameChosen || lt_fade_status() != 2) {
-        return -1;
-    }
-    int flags = pad[0].flags;
-    const int cur = lt_ext_layout(s_newGameLayout)->curItem;
-    if ((flags & PAD_OK) && cur != s_newGameStart && !(flags & LT_PAD_START)) {
-        /* Cross on an Off/On item picks it and moves on */
-        POSITIVE_SE();
-        lt_ext_layout(s_newGameLayout)->curItem = P(cur)->downItem;
-        newGameSync(); /* lit for this tick's draw */
-        return -1;
-    }
-    if (flags & (PAD_OK | LT_PAD_START)) {
-        s_newGameChosen = 1;
-        POSITIVE_SE();
-        ico_opt_set_mirror(s_mirrorChoice);
-        /* the game's only record of a second playthrough: the chosen value
-           wins over the save's */
-        gFlagGameClear = s_ngpChoice;
-        la_host_new_game_go();
-        return -1;
-    }
-    if (flags & PAD_BACK) {
-        NEGATIVE_SE();
-        return LAYOUT_VIBE_SELECT;
-    }
-    return -1;
 }
 
 /* ---------------------------------------------------------- the quit screen
@@ -4892,6 +4634,7 @@ void ui_settings_install(void)
     if (s_origin < 0) {
         s_origin = LAYOUT_PAUSE;
     }
+    ui__diff_listen(); /* the journey's toasts */
     /* the port's text in the menu language ([ui] language) */
     ui_settings_apply_language();
     /* [audio] output: an explicit stereo or mono is the game's from the
@@ -4911,6 +4654,7 @@ void ui_settings_install(void)
 
 void ui_settings_reset(void)
 {
+    ui__diff_set_readonly(0);
     s_built = 0;
     s_warned = 0;
     s_origin = LAYOUT_PAUSE;
@@ -4941,10 +4685,7 @@ void ui_settings_reset(void)
     /* the wrapped notes are set again on the rebuilt rows */
     memset(s_noteStr, 0, sizeof(s_noteStr));
     memset(s_noteLang, 0, sizeof(s_noteLang));
-    s_newGameLayout = s_newGameStart = -1;
-    s_newGameRow[0][0] = s_newGameRow[0][1] = s_newGameRow[1][0] = s_newGameRow[1][1] = -1;
-    s_newGameNote = -1;
-    s_newGameChosen = s_mirrorChoice = s_ngpChoice = 0;
+    ui__newgame_reset();
     s_quitLayout = s_quitYesNo[0] = s_quitYesNo[1] = -1;
     s_quitChosen = 0;
     for (int i = 0; i < ICO_APP_PART_COUNT; i++) {
@@ -5299,7 +5040,30 @@ static int closeForDebugMenu(void)
 
 static int parentLayout(const Page *pg)
 {
+    if (pg->parent == UI__PARENT_NEW_GAME) {
+        if (ui__diff_readonly()) {
+            return s_pages[UI_PAGE_GAMEPLAY]
+                .layout; /* the pause menu's view (leaveTo: on its link) */
+        }
+        return ui__newgame_customize_back(); /* the cursor on Customize */
+    }
     return pg->parent >= 0 ? s_pages[pg->parent].layout : s_origin;
+}
+
+/* settings_newgame.h: the New Game screen's Customize opens its page on its
+   first row, every page under it too */
+int ui__settings_open_customize(void)
+{
+    ui__diff_set_readonly(0); /* the New Game draft's */
+    for (int p = 0; p < UI_PAGE_COUNT; p++) {
+        Page *pg = &s_pages[p];
+        if ((p == UI_PAGE_CUSTOMIZE || pg->parent == UI_PAGE_CUSTOMIZE) && pg->layout >= 0) {
+            lt_ext_layout(pg->layout)->defaultItem = lt_ext_layout(pg->layout)->curItem =
+                pageFirstNav(pg);
+            pg->offset = 0;
+        }
+    }
+    return s_pages[UI_PAGE_CUSTOMIZE].layout;
 }
 
 /* ------------------------------------------------- the Save states page
@@ -6387,10 +6151,12 @@ static void refreshPage(Page *pg, int id, int cur)
                 liveNoteText(r->note, text);
             }
         }
-        if (r->opt == UI_OPT_VAR_TOUGHNESS) {
-            r->noteStr = ui__variant_note(r->opt, UI_STR_OPT_VAR_TOUGHNESS_NOTE);
-        } else if (r->opt == UI_OPT_VAR_NO_HINTS) {
-            r->noteStr = ui__variant_note(r->opt, UI_STR_OPT_VAR_NO_HINTS_NOTE);
+        if (ui__diff_opt(r->opt)) {
+            /* the draft's value and the disc choose the note; the count
+               greyed while there is no limit */
+            r->noteStr = ui__diff_note(r->opt);
+            lt_ext_set_dim(r->label, ui__diff_dimmed(r->opt));
+            lt_ext_set_dim(r->value, ui__diff_dimmed(r->opt));
         } else if (r->opt == UI_OPT_VAR_NO_LOOK) {
             r->noteStr = ui__variant_note(r->opt, UI_STR_OPT_VAR_NO_LOOK_NOTE);
         }
@@ -6450,6 +6216,9 @@ static int settingsProc(int first, int item)
        to the pause menu when it was opened from its row) */
     const int prevLayout = s_procLayout;
     s_procLayout = current_layout_id;
+    if (id == UI_PAGE_GAMEPLAY && !onTitle()) {
+        ui__diff_set_readonly(1); /* its Difficulty link opens the journey's rows, read-only */
+    }
     if (id != UI_PAGE_STATES && ui__states_is_open()) {
         ui__states_release(); /* the Save states page was left for this one */
     }

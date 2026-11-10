@@ -249,6 +249,30 @@ together: a shadow did not wait for another's attack (N this run)`.
 and log lines, and scans `enemy_act.c` for the eleven callers and the hook; `settings_extra`
 (`testShadowsTogether`) the row.
 
+### Knock-down limit
+
+A row of the journey's difficulty (Customize > Rules: Knock-down limit Off or 1 to 9, Knock-downs count Each
+room or Whole journey; Hard: 3 in each room; `port/game/difficulty.h` `knock_limit`, `knock_scope`): the game
+is over when Ico has been knocked down that many times by a hit, in the room (the count starts again at each
+room entry, a Continue included) or on the journey (it starts again after the game over it caused). Each
+fall counts once: while he lies, while his get-up timer runs, and the landing of a fall the knock-down began
+(the European family's mails 55 and 56) are the same fall; a fall no hit caused (losing his balance at a
+ledge) and Yorda's and the Shadows' falls never count. At the limit he lies 2 s, unhittable, as the game's own
+death lies, then the game over comes as any other (Continue, or Quit; with Permadeath the journey ends).
+Each counted knock-down short of the limit shows the toast "Knocked down n of N"; the pause menu's journey
+lines show the difficulty with "n / N" (the scope's count) and the Permadeath word, and Settings > Gameplay >
+Difficulty (pause menu only) shows the journey's rows read-only ([UI.md](UI.md#customize-the-new-game-drafts-pages)).
+
+The hooks: `ico_gs_knockdown` at the entry of each `actCommonDown` copy (`ico2/fumi/src/commonact.c`:
+European body, `_ntsc`, `_aug6`, `_jun26`), `actDownGameOver` and `actDownGameOverNow` there (the game over:
+`ACT_LAYOUT_GAMEOVER`, the June 2001 demo's own form), `actAfterDown` (a mail that took him out of the
+down act first asks for the game over at once); the snapshot's `boy_act_mode` and `boy_down_timer`
+(`port/include/ico_gamestate.h`) and host_loop.c's `ico_difficulty_tick` for the in-fall latch; the room
+entry and the game over through `port/game/gamestate.c` (`ico_gs_signal`, `ico_gs_tick`). No per-frame game
+hook. The mechanism, the log lines and the mails per disc: [HARD_MODE.md](HARD_MODE.md#the-knock-down-limit);
+[DIVERGENCES.md](DIVERGENCES.md) GL-19. Tests: `difficulty_knock` (each disc), `knockdown_disc` (each disc
+image).
+
 ### No Shadows
 
 A Customize row of the journey's difficulty (`ICO_DIFF_NO_SHADOWS`, `port/game/difficulty.h`
@@ -418,9 +442,12 @@ disc](#options-on-each-disc)).
 
 ### Game variants
 
-Options > Gameplay: No hints on the page, Shadow toughness, Shadow aggression and Peaceful shadows on Gameplay > Shadows, Automatic guard, Turn to face shadows, Shadows wait while Ico is down, One hit per swing, Shadows never dodge, Queen barrier, Light sword colour and Stick on Gameplay > Combat (Shadows attack together is there too), No cutscene look-around and Ignore
+Options > Gameplay: Light sword colour and Stick on the page, No cutscene look-around and Ignore
 cutscene cameras on Gameplay > Cutscenes, and the Debug menu on Developer (`[variants]`,
-[CONFIG.md](CONFIG.md#variants), [UI.md](UI.md#gameplay--yorda-shadows-combat-and-cutscenes)). The values are
+[CONFIG.md](CONFIG.md#variants), [UI.md](UI.md#gameplay--yorda-and-cutscenes)); No hints, Shadow
+toughness, Shadow aggression, Peaceful shadows, Automatic guard, Turn to face shadows, Shadows wait
+while Ico is down, One hit per swing, Shadows never dodge and Queen barrier on the New Game screen's
+Customize pages, a journey's difficulty ([UI.md](UI.md#customize-the-new-game-drafts-pages)). The values are
 `port/game/variants.c`'s; the game reads them in three ways, and with every row at its shipped value
 it runs as before (each hook below gives the game's own value or row then).
 

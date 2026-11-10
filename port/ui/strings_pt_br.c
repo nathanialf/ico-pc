@@ -879,7 +879,7 @@ const char *const ui_strings_pt_br[UI_STR_COUNT] = {
     [UI_STR_DIFF_CUSTOMIZE_NOTE] = NULL,
     [UI_STR_DIFF_RULES] = NULL,      /* "Rules" */
     [UI_STR_DIFF_NO_SHADOWS] = NULL, /* "No Shadows" */
-    /* "On: no Shadows ever appear. The story still plays out as usual." */
+    /* "On: Shadows never appear. Some story moments are lost or play differently without them." */
     [UI_STR_DIFF_NO_SHADOWS_NOTE] = NULL,
     [UI_STR_DIFF_KNOCK_LIMIT] = NULL, /* "Knock-down limit" */
     /* "A game over once Ico has been knocked down this many times. Off sets no limit." */

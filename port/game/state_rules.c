@@ -9,6 +9,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "difficulty.h" /* IcoDifficulty: a state's record, read by its bytes */
 #include "host_fs.h"
 
 int ico_state_on_pause_menu(const IcoStateConds *c)
@@ -24,6 +25,14 @@ IcoStateResult ico_state_conditions(const IcoStateConds *c, int saving, const ch
 
     if (!c->available) {
         r = ICO_STATE_OFF;
+    } else if (c->locked) {
+        /* Permadeath: a game over ends the journey, so no state may take
+           it back to before one: a load is refused, and so is a save (a
+           state of this journey could never be loaded, ico_state_list
+           and the load refuse it by its own record) */
+        r = ICO_STATE_PERMADEATH;
+        w = saving ? "the journey has Permadeath on: a state of it could never be loaded"
+                   : "the journey has Permadeath on";
     } else if (saving && !ico_state_on_pause_menu(c)) {
         r = ICO_STATE_NOT_PAUSED;
     } else if (c->stage_switch != 0) {
@@ -88,6 +97,8 @@ const char *ico_state_result_text(IcoStateResult r)
         return "the file could not be written";
     case ICO_STATE_BUSY:
         return "a save or load is in flight";
+    case ICO_STATE_PERMADEATH:
+        return "save states are off on a Permadeath journey";
     }
     return "unknown";
 }
@@ -362,4 +373,15 @@ void ico_state_thumb_scale(const uint8_t *src, int w, int h, uint8_t *dst, int d
             dst[((size_t)y * (size_t)dw + (size_t)x) * 4 + 3] = 255;
         }
     }
+}
+
+int ico_state_record_permadeath(const unsigned char *reg, uint64_t reg_n, uint64_t off, uint64_t n)
+{
+    IcoDifficulty d;
+
+    if (reg == NULL || n != sizeof d || off > reg_n || reg_n - off < n) {
+        return 0;
+    }
+    memcpy(&d, reg + off, sizeof d);
+    return d.version == ICO_DIFF_VERSION && d.row[ICO_DIFF_PERMADEATH] != 0;
 }

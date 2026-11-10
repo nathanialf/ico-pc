@@ -880,7 +880,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
         "더 느리고 순한 그림자가 요르다를 데려가지 않고 피하지도 않으며, 구출할 시간이 더 많습니다.",
     [UI_STR_DIFF_NORMAL_NOTE] = "발매 당시 그대로의 게임입니다.",
     [UI_STR_DIFF_HARD_NOTE] =
-        "더 빠르고 단단한 그림자가 함께 공격하고, 자동 방어가 없으며, 구출 시간이 짧고, 한 방에서 3번 쓰러지면 게임 오버입니다.",
+        "빠르고 단단한 그림자가 함께 공격, 자동 방어 없음, 짧은 구출 시간, 한 방에서 3번 쓰러지면 게임 오버.",
     [UI_STR_DIFF_CUSTOM_NOTE] =
         "직접 정하는 규칙입니다. 세부 조정에서 모든 항목을 바꿀 수 있습니다.",
     [UI_STR_DIFF_CUSTOMIZE] = "세부 조정",
@@ -889,7 +889,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_DIFF_RULES] = "규칙",
     [UI_STR_DIFF_NO_SHADOWS] = "그림자 없음",
     [UI_STR_DIFF_NO_SHADOWS_NOTE] =
-        "켬: 그림자가 전혀 나타나지 않습니다. 이야기는 그대로 진행됩니다.",
+        "켬: 그림자가 나타나지 않습니다. 일부 이야기 장면은 사라지거나 다르게 진행됩니다.",
     [UI_STR_DIFF_KNOCK_LIMIT] = "쓰러짐 제한",
     [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
         "이코가 이 횟수만큼 쓰러지면 게임 오버입니다. 끔이면 제한이 없습니다.",

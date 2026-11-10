@@ -44,7 +44,9 @@ int window_pipe_floor_retry(int pipePolicy);
 /* After the start-up set (or the lazy start's self-tests), before the
    render thread starts: the skin check's background compiles under issue
    161's rule (rd.h rd_vu_skin_background): the memory function
-   ico_diag_background_memory, and none at all when this start's set
+   ico_diag_background_memory, and the careful form (rd_vu_skin_check.c:
+   one at a time, above the floor, 2 s apart; before v0.11.3 none at all,
+   issue 123) when this start's set
    stopped at the free-memory floor or the start makes no set because the
    last one stopped for memory (pipePolicy ICO_DIAG_PIPESET_LAZY_LOW_MEMORY;
    -1 for none: the backend switch) on a driver other than

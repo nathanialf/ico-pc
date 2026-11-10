@@ -26,7 +26,12 @@
  *   retired     the fifteen difficulty rows (port/game/difficulty.h) left
  *               the list for ICO_SIM_KEYS_RETIRED: none in both, each found
  *               by ico_sim_key_retired, none in the hash or the text, and an
- *               older state's text that lists them at any value is equal
+ *               older state's text that lists them at any value is equal;
+ *               through the save state's own header check (state_file.h,
+ *               the two functions state_host.c sets): a v0.11.2 state's
+ *               text with the fifteen at any value loads, its damaged hash
+ *               or a still-listed key that differs (gameplay.door_fix)
+ *               refuses, and the fifteen are named for the log
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -35,6 +40,8 @@
 #include "config.h"
 #include "host_config.h"
 #include "sim_keys.h"
+#include "state_file.h"
+#include "xxh3.h"
 
 static int fails;
 
@@ -324,6 +331,50 @@ static void test_retired(void)
                                i % 2 ? "true" : "7");
     }
     CHECK(ico_sim_keys_first_diff(older, out, sizeof out) == NULL && out[0] == '\0');
+    /* the save state's header check as state_host.c sets it up */
+    {
+        static IcoStateHeader sv, nw;
+        static char names[2048];
+        char detail[160];
+
+        ico_state_header_init(&nw, "v0.11.3");
+        snprintf(nw.disc, sizeof nw.disc, "pal");
+        nw.settings_hash = ico_sim_keys_hash(nw.keys, sizeof nw.keys);
+        sv = nw;
+        CHECK(strlen(older) < sizeof sv.keys);
+        memcpy(sv.keys, older, strlen(older) < sizeof sv.keys ? strlen(older) + 1 : 1);
+        sv.keys[sizeof sv.keys - 1] = '\0';
+        sv.settings_hash = xxh3_64(sv.keys, strlen(sv.keys));
+        ico_state_set_key_default(ico_sim_key_is_default);
+        ico_state_set_key_retired(NULL);
+        CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS);
+        CHECK(strcmp(detail, "gameplay.yorda_safe=7 (now absent)") == 0);
+        ico_state_set_key_retired(ico_sim_key_retired);
+        CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OK);
+        CHECK(ico_state_header_check_other_build(&sv, &nw, detail, sizeof detail) == ICO_STATE_OK);
+        CHECK(ico_state_keys_retired(sv.keys, nw.keys, names, sizeof names) == 15);
+        CHECK(strncmp(names, "gameplay.yorda_safe=7, gameplay.pit_time=true", 45) == 0);
+        sv.settings_hash ^= 1;
+        CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS);
+        CHECK(strcmp(detail, "the settings differ") == 0);
+        /* a key still listed that differs: the door fix on in the state */
+        memcpy(sv.keys, nw.keys, sizeof sv.keys);
+        {
+            char *door = strstr(sv.keys, "gameplay.door_fix=\n"); /* unset now */
+
+            CHECK(door != NULL && strlen(sv.keys) + 4 < sizeof sv.keys);
+            if (door != NULL && strlen(sv.keys) + 4 < sizeof sv.keys) {
+                door += 18;
+                memmove(door + 4, door, strlen(door) + 1);
+                memcpy(door, "true", 4);
+            }
+        }
+        sv.settings_hash = xxh3_64(sv.keys, strlen(sv.keys));
+        CHECK(ico_state_header_check(&sv, &nw, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS);
+        CHECK(strcmp(detail, "gameplay.door_fix=true (now )") == 0);
+        ico_state_set_key_retired(NULL);
+        ico_state_set_key_default(NULL);
+    }
     CHECK(ico_config_set_string("gameplay.pit_time", "") == 0);
     CHECK(ico_config_set_string("variants.one_hit", "") == 0);
 }

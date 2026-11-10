@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "difficulty.h"
 #include "ico_rows.h"
 #include "options.h"
 #include "variants.h"
@@ -107,6 +108,8 @@ void ico_gs_sample_live(IcoGsSnapshot *s)
         if (a->weapon != 0 && GOBJ_SUB(a->weapon) != 0 && GOBJ_SUB(a->weapon)->work != 0) {
             s->weapon_kind = CheckWeaponKind(a->weapon);
         }
+        s->boy_act_mode = a->actMode;
+        s->boy_down_timer = ico_gs_game_down_timer(boyGObj);
     }
     if (girlGObj != 0 && GOBJ_ACT(girlGObj) != 0) {
         Act *g = GOBJ_ACT(girlGObj);
@@ -166,6 +169,13 @@ static unsigned int s_dropped;
 static int s_over_seen;
 static unsigned int s_over_logged;
 
+/* the knock-down limit (ico_gs_knockdown): the limit's game over asked for
+   (ico_gs_knock_game_over_take), the boy's down entries seen while a limit
+   is on, and the ticks the game over has been due with him neither lying
+   nor dead */
+static int s_knock_asked;
+static unsigned int s_knock_entries, s_knock_away, s_knock_away_logged;
+
 static int s_count[ICO_GS_EV_COUNT];
 static int s_arg[ICO_GS_EV_COUNT];
 
@@ -176,6 +186,11 @@ void ico_gs_signal(int event, int arg)
     }
     if (event == ICO_GS_EV_STAGE_ENTER) {
         s_over_seen = 0;
+        /* the knock-down limit's room count starts again here (the stage
+           manager's one signal of a room entry, StageManager.c
+           start_stage_Load_thread: a Continue comes through it too) */
+        s_knock_away = 0;
+        ico_difficulty_stage_enter(arg);
     }
     if (s_pending_n >= SIGNAL_QUEUE) {
         s_dropped++;
@@ -277,6 +292,8 @@ void ico_gs_reset(void)
     s_cap_logged = s_cap_same_logged = 0;
     s_over_logged = 0;
     s_over_seen = 0;
+    s_knock_asked = 0;
+    s_knock_entries = s_knock_away = s_knock_away_logged = 0;
 }
 
 void ico_gs_rebaseline(void)
@@ -298,6 +315,10 @@ void ico_gs_rebaseline(void)
     s_over_seen = 0;
     s_cap_hook_tick = 0;
     s_cap_hooked = 0;
+    /* a state's record (difficulty.record) holds its own over_pending: a
+       lying the state resumes asks for its game over again */
+    s_knock_asked = 0;
+    s_knock_away = 0;
     ico_diag_log("stats: the baseline taken again after a save state's load (stage %d); the "
                  "run's counters kept",
                  s_snap.stage_no);
@@ -323,6 +344,99 @@ static int flag_in(const IcoGsSnapshot *s, int n)
 #define PREVIEW_PLAY (ico_region_cur()->mc_preview_play)
 #define PREVIEW_SOFA (ico_region_cur()->mc_preview_sofa)
 #define STAGE_TITLE (ico_region_cur()->stage_title)
+
+/* --- the knock-down limit ------------------------------------------------ */
+
+#define DEAD_ACT_MODE 0x16 /* actModeTbl's DEAD (actCommonDie) on every disc */
+
+int ico_gs_knockdown(int is_boy, int landing, int by_hit, int down_timer, int intr_kind)
+{
+    const IcoDifficulty *d;
+    int was_in_fall, journey, over;
+    const char *what;
+
+    if (!is_boy) {
+        return 0;
+    }
+    d = ico_difficulty_active();
+    was_in_fall = d->in_fall;
+    journey = d->knocks_journey;
+    /* a landing, and a fall no hit caused (a ledge's), are passed as the
+       same fall: not counted, and the limit's due game over still answered */
+    over = ico_difficulty_knockdown(1, landing || !by_hit, down_timer);
+    if (d->row[ICO_DIFF_KNOCK_LIMIT] <= 0 || !log_this(++s_knock_entries)) {
+        return over;
+    }
+    if (over) {
+        what = "the limit's game over is due: he lies, then the game over";
+    } else if (d->knocks_journey != journey) {
+        what = "counted";
+    } else if (landing) {
+        what = "not counted: the landing of the fall the down act began";
+    } else if (!by_hit) {
+        what = "not counted: no hit put him down";
+    } else if (was_in_fall || down_timer != 0) {
+        what = "not counted: the same fall (down, or getting up)";
+    } else {
+        what = "not counted";
+    }
+    ico_diag_log("difficulty: Ico down %u (mail %d, hit %d, landing %d, get-up timer %d, stage "
+                 "%d): %s; %d in this room, %d on this journey, limit %d %s",
+                 s_knock_entries, intr_kind, by_hit != 0, landing != 0, down_timer, s_snap.stage_no,
+                 what, (int)d->knocks_room, (int)d->knocks_journey,
+                 (int)d->row[ICO_DIFF_KNOCK_LIMIT],
+                 d->row[ICO_DIFF_KNOCK_SCOPE] == ICO_DIFF_SCOPE_JOURNEY ? "a journey" : "a room");
+    return over;
+}
+
+int ico_gs_knock_game_over_take(int why)
+{
+    const IcoDifficulty *d = ico_difficulty_active();
+
+    if (!d->over_pending) {
+        s_knock_asked = 0;
+        return 0;
+    }
+    if (s_knock_asked) {
+        return 0;
+    }
+    s_knock_asked = 1;
+    ico_diag_log("difficulty: the knock-down limit's game over asked for (%s; stage %d)",
+                 why == ICO_GS_KNOCK_LEFT_DOWN ? "a mail took Ico out of the down act first"
+                                               : "he lay 2 s",
+                 s_snap.stage_no);
+    return 1;
+}
+
+int ico_gs_boy_act_mode(void)
+{
+    return s_snap.valid && s_snap.actors_valid ? s_snap.boy_act_mode : -1;
+}
+
+int ico_gs_boy_down_timer(void)
+{
+    return s_snap.valid && s_snap.actors_valid ? s_snap.boy_down_timer : 0;
+}
+
+/* the limit's game over due (not yet come) while the boy is neither lying
+   nor dead for 2 s: his act was replaced without leaving through
+   actAfterDown; the game over then comes at his next knock-down */
+static void knock_watch(void)
+{
+    const IcoDifficulty *d = ico_difficulty_active();
+
+    if (!d->over_pending || !s_snap.actors_valid || s_snap.boy_act_mode == ICO_DIFF_DOWN_ACT_MODE ||
+        s_snap.boy_act_mode == DEAD_ACT_MODE) {
+        s_knock_away = 0;
+        return;
+    }
+    if (++s_knock_away == (unsigned int)ico_gs_tick_hz() * 2u && log_this(++s_knock_away_logged)) {
+        ico_diag_log(
+            "difficulty: the knock-down limit's game over is due but Ico is in act mode %d "
+            "(not down, not dead; asked %d, stage %d): it comes at his next knock-down",
+            s_snap.boy_act_mode, s_knock_asked, s_snap.stage_no);
+    }
+}
 
 void ico_gs_tick(void)
 {
@@ -361,10 +475,19 @@ void ico_gs_tick(void)
     }
     s_pending_n = 0;
 
+    /* every game over, whatever asked for it (ACT_LAYOUT_GAMEOVER's signal,
+       the June 2001 demo's ico_gs_signal_game_over_once): the knock-down
+       limit's counts and Permadeath (difficulty.h) */
+    if (s_count[ICO_GS_EV_GAME_OVER] != 0) {
+        s_knock_asked = 0;
+        ico_difficulty_game_over();
+    }
+
     if (!s_snap.valid) {
         s_stage_entered = 0;
         return;
     }
+    knock_watch();
 
     /* polled events */
     s_stage_entered =

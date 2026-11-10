@@ -42,6 +42,9 @@
  *   sound.c         the EE sequencer's .bss (sce/libsndn2, compiled into the
  *                   sound library, outside the game data ranges; AUDIO, the
  *                   pointer blocks scanned)
+ *   difficulty.c    the journey's difficulty record (FRESH: a state made
+ *                   before it existed builds the record from its own keys
+ *                   text, ico_difficulty_state_loaded)
  *
  * Not registered: the scheduler's tables (ico_sched_state_save/restore
  * move their pointers themselves: a scan of them here would move them
@@ -78,6 +81,7 @@ int ico_host_loop_state_register(void);    /* host_loop.c */
 /* port/audio/audio_host.c (audio_host.h): the SPU2, the libsd layer, the
    gain tags, the SNDN2DRV host and its streams, the sync path's count */
 int ico_audio_state_register(void);
-int ico_sound_state_register(void); /* sce/libsndn2/sound.c: the EE sequencer's .bss */
+int ico_sound_state_register(void);      /* sce/libsndn2/sound.c: the EE sequencer's .bss */
+int ico_difficulty_state_register(void); /* port/game/difficulty.c: "difficulty.record" */
 
 #endif /* ICO_PLATFORM_STATE_PORT_H */

@@ -53,6 +53,7 @@ fixed value. The judgement names both forms ([What it checks](#what-it-checks)).
 | `port/platform/bones_ladder.c`, `window_bones.c` | the ladder across starts (pure: the step, the mark, the lines, step 1's switch guards) and the window's part (the evidence read from the pump, the keys written, step 1's switch asked) |
 | `port/platform/window_switch.c` (`ico_window_switch_restart`) | step 1 in the run: the renderer made again in place through Options > Graphics > Apply's switch |
 | `port/platform/android/gpu_driver_android.c` (`tu_debug_apply`) | `[dev] turnip_debug = nobin`: `TU_DEBUG=nobin` set before a Turnip package loads |
+| `port/render/rd_vu_skin_trace.c` | the trace (pure): the two stamps (the probe target's clear, the ring's 16 bytes), the checked blocks kept (`RdSkinTrace`, the last 64), the search of a differing copy's bytes and its words ([The trace](#the-trace)) |
 | `port/render/rd_vu_skin_judge.c` | the judgement (pure): the CPU's positions through `vu1_ref`'s cluster program, a probe against them, the zero-matrix address, the byte windows, the decision table's words |
 | `port/render/rd_vu_skin_selftest.c` | the start-up probe (S1) and the check's start line; `rd_vu_skin_probe_failed` |
 | `port/platform/window_host.c` (`skin_probe_after`, `skin_check_persist_off`), `startup_retry.c` (`startup_retry_note_has_skin_probe`), `diag_host.c` | an end or a device failure inside the start-up probe: `[dev] vu_skin_check = false` |
@@ -244,13 +245,17 @@ same setting at once ([PLATFORM.md](PLATFORM.md), `rd_vu_skin_probe_failed`).
 rule for background compiles (`rd_vu_skin_background`, set by the window from
 `port/platform/window_pipe_finish.c` (`window_pipe_skin_check`)): one job at a time, each begun
 only when `ico_diag_background_memory` says neither the system's low-memory signal (none for the
-rest of the run) nor the free-memory floor now (asked again at the next check), and none at all
-where the start-up set stopped for memory (this start's at the floor, or the last start's, which
-makes this one set-less) on Qualcomm's own driver. Until a pipeline exists its part is not drawn:
-the check runs without its box check or c2, said once (`rd: VU skin check: its box check and its
-c2 variant are not compiled in the background (<why>): the check runs without them`, `... no
-background compile for the rest of the run (<why>) ...`, `... a background compile waits for
-memory (<why>) ...`). The check holds 33 pipelines outside the renderer's cache at most (the probe's 3, c2's 3, column
+rest of the run) nor the free-memory floor now (asked again at the next check). Where the start-up
+set stopped for memory (this start's at the floor, or the last start's, which makes this one
+set-less) on Qualcomm's own driver they are compiled carefully: one at a time, each begun only
+above the floor and at least 2 s after the last one began (`SK_CAREFUL_GAP_MS`): the run
+of issue 123's report stopped its set 4 MB under the floor
+(1,943 MB available, floor 1,947 MB), played with 2.2 GB free, and had neither a box check nor a
+twin when its check failed. Until a pipeline exists its part is not drawn: the check runs without
+its box check, twins or c2, said once (`rd: VU skin check: its box check, its twins' pipelines and
+its c2 variant are compiled carefully (<why>): one at a time, each only above the free-memory floor
+and 2 s after the last; until then the check runs without them`, `... no background compile for
+the rest of the run (<why>) ...`, `... a background compile waits for memory (<why>) ...`). The check holds 33 pipelines outside the renderer's cache at most (the probe's 3, c2's 3, column
 3's 3, 16 box checks and twin C's 8), counted
 in the pool's headroom ([RHI.md](RHI.md)); keys past the 16 box slots are not box-checked.
 
@@ -263,6 +268,42 @@ The cost: one probe pass of three times the draw's vertices times nine one-pixel
 3,840-byte copy, a 48 x 1,024 target's copy, every 100 ms; the box check four scissored redraws of
 one command with nothing written; on the CPU the cluster program over at most 1,024 vertices, and
 on a wrong check one more run of it for each candidate address.
+
+## The trace
+
+Issue 123's report (Adreno 740, Qualcomm's driver 512.676.1): `403 vertices wrong of 403 ...
+the bone block as the GPU copied it: differs at qwords 0..195; as the CPU reads it after the fence:
+equal`, c1 wrong too, `reads as: H2, the memory`, recorded in replay 785, the same replay whose
+present blocked 340 ms and whose GPU timestamps restarted (the stall lines of that log). Qwords
+0..195 are every qword that mesh's block uses (196 of 240; the rest are zeros in both), and the
+probe's first wrong vertex sits about 19 and 54 GS pixels from the CPU's: a whole block of the same
+shape, not a few bytes. That log could not tell three paths apart: the readback not written by
+the replay (its rows and copy an earlier check's), the GPU reading the ring as an earlier replay
+left it, or the GPU reading other memory. The trace (`rd_vu_skin_trace.c`):
+
+- **The clear stamp.** The probe target is cleared to `(0xA5, the replay's number bits 0..7, 8..15,
+  16..23)`, not zeros; no probe draws field 15 of a column, so the readback's last texel names the
+  replay whose copy wrote the rows.
+- **The ring stamp.** At the replay's end the CPU writes 16 bytes into the ring (`RdSkinRingStamp`:
+  magic, replay, ring slot, ring id) and the copy of them into the readback is the last copy, after
+  the bone blocks.
+- **The search.** A GPU copy that differs from the bytes kept is looked for: in the slot's readback
+  as the last harvest whose clear stamp was its own left it (check 0), all zeros, in the checked
+  blocks of the last 64 checks (`RdSkinTrace`, newest first; the check's own never), then in the
+  check's own ring (while its replay's bytes are there) and the other frame slot's ring as they are
+  at the harvest, at every uniform-alignment offset within the bytes the slot's last replay wrote
+  (the draw's own offset first, at most 64 MB a ring; only for an event line: the ring's memory may
+  be uncached on the device). Else `other memory`, with its zero qwords, qwords equal to the bytes
+  kept and non-finite lanes.
+
+So the next log decides the path by itself:
+
+| the stamps and the search say | means |
+| --- | --- |
+| `the readback was not written by this replay's copies (the probe target's clear stamp: replay R's ...)` | the GPU did not run the replay's copies (a submission dropped or cut short, e.g. a GPU fault recovered by the kernel) or the CPU read the readback before they landed: the check's verdict is not about the bones; the ladder is not fed |
+| the clear stamp right, `the ring's stamp reads replay R's` (`H2, the memory: the GPU read the ring as an earlier replay left it`) | the copies ran but the GPU saw the ring's memory as replay R left it: stale memory under the GPU (a cache or mapping of the upload memory) |
+| both right, the copy `the block checked in replay R ...` or `the block at ring offset O of frame slot S's ring ...` | the GPU read another block: an offset or slot the GPU used that the CPU did not |
+| both right, `no block ...: other memory` | other memory: neither the check's blocks nor the rings |
 
 ## The decision table
 
@@ -340,11 +381,27 @@ On an event, the first 8, then every 100th, of each kind on its own count (a wro
   sidecar written (WHY); asked for a frame dump`), then the window's `window: VU skin check: a
   failure was captured (...)` and, after the dump, `window: VU skin check: the capture: SIDECAR and
   the frame dump ZIP (PNG), the presented picture at the next present; the sidecar is in the zip`
+- `rd: VU skin check: frame F command L:I the GPU's copy of the bone block (frame slot S's ring,
+  offset O of U written, C MB; recorded in replay R): WHERE; Z of 240 qwords zero, K of 240 qwords as
+  kept, N of 960 lanes not finite; B KB of the rings searched` after a line whose copy differs (the
+  same budget), WHERE one of `the bytes the slot's readback held from the check of replay Q (not
+  written again)`, `all zeros`, `the block checked in replay Q (frame slot T, ring offset Y[, the
+  draw's own offset]; mesh NAME #ID, command L:I): another replay's block`, `the block at ring offset
+  Y of frame slot T's ring as it is now (replay Q's[, the draw's own offset])`, `no block the
+  check kept or the rings hold: other memory` ([The trace](#the-trace))
+- `rd: VU skin check: frame F command L:I replay R (frame slot S, readback of N checks): the readback
+  was not written by this replay's copies (the probe target's clear stamp: replay Q's | no stamp
+  (bits 0..23); the ring's stamp: ...): the GPU did not run them, or they were read before they
+  landed; recorded after submission N, read with M finished (stamp event E)` or `...: the copies ran
+  (the clear stamp is this replay's) but the ring's stamp reads replay Q's | no stamp: the GPU read
+  the ring's memory as it was before this replay wrote it; ...` (its own budget: the first 8, then
+  every 100th)
 - `rd: VU skin check: frame F command L:I drew N samples outside its box (texels X,Y WxH, the CPU's vertices + 2 GS pixels; through FS[ without the draw's attachment read]; the probe right|wrong too) (box event E)`
 
 At the renderer's shutdown, when the run drew a check: `rd: VU skin check: at the end of the run: D
 checks drawn (B box checks drawn), R read, W wrong, X blocks whose bytes differed, Y box checks
-with samples outside` (a check of the last replays is not read: its slot was not recycled), and with
+with samples outside; U readbacks not written by their replay, O ring stamps of an earlier replay`
+(a check of the last replays is not read: its slot was not recycled), and with
 twins drawn `rd: VU skin check: twins at the end of the run: T drawn (O through the draw's own
 pipeline with its attachment read), R read, D differ; K checks targeted after a twin event; the ring
 read's twin (C) X drawn, Y read, Z differ from B; thinned N times, re-armed M times[ (thinned at the
@@ -355,7 +412,8 @@ healed (D of T twins differ over P replays)`.
 In the 10 s summary, when the check ran: `rd: VU skin check: P checks, W wrong, B blocks whose bytes
 differed (R changed after the draw); Q box checks, S with samples outside the box, N not drawn
 (their pipeline not made yet; F with no slot left for the key); variants on the wrong ones: c1
-right K, c2 right L (c2 drawn in M checks); largest difference on a right vertex D/16 pixel[; T twins, D differ (first at frame F), N not drawn
+right K, c2 right L (c2 drawn in M checks); largest difference on a right vertex D/16 pixel[;
+readbacks not written by their replay U, ring stamps of an earlier replay O (only when one was)][; T twins, D differ (first at frame F), N not drawn
 (their pipeline not made yet), ring twins differ E (of R read) | A and B through the ring, thinned
 to one a picture (P clean replays) | every skinned draw (P of 2000 clean replays to thin)]`. The
 window's 10 s VU line carries the twins' cost: `window: VU: D draws, T triangles, V vertex
@@ -564,7 +622,9 @@ the device's wrong read.
 `rd_vu_skin_check_test.c` with `rd_vu_skin_check.cmake` (`rd_vu_skin_check_judge`,
 `rd_vu_skin_check`, `rd_vu_skin_check_robust`, `rd_vu_skin_check_probe`,
 `rd_vu_skin_check_probe_robust`, `rd_vu_skin_check_ring`, `rd_vu_skin_check_twin`,
-`rd_vu_skin_check_twin_nan`, `rd_vu_skin_check_capture`, `rd_vu_skin_check_thin` (the thinning:
+`rd_vu_skin_check_twin_nan`, `rd_vu_skin_check_capture`, `rd_vu_skin_check_stale` (the careful
+compile rule draws a box check; each slot's readback not written again names the replay whose
+stamps it holds), `rd_vu_skin_check_thin` (the thinning:
 three twins a replay until the clean replays, one after, re-armed by the zeroed bone), and the
 ladder's `rd_vu_skin_check_probe_c3`, `rd_vu_skin_check_twin_c`, `rd_vu_skin_check_twin_bones_ring`,
 `rd_vu_skin_check_twin_record` (a pre-pass record draw's twins through the ring build)),
