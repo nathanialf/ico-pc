@@ -5120,14 +5120,25 @@ static int gameOverVoiceOpened = 0; /* derived name */
    with Permadeath any game over ends it): Continue is hidden and the cursor
    kept on Quit, the item after it; the Continue case acts as Quit, as in a
    test room of Extras > Unused content.  exec_layout_texture puts every mask
-   back to the layout's own before the procs run, so this runs every tick. */
+   back to the layout's own before the procs run, and runs no proc while the
+   layout fades (in: the first tick, drawn at alpha 0; out: the 0.5 s after a
+   choice, after a 0.25 s hold on the discs that are not from 2001), so the
+   layout's own mask (defaultMask) is set too: without it Continue came back
+   for the fade-out after Quit was chosen.  Every disc's game over layout
+   (62 European; 59 Japanese, Korean, Asian; 58 on the 2001 discs) has
+   Continue and Quit side by side, Continue's own mask 0. */
 static void la_host_game_over_quit_only(int cont)
 {
     int i;
 
     if (!ico_difficulty_finished()) {
+        /* an ended journey's mask left from its game over: the disc's own
+           (nothing in the game masks Continue) */
+        lt_default_mask_property(cont, 0);
+        lt_mask_property(cont, 0);
         return;
     }
+    lt_default_mask_property(cont, 1);
     lt_mask_property(cont, 1);
     /* the layout holding the item: every disc has at least 75 game layouts
        (port/core/region.h layout_count) */
@@ -5138,10 +5149,12 @@ static void la_host_game_over_quit_only(int cont)
             p->curItem = cont + 1;
         }
         if (p->curItem == cont + 1 && cont >= p->first && cont + 1 < p->last) {
-            /* the cursor on Quit: Up and Down (the buttons, and the stick
+            /* the cursor on Quit: Left (the button, and the stick
                default_item_select reads after this proc) would move it onto
-               the hidden Continue for a tick, with the cursor's sound */
-            pad[0].flags &= ~(0x1000 | 0x4000);
+               the hidden Continue (Quit's left item) for a tick, with the
+               cursor's sound; Up and Down lead nowhere on this layout */
+            pad[0].flags &= ~(0x1000 | 0x4000 | 0x8000);
+            pad[0].ana[2] = 0x80;
             pad[0].ana[3] = 0x80;
         }
     }

@@ -322,7 +322,7 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `mc_preview_sofa`) the ones `layout_action.c`'s `la_preview_play` / `la_preview_sofa` read; a
   text scan of the hooks in `layout_action.c` (the save hook, both load twins' hook and backstop
   before `gflagKeepState`, the Continue list's refusal in both twins with the negative sound, the
-  three game over twins' Quit only) and of `backup.c`; the log lines (found by slot / by sum /
+  three game over twins' Quit only, the helper setting Continue's own mask too and clearing Left and the stick's x on Quit) and of `backup.c`; the log lines (found by slot / by sum /
   carry-over / none, the writes, the refusals, the damaged file) (`difficulty_file`,
   `difficulty_file_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
 - `difficulty_knock_test.c`: the knock-down limit's game side
@@ -826,8 +826,10 @@ that stops again writing its own line without the retry mark); a stop at the fre
 - `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 and the
   Continue screen's Square prompt ([UI.md](UI.md#save-states)), the pictures' box at their own
   shape, and F6 (the page from play and from the pause menu, back to the game, a late press, each
-  ignore), on each disc's layout (`settings_states`, `_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`,
-  `_jun26`).
+  ignore), on a Permadeath journey (the pause row greyed and still shown, the page's line
+  "cannot be made", the Continue screen's prompt hidden with its line and Square opening nothing,
+  all back with Normal), on each disc's layout (`settings_states`, `_jpn`, `_kor`, `_cn`, `_ntsc`,
+  `_aug6`, `_jun26`).
 - `fiber_test.c`: [fibers](ARCHITECTURE.md#terms) switched round-robin with their stacks checked,
   deep stacks, the FP state inside a fiber (`fiber`, `fiber_guard`).
 - `ico_thread_test.c`: a thread runs and joins, a mutex and condition hand a value across, the clock does not run backwards (`ico_thread`).
@@ -1836,7 +1838,8 @@ The renderer's test programs have a page of their own:
 - `settings_difficulty_test.c` (`settings_difficulty`, and on every other disc
   `settings_difficulty_<slug>`): the New Game screen's Difficulty row and Customize's pages run by the
   real layout code: Normal, Hard (three knock-downs in a room), Easy round with their notes, nothing in
-  force before the confirm; Customize opened on its first row, Shadows from it, Right on Shadow speed
+  force before the confirm; the left stick stepping Difficulty one step a push (held 60 ticks: one),
+  moving Mirror mode's Off and On, and stepping Customize's Shadow speed; Customize opened on its first row, Shadows from it, Right on Shadow speed
   turning the draft Custom (no config key, the journey in force untouched), No Shadows' row and note,
   Back to Customize on the link and to the screen on Customize, Difficulty from Custom to Easy and back
   to the kept Custom rows, an edit back to Normal's rows; Rules: the count greyed while the limit is Off

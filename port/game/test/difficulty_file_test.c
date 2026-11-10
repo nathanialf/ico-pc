@@ -832,6 +832,26 @@ static void test_hooks(void)
         CHECK(strstr(src, "la_host_game_over_quit_only(429 - PAL_JPNCN_KOR(0, 23, 29));") != NULL);
         CHECK(count(src, "if (ico_unused_active() || ico_difficulty_finished()) {") == 3);
         CHECK(count(src, "if (ico_unused_active()) {") == 0);
+        /* the helper sets the layout's own mask too (no proc runs while the
+           layout fades out after a choice, and exec_layout_texture puts each
+           mask back to it every tick), puts the disc's back on a journey
+           that has not ended, and keeps the cursor off Continue with Left
+           and the stick's x (Quit's left item; Up and Down lead nowhere) */
+        {
+            const char *h = strstr(src, "static void la_host_game_over_quit_only(int cont)\n{");
+            const char *e = h != NULL ? strstr(h, "\n}\n") : NULL;
+            const char *def0 = h != NULL ? strstr(h, "lt_default_mask_property(cont, 0);") : NULL;
+            const char *ret = h != NULL ? strstr(h, "        return;\n    }\n") : NULL;
+            const char *def1 = h != NULL ? strstr(h, "lt_default_mask_property(cont, 1);") : NULL;
+            const char *m1 = h != NULL ? strstr(h, "lt_mask_property(cont, 1);") : NULL;
+            const char *left =
+                h != NULL ? strstr(h, "pad[0].flags &= ~(0x1000 | 0x4000 | 0x8000);") : NULL;
+            const char *ax = h != NULL ? strstr(h, "pad[0].ana[2] = 0x80;") : NULL;
+            CHECK(h != NULL && e != NULL);
+            CHECK(def0 != NULL && ret != NULL && def0 < ret && ret < def1);
+            CHECK(def1 != NULL && m1 != NULL && def1 < m1 && m1 < e);
+            CHECK(left != NULL && ax != NULL && left < e && ax < e);
+        }
         /* the Continue property's ids are the ones the twins switch on */
         CHECK(count(src, "case 378:") == 2 && count(src, "case 429:") == 1 &&
               count(src, "case 379:") == 2 && count(src, "case 430:") == 1);

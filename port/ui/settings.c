@@ -894,6 +894,8 @@ static int s_contWarned;
    and Back (from 200) on every disc */
 #define CONT_HINT_Y 183
 static UiHint s_contHint;
+static unsigned s_contLockedLines; /* contProc: showings with the prompt held back */
+static int s_contLockedWas;
 static void statesCloseAfterLoad(void);
 static void gameCursorOn(int to, int row);
 static void buildStatesPage(void);
@@ -4553,6 +4555,11 @@ static void placePause(void)
         P(prev)->downItem = ROW_PAUSE_BACK;
     }
     back->upItem = prev;
+    if (s_statesRow >= 0) {
+        /* greyed on a Permadeath journey (no state saves or loads; the page
+           still opens for Delete and says why) */
+        lt_ext_set_dim(s_statesRow, shown[1] && ico_difficulty_states_locked());
+    }
 }
 
 /* whether the pause menu's rows are the PAL ones (or as placePause and
@@ -5205,8 +5212,19 @@ static void statesCloseAfterLoad(void)
 static int contProc(int first, int item)
 {
     (void)first;
+    /* not while the journey in force refuses every state (Permadeath:
+       the condition the load itself checks first, state_rules.c) */
+    const int locked = ico_difficulty_states_locked();
     const int shown = ui__states_hosted() && current_layout_id == LAYOUT_LOAD_FILES &&
-                      s_pages[UI_PAGE_STATES].layout >= 0 && la_host_mc_files_shown();
+                      s_pages[UI_PAGE_STATES].layout >= 0 && la_host_mc_files_shown() && !locked;
+    const int hid = locked && current_layout_id == LAYOUT_LOAD_FILES && la_host_mc_files_shown();
+    if (hid && !s_contLockedWas && (++s_contLockedLines <= 8 || s_contLockedLines % 100 == 0)) {
+        fprintf(stderr,
+                "settings: the Save states prompt not shown on the card's files: the journey "
+                "has Permadeath on (%u)\n",
+                s_contLockedLines);
+    }
+    s_contLockedWas = hid;
     s_procLayout = current_layout_id;
     ui_hint_show(&s_contHint, 0, shown);
     ui_hint_layout(&s_contHint);

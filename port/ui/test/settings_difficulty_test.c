@@ -485,6 +485,75 @@ static void testToasts(void)
     ico_difficulty_reset();
 }
 
+/* the left stick pushed to x (0 left, 255 right) for ticks frames, then
+   let go: no d-pad bit in the word, only the stick */
+static void stickX(int x, int ticks)
+{
+    for (int k = 0; k < 3; k++) {
+        frame(0);
+    }
+    pad[0].ana[2] = (unsigned char)x;
+    for (int k = 0; k < ticks; k++) {
+        frame(0);
+    }
+    pad[0].ana[2] = 128;
+    for (int k = 0; k < 3; k++) {
+        frame(0);
+    }
+}
+
+/* the owner's play test: the stick's left and right step Difficulty as the
+   d-pad does (one step a push, held or not, the mode wrapping as a Settings
+   row that wraps); the Off/On rows and Customize's rows keep taking it */
+static void testStick(void)
+{
+    ngSetup();
+    const int ml = ngOpen(0);
+    LtProp *l = lt_ext_layout(ml);
+    stickX(255, 1);
+    CHECK(l->curItem == ui_new_game_screen_difficulty() && ui__diff_draft_mode() == ICO_DIFF_HARD &&
+              draftIs(ICO_DIFF_HARD),
+          "stick right: Hard (%s)", ico_difficulty_mode_name(ui__diff_draft_mode()));
+    stickX(255, 60);
+    CHECK(ui__diff_draft_mode() == ICO_DIFF_EASY,
+          "stick right held 60 ticks: one step, Easy around (%s)",
+          ico_difficulty_mode_name(ui__diff_draft_mode()));
+    stickX(0, 1);
+    CHECK(ui__diff_draft_mode() == ICO_DIFF_HARD && l->curItem == ui_new_game_screen_difficulty(),
+          "stick left: Hard again, the cursor still on Difficulty (%s)",
+          ico_difficulty_mode_name(ui__diff_draft_mode()));
+    stickX(0, 1);
+    CHECK(ui__diff_draft_mode() == ICO_DIFF_NORMAL, "stick left: Normal");
+    CHECK(!ico_difficulty_has_journey() && ico_difficulty_active()->mode == ICO_DIFF_NORMAL,
+          "the stick changes nothing in force before the confirm");
+    /* Mirror mode's Off/On: the stick moves between them as before */
+    l->curItem = ui_new_game_screen_row(0, 0);
+    frame(0);
+    stickX(255, 1);
+    CHECK(l->curItem == ui_new_game_screen_row(0, 1), "stick right on Mirror mode: On (%d)",
+          l->curItem);
+    stickX(0, 1);
+    CHECK(l->curItem == ui_new_game_screen_row(0, 0), "stick left on Mirror mode: Off (%d)",
+          l->curItem);
+    CHECK(ui__diff_draft_mode() == ICO_DIFF_NORMAL, "Mirror mode's stick leaves Difficulty");
+    /* a Customize row (an ordinary Settings page) steps by the stick too */
+    const int cl = custOpen(ml);
+    const int sl = openLink(cl, UI_PAGE_CUSTOMIZE, UI_PAGE_SHADOWS);
+    int lb[16], op[16];
+    const int sn = ui_settings_page_rows(UI_PAGE_SHADOWS, lb, op, NULL, 16);
+    CHECK(sn > 0 && op[0] == UI_OPT_SHADOW_SPEED && lt_ext_layout(sl)->curItem == lb[0],
+          "Shadows on Shadow speed");
+    stickX(255, 1);
+    CHECK(ui_new_game_screen_draft()->row[ICO_DIFF_SHADOW_SPEED] == ICO_SPEED_FASTER &&
+              ui__diff_draft_mode() == ICO_DIFF_CUSTOM,
+          "stick right on Shadow speed: Faster, the draft Custom");
+    press(LT_PAD_TRIANGLE);
+    settle(cl, 60);
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(ml, 60), "back on the screen");
+    ico_difficulty_reset();
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -493,6 +562,7 @@ int main(int argc, char **argv)
     const char *slug = argc > 2 ? argv[2] : "pal";
     CHECK(ico_region_select(slug) == 0, "the %s disc", slug);
     testPresets();
+    testStick();
     testCustomize();
     testClearedSave();
     testReadOnly();
