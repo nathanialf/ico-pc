@@ -1912,7 +1912,11 @@ RHI's counters, and then waits in a slot per frame in flight until its GPU times
 without waiting. The timestamps carry the effect whose work they end, so the record has a GPU time
 per list, for the uploads, for the VU vertex pre-pass (`gpuPrepassMs`, from `RD_PERF_TS_PREPASS`
 after the uploads to list 0: its passes and, under the render targets, its copies; under the
-vertex stores the passes alone), for the present, and per picture effect
+vertex stores the passes alone; both stamps are bottom-of-pipe, so the first waits for the
+replay before as well, and a record that ran beside the replay before's fragment work, which the
+barriers allow, shows as a pre-pass near 0: [RHI.md](RHI.md#buffer-barriers-scopes);
+`RD_PERF_TS_LISTS` also sends the barriers held back from the record, so its end does not join
+list 0's first pass barrier), for the present, and per picture effect
 (`RD_PERF_POST_*`: reduction,
 fog, motion blur, aura, glow, depth of field, softening, CRT, MSAA resolve, crack fill)
 (`port/render/rd_perf.c`; `port/render/rd.h` (`RdPerfRecord`, `rd_perf_pop`)). An effect is the

@@ -194,6 +194,38 @@ question it decides:
   targets rung first ([PIPELINES.md](PIPELINES.md#the-record-stores-restart-rung)): `[dev]
   vu_record = "targets"` in `config.toml` after two such ends. Decides whether the compute
   write runs on the phone, draws right, and how much of the 64 ms it saves.
+- **What holds a picture behind the one before** ([RHI.md](RHI.md#buffer-barriers-scopes)).
+  Issue 179's log of 2026-11-10 (stage 3: list 0 about 20 ms against about 15 before the compute
+  record, the pre-pass about 3 ms against 13) raised the question whether the record's dispatches
+  waited for the picture before's pixels: its bracket's barrier, the mesh uploads' copies and every
+  command list's opening barrier all named a fragment-side stage beside the copy or compute stage,
+  and on a tile-based GPU such a barrier keeps a picture's uploads, record and vertex work from
+  running beside the previous picture's fragment work. They name only the stages that can touch the
+  buffer. The `GPU between replays` line's `0 begun before the one before ended` cannot answer
+  it: every Vulkan stamp is bottom-of-pipe, so a replay's first stamp waits for the replay before on
+  a driver that keeps the rule ([DISPLAY.md](DISPLAY.md)), and that 0 is what the line reads on any
+  such driver. Read instead, in the next Mali log:
+  - `rhi_vk: barriers: one holds every later vertex, compute and copy command (the next picture's
+    too) behind the fragment work before it: SITE (first scope 0xS, second 0xD, ...); K at this
+    site, M in all` (each site's first 8, then every 100th). Lines that keep coming every few
+    seconds at one site are the barriers that still serialise the pictures: a texture upload over a
+    sampled texture (`a render pass's or copy's own barrier`, first scope 0x80, second 0x1000) is
+    expected where textures stream; `the barriers held back for the next command` with a first
+    scope holding 0x80 (the fragment shader) or 0x400 (colour output) and a second holding 0x800
+    (compute) or 0x8 (vertex shader) would be the record or a pass's vertex work held. No such
+    lines in a play block say no barrier holds the next picture's vertex and compute work behind
+    the picture before's pixels.
+  - The pre-pass's own GPU time (`VU pre-pass X` in the replays line, the `VU pre-pass record`
+    entries of the top passes): both its stamps are bottom-of-pipe, the first written once the
+    uploads and the picture before are done, so a record that ran during the picture before's
+    fragment work shows as a pre-pass near 0 and a GPU span a replay that is not longer. A pre-pass
+    that stays near its cost in that log (2.99 ms in its stage 3 block) with no hold lines says the
+    driver ran it after the picture before anyway (or writes its stamps late); with hold lines,
+    the site they name.
+  - The span a replay and the presented rate against that log's (stage 3 play: GPU 49.6 ms a
+    replay) decide whether anything was gained.
+  Decides whether the barriers were what held the record behind the picture before, and which
+  barrier to look at next.
 - **Images in use** (the 10 s first line's `present mailbox (images: 10, in use 1)`;
   `RhiStats.swapAcquired`, Vulkan only). The swapchain's images and those the game holds
   (acquired, not yet presented) as the block ends; while the render thread is busy, the count at
