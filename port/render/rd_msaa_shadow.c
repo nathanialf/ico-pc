@@ -308,6 +308,57 @@ void rd__msaa_shadow_done(Replay *r, RdTargetRec *tc)
     }
 }
 
+/* -------------------------------------------- the count target's size
+ * Issue 209's log :923 ("shadow command without a depth-stencil target of
+ * the colour target's size: skipped") at the switch to 4x supersampling
+ * (5.95349 a GS pixel, SCENE 4096x2667): a frame recorded before a scale
+ * change holds its count target (rd_shadow_count_target, a temporary of the
+ * scene's GS size) at the texels of the scale it was made at, and replayed
+ * after the change (the targets made again) its texels are not SCENE's, so
+ * every shadow command of the frame was skipped.  Such a temporary is made
+ * again here at the scale in force (its contents are the count's own: the
+ * reset, the volumes and the resolve write what is read), with a line. */
+bool rd__shadow_size_agree(RdTargetRec *tc, const RdTargetRec *td)
+{
+    static uint32_t s_remade, s_refused;
+    if (tc->tw == td->tw && tc->th == td->th) {
+        return true;
+    }
+    RdTargetRec want = *tc;
+    rd__target_scale_of(&want, -1);
+    const bool fits =
+        !tc->named && tc->live && !tc->withDepth && want.tw == td->tw && want.th == td->th;
+    if (!fits) {
+        s_refused++;
+        if (s_refused <= 8u || s_refused % 100u == 0u) {
+            rd__log("shadow count: the count target is %ux%u texels (GS %ux%u, %s), its depth "
+                    "target %ux%u (GS %ux%u): the shadow command skipped (the first 8, then every "
+                    "100th: %u so far)",
+                    tc->tw, tc->th, tc->w, tc->h, tc->named ? "named" : "a temporary", td->tw,
+                    td->th, td->w, td->h, s_refused);
+        }
+        return false;
+    }
+    const uint32_t ow = tc->tw, oh = tc->th;
+    rd__target_destroy_gpu(tc);
+    tc->sx = want.sx;
+    tc->sy = want.sy;
+    tc->tw = want.tw;
+    tc->th = want.th;
+    tc->ox = want.ox;
+    const bool made = rd__target_create_gpu(tc, "temp target");
+    tc->clearPending = 1;
+    s_remade++;
+    if (s_remade <= 8u || s_remade % 100u == 0u) {
+        rd__log("shadow count: the count target made at %ux%u texels before the scale changed "
+                "is made again at the scene's %ux%u (a frame recorded before the change, "
+                "replayed after it)%s (the first 8, then every 100th: %u so far)",
+                ow, oh, tc->tw, tc->th, made ? "" : ": it could not be made, the count skipped",
+                s_remade);
+    }
+    return made && tc->color.id != 0;
+}
+
 /* ------------------------------------------------------------ the self-test */
 
 #define MST_GROUND 0x40000000u /* the ground's GS Z: the clear is 0 */

@@ -31,6 +31,22 @@ target_include_directories(rd_msaa_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shader
 # self-test's verdict, the volumes drawn multisampled, MSAA4's count the
 # count without anti-aliasing away from edges).  77 without a device that
 # takes 4 samples.
+# rd_ssaa_shadow_test: the shadow count under supersampling at a scale the
+# render-target limit makes fractional (issue 209's log :923): the reporter's
+# setting (2x, 16:9, Full height, Full pixel, 4x supersampling), a live
+# switch to it with the renderer's thread and between-tick presents, and the
+# shadow commands' size rule (rd__shadow_size_agree: a count target made at
+# the scale before the switch made again at SCENE's texels).
+#   rd_ssaa_shadow        lavapipe's own limit (16384: whole scales)
+#   rd_ssaa_shadow_4096   ICO_VK_FAKE_LIMITS=min, the 4096 a tile-based GPU
+#                         takes: SCENE 4096 x 2667 at 5.95349, as on the phone
+add_executable(rd_ssaa_shadow_test test/rd_ssaa_shadow_test.c)
+target_compile_options(rd_ssaa_shadow_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(rd_ssaa_shadow_test PRIVATE "${CMAKE_SOURCE_DIR}/port/rhi"
+                                                       "${CMAKE_SOURCE_DIR}/port/shaders")
+target_link_libraries(rd_ssaa_shadow_test PRIVATE ico_render)
+ico_copy_sdl3_dll(rd_ssaa_shadow_test)
+
 if(ICO_RUN_TESTS)
     set(_mss_env "")
     if(NOT WIN32 AND EXISTS "${ICO_DEPS_DIR}/vulkan-validation/VkLayer_khronos_validation.json")
@@ -56,4 +72,10 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_msaa_mvk PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_mss_mvk}")
     set_tests_properties(rd_msaa_shadow_sabotage PROPERTIES SKIP_RETURN_CODE 77
                                                             ENVIRONMENT "${_mss_sab}")
+    add_test(NAME rd_ssaa_shadow COMMAND rd_ssaa_shadow_test)
+    add_test(NAME rd_ssaa_shadow_4096 COMMAND rd_ssaa_shadow_test)
+    set(_mss_4096 ${_mss_env} "ICO_VK_FAKE_LIMITS=min")
+    set_tests_properties(rd_ssaa_shadow PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT "${_mss_env}")
+    set_tests_properties(rd_ssaa_shadow_4096 PROPERTIES SKIP_RETURN_CODE 77
+                                                        ENVIRONMENT "${_mss_4096}")
 endif()

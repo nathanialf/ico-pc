@@ -576,6 +576,11 @@ const RdCmd *rd__vis_culled(const RdFrame *f, int l, uint32_t i);
  * and from rd_replay.c: rd__msaa_pair (SCENE_MS's colour and depth, their
  * states and count; true while the epoch is open with its depth drawn) and
  * rd__msaa_close (msaaEnd for RD_MSAA_CLOSE_COUNTED) */
+/* rd_replay.c shadowTargets: the shadow commands' colour target tc and depth
+ * target td of one texel size; a temporary of the scene's GS size whose
+ * texels are another scale's (made before a scale change, its frame
+ * replayed after it) is made again at the scale in force (rd_msaa_shadow.c) */
+bool rd__shadow_size_agree(RdTargetRec *tc, const RdTargetRec *td);
 bool rd__msaa_shadow_reset(Replay *r, RdTargetRec *tc, RdTargetRec *td);
 bool rd__msaa_shadow_pass(Replay *r);
 void rd__msaa_shadow_done(Replay *r, RdTargetRec *tc);
