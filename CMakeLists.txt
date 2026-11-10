@@ -576,6 +576,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
                                   port/platform/window_disc.c port/platform/window_blended.c
                                   port/platform/window_present.c port/platform/render_thread.c
                                   port/platform/window_sweep.c port/platform/dump_zip.c
+                                  port/platform/dump_auto.c port/platform/window_dump_auto.c
                                   port/platform/upscale_pictures.c
                                   port/platform/upscale_pictures_arm.c
                                   port/platform/backup_host.c port/platform/app_icon_host.c

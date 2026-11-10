@@ -42,11 +42,12 @@ static void stall_rec(const RdPerfRecord *r, PresentStallRec *o)
     o->gapValid = r->gpuGapValid != 0;
     o->gapMs = (double)r->gpuGapNs / 1e6;
     o->gapSkipped = r->gpuGapSkipped;
+    o->gapBackMs = (double)r->gpuGapBackNs / 1e6;
 }
 
 const char *window_stall_split(const RdPerfRecord *r, unsigned blockGpuN, double blockGpuMs)
 {
-    static char text[384];
+    static char text[448];
     PresentStallRec o;
 
     stall_rec(r, &o);
@@ -208,7 +209,7 @@ void window_stall_blocked(const RdPerfRecord *r)
 
 void window_stall_after(const RdPerfRecord *r, PaceGpuGap *gap)
 {
-    char text[320];
+    char text[448];
     PresentStallRec o;
 
     if (!s_after.pending) {

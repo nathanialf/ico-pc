@@ -27,8 +27,10 @@
 #define RD_PERF_GAP_MAX_NS 60000000000ll /* 60 s */
 
 typedef struct RdPerfGap {
-    uint32_t lastReplay; /* the last timed replay (0: none yet) */
-    uint64_t lastNs;     /* its last timestamp */
+    uint32_t lastReplay;  /* the last timed replay (0: none yet) */
+    uint64_t lastNs;      /* its last timestamp */
+    uint64_t lastFirstNs; /* its first timestamp */
+    uint32_t restarts;    /* the clock restarts seen (rd_perf_gap_step_ex) */
 } RdPerfGap;
 
 /* Timed replay `replay` with its first and last timestamps: true with
@@ -39,5 +41,17 @@ typedef struct RdPerfGap {
    The replay becomes the last either way. */
 bool rd_perf_gap_step(RdPerfGap *g, uint32_t replay, uint64_t firstNs, uint64_t lastNs,
                       int64_t *gapNs, uint32_t *skipped);
+
+/* rd_perf_gap_step, and a clock that went back (issue 123): a replay
+   cannot begin before the replay before it began, on one GPU clock. When
+   firstNs is under the last replay's first stamp the clock was restarted
+   between them (Adreno's timestamp counter, at a stall: the stalled
+   replays' "begun 20699.4 ms before the one before ended" was the time the
+   counter had run since its last restart, 14-36 s, not an overlap): no gap
+   is measured (false), *backNs is how far back it went (lastNs less
+   firstNs) and g->restarts counts it. *backNs is 0 for every other
+   result. */
+bool rd_perf_gap_step_ex(RdPerfGap *g, uint32_t replay, uint64_t firstNs, uint64_t lastNs,
+                         int64_t *gapNs, uint32_t *skipped, uint64_t *backNs);
 
 #endif /* RD_PERF_GAP_H */

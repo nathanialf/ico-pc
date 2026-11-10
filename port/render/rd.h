@@ -2184,6 +2184,18 @@ bool rd_dump_frame(const char *path);
  * written) otherwise.  F12 zips it beside the frame, so `rd_replay_tool
  * --interp T` rebuilds the pictures between the two. */
 bool rd_dump_prev_frame(const char *path);
+/* The same three dumps as one malloc block (the caller frees it), for a
+ * worker thread to write: the game thread pays a memory copy (and the wait
+ * for the render thread every dump has), the disk and the zip are the
+ * worker's (port/platform/dump_auto.c, issues 123 and 179). false: nothing
+ * to dump, or the frame is over the 192 MiB limit (logged). */
+bool rd_dump_frame_mem(void **buf, size_t *len);
+bool rd_dump_prev_frame_mem(void **buf, size_t *len);
+/* rd_dump_retained_frame below, in memory */
+bool rd_dump_retained_frame_mem(uint32_t number, void **buf, size_t *len, uint32_t *dumped);
+/* The log lines rd_dump_on_demand writes about the frame (the cull drops,
+ * the water's blocks), without the files */
+void rd_dump_on_demand_log(void);
 /* The blended present's frame (F12, port/platform/window_host.c): the next
  * rd_present that draws a picture between two ticks (alpha below 1, not a
  * keep frame) writes the frame it drew (rd_interp.c's blended copy of the
@@ -3036,6 +3048,10 @@ typedef struct RdPerfRecord {
     uint8_t gpuGapValid;
     int64_t gpuGapNs;
     uint32_t gpuGapSkipped;
+    /* the GPU's timestamp clock went back between the replay before and this
+     * one (rd_perf_gap.h rd_perf_gap_step_ex): by this many ns (0: it did
+     * not); gpuGapValid is 0 then */
+    uint64_t gpuGapBackNs;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

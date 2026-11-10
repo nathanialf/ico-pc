@@ -319,6 +319,24 @@ int main(void)
                          "that scales with the pixels: 0.0 + 50.0 x (4/6)^2 = 22.2 ms, under 36.0 "
                          "ms, 0.9 of the 40.0 ms step at 25.0 game fps; a hint: nothing changes by "
                          "itself)"));
+        /* issue 179 (Mali-G52): no late skip, 157 frames left out because
+           the render thread was busy: the call site adds them, the hint
+           prints (the spread guard still names no step) */
+        CHECK(window_scene_hint_skips(0, 157) == 157 && window_scene_hint_skips(3, 4) == 7 &&
+              window_scene_hint_skips(0xFFFFFFFFu, 5) == 0xFFFFFFFFu);
+        window_scene_gpu_hint_text(b, sizeof(b), 15.0, 25.0, window_scene_hint_skips(0, 157), 53.0,
+                                   1.0, &flat);
+        CHECK(b[0] != '\0' && strstr(b, "at 1x already") != NULL);
+        memset(&f, 0, sizeof(f));
+        for (int i = 0; i < 3; i++) {
+            window_scene_vu_fit_add(&f, narrow[i], 0.1 * (double)narrow[i] / 1000.0);
+        }
+        window_scene_gpu_hint_text(b, sizeof(b), 15.0, 25.0, window_scene_hint_skips(0, 157), 53.0,
+                                   1.0, &f);
+        CHECK(strstr(b, "no resolution hint (fit: not enough spread)") != NULL &&
+              strstr(b, "2x would") == NULL);
+        CHECK(window_scene_gpu_hint_text(b, sizeof(b), 15.0, 25.0, window_scene_hint_skips(0, 0),
+                                         53.0, 1.0, &f) == 0);
         {
             char t[16];
             const size_t n =
