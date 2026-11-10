@@ -155,16 +155,17 @@ static void testBuild(void)
         UI_STR_OPT_TOUCH_MODE, UI_STR_OPT_TOUCH_SIZE,  UI_STR_OPT_TOUCH_OPACITY,
         UI_STR_OPT_TOUCH_EDIT, UI_STR_OPT_TOUCH_SNAP,  UI_STR_OPT_TOUCH_GRID,
         UI_STR_TOUCH_RESET,    UI_STR_TOUCH_RESET_ALL, UI_STR_BACK};
-    /* Gameplay: its own seven rows, the two pages' links, Back */
+    /* Gameplay: its own seven rows, the two pages' links, the pause menu's
+       Difficulty link, Back */
     static const int gameOpts[] = {UI_OPT_STICK_FIX,   UI_OPT_DOOR_FIX, UI_OPT_SECOND_CARD,
                                    UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,  UI_OPT_VAR_SWORD_COLOUR,
                                    UI_OPT_VAR_WEAPON,  UI_OPT_LINK,     UI_OPT_LINK,
-                                   UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,     UI_STR_OPT_DOOR_FIX,
-                                   UI_STR_OPT_SECOND_CARD,   UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS,       UI_STR_OPT_VAR_SWORD_COLOUR,
-                                   UI_STR_OPT_VAR_WEAPON,    UI_STR_SECTION_YORDA,
-                                   UI_STR_SECTION_CUTSCENES, UI_STR_BACK};
+                                   UI_OPT_LINK,        UI_OPT_BACK};
+    static const int gameStrs[] = {
+        UI_STR_OPT_STICK_FIX,   UI_STR_OPT_DOOR_FIX,  UI_STR_OPT_SECOND_CARD,
+        UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,   UI_STR_OPT_VAR_SWORD_COLOUR,
+        UI_STR_OPT_VAR_WEAPON,  UI_STR_SECTION_YORDA, UI_STR_SECTION_CUTSCENES,
+        UI_STR_DIFF_LINK,       UI_STR_BACK};
     static const int yordaOpts[] = {UI_OPT_NATURAL_CHAINS, UI_OPT_VAR_CHAIN_SPEED,
                                     UI_OPT_VAR_CHAIN_DAMPING, UI_OPT_BACK};
     static const int yordaStrs[] = {UI_STR_OPT_NATURAL_CHAINS, UI_STR_OPT_VAR_CHAIN_SPEED,
@@ -266,7 +267,7 @@ static void testBuild(void)
                   lt_ext_prop(cl[12])->right == ui_settings_page_layout(UI_PAGE_TOUCH),
               "Touch screen opens its page");
     }
-    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 10), "gameplay rows");
+    CHECK(labelsAre(UI_PAGE_GAMEPLAY, gameOpts, gameStrs, 11), "gameplay rows");
     CHECK(labelsAre(UI_PAGE_YORDA, yordaOpts, yordaStrs, 4), "Gameplay > Yorda rows");
     CHECK(labelsAre(UI_PAGE_CUTSCENES, cutOpts, cutStrs, 4), "Gameplay > Cutscenes rows");
     CHECK(labelsAre(UI_PAGE_CUSTOMIZE, custOpts, custStrs, 4), "Customize rows");
@@ -281,12 +282,16 @@ static void testBuild(void)
         static const UiSettingsPage kCust[3] = {UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_RULES};
         int gl[16], go[16];
         const int gn = ui_settings_page_rows(UI_PAGE_GAMEPLAY, gl, go, NULL, 16);
-        CHECK(gn == 10, "Gameplay: ten rows (%d)", gn);
-        for (int k = 0; k < 2 && gn == 10; k++) {
+        CHECK(gn == 11, "Gameplay: eleven rows (%d)", gn);
+        for (int k = 0; k < 2 && gn == 11; k++) {
             CHECK(go[7 + k] == UI_OPT_LINK &&
                       lt_ext_prop(gl[7 + k])->right == ui_settings_page_layout(kSub[k]),
                   "Gameplay row %d opens page %d", 7 + k, kSub[k]);
         }
+        /* the Difficulty link opens Customize (read-only), from Gameplay only */
+        CHECK(gn == 11 && go[9] == UI_OPT_LINK &&
+                  lt_ext_prop(gl[9])->right == ui_settings_page_layout(UI_PAGE_CUSTOMIZE),
+              "Gameplay's Difficulty link opens Customize");
         const int cn = ui_settings_page_rows(UI_PAGE_CUSTOMIZE, gl, go, NULL, 16);
         for (int k = 0; k < 3 && cn == 4; k++) {
             CHECK(go[k] == UI_OPT_LINK &&
@@ -301,7 +306,8 @@ static void testBuild(void)
                     CHECK(lt_ext_prop(pl[k])->right != ui_settings_page_layout(kCust[c]),
                           "page %d row %d does not open Customize's page %d", p, k, kCust[c]);
                 }
-                CHECK(lt_ext_prop(pl[k])->right != ui_settings_page_layout(UI_PAGE_CUSTOMIZE),
+                CHECK(p == UI_PAGE_GAMEPLAY ||
+                          lt_ext_prop(pl[k])->right != ui_settings_page_layout(UI_PAGE_CUSTOMIZE),
                       "page %d row %d does not open Customize", p, k);
             }
         }
@@ -1548,6 +1554,8 @@ static void testPauseStats(void)
     snprintf(want, sizeof(want), "0 / %d", ico_ach_count());
     v = statValue(UI_STR_SECTION_ACHIEVEMENTS);
     CHECK(v && strcmp(v, want) == 0, "Achievements \"%s\" (want \"%s\")", v ? v : "(hidden)", want);
+    v = statValue(UI_STR_DIFF_LINE);
+    CHECK(v && strcmp(v, ui_str(UI_STR_DIFF_NORMAL)) == 0, "Difficulty \"%s\"", v ? v : "(hidden)");
     v = statValue(UI_STR_STATS_AREA);
     CHECK(v && strcmp(v, ui_str(UI_STR_MT_LOC_MAIN_GATE)) == 0, "Area \"%s\"", v ? v : "(hidden)");
     CHECK(statValue(UI_STR_STATS_ASSISTS) == NULL, "no assist on: no Assists line");
@@ -1561,8 +1569,8 @@ static void testPauseStats(void)
           "from x 300 to 610");
     CHECK(lt_ext_prop(de)->dispY > lt_ext_prop(pt)->dispY &&
               lt_ext_prop(ar)->dispY ==
-                  lt_ext_prop(ac)->dispY + (lt_ext_prop(de)->dispY - lt_ext_prop(pt)->dispY),
-          "Area right under Achievements when no assist is on");
+                  lt_ext_prop(ac)->dispY + 2 * (lt_ext_prop(de)->dispY - lt_ext_prop(pt)->dispY),
+          "Area right under the Difficulty line (under Achievements) when no assist is on");
     /* the Photo mode row's box ends before the lines; the game's rows
        where they were */
     CHECK(lt_ext_prop(ph)->dispX + lt_ext_prop(ph)->dispW < 300, "Photo mode's box ends at x %d",
@@ -1589,27 +1597,68 @@ static void testPauseStats(void)
     v = statValue(UI_STR_OPT_MIRROR);
     CHECK(v && strcmp(v, "On") == 0, "Mirror mode \"%s\"", v ? v : "(hidden)");
 
+    /* the journey's line: the mode, the knock-down count by the scope, Permadeath
+       (Shadows never take Yorda is a row of the difficulty, not an assist) */
+    {
+        IcoDifficulty hard;
+        char line[96];
+
+        ico_difficulty_preset(ICO_DIFF_HARD, &hard);
+        ico_difficulty_begin(&hard);
+        frame(0);
+        snprintf(line, sizeof(line), "%s", ui_str(UI_STR_DIFF_HARD));
+        snprintf(line + strlen(line), sizeof(line) - strlen(line), " 0 / 3");
+        v = statValue(UI_STR_DIFF_LINE);
+        CHECK(v && strcmp(v, line) == 0, "Hard with its limit: \"%s\" (want \"%s\")",
+              v ? v : "(hidden)", line);
+        CHECK(ico_difficulty_knockdown(1, 0, 0) == 0, "the first knock-down is counted");
+        frame(0);
+        snprintf(line, sizeof(line), "%s 1 / 3", ui_str(UI_STR_DIFF_HARD));
+        v = statValue(UI_STR_DIFF_LINE);
+        CHECK(v && strcmp(v, line) == 0, "one knock-down in the room: \"%s\"", v ? v : "(hidden)");
+        ico_difficulty_set_row(ICO_DIFF_PERMADEATH, 1);
+        ico_difficulty_set_row(ICO_DIFF_KNOCK_SCOPE, ICO_DIFF_SCOPE_JOURNEY);
+        frame(0);
+        snprintf(line, sizeof(line), "%s 1 / 3, %s", ui_str(UI_STR_DIFF_CUSTOM),
+                 ui_str(UI_STR_DIFF_WORD_PERMADEATH));
+        v = statValue(UI_STR_DIFF_LINE);
+        CHECK(v && strcmp(v, line) == 0, "the journey's count and Permadeath: \"%s\"",
+              v ? v : "(hidden)");
+        /* no limit: no count */
+        ico_difficulty_set_row(ICO_DIFF_KNOCK_LIMIT, 0);
+        ico_difficulty_set_row(ICO_DIFF_PERMADEATH, 0);
+        frame(0);
+        v = statValue(UI_STR_DIFF_LINE);
+        CHECK(v && strchr(v, '/') == NULL && strchr(v, ',') == NULL, "no limit, no count: \"%s\"",
+              v ? v : "(hidden)");
+        ico_difficulty_reset();
+        ui_popup_reset(); /* the knock-down's toast */
+        frame(0);
+    }
+
     /* the assists: the line and one line for each on, nothing for those off */
-    ico_opt_set_yorda_safe(1);
     ico_opt_set_developer_mode(1);
     frame(0);
     const int as = statLabel(ui_str(UI_STR_STATS_ASSISTS));
     CHECK(as >= 0 && !lt_ext_prop(as)->masked, "an assist on: the Assists line");
     if (as >= 0) {
         CHECK(!lt_ext_prop(as + 3)->masked &&
-                  strcmp(lt_ext_row_text(as + 3), ui_str(UI_STR_OPT_YORDA)) == 0 &&
-                  !lt_ext_prop(as + 5)->masked &&
-                  strcmp(lt_ext_row_text(as + 5), ui_str(UI_STR_OPT_DEVELOPER_MODE)) == 0 &&
-                  lt_ext_prop(as + 7)->masked,
-              "the two on, one a line (\"%s\", \"%s\")", lt_ext_row_text(as + 3),
-              lt_ext_row_text(as + 5));
+                  strcmp(lt_ext_row_text(as + 3), ui_str(UI_STR_OPT_DEVELOPER_MODE)) == 0 &&
+                  lt_ext_prop(as + 5)->masked,
+              "Developer mode on, Shadows never take Yorda not an assist (\"%s\")",
+              lt_ext_row_text(as + 3));
     }
     statsShown(&placed);
     CHECK(placed, "with the assists, every line between the bars");
     ico_opt_set_stick_fix(1);
     frame(0);
     CHECK(statsShown(&placed) == 2 * 13 + 1 && placed,
-          "every line (the three assists and the area): still between the bars");
+          "every line (the two assists, the difficulty and the area): still between the bars");
+    if (as >= 0) {
+        CHECK(strcmp(lt_ext_row_text(as + 3), ui_str(UI_STR_OPT_STICK_FIX)) == 0 &&
+                  strcmp(lt_ext_row_text(as + 5), ui_str(UI_STR_OPT_DEVELOPER_MODE)) == 0,
+              "both assists, one a line");
+    }
     /* each language: a label and its value never overlap once the label is
        set to fit its box (layout_ext.c: down to 60 %) */
     for (int g = 2; g <= 6; g++) {
@@ -1633,7 +1682,6 @@ static void testPauseStats(void)
         }
     }
     NonLinearCameraMove = 2;
-    ico_opt_set_yorda_safe(0);
     ico_opt_set_developer_mode(0);
     ico_opt_set_stick_fix(0);
     ico_opt_set_mirror(0);

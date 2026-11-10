@@ -286,10 +286,10 @@ enum {
     STAT_NEWGAME_PLUS,
     STAT_MIRROR,
     STAT_ACHIEVEMENTS,
-    STAT_ASSISTS, /* the heading; the active assists one a line under it */
+    STAT_DIFFICULTY, /* the mode, "n / N" with a knock-down limit, Permadeath */
+    STAT_ASSISTS,    /* the heading; the active assists one a line under it */
     STAT_ASSIST_1,
     STAT_ASSIST_2,
-    STAT_ASSIST_3,
     STAT_AREA,
     STAT_LINES
 };
@@ -2117,6 +2117,9 @@ static int optShown(int opt, int link)
     if (opt == UI_OPT_LINK && link == UI_PAGE_TOUCH) {
         return touchPresent(); /* Controls > Touch screen */
     }
+    if (opt == UI_OPT_LINK && link == UI_PAGE_CUSTOMIZE) {
+        return !onTitle(); /* Gameplay > Difficulty: the journey's, from the pause menu only */
+    }
     if (opt == UI_OPT_GPU_ADD) {
         return s_gpuHostSet && s_gpuHost.adreno() != 0;
     }
@@ -3653,8 +3656,8 @@ static const int kStatLabel[STAT_LINES] = {UI_STR_STATS_PLAY_TIME,
                                            UI_STR_OPT_NEWGAME_PLUS,
                                            UI_STR_OPT_MIRROR,
                                            UI_STR_SECTION_ACHIEVEMENTS,
+                                           UI_STR_DIFF_LINE,
                                            UI_STR_STATS_ASSISTS,
-                                           0,
                                            0,
                                            0,
                                            UI_STR_STATS_AREA};
@@ -3806,11 +3809,13 @@ static void pauseStats(int show)
                counted from the load, until a New Game */
             on[STAT_SAVES] = on[STAT_ENEMIES] = 0;
         }
-        const int assist[3] = {ico_opt_yorda_safe(), ico_opt_stick_fix(), ico_opt_developer_mode()};
-        static const int kAssistStr[3] = {UI_STR_OPT_YORDA, UI_STR_OPT_STICK_FIX,
-                                          UI_STR_OPT_DEVELOPER_MODE};
+        /* the journey's difficulty has a line of its own (Shadows never
+           take Yorda is one of its rows, not an assist) */
+        ui__diff_line_text(text[STAT_DIFFICULTY], sizeof(text[0]));
+        const int assist[2] = {ico_opt_stick_fix(), ico_opt_developer_mode()};
+        static const int kAssistStr[2] = {UI_STR_OPT_STICK_FIX, UI_STR_OPT_DEVELOPER_MODE};
         int k = STAT_ASSIST_1;
-        for (int a = 0; a < 3; a++) {
+        for (int a = 0; a < 2; a++) {
             if (assist[a]) {
                 snprintf(text[k], sizeof(text[0]), "%s", ui_str((UiStrId)kAssistStr[a]));
                 on[k++] = 1;
@@ -4150,18 +4155,19 @@ static void build(void)
        from the pause menu once the game is cleared, the two weapon rows;
        the Yorda and Cutscenes pages' links before Back (the Controls >
        Touch screen pattern).  The rows a journey's difficulty holds are the
-       New Game's Customize pages' (settings_difficulty.c) */
+       New Game's Customize pages' (settings_difficulty.c); from the pause
+       menu the Difficulty link opens them read-only */
     static const int gameOpts[] = {UI_OPT_STICK_FIX,   UI_OPT_DOOR_FIX, UI_OPT_SECOND_CARD,
                                    UI_OPT_FILM_EFFECT, UI_OPT_PLAYERS,  UI_OPT_VAR_SWORD_COLOUR,
                                    UI_OPT_VAR_WEAPON,  UI_OPT_LINK,     UI_OPT_LINK,
-                                   UI_OPT_BACK};
-    static const int gameStrs[] = {UI_STR_OPT_STICK_FIX,     UI_STR_OPT_DOOR_FIX,
-                                   UI_STR_OPT_SECOND_CARD,   UI_STR_OPT_FILM_EFFECT,
-                                   UI_STR_OPT_PLAYERS,       UI_STR_OPT_VAR_SWORD_COLOUR,
-                                   UI_STR_OPT_VAR_WEAPON,    UI_STR_SECTION_YORDA,
-                                   UI_STR_SECTION_CUTSCENES, UI_STR_BACK};
-    static const int gameLinks[] = {-1, -1, -1, -1, -1, -1, -1, UI_PAGE_YORDA, UI_PAGE_CUTSCENES,
-                                    -1};
+                                   UI_OPT_LINK,        UI_OPT_BACK};
+    static const int gameStrs[] = {
+        UI_STR_OPT_STICK_FIX,   UI_STR_OPT_DOOR_FIX,  UI_STR_OPT_SECOND_CARD,
+        UI_STR_OPT_FILM_EFFECT, UI_STR_OPT_PLAYERS,   UI_STR_OPT_VAR_SWORD_COLOUR,
+        UI_STR_OPT_VAR_WEAPON,  UI_STR_SECTION_YORDA, UI_STR_SECTION_CUTSCENES,
+        UI_STR_DIFF_LINK,       UI_STR_BACK};
+    static const int gameLinks[] = {
+        -1, -1, -1, -1, -1, -1, -1, UI_PAGE_YORDA, UI_PAGE_CUTSCENES, UI_PAGE_CUSTOMIZE, -1};
     /* Gameplay > Yorda: the chains Ico lets down for her and how they swing
        (the [variants] chain rows) */
     static const int yordaOpts[] = {UI_OPT_NATURAL_CHAINS, UI_OPT_VAR_CHAIN_SPEED,
@@ -4628,6 +4634,7 @@ void ui_settings_install(void)
     if (s_origin < 0) {
         s_origin = LAYOUT_PAUSE;
     }
+    ui__diff_listen(); /* the journey's toasts */
     /* the port's text in the menu language ([ui] language) */
     ui_settings_apply_language();
     /* [audio] output: an explicit stereo or mono is the game's from the
@@ -4647,6 +4654,7 @@ void ui_settings_install(void)
 
 void ui_settings_reset(void)
 {
+    ui__diff_set_readonly(0);
     s_built = 0;
     s_warned = 0;
     s_origin = LAYOUT_PAUSE;
@@ -5033,6 +5041,10 @@ static int closeForDebugMenu(void)
 static int parentLayout(const Page *pg)
 {
     if (pg->parent == UI__PARENT_NEW_GAME) {
+        if (ui__diff_readonly()) {
+            return s_pages[UI_PAGE_GAMEPLAY]
+                .layout; /* the pause menu's view (leaveTo: on its link) */
+        }
         return ui__newgame_customize_back(); /* the cursor on Customize */
     }
     return pg->parent >= 0 ? s_pages[pg->parent].layout : s_origin;
@@ -5042,6 +5054,7 @@ static int parentLayout(const Page *pg)
    first row, every page under it too */
 int ui__settings_open_customize(void)
 {
+    ui__diff_set_readonly(0); /* the New Game draft's */
     for (int p = 0; p < UI_PAGE_COUNT; p++) {
         Page *pg = &s_pages[p];
         if ((p == UI_PAGE_CUSTOMIZE || pg->parent == UI_PAGE_CUSTOMIZE) && pg->layout >= 0) {
@@ -6203,6 +6216,9 @@ static int settingsProc(int first, int item)
        to the pause menu when it was opened from its row) */
     const int prevLayout = s_procLayout;
     s_procLayout = current_layout_id;
+    if (id == UI_PAGE_GAMEPLAY && !onTitle()) {
+        ui__diff_set_readonly(1); /* its Difficulty link opens the journey's rows, read-only */
+    }
     if (id != UI_PAGE_STATES && ui__states_is_open()) {
         ui__states_release(); /* the Save states page was left for this one */
     }

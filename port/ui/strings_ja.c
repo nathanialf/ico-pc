@@ -891,7 +891,8 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "項目を一つずつ変えます。どの設定とも合わない組み合わせは「カスタム」と表示されます。",
     [UI_STR_DIFF_RULES] = "ルール",
     [UI_STR_DIFF_NO_SHADOWS] = "影なし",
-    [UI_STR_DIFF_NO_SHADOWS_NOTE] = "オン：影がまったく現れません。物語はそのまま進みます。",
+    [UI_STR_DIFF_NO_SHADOWS_NOTE] =
+        "オン：影がまったく現れません。影がいないと、一部の物語の場面は失われたり、変わったりします。",
     [UI_STR_DIFF_KNOCK_LIMIT] = "ダウン回数の上限",
     [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
         "イコがこの回数だけ倒されるとゲームオーバーです。オフなら上限なしです。",

@@ -17,12 +17,21 @@
  *     its rows, its mode, a New Game's origin and journey);
  *   - a cleared save's New Game+: the draft starts from that save's rows,
  *     kept through Triangle and back; a title New Game starts at Normal;
+ *   - the pause menu's read-only view: Gameplay's Difficulty link (hidden
+ *     from the title) opens Customize and its pages on the journey in force,
+ *     every row greyed with "Chosen when the journey began", a step changes
+ *     nothing, Back returns to Gameplay on the link; the New Game screen's
+ *     pages are the draft's again afterwards;
+ *   - the pause menu's journey line and the toasts (the difficulty
+ *     listener: the Continue list's refusal, each counted knock-down short of
+ *     the limit);
  *   - the screen's notes fit two lines in every table; the moved rows' notes
  *     carry no achievements tail.
  * CPU only. */
 #include "settings_fixture.h"
 
 #include "settings_difficulty.h"
+#include "popup.h"
 
 /* the screen up, the cursor on Difficulty */
 static int ngOpen(int cleared)
@@ -137,11 +146,11 @@ static void testCustomize(void)
         if (op[i] == UI_OPT_DIFF_NO_SHADOWS) {
             lt_ext_layout(sl)->curItem = lb[i];
             frame(0);
-            CHECK(strcmp(lt_ext_row_text(lv[i]), "Off") == 0 &&
-                      noteStarting(UI_PAGE_SHADOWS, "On: no Shadows ever appear") >= 0 &&
-                      !lt_ext_prop(noteStarting(UI_PAGE_SHADOWS, "On: no Shadows ever appear"))
-                           ->masked,
-                  "No Shadows: Off, its note on the cursor");
+            CHECK(
+                strcmp(lt_ext_row_text(lv[i]), "Off") == 0 &&
+                    noteStarting(UI_PAGE_SHADOWS, "On: Shadows never appear") >= 0 &&
+                    !lt_ext_prop(noteStarting(UI_PAGE_SHADOWS, "On: Shadows never appear"))->masked,
+                "No Shadows: Off, its note on the cursor");
         }
     }
     press(LT_PAD_TRIANGLE);
@@ -285,9 +294,10 @@ static void testClearedSave(void)
    achievements tail */
 static void testNotes(void)
 {
-    static const int kNotes[] = {UI_STR_DIFF_EASY_NOTE, UI_STR_DIFF_NORMAL_NOTE,
-                                 UI_STR_DIFF_HARD_NOTE, UI_STR_DIFF_CUSTOM_NOTE,
-                                 UI_STR_DIFF_CUSTOMIZE_NOTE};
+    static const int kNotes[] = {UI_STR_DIFF_EASY_NOTE,      UI_STR_DIFF_NORMAL_NOTE,
+                                 UI_STR_DIFF_HARD_NOTE,      UI_STR_DIFF_CUSTOM_NOTE,
+                                 UI_STR_DIFF_CUSTOMIZE_NOTE, UI_STR_DIFF_LOCKED_NOTE,
+                                 UI_STR_DIFF_NO_SHADOWS_NOTE};
     static const UiSettingsPage kPages[3] = {UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_RULES};
     ngSetup();
     for (int lang = 0; lang < UI_LANG_TABLES; lang++) {
@@ -311,6 +321,164 @@ static void testNotes(void)
     }
 }
 
+/* the Difficulty link's label on Gameplay, -1 for none */
+static int gameLink(void)
+{
+    int labels[24], opts[24];
+    const int n = ui_settings_page_rows(UI_PAGE_GAMEPLAY, labels, opts, NULL, 24);
+    for (int i = 0; i < n; i++) {
+        if (opts[i] == UI_OPT_LINK &&
+            lt_ext_prop(labels[i])->right == ui_settings_page_layout(UI_PAGE_CUSTOMIZE)) {
+            return labels[i];
+        }
+    }
+    return -1;
+}
+
+static void testReadOnly(void)
+{
+    IcoDifficulty hard;
+    int lb[16], op[16], lv[16];
+
+    /* from the title: no link */
+    int mainL = enterMain(1);
+    int gameL = openPage(mainL, -1, UI_PAGE_GAMEPLAY);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    CHECK(gameLink() >= 0 && !ui_settings_row_shown(gameLink()),
+          "the title: Gameplay has no Difficulty link");
+
+    /* from the pause menu, a Hard journey in force */
+    ico_difficulty_reset();
+    mainL = enterMain(0);
+    ico_difficulty_preset(ICO_DIFF_HARD, &hard);
+    hard.row[ICO_DIFF_SHADOW_SPEED] = ICO_SPEED_FASTEST;
+    ico_difficulty_begin(&hard);
+    gameL = openPage(mainL, -1, UI_PAGE_GAMEPLAY);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    const int link = gameLink();
+    CHECK(link >= 0 && ui_settings_row_shown(link) &&
+              strcmp(lt_ext_row_text(link), ui_str(UI_STR_DIFF_LINK)) == 0,
+          "the pause menu: Gameplay has the Difficulty link");
+    const int cl = openLink(gameL, UI_PAGE_GAMEPLAY, UI_PAGE_CUSTOMIZE);
+    CHECK(ui__diff_readonly(), "opened from Gameplay: read-only");
+    const int sl = openLink(cl, UI_PAGE_CUSTOMIZE, UI_PAGE_SHADOWS);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    const int sn = ui_settings_page_rows(UI_PAGE_SHADOWS, lb, op, lv, 16);
+    CHECK(sn == 8 && op[0] == UI_OPT_SHADOW_SPEED &&
+              strcmp(lt_ext_row_text(lv[0]), ui_str(UI_STR_VAL_SPEED_FASTEST)) == 0,
+          "the journey's rows (Fastest, not the draft's Original): %s",
+          sn > 0 ? lt_ext_row_text(lv[0]) : "");
+    for (int i = 0; i + 1 < sn; i++) {
+        CHECK(lt_ext_row_dim(lb[i]) && lt_ext_row_dim(lv[i]), "row %d greyed", i);
+    }
+    int n = noteStarting(UI_PAGE_SHADOWS, ui_str(UI_STR_DIFF_LOCKED_NOTE));
+    CHECK(n >= 0 && !lt_ext_prop(n)->masked, "the note: chosen when the journey began");
+    CHECK(ui__diff_note(UI_OPT_DIFF_NO_SHADOWS) == UI_STR_DIFF_LOCKED_NOTE,
+          "No Shadows off: the locked note");
+    ico_difficulty_set_row(ICO_DIFF_NO_SHADOWS, 1);
+    CHECK(ui__diff_note(UI_OPT_DIFF_NO_SHADOWS) == UI_STR_DIFF_NO_SHADOWS_NOTE,
+          "No Shadows on: its own note (the story warning)");
+    ico_difficulty_set_row(ICO_DIFF_NO_SHADOWS, 0);
+    press(LT_PAD_RIGHT);
+    press(LT_PAD_LEFT);
+    CHECK(ico_difficulty_row(ICO_DIFF_SHADOW_SPEED) == ICO_SPEED_FASTEST &&
+              strcmp(lt_ext_row_text(lv[0]), ui_str(UI_STR_VAL_SPEED_FASTEST)) == 0 &&
+              ico_difficulty_active()->mode == ICO_DIFF_CUSTOM,
+          "steps are ignored (%s)", lt_ext_row_text(lv[0]));
+    /* every page: the journey's values (Hard's limit of 3 on Rules), all greyed */
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(cl, 60), "Back: Customize");
+    const int rl = openLink(cl, UI_PAGE_CUSTOMIZE, UI_PAGE_RULES);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    const int rn = ui_settings_page_rows(UI_PAGE_RULES, lb, op, lv, 16);
+    for (int i = 0; i < rn; i++) {
+        if (op[i] == UI_OPT_DIFF_KNOCK_LIMIT) {
+            CHECK(strcmp(lt_ext_row_text(lv[i]), "3") == 0, "Hard's limit, 3 (%s)",
+                  lt_ext_row_text(lv[i]));
+        }
+        if (op[i] == UI_OPT_DIFF_KNOCK_SCOPE || op[i] == UI_OPT_DIFF_PERMADEATH) {
+            CHECK(lt_ext_row_dim(lb[i]) && lt_ext_row_dim(lv[i]), "Rules row %d greyed", i);
+        }
+    }
+    (void)rl;
+    checkPageFits(UI_PAGE_RULES, "Customize > Rules (read-only)");
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(cl, 60), "Back: Customize");
+    press(LT_PAD_TRIANGLE);
+    CHECK(settle(gameL, 60) && lt_ext_layout(gameL)->curItem == link,
+          "Back from Customize: Gameplay, on the Difficulty link (%d)", current_layout_id);
+    (void)sl;
+
+    /* the New Game screen's pages are the draft's again */
+    ngSetup();
+    ico_difficulty_begin(&hard);
+    const int ml = ngOpen(0);
+    const int ncl = custOpen(ml);
+    CHECK(!ui__diff_readonly(), "from the New Game screen: not read-only");
+    const int nsl = openLink(ncl, UI_PAGE_CUSTOMIZE, UI_PAGE_SHADOWS);
+    for (int k = 0; k < 4; k++) {
+        frame(0);
+    }
+    ui_settings_page_rows(UI_PAGE_SHADOWS, lb, op, lv, 16);
+    CHECK(strcmp(lt_ext_row_text(lv[0]), ui_str(UI_STR_VAL_ORIGINAL)) == 0 &&
+              !lt_ext_row_dim(lb[0]) && !lt_ext_row_dim(lv[0]),
+          "the draft's Original, not greyed (%s)", lt_ext_row_text(lv[0]));
+    (void)nsl;
+    ico_difficulty_reset();
+}
+
+/* the pause menu's journey line text and the listener's toasts */
+static void testToasts(void)
+{
+    IcoDifficulty d;
+    char line[96], want[96];
+
+    ngSetup();
+    ui_settings_install(); /* registers the listener (a no-op when built) */
+    ico_difficulty_reset();
+    ui__diff_line_text(line, sizeof(line));
+    CHECK(strcmp(line, ui_str(UI_STR_DIFF_NORMAL)) == 0, "Normal: %s", line);
+    ico_difficulty_preset(ICO_DIFF_HARD, &d); /* Hard: the limit is 3 in each room */
+    ico_difficulty_begin(&d);
+    ui__diff_line_text(line, sizeof(line));
+    snprintf(want, sizeof(want), "%s 0 / 3", ui_str(UI_STR_DIFF_HARD));
+    CHECK(strcmp(line, want) == 0, "Hard: %s (want %s)", line, want);
+    ui_popup_reset();
+    CHECK(!ui_popup_active(), "no toast to begin with");
+    /* a counted knock-down short of the limit: a toast */
+    CHECK(ico_difficulty_knockdown(1, 0, 0) == 0, "counted");
+    snprintf(want, sizeof(want), ui_str(UI_STR_DIFF_TOAST_KNOCK), 1, 3);
+    CHECK(ui_popup_active() && strstr(ui_popup_title(), want) != NULL, "the toast \"%s\" (%s)",
+          want, ui_popup_active() ? ui_popup_title() : "");
+    ui_popup_reset();
+    ico_difficulty_tick(1, 0, 0); /* back on his feet */
+    CHECK(ico_difficulty_knockdown(1, 0, 0) == 0, "the second is counted");
+    snprintf(want, sizeof(want), ui_str(UI_STR_DIFF_TOAST_KNOCK), 2, 3);
+    CHECK(ui_popup_active() && strstr(ui_popup_title(), want) != NULL, "the toast \"%s\" (%s)",
+          want, ui_popup_active() ? ui_popup_title() : "");
+    ui_popup_reset();
+    /* the one at the limit: no toast, the game over follows */
+    ico_difficulty_tick(1, 0, 0);
+    CHECK(ico_difficulty_knockdown(1, 0, 0) == 1, "the limit");
+    CHECK(!ui_popup_active(), "no toast at the limit");
+    ico_difficulty_game_over();
+    /* the Continue list's refusal */
+    ui_popup_reset();
+    ico_difficulty_notify(ICO_DIFF_EV_REFUSED, 0, 0);
+    CHECK(ui_popup_active() && strstr(ui_popup_title(), ui_str(UI_STR_DIFF_TOAST_ENDED)) != NULL,
+          "the refusal's toast (%s)", ui_popup_active() ? ui_popup_title() : "");
+    ui_popup_reset();
+    ico_difficulty_reset();
+}
+
 int main(int argc, char **argv)
 {
     snprintf(s_dir, sizeof(s_dir), "%s", argc > 1 ? argv[1] : ".");
@@ -321,6 +489,8 @@ int main(int argc, char **argv)
     testPresets();
     testCustomize();
     testClearedSave();
+    testReadOnly();
+    testToasts();
     testNotes();
     gFlagGameClear = 0;
     ico_opt_set_ui_language(-1);

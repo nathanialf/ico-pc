@@ -284,8 +284,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   `_aug6`, `_jun26`).
 - `difficulty_test.c`: each journey's difficulty record (`port/game/difficulty.h`) on the CPU,
   one run per disc: the presets row by row (Hard's Shadow toughness per disc), each classified as
-  itself and one changed row Custom (the disc's own barrier and seconds equal to Normal's), every
-  row's Left/Right step, the rows text's round trip (a row left out Normal's, a bad word counted,
+  itself and one changed row Custom (the disc's own barrier and seconds equal to Normal's; the
+  knock-down scope stepped with the limit Off keeps the preset), every row's Left/Right step (the
+  barrier has two steps, the disc's own number and the other), `ico_difficulty_notify`, the rows text's round trip (a row left out Normal's, a bad word counted,
   the earlier `pit_time` words), the carry-over from the fifteen retired config keys (Normal when
   all are the game's own, else Custom) and from an old state's keys text (the same text the same
   journey id), begin / reset / `set_active` / `set_row`, the accessors of `options.h` and
@@ -300,7 +301,8 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
 - `difficulty_file_test.c`: the difficulty sidecar, `difficulty.toml` (`port/game/difficulty_file.c`;
   [SAVES.md](SAVES.md#the-difficulty-of-each-save)) on the CPU, one run per disc in a folder of its
   own: a save's record written under the disc's key prefix and the card and read back by a load
-  with the same checksum (rows, mode, journey, origin, preview, count); the same slot on card 1 and
+  with the same checksum (rows, mode, journey, origin, preview, count); the refusals raising
+  `ICO_DIFF_EV_REFUSED` for the toast; the same slot on card 1 and
   card 2 two records; a moved file found by its checksum; the carry-over written once, found by the
   second load with config changed, its origin kept by a later save, Normal when every key is the
   game's own; a slot that is no save slot changing nothing; a Permadeath game over writing
@@ -1760,7 +1762,10 @@ The renderer's test programs have a page of their own:
   to the journey (`ico_difficulty_begin`: its rows, Custom, a New Game's origin and journey, counts 0);
   a cleared Hard save's New Game+ starting at Hard, kept through Triangle and back, a cleared Custom
   save's at Custom, the title's at Normal; the screen's five notes in two lines in every table; no
-  Customize note naming achievements.
+  Customize note naming achievements; the pause menu's read-only view (no link from the title, the link
+  from the pause menu, the journey's values greyed with their note, a step ignored, Back to Gameplay on
+  the link, the New Game pages the draft's again); the journey line's text and the toasts (a counted
+  knock-down short of the limit, none at the limit, the refusal's).
 - `settings_test.c`'s `testNewGameScreen`, `testNewGameMouse` and `testNewGameStartFlags`: the
   screen's rows from Difficulty round to Start, the journey Normal after a plain confirm, the mouse's
   click on Difficulty's arrows and value (a hover moving nothing) and the start with Hard, and on every

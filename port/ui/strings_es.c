@@ -901,7 +901,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_DIFF_RULES] = "Reglas",
         [UI_STR_DIFF_NO_SHADOWS] = "Sin sombras",
         [UI_STR_DIFF_NO_SHADOWS_NOTE] =
-            "Sí: no aparece ninguna sombra. La historia sigue su curso.",
+            "Sí: las sombras nunca aparecen. Algunos momentos de la historia se pierden o cambian sin ellas.",
         [UI_STR_DIFF_KNOCK_LIMIT] = "Límite de derribos",
         [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
             "Fin de partida cuando Ico ha sido derribado tantas veces. Desactivado: sin límite.",

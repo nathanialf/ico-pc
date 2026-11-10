@@ -44,6 +44,19 @@ int ui__diff_dimmed(int opt);
    and the header; the count, 0 for another page */
 int ui__diff_page(int page, const int **opts, const int **strs, const int **links, int *header);
 
+/* The pause menu's read-only view (settings.c sets it while Gameplay is up,
+   the New Game screen clears it): the pages show the journey in force
+   (ico_difficulty_active), every row greyed with the note "Chosen when the
+   journey began", and a step changes nothing. */
+void ui__diff_set_readonly(int on);
+int ui__diff_readonly(void);
+/* the pause menu's journey line: the mode, " n / N" while a knock-down limit
+   is on (the room's or the journey's count, by the scope), ", Permadeath";
+   1 when written */
+int ui__diff_line_text(char *buf, unsigned size);
+/* registers the toasts (the difficulty listener); settings.c at install */
+void ui__diff_listen(void);
+
 /* the draft: from a record (a cleared save's rows), or Normal for NULL; the
    counts and journey are the confirm's (ico_difficulty_begin) */
 void ui__diff_draft_start(const IcoDifficulty *from);

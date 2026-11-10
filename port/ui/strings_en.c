@@ -887,7 +887,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_DIFF_RULES] = "Rules",
     [UI_STR_DIFF_NO_SHADOWS] = "No Shadows",
     [UI_STR_DIFF_NO_SHADOWS_NOTE] =
-        "On: no Shadows ever appear. The story still plays out as usual.",
+        "On: Shadows never appear. Some story moments are lost or play differently without them.",
     [UI_STR_DIFF_KNOCK_LIMIT] = "Knock-down limit",
     [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
         "A game over once Ico has been knocked down this many times. Off sets no limit.",

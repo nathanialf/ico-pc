@@ -4710,7 +4710,7 @@ static void varSwitch(const char *who, const VarSwitch *sw, int pl, const int *l
    disc; *debugPressed counts the opener's calls over the runs */
 static void testVariantsPage(const char *who, int title, int *debugPressed)
 {
-    static const char *const kGameLabels[10] = {"Analogue stick fix",
+    static const char *const kGameLabels[11] = {"Analogue stick fix",
                                                 "East Reflector door fix",
                                                 "Second memory card",
                                                 "Film effect",
@@ -4719,6 +4719,7 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
                                                 "Stick",
                                                 "Yorda",
                                                 "Cutscenes",
+                                                "Difficulty",
                                                 "Back"};
     static const char *const kCutLabels[4] = {"Skip the opening", "No cutscene look-around",
                                               "Ignore cutscene cameras", "Back"};
@@ -4771,10 +4772,10 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     }
     int gb[16], go[16], gv[16];
     const int gn = ui_settings_page_rows(UI_PAGE_GAMEPLAY, gb, go, gv, 16);
-    varLabelsAre(who, "Gameplay", gb, gn, kGameLabels, 10);
+    varLabelsAre(who, "Gameplay", gb, gn, kGameLabels, 11);
     /* Light sword colour shows only where the light sword exists (the
        European, Japanese, Korean and Asian discs); Stick on every disc */
-    CHECK(gn == 10 && ui_settings_row_shown(gb[5]) == !y2001 && ui_settings_row_shown(gb[6]) &&
+    CHECK(gn == 11 && ui_settings_row_shown(gb[5]) == !y2001 && ui_settings_row_shown(gb[6]) &&
               ui_settings_row_shown(gb[7]) && ui_settings_row_shown(gb[8]) &&
               strcmp(lt_ext_row_text(gv[5]), "Original") == 0 &&
               strcmp(lt_ext_row_text(gv[6]), "Original") == 0,
@@ -4795,7 +4796,9 @@ static void testVariantsPage(const char *who, int title, int *debugPressed)
     if (y2001) {
         kSw[0].notePrefix = "This version of the game has no look-around";
     }
-    if (gn == 10) {
+    CHECK(gn == 11 && ui_settings_row_shown(gb[9]) == !title,
+          "%s: the Difficulty link shows from the pause menu only", who);
+    if (gn == 11) {
         /* the weapon rows: Original <-> Red (where shown), Original <->
            Insect net; the key a word; achievements stay on; each note */
         if (!y2001) {

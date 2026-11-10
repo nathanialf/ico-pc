@@ -889,7 +889,7 @@ const char *const ui_strings_ko[UI_STR_COUNT] = {
     [UI_STR_DIFF_RULES] = "규칙",
     [UI_STR_DIFF_NO_SHADOWS] = "그림자 없음",
     [UI_STR_DIFF_NO_SHADOWS_NOTE] =
-        "켬: 그림자가 전혀 나타나지 않습니다. 이야기는 그대로 진행됩니다.",
+        "켬: 그림자가 나타나지 않습니다. 일부 이야기 장면은 사라지거나 다르게 진행됩니다.",
     [UI_STR_DIFF_KNOCK_LIMIT] = "쓰러짐 제한",
     [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
         "이코가 이 횟수만큼 쓰러지면 게임 오버입니다. 끔이면 제한이 없습니다.",
