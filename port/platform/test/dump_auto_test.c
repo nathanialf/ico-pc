@@ -93,7 +93,7 @@ static void wait_done(IcoDumpDone *d)
 
 static void test_mem_zip(const char *base)
 {
-    char dir[1200], zip[1300], log[1300], why[160];
+    char dir[400], zip[600], log[600], why[160];
     const char a[] = "frame bytes", b[] = "tick before", text[] = "log text\n";
     IcoZipMem e[2] = {{"f.rddump", a, sizeof(a)}, {"f-prev.rddump", b, sizeof(b)}};
     mz_zip_archive z;
@@ -118,7 +118,7 @@ static void test_mem_zip(const char *base)
 
 static void test_job(const char *base)
 {
-    char dir[1200], log[1300], side[1300], why[160];
+    char dir[400], log[600], side[600], why[160];
     const char dump[] = "the slow frame", prev[] = "the tick before", text[] = "the log\n";
     IcoDumpJob j;
     IcoDumpDone d;
@@ -132,7 +132,7 @@ static void test_job(const char *base)
     CHECK(put(side, "sidecar", 7) == 0);
     /* four older slow zips: the prune keeps ICO_SLOW_DUMP_KEEP in all */
     for (int i = 1; i <= 4; i++) {
-        char old[1300];
+        char old[600];
 
         snprintf(old, sizeof(old), "%s/slow-2026110%d-000000.zip", dir, i);
         CHECK(put(old, "x", 1) == 0);
@@ -163,7 +163,7 @@ static void test_job(const char *base)
         int left = 0;
 
         for (int i = 1; i <= 4; i++) {
-            char old[1300];
+            char old[600];
 
             snprintf(old, sizeof(old), "%s/slow-2026110%d-000000.zip", dir, i);
             left += ico_path_kind(old, NULL, NULL) == 0;
@@ -186,7 +186,7 @@ static void test_job(const char *base)
 
 static void test_busy(const char *base)
 {
-    char dir[1200];
+    char dir[400];
     IcoDumpJob a, b;
     IcoDumpDone d;
     const unsigned drops = ico_dump_auto_dropped();
@@ -214,7 +214,7 @@ static void test_busy(const char *base)
 
 static void test_shutdown(const char *base)
 {
-    char dir[1200];
+    char dir[400];
     IcoDumpJob a;
     IcoDumpDone d;
 
@@ -236,7 +236,7 @@ static void test_shutdown(const char *base)
 
 static void test_bundle(const char *base)
 {
-    char dir[1200], rep[1300], line[400], p[6][1300];
+    char dir[400], rep[600], line[400], p[6][600];
     mz_zip_archive z;
     const char keep[] = "the report's own entry";
     IcoZipMem e = {"report.txt", keep, sizeof(keep)};
