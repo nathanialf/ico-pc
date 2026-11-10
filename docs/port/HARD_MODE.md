@@ -49,7 +49,7 @@ the weapon, not the difficulty (Stick: Insect net removes the stick's damage, so
 
 | mechanism | the game's value | what it would do | discs | where |
 | --- | --- | --- | --- | --- |
-| Get-up timer length | `actAfterDown`: `((60 - systemStatus[0] * 10) / systemStatus[1]) * 130 / 60` frames: 130 at 60 Hz, 108 at 50 Hz (about 2.2 s either way), 60 on jun26 | a shorter timer shortens the time Ico lies and can be hit (with the row Off); a longer one lengthens it | all; jun26 uses 60 | `commonact.c` `actAfterDown`; read by `IsBoyStatus_EnemyMustWait` as `downTimer` |
+| Get-up timer length | `actAfterDown`: `((60 - systemStatus[0] * 10) / systemStatus[1]) * 130 / 60` frames: 130 at 60 Hz, 108 at 50 Hz (about 2.2 s either way), the same on every disc (the June 2001 demo's `PAL_JUN26(0x82, 130) / PAL_JUN26(0x3C, 60)` is 130 / 60 on both arms) | a shorter timer shortens the time Ico lies and can be hit (with the row Off); a longer one lengthens it | all | `commonact.c` `actAfterDown`; read by `IsBoyStatus_EnemyMustWait` as `downTimer` |
 | Random-spawn tables | disc data: 84 entries on the NTSC disc, 86 on the PAL family | more or faster spawns need an edit of the table data, not a code hook | disc data per disc | `port/data/gen/ntsc/table_desc.c` (:2460), `port/data/gen/pal/table_desc.c` (:3095) |
 | Dodge ranges per kind | `GetEnemyDefDodgeRange`, one value per `enemyKind` row | smaller ranges make a Shadow dodge less (easier), larger more | all | `ico2/sugipon/src/enemyKind.c`, `enemy.c` |
 | Shadow life per kind | `GetEnemyDefLife`, the kind's `life` (the NTSC table's 400 is the American row) | Toughness covers the two table sets; a per-kind or arbitrary multiplier is not exposed | all | `enemyKind.c`, `getEnemyRestartLife` |
