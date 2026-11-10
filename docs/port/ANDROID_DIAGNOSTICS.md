@@ -374,7 +374,7 @@ folder, `-scene.png` (the picture before the upscaler, render size), `-velocity.
 vectors), `-depth.png` (the depth the upscaler received, a 24-bit step in R, G, B; not written
 where the driver cannot read depth back, which the line says) and `-composite.png` (the upscaler's
 output, before the game's 2D layer), each halved until at most 2560 wide, and adds them to the
-report's zip while it stays under 24 MB (Share a bug report offers the zip). Lines:
+report's zip while it stays under 24 MB (in an rc build Share a bug report offers the zip; a release build has no such row, so the zip is taken from the `dumps` folder). Lines:
 `upscale capture: frame N: ...` (the sizes, or why a picture is missing) and `window: bug report:
 the upscaler's pictures: ... K of 4 in <zip>`. Reading them: a flaw in `-scene.png` is the port's;
 one only in `-composite.png` is the upscaler's. The upscaler runs in full precision by default on
