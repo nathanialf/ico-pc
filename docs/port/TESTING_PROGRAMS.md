@@ -297,11 +297,30 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   states lock, No Shadows, the `difficulty.record` state block (a restored record, a damaged
   version and a missing block rebuilt from the state's keys) (`difficulty`, `difficulty_jpn`,
   `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
-- `difficulty_file_test.c`, `difficulty_knock_test.c`, `knockdown_disc_test.c`,
+- `difficulty_file_test.c`: the difficulty sidecar, `difficulty.toml` (`port/game/difficulty_file.c`;
+  [SAVES.md](SAVES.md#the-difficulty-of-each-save)) on the CPU, one run per disc in a folder of its
+  own: a save's record written under the disc's key prefix and the card and read back by a load
+  with the same checksum (rows, mode, journey, origin, preview, count); the same slot on card 1 and
+  card 2 two records; a moved file found by its checksum; the carry-over written once, found by the
+  second load with config changed, its origin kept by a later save, Normal when every key is the
+  game's own; a slot that is no save slot changing nothing; a Permadeath game over writing
+  `[finished]`, the Continue list's preview match (the slot's own entry, a file moved to card 2, a
+  newer save of the slot and another journey's save not refused) and the backstop by checksum, a
+  load of such a save finished; the whole-journey count at a save and written through as 0 after
+  the limit's game over (not into another journey's entry); a damaged file and a later version's
+  read as empty and not written over by a load, kept as `difficulty.toml.bad` by the next save or
+  a Permadeath end, an empty file no damage; the disc's preview words (`mc_preview_play`,
+  `mc_preview_sofa`) the ones `layout_action.c`'s `la_preview_play` / `la_preview_sofa` read; a
+  text scan of the hooks in `layout_action.c` (the save hook, both load twins' hook and backstop
+  before `gflagKeepState`, the Continue list's refusal in both twins with the negative sound, the
+  three game over twins' Quit only) and of `backup.c`; the log lines (found by slot / by sum /
+  carry-over / none, the writes, the refusals, the damaged file) (`difficulty_file`,
+  `difficulty_file_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
+- `difficulty_knock_test.c`, `knockdown_disc_test.c`,
   `no_shadows_disc_test.c`, `no_shadows_census_test.c`: registered with their ctests for the
-  packages that fill them (the sidecar, the knock-down limit's game side, the disc's
+  packages that fill them (the knock-down limit's game side, the disc's
   mails, No Shadows on each disc, the script census); until then each passes without a check
-  (`difficulty_file`, `difficulty_file_<disc>`, `difficulty_knock`, `difficulty_knock_<disc>`,
+  (`difficulty_knock`, `difficulty_knock_<disc>`,
   `knockdown_disc`, `knockdown_disc_<disc>`, `no_shadows_disc`, `no_shadows_disc_<disc>`,
   `no_shadows_census`).
 - `door_grace_test.c`: the doorway fix's arm and grace and a copy of the exit check's guard
@@ -617,8 +636,8 @@ that stops again writing its own line without the retry mark); a stop at the fre
   to the greater name, missing folders skipped, the names line and a short buffer (`share_report`).
 - `backup_test.c`: Options > Extras' backup and restore (`backup.h`) on a user folder of its own
   under the build folder: the names a backup may hold (no `..`, no absolute or drive path, no `\`,
-  no empty part, the places only); a backup holding the card folders, `states/`, `config.toml` and
-  `achievements.toml` and none of `ico-pc.ini`, `logs/`, `dumps/`, the textures, a slot's
+  no empty part, the places only); a backup holding the card folders, `states/`, `config.toml`,
+  `achievements.toml` and `difficulty.toml` and none of `ico-pc.ini`, `logs/`, `dumps/`, the textures, a slot's
   developer dump or a `.tmp` file, save states and pictures stored and text deflated, the manifest
   last with the version, platform, discs, time and count; inspect reading it back and saying when
   another disc made it; the restore unpacking into `backup-restore/` and changing nothing else, the

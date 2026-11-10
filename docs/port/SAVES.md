@@ -25,6 +25,8 @@ progress as a card save. The game's own card code
 | `port/save/test/save_test.c` | the same tests |
 | `port/core/region_<slug>.c` (seven rows) | each disc's save directory (`mc_save_dir`) and product record size (`mc_product_size`) |
 | `ico2/fumi/ios/mcard.c`, `mcdata.c` | the game's side: the card manager thread, the save and load steps, the icon files |
+| `port/game/difficulty_file.c` (`port/game/difficulty.h`) | `difficulty.toml`: each save's difficulty record and the ended journeys ([The difficulty of each save](#the-difficulty-of-each-save)) |
+| `port/game/test/difficulty_file_test.c` | the `difficulty_file` tests (one a disc) |
 
 ## The card
 
@@ -49,11 +51,12 @@ stores what the game writes. Nothing else is written, and nothing at
 all before the game's first `sceMcMkdir`: until then a card folder that does not exist is an
 empty card, and `sceMcMkdir` creates the card folder and any missing parent
 (`port/save/mc_host.c` (`sceMcGetDir`, `sceMcMkdir`, `make_root`)). The PC-only facts about a
-save, the mirror-mode flag of each slot and the achievements' run state, live outside the card,
-in `config.toml`'s `[mirror]` and `achievements.toml`, keyed by the slot and the save block's
-checksum, one set of keys per disc ([The seven discs](#the-seven-discs), [CONFIG.md](CONFIG.md);
+save, the mirror-mode flag of each slot, the achievements' run state and the save's difficulty,
+live outside the card, in `config.toml`'s `[mirror]`, `achievements.toml` and `difficulty.toml`,
+keyed by the slot (and, for the difficulty, the card) and the save block's checksum, one set of
+keys per disc ([The seven discs](#the-seven-discs), [CONFIG.md](CONFIG.md);
 `port/game/options.h`, `ico_mirror_slot_saved`; `port/game/achievements.h`,
-`ico_ach_slot_saved`).
+`ico_ach_slot_saved`; [The difficulty of each save](#the-difficulty-of-each-save)).
 
 Names follow the card's rules: at most 31 bytes, none of `\ : * ? " < > |` or a control
 character, at most 8 directories deep; `.` and `..` resolve against each port's current directory
@@ -385,8 +388,10 @@ product file written, then the game block (`gameblock_write`: the image's first 
 the two option words, or the 2001 discs' block) and its sum; the file read back through the card
 and compared. The slot is the lowest one with no `game.00N`, or `--slot`; a slot that holds a save
 needs `--overwrite`. The icon files are never written (they come from the disc); a directory
-without them gets them at the game's next save. `config.toml`'s `[mirror]` and
-`achievements.toml` are not touched, so the slot has no mirror flag or achievement run of its own.
+without them gets them at the game's next save. `config.toml`'s `[mirror]`, `achievements.toml`
+and `difficulty.toml` are not touched, so the slot has no mirror flag or achievement run of its
+own, and its first load takes the difficulty carry-over
+([The difficulty of each save](#the-difficulty-of-each-save)).
 
 Where the game resumes: a load starts the image's stage, `gflagSave`'s `gFlagSaveStage`
 (`layout_action.c` (`la_load_processing`): `stgmgrForceSwitchWithFade(gFlagSaveStage, ...)`),
@@ -406,6 +411,74 @@ state_recover_tool SIDE_FILE --card CARD_FOLDER [--slot N] [--overwrite]
 Both exit 0 when written, 1 when refused (the reason printed), 2 on a usage or card error. The
 tool is built by `port/save/CMakeLists.txt` and kept in every build (`cmake/IcoTests.cmake`
 (`ICO_KEEP_IN_ALL`)); the script finds the newest one under `build-host/*/port/save/`.
+
+## The difficulty of each save
+
+Each journey's difficulty (the New Game screen's mode and rows, `port/game/difficulty.h`) is kept
+per save in `<user folder>/difficulty.toml`, beside `achievements.toml`; the card files are never
+touched for it (`port/game/difficulty_file.c`, header comment). Not `config.toml`: it is journey
+data, has no `ico-pc.ini` override layer, and holds the list of ended journeys.
+
+```toml
+version = 1
+[save]
+slot_3_sum = 123456                 # the game block's checksum (mc.sum), as [mirror]
+slot_3_preview = "12:345678:2"      # stage:play frames:couch, the product file's preview
+slot_3_journey = "9f3a6c0e5d2b7a11"
+slot_3_mode = "hard"                # easy | normal | hard | custom
+slot_3_origin = "new"               # new | config | state
+slot_3_rows = "shadow_speed=faster shade_toughness=third_journey ... knock_limit=3 knock_scope=room permadeath=false"
+slot_3_knocks = 1                   # the whole-journey knock-down count at this save
+b_slot_3_sum = 654321               # card 2's slot 3
+[finished]
+9f3a6c0e5d2b7a11 = true
+```
+
+An entry's key is the disc's key prefix (`key_prefix`: none on the European disc, `jpn_`,
+`kor_`, `cn_`, `ntsc_`, `aug6_`, `jun26_`), the card (none for port 0, `b_` for port 1: with
+Second card on, both cards have a slot 3) and `slot_N_` (`entry_key`). The rows are the
+`ico_difficulty_rows_format` text.
+
+- **Save** (`la_save_processing` step 10, beside `ico_ach_slot_saved`: `la_host_difficulty_saved`):
+  the active record under the card and slot with the game block's checksum and the preview the
+  product file now holds for it (stage, play frames, couch; read through `la_preview_play` and
+  `la_preview_sofa`, the 2001 discs' words, region rows `mc_preview_play` and `mc_preview_sofa`).
+- **Load** (both `la_load_processing` twins' step 10, beside `ico_ach_slot_loaded`:
+  `ico_difficulty_slot_loaded`): the card and slot's entry when its checksum matches ("found by
+  slot"); else any entry of this disc with that checksum, a file moved or copied to another slot or
+  card ("found by sum"); else no record: the one-time carry-over of the fifteen retired config keys
+  (`ico_difficulty_from_config`: Normal when every value is the game's own, else Custom), written at
+  once with origin `config` ("carry-over"). Later saves keep the origin. A save with no entry (one
+  made before the file existed, a slot `state_recover` wrote) takes the carry-over at its first
+  load.
+- **Permadeath** (any game over ends the journey): the journey's id goes into `[finished]` at once
+  (`ico_difficulty_file_journey_ended`). The Continue list (both `la_mc_load_file_select` twins)
+  refuses a save whose preview matches an entry of an ended journey (the slot's own entry, or any
+  entry of the disc with that preview: a moved file) with the negative sound
+  (`la_host_load_refused`, `ico_difficulty_slot_finished`); a later save in the same slot has
+  another preview and is not refused. The load's backstop at the top of step 10 (step 9 on the June
+  2001 demo), before `gflagKeepState`, refuses a game block whose checksum is an ended journey's and
+  goes back to the file list (`ico_difficulty_sum_finished`). The three game over twins
+  (`la_game_over_continue`, `_ntscaug6`, `_jun26`) hide Continue, keep the cursor on Quit and make
+  the Continue case act as Quit (`la_host_game_over_quit_only`; as in a test room of Extras >
+  Unused content).
+- **The knock-down limit's whole-journey count** is the entry's `knocks` at each save; the game
+  over the limit causes sets it back to 0 in memory and in the run's entry when that entry is the
+  journey's (`ico_difficulty_file_knocks_reset`).
+
+Every call reads the file afresh and every change is written at once and atomically (`.tmp`, then a
+rename: `ico_toml_write_text`). A file whose `version` is missing or not 1 reads as empty with a log
+line (the first 8 reads, then every 100th) and is not written over by a load's carry-over; the next
+save (or a Permadeath end) keeps its text as `difficulty.toml.bad` and writes a new file. The file
+is in a backup ([PLATFORM.md](PLATFORM.md)).
+
+The log says every lookup's outcome (`difficulty: load of card 1 slot 3 (sum 123456): found by
+slot: Hard, journey ...`, `found by sum at card 2 slot 3 (the file was moved or copied)`, `no
+entry on this disc (pal): carry-over: Custom, ...`, `none (not a save slot)`), every write
+(`difficulty: wrote <path> (card 1 slot 3 saved: Hard, journey ..., origin new, sum ..., preview
+12:345678:2, knock-downs 0)`) and its failure, and every refusal (`difficulty: the Continue list
+refuses card 1 slot 4 (preview 20:1000:1): journey ... has ended (Permadeath; entry card 1 slot
+4)`, `difficulty: the load refuses the save with sum ...: ... back to the file list`).
 
 ## Tests
 
