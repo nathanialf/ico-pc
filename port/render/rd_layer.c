@@ -244,7 +244,7 @@ typedef struct PlanWalk {
     RdLayerPlan *p;
     const RdFrame *f;
     uint32_t ord, scene, display, pre, preHeld;
-    bool barsFree, sceneDepthCleared;
+    bool barsFree, sceneDepthCleared, keep;
     bool *carried;
     uint32_t lastScene; /* the ordinal after the last scene-class command, 0 none */
     uint32_t acts, tex, actsAt, texAt;
@@ -260,8 +260,25 @@ static bool isAction(uint8_t type)
     return !rd__cmd_is_state(type) && type != RDC_NOP && type != RDC_OVERLAY_TEXT;
 }
 
+/* a screen sprite covering the frame (GS 2048 -+ W / 2, H / 2) */
+static bool coversFrame(const PlanWalk *w, const RdCmd *c, const RdStateBlock *st)
+{
+    if (c->type != RDC_SCREEN || c->b[0] != RD_PRIM_SPRITES || c->u[1] < 2u ||
+        (uint64_t)c->u[0] + 2u * sizeof(RdScreenVtx) > (uint64_t)w->f->payloadSize) {
+        return false;
+    }
+    RdScreenVtx v[2];
+    memcpy(v, w->f->payload + c->u[0], sizeof(v));
+    const int32_t x0 = v[0].x < v[1].x ? v[0].x : v[1].x, x1 = v[0].x < v[1].x ? v[1].x : v[0].x;
+    const int32_t y0 = v[0].y < v[1].y ? v[0].y : v[1].y, y1 = v[0].y < v[1].y ? v[1].y : v[0].y;
+    const int32_t fx0 = (2048 - (int32_t)(st->gsW >> 1)) * 16,
+                  fy0 = (2048 - (int32_t)(st->gsH >> 1)) * 16;
+    return x0 <= fx0 && y0 <= fy0 && x1 >= fx0 + (int32_t)st->gsW * 16 &&
+           y1 >= fy0 + (int32_t)st->gsH * 16;
+}
+
 /* the kind of scene-class command c is under st (RD_LAYER_SC_NONE: not) */
-static int sceneClassOf(const PlanWalk *w, const RdCmd *c, const RdStateBlock *st)
+static int sceneClassOf(PlanWalk *w, const RdCmd *c, const RdStateBlock *st)
 {
     const uint32_t scene = w->scene;
     switch (c->type) {
@@ -307,6 +324,15 @@ static int sceneClassOf(const PlanWalk *w, const RdCmd *c, const RdStateBlock *s
         return RD_LAYER_SC_ZTEST;
     }
     if (depth && d->zwrite == RD_ZWRITE_ON && !w->barsFree) {
+        /* a keep frame's full-frame sprites (the brightness, the keep
+         * sprite, a fade: each writes Z untested) stay in the layer: the
+         * next frame's head clear writes SCENE's depth over theirs, and
+         * as scene-class they would refuse the keep frame (the upscaler's
+         * smear of issue 203 again) */
+        if (w->keep && coversFrame(w, c, st)) {
+            w->p->keepZFree++;
+            return RD_LAYER_SC_NONE;
+        }
         return RD_LAYER_SC_ZWRITE;
     }
     if (d->test.date != RD_DATE_OFF) {
@@ -339,17 +365,7 @@ static bool isKeepSprite(const PlanWalk *w, const RdCmd *c, const RdStateBlock *
         t->view != RD_VIEW_RGB24_TA0) {
         return false;
     }
-    if ((uint64_t)c->u[0] + 2u * sizeof(RdScreenVtx) > (uint64_t)w->f->payloadSize) {
-        return false;
-    }
-    RdScreenVtx v[2];
-    memcpy(v, w->f->payload + c->u[0], sizeof(v));
-    const int32_t x0 = v[0].x < v[1].x ? v[0].x : v[1].x, x1 = v[0].x < v[1].x ? v[1].x : v[0].x;
-    const int32_t y0 = v[0].y < v[1].y ? v[0].y : v[1].y, y1 = v[0].y < v[1].y ? v[1].y : v[0].y;
-    const int32_t fx0 = (2048 - (int32_t)(st->gsW >> 1)) * 16,
-                  fy0 = (2048 - (int32_t)(st->gsH >> 1)) * 16;
-    return x0 <= fx0 && y0 <= fy0 && x1 >= fx0 + (int32_t)st->gsW * 16 &&
-           y1 >= fy0 + (int32_t)st->gsH * 16;
+    return coversFrame(w, c, st);
 }
 
 static void planCmd(void *user, int list, uint32_t index, const RdCmd *c, const RdStateBlock *st)
@@ -454,6 +470,14 @@ void rd__layer_plan(const RdFrame *f, int keep, bool effectsDepth, bool *depthCa
     w.preHeld = rd__layer_id(RD_LAYER_SLOT_PRE_HELD);
     w.carried = &carried;
     w.barsFree = !effectsDepth && !carried;
+    w.keep = keep != 0;
+    /* SCENE new this replay (rd__clear_new_targets clears it after this
+     * scan, before the walk): a depth read before the frame's own clear
+     * reads that clear, not a carried depth (the store plan's rule) */
+    {
+        const RdTargetRec *sr = rd__target_rec(w.scene);
+        w.sceneDepthCleared = sr != NULL && sr->clearPending != 0;
+    }
     RdStateBlock st = f->startState;
     rd__walk(f, keep, &st, planCmd, &w);
     p->count = w.ord;
@@ -496,7 +520,7 @@ static void note(uint32_t *count, const char *fmt, const char *what, uint32_t fr
     }
 }
 
-static uint32_t s_nRefused, s_nLate, s_nNoKeep, s_nCopied;
+static uint32_t s_nRefused, s_nLate, s_nNoKeep, s_nCopied, s_nKeepZ, s_nKeepZRefused;
 
 static void refuse(const char *why, uint32_t frame)
 {
@@ -533,8 +557,9 @@ void rd__layer_scan(const RdFrame *f, int keep)
     rd__layer_plan(f, keep, rd__effects_depth_wanted(), &s_ly.depthCarried, &s_ly.p);
     if (s_ly.depthCarried && !carried) {
         rd__log("display layer: SCENE's depth is read before frame %u clears it: draws that write "
-                "Z without testing it (the letterbox bars) stay in SCENE from now on (reported "
-                "once)",
+                "Z without testing it (the letterbox bars) stay in SCENE from now on, but a keep "
+                "frame's full-frame sprites (the brightness, the keep sprite, a fade) stay in the "
+                "layer (reported once; each such keep frame is counted on its own line)",
                 f->number);
     }
     if (s_ly.p.markerOrd == ~0u) {
@@ -543,6 +568,21 @@ void rd__layer_scan(const RdFrame *f, int keep)
     if (g_rdWin.first) {
         refuse("the replay tool's pass window reads targets mid-frame", f->number);
         return;
+    }
+    if (keep && s_ly.p.keepZFree) {
+        note(&s_nKeepZ,
+             "%s: a keep frame's full-frame sprites that write Z kept in the layer, not in SCENE",
+             s_ly.depthCarried ? "SCENE's depth carried (read before a clear)"
+                               : "an effects program reads SCENE's depth",
+             f->number);
+    }
+    if (keep && s_ly.p.keepAtOrd != ~0u && s_ly.p.keepOrd == ~0u &&
+        s_ly.p.late == RD_LAYER_SC_ZWRITE && s_ly.p.keepAtOrd < s_ly.p.boundaryOrd) {
+        /* a Z writer past the keep sprite that is not a full-frame sprite */
+        note(&s_nKeepZRefused,
+             "a keep frame refused for %s past its keep sprite while SCENE's depth is carried or "
+             "read by an effects program: the keep frame is upscaled again",
+             "a Z write", f->number);
     }
     if (keep && s_ly.p.keepAtOrd != ~0u && s_ly.p.keepOrd == ~0u) {
         refuse(s_ly.p.keepAtOrd < s_ly.p.boundaryOrd
@@ -778,10 +818,15 @@ const RdScreenVtx *rd__layer_keep_verts(Replay *r, const RdCmd *c, const RdScree
      * line), less the half line the target's offset adds (RD_TARGET_HALF_Y
      * moves list 11's draws half a GS pixel down); the UVs the GS position
      * less the frame's corner, over the held composite's GS size in 12.4,
-     * moved by the scaled sprite's sample shift (rd_replay.c snapAxis takes
-     * (s - 1) / 2s GS pixels off them) so every texel samples its own
-     * centre: a 1:1 copy at any scale and any Full pixel ox (the margin
-     * lies off the target) */
+     * plus half a GS pixel: rd_replay.c snapAxis takes (s - 1) / 2s GS
+     * pixels off a scaled sprite's UVs, leaving u = x + 1 / 2s, which a
+     * target sampled at u * s puts on texel i's centre (i + 0.5) at any
+     * scale and any Full pixel ox (at s <= 1, no snap: x + 0.5, the
+     * centre too). The game's own 1:1 sprites carry the same + 0.5; a UV
+     * on a texel's edge would leave NEAREST to the sampler's rounding,
+     * repeated over a fade's ~256 ticks. The half line: FrameCB's
+     * oy += 0.5 moves the draw up half a GS pixel, so the frame is moved
+     * down by as much (the margin lies off the target) */
     static RdScreenVtx q[2];
     q[0] = v[0];
     q[1] = v[1];
@@ -789,14 +834,12 @@ const RdScreenVtx *rd__layer_keep_verts(Replay *r, const RdCmd *c, const RdScree
     const int32_t half = (r->st.useOffset & RD_TARGET_HALF_Y) ? 8 : 0;
     q[0].x = (2048 - W / 2 - 1) * 16;
     q[1].x = (2048 + W / 2 + 1) * 16;
-    q[0].y = (2048 - H / 2 - 1) * 16 - half;
-    q[1].y = (2048 + H / 2 + 1) * 16 - half;
-    const float kx = tc->sx > 1.0f ? (tc->sx - 1.0f) / (2.0f * tc->sx) : 0.0f;
-    const float ky = tc->sy > 1.0f ? (tc->sy - 1.0f) / (2.0f * tc->sy) : 0.0f;
-    q[0].s = (kx - 1.0f) * 16.0f;
-    q[1].s = ((float)W + 1.0f + kx) * 16.0f;
-    q[0].t = (ky - 1.0f) * 16.0f;
-    q[1].t = ((float)H + 1.0f + ky) * 16.0f;
+    q[0].y = (2048 - H / 2 - 1) * 16 + half;
+    q[1].y = (2048 + H / 2 + 1) * 16 + half;
+    q[0].s = -0.5f * 16.0f;
+    q[1].s = ((float)W + 1.5f) * 16.0f;
+    q[0].t = -0.5f * 16.0f;
+    q[1].t = ((float)H + 1.5f) * 16.0f;
     q[0].q = q[1].q = 1.0f;
     rd__upscale_stats_layer()->keepCopies++;
     return q;

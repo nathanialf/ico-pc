@@ -888,7 +888,11 @@ void ico_diag_forget_startup_retry_env(void);
 void ico_diag_set_pipeline_cache(int loaded, const char *path);
 /* the path given to ico_diag_set_pipeline_cache ("" before the window gave one) */
 const char *ico_diag_pipeline_cache_path(void);
-/* Issue 123 (memory_floor.h ico_memory_floor_retry): the previous start's
+/* The three below served issue 123's floor retry (memory_floor.h
+   ico_memory_floor_retry); since v0.11.2's resume (window_pipe_finish.h
+   window_pipe_floor_retry) the window calls none of them: kept with their
+   tests (diag_test), so the retry mark is never written.
+   Issue 123: the previous start's
    set stopped at the free-memory floor (its file's line carries the floor's
    figures, not the system's signal level); valid after
    ico_diag_startup_pipeline_set */

@@ -73,3 +73,8 @@ unsigned ico_pipe_resume_stops(int resumed, const IcoPipeResume *prev)
 {
     return resumed && prev != NULL && prev->stops > 0 ? prev->stops + 1u : 1u;
 }
+
+int ico_pipe_resume_careful(const char *setting)
+{
+    return setting != NULL && strcmp(setting, "careful") == 0;
+}

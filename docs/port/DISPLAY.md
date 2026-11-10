@@ -1915,7 +1915,9 @@ compares the present with and without them):
 
 The bug-report row's pictures are halved (a 2 x 2 box) until they are at most 2560 wide and go into
 its zip while the zip stays under 24 MB (GitHub's limit is 25 MB; a picture that would pass it is
-left out and named); F12's are full size and stay loose, as its present picture. The lines: the
+left out and named), in the order composite, scene, velocity, depth (they barely compress, about 3
+bytes a pixel, so the cap leaves out the last first and keeps the pair that tells the port's lines
+from the upscaler's); F12's are full size and stay loose, as its present picture. The lines: the
 renderer's `upscale capture: frame N: <stem>-scene.png, -velocity.png, -depth.png, -composite.png:
 scene.png WxH, ... (read back in T ms; the upscaler's inputs and output: lines in -scene.png are the
 port's, lines only in -composite.png are the upscaler's)`, a picture not given to the upscaler named
@@ -1924,14 +1926,28 @@ port's, lines only in -composite.png are the upscaler's)`, a picture not given t
 lines only in -composite.png are the upscaler's)` and, for a report, `window: bug report: the
 upscaler's pictures: <name> (N bytes) added; ... K of 4 in <zip>`. Without an upscaler the request is
 dropped at the next present (`upscale capture: no upscaler in force at the present after the
-request: ...`); a present shown again without a replay (the still re-present) leaves it for the next
-replay, said once (those pictures then miss a zip already written). `rd_replay_tool --fsr3-dump DIR`
+request: ...`). While the request waits for a dispatch the still re-present is refused (a re-shown
+present does not dispatch; the 10 s `interp: still re-present` line counts those presents: `(N of
+them for an upscaler capture waiting for a dispatch)`), so the next present replays and dispatches.
+A keep frame does not dispatch either (a fade, a loading picture): the request waits for the first
+present that does (`upscale capture: the present after the request did not dispatch the upscaler
+(a keep frame: ...): ... the bug-report zip waits for them (at most 60 presents and 2 s ...)`), at
+most 60 presents and 2 s (both), then is dropped (`upscale capture: no dispatch of the upscaler in N
+presents over T s after the request (keep frames throughout): ... the bug-report zip goes without
+them`). `rd_upscale_capture_state` tells the window the outcome: while it is pending the window adds
+the present's picture to the zip at once (`window: F12: the upscaler's pictures are not taken yet
+...`) and the four when it comes (`window: F12: the upscaler's pictures came N pumps after the
+present's`, then the usual lines); an upscaler that was asked and gave none is said (`window: F12:
+the upscaler's pictures are not beside <present>: <why>; the bug-report zip goes without them`). The
+renderer's line names the presents waited (`...; N presents without a dispatch before it; ...`). `rd_replay_tool --fsr3-dump DIR`
 writes the same four from a dump (the last replay's dispatch), for a side-by-side with a reporter's.
 
 **What the frames held** (the 10 s line under an upscaler, `rd__upscale_note_frame`): `upscale
 point: 10 s: the N pictures dispatched held: the fog in F, the glow chain in G, the aura in A, the
 depth of field in D, the motion blur in M, film noise in K, render-to-texture blocks (the water's
-reflections) in R; FSR 3.1 fp16 on|off|off (dev)` (each frame's lists scanned once a frame number:
+reflections) in R; FSR 3.1 fp16 <words>` (`off (the port's default; [dev] fsr3_fp16 = on for
+the half-precision path)`, `on (dev)` or `off ([dev] fsr3_fp16 = on, the device offers no fp16)`:
+`rd_fsr3.c rd__fsr3_fp16_word`; each frame's lists scanned once a frame number:
 the post stubs by kind, a TARGET naming a block, the film noise), beside the velocity line's counts
 of the draws left without motion vectors. **Precision.** FSR 3.1 runs in full precision on every GPU (`[dev] fsr3_fp16`, default `off`):
 the FidelityFX context is made as on a device without fp16, so every pass takes its fp32 build

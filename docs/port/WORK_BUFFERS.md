@@ -275,7 +275,9 @@ are the A/B ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 ## The work clear
 
 `ICO_RD_WORK_CLEAR=RRGGBB` in the environment (the game), or `rd_replay_tool --work-clear RRGGBB`,
-clears every live target's colour but SCENE, DISPLAY, DISPLAY_HELD, FEED128, FEED_HELD and WORK3_HELD to that
+clears every live target's colour but SCENE, DISPLAY, DISPLAY_HELD, FEED128, FEED_HELD, WORK3_HELD and
+the display layer's slots (COMPOSITE, COMPOSITE_HELD, PRE_DISPLAY, PRE_HELD, read across replays:
+[DISPLAY_LAYER.md](DISPLAY_LAYER.md)) to that
 colour with alpha 0x80 at the head of every replay, after `rd__clear_new_targets`
 (`port/render/rd_upload.c` (`workClear`); `rd__set_work_clear` overrides the environment). A texel
 the frame reads before drawing it then carries the colour downstream: in a target (`--target
@@ -283,7 +285,7 @@ NAME`), in a pass's picture (`--pass-dump DIR`), or on screen. The depth and ste
 one clear pass a target a frame, so it is a diagnostic only. One line at its first replay:
 
 ```
-rd: work clear: every target but SCENE, DISPLAY and the feedback kept across frames (DISPLAY_HELD, FEED128, FEED_HELD, WORK3_HELD) cleared to FF00FF before every frame (ICO_RD_WORK_CLEAR, a diagnostic): 13 named (SHADOW0 SHADOW1 ... WORK2_PAD) and N temporaries; a texel a frame reads before drawing it shows that colour
+rd: work clear: every target but SCENE, DISPLAY and the feedback kept across frames (DISPLAY_HELD, FEED128, FEED_HELD, WORK3_HELD, the display layer's COMPOSITE, COMPOSITE_HELD, PRE_DISPLAY, PRE_HELD) cleared to FF00FF before every frame (ICO_RD_WORK_CLEAR, a diagnostic): 13 named (SHADOW0 SHADOW1 ... WORK2_PAD) and N temporaries; a texel a frame reads before drawing it shows that colour
 ```
 
 A replay with the work clear against the same replay without it differs exactly where the frame

@@ -2365,8 +2365,8 @@ open_window:
        StartupRetryRun.robustOffDefault; Direct3D 12: NULL, its own rules) */
     ico_diag_set_robust_off_default(rhi_limits() != NULL && rhi_limits()->robustDefaultOff);
     window_pipe_floor_driver(); /* the free-memory floor's rule (memory_floor.h) */
-    /* issue 123: after a stop at the floor on Qualcomm's own driver, the set again
-       when the cache file holds this shader set (window_pipe_finish.h) */
+    /* issue 123: after a stop for memory, the set resumed where it stopped
+       (window_pipe_finish.h) */
     pipePolicy = window_pipe_floor_retry(pipePolicy);
     {
         /* the watchdog's GPU hang counts as a device loss where the
@@ -3515,7 +3515,8 @@ static void photo_pump(void)
             photo_capture();
         }
     }
-    window_blended_pump(); /* F12's blended present's frame into its zip */
+    window_blended_pump();       /* F12's blended present's frame into its zip */
+    ico_upscale_pictures_pump(); /* the upscaler's pictures that came later */
     {
         char path[ICO_PATH_MAX];
         const int r = rd_capture_result(path, sizeof(path));
@@ -3564,7 +3565,7 @@ static void photo_pump(void)
                 }
                 fprintf(stderr, "window: F12: %s %s%s\n", r > 0 ? "wrote" : "could not write", path,
                         what);
-                ico_upscale_pictures_done(path, s_pres.reportZip);
+                ico_upscale_pictures_after_present(path, s_pres.reportZip);
                 if (s_pres.reportZip[0] != '\0') {
                     char why[160], entry[ICO_PATH_MAX];
                     size_t bytes = 0;

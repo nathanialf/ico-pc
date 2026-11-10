@@ -167,7 +167,9 @@ void window_scene_vu_fit_add(SceneVuFit *f, uint64_t invocations, double workMs)
     const double x = (double)invocations / 1000.0;
     const double list0Ms = workMs;
 
-    if (f->n == 0 || x < f->xMin) {
+    /* the smallest x above 0: a replay with no VU work (a keep frame, a
+       menu) would make the spread guard below pass for any block */
+    if (x > 0.0 && (f->xMin == 0.0 || x < f->xMin)) {
         f->xMin = x;
     }
     if (f->n == 0 || x > f->xMax) {
@@ -197,7 +199,7 @@ bool window_scene_vu_fit(const SceneVuFit *f, double *a, double *b, double *r2)
     if (!(vx > 1e-9 * (f->sxx > 1.0 ? f->sxx : 1.0))) {
         return false;
     }
-    if (!(f->xMax >= 2.0 * f->xMin)) {
+    if (!(f->xMin > 0.0) || !(f->xMax >= 2.0 * f->xMin)) {
         return false;
     }
     *b = cxy / vx;
@@ -256,7 +258,7 @@ size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, do
                                   const SceneVuFit *fit)
 {
     double a, b, r2, v = 0.0, p, period, budget;
-    int k = 0, w;
+    int k = 0, w, row = 0;
 
     if (cap == 0) {
         return 0;
@@ -293,6 +295,9 @@ size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, do
     p = gpuMs - v;
     for (size_t i = 0; i < sizeof kHintScales / sizeof kHintScales[0]; i++) {
         const double kk = (double)kHintScales[i];
+        /* the scale is a Resolution row's (else Window, Auto or an
+           upscaler's render scale: no row to name) */
+        row |= scale > kk - 1e-3 && scale < kk + 1e-3;
         if (kk < scale - 1e-6 && v + p * (kk / scale) * (kk / scale) <= budget) {
             k = kHintScales[i];
         }
@@ -312,6 +317,17 @@ size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, do
                      "1x against %.1f ms, 0.9 of the %.1f ms step at %.1f game fps)",
                      gpuMs, scale, v, p, v, p, scale, v + p / (scale * scale), budget, period,
                      gameFps);
+    } else if (!row) {
+        w = snprintf(
+            out, cap,
+            "; the GPU takes %.1f ms a picture at this render scale (%.4gx, not a "
+            "Resolution row's: Window, Auto or an upscaler): a lower Resolution (or "
+            "Upscaling quality) would fit the game's rate at a render scale of %dx or "
+            "under (%.1f ms = %.1f ms of vertex work by the fit + %.1f ms that scales with "
+            "the pixels: %.1f + %.1f x (%d/%.4g)^2 = %.1f ms, under %.1f ms, 0.9 of the "
+            "%.1f ms step at %.1f game fps; a hint: nothing changes by itself)",
+            gpuMs, scale, k, gpuMs, v, p, v, p, k, scale,
+            v + p * ((double)k / scale) * ((double)k / scale), budget, period, gameFps);
     } else {
         w = snprintf(out, cap,
                      "; the GPU takes %.1f ms a picture at this resolution (%.4gx): %dx would fit "

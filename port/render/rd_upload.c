@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_layer.h"
 #include "rd_velocity.h"
 #include "rd_vu_skin_check.h"
 #include "rd_mesh.h"
@@ -793,11 +794,15 @@ static void workClearEnv(void)
     s_wc.rgb = (uint32_t)v;
 }
 
-/* the targets read across frames by design, or the frame's own picture */
+/* the targets read across frames by design, or the frame's own picture;
+ * the display layer's slots (COMPOSITE, COMPOSITE_HELD, PRE_DISPLAY,
+ * PRE_HELD: rd_layer.h) are read across replays (a keep frame's hold, the
+ * motion blur's PRE_DISPLAY) */
 static bool workClearKeeps(int i)
 {
     return i == RD_TARGET_SCENE || i == RD_TARGET_DISPLAY || i == RD_TARGET_DISPLAY_HELD ||
-           i == RD_TARGET_FEED128 || i == RD_TARGET_FEED_HELD || i == RD_TARGET_WORK3_HELD;
+           i == RD_TARGET_FEED128 || i == RD_TARGET_FEED_HELD || i == RD_TARGET_WORK3_HELD ||
+           i >= RD_LAYER_SLOT_FIRST;
 }
 
 /* rd_internal.h rd__set_work_clear: every other live target's colour
@@ -852,7 +857,8 @@ static void workClear(void)
     }
     if (s_wc.count++ == 0) {
         rd__log("work clear: every target but SCENE, DISPLAY and the feedback kept across frames "
-                "(DISPLAY_HELD, FEED128, FEED_HELD, WORK3_HELD) cleared to %06X before every frame "
+                "(DISPLAY_HELD, FEED128, FEED_HELD, WORK3_HELD, the display layer's COMPOSITE, "
+                "COMPOSITE_HELD, PRE_DISPLAY, PRE_HELD) cleared to %06X before every frame "
                 "(ICO_RD_WORK_CLEAR, a diagnostic): %d named (%s) and %d temporaries; a texel a "
                 "frame reads before drawing it shows that colour",
                 (unsigned)s_wc.rgb, named, names, temps);

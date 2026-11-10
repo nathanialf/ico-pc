@@ -142,8 +142,10 @@ with a dated block:
 one line for every row added after the file came in: `NULL` (English at run time) with the English
 words beside it. The maintainer makes the block with `tools/strings_sync.py --write --since
 <release>` when a release adds rows. `python3 -I tools/strings_sync.py --check` lists the rows a file
-has no line for; ctest `strings_sync` runs it, so a new row without its line fails the tests. A
-row stays in the block it first came in, under that release's heading, until it is translated.
+has no line for, and the lines whose quoted English differs from the English row's current words
+(an English row reworded after its line was written); ctest `strings_sync` runs it, so a new row
+without its line, or a stale quote, fails the tests. `tools/strings_sync.py --refresh-comments`
+rewrites the stale quotes to the current English. A row stays in the block it first came in, under that release's heading, until it is translated.
 
 A block's header may also name words the maintainer wrote for a row before the translator sent
 any (`UI_STR_NEWGAME_START` and `UI_STR_NEWGAME_START_SCREEN`, written by the maintainer and left where

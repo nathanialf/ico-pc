@@ -118,7 +118,7 @@ touching no game thread's slot or save image.
 
 ### The pool
 
-Every fiber lives in one of 256 slots (`ICO_FIBER_POOL_SLOTS`) of one address space reservation
+Every pooled fiber lives in one of 256 slots (`ICO_FIBER_POOL_SLOTS`) of one address space reservation
 (`port/platform/fiber.c` (the pool section)). A slot is a header page (the `IcoFiber` record, then
 minicoro's `mco_coro` and switch context, placed where minicoro's `_mco_create_context` puts them
 in its one-block layout), the guard page (minicoro's storage area, one page long), the stack and

@@ -1478,7 +1478,8 @@ static char act_prev_low_memory_line[sizeof act_low_memory];
 /* this start retries the set after the previous one stopped at the
    free-memory floor (ico_diag_startup_floor_retry): a stop line it writes
    ends with ICO_MEMORY_FLOOR_RETRIED_MARK, so the next start does not retry
-   again */
+   again.  The window no longer calls the retry (v0.11.2 resumes the set,
+   ico_diag_startup_resume), so this stays 0 outside diag_test */
 static int act_floor_retried;
 static const char act_loss_none[] = "graphics device lost, no loss dump";
 /* a GPU hang's loss (watchdog_fire, loss_hang set): its own line, counted
