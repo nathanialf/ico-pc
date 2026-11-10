@@ -248,6 +248,27 @@ together: a shadow did not wait for another's attack (N this run)`.
 and log lines, and scans `enemy_act.c` for the eleven callers and the hook; `settings_extra`
 (`testShadowsTogether`) the row.
 
+### Knock-down limit
+
+A row of the journey's difficulty (Customize > Rules: Knock-down limit Off or 1 to 9, Knock-downs count Each
+room or Whole journey; Hard: 3 in each room; `port/game/difficulty.h` `knock_limit`, `knock_scope`): the game
+is over when Ico has been knocked down that many times by a hit, in the room (the count starts again at each
+room entry, a Continue included) or on the journey (it starts again after the game over it caused). Each
+fall counts once: while he lies, while his get-up timer runs, and the landing of a fall the knock-down began
+(the European family's mails 55 and 56) are the same fall; a fall no hit caused (losing his balance at a
+ledge) and Yorda's and the Shadows' falls never count. At the limit he lies 2 s, unhittable, as the game's own
+death lies, then the game over comes as any other (Continue, or Quit; with Permadeath the journey ends).
+
+The hooks: `ico_gs_knockdown` at the entry of each `actCommonDown` copy (`ico2/fumi/src/commonact.c`:
+European body, `_ntsc`, `_aug6`, `_jun26`), `actDownGameOver` and `actDownGameOverNow` there (the game over:
+`ACT_LAYOUT_GAMEOVER`, the June 2001 demo's own form), `actAfterDown` (a mail that took him out of the
+down act first asks for the game over at once); the snapshot's `boy_act_mode` and `boy_down_timer`
+(`port/include/ico_gamestate.h`) and host_loop.c's `ico_difficulty_tick` for the in-fall latch; the room
+entry and the game over through `port/game/gamestate.c` (`ico_gs_signal`, `ico_gs_tick`). No per-frame game
+hook. The mechanism, the log lines and the mails per disc: [HARD_MODE.md](HARD_MODE.md#the-knock-down-limit);
+[DIVERGENCES.md](DIVERGENCES.md) GL-19. Tests: `difficulty_knock` (each disc), `knockdown_disc` (each disc
+image).
+
 ### Natural chains
 
 Two stage animations let a chain down for the player, `st10l_chain_down` (stage 17) and

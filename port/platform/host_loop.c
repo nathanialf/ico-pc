@@ -7,9 +7,11 @@
 #include <stdlib.h>
 #include "../audio/audio_host.h"
 #include "../game/options.h"
+#include "../game/difficulty.h"
 #include "../data/cdvd_host.h"
 #include "../game/achievements.h"
 #include "../include/ico_credits.h"
+#include "../include/ico_gamestate.h"
 #include "../include/ico_unused.h"
 #include "../save/mc_host.h"
 #include "arena.h"
@@ -143,6 +145,14 @@ void ico_host_step(void)
     /* the port's achievements: once per new Main tick, after the threads
        have run; reads game state, writes none */
     ico_ach_host_poll(ico_host_main_ticks());
+    /* the knock-down limit's in-fall latch, from the snapshot that poll
+       took: the next knock-down counts once Ico is out of the down act and
+       his get-up timer has run out */
+    {
+        const int boy_mode = ico_gs_boy_act_mode();
+
+        ico_difficulty_tick(boy_mode >= 0, boy_mode, ico_gs_boy_down_timer());
+    }
     /* the Extras credits' playback: nothing unless one is running; then it
        watches the stage and puts the game flags back at the title */
     ico_credits_host_poll();

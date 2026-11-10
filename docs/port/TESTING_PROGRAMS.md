@@ -316,8 +316,27 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   three game over twins' Quit only) and of `backup.c`; the log lines (found by slot / by sum /
   carry-over / none, the writes, the refusals, the damaged file) (`difficulty_file`,
   `difficulty_file_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
-- `difficulty_knock_test.c`, `knockdown_disc_test.c`,
-  `no_shadows_disc_test.c`, `no_shadows_census_test.c`: registered with their ctests for the
+- `difficulty_knock_test.c`: the knock-down limit's game side
+  ([GAME_FEATURES.md](GAME_FEATURES.md#knock-down-limit)) on the CPU, `gamestate.c` compiled in over a
+  synthetic sampler, one run per disc: the snapshot's act mode and get-up timer (unknown while the boy's
+  object is unreadable); `ico_gs_knockdown` counts a fall by a hit once (still down, the get-up timer
+  running, a landing, a fall without a hit and another actor's fall do not count) and the latch clears
+  through the snapshot as host_loop.c passes it to `ico_difficulty_tick`; Hard's third fall returns 1 and
+  every later entry while the game over is due, `ico_gs_knock_game_over_take` answers once (again after a
+  state's rebaseline), the watch line after 2 s neither down nor dead; a room entry's signal starts the
+  room's count again; the game over signal (and the June 2001 demo's `ico_gs_signal_game_over_once`, two
+  calls, one game over) clears the due game over and the counts it should; the journey scope; Permadeath;
+  Normal counts nothing and logs nothing; each log line's text (POSIX hosts); text scans of the hooks in
+  commonact.c (four copies, the hold, the two game-over forms, `actAfterDown`), act.c (the after-proc at
+  every interrupt), StageManager.c, gamestate.c, host_loop.c and the header (`difficulty_knock`,
+  `difficulty_knock_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
+- `knockdown_disc_test.c`: the knock-down limit against each disc image's own tables: act mode 0x15 is
+  DOWN with `actCommonDown` for all three actor kinds, 0x16 DEAD with `actCommonDie`, 5 FALL, 26
+  CLIFF_HESITATE; the interrupt lists' terminator (429, 396, 392, 376); every row into DOWN: the
+  knock-down mail in list 3 (291, 275 ntsc, 272 aug6, 264 jun26), on the European family also the
+  landing's 55 (list 3) and 56 (FALL's list), on the 2001 discs nothing else; skipped (77) without the
+  image (`knockdown_disc`, `knockdown_disc_jpn`, `_kor`, `_cn`, `_ntsc`, `_aug6`, `_jun26`).
+- `no_shadows_disc_test.c`, `no_shadows_census_test.c`: registered with their ctests for the
   packages that fill them (the knock-down limit's game side, the disc's
   mails, No Shadows on each disc, the script census); until then each passes without a check
   (`difficulty_knock`, `difficulty_knock_<disc>`,
