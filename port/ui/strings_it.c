@@ -35,7 +35,7 @@ const char *const ui_strings_it[UI_STR_COUNT] =
             "Per una partita meno stressante. Alcune scene scriptate mostrano ancora il rapimento.",
         [UI_STR_OPT_PIT_TIME] = "Tempo per salvare Yorda",
         [UI_STR_OPT_PIT_TIME_NOTE] =
-            "Secondi da quando un’ombra sprofonda con Yorda a quando la porta via; meno in alcune scene, in proporzione. La riga Yorda lo impedisce.",
+            "Secondi da quando un’ombra sprofonda con Yorda a quando la porta via; meno in alcune scene, in proporzione. Nulla se le ombre non la rapiscono.",
         [UI_STR_OPT_SHADOW_SPEED] = "Velocità delle ombre",
         [UI_STR_OPT_SHADOW_SPEED_NOTE] =
             "Quanto velocemente le ombre camminano, corrono e volano. Non cambia la frequenza dei loro attacchi.",
@@ -746,15 +746,13 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_SECTION_CUTSCENES] = "Filmati",
         [UI_STR_OPT_VAR_TOUGHNESS] = "Resistenza delle ombre",
         [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
-            "Americana: ogni ombra resistente come nel disco nordamericano, e non più resistente nelle partite successive. Gli obiettivi restano attivi.",
+            "Americana: ogni ombra resistente come nel disco nordamericano, e non più resistente nelle partite successive.",
         [UI_STR_VAL_VAR_AMERICAN] = "Americana",
         [UI_STR_VAL_VAR_NOT_TOUGHER] = "Senza aumenti",
         [UI_STR_OPT_VAR_ONE_HIT] = "Un colpo per attacco",
-        [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
-            "Ogni attacco di Ico può colpire un’ombra una sola volta. Disattiva gli obiettivi.",
+        [UI_STR_OPT_VAR_ONE_HIT_NOTE] = "Ogni attacco di Ico può colpire un’ombra una sola volta.",
         [UI_STR_OPT_VAR_NEVER_DODGE] = "Le ombre non schivano mai",
-        [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] =
-            "Le ombre non evitano mai i colpi di Ico. Disattiva gli obiettivi.",
+        [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] = "Le ombre non evitano mai i colpi di Ico.",
         [UI_STR_OPT_VAR_AGGRESSION] = "Aggressività delle ombre",
         [UI_STR_VAL_VAR_AGG_OWN] = "Proprio",
         [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "Audace, paziente",
@@ -762,15 +760,15 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "Cauto, paziente",
         [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "Cauto, veloce",
         [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
-            "Come combattono le ombre: audaci o caute, pazienti o veloci. Gli obiettivi restano attivi.",
+            "Come combattono le ombre: audaci o caute, pazienti o veloci.",
         [UI_STR_OPT_VAR_NO_HINTS] = "Niente suggerimenti",
         [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
-            "Yorda non dà suggerimenti su dove andare, come nel disco nordamericano. Gli obiettivi restano attivi.",
+            "Yorda non dà suggerimenti su dove andare, come nel disco nordamericano.",
         [UI_STR_OPT_VAR_BARRIER] = "Barriera della Regina",
         [UI_STR_VAL_VAR_HITS_5] = "5 colpi",
         [UI_STR_VAL_VAR_HITS_7] = "7 colpi",
         [UI_STR_OPT_VAR_BARRIER_NOTE] =
-            "Quanti colpi servono per rompere la barriera della Regina. Gli obiettivi restano attivi.",
+            "Quanti colpi servono per rompere la barriera della Regina.",
         [UI_STR_OPT_VAR_NO_LOOK] = "Filmati senza visuale libera",
         [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
             "Lo stick destro non muove più la visuale durante i filmati. Gli obiettivi restano attivi.",
@@ -781,9 +779,9 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
             "Il menu di debug del gioco, per sviluppatori. Disattiva gli obiettivi.",
         [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
-            "Americana non è disponibile in questa demo: le sue ombre non sono quelle del disco nordamericano. Senza aumenti: non più resistenti nelle partite successive. Gli obiettivi restano attivi.",
+            "Americana non è disponibile in questa demo: le sue ombre non sono quelle del disco nordamericano. Senza aumenti: non più resistenti nelle partite successive.",
         [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
-            "Questa versione del gioco non dà suggerimenti, quindi non cambia nulla. Gli obiettivi restano attivi.",
+            "Questa versione del gioco non dà suggerimenti, quindi non cambia nulla.",
         [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
             "In questa versione del gioco la visuale non si muove durante i filmati, quindi non cambia nulla. Gli obiettivi restano attivi.",
         [UI_STR_GPU_HANG_TURNIP] =
@@ -813,8 +811,7 @@ const char *const ui_strings_it[UI_STR_COUNT] =
             "Questo stato è stato creato dalla versione %s,\nprima che gli stati salvati potessero passare\nalle versioni più recenti.\nI salvataggi sulla memory card funzionano ancora.",
         [UI_STR_STATES_XB_CODE] =
             "Questo stato è stato creato dalla versione %s.\nLa versione %s ha cambiato la parte del gioco\nin cui è stato salvato, quindi non può essere\nripreso.\nI salvataggi sulla memory card funzionano ancora.",
-        [UI_STR_STATES_XB_DATA] =
-            "Questo stato è stato creato dalla versione %s.\nLa versione %s ha cambiato il modo in cui il gioco\ntiene i suoi progressi in memoria, quindi non può\nessere ripreso.\nI salvataggi sulla memory card funzionano ancora.",
+        [UI_STR_STATES_XB_DATA] = "Questo stato è stato creato dalla versione %s.\nLa versione %s ha cambiato il modo in cui il gioco\ntiene i suoi progressi in memoria, quindi non può\nessere ripreso.\nI salvataggi sulla memory card funzionano ancora.",
         [UI_STR_STATES_XB_PINNED] =
             "Questo stato è stato creato dalla versione %s\ne solo quella versione può riprenderlo.\nI salvataggi sulla memory card funzionano ancora.",
         [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Bagliore tra i fotogrammi",
@@ -845,13 +842,13 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_SECTION_COMBAT] = "Combattimento",
         [UI_STR_OPT_VAR_AUTO_GUARD] = "Parata automatica",
         [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
-            "No: Ico non para più l’attacco di un’ombra di fronte; lo colpisce come se arrivasse da dietro. Gli obiettivi restano attivi.",
+            "No: Ico non para più l’attacco di un’ombra di fronte; lo colpisce come se arrivasse da dietro.",
         [UI_STR_OPT_VAR_ATTACK_TURN] = "Gira verso le ombre",
         [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
-            "No: Ico colpisce dritto senza girarsi verso l’ombra più vicina; la portata resta. Gli obiettivi restano attivi.",
+            "No: Ico colpisce dritto senza girarsi verso l’ombra più vicina; la portata resta.",
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "Le ombre aspettano che Ico si rialzi",
         [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
-            "No: le ombre non si trattengono più mentre Ico è a terra, e i loro colpi lo raggiungono mentre è a terra e mentre si rialza. Gli obiettivi restano attivi.",
+            "No: le ombre non si trattengono più mentre Ico è a terra, e i loro colpi lo raggiungono mentre è a terra e mentre si rialza.",
         [UI_STR_OPT_VAR_SWORD_COLOUR] = "Colore della spada di luce",
         [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
             "Rosso: la spada di luce lascia una scia rossa come la gemella inutilizzata; nient’altro cambia. Dalla stanza seguente.",
@@ -861,10 +858,10 @@ const char *const ui_strings_it[UI_STR_COUNT] =
             "Retino: ogni bastone è il retino inutilizzato del gioco; non si brandisce né si accende e non ferisce le ombre. Dalla stanza seguente.",
         [UI_STR_VAL_VAR_THIRD_JOURNEY] = "Terzo viaggio",
         [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
-            "Ombre resistenti come in una terza partita, che il gioco non raggiunge mai (il doppio del primo viaggio). Gli obiettivi restano attivi.",
+            "Ombre resistenti come in una terza partita, che il gioco non raggiunge mai (il doppio del primo viaggio).",
         [UI_STR_OPT_VAR_PEACEFUL] = "Ombre pacifiche",
         [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
-            "Sì: le ombre restano dove compaiono e non attaccano mai Ico né Yorda. Disattiva gli obiettivi.",
+            "Sì: le ombre restano dove compaiono e non attaccano mai Ico né Yorda.",
         [UI_STR_OPT_VAR_CHAIN_SPEED] = "Velocità della catena",
         [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
             "Quanto veloce oscilla una catena quando Ico vi si aggrappa e la fa dondolare. 1 è il più lento, 10 il più veloce, 4 il valore del gioco. Gli obiettivi restano attivi.",
@@ -879,4 +876,43 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_OPT_FREE_MOVEMENT_NOTE] =
             "Premi L2 per guidare Ico con gli stick: il sinistro lo muove, il destro lo alza e abbassa, L3 lo posa a terra. Disattiva gli obiettivi.",
         [UI_STR_REMAP_ASK_HINT] = "Chiedi un suggerimento a Yorda",
+        [UI_STR_DIFF] = "Difficoltà",
+        [UI_STR_DIFF_NOTE] =
+            "Imposta ombre, tempo di salvataggio e regole di questa nuova partita. Il salvataggio ricorda la scelta.",
+        [UI_STR_DIFF_EASY] = "Facile",
+        [UI_STR_DIFF_NORMAL] = "Normale",
+        [UI_STR_DIFF_HARD] = "Difficile",
+        [UI_STR_DIFF_CUSTOM] = "Personalizzata",
+        [UI_STR_DIFF_EASY_NOTE] =
+            "Ombre più lente e docili che non rapiscono mai Yorda e non schivano, e più tempo per salvarla.",
+        [UI_STR_DIFF_NORMAL_NOTE] = "Il gioco com’era all’uscita.",
+        [UI_STR_DIFF_HARD_NOTE] =
+            "Ombre più veloci e resistenti che attaccano insieme, niente parata auto, meno tempo per salvare Yorda, game over dopo 3 atterramenti in una stanza.",
+        [UI_STR_DIFF_CUSTOM_NOTE] = "Le tue regole. Modifica ogni riga in Personalizza.",
+        [UI_STR_DIFF_CUSTOMIZE] = "Personalizza",
+        [UI_STR_DIFF_CUSTOMIZE_NOTE] =
+            "Modifica ogni regola da sola. Una combinazione che non corrisponde a nessun livello appare come Personalizzata.",
+        [UI_STR_DIFF_RULES] = "Regole",
+        [UI_STR_DIFF_NO_SHADOWS] = "Niente ombre",
+        [UI_STR_DIFF_NO_SHADOWS_NOTE] =
+            "Sì: non compare mai nessuna ombra. La storia si svolge comunque.",
+        [UI_STR_DIFF_KNOCK_LIMIT] = "Limite di atterramenti",
+        [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
+            "Game over quando Ico è stato atterrato questo numero di volte. Disattivato: nessun limite.",
+        [UI_STR_DIFF_KNOCK_SCOPE] = "Atterramenti contati",
+        [UI_STR_DIFF_KNOCK_SCOPE_NOTE] =
+            "Per stanza (il conto riparte a ogni ingresso in una stanza) o su tutto il viaggio. Non fa nulla se il limite è disattivato.",
+        [UI_STR_DIFF_SCOPE_ROOM] = "Per stanza",
+        [UI_STR_DIFF_SCOPE_JOURNEY] = "Tutto il viaggio",
+        [UI_STR_DIFF_PERMADEATH] = "Morte permanente",
+        [UI_STR_DIFF_PERMADEATH_NOTE] =
+            "Sì: ogni game over pone fine a questo viaggio. Niente più Carica, e il salvataggio non si può più caricare.",
+        [UI_STR_DIFF_LOCKED_NOTE] = "Scelta all’inizio del viaggio",
+        [UI_STR_DIFF_LINE] = "Difficoltà",
+        [UI_STR_DIFF_LINK] = "Difficoltà",
+        [UI_STR_DIFF_TOAST_ENDED] = "Questo viaggio è finito.",
+        [UI_STR_DIFF_TOAST_KNOCK] = "Atterrato: %d su %d",
+        [UI_STR_DIFF_STATES_LOCKED] =
+            "Gli stati salvati non si possono caricare in un viaggio con morte permanente.",
+        [UI_STR_DIFF_WORD_PERMADEATH] = "Morte permanente",
 };

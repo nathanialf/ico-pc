@@ -34,7 +34,7 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "気軽に遊びたい方に。一部のイベントでは、さらわれる場面が表示されます。",
     [UI_STR_OPT_PIT_TIME] = "ヨルダを助けるまでの時間",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "影がヨルダを連れて沈み始めてから連れ去るまでの秒数（一部の場面は同じ割合で短め）。上のヨルダの項目でさらわれなくなります。",
+        "影がヨルダを連れて沈み始めてから連れ去るまでの秒数（一部の場面は同じ割合で短め）。さらわれない設定では無効です。",
     [UI_STR_OPT_SHADOW_SPEED] = "影の速さ",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "影が歩く、走る、飛ぶ速さです。攻撃してくる頻度は変わりません。",
@@ -746,14 +746,13 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_SECTION_CUTSCENES] = "ムービー",
     [UI_STR_OPT_VAR_TOUGHNESS] = "影の強さ",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE] =
-        "北米版：影の強さが北米版ディスクと同じになり、2周目以降も強くなりません。実績はそのままです。",
+        "北米版：影の強さが北米版ディスクと同じになり、2周目以降も強くなりません。",
     [UI_STR_VAL_VAR_AMERICAN] = "北米版",
     [UI_STR_VAL_VAR_NOT_TOUGHER] = "強くならない",
     [UI_STR_OPT_VAR_ONE_HIT] = "一振り一回だけ命中",
-    [UI_STR_OPT_VAR_ONE_HIT_NOTE] =
-        "イコの一振りは、影に一度しか当たりません。実績が無効になります。",
+    [UI_STR_OPT_VAR_ONE_HIT_NOTE] = "イコの一振りは、影に一度しか当たりません。",
     [UI_STR_OPT_VAR_NEVER_DODGE] = "影がよけない",
-    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] = "影はイコの攻撃をよけません。実績が無効になります。",
+    [UI_STR_OPT_VAR_NEVER_DODGE_NOTE] = "影はイコの攻撃をよけません。",
     [UI_STR_OPT_VAR_AGGRESSION] = "影の攻め方",
     [UI_STR_VAL_VAR_AGG_OWN] = "元のまま",
     [UI_STR_VAL_VAR_AGG_BOLD_PATIENT] = "大胆・じっくり",
@@ -761,15 +760,13 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_VAL_VAR_AGG_WARY_PATIENT] = "慎重・じっくり",
     [UI_STR_VAL_VAR_AGG_WARY_QUICK] = "慎重・すばやく",
     [UI_STR_OPT_VAR_AGGRESSION_NOTE] =
-        "影の戦い方を、大胆か慎重か、じっくりかすばやくかで変えます。実績はそのままです。",
+        "影の戦い方を、大胆か慎重か、じっくりかすばやくかで変えます。",
     [UI_STR_OPT_VAR_NO_HINTS] = "ヒントなし",
-    [UI_STR_OPT_VAR_NO_HINTS_NOTE] =
-        "北米版と同じく、ヨルダが進む先のヒントを出しません。実績はそのままです。",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE] = "北米版と同じく、ヨルダが進む先のヒントを出しません。",
     [UI_STR_OPT_VAR_BARRIER] = "女王の結界",
     [UI_STR_VAL_VAR_HITS_5] = "5回",
     [UI_STR_VAL_VAR_HITS_7] = "7回",
-    [UI_STR_OPT_VAR_BARRIER_NOTE] =
-        "女王の結界を壊すのに必要な攻撃の回数です。実績はそのままです。",
+    [UI_STR_OPT_VAR_BARRIER_NOTE] = "女王の結界を壊すのに必要な攻撃の回数です。",
     [UI_STR_OPT_VAR_NO_LOOK] = "ムービー中に見回さない",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE] =
         "ムービー中に右スティックで見回せなくなります。実績はそのままです。",
@@ -780,9 +777,8 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_VAR_DEBUG_MENU_NOTE] =
         "ゲーム本来のデバッグメニューです（開発者向け）。実績が無効になります。",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE_DEMO] =
-        "このデモには北米版がありません。影が北米版ディスクと同じではないためです。強くならない：2周目以降も強くなりません。実績はそのままです。",
-    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] =
-        "このバージョンにはヒントがないため、変わりません。実績はそのままです。",
+        "このデモには北米版がありません。影が北米版ディスクと同じではないためです。強くならない：2周目以降も強くなりません。",
+    [UI_STR_OPT_VAR_NO_HINTS_NOTE_2001] = "このバージョンにはヒントがないため、変わりません。",
     [UI_STR_OPT_VAR_NO_LOOK_NOTE_2001] =
         "このバージョンではもともとムービー中に見回せないため、変わりません。実績はそのままです。",
     [UI_STR_GPU_HANG_TURNIP] =
@@ -844,13 +840,13 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_SECTION_COMBAT] = "戦闘",
     [UI_STR_OPT_VAR_AUTO_GUARD] = "自動ガード",
     [UI_STR_OPT_VAR_AUTO_GUARD_NOTE] =
-        "オフ：正面からの影の攻撃をイコがガードしなくなり、背後から受けたときと同じように当たります。実績はそのままです。",
+        "オフ：正面からの影の攻撃をイコがガードしなくなり、背後から受けたときと同じように当たります。",
     [UI_STR_OPT_VAR_ATTACK_TURN] = "影のほうを向く",
     [UI_STR_OPT_VAR_ATTACK_TURN_NOTE] =
-        "オフ：イコの攻撃で最も近い影のほうを向かなくなり、正面に振ります。横にいる影には攻撃が当たることがあります。実績はそのままです。",
+        "オフ：イコの攻撃で最も近い影のほうを向かなくなり、正面に振ります。横にいる影には攻撃が当たることがあります。",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN] = "イコが倒れている間は影が待つ",
     [UI_STR_OPT_VAR_SHADOWS_WAIT_DOWN_NOTE] =
-        "オフ：イコが倒れている間も影が待たなくなり、倒れている間も起き上がる途中も攻撃が当たります。実績はそのままです。",
+        "オフ：イコが倒れている間も影が待たなくなり、倒れている間も起き上がる途中も攻撃が当たります。",
     [UI_STR_OPT_VAR_SWORD_COLOUR] = "光の剣の色",
     [UI_STR_OPT_VAR_SWORD_COLOUR_NOTE] =
         "赤：光の剣の軌跡が、未使用のもう一本と同じ赤になります。変わるのは色だけです。次の部屋から反映されます。",
@@ -860,10 +856,9 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
         "虫取り網：棒がすべて未使用の虫取り網になります。振れず、火もつかず、影を傷つけません。次の部屋から反映されます。",
     [UI_STR_VAL_VAR_THIRD_JOURNEY] = "3周目",
     [UI_STR_OPT_VAR_TOUGHNESS_NOTE_THIRD] =
-        "影が3周目と同じ強さ（1周目の2倍）になります。ゲームでは3周目に到達することはありません。実績はそのままです。",
+        "影が3周目と同じ強さ（1周目の2倍）になります。ゲームでは3周目に到達することはありません。",
     [UI_STR_OPT_VAR_PEACEFUL] = "おとなしい影",
-    [UI_STR_OPT_VAR_PEACEFUL_NOTE] =
-        "オン：影は現れた場所にとどまり、イコやヨルダを襲いません。実績が無効になります。",
+    [UI_STR_OPT_VAR_PEACEFUL_NOTE] = "オン：影は現れた場所にとどまり、イコやヨルダを襲いません。",
     [UI_STR_OPT_VAR_CHAIN_SPEED] = "鎖の揺れの速さ",
     [UI_STR_OPT_VAR_CHAIN_SPEED_NOTE] =
         "イコがつかまって揺らしたときに、鎖が揺れる速さです。1が最も遅く、10が最も速く、4がゲーム本来の値です。実績はそのままです。",
@@ -878,4 +873,41 @@ const char *const ui_strings_ja[UI_STR_COUNT] = {
     [UI_STR_OPT_FREE_MOVEMENT_NOTE] =
         "L2を押すとスティックでイコを自由に動かせます。左スティックで移動、右スティックで上下、L3で床に降ろします。実績が無効になります。",
     [UI_STR_REMAP_ASK_HINT] = "ヨルダにヒントを聞く",
+    [UI_STR_DIFF] = "難易度",
+    [UI_STR_DIFF_NOTE] =
+        "今回の新しい旅の影、救出までの時間、ルールを決めます。セーブにこの選択が残ります。",
+    [UI_STR_DIFF_EASY] = "イージー",
+    [UI_STR_DIFF_NORMAL] = "ノーマル",
+    [UI_STR_DIFF_HARD] = "ハード",
+    [UI_STR_DIFF_CUSTOM] = "カスタム",
+    [UI_STR_DIFF_EASY_NOTE] =
+        "動きが遅くおとなしい影で、ヨルダをさらわず、よけません。救出までの時間も長くなります。",
+    [UI_STR_DIFF_NORMAL_NOTE] = "発売時のままのゲームです。",
+    [UI_STR_DIFF_HARD_NOTE] =
+        "速くて強い影が一斉に襲い、自動ガードなし、救出までの時間が短く、1部屋で3回倒されるとゲームオーバーです。",
+    [UI_STR_DIFF_CUSTOM_NOTE] = "自分で決めるルールです。カスタマイズで全項目を変えられます。",
+    [UI_STR_DIFF_CUSTOMIZE] = "カスタマイズ",
+    [UI_STR_DIFF_CUSTOMIZE_NOTE] =
+        "項目を一つずつ変えます。どの設定とも合わない組み合わせは「カスタム」と表示されます。",
+    [UI_STR_DIFF_RULES] = "ルール",
+    [UI_STR_DIFF_NO_SHADOWS] = "影なし",
+    [UI_STR_DIFF_NO_SHADOWS_NOTE] = "オン：影がまったく現れません。物語はそのまま進みます。",
+    [UI_STR_DIFF_KNOCK_LIMIT] = "ダウン回数の上限",
+    [UI_STR_DIFF_KNOCK_LIMIT_NOTE] =
+        "イコがこの回数だけ倒されるとゲームオーバーです。オフなら上限なしです。",
+    [UI_STR_DIFF_KNOCK_SCOPE] = "ダウン回数の数え方",
+    [UI_STR_DIFF_KNOCK_SCOPE_NOTE] =
+        "部屋ごと（部屋に入るたびに数え直し）か、旅全体かを選びます。上限がオフのときは何も起きません。",
+    [UI_STR_DIFF_SCOPE_ROOM] = "部屋ごと",
+    [UI_STR_DIFF_SCOPE_JOURNEY] = "旅全体",
+    [UI_STR_DIFF_PERMADEATH] = "パーマデス",
+    [UI_STR_DIFF_PERMADEATH_NOTE] =
+        "オン：ゲームオーバーになるとこの旅は終わりです。「つづきから」は使えず、このセーブは二度とロードできません。",
+    [UI_STR_DIFF_LOCKED_NOTE] = "旅のはじめに選んだ設定です",
+    [UI_STR_DIFF_LINE] = "難易度",
+    [UI_STR_DIFF_LINK] = "難易度",
+    [UI_STR_DIFF_TOAST_ENDED] = "この旅は終わりました。",
+    [UI_STR_DIFF_TOAST_KNOCK] = "倒された回数 %d / %d",
+    [UI_STR_DIFF_STATES_LOCKED] = "パーマデスの旅では、セーブステートをロードできません。",
+    [UI_STR_DIFF_WORD_PERMADEATH] = "パーマデス",
 };
