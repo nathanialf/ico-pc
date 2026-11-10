@@ -1300,6 +1300,17 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   note's hold (`testHold`: the shadow reduce's order, its pipeline looked up held leaving the
   seven draws' entry alone, its own entry at the GS size taking it when asked again); pure
   (`rd_passring`).
+- `rd_ssaa_shadow_test.c`: the shadow count under supersampling (`rd_ssaa_shadow`, and
+  `rd_ssaa_shadow_4096` under `ICO_VK_FAKE_LIMITS=min`, the 4096 render-target limit a tile-based
+  GPU takes; `port/render/rd_msaa_shadow.cmake`; issue 209's log :923): a 688 x 448 frame with a
+  ground and Shadow.c's count at 2x 16:9 Full height and Full pixel, then with 4x supersampling
+  (SCENE 4096 x 2667 at 5.95349 under the limit), 3x with 2x supersampling and 4:3 with 4x: the
+  count drawn once, read back, the volume's centre the count 1, the count target's texels SCENE's;
+  a live switch to 4x supersampling with the renderer's own thread (every replay after it draws
+  its count) and across between-tick presents; the shadow commands' size rule
+  (`rd__shadow_size_agree`): a scene-sized temporary made at 2x and kept across the switch is made
+  again at SCENE's texels (the rule before skipped the shadow commands on it), a named target of
+  another size is refused; no validation error.
 - `rd_msaa_test.c`: the anti-aliasing's MSAA against the frame without it (`rd_msaa`); with
   `msaa_resolve_ps` or `depth_resolve_ps` cleared for one call (a backend that cannot make one)
   the supported mask holds the supersampling values only; `testShadowEpoch` (issue 209): with
