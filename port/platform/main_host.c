@@ -2069,16 +2069,18 @@ static int states_request(int action, int slot, int *refusal_str)
         *refusal_str = UI_STR_STATES_OFF;
         return -1;
     }
-    if (action == UI_STATES_ACT_SAVE && !ico_state_can_save_here()) {
-        *refusal_str = UI_STR_STATES_PAUSE_FIRST;
-        return -1;
-    }
-    if (action == UI_STATES_ACT_LOAD && ico_difficulty_states_locked()) {
+    if (action != UI_STATES_ACT_DELETE && ico_difficulty_states_locked()) {
         /* a Permadeath journey: the poll would refuse it the same
-           (ico_state_conditions); said at once, nothing requested */
-        fprintf(stderr, "state: refused load slot %d: %s (the page)\n", slot,
+           (ico_state_conditions); said at once, nothing requested.  The
+           save's refusal shares the load's words for now */
+        fprintf(stderr, "state: refused %s slot %d: %s (the page)\n",
+                action == UI_STATES_ACT_SAVE ? "save" : "load", slot,
                 ico_state_result_text(ICO_STATE_PERMADEATH));
         *refusal_str = UI_STR_DIFF_STATES_LOCKED;
+        return -1;
+    }
+    if (action == UI_STATES_ACT_SAVE && !ico_state_can_save_here()) {
+        *refusal_str = UI_STR_STATES_PAUSE_FIRST;
         return -1;
     }
     if (action == UI_STATES_ACT_SAVE) {

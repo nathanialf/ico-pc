@@ -371,8 +371,11 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   (taken once from play to the pause menu, kept over the pages, dropped on play); after a load the
   loaded slot's picture copied to `pause.png` with its size from the PNG header (none without a
   picture, no size for a header that is not a PNG's) and on to a later save's slot; a Permadeath
-  journey (`IcoStateConds.locked`): a load refused as `ICO_STATE_PERMADEATH` right after "off",
-  before every other condition, a save allowed, its own log words (`state_host`).
+  journey in force (`IcoStateConds.locked`): a load and a save refused as `ICO_STATE_PERMADEATH`
+  right after "off", before every other condition, with their own log words; a state's own
+  difficulty record read by its bytes (`ico_state_record_permadeath`): Permadeath on refuses it,
+  off, another record version, another size, a block past the end and no section do not, and the
+  same through a state file's reg section written and read back (`state_host`).
 - `variants_test.c`: the game variants (`port/game/variants.h`) on the CPU: every default is the game as
   shipped (the barrier's number the disc's: 5, 7 on `jun26`), every variant steps through
   all its values, saves and reads back (a global one's `[variants]` key written, a difficulty row's

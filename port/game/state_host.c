@@ -1490,6 +1490,9 @@ static void shot_from_slot(int slot)
 typedef struct LoadCtx {
     Copy *c;
     unsigned want; /* the sections to read (1 << SEC_*), 0 every one */
+    int xb;        /* another build's state: its reg and audio sections lack the FRESH blocks
+                      it was saved without, so their sizes are bounds here (check_sizes does
+                      the exact sum from the translation's offsets) */
     int bad;
     char why[160];
 } LoadCtx;
@@ -1544,6 +1547,10 @@ static void *load_section(void *user, const IcoStateSectionInfo *s)
             (l->want == 0 || (l->want & (1u << i)) != 0)) {
             int exact;
             const uint64_t want = section_size(i, &exact);
+
+            if (l->xb && (i == SEC_REG || i == SEC_AUDIO)) {
+                exact = 0;
+            }
 
             /* review finding 10: the size the file claims against this
                build's before anything is allocated for it */
@@ -1760,6 +1767,71 @@ static int state_block_absent(const IcoXbVerdict *v, const char *name)
         }
     }
     return 0;
+}
+
+/* The "difficulty.record" block's place in a reg section: this build's
+   order (block_off NULL) or another build's offsets; 0 when the state has
+   none (a FRESH block it lacks) or the block is not registered */
+static int record_place(const uint64_t *block_off, uint64_t *off, uint64_t *n)
+{
+    uint64_t at = 0;
+    int i;
+
+    for (i = 0; i < ico_state_registry_count(); i++) {
+        const IcoStateEntry *e = ico_state_registry_entry(i);
+
+        if ((e->flags & ICO_STATE_AUDIO) != 0) {
+            continue;
+        }
+        if (strcmp(e->name, "difficulty.record") == 0) {
+            if (block_off != NULL && block_off[i] == ICO_XB_BLOCK_ABSENT) {
+                return 0;
+            }
+            *off = block_off != NULL ? block_off[i] : at;
+            *n = e->n;
+            return 1;
+        }
+        at += e->n;
+    }
+    return 0;
+}
+
+/* 1 when the staged reg section holds a record with Permadeath on */
+static int staged_permadeath(const Copy *c, const uint64_t *block_off)
+{
+    uint64_t off = 0, n = 0;
+
+    return c->p[SEC_REG] != NULL && record_place(block_off, &off, &n) &&
+           ico_state_record_permadeath((const unsigned char *)c->p[SEC_REG], c->n[SEC_REG], off, n);
+}
+
+/* The listing's check of a slot's file: its reg section read alone (the
+   record's bytes), 1 when it was saved on a Permadeath journey */
+static int slot_permadeath(int slot, const uint64_t *block_off)
+{
+    char path[ICO_PATH_MAX];
+    Copy c;
+    LoadCtx lc;
+    int k = 0;
+
+    if (ico_state_slot_path(path, sizeof path, ico_state_dir(), slot, ".ics") != 0) {
+        return 0;
+    }
+    memset(&c, 0, sizeof c);
+    memset(&lc, 0, sizeof lc);
+    lc.c = &c;
+    lc.want = 1u << SEC_REG;
+    lc.xb = block_off != NULL;
+    if (ico_state_file_read(path, NULL, load_section, &lc) == ICO_STATE_OK && !lc.bad) {
+        k = staged_permadeath(&c, block_off);
+    }
+    copy_free(&c);
+    if (k) {
+        fprintf(stderr,
+                "state: slot %d was saved on a Permadeath journey: it cannot be loaded here\n",
+                slot);
+    }
+    return k;
 }
 
 /* A state that header_check called another build's: OK when it can be
@@ -2016,6 +2088,7 @@ static void perform_load(int slot)
     memset(&backup, 0, sizeof backup);
     memset(&lc, 0, sizeof lc);
     lc.c = &stage;
+    lc.xb = xb;
     r = ico_state_file_read(path, NULL, load_section, &lc);
     rg = stage.n[SEC_RANGES] == sizeof(StateRanges) ? (const StateRanges *)stage.p[SEC_RANGES]
                                                     : NULL;
@@ -2042,6 +2115,13 @@ static void perform_load(int slot)
         snprintf(detail, sizeof detail, "%s -> %s: %.250s", sv, tv, why);
         set_refusal(ICO_STATE_BLOCK_DATA, saved.commit);
         r = ICO_STATE_OTHER_BUILD;
+    }
+    /* a state saved on a Permadeath journey never loads, whatever journey
+       is in force now (from the title too): its record, read from the
+       file's own bytes, before anything is restored */
+    if (r == ICO_STATE_OK && staged_permadeath(&stage, xb ? xv.block_off : NULL)) {
+        r = ICO_STATE_PERMADEATH;
+        snprintf(detail, sizeof detail, "%s", "the state was saved on a Permadeath journey");
     }
     /* a state without the saving process's thread pointer or stack guard
        where this platform's frames hold them: its fibers would resume with
@@ -2302,6 +2382,10 @@ static void list_other_build(int slot, IcoStateSlotInfo *info)
     }
     detail[0] = '\0';
     r = other_build(path, &h, &v, &xb, detail, sizeof detail);
+    if (r == ICO_STATE_OK && xb && slot_permadeath(slot, v.block_off)) {
+        r = ICO_STATE_PERMADEATH;
+        snprintf(detail, sizeof detail, "%s", "the state was saved on a Permadeath journey");
+    }
     if (xb) {
         ico_xb_verdict_free(&v);
     }
@@ -2334,6 +2418,10 @@ void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
             if (cache[i].present && !cache[i].loadable &&
                 cache[i].why_not == ICO_STATE_OTHER_BUILD) {
                 list_other_build(i + 1, &cache[i]);
+            } else if (cache[i].present && cache[i].loadable && slot_permadeath(i + 1, NULL)) {
+                /* this build's state of a Permadeath journey */
+                cache[i].loadable = 0;
+                cache[i].why_not = ICO_STATE_PERMADEATH;
             }
         }
         cache_gen = s_list_gen;
@@ -2341,9 +2429,9 @@ void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
     }
     memcpy(out, cache, sizeof cache);
     if (ico_difficulty_states_locked()) {
-        /* a Permadeath journey: no slot loads (the load refuses the same,
-           ico_state_conditions); the cache keeps each slot's own verdict
-           for when another journey is in force */
+        /* a Permadeath journey in force: no slot loads (the load refuses
+           the same, ico_state_conditions); the cache keeps each slot's own
+           verdict for when another journey is in force */
         int i;
 
         for (i = 0; i < ICO_STATE_SLOTS; i++) {
