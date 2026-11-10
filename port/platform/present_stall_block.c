@@ -137,7 +137,8 @@ int stall_block_band(const StallBlock *b)
     if (b->spanN == 0) {
         return -1;
     }
-    i = (int)floor(b->spanSum / b->spanN / STALL_BLOCK_BAND_MS);
+    /* truncation: a negative mean lands in band 0 either way (no libm) */
+    i = (int)(b->spanSum / b->spanN / STALL_BLOCK_BAND_MS);
     return i < 0 ? 0 : i >= STALL_BLOCK_BANDS ? STALL_BLOCK_BANDS - 1 : i;
 }
 
