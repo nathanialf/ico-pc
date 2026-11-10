@@ -9,7 +9,9 @@
  *                menu, a stage switch, the card, the disc, a movie, photo
  *                mode, the credits, the music gallery) and named; the
  *                order when several hold; a load needs no pause; the pause
- *                menu, a port page over it, a game layout, the title
+ *                menu, a port page over it, a game layout, the title; a
+ *                Permadeath journey (the active difficulty record): a load
+ *                refused first (after off), a save allowed
  *   texts        every result has its own log words
  *   slot paths   slot1.ics .. slot4.png; slot 0, slot 5 and a path that
  *                does not fit refused with ""
@@ -153,13 +155,37 @@ static void test_conditions(void)
     CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_PHOTO);
     c.available = 0;
     CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_OFF);
+
+    /* a Permadeath journey (ico_difficulty_states_locked): a load refused
+       before anything else is looked at, a save allowed as ever */
+    c = ok_conds();
+    c.locked = 1;
+    what = "";
+    CHECK(ico_state_conditions(&c, 0, &what) == ICO_STATE_PERMADEATH);
+    CHECK_STR(what, "the journey has Permadeath on");
+    what = "x";
+    CHECK(ico_state_conditions(&c, 1, &what) == ICO_STATE_OK, "a save on a Permadeath journey");
+    CHECK_STR(what, "");
+    c.layout = 58; /* not the pause menu: a load is still the lock's */
+    CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_PERMADEATH);
+    CHECK(ico_state_conditions(&c, 1, NULL) == ICO_STATE_NOT_PAUSED);
+    c = ok_conds();
+    c.locked = 1;
+    c.stage_switch = 1;
+    c.card_busy = 1;
+    c.movie = 1;
+    c.unused = 1;
+    CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_PERMADEATH, "the lock before the rest");
+    CHECK(ico_state_conditions(&c, 1, NULL) == ICO_STATE_STAGE_SWITCH);
+    c.available = 0;
+    CHECK(ico_state_conditions(&c, 0, NULL) == ICO_STATE_OFF, "off before the lock");
 }
 
 static void test_texts(void)
 {
     int a, b;
 
-    for (a = ICO_STATE_OK; a <= ICO_STATE_BUSY; a++) {
+    for (a = ICO_STATE_OK; a <= ICO_STATE_PERMADEATH; a++) {
         const char *t = ico_state_result_text((IcoStateResult)a);
 
         CHECK(t != NULL && t[0] != '\0' && strcmp(t, "unknown") != 0, "result %d has no text", a);
@@ -169,6 +195,8 @@ static void test_texts(void)
         }
     }
     CHECK_STR(ico_state_result_text(ICO_STATE_OTHER_SETTINGS), "settings differ");
+    CHECK_STR(ico_state_result_text(ICO_STATE_PERMADEATH),
+              "states do not load on a Permadeath journey");
 }
 
 static void test_paths(void)

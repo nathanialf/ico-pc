@@ -24,6 +24,12 @@ IcoStateResult ico_state_conditions(const IcoStateConds *c, int saving, const ch
 
     if (!c->available) {
         r = ICO_STATE_OFF;
+    } else if (!saving && c->locked) {
+        /* Permadeath: a game over ends the journey, so a state may not
+           take it back to before one (the user's rule: saving states
+           stays allowed) */
+        r = ICO_STATE_PERMADEATH;
+        w = "the journey has Permadeath on";
     } else if (saving && !ico_state_on_pause_menu(c)) {
         r = ICO_STATE_NOT_PAUSED;
     } else if (c->stage_switch != 0) {
@@ -88,6 +94,8 @@ const char *ico_state_result_text(IcoStateResult r)
         return "the file could not be written";
     case ICO_STATE_BUSY:
         return "a save or load is in flight";
+    case ICO_STATE_PERMADEATH:
+        return "states do not load on a Permadeath journey";
     }
     return "unknown";
 }

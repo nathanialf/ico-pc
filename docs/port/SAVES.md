@@ -3,8 +3,8 @@
 How the port keeps the game's saves: [libmc](ARCHITECTURE.md#terms) answered from a folder on the
 host in the layout PCSX2's folder memory cards use, a second card in port 1 when one is configured,
 where those folders are on each platform, each disc's save directory and record, the importer
-that copies an existing PS2 save into a card folder, and the rescue of an old save state's
-progress as a card save. The game's own card code
+that copies an existing PS2 save into a card folder, the rescue of an old save state's
+progress as a card save, and what a save state carries of the journey's difficulty. The game's own card code
 (`ico2/fumi/ios/mcard.c`, `mcdata.c`) runs unchanged but for its region forms.
 
 ## Files
@@ -406,6 +406,62 @@ state_recover_tool SIDE_FILE --card CARD_FOLDER [--slot N] [--overwrite]
 Both exit 0 when written, 1 when refused (the reason printed), 2 on a usage or card error. The
 tool is built by `port/save/CMakeLists.txt` and kept in every build (`cmake/IcoTests.cmake`
 (`ICO_KEEP_IN_ALL`)); the script finds the newest one under `build-host/*/port/save/`.
+
+## Save states and difficulty
+
+The difficulty a journey runs with is one record (`port/game/difficulty.h`, `IcoDifficulty`, 256
+bytes of int32: the mode, the rows, the journey id, the knock-down counts, the in-fall latch, the
+finished flag, the run's card port, slot and sum). A save state carries it as the registry block
+`difficulty.record` (`ico_difficulty_state_register`, the last call in
+`port/platform/state_port.c`; `ICO_STATE_FRESH`, no host pointers), so a state loads with the rows
+and the counts it was saved with, whatever the journey before the load was. The save states
+themselves are [PLATFORM.md](PLATFORM.md#save-states).
+
+- **After a load** (`port/game/state_host.c`, `perform_load`, beside `ico_gs_rebaseline`):
+  `ico_difficulty_state_loaded(absent, keys)` makes the restored record the active one and runs
+  `ico_variants_apply`, so the variants' switches follow it. `absent` is 1 for another build's
+  state that has no such block (its offset in the translation is `ICO_XB_BLOCK_ABSENT`, the block
+  kept this run's bytes): the record is then built from the state's own keys text
+  (`ico_difficulty_from_keys`: Normal when every row is the game's own, else Custom; origin
+  `state`), never from `config.toml`.
+- **The keys text**: the fifteen difficulty rows are not simulation keys
+  (`port/platform/sim_keys.h`, `ICO_SIM_KEYS_RETIRED`). A state made while they were lists them in
+  its keys text; `ico_state_header_check` passes over a key that only the saved text lists when
+  the retired-key function names it (`ico_state_set_key_retired`, set by `state_host.c` to
+  `ico_sim_key_retired`, since the platform layer does not see the config), at any value. The two
+  hashes then differ by those lines, so the saved text must be whole (its own hash), as for a key a
+  later version adds. A key still listed that differs is refused and named as before.
+- **Permadeath**: while the active record has Permadeath on (`ico_difficulty_states_locked`), a
+  load is refused before anything is read: `ico_state_conditions` returns `ICO_STATE_PERMADEATH`
+  right after "off" (`IcoStateConds.locked`, sampled by `state_host.c`), the slot listing marks
+  every present slot not loadable for that reason, and the Save states page's load is refused at
+  once with "Save states cannot be loaded on a Permadeath journey." (`UI_STR_DIFF_STATES_LOCKED`,
+  `port/platform/main_host.c`). Saving a state stays allowed.
+- **Pad recordings**: a recording's header lists `ICO_SIM_KEYS`, so the rows are not in it. A
+  recording whose header lists them as config keys has those lines read as a state's keys would be
+  and compared with Normal (the record a run starts with; its New Game screen chooses the
+  journey's); a difference is logged and counted, nothing is refused.
+- **Another version's state**: the translation ([PLATFORM.md](PLATFORM.md#across-versions))
+  refuses a state with a fiber suspended in a function whose code changed. The knock-down limit
+  changes the four copies of `actCommonDown` (`ico2/fumi/src/commonact.c`), in which every lying
+  character waits, and No Shadows the copies of `actEnemyStart` (`ico2/fumi/src/enemy_act.c`), in
+  which a placed Shadow already beaten waits hidden: a state saved with either on a stack is
+  refused as another version's ("the code it was saved in changed"); a state without them loads as
+  long as nothing else it points into changed. A new or resized game global refuses every such
+  state ("the game's data layout changed").
+
+| line | when |
+| --- | --- |
+| `state: slot N's difficulty: the state's record` or `...: no record in the state (made before states held one): built from its keys` | every load, before the record's own `difficulty: ...` line |
+| `state: slot N lists K difficulty row(s) among its settings (made before they were its own block): not compared: <key=value, ...>` | a load of a state whose keys text lists the rows |
+| `state: refused load slot N: states do not load on a Permadeath journey: the journey has Permadeath on` | a load on a Permadeath journey (the poll); `... (the page)` from the Save states page |
+| `ico_pc: pad script lists K difficulty rows among its config keys (each journey's own now), read as a state's keys:` | a recording whose header lists the rows; then `difficulty: built from a state's keys ...` and, when they are not Normal's, `ico_pc: pad script recorded with the difficulty rows above; ...` |
+
+The tests: `state_format` and `state_port` (the retired keys in both header checks), `sim_keys`
+(the real fifteen through the header check), `state_host` (the lock in the conditions, its text),
+`difficulty` (the block, a state's record and a state without one); the disc tests
+`state_roundtrip_headless` and `state_roundtrip_headless_settings` (a load restores the record;
+the refusal is by `gameplay.door_fix`).
 
 ## Tests
 

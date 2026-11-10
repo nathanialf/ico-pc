@@ -272,10 +272,50 @@ static int key_value(const char *text, const char *key, size_t key_n, const char
 }
 
 static IcoStateKeyDefaultFn s_key_default;
+static IcoStateKeyRetiredFn s_key_retired;
 
 void ico_state_set_key_default(IcoStateKeyDefaultFn fn)
 {
     s_key_default = fn;
+}
+
+void ico_state_set_key_retired(IcoStateKeyRetiredFn fn)
+{
+    s_key_retired = fn;
+}
+
+int ico_state_keys_retired(const char *saved, const char *now, char *out, size_t size)
+{
+    const char *line = saved != NULL ? saved : "";
+    size_t at = 0;
+    int count = 0;
+
+    if (out != NULL && size > 0) {
+        out[0] = '\0';
+    }
+    while (*line != '\0') {
+        const char *end = strchr(line, '\n');
+        const size_t len = end != NULL ? (size_t)(end - line) : strlen(line);
+        const char *eq = memchr(line, '=', len);
+        const char *v;
+        size_t vn;
+
+        if (eq != NULL && s_key_retired != NULL && s_key_retired(line, (size_t)(eq - line)) &&
+            key_value(now != NULL ? now : "", line, (size_t)(eq - line), &v, &vn) != 0) {
+            if (out != NULL && at + 1 < size) {
+                const int w =
+                    snprintf(out + at, size - at, "%s%.*s", count > 0 ? ", " : "", (int)len, line);
+
+                at = w < 0 ? at : at + (size_t)w < size ? at + (size_t)w : size - 1;
+            }
+            count++;
+        }
+        if (end == NULL) {
+            break;
+        }
+        line = end + 1;
+    }
+    return count;
 }
 
 int ico_state_keys_absent(const char *saved, const char *now, char *out, size_t size)
@@ -315,7 +355,10 @@ int ico_state_keys_absent(const char *saved, const char *now, char *out, size_t 
 /* the first key of `now` whose value differs in `saved` (or a key only one
    of them has): 1 and out = "key=saved (now cur)", else 0.  A key only
    `now` lists whose value there is its default (s_key_default) is equal:
-   *absent counts those */
+   *absent counts those.  A key only `saved` lists that this version
+   retired (s_key_retired: a setting that became part of what a state
+   carries itself) is passed over whatever its value: *absent counts those
+   too, so the saved text must then be whole (header_check) */
 static int keys_first_diff(const char *saved, const char *now, char *out, size_t size, int *absent)
 {
     int pass;
@@ -343,6 +386,13 @@ static int keys_first_diff(const char *saved, const char *now, char *out, size_t
                     /* a key only this run lists (a later version's) at its
                        default: the state was made at that default */
                     if (pass == 0 && s_key_default != NULL && s_key_default(line, key_n, va, na)) {
+                        (*absent)++;
+                        line = end != NULL ? end + 1 : NULL;
+                        continue;
+                    }
+                    /* a key only the state lists that this version
+                       retired: the state's own block holds what it set */
+                    if (pass == 1 && s_key_retired != NULL && s_key_retired(line, key_n)) {
                         (*absent)++;
                         line = end != NULL ? end + 1 : NULL;
                         continue;
@@ -403,9 +453,10 @@ static IcoStateResult header_check(const IcoStateHeader *saved, const IcoStateHe
             return ICO_STATE_OTHER_SETTINGS;
         }
         if (absent > 0) {
-            /* a later version's keys at their defaults: the two hashes
-               differ by those lines, so the saved text must be the whole
-               of what its hash covered (not cut, not damaged) */
+            /* a later version's keys at their defaults, or an earlier
+               version's keys this one retired: the two hashes differ by
+               those lines, so the saved text must be the whole of what its
+               hash covered (not cut, not damaged) */
             const char *z = (const char *)memchr(saved->keys, '\0', sizeof saved->keys);
 
             if (z == NULL ||

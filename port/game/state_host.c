@@ -66,6 +66,7 @@
 #include "../save/mc_host.h"
 #include "../ui/settings.h"
 #include "achievements.h"
+#include "difficulty.h"
 #include "options.h"
 #include "video_options.h"
 
@@ -293,6 +294,10 @@ static void init(void)
     /* a simulation key a later version added reads as its default in an
        earlier version's state (sim_keys.h) */
     ico_state_set_key_default(ico_sim_key_is_default);
+    /* the difficulty rows an earlier version's state lists among its
+       simulation keys: its record is built from them (difficulty.h), so
+       they never refuse it */
+    ico_state_set_key_retired(ico_sim_key_retired);
     if (!s_on) {
         fprintf(stderr, "state: save states are off: %s\n", s_off_why);
         return;
@@ -392,6 +397,7 @@ static void sample(IcoStateConds *c)
     c->credits = ico_credits_active();
     c->unused = ico_unused_active();
     c->gallery = gallery_playing() >= 0;
+    c->locked = ico_difficulty_states_locked();
 }
 
 int ico_state_can_save_here(void)
@@ -1739,6 +1745,23 @@ static void log_fresh_blocks(int slot, const IcoXbVerdict *v)
             slot, v->fresh, names);
 }
 
+/* 1 when the registered block `name` is one of the FRESH blocks another
+   build's state lacks (v: its translation), so it kept this run's bytes */
+static int state_block_absent(const IcoXbVerdict *v, const char *name)
+{
+    int i;
+
+    if (v->fresh == 0 || v->block_off == NULL) {
+        return 0;
+    }
+    for (i = 0; i < ico_state_registry_count(); i++) {
+        if (strcmp(ico_state_registry_entry(i)->name, name) == 0) {
+            return v->block_off[i] == ICO_XB_BLOCK_ABSENT;
+        }
+    }
+    return 0;
+}
+
 /* A state that header_check called another build's: OK when it can be
    translated into this one (*xb 1, v the translation), else the refusal
    with detail and the box's blocker (set_refusal). */
@@ -1977,6 +2000,17 @@ static void perform_load(int slot)
                     nk > 1 ? "they have" : "it has");
         }
     }
+    {
+        char keys[ICO_STATE_KEYS_MAX];
+        const int nr = ico_state_keys_retired(saved.keys, s_now.keys, keys, sizeof keys);
+
+        if (nr > 0) {
+            fprintf(stderr,
+                    "state: slot %d lists %d difficulty row%s among its settings (made before they "
+                    "were its own block): not compared: %s\n",
+                    slot, nr, nr > 1 ? "s" : "", keys);
+        }
+    }
     t0 = ico_thread_now_ms();
     memset(&stage, 0, sizeof stage);
     memset(&backup, 0, sizeof backup);
@@ -2140,6 +2174,19 @@ static void perform_load(int slot)
     ico_video_camera_cut();
     s_cut_next = 1;
     ico_gs_rebaseline();
+    /* the journey's difficulty: the record the state holds (its block put
+       back above), or for a state made before records (another build's
+       without the block: this run's bytes were kept) one built from the
+       state's own keys text, never from config.toml; either way the
+       variants' switches follow (ico_variants_apply inside) */
+    {
+        const int absent = xb && state_block_absent(&xv, "difficulty.record");
+
+        fprintf(stderr, "state: slot %d's difficulty: %s\n", slot,
+                absent ? "no record in the state (made before states held one): built from its keys"
+                       : "the state's record");
+        ico_difficulty_state_loaded(absent, saved.keys);
+    }
     ico_ach_host_state_loaded(ico_host_main_ticks());
     ico_input_record_state_loaded(slot, ico_host_main_ticks());
     ico_fpenv_sim_enter();
@@ -2293,6 +2340,19 @@ void ico_state_list(IcoStateSlotInfo out[ICO_STATE_SLOTS])
         cache_keys = now->settings_hash;
     }
     memcpy(out, cache, sizeof cache);
+    if (ico_difficulty_states_locked()) {
+        /* a Permadeath journey: no slot loads (the load refuses the same,
+           ico_state_conditions); the cache keeps each slot's own verdict
+           for when another journey is in force */
+        int i;
+
+        for (i = 0; i < ICO_STATE_SLOTS; i++) {
+            if (out[i].present) {
+                out[i].loadable = 0;
+                out[i].why_not = ICO_STATE_PERMADEATH;
+            }
+        }
+    }
 }
 
 /* --- requests and the poll ----------------------------------------------------- */

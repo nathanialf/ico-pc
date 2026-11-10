@@ -370,7 +370,9 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   box's shape) and box filter; the pause picture's path, its copy to a slot's picture and its steps
   (taken once from play to the pause menu, kept over the pages, dropped on play); after a load the
   loaded slot's picture copied to `pause.png` with its size from the PNG header (none without a
-  picture, no size for a header that is not a PNG's) and on to a later save's slot (`state_host`).
+  picture, no size for a header that is not a PNG's) and on to a later save's slot; a Permadeath
+  journey (`IcoStateConds.locked`): a load refused as `ICO_STATE_PERMADEATH` right after "off",
+  before every other condition, a save allowed, its own log words (`state_host`).
 - `variants_test.c`: the game variants (`port/game/variants.h`) on the CPU: every default is the game as
   shipped (the barrier's number the disc's: 5, 7 on `jun26`), every variant steps through
   all its values, saves and reads back (a global one's `[variants]` key written, a difficulty row's
@@ -463,9 +465,10 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   game's data and bss and the arena's first ten differing ranges (the dumps are deleted on a
   pass). On a pass the output ends with the `state: hash masked ...` line.
   `state_roundtrip_headless_settings`: one run saves slot 1, a
-  second run over a copy of its states folder with `[gameplay] yorda_safe = true` (a simulation
-  key) loads it and must log `state: refused load slot 1: settings differ: gameplay.yorda_safe=...`
-  and go on to its last tick. Both skip without the disc image and on a sanitizer build ([Tests
+  second run over a copy of its states folder with `[gameplay] door_fix = true` (a simulation
+  key) loads it and must log `state: refused load slot 1: settings differ: gameplay.door_fix=...`
+  and go on to its last tick (the difficulty rows are each state's own block, so none of them
+  refuses a load: [SAVES.md](SAVES.md#save-states-and-difficulty)). Both skip without the disc image and on a sanitizer build ([Tests
   that need the disc](TESTING.md#tests-that-need-the-disc)).
 - `options_test.c`: `test_pit_time` (Time to rescue Yorda in seconds, issue 186: the pull-in's ticks per disc, the parser's seconds, words and range, the factor seconds x 30 / ticks and the ratios 1/factor and 2/factor for 4 to 30 s with the whole pull-in lasting the seconds, Original bit for bit, and the source scan: four hooks over each copy's five SINK motions, this disc's among them, the three camera timeouts, the frame-50 test); `test_shadows_together` (Shadows attack together, issue 185): off by default
   and from the file, `ico_opt_shadow_waits` 1 for a Shadow while another attacks with the option
@@ -714,7 +717,9 @@ that stops again writing its own line without the retry mark); a stop at the fre
   refused; a simulation key this build lists that the state lacks: refused without the key-default
   function, equal at its default or unset, refused when changed or when the saved text is not what
   its hash covered, a differing key named first, a key only the state lists refused, the absent
-  keys named for the log (`state_port`).
+  keys named for the log; a key only the state lists that this build retired (a difficulty row)
+  passed over by the other-build check, refused without the retired-key function, a listed key
+  that differs still named (`state_port`).
 - `state_reloc_test.c`: the scan and the self-checks over the game's real allocator
   (`ico2/fumi/ios/memory.c` built with the game's flags): words at each range's start, middle and end
   move by their own delta and nothing else does (near misses, 0, all ones, floats, doubles, EE word
@@ -729,7 +734,11 @@ that stops again writing its own line without the retry mark); a stop at the fre
   while one is in flight; each validity field changed alone gives its result and detail; every
   damaged file (magic, version, a header byte, truncation, an appended byte, a flipped packed byte) is
   `ICO_STATE_BAD_FILE`; a write into a missing folder fails on its thread and leaves no `.tmp`; the
-  build id is stable and changes with the commit and with one more block (`state_format`).
+  build id is stable and changes with the commit and with one more block; a retired key the saved
+  text lists passed over at any value on both checks under the whole-text rule (a damaged hash
+  refused), `(now absent)` without the retired-key function, a listed key that differs and a key
+  only the state lists that is not retired still refused, a retired name this run still lists
+  compared as any key, the retired keys named for the log (`state_format`).
 - `state_registry_test.c`: registration order, the stored fields, every refusal with the table
   unchanged, a full table, reset (`state_registry`).
 - `sim_keys_test.c`: the simulation keys' list (no repeats, the expected keys), the text, the hash
@@ -741,7 +750,9 @@ that stops again writing its own line without the retry mark); a stop at the fre
   state saved before `gameplay.skip_opening` existed equal with the option off and differing
   (`gameplay.skip_opening=(absent) (now true)`) with it on; the fifteen difficulty keys out of the
   list and in `ICO_SIM_KEYS_RETIRED` (`ico_sim_key_retired`), out of the hash and the text, an older
-  state's text that lists them at any value equal.
+  state's text that lists them at any value equal; the same text through the save state's own
+  header check with the two functions `state_host.c` sets: it loads (both checks), the fifteen
+  named for the log, a damaged hash and `gameplay.door_fix=true` refused.
   The same for `developer.free_movement` (`developer.free_movement=(absent) (now true)`); `config_test.c` checks the first-run file's `[developer]` block.
 - `settings_states_test.c`: the Save states page, the pause menu's rows at pitch 16 and the
   Continue screen's Square prompt ([UI.md](UI.md#save-states)), the pictures' box at their own

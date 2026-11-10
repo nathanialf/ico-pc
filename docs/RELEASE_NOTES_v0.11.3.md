@@ -2,6 +2,8 @@
 
 (kept current after every merge; player words only)
 
+- Save states remember the journey's difficulty: loading one brings back the difficulty and the knock-down count it was saved with, and a save state made with an earlier version is not refused for its difficulty settings (it takes the difficulty it was made with). On a Permadeath journey save states cannot be loaded.
+
 
 ## Fixed
 
