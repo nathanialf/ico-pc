@@ -266,20 +266,40 @@ after them would wait for the previous picture's last pixel.
   fragment shader included (a later module may read the buffer); a fragment stage there holds only
   later fragment work.
 - **A buffer copy's wait** (`rhi_cmd_copy_buffer`) holds the transfer stage only when a copy between
-  a texture and either buffer is pending in the list (its hazard record): an earlier buffer copy's
+  a texture and either buffer is pending in the list (its hazard record), and always on the global
+  barrier path (`ICO_VK_GLOBAL_BARRIERS=1`, which keeps no hazard record): an earlier buffer copy's
   own second barrier holds the transfer stage, the stores' bracket end holds it, and earlier lists
-  end with it. So the mesh uploads do not wait for every earlier copy of the picture (a texture
-  upload over a sampled texture waits for the sampling), nor the record that reads them.
+  end with it. That alone does not keep a copy from waiting for earlier fragment work: an execution
+  dependency covers every command in its scopes, so a barrier with the fragment shader in its first
+  scope and the transfer stage in its second (a texture upload over a sampled texture,
+  `SHADER_READ` to `COPY_DST`) holds every later copy of the list, and the copy's own second barrier
+  passes the wait on to the vertex and compute work that reads its destination. So the renderer
+  records the mesh uploads and the VU pre-pass before its texture uploads and the fog's table
+  (`port/render/rd_upload_late.h`; `rhi_vk_scopes`' list G: that hold recorded before the record in
+  the old order, none in the new). What can still hold the record: the closing barrier of the list
+  before orders its copies before this list's transfers, so a copy out of a render target at the
+  end of the picture before (its own barrier waits for colour output) holds the mesh copies, and the
+  record after them, behind that pass's fragment work; the hold lines name such barriers. The gain
+  on the Mali of issue 179 is a hypothesis until its log shows it.
 - **Between lists**: attachment writes and reads are ordered by the opening barrier (colour output
   and the depth tests on both sides), transfer writes and reads by the barrier every list ends with
   (`rhi_end_commands`: the transfer stage on both sides beside the host read; not counted in
   `barriers`, as before). The barrier counts are unchanged (`rd_perf`'s exact counts).
 - **The count** (`RhiStats.fragmentHolds`, `vk_cmd.c` `vkr_hold_note`): every `vkCmdPipelineBarrier`
   whose first scope holds a fragment-side stage (or a mask holding all) and whose second holds a
-  stage before them. Counted where each barrier is recorded, a few dozen a picture, none a draw.
-  Each site logs its first 8 and every 100th with the masks: `rhi_vk: barriers: one holds every
-  later vertex, compute and copy command (the next picture's too) behind the fragment work before
-  it: SITE (first scope 0xS, second 0xD, N image barriers); K at this site, M in all`. The sites:
+  stage before them. Counted where each barrier is recorded, a few dozen a picture, none a draw,
+  by kind and site (`RhiStats.holdSites`): the kind `RHI_HOLD_KIND_VERTEX` when the second scope
+  holds the top of the pipe, indirect, vertex input, a pre-rasterisation shader or compute (the
+  picture's VU record and vertex work wait), `RHI_HOLD_KIND_COPY` when it holds the transfer stage
+  alone (later copies wait; vertex work only where a copy's own barrier passes it on; every copy out
+  of a render target is one). Each site and kind logs its first 8, then nothing, with the masks:
+  `rhi_vk: barriers: one holds every later vertex, compute and copy command (the next picture's
+  too) behind the fragment work before it: SITE (first scope 0xS, second 0xD, N image barriers); K
+  of this kind at this site (the first 8 of each said; the counts in the 10 s summary)`, or `... one
+  holds every later copy (vertex and compute work only through a copy's own barrier) ...`; the 10 s
+  summary's `window: CPU walk ms ...` line ends with `; barriers holding fragment work per replay: V
+  before vertex or compute work, C before copies only (vertex/copy by site: the passes' and copies'
+  own 0.00/1.00, ...)` (`port/render/rd_perf.c`, only sites with any). The sites:
   the opening barrier, the held-back barriers sent before a command, a pass's or copy's own barrier,
   a buffer copy's wait, the global barriers, the external compute's bracket. Expected ones: a
   texture upload over a sampled texture (the copy waits for the sampling), the copies of a snapshot
@@ -828,7 +848,12 @@ writes to the same reads, `RHI_LOCAL_READ_BACK` those reads to the next draws' d
 colour writes. Outside a pass, or without local read, it records nothing.
 
 **The subpass read** (`RhiLimits.localReadSubpass`; `port/rhi/vk/vk_renderpass.c`, header comment;
-issue 179). On the Vulkan `VkRenderPass` path (a device without dynamic rendering, the Mali-G52 of
+issue 179). An experiment, **off by default on every device**: its cost on a phone is not measured
+(every `RGBA8_UNORM` render target of the device would sit in `GENERAL` with the input-attachment
+usage, and a driver may then keep its framebuffer compression off), so by default none of it exists
+(no usage, no layout, no self-dependency, DATE through its snapshot); `[dev]
+subpass_read = on` (`ICO_VK_SUBPASS_READ=1`, [CONFIG.md](CONFIG.md)) tries it. With it on, on the
+Vulkan `VkRenderPass` path (a device without dynamic rendering, the Mali-G52 of
 issue 179 at Vulkan 1.1) `RhiLimits.localRead` is the same read through Vulkan 1.0's input
 attachments, for the colour of a pass with one `RGBA8_UNORM` colour target, single-sampled, and a
 depth target: such a pass's subpass names its colour attachment 0 also as input attachment 0 (the
@@ -861,15 +886,17 @@ none by construction). Colour-only passes and other formats keep the old shape, 
 not one RGBA8 colour): skipped, and a read after it is not ordered (N so far)` (first 8, then every
 100th). A readable depth is refused on it (`a readable depth target without local read (the subpass
 read reads the colour only), or read-only`): the fog's depth read stays dynamic rendering's (its
-shader's input attachment has no index, which only dynamic rendering's mapping gives it). On where
-the `VkRenderPass` path is the device's own; off where the driver row or `[dev] legacy_passes` chose
-it on a device that has dynamic rendering (the Intel row keeps its fix as it was) and under
-`ICO_VK_FAKE_NO_DST`; `ICO_VK_SUBPASS_READ=1` turns it on on any `VkRenderPass` path, `0` off. Its
-lines: `rhi_vk: render passes: the subpass read: a pass of one RGBA8 colour target and a depth
-target names its colour as its subpass's input attachment 0, in GENERAL, with a by-region
-self-dependency (Vulkan 1.0), so a read of the pass's own colour (DATE's stencil setup) does not end
-the pass; ICO_VK_SUBPASS_READ=0 turns it off`, or `rhi_vk: render passes: no subpass read (<why>):
-...`, and at the first pass made with it `rhi_vk: render passes: the first with the subpass read:
+shader's input attachment has no index, which only dynamic rendering's mapping gives it). Off by
+default on every `VkRenderPass` path (the device's own, the Intel driver row's, `[dev]
+legacy_passes`'), the Intel row's fix unchanged; `[dev] subpass_read = on`
+(`ICO_VK_SUBPASS_READ=1`) turns it on on any of them, not under `ICO_VK_FAKE_NO_DST`. The device
+line on that path says which: `rhi_vk: render passes: the subpass read off (the default; [dev]
+subpass_read = on tries it): a read of a pass's own colour ends the pass for a copy (DATE's
+snapshot)` (or `([dev] subpass_read = off (ICO_VK_SUBPASS_READ=0))`), or with the key `rhi_vk: render
+passes: the subpass read: a pass of one RGBA8 colour target and a depth target names its colour as
+its subpass's input attachment 0, in GENERAL, with a by-region self-dependency (Vulkan 1.0), so a
+read of the pass's own colour (DATE's stencil setup) does not end the pass ([dev] subpass_read = on,
+ICO_VK_SUBPASS_READ=1: an experiment; DATE's self-test still decides)`, and at the first pass made with it `rhi_vk: render passes: the first with the subpass read:
 its colour (format 37) also input attachment 0, ...`. The renderer uses it for DATE's stencil setup
 alone, and only where DATE's self-test passes on the device ([RENDER.md](RENDER.md), the device
 profile). Checked on lavapipe (`rhi_vk_subpass*`): without the self-dependency the layer reports
@@ -1185,7 +1212,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_FAKE_API` | `1.1` uses the device as a stock Vulkan 1.1 driver (Adreno 618 class): the instance and the device held to 1.1 (the KHR and EXT names of what is core later), and `VK_KHR_timeline_semaphore`, `VK_KHR_dynamic_rendering_local_read`, `VK_KHR_driver_properties`, `VK_KHR_image_format_list`, `VK_KHR_load_store_op_none`, `VK_EXT_load_store_op_none` and `VK_QCOM_render_pass_store_ops` reported absent (`vkr_fake_hidden`): the fence ring ([Bindings and synchronisation](#vulkan)), no dynamic rendering local read (the [subpass read](#local-read) instead), the driver unnamed; `VK_KHR_dynamic_rendering` is hidden too (`VKR_LEGACY_PASSES`), so the passes are `VkRenderPass` objects ([Render passes](#vulkan)) and the device line says `render passes legacy`; the line `ICO_VK_FAKE_API=1.1: the device is used as a Vulkan 1.1 driver without timeline semaphores, dynamic rendering, local read, driver properties, image format list or store op none`. `1.1ext` holds the versions to 1.1 and hides nothing (a 1.1 driver with the extensions: the timeline through `VK_KHR_timeline_semaphore`, dynamic rendering through `VK_KHR_dynamic_rendering`), local read off (it needs 1.3). `1.0` (issue 158) creates the instance at Vulkan 1.0 with `VK_KHR_get_physical_device_properties2`, as a 1.0 loader would, uses the device at 1.0 with `VK_KHR_maintenance1` and `VK_KHR_maintenance2`, hides what `1.1` hides, and clears volk's core 1.1 entry points after the instance and the device are made (`vkr_fake_10_entry_points`: the system's loader still hands out the instance-level ones at 1.0, so a core 1.1 call left unguarded stops the test at a NULL call); the line `ICO_VK_FAKE_API=1.0: the device is used as a Vulkan 1.0 driver (a 1.0 instance with VK_KHR_get_physical_device_properties2) without ...` (`rhi_vk_vk10`, `rhi_vk_swapchain_vk10`, the render twins `rd_*_vk10`, all with `ICO_VK_FAKE_NO_DYNAMIC=1` as on Android, label `vk10`: [TESTING.md](TESTING.md#the-render-suite-on-a-vulkan-10-driver)). `1.0bare` is `1.0` on a loader without `VK_KHR_get_physical_device_properties2`: the instance is made without it and the device without the extended queries (`rhi_vk_vk10bare`, review finding 5). All compose with `ICO_VK_FAKE_LIMITS=mali`; the device line ends `; ICO_VK_FAKE_API=<profile>`; another value is logged and hides nothing (`rhi_vk_vk11`, `rhi_vk_swapchain_vk11`, the render twins `rd_*_vk11` and `rd_pixel_vk11ext`, `rd_present_vk11ext`, label `vk11`: [TESTING.md](TESTING.md#the-render-suite-on-a-vulkan-11-driver)) |
 | `ICO_VK_ATTACHMENT_READ` | 1 offers the attachment read on Qualcomm's driver too; ico-pc.ini `attachment_read` |
 | `ICO_VK_LEGACY_PASSES` | 1 records the render passes as `VkRenderPass` objects on any device (the Intel driver row's path, `rd_display_change_2x_legacy`), 0 keeps dynamic rendering on a device of the row; unset, the row; ico-pc.ini `[dev] legacy_passes` ([Vulkan](#vulkan), **Render passes**) |
-| `ICO_VK_SUBPASS_READ` | 1 turns [the subpass read](#local-read) on on any `VkRenderPass` path (the driver row's and `[dev] legacy_passes`' too: `rhi_vk_subpass_legacy_on`), 0 off where it would be on (a device without dynamic rendering) |
+| `ICO_VK_SUBPASS_READ` | `[dev] subpass_read`: 1 turns [the subpass read](#local-read), an experiment off by default, on on any `VkRenderPass` path (the device's own, the driver row's and `[dev] legacy_passes`': `rhi_vk_subpass_vk11`, `_legacy_on`); 0 or unset off |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
 | `ICO_VK_GLOBAL_BARRIERS` | 1 records a global barrier before every render pass and copy (`vk_cmd.c`) |
 | `ICO_VK_DEPTH_ALWAYS` | 1 makes every depth test compare `ALWAYS`, static and dynamic (`vk_pipeline.c`, `rhi_cmd_set_depth_state`), with the line `ICO_VK_DEPTH_ALWAYS: every depth test passes (...)`: the occlusion measurement's run without the depth ([RENDER.md](RENDER.md#culling)); the picture is not the game's |
@@ -1300,7 +1327,13 @@ stamps of the slot `rhi_wait_frame` recycled, what the CPU saw of that slot's GP
 back available; and, where `VK_KHR_calibrated_timestamps` or `VK_EXT_calibrated_timestamps` is
 offered with the device's and the CPU's time domains (CLOCK_MONOTONIC, the performance counter on
 Windows; both need `VK_KHR_get_physical_device_properties2` or Vulkan 1.1), one calibrated pair read
-at the recycle. Enabling the extension also orders timestamps across submissions: without it the
+at the recycle: at a device's first recycle, at one whose wait blocked past `RHI_TS_TRACE_AFTER_MS`
+and at the `RHI_FRAMES_IN_FLIGHT + 1` recycles after it (the replays in flight through the stall,
+among them the one whose counter restarted: every restart in issue 123's logs came with such a
+stall), not at every recycle (the driver call each replay was not needed by any line).
+`recorded` holds the stamps of the slot's submitted lists only, so a list recorded and never
+submitted cannot read as unwritten stamps; such lists are counted in `listsUnsubmitted` (the
+`GPU clock` line's `N of the slot's lists with stamps were recorded and not submitted`). Enabling the extension also orders timestamps across submissions: without it the
 specification orders only writes "in the same submission" ("Timestamp Queries"), and the renderer
 compares the scene's and the present's lists and replay with replay. A recycle's wait that blocks
 past `RHI_TS_TRACE_AFTER_MS` (50 ms) becomes timed waits of `RHI_TS_TRACE_STEP_MS` (4 ms) between
@@ -1361,7 +1394,7 @@ Vulkan 1.3.215 or older (...); [dev] legacy_passes = false (ICO_VK_LEGACY_PASSES
 rendering`, and the device line's `render passes legacy (<the reason>)`. Such a 1.3 device keeps
 everything else of 1.3 (the timeline, `STORE_OP_NONE`, the dynamic depth state); dynamic
 rendering's local read is off on that path (those Intel drivers offer none), and so is the subpass
-read (the row's fix as it was; `ICO_VK_SUBPASS_READ=1` asks for it). Before either path's
+read unless `[dev] subpass_read = on` asks for it (off by default everywhere). Before either path's
 driver call `vkr_pass_begin` stores the pass's shape for the crash report ([Device
 loss](#device-loss)); the dynamic path's `pColorAttachments` is NULL when the pass has no colour
 target and its attachment array is zeroed. `rhi_cmd_begin_render_pass` refuses a target without an
@@ -2251,7 +2284,10 @@ renderer's [pass ring](RENDER.md#the-pass-ring) after it, before the message box
   `rhi_cmd_checkpoint` was given, kept with the checkpoints off too, which is the renderer's pass
   ring sequence number; each colour target's format and size, the depth's format and layout, stencil
   and read-only, a target without a view, the area and the framebuffer, the path), marks it begun
-  after the call and ended at `vkr_pass_end`; the crash block prints it (`ico_pc: the last render
+  after the call and ended at `vkr_pass_end`; on the `VkRenderPass` path its phase is first
+  `making its VkRenderPass or framebuffer (a crash here is in vkCreateRenderPass or
+  vkCreateFramebuffer, before the begin)`, then inside the begin, and `not begun: no VkRenderPass
+  or framebuffer could be made (its draws skipped)` when they could not be made; the crash block prints it (`ico_pc: the last render
   pass begun: #N (the renderer's pass ring M), dynamic rendering (vkCmdBeginRendering), 1 colour
   (format 37 1024x896), no depth, area 0,0 1024x896, framebuffer 1024x896; inside the driver's begin
   call (a crash here is in the begin)`) and the renderer's last 16 pass ring entries after it

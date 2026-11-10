@@ -3683,6 +3683,7 @@ enum {
     RD_PERF_TS_PRESENT = RD_PERF_TS_LIST0 + RD_LIST_COUNT, /* the present blits done */
     RD_PERF_TS_PREPASS,       /* the uploads done, the VU vertex pre-pass starts */
     RD_PERF_TS_PRESENT_BEGIN, /* the present's own list starts (rd_submit.c) */
+    RD_PERF_TS_LATE,          /* the pre-pass done, rd_upload_late.h's start */
     RD_PERF_TS_COUNT
 };
 

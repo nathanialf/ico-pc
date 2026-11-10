@@ -1,6 +1,8 @@
 /* rhi_vk_pass_crumb_test.c: the render pass breadcrumb the crash report
  * prints (port/rhi/rhi_pass_crumb.c), pure: none before a pass; a pass
- * stored is inside the driver's begin until marked begun, then ended; the
+ * stored is inside the driver's begin until marked begun, then ended (on
+ * the VkRenderPass path first making its objects, or not begun when they
+ * could not be made); the
  * line names the pass number, the pass ring's marker, the path, each colour
  * format and size, a missing view, the depth's format, layout, stencil and
  * read-only flags, the area and the framebuffer; a short buffer is cut and
@@ -78,6 +80,18 @@ int main(void)
                     "area 8,16 100x50, framebuffer 512x448; inside the driver's begin call (a "
                     "crash here is in the begin)");
     CHECK(len == (int)strlen(line), "length %d, the line's %zu", len, strlen(line));
+    /* the VkRenderPass path's two phases before the begin call
+       (vk_renderpass.c vkr_pass_begin): its objects being made, and a
+       begin that failed for want of them */
+    rhi_pass_crumb_phase(RHI_PASS_CRUMB_OBJECTS);
+    rhi_pass_crumb_format(rhi_pass_crumb_last(), line, sizeof line);
+    CHECK(strstr(line, "; making its VkRenderPass or framebuffer (a crash here is in "
+                       "vkCreateRenderPass or vkCreateFramebuffer, before the begin)") != NULL,
+          "%s", line);
+    rhi_pass_crumb_phase(RHI_PASS_CRUMB_FAILED);
+    rhi_pass_crumb_format(rhi_pass_crumb_last(), line, sizeof line);
+    CHECK(strstr(line, "; not begun: no VkRenderPass or framebuffer could be made") != NULL, "%s",
+          line);
 
     /* the record-stores pass before v0.11.3: no attachment */
     memset(&c, 0, sizeof(c));

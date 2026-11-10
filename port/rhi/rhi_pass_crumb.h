@@ -28,7 +28,14 @@ typedef enum RhiPassCrumbPhase {
     RHI_PASS_CRUMB_NONE = 0,  /* no pass begun yet */
     RHI_PASS_CRUMB_BEGINNING, /* inside the driver's begin call */
     RHI_PASS_CRUMB_BEGUN,     /* begun: its draws are being recorded */
-    RHI_PASS_CRUMB_ENDED      /* ended */
+    RHI_PASS_CRUMB_ENDED,     /* ended */
+    /* the VkRenderPass path: making or finding the pass's VkRenderPass and
+     * VkFramebuffer (vkCreateRenderPass, vkCreateFramebuffer), before the
+     * driver's begin call */
+    RHI_PASS_CRUMB_OBJECTS,
+    /* the VkRenderPass path: no VkRenderPass or framebuffer could be made,
+     * the pass not begun (its draws skipped) */
+    RHI_PASS_CRUMB_FAILED
 } RhiPassCrumbPhase;
 
 typedef struct RhiPassCrumb {

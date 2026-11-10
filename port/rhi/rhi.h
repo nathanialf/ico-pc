@@ -1601,7 +1601,33 @@ typedef struct RhiStats {
      * Read at most four times a second.  0 where the adapter does not say
      * (a Windows without IDXGIAdapter3) and on the other backends */
     uint64_t videoMemBudget, videoMemUsage, videoMemAvailable;
+    /* Vulkan: fragmentHolds by kind and site (vk_cmd.c vkr_hold_note):
+     * holdSites[RHI_HOLD_KIND_VERTEX] those whose second scope holds vertex or
+     * compute work (the top of the pipe, indirect, vertex input, the
+     * pre-rasterisation shaders, compute: a picture's VU record and vertex
+     * work wait behind the fragment work before it), holdSites
+     * [RHI_HOLD_KIND_COPY] those whose second scope holds only the transfer
+     * stage (later copies wait; vertex work only where a copy's own
+     * barrier passes the wait on); the site index RHI_HOLD_SITE_* (the
+     * list's opening barrier, the held-back barriers, a pass's or copy's
+     * own, a buffer copy's wait, the global barriers, the external
+     * compute's bracket).  Counts, summed over both: fragmentHolds; 0 on
+     * the other backends */
+    uint64_t holdSites[2][8];
 } RhiStats;
+
+#define RHI_HOLD_KIND_VERTEX 0
+#define RHI_HOLD_KIND_COPY 1
+
+enum {
+    RHI_HOLD_SITE_OPEN,
+    RHI_HOLD_SITE_DEFERRED,
+    RHI_HOLD_SITE_HAZARD,
+    RHI_HOLD_SITE_COPY,
+    RHI_HOLD_SITE_GLOBAL,
+    RHI_HOLD_SITE_EXTERNAL,
+    RHI_HOLD_SITES
+};
 
 void rhi_get_stats(RhiStats *out);
 
@@ -1835,6 +1861,9 @@ typedef struct RhiTimestampClock {
     bool stillStale;
     uint32_t traceN, traceMore;
     RhiTsTracePoint trace[RHI_TS_TRACE_MAX];
+    /* the slot's command lists with stamps that were recorded and not
+     * submitted (their stamps are not in recorded) */
+    uint32_t listsUnsubmitted;
 } RhiTimestampClock;
 
 bool rhi_read_timestamp_clock(RhiTimestampClock *out);

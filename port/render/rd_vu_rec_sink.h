@@ -30,6 +30,7 @@
 #ifndef PORT_RENDER_RD_VU_REC_SINK_H
 #define PORT_RENDER_RD_VU_REC_SINK_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "rhi.h"
@@ -37,9 +38,15 @@
 #define RD_VU_REC_SINK_FMT RHI_FMT_R8_UNORM
 #define RD_VU_REC_SINKS 2u
 
-/* The next of the two targets in RHI_STATE_RENDER_TARGET on cl, both made at
- * the first call (one line); {0} when they could not be made (one line:
- * the store passes then begin without an attachment, as before v0.11.3) */
+/* Whether the two targets exist, made at the first call (one line); false
+ * when they could not be made (one line; not tried again on this device).
+ * The pre-pass asks before a replay's record under the stores
+ * (rd_replay_vu.c rd__vu_prepass): without them a store pass would begin
+ * without an attachment while its pipelines name one (invalid usage), so
+ * the stores are turned off for the run (rd__vu_record_fall_back) */
+bool rd__vu_rec_sink_ready(void);
+/* The next of the two targets in RHI_STATE_RENDER_TARGET on cl (made as
+ * rd__vu_rec_sink_ready makes them); {0} when they could not be made */
 RhiTexture rd__vu_rec_sink(RhiCommandList cl);
 /* target i (0 or 1; {0} before the first call or past them), for the tests */
 RhiTexture rd__vu_rec_sink_target(uint32_t i);

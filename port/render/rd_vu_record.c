@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "rd_vu_record.h"
+#include "rd_vu_rec_sink.h"
 
 RdVuRecord g_rdRec;
 
@@ -350,6 +351,12 @@ void rd__vu_record_shaders(void)
         char why[96];
         snprintf(why, sizeof(why), "%s could not be made", miss);
         (void)rd__vu_record_fall_back(why);
+    }
+    if (g_rdRec.mode == RD_VU_RECORD_STORES && !rd__vu_rec_sink_ready()) {
+        /* the store passes' targets (rd_vu_rec_sink.h): without them a store
+           pass would not match its pipelines; the stores off before the
+           self-test and the first replay (rd__vu_prepass asks again) */
+        (void)rd__vu_record_fall_back("the store passes' throwaway targets could not be made");
     }
 }
 

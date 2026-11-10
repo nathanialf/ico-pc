@@ -715,7 +715,9 @@ that stops again writing its own line without the retry mark); a stop at the fre
   polled; a zip that cannot be written keeping the frame loose; the join at shutdown with a job in
   flight, twice safe, a later job starting a new worker; the report's bundle (the newest three of
   five recorded zips stored with `automatic-captures.txt` naming each and why one is left out, the
-  report zip's own entries kept, a zip gone from the disk not listed, none recorded adding nothing).
+  report zip's own entries kept, a zip gone from the disk not listed, none recorded adding nothing;
+  a zip that cannot be read as the report is rebuilt left out and named `left out: gone` in the
+  note, the other still in).
   Run under the asan and thread presets as well.
 - `game_data_range_test.c`: the game data ranges ([PLATFORM.md](PLATFORM.md#game-data-ranges))
   on this toolchain's compiler and linker, over a stand-in game library (`game_data_fixture.c`)
@@ -1412,13 +1414,17 @@ The renderer's test programs have a page of their own:
   the argument `scopes`: `rhi_vk_scopes`, `_vk11` (`ICO_VK_FAKE_API=1.1`, label vk11), `_global`
   (`ICO_VK_GLOBAL_BARRIERS=1`), `_novs` (no vertex stores), each with the layer's shader access
   analysis on, `VK_KHRONOS_VALIDATION_SYNCVAL_SHADER_ACCESSES_HEURISTIC=true`: without it the
-  synchronisation checks see no shader's buffer read): seven lists, each submitted and waited for,
+  synchronisation checks see no shader's buffer read; every `rhi_vk*` and
+  `rhi_native*` run has it): eight lists, each submitted and waited for,
   counted by `RhiStats.fragmentHolds` (the barriers whose first scope holds fragment work and whose
   second the vertex, compute or copy stages): "a picture" (a mesh upload into an index and storage
   buffer, the record's dispatch and store pass in their brackets, a colour pass, a texture upload),
   then "the next picture" (the same: 0 holds), a texture upload over the sampled texture (1), the
   record's held-back end with a transition out of `SHADER_READ` before a pass (1, 0 under the
-  global barriers), a fragment shader that declares a storage buffer made (`rhi_vk_ps_storage.h`)
+  global barriers), a texture upload over the sampled texture, a mesh upload and the record, then
+  in the same list the mesh upload, the record and the texture upload (the texture's hold recorded
+  before the record in the old order, 1, none in the renderer's order, 0;
+  `port/render/rd_upload_late.h`), a fragment shader that declares a storage buffer made (`rhi_vk_ps_storage.h`)
   and the upload and dispatch again (2: the copy and the bracket now wait for fragment work), a
   draw whose fragment shader reads the arena and a copy over it (1, no write after read), the
   record read back word for word; no validation message.
@@ -1427,9 +1433,12 @@ The renderer's test programs have a page of their own:
   analysis on: `rhi_vk_subpass` through dynamic rendering's local read, `_vk11`
   (`ICO_VK_FAKE_API=1.1`), `_vk10` (`=1.0` with `ICO_VK_FAKE_NO_DYNAMIC=1`, label vk10) and
   `_mali_vk11` (with `ICO_VK_FAKE_LIMITS=mali`) through the `VkRenderPass` path's subpass read
-  ([RHI.md](RHI.md#local-read)), `_legacy` (`ICO_VK_LEGACY_PASSES=1`: the Intel row's path, no
-  subpass read, the cell not run) and `_legacy_on` (with `ICO_VK_SUBPASS_READ=1`); labels vk11
-  for the 1.1 pair): a 16x16 RGBA8 target cleared, then in a pass with a D32F_S8 depth a draw of A
+  ([RHI.md](RHI.md#local-read)), each with `ICO_VK_SUBPASS_READ=1` (the read is an experiment, off
+  by default); `_vk11_off` the 1.1 profile as shipped (the read off, no local read, the cell not
+  run); `_legacy` (`ICO_VK_LEGACY_PASSES=1`: the Intel row's path, no subpass read, the cell not
+  run) and `_legacy_on` (with `ICO_VK_SUBPASS_READ=1`); `ICO_TEST_SUBPASS_WANT=1` / `0` makes the
+  cell fail unless the read is on / off as the row says; labels vk11 for the 1.1 rows): a 16x16
+  RGBA8 target cleared, then in a pass with a D32F_S8 depth a draw of A
   over the left half, the COLOR barrier, a draw through `ps_subpass` over all of it (the GS LERP of
   its colour over the colour it reads), the BACK barrier, a draw over the bottom rows; a
   colour-only readable pass with a COLOR barrier (skipped and counted on the subpass read); a
@@ -1544,7 +1553,8 @@ The renderer's test programs have a page of their own:
   nothing found (`rhi_vk_spirv_scan`).
 - `rhi_vk_pass_crumb_test.c`: the render pass breadcrumb the crash report prints
   (`port/rhi/rhi_pass_crumb.c`), pure: none before a pass; a pass stored is inside the driver's
-  begin until marked begun, then ended; the line word for word for the crack fill's shape at 2x (one
+  begin until marked begun, then ended; the `VkRenderPass` path's two phases before the begin
+  (making its objects; not begun when they could not be made), word for word; the line word for word for the crack fill's shape at 2x (one
   colour, no depth, dynamic rendering) and for two colours with one view missing and a read-only
   D32S8 on a `VkRenderPass`; the attachment-less record pass; a short buffer cut and terminated with
   the full length returned; the reset (`rhi_vk_pass_crumb`).

@@ -429,8 +429,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   (`rd__vu_skin_thinned`); the bone at 200 zeroed in the run (`rd__vu_skin_sabotage_set`): the one
   twin differs and re-arms the twins, the next replay twins all three; the sabotage off: thinned
   again after four; the lines `twins thinned to one a picture after 4 clean replays`, `twins
-  re-armed by a twin event ... (re-armed 1 times)` and the end line's `thinned 2 times, re-armed 1
-  times (thinned at the end)` (`rd_vu_skin_check_thin`).
+  re-armed by a twin event ... (re-armed 1 times)` and the end line's `thinned 2 times, re-armed 2
+  times (thinned at the end)`; then the careful rule (`rd_vu_skin_background` with a reason,
+  `rd__vu_skin_careful_rearm_set` 2): after one more event under the old rule (the second re-arm)
+  the careful rule thins the twins at once, three replays twin one each; an event re-arms all three
+  for two replays (the events in them do not lengthen it), then one a replay again; three more
+  cycles use the four stretches, after which two replays under the sabotage twin one each
+  (`rd_vu_skin_check_thin`).
 - `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
   paths, `*` globs, a missing dump named and skipped, none at all `SKIP`) replayed by
   `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
@@ -1092,6 +1097,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   with `ICO_RD_FOG_SABOTAGE=local`, `local fail N, copy ok N`, the copy taken at both sizes and
   `profile: fog local off (self-test)` (`rd_fog_selftest_local_sabotage`). On the Vulkan
   `VkRenderPass` path's subpass read ([RHI.md](RHI.md#local-read); `test/rd_date_subpass.cmake`):
+  each with `ICO_VK_SUBPASS_READ=1` (the read is an experiment, off by default):
   `rd_date_selftest_vk11` (`ICO_VK_FAKE_API=1.1`) and `_vk10` (`=1.0`, all-static pipelines) with
   `ICO_RD_DATE_PATH=stencil`, stencil and snapshot ok 5 and the lines `render passes: the subpass
   read: ...` and `local read yes (the subpass read: ...)`; `rd_date_selftest_tiler_vk11` under
@@ -1100,9 +1106,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `ICO_RD_DATE_SABOTAGE=1`: the stencil fails and `profile: DATE stencil off (self-test)`; and
   `rd_date_subpass_ab` (`test/rd_date_subpass_ab.cmake`, the dumps of
   `tools/date_subpass_dumps.txt`, issue 179's Mali frame first): each dump through the bit and
-  through the snapshot on that 1.1 tile-based profile with `--pass-dump`, every named target byte
-  for byte, no DATE snapshot and fewer passes through the bit where the snapshot run drew some, no
-  validation error (labels vk11, vk10). Both scripts take
+  through the snapshot on that 1.1 tile-based profile with `--pass-dump` (the stencil run with the
+  read on, the snapshot run with it off, as shipped), every named target byte for byte, no DATE
+  snapshot and fewer passes through the bit where the snapshot run drew some, no validation error;
+  `rd_pixel_vk11_subpass`, `rd_pixel` on the 1.1 profile with the read on: its DATE stencil case
+  runs (`DATE stencil: skipped` fails it) and equals the snapshot's (labels vk11, vk10). Both scripts take
   `-DEXTRA` and `-DEXTRA2`, regexes that must each match the log at least once. With
   `rd_shadow_selftest.cmake`, the shadow count's self-test, which the fog's first run and its run
   at the second scene size run: every `shadow count: one draw (self-test: equal to the seven draws
@@ -1623,7 +1631,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `rd__enumerate_reachable`; the test fails on a key the set lacks, which on a device is one
   first-use stall (`firstUseLine`), never a wrong picture. The union of the asked keys is left in
   `rd_replay_tool_keys/keys-<config>-<size>.txt` (`rd_replay_tool_keys`).
-- `rd_perf_clock_test.c`: a replay's GPU clock against the CPU's (`port/render/rd_perf_clock.h`, issue 123), from made-up slot clocks: the issue 123 stall (the previous use's stamps at the wait's start, nothing for 250 ms, the replay's stamps written and reset again, a restarted counter, the calibrated clocks: 296.0 ms after its first submit) word for word; a trace point of the replay's own names its last stamp; without calibration the start from the wait's end (297.0 ms); calibrated clocks older than the stamps fall back to it; with no wait either, not placed; two recorded stamps unwritten (the first named), none written; a replay that had finished with an index the backend did not record (no line due); a short buffer (`rd_perf_clock`).
+- `rd_perf_clock_test.c`: a replay's GPU clock against the CPU's (`port/render/rd_perf_clock.h`, issue 123), from made-up slot clocks: the issue 123 stall (the previous use's stamps at the wait's start, nothing for 250 ms, the replay's stamps written and reset again, a restarted counter, the calibrated clocks: 296.0 ms after its first submit) word for word; a trace point of the replay's own names its last stamp; without calibration the start from the wait's end (297.0 ms); calibrated clocks older than the stamps fall back to it; with no wait either, not placed; two recorded stamps unwritten (the first named), none written; a list with stamps recorded and never submitted (its stamps not recorded, `listsUnsubmitted` said apart, none unwritten); a replay that had finished with an index the backend did not record (no line due); a short buffer (`rd_perf_clock`).
 - `rd_perf_gap_test.c`: the GPU's time between two timed replays (`port/render/rd_perf_gap.h`, issue 123): the first timed replay has none; a consecutive one's gap; a 340 ms idle GPU across a stall kept; 1.5 s kept with nothing skipped; two replays without timestamps between kept and counted (skipped 2); 61 s and 60 s refused (the replay the last all the same), just under 60 s kept; a first stamp before the one before ended (under 0) kept; a replay number not after the last (a restart) without one, measured from it after (`rd_perf_gap`).
 - `rd_submit_queue_test.c`: the submit thread's queue (`port/render/rd_submit_queue.h`): jobs run in the order posted, numbered from 1, an empty one refused; at most `RD_SUBMIT_DEPTH` queued and running, the running job counted until it finishes (one at a time, a third post refused meanwhile); the finished jobs' times taken oldest first, once, the oldest dropped and counted past the depth, the present timed apart (`presentSplit`, the lock, the driver's call, the poll, the end: issue 123) with them; the longest present since the last take, once (1 ns for a 0 ms present, 0 for a job that presents nothing); the block's means, longest, depth, waits by the render thread and the others, lists submitted on the render thread, cleared by the take with the depth carried for the jobs still queued; the jobs queued and running of each frame slot (a running job counted until it finishes, the other slot's queued job not counted for this one) and the pictures begun beside the other slot's job (`testSlots`); a presenting picture's two lists carried through the queue (`RdSubmitJob.cl2`) and its tail's steps in order, the scene's list ended and submitted, then the present's own, then the present, a one-list job's end and submit with a present only when asked (`testTail`, `rd__sq_tail_steps`, issue 179) (`rd_submit_queue`).
 - `rd_pipe_finish_test.c`: the background finisher's choices (`rd_pipe_finish.h`): a set of 1196 keys stopped after 33 gives its batches from key 33 in the set's order, 32 a batch, the keys made meanwhile and the failed ones skipped, a batch never mixing keys with and without a destination read (the other kind's key starts the next), every key not made taken exactly once, 37 batches for 1163 keys of one kind (the last of 11), none past the end; the step after a picture: a batch in flight waits, then is taken whatever the memory or a hold; the system's signal ends the finisher, no key left ends it, a hold (late step, slow picture) and a reading under the floor wait until their time, the memory is read only when nothing else holds the batch, then a batch begins; every step's words (`rd_pipe_finish`).

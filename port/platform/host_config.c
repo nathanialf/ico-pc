@@ -554,6 +554,9 @@ static const struct {
        dynamic rendering wherever offered; unset, the Intel driver row
        (port/rhi/rhi_pass_row.h) */
     {"dev.legacy_passes", "legacy_passes"},
+    /* the Vulkan VkRenderPass path's subpass read (an experiment, off by
+       default): on tries it, still gated by DATE's self-test */
+    {"dev.subpass_read", "subpass_read"},
     {"dev.storage_pass_merge", "storage_pass_merge"},
     /* retired: the VU vertex shaders' plain variants only and the override
        of the device table (one module set on every device now); read so a
@@ -784,6 +787,9 @@ static const struct {
        1 the render passes as VkRenderPass objects on any device, 0 dynamic
        rendering wherever offered (the Intel driver row off) */
     {"legacy_passes", "ICO_VK_LEGACY_PASSES"},
+    /* port/rhi/vk/vk_device.c vkr_subpass_read_decide: 1 the subpass read
+       on any VkRenderPass path (an experiment), 0 or unset off */
+    {"subpass_read", "ICO_VK_SUBPASS_READ"},
     /* port/render/rd_dst_read.c rd__dst_merge_ok, rd_core.c rd_init */
     {"storage_pass_merge", "ICO_RD_PASS_MERGE"},
     /* port/render/rd_replay_vu.c rd__vu_prepass_init: 0 draws without the

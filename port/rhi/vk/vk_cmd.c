@@ -272,8 +272,19 @@ static void vkr_collect_timestamps(VkrFrame *f)
             hi = i + 1;
         }
     }
-    /* what the slot recorded, for rhi_read_timestamp_clock */
-    memcpy(g_vkr.tsClock.recorded, f->tsWritten, sizeof(g_vkr.tsClock.recorded));
+    /* what the slot's submitted lists recorded, for rhi_read_timestamp_clock
+     * (a list recorded and never submitted wrote nothing on the GPU: its
+     * stamps would read as unwritten, port/render/rd_perf_clock.c), and
+     * how many lists with stamps were not submitted */
+    for (uint32_t w = 0; w < RHI_TIMESTAMP_WORDS; w++) {
+        g_vkr.tsClock.recorded[w] =
+            f->tsWritten[w] & __atomic_load_n(&f->tsSubmitted[w], __ATOMIC_RELAXED);
+    }
+    const uint32_t stamped = __atomic_load_n(&f->tsListsStamped, __ATOMIC_RELAXED);
+    const uint32_t sent = __atomic_load_n(&f->tsListsSubmitted, __ATOMIC_RELAXED);
+    g_vkr.tsClock.listsUnsubmitted = stamped > sent ? stamped - sent : 0u;
+    memset(f->tsSubmitted, 0, sizeof(f->tsSubmitted));
+    f->tsListsStamped = f->tsListsSubmitted = 0;
     if (!f->queryPool || hi == 0) {
         memset(f->tsWritten, 0, sizeof(f->tsWritten));
         return;
@@ -489,6 +500,7 @@ RhiCommandList rhi_begin_commands(void)
     }
     c->recording = true;
     c->slot = (uint8_t)(f - g_vkr.frames);
+    memset(c->tsWritten, 0, sizeof(c->tsWritten));
     /* the bind cache starts empty (the slot's recycle zeroed it too) */
     c->pipeline = NULL;
     c->pipelineId = 0;
@@ -689,8 +701,20 @@ void rhi_submit(RhiCommandList cl)
         /* the acquire's wait goes with the list that uses the image (vkr_submit_batch) */
         takeAcquire = bb && bb->image == c->swapImage;
     }
-    if (vkr_submit_batch(f, &c->cb, 1, signal, takeAcquire) && signal) {
+    const bool sent = vkr_submit_batch(f, &c->cb, 1, signal, takeAcquire);
+    if (sent && signal) {
         f->acq.signalled = true;
+    }
+    /* its stamps reach the GPU: the slot's tsSubmitted (vkr_collect_timestamps) */
+    bool stamped = false;
+    for (uint32_t w = 0; sent && w < RHI_TIMESTAMP_WORDS; w++) {
+        if (c->tsWritten[w]) {
+            __atomic_or_fetch(&f->tsSubmitted[w], c->tsWritten[w], __ATOMIC_RELAXED);
+            stamped = true;
+        }
+    }
+    if (stamped) {
+        __atomic_add_fetch(&f->tsListsSubmitted, 1u, __ATOMIC_RELAXED);
     }
 }
 
@@ -815,27 +839,34 @@ static VkPipelineStageFlags vkr_buf_later_stages(const VkrBuffer *b, VkAccessFla
 }
 
 /* The barriers that hold later vertex, compute and copy work behind earlier
- * fragment work (VkrState.holdSite, RhiStats.fragmentHolds): a first scope
- * with a fragment-side stage (the fragment shader, the depth tests, colour
- * output, or a mask that holds them all) and a second with a stage that
- * runs before them (draw indirect, vertex input, the vertex and the other
- * pre-rasterisation shaders, compute, transfer, or a mask that holds them
- * all).  Counted where each vkCmdPipelineBarrier is recorded (a few dozen a
- * picture, none a draw), and one line per site for its first 8 and every
- * 100th after, with the masks: a reporter's log then names the barriers
- * that keep a picture from starting beside the one before.  A copy over a
- * sampled texture is one by its nature (the copy waits for the sampling). */
+ * fragment work (VkrState.holdSite, RhiStats.fragmentHolds and holdSites):
+ * a first scope with a fragment-side stage (the fragment shader, the depth
+ * tests, colour output, or a mask that holds them all) and a second with a
+ * stage that runs before them.  Two kinds: RHI_HOLD_KIND_VERTEX, whose second
+ * scope holds draw indirect, vertex input, the vertex or another
+ * pre-rasterisation shader, compute, the top of the pipe or a mask that
+ * holds them all (the picture's VU record and vertex work wait behind the
+ * fragment work before it), and RHI_HOLD_KIND_COPY, whose second scope holds
+ * the transfer stage alone (later copies wait, and vertex or compute work
+ * only where a copy's own barrier passes the wait on: every copy out of a
+ * render target is one).  Counted where each vkCmdPipelineBarrier is
+ * recorded (a few dozen a picture, none a draw); one line for each of the
+ * first 8 of a site and kind, then none (the counts go to the 10 s
+ * summary through RhiStats.holdSites: port/render/rd_perf.c), with the
+ * masks: a reporter's log then names the barriers that keep a picture from
+ * starting beside the one before.  A copy over a sampled texture is one by
+ * its nature (the copy waits for the sampling). */
 typedef enum VkrHoldSite {
-    VKR_HOLD_OPEN,     /* a list's opening barrier */
-    VKR_HOLD_DEFERRED, /* the barriers held back, sent before a command */
-    VKR_HOLD_HAZARD,   /* a pass's or copy's barrier, with those held back */
-    VKR_HOLD_COPY,     /* a buffer copy's wait for its destination's uses */
-    VKR_HOLD_GLOBAL,   /* the global barriers (ICO_VK_GLOBAL_BARRIERS=1) */
-    VKR_HOLD_EXTERNAL, /* the external compute's bracket (rhi_native.h) */
-    VKR_HOLD_SITES
+    VKR_HOLD_OPEN = RHI_HOLD_SITE_OPEN,         /* a list's opening barrier */
+    VKR_HOLD_DEFERRED = RHI_HOLD_SITE_DEFERRED, /* the barriers held back, sent before a command */
+    VKR_HOLD_HAZARD = RHI_HOLD_SITE_HAZARD, /* a pass's or copy's barrier, with those held back */
+    VKR_HOLD_COPY = RHI_HOLD_SITE_COPY,     /* a buffer copy's wait for its destination's uses */
+    VKR_HOLD_GLOBAL = RHI_HOLD_SITE_GLOBAL, /* the global barriers (ICO_VK_GLOBAL_BARRIERS=1) */
+    VKR_HOLD_EXTERNAL = RHI_HOLD_SITE_EXTERNAL, /* the external compute's bracket (rhi_native.h) */
+    VKR_HOLD_SITES = RHI_HOLD_SITES
 } VkrHoldSite;
 
-_Static_assert(VKR_HOLD_SITES <= sizeof(g_vkr.holdSite) / sizeof(g_vkr.holdSite[0]),
+_Static_assert(VKR_HOLD_SITES <= sizeof(g_vkr.holdSite[0]) / sizeof(g_vkr.holdSite[0][0]),
                "VkrState.holdSite holds every site");
 
 static const char *const vkr_holdSiteName[VKR_HOLD_SITES] = {
@@ -855,14 +886,14 @@ static const char *const vkr_holdSiteName[VKR_HOLD_SITES] = {
      VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)
 /* (the top of the pipe in a second scope stands for every stage, as the
    bottom does in a first) */
-#define VKR_BEFORE_FRAGMENT                                                                        \
+#define VKR_BEFORE_FRAGMENT_VERTEX                                                                 \
     (VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |                     \
      VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |                    \
      VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT |                                           \
      VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |                                        \
      VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |                \
-     VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |                         \
-     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)
+     VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT | VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)
+#define VKR_BEFORE_FRAGMENT (VKR_BEFORE_FRAGMENT_VERTEX | VK_PIPELINE_STAGE_TRANSFER_BIT)
 
 /* late: a list's end (VkrState.late, either thread) */
 static void vkr_hold_note(VkrHoldSite site, VkPipelineStageFlags src, VkPipelineStageFlags dst,
@@ -876,18 +907,19 @@ static void vkr_hold_note(VkrHoldSite site, VkPipelineStageFlags src, VkPipeline
     } else {
         g_vkr.stats.fragmentHolds++;
     }
-    const uint64_t n = __atomic_add_fetch(&g_vkr.holdSite[site], 1u, __ATOMIC_RELAXED);
-    if (n <= 8u || n % 100u == 0u) {
-        uint64_t all = 0;
-        for (int i = 0; i < VKR_HOLD_SITES; i++) {
-            all += __atomic_load_n(&g_vkr.holdSite[i], __ATOMIC_RELAXED);
-        }
-        VKR_LOG("barriers: one holds every later vertex, compute and copy command (the next "
-                "picture's too) behind the fragment work before it: %s (first scope 0x%x, "
-                "second 0x%x, %u image barrier%s); %llu at this site, %llu in all (the first 8 "
-                "a site said, then every 100th)",
+    const int kind = (dst & VKR_BEFORE_FRAGMENT_VERTEX) ? RHI_HOLD_KIND_VERTEX : RHI_HOLD_KIND_COPY;
+    const uint64_t n = __atomic_add_fetch(&g_vkr.holdSite[kind][site], 1u, __ATOMIC_RELAXED);
+    if (n <= 8u) {
+        VKR_LOG("barriers: one holds every later %s (the next picture's too) behind the "
+                "fragment work before it: %s (first scope 0x%x, second 0x%x, %u image "
+                "barrier%s); %llu of this kind at this site (the first 8 of each said; the "
+                "counts in the 10 s summary)",
+                kind == RHI_HOLD_KIND_VERTEX
+                    ? "vertex, compute and copy command"
+                    : "copy (vertex and compute work only through a copy's "
+                      "own barrier)",
                 vkr_holdSiteName[site], (unsigned)src, (unsigned)dst, images,
-                images == 1u ? "" : "s", (unsigned long long)n, (unsigned long long)all);
+                images == 1u ? "" : "s", (unsigned long long)n);
     }
 }
 
@@ -2243,17 +2275,32 @@ void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, R
      *   - those of earlier lists: each list's closing barrier
      *     (rhi_end_commands).
      * So the transfer stage is in this first scope only for a copy between
-     * a texture and either buffer: a buffer copy waits no longer for every earlier copy of the
-     * picture, whose own first scope may reach fragment work (a texture
-     * upload over a sampled texture waits for the sampling), and so the
-     * mesh uploads and the VU record that reads them do not inherit that
-     * wait.  A buffer nothing can have used gets the top of the pipe (no
-     * wait); the call stays one either way (rd_perf's barrier counts). */
+     * a texture and either buffer.  That does not keep this copy from
+     * waiting for fragment work recorded before it: an execution
+     * dependency covers every command in its scopes, whatever resource, so
+     * an earlier barrier whose first scope holds the fragment shader and
+     * whose second the transfer stage (a texture upload over a sampled
+     * texture: SHADER_READ -> COPY_DST) makes every later copy wait for the
+     * fragment work before it, this one included, and this copy's second
+     * barrier passes that wait on to the vertex and compute work that
+     * reads the destination.  The renderer therefore records the mesh
+     * uploads and the VU record before its texture uploads
+     * (port/render/rd_upload_late.h).  What remains: the previous list's
+     * closing barrier orders its copies before this list's transfers, so a
+     * copy out of a render target at the end of the picture before (its
+     * own barrier waits for colour output) still holds this copy, and the
+     * record after it, behind that pass's fragment work.  A buffer nothing
+     * can have used gets the top of the pipe (no wait); the call stays one
+     * either way (rd_perf's barrier counts). */
     const bool dPending = d->hzEpoch == c->epoch && (d->hzXferWrite || d->hzXferRead);
     const bool sPending = s->hzEpoch == c->epoch && s->hzXferWrite;
     VkPipelineStageFlags preSrc =
         vkr_buf_earlier_stages(d) & ~(VkPipelineStageFlags)VK_PIPELINE_STAGE_TRANSFER_BIT;
-    if (dPending || sPending) {
+    /* on the global barrier path vkr_hz_copy keeps no hazard record (its
+       global barrier goes before a texture copy, none after it): the
+       transfer stage always, so an earlier copy between a texture and
+       either buffer stays ordered before this one */
+    if (dPending || sPending || c->globalOrder) {
         preSrc |= VK_PIPELINE_STAGE_TRANSFER_BIT;
     }
     VkMemoryBarrier pre = {
@@ -2747,6 +2794,14 @@ void rhi_cmd_write_timestamp(RhiCommandList cl, uint32_t index)
     }
     vkCmdWriteTimestamp(c->cb, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, f->queryPool, index);
     rhi_ts_add(f->tsWritten, index);
+    bool first = true;
+    for (uint32_t w = 0; w < RHI_TIMESTAMP_WORDS; w++) {
+        first = first && c->tsWritten[w] == 0u;
+    }
+    if (first) {
+        __atomic_add_fetch(&g_vkr.frames[c->slot].tsListsStamped, 1u, __ATOMIC_RELAXED);
+    }
+    rhi_ts_add(c->tsWritten, index);
 }
 
 uint32_t rhi_read_timestamps(uint64_t *ns, uint32_t max)

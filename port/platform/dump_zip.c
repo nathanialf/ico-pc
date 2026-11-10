@@ -247,7 +247,7 @@ int ico_zip_add_file(const char *zip_path, const char *file_path, const char *en
 }
 
 int ico_zip_add_bundle(const char *zip_path, const char *const *paths, int n, const char *note_name,
-                       const char *note, char *why, size_t why_size)
+                       const char *note, int *gone, char *why, size_t why_size)
 {
     mz_zip_archive rd, wr;
     size_t zsize = 0, osize = 0;
@@ -268,19 +268,56 @@ int ico_zip_add_bundle(const char *zip_path, const char *const *paths, int n, co
         for (mz_uint i = 0; ok && i < cnt; i++) {
             ok = mz_zip_writer_add_from_zip_reader(&wr, &rd, i) != 0;
         }
-        /* the files are zips already: stored */
+        /* the files are zips already: stored; one that cannot be read now
+           (gone since it was listed) is left out and named in the note, the
+           others still go in */
+        char *gnote = NULL;
+        size_t glen = 0;
+        int ngone = 0;
         for (int i = 0; ok && i < n; i++) {
             size_t fsize = 0;
             void *fdata = read_all(paths[i], &fsize);
 
-            ok = fdata != NULL && fsize > 0 &&
-                 mz_zip_writer_add_mem(&wr, base_name(paths[i]), fdata, fsize, MZ_NO_COMPRESSION) !=
-                     0;
+            if (fdata == NULL || fsize == 0) {
+                const char *b = base_name(paths[i]);
+                const size_t add = strlen(b) + 96u;
+                char *g = realloc(gnote, glen + add);
+
+                if (g != NULL) {
+                    gnote = g;
+                    const int w = snprintf(gnote + glen, add,
+                                           "%s: left out: gone (it could not be read when the "
+                                           "report was made)\n",
+                                           b);
+                    glen += w > 0 && (size_t)w < add ? (size_t)w : 0u;
+                }
+                ngone++;
+                free(fdata);
+                continue;
+            }
+            ok = mz_zip_writer_add_mem(&wr, base_name(paths[i]), fdata, fsize, MZ_NO_COMPRESSION) !=
+                 0;
             free(fdata);
         }
-        ok = ok &&
-             (note == NULL || note_name == NULL ||
-              mz_zip_writer_add_mem(&wr, note_name, note, strlen(note), MZ_DEFAULT_LEVEL) != 0);
+        if (ok && note != NULL && note_name != NULL) {
+            const size_t nlen = strlen(note);
+            char *full = malloc(nlen + glen + 1u);
+
+            if (full != NULL) {
+                memcpy(full, note, nlen);
+                if (glen) {
+                    memcpy(full + nlen, gnote, glen);
+                }
+                full[nlen + glen] = '\0';
+            }
+            ok = mz_zip_writer_add_mem(&wr, note_name, full != NULL ? full : note,
+                                       full != NULL ? nlen + glen : nlen, MZ_DEFAULT_LEVEL) != 0;
+            free(full);
+        }
+        free(gnote);
+        if (gone != NULL) {
+            *gone = ngone;
+        }
         ok = ok && mz_zip_writer_finalize_heap_archive(&wr, &out, &osize) != 0;
         mz_zip_writer_end(&wr);
         mz_zip_reader_end(&rd);
