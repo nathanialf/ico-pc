@@ -850,6 +850,36 @@ static void testDump(const char *dir)
     char path[1024];
     snprintf(path, sizeof(path), "%s/rd_state_test.rddump", dir);
     CHECK(rd__dump_frame(f, path), "dump written");
+    {
+        /* the memory dump (rd_dump_frame_mem: the automatic dumps' worker
+           writes the bytes, issues 123 and 179) is the file's bytes */
+        void *mem = NULL, *none = NULL;
+        size_t memLen = 0, noneLen = 0;
+        FILE *df = fopen(path, "rb");
+        long fileLen = 0;
+        uint8_t *fileBytes = NULL;
+
+        if (df) {
+            fseek(df, 0, SEEK_END);
+            fileLen = ftell(df);
+            fseek(df, 0, SEEK_SET);
+            fileBytes = malloc((size_t)fileLen + 1);
+            CHECK(fileBytes && fread(fileBytes, 1, (size_t)fileLen, df) == (size_t)fileLen,
+                  "dump file read");
+            fclose(df);
+        }
+        CHECK(rd_dump_frame_mem(&mem, &memLen), "memory dump made");
+        CHECK(fileBytes && mem && memLen == (size_t)fileLen && memcmp(mem, fileBytes, memLen) == 0,
+              "memory dump equals the file's bytes (%zu, %ld)", memLen, fileLen);
+        CHECK(rd_dump_retained_frame_mem(f->number, &none, &noneLen, NULL) && noneLen == memLen &&
+                  memcmp(none, mem, memLen) == 0,
+              "the retained frame's memory dump is the same");
+        CHECK(!rd_dump_retained_frame_mem(f->number + 7u, &none, &noneLen, NULL),
+              "a frame the ring does not hold is not dumped");
+        free(mem);
+        free(none);
+        free(fileBytes);
+    }
     RdFrame g;
     if (!rd__load_frame(path, &g)) {
         CHECK(0, "dump loaded");

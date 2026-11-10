@@ -70,6 +70,8 @@
 #include "window_stall.h"
 #include "window_disc.h"
 #include "window_blended.h"
+#include "window_dump_auto.h"
+#include "dump_auto.h"
 #include "window_sweep.h"
 #include "window_lifecycle.h"
 #include "window_pump_win.h"
@@ -3269,10 +3271,6 @@ static int device_lost_quit(void)
    .rddump is deleted once the zip is written, kept when it fails. With
    --console there is no log file. forReport: Settings' bug-report row
    (the pictures go into the zip too) */
-/* the skin check's sidecar for the next frame_dump (skin_capture_pump):
-   added to its zip, "" none */
-static char s_skinSidecar[ICO_PATH_MAX];
-
 static void frame_dump(int forReport)
 {
     char pref[ICO_PATH_MAX], dir[ICO_PATH_MAX], dump[ICO_PATH_MAX], png[ICO_PATH_MAX],
@@ -3329,24 +3327,13 @@ static void frame_dump(int forReport)
                                 sizeof(why));
     }
     s_pres.presentDumpPrev = havePrev && zr >= 0;
-    if (s_skinSidecar[0] != '\0') {
-        /* the skin check's capture (issue 123): its sidecar in the zip too
-           (kept in logs/ for the share menu); one line names both */
-        char swhy[160] = "no zip";
-        const char *b = s_skinSidecar + strlen(s_skinSidecar);
+    if (forReport && zr >= 0) {
+        /* the run's automatic zips still on disk, so one attachment brings
+           them (the slow-scene and skin-check zips stay on a phone) */
+        char bl[320];
 
-        while (b > s_skinSidecar && b[-1] != '/' && b[-1] != '\\') {
-            b--;
-        }
-        const int added =
-            zr >= 0 && ico_zip_add_file(zip, s_skinSidecar, b, swhy, sizeof(swhy), NULL) == 0;
-        fprintf(stderr,
-                "window: VU skin check: the capture: %s and the frame dump %s (%s), the "
-                "presented picture at the next present%s%s\n",
-                s_skinSidecar, zr >= 0 ? zip : dump, png,
-                added ? "; the sidecar is in the zip" : "; the sidecar is not in the zip: ",
-                added ? "" : swhy);
-        s_skinSidecar[0] = '\0';
+        (void)ico_dump_auto_bundle(zip, bl, sizeof(bl));
+        fprintf(stderr, "window: bug report: %s\n", bl);
     }
     if (forReport && zr >= 0 && s_pres.presentPng[0] != '\0') {
         snprintf(s_pres.reportZip, sizeof(s_pres.reportZip), "%s", zip);
@@ -3383,24 +3370,6 @@ static Uint64 s_reportDumpAt;
 static void report_picture_arm(void)
 {
     s_reportDumpAt = SDL_GetTicksNS() + 3000000000ull;
-}
-
-/* the skin check's capture on failure (issue 123; rd.h
-   rd_vu_skin_capture_due): once a run, a frame dump of the next present,
-   its sidecar into the zip; nothing asked of the player */
-static void skin_capture_pump(void)
-{
-    char path[ICO_PATH_MAX];
-
-    if (!rd_vu_skin_capture_due(path, sizeof(path))) {
-        return;
-    }
-    fprintf(stderr,
-            "window: VU skin check: a failure was captured (%s): a frame dump for the "
-            "next present\n",
-            path[0] != '\0' ? path : "no sidecar");
-    snprintf(s_skinSidecar, sizeof(s_skinSidecar), "%s", path);
-    frame_dump(0);
 }
 
 static void report_picture_pump(void)
@@ -4150,7 +4119,7 @@ int ico_window_pump(void)
     first_pump_recheck();
     resume_recheck();
     report_picture_pump();
-    skin_capture_pump();
+    window_dump_auto_skin_pump();
     window_bones_pump(); /* issue 123's ladder (window_bones.c) */
 #if ICO_RC_TOOLS && defined(__ANDROID__)
     share_report_pump();
@@ -4855,39 +4824,10 @@ static void slow_scene_write(const RdReplayWork *w, double work)
     s_slowLastWorkMs = window_slow_scene_work_ms(&b);
     s_slowLastStage = b.stage;
 
-    char logs[ICO_PATH_MAX], zip[ICO_PATH_MAX], dump[ICO_PATH_MAX + 64], stamp[32], why[160];
-    const time_t now = time(NULL);
-    const struct tm *tm = localtime(&now);
-    uint32_t frame = 0;
-
-    if (tm == NULL || strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", tm) == 0) {
-        snprintf(stamp, sizeof(stamp), "unknown");
-    }
-    if (ico_host_logs_dir(logs, sizeof(logs)) != 0 ||
-        ico_slow_dump_path(zip, sizeof(zip), logs, stamp) != 0) {
-        fprintf(stderr, "window: slow scene: no usable logs folder\n");
-        return;
-    }
-    snprintf(dump, sizeof(dump), "%s/slow-%s.rddump", logs, stamp);
-    if (!rd_dump_retained_frame(w->frame, dump, &frame)) {
-        fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)w->frame);
-        ico_remove(dump);
-        return;
-    }
-    ico_host_log_flush();
-    if (ico_loss_dump_zip(zip, dump, NULL, ico_diag_log_path(), 0, why, sizeof(why)) < 0) {
-        fprintf(stderr, "window: slow scene: zip not written: %s\n", why);
-        ico_remove(dump);
-        return;
-    }
-    (void)ico_slow_dump_prune(logs, ICO_SLOW_DUMP_KEEP);
-    ico_diag_note_slow_scene(zip);
-
-    char name[64], line[640];
-
-    snprintf(name, sizeof(name), "slow-%s.zip", stamp);
-    (void)window_slow_scene_text(line, sizeof(line), &b, (unsigned)frame, work, mean, name);
-    fprintf(stderr, "window: %s\n", line);
+    /* the frame is copied here and written by the dump worker
+       (window_dump_auto.c): the old synchronous write and zip were a
+       0.8-1.5 s hitch on the phone */
+    (void)window_dump_auto_slow(w->frame, &b, work, mean);
 }
 
 /* Every vsync while armed: the replay the renderer finished last, when it
@@ -4929,7 +4869,8 @@ static void perf_drain(void)
     double refreshMs = -1.0; /* the slow-replay threshold, read at the first record */
 
     window_video_memory_watch();
-    window_stall_poll(); /* the kernel GPU driver around the presents that blocked */
+    window_stall_poll();       /* the kernel GPU driver around the presents that blocked */
+    window_dump_auto_report(); /* the dump worker's finished zips */
     slow_scene_poll();
     while (rd_perf_pop(&r)) {
         auto_res_sample(&r);
@@ -5697,9 +5638,10 @@ void window_pace_log(Uint64 now)
         float sx = 1.0f, sy = 1.0f;
 
         rd_get_scene_scale(&sx, &sy);
-        (void)window_scene_gpu_hint_text(hint, sizeof(hint), s_pres.statPresents / sec,
-                                         s_pres.statFrames / sec, s_pres.statSkipLate,
-                                         (double)s_pres.gpuNs / 1e6, sy, &s_perf.vuFit);
+        (void)window_scene_gpu_hint_text(
+            hint, sizeof(hint), s_pres.statPresents / sec, s_pres.statFrames / sec,
+            window_scene_hint_skips(s_pres.statSkipLate, window_orig_skip_busy()),
+            (double)s_pres.gpuNs / 1e6, sy, &s_perf.vuFit);
     }
 
     fprintf(
@@ -5963,6 +5905,7 @@ void ico_window_close(void)
     }
     s_open = 0;
     ico_render_thread_stop(); /* every picture handed over finished, the thread ended */
+    window_dump_auto_stop();  /* the dump worker joined, its last zip reported */
     window_display_rate_stop(s_window);
     window_stall_gpu_close(); /* Android: the kernel GPU driver's sampler joined */
     /* a clean exit: a lazy run keeps the start-up activity file, so the
