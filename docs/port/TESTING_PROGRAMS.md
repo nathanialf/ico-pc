@@ -1401,6 +1401,19 @@ The renderer's test programs have a page of their own:
   name's index, the first of two equal names, no match for another case, a part of a name, a
   longer name, `""`, NULL or a NULL entry; the device-list text with and without scores, the
   unsuitable reasons, a short buffer cut (`rhi_adapter_match`).
+- `rhi_vk_pass_row_test.c`: the render pass driver row (`port/rhi/rhi_pass_row.c`), pure: Intel's
+  Windows driver (driver id 5, or no id on a Windows build) at Vulkan 1.3.215 (the issue 123
+  report's HD 530 on 101.2125), 1.3.200 and 1.2.182 takes `VkRenderPass` objects; 1.3.216, 1.3.289
+  and 1.4, Mesa's ANV on the same GPU, an Intel GPU on a non-Windows build without an id, NVIDIA,
+  AMD and Qualcomm keep dynamic rendering; the reason names the driver and `vkCmdBeginRendering`;
+  the `[dev] legacy_passes` words (`1`, `true`, `on`, `yes` in any case; `0`, `false`, `off`, `no`;
+  anything else, empty and NULL none) (`rhi_vk_pass_row`).
+- `rhi_vk_pass_crumb_test.c`: the render pass breadcrumb the crash report prints
+  (`port/rhi/rhi_pass_crumb.c`), pure: none before a pass; a pass stored is inside the driver's
+  begin until marked begun, then ended; the line word for word for the crack fill's shape at 2x (one
+  colour, no depth, dynamic rendering) and for two colours with one view missing and a read-only
+  D32S8 on a `VkRenderPass`; the attachment-less record pass; a short buffer cut and terminated with
+  the full length returned; the reset (`rhi_vk_pass_crumb`).
 - `rhi_vk_enum_test.c`: every `rhi.h` enumeration has a Vulkan mapping, `RGBA32_UINT` among them
   (`rhi_vk_enum`).
 - `rhi_vk_present_mode_test.c`: the present-mode choice over the sets drivers offer, and FIFO

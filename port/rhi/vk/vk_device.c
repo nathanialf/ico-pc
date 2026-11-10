@@ -5,6 +5,8 @@
 #include "../rhi_backend.h"
 #include "../rhi_adapter.h"
 #include "../rhi_driver_version.h"
+#include "../rhi_pass_row.h"
+#include "../rhi_pass_crumb.h"
 #include "../rhi_bind_cache.h"
 #include <stdlib.h>
 #include <string.h>
@@ -1546,6 +1548,54 @@ static uint32_t vkr_msaa_counts(void)
 
 static bool vkr_is_tiler(uint32_t vendor); /* below, with the vendor table */
 
+/* The driver row and its override (rhi_pass_row.h) over legacyPasses as
+ * the device's version and extensions set it: VkRenderPass objects on a
+ * device of the row (Intel's Windows driver at Vulkan 1.3.215 or older,
+ * whose vkCmdBeginRendering crashed in the reporter's first picture after
+ * a live switch to 2x), or wherever ICO_VK_LEGACY_PASSES ([dev]
+ * legacy_passes) is 1; with it 0, dynamic rendering wherever offered.
+ * One line when either changes the path or the override asks for what the
+ * device cannot give.  Without the VkRenderPass path in the build
+ * (VKR_LEGACY_PASSES 0) neither applies. */
+static void vkr_pass_row_apply(void)
+{
+    g_vkr.legacyWhy = NULL;
+#if VKR_LEGACY_PASSES
+    const int ov = rhi_vk_pass_override(getenv("ICO_VK_LEGACY_PASSES"));
+#ifdef _WIN32
+    const int windows = 1;
+#else
+    const int windows = 0;
+#endif
+    const char *row =
+        rhi_vk_pass_row(g_vkr.props.vendorID, g_vkr.driverID, g_vkr.props.apiVersion, windows);
+    if (g_vkr.legacyPasses) {
+        if (ov == 0) {
+            VKR_LOG("render passes: [dev] legacy_passes = false (ICO_VK_LEGACY_PASSES=0) asks for "
+                    "dynamic rendering, which this device does not offer: VkRenderPass objects");
+        }
+        return;
+    }
+    if (ov == 1) {
+        g_vkr.legacyPasses = true;
+        g_vkr.legacyWhy = "[dev] legacy_passes = true";
+        VKR_LOG("render passes: VkRenderPass objects, not dynamic rendering: [dev] legacy_passes "
+                "= true (ICO_VK_LEGACY_PASSES=1)%s",
+                row ? "; the driver row gives them too" : "");
+    } else if (row && ov == 0) {
+        VKR_LOG("render passes: dynamic rendering on %s, as [dev] legacy_passes = false "
+                "(ICO_VK_LEGACY_PASSES=0) asks (the row would give VkRenderPass objects)",
+                row);
+    } else if (row) {
+        g_vkr.legacyPasses = true;
+        g_vkr.legacyWhy = row;
+        VKR_LOG("render passes: VkRenderPass objects, not dynamic rendering: %s; [dev] "
+                "legacy_passes = false (ICO_VK_LEGACY_PASSES=0) gives dynamic rendering",
+                row);
+    }
+#endif
+}
+
 static bool vkr_create_device(void)
 {
     bool core13 = vkr_core13(g_vkr.props.apiVersion);
@@ -1554,6 +1604,10 @@ static bool vkr_create_device(void)
     const bool core12 = g_vkr.apiVersion >= VK_API_VERSION_1_2;
     const char *exts[48];
     uint32_t extCount = 0;
+    /* the crash report's breadcrumb counts this device's passes */
+    g_vkr.passSeq = 0;
+    g_vkr.lastMarker = 0;
+    rhi_pass_crumb_reset();
     if (g_vkr.surface) {
         exts[extCount++] = VK_KHR_SWAPCHAIN_EXTENSION_NAME;
     }
@@ -1583,6 +1637,7 @@ static bool vkr_create_device(void)
     g_vkr.legacyPasses =
         !core13 &&
         (!core11 || !vkr_device_has_ext(g_vkr.phys, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME));
+    vkr_pass_row_apply(); /* the driver row and [dev] legacy_passes */
 #if !VKR_LEGACY_PASSES
     if (g_vkr.legacyPasses) {
         VKR_LOG("no dynamic rendering, and this build has no VkRenderPass path");
@@ -1750,11 +1805,16 @@ static bool vkr_create_device(void)
             vkr_device_has_ext(g_vkr.phys,
                                VK_ARM_RASTERIZATION_ORDER_ATTACHMENT_ACCESS_EXTENSION_NAME);
         /* local read needs Vulkan 1.3 (VK_KHR_dynamic_rendering_local_read
-         * depends on it): never under ICO_VK_FAKE_API, whose device is 1.1 */
+         * depends on it): never under ICO_VK_FAKE_API, whose device is 1.1,
+         * and never on the VkRenderPass path (the driver row or [dev]
+         * legacy_passes on a device that has dynamic rendering: the read is
+         * dynamic rendering's) */
         const bool extLocal =
             (g_vkr.fakeApi == NULL || g_vkr.apiVersion >= VK_API_VERSION_1_3) &&
+            !g_vkr.legacyPasses &&
             vkr_device_has_ext(g_vkr.phys, VK_KHR_DYNAMIC_RENDERING_LOCAL_READ_EXTENSION_NAME);
-        const bool core14 = !extLocal && g_vkr.apiVersion >= VK_API_VERSION_1_4;
+        const bool core14 =
+            !extLocal && !g_vkr.legacyPasses && g_vkr.apiVersion >= VK_API_VERSION_1_4;
         VkPhysicalDeviceVulkan14Features q14 = {
             .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_4_FEATURES};
         void *chain = NULL;
@@ -2625,7 +2685,10 @@ static bool vkr_create_device(void)
      * leaves these NULL (vk_renderpass.c) */
     g_vkr.cmdBeginRendering = NULL;
     g_vkr.cmdEndRendering = NULL;
-    if (core13) {
+    if (g_vkr.legacyPasses) {
+        /* a 1.3 device on the driver row too: vkCmdBeginRendering is never
+         * called there */
+    } else if (core13) {
         g_vkr.cmdBeginRendering = vkCmdBeginRendering;
         g_vkr.cmdEndRendering = vkCmdEndRendering;
     } else if (!g_vkr.legacyPasses) {
@@ -3039,13 +3102,14 @@ bool rhi_init(const RhiDeviceDesc *desc)
      * (dynamic rendering or VkRenderPass objects) and the submission sync
      * (vk_sync.c), and the ICO_VK_FAKE_API profile in force */
     VKR_LOG("%s (Vulkan %u.%u.%u%s)%s%s; index values up to %u (full 32-bit range %s); render "
-            "passes %s; sync %s%s%s",
+            "passes %s%s%s%s; sync %s%s%s",
             g_vkr.adapterName, VK_API_VERSION_MAJOR(g_vkr.apiVersion),
             VK_API_VERSION_MINOR(g_vkr.apiVersion), VK_API_VERSION_PATCH(g_vkr.apiVersion),
             s_driverText, g_vkr.moltenvk ? "; MoltenVK" : "", g_vkr.surface ? "" : ", headless",
             g_vkr.limits.maxDrawIndexedIndexValue,
             g_vkr.limits.fullDrawIndexUint32 ? "offered" : "not offered",
-            g_vkr.legacyPasses ? "legacy" : "dynamic", vkr_sync_name(),
+            g_vkr.legacyPasses ? "legacy" : "dynamic", g_vkr.legacyWhy ? " (" : "",
+            g_vkr.legacyWhy ? g_vkr.legacyWhy : "", g_vkr.legacyWhy ? ")" : "", vkr_sync_name(),
             g_vkr.fakeApi ? "; ICO_VK_FAKE_API=" : "", g_vkr.fakeApi ? g_vkr.fakeApi : "");
     return true;
 }

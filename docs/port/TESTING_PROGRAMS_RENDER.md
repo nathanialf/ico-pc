@@ -1012,6 +1012,22 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   render-thread job, and it is called when the change made pipelines; `rhi_call_guard_settle`
   makes a busy guard's wait. The window's half (the
   present allowance started again) has no test: the window is not run in the tests.
+- `rd_display_change_2x_test.c`: a live switch from Original 1x to Enhanced at a whole 2x
+  (`rd_display_change_2x`, `_legacy` with `ICO_VK_LEGACY_PASSES=1`: a Vulkan 1.3 device with its
+  passes as `VkRenderPass` objects, the Intel driver row's path; `_vk11` with `ICO_VK_FAKE_API=1.1`,
+  label `vk11`), the case of the issue 123 report's Intel HD 530 crash inside `vkCmdBeginRendering`
+  ([RHI.md](RHI.md#vulkan), **Render passes**). The frame: VU meshes through the vertex pre-pass
+  with its record stored by the vertex shaders (`ICO_RD_VU_PREPASS=1`, `ICO_RD_VU_RECORD=stores`),
+  triangles writing the alpha and a DATE-tested sprite, the shadow count (reset, volume, resolve),
+  the fog over SCENE's depth, UI sprites and the reduction. With the renderer's own thread: three
+  frames at 1x after the start-up set, then the switch (scene scale 2, output 960x720) and eight
+  frames. After the switch at least two replays are recorded, the scene is 2x2, and each part is
+  drawn (pre-pass passes, a DATE snapshot or stencil draw, a shadow count resolve, a crack fill
+  pass; none of the last at 1x); where the record is stored by the vertex shaders every store pass
+  began on the throwaway target (`rd_vu_rec_sink.h`, none without it); the render pass breadcrumb
+  (`rhi_pass_crumb.h`) names the last pass ended, with a pass ring marker and the path asked, every
+  target with a view; under the validation layer no validation error from the first frame to the
+  end. 77 without a Vulkan device.
 - `rd_set_resume_test.c`: the start-up set resumed after a low-memory stop (`rd_set_resume`; issue
   123, `rd_set_pipeline_resume`, `rd_pipeline_set_stop`; [PIPELINES.md](PIPELINES.md#stop-and-resume)):
   each start a fresh `rd_init` at Original with a low-memory function that says yes after the

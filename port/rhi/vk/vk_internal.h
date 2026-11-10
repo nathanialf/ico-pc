@@ -209,9 +209,12 @@ typedef enum VkrSyncKind { VKR_SYNC_TIMELINE, VKR_SYNC_FENCES } VkrSyncKind;
 /* The render passes of a device without dynamic rendering (core 1.3 or
  * VK_KHR_dynamic_rendering): classic VkRenderPass objects
  * (vk_renderpass.c, g_vkr.legacyPasses), and ICO_VK_FAKE_API=1.1 hides
- * VK_KHR_dynamic_rendering so its runs take them.  Set to 0, such a device
- * is unsuitable again (vkr_rate_device, "no dynamic rendering") and the
- * 1.1 profile keeps the extension. */
+ * VK_KHR_dynamic_rendering so its runs take them.  A device of the driver
+ * row (port/rhi/rhi_pass_row.h: Intel's Windows driver at Vulkan 1.3.215
+ * or older) takes them too, and ICO_VK_LEGACY_PASSES=1 any device.  Set to
+ * 0, such a device is unsuitable again (vkr_rate_device, "no dynamic
+ * rendering"), the row and the override are ignored, and the 1.1 profile
+ * keeps the extension. */
 #define VKR_LEGACY_PASSES 1
 
 /* One vkQueueSubmit through vkr_sync_submit: the command buffers (possibly
@@ -630,6 +633,16 @@ typedef struct VkrState {
      * (Vulkan 1.1, or VK_KHR_maintenance2 on a Vulkan 1.0 device: issue
      * 158; without it the view keeps the image's usages) */
     bool legacyPasses;
+    /* why legacyPasses is on where the device offers dynamic rendering
+     * (the driver row, rhi_pass_row.h, or the override [dev]
+     * legacy_passes / ICO_VK_LEGACY_PASSES), for the device line; NULL
+     * otherwise */
+    const char *legacyWhy;
+    /* the crash report's breadcrumb (rhi_pass_crumb.h): the passes begun,
+     * and the last marker rhi_cmd_checkpoint was given (the renderer's
+     * pass ring sequence number), kept with the checkpoints off too */
+    uint64_t passSeq;
+    uint64_t lastMarker;
     bool driverProps;
     bool formatList;
     bool storeOpNone;
