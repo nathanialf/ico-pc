@@ -23,6 +23,7 @@ target_sources(ico_platform PRIVATE
     memory_floor.c
     display_rate.c
     present_hist.c
+    present_stall_block.c
     perf_block.c
     pipeline_skip.c
     pipe_resume.c
@@ -137,6 +138,10 @@ endif()
 # decisions (display_rate.c, issue 123)
 # present_hist: the 10 s block's histogram of the driver's present call
 # (present_hist.c, issue 123)
+# present_stall_block: the present stalls per 10 s block and per run against
+# the block's GPU span band and the display's rate (present_stall_block.c,
+# issue 123): the issue 123 log's figures, the lines word for word, a clock
+# restart, the run's per-minute sums, a short buffer
 # gpu_sysfs: the kernel GPU driver's nodes, the pure part (gpu_sysfs.c, issue
 # 123): the parser over the nodes' texts, the ring, the block and around
 # reductions, the three lines word for word
@@ -158,7 +163,7 @@ endif()
 # back, the start and action lines word for word
 foreach(t sched fiber fps_counter arena diag hotkeys pace_policy pace_loop perf_block lifecycle pump_watch ico_thread
           gpu_hang state_fiber state_guard state_port state_registry pipeline_skip memory_floor
-          present_fallback frame_mailbox display_rate present_hist gpu_sysfs
+          present_fallback frame_mailbox display_rate present_hist present_stall_block gpu_sysfs
           thermal_text window_scene bones_ladder pipe_resume)
     add_executable(${t}_test test/${t}_test.c)
     target_include_directories(${t}_test PRIVATE "${ICO_COMPAT_DIR}")

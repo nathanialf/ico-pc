@@ -154,6 +154,35 @@ if(ICO_RUN_TESTS)
     add_test(NAME rhi_driver_version COMMAND rhi_driver_version_test)
 endif()
 
+# --- The render pass driver row (CPU only, every target) ---------------------
+# rhi_pass_row.c: the drivers whose render passes are VkRenderPass objects
+# although they offer dynamic rendering (Intel's Windows driver at Vulkan
+# 1.3.215 or older), and the [dev] legacy_passes override's words
+# (vk_device.c vkr_pass_row_apply).
+add_executable(rhi_vk_pass_row_test test/rhi_vk_pass_row_test.c rhi_pass_row.c)
+target_include_directories(rhi_vk_pass_row_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(rhi_vk_pass_row_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME rhi_vk_pass_row COMMAND rhi_vk_pass_row_test)
+endif()
+
+# --- The render pass breadcrumb (CPU only, every target) ---------------------
+# rhi_pass_crumb.c: the pass a backend last began, stored before the driver's
+# begin call (vk_renderpass.c vkr_pass_begin) and printed by the crash report
+# (port/platform/diag_host.c report_crash_block).  A library of its own: the
+# Vulkan backend writes it, the platform layer, which links no backend, reads
+# it.
+add_library(ico_pass_crumb STATIC rhi_pass_crumb.c)
+target_include_directories(ico_pass_crumb PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(ico_pass_crumb PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(ico_platform PUBLIC ico_pass_crumb)
+add_executable(rhi_vk_pass_crumb_test test/rhi_vk_pass_crumb_test.c)
+target_compile_options(rhi_vk_pass_crumb_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(rhi_vk_pass_crumb_test PRIVATE ico_pass_crumb)
+if(ICO_RUN_TESTS)
+    add_test(NAME rhi_vk_pass_crumb COMMAND rhi_vk_pass_crumb_test)
+endif()
+
 # --- The [video] adapter rules (CPU only, every target) ---------------------
 # rhi_adapter.c: the exact-name match the Vulkan and Direct3D backends force
 # a pick with, and the device-list line's text. Each of those backends links
@@ -289,7 +318,7 @@ endif()
 
 # --- ico_rhi_vulkan -------------------------------------------------------------
 if(_ico_have_vk)
-    set(_ico_vk_sources rhi_adapter.c rhi_bind_cache.c rhi_driver_version.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c vk/vk_native.c
+    set(_ico_vk_sources rhi_adapter.c rhi_bind_cache.c rhi_driver_version.c rhi_pass_row.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c vk/vk_native.c
                         vk/vk_pipeline.c vk/vk_present_mode.c vk/vk_renderpass.c vk/vk_resource.c
                         vk/vk_swapchain.c vk/vk_sync.c)
     if(ANDROID)
@@ -316,6 +345,8 @@ if(_ico_have_vk)
     set_source_files_properties(${_ico_vk_sources} PROPERTIES COMPILE_OPTIONS
                                 "${ICO_PORT_WARNINGS}")
     target_link_libraries(ico_rhi_vulkan PRIVATE ${CMAKE_DL_LIBS})
+    # the crash report's breadcrumb (vk_renderpass.c writes it)
+    target_link_libraries(ico_rhi_vulkan PUBLIC ico_pass_crumb)
     if(SDL3_FOUND)
         target_compile_definitions(ico_rhi_vulkan PRIVATE ICO_RHI_HAVE_SDL=1)
         target_link_libraries(ico_rhi_vulkan PUBLIC SDL3::SDL3)

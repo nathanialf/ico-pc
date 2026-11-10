@@ -142,7 +142,7 @@ const char *ico_config_ini_key(const char *toml_path);
 /* The [dev] A/B switches (blend=, uber=, fog_path=, date_path=, store_plan=,
    blur_fold=, uint_view=, alpha_plan=, fx_plan=, fx_dst_local=,
    vu_planes=, shadow_one=, shadow_bspline=, dynamic_state=, gpu_checkpoints=,
-   gpu_robust=, pass_split=, attachment_read=, storage_pass_merge=,
+   gpu_robust=, pass_split=, attachment_read=, legacy_passes=, storage_pass_merge=,
    vu_prepass=, crack_fill=, joystick_directinput=, pipeline_set=, bind_cache=,
    aura_box=, pass_area=, clear_carry=, clear_skip=, last_store=, glow_fold=,
    jitter_test=):
@@ -179,7 +179,8 @@ const char *ico_config_ini_key(const char *toml_path);
    auto, targets, stores or compute as they are; vu_prepass_min a count as it is
    (false/off/no -> "0"); jitter_test
    "x,y" (each -0.5..0.5) as it is; pass_split a
-   count; velocity_sign 1 or -1 as it is; gpu_*, attachment_read, storage_pass_merge, store_plan,
+   count; velocity_sign 1 or -1 as it is; gpu_*, attachment_read, legacy_passes,
+   storage_pass_merge, store_plan,
    blur_fold, uint_view, alpha_plan, fx_plan, fx_dst_local, vu_planes,
    shadow_one, shadow_bspline, vu_prepass_batch, velocity_test, upscale_test, upscale_debug_view,
    upscale_debug_checks, still_represent, glow_redraw, glow_fold,

@@ -2,7 +2,7 @@
 # on a device, its log matched (rd_vu_skin_check.c, rd_vu_skin_selftest.c):
 # the start-up probe's "VU skin probe: ok (...)" line and the check's start
 # line once each, EXTRA a line the log must hold, NOT a line it must not.
-# -DTOOL=<rd_vu_skin_check_test> -DMODE=<judge|clean|probe|ring|twin|capture>
+# -DTOOL=<rd_vu_skin_check_test> -DMODE=<judge|clean|probe|ring|twin|capture|thin|stale>
 # [-DARG=<a folder the test may write: capture's sidecar>] [-DEXTRA=<regex>] [-DNOT=<regex>]
 set(args "${MODE}")
 if(ARG)

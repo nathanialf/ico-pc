@@ -168,6 +168,106 @@ enum { RD_SKIN_VAR_NOT_RUN = -1, RD_SKIN_VAR_WRONG = 0, RD_SKIN_VAR_RIGHT = 1 };
 const char *rd__skin_decision(bool copyDiffers, bool rereadDiffers, bool probeWrong, int c1,
                               int c2);
 
+/* ------------------------------------------------------- the trace
+ * rd_vu_skin_trace.c (pure, no device): issue 123's v0.11.2 log had the
+ * GPU's copy of a bone block differ in every used qword while the ring
+ * read back right after the fence, and could not say whether the readback
+ * was written at all, whether the GPU read the ring as an earlier replay
+ * left it, or which bytes it copied.  Two stamps and a search say it in the
+ * next log:
+ *   the clear stamp: the probe target is cleared to (0xA5, the replay's
+ *     number, bits 0..23) where no probe draws (field 15 of every column),
+ *     so the readback's rows name the replay whose copy wrote them;
+ *   the ring stamp: 16 bytes the CPU writes into the ring at the replay's
+ *     end, copied after the bone blocks, so the readback names the replay
+ *     whose ring the GPU read last;
+ *   the search: a GPU copy that differs from the bytes kept is looked for in
+ *     the slot's readback as the check before left it, in the checked
+ *     blocks of earlier replays, and in both frame slots' rings as they are
+ *     at the harvest; else counted as zeros, non-finite and kept qwords. */
+
+#define RD_SKIN_CLEAR_TAG 0xA5u
+#define RD_SKIN_RING_STAMP_MAGIC 0x31534B52u /* "RKS1" */
+
+typedef struct RdSkinRingStamp {
+    uint32_t magic, replay, slot, ringId;
+} RdSkinRingStamp;
+
+/* the probe target's clear colour for replay (integer channels 0..255) */
+void rd__skin_clear_stamp(uint32_t replay, float out[4]);
+/* the replay's bits 0..23 a texel holds; false when it holds no stamp */
+bool rd__skin_clear_stamp_read(const uint8_t texel[4], uint32_t *replay24);
+
+/* a stamp's state at the harvest, for the check of replay `replay`:
+ * RD_SKIN_STAMP_OK this replay's, _OLD an earlier replay's (*seen its
+ * number, bits 0..23 for the clear stamp), _NONE no stamp at all */
+enum { RD_SKIN_STAMP_OK = 0, RD_SKIN_STAMP_OLD = 1, RD_SKIN_STAMP_NONE = 2 };
+
+int rd__skin_clear_stamp_state(const uint8_t texel[4], uint32_t replay, uint32_t *seen);
+int rd__skin_ring_stamp_state(const void *bytes16, uint32_t replay, uint32_t slot, uint32_t ringId,
+                              uint32_t *seen);
+/* "the readback was not written by this replay's copies: ..." or "" when
+ * both stamps are this replay's */
+void rd__skin_stamp_words(int clearState, uint32_t clearSeen, int ringState, uint32_t ringSeen,
+                          char *out, size_t size);
+
+/* the checked blocks of the last replays (rd__vu_skin_note) */
+#define RD_SKIN_TRACE_KEEP 64u
+
+typedef struct RdSkinTraceEntry {
+    uint64_t hash;
+    uint64_t off;
+    uint32_t replay, slot, meshId, list, index;
+    char mesh[24];
+} RdSkinTraceEntry;
+
+typedef struct RdSkinTrace {
+    RdSkinTraceEntry e[RD_SKIN_TRACE_KEEP];
+    uint32_t next, count;
+} RdSkinTrace;
+
+uint64_t rd__skin_block_hash(const void *bytes, uint32_t n);
+void rd__skin_trace_note(RdSkinTrace *t, const RdSkinTraceEntry *e);
+
+/* where a GPU copy that differs from the bytes kept came from */
+enum {
+    RD_SKIN_FOUND_NONE = 0,
+    RD_SKIN_FOUND_PREV,  /* the slot's readback as the check before left it */
+    RD_SKIN_FOUND_TRACE, /* a block checked in an earlier replay */
+    RD_SKIN_FOUND_RING,  /* a block in a frame slot's ring as it is now */
+    RD_SKIN_FOUND_ZERO   /* all zeros */
+};
+
+typedef struct RdSkinCopyFind {
+    const uint8_t *gpu, *kept; /* bytes long each */
+    uint32_t bytes;
+    uint32_t replay, slot; /* the check's */
+    uint64_t off;          /* the draw's block's ring offset */
+    const uint8_t *prev;   /* the slot's readback block as the check before left it (NULL: none) */
+    uint32_t prevReplay;
+    const RdSkinTrace *trace;
+    const uint8_t *ring[2]; /* each frame slot's ring as the CPU maps it now (NULL: none) */
+    uint64_t ringUsed[2];   /* the bytes its last replay wrote */
+    uint32_t ringReplay[2]; /* that replay */
+    uint64_t align;         /* the blocks' alignment in the ring (the uniform alignment) */
+    uint64_t scanMax;       /* the most bytes of a ring searched */
+} RdSkinCopyFind;
+
+typedef struct RdSkinCopyFound {
+    int kind;
+    uint32_t replay, slot, meshId, list, index; /* the block found (PREV: replay only) */
+    uint64_t off;
+    char mesh[24];
+    bool sameOff;       /* found at the draw's own offset (another replay's block there) */
+    uint32_t zeroQw;    /* qwords all zero */
+    uint32_t keptQw;    /* qwords equal to the bytes kept */
+    uint32_t nonFinite; /* 32-bit lanes not finite */
+    uint64_t scanned;   /* ring bytes searched */
+} RdSkinCopyFound;
+
+void rd__skin_copy_find(const RdSkinCopyFind *in, RdSkinCopyFound *out);
+void rd__skin_copy_words(const RdSkinCopyFound *f, uint32_t bytes, char *out, size_t size);
+
 /* ICO_RD_VU_SKIN_CHECK's value: -1 unset (NULL or ""), 2 for "2" (every
  * skinned command of every replay: rd_vu_skin_check_ab), 1 for 1, true, on
  * or yes, 0 for anything else (rd_profile.c envBool's rule: "false" is off) */
@@ -244,6 +344,9 @@ bool rd__vu_skin_thinned(void);
  * at VU address addr from the next note on, 0 off (the environment is not
  * read again) */
 void rd__vu_skin_sabotage_set(uint32_t addr);
+/* the tests: each slot's readback written by its first check's copies
+ * only, never again (the trace's "not written by this replay" form) */
+void rd__vu_skin_sabotage_copy(bool on);
 /* the occlusion queries the check uses (RD_SKIN_QUERIES with the twins,
  * RD_SKIN_CHECKS_ALL without): the start-up probe prepares them */
 uint32_t rd__vu_skin_queries(void);
@@ -307,6 +410,12 @@ typedef struct RdSkinSummary {
      * right where column 0 was wrong; twin C (the ring read in the pass)
      * read, and differing from B (the same bytes at a fresh offset) */
     uint32_t c3Run, c3Right, ringTwins, ringDiffer;
+    /* the trace (issue 123 v0.11.3): checks whose readback their replay did
+     * not write (the clear stamp), whose ring stamp was another replay's
+     * with the rows written, and where the last differing copy was found
+     * (RD_SKIN_FOUND_*, -1: no copy differed) */
+    uint32_t unwritten, ringOld;
+    int lastFound;
 } RdSkinSummary;
 
 int rd__vu_skin_check_frame(const RdFrame *f, int keep, RdSkinSummary *out);
