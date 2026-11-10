@@ -28,6 +28,7 @@
 #define RHI_DRIVER_ID_INTEL_PROPRIETARY_WINDOWS 5u
 #define RHI_DRIVER_ID_QUALCOMM_PROPRIETARY 8u
 #define RHI_DRIVER_ID_MOLTENVK 14u
+#define RHI_DRIVER_ID_MESA_TURNIP 18u
 
 /* The text into buf (always terminated when n > 0); returns buf. */
 char *rhi_driver_version_text(uint32_t vendorId, uint32_t driverId, uint32_t driverVersion,

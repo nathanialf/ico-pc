@@ -164,6 +164,7 @@
 #include <string.h>
 #include "rd_internal.h"
 #include "rd_vis.h"
+#include "rhi_driver_version.h" /* RHI_DRIVER_ID_MESA_TURNIP */
 #include "rd_vu_skin_check.h"
 
 /* the device classes of the table */
@@ -243,9 +244,15 @@ static bool hasWord(const char *s, const char *word)
     return false;
 }
 
+/* Mesa's Turnip, or a build of it that renamed itself: the Vulkan driver id
+ * (VK_DRIVER_ID_MESA_TURNIP, 18; rhi_driver_is_qualcomm_proprietary reads the
+ * same id) or, from a driver without VK_KHR_driver_properties (id 0), the
+ * name in the driver text.  Issue 209's "PurpleVK public driver" (Turnip
+ * 26.3.0-devel, id 18) names itself neither Turnip nor Mesa */
 bool rd__driver_is_turnip(const RhiLimits *lim)
 {
-    return lim != NULL && hasWord(lim->driverText, "turnip");
+    return lim != NULL &&
+           (lim->driverId == RHI_DRIVER_ID_MESA_TURNIP || hasWord(lim->driverText, "turnip"));
 }
 
 void rd__turnip_note(const RhiLimits *lim, char *out, size_t n)
@@ -276,10 +283,11 @@ static ProfileClass classOf(const RhiLimits *lim)
         break;
     }
     if (rd__profile_vendor_adreno(lim->vendorId, lim->moltenvk)) {
-        /* Mesa's Turnip reports Qualcomm's vendor id and names itself in
-         * the driver text (VkPhysicalDeviceDriverProperties.driverName
-         * "turnip Mesa driver", RhiLimits.driverText); Qualcomm's own
-         * driver does not */
+        /* Mesa's Turnip reports Qualcomm's vendor id, its own driver id
+         * (18) and names itself in the driver text
+         * (VkPhysicalDeviceDriverProperties.driverName "turnip Mesa
+         * driver", RhiLimits.driverText); a renamed build keeps the id;
+         * Qualcomm's own driver has neither (rd__driver_is_turnip) */
         return rd__driver_is_turnip(lim) ? PC_ADRENO_TURNIP : PC_ADRENO_QUALCOMM;
     }
     if (lim->moltenvk) {
