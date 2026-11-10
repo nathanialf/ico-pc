@@ -204,9 +204,9 @@ How the picture is drawn and finished: smoothing, the picture's size and sharpne
   **(off: FSR 3.1)** after the name. The game's own text, save tiles,
   subtitles, fades, film grain and cinematic bars are drawn over the
   finished picture at your screen's size, not through the upscaler, so
-  they stay sharp, and an area change fades to black cleanly. Because it builds each picture from the ones before, sparks
-  and smoke can leave a faint trail while they move. If the log says "the vertex
-  pre-pass is off", every moving thing trails, not only those (a
+  they stay sharp, and an area change fades to black cleanly. Because it
+  builds each picture from the ones before, sparks and smoke can leave a
+  faint trail while they move. If the log says "the vertex pre-pass is off", every moving thing trails, not only those (a
   developer setting or a graphics card problem turned that pass off). It
   uses some of the graphics card's memory (tens of megabytes, more at
   large window sizes).

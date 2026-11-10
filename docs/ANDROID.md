@@ -374,8 +374,8 @@ first shows a message that says so and where its log is. Sometimes the
 phone closes it without a message (for example when the phone runs short
 of memory); the log then just stops. If that happened while the game was
 getting its graphics ready, the next start's log says where it stopped,
-and that start gets its graphics ready as you play. If it stops there
-two starts in a row, the game does that from then on and writes it into
+and that start picks the work up from there, in smaller steps. If a stop
+that cannot be resumed happens at the same place two starts in a row, the game does that from then on and writes it into
 `config.toml` ([how to undo that](TROUBLESHOOTING.md#the-first-start-takes-a-long-time)).
 If the graphics driver stops answering while the game prepares a piece of
 graphics, the game closes itself after about 10 seconds with a message,
