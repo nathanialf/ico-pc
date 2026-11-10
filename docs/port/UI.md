@@ -1179,7 +1179,7 @@ is never greyed. Every row shows on every disc.
   Gameplay is up in the pause menu and the New Game screen's Customize clears it, so the pages know
   which way they were entered whichever page is on screen. Read-only: every draft row reads the
   journey's value (`ui__diff_text`), is greyed (`ui__diff_dimmed`), has the note "Chosen when the
-  journey began" (`UI_STR_DIFF_LOCKED_NOTE`, `ui__diff_note`) and ignores Left and Right (`ui__diff_step`
+  journey began" (`UI_STR_DIFF_LOCKED_NOTE`, `ui__diff_note`) and ignores Left and Right (No Shadows, when on, keeps its own note, which says some story moments are lost or play differently without the Shadows; `ui__diff_step`
   logs `<key> not stepped: chosen when the journey began`, the first 8 then every 100th);
   `parentLayout` sends Customize's Back to Gameplay and `leaveTo` puts the cursor on the link.
 - The pause menu's journey lines (`pauseStats`, 13 lines at most): one line `STAT_DIFFICULTY`

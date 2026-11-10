@@ -374,7 +374,9 @@ int ui__diff_note(int opt)
 {
     const int row = ui__diff_row(opt);
     if (s_readOnly && row >= 0) {
-        return UI_STR_DIFF_LOCKED_NOTE;
+        /* No Shadows, when on, keeps its warning about the story */
+        return row == ICO_DIFF_NO_SHADOWS && viewed()->row[row] ? UI_STR_DIFF_NO_SHADOWS_NOTE
+                                                                : UI_STR_DIFF_LOCKED_NOTE;
     }
     switch (row) {
     case ICO_DIFF_SHADOW_SPEED:

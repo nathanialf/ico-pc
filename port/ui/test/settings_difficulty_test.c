@@ -146,11 +146,11 @@ static void testCustomize(void)
         if (op[i] == UI_OPT_DIFF_NO_SHADOWS) {
             lt_ext_layout(sl)->curItem = lb[i];
             frame(0);
-            CHECK(strcmp(lt_ext_row_text(lv[i]), "Off") == 0 &&
-                      noteStarting(UI_PAGE_SHADOWS, "On: no Shadows ever appear") >= 0 &&
-                      !lt_ext_prop(noteStarting(UI_PAGE_SHADOWS, "On: no Shadows ever appear"))
-                           ->masked,
-                  "No Shadows: Off, its note on the cursor");
+            CHECK(
+                strcmp(lt_ext_row_text(lv[i]), "Off") == 0 &&
+                    noteStarting(UI_PAGE_SHADOWS, "On: Shadows never appear") >= 0 &&
+                    !lt_ext_prop(noteStarting(UI_PAGE_SHADOWS, "On: Shadows never appear"))->masked,
+                "No Shadows: Off, its note on the cursor");
         }
     }
     press(LT_PAD_TRIANGLE);
@@ -296,7 +296,8 @@ static void testNotes(void)
 {
     static const int kNotes[] = {UI_STR_DIFF_EASY_NOTE,      UI_STR_DIFF_NORMAL_NOTE,
                                  UI_STR_DIFF_HARD_NOTE,      UI_STR_DIFF_CUSTOM_NOTE,
-                                 UI_STR_DIFF_CUSTOMIZE_NOTE, UI_STR_DIFF_LOCKED_NOTE};
+                                 UI_STR_DIFF_CUSTOMIZE_NOTE, UI_STR_DIFF_LOCKED_NOTE,
+                                 UI_STR_DIFF_NO_SHADOWS_NOTE};
     static const UiSettingsPage kPages[3] = {UI_PAGE_SHADOWS, UI_PAGE_COMBAT, UI_PAGE_RULES};
     ngSetup();
     for (int lang = 0; lang < UI_LANG_TABLES; lang++) {
@@ -377,6 +378,13 @@ static void testReadOnly(void)
     }
     int n = noteStarting(UI_PAGE_SHADOWS, "Chosen when the journey began");
     CHECK(n >= 0 && !lt_ext_prop(n)->masked, "the note: chosen when the journey began");
+    CHECK(ui__diff_note(UI_OPT_DIFF_NO_SHADOWS) == UI_STR_DIFF_LOCKED_NOTE,
+          "No Shadows off: the locked note");
+    ico_difficulty_set_row(ICO_DIFF_NO_SHADOWS, 1);
+    CHECK(ui__diff_note(UI_OPT_DIFF_NO_SHADOWS) == UI_STR_DIFF_NO_SHADOWS_NOTE &&
+              strstr(ui_str(UI_STR_DIFF_NO_SHADOWS_NOTE), "story") != NULL,
+          "No Shadows on: its note, with the story warning");
+    ico_difficulty_set_row(ICO_DIFF_NO_SHADOWS, 0);
     press(LT_PAD_RIGHT);
     press(LT_PAD_LEFT);
     CHECK(ico_difficulty_row(ICO_DIFF_SHADOW_SPEED) == ICO_SPEED_FASTEST &&
