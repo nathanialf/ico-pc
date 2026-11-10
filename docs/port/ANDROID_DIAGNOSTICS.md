@@ -310,6 +310,20 @@ lines and what each decides:
   frame dump`, then `window: VU skin check: the capture: ... and the frame dump ...zip (...png)`):
   the sidecar (the bytes, the probe's rows, the twins' counts) and F12's dump of the next present
   with the sidecar in its zip, once a run. The files a report needs are those two and the log.
+- **Which bytes the GPU read** ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md#the-trace)): a
+  stamp line `rd: VU skin check: frame F command L:I replay R (...): the readback was not written by
+  this replay's copies (the probe target's clear stamp: replay Q's ...)` says the replay's copies
+  never landed (the check's wrong vertices are then an earlier replay's, not a bone read); `... the
+  copies ran ... but the ring's stamp reads replay Q's` says the GPU saw the upload ring as an
+  earlier replay left it. After a line whose copy differs, `rd: VU skin check: frame F command L:I
+  the GPU's copy of the bone block (frame slot S's ring, offset O ...): WHERE` names the block it
+  holds (the slot's readback as before, a block checked in replay Q, a block in a ring now, all
+  zeros) or `other memory`. Compare R with the `a present blocked ... (replay R ...)` and `rd: GPU
+  timestamps: the clock went back ... at replay R` lines: the one failure of issue 123's report was recorded in the
+  replay whose present blocked 340 ms. Where the start-up set stopped for memory on Qualcomm's own
+  driver the box check and the twins are now compiled carefully (`rd: VU skin check: its box check,
+  its twins' pipelines and its c2 variant are compiled carefully (...)`), one at a time above the
+  floor; that report's run had neither.
 - **The ring read beside the picture** (the variants line's `(c3) the bones through the ring:
   right | wrong`, the event line's `C (ring read) K samples`, the 10 s block's `ring twins differ E
   (of R read)`): where the program entries are the plain set (Turnip's), the same bones read through
