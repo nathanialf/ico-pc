@@ -483,8 +483,13 @@ static void test_upscale_pictures(const char *base)
     CHECK(entry_is(&z, "up-depth.png", pic, sizeof(pic) / 4u));
     mz_zip_reader_end(&z);
     remove(zip);
-    /* an outcome other than PENDING: at once, nothing kept */
-    CHECK(ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) >= 0);
+    /* an outcome other than PENDING: at once, nothing kept (the dump is
+       moved into each zip: written again for the next) */
+    CHECK(put(dump, rd, sizeof(rd)) == 0);
+    if (ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) < 0) {
+        printf("FAIL %s:%d: the zip for the outcome case: %s\n", __FILE__, __LINE__, why);
+        fails++;
+    }
     CHECK(ico_upscale_pictures_after(present, zip, ICO_UPSCALE_OUTCOME_WRITTEN) == 0);
     CHECK(ico_upscale_pictures_waiting() == 0);
     memset(&z, 0, sizeof(z));
@@ -497,7 +502,11 @@ static void test_upscale_pictures(const char *base)
         snprintf(path, sizeof(path), "%s%s", stem, ico_upscale_picture_suffix(i));
         remove(path);
     }
-    CHECK(ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) >= 0);
+    CHECK(put(dump, rd, sizeof(rd)) == 0);
+    if (ico_frame_dump_zip(zip, dump, NULL, NULL, why, sizeof(why)) < 0) {
+        printf("FAIL %s:%d: the zip for the expired case: %s\n", __FILE__, __LINE__, why);
+        fails++;
+    }
     CHECK(ico_upscale_pictures_after(present, zip, ICO_UPSCALE_OUTCOME_PENDING) == 1);
     CHECK(ico_upscale_pictures_step(ICO_UPSCALE_OUTCOME_EXPIRED) == 1);
     memset(&z, 0, sizeof(z));
