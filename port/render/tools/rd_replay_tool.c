@@ -542,6 +542,7 @@
 #include "../../shaders/shader_consts.h" /* ICO_VU_MARK_*: the marks --mesh shows */
 #include "font.h"                        /* port/ui: the overlay test's text */
 #include "rd_replay_region.h"            /* --region-stats */
+#include "rd_replay.h"                   /* rd__msaa_shadow_counts (--stats) */
 
 static const char *const kNames[] = {
     "SCENE",    "DISPLAY",   "SHADOW0",   "SHADOW1",      "SHADOW2",   "WORK0", "WORK1",
@@ -3104,8 +3105,10 @@ int main(int argc, char **argv)
         /* the shadow count's resolves (rd_replay.c doShadowResolve), the
          * one draw's pass and the count target's colour passes the store
          * plan left neither loaded nor stored (rd_store_plan.c) */
-        printf("%s: stats: shadow count: %u in one draw, %u in seven draws (profile %s)", dump,
-               pr->shadowOne, pr->shadowSeven, g_rd.profile.shadowOne ? "one draw" : "seven draws");
+        printf("%s: stats: shadow count: %u in one draw, %u in seven draws (profile %s), %u in "
+               "the MSAA epoch",
+               dump, pr->shadowOne, pr->shadowSeven,
+               g_rd.profile.shadowOne ? "one draw" : "seven draws", rd__msaa_shadow_counts());
         if (pr->shadowOne) {
             const double mb = 1.0 / 1048576.0;
             printf("; the one draw's pass: colour %ux%u not loaded, stored (%.1f MB), no depth "
