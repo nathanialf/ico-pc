@@ -217,7 +217,12 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f);
    as pixels: "; GPU-bound at 3x (the GPU takes 37.7 ms a picture, the step
    33.3 ms at 30.0 game fps): no resolution hint (fit: not enough spread)"
    ("fit: under 3 timed replays").  A hint only: the resolution
-   never changes by itself (the v0.7.9 decision).  The length written */
+   never changes by itself (the v0.7.9 decision).  skippedLate: the block's
+   frames not presented, the late skips and, at frame rate Original, those
+   the render thread's busy picture left out (issue 179: a Mali-G52 phone
+   showed "the render thread busy 157" and no late skip, so no hint
+   printed); 0 prints none.  The length written */
+unsigned window_scene_hint_skips(unsigned late, unsigned busy);
 size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, double gameFps,
                                   unsigned skippedLate, double gpuMs, double scale,
                                   const SceneVuFit *fit);

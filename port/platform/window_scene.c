@@ -4,6 +4,7 @@
  * The window's scene lines (window_scene.h).
  */
 #include "window_scene.h"
+#include <limits.h>
 #include <stdio.h>
 
 static const char *const kKindWords[SCENE_KIND_COUNT] = {"play",  "scene",    "title",
@@ -252,6 +253,11 @@ size_t window_scene_vu_fit_text(char *out, size_t cap, const SceneVuFit *f)
 
 /* the Resolution row's whole scales (port/ui/settings.c kResScales) */
 static const int kHintScales[] = {1, 2, 3, 4, 6, 8, 12, 16};
+
+unsigned window_scene_hint_skips(unsigned late, unsigned busy)
+{
+    return busy > UINT_MAX - late ? UINT_MAX : late + busy;
+}
 
 size_t window_scene_gpu_hint_text(char *out, size_t cap, double presentedFps, double gameFps,
                                   unsigned skippedLate, double gpuMs, double scale,

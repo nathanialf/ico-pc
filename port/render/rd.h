@@ -3036,6 +3036,10 @@ typedef struct RdPerfRecord {
     uint8_t gpuGapValid;
     int64_t gpuGapNs;
     uint32_t gpuGapSkipped;
+    /* the GPU's timestamp clock went back between the replay before and this
+     * one (rd_perf_gap.h rd_perf_gap_step_ex): by this many ns (0: it did
+     * not); gpuGapValid is 0 then */
+    uint64_t gpuGapBackNs;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

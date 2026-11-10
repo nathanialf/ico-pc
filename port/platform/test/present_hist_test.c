@@ -71,6 +71,20 @@ static void split_texts(void)
     CHECK(text_is(line, "inside vkQueuePresentKHR 358.6 ms, the swapchain lock 0.0 ms, the surface "
                         "poll 0.0 ms, other 0.1 ms; the replay's GPU span 67.9 ms (the block's "
                         "first timed replay), begun 1.3 ms before the one before ended"));
+    /* the GPU's timestamp clock went back (a counter restart, issue 123: the
+       reporter's stalls printed "begun 20699.4 ms before the one before
+       ended"): no gap, the clock's step back said */
+    r.gapValid = 0;
+    r.gapMs = 0.0;
+    r.gapBackMs = 20699.4;
+    present_split_text(&r, 0, 0.0, line, sizeof line);
+    CHECK(text_is(line, "inside vkQueuePresentKHR 358.6 ms, the swapchain lock 0.0 ms, the surface "
+                        "poll 0.0 ms, other 0.1 ms; the replay's GPU span 67.9 ms (the block's "
+                        "first timed replay), the GPU's timestamp clock went back 20699.4 ms "
+                        "since the replay before (a counter restart: no gap to measure)"));
+    r.gapBackMs = 0.0;
+    r.gapValid = 1;
+    r.gapMs = -1.3;
     /* the lock taken, no present call made (no slot, or the present-signal
        submit failed): the lock's wait kept, the rest as other */
     r.split = 2;

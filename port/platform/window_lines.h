@@ -69,6 +69,11 @@ void window_hold_block_line(unsigned long long heldMs, double stepAvgMs, double 
 int window_orig_gate(int keep, bool busy, uint64_t nowNs, uint64_t dueNs, int hz);
 void window_orig_step(bool late);
 const char *window_orig_words(bool original);
+/* The block's frames left out because the render thread was busy with the
+   picture before (window_orig_gate's RD_GATE_BUSY), until the block's end:
+   the GPU-bound hint counts them with the late ones (issue 179: a phone
+   whose GPU cannot keep up shows no late skips, only busy ones) */
+unsigned window_orig_skip_busy(void);
 /* PC port: the end of the 10 s GPU lines on a tile-based GPU (where a pass's time and the
  * display wait land; issues 95, 123), "" elsewhere */
 const char *window_tiler_words(void);
