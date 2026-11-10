@@ -4,6 +4,8 @@
 # rd_msaa_test (a file of its own: port/render/CMakeLists.txt is at the
 # 256 KiB cap, tools/check_no_rom.sh).
 target_sources(ico_render PRIVATE rd_msaa_shadow.c)
+# rd_msaa_test reads rd_replay.h (rd_msaa_shadow.c's calls), which needs shader_consts.h
+target_include_directories(rd_msaa_test PRIVATE "${CMAKE_SOURCE_DIR}/port/shaders")
 
 # rd_msaa under the profiles of issue 209's phone, on lavapipe, under the
 # validation layer with its synchronisation checks where the toolchain has
