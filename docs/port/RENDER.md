@@ -661,7 +661,11 @@ pass's own record (the same pass, target and write serial, the area held), so it
 exactly where a snapshot would be retaken, and the open screen run is drawn before the read.
 Within one draw the alpha is the one before its first primitive: the snapshot's semantics, the
 same bytes (not PRIM.AA1: **DATE and AA1**). Not inside the MSAA epoch, under the exact blend's storage read, on another target or
-without a depth: the snapshot. The DATE self-test decides per device ([The fog path and its
+without a depth: the snapshot. On a Vulkan device without dynamic rendering (issue 179's Mali-G52
+at Vulkan 1.1) the read is the RHI's subpass read ([RHI.md](RHI.md#local-read): the scene's passes
+with its depth name its colour as their subpass's input attachment, with a self-dependency), so
+there too DATE ends no pass, where a DATE snapshot ends the scene's pass and begins it again (3
+a replay in the reporter's log, each a 912x512 colour and D32S8 store and reload). The DATE self-test decides per device ([The fog path and its
 self-test](RENDER_POST.md#the-fog-path-and-its-self-test)) (`port/render/rd_replay.c` (`dateStencilFor`,
 `prepareDrawEx`, `bindDrawEx`); `port/render/rd_replay_tiler.c` (`rd__replay_date_take`);
 `port/render/rd_pipeline.c` (`shadowStencil`,
@@ -1545,7 +1549,14 @@ stencil shader is in the table (`rd__dst_target_usage`, narrowed to the scene cl
 scene-class depth with `RHI_TEX_INPUT_ATTACHMENT` and `RD_DST_USAGE_LOCAL_DEPTH` when `fogLocal`
 is on and `fog_lut_local_ps` is in the table (`port/render/rd_core.c` (`rd__target_create_gpu`)).
 `uintView*` are off wherever `RhiLimits.uintView` is false, and `fogLocal` and `dateStencil`
-wherever `RhiLimits.localRead` is. The local read is enabled through
+wherever `RhiLimits.localRead` is. Where the local read is the Vulkan `VkRenderPass` path's subpass
+read (`RhiLimits.localReadSubpass`: the colour of a pass with a depth target, never the depth;
+[RHI.md](RHI.md#local-read)) `fogLocal` and `fxDstLocal` stay off (the fog reads the depth, the fx
+plan's reads land in the scene's colour-only passes; their `[dev]` keys get the line `profile:
+[dev] fog_path = local (the subpass read reads no depth): not on this device, the flag stays off`
+and its `fx_dst_local` twin) and the profile's words say `local read yes (the subpass read: a
+pass's colour with a depth target)`: DATE's stencil path is its one user, on by the table and kept
+only where DATE's self-test passes (`port/render/rd_profile.c`). The local read is enabled through
 `VK_KHR_dynamic_rendering_local_read`; the Vulkan 1.4 core feature is queried but the instance's
 version is capped at 1.3, so a 1.4 driver that lists only the core feature has no local read
 (`port/rhi/vk/vk_device.c`).

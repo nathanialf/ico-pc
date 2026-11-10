@@ -1413,6 +1413,21 @@ The renderer's test programs have a page of their own:
   and the upload and dispatch again (2: the copy and the bracket now wait for fragment work), a
   draw whose fragment shader reads the arena and a copy over it (1, no write after read), the
   record read back word for word; no validation message.
+  Then a pass's own colour read in it with a depth target bound (`rhi_vk_subpass.c`,
+  `rhi_vk_subpass_cell`; issue 179; alone with the argument `subpass`, each with the shader access
+  analysis on: `rhi_vk_subpass` through dynamic rendering's local read, `_vk11`
+  (`ICO_VK_FAKE_API=1.1`), `_vk10` (`=1.0` with `ICO_VK_FAKE_NO_DYNAMIC=1`, label vk10) and
+  `_mali_vk11` (with `ICO_VK_FAKE_LIMITS=mali`) through the `VkRenderPass` path's subpass read
+  ([RHI.md](RHI.md#local-read)), `_legacy` (`ICO_VK_LEGACY_PASSES=1`: the Intel row's path, no
+  subpass read, the cell not run) and `_legacy_on` (with `ICO_VK_SUBPASS_READ=1`); labels vk11
+  for the 1.1 pair): a 16x16 RGBA8 target cleared, then in a pass with a D32F_S8 depth a draw of A
+  over the left half, the COLOR barrier, a draw through `ps_subpass` over all of it (the GS LERP of
+  its colour over the colour it reads), the BACK barrier, a draw over the bottom rows; a
+  colour-only readable pass with a COLOR barrier (skipped and counted on the subpass read); a
+  second RGBA8 target made without the input usage drawn with the same pipeline and the depth.
+  Every texel exact, the subpass read's counts (2 passes with it, 1 barrier skipped, 0 misfits),
+  no validation message. Without the self-dependency the layer reports
+  `VUID-vkCmdPipelineBarrier-None-07889` (checked by hand).
 - `rhi_d3d12_test.c`: the same checks on D3D12, a Windows GUI program that writes a log and shows
   a message box (`rhi_d3d12`).
 - `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP; WARP again with

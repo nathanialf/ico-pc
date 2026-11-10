@@ -982,9 +982,12 @@ have no fragment shader and no rasterization (`RhiPipelineDesc.noRaster`; group 
 one their passes begin on (`port/render/rd_vu_rec_sink.h`: 1024 x 1 texels of `R8_UNORM`, loaded and
 stored `DONT_CARE`, its write mask 0, never written or read: no fragment runs), so no render pass
 begins without an attachment, the shape the Intel `vkCmdBeginRendering` crash reports share
-([RHI.md](RHI.md#vulkan), **Render passes**); the target is made at the first store pass (`rd: VU
-pre-pass: the store passes begin on a throwaway 1024x1 R8 target ...`; one that could not be made is
-said once and the passes begin without it), and each pass is 1024 x 1 inside the store bracket
+([RHI.md](RHI.md#vulkan), **Render passes**); two such targets, taken in turn, so neither of a
+replay's two store passes begins on a target the other wrote (that pending attachment write made
+the second pass's begin hold the vertex stages behind colour output: [RHI.md](RHI.md#buffer-barriers-scopes)),
+made at the first store pass (`rd: VU pre-pass: the store passes begin on two throwaway 1024x1 R8
+targets taken in turn ...`; when they could not be made it is said once and the passes begin
+without them), and each pass is 1024 x 1 inside the store bracket
 (`rhi_cmd_buffer_store_begin` before it,
 `rhi_cmd_buffer_store_end` after: [RHI.md](RHI.md#the-interface)), so a replay has no record
 texture, no layout transition and no copy. The draws of a record pass write disjoint slots

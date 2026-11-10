@@ -228,6 +228,34 @@ question it decides:
     replay) decide whether anything was gained.
   Decides whether the barriers were what held the record behind the picture before, and which
   barrier to look at next.
+- **DATE without ending the scene's pass** ([RHI.md](RHI.md#local-read), the subpass read;
+  [RENDER.md](RENDER.md), DATE through the stencil bit). Issue 179's Mali-G52 (Vulkan 1.1.177,
+  `render passes legacy`, `local read no`) drew DATE through the R8 snapshot: `passes per replay
+  20.0 (render passes 13, VU pre-pass 2, DATE snapshot 3, present 1)` in its stage 3 block, each
+  snapshot a store and reload of SCENE's 912x512 colour and D32S8 depth; list 3 cost 9-12 ms in
+  play and 25-33 ms in the cage. Now the `VkRenderPass` path reads the pass's own colour
+  as an input attachment of its subpass. Read, in the next Mali log:
+  - `rhi_vk: render passes: the subpass read: ...` after the device line (the RHI offers it), and
+    `rhi_vk: render passes: the first with the subpass read: ...` once the scene's first pass is
+    made; `rhi_vk: render passes: no subpass read (<why>)` says why not.
+  - The profile line's `DATE stencil` and `local read yes (the subpass read: a pass's colour with
+    a depth target)`; then `rd: DATE: stencil path (self-test: stencil ok 5, snapshot ok 5)`: the
+    device drew the stencil bit right on its SCENE. `DATE: snapshot path (self-test: stencil fail
+    ...)` with `profile: DATE stencil off (self-test)`: the driver read the colour wrong; the run
+    keeps the snapshot (the picture as with the snapshot path), and the line's samples are what to send on.
+  - The `passes per replay` line: `DATE snapshot` near 0 and the render passes fewer by about
+    as many (3 a replay in that block). The issue's own frame, replayed on lavapipe through this
+    path (`rd_date_subpass_ab`): 3 DATE snapshots to 0, 51 passes to 46, every target byte for byte.
+  - list 3's and list 0's times in the same scenes (stage 3 play, the cage) against that log's.
+    The gain on the phone is not measured: a tile-based GPU pays for each snapshot's store and
+    reload, but the subpass read keeps every RGBA8 render target in `GENERAL` and gives it the
+    input-attachment usage, whose cost on a Mali is not known.
+  - `rhi_vk: render pass: a local-read barrier in a pass without the subpass read ...` or `... the
+    subpass read's class ... begun without its input attachment ...` should never print: either
+    is a fault to report. `[dev] date_path = "snapshot"` in `config.toml` goes back to the
+    snapshot for an A/B.
+  Decides whether the scene's pass now stays open through DATE on the phone, whether the driver
+  draws it right, and what it saves.
 - **Images in use** (the 10 s first line's `present mailbox (images: 10, in use 1)`;
   `RhiStats.swapAcquired`, Vulkan only). The swapchain's images and those the game holds
   (acquired, not yet presented) as the block ends; while the render thread is busy, the count at
