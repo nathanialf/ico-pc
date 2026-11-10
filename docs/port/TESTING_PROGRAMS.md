@@ -307,10 +307,12 @@ D3D12 and a Vulkan device without the dynamic state; `rd_mesh_static.1of4` is `r
   checks and calls that read or bring out a Shadow is in a reviewed table by file, function and
   callee with its count and class (passes, gated, refused, unaffected), a new, moved or
   recounted site failing; each hook in every disc copy of its function, before what it guards,
-  a family with a copy more or fewer failing; `port/game/no_shadows.c` compiled in with the
-  test's own `ico_no_shadows`: off answers 0 and prints nothing, on the room's line after two
-  quiet ticks, the room-left counts, the forced conditions' lines and the rate limit
-  (`no_shadows_census`).
+  a family with a copy more or fewer failing (`EnemyGeo`'s out-of-the-world guard among them),
+  no hold variable in st13b.c; `port/game/no_shadows.c` compiled in with the test's own
+  `ico_no_shadows` and `ico_state_register`: off answers 0 and prints nothing, on the room's line
+  after two quiet ticks, the room-left counts, the forced conditions' lines and the rate limit,
+  the final fight's hold (held until begun, then its ticks; a room's reset holds again) and its
+  two FRESH blocks (`no_shadows_census`).
 - `no_shadows_disc_test.c`: off each disc image (the tables from its ELF), the Shadow rows
   placed in their rooms against the reviewed list of that disc, the cage room's Shadow a row of
   the cage room starting in its pit, the left-alone timer's stages (26; 25 on the June 2001

@@ -23,6 +23,12 @@
  * hooks    each hook in each disc copy of its function (the European body,
  *          _ntsc, _aug6, _jun26 and the shared twins), before the statement it
  *          guards; a family with a copy more or fewer than reviewed fails.
+ *          enemy.c's EnemyGeo keeps a held-back Shadow out of the world every frame (its
+ *          cylinder off, unhittable, at the hidden position); st13b.c keeps no hold
+ *          variable of its own (the hold is no_shadows.c's).
+ * hold     no_shadows.c's final-fight hold: never with the row off; on, held until the
+ *          fight's start, then for the given ticks; a room's reset holds again; its two
+ *          FRESH save-state blocks.
  * log      no_shadows.c (compiled in, with this file's ico_no_shadows): off,
  *          every call answers 0 and prints nothing; on, the room's line once
  *          two ticks pass with no new Shadow (a Shadow started before the first
@@ -45,6 +51,7 @@
 #include <unistd.h>
 
 #include "../no_shadows.h"
+#include "../../platform/state_registry.h"
 #include "../../test/ico_check.h"
 
 #ifndef ICO_SOURCE_DIR
@@ -487,12 +494,24 @@ static const Hook kHooks[] = {
     {"ico2/ito/src/itou_boss.c", "InqCapsuleGhostBossEnd", 2, "InqCapsuleGhostBossEnd",
      "if (ico_no_shadows()) {", "isysGObjSearchFromObjKindID_begin(4)"},
     {"ico2/ito/src/itou_boss.c", "gene_enemy", 2, NULL, "!ico_no_shadows()", "Generator_Call(o)"},
-    {"ico2/script/src/st13b.c", "actSt13bBossAfterChk", 4, NULL, "st13bNoShadowsFightHeld()",
+    {"ico2/script/src/st13b.c", "actSt13bBossAfterChk", 4, NULL, "ico_no_shadows_fight_held()",
      "lt_switch_layout"},
-    {"ico2/script/src/st13b.c", "actSt13bBoss", 2, NULL, "nsFightBegun = 0;", "_ACTWait(1)"},
-    {"ico2/script/src/st13b.c", "actConte10b", 2, NULL, "st13bNoShadowsFightBegun();", NULL},
+    {"ico2/script/src/st13b.c", "actSt13bBoss", 2, NULL, "ico_no_shadows_fight_reset();",
+     "_ACTWait(1)"},
+    {"ico2/script/src/st13b.c", "actConte10b", 2, NULL, "ico_no_shadows_fight_begun(", NULL},
     {"ico2/script/src/st13b.c", "actSt13bBossChk", 4, "actSt13bBossChk",
-     "st13bNoShadowsFightBegun();", NULL},
+     "ico_no_shadows_fight_begun(", NULL},
+    /* a held-back Shadow out of the world every frame, before the dispatch to the June 2001
+       demo's copy: back to the hidden position, its cylinder off (Ico's and Yorda's
+       CylinderCollision read it whatever its display bits), unhittable */
+    {"ico2/sugipon/src/enemy.c", "EnemyGeo", 2, "EnemyGeo", "if (ico_no_shadows()) {",
+     "if (ICO_JUN26)"},
+    {"ico2/sugipon/src/enemy.c", "EnemyGeo", 2, "EnemyGeo", "GOBJ_SUB(self)->cylinderOn = 0;",
+     "if (ICO_JUN26)"},
+    {"ico2/sugipon/src/enemy.c", "EnemyGeo", 2, "EnemyGeo", "GOBJ_ACT(self)->hit = 1;",
+     "if (ICO_JUN26)"},
+    {"ico2/sugipon/src/enemy.c", "EnemyGeo", 2, "EnemyGeo", "actEnemyHyde(self);",
+     "if (ICO_JUN26)"},
 };
 
 enum { HOOK_COUNT = (int)(sizeof kHooks / sizeof kHooks[0]) };
@@ -565,12 +584,15 @@ static void testHooks(const char *root)
               k->file, copies, k->family, k->copies);
         freeText(&t);
     }
-    /* the gate's start: defined once, called at the five fight starts */
+    /* the hold's start: called at the five fight starts; and no ico2 file of the hooks keeps a
+       variable of its own (a new game variable changes the data layout another build's save
+       states are checked against): its state is no_shadows.c's */
     snprintf(path, sizeof path, "%s/ico2/script/src/st13b.c", root);
     if (readText(path, &t) == 0) {
-        CHECK(countIn(&t, 0, t.size, "st13bNoShadowsFightBegun();", NULL) == 5,
-              "st13b.c: st13bNoShadowsFightBegun is called at the five fight starts (BossChk, "
-              "Conte10b, Conte10b_jun26, the two begun-fight entries)");
+        CHECK(countIn(&t, 0, t.size, "ico_no_shadows_fight_begun(", NULL) == 5 + 1,
+              "st13b.c: ico_no_shadows_fight_begun is declared once and called at the five fight "
+              "starts (BossChk, Conte10b, Conte10b_jun26, the two begun-fight entries)");
+        CHECK(countIn(&t, 0, t.size, "nsFight", NULL) == 0, "st13b.c keeps a hold variable");
         freeText(&t);
     } else {
         CHECK(0, "cannot read %s", path);
@@ -585,6 +607,18 @@ static int s_on;
 int ico_no_shadows(void)
 {
     return s_on;
+}
+
+/* no_shadows.c registers its two words; the registry is the platform's */
+static int s_blocks;
+
+int ico_state_register(const char *name, void *p, size_t n, unsigned flags)
+{
+    CHECK(name != NULL && p != NULL && n == sizeof(int) && flags == ICO_STATE_FRESH,
+          "no_shadows.c registers %s (%u bytes, flags %u)", name != NULL ? name : "(null)",
+          (unsigned)n, flags);
+    s_blocks++;
+    return 0;
 }
 
 static char s_log[8192];
@@ -679,6 +713,35 @@ static void runOn(void)
     s_on = 0;
 }
 
+/* the final fight's hold: off never held; on held until begun, then the given ticks */
+static void testFightHold(void)
+{
+    int held = 0;
+
+    s_on = 0;
+    ico_no_shadows_reset();
+    CHECK(ico_no_shadows_fight_held() == 0, "held with the row off");
+    s_on = 1;
+    ico_no_shadows_fight_reset();
+    for (int i = 0; i < 50; i++) {
+        held += ico_no_shadows_fight_held();
+    }
+    CHECK(held == 50, "not held before the fight's start (%d of 50)", held);
+    ico_no_shadows_fight_begun(3);
+    CHECK(ico_no_shadows_fight_held() == 1 && ico_no_shadows_fight_held() == 1 &&
+              ico_no_shadows_fight_held() == 1 && ico_no_shadows_fight_held() == 0 &&
+              ico_no_shadows_fight_held() == 0,
+          "the hold after the start is not 3 ticks");
+    ico_no_shadows_fight_reset(); /* a new room load */
+    CHECK(ico_no_shadows_fight_held() == 1, "a new room's waiter not held");
+    ico_no_shadows_fight_begun(-5);
+    CHECK(ico_no_shadows_fight_held() == 0, "a negative hold");
+    s_blocks = 0;
+    CHECK(ico_no_shadows_state_register() == 0 && s_blocks == 2, "%d state blocks", s_blocks);
+    s_on = 0;
+    ico_no_shadows_reset();
+}
+
 static void testLog(void)
 {
     captured(runOff);
@@ -705,6 +768,7 @@ int main(int argc, char **argv)
 
     testCensus(root);
     testHooks(root);
+    testFightHold();
     testLog();
     return ico_check_summary("no_shadows_census_test");
 }

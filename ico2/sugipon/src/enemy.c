@@ -28,6 +28,8 @@
 #include "sceneManager.h"
 #include "Primitive.h"
 
+/* PC port: port/game/difficulty.h: No Shadows (the journey's Customize row): 1 while it is on */
+extern int ico_no_shadows(void);
 /* PC port: Options > Gameplay > Shadows (port/game/variants.c): every
    read of the disc's enemyKind row goes through the variants' reader, which
    gives the disc's own row while Shadow toughness and Shadow aggression are as
@@ -709,6 +711,19 @@ static void EnemyGeo_jun26(GObj *self)
 
 void EnemyGeo(GObj *self)
 {
+    /* PC port: No Shadows (port/game/no_shadows.h): every Shadow is held back (actEnemyStart
+       started it as a killed one, out of sight).  A script may still move one (st13b's
+       scpPlayPosSet of 2470, the June 2001 demo's skipped cage scene putting 104 on Yorda), and
+       a moved one would be in the world: Ico's and Yorda's cylinder tests (boy.c, girl.c
+       CylinderCollision group 4) read every Shadow whose cylinder is on, whatever its display
+       bits, and the swings (attackhit.c) every one not marked hit.  Each frame, both copies, it
+       goes back to the hidden position with its cylinder off and marked hit (unhittable); its
+       motion still plays (a script may wait on it) */
+    if (ico_no_shadows()) {
+        GOBJ_SUB(self)->cylinderOn = 0;
+        GOBJ_ACT(self)->hit = 1;
+        actEnemyHyde(self);
+    }
     if (ICO_JUN26) {
         EnemyGeo_jun26(self);
         return;

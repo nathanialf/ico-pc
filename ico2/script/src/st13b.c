@@ -263,41 +263,18 @@ unsigned char sekizo_13b_vol_ntscaug6jun26 = 0;
 
 /* PC port: port/game/no_shadows.h: No Shadows (the journey's Customize row).  ico_no_shadows: 1
    while it is on; ico_no_shadows_forced: the log line of a forced condition (1 the final fight
-   let through, 2 the June 2001 demo's). */
+   let through, 2 the June 2001 demo's).  The final fight has no Shadow to beat, so its waiters
+   (actSt13bBossAfterChk and its twins) would pass at once and close the boss stream before the
+   code that plays it had played it: ico_no_shadows_fight_held keeps each waiting until the fight
+   is under way (ico_no_shadows_fight_begun: its music played in actSt13bBossChk / actConte10b,
+   the June 2001 demo's cutscene over in actConte10b_jun26, or the room entered with the fight
+   begun in actSt13bBoss) and four seconds more; ico_no_shadows_fight_reset at the room's first
+   tick.  The state is the port's (no game variable is added). */
 extern int ico_no_shadows(void);
 extern void ico_no_shadows_forced(int what, int a);
-
-/* PC port: No Shadows: the final fight has no Shadow to beat, so its waiters (actSt13bBossAfterChk
-   and its twins) would pass at once.  Each holds instead until the fight is under way: its music
-   played (actSt13bBossChk, actConte10b; the June 2001 demo's cutscene over, actConte10b_jun26; or
-   the room entered with the fight already begun, actSt13bBoss), then four seconds more.  Without
-   the first hold the waiter would close the boss stream (soundDataClose) before the code that plays
-   it had played it. */
-static int nsFightBegun; /* the fight's music has started */
-
-static int nsFightHold; /* ticks still to wait after that */
-
-static void st13bNoShadowsFightBegun(void)
-{
-    nsFightBegun = 1;
-    nsFightHold = (60 - systemStatus[0] * 10) / systemStatus[1] * 4;
-}
-
-/* 1 while a post-fight waiter must keep waiting under No Shadows (polled once a tick) */
-static int st13bNoShadowsFightHeld(void)
-{
-    if (!ico_no_shadows()) {
-        return 0;
-    }
-    if (nsFightBegun == 0) {
-        return 1;
-    }
-    if (nsFightHold > 0) {
-        nsFightHold--;
-        return 1;
-    }
-    return 0;
-}
+extern void ico_no_shadows_fight_reset(void);
+extern void ico_no_shadows_fight_begun(int hold_ticks);
+extern int ico_no_shadows_fight_held(void);
 
 int st13b_yure = 0;
 
@@ -1873,8 +1850,8 @@ static void actSt13bBoss_jun26(GObj *volatile self)
     GObj *x = self;
     Act *act = actInitialize(self);
     /* PC port: No Shadows: the fight's start is this room load's own: cleared at the room's
-       first tick, before actSt13bBossAfter's waiter first looks (st13bNoShadowsFightHeld) */
-    nsFightBegun = 0;
+       first tick, before actSt13bBossAfter's waiter first looks (ico_no_shadows_fight_held) */
+    ico_no_shadows_fight_reset();
     _ACTWait(1);
 
     fightSoundProcessRequestPause();
@@ -1896,7 +1873,7 @@ static void actSt13bBoss_jun26(GObj *volatile self)
         CameraSetCameraSet(5);
         scpAdpcmPlayRequestFunc(39, 0, 1, 0, 1);
         /* PC port: No Shadows: entered with the fight begun */
-        st13bNoShadowsFightBegun();
+        ico_no_shadows_fight_begun((60 - systemStatus[0] * 10) / systemStatus[1] * 4);
     }
 }
 
@@ -1909,8 +1886,8 @@ void actSt13bBoss(GObj *volatile self)
     GObj *x = self;
     Act *act = actInitialize(self);
     /* PC port: No Shadows: the fight's start is this room load's own: cleared at the room's
-       first tick, before actSt13bBossAfter's waiter first looks (st13bNoShadowsFightHeld) */
-    nsFightBegun = 0;
+       first tick, before actSt13bBossAfter's waiter first looks (ico_no_shadows_fight_held) */
+    ico_no_shadows_fight_reset();
     _ACTWait(1);
 
     ScpCallCameraSetTarget(-1886.0f, PAL_AUG6JUN26(625.0f, 651.0f), -4.0f);
@@ -1935,7 +1912,7 @@ void actSt13bBoss(GObj *volatile self)
            from the fight's start flag, which a load clears (itouGflagLoad) */
         if (ico_no_shadows()) {
             CapsuleGhostBossStart();
-            st13bNoShadowsFightBegun();
+            ico_no_shadows_fight_begun((60 - systemStatus[0] * 10) / systemStatus[1] * 4);
         }
     }
 }
@@ -2060,7 +2037,7 @@ void actSt13bBossChk(GObj *volatile self)
 
     AdpcmPlay(boss->stream);
     /* PC port: No Shadows: the fight is under way */
-    st13bNoShadowsFightBegun();
+    ico_no_shadows_fight_begun((60 - systemStatus[0] * 10) / systemStatus[1] * 4);
 }
 
 static void actConte10b_jun26(GObj *volatile self)
@@ -2114,7 +2091,7 @@ static void actConte10b_jun26(GObj *volatile self)
     lt_switch_layout(50);
     scpWakeupEnemyAll();
     /* PC port: No Shadows: the fight is under way */
-    st13bNoShadowsFightBegun();
+    ico_no_shadows_fight_begun((60 - systemStatus[0] * 10) / systemStatus[1] * 4);
 }
 
 void actConte10b(GObj *volatile self)
@@ -2140,7 +2117,7 @@ void actConte10b(GObj *volatile self)
 
     AdpcmPlay(boss->stream);
     /* PC port: No Shadows: the fight is under way */
-    st13bNoShadowsFightBegun();
+    ico_no_shadows_fight_begun((60 - systemStatus[0] * 10) / systemStatus[1] * 4);
 
     scpPlayMot(boyGObj, 0);
     scpPlayEnd(boyGObj);
@@ -2150,8 +2127,8 @@ void actConte10b(GObj *volatile self)
 
 static void actSt13bBossAfterChk_ntsc(GObj *volatile self)
 {
-    /* PC port: No Shadows: held until the fight is under way (st13bNoShadowsFightHeld) */
-    while (InqCapsuleGhostBossEnd() == 0 || st13bNoShadowsFightHeld()) {
+    /* PC port: No Shadows: held until the fight is under way (ico_no_shadows_fight_held) */
+    while (InqCapsuleGhostBossEnd() == 0 || ico_no_shadows_fight_held()) {
         _ACTWait(1);
     }
     if (ico_no_shadows()) {
@@ -2182,10 +2159,10 @@ static void actSt13bBossAfterChk_ntsc(GObj *volatile self)
 static inline void actSt13bBossAfterChk_jun26(GObj *volatile self)
 {
     /* PC port: No Shadows: 2139 and 2140 start as killed ones (actEnemyStart), and this waiter is
-       armed at the room's load: held until the fight is under way (st13bNoShadowsFightHeld), or
+       armed at the room's load: held until the fight is under way (ico_no_shadows_fight_held), or
        the post-fight scene would play on entry */
     while (actEnemyFlagCheckDead(scpSearchGobj(2139)) == 0 ||
-           actEnemyFlagCheckDead(scpSearchGobj(2140)) == 0 || st13bNoShadowsFightHeld()) {
+           actEnemyFlagCheckDead(scpSearchGobj(2140)) == 0 || ico_no_shadows_fight_held()) {
         _ACTWait(1);
     }
     if (ico_no_shadows()) {
@@ -2210,8 +2187,8 @@ static inline void actSt13bBossAfterChk_jun26(GObj *volatile self)
 
 static inline void actSt13bBossAfterChk_aug6(GObj *volatile self)
 {
-    /* PC port: No Shadows: held until the fight is under way (st13bNoShadowsFightHeld) */
-    while (InqCapsuleGhostBossEnd() == 0 || st13bNoShadowsFightHeld()) {
+    /* PC port: No Shadows: held until the fight is under way (ico_no_shadows_fight_held) */
+    while (InqCapsuleGhostBossEnd() == 0 || ico_no_shadows_fight_held()) {
         _ACTWait(1);
     }
     if (ico_no_shadows()) {
@@ -2255,8 +2232,8 @@ void actSt13bBossAfterChk(GObj *volatile self)
     }
     GProc *th;
 
-    /* PC port: No Shadows: held until the fight is under way (st13bNoShadowsFightHeld) */
-    while (InqCapsuleGhostBossEnd() == 0 || st13bNoShadowsFightHeld()) {
+    /* PC port: No Shadows: held until the fight is under way (ico_no_shadows_fight_held) */
+    while (InqCapsuleGhostBossEnd() == 0 || ico_no_shadows_fight_held()) {
         _ACTWait(1);
     }
     if (ico_no_shadows()) {

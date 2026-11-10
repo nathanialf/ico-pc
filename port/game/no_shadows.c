@@ -9,6 +9,7 @@
 #include <stdio.h>
 
 #include "difficulty.h"
+#include "../platform/state_registry.h"
 
 /* the room whose Shadows are being counted, its counts, the ticks since the
    last one started */
@@ -159,6 +160,51 @@ void ico_no_shadows_forced(int what, int a)
     s_lines++;
 }
 
+/* the final fight's hold: begun (the music started), the ticks still to wait */
+static int s_fight_begun;
+static int s_fight_hold;
+
+void ico_no_shadows_fight_reset(void)
+{
+    s_fight_begun = 0;
+    s_fight_hold = 0;
+}
+
+void ico_no_shadows_fight_begun(int hold_ticks)
+{
+    s_fight_begun = 1;
+    s_fight_hold = hold_ticks > 0 ? hold_ticks : 0;
+}
+
+int ico_no_shadows_fight_held(void)
+{
+    if (!ico_no_shadows()) {
+        return 0;
+    }
+    if (!s_fight_begun) {
+        return 1;
+    }
+    if (s_fight_hold > 0) {
+        s_fight_hold--;
+        return 1;
+    }
+    return 0;
+}
+
+/* FRESH: a state saved before the blocks existed loads, keeping this run's words (a waiter
+   then holds until the fight's start runs again, which a room entered with the fight begun
+   does at its first ticks) */
+int ico_no_shadows_state_register(void)
+{
+    int rc = 0;
+
+    rc |= ico_state_register("no_shadows.fight_begun", &s_fight_begun, sizeof s_fight_begun,
+                             ICO_STATE_FRESH);
+    rc |= ico_state_register("no_shadows.fight_hold", &s_fight_hold, sizeof s_fight_hold,
+                             ICO_STATE_FRESH);
+    return rc != 0 ? -1 : 0;
+}
+
 int ico_no_shadows_drop_count(int what)
 {
     return what >= 0 && what < ICO_NOSH_DROP_COUNT ? s_drop_total[what] : 0;
@@ -179,6 +225,7 @@ void ico_no_shadows_reset(void)
         s_drop_room[i] = s_drop_total[i] = 0;
     }
     s_told_room = s_told_left = 0;
+    s_fight_begun = s_fight_hold = 0;
     for (int i = 0; i < ICO_NOSH_FORCED_COUNT; i++) {
         s_told_forced[i] = 0;
     }
