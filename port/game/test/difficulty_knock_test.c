@@ -633,7 +633,7 @@ static void test_hooks(void)
               strstr(b, "lt_switch_layout(PAL_JPNKORCN_NTSCAUG6JUN26(62, 59, 58));") != NULL);
         free(b);
         /* a mail took him out of the act: the game over at once */
-        b = body_of(t, "inline void actAfterDown(GObj *volatile self)");
+        b = body_of(t, "inline void actAfterDown(GObj *volatile self)\n{"); /* not the prototype */
         CHECK(b != NULL);
         if (b != NULL) {
             CHECK(count_of(b, "if (self == boyGObj) {\n        "
