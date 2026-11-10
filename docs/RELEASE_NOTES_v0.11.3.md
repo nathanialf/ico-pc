@@ -2,6 +2,8 @@
 
 (kept current after every merge; player words only)
 
+- Each save keeps the difficulty its journey was started on, on either memory card; a save from an earlier version keeps the gameplay options you had chosen, from the first time you load it.
+
 ## Fixed
 
 (kept current after every merge; player words only)

@@ -1539,7 +1539,8 @@ Options > Extras > Back up your data and Restore from a backup move the player's
 zip (`port/platform/backup.h`, header comment). A backup holds, from the user folder: every
 folder named `memcard` or `memcard` followed by letters, digits, `-` or `_` (`memcard`,
 `memcard-preview`), `states/` without a slot's developer dumps (`states/<slug>/dump-*`),
-`config.toml` and `achievements.toml`; never a file still being written (`*.tmp`, `*.part`), the
+`config.toml`, `achievements.toml` and `difficulty.toml` (each save's difficulty,
+[SAVES.md](SAVES.md#the-difficulty-of-each-save)); never a file still being written (`*.tmp`, `*.part`), the
 logs, `ico-pc.ini` (this device's disc image and folders), the pipeline caches, `dumps/`, the
 texture and model packs or the extracted game data (`backup.c` (`top_visit`, `collect_add`)). A
 card folder that `saves=` or `[paths] saves` puts outside the user folder is not in it; the start
