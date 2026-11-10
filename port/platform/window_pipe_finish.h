@@ -27,13 +27,18 @@ void window_pipe_floor_driver(void);
 void window_pipe_finish_start(void);
 
 /* After window_pipe_floor_driver, before the set: pipePolicy as the window
-   has it; on Qualcomm's own driver a ICO_DIAG_PIPESET_LAZY_LOW_MEMORY start
-   whose previous start stopped at the free-memory floor becomes
-   ICO_DIAG_PIPESET_FULL (the careful set where the device table asks for
-   it) when this shader set's pipeline cache file exists and is not empty
-   (memory_floor.h ico_memory_floor_retry).  One line, the decision and its
-   reason, whenever the previous start stopped at the floor.  Returns the
-   policy to use. */
+   has it; a ICO_DIAG_PIPESET_LAZY_LOW_MEMORY start (the previous start's set
+   stopped for memory: the system's signal, or the free-memory floor on
+   Qualcomm's own driver) resumes the set where that one stopped, in half
+   its batches (pipe_resume.h, rd.h rd_set_pipeline_resume), whatever the
+   pipeline cache holds, and becomes ICO_DIAG_PIPESET_FULL (the careful set
+   where the device table asks for it), or ICO_DIAG_PIPESET_CAREFUL_SETTING
+   when the player set [dev] pipeline_set = "careful"
+   (ico_pipe_resume_careful).  One line, "window: start-up set: resumed
+   ...", with the place, the batch, the policy and the stop line.  Any
+   other policy is returned as it is.  (The earlier rule, a retry only on
+   Qualcomm's own driver with a loaded cache file, memory_floor.h
+   ico_memory_floor_retry, is no longer called.) */
 int window_pipe_floor_retry(int pipePolicy);
 
 /* After the start-up set (or the lazy start's self-tests), before the

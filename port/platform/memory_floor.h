@@ -111,7 +111,9 @@ int ico_memory_floor_line_retried(const char *line);
    (cache_loaded, rhi_pipeline_cache_loaded: a file the driver refused,
    another driver after a system update or another shader set, answers
    nothing, so the compiler would run).  why: the decision's words for the
-   log, either way (may be NULL). */
+   log, either way (may be NULL).  Not called since v0.11.2: the window
+   resumes the set after any stop for memory instead
+   (window_pipe_finish.h window_pipe_floor_retry); kept with its test. */
 int ico_memory_floor_retry(int prev_floor_stop, int prev_retried, int driver, long long cache_bytes,
                            int cache_loaded, char *why, size_t size);
 

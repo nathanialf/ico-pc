@@ -2365,8 +2365,8 @@ open_window:
        StartupRetryRun.robustOffDefault; Direct3D 12: NULL, its own rules) */
     ico_diag_set_robust_off_default(rhi_limits() != NULL && rhi_limits()->robustDefaultOff);
     window_pipe_floor_driver(); /* the free-memory floor's rule (memory_floor.h) */
-    /* issue 123: after a stop at the floor on Qualcomm's own driver, the set again
-       when the cache file holds this shader set (window_pipe_finish.h) */
+    /* issue 123: after a stop for memory, the set resumed where it stopped
+       (window_pipe_finish.h) */
     pipePolicy = window_pipe_floor_retry(pipePolicy);
     {
         /* the watchdog's GPU hang counts as a device loss where the
