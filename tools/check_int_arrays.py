@@ -52,6 +52,13 @@ _SHADER = (
     "by port/rhi/test/shaders/gen_shaders.sh (DXC)."
 )
 
+_SHADER_SCOPE = (
+    "compiled shader bytecode of two shaders written for the Vulkan buffer "
+    "barrier tests (a fragment shader reading a StructuredBuffer and its "
+    "input-less vertex shader), their HLSL source and the DXC command in the "
+    "header's comment (port/rhi/test/rhi_vk_ps_storage.h)."
+)
+
 # (path, array name) -> reason. Every entry is reviewed; see
 # tools/check_no_rom.sh rule 5 and docs/LEGAL.md.
 EXEMPT = {
@@ -139,6 +146,8 @@ EXEMPT = {
     ("port/rhi/test/shaders/rhi_test_spv.h", "spv_vs_store"): _PORT + _SHADER,
     ("port/rhi/test/shaders/rhi_test_dxil.h", "dxil_cs_store"): _PORT + _SHADER,
     ("port/rhi/test/shaders/rhi_test_spv.h", "spv_cs_store"): _PORT + _SHADER,
+    ("port/rhi/test/rhi_vk_ps_storage.h", "spv_ps_storage"): _PORT + _SHADER_SCOPE,
+    ("port/rhi/test/rhi_vk_ps_storage.h", "spv_vs_tri"): _PORT + _SHADER_SCOPE,
 }
 
 INT_TYPE = (
