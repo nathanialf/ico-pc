@@ -522,7 +522,8 @@ if(_ico_have_vk)
 
     # Headless rendering on whatever device is present (lavapipe in the
     # container); exits 77 (skipped) when there is no Vulkan device.
-    add_executable(rhi_vk_test test/rhi_vk_test.c test/rhi_vk_scope.c ${_ico_rhi_test_common})
+    add_executable(rhi_vk_test test/rhi_vk_test.c test/rhi_vk_scope.c test/rhi_vk_subpass.c
+                               ${_ico_rhi_test_common})
     # the thread submit cell's second thread (rhi_test_common.c threadSubmitCell)
     target_link_libraries(rhi_vk_test PRIVATE ico_thread)
     target_include_directories(rhi_vk_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/test/shaders")
@@ -666,6 +667,40 @@ if(_ico_have_vk)
                              "${_ico_vk_scopesg_env}")
         set_tests_properties(rhi_vk_scopes_novs PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_scopesn_env}")
+        # a pass's own colour read in it with a depth target bound
+        # (rhi_vk_subpass.c, DATE's stencil setup's shape) under
+        # synchronisation validation with the shader access analysis on:
+        # rhi_vk_subpass through dynamic rendering's local read; _vk11, _vk10
+        # (with all-static pipelines) and _mali_vk11 (the Mali-G52's 1.1
+        # limits) through the VkRenderPass path's subpass read (the colour
+        # also input attachment 0, a by-region self-dependency, GENERAL);
+        # _legacy on VkRenderPass objects of a 1.4 device: as the Intel row
+        # gives them, no subpass read (ICO_VK_LEGACY_PASSES=1, the cell not
+        # run), and with ICO_VK_SUBPASS_READ=1 (_legacy_on) the read on them
+        set(_ico_vk_subpass11_env ${_ico_vk_scopes11_env})
+        set(_ico_vk_subpass10_env ${_ico_vk_scopes_env} "ICO_VK_FAKE_API=1.0"
+                                  "ICO_VK_FAKE_NO_DYNAMIC=1")
+        set(_ico_vk_subpassm_env ${_ico_vk_scopes11_env} "ICO_VK_FAKE_LIMITS=mali")
+        set(_ico_vk_subpassl_env ${_ico_vk_scopes_env} "ICO_VK_LEGACY_PASSES=1")
+        set(_ico_vk_subpasslo_env ${_ico_vk_subpassl_env} "ICO_VK_SUBPASS_READ=1")
+        foreach(_sp IN ITEMS "|${_ico_vk_scopes_env}" "_vk11|${_ico_vk_subpass11_env}"
+                             "_vk10|${_ico_vk_subpass10_env}" "_mali_vk11|${_ico_vk_subpassm_env}"
+                             "_legacy|${_ico_vk_subpassl_env}"
+                             "_legacy_on|${_ico_vk_subpasslo_env}")
+            string(FIND "${_sp}" "|" _spi)
+            string(SUBSTRING "${_sp}" 0 ${_spi} _spn)
+            math(EXPR _spi "${_spi} + 1")
+            string(SUBSTRING "${_sp}" ${_spi} -1 _spe)
+            add_test(NAME rhi_vk_subpass${_spn} COMMAND rhi_vk_test subpass)
+            set_tests_properties(rhi_vk_subpass${_spn} PROPERTIES SKIP_RETURN_CODE 77
+                                 ENVIRONMENT "${_spe}")
+        endforeach()
+        foreach(_spn _vk11 _mali_vk11)
+            get_test_property(rhi_vk_subpass${_spn} LABELS _ico_sp_labels)
+            set_tests_properties(rhi_vk_subpass${_spn} PROPERTIES LABELS "${_ico_sp_labels};vk11")
+        endforeach()
+        get_test_property(rhi_vk_subpass_vk10 LABELS _ico_sp_labels)
+        set_tests_properties(rhi_vk_subpass_vk10 PROPERTIES LABELS "${_ico_sp_labels};vk10")
         # rhi_native.h on the same layer setup (a validation message fails it)
         add_test(NAME rhi_native COMMAND rhi_native_test)
         set_tests_properties(rhi_native PROPERTIES SKIP_RETURN_CODE 77)

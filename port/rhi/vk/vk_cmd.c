@@ -995,8 +995,8 @@ void vkr_image_barrier(VkrCmdList *c, VkrTexture *t, RhiState before, RhiState a
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
         .srcAccessMask = srcAccess,
         .dstAccessMask = dstAccess,
-        .oldLayout = vkr_state_layout(before, t->rhiFormat),
-        .newLayout = vkr_state_layout(after, t->rhiFormat),
+        .oldLayout = vkr_texture_layout(before, t),
+        .newLayout = vkr_texture_layout(after, t),
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .image = t->image,
@@ -1447,8 +1447,9 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         }
         /* readable: the exact blend's attachment read (rasterization
          * order, rasterOrder) or a read after rhi_cmd_local_read_barrier
-         * (DATE's stencil setup), both through local read */
-        if (a->readable && !g_vkr.localRead) {
+         * (DATE's stencil setup), through dynamic rendering's local read
+         * or the subpass read (VKR_PASS_READ) */
+        if (a->readable && !VKR_PASS_READ) {
             VKR_LOG("render pass: a readable colour target without local read");
             return;
         }
@@ -1457,9 +1458,10 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         pa->view = t->view;
         pa->format = t->format;
         pa->samples = (VkSampleCountFlagBits)t->samples;
-        /* read by the pass's RHI_DST_READ_ATTACHMENT pipelines */
-        pa->layout = vkr_state_layout(
-            a->readable ? RHI_STATE_RENDER_TARGET_READ : RHI_STATE_RENDER_TARGET, t->rhiFormat);
+        /* read by the pass's RHI_DST_READ_ATTACHMENT pipelines (GENERAL
+         * for the subpass read, vkr_texture_layout) */
+        pa->layout = vkr_texture_layout(
+            a->readable ? RHI_STATE_RENDER_TARGET_READ : RHI_STATE_RENDER_TARGET, t);
         pa->load = vkr_loadOpMap[a->load < RHI_LOAD_COUNT ? a->load : 0].vk;
         /* DONT_CARE when asked (a tiler skips the write-back) */
         pa->store = a->store == RHI_STORE_DONT_CARE ? VK_ATTACHMENT_STORE_OP_DONT_CARE
@@ -1478,7 +1480,11 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
             return;
         }
         if (pass->depth.readable && (!g_vkr.localRead || pass->depth.readOnlyDepth)) {
-            VKR_LOG("render pass: a readable depth target without local read, or read-only");
+            /* the subpass read reads a colour only (RhiLimits
+             * .localReadSubpass): the fog's depth read is dynamic
+             * rendering's */
+            VKR_LOG("render pass: a readable depth target without local read%s, or read-only",
+                    g_vkr.subpassRead ? " (the subpass read reads the colour only)" : "");
             return;
         }
         /* readable: the pass's fragment shaders read the depth as an input
@@ -1623,9 +1629,33 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
             depthTex->hzAttach |= depthWrites ? VKR_HZ_ATTACH_WRITE : VKR_HZ_ATTACH_READ;
         }
     }
+    /* the subpass read's shape (vk_internal.h vkr_subpass_class): every
+     * pass of its class, its colour one of its textures (in GENERAL) */
+    if (g_vkr.legacyPasses && d.colorCount == 1u &&
+        vkr_subpass_class(1u, d.color[0].format, d.color[0].samples, d.hasDepth)) {
+        if (colorTex[0]->subpassRead && d.color[0].layout == VK_IMAGE_LAYOUT_GENERAL) {
+            d.subpassRead = true;
+        } else {
+            /* not reached by construction (a swapchain image drawn with a
+             * depth target): the class's pipelines would not match */
+            g_vkr.subpassMisfit++;
+            if (g_vkr.subpassMisfit <= 8u || g_vkr.subpassMisfit % 100u == 0u) {
+                VKR_LOG("render pass: the subpass read's class (one RGBA8 colour target and a "
+                        "depth target) on a colour %s (%ux%u, layout %d): begun without its "
+                        "input attachment; the class's pipelines do not match it (%u so far)",
+                        colorTex[0]->swapchain ? "swapchain image" : "texture made before it",
+                        colorTex[0]->width, colorTex[0]->height, (int)d.color[0].layout,
+                        g_vkr.subpassMisfit);
+            }
+        }
+    }
     if (!vkr_pass_begin(c, &d)) {
         return;
     }
+    if (d.subpassRead) {
+        g_vkr.subpassPasses++;
+    }
+    c->passSubpassRead = d.subpassRead;
     c->inPass = true;
     c->areaX = areaX;
     c->areaY = areaY;
@@ -1655,6 +1685,7 @@ void rhi_cmd_end_render_pass(RhiCommandList cl)
     vkr_flush_barriers(c);
     vkr_pass_end(c);
     c->inPass = false;
+    c->passSubpassRead = false;
 }
 
 void rhi_cmd_set_viewport(RhiCommandList cl, const RhiViewport *v)
@@ -2048,19 +2079,36 @@ static void vkr_flush_dynamic(VkrCmdList *c)
     c->dynFresh = 0;
 }
 
-/* Inside the open pass (dynamic rendering local read): one by-region
- * memory barrier holding the masks asked for, counted in stats.barriers.
+/* Inside the open pass (dynamic rendering local read, or a pass of the
+ * subpass read, whose self-dependency holds every mask here: vk_renderpass.c):
+ * one by-region memory barrier holding the masks asked for, counted in
+ * stats.barriers.
  *   COLOR  colour attachment writes -> the fragment shaders' input
  *          attachment reads (DATE's setup draw reads the alpha);
  *   DEPTH  the depth tests' writes -> the fragment shaders' input
  *          attachment reads (the fog reads the depth);
  *   BACK   those reads -> the next draws' depth and colour writes (the
  *          write after the read of the same pixel).
- * Nothing outside a pass, or without local read. */
+ * Nothing outside a pass, or without local read.  Under the subpass read
+ * a pass outside its class (colour only, or another format) has no
+ * self-dependency, so a barrier there would break
+ * VUID-vkCmdPipelineBarrier-None-07889: skipped, counted and logged (the
+ * renderer reads only in passes with a depth target there, RhiLimits
+ * .localReadSubpass). */
 void rhi_cmd_local_read_barrier(RhiCommandList cl, uint32_t mask)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
-    if (!c || !c->inPass || !g_vkr.localRead || mask == 0u) {
+    if (!c || !c->inPass || !VKR_PASS_READ || mask == 0u) {
+        return;
+    }
+    if (!g_vkr.localRead && !c->passSubpassRead) {
+        g_vkr.subpassSkipped++;
+        if (g_vkr.subpassSkipped <= 8u || g_vkr.subpassSkipped % 100u == 0u) {
+            VKR_LOG("render pass: a local-read barrier in a pass without the subpass read (no "
+                    "depth target, or not one RGBA8 colour): skipped, and a read after it is "
+                    "not ordered (%u so far)",
+                    g_vkr.subpassSkipped);
+        }
         return;
     }
     VkMemoryBarrier mb = {.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER};

@@ -1596,6 +1596,54 @@ static void vkr_pass_row_apply(void)
 #endif
 }
 
+/* The subpass read (vk_internal.h vkr_subpass_class, vk_renderpass.c;
+ * RhiLimits.localReadSubpass): on the VkRenderPass path, a pass of one
+ * RGBA8 colour target and a depth target reads its own colour as an input
+ * attachment of its one subpass after a barrier its self-dependency
+ * allows, all of it Vulkan 1.0 core, so DATE's stencil setup
+ * (port/render/rd_replay_tiler.c) no longer ends the scene's pass for an
+ * R8 snapshot on a device without dynamic rendering (issue 179's
+ * Mali-G52 on Vulkan 1.1).  On where the VkRenderPass path is the
+ * device's own (no dynamic rendering); off where the driver row or [dev]
+ * legacy_passes chose it on a device that has dynamic rendering (the
+ * Intel row: its fix stays as it was), and under ICO_VK_FAKE_NO_DST.
+ * ICO_VK_SUBPASS_READ=1 turns it on on any VkRenderPass path, =0 off.
+ * One line either way.  The renderer turns each read on only where its
+ * own self-test passes on the device (port/render/rd_date_selftest.c). */
+static void vkr_subpass_read_decide(void)
+{
+    g_vkr.subpassRead = false;
+    g_vkr.subpassPasses = g_vkr.subpassSkipped = g_vkr.subpassMisfit = 0;
+    if (!g_vkr.legacyPasses) {
+        return;
+    }
+    const char *env = getenv("ICO_VK_SUBPASS_READ");
+    const int ask = env && env[0] ? (env[0] != '0' ? 1 : 0) : -1;
+    const char *noDst = getenv("ICO_VK_FAKE_NO_DST");
+    const bool fake = noDst && noDst[0] && noDst[0] != '0';
+    const char *why = NULL;
+    if (ask == 0) {
+        why = "ICO_VK_SUBPASS_READ=0";
+    } else if (fake) {
+        why = "ICO_VK_FAKE_NO_DST";
+    } else if (g_vkr.legacyWhy && ask != 1) {
+        why = g_vkr.legacyWhy; /* the driver row, [dev] legacy_passes */
+    }
+    g_vkr.subpassRead = why == NULL;
+    if (g_vkr.subpassRead) {
+        VKR_LOG("render passes: the subpass read: a pass of one RGBA8 colour target and a depth "
+                "target names its colour as its subpass's input attachment 0, in GENERAL, with "
+                "a by-region self-dependency (Vulkan 1.0), so a read of the pass's own colour "
+                "(DATE's stencil setup) does not end the pass%s; ICO_VK_SUBPASS_READ=0 turns "
+                "it off",
+                ask == 1 ? " (ICO_VK_SUBPASS_READ=1)" : "");
+    } else {
+        VKR_LOG("render passes: no subpass read (%s): a read of a pass's own colour ends the "
+                "pass for a copy, as before v0.11.3; ICO_VK_SUBPASS_READ=1 turns it on",
+                why);
+    }
+}
+
 static bool vkr_create_device(void)
 {
     bool core13 = vkr_core13(g_vkr.props.apiVersion);
@@ -1927,6 +1975,7 @@ static bool vkr_create_device(void)
             exts[extCount++] = VK_KHR_DYNAMIC_RENDERING_LOCAL_READ_EXTENSION_NAME;
         }
     }
+    vkr_subpass_read_decide();
 
     /* the display's timing of presents (rhi_present_timing): VK_KHR_present_id
      * and VK_KHR_present_wait on a window, with SDL for the thread that
@@ -2942,7 +2991,10 @@ static void vkr_fill_limits(void)
     o->validationLayer = g_vkr.validationOn;
     o->moltenvk = g_vkr.moltenvk;
     /* v0.7.10: the device profile's facts (rhi.h) */
-    o->localRead = g_vkr.localRead;
+    /* either path's read (RhiLimits.localReadSubpass: the subpass read,
+     * the colour of a pass with a depth target only) */
+    o->localRead = VKR_PASS_READ;
+    o->localReadSubpass = g_vkr.subpassRead && !g_vkr.localRead;
     o->vendorId = g_vkr.props.vendorID;
     o->dynamicDepth = g_vkr.dynDepth;
     o->dynamicBlend = g_vkr.dynBlend;
@@ -3138,6 +3190,20 @@ uint32_t vkr_test_api_version(void)
 bool vkr_test_legacy_passes(void)
 {
     return g_vkr.legacyPasses;
+}
+
+bool vkr_test_subpass_read(uint32_t *passes, uint32_t *skipped, uint32_t *misfit)
+{
+    if (passes) {
+        *passes = g_vkr.subpassPasses;
+    }
+    if (skipped) {
+        *skipped = g_vkr.subpassSkipped;
+    }
+    if (misfit) {
+        *misfit = g_vkr.subpassMisfit;
+    }
+    return g_vkr.subpassRead;
 }
 
 bool vkr_test_view_usage(void)

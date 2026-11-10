@@ -11,7 +11,7 @@
  *                 Vulkan           Qualcomm  Turnip                  MoltenVK
  *   blend         fixed-function on every class; [dev] blend opts into an
  *                 exact mode (rd_dst_read.c)
- *   fogLocal      on (1)   off     on where the device has local read
+ *   fogLocal      on (1)   off     on where the device has local read (2)
  *   dateStencil   on (1)   off     on where the device has local read
  *   storePlan     on on every class: a pass after its depth's last touch in
  *                 the replay neither loads nor stores the depth and its
@@ -97,6 +97,15 @@
  * ICO_RD_LOCAL_PROBE is set: 1 the game's default and its probe (where the
  * self-tests run), 0 the local reads without the probe.  Where the device
  * has no local read the three stay off.
+ *
+ * (2) Not where the local read is the Vulkan VkRenderPass path's subpass
+ * read (RhiLimits.localReadSubpass: a device without dynamic rendering,
+ * port/rhi/vk/vk_renderpass.c), which reads the colour of a pass with a
+ * depth target and nothing else: DATE's stencil setup is its one user;
+ * fogLocal and fxDstLocal stay off there (their [dev] keys too, with a
+ * line), and the profile's words say "local read yes (the subpass read:
+ * a pass's colour with a depth target)".  DATE's self-test
+ * (rd_date_selftest.c) decides it on the device as everywhere.
  *
  * The OpenGL and D3D11 classes take the desktop column whatever the
  * vendor (neither backend reports a tiler: gl_device.c, d3d11_device.c);
@@ -404,9 +413,18 @@ void rd__profile_init(void)
     p->desktopLocal = desk && (g_rd.windowed || probeEnv >= 0);
     p->localProbe = p->desktopLocal && probeEnv != 0;
     const bool local = (tile || p->desktopLocal) && p->localRead;
+    /* the Vulkan VkRenderPass path's subpass read (RhiLimits
+     * .localReadSubpass, port/rhi/vk/vk_renderpass.c): the colour of a pass
+     * with a depth target only, so DATE's stencil setup alone (its draws
+     * always have the scene's depth bound: rd_replay.c dateStencilFor).
+     * The fog reads the depth (and its shader's input attachment has no
+     * index, which only dynamic rendering's read maps: fog_lut.hlsl), the
+     * fx plan's reads land in the scene's colour-only passes (the post
+     * effects', the crack fill's paste): both stay on their snapshots */
+    const bool subpass = lim->localReadSubpass;
 
     /* the table (the file comment) */
-    p->fogLocal = local;
+    p->fogLocal = local && !subpass;
     p->dateStencil = local;
     p->storePlan = true; /* rd_store_plan.c; nothing changes where the device keeps the contents */
     p->blurFold = c != PC_MALI;
@@ -418,7 +436,7 @@ void rd__profile_init(void)
     p->carefulSet = false;
     p->alphaPlan = true;
     p->fxPlan = true;
-    p->fxDstLocal = local;
+    p->fxDstLocal = local && !subpass;
     p->vuPlanesFrac = true;
     p->crackFill = true; /* rd_crack_fill.c reads ICO_RD_CRACK_FILL over it */
     const bool stencilView = lim->stencilView && lim->depthSampled;
@@ -449,9 +467,11 @@ void rd__profile_init(void)
     const char *notHere = NULL; /* a [dev] key asked for what the device lacks */
     const char *fog = getenv("ICO_RD_FOG_PATH");
     if (fog && strcmp(fog, "local") == 0) {
-        p->fogLocal = p->localRead;
+        p->fogLocal = p->localRead && !subpass;
         p->devSet |= RD_PROFILE_FOG_LOCAL;
-        notHere = p->localRead ? notHere : "[dev] fog_path = local (no local read)";
+        notHere = !p->localRead ? "[dev] fog_path = local (no local read)"
+                  : subpass     ? "[dev] fog_path = local (the subpass read reads no depth)"
+                                : notHere;
     } else if (fog && (strcmp(fog, "inplace") == 0 || strcmp(fog, "copy") == 0 ||
                        strcmp(fog, "buffer") == 0)) {
         p->fogLocal = false;
@@ -511,9 +531,12 @@ void rd__profile_init(void)
     }
     const int fxLocal = envBool("ICO_RD_FX_DST_LOCAL");
     if (fxLocal >= 0) {
-        p->fxDstLocal = fxLocal == 1 && p->localRead;
+        p->fxDstLocal = fxLocal == 1 && p->localRead && !subpass;
         p->devSet |= RD_PROFILE_FX_DST_LOCAL;
-        notHere = fxLocal == 1 && !p->localRead ? "[dev] fx_dst_local (no local read)" : notHere;
+        notHere = fxLocal == 1 && !p->localRead ? "[dev] fx_dst_local (no local read)"
+                  : fxLocal == 1 && subpass
+                      ? "[dev] fx_dst_local (the subpass read: no read in a colour-only pass)"
+                      : notHere;
     }
     const int planes = envBool("ICO_RD_VU_PLANES");
     if (planes >= 0) {
@@ -595,6 +618,7 @@ void rd__profile_init(void)
         : d3d           ? "D3D12's own"
                         : "off",
         d3d            ? "n/a"
+        : subpass      ? "yes (the subpass read: a pass's colour with a depth target)"
         : p->localRead ? "yes"
                        : "no",
         uintWords(p), mark(p, UINT_BITS), p->alphaPlan ? "on" : "off",

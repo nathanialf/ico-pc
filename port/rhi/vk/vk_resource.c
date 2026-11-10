@@ -678,6 +678,16 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
         (desc->usage & (RHI_TEX_RENDER_TARGET | RHI_TEX_DEPTH_STENCIL))) {
         usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
     }
+    /* the subpass read (vk_internal.h vkr_subpass_class): every
+     * single-sampled RGBA8_UNORM render target, asked or not, since a pass
+     * of its class names its colour as an input attachment whichever
+     * texture it is (VUID-VkFramebufferCreateInfo-pAttachments-00879: the
+     * usage on every image a framebuffer's input attachment is) */
+    const bool subpassRead = g_vkr.subpassRead && (desc->usage & RHI_TEX_RENDER_TARGET) &&
+                             vkFmt == VK_FORMAT_R8G8B8A8_UNORM && desc->samples <= 1u;
+    if (subpassRead) {
+        usage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    }
     /* rhi_readback_texture works on any texture */
     usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 
@@ -740,6 +750,7 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
     t->memSize = req.size;
     t->format = vkFmt;
     t->storage = storage;
+    t->subpassRead = subpassRead;
     t->rhiFormat = desc->format;
     t->aspects = fm->aspect;
     t->width = desc->width;

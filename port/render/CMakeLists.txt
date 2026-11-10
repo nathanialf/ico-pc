@@ -1444,7 +1444,7 @@ if(ICO_RUN_TESTS)
     set(_ico_vvl "${ICO_DEPS_DIR}/vulkan-validation")
     if(NOT WIN32 AND EXISTS "${_ico_vvl}/VkLayer_khronos_validation.json")
         set(_env "VK_ADD_LAYER_PATH=${_ico_vvl}" "VK_KHRONOS_VALIDATION_VALIDATE_SYNC=true"
-                 "ICO_VK_VALIDATION=1")
+                 "VK_KHRONOS_VALIDATION_SYNCVAL_SHADER_ACCESSES_HEURISTIC=true" "ICO_VK_VALIDATION=1")
     endif()
     if(ICO_SANITIZE MATCHES "address")
         list(APPEND _env "ASAN_OPTIONS=detect_leaks=0")
@@ -3558,6 +3558,7 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_fog_selftest_local_sabotage
                          PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                     ENVIRONMENT "${_env};ICO_VK_FAKE_LIMITS=moltenvk;ICO_RD_FOG_SABOTAGE=local")
+    include(test/rd_date_subpass.cmake)
 endif()
 # ---- FIXT end ----
 

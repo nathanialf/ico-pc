@@ -114,6 +114,11 @@ uint32_t vkr_test_sync_recycle_waits(void);
  * VK_KHR_get_physical_device_properties2, review finding 5) */
 uint32_t vkr_test_api_version(void);
 bool vkr_test_legacy_passes(void);
+/* The subpass read (vk_device.c vkr_subpass_read_decide): whether it is on,
+ * and since the device was made the passes begun with it, the local-read
+ * barriers skipped in a pass without it and the passes of its class whose
+ * colour is not one of its textures (each pointer may be NULL) */
+bool vkr_test_subpass_read(uint32_t *passes, uint32_t *skipped, uint32_t *misfit);
 bool vkr_test_view_usage(void);
 bool vkr_test_props2(void);
 

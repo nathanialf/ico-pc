@@ -1,0 +1,14 @@
+# Dump list for rd_date_subpass_ab (port/render/test/rd_date_subpass_ab.cmake:
+# DATE through the stencil bit on the VkRenderPass path's subpass read against
+# the snapshot, byte for byte).  MACHINE-LOCAL: these are paths on the
+# maintainer's machine; the dumps themselves are never committed.  Missing
+# files are reported and skipped (no dump at all: SKIP).  Relative paths are
+# relative to this file; '*' globs are allowed.
+#
+# issue 179's Mali-G52 frame (v0.11.2, 912x512 scene, 3 DATE snapshots a
+# replay on the phone)
+/primary/dev/ico-pc/build-host/tmp/v0113/evidence/179/zip/frame-20261110-003507-v17008.rddump
+# the main gate's frame (fog, 3 DATE snapshots, the shadow count, the crack fill)
+/primary/dev/ico-dumps/maingate/frame-20261104-123603-v10827.rddump
+# the 2026-10-07 captures
+/primary/dev/ico-dumps/*.rddump

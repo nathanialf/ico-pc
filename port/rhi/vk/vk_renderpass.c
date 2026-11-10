@@ -11,8 +11,9 @@
  *            VkRenderPass and VkFramebuffer, both from caches here, and
  *            vkCmdBeginRenderPass.
  *
- * A legacy render pass has one subpass, no dependencies, no resolve or
- * input attachments.  Every attachment's initial, subpass and final layout
+ * A legacy render pass has one subpass, no resolve attachments, and no
+ * dependency or input attachment but the subpass read's (below).  Every
+ * attachment's initial, subpass and final layout
  * is the layout the port's state tracking put it in before the pass
  * (vk_cmd.c's hazard barriers, or rhi_cmd_barrier under the global
  * barriers), so the pass makes no layout transition and needs no
@@ -22,6 +23,37 @@
  * attachments' size whatever the pass's area (RhiRenderPassDesc.area):
  * VkRenderPassBeginInfo.renderArea carries the area's offset and extent,
  * inside the framebuffer, so one framebuffer serves every area.
+ *
+ * The subpass read (vk_internal.h vkr_subpass_class, g_vkr.subpassRead):
+ * the pass's own colour read in the pass, with Vulkan 1.0's input
+ * attachments, as dynamic rendering's local read does it
+ * (VK_KHR_dynamic_rendering_local_read, which a VkRenderPass cannot use).
+ * A pass of the class (one RGBA8_UNORM colour target, single-sampled, and
+ * a depth target) names its colour attachment 0 also as input attachment 0
+ * (the shaders' [[vk::input_attachment_index(0)]], the index the dynamic
+ * path maps colour 0 to by default), both references in GENERAL, and has
+ * one self-dependency, subpass 0 to subpass 0, BY_REGION, between the
+ * framebuffer-space stages (early and late fragment tests, the fragment
+ * shader, colour output) with the colour and depth writes and the input
+ * attachment read on both sides: the superset of every barrier
+ * rhi_cmd_local_read_barrier records inside it (VUID-vkCmdPipelineBarrier-
+ * None-07889: inside a VkRenderPass a barrier needs a self-dependency
+ * whose scopes contain its own and whose flags match; -07891 and
+ * VUID-VkSubpassDependency-srcSubpass-02243: BY_REGION between
+ * framebuffer-space stages; -srcSubpass-06809: a framebuffer-space first
+ * scope keeps the second to framebuffer-space stages).  The spec's
+ * "Synchronization Options" (Render Pass chapter, "Common Render Pass Data
+ * Races"): "A vkCmdPipelineBarrier inside a subpass can synchronize prior
+ * attachment writes in the subpass with subsequent input attachment
+ * reads."  The read a fragment makes through the input attachment is of
+ * its own pixel, so the by-region dependency is enough.  The class is the
+ * formats' (a pipeline knows no more), so every pass of it has the shape,
+ * readable or not: input attachment references and dependencies are part
+ * of render pass compatibility (Vulkan spec, "Render Pass
+ * Compatibility": "Two render passes are compatible if their
+ * corresponding color, input, resolve, and depth/stencil attachment
+ * references are compatible and if they are otherwise identical except
+ * for" the attachments' layouts and load and store operations).
  *
  * The caches are linear arrays, searched by memcmp of a zeroed key:
  *   render passes  VKR_RP_CACHE entries, keyed by the attachments' formats,
@@ -64,6 +96,7 @@
 typedef struct VkrRpKey {
     uint32_t colorCount;
     uint32_t hasDepth;
+    uint32_t subpassRead; /* the subpass read's shape (the file comment) */
     VkAttachmentDescription att[VKR_RP_ATTACH];
 } VkrRpKey;
 
@@ -92,7 +125,7 @@ static uint32_t s_rpCount;
 static VkrFbEntry s_fb[VKR_FB_CACHE];
 static uint32_t s_fbCount;
 static uint64_t s_fbClock;
-static bool s_rpFullLogged, s_fbFullLogged, s_firstLogged;
+static bool s_rpFullLogged, s_fbFullLogged, s_firstLogged, s_subpassLogged;
 
 /* ------------------------------------------------------------ render passes */
 static VkRenderPass vkr_rp_make(const VkrRpKey *k)
@@ -106,11 +139,33 @@ static VkRenderPass vkr_rp_make(const VkrRpKey *k)
     if (k->hasDepth) {
         depthRef = (VkAttachmentReference){k->colorCount, k->att[k->colorCount].initialLayout};
     }
+    /* the subpass read: colour 0 is input attachment 0 too, in the
+     * colour reference's layout (GENERAL, vkr_texture_layout) */
+    const VkAttachmentReference inputRef = {0u, k->att[0].initialLayout};
     VkSubpassDescription sub = {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+        .inputAttachmentCount = k->subpassRead ? 1u : 0u,
+        .pInputAttachments = k->subpassRead ? &inputRef : NULL,
         .colorAttachmentCount = k->colorCount,
         .pColorAttachments = k->colorCount ? colorRef : NULL,
         .pDepthStencilAttachment = k->hasDepth ? &depthRef : NULL,
+    };
+    /* its self-dependency: the superset of rhi_cmd_local_read_barrier's
+     * three kinds (vk_cmd.c), framebuffer-space stages only, by region */
+    const VkPipelineStageFlags fbStages =
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+    const VkAccessFlags fbAccess = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                   VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                                   VK_ACCESS_INPUT_ATTACHMENT_READ_BIT;
+    const VkSubpassDependency self = {
+        .srcSubpass = 0,
+        .dstSubpass = 0,
+        .srcStageMask = fbStages,
+        .dstStageMask = fbStages,
+        .srcAccessMask = fbAccess,
+        .dstAccessMask = fbAccess,
+        .dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT,
     };
     VkRenderPassCreateInfo ci = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
@@ -118,10 +173,19 @@ static VkRenderPass vkr_rp_make(const VkrRpKey *k)
         .pAttachments = n ? k->att : NULL,
         .subpassCount = 1,
         .pSubpasses = &sub,
+        .dependencyCount = k->subpassRead ? 1u : 0u,
+        .pDependencies = k->subpassRead ? &self : NULL,
     };
     VkRenderPass rp = VK_NULL_HANDLE;
     if (!VKR_CHECK(vkCreateRenderPass(g_vkr.device, &ci, NULL, &rp))) {
         return VK_NULL_HANDLE;
+    }
+    if (k->subpassRead && !s_subpassLogged) {
+        s_subpassLogged = true;
+        VKR_LOG("render passes: the first with the subpass read: its colour (format %d) also "
+                "input attachment 0, in GENERAL, a by-region self-dependency (the pass reads "
+                "its own colour without ending)",
+                (int)k->att[0].format);
     }
     if (!s_firstLogged) {
         s_firstLogged = true;
@@ -188,6 +252,7 @@ VkRenderPass vkr_renderpass_get(const VkrPassDesc *d)
     memset(&k, 0, sizeof(k));
     k.colorCount = d->colorCount;
     k.hasDepth = d->hasDepth ? 1u : 0u;
+    k.subpassRead = d->subpassRead ? 1u : 0u;
     for (uint32_t i = 0; i < d->colorCount; i++) {
         vkr_rp_attach(&k.att[i], &d->color[i]);
     }
@@ -207,8 +272,15 @@ VkRenderPass vkr_renderpass_compat(uint32_t colorCount, const VkFormat *colorFor
     memset(&k, 0, sizeof(k));
     k.colorCount = colorCount;
     k.hasDepth = depthFormat != VK_FORMAT_UNDEFINED ? 1u : 0u;
+    /* the subpass read's shape, from the formats alone (vkr_subpass_class) */
+    k.subpassRead =
+        colorCount && vkr_subpass_class(colorCount, colorFormats[0], samples, k.hasDepth != 0u)
+            ? 1u
+            : 0u;
     /* compatibility is the formats and the sample counts: the ops and
-     * layouts are fixed, so every pass of one class shares this one */
+     * layouts are fixed, so every pass of one class shares this one (the
+     * subpass read's colour in GENERAL: an input attachment's reference
+     * cannot be COLOR_ATTACHMENT_OPTIMAL) */
     for (uint32_t i = 0; i < colorCount + k.hasDepth; i++) {
         VkAttachmentDescription *a = &k.att[i];
         const bool depth = i == colorCount;
@@ -218,8 +290,9 @@ VkRenderPass vkr_renderpass_compat(uint32_t colorCount, const VkFormat *colorFor
         a->storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         a->stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         a->stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        a->initialLayout = depth ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-                                 : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+        a->initialLayout = depth           ? VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+                           : k.subpassRead ? VK_IMAGE_LAYOUT_GENERAL
+                                           : VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
         a->finalLayout = a->initialLayout;
     }
     return vkr_rp_lookup(&k);
@@ -335,7 +408,7 @@ void vkr_renderpass_shutdown(void)
     s_rp = s_rpStatic;
     s_rpCap = VKR_RP_CACHE;
     s_fbClock = 0;
-    s_rpFullLogged = s_fbFullLogged = s_firstLogged = false;
+    s_rpFullLogged = s_fbFullLogged = s_firstLogged = s_subpassLogged = false;
 }
 
 /* ------------------------------------------------------------ begin and end */

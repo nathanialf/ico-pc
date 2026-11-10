@@ -1,4 +1,4 @@
-/* rd_vu_rec_sink.h: the throwaway colour target of the VU record's store
+/* rd_vu_rec_sink.h: the throwaway colour targets of the VU record's store
  * passes (rd_vu_record.h "stores"; rd_replay_vu.c recStorePassOpen).
  *
  * The store passes draw points without rasterization (RhiPipelineDesc
@@ -7,7 +7,7 @@
  * the one shape of the replay that the reports of a crash inside Intel's
  * vkCmdBeginRendering share (issue 123's Intel HD 530 on driver 101.2125,
  * Vulkan 1.3.215, and other ports' reports on the same drivers:
- * port/rhi/rhi_pass_row.h).  Every store pass now begins on this target,
+ * port/rhi/rhi_pass_row.h).  Every store pass now begins on such a target,
  * on every GPU and both render pass paths: ICO_VU_REC_W x 1 texels of the
  * cheapest colour format a device must render to (R8_UNORM, a required
  * format: vk_device.c vkr_rate_device), loaded DONT_CARE, stored
@@ -15,7 +15,18 @@
  * it (rd_pipeline.c: one colour target of RD_VU_REC_SINK_FMT, its write
  * mask 0), so their keys, counts and the start-up set are unchanged; no
  * fragment runs, so nothing is written to it and every picture is the
- * same byte for byte. */
+ * same byte for byte.
+ *
+ * Two targets, taken in turn (RD_VU_REC_SINKS).  With one, the second store
+ * pass of a list found the first's attachment write pending (a DONT_CARE
+ * load and store is a write in Vulkan's synchronisation), so its begin's
+ * barrier, which goes out with the store bracket's own (vertex stages),
+ * held colour output before the bracket: the pass's vertex shaders waited
+ * for every earlier colour write of the list, the previous picture's too
+ * (BARRIER179's finding; port/rhi/vk/vk_cmd.c vkr_hz_image).  With two,
+ * neither of a list's two store passes begins on a target written earlier
+ * in the list, so their begins carry no attachment barrier (a third pass
+ * in one list, which the replay does not make, would wait again). */
 #ifndef PORT_RENDER_RD_VU_REC_SINK_H
 #define PORT_RENDER_RD_VU_REC_SINK_H
 
@@ -24,15 +35,18 @@
 #include "rhi.h"
 
 #define RD_VU_REC_SINK_FMT RHI_FMT_R8_UNORM
+#define RD_VU_REC_SINKS 2u
 
-/* The target in RHI_STATE_RENDER_TARGET on cl, made at the first call (one
- * line); {0} when it could not be made (one line: the store passes then
- * begin without an attachment, as before v0.11.3) */
+/* The next of the two targets in RHI_STATE_RENDER_TARGET on cl, both made at
+ * the first call (one line); {0} when they could not be made (one line:
+ * the store passes then begin without an attachment, as before v0.11.3) */
 RhiTexture rd__vu_rec_sink(RhiCommandList cl);
+/* target i (0 or 1; {0} before the first call or past them), for the tests */
+RhiTexture rd__vu_rec_sink_target(uint32_t i);
 /* the store passes begun on the target, and without it (it could not be
  * made), since the start (the replay tool's --stats and the tests) */
 uint32_t rd__vu_rec_sink_passes(uint32_t *without);
-/* the target destroyed (rd__vu_prepass_shutdown); the counts kept */
+/* the targets destroyed (rd__vu_prepass_shutdown); the counts kept */
 void rd__vu_rec_sink_free(void);
 
 #endif /* PORT_RENDER_RD_VU_REC_SINK_H */

@@ -810,14 +810,13 @@ RhiBindGroup rhi_create_bind_group(const RhiBindGroupDesc *desc)
             const VkImageView v = t && depthIn ? (t->depthView ? t->depthView : VK_NULL_HANDLE)
                                   : t          ? t->view
                                                : VK_NULL_HANDLE;
-            if (!t || !v || t->samples > 1u || (storage ? !g_vkr.interlock : !g_vkr.localRead)) {
+            if (!t || !v || t->samples > 1u || (storage ? !g_vkr.interlock : !VKR_PASS_READ)) {
                 VKR_LOG("bind group: slot %u: invalid destination-read texture", b->slot);
                 continue;
             }
             ii[n] = (VkDescriptorImageInfo){
                 VK_NULL_HANDLE, v,
-                vkr_state_layout(storage ? RHI_STATE_STORAGE : RHI_STATE_RENDER_TARGET_READ,
-                                 t->rhiFormat)};
+                vkr_texture_layout(storage ? RHI_STATE_STORAGE : RHI_STATE_RENDER_TARGET_READ, t)};
             w[n].pImageInfo = &ii[n];
             break;
         }
