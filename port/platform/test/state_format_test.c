@@ -23,6 +23,14 @@
  *                leaves no .tmp behind
  *   build id     stable for the same inputs; changes with the commit and
  *                with one more registered block; the text names them
+ *   retired keys a key the saved text lists that this version retired
+ *                (v0.11.3's difficulty rows, ico_state_set_key_retired):
+ *                passed over at any value, on both checks, under the
+ *                whole-text rule (a damaged hash refused); without the
+ *                function such a key is "(now absent)"; a still-listed key
+ *                that differs is still named first; the retired keys
+ *                named for the log; a key only this run lists is not
+ *                retired by it
  */
 #include <stdint.h>
 #include <stdio.h>
@@ -32,6 +40,7 @@
 #include "../host_fs.h"
 #include "../state_file.h"
 #include "../state_registry.h"
+#include "xxh3.h"
 
 static int fails;
 
@@ -295,6 +304,68 @@ static void test_refusals(void)
     CHECK(ico_state_header_check(&saved, &now, NULL, 0) == ICO_STATE_OTHER_SETTINGS);
 }
 
+/* --- retired keys ------------------------------------------------------------- */
+
+/* two retired keys, as sim_keys.h ico_sim_key_retired would name them */
+static int fake_retired(const char *key, size_t key_n)
+{
+    return (key_n == 19 && memcmp(key, "gameplay.yorda_safe", 19) == 0) ||
+           (key_n == 16 && memcmp(key, "variants.one_hit", 16) == 0);
+}
+
+static void keys_set(IcoStateHeader *h, const char *keys)
+{
+    snprintf(h->keys, sizeof h->keys, "%s", keys);
+    h->settings_hash = xxh3_64(h->keys, strlen(h->keys));
+}
+
+static void test_retired_keys(void)
+{
+    IcoStateHeader now, saved;
+    char detail[160], names[160];
+
+    make_header(&now);
+    keys_set(&now, "video.video_mode=auto\ngameplay.mirror=false\n");
+    saved = now;
+    /* a state of v0.11.2: the difficulty rows among its keys, at any value */
+    keys_set(&saved, "video.video_mode=auto\ngameplay.mirror=false\ngameplay.yorda_safe=true\n"
+                     "variants.one_hit=\n");
+    ico_state_set_key_retired(NULL);
+    CHECK(ico_state_header_check(&saved, &now, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(strcmp(detail, "gameplay.yorda_safe=true (now absent)") == 0);
+    CHECK(ico_state_keys_retired(saved.keys, now.keys, names, sizeof names) == 0 &&
+          names[0] == '\0');
+    ico_state_set_key_retired(fake_retired);
+    CHECK(ico_state_header_check(&saved, &now, detail, sizeof detail) == ICO_STATE_OK);
+    CHECK(detail[0] == '\0');
+    CHECK(ico_state_header_check_other_build(&saved, &now, detail, sizeof detail) == ICO_STATE_OK);
+    CHECK(ico_state_keys_retired(saved.keys, now.keys, names, sizeof names) == 2);
+    CHECK(strcmp(names, "gameplay.yorda_safe=true, variants.one_hit=") == 0);
+    /* a short buffer: the start, NUL-terminated; the count whole */
+    CHECK(ico_state_keys_retired(saved.keys, now.keys, names, 8) == 2 &&
+          strcmp(names, "gamepla") == 0);
+    /* the saved text must be whole: its own hash */
+    saved.settings_hash ^= 1;
+    CHECK(ico_state_header_check(&saved, &now, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(strcmp(detail, "the settings differ") == 0);
+    /* a key still listed that differs: refused, named */
+    keys_set(&saved, "video.video_mode=auto\ngameplay.mirror=true\ngameplay.yorda_safe=true\n");
+    CHECK(ico_state_header_check(&saved, &now, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(strcmp(detail, "gameplay.mirror=true (now false)") == 0);
+    /* a key only the state lists that is not retired: still refused */
+    keys_set(&saved, "video.video_mode=auto\ngameplay.mirror=false\ngameplay.yorda_safe=true\n"
+                     "old.key=1\n");
+    CHECK(ico_state_header_check(&saved, &now, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(strcmp(detail, "old.key=1 (now absent)") == 0);
+    /* a retired name this run still lists is compared as any key */
+    keys_set(&now, "video.video_mode=auto\ngameplay.mirror=false\ngameplay.yorda_safe=false\n");
+    keys_set(&saved, "video.video_mode=auto\ngameplay.mirror=false\ngameplay.yorda_safe=true\n");
+    CHECK(ico_state_header_check(&saved, &now, detail, sizeof detail) == ICO_STATE_OTHER_SETTINGS);
+    CHECK(strcmp(detail, "gameplay.yorda_safe=true (now false)") == 0);
+    CHECK(ico_state_keys_retired(saved.keys, now.keys, names, sizeof names) == 0);
+    ico_state_set_key_retired(NULL);
+}
+
 /* --- bad files ---------------------------------------------------------------- */
 
 static unsigned char *file_bytes;
@@ -487,6 +558,7 @@ int main(int argc, char **argv)
     test_build_id();
     test_round_trip();
     test_refusals();
+    test_retired_keys();
     test_bad_files();
     test_writes();
     remove(path);
