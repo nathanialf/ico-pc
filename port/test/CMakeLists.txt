@@ -33,8 +33,11 @@ if(Python3_FOUND)
     add_test(NAME font_audit COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/font_audit.py")
     # strings_sync: every string id has a line in every community translation table
     # (tools/strings_sync.py --check): a new id appended to the enum without its
-    # `[UI_STR_X] = NULL` line in the end block of each table fails here
+    # `[UI_STR_X] = NULL` line in the end block of each table fails here, and so does a
+    # block's quoted English that differs from strings_en.c (--refresh-comments renews it);
+    # strings_sync_selftest checks the tool's parse rules on fixed inputs
     add_test(NAME strings_sync COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/strings_sync.py" --check)
+    add_test(NAME strings_sync_selftest COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_SOURCE_DIR}/tools/strings_sync.py" --self-test)
 endif()
 
 # font_subset_arimo: the port's main font (tools/subset_font_arimo.py --check):
