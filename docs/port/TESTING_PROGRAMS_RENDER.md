@@ -1037,7 +1037,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   frames. After the switch at least two replays are recorded, the scene is 2x2, and each part is
   drawn (pre-pass passes, a DATE snapshot or stencil draw, a shadow count resolve, a crack fill
   pass; none of the last at 1x); where the record is stored by the vertex shaders every store pass
-  began on the throwaway target (`rd_vu_rec_sink.h`, none without it); the render pass breadcrumb
+  began on the throwaway targets (`rd_vu_rec_sink.h`, none without them; the two targets made and
+  distinct), and the barriers that held later vertex work behind fragment work after the switch
+  are printed (`2x: N barriers holding ...`, `RhiStats.fragmentHolds`); the render pass breadcrumb
   (`rhi_pass_crumb.h`) names the last pass ended, with a pass ring marker and the path asked, every
   target with a view; under the validation layer no validation error from the first frame to the
   end. 77 without a Vulkan device.
@@ -1088,7 +1090,19 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   profile's own, not `[dev]`'s): with `ICO_RD_DATE_SABOTAGE=1`, `DATE: snapshot path (self-test:
   stencil fail ...` and `profile: DATE stencil off (self-test)` (`rd_date_selftest_sabotage`);
   with `ICO_RD_FOG_SABOTAGE=local`, `local fail N, copy ok N`, the copy taken at both sizes and
-  `profile: fog local off (self-test)` (`rd_fog_selftest_local_sabotage`). Both scripts take
+  `profile: fog local off (self-test)` (`rd_fog_selftest_local_sabotage`). On the Vulkan
+  `VkRenderPass` path's subpass read ([RHI.md](RHI.md#local-read); `test/rd_date_subpass.cmake`):
+  `rd_date_selftest_vk11` (`ICO_VK_FAKE_API=1.1`) and `_vk10` (`=1.0`, all-static pipelines) with
+  `ICO_RD_DATE_PATH=stencil`, stencil and snapshot ok 5 and the lines `render passes: the subpass
+  read: ...` and `local read yes (the subpass read: ...)`; `rd_date_selftest_tiler_vk11` under
+  `ICO_VK_FAKE_LIMITS=moltenvk` at 1.1, the stencil path the profile's own and `fog local off` (on
+  that class with dynamic rendering it is on); `rd_date_selftest_sabotage_vk11`, the same with
+  `ICO_RD_DATE_SABOTAGE=1`: the stencil fails and `profile: DATE stencil off (self-test)`; and
+  `rd_date_subpass_ab` (`test/rd_date_subpass_ab.cmake`, the dumps of
+  `tools/date_subpass_dumps.txt`, issue 179's Mali frame first): each dump through the bit and
+  through the snapshot on that 1.1 tile-based profile with `--pass-dump`, every named target byte
+  for byte, no DATE snapshot and fewer passes through the bit where the snapshot run drew some, no
+  validation error (labels vk11, vk10). Both scripts take
   `-DEXTRA` and `-DEXTRA2`, regexes that must each match the log at least once. With
   `rd_shadow_selftest.cmake`, the shadow count's self-test, which the fog's first run and its run
   at the second scene size run: every `shadow count: one draw (self-test: equal to the seven draws

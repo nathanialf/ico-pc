@@ -93,6 +93,12 @@ typedef struct VkrTexture {
     /* made with the storage-image usage (RHI_TEX_STORAGE granted:
      * vk_resource.c; rhi_native.h RhiNativeTexture.storage) */
     bool storage;
+    /* the subpass read's colour (g_vkr.subpassRead, vk_resource.c): an
+     * RGBA8_UNORM single-sampled render target that is not a swapchain
+     * image, made with the input-attachment usage; as an attachment it is
+     * in GENERAL (vkr_texture_layout), the one layout an input attachment
+     * and a colour attachment of one subpass can share */
+    bool subpassRead;
     /* hazard tracking (vk_cmd.c, "Hazards"): what touched the image since
      * its last barrier, valid while hzEpoch is the recording list's: the
      * mips a copy wrote, and an attachment write or read */
@@ -269,6 +275,9 @@ typedef struct VkrCmdList {
     /* a draw, and a RHI_DST_READ_STORAGE draw, recorded in the open
      * render pass (vk_cmd.c vkr_dst_order) */
     bool drawnInPass, storageDrawn;
+    /* the open pass is a VkRenderPass of the subpass read (VkrPassDesc
+     * .subpassRead): rhi_cmd_local_read_barrier records its barrier */
+    bool passSubpassRead;
     /* the list's hazard-tracking epoch (g_vkr.hzEpoch when it began);
      * globalOrder: a global barrier before every pass and copy instead
      * (ICO_VK_GLOBAL_BARRIERS=1, or lists recorded interleaved) */
@@ -439,6 +448,10 @@ typedef struct VkrPassDesc {
     uint32_t colorCount;
     VkrPassAttach color[RHI_MAX_COLOR_TARGETS];
     bool hasDepth, hasStencil, readOnlyDepth;
+    /* legacy path, the subpass read (vkr_subpass_class): colour 0 is also
+     * the subpass's input attachment 0, the render pass has the
+     * self-dependency (vk_renderpass.c vkr_rp_make) */
+    bool subpassRead;
     VkrPassAttach depth;
     uint32_t areaX, areaY, areaW, areaH;
     uint32_t fbW, fbH;
@@ -557,6 +570,16 @@ typedef struct VkrState {
      * destination-read draw after other draws of its pass (vk_cmd.c
      * vkr_dst_order) */
     bool localRead;
+    /* the subpass read (vk_device.c vkr_subpass_read_decide; RhiLimits
+     * .localReadSubpass): on the VkRenderPass path, a pass of one
+     * RGBA8_UNORM colour target and a depth target reads its colour as an
+     * input attachment of its own subpass (Vulkan 1.0 core).  localRead
+     * stays dynamic rendering's own; VKR_PASS_READ is either.  The counts
+     * since the device was made: passes begun with it, local-read
+     * barriers skipped in a pass without it, passes of its class whose
+     * colour is not one of its textures (none by construction) */
+    bool subpassRead;
+    uint32_t subpassPasses, subpassSkipped, subpassMisfit;
     bool validationOn;
     bool storageBarriers;
     uint32_t validationErrors;
@@ -991,6 +1014,44 @@ VkRenderPass vkr_renderpass_compat(uint32_t colorCount, const VkFormat *colorFor
                                    VkFormat depthFormat, VkSampleCountFlagBits samples);
 void vkr_framebuffer_forget_view(VkImageView view, bool now);
 void vkr_renderpass_shutdown(void);
+
+/* The subpass read (g_vkr.subpassRead; docs/port/RHI.md "The subpass
+ * read").  Pipelines and framebuffers are made against a render pass of
+ * their compatibility class, and two render passes are compatible only
+ * when their input attachment references and dependencies match too
+ * (Vulkan spec, "Render Pass Compatibility"), so the class decides, from
+ * what a pipeline knows (its formats and sample count): every pass of one
+ * RGBA8_UNORM colour target, single-sampled, with a depth target, names
+ * its colour as input attachment 0 and has the self-dependency, readable
+ * or not, and every RGBA8_UNORM render target is made for it
+ * (VkrTexture.subpassRead: the input-attachment usage, GENERAL as an
+ * attachment).  A swapchain image is never one: it is never drawn with a
+ * depth target.  VKR_PASS_READ: a pass's own attachments can be read in
+ * it, through either path */
+#define VKR_PASS_READ (g_vkr.localRead || g_vkr.subpassRead)
+
+static inline bool vkr_subpass_class(uint32_t colorCount, VkFormat color0,
+                                     VkSampleCountFlagBits samples, bool hasDepth)
+{
+    return g_vkr.subpassRead && colorCount == 1u && color0 == VK_FORMAT_R8G8B8A8_UNORM &&
+           samples == VK_SAMPLE_COUNT_1_BIT && hasDepth;
+}
+
+/* the layout of t in state s: the state map's (vkr_state_layout), but
+ * under the subpass read GENERAL for a readable colour and for a subpass
+ * read texture as a render target (an input attachment's reference must
+ * not be COLOR_ATTACHMENT_OPTIMAL, VUID-VkSubpassDescription-attachment-
+ * 06912, and one attachment's references share their layout,
+ * VUID-VkSubpassDescription-layout-02519) */
+static inline VkImageLayout vkr_texture_layout(RhiState s, const VkrTexture *t)
+{
+    if (g_vkr.subpassRead && !(t->aspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
+        (s == RHI_STATE_RENDER_TARGET_READ || (s == RHI_STATE_RENDER_TARGET && t->subpassRead))) {
+        return VK_IMAGE_LAYOUT_GENERAL;
+    }
+    return vkr_state_layout(s, t->rhiFormat);
+}
+
 /* vk_cmd.c: rhi_gpu_progress's values back to none (a new device) */
 void vkr_progress_reset(void);
 

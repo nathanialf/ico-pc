@@ -45,7 +45,7 @@ bool rhi_native_texture(RhiTexture t, RhiNativeTexture *out)
     out->storage = tex->storage;
     out->stateTracked = false;
     for (uint32_t s = 0; s < RHI_STATE_COUNT; s++) {
-        out->nativeState[s] = (uint32_t)vkr_state_layout((RhiState)s, tex->rhiFormat);
+        out->nativeState[s] = (uint32_t)vkr_texture_layout((RhiState)s, tex);
     }
     return true;
 }

@@ -27,8 +27,12 @@
  * at least two recorded; every part of the frame drawn (the pre-pass's
  * passes, a DATE snapshot or stencil draw, the shadow count's resolve, the
  * crack fill in at least one); the scene at 2 x 2.  The store passes all
- * began on the throwaway target (none without it) where the record is
- * stored by the vertex shaders; the render pass breadcrumb names the last
+ * began on the throwaway targets (none without them; two distinct targets
+ * taken in turn) where the record is stored by the vertex shaders, and the
+ * barriers that held later vertex work behind fragment work after the
+ * switch are printed (RhiStats.fragmentHolds); on the 1.1 profile the
+ * scene's passes with its depth have the subpass read (vk_renderpass.c);
+ * the render pass breadcrumb names the last
  * pass begun (ended, a pass number, a pass ring marker) on the path asked
  * (--legacy: VkRenderPass objects, [dev] legacy_passes or the 1.1 profile).
  * Under the validation layer (the render tests' environment when the
@@ -363,6 +367,9 @@ int main(int argc, char **argv)
     drain(&one, 0);
     const uint32_t sinkBefore = rd__vu_rec_sink_passes(NULL);
     const uint32_t lastAt1x = g_rdPerf.replay;
+    RhiStats st0;
+    memset(&st0, 0, sizeof(st0));
+    rhi_get_stats(&st0); /* the barriers holding later vertex work behind fragment work */
     printf("1x: %u records, %u pre-pass passes (%u VU draws the old way), %u DATE, %u shadow "
            "resolves, %u crack fills, store passes on the throwaway target %u\n",
            one.n, one.prePasses, one.preFallbacks, one.dates, one.shadowResolves, one.crackFills,
@@ -399,10 +406,20 @@ int main(int argc, char **argv)
     CHECK(two.dates > 0, "2x: no DATE snapshot or stencil draw after the switch");
     CHECK(two.shadowResolves > 0, "2x: no shadow count resolve after the switch");
     CHECK(two.crackFills > 0, "2x: no crack fill pass after the switch");
+    RhiStats st1;
+    memset(&st1, 0, sizeof(st1));
+    rhi_get_stats(&st1);
+    printf("2x: %llu barriers holding later vertex, compute or copy work behind fragment work "
+           "over the %u replays after the switch (RhiStats.fragmentHolds)\n",
+           (unsigned long long)(st1.fragmentHolds - st0.fragmentHolds), two.n);
     if (stores) {
         CHECK(sinkAfter > sinkBefore && sinkWithout == 0,
               "2x: %u store passes on the throwaway target after the switch, %u without it",
               sinkAfter - sinkBefore, sinkWithout);
+        /* two targets taken in turn (rd_vu_rec_sink.h) */
+        const RhiTexture s0 = rd__vu_rec_sink_target(0), s1 = rd__vu_rec_sink_target(1);
+        CHECK(s0.id && s1.id && s0.id != s1.id, "2x: the store passes' two targets %08x %08x",
+              s0.id, s1.id);
     } else {
         printf("2x: the record is not stored by the vertex shaders here (%s): the throwaway "
                "target's check skipped\n",

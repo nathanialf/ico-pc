@@ -788,7 +788,8 @@ typedef struct RhiLimits {
      * VK_EXT_extended_dynamic_state); dynamicBlend: the blend enable,
      * equation and write mask to rhi_cmd_set_blend_state
      * (VK_EXT_extended_dynamic_state3); both false on D3D12.  uintView:
-     * RHI_TEX_UINT_VIEW textures get their RGBA8_UINT view. */
+     * RHI_TEX_UINT_VIEW textures get their RGBA8_UINT view (localRead's
+     * subpass form: localReadSubpass, at the end). */
     bool localRead;
     uint32_t vendorId;
     bool dynamicDepth;
@@ -919,6 +920,14 @@ typedef struct RhiLimits {
      * occlusionQueryPrecise); without it a count is exact only as zero or
      * not zero (rhi_cmd_begin_occlusion; false elsewhere) */
     bool occlusionPrecise;
+    /* localRead is the Vulkan VkRenderPass path's subpass read (Vulkan 1.0
+     * input attachments with a subpass self-dependency, on a device without
+     * dynamic rendering: vk_renderpass.c): a pass's colour can be read in
+     * the pass only where the pass has one RGBA8_UNORM colour target,
+     * single-sampled, and a depth target, and never its depth (no fog local
+     * read); rhi_cmd_local_read_barrier in another pass is skipped (logged).
+     * False elsewhere */
+    bool localReadSubpass;
 } RhiLimits;
 
 /* The window's part in a driver call that may take long (rhi_set_wait_hooks):
