@@ -30,6 +30,7 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/vk/vk_cmd.c` | frames, command lists, submission, barriers, passes, draws, copies, readback |
 | `port/rhi/vk/vk_native.c` | `rhi_native.h` on Vulkan: the device, a texture's `VkImage` and layouts, the `VkCommandBuffer`, the capability answer |
 | `port/rhi/vk/vk_resource.c` | buffers, textures, samplers, shaders, deferred destruction |
+| `port/rhi/vk/vk_spirv_scan.c`, `vk_spirv_scan.h` | whether a SPIR-V module is a fragment shader that declares a storage buffer (the buffer barriers' first scopes), pure |
 | `port/rhi/vk/vk_tsclock.c` | the recycled slot's clock (`rhi_read_timestamp_clock`): submit times, calibrated timestamps, the polled wait's trace |
 | `port/rhi/vk/vk_range.c` | the indexed draws' and copies' ranges against their resources (what robust access does not cover), logged |
 | `port/rhi/vk/vk_enums.h`, `vk_internal.h` | the enum tables; the backend's shared state |
@@ -233,6 +234,73 @@ its dispatches each in a bracket of their own,
 compute dispatches where the vertex shaders cannot store has the compute twin of this bracket,
 below.
 
+### Buffer barriers' scopes
+
+Every Vulkan buffer barrier names only the stages that can have touched that buffer, and a
+command list's opening barrier only the attachment stages (issue 179). A pipeline barrier's
+first scope is every command recorded or submitted before it at the stages its source mask names,
+whatever they used, and its second scope holds every later command at its destination stages: a
+fragment-side stage in the first and a vertex, compute or transfer stage in the second make all
+later vertex, compute and copy work, the next picture's included, wait for every pixel before it.
+On a tile-based GPU that is the overlap of a picture's uploads, VU record and vertex work with the
+picture before's fragment work. With the fragment stage in the compute bracket's begin and in a
+buffer copy's wait, and colour output and the transfer stage on both sides of one opening barrier,
+each would join the two: on the Mali-G52 of issue 179 the record's dispatches and every vertex
+after them would wait for the previous picture's last pixel.
+
+- **Earlier uses** (a copy's wait, a bracket's begin; `vkr_buf_earlier_stages`): vertex input for a
+  buffer made as a vertex or index buffer; the vertex shader (and the compute shader where
+  `computeStores`) for a uniform or storage buffer; the fragment shader for a uniform buffer, and for
+  a storage buffer only once a fragment module that declares one has been made
+  (`VkrState.fragmentStorage`, set by `rhi_create_shader` through `vk_spirv_scan.c`, before the
+  module can be in any pipeline; the line `buffer barriers: fragment shader NAME declares a storage
+  buffer: from here ...`); the transfer stage once a copy has touched the buffer
+  (`VkrBuffer.copied`). Binding a buffer as any of those needs its usage bit (`VkrBuffer.vkUsage`),
+  and a shader reaches a storage buffer only through a resource its module declares. None of
+  `port/shaders`' 105 fragment modules declares one (they read the frame's and the draw's uniform
+  blocks; the VU programs hand the record's planes to the pixel side as flat varyings), so the mesh
+  arena and the VU record are reached by vertex input, the vertex and the compute shaders alone. The
+  uniform ring and the bone ring are host-written mapped memory per frame slot: no GPU barrier is
+  theirs.
+- **Later uses** (a copy's or a bracket end's visibility; `vkr_buf_later_stages`): the usage's,
+  fragment shader included (a later module may read the buffer); a fragment stage there holds only
+  later fragment work.
+- **A buffer copy's wait** (`rhi_cmd_copy_buffer`) holds the transfer stage only when a copy between
+  a texture and either buffer is pending in the list (its hazard record): an earlier buffer copy's
+  own second barrier holds the transfer stage, the stores' bracket end holds it, and earlier lists
+  end with it. So the mesh uploads do not wait for every earlier copy of the picture (a texture
+  upload over a sampled texture waits for the sampling), nor the record that reads them.
+- **Between lists**: attachment writes and reads are ordered by the opening barrier (colour output
+  and the depth tests on both sides), transfer writes and reads by the barrier every list ends with
+  (`rhi_end_commands`: the transfer stage on both sides beside the host read; not counted in
+  `barriers`, as before). The barrier counts are unchanged (`rd_perf`'s exact counts).
+- **The count** (`RhiStats.fragmentHolds`, `vk_cmd.c` `vkr_hold_note`): every `vkCmdPipelineBarrier`
+  whose first scope holds a fragment-side stage (or a mask holding all) and whose second holds a
+  stage before them. Counted where each barrier is recorded, a few dozen a picture, none a draw.
+  Each site logs its first 8 and every 100th with the masks: `rhi_vk: barriers: one holds every
+  later vertex, compute and copy command (the next picture's too) behind the fragment work before
+  it: SITE (first scope 0xS, second 0xD, N image barriers); K at this site, M in all`. The sites:
+  the opening barrier, the held-back barriers sent before a command, a pass's or copy's own barrier,
+  a buffer copy's wait, the global barriers, the external compute's bracket. Expected ones: a
+  texture upload over a sampled texture (the copy waits for the sampling), the copies of a snapshot
+  or readback after a pass, FidelityFX's bracket (`ALL_COMMANDS` on both sides). One to read with
+  care: the held-back bracket end joined in one call to a transition out of `SHADER_READ` (the
+  pass's barrier then holds both); the renderer keeps the record's end apart with the timestamp it
+  writes before list 0 (`RD_PERF_TS_LISTS` sends the held-back barriers), so it appears only on a
+  device without timestamps. On a device with vertex stores the second store pass's barrier also
+  joins the bracket to the throwaway target's attachment hazard (colour output to colour output,
+  `rd_vu_rec_sink.c`): a hold there each replay, which two throwaway targets taken in turn (no store
+  pass's target written before in its list) would avoid.
+- **Validation.** The layer's synchronisation checks with their default settings (layer 1.4.309)
+  take no shader's buffer read into account: a copy over a buffer a fragment shader read, with no
+  barrier at all, passes. `rhi_vk_scopes*` run with `VK_KHRONOS_VALIDATION_SYNCVAL_SHADER_ACCESSES_HEURISTIC=true`,
+  under which that write after read is reported (checked with the fragment stage taken out of the
+  copy's wait) and the narrowed scopes are clean.
+
+(`port/rhi/vk/vk_cmd.c` ("Buffer barriers", `vkr_open_barrier`, `rhi_end_commands`,
+`rhi_cmd_copy_buffer`, `vkr_store_open`, `vkr_hold_note`); `vk_resource.c`
+(`vkr_note_fragment_storage`); `vk_spirv_scan.c`; `port/rhi/test/rhi_vk_scope.c`.)
+
 ### Compute dispatch (the VU record)
 
 The RHI's one compute use (issue 179: the Mali-G52 MC2 under driver r32p1 offers no
@@ -266,11 +334,9 @@ input, so the same entries run as compute entries and store the same words
 - **The bracket.** `rhi_cmd_buffer_compute_begin` / `_end` are the store bracket with the compute
   shader as the writing stage, held back the same way (the first dispatch or `set_pipeline` flushes
   the begin; V's end and T's begin go out as one call). Wherever the compute stores are offered the
-  buffer read stages of every copy's barriers and of both brackets include the compute shader
-  (`vk_cmd.c` `vkr_buf_read_stages`): the compute builds read the arena's stream (t0) and the
-  ring (t5), which copies rewrite, and their stores are read by the next vertex shaders; without the
-  stage those reads would be unordered, which only the validation layer under the compute tests
-  would show.
+  stages that can touch a uniform or storage buffer include the compute shader ([Buffer barriers'
+  scopes](#buffer-barriers-scopes), `vk_cmd.c` `vkr_buf_earlier_stages`): the compute builds read
+  the arena's stream (t0) and the ring (t5), and their stores are read by the next vertex shaders.
 - **The offer.** `RhiLimits.computeStores` (with `computeStoresOff`, why not): Vulkan where the
   graphics queue's family takes compute work, never gated on the external compute's
   `RhiComputeCaps.ok` (subgroups and storage image formats are not needed here);
@@ -452,7 +518,8 @@ and once a block when the usage reaches 90 % of the budget (`port/platform/windo
 [WORK_BUFFERS.md](WORK_BUFFERS.md#the-upload-ring-shrinks) for the other half of issue 126's
 memory finding).
 The Vulkan-only fields read 0 on D3D12: the memory gauges (live and peak allocations, their bytes,
-the device's limit), `memoryAllocs`, `memoryFrees`, `memoryFallbacks`, `orderBarriers`
+the device's limit), `memoryAllocs`, `memoryFrees`, `memoryFallbacks`, `orderBarriers`,
+`fragmentHolds` ([Buffer barriers' scopes](#buffer-barriers-scopes))
 (`port/rhi/rhi.h` (`RhiStats`); `port/rhi/vk/vk_swapchain.c` (`rhi_acquire_backbuffer`,
 `rhi_present`); `port/rhi/d3d12/d3d12_device.c` (`rhi_get_stats`); `port/rhi/d3d12/d3d12_cmd.c`
 (`dx_wait_fence`, the draw, pass, bind and copy calls)). `createNs` is the CPU time in
@@ -2219,6 +2286,8 @@ bound), so the renderer leaves the VU vertex pre-pass (48 bytes a pixel) off on 
 | --- | --- |
 | `rhi_test_common.c`, `rhi_test_common.h` | headless rendering on any backend, texel by texel: a 64x32 target in eight cells (dual-source blending, stencil wrap, reversed depth, colour mask, a copied texture drawn indexed), the fill rule (`fillRuleCell`: two quads with every edge through pixel centres, the top and left edges' pixels taken and the bottom and right ones left, the shared edge's row once), an RGBA8 UINT target, R8 copies and same-state ordering, a device-local buffer, depth readback, three frames; seven of the cells' pipelines come from one `rhi_create_pipelines` call with an uncreatable description among them (only that one fails, the ids are distinct, the finished count never goes back); the dynamic state cell (`dynamicCell`: sixteen cells of the renderer's depth tests, Z writes, blends and masks drawn with every state static, from one `rhi_create_pipelines` batch with `maxThreads` 1 on one thread, then with the device's dynamic groups set after each bind: texel-equal, three commands a group after each static bind, none for a repeat; skipped but for the static pass without dynamic state; then `dualLeftoverCell`, an opaque draw after a SRC1 lerp on one dynamic-blend pipeline: 2 commands, `blendEqOffSets` and `dualLeftovers` +1, the colour exact on an even and an odd column; skipped without dual-source blending or dynamic blend; the repeats' sets counted in `stateSetsSkipped`, every command of their groups); the bind cache cell (`bindCacheCell`, [The bind cache](#the-bind-cache)): one list recorded with every bind once, then with each bind and state set given three times in a row: the same exact pictures, the same `pipelineBinds` and `bindGroupBinds`, and exactly 6 pipeline, 8 bind group and 16 state skips more; in both, the group bound again at another dynamic offset draws that offset's value, a second pass binding the first pass's texture group draws the texture, and a pipeline destroyed in the list with a new one made in its pool slot (a new id) draws with the new one's write mask; with the bind cache off (`ICO_RHI_BIND_CACHE=0`: `rhi_vk_nobindcache`, `rhi_gl_nobindcache`) no skip counted, the repeats' pipeline binds recorded, the same pictures, and the dynamic state cells' repeats sent again |
 | `rhi_vk_test.c` | the common cells on Vulkan, a hazard-tracking cell, the render-area check (a pass wider than its colour target, one taller than its depth: each clamped and counted, no validation error; a fitting pass untouched), and the pipeline cache file (written while up by `rhi_pipeline_cache_save` and at shutdown, read back, another device's or garbage ignored; the drop of other builds' cache files in a temporary folder: the current file, its `.tmp` and unrelated names stay), and the pipeline pool filled (`poolCell`, [The pipeline pool](#the-pipeline-pool); not under the fake switches); ctest `rhi_vk`, and `rhi_vk_nodual`, `rhi_vk_d24s8`, `rhi_vk_mali` under the fake switches, `rhi_vk_nobindcache` with the bind cache off ([The bind cache](#the-bind-cache)) |
+| `rhi_vk_scope.c` | the buffer barriers' scopes ([Buffer barriers' scopes](#buffer-barriers-scopes)): seven lists under synchronisation validation with the shader access analysis, counted by `RhiStats.fragmentHolds`: a picture's mesh upload, VU record (compute and stores) and pass after the picture before's hold no fragment work (0), a texture upload over a sampled texture 1, the bracket's held-back end joined to a transition out of `SHADER_READ` 1 (0 on the global path), and after a fragment shader that declares a storage buffer the copy and the bracket wait for fragment work (2) and a copy over a buffer that shader read is clean; the record read back word for word; also inside `rhi_vk`'s run; ctests `rhi_vk_scopes`, `_vk11`, `_global`, `_novs` |
+| `rhi_vk_spirv_scan_test.c` | `vk_spirv_scan.c` over the tests' modules, a fragment shader that reads a storage buffer (`rhi_vk_ps_storage.h`, with its vertex shader) and hand-built and unreadable modules; ctest `rhi_vk_spirv_scan` |
 | `rhi_native_test.c`, `rhi_test_native.c` | `rhi_native.h`: `rhi_test_native.c` runs inside the common cells on every backend (Vulkan and D3D12 hand out a device, a queue and, with a device-level loader or the command list, the handles; Direct3D 11 and OpenGL answer "not offered" with zeroed outputs, a reason for the capability query, and refuse a null and a real texture and list); `rhi_native_test.c` on Vulkan (lavapipe): the device handles, a vkCmdPipelineBarrier recorded through the `getDeviceProcAddr` handed out, RGBA16F and RGBA8 textures granted storage with their image, format, extent and layouts (a texture without the flag reports none, D32F with it is accepted), the storage barriers passing the layer's synchronisation checks, the external begin refused inside a pass and twice, and a two-pass picture byte-identical without the pair, around an empty stretch and around a native barrier (the second pass drawing with no pipeline or vertex buffer call after the pair), the pair counting two barriers; ctest `rhi_native` (exit 77 without a device; a validation message fails it) |
 | `rhi_vk_swapchain_test.c` | the window path on SDL's offscreen driver: frames, readback order, surface release and recreation, suboptimal and lost presents, resizes, the surface poll, submits per frame, the present-wait stand-in and a hanging wait; ctest `rhi_vk_swapchain` |
 | `rhi_vk_present_mode_test.c` | `vkr_choose_present_mode` over the mode sets drivers offer, and `vkr_present_wait_wanted`; ctest `rhi_vk_present_mode` |

@@ -1408,6 +1408,20 @@ The renderer's test programs have a page of their own:
   validation message; 77 where the device reports no compute stores, after checking that the
   bracket refuses, a dispatch counts nothing and a reason is given (`rhi_vk_nocompute`, the
   argument `nocompute` under `ICO_VK_FAKE_NO_COMPUTE_STORES=1`, passes only on that refusal).
+  Then the buffer barriers' scopes (`rhi_vk_scope.c`, `rhi_vk_scope_cell`; issue 179; alone with
+  the argument `scopes`: `rhi_vk_scopes`, `_vk11` (`ICO_VK_FAKE_API=1.1`, label vk11), `_global`
+  (`ICO_VK_GLOBAL_BARRIERS=1`), `_novs` (no vertex stores), each with the layer's shader access
+  analysis on, `VK_KHRONOS_VALIDATION_SYNCVAL_SHADER_ACCESSES_HEURISTIC=true`: without it the
+  synchronisation checks see no shader's buffer read): seven lists, each submitted and waited for,
+  counted by `RhiStats.fragmentHolds` (the barriers whose first scope holds fragment work and whose
+  second the vertex, compute or copy stages): "a picture" (a mesh upload into an index and storage
+  buffer, the record's dispatch and store pass in their brackets, a colour pass, a texture upload),
+  then "the next picture" (the same: 0 holds), a texture upload over the sampled texture (1), the
+  record's held-back end with a transition out of `SHADER_READ` before a pass (1, 0 under the
+  global barriers), a fragment shader that declares a storage buffer made (`rhi_vk_ps_storage.h`)
+  and the upload and dispatch again (2: the copy and the bracket now wait for fragment work), a
+  draw whose fragment shader reads the arena and a copy over it (1, no write after read), the
+  record read back word for word; no validation message.
 - `rhi_d3d12_test.c`: the same checks on D3D12, a Windows GUI program that writes a log and shows
   a message box (`rhi_d3d12`).
 - `rhi_d3d11_test.c`: the same checks on Direct3D 11 (WARP; WARP again with
@@ -1505,6 +1519,14 @@ The renderer's test programs have a page of their own:
   AMD and Qualcomm keep dynamic rendering; the reason names the driver and `vkCmdBeginRendering`;
   the `[dev] legacy_passes` words (`1`, `true`, `on`, `yes` in any case; `0`, `false`, `off`, `no`;
   anything else, empty and NULL none) (`rhi_vk_pass_row`).
+- `rhi_vk_spirv_scan_test.c`: `port/rhi/vk/vk_spirv_scan.c`, pure: the RHI tests' ten modules
+  (every `ps_*` a fragment module without a storage buffer, `vs_store` and `cs_store` with one,
+  `vs_main` neither), `rhi_vk_ps_storage.h`'s fragment shader (a StructuredBuffer: BufferBlock)
+  found and its `vs_tri` not; hand-built modules (the StorageBuffer class on a pointer and on a
+  variable, PhysicalStorageBuffer, the buffer device address capability, BufferBlock as a member
+  decoration, a Fragment entry among two, a uniform block not a storage buffer); a module without
+  the magic, a short header, an instruction of length 0 or past the end, NULL: refused with
+  nothing found (`rhi_vk_spirv_scan`).
 - `rhi_vk_pass_crumb_test.c`: the render pass breadcrumb the crash report prints
   (`port/rhi/rhi_pass_crumb.c`), pure: none before a pass; a pass stored is inside the driver's
   begin until marked begun, then ended; the line word for word for the crack fill's shape at 2x (one

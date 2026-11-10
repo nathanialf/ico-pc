@@ -554,14 +554,21 @@ void rhi_end_commands(RhiCommandList cl)
         c->inPass = false;
     }
     /* Copies into READBACK buffers become visible to the host once this
-     * submission has finished. */
+     * submission has finished; and this list's copies are ordered before
+     * every later list's (the transfer half of the order between lists,
+     * "Hazards" above: a later copy into a texture or buffer this list
+     * copied into or from, in the same state, needs no barrier of its own).
+     * Not counted in stats.barriers (it is every list's, as it was before
+     * the transfer half moved here from vkr_open_barrier) */
     VkMemoryBarrier mb = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .dstAccessMask = VK_ACCESS_HOST_READ_BIT,
+        .dstAccessMask =
+            VK_ACCESS_HOST_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
     };
-    vkCmdPipelineBarrier(c->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0, 1,
-                         &mb, 0, NULL, 0, NULL);
+    vkCmdPipelineBarrier(c->cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &mb, 0,
+                         NULL, 0, NULL);
     VKR_CHECK(vkEndCommandBuffer(c->cb));
     c->recording = false;
 }
@@ -706,25 +713,182 @@ bool vkr_submit_present_signal(VkrFrame *f)
  * the global barrier path (ICO_VK_GLOBAL_BARRIERS=1, or recorded
  * interleaved: vkr_order_writes) defers nothing and records each barrier
  * at once.  stats.barriers counts vkCmdPipelineBarrier calls. */
-/* The stages that read a buffer shaders read (vertex input, vertex and
- * fragment shaders; with the compute record's stores offered the compute
- * shader too: the VU record's compute builds read the stream at t0 and the
- * ring at t5, which copies rewrite, and their stores are read by the later
- * vertex shaders, rhi.h RhiLimits.computeStores), and with the transfer
- * stage (copies); the first scope of a copy into such a buffer and the
- * second of a copy's or store's visibility.  Without the compute stage here
- * a compute read of an arena range a copy rewrote would be unordered, which
- * only the validation layer under the compute tests would show. */
-static VkPipelineStageFlags vkr_buf_shader_stages(void)
+/* Buffer barriers: the stages that can touch a buffer.  A barrier's first
+ * scope is every command recorded or submitted before it, at the stages
+ * its source mask names, whichever resource they used: so a fragment stage
+ * there makes the barrier wait for all earlier fragment work, the previous
+ * picture's included, and every command after it that its second scope
+ * holds waits too (and whatever waits for those).  On a tile-based GPU the
+ * vertex and compute work of a picture can run beside the fragment work of
+ * the one before only when no barrier between them joins the two (issue
+ * 179: the VU record's compute bracket and the mesh uploads' copies named
+ * the fragment stage, so the record and every vertex after it waited for
+ * the picture before's last pixel).  So each buffer barrier names the
+ * stages that can have used that buffer, no wider.
+ *
+ * Earlier uses (a first scope: the earlier reads a copy or a store must
+ * not overtake, the earlier writes it must follow), from what Vulkan lets
+ * reach the buffer and what has:
+ *   - vertex input: a buffer made as a vertex or index buffer (binding one
+ *     needs the usage bit);
+ *   - the vertex shader: a uniform or storage buffer (a descriptor needs
+ *     the usage bit); the compute shader too where the VU record's compute
+ *     builds exist (RhiLimits.computeStores: they read the stream at t0,
+ *     the ring at t5 and the record, and store the record), the only
+ *     compute work that reads RHI buffers;
+ *   - the fragment shader: a uniform buffer always; a storage buffer only
+ *     once a fragment module that declares one was made
+ *     (VkrState.fragmentStorage, vk_resource.c): a shader can read a
+ *     storage buffer only through a resource its module declares, and the
+ *     flag is set before that module can be in any pipeline or draw.  None
+ *     of port/shaders' 105 fragment modules declares one (they read the
+ *     frame's and the draw's uniform blocks; the VU programs hand the
+ *     record's planes to the pixel side as flat varyings,
+ *     vu_common.hlsli vu_rec_planes), so the renderer's storage buffers,
+ *     the mesh arena and the VU record, are reached by the vertex input,
+ *     vertex and compute stages alone;
+ *   - the transfer stage: a buffer a copy has read or written
+ *     (VkrBuffer.copied; a copy's own first scope always has it).
+ * The uniform ring and the bone ring the record reads (the slot's upload
+ * ring, port/render/rd_upload.c) are host-written mapped memory, one per
+ * frame slot, rewritten only after the slot's fence: no GPU barrier is
+ * theirs (the submit makes the host's writes visible).
+ *
+ * Later uses (a second scope: what a copy's or store's writes become
+ * visible to) cannot be narrowed by what has happened (a later module or
+ * group may read the buffer anywhere its usage allows), so they are the
+ * usage's: vertex input for a vertex or index buffer, the vertex, fragment
+ * (and compute) shaders for a uniform or storage buffer, the transfer stage
+ * for every buffer a copy may touch.  A fragment stage there makes only
+ * later fragment work wait for the write, which costs no overlap. */
+static VkPipelineStageFlags vkr_buf_compute_stage(void)
 {
-    return VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
-           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
-           (g_vkr.computeStores ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : 0u);
+    return g_vkr.computeStores ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : 0u;
 }
 
-static VkPipelineStageFlags vkr_buf_read_stages(void)
+static VkPipelineStageFlags vkr_buf_earlier_stages(const VkrBuffer *b)
 {
-    return vkr_buf_shader_stages() | VK_PIPELINE_STAGE_TRANSFER_BIT;
+    VkPipelineStageFlags s = 0;
+    if (b->vkUsage & (VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT)) {
+        s |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+    }
+    if (b->vkUsage & (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) {
+        s |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | vkr_buf_compute_stage();
+    }
+    if ((b->vkUsage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) ||
+        ((b->vkUsage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) &&
+         __atomic_load_n(&g_vkr.fragmentStorage, __ATOMIC_ACQUIRE))) {
+        s |= VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+    }
+    if (b->copied) {
+        s |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
+    return s;
+}
+
+/* the later uses' stages, and in *access their accesses (each supported by
+   a stage it names, as the validation layer checks) */
+static VkPipelineStageFlags vkr_buf_later_stages(const VkrBuffer *b, VkAccessFlags *access)
+{
+    VkPipelineStageFlags s = 0;
+    VkAccessFlags a = 0;
+    if (b->vkUsage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
+        s |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+        a |= VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT;
+    }
+    if (b->vkUsage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT) {
+        s |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
+        a |= VK_ACCESS_INDEX_READ_BIT;
+    }
+    if (b->vkUsage & (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_BUFFER_BIT)) {
+        s |= VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT |
+             vkr_buf_compute_stage();
+        a |= (b->vkUsage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) ? VK_ACCESS_UNIFORM_READ_BIT : 0u;
+        a |= (b->vkUsage & VK_BUFFER_USAGE_STORAGE_BUFFER_BIT) ? VK_ACCESS_SHADER_READ_BIT : 0u;
+    }
+    if (b->vkUsage & (VK_BUFFER_USAGE_TRANSFER_SRC_BIT | VK_BUFFER_USAGE_TRANSFER_DST_BIT)) {
+        s |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+        a |= VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
+    }
+    *access = a;
+    return s ? s : VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT;
+}
+
+/* The barriers that hold later vertex, compute and copy work behind earlier
+ * fragment work (VkrState.holdSite, RhiStats.fragmentHolds): a first scope
+ * with a fragment-side stage (the fragment shader, the depth tests, colour
+ * output, or a mask that holds them all) and a second with a stage that
+ * runs before them (draw indirect, vertex input, the vertex and the other
+ * pre-rasterisation shaders, compute, transfer, or a mask that holds them
+ * all).  Counted where each vkCmdPipelineBarrier is recorded (a few dozen a
+ * picture, none a draw), and one line per site for its first 8 and every
+ * 100th after, with the masks: a reporter's log then names the barriers
+ * that keep a picture from starting beside the one before.  A copy over a
+ * sampled texture is one by its nature (the copy waits for the sampling). */
+typedef enum VkrHoldSite {
+    VKR_HOLD_OPEN,     /* a list's opening barrier */
+    VKR_HOLD_DEFERRED, /* the barriers held back, sent before a command */
+    VKR_HOLD_HAZARD,   /* a pass's or copy's barrier, with those held back */
+    VKR_HOLD_COPY,     /* a buffer copy's wait for its destination's uses */
+    VKR_HOLD_GLOBAL,   /* the global barriers (ICO_VK_GLOBAL_BARRIERS=1) */
+    VKR_HOLD_EXTERNAL, /* the external compute's bracket (rhi_native.h) */
+    VKR_HOLD_SITES
+} VkrHoldSite;
+
+_Static_assert(VKR_HOLD_SITES <= sizeof(g_vkr.holdSite) / sizeof(g_vkr.holdSite[0]),
+               "VkrState.holdSite holds every site");
+
+static const char *const vkr_holdSiteName[VKR_HOLD_SITES] = {
+    "a command list's opening barrier",
+    ("the barriers held back for the next command (image transitions, the store or compute "
+     "bracket, a copy's visibility)"),
+    "a render pass's or copy's own barrier (its hazards, with the barriers held back)",
+    "a buffer copy's wait for the earlier uses of its destination",
+    "a global barrier (ICO_VK_GLOBAL_BARRIERS=1, or command lists recorded interleaved)",
+    "the external compute's bracket (FidelityFX)",
+};
+
+#define VKR_FRAGMENT_SIDE                                                                          \
+    (VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT |          \
+     VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |   \
+     VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |                   \
+     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)
+/* (the top of the pipe in a second scope stands for every stage, as the
+   bottom does in a first) */
+#define VKR_BEFORE_FRAGMENT                                                                        \
+    (VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT | VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT |                     \
+     VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |                    \
+     VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT |                                           \
+     VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |                                        \
+     VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |                \
+     VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT |                         \
+     VK_PIPELINE_STAGE_ALL_COMMANDS_BIT)
+
+/* late: a list's end (VkrState.late, either thread) */
+static void vkr_hold_note(VkrHoldSite site, VkPipelineStageFlags src, VkPipelineStageFlags dst,
+                          uint32_t images, bool late)
+{
+    if (!(src & VKR_FRAGMENT_SIDE) || !(dst & VKR_BEFORE_FRAGMENT)) {
+        return;
+    }
+    if (late) {
+        vkr_late_add(&g_vkr.late.fragmentHolds, 1u);
+    } else {
+        g_vkr.stats.fragmentHolds++;
+    }
+    const uint64_t n = __atomic_add_fetch(&g_vkr.holdSite[site], 1u, __ATOMIC_RELAXED);
+    if (n <= 8u || n % 100u == 0u) {
+        uint64_t all = 0;
+        for (int i = 0; i < VKR_HOLD_SITES; i++) {
+            all += __atomic_load_n(&g_vkr.holdSite[i], __ATOMIC_RELAXED);
+        }
+        VKR_LOG("barriers: one holds every later vertex, compute and copy command (the next "
+                "picture's too) behind the fragment work before it: %s (first scope 0x%x, "
+                "second 0x%x, %u image barrier%s); %llu at this site, %llu in all (the first 8 "
+                "a site said, then every 100th)",
+                vkr_holdSiteName[site], (unsigned)src, (unsigned)dst, images,
+                images == 1u ? "" : "s", (unsigned long long)n, (unsigned long long)all);
+    }
 }
 
 static void vkr_flush_barriers(VkrCmdList *c)
@@ -752,6 +916,8 @@ static void vkr_flush_barriers_to(VkrCmdList *c, bool late)
     };
     vkCmdPipelineBarrier(c->cb, c->pendSrc, c->pendDst, 0, c->pendMemDst ? 1u : 0u, &mb, 0, NULL,
                          c->pendCount, c->pendImg);
+    vkr_hold_note(c->globalOrder ? VKR_HOLD_GLOBAL : VKR_HOLD_DEFERRED, c->pendSrc, c->pendDst,
+                  c->pendCount, late);
     if (late) {
         vkr_late_add(&g_vkr.late.barriers, 1u);
     } else {
@@ -917,6 +1083,7 @@ static void vkr_order_writes(VkCommandBuffer cb, bool attachments)
         mb.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
     }
     vkCmdPipelineBarrier(cb, stages, stages, 0, 1, &mb, 0, NULL, 0, NULL);
+    vkr_hold_note(VKR_HOLD_GLOBAL, stages, stages, 0u, false);
     g_vkr.stats.barriers++;
 }
 
@@ -931,28 +1098,37 @@ static void vkr_order_writes(VkCommandBuffer cb, bool attachments)
  * copying from and presenting all need a state change, and that
  * transition is the caller's.
  *
- * The record belongs to one command list (its epoch).  Each list begins
- * with one global barrier over attachment and transfer writes
- * (vkr_open_barrier), which orders it after every list submitted before it,
- * this frame's and the frames' still in flight, so a record from an older
- * list counts as clean and nothing is carried across submissions or frame
- * slots.  Lists recorded interleaved fall back to vkr_order_writes. */
+ * The record belongs to one command list (its epoch).  Every list is
+ * ordered after every list submitted before it, this frame's and the
+ * frames' still in flight, for the two kinds of same-state write the record
+ * tracks, so a record from an older list counts as clean and nothing is
+ * carried across submissions or frame slots: attachment writes and reads by
+ * the barrier each list begins with (vkr_open_barrier: colour output and
+ * the depth tests on both sides), transfer writes and reads by the barrier
+ * each list ends with (rhi_end_commands: the transfer stage on both sides,
+ * beside the host's read).  Before v0.11.3 one opening barrier held both
+ * kinds, so its first scope's colour output reached its second scope's
+ * transfer stage: the next picture's uploads, and the VU record and every
+ * vertex shader after them, waited for the picture before's last pixel
+ * (issue 179).  No other pair crosses a list without a barrier of its own:
+ * an attachment written by a copy (or copied from after a pass) changes
+ * state, and the caller's transition names both stages (vkr_image_barrier).
+ * Lists recorded interleaved fall back to vkr_order_writes. */
 static void vkr_open_barrier(VkCommandBuffer cb)
 {
-    const VkPipelineStageFlags stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
-                                        VKR_DEPTH_STAGES | VK_PIPELINE_STAGE_TRANSFER_BIT;
+    const VkPipelineStageFlags stages =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VKR_DEPTH_STAGES;
     VkMemoryBarrier mb = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-                         VK_ACCESS_TRANSFER_WRITE_BIT,
+        .srcAccessMask =
+            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
         .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-                         VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
     };
     vkCmdPipelineBarrier(cb, stages, stages, 0, 1, &mb, 0, NULL, 0, NULL);
+    vkr_hold_note(VKR_HOLD_OPEN, stages, stages, 0u, false);
     g_vkr.stats.barriers++;
 }
 
@@ -1089,6 +1265,7 @@ static void vkr_hz_flush(VkCommandBuffer cb, const VkrHz *h)
     };
     vkCmdPipelineBarrier(cb, h->src, h->dst, 0, h->memDst ? 1u : 0u, &mb, h->bufCount, h->buf,
                          h->imgCount, h->img);
+    vkr_hold_note(VKR_HOLD_HAZARD, h->src, h->dst, h->imgCount, false);
     g_vkr.stats.barriers++;
 }
 
@@ -1104,6 +1281,12 @@ static void vkr_hz_copy(VkrCmdList *c, VkrTexture *srcTex, VkrBuffer *srcBuf, Vk
     if (c->globalOrder) {
         vkr_flush_barriers(c);
         vkr_order_writes(c->cb, false);
+        if (srcBuf) {
+            srcBuf->copied = true;
+        }
+        if (dstBuf) {
+            dstBuf->copied = true;
+        }
         return;
     }
     VkrHz h;
@@ -1114,10 +1297,18 @@ static void vkr_hz_copy(VkrCmdList *c, VkrTexture *srcTex, VkrBuffer *srcBuf, Vk
     vkr_hz_take_pending(&h, c);
     if (dstBuf && dstBuf->shaderRead) {
         /* rhi.h: a copy into a buffer shaders read waits for their earlier
-         * reads, as rhi_cmd_copy_buffer does */
-        h.src |= vkr_buf_shader_stages();
+         * reads, as rhi_cmd_copy_buffer does: at the stages that can have
+         * read it (vkr_buf_earlier_stages; the transfer stage for a copy's
+         * read of it, which vkr_hz_buffer also orders within the list) */
+        h.src |= vkr_buf_earlier_stages(dstBuf) | VK_PIPELINE_STAGE_TRANSFER_BIT;
         h.dst |= VK_PIPELINE_STAGE_TRANSFER_BIT;
         h.force = true;
+    }
+    if (srcBuf) {
+        srcBuf->copied = true;
+    }
+    if (dstBuf) {
+        dstBuf->copied = true;
     }
     if (srcTex) {
         vkr_hz_image(&h, c, srcTex, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
@@ -1989,27 +2180,68 @@ void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, R
     vkr_flush_barriers(c);
     /* rhi.h: the copy waits for every earlier read of the destination
      * (draws of earlier frames reading a range rewritten now) and write (an
-     * earlier copy) */
+     * earlier copy or store), at the stages that can have made them
+     * ("Buffer barriers" above):
+     *   - the shaders' and vertex input's reads: vkr_buf_earlier_stages
+     *     (the mesh arena: vertex input, vertex and compute shaders; never
+     *     the fragment shader, whose modules declare no storage buffer);
+     *   - the stores: their bracket's end has the transfer stage and its
+     *     write in its second scope (vkr_store_close);
+     *   - an earlier buffer copy's read or write of either buffer: that
+     *     copy's own second barrier (below) holds the transfer stage;
+     *   - a copy between a texture and either buffer in this list
+     *     (vkr_hz_copy: its hazard record, VkrBuffer.hzXfer*): the transfer
+     *     stage here, with its write;
+     *   - those of earlier lists: each list's closing barrier
+     *     (rhi_end_commands).
+     * So the transfer stage is in this first scope only for a copy between
+     * a texture and either buffer: a buffer copy waits no longer for every earlier copy of the
+     * picture, whose own first scope may reach fragment work (a texture
+     * upload over a sampled texture waits for the sampling), and so the
+     * mesh uploads and the VU record that reads them do not inherit that
+     * wait.  A buffer nothing can have used gets the top of the pipe (no
+     * wait); the call stays one either way (rd_perf's barrier counts). */
+    const bool dPending = d->hzEpoch == c->epoch && (d->hzXferWrite || d->hzXferRead);
+    const bool sPending = s->hzEpoch == c->epoch && s->hzXferWrite;
+    VkPipelineStageFlags preSrc =
+        vkr_buf_earlier_stages(d) & ~(VkPipelineStageFlags)VK_PIPELINE_STAGE_TRANSFER_BIT;
+    if (dPending || sPending) {
+        preSrc |= VK_PIPELINE_STAGE_TRANSFER_BIT;
+    }
     VkMemoryBarrier pre = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-        .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+        .srcAccessMask =
+            (preSrc & VK_PIPELINE_STAGE_TRANSFER_BIT) ? VK_ACCESS_TRANSFER_WRITE_BIT : 0u,
         .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
     };
-    vkCmdPipelineBarrier(c->cb, vkr_buf_read_stages(), VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &pre,
-                         0, NULL, 0, NULL);
+    if (preSrc == 0) {
+        preSrc = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+    }
+    vkCmdPipelineBarrier(c->cb, preSrc, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &pre, 0, NULL, 0,
+                         NULL);
+    vkr_hold_note(VKR_HOLD_COPY, preSrc, VK_PIPELINE_STAGE_TRANSFER_BIT, 0u, false);
     g_vkr.stats.barriers++;
+    if (dPending || sPending) {
+        /* the transfer stage above covered the list's earlier copies of both */
+        d->hzXferWrite = d->hzXferRead = false;
+        s->hzXferWrite = false;
+    }
     vkCmdCopyBuffer(c->cb, s->buffer, d->buffer, 1, &r);
     g_vkr.stats.copies++;
-    /* rhi.h: buffer copies are visible to every later read */
+    s->copied = d->copied = true;
+    /* rhi.h: buffer copies are visible to every later read, and ordered
+     * before every later copy (the transfer stage here: a later copy's own
+     * first scope need not hold it), at the stages the destination's usage
+     * lets reach it (vkr_buf_later_stages) */
+    VkAccessFlags laterAccess = 0;
+    const VkPipelineStageFlags later = vkr_buf_later_stages(d, &laterAccess);
     VkMemoryBarrier mb = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .dstAccessMask = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
-                         VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
-                         VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = laterAccess,
     };
-    vkCmdPipelineBarrier(c->cb, VK_PIPELINE_STAGE_TRANSFER_BIT, vkr_buf_read_stages(), 0, 1, &mb, 0,
-                         NULL, 0, NULL);
+    vkCmdPipelineBarrier(c->cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                         later | VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &mb, 0, NULL, 0, NULL);
     g_vkr.stats.barriers++;
 }
 
@@ -2129,28 +2361,32 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
     vkr_range_image(c, "a texture-to-buffer copy's region", t, 0, region);
     vkr_range_rows(c, "a texture-to-buffer copy's destination rows", d, dstOffset, rowPitch, t,
                    region);
+    /* the earlier reads' stages, before vkr_hz_copy marks the buffer copied
+       (the global path's own barrier below) */
+    const VkPipelineStageFlags earlier = vkr_buf_earlier_stages(d) | VK_PIPELINE_STAGE_TRANSFER_BIT;
     vkr_hz_copy(c, t, NULL, NULL, 0, d);
-    const VkAccessFlags reads = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT |
-                                VK_ACCESS_UNIFORM_READ_BIT | VK_ACCESS_SHADER_READ_BIT |
-                                VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT;
-    const VkPipelineStageFlags readStages = vkr_buf_read_stages();
+    VkAccessFlags reads = 0;
+    const VkPipelineStageFlags readStages = vkr_buf_later_stages(d, &reads);
     if (d->shaderRead && c->globalOrder) {
-        /* rhi.h: into a buffer shaders read, after their earlier reads (the
-         * hazard path folds this into vkr_hz_copy's barrier) */
+        /* rhi.h: into a buffer shaders read, after their earlier reads, at
+         * the stages that can have made them (the hazard path folds this
+         * into vkr_hz_copy's barrier) */
         VkMemoryBarrier pre = {
             .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
             .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
             .dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
         };
-        vkCmdPipelineBarrier(c->cb, readStages, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &pre, 0, NULL,
-                             0, NULL);
+        vkCmdPipelineBarrier(c->cb, earlier, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 1, &pre, 0, NULL, 0,
+                             NULL);
+        vkr_hold_note(VKR_HOLD_GLOBAL, earlier, VK_PIPELINE_STAGE_TRANSFER_BIT, 0u, false);
         g_vkr.stats.barriers++;
     }
     vkCmdCopyImageToBuffer(c->cb, t->image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, d->buffer, 1, &r);
     g_vkr.stats.copies++;
     if (d->shaderRead) {
         /* ... and visible to every later read (the VU vertex pre-pass's
-         * record, read by the triangle stage's vertex shader): a memory
+         * record, read by the triangle stage's vertex shader), at the
+         * stages its usage lets reach it (vkr_buf_later_stages): a memory
          * barrier held back with the image barriers, so the copies of a
          * batch and the next pass share their barriers */
         c->pendMemDst |= reads;
@@ -2169,22 +2405,43 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
  * back with the list's deferred barriers (VkrCmdList.pendMemDst, with the
  * shader writes in pendMemSrc), so it goes out in the next pass's or
  * copy's one vkCmdPipelineBarrier (vkr_hz_take_pending): _end's of pass V
- * and _begin's of pass T are one call.  _begin: every earlier read of a
- * buffer shaders read (the stages and accesses of the copy's barrier,
- * rhi_cmd_copy_texture_to_buffer), copy and store before the vertex
- * shader's reads and stores (write after read, write after write, and a
- * store pass reading the last pass's stores); _end: the stores before
- * every later read, as a copy into the buffer is.  A pipeline barrier's
- * first scope holds every command submitted to the queue before it, so the
- * lists of the other frame slot and of earlier replays are ordered too. */
-#define VKR_BUF_READ_ACCESS                                                                        \
-    (VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT | \
-     VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)
+ * and _begin's of pass T are one call.  _begin: every earlier use of the
+ * buffer before the shader's reads and stores (write after read, write
+ * after write, and a store pass reading the last pass's stores); _end: the
+ * stores before every later read, as a copy into the buffer is.  A
+ * pipeline barrier's first scope holds every command submitted to the
+ * queue before it, so the lists of the other frame slot and of earlier
+ * replays are ordered too.
+ *
+ * The scopes, proven against the stages that can touch the buffer
+ * ("Buffer barriers" above; the VU record, port/render/rd_replay_vu.c
+ * recEnsure: RHI_BUF_STORAGE_READ | _STORAGE_WRITE | _COPY_DST, a storage
+ * buffer that is never a vertex, index or uniform buffer):
+ *   _begin, first scope: the stages of its earlier reads and writes,
+ *     vkr_buf_earlier_stages: the vertex shader (the triangle stage's
+ *     vu_rec_buf at t4, the velocity pass, the store passes' u6), the
+ *     compute shader where the compute builds exist (their u6), the
+ *     transfer stage once a copy has touched it (the render targets'
+ *     record copies into it); its accesses: the shader writes (the stores:
+ *     the vertex or compute stage is in the scope) and, with the transfer
+ *     stage, the copies' writes (vkr_flush_barriers_to).  Not the fragment
+ *     shader: no fragment module of the run declares a storage buffer
+ *     until VkrState.fragmentStorage says one does (then it is in), and
+ *     no other access reaches a storage buffer.  So the first dispatch of
+ *     a picture waits for the picture before's vertex and compute work,
+ *     not for its pixels (issue 179);
+ *   _begin, second scope: the writing stage ws with its reads and writes;
+ *   _end, first scope: ws and its writes;
+ *   _end, second scope: the stages the usage lets read it
+ *     (vkr_buf_later_stages: the vertex, fragment and compute shaders'
+ *     storage reads, the transfer stage's reads and writes) with ws's
+ *     writes (the next pass's stores).  The fragment stage there holds
+ *     only later fragment work, behind the stores. */
 
-/* the list, outside a pass, where the stores of the kind are offered
-   (compute: rhi_cmd_buffer_compute_begin / _end) */
+/* the list and the buffer, outside a pass, where the stores of the kind
+   are offered (compute: rhi_cmd_buffer_compute_begin / _end) */
 static VkrCmdList *vkr_store_list_of(RhiCommandList cl, RhiBuffer buf, const char *what,
-                                     bool compute)
+                                     bool compute, VkrBuffer **out)
 {
     VkrCmdList *c = vkr_get_cmd(cl);
     VkrBuffer *b = vkr_get_buffer(buf);
@@ -2195,31 +2452,32 @@ static VkrCmdList *vkr_store_list_of(RhiCommandList cl, RhiBuffer buf, const cha
         VKR_LOG("%s: inside a render pass (the bracket goes around the passes)", what);
         return NULL;
     }
+    *out = b;
     return c;
 }
 
 /* the bracket's two halves for the writing stage ws (the vertex shader,
  * or the compute shader: rhi_cmd_buffer_compute_begin / _end, the same
- * barriers with the compute stage writing; the read stages include the
- * compute shader wherever the compute stores are offered,
- * vkr_buf_read_stages) */
-static void vkr_store_open(VkrCmdList *c, VkPipelineStageFlags ws)
+ * barriers with the compute stage writing) on buffer b */
+static void vkr_store_open(VkrCmdList *c, const VkrBuffer *b, VkPipelineStageFlags ws)
 {
     c->pendMemSrc |= VK_ACCESS_SHADER_WRITE_BIT;
     c->pendMemDst |= VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-    c->pendSrc |= vkr_buf_read_stages() | ws;
+    c->pendSrc |= vkr_buf_earlier_stages(b) | ws;
     c->pendDst |= ws;
     if (c->globalOrder) {
         vkr_flush_barriers(c);
     }
 }
 
-static void vkr_store_close(VkrCmdList *c, VkPipelineStageFlags ws)
+static void vkr_store_close(VkrCmdList *c, const VkrBuffer *b, VkPipelineStageFlags ws)
 {
+    VkAccessFlags reads = 0;
+    const VkPipelineStageFlags later = vkr_buf_later_stages(b, &reads);
     c->pendMemSrc |= VK_ACCESS_SHADER_WRITE_BIT;
-    c->pendMemDst |= VKR_BUF_READ_ACCESS | VK_ACCESS_SHADER_WRITE_BIT;
+    c->pendMemDst |= reads | VK_ACCESS_SHADER_WRITE_BIT;
     c->pendSrc |= ws;
-    c->pendDst |= vkr_buf_read_stages() | ws;
+    c->pendDst |= later | ws;
     if (c->globalOrder) {
         vkr_flush_barriers(c);
     }
@@ -2227,21 +2485,23 @@ static void vkr_store_close(VkrCmdList *c, VkPipelineStageFlags ws)
 
 bool rhi_cmd_buffer_store_begin(RhiCommandList cl, RhiBuffer buf)
 {
-    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_store_begin", false);
+    VkrBuffer *b = NULL;
+    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_store_begin", false, &b);
     if (!c) {
         return false;
     }
-    vkr_store_open(c, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+    vkr_store_open(c, b, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
     return true;
 }
 
 bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf)
 {
-    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_store_end", false);
+    VkrBuffer *b = NULL;
+    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_store_end", false, &b);
     if (!c) {
         return false;
     }
-    vkr_store_close(c, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
+    vkr_store_close(c, b, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT);
     return true;
 }
 
@@ -2255,21 +2515,23 @@ bool rhi_cmd_buffer_store_end(RhiCommandList cl, RhiBuffer buf)
  * pass's or copy's barrier. */
 bool rhi_cmd_buffer_compute_begin(RhiCommandList cl, RhiBuffer buf)
 {
-    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_compute_begin", true);
+    VkrBuffer *b = NULL;
+    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_compute_begin", true, &b);
     if (!c) {
         return false;
     }
-    vkr_store_open(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    vkr_store_open(c, b, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
     return true;
 }
 
 bool rhi_cmd_buffer_compute_end(RhiCommandList cl, RhiBuffer buf)
 {
-    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_compute_end", true);
+    VkrBuffer *b = NULL;
+    VkrCmdList *c = vkr_store_list_of(cl, buf, "rhi_cmd_buffer_compute_end", true, &b);
     if (!c) {
         return false;
     }
-    vkr_store_close(c, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
+    vkr_store_close(c, b, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT);
     return true;
 }
 
@@ -2641,10 +2903,11 @@ static void vkr_external_barrier(VkrCmdList *c, bool begin)
         .srcAccessMask = VK_ACCESS_MEMORY_WRITE_BIT,
         .dstAccessMask = VK_ACCESS_MEMORY_READ_BIT | VK_ACCESS_MEMORY_WRITE_BIT,
     };
-    vkCmdPipelineBarrier(c->cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                         begin ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT
-                               : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT,
-                         0, 1, &mb, 0, NULL, 0, NULL);
+    const VkPipelineStageFlags dst =
+        begin ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+    vkCmdPipelineBarrier(c->cb, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, dst, 0, 1, &mb, 0, NULL, 0,
+                         NULL);
+    vkr_hold_note(VKR_HOLD_EXTERNAL, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, dst, 0u, false);
     g_vkr.stats.barriers++;
 }
 
