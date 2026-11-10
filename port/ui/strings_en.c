@@ -34,7 +34,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "For a less stressful game. A few scripted scenes still show the capture.",
     [UI_STR_OPT_PIT_TIME] = "Time to rescue Yorda",
     [UI_STR_OPT_PIT_TIME_NOTE] =
-        "Seconds from a shadow sinking with Yorda until she is taken; quicker in some scenes, in proportion. The Shadows never take Yorda row stops it.",
+        "Seconds from a shadow sinking with Yorda until she is taken; quicker in some scenes, in proportion. Shadows never taking Yorda stops it.",
     [UI_STR_OPT_SHADOW_SPEED] = "Shadow speed",
     [UI_STR_OPT_SHADOW_SPEED_NOTE] =
         "How fast shadows walk, run and fly. It does not change how often they attack.",
@@ -893,7 +893,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
         "A game over once Ico has been knocked down this many times. Off sets no limit.",
     [UI_STR_DIFF_KNOCK_SCOPE] = "Knock-downs count",
     [UI_STR_DIFF_KNOCK_SCOPE_NOTE] =
-        "Whether knock-downs are counted in each room (the count starts again when Ico enters a room) or across the whole journey. Does nothing while the limit is Off.",
+        "Counts knock-downs in each room (starting again on entering one) or across the whole journey. Does nothing while the limit is Off.",
     [UI_STR_DIFF_SCOPE_ROOM] = "Each room",
     [UI_STR_DIFF_SCOPE_JOURNEY] = "Whole journey",
     [UI_STR_DIFF_PERMADEATH] = "Permadeath",

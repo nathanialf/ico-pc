@@ -35,7 +35,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "Para una partida menos estresante. Algunas escenas guionizadas siguen mostrando el secuestro.",
         [UI_STR_OPT_PIT_TIME] = "Tiempo para rescatar a Yorda",
         [UI_STR_OPT_PIT_TIME_NOTE] =
-            "Segundos desde que una sombra se hunde con Yorda hasta que se la lleva; menos en algunas escenas, en proporción. La fila Las sombras nunca se llevan a Yorda lo impide.",
+            "Segundos desde que una sombra se hunde con Yorda hasta que se la lleva; menos en algunas escenas, en proporción. Nada si nunca se la llevan.",
         [UI_STR_OPT_SHADOW_SPEED] = "Velocidad de las sombras",
         [UI_STR_OPT_SHADOW_SPEED_NOTE] =
             "Qué tan rápido caminan, corren y vuelan las sombras. No cambia la frecuencia con que atacan.",
@@ -816,7 +816,8 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "Este estado guardado se creó con la versión %s,\nantes de que los estados guardados pudieran\npasar a versiones nuevas.\nTus partidas de la memory card siguen funcionando.",
         [UI_STR_STATES_XB_CODE] =
             "Este estado guardado se creó con la versión %s.\nLa versión %s cambió la parte del juego\nen la que se guardó, así que no se puede reanudar.\nTus partidas de la memory card siguen funcionando.",
-        [UI_STR_STATES_XB_DATA] = "Este estado guardado se creó con la versión %s.\nLa versión %s cambió cómo el juego guarda\nsu progreso en memoria, así que no se puede\nreanudar.\nTus partidas de la memory card siguen funcionando.",
+        [UI_STR_STATES_XB_DATA] =
+            "Este estado guardado se creó con la versión %s.\nLa versión %s cambió cómo el juego guarda\nsu progreso en memoria, así que no se puede\nreanudar.\nTus partidas de la memory card siguen funcionando.",
         [UI_STR_STATES_XB_PINNED] =
             "Este estado guardado se creó con la versión %s\ny solo esa versión puede reanudarlo.\nTus partidas de la memory card siguen funcionando.",
         [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Resplandor entre fotogramas",
@@ -892,7 +893,7 @@ const char *const ui_strings_es[UI_STR_COUNT] =
             "Sombras más lentas y suaves que nunca se llevan a Yorda ni esquivan, y más tiempo para rescatarla.",
         [UI_STR_DIFF_NORMAL_NOTE] = "El juego tal como salió.",
         [UI_STR_DIFF_HARD_NOTE] =
-            "Sombras más rápidas y duras que atacan juntas, sin guardia automática, menos tiempo para rescatar a Yorda y fin de partida tras 3 derribos en una sala.",
+            "Sombras más rápidas y duras que atacan juntas, sin guardia automática, menos tiempo para rescatar a Yorda y fin de partida tras 3 derribos por sala.",
         [UI_STR_DIFF_CUSTOM_NOTE] = "Tus propias reglas. Cambia cada fila en Personalizar.",
         [UI_STR_DIFF_CUSTOMIZE] = "Personalizar",
         [UI_STR_DIFF_CUSTOMIZE_NOTE] =

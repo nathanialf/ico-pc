@@ -899,7 +899,7 @@ const char *const ui_strings_ru_bobttz[UI_STR_COUNT] = {
     /* "A game over once Ico has been knocked down this many times. Off sets no limit." */
     [UI_STR_DIFF_KNOCK_LIMIT_NOTE] = NULL,
     [UI_STR_DIFF_KNOCK_SCOPE] = NULL, /* "Knock-downs count" */
-    /* "Whether knock-downs are counted in each room (the count starts again when Ico enters a room) or across the whole journey. Does nothing while the limit is Off." */
+    /* "Counts knock-downs in each room (starting again on entering one) or across the whole journey. Does nothing while the limit is Off." */
     [UI_STR_DIFF_KNOCK_SCOPE_NOTE] = NULL,
     [UI_STR_DIFF_SCOPE_ROOM] = NULL,    /* "Each room" */
     [UI_STR_DIFF_SCOPE_JOURNEY] = NULL, /* "Whole journey" */

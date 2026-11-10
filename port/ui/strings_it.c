@@ -35,7 +35,7 @@ const char *const ui_strings_it[UI_STR_COUNT] =
             "Per una partita meno stressante. Alcune scene scriptate mostrano ancora il rapimento.",
         [UI_STR_OPT_PIT_TIME] = "Tempo per salvare Yorda",
         [UI_STR_OPT_PIT_TIME_NOTE] =
-            "Secondi da quando un’ombra sprofonda con Yorda a quando la porta via; meno in alcune scene, in proporzione. La riga Le ombre non rapiscono mai Yorda lo impedisce.",
+            "Secondi da quando un’ombra sprofonda con Yorda a quando la porta via; meno in alcune scene, in proporzione. Nulla se le ombre non la rapiscono.",
         [UI_STR_OPT_SHADOW_SPEED] = "Velocità delle ombre",
         [UI_STR_OPT_SHADOW_SPEED_NOTE] =
             "Quanto velocemente le ombre camminano, corrono e volano. Non cambia la frequenza dei loro attacchi.",
@@ -811,8 +811,7 @@ const char *const ui_strings_it[UI_STR_COUNT] =
             "Questo stato è stato creato dalla versione %s,\nprima che gli stati salvati potessero passare\nalle versioni più recenti.\nI salvataggi sulla memory card funzionano ancora.",
         [UI_STR_STATES_XB_CODE] =
             "Questo stato è stato creato dalla versione %s.\nLa versione %s ha cambiato la parte del gioco\nin cui è stato salvato, quindi non può essere\nripreso.\nI salvataggi sulla memory card funzionano ancora.",
-        [UI_STR_STATES_XB_DATA] =
-            "Questo stato è stato creato dalla versione %s.\nLa versione %s ha cambiato il modo in cui il gioco\ntiene i suoi progressi in memoria, quindi non può\nessere ripreso.\nI salvataggi sulla memory card funzionano ancora.",
+        [UI_STR_STATES_XB_DATA] = "Questo stato è stato creato dalla versione %s.\nLa versione %s ha cambiato il modo in cui il gioco\ntiene i suoi progressi in memoria, quindi non può\nessere ripreso.\nI salvataggi sulla memory card funzionano ancora.",
         [UI_STR_STATES_XB_PINNED] =
             "Questo stato è stato creato dalla versione %s\ne solo quella versione può riprenderlo.\nI salvataggi sulla memory card funzionano ancora.",
         [UI_STR_OPT_EFFECT_GLOW_SMOOTH] = "Bagliore tra i fotogrammi",
@@ -888,7 +887,7 @@ const char *const ui_strings_it[UI_STR_COUNT] =
             "Ombre più lente e docili che non rapiscono mai Yorda e non schivano, e più tempo per salvarla.",
         [UI_STR_DIFF_NORMAL_NOTE] = "Il gioco com’era all’uscita.",
         [UI_STR_DIFF_HARD_NOTE] =
-            "Ombre più veloci e resistenti che attaccano insieme, niente parata automatica, meno tempo per salvare Yorda, game over dopo 3 atterramenti in una stanza.",
+            "Ombre più veloci e resistenti che attaccano insieme, niente parata auto, meno tempo per salvare Yorda, game over dopo 3 atterramenti in una stanza.",
         [UI_STR_DIFF_CUSTOM_NOTE] = "Le tue regole. Modifica ogni riga in Personalizza.",
         [UI_STR_DIFF_CUSTOMIZE] = "Personalizza",
         [UI_STR_DIFF_CUSTOMIZE_NOTE] =

@@ -37,7 +37,7 @@ const char *const
             [UI_STR_OPT_PIT_TIME] = "Zeit zur Rettung Yordas",
             [UI_STR_OPT_PIT_TIME_NOTE] =
                 "Sekunden vom Versinken eines Schattens mit Yorda, bis sie fort ist; in manchen Szenen "
-                "anteilig kürzer. Die Zeile Schatten entführen Yorda nie verhindert es.",
+                "anteilig kürzer. Entfällt, wenn Yorda nie entführt wird.",
             [UI_STR_OPT_SHADOW_SPEED] = "Tempo der Schatten",
             [UI_STR_OPT_SHADOW_SPEED_NOTE] =
                 "Wie schnell Schatten gehen, rennen und fliegen. Wie oft sie angreifen, ändert sich nicht.",
@@ -906,7 +906,7 @@ const char *const
                 "Langsamere, mildere Schatten, die Yorda nie packen und nie ausweichen, und mehr Zeit, sie zu retten.",
             [UI_STR_DIFF_NORMAL_NOTE] = "Das Spiel, wie es erschienen ist.",
             [UI_STR_DIFF_HARD_NOTE] =
-                "Schnellere, zähere Schatten, die gemeinsam angreifen, keine automatische Abwehr, weniger Rettungszeit, Game Over nach 3 Niederschlägen pro Raum.",
+                "Schnellere, zähere Schatten, die gemeinsam angreifen, keine Auto-Abwehr, weniger Rettungszeit, Game Over nach 3 Niederschlägen pro Raum.",
             [UI_STR_DIFF_CUSTOM_NOTE] = "Deine eigenen Regeln. Ändere jede Zeile unter Anpassen.",
             [UI_STR_DIFF_CUSTOMIZE] = "Anpassen",
             [UI_STR_DIFF_CUSTOMIZE_NOTE] =

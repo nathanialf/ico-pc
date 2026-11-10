@@ -36,7 +36,7 @@ const char *const
                 "Pour une partie moins stressante. Quelques scènes scriptées montrent encore l’enlèvement.",
             [UI_STR_OPT_PIT_TIME] = "Temps pour sauver Yorda",
             [UI_STR_OPT_PIT_TIME_NOTE] =
-                "Secondes avant qu’une ombre enfoncée avec Yorda l’emporte ; moins dans certaines scènes. La ligne Les ombres n’enlèvent jamais Yorda l’empêche.",
+                "Secondes avant qu’une ombre enfoncée avec Yorda l’emporte ; moins dans certaines scènes. Sans effet si les ombres n’enlèvent jamais Yorda.",
             [UI_STR_OPT_SHADOW_SPEED] = "Vitesse des ombres",
             [UI_STR_OPT_SHADOW_SPEED_NOTE] =
                 "La vitesse à laquelle les ombres marchent, courent et volent. Cela ne change pas la fréquence de leurs attaques.",
@@ -904,7 +904,7 @@ const char *const
                 "Ombres plus lentes et plus douces, qui n’enlèvent jamais Yorda et n’esquivent jamais, et plus de temps pour la sauver.",
             [UI_STR_DIFF_NORMAL_NOTE] = "Le jeu tel qu’il est sorti.",
             [UI_STR_DIFF_HARD_NOTE] =
-                "Ombres plus rapides et coriaces qui attaquent ensemble, sans garde automatique, moins de temps pour sauver Yorda, game over après 3 mises à terre par salle.",
+                "Ombres plus rapides et coriaces qui attaquent ensemble, sans garde auto, moins de temps pour sauver Yorda, game over après 3 mises à terre par salle.",
             [UI_STR_DIFF_CUSTOM_NOTE] =
                 "Vos propres règles. Modifiez chaque ligne sous Personnaliser.",
             [UI_STR_DIFF_CUSTOMIZE] = "Personnaliser",
