@@ -1314,7 +1314,22 @@ static int clockCell(void)
     }
     CLK_CHECK(!held || waitMs >= 100.0, "a held wait of %.1f ms (the release after 150 ms)\n",
               waitMs);
-    if (waitMs >= (double)RHI_TS_TRACE_AFTER_MS + 2.0 * RHI_TS_TRACE_STEP_MS) {
+    /* the single wait (rhi_tile_rule.h: a tile-based GPU, [dev] polled_wait
+       = off, two lost starts; rhi_vk_clock_arm fakes Arm's vendor id): one
+       wait, no trace, no calibrated pair; ICO_TEST_POLLED_WANT (1 or 0)
+       names the wait the device must run */
+    const bool polled = rhi_limits()->polledWait;
+    const char *pw = getenv("ICO_TEST_POLLED_WANT");
+    CLK_CHECK(!pw || !pw[0] || (pw[0] != '0') == polled, "the %s wait (%s), %s wanted\n",
+              polled ? "polled" : "single", rhi_limits()->waitWords ? rhi_limits()->waitWords : "?",
+              pw ? pw : "");
+    if (!polled) {
+        CLK_CHECK(c.traceN == 0 && c.traceMore == 0 && !c.calibrated && !c.again,
+                  "the single wait: %u trace points, calibrated %d, again %d (none wanted)\n",
+                  c.traceN, (int)c.calibrated, (int)c.again);
+        rhi_test_log("clock cell: the single wait (%s): no trace, no calibrated pair\n",
+                     rhi_limits()->waitWords ? rhi_limits()->waitWords : "?");
+    } else if (waitMs >= (double)RHI_TS_TRACE_AFTER_MS + 2.0 * RHI_TS_TRACE_STEP_MS) {
         /* a read that does not wait (a phone's driver): the first point
            before the release holds the first use's stamps, stale, and the
            still stretch is theirs; lavapipe's read waits for the queue, so
@@ -1465,6 +1480,17 @@ int main(int argc, char **argv)
         /* rhi_vk_scopes*: the buffer barriers' first scopes alone
            (rhi_vk_scope.c), 77 without a device */
         return rhi_vk_scope_cell(&cfg);
+    }
+    if (argc > 1 && strcmp(argv[1], "clock") == 0) {
+        /* rhi_vk_clock_arm: the recycled slot's clock alone (the single wait
+           on a faked Arm vendor id, ICO_TEST_POLLED_WANT=0) */
+        RhiDeviceDesc probe = {NULL, false, true, "rhi_vk_test clock probe", NULL};
+        if (!rhi_create_backend("vulkan") || !rhi_init(&probe)) {
+            rhi_test_log("SKIP clock: no Vulkan device\n");
+            return 77;
+        }
+        rhi_shutdown();
+        return clockCell() ? 1 : 0;
     }
     if (argc > 1 && strcmp(argv[1], "subpass") == 0) {
         /* rhi_vk_subpass*: the local read with a depth target alone

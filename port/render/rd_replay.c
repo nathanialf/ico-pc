@@ -5805,9 +5805,10 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     memset(&s_stencil, 0, sizeof(s_stencil));
     rhi_cmd_checkpoint(s_cl, rd__passring_push(RD_PASSK_UPLOAD, 0, 0, 0, 0, 0, 0, 0, -1));
     rd__perf_pass(s_cl, RD_PERF_PASS_UPLOAD, 0, 0, 0, -1);
-    /* the texture uploads and the fog's table after the pre-pass, their
-       ring bytes here, before t5's base (rd_upload_late.h) */
-    const uint64_t lateWin = rd__upload_late_reserve();
+    /* the texture uploads and the fog's table after the pre-pass (here on
+       the wide scopes), their ring bytes here, before t5's base
+       (rd_upload_late.h) */
+    const uint64_t lateWin = rd__upload_late_reserve(f, keep);
     rd__join_parts(f, keep); /* the card test over a part's packets (rd_join.c) */
     rd__upload_meshes(f, keep);
     rd__passring_bytes(s_ringOff);

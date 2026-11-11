@@ -350,6 +350,66 @@ question it decides:
   whether the occlusion test still costs the render thread a share of the 40 ms Original cap in
   the scenes.
 
+### The barrier scopes and the submission wait (issues 179 and 211)
+
+A Mali-G52 MC2 (Arm's driver) and an Adreno 710 (Qualcomm's driver) lost the graphics device at the
+first pictures of the first 3D scene, three starts in a row each, once the buffer barriers were
+narrowed and the polled submission wait came in; the release before both ran there. Every
+tile-based GPU now runs the wide barrier scopes, the texture uploads before the VU pre-pass and the
+single submission wait by default (RHI.md "Barrier scopes and the submission wait"). The start of a
+log says which ran and why, one line each:
+
+    rhi_vk: barriers: wide (a tile-based GPU, Arm, vendor 0x13B5: the default on every such GPU; [dev] barrier_scope = narrow tries the narrow ones): every buffer barrier waits for ...
+    rhi_vk: submission wait: single (a tile-based GPU, Arm, vendor 0x13B5: the default on every such GPU; [dev] polled_wait = on tries the polled one): one wait without a time limit for a frame slot, ...
+    rhi_vk: timestamps: ...; calibrated with the CPU's clock: off (the single submission wait: single (tile-based)) ...
+
+and the summary's profile words end `, barriers wide (tile-based), submission wait single
+(tile-based)`. How to read the next log:
+
+- Both lines `wide` / `single` and no loss: one of the two changes was the cause, or set off the
+  driver's fault (the code reading for issue 179 found no other change to the GPU work of those
+  pictures on the Mali; on the Adreno the skin check's twins and readbacks also run there).
+  `[dev] barrier_scope = narrow` alone, then `[dev] polled_wait = on` alone, tells which, only if
+  the reporter offers to try; nothing to ask for otherwise.
+- Both lines present and the device still lost: neither was; the loss dump's lines (below) and
+  the stall lines (issue 123's sections) are the evidence then.
+- `narrow (...)` or `polled (...)` with `[dev] ... = ...` in the reason: a setting chose it;
+  `auto would give ... here` names what the default would have been.
+- With the single wait the stall diagnostics measure less: a stalled replay's `rd: GPU clock`
+  line has no trace (which of its stamps were written while the CPU waited, the longest stretch
+  with nothing new, its first list's second run), and its start is placed from its wait's end,
+  not on the CPU's clock. Its counter restarts, unwritten stamps and the wait's own time are kept.
+
+The loss ladder, on every device (desktops too) and never written to the settings: a start after a
+lost one runs the wide scopes, after two lost starts in a row the single wait too, unless a setting
+says otherwise. Its line, before the backend's:
+
+    ico_pc: loss ladder: 2 starts in a row lost the graphics device before this one: this start runs the wide barrier scopes and the single submission wait unless [dev] barrier_scope or polled_wait says otherwise (the graphics backend's barriers and submission wait line says what ran); nothing is written to the settings
+
+Until this fix a `gpu_robust = true` in the settings (by hand, or written by the game after two
+lost starts) set the row back to 0 every start: both issue 179's and issue 211's logs said `starts in a row
+that lost the graphics device: 1` start after start, so no rung past the first could fire. The row
+now counts on (`ico_pc: the previous start lost the graphics device (2 in a row); nothing is written
+to <path>: robust access is as the settings say ([dev] gpu_robust)`). The desktop's restarts after
+a loss count in the activity file's `-ends.txt` as `loss_chain <n>` (`... before this one (this
+game's restarts after a loss): ...`).
+
+Issue 211's logs (the Adreno 710, two runs) against what the narrowing release changed on
+Qualcomm's path: in each run three replays in a row stalled 270-400 ms with "9 of 66 written (the
+last: the start of piece 4 of 39, list 0)" (the scene's first list, right after the VU pre-pass's
+record), each with a timestamp counter restart and the kernel's reset count moving during the
+third (`resets 645705` to `645706`); the skin check's readbacks of those replays came back
+unwritten ("the GPU did not run them"), and the next submission, an unnumbered one after the last
+numbered replay finished (`the GPU reached 447; no wait failed`), failed with `VkResult -4`, then
+the photo's capture failed the same way. A failed `vkQueueSubmit` with `VK_ERROR_DEVICE_LOST` is the
+device's, not the submission's (every later call may fail; the second failure here shows it), so
+the backend cannot tell a capture's lost submission from the picture's and keep running; the
+skin-check capture and the frame dump it asks for are CPU work on the frame record, and the photo
+a readback after the loss had already happened. The stalls themselves are issue 123's shape (the
+Adreno 740 showed them without a loss, with the VU pre-pass off by its device row; the 710 has no
+row and draws through the pre-pass). Which of the wide scopes or the single wait, if either, keeps
+the 710 from losing the device is what its next log says by the lines above.
+
 ## Issues 123 and 163's lines: the skin check on an Adreno
 
 On an Adreno (Qualcomm's own driver and Turnip alike) the skinned draws' check

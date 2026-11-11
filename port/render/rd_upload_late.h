@@ -36,7 +36,14 @@
  * waits for the colour output, and the closing barrier of its list orders
  * that copy before the next list's transfers): the mesh copies, and so the
  * record, then wait for the fragment work that copy read.  The hold lines
- * and counts (vk_cmd.c vkr_hold_note) name each such barrier. */
+ * and counts (vk_cmd.c vkr_hold_note) name each such barrier.
+ *
+ * Issues 179 and 211 (a Mali-G52 and an Adreno 710 lost the device at the
+ * first 3D pictures on v0.11.3): on every tile-based GPU the order is
+ * v0.11.2's again, with the barrier scopes (rhi.h RhiLimits.wideBarriers):
+ * the texture uploads and the fog's table first, then the meshes and the
+ * pre-pass.  Desktops keep the order above.  Either order draws the same
+ * bytes. */
 #ifndef PORT_RENDER_RD_UPLOAD_LATE_H
 #define PORT_RENDER_RD_UPLOAD_LATE_H
 
@@ -48,10 +55,14 @@
  * uploads and the pre-pass): as many bytes as the dirty textures (laid
  * out as rd__upload_dirty_textures lays them), the dummy's upload and the
  * fog's table take; ~0 when the ring has no room (they then take the
- * ring's end); the dummy's one upload is recorded here, before them */
-uint64_t rd__upload_late_reserve(void);
+ * ring's end); the dummy's one upload is recorded here, before them.
+ * With the wide barrier scopes (rhi.h RhiLimits.wideBarriers: a tile-based
+ * GPU by default since v0.11.4, or a start after a lost one; rhi_tile_rule.h)
+ * the texture uploads and frame f's fog table are recorded here instead,
+ * v0.11.2's order, and ~0 is returned */
+uint64_t rd__upload_late_reserve(const RdFrame *f, int keep);
 /* the texture uploads and the fog's table of frame f, into the window
- * rd__upload_late_reserve gave (win) */
+ * rd__upload_late_reserve gave (win); nothing after a wide reserve */
 void rd__upload_late(const RdFrame *f, int keep, uint64_t win);
 /* the window rd__ring_alloc takes first from now on: [off, end), end 0
  * none; the window's next offset before the call */

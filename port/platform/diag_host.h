@@ -417,6 +417,18 @@ void ico_diag_startup_activity_batch(const char *line);
 #define ICO_DIAG_END_VU_PRE 1
 #define ICO_DIAG_END_LOSS 2
 int ico_diag_startup_end_count(int kind);
+/* The loss ladder's count (diag_host.c loss_ladder_export; issues 179 and
+   211): the starts in a row that lost the graphics device before this one,
+   on every device and whatever robust access is (a hand-set gpu_robust
+   keeps the row since v0.11.4), the desktop's loss-order restarts counted
+   in a slot of their own ("loss_chain <n>" in the counts file). Set by
+   ico_diag_startup_activity_begin and handed to the graphics backend as
+   ICO_LOSS_ROW (unset when 0; port/rhi/rhi_tile_rule.h): after one the
+   v0.11.2 barrier scopes, after two the single submission wait too, unless
+   [dev] barrier_scope or polled_wait says otherwise. Logged: "ico_pc: loss
+   ladder: <n> start(s) in a row lost the graphics device before this one
+   ...". Never written to the settings. */
+unsigned int ico_diag_startup_loss_row(void);
 /* The start-up set's policy for this start (issues 93 and 107), after
    ico_diag_startup_activity_begin (file_lazy: its result) and before the
    renderer starts; setting: [dev] pipeline_set ("full", "careful",
@@ -512,15 +524,17 @@ int ico_diag_startup_vu_store(void);
    that kind (NULL when none does; the window passes none for the pipelines
    and the pre-pass, and for the losses "[dev] gpu_robust" when the player
    set it). With a rule nothing is written and the count is cleared (the
-   setting would be redundant, and would outlive a change of the rule), the
+   setting would be redundant, and would outlive a change of the rule;
+   not the losses' count since v0.11.4: it stays, for the loss ladder,
+   ico_diag_startup_loss_row), the
    pipelines' lazy run no longer "for this start only": the first end
    "ico_pc: the previous start ended while preparing the graphics (<note>);
    nothing is counted or written to <config_name>: <rule> (<table>)", the
    second "ico_pc: the second start in a row ended while preparing the
    graphics (<note>); <setting> is not written to <config_name>: <rule>
    (<table>)" (the losses: "ico_pc: the previous start lost the graphics
-   device; nothing is counted or written to <config_name>: robust access
-   is as the settings say (<table>)"). Without one, the first logs what this
+   device (<n> in a row); nothing is written to <config_name>: robust
+   access is as the settings say (<table>)"). Without one, the first logs what this
    start does: the pipelines on CAREFUL_ONCE "ico_pc: the previous start
    ended while preparing the graphics (<note>); this start only makes the
    start-up set the careful way (small batches on one thread, the pipeline

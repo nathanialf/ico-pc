@@ -166,6 +166,17 @@ if(ICO_RUN_TESTS)
     add_test(NAME rhi_vk_pass_row COMMAND rhi_vk_pass_row_test)
 endif()
 
+# --- The tile-based phones' rule (CPU only, every target) --------------------
+# rhi_tile_rule.c: the barrier scopes and the submission wait a Vulkan start
+# runs ([dev] barrier_scope, [dev] polled_wait, a tile-based GPU, the lost
+# starts in a row before it; issues 179 and 211), and their lines' words.
+add_executable(rhi_vk_tile_rule_test test/rhi_vk_tile_rule_test.c rhi_tile_rule.c)
+target_include_directories(rhi_vk_tile_rule_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(rhi_vk_tile_rule_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME rhi_vk_tile_rule COMMAND rhi_vk_tile_rule_test)
+endif()
+
 # --- The SPIR-V scan (CPU only, every target) --------------------------------
 # vk/vk_spirv_scan.c: whether a module is a fragment shader that declares a
 # storage buffer (the buffer barriers' first scopes, vk_cmd.c), over the RHI
@@ -330,7 +341,7 @@ endif()
 
 # --- ico_rhi_vulkan -------------------------------------------------------------
 if(_ico_have_vk)
-    set(_ico_vk_sources rhi_adapter.c rhi_bind_cache.c rhi_driver_version.c rhi_pass_row.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c vk/vk_native.c
+    set(_ico_vk_sources rhi_adapter.c rhi_bind_cache.c rhi_driver_version.c rhi_pass_row.c rhi_tile_rule.c vk/vk_cmd.c vk/vk_device.c vk/vk_memory.c vk/vk_native.c
                         vk/vk_pipeline.c vk/vk_present_mode.c vk/vk_renderpass.c vk/vk_resource.c
                         vk/vk_spirv_scan.c vk/vk_swapchain.c vk/vk_sync.c vk/vk_tsclock.c vk/vk_range.c)
     if(ANDROID)
@@ -661,7 +672,7 @@ if(_ico_have_vk)
         add_test(NAME rhi_vk_scopes_global COMMAND rhi_vk_test scopes)
         add_test(NAME rhi_vk_scopes_novs COMMAND rhi_vk_test scopes)
         set_tests_properties(rhi_vk_scopes PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
-                             "${_ico_vk_scopes_env}")
+                             "${_ico_vk_scopes_env};ICO_TEST_SCOPE_WANT=narrow")
         set_tests_properties(rhi_vk_scopes_vk11 PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_scopes11_env}")
         get_test_property(rhi_vk_scopes_vk11 LABELS _ico_scopes11_labels)
@@ -670,6 +681,35 @@ if(_ico_have_vk)
                              "${_ico_vk_scopesg_env}")
         set_tests_properties(rhi_vk_scopes_novs PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_scopesn_env}")
+        # the wide scopes (port/rhi/rhi_tile_rule.h; issues 179 and 211:
+        # v0.11.2's, on every tile-based GPU by default since v0.11.4):
+        # _arm on Arm's vendor id faked (ICO_VK_FAKE_VENDOR=0x13B5, the rule's
+        # alone), _wide asked for ([dev] barrier_scope = wide), _arm_narrow
+        # Arm faked with the narrow ones asked for (the setting rules); each
+        # under the same synchronisation checks, ICO_TEST_SCOPE_WANT naming
+        # the scopes the device must run (rhi_vk_scopes: narrow, lavapipe is
+        # not tile-based).  rhi_vk_clock_arm: the recycled slot's clock alone
+        # on Arm faked: the single wait, no trace, no calibrated pair
+        # (ICO_TEST_POLLED_WANT=0)
+        set(_ico_vk_arm "ICO_VK_FAKE_VENDOR=0x13B5")
+        set(_ico_vk_scopesarm_env ${_ico_vk_scopes_env} ${_ico_vk_arm} "ICO_TEST_SCOPE_WANT=wide")
+        set(_ico_vk_scopesw_env ${_ico_vk_scopes_env} "ICO_VK_BARRIER_SCOPE=wide"
+                                "ICO_TEST_SCOPE_WANT=wide")
+        set(_ico_vk_scopesan_env ${_ico_vk_scopes_env} ${_ico_vk_arm} "ICO_VK_BARRIER_SCOPE=narrow"
+                                 "ICO_TEST_SCOPE_WANT=narrow")
+        set(_ico_vk_clockarm_env ${_ico_vk_test_env} ${_ico_vk_arm} "ICO_TEST_POLLED_WANT=0")
+        add_test(NAME rhi_vk_scopes_arm COMMAND rhi_vk_test scopes)
+        add_test(NAME rhi_vk_scopes_wide COMMAND rhi_vk_test scopes)
+        add_test(NAME rhi_vk_scopes_arm_narrow COMMAND rhi_vk_test scopes)
+        add_test(NAME rhi_vk_clock_arm COMMAND rhi_vk_test clock)
+        set_tests_properties(rhi_vk_scopes_arm PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_scopesarm_env}")
+        set_tests_properties(rhi_vk_scopes_wide PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_scopesw_env}")
+        set_tests_properties(rhi_vk_scopes_arm_narrow PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_scopesan_env}")
+        set_tests_properties(rhi_vk_clock_arm PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_clockarm_env}")
         # a pass's own colour read in it with a depth target bound
         # (rhi_vk_subpass.c, DATE's stencil setup's shape) under
         # synchronisation validation with the shader access analysis on:

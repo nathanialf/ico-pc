@@ -13,6 +13,7 @@
 #endif
 #include "../rhi.h"
 #include "../rhi_native.h"
+#include "../rhi_tile_rule.h"
 #include "vk_enums.h"
 #include <stdio.h>
 
@@ -853,6 +854,13 @@ typedef struct VkrState {
 
     /* hazard tracking (vk_cmd.c, "Hazards") */
     bool globalBarriers; /* ICO_VK_GLOBAL_BARRIERS=1: a global barrier before every pass and copy */
+    /* the tile-based phones' rule and the loss ladder (rhi_tile_rule.h,
+     * vk_device.c vkr_tile_rule_apply, before the device is made): tile.wide
+     * the v0.11.2 barrier scopes (vk_cmd.c "Buffer barriers",
+     * vkr_open_barrier, rhi_end_commands) and RhiLimits.wideBarriers (the
+     * renderer's texture uploads before the VU pre-pass); tile.polled the
+     * recycle wait's 4 ms steps and the calibrated timestamps (vk_tsclock.c) */
+    RhiTileRule tile;
     /* ICO_VK_DEPTH_ALWAYS=1: every depth test compares ALWAYS (the
      * occlusion measurement's run without the depth: what draws nothing
      * whatever the depth says; the picture is not the game's) */

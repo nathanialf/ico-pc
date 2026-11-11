@@ -1840,9 +1840,12 @@ static void act_sibling(char *out, size_t size, const char *suffix)
 /* the counts file's slots: the kinds (ICO_DIAG_END_*), then the mark of a
    start that ran with robust access on for a loss
    (ico_diag_startup_end_persist), which the next start's loss_count_prev
-   reads and clears */
+   reads and clears, then the lost starts in a row of the desktop's loss
+   order (its relaunched runs, which count nothing in the loss slot: the
+   loss ladder's count there, loss_count_prev) */
 #define ACT_END_ROBUST_ONCE 3
-#define ACT_END_SLOTS 4
+#define ACT_END_LOSS_CHAIN 4
+#define ACT_END_SLOTS 5
 
 /* the counts by kind (ICO_DIAG_END_*), 0 when none or unreadable; an
    older version's "vu_ext <n>" (the retired extended VU kind) is dropped */
@@ -1850,7 +1853,7 @@ static void ends_read(unsigned int n[ACT_END_SLOTS])
 {
     char line[64];
     FILE *f;
-    n[0] = n[1] = n[2] = n[3] = 0;
+    n[0] = n[1] = n[2] = n[3] = n[4] = 0;
     if (act_ends_path[0] == '\0' || (f = ico_fopen(act_ends_path, "rb")) == NULL) {
         return;
     }
@@ -1860,6 +1863,8 @@ static void ends_read(unsigned int n[ACT_END_SLOTS])
             n[ICO_DIAG_END_PIPELINES] = v > 9 ? 9 : v;
         } else if (sscanf(line, "vu_pre %u", &v) == 1) {
             n[ICO_DIAG_END_VU_PRE] = v > 9 ? 9 : v;
+        } else if (sscanf(line, "loss_chain %u", &v) == 1) {
+            n[ACT_END_LOSS_CHAIN] = v > 9 ? 9 : v;
         } else if (sscanf(line, "loss_robust %u", &v) == 1) {
             n[ACT_END_ROBUST_ONCE] = v != 0;
         } else if (sscanf(line, "loss %u", &v) == 1) {
@@ -1879,14 +1884,16 @@ static void ends_write(const unsigned int n[ACT_END_SLOTS])
     if (act_ends_path[0] == '\0') {
         return;
     }
-    if (n[0] == 0 && n[1] == 0 && n[2] == 0 && n[3] == 0) {
+    if (n[0] == 0 && n[1] == 0 && n[2] == 0 && n[3] == 0 && n[4] == 0) {
         (void)ico_remove(act_ends_path);
         return;
     }
     f = ico_fopen(act_ends_path, "wb");
+    /* loss_chain only when set (a file an older version reads the same) */
     ok = f != NULL &&
          fprintf(f, "pipelines %u\nvu_pre %u\nloss %u\nloss_robust %u\n", n[ICO_DIAG_END_PIPELINES],
-                 n[ICO_DIAG_END_VU_PRE], n[ICO_DIAG_END_LOSS], n[ACT_END_ROBUST_ONCE]) > 0;
+                 n[ICO_DIAG_END_VU_PRE], n[ICO_DIAG_END_LOSS], n[ACT_END_ROBUST_ONCE]) > 0 &&
+         (n[ACT_END_LOSS_CHAIN] == 0 || fprintf(f, "loss_chain %u\n", n[ACT_END_LOSS_CHAIN]) > 0);
     if (f != NULL && fclose(f) != 0) {
         ok = 0;
     }
@@ -2013,6 +2020,50 @@ static void ends_clean(void)
     }
 }
 
+/* The loss ladder (port/rhi/rhi_tile_rule.h, issues 179 and 211): the lost
+   starts in a row before this one, on every device, whatever robust access
+   is (a hand-set gpu_robust no longer clears the row,
+   ico_diag_startup_end_persist): Android's and a fresh start's from the
+   loss slot, a run of the desktop's loss order (relaunched) from the chain
+   slot.  Handed to the graphics backend as ICO_LOSS_ROW (unset when 0):
+   after one, the v0.11.2 barrier scopes, after two the single submission
+   wait too, unless [dev] barrier_scope or polled_wait says otherwise; the
+   backend's lines say which ran.  Nothing is written to the settings. */
+static unsigned int act_loss_row;
+
+static void loss_ladder_export(int relaunched)
+{
+    char v[16];
+    if (act_loss_row == 0) {
+#ifdef _WIN32
+        _putenv_s("ICO_LOSS_ROW", "");
+#else
+        unsetenv("ICO_LOSS_ROW");
+#endif
+        return;
+    }
+    snprintf(v, sizeof v, "%u", act_loss_row);
+#ifdef _WIN32
+    _putenv_s("ICO_LOSS_ROW", v);
+#else
+    setenv("ICO_LOSS_ROW", v, 1);
+#endif
+    ico_diag_log("ico_pc: loss ladder: %u start%s in a row lost the graphics device before this "
+                 "one%s: this start runs the wide barrier scopes%s unless [dev] barrier_scope%s "
+                 "says otherwise (the graphics backend's barriers%s line says what ran); nothing "
+                 "is written to the settings",
+                 act_loss_row, act_loss_row == 1 ? "" : "s",
+                 relaunched ? " (this game's restarts after a loss)" : "",
+                 act_loss_row >= 2 ? " and the single submission wait" : "",
+                 act_loss_row >= 2 ? " or polled_wait" : "",
+                 act_loss_row >= 2 ? " and submission wait" : "");
+}
+
+unsigned int ico_diag_startup_loss_row(void)
+{
+    return act_loss_row;
+}
+
 /* ico_diag_startup_activity_begin: the previous run's device loss
    (prev_loss: its file's loss line) into the row of starts that lost it.
    A loss counts one more, whatever the version or the note; a start
@@ -2026,11 +2077,26 @@ static void loss_count_prev(int prev_loss, int relaunched)
 {
     unsigned int n[ACT_END_SLOTS], was[ACT_END_SLOTS];
     act_end_n[ICO_DIAG_END_LOSS] = 0;
-    if (relaunched || act_ends_path[0] == '\0') {
+    act_loss_row = 0;
+    if (act_ends_path[0] == '\0') {
+        loss_ladder_export(relaunched);
         return;
     }
     ends_read(n);
     memcpy(was, n, sizeof was);
+    if (relaunched) {
+        /* the desktop's loss order: the chain of its restarts (the loss
+           slot is a fresh start's, as before) */
+        n[ACT_END_LOSS_CHAIN] =
+            prev_loss ? (n[ACT_END_LOSS_CHAIN] < 9 ? n[ACT_END_LOSS_CHAIN] + 1 : 9) : 0;
+        act_loss_row = n[ACT_END_LOSS_CHAIN];
+        if (memcmp(n, was, sizeof was) != 0) {
+            ends_write(n);
+        }
+        loss_ladder_export(relaunched);
+        return;
+    }
+    n[ACT_END_LOSS_CHAIN] = 0;
     if (prev_loss) {
         n[ICO_DIAG_END_LOSS]++;
         act_end_n[ICO_DIAG_END_LOSS] = n[ICO_DIAG_END_LOSS];
@@ -2043,6 +2109,11 @@ static void loss_count_prev(int prev_loss, int relaunched)
     if (memcmp(n, was, sizeof was) != 0) {
         ends_write(n);
     }
+    /* the ladder: the losses in a row before this start (a start that ran
+       robust because of the row and did not lose it leaves the row, and
+       is not a loss: 0 here) */
+    act_loss_row = prev_loss ? n[ICO_DIAG_END_LOSS] : 0;
+    loss_ladder_export(relaunched);
 }
 
 /* the mark's file written whole from act_bg_text (under the lock) */
@@ -2644,6 +2715,7 @@ int ico_diag_startup_activity_begin(const char *path, int relaunched)
     act_saw_vu_pre = 0;
     act_unsynced = 0;
     act_end_n[0] = act_end_n[1] = act_end_n[2] = 0;
+    act_loss_row = 0;
     act_prev_background = 0;
     act_prev_bg_line[0] = '\0';
     act_ends_path[0] = '\0';
@@ -3073,15 +3145,22 @@ int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(voi
     if (table != NULL) {
         /* the rule already holds here: the setting would be redundant, and
            it would outlive a change of the rule; the row is cleared, and a
-           lazy run follows the rule, not "this start only" */
-        ends_clear_kind(kind);
+           lazy run follows the rule, not "this start only".  Not a loss's
+           row: robust access set by hand (or by the game for good) rules
+           robust access, but the starts that lost the device still count
+           (the loss ladder, loss_ladder_export; before v0.11.4 the row went
+           back to 0 every start, so "starts in a row that lost the
+           graphics device: 1" was all such a log could say) */
+        if (!loss) {
+            ends_clear_kind(kind);
+        }
         if (kind == ICO_DIAG_END_PIPELINES) {
             act_once = 0;
         }
         if (loss) {
-            ico_diag_log("ico_pc: the previous start lost the graphics device; nothing is counted "
-                         "or written to %s: robust access is as the settings say (%s)",
-                         cfg, table);
+            ico_diag_log("ico_pc: the previous start lost the graphics device (%u in a row); "
+                         "nothing is written to %s: robust access is as the settings say (%s)",
+                         act_end_n[kind], cfg, table);
         } else if (act_end_n[kind] >= 2) {
             ico_diag_log("ico_pc: the second start in a row ended while preparing the graphics "
                          "(%s); %s is not written to %s: %s (%s)",

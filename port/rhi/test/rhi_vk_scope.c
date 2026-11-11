@@ -48,7 +48,19 @@
  *   E the record copied into a readback buffer: the last dispatch's words,
  *     word for word (cs_store: invocation i stores (i, 3i + 1, 0xC0DE0000 +
  *     i, 0x5EED)).
- * Then no validation error.  77 without a Vulkan device. */
+ * Then no validation error.  77 without a Vulkan device.
+ *
+ * The wide scopes (rhi_tile_rule.h: v0.11.2's, on a tile-based GPU by
+ * default since v0.11.4; rhi_vk_scopes_arm fakes Arm's vendor id with
+ * ICO_VK_FAKE_VENDOR=0x13B5, rhi_vk_scopes_wide asks with [dev]
+ * barrier_scope = wide, rhi_vk_scopes_arm_narrow fakes Arm and asks for the
+ * narrow ones): RhiLimits.wideBarriers as ICO_TEST_SCOPE_WANT (wide or
+ * narrow) names, and then every list holds fragment work (the opening
+ * barrier's colour output reaches the transfer stage, the copy's wait
+ * names the fragment stage): B at least 2 (the opening barrier and the
+ * mesh upload's wait), C2 and G at least as many as their narrow counts,
+ * the same lists clean under the synchronisation checks and the record
+ * read back word for word. */
 #include "rhi.h"
 #include "rhi_test_common.h"
 #include "rhi_test_spv.h"
@@ -440,6 +452,13 @@ int rhi_vk_scope_cell(const RhiTestConfig *cfg)
     }
     const char *env = getenv("ICO_VK_GLOBAL_BARRIERS");
     const bool global = env && env[0] && env[0] != '0';
+    /* the scopes the device runs (rhi_tile_rule.h), and the ones the test
+       was registered for */
+    const bool wide = rhi_limits()->wideBarriers;
+    const char *want = getenv("ICO_TEST_SCOPE_WANT");
+    SC_CHECK(!want || !want[0] || strcmp(want, wide ? "wide" : "narrow") == 0,
+             "the device runs the %s scopes (%s), %s wanted\n", wide ? "wide" : "narrow",
+             rhi_limits()->barrierWords ? rhi_limits()->barrierWords : "?", want ? want : "");
     ScRes r;
     memset(&r, 0, sizeof(r));
     if (!setup(&r)) {
@@ -448,27 +467,28 @@ int rhi_vk_scope_cell(const RhiTestConfig *cfg)
     } else {
         const uint64_t a = runList(cfg, "A", &r, fillA);
         const uint64_t b = runList(cfg, "B", &r, fillB);
-        SC_CHECK(b == 0,
+        SC_CHECK(wide ? b >= 2 : b == 0,
                  "list B (the next picture's uploads, record and pass): %llu barriers held "
-                 "fragment work, 0 expected\n",
-                 (unsigned long long)b);
+                 "fragment work, %s expected (the %s scopes)\n",
+                 (unsigned long long)b, wide ? "2 or more" : "0", wide ? "wide" : "narrow");
         const uint64_t c = runList(cfg, "C", &r, fillC);
-        SC_CHECK(c == 1, "list C (a texture upload over a sampled texture): %llu, 1 expected\n",
-                 (unsigned long long)c);
+        SC_CHECK(wide ? c >= 1 : c == 1,
+                 "list C (a texture upload over a sampled texture): %llu, %s expected\n",
+                 (unsigned long long)c, wide ? "1 or more" : "1");
         const bool rec = r.compute || r.vstores;
         const uint64_t c2 = runList(cfg, "C2", &r, fillC2);
         const uint64_t c2want = rec && !global ? 1u : 0u;
-        SC_CHECK(c2 == c2want,
+        SC_CHECK(wide ? c2 >= c2want : c2 == c2want,
                  "list C2 (the record's end joined to a transition out of SHADER_READ): %llu, "
-                 "%llu expected\n",
-                 (unsigned long long)c2, (unsigned long long)c2want);
+                 "%s%llu expected\n",
+                 (unsigned long long)c2, wide ? "at least " : "", (unsigned long long)c2want);
         /* G: the texture upload's hold before the record in the old order
            (every later copy, the mesh upload's, waits behind it, and the
            record behind the copy), none before it in the new; the hold
            itself stays (one in each order) */
         const uint64_t g = runList(cfg, "G", &r, fillG);
         const uint64_t g1Before = s_holdsBefore[0], g2Before = s_holdsBefore[1];
-        SC_CHECK(g1Before == 1 && g2Before == 0 && g == 2,
+        SC_CHECK(wide ? g1Before >= 1 && g >= 2 : g1Before == 1 && g2Before == 0 && g == 2,
                  "list G (a texture upload over a sampled texture, a mesh upload, the record): "
                  "before the record %llu in the old order (1 expected), %llu in the new (0 "
                  "expected); in all %llu (2 expected)\n",
@@ -485,7 +505,7 @@ int rhi_vk_scope_cell(const RhiTestConfig *cfg)
         SC_CHECK(r.ps.id != 0, "the storage fragment shader was not made\n");
         const uint64_t d = runList(cfg, "D", &r, fillD);
         const uint64_t dwant = 1u + (r.compute ? 1u : 0u);
-        SC_CHECK(d == dwant,
+        SC_CHECK(wide ? d >= dwant : d == dwant,
                  "list D (after a fragment shader that reads a storage buffer: the upload%s): "
                  "%llu, %llu expected\n",
                  r.compute ? " and the compute bracket" : "", (unsigned long long)d,
@@ -493,7 +513,7 @@ int rhi_vk_scope_cell(const RhiTestConfig *cfg)
         uint64_t f = 0;
         if (setupF(&r)) {
             f = runList(cfg, "F", &r, fillF);
-            SC_CHECK(f == 1,
+            SC_CHECK(wide ? f >= 1 : f == 1,
                      "list F (a copy over the arena after a fragment shader read it): %llu, 1 "
                      "expected\n",
                      (unsigned long long)f);
@@ -516,11 +536,11 @@ int rhi_vk_scope_cell(const RhiTestConfig *cfg)
         }
         rhi_test_log("%s scopes: fragment holds A %llu, B %llu, C %llu, C2 %llu, G before the "
                      "record %llu old order / %llu new, D %llu, F %llu (compute %d, vertex "
-                     "stores %d, global barriers %d)\n",
+                     "stores %d, global barriers %d, %s scopes)\n",
                      cfg->label, (unsigned long long)a, (unsigned long long)b,
                      (unsigned long long)c, (unsigned long long)c2, (unsigned long long)g1Before,
                      (unsigned long long)g2Before, (unsigned long long)d, (unsigned long long)f,
-                     (int)r.compute, (int)r.vstores, (int)global);
+                     (int)r.compute, (int)r.vstores, (int)global, wide ? "wide" : "narrow");
     }
     teardown(&r);
     rhi_shutdown();
