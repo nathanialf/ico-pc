@@ -19,6 +19,7 @@ target_sources(ico_platform PRIVATE
     thermal_text.c
     hotkeys.c
     kernel_host.c
+    log_cost.c
     pace_policy.c
     memory_floor.c
     display_rate.c
@@ -319,6 +320,16 @@ target_compile_options(dump_zip_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_
 target_link_libraries(dump_zip_test PRIVATE ico_host_fs ico_miniz)
 if(ICO_RUN_TESTS)
     add_test(NAME dump_zip COMMAND dump_zip_test "${CMAKE_CURRENT_BINARY_DIR}")
+endif()
+
+# log_cost_test: the logging's own cost a block (log_cost.h): the window
+# thread's print, the log thread's writes and their overlaps with a present
+# that blocked and a late step, the pipe full or not, a capture, the line
+# word for word (CPU only)
+add_executable(log_cost_test test/log_cost_test.c log_cost.c)
+target_compile_options(log_cost_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME log_cost COMMAND log_cost_test)
 endif()
 
 # The automatic dumps' worker (dump_auto.c, issues 123 and 179): a job written

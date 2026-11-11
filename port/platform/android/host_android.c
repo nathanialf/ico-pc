@@ -9,6 +9,7 @@
 
 #include "host_android.h"
 #include "diag_host.h"
+#include "ico_thread.h" /* ico_thread_now_ms: the log thread's write times */
 #include "report.h"
 #include "thermal_text.h"
 #include <android/asset_manager.h>
@@ -18,6 +19,7 @@
 #include <fcntl.h>
 #include <math.h>
 #include <poll.h>
+#include <sys/ioctl.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -160,6 +162,26 @@ static int s_log_fd = -1;
 static SDL_Mutex *s_mirror_lock;
 static char s_line[1024];
 static size_t s_line_len;
+/* the log thread's own cost (host_android.h ico_android_log_mirror_take) */
+static SDL_SpinLock s_statLock;
+static IcoLogMirrorStats s_stat;
+
+/* the first words of a chunk, up to the second ':' (the line's family:
+   "window: perf classes", "rd: GPU clock") */
+static void chunk_family(const char *b, size_t n, char *out, size_t size)
+{
+    size_t k = 0;
+    int colons = 0;
+
+    while (k < n && k + 1 < size && b[k] != '\n') {
+        if (b[k] == ':' && ++colons == 2) {
+            break;
+        }
+        out[k] = b[k];
+        k++;
+    }
+    out[k] = '\0';
+}
 
 static void logcat_line(void)
 {
@@ -172,6 +194,7 @@ static void logcat_line(void)
 static void mirror_chunk(const char *b, size_t n)
 {
     size_t i, off = 0;
+    const double t0 = ico_thread_now_ms();
 
     while (off < n) {
         ssize_t w = write(s_log_fd, b + off, n - off);
@@ -181,6 +204,7 @@ static void mirror_chunk(const char *b, size_t n)
         }
         off += (size_t)w;
     }
+    const double t1 = ico_thread_now_ms();
     for (i = 0; i < n; i++) {
         if (b[i] == '\n') {
             logcat_line();
@@ -191,6 +215,25 @@ static void mirror_chunk(const char *b, size_t n)
             }
         }
     }
+    const double t2 = ico_thread_now_ms();
+    SDL_LockSpinlock(&s_statLock);
+    s_stat.bytes += n;
+    s_stat.writes++;
+    s_stat.writeMs += t1 - t0;
+    s_stat.logcatMs += t2 - t1;
+    if (t1 - t0 > s_stat.longestMs) {
+        s_stat.longestMs = t1 - t0;
+        chunk_family(b, n, s_stat.longestFamily, sizeof(s_stat.longestFamily));
+    }
+    if (t1 - t0 >= ICO_LOG_MIRROR_SLOW_MS) {
+        if (s_stat.slowN < ICO_LOG_MIRROR_SLOW_KEEP) {
+            s_stat.slowT0[s_stat.slowN] = t0;
+            s_stat.slowT1[s_stat.slowN] = t1;
+            s_stat.slowN++;
+        }
+        s_stat.slow++;
+    }
+    SDL_UnlockSpinlock(&s_statLock);
 }
 
 /* reads what the pipe holds now (non-blocking), under the lock; 0 at its
@@ -200,6 +243,17 @@ static int mirror_drain(void)
     char buf[4096];
 
     for (;;) {
+        int waiting = 0;
+
+        /* what waits in the pipe before this read: a writer waits only
+           once it holds the pipe's size */
+        if (ioctl(s_pipe_r, FIONREAD, &waiting) == 0 && waiting > 0) {
+            SDL_LockSpinlock(&s_statLock);
+            if ((unsigned)waiting > s_stat.pipeMax) {
+                s_stat.pipeMax = (unsigned)waiting;
+            }
+            SDL_UnlockSpinlock(&s_statLock);
+        }
         ssize_t n = read(s_pipe_r, buf, sizeof(buf));
 
         if (n > 0) {
@@ -277,6 +331,13 @@ int ico_android_log_mirror_start(const char *log_path)
         goto fail;
     }
     close(fds[1]);
+#ifdef F_GETPIPE_SZ
+    {
+        const int cap = fcntl(fds[0], F_GETPIPE_SZ);
+
+        s_stat.pipeCap = cap > 0 ? (unsigned)cap : 0u;
+    }
+#endif
     /* each call one write, as on Linux, so lines arrive whole and in order */
     setvbuf(stdout, NULL, _IONBF, 0);
     setvbuf(stderr, NULL, _IONBF, 0);
@@ -314,6 +375,20 @@ void ico_android_log_mirror_flush(void)
     SDL_LockMutex(s_mirror_lock);
     mirror_flush_locked();
     SDL_UnlockMutex(s_mirror_lock);
+}
+
+int ico_android_log_mirror_take(IcoLogMirrorStats *out)
+{
+    if (s_pipe_r < 0) {
+        return -1;
+    }
+    SDL_LockSpinlock(&s_statLock);
+    *out = s_stat;
+    const unsigned cap = s_stat.pipeCap;
+    memset(&s_stat, 0, sizeof(s_stat));
+    s_stat.pipeCap = cap;
+    SDL_UnlockSpinlock(&s_statLock);
+    return 0;
 }
 
 void ico_android_log_mirror_try_flush(void)

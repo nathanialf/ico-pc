@@ -15,6 +15,7 @@
 #include "rd_perf_rare.h"
 #include "rhi.h"
 #include "thermal_text.h"
+#include "window_lines.h"   /* window_log_cost_present */
 #include "window_present.h" /* window_refresh_ns */
 #ifdef __ANDROID__
 #include "gpu_sysfs_android.h"
@@ -246,6 +247,9 @@ void window_stall_gpu_block(void)
 void window_stall_blocked(const RdPerfRecord *r)
 {
     around_queue(r);
+    if (r->presentEndMs > 0.0) {
+        window_log_cost_present(r->presentEndMs - r->presentMs, r->presentEndMs);
+    }
     s_after.pending = 1;
     s_after.replay = r->replay;
     s_after.ms = r->presentMs;

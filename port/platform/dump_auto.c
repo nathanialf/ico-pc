@@ -131,7 +131,8 @@ static void write_job(IcoDumpJob *j, IcoDumpDone *d)
             (void)ico_slow_dump_prune(dir, ICO_SLOW_DUMP_KEEP);
         }
     }
-    d->workerMs = ico_thread_now_ms() - t0;
+    d->workerEndMs = ico_thread_now_ms();
+    d->workerMs = d->workerEndMs - t0;
 }
 
 static void worker_main(void *arg)

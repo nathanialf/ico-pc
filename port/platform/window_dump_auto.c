@@ -20,6 +20,7 @@
 #include "rd.h"
 #include "rd_thread.h" /* rd_thread_drain */
 #include "trace_host.h"
+#include "window_lines.h" /* window_log_cost_job */
 #include "window_present.h"
 
 #define s_pres g_windowPres
@@ -206,6 +207,7 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
 
 static void report_one(const IcoDumpDone *d)
 {
+    window_log_cost_job(d->gameMs, d->workerEndMs - d->workerMs, d->workerEndMs);
     if (d->result < 0) {
         fprintf(stderr,
                 "window: %s: zip not written: %s (%.1f ms on the game thread, %.0f ms on the "

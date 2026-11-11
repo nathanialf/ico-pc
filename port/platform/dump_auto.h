@@ -52,8 +52,9 @@ typedef struct IcoDumpDone {
     char why[160];
     int result; /* 0 both, 1 without the log, -1 not written */
     double gameMs, workerMs;
-    double drainMs; /* IcoDumpJob.drainMs */
-    size_t bytes;   /* the dump's bytes */
+    double drainMs;     /* IcoDumpJob.drainMs */
+    double workerEndMs; /* the worker's end, ico_thread_now_ms */
+    size_t bytes;       /* the dump's bytes */
 } IcoDumpDone;
 
 /* 1 when a job is being written or its result is not yet picked up: the

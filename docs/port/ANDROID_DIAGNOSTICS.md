@@ -1097,3 +1097,23 @@ counters in the hot path.
   the render and submit threads first); the zip and the file writes were already the worker's. On a
   GPU-bound phone the drain is the render thread's own slot wait, so most of issue 179's 26-156 ms
   hitches are expected to be that wait (unmeasured until the next log).
+- **The logging's own cost** (`port/platform/log_cost.c`, `window_lines.c`, the log thread's
+  counts in `port/platform/android/host_android.c`), once a 10 s block:
+
+      window: logging: 8.0 KB written to the log in the block (every thread's); the window thread's
+      10 s lines 1.25 ms (formatting and writing; 0 during a present that blocked, 0 during a late
+      game step); the log thread's file writes 42 in 14.5 ms, the longest 9.0 ms (from "rd: GPU
+      clock"), 2 of 8 ms or more (1 during a present that blocked, 1 during a late game step);
+      logcat 1.5 ms; the pipe at most 2 of 64 KB waiting (never full: no writer waited); captures 1:
+      30.8 ms on the game thread (the longest 30.8 ms), 550 ms on the worker (0 during a present
+      that blocked, 1 during a late game step); 1 presents blocked, 1 late game steps in the block
+
+  How the log is written: on Android stdout and stderr are a pipe; each `fprintf` is one `write`
+  into it (a copy into the kernel's pipe buffer) and the `ico-log` thread writes the file and
+  logcat, so a slow file write (the app's external folder is FUSE-backed) holds the log thread, not
+  the game, render or submit thread, until the pipe is full. "never full: no writer waited" is the
+  proof for the block; "full" names the one case where logging can hold a game thread. The file is
+  never synced; on a hard kill what is lost is what the pipe still held (normally nothing). On Linux
+  and macOS each line is one `write` on its own thread; on Windows the streams are buffered and
+  flushed once a vsync. A late game step is one 10 ms or more past its period; the overlaps say
+  whether a slow write or a capture coincided with a stall, not that it caused it.
