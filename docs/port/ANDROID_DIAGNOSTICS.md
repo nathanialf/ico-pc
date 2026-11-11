@@ -1139,3 +1139,14 @@ counters in the hot path.
   `window: pass timing's cost: GPU span median 67.4 ms with every pass stamped (37 pictures), 64.1
   ms with the list stamps only (111 pictures): +3.3 ms (an estimate: different pictures of one
   block)`.
+- **What the device offers** (`port/rhi/vk/vk_device.c` `vkr_offer_line`, once at the device's
+  start, read-only queries, nothing enabled):
+
+      rhi_vk: offered (read only, nothing enabled for it): calibrated time domains KHR: device,
+      CLOCK_MONOTONIC, CLOCK_MONOTONIC_RAW; global queue priority KHR offered, its query too (the
+      game's queue family 0's priorities: 4: low, medium, high, realtime); the game's one queue made
+      at priority 1.0 with no global priority asked (the driver's default, medium)
+
+  Whether the compositor could preempt the game's queue (issue 123's T2) and whether a stall could
+  be placed on the CPU's clock if the polled wait were used again. The calibrated domains are
+  listed whatever the submission wait; they are enabled only with the polled wait, as before.

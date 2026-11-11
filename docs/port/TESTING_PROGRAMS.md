@@ -1455,7 +1455,7 @@ The renderer's test programs have a page of their own:
   its visibility and the closing barrier, each with the masks of the release before the narrowing), a texture copied into the
   arena (the copy's wait the shader stages and vertex input alone, no transfer stage, no memory
   barrier), and texture copy, buffer copy, texture copy (the second's barrier with a buffer barrier:
-  the hazard record kept; narrow: none); the narrow runs the narrow closing barrier. `rhi_vk_clock_arm` (the argument `clock`: the clock cell alone) on Arm faked with
+  the hazard record kept; narrow: none); the narrow runs the narrow closing barrier. `rhi_vk_offer` (the same `clock` run, passing on the device start's `rhi_vk: offered (read only, nothing enabled for it): calibrated time domains ...; global queue priority ... offered` line, issue 123). `rhi_vk_clock_arm` (the argument `clock`: the clock cell alone) on Arm faked with
   `ICO_TEST_POLLED_WANT=0`: the single wait, a held wait of 150 ms with no trace point, no
   calibrated pair and no fall (`RhiLimits.polledWait` false); every other run asserts the polled
   wait's trace as before.

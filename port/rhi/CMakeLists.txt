@@ -732,6 +732,12 @@ if(_ico_have_vk)
                              "${_ico_vk_scopesan_env}")
         set_tests_properties(rhi_vk_clock_arm PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_clockarm_env}")
+        # rhi_vk_offer: the device start's read-only line of what it offers
+        # for the stall diagnostics (vk_device.c vkr_offer_line, issue 123):
+        # the calibrated time domains and the global queue priority
+        add_test(NAME rhi_vk_offer COMMAND rhi_vk_test clock)
+        set_tests_properties(rhi_vk_offer PROPERTIES SKIP_RETURN_CODE 77 PASS_REGULAR_EXPRESSION
+                             "rhi_vk: offered \\(read only, nothing enabled for it\\): calibrated time domains [^;]+; global queue priority (KHR and EXT|KHR|EXT|not) offered")
         # a pass's own colour read in it with a depth target bound
         # (rhi_vk_subpass.c, DATE's stencil setup's shape) under
         # synchronisation validation with the shader access analysis on:
