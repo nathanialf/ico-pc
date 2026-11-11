@@ -78,6 +78,9 @@ static const char *const kRetakeWhy[RD_DATE_RETAKE_COUNT] = {
     "the first", "another target", "an alpha write since", "an area not held",
     "the copy used elsewhere"};
 
+/* the last scan's runs, for the tests (rd__date_cut_last_runs) */
+static uint32_t s_lastN, s_lastStart[DC_RUNS], s_lastEnd[DC_RUNS];
+
 static int s_force = -1; /* rd__date_cut_force: -1 the switch's own, 0, 1 */
 
 void rd__date_cut_force(int mode)
@@ -105,6 +108,7 @@ bool rd__date_cut_on(void)
 
 bool rd__date_cut_scan_begin(const RdFrame *f)
 {
+    s_lastN = 0; /* a replay with the cut off has no runs to show */
     s_dc.n = s_dc.cur = 0;
     memset(&s_dc.scan, 0, sizeof(s_dc.scan));
     s_dc.serialValid = false;
@@ -188,9 +192,6 @@ void rd__date_cut_scan_cmd(const RdCmd *c, const RdStateBlock *st, bool state, u
     dcClose(did, start, ord);
 }
 
-/* the last scan's runs, for the tests (rd__date_cut_last_runs) */
-static uint32_t s_lastN, s_lastStart[DC_RUNS], s_lastEnd[DC_RUNS];
-
 void rd__date_cut_scan_end(uint32_t ord)
 {
     s_lastN = 0;
@@ -257,7 +258,8 @@ void rd__date_cut_depth(Replay *r, DrawSetup *ds, const RdTargetRec *td)
     if (ds->dateStencil || r->dateStNow || r->dateDstNow || rd__replay_msaa_want() > 1u ||
         g_rd.dstMode != RD_BLEND_EXACT_OFF ||
         rd__stencil_live(rd__replay_stencil(), td->depth.id) ||
-        rd__target_z_scale(r->st.depth) != rd__target_z_scale(0)) {
+        rd__target_z_scale(r->st.depth) != rd__target_z_scale(0) ||
+        !rd_date_cut_scale_ok(ds->tc->sx, ds->tc->sy)) {
         g_rdPerf.dateCutKept++;
         return;
     }

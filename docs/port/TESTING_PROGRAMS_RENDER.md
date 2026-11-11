@@ -811,7 +811,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   passes without the depth (`rd_date_cut.c`, `rd_date_cut.h`): the rule on made-up commands (the
   shadow's three composites then a mesh draw: two depth-free runs, the third undecided; a draw that
   tests the depth between two DATE draws; a DATE draw after no alpha write in the run; a post
-  sprite, a copy, a VU draw elsewhere; no run without a depth target, a depth-using or AA1 draw);
+  sprite, a copy, a VU draw elsewhere; no run without a depth target, a depth-using or AA1 draw;
+  integer scales only, `rd_date_cut_scale_ok`);
   every screen-family key with an unused depth has its no-depth twin in the start-up set; a frame in
   the composites' shape and two variants (a Z GEQUAL draw after the third composite in its pass, one
   between the first two) (`ICO_RD_DATE_PATH=snapshot`, `ICO_RD_BLEND=fixed`,
@@ -906,12 +907,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `ICO_RD_VU_PREPASS=0`, at the Mali-G52's setting (1x, 21:9, 1612x720; `ICO_VK_FAKE_LIMITS=mali`,
   `ICO_VK_FAKE_NO_DST=1`), the Adreno 740's (3x, 3:2, Full height and pixel, 3048x2032;
   `ICO_VK_FAKE_ADRENO=1`, `ICO_VK_FAKE_NO_DST=1`) and the PowerVR phone's Resolution Auto without
-  its in-pass read (`ICO_VK_FAKE_NO_DST=1`); the `_gl` twin the Mali's setting on OpenGL (llvmpipe).
+  its in-pass read (`ICO_VK_FAKE_NO_DST=1`: a fractional scale, 0 passes cut expected); the `_gl`
+  twin the Mali's setting on OpenGL (llvmpipe).
   Each pair: every PNG byte for byte, the same draws, passes, snapshots, colour and copy MB; the
   off run cuts nothing, the on run begins no pass again, cuts the passes the list names (2 for the
   composites) or at least one where it takes two snapshots, and its depth and stencil MB loaded and
   stored each fall by 0.8 to 1.0 of the "at most" its stats line names; Vulkan also `--keys` at the
-  Mali's setting: the cut adds no key the start-up set lacks. No device: SKIP.
+  Mali's present size without an aspect: the cut adds no key the start-up set lacks. No device: SKIP.
 - `rd_shadow_box_test.c` (`rd_shadow_box`, CPU): the shadows over the volumes' box
   (`rd_shadow_box.c`): the count's box from 12.4 vertices (margins, a clamped vertex, clipping);
   one axis through a sprite (the Pixel frame's level 0 across and down, its rows past the count's

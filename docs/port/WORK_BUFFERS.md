@@ -1398,7 +1398,11 @@ another target) or the open pass on its target has no depth; `bindDrawEx` then b
 the colour alone, as for any target without a depth. Not taken (the draw keeps its depth): DATE
 through the stencil bit or the shader's read, an MSAA epoch wanted, the exact blend, an open shadow
 window on the depth (`rd__stencil_live`), a pass open on the target with its depth (the draw joins
-it). The store plan is not changed: a DATE draw still counts as a touch of the depth, so every pass
+it), a fractional scale (`rd_date_cut_scale_ok`: whole texels a GS pixel only; at the PowerVR
+phone's Resolution Auto, 2.79 x 2.41 on its F12 frame, lavapipe drew the second composite one level
+apart at four texels with the depth attached and without it, with every other cut's switch and the
+store plan's poison off alike: the two pipelines' code for the same shader rounds the above-1x
+sample apart on a tie; 1x, 2x and 3x were byte-equal on every dump). The store plan is not changed: a DATE draw still counts as a touch of the depth, so every pass
 that keeps its depth loads and stores it as with the cut off (list 0's pass, whose stencil the
 shadow count reads, and every later reader).
 

@@ -17,7 +17,10 @@
 #           (ICO_VK_FAKE_ADRENO=1, ICO_VK_FAKE_NO_DST=1);
 #   phone   the PowerVR phone's Resolution Auto (2364x1080, Full height, Full
 #           pixel, aspect 2.189) with its in-pass read taken away
-#           (ICO_VK_FAKE_NO_DST=1);
+#           (ICO_VK_FAKE_NO_DST=1): a fractional scale, where the cut keeps
+#           every depth (rd_date_cut_scale_ok; the Pixel's v3677 drew a
+#           composite a level apart at four texels with the cut there before
+#           the rule): 0 passes cut, the bytes the same;
 # a dump drawn narrower than a setting's aspect cannot show it and is skipped
 # there.  -DBACKEND=opengl (rd_date_cut_ab_gl): the mali setting alone on
 # OpenGL (llvmpipe, DATE by the snapshot there; the Vulkan fakes left out).
@@ -31,7 +34,7 @@
 # "at most" its stats name (4 bytes of depth and up to 1 of stencil a texel),
 # and by something where it cut.  On Vulkan also --keys at the mali setting:
 # the cut on asks for no pipeline the start-up set lacks that the cut off does
-# not.  No device: SKIP (77).
+# not (no --aspect there: --present 1612x720 alone).  No device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 # -DBACKEND=vulkan|opengl
 set(dumps "")
@@ -87,6 +90,9 @@ set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --as
                --present 2364x1080)
 set(env_phone ICO_VK_FAKE_NO_DST=1)
 set(args_gl ${args_mali})
+# --keys: no aspect (a dump drawn narrower than 21:9 cannot show it, and the
+# keys do not depend on it)
+set(args_keys --present 1612x720)
 set(env_gl "")
 if("${BACKEND}" STREQUAL "opengl")
   set(settings gl)
@@ -198,10 +204,15 @@ foreach(dump IN LISTS dumps)
       math(EXPR failures "${failures} + 1")
     endif()
     set(want "${want_${dump}}")
+    if(s STREQUAL "phone")
+      # a fractional scale (2364x1080 for the frame: 2.79 x 2.41 on the
+      # Pixel's): the cut keeps the depth (rd_date_cut.h rd_date_cut_scale_ok)
+      set(want 0)
+    endif()
     if(NOT want STREQUAL "" AND NOT cut_1 EQUAL want)
       message(SEND_ERROR "${dump} ${s}: ${cut_1} passes without the depth, ${want} expected")
       math(EXPR failures "${failures} + 1")
-    elseif(want STREQUAL "" AND snaps_1 GREATER 1 AND cut_1 LESS 1)
+    elseif(want STREQUAL "" AND snaps_1 GREATER 1 AND cut_1 LESS 1 AND NOT s STREQUAL "phone")
       message(SEND_ERROR "${dump} ${s}: ${snaps_1} DATE snapshots and no pass without the depth")
       math(EXPR failures "${failures} + 1")
     endif()
@@ -246,7 +257,7 @@ foreach(dump IN LISTS dumps)
   if(NOT "${BACKEND}" STREQUAL "opengl")
     foreach(cut 0 1)
       execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${env_mali} ICO_RD_DATE_CUT=${cut}
-                              "${TOOL}" "${dump}" - --keys ${args_mali}
+                              "${TOOL}" "${dump}" - --keys ${args_keys}
                       RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
       if(rc EQUAL 77)
         message(STATUS "SKIP: no device: ${err}")

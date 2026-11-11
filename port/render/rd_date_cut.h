@@ -97,6 +97,21 @@ static inline int rd_date_cut_step(RdDateCutScan *s, const RdDateCutCmd *c, uint
     return did;
 }
 
+/* The scales the cut takes: whole texels per GS pixel on both axes.  At a
+ * fractional scale (the PowerVR phone's Resolution Auto, 2364x1080 for a
+ * 848x448 frame: 2.79 x 2.41) lavapipe drew the second shadow composite one
+ * level apart at four texels with the depth attached and without it (round 3
+ * of v0.11.5's merge check: the Pixel's v3677 at that setting, SCENE
+ * (354,897), (354,905), (354,906), (23,974), every other package's switch off
+ * and the store plan's poison off alike): the two pipelines' fragment code,
+ * the same shader, rounds the above-1x sample apart where it lands on a tie.
+ * The integer scales (1x, 2x, 3x) were byte-equal on every dump, so the cut
+ * keeps to them: when in doubt the pass keeps its depth. */
+static inline bool rd_date_cut_scale_ok(float sx, float sy)
+{
+    return sx >= 1.0f && sy >= 1.0f && sx == (float)(uint32_t)sx && sy == (float)(uint32_t)sy;
+}
+
 /* the replay's end at ordinal ord: the open run is depth-free ([*start, ord)) */
 static inline int rd_date_cut_finish(RdDateCutScan *s, uint32_t ord, uint32_t *start)
 {
