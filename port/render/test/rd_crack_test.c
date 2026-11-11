@@ -75,6 +75,13 @@
 #include "rd_late_pass.h"
 #include "vk/rhi_vk.h"
 
+/* rd_crack_fill.c's FILLSWAP and CRACKTAP (declared in rd_replay.h, which
+ * needs the shaders' include path this test does not have) */
+bool rd__crack_swap_selftest(void);
+int rd__crack_swap_test(void);
+void rd__crack_swap_force(int on);
+void rd__crack_tap2_force(int on);
+
 static int failures;
 
 #define CHECK(c, ...)                                                                              \
@@ -259,7 +266,11 @@ static void recordAfter(RdTarget scene)
                 return;
             }
             /* defer: the aura's paste after the glow's (the paste deferred to
-             * its pass, the fill held on to it) */
+             * its pass, the fill held on to it), the aura's own sprite into
+             * WORK1 between them (staticBlur's aura draws into its buffers
+             * before its paste): without the late pass the glow's paste and
+             * the aura's are a pass each, not one pass on SCENE drawn on
+             * across them */
         }
         rd_select_list(8);
         rd_texture_off();
@@ -268,6 +279,11 @@ static void recordAfter(RdTarget scene)
         rd_z_write(0);
         rd_gouraud(0);
         rd_test_gs(RD_TEST_Z_ALWAYS);
+        if (s_after == AFTER_DEFER) {
+            rd_set_target(rd_target(RD_TARGET_WORK1), (RdTarget){0}, 256, 128, 0);
+            rd_abe(0);
+            blurSprite(RD_POST_AURA, 256, 128, kFeed, 0, 0.0f, 0.0f);
+        }
         rd_set_target(scene, scene, GW, GH, 0);
         rd_texture(rd_target_texture(work0, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
         rd_sampler_filter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
@@ -410,6 +426,8 @@ typedef struct Picture {
      * pass, held fills drawn early in a pass of their own, list 11's draws
      * joined without the depth and the passes they joined */
     uint32_t held, glowHeld, early, joined, joinPasses, deferred, deferEarly;
+    /* FILLSWAP and CRACKTAP: snapshots by the swap, copied ones, early-leave draws */
+    uint32_t swaps, swapCopied, tap2;
 } Picture;
 
 static bool replay(bool fill, Picture *p)
@@ -427,6 +445,9 @@ static bool replay(bool fill, Picture *p)
     p->early = g_rdPerf.latePassFlushed;
     p->joined = g_rdPerf.latePassJoined;
     p->joinPasses = g_rdPerf.latePassJoinPasses;
+    p->swaps = g_rdPerf.crackSwaps;
+    p->swapCopied = g_rdPerf.crackSwapCopied;
+    p->tap2 = g_rdPerf.crackTap2;
     rhi_wait_idle();
     const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!t) {
@@ -617,6 +638,106 @@ static void checkJoin(const Picture *on)
     CHECK(fewer == 1, "%d render passes fewer than the join off, not 1", fewer);
     free(un.px);
     free(un.z);
+}
+
+/* one replay of the frame with the swap and the early leave forced (-1 the
+ * environment's) and the general shader forced or not: the counts' change */
+static bool workReplay(int swap, int tap2, bool general, Picture *p, uint64_t *pixels)
+{
+    rd__crack_swap_force(swap);
+    rd__crack_tap2_force(tap2);
+    rd__crack_fill_force_general(general);
+    RdCrackCounts a, b;
+    rd__crack_fill_wait();
+    rd__crack_fill_counts(&a);
+    const bool ok = replay(true, p);
+    rd__crack_fill_wait();
+    rd__crack_fill_counts(&b);
+    rd__crack_swap_force(-1);
+    rd__crack_tap2_force(-1);
+    rd__crack_fill_force_general(false);
+    *pixels = b.pixels - a.pixels;
+    return ok;
+}
+
+static void workDiff(const Picture *a, const Picture *b, size_t *dPx, size_t *dZ)
+{
+    *dPx = *dZ = 0;
+    for (size_t i = 0; i < (size_t)a->w * a->h; i++) {
+        *dPx += memcmp(&a->px[i * 4], &b->px[i * 4], 4) != 0;
+        *dZ += a->z && b->z && memcmp(&a->z[i], &b->z[i], sizeof(float)) != 0;
+    }
+}
+
+/* FILLSWAP and CRACKTAP (rd_crack_fill.c), wherever the filler draws: the
+ * swap's self-test on this device (passed: rd_crack_test runs no
+ * rd_fog_selftest, so the swap is off until it is run here), then the frame
+ * with the swap and the early leave forced on against both forced off:
+ * SCENE's colour and depth byte for byte against each other and against the
+ * frame as first drawn (on: the swap not yet tested, the early leave as the
+ * environment has it), the same render passes, fill passes and count; the
+ * snapshot taken by the swap once (where the late pass holds the fill: none,
+ * copied for that reason), copied once with the swap off; the early leave
+ * drawn once where the general shader draws at a reach of at most 2 (the
+ * reach-1 shader below 2 on both axes: none), none with it off.  At a reach
+ * of 1 on both axes the general shader forced, with both on: the same bytes,
+ * the early leave once. */
+static void checkWork(const Picture *on, uint32_t rx, uint32_t ry)
+{
+    const bool passed = rd__crack_swap_selftest();
+    CHECK(passed && rd__crack_swap_test() == 1, "the swap's self-test: %d (1 passed)",
+          rd__crack_swap_test());
+    Picture a, b, g;
+    memset(&a, 0, sizeof(a));
+    memset(&b, 0, sizeof(b));
+    memset(&g, 0, sizeof(g));
+    uint64_t pa = 0, pb = 0, pg = 0;
+    const bool okA = workReplay(1, 1, false, &a, &pa) && a.w == on->w && a.h == on->h;
+    const bool okB = workReplay(0, 0, false, &b, &pb) && b.w == on->w && b.h == on->h;
+    const bool one = rx <= 1u && ry <= 1u;
+    const bool okG = !one || (workReplay(1, 1, true, &g, &pg) && g.w == on->w && g.h == on->h);
+    CHECK(okA && okB && okG, "SCENE readbacks with the swap and the early leave forced");
+    if (!(okA && okB && okG)) {
+        free(a.px), free(a.z), free(b.px), free(b.z), free(g.px), free(g.z);
+        return;
+    }
+    size_t dPx, dZ, oPx, oZ, gPx = 0, gZ = 0;
+    workDiff(&a, &b, &dPx, &dZ);
+    workDiff(on, &b, &oPx, &oZ);
+    if (one) {
+        workDiff(&g, &b, &gPx, &gZ);
+    }
+    const uint32_t swapWant = held() ? 0u : 1u;
+    const uint32_t tapWant = one ? 0u : (rx <= 2u && ry <= 2u ? 1u : 0u);
+    printf("  swap and early leave on: %u snapshots by the swap, %u copied, %u early-leave draws "
+           "(off: %u, %u, %u); %zu texels' colour and %zu depths differ (against the first: %zu, "
+           "%zu), render passes %u and %u, fill passes %u and %u, counted %llu and %llu pixels\n",
+           a.swaps, a.swapCopied, a.tap2, b.swaps, b.swapCopied, b.tap2, dPx, dZ, oPx, oZ, a.passes,
+           b.passes, a.fills, b.fills, (unsigned long long)pa, (unsigned long long)pb);
+    CHECK(dPx == 0 && dZ == 0 && oPx == 0 && oZ == 0,
+          "the swap and the early leave on against off: %zu colours, %zu depths differ "
+          "(against the first replay %zu, %zu)",
+          dPx, dZ, oPx, oZ);
+    CHECK(a.swaps == swapWant && a.swapCopied == 1u - swapWant,
+          "%u snapshots by the swap, %u copied: %u and %u expected", a.swaps, a.swapCopied,
+          swapWant, 1u - swapWant);
+    CHECK(b.swaps == 0 && b.swapCopied == 1, "the swap off: %u swapped, %u copied", b.swaps,
+          b.swapCopied);
+    CHECK(a.tap2 == tapWant && b.tap2 == 0, "early-leave draws %u (off %u): %u expected", a.tap2,
+          b.tap2, tapWant);
+    CHECK(a.passes == b.passes && a.fills == b.fills && pa == pb,
+          "render passes %u and %u, fill passes %u and %u, counts %llu and %llu", a.passes,
+          b.passes, a.fills, b.fills, (unsigned long long)pa, (unsigned long long)pb);
+    if (one) {
+        printf("  the general shader with both on: %u early-leave draws, %u snapshots by the swap; "
+               "%zu texels' colour and %zu depths differ, counted %llu pixels\n",
+               g.tap2, g.swaps, gPx, gZ, (unsigned long long)pg);
+        CHECK(gPx == 0 && gZ == 0 && g.tap2 == 1 && g.swaps == swapWant && pg == pb,
+              "the general shader with both on: %zu colours, %zu depths differ, %u early-leave "
+              "draws, %u swapped, %llu pixels",
+              gPx, gZ, g.tap2, g.swaps, (unsigned long long)pg);
+    }
+    free(a.px), free(a.z), free(b.px), free(b.z), free(g.px), free(g.z);
 }
 
 int main(int argc, char **argv)
@@ -926,6 +1047,9 @@ int main(int argc, char **argv)
         checkJoin(&on);
     } else if (s_after != AFTER_NONE) {
         checkPlace(&on, c0, c1, active);
+    }
+    if (active && !msaa) {
+        checkWork(&on, rx, ry);
     }
     if (msaa) {
         /* the same frame without anti-aliasing and without the filler (a

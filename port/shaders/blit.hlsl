@@ -394,6 +394,16 @@ float depth_upsample_ps(BlitVSOut i) : SV_Depth
 //               right of the pixel's (0 but for a held fill's draws over
 //               SCENE's repeated border columns, each at its source column:
 //               rd_crack_fill.c fillDrawHeld); a whole number
+//   g_mode.x    crack_fill_ps's mode (rd_crack_fill.c CRACK_MODE_*): bit 0 COPY,
+//               a texel that is no crack takes its own snapshot texel instead of
+//               being discarded (the swap: the attachment is the old snapshot
+//               texture, holding nothing of this picture); bit 1 KEEP_A, with
+//               COPY every texel's alpha its own snapshot texel's (the fill
+//               writes RGB alone after the glow's alpha); bit 2 EARLY, the
+//               general shader at a reach of at most 2 on both axes: a texel
+//               with neither immediate neighbour in front on an axis whose reach
+//               is at least 1 is no crack at once (a run of at most 2 texels has
+//               an end at distance 1: the verdict is crack_at's); 0 in the count
 // crack_count_ps: the same test over a 16 x 16 block of SCENE's depth (t1
 // there) per output texel, the count n of cracks written as (n & 255,
 // n >> 8) / 255 in R and G of an RGBA8 target (the filled pixels, read back
@@ -488,6 +498,17 @@ bool crack_at(Texture2D<float> z, int2 p, int2 size, int2 reach, float share, ou
 {
     from = p;
     float dp = crack_depth(z, p, size);
+    if ((g_mode.x & 4u) != 0u) {
+        // EARLY (g_mode.x bit 2; the CPU sets it at a reach of at most 2): no
+        // end at distance 1 on an axis, no run on it
+        bool nx = reach.x >= 1 && (crack_front(crack_depth(z, p + int2(-1, 0), size), dp, share) ||
+                                   crack_front(crack_depth(z, p + int2(1, 0), size), dp, share));
+        bool ny = reach.y >= 1 && (crack_front(crack_depth(z, p + int2(0, -1), size), dp, share) ||
+                                   crack_front(crack_depth(z, p + int2(0, 1), size), dp, share));
+        if (!nx && !ny) {
+            return false;
+        }
+    }
     int run = CRACK_REACH_MAX + 1;
     float da, db;
     int l = crack_end(z, p, int2(-1, 0), reach.x, size, dp, share, da);
@@ -514,10 +535,18 @@ float4 crack_fill_ps(BlitVSOut i) : SV_Target0
     g_sceneDepth.GetDimensions(w, h);
     int2 p = int2(i.pos.xy) + int2(int(g_param.w), 0);
     int2 from;
+    const bool copy = (g_mode.x & 1u) != 0u;
     if (!crack_at(g_sceneDepth, p, int2(int(w), int(h)), int2(g_param.xy), g_param.z, from)) {
-        discard;
+        if (!copy) {
+            discard;
+        }
+        from = p; // COPY: the texel's own (crack_at leaves from at p)
     }
-    return g_texture.Load(int3(from, 0));
+    float4 c = g_texture.Load(int3(from, 0));
+    if (copy && (g_mode.x & 2u) != 0u) {
+        c.a = g_texture.Load(int3(p, 0)).a; // KEEP_A
+    }
+    return c;
 }
 
 float4 crack_count_ps(BlitVSOut i) : SV_Target0

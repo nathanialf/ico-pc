@@ -430,6 +430,41 @@ static bool planHolds(void)
            plan == RD_GLOW_LIGHT_WHOLE;
 }
 
+/* a paste pass on this device can take a held fill: the aura's when its
+ * paste reads its destination by the local read (rd_crack_fill.c
+ * pasteWhyNot's device part), the glow's when the fx plan draws it by the
+ * premultiplied add (glowWhyNot's); under DARK the aura's alone (the plan
+ * skips the glow's paste).  Where none can, the hold would only draw the
+ * fill later in a pass of its own (past SCENE's border repeat: a draw a
+ * repeated block more), so the fill is drawn where it was due, as without
+ * the late pass (the GL backend's form: its paste reads a snapshot).  The
+ * tests' RD_LATE_ANY_PLAN ignores the device too (rd_late_pass_test's scan
+ * runs record-only, without a device's profile) */
+static bool landPossible(void)
+{
+    if (anyPlan()) {
+        return true;
+    }
+    const bool aura = g_rd.profile.fxPlan && g_rd.profile.fxDstLocal &&
+                      g_rd.fs[RD_FS_FX_LOCAL].id && g_rd.layoutLocal.id;
+    if (aura) {
+        return true;
+    }
+    const bool glow = g_rd.profile.fxPlan && g_rd.fs[RD_FS_FX_FRAME].id && !rd__uber_on();
+    const bool ok = glow && rd__glow_light_plan() != RD_GLOW_LIGHT_DARK;
+    static bool s_said;
+    if (!ok && !s_said) {
+        s_said = true;
+        rd__log("late pass: the crack fill not held on this device: no paste pass here can take "
+                "it (the aura's paste reads its destination through a snapshot%s): drawn where "
+                "it is due (reported once)",
+                glow ? ", and the glow's paste is skipped in this room"
+                     : ", and the glow's is "
+                       "not the premultiplied add");
+    }
+    return ok;
+}
+
 bool rd__late_pass_scan_end(const RdLateScan *s, uint32_t end, int endL, uint32_t *ord, int *l,
                             uint32_t *i)
 {
@@ -437,7 +472,7 @@ bool rd__late_pass_scan_end(const RdLateScan *s, uint32_t end, int endL, uint32_
         return false;
     }
     const bool dark = rd__glow_light_plan() == RD_GLOW_LIGHT_DARK && !anyPlan();
-    if (!planHolds()) {
+    if (!planHolds() || !landPossible()) {
         *ord = s->takeOrd; /* drawn where it is taken, as without the hold */
         *l = s->takeL;
         *i = s->takeI;
@@ -462,7 +497,8 @@ bool rd__late_pass_scan_end(const RdLateScan *s, uint32_t end, int endL, uint32_
 bool rd__late_pass_hold_wanted(void)
 {
     return (rd__late_pass_bits() & RD_LATE_FILL) != 0 && planHolds() && !rd__upscale_point_on() &&
-           rd__replay_msaa_want() <= 1u && g_rd.dstMode == RD_BLEND_EXACT_OFF && !g_rdWin.first;
+           rd__replay_msaa_want() <= 1u && g_rd.dstMode == RD_BLEND_EXACT_OFF && !g_rdWin.first &&
+           landPossible();
 }
 
 void rd__late_pass_held_drawn(const RdTargetRec *scene, bool glow)
@@ -511,6 +547,20 @@ void rd__late_pass_join(Replay *r, DrawSetup *ds)
         g_rd.passSamples > 1u || rd__replay_msaa_want() > 1u ||
         g_rd.dstMode != RD_BLEND_EXACT_OFF || rd__uber_on() ||
         !(rd__late_pass_bits() & RD_LATE_JOIN)) {
+        return;
+    }
+    /* only where the fx plan reads destinations by the local read (the
+     * profile its byte-for-byte A/B ran on: rd_late_pass_ab's phone and 4:3
+     * settings); on OpenGL, whose destination reads go another way, the
+     * joined passes' pictures differed (rd_late_pass_gl, 2026-11-11: issue
+     * 102's and 164's frames), the cause not found */
+    if (!g_rd.profile.fxDstLocal || !g_rd.profile.fxPlan) {
+        static bool s_said;
+        if (!s_said) {
+            s_said = true;
+            rd__log("late pass: list 11's draws not joined to the open pass on this device (the "
+                    "fx plan does not read destinations by the local read here) (reported once)");
+        }
         return;
     }
     /* a draw that uses no depth: no Z test (or ALWAYS), no Z write, no

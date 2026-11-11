@@ -293,6 +293,17 @@ bool rd__crack_fill_glow_due(void);
 void rd__crack_fill_in_pass(Replay *r, uint32_t tdId);
 void rd__crack_fill_paste_late(Replay *r, const char *why);
 bool rd__crack_fill_may(const RdStateBlock *st);
+/* FILLSWAP and CRACKTAP (rd_crack_fill.c): the swap's start-up self-test
+ * (rd_fog_path.c, with the other self-tests; true when it passed or had
+ * nothing to check), its result (0 not run, 1 passed, 2 failed), and the
+ * tests' switches (-1 the environment's: ICO_RD_CRACK_SWAP, ICO_RD_CRACK_TAP2) */
+bool rd__crack_swap_selftest(void);
+int rd__crack_swap_test(void);
+bool rd__crack_swap_on(void);
+const char *rd__crack_swap_why_text(uint32_t why);
+bool rd__crack_tap2_on(void);
+void rd__crack_swap_force(int on);
+void rd__crack_tap2_force(int on);
 /* the first list the armed fill may be drawn in (rd_store_plan.c's touch) */
 #define RD_CRACK_LATE_LIST 7
 /* the target's passes readable for the exact blend's attachment read (exactReadable) */

@@ -36,7 +36,9 @@
 # is no farther from the baseline than the no-fill run's is (no more pixels apart, no
 # larger difference: the late fill never takes a target farther from the old fill's
 # picture than no fill does).  At the phone's setting the stats line's copies are one fewer than
-# the baseline's (the depth no longer copied for the fill) and its passes no more.  The
+# the baseline's (the depth no longer copied for the fill) and its passes no more (the
+# fill's swap off in every run, ICO_RD_CRACK_SWAP=0: it saves the colour's copy too,
+# rd_crack_work_ab checks it).  The
 # differing pixels and the largest difference are printed per target.  Every run that
 # drew the fill is replayed once more with ICO_RD_CRACK_PLACE=7 (the fill at the start of
 # list 7, its place before; rd_crack_fill.c rd__crack_fill_place moves it after the
@@ -119,7 +121,7 @@ foreach(run IN LISTS runs)
   set(dir "${OUT}/${index}-${s}")
   file(REMOVE_RECURSE "${dir}")
   file(MAKE_DIRECTORY "${dir}")
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0 ICO_RD_CRACK_SWAP=0
                           ICO_RD_CULL=off ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dir}"
                           --stats ${args_${s}}
                   RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
@@ -148,7 +150,7 @@ foreach(run IN LISTS runs)
     set(pin "${dir}-pin")
     file(REMOVE_RECURSE "${pin}")
     file(MAKE_DIRECTORY "${pin}")
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0 ICO_RD_CRACK_SWAP=0
                             ICO_RD_CULL=off ${env_${s}} ICO_RD_CRACK_PLACE=7 "${TOOL}" "${dump}" -
                             --pass-dump "${pin}" --stats ${args_${s}}
                     RESULT_VARIABLE rcPin OUTPUT_VARIABLE outPin ERROR_VARIABLE errPin)
@@ -258,7 +260,7 @@ foreach(run IN LISTS runs)
   set(nofill "${dir}-nofill")
   file(REMOVE_RECURSE "${nofill}")
   file(MAKE_DIRECTORY "${nofill}")
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0 ICO_RD_CRACK_SWAP=0
                           ICO_RD_CULL=off ${env_${s}} ICO_RD_CRACK_FILL=0 "${TOOL}" "${dump}" -
                           --pass-dump "${nofill}" --stats ${args_${s}}
                   RESULT_VARIABLE rcNo OUTPUT_VARIABLE outNo ERROR_VARIABLE errNo)

@@ -632,6 +632,15 @@ classes` line's crack fill class loses its pass (its colour copy stays). Dark ro
 `drawn early` say a command the hold did not expect; the player's F12 dump replays it
 (`rd_replay_tool --stats` prints `late pass on: N crack fills held ..., M drawn early (<why>)`).
 
+### The crack fill's snapshot by the swap
+
+The crack fill's start-up check prints `rd: crack fill: swap: on (self-test: 256 levels a channel
+...)` where the phone keeps colours exactly through the fill's shader, else `swap: off (self-test
+failed at texel N: ... for ...)` and the fill copies SCENE as before
+([RENDER_POST.md](RENDER_POST.md#the-crack-fills-snapshot-by-the-swap)). The 10 s crack fill line's
+`; N snapshots by the swap, M copied (K <why>)` says how often the copy was saved; in a dark glow
+room the late pass holds the fill and the copy stays (`the draw held past the snapshot`).
+
 ### The aura's paste as its constant part
 
 In a room with no aura object on screen the aura's paste is drawn as the alpha alone over all but a

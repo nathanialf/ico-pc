@@ -858,7 +858,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   premultiplied add) in place of the aura's: the fill held into the glow's paste pass
   (`latePassGlowHeld` 1), the same checks.
 - `rd_crack_defer` (`rd_crack_test 2 defer`, the same fakes): `rd_crack_heldglow`'s frame with the
-  aura's paste (list 8) after the glow's: the glow's paste deferred to the aura's paste pass
+  aura's paste (list 8) after the glow's, and the aura's own sprite into WORK1 between them (without
+  it the late pass off draws both pastes in one pass on SCENE): the glow's paste deferred to the aura's paste pass
   (`latePassDeferred` 1, none early) and the fill held on to it (`latePassHeld` 1, none in the
   glow's pass), the same checks with two render passes fewer than the late pass off.
 - `rd_crack_join` (`rd_crack_test 2 join`, `ICO_VK_FAKE_LIMITS=moltenvk`; `rd_late_pass.cmake`):
@@ -872,8 +873,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   none too) with `ICO_RD_LATE_PASS=0` and `1`, `--pass-dump --stats`, `ICO_RD_VU_PREPASS=0`, at the
   PowerVR phone's Resolution Auto (2364x1080, Full height and pixel) and at Enhanced 2x 4:3, both under
   `ICO_VK_FAKE_LIMITS=moltenvk`; the `_gl` twin the phone's setting on OpenGL (llvmpipe, the aura's
-  paste through a snapshot: a held fill drawn early in its own pass). Each pair: every PNG byte for
-  byte, the same draws, the passes fewer by exactly the fills held, the glow pastes deferred to the
+  paste through a snapshot: no fill held in a DARK room, one held into the glow's paste pass in a
+  LAMPS room, no list 11 join). Each pair: every PNG byte for
+  byte, the same draws but the border's block draws the stats name, the passes fewer by exactly the fills held, the glow pastes deferred to the
   aura's pass and the passes list 11's draws joined, the crack fill's own passes by the fills held, the colour MB loaded and stored each fewer
   by at least the MB the stats name for the held fills and the deferred pastes and at most that and
   the joined passes' MB
@@ -881,9 +883,22 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   times the held fills' MB where a fill went into the glow's paste pass (the lamps' pass keeps its
   depth store), the same without a join or a glow pass fill, the copy MB the same,
   the off run holding and joining nothing; the dumps the list marks hold that many fills at the
-  phone's setting (on OpenGL held or drawn early) and join as many passes (`joinN`: the paused frame
+  phone's setting (on OpenGL none held or drawn early) and join as many passes (`joinN`: the paused frame
   of issue 164); at least one fill held and one pass joined over the list on Vulkan. No device:
   SKIP.
+- `rd_crack_work_ab.cmake` (`rd_crack_work_ab`, `rd_crack_work_gl`; `rd_crack_work.cmake`): the
+  crack fill's snapshot by the swap and its early leave (`rd_crack_fill.c` FILLSWAP, CRACKTAP). The
+  dumps of `tools/crack_work_dumps.txt` (machine-local; a listed dump that is absent FAILS: the
+  phone's bridge frame and three cage frames, issue 163's rooms, the corpus)
+  with `ICO_RD_CRACK_SWAP` and `ICO_RD_CRACK_TAP2` both `0` and both `1`, `--pass-dump --stats`,
+  `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's Resolution Auto (`ICO_VK_FAKE_LIMITS=moltenvk`) and
+  on lavapipe's own profile at 1344x1008, 3x and 4x (4:3; scales 2.1 to 4, the fill in a pass of its
+  own); the `_gl` twin the phone's setting on OpenGL. Each pair: every PNG byte for byte, the same
+  draws, passes, fill passes and pixels filled, the off run swapping and leaving early nothing, the
+  swap's self-test passed in both runs where the fill drew, the colour MB copied and loaded each
+  fewer by the swapped snapshots' MB (within 0.02), the rest the same; the marked dumps' swaps
+  (`swapN`: the bridge 1, a held fill 0) and early-leave draws (`tapN`) at the phone's setting; at
+  least one of each over the list. No device: SKIP.
 - `rd_date_cut_ab.cmake` (`rd_date_cut_ab`, `rd_date_cut_ab_gl`): the dumps of
   `tools/date_cut_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches
   none too) with `ICO_RD_DATE_CUT=0` and `1`, `--pass-dump --stats`, under `ICO_RD_BLEND=fixed`,
@@ -1162,6 +1177,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   frame is also replayed with the general shader (`rd__crack_fill_force_general`): every byte of colour and
   depth and the count are the reach-1 shader's (`crack_fill1_ps`), and the `rd: crack fill: the reach-1 shader`
   line is matched (`EXPECT2`).
+  Wherever the filler draws (every mode but MSAA), `checkWork` runs the crack fill's swap self-test
+  (`rd__crack_swap_selftest`: passed) and replays the frame with the swap and the early leave forced
+  on and forced off (`rd__crack_swap_force`, `rd__crack_tap2_force`): SCENE's colour and depth byte
+  for byte against each other and the first replay, the same render passes, fill passes and count,
+  one snapshot by the swap (none where the late pass holds the fill: copied, `crackSwapCopied`), one
+  early-leave draw where the general shader draws at a reach of at most 2 (`crackTap2`); at a reach of
+  1 on both axes the general shader forced with both on, the same bytes and one early-leave draw.
   at 1x, under Original, under MSAA4 and with `ICO_RD_CRACK_FILL=0` (`rd_crack_1x`,
   `rd_crack_original`, `rd_crack_msaa`, `rd_crack_off`) no fill pass and the same bytes (under
   MSAA4 the frame has no shadow, so the epoch is still open at the fog and the skip line says so); under

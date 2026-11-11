@@ -37,3 +37,6 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
         set_tests_properties(rd_aura_paste_ab PROPERTIES ENVIRONMENT "${_dc_env}")
     endif()
 endif()
+
+# the crack fill's swap and early leave (rd_crack_fill.c) and their A/B
+include(rd_crack_work.cmake)

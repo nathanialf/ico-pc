@@ -74,6 +74,7 @@ int rd__reshow_why(const RdReshowIn *in)
 typedef struct Snap {
     RdSettings settings;
     uint32_t filter, tex[6];
+    uint32_t sceneOther; /* SCENE's other texture of its colour and its snapshot */
 } Snap;
 
 static void snapNow(Snap *s)
@@ -85,7 +86,14 @@ static void snapNow(Snap *s)
     for (int k = 0; k < 2; k++) {
         const RdTargetRec *t = rd__target_rec(rd_target(ids[k]).id);
         if (t) {
-            s->tex[3 * k] = t->color.id;
+            /* SCENE's colour and its snapshot change places (the crack
+             * fill's swap, rd_crack_fill.c; a staticBlur sprite's,
+             * blurSwapTarget): the pair, not which of the two is drawn */
+            const uint32_t a = t->color.id, b = ids[k] == RD_TARGET_SCENE ? t->snap.id : 0u;
+            s->tex[3 * k] = b && b < a ? b : a;
+            if (ids[k] == RD_TARGET_SCENE) {
+                s->sceneOther = b && b < a ? a : b;
+            }
             s->tex[3 * k + 1] = t->tw;
             s->tex[3 * k + 2] = t->th;
         }

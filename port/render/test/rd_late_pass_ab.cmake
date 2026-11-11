@@ -15,12 +15,16 @@
 #           SCENE's columns not repeated; a wider one repeats them);
 #   gl      -DBACKEND=opengl (rd_late_pass_gl): the phone's setting on OpenGL
 #           (llvmpipe; no fakes: the aura's paste reads its destination through
-#           a snapshot there, so a held fill is drawn before it in a pass of its
-#           own, after SCENE's border repeat: the border's draws at their
-#           source texel on GLSL);
+#           a snapshot there, so no fill is held for it: in a DARK room the
+#           fill is drawn where it was due, as with the late pass off; one is
+#           held into the glow's paste pass, drawn past SCENE's border repeat
+#           with a draw for each repeated block; list 11's draws are not
+#           joined there, rd_late_pass.c);
 # a dump drawn narrower than a setting's aspect cannot show it and is skipped
 # there.  Each pair: every PNG the off run writes (SCENE, DISPLAY, PRESENT and
-# every other named target) the on run's byte for byte; the same draws; the
+# every other named target) the on run's byte for byte; the same draws but
+# those the stats name for the border's blocks (a held fill drawn past SCENE's
+# border repeat: one draw for the middle and one a repeated block); the
 # off run says "off" and holds, defers and joins nothing; the on run says "on"; its
 # render passes fewer than the off run's by exactly the fills it held into a
 # paste pass (the aura's or the glow's), the glow pastes it drew in the aura's
@@ -34,9 +38,9 @@
 # the glow's paste deferred (the lamps' pass keeps its depth store for the
 # fill's read), the same without a join, a fill in the glow's pass or a
 # deferred paste, its copies the same; at the
-# phone's setting
-# (and on OpenGL, held or drawn early) a dump the list marks holds that many
-# fills where the off run draws a fill in its own pass, and joins as many passes
+# phone's setting a dump the list marks holds that many fills where the off
+# run draws a fill in its own pass (on OpenGL none held or drawn early: no
+# paste there takes a fill in these DARK rooms), and joins as many passes
 # as it marks.  On Vulkan at least one fill held and one pass joined over the
 # list.  No device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
@@ -90,7 +94,10 @@ endforeach()
 list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
-set(common ICO_RD_VU_PREPASS=0)
+# the crack fill's swap off in both runs (rd_crack_fill.c FILLSWAP: refused for a
+# held fill, so with it on the pair's copies would differ by the fills held;
+# rd_crack_work_ab checks the swap)
+set(common ICO_RD_VU_PREPASS=0 ICO_RD_CRACK_SWAP=0)
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(env_phone ICO_VK_FAKE_LIMITS=moltenvk)
 set(args_enh43 --enhanced --resolution 2x --aspect 1.3333 --present 1280x960)
@@ -106,7 +113,7 @@ endif()
 set(drawsRe "stats: ([0-9]+) draws, ([0-9]+) passes")
 set(lateRe "stats: late pass (on|off|fill|defer|join|some): ([0-9]+) crack fills held into a paste pass \\(([0-9]+) the glow's, ([0-9.]+) MB of colour not loaded and as many not stored\\), ([0-9]+) drawn early")
 set(deferRe ", ([0-9]+) glow pastes in the aura's paste pass \\(([0-9.]+) MB of colour not loaded and as many not stored\\), ([0-9]+) drawn early, ")
-set(joinRe ", ([0-9]+) list 11 draws joined the open pass without SCENE's depth \\(([0-9]+) passes not begun, ([0-9.]+) MB of colour at most each way\\)")
+set(joinRe ", ([0-9]+) list 11 draws joined the open pass without SCENE's depth \\(([0-9]+) passes not begun, ([0-9.]+) MB of colour at most each way\\), ([0-9]+) draws more for the border's blocks")
 set(crackRe "stats: crack fill (on|off): ([0-9]+) passes")
 set(trafficRe "stats: traffic: colour ([0-9.]+) MB loaded ([0-9.]+) MB stored, depth and stencil ([0-9.]+)/([0-9.]+) MB loaded/stored, [0-9.]+ MB cleared, ([0-9.]+) MB copied")
 
@@ -180,6 +187,7 @@ foreach(dump IN LISTS dumps)
       set(joined_${lp} "${CMAKE_MATCH_1}")
       set(joinPasses_${lp} "${CMAKE_MATCH_2}")
       set(joinMb_${lp} "${CMAKE_MATCH_3}")
+      set(blocks_${lp} "${CMAKE_MATCH_4}")
       string(REGEX MATCH "${crackRe}" m "${flat}")
       set(crack_${lp} "${CMAKE_MATCH_2}")
       string(REGEX MATCH "${trafficRe}" m "${flat}")
@@ -204,6 +212,7 @@ foreach(dump IN LISTS dumps)
     # the pair
     if(NOT word_0 STREQUAL "off" OR NOT held_0 EQUAL 0 OR NOT early_0 EQUAL 0 OR
        NOT joined_0 EQUAL 0 OR NOT deferred_0 EQUAL 0 OR NOT deferEarly_0 EQUAL 0 OR
+       NOT blocks_0 EQUAL 0 OR
        NOT word_1 STREQUAL "on")
       message(SEND_ERROR "${dump} ${s}: the late pass says ${word_0} (${held_0} held, ${early_0} "
                          "early) off and ${word_1} on: off holding nothing and on expected")
@@ -211,10 +220,12 @@ foreach(dump IN LISTS dumps)
     endif()
     math(EXPR passesWant "${passes_0} - ${held_1} - ${joinPasses_1} - ${deferred_1}")
     math(EXPR crackWant "${crack_0} - ${held_1}")
-    if(NOT draws_1 EQUAL draws_0 OR NOT passes_1 EQUAL passesWant OR NOT crack_1 EQUAL crackWant)
+    math(EXPR drawsWant "${draws_0} + ${blocks_1}")
+    if(NOT draws_1 EQUAL drawsWant OR NOT passes_1 EQUAL passesWant OR NOT crack_1 EQUAL crackWant)
       message(SEND_ERROR "${dump} ${s}: ${draws_1} draws, ${passes_1} passes, ${crack_1} crack "
                          "fill passes with the late pass; ${draws_0}, ${passes_0} and ${crack_0} "
-                         "without, ${held_1} fills held, ${joinPasses_1} passes joined")
+                         "without, ${held_1} fills held, ${joinPasses_1} passes joined, "
+                         "${blocks_1} draws more for the border's blocks")
       math(EXPR failures "${failures} + 1")
     endif()
     mb_hundredths(cl0 "${cl_0}")
@@ -257,10 +268,12 @@ foreach(dump IN LISTS dumps)
     endif()
     set(want "${want_${dump}}")
     if(NOT want STREQUAL "" AND (s STREQUAL "phone" OR s STREQUAL "gl") AND crack_0 GREATER 0)
+      set(got "${held_1}")
       if(s STREQUAL "gl")
+        # no paste on OpenGL takes the fill in a DARK room: none held, none
+        # drawn early (rd_late_pass.c landPossible)
         math(EXPR got "${held_1} + ${early_1}")
-      else()
-        set(got "${held_1}")
+        set(want 0)
       endif()
       if(NOT got EQUAL want)
         message(SEND_ERROR "${dump} ${s}: ${held_1} fills held, ${early_1} drawn early; ${want} "

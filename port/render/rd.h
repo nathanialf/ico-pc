@@ -2968,12 +2968,22 @@ typedef struct RdPerfRecord {
     /* the targets of glowLightLazy's clears, bit k: WORK2_PAD, WORK2, WORK3,
      * WORK0 (rd__glow_light_lazy_text's order) */
     uint32_t glowLightLazyWhich;
+    /* the draws a held fill drew more than one when it was drawn past
+     * SCENE's border repeat (a draw of the middle and one a repeated block,
+     * rd_crack_fill.c fillDrawHeld) */
+    uint32_t latePassBlockDraws;
     /* The aura's paste split (rd_aura_paste.c): pastes drawn as the alpha
      * alone over the rows that read proven alpha 0 rows of their source
      * (auraPasteRows of SCENE's rows) and as the paste over the band
      * (auraPasteBand rows); pastes drawn whole (auraPasteKept; auraPasteWhy
      * the last one's reason, rd_aura_paste.h RD_AP_WHY_*) */
     uint32_t auraPasteSplit, auraPasteRows, auraPasteBand, auraPasteKept, auraPasteWhy;
+    /* The crack fill's cost (rd_crack_fill.c): its snapshots taken by the
+     * swap (crackSwaps, of crackSwapTexels of SCENE's colour not copied
+     * and as many not loaded) and copied (crackSwapCopied; crackSwapWhy the
+     * last one's reason, the file's SWAP_WHY_*), and its draws with the
+     * general shader's early leave at a reach of at most 2 (crackTap2) */
+    uint32_t crackSwaps, crackSwapTexels, crackSwapCopied, crackSwapWhy, crackTap2;
     /* The aura's read of SCENE into FEED128 in two passes (rd_aura_box.c):
      * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
      * a replay; none while the game is paused) */

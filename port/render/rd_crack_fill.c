@@ -148,6 +148,7 @@
 #include <string.h>
 
 #include "rd_replay.h"
+#include "rd_upscale.h"
 
 /* crack_count_ps's block (blit.hlsl CRACK_BLOCK) */
 #define CRACK_BLOCK 16u
@@ -226,6 +227,58 @@ static struct {
 
 /* the replay tool's --no-crack-fill and the tests: -1 none, else the switch */
 static int s_forced = -1;
+
+/* crack_fill_ps's DrawCB.mode.x (blit.hlsl CRACK_MODE_*), set by the draws
+ * around fullscreenAt: COPY a texel that is no crack takes its own
+ * snapshot texel (the swap: the attachment holds nothing yet), KEEP_A with
+ * it every texel's alpha its own snapshot texel's (the fill writes RGB alone
+ * after the glow's alpha), EARLY a texel with neither immediate neighbour in
+ * front on an axis left at once (the general shader at a reach of at most 2:
+ * CRACKTAP) */
+#define CRACK_MODE_COPY 1u
+#define CRACK_MODE_KEEP_A 2u
+#define CRACK_MODE_EARLY 4u
+static uint32_t s_mode;
+
+/* FILLSWAP: SCENE's colour swapped with its snapshot texture where the fill
+ * takes its snapshot (rd__replay_blur_swap), the fill drawn over every
+ * texel; on only where the start-up self-test passed (rd__crack_swap_selftest:
+ * 0 not run, 1 passed, 2 failed) */
+enum {
+    SWAP_WHY_NONE,
+    SWAP_WHY_OFF,     /* ICO_RD_CRACK_SWAP=0 */
+    SWAP_WHY_TEST,    /* the self-test not passed (not run, failed) */
+    SWAP_WHY_HELD,    /* the late pass holds the draw past the snapshot (rd_late_pass.c) */
+    SWAP_WHY_SPLIT,   /* the upscaler's split (the display layer owns SCENE's snapshot) */
+    SWAP_WHY_PRESENT, /* the present from SCENE (it tracks SCENE's colour texture) */
+    SWAP_WHY_MSAA,    /* an MSAA epoch wanted */
+    SWAP_WHY_EXACT,   /* the opted-in exact blend */
+    SWAP_WHY_PIPE,    /* the fill's whole-mask pipeline missing */
+    SWAP_WHY_COUNT
+};
+
+static const char *const kSwapWhy[SWAP_WHY_COUNT] = {
+    "-",
+    "switched off",
+    "its self-test not passed",
+    "the draw held past the snapshot",
+    "the upscaler's split",
+    "the present from SCENE",
+    "an MSAA epoch",
+    "the exact blend",
+    "its pipeline missing",
+};
+
+static struct {
+    int test;      /* 0 not run, 1 passed, 2 failed */
+    int force;     /* rd__crack_swap_force: -1 the environment's */
+    int env;       /* ICO_RD_CRACK_SWAP: -1 not read, 0 off, 1 on */
+    bool swapping; /* inside the fill's own swap (rd__crack_fill_snap's hook stands down) */
+    uint64_t bSwapped, bWhy[SWAP_WHY_COUNT];
+} s_swap = {0, -1, -1, false, 0, {0}};
+
+/* CRACKTAP: ICO_RD_CRACK_TAP2=0 the general shader's early leave off */
+static int s_tap2 = -1, s_tap2Force = -1;
 
 uint32_t rd__crack_fill_reach(float scale)
 {
@@ -416,7 +469,7 @@ void rd__crack_fill_counts(RdCrackCounts *out)
 void rd__crack_fill_block(void)
 {
     note();
-    char fold[320] = "";
+    char fold[640] = "";
     int at = 0;
     if (s_cf.bLate) {
         at = snprintf(fold, sizeof(fold), "; %llu after lists 4-6", (unsigned long long)s_cf.bLate);
@@ -437,9 +490,27 @@ void rd__crack_fill_block(void)
                        (unsigned long long)s_place.bBorder);
     }
     if (s_cf.bAfterMsaa && at >= 0 && (size_t)at < sizeof(fold)) {
-        snprintf(fold + at, sizeof(fold) - (size_t)at, "; %llu after the MSAA resolve",
-                 (unsigned long long)s_cf.bAfterMsaa);
+        at += snprintf(fold + at, sizeof(fold) - (size_t)at, "; %llu after the MSAA resolve",
+                       (unsigned long long)s_cf.bAfterMsaa);
     }
+    /* FILLSWAP: the snapshots the swap took; the copies' reasons */
+    uint64_t copied = 0;
+    for (int k = 1; k < SWAP_WHY_COUNT; k++) {
+        copied += s_swap.bWhy[k];
+    }
+    if ((s_swap.bSwapped || copied) && at >= 0 && (size_t)at < sizeof(fold)) {
+        at += snprintf(fold + at, sizeof(fold) - (size_t)at,
+                       "; %llu snapshots by the swap, %llu copied",
+                       (unsigned long long)s_swap.bSwapped, (unsigned long long)copied);
+        for (int k = 1; k < SWAP_WHY_COUNT && at >= 0 && (size_t)at < sizeof(fold); k++) {
+            if (s_swap.bWhy[k]) {
+                at += snprintf(fold + at, sizeof(fold) - (size_t)at, " (%llu %s)",
+                               (unsigned long long)s_swap.bWhy[k], kSwapWhy[k]);
+            }
+        }
+    }
+    s_swap.bSwapped = 0;
+    memset(s_swap.bWhy, 0, sizeof(s_swap.bWhy));
     if (s_cf.bFilled && !s_cf.bCounted) {
         rd__log("crack fill: %llu replays filled (scale %.4gx%.4g; reach %ux%u texels; not counted "
                 "in the game%s)",
@@ -519,6 +590,7 @@ static void fullscreenAt(RhiCommandList cl, const RdPipeKeyInt *k, RhiPipeline p
     cb.param[1] = (float)s_cf.ry;
     cb.param[2] = 1.0f / (float)RD_CRACK_BEHIND;
     cb.param[3] = (float)off; /* a whole number under 2^24: exact */
+    cb.mode[0] = s_mode;
     RhiBinding b[3];
     memset(b, 0, sizeof(b));
     b[0].slot = 1;
@@ -731,24 +803,186 @@ static void fillDrawHeld(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const Rd
                      (RhiRect){b->b[k].x, 0, (uint32_t)b->b[k].w, th}, b->b[k].off);
     }
     r->writeSerial++; /* SCENE's colour changed (DATE's snapshot) */
+    const uint32_t draws = (b->x1 > b->x0 ? 1u : 0u) + b->n;
+    g_rdPerf.latePassBlockDraws += draws > 1u ? draws - 1u : 0u;
     s_cf.filled++;
     s_cf.bFilled++;
     s_place.border++;
     s_place.bBorder++;
 }
 
+static bool swapOn(void)
+{
+    if (s_swap.force >= 0) {
+        return s_swap.force != 0;
+    }
+    if (s_swap.env < 0) {
+        /* the tests' A/B only (TESTING.md): no config key */
+        const char *e = getenv("ICO_RD_CRACK_SWAP");
+        s_swap.env = !(e && e[0] == '0');
+    }
+    return s_swap.env != 0;
+}
+
+void rd__crack_swap_force(int on)
+{
+    s_swap.force = on < 0 ? -1 : on != 0;
+}
+
+int rd__crack_swap_test(void)
+{
+    return s_swap.test;
+}
+
+bool rd__crack_swap_on(void)
+{
+    return swapOn();
+}
+
+const char *rd__crack_swap_why_text(uint32_t why)
+{
+    return why < SWAP_WHY_COUNT ? kSwapWhy[why] : "?";
+}
+
+static bool tap2On(void)
+{
+    if (s_tap2Force >= 0) {
+        return s_tap2Force != 0;
+    }
+    if (s_tap2 < 0) {
+        const char *e = getenv("ICO_RD_CRACK_TAP2");
+        s_tap2 = !(e && e[0] == '0');
+    }
+    return s_tap2 != 0;
+}
+
+void rd__crack_tap2_force(int on)
+{
+    s_tap2Force = on < 0 ? -1 : on != 0;
+}
+
+bool rd__crack_tap2_on(void)
+{
+    return tap2On();
+}
+
+/* why SCENE's colour is not swapped with its snapshot at this fill's take
+ * (SWAP_WHY_NONE: it is) */
+static int swapWhyNot(void)
+{
+    if (!swapOn()) {
+        return SWAP_WHY_OFF;
+    }
+    if (s_swap.test != 1) {
+        return SWAP_WHY_TEST;
+    }
+    if (rd__upscale_point_on()) {
+        return SWAP_WHY_SPLIT;
+    }
+    if (rd__present_scene_on()) {
+        return SWAP_WHY_PRESENT;
+    }
+    if (rd__replay_msaa_want() > 1u) {
+        return SWAP_WHY_MSAA;
+    }
+    if (g_rd.dstMode != RD_BLEND_EXACT_OFF) {
+        return SWAP_WHY_EXACT;
+    }
+    return SWAP_WHY_NONE;
+}
+
+static void swapCounted(int why, const RdTargetRec *tc)
+{
+    if (why == SWAP_WHY_NONE) {
+        g_rdPerf.crackSwaps++;
+        g_rdPerf.crackSwapTexels += tc->tw * tc->th;
+        s_swap.bSwapped++;
+        static bool s_said;
+        if (!s_said) {
+            s_said = true;
+            rd__log("crack fill: SCENE's colour swapped with its snapshot texture where the fill "
+                    "takes its snapshot, the fill drawn over every texel (a texel that is no crack "
+                    "its own): no copy of the picture, no load (reported once)");
+        }
+        return;
+    }
+    g_rdPerf.crackSwapCopied++;
+    g_rdPerf.crackSwapWhy = (uint32_t)why;
+    s_swap.bWhy[why]++;
+}
+
+/* the swap's key and pipeline: the fill's with the colour mask whole (the
+ * attachment holds nothing before it: every channel written) */
+static bool swapPipe(const RdPipeKeyInt *kFill, RdPipeKeyInt *k, RhiPipeline *p)
+{
+    const bool general = kFill->fs == RD_FS_CRACK_FILL;
+    *k = rd__crack_fill_key(general ? RD_CRACK_KEY_FILL : RD_CRACK_KEY_FILL1);
+    *p = rd__get_pipeline(k);
+    return p->id != 0;
+}
+
+/* CRACKTAP: the general shader at a reach of at most 2 on both axes leaves a
+ * texel with neither immediate neighbour in front on an axis (blit.hlsl:
+ * a run's end lies at distance 1 there) */
+static uint32_t tapMode(const RdPipeKeyInt *kFill)
+{
+    if (kFill->fs != RD_FS_CRACK_FILL || s_cf.rx > 2u || s_cf.ry > 2u || !tap2On()) {
+        return 0u;
+    }
+    g_rdPerf.crackTap2++;
+    return CRACK_MODE_EARLY;
+}
+
+/* the snapshot by the swap: SCENE's colour becomes its snapshot (read in
+ * place), the snapshot texture its colour (rd_replay.c blurSwapTarget: the
+ * pass ended, the old colour readable); the depth and the count as
+ * fillTake's */
+static bool fillTakeSwap(Replay *r, RdTargetRec *tc, RhiPipeline pCount, const RdPipeKeyInt *kCount)
+{
+    s_swap.swapping = true;
+    const bool ok = rd__replay_blur_swap(r, tc);
+    s_swap.swapping = false;
+    if (!ok) {
+        return false;
+    }
+    RhiCommandList cl = rd__replay_cl();
+    rd__transition(cl, tc->depth, &tc->depthState, RHI_STATE_DEPTH_READ);
+    s_cf.sx = tc->sx;
+    s_cf.sy = tc->sy;
+    s_cf.rx = rd__crack_fill_reach(tc->sx);
+    s_cf.ry = rd__crack_fill_reach(tc->sy);
+    countPass(cl, pCount, kCount, tc->depth, tc->tw, tc->th);
+    return true;
+}
+
+/* whether this fill swaps (counted): not held, allowed, its pipeline there */
+static bool swapDecide(const RdTargetRec *tc, bool held, const RdPipeKeyInt *kFill,
+                       RdPipeKeyInt *kS, RhiPipeline *pS)
+{
+    int why = held ? SWAP_WHY_HELD : swapWhyNot();
+    if (why == SWAP_WHY_NONE && !swapPipe(kFill, kS, pS)) {
+        why = SWAP_WHY_PIPE;
+    }
+    swapCounted(why, tc);
+    return why == SWAP_WHY_NONE;
+}
+
 /* the snapshot (or the one a held fill took), the count and the fill in a
- * pass of SCENE's colour alone, loaded and stored */
+ * pass of SCENE's colour alone, loaded and stored (with the swap: not
+ * loaded, every texel drawn) */
 static bool fillWork(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipeKeyInt *kFill,
                      RhiPipeline pCount, const RdPipeKeyInt *kCount, bool held)
 {
     RhiCommandList cl = rd__replay_cl();
+    RdPipeKeyInt kS;
+    RhiPipeline pS = {0};
+    const bool swap = swapDecide(tc, held, kFill, &kS, &pS);
     if (held) {
         /* the snapshot taken where the fill was due; the depth back to its
          * sampled state (a pass may have bound it since: a test only) */
         rd__replay_end_pass(r);
         rd__transition(cl, tc->depth, &tc->depthState, RHI_STATE_DEPTH_READ);
-    } else if (!fillTake(r, tc, pCount, kCount)) {
+    } else if (swap ? !fillTakeSwap(r, tc, pCount, kCount) : !fillTake(r, tc, pCount, kCount)) {
         return false;
     }
     const uint32_t w = tc->tw, h = tc->th, scene = RD_TARGET_SCENE + 1u;
@@ -759,12 +993,15 @@ static bool fillWork(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipe
     RhiRenderPassDesc p;
     memset(&p, 0, sizeof(p));
     p.color[0].texture = tc->color;
-    p.color[0].load = RHI_LOAD_LOAD;
+    p.color[0].load = swap ? RHI_LOAD_DONT_CARE : RHI_LOAD_LOAD; /* the swap writes every texel */
     p.colorCount = 1;
     p.width = w;
     p.height = h;
     rhi_cmd_begin_render_pass(cl, &p);
-    fillDrawHeld(r, tc, pFill, kFill, held);
+    s_mode =
+        tapMode(kFill) | (swap ? CRACK_MODE_COPY | (s_late.alpha ? CRACK_MODE_KEEP_A : 0u) : 0u);
+    fillDrawHeld(r, tc, swap ? pS : pFill, swap ? &kS : kFill, held);
+    s_mode = 0;
     rhi_cmd_end_render_pass(cl);
     g_rdPerf.crackFillPasses++;
     return true;
@@ -1079,6 +1316,9 @@ void rd__crack_fill_flush_held(Replay *r, int why)
 
 void rd__crack_fill_snap(Replay *r, const RdTargetRec *tc)
 {
+    if (s_swap.swapping) {
+        return; /* the fill's own swap (FILLSWAP) */
+    }
     if (s_late.armed && s_late.taken && tc && tc == sceneRec()) {
         rd__crack_fill_flush_held(r, RD_LATE_WHY_SNAP);
     }
@@ -1194,6 +1434,9 @@ void rd__crack_fill_in_pass(Replay *r, uint32_t tdId)
     if (!fillPipes(tc, &kFill, &pFill, &kCount, &pCount)) {
         return;
     }
+    RdPipeKeyInt kS;
+    RhiPipeline pS = {0};
+    const bool swap = swapDecide(tc, held, &kFill, &kS, &pS);
     if (held) {
         /* the snapshot taken where the fill was due (rd_late_pass.c); the
          * depth back to its sampled state outside any pass */
@@ -1202,21 +1445,27 @@ void rd__crack_fill_in_pass(Replay *r, uint32_t tdId)
     } else {
         /* the snapshot and the count are the fill's effect; the pass is the
          * paste's (the aura's), begun as the paste's bindDraw would begin
-         * it: SCENE's colour loaded, no depth; the paste's draw then lands
+         * it: SCENE's colour loaded, no depth (with the swap not loaded:
+         * the fill writes every texel first); the paste's draw then lands
          * in it */
         const int post = r->perfPost;
         r->perfPost = RD_PERF_POST_CRACK;
         rd__replay_perf_post(r, RD_PERF_POST_CRACK);
-        const bool taken = fillTake(r, tc, pCount, &kCount);
+        const bool taken =
+            swap ? fillTakeSwap(r, tc, pCount, &kCount) : fillTake(r, tc, pCount, &kCount);
         r->perfPost = post;
         rd__replay_perf_post(r, post);
         if (!taken) {
             return;
         }
     }
-    rd__replay_begin_pass(r, tc, NULL, RD_TARGET_SCENE + 1u, 0, RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD,
-                          0.0f, false);
-    fillDrawHeld(r, tc, pFill, &kFill, held);
+    rd__replay_begin_pass(r, tc, NULL, RD_TARGET_SCENE + 1u, 0,
+                          swap ? RHI_LOAD_DONT_CARE : RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f,
+                          false);
+    s_mode =
+        tapMode(&kFill) | (swap ? CRACK_MODE_COPY | (s_late.alpha ? CRACK_MODE_KEEP_A : 0u) : 0u);
+    fillDrawHeld(r, tc, swap ? pS : pFill, swap ? &kS : &kFill, held);
+    s_mode = 0;
     fillCounted(!glow); /* the glow's paste pass is not the aura's */
     if (held) {
         rd__late_pass_held_drawn(tc, glow);
@@ -1227,4 +1476,188 @@ void rd__crack_fill_in_pass(Replay *r, uint32_t tdId)
         rd__log("crack fill: drawn as the first draw of the aura's paste pass on SCENE (the "
                 "paste's own pass, its draw after it), not in a pass of its own (reported once)");
     }
+}
+
+/* ---------------------------------------------------- FILLSWAP's self-test
+ * The swap rests on a texel of the snapshot surviving Load, the float and
+ * the store into an RGBA8_UNORM attachment unchanged (crack_fill_ps's COPY
+ * path: k / 255 written back as k).  So, on the device, before the swap is
+ * used: a 256 x 2 source of every level in every channel (each row a
+ * permutation of 0..255 a channel), made as SCENE's colour is made (the
+ * same usage), drawn through both fill shaders' no-crack path (the depth
+ * the dummy texture: every texel alike, so no texel is a crack) with COPY,
+ * one of them with KEEP_A, into a target of the same usage, read back and
+ * compared texel for texel.  Any difference, or a part that cannot run: the
+ * swap stays off (logged). */
+#define SW_W 256u
+#define SW_H 2u
+
+static uint8_t swapLevel(uint32_t x, uint32_t y, uint32_t ch)
+{
+    static const uint32_t mul[2][4] = {{1u, 255u, 7u, 13u}, {3u, 5u, 11u, 1u}};
+    static const uint32_t add[2][4] = {{0u, 255u, 0u, 0u}, {0u, 1u, 2u, 255u}};
+    return (uint8_t)((x * mul[y][ch] + add[y][ch]) & 255u);
+}
+
+static bool swapDraw(RhiCommandList cl, RhiTexture src, RhiTexture dst, RhiState *dstState,
+                     const RdPipeKeyInt *k, uint32_t mode)
+{
+    const RhiPipeline pipe = rd__get_pipeline(k);
+    if (!pipe.id) {
+        return false;
+    }
+    rd__transition(cl, dst, dstState, RHI_STATE_RENDER_TARGET);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.color[0].texture = dst;
+    p.color[0].load = RHI_LOAD_DONT_CARE;
+    p.colorCount = 1;
+    p.width = SW_W;
+    p.height = SW_H;
+    rhi_cmd_begin_render_pass(cl, &p);
+    const RhiViewport vp = {0.0f, 0.0f, (float)SW_W, (float)SW_H, 0.0f, 1.0f};
+    rhi_cmd_set_viewport(cl, &vp);
+    const RhiRect all = {0, 0, SW_W, SW_H};
+    rhi_cmd_set_scissor(cl, &all);
+    IcoDrawCB cb;
+    memset(&cb, 0, sizeof(cb));
+    cb.param[0] = 1.0f; /* a reach of 1: the test runs, finds no crack */
+    cb.param[1] = 1.0f;
+    cb.param[2] = 1.0f / (float)RD_CRACK_BEHIND;
+    cb.mode[0] = mode;
+    RhiBinding b[3];
+    memset(b, 0, sizeof(b));
+    b[0].slot = 1;
+    b[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[0].texture = src;
+    b[0].aspect = RHI_ASPECT_COLOR;
+    b[1].slot = 1;
+    b[1].type = RHI_BIND_SAMPLER;
+    b[1].sampler = rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    b[2].slot = 2;
+    b[2].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[2].texture = g_rd.dummy;
+    b[2].aspect = RHI_ASPECT_COLOR;
+    const RhiBindGroup g = rd__replay_bind_group(g_rd.layoutTex, b, 3);
+    if (g.id) {
+        rd__set_pipeline(cl, pipe, k);
+        rd__bind_uniform(cl, 0, rd__frame_group(SW_W, SW_H, 0.0f, 0.0f));
+        rd__bind_uniform(cl, 1, rd__draw_group(&cb));
+        rhi_cmd_set_bind_group(cl, 2, g);
+        rhi_cmd_draw(cl, 3, 0, 1);
+    }
+    rhi_cmd_end_render_pass(cl);
+    rd__transition(cl, dst, dstState, RHI_STATE_COPY_SRC);
+    return g.id != 0;
+}
+
+bool rd__crack_swap_selftest(void)
+{
+    s_swap.test = 0;
+    const RdTargetRec *tc = sceneRec();
+    if (!g_rd.inited || !g_rd.hasDevice || !s_cf.enabled || !tc ||
+        tc->format != RHI_FMT_RGBA8_UNORM || !g_rd.fs[RD_FS_CRACK_FILL].id) {
+        return true; /* no fill, or none here: nothing to check */
+    }
+    const RhiFormat fmt = tc->format;
+    const uint32_t usage = RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC |
+                           RHI_TEX_COPY_DST | rd__dst_target_usage(fmt, NULL) |
+                           (tc->uintView ? (uint32_t)RHI_TEX_UINT_VIEW : 0u);
+    const uint32_t a = rhi_limits()->copyRowPitchAlign ? rhi_limits()->copyRowPitchAlign : 1u;
+    const uint32_t pitch = (SW_W * 4u + a - 1u) / a * a;
+    RhiTexture src = rhi_create_texture(
+        &(RhiTextureDesc){SW_W, SW_H, 1, fmt, usage, "rd crack swap test source", 0});
+    RhiTexture dst[2] = {
+        rhi_create_texture(&(RhiTextureDesc){SW_W, SW_H, 1, fmt, usage, "rd crack swap test", 0}),
+        rhi_create_texture(&(RhiTextureDesc){SW_W, SW_H, 1, fmt, usage, "rd crack swap test", 0})};
+    RhiBuffer up = rhi_create_buffer(&(RhiBufferDesc){(uint64_t)pitch * SW_H, RHI_BUF_COPY_SRC,
+                                                      RHI_MEM_UPLOAD, "rd crack swap test"});
+    uint8_t *m = up.id ? (uint8_t *)rhi_map_buffer(up) : NULL;
+    const char *why = NULL;
+    int bad = -1;
+    uint8_t got[4] = {0}, want[4] = {0};
+    if (!src.id || !dst[0].id || !dst[1].id || !m) {
+        why = "no memory for its textures";
+    } else {
+        for (uint32_t y = 0; y < SW_H; y++) {
+            for (uint32_t x = 0; x < SW_W; x++) {
+                for (uint32_t ch = 0; ch < 4u; ch++) {
+                    m[(size_t)y * pitch + x * 4u + ch] = swapLevel(x, y, ch);
+                }
+            }
+        }
+        rhi_unmap_buffer(up);
+        m = NULL;
+        RhiCommandList cl =
+            rd__begin_own_frame(64u * 1024u) ? rhi_begin_commands() : (RhiCommandList){0};
+        if (!cl.id) {
+            why = "no command list";
+        } else {
+            RhiState ss = RHI_STATE_UNDEFINED, ds[2] = {RHI_STATE_UNDEFINED, RHI_STATE_UNDEFINED};
+            rd__transition(cl, src, &ss, RHI_STATE_COPY_DST);
+            rhi_cmd_copy_buffer_to_texture(cl, up, 0, pitch, src, 0, (RhiRect){0, 0, SW_W, SW_H});
+            rd__transition(cl, src, &ss, RHI_STATE_SHADER_READ);
+            const RdPipeKeyInt k0 = rd__crack_fill_key(RD_CRACK_KEY_FILL);
+            const RdPipeKeyInt k1 = rd__crack_fill_key(
+                g_rd.fs[RD_FS_CRACK_FILL1].id ? RD_CRACK_KEY_FILL1 : RD_CRACK_KEY_FILL);
+            const bool drawn =
+                swapDraw(cl, src, dst[0], &ds[0], &k0, CRACK_MODE_COPY | CRACK_MODE_EARLY) &&
+                swapDraw(cl, src, dst[1], &ds[1], &k1, CRACK_MODE_COPY | CRACK_MODE_KEEP_A);
+            rhi_end_commands(cl);
+            rhi_submit(cl);
+            rhi_wait_idle();
+            if (!drawn) {
+                why = "its pipelines missing";
+            }
+        }
+        static uint8_t back[SW_W * SW_H * 4u + 4096u];
+        for (int t = 0; t < 2 && !why; t++) {
+            uint32_t rp = 0;
+            if (!rhi_readback_texture(dst[t], RHI_ASPECT_COLOR, back, sizeof(back), &rp) ||
+                rp < SW_W * 4u || (size_t)rp * SW_H > sizeof(back)) {
+                why = "its readback failed";
+                break;
+            }
+            for (uint32_t i = 0; i < SW_W * SW_H && bad < 0; i++) {
+                const uint32_t x = i % SW_W, y = i / SW_W;
+                for (uint32_t ch = 0; ch < 4u; ch++) {
+                    got[ch] = back[(size_t)y * rp + x * 4u + ch];
+                    want[ch] = swapLevel(x, y, ch);
+                }
+                if (memcmp(got, want, 4) != 0) {
+                    bad = (int)i + t * (int)(SW_W * SW_H);
+                }
+            }
+        }
+    }
+    if (m) {
+        rhi_unmap_buffer(up);
+    }
+    rhi_wait_idle();
+    for (int t = 0; t < 2; t++) {
+        if (dst[t].id) {
+            rhi_destroy_texture(dst[t]);
+        }
+    }
+    if (src.id) {
+        rhi_destroy_texture(src);
+    }
+    if (up.id) {
+        rhi_destroy_buffer(up);
+    }
+    s_swap.test = !why && bad < 0 ? 1 : 2;
+    if (s_swap.test == 1) {
+        rd__log("crack fill: swap: on (self-test: %u levels a channel through both fill shaders "
+                "read back unchanged): SCENE's colour swapped with its snapshot where the fill "
+                "takes it%s",
+                256u, swapOn() ? "" : "; ICO_RD_CRACK_SWAP=0 keeps the copy");
+    } else if (why) {
+        rd__log("crack fill: swap: off (self-test not run: %s): the snapshot copied as before",
+                why);
+    } else {
+        rd__log("crack fill: swap: off (self-test failed at texel %d: %02X%02X%02X%02X for "
+                "%02X%02X%02X%02X): the snapshot copied as before",
+                bad, got[0], got[1], got[2], got[3], want[0], want[1], want[2], want[3]);
+    }
+    return s_swap.test == 1;
 }
