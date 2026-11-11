@@ -47,8 +47,10 @@
  * read by these keys alone; bits 0-5 (the count) are never touched.  So
  * every target is the same bytes; no DIVERGENCES row.
  *
- * Where.  On by default for the PowerVR class and the desktop classes
- * where the start-up self-test passes, off on the others (the Adreno and
+ * Where.  Off by default (RD_SHADOW_TILE_DEFAULT 0: the owner's PowerVR
+ * phone measured it slower); with the default 1, on for the PowerVR class
+ * and the desktop classes where the start-up self-test passes, off on the
+ * others (the Adreno and
  * Mali classes in this release, issues 179, 211, 123; Apple; another
  * tile-based GPU); only where DATE takes the stencil bit (Vulkan with the
  * local read: elsewhere the composites keep the R8 snapshot, which this
@@ -74,6 +76,14 @@
 #include "rd_shadow_tile.h"
 
 enum { ST_NOT_RUN, ST_OK, ST_FAIL, ST_ERROR };
+
+/* The default without ICO_RD_SHADOW_TILE: off on every class.  The owner's
+ * Pixel (PowerVR, rc5) ran it with the self-test passing and list 3's class
+ * 1.7 ms slower: on that tile-based GPU the composites' dead fragments were
+ * already cheap (rejected after one texture read), and the three mark
+ * draws and the per-pixel stencil test cost more than they saved.  1 turns
+ * it on again where the class allows and the self-test passes. */
+#define RD_SHADOW_TILE_DEFAULT 0
 
 static struct {
     uint8_t test;
@@ -118,13 +128,14 @@ bool rd__shadow_tile_on(void)
     if (env >= 0) {
         return env == 1;
     }
-    return rd__profile_tile_class() != 0 && s_t.test == ST_OK;
+    return RD_SHADOW_TILE_DEFAULT != 0 && rd__profile_tile_class() != 0 && s_t.test == ST_OK;
 }
 
 bool rd__shadow_tile_keys_wanted(void)
 {
     const int env = envSwitch();
-    return modules() && env != 0 && (env == 1 || rd__profile_tile_class() != 0);
+    return modules() && env != 0 &&
+           (env == 1 || (RD_SHADOW_TILE_DEFAULT != 0 && rd__profile_tile_class() != 0));
 }
 
 RdPipeKeyInt rd__shadow_tile_mask_key(void)
@@ -288,8 +299,10 @@ void rd__shadow_tile_prepare(Replay *r, DrawSetup *ds, const RdScreenVtx *v, uin
         return; /* not a boxed composite on DATE's stencil path */
     }
     if (!rd__shadow_tile_on() || !modules()) {
-        whole(RD_ST_WHY_OFF);
-        return;
+        if (envSwitch() == 0) {
+            whole(RD_ST_WHY_OFF); /* the tests' switch: counted */
+        }
+        return; /* off by default: not counted, no 10 s clause */
     }
     const bool repS = r->st.ds.wrap.s == RD_WRAP_REPEAT, repT = r->st.ds.wrap.t == RD_WRAP_REPEAT;
     int mi = maskFind(src);
@@ -766,14 +779,17 @@ bool rd__shadow_tile_selftest(void)
     s_t.words[0] = '\0';
     const int env = envSwitch();
     const int cls = rd__profile_tile_class();
-    if (env == 0 || !modules() || (env < 0 && cls == 0)) {
+    if (env == 0 || !modules() || (env < 0 && (cls == 0 || RD_SHADOW_TILE_DEFAULT == 0))) {
         rd__log("shadow tiles: off (%s)",
                 env == 0          ? "ICO_RD_SHADOW_TILE=0"
                 : !g_rd.hasDevice ? "no device"
                 : !g_rd.profile.dateStencil
                     ? "DATE by the snapshot here: the tiles need its stencil bit"
                 : !modules() ? "the shaders are not on this backend"
-                             : "not the PowerVR or a desktop class: off in this release");
+                : RD_SHADOW_TILE_DEFAULT == 0
+                    ? "not measured to help on a tile-based GPU; ICO_RD_SHADOW_TILE=1 turns it on "
+                      "for the tests"
+                    : "not the PowerVR or a desktop class: off in this release");
         return true;
     }
     const bool pass = rd__shadow_tile_selftest_variant(0, s_t.words, sizeof s_t.words);

@@ -681,14 +681,14 @@ What the log shows:
 
 ### The shadow tiles
 
-On the PowerVR class (and desktop Vulkan) the shadow composites are culled by the stencil outside a
-GPU tile mask of where a shadow lands ([RENDER_POST.md](RENDER_POST.md#the-shadow-tiles)). What the
-log shows:
+Off by default on every device ([RENDER_POST.md](RENDER_POST.md#the-shadow-tiles): the owner's
+PowerVR phone measured it slower). What the log shows:
 
-- once at start, after the stencil's line: `rd: shadow tiles: on (the PowerVR class; self-test ok:
-  SCENE the same bytes over N texels, L of M mask texels live)`, or `rd: shadow tiles: off (<why>)`
-  (`not the PowerVR or a desktop class`, `DATE by the snapshot here`, `self-test failed: SCENE
-  differs at ...`);
+- once at start, after the stencil's line: `rd: shadow tiles: off (not measured to help on a
+  tile-based GPU; ICO_RD_SHADOW_TILE=1 turns it on for the tests)` (or `DATE by the snapshot
+  here`, `the shaders are not on this backend`); with the tests' switch, `rd: shadow tiles: on
+  (ICO_RD_SHADOW_TILE=1; self-test ok: SCENE the same bytes over N texels, L of M mask texels
+  live)`, and then:
 - once: `rd: shadow tiles: the first composite over the tile mask (command N, SHADOWk WxH, mask
   WxH, the set-up over WxH texels)`;
 - a composite drawn whole: `rd: shadow tiles: a composite drawn whole: <why>`, the first 8 then
