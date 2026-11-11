@@ -1467,8 +1467,9 @@ void rhi_set_submit_tag(uint32_t replay, uint32_t frame);
  *   submittedAgoNs how long ago the newest submission was made;
  *   replay, frame the newest submission's rhi_set_submit_tag;
  *   openReplay, openFrame
- *                 the tag of the oldest submission of the last eight made
- *                 that is above `finished` (the first the GPU had not been
+ *                 the tag of the oldest submission of the last seven made
+ *                 (the eighth slot is the one a submit in progress
+ *                 overwrites) that is above `finished` (the first the GPU had not been
  *                 seen to finish), 0 and 0 when none is (or the backend
  *                 keeps no history); `finished` is as the submitting
  *                 thread last saw it, so an old one may be listed that the

@@ -3406,26 +3406,36 @@ bool rhi_gpu_progress(RhiGpuProgress *out)
     vkr_pipe_background_progress(&out->bgPipesDone, &out->bgPipesLeft);
     {
         /* the tags of the submission whose wait failed and of the first one
-           above `finished`, from the last eight submissions (atomic words
-           the submitting thread stores in vkr_note_submit: a value and its
-           tag read across a submit in progress may belong to two
-           neighbours, which only moves a diagnostic by one submission) */
+           above `finished`, from the last submissions (atomic words the
+           submitting thread stores in vkr_note_submit, the slot after the
+           newest first: cnt % VKR_SUBMIT_HISTORY).  That slot is the oldest
+           of a full history and the one a submit in progress overwrites, so
+           it is not read (the newest seven are); and when the count moved
+           while they were read, a later submit may have overwritten one of
+           them: read again (at most four times; the last read stands) */
         const uint64_t lostWait = __atomic_load_n(&g_vkr.lostWaitValue, __ATOMIC_RELAXED);
-        const uint32_t cnt = __atomic_load_n(&g_vkr.progTagCount, __ATOMIC_ACQUIRE);
-        const uint32_t n = cnt < VKR_SUBMIT_HISTORY ? cnt : VKR_SUBMIT_HISTORY;
+        for (int attempt = 0; attempt < 4; attempt++) {
+            const uint32_t cnt = __atomic_load_n(&g_vkr.progTagCount, __ATOMIC_ACQUIRE);
+            const uint32_t n = cnt < VKR_SUBMIT_HISTORY ? cnt : VKR_SUBMIT_HISTORY - 1u;
 
-        for (uint32_t k = 0; k < n; k++) {
-            const uint32_t i = (cnt - n + k) % VKR_SUBMIT_HISTORY;
-            const uint64_t value = __atomic_load_n(&g_vkr.progTagValue[i], __ATOMIC_RELAXED);
-            const uint64_t tag = __atomic_load_n(&g_vkr.progTagTag[i], __ATOMIC_RELAXED);
+            out->openReplay = out->openFrame = 0;
+            out->lostReplay = out->lostFrame = 0;
+            for (uint32_t k = 0; k < n; k++) {
+                const uint32_t i = (cnt - n + k) % VKR_SUBMIT_HISTORY;
+                const uint64_t value = __atomic_load_n(&g_vkr.progTagValue[i], __ATOMIC_RELAXED);
+                const uint64_t tag = __atomic_load_n(&g_vkr.progTagTag[i], __ATOMIC_RELAXED);
 
-            if (out->openReplay == 0 && value > out->finished) {
-                out->openReplay = (uint32_t)(tag >> 32);
-                out->openFrame = (uint32_t)tag;
+                if (out->openReplay == 0 && value > out->finished) {
+                    out->openReplay = (uint32_t)(tag >> 32);
+                    out->openFrame = (uint32_t)tag;
+                }
+                if (lostWait != 0 && value == lostWait) {
+                    out->lostReplay = (uint32_t)(tag >> 32);
+                    out->lostFrame = (uint32_t)tag;
+                }
             }
-            if (lostWait != 0 && value == lostWait) {
-                out->lostReplay = (uint32_t)(tag >> 32);
-                out->lostFrame = (uint32_t)tag;
+            if (__atomic_load_n(&g_vkr.progTagCount, __ATOMIC_ACQUIRE) == cnt) {
+                break;
             }
         }
     }
