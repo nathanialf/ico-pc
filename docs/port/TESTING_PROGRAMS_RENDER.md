@@ -833,6 +833,27 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   composites) or at least one where it takes two snapshots, and its depth and stencil MB loaded and
   stored each fall by 0.8 to 1.0 of the "at most" its stats line names; Vulkan also `--keys` at the
   Mali's setting: the cut adds no key the start-up set lacks. No device: SKIP.
+- `rd_stencil_selftest_test.c` (`rd_stencil_selftest`, `rd_stencil_selftest_poison`, lavapipe with
+  `ICO_RD_FOG_PATH=local` and `ICO_RD_STENCIL_PACKED=0`, the second also `ICO_RD_STORE_POISON=1`;
+  77 without a device or the local read, after its CPU cases): the stencil outside the shadow window
+  (`rd_stencil_selftest.c`): the 10 s clause and the `--stats` words from a made-up record; at a
+  640x448 Enhanced scale-2 Full pixel 16:9 scene, `rd_fog_selftest` on the local path, the stencil
+  self-test passed (its eight texels the GS arithmetic and the forced replay's), the stencil not
+  forced, the cut's replay with 2 or more stencil stores and 1 or more loads not asked (each at most
+  a SCENE of texels); the decision on the desktop class: `=1` forced, unset with the local path
+  forced (not the PowerVR class), the in-place path not, the copy and buffer paths forced, `=0` not;
+  no validation error.
+- `rd_stencil_ab.cmake` (`rd_stencil_ab`): the dumps of `tools/stencil_dumps.txt` (machine-local; a
+  listed dump that is absent FAILS: the Pixel's v3677 and v4287, the PowerVR phone's v4657,
+  the main gate, the drained-room ripples' 223424) with `ICO_RD_STENCIL_PACKED=1` and `0`,
+  `--pass-dump --stats`, under `ICO_RD_STORE_PLAN=1`, `ICO_RD_STORE_POISON=1`,
+  `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's profile (`ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced
+  2364x1080, Full height and pixel) and the Mali-G52's (`ICO_VK_FAKE_LIMITS=mali`,
+  `ICO_VK_FAKE_NO_DST=1`, 1x at 1612x720). Each pair: every PNG byte for byte, the same draws,
+  passes, colour and copy MB; `=1` with the depth and nothing not asked; `=0` inside the window
+  only; the depth and stencil MB stored and loaded fall by exactly the `=0` run's stats (MB
+  stored, MB loaded) within two hundredths, the MB cleared rise by at most its MB loaded (the
+  poisoned loads); each setting that compared a pair leaves out a stencil store. No device: SKIP.
 - `rd_store_plan_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` (the phone's three
   frames) three times under
   `ICO_RD_BLEND=fixed` and `ICO_RD_STORE_POISON=1` (a depth or stencil load the plan leaves

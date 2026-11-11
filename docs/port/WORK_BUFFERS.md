@@ -9,7 +9,7 @@ reflection block between ticks, and where the crack filler is drawn (after lists
 a new key between ticks is paired, how desktop Vulkan decides on the local reads at start, how
 the shadow count is read from the stencil in one draw (and its colour left unstored while it is
 made), how the shadow levels are composited above
-1x, which passes leave a depth neither loaded nor stored (the store plan) or begin without it (DATE's passes), which passes load and store only the tiles their draws touch (the pass area), a source that holds only its clear read as its colour, which full-frame reads stay at a large
+1x, which passes leave a depth neither loaded nor stored (the store plan) or begin without it (DATE's passes), where the stencil is loaded and stored (the shadow window), which passes load and store only the tiles their draws touch (the pass area), a source that holds only its clear read as its colour, which full-frame reads stay at a large
 scale, and how the screen-prim triangles draw without the sprite planes (issue 161). The sprites themselves are drawn by the GS
 sprite model ([RENDER_POST.md](RENDER_POST.md#post-passes), "The staticBlur sprites").
 
@@ -32,6 +32,7 @@ sprite model ([RENDER_POST.md](RENDER_POST.md#post-passes), "The staticBlur spri
 | `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
 | `port/render/rd_pass_area.c`, `port/render/rd_replay.c`, `port/rhi/vk/vk_cmd.c` | the pass area: the commands' boxes before the walk (`rd__pass_area_scan`, from `rd__store_plan_scan`), each pass's area (`rd__pass_area_begin` from `beginPass`), the end of its commands (`rd__pass_area_due`), the render area and the cut scissors (`rhi_cmd_begin_render_pass`, `rhi_cmd_set_scissor`) |
 | `port/render/rd_date_cut.c`, `port/render/rd_date_cut.h`, `port/render/rd_store_plan.c` | DATE's passes without the depth: the rule (`rd_date_cut_step`), the scan (`rd__date_cut_scan_cmd`, from `rd__store_plan_scan`), each draw's depth (`rd__date_cut_depth`, from `prepareDrawEx`), the DATE snapshot and its reasons (`rd__date_snapshot`) |
+| `port/render/rd_stencil_selftest.c`, `port/render/rd_stencil_selftest.h`, `port/render/rd_shadow.c` | the stencil outside the shadow window: the decision (`rd__stencil_cut_forced`, read by `rd__stencil_ops_packed`), its start-up self-test (`rd__stencil_cut_selftest`), the passes' counters and the tests' poison (`rd__stencil_cut_pass`) |
 | `port/render/rd_store_plan.c`, `port/render/rd_replay.c`, `port/render/rd_profile.c` | the store plan: the scan before the walk (`rd__store_plan_scan`), each pass's depth ops (`rd__store_plan_pass` from `beginPass`), the walk's command count (`g_rdStoreOrd`), the profile's `storePlan` |
 
 ## Sizes per frame width
@@ -1451,6 +1452,102 @@ and its three slow-scene captures, the Pixel's frame, `tools/date_subpass_dumps.
 with the cut off and on at the Mali's, the Adreno's and the PowerVR phone's settings without the
 in-pass read, and on OpenGL ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)). `ICO_RD_DATE_CUT=0` or
 `1` is the tests' switch ([TESTING.md](TESTING.md)); there is no setting.
+
+## The stencil outside the shadow window
+
+Every target depth is `RHI_FMT_D32F_S8` (`port/render/rd_core.c`), and a tile-based GPU reads and
+writes both aspects of a loaded and stored attachment: 4 bytes of depth and 1 of stencil a texel
+(`port/rhi/rhi_traffic.c` charges them apart). The stencil's bits 0-5 hold the shadow count from
+its reset to its resolve, bit 6 is DATE's, made again in each pass that tests it
+(`rd__replay_date_take` writes 0 into it over its area first, then 1 where the alpha's MSB is set;
+the tests read it under mask 0x40 alone), and bit 7 is unused. Outside the shadow window
+(`RdStencilWindow`, `port/render/rd_shadow.c`) nothing reads what a pass loads or stores of it:
+`rd__stencil_ops` loads it with the depth and stores it only while the window is open on that depth.
+
+**Why every pass kept it.** The renderer once sampled SCENE's depth in place everywhere and loaded
+and stored the stencil inside the window only. A Galaxy A36 (Adreno 710) then drew the fog at full
+strength on near geometry: the depth read as far. Commit a54e2f896 made the fog read a copy of the depth on every
+tile-based GPU and on D24S8, and made every pass load and store the stencil with the depth
+(`g_rd.depthCopy`, later set by `rd__set_fog_path` on every path but the in-place one). The two
+changes shipped together; which of them the Adreno needed was never measured. The fog's local read
+(`RD_FOG_LOCAL`) came later and set `depthCopy` too, so on the PowerVR phone list 3's pass (after the
+shadow count) loads and stores SCENE's 2364 x 1080 stencil, 2.4 MB each way, that nothing reads.
+The crack fill still samples SCENE's depth in place (`rd_crack_fill.c` `fillTake`,
+`RHI_STATE_DEPTH_READ`) right after such a pass: the Adreno 710's sequence.
+
+**The decision** (`rd__stencil_cut_forced`, `port/render/rd_stencil_selftest.c`; made again at each
+`rd__set_fog_path`), read by `rd__stencil_ops_packed` and the shadow reset's own pass:
+
+| The fog's depth path | The stencil |
+| --- | --- |
+| in place (the desktop) | inside the window only (never forced there) |
+| copy, buffer | with the depth on every pass, as a54e2f896 has it |
+| local read, the PowerVR class (`rd__profile_powervr`), its self-test passed | inside the window only |
+| local read, any other class (every Adreno class first), before the self-test or after a failed one | with the depth on every pass |
+
+No setting; `ICO_RD_STENCIL_PACKED=1` (with the depth everywhere) or `=0` (inside the window only,
+whatever the class and path; the self-test still runs where the renderer runs its self-tests) are
+the tests' switch ([TESTING.md](TESTING.md)).
+
+**The self-test** (`rd__stencil_cut_selftest`, from `rd_fog_selftest` once a renderer, after the
+fog's path is chosen and the other self-tests; nothing runs where the class or the path keeps the
+stencil with the depth). A frame of its own on SCENE and WORK2 at their real size, replayed with
+the stencil forced and with the cut, MSAA held off, its fogs reading the exact table entry and the
+depth sampled in place (`g_rd.depthCopy` held off for the two replays, as the crack fill samples
+it): list 0 clears SCENE and Z-writes two sprites (GS Z index 200 on the left half, 60 on the
+right: the pass stores the depth and, with the cut, not the stencil); list 3 clears WORK2 and fogs
+it from SCENE's depth view (the in-place read, `RHI_STATE_DEPTH_READ`, a pass of WORK2's colour
+alone); list 5 draws a sprite at index 130 over SCENE under ZTST GEQUAL without a Z write (a new
+pass: the depth loaded, with the cut the stencil neither loaded nor stored; drawn on the right
+half only); list 6 fogs SCENE in that pass (the local read). Eight texels, a quarter in from each
+corner of SCENE and of WORK2, must be the GS arithmetic of the fog over what the pattern gives
+there (within the fog self-test's 2 LSB) and the cut's replay the forced one's byte for byte. A
+depth read as far shows as the table's entry 0 and the GEQUAL sprite over the left half. A failure
+keeps the stencil with the depth (`profile: stencil outside the shadow window off (self-test)`;
+the profile's own flags are `RdProfile` fields, this one lives in its file).
+
+**The store plan agrees.** The plan drops a depth's load and store together with its stencil's
+after the depth's last touch (`rd__store_plan_pass`), and keeps both while a window is open
+(`RD_STORE_WHY_STENCIL`); the decision only changes the passes the plan keeps whose stencil is not
+live, which then keep the depth's load and store and leave the stencil's. The window's own passes
+are untouched: the reset (its own pass, or the shadow merge's armed pass, whose stencil store the
+arm asks after the plan), the volumes' pass and the resolve's load and store the stencil, as
+before.
+
+**The same bytes.** No draw outside the window reads a stencil bit a pass before it wrote: the
+count's bits are cleared at the reset and read before the resolve's pass ends; DATE's bit is
+written over its area in the pass that tests it; nothing uses bit 7. The depth's own ops do not
+change. So no `DIVERGENCES.md` row: the picture is the same bytes on every device and backend.
+
+**The counters and the log.** `rd__stencil_cut_pass` (after the store plan, the pass area and the
+merge's arm, in `beginPass`; also the new targets' clears and the wrap accumulator's pass) counts the
+passes whose depth store was asked and its stencil's not, and those whose depth load was asked and
+its stencil's not outside a window (`RdPerfRecord.stencilCutStores`, `stencilCutLoads` and their
+texels); under `ICO_RD_STORE_POISON=1` such a stencil load clears to 0x5A instead (after the area and
+the arm read the ops, so neither changes). Once at start, one of
+`rd: stencil: loaded and stored inside the shadow window only (self-test ok); ...`,
+`rd: stencil: loaded and stored inside the shadow window only (the fog reads the depth in place, ...)`
+or `rd: stencil: loaded and stored with the depth (<why>)`; a later change of path that changes it,
+`rd: stencil: now loaded and stored ...` (the first 8, then every 100th). The 10 s `window: per
+replay` line, after `stores:`, where the cut is on (the PowerVR phone after its self-test, the
+tests' `=0`; not on the desktop's in-place path, which never asked): `; stencil: S stores and L
+loads a replay not asked with the depth's (X/Y MB), loaded and stored inside the shadow window
+only`. `rd_replay_tool --stats`:
+`stats: stencil <words>: N stores and L loads not asked with the depth's (X MB stored, Y MB loaded)`.
+
+**What it saves** (by the traffic model, not measured on the phone): at the PowerVR phone's 2364 x
+1080, 2.4 MB of stencil stored and 2.4 MB loaded a pass that keeps its depth outside the window
+(list 3's pass and those after it with the depth: the plan's survivors); the Pixel's v3677 frame
+had 3 passes with a depth, one of them the window's.
+
+**The tests.** `rd_stencil_selftest` and `rd_stencil_selftest_poison`
+(`port/render/test/rd_stencil_selftest_test.c`, lavapipe on the local path with
+`ICO_RD_STENCIL_PACKED=0`, the second under the poison): the 10 s and `--stats` words, the self-test
+passed, the stencil not forced, the counters, the decision by path and switch on the desktop class.
+`rd_stencil_ab` replays `tools/stencil_dumps.txt` with `ICO_RD_STENCIL_PACKED=1` and `=0` at the
+PowerVR phone's profile and the Mali's under the poison: every target byte for byte, the same draws,
+passes and colour MB, the depth and stencil MB stored and loaded lower by exactly what the stats
+name ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ## A cleared source read as its colour
 

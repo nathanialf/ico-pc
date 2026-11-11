@@ -936,7 +936,10 @@ the resolve reads), 6 DATE's (`RD_DATE_STENCIL_BIT`: its setup writes it alone a
 it alone, [The replay](RENDER.md#the-replay)), 7 unused. A count's INCR_WRAP or DECR_WRAP through the write
 mask 0x3F leaves bit 6 as it was and gives bits 0-5 the same value whatever bit 6 holds, so the
 two never meet; the shadow reset clears the whole stencil, which DATE's setup writes again in the
-pass that needs it (`port/render/rd_pipeline.c` (`shadowStencil`)).
+pass that needs it (`port/render/rd_pipeline.c` (`shadowStencil`)). So outside the shadow window
+nothing reads a stencil a pass before it stored: where its passes load and store it (inside the
+window only, or with the depth on every pass on most tile-based GPUs) is
+[WORK_BUFFERS.md](WORK_BUFFERS.md#the-stencil-outside-the-shadow-window).
 
 ## Water and render-to-texture blocks
 
