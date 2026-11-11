@@ -7,17 +7,21 @@
 #include "render_thread.h"
 
 #include <SDL3/SDL.h>
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 #include "config.h"
 #include "cpu_place.h"
 #include "diag_host.h"
+#include "ico_thread.h" /* ico_thread_now_ms */
 #include "pace_policy.h"
 #include "rd.h"
 #include "rd_submit_thread.h"
 #include "rd_thread.h"
 #include "rhi.h"
+#include "sys_cell.h"
 #include "thread_stat.h"
+#include "window_lines.h" /* window_log_cost_mark */
 
 static struct {
     SDL_Thread *thread;
@@ -159,15 +163,81 @@ static void place_rhi_thread_begin(void)
    after the game thread's pin, then at a 10 s block when the text changed
    (a hash of it kept; the first 8 changes, then every 100th).  Linux and
    Android (nothing read elsewhere).  The game thread's */
+/* The per-thread reads the 10 s block made on the game thread, moved to
+ * the log thread's once-a-second tick (ico_render_thread_tick, Android;
+ * window_stall.c asks_tick): the three threads' schedstat (one file each)
+ * into cells every tick, and the thread list (opendir /proc/self/task and
+ * every thread's comm and status: about 100 file reads, the owner's
+ * Pixel's 2.5 ms "hold and game thread lines", rc10) every tenth tick into
+ * a buffer.  The block reads the cells and the buffer; without the tick
+ * (no log thread, or not Android) it reads the files itself, as before */
+#define TICK_LIST_EVERY 10u
+static int s_tickOn; /* __atomic: the tick has run: the block reads its cells */
+static SysCell s_statCell[3];
+
+static struct {
+    SDL_SpinLock lock;
+    uint32_t gen; /* under lock: a new list in text */
+    char text[1024];
+} s_list;
+
+static long stat_tid(int i)
+{
+    return i == 0   ? s_place.gameTid
+           : i == 1 ? __atomic_load_n(&s_place.renderTid, __ATOMIC_ACQUIRE)
+                    : __atomic_load_n(&s_place.submitTid, __ATOMIC_ACQUIRE);
+}
+
+void ico_render_thread_tick(void)
+{
+    static uint32_t s_ticks;
+    for (int i = 0; i < 3; i++) {
+        ThreadStat now;
+        const long tid = stat_tid(i);
+        if (tid > 0 && thread_stat_read(NULL, tid, &now) == 0) {
+            const double v[4] = {(double)now.runNs, (double)now.waitNs, (double)now.slices,
+                                 (double)tid};
+            sys_cell_put(&s_statCell[i], ico_thread_now_ms(), 0.0, v, 4);
+        }
+    }
+    if (s_ticks++ % TICK_LIST_EVERY == 0u) {
+        static char text[1024]; /* the log thread's alone */
+        if (cpu_place_threads_text(NULL, s_place.gameTid, text, sizeof(text)) > 0) {
+            SDL_LockSpinlock(&s_list.lock);
+            memcpy(s_list.text, text, sizeof(text));
+            s_list.gen++;
+            SDL_UnlockSpinlock(&s_list.lock);
+        }
+    }
+    __atomic_store_n(&s_tickOn, 1, __ATOMIC_RELEASE);
+}
+
 static void place_threads_line(void)
 {
     static uint32_t s_hash;
     static bool s_said;
+    static uint32_t s_gen;
     char text[1024];
     uint32_t h = 2166136261u; /* FNV-1a */
 
-    if (cpu_place_threads_text(NULL, s_place.gameTid, text, sizeof(text)) == 0 ||
-        strcmp(text, "threads: none read") == 0) {
+    if (__atomic_load_n(&s_tickOn, __ATOMIC_ACQUIRE)) {
+        /* the log thread's last list (up to TICK_LIST_EVERY s old) */
+        SDL_LockSpinlock(&s_list.lock);
+        const uint32_t gen = s_list.gen;
+        if (gen != s_gen) {
+            memcpy(text, s_list.text, sizeof(text));
+        }
+        SDL_UnlockSpinlock(&s_list.lock);
+        if (gen == s_gen) {
+            return; /* nothing new read */
+        }
+        s_gen = gen;
+        text[sizeof(text) - 1] = '\0';
+        if (text[0] == '\0' || strcmp(text, "threads: none read") == 0) {
+            return;
+        }
+    } else if (cpu_place_threads_text(NULL, s_place.gameTid, text, sizeof(text)) == 0 ||
+               strcmp(text, "threads: none read") == 0) {
         return;
     }
     for (const char *c = text; *c != '\0'; c++) {
@@ -213,6 +283,9 @@ static size_t place_stat_part(char *out, size_t cap, bool submitOn)
     if (cap > 0) {
         out[0] = '\0';
     }
+    const bool cells = __atomic_load_n(&s_tickOn, __ATOMIC_ACQUIRE);
+    double oldest = -1.0;
+
     for (int i = 0; i < 3; i++) {
         ThreadStat now;
         int e;
@@ -221,7 +294,25 @@ static size_t place_stat_part(char *out, size_t cap, bool submitOn)
         if (tids[i] <= 0) {
             continue;
         }
-        e = thread_stat_read(NULL, tids[i], &now);
+        if (cells) {
+            /* the log thread's last read of this thread (a cell of another
+               thread id is an old one: not this thread's) */
+            double v[4], at;
+            e = sys_cell_get(&s_statCell[i], v, 4, &at, NULL) == 4 && (long)v[3] == tids[i]
+                    ? 0
+                    : ENOENT;
+            if (e == 0) {
+                now.runNs = (uint64_t)v[0];
+                now.waitNs = (uint64_t)v[1];
+                now.slices = (uint64_t)v[2];
+                const double age = ico_thread_now_ms() - at;
+                oldest = age > oldest ? age : oldest;
+            } else {
+                e = thread_stat_read(NULL, tids[i], &now); /* none read there: its own errno */
+            }
+        } else {
+            e = thread_stat_read(NULL, tids[i], &now);
+        }
         if (e != 0) {
             gameErr = i == 0 ? e : gameErr;
             s_statTrack[i].tid = 0; /* read again from nothing */
@@ -230,7 +321,18 @@ static size_t place_stat_part(char *out, size_t cap, bool submitOn)
         have[i] = thread_stat_track(&s_statTrack[i], tids[i], &now, &d[i]);
     }
     if (have[0] || have[1] || have[2]) {
-        return thread_stat_text(out, cap, who, d, have, 3);
+        size_t n = thread_stat_text(out, cap, who, d, have, 3);
+        if (cells && oldest >= 0.0 && n < cap) {
+            /* the deltas run between the log thread's reads, not the
+               block's ends: up to a second more or less than the block */
+            const int w = snprintf(out + n, cap - n,
+                                   " (the threads' run times as the log thread read them up to "
+                                   "%.0f ms before)",
+                                   oldest);
+            n += w > 0 ? (size_t)w : 0u;
+            n = n < cap ? n : cap - 1;
+        }
+        return n;
     }
     if (gameErr != 0 && !s_failSaid) {
         s_failSaid = true;
@@ -1092,6 +1194,7 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
             snprintf(cores + at, sizeof(cores) - at, "; %s", ran);
         }
     }
+    window_log_cost_mark("the game thread line's cores and run times");
     rd_thread_block_take(&tb);
     rd_thread_submit_block_take(&sb);
     rd_frame_close_take(&closes, &closeMs, &closeMaxMs);
@@ -1208,5 +1311,7 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
         fprintf(stderr, "window: step rule: %s\n", ask);
     }
     memset(&s_rt.asks, 0, sizeof(s_rt.asks));
+    window_log_cost_mark("the game thread line");
     place_threads_line(); /* again only when the threads or their cores changed */
+    window_log_cost_mark("the thread list");
 }
