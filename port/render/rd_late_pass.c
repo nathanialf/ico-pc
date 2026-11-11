@@ -125,8 +125,15 @@ static struct {
  * and clears them; the replay adds) */
 static struct {
     uint64_t held, glowHeld, flushed, why[RD_LATE_WHY_COUNT], joined, joinPasses;
-    uint64_t deferred, deferEarly;
+    uint64_t deferred, deferEarly, noLand;
 } s_sum;
+
+/* the scan's verdict for the walk (rd__late_pass_scan_end): whether a paste
+ * in this replay takes the held fill; the replay it is for */
+static struct {
+    uint32_t replay;
+    bool known, lands;
+} s_land;
 
 /* RD_LATE_DEFER: the aura's paste the deferred glow paste lands at (its
  * command order and replay) */
@@ -166,7 +173,8 @@ const char *rd__late_pass_why_text(int why)
 const char *rd__late_pass_bits_text(unsigned bits)
 {
     bits &= RD_LATE_ALL;
-    return bits == RD_LATE_ALL     ? "on"
+    return bits == RD_LATE_DEFAULT ? "on"
+           : bits == RD_LATE_ALL   ? "all"
            : bits == 0             ? "off"
            : bits == RD_LATE_FILL  ? "fill"
            : bits == RD_LATE_DEFER ? "defer"
@@ -197,7 +205,7 @@ static void note(unsigned bits, const char *why)
             bits & RD_LATE_JOIN ? "list 11's draws that use no depth in the open pass without it"
                                 : NULL};
         int at = snprintf(line, sizeof(line), "late pass: %s (%s):",
-                          bits == RD_LATE_ALL ? "on" : rd__late_pass_bits_text(bits), why);
+                          bits == RD_LATE_DEFAULT ? "on" : rd__late_pass_bits_text(bits), why);
         bool first = true;
         for (int k = 0; k < 3 && at >= 0 && (size_t)at < sizeof(line); k++) {
             if (part[k]) {
@@ -225,14 +233,15 @@ unsigned rd__late_pass_bits(void)
         const char *e = getenv("ICO_RD_LATE_PASS");
         if (e && e[0]) {
             s_sw.bits = strcmp(e, "0") == 0       ? 0
-                        : strcmp(e, "1") == 0     ? (int)RD_LATE_ALL
+                        : strcmp(e, "1") == 0     ? (int)RD_LATE_DEFAULT
+                        : strcmp(e, "all") == 0   ? (int)RD_LATE_ALL
                         : strcmp(e, "fill") == 0  ? (int)RD_LATE_FILL
                         : strcmp(e, "join") == 0  ? (int)RD_LATE_JOIN
                         : strcmp(e, "defer") == 0 ? (int)RD_LATE_DEFER
                                                   : -1;
             if (s_sw.bits < 0) {
-                rd__log("late pass: ICO_RD_LATE_PASS=%.16s is not 0, 1, fill, defer or join: the "
-                        "profile's",
+                rd__log("late pass: ICO_RD_LATE_PASS=%.16s is not 0, 1, all, fill, defer or join: "
+                        "the profile's",
                         e);
             }
         }
@@ -246,8 +255,9 @@ unsigned rd__late_pass_bits(void)
         bits = (unsigned)s_sw.bits;
         why = "ICO_RD_LATE_PASS";
     } else if (g_rd.hasDevice && g_rd.profile.tiler && rhi_backend() == RHI_BACKEND_VULKAN) {
-        bits = RD_LATE_ALL;
-        why = "a tile-based GPU's default";
+        bits = RD_LATE_DEFAULT;
+        why = "a tile-based GPU's default; list 11's join off by default: its A/B differs by a "
+              "level on the reference drivers";
     } else {
         bits = 0;
         why = g_rd.hasDevice && g_rd.profile.tiler ? "not under Vulkan" : "not a tile-based GPU";
@@ -390,14 +400,18 @@ bool rd__late_pass_scan(RdLateScan *s, const RdFrame *f, const RdCmd *c, const R
     }
     if (s->held) {
         int why;
-        if (!s->first && rd__late_pass_class(f, c, st, 0, &why) != RD_LATE_HOLD) {
+        int k = s->first ? RD_LATE_HOLD : rd__late_pass_class(f, c, st, 0, &why);
+        if (!s->first && k != RD_LATE_HOLD) {
             s->first = true; /* a plan that skips nothing on SCENE: here */
+            s->firstLands = k == RD_LATE_LAND_AURA || k == RD_LATE_LAND_GLOW;
             s->firstOrd = ord;
             s->firstL = l;
             s->firstI = i;
         }
-        if (rd__late_pass_class(f, c, st, -1, &why) != RD_LATE_HOLD) {
+        k = rd__late_pass_class(f, c, st, -1, &why);
+        if (k != RD_LATE_HOLD) {
             s->done = true; /* the held draw lands here, or is drawn before c */
+            s->doneLands = k == RD_LATE_LAND_AURA || k == RD_LATE_LAND_GLOW;
             s->landOrd = ord;
             s->landL = l;
             s->landI = i;
@@ -472,7 +486,16 @@ bool rd__late_pass_scan_end(const RdLateScan *s, uint32_t end, int endL, uint32_
         return false;
     }
     const bool dark = rd__glow_light_plan() == RD_GLOW_LIGHT_DARK && !anyPlan();
-    if (!planHolds() || !landPossible()) {
+    /* where the place the walk would hold the fill to is no paste (a draw
+     * the fill must go before, the walk's end: the opening's frames, which
+     * have no aura), the hold gains no pass and keeps the snapshot's copy
+     * (FILLSWAP refuses a held fill): the walk does not hold it.  The tests'
+     * RD_LATE_ANY_PLAN holds as before */
+    const bool lands = anyPlan() || (dark ? s->done && s->doneLands : s->first && s->firstLands);
+    s_land.replay = g_rd.replayCounter;
+    s_land.known = true;
+    s_land.lands = lands;
+    if (!planHolds() || !landPossible() || !lands) {
         *ord = s->takeOrd; /* drawn where it is taken, as without the hold */
         *l = s->takeL;
         *i = s->takeI;
@@ -498,7 +521,26 @@ bool rd__late_pass_hold_wanted(void)
 {
     return (rd__late_pass_bits() & RD_LATE_FILL) != 0 && planHolds() && !rd__upscale_point_on() &&
            rd__replay_msaa_want() <= 1u && g_rd.dstMode == RD_BLEND_EXACT_OFF && !g_rdWin.first &&
-           landPossible();
+           landPossible() && !rd__late_pass_no_land();
+}
+
+bool rd__late_pass_no_land(void)
+{
+    return (rd__late_pass_bits() & RD_LATE_FILL) != 0 && s_land.known &&
+           s_land.replay == g_rd.replayCounter && !s_land.lands;
+}
+
+void rd__late_pass_not_held(void)
+{
+    g_rdPerf.latePassNoLand++;
+    __atomic_add_fetch(&s_sum.noLand, 1, __ATOMIC_RELAXED);
+    static bool s_said;
+    if (!s_said) {
+        s_said = true;
+        rd__log("late pass: the crack fill not held in a frame where no paste takes it (no aura, "
+                "a draw or the walk's end first): drawn where it is due, its snapshot by the swap "
+                "where allowed (reported once)");
+    }
 }
 
 void rd__late_pass_held_drawn(const RdTargetRec *scene, bool glow)
@@ -763,11 +805,12 @@ void rd_late_pass_line(void)
     const uint64_t joinPasses = __atomic_exchange_n(&s_sum.joinPasses, 0, __ATOMIC_RELAXED);
     const uint64_t deferred = __atomic_exchange_n(&s_sum.deferred, 0, __ATOMIC_RELAXED);
     const uint64_t deferEarly = __atomic_exchange_n(&s_sum.deferEarly, 0, __ATOMIC_RELAXED);
+    const uint64_t noLand = __atomic_exchange_n(&s_sum.noLand, 0, __ATOMIC_RELAXED);
     uint64_t w[RD_LATE_WHY_COUNT];
     for (int k = 0; k < RD_LATE_WHY_COUNT; k++) {
         w[k] = __atomic_exchange_n(&s_sum.why[k], 0, __ATOMIC_RELAXED);
     }
-    if (held + glowHeld + flushed + joined + deferred + deferEarly == 0) {
+    if (held + glowHeld + flushed + joined + deferred + deferEarly + noLand == 0) {
         return;
     }
     char why[512] = "";
@@ -787,8 +830,9 @@ void rd_late_pass_line(void)
             "window: late pass: %llu crack fills held into the aura's paste pass, %llu into the "
             "glow's, %llu drawn early in a pass of their own%s%s; %llu glow pastes in the "
             "aura's paste pass, %llu drawn early; %llu list 11 draws joined the open pass "
-            "without SCENE's depth (%llu passes not begun)\n",
+            "without SCENE's depth (%llu passes not begun); %llu fills not held (no paste in "
+            "the frame takes them)\n",
             (unsigned long long)held, (unsigned long long)glowHeld, (unsigned long long)flushed,
             why, at ? ")" : "", (unsigned long long)deferred, (unsigned long long)deferEarly,
-            (unsigned long long)joined, (unsigned long long)joinPasses);
+            (unsigned long long)joined, (unsigned long long)joinPasses, (unsigned long long)noLand);
 }

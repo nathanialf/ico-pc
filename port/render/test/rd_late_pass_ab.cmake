@@ -40,9 +40,10 @@
 # deferred paste, its copies the same; at the
 # phone's setting a dump the list marks holds that many fills where the off
 # run draws a fill in its own pass (on OpenGL none held or drawn early: no
-# paste there takes a fill in these DARK rooms), and joins as many passes
-# as it marks.  On Vulkan at least one fill held and one pass joined over the
-# list.  No device: SKIP (77).
+# paste there takes a fill in these DARK rooms); no list 11 draw joined (=1
+# is the default parts, the join left out: rd_late_pass.h RD_LATE_DEFAULT; a
+# joinN mark is read and not checked).  On Vulkan at least one fill held over
+# the list.  No device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 # -DBACKEND=vulkan|opengl
 set(dumps "")
@@ -111,7 +112,7 @@ else()
 endif()
 
 set(drawsRe "stats: ([0-9]+) draws, ([0-9]+) passes")
-set(lateRe "stats: late pass (on|off|fill|defer|join|some): ([0-9]+) crack fills held into a paste pass \\(([0-9]+) the glow's, ([0-9.]+) MB of colour not loaded and as many not stored\\), ([0-9]+) drawn early")
+set(lateRe "stats: late pass (on|off|all|fill|defer|join|some): ([0-9]+) crack fills held into a paste pass \\(([0-9]+) the glow's, ([0-9.]+) MB of colour not loaded and as many not stored\\), ([0-9]+) drawn early")
 set(deferRe ", ([0-9]+) glow pastes in the aura's paste pass \\(([0-9.]+) MB of colour not loaded and as many not stored\\), ([0-9]+) drawn early, ")
 set(joinRe ", ([0-9]+) list 11 draws joined the open pass without SCENE's depth \\(([0-9]+) passes not begun, ([0-9.]+) MB of colour at most each way\\), ([0-9]+) draws more for the border's blocks")
 set(crackRe "stats: crack fill (on|off): ([0-9]+) passes")
@@ -281,10 +282,12 @@ foreach(dump IN LISTS dumps)
         math(EXPR failures "${failures} + 1")
       endif()
     endif()
-    set(wantJoin "${wantJoin_${dump}}")
-    if(NOT wantJoin STREQUAL "" AND s STREQUAL "phone" AND NOT joinPasses_1 EQUAL wantJoin)
-      message(SEND_ERROR "${dump} ${s}: list 11's draws joined ${joinPasses_1} passes, ${wantJoin} "
-                         "expected (the pause menu after the aura's paste)")
+    # ICO_RD_LATE_PASS=1 is the default parts: list 11's join left out
+    # (rd_late_pass.h RD_LATE_DEFAULT: its A/B differed by a level on the menu's
+    # text), so nothing joins; a joinN mark is not checked
+    if(NOT joined_1 EQUAL 0 OR NOT joinPasses_1 EQUAL 0)
+      message(SEND_ERROR "${dump} ${s}: list 11's draws joined ${joinPasses_1} passes with the "
+                         "default parts: none expected (the join is off by default)")
       math(EXPR failures "${failures} + 1")
     endif()
     math(EXPR heldTotal "${heldTotal} + ${held_1}")
@@ -317,9 +320,9 @@ endif()
 if(compared EQUAL 0)
   message(FATAL_ERROR "rd_late_pass_ab: no target compared over ${ndumps} dumps")
 endif()
-if(NOT "${BACKEND}" STREQUAL "opengl" AND (heldTotal EQUAL 0 OR joinTotal EQUAL 0))
-  message(FATAL_ERROR "rd_late_pass_ab: ${heldTotal} crack fills held and ${joinTotal} passes "
-                      "joined over ${ndumps} dumps: one of each at least expected")
+if(NOT "${BACKEND}" STREQUAL "opengl" AND heldTotal EQUAL 0)
+  message(FATAL_ERROR "rd_late_pass_ab: ${heldTotal} crack fills held over ${ndumps} dumps: one "
+                      "at least expected")
 endif()
 message(STATUS "rd_late_pass_ab: ${compared} targets the same bytes over ${ndumps} dumps; "
                "${heldTotal} crack fills held into the aura's paste pass, ${joinTotal} passes "

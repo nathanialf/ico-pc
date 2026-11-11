@@ -2987,6 +2987,9 @@ typedef struct RdPerfRecord {
      * SCENE's border repeat (a draw of the middle and one a repeated block,
      * rd_crack_fill.c fillDrawHeld) */
     uint32_t latePassBlockDraws;
+    /* fills the walk did not hold because the scan found no paste in the
+     * replay that takes them (rd_late_pass.c rd__late_pass_no_land) */
+    uint32_t latePassNoLand;
     /* The aura's paste split (rd_aura_paste.c): pastes drawn as the alpha
      * alone over the rows that read proven alpha 0 rows of their source
      * (auraPasteRows of SCENE's rows) and as the paste over the band

@@ -863,7 +863,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   it the late pass off draws both pastes in one pass on SCENE): the glow's paste deferred to the aura's paste pass
   (`latePassDeferred` 1, none early) and the fill held on to it (`latePassHeld` 1, none in the
   glow's pass), the same checks with two render passes fewer than the late pass off.
-- `rd_crack_join` (`rd_crack_test 2 join`, `ICO_VK_FAKE_LIMITS=moltenvk`; `rd_late_pass.cmake`):
+- `rd_crack_join` (`rd_crack_test 2 join`, `ICO_VK_FAKE_LIMITS=moltenvk`; `rd_late_pass.cmake`; the
+  join forced, off by default: its untextured flat sprites at 2x come out the same bytes, the dumps'
+  textured menu text does not):
   `rd_crack_aura`'s frame with two list 11 commands after the paste (a blended sprite each into
   SCENE, Z ALWAYS, no Z write, right of the slit): with the late pass both drawn in the paste's pass
   without SCENE's depth (2 draws, 1 pass joined); against the join off
@@ -884,9 +886,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   times the held fills' MB where a fill went into the glow's paste pass (the lamps' pass keeps its
   depth store), the same without a join or a glow pass fill, the copy MB the same,
   the off run holding and joining nothing; the dumps the list marks hold that many fills at the
-  phone's setting (on OpenGL none held or drawn early) and join as many passes (`joinN`: the paused frame
-  of issue 164); at least one fill held and one pass joined over the list on Vulkan. No device:
-  SKIP.
+  phone's setting (on OpenGL none held or drawn early); no list 11 draw joined (`1` is the default
+  parts, the join left out; a `joinN` mark is not checked); at least one fill held over the list on
+  Vulkan. No device: SKIP.
 - `rd_crack_work_ab.cmake` (`rd_crack_work_ab`, `rd_crack_work_gl`; `rd_crack_work.cmake`): the
   crack fill's snapshot by the swap and its early leave (`rd_crack_fill.c` FILLSWAP, CRACKTAP). The
   dumps of `tools/crack_work_dumps.txt` (machine-local; a listed dump that is absent FAILS: the

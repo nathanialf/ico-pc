@@ -69,7 +69,8 @@ if(ICO_RUN_TESTS AND TARGET rd_crack_test)
                          ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk")
 endif()
 
-# rd_crack_join: rd_crack_test 2 join on the tile class's fakes: the aura's frame
+# rd_crack_join: rd_crack_test 2 join on the tile class's fakes, the join forced
+# (rd__late_pass_force(RD_LATE_ALL); off by default): the aura's frame
 # (rd_crack_aura's) with two list 11 commands after the paste, each a sprite
 # into SCENE under Z ALWAYS without a Z write: with the late pass both drawn in
 # the paste's pass without SCENE's depth (2 draws, 1 pass), against the join off
@@ -94,7 +95,8 @@ endif()
 # target and PRESENT byte for byte, the same draws, passes fewer by the held
 # fills exactly, the crack fill's own passes fewer by them too, the colour bytes
 # loaded and stored fewer by SCENE's once a held fill each way, the copies the
-# same; the off run holds nothing; the dumps the list marks hold one fill;
+# same; the off run holds nothing; the dumps the list marks hold one fill; no
+# list 11 join (off by default: =1 is the default parts, rd_late_pass.h);
 # rd_late_pass_gl: the phone's setting on OpenGL (llvmpipe) with the late pass on
 # (the aura's paste reads a snapshot there: no fill held in a DARK room, one
 # held into the glow's paste pass in a LAMPS room, drawn past the border repeat
