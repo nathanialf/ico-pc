@@ -7,6 +7,7 @@
 #include "../rhi_driver_version.h"
 #include "../rhi_pass_row.h"
 #include "../rhi_pass_crumb.h"
+#include "../rhi_tile_rule.h"
 #include "../rhi_bind_cache.h"
 #include <stdlib.h>
 #include <string.h>
@@ -90,6 +91,8 @@ static int vkr_env_switch(const char *name)
                ? 0
                : -1;
 }
+
+static void vkr_tile_rule_apply(void); /* the barrier scopes and the wait, below */
 
 /* ------------------------------------------------------------ device loss
  * The report vkr_check prints once, at the first VK_ERROR_DEVICE_LOST
@@ -1441,6 +1444,7 @@ static bool vkr_pick_device(void)
     g_vkr.moltenvk =
         g_vkr.fakeMoltenvk || rhi_driver_is_moltenvk(g_vkr.props.vendorID, g_vkr.driverID, 0);
 #endif
+    vkr_tile_rule_apply(); /* the barrier scopes and the submission wait (rhi_tile_rule.h) */
     vkGetPhysicalDeviceMemoryProperties(g_vkr.phys, &g_vkr.memProps);
     /* the heaps, and the one uploads (the renderer's ring, texture
        pack uploads) come from: a device-local, host-visible type first
@@ -1547,6 +1551,66 @@ static uint32_t vkr_msaa_counts(void)
 }
 
 static bool vkr_is_tiler(uint32_t vendor); /* below, with the vendor table */
+
+/* The tile-based phones' rule and the loss ladder (rhi_tile_rule.h, issues
+ * 179 and 211): the barrier scopes and the submission wait this device
+ * runs (VkrState.tile), decided once the device is picked and before it is
+ * made (the calibrated timestamps' extension follows the wait, vk_tsclock.c
+ * vkr_tsclock_pick).  Tile-based as port/render/rd_profile.c calls it: the
+ * vendors rhi_tile_vendor names, MoltenVK, every Android GPU.
+ * ICO_VK_FAKE_VENDOR=<id> (the tests: 0x13B5 for Arm) is the vendor id this
+ * rule reads, nothing else.  Two lines, each switch's value and why: the
+ * reporter's next log is read by them (with them present and no loss, the
+ * cause was one of the two). */
+static void vkr_tile_rule_apply(void)
+{
+    uint32_t vendor = g_vkr.props.vendorID;
+    const char *fake = getenv("ICO_VK_FAKE_VENDOR");
+    bool faked = false;
+    if (fake && fake[0]) {
+        char *end = NULL;
+        const unsigned long v = strtoul(fake, &end, 0);
+        if (end != fake && *end == '\0' && v <= 0xFFFFFFFFul) {
+            vendor = (uint32_t)v;
+            faked = true;
+        }
+    }
+    const char *name = rhi_tile_vendor_name(vendor);
+    bool tiler = name != NULL || g_vkr.moltenvk;
+#ifdef __ANDROID__
+    tiler = true; /* every Android GPU (vkr_fill_limits' RhiLimits.tiler) */
+#endif
+    char device[80];
+    snprintf(device, sizeof device, "%s, vendor 0x%04X%s",
+             g_vkr.moltenvk ? "MoltenVK"
+             : name         ? name
+                            : "an Android GPU",
+             (unsigned)vendor, faked ? " (ICO_VK_FAKE_VENDOR)" : "");
+    const char *row = getenv("ICO_LOSS_ROW");
+    rhi_tile_rule(getenv("ICO_VK_BARRIER_SCOPE"), getenv("ICO_VK_POLLED_WAIT"), tiler, device,
+                  rhi_tile_loss_row(row), &g_vkr.tile);
+    VKR_LOG("barriers: %s: %s", g_vkr.tile.wideWhy,
+            g_vkr.tile.wide
+                ? "every buffer barrier waits for and is seen by the vertex input, vertex, "
+                  "fragment, compute and copy stages, and each command list begins with one "
+                  "barrier over attachment and copy writes; the renderer uploads the "
+                  "textures and the fog's table before the VU pre-pass"
+                : "each buffer barrier names only the stages that can touch the buffer, a "
+                  "command list's opening barrier only attachments and its closing one the "
+                  "copies; the renderer uploads the textures and the fog's table "
+                  "after the VU pre-pass");
+    VKR_LOG("submission wait: %s: %s", g_vkr.tile.polledWhy,
+            g_vkr.tile.polled
+                ? "a frame slot's wait that blocks past 50 ms becomes 4 ms timed waits reading "
+                  "its timestamps and the submission counter (the trace of a stalled replay's "
+                  "GPU clock line), calibrated timestamps enabled where offered"
+                : "one wait without a time limit for a frame slot, nothing of its work read "
+                  "while it runs: a stalled replay's GPU clock line has no trace (which "
+                  "of its stamps were written while the CPU waited, the longest stretch with "
+                  "nothing new, a second run of its first list are not measured) and calibrated "
+                  "timestamps are not enabled (a stalled replay's start is placed from its "
+                  "wait's end, not on the CPU's clock)");
+}
 
 /* The driver row and its override (rhi_pass_row.h) over legacyPasses as
  * the device's version and extensions set it: VkRenderPass objects on a
@@ -2997,6 +3061,12 @@ static void vkr_fill_limits(void)
 
     o->validationLayer = g_vkr.validationOn;
     o->moltenvk = g_vkr.moltenvk;
+    /* the tile-based phones' rule (vkr_tile_rule_apply): the renderer's
+     * upload order follows the scopes, the summary names both */
+    o->wideBarriers = g_vkr.tile.wide;
+    o->polledWait = g_vkr.tile.polled;
+    o->barrierWords = g_vkr.tile.wideTag;
+    o->waitWords = g_vkr.tile.polledTag;
     /* v0.7.10: the device profile's facts (rhi.h) */
     /* either path's read (RhiLimits.localReadSubpass: the subpass read,
      * the colour of a pass with a depth target only) */

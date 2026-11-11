@@ -571,16 +571,19 @@ void rhi_end_commands(RhiCommandList cl)
      * "Hazards" above: a later copy into a texture or buffer this list
      * copied into or from, in the same state, needs no barrier of its own).
      * Not counted in stats.barriers (it is every list's, as it was before
-     * the transfer half moved here from vkr_open_barrier) */
+     * the transfer half moved here from vkr_open_barrier).  The wide scopes
+     * (VkrState.tile.wide, rhi_tile_rule.h) keep v0.11.2's: the host's read
+     * alone here, the transfer half in every list's opening barrier */
+    const bool wide = g_vkr.tile.wide;
     VkMemoryBarrier mb = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
         .srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-        .dstAccessMask =
-            VK_ACCESS_HOST_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT,
+        .dstAccessMask = VK_ACCESS_HOST_READ_BIT |
+                         (wide ? 0u : VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT),
     };
     vkCmdPipelineBarrier(c->cb, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                         VK_PIPELINE_STAGE_TRANSFER_BIT | VK_PIPELINE_STAGE_HOST_BIT, 0, 1, &mb, 0,
-                         NULL, 0, NULL);
+                         VK_PIPELINE_STAGE_HOST_BIT | (wide ? 0u : VK_PIPELINE_STAGE_TRANSFER_BIT),
+                         0, 1, &mb, 0, NULL, 0, NULL);
     VKR_CHECK(vkEndCommandBuffer(c->cb));
     c->recording = false;
 }
@@ -784,14 +787,38 @@ bool vkr_submit_present_signal(VkrFrame *f)
  * usage's: vertex input for a vertex or index buffer, the vertex, fragment
  * (and compute) shaders for a uniform or storage buffer, the transfer stage
  * for every buffer a copy may touch.  A fragment stage there makes only
- * later fragment work wait for the write, which costs no overlap. */
+ * later fragment work wait for the write, which costs no overlap.
+ *
+ * The wide scopes (VkrState.tile.wide: a tile-based GPU by default, or a
+ * start after a lost one; rhi_tile_rule.h) are v0.11.2's instead, for every
+ * buffer whatever its usage or history: vertex input, the vertex and
+ * fragment shaders, the compute shader where the compute record exists and
+ * the transfer stage on both sides, with every read access and the
+ * transfer's writes (vkr_buf_wide_stages, VKR_BUF_WIDE_ACCESS).  The picture
+ * is the same either way (ordering only); the wide scopes keep a picture's
+ * uploads, VU record and vertex work behind the picture before's fragment
+ * work, as every release before v0.11.3 did. */
 static VkPipelineStageFlags vkr_buf_compute_stage(void)
 {
     return g_vkr.computeStores ? VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT : 0u;
 }
 
+#define VKR_BUF_WIDE_ACCESS                                                                        \
+    (VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT | VK_ACCESS_INDEX_READ_BIT | VK_ACCESS_UNIFORM_READ_BIT | \
+     VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT)
+
+static VkPipelineStageFlags vkr_buf_wide_stages(void)
+{
+    return VK_PIPELINE_STAGE_VERTEX_INPUT_BIT | VK_PIPELINE_STAGE_VERTEX_SHADER_BIT |
+           VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT | vkr_buf_compute_stage() |
+           VK_PIPELINE_STAGE_TRANSFER_BIT;
+}
+
 static VkPipelineStageFlags vkr_buf_earlier_stages(const VkrBuffer *b)
 {
+    if (g_vkr.tile.wide) {
+        return vkr_buf_wide_stages();
+    }
     VkPipelineStageFlags s = 0;
     if (b->vkUsage & (VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT)) {
         s |= VK_PIPELINE_STAGE_VERTEX_INPUT_BIT;
@@ -814,6 +841,10 @@ static VkPipelineStageFlags vkr_buf_earlier_stages(const VkrBuffer *b)
    a stage it names, as the validation layer checks) */
 static VkPipelineStageFlags vkr_buf_later_stages(const VkrBuffer *b, VkAccessFlags *access)
 {
+    if (g_vkr.tile.wide) {
+        *access = VKR_BUF_WIDE_ACCESS;
+        return vkr_buf_wide_stages();
+    }
     VkPipelineStageFlags s = 0;
     VkAccessFlags a = 0;
     if (b->vkUsage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT) {
@@ -1145,19 +1176,26 @@ static void vkr_order_writes(VkCommandBuffer cb, bool attachments)
  * (issue 179).  No other pair crosses a list without a barrier of its own:
  * an attachment written by a copy (or copied from after a pass) changes
  * state, and the caller's transition names both stages (vkr_image_barrier).
- * Lists recorded interleaved fall back to vkr_order_writes. */
+ * Lists recorded interleaved fall back to vkr_order_writes.  The wide scopes
+ * (VkrState.tile.wide, rhi_tile_rule.h) keep v0.11.2's one barrier over
+ * both kinds (the transfer stage on both sides here, the closing barrier
+ * the host's read alone). */
 static void vkr_open_barrier(VkCommandBuffer cb)
 {
-    const VkPipelineStageFlags stages =
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VKR_DEPTH_STAGES;
+    const bool wide = g_vkr.tile.wide;
+    const VkPipelineStageFlags stages = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT |
+                                        VKR_DEPTH_STAGES |
+                                        (wide ? VK_PIPELINE_STAGE_TRANSFER_BIT : 0u);
     VkMemoryBarrier mb = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER,
-        .srcAccessMask =
-            VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+        .srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                         (wide ? VK_ACCESS_TRANSFER_WRITE_BIT : 0u),
         .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
                          VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                          VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
+                         (wide ? VK_ACCESS_TRANSFER_READ_BIT | VK_ACCESS_TRANSFER_WRITE_BIT : 0u),
     };
     vkCmdPipelineBarrier(cb, stages, stages, 0, 1, &mb, 0, NULL, 0, NULL);
     vkr_hold_note(VKR_HOLD_OPEN, stages, stages, 0u, false);
@@ -2299,8 +2337,9 @@ void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, R
     /* on the global barrier path vkr_hz_copy keeps no hazard record (its
        global barrier goes before a texture copy, none after it): the
        transfer stage always, so an earlier copy between a texture and
-       either buffer stays ordered before this one */
-    if (dPending || sPending || c->globalOrder) {
+       either buffer stays ordered before this one; and the wide scopes'
+       v0.11.2 first scope always holds it (vkr_buf_wide_stages) */
+    if (dPending || sPending || c->globalOrder || g_vkr.tile.wide) {
         preSrc |= VK_PIPELINE_STAGE_TRANSFER_BIT;
     }
     VkMemoryBarrier pre = {

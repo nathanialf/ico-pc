@@ -564,6 +564,20 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_dev_env_value("subpass_read", "on"), "1") == 0);
     CHECK(strcmp(ico_dev_env_value("subpass_read", "off"), "0") == 0);
     CHECK(ico_dev_env_value("subpass_read", "maybe") == NULL);
+    /* the barrier scopes and the submission wait (vk_device.c
+       vkr_tile_rule_apply, rhi_tile_rule.h: issues 179 and 211) */
+    CHECK(strcmp(ico_dev_env_name("barrier_scope"), "ICO_VK_BARRIER_SCOPE") == 0);
+    CHECK(strcmp(ico_dev_env_value("barrier_scope", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("barrier_scope", "wide"), "wide") == 0);
+    CHECK(strcmp(ico_dev_env_value("barrier_scope", "narrow"), "narrow") == 0);
+    CHECK(ico_dev_env_value("barrier_scope", "on") == NULL);
+    CHECK(ico_dev_env_value("barrier_scope", "maybe") == NULL);
+    CHECK(strcmp(ico_dev_env_name("polled_wait"), "ICO_VK_POLLED_WAIT") == 0);
+    CHECK(strcmp(ico_dev_env_value("polled_wait", "auto"), "auto") == 0);
+    CHECK(strcmp(ico_dev_env_value("polled_wait", "on"), "1") == 0);
+    CHECK(strcmp(ico_dev_env_value("polled_wait", "off"), "0") == 0);
+    CHECK(strcmp(ico_dev_env_value("polled_wait", "false"), "0") == 0);
+    CHECK(ico_dev_env_value("polled_wait", "maybe") == NULL);
     /* fog_path: the four paths as they are (local: the device profile's
        fogLocal, port/render/rd_profile.c) */
     CHECK(strcmp(ico_dev_env_value("fog_path", "local"), "local") == 0);
@@ -1052,6 +1066,8 @@ static void test_dev_env(void)
     CHECK(strcmp(ico_config_ini_key("dev.attachment_read"), "attachment_read") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.legacy_passes"), "legacy_passes") == 0);
     CHECK(strcmp(ico_config_ini_key("dev.subpass_read"), "subpass_read") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.barrier_scope"), "barrier_scope") == 0);
+    CHECK(strcmp(ico_config_ini_key("dev.polled_wait"), "polled_wait") == 0);
 
     for (i = 0; i < sizeof(vars) / sizeof(vars[0]); i++) {
         unset_env(vars[i]);

@@ -776,6 +776,20 @@ typedef struct RhiLimits {
      * (port/render/rd_dst_read.c; [dev] blend still forces any mode).
      * ICO_VK_FAKE_LIMITS=moltenvk reports it on any device. */
     bool moltenvk;
+    /* Vulkan: the barrier scopes and the submission wait the device runs
+     * (rhi_tile_rule.h; issues 179 and 211).  wideBarriers: v0.11.2's
+     * scopes, and the renderer then records the texture uploads and the
+     * fog's table before the mesh uploads and the VU pre-pass, as v0.11.2
+     * did (port/render/rd_upload.c rd__upload_late_reserve); false: v0.11.3's
+     * narrow scopes and the uploads after the pre-pass.  polledWait: the
+     * frame slot's polled recycle wait and the calibrated timestamps
+     * (v0.11.3); false the single wait (v0.11.2).  barrierWords, waitWords:
+     * the summary's words ("wide (tile-based)", "single (tile-based)").
+     * false / NULL on the other backends (v0.11.3's order) */
+    bool wideBarriers;
+    bool polledWait;
+    const char *barrierWords;
+    const char *waitWords;
     /* (docs/port/RENDER.md, the device profile).  localRead: Vulkan
      * dynamicRenderingLocalRead (VK_KHR_dynamic_rendering_local_read, or
      * VkPhysicalDeviceVulkan14Features on a 1.4 device without the

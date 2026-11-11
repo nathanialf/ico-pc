@@ -35,7 +35,16 @@
  * timestamps to every submission on the device ("If VK_KHR_calibrated_
  * timestamps or VK_EXT_calibrated_timestamps is enabled, this extends to
  * timestamp writes across all submissions on the same logical device";
- * without it only writes in the same submission are ordered). */
+ * without it only writes in the same submission are ordered).
+ *
+ * The single wait (VkrState.tile.polled false: a tile-based GPU by default
+ * since v0.11.4, [dev] polled_wait = off, or two lost starts in a row;
+ * port/rhi/rhi_tile_rule.h, issues 179 and 211) is v0.11.2's: one wait
+ * without a time limit, no read of the slot's queries or of the counter
+ * while its work runs, and the calibrated-timestamps extension not enabled
+ * (vkr_tsclock_pick).  The submit times and the wait's CPU times are still
+ * kept; the trace, the still stretch, the fall and the calibrated pair are
+ * not (the device's "submission wait" line says so). */
 #include "vk_internal.h"
 #include "rhi_vk.h"
 #include <stdlib.h>
@@ -82,6 +91,12 @@ const char *vkr_tsclock_pick(bool hasKhr, bool hasExt)
     const char *env = getenv("ICO_VK_CALIBRATED_TIMESTAMPS");
     if (env && strcmp(env, "0") == 0) {
         snprintf(s_why, sizeof s_why, "off (ICO_VK_CALIBRATED_TIMESTAMPS=0)");
+        return NULL;
+    }
+    if (!g_vkr.tile.polled) {
+        /* v0.11.2's device: the extension not enabled with the single wait
+           (rhi_tile_rule.h; the submission wait's line says why) */
+        snprintf(s_why, sizeof s_why, "off (the single submission wait: %s)", g_vkr.tile.polledTag);
         return NULL;
     }
     if (!hasKhr && !hasExt) {
@@ -260,7 +275,10 @@ VkResult vkr_tsclock_wait(VkrFrame *f, uint64_t value)
     RhiTimestampClock *k = &g_vkr.tsClock;
     const uint64_t t0 = vkr_now_ns();
     k->waitBeginNs = t0;
-    if (!g_vkr.timestamps || !f->queryPool) {
+    /* the single wait (VkrState.tile.polled false, rhi_tile_rule.h): one
+       wait without a time limit and no read of the slot while its work is
+       in flight, as v0.11.2; the CPU's times of the wait are kept */
+    if (!g_vkr.timestamps || !f->queryPool || !g_vkr.tile.polled) {
         const VkResult r = vkr_sync_wait(value);
         k->waitEndNs = vkr_now_ns();
         return r;

@@ -636,6 +636,9 @@ void rd__upload_dirty_textures(void)
 }
 
 static uint64_t s_lateBytes; /* the window's size (rd__upload_late_reserve) */
+/* the wide scopes' replay: the late uploads were recorded at the reserve,
+ * in v0.11.2's place (rd__upload_late then records nothing) */
+static bool s_lateDone;
 
 /* the ring bytes rd__upload_dirty_textures will take now, as it lays them
  * out (the changed rectangle of a texture uploaded in place, a whole one
@@ -692,9 +695,22 @@ static uint64_t lateTextureBytes(void)
     return total;
 }
 
-uint64_t rd__upload_late_reserve(void)
+uint64_t rd__upload_late_reserve(const RdFrame *f, int keep)
 {
     const RhiLimits *lim = rhi_limits();
+    s_lateDone = false;
+    if (lim->wideBarriers) {
+        /* v0.11.2's order (rhi.h RhiLimits.wideBarriers, rhi_tile_rule.h: a
+           tile-based GPU by default, or a start after a lost one): the
+           texture uploads and the fog's table here, first, before the
+           meshes; the same bytes at the same ring offsets as v0.11.2 */
+        const uint64_t texOff = rd__ring_alloc(0, 1);
+        rd__upload_dirty_textures();
+        g_rdPerf.uploadTextureBytes = rd__ring_alloc(0, 1) - texOff;
+        rd__fog_lut_upload(f, keep); /* the fog's table, outside any pass (doFog) */
+        s_lateDone = true;
+        return ~0ull;
+    }
     const uint64_t pitchA = lim->copyRowPitchAlign ? lim->copyRowPitchAlign : 1u;
     const uint64_t offA = lim->copyOffsetAlign ? lim->copyOffsetAlign : 1u;
     /* the dummy's 4 bytes and the fog's 256 texels, each at its alignment */
@@ -708,6 +724,10 @@ uint64_t rd__upload_late_reserve(void)
 
 void rd__upload_late(const RdFrame *f, int keep, uint64_t win)
 {
+    if (s_lateDone) {
+        s_lateDone = false; /* recorded before the meshes (the wide scopes) */
+        return;
+    }
     /* their GPU time in the uploads' (rd_perf.c), the record's held-back
        end sent before their barriers */
     rd__perf_stamp(rd__replay_cl(), RD_PERF_TS_LATE);

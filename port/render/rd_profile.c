@@ -400,6 +400,15 @@ static void makeText(RdProfile *p)
                  ? ", cull frustum (the profile: the occlusion test costs more on this chip's CPU "
                    "than it saves)"
                  : "");
+    /* the Vulkan backend's barrier scopes and submission wait (rhi.h
+       RhiLimits.barrierWords, rhi_tile_rule.h; issues 179 and 211): the
+       summary says which of v0.11.2's and v0.11.3's this start ran */
+    const RhiLimits *lim = rhi_limits();
+    if (lim != NULL && lim->barrierWords != NULL && lim->waitWords != NULL) {
+        const size_t n = strlen(p->text);
+        snprintf(p->text + n, sizeof p->text - n, ", barriers %s, submission wait %s",
+                 lim->barrierWords, lim->waitWords);
+    }
 }
 
 void rd__profile_init(void)
