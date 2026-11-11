@@ -199,6 +199,14 @@ static bool fxPassReadable(const Replay *r, const RdFxDraw *x)
  * drawn by rd__fx_defer_draw under its own state, the command order taken
  * back to its own (g_rdStoreOrd: the pass area and the store plan read the
  * pass the draw begins, or joins, as begun at the paste) */
+/* the aura's paste split (rd_aura_paste.c): the draw's texel rows, the
+ * scissor fxDraw sets just before it draws (the sprite's own scissor is the
+ * whole target there: rd_aura_paste.c planPaste) */
+static struct {
+    bool on;
+    RhiRect rect;
+} s_clip;
+
 static struct {
     bool on, drawing;
     uint32_t replay, ord;
@@ -274,9 +282,12 @@ void rd__fx_defer_draw(Replay *r, bool landed)
     r->mirror = 0;
     g_rdStoreOrd = s_def.ord;
     s_def.drawing = true;
+    const bool clip = s_clip.on; /* the aura's split's rows are not the glow paste's */
+    s_clip.on = false;
     const bool drawn =
         fxDraw(r, &s_def.x, &s_def.key, s_def.set, s_def.clear, NULL, 0, FX_ADDITIVE, NULL, NULL);
     s_def.drawing = false;
+    s_clip.on = clip;
     g_rdStoreOrd = ord;
     r->st = st;
     r->mirror = mirror;
@@ -440,6 +451,9 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
         rd__replay_flush_run(r); /* the run's draws before the read */
         rhi_cmd_local_read_barrier(cl, RHI_LOCAL_READ_COLOR);
     }
+    if (s_clip.on) {
+        rhi_cmd_set_scissor(cl, &s_clip.rect); /* the aura's split: these rows alone */
+    }
     rd__set_pipeline(cl, pipe, key);
     rd__bind_uniform(cl, 0, r->frameBG);
     rd__bind_uniform(cl, 1, rd__draw_group(&cb));
@@ -589,6 +603,7 @@ static bool fxPlanDraw(Replay *r, const RdFxDraw *x);
 
 bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x)
 {
+    rd__aura_paste_observe(r, x); /* the aura's paste's proof (rd_aura_paste.c) */
     /* the crack fill armed for this sprite's pass (rd_crack_fill.c: the
      * aura's paste, or the glow's for a fill the late pass held): taken by
      * the local read's pass or the premultiplied add's; drawn any other
@@ -642,6 +657,79 @@ static bool fxGlowFold(Replay *r, const RdFxDraw *x)
     return false;
 }
 
+/* fxDraw under the split's rows [y0, y1) of x's target (none: no draw) */
+static bool fxDrawRows(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32_t set,
+                       uint32_t clear, const uint8_t *col, int local, int kind, uint32_t y0,
+                       uint32_t y1)
+{
+    if (y1 <= y0) {
+        return true;
+    }
+    s_clip.on = true;
+    s_clip.rect = (RhiRect){0, (int32_t)y0, x->tc->tw, y1 - y0};
+    const bool drawn = fxDraw(r, x, key, set, clear, col, local, kind, NULL, NULL);
+    s_clip.on = false;
+    return drawn;
+}
+
+/* The aura's paste split (rd_aura_paste.c): its rows [c0, c1) of SCENE as
+ * the alpha alone (the constant fold of the sprite untextured with RGBAQ's
+ * alpha 0: rd_aura_paste.c proved every tap there alpha 0, so the paste's
+ * As is 0, its RGB Cd and its alpha 0), the other rows as the paste by the
+ * local read (kl), scissored.  The paste's first local draw takes the pass's
+ * first draws (a held crack fill, a deferred glow paste: rd_late_pass.c),
+ * as the whole paste's does; with no band they are drawn first here.  -1:
+ * not planned or not drawable (the whole paste as before) */
+static int fxAuraSplit(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *kl)
+{
+    uint32_t c0, c1;
+    if (!rd__aura_paste_due(x, &c0, &c1)) {
+        return -1;
+    }
+    RdPipeKeyInt kc = *x->key;
+    kc.gs.colorMask = 8; /* the constant fold's key: the alpha alone (rd__fx_enumerate) */
+    const uint32_t th = x->tc->th;
+    if (c1 > th || !rd__get_pipeline(kl).id || !rd__get_pipeline(&kc).id || !fxPassReadable(r, x)) {
+        rd__aura_paste_kept(RD_AP_WHY_LOCAL);
+        return -1;
+    }
+    if (c0 > 0 && !fxDrawRows(r, x, kl, 0, 0, NULL, 1, FX_LOCAL, 0, c0)) {
+        rd__aura_paste_kept(RD_AP_WHY_LOCAL);
+        return -1; /* nothing drawn: the whole paste's path */
+    }
+    if (c1 < th && !fxDrawRows(r, x, kl, 0, 0, NULL, 1, FX_LOCAL, c1, th) && c0 == 0) {
+        rd__aura_paste_kept(RD_AP_WHY_LOCAL);
+        return -1;
+    }
+    if (c0 == 0 && c1 == th) {
+        /* no band: the pass's first draws, as the paste's local draw takes them */
+        rd__crack_fill_in_pass(r, 0);
+        if (rd__fx_defer_on() && rd__late_pass_defer_lands()) {
+            rd__fx_defer_draw(r, true);
+        }
+    }
+    /* the alpha alone: the sprite untextured, RGBAQ's alpha 0 */
+    RdFxDraw y = *x;
+    RdPostRec p = *x->p;
+    p.rgba[3] = 0;
+    y.p = &p;
+    y.textured = 0;
+    y.src = NULL;
+    y.srcTex = g_rd.dummy;
+    y.steps = 0;
+    uint8_t ident = 0, rgb[3];
+    const bool fold = rd__fx_fold(x->d, p.rgba, &ident, rgb) && (ident & 7u) == 7u;
+    if (!fold || !fxDrawRows(r, &y, &kc, 0, RD_FXF_ABE | RD_FXF_DST | RD_FXF_PABE, rgb, 0,
+                             FX_CONSTANT, c0, c1)) {
+        /* not drawn so after all: those rows as the paste, in the same pass */
+        fxDrawRows(r, x, kl, 0, 0, NULL, 1, FX_LOCAL, c0, c1);
+        rd__aura_paste_kept(RD_AP_WHY_FORM);
+        return 1;
+    }
+    rd__aura_paste_split(c0, c1, th);
+    return 1;
+}
+
 static bool fxPlanDraw(Replay *r, const RdFxDraw *x)
 {
     if (fxGlowFold(r, x)) {
@@ -678,6 +766,10 @@ static bool fxPlanDraw(Replay *r, const RdFxDraw *x)
         if (g_rd.profile.fxDstLocal && g_rd.fs[RD_FS_FX_LOCAL].id && g_rd.layoutLocal.id) {
             RdPipeKeyInt k = *x->key;
             k.fs = RD_FS_FX_LOCAL;
+            const int split = fxAuraSplit(r, x, &k);
+            if (split >= 0) {
+                return split != 0;
+            }
             return fxDraw(r, x, &k, 0, 0, NULL, 1, FX_LOCAL, NULL, NULL);
         }
         return false;

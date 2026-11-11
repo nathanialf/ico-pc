@@ -537,6 +537,7 @@
 #include "rd_internal.h"
 #include "rd_jitter.h"
 #include "rd_layer.h"
+#include "rd_aura_paste.h"       /* --stats: the aura's paste split */
 #include "rd_late_pass.h"        /* --stats: the late passes on SCENE */
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
 #include "rd_stencil_selftest.h" /* --stats: the stencil outside the shadow window */
@@ -3261,6 +3262,13 @@ int main(int argc, char **argv)
                (double)pr->latePassDeferTexels * 4.0 / 1048576.0, pr->latePassDeferEarly,
                pr->latePassJoined, pr->latePassJoinPasses,
                (double)pr->latePassJoinTexels * 4.0 / 1048576.0);
+        /* the aura's paste as the alpha alone (rd_aura_paste.c) */
+        printf("%s: stats: aura paste %s: %u split (%u rows as the alpha alone, %u band rows), %u "
+               "drawn whole%s%s%s\n",
+               dump, rd__aura_paste_on() ? "on" : "off", pr->auraPasteSplit, pr->auraPasteRows,
+               pr->auraPasteBand, pr->auraPasteKept, pr->auraPasteKept ? " (" : "",
+               pr->auraPasteKept ? rd__aura_paste_why_text((int)pr->auraPasteWhy) : "",
+               pr->auraPasteKept ? ")" : "");
         /* the aura's read in two passes (rd_aura_box.c) */
         printf("%s: stats: aura box %s: %u feedback reads in two passes\n", dump,
                rd__aura_box_on() ? "on" : "off", pr->auraBoxDraws);

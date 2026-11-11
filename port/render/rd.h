@@ -2968,6 +2968,12 @@ typedef struct RdPerfRecord {
     /* the targets of glowLightLazy's clears, bit k: WORK2_PAD, WORK2, WORK3,
      * WORK0 (rd__glow_light_lazy_text's order) */
     uint32_t glowLightLazyWhich;
+    /* The aura's paste split (rd_aura_paste.c): pastes drawn as the alpha
+     * alone over the rows that read proven alpha 0 rows of their source
+     * (auraPasteRows of SCENE's rows) and as the paste over the band
+     * (auraPasteBand rows); pastes drawn whole (auraPasteKept; auraPasteWhy
+     * the last one's reason, rd_aura_paste.h RD_AP_WHY_*) */
+    uint32_t auraPasteSplit, auraPasteRows, auraPasteBand, auraPasteKept, auraPasteWhy;
     /* The aura's read of SCENE into FEED128 in two passes (rd_aura_box.c):
      * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
      * a replay; none while the game is paused) */
@@ -3339,6 +3345,9 @@ void rd_glow_light_line(void);
  * "window: late pass: ..." for the replays since its last call (nothing
  * when no fill was held) */
 void rd_late_pass_line(void);
+/* the aura's paste split (rd_aura_paste.c): the window's 10 s clause
+ * "window: aura paste: ..." (nothing when no paste was seen) */
+void rd_aura_paste_line(void);
 /* the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off (the tests' A/B, no config
  * key); rd__glow_light_force sets it (-1 the environment's) and forgets the
  * plan's off and the plan frame before */

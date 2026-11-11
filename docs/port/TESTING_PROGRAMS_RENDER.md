@@ -820,6 +820,19 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   none begun again, the same passes, 3 snapshots (1 the first, 2 after an alpha write) and store-plan
   drops, the passes with a depth fewer by the runs, the depth and stencil bytes asked lower by 4 to 5
   bytes a texel each way of each cut pass, the 10 s text's `; DATE: 2.0 passes`; no validation error.
+- `rd_aura_paste_test.c` (`rd_aura_paste`, CPU): the aura's paste split's row proof
+  (`rd_aura_paste.c`): the kernels' taps (nearest, bilinear with a fraction of 0 and 8, the B-spline,
+  the box), the GS's V truncated toward 0, the addressing (CLAMP, REPEAT, the backing clamp), and the
+  chain on the Pixel frame's geometry: WORK0 rows 0-111 carried into FEED128 rows 0-111 (CLAMP; 1-111
+  under REPEAT), the paste's rows [0, 1062) of 1080 (CLAMP both), [11, 1062) (the paste on REPEAT),
+  [21, 1062) (command 47 on REPEAT), the measured band rows 1072-1079 inside the band.
+- `rd_aura_paste_ab.cmake` (`rd_aura_paste_ab`): the dumps of `tools/aura_paste_dumps.txt`
+  (machine-local; a listed dump that is absent FAILS) with `ICO_RD_AURA_PASTE=0` and `1`,
+  `--pass-dump --stats`, `ICO_RD_VU_PREPASS=0`, at the phone's Resolution Auto and Enhanced 2x 4:3
+  (both `ICO_VK_FAKE_LIMITS=moltenvk`) and a desktop 16:9 window: every PNG byte for byte, the same
+  passes and attachment MB, the off run splitting nothing; the marked dump (the phone's cage frame) split once
+  at the phone's setting with at most 32 band rows; at least one split over the list. No device:
+  SKIP.
 - `rd_late_pass_test.c` (`rd_late_pass`, CPU, record-only): the late passes' predicate
   (`rd_late_pass.c` `rd__late_pass_class`) on made-up commands: state, NOPs, overlay text, a clear
   or copy of another target, a sprite into another target (untextured, from another target, the

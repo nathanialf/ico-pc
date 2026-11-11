@@ -1,0 +1,18 @@
+# Dump list for rd_aura_paste_ab (port/render/test/rd_aura_paste_ab.cmake: the
+# aura's paste as the alpha alone, ICO_RD_AURA_PASTE=0 against 1, byte for byte).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  A listed dump that is absent FAILS the test
+# (a '*' glob that matches nothing too).  A second field 1: the paste split
+# once a replay at the phone's setting (AURA_WORK only its clear: the chain
+# rd_aura_paste.c proves); without it, no expectation but the pair's.
+#
+# the PowerVR phone's v0.11.5 rc1 F12 frame (the cage; "constant reads 1.0")
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc1/frame-20261111-075333-v4287.zip 1
+# its v0.11.4 F12 frame (stage 4)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump
+# issue 164's paused frame
+/primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump
+# issue 163's lamp rooms
+/primary/dev/ico-dumps/163/*.rddump
+# a 2026-10-07 capture (4:3, 512 GS pixels)
+/primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump

@@ -11,6 +11,7 @@
 #include "shader_consts.h"
 #include "rd_present_scene.h" /* rd_replay.c and rd_blur_border.c call its hooks */
 #include "rd_late_pass.h"     /* rd_crack_fill.c, rd_store_plan.c and rd_replay.c call it */
+#include "rd_aura_paste.h"    /* rd_fx_plan.c calls it */
 
 /* Consecutive screen-prim commands that bind the same things are one draw
  * (doScreen).  A command whose plan is one draw opens a run or joins the
@@ -392,6 +393,12 @@ void rd__fill_draw_cb_extra(const Replay *r, const RdDrawPass *dp, const DrawSet
  *                      untextured); counts RdPerfRecord.constReads /
  *                      constKept (rd__const_reads_on: rd_internal.h) */
 void rd__const_cmd(const RdCmd *c);
+/* rd__const_actions  the actions walked so far this replay (this command's
+ *                    counted); rd__const_took  the sprite being drawn now
+ *                    (this action) into tcId was drawn in a cleared source's
+ *                    colour (rd_aura_paste.c's chain) */
+uint32_t rd__const_actions(void);
+bool rd__const_took(uint32_t tcId);
 void rd__const_note_clear(uint32_t id, const RdTargetRec *t, const float col[4]);
 bool rd__const_read(const RdTargetRec *tc, uint32_t tcId, const RdTargetRec *src, uint32_t srcId,
                     const RdDrawState *d, RdPostRec *p, uint32_t tfmt);

@@ -119,3 +119,6 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                              ENVIRONMENT "ICO_RHI_BACKEND=opengl;LIBGL_ALWAYS_SOFTWARE=1;SDL_VIDEO_DRIVER=offscreen")
     endif()
 endif()
+
+# the aura's paste split (rd_aura_paste.c in ico_render) and its tests
+include(rd_aura_paste.cmake)
