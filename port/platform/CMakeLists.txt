@@ -327,6 +327,7 @@ endif()
 # that blocked and a late step, the pipe full or not, a capture, the line
 # word for word (CPU only)
 add_executable(log_cost_test test/log_cost_test.c log_cost.c)
+target_include_directories(log_cost_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(log_cost_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(ICO_RUN_TESTS)
     add_test(NAME log_cost COMMAND log_cost_test)
