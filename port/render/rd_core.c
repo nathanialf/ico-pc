@@ -28,6 +28,7 @@
 #include <string.h>
 #include <time.h>
 #include "../fmv/rd_video.h"
+#include "rd_log_line.h"
 #include "rd_internal.h"
 #include "rd_icon_hold.h" /* rd__icon_pass_drop */
 #include "rd_loss_keep.h" /* rd__loss_keep_recycle */
@@ -116,13 +117,13 @@ static uint32_t s_notImplementedCount;
 
 /* ------------------------------------------------------------ diagnostics */
 
+/* one write a line (rd_log_line.h): the streams are unbuffered, so three
+ * calls let another thread's line land inside this one */
 void rd__log(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    fputs("rd: ", stderr);
-    vfprintf(stderr, fmt, ap);
-    fputc('\n', stderr);
+    (void)rd_log_line_write(stderr, "rd: ", NULL, fmt, ap);
     va_end(ap);
 }
 
@@ -332,9 +333,7 @@ void rd__log_once(int bit, const char *fmt, ...)
     g_rd.onceFlags |= 1u << bit;
     va_list ap;
     va_start(ap, fmt);
-    fputs("rd: ", stderr);
-    vfprintf(stderr, fmt, ap);
-    fputs(" (reported once)\n", stderr);
+    (void)rd_log_line_write(stderr, "rd: ", " (reported once)", fmt, ap);
     va_end(ap);
 }
 

@@ -1176,3 +1176,16 @@ in G), which is copied into a readback buffer and summed once the GPU is past th
 `rd_crack_nodual`, `rd_crack_tiler`, `rd_crack_tiler_on`, `rd_crack_tiler_fold`,
 `rd_crack_tiler_fold_mali`), `rd_replay_tool_crack` and `rd_crack_late_ab` check it
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
+
+## Start-up
+
+What the renderer decides or prepares before play, and the lines that show it, beside
+[RENDER.md](RENDER.md#made-at-start-up)'s allocations.
+
+**One log line, one write.** The log streams are unbuffered (Android: fds 1 and 2 are a pipe the
+log thread drains; Linux and macOS: each write goes to the file), so a line written in three calls
+(its `rd: `, its text, its newline) could have another thread's line land inside it.
+`rd__log` and `rd__log_once` format the whole line into one buffer (`rd_log_line.c`: on the stack
+up to 2 KB, else on the heap) and hand it to the stream in one `fwrite`, which an unbuffered stream
+passes on as one write; only where the heap refuses a long line are the three calls made.
+`rd_log_line` checks the bytes and the one write (glibc's `fopencookie`).

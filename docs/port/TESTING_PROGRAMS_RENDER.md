@@ -1335,6 +1335,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   does and prints `early: record 1024 rows, arena made`), under lavapipe's own record write, the
   compute dispatches and the render targets: every named target byte for byte at Original 4:3 1x
   and Enhanced 16:9 2x; a frame without a pre-pass is skipped.
+- `rd_log_line_test.c` (ctest `rd_log_line`, `rd_early.cmake`): a log line handed to an
+  unbuffered stream in one write (`rd_log_line.c`, `rd__log`; [RENDER_POST.md](RENDER_POST.md#start-up)),
+  pure: a short line, one with `rd__log_once`'s suffix, one of 10,000 characters (formatted on the
+  heap), one at the stack buffer's edge and one past it, one without a prefix: the bytes whole and,
+  where glibc lets the test count them (`fopencookie`, the stream unbuffered), one write each.
 - `rd_loss_pick_test.c` (ctest `rd_loss_pick`): which frames the device-loss dump writes
   (`rd_loss_pick.c`), pure, with a fake submission history. The two reporters' cases: a Mali
   phone's loss (replay 148 / frame 129 lost its wait while the ring held 130..132: without a copy the
