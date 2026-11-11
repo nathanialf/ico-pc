@@ -53,6 +53,20 @@ if(ICO_RUN_TESTS AND TARGET rd_crack_test)
                          ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk")
 endif()
 
+# rd_crack_defer: rd_crack_test 2 defer, rd_crack_heldglow's frame with the aura's
+# paste after the glow's: the glow's paste deferred to the aura's paste pass and
+# the fill held on to it (one held fill, none in the glow's pass, one paste
+# deferred), the same checks with two render passes fewer than the late pass off
+if(ICO_RUN_TESTS AND TARGET rd_crack_test)
+    add_test(NAME rd_crack_defer
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=2|defer"
+                     "-DEXPECT=rd: crack fill: on above 1x \\(scale 2x2, reach 1x1"
+                     "-DEXPECT2=rd: late pass: the glow's paste deferred to the aura's paste pass"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack.cmake")
+    set_tests_properties(rd_crack_defer PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk")
+endif()
+
 # rd_crack_join: rd_crack_test 2 join on the tile class's fakes: the aura's frame
 # (rd_crack_aura's) with two list 11 commands after the paste, each a sprite
 # into SCENE under Z ALWAYS without a Z write: with the late pass both drawn in

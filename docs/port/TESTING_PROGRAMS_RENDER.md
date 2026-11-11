@@ -844,6 +844,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   write) and the glow's paste (WORK0 added over SCENE, Cs * FIX + Cd at FIX 128, the fx plan's
   premultiplied add) in place of the aura's: the fill held into the glow's paste pass
   (`latePassGlowHeld` 1), the same checks.
+- `rd_crack_defer` (`rd_crack_test 2 defer`, the same fakes): `rd_crack_heldglow`'s frame with the
+  aura's paste (list 8) after the glow's: the glow's paste deferred to the aura's paste pass
+  (`latePassDeferred` 1, none early) and the fill held on to it (`latePassHeld` 1, none in the
+  glow's pass), the same checks with two render passes fewer than the late pass off.
 - `rd_crack_join` (`rd_crack_test 2 join`, `ICO_VK_FAKE_LIMITS=moltenvk`; `rd_late_pass.cmake`):
   `rd_crack_aura`'s frame with two list 11 commands after the paste (a blended sprite each into
   SCENE, Z ALWAYS, no Z write, right of the slit): with the late pass both drawn in the paste's pass
@@ -856,9 +860,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   PowerVR phone's Resolution Auto (2364x1080, Full height and pixel) and at Enhanced 2x 4:3, both under
   `ICO_VK_FAKE_LIMITS=moltenvk`; the `_gl` twin the phone's setting on OpenGL (llvmpipe, the aura's
   paste through a snapshot: a held fill drawn early in its own pass). Each pair: every PNG byte for
-  byte, the same draws, the passes fewer by exactly the fills held and the passes list 11's draws
-  joined, the crack fill's own passes by the fills held, the colour MB loaded and stored each fewer
-  by at least the MB the stats name for the held fills and at most that and the joined passes' MB
+  byte, the same draws, the passes fewer by exactly the fills held, the glow pastes deferred to the
+  aura's pass and the passes list 11's draws joined, the crack fill's own passes by the fills held, the colour MB loaded and stored each fewer
+  by at least the MB the stats name for the held fills and the deferred pastes and at most that and
+  the joined passes' MB
   (within 0.02), the depth and stencil MB loaded not higher, stored not higher but by up to 1.25
   times the held fills' MB where a fill went into the glow's paste pass (the lamps' pass keeps its
   depth store), the same without a join or a glow pass fill, the copy MB the same,

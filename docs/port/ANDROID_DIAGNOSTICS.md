@@ -620,8 +620,8 @@ paste pass
 ([RENDER_POST.md](RENDER_POST.md#the-late-passes-on-scene)). The start line `rd: late pass: on (a
 tile-based GPU's default): ...` (or `off (<why>)`) says whether it is in force; the 10 s block's
 `window: late pass: N crack fills held into the aura's paste pass, G into the glow's, M drawn early
-in a pass of their own (K <why>, ...); J list 11 draws joined the open pass without SCENE's depth (P passes not
-begun)` counts the pictures it saved a pass in (N), those where something between the glow and the
+in a pass of their own (K <why>, ...); D glow pastes in the aura's paste pass, E drawn early; J
+list 11 draws joined the open pass without SCENE's depth (P passes not begun)` counts the pictures it saved a pass in (N), those where something between the glow and the
 aura drew on SCENE first (M, by reason: `a draw`, `a command on SCENE`, `the aura's paste pass could
 not take it`, `SCENE's snapshot taken again`, ...), and the paused or menu pictures whose list 11
 draws went into the aura's pass instead of a pass of their own (P, one a paused picture). The crack fill's own 10 s

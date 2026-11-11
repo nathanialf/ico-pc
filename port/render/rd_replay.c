@@ -5897,6 +5897,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     }
     if (!g_rdWin.stop) {
         rd__crack_fill_late(&r, s_ms.active); /* held to the end */
+        rd__late_pass_defer_end(&r);          /* a glow paste deferred (rd_late_pass.c) */
     }
     msaaEnd(&r,
             RD_MSAA_CLOSE_END); /* an epoch still open: SCENE resolved before anything reads it */

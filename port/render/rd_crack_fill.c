@@ -1082,11 +1082,31 @@ void rd__crack_fill_snap(Replay *r, const RdTargetRec *tc)
     if (s_late.armed && s_late.taken && tc && tc == sceneRec()) {
         rd__crack_fill_flush_held(r, RD_LATE_WHY_SNAP);
     }
+    if (tc && tc == sceneRec() && rd__fx_defer_on()) {
+        rd__fx_defer_draw(r, false); /* the deferred glow paste before SCENE is read */
+    }
 }
+
+void rd__crack_fill_unarm_glow(void)
+{
+    if (s_late.armed && s_late.taken && s_late.paste && s_late.glow) {
+        s_late.paste = s_late.glow = false; /* held on, to the aura's paste */
+    }
+}
+
+static void fillAt(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen);
 
 void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen)
 {
     rd__late_pass_cmd(c); /* the command walked (rd_late_pass.c's list 11 join) */
+    fillAt(r, f, c, list, msaaOpen);
+    if (list >= RD_CRACK_LATE_LIST) {
+        rd__late_pass_defer_at(r, f, c); /* the deferred glow paste, after the fill */
+    }
+}
+
+static void fillAt(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen)
+{
     if (!s_late.armed || list < RD_CRACK_LATE_LIST) {
         return;
     }

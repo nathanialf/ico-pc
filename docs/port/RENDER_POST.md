@@ -1366,8 +1366,8 @@ in G), which is copied into a readback buffer and summed once the GPU is past th
 `port/render/rd_late_pass.c` (`rd_late_pass.h`): fewer full-size passes on SCENE after list 7, the
 same bytes. On by default on a tile-based GPU (`RdProfile.tiler`) under Vulkan (MoltenVK too), where a
 pass loads and stores the whole picture (10 MB each way at 2364 x 1080); off on the other classes and
-on OpenGL. `ICO_RD_LATE_PASS=0|1|fill|join` (the tests only, [TESTING.md](TESTING.md); no config
-key) switches it off, or every part or one part on anywhere.
+on OpenGL. `ICO_RD_LATE_PASS=0|1|fill|defer|join` (the tests only, [TESTING.md](TESTING.md); no
+config key) switches it off, or every part or one part on anywhere.
 
 **The crack fill's draw held** (`fill`). In a glow room the fill is placed after `cleanUpFB` at the
 first sprite into another target (the glow's `WORK2_PAD` band), because the glow's mask, which samples
@@ -1424,19 +1424,42 @@ UNVERIFIED), and in each LAMPS picture less the lamps' depth store. Counters
 `latePassFlushed`, `latePassWhy` (`RD_LATE_WHY_*`). The lines:
 
 - `rd: late pass: on (a tile-based GPU's default): the crack fill's draw held from its snapshot to
-  the aura's paste pass in a frame whose glow draws nothing; list 11's draws that use no depth in
+  the aura's paste pass in a frame whose glow draws nothing, to the glow's paste pass in one that
+  draws the paste; the glow's paste in the aura's paste pass; list 11's draws that use no depth in
   the open pass without it (the same bytes)`, or `rd: late pass: off (<why>)`, at the start and
   when it changes;
 - `rd: late pass: the crack fill's draw held from its snapshot to the aura's paste pass (the glow
   drew nothing between), not in a pass of its own (reported once)`, and the same `to the glow's
   paste pass (the lamps' or the sun's draws into WORK2 between)`;
 - the 10 s `window: late pass: N crack fills held into the aura's paste pass, G into the glow's, M
-  drawn early in a pass of their own (K <why>, ...); J list 11 draws joined the open pass without
-  SCENE's depth (P passes not begun)` (when any) and the crack fill's own `..., B held past SCENE's
+  drawn early in a pass of their own (K <why>, ...); D glow pastes in the aura's paste pass, E drawn
+  early; J list 11 draws joined the open pass without SCENE's depth (P passes not begun)` (when any) and the crack fill's own `..., B held past SCENE's
   border repeat (its columns filled from their source columns)`;
 - `--stats`: `<dump>: stats: late pass on|off|fill|join: N crack fills held into a paste pass (G
   the glow's; X MB of colour not loaded and as many not stored), M drawn early in a pass of their
-  own (<why>); J list 11 draws joined ...`.
+  own (<why>); D glow pastes in the aura's paste pass (Y MB ...), E drawn early; J list 11 draws
+  joined ...`.
+
+**The glow's paste in the aura's pass** (`defer`). Under LAMPS and WHOLE the glow's paste begins a
+pass on SCENE of its own, and the aura's paste another after the aura's sprites into its own buffers.
+Where the device has the local read (the aura's paste is drawn in its pass by `fx_local_ps`), the
+glow's paste is not drawn where it comes: `rd_fx_plan.c` `fxDraw` copies its arguments and inputs
+(`fxDeferTake`, its source WORK3 made readable first) and `rd__fx_defer_draw` draws it in the aura's
+paste pass, after a held crack fill and before the aura's paste, under its own state and with the
+command order set back to its own (`g_rdStoreOrd`: the pass area and the store plan read a pass it
+begins as begun at the paste; `rd_pass_area.c` names the exception). The frame's order of writes to
+SCENE is kept (fill, glow's paste, aura's paste; the aura's local read sees the glow's writes after
+its barrier), so the same bytes. While deferred it waits past what the fill's class waits past less
+draws (their passes may bind SCENE's depth, which a held fill reads after them), sprites with a Z test
+of SCENE's depth, any read of SCENE (the paste wrote its RGB and alpha) and anything on its source; any
+of those, SCENE's snapshot taken or swapped, an aura's pass that is not the local read's, has an area
+or follows an open pass on SCENE, and the walk's end draw it before them (a held fill first; counted
+as drawn early). A held fill armed for the glow's paste waits on to the aura's paste with it
+(`rd__crack_fill_unarm_glow`). Counted: `RdPerfRecord.latePassDeferred`, `latePassDeferTexels`,
+`latePassDeferEarly`; once a run `rd: late pass: the glow's paste deferred to the aura's paste pass
+...`; the 10 s line's `; D glow pastes in the aura's paste pass, E drawn early`; the `--stats` line's
+`; D glow pastes in the aura's paste pass (X MB ...), E drawn early`. The glow's GPU time is then
+counted in the aura's class.
 
 **List 11's draws in the open pass** (`join`). List 11's screen prims bind SCENE's depth wherever
 SCENE has one (`rd_replay.c` `prepareDrawEx`), so after the aura's paste, whose pass has no depth
@@ -1463,7 +1486,8 @@ X MB of colour at most each way)`.
 
 `rd_late_pass` (the predicate and the scan, CPU), `rd_crack_held` and `rd_crack_heldglow` (a crack
 in the repeat's source column, held to the aura's or the glow's paste against the late pass off),
-`rd_crack_join` (two list 11 commands after the aura's paste), `rd_late_pass_ab` and `rd_late_pass_gl` (dumps) check it
+`rd_crack_defer` (the glow's paste deferred to the aura's paste pass), `rd_crack_join` (two list 11
+commands after the aura's paste), `rd_late_pass_ab` and `rd_late_pass_gl` (dumps) check it
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 `rd_crack_test` (`rd_crack`, `rd_crack_4x`, `rd_crack_frac`, `rd_crack_backdrop`,

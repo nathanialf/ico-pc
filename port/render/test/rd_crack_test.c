@@ -122,14 +122,23 @@ static bool s_backdrop; /* the far plane first (argv[2] backdrop) */
 
 /* argv[2] glow or aura: after the fog the glow's cleanUpFB (list 7) or the
  * aura's paste (list 8) as staticBlur.c draws them */
-enum { AFTER_NONE, AFTER_GLOW, AFTER_AURA, AFTER_HELD, AFTER_JOIN, AFTER_HELDGLOW };
+enum { AFTER_NONE, AFTER_GLOW, AFTER_AURA, AFTER_HELD, AFTER_JOIN, AFTER_HELDGLOW, AFTER_DEFER };
 
 static int s_after;
 
-/* held or heldglow: the late pass holds the fill (rd_late_pass.c) */
+/* held, heldglow or defer: the late pass holds the fill (rd_late_pass.c) */
 static bool held(void)
 {
-    return s_after == AFTER_HELD || s_after == AFTER_HELDGLOW;
+    return s_after == AFTER_HELD || s_after == AFTER_HELDGLOW || s_after == AFTER_DEFER;
+}
+
+/* the late pass's switch for them: the hold (and for defer the glow's paste
+ * deferred) whatever the glow's plan (these frames hold no chain the light
+ * plan reads) */
+static int heldBits(void)
+{
+    return (int)((s_after == AFTER_DEFER ? RD_LATE_FILL | RD_LATE_DEFER : RD_LATE_FILL) |
+                 RD_LATE_ANY_PLAN);
 }
 
 static RdScreenVtx vtx(double x, double y, uint32_t z, const uint8_t c[4])
@@ -224,7 +233,7 @@ static void recordAfter(RdTarget scene)
         rd_texture(rd_target_texture(scene, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
         rd_sampler_filter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
         blurSprite(RD_POST_FLARE, GW, GH, kMask, 0, (float)GW, (float)GH);
-        if (s_after == AFTER_HELDGLOW) {
+        if (s_after == AFTER_HELDGLOW || s_after == AFTER_DEFER) {
             /* heldglow: a lamp's stand-in (a sprite into WORK2 under a Z
              * GEQUAL test of SCENE's depth, no Z write), then the glow's
              * paste: WORK0 added over SCENE through Cs * FIX + Cd, FIX 128,
@@ -246,7 +255,11 @@ static void recordAfter(RdTarget scene)
             rd_abe(1);
             rd_blend_func(RD_BLEND_CS_FIX_ADD_CD, 128);
             blurSprite(RD_POST_FLARE, GW, GH, kGlow, 0, 256.0f, 128.0f);
-            return;
+            if (s_after == AFTER_HELDGLOW) {
+                return;
+            }
+            /* defer: the aura's paste after the glow's (the paste deferred to
+             * its pass, the fill held on to it) */
         }
         rd_select_list(8);
         rd_texture_off();
@@ -396,7 +409,7 @@ typedef struct Picture {
     /* the late pass (rd_late_pass.c): fills held into the aura's paste
      * pass, held fills drawn early in a pass of their own, list 11's draws
      * joined without the depth and the passes they joined */
-    uint32_t held, glowHeld, early, joined, joinPasses;
+    uint32_t held, glowHeld, early, joined, joinPasses, deferred, deferEarly;
 } Picture;
 
 static bool replay(bool fill, Picture *p)
@@ -409,6 +422,8 @@ static bool replay(bool fill, Picture *p)
     p->fogLocal = g_rdPerf.fogLocalDraws;
     p->held = g_rdPerf.latePassHeld;
     p->glowHeld = g_rdPerf.latePassGlowHeld;
+    p->deferred = g_rdPerf.latePassDeferred;
+    p->deferEarly = g_rdPerf.latePassDeferEarly;
     p->early = g_rdPerf.latePassFlushed;
     p->joined = g_rdPerf.latePassJoined;
     p->joinPasses = g_rdPerf.latePassJoinPasses;
@@ -515,7 +530,7 @@ static void checkHeld(const Picture *on, bool active)
     Picture un;
     memset(&un, 0, sizeof(un));
     const bool ok = replay(true, &un) && un.w == on->w && un.h == on->h;
-    rd__late_pass_force((int)(RD_LATE_FILL | RD_LATE_ANY_PLAN));
+    rd__late_pass_force(heldBits());
     CHECK(ok, "SCENE readback with the late pass off");
     size_t dPx = 0, dZ = 0;
     for (size_t i = 0; ok && i < (size_t)on->w * on->h; i++) {
@@ -544,16 +559,21 @@ static void checkHeld(const Picture *on, bool active)
            un.fills, x, y, memcmp(src, ref, 4) != 0 ? "filled" : "the clear's fog", copies,
            badCopies);
     const uint32_t glowWant = s_after == AFTER_HELDGLOW ? 1u : 0u;
+    const uint32_t deferWant = s_after == AFTER_DEFER ? 1u : 0u;
     CHECK(on->held == 1 && on->early == 0 && on->glowHeld == glowWant,
           "held %u (%u in the glow's paste pass), drawn early %u: 1 (%u) and 0 expected", on->held,
           on->glowHeld, on->early, glowWant);
+    CHECK(on->deferred == deferWant && on->deferEarly == 0 && un.deferred == 0,
+          "glow pastes deferred %u (early %u; off %u): %u expected", on->deferred, on->deferEarly,
+          un.deferred, deferWant);
     CHECK(un.held == 0 && un.early == 0, "the late pass off held %u, drew %u early", un.held,
           un.early);
     CHECK(dPx == 0 && dZ == 0,
           "the held fill against the late pass off: %zu colours, %zu depths "
           "differ",
           dPx, dZ);
-    CHECK(fewer == 1, "%d render passes fewer than the late pass off, not 1", fewer);
+    CHECK(fewer == 1 + (int)deferWant, "%d render passes fewer than the late pass off, not %d",
+          fewer, 1 + (int)deferWant);
     CHECK(on->fills == 0 && un.fills == 1, "fill passes %u held and %u off, 0 and 1 expected",
           on->fills, un.fills);
     CHECK(x >= a2 && x < a3, "the crack's texel %u not in column 2's texels [%u, %u)", x, a2, a3);
@@ -604,7 +624,7 @@ int main(int argc, char **argv)
     printf("rd_crack_test\n");
     if (argc < 2) {
         printf("usage: rd_crack_test 2|4|1|frac|original "
-               "[msaa|backdrop|fold|glow|aura|held|heldglow|join]\n");
+               "[msaa|backdrop|fold|glow|aura|held|heldglow|defer|join]\n");
         return 2;
     }
     const bool original = strcmp(argv[1], "original") == 0;
@@ -616,12 +636,13 @@ int main(int argc, char **argv)
               : argc > 2 && strcmp(argv[2], "aura") == 0     ? AFTER_AURA
               : argc > 2 && strcmp(argv[2], "held") == 0     ? AFTER_HELD
               : argc > 2 && strcmp(argv[2], "heldglow") == 0 ? AFTER_HELDGLOW
+              : argc > 2 && strcmp(argv[2], "defer") == 0    ? AFTER_DEFER
               : argc > 2 && strcmp(argv[2], "join") == 0     ? AFTER_JOIN
                                                              : AFTER_NONE;
     if (held()) {
         /* the late pass's hold whatever the glow's plan (this frame holds
          * no chain the light plan reads; rd_late_pass.c) */
-        rd__late_pass_force((int)(RD_LATE_FILL | RD_LATE_ANY_PLAN));
+        rd__late_pass_force(heldBits());
     } else if (s_after == AFTER_JOIN) {
         rd__late_pass_force((int)RD_LATE_ALL); /* the tile class's default, said */
     }

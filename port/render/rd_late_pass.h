@@ -9,12 +9,16 @@
  *                 frame whose glow plan draws nothing (DARK), or of the
  *                 glow's paste pass in a frame that still draws the paste
  *                 (LAMPS, WHOLE), so the fill has no pass of its own there
+ *   RD_LATE_DEFER the glow's paste (LAMPS, WHOLE) deferred to the aura's
+ *                 local-read paste pass (rd_fx_plan.c fxDraw takes it, draws
+ *                 it there after a held fill, before the aura's paste), so
+ *                 it has no pass of its own
  *   RD_LATE_JOIN  a list 11 screen prim that neither tests nor writes the
  *                 depth and takes no DATE joins the open pass on its target
  *                 that has no depth (the pause menu's draws in the aura's
  *                 paste pass) instead of beginning one with SCENE's depth
  * On by default on a tile-based GPU under Vulkan (MoltenVK too); off on the
- * other classes and on OpenGL.  ICO_RD_LATE_PASS=0|1|fill|join (the tests'
+ * other classes and on OpenGL.  ICO_RD_LATE_PASS=0|1|fill|defer|join (the tests'
  * A/B only, docs/port/TESTING.md; no config key): off, every part, one
  * part (forced on any device and backend).  rd__late_pass_force is the
  * tests' switch (-1 the environment's or the profile's). */
@@ -27,8 +31,9 @@
 #include "rd_internal.h"
 
 #define RD_LATE_FILL 1u
+#define RD_LATE_DEFER 2u
 #define RD_LATE_JOIN 4u
-#define RD_LATE_ALL (RD_LATE_FILL | RD_LATE_JOIN)
+#define RD_LATE_ALL (RD_LATE_FILL | RD_LATE_DEFER | RD_LATE_JOIN)
 /* rd__late_pass_force only (the tests' frames, which hold no glow chain the
  * light plan reads): the fill held whatever the glow's plan */
 #define RD_LATE_ANY_PLAN 0x100u
@@ -80,6 +85,7 @@ enum {
     RD_LATE_WHY_BORDER,  /* SCENE's border repeat with more blocks than the hold keeps */
     RD_LATE_WHY_MSAA,    /* the MSAA epoch */
     RD_LATE_WHY_END,     /* the walk's end */
+    RD_LATE_WHY_WORK3,   /* the deferred glow paste's source or a draw that binds SCENE's depth */
     RD_LATE_WHY_COUNT
 };
 
@@ -173,5 +179,35 @@ void rd__crack_fill_snap(struct Replay *r, const RdTargetRec *tc);
  * the passes it joined, each one a pass the draw would have begun) */
 void rd__late_pass_cmd(const RdCmd *c);
 void rd__late_pass_join(struct Replay *r, struct DrawSetup *ds);
+
+/* RD_LATE_DEFER.  rd__late_pass_defer_wanted (rd_fx_plan.c, the glow's
+ * paste about to be drawn by the premultiplied add, command c of frame f
+ * under r's state): the switch, LAMPS or WHOLE, the glow's paste form
+ * (RD_LATE_LAND_GLOW), a local read on this device, no MSAA, no exact blend,
+ * no upscaler split, no pass window.  rd__late_pass_defer_at (from
+ * rd__crack_fill_at, after the fill's own step, before every command):
+ * while a paste is deferred, it waits past what the fill's class waits past
+ * but a draw, a sprite with a Z test of SCENE's depth, a read of SCENE in any
+ * form and anything on WORK3 (its source), lands at the aura's paste
+ * (rd__late_pass_defer_lands: rd_fx_plan.c draws it in that pass after a
+ * held fill) when its pass is the local read's, whole, with no pass on SCENE
+ * open before it, else is drawn now (a held fill first).
+ * rd__late_pass_defer_end: the walk's end (rd_replay.c).  The counters:
+ * rd__late_pass_deferred_taken, rd__late_pass_deferred_drawn (landed in the
+ * aura's pass, or drawn early; drawn by fxDraw) */
+bool rd__late_pass_defer_wanted(struct Replay *r, const RdFrame *f, const RdCmd *c);
+void rd__late_pass_defer_at(struct Replay *r, const RdFrame *f, const RdCmd *c);
+bool rd__late_pass_defer_lands(void);
+void rd__late_pass_defer_end(struct Replay *r);
+void rd__late_pass_deferred_taken(void);
+void rd__late_pass_deferred_drawn(bool landed, bool drawn);
+/* rd_fx_plan.c: the deferred paste (rd__fx_defer_on: one this replay;
+ * rd__fx_defer_draw: drawn now, landed in the aura's pass or early);
+ * rd_crack_fill.c rd__crack_fill_unarm_glow: a held fill armed for the
+ * glow's paste waits on to the aura's paste with the deferred paste */
+bool rd__fx_defer_on(void);
+const RdTargetRec *rd__fx_defer_src(void); /* its source target (WORK3) */
+void rd__fx_defer_draw(struct Replay *r, bool landed);
+void rd__crack_fill_unarm_glow(void);
 
 #endif

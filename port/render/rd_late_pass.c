@@ -62,6 +62,23 @@
  * paste).  The sun's fans write SCENE's depth: a fill held past them is
  * drawn before them (WHOLE with the fans on the picture gains nothing).
  *
+ * The glow's paste deferred (RD_LATE_DEFER).  Under LAMPS and WHOLE the
+ * glow's paste has a pass of its own on SCENE (its colour loaded and
+ * stored), and the aura's paste after it another: between them only the
+ * aura's sprites into its own buffers.  rd_fx_plan.c fxDraw copies the
+ * paste's arguments and inputs instead of drawing it (fxDeferTake: its
+ * source made readable first) and draws it in the aura's local-read paste
+ * pass, after a held fill and before the aura's paste (rd__fx_defer_draw),
+ * under its own state and command order: the frame's order, so the same
+ * bytes.  While it is deferred, the commands it waits past are the fill's
+ * class less draws (their passes may bind SCENE's depth, which a held fill
+ * reads later), sprites with a Z test of SCENE's depth, any read of SCENE
+ * (the paste wrote its RGB and its alpha) and anything on its source;
+ * anything else, SCENE's snapshot or swap, an aura's pass that is not the
+ * local read's or has an area or a pass on SCENE open before it, and the
+ * walk's end draw it there (a held fill first).  The glow's time is then
+ * counted in the aura's class.
+ *
  * List 11's draws in the open pass (RD_LATE_JOIN).  A list 11 screen prim
  * binds SCENE's depth wherever SCENE has one (rd_replay.c prepareDrawEx),
  * so after the aura's paste, whose pass has no depth, the pause menu's first
@@ -108,7 +125,15 @@ static struct {
  * and clears them; the replay adds) */
 static struct {
     uint64_t held, glowHeld, flushed, why[RD_LATE_WHY_COUNT], joined, joinPasses;
+    uint64_t deferred, deferEarly;
 } s_sum;
+
+/* RD_LATE_DEFER: the aura's paste the deferred glow paste lands at (its
+ * command order and replay) */
+static struct {
+    bool land;
+    uint32_t ord, replay;
+} s_def;
 
 /* RD_LATE_JOIN: the command walked now (rd__late_pass_cmd), the pass the
  * last joined draw was drawn in (its serial and replay) */
@@ -130,6 +155,7 @@ static const char *const kWhy[RD_LATE_WHY_COUNT] = {
     [RD_LATE_WHY_BORDER] = "SCENE's border repeat",
     [RD_LATE_WHY_MSAA] = "the MSAA epoch",
     [RD_LATE_WHY_END] = "the walk's end",
+    [RD_LATE_WHY_WORK3] = "WORK3 or SCENE's depth used",
 };
 
 const char *rd__late_pass_why_text(int why)
@@ -140,7 +166,12 @@ const char *rd__late_pass_why_text(int why)
 const char *rd__late_pass_bits_text(unsigned bits)
 {
     bits &= RD_LATE_ALL;
-    return bits == RD_LATE_ALL ? "on" : bits == 0 ? "off" : bits == RD_LATE_FILL ? "fill" : "join";
+    return bits == RD_LATE_ALL     ? "on"
+           : bits == 0             ? "off"
+           : bits == RD_LATE_FILL  ? "fill"
+           : bits == RD_LATE_DEFER ? "defer"
+           : bits == RD_LATE_JOIN  ? "join"
+                                   : "some";
 }
 
 void rd__late_pass_force(int bits)
@@ -156,17 +187,28 @@ static void note(unsigned bits, const char *why)
     }
     char line[sizeof(s_sw.said)];
     if (bits) {
-        snprintf(line, sizeof(line), "late pass: %s (%s):%s%s (the same bytes)",
-                 bits == RD_LATE_ALL ? "on" : rd__late_pass_bits_text(bits), why,
-                 bits & RD_LATE_FILL ? " the crack fill's draw held from its snapshot to the "
-                                       "aura's paste pass in a frame whose glow draws nothing, "
-                                       "to the glow's paste pass in one that draws the paste"
-                                     : "",
-                 bits & RD_LATE_JOIN ? (bits & RD_LATE_FILL ? "; list 11's draws that use no "
-                                                              "depth in the open pass without it"
-                                                            : " list 11's draws that use no "
-                                                              "depth in the open pass without it")
-                                     : "");
+        /* each part's words, joined by "; " */
+        const char *part[3] = {
+            bits & RD_LATE_FILL ? "the crack fill's draw held from its snapshot to the aura's "
+                                  "paste pass in a frame whose glow draws nothing, to the glow's "
+                                  "paste pass in one that draws the paste"
+                                : NULL,
+            bits & RD_LATE_DEFER ? "the glow's paste in the aura's paste pass" : NULL,
+            bits & RD_LATE_JOIN ? "list 11's draws that use no depth in the open pass without it"
+                                : NULL};
+        int at = snprintf(line, sizeof(line), "late pass: %s (%s):",
+                          bits == RD_LATE_ALL ? "on" : rd__late_pass_bits_text(bits), why);
+        bool first = true;
+        for (int k = 0; k < 3 && at >= 0 && (size_t)at < sizeof(line); k++) {
+            if (part[k]) {
+                at += snprintf(line + at, sizeof(line) - (size_t)at, "%s %s", first ? "" : ";",
+                               part[k]);
+                first = false;
+            }
+        }
+        if (at >= 0 && (size_t)at < sizeof(line)) {
+            snprintf(line + at, sizeof(line) - (size_t)at, " (the same bytes)");
+        }
     } else {
         snprintf(line, sizeof(line), "late pass: off (%s)", why);
     }
@@ -182,13 +224,14 @@ unsigned rd__late_pass_bits(void)
         s_sw.read = true;
         const char *e = getenv("ICO_RD_LATE_PASS");
         if (e && e[0]) {
-            s_sw.bits = strcmp(e, "0") == 0      ? 0
-                        : strcmp(e, "1") == 0    ? (int)RD_LATE_ALL
-                        : strcmp(e, "fill") == 0 ? (int)RD_LATE_FILL
-                        : strcmp(e, "join") == 0 ? (int)RD_LATE_JOIN
-                                                 : -1;
+            s_sw.bits = strcmp(e, "0") == 0       ? 0
+                        : strcmp(e, "1") == 0     ? (int)RD_LATE_ALL
+                        : strcmp(e, "fill") == 0  ? (int)RD_LATE_FILL
+                        : strcmp(e, "join") == 0  ? (int)RD_LATE_JOIN
+                        : strcmp(e, "defer") == 0 ? (int)RD_LATE_DEFER
+                                                  : -1;
             if (s_sw.bits < 0) {
-                rd__log("late pass: ICO_RD_LATE_PASS=%.16s is not 0, 1, fill or join: the "
+                rd__log("late pass: ICO_RD_LATE_PASS=%.16s is not 0, 1, fill, defer or join: the "
                         "profile's",
                         e);
             }
@@ -513,6 +556,152 @@ void rd__late_pass_join(Replay *r, DrawSetup *ds)
     }
 }
 
+/* ------------------------------------------------------------ the defer */
+
+bool rd__late_pass_defer_wanted(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    const int plan = rd__glow_light_plan();
+    int why;
+    return (rd__late_pass_bits() & RD_LATE_DEFER) != 0 &&
+           (anyPlan() || plan == RD_GLOW_LIGHT_LAMPS || plan == RD_GLOW_LIGHT_WHOLE) &&
+           rd__target_rec(r->st.color) == rd__target_rec(RD_TARGET_SCENE + 1u) &&
+           g_rd.profile.fxPlan && g_rd.profile.fxDstLocal && g_rd.fs[RD_FS_FX_LOCAL].id &&
+           g_rd.layoutLocal.id && rd__replay_msaa_want() <= 1u &&
+           g_rd.dstMode == RD_BLEND_EXACT_OFF && !rd__uber_on() && !rd__upscale_point_on() &&
+           !g_rdWin.first && rd__late_pass_class(f, c, &r->st, 0, &why) == RD_LATE_LAND_GLOW;
+}
+
+/* the deferred paste's class at command c: the fill's, and besides a draw
+ * (its pass may bind SCENE's depth, which a held fill reads after it), a
+ * sprite with a Z test of SCENE's depth, a sprite sampling SCENE (the paste
+ * wrote its RGB and its alpha), and a command on WORK3 (the paste's source,
+ * left readable) are drawn after it: it is drawn before them */
+static int deferClass(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, int *why)
+{
+    const int k = rd__late_pass_class(f, c, st, 0, why);
+    if (k != RD_LATE_HOLD) {
+        return k == RD_LATE_LAND_AURA ? k : RD_LATE_FLUSH;
+    }
+    const RdTargetRec *sc = rd__target_rec(RD_TARGET_SCENE + 1u);
+    const RdTargetRec *w3 = rd__fx_defer_src(); /* WORK3: the paste's source */
+    if (c->type == RDC_CLEAR || c->type == RDC_COPY) {
+        const bool touches = w3 && (rd__target_rec(c->u[0]) == w3 ||
+                                    (c->type == RDC_COPY && rd__target_rec(c->u[1]) == w3));
+        if (touches) {
+            *why = RD_LATE_WHY_WORK3;
+            return RD_LATE_FLUSH;
+        }
+        return RD_LATE_HOLD;
+    }
+    if (c->type != RDC_POST_STUB) {
+        if (rd__cmd_is_state(c->type) || c->type == RDC_NOP || c->type == RDC_OVERLAY_TEXT) {
+            return RD_LATE_HOLD;
+        }
+        *why = RD_LATE_WHY_WORK3; /* a draw: its pass may bind SCENE's depth */
+        return RD_LATE_FLUSH;
+    }
+    const RdDrawState *d = &st->ds;
+    const RdTexRec *t = d->texEnabled ? rd__tex_rec(st->tex) : NULL;
+    if ((t && t->kind == RD_TEXKIND_TARGET && rd__target_rec(t->target) == sc) ||
+        (w3 && rd__target_rec(st->color) == w3) ||
+        (rd__target_rec(st->depth) == sc && d->test.zte && d->test.ztst != RD_ZTST_ALWAYS)) {
+        *why = RD_LATE_WHY_WORK3;
+        return RD_LATE_FLUSH;
+    }
+    return RD_LATE_HOLD;
+}
+
+void rd__late_pass_defer_at(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    if (!rd__fx_defer_on()) {
+        return;
+    }
+    if (s_def.land && s_def.replay == g_rd.replayCounter && g_rdStoreOrd > s_def.ord) {
+        /* the aura's paste it was to land in was drawn without it (a path
+         * past rd_fx_plan.c rd__fx_plan_draw: none known); drawn now, said */
+        static uint32_t s_seen;
+        if (++s_seen <= 8u || s_seen % 100u == 0u) {
+            rd__log("late pass: the glow's paste deferred to the aura's paste at command %u was "
+                    "not drawn there: drawn after it (the first 8, then every 100th: %u so far)",
+                    s_def.ord, s_seen);
+        }
+        rd__fx_defer_draw(r, false);
+        return;
+    }
+    int why = RD_LATE_WHY_NONE;
+    int k = RD_LATE_FLUSH;
+    if (rd__replay_msaa_want() > 1u) {
+        why = RD_LATE_WHY_MSAA;
+    } else {
+        k = deferClass(f, c, &r->st, &why);
+    }
+    if (k == RD_LATE_HOLD) {
+        return;
+    }
+    if (k == RD_LATE_LAND_AURA) {
+        /* the aura's paste by the local read (rd_fx_plan.c fxLocalNext's
+         * profile), its pass whole and not open on SCENE before it */
+        RhiRect a;
+        const RdTargetRec *sc = rd__target_rec(RD_TARGET_SCENE + 1u);
+        if (sc && !(r->passOpen && r->passColor == RD_TARGET_SCENE + 1u) &&
+            rd__pass_wants_readable(sc) &&
+            !(rd__pass_area_on() &&
+              rd__pass_area_rect(RD_TARGET_SCENE + 1u, sc, g_rdStoreOrd, &a, NULL))) {
+            s_def.land = true;
+            s_def.ord = g_rdStoreOrd;
+            s_def.replay = g_rd.replayCounter;
+            return;
+        }
+        why = RD_LATE_WHY_PASTE;
+    }
+    if (why <= RD_LATE_WHY_NONE || why >= RD_LATE_WHY_COUNT) {
+        why = RD_LATE_WHY_SCENE;
+    }
+    /* a held fill first (the order of the frame), then the paste */
+    rd__crack_fill_flush_held(r, why);
+    rd__fx_defer_draw(r, false);
+}
+
+bool rd__late_pass_defer_lands(void)
+{
+    return s_def.land && s_def.ord == g_rdStoreOrd && s_def.replay == g_rd.replayCounter;
+}
+
+void rd__late_pass_defer_end(Replay *r)
+{
+    if (rd__fx_defer_on()) {
+        rd__crack_fill_flush_held(r, RD_LATE_WHY_END);
+        rd__fx_defer_draw(r, false);
+    }
+    s_def.land = false;
+}
+
+void rd__late_pass_deferred_taken(void)
+{
+    s_def.land = false;
+    static bool s_said;
+    if (!s_said) {
+        s_said = true;
+        rd__log("late pass: the glow's paste deferred to the aura's paste pass (the aura's "
+                "sprites into its own buffers between), not in a pass of its own (reported "
+                "once)");
+    }
+}
+
+void rd__late_pass_deferred_drawn(bool landed, bool drawn)
+{
+    s_def.land = false;
+    if (landed && drawn) {
+        const RdTargetRec *sc = rd__target_rec(RD_TARGET_SCENE + 1u);
+        g_rdPerf.latePassDeferred++;
+        g_rdPerf.latePassDeferTexels += sc ? sc->tw * sc->th : 0u;
+        __atomic_add_fetch(&s_sum.deferred, 1, __ATOMIC_RELAXED);
+    } else {
+        g_rdPerf.latePassDeferEarly++;
+        __atomic_add_fetch(&s_sum.deferEarly, 1, __ATOMIC_RELAXED);
+    }
+}
+
 /* ------------------------------------------------------------ the line */
 
 void rd_late_pass_line(void)
@@ -522,11 +711,13 @@ void rd_late_pass_line(void)
     const uint64_t flushed = __atomic_exchange_n(&s_sum.flushed, 0, __ATOMIC_RELAXED);
     const uint64_t joined = __atomic_exchange_n(&s_sum.joined, 0, __ATOMIC_RELAXED);
     const uint64_t joinPasses = __atomic_exchange_n(&s_sum.joinPasses, 0, __ATOMIC_RELAXED);
+    const uint64_t deferred = __atomic_exchange_n(&s_sum.deferred, 0, __ATOMIC_RELAXED);
+    const uint64_t deferEarly = __atomic_exchange_n(&s_sum.deferEarly, 0, __ATOMIC_RELAXED);
     uint64_t w[RD_LATE_WHY_COUNT];
     for (int k = 0; k < RD_LATE_WHY_COUNT; k++) {
         w[k] = __atomic_exchange_n(&s_sum.why[k], 0, __ATOMIC_RELAXED);
     }
-    if (held + glowHeld + flushed + joined == 0) {
+    if (held + glowHeld + flushed + joined + deferred + deferEarly == 0) {
         return;
     }
     char why[512] = "";
@@ -544,8 +735,10 @@ void rd_late_pass_line(void)
     }
     fprintf(stderr,
             "window: late pass: %llu crack fills held into the aura's paste pass, %llu into the "
-            "glow's, %llu drawn early in a pass of their own%s%s; %llu list 11 draws joined the "
-            "open pass without SCENE's depth (%llu passes not begun)\n",
+            "glow's, %llu drawn early in a pass of their own%s%s; %llu glow pastes in the "
+            "aura's paste pass, %llu drawn early; %llu list 11 draws joined the open pass "
+            "without SCENE's depth (%llu passes not begun)\n",
             (unsigned long long)held, (unsigned long long)glowHeld, (unsigned long long)flushed,
-            why, at ? ")" : "", (unsigned long long)joined, (unsigned long long)joinPasses);
+            why, at ? ")" : "", (unsigned long long)deferred, (unsigned long long)deferEarly,
+            (unsigned long long)joined, (unsigned long long)joinPasses);
 }

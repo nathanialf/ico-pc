@@ -43,7 +43,12 @@
  * (rd_store_plan.c's header) is that a pass begun while command k is
  * replayed (g_rdStoreOrd) holds the work of command k and later ones only
  * (a screen run or a VU merge is flushed into the pass it was recorded in;
- * a fold reads ahead, never back).  The scan (rd__pass_area_scan_cmd, in
+ * a fold reads ahead, never back).  One draw is replayed out of its order:
+ * the glow's paste the late pass defers to the aura's paste pass
+ * (rd_late_pass.c RD_LATE_DEFER, rd_fx_plan.c rd__fx_defer_draw); it is
+ * drawn with g_rdStoreOrd set back to its own command, so a pass it begins
+ * is read here as begun at the paste (a sprite of the WHOLE kind: no area),
+ * and it lands only in an aura's pass that has no area.  The scan (rd__pass_area_scan_cmd, in
  * rd__store_plan_scan's one walk of the lists before the replay's walk,
  * beside the pass cut's and the store plan's; rd__pass_area_scan alone in
  * the tests) reads the lists with their state once and gives every command
