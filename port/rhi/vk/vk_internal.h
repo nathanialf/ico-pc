@@ -644,6 +644,12 @@ typedef struct VkrState {
      * rhi_wait_idle); stored with __atomic by the submitting thread */
     uint64_t progSubmitted, progSubmitNs, progFinished, progWaitingFor, progWaitSinceNs;
     uint32_t progReplay, progFrame;
+    /* the last VKR_SUBMIT_HISTORY submissions' values and tags
+     * (replay << 32 | frame) as atomic words, and the count made: what
+     * rhi_gpu_progress reads from another thread (submits[] above is the
+     * loss report's, read after the submitting thread stopped) */
+    uint64_t progTagValue[VKR_SUBMIT_HISTORY], progTagTag[VKR_SUBMIT_HISTORY];
+    uint32_t progTagCount;
     /* render passes whose area exceeded an attachment (vk_cmd.c
      * vkr_pass_area_fits: logged once, clamped; vkr_test_pass_area_count) */
     uint32_t passAreaBad;
