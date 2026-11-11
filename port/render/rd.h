@@ -176,7 +176,20 @@ typedef enum RdStencilMode {
     /* the shadow resolve's A on a disc whose count steps by 8 (rd_shadow.c
      * "The step"): NOTEQUAL 0 under read mask 0x1F, the five bits 8 n mod
      * 256 keeps */
-    RD_STENCIL_TEST_NONZERO5
+    RD_STENCIL_TEST_NONZERO5,
+    /* the shadow tiles (rd_shadow_tile.c): a composite's DATE set-up over
+     * the tile mask.  CLEAR2 writes 0 into bits 6 and 7 (the reference 0),
+     * TILE_MARK writes 1 into bit 7 (the reference 0x80) where
+     * shadow_tile_mark_ps keeps the fragment (a dead tile), SET_T is SET
+     * where bit 7 is 0 (EQUAL under read mask 0x80, the reference 0x40),
+     * TEST0_T and TEST1_T are TEST0 and TEST1 where bit 7 is 0 too (read
+     * mask 0xC0, the reference 0x40: GREATER, 0x40 > s, passes on s = 0
+     * alone; EQUAL on s = 0x40 alone); none reads or writes bits 0-5 */
+    RD_STENCIL_DATE_CLEAR2,
+    RD_STENCIL_TILE_MARK,
+    RD_STENCIL_DATE_SET_T,
+    RD_STENCIL_DATE_TEST0_T,
+    RD_STENCIL_DATE_TEST1_T
 } RdStencilMode;
 
 typedef enum RdTargetFormat {
@@ -2721,6 +2734,8 @@ enum { RD_PRESENT_ELSEWHERE = 0, RD_PRESENT_ON_SUBMIT = 1, RD_PRESENT_IN_STEP = 
 
 /* the reasons rd_shadow_box.c counts (RdPerfRecord.shadowBoxWhy) */
 #define RD_SHADOW_BOX_WHYS 8
+/* the reasons rd_shadow_tile.c counts (RdPerfRecord.shadowTileWhy) */
+#define RD_SHADOW_TILE_WHYS 8
 
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
@@ -3161,6 +3176,12 @@ typedef struct RdPerfRecord {
     uint32_t shadowBoxCounts, shadowBoxComposites, shadowBoxEmpty;
     uint64_t shadowBoxTexels, shadowBoxAllTexels;
     uint16_t shadowBoxWhy[RD_SHADOW_BOX_WHYS];
+    /* The shadow tiles (rd_shadow_tile.c): the composites drawn over the
+     * tile mask (shadowTileComposites), the masks drawn (shadowTileMasks),
+     * and the boxed composites on DATE's stencil path drawn whole by why
+     * (shadowTileWhy, rd_shadow_tile.h RD_ST_WHY_*) */
+    uint32_t shadowTileComposites, shadowTileMasks;
+    uint16_t shadowTileWhy[RD_SHADOW_TILE_WHYS];
     /* DATE's passes without the depth (rd_date_cut.c; docs/port/
      * WORK_BUFFERS.md "DATE's passes without the depth"): the runs the
      * scan found depth-free, the passes begun without the depth and the

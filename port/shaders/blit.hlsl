@@ -730,3 +730,90 @@ float4 shadow_count_ps(BlitVSOut i) : SV_Target0
     }
     return sum / (g_param.x * g_param.y);
 }
+
+// The shadow tiles (port/render/rd_shadow_tile.c): the shadow composites'
+// dead tiles marked in the stencil's bit 7, so the composite and its DATE
+// set-up's stencil write are culled there by the stencil test.
+//
+// v wrapped into 0 .. n - 1 without % on a negative value (GLSL leaves its
+// sign undefined): exact for |v| under 2^24 and n up to 4096
+int shadow_tile_wrap(int v, int n)
+{
+    return v - n * int(floor(float(v) / float(n)));
+}
+//
+// shadow_tile_mask_ps: the mask of a shadow level t1 (RGBA8, at scale 1),
+// drawn into an RGBA8 target of ceil(w / B) x ceil(h / B) texels: texel (i,
+// j) is 1 where any texel of the level in [B i - M, B i + B - 1 + M] x
+// [B j - M, B j + B - 1 + M] holds alpha above 0, each index clamped to the
+// level or wrapped as the composite's sampler (g_aux1.x, g_aux1.y: 1 on a
+// repeated axis), else 0. g_aux0 = (B, M, w, h). Integer loads of the
+// level's texels: an 8-bit alpha above 0 reads above 0.0 exactly.
+float4 shadow_tile_mask_ps(BlitVSOut i) : SV_Target0
+{
+    const int b = int(g_aux0.x);
+    const int m = int(g_aux0.y);
+    const int w = int(g_aux0.z);
+    const int h = int(g_aux0.w);
+    const int2 p = int2(i.pos.xy);
+    const int x0 = p.x * b - m;
+    const int y0 = p.y * b - m;
+    const int n = b + 2 * m;
+    float hit = 0.0;
+    for (int dy = 0; dy < n; dy++) {
+        int y = y0 + dy;
+        if (g_aux1.y != 0u) {
+            y = shadow_tile_wrap(y, h);
+        } else {
+            y = clamp(y, 0, h - 1);
+        }
+        for (int dx = 0; dx < n; dx++) {
+            int x = x0 + dx;
+            if (g_aux1.x != 0u) {
+                x = shadow_tile_wrap(x, w);
+            } else {
+                x = clamp(x, 0, w - 1);
+            }
+            if (g_texture.Load(int3(x, y, 0)).a > 0.0) {
+                hit = 1.0;
+            }
+        }
+    }
+    return float4(hit, hit, hit, hit);
+}
+
+// shadow_tile_mark_ps: before a composite, over its DATE set-up's area (the
+// scissor), the pixel's UV in the level's texels as the composite's sprite
+// maps the target's texels (g_param: u = pos.x * x + y, v = pos.y * z + w),
+// its texel clamped or wrapped as the composite's sampler (g_aux1.x,
+// g_aux1.y), its block of the mask t1 (g_aux0 = (B, mask width, mask
+// height, level width), g_aux1.z the level's height): kept where the mask
+// holds 0 (the pipeline's stencil, RD_STENCIL_TILE_MARK, writes 1 into bit 7
+// there), discarded where it holds 1. No colour output (colour mask 0).
+void shadow_tile_mark_ps(BlitVSOut i)
+{
+    const float u = i.pos.x * g_param.x + g_param.y;
+    const float v = i.pos.y * g_param.z + g_param.w;
+    const int b = int(g_aux0.x);
+    const int mw = int(g_aux0.y);
+    const int mh = int(g_aux0.z);
+    const int lw = int(g_aux0.w);
+    const int lh = int(g_aux1.z);
+    int tx = int(floor(u));
+    int ty = int(floor(v));
+    if (g_aux1.x != 0u) {
+        tx = shadow_tile_wrap(tx, lw);
+    } else {
+        tx = clamp(tx, 0, lw - 1);
+    }
+    if (g_aux1.y != 0u) {
+        ty = shadow_tile_wrap(ty, lh);
+    } else {
+        ty = clamp(ty, 0, lh - 1);
+    }
+    const int bx = min(tx / b, mw - 1);
+    const int by = min(ty / b, mh - 1);
+    if (g_texture.Load(int3(bx, by, 0)).x > 0.0) {
+        discard;
+    }
+}

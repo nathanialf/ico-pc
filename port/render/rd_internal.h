@@ -210,8 +210,12 @@ uint32_t rd__shadow_disc_step(void);
 /* The stencil bit DATE's stencil path keeps the destination alpha's MSB in
  * (rd_replay_tiler.c rd__replay_date_take; RD_STENCIL_DATE_*): the count writes bits
  * 0-5 only (RD_SHADOW_STENCIL_MASK) and its resolve reads no other, so bit
- * 6 is free; bit 7 is unused. */
+ * 6 is free; bit 7 marks the shadow tiles' dead tiles inside a composite's
+ * own pass (RD_TILE_STENCIL_BIT, rd_shadow_tile.c). */
 #define RD_DATE_STENCIL_BIT 0x40u
+/* the shadow tiles' mark of a dead tile (rd_shadow_tile.c): bit 7, which
+ * nothing else reads or writes */
+#define RD_TILE_STENCIL_BIT 0x80u
 /* ICO_RD_DATE_SABOTAGE=1 (a test's switch, read once): DATE's setup writes 0
  * into the bit where the alpha's MSB is 1, so the self-test's failure path
  * runs (rd_replay_tiler.c rd__replay_date_take; rd_date_selftest.c). */
@@ -1577,6 +1581,10 @@ typedef enum RdFsId {
     RD_FS_FSR1_RCAS,
     RD_FS_VU_PRE_CS, /* the VU record's compute keys, no module (rd_vu_record.h) */
     RD_FS_BLIT_SCENE,
+    /* the shadow tiles (rd_shadow_tile.c, blit.hlsl): a level's tile mask
+     * and the dead tiles' mark in the stencil's bit 7, behind blit_vs */
+    RD_FS_SHADOW_TILE_MASK,
+    RD_FS_SHADOW_TILE_MARK,
     RD_FS_COUNT
 } RdFsId;
 
@@ -3878,11 +3886,13 @@ uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t 
 bool rd__date_stencil_pass(RdDrawPass *p);
 
 /* A DATE draw's own stencil mode (not a setup's): the bit's tests TEST0 and
- * TEST1, and the PRIM.AA1 pairs' TEST0_SET and TEST1_CLR (rd.h) */
+ * TEST1, and the PRIM.AA1 pairs' TEST0_SET and TEST1_CLR, and the shadow
+ * tiles' TEST0_T and TEST1_T (rd.h) */
 static inline bool rd__date_draw_stencil(uint8_t m)
 {
     return m == RD_STENCIL_DATE_TEST0 || m == RD_STENCIL_DATE_TEST1 ||
-           m == RD_STENCIL_DATE_TEST0_SET || m == RD_STENCIL_DATE_TEST1_CLR;
+           m == RD_STENCIL_DATE_TEST0_SET || m == RD_STENCIL_DATE_TEST1_CLR ||
+           m == RD_STENCIL_DATE_TEST0_T || m == RD_STENCIL_DATE_TEST1_T;
 }
 
 /* the fold's key of a staticBlur pair (fx_blur2_ps over colorFmt, no depth;
