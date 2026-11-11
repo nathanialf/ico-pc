@@ -2962,6 +2962,10 @@ typedef struct RdPerfRecord {
      * drawn there (latePassDeferred, of latePassDeferTexels SCENE texels),
      * drawn early in a pass of its own after all (latePassDeferEarly) */
     uint32_t latePassDeferred, latePassDeferTexels, latePassDeferEarly;
+    /* the draws a held fill drew more than one when it was drawn past
+     * SCENE's border repeat (a draw of the middle and one a repeated block,
+     * rd_crack_fill.c fillDrawHeld) */
+    uint32_t latePassBlockDraws;
     /* The aura's paste split (rd_aura_paste.c): pastes drawn as the alpha
      * alone over the rows that read proven alpha 0 rows of their source
      * (auraPasteRows of SCENE's rows) and as the paste over the band

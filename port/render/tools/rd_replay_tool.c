@@ -3251,7 +3251,7 @@ int main(int argc, char **argv)
                "of their own%s%s%s; %u glow pastes in the aura's paste pass (%.2f MB of colour "
                "not loaded and as many not stored), %u drawn early; %u list 11 draws joined the "
                "open pass without SCENE's depth (%u passes not begun, %.2f MB of colour at most "
-               "each way)\n",
+               "each way); %u draws more for the border's blocks\n",
                dump, rd__late_pass_bits_text(rd__late_pass_bits()), pr->latePassHeld,
                pr->latePassGlowHeld, (double)pr->latePassTexels * 4.0 / 1048576.0,
                pr->latePassFlushed, pr->latePassFlushed ? " (" : "",
@@ -3259,7 +3259,7 @@ int main(int argc, char **argv)
                pr->latePassFlushed ? ")" : "", pr->latePassDeferred,
                (double)pr->latePassDeferTexels * 4.0 / 1048576.0, pr->latePassDeferEarly,
                pr->latePassJoined, pr->latePassJoinPasses,
-               (double)pr->latePassJoinTexels * 4.0 / 1048576.0);
+               (double)pr->latePassJoinTexels * 4.0 / 1048576.0, pr->latePassBlockDraws);
         /* the aura's paste as the alpha alone (rd_aura_paste.c) */
         printf("%s: stats: aura paste %s: %u split (%u rows as the alpha alone, %u band rows), %u "
                "drawn whole%s%s%s\n",

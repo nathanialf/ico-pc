@@ -1395,7 +1395,13 @@ them is drawn before them (a WHOLE frame with the fans on the picture gains noth
 a pass of its own (the cost without the hold); so do SCENE's snapshot taken again or swapped
 (`rd_replay.c` `takeSnap`, `blurSwapTarget`), an MSAA epoch, an aura paste whose pass cannot take
 it, and the walk's end. Not held under the upscaler's split (the upscale point, the display layer),
-with an MSAA epoch wanted, under the exact blend, or under the tool's pass window.
+with an MSAA epoch wanted, under the exact blend, or under the tool's pass window, nor where no
+paste pass on the device can take the fill (`landPossible`: the aura's needs the fx plan's local
+read, the glow's the fx plan's premultiplied add and a plan that draws it; on OpenGL the aura's
+paste reads a snapshot, so in a DARK room the fill is drawn where it was due, as without the late
+pass, not held to be drawn in a pass of its own later; once a run `rd: late pass: the crack fill
+not held on this device: ...`). A held fill drawn past SCENE's border repeat draws the middle and
+each repeated block (below): `RdPerfRecord.latePassBlockDraws` counts the draws more than one.
 
 One write of SCENE falls between the snapshot and the draw: SCENE's border repeat
 ([RENDER.md](RENDER.md), `rd_blur_border.c` `sceneRepeat`, before the first sprite that samples
@@ -1438,7 +1444,7 @@ UNVERIFIED), and in each LAMPS picture less the lamps' depth store. Counters
 - `--stats`: `<dump>: stats: late pass on|off|fill|join: N crack fills held into a paste pass (G
   the glow's; X MB of colour not loaded and as many not stored), M drawn early in a pass of their
   own (<why>); D glow pastes in the aura's paste pass (Y MB ...), E drawn early; J list 11 draws
-  joined ...`.
+  joined ...; K draws more for the border's blocks`.
 
 **The glow's paste in the aura's pass** (`defer`). Under LAMPS and WHOLE the glow's paste begins a
 pass on SCENE of its own, and the aura's paste another after the aura's sprites into its own buffers.
@@ -1469,7 +1475,10 @@ menu's draws, on the phone 2.8 ms of a picture in a block 70 % paused. A list 11
 draw uses no depth (its Z test off or ALWAYS, its Z write off, no DATE, no PRIM.AA1, no depth view,
 no shadow window on the depth, the same Z scale without it) takes no depth target
 (`rd__late_pass_join`, after the DATE cut's depth: `tdId` 0, `depthFmt` UNKNOWN) when the pass open on
-its target has none (no MSAA, no exact blend, no GS state as shader data), so it is drawn in that
+its target has none (no MSAA, no exact blend, no GS state as shader data) and the fx plan reads
+destinations by the local read (the profile the join's A/B ran on byte for byte; on OpenGL the
+joined passes' pictures differed in issue 102's and 164's frames, cause not found, so it is not
+joined there: once a run `rd: late pass: list 11's draws not joined ...`), so it is drawn in that
 pass: the mirror of `fxAttachDepth` (a sprite without a Z test drawn in a pass with the depth it
 does not use). The colour bytes are the same: the key with the depth had Z ALWAYS and no write,
 the key without it is given the same (`rd_pipeline.c` `rd__plan_screen_draw_ex`); the depth is not

@@ -803,6 +803,8 @@ static void fillDrawHeld(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const Rd
                      (RhiRect){b->b[k].x, 0, (uint32_t)b->b[k].w, th}, b->b[k].off);
     }
     r->writeSerial++; /* SCENE's colour changed (DATE's snapshot) */
+    const uint32_t draws = (b->x1 > b->x0 ? 1u : 0u) + b->n;
+    g_rdPerf.latePassBlockDraws += draws > 1u ? draws - 1u : 0u;
     s_cf.filled++;
     s_cf.bFilled++;
     s_place.border++;
