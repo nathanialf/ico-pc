@@ -88,6 +88,9 @@ void window_log_cost_begin(void);
 /* the print's time since the last part into part (LOG_COST_*); nothing
    outside the block's print */
 void window_log_cost_part(int part);
+/* the same into the other lines' part, named what (a static string: the
+   lines since the last mark) */
+void window_log_cost_mark(const char *what);
 void window_log_cost_end(void);
 void window_log_cost_present(double t0Ms, double t1Ms);
 void window_log_cost_job(double gameMs, double t0Ms, double t1Ms);

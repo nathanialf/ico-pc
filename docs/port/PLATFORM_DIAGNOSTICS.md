@@ -470,7 +470,11 @@ excused for an effects program, and the first limit is doubled when one is loade
 
 On Android the kernel GPU driver's nodes are sampled on a thread of their own, never this one, and
 the app's Java side reports the thermal state and screen recording (issue 123):
-[ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md).
+[ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md). The thermal asks (JNI calls into
+PowerManager) and the memory line's `/proc` reads run once a second on the log thread, not on the
+game thread; the 10 s lines read their last answers from lock-free cells
+(`port/platform/sys_cell.h`, `window_stall.c`). The device line at the window's start, `window:
+device: Android 16 (API 36), Google Pixel 10 Pro Fold (...)`, comes from the system properties.
 
 **A wait the system holds.** The hang verdict applies to the game's own code only. The window build
 marks the main thread's calls into the system that run none of the game's code (`SDL_PollEvent`, and

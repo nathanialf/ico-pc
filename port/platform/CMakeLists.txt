@@ -42,6 +42,7 @@ target_sources(ico_platform PRIVATE
     state_reloc.c
     state_syms.c
     state_xbuild.c
+    sys_cell.c
     symmap.c
     vm_reserve.c
     vsync_hooks.c
@@ -327,6 +328,17 @@ endif()
 # thread's print, the log thread's writes and their overlaps with a present
 # that blocked and a late step, the pipe full or not, a capture, the line
 # word for word (CPU only)
+# sys_cell_test: the last-value cell the log thread writes and the 10 s
+# lines read (sys_cell.h): read back whole with its time and cost, a write
+# in progress read as nothing, a writer thread against a reader (CPU only)
+add_executable(sys_cell_test test/sys_cell_test.c sys_cell.c)
+target_include_directories(sys_cell_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(sys_cell_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(sys_cell_test PRIVATE ico_thread)
+if(ICO_RUN_TESTS)
+    add_test(NAME sys_cell COMMAND sys_cell_test)
+endif()
+
 add_executable(log_cost_test test/log_cost_test.c log_cost.c)
 target_include_directories(log_cost_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(log_cost_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})

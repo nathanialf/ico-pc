@@ -74,6 +74,26 @@ static void testPhone(void)
         CHECK(strstr(pl, "lines 1.25 ms (formatting and writing; of it the block's records 0.25, "
                          "the kernel GPU and thermal reads 0.50, the memory reads 0.10, the "
                          "performance lines 0.25, the other lines 0.20; 0 during") != NULL);
+        /* the other lines named, in order, one name added twice; the log
+           thread's asks */
+        log_cost_other(&p, "the presents line", 0.05);
+        log_cost_other(&p, "the audio", 0.1);
+        log_cost_other(&p, "the presents line", 0.05);
+        p.asks = 10;
+        p.askThermalMs = 1.5;
+        p.askMemoryMs = 0.25;
+        log_cost_text(&p, pl, sizeof pl);
+        CHECK(
+            strstr(pl, "the other lines 0.20 (the presents line 0.10, the audio 0.10); 0 during") !=
+            NULL);
+        CHECK(strstr(pl, "; the log thread's asks 10 (the thermal state 1.50 ms, the memory "
+                         "figures 0.25 ms the last time)") != NULL);
+        for (unsigned i = 0; i < LOG_COST_OTHER_NAMES + 3u; i++) {
+            static const char *const names[] = {"a", "b", "c", "d", "e", "f", "g", "h", "i", "j",
+                                                "k", "l", "m", "n", "o", "p", "q", "r", "s"};
+            log_cost_other(&p, names[i], 1.0);
+        }
+        CHECK(p.otherN == LOG_COST_OTHER_NAMES && p.other[LOG_COST_OTHER_NAMES - 1u].ms == 6.0);
     }
     CHECK_STR(line, "logging: 8.0 KB written to the log in the block (every thread's); the window "
                     "thread's 10 s lines 1.25 ms (formatting and writing; 0 during a present that "

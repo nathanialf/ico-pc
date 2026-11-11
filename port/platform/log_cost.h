@@ -58,6 +58,8 @@ enum {
     LOG_COST_PARTS
 };
 
+#define LOG_COST_OTHER_NAMES 16u
+
 typedef struct LogCostSpan {
     double t0, t1; /* ms on the monotonic clock (ico_thread_now_ms) */
 } LogCostSpan;
@@ -68,6 +70,19 @@ typedef struct LogCost {
     double printMs;
     double partMs[LOG_COST_PARTS]; /* of printMs (partValid: measured) */
     int partValid;
+
+    /* the other lines' own parts, named by the window's marks
+       (window_log_cost_mark), in their order; the names are static strings */
+    struct {
+        const char *name;
+        double ms;
+    } other[LOG_COST_OTHER_NAMES];
+
+    unsigned otherN;
+    /* the log thread's asks (window_stall.c): their runs in the block and
+       what the last thermal ask and memory read took there */
+    unsigned asks;
+    double askThermalMs, askMemoryMs;
     LogCostSpan print;
     long long bytes; /* the log's bytes in the block, every thread's; -1 not known */
     /* the log thread (Android) */
@@ -92,6 +107,9 @@ typedef struct LogCost {
 } LogCost;
 
 void log_cost_reset(LogCost *c);
+/* ms of the other lines' part named name (a static string): added to the
+   same name's entry, or a new one in order (past the table: to the last) */
+void log_cost_other(LogCost *c, const char *name, double ms);
 /* a present that blocked over 50 ms (its call's span) */
 void log_cost_present(LogCost *c, double t0, double t1);
 /* a game step late by LOG_COST_LATE_MS or more (its late stretch) */

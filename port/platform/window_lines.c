@@ -6,6 +6,7 @@
  */
 #include "window_lines.h"
 #include "window_scene.h"
+#include "window_stall.h" /* window_stall_memory */
 
 #include <stdio.h>
 #include "audio_host.h"
@@ -106,16 +107,22 @@ void window_memory_line(void)
     RhiStats st;
     long rss = -1, peak = -1, avail = -1, total = -1;
 
-    window_log_cost_part(LOG_COST_OTHER); /* the print before it (log_cost.h) */
+    window_log_cost_mark("the passes, walk and pixel lines"); /* before it (log_cost.h) */
 
     char gfx[160] = "graphics allocations not counted";
     char dev[96] = "; device memory unknown";
 
     rhi_get_stats(&st);
-    ico_diag_process_memory(&rss, &peak);
+    /* the log thread's last reads where it makes them (window_stall.c:
+       /proc off the game thread), else here */
+    double age = -1.0;
+    const int cell = window_stall_memory(&rss, &peak, &avail, &total, &age);
+    if (cell != 0) {
+        ico_diag_process_memory(&rss, &peak);
+    }
     /* and the device's (issue 128: what the system has left decides
        when it ends the app, not the app's own size) */
-    if (ico_diag_device_memory(&avail, &total) == 0) {
+    if ((cell == 0 && avail >= 0) || (cell != 0 && ico_diag_device_memory(&avail, &total) == 0)) {
         snprintf(dev, sizeof(dev), "; device %ld MB available of %ld MB", avail / 1024,
                  total / 1024);
     }
@@ -221,6 +228,17 @@ void window_log_cost_begin(void)
     c->partValid = 1;
 }
 
+void window_log_cost_mark(const char *what)
+{
+    if (s_logPartAt <= 0.0) {
+        return; /* outside the block's print */
+    }
+    const double now = ico_thread_now_ms();
+    s_logCost.partMs[LOG_COST_OTHER] += now - s_logPartAt;
+    log_cost_other(&s_logCost, what, now - s_logPartAt);
+    s_logPartAt = now;
+}
+
 void window_log_cost_part(int part)
 {
     if (s_logPartAt <= 0.0 || part < 0 || part >= LOG_COST_PARTS) {
@@ -237,8 +255,9 @@ void window_log_cost_end(void)
     const double t1 = ico_thread_now_ms();
     char text[1024];
 
-    window_log_cost_part(LOG_COST_OTHER); /* the rest of the print */
+    window_log_cost_mark("the rest"); /* the rest of the print */
     s_logPartAt = 0.0;
+    c->asks = window_stall_asks_take(&c->askThermalMs, &c->askMemoryMs);
     if (s_logPrintT0 > 0.0 && t1 >= s_logPrintT0) {
         c->printValid = 1;
         c->printMs = t1 - s_logPrintT0;

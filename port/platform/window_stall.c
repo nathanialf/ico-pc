@@ -18,7 +18,9 @@
 #include "log_cost.h"
 #include "window_lines.h"   /* window_log_cost_present */
 #include "window_present.h" /* window_refresh_ns */
+#include "sys_cell.h"
 #ifdef __ANDROID__
+#include <sys/system_properties.h>
 #include "gpu_sysfs_android.h"
 #include "host_android.h"
 #endif
@@ -142,6 +144,91 @@ static void around_queue(const RdPerfRecord *r)
     s_around.n++;
 }
 
+/* The asks the game thread must not make (sys_cell.h): on Android the log
+ * thread (host_android.c ico_android_log_mirror_set_tick, the one worker
+ * every Android start has: the GPU sampler runs only where a node is
+ * readable, the performance hints' thread only from API 33) asks the
+ * thermal state (two JNI calls into PowerManager, binder calls: 1.6-2.8 ms
+ * of the owner's Pixel's 10 s print, rc4-rc9) and reads /proc/self/status
+ * and /proc/meminfo once a second; the window's lines read the last
+ * answers and their age.  Without the log thread they are asked where they
+ * were, on the game thread (never both: ico_host_thermal keeps statics). */
+static SysCell s_thermalCell, s_memoryCell;
+static const char *s_thermalWhy; /* __atomic: a static string */
+static int s_asksOn;             /* the tick is set: the game thread asks nothing */
+static uint32_t s_asksN;         /* __atomic: the tick's runs since the window took them */
+
+#ifdef __ANDROID__
+static void asks_tick(void)
+{
+    if (ico_diag_watchdog_paused()) {
+        return; /* the app in the background: nothing asked, as the GPU sampler */
+    }
+    double t0 = ico_thread_now_ms();
+    const char *why = "";
+    const ThermalState t = ico_host_thermal(&why);
+    double t1 = ico_thread_now_ms();
+    const double tv[3] = {t.headroom, (double)t.status, (double)t.recording};
+    __atomic_store_n(&s_thermalWhy, why, __ATOMIC_RELEASE);
+    sys_cell_put(&s_thermalCell, t1, t1 - t0, tv, 3);
+    long rss = -1, peak = -1, avail = -1, total = -1;
+    t0 = t1;
+    ico_diag_process_memory(&rss, &peak);
+    const double dev = ico_diag_device_memory(&avail, &total) == 0 ? 1.0 : 0.0;
+    t1 = ico_thread_now_ms();
+    const double mv[5] = {(double)rss, (double)peak, (double)avail, (double)total, dev};
+    sys_cell_put(&s_memoryCell, t1, t1 - t0, mv, 5);
+    __atomic_fetch_add(&s_asksN, 1u, __ATOMIC_RELAXED);
+}
+#endif
+
+uint32_t window_stall_asks_take(double *thermalMs, double *memoryMs)
+{
+    double v[1], at, took;
+    *thermalMs = sys_cell_get(&s_thermalCell, v, 1, &at, &took) ? took : 0.0;
+    *memoryMs = sys_cell_get(&s_memoryCell, v, 1, &at, &took) ? took : 0.0;
+    return __atomic_exchange_n(&s_asksN, 0u, __ATOMIC_RELAXED);
+}
+
+#ifdef __ANDROID__
+/* the thermal state: the log thread's last answer (and its age) when the
+   tick runs, else asked here as before */
+static ThermalState thermal_now(const char **why, double *ageMs)
+{
+    *ageMs = -1.0;
+    if (!s_asksOn) {
+        return ico_host_thermal(why);
+    }
+    ThermalState t = thermal_state_none();
+    double v[3], at;
+    if (sys_cell_get(&s_thermalCell, v, 3, &at, NULL) == 3) {
+        t.headroom = v[0];
+        t.status = (int)v[1];
+        t.recording = (int)v[2];
+        *ageMs = ico_thread_now_ms() - at;
+    }
+    if (why != NULL) {
+        const char *w = __atomic_load_n(&s_thermalWhy, __ATOMIC_ACQUIRE);
+        *why = w != NULL ? w : "not asked yet";
+    }
+    return t;
+}
+#endif
+
+int window_stall_memory(long *rss, long *peak, long *avail, long *total, double *ageMs)
+{
+    double v[5], at;
+    if (!s_asksOn || sys_cell_get(&s_memoryCell, v, 5, &at, NULL) != 5) {
+        return -1; /* read on the caller's thread */
+    }
+    *rss = (long)v[0];
+    *peak = (long)v[1];
+    *avail = v[4] != 0.0 ? (long)v[2] : -1;
+    *total = v[4] != 0.0 ? (long)v[3] : -1;
+    *ageMs = ico_thread_now_ms() - at;
+    return 0;
+}
+
 /* what follows the around line's samples: the app's own words on the
    device's thermal state and screen recording where it reports them ("" on
    Android when it reports none, and everywhere else) */
@@ -149,7 +236,8 @@ static const char *around_suffix(void)
 {
 #ifdef __ANDROID__
     static char text[160];
-    ThermalState t = ico_host_thermal(NULL);
+    double age;
+    ThermalState t = thermal_now(NULL, &age);
 
     thermal_around_text(&t, text, sizeof text);
     return text;
@@ -200,6 +288,28 @@ void window_stall_gpu_open(void)
     s_said = 1;
     gpu_sysfs_open_text(&info, text, sizeof(text));
     fprintf(stderr, "window: %s\n", text);
+    {
+        /* what the device runs (issues 123, 179: their logs did not say;
+           the performance hints need API 33): the system properties,
+           android.os.Build's own sources, read once here */
+        char rel[PROP_VALUE_MAX] = "", sdk[PROP_VALUE_MAX] = "", man[PROP_VALUE_MAX] = "",
+             model[PROP_VALUE_MAX] = "", dev[PROP_VALUE_MAX] = "";
+        (void)__system_property_get("ro.build.version.release", rel);
+        (void)__system_property_get("ro.build.version.sdk", sdk);
+        (void)__system_property_get("ro.product.manufacturer", man);
+        (void)__system_property_get("ro.product.model", model);
+        (void)__system_property_get("ro.product.device", dev);
+        fprintf(stderr, "window: device: Android %s (API %s), %s %s (%s)\n", rel[0] ? rel : "?",
+                sdk[0] ? sdk : "?", man[0] ? man : "?", model[0] ? model : "?", dev[0] ? dev : "?");
+    }
+    if (ico_android_log_mirror_running()) {
+        /* the thermal and /proc asks on the log thread from here */
+        s_asksOn = 1;
+        ico_android_log_mirror_set_tick(asks_tick);
+        fprintf(stderr,
+                "window: the thermal state and the memory figures are asked once a second on the "
+                "log thread; the 10 s lines read the last answers\n");
+    }
     s_gpuOn = gpu_sysfs_any_sampled(&info); /* the GPU's nodes or the CPU clocks */
     s_gpuBlockMs = ico_thread_now_ms();
 #endif
@@ -214,7 +324,7 @@ void window_stall_gpu_close(void)
 
 void window_stall_gpu_block(void)
 {
-    window_log_cost_part(LOG_COST_OTHER); /* the print before it (log_cost.h) */
+    window_log_cost_mark("the acquire and present lines"); /* before it (log_cost.h) */
 #ifdef __ANDROID__
     const double now = ico_thread_now_ms();
     static int s_thermalSaid;
@@ -236,11 +346,17 @@ void window_stall_gpu_block(void)
         }
     }
     /* the thermal line each block, after the driver's; "not available"
-       only once */
-    t = ico_host_thermal(&why);
+       only once; the log thread's last answer where it asks (its age said) */
+    double age;
+    t = thermal_now(&why, &age);
     if (thermal_state_any(&t) || !s_thermalSaid) {
         thermal_block_text(&t, why, text, sizeof(text));
-        fprintf(stderr, "window: %s\n", text);
+        if (age >= 0.0) {
+            fprintf(stderr, "window: %s (asked %.1f s before on the log thread)\n", text,
+                    age / 1000.0);
+        } else {
+            fprintf(stderr, "window: %s\n", text);
+        }
         s_thermalSaid = 1;
     }
     stall_block_close(&clock);
