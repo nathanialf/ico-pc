@@ -17,15 +17,16 @@
  *                 depth and takes no DATE joins the open pass on its target
  *                 that has no depth (the pause menu's draws in the aura's
  *                 paste pass) instead of beginning one with SCENE's depth
- * FILL and DEFER on by default on a tile-based GPU under Vulkan (MoltenVK
- * too; RD_LATE_DEFAULT); off on the other classes and on OpenGL.  JOIN is
- * off by default everywhere: its A/B (rd_late_pass_ab, issues 102's and
- * 164's frames) differs by one level on some texels of the menu's text on
- * lavapipe and llvmpipe, at 2x and at the phone's scale, and nothing proves
- * the no-depth pipeline twin rounds as its twin with the depth on a device.
- * ICO_RD_LATE_PASS=0|1|all|fill|defer|join (the tests' A/B only,
- * docs/port/TESTING.md; no config key): off, the default parts, every part,
- * one part (forced on any device and backend).  rd__late_pass_force is the
+ * Every part on by default on a tile-based GPU under Vulkan (MoltenVK too;
+ * RD_LATE_DEFAULT); on the other classes and backends JOIN alone, which
+ * applies only where the fx plan reads destinations by the local read
+ * (rd__late_pass_join).  FILL and DEFER are byte for byte; JOIN is an
+ * accepted "looks the same" divergence (docs/port/DIVERGENCES.md VD-31: the
+ * no-depth pipeline's sampling of a blended bilinear text sprite lands a
+ * level or a few apart on a few hundred texels of list 11's sprites), so it
+ * ships wherever it applies.  ICO_RD_LATE_PASS=0|1|all|fill|defer|join (the
+ * tests' A/B only, docs/port/TESTING.md; no config key): off, every part
+ * (1 and all), one part (forced on any device and backend).  rd__late_pass_force is the
  * tests' switch (-1 the environment's or the profile's). */
 #ifndef PORT_RENDER_RD_LATE_PASS_H
 #define PORT_RENDER_RD_LATE_PASS_H
@@ -39,8 +40,8 @@
 #define RD_LATE_DEFER 2u
 #define RD_LATE_JOIN 4u
 #define RD_LATE_ALL (RD_LATE_FILL | RD_LATE_DEFER | RD_LATE_JOIN)
-/* the profile's parts and ICO_RD_LATE_PASS=1's: the join left out */
-#define RD_LATE_DEFAULT (RD_LATE_FILL | RD_LATE_DEFER)
+/* the tile class's parts and ICO_RD_LATE_PASS=1's: every part */
+#define RD_LATE_DEFAULT RD_LATE_ALL
 /* rd__late_pass_force only (the tests' frames, which hold no glow chain the
  * light plan reads): the fill held whatever the glow's plan */
 #define RD_LATE_ANY_PLAN 0x100u

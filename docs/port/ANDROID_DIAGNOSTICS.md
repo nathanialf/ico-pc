@@ -625,8 +625,8 @@ in a pass of their own (K <why>, ...); D glow pastes in the aura's paste pass, E
 list 11 draws joined the open pass without SCENE's depth (P passes not begun)` counts the pictures it saved a pass in (N), those where something between the glow and the
 aura drew on SCENE first (M, by reason: `a draw`, `a command on SCENE`, `the aura's paste pass could
 not take it`, `SCENE's snapshot taken again`, ...), and the paused or menu pictures whose list 11
-draws went into the aura's pass instead of a pass of their own (P, one a paused picture; 0 by
-default: the join is off, its A/B a level apart on the menu's text); its last clause, `N fills not
+draws went into the aura's pass instead of a pass of their own (P, one a paused picture; a few texels of the menu's
+text may land a shade apart, DIVERGENCES.md VD-31); its last clause, `N fills not
 held (no paste in the frame takes them)`, counts the pictures of a room without the aura (the
 opening) whose fill is drawn where it is due, with its snapshot by the swap. The crack fill's own 10 s
 line then shows its `after the glow's alpha` count falling and `in the aura's paste pass` rising by

@@ -69,8 +69,7 @@ if(ICO_RUN_TESTS AND TARGET rd_crack_test)
                          ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk")
 endif()
 
-# rd_crack_join: rd_crack_test 2 join on the tile class's fakes, the join forced
-# (rd__late_pass_force(RD_LATE_ALL); off by default): the aura's frame
+# rd_crack_join: rd_crack_test 2 join on the tile class's fakes: the aura's frame
 # (rd_crack_aura's) with two list 11 commands after the paste, each a sprite
 # into SCENE under Z ALWAYS without a Z write: with the late pass both drawn in
 # the paste's pass without SCENE's depth (2 draws, 1 pass), against the join off
@@ -92,11 +91,13 @@ endif()
 # the PowerVR phone's profile on lavapipe (ICO_VK_FAKE_LIMITS=moltenvk,
 # ICO_RD_VU_PREPASS=0, Enhanced, 2364x1080, Full height, Full pixel) and at
 # Enhanced 2x 4:3 under the same fakes (the PS2's border: no repeat): every
-# target and PRESENT byte for byte, the same draws, passes fewer by the held
+# target and PRESENT byte for byte (but where list 11 joined a pass: SCENE,
+# DISPLAY and PRESENT within DIVERGENCES.md VD-31's bound, 800 pixels and 3
+# levels, png_level_diff.py), the same draws, passes fewer by the held
 # fills exactly, the crack fill's own passes fewer by them too, the colour bytes
 # loaded and stored fewer by SCENE's once a held fill each way, the copies the
-# same; the off run holds nothing; the dumps the list marks hold one fill; no
-# list 11 join (off by default: =1 is the default parts, rd_late_pass.h);
+# same; the off run holds nothing; the dumps the list marks hold one fill and
+# join as many passes as they mark;
 # rd_late_pass_gl: the phone's setting on OpenGL (llvmpipe) with the late pass on
 # (the aura's paste reads a snapshot there: no fill held in a DARK room, one
 # held into the glow's paste pass in a LAMPS room, drawn past the border repeat
@@ -108,6 +109,8 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
              COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                      "-DLIST=${CMAKE_SOURCE_DIR}/tools/late_pass_dumps.txt"
                      "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/late_pass_ab" -DBACKEND=vulkan
+                     "-DPY=${Python3_EXECUTABLE}"
+                     "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
                      -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_late_pass_ab.cmake")
     set_tests_properties(rd_late_pass_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:" TIMEOUT 7200)
     if(_dc_env)
@@ -119,6 +122,8 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                  COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
                          "-DLIST=${CMAKE_SOURCE_DIR}/tools/late_pass_dumps.txt"
                          "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/gl/late_pass_ab" -DBACKEND=opengl
+                         "-DPY=${Python3_EXECUTABLE}"
+                         "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
                          -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_late_pass_ab.cmake")
         set_tests_properties(rd_late_pass_gl PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                              TIMEOUT 7200 LABELS gl

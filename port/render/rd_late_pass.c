@@ -173,8 +173,7 @@ const char *rd__late_pass_why_text(int why)
 const char *rd__late_pass_bits_text(unsigned bits)
 {
     bits &= RD_LATE_ALL;
-    return bits == RD_LATE_DEFAULT ? "on"
-           : bits == RD_LATE_ALL   ? "all"
+    return bits == RD_LATE_ALL     ? "on"
            : bits == 0             ? "off"
            : bits == RD_LATE_FILL  ? "fill"
            : bits == RD_LATE_DEFER ? "defer"
@@ -204,8 +203,8 @@ static void note(unsigned bits, const char *why)
             bits & RD_LATE_DEFER ? "the glow's paste in the aura's paste pass" : NULL,
             bits & RD_LATE_JOIN ? "list 11's draws that use no depth in the open pass without it"
                                 : NULL};
-        int at = snprintf(line, sizeof(line), "late pass: %s (%s):",
-                          bits == RD_LATE_DEFAULT ? "on" : rd__late_pass_bits_text(bits), why);
+        int at =
+            snprintf(line, sizeof(line), "late pass: %s (%s):", rd__late_pass_bits_text(bits), why);
         bool first = true;
         for (int k = 0; k < 3 && at >= 0 && (size_t)at < sizeof(line); k++) {
             if (part[k]) {
@@ -215,7 +214,10 @@ static void note(unsigned bits, const char *why)
             }
         }
         if (at >= 0 && (size_t)at < sizeof(line)) {
-            snprintf(line + at, sizeof(line) - (size_t)at, " (the same bytes)");
+            snprintf(line + at, sizeof(line) - (size_t)at, "%s",
+                     bits & RD_LATE_JOIN ? " (the same bytes but the join's: a looks-the-same "
+                                           "divergence, DIVERGENCES.md VD-31)"
+                                         : " (the same bytes)");
         }
     } else {
         snprintf(line, sizeof(line), "late pass: off (%s)", why);
@@ -256,11 +258,18 @@ unsigned rd__late_pass_bits(void)
         why = "ICO_RD_LATE_PASS";
     } else if (g_rd.hasDevice && g_rd.profile.tiler && rhi_backend() == RHI_BACKEND_VULKAN) {
         bits = RD_LATE_DEFAULT;
-        why = "a tile-based GPU's default; list 11's join off by default: its A/B differs by a "
-              "level on the reference drivers";
+        why = "a tile-based GPU's default";
+    } else if (g_rd.hasDevice) {
+        /* the join, an accepted divergence (DIVERGENCES.md VD-31), wherever
+         * it applies (rd__late_pass_join: the fx plan's local read); the
+         * fill's hold and the deferred paste save a load and a store an
+         * immediate-mode GPU hardly pays for */
+        bits = RD_LATE_JOIN;
+        why = g_rd.profile.tiler ? "not under Vulkan: list 11's join alone, where it applies"
+                                 : "not a tile-based GPU: list 11's join alone, where it applies";
     } else {
         bits = 0;
-        why = g_rd.hasDevice && g_rd.profile.tiler ? "not under Vulkan" : "not a tile-based GPU";
+        why = "no device";
     }
     note(bits, why);
     return bits;
