@@ -14,6 +14,7 @@
 #include "rd_passring.h"
 #include "rd_replay.h"
 #include "rd_velocity.h"
+#include "rd_vu_rec_early.h"
 #include "rd_vu_record.h"
 #include "rd_vu_rec_sink.h"
 #include "rd_vu_skin_check.h"
@@ -133,6 +134,10 @@ static RhiBuffer recBinding(uint64_t *bytes)
 
 /* recEnsure's failures in a row: the second turns the pre-pass off */
 static uint32_t s_recFails;
+/* the start-up preparation (rd_vu_rec_early.h rd__vu_rec_presize): the
+   rows it made (0 none), and whether recEnsure runs inside it (its line) */
+static uint32_t s_recEarlyRows;
+static bool s_recEarlyNow;
 
 /* the record's textures and buffers (not s_recNull) */
 static void recFree(void)
@@ -158,6 +163,7 @@ static void recFree(void)
     }
     s_recSink = (RhiBuffer){0};
     s_recSinkRows = 0;
+    s_recEarlyRows = 0;
 }
 
 /* The textures (the targets only) and every slot's buffer hold rows rows
@@ -188,11 +194,20 @@ static bool recEnsure(uint32_t rows)
     }
     if (s_recRows < rows) {
         s_recRows = rows;
-        rd__log("VU pre-pass: the record holds %u slots (%u rows, %llu KB a frame slot; %s)",
+        /* made at start-up, or grown in play (past what start-up made) */
+        char when[96] = "";
+        if (s_recEarlyNow) {
+            snprintf(when, sizeof(when), "; made at start-up, before play");
+        } else if (s_recEarlyRows != 0u) {
+            snprintf(when, sizeof(when), "; grown in play past the %u rows made at start-up",
+                     s_recEarlyRows);
+        }
+        rd__log("VU pre-pass: the record holds %u slots (%u rows, %llu KB a frame slot; %s%s)",
                 rows * ICO_VU_REC_W, rows, (unsigned long long)(recBytes(rows) / 1024u),
                 rd__vu_record_compute() ? "stored by compute dispatches"
                 : buffered              ? "stored by the vertex shaders"
-                                        : "3 render targets copied");
+                                        : "3 render targets copied",
+                when);
     }
     for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
         if (s_recBufRows[i] >= rows) {
@@ -208,6 +223,50 @@ static bool recEnsure(uint32_t rows)
         s_recBufRows[i] = s_recBuf[i].id ? rows : 0u;
     }
     return s_recBuf[rd__ring_slot()].id != 0;
+}
+
+/* ---------------------------------- the record made at start-up
+ * rd_vu_rec_early.h: every slot's buffer (and the targets) at rows rows
+ * before play, through recEnsure as a replay would grow them; a slot that
+ * could not be made frees the record, so play grows it from nothing as
+ * before (not counted in s_recFails: no pre-pass turned off by it) */
+uint32_t rd__vu_rec_rows(void)
+{
+    return s_recRows;
+}
+
+uint32_t rd__vu_rec_rows_min(void)
+{
+    return RD_VU_REC_ROWS_MIN;
+}
+
+uint32_t rd__vu_rec_rows_max(void)
+{
+    return RD_VU_REC_ROWS_MAX;
+}
+
+uint64_t rd__vu_rec_row_bytes(void)
+{
+    return recBytes(1u) * (RHI_FRAMES_IN_FLIGHT + (rd__vu_record_buffered() ? 0u : 1u));
+}
+
+bool rd__vu_rec_presize(uint32_t rows)
+{
+    if (rows < RD_VU_REC_ROWS_MIN || rows > RD_VU_REC_ROWS_MAX || (rows & (rows - 1u)) != 0u) {
+        return false;
+    }
+    s_recEarlyNow = true;
+    bool ok = recEnsure(rows);
+    s_recEarlyNow = false;
+    for (uint32_t i = 0; i < RHI_FRAMES_IN_FLIGHT; i++) {
+        ok = ok && s_recBufRows[i] >= rows;
+    }
+    if (!ok) {
+        recFree();
+        return false;
+    }
+    s_recEarlyRows = rows;
+    return true;
 }
 
 /* t5's first byte in the slot's upload ring this replay (vu_ring: the

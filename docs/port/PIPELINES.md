@@ -940,7 +940,11 @@ once, logged as `rd: VU pre-pass: the
 record holds 32768 slots (32 rows, 1536 KB a frame slot)` (48 KB a row in each frame slot's buffer
 and as much in the three shared textures; a scene of 100,000 vertices and 150,000 to 230,000
 triangle slots, issue 179's boat scene, takes 256 or 512 rows, 12 to 24 MB a frame slot; the
-1,024-row cap is 48 MB a slot); group 1 binds the record at t4 (to the
+1,024-row cap is 48 MB a slot). The game's window makes the record at start-up, after
+the self-tests and the start-up set, as large as half the free memory above the free-memory floor
+allows (1,024 rows where the system does not say how much is free; RENDER.md
+[Made at start-up](RENDER.md#made-at-start-up)), so play grows it only past that (`...; grown in
+play past the N rows made at start-up)`); group 1 binds the record at t4 (to the
 vertex and the pixel side), and a 256-byte buffer before there is one (the slot's upload ring when
 even that could not be made, logged once: no shader reads t4 then). A record that cannot be made
 draws that replay the old way and is asked for once more at the next replay; a second failure in

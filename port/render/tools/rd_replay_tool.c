@@ -542,6 +542,7 @@
 #include "rd_velocity.h"
 #include "rd_mesh.h"
 #include "rd_vis.h"
+#include "rd_vu_rec_early.h" /* ICO_RD_EARLY_PREPARE=1 */
 #include "rd_vu_record.h"
 #include "rd_vu_skin_check.h"
 #include "../core/region.h"              /* the dump's disc (version 12) */
@@ -2725,6 +2726,14 @@ int main(int argc, char **argv)
         }
     }
     rd__set_not_implemented_fatal(false);
+    if (!noDevice && getenv("ICO_RD_EARLY_PREPARE") != NULL &&
+        strcmp(getenv("ICO_RD_EARLY_PREPARE"), "1") == 0) {
+        /* the game window's start-up preparation (rd_vu_rec_early.h), with
+           no memory function: the record's own limit (rd_vu_rec_early_ab) */
+        rd_vu_record_prepare(NULL);
+        printf("early: record %u rows, arena %s\n", rd_vu_record_early_rows(),
+               rd_vu_record_early_arena() ? "made" : "not made");
+    }
     if (fsr3Asked && !noDevice && !rd_upscale_temporal_supported()) {
         /* a skip only where FSR 3.1 cannot be expected; a build with it on a
            Vulkan 1.2 device that refuses it is a failure */
