@@ -435,7 +435,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the careful rule thins the twins at once, three replays twin one each; an event re-arms all three
   for two replays (the events in them do not lengthen it), then one a replay again; three more
   cycles use the four stretches, after which two replays under the sabotage twin one each
-  (`rd_vu_skin_check_thin`).
+  (`rd_vu_skin_check_thin`). `thinphone` (`rd_vu_skin_check_thin_phone`, Arm's phone GPU faked,
+  `ICO_VK_FAKE_VENDOR=0x13B5`): the window's rule without a reason (`rd_vu_skin_background(memory,
+  NULL)`) thins the twins at once, three replays twin one each and the first twin's line says `at
+  one skinned draw a picture from the start (a tile-based phone GPU`; the zeroed bone re-arms them
+  (the next replay twins all three), and four clean replays thin them again, two more twin one each.
 - `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
   paths, `*` globs, a missing dump named and skipped, none at all `SKIP`) replayed by
   `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the

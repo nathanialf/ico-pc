@@ -600,7 +600,10 @@ lines and what each decides:
   draws and vertex invocations a picture (9 a triangle). Several dozen draws a picture with the
   GPU work near the frame's budget says the check's share; once thinned (`rd: VU skin check: twins
   thinned to one a picture after P clean replays ...`, the 10 s block's `, thinned to one a picture`)
-  N falls to 1 to 3 a picture. `rd: VU skin check: twins re-armed by a twin event ...` says a fault
+  N falls to 1 to 3 a picture. On a phone the twins start there (`rd: VU skin check: twins on (...)
+  at one skinned draw a picture from the start (a tile-based phone GPU: ...)`), so a first start's
+  3D scene carries one twin a picture, not every skinned draw for 2000 replays (issue 211's report
+  had them all on when its device was lost). `rd: VU skin check: twins re-armed by a twin event ...` says a fault
   came back and every draw is watched again; the 10 s block's `every skinned draw (P of 2000 clean
   replays to thin)` how far the run is from thinning.
 - **The 10 s block** (`rd: VU skin check: P checks, W wrong, ...; T twins, D differ (first at frame
