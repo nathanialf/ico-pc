@@ -178,6 +178,7 @@ static struct {
      * after the chain began: its clear cannot wait for a sprite to draw it */
     bool unhooked[LZ_COUNT];
     bool w1Before, w1After; /* WORK1 written outside the chain before it, after it */
+    bool w1Cleared;         /* cleared to 0 before the chain, nothing written since */
     bool chainSeen;         /* the chain's first command was walked */
     float p1Rect[4];        /* the first blur pass's rect (12.4), its target's GS width */
     uint32_t p1GsW;
@@ -185,6 +186,11 @@ static struct {
      * begun from there to the paste (RdPerfRecord.glowLightPasses) */
     bool spanOpen;
     uint32_t spanFrom;
+    uint32_t spanLast;  /* the pass serial at the last chain hook (or mark) */
+    uint32_t preSerial; /* rd__glow_light_mark's: before SCENE's border repeat */
+    uint32_t preCount;  /* the marks this replay (the hook's own one included) */
+    uint8_t spanLastEl;
+    uint32_t glowLightOwn; /* the span's passes but SCENE's border repeat */
     /* the plan of this replay */
     uint8_t plan;
     uint32_t replay;
@@ -220,6 +226,41 @@ static int s_force = -1; /* rd__glow_light_force: -1 the environment's */
 static uint64_t s_count[RD_GLOW_LIGHT_COUNT];
 static uint64_t s_whyCount[RD_GLOW_LIGHT_WHY_COUNT];
 static uint64_t s_darkPasses; /* the passes the dark plans' chains began */
+
+/* the passes begun in the last chain's span, named (rd__glow_light_debug,
+ * the tests print it when a bound fails): what came before each */
+static char s_dbg[768];
+static size_t s_dbgAt;
+
+static const char *const kEl[] = {
+    "band",        "fill",     "fan",        "mask",   "lamp",      "reduction",     "blur pass 1",
+    "blur pass 2", "eye blur", "sun sprite", "shrink", "hold copy", "WORK0's alpha", "paste"};
+
+static void dbgAdd(const Replay *r, uint32_t n, const char *what, uint8_t el)
+{
+    if (!n || s_dbgAt >= sizeof(s_dbg) - 1) {
+        return;
+    }
+    const RdTargetRec *t = r->passOpen ? rd__target_rec(r->passColor) : NULL;
+    const int m =
+        snprintf(s_dbg + s_dbgAt, sizeof(s_dbg) - s_dbgAt, "%s%u %s %s (open now: %s %ux%u)",
+                 s_dbgAt ? "; " : "", n, what, el < sizeof(kEl) / sizeof(kEl[0]) ? kEl[el] : "?",
+                 t ? rd__target_name(r->passColor) : "none", t ? t->tw : 0u, t ? t->th : 0u);
+    if (m > 0) {
+        s_dbgAt += (size_t)m < sizeof(s_dbg) - s_dbgAt ? (size_t)m : sizeof(s_dbg) - 1 - s_dbgAt;
+    }
+}
+
+const char *rd__glow_light_debug(void)
+{
+    return s_dbg;
+}
+
+void rd__glow_light_mark(const Replay *r)
+{
+    s_gl.preSerial = r->passSerial;
+    s_gl.preCount++;
+}
 
 static const char *const kPlan[RD_GLOW_LIGHT_COUNT] = {
     [RD_GLOW_LIGHT_NONE] = "no glow",
@@ -629,7 +670,8 @@ bool rd__glow_light_scan_begin(const RdFrame *f)
         s_gl.first[k] = FT_NONE;
         s_gl.unhooked[k] = false;
     }
-    s_gl.w1Before = s_gl.w1After = s_gl.chainSeen = s_gl.spanOpen = false;
+    s_gl.w1Before = s_gl.w1After = s_gl.w1Cleared = s_gl.chainSeen = s_gl.spanOpen = false;
+    s_gl.preCount = 0;
     s_gl.p1GsW = 0;
     g_rdPerf.glowLightPasses = 0;
     g_rdPerf.glowLight = RD_GLOW_LIGHT_NONE;
@@ -920,8 +962,15 @@ void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
         return; /* one of the chain's commands */
     }
     if (writesTarget(c, st, idOf(RD_TARGET_WORK1))) {
-        if (before) {
+        /* a clear of WORK1 to (0, 0, 0, 0) before the chain leaves the zero
+         * region zero (the tests clear every target at a frame's head) */
+        const bool zero = c->type == RDC_CLEAR && !c->b[0] && !c->b[1] && !c->b[2] && !c->b[3];
+        if (before && zero) {
+            s_gl.w1Before = false;
+            s_gl.w1Cleared = true;
+        } else if (before) {
             s_gl.w1Before = true;
+            s_gl.w1Cleared = false;
         } else {
             s_gl.w1After = true;
         }
@@ -941,6 +990,9 @@ void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
 static bool w1Zero(void)
 {
     const RdTargetRec *t = rd__target_rec(idOf(RD_TARGET_WORK1));
+    if (s_gl.w1Cleared && !s_gl.w1Before) {
+        return true; /* the frame's own clear zeroed all of WORK1 */
+    }
     return s_w1.valid && t && t->color.id == s_w1.tex && !t->clearPending && !s_gl.w1Before &&
            s_w1.gsW == s_gl.p1GsW && memcmp(s_w1.rect, s_gl.p1Rect, sizeof(s_w1.rect)) == 0;
 }
@@ -1432,11 +1484,26 @@ bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
     GlCmd *e = find(c);
     if (e && e == &s_gl.cmd[0] && !s_gl.spanOpen) {
         s_gl.spanOpen = true; /* the chain's passes counted from here */
-        s_gl.spanFrom = r->passSerial;
+        s_gl.spanFrom = s_gl.spanLast = r->passSerial;
+        s_gl.spanLastEl = e->el;
+        s_gl.glowLightOwn = 0;
+        s_dbgAt = 0;
+        s_dbg[0] = '\0';
+    } else if (e && s_gl.spanOpen) {
+        /* the passes begun since the last chain command: between the two
+         * (the list loop's own work), and in SCENE's border repeat just
+         * before this sprite (rd_blur_border.c sceneRepeatDue: SCENE's, not
+         * the glow's: not counted) */
+        const uint32_t pre = s_gl.preSerial >= s_gl.spanLast ? s_gl.preSerial : s_gl.spanLast;
+        dbgAdd(r, pre - s_gl.spanLast, "after the", s_gl.spanLastEl);
+        dbgAdd(r, r->passSerial - pre, "in SCENE's border repeat before the", e->el);
+        s_gl.glowLightOwn += pre - s_gl.spanLast;
+        s_gl.spanLast = r->passSerial;
+        s_gl.spanLastEl = e->el;
     }
     if (e && e->el == E_PASTE && s_gl.spanOpen) {
         s_gl.spanOpen = false;
-        g_rdPerf.glowLightPasses = r->passSerial - s_gl.spanFrom;
+        g_rdPerf.glowLightPasses = s_gl.glowLightOwn;
         if (s_gl.plan == RD_GLOW_LIGHT_DARK) {
             s_darkPasses += g_rdPerf.glowLightPasses;
         }

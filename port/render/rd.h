@@ -3259,6 +3259,9 @@ void rd_glow_light_line(void);
  * plan's off and the plan frame before */
 bool rd__glow_light_on(void);
 void rd__glow_light_force(int on);
+/* the render passes begun in the last plan's chain, each named after the
+ * command it followed and the pass open then (the tests print it) */
+const char *rd__glow_light_debug(void);
 
 /* The CPU time of the replay finished last (its RdPerfRecord.totalMs,
  * popped or not; a picture handed over is still running when the step

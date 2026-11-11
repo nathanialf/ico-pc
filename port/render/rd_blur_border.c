@@ -496,7 +496,8 @@ static void postSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 
 static void blurPostSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
-    sceneRepeatDue(r); /* SCENE's outer columns before the first read of it */
+    rd__glow_light_mark(r); /* the passes SCENE's repeat begins are not the glow's */
+    sceneRepeatDue(r);      /* SCENE's outer columns before the first read of it */
     if (rd__glow_light_sprite(r, f, c)) {
         return; /* the glow's light plan: not drawn, or drawn another way (rd_glow_light.c) */
     }

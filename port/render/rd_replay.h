@@ -548,6 +548,10 @@ void rd__glow_light_lazy_begin(void);
 void rd__glow_light_readback(uint32_t id);
 void rd__glow_light_reset(void);
 void rd__blur_post_planned(Replay *r, const RdFrame *f, const RdCmd *c);
+/* rd_blur_border.c blurPostSprite, before SCENE's border repeat: the pass
+ * serial there, so the passes the repeat begins are not counted as the
+ * glow chain's (RdPerfRecord.glowLightPasses) */
+void rd__glow_light_mark(const Replay *r);
 /* rd_const_read.c: fx_tfx of texel t under RGBAQ col and the sprite's
  * flags (TFX in bits 1..2, TCC), the shader's integers */
 void rd__const_tfx(const uint8_t t[4], const uint8_t col[4], uint32_t flags, uint8_t out[4]);

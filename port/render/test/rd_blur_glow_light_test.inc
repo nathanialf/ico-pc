@@ -228,32 +228,35 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
     glDiffer(what, alphaFree, &rgb, &a);
     uint32_t again = 0;
     if (plan == RD_GLOW_LIGHT_DARK) {
-        /* the passes the dark chain begins (RdPerfRecord.glowLightPasses):
-         * WORK1's zero draw over the first blur pass's rect, its glow edge
-         * strip and the sun's shrink, in one pass on WORK1, because the
-         * replay before drew the chain whole and WORK1 holds its alpha;
-         * WORK2, WORK2_PAD, WORK3 and WORK0 are lazy clears (no pass: the
-         * reads above draw them).  The other glow passes of the frame are
+        /* the passes the dark chain begins (RdPerfRecord.glowLightPasses,
+         * SCENE's border repeat before the mask not counted): none but the
+         * sun's shrink into WORK1 (its rect follows the sun).  WORK1's first
+         * blur pass is not drawn: this frame clears WORK1 to 0 at its head
+         * (clearAll), and in play a dark frame before left that region
+         * zero; WORK2, WORK2_PAD, WORK3 and WORK0 are lazy clears (no pass:
+         * the reads above draw them).  The frame's other glow passes are
          * cleanUpFB's two sprites and the test's SCENE sprite after the
          * paste, not the chain's: fewer than the chain's in total */
-        CHECK(chainPasses <= 1u, "%s: %u passes in the dark chain (want at most WORK1's)", what,
-              chainPasses);
+        const uint32_t most = k == GL_SUN_OFF ? 1u : 0u;
+        CHECK(chainPasses <= most, "%s: %u passes in the dark chain (want at most %u): %s", what,
+              chainPasses, most, rd__glow_light_debug());
         CHECK(passes < passesChain, "%s: %u glow passes under DARK, the chain %u", what, passes,
               passesChain);
-        /* again with the plan: WORK1's region is zero already (no replay
-           wrote WORK1 since), so the chain begins no pass; the sun's shrink
-           (its rect not the first pass's) still one */
+        /* again with the plan: the same (WORK1's region zero, from the
+           frame's clear and the replay before) */
         rhi_wait_idle();
         CHECK(rd__replay_frame(f, 0, false), "%s: replay again", what);
         rhi_wait_idle();
         again = g_rdPerf.glowLightPasses;
+        char named[800];
+        snprintf(named, sizeof(named), "%s", rd__glow_light_debug());
         const uint32_t againPlan = g_rdPerf.glowLight;
         glRead(0);
         CHECK(againPlan == RD_GLOW_LIGHT_DARK, "%s again: plan %s", what,
               rd_glow_light_text(againPlan));
         CHECK(again <= (k == GL_SUN_OFF ? 1u : 0u),
-              "%s again: %u passes in the dark chain (want %s)", what, again,
-              k == GL_SUN_OFF ? "at most the shrink's" : "none");
+              "%s again: %u passes in the dark chain (want %s): %s", what, again,
+              k == GL_SUN_OFF ? "at most the shrink's" : "none", named);
         int rgb2 = 0, a2 = 0;
         char what2[160];
         snprintf(what2, sizeof(what2), "%s again", what);
