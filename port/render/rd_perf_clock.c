@@ -72,6 +72,14 @@ void rd_perf_clock_judge(const RdPerfClockIn *in, RdPerfClockVerdict *v)
     if (c->waitBeginNs != 0 && c->waitEndNs >= c->waitBeginNs) {
         v->waitMs = (double)(c->waitEndNs - c->waitBeginNs) / 1e6;
     }
+    if (c->lastSubmitNs != 0 && c->waitBeginNs >= c->lastSubmitNs &&
+        c->waitEndNs >= c->waitBeginNs) {
+        /* a wait under 0.05 ms found the work finished: the time to the
+           wait's start bounds the GPU's end */
+        v->doneValid = v->waitMs >= 0.05 ? 1 : 2;
+        v->doneMs =
+            (double)((v->doneValid == 1 ? c->waitEndNs : c->waitBeginNs) - c->lastSubmitNs) / 1e6;
+    }
     v->ranTwice = c->again;
     if (haveFirst) {
         v->counterMs = (double)first / 1e6;
@@ -87,8 +95,11 @@ void rd_perf_clock_judge(const RdPerfClockIn *in, RdPerfClockVerdict *v)
             v->lateValid = 2;
         }
     }
-    v->report = (c->traceN > 0 && v->waitMs >= RD_PERF_CLOCK_WAIT_MS) || v->ranTwice ||
-                v->missing > 0 || in->backNs != 0;
+    /* a long wait with no trace is the single submission wait's (the polled
+       one traces every wait past RHI_TS_TRACE_AFTER_MS): its line says when
+       the replay ended and where it began, from the wait's own return */
+    v->report =
+        v->waitMs >= RD_PERF_CLOCK_WAIT_MS || v->ranTwice || v->missing > 0 || in->backNs != 0;
 }
 
 typedef struct Out {
@@ -169,7 +180,15 @@ int rd_perf_clock_text(const RdPerfClockIn *in, const RdPerfClockVerdict *v, cha
         if (gap >= 0.0) {
             put(&o, " from %.1f ms after its last submit", gap);
         }
-        if (c->traceN == 0) {
+        if (c->traceN == 0 && v->waitMs >= (double)RHI_TS_TRACE_AFTER_MS) {
+            /* the single wait: nothing of the slot read while it ran */
+            put(&o, " (no trace: the single submission wait reads nothing of its work while it "
+                    "runs)");
+            if (v->doneValid == 1) {
+                put(&o, "; its work done about %.1f ms after its last submit (the wait's end)",
+                    v->doneMs);
+            }
+        } else if (c->traceN == 0) {
             put(&o, " (no trace: the wait did not pass %u ms)", (unsigned)RHI_TS_TRACE_AFTER_MS);
         } else {
             const RhiTsTracePoint *p0 = &c->trace[0];

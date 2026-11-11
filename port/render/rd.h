@@ -2547,6 +2547,13 @@ typedef struct RdPerfPass {
     /* a render pass's area (rd_pass_area.c, RhiRenderPassDesc.area): its
      * offset and size in texels; aw 0 the whole target */
     uint16_t ax, ay, aw, ah;
+    /* the attachment memory the piece's render passes asked for and its
+     * texture copies' bytes (RhiStats.passColorLoadBytes ... copyTextureBytes
+     * between two starts, rhi_traffic.h), KB: colour and depth-stencil
+     * loaded and stored, cleared in tile memory; and the passes' render-area
+     * texels, thousands */
+    uint32_t colorLoadKB, colorStoreKB, depthLoadKB, depthStoreKB, clearKB, copyKB;
+    uint32_t kTexels;
 } RdPerfPass;
 
 /* A piece's label as the window's summary writes it: the effect for a
@@ -3118,6 +3125,23 @@ typedef struct RdPerfRecord {
     double gpuLateMs;
     uint8_t gpuLateValid, gpuRanTwice;
     uint16_t gpuStampsMissing;
+    /* the slot's wait (rd_perf_clock.h, the CPU's times of the wait the
+     * backend makes in any case, no read of the work in flight): how long
+     * the recycle blocked for this replay's slot (gpuSlotWaitMs, 0 it had
+     * finished), and the time from its last submit to the wait's return
+     * (gpuDoneMs: the GPU's end of it when the wait blocked, gpuDoneValid
+     * 1; an upper bound when it had finished before, 2; 0 not known) */
+    double gpuSlotWaitMs, gpuDoneMs;
+    uint8_t gpuDoneValid;
+    /* the attachment memory the replay's render passes asked a tile-based
+     * GPU to move (rhi_traffic.h, RhiStats.pass*Bytes): colour and
+     * depth-stencil loaded and stored, cleared in tile memory, the
+     * render-area texels, and the texture copies' bytes; passUntracked the
+     * passes with an attachment of a format the table did not know (counted
+     * at 4 bytes a texel: the window's image) */
+    uint64_t colorLoadBytes, colorStoreBytes, depthLoadBytes, depthStoreBytes, clearBytes;
+    uint64_t passTexels, copyBytes;
+    uint32_t passUntracked;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are

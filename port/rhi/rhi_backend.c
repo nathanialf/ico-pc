@@ -6,6 +6,7 @@
  * (port/rhi/CMakeLists.txt), Vulkan first, so it is the default; [video]
  * backend or ICO_RHI_BACKEND picks another. */
 #include "rhi_backend.h"
+#include "rhi_traffic.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -313,6 +314,7 @@ void rhi_shutdown(void)
 {
     RHI_GUARD();
     be()->shutdown();
+    rhi_traffic_forget(); /* the handles were the device's */
     s_up = false;
 }
 
@@ -434,12 +436,15 @@ void rhi_buffer_note_written(RhiBuffer b, uint64_t hi)
 RhiTexture rhi_create_texture(const RhiTextureDesc *desc)
 {
     RHI_GUARD();
-    return be()->create_texture(desc);
+    const RhiTexture t = be()->create_texture(desc);
+    rhi_traffic_texture_made(t, desc); /* its format for the passes' bytes */
+    return t;
 }
 
 void rhi_destroy_texture(RhiTexture t)
 {
     RHI_GUARD();
+    rhi_traffic_texture_gone(t);
     be()->destroy_texture(t);
 }
 
@@ -593,6 +598,7 @@ void rhi_cmd_barrier(RhiCommandList cl, const RhiTextureBarrier *barriers, uint3
 
 void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
 {
+    rhi_traffic_pass(pass); /* the bytes it asks to load and store (CPU only) */
     be()->cmd_begin_render_pass(cl, pass);
 }
 
@@ -689,6 +695,7 @@ void rhi_cmd_copy_buffer_to_texture(RhiCommandList cl, RhiBuffer src, uint64_t s
 void rhi_cmd_copy_texture(RhiCommandList cl, RhiTexture src, RhiRect srcRegion, RhiTexture dst,
                           int32_t dstX, int32_t dstY)
 {
+    rhi_traffic_copy(src, RHI_ASPECT_COLOR, srcRegion);
     be()->cmd_copy_texture(cl, src, srcRegion, dst, dstX, dstY);
 }
 
@@ -696,6 +703,7 @@ void rhi_cmd_copy_texture_to_buffer(RhiCommandList cl, RhiTexture src, RhiViewAs
                                     RhiRect region, RhiBuffer dst, uint64_t dstOffset,
                                     uint32_t rowPitch)
 {
+    rhi_traffic_copy(src, aspect, region);
     be()->cmd_copy_texture_to_buffer(cl, src, aspect, region, dst, dstOffset, rowPitch);
 }
 
@@ -774,9 +782,11 @@ void rhi_get_stats(RhiStats *out)
     if (s_guardOn &&
         (s_guard.stale != NULL ? s_guard.stale(s_guard.user) : s_guard.busy(s_guard.user))) {
         *out = s_guardStats; /* the hand-over's counters (rhi.h rhi_set_call_guard) */
+        rhi_traffic_stats(out);
         return;
     }
     be()->get_stats(out);
+    rhi_traffic_stats(out); /* the passes' bytes (rhi_traffic.h): every backend */
 }
 
 bool rhi_timestamps_supported(void)

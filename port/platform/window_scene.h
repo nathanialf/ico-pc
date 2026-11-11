@@ -49,6 +49,11 @@ typedef struct SceneIds {
    layout */
 SceneKind window_scene_kind(const SceneIds *ids, int layout, int movie);
 
+/* The kind's word in the layout line ("play", "scene", "title", "pause",
+   "settings", "other"; "other" past the kinds): the performance lines'
+   scene names (window_perf_rank.c) */
+const char *window_scene_kind_word(SceneKind kind);
+
 /* The block's time by kind, in ns */
 typedef struct SceneShare {
     uint64_t ns[SCENE_KIND_COUNT];
