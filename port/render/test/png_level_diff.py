@@ -6,6 +6,15 @@ Prints one line:
     png_level_diff: W x H, C channels: E equal, O one level apart, M more (largest D), P pixels differ
 and exits 0; 2 when the files cannot be read or their sizes or formats
 differ (the reason printed).  Run it with python3 -I.
+
+--channels SET (letters of RGBA, e.g. RGB or A) compares only those
+channels (C counts them; a pixel differs when one of them does): the glow
+light plan's A/B (rd_glow_light_ab.cmake) holds RGB at 0 levels everywhere
+and the alpha only where the plan may change it.  An RGB file has no A.
+
+--count-alpha V FILE prints
+    png_level_diff: W x H, N pixels with alpha V
+(0 for an RGB file): whether a frame's WORK2 holds the fill the mask kept.
 """
 import struct
 import sys
@@ -65,8 +74,29 @@ def load(path):
 
 
 def main(argv):
+    argv = list(argv)
+    if len(argv) == 4 and argv[1] == "--count-alpha":
+        try:
+            v = int(argv[2])
+            w, h, c, rows = load(argv[3])
+        except (OSError, ValueError, zlib.error) as e:
+            print("png_level_diff: %s" % e)
+            return 2
+        n = 0
+        if c == 4:
+            for r in rows:
+                n += sum(1 for x in range(3, len(r), 4) if r[x] == v)
+        print("png_level_diff: %u x %u, %u pixels with alpha %u" % (w, h, n, v))
+        return 0
+    chans = "RGBA"
+    if len(argv) == 5 and argv[1] == "--channels":
+        chans = argv[2].upper()
+        argv = [argv[0]] + argv[3:]
+        if not chans or any(ch not in "RGBA" for ch in chans):
+            print("png_level_diff: --channels takes letters of RGBA")
+            return 2
     if len(argv) != 3:
-        print("usage: png_level_diff.py A.png B.png")
+        print("usage: png_level_diff.py [--channels RGBA] A.png B.png | --count-alpha V A.png")
         return 2
     try:
         wa, ha, ca, ra = load(argv[1])
@@ -78,6 +108,7 @@ def main(argv):
         print("png_level_diff: %ux%u (%u channels) against %ux%u (%u channels)" %
               (wa, ha, ca, wb, hb, cb))
         return 2
+    pick = [k for k in range(ca) if "RGBA"[k] in chans]
     one = more = largest = pixels = 0
     for a, b in zip(ra, rb):
         if a == b:
@@ -86,15 +117,20 @@ def main(argv):
             pa, pb = a[x:x + ca], b[x:x + ca]
             if pa == pb:
                 continue
-            pixels += 1
-            for u, v in zip(pa, pb):
+            differ = False
+            for k in pick:
+                u, v = pa[k], pb[k]
                 d = u - v if u > v else v - u
+                if d == 0:
+                    continue
+                differ = True
                 if d == 1:
                     one += 1
-                elif d > 1:
+                else:
                     more += 1
                 largest = d if d > largest else largest
-    total = wa * ha * ca
+            pixels += 1 if differ else 0
+    total = wa * ha * len(pick)
     print("png_level_diff: %u x %u, %u channels: %u equal, %u one level apart, %u more "
           "(largest %u), %u pixels differ" %
           (wa, ha, total, total - one - more, one, more, largest, pixels))

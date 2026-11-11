@@ -514,6 +514,47 @@ bool rd__glow_fold_due(Replay *r, const RdFxDraw *x, uint32_t words[RD_GLOW_FOLD
 void rd__glow_fold_drawn(void);
 void rd__glow_fold_undo(Replay *r, const char *why);
 void rd__glow_fold_end(void);
+/* The glow drawn only where it can add light (rd_glow_light.c).
+ * rd__glow_light_on      the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off
+ *                        (the tests' A/B); rd__glow_light_force sets it (-1
+ *                        the environment's) and forgets the plan's off
+ * rd__glow_light_scan_begin, _scan_cmd, _scan_end  rd_store_plan.c
+ *                        rd__store_plan_scan's walk: every command (state:
+ *                        a state command), then the plan (counted, logged)
+ * rd__glow_light_planned this replay applies a plan (the WORK2 fold stands
+ *                        down, rd_glow_fold.c)
+ * rd__glow_light_sprite  rd_blur_border.c blurPostSprite: true when the
+ *                        plan handled post sprite c (skipped, drawn as a
+ *                        clear, drawn with its source planned)
+ * rd__glow_light_skip    rd_replay.c doScreen: command ord is not drawn (the
+ *                        fades fold's, rd__fades_fold_skip, or the sun's
+ *                        fans off the picture under a plan)
+ * rd__glow_light_src     rd_const_read.c rd__const_read: the colour the plan
+ *                        gives source srcId for the sprite being drawn
+ * rd__glow_light_lazy_begin, _readback  rd_pass_cut.c: the lazy clears of
+ *                        WORK2_PAD, WORK2 and WORK3 drawn before a replay
+ *                        that reads them first, or before a read outside one
+ * rd__glow_light_reset   rd_pass_cut.c rd__pass_cut_init: a new renderer
+ *                        holds no lazy clear
+ * rd__blur_post_planned  rd_blur_border.c: sprite c and its glow edge strip
+ *                        drawn (no fold, no border) */
+bool rd__glow_light_on(void);
+void rd__glow_light_force(int on);
+bool rd__glow_light_scan_begin(const RdFrame *f);
+void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
+                             uint32_t ord);
+void rd__glow_light_scan_end(void);
+bool rd__glow_light_planned(void);
+bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c);
+bool rd__glow_light_skip(uint32_t ord);
+bool rd__glow_light_src(uint32_t srcId, uint8_t rgba[4]);
+void rd__glow_light_lazy_begin(void);
+void rd__glow_light_readback(uint32_t id);
+void rd__glow_light_reset(void);
+void rd__blur_post_planned(Replay *r, const RdFrame *f, const RdCmd *c);
+/* rd_const_read.c: fx_tfx of texel t under RGBAQ col and the sprite's
+ * flags (TFX in bits 1..2, TCC), the shader's integers */
+void rd__const_tfx(const uint8_t t[4], const uint8_t col[4], uint32_t flags, uint8_t out[4]);
 /* rd_replay_vu.c.
  * rd__replay_vu       a VU draw under its camera's picture
  * rd__vu_prepass      before list 0 (replayFrame, after the uploads and

@@ -3523,7 +3523,7 @@ static RdUniform msaaFrame(const Replay *r, const DrawSetup *ds)
 static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     DrawSetup ds;
-    if ((g_rd.deferText && c->b[3] == RD_SCREEN_TEXT_QUADS) || rd__fades_fold_skip(g_rdStoreOrd)) {
+    if ((g_rd.deferText && c->b[3] == RD_SCREEN_TEXT_QUADS) || rd__glow_light_skip(g_rdStoreOrd)) {
         flushScreenRun(r); /* a skipped text item (a folded fade) ends the run */
         return;            /* the item is drawn on the output (the reduction) instead */
     }

@@ -497,6 +497,9 @@ static void postSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 static void blurPostSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     sceneRepeatDue(r); /* SCENE's outer columns before the first read of it */
+    if (rd__glow_light_sprite(r, f, c)) {
+        return; /* the glow's light plan: not drawn, or drawn another way (rd_glow_light.c) */
+    }
     if (rd__glow_fold_skip(r, f, c)) {
         return; /* the glow's fill or mask: its reduction computes it (rd_glow_fold.c) */
     }
@@ -534,4 +537,14 @@ static void blurPostSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     memcpy(r->st.scissor, scissor, sizeof(scissor));
     r->st.ds.wrap = wrap;
+}
+
+/* the glow's light plan (rd_glow_light.c): sprite c drawn with its source's
+ * colour planned (rd_const_read.c), and its glow edge strip, as
+ * blurPostSprite's plain path draws them (no fold: the plan draws one pass
+ * of a pair) */
+void rd__blur_post_planned(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    rd__replay_blur_sprite_draw(r, f, c);
+    glowEdge(r, f, c);
 }
