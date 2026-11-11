@@ -800,6 +800,13 @@ typedef struct RhiLimits {
      * otherwise.  false / NULL on the other backends */
     bool tilePhone;
     const char *vuPrepassLoss;
+    /* The VU record's store passes begin on a throwaway colour target
+     * (port/render/rd_vu_rec_sink.h): Vulkan on the Intel driver row
+     * (rhi_pass_row.h, the crash inside Intel's vkCmdBeginRendering) or
+     * with the subpass read on (RhiLimits.localReadSubpass's path); false
+     * elsewhere and on the other backends: the passes begin without an
+     * attachment, as v0.11.2's did */
+    bool storePassTarget;
     /* (docs/port/RENDER.md, the device profile).  localRead: Vulkan
      * dynamicRenderingLocalRead (VK_KHR_dynamic_rendering_local_read, or
      * VkPhysicalDeviceVulkan14Features on a 1.4 device without the

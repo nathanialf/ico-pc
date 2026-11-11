@@ -1639,6 +1639,7 @@ static void vkr_tile_rule_apply(void)
 static void vkr_pass_row_apply(void)
 {
     g_vkr.legacyWhy = NULL;
+    g_vkr.passRowHit = false;
 #if VKR_LEGACY_PASSES
     const int ov = rhi_vk_pass_override(getenv("ICO_VK_LEGACY_PASSES"));
 #ifdef _WIN32
@@ -1648,6 +1649,9 @@ static void vkr_pass_row_apply(void)
 #endif
     const char *row =
         rhi_vk_pass_row(g_vkr.props.vendorID, g_vkr.driverID, g_vkr.props.apiVersion, windows);
+    /* the store passes' throwaway targets follow the row whatever the path
+       (RhiLimits.storePassTarget) */
+    g_vkr.passRowHit = row != NULL;
     if (g_vkr.legacyPasses) {
         if (ov == 0) {
             VKR_LOG("render passes: [dev] legacy_passes = false (ICO_VK_LEGACY_PASSES=0) asks for "
@@ -3083,6 +3087,11 @@ static void vkr_fill_limits(void)
     o->barrierWords = g_vkr.tile.wideTag;
     o->waitWords = g_vkr.tile.polledTag;
     o->tilePhone = g_vkr.tile.phone;
+    /* the VU record's store passes begin on a colour target only on the
+     * Intel driver row (rhi_pass_row.h: the crash inside Intel's
+     * vkCmdBeginRendering) and with the subpass read on; elsewhere without
+     * an attachment, as v0.11.2 (port/render/rd_vu_rec_sink.h) */
+    o->storePassTarget = g_vkr.passRowHit || g_vkr.subpassRead;
     o->vuPrepassLoss = g_vkr.tile.noPrepass ? g_vkr.tile.prepassWhy : NULL;
     /* v0.7.10: the device profile's facts (rhi.h) */
     /* either path's read (RhiLimits.localReadSubpass: the subpass read,

@@ -489,8 +489,25 @@ static RdSkinSummary *s_collect; /* rd__vu_skin_check_frame's */
  * no box check and no twins when its check failed).  Until a pipeline
  * exists its part is not drawn (the box check, c2), said once. */
 #define SK_CAREFUL_GAP_MS 2000.0
+
+/* On a tile-based phone GPU (RhiLimits.tilePhone; v0.11.4: two phones lost
+ * the device in the first 3D scene on v0.11.3, cause unknown) the check
+ * issues what v0.11.2's issued: no careful rule (with a reason none of these
+ * compiles at all, so none of their draws; the twins not thinned from the
+ * start), no ring stamp (no 16 bytes in the ring, no copy of them, the
+ * readback laid out as before) and the probe target cleared to zero, not to
+ * the replay's stamp; the stamps' checks then take every readback as its
+ * replay's.  CPU-only additions (the copy search, the trace) stay. */
+static bool skAsBefore(void)
+{
+    /* the device's limits (zero before rhi_init); valid while the ring is
+       sized (rd_upload.c) and every check is drawn */
+    return rhi_limits()->tilePhone;
+}
+
 static RdBackgroundMemoryFn s_memFn;
-static char s_noBg[192];  /* why the compiles are careful: "" not */
+static char s_noBg[192];  /* why the compiles are careful (none at all on a phone) */
+static bool s_noBgPhone;  /* s_noBg's rule is v0.11.2's: none compiled (skAsBefore) */
 static bool s_memStop;    /* the system's signal: none for the run */
 static bool s_bgSaid[3];  /* the lines said: the rule, the signal, the floor */
 static double s_bgLastMs; /* the careful rule's last begin */
@@ -499,12 +516,14 @@ void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground
 {
     s_memFn = memory;
     snprintf(s_noBg, sizeof(s_noBg), "%s", noBackground ? noBackground : "");
+    s_noBgPhone = s_noBg[0] != '\0' && skAsBefore();
     /* the careful rule: on a GPU-bound phone (issue 123: 26.7-28.7 of 33.3 ms
      * a picture) the twins' extra draws must not cost it time, so they
      * start thinned (one a picture, the rate they reach after
      * RD_SKIN_THIN_REPLAYS clean replays) and a twin event re-arms them for
-     * a bounded stretch only (thinNote) */
-    const bool careful = s_noBg[0] != '\0';
+     * a bounded stretch only (thinNote); not on a tile-based phone GPU
+     * (skAsBefore: v0.11.2's rule, none compiled, the twins as before) */
+    const bool careful = s_noBg[0] != '\0' && !s_noBgPhone;
     if (careful && !s_thin.careful) {
         s_thin.thin = true;
         s_thin.left = 0;
@@ -538,6 +557,17 @@ static bool bgMay(bool wait)
         return true;
     }
     if (jobBusy()) {
+        return false;
+    }
+    if (s_noBg[0] && s_noBgPhone) {
+        /* v0.11.2's rule on a tile-based phone GPU (skAsBefore) */
+        if (!s_bgSaid[0]) {
+            s_bgSaid[0] = true;
+            rd__log("VU skin check: its box check, its twins' pipelines and its c2 variant are "
+                    "not compiled in the background (%s; a tile-based phone GPU: none, as before "
+                    "the careful rule): the check runs without them",
+                    s_noBg);
+        }
         return false;
     }
     if (s_noBg[0]) {
@@ -1608,10 +1638,11 @@ uint64_t rd__vu_skin_ring_bytes(void)
      * under the ring builds, C's otherwise) */
     const uint64_t twin =
         SK_BONE_BYTES + 4096u + ua + sizeof(IcoDrawCB) + ua + 2u * (sizeof(IcoVuCB) + ua);
-    /* the ring stamp (rd_vu_skin_trace.c): one a replay */
+    /* the ring stamp (rd_vu_skin_trace.c): one a replay (none on a phone,
+       skAsBefore) */
     return (skMode() == 2 ? SK_CHECKS_ALL : 1u) * one +
-           (rd__vu_skin_twins_on() ? SK_TWINS_MAX * twin : 0u) + 4096u + sizeof(RdSkinRingStamp) +
-           16u;
+           (rd__vu_skin_twins_on() ? SK_TWINS_MAX * twin : 0u) + 4096u +
+           (skAsBefore() ? 0u : sizeof(RdSkinRingStamp) + 16u);
 }
 
 /* the slot's target and readback buffer for cols columns of RD_SKIN_MAXV
@@ -1622,8 +1653,8 @@ static bool slotEnsure(SkSlot *sl, uint32_t cols, uint32_t n)
     const RhiLimits *lim = rhi_limits();
     const uint32_t a = lim->copyRowPitchAlign ? lim->copyRowPitchAlign : 1u;
     const uint32_t pitch = (w * 4u + a - 1u) / a * a;
-    const uint64_t rowsOff =
-        ((uint64_t)n * SK_BONE_BYTES + sizeof(RdSkinRingStamp) + 255u) & ~(uint64_t)255u;
+    const uint64_t stampBytes = skAsBefore() ? 0u : sizeof(RdSkinRingStamp);
+    const uint64_t rowsOff = ((uint64_t)n * SK_BONE_BYTES + stampBytes + 255u) & ~(uint64_t)255u;
     const uint64_t need = rowsOff + (uint64_t)pitch * h;
     if (sl->tex.id && sl->texW >= w && sl->rb.id && sl->rbSize >= need && sl->pitch == pitch) {
         sl->rowsOff = rowsOff;
@@ -1769,10 +1800,11 @@ void rd__vu_skin_end(void)
     /* the ring stamp (rd_vu_skin_trace.c): written last into the ring and
      * copied last into the readback, so the harvest names the replay whose
      * ring the GPU read */
+    const bool asBefore = skAsBefore(); /* no stamps on a phone */
     const RdSkinRingStamp stamp = {RD_SKIN_RING_STAMP_MAGIC, g_rd.replayCounter, slot,
                                    g_rd.ring[slot].id};
-    sl->stampOff = ok ? ringPut(&stamp, sizeof(stamp), 16u) : ~0ull;
-    ok = ok && sl->stampOff != ~0ull;
+    sl->stampOff = ok && !asBefore ? ringPut(&stamp, sizeof(stamp), 16u) : ~0ull;
+    ok = ok && (asBefore || sl->stampOff != ~0ull);
     if (!ok) {
         sl->n = 0;
         sl->nTwins = 0;
@@ -1785,7 +1817,9 @@ void rd__vu_skin_end(void)
      * drawn (the probes write fields 0..2), so the harvest reads which
      * replay's copy wrote the rows (rd_vu_skin_trace.c) */
     rp.color[0] = (RhiColorAttachment){sl->tex, RHI_LOAD_CLEAR, {0}, RHI_STORE_STORE, false};
-    rd__skin_clear_stamp(g_rd.replayCounter, rp.color[0].clear);
+    if (!asBefore) {
+        rd__skin_clear_stamp(g_rd.replayCounter, rp.color[0].clear);
+    }
     rp.colorCount = 1;
     rp.width = sl->texW;
     rp.height = sl->texH;
@@ -1829,8 +1863,10 @@ void rd__vu_skin_end(void)
             rhi_cmd_copy_buffer(cl, g_rd.ring[slot], sl->checks[i].bonesOff, sl->rb,
                                 (uint64_t)i * SK_BONE_BYTES, SK_BONE_BYTES);
         }
-        rhi_cmd_copy_buffer(cl, g_rd.ring[slot], sl->stampOff, sl->rb, (uint64_t)n * SK_BONE_BYTES,
-                            sizeof(RdSkinRingStamp));
+        if (!asBefore) {
+            rhi_cmd_copy_buffer(cl, g_rd.ring[slot], sl->stampOff, sl->rb,
+                                (uint64_t)n * SK_BONE_BYTES, sizeof(RdSkinRingStamp));
+        }
         sl->wrote = true;
     }
     sl->pending = true;
@@ -2481,6 +2517,13 @@ static void thinNote(uint32_t read, uint32_t differ)
  * 100th) */
 static void stampsRead(const SkSlot *sl, const uint8_t *map, SkStamps *st)
 {
+    if (skAsBefore()) {
+        /* no stamps on a phone (skAsBefore): every readback is its
+           replay's, as v0.11.2 read it */
+        memset(st, 0, sizeof(*st));
+        st->clear = st->ring = RD_SKIN_STAMP_OK;
+        return;
+    }
     const uint8_t *texel =
         map + sl->rowsOff + (size_t)(sl->texH - 1u) * sl->pitch + (size_t)(sl->texW - 1u) * 4u;
     st->clear = rd__skin_clear_stamp_state(texel, sl->counter, &st->clearSeen);
@@ -2838,7 +2881,7 @@ void rd__vu_skin_shutdown(void)
          * stretches are a run's */
         const uint32_t used = s_thin.used;
         memset(&s_thin, 0, sizeof(s_thin));
-        s_thin.careful = s_thin.thin = s_noBg[0] != '\0';
+        s_thin.careful = s_thin.thin = s_noBg[0] != '\0' && !s_noBgPhone;
         s_thin.used = used;
     }
     s_twinsSaid = false;

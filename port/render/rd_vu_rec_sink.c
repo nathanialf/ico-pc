@@ -12,8 +12,14 @@
 static RhiTexture s_sink[RD_VU_REC_SINKS];
 static RhiState s_sinkState[RD_VU_REC_SINKS];
 static uint32_t s_next;
-static bool s_failed, s_madeSaid;
-static uint32_t s_with, s_without;
+static bool s_failed, s_madeSaid, s_bareSaid;
+static uint32_t s_with, s_without, s_bare;
+
+bool rd__vu_rec_sink_wanted(void)
+{
+    /* the device's limits (zero before rhi_init: not wanted) */
+    return rhi_limits()->storePassTarget;
+}
 
 static void sinksFree(void)
 {
@@ -28,6 +34,15 @@ static void sinksFree(void)
 
 bool rd__vu_rec_sink_ready(void)
 {
+    if (!rd__vu_rec_sink_wanted()) {
+        /* v0.11.2's shape (rd_vu_rec_sink.h): nothing to make, one line */
+        if (!s_bareSaid) {
+            s_bareSaid = true;
+            rd__log("VU pre-pass: the store passes begin without an attachment (no throwaway "
+                    "target: not the Intel driver row, no subpass read)");
+        }
+        return true;
+    }
     if (!s_sink[0].id && !s_failed) {
         /* ICO_RD_VU_REC_SINK_FAIL=1 (the tests): the targets refused */
         const char *fail = getenv("ICO_RD_VU_REC_SINK_FAIL");
@@ -67,6 +82,10 @@ bool rd__vu_rec_sink_ready(void)
 
 RhiTexture rd__vu_rec_sink(RhiCommandList cl)
 {
+    if (!rd__vu_rec_sink_wanted()) {
+        s_bare++; /* no attachment, as the store pipelines name none */
+        return (RhiTexture){0};
+    }
     if (!rd__vu_rec_sink_ready()) {
         s_without++;
         return (RhiTexture){0};
@@ -86,6 +105,11 @@ uint32_t rd__vu_rec_sink_passes(uint32_t *without)
     return s_with;
 }
 
+uint32_t rd__vu_rec_sink_bare_passes(void)
+{
+    return s_bare;
+}
+
 RhiTexture rd__vu_rec_sink_target(uint32_t i)
 {
     return i < RD_VU_REC_SINKS ? s_sink[i] : (RhiTexture){0};
@@ -97,4 +121,5 @@ void rd__vu_rec_sink_free(void)
     s_next = 0;
     s_failed = false;   /* a new device tries again */
     s_madeSaid = false; /* and says it again */
+    s_bareSaid = false;
 }

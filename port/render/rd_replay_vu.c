@@ -2027,8 +2027,9 @@ static RhiBuffer recStoreBuffer(void)
 }
 
 /* the stores: the bracket's begin (after every earlier use of the buffer),
- * then a pass on the throwaway target alone (rd_vu_rec_sink.h; without
- * attachments before v0.11.3), ICO_VU_REC_W x 1, its whole area; the
+ * then a pass on the throwaway target alone where it is wanted
+ * (rd_vu_rec_sink.h: the Intel driver row, the subpass read), without
+ * attachments elsewhere (as v0.11.2), ICO_VU_REC_W x 1, its whole area; the
  * pass's default viewport and scissor stand (no point is rasterised:
  * RhiPipelineDesc.noRaster, the shaders' position outside the clip volume).
  * The compute dispatches: the compute bracket's begin alone (dispatches are
@@ -2050,8 +2051,9 @@ static void recStorePassOpen(void)
         s_recDrawn = false;
         return;
     }
-    /* the throwaway target the store pipelines name (rd_vu_rec_sink.h), in
-     * its state before the bracket: no pass begins without an attachment */
+    /* the throwaway target the store pipelines name where it is wanted
+     * (rd_vu_rec_sink.h), in its state before the bracket; {0} elsewhere:
+     * the pass begins without an attachment, as v0.11.2's */
     const RhiTexture sink = rd__vu_rec_sink(rd__replay_cl());
     if (!rhi_cmd_buffer_store_begin(rd__replay_cl(), recStoreBuffer())) {
         static bool said; /* once a run */

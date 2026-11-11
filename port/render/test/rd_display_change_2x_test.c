@@ -8,9 +8,10 @@
  *   list 0   SCENE cleared with its depth, VU meshes (normal_c, code 32)
  *            drawn through the vertex pre-pass with its record stored by
  *            the vertex shaders (ICO_RD_VU_PREPASS=1,
- *            ICO_RD_VU_RECORD=stores: the store passes, without attachments
- *            before v0.11.3, now on their throwaway target,
- *            rd_vu_rec_sink.h), world triangles writing the alpha, then a
+ *            ICO_RD_VU_RECORD=stores: the store passes, on their throwaway
+ *            target where RhiLimits.storePassTarget says (the Intel driver
+ *            row, the subpass read: rd_vu_rec_sink.h), without attachments
+ *            elsewhere), world triangles writing the alpha, then a
  *            DATE-tested sprite over them (the DATE snapshot, or the
  *            stencil bit on a tile-based profile)
  *   list 3   the shadow count: its scene-sized target on SCENE's depth, a
@@ -26,9 +27,11 @@
  * eight frames, the thread stopped.  Of the replays after the switch:
  * at least two recorded; every part of the frame drawn (the pre-pass's
  * passes, a DATE snapshot or stencil draw, the shadow count's resolve, the
- * crack fill in at least one); the scene at 2 x 2.  The store passes all
- * began on the throwaway targets (none without them; two distinct targets
- * taken in turn) where the record is stored by the vertex shaders, and the
+ * crack fill in at least one); the scene at 2 x 2.  Where the record is
+ * stored by the vertex shaders: with the targets wanted the store passes
+ * all began on them (none without them; two distinct targets taken in
+ * turn), and without them (every other row) all began without an
+ * attachment and no target was made, as v0.11.2's; and the
  * barriers that held later vertex work behind fragment work after the
  * switch are printed (RhiStats.fragmentHolds); on the 1.1 profile the
  * scene's passes with its depth have the subpass read (vk_renderpass.c);
@@ -430,7 +433,16 @@ int main(int argc, char **argv)
             printf("2x: the summary's%.*s\n", (int)strcspn(h + 1, ";") + 1, h);
         }
     }
-    if (stores) {
+    const bool wanted = rd__vu_rec_sink_wanted();
+    printf("2x: the store passes' throwaway targets %s (RhiLimits.storePassTarget), %u passes "
+           "begun without an attachment\n",
+           wanted ? "wanted" : "not wanted", rd__vu_rec_sink_bare_passes());
+    if (getenv("ICO_TEST_SINK_WANT") != NULL) {
+        const bool want = getenv("ICO_TEST_SINK_WANT")[0] == '1';
+        CHECK(wanted == want, "the throwaway targets %s, %s expected",
+              wanted ? "wanted" : "not wanted", want ? "wanted" : "not wanted");
+    }
+    if (stores && wanted) {
         CHECK(sinkAfter > sinkBefore && sinkWithout == 0,
               "2x: %u store passes on the throwaway target after the switch, %u without it",
               sinkAfter - sinkBefore, sinkWithout);
@@ -438,6 +450,13 @@ int main(int argc, char **argv)
         const RhiTexture s0 = rd__vu_rec_sink_target(0), s1 = rd__vu_rec_sink_target(1);
         CHECK(s0.id && s1.id && s0.id != s1.id, "2x: the store passes' two targets %08x %08x",
               s0.id, s1.id);
+    } else if (stores) {
+        /* v0.11.2's shape: no target made, every store pass without one */
+        CHECK(sinkAfter == 0 && sinkWithout == 0 && rd__vu_rec_sink_bare_passes() > 0 &&
+                  rd__vu_rec_sink_target(0).id == 0,
+              "2x: targets not wanted, yet %u store passes on one, %u failed, %u without one, "
+              "target %08x",
+              sinkAfter, sinkWithout, rd__vu_rec_sink_bare_passes(), rd__vu_rec_sink_target(0).id);
     } else {
         printf("2x: the record is not stored by the vertex shaders here (%s): the throwaway "
                "target's check skipped\n",

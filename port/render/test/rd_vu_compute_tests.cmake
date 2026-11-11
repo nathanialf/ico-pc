@@ -99,7 +99,9 @@ if(_env)
 endif()
 # rd_vuprepass_selftest_sink_fail: the store passes' two throwaway targets
 # refused (ICO_RD_VU_REC_SINK_FAIL=1, rd_vu_rec_sink.h) under the stores asked
-# for: a store pass without them would begin with no attachment while its
+# for, where the targets are wanted (VkRenderPass objects with the subpass read
+# on: ICO_VK_LEGACY_PASSES=1, ICO_VK_SUBPASS_READ=1; elsewhere the passes begin
+# without an attachment and nothing is made): a store pass without them would begin with no attachment while its
 # pipelines name one (invalid usage), so the stores are off for the run before
 # the self-test (rd_vu_record.c rd__vu_record_shaders) and the record takes the
 # compute dispatches: both lines and the self-test's compute verdict, under
@@ -111,7 +113,7 @@ add_test(NAME rd_vuprepass_selftest_sink_fail
                  -P "${_vst}")
 set_tests_properties(rd_vuprepass_selftest_sink_fail
                      PROPERTIES ENVIRONMENT
-                                "${_env};ICO_RD_VU_RECORD=stores;ICO_RD_VU_REC_SINK_FAIL=1")
+                                "${_env};ICO_RD_VU_RECORD=stores;ICO_RD_VU_REC_SINK_FAIL=1;ICO_VK_LEGACY_PASSES=1;ICO_VK_SUBPASS_READ=1")
 # rd_vuprepass_selftest_lossrung: the phones' loss rung (port/rhi/rhi_tile_rule.h:
 # a start after a lost one on a tile-based phone GPU draws without the VU
 # pre-pass), Arm's phone GPU faked (ICO_VK_FAKE_VENDOR=0x13B5) and one lost
