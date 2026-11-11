@@ -420,13 +420,19 @@ int ico_diag_startup_end_count(int kind);
 /* The loss ladder's count (diag_host.c loss_ladder_export; issues 179 and
    211): the starts in a row that lost the graphics device before this one,
    on every device and whatever robust access is (a hand-set gpu_robust
-   keeps the row since v0.11.4), the desktop's loss-order restarts counted
-   in a slot of their own ("loss_chain <n>" in the counts file). Set by
+   keeps the row since v0.11.4), in a slot of its own ("loss_row <n>" in
+   the counts file: the loss slot is the robust step's count, which a start
+   that ran robust without a loss keeps), the desktop's loss-order restarts
+   counted in theirs ("loss_chain <n>") and added to the row, at the
+   restarts and at the fresh start after them. Set by
    ico_diag_startup_activity_begin and handed to the graphics backend as
-   ICO_LOSS_ROW (unset when 0; port/rhi/rhi_tile_rule.h): after one the
-   v0.11.2 barrier scopes, after two the single submission wait too. Logged: "ico_pc: loss
-   ladder: <n> start(s) in a row lost the graphics device before this one
-   ...". Never written to the settings. */
+   ICO_LOSS_ROW (unset when 0; port/rhi/rhi_tile_rule.h): on a desktop's
+   Vulkan after one the v0.11.2 barrier scopes, after two the single
+   submission wait too; on a tile-based phone GPU the VU pre-pass off; the
+   other backends change nothing. Logged: "ico_pc: loss ladder: <n>
+   start(s) in a row lost the graphics device before this one ...". Never
+   written to the settings. The window sets ICO_LOSS_ROW one less around the
+   start-up loss bisect (the lost start's row). */
 unsigned int ico_diag_startup_loss_row(void);
 /* The start-up set's policy for this start (issues 93 and 107), after
    ico_diag_startup_activity_begin (file_lazy: its result) and before the

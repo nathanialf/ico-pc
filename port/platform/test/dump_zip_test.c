@@ -292,7 +292,41 @@ static void test_why(const char *base)
     CHECK(got == NULL && strstr(why, "no frame number 2 (.rddump) inside (1 found)") != NULL);
     /* the old entry point is the same without a message */
     CHECK(ico_dump_zip_extract_nth(zip, 1, &size, NULL, 0) == NULL);
-    (void)b;
+    /* the lost frame's entry damaged (its stored bytes changed: the CRC
+       fails) and the frame before intact: the lost frame is said to be
+       damaged, never the next .rddump handed back as frame 1 */
+    {
+        const IcoZipMem e[2] = {{"loss-1-lost.rddump", a, sizeof(a)},
+                                {"loss-1-before.rddump", b, sizeof(b)}};
+        mz_zip_archive z;
+        void *out = NULL;
+        size_t outSize = 0;
+
+        memset(&z, 0, sizeof(z));
+        CHECK(mz_zip_writer_init_heap(&z, 0, 0));
+        for (int i = 0; i < 2; i++) {
+            CHECK(mz_zip_writer_add_mem(&z, e[i].name, e[i].data, e[i].size, MZ_NO_COMPRESSION));
+        }
+        CHECK(mz_zip_writer_finalize_heap_archive(&z, &out, &outSize));
+        mz_zip_writer_end(&z);
+        for (size_t i = 0; out != NULL && i + sizeof(a) <= outSize; i++) {
+            if (memcmp((const char *)out + i, a, sizeof(a)) == 0) {
+                ((char *)out)[i] ^= 0x20; /* "The lost frame": the CRC no longer matches */
+                break;
+            }
+        }
+        CHECK(put(zip, out, outSize) == 0);
+        mz_free(out);
+        got = ico_dump_zip_extract_why(zip, 0, &size, name, sizeof(name), why, sizeof(why));
+        CHECK(got == NULL);
+        CHECK(strstr(why, "whose frame entry loss-1-lost.rddump") != NULL);
+        CHECK(strstr(why, "could not be extracted") != NULL);
+        free(got);
+        /* the second frame is still the second */
+        got = ico_dump_zip_extract_why(zip, 1, &size, name, sizeof(name), why, sizeof(why));
+        CHECK(got != NULL && size == sizeof(b) && memcmp(got, b, size) == 0 && why[0] == '\0');
+        free(got);
+    }
     remove(zip);
     remove(lost);
     remove(log);

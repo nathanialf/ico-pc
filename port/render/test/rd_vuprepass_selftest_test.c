@@ -47,7 +47,11 @@
  *      stored, no colour target) on; the device table's row
  *      (RhiLimits.vuPrepassOff, issue 123) leaves it off with the row's
  *      reason unless ICO_RD_VU_PREPASS=on, which does not pass the byte
- *      bound (without vertex stores).
+ *      bound (without vertex stores); the phones' loss rung
+ *      (RhiLimits.vuPrepassLoss) the same with the loss's words.
+ * notrun with ICO_VK_FAKE_VENDOR=0x13B5 and ICO_LOSS_ROW=1 is the rung on
+ * this device (a phone GPU faked, a start after a lost one): "off by the
+ * loss ladder (a tile-based phone GPU; the previous start lost ...)".
  * notrun with ICO_VK_FAKE_NO_PREPASS=1 is the row on this device: the
  * summary says "off by the device table (ICO_VK_FAKE_NO_PREPASS; ...)".
  * The log lines are matched by test/rd_vuprepass_selftest.cmake. */
@@ -203,6 +207,53 @@ static void checkTable(RhiLimits *lim)
     putEnv("ICO_RD_VU_PREPASS", had ? saved : NULL);
 }
 
+/* 6c. the phones' loss rung (RhiLimits.vuPrepassLoss, rhi_tile_rule.h: a
+ * start after a lost one on a tile-based phone GPU): off with the loss's
+ * words for this start; ICO_RD_VU_PREPASS=on passes it as it passes the
+ * device table's row, =0 is the settings' own reason; without the rung
+ * (a desktop, or no lost start) on */
+static void checkLossRung(RhiLimits *lim)
+{
+    const char *had = getenv("ICO_RD_VU_PREPASS");
+    char saved[64] = "";
+    if (had) {
+        snprintf(saved, sizeof(saved), "%s", had);
+    }
+    lim->vuPrepassOff = NULL;
+    lim->colorBytesPerPixel = 0u;
+    lim->vuPrepassLoss = "the previous start lost the graphics device";
+
+    static const struct {
+        const char *env;
+        bool on;
+        const char *why;
+    } cases[] = {
+        {NULL, false,
+         "by the loss ladder (a tile-based phone GPU; the previous start lost the graphics "
+         "device: this start only; [dev] vu_prepass = true draws with it anyway)"},
+        {"1", false, "by the loss ladder (a tile-based phone GPU; "},
+        {"0", false, "by the settings ([dev] vu_prepass = false"},
+        {"on", true, ""},
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        putEnv("ICO_RD_VU_PREPASS", cases[i].env);
+        rd__vu_prepass_init(lim);
+        CHECK(g_rd.vuPrepass == cases[i].on &&
+                  strncmp(g_rd.vuPrepassWhy, cases[i].why, strlen(cases[i].why)) == 0 &&
+                  (cases[i].on || cases[i].why[0] != '\0'),
+              "the loss rung with ICO_RD_VU_PREPASS=%s: the pre-pass %s (\"%s\"), %s (\"%s\") "
+              "expected",
+              cases[i].env ? cases[i].env : "(unset)", g_rd.vuPrepass ? "on" : "off",
+              g_rd.vuPrepassWhy, cases[i].on ? "on" : "off", cases[i].why);
+    }
+    putEnv("ICO_RD_VU_PREPASS", had ? saved : NULL);
+    lim->vuPrepassLoss = NULL;
+    rd__vu_prepass_init(lim);
+    CHECK(g_rd.vuPrepass || strstr(g_rd.vuPrepassWhy, "loss ladder") == NULL,
+          "without the rung the pre-pass is off by the loss ladder: %s", g_rd.vuPrepassWhy);
+}
+
 int main(int argc, char **argv)
 {
     if (argc < 2) {
@@ -246,12 +297,18 @@ int main(int argc, char **argv)
     const char *fakeRow = getenv("ICO_VK_FAKE_NO_PREPASS");
     const bool tableOff = fakeRow && fakeRow[0] && fakeRow[0] != '0';
     /* the record's write after the verdict (rd_vu_record.h) */
+    /* the phones' loss rung on this device (rd_vuprepass_selftest_lossrung:
+       Arm's phone GPU faked, ICO_LOSS_ROW=1) */
+    const bool rungOff = rhi_limits()->vuPrepassLoss != NULL;
     const char *want = wantOn ? "; VU pre-pass on (self-test: ok; record "
                        : notRun && tableOff
                            ? "; VU pre-pass off by the device table (ICO_VK_FAKE_NO_PREPASS; [dev] "
                              "vu_prepass = true draws with it anyway) (self-test not run); "
-                       : notRun ? "; VU pre-pass off by the settings ("
-                                : "; VU pre-pass off (self-test: the pictures differ: ";
+                       : notRun && rungOff ? "; VU pre-pass off by the loss ladder (a tile-based "
+                                             "phone GPU; the previous start lost the graphics "
+                                             "device: this start only; "
+                       : notRun            ? "; VU pre-pass off by the settings ("
+                                           : "; VU pre-pass off (self-test: the pictures differ: ";
     CHECK(strstr(sum, want) != NULL, "the summary lacks \"%s\"", want);
     if (wantOn) {
         /* the pre-pass's draws batched unless ICO_RD_VU_PREPASS_BATCH=0
@@ -360,6 +417,7 @@ int main(int argc, char **argv)
         }
         lim.vertexStores = stores;
         checkTable(&lim);
+        checkLossRung(&lim);
     }
     rd_shutdown();
     if (failures) {

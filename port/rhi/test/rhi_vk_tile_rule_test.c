@@ -1,11 +1,18 @@
 /* rhi_vk_tile_rule_test.c: rhi_tile_rule.h's rule (pure: no device).
  *
- *   - a tile-based GPU runs the wide scopes and the single wait, any other
- *     GPU the narrow scopes and the polled wait, each reason naming why;
- *   - the loss ladder on a GPU that is not tile-based: one lost start in a
- *     row before this one gives the wide scopes (the wait stays polled, the
- *     reason says a second gives the single wait), two or more the single
- *     wait too; the reasons say nothing is written to the settings;
+ *   - which devices are tile-based phone GPUs (rhi_tile_phone): every
+ *     Android GPU, iOS through MoltenVK, a faked tile-based vendor; not a
+ *     Mac, a Qualcomm or Turnip desktop or any other desktop;
+ *   - a tile-based phone GPU runs the wide scopes and the single wait, any
+ *     other GPU the narrow scopes and the polled wait, each reason naming
+ *     why;
+ *   - the loss ladder on a desktop: one lost start in a row before this
+ *     one gives the wide scopes (the wait stays polled, the reason says a
+ *     second gives the single wait), two or more the single wait too; the
+ *     reasons say nothing is written to the settings; never the pre-pass
+ *     rung there;
+ *   - on a phone one or more lost starts turn the VU pre-pass off for the
+ *     start (noPrepass, its reason the loss's words);
  *   - the tests' override ICO_VK_FAKE_SCOPES (wide, narrow) picks the scopes
  *     alone on any device, the wait still the device's; another value is
  *     not an override;
@@ -28,12 +35,13 @@ static int s_fails;
         }                                                                                          \
     } while (0)
 
-static RhiTileRule rule(const char *fake, bool tiler, uint32_t row)
+static RhiTileRule rule(const char *fake, bool phone, uint32_t row)
 {
     RhiTileRule r;
-    rhi_tile_rule(fake, tiler, "Arm, vendor 0x13B5", row, &r);
-    printf("fake %s tiler %d row %u: barriers %s | wait %s | %s, %s\n", fake ? fake : "(unset)",
-           (int)tiler, (unsigned)row, r.wideWhy, r.polledWhy, r.wideTag, r.polledTag);
+    rhi_tile_rule(fake, phone, "Arm, vendor 0x13B5", row, &r);
+    printf("fake %s phone %d row %u: barriers %s | wait %s | %s, %s | pre-pass %s (%s)\n",
+           fake ? fake : "(unset)", (int)phone, (unsigned)row, r.wideWhy, r.polledWhy, r.wideTag,
+           r.polledTag, r.noPrepass ? "off" : "as the device", r.prepassWhy);
     return r;
 }
 
@@ -41,25 +49,39 @@ int main(void)
 {
     RhiTileRule r;
 
-    /* a tile-based GPU: both of v0.11.2 */
+    /* which devices are phones: the Android branch (vk_device.c: every
+       Android GPU, whatever its vendor), iOS through MoltenVK, a faked
+       tile-based vendor (the tests); a Mac or a Qualcomm desktop is not
+       (the caller passes ios false off iOS, fakedTileVendor false for a
+       real vendor id) */
+    CHECK(rhi_tile_phone(true, false, false), "an Android GPU is a phone GPU");
+    CHECK(rhi_tile_phone(true, false, true), "an Android GPU with a faked vendor");
+    CHECK(rhi_tile_phone(false, true, false), "iOS through MoltenVK is a phone GPU");
+    CHECK(rhi_tile_phone(false, false, true), "a faked tile-based vendor is a phone GPU");
+    CHECK(!rhi_tile_phone(false, false, false),
+          "a desktop (a Mac, a Qualcomm or Turnip desktop, any other) is not");
+
+    /* a tile-based phone GPU: both of v0.11.2, the pre-pass as the device */
     r = rule(NULL, true, 0);
-    CHECK(r.wide && !r.polled, "tile-based: wide %d polled %d", (int)r.wide, (int)r.polled);
-    CHECK(strcmp(r.wideWhy, "wide (a tile-based GPU, Arm, vendor 0x13B5)") == 0,
-          "tile-based scope reason: %s", r.wideWhy);
-    CHECK(strcmp(r.polledWhy, "single (a tile-based GPU, Arm, vendor 0x13B5)") == 0,
-          "tile-based wait reason: %s", r.polledWhy);
-    CHECK(strcmp(r.wideTag, "wide (tile-based)") == 0 &&
-              strcmp(r.polledTag, "single (tile-based)") == 0,
-          "tile-based tags: %s, %s", r.wideTag, r.polledTag);
+    CHECK(r.phone && r.wide && !r.polled && !r.noPrepass && r.prepassWhy[0] == '\0',
+          "phone: wide %d polled %d no pre-pass %d", (int)r.wide, (int)r.polled, (int)r.noPrepass);
+    CHECK(strcmp(r.wideWhy, "wide (a tile-based phone GPU, Arm, vendor 0x13B5)") == 0,
+          "phone scope reason: %s", r.wideWhy);
+    CHECK(strcmp(r.polledWhy, "single (a tile-based phone GPU, Arm, vendor 0x13B5)") == 0,
+          "phone wait reason: %s", r.polledWhy);
+    CHECK(strcmp(r.wideTag, "wide (tile-based phone)") == 0 &&
+              strcmp(r.polledTag, "single (tile-based phone)") == 0,
+          "phone tags: %s, %s", r.wideTag, r.polledTag);
 
     /* elsewhere: both of v0.11.3 */
     r = rule(NULL, false, 0);
-    CHECK(!r.wide && r.polled, "desktop: wide %d polled %d", (int)r.wide, (int)r.polled);
-    CHECK(strcmp(r.wideWhy, "narrow (a GPU that is not tile-based)") == 0 &&
-              strcmp(r.polledWhy, "polled (a GPU that is not tile-based)") == 0,
+    CHECK(!r.phone && !r.wide && r.polled && !r.noPrepass, "desktop: wide %d polled %d",
+          (int)r.wide, (int)r.polled);
+    CHECK(strcmp(r.wideWhy, "narrow (not a tile-based phone GPU)") == 0 &&
+              strcmp(r.polledWhy, "polled (not a tile-based phone GPU)") == 0,
           "desktop reasons: %s | %s", r.wideWhy, r.polledWhy);
-    CHECK(strcmp(r.wideTag, "narrow (not tile-based)") == 0 &&
-              strcmp(r.polledTag, "polled (not tile-based)") == 0,
+    CHECK(strcmp(r.wideTag, "narrow (not a phone)") == 0 &&
+              strcmp(r.polledTag, "polled (not a phone)") == 0,
           "desktop tags: %s, %s", r.wideTag, r.polledTag);
 
     /* the loss ladder on a desktop */
@@ -78,18 +100,25 @@ int main(void)
           "two lost starts, wait reason: %s", r.polledWhy);
     CHECK(strcmp(r.polledTag, "single (lost starts)") == 0, "two lost starts tag: %s", r.polledTag);
     r = rule(NULL, false, 9);
-    CHECK(r.wide && !r.polled, "nine lost starts");
-    /* ... and on a tiler (already both): the scope's reason names the loss */
+    CHECK(r.wide && !r.polled && !r.noPrepass, "nine lost starts");
+    /* ... and on a phone (already both): the scope's reason names the
+       loss, and the phones' rung turns the pre-pass off for the start */
     r = rule(NULL, true, 1);
-    CHECK(r.wide && !r.polled, "a tiler after a lost start");
-    CHECK(strcmp(r.wideWhy, "wide (a tile-based GPU, Arm, vendor 0x13B5; the previous start lost "
-                            "the graphics device)") == 0,
-          "a tiler after a lost start, reason: %s", r.wideWhy);
+    CHECK(r.wide && !r.polled && r.noPrepass, "a phone after a lost start");
+    CHECK(strcmp(r.wideWhy, "wide (a tile-based phone GPU, Arm, vendor 0x13B5; the previous start "
+                            "lost the graphics device)") == 0,
+          "a phone after a lost start, reason: %s", r.wideWhy);
+    CHECK(strcmp(r.prepassWhy, "the previous start lost the graphics device") == 0,
+          "a phone after a lost start, the pre-pass reason: %s", r.prepassWhy);
+    r = rule(NULL, true, 2);
+    CHECK(r.wide && !r.polled && r.noPrepass &&
+              strcmp(r.prepassWhy, "2 starts in a row lost the graphics device") == 0,
+          "a phone after two lost starts: the pre-pass reason: %s", r.prepassWhy);
 
     /* the tests' override: the scopes alone */
     r = rule("narrow", true, 3);
-    CHECK(!r.wide && !r.polled, "narrow faked on a tiler after 3 losses: wide %d polled %d",
-          (int)r.wide, (int)r.polled);
+    CHECK(!r.wide && !r.polled && r.noPrepass,
+          "narrow faked on a phone after 3 losses: wide %d polled %d", (int)r.wide, (int)r.polled);
     CHECK(strcmp(r.wideWhy, "narrow (ICO_VK_FAKE_SCOPES=narrow, a test)") == 0 &&
               strcmp(r.wideTag, "narrow (faked)") == 0,
           "narrow faked: %s, %s", r.wideWhy, r.wideTag);

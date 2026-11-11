@@ -51,6 +51,55 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* ------------------------------------------------------- the barrier trace
+ * rhi_vk.h vkr_test_barrier_trace: every vkCmdPipelineBarrier of this file
+ * noted while the tests ask (the recording thread's; one branch a barrier
+ * otherwise).  The macro below wraps volk's function pointer of the same
+ * name (not expanded again inside itself); its arguments have no side
+ * effects at any call site. */
+#define VKR_TEST_BARRIERS 64u
+static bool s_barTrace;
+static VkrTestBarrier s_bar[VKR_TEST_BARRIERS];
+static uint32_t s_barN;
+
+void vkr_test_barrier_trace(bool on)
+{
+    s_barTrace = on;
+    s_barN = 0;
+}
+
+uint32_t vkr_test_barrier_get(VkrTestBarrier *out, uint32_t cap)
+{
+    for (uint32_t i = 0; out && i < cap && i < s_barN && i < VKR_TEST_BARRIERS; i++) {
+        out[i] = s_bar[i];
+    }
+    return s_barN;
+}
+
+static void vkr_bar_note(VkPipelineStageFlags src, VkPipelineStageFlags dst, uint32_t nMem,
+                         const VkMemoryBarrier *mb, uint32_t nBuf, uint32_t nImg)
+{
+    if (s_barN < VKR_TEST_BARRIERS) {
+        s_bar[s_barN] = (VkrTestBarrier){(uint32_t)src,
+                                         (uint32_t)dst,
+                                         nMem && mb ? (uint32_t)mb->srcAccessMask : 0u,
+                                         nMem && mb ? (uint32_t)mb->dstAccessMask : 0u,
+                                         nMem,
+                                         nBuf,
+                                         nImg};
+    }
+    s_barN++;
+}
+
+#define vkCmdPipelineBarrier(cb, src, dst, dep, nMem, mb, nBuf, bufs, nImg, imgs)                  \
+    do {                                                                                           \
+        if (s_barTrace) {                                                                          \
+            vkr_bar_note((src), (dst), (nMem), (mb), (nBuf), (nImg));                              \
+        }                                                                                          \
+        vkCmdPipelineBarrier((cb), (src), (dst), (dep), (nMem), (mb), (nBuf), (bufs), (nImg),      \
+                             (imgs));                                                              \
+    } while (0)
+
 /* ------------------------------------------------------------------ frames */
 bool vkr_frames_init(void)
 {
@@ -801,7 +850,7 @@ bool vkr_submit_present_signal(VkrFrame *f)
  * for every buffer a copy may touch.  A fragment stage there makes only
  * later fragment work wait for the write, which costs no overlap.
  *
- * The wide scopes (VkrState.tile.wide: a tile-based GPU by default, or a
+ * The wide scopes (VkrState.tile.wide: a tile-based phone GPU by default, or a
  * start after a lost one; rhi_tile_rule.h) are v0.11.2's instead, for every
  * buffer whatever its usage or history: vertex input, the vertex and
  * fragment shaders, the compute shader where the compute record exists and
@@ -1381,8 +1430,14 @@ static void vkr_hz_copy(VkrCmdList *c, VkrTexture *srcTex, VkrBuffer *srcBuf, Vk
         /* rhi.h: a copy into a buffer shaders read waits for their earlier
          * reads, as rhi_cmd_copy_buffer does: at the stages that can have
          * read it (vkr_buf_earlier_stages; the transfer stage for a copy's
-         * read of it, which vkr_hz_buffer also orders within the list) */
-        h.src |= vkr_buf_earlier_stages(dstBuf) | VK_PIPELINE_STAGE_TRANSFER_BIT;
+         * read of it, which vkr_hz_buffer also orders within the list).
+         * The wide scopes keep v0.11.2's first scope here: the shader stages
+         * and vertex input alone, no transfer stage (and so no transfer
+         * write in vkr_hz_flush's source access) unless a hazard of the list
+         * adds it */
+        h.src |= g_vkr.tile.wide
+                     ? vkr_buf_wide_stages() & ~(VkPipelineStageFlags)VK_PIPELINE_STAGE_TRANSFER_BIT
+                     : vkr_buf_earlier_stages(dstBuf) | VK_PIPELINE_STAGE_TRANSFER_BIT;
         h.dst |= VK_PIPELINE_STAGE_TRANSFER_BIT;
         h.force = true;
     }
@@ -2367,8 +2422,11 @@ void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, R
                          NULL);
     vkr_hold_note(VKR_HOLD_COPY, preSrc, VK_PIPELINE_STAGE_TRANSFER_BIT, 0u, false);
     g_vkr.stats.barriers++;
-    if (dPending || sPending) {
-        /* the transfer stage above covered the list's earlier copies of both */
+    if ((dPending || sPending) && !g_vkr.tile.wide) {
+        /* the transfer stage above covered the list's earlier copies of both
+           (the wide scopes keep the hazard record, as v0.11.2 did: a later
+           texture copy of either buffer in this list still makes its own
+           buffer barrier) */
         d->hzXferWrite = d->hzXferRead = false;
         s->hzXferWrite = false;
     }

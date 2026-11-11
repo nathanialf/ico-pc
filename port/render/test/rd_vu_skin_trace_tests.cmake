@@ -15,3 +15,22 @@ add_test(NAME rd_vu_skin_check_stale
                  -P "${_vsk}")
 set_tests_properties(rd_vu_skin_check_stale PROPERTIES ENVIRONMENT
                      "${_env};ICO_RD_VU_SKIN_INTERVAL_MS=0" SKIP_REGULAR_EXPRESSION "SKIP:")
+# stale_phone, clean_phone: the same on a tile-based phone GPU (Arm faked,
+# ICO_VK_FAKE_VENDOR=0x13B5: RhiLimits.tilePhone), where the check issues what
+# v0.11.2's issued: with the careful rule's reason none of its own compiles
+# (v0.11.2's line), no stamps (no readback named not written); the clean frame
+# checked right with the readback laid out without the ring stamp
+add_test(NAME rd_vu_skin_check_stale_phone
+         COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=stale
+                 "-DEXTRA=rd: VU skin check: its box check, its twins' pipelines and its c2 variant are not compiled in the background \\(the test's careful rule, a tile-based phone GPU: none"
+                 "-DNOT_=not written by this replay's copies|compiled carefully"
+                 -P "${_vsk}")
+add_test(NAME rd_vu_skin_check_clean_phone
+         COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=clean
+                 "-DNOT_=vertices wrong|not written by this replay's copies|ring stamps of an earlier replay [1-9]"
+                 -P "${_vsk}")
+set_tests_properties(rd_vu_skin_check_stale_phone PROPERTIES
+                     ENVIRONMENT "${_env};ICO_RD_VU_SKIN_INTERVAL_MS=0;ICO_VK_FAKE_VENDOR=0x13B5"
+                     SKIP_REGULAR_EXPRESSION "SKIP:")
+set_tests_properties(rd_vu_skin_check_clean_phone PROPERTIES
+                     ENVIRONMENT "${_env};ICO_VK_FAKE_VENDOR=0x13B5" SKIP_REGULAR_EXPRESSION "SKIP:")

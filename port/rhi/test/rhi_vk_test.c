@@ -1314,7 +1314,7 @@ static int clockCell(void)
     }
     CLK_CHECK(!held || waitMs >= 100.0, "a held wait of %.1f ms (the release after 150 ms)\n",
               waitMs);
-    /* the single wait (rhi_tile_rule.h: a tile-based GPU or two lost
+    /* the single wait (rhi_tile_rule.h: a tile-based phone GPU or two lost
        starts; rhi_vk_clock_arm fakes Arm's vendor id): one
        wait, no trace, no calibrated pair; ICO_TEST_POLLED_WANT (1 or 0)
        names the wait the device must run */

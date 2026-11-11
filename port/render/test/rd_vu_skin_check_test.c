@@ -90,6 +90,11 @@
  *   reason: the start-up set stopped for memory on Qualcomm's own driver)
  *   the box check's pipeline is compiled in the background and the box
  *   check drawn (before v0.11.3 none was compiled).
+ *   On a tile-based phone GPU (RhiLimits.tilePhone: ICO_VK_FAKE_VENDOR=0x13B5,
+ *   rd_vu_skin_check_stale_phone) the check issues what v0.11.2's issued:
+ *   with the reason no box check is compiled or drawn (22.), and there are
+ *   no stamps, so the readbacks not written again are not told apart (21.:
+ *   none unwritten, none old, none wrong).
  * The log lines are matched by test/rd_vu_skin_check.cmake. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -788,9 +793,10 @@ static int deviceTests(const char *mode, const char *folder)
         /* 22. the careful rule (the window's after a start-up set stopped
          * for memory on Qualcomm's own driver): the box check's pipeline is
          * still compiled in the background, and the box check drawn */
+        const bool phone = rhi_limits()->tilePhone;
         rd_vu_skin_background(memoryFine, "the test's careful rule");
         uint32_t box = 0;
-        for (int i = 0; i < 200 && box == 0; i++) {
+        for (int i = 0; i < 200 && (box == 0 || phone); i++) {
             RdSkinSummary sb;
             (void)rd__vu_skin_check_replays(&f, 0, 1, &sb);
             box += sb.boxChecks;
@@ -798,8 +804,10 @@ static int deviceTests(const char *mode, const char *folder)
                 sleepMs(10);
             }
         }
-        printf("  22. the careful rule: %u box checks drawn\n", box);
-        CHECK(box > 0, "no box check drawn under the careful rule");
+        printf("  22. the careful rule%s: %u box checks drawn\n",
+               phone ? " on a tile-based phone GPU (none compiled)" : "", box);
+        CHECK(phone ? box == 0 : box > 0, "%u box checks drawn under the careful rule (%s)", box,
+              phone ? "a phone: none expected" : "some expected");
         rd_vu_skin_background(NULL, NULL);
         /* 21. each slot's readback written by its first check alone (both
          * written in 22.): the four checks read as not written by their
@@ -811,9 +819,10 @@ static int deviceTests(const char *mode, const char *folder)
         printf("  21. stale: %u checks, %u wrong, %u not written by their replay, %u ring "
                "stamps old\n",
                s.checks, s.wrong, s.unwritten, s.ringOld);
-        CHECK(rc >= 0 && s.checks == 4 && s.unwritten == 4 && s.ringOld == 0,
-              "rc %d, %u checks, %u unwritten, %u ring stamps old", rc, s.checks, s.unwritten,
-              s.ringOld);
+        CHECK(rc >= 0 && s.checks == 4 && s.unwritten == (phone ? 0u : 4u) && s.ringOld == 0 &&
+                  (!phone || s.wrong == 0),
+              "rc %d, %u checks, %u unwritten (%u expected), %u ring stamps old, %u wrong", rc,
+              s.checks, s.unwritten, phone ? 0u : 4u, s.ringOld, s.wrong);
         /* written again: both stamps right */
         const int rc2 = rd__vu_skin_check_replays(&f, 0, 2, &s);
         CHECK(rc2 >= 0 && s.checks == 2 && s.unwritten == 0 && s.ringOld == 0 && s.wrong == 0,

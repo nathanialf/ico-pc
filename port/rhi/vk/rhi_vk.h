@@ -58,6 +58,20 @@ void vkr_test_fake_present_wait(int on);
 void vkr_test_fake_present_wait_hang(uint32_t ms);
 uint32_t vkr_test_present_wait_misuse(void);
 
+/* For rhi_vk_test's scopes cell (rhi_vk_scope.c): the pipeline barriers
+ * vk_cmd.c records from vkr_test_barrier_trace(true) on (the trace cleared),
+ * each its two stage masks, its memory barrier's accesses (0 and 0 without
+ * one) and its buffer and image barrier counts, in recording order;
+ * vkr_test_barrier_get copies up to cap of them and returns how many were
+ * recorded (more than cap: the rest not kept).  Off by default (one branch
+ * a barrier). */
+typedef struct VkrTestBarrier {
+    uint32_t src, dst, memSrc, memDst, nMem, nBuf, nImg;
+} VkrTestBarrier;
+
+void vkr_test_barrier_trace(bool on);
+uint32_t vkr_test_barrier_get(VkrTestBarrier *out, uint32_t cap);
+
 /* For rhi_vk_test's limits cell (ICO_VK_FAKE_LIMITS): the name of the
  * VkPhysicalDeviceLimits member the last pipeline, allocation or sampler
  * reached ("maxBoundDescriptorSets", ...), NULL when none since rhi_init;

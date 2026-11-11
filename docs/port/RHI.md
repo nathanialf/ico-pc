@@ -19,8 +19,8 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/rhi_backend.c` | the real `rhi_*` functions, forwarding to the selected table; the layer classifiers |
 | `port/rhi/rhi_driver_version.h`, `rhi_driver_version.c` | a Vulkan `driverVersion` decoded the way its vendor writes it, for the adapter log line |
 | `port/rhi/rhi_pass_row.h`, `rhi_pass_row.c` | the render pass driver row (Intel's Windows driver at Vulkan 1.3.215 or older takes `VkRenderPass` objects) and the `[dev] legacy_passes` override's words, pure ([Vulkan](#vulkan), **Render passes**) |
+| `port/rhi/rhi_tile_rule.h`, `rhi_tile_rule.c` | the barrier scopes, the submission wait and the phones' pre-pass rung a Vulkan start runs (a tile-based phone GPU, `rhi_tile_phone`; the loss ladder; the tests' `ICO_VK_FAKE_SCOPES`) and their lines' words, pure ([Barrier scopes and the submission wait](#barrier-scopes-and-the-submission-wait)) |
 | `port/rhi/rhi_traffic.h`, `rhi_traffic.c` | the attachment bytes each render pass asks to load, store and clear and the texture copies' bytes, counted on the CPU in `rhi_backend.c`'s forwarders (a table of the textures' formats by handle), summed into `RhiStats.pass*Bytes`, pure ([ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-performance-lines-issues-179-211-and-123)) |
-| `port/rhi/rhi_tile_rule.h`, `rhi_tile_rule.c` | the barrier scopes and the submission wait a Vulkan start runs (a tile-based GPU, the loss ladder, the tests' `ICO_VK_FAKE_SCOPES`) and their lines' words, pure ([Barrier scopes and the submission wait](#barrier-scopes-and-the-submission-wait)) |
 | `port/rhi/rhi_pass_crumb.h`, `rhi_pass_crumb.c` | the render pass the backend last began, stored before the driver's begin call and printed by the crash report (library `ico_pass_crumb`; [Device loss](#device-loss), **The crash report's pass**) |
 | `port/rhi/rhi_adapter.h`, `rhi_adapter.c` | the `[video] adapter` name match and the device-list line's text, linked by the Vulkan and Direct3D backends |
 | `port/rhi/CMakeLists.txt` | the libraries, SDL3's prefix per target, the tests |
@@ -240,62 +240,80 @@ below.
 
 Issues 179 and 211: a Mali-G52 MC2 (Arm's driver r32p1) and an Adreno 710 (Qualcomm's driver
 512.800.80) lost the graphics device at the first pictures of the first 3D scene, three starts in
-a row each, once the buffer barriers were narrowed and the polled submission wait came in; the
-release before both ran there. No cause is proven. Those two changes are each a switch, chosen once
-a device is picked and before it is made (`vk_device.c` `vkr_tile_rule_apply`, the pure rule in
+a row each, on the release that narrowed the buffer barriers and brought the polled submission
+wait. The Mali ran the release before without a loss (its log); there is no log of the Adreno 710
+on the release before. No cause is proven. Those two changes are each a switch, chosen once a
+device is picked and before it is made (`vk_device.c` `vkr_tile_rule_apply`, the pure rule in
 `rhi_tile_rule.c`):
 
-- **The barrier scopes** (`VkrState.tile.wide`,
-  `RhiLimits.wideBarriers`). `narrow` is the next section's: each buffer barrier names only the
-  stages that can touch the buffer, the opening barrier only attachments, the copies' half of the
-  order between lists in the closing barrier, and the renderer's texture uploads and fog table
-  after the VU pre-pass. `wide` is the order before the narrowing, field for field: every buffer
-  barrier's earlier and later stages are vertex input, the vertex and fragment shaders, the compute
-  shader where the compute record exists and the transfer stage, with every read access and the
-  transfer's writes (`vkr_buf_wide_stages`, `VKR_BUF_WIDE_ACCESS`), a buffer copy's wait always
-  holds the transfer stage, the opening barrier holds colour output, the depth tests and the
-  transfer stage on both sides with their writes and reads, the closing barrier the host's read
-  alone, and the renderer records the texture uploads and the fog's table before the meshes and
-  the pre-pass (`port/render/rd_upload_late.h`, `rd__upload_late_reserve`). One difference is left:
-  a copy between a texture and a buffer shaders read adds the transfer stage to its first scope
-  (`vkr_hz_copy`), which the wide opening barrier holds anyway. The picture is the same either way
-  (ordering only; `rd_scope_ab`, `rd_scope_ab_tiler`).
-- **The submission wait** (`VkrState.tile.polled`,
-  `RhiLimits.polledWait`). `on`, the polled wait: a frame slot's recycle wait that blocks past 50 ms
-  becomes 4 ms timed waits reading the slot's query results and the submission counter while its
-  work is in flight (`vk_tsclock.c`, the trace of issue 123's stalls), and
-  `VK_KHR`/`VK_EXT_calibrated_timestamps` enabled where offered. `off`, the single wait: one wait
-  without a time limit, nothing of the slot read while its work runs, the extension not enabled
-  (`vkr_tsclock_pick`; `ICO_VK_CALIBRATED_TIMESTAMPS=0` still turns it off alone). What the stall
-  diagnostics lose with it: the `rd: GPU clock` line of a stalled replay has no trace (which of its
-  stamps were written while the CPU waited, the longest stretch with nothing new, a second run of
-  its first list), and the replay's start is placed from its wait's end instead of on the CPU's
-  clock. The CPU's times of the wait, the counter restarts and the unwritten stamps are still
-  measured.
+- **The barrier scopes** (`VkrState.tile.wide`, `RhiLimits.wideBarriers`). `narrow` is the next
+  section's: each buffer barrier names only the stages that can touch the buffer, the opening
+  barrier only attachments, the copies' half of the order between lists in the closing barrier,
+  and the renderer's texture uploads and fog table after the VU pre-pass. `wide` is the order
+  before the narrowing, field for field: every buffer barrier's earlier and later stages are
+  vertex input, the vertex and fragment shaders, the compute shader where the compute record
+  exists and the transfer stage, with every read access and the transfer's writes
+  (`vkr_buf_wide_stages`, `VKR_BUF_WIDE_ACCESS`), a buffer copy's wait always holds the transfer
+  stage, a copy into a buffer shaders read waits at the shader stages and vertex input alone
+  (`vkr_hz_copy`; the transfer stage only for a hazard of the list), a buffer copy keeps the list's
+  texture-copy hazard record (a later texture copy of either buffer makes its own buffer barrier),
+  the opening barrier holds colour output, the depth tests and the transfer stage on both sides
+  with their writes and reads, the closing barrier the host's read alone, and the renderer records
+  the texture uploads and the fog's table before the meshes and the pre-pass
+  (`port/render/rd_upload_late.h`, `rd__upload_late_reserve`). `rhi_vk_scope.c` checks the wide
+  barriers field for field through the tests' barrier trace (`rhi_vk.h`
+  `vkr_test_barrier_trace`). The picture is the same either way (ordering only; `rd_scope_ab`,
+  `rd_scope_ab_tiler`).
+- **The submission wait** (`VkrState.tile.polled`, `RhiLimits.polledWait`). `polled`: a frame
+  slot's recycle wait that blocks past 50 ms becomes 4 ms timed waits reading the slot's query
+  results and the submission counter while its work is in flight (`vk_tsclock.c`, the trace of
+  issue 123's stalls), and `VK_KHR`/`VK_EXT_calibrated_timestamps` enabled where offered.
+  `single`: one wait without a time limit, nothing of the slot read while its work runs, the
+  extension not enabled (`vkr_tsclock_pick`; `ICO_VK_CALIBRATED_TIMESTAMPS=0` still turns it off
+  alone). What the stall diagnostics lose with it: the `rd: GPU clock` line of a stalled replay has
+  no trace (which of its stamps were written while the CPU waited, the longest stretch with
+  nothing new, a second run of its first list), and the replay's start is placed from its wait's
+  end instead of on the CPU's clock. The CPU's times of the wait, the counter restarts and the
+  unwritten stamps are still measured.
 
-There is no setting: both are `wide` and the single wait on every tile-based GPU (the vendors
-Arm, Qualcomm, Imagination, Samsung, Apple and Broadcom, MoltenVK, every Android GPU: what `rd:
-profile:` calls tile-based, so Qualcomm's driver and Turnip alike) and `narrow` with the polled wait
-elsewhere. The loss ladder, on every device: a start after a lost one runs the wide scopes, after
-two lost starts in a row the single wait too (`ICO_LOSS_ROW` from `port/platform/diag_host.c`, the
-line `ico_pc: loss ladder: ...`; never written to the settings). The lines, one each at the
-device's start, that the reporter's next log is read by:
+There is no setting: both are `wide` and `single` on every tile-based phone GPU
+(`rhi_tile_phone`: every Android GPU, and iOS through MoltenVK) and `narrow` with the polled wait
+elsewhere, Macs (MoltenVK on macOS, whatever the GPU) and Qualcomm or Turnip desktops included. The
+loss ladder (`ICO_LOSS_ROW` from `port/platform/diag_host.c`, the line `ico_pc: loss ladder:
+...`; never written to the settings): on a desktop a start after a lost one runs the wide scopes,
+after two lost starts in a row the single wait too; on a phone, whose scopes and wait are those
+already, a start after one or more lost starts draws without the VU pre-pass
+(`RhiTileRule.noPrepass`, `RhiLimits.vuPrepassLoss`, what the Adreno 740's device-table row does;
+the renderer's `rd: VU pre-pass: off by the loss ladder (...)`; `[dev] vu_prepass = true` written
+in the file passes it, as it passes the table). Direct3D 11, Direct3D 12 and OpenGL (ES) change
+nothing. The start-up loss bisect replays under the lost start's row (one less than this start's;
+`window_host.c`). The lines, at the device's start, that the reporter's next log is read by:
 
-    rhi_vk: barriers: wide (a tile-based GPU, Arm, vendor 0x13B5): every buffer barrier waits for ...
-    rhi_vk: submission wait: single (a tile-based GPU, Arm, vendor 0x13B5): one wait without a time limit for a frame slot, ... (a stalled replay's start is placed from its wait's end, not on the CPU's clock)
-    rhi_vk: timestamps: 48 valid bits, ...; calibrated with the CPU's clock: off (the single submission wait: single (tile-based)) ...
+    rhi_vk: barriers: wide (a tile-based phone GPU, Arm, vendor 0x13B5): every buffer barrier waits for ...
+    rhi_vk: submission wait: single (a tile-based phone GPU, Arm, vendor 0x13B5): one wait without a time limit for a frame slot, ... (a stalled replay's start is placed from its wait's end, not on the CPU's clock)
+    rhi_vk: timestamps: 48 valid bits, ...; calibrated with the CPU's clock: off (the single submission wait: single (tile-based phone)) ...
+    rhi_vk: VU pre-pass: off for this start on a tile-based phone GPU (Arm, vendor 0x13B5; the previous start lost the graphics device; nothing written to the settings): ...
 
-(after a lost start on a desktop: `wide (the previous start lost the graphics device: this start
-only, nothing written to the settings)`), and the summary's profile words end `, barriers wide
-(tile-based), submission wait single (tile-based)`. With both present and no loss, one of the two
-was the cause. The tests alone pick a path: `ICO_VK_FAKE_VENDOR=<id>` (`0x13B5`) is the vendor id
-the rule reads on any device, nothing else, and `ICO_VK_FAKE_SCOPES=wide` or `narrow` the scopes
-alone (the wait stays the device's) (`rhi_vk_scopes_arm`, `rhi_vk_scopes_wide`,
-`rhi_vk_scopes_arm_narrow`, `rhi_vk_clock_arm`, `rd_scope_ab`, `rd_scope_ab_tiler`).
+(the last only after a lost start; on a desktop after a lost start: `wide (the previous start lost
+the graphics device: this start only, nothing written to the settings)`), and the summary's
+profile words end `, barriers wide (tile-based phone), submission wait single (tile-based
+phone)`. With both present and no loss, one of the two was the cause. The tests alone pick a path:
+`ICO_VK_FAKE_VENDOR=<id>` (`0x13B5`) makes the device that vendor's phone GPU for this rule alone,
+nothing else, and `ICO_VK_FAKE_SCOPES=wide` or `narrow` the scopes alone (the wait stays the
+device's) (`rhi_vk_scopes_arm`, `rhi_vk_scopes_wide`, `rhi_vk_scopes_arm_narrow`,
+`rhi_vk_scopes_mac`, `rhi_vk_clock_arm`, `rd_scope_ab`, `rd_scope_ab_tiler`,
+`rd_vuprepass_selftest_lossrung`).
+
+`RhiLimits.tilePhone` carries the phone decision to the renderer, whose other changes of the
+narrowing release in that scene also run as the release before ran them there: the VU skin check issues no ring stamp, no stamp clear
+value and no careful compiles ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)). `RhiLimits.storePassTarget`
+(the Intel driver row, `rhi_pass_row.h`, or the subpass read on) is where the VU record's store
+passes begin on their throwaway target (`port/render/rd_vu_rec_sink.h`); elsewhere, phones
+included, they begin without an attachment, as before.
 
 ### Buffer barriers' scopes
 
-The narrow scopes (where the GPU is not tile-based;
+The narrow scopes (where the GPU is not a tile-based phone GPU;
 [the section above](#barrier-scopes-and-the-submission-wait)): every Vulkan buffer barrier names
 only the stages that can have touched that buffer, and a command list's opening barrier only the
 attachment stages (issue 179). A pipeline barrier's
@@ -2322,8 +2340,9 @@ renderer's [pass ring](RENDER.md#the-pass-ring) after it, before the message box
   counter read; a removed D3D12 device's fence, which reads `UINT64_MAX`); the Vulkan header line
   names the submission sync (`sync timeline` or `sync fences`). `rhi_gpu_progress` hands the same history
   to the renderer (issue 179): `lostReplay`/`lostFrame` the tag of the submission whose wait failed and
-  `openReplay`/`openFrame` the tag of the first of the eight above the finished count, which the
-  loss dump takes to name the lost frame ([The loss dump](RENDER.md#the-loss-dump)); a `vkQueueSubmit`
+  `openReplay`/`openFrame` the tag of the first of the newest seven above the finished count (the
+  eighth slot is the one a submit in progress overwrites, never read; the seven read again when the
+  count moved during the read), which the loss dump takes to name the lost frame ([The loss dump](RENDER.md#the-loss-dump)); a `vkQueueSubmit`
   that fails has no number yet, so neither names it (Vulkan only; the other backends track nothing).
   A Vulkan wait that fails first logs
   how long it waited, the submission it waited for, the last one submitted, the sync and the one the

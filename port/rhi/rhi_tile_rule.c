@@ -6,7 +6,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-void rhi_tile_rule(const char *fakeScopes, bool tiler, const char *device, uint32_t lossRow,
+bool rhi_tile_phone(bool android, bool ios, bool fakedTileVendor)
+{
+    return android || ios || fakedTileVendor;
+}
+
+void rhi_tile_rule(const char *fakeScopes, bool phone, const char *device, uint32_t lossRow,
                    RhiTileRule *out)
 {
     const char *dev = device != NULL && device[0] != '\0' ? device : "the GPU";
@@ -18,6 +23,7 @@ void rhi_tile_rule(const char *fakeScopes, bool tiler, const char *device, uint3
     char lossWords[96] = "";
 
     memset(out, 0, sizeof(*out));
+    out->phone = phone;
     if (lossRow == 1u) {
         snprintf(lossWords, sizeof lossWords, "the previous start lost the graphics device");
     } else if (lossRow > 1u) {
@@ -33,36 +39,44 @@ void rhi_tile_rule(const char *fakeScopes, bool tiler, const char *device, uint3
     } else if (fake == 0) {
         snprintf(out->wideWhy, sizeof out->wideWhy, "narrow (ICO_VK_FAKE_SCOPES=narrow, a test)");
         snprintf(out->wideTag, sizeof out->wideTag, "narrow (faked)");
-    } else if (tiler) {
+    } else if (phone) {
         out->wide = true;
-        snprintf(out->wideWhy, sizeof out->wideWhy, "wide (a tile-based GPU, %s%s%s)", dev,
+        snprintf(out->wideWhy, sizeof out->wideWhy, "wide (a tile-based phone GPU, %s%s%s)", dev,
                  lossRow ? "; " : "", lossRow ? lossWords : "");
-        snprintf(out->wideTag, sizeof out->wideTag, "wide (tile-based)");
+        snprintf(out->wideTag, sizeof out->wideTag, "wide (tile-based phone)");
     } else if (lossRow) {
         out->wide = true;
         snprintf(out->wideWhy, sizeof out->wideWhy,
                  "wide (%s: this start only, nothing written to the settings)", lossWords);
         snprintf(out->wideTag, sizeof out->wideTag, "wide (a lost start)");
     } else {
-        snprintf(out->wideWhy, sizeof out->wideWhy, "narrow (a GPU that is not tile-based)");
-        snprintf(out->wideTag, sizeof out->wideTag, "narrow (not tile-based)");
+        snprintf(out->wideWhy, sizeof out->wideWhy, "narrow (not a tile-based phone GPU)");
+        snprintf(out->wideTag, sizeof out->wideTag, "narrow (not a phone)");
     }
 
     /* the submission wait */
-    if (tiler) {
-        snprintf(out->polledWhy, sizeof out->polledWhy, "single (a tile-based GPU, %s)", dev);
-        snprintf(out->polledTag, sizeof out->polledTag, "single (tile-based)");
+    if (phone) {
+        snprintf(out->polledWhy, sizeof out->polledWhy, "single (a tile-based phone GPU, %s)", dev);
+        snprintf(out->polledTag, sizeof out->polledTag, "single (tile-based phone)");
     } else if (lossRow > 1u) {
         snprintf(out->polledWhy, sizeof out->polledWhy,
                  "single (%s: this start only, nothing written to the settings)", lossWords);
         snprintf(out->polledTag, sizeof out->polledTag, "single (lost starts)");
     } else {
         out->polled = true;
-        snprintf(out->polledWhy, sizeof out->polledWhy, "polled (a GPU that is not tile-based%s)",
+        snprintf(out->polledWhy, sizeof out->polledWhy, "polled (not a tile-based phone GPU%s)",
                  lossRow == 1u ? "; one lost start before this one: a second in a row gives the "
                                  "single wait"
                                : "");
-        snprintf(out->polledTag, sizeof out->polledTag, "polled (not tile-based)");
+        snprintf(out->polledTag, sizeof out->polledTag, "polled (not a phone)");
+    }
+
+    /* the phones' rung: the scopes and the wait are already v0.11.2's
+       there, so a start after a lost one draws without the VU pre-pass (the
+       Adreno 740's device-table row's remedy, vk_device.c kVuPlainOnly) */
+    if (phone && lossRow) {
+        out->noPrepass = true;
+        snprintf(out->prepassWhy, sizeof out->prepassWhy, "%s", lossWords);
     }
 }
 

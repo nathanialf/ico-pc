@@ -1556,11 +1556,14 @@ static bool vkr_is_tiler(uint32_t vendor); /* below, with the vendor table */
  * 179 and 211): the barrier scopes and the submission wait this device
  * runs (VkrState.tile), decided once the device is picked and before it is
  * made (the calibrated timestamps' extension follows the wait, vk_tsclock.c
- * vkr_tsclock_pick).  Tile-based as port/render/rd_profile.c calls it: the
- * vendors rhi_tile_vendor names, MoltenVK, every Android GPU.
+ * vkr_tsclock_pick).  A tile-based phone GPU (rhi_tile_phone): every
+ * Android GPU, and iOS through MoltenVK; a Mac (MoltenVK on macOS) and a
+ * Qualcomm or Turnip desktop keep v0.11.3's narrow scopes and polled wait.
  * No setting: the tests alone pick, ICO_VK_FAKE_VENDOR=<id> (0x13B5 for Arm)
- * the vendor id this rule reads, nothing else, and ICO_VK_FAKE_SCOPES=wide or
- * narrow the scopes alone on any device.  Two lines, each switch's value and why: the
+ * a phone GPU of that vendor for this rule alone, nothing else, and
+ * ICO_VK_FAKE_SCOPES=wide or narrow the scopes alone on any device.  Two
+ * lines, each switch's value and why, and a third on a phone after a lost
+ * start (the VU pre-pass off for this start, RhiLimits.vuPrepassLoss): the
  * reporter's next log is read by them (with them present and no loss, the
  * cause was one of the two). */
 static void vkr_tile_rule_apply(void)
@@ -1577,10 +1580,17 @@ static void vkr_tile_rule_apply(void)
         }
     }
     const char *name = rhi_tile_vendor_name(vendor);
-    bool tiler = name != NULL || g_vkr.moltenvk;
 #ifdef __ANDROID__
-    tiler = true; /* every Android GPU (vkr_fill_limits' RhiLimits.tiler) */
+    const bool android = true; /* every Android GPU (vkr_fill_limits' RhiLimits.tiler) */
+#else
+    const bool android = false;
 #endif
+#ifdef ICO_IOS
+    const bool ios = g_vkr.moltenvk; /* Apple's phone and tablet GPUs */
+#else
+    const bool ios = false;
+#endif
+    const bool phone = rhi_tile_phone(android, ios, faked && name != NULL);
     char device[80];
     snprintf(device, sizeof device, "%s, vendor 0x%04X%s",
              g_vkr.moltenvk ? "MoltenVK"
@@ -1588,7 +1598,7 @@ static void vkr_tile_rule_apply(void)
                             : "an Android GPU",
              (unsigned)vendor, faked ? " (ICO_VK_FAKE_VENDOR)" : "");
     const char *row = getenv("ICO_LOSS_ROW");
-    rhi_tile_rule(getenv("ICO_VK_FAKE_SCOPES"), tiler, device, rhi_tile_loss_row(row), &g_vkr.tile);
+    rhi_tile_rule(getenv("ICO_VK_FAKE_SCOPES"), phone, device, rhi_tile_loss_row(row), &g_vkr.tile);
     VKR_LOG("barriers: %s: %s", g_vkr.tile.wideWhy,
             g_vkr.tile.wide
                 ? "every buffer barrier waits for and is seen by the vertex input, vertex, "
@@ -1610,6 +1620,11 @@ static void vkr_tile_rule_apply(void)
                   "nothing new, a second run of its first list are not measured) and calibrated "
                   "timestamps are not enabled (a stalled replay's start is placed from its "
                   "wait's end, not on the CPU's clock)");
+    if (g_vkr.tile.noPrepass) {
+        VKR_LOG("VU pre-pass: off for this start on a tile-based phone GPU (%s; %s; nothing "
+                "written to the settings): the renderer's VU pre-pass line says so",
+                device, g_vkr.tile.prepassWhy);
+    }
 }
 
 /* The driver row and its override (rhi_pass_row.h) over legacyPasses as
@@ -1624,6 +1639,7 @@ static void vkr_tile_rule_apply(void)
 static void vkr_pass_row_apply(void)
 {
     g_vkr.legacyWhy = NULL;
+    g_vkr.passRowHit = false;
 #if VKR_LEGACY_PASSES
     const int ov = rhi_vk_pass_override(getenv("ICO_VK_LEGACY_PASSES"));
 #ifdef _WIN32
@@ -1633,6 +1649,9 @@ static void vkr_pass_row_apply(void)
 #endif
     const char *row =
         rhi_vk_pass_row(g_vkr.props.vendorID, g_vkr.driverID, g_vkr.props.apiVersion, windows);
+    /* the store passes' throwaway targets follow the row whatever the path
+       (RhiLimits.storePassTarget) */
+    g_vkr.passRowHit = row != NULL;
     if (g_vkr.legacyPasses) {
         if (ov == 0) {
             VKR_LOG("render passes: [dev] legacy_passes = false (ICO_VK_LEGACY_PASSES=0) asks for "
@@ -3067,6 +3086,13 @@ static void vkr_fill_limits(void)
     o->polledWait = g_vkr.tile.polled;
     o->barrierWords = g_vkr.tile.wideTag;
     o->waitWords = g_vkr.tile.polledTag;
+    o->tilePhone = g_vkr.tile.phone;
+    /* the VU record's store passes begin on a colour target only on the
+     * Intel driver row (rhi_pass_row.h: the crash inside Intel's
+     * vkCmdBeginRendering) and with the subpass read on; elsewhere without
+     * an attachment, as v0.11.2 (port/render/rd_vu_rec_sink.h) */
+    o->storePassTarget = g_vkr.passRowHit || g_vkr.subpassRead;
+    o->vuPrepassLoss = g_vkr.tile.noPrepass ? g_vkr.tile.prepassWhy : NULL;
     /* v0.7.10: the device profile's facts (rhi.h) */
     /* either path's read (RhiLimits.localReadSubpass: the subpass read,
      * the colour of a pass with a depth target only) */
@@ -3380,26 +3406,36 @@ bool rhi_gpu_progress(RhiGpuProgress *out)
     vkr_pipe_background_progress(&out->bgPipesDone, &out->bgPipesLeft);
     {
         /* the tags of the submission whose wait failed and of the first one
-           above `finished`, from the last eight submissions (atomic words
-           the submitting thread stores in vkr_note_submit: a value and its
-           tag read across a submit in progress may belong to two
-           neighbours, which only moves a diagnostic by one submission) */
+           above `finished`, from the last submissions (atomic words the
+           submitting thread stores in vkr_note_submit, the slot after the
+           newest first: cnt % VKR_SUBMIT_HISTORY).  That slot is the oldest
+           of a full history and the one a submit in progress overwrites, so
+           it is not read (the newest seven are); and when the count moved
+           while they were read, a later submit may have overwritten one of
+           them: read again (at most four times; the last read stands) */
         const uint64_t lostWait = __atomic_load_n(&g_vkr.lostWaitValue, __ATOMIC_RELAXED);
-        const uint32_t cnt = __atomic_load_n(&g_vkr.progTagCount, __ATOMIC_ACQUIRE);
-        const uint32_t n = cnt < VKR_SUBMIT_HISTORY ? cnt : VKR_SUBMIT_HISTORY;
+        for (int attempt = 0; attempt < 4; attempt++) {
+            const uint32_t cnt = __atomic_load_n(&g_vkr.progTagCount, __ATOMIC_ACQUIRE);
+            const uint32_t n = cnt < VKR_SUBMIT_HISTORY ? cnt : VKR_SUBMIT_HISTORY - 1u;
 
-        for (uint32_t k = 0; k < n; k++) {
-            const uint32_t i = (cnt - n + k) % VKR_SUBMIT_HISTORY;
-            const uint64_t value = __atomic_load_n(&g_vkr.progTagValue[i], __ATOMIC_RELAXED);
-            const uint64_t tag = __atomic_load_n(&g_vkr.progTagTag[i], __ATOMIC_RELAXED);
+            out->openReplay = out->openFrame = 0;
+            out->lostReplay = out->lostFrame = 0;
+            for (uint32_t k = 0; k < n; k++) {
+                const uint32_t i = (cnt - n + k) % VKR_SUBMIT_HISTORY;
+                const uint64_t value = __atomic_load_n(&g_vkr.progTagValue[i], __ATOMIC_RELAXED);
+                const uint64_t tag = __atomic_load_n(&g_vkr.progTagTag[i], __ATOMIC_RELAXED);
 
-            if (out->openReplay == 0 && value > out->finished) {
-                out->openReplay = (uint32_t)(tag >> 32);
-                out->openFrame = (uint32_t)tag;
+                if (out->openReplay == 0 && value > out->finished) {
+                    out->openReplay = (uint32_t)(tag >> 32);
+                    out->openFrame = (uint32_t)tag;
+                }
+                if (lostWait != 0 && value == lostWait) {
+                    out->lostReplay = (uint32_t)(tag >> 32);
+                    out->lostFrame = (uint32_t)tag;
+                }
             }
-            if (lostWait != 0 && value == lostWait) {
-                out->lostReplay = (uint32_t)(tag >> 32);
-                out->lostFrame = (uint32_t)tag;
+            if (__atomic_load_n(&g_vkr.progTagCount, __ATOMIC_ACQUIRE) == cnt) {
+                break;
             }
         }
     }

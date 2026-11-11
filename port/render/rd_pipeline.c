@@ -830,11 +830,12 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
              * key's colorFmt UNKNOWN, rd__vu_pre_key): the store build, group
              * 1's store layout, no fragment shader, no rasterization; the
              * tick stage's lane is vu_tri.w (the key's two masks stay two
-             * keys, the same pipeline twice).  The pass's one target, the
-             * throwaway one (rd_vu_rec_sink.h: the passes never begin
-             * without an attachment), named with its format and a write
-             * mask of 0 so the pipeline matches the pass on both render
-             * pass paths; the key is unchanged */
+             * keys, the same pipeline twice).  Where the passes begin on the
+             * throwaway target (rd_vu_rec_sink.h rd__vu_rec_sink_wanted: the
+             * Intel driver row, the subpass read) it is the pipeline's one
+             * target, named with its format and a write mask of 0 so the
+             * pipeline matches the pass on both render pass paths; elsewhere
+             * no target, as v0.11.2; the key is unchanged */
             layouts[1] = g_rdRec.layoutVuPre;
             d->vertex = rd__vu_record_vs(k->vs, g_rd.vuPreBatch && g_rd.vsBatch[k->vs].id);
             if (!d->vertex.id || !layouts[1].id) {
@@ -844,9 +845,13 @@ static bool pipelineDesc(const RdPipeKeyInt *k, RhiPipelineDesc *d, RhiBindGroup
             d->layoutCount = 3;
             d->topology = RHI_TOPO_POINT_LIST;
             d->cullNone = true;
-            d->colorFormats[0] = RD_VU_REC_SINK_FMT;
-            d->blend[0].writeMask = 0;
-            d->colorCount = 1;
+            if (rd__vu_rec_sink_wanted()) {
+                d->colorFormats[0] = RD_VU_REC_SINK_FMT;
+                d->blend[0].writeMask = 0;
+                d->colorCount = 1;
+            } else {
+                d->colorCount = 0;
+            }
             d->depthFormat = RHI_FMT_UNKNOWN;
             d->noRaster = true;
             d->debugName = "rd vu pre-pass (stores)";

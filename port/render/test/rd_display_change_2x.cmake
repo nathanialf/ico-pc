@@ -7,7 +7,8 @@
 # vkCmdBeginRendering in the first picture after a live switch from 1x to 2x;
 # port/rhi/rhi_pass_row.h): a live Original 1x -> Enhanced 2x switch with the
 # render thread, the frame holding VU meshes through the record-stores
-# pre-pass (the store passes on their throwaway target, rd_vu_rec_sink.h), a
+# pre-pass (the store passes without an attachment, or on their throwaway
+# target where RhiLimits.storePassTarget says: rd_vu_rec_sink.h), a
 # DATE draw, the shadow count, the fog and the crack fill, under the
 # validation layer when the toolchain has it: no validation error, every part
 # drawn after the switch, the render pass breadcrumb (rhi_pass_crumb.h) of the
@@ -20,6 +21,12 @@
 #   rd_display_change_2x_vk11    through a Vulkan 1.1 driver's absences
 #                                (ICO_VK_FAKE_API=1.1: VkRenderPass objects,
 #                                the fence ring), label vk11
+#   rd_display_change_2x_sinks   VkRenderPass objects with the subpass read
+#                                on (ICO_VK_SUBPASS_READ=1): the store passes
+#                                on their throwaway targets (the Intel driver
+#                                row's shape, which no CI device has)
+# ICO_TEST_SINK_WANT: 0 on the first three (the store passes without an
+# attachment, as v0.11.2's), 1 on _sinks.
 add_executable(rd_display_change_2x_test test/rd_display_change_2x_test.c)
 target_compile_options(rd_display_change_2x_test PRIVATE ${ICO_SEMANTIC_OPTIONS}
                        ${ICO_PORT_WARNINGS})
@@ -28,13 +35,17 @@ target_link_libraries(rd_display_change_2x_test PRIVATE ico_render ico_pass_crum
 ico_copy_sdl3_dll(rd_display_change_2x_test)
 
 set(_dc2 ${_env} "ICO_RD_VU_PREPASS=1" "ICO_RD_VU_RECORD=stores")
-set(_dc2_legacy ${_dc2} "ICO_VK_LEGACY_PASSES=1")
-set(_dc2_vk11 ${_dc2} "ICO_VK_FAKE_API=1.1")
+set(_dc2_legacy ${_dc2} "ICO_VK_LEGACY_PASSES=1" "ICO_TEST_SINK_WANT=0")
+set(_dc2_vk11 ${_dc2} "ICO_VK_FAKE_API=1.1" "ICO_TEST_SINK_WANT=0")
+set(_dc2_sinks ${_dc2} "ICO_VK_LEGACY_PASSES=1" "ICO_VK_SUBPASS_READ=1" "ICO_TEST_SINK_WANT=1")
+list(APPEND _dc2 "ICO_TEST_SINK_WANT=0")
 add_test(NAME rd_display_change_2x COMMAND rd_display_change_2x_test)
 add_test(NAME rd_display_change_2x_legacy COMMAND rd_display_change_2x_test --legacy)
 add_test(NAME rd_display_change_2x_vk11 COMMAND rd_display_change_2x_test --legacy)
+add_test(NAME rd_display_change_2x_sinks COMMAND rd_display_change_2x_test --legacy)
 set_tests_properties(rd_display_change_2x rd_display_change_2x_legacy rd_display_change_2x_vk11
-                     PROPERTIES SKIP_RETURN_CODE 77)
+                     rd_display_change_2x_sinks PROPERTIES SKIP_RETURN_CODE 77)
+set_tests_properties(rd_display_change_2x_sinks PROPERTIES ENVIRONMENT "${_dc2_sinks}")
 set_tests_properties(rd_display_change_2x PROPERTIES ENVIRONMENT "${_dc2}")
 set_tests_properties(rd_display_change_2x_legacy PROPERTIES ENVIRONMENT "${_dc2_legacy}")
 set_tests_properties(rd_display_change_2x_vk11 PROPERTIES ENVIRONMENT "${_dc2_vk11}")

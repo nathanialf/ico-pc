@@ -7,8 +7,13 @@
  * the one shape of the replay that the reports of a crash inside Intel's
  * vkCmdBeginRendering share (issue 123's Intel HD 530 on driver 101.2125,
  * Vulkan 1.3.215, and other ports' reports on the same drivers:
- * port/rhi/rhi_pass_row.h).  Every store pass now begins on such a target,
- * on every GPU and both render pass paths: ICO_VU_REC_W x 1 texels of the
+ * port/rhi/rhi_pass_row.h).  Where RhiLimits.storePassTarget says so (the
+ * Intel driver row, or the subpass read on: rd__vu_rec_sink_wanted) every
+ * store pass begins on such a target, on both render pass paths; everywhere
+ * else (v0.11.4: the phones of issues 179 and 211 lost the device in the
+ * first 3D scene on v0.11.3, cause unknown, so they run what v0.11.2 ran)
+ * the passes begin without an attachment and the store pipelines name no
+ * colour target, as before v0.11.3.  The target: ICO_VU_REC_W x 1 texels of the
  * cheapest colour format a device must render to (R8_UNORM, a required
  * format: vk_device.c vkr_rate_device), loaded DONT_CARE, stored
  * DONT_CARE, never sampled, copied or read back.  The store pipelines name
@@ -38,21 +43,30 @@
 #define RD_VU_REC_SINK_FMT RHI_FMT_R8_UNORM
 #define RD_VU_REC_SINKS 2u
 
+/* Whether the store passes begin on the targets on this device
+ * (RhiLimits.storePassTarget); the store pipelines name one only then
+ * (rd_pipeline.c) */
+bool rd__vu_rec_sink_wanted(void);
 /* Whether the two targets exist, made at the first call (one line); false
  * when they could not be made (one line; not tried again on this device).
+ * True without making anything where they are not wanted (one line: the
+ * passes begin without an attachment).
  * The pre-pass asks before a replay's record under the stores
  * (rd_replay_vu.c rd__vu_prepass): without them a store pass would begin
  * without an attachment while its pipelines name one (invalid usage), so
  * the stores are turned off for the run (rd__vu_record_fall_back) */
 bool rd__vu_rec_sink_ready(void);
 /* The next of the two targets in RHI_STATE_RENDER_TARGET on cl (made as
- * rd__vu_rec_sink_ready makes them); {0} when they could not be made */
+ * rd__vu_rec_sink_ready makes them); {0} when they could not be made, or
+ * are not wanted (no attachment: counted by rd__vu_rec_sink_bare_passes) */
 RhiTexture rd__vu_rec_sink(RhiCommandList cl);
 /* target i (0 or 1; {0} before the first call or past them), for the tests */
 RhiTexture rd__vu_rec_sink_target(uint32_t i);
 /* the store passes begun on the target, and without it (it could not be
  * made), since the start (the replay tool's --stats and the tests) */
 uint32_t rd__vu_rec_sink_passes(uint32_t *without);
+/* the store passes begun without an attachment where none is wanted */
+uint32_t rd__vu_rec_sink_bare_passes(void);
 /* the targets destroyed (rd__vu_prepass_shutdown); the counts kept */
 void rd__vu_rec_sink_free(void);
 

@@ -168,7 +168,7 @@ endif()
 
 # --- The tile-based phones' rule (CPU only, every target) --------------------
 # rhi_tile_rule.c: the barrier scopes and the submission wait a Vulkan start
-# runs (a tile-based GPU, the lost starts in a row before it, the tests'
+# runs (a tile-based phone GPU, the lost starts in a row before it, the tests'
 # ICO_VK_FAKE_SCOPES; issues 179 and 211), and their lines' words.
 add_executable(rhi_vk_tile_rule_test test/rhi_vk_tile_rule_test.c rhi_tile_rule.c)
 target_include_directories(rhi_vk_tile_rule_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
@@ -696,8 +696,8 @@ if(_ico_have_vk)
         set_tests_properties(rhi_vk_scopes_novs PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
                              "${_ico_vk_scopesn_env}")
         # the wide scopes (port/rhi/rhi_tile_rule.h; issues 179 and 211:
-        # v0.11.2's, on every tile-based GPU by default since v0.11.4):
-        # _arm on Arm's vendor id faked (ICO_VK_FAKE_VENDOR=0x13B5, the rule's
+        # v0.11.2's, on every tile-based phone GPU by default since v0.11.4):
+        # _arm on Arm's phone GPU faked (ICO_VK_FAKE_VENDOR=0x13B5, the rule's
         # alone), _wide the wide scopes faked on lavapipe
         # (ICO_VK_FAKE_SCOPES=wide), _arm_narrow Arm faked with the narrow
         # scopes faked (ICO_VK_FAKE_SCOPES=narrow: the override rules); each
@@ -705,8 +705,15 @@ if(_ico_have_vk)
         # the scopes the device must run (rhi_vk_scopes: narrow, lavapipe is
         # not tile-based).  rhi_vk_clock_arm: the recycled slot's clock alone
         # on Arm faked: the single wait, no trace, no calibrated pair
-        # (ICO_TEST_POLLED_WANT=0)
+        # (ICO_TEST_POLLED_WANT=0).  rhi_vk_scopes_mac: MoltenVK faked
+        # (ICO_VK_FAKE_LIMITS=moltenvk) off iOS is a Mac, not a phone: the
+        # narrow scopes (desktops keep v0.11.3's)
         set(_ico_vk_arm "ICO_VK_FAKE_VENDOR=0x13B5")
+        set(_ico_vk_scopesmac_env ${_ico_vk_scopes_env} "ICO_VK_FAKE_LIMITS=moltenvk"
+                                  "ICO_TEST_SCOPE_WANT=narrow")
+        add_test(NAME rhi_vk_scopes_mac COMMAND rhi_vk_test scopes)
+        set_tests_properties(rhi_vk_scopes_mac PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_scopesmac_env}")
         set(_ico_vk_scopesarm_env ${_ico_vk_scopes_env} ${_ico_vk_arm} "ICO_TEST_SCOPE_WANT=wide")
         set(_ico_vk_scopesw_env ${_ico_vk_scopes_env} "ICO_VK_FAKE_SCOPES=wide"
                                 "ICO_TEST_SCOPE_WANT=wide")

@@ -50,7 +50,7 @@
  *     i, 0x5EED)).
  * Then no validation error.  77 without a Vulkan device.
  *
- * The wide scopes (rhi_tile_rule.h: v0.11.2's, on a tile-based GPU since
+ * The wide scopes (rhi_tile_rule.h: v0.11.2's, on a tile-based phone GPU since
  * v0.11.4; rhi_vk_scopes_arm fakes Arm's vendor id with
  * ICO_VK_FAKE_VENDOR=0x13B5, rhi_vk_scopes_wide fakes the wide scopes on
  * lavapipe with ICO_VK_FAKE_SCOPES=wide, rhi_vk_scopes_arm_narrow fakes Arm
@@ -60,11 +60,32 @@
  * names the fragment stage): B at least 2 (the opening barrier and the
  * mesh upload's wait), C2 and G at least as many as their narrow counts,
  * the same lists clean under the synchronisation checks and the record
- * read back word for word. */
+ * read back word for word.  Then, field for field against v0.11.2's masks
+ * (vk_cmd.c's barrier trace, rhi_vk.h vkr_test_barrier_trace; not on the
+ * global path):
+ *   M1 a mesh upload alone: the opening barrier (colour output, the depth
+ *     tests and the transfer stage on both sides, attachment and transfer
+ *     accesses), the copy's wait (vertex input, vertex, fragment, compute
+ *     where the record is computed, transfer -> transfer; transfer write ->
+ *     transfer read and write), its visibility (transfer -> the same stages;
+ *     every read and the transfer's write) and the closing barrier
+ *     (transfer -> host; transfer write -> host read), four in all;
+ *   M2 a texture copied into the arena (a buffer shaders read): the copy's
+ *     wait the shader stages and vertex input alone, no transfer stage and
+ *     no memory barrier (v0.11.2's vkr_buf_shader_stages), then its held
+ *     back visibility at the list's end, then the closing barrier;
+ *   M3 a texture copy into the arena, a buffer copy into it, a texture copy
+ *     into it again: the buffer copy keeps the list's hazard record, so the
+ *     second texture copy's barrier holds a buffer barrier and the transfer
+ *     stage (v0.11.2's; the narrow scopes clear the record there: none).
+ * The narrow scopes: the closing barrier transfer -> host and transfer,
+ * host read and transfer read and write, and M3's second texture copy
+ * without a buffer barrier. */
 #include "rhi.h"
 #include "rhi_test_common.h"
 #include "rhi_test_spv.h"
 #include "rhi_vk_ps_storage.h"
+#include "vk/rhi_vk.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -397,6 +418,176 @@ static bool setup(ScRes *r)
     return r->g.id && (!r->compute || r->pc.id) && (!r->vstores || r->pv.id);
 }
 
+/* the barrier trace's lists (M1, M2, M3 above); Vulkan's values
+   (vulkan_core.h) */
+enum {
+    SC_VI = 0x4u, /* VK_PIPELINE_STAGE_VERTEX_INPUT_BIT */
+    SC_VS = 0x8u,
+    SC_FS = 0x80u,
+    SC_EFT = 0x100u,
+    SC_LFT = 0x200u,
+    SC_CAO = 0x400u,
+    SC_CS = 0x800u,
+    SC_XFER = 0x1000u,
+    SC_HOST = 0x4000u,
+    SC_A_INDEX = 0x2u, /* VK_ACCESS_INDEX_READ_BIT */
+    SC_A_VATTR = 0x4u,
+    SC_A_UNIFORM = 0x8u,
+    SC_A_SHADER = 0x20u,
+    SC_A_CAR = 0x80u,
+    SC_A_CAW = 0x100u,
+    SC_A_DSAR = 0x200u,
+    SC_A_DSAW = 0x400u,
+    SC_A_TR = 0x800u,
+    SC_A_TW = 0x1000u,
+    SC_A_HOST = 0x2000u,
+};
+
+static RhiTexture s_maskTex; /* M2, M3: a texture a copy reads (COPY_SRC) */
+
+static void fillMaskTex(RhiCommandList cl, const ScRes *r)
+{
+    barrier(cl, s_maskTex, RHI_STATE_UNDEFINED, RHI_STATE_COPY_DST);
+    rhi_cmd_copy_buffer_to_texture(cl, r->up, 0, SC_W * 4u, s_maskTex, 0,
+                                   (RhiRect){0, 0, SC_W, SC_POINTS * 16u / (SC_W * 4u)});
+    barrier(cl, s_maskTex, RHI_STATE_COPY_DST, RHI_STATE_COPY_SRC);
+}
+
+static void texToArena(RhiCommandList cl, const ScRes *r)
+{
+    rhi_cmd_copy_texture_to_buffer(cl, s_maskTex, RHI_ASPECT_COLOR,
+                                   (RhiRect){0, 0, SC_W, SC_POINTS * 16u / (SC_W * 4u)}, r->arena,
+                                   0, SC_W * 4u);
+}
+
+static void fillM2(RhiCommandList cl, const ScRes *r)
+{
+    texToArena(cl, r);
+}
+
+static void fillM3(RhiCommandList cl, const ScRes *r)
+{
+    texToArena(cl, r);
+    upload(cl, r);
+    texToArena(cl, r);
+}
+
+static bool barEq(const VkrTestBarrier *b, uint32_t src, uint32_t dst, uint32_t memSrc,
+                  uint32_t memDst, uint32_t nMem, uint32_t nBuf)
+{
+    return b->src == src && b->dst == dst && b->memSrc == memSrc && b->memDst == memDst &&
+           b->nMem == nMem && b->nBuf == nBuf && b->nImg == 0;
+}
+
+/* one list traced: its barriers into bar (at most cap), their count */
+static uint32_t traceList(const RhiTestConfig *cfg, const char *what, const ScRes *r, ScFill fill,
+                          VkrTestBarrier *bar, uint32_t cap)
+{
+    vkr_test_barrier_trace(true);
+    (void)runList(cfg, what, r, fill);
+    const uint32_t n = vkr_test_barrier_get(bar, cap);
+    vkr_test_barrier_trace(false);
+    for (uint32_t i = 0; i < n && i < cap; i++) {
+        rhi_test_log("%s scopes: list %s barrier %u: 0x%x -> 0x%x, access 0x%x -> 0x%x (%u memory, "
+                     "%u buffer, %u image)\n",
+                     cfg->label, what, i, bar[i].src, bar[i].dst, bar[i].memSrc, bar[i].memDst,
+                     bar[i].nMem, bar[i].nBuf, bar[i].nImg);
+    }
+    return n;
+}
+
+static void checkMasks(const RhiTestConfig *cfg, const ScRes *r, bool wide)
+{
+    VkrTestBarrier bar[16];
+    const uint32_t cs = r->compute ? SC_CS : 0u;
+    /* vk_cmd.c vkr_buf_wide_stages, VKR_BUF_WIDE_ACCESS: v0.11.2's
+       vkr_buf_read_stages and VKR_BUF_READ_ACCESS */
+    const uint32_t wideStages = SC_VI | SC_VS | SC_FS | cs | SC_XFER;
+    const uint32_t wideAccess =
+        SC_A_VATTR | SC_A_INDEX | SC_A_UNIFORM | SC_A_SHADER | SC_A_TR | SC_A_TW;
+    const uint32_t openStages = SC_CAO | SC_EFT | SC_LFT | SC_XFER;
+    const uint32_t closeDst = wide ? SC_HOST : SC_HOST | SC_XFER;
+    const uint32_t closeAccess = wide ? SC_A_HOST : SC_A_HOST | SC_A_TR | SC_A_TW;
+
+    s_maskTex = rhi_create_texture(
+        &(RhiTextureDesc){SC_W, SC_POINTS * 16u / (SC_W * 4u), 1, RHI_FMT_RGBA8_UNORM,
+                          RHI_TEX_COPY_SRC | RHI_TEX_COPY_DST, "rhi test scopes copy source", 0});
+    SC_CHECK(s_maskTex.id != 0, "the copy source texture was not made\n");
+    if (!s_maskTex.id) {
+        return;
+    }
+    /* a new frame first: lists A to E filled the slot's VKR_MAX_CMD_LISTS
+       (8), and rhi_wait_frame is the frame boundary that recycles a slot's
+       lists (rhi.h); it records nothing, so the trace below sees only the
+       lists' own barriers */
+    rhi_wait_frame();
+    (void)runList(cfg, "M0", r, fillMaskTex);
+
+    uint32_t n = traceList(cfg, "M1", r, upload, bar, 16);
+    SC_CHECK(n >= 1 &&
+                 barEq(&bar[n < 16 ? n - 1 : 15], SC_XFER, closeDst, SC_A_TW, closeAccess, 1, 0),
+             "list M1: the closing barrier is not the %s scopes' (transfer -> 0x%x, transfer "
+             "write -> 0x%x)\n",
+             wide ? "wide" : "narrow", closeDst, closeAccess);
+    if (wide) {
+        SC_CHECK(n == 4, "list M1 (a mesh upload alone): %u barriers, 4 expected\n", n);
+        SC_CHECK(n >= 1 &&
+                     barEq(&bar[0], openStages, openStages, SC_A_CAW | SC_A_DSAW | SC_A_TW,
+                           SC_A_CAR | SC_A_CAW | SC_A_DSAR | SC_A_DSAW | SC_A_TR | SC_A_TW, 1, 0),
+                 "list M1: the opening barrier is not v0.11.2's\n");
+        SC_CHECK(n >= 2 && barEq(&bar[1], wideStages, SC_XFER, SC_A_TW, SC_A_TR | SC_A_TW, 1, 0),
+                 "list M1: the copy's wait is not v0.11.2's (0x%x -> transfer expected)\n",
+                 wideStages);
+        SC_CHECK(n >= 3 && barEq(&bar[2], SC_XFER, wideStages, SC_A_TW, wideAccess, 1, 0),
+                 "list M1: the copy's visibility is not v0.11.2's\n");
+    }
+
+    n = traceList(cfg, "M2", r, fillM2, bar, 16);
+    SC_CHECK(n >= 1 &&
+                 barEq(&bar[n < 16 ? n - 1 : 15], SC_XFER, closeDst, SC_A_TW, closeAccess, 1, 0),
+             "list M2: the closing barrier is not the %s scopes'\n", wide ? "wide" : "narrow");
+    if (wide) {
+        SC_CHECK(n == 4, "list M2 (a texture copied into the arena): %u barriers, 4 expected\n", n);
+        /* vkr_hz_copy: the shader stages and vertex input alone, no
+           transfer stage, no memory barrier */
+        SC_CHECK(n >= 2 && barEq(&bar[1], wideStages & ~SC_XFER, SC_XFER, 0, 0, 0, 0),
+                 "list M2: the copy's wait is not v0.11.2's (0x%x -> transfer, no memory "
+                 "barrier, expected)\n",
+                 wideStages & ~SC_XFER);
+        SC_CHECK(n >= 3 && barEq(&bar[2], SC_XFER, wideStages, SC_A_TW, wideAccess, 1, 0),
+                 "list M2: the copy's held-back visibility is not v0.11.2's\n");
+    }
+
+    n = traceList(cfg, "M3", r, fillM3, bar, 16);
+    /* the second texture copy's barrier: the last whose second scope is the
+       transfer stage alone */
+    int second = -1;
+    for (uint32_t i = 0; i < n && i < 16; i++) {
+        if (bar[i].dst == SC_XFER && bar[i].memDst != (SC_A_TR | SC_A_TW)) {
+            second = (int)i;
+        }
+    }
+    SC_CHECK(second >= 0, "list M3: no texture copy's barrier found\n");
+    if (second >= 0) {
+        if (wide) {
+            SC_CHECK(n == 8, "list M3: %u barriers, 8 expected\n", n);
+            /* (no memory barrier: the buffer barrier carries the transfer
+               write, so the trace's memory accesses are 0) */
+            SC_CHECK(barEq(&bar[second], wideStages, SC_XFER, 0, 0, 0, 1),
+                     "list M3: the second texture copy's barrier is not v0.11.2's (0x%x -> "
+                     "transfer with one buffer barrier expected; the hazard record kept)\n",
+                     wideStages);
+        } else {
+            SC_CHECK(bar[second].nBuf == 0,
+                     "list M3: the narrow scopes' second texture copy holds %u buffer "
+                     "barriers (the hazard record is cleared by the buffer copy: 0)\n",
+                     bar[second].nBuf);
+        }
+    }
+    rhi_destroy_texture(s_maskTex);
+    s_maskTex = (RhiTexture){0};
+}
+
 static void teardown(ScRes *r)
 {
     rhi_wait_idle();
@@ -533,6 +724,9 @@ int rhi_vk_scope_cell(const RhiTestConfig *cfg)
             if (w) {
                 rhi_unmap_buffer(r.rb);
             }
+        }
+        if (!global) {
+            checkMasks(cfg, &r, wide);
         }
         rhi_test_log("%s scopes: fragment holds A %llu, B %llu, C %llu, C2 %llu, G before the "
                      "record %llu old order / %llu new, D %llu, F %llu (compute %d, vertex "

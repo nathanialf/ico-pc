@@ -353,28 +353,37 @@ question it decides:
 ### The barrier scopes and the submission wait (issues 179 and 211)
 
 A Mali-G52 MC2 (Arm's driver) and an Adreno 710 (Qualcomm's driver) lost the graphics device at the
-first pictures of the first 3D scene, three starts in a row each, once the buffer barriers were
-narrowed and the polled submission wait came in; the release before both ran there. Every
-tile-based GPU now runs the wide barrier scopes, the texture uploads before the VU pre-pass and the
-single submission wait by default (RHI.md "Barrier scopes and the submission wait"). The start of a
-log says which ran and why, one line each:
+first pictures of the first 3D scene, three starts in a row each, on the release that narrowed the
+buffer barriers and brought the polled submission wait. The Mali ran the release before there
+without a loss (its log); there is no log of the Adreno 710 on the release before. Every tile-based
+phone GPU (every Android GPU, iOS through MoltenVK) now runs the wide barrier scopes, the texture
+uploads before the VU pre-pass and the single submission wait (RHI.md "Barrier scopes and the
+submission wait"); Macs and desktops keep the narrow scopes and the polled wait. The start of a log
+says which ran and why, one line each:
 
-    rhi_vk: barriers: wide (a tile-based GPU, Arm, vendor 0x13B5): every buffer barrier waits for ...
-    rhi_vk: submission wait: single (a tile-based GPU, Arm, vendor 0x13B5): one wait without a time limit for a frame slot, ...
-    rhi_vk: timestamps: ...; calibrated with the CPU's clock: off (the single submission wait: single (tile-based)) ...
+    rhi_vk: barriers: wide (a tile-based phone GPU, Arm, vendor 0x13B5): every buffer barrier waits for ...
+    rhi_vk: submission wait: single (a tile-based phone GPU, Arm, vendor 0x13B5): one wait without a time limit for a frame slot, ...
+    rhi_vk: timestamps: ...; calibrated with the CPU's clock: off (the single submission wait: single (tile-based phone)) ...
 
-and the summary's profile words end `, barriers wide (tile-based), submission wait single
-(tile-based)`. How to read the next log:
+and the summary's profile words end `, barriers wide (tile-based phone), submission wait single
+(tile-based phone)`. The other changes of that release to a phone's GPU work in that scene run as
+before it too: the VU record's store passes begin without an attachment (the throwaway targets only
+on the Intel driver row or with the subpass read on: `rd: VU pre-pass: the store passes begin without
+an attachment ...`), and the skin check issues no ring stamp, no stamp clear value and none of its
+own compiles after a memory stop (`... not compiled in the background (<why>; a tile-based phone GPU:
+none, ...)`). What still differs on a phone, all CPU work: the range checks, the hold notes and
+pass crumbs, the timestamp bookkeeping, the SPIR-V scan, the skin check's copy search, and the loss
+keep's gate (one progress read a frame; a copy only after a slot wait blocked 100 ms or more). How
+to read the next log:
 
-- Both lines `wide` / `single` and no loss: one of the two changes was the cause, or set off the
-  driver's fault (the code reading for issue 179 found no other change to the GPU work of those
-  pictures on the Mali; on the Adreno the skin check's twins and readbacks also run there).
-  Which of the two is not told apart by a setting (there is none); nothing to ask for.
-- Both lines present and the device still lost: neither was; the loss dump's lines (below) and
-  the stall lines (issue 123's sections) are the evidence then.
-- `narrow (a GPU that is not tile-based)` or `polled (...)` on a phone: the GPU was not taken for
-  a tile-based one (its vendor id and the reason's words say why); `(ICO_VK_FAKE_SCOPES=..., a
-  test)` only ever in a test.
+- Both lines `wide` / `single` and no loss: one of the two changes (or the store passes' targets,
+  or the skin check's stamps on the Adreno) was the cause, or set off the driver's fault. Nothing
+  tells them apart by a setting (there is none); nothing to ask for.
+- Both lines present and the device still lost: none of them was; the loss dump's lines (below)
+  and the stall lines (issue 123's sections) are the evidence then, and the next start draws
+  without the VU pre-pass (the ladder below).
+- `narrow (not a tile-based phone GPU)` or `polled (...)` on a phone: the GPU was not taken for a
+  phone's (the reason's words say why); `(ICO_VK_FAKE_SCOPES=..., a test)` only ever in a test.
 - With the single wait the stall diagnostics measure less: a stalled replay's `rd: GPU clock`
   line has no trace (which of its stamps were written while the CPU waited, the longest stretch
   with nothing new, its first list's second run), and its start is placed from its wait's end,
@@ -385,19 +394,27 @@ and the summary's profile words end `, barriers wide (tile-based), submission wa
   378.0 ms after its last submit (the wait's end)` (`rd_perf_clock.c`; the CPU's clock read around
   the wait the backend makes anyway, nothing of the slot read while it runs).
 
-The loss ladder, on every device (desktops too) and never written to the settings: a start after a
-lost one runs the wide scopes, after two lost starts in a row the single wait too. Its line,
-before the backend's:
+The loss ladder, never written to the settings. On a phone a start after one or more lost starts in
+a row draws without the VU pre-pass (the scopes and the wait are already the wide and single ones;
+the Adreno 740's device-table row does the same; OpenGL ES changes nothing):
 
-    ico_pc: loss ladder: 2 starts in a row lost the graphics device before this one: this start runs the wide barrier scopes and the single submission wait (the graphics backend's barriers and submission wait line says what ran); nothing is written to the settings
+    ico_pc: loss ladder: 1 start in a row lost the graphics device before this one: on Vulkan this start draws without the VU pre-pass (a tile-based phone GPU, ...); nothing is written to the settings
+    rhi_vk: VU pre-pass: off for this start on a tile-based phone GPU (Qualcomm, vendor 0x5143; the previous start lost the graphics device; nothing written to the settings): ...
+    rd: VU pre-pass: off by the loss ladder (a tile-based phone GPU; the previous start lost the graphics device: this start only; [dev] vu_prepass = true draws with it anyway): ...
 
-Until this fix a `gpu_robust = true` in the settings (by hand, or written by the game after two
-lost starts) set the row back to 0 every start: both issue 179's and issue 211's logs said `starts in a row
-that lost the graphics device: 1` start after start, so no rung past the first could fire. The row
-now counts on (`ico_pc: the previous start lost the graphics device (2 in a row); nothing is written
-to <path>: robust access is as the settings say ([dev] gpu_robust)`). The desktop's restarts after
-a loss count in the activity file's `-ends.txt` as `loss_chain <n>` (`... before this one (this
-game's restarts after a loss): ...`).
+On a desktop's Vulkan the rungs are the wide scopes after one lost start and the single wait too
+after two (`... on Vulkan this start runs the wide barrier scopes and the single submission wait
+...; Direct3D and OpenGL change nothing`). The row is the lost starts in a row, in its own slot of the
+activity file's `-ends.txt` (`loss_row <n>`): until this fix a `gpu_robust = true` in the settings (by
+hand, or written by the game after two lost starts) set it back to 0 every start, and the start that
+wrote it did too, so both reports said `starts in a row that lost the graphics device: 1` start after
+start. The row now counts on (`ico_pc: the previous start lost the graphics device (2 in a row);
+nothing is written to <path>: robust access is as the settings say ([dev] gpu_robust)`); a start
+that ran robust without a loss ends it while the robust step's own count goes on (`... lost the
+graphics device: 1 (2 counted for robust access)`). A desktop's restarts after a loss count in it too
+(`loss_chain <n>`, `... before this one (this game's restarts after a loss): ...`). The start-up
+loss bisect replays the lost frame under the row the lost start ran; on a phone it skips its
+overlap step (a loss it reproduced could end the start).
 
 Issue 211's logs (the Adreno 710, two runs) against what the narrowing release changed on
 Qualcomm's path: in each run three replays in a row stalled 270-400 ms with "9 of 66 written (the
@@ -412,8 +429,8 @@ the backend cannot tell a capture's lost submission from the picture's and keep 
 skin-check capture and the frame dump it asks for are CPU work on the frame record, and the photo
 a readback after the loss had already happened. The stalls themselves are issue 123's shape (the
 Adreno 740 showed them without a loss, with the VU pre-pass off by its device row; the 710 has no
-row and draws through the pre-pass). Which of the wide scopes or the single wait, if either, keeps
-the 710 from losing the device is what its next log says by the lines above.
+row and draws through the pre-pass, so after a lost start the ladder turns it off). Whether the
+changes above keep the 710 from losing the device is what its next log says by the lines above.
 
 ### The first 3D scene's allocations made at start-up (issues 179 and 211)
 
@@ -626,13 +643,16 @@ begins, so the last line says which one a hang of the handler itself is in:
   now: frames A..Z (n, c of them copies in memory, K KB)` and `window: loss dump: copies in
   memory: ...`: which frame the loss belongs to and what the renderer still held. The ring holds
   the last three frames only; a frame the GPU had not finished when the ring reused its slot is
-  copied to memory first (`rd: loss keep: frame N (replay R) copied to memory ...`, the first eight
-  and every hundredth), at most 4 copies of at most 16 MiB (64 MiB at the worst, normally
-  nothing). A dump taken from the ring alone, for a loss at frame 129, held frames 132 and 131 and
+  copied to memory first while a slot wait has blocked 100 ms or more (`rd: loss keep: frame N
+  copied to memory ...`, the first eight and every hundredth), at most 4 copies of at most 16 MiB,
+  at most 4 tries in any 64 frames, nothing in steady play. So the lost frame is held only when a
+  stall came before the loss (as in both reports); otherwise the frames the ring holds are written,
+  as before. `copies in memory: not used` says a copy in progress did not finish in time. A dump taken from the ring alone, for a loss at frame 129, held frames 132 and 131 and
   so replayed the wrong frame in the next start's bisect; a line `the lost frame F is not held any more ... writing
   frame X instead ... it is NOT the frame whose submission failed` says the true frame is gone,
   and the closing line says `NOT the lost one`;
-- `window: loss dump: writing frame N, the lost one (replay R), to .../logs/loss-<stamp>-lost.rddump`,
+- `window: loss dump: writing frame N, the lost one (replay R), to .../logs/loss-<stamp>-lost.rddump`
+  (`the best guess at the lost one` when the failed submit was outside a picture, as on the Adreno 710),
   then `... writing frame M (the one replayed before it) to ...-before.rddump`: the frames' writes
   (the CPU's copies of the commands, texels and meshes, onto the phone's shared storage);
 - `window: loss dump: zipping K MB (the two frames and the log) at store level`: the zip, stored
@@ -642,11 +662,13 @@ begins, so the last line says which one a hang of the handler itself is in:
   zip just written is never deleted: `the name order alone would have deleted this zip (the clock
   went back or the zone changed ...); it was kept` says it would have been.
 
-The start after a loss replays the lost frame pass by pass (`ico_pc: loss bisect: ...`), and if
-that runs clean, replays the frame before it and the lost one back to back with no wait for the GPU
-between them, four times each, as the game's pictures overlap (the passes wait after each replay
-and so never do): `window: loss bisect: overlap step: ...` says that it ran and whether the device
-was lost, or `overlap step not run (...)`. When the zip cannot be read the line says which of
+The start after a loss replays the lost frame pass by pass (`ico_pc: loss bisect: ...`). On a
+desktop, if that runs clean, it replays the frame before it and the lost one back to back with no
+wait for the GPU between them, four times each, as the game's pictures overlap: `window: loss
+bisect: overlap step: ...` says that it ran and whether the device was lost. On a phone the line is
+`overlap step not run (a phone: a loss it reproduced could end this start, ...)`: a driver that
+makes no second device after a loss would end the start at a message box, and a phone cannot start
+the game again by itself. When the zip cannot be read the line says which of
 `cannot open <zip>: <errno text> (errno N)`, `<zip> is not a zip: N bytes, ...` and `<zip> is a zip
 (...) with no frame number 1 (.rddump) inside; it holds: ...` it is.
 

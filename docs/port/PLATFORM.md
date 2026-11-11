@@ -2008,7 +2008,7 @@ bounds of every buffer and image read ([dev] gpu_robust = true in <path>); delet
 it off again`; the game takes it off again itself (`robust_persist.h`: the mark `[dev] gpu_robust_by`, 3 clean starts in a row or a new version; a clean start is one that reached the game, after the set or after the self-tests of a run on first use, and ended without a loss, an end while preparing the graphics or a watchdog end, the last read from the mark `<activity file>-watchdog.txt` the watchdog writes as it ends a run with the main thread not waiting for the GPU and the next start reads, logs (`ico_pc: the previous run (version V) was ended by the watchdog: <reason>`) and deletes (`ico_diag_startup_prev_watchdog`); each start's `ico_pc: robust access on (set by the game after 2 lost starts on <version>): N clean starts of 3 before it turns off` line). With `gpu_robust` set by the player (the variable already in the environment)
 nothing is written, the row kept (`ico_pc: the previous start lost the graphics device (<n> in a
 row); nothing is written to <path>: robust access is as the settings say ([dev] gpu_robust)`). A
-restart after a crash or a loss (desktop) counts only the loss ladder's `loss_chain` (CONFIG.md). The rest of the row's
+restart after a crash or a loss (desktop) counts only the loss ladder's `loss_chain` (RHI.md). The rest of the row's
 rules are the ends': the count file, the failed write (`, which could not be written: this start
 only`, robust access for that start only, the count kept).
 
@@ -2479,7 +2479,7 @@ pump and the start-up screens' pump end the session through the normal quit path
 [pass ring](RENDER.md#the-pass-ring) (the last replays and the passes of the last three, with the
 sequence numbers the checkpoint markers carry and each effect's name from `rd_perf_post_name`), a
 flush of the log, the [loss dump](RENDER.md#the-loss-dump) (`logs/loss-<date>-<time>.zip`, logged as
-`window: loss dump: frames N and M (the one before) written to <zip> in T s`, and noted in the activity
+`window: loss dump: frames N (the lost one) and M (the one before) written to <zip> in T s`, and noted in the activity
 file), the [report file](#the-report-file) (which holds the loss dump and the log), and one message
 box: the card stopped responding, the game has to close, the save is kept, "If the graphics card is
 overclocked, try its stock clocks first.", and a request to attach the newest file in logs that

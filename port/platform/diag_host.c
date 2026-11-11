@@ -1845,7 +1845,12 @@ static void act_sibling(char *out, size_t size, const char *suffix)
    loss ladder's count there, loss_count_prev) */
 #define ACT_END_ROBUST_ONCE 3
 #define ACT_END_LOSS_CHAIN 4
-#define ACT_END_SLOTS 5
+/* the loss ladder's row: the starts in a row that lost the device, each
+   one, fresh or a restart of the desktop's loss order (loss_count_prev);
+   the loss slot is the robust step's count, which a start that ran robust
+   without a loss keeps */
+#define ACT_END_LOSS_ROW 5
+#define ACT_END_SLOTS 6
 
 /* the counts by kind (ICO_DIAG_END_*), 0 when none or unreadable; an
    older version's "vu_ext <n>" (the retired extended VU kind) is dropped */
@@ -1853,7 +1858,7 @@ static void ends_read(unsigned int n[ACT_END_SLOTS])
 {
     char line[64];
     FILE *f;
-    n[0] = n[1] = n[2] = n[3] = n[4] = 0;
+    memset(n, 0, sizeof(unsigned int) * ACT_END_SLOTS);
     if (act_ends_path[0] == '\0' || (f = ico_fopen(act_ends_path, "rb")) == NULL) {
         return;
     }
@@ -1865,6 +1870,8 @@ static void ends_read(unsigned int n[ACT_END_SLOTS])
             n[ICO_DIAG_END_VU_PRE] = v > 9 ? 9 : v;
         } else if (sscanf(line, "loss_chain %u", &v) == 1) {
             n[ACT_END_LOSS_CHAIN] = v > 9 ? 9 : v;
+        } else if (sscanf(line, "loss_row %u", &v) == 1) {
+            n[ACT_END_LOSS_ROW] = v > 9 ? 9 : v;
         } else if (sscanf(line, "loss_robust %u", &v) == 1) {
             n[ACT_END_ROBUST_ONCE] = v != 0;
         } else if (sscanf(line, "loss %u", &v) == 1) {
@@ -1884,16 +1891,18 @@ static void ends_write(const unsigned int n[ACT_END_SLOTS])
     if (act_ends_path[0] == '\0') {
         return;
     }
-    if (n[0] == 0 && n[1] == 0 && n[2] == 0 && n[3] == 0 && n[4] == 0) {
+    if (n[0] == 0 && n[1] == 0 && n[2] == 0 && n[3] == 0 && n[4] == 0 && n[5] == 0) {
         (void)ico_remove(act_ends_path);
         return;
     }
     f = ico_fopen(act_ends_path, "wb");
-    /* loss_chain only when set (a file an older version reads the same) */
+    /* loss_chain and loss_row only when set (a file an older version reads
+       the same) */
     ok = f != NULL &&
          fprintf(f, "pipelines %u\nvu_pre %u\nloss %u\nloss_robust %u\n", n[ICO_DIAG_END_PIPELINES],
                  n[ICO_DIAG_END_VU_PRE], n[ICO_DIAG_END_LOSS], n[ACT_END_ROBUST_ONCE]) > 0 &&
-         (n[ACT_END_LOSS_CHAIN] == 0 || fprintf(f, "loss_chain %u\n", n[ACT_END_LOSS_CHAIN]) > 0);
+         (n[ACT_END_LOSS_CHAIN] == 0 || fprintf(f, "loss_chain %u\n", n[ACT_END_LOSS_CHAIN]) > 0) &&
+         (n[ACT_END_LOSS_ROW] == 0 || fprintf(f, "loss_row %u\n", n[ACT_END_LOSS_ROW]) > 0);
     if (f != NULL && fclose(f) != 0) {
         ok = 0;
     }
@@ -2030,6 +2039,19 @@ static void ends_clean(void)
    wait too; the backend's lines say which ran.  Nothing is written to the settings. */
 static unsigned int act_loss_row;
 
+/* the ladder line's words for a phone (Android, iOS: every GPU there is a
+   tile-based phone GPU to rhi_tile_rule.h); ICO_TEST_LADDER_PHONE gives
+   them to diag_test on a desktop */
+static int ladder_phone(void)
+{
+#if defined(__ANDROID__) || defined(ICO_IOS)
+    return 1;
+#else
+    const char *t = getenv("ICO_TEST_LADDER_PHONE");
+    return t != NULL && t[0] == '1';
+#endif
+}
+
 static void loss_ladder_export(int relaunched)
 {
     char v[16];
@@ -2047,9 +2069,21 @@ static void loss_ladder_export(int relaunched)
 #else
     setenv("ICO_LOSS_ROW", v, 1);
 #endif
+    if (ladder_phone()) {
+        /* a tile-based phone GPU (rhi_tile_rule.h): its scopes and wait are
+           the wide and single ones already, the rung is the pre-pass */
+        ico_diag_log("ico_pc: loss ladder: %u start%s in a row lost the graphics device before "
+                     "this one: on Vulkan this start draws without the VU pre-pass (a tile-based "
+                     "phone GPU, whose barrier scopes and submission wait are the wide and "
+                     "single ones already; the graphics backend's VU pre-pass line says what "
+                     "ran; OpenGL ES changes nothing); nothing is written to the settings",
+                     act_loss_row, act_loss_row == 1 ? "" : "s");
+        return;
+    }
     ico_diag_log("ico_pc: loss ladder: %u start%s in a row lost the graphics device before this "
-                 "one%s: this start runs the wide barrier scopes%s (the graphics backend's "
-                 "barriers%s line says what ran); nothing is written to the settings",
+                 "one%s: on Vulkan this start runs the wide barrier scopes%s (the graphics "
+                 "backend's barriers%s line says what ran; Direct3D and OpenGL change nothing); "
+                 "nothing is written to the settings",
                  act_loss_row, act_loss_row == 1 ? "" : "s",
                  relaunched ? " (this game's restarts after a loss)" : "",
                  act_loss_row >= 2 ? " and the single submission wait" : "",
@@ -2086,30 +2120,50 @@ static void loss_count_prev(int prev_loss, int relaunched)
            slot is a fresh start's, as before) */
         n[ACT_END_LOSS_CHAIN] =
             prev_loss ? (n[ACT_END_LOSS_CHAIN] < 9 ? n[ACT_END_LOSS_CHAIN] + 1 : 9) : 0;
-        act_loss_row = n[ACT_END_LOSS_CHAIN];
+        /* the row: the fresh start's own row (the losses before it) and the
+           chain's losses since */
+        act_loss_row = n[ACT_END_LOSS_CHAIN] == 0 ? 0u
+                       : n[ACT_END_LOSS_ROW] + n[ACT_END_LOSS_CHAIN] > 9u
+                           ? 9u
+                           : n[ACT_END_LOSS_ROW] + n[ACT_END_LOSS_CHAIN];
         if (memcmp(n, was, sizeof was) != 0) {
             ends_write(n);
         }
         loss_ladder_export(relaunched);
         return;
     }
+    /* the ladder's row (its own slot: the loss slot is the robust step's
+       count, kept across a start that ran robust without a loss, which is
+       no row): a loss after a restart chain of the desktop's loss order
+       counts the chain's losses too (1 + chain), so the ladder does not fall
+       back to its first rung when the loss order runs out */
+    const unsigned int chain = n[ACT_END_LOSS_CHAIN];
     n[ACT_END_LOSS_CHAIN] = 0;
+    unsigned int row = 0;
     if (prev_loss) {
+        const unsigned int sum = n[ACT_END_LOSS_ROW] + 1u + chain;
+        row = sum > 9u ? 9u : sum;
         n[ICO_DIAG_END_LOSS]++;
         act_end_n[ICO_DIAG_END_LOSS] = n[ICO_DIAG_END_LOSS];
-        ico_diag_log("ico_pc: starts in a row that lost the graphics device: %u",
-                     n[ICO_DIAG_END_LOSS]);
+        if (row != n[ICO_DIAG_END_LOSS]) {
+            ico_diag_log("ico_pc: starts in a row that lost the graphics device: %u (%u counted "
+                         "for robust access)",
+                         row, n[ICO_DIAG_END_LOSS]);
+        } else {
+            ico_diag_log("ico_pc: starts in a row that lost the graphics device: %u", row);
+        }
     } else if (!n[ACT_END_ROBUST_ONCE]) {
         n[ICO_DIAG_END_LOSS] = 0;
     }
+    n[ACT_END_LOSS_ROW] = row;
     n[ACT_END_ROBUST_ONCE] = 0;
     if (memcmp(n, was, sizeof was) != 0) {
         ends_write(n);
     }
     /* the ladder: the losses in a row before this start (a start that ran
-       robust because of the row and did not lose it leaves the row, and
-       is not a loss: 0 here) */
-    act_loss_row = prev_loss ? n[ICO_DIAG_END_LOSS] : 0;
+       robust because of the row and did not lose it ends the ladder's row,
+       and is not a loss: 0 here) */
+    act_loss_row = row;
     loss_ladder_export(relaunched);
 }
 
@@ -3157,7 +3211,7 @@ int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(voi
         if (loss) {
             ico_diag_log("ico_pc: the previous start lost the graphics device (%u in a row); "
                          "nothing is written to %s: robust access is as the settings say (%s)",
-                         act_end_n[kind], cfg, table);
+                         act_loss_row, cfg, table);
         } else if (act_end_n[kind] >= 2) {
             ico_diag_log("ico_pc: the second start in a row ended while preparing the graphics "
                          "(%s); %s is not written to %s: %s (%s)",
@@ -3212,8 +3266,13 @@ int ico_diag_startup_end_persist(int kind, const char *table, int (*persist)(voi
     saved = persist != NULL && persist() == 0;
     if (saved) {
         /* the setting is the rule from now; a deleted setting starts the
-           count again */
-        ends_clear_kind(kind);
+           count again.  Not a loss's row: the loss ladder counts on
+           (loss_ladder_export; before v0.11.4 the row went back to 0 at the
+           start that wrote [dev] gpu_robust, and the next said "1 in a
+           row") */
+        if (!loss) {
+            ends_clear_kind(kind);
+        }
     } else if (kind == ICO_DIAG_END_PIPELINES) {
         /* not written: this start only, so its lazy run's notes say so
            and the next start tries the set again; the count stays, so a

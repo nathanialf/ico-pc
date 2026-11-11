@@ -100,19 +100,47 @@ void rd_loss_choose(const RdLossInput *in, RdLossChoice *out)
     }
 }
 
-bool rd_loss_keep_needed(uint32_t replay, uint32_t openReplay)
+bool rd_loss_keep_needed(uint32_t frame, uint32_t openFrame)
 {
-    return replay != 0 && openReplay != 0 && replay >= openReplay;
+    return frame != 0 && openFrame != 0 && frame >= openFrame;
 }
 
-bool rd_loss_keep_release(uint32_t replay, uint32_t openReplay)
+bool rd_loss_keep_release(uint32_t frame, uint32_t openFrame)
 {
-    return openReplay == 0 || replay + 2u <= openReplay;
+    return openFrame == 0 || frame + 2u <= openFrame;
 }
 
-bool rd_loss_keep_allowed(uint64_t taken, uint64_t seen)
+bool rd_loss_keep_stalled(uint64_t waitingFor, uint64_t waitingNs)
 {
-    return taken < RD_LOSS_KEEP_FREE || taken * 4u <= seen;
+    return waitingFor != 0 && waitingNs >= RD_LOSS_KEEP_STALL_NS;
+}
+
+RdLossKeep rd_loss_keep_decide(RdLossThrottle *t, uint64_t seen, uint32_t frame, uint32_t openFrame,
+                               uint64_t waitingFor, uint64_t waitingNs)
+{
+    if (!rd_loss_keep_needed(frame, openFrame)) {
+        return RD_LOSS_KEEP_NOT_OPEN;
+    }
+    if (!rd_loss_keep_stalled(waitingFor, waitingNs)) {
+        return RD_LOSS_KEEP_NO_STALL;
+    }
+    if (seen < t->pauseUntil) {
+        return RD_LOSS_KEEP_PAUSED;
+    }
+    /* the oldest of the last RD_LOSS_KEEP_PER_WINDOW attempts inside the
+       window: none left */
+    if (t->attempts >= RD_LOSS_KEEP_PER_WINDOW && seen - t->at[t->next] < RD_LOSS_KEEP_WINDOW) {
+        return RD_LOSS_KEEP_THROTTLED;
+    }
+    t->at[t->next] = seen;
+    t->next = (t->next + 1u) % RD_LOSS_KEEP_PER_WINDOW;
+    t->attempts++;
+    return RD_LOSS_KEEP_TAKE;
+}
+
+void rd_loss_keep_big(RdLossThrottle *t, uint64_t seen)
+{
+    t->pauseUntil = seen + RD_LOSS_KEEP_BIG_PAUSE;
 }
 
 uint32_t rd_loss_keep_slot(const uint32_t *frames, uint32_t n)
