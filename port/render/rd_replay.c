@@ -2413,83 +2413,10 @@ static const RdTargetRec *texCropOf(const Replay *r, RhiTexture tex)
     return src;
 }
 
-/* TEST.DATE: the bound target's alpha MSB into the R8 snapshot
- * (RD_TARGET_DATE_SNAPSHOT), pixel for pixel, for sprite_ps to test at t2.
- * Retaken when the target changed or anything may have written alpha since
- * the last one, so consecutive DATE draws see each other's writes as on the
- * GS (within one draw, overlapping primitives see the snapshot: accepted).
- * area (texels, NULL = the whole target) holds every fragment the draw can
- * make (rd__screen_area), and the shaders read the snapshot only at the
- * fragment's own texel, so only that area is drawn: the snapshot is right
- * inside r->dateArea and stale outside it, and a draw whose area it does
- * not hold retakes it (rd__date_retake), never reading a stale texel. */
+/* TEST.DATE: the R8 snapshot (rd_date_cut.c rd__date_snapshot) */
 static RhiTexture dateSnapshot(Replay *r, RdTargetRec *tc, uint32_t tcId, const RhiRect *area)
 {
-    RdTargetRec *sn = rd__target_rec(RD_TARGET_DATE_SNAPSHOT + 1);
-    if (!sn || !sn->color.id || tc == sn) {
-        return g_rd.dummy;
-    }
-    /* in texels: the snapshot has the scene's scale and sprite_ps
-     * reads it at the fragment's texel */
-    uint32_t w = tc->tw, h = tc->th;
-    if (w > sn->tw || h > sn->th) {
-        rd__log_once(RD_ONCE_DATE_SIZE, "DATE on a target larger than the snapshot: clipped");
-        w = w > sn->tw ? sn->tw : w;
-        h = h > sn->th ? sn->th : h;
-    }
-    RhiRect take;
-    const bool retake = rd__date_retake(r->dateFor, r->dateSerial, &r->dateArea, tcId,
-                                        r->writeSerial, area, w, h, &take);
-    if (!retake && sn->colorState == RHI_STATE_SHADER_READ) {
-        return sn->color;
-    }
-    if (!retake) {
-        /* the snapshot was touched elsewhere since: nothing of it is known */
-        take = (RhiRect){0, 0, w, h};
-    }
-    endPass(r);
-    rd__perf_pass(s_cl, RD_PERF_PASS_DATE, tcId, take.w, take.h, r->perfPost);
-    g_rdPerf.dateSnapshots++;
-    rd__date_snap(tc, s_ms.active && !s_ms.internal, s_ms.ended);
-    rd__transition(s_cl, tc->color, &tc->colorState, RHI_STATE_SHADER_READ);
-    rd__transition(s_cl, sn->color, &sn->colorState, RHI_STATE_RENDER_TARGET);
-    RhiRenderPassDesc p;
-    memset(&p, 0, sizeof(p));
-    p.color[0].texture = sn->color;
-    p.color[0].load = RHI_LOAD_LOAD;
-    p.colorCount = 1;
-    p.width = sn->tw;
-    p.height = sn->th;
-    rhi_cmd_begin_render_pass(s_cl, &p);
-    setViewport(w, h);
-    /* the same full-target triangle and viewport, cut to the area */
-    rhi_cmd_set_scissor(s_cl, &take);
-    RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_DATE_SNAP, RHI_FMT_R8_UNORM);
-    RhiPipeline pipe = rd__get_pipeline(&k);
-    if (pipe.id) {
-        IcoDrawCB cb;
-        memset(&cb, 0, sizeof(cb));
-        cb.uvRect[2] = (float)w;
-        cb.uvRect[3] = (float)h;
-        cb.tex[0] = (float)tc->tw;
-        cb.tex[1] = (float)tc->th;
-        cb.tex[2] = 1.0f / (float)tc->tw;
-        cb.tex[3] = 1.0f / (float)tc->th;
-        rd__set_pipeline(s_cl, pipe, &k);
-        rd__bind_uniform(s_cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
-        rd__bind_uniform(s_cl, 1, rd__draw_group(&cb));
-        rhi_cmd_set_bind_group(
-            s_cl, 2,
-            rd__tex_group(tc->color, rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST,
-                                                 RD_WRAP_CLAMP, RD_WRAP_CLAMP)));
-        drawCmd(s_cl, 3, 0, 1);
-    }
-    rhi_cmd_end_render_pass(s_cl);
-    rd__transition(s_cl, sn->color, &sn->colorState, RHI_STATE_SHADER_READ);
-    r->dateFor = tcId;
-    r->dateSerial = r->writeSerial;
-    r->dateArea = take;
-    return sn->color;
+    return rd__date_snapshot(r, tc, tcId, area, s_ms.active && !s_ms.internal, s_ms.ended);
 }
 
 /* ------------------------------------------------------- scale and frame
@@ -2800,8 +2727,7 @@ static bool prepareDrawEx(Replay *r, DrawSetup *ds, const RhiRect *dateArea, boo
             ds->dateTex = dateSnapshot(r, ds->tc, r->st.color, dateArea);
         }
     }
-    ds->tdId = td ? r->st.depth : 0;
-    ds->depthFmt = td ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
+    rd__date_cut_depth(r, ds, td); /* tdId, depthFmt: none in a DATE pass not using it */
     ds->tex = resolveTexture(r, ds->tc, r->st.color, &ds->tw, &ds->th, &ds->tfmt, &ds->textured,
                              &ds->mipmapped);
     ds->texCrop = texCropOf(r, ds->tex);

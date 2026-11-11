@@ -14,7 +14,10 @@
  * is
  *   - a draw (screen prims, the VU draws, a post sprite) on the state's
  *     depth with the Z test on (ZTE and not ALWAYS), Z write on, DATE on
- *     (the stencil bit) or PRIM.AA1 (its stencil pairs); DATE on a post
+ *     where it takes the stencil bit (RdProfile.dateStencil: on the R8
+ *     snapshot path it touches no depth) or PRIM.AA1 (its stencil pairs);
+ *     the passes DATE's snapshots open without the depth are not begun with
+ *     it at all (rd_date_cut.c, the same walk); DATE on a post
  *     sprite other than the reduction's is no touch (planPost: the sprite
  *     tests the destination alpha in its shader, from the snapshot or the
  *     local read, never through the stencil);
@@ -257,9 +260,15 @@ static void planDrawEx(const RdStateBlock *st, uint32_t ord, int l, bool date)
     }
 }
 
+/* DATE takes the stencil bit only where the profile has that path
+ * (rd_replay.c dateStencilFor: RdProfile.dateStencil); on the R8 snapshot
+ * path a DATE draw tests the snapshot in its shader and touches no depth
+ * (PRIM.AA1's stencil pairs under DATE count by st->aa1), so its pass may be
+ * begun without the depth (rd_date_cut.c) and the depth's last touch lies
+ * before it */
 static void planDraw(const RdStateBlock *st, uint32_t ord, int l)
 {
-    planDrawEx(st, ord, l, true);
+    planDrawEx(st, ord, l, g_rd.profile.dateStencil);
 }
 
 /* A scene draw the visibility test skipped (rd_vis.c, an RDC_NOP of the
@@ -387,6 +396,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
      * touching WORK2; the passes' area, cut and plan read its sprites as
      * drawn, which only keeps more) */
     const bool glow = rd__glow_fold_scan_begin(f);
+    /* and DATE's passes without the depth (rd_date_cut.c: the runs a DATE
+     * snapshot opens whose draws never touch the depth) */
+    const bool dateCut = rd__date_cut_scan_begin(f);
     s_plan.n = s_plan.nUndef = 0;
     s_plan.full = false;
     s_plan.anyTouch = 0;
@@ -402,7 +414,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     g_rdPerf.storePlanMode = s_plan.mode;
     s_plan.scanFrame = f->number;
     const bool plan = s_plan.mode != 0;
-    if (!plan && !area && !cut && !glow) {
+    if (!plan && !area && !cut && !glow && !dateCut) {
         return;
     }
     const bool fxDepth = plan && rd__effects_depth_wanted();
@@ -447,6 +459,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
             }
             if (glow) {
                 rd__glow_fold_scan_cmd(f, c, &st, state, ord);
+            }
+            if (dateCut) {
+                rd__date_cut_scan_cmd(c, &st, state, ord);
             }
             if (state || !plan) {
                 continue;
@@ -531,6 +546,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     }
     if (glow) {
         rd__glow_fold_scan_end(); /* the verdict (rd_glow_fold.c) */
+    }
+    if (dateCut) {
+        rd__date_cut_scan_end(ord); /* the replay's end closes the open run */
     }
     if (!plan) {
         return;
@@ -806,6 +824,7 @@ void rd__store_plan_end(void)
     rd__fades_fold_end();        /* a fold no reduction took (rd_fades_fold.c) */
     rd__glow_fold_end();         /* the glow's likewise (rd_glow_fold.c) */
     rd__last_store_replay_end(); /* why a last touch's pass kept its store (rd_pass_cut.c) */
+    rd__date_cut_end();          /* no run outside the walk (rd_date_cut.c) */
     planNothingDropped();
     s_plan.nPrevDropped = 0;
     for (uint32_t i = 0; i < s_plan.n; i++) {

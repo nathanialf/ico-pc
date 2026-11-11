@@ -825,7 +825,7 @@ checks the line on the puddle's frame and the count at 2x under Original (the co
 The MSAA part (or `no MSAA: the last replay's DATE snapshots of SCENE S, of other targets O`)
 tests the first of issue 106's two candidates: with MSAA a DATE draw on SCENE reads the alpha bit
 through the snapshot of SCENE as the epoch resolved it, the colour the mean of the samples, so an
-edge pixel's bit can differ from what each sample drew (`rd_replay.c` `dateSnapshot`, `rd_core.c`
+edge pixel's bit can differ from what each sample drew (`rd_date_cut.c` `rd__date_snapshot`, `rd_core.c`
 `rd__date_msaa_last`). `P of them DATE draws` tests the second: a texture pack's picture sampled
 by the puddle's mask readers themselves.
 

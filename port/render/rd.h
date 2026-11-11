@@ -2632,6 +2632,21 @@ enum {
     RD_STORE_WHY_COUNT
 };
 
+/* Why a DATE snapshot was taken (RdPerfRecord.dateRetakeWhy; rd_date_cut.c
+ * rd__date_snapshot, rd__date_retake's inputs): FIRST none taken yet this
+ * replay, TARGET it held another target, WRITTEN something may have written
+ * the target's alpha since (the write serial moved), AREA nothing wrote it
+ * but the draw's area was not held, TOUCHED the snapshot texture was used
+ * elsewhere since.  rd__date_retake_word gives the 10 s line's words. */
+enum {
+    RD_DATE_RETAKE_FIRST,
+    RD_DATE_RETAKE_TARGET,
+    RD_DATE_RETAKE_WRITTEN,
+    RD_DATE_RETAKE_AREA,
+    RD_DATE_RETAKE_TOUCHED,
+    RD_DATE_RETAKE_COUNT
+};
+
 /* RdPerfRecord.passAreaWhy: why a render pass on a target with its own
  * depth (SCENE) began whole, the first that holds (rd_pass_area.c
  * rd__pass_area_begin; docs/port/WORK_BUFFERS.md "The pass area"): SCAN no
@@ -3069,6 +3084,19 @@ typedef struct RdPerfRecord {
     uint8_t storePlanMode;
     uint8_t storeKept, storeKeptTarget, storeWhy;
     uint32_t storeKeptFrame;
+    /* DATE's passes without the depth (rd_date_cut.c; docs/port/
+     * WORK_BUFFERS.md "DATE's passes without the depth"): the runs the
+     * scan found depth-free, the passes begun without the depth and the
+     * draws drawn in them, the depth target's texels those passes left
+     * out (each 4 bytes of depth and 1 of stencil, each way), the passes
+     * begun again with the depth for a draw that needed it (a wrong
+     * prediction: a pass more), the runs' draws that kept the depth (an
+     * open pass with it, the stencil path, MSAA, the exact blend, a shadow
+     * window); the DATE snapshots by why each was taken (RD_DATE_RETAKE_*;
+     * their sum is dateSnapshots) and those reused */
+    uint32_t dateCutRuns, dateCutPasses, dateCutDraws, dateCutAgain, dateCutKept;
+    uint64_t dateCutTexels;
+    uint32_t dateRetakeWhy[RD_DATE_RETAKE_COUNT], dateSnapReused;
     /* GS state as shader data (rd_uber.c): uber 1 while it is in force;
      * pipeFamily the pipeline cache by family at the replay's end, in
      * rd_internal.h RdKeyFamily's order (2D, VU, VU point, shadow, fog,
@@ -3212,6 +3240,21 @@ enum {
 };
 
 const char *rd_glow_fold_why_text(uint32_t why);
+
+/* rd_date_cut.c: the 10 s line's DATE clause (rd_perf.c): each popped
+ * record's counts summed (rd__date_cut_pop, rd_perf_pop), then
+ * "; DATE: ..." at *at of out and the sums cleared (rd__date_cut_text,
+ * rd_perf_backend_text; nothing when no DATE snapshot or cut pass ran);
+ * a RD_DATE_RETAKE_* reason's words; rd__date_cut_on: the cut in force
+ * (the DATE snapshot path: RdProfile.dateStencil off, GS state as shader
+ * data off; not ICO_RD_DATE_CUT=0) */
+bool rd__date_cut_on(void);
+/* the tests' switch: -1 ICO_RD_DATE_CUT's and the profile's, 0 off, 1 on
+ * (still the snapshot path only) */
+void rd__date_cut_force(int mode);
+void rd__date_cut_pop(const RdPerfRecord *r);
+void rd__date_cut_text(char *out, size_t n, size_t *at);
+const char *rd__date_retake_word(int why);
 
 /* The CPU time of the replay finished last (its RdPerfRecord.totalMs,
  * popped or not; a picture handed over is still running when the step

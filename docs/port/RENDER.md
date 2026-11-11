@@ -661,8 +661,8 @@ groups are cached by (texture, sampler, DATE snapshot) (`port/render/rd_replay.c
 target's alpha MSB into the R8 `RD_TARGET_DATE_SNAPSHOT` over the area the draw can touch, and the
 shader tests it at the fragment's own texel. The snapshot is retaken when the target changed or
 anything may have written alpha since, so consecutive DATE draws see each other's writes; within
-one draw, overlapping primitives see the snapshot (`port/render/rd_replay.c` (`dateSnapshot`,
-`rd__date_retake`)).
+one draw, overlapping primitives see the snapshot (`port/render/rd_date_cut.c` (`rd__date_snapshot`),
+`port/render/rd_replay.c` (`rd__date_retake`)).
 
 **DATE through the stencil bit.** Where the profile has `dateStencil` ([The device
 profile](#the-device-profile)), a DATE draw of a screen-prim or VU command into a scene-class RGBA8

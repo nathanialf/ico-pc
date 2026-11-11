@@ -402,6 +402,29 @@ bool rd__const_read(const RdTargetRec *tc, uint32_t tcId, const RdTargetRec *src
  *                       n - 1 the glow's edge strip draws after c, pass 1
  *                       of blur(n) on a wide frame, under r's state, as
  *                       c's texels at its first drawn column n; 0: none */
+/* rd_date_cut.c (docs/port/WORK_BUFFERS.md, "DATE's passes without the
+ * depth"; the rule: rd_date_cut.h).
+ * rd__date_cut_on        (rd.h) the cut in force
+ * rd__date_cut_scan_begin, rd__date_cut_scan_cmd, rd__date_cut_scan_end
+ *                        rd_store_plan.c rd__store_plan_scan's walk: every
+ *                        command under the state after it (state: a state
+ *                        command), its ordinal; the depth-free runs found;
+ *                        rd__date_cut_end (rd__store_plan_end) the walk's end
+ * rd__date_cut_depth     rd_replay.c prepareDrawEx, after the DATE snapshot:
+ *                        the draw's depth (DrawSetup.tdId, depthFmt) from td
+ *                        (its depth target, NULL none), none for a draw of a
+ *                        depth-free run whose pass begins here or is open on
+ *                        its target without a depth
+ * rd__date_snapshot      rd_replay.c dateSnapshot: the R8 snapshot of tc
+ *                        (taken, retaken or reused, counted by why); closing
+ *                        and ended the MSAA epoch's state for rd__date_snap */
+bool rd__date_cut_scan_begin(const RdFrame *f);
+void rd__date_cut_scan_cmd(const RdCmd *c, const RdStateBlock *st, bool state, uint32_t ord);
+void rd__date_cut_scan_end(uint32_t ord);
+void rd__date_cut_end(void);
+void rd__date_cut_depth(Replay *r, DrawSetup *ds, const RdTargetRec *td);
+RhiTexture rd__date_snapshot(Replay *r, RdTargetRec *tc, uint32_t tcId, const RhiRect *area,
+                             bool closing, bool ended);
 bool rd__replay_date_take(Replay *r, const DrawSetup *ds);
 bool rd__replay_date_clear(Replay *r, const DrawSetup *ds, const RhiRect *area);
 bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c);
