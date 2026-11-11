@@ -10,6 +10,11 @@
 #     pass P) draws the plain picture; --loss-bisect --passes P --draws 1-2
 #     and --loss-bisect --passes P --mask-marks run one step each, clean on
 #     this device, and name the last draw they recorded
+#   - --loss-bisect --loss-overlap <the same dump> then replays that frame
+#     and the dump as the frame before it back to back, 4 times each with no
+#     wait for the GPU between them, and reports "loss overlap: clean" with
+#     8 replays (and with "-" for no frame before: 4); a dump that cannot be
+#     read exits 1
 #   Exit 77 (no device) skips.
 # -DTOOL=<rd_replay_tool> -DDUMP=<rddump> -DOUT=<a folder the test may write>
 if(NOT EXISTS "${DUMP}")
@@ -36,6 +41,34 @@ set(replays ${CMAKE_MATCH_2})
 math(EXPR want "${passes} + 1")
 if(passes LESS 1 OR NOT replays EQUAL want)
   message(FATAL_ERROR "--loss-bisect: ${passes} passes in ${replays} replays, want ${want}:\n${out}")
+endif()
+
+foreach(before "${DUMP}" "-")
+  execute_process(COMMAND "${TOOL}" "${DUMP}" - --loss-bisect --loss-overlap "${before}"
+                  RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+  if(NOT rc EQUAL 0)
+    message(FATAL_ERROR "--loss-overlap ${before} exited ${rc}:\n${out}\n${err}")
+  endif()
+  if(before STREQUAL "-")
+    set(want_replays 4)
+  else()
+    set(want_replays 8)
+  endif()
+  if(NOT out MATCHES "loss overlap: clean; frames ([0-9]+) and ([0-9]+), ([0-9]+) replays")
+    message(FATAL_ERROR "--loss-overlap ${before}: no clean overlap line:\n${out}")
+  endif()
+  if(NOT CMAKE_MATCH_3 EQUAL want_replays)
+    message(FATAL_ERROR "--loss-overlap ${before}: ${CMAKE_MATCH_3} replays, want ${want_replays}:\n${out}")
+  endif()
+endforeach()
+execute_process(COMMAND "${TOOL}" "${DUMP}" - --loss-bisect --loss-overlap "${OUT}/no-such.rddump"
+                RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
+if(NOT rc EQUAL 0)
+  # a before frame that cannot be read is left out, the lost frame replayed alone
+  message(FATAL_ERROR "--loss-overlap with an unreadable frame before exited ${rc}:\n${out}\n${err}")
+endif()
+if(NOT out MATCHES "loss overlap: clean; frames 0 and ([0-9]+), 4 replays")
+  message(FATAL_ERROR "--loss-overlap with an unreadable frame before: want the lost frame alone, 4 replays:\n${out}")
 endif()
 
 execute_process(COMMAND "${TOOL}" "${DUMP}" "${OUT}/plain.png" --target DISPLAY

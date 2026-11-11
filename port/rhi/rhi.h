@@ -1435,6 +1435,18 @@ void rhi_set_submit_tag(uint32_t replay, uint32_t frame);
  *   waitingNs     how long that wait has blocked so far;
  *   submittedAgoNs how long ago the newest submission was made;
  *   replay, frame the newest submission's rhi_set_submit_tag;
+ *   openReplay, openFrame
+ *                 the tag of the oldest submission of the last eight made
+ *                 that is above `finished` (the first the GPU had not been
+ *                 seen to finish), 0 and 0 when none is (or the backend
+ *                 keeps no history); `finished` is as the submitting
+ *                 thread last saw it, so an old one may be listed that the
+ *                 GPU did finish;
+ *   lostReplay, lostFrame
+ *                 the tag of the submission whose wait failed with the
+ *                 device lost (the loss report's "the wait that failed"), 0
+ *                 and 0 when no wait failed (a vkQueueSubmit that failed
+ *                 has no number yet) or it is no longer in the eight;
  *   bgPipesDone   the compiles of rhi_create_pipelines_begin's sets that
  *                 have returned since rhi_init (a count that only grows:
  *                 the background set's own heartbeat while nothing takes
@@ -1450,6 +1462,7 @@ typedef struct RhiGpuProgress {
     uint64_t submitted, finished, waitingFor;
     uint64_t waitingNs, submittedAgoNs;
     uint32_t replay, frame;
+    uint32_t openReplay, openFrame, lostReplay, lostFrame;
     uint32_t bgPipesDone, bgPipesLeft;
 } RhiGpuProgress;
 

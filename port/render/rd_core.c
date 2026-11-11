@@ -30,6 +30,7 @@
 #include "../fmv/rd_video.h"
 #include "rd_internal.h"
 #include "rd_icon_hold.h" /* rd__icon_pass_drop */
+#include "rd_loss_keep.h" /* rd__loss_keep_recycle */
 #include "rd_layer.h"     /* the display layer's reserved slots */
 #include "rd_fsr3.h"      /* rd__fsr3_fp16_word, the summary's precision */
 #include "modelpack.h"    /* the model pack switch */
@@ -1936,6 +1937,7 @@ void rd_shutdown(void)
     for (int i = 0; i < RD_FRAME_RING; i++) {
         rd__frame_free(&g_rd.frames[i]);
     }
+    rd__loss_keep_shutdown();
     rd__interp_shutdown();
     for (int i = 0; i < RD_MAX_TARGETS; i++) {
         if (g_rd.targets[i].live || g_rd.targets[i].parked) {
@@ -2500,6 +2502,7 @@ void rd_begin_frame(void)
      * the one before it */
     int idx = g_rd.lastIndex < 0 ? 0 : (g_rd.lastIndex + 1) % RD_FRAME_RING;
     RdFrame *f = &g_rd.frames[idx];
+    rd__loss_keep_recycle(f); /* a frame the GPU may not have finished, copied (rd_dump.c) */
     rd__frame_reset(f);
     f->number = ++g_rd.frameCounter;
     rd__vu_mesh_sweep_stale(); /* retired meshes no kept frame drew */
