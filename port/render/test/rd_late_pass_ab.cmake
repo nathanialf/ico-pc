@@ -94,7 +94,10 @@ endforeach()
 list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
-set(common ICO_RD_VU_PREPASS=0)
+# the crack fill's swap off in both runs (rd_crack_fill.c FILLSWAP: refused for a
+# held fill, so with it on the pair's copies would differ by the fills held;
+# rd_crack_work_ab checks the swap)
+set(common ICO_RD_VU_PREPASS=0 ICO_RD_CRACK_SWAP=0)
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(env_phone ICO_VK_FAKE_LIMITS=moltenvk)
 set(args_enh43 --enhanced --resolution 2x --aspect 1.3333 --present 1280x960)
