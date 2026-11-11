@@ -558,6 +558,18 @@ static bool fxPlanDraw(Replay *r, const RdFxDraw *x)
     return false;
 }
 
+/* fxPlanDraw's alpha alone from the state and the record: a textured
+ * sprite under MODULATE (no TFX in the record's lines, no DECAL) with
+ * RGBAQ's RGB 0 and no blend writes RGB 0 whatever its texture holds, so
+ * the texture's RGB is read by nothing (the glow's mask: SCENE's alpha
+ * into WORK2).  rd_late_pass.c holds the crack fill past such a read of
+ * SCENE (the fill writes SCENE's RGB alone after the glow's alpha) */
+bool rd__fx_alpha_only(const RdDrawState *d, const RdPostRec *p)
+{
+    return d->texEnabled && !d->abe && (p->lines & 3u) == 0 && d->texFn != RD_TEXFN_DECAL &&
+           p->rgba[0] == 0 && p->rgba[1] == 0 && p->rgba[2] == 0;
+}
+
 uint32_t rd__fx_enumerate(RdPipeKeyInt *out, uint32_t max, uint32_t n)
 {
     if (!g_rd.profile.fxPlan) {

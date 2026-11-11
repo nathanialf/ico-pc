@@ -612,6 +612,22 @@ replays it (`rd_replay_tool --stats` prints `glow: light plan on: <plan> (<reaso
 `perf classes` line's glow class shows what the plan saved; the first dark frame is logged once
 (`rd: glow: light plan: above 1x nothing in frame N puts light into the glow ...`).
 
+### The late passes on SCENE
+
+On a tile-based phone the crack fill of a glow room whose glow draws nothing (the dark plan above)
+is drawn in the aura's paste pass instead of a pass of its own
+([RENDER_POST.md](RENDER_POST.md#the-late-passes-on-scene)). The start line `rd: late pass: on (a
+tile-based GPU's default): ...` (or `off (<why>)`) says whether it is in force; the 10 s block's
+`window: late pass: N crack fills held into the aura's paste pass, M drawn early in a pass of their
+own (K <why>, ...)` counts the pictures it saved a pass in (N) and those where something between
+the glow and the aura drew on SCENE first (M, by reason: `a draw`, `a command on SCENE`, `the
+aura's paste pass could not take it`, `SCENE's snapshot taken again`, ...). The crack fill's own 10 s
+line then shows its `after the glow's alpha` count falling and `in the aura's paste pass` rising by
+N, and `held past SCENE's border repeat` where the frame's outer columns are repeated; the `perf
+classes` line's crack fill class loses its pass (its colour copy stays). Dark rooms with many
+`drawn early` say a command the hold did not expect; the player's F12 dump replays it
+(`rd_replay_tool --stats` prints `late pass on: N crack fills held ..., M drawn early (<why>)`).
+
 ### DATE's passes without the depth (issues 179 and 123)
 
 On a phone with `DATE snapshot` in its profile line (Arm, Qualcomm without the in-pass read) the

@@ -5219,6 +5219,7 @@ static void perf_log(void)
                 (unsigned long long)s_perf.glowKept, why, at ? ")" : "");
     }
     rd_glow_light_line(); /* the glow drawn where it adds light (rd_glow_light.c) */
+    rd_late_pass_line();  /* the crack fill held into the aura's pass (rd_late_pass.c) */
     window_pipeline_skip_line();
     if (s_perf.msaaSamples) {
         /* the anti-aliasing's cost: its resolves' GPU time is the effects'

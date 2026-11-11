@@ -1270,7 +1270,8 @@ store the fill reads is kept up to that command, `PlanDepth.late`):
   wherever it lay. The fill then waits past both sprites and is drawn with RGB alone (the colour
   mask, `RD_CRACK_KEY_RGB`): the same bytes as at the start of list 7. The two sprites stay in the
   fog's pass ([RENDER.md](RENDER.md#the-glows-passes): `fxAttachDepth`), so the glow keeps its cut.
-  After them the fill waits for nothing else (the mask that reads SCENE follows).
+  After them the fill waits for nothing else (the mask that reads SCENE follows), unless the late
+  pass holds its draw ([below](#the-late-passes-on-scene)).
 - **the aura's paste** (`pasteFeedBackAreaToFB`: FEED128 blended over SCENE through its
   destination, no Z test): the fill is the first draw of the paste's own pass. Where the fx plan
   draws the paste by the local read (`rd_fx_plan.c` `fxDraw`), `rd__crack_fill_in_pass` copies
@@ -1359,6 +1360,71 @@ in G), which is copied into a readback buffer and summed once the GPU is past th
   scale SXxSY, reach RXxRY texels; S fogged replays above 1x not filled; F fills after lists 4-6;
   A fills after the MSAA resolve; K fills in the aura's paste pass; G fills after the glow's
   alpha)` (P counts the fill's own passes: 0 for a fill in the paste's pass).
+
+### The late passes on SCENE
+
+`port/render/rd_late_pass.c` (`rd_late_pass.h`): fewer full-size passes on SCENE after list 7, the
+same bytes. On by default on a tile-based GPU (`RdProfile.tiler`) under Vulkan (MoltenVK too), where a
+pass loads and stores the whole picture (10 MB each way at 2364 x 1080); off on the other classes and
+on OpenGL. `ICO_RD_LATE_PASS=0|1|fill` (the tests only, [TESTING.md](TESTING.md); no config key)
+switches it off or forces it on anywhere.
+
+**The crack fill's draw held** (`fill`). In a glow room the fill is placed after `cleanUpFB` at the
+first sprite into another target (the glow's `WORK2_PAD` band), because the glow's mask, which samples
+SCENE, follows; so it has a pass of its own (the PowerVR phone's cage rooms at Resolution Auto: 0.9
+passes and 1.8 ms a picture, "after the glow's alpha" in its 10 s line). Under the glow's DARK plan
+([The glow where it adds light](#the-glow-where-it-adds-light)) the mask and the paste are not
+drawn, and nothing until the aura's paste draws on SCENE or reads its RGB. There
+`rd__crack_fill_place` says TAKE: the fill's snapshot is taken where it was (the same bytes read, the
+detector, reach and arithmetic unchanged) and its draw waits, each command classed by
+`rd__late_pass_class`, until it is the first draw of the aura's paste pass (`rd__crack_fill_in_pass`,
+as in a room without the glow). It waits past: state (not the upscale point), NOPs, overlay text, a
+clear or a copy of another target, a staticBlur sprite into another target that writes no depth of
+SCENE, takes no DATE and samples SCENE only in the alpha-only form (`rd__fx_alpha_only`: MODULATE by
+RGBAQ's RGB 0 without a blend, the glow's mask: the alpha, which the fill, RGB alone after the
+glow's alpha, does not write), and a sprite on SCENE the light plan does not draw
+(`rd__glow_light_skips`: the DARK plan's paste). Anything else has the held fill drawn before it in
+a pass of its own (the cost without the hold); so do SCENE's snapshot taken again or swapped
+(`rd_replay.c` `takeSnap`, `blurSwapTarget`), an MSAA epoch, an aura paste whose pass cannot take
+it, and the walk's end. Not held under the upscaler's split (the upscale point, the display layer),
+with an MSAA epoch wanted, under the exact blend, or under the tool's pass window.
+
+One write of SCENE falls between the snapshot and the draw: SCENE's border repeat
+([RENDER.md](RENDER.md), `rd_blur_border.c` `sceneRepeat`, before the first sprite that samples
+SCENE: the mask, whose draw the plan skips and whose repeat it keeps), which copies GS columns 2 and
+W - 3 over the outer two a side. Without the hold it copied the filled columns, and the fill had read
+the outer columns, as the fog and lists 4-6 left them, as neighbours. With it the fill reads the same
+snapshot, taken before the repeat; its draw is scissored to the columns the repeat left, and each
+block the repeat copied (`rd__scene_border_blocks`: up to 16, more and the held fill is drawn before
+the repeat) is drawn again with the test made at the block's source texel (`crack_fill_ps`'s
+`DrawCB.g_param.w`, a whole number of columns; 0 for every other draw): a crack there writes its
+source's fill, any other texel keeps the copy. The alpha is the copy's either way (the fill writes RGB
+alone there).
+
+The store plan's scan (`rd_store_plan.c`) asks `rd__late_pass_scan` where the fill reads SCENE's
+depth; the glow's plan is decided at the scan's end, so `rd__late_pass_scan_end` then gives the
+place the walk takes (the landing under DARK, the snapshot's place under any other plan) and the
+depth's touch (`PlanDepth.late`) lands there, every pass before it keeping the depth's store.
+
+What it saves: the fill's own pass, SCENE's colour loaded and stored, in each DARK room picture with
+a crack fill and the aura (about 1.2 to 1.5 ms a picture estimated for the phone's cage rooms;
+UNVERIFIED). Counters `RdPerfRecord.latePassHeld`, `latePassTexels`, `latePassFlushed`,
+`latePassWhy` (`RD_LATE_WHY_*`). The lines:
+
+- `rd: late pass: on (a tile-based GPU's default): the crack fill's draw held from its snapshot to
+  the aura's paste pass in a frame whose glow draws nothing (the same bytes)`, or `rd: late pass:
+  off (<why>)`, at the start and when it changes;
+- `rd: late pass: the crack fill's draw held from its snapshot to the aura's paste pass (the glow
+  drew nothing between), not in a pass of its own (reported once)`;
+- the 10 s `window: late pass: N crack fills held into the aura's paste pass, M drawn early in a
+  pass of their own (K <why>, ...)` (when any) and the crack fill's own `..., B held past SCENE's
+  border repeat (its columns filled from their source columns)`;
+- `--stats`: `<dump>: stats: late pass on|off|fill: N crack fills held into the aura's paste pass
+  (X MB of colour not loaded and as many not stored), M drawn early in a pass of their own (<why>)`.
+
+`rd_late_pass` (the predicate and the scan, CPU), `rd_crack_held` (a crack in the repeat's source
+column, held against the late pass off), `rd_late_pass_ab` and `rd_late_pass_gl` (dumps) check it
+([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 `rd_crack_test` (`rd_crack`, `rd_crack_4x`, `rd_crack_frac`, `rd_crack_backdrop`,
 `rd_crack_backdrop_4x`, `rd_crack_backdrop_frac`, `rd_crack_1x`, `rd_crack_original`,

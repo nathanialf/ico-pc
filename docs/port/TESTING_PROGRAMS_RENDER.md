@@ -820,6 +820,36 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   none begun again, the same passes, 3 snapshots (1 the first, 2 after an alpha write) and store-plan
   drops, the passes with a depth fewer by the runs, the depth and stencil bytes asked lower by 4 to 5
   bytes a texel each way of each cut pass, the 10 s text's `; DATE: 2.0 passes`; no validation error.
+- `rd_late_pass_test.c` (`rd_late_pass`, CPU, record-only): the late passes' predicate
+  (`rd_late_pass.c` `rd__late_pass_class`) on made-up commands: state, NOPs, overlay text, a clear
+  or copy of another target, a sprite into another target (untextured, from another target, the
+  glow's mask from SCENE in the alpha-only form) and a sprite on SCENE the light plan skips (or, in
+  the scan, may skip) wait; the upscale point, a clear or copy of SCENE, SCENE's colour or depth view
+  sampled otherwise, DATE, SCENE's depth written, a drawn sprite on SCENE, the reduction, the fog, a
+  screen prim, a VU draw and a shadow command do not, each with its reason; the aura's paste lands.
+  The store plan's scan (`rd__late_pass_scan`, `rd__late_pass_scan_end`) over a DARK room's order:
+  the fill's read at the aura's paste held (the plan ignored, `RD_LATE_ANY_PLAN`), at the band with
+  no DARK plan and switched off, at the walk's end with no paste, at a screen prim before the
+  paste; `rd__fx_alpha_only`.
+- `rd_crack_held` (`rd_crack_test 2 held`, `ICO_VK_FAKE_LIMITS=moltenvk`; registered by
+  `rd_late_pass.cmake`): the glow's `cleanUpFB`, a sprite into WORK0 (the fill's snapshot there), the
+  glow's mask (SCENE's alpha into WORK2: SCENE's border repeat before it on the 640 GS pixel frame)
+  and the aura's paste, with a crack 1/16 GS pixel wide at GS x 2.5 (texel 5 at 2x, the repeat's
+  source column); the late pass forced with the plan ignored: one fill held into the paste's pass,
+  none early, no fill pass of its own; against the late pass off (`rd__late_pass_force(0)`) SCENE's
+  colour and depth byte for byte, one render pass fewer, the crack filled and each copy the repeat
+  laid of it the filled texel's bytes; the main checks leave out the repeat's outer columns.
+- `rd_late_pass_ab.cmake` (`rd_late_pass_ab`, `rd_late_pass_gl`): the dumps of
+  `tools/late_pass_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches
+  none too) with `ICO_RD_LATE_PASS=0` and `1`, `--pass-dump --stats`, `ICO_RD_VU_PREPASS=0`, at the
+  PowerVR phone's Resolution Auto (2364x1080, Full height and pixel) and at Enhanced 2x 4:3, both under
+  `ICO_VK_FAKE_LIMITS=moltenvk`; the `_gl` twin the phone's setting on OpenGL (llvmpipe, the aura's
+  paste through a snapshot: a held fill drawn early in its own pass). Each pair: every PNG byte for
+  byte, the same draws, the passes and the crack fill's own passes fewer by exactly the fills held,
+  the colour MB loaded and stored each fewer by the MB the stats name for them (within 0.02), the
+  depth and stencil and copy MB the same, the off run holding nothing; the dumps the list marks hold
+  that many fills at the phone's setting (on OpenGL held or drawn early); at least one held over the
+  list on Vulkan. No device: SKIP.
 - `rd_date_cut_ab.cmake` (`rd_date_cut_ab`, `rd_date_cut_ab_gl`): the dumps of
   `tools/date_cut_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches
   none too) with `ICO_RD_DATE_CUT=0` and `1`, `--pass-dump --stats`, under `ICO_RD_BLEND=fixed`,

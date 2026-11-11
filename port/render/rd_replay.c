@@ -2313,6 +2313,7 @@ static bool snapEnsure(RdTargetRec *tc)
  * a stale texel.  False when there is no snapshot texture. */
 static bool takeSnap(Replay *r, RdTargetRec *tc, RhiRect area)
 {
+    rd__crack_fill_snap(r, tc); /* a held fill first (rd_late_pass.c) */
     endPass(r);
     if (!snapEnsure(tc)) {
         return false;
@@ -5127,6 +5128,7 @@ static bool blurCoversTarget(const Replay *r, const RdTargetRec *tc, const RdPos
  * SCENE, recording a pending clear) before it is the snapshot. */
 static bool blurSwapTarget(Replay *r, RdTargetRec *tc)
 {
+    rd__crack_fill_snap(r, tc);
     endPass(r);
     if (!snapEnsure(tc)) {
         return false;

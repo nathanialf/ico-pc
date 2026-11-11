@@ -390,6 +390,10 @@ float depth_upsample_ps(BlitVSOut i) : SV_Depth
 //   g_param.xy  the reach across columns and across rows, 0..3 texels
 //               (ceil(scale / 2) on an axis above 1x, else 0)
 //   g_param.z   the share (1 / RD_CRACK_BEHIND)
+//   g_param.w   crack_fill_ps: the texel the test is made at, as columns
+//               right of the pixel's (0 but for a held fill's draws over
+//               SCENE's repeated border columns, each at its source column:
+//               rd_crack_fill.c fillDrawHeld); a whole number
 // crack_count_ps: the same test over a 16 x 16 block of SCENE's depth (t1
 // there) per output texel, the count n of cracks written as (n & 255,
 // n >> 8) / 255 in R and G of an RGBA8 target (the filled pixels, read back
@@ -508,7 +512,7 @@ float4 crack_fill_ps(BlitVSOut i) : SV_Target0
 {
     uint w, h;
     g_sceneDepth.GetDimensions(w, h);
-    int2 p = int2(i.pos.xy);
+    int2 p = int2(i.pos.xy) + int2(int(g_param.w), 0);
     int2 from;
     if (!crack_at(g_sceneDepth, p, int2(int(w), int(h)), int2(g_param.xy), g_param.z, from)) {
         discard;

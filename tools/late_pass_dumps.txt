@@ -1,0 +1,23 @@
+# Dump list for rd_late_pass_ab and rd_late_pass_gl (port/render/test/rd_late_pass_ab.cmake:
+# the late passes on SCENE, ICO_RD_LATE_PASS=0 against 1, byte for byte).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  A listed dump that is absent FAILS the test
+# (a '*' glob that matches nothing too).  Relative paths are relative to this
+# file.  A second field is the crack fills one replay holds into the aura's
+# paste pass at the phone's setting (on OpenGL held or drawn early): the glow's
+# light plan draws nothing in these rooms (DARK) and the fill was drawn after
+# the glow's alpha in a pass of its own; without it, no expectation but the
+# pair's arithmetic.
+#
+# the Pixel 10 Pro Fold's v0.11.4 F12 frame (stage 4; unzipped)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump 1
+# the same phone's v0.11.5 rc1 F12 frame (stage 4, the cage)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc1/frame-20261111-075333-v4287.zip 1
+# issue 163's lamp rooms
+/primary/dev/ico-dumps/163/*.rddump
+# issue 102's frame with the sun's fans
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump
+# issue 164's paused frame (the pause menu's draws in list 11 after the aura)
+/primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump
+# a 2026-10-07 capture (512 GS pixels wide: no border repeat at 4:3)
+/primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump
