@@ -23,7 +23,12 @@
 # FSR 1.0 (--fsr1), the display layer under a temporal upscaler
 # (--upscale-test 1.5), Downsampling (--downsample); and the mirror, which
 # takes it (PRESENT within the bound).  The off runs must say "present from
-# SCENE off".  No device: SKIP (77); no list: SKIP.
+# SCENE off".  The crack fill's swap (rd_crack_fill.c) as often in the on run
+# as in the off run, and at the phone's setting some dump with the reduction
+# not drawn and the swap taken in one replay (the display layer's switch on
+# in every run, its default: it keeps nothing without a temporal upscaler);
+# the first dump presented 31 times (--time 30) prints the 10 s line with a
+# rate above 0.  No device: SKIP (77); no list: SKIP.
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DPY=<python3>
 # -DDIFF=<png_level_diff.py> -DOUT=<a folder the test may write>
 set(dumps "")
@@ -65,6 +70,8 @@ set(env_enh2x "")
 set(args_enh2x --enhanced --resolution 2x --present 1280x960)
 set(statRe "stats: present from SCENE (on|off): ([0-9]+) reductions not drawn, ([0-9]+) presents from SCENE, ([0-9]+) kept( \\(([^)]*)\\))?")
 set(trafficRe "stats: traffic: colour ([0-9.]+) MB loaded ([0-9.]+) MB stored[^\n]* ([0-9]+) passes")
+set(swapRe "stats: crack fill swap (on|off) \\(self-test (passed|failed|not run)\\): ([0-9]+) snapshots by the swap[^\n]*, ([0-9]+) copied")
+set(lineRe "rd: present from SCENE: ([0-9.]+) a replay \\(([0-9.]+) presents from SCENE\\), ([0-9.]+) through DISPLAY")
 set(diffRe "png_level_diff: [0-9]+ x [0-9]+, ([0-9]+) channels: [0-9]+ equal, ([0-9]+) one level apart, ([0-9]+) more \\(largest ([0-9]+)\\), ([0-9]+) pixels differ")
 
 # one run: the tool's exit, its output in out_<var>
@@ -123,6 +130,7 @@ function(compareDirs tag dirOff dirOn same)
 endfunction()
 
 set(taken 0)
+set(phoneTaken 0)
 set(index 0)
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
@@ -171,6 +179,25 @@ foreach(dump IN LISTS dumps)
         message(SEND_ERROR "${dump} ${s}: the reduction not drawn but no pass or store fewer (${passesOff} -> ${passesOn} passes, ${storedOff} -> ${storedOn} MB)")
         math(EXPR failures "${failures} + 1")
       endif()
+    endif()
+    # the crack fill's swap: the present from SCENE takes no refusal from it,
+    # so the on run swaps as often as the off run (the display layer's switch
+    # on in both, its default: the layer itself needs a temporal upscaler)
+    set(swapsOff 0)
+    set(swapsOn 0)
+    if(out_off MATCHES "${swapRe}")
+      set(swapsOff "${CMAKE_MATCH_3}")
+    endif()
+    if(out_on MATCHES "${swapRe}")
+      set(swapsOn "${CMAKE_MATCH_3}")
+    endif()
+    message(STATUS "${dump} ${s}: crack fill swaps ${swapsOff} off, ${swapsOn} on")
+    if(NOT swapsOn EQUAL swapsOff)
+      message(SEND_ERROR "${dump} ${s}: the crack fill swapped ${swapsOff} times off and ${swapsOn} on (the same expected)")
+      math(EXPR failures "${failures} + 1")
+    endif()
+    if(s STREQUAL "phone" AND skipped EQUAL 1 AND swapsOn GREATER 0)
+      math(EXPR phoneTaken "${phoneTaken} + 1")
     endif()
     compareDirs("${tag}" "${OUT}/${tag}-off" "${OUT}/${tag}-on" FALSE)
     math(EXPR failures "${failures} + ${bad_${tag}}")
@@ -223,6 +250,29 @@ foreach(dump IN LISTS dumps)
     endif()
   endforeach()
 endforeach()
+# the phone's shape: the reduction not drawn and the crack fill's swap taken
+# in one replay (the display layer's switch on), on some dump
+if(phoneTaken EQUAL 0)
+  message(SEND_ERROR "no dump at the phone's setting had the reduction not drawn with the crack fill's swap taken")
+  math(EXPR failures "${failures} + 1")
+endif()
+# the 10 s line: the first dump presented 31 times at the phone's setting
+# (about 1.4 s of lavapipe a replay: past 10 s), the line's rate above 0
+list(GET dumps 0 first)
+execute_process(COMMAND "${CMAKE_COMMAND}" -E env "TMPDIR=${OUT}/tmp" ICO_RD_PRESENT_SCENE=1
+                        ${env_phone} "${TOOL}" "${first}" "${OUT}/ten.png" --stats --time 30
+                        ${args_phone}
+                RESULT_VARIABLE rcT OUTPUT_VARIABLE outT ERROR_VARIABLE errT)
+if(NOT rcT EQUAL 0 OR NOT "${outT}${errT}" MATCHES "${lineRe}")
+  message(SEND_ERROR "the 10 s line: exit ${rcT}, no 'present from SCENE: N a replay' line:\n${errT}")
+  math(EXPR failures "${failures} + 1")
+else()
+  message(STATUS "the 10 s line: ${CMAKE_MATCH_1} a replay, ${CMAKE_MATCH_2} presents from SCENE, ${CMAKE_MATCH_3} through DISPLAY")
+  if(NOT CMAKE_MATCH_1 GREATER 0 OR NOT CMAKE_MATCH_2 GREATER 0)
+    message(SEND_ERROR "the 10 s line says ${CMAKE_MATCH_1} a replay (${CMAKE_MATCH_2} presents from SCENE): above 0 expected")
+    math(EXPR failures "${failures} + 1")
+  endif()
+endif()
 if(taken EQUAL 0)
   message(SEND_ERROR "no dump's reduction was left undrawn at any setting (the gate saw nothing)")
   math(EXPR failures "${failures} + 1")

@@ -595,7 +595,9 @@ The conditions (each keeps the reduction, counted with its reason, `rd_present_s
 - the hardware sprite (scale 1, the Original preset and 1x keep the GS sprite model); no MSAA
   (`rd_aa_samples`); no GS state as shader data (`rd__uber_on`); no upscaler set
   (`RdSettings.upscale`: FSR 1.0 reads DISPLAY, a temporal one takes SCENE at the reduction,
-  `rd__upscale_point_on`); not the display layer (`rd__layer_on`);
+  `rd__upscale_point_on`); not the display layer in force (`rd__layer_active`: SCENE lent to the
+  composite this replay; `rd__layer_on` is only its switch, and the layer runs only under a
+  temporal upscaler);
 - the present reads DISPLAY in its box blit alone (`rd_present.c`
   `rd__present_scene_present_why`): no CRT filter, no Downsampling, no doubled lines (full height),
   no effects depth, no capture armed or pending, no box average of DISPLAY into the window
@@ -624,7 +626,11 @@ state's picture, the tests and the replay tool's PNGs; `rd_display_probe`) draws
 its own; a present that cannot read SCENE after all (a capture armed since the replay) draws it in
 the present's list first. SCENE is that frame's then: only a replay draws on it and every replay
 settles the debt before its first command; its texture and generation are checked, and a SCENE
-made again with DISPLAY kept loses the picture (said; the switch off from then on). A new context
+made again with DISPLAY kept loses the picture (said; the switch off from then on). The crack
+fill's swap ([The crack fill's snapshot by the swap](#the-crack-fills-snapshot-by-the-swap)) is no such recreation and takes no refusal from
+it: it swaps SCENE's colour before the reduction, the plan records the colour SCENE holds at the
+reduction, the present reads SCENE's record's colour when it draws, nothing after the reduction may
+touch SCENE, and a later replay settles the debt before its own swap. A new context
 owes nothing (`rd__present_scene_init`). The pipelines (`blit_scene_ps` on both outputs) are in
 the start-up set while the switch is on; every backend draws it from the shared module (SPIR-V on
 Vulkan and MoltenVK, DXIL on Direct3D 12, FXC's run-time compile of `blit.hlsl` on Direct3D 11, the
@@ -1484,7 +1490,7 @@ two textures as a pair (the smaller id in `Snap.tex[3]`, the larger in `sceneOth
 not a recreation; the fill's pass stays whole (it has no pass area; `pasteWhyNot` and `glowWhyNot`
 refuse one). Refused, the snapshot copied, and counted by reason: a draw the late pass holds past
 the snapshot (SCENE's colour would be the stale texture while the border repeat and the mask read
-it), the upscaler's split (the display layer reads SCENE's snapshot), the present from SCENE, an
+it), the upscaler's split (the display layer reads SCENE's snapshot), an
 MSAA epoch wanted, the exact blend, the whole-mask pipeline missing, `ICO_RD_CRACK_SWAP=0` (the
 tests only, [TESTING.md](TESTING.md); no config key). What it saves where it swaps: the colour copy
 (about 9.7 MB read and as many written at 2364 x 1080) and the fill pass's colour load.

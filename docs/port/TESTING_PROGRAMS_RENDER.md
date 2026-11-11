@@ -1070,7 +1070,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   skipped, a run with the reduction not drawn one pass and some colour MB stored fewer, 2x kept;
   on the first dump at the phone's setting the CRT filter, FSR 1.0, the test's temporal upscaler
   and Downsampling keep the reduction with their reasons and every PNG byte for byte, and the
-  mirror takes it; some run must leave it undrawn (`rd_present_scene_ab`). SKIP without a device.
+  mirror takes it; the crack fill's swap as often in the on run as in the off run, and at the
+  phone's setting some dump with the reduction not drawn and the swap taken in one replay (the
+  display layer's switch on, its default: the layer needs a temporal upscaler); the first dump
+  presented 31 times (`--time 30`) prints the 10 s `present from SCENE: N a replay` line with N
+  above 0; some run must leave it undrawn (`rd_present_scene_ab`). SKIP without a device.
 - `rd_crack_late_ab.cmake`: the crack fill after lists 4-6 against pass dumps of the build that drew
   it before the fog: each line of `tools/crack_late_dumps.txt` (`<setting> <dump> <baseline
   folder>`, machine-local: six corpus dumps at the gate's Enhanced 2x 4:3 against

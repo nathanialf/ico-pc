@@ -246,14 +246,13 @@ static uint32_t s_mode;
  * 0 not run, 1 passed, 2 failed) */
 enum {
     SWAP_WHY_NONE,
-    SWAP_WHY_OFF,     /* ICO_RD_CRACK_SWAP=0 */
-    SWAP_WHY_TEST,    /* the self-test not passed (not run, failed) */
-    SWAP_WHY_HELD,    /* the late pass holds the draw past the snapshot (rd_late_pass.c) */
-    SWAP_WHY_SPLIT,   /* the upscaler's split (the display layer owns SCENE's snapshot) */
-    SWAP_WHY_PRESENT, /* the present from SCENE (it tracks SCENE's colour texture) */
-    SWAP_WHY_MSAA,    /* an MSAA epoch wanted */
-    SWAP_WHY_EXACT,   /* the opted-in exact blend */
-    SWAP_WHY_PIPE,    /* the fill's whole-mask pipeline missing */
+    SWAP_WHY_OFF,   /* ICO_RD_CRACK_SWAP=0 */
+    SWAP_WHY_TEST,  /* the self-test not passed (not run, failed) */
+    SWAP_WHY_HELD,  /* the late pass holds the draw past the snapshot (rd_late_pass.c) */
+    SWAP_WHY_SPLIT, /* the upscaler's split (the display layer owns SCENE's snapshot) */
+    SWAP_WHY_MSAA,  /* an MSAA epoch wanted */
+    SWAP_WHY_EXACT, /* the opted-in exact blend */
+    SWAP_WHY_PIPE,  /* the fill's whole-mask pipeline missing */
     SWAP_WHY_COUNT
 };
 
@@ -263,7 +262,6 @@ static const char *const kSwapWhy[SWAP_WHY_COUNT] = {
     "its self-test not passed",
     "the draw held past the snapshot",
     "the upscaler's split",
-    "the present from SCENE",
     "an MSAA epoch",
     "the exact blend",
     "its pipeline missing",
@@ -879,9 +877,11 @@ static int swapWhyNot(void)
     if (rd__upscale_point_on()) {
         return SWAP_WHY_SPLIT;
     }
-    if (rd__present_scene_on()) {
-        return SWAP_WHY_PRESENT;
-    }
+    /* the present from SCENE takes no refusal: its plan reads SCENE's colour
+     * texture at the reduction, after this swap, and the present reads
+     * SCENE's record's colour when it draws; nothing after the reduction may
+     * touch SCENE (rd_present_scene.c planPair), and a later replay settles
+     * an owed DISPLAY before its first command, before its own swap */
     if (rd__replay_msaa_want() > 1u) {
         return SWAP_WHY_MSAA;
     }
