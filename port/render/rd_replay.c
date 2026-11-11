@@ -68,6 +68,7 @@
 #include "rd_passring.h"
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
+#include "rd_shadow_tile.h"
 #include "rd_stencil_selftest.h"
 #include "rd_submit.h"
 #include "rd_upscale.h"
@@ -112,7 +113,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
     "crack_fill_ps", "crack_count_ps", "shadow_count_ps", "crack_fill1_ps", "fx_aura_rows_ps",
     "fx_aura_sum_ps", "shadow_count_load_ps", "fsr1_easu_ps", "fsr1_rcas_ps", "vu_pre_cs",
-    "blit_scene_ps"};
+    "blit_scene_ps", "shadow_tile_mask_ps", "shadow_tile_mark_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -348,6 +349,11 @@ bool rd__gpu_init(void *sdlWindow)
             continue;
         }
         if (i >= RD_FS_OPTIONAL_FIRST && !optionalBuilt(s_fsNames[i])) {
+            continue;
+        }
+        /* the shadow tiles need DATE's stencil bit: Vulkan's alone */
+        if ((i == RD_FS_SHADOW_TILE_MASK || i == RD_FS_SHADOW_TILE_MARK) &&
+            rhi_backend() != RHI_BACKEND_VULKAN) {
             continue;
         }
         /* without dual-source blending the gs_dual_out entries are not
@@ -2709,6 +2715,7 @@ static bool prepareDrawEx(Replay *r, DrawSetup *ds, const RhiRect *dateArea, boo
     memset(ds, 0, sizeof(*ds));
     r->mirror = 0; /* likewise */
     r->dateStNow = 0;
+    r->tileNow = 0; /* rd_shadow_tile.c */
     ds->tc = rd__target_rec(r->st.color);
     if (!ds->tc || !ds->tc->color.id) {
         return false;
@@ -2854,7 +2861,8 @@ static RhiBindGroup bindDrawEx(Replay *r, const DrawSetup *ds, RhiRect *scOut, u
                   RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f, false);
         rd__last_store_arm(0, 0);
     }
-    if (ds->dateStencil && !rd__replay_date_take(r, ds)) {
+    if (ds->dateStencil &&
+        !(ds->shadowTile ? rd__shadow_tile_take(r, ds) : rd__replay_date_take(r, ds))) {
         return (RhiBindGroup){0}; /* the bit could not be written: nothing drawn */
     }
     frameRefresh(r, ds);
@@ -2941,7 +2949,9 @@ static int expandPasses(const Replay *r, const RdDrawPass *in, int n, RdDrawPass
          * tests the bit with DF_DATE off (the exact blend's and the
          * two-pass fallback's images alike) */
         for (int i = 0; i < m; i++) {
-            (void)rd__date_stencil_pass(&out[i]);
+            if (rd__date_stencil_pass(&out[i]) && r->tileNow) {
+                rd__shadow_tile_test_key(&out[i].key); /* over the tile mask */
+            }
         }
     }
     return m;
@@ -3482,6 +3492,7 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     if (!prepareDrawEx(r, &ds, dateAt, true)) {
         return;
     }
+    rd__shadow_tile_prepare(r, &ds, v, n); /* a composite over the tile mask */
     ds.screenCopy = screenCopy(r, &ds, c->b[0], c->b[1]);
     ds.screenPrim = 1; /* drawWrap's block rule */
 

@@ -167,6 +167,7 @@
 #include "rhi_driver_version.h" /* RHI_DRIVER_ID_MESA_TURNIP */
 #include "rd_vu_skin_check.h"
 #include "rd_stencil_selftest.h" /* rd__profile_powervr */
+#include "rd_shadow_tile.h"      /* rd__profile_tile_class */
 
 /* the device classes of the table */
 typedef enum ProfileClass {
@@ -327,6 +328,26 @@ bool rd__profile_powervr(void)
 {
     const RhiLimits *lim = rhi_limits();
     return lim != NULL && classOf(lim) == PC_POWERVR;
+}
+
+/* rd_shadow_tile.h: 1 the PowerVR class, 2 a desktop class, 0 any other */
+int rd__profile_tile_class(void)
+{
+    const RhiLimits *lim = rhi_limits();
+    if (lim == NULL) {
+        return 0;
+    }
+    switch (classOf(lim)) {
+    case PC_POWERVR:
+        return 1;
+    case PC_DESKTOP:
+    case PC_D3D12:
+    case PC_OPENGL:
+    case PC_D3D11:
+        return 2;
+    default:
+        return 0;
+    }
 }
 
 /* ICO_<name>: -1 unset, else 1 for 1/true/on/yes, 0 for anything else */

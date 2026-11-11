@@ -311,6 +311,12 @@ ico_add_shader(shadow_count_ps blit.hlsl shadow_count_ps fragment)
 # (RhiLimits.stencilGather), and the loads in force elsewhere
 # (rd_shadow_one.c); the same bytes
 ico_add_shader(shadow_count_load_ps blit.hlsl shadow_count_ps fragment DEFINES SHADOW_COUNT_LOAD=1)
+# The shadow tiles (port/render/rd_shadow_tile.c): a shadow level's tile mask
+# (integer loads of the level's alpha) and the composite's dead tiles marked
+# in the stencil's bit 7 from it, behind blit_vs; made on Vulkan alone (the
+# path needs DATE through the stencil bit)
+ico_add_shader(shadow_tile_mask_ps blit.hlsl shadow_tile_mask_ps fragment)
+ico_add_shader(shadow_tile_mark_ps blit.hlsl shadow_tile_mark_ps fragment)
 # The blur sprite's UINT-view build (fx_sprite_u_ps)
 # fx_sprite_ps reading its textures through their RGBA8_UINT views
 # (RHI_TEX_UINT_VIEW; rd_replay.c doBlurSpriteDraw)

@@ -81,6 +81,7 @@
 #include "rd_passring.h"
 #include "rd_pipe_finish.h"
 #include "rd_present_scene.h"
+#include "rd_shadow_tile.h"
 #include "rd_vu_record.h"
 #include "rd_vu_rec_sink.h"
 #include "rd_vu_skin_check.h"
@@ -740,6 +741,33 @@ static void shadowStencil(uint8_t mode, RhiDepthStencilState *ds)
                      : (mode == RD_STENCIL_DATE_TEST1_CLR ? RHI_SO_ZERO : RHI_SO_KEEP);
         ds->stencilReadMask = RD_DATE_STENCIL_BIT;
         ds->stencilWriteMask = f.pass == RHI_SO_KEEP ? 0 : RD_DATE_STENCIL_BIT;
+        break;
+    /* the shadow tiles (rd_shadow_tile.c; rd.h RD_STENCIL_DATE_CLEAR2 on):
+     * bit 7 marks a dead tile of a composite's area */
+    case RD_STENCIL_DATE_CLEAR2:
+        f.pass = RHI_SO_REPLACE; /* the reference 0 */
+        ds->stencilReadMask = 0;
+        ds->stencilWriteMask = RD_DATE_STENCIL_BIT | RD_TILE_STENCIL_BIT;
+        break;
+    case RD_STENCIL_TILE_MARK:
+        f.pass = RHI_SO_REPLACE; /* the reference RD_TILE_STENCIL_BIT */
+        ds->stencilReadMask = 0;
+        ds->stencilWriteMask = RD_TILE_STENCIL_BIT;
+        break;
+    case RD_STENCIL_DATE_SET_T:
+        f.compare = RHI_CMP_EQUAL; /* (0x40 & 0x80) == (s & 0x80): bit 7 is 0 */
+        f.pass = RHI_SO_REPLACE;
+        ds->stencilReadMask = RD_TILE_STENCIL_BIT;
+        ds->stencilWriteMask = RD_DATE_STENCIL_BIT;
+        break;
+    case RD_STENCIL_DATE_TEST0_T:
+    case RD_STENCIL_DATE_TEST1_T:
+        /* under 0xC0 against the reference 0x40: GREATER (0x40 > s) holds
+         * for s = 0 alone (bit 6 and bit 7 both 0), EQUAL for s = 0x40
+         * alone (bit 6 1, bit 7 0) */
+        f.compare = mode == RD_STENCIL_DATE_TEST1_T ? RHI_CMP_EQUAL : RHI_CMP_GREATER;
+        ds->stencilReadMask = RD_DATE_STENCIL_BIT | RD_TILE_STENCIL_BIT;
+        ds->stencilWriteMask = 0;
         break;
     default:
         f.compare = RHI_CMP_EQUAL;
@@ -3850,6 +3878,11 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     case RD_STENCIL_DATE_TEST1:
     case RD_STENCIL_DATE_TEST0_SET:
     case RD_STENCIL_DATE_TEST1_CLR:
+    case RD_STENCIL_DATE_CLEAR2:
+    case RD_STENCIL_TILE_MARK:
+    case RD_STENCIL_DATE_SET_T:
+    case RD_STENCIL_DATE_TEST0_T:
+    case RD_STENCIL_DATE_TEST1_T:
         return RD_KF_DATE;
     default:
         break;
@@ -4166,9 +4199,12 @@ RdPipeKeyInt rd__crack_fill_key(int kind)
 
 RdPipeKeyInt rd__date_setup_key(uint8_t mode, RhiFormat colorFmt)
 {
-    RdPipeKeyInt k = rd__post_key(
-        RD_VS_BLIT, mode == RD_STENCIL_DATE_CLEAR ? RD_FS_DATE_CLEAR : RD_FS_DATE_STENCIL,
-        colorFmt);
+    RdPipeKeyInt k = rd__post_key(RD_VS_BLIT,
+                                  mode == RD_STENCIL_DATE_CLEAR || mode == RD_STENCIL_DATE_CLEAR2
+                                      ? RD_FS_DATE_CLEAR
+                                  : mode == RD_STENCIL_TILE_MARK ? RD_FS_SHADOW_TILE_MARK
+                                                                 : RD_FS_DATE_STENCIL,
+                                  colorFmt);
     k.depthFmt = RHI_FMT_D32F_S8;
     k.gs.ztst = RD_ZTST_ALWAYS;
     k.gs.zwrite = RD_ZWRITE_OFF;
@@ -4221,6 +4257,8 @@ uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t 
     static const int kBlends[] = {-1, 4, 5, 6};
     static const uint8_t kPrims[] = {RD_PRIM_TRIANGLES, RD_PRIM_LINES};
     const uint32_t n0 = n < max ? n : max;
+    /* the shadow tiles' keys where they may be drawn (rd_shadow_tile.c) */
+    const bool tiles = rd__shadow_tile_keys_wanted();
     for (size_t t = 0; t < sizeof(kTests) / sizeof(kTests[0]); t++) {
         for (int space = 0; space < 2; space++) {
             for (int zw = 0; zw < 2; zw++) {
@@ -4241,9 +4279,21 @@ uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t 
                             kt.key.fs = RD_FS_SPRITE_TEXA;
                             if (rd__date_stencil_pass(&dp[i])) {
                                 n = rd__add_pipe_key(out, max, n, &dp[i].key);
+                                /* the shadow composite's TEST word without a Z
+                                 * write: its twin over the tile mask */
+                                if (t == 0 && !zw && tiles) {
+                                    RdPipeKeyInt tk = dp[i].key;
+                                    rd__shadow_tile_test_key(&tk);
+                                    n = rd__add_pipe_key(out, max, n, &tk);
+                                }
                             }
                             if (rd__date_stencil_pass(&kt)) {
                                 n = rd__add_pipe_key(out, max, n, &kt.key);
+                                if (t == 0 && !zw && tiles) {
+                                    RdPipeKeyInt tk = kt.key;
+                                    rd__shadow_tile_test_key(&tk);
+                                    n = rd__add_pipe_key(out, max, n, &tk);
+                                }
                             }
                         }
                     }
@@ -4294,6 +4344,17 @@ uint32_t rd__enumerate_reachable_date(RdPipeKeyInt *out, uint32_t max, uint32_t 
     const RdPipeKeyInt clear = rd__date_setup_key(RD_STENCIL_DATE_CLEAR, RHI_FMT_RGBA8_UNORM);
     const RdPipeKeyInt set = rd__date_setup_key(RD_STENCIL_DATE_SET, RHI_FMT_RGBA8_UNORM);
     n = rd__add_pipe_key(out, max, n, &clear);
+    if (tiles) {
+        /* the tiled set-up's three keys and the mask's */
+        static const uint8_t kTileModes[] = {RD_STENCIL_DATE_CLEAR2, RD_STENCIL_TILE_MARK,
+                                             RD_STENCIL_DATE_SET_T};
+        for (size_t i = 0; i < sizeof kTileModes; i++) {
+            const RdPipeKeyInt k = rd__date_setup_key(kTileModes[i], RHI_FMT_RGBA8_UNORM);
+            n = rd__add_pipe_key(out, max, n, &k);
+        }
+        const RdPipeKeyInt mask = rd__shadow_tile_mask_key();
+        n = rd__add_pipe_key(out, max, n, &mask);
+    }
     return rd__add_pipe_key(out, max, n, &set);
 }
 

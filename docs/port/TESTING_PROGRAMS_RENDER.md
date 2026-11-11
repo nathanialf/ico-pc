@@ -914,6 +914,25 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   composites) or at least one where it takes two snapshots, and its depth and stencil MB loaded and
   stored each fall by 0.8 to 1.0 of the "at most" its stats line names; Vulkan also `--keys` at the
   Mali's present size without an aspect: the cut adds no key the start-up set lacks. No device: SKIP.
+- `rd_shadow_tile_test.c` (`rd_shadow_tile` with `frames`, `rd_shadow_tile_selftest` with
+  `startup` and `ICO_RD_SHADOW_TILE=1`; both `ICO_RD_DATE_PATH=stencil`, lavapipe; 77 without a
+  device, DATE's stencil bit or the one-draw count, after the CPU words): the shadow tiles
+  (`rd_shadow_tile.c`): the 10 s clause and the `--stats` words from a made-up record; at a 640x448
+  Enhanced scale-2 Full pixel 16:9 scene, `frames` replays the self-test's frames (a shadow in a
+  corner, shadows at the frame's edges, no shadow), each with the B-spline composites off and on:
+  SCENE byte for byte with the tiles off and on (a later DATE DATM 1 sprite included), the corner's
+  and the edges' composite over a mask with dead tiles; `startup` runs `rd_fog_selftest`, whose
+  first run takes the tiles' self-test, and checks it passed; no validation error.
+- `rd_shadow_tile_ab.cmake` (`rd_shadow_tile_ab`): the dumps of `tools/shadow_tile_dumps.txt`
+  (machine-local; a listed dump that is absent FAILS: `tools/shadow_box_dumps.txt`'s and the
+  bridge v2809 and cage v4405 captures) with `ICO_RD_SHADOW_TILE=0` and `1`, `--pass-dump --stats`,
+  under `ICO_RD_STORE_PLAN=1`, `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's profile
+  (`ICO_VK_FAKE_LIMITS=moltenvk`), the Mali-G52's (`ICO_VK_FAKE_LIMITS=mali`, `ICO_VK_FAKE_NO_DST=1`:
+  nothing tiled) and the B-spline composites at Enhanced 2x, 3x and 4x (`ICO_RD_SHADOW_BSPLINE=1`,
+  `ICO_RD_DATE_PATH=stencil`). Each pair: every PNG byte for byte, `=0` off with nothing, the
+  passes more by at most the masks; at the phone setting v3677 and v2809 3 composites over the mask,
+  v2809's mask texels live at most 3717 (SHADOW0), 1023 (SHADOW1) and 289 (SHADOW2) by its measured
+  alpha boxes. No OpenGL twin: the path needs DATE's stencil bit. No device: SKIP.
 - `rd_shadow_box_test.c` (`rd_shadow_box`, CPU): the shadows over the volumes' box
   (`rd_shadow_box.c`): the count's box from 12.4 vertices (margins, a clamped vertex, clipping);
   one axis through a sprite (the Pixel frame's level 0 across and down, its rows past the count's

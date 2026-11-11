@@ -114,6 +114,14 @@ bool rd__shadow_box_screen(const struct RdStateBlock *st, const struct RdCmd *c,
  * it (NULL: not boxed); a level's box is kept here, once drawn */
 void rd__shadow_box_drawn(const RhiRect *all, const RhiRect *boxed);
 
+/* the shadow tiles (rd_shadow_tile.c): true with *src (the level target)
+ * when the draw at the current ordinal is a composite over a box that is
+ * not empty (rd__shadow_box_screen found it); and the levels the
+ * composites at ordinals from fromOrd on read whose box their producer drew
+ * this replay (at most max into out, the count returned) */
+bool rd__shadow_box_composite(uint32_t *src);
+unsigned rd__shadow_box_composite_sources(uint32_t fromOrd, uint32_t *out, unsigned max);
+
 /* ------------------------------------------------------------ the lines */
 void rd__shadow_box_pop(const struct RdPerfRecord *rec);
 void rd__shadow_box_text(char *out, size_t size, size_t *at);

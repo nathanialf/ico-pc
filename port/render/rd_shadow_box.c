@@ -731,6 +731,36 @@ bool rd__shadow_box_screen(const RdStateBlock *st, const RdCmd *c, const RdScree
     return true;
 }
 
+bool rd__shadow_box_composite(uint32_t *src)
+{
+    if (s_rep.qOrd != g_rdStoreOrd || s_rep.qRole != ROLE_COMPOSITE || s_rep.qBox.empty) {
+        return false;
+    }
+    return rd__shadow_box_role(g_rdStoreOrd, src) == ROLE_COMPOSITE;
+}
+
+unsigned rd__shadow_box_composite_sources(uint32_t fromOrd, uint32_t *out, unsigned max)
+{
+    unsigned n = 0;
+    for (unsigned i = 0; i < s_scan.nRole && n < max; i++) {
+        if (s_scan.role[i].role != ROLE_COMPOSITE || s_scan.role[i].ord < fromOrd) {
+            continue;
+        }
+        RdSbBox b;
+        if (madeFind(s_scan.role[i].src, s_scan.role[i].prod, &b) != RD_SB_WHY_COUNT) {
+            continue;
+        }
+        bool seen = false;
+        for (unsigned k = 0; k < n; k++) {
+            seen = seen || out[k] == s_scan.role[i].src;
+        }
+        if (!seen) {
+            out[n++] = s_scan.role[i].src;
+        }
+    }
+    return n;
+}
+
 void rd__shadow_box_drawn(const RhiRect *all, const RhiRect *boxed)
 {
     if (s_rep.qOrd != g_rdStoreOrd || s_rep.qRole == ROLE_NONE) {
