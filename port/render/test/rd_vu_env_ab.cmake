@@ -3,9 +3,9 @@
 # byte (the VU record's two writes, rd_vu_record.h: rd_vurecord_ab
 # ICO_RD_VU_RECORD=targets against =stores; the pre-pass's floor:
 # rd_vuprepass_min_ab, ICO_RD_VU_PREPASS_MIN unset against a floor no frame
-# reaches, every VU command drawn the old way).  Each run's stdout must match
-# its regex (REQ_A, REQ_B: the stats lines that say the run took the path it
-# was meant to).  At the Original preset at 4:3 and 1x and the Enhanced
+# reaches, every VU command drawn the old way).  Each run's output (stdout
+# and then stderr, where the backend's lines go) must match its regex
+# (REQ_A, REQ_B: the lines that say the run took the path it was meant to).  At the Original preset at 4:3 and 1x and the Enhanced
 # preset at 16:9 and 2x, under ICO_RD_BLEND=fixed.  The dumps: DUMP (one
 # file, may be absent) and those LIST names (tools/vustage_dumps.txt, as
 # rd_vubatch_ab.cmake reads it); none here, or no device: SKIP (77).
@@ -14,7 +14,12 @@
 # [-DDUMP=<dump>] [-DLIST=<dump list>] [-DSKIP_UNLESS=<regex>: a dump whose
 # first run prints no line matching it is skipped, not compared (the list's
 # frames without VU commands: 0 pre-passes, nothing for a floor to skip)]
+# [-DLIST_STRICT=1: on a machine where any of the list's entries exists,
+# each entry that names no file (or a glob no file matches) is an error;
+# without it, or where none exists (CI), a missing entry is reported only]
 set(dumps "")
+set(missing "")
+set(listFound 0)
 if(DUMP AND EXISTS "${DUMP}")
   list(APPEND dumps "${DUMP}")
 endif()
@@ -33,10 +38,28 @@ if(LIST AND EXISTS "${LIST}")
       file(GLOB matched "${l}")
       list(SORT matched)
       list(APPEND dumps ${matched})
+      if(matched)
+        set(listFound 1)
+      else()
+        list(APPEND missing "${l}")
+      endif()
     elseif(EXISTS "${l}")
       list(APPEND dumps "${l}")
+      set(listFound 1)
+    else()
+      list(APPEND missing "${l}")
     endif()
   endforeach()
+endif()
+foreach(m IN LISTS missing)
+  if(LIST_STRICT AND listFound)
+    message(SEND_ERROR "${NAME}: ${LIST} names ${m}, which is not here")
+  else()
+    message(STATUS "${NAME}: ${LIST} names ${m}, which is not here: skipped")
+  endif()
+endforeach()
+if(LIST_STRICT AND listFound AND missing)
+  message(FATAL_ERROR "${NAME}: the dump list names files that are not here")
 endif()
 list(LENGTH dumps ndumps)
 if(ndumps EQUAL 0)
@@ -84,8 +107,8 @@ foreach(dump IN LISTS dumps)
       math(EXPR failures "${failures} + 1")
       continue()
     endif()
-    string(REPLACE ";" "," flatA "${outA}")
-    string(REPLACE ";" "," flatB "${outB}")
+    string(REPLACE ";" "," flatA "${outA}\n${errA}")
+    string(REPLACE ";" "," flatB "${outB}\n${errB}")
     if(NOT flatA MATCHES "${REQ_A}")
       message(SEND_ERROR "${dump} ${s}: the ${ENV_A} run has no line matching \"${REQ_A}\":\n${outA}")
       math(EXPR failures "${failures} + 1")

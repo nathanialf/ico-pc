@@ -3435,8 +3435,10 @@ static void vuMergeInit(void)
  * table (RhiLimits.vuPrepassOff: the Adreno 740 under Qualcomm's own
  * driver, issue 123, where v0.11.0's record path drew noise and hung the
  * GPU; [dev] vu_prepass = true written in config.toml, ICO_RD_VU_PREPASS=on,
- * passes it), then the colour targets' byte bound (the record drawn into
- * render targets only; the vertex stores hold it in buffers). */
+ * passes it), the phones' loss rung (RhiLimits.vuPrepassLoss: a start
+ * after a lost one on a tile-based phone GPU, this start only; the same
+ * key passes it), then the colour targets' byte bound (the record drawn
+ * into render targets only; the vertex stores hold it in buffers). */
 void rd__vu_prepass_init(const RhiLimits *lim)
 {
     g_rd.vuPrepassWhy[0] = '\0';
@@ -3455,6 +3457,13 @@ void rd__vu_prepass_init(const RhiLimits *lim)
         snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
                  "by the device table (%s; [dev] vu_prepass = true draws with it anyway)",
                  lim->vuPrepassOff);
+    } else if (lim && lim->vuPrepassLoss && !(env && strcmp(env, "on") == 0)) {
+        /* the phones' loss rung (rhi_tile_rule.h: a tile-based phone GPU, a
+         * start after a lost one), as the device table's row */
+        snprintf(g_rd.vuPrepassWhy, sizeof(g_rd.vuPrepassWhy),
+                 "by the loss ladder (a tile-based phone GPU; %s: this start only; [dev] "
+                 "vu_prepass = true draws with it anyway)",
+                 lim->vuPrepassLoss);
     } else if (!rd__vu_record_buffered() && bytes != 0u && bytes < ICO_VU_REC_BYTES) {
         /* an Apple A9 or A10 GPU under MoltenVK (rhi_metal_color_bytes);
          * Direct3D 11 reports 0 since v0.10.0 (its record copies are a

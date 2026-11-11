@@ -2,14 +2,15 @@
 # (port/render/test/rd_vu_compute_tests.cmake: the narrow barrier scopes
 # against the wide ones, byte for byte; issues 179 and 211).  MACHINE-LOCAL:
 # these are paths on the maintainer's machine; the dumps themselves are never
-# committed.  Missing files are reported and skipped (no dump at all: SKIP).
-# Relative paths are relative to this file; '*' globs are allowed.
+# committed.  Where any of them is here, an entry that names no file is an
+# error (rd_vu_env_ab.cmake LIST_STRICT); where none is (CI), each is
+# reported and the test skips.  Relative paths are relative to this file;
+# '*' globs are allowed (a glob that matches nothing is a missing entry).
 #
 # the 2026-10-07 captures (as tools/vustage_dumps.txt)
 /primary/dev/ico-dumps/*.rddump
 # issue 179's Mali-G52 loss frames (the first 3D scene, v0.11.3)
 /primary/dev/ico-pc/build-host/tmp/v0114/evidence/179/loss/loss-20261110-184556-lost.rddump
 /primary/dev/ico-pc/build-host/tmp/v0114/evidence/179/loss/loss-20261110-184556-before.rddump
-# a device-loss frame and the forest (as tools/vustage_dumps.txt)
+# a device-loss frame (as tools/vustage_dumps.txt)
 /primary/dev/ico-pc/build-host/tmp/evidence-v079/95/loss-20261015-100428-lost.rddump
-/primary/dev/ico-pc/build-host/tmp/pcsx2cmp/godrays/port/keep/rd-00720.rddump

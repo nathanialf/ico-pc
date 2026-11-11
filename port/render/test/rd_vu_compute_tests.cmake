@@ -112,17 +112,43 @@ add_test(NAME rd_vuprepass_selftest_sink_fail
 set_tests_properties(rd_vuprepass_selftest_sink_fail
                      PROPERTIES ENVIRONMENT
                                 "${_env};ICO_RD_VU_RECORD=stores;ICO_RD_VU_REC_SINK_FAIL=1")
+# rd_vuprepass_selftest_lossrung: the phones' loss rung (port/rhi/rhi_tile_rule.h:
+# a start after a lost one on a tile-based phone GPU draws without the VU
+# pre-pass), Arm's phone GPU faked (ICO_VK_FAKE_VENDOR=0x13B5) and one lost
+# start (ICO_LOSS_ROW=1, as diag_host.c exports it): the backend's line, the
+# pre-pass off by the ladder, the self-test not run.  _desktop: the same lost
+# start on lavapipe (not a phone): the pre-pass on, no rung (the desktop's
+# rungs are the scopes and the wait)
+add_test(NAME rd_vuprepass_selftest_lossrung
+         COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=notrun
+                 "-DLINE=off \\(self-test not run\\)"
+                 "-DEXTRA=rhi_vk: VU pre-pass: off for this start on a tile-based phone GPU \\(Arm, vendor 0x13B5 \\(ICO_VK_FAKE_VENDOR\\), the previous start lost the graphics device, nothing written to the settings\\).*rd: VU pre-pass: off by the loss ladder \\(a tile-based phone GPU, the previous start lost the graphics device: this start only, \\[dev\\] vu_prepass = true draws with it anyway\\): every VU draw"
+                 -P "${_vst}")
+add_test(NAME rd_vuprepass_selftest_lossrung_desktop
+         COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
+                 "-DLINE=${_vst_on}" "-DEXTRA=rhi_vk: barriers: wide \\(the previous start lost"
+                 "-DNOT_=loss ladder|VU pre-pass: off for this start" -P "${_vst}")
+set_tests_properties(rd_vuprepass_selftest_lossrung rd_vuprepass_selftest_lossrung_desktop
+                     PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
+set_tests_properties(rd_vuprepass_selftest_lossrung
+                     PROPERTIES ENVIRONMENT "${_env};ICO_VK_FAKE_VENDOR=0x13B5;ICO_LOSS_ROW=1")
+set_tests_properties(rd_vuprepass_selftest_lossrung_desktop
+                     PROPERTIES ENVIRONMENT "${_env};ICO_LOSS_ROW=1")
 # rd_scope_ab, rd_scope_ab_tiler (test/rd_vu_env_ab.cmake; issues 179 and
 # 211, port/rhi/rhi_tile_rule.h): the same dumps under v0.11.3's narrow
 # barrier scopes (ICO_VK_FAKE_SCOPES=narrow: the texture uploads after the
 # VU pre-pass) and v0.11.2's wide ones with the uploads before it (the
 # tile-based phones' default since v0.11.4): every named target byte for
 # byte.  rd_scope_ab: the wide run by Arm's vendor id faked
-# (ICO_VK_FAKE_VENDOR=0x13B5: the tile rule), the desktop profile;
-# rd_scope_ab_tiler: both runs on a tile-based profile
-# (ICO_VK_FAKE_LIMITS=moltenvk, rd_profile.c's Apple class), the wide run by
-# the tile rule, the narrow one faked.  The dumps: rd_pixel's, and tools/scope_dumps.txt's
-# (the VU stage list's and issue 179's two loss frames, machine-local)
+# (ICO_VK_FAKE_VENDOR=0x13B5: the tile rule's phone GPU), the desktop
+# profile; rd_scope_ab_tiler: both runs on a tile-based profile
+# (ICO_VK_FAKE_LIMITS=moltenvk, rd_profile.c's Apple class: a Mac, narrow by
+# the rule since v0.11.4), the wide run by the tile rule with Arm faked, the
+# narrow one faked.  Each run must print the backend's barriers line of the
+# scopes it was meant to run (stderr), so a switch that did nothing fails.
+# The dumps: rd_pixel's, and tools/scope_dumps.txt's (the VU stage list's
+# and issue 179's two loss frames, machine-local; LIST_STRICT: where any is
+# here, a missing one is an error)
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/scope_ab" "${CMAKE_CURRENT_BINARY_DIR}/scope_ab_tiler")
 add_test(NAME rd_scope_ab
          COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> -DNAME=rd_scope_ab
@@ -130,17 +156,17 @@ add_test(NAME rd_scope_ab
                  "-DLIST=${CMAKE_SOURCE_DIR}/tools/scope_dumps.txt"
                  "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/scope_ab"
                  "-DENV_A=ICO_VK_FAKE_SCOPES=narrow" "-DENV_B=ICO_VK_FAKE_VENDOR=0x13B5"
-                 "-DREQ_A=stats: [0-9]+ draws, [0-9]+ passes" "-DREQ_B=stats: [0-9]+ draws, [0-9]+ passes"
-                 -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
+                 "-DREQ_A=rhi_vk: barriers: narrow \\(ICO_VK_FAKE_SCOPES=narrow" "-DREQ_B=rhi_vk: barriers: wide \\(a tile-based phone GPU, Arm"
+                 -DLIST_STRICT=1 -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
 add_test(NAME rd_scope_ab_tiler
          COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool> -DNAME=rd_scope_ab_tiler
                  "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
                  "-DLIST=${CMAKE_SOURCE_DIR}/tools/scope_dumps.txt"
                  "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/scope_ab_tiler"
                  "-DENV_A=ICO_VK_FAKE_LIMITS=moltenvk|ICO_VK_FAKE_SCOPES=narrow"
-                 "-DENV_B=ICO_VK_FAKE_LIMITS=moltenvk"
-                 "-DREQ_A=stats: [0-9]+ draws, [0-9]+ passes" "-DREQ_B=stats: [0-9]+ draws, [0-9]+ passes"
-                 -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
+                 "-DENV_B=ICO_VK_FAKE_LIMITS=moltenvk|ICO_VK_FAKE_VENDOR=0x13B5"
+                 "-DREQ_A=rhi_vk: barriers: narrow \\(ICO_VK_FAKE_SCOPES=narrow" "-DREQ_B=rhi_vk: barriers: wide \\(a tile-based phone GPU, MoltenVK"
+                 -DLIST_STRICT=1 -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
 set_tests_properties(rd_scope_ab rd_scope_ab_tiler PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
                                                    TIMEOUT 3600 FIXTURES_REQUIRED rd_dump)
 if(_env)

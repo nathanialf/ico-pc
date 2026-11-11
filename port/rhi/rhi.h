@@ -784,12 +784,22 @@ typedef struct RhiLimits {
      * narrow scopes and the uploads after the pre-pass.  polledWait: the
      * frame slot's polled recycle wait and the calibrated timestamps
      * (v0.11.3); false the single wait (v0.11.2).  barrierWords, waitWords:
-     * the summary's words ("wide (tile-based)", "single (tile-based)").
+     * the summary's words ("wide (tile-based phone)", "single (tile-based
+     * phone)").
      * false / NULL on the other backends (v0.11.3's order) */
     bool wideBarriers;
     bool polledWait;
     const char *barrierWords;
     const char *waitWords;
+    /* Vulkan: a tile-based phone GPU (rhi_tile_rule.h rhi_tile_phone: every
+     * Android GPU, iOS through MoltenVK; the tests' ICO_VK_FAKE_VENDOR):
+     * the renderer's parts that v0.11.3 changed run as v0.11.2 ran them
+     * there (port/render/rd_vu_skin_check.c).  vuPrepassLoss: the phones'
+     * loss rung, why this start draws without the VU pre-pass (a start
+     * after a lost one; rd__vu_prepass_init, as vuPrepassOff), NULL
+     * otherwise.  false / NULL on the other backends */
+    bool tilePhone;
+    const char *vuPrepassLoss;
     /* (docs/port/RENDER.md, the device profile).  localRead: Vulkan
      * dynamicRenderingLocalRead (VK_KHR_dynamic_rendering_local_read, or
      * VkPhysicalDeviceVulkan14Features on a 1.4 device without the
