@@ -31,6 +31,7 @@
 #include "rd_perf_gap.h"
 #include "rd_perf_rare.h"
 #include "rd_shot_late.h"
+#include "rd_stencil_selftest.h"
 #include "rd_vis.h"
 
 RdPerfRecord g_rdPerf;
@@ -319,7 +320,8 @@ bool rd_perf_pop(RdPerfRecord *out)
     s_storePasses += s_queue[s_head].storePasses;
     s_storeDepth += s_queue[s_head].storeDepthDropped;
     s_storeColor += s_queue[s_head].storeColorDropped;
-    rd__date_cut_pop(&s_queue[s_head]); /* DATE's passes and snapshots (rd_date_cut.c) */
+    rd__date_cut_pop(&s_queue[s_head]);    /* DATE's passes and snapshots (rd_date_cut.c) */
+    rd__stencil_cut_pop(&s_queue[s_head]); /* the stencil outside the window */
     s_storePlanned += s_queue[s_head].storePlanMode != 0;
     if (s_queue[s_head].storeWhy < RD_STORE_WHY_COUNT) {
         s_storeWhy[s_queue[s_head].storeWhy]++;
@@ -696,7 +698,8 @@ const char *rd_perf_backend_text(void)
                      s_storePlanned ? "planned" : "every store kept", kept, none);
         at += k > 0 && (size_t)k < sizeof(s_text) - at ? (size_t)k : 0;
     }
-    rd__date_cut_text(s_text, sizeof(s_text), &at); /* "; DATE: ..." (rd_date_cut.c) */
+    rd__stencil_cut_text(s_text, sizeof(s_text), &at); /* "; stencil: ..." */
+    rd__date_cut_text(s_text, sizeof(s_text), &at);    /* "; DATE: ..." (rd_date_cut.c) */
     if (s_backendReplays &&
         (s_cutCarried || s_cutSkipped || s_cutLast || rd__pass_cut_on(RD_CUT_CARRY) ||
          rd__pass_cut_on(RD_CUT_SKIP) || rd__pass_cut_on(RD_CUT_LAST))) {

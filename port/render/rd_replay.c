@@ -67,6 +67,7 @@
 #include "rd_layer.h"
 #include "rd_passring.h"
 #include "rd_replay.h"
+#include "rd_stencil_selftest.h"
 #include "rd_submit.h"
 #include "rd_upscale.h"
 #include "rd_mesh.h"
@@ -1278,7 +1279,7 @@ static void flushStencilClear(void)
     p.depth.depthLoad = RHI_LOAD_LOAD;
     p.depth.stencilLoad = RHI_LOAD_CLEAR;
     p.depth.clearStencil = 0;
-    p.depth.stencilStore = g_rd.depthCopy || rd__stencil_live(&s_stencil.w, depthTex)
+    p.depth.stencilStore = rd__stencil_cut_forced() || rd__stencil_live(&s_stencil.w, depthTex)
                                ? RHI_STORE_STORE
                                : RHI_STORE_DONT_CARE;
     p.width = tc->tw;
@@ -1426,6 +1427,7 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, cid, c->tw, c->th, r->perfPost);
     rd__pass_area_begin(&p, c, cid, r->passSerial + 1u, ms, storage); /* rd_pass_area.c */
     rd__shadow_merge_arm(&p, cid, d ? did : 0u, r->passSerial + 1u, ms, storage);
+    rd__stencil_cut_pass(&p, ms); /* rd_stencil_selftest.c: counted, poisoned for tests */
     rhi_cmd_checkpoint(s_cl, passPush(RD_PASSK_PASS, cid, c->tw, c->th, d ? did : 0, d ? d->tw : 0,
                                       d ? d->th : 0, storage, r->perfPost));
     rhi_cmd_begin_render_pass(s_cl, &p);
@@ -4082,6 +4084,7 @@ static void doScreenWrap(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     p.width = tc->tw;
     p.height = tc->th;
+    rd__stencil_cut_pass(&p, false);
     rd__perf_pass(s_cl, RD_PERF_PASS_RENDER, r->st.color, tc->tw, tc->th, r->perfPost);
     rhi_cmd_begin_render_pass(s_cl, &p);
     setViewport(tc->tw, tc->th);

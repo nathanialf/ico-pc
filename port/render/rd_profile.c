@@ -166,6 +166,7 @@
 #include "rd_vis.h"
 #include "rhi_driver_version.h" /* RHI_DRIVER_ID_MESA_TURNIP */
 #include "rd_vu_skin_check.h"
+#include "rd_stencil_selftest.h" /* rd__profile_powervr */
 
 /* the device classes of the table */
 typedef enum ProfileClass {
@@ -318,6 +319,14 @@ bool rd__profile_adreno(void)
     }
     const ProfileClass c = classOf(lim);
     return c == PC_ADRENO_QUALCOMM || c == PC_ADRENO_TURNIP;
+}
+
+/* rd_stencil_selftest.h: classOf's PowerVR class (Imagination's vendor id on
+ * Vulkan, not through MoltenVK); another tiler that takes its row is not it */
+bool rd__profile_powervr(void)
+{
+    const RhiLimits *lim = rhi_limits();
+    return lim != NULL && classOf(lim) == PC_POWERVR;
 }
 
 /* ICO_<name>: -1 unset, else 1 for 1/true/on/yes, 0 for anything else */

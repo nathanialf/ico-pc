@@ -64,3 +64,6 @@ endif()
 
 # DATE's passes without the depth (rd_date_cut.c in ico_render) and their tests
 include(rd_date_cut.cmake)
+
+# the stencil outside the shadow window (rd_stencil_selftest.c in ico_render) and its tests
+include(rd_stencil.cmake)
