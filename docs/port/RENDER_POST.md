@@ -355,8 +355,13 @@ hold's copy, WORK0's alpha, the paste) and picks one plan:
   first), WORK3 a clear instead when the glow hold copies it; WORK1 0 over the first blur pass's
   rect and its glow edge strip (every later pass into WORK1 lies inside it) and over the sun's
   shrink, those two sprites drawn untextured in the colour their source holds in the chain
-  (`rd_const_read.c`, the planned source); WORK0 (0, 0, 0, A) by `pasteWork0ToFB`'s sprite drawn
-  as that clear (the last blur pass covers WORK0). The fans whose box misses the picture are not
+  (`rd_const_read.c`, the planned source), and not even drawn when a dark plan before left that
+  region zero and no replay wrote WORK1 since (a steady dark room); WORK0 (0, 0, 0, A) as a lazy
+  clear too (the last blur pass covers WORK0), which the first sprite after that touches WORK0
+  (the aura's, in play) draws first as the load op of its own pass. A buffer a command other than
+  a sprite touches later in the frame (the glow hold's copy of WORK3) gets its clear drawn at the
+  chain's place instead. So a dark room's chain begins no render pass once WORK1 is zero, one
+  (WORK1's) after a frame that drew the chain. The fans whose box misses the picture are not
   drawn. SCENE is as the paste leaves it in RGB; its alpha is `cleanUpFB`'s (0, and 192 on the
   marked background) where the paste wrote WORK3's;
 - **lamps** (the fill RGB 0, no fan on the picture, lamps drawn into WORK2 after the mask without
@@ -392,8 +397,9 @@ Lines: `rd: glow: light plan: above 1x nothing in frame N puts light into the gl
 `... frame N's light in the glow is the lamps' ...` once each, `rd: glow: light plan: the chain
 drawn whole: <reason> (<detail>; frame N; reported once for this reason)`, `rd: glow: light plan:
 frame N reads WORK1, WORK2 or WORK3 before ...: the plan is off from now on`; the 10 s block's
-`window: glow: light: N dark, L lamps (mask not drawn), K whole (counts by reason)`;
-`rd_replay_tool --stats` `stats: glow: light plan on|off: <plan> (<reason>); N lazy clears drawn`.
+`window: glow: light: N dark (P passes in their chains), L lamps (mask not drawn), K whole
+(counts by reason)`; `rd_replay_tool --stats` `stats: glow: light plan on|off: <plan>
+(<reason>); P passes in the chain, N lazy clears drawn`.
 
 ### The fades fold
 

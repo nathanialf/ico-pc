@@ -144,8 +144,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the mask (lamps), post mode 4's grey fill (whole), a DATE sprite into SCENE after the paste
   (whole, SCENE's alpha read), each ending with a sprite that rewrites SCENE's alpha; the plan
   each frame takes checked, RGB of every target the chain's, the alpha too but on WORK1, WORK2,
-  WORK3 and SCENE in frames with the marked background, at most 2 glow passes under dark, one
-  fewer under lamps; at 1x the plan off and every byte the chain's. Every other case runs with
+  WORK3 and SCENE in frames with the marked background, under dark at most one pass begun by the
+  chain (WORK1's zero draw, after the plan-off replay) and fewer glow passes than the chain's,
+  then the frame replayed with the plan again: no pass begun by the chain (one with the sun's
+  shrink) and the same bytes; one glow pass fewer under lamps; the grey fill refused for its own
+  reason; at 1x the plan off and every byte the chain's. Every other case runs with
   the plan off (`rd__glow_light_force(0)` in `main`): they compare the glow's buffers with the
   model in every channel.
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
@@ -975,8 +978,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   PNG's RGB 0 levels apart (`png_level_diff.py --channels RGB`), the alpha 0 levels on DISPLAY,
   PRESENT and every target but WORK1, WORK2, WORK3, WORK3_HELD and SCENE, and on those too where
   the whole run's WORK2 holds no alpha 192 (`--count-alpha 192`: no fill the mask kept); at
-  Original every PNG the same bytes and the plan off; the `glow N passes` count at most 2 under
-  dark, one fewer under lamps, no more otherwise; at least one dark run at the phone's setting and
+  Original every PNG the same bytes and the plan off; under dark the stats' `N passes in the
+  chain` at most 1 (WORK1's zero draw in a fresh renderer) and `glow N passes` fewer than the
+  whole run's, one fewer under lamps, no more otherwise; at least one dark run at the phone's setting and
   at Enhanced 2x (`rd_glow_light_ab`; SKIP without a device).
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no

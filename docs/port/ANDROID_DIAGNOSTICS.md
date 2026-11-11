@@ -588,8 +588,9 @@ once the work before them is done), the GPU's clock steps on a Mali whose kernel
 
 Above 1x the glow's chain is not drawn where it adds no light
 ([RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)). The 10 s block says how each
-glow picture was drawn: `window: glow: light: 412 dark, 0 lamps (mask not drawn), 37 whole (37
-the sun's fans on the picture)`: the dark ones skip the mask's full-frame pass, the paste and the
+glow picture was drawn: `window: glow: light: 412 dark (3 passes in their chains), 0 lamps (mask not drawn), 37 whole
+(37 the sun's fans on the picture)`: the passes in the dark chains are WORK1's zero draws after a
+picture that drew the chain (0 a picture in a steady dark room); the dark ones skip the mask's full-frame pass, the paste and the
 small passes (on the PowerVR phone 11.6 ms of a 32 ms picture in the measured room), the lamps
 ones the mask's pass; the whole ones name their reason (`a grey fill (the bloom)`, `the sun's
 fans on the picture`, `SCENE's alpha read before it is rewritten`, `WORK1, WORK2 or WORK3 read
