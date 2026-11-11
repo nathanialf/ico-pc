@@ -8,6 +8,9 @@
 //   blit_tone_ps, blit_depth_tone_ps the two with the colour adjustment
 //                (tone.hlsli; DrawCB.g_param: rd__tone_params), for the
 //                present's box blit when a Picture tone row is not 50
+//   blit_scene_ps the present's box blit reading SCENE where the reduction
+//                was not drawn, and DISPLAY drawn from SCENE on demand
+//                (port/render/rd_present_scene.c)
 //   aa_reduce_ps the supersampled DISPLAY box-averaged to the present box
 //   msaa_resolve_ps, depth_resolve_ps, depth_upsample_ps the MSAA epoch
 //   crack_fill_ps, crack_count_ps the crack filler above 1x (rd_crack_fill.c)
@@ -116,6 +119,56 @@ BlitDepthOut blit_depth_tone_ps(BlitVSOut i)
     p = min(p, int2(int(w) - 1, int(h) - 1));
     o.d = g_sceneDepth.Load(int3(p, 0));
     return o;
+}
+
+// blit_scene_ps (port/render/rd_present_scene.c; docs/port/RENDER_POST.md
+// "The present from SCENE"): DISPLAY's colour where the reduction was not
+// drawn, from SCENE (t1).  The reduction's sample of DISPLAY texel x, y is
+// SCENE texel x + g_scale.x, y + g_scale.y (a whole offset), and its texel
+// is g of that SCENE texel: the fades fold's steps (DF_FOLD: g_aux0 the
+// steps, g_aux1.x their count and rounding, g_aux1.y their alphas, as
+// sprite.hlsl sprite_fold takes them; no bar steps here, so every row takes
+// every step), then the texture function with the tint (g_col, g_mode.x's
+// TFX and TCC bits, as sprite_ps).  g_scale.z not 0: one texel a pixel by
+// Load, DISPLAY itself drawn (the fragment's texel plus the offset, clamped
+// to SCENE as the reduction's CLAMP holds it).  Else the present's box blit:
+// uv (blit_vs, g_tex DISPLAY's size) is the place in DISPLAY the box blit
+// would have sampled, clamped to DISPLAY's texel centres (its CLAMP
+// sampler's edge), moved by the offset and sampled in SCENE with the box
+// blit's filter; then g.  Within a level of the DISPLAY sample where the
+// filter weighs the taps alike (g affine but for its rounding, the weights
+// summing to one).  g_mode.w bit 0: the colour adjustment after it, as
+// blit_tone_ps (g_param).
+float4 blit_scene_ps(BlitVSOut i) : SV_Target0
+{
+    uint w, h;
+    g_texture.GetDimensions(w, h);
+    const float2 size = float2(max(w, 1u), max(h, 1u));
+    uint4 t;
+    [branch] if (g_scale.z != 0.0) {
+        const int2 q = clamp(int2(i.pos.xy) + int2(g_scale.xy), int2(0, 0),
+                             int2(size) - int2(1, 1));
+        t = uint4(floor(g_texture.Load(int3(q, 0)) * 255.0 + 0.5));
+    } else {
+        const float2 p =
+            clamp(i.uv * g_tex.xy, float2(0.5, 0.5), g_tex.xy - float2(0.5, 0.5)) + g_scale.xy;
+        t = uint4(floor(g_texture.SampleLevel(g_sampler, p / size, 0.0) * 255.0 + 0.5));
+    }
+    [branch] if ((g_mode.x & DF_FOLD) != 0u) {
+        const uint meta = g_aux1.x, alphas = g_aux1.y;
+        const int r = (meta & 8u) != 0u ? 64 : 0;
+        [loop] for (uint k = 0u; k < (meta & 7u); k++) {
+            // step k without a dynamic index into the constant block (FXC)
+            const uint s = k == 0u ? g_aux0.x : (k == 1u ? g_aux0.y : (k == 2u ? g_aux0.z : g_aux0.w));
+            t = uint4(gs_fold_ch(s, 0u, t.r, r), gs_fold_ch(s, 1u, t.g, r),
+                      gs_fold_ch(s, 2u, t.b, r), (alphas >> (8u * k)) & 255u);
+        }
+    }
+    float4 c = float4(gs_texture_function(t, g_col, g_mode.x)) * (1.0 / 255.0);
+    [branch] if ((g_mode.w & 1u) != 0u) {
+        c.rgb = saturate(tone_adjust(c.rgb, g_param));
+    }
+    return c;
 }
 
 // box_reduce_ps (rd_replay.c doShadowResolve): the exact box

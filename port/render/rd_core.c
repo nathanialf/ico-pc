@@ -35,6 +35,7 @@
 #include "rd_fsr3.h"      /* rd__fsr3_fp16_word, the summary's precision */
 #include "modelpack.h"    /* the model pack switch */
 #include "rd_mesh.h"
+#include "rd_present_scene.h"
 #include "rd_tex.h"
 #include "rd_tex_decode.h"
 #include "rd_tone.h"
@@ -1840,6 +1841,7 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
     rd__aura_box_init();               /* the aura's read in two passes (rd_aura_box.c) */
     rd__pass_area_init();              /* the passes' render areas (rd_pass_area.c) */
     rd__pass_cut_init();               /* the passes cut (rd_pass_cut.c) */
+    rd__present_scene_init();          /* no owed DISPLAY of another context */
     rd__vis_init();                    /* the scene draws' visibility test (rd_vis.c) */
     rd__shadow_merge_init();           /* the volumes in the scene's pass (rd_shadow_merge.c) */
     rd__sprite_planes_init();          /* issue 161: the planes builds off (rd_screen_planes.c) */

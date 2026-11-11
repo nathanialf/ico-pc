@@ -9,6 +9,7 @@
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "shader_consts.h"
+#include "rd_present_scene.h" /* rd_replay.c and rd_blur_border.c call its hooks */
 
 /* Consecutive screen-prim commands that bind the same things are one draw
  * (doScreen).  A command whose plan is one draw opens a run or joins the
@@ -442,7 +443,12 @@ int rd__replay_glow_edge_columns(const Replay *r, const RdFrame *f, const RdCmd 
  *                       (rd__fades_fold_on, rd_internal.h)
  * rd__fades_fold_exact  whether the sprites blend exactly (the GS's floor)
  *                       under exact mode mode (RdBlendExact) on a target of
- *                       dstUsage usage: RdFadesFoldEnv.exact */
+ *                       dstUsage usage: RdFadesFoldEnv.exact
+ * rd__fades_fold_present rd_present_scene.c: true when this replay's plan
+ *                       is the reduction's textured sprite at ordinal ord
+ *                       (its plan copied to out when not NULL); take: the
+ *                       present from SCENE applies it instead (counted as
+ *                       the reduction's taking it) */
 #define RD_FADES_FOLD_STEPS 4
 #define RD_FADES_FOLD_SPRITES 8
 
@@ -480,6 +486,7 @@ void rd__fades_fold_screen(const Replay *r, const RdDrawPass *dp, const DrawSetu
                            IcoDrawCB *cb);
 void rd__fades_fold_end(void);
 bool rd__fades_fold_exact(int mode, uint32_t usage, bool rgba8);
+bool rd__fades_fold_present(uint32_t ord, bool take, RdFadesFold *out);
 /* The glow's mask folded into its reduction (rd_glow_fold.c; rd_internal.h
  * has the switch and the plan).
  * rd__glow_fold_scan_begin  rd_store_plan.c rd__store_plan_scan: true when

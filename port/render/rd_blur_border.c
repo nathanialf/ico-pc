@@ -497,6 +497,11 @@ static void postSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 static void blurPostSprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     sceneRepeatDue(r); /* SCENE's outer columns before the first read of it */
+    /* the reduction not drawn: the present reads SCENE (rd_present_scene.c;
+     * the open border's columns would be drawn after the textured sprite) */
+    if (rd__present_scene_skip(r, f, c, s_borderRepeat && !rd__frame_cropped())) {
+        return;
+    }
     if (rd__glow_fold_skip(r, f, c)) {
         return; /* the glow's fill or mask: its reduction computes it (rd_glow_fold.c) */
     }

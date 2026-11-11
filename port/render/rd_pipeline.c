@@ -79,6 +79,7 @@
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_pipe_finish.h"
+#include "rd_present_scene.h"
 #include "rd_vu_record.h"
 #include "rd_vu_rec_sink.h"
 #include "rd_vu_skin_check.h"
@@ -4606,6 +4607,16 @@ uint32_t rd__enumerate_reachable_screen(RdPipeKeyInt *out, uint32_t max)
     const RdPipeKeyInt blitToneB = rd__post_key(RD_VS_BLIT, RD_FS_BLIT_TONE, RHI_FMT_BGRA8_UNORM);
     n = rd__add_pipe_key(out, max, n, &blitToneA);
     n = rd__add_pipe_key(out, max, n, &blitToneB);
+    /* the present from SCENE (rd_present_scene.c): its box blit on both
+     * outputs and its draw of DISPLAY on demand (RGBA8), only while the
+     * switch is on (off by default in v0.11.5) and the module is in the
+     * table; so a start with it off makes no pipeline more */
+    if (rd__present_scene_on() && g_rd.fs[RD_FS_BLIT_SCENE].id) {
+        const RdPipeKeyInt sceneA = rd__post_key(RD_VS_BLIT, RD_FS_BLIT_SCENE, RHI_FMT_RGBA8_UNORM);
+        const RdPipeKeyInt sceneB = rd__post_key(RD_VS_BLIT, RD_FS_BLIT_SCENE, RHI_FMT_BGRA8_UNORM);
+        n = rd__add_pipe_key(out, max, n, &sceneA);
+        n = rd__add_pipe_key(out, max, n, &sceneB);
+    }
     /* the present's box average of DISPLAY into an RGBA8 texture of the box's
      * (or the game's own) size (rd_present.c reduceInto: supersampling, a
      * scaled scene with more texels than the box has pixels, Downsampling) */
