@@ -58,6 +58,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_occlusion.c` | every GPU draw of a replay (`rd__replay_draw`, `rd__replay_draw_indexed`: the pass window's take) and the hidden-draw measurement around them ([Culling](#culling)) |
 | `port/render/rd_passring.h`, `rd_passring.c` | the pass ring: the last passes recorded, for the device-loss report |
 | `port/render/rd_loss_pick.h`, `rd_loss_pick.c`, `rd_loss_keep.h` | which frame the loss dump writes and the memory copies of frames the GPU may not have finished ([The loss dump](#the-loss-dump)) |
+| `port/render/rd_vu_rec_early.c`, `rd_vu_rec_early.h`, `rd_early_plan.c`, `rd_early_plan.h` | the first 3D pictures' allocations made at start-up, and their memory bound ([Made at start-up](#made-at-start-up)) |
 | `port/render/rd_dump.c`, `rd_png.c` | frame dumps; a minimal PNG writer |
 | `port/render/tools/rd_replay_tool.c` | [the replay tool](ARCHITECTURE.md#terms) |
 | `port/render/tools/rd_replay_region.c` | the replay tool's `--region-stats`: the region rule's verdicts on the CPU |
@@ -1361,6 +1362,22 @@ player's log. `ICO_AUDIT_SPANS=1` lists each draw past the bound. A stream one v
 synthetic draw and on the first real mesh draw of the dumps (`port/render/test/rd_stream_audit_test.c`,
 header comment). On the 27 listed dumps present on the maintainer's machine and the title frame
 (2,964 VU draws, 115 of them the title's; 2026-10-15) no read leaves its stream.
+
+### Made at start-up
+
+Two allocations would otherwise happen in the first pictures of the first 3D scene on every device:
+the VU pre-pass's record growing from 16 rows (both device losses of issues 179 and 211 came in the
+pictures right after it grew to 256 rows), and the mesh arena's first 32 MB chunk. The window makes
+both before the game runs (`rd_vu_record_prepare`, called by `window_pipe_early` after the self-tests
+and the start-up set, behind the start-up screen). The bound (`rd_early_plan.h`): half of the free
+memory above the free-memory floor where the system says (Android), half of the adapter's free
+video memory where it says (Direct3D), else the record's own limit (1,024 rows, 48 MB a frame
+slot); the record first, the chunk if it still fits; nothing under the floor or after the
+system's low-memory signal. A part that cannot be made is left to play as before. No picture
+changes: the record's slots are placed from texel 0 whatever its size and the chunk is the one the
+first mesh would make (`rd_vu_rec_early_ab*`, byte for byte). One line:
+`rd: start-up: made before play in T ms: the VU pre-pass's record at R rows (...), the mesh arena's
+first chunk (32 MB); M MB in all; the bound: ...`.
 
 ## Pipelines
 

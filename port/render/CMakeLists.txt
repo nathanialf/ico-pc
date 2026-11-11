@@ -3879,3 +3879,4 @@ if(ICO_RUN_TESTS AND ICO_RHI_OPENGL AND ICO_SHADERS_GLSL AND TARGET ico_rhi_open
     message(STATUS "ico: ${_gl_n} render tests registered again on OpenGL (ctest -L gl)")
 endif()
 # ---- OpenGL twins end ----
+include(rd_early.cmake)

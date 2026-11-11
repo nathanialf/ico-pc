@@ -53,6 +53,17 @@ int window_pipe_floor_retry(int pipePolicy);
    ICO_MEMORY_FLOOR_DRIVER_OTHER, as window_pipe_finish_start rules */
 void window_pipe_skin_check(int pipePolicy);
 
+/* The allocations of the first 3D pictures made before the game runs
+   (port/render/rd_vu_rec_early.h rd_vu_record_prepare: the VU pre-pass's
+   record at the size its bound allows, the mesh arena's first chunk), with
+   the system's free memory against the free-memory floor as the bound
+   (Android; the floor of memory_floor.h, [dev] pipeline_memory_floor_mb as
+   the set reads it), nothing after the system's low-memory signal.
+   window_pipe_skin_check calls it first, so every path that starts the
+   game (the set, the lazy start, the backend switch) runs it once its
+   self-tests and set are done, behind the start-up screen. */
+void window_pipe_early(void);
+
 /* The words of a start without the start-up set for rd_pipelines_lazy
    ("(a restart after a graphics driver crash)", "by the settings ([dev]
    pipeline_set = \"lazy\")", ...): pipePolicy as the window has it,

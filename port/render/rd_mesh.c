@@ -36,6 +36,7 @@
 #include "../core/region.h" /* ico_region: which disc's VU programs */
 #include "rd_internal.h"
 #include "rd_mesh.h"
+#include "rd_vu_rec_early.h"
 #include "shader_consts.h"
 #include "vu1_ref.h"
 #include "xxh3.h"
@@ -201,6 +202,45 @@ bool rd__mesh_gpu_reserve(RdMeshRec *m, uint64_t streamBytes, uint64_t indexByte
 RhiBuffer rd__mesh_gpu_buffer(uint32_t chunk)
 {
     return chunk && chunk <= RD_MESH_CHUNKS ? s_arena[chunk - 1].buf : (RhiBuffer){0};
+}
+
+/* rd_vu_rec_early.h: the first chunk made at start-up, as the first mesh's
+   reserve above would make it (a mesh larger than RD_MESH_CHUNK then gets
+   a chunk of its own after it) */
+bool rd__mesh_arena_ready(void)
+{
+    return s_arena[0].buf.id != 0;
+}
+
+uint64_t rd__mesh_arena_chunk_bytes(void)
+{
+    return RD_MESH_CHUNK;
+}
+
+bool rd__mesh_arena_prepare(void)
+{
+    ArenaChunk *c = &s_arena[0];
+    if (!g_rd.hasDevice) {
+        return false;
+    }
+    if (c->buf.id) {
+        return true;
+    }
+    c->buf = rhi_create_buffer(
+        &(RhiBufferDesc){RD_MESH_CHUNK, RHI_BUF_INDEX | RHI_BUF_STORAGE_READ | RHI_BUF_COPY_DST,
+                         RHI_MEM_DEVICE, "rd mesh arena"});
+    if (!c->buf.id) {
+        return false;
+    }
+    c->size = RD_MESH_CHUNK;
+    c->freeCount = 0;
+    if (!spanInsert(c, 0, 0, RD_MESH_CHUNK)) {
+        rhi_destroy_buffer(c->buf);
+        c->buf = (RhiBuffer){0};
+        c->size = 0;
+        return false;
+    }
+    return true;
 }
 
 uint64_t rd__mesh_gpu_buffer_size(uint32_t chunk)

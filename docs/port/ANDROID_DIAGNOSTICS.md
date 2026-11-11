@@ -410,6 +410,27 @@ Adreno 740 showed them without a loss, with the VU pre-pass off by its device ro
 row and draws through the pre-pass). Which of the wide scopes or the single wait, if either, keeps
 the 710 from losing the device is what its next log says by the lines above.
 
+### The first 3D scene's allocations made at start-up (issues 179 and 211)
+
+Both losses (issues 179 and 211) came in the first pictures after the VU pre-pass's record grew in play (issue
+179: 16 to 256 rows at `report/ico-pc.log:378`; issue 211: 16 to 128 to 256 rows at
+`report/ico-pc.log:530` and `:535`), each growth a new buffer for every frame slot, beside the mesh
+arena's first 32 MB chunk (the third of `3 allocations, 3 buffers` in the slow-replay line of the
+first 3D picture). Not proven as the cause; the start-up loss bisect, which makes the record at its
+full size at once, never lost the device. Both are made before the game runs, after the start-up
+set, in one line:
+`rd: start-up: made before play in T ms: the VU pre-pass's record at R rows (S slots, M MB over
+the 2 frame slots; ...), the mesh arena's first chunk (32 MB); N MB in all; the bound: at most half
+of the A MB above the free-memory floor (V MB available, floor F MB); the system: ...`. The record's
+own line then ends `; made at start-up, before play)`, and a later growth in play
+`; grown in play past the R rows made at start-up)`. With the numbers of the two reports: the Mali
+(815 MB available, floor 641 MB) gets 512 rows and the chunk (80 MB), the Adreno 710 (968 MB,
+floor 908 MB) 256 rows (24 MB, what its first scene grew to) and no chunk. Under the floor or
+after the system's low-memory signal nothing is made (`kept at 16 rows (...)`, the bound's words
+say which) and play grows the record as before. What to read: no `the record holds` line between
+the first 3D picture and a loss means the growth was not there; a loss in the same place with it
+gone rules the growth out.
+
 ## Issues 123 and 163's lines: the skin check on an Adreno
 
 On an Adreno (Qualcomm's own driver and Turnip alike) the skinned draws' check
