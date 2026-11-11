@@ -10,8 +10,10 @@
 #include <string.h>
 
 #include "ico_gamestate.h"
+#include "log_cost.h"
 #include "rd_perf_rank.h"
 #include "rhi.h"
+#include "window_lines.h" /* window_log_cost_part */
 
 /* the window's thread and the lifecycle's (SDL's posting thread) both
    reach the block and the run: every entry point holds the lock */
@@ -119,7 +121,16 @@ static void profile(const char *why, bool partial)
     }
 }
 
+static void window_perf_rank_block_lines(const WindowPerfBlock *in);
+
 void window_perf_rank_block(const WindowPerfBlock *in)
+{
+    window_log_cost_part(LOG_COST_OTHER); /* the print before it (log_cost.h) */
+    window_perf_rank_block_lines(in);
+    window_log_cost_part(LOG_COST_RANK);
+}
+
+static void window_perf_rank_block_lines(const WindowPerfBlock *in)
 {
     SDL_LockSpinlock(&s_lock);
     if (in == NULL || s_block.n == 0) {

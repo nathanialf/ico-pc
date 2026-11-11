@@ -1120,6 +1120,14 @@ counters in the hot path.
       30.8 ms on the game thread (the longest 30.8 ms), 550 ms on the worker (0 during a present
       that blocked, 1 during a late game step); 1 presents blocked, 1 late game steps in the block
 
+  The window thread's time is split into its parts, `(formatting and writing; of it the block's
+  records D, the kernel GPU and thermal reads K, the memory reads M, the performance lines P, the
+  other lines R; ...)`: the block's last record drain (with `[dev] perf_log`/`perf_passes` the
+  CSVs are flushed there), the kernel GPU sampler's block and the thermal state (a JNI ask of
+  `PowerManager` at most once a second), `/proc/self/status` and `/proc/meminfo`, the `perf`
+  lines' fits and texts, the rest. Formatting the whole block is about 760 numbers (15 KB on the
+  owner's Pixel), well under a millisecond on a phone core (0.16 ms on the test machine).
+
   How the log is written: on Android stdout and stderr are a pipe; each `fprintf` is one `write`
   into it (a copy into the kernel's pipe buffer) and the `ico-log` thread writes the file and
   logcat, so a slow file write (the app's external folder is FUSE-backed) holds the log thread, not

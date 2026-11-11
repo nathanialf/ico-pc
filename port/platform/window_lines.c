@@ -106,6 +106,8 @@ void window_memory_line(void)
     RhiStats st;
     long rss = -1, peak = -1, avail = -1, total = -1;
 
+    window_log_cost_part(LOG_COST_OTHER); /* the print before it (log_cost.h) */
+
     char gfx[160] = "graphics allocations not counted";
     char dev[96] = "; device memory unknown";
 
@@ -147,6 +149,7 @@ void window_memory_line(void)
     }
     window_video_memory_watch();
     s_pagingWarned = false; /* the next block says it again */
+    window_log_cost_part(LOG_COST_MEMORY);
     if (rss >= 0) {
         fprintf(stderr, "window: memory: %s; the process holds %ld MB (most %ld MB)%s%s%s\n", gfx,
                 rss / 1024, (peak >= 0 ? peak : rss) / 1024, dev, pipes, vmem);
@@ -209,10 +212,23 @@ void window_log_cost_job(double gameMs, double t0Ms, double t1Ms)
     log_cost_job(log_cost(), gameMs, t0Ms, t1Ms);
 }
 
+static double s_logPartAt; /* the last part's end, 0 outside the print */
+
 void window_log_cost_begin(void)
 {
-    (void)log_cost();
-    s_logPrintT0 = ico_thread_now_ms();
+    LogCost *c = log_cost();
+    s_logPrintT0 = s_logPartAt = ico_thread_now_ms();
+    c->partValid = 1;
+}
+
+void window_log_cost_part(int part)
+{
+    if (s_logPartAt <= 0.0 || part < 0 || part >= LOG_COST_PARTS) {
+        return; /* outside the block's print */
+    }
+    const double now = ico_thread_now_ms();
+    s_logCost.partMs[part] += now - s_logPartAt;
+    s_logPartAt = now;
 }
 
 void window_log_cost_end(void)
@@ -221,6 +237,8 @@ void window_log_cost_end(void)
     const double t1 = ico_thread_now_ms();
     char text[1024];
 
+    window_log_cost_part(LOG_COST_OTHER); /* the rest of the print */
+    s_logPartAt = 0.0;
     if (s_logPrintT0 > 0.0 && t1 >= s_logPrintT0) {
         c->printValid = 1;
         c->printMs = t1 - s_logPrintT0;
