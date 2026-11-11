@@ -37,9 +37,9 @@ static void say_fmt(char *why, size_t why_size, const char *fmt, ...)
 }
 
 /* the file's bytes in a malloc block (NULL when it cannot be read); when
-   it cannot, *stage says where (1 opening, 2 reading) and *err the errno
+   it cannot, *where says where (1 opening, 2 reading) and *err the errno
    there (either may be NULL) */
-static void *read_all_ex(const char *path, size_t *size, int *stage, int *err)
+static void *read_all_ex(const char *path, size_t *size, int *where, int *err)
 {
     FILE *f;
     unsigned char *buf = NULL;
@@ -50,8 +50,8 @@ static void *read_all_ex(const char *path, size_t *size, int *stage, int *err)
     f = ico_fopen(path, "rb");
     if (f == NULL) {
         e = errno != 0 ? errno : EIO;
-        if (stage != NULL) {
-            *stage = 1;
+        if (where != NULL) {
+            *where = 1;
         }
         if (err != NULL) {
             *err = e;
@@ -87,8 +87,8 @@ static void *read_all_ex(const char *path, size_t *size, int *stage, int *err)
     fclose(f);
     if (st != 0) {
         free(buf);
-        if (stage != NULL) {
-            *stage = st;
+        if (where != NULL) {
+            *where = st;
         }
         if (err != NULL) {
             *err = e;
@@ -540,18 +540,18 @@ void *ico_dump_zip_extract_why(const char *zip_path, int nth, size_t *size, char
     mz_zip_archive z;
     void *data = NULL, *zip = NULL;
     size_t zip_size = 0;
-    int stage = 0, err = 0, want = nth;
+    int where = 0, err = 0, want = nth;
     char seen[400] = "", fail[240] = "";
     mz_uint frames = 0;
 
     if (why != NULL && why_size > 0) {
         why[0] = '\0';
     }
-    zip = read_all_ex(zip_path, &zip_size, &stage, &err);
+    zip = read_all_ex(zip_path, &zip_size, &where, &err);
     if (zip == NULL) {
         /* ENOENT is a file that is gone, EACCES one the app may not read,
            EIO or ENOMEM a read that broke */
-        say_fmt(why, why_size, "cannot %s %s: %s (errno %d)", stage == 1 ? "open" : "read",
+        say_fmt(why, why_size, "cannot %s %s: %s (errno %d)", where == 1 ? "open" : "read",
                 zip_path, strerror(err), err);
         return NULL;
     }
