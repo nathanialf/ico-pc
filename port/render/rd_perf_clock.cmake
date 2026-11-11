@@ -61,3 +61,6 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                          "stats: traffic: colour [0-9]+\\.[0-9][0-9] MB loaded [0-9]+\\.[0-9][0-9] MB stored, depth and stencil [0-9.]+/[0-9.]+ MB loaded/stored, [0-9.]+ MB cleared, [0-9.]+ MB copied \\(each copy counted once: as many MB read as written\\), [1-9][0-9]* passes"
                          SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
 endif()
+
+# DATE's passes without the depth (rd_date_cut.c in ico_render) and their tests
+include(rd_date_cut.cmake)

@@ -1,0 +1,22 @@
+# Dump list for rd_date_cut_ab (port/render/test/rd_date_cut_ab.cmake: DATE's
+# passes without the depth, the cut off against on, byte for byte).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  A listed dump that is absent FAILS the test
+# (a '*' glob that matches nothing too).  Relative paths are relative to this
+# file.  A second field is the passes the cut begins without the depth in one
+# replay (the shadow's three composites in list 3: 2); without it, at least one
+# where the replay takes two DATE snapshots or more.
+#
+# issue 179's Mali-G52 on v0.11.4: its F12 frame and its three slow-scene
+# captures (unzipped from the reporter's zips into their own folders)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/179/x/frame-20261111-070230-v6100.rddump 2
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/slow/070127/slow-20261111-070127.rddump
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/slow/070137/slow-20261111-070137.rddump 2
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/slow/070147/slow-20261111-070147.rddump
+# the Pixel 10 Pro Fold's v0.11.4 F12 frame (stage 4)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump 2
+# tools/date_subpass_dumps.txt's frames that exist: issue 179's v0.11.2 frame,
+# the main gate's frame, the 2026-10-07 captures
+/primary/dev/ico-pc/build-host/tmp/v0113/evidence/179/zip/frame-20261110-003507-v17008.rddump
+/primary/dev/ico-dumps/maingate/frame-20261104-123603-v10827.rddump 2
+/primary/dev/ico-dumps/frame-20261007-*.rddump

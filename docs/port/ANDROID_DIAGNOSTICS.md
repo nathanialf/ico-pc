@@ -612,6 +612,31 @@ replays it (`rd_replay_tool --stats` prints `glow: light plan on: <plan> (<reaso
 `perf classes` line's glow class shows what the plan saved; the first dark frame is logged once
 (`rd: glow: light plan: above 1x nothing in frame N puts light into the glow ...`).
 
+### DATE's passes without the depth (issues 179 and 123)
+
+On a phone with `DATE snapshot` in its profile line (Arm, Qualcomm without the in-pass read) the
+shadow's three composites end SCENE's pass three times a picture, and the passes after the first
+two snapshots begin without SCENE's depth and stencil ([WORK_BUFFERS.md](WORK_BUFFERS.md#dates-passes-without-the-depth)).
+What the log shows:
+
+- once at the first replay: `rd: DATE cut: on: a DATE snapshot's pass whose draws neither test nor
+  write the depth begins without it (the same picture)`, or `off (...)` with why (the stencil path
+  or the shader's read in force: no pass ends for DATE there);
+- once at the first such pass: `rd: DATE cut: SCENE's pass after a DATE snapshot begun without its
+  depth (frame F, list 3) ...`;
+- in each 10 s block's `window: per replay` line, after `stores:`: `; DATE: 2.0 passes a replay
+  begun without the depth their draws never touch (up to M MB of depth and stencil loads and as many
+  stores not asked), 0.0 begun again with it; snapshots 3.0 a replay taken (the first 1.0, another
+  target 0.0, an alpha write since 2.0, an area not held 0.0, the copy used elsewhere 0.0), 0.0
+  reused` in a block of play with the shadow on screen. 2.0 passes and M near 4.5 at the Mali's 1x
+  (912 x 512 x 5 bytes, twice) say the cut fired in every picture; `begun again` above 0 names a
+  frame whose prediction failed (a pass more each, the same picture: the line `rd: DATE cut: a draw
+  that needs SCENE's depth after its pass began without it (frame F, list L)` names it, the first
+  8 then every 100th);
+- the `perf classes` line's list 3: its depth MB loaded and stored fall by about two thirds (two of
+  its three SCENE passes) at the same passes; its ms against the last log's at the same scene is
+  this device's price of that many MB (issue 179's rates line had no fit for it).
+
 ## Issues 123 and 163's lines: the skin check on an Adreno
 
 On an Adreno (Qualcomm's own driver and Turnip alike) the skinned draws' check

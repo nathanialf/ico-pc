@@ -3148,6 +3148,20 @@ int main(int argc, char **argv)
                "%u (fog path %s); blur pairs folded %u\n",
                dump, pr->dateSnapshots, pr->dateStencilDraws, pr->dateStencilTakes,
                pr->fogLocalDraws, rd__fog_path_name(g_rd.fogPath), pr->blurFolds);
+        /* DATE's passes without the depth and the snapshots by why
+         * (rd_date_cut.c; rd_date_cut_ab reads this line) */
+        printf("%s: stats: DATE cut %s: %u passes begun without the depth (%u draws, %u runs, "
+               "%.2f MB of depth and stencil each way at most), %u begun again with it, %u draws "
+               "kept it; snapshots taken: %s %u, %s %u, %s %u, %s %u, %s %u; reused %u\n",
+               dump, rd__date_cut_on() ? "on" : "off", pr->dateCutPasses, pr->dateCutDraws,
+               pr->dateCutRuns, (double)pr->dateCutTexels * 5.0 / 1048576.0, pr->dateCutAgain,
+               pr->dateCutKept, rd__date_retake_word(RD_DATE_RETAKE_FIRST),
+               pr->dateRetakeWhy[RD_DATE_RETAKE_FIRST], rd__date_retake_word(RD_DATE_RETAKE_TARGET),
+               pr->dateRetakeWhy[RD_DATE_RETAKE_TARGET],
+               rd__date_retake_word(RD_DATE_RETAKE_WRITTEN),
+               pr->dateRetakeWhy[RD_DATE_RETAKE_WRITTEN], rd__date_retake_word(RD_DATE_RETAKE_AREA),
+               pr->dateRetakeWhy[RD_DATE_RETAKE_AREA], rd__date_retake_word(RD_DATE_RETAKE_TOUCHED),
+               pr->dateRetakeWhy[RD_DATE_RETAKE_TOUCHED], pr->dateSnapReused);
         /* the shadow count's resolves (rd_replay.c doShadowResolve), the
          * one draw's pass and the count target's colour passes the store
          * plan left neither loaded nor stored (rd_store_plan.c) */

@@ -9,7 +9,7 @@ reflection block between ticks, and where the crack filler is drawn (after lists
 a new key between ticks is paired, how desktop Vulkan decides on the local reads at start, how
 the shadow count is read from the stencil in one draw (and its colour left unstored while it is
 made), how the shadow levels are composited above
-1x, which passes leave a depth neither loaded nor stored (the store plan), which passes load and store only the tiles their draws touch (the pass area), a source that holds only its clear read as its colour, which full-frame reads stay at a large
+1x, which passes leave a depth neither loaded nor stored (the store plan) or begin without it (DATE's passes), which passes load and store only the tiles their draws touch (the pass area), a source that holds only its clear read as its colour, which full-frame reads stay at a large
 scale, and how the screen-prim triangles draw without the sprite planes (issue 161). The sprites themselves are drawn by the GS
 sprite model ([RENDER_POST.md](RENDER_POST.md#post-passes), "The staticBlur sprites").
 
@@ -31,6 +31,7 @@ sprite model ([RENDER_POST.md](RENDER_POST.md#post-passes), "The staticBlur spri
 | `port/render/rd_fx_plan.c`, `port/render/rd_profile.c` | the shadow composites above 1x: one bilinear tap unless `RdProfile.shadowBspline` (`rd__sprite_above1x`) |
 | `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
 | `port/render/rd_pass_area.c`, `port/render/rd_replay.c`, `port/rhi/vk/vk_cmd.c` | the pass area: the commands' boxes before the walk (`rd__pass_area_scan`, from `rd__store_plan_scan`), each pass's area (`rd__pass_area_begin` from `beginPass`), the end of its commands (`rd__pass_area_due`), the render area and the cut scissors (`rhi_cmd_begin_render_pass`, `rhi_cmd_set_scissor`) |
+| `port/render/rd_date_cut.c`, `port/render/rd_date_cut.h`, `port/render/rd_store_plan.c` | DATE's passes without the depth: the rule (`rd_date_cut_step`), the scan (`rd__date_cut_scan_cmd`, from `rd__store_plan_scan`), each draw's depth (`rd__date_cut_depth`, from `prepareDrawEx`), the DATE snapshot and its reasons (`rd__date_snapshot`) |
 | `port/render/rd_store_plan.c`, `port/render/rd_replay.c`, `port/render/rd_profile.c` | the store plan: the scan before the walk (`rd__store_plan_scan`), each pass's depth ops (`rd__store_plan_pass` from `beginPass`), the walk's command count (`g_rdStoreOrd`), the profile's `storePlan` |
 
 ## Sizes per frame width
@@ -1361,6 +1362,95 @@ area's reasons (its fourth cell).
 cut off, each alone and all on: every target and the present byte for byte, the passes fewer by the
 clears carried and skipped, the depth stores dropped more by those at the last touch, each cut
 cutting something on the phone's frames ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
+
+## DATE's passes without the depth
+
+On the devices without an in-pass read (the profile's `DATE snapshot`: Arm, Qualcomm, Apple, the
+desktop's OpenGL) each DATE draw whose target's alpha was written since the last snapshot ends the
+open pass for the R8 copy of the alpha's MSB (`port/render/rd_date_cut.c` (`rd__date_snapshot`),
+[RENDER.md](RENDER.md#the-replay)) and begins the target's pass again. The shadow's three
+composites (`Shadow.c`, list 3: full-frame sprites on SCENE under DATE DATM 0, ZTST ALWAYS, Z write
+off, each writing the alpha the next one tests) make that three times a picture, and each pass after
+a snapshot attached SCENE's depth and stencil, loaded and stored them, though no draw in the first
+two passes tests or writes them: issue 179's Mali-G52 log, "list 3 ... 6.0 passes, colour 5.9/5.9
+MB, depth 6.7/6.7 MB loaded/stored" at 912 x 512; issue 123's Adreno 740, 33.2 MB of depth and
+stencil each way in list 3 at 3x.
+
+**The rule** (`port/render/rd_date_cut.h`, `rd_date_cut_step`). The store plan's walk
+(`rd__store_plan_scan`) reads every command under its state before the replay. A run opens at a
+screen-prim DATE draw that neither tests the depth (ZTE off or ZTST ALWAYS) nor writes it, takes no
+PRIM.AA1, samples no depth view, is not COLCLAMP 0's draw, on a target with a depth. It is
+depth-free when it ends at a command that ends the pass for certain: a draw on another colour target
+(its own pass), or a DATE draw on the run's target after a draw of the run wrote alpha (its snapshot
+is retaken: the write serial moved). Inside it only such depth-free screen prims on the target,
+state commands and commands that draw nothing (a NOP, a folded fade, the deferred text) may come.
+Anything else (a copy, a clear, a post sprite, the fog, a shadow command, a VU draw on the target, a
+draw that uses the depth) ends the run undecided, and its passes keep the depth. The replay's end
+closes a run. On the composites: the first two runs are depth-free, the third goes on into list
+4's mesh draws and keeps its depth.
+
+**The walk** (`rd__date_cut_depth`, from `rd_replay.c` `prepareDrawEx` after the DATE snapshot).
+A draw of a depth-free run gets no depth target (`DrawSetup.tdId` 0, `depthFmt`
+`RHI_FMT_UNKNOWN`) when its pass begins there (the snapshot ended the pass, or the open pass is on
+another target) or the open pass on its target has no depth; `bindDrawEx` then begins its pass with
+the colour alone, as for any target without a depth. Not taken (the draw keeps its depth): DATE
+through the stencil bit or the shader's read, an MSAA epoch wanted, the exact blend, an open shadow
+window on the depth (`rd__stencil_live`), a pass open on the target with its depth (the draw joins
+it). The store plan is not changed: a DATE draw still counts as a touch of the depth, so every pass
+that keeps its depth loads and stores it as with the cut off (list 0's pass, whose stencil the
+shadow count reads, and every later reader).
+
+**The same bytes.** The depth and stencil are not attached, so the pass neither reads nor writes
+them, and their memory holds what the last pass that stored them left, which is what a load and a
+store with nothing touching them in between leave (the passes before the run keep their stores: a
+later pass's touch keeps them). The colour is the draw's with the depth attached: its key with the
+depth has the test ALWAYS and the write off, which is what `rd__plan_screen_draw_ex` gives without
+one; the FrameCB's Z scale does not depend on the depth target (every target's `zFormat` is
+`RD_ZFMT_32`, checked per draw). A draw that needs the depth while such a pass is open begins a pass
+of its own with it (the pass's depth differs in `bindDrawEx`): a wrong prediction costs a pass,
+never a byte (counted, "begun again").
+
+**Why it cannot bring back a device loss** (issues 179, 211, 123). It takes an attachment off passes
+that exist; it adds no pass, barrier, copy or wait, and no kind of pass the drivers have not run: a
+colour-only pass on SCENE is what every post sprite without a Z test begins (`rd_fx_plan.c`,
+`doBlurSpriteDraw`). The depth stays in its layout, untouched, between the passes that use it (one
+transition fewer, none added). Its pipelines are the screen family's no-depth keys, made at start
+beside every key with the depth (`rd__enumerate_reachable_screen` plans each state with and without
+a depth target; `rd_date_cut_test` checks every pair, `rd_date_cut_ab` runs `--keys` on the dumps),
+so none is made during play.
+
+**What it saves.** Two passes a picture without SCENE's depth and stencil: about 2.2 MB loaded and
+2.2 MB stored each at the Mali-G52's 912 x 512 (9 MB a picture), 11 MB each way each at the Adreno
+740's 3x (44 MB a picture, about 0.9 ms by that device's 0.02 ms a MB); the passes and the snapshots
+stay as they are.
+
+**The snapshots.** `rd__date_snapshot` (the copy itself, moved out of `rd_replay.c`, the same
+commands) counts each snapshot by why it was taken: the first of the replay, another target, an
+alpha write since, an area not held, the copy used elsewhere, or reused. In every frame looked at
+(the Mali's F12 frame and its 07:01:37 slow-scene capture, the Pixel's frame, the main gate's) the
+three composites each write alpha over the whole frame (912 x 512 GS pixels on the Mali's), so each
+later one is retaken for an alpha write since: an area-aware retake would reuse none of them, and
+none is built.
+
+**The log.** Once: `rd: DATE cut: on: ...` (or why off) and `rd: DATE cut: SCENE's pass after a DATE
+snapshot begun without its depth (frame F, list L) ...`; a draw that needed the depth after such a
+pass, the first 8 then every 100th. The 10 s `window: per replay` line's clause after `stores:`:
+`; DATE: P passes a replay begun without the depth their draws never touch (up to M MB of depth and
+stencil loads and as many stores not asked), A begun again with it; snapshots S a replay taken (the
+first .., another target .., an alpha write since .., an area not held .., the copy used elsewhere
+..), R reused`. `rd_replay_tool --stats`: `stats: DATE cut on|off: ...`.
+
+**The tests.** `rd_date_cut` (`port/render/test/rd_date_cut_test.c`): the rule on made-up commands,
+the start-up set's pairs, and on lavapipe a frame in the composites' shape and two variants (a Z
+GEQUAL draw after the third composite in its pass, one between the first two) with the cut off and
+on: SCENE byte for byte under the store plan's poison, the scan's runs by ordinal, a pass without
+the depth a run, the same passes, snapshots and store-plan drops, the depth and stencil bytes asked
+lower, the reasons, the 10 s text.
+`rd_date_cut_ab` and `rd_date_cut_ab_gl` replay `tools/date_cut_dumps.txt` (the Mali's F12 frame
+and its three slow-scene captures, the Pixel's frame, `tools/date_subpass_dumps.txt`'s frames)
+with the cut off and on at the Mali's, the Adreno's and the PowerVR phone's settings without the
+in-pass read, and on OpenGL ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)). `ICO_RD_DATE_CUT=0` or
+`1` is the tests' switch ([TESTING.md](TESTING.md)); there is no setting.
 
 ## A cleared source read as its colour
 
