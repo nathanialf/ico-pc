@@ -795,8 +795,21 @@ void rd__present_scene_begin(const RdFrame *f, int keep)
         s_ps.owed = false; /* DISPLAY made again (cleared before the walk) */
         return;
     }
+    if (d->clearPending) {
+        s_ps.owed = false; /* DISPLAY cleared before the walk (rd__clear_new_targets) */
+        return;
+    }
     int why = RD_PS_WHY_NONE;
-    const int v = rd__present_scene_settle(f, keep, s_ps.debt.disp, s_ps.debt.scene, &why);
+    int v = rd__present_scene_settle(f, keep, s_ps.debt.disp, s_ps.debt.scene, &why);
+    if (sc && sc->clearPending && v == RD_PS_SETTLE_KEEP) {
+        /* SCENE is cleared before the walk (a self-test's "the next replay
+         * starts SCENE from its clear", rd_fog_path.c, rd_fx_plan.c,
+         * rd_shadow_tile.c, rd_msaa_shadow.c) without a new texture: a frame
+         * touching neither target would present the cleared SCENE, so
+         * DISPLAY is drawn now, before the clear */
+        v = RD_PS_SETTLE_DRAW;
+        why = RD_PS_WHY_SCENE;
+    }
     if (v == RD_PS_SETTLE_KEEP) {
         return; /* nothing touches either: the present reads SCENE again */
     }
