@@ -2251,8 +2251,12 @@ bool rd_frame_retained(uint32_t number);
  * failed, else the first not seen finished, else the frame after the newest
  * numbered); the ring holds only the newest closed frames, so a frame the
  * GPU may not have finished is copied to memory when the ring reuses its
- * slot (at most 4 copies, 16 MiB each, held only while a submission is
- * open at or after them).  rd_loss_plan reads all of it (the main thread,
+ * slot while a slot wait has stalled 100 ms or more (at most 4 copies, 16
+ * MiB each, held only while a submission is open at or after them; a loss
+ * with no stall before it finds no copy, and the pick falls back to the
+ * frames the ring holds).  rd_loss_plan stops the copies for good (no
+ * recycle copies or frees after it; one in progress is waited for, up to
+ * 3 s, else the copies are not used) and reads all of it (the main thread,
  * with the render thread drained, or the watchdog's while the main thread
  * is blocked); the fields tell which frame is which and what is held.
  * how: an RdLossHow (rd_loss_pick.h).  writeFrame/writeBefore: the frames
@@ -2270,7 +2274,11 @@ typedef struct RdLossPlan {
     uint32_t waitFrame, openFrame, newestFrame, newestReplay;
     uint32_t heldCount, heldOldest, heldNewest;
     uint32_t copies, copyKB, copyMaxKB;
-    uint64_t copiesTaken, copiesSeen, copiesBig, copiesThrottled;
+    uint64_t copiesTaken, copiesSeen, copiesBig, copiesFailed, copiesThrottled;
+    /* a copy in progress on the game thread did not finish in time (its
+     * drain blocked): the copies were left alone, the frames come from the
+     * ring */
+    bool copiesUnused;
 } RdLossPlan;
 
 void rd_loss_plan(RdLossPlan *plan);

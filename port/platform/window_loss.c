@@ -165,12 +165,18 @@ void window_loss_dump(char *name, size_t name_size)
     rd_loss_plan(&plan);
     rd_loss_plan_text(&plan, text, sizeof(text));
     fprintf(stderr, "window: loss dump: %s\n", text);
-    fprintf(stderr,
-            "window: loss dump: copies in memory: %u held (%u KB; the most %u KB), %llu made in "
-            "%llu recycled frames, %llu too big, %llu held back by the throttle\n",
-            plan.copies, plan.copyKB, plan.copyMaxKB, (unsigned long long)plan.copiesTaken,
-            (unsigned long long)plan.copiesSeen, (unsigned long long)plan.copiesBig,
-            (unsigned long long)plan.copiesThrottled);
+    if (plan.copiesUnused) {
+        fprintf(stderr, "window: loss dump: copies in memory: not used (a copy in progress did "
+                        "not finish; the frames come from the ring)\n");
+    } else {
+        fprintf(stderr,
+                "window: loss dump: copies in memory (made only while a slot wait had blocked "
+                "100 ms or more): %u held (%u KB; the most %u KB), %llu made in %llu recycled "
+                "frames, %llu too big, %llu failed, %llu held back by the throttle\n",
+                plan.copies, plan.copyKB, plan.copyMaxKB, (unsigned long long)plan.copiesTaken,
+                (unsigned long long)plan.copiesSeen, (unsigned long long)plan.copiesBig,
+                (unsigned long long)plan.copiesFailed, (unsigned long long)plan.copiesThrottled);
+    }
     if (plan.writeFrame == 0) {
         fprintf(stderr, "window: loss dump: the renderer holds no frame to write\n");
         ico_diag_note_device_loss(NULL);
