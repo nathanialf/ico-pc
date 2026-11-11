@@ -516,6 +516,11 @@ static void checkMasks(const RhiTestConfig *cfg, const ScRes *r, bool wide)
     if (!s_maskTex.id) {
         return;
     }
+    /* a new frame first: lists A to E filled the slot's VKR_MAX_CMD_LISTS
+       (8), and rhi_wait_frame is the frame boundary that recycles a slot's
+       lists (rhi.h); it records nothing, so the trace below sees only the
+       lists' own barriers */
+    rhi_wait_frame();
     (void)runList(cfg, "M0", r, fillMaskTex);
 
     uint32_t n = traceList(cfg, "M1", r, upload, bar, 16);
