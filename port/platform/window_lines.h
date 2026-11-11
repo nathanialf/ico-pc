@@ -85,6 +85,9 @@ const char *window_tiler_words(void);
    capture's result (its game-thread ms, its worker's span).  The window's
    thread only; window_hold_line notes the late steps itself */
 void window_log_cost_begin(void);
+/* the print's time since the last part into part (LOG_COST_*); nothing
+   outside the block's print */
+void window_log_cost_part(int part);
 void window_log_cost_end(void);
 void window_log_cost_present(double t0Ms, double t1Ms);
 void window_log_cost_job(double gameMs, double t0Ms, double t1Ms);

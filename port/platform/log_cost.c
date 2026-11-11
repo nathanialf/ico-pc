@@ -130,6 +130,13 @@ int log_cost_text(const LogCost *c, char *buf, size_t n)
     }
     if (c->printValid) {
         put(&o, "; the window thread's 10 s lines %.2f ms (formatting and writing; ", c->printMs);
+        if (c->partValid) {
+            put(&o,
+                "of it the block's records %.2f, the kernel GPU and thermal reads %.2f, the "
+                "memory reads %.2f, the performance lines %.2f, the other lines %.2f; ",
+                c->partMs[LOG_COST_DRAIN], c->partMs[LOG_COST_KERNEL], c->partMs[LOG_COST_MEMORY],
+                c->partMs[LOG_COST_RANK], c->partMs[LOG_COST_OTHER]);
+        }
         overlapWords(&o, c, &c->print, 1);
         put(&o, ")");
     }

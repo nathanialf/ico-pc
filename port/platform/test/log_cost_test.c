@@ -60,6 +60,21 @@ static void testPhone(void)
     c.printMs = 1.25;
     c.print = (LogCostSpan){9990.0, 9991.25};
     log_cost_text(&c, line, sizeof line);
+    {
+        /* the print in parts (window_log_cost_part) */
+        LogCost p = c;
+        char pl[1024];
+        p.partValid = 1;
+        p.partMs[LOG_COST_DRAIN] = 0.25;
+        p.partMs[LOG_COST_KERNEL] = 0.5;
+        p.partMs[LOG_COST_MEMORY] = 0.1;
+        p.partMs[LOG_COST_RANK] = 0.25;
+        p.partMs[LOG_COST_OTHER] = 0.2;
+        log_cost_text(&p, pl, sizeof pl);
+        CHECK(strstr(pl, "lines 1.25 ms (formatting and writing; of it the block's records 0.25, "
+                         "the kernel GPU and thermal reads 0.50, the memory reads 0.10, the "
+                         "performance lines 0.25, the other lines 0.20; 0 during") != NULL);
+    }
     CHECK_STR(line, "logging: 8.0 KB written to the log in the block (every thread's); the window "
                     "thread's 10 s lines 1.25 ms (formatting and writing; 0 during a present that "
                     "blocked, 0 during a late game step); the log thread's file writes 42 in 14.5 "

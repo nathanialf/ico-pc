@@ -1911,7 +1911,7 @@ int rd_perf_pass_agg_text_ex(const RdPerfPassAgg *a, unsigned top, bool tiler, b
             /* the display wait: "display wait window 1280x720 38.40 ms" */
             snprintf(draws, sizeof(draws), " %.0f draws", (double)e->draws / r);
         }
-        char after[96] = "";
+        char after[160] = "";
         if (before && e->prevN) {
             const RdPerfPass bp = {.kind = e->prevKind,
                                    .target = e->prevTarget,
@@ -1919,9 +1919,11 @@ int rd_perf_pass_agg_text_ex(const RdPerfPassAgg *a, unsigned top, bool tiler, b
                                    .post = e->prevPost};
             char bl[32];
             rd_perf_pass_label(&bp, bl, sizeof(bl));
-            snprintf(after, sizeof(after), " after %s %s %ux%u (full size in %llu of %llu)", bl,
-                     rd_perf_target_name(e->prevTarget), (unsigned)e->prevW, (unsigned)e->prevH,
-                     (unsigned long long)e->prevFull, (unsigned long long)e->prevN);
+            snprintf(
+                after, sizeof(after),
+                " after %s %s %ux%u (the last seen; the piece before was full size in %llu of %llu)",
+                bl, rd_perf_target_name(e->prevTarget), (unsigned)e->prevW, (unsigned)e->prevH,
+                (unsigned long long)e->prevFull, (unsigned long long)e->prevN);
         }
         const int w = snprintf(buf + at, n - at, "%s%s %s %ux%u%s%s %.2f ms%s%s", shown ? ", " : "",
                                label, rd_perf_target_name(e->target), (unsigned)e->w,

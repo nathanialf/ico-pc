@@ -15,6 +15,7 @@
 #include "rd_perf_rare.h"
 #include "rhi.h"
 #include "thermal_text.h"
+#include "log_cost.h"
 #include "window_lines.h"   /* window_log_cost_present */
 #include "window_present.h" /* window_refresh_ns */
 #ifdef __ANDROID__
@@ -213,6 +214,7 @@ void window_stall_gpu_close(void)
 
 void window_stall_gpu_block(void)
 {
+    window_log_cost_part(LOG_COST_OTHER); /* the print before it (log_cost.h) */
 #ifdef __ANDROID__
     const double now = ico_thread_now_ms();
     static int s_thermalSaid;
@@ -245,6 +247,7 @@ void window_stall_gpu_block(void)
 #else
     stall_block_close(NULL);
 #endif
+    window_log_cost_part(LOG_COST_KERNEL);
 }
 
 /* The every-replay pass timing armed by a present that blocked

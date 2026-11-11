@@ -972,10 +972,17 @@ void ico_render_thread_note_held(int why)
     }
 }
 
+/* the step rule's held asks of the run: the trace line's limit, the first 8
+   of the run then every 100th (it was the block's count, so every block
+   with holds wrote 8 lines of about 900 bytes: 11 KB of a 37 KB block on
+   the owner's Pixel); the block's summary line is unchanged */
+static unsigned s_heldLines;
+
 void ico_render_thread_note_ask(const struct PaceRtAsk *q, const struct PaceRtTrace *t, int why)
 {
     pace_rt_trace_sum_add(&s_rt.asks, q, t, (PaceRtHold)why);
-    if (why == PACE_RT_MISS && (s_rt.asks.held <= 8u || s_rt.asks.held % 100u == 0)) {
+    const unsigned run = why == PACE_RT_MISS ? ++s_heldLines : 0u;
+    if (why == PACE_RT_MISS && (run <= 8u || run % 100u == 0)) {
         char line[1536];
 
         (void)pace_rt_trace_text(q, t, s_rt.asks.held, line, sizeof(line));

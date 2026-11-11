@@ -1240,6 +1240,14 @@ counters in the hot path.
       30.8 ms on the game thread (the longest 30.8 ms), 550 ms on the worker (0 during a present
       that blocked, 1 during a late game step); 1 presents blocked, 1 late game steps in the block
 
+  The window thread's time is split into its parts, `(formatting and writing; of it the block's
+  records D, the kernel GPU and thermal reads K, the memory reads M, the performance lines P, the
+  other lines R; ...)`: the block's last record drain (with `[dev] perf_log`/`perf_passes` the
+  CSVs are flushed there), the kernel GPU sampler's block and the thermal state (a JNI ask of
+  `PowerManager` at most once a second), `/proc/self/status` and `/proc/meminfo`, the `perf`
+  lines' fits and texts, the rest. Formatting the whole block is about 760 numbers (15 KB on the
+  owner's Pixel), well under a millisecond on a phone core (0.16 ms on the test machine).
+
   How the log is written: on Android stdout and stderr are a pipe; each `fprintf` is one `write`
   into it (a copy into the kernel's pipe buffer) and the `ico-log` thread writes the file and
   logcat, so a slow file write (the app's external folder is FUSE-backed) holds the log thread, not
@@ -1252,8 +1260,8 @@ counters in the hot path.
 - **The piece before each top pass** (`window: GPU top passes:`, `rd_perf.c`
   `rd_perf_pass_agg_text_ex`; `perf classes`, `rd_perf_rank.c`): each entry is followed by the
   piece before it and how often that piece was a full-size render pass, e.g. `shadow count 576x448
-  1 draws 3.46 ms after list 0 SCENE 1728x1344 (full size in 349 of 349)` and, in the classes line,
-  `; after list 0 1728x1344 (a full-size pass in 349 of 349)`. On a tile-based GPU a stamp after a
+  1 draws 3.46 ms after list 0 SCENE 1728x1344 (the last seen; the piece before was full size in 349 of 349)` and, in the classes line,
+  `; after list 0 1728x1344 (the last seen; the piece before was full size in 349 of 349)`. On a tile-based GPU a stamp after a
   full-size pass may carry that pass's tile work (issue 123's 3.46 ms for one 576x448 draw), so a
   piece that always follows one and shrinks where it does not is carrying it.
 - **Before list 0 and list 0 as one on a tile-based GPU**: the stamp that ends the uploads lands

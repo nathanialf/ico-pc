@@ -57,6 +57,7 @@
 #include "ui_mouse.h"
 #include "video_options.h"
 #include "window_host.h"
+#include "log_cost.h" /* LOG_COST_DRAIN */
 #include "window_lines.h"
 #include "window_loss.h"
 #include "window_pipeline_skip.h"
@@ -5437,6 +5438,7 @@ void window_pace_log(Uint64 now)
     window_log_cost_begin(); /* the block's prints timed (log_cost.h) */
     perf_drain();            /* the block's last records, for its replays over a refresh */
     slow_replay_longest();
+    window_log_cost_part(LOG_COST_DRAIN);
     const double sec = (double)(now - s_pres.statAt) / 1e9;
     uint32_t replays = 0;
     const double maxMs = rd_replay_time_max(1, &replays);

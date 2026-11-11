@@ -771,8 +771,9 @@ int rd_perf_rank_classes_text(const RdPerfRankBlock *b, RdPerfRankLabel label, u
             } else {
                 className(rd_perf_rank_class_of(&c->prev), before, sizeof before);
             }
-            put(&o, "; after %s %ux%u (a full-size pass in %.0f of %.0f)", before,
-                (unsigned)c->prev.w, (unsigned)c->prev.h, c->prevFull, c->prevN);
+            put(&o,
+                "; after %s %ux%u (the last seen; the piece before was full size in %.0f of %.0f)",
+                before, (unsigned)c->prev.w, (unsigned)c->prev.h, c->prevFull, c->prevN);
         }
     }
     put(&o, " (%d of %d classes; all %.2f ms%s)", shown, count, all / t,

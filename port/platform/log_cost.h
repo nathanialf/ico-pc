@@ -44,6 +44,20 @@
 #define LOG_COST_SPANS 32u    /* spans of each kind kept a block (the rest counted) */
 #define LOG_COST_JOBS 8u
 
+/* the window thread's block print in parts (window_log_cost_part): its
+   records' last drain (the dev CSVs flushed in it), the kernel GPU and
+   thermal reads (the JNI headroom ask), the memory reads (/proc), the
+   performance lines (their fits and texts), the other lines' formatting
+   and writes */
+enum {
+    LOG_COST_DRAIN = 0,
+    LOG_COST_KERNEL,
+    LOG_COST_MEMORY,
+    LOG_COST_RANK,
+    LOG_COST_OTHER,
+    LOG_COST_PARTS
+};
+
 typedef struct LogCostSpan {
     double t0, t1; /* ms on the monotonic clock (ico_thread_now_ms) */
 } LogCostSpan;
@@ -52,6 +66,8 @@ typedef struct LogCost {
     /* the window thread's prints of the block */
     int printValid;
     double printMs;
+    double partMs[LOG_COST_PARTS]; /* of printMs (partValid: measured) */
+    int partValid;
     LogCostSpan print;
     long long bytes; /* the log's bytes in the block, every thread's; -1 not known */
     /* the log thread (Android) */

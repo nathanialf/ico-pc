@@ -1257,7 +1257,7 @@ static void checkPassTexts(void)
         rd_perf_pass_agg_add(&ta, tp, 3);
         rd_perf_pass_agg_text_ex(&ta, 5, false, true, buf, sizeof(buf));
         CHECK(strstr(buf, "shadow count 424x224 1 draws 3.46 ms after list 0 SCENE 848x448 "
-                          "(full size in 2 of 2)") != NULL,
+                          "(the last seen; the piece before was full size in 2 of 2)") != NULL,
               "top passes, the piece before: %s", buf);
         CHECK(strstr(buf, "uploads") != NULL && strstr(buf, "before list 0 + list 0") == NULL,
               "top passes, not a tiler: %s", buf);
