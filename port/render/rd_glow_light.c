@@ -159,6 +159,7 @@ static struct {
     uint8_t phase, why;
     const char *detail;
     bool glow, readFirst, grey, fansOn, sun;
+    bool pasteFix;    /* the paste's blend takes FIX (not As or Ad) as its C */
     uint32_t written; /* bit k: the scan saw a write of watched buffer k (WORK1, 2, 3) */
     uint32_t n, pairs, lamps;
     GlCmd cmd[GL_MAX];
@@ -587,7 +588,7 @@ bool rd__glow_light_scan_begin(const RdFrame *f)
     s_gl.phase = PH_IDLE;
     s_gl.why = RD_GLOW_LIGHT_WHY_NONE;
     s_gl.detail = NULL;
-    s_gl.glow = s_gl.readFirst = s_gl.grey = s_gl.fansOn = s_gl.sun = false;
+    s_gl.glow = s_gl.readFirst = s_gl.grey = s_gl.fansOn = s_gl.sun = s_gl.pasteFix = false;
     s_gl.written = 0;
     s_gl.n = s_gl.pairs = s_gl.lamps = 0;
     for (int k = 0; k < LZ_COUNT; k++) {
@@ -671,8 +672,8 @@ void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
             return;
         }
         if (post && tgt == w2 && tex == scene) {
-            if (!postRec(f, c, &p) || d->texFn != RD_TEXFN_MODULATE || p.rgba[0] || p.rgba[1] ||
-                p.rgba[2] || d->abe || d->test.date != RD_DATE_OFF) {
+            if (!postRec(f, c, &p) || d->texFn != RD_TEXFN_MODULATE || (p.lines & 3u) != 0u ||
+                p.rgba[0] || p.rgba[1] || p.rgba[2] || d->abe || d->test.date != RD_DATE_OFF) {
                 fail(RD_GLOW_LIGHT_WHY_FORM, "the mask is not MODULATE by RGB 0 without a blend");
                 return;
             }
@@ -814,6 +815,8 @@ void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
                 return;
             }
             if (add(c, ord, E_PASTE)) {
+                const uint32_t reg = rd__alpha_register(d->blend < RD_BLEND_COUNT ? d->blend : 0);
+                s_gl.pasteFix = ((reg >> 4) & 3u) == 2u;
                 s_gl.phase = PH_AFTER;
                 s_gl.written = 0; /* from here a read before a write reads the chain's */
             }
@@ -1019,6 +1022,9 @@ void rd__glow_light_scan_end(void)
     } else if (s_gl.lamps && s_gl.sun) {
         why = RD_GLOW_LIGHT_WHY_SUN;
         detail = "the sun's tint reads the lamps' WORK1 at the alpha the mask decides";
+    } else if (s_gl.lamps && !s_gl.pasteFix) {
+        why = RD_GLOW_LIGHT_WHY_FORM;
+        detail = "the paste's blend reads WORK3's alpha, which the lamps' plan changes";
     } else if (s_gl.lamps) {
         plan = RD_GLOW_LIGHT_LAMPS;
     } else if ((detail = darkForm()) != NULL) {
@@ -1072,13 +1078,14 @@ static int lazySlot(uint32_t id)
     return id == idOf(RD_TARGET_WORK3) ? LZ_W3 : -1;
 }
 
-/* a lazy clear noted: target id holds col until it is read */
-static void lazyNote(uint32_t id, const uint8_t col[4])
+/* a lazy clear noted: target id holds col until it is read; false when it
+ * cannot be (no texture yet): the caller draws the clear */
+static bool lazyNote(uint32_t id, const uint8_t col[4])
 {
     const int k = lazySlot(id);
     const RdTargetRec *t = rd__target_rec(id);
     if (k < 0 || !t || !t->color.id) {
-        return;
+        return false;
     }
     s_lazy[k].on = true;
     s_lazy[k].id = id;
@@ -1086,6 +1093,7 @@ static void lazyNote(uint32_t id, const uint8_t col[4])
     for (int i = 0; i < 4; i++) {
         s_lazy[k].col[i] = (float)col[i] / 255.0f;
     }
+    return true;
 }
 
 /* lazy clear k recorded on cl as the pass a clear of its own begins */
@@ -1219,6 +1227,18 @@ static void drawAs(Replay *r, const RdFrame *f, const RdCmd *c, const RdPostRec 
     r->st = keep;
 }
 
+/* command c drawn untextured without a blend in e's colour: a clear of
+ * its target (rd_replay.c blurSpriteClears takes a covering sprite so) */
+static void drawClear(Replay *r, const RdFrame *f, const RdCmd *c, const GlCmd *e, RdPostRec *p)
+{
+    RdStateBlock st = r->st;
+    st.ds.texEnabled = 0;
+    st.ds.abe = 0;
+    st.ds.fba = 0;
+    memcpy(p->rgba, e->col, sizeof(p->rgba));
+    drawAs(r, f, c, p, &st);
+}
+
 bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     GlCmd *e = find(c);
@@ -1230,10 +1250,6 @@ bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
         return false;
     }
     switch (e->act) {
-    case ACT_LAZY:
-        lazyNote(e->target, e->col);
-        r->writeSerial++;
-        return true;
     case ACT_SKIP:
         r->writeSerial++; /* as the sprite's draw (DATE's snapshot reuse) */
         return true;
@@ -1244,15 +1260,16 @@ bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
         rd__blur_post_planned(r, f, c); /* the sprite and its glow edge strip */
         s_gl.planned = false;
         return true;
-    case ACT_CLEAR: {
-        RdStateBlock st = r->st;
-        st.ds.texEnabled = 0;
-        st.ds.abe = 0;
-        st.ds.fba = 0;
-        memcpy(p.rgba, e->col, sizeof(p.rgba));
-        drawAs(r, f, c, &p, &st);
+    case ACT_LAZY:
+        if (lazyNote(e->target, e->col)) {
+            r->writeSerial++;
+            return true;
+        }
+        drawClear(r, f, c, e, &p); /* no texture to hold it: drawn as the clear */
         return true;
-    }
+    case ACT_CLEAR:
+        drawClear(r, f, c, e, &p);
+        return true;
     case ACT_ALPHA0:
         p.rgba[3] = 0;
         drawAs(r, f, c, &p, &r->st);
