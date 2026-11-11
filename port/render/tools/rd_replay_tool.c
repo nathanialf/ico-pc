@@ -2157,13 +2157,14 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
 /* rd_msaa_shadow.c (rd_replay.h needs the shaders' include path, which this
    tool does not have): the counts drawn in the MSAA epoch in the last replay (--stats) */
 uint32_t rd__msaa_shadow_counts(void);
-/* rd_crack_fill.c's FILLSWAP (declared in rd_replay.h, for the
+/* rd_crack_fill.c's FILLSWAP and CRACKTAP (declared in rd_replay.h, for the
    same reason): the swap's self-test, its result (0 not run, 1 passed, 2
-   failed), its switch and a copy's reason */
+   failed), its switch and a copy's reason, the early leave's switch */
 bool rd__crack_swap_selftest(void);
 int rd__crack_swap_test(void);
 bool rd__crack_swap_on(void);
 const char *rd__crack_swap_why_text(uint32_t why);
+bool rd__crack_tap2_on(void);
 
 int main(int argc, char **argv)
 {
@@ -3408,12 +3409,13 @@ int main(int argc, char **argv)
                (unsigned long long)cc.skipped, (unsigned long long)cc.late,
                (unsigned long long)cc.afterMsaa, (unsigned long long)cc.pasted,
                (unsigned long long)cc.afterAlpha);
-        /* FILLSWAP (rd_crack_fill.c) */
+        /* FILLSWAP and CRACKTAP (rd_crack_fill.c) */
         {
             const int t = rd__crack_swap_test();
             printf(
                 "%s: stats: crack fill swap %s (self-test %s): %u snapshots by the swap (%.2f MB "
-                "of colour not copied and as many not loaded), %u copied%s%s%s\n",
+                "of colour not copied and as many not loaded), %u copied%s%s%s; early leave "
+                "%s: %u draws\n",
                 dump, rd__crack_swap_on() && t == 1 ? "on" : "off",
                 t == 1   ? "passed"
                 : t == 2 ? "failed"
@@ -3421,7 +3423,7 @@ int main(int argc, char **argv)
                 pr->crackSwaps, (double)pr->crackSwapTexels * 4.0 / 1048576.0, pr->crackSwapCopied,
                 pr->crackSwapCopied ? " (last: " : "",
                 pr->crackSwapCopied ? rd__crack_swap_why_text(pr->crackSwapWhy) : "",
-                pr->crackSwapCopied ? ")" : "");
+                pr->crackSwapCopied ? ")" : "", rd__crack_tap2_on() ? "on" : "off", pr->crackTap2);
         }
         /* the scene draws' visibility test (rd_vis.c rd__vis_frame): the VU
          * draw commands walked, those replayed as NOPs, and those it did not

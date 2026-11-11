@@ -232,9 +232,12 @@ static int s_forced = -1;
  * around fullscreenAt: COPY a texel that is no crack takes its own
  * snapshot texel (the swap: the attachment holds nothing yet), KEEP_A with
  * it every texel's alpha its own snapshot texel's (the fill writes RGB alone
- * after the glow's alpha) */
+ * after the glow's alpha), EARLY a texel with neither immediate neighbour in
+ * front on an axis left at once (the general shader at a reach of at most 2:
+ * CRACKTAP) */
 #define CRACK_MODE_COPY 1u
 #define CRACK_MODE_KEEP_A 2u
+#define CRACK_MODE_EARLY 4u
 static uint32_t s_mode;
 
 /* FILLSWAP: SCENE's colour swapped with its snapshot texture where the fill
@@ -273,6 +276,9 @@ static struct {
     bool swapping; /* inside the fill's own swap (rd__crack_fill_snap's hook stands down) */
     uint64_t bSwapped, bWhy[SWAP_WHY_COUNT];
 } s_swap = {0, -1, -1, false, 0, {0}};
+
+/* CRACKTAP: ICO_RD_CRACK_TAP2=0 the general shader's early leave off */
+static int s_tap2 = -1, s_tap2Force = -1;
 
 uint32_t rd__crack_fill_reach(float scale)
 {
@@ -836,6 +842,28 @@ const char *rd__crack_swap_why_text(uint32_t why)
     return why < SWAP_WHY_COUNT ? kSwapWhy[why] : "?";
 }
 
+static bool tap2On(void)
+{
+    if (s_tap2Force >= 0) {
+        return s_tap2Force != 0;
+    }
+    if (s_tap2 < 0) {
+        const char *e = getenv("ICO_RD_CRACK_TAP2");
+        s_tap2 = !(e && e[0] == '0');
+    }
+    return s_tap2 != 0;
+}
+
+void rd__crack_tap2_force(int on)
+{
+    s_tap2Force = on < 0 ? -1 : on != 0;
+}
+
+bool rd__crack_tap2_on(void)
+{
+    return tap2On();
+}
+
 /* why SCENE's colour is not swapped with its snapshot at this fill's take
  * (SWAP_WHY_NONE: it is) */
 static int swapWhyNot(void)
@@ -889,6 +917,18 @@ static bool swapPipe(const RdPipeKeyInt *kFill, RdPipeKeyInt *k, RhiPipeline *p)
     *k = rd__crack_fill_key(general ? RD_CRACK_KEY_FILL : RD_CRACK_KEY_FILL1);
     *p = rd__get_pipeline(k);
     return p->id != 0;
+}
+
+/* CRACKTAP: the general shader at a reach of at most 2 on both axes leaves a
+ * texel with neither immediate neighbour in front on an axis (blit.hlsl:
+ * a run's end lies at distance 1 there) */
+static uint32_t tapMode(const RdPipeKeyInt *kFill)
+{
+    if (kFill->fs != RD_FS_CRACK_FILL || s_cf.rx > 2u || s_cf.ry > 2u || !tap2On()) {
+        return 0u;
+    }
+    g_rdPerf.crackTap2++;
+    return CRACK_MODE_EARLY;
 }
 
 /* the snapshot by the swap: SCENE's colour becomes its snapshot (read in
@@ -956,7 +996,8 @@ static bool fillWork(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipe
     p.width = w;
     p.height = h;
     rhi_cmd_begin_render_pass(cl, &p);
-    s_mode = (swap ? CRACK_MODE_COPY | (s_late.alpha ? CRACK_MODE_KEEP_A : 0u) : 0u);
+    s_mode =
+        tapMode(kFill) | (swap ? CRACK_MODE_COPY | (s_late.alpha ? CRACK_MODE_KEEP_A : 0u) : 0u);
     fillDrawHeld(r, tc, swap ? pS : pFill, swap ? &kS : kFill, held);
     s_mode = 0;
     rhi_cmd_end_render_pass(cl);
@@ -1419,7 +1460,8 @@ void rd__crack_fill_in_pass(Replay *r, uint32_t tdId)
     rd__replay_begin_pass(r, tc, NULL, RD_TARGET_SCENE + 1u, 0,
                           swap ? RHI_LOAD_DONT_CARE : RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f,
                           false);
-    s_mode = (swap ? CRACK_MODE_COPY | (s_late.alpha ? CRACK_MODE_KEEP_A : 0u) : 0u);
+    s_mode =
+        tapMode(&kFill) | (swap ? CRACK_MODE_COPY | (s_late.alpha ? CRACK_MODE_KEEP_A : 0u) : 0u);
     fillDrawHeld(r, tc, swap ? pS : pFill, swap ? &kS : &kFill, held);
     s_mode = 0;
     fillCounted(!glow); /* the glow's paste pass is not the aura's */
@@ -1557,7 +1599,7 @@ bool rd__crack_swap_selftest(void)
             const RdPipeKeyInt k1 = rd__crack_fill_key(
                 g_rd.fs[RD_FS_CRACK_FILL1].id ? RD_CRACK_KEY_FILL1 : RD_CRACK_KEY_FILL);
             const bool drawn =
-                swapDraw(cl, src, dst[0], &ds[0], &k0, CRACK_MODE_COPY) &&
+                swapDraw(cl, src, dst[0], &ds[0], &k0, CRACK_MODE_COPY | CRACK_MODE_EARLY) &&
                 swapDraw(cl, src, dst[1], &ds[1], &k1, CRACK_MODE_COPY | CRACK_MODE_KEEP_A);
             rhi_end_commands(cl);
             rhi_submit(cl);
