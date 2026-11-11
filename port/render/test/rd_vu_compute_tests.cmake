@@ -129,7 +129,7 @@ add_test(NAME rd_vuprepass_selftest_lossrung
 add_test(NAME rd_vuprepass_selftest_lossrung_desktop
          COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vuprepass_selftest_test> -DMODE=on
                  "-DLINE=${_vst_on}" "-DEXTRA=rhi_vk: barriers: wide \\(the previous start lost"
-                 "-DNOT_=loss ladder|VU pre-pass: off for this start" -P "${_vst}")
+                 "-DNOT_=rhi_vk: VU pre-pass: off for this start" -P "${_vst}")
 set_tests_properties(rd_vuprepass_selftest_lossrung rd_vuprepass_selftest_lossrung_desktop
                      PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:")
 set_tests_properties(rd_vuprepass_selftest_lossrung
