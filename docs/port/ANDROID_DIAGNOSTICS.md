@@ -279,7 +279,7 @@ question it decides:
 - **The display wait** (the replays line's GPU part `uploads 2.1, lists 0-10 55.2, 11-12
   1.0, display wait 38.4, present 2.0`, the per-replay counts' `submits 2.0`, the start line `rd:
   present: the present's pass is a list of its own, submitted after the scene's; only its submit
-  waits for the display's image ...`; [RENDER.md](RENDER.md#the-presents-own-list)). The issue's last
+  waits for the display's image ...`; [RENDER.md](RENDER_PERF.md#the-presents-own-list)). The issue's last
   log, with a picture in one list, showed the GPU's wait for the window's image inside the first scene pass that wrote colour
   (uploads 38.8 to 84.5 ms, 52 to 59 % of every stage-42 picture, L658 and L707 of the evidence):
   the acquire's semaphore held the whole picture's one list. Now only the present's own list waits.
@@ -336,7 +336,7 @@ question it decides:
   collect C ms (settle S, alpha A, vertices V ms for Nv vertices, Nt triangles kept of Na; cache Hc
   of Dc draws), raster R ms (Nc cells), test X ms (Nd draws tested); occluders used U, refused:
   state/chain/target/bound/program/alpha/small/no-tri a/b/c/d/e/f/g/h; past the budget B`, each
-  figure the mean a replay; [RENDER.md](RENDER.md#culling)). The issue's log showed 14.4 to 16.1
+  figure the mean a replay; [RENDER.md](RENDER_PERF.md#culling)). The issue's log showed 14.4 to 16.1
   ms of cull a picture on the render thread, 12.8 to 14.7 of it the occlusion test, for 0 draws
   occluded in its scene blocks (L596, L634, L678 and L727 of the evidence log); the code says the
   cost was the collect's vertex pass (every vertex of every candidate occluder projected in full

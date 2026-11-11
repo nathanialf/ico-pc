@@ -130,7 +130,7 @@ acquires B's image and records B's list. The device line is followed by `rhi_vk:
 The slot calls the guard lets through (`rhi.h` `rhi_set_slot_guard`, `port/rhi/rhi_backend.c`
 `RHI_GUARD_SLOT`): `rhi_wait_frame` (for the slot it recycles), `rhi_begin_commands`,
 `rhi_end_commands` (the renderer ends a picture's scene list before it begins the present's own,
-[RENDER.md](RENDER.md#the-presents-own-list); an end touches only its list's command buffer, of
+[RENDER.md](RENDER_PERF.md#the-presents-own-list); an end touches only its list's command buffer, of
 its own slot's pool, and the atomic late counters, so it waits only while the other thread has a
 job of its slot; `threadSlotsCell` ends a list beside the other thread's end and submit of the
 other slot without a wait, and its submit, not a slot call, waits once), `rhi_create_bind_group`, `rhi_map_buffer`, `rhi_unmap_buffer`, `rhi_read_timestamps`,
@@ -640,7 +640,7 @@ reads real numbers on both backends.
 
 **Timestamps.** `RHI_MAX_TIMESTAMPS` (256) a [frame slot](ARCHITECTURE.md#terms): the
 renderer's list and effect stamps take the first 32 and a replay timed pass by pass one more per
-pass ([RENDER.md](RENDER.md#the-per-pass-timing)); a pool or heap of 256 is 2 KB a slot. The
+pass ([RENDER.md](RENDER_PERF.md#the-per-pass-timing)); a pool or heap of 256 is 2 KB a slot. The
 indices written are bit sets of `RHI_TIMESTAMP_WORDS` words (`rhi_ts_has`, `rhi_ts_add` in
 `port/rhi/rhi.h`), and Vulkan reads a slot's results only up to the highest index written
 (`port/rhi/vk/vk_cmd.c` (`vkr_collect_timestamps`)).
@@ -659,7 +659,7 @@ frequency and every slot got its heap and buffer; otherwise the device log says 
 them off for a test of the fallback.
 
 **Occlusion queries.** `RHI_MAX_OCCLUSION` (8192) a frame slot, a count of their own beside the
-timestamps', for the replay tool's hidden-draw measurement ([RENDER.md](RENDER.md#culling);
+timestamps', for the replay tool's hidden-draw measurement ([RENDER.md](RENDER_PERF.md#culling);
 `port/render/rd_occlusion.c`). `rhi_cmd_begin_occlusion(cl, i)` and `rhi_cmd_end_occlusion(cl, i)`
 around draws inside one render pass count the samples that passed the depth and stencil tests;
 one query is open at a time, each index once a slot; a begin outside a pass, a second begin of an
@@ -1307,7 +1307,7 @@ transfer features (`vkr_choose_depth_stencil`).
 | `ICO_VK_SUBPASS_READ` | `[dev] subpass_read`: 1 turns [the subpass read](#local-read), an experiment off by default, on on any `VkRenderPass` path (the device's own, the driver row's and `[dev] legacy_passes`': `rhi_vk_subpass_vk11`, `_legacy_on`); 0 or unset off |
 | `ICO_VK_STORAGE_BARRIERS` | 1 puts the by-region barrier before a destination-read draw that only the validation layer needs |
 | `ICO_VK_GLOBAL_BARRIERS` | 1 records a global barrier before every render pass and copy (`vk_cmd.c`) |
-| `ICO_VK_DEPTH_ALWAYS` | 1 makes every depth test compare `ALWAYS`, static and dynamic (`vk_pipeline.c`, `rhi_cmd_set_depth_state`), with the line `ICO_VK_DEPTH_ALWAYS: every depth test passes (...)`: the occlusion measurement's run without the depth ([RENDER.md](RENDER.md#culling)); the picture is not the game's |
+| `ICO_VK_DEPTH_ALWAYS` | 1 makes every depth test compare `ALWAYS`, static and dynamic (`vk_pipeline.c`, `rhi_cmd_set_depth_state`), with the line `ICO_VK_DEPTH_ALWAYS: every depth test passes (...)`: the occlusion measurement's run without the depth ([RENDER.md](RENDER_PERF.md#culling)); the picture is not the game's |
 | `ICO_VK_PRESENT_WAIT` | 1 uses `VK_KHR_present_id` and `VK_KHR_present_wait` where offered (off otherwise) |
 | `ICO_VK_FIFO_LATEST_READY` | 1 uses `VK_PRESENT_MODE_FIFO_LATEST_READY_EXT` where FIFO would be taken, when offered |
 | `ICO_VK_POLL_SURFACE` | 1 polls the surface size after presents, as Android always does (`vk_swapchain.c`) |

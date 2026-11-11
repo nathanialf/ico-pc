@@ -13,6 +13,7 @@ In reading order.
 | --- | --- |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | What runs, what stands in for each PS2 component, and the Terms glossary. |
 | [PLATFORM.md](PLATFORM.md) | Entry points, fibers and the scheduler, the host loop, the arena, the game data ranges, save states, folders, diagnostics and the Steam shortcut. |
+| [PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md) | The log, the heartbeat and watchdog, crash and bug reports, the loss ladder and the lines the window prints. |
 | [ANDROID_DRIVERS.md](ANDROID_DRIVERS.md) | Android graphics driver packages: the picker, the drivers folder, the driver page, the fallback to the phone's own driver. |
 | [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md) | Android's log diagnostics: the kernel GPU driver's sampler on its own thread, the thermal state and screen recording from the Java side. |
 | [GAME_CODE.md](GAME_CODE.md) | How `ico2/` is compiled: the sources, options, host paths, layout asserts and audits. |
@@ -22,6 +23,7 @@ In reading order.
 | [GS.md](GS.md) | What the port adds under the game's GS layer: the register decoder and the hand-offs to rd. |
 | [VU1_PROGRAMS.md](VU1_PROGRAMS.md) | The five VU1 microprograms, their shaders, their CPU oracles and the region rule. |
 | [RENDER.md](RENDER.md) | rd: recording, state, the replay, the device profile, camera blending, performance records, dumps and the replay tool. |
+| [RENDER_PERF.md](RENDER_PERF.md) | rd's performance record: the GPU timestamps, the 10 s lines built from it and the measurements kept from the phones. |
 | [RENDER_POST.md](RENDER_POST.md) | rd's post passes: the fades fold, the motion blur, above 1x, shadows, water blocks, the fog path and crack filling. |
 | [DISPLAY_LAYER.md](DISPLAY_LAYER.md) | The display layer under a temporal upscaler: the game's 2D drawn over the upscaled picture at the display scale, keep frames held 1:1, the history resets by reason, the motion blur's pre-upscale copy, its lines and tests. |
 | [PIPELINES.md](PIPELINES.md) | the pipeline key and blend paths, the start-up set, the fallback entries, the vertex and triangle pre-passes. |

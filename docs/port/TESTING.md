@@ -160,7 +160,7 @@ replayed (`off`) under `ICO_RD_BLEND=fixed`, `--pass-dump --stats` at Original 4
 640x480, Enhanced 4:3 2x, Enhanced 2x at a wide dump's own aspect and once with `--aa msaa4`: every
 target's PNG of both runs byte for byte the off run's, the stats line's `cull off: 0 of 0`, `cull
 frustum: N of M` and `cull full: N of M (F frustum, O occluded)` with F the frustum run's N, and
-draws skipped over the corpus ([RENDER.md](RENDER.md#culling)), and `rd_vis_hiz_corpus.cmake` over
+draws skipped over the corpus ([RENDER.md](RENDER_PERF.md#culling)), and `rd_vis_hiz_corpus.cmake` over
 the rows of `port/render/test/rd_vis_hiz_corpus.txt` (the occlusion corpus at three settings):
 the occlusion test's fast collect (with `ICO_RD_CULL_HIZ_CHECK=1`) against its plain pass
 (`ICO_RD_CULL_HIZ_FAST=0`) and the table, the same 26 counts, no check wrong
@@ -483,7 +483,7 @@ switches the tests and their registrations use:
 | `ICO_VK_ATTACHMENT_READ` | `vk_device.c` | 1 offers the attachment read under `ICO_VK_FAKE_ADRENO` too (`rd_blend_selftest_adreno_forced`) |
 | `ICO_VK_VALIDATION` | `vk_device.c` | the validation layer; the render and RHI tests set it with `VK_ADD_LAYER_PATH` when the layer is in the toolchain |
 | `ICO_VK_GLOBAL_BARRIERS` | `vk_cmd.c` | a global barrier before every pass instead of hazard tracking, for A/B runs |
-| `ICO_VK_DEPTH_ALWAYS` | `vk_cmd.c`, `vk_pipeline.c` | 1: every depth test passes; the occlusion measurement's run without the depth (`tools/occlusion_corpus.py`, `rhi_vk`'s occlusion cell; [RENDER.md](RENDER.md#culling)) |
+| `ICO_VK_DEPTH_ALWAYS` | `vk_cmd.c`, `vk_pipeline.c` | 1: every depth test passes; the occlusion measurement's run without the depth (`tools/occlusion_corpus.py`, `rhi_vk`'s occlusion cell; [RENDER.md](RENDER_PERF.md#culling)) |
 | `ICO_RD_FOG_PATH` | `rd_fog_path.c`, `rd_profile.c` | `local` (the profile's `fogLocal` on where the device has local read), `inplace`, `copy` or `buffer` forces the fog's depth path; `test` makes the self-test try every path (`rd_fog_local`, `rd_fog_selftest_local`) |
 | `ICO_RD_DATE_PATH` | `rd_profile.c`, `rd_date_selftest.c` | `stencil` DATE through the stencil bit wherever the device has local read, kept whatever the self-test finds; `snapshot` the R8 snapshot (`rd_date_selftest`) |
 | `ICO_RD_BLUR_FOLD` | `rd_profile.c` | 1 folds the staticBlur pairs (`fx_blur2_ps`) on any device, 0 never (the A/B of the replay tool's `--pass-dump`) |
@@ -521,16 +521,16 @@ switches the tests and their registrations use:
 | `ICO_RD_VU_FUSE` | `rd_replay_vu.c` | 0: code 36's kick draws under their own pipelines instead of the fused scissor pair (`[dev] vu_fuse = false`; `rd_vufuse_ab`; [VU1_PROGRAMS.md](VU1_PROGRAMS.md#the-fused-scissor-pair)) |
 | `ICO_RD_VU_SKIN_CHECK` | `rd_vu_skin_check.c`, `vk_device.c` | unset: the skinned draws' bone-block check on only on an Adreno with a window; 0 (`false`, `off`, `no`): off (`[dev] vu_skin_check = false`); 1 (`true`, `on`, `yes`): on on any device, headless or not (`[dev] vu_skin_check = true`; `rd_vu_skin_check_robust`); 2: every skinned command of every replay (`rd_vu_skin_check_ab`); the device enables `VK_EXT_pipeline_robustness` only where the check can run ([VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
 | `ICO_RD_VU_SKIN_SABOTAGE` | `rd_vu_skin_check.c` | `A`: the check's own probe reads the bone at VU address A as zeros, the draw's bytes right (H1's form); `A,ring`: the bone zeroed in the ring after the check kept the bytes, the draw and the probe both reading zeros (H2's form) (`rd_vu_skin_check_probe`, `_ring`, `rd_vu_skin_check_163`; [VU_SKIN_CHECK.md](VU_SKIN_CHECK.md)) |
-| `ICO_RD_CULL` | `rd_vis.c` | `off` (or 0): every scene draw replayed; `full` (or 2, `true`; the default on an immediate-mode GPU, `frustum` is the default on a tile-based profile): `frustum` with list 0's occlusion test; `frustum` (or 1): a mesh, skinned or grid command of lists 0 to 10 wholly off its target or behind the eye replayed as an `RDC_NOP`; `full`: list 0's occlusion test too, a mesh or grid draw of list 0 wholly behind the depth the opaque draws before it wrote replayed as an `RDC_NOP` (`rd_vis_hiz.c`) (`[dev] cull`; `rd_cull_ab`; the replay tool's `--cull`, and its `--occlusion` sets 0; [RENDER.md](RENDER.md#culling)) |
-| `ICO_RD_CULL_HIZ_TRIS` | `rd_vis.c` | under `ICO_RD_CULL=full`: the occluder triangles a picture rasterises into the occlusion test's record, the largest screen boxes first (a count up to 1000000, 0 none; default 12000; the stats line's `past the budget`; [RENDER.md](RENDER.md#culling)) |
-| `ICO_RD_CULL_HIZ_FAST` | `rd_vis.c` | `0` (or `off`): the occlusion test's collect without its shortcuts (no batch or triangle screen box before the vertex pass, no verdicts handed to the walk, no scan memo, no collect cache): the plain pass, a comparison; the same occluders either way (read at `rd__vis_init`; `rd_vis_hiz`, `rd_vis_hiz_corpus`; [RENDER.md](RENDER.md#culling)) |
+| `ICO_RD_CULL` | `rd_vis.c` | `off` (or 0): every scene draw replayed; `full` (or 2, `true`; the default on an immediate-mode GPU, `frustum` is the default on a tile-based profile): `frustum` with list 0's occlusion test; `frustum` (or 1): a mesh, skinned or grid command of lists 0 to 10 wholly off its target or behind the eye replayed as an `RDC_NOP`; `full`: list 0's occlusion test too, a mesh or grid draw of list 0 wholly behind the depth the opaque draws before it wrote replayed as an `RDC_NOP` (`rd_vis_hiz.c`) (`[dev] cull`; `rd_cull_ab`; the replay tool's `--cull`, and its `--occlusion` sets 0; [RENDER.md](RENDER_PERF.md#culling)) |
+| `ICO_RD_CULL_HIZ_TRIS` | `rd_vis.c` | under `ICO_RD_CULL=full`: the occluder triangles a picture rasterises into the occlusion test's record, the largest screen boxes first (a count up to 1000000, 0 none; default 12000; the stats line's `past the budget`; [RENDER.md](RENDER_PERF.md#culling)) |
+| `ICO_RD_CULL_HIZ_FAST` | `rd_vis.c` | `0` (or `off`): the occlusion test's collect without its shortcuts (no batch or triangle screen box before the vertex pass, no verdicts handed to the walk, no scan memo, no collect cache): the plain pass, a comparison; the same occluders either way (read at `rd__vis_init`; `rd_vis_hiz`, `rd_vis_hiz_corpus`; [RENDER.md](RENDER_PERF.md#culling)) |
 | `ICO_RD_CULL_HIZ_CHECK` | `rd_vis.c` | `1`: with the fast collect, every triangle it leaves and every collect cache hit worked out in full as well, a difference counted (`rd_replay_tool --stats`'s `stats: cull occlusion cost: ... check: N checked, W wrong`; `rd_vis_hiz`, `rd_vis_hiz_corpus`) |
-| `ICO_RD_CULL_RANGE` | `rd_vis.c` | `0` (or `off`): a draw of part of a mesh is tested with the whole stream's box alone, not its batches' box (a comparison; read at `rd_init`; [RENDER.md](RENDER.md#culling)) |
+| `ICO_RD_CULL_RANGE` | `rd_vis.c` | `0` (or `off`): a draw of part of a mesh is tested with the whole stream's box alone, not its batches' box (a comparison; read at `rd_init`; [RENDER.md](RENDER_PERF.md#culling)) |
 | `ICO_RD_PRESENT_SCENE` | `rd_present_scene.c` | 1: the present from SCENE on (the reduction not drawn where only the present reads DISPLAY), 0: off, the default; unset: the default (`RD_PRESENT_SCENE_DEFAULT`, off until the owner has seen the measurement); the A/B's switch, no config key (`rd_present_scene_ab`; [RENDER_POST.md](RENDER_POST.md#the-present-from-scene-off-by-default-until-measured)) |
 | `ICO_RD_CONSTANT_READS` | `rd_const_read.c` | 0: a post sprite whose source target holds only its last clear reads the target as before instead of being drawn in the clear's colour (`[dev] constant_reads = false`; `rd_constant_reads_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#a-cleared-source-read-as-its-colour)) |
 | `ICO_RD_NO_SPRITE_PLANES` | `rd_screen_planes.c` | 1: the sprite planes builds off for the run, the screen-prim triangles through the plain sprite builds, as `[dev] pipeline_skip` makes it on a device whose driver stopped creating them (issue 161; `rd_noplanes_ab`; [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)) |
-| `ICO_RD_PERF_LIST_STAMPS` | `rd_perf.c` | 0: no list or effect timestamp (`[dev] perf_list_stamps = false`); `rd_perf_test` switches it with `rd__set_perf_list_stamps` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
-| `ICO_RD_PERF_PASSES` | `rd_perf.c` | 1: every replay timed pass by pass (`[dev] perf_passes = true`; the window writes `ico-pc-passes.csv`); `rd_perf_test` and the replay tool's `--pass-times` switch it with `rd__set_perf_passes` ([RENDER.md](RENDER.md#the-per-pass-timing)) |
+| `ICO_RD_PERF_LIST_STAMPS` | `rd_perf.c` | 0: no list or effect timestamp (`[dev] perf_list_stamps = false`); `rd_perf_test` switches it with `rd__set_perf_list_stamps` ([RENDER.md](RENDER_PERF.md#the-per-pass-timing)) |
+| `ICO_RD_PERF_PASSES` | `rd_perf.c` | 1: every replay timed pass by pass (`[dev] perf_passes = true`; the window writes `ico-pc-passes.csv`); `rd_perf_test` and the replay tool's `--pass-times` switch it with `rd__set_perf_passes` ([RENDER.md](RENDER_PERF.md#the-per-pass-timing)) |
 | `ICO_RHI_BACKEND`, `ICO_VK_DEVICE`, `ICO_D3D12_ADAPTER` | `rhi_backend.c`, `vk_device.c`, `d3d12_device.c` | pick the backend, the Vulkan device, the D3D12 adapter (`warp`) |
 | `ICO_FIXED_CLOCK` | `clock.c` | the wall clock fixed at 2002-01-01 unless `0` |
 | `ICO_GALLERY_PLAY` | `gallery.c` | a play script for the music gallery |
@@ -595,14 +595,14 @@ listed in [RENDER.md](RENDER.md#dumps-and-the-replay-tool). For tests the useful
 `--pass-dump DIR` (every named target from one run), `--occlusion` with `--nop @FILE` (the
 hidden-draw measurement and the replay without the hidden draws; `tools/occlusion_corpus.py` runs
 them over `tools/occlusion_corpus.txt` with `--stats --gpu-repeat K`, under the replay lock it takes
-for each run, and writes the report and the culling gate's verdict, [RENDER.md](RENDER.md#culling)), `--list --no-device` (the commands without a
+for each run, and writes the report and the culling gate's verdict, [RENDER.md](RENDER_PERF.md#culling)), `--list --no-device` (the commands without a
 GPU), `--present WxH`, `--aspect`, `--enhanced`, `--aa`, `--interp T PREV` and with it
 `--save-blended DUMP` (the frame between the two written as F12's blended present's frame)
 (`port/render/tools/rd_replay_tool.c`, usage).
 
 ### The culler over the corpus, and the phone's logs
 
-`tools/cull_corpus.py` ([RENDER.md](RENDER.md#culling)) runs `rd_replay_tool --stats --gpu-repeat K
+`tools/cull_corpus.py` ([RENDER.md](RENDER_PERF.md#culling)) runs `rd_replay_tool --stats --gpu-repeat K
 --time K` under `--cull off`, `frustum` and `full` for every dump of `tools/occlusion_corpus.txt`
 and `tools/native_frame_dumps.txt` that is here (Original 4:3, Enhanced 4:3 2x, and Enhanced 2x at
 the dump's own aspect for a dump wider than 4:3), and `--occlusion` once, under the replay lock for

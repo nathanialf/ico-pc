@@ -64,7 +64,7 @@ draws only what that outcome needs, byte for byte what the planned passes write
 after the plan by `port/render/rd_replay_vu.c` (`vuDraw`, the range once a command in `doVuDraw`)
 and `port/render/rd_replay.c` (`doScreen`), before the exact blend's and the two-pass blend's
 expansions; a mesh's vertex span is kept while its stream's serial holds, `meshSpanMemo`,
-[RENDER.md](RENDER.md#performance-notes)). The rules, each a fact of the GS's integer arithmetic and
+[RENDER.md](RENDER_PERF.md#performance-notes)). The rules, each a fact of the GS's integer arithmetic and
 of the fixed-function path:
 
 | rule | condition over the range lo..hi | the plan | why the bytes are the same |
@@ -830,7 +830,7 @@ record stages, `vu_pre_out`, `vu_rec_vertex`, `vu_rec_planes`); `port/shaders/vu
 `port/shaders/vu_particle.hlsl`). The meshes (`RDC_MESH`, `RDC_SKINNED`), the grids (`RDC_GRID`)
 and the particles (`RDC_PARTICLES`: a sprite's verdict and planes, six invocations a sprite) take
 it. A command the visibility test left out of the replay (an `RDC_NOP` of the shadow frame,
-[RENDER.md](RENDER.md#culling)) has no entry, no record rows and no draw: the pre-pass walks the
+[RENDER.md](RENDER_PERF.md#culling)) has no entry, no record rows and no draw: the pre-pass walks the
 frame the replay walks.
 
 **The vertex record.** Twelve 32-bit words a vertex, in three planes of `RGBA32_UINT` texels, one
@@ -964,7 +964,7 @@ shaders' keys are the ones named. The pass ring holds the passes as `VU pre-pass
 the record (1024xR)` and `VU triangle pre-pass, N triangle slots into the record (1024xR)`
 (`RD_PASSK_VU_PRE`, `RD_PASSK_VU_TRI`), the loss bisect's window numbers them passes 1 and 2, and
 the per-pass timing has a pre-pass piece for each ([The pass ring](RENDER.md#the-pass-ring), [The per-pass
-timing](RENDER.md#the-per-pass-timing); `port/render/rd_replay_vu.c` (`vuPrepassRun`, `vuSource`,
+timing](RENDER_PERF.md#the-per-pass-timing); `port/render/rd_replay_vu.c` (`vuPrepassRun`, `vuSource`,
 `vuPreRange`, `vuPreRecord`, `recEnsure`)).
 
 **The record's three writes.** What is written above into three render targets and copied is, on a
@@ -1253,7 +1253,7 @@ A start whose pre-pass is already off (the settings, the device, the host's
 pre-pass: off (self-test not run)`; a frame it could not build, or one in which neither replay of a pair
 drew the meshes, leaves the pre-pass on (`on (self-test not run: ...)`, `on (self-test
 inconclusive: ...)`). The summary line carries the verdict (`VU pre-pass on (self-test: ok; record stores)`, `VU
-pre-pass off (self-test: <reason>)`, [PLATFORM.md](PLATFORM.md#the-summary-line)). A crash in one
+pre-pass off (self-test: <reason>)`, [PLATFORM.md](PLATFORM_DIAGNOSTICS.md#the-summary-line)). A crash in one
 of its pipelines is noted as the start-up set's would be and takes the crash order's `noprepass`
 step; a start that ended without a word in one of the pre-pass's pipelines or batches makes the
 next start draw without it, and the second such end in a row writes `[dev] vu_prepass = false`; a

@@ -200,7 +200,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   every reader and condition; `rd__present_scene_settle` on recorded frames (a frame of play drops
   the debt, a keep frame and the motion blur's held copy draw DISPLAY first, a frame drawing on
   SCENE alone draws it, the still re-present's empty keep frame keeps it) (`rd_present_scene`).
-- `rd_vis_test.c`: the scene draws' visibility test ([RENDER.md](RENDER.md#culling)) on the CPU,
+- `rd_vis_test.c`: the scene draws' visibility test ([RENDER.md](RENDER_PERF.md#culling)) on the CPU,
   without a device (the default mode per device class, `checkProfileDefault`: a tile-based profile takes `frustum`, every other `full`, `ICO_RD_CULL` rules on both, and the 10 s line says `(profile default)` or `([dev] cull)`; also the MSAA epoch, `checkMsaaEpoch`: `rd__vis_msaa_may_close` true for DATE,
   a texture of SCENE's depth (texturing off too), SCENE's colour with another depth and SCENE's
   depth with another colour, false for SCENE's own pair, SCENE without a depth and another target's
@@ -252,7 +252,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   AFAIL FB_ONLY whose texture is not uploaded yet (record-only: dirty) hiding the box behind it when
   the texture's alpha is 0x80 throughout (`rd__vis_hiz_pending_scan`'s scan 0x80..0x80), not when
   one texel is 0x40 (`rd_vis`).
-- `rd_vis_hiz_test.c`: the occlusion test's cheaper collect ([RENDER.md](RENDER.md#culling), the
+- `rd_vis_hiz_test.c`: the occlusion test's cheaper collect ([RENDER.md](RENDER_PERF.md#culling), the
   occlusion test's cost) on the CPU, without a device (`rd__init_record_only`, 512 x 448): over
   3000 random perspective cameras and boxes (code 32, and code 36's pos.w range) every triangle of
   three random points of the box whose corners `rd__vis_hiz_vertex` accepts has an area at most
@@ -593,7 +593,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   commands through it (the title's and the boot's dumps: 2), `expect=report` at least one command
   through it and the targets that differ listed (`rd_noplanes_ab`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#without-the-sprite-planes)). SKIP as `rd_vustage_ab`.
-- `rd_occlusion_tool.cmake`: `rd_replay_tool --occlusion` ([RENDER.md](RENDER.md#culling)) on the
+- `rd_occlusion_tool.cmake`: `rd_replay_tool --occlusion` ([RENDER.md](RENDER_PERF.md#culling)) on the
   first dump of the machine-local list `tools/occlusion_corpus.txt` that is here, at Original 4:3
   1x: the line `occlusion: hidden N of M list-0 draws, T of U triangles (index count / 3); hidden
   commands: S` with M above 0, N at most M, T at most U and S `none` or a `--nop` spec of list 0,
@@ -861,7 +861,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   full: N of M (F frustum, O occluded)` with the frustum run's M, F its N and N = F + O, and draws
   skipped over the corpus (the occluded total printed); each run's counts printed;
   `-DMAX_DUMPS=n` takes the first n dumps (`rd_cull_ab`, TIMEOUT 5400, and its OpenGL twin
-  `rd_cull_ab_gl`; [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
+  `rd_cull_ab_gl`; [RENDER.md](RENDER_PERF.md#culling)). SKIP as `rd_vustage_ab`.
 - `rd_vis_hiz_corpus.cmake`: the rows of `test/rd_vis_hiz_corpus.txt` (the dumps of
   `tools/occlusion_corpus.txt` and issue 179's frame at Original 4:3 640x480, Enhanced 4:3 2x and Enhanced 4:3 2x with
   `--repeat 3`, the last replay's counts, so the collect cache's; the missing dumps named and
@@ -873,7 +873,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `stats: cull occlusion cost:`'s `check: N checked, 0 wrong`, `fast off` and `fast on` as set;
   each row's cull, occlusion and collect ms of both runs printed, and their sums (the table made by
   the plain pass; made again only when the culler's rules change)
-  (`rd_vis_hiz_corpus`, TIMEOUT 1800; [RENDER.md](RENDER.md#culling)). SKIP as `rd_vustage_ab`.
+  (`rd_vis_hiz_corpus`, TIMEOUT 1800; [RENDER.md](RENDER_PERF.md#culling)). SKIP as `rd_vustage_ab`.
 - `rd_thread_ab.cmake`: the same dumps and those of `tools/vufuse_dumps.txt` through
   `rd_replay_tool --render-thread off`, `sync` and `on` (every replay, the interpolation and the
   renderer's calls on a thread of the renderer's own, `port/render/rd_thread.h`), with

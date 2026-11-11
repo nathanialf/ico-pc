@@ -724,7 +724,7 @@ hold no developer programs: no `rhi_d3d12_test`, `rd_replay_tool` or `compare_ba
 (developer programs in a download make browsers and Windows flag it; the scripts assert their
 absence). The link map ships beside the program in both archives (`x64/ico_pc_x64.map`,
 `ico_pc.map`; the scripts assert it is there): a crash or watchdog report names its functions from
-it on the player's machine ([PLATFORM.md](port/PLATFORM.md#the-symbol-lines)). It stays in
+it on the player's machine ([PLATFORM.md](port/PLATFORM_DIAGNOSTICS.md#the-symbol-lines)). It stays in
 `dist/stage` too, and `tools/package_win.sh` builds only `ico_pc`, `mc_import` and `ico_icon_stamp`. The
 Windows program carries version information (company, product, file version `x.y.z.N`: N is the
 release candidate's number for a label `vX.Y.Z-rcN`, 0 for `vX.Y.Z`; `ico_version_from_label` in
@@ -821,7 +821,7 @@ screen) and `zipalign -c -P 16 -v 4`. Before the alignment it adds
 `assets/libmain.syms.gz` to the APK, stored: `llvm-nm -n --defined-only` of the unstripped
 `libmain.so`, its code symbols (`T`, `t`, `W`, `w`), gzip-compressed, from which a crash or
 watchdog report names its functions on the phone
-([PLATFORM.md](port/PLATFORM.md#the-symbol-lines)); the signed APK is checked to hold it stored. The
+([PLATFORM.md](port/PLATFORM_DIAGNOSTICS.md#the-symbol-lines)); the signed APK is checked to hold it stored. The
 unstripped `libmain.so`, `ico_pc.map`, `libmain.syms.gz` and `VERSION.txt` are left in
 `dist/stage/android/`.
 
