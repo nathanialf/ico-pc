@@ -82,6 +82,7 @@
 
 #include "rd_layer.h"
 #include "rd_replay.h"
+#include "rd_shadow_box.h"
 #include "rd_upscale.h"
 
 /* the command the walk replays (rd_replay.c replayFrame), counted as the
@@ -399,6 +400,8 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     /* and DATE's passes without the depth (rd_date_cut.c: the runs a DATE
      * snapshot opens whose draws never touch the depth) */
     const bool dateCut = rd__date_cut_scan_begin(f);
+    /* and the shadows' sources and composites (rd_shadow_box.c) */
+    const bool box = rd__shadow_box_scan_begin(f);
     s_plan.n = s_plan.nUndef = 0;
     s_plan.full = false;
     s_plan.anyTouch = 0;
@@ -414,7 +417,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     g_rdPerf.storePlanMode = s_plan.mode;
     s_plan.scanFrame = f->number;
     const bool plan = s_plan.mode != 0;
-    if (!plan && !area && !cut && !glow && !light && !dateCut) {
+    if (!plan && !area && !cut && !glow && !light && !dateCut && !box) {
         return;
     }
     const bool fxDepth = plan && rd__effects_depth_wanted();
@@ -465,6 +468,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
             }
             if (dateCut) {
                 rd__date_cut_scan_cmd(c, &st, state, ord);
+            }
+            if (box) {
+                rd__shadow_box_scan_cmd(f, c, &st, state, ord);
             }
             if (state || !plan) {
                 continue;
@@ -555,6 +561,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     }
     if (dateCut) {
         rd__date_cut_scan_end(ord); /* the replay's end closes the open run */
+    }
+    if (box) {
+        rd__shadow_box_scan_end();
     }
     if (!plan) {
         return;

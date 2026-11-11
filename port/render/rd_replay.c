@@ -67,6 +67,7 @@
 #include "rd_layer.h"
 #include "rd_passring.h"
 #include "rd_replay.h"
+#include "rd_shadow_box.h"
 #include "rd_stencil_selftest.h"
 #include "rd_submit.h"
 #include "rd_upscale.h"
@@ -3469,8 +3470,13 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[0]);
     v = rd__layer_keep_verts(r, c, v); /* a keep frame's 1:1 hold (rd_layer.c) */
     v = extendFullFrame(r, rd__target_rec(r->st.color), v, n, c->b[0], c->b[1]);
-    RhiRect dateArea;
+    RhiRect dateArea, sbox, dsb;
     const RhiRect *dateAt = dateAreaFor(r, c, v, n, &dateArea) ? &dateArea : NULL;
+    /* a shadow composite over the volumes' box (rd_shadow_box.c) */
+    const bool sb = rd__shadow_box_screen(&r->st, c, v, n, &sbox);
+    if (sb && dateAt && rectMeet(dateArea, sbox, &dsb)) {
+        dateArea = dsb;
+    }
     if (!prepareDrawEx(r, &ds, dateAt, true)) {
         return;
     }
@@ -3588,6 +3594,15 @@ static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
     ScreenRun nr;
     nr.g2 = bindDrawEx(r, &ds, &nr.sc, &nr.sampler, true);
     if (!nr.g2.id) {
+        return;
+    }
+    const RhiRect scAll = nr.sc;
+    if (sb && !rectMeet(scAll, sbox, &nr.sc)) {
+        nr.sc.w = nr.sc.h = 0;
+    }
+    rd__shadow_box_drawn(&scAll, sb ? &nr.sc : NULL);
+    if (sb && nr.sc.w == 0) {
+        r->writeSerial += (dp[0].key.gs.colorMask & 8) != 0; /* as the whole draw's */
         return;
     }
     /* the MSAA epoch: integer-aligned sprites cover whole pixels */
@@ -4310,6 +4325,7 @@ static void doShadowReset(Replay *r)
     }
     s_shadowRedFor = 0; /* a new count starts */
     s_shadowCountFor = 0;
+    rd__shadow_box_reset(r->st.color); /* the volumes' box (rd_shadow_box.c) */
     if (rd__msaa_shadow_reset(r, tc, td)) {
         return; /* in the MSAA epoch (rd_msaa_shadow.c) */
     }
@@ -4366,6 +4382,7 @@ static void doShadowStripIn(Replay *r, const RdFrame *f, const RdCmd *c)
             return;
         }
         const RdScreenVtx *v = (const RdScreenVtx *)(f->payload + c->u[1]);
+        rd__shadow_box_strip_v(v, n, &r->st);
         IcoSpriteVertex *o = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
         for (uint32_t i = 0; i < n; i++) {
             convVtx(&v[i], 1, 1.0f, 1.0f, noOff, &o[i]);
@@ -4378,6 +4395,7 @@ static void doShadowStripIn(Replay *r, const RdFrame *f, const RdCmd *c)
             return;
         }
         const float (*fv)[4] = (const float (*)[4])(f->payload + c->u[1]);
+        rd__shadow_box_strip_f(fv, n, &r->st);
         IcoSpriteVertex *o = (IcoSpriteVertex *)(g_rd.ringMap[s_slot] + vOff);
         for (uint32_t t = 0; t < nt; t++) {
             for (uint32_t j = 0; j < 3; j++) {
@@ -4528,6 +4546,7 @@ static bool shadowCountOne(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t
                              scaled ? &s_shadowRedState : &tc->colorState, &cb)) {
         return false;
     }
+    rd__shadow_box_count_done(r->st.color);
     if (scaled) {
         rd__transition(s_cl, s_shadowRed, &s_shadowRedState, RHI_STATE_SHADER_READ);
         s_shadowRedFor = r->st.color;
@@ -4550,6 +4569,7 @@ static void doShadowResolve(Replay *r, const RdCmd *c)
         s_shadowCountFor = r->st.color;
         return;
     }
+    rd__shadow_box_count_whole(r->st.color, ms);
     static const float zero[4] = {0.0f, 0.0f, 0.0f, 0.0f};
     r->writeSerial++;
     if (!ms) {
