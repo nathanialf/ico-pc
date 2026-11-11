@@ -90,6 +90,7 @@ static int lineOf(const char *prefix, const char *suffix, const char *text)
     rewind(f);
     s_gotN = fread(s_got, 1, sizeof(s_got), f);
     fclose(f);
+    (void)s_writes; /* counted only through glibc's cookie streams */
     return -1;
 #endif
 }
