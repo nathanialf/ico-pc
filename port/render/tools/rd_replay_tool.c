@@ -2157,6 +2157,13 @@ static int presentsRun(const char *dump, const char *png, RdFrame *pf, RdFrame *
 /* rd_msaa_shadow.c (rd_replay.h needs the shaders' include path, which this
    tool does not have): the counts drawn in the MSAA epoch in the last replay (--stats) */
 uint32_t rd__msaa_shadow_counts(void);
+/* rd_crack_fill.c's FILLSWAP (declared in rd_replay.h, for the
+   same reason): the swap's self-test, its result (0 not run, 1 passed, 2
+   failed), its switch and a copy's reason */
+bool rd__crack_swap_selftest(void);
+int rd__crack_swap_test(void);
+bool rd__crack_swap_on(void);
+const char *rd__crack_swap_why_text(uint32_t why);
 
 int main(int argc, char **argv)
 {
@@ -2729,6 +2736,12 @@ int main(int argc, char **argv)
         }
     }
     rd__set_not_implemented_fatal(false);
+    if (!noDevice) {
+        /* the crack fill's swap is on only where its self-test passed
+         * (rd_crack_fill.c; the game runs it with the other self-tests,
+         * rd_fog_selftest, which the tool does not run) */
+        (void)rd__crack_swap_selftest();
+    }
     if (!noDevice && getenv("ICO_RD_EARLY_PREPARE") != NULL &&
         strcmp(getenv("ICO_RD_EARLY_PREPARE"), "1") == 0) {
         /* the game window's start-up preparation (rd_vu_rec_early.h), with
@@ -3395,6 +3408,21 @@ int main(int argc, char **argv)
                (unsigned long long)cc.skipped, (unsigned long long)cc.late,
                (unsigned long long)cc.afterMsaa, (unsigned long long)cc.pasted,
                (unsigned long long)cc.afterAlpha);
+        /* FILLSWAP (rd_crack_fill.c) */
+        {
+            const int t = rd__crack_swap_test();
+            printf(
+                "%s: stats: crack fill swap %s (self-test %s): %u snapshots by the swap (%.2f MB "
+                "of colour not copied and as many not loaded), %u copied%s%s%s\n",
+                dump, rd__crack_swap_on() && t == 1 ? "on" : "off",
+                t == 1   ? "passed"
+                : t == 2 ? "failed"
+                         : "not run",
+                pr->crackSwaps, (double)pr->crackSwapTexels * 4.0 / 1048576.0, pr->crackSwapCopied,
+                pr->crackSwapCopied ? " (last: " : "",
+                pr->crackSwapCopied ? rd__crack_swap_why_text(pr->crackSwapWhy) : "",
+                pr->crackSwapCopied ? ")" : "");
+        }
         /* the scene draws' visibility test (rd_vis.c rd__vis_frame): the VU
          * draw commands walked, those replayed as NOPs, and those it did not
          * test (particles, clip mode none, lists 11 and 12, no target: exempt;
@@ -3494,6 +3522,7 @@ int main(int argc, char **argv)
                 return 1;
             }
             rd__set_not_implemented_fatal(false);
+            (void)rd__crack_swap_selftest(); /* the new renderer's (rd_crack_fill.c) */
             if (overlay) {
                 rd_set_present_overlay(overlayTest, NULL);
             }

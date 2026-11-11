@@ -2968,6 +2968,11 @@ typedef struct RdPerfRecord {
      * (auraPasteBand rows); pastes drawn whole (auraPasteKept; auraPasteWhy
      * the last one's reason, rd_aura_paste.h RD_AP_WHY_*) */
     uint32_t auraPasteSplit, auraPasteRows, auraPasteBand, auraPasteKept, auraPasteWhy;
+    /* The crack fill's cost (rd_crack_fill.c): its snapshots taken by the
+     * swap (crackSwaps, of crackSwapTexels of SCENE's colour not copied
+     * and as many not loaded) and copied (crackSwapCopied; crackSwapWhy the
+     * last one's reason, the file's SWAP_WHY_*) */
+    uint32_t crackSwaps, crackSwapTexels, crackSwapCopied, crackSwapWhy;
     /* The aura's read of SCENE into FEED128 in two passes (rd_aura_box.c):
      * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
      * a replay; none while the game is paused) */

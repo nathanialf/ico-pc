@@ -1443,8 +1443,9 @@ bool rd_fog_selftest(void)
     if (first) {
         g_rd.dateRan = true;
         (void)rd_date_selftest();
-        (void)rd__fx_local_selftest(); /* it reads the readable passes DATE's path keeps */
-        (void)rd__shadow_selftest();   /* the shadow count's one draw (rd_shadow_selftest.c) */
+        (void)rd__fx_local_selftest();   /* it reads the readable passes DATE's path keeps */
+        (void)rd__shadow_selftest();     /* the shadow count's one draw (rd_shadow_selftest.c) */
+        (void)rd__crack_swap_selftest(); /* the crack fill's swap (rd_crack_fill.c) */
     }
     s_st.armed = true;
     bool ok = runSelftest();
