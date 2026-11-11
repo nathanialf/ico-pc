@@ -297,12 +297,18 @@ int main(int argc, char **argv)
     const char *fakeRow = getenv("ICO_VK_FAKE_NO_PREPASS");
     const bool tableOff = fakeRow && fakeRow[0] && fakeRow[0] != '0';
     /* the record's write after the verdict (rd_vu_record.h) */
+    /* the phones' loss rung on this device (rd_vuprepass_selftest_lossrung:
+       Arm's phone GPU faked, ICO_LOSS_ROW=1) */
+    const bool rungOff = rhi_limits()->vuPrepassLoss != NULL;
     const char *want = wantOn ? "; VU pre-pass on (self-test: ok; record "
                        : notRun && tableOff
                            ? "; VU pre-pass off by the device table (ICO_VK_FAKE_NO_PREPASS; [dev] "
                              "vu_prepass = true draws with it anyway) (self-test not run); "
-                       : notRun ? "; VU pre-pass off by the settings ("
-                                : "; VU pre-pass off (self-test: the pictures differ: ";
+                       : notRun && rungOff ? "; VU pre-pass off by the loss ladder (a tile-based "
+                                             "phone GPU; the previous start lost the graphics "
+                                             "device: this start only; "
+                       : notRun            ? "; VU pre-pass off by the settings ("
+                                           : "; VU pre-pass off (self-test: the pictures differ: ";
     CHECK(strstr(sum, want) != NULL, "the summary lacks \"%s\"", want);
     if (wantOn) {
         /* the pre-pass's draws batched unless ICO_RD_VU_PREPASS_BATCH=0
