@@ -979,8 +979,16 @@ static bool fillWork(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipe
     const bool swap = swapDecide(tc, held, kFill, &kS, &pS);
     if (held) {
         /* the snapshot taken where the fill was due; the depth back to its
-         * sampled state (a pass may have bound it since: a test only) */
-        rd__replay_end_pass(r);
+         * sampled state (a pass may have bound it since: a test only).  A
+         * clear pending on another target stays pending for its next pass
+         * to take as its load op (rd_replay.c endPassFor, the clear carry):
+         * the commands the fill was held past touch none of SCENE's
+         * textures (rd__late_pass_class flushes at a clear of SCENE's colour
+         * or depth), so no pending clear is SCENE's, and the fill reads and
+         * writes nothing else; ended with endPass, the clear was recorded
+         * here as a pass of its own (the crack fill's class: the opening's
+         * WORK2 clear before the lamps) */
+        rd__replay_end_pass_for(r, tc->depth.id);
         rd__transition(cl, tc->depth, &tc->depthState, RHI_STATE_DEPTH_READ);
     } else if (swap ? !fillTakeSwap(r, tc, pCount, kCount) : !fillTake(r, tc, pCount, kCount)) {
         return false;

@@ -1462,7 +1462,11 @@ aura, and its lamps write SCENE's depth, so every held fill there was drawn earl
 and kept its snapshot's copy, which FILLSWAP refuses for a held fill): the walk then draws it where
 it is due (`rd__late_pass_no_land`; counted `RdPerfRecord.latePassNoLand`, the 10 s line's `; N
 fills not held (no paste in the frame takes them)`, once a run `rd: late pass: the crack fill not
-held in a frame where no paste takes it ...`).
+held in a frame where no paste takes it ...`). A held fill drawn early ends the open pass with
+`endPassFor`: a clear pending on another target stays pending for that target's next pass to take
+as its load op (the commands it was held past touch none of SCENE's textures), where `endPass` had
+recorded it as a pass of its own in the crack fill's class (the opening's lamps rooms: 0.6 passes
+and 6 MB cleared a picture).
 
 One write of SCENE falls between the snapshot and the draw: SCENE's border repeat
 ([RENDER.md](RENDER.md), `rd_blur_border.c` `sceneRepeat`, before the first sprite that samples
