@@ -43,6 +43,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_fog_path.c` | how the fog reads the scene depth; the fog probe and self-test |
 | `port/render/rd_fades_fold.c` | the fades fold: list 11's last full-frame lerp sprites applied by the reduction ([The fades fold](RENDER_POST.md#the-fades-fold)) |
 | `port/render/rd_glow_fold.c` | the glow's mask computed in the reduction that reads it: WORK2's fill and mask not drawn ([The glow's mask in its reduction](RENDER_POST.md#the-glows-mask-in-its-reduction)) |
+| `port/render/rd_glow_light.c` | the glow drawn only where it can add light above 1x: its chain left undrawn in rooms without light in it ([The glow where it adds light](RENDER_POST.md#the-glow-where-it-adds-light)) |
 | `port/render/rd_content_hide.c` | the content table: stage faces the native frame must not show |
 | `port/render/rd_content_extend.c` | the content table's sheets: stage overlays continued to the frame's edges |
 | `port/render/rd_content_chain.c`, `rd_chain.h` | the chains drawn at their links' size |

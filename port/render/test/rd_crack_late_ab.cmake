@@ -46,7 +46,7 @@
 # after the glow's alpha") has at least one pass fewer.  A line whose dump
 # or baseline is missing is named and skipped; none compared, or no device: SKIP.
 # Every run sets ICO_RD_GLOW_LIGHT=0 (the glow's chain drawn whole, as the
-# baselines drew it): the light plan (rd_glow_light.c, VD-41) came after them
+# baselines drew it): the light plan (rd_glow_light.c, VD-30) came after them
 # and changes the alpha of the glow's buffers and SCENE in frames with a
 # marked background; rd_glow_light_ab holds it against the chain drawn.
 # -DTOOL=<rd_replay_tool> -DLIST=<the list> -DPY=<python3> -DDIFF=<png_level_diff.py>

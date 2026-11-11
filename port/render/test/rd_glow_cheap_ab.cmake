@@ -70,7 +70,7 @@
 #   - at least one run folded at each setting where any was compared.
 # Every run sets ICO_RD_GLOW_LIGHT=0 (the chain drawn whole, as the
 # baselines and the WORK2 fold need it): the light plan (rd_glow_light.c,
-# VD-41) came after them; rd_glow_light_ab holds it against the chain drawn.
+# VD-30) came after them; rd_glow_light_ab holds it against the chain drawn.
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DBASE_PHONE=<dir> -DBASE_DESK=<dir>
 # -DBASE_REFRESH=<dir> -DPY=<python3> -DDIFF=<png_level_diff.py>
 # -DOUT=<a folder the test may write>

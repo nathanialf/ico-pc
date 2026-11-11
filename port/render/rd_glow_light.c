@@ -1,7 +1,7 @@
 /* rd_glow_light.c: the glow drawn only where it can add light
  * (docs/port/RENDER_POST.md, "The glow where it adds light";
  * docs/port/WORK_BUFFERS.md, "The glow's buffers under the light plan";
- * DIVERGENCES.md VD-41).  Above 1x on every device class and backend, no
+ * DIVERGENCES.md VD-30).  Above 1x on every device class and backend, no
  * switch; ICO_RD_GLOW_LIGHT=0 draws the chain as before (the tests' A/B,
  * TESTING.md).
  *
