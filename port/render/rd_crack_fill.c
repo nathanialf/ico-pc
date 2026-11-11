@@ -1249,6 +1249,10 @@ static bool takeHeld(Replay *r, bool msaaOpen)
     RdTargetRec *tc = sceneRec();
     if (msaaOpen || s_late.replay != g_rd.replayCounter || !tc || !tc->depth.id || !tc->color.id ||
         !s_late.alpha || !rd__late_pass_hold_wanted()) {
+        if (!msaaOpen && s_late.replay == g_rd.replayCounter && tc && s_late.alpha &&
+            rd__late_pass_no_land()) {
+            rd__late_pass_not_held(); /* no paste in this replay takes it (counted) */
+        }
         return false;
     }
     RdPipeKeyInt kFill, kCount;

@@ -1456,6 +1456,13 @@ paste reads a snapshot, so in a DARK room the fill is drawn where it was due, as
 pass, not held to be drawn in a pass of its own later; once a run `rd: late pass: the crack fill
 not held on this device: ...`). A held fill drawn past SCENE's border repeat draws the middle and
 each repeated block (below): `RdPerfRecord.latePassBlockDraws` counts the draws more than one.
+Nor is it held in a replay whose scan (`rd__late_pass_scan_end`, below) finds that the place it
+would be held to is no paste (a draw it must go before, the walk's end: the opening cutscene has no
+aura, and its lamps write SCENE's depth, so every held fill there was drawn early in its own pass
+and kept its snapshot's copy, which FILLSWAP refuses for a held fill): the walk then draws it where
+it is due (`rd__late_pass_no_land`; counted `RdPerfRecord.latePassNoLand`, the 10 s line's `; N
+fills not held (no paste in the frame takes them)`, once a run `rd: late pass: the crack fill not
+held in a frame where no paste takes it ...`).
 
 One write of SCENE falls between the snapshot and the draw: SCENE's border repeat
 ([RENDER.md](RENDER.md), `rd_blur_border.c` `sceneRepeat`, before the first sprite that samples
@@ -1498,7 +1505,8 @@ UNVERIFIED), and in each LAMPS picture less the lamps' depth store. Counters
 - `--stats`: `<dump>: stats: late pass on|off|fill|join: N crack fills held into a paste pass (G
   the glow's; X MB of colour not loaded and as many not stored), M drawn early in a pass of their
   own (<why>); D glow pastes in the aura's paste pass (Y MB ...), E drawn early; J list 11 draws
-  joined ...; K draws more for the border's blocks`.
+  joined ...; K draws more for the border's blocks; L fills not held (no paste in the frame takes
+  them)`.
 
 **The glow's paste in the aura's pass** (`defer`). Under LAMPS and WHOLE the glow's paste begins a
 pass on SCENE of its own, and the aura's paste another after the aura's sprites into its own buffers.

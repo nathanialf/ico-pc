@@ -117,11 +117,12 @@ int rd__late_pass_class(const RdFrame *f, const RdCmd *c, const RdStateBlock *st
  * when none came: end, endL), the snapshot's place under any other (true;
  * false when nothing is held) */
 typedef struct RdLateScan {
-    bool alpha; /* rd__crack_fill_place's */
-    bool hold;  /* the fill may be held this replay */
-    bool held;  /* past the place where the snapshot is taken */
-    bool done;  /* the held draw's landing found (skipped -1) */
-    bool first; /* the first command not waited past with skipped 0 found */
+    bool alpha;                 /* rd__crack_fill_place's */
+    bool hold;                  /* the fill may be held this replay */
+    bool held;                  /* past the place where the snapshot is taken */
+    bool done;                  /* the held draw's landing found (skipped -1) */
+    bool first;                 /* the first command not waited past with skipped 0 found */
+    bool doneLands, firstLands; /* that command a paste the fill lands in */
     uint32_t takeOrd, takeI, landOrd, landI, firstOrd, firstI;
     int takeL, landL, firstL;
 } RdLateScan;
@@ -131,6 +132,10 @@ bool rd__late_pass_scan(RdLateScan *s, const RdFrame *f, const RdCmd *c, const R
                         uint32_t ord, int l, uint32_t i);
 bool rd__late_pass_scan_end(const RdLateScan *s, uint32_t end, int endL, uint32_t *ord, int *l,
                             uint32_t *i);
+/* this replay's scan found no paste that takes the held fill (the walk does
+ * not hold it); the walk's count of such a fill not held */
+bool rd__late_pass_no_land(void);
+void rd__late_pass_not_held(void);
 
 /* The walk's: whether the crack fill's draw is held this replay (the glow
  * plan's DARK, LAMPS or WHOLE, no MSAA, not under the upscaler's split),
