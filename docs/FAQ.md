@@ -358,7 +358,7 @@ not in Options. [The details](OPTIONS.md#difficulty).
 
 ## My Permadeath save will not load
 
-**I hear the refusal sound when I choose my save, or the game over
+**I get "This journey has ended." when I choose my save, or the game over
 screen has no Continue.**
 
 That is Permadeath doing its job: a journey with it on ends at the first game

@@ -19,6 +19,7 @@
 #include <string.h>
 
 #include "options.h"
+#include "popup.h"
 #include "strings.h"
 #include "variants.h"
 #include "../core/region.h" /* ICO_JUN26, ICO_NTSCAUG6JUN26 */
@@ -466,30 +467,34 @@ int ui__diff_line_text(char *buf, unsigned size)
     return 1;
 }
 
-/* port/game/difficulty.h's listener: the journey's events, in the log only.
-   Nothing here raises a pop-up: the only pop-up that appears by itself
-   during play is an achievement. The pause menu's journey line carries the
-   count, and a refused Continue plays the negative sound. */
+/* port/game/difficulty.h's listener. The only pop-up that appears by itself
+   during play is an achievement: a counted knock-down and a Permadeath
+   journey's end (the game over) raise none, only a log line; the pause
+   menu's journey line carries the count. The one pop-up here answers the
+   player's own menu action: choosing a save of an ended journey on the
+   Continue list (or the load's backstop) says "This journey has ended." */
 static void onDifficulty(IcoDiffEvent ev, int a, int b)
 {
     static int logged;
     const char *what = NULL;
 
     if (ev == ICO_DIFF_EV_REFUSED) {
-        what = "a save of an ended journey was refused";
+        what = "a save of an ended journey was refused, pop-up shown";
     } else if (ev == ICO_DIFF_EV_ENDED) {
-        what = "a Permadeath journey ended";
+        what = "a Permadeath journey ended, no pop-up";
     } else if (ev == ICO_DIFF_EV_KNOCK && b > 0 && a < b) {
         /* not the one at the limit: the game over follows */
-        what = "knock-down counted";
+        what = "knock-down counted, no pop-up";
     }
     if (what == NULL) {
         return;
     }
     logged++;
     if (logged <= 8 || logged % 100 == 0) {
-        fprintf(stderr, "settings: journey event, no pop-up: %s (%d of %d) (%d)\n", what, a, b,
-                logged);
+        fprintf(stderr, "settings: journey event: %s (%d of %d) (%d)\n", what, a, b, logged);
+    }
+    if (ev == ICO_DIFF_EV_REFUSED) {
+        (void)ui_popup_push(ui_str(UI_STR_DIFF_TOAST_ENDED), "");
     }
 }
 

@@ -22,7 +22,7 @@
  *     every row greyed with "Chosen when the journey began", a step changes
  *     nothing, Back returns to Gameplay on the link; the New Game screen's
  *     pages are the draft's again afterwards;
- *   - the pause menu's journey line and the listener (no pop-ups; the difficulty
+ *   - the pause menu's journey line and the listener (no pop-up for a knock-down or the end; the difficulty
  *     listener: the Continue list's refusal, each counted knock-down short of
  *     the limit);
  *   - the screen's notes fit two lines in every table; the moved rows' notes
@@ -435,7 +435,7 @@ static void testReadOnly(void)
     ico_difficulty_reset();
 }
 
-/* the pause menu's journey line text and the listener's (no) pop-ups */
+/* the pause menu's journey line text and the listener's pop-ups (the refusal's alone) */
 static void testNoPopups(void)
 {
     IcoDifficulty d;
@@ -472,15 +472,16 @@ static void testNoPopups(void)
     CHECK(!ui_popup_active(), "no pop-up at the limit");
     ico_difficulty_game_over();
     CHECK(!ui_popup_active(), "no pop-up at the game over");
-    /* the Continue list's refusal */
-    ico_difficulty_notify(ICO_DIFF_EV_REFUSED, 0, 0);
-    CHECK(!ui_popup_active(), "the refusal raises no pop-up (%s)",
-          ui_popup_active() ? ui_popup_title() : "");
     /* a Permadeath journey ending (its game over, or the knock-down limit
        reached): none either */
     ico_difficulty_notify(ICO_DIFF_EV_ENDED, 0, 0);
     CHECK(!ui_popup_active(), "the end raises no pop-up (%s)",
           ui_popup_active() ? ui_popup_title() : "");
+    /* the Continue list's refusal answers the player's own choice: its
+       pop-up stays */
+    ico_difficulty_notify(ICO_DIFF_EV_REFUSED, 0, 0);
+    CHECK(ui_popup_active() && strstr(ui_popup_title(), ui_str(UI_STR_DIFF_TOAST_ENDED)) != NULL,
+          "the refusal's pop-up (%s)", ui_popup_active() ? ui_popup_title() : "");
     ui_popup_reset();
     ico_difficulty_reset();
 }

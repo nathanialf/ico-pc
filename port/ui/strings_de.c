@@ -929,6 +929,7 @@ const char *const
             [UI_STR_DIFF_LOCKED_NOTE] = "Zu Beginn der Reise gewählt",
             [UI_STR_DIFF_LINE] = "Schwierigkeit",
             [UI_STR_DIFF_LINK] = "Schwierigkeit",
+            [UI_STR_DIFF_TOAST_ENDED] = "Diese Reise ist zu Ende.",
             [UI_STR_DIFF_STATES_LOCKED] =
                 "Spielzustände lassen sich auf einer Permadeath-Reise nicht laden.",
             [UI_STR_DIFF_WORD_PERMADEATH] = "Permadeath",

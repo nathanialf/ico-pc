@@ -54,7 +54,7 @@ int ui__diff_readonly(void);
    is on (the room's or the journey's count, by the scope), ", Permadeath";
    1 when written */
 int ui__diff_line_text(char *buf, unsigned size);
-/* registers the journey events' log listener (the difficulty listener); settings.c at install */
+/* registers the journey events' listener (the difficulty listener); settings.c at install */
 void ui__diff_listen(void);
 
 /* the draft: from a record (a cleared save's rows), or Normal for NULL; the

@@ -1192,18 +1192,19 @@ is never greyed. Every row shows on every disc.
   ", Permadeath" (`UI_STR_DIFF_WORD_PERMADEATH`); it took the third assist slot, and Shadows never take
   Yorda is not an assist any more (it is a row of the difficulty).
 - The journey events (`ui__diff_listen`, called by `ui_settings_install`): the difficulty listener
-  (`ico_difficulty_set_listener`) only writes the log, no pop-up: the only pop-up that appears by itself
-  during play is an achievement (the others answer a menu action or a hotkey the player just used). It
-  hears `ICO_DIFF_EV_REFUSED` (difficulty_file.c raises it through `ico_difficulty_notify` at the
-  Continue list's refusal, which also plays the negative sound, and at the load's backstop),
-  `ICO_DIFF_EV_ENDED` and each counted `ICO_DIFF_EV_KNOCK` short of the limit. Log: `settings: journey
-  event, no pop-up: <what> (<a> of <b>) (<n>)`, the first 8 then every 100th. The pause menu's journey
+  (`ico_difficulty_set_listener`) raises one pop-up, for `ICO_DIFF_EV_REFUSED` ("This journey has
+  ended.", `UI_STR_DIFF_TOAST_ENDED`): difficulty_file.c raises it through `ico_difficulty_notify` at
+  the Continue list's refusal (with the negative sound) and at the load's backstop, both answers to the
+  player's own choice of a save. `ICO_DIFF_EV_ENDED` (the game over) and each counted
+  `ICO_DIFF_EV_KNOCK` short of the limit only write the log: the only pop-up that appears by itself
+  during play is an achievement. Log: `settings: journey event: <what> (<a> of <b>) (<n>)`, the first 8
+  then every 100th. The pause menu's journey
   line carries the count. The refused-state text is main_host.c's (STATE; a save state action's answer).
 
 ctests `settings` (each page's rows, the links, no page but Customize leading to its pages),
 `settings_difficulty` and its disc runs (each preset's draft, Customize's walk and Back, an edit
 turning the mode Custom and back, the greyed count, the confirm handing the draft over, a cleared
-save's draft, the pause menu's read-only view and Back, the journey line text, no pop-ups from the journey events, the screen's
+save's draft, the pause menu's read-only view and Back, the journey line text, the refusal's pop-up and none for a knock-down or the end, the screen's
 notes in every table), `settings_discs*` (every draft row on every disc,
 Hard's toughness, the toughness values offered, the disc's notes).
 

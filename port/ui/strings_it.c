@@ -910,6 +910,7 @@ const char *const ui_strings_it[UI_STR_COUNT] =
         [UI_STR_DIFF_LOCKED_NOTE] = "Scelta all’inizio del viaggio",
         [UI_STR_DIFF_LINE] = "Difficoltà",
         [UI_STR_DIFF_LINK] = "Difficoltà",
+        [UI_STR_DIFF_TOAST_ENDED] = "Questo viaggio è finito.",
         [UI_STR_DIFF_STATES_LOCKED] =
             "Gli stati salvati non si possono caricare in un viaggio con morte permanente.",
         [UI_STR_DIFF_WORD_PERMADEATH] = "Morte permanente",

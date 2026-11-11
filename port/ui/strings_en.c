@@ -902,6 +902,7 @@ const char *const ui_strings_en[UI_STR_COUNT] = {
     [UI_STR_DIFF_LOCKED_NOTE] = "Chosen when the journey began",
     [UI_STR_DIFF_LINE] = "Difficulty",
     [UI_STR_DIFF_LINK] = "Difficulty",
+    [UI_STR_DIFF_TOAST_ENDED] = "This journey has ended.",
     [UI_STR_DIFF_STATES_LOCKED] = "Save states cannot be loaded on a Permadeath journey.",
     [UI_STR_DIFF_WORD_PERMADEATH] = "Permadeath",
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = "Save states cannot be made on a Permadeath journey.",

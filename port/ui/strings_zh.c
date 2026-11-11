@@ -873,6 +873,7 @@ const char *const ui_strings_zh[UI_STR_COUNT] = {
     [UI_STR_DIFF_LOCKED_NOTE] = "旅程開始時選定",
     [UI_STR_DIFF_LINE] = "難度",
     [UI_STR_DIFF_LINK] = "難度",
+    [UI_STR_DIFF_TOAST_ENDED] = "這趟旅程已經結束。",
     [UI_STR_DIFF_STATES_LOCKED] = "永久死亡的旅程無法讀取存檔狀態。",
     [UI_STR_DIFF_WORD_PERMADEATH] = "永久死亡",
     [UI_STR_DIFF_STATES_SAVE_LOCKED] = "永久死亡的旅程無法儲存存檔狀態。",
