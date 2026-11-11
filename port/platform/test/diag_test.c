@@ -988,6 +988,9 @@ static void activity_child(const char *mode, const char *log)
                      n == 0 || getenv("ICO_TEST_ROBUST_SAID") != NULL ? "as set"
                      : saved                                          ? "for good"
                                                                       : "this start");
+        /* the loss ladder's count and the backend's variable (rhi_tile_rule.h) */
+        ico_diag_log("test: loss row %u, ICO_LOSS_ROW %s", ico_diag_startup_loss_row(),
+                     getenv("ICO_LOSS_ROW") != NULL ? getenv("ICO_LOSS_ROW") : "unset");
         ico_diag_startup_activity_record(ICO_DIAG_ACTIVITY_STARTUP);
         ico_diag_startup_activity_record(0);
         if (getenv("ICO_TEST_THEN") != NULL && strcmp(getenv("ICO_TEST_THEN"), "loss") == 0) {
@@ -3386,27 +3389,82 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "test: losses 2, robust this start\n") != NULL);
         CHECK(strstr(read_file(ends), "loss 2\n") != NULL);
         remove(ends);
-        /* ... the player set gpu_robust: nothing counted or written */
+        /* ... the player set gpu_robust: nothing written, robust access as
+           set, but the row counts on (since v0.11.4: before it the row went
+           back to 0 every start, so the loss ladder could never pass one)
+           and the ladder's count reaches the backend, 1 then 2 */
         setenv("ICO_TEST_THEN", "loss", 1);
         run(argv[0], "actlossnext", log);
-        unsetenv("ICO_TEST_THEN");
+        s = read_file(log);
+        CHECK(strstr(s, "test: loss row 0, ICO_LOSS_ROW unset\n") != NULL);
+        CHECK(strstr(s, "loss ladder") == NULL);
         setenv("ICO_TEST_ROBUST_SAID", "[dev] gpu_robust", 1);
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 1\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous start lost the graphics device (1 in a row); nothing "
+                        "is written to config.toml: robust access is as the settings say ([dev] "
+                        "gpu_robust)\n") != NULL);
+        CHECK(strstr(s, "ico_pc: loss ladder: 1 start in a row lost the graphics device before "
+                        "this one: this start runs the wide barrier scopes unless [dev] "
+                        "barrier_scope says otherwise (the graphics backend's barriers line says "
+                        "what ran); nothing is written to the settings\n") != NULL);
+        CHECK(strstr(s, "test: loss row 1, ICO_LOSS_ROW 1\n") != NULL);
+        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(read_file(ends), "loss 1\n") != NULL);
+        unsetenv("ICO_TEST_THEN"); /* the next one sees the loss and ends without one */
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 2\n") != NULL);
+        CHECK(strstr(s, "ico_pc: the previous start lost the graphics device (2 in a row); nothing "
+                        "is written to config.toml") != NULL);
+        CHECK(strstr(s, "ico_pc: loss ladder: 2 starts in a row lost the graphics device before "
+                        "this one: this start runs the wide barrier scopes and the single "
+                        "submission wait unless [dev] barrier_scope or polled_wait says otherwise "
+                        "(the graphics backend's barriers and submission wait line says what "
+                        "ran); nothing is written to the settings\n") != NULL);
+        CHECK(strstr(s, "test: loss row 2, ICO_LOSS_ROW 2\n") != NULL);
+        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(read_file(ends), "loss 2\n") != NULL);
+        /* ... a start without a loss ends the row: the ladder's count 0 */
         r = run(argv[0], "actlossnext", log);
         unsetenv("ICO_TEST_ROBUST_SAID");
         s = read_file(log);
-        CHECK(strstr(s, "ico_pc: the previous start lost the graphics device; nothing is counted "
-                        "or written to config.toml: robust access is as the settings say ([dev] "
-                        "gpu_robust)\n") != NULL);
-        CHECK(strstr(s, "test: config write") == NULL);
+        CHECK(strstr(s, "test: losses 0, robust as set\n") != NULL);
+        CHECK(strstr(s, "test: loss row 0, ICO_LOSS_ROW unset\n") != NULL);
         CHECK(read_file(ends)[0] == '\0');
         /* ... a restart after a loss (the desktop's loss order) counts
-           nothing */
+           nothing in the loss row, but the ladder's chain counts it: 1,
+           then 2 for a restart after the restart lost it too, 0 again after
+           a fresh start */
         setenv("ICO_TEST_THEN", "loss", 1);
         run(argv[0], "actlossnext", log);
         unsetenv("ICO_TEST_THEN");
         r = run(argv[0], "actrelaunch", log);
         s = read_file(log);
         CHECK(strstr(s, "lost the graphics device: ") == NULL);
+        CHECK(strstr(s, "ico_pc: loss ladder: 1 start in a row lost the graphics device before "
+                        "this one (this game's restarts after a loss): ") != NULL);
+        CHECK(strstr(read_file(ends), "loss 0\n") != NULL);
+        CHECK(strstr(read_file(ends), "loss_chain 1\n") != NULL);
+        {
+            /* the restart lost it too (its file's loss line, as
+               ico_diag_note_device_loss writes it) */
+            FILE *af = fopen(act, "wb");
+            CHECK(af != NULL);
+            if (af != NULL) {
+                fputs("test 1\n\ngraphics device lost, no loss dump", af);
+                fclose(af);
+            }
+        }
+        r = run(argv[0], "actrelaunch", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: loss ladder: 2 starts in a row lost the graphics device before "
+                        "this one (this game's restarts after a loss): ") != NULL);
+        CHECK(strstr(read_file(ends), "loss_chain 2\n") != NULL);
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "test: loss row 0, ICO_LOSS_ROW unset\n") != NULL);
         CHECK(read_file(ends)[0] == '\0');
         remove(act);
         remove(ends);
