@@ -25,7 +25,12 @@
  *   - stamps the replay recorded that came back unwritten once its work was
  *     signalled finished (the GPU skipped part of it).
  * The renderer logs the line on any of: a wait of RD_PERF_CLOCK_WAIT_MS or
- * more with a trace, a second run, a stamp missing, a counter restart.
+ * more (with a trace, or under the single submission wait, which has none:
+ * the replay's place then from the wait's own end, issues 179 and 211), a
+ * second run, a stamp missing, a counter restart.  Every verdict also
+ * carries the time from the replay's last submit to the wait's return
+ * (doneMs: the GPU's end of the replay when the wait blocked; the 10 s
+ * summary's "submit to done" figure, port/render/rd_perf_rank.h).
  *
  * Pure C, no globals: the unit test is port/render/test/rd_perf_clock_test.c.
  */
@@ -65,6 +70,11 @@ typedef struct RdPerfClockVerdict {
     double lateMs;              /* the first stamp after the first submit */
     double counterMs;           /* the first stamp's value: the counter's age then */
     double waitMs;              /* the recycle's wait, 0 it did not block */
+    /* the last submit to the wait's return, ms: doneValid 1 the wait
+       blocked (about when the GPU finished it), 2 it had finished before
+       the wait began (an upper bound: the wait's start), 0 not known */
+    double doneMs;
+    int doneValid;
     bool ranTwice;
     bool report; /* a line is due */
 } RdPerfClockVerdict;

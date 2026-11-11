@@ -898,6 +898,17 @@ static void passClose(const RhiStats *st, double nowMs)
     p->pipelineBinds = (uint32_t)(st->pipelineBinds - s_passStats.pipelineBinds);
     p->entryBinds = (uint32_t)(st->entryBinds - s_passStats.entryBinds);
     p->entrySkipped = (uint32_t)(st->entryBindsSkipped - s_passStats.entryBindsSkipped);
+    /* the attachment bytes its passes asked for (rhi_traffic.h: counted on
+       the CPU as the passes began) */
+#define KB(field) (uint32_t)((st->field - s_passStats.field + 512u) / 1024u)
+    p->colorLoadKB = KB(passColorLoadBytes);
+    p->colorStoreKB = KB(passColorStoreBytes);
+    p->depthLoadKB = KB(passDepthLoadBytes);
+    p->depthStoreKB = KB(passDepthStoreBytes);
+    p->clearKB = KB(passClearBytes);
+    p->copyKB = KB(copyTextureBytes);
+#undef KB
+    p->kTexels = (uint32_t)((st->passPixels - s_passStats.passPixels + 500u) / 1000u);
     p->cpuUs = (float)((nowMs - s_passCpu0) * 1000.0);
 }
 
@@ -1293,6 +1304,9 @@ static void clockNote(RdPerfRecord *r, uint32_t slot, const RhiTimestampClock *c
     r->gpuLateMs = v.lateMs;
     r->gpuRanTwice = (uint8_t)v.ranTwice;
     r->gpuStampsMissing = (uint16_t)(v.missing > 65535u ? 65535u : v.missing);
+    r->gpuSlotWaitMs = v.waitMs;
+    r->gpuDoneMs = v.doneMs;
+    r->gpuDoneValid = (uint8_t)v.doneValid;
     if (!v.report) {
         return;
     }
@@ -1520,6 +1534,14 @@ void rd__perf_end(void)
         qUnlock();
         r->fenceWaitMs = (double)(s.fenceWaitNs - s_last.fenceWaitNs) / 1e6;
         r->backendWriteBytes = s.uploadWriteBytes - s_last.uploadWriteBytes;
+        r->colorLoadBytes = s.passColorLoadBytes - s_last.passColorLoadBytes;
+        r->colorStoreBytes = s.passColorStoreBytes - s_last.passColorStoreBytes;
+        r->depthLoadBytes = s.passDepthLoadBytes - s_last.passDepthLoadBytes;
+        r->depthStoreBytes = s.passDepthStoreBytes - s_last.passDepthStoreBytes;
+        r->clearBytes = s.passClearBytes - s_last.passClearBytes;
+        r->passTexels = s.passPixels - s_last.passPixels;
+        r->copyBytes = s.copyTextureBytes - s_last.copyTextureBytes;
+        r->passUntracked = (uint32_t)(s.passUntracked - s_last.passUntracked);
         if (r->walkMs > WALK_SLOW_MS) {
             walkBreakdown(r);
         }
