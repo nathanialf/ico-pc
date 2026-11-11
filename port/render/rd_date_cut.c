@@ -115,6 +115,7 @@ bool rd__date_cut_scan_begin(const RdFrame *f)
         rd__log("DATE cut: %s", s_dc.on ? "on: a DATE snapshot's pass whose draws neither test "
                                           "nor write the depth begins without it (the same "
                                           "picture)"
+                                : s_force == 0   ? "off (the tests' switch)"
                                 : s_dc.mode == 0 ? "off (ICO_RD_DATE_CUT=0)"
                                                  : "off (DATE through the stencil bit or the "
                                                    "shader's read: no pass ends for DATE)");
