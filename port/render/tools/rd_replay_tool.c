@@ -537,7 +537,9 @@
 #include "rd_internal.h"
 #include "rd_jitter.h"
 #include "rd_layer.h"
-#include "rd_present_scene.h" /* --stats: the present from SCENE */
+#include "rd_present_scene.h"    /* --stats: the present from SCENE */
+#include "rd_stencil_selftest.h" /* --stats: the stencil outside the shadow window */
+#include "rd_shadow_box.h"       /* --stats: the shadows over the volumes' box */
 #include "rd_upscale.h"
 #include "rd_upscale_capture.h" /* --fsr3-dump */
 #include "rd_velocity.h"
@@ -3195,6 +3197,13 @@ int main(int argc, char **argv)
                pr->storePlanMode == 2   ? "all"
                : pr->storePlanMode == 1 ? "on"
                                         : "off");
+        {
+            char sc[256]; /* the stencil outside the shadow window (rd_stencil_selftest.c) */
+            rd__stencil_cut_stats(pr, sc, sizeof sc);
+            printf("%s: stats: %s\n", dump, sc);
+            rd__shadow_box_stats(pr, sc, sizeof sc); /* rd_shadow_box.c */
+            printf("%s: stats: %s\n", dump, sc);
+        }
         /* a cleared source read as its colour (rd_const_read.c) */
         printf("%s: stats: constant reads %s: %u sprites drawn in a cleared source's colour, %u "
                "target reads kept (the source drawn since its clear, or not cleared this "

@@ -20,6 +20,7 @@
 #include "rd_velocity.h"
 #include "rd_vu_skin_check.h"
 #include "rd_mesh.h"
+#include "rd_stencil_selftest.h"
 #include "rd_tex.h"
 #include "rd_upload_late.h"
 #include "shader_consts.h"
@@ -860,6 +861,7 @@ void rd__clear_new_targets(void)
         }
         p.width = t->tw;
         p.height = t->th;
+        rd__stencil_cut_pass(&p, false); /* the stencil's store counted (rd_stencil_selftest.c) */
         rhi_cmd_begin_render_pass(rd__replay_cl(), &p);
         rhi_cmd_end_render_pass(rd__replay_cl());
         if (i >= RD_TARGET_COUNT) {

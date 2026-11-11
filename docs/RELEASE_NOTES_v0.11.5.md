@@ -5,6 +5,8 @@
 - Russian (bob-ttz): more of the menus are translated, among them upscaling, the combat options, the chain speed rows and free movement, and the difficulty screen (thanks, bob-ttz). The hardest difficulty's description stays in English for now.
 - Above the Original resolution, the glow is not drawn in rooms where it adds no light (most rooms without the sun or the lamps in view), so those rooms take less work to draw; the picture is the same.
 - Drawing the shadows takes less graphics memory work on phones with Arm Mali or Qualcomm Adreno graphics and on some PCs. The picture is exactly the same.
+- The characters' shadows are drawn only where they fall, so the shadows take less graphics work on every device. The picture is exactly the same.
+- On phones with PowerVR graphics (such as the Pixel 10 Pro Fold), each picture moves less data through graphics memory after a check the game makes on the phone at start. The picture is exactly the same.
 
 ## Fixed
 

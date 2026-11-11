@@ -2719,6 +2719,9 @@ enum {
 
 enum { RD_PRESENT_ELSEWHERE = 0, RD_PRESENT_ON_SUBMIT = 1, RD_PRESENT_IN_STEP = 2 };
 
+/* the reasons rd_shadow_box.c counts (RdPerfRecord.shadowBoxWhy) */
+#define RD_SHADOW_BOX_WHYS 8
+
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
     uint32_t frame;  /* the replayed frame's number */
@@ -3102,6 +3105,24 @@ typedef struct RdPerfRecord {
     uint8_t storePlanMode;
     uint8_t storeKept, storeKeptTarget, storeWhy;
     uint32_t storeKeptFrame;
+    /* The stencil outside the shadow window (rd_stencil_selftest.c,
+     * rd__stencil_cut_pass): the passes begun by the walk with a depth
+     * whose depth store was asked and its stencil's not (stencilCutStores),
+     * whose depth load was asked and its stencil's not, outside a shadow
+     * window (stencilCutLoads), and their texels (a byte of stencil each;
+     * the pass's area where it has one).  Outside the MSAA epoch; 0 where
+     * the stencil is loaded and stored with the depth */
+    uint32_t stencilCutStores, stencilCutLoads;
+    uint64_t stencilCutStoreTexels, stencilCutLoadTexels;
+    /* The shadows over the volumes' box (rd_shadow_box.c): the counts drawn
+     * over it (shadowBoxCounts) and the composites (shadowBoxComposites, of
+     * them shadowBoxEmpty with nothing left to draw), the composites'
+     * scissors' texels with the box and without it (shadowBoxTexels,
+     * shadowBoxAllTexels), and the counts and composites drawn whole by why
+     * (shadowBoxWhy, rd_shadow_box.h RD_SB_WHY_*) */
+    uint32_t shadowBoxCounts, shadowBoxComposites, shadowBoxEmpty;
+    uint64_t shadowBoxTexels, shadowBoxAllTexels;
+    uint16_t shadowBoxWhy[RD_SHADOW_BOX_WHYS];
     /* DATE's passes without the depth (rd_date_cut.c; docs/port/
      * WORK_BUFFERS.md "DATE's passes without the depth"): the runs the
      * scan found depth-free, the passes begun without the depth and the

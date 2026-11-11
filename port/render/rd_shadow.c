@@ -67,7 +67,8 @@
  */
 #include <string.h>
 #include "rd_internal.h"
-#include "../core/region.h" /* the running disc's step (rd__shadow_disc_step) */
+#include "rd_stencil_selftest.h" /* rd__stencil_cut_forced */
+#include "../core/region.h"      /* the running disc's step (rd__shadow_disc_step) */
 
 RdTarget rd_shadow_count_target(uint32_t gsW, uint32_t gsH)
 {
@@ -229,15 +230,18 @@ bool rd__stencil_ops(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp d
     return false;
 }
 
-/* rd__stencil_ops, and with g_rd.depthCopy the stencil loaded with the
- * depth and stored outside the window too: no pass on a
+/* rd__stencil_ops, and where rd__stencil_cut_forced says so the stencil
+ * loaded with the depth and stored outside the window too: no pass on a
  * packed depth-stencil then asks for its depth and its stencil
- * differently */
+ * differently.  Forced on the fog's copy and buffer paths and, but on the
+ * PowerVR class after its self-test, on the local read (commit a54e2f896:
+ * an Adreno 710 read the in-place depth as far with the stencil DONT_CARE;
+ * rd_stencil_selftest.c); not on the in-place path */
 bool rd__stencil_ops_packed(RdStencilWindow *w, uint32_t depth, bool whole, RhiLoadOp depthLoad,
                             RhiLoadOp *stencilLoad, RhiStoreOp *stencilStore)
 {
     const bool took = rd__stencil_ops(w, depth, whole, depthLoad, stencilLoad, stencilStore);
-    if (g_rd.depthCopy) {
+    if (rd__stencil_cut_forced()) {
         *stencilStore = RHI_STORE_STORE;
         if (*stencilLoad == RHI_LOAD_DONT_CARE) {
             *stencilLoad = depthLoad;

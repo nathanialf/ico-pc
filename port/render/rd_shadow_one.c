@@ -43,6 +43,7 @@
 
 #include "rd_internal.h"
 #include "rd_replay.h"
+#include "rd_shadow_box.h"
 
 bool rd__shadow_count_loads(void)
 {
@@ -249,6 +250,13 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
     p.color[0].texture = dst;
     p.color[0].load = RHI_LOAD_DONT_CARE; /* every texel is written */
     p.colorCount = 1;
+    /* over the volumes' box (rd_shadow_box.c): the count is (0, 0, 0, 0)
+     * outside it, which the clear writes */
+    RhiRect box;
+    const bool boxed = rd__shadow_box_count_area(tc, &box);
+    if (boxed) {
+        p.color[0].load = RHI_LOAD_CLEAR; /* clear[] zeroed: (0, 0, 0, 0) */
+    }
     p.width = tc->w;
     p.height = tc->h;
     /* "shadow count 848x448" in the pass list (not the count target's
@@ -264,7 +272,7 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
     (void)rd__get_pipeline(&k); /* the cache's hit: its pipeline on this entry */
     rd__replay_viewport(tc->w, tc->h);
     const RhiRect all = {0, 0, tc->w, tc->h};
-    rhi_cmd_set_scissor(cl, &all);
+    rhi_cmd_set_scissor(cl, boxed ? &box : &all);
     IcoDrawCB cb = *reduceCb;
     cb.mode[0] = lim->stencilViewChannel; /* the stencil's channel in its view */
     cb.mode[1] = load ? 1u : 0u;          /* the loads, else four texels a gather */
@@ -272,7 +280,9 @@ bool rd__shadow_one_draw(Replay *r, RdTargetRec *tc, RdTargetRec *td, uint32_t s
     rd__bind_uniform(cl, 0, rd__frame_group(tc->w, tc->h, 0.0f, 0.0f));
     rd__bind_uniform(cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(cl, 2, g2);
-    rd__replay_draw(cl, 3, 0, 1);
+    if (!boxed || (box.w && box.h)) {
+        rd__replay_draw(cl, 3, 0, 1); /* an empty box: the clear alone */
+    }
     rhi_cmd_end_render_pass(cl);
     g_rdPerf.shadowOne++;
     g_rdPerf.shadowGathered += load ? 0u : 1u;

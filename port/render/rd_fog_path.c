@@ -81,6 +81,7 @@
 
 #include "rd_internal.h"
 #include "rd_replay.h" /* rd__msaa_shadow_selftest */
+#include "rd_stencil_selftest.h"
 
 static const char *const s_pathNames[RD_FOG_PATH_COUNT] = {"inplace", "copy", "buffer", "local"};
 
@@ -186,6 +187,7 @@ void rd__set_fog_path(int path)
     }
     g_rd.fogPath = (uint8_t)path;
     g_rd.depthCopy = path != RD_FOG_INPLACE;
+    rd__stencil_cut_path(path); /* the stencil with the depth or not (rd_stencil_selftest.c) */
 }
 
 static bool depthIs24(void)
@@ -1457,6 +1459,11 @@ bool rd_fog_selftest(void)
     if (first) {
         /* the shadow count in the MSAA epoch, where it is asked for */
         (void)rd__msaa_shadow_selftest(rd_aa_samples(rd__aa_requested()));
+        /* the stencil outside the shadow window on the path chosen
+           (rd_stencil_selftest.c): its fogs read the exact entry, no probe */
+        s_st.running = true;
+        (void)rd__stencil_cut_selftest();
+        s_st.running = false;
     }
     return ok;
 }

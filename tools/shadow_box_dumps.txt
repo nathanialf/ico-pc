@@ -1,0 +1,19 @@
+# Dump list for rd_shadow_box_ab (port/render/test/rd_shadow_box_ab.cmake: the
+# shadow count and composites over the volumes' box against drawn whole, byte
+# for byte).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  A listed dump that is absent FAILS the test
+# (a '*' glob that matches nothing too).  Relative paths are relative to this
+# file.  Optional second and third fields: the counts and composites the box
+# takes in one replay at the phone setting (read from the dump's list: one
+# shadow reset and resolve, three levels, three composites).
+#
+# the Pixel 10 Pro Fold's v0.11.4 F12 frame (stage 4)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump 1 3
+# its v0.11.5 rc frame (stage 4, the cage room: SHADOW0's alpha over about 31 % of it)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc1/frame-20261111-075333-v4287.zip
+# the main gate (the three composites, DATE)
+/primary/dev/ico-dumps/maingate/frame-20261104-123603-v10827.rddump
+# the PowerVR phone's F12 frames: 2026-10-28, and 2026-11-02's 3272 shadow triangles
+/primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip
+/primary/dev/ico-dumps/phone/frame-20261102-114223-v2381.zip

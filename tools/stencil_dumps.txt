@@ -1,0 +1,21 @@
+# Dump list for rd_stencil_ab (port/render/test/rd_stencil_ab.cmake: the
+# stencil loaded and stored with the depth against inside the shadow window
+# only, byte for byte).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  A listed dump that is absent FAILS the test
+# (a '*' glob that matches nothing too).  Relative paths are relative to this
+# file.
+#
+# the Pixel 10 Pro Fold's v0.11.4 F12 frame (stage 4: shadows, DATE's three
+# composites through the stencil bit on its profile, the fog's local read)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump
+# its v0.11.5-rc1 frame (stage 4, the cage room)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc1/frame-20261111-075333-v4287.zip
+# the PowerVR phone's F12 frame of 2026-10-28 (Yorda's and Ico's shadows)
+/primary/dev/ico-dumps/phone/frame-20261028-173610-v4657.zip
+# the main gate (DATE's composites over a wide shadow)
+/primary/dev/ico-dumps/maingate/frame-20261104-123603-v10827.rddump
+# the drained-room water of 2026-10-15 (issue 106): the ripples' PRIM.AA1 draws
+# under DATE (command 4:147, up to 320 draws, bit 6 carried primitive to
+# primitive inside one pass)
+/primary/dev/ico-pc/build-host/tmp/handoff-v078/dumps/frame-20261015-223424-v2585.rddump

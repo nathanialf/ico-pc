@@ -637,6 +637,52 @@ What the log shows:
   its three SCENE passes) at the same passes; its ms against the last log's at the same scene is
   this device's price of that many MB (issue 179's rates line had no fit for it).
 
+### The shadows over the volumes' box
+
+On every device the shadow count's one draw and the three shadow composites are drawn over the
+volumes' box alone ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadows-over-the-volumes-box)). What the
+log shows:
+
+- once, at the first boxed composite: `rd: shadow box: on: the shadow count and its composites
+  drawn over the volumes' box (the first: command N, GS pixels ...); the same bytes`;
+- a count or composite drawn whole: `rd: shadow box: drawn whole: <why> (command N; ...)`, the
+  first 8 then every 100th: `the count by the seven draws` (a device whose count is the seven
+  draws: no box anywhere), `the count in the MSAA epoch`, `the source holds no box` (another write
+  to a level, a level not drawn), `the draw's form`;
+- in each 10 s block's `window: per replay` line: `; shadow box: 1.0 counts and 3.0 composites a
+  replay over the volumes' box (B % of their picture), 0.0 whole` in a block with the shadows on
+  screen; B is the share of the composites' texels still drawn; the `perf classes` line's list 3
+  shows what it saved.
+
+### The stencil outside the shadow window (the PowerVR phone)
+
+On the PowerVR class with the fog's local read (`fog local on` in the profile line, `rd: fog: depth
+path local`) the stencil of SCENE's depth is loaded and stored only inside the shadow window once a
+start-up self-test passed; every other class keeps it with the depth on every pass
+([WORK_BUFFERS.md](WORK_BUFFERS.md#the-stencil-outside-the-shadow-window)). What the log shows:
+
+- once at start, after the fog's and the shadow count's self-test lines: `rd: stencil: loaded and
+  stored inside the shadow window only (self-test ok); 8 texels the GS's and the forced replay's;
+  the fog by the local read, ...; fog path local, SCENE WxH texels`, or `rd: stencil: loaded and
+  stored with the depth (<why>)`: `an Adreno GPU: ...`, `not the PowerVR class: ...`, `the fog reads
+  a copy of the depth`, `self-test failed at SCENE sample N: <got> for <want> (...)` (with `rd:
+  profile: stencil outside the shadow window off (self-test)` before it), `self-test error: ...`;
+  on the desktop's in-place path `(the fog reads the depth in place: the desktop's path, never
+  forced)`;
+- a later fog path change that changes it: `rd: stencil: now loaded and stored ... (...; fog path P;
+  N changes)`, the first 8 then every 100th;
+- in each 10 s block's `window: per replay` line, after `stores:`: `; stencil: S stores and L loads
+  a replay not asked with the depth's (X/Y MB), loaded and stored inside the shadow window only`.
+  On the phone at 2364 x 1080 each such pass is 2.4 MB: S near the passes that keep SCENE's depth
+  outside the window (list 3's and after) says the cut fired; no `; stencil:` clause says it is off
+  (the clause is printed only where the cut is on);
+- the `perf classes` line's list 3: its depth MB loaded and stored fall by a fifth (1 byte of the
+  5 a texel) at the same passes.
+
+A fog drawn at full strength on near geometry on such a phone (the Adreno 710's symptom) with the
+cut's line in the log is this cut's: the self-test passed and the game's frames still read the
+depth as far.
+
 ## Issues 123 and 163's lines: the skin check on an Adreno
 
 On an Adreno (Qualcomm's own driver and Turnip alike) the skinned draws' check
