@@ -1006,6 +1006,19 @@ typedef struct RhiDeviceDesc {
  * thread as before. */
 void rhi_set_wait_hooks(const RhiWaitHooks *hooks);
 
+/* The renderer's watch on what is made outside its own caches
+ * (port/render/rd_made_outside.c): called after every rhi_create_pipeline
+ * and rhi_create_buffer that made one, on the thread that made it, with the
+ * kind (RHI_CREATE_PIPELINE, RHI_CREATE_BUFFER), the description's
+ * debugName (NULL when it has none) and a buffer's size (0 for a pipeline).
+ * Not for the batches (rhi_create_pipelines, _begin): the start-up set's and
+ * the background compiles', whose own lines say them.  NULL: none (the
+ * default).  The hook makes no RHI call. */
+enum { RHI_CREATE_PIPELINE = 1, RHI_CREATE_BUFFER = 2 };
+
+typedef void (*RhiCreateHook)(int kind, const char *name, uint64_t bytes);
+void rhi_set_create_hook(RhiCreateHook fn);
+
 /* The device's start-up shader set, as the renderer is about to make it
  * (port/render/rd_replay.c rd__gpu_init, rd_shader_plan.c): count more
  * shaders of the set to come; rhi_init starts the device with none.  The

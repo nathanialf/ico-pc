@@ -1189,3 +1189,23 @@ log thread drains; Linux and macOS: each write goes to the file), so a line writ
 up to 2 KB, else on the heap) and hand it to the stream in one `fwrite`, which an unbuffered stream
 passes on as one write; only where the heap refuses a long line are the three calls made.
 `rd_log_line` checks the bytes and the one write (glibc's `fopencookie`).
+
+**What play makes outside the key cache, named.** The slow-replay line counts a replay's
+creations (`N pipelines created, A allocations, B buffers and T textures created`) and a key-cache
+pipeline made on first use has its own line (`rd: pipelines: made on first use in ...`), but the
+rest had no name: the Mali of issue 179 made 5 pipelines at replay 1 and the Adreno 710 of issue 211
+3 at replay 47 with no first-use line, and one buffer of the Mali's first 3D picture was not the
+upload ring by its size. Once the window says play begins (`rd_made_outside_watch`, at the end of
+`window_pipe_skin_check`: after the start-up set, the self-tests and the start-up allocations), the
+RHI's create hook (`rhi_set_create_hook`, called after every `rhi_create_pipeline` and
+`rhi_create_buffer` that made one) names each pipeline made one at a time outside the key cache
+and each buffer (`rd_made_outside.c`): `rd: made in play outside the key cache in replay R (list
+L | the vertex pre-pass | no draw list: the present, a check or the game thread): pipeline "NAME"
+(its 1st; pipelines so far P, of N names)`, a buffer's with its size (`buffer "rd ring" of 8192
+KB`). The first of each name always, then that name's first 8 and every 100th (32 names kept,
+the rest counted on the last); at the end of the run `rd: made in play outside the key cache, at
+the end of the run: P pipelines (N names), B buffers (M names): pipeline "NAME" C, ...`. Not here:
+the batches (the start-up set, the background finisher, the skin check's background compiles: their
+own lines) and textures (the stage's own and the work targets, whose `named targets made` line
+says them). No GPU work, no picture change; a line only where something was made in play.
+`rd_made_outside` checks the words and the limiter.

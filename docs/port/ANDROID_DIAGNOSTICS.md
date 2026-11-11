@@ -453,6 +453,15 @@ say which) and play grows the record as before. What to read: no `the record hol
 the first 3D picture and a loss means the growth was not there; a loss in the same place with it
 gone rules the growth out.
 
+What else play makes is named from the start of play on (`rd: made in play outside the key cache
+in replay R (WHERE): pipeline "NAME" (...)` and `... buffer "NAME" of S KB (...)`, the first of
+each name, then its first 8 and every 100th; the run's end line counts every name;
+[RENDER_POST.md](RENDER_POST.md#start-up)): the pipelines a slow replay counts with no
+`made on first use` line beside it (issue 179's 5 at replay 1, issue 211's 3 at replay 47) and
+the buffers of the first 3D pictures (`rd ring` is the upload ring growing; the VU record's and the
+mesh arena's carry their own names). Whatever a phone's next log names there is what the start-up
+could make before play.
+
 ### The performance lines (issues 179, 211 and 123)
 
 The tile-based phones run the wide barrier scopes and the single wait again, so their next log is

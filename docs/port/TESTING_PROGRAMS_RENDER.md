@@ -1340,6 +1340,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   pure: a short line, one with `rd__log_once`'s suffix, one of 10,000 characters (formatted on the
   heap), one at the stack buffer's edge and one past it, one without a prefix: the bytes whole and,
   where glibc lets the test count them (`fopencookie`, the stream unbuffered), one write each.
+- `rd_made_outside_test.c` (ctest `rd_made_outside`, `rd_early.cmake`): the line naming what
+  play makes outside the key cache (`rd_made_outside_text.c`; [RENDER_POST.md](RENDER_POST.md#start-up)),
+  pure: the limiter (a name's first 8, then every 100th), a pipeline's and a buffer's line word for
+  word (the size in KB rounded up, the 8th's "from here every 100th"), the ordinals (1st, 2nd, 3rd,
+  11th to 13th, 21st, 102nd, 111th), an unnamed buffer, and a cut output that does not overrun.
 - `rd_loss_pick_test.c` (ctest `rd_loss_pick`): which frames the device-loss dump writes
   (`rd_loss_pick.c`), pure, with a fake submission history. The two reporters' cases: a Mali
   phone's loss (replay 148 / frame 129 lost its wait while the ring held 130..132: without a copy the

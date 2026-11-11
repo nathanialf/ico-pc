@@ -1173,6 +1173,12 @@ switch's watchdog limit ([PLATFORM.md](PLATFORM.md#diagnostics)), and `limitNs` 
 limit (`ico_diag_gpu_hang_limit`: half `watchdog=`, 15 s by default, 0 none). The tests and tools
 set none, so their OpenGL compiles run on the calling thread.
 
+`rhi_set_create_hook(fn)` (the dispatcher's, every backend) calls `fn(kind, debugName, bytes)` after
+every `rhi_create_pipeline` and `rhi_create_buffer` that made one, on the thread that made it
+(`RHI_CREATE_PIPELINE`, `RHI_CREATE_BUFFER`; a buffer's size, 0 for a pipeline); the batches
+(`rhi_create_pipelines`, `_begin`) do not call it. The renderer sets it at `rd_init` to name what
+play makes outside its key cache ([RENDER_POST.md](RENDER_POST.md#start-up)); NULL is none.
+
 **The start-up shader set** (`rhi_plan_shaders`, `rhi_plan_progress`, `rhi_plan_end`; the
 dispatcher's). `rhi_init` starts a device with no plan. The renderer counts the shaders
 `rd__gpu_init` is about to make before its loops (`port/render/rd_shader_plan.c` `rd__shader_plan`:
