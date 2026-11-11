@@ -1370,3 +1370,16 @@ counters in the hot path.
   1612x720 from the 1612x720 output (the box at 0,0), read at its slot's recycle 2 pictures later,
   no wait (63.0 ms after its present)`. No new wait of any kind; a photo, a second request while one
   is pending, and the other backends keep the old read.
+- **The thermal and memory asks off the game thread** (`port/platform/window_stall.c`,
+  `sys_cell.c`, the log thread's tick in `host_android.c`): the owner's Pixel measured the 10 s
+  print's kernel GPU and thermal part at 1.6-2.8 ms (rc4-rc9): two JNI calls into PowerManager
+  (binder calls) on the game thread each block. The log thread, which every Android start has
+  (`ico-log`; the GPU sampler runs only where a node is readable, the hints' thread only from API
+  33), now asks the thermal state and reads `/proc/self/status` and `/proc/meminfo` once a second
+  (not while the app is in the background), outside the mirror's lock, into lock-free last-value
+  cells; the 10 s lines read the last answers. `window: the thermal state and the memory figures
+  are asked once a second on the log thread; the 10 s lines read the last answers` at the start,
+  the thermal line ends `(asked 0.4 s before on the log thread)`. Without the log thread they are
+  asked on the game thread as before (never on both: `ico_host_thermal` keeps statics). At the
+  start `window: device: Android R (API N), <manufacturer> <model> (<device>)`, from the system
+  properties.

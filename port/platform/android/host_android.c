@@ -277,18 +277,46 @@ static void mirror_flush_locked(void)
     }
 }
 
+/* the log thread's once-a-second work (ico_android_log_mirror_set_tick):
+   run outside the mirror's lock, so a slow ask never holds a flush */
+static void (*volatile s_tick)(void);
+
+void ico_android_log_mirror_set_tick(void (*tick)(void))
+{
+    __atomic_store_n(&s_tick, tick, __ATOMIC_RELEASE);
+}
+
+int ico_android_log_mirror_running(void)
+{
+    return s_pipe_r >= 0 && s_mirror_lock != NULL;
+}
+
 static int SDLCALL mirror_main(void *user)
 {
     struct pollfd pf;
+    double tickAt = 0.0;
 
     (void)user;
     pf.fd = s_pipe_r;
     pf.events = POLLIN;
     for (;;) {
         int more;
+        void (*tick)(void) = __atomic_load_n(&s_tick, __ATOMIC_ACQUIRE);
 
+        if (tick != NULL) {
+            const double now = ico_thread_now_ms();
+
+            if (now - tickAt >= ICO_LOG_MIRROR_TICK_MS) {
+                tickAt = now;
+                tick();
+            }
+        }
         pf.revents = 0;
-        if (poll(&pf, 1, -1) < 0) {
+        const int r = poll(&pf, 1, tick != NULL ? (int)ICO_LOG_MIRROR_TICK_MS : -1);
+        if (r == 0) {
+            continue; /* the tick's time */
+        }
+        if (r < 0) {
             if (errno == EINTR) {
                 continue;
             }

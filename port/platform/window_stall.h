@@ -99,6 +99,13 @@ void window_stall_gpu_close(void);
    pin's ask, the GPU clock where readable), the block joined into the
    run's sums */
 void window_stall_gpu_block(void);
+/* The memory figures the log thread read last (Android, its tick on):
+   0 and the values (avail/total -1 when the device's were not readable)
+   with their age; -1: read them on the calling thread */
+int window_stall_memory(long *rss, long *peak, long *avail, long *total, double *ageMs);
+/* The log thread's asks since the last take (their count), and what the
+   last thermal ask and memory read took on it, ms */
+uint32_t window_stall_asks_take(double *thermalMs, double *memoryMs);
 /* At the window's close: the run's line, the stalls per minute by display
    rate and by the block's GPU span band ("window: present stalls this
    run: ...") */

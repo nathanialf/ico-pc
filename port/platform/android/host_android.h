@@ -75,6 +75,15 @@ typedef struct IcoLogMirrorStats {
 /* 0 and *out filled (then emptied, the pipe's size kept), -1 without the
    mirror */
 int ico_android_log_mirror_take(IcoLogMirrorStats *out);
+/* A function the log thread calls about once every ICO_LOG_MIRROR_TICK_MS
+   (its poll wakes for it), outside the mirror's lock: the window's asks
+   that must not run on the game thread (window_stall.c: the thermal state
+   by JNI, /proc).  NULL stops it.  The log thread is an SDL thread, so
+   SDL_GetAndroidJNIEnv attaches it.  _running: 1 when the log thread
+   exists (the mirror started), so a tick set will run */
+#define ICO_LOG_MIRROR_TICK_MS 1000.0
+void ico_android_log_mirror_set_tick(void (*tick)(void));
+int ico_android_log_mirror_running(void);
 /* The error box for the end of a crash or the watchdog (diag_host.h
    ico_diag_set_fatal_ui): ico_android_message_box without stdio. */
 void ico_android_fatal_box(const char *text);
