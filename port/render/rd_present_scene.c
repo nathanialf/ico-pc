@@ -97,7 +97,7 @@
 
 /* The default: off in v0.11.5 until the owner has seen the measurement
  * (build-host's present_scene_measure.sh).  The one place to flip. */
-#define RD_PRESENT_SCENE_DEFAULT 0
+#define RD_PRESENT_SCENE_DEFAULT 1
 
 static const char *const kWhy[RD_PS_WHY_COUNT] = {
     "taken",
