@@ -1381,8 +1381,14 @@ static void vkr_hz_copy(VkrCmdList *c, VkrTexture *srcTex, VkrBuffer *srcBuf, Vk
         /* rhi.h: a copy into a buffer shaders read waits for their earlier
          * reads, as rhi_cmd_copy_buffer does: at the stages that can have
          * read it (vkr_buf_earlier_stages; the transfer stage for a copy's
-         * read of it, which vkr_hz_buffer also orders within the list) */
-        h.src |= vkr_buf_earlier_stages(dstBuf) | VK_PIPELINE_STAGE_TRANSFER_BIT;
+         * read of it, which vkr_hz_buffer also orders within the list).
+         * The wide scopes keep v0.11.2's first scope here: the shader stages
+         * and vertex input alone, no transfer stage (and so no transfer
+         * write in vkr_hz_flush's source access) unless a hazard of the list
+         * adds it */
+        h.src |= g_vkr.tile.wide
+                     ? vkr_buf_wide_stages() & ~(VkPipelineStageFlags)VK_PIPELINE_STAGE_TRANSFER_BIT
+                     : vkr_buf_earlier_stages(dstBuf) | VK_PIPELINE_STAGE_TRANSFER_BIT;
         h.dst |= VK_PIPELINE_STAGE_TRANSFER_BIT;
         h.force = true;
     }
@@ -2367,8 +2373,11 @@ void rhi_cmd_copy_buffer(RhiCommandList cl, RhiBuffer src, uint64_t srcOffset, R
                          NULL);
     vkr_hold_note(VKR_HOLD_COPY, preSrc, VK_PIPELINE_STAGE_TRANSFER_BIT, 0u, false);
     g_vkr.stats.barriers++;
-    if (dPending || sPending) {
-        /* the transfer stage above covered the list's earlier copies of both */
+    if ((dPending || sPending) && !g_vkr.tile.wide) {
+        /* the transfer stage above covered the list's earlier copies of both
+           (the wide scopes keep the hazard record, as v0.11.2 did: a later
+           texture copy of either buffer in this list still makes its own
+           buffer barrier) */
         d->hzXferWrite = d->hzXferRead = false;
         s->hzXferWrite = false;
     }
