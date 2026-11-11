@@ -143,6 +143,8 @@
 #include "rd_internal.h"
 #include "../core/region.h" /* the disc a dump was drawn on (version 12) */
 #include "rd_mesh.h"
+#include "rd_loss_keep.h"
+#include "rd_loss_pick.h"
 #include "rd_passring.h"
 #include "rd_tex.h"
 #include "rd_velocity.h"
@@ -1255,6 +1257,345 @@ bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped)
     return true;
 }
 
+/* ------------------------------------------- the lost frame (issue 179) */
+
+/* The ring holds three frames and the game thread records ahead of the GPU
+ * (the render and submit threads), so by the time a loss is seen the ring
+ * can hold only frames newer than the lost one: v0.11.3's reporter lost
+ * frame 129 and the dump held 132 and 131.  A frame the GPU may not have
+ * finished when the ring reuses its slot is therefore copied to memory first
+ * (rd__loss_keep_recycle, the game thread, before the slot is reset), as an
+ * ordinary dump (dumpFrameMem), and freed again once the GPU has moved two
+ * replays past it.
+ *
+ * The memory this keeps: at most RD_LOSS_KEEP_SLOTS copies of at most
+ * RD_LOSS_KEEP_BYTES each (64 MiB at the worst; a dump is 7 MB at 2x scale),
+ * held only while the backend has a submission open at or after that
+ * frame's replay, which in steady play is none: a copy is made only when
+ * the GPU is a picture or more behind the ring.  The copies are throttled
+ * to a quarter of the recycled frames after the first eight
+ * (rd_loss_keep_allowed), so a backend whose finished count lags cannot make
+ * one every frame.  Nothing is kept on a backend that does not track its
+ * submissions (Direct3D 12 and 11, OpenGL). */
+#define RD_LOSS_KEEP_SLOTS 4
+#define RD_LOSS_KEEP_BYTES ((size_t)16u << 20)
+
+static struct {
+    uint32_t frame[RD_LOSS_KEEP_SLOTS], replay[RD_LOSS_KEEP_SLOTS];
+    void *buf[RD_LOSS_KEEP_SLOTS];
+    size_t len[RD_LOSS_KEEP_SLOTS];
+    uint64_t seen, taken, big, throttled, freed;
+    size_t maxBytes;
+} s_keep;
+
+/* the replay that last drew frame `frame`, from the pass ring's table; 0
+ * when the table has moved past it */
+static uint32_t replayOfFrame(uint32_t frame)
+{
+    uint32_t replay = 0;
+
+    for (uint32_t i = 0; i < rd_passring_replay_count(); i++) {
+        const RdPassReplay *r = rd_passring_replay_get(i);
+
+        if (r->frame == frame) {
+            replay = r->replay;
+        }
+    }
+    return replay;
+}
+
+static size_t keepBytes(void)
+{
+    size_t n = 0;
+
+    for (int i = 0; i < RD_LOSS_KEEP_SLOTS; i++) {
+        n += s_keep.len[i];
+    }
+    return n;
+}
+
+static void keepFree(int i)
+{
+    free(s_keep.buf[i]);
+    s_keep.buf[i] = NULL;
+    s_keep.len[i] = 0;
+    s_keep.frame[i] = s_keep.replay[i] = 0;
+    s_keep.freed++;
+}
+
+void rd__loss_keep_recycle(const RdFrame *f)
+{
+    RhiGpuProgress p;
+
+    s_keep.seen++;
+    if (!rhi_gpu_progress(&p)) {
+        return;
+    }
+    for (int i = 0; i < RD_LOSS_KEEP_SLOTS; i++) {
+        if (s_keep.buf[i] && rd_loss_keep_release(s_keep.replay[i], p.openReplay)) {
+            keepFree(i);
+        }
+    }
+    if (!f || !f->closed || f->number == 0) {
+        return;
+    }
+    const uint32_t replay = replayOfFrame(f->number);
+
+    if (!rd_loss_keep_needed(replay, p.openReplay)) {
+        return;
+    }
+    for (int i = 0; i < RD_LOSS_KEEP_SLOTS; i++) {
+        if (s_keep.frame[i] == f->number) {
+            return;
+        }
+    }
+    if (!rd_loss_keep_allowed(s_keep.taken, s_keep.seen)) {
+        s_keep.throttled++;
+        return;
+    }
+    void *buf = NULL;
+    size_t len = 0;
+
+    if (!dumpFrameMem(f, &buf, &len)) {
+        return;
+    }
+    if (len > RD_LOSS_KEEP_BYTES) {
+        s_keep.big++;
+        rd__log("loss keep: frame %u (replay %u) is %zu KB, over the %zu KB a kept copy may be: "
+                "not kept (%llu so far)",
+                f->number, replay, len >> 10, RD_LOSS_KEEP_BYTES >> 10,
+                (unsigned long long)s_keep.big);
+        free(buf);
+        return;
+    }
+    const uint32_t slot = rd_loss_keep_slot(s_keep.frame, RD_LOSS_KEEP_SLOTS);
+
+    if (s_keep.buf[slot]) {
+        keepFree(slot);
+    }
+    s_keep.buf[slot] = buf;
+    s_keep.len[slot] = len;
+    s_keep.frame[slot] = f->number;
+    s_keep.replay[slot] = replay;
+    s_keep.taken++;
+    if (keepBytes() > s_keep.maxBytes) {
+        s_keep.maxBytes = keepBytes();
+    }
+    if (s_keep.taken <= 8 || s_keep.taken % 100 == 0) {
+        rd__log("loss keep: frame %u (replay %u) copied to memory, %zu KB, as the GPU had not "
+                "finished it when the ring reused its slot (the backend's first open submission "
+                "is replay %u, newest tag replay %u frame %u); %u kept (%zu KB), copy %llu of %llu "
+                "recycled frames",
+                f->number, replay, len >> 10, p.openReplay, p.replay, p.frame,
+                (unsigned)(s_keep.taken - s_keep.freed), keepBytes() >> 10,
+                (unsigned long long)s_keep.taken, (unsigned long long)s_keep.seen);
+    }
+}
+
+void rd__loss_keep_shutdown(void)
+{
+    for (int i = 0; i < RD_LOSS_KEEP_SLOTS; i++) {
+        if (s_keep.buf[i]) {
+            keepFree(i);
+        }
+    }
+}
+
+/* the closed frame numbered `number` in any ring slot */
+static const RdFrame *ringFrame(uint32_t number)
+{
+    for (int i = 0; number && i < RD_FRAME_RING; i++) {
+        const RdFrame *f = &g_rd.frames[i];
+
+        if (f->closed && f->number == number) {
+            return f;
+        }
+    }
+    return NULL;
+}
+
+static int keepSlotOf(uint32_t number)
+{
+    for (int i = 0; number && i < RD_LOSS_KEEP_SLOTS; i++) {
+        if (s_keep.buf[i] && s_keep.frame[i] == number) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/* the frames held (ring slots that are closed and kept copies), ascending
+ * without repeats; the count */
+static uint32_t heldFrames(uint32_t *out, uint32_t cap)
+{
+    uint32_t n = 0;
+
+    for (int pass = 0; pass < 2; pass++) {
+        const int count = pass == 0 ? RD_FRAME_RING : RD_LOSS_KEEP_SLOTS;
+
+        for (int i = 0; i < count; i++) {
+            const uint32_t num = pass == 0 ? (g_rd.frames[i].closed ? g_rd.frames[i].number : 0u)
+                                           : (s_keep.buf[i] ? s_keep.frame[i] : 0u);
+            bool have = num == 0;
+
+            for (uint32_t k = 0; k < n && !have; k++) {
+                have = out[k] == num;
+            }
+            if (!have && n < cap) {
+                uint32_t k = n++;
+
+                while (k > 0 && out[k - 1] > num) {
+                    out[k] = out[k - 1];
+                    k--;
+                }
+                out[k] = num;
+            }
+        }
+    }
+    return n;
+}
+
+void rd_loss_plan(RdLossPlan *plan)
+{
+    uint32_t held[RD_FRAME_RING + RD_LOSS_KEEP_SLOTS], replayed[RD_PASSRING_REPLAYS];
+    uint32_t nr = 0;
+    RhiGpuProgress p;
+    RdLossInput in = {0};
+    RdLossChoice c;
+
+    memset(plan, 0, sizeof(*plan));
+    if (rhi_gpu_progress(&p)) {
+        in.waitReplay = p.lostReplay;
+        in.waitFrame = p.lostFrame;
+        in.openReplay = p.openReplay;
+        in.openFrame = p.openFrame;
+        in.newestReplay = p.replay;
+        in.newestFrame = p.frame;
+    }
+    for (uint32_t i = 0; i < rd_passring_replay_count() && nr < RD_PASSRING_REPLAYS; i++) {
+        const uint32_t fr = rd_passring_replay_get(i)->frame;
+
+        if (nr == 0 || replayed[nr - 1] != fr) {
+            replayed[nr++] = fr;
+        }
+    }
+    in.replayed = replayed;
+    in.replayedCount = nr;
+    if (rd_passring_replay_count() > 0) {
+        const RdPassReplay *last = rd_passring_replay_get(rd_passring_replay_count() - 1);
+
+        in.ringReplay = last->replay;
+        in.ringFrame = last->frame;
+    }
+    in.held = held;
+    in.heldCount = heldFrames(held, sizeof(held) / sizeof(held[0]));
+    rd_loss_choose(&in, &c);
+    plan->how = (int)c.how;
+    plan->replay = c.replay;
+    plan->frame = c.frame;
+    plan->before = c.before;
+    plan->frameHeld = c.frameHeld;
+    plan->beforeHeld = c.beforeHeld;
+    plan->writeFrame = c.writeFrame;
+    plan->writeBefore = c.writeBefore;
+    plan->waitFrame = in.waitFrame;
+    plan->openFrame = in.openFrame;
+    plan->newestFrame = in.newestFrame;
+    plan->newestReplay = in.newestReplay;
+    plan->heldCount = in.heldCount;
+    plan->heldOldest = in.heldCount ? held[0] : 0;
+    plan->heldNewest = in.heldCount ? held[in.heldCount - 1] : 0;
+    for (int i = 0; i < RD_LOSS_KEEP_SLOTS; i++) {
+        plan->copies += s_keep.buf[i] != NULL;
+    }
+    plan->copyKB = (uint32_t)(keepBytes() >> 10);
+    plan->copiesTaken = s_keep.taken;
+    plan->copiesSeen = s_keep.seen;
+    plan->copiesBig = s_keep.big;
+    plan->copiesThrottled = s_keep.throttled;
+    plan->copyMaxKB = (uint32_t)(s_keep.maxBytes >> 10);
+    plan->writeFromCopy = c.writeFrame != 0 && !ringFrame(c.writeFrame);
+    plan->writeBeforeFromCopy = c.writeBefore != 0 && !ringFrame(c.writeBefore);
+}
+
+/* how the lost frame was found, in words (a switch: adjacent string
+ * literals in an array initializer are -Werror=string-concatenation under
+ * the Android clang) */
+static const char *lossHowText(int how)
+{
+    switch (how) {
+    case RD_LOSS_HOW_WAIT:
+        return "the submission whose wait failed";
+    case RD_LOSS_HOW_OPEN:
+        return "the first submission the GPU was not seen to finish";
+    case RD_LOSS_HOW_NEXT:
+        return "a picture recorded after the newest numbered submission, whose submit failed (it "
+               "has no number)";
+    case RD_LOSS_HOW_SIDE:
+        return "a submit that failed outside a picture (a capture, a readback or a check): the "
+               "newest numbered picture is the frame";
+    case RD_LOSS_HOW_NEWEST:
+        return "the newest frame held (the backend names no submission)";
+    default:
+        return "nothing is known";
+    }
+}
+
+void rd_loss_plan_text(const RdLossPlan *p, char *out, size_t size)
+{
+    char held[160] = "";
+
+    if (p->frame == 0) {
+        snprintf(out, size,
+                 "no lost frame could be named (the backend names no submission and "
+                 "the renderer holds %u frame%s)",
+                 p->heldCount, p->heldCount == 1 ? "" : "s");
+        return;
+    }
+    if (p->heldCount > 0) {
+        snprintf(held, sizeof(held),
+                 "; held now: frames %u..%u (%u, %u of them copies in memory, "
+                 "%u KB)",
+                 p->heldOldest, p->heldNewest, p->heldCount, p->copies, p->copyKB);
+    }
+    snprintf(out, size,
+             "the lost submission is replay %u, frame %u (%s; wait failed on frame %u, first open "
+             "frame %u, newest numbered frame %u); the frame before it is %u%s%s",
+             p->replay, p->frame, lossHowText(p->how), p->waitFrame, p->openFrame, p->newestFrame,
+             p->before, p->frameHeld ? "" : "; frame is NOT held any more", held);
+}
+
+bool rd_dump_loss_frame(uint32_t number, const char *path, uint32_t *dumped, bool *fromCopy)
+{
+    const RdFrame *f = ringFrame(number);
+    const int slot = f ? -1 : keepSlotOf(number);
+    bool ok = false;
+
+    if (dumped) {
+        *dumped = 0;
+    }
+    if (fromCopy) {
+        *fromCopy = slot >= 0;
+    }
+    if (f && path) {
+        ok = rd__dump_frame(f, path);
+    } else if (slot >= 0 && path) {
+        FILE *fp = ico_fopen(path, "wb");
+
+        ok = fp != NULL && fwrite(s_keep.buf[slot], 1, s_keep.len[slot], fp) == s_keep.len[slot];
+        if (fp != NULL) {
+            ok = fclose(fp) == 0 && ok;
+        }
+        if (!ok) {
+            rd__log("dump: write to %s failed", path);
+        }
+    }
+    if (ok && dumped) {
+        *dumped = number;
+    }
+    return ok;
+}
+
 /* ------------------------------------------------------- loss bisect */
 
 bool rd_dump_frame_size(const char *path, uint32_t *gsW, uint32_t *gsH, float *aspect)
@@ -1438,5 +1779,62 @@ void rd_loss_bisect(const char *path, RdLossBisect *out)
     /* the frame's lists, payload and temporary targets; its textures and
      * meshes stay in this renderer until its shutdown */
     rd__frame_free(&f);
+    out->ms = rd__now_ms() - t0;
+}
+
+/* The overlap step (rd.h rd_loss_overlap): the two frames replayed
+ * alternately with no wait for the GPU between them */
+void rd_loss_overlap(const char *lostPath, const char *beforePath, uint32_t rounds,
+                     RdLossOverlap *out)
+{
+    memset(out, 0, sizeof(*out));
+    const double t0 = rd__now_ms();
+    RdFrame lost, before;
+    bool haveBefore = false;
+
+    if (!g_rd.inited || !g_rd.hasDevice || rhi_device_lost()) {
+        snprintf(out->line, sizeof(out->line), "the renderer has no device");
+        return;
+    }
+    if (!lostPath || !rd__load_frame(lostPath, &lost)) {
+        snprintf(out->line, sizeof(out->line), "the dump %s could not be read",
+                 lostPath ? lostPath : "(none)");
+        return;
+    }
+    if (beforePath && beforePath[0] != '\0') {
+        haveBefore = rd__load_frame(beforePath, &before);
+    }
+    out->lostFrame = lost.number;
+    out->beforeFrame = haveBefore ? before.number : 0;
+    out->rounds = rounds ? rounds : 1u;
+    /* each frame's pipelines first, as the first level makes the lost
+     * frame's (the replays below then record and submit only) */
+    bool ok = bisectPipelines(&lost, out->line, sizeof(out->line)) &&
+              (!haveBefore || bisectPipelines(&before, out->line, sizeof(out->line)));
+
+    rd__replay_set_window(0, 0);
+    for (uint32_t r = 0; ok && r < out->rounds && !rhi_device_lost(); r++) {
+        for (int k = 0; k < (haveBefore ? 2 : 1) && !rhi_device_lost(); k++) {
+            RdFrame *f = haveBefore && k == 0 ? &before : &lost;
+
+            (void)rd__replay_frame(f, (int)f->keep, false);
+            out->replays++;
+        }
+    }
+    if (ok) {
+        const bool lostBeforeWait = rhi_device_lost();
+
+        out->lostAt = lostBeforeWait ? out->replays : 0;
+        if (!lostBeforeWait) {
+            rhi_wait_idle();
+        }
+        out->result = rhi_device_lost() ? RD_BISECT_LOST : RD_BISECT_CLEAN;
+    } else {
+        out->result = RD_BISECT_NOT_RUN;
+    }
+    if (haveBefore) {
+        rd__frame_free(&before);
+    }
+    rd__frame_free(&lost);
     out->ms = rd__now_ms() - t0;
 }

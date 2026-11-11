@@ -2245,6 +2245,38 @@ bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped)
  * before (the thread that records frames) */
 bool rd_frame_retained(uint32_t number);
 
+/* Which frames the loss dump writes (issue 179; rd_loss_pick.h): the frame
+ * of the submission that failed, and the one replayed before it.  The
+ * backend's tags say which submission it was (RhiGpuProgress: the wait that
+ * failed, else the first not seen finished, else the frame after the newest
+ * numbered); the ring holds only the newest closed frames, so a frame the
+ * GPU may not have finished is copied to memory when the ring reuses its
+ * slot (at most 4 copies, 16 MiB each, held only while a submission is
+ * open at or after them).  rd_loss_plan reads all of it (the main thread,
+ * with the render thread drained, or the watchdog's while the main thread
+ * is blocked); the fields tell which frame is which and what is held.
+ * how: an RdLossHow (rd_loss_pick.h).  writeFrame/writeBefore: the frames
+ * to write (the lost one and the one before it when held, else the nearest
+ * held, 0 none), writeFromCopy: it is a memory copy, not a ring slot.
+ * rd_dump_loss_frame writes one of them to path (the ring's closed slot or
+ * the copy); false when it is held by neither or the write fails.
+ * rd_loss_plan_text: one line saying all of it. */
+typedef struct RdLossPlan {
+    int how;
+    uint32_t replay, frame, before;
+    bool frameHeld, beforeHeld;
+    uint32_t writeFrame, writeBefore;
+    bool writeFromCopy, writeBeforeFromCopy;
+    uint32_t waitFrame, openFrame, newestFrame, newestReplay;
+    uint32_t heldCount, heldOldest, heldNewest;
+    uint32_t copies, copyKB, copyMaxKB;
+    uint64_t copiesTaken, copiesSeen, copiesBig, copiesThrottled;
+} RdLossPlan;
+
+void rd_loss_plan(RdLossPlan *plan);
+void rd_loss_plan_text(const RdLossPlan *plan, char *out, size_t size);
+bool rd_dump_loss_frame(uint32_t number, const char *path, uint32_t *dumped, bool *fromCopy);
+
 /* The loss bisect (docs/port/RENDER.md, "The loss bisect"): the frame of
  * the dump at path replayed in this renderer one pass longer each time
  * (the pass window, rd_internal.h rd__replay_set_window: passes 1..k),
@@ -2280,6 +2312,28 @@ typedef struct RdLossBisect {
 } RdLossBisect;
 
 void rd_loss_bisect(const char *path, RdLossBisect *out);
+
+/* The loss bisect's last step (issue 179): the bisect above waits for the
+ * GPU after every replay, so two pictures never overlap as they do in the
+ * game.  This replays the frame of the dump at beforePath (NULL or
+ * unreadable: left out) and the frame of lostPath alternately, `rounds`
+ * times each, with no wait for the GPU between them (only the frame slot's
+ * own wait, two in flight, as the game's pictures have), then waits once.
+ * Nothing is presented (no overlay or swapchain: the start-up has no UI to
+ * draw).  result: RD_BISECT_LOST (the device was lost: lostAt, the replay of
+ * `replays` made that did, 0 when the final wait did), RD_BISECT_CLEAN,
+ * RD_BISECT_NOT_RUN with line saying why.  The renderer must have a device;
+ * a loss leaves it lost. */
+typedef struct RdLossOverlap {
+    RdBisectResult result;
+    uint32_t lostFrame, beforeFrame; /* the frames replayed (0: beforeFrame not) */
+    uint32_t rounds, replays, lostAt;
+    double ms;
+    char line[320];
+} RdLossOverlap;
+
+void rd_loss_overlap(const char *lostPath, const char *beforePath, uint32_t rounds,
+                     RdLossOverlap *out);
 
 /* The loss bisect's second level (port/render/rd_bisect_plan.h): what one
  * draw of the window was, noted while a draw window is set (no work

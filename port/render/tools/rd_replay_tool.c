@@ -424,6 +424,13 @@
  *                         and prints what it found; <out.png> is unused (give
  *                         -).  Exit 0 when it ran (lost or not), 1 when it
  *                         could not
+ *   --loss-overlap BEFORE the bisect's last step too (rd.h rd_loss_overlap):
+ *                         after a clean bisect the frame of BEFORE (a dump;
+ *                         "-" for none) and the frame are replayed back to back,
+ *                         4 times each, with no wait for the GPU between them,
+ *                         then one wait; prints "loss overlap: clean|lost|not
+ *                         run; frames B and L, N replays".  Implies
+ *                         --loss-bisect
  *   --passes A[-B]        replays passes A..B only (rd_internal.h
  *                         rd__replay_set_window: the draws and copies of the
  *                         other passes left out, the walk stopped where pass
@@ -2169,7 +2176,8 @@ int main(int argc, char **argv)
                 "[--velocity] [--velocity-dump PNG] "
                 "[--prev DUMP]... [--no-half] [--interp T PREV [--interp-any] [--no-reproject] "
                 "[--interp-nop-prev L:A[-B]] [--presents N] [--save-blended DUMP]]\n"
-                "       [--loss-bisect] [--passes A[-B]] [--draws A[-B]] [--mask-marks]\n"
+                "       [--loss-bisect [--loss-overlap BEFORE|-]] [--passes A[-B]] [--draws A[-B]] "
+                "[--mask-marks]\n"
                 "       [--no-device (with --list, --mesh or --dump-textures; <out.png> unused)]\n"
                 "       [--crt scanlines|consumer|trinitron|pvm|shadow [--crt-strength K]]\n"
                 "       [--aa off|ssaa2|ssaa4|msaa2|msaa4|msaa8 (with --enhanced)]\n"
@@ -2208,6 +2216,7 @@ int main(int argc, char **argv)
     const char *tempsDir = NULL; /* --dump-temps: every per-frame temp target after the replay */
     const char *texDir = NULL, *meshName = NULL;
     bool lossBisect = false, maskMarks = false;
+    const char *overlapBefore = NULL;
     uint32_t drawA = 0, drawB = 0;
     unsigned passA = 0, passB = 0;
     memset(&s, 0, sizeof(s));
@@ -2502,6 +2511,9 @@ int main(int argc, char **argv)
             noDevice = true;
         } else if (strcmp(argv[i], "--loss-bisect") == 0) {
             lossBisect = true;
+        } else if (strcmp(argv[i], "--loss-overlap") == 0 && i + 1 < argc) {
+            lossBisect = true;
+            overlapBefore = argv[++i];
         } else if (strcmp(argv[i], "--draws") == 0 && i + 1 < argc) {
             const int n = sscanf(argv[++i], "%u-%u", &drawA, &drawB);
             if (n < 1 || drawA == 0 || (n == 2 && drawB < drawA)) {
@@ -2769,6 +2781,18 @@ int main(int argc, char **argv)
                b.line[0] ? ": " : "", b.line);
         if (b.next[0]) {
             printf("%s: loss bisect: the replay stopped as %s began\n", dump, b.next);
+        }
+        if (overlapBefore && b.result == RD_BISECT_CLEAN) {
+            RdLossOverlap ov;
+
+            rd_loss_overlap(dump, strcmp(overlapBefore, "-") == 0 ? NULL : overlapBefore, 4u, &ov);
+            printf("%s: loss overlap: %s; frames %u and %u, %u replays in %.1f s%s%s\n", dump,
+                   kResult[ov.result], ov.beforeFrame, ov.lostFrame, ov.replays, ov.ms / 1000.0,
+                   ov.line[0] ? ": " : "", ov.line);
+            if (ov.result == RD_BISECT_NOT_RUN) {
+                rd_shutdown();
+                return 1;
+            }
         }
         rd_shutdown();
         return b.result == RD_BISECT_NOT_RUN ? 1 : 0;
