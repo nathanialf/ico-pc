@@ -122,9 +122,15 @@ static bool s_backdrop; /* the far plane first (argv[2] backdrop) */
 
 /* argv[2] glow or aura: after the fog the glow's cleanUpFB (list 7) or the
  * aura's paste (list 8) as staticBlur.c draws them */
-enum { AFTER_NONE, AFTER_GLOW, AFTER_AURA, AFTER_HELD, AFTER_JOIN };
+enum { AFTER_NONE, AFTER_GLOW, AFTER_AURA, AFTER_HELD, AFTER_JOIN, AFTER_HELDGLOW };
 
 static int s_after;
+
+/* held or heldglow: the late pass holds the fill (rd_late_pass.c) */
+static bool held(void)
+{
+    return s_after == AFTER_HELD || s_after == AFTER_HELDGLOW;
+}
 
 static RdScreenVtx vtx(double x, double y, uint32_t z, const uint8_t c[4])
 {
@@ -191,7 +197,7 @@ static void recordAfter(RdTarget scene)
     rd_fba(0);
     rd_z_write(0);
     rd_gouraud(0);
-    if (s_after == AFTER_GLOW || s_after == AFTER_HELD) {
+    if (s_after == AFTER_GLOW || held()) {
         rd_set_target(scene, scene, GW, GH, 0);
         rd_abe(1);
         rd_blend_func(RD_BLEND_CS_AS_ADD_CD, 0);
@@ -218,6 +224,30 @@ static void recordAfter(RdTarget scene)
         rd_texture(rd_target_texture(scene, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
         rd_sampler_filter(RD_FILTER_NEAREST, RD_FILTER_NEAREST);
         blurSprite(RD_POST_FLARE, GW, GH, kMask, 0, (float)GW, (float)GH);
+        if (s_after == AFTER_HELDGLOW) {
+            /* heldglow: a lamp's stand-in (a sprite into WORK2 under a Z
+             * GEQUAL test of SCENE's depth, no Z write), then the glow's
+             * paste: WORK0 added over SCENE through Cs * FIX + Cd, FIX 128,
+             * no Z test (the fx plan's premultiplied add), which takes the
+             * held fill */
+            static const uint8_t kLamp[4] = {200, 180, 60, 0x80}, kGlow[4] = {128, 128, 128, 128};
+            rd_set_target(work2, scene, GW, GH, 0);
+            rd_texture_off();
+            rd_abe(0);
+            rd_z_write(0);
+            rd_test_gs(RD_TEST_Z_GEQUAL);
+            RdScreenVtx lamp[2] = {vtx(120.0, 60.0, 0x00100000u, kLamp),
+                                   vtx(200.0, 120.0, 0x00100000u, kLamp)};
+            rd_screen_prims(RD_PRIM_SPRITES, lamp, 2, RD_SPACE_WORLD, 1, 0);
+            rd_set_target(scene, scene, GW, GH, 0);
+            rd_texture(rd_target_texture(work0, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
+            rd_sampler_filter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);
+            rd_test_gs(RD_TEST_Z_ALWAYS);
+            rd_abe(1);
+            rd_blend_func(RD_BLEND_CS_FIX_ADD_CD, 128);
+            blurSprite(RD_POST_FLARE, GW, GH, kGlow, 0, 256.0f, 128.0f);
+            return;
+        }
         rd_select_list(8);
         rd_texture_off();
         rd_pabe(0);
@@ -311,7 +341,7 @@ static void recordFrame(void)
                         vtx(SLIT1, TOP, 0x00800000u, kRect),
                         vtx(600.0, BOTTOM, 0x00800000u, kRect)};
     rd_screen_prims(RD_PRIM_SPRITES, s, 4, RD_SPACE_WORLD, 1, 0);
-    if (s_after == AFTER_HELD) {
+    if (held()) {
         /* a crack 1/16 GS pixel wide at GS x HELD_X in column 2 (the border
          * repeat's source on the left): two sprites meeting there, one 12.4
          * step apart, so the texel whose point lies on HELD_X (texel 5 at
@@ -366,7 +396,7 @@ typedef struct Picture {
     /* the late pass (rd_late_pass.c): fills held into the aura's paste
      * pass, held fills drawn early in a pass of their own, list 11's draws
      * joined without the depth and the passes they joined */
-    uint32_t held, early, joined, joinPasses;
+    uint32_t held, glowHeld, early, joined, joinPasses;
 } Picture;
 
 static bool replay(bool fill, Picture *p)
@@ -378,6 +408,7 @@ static bool replay(bool fill, Picture *p)
     p->countPasses = g_rdPerf.crackCountPasses;
     p->fogLocal = g_rdPerf.fogLocalDraws;
     p->held = g_rdPerf.latePassHeld;
+    p->glowHeld = g_rdPerf.latePassGlowHeld;
     p->early = g_rdPerf.latePassFlushed;
     p->joined = g_rdPerf.latePassJoined;
     p->joinPasses = g_rdPerf.latePassJoinPasses;
@@ -512,8 +543,10 @@ static void checkHeld(const Picture *on, bool active)
            on->held, on->early, un.held, un.early, dPx, dZ, on->passes, un.passes, fewer, on->fills,
            un.fills, x, y, memcmp(src, ref, 4) != 0 ? "filled" : "the clear's fog", copies,
            badCopies);
-    CHECK(on->held == 1 && on->early == 0, "held %u, drawn early %u: 1 and 0 expected", on->held,
-          on->early);
+    const uint32_t glowWant = s_after == AFTER_HELDGLOW ? 1u : 0u;
+    CHECK(on->held == 1 && on->early == 0 && on->glowHeld == glowWant,
+          "held %u (%u in the glow's paste pass), drawn early %u: 1 (%u) and 0 expected", on->held,
+          on->glowHeld, on->early, glowWant);
     CHECK(un.held == 0 && un.early == 0, "the late pass off held %u, drew %u early", un.held,
           un.early);
     CHECK(dPx == 0 && dZ == 0,
@@ -571,7 +604,7 @@ int main(int argc, char **argv)
     printf("rd_crack_test\n");
     if (argc < 2) {
         printf("usage: rd_crack_test 2|4|1|frac|original "
-               "[msaa|backdrop|fold|glow|aura|held|join]\n");
+               "[msaa|backdrop|fold|glow|aura|held|heldglow|join]\n");
         return 2;
     }
     const bool original = strcmp(argv[1], "original") == 0;
@@ -579,12 +612,13 @@ int main(int argc, char **argv)
     const bool msaa = argc > 2 && strcmp(argv[2], "msaa") == 0;
     s_backdrop = argc > 2 && strcmp(argv[2], "backdrop") == 0;
     const bool inPass = argc > 2 && strcmp(argv[2], "fold") == 0;
-    s_after = argc > 2 && strcmp(argv[2], "glow") == 0   ? AFTER_GLOW
-              : argc > 2 && strcmp(argv[2], "aura") == 0 ? AFTER_AURA
-              : argc > 2 && strcmp(argv[2], "held") == 0 ? AFTER_HELD
-              : argc > 2 && strcmp(argv[2], "join") == 0 ? AFTER_JOIN
-                                                         : AFTER_NONE;
-    if (s_after == AFTER_HELD) {
+    s_after = argc > 2 && strcmp(argv[2], "glow") == 0       ? AFTER_GLOW
+              : argc > 2 && strcmp(argv[2], "aura") == 0     ? AFTER_AURA
+              : argc > 2 && strcmp(argv[2], "held") == 0     ? AFTER_HELD
+              : argc > 2 && strcmp(argv[2], "heldglow") == 0 ? AFTER_HELDGLOW
+              : argc > 2 && strcmp(argv[2], "join") == 0     ? AFTER_JOIN
+                                                             : AFTER_NONE;
+    if (held()) {
         /* the late pass's hold whatever the glow's plan (this frame holds
          * no chain the light plan reads; rd_late_pass.c) */
         rd__late_pass_force((int)(RD_LATE_FILL | RD_LATE_ANY_PLAN));
@@ -672,8 +706,8 @@ int main(int argc, char **argv)
      * filled source's with the filler on: checkHeld compares them; the
      * texels here are the repeat's own columns (rd_blur_border.c
      * columnTexel: texel t's point at GS t / sx) */
-    const uint32_t bx0 = s_after == AFTER_HELD ? (uint32_t)ceil(2.0 * sx - 1e-4) : 0u;
-    const uint32_t bx1 = s_after == AFTER_HELD ? (uint32_t)ceil((GW - 2) * (double)sx - 1e-4) : w;
+    const uint32_t bx0 = held() ? (uint32_t)ceil(2.0 * sx - 1e-4) : 0u;
+    const uint32_t bx1 = held() ? (uint32_t)ceil((GW - 2) * (double)sx - 1e-4) : w;
     for (uint32_t y = 0; y < h; y++) {
         const double gy = gsX(y, sy);
         const double ex = EDGE_X0 - (EDGE_X0 - LEFT) * (gy - TOP) / (BOTTOM - TOP);
@@ -725,8 +759,7 @@ int main(int argc, char **argv)
                     /* after the glow the crack's alpha is its own (cleanUpFB's
                        Z-tested mark): its RGB the neighbour's */
                     if (memcmp(&off.px[q * 4], ref, 4) != 0 &&
-                        memcmp(&on.px[q * 4], b,
-                               s_after == AFTER_GLOW || s_after == AFTER_HELD ? 3 : 4) == 0) {
+                        memcmp(&on.px[q * 4], b, s_after == AFTER_GLOW || held() ? 3 : 4) == 0) {
                         from = true;
                     }
                 }
@@ -764,10 +797,8 @@ int main(int argc, char **argv)
               "%d filled texels not a neighbour's colour, %d with their depth changed", badFrom,
               badDepth);
         /* in the aura's paste pass: no pass of its own */
-        CHECK(
-            on.fills ==
-                (s_after == AFTER_AURA || s_after == AFTER_HELD || s_after == AFTER_JOIN ? 0u : 1u),
-            "%u fill passes", on.fills);
+        CHECK(on.fills == (s_after == AFTER_AURA || held() || s_after == AFTER_JOIN ? 0u : 1u),
+              "%u fill passes", on.fills);
         CHECK(c1.counted - c0.counted == 1 && c1.filled - c0.filled == 1 &&
                   c1.pixels - c0.pixels == (uint64_t)changed,
               "counted %llu pixels over %llu replays (%llu filled), %d texels changed",
@@ -868,7 +899,7 @@ int main(int argc, char **argv)
         free(cp.px);
         free(cp.z);
     }
-    if (s_after == AFTER_HELD) {
+    if (held()) {
         checkHeld(&on, active);
     } else if (s_after == AFTER_JOIN) {
         checkJoin(&on);

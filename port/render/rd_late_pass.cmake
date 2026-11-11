@@ -38,6 +38,21 @@ if(ICO_RUN_TESTS AND TARGET rd_crack_test)
                          ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk")
 endif()
 
+# rd_crack_heldglow: rd_crack_test 2 heldglow, as rd_crack_held with a sprite into
+# WORK2 under a Z GEQUAL test of SCENE's depth after the mask (a lamp's
+# stand-in, no Z write) and the glow's paste (WORK0 added over SCENE through
+# Cs * FIX + Cd, the fx plan's premultiplied add) in place of the aura's: the
+# fill held into the glow's paste pass, the same checks
+if(ICO_RUN_TESTS AND TARGET rd_crack_test)
+    add_test(NAME rd_crack_heldglow
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=2|heldglow"
+                     "-DEXPECT=rd: crack fill: on above 1x \\(scale 2x2, reach 1x1"
+                     "-DEXPECT2=rd: late pass: the crack fill's draw held from its snapshot to the glow's paste pass"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack.cmake")
+    set_tests_properties(rd_crack_heldglow PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk")
+endif()
+
 # rd_crack_join: rd_crack_test 2 join on the tile class's fakes: the aura's frame
 # (rd_crack_aura's) with two list 11 commands after the paste, each a sprite
 # into SCENE under Z ALWAYS without a Z write: with the late pass both drawn in

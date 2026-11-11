@@ -12,18 +12,22 @@
  *       into another target waits (untextured, from another target, from
  *       SCENE in the alpha-only form: the glow's mask), not from SCENE's
  *       colour otherwise, from SCENE's depth view, with DATE, or writing
- *       SCENE's depth; the aura's paste into SCENE lands; a sprite on SCENE
- *       the light plan skips waits, one it draws does not, one the scan
- *       cannot know waits; the reduction, the fog, a screen prim and a VU
- *       draw do not; each refusal's reason
- *   c2  rd__late_pass_scan and rd__late_pass_scan_end over a frame in the
- *       DARK room's order (cleanUpFB's two sprites of SCENE's alpha, the
- *       band, the mask, the blur, the glow's paste, the aura's sprites, its
- *       paste, a screen prim): held (the plan ignored, RD_LATE_ANY_PLAN) the
- *       fill's read lies at the aura's paste; under no DARK plan and switched
- *       off at the band (rd__crack_fill_place's place, as before the hold);
- *       held with no paste in the frame at the walk's end; with a screen
- *       prim on SCENE before the aura's paste at that prim
+ *       SCENE's depth; the aura's paste into SCENE lands; the glow's paste
+ *       the light plan skips waits, drawn it lands (not under PABE or as a
+ *       lerp), in the scan it waits; a draw into WORK2 under a Z test of
+ *       SCENE's depth waits (a lamp), writing it, under DATE, PRIM.AA1 or
+ *       sampling SCENE not; the reduction, the fog, a screen prim, a grid
+ *       on SCENE and a shadow command do not; each refusal's reason
+ *   c2  rd__late_pass_scan and rd__late_pass_scan_end over a frame in a glow
+ *       room's order (cleanUpFB's two sprites of SCENE's alpha, the band,
+ *       the mask, a lamp's mesh into WORK2, a blur pass, the glow's paste,
+ *       the aura's sprites, its paste, a screen prim): held (the plan
+ *       ignored, RD_LATE_ANY_PLAN: nothing on SCENE skipped) the fill's read
+ *       lies at the glow's paste, without the glow's paste at the aura's;
+ *       under no plan that holds and switched off at the band
+ *       (rd__crack_fill_place's place, as before the hold); held with no
+ *       paste in the frame at the walk's end; with a screen prim on SCENE
+ *       before the aura's paste at that prim
  *   c3  rd__fx_alpha_only: MODULATE by RGBAQ RGB 0 without a blend only. */
 #include <stdio.h>
 #include <stdlib.h>
@@ -110,6 +114,9 @@ static RdStateBlock state(uint32_t c, uint32_t d, uint32_t tex)
     s.ds.test.ztst = RD_ZTST_ALWAYS;
     s.ds.test.date = RD_DATE_OFF;
     s.ds.colorMask = 0xF;
+    s.ds.colclamp = 1;
+    s.ds.pabe = 0;
+    s.aa1 = 0;
     return s;
 }
 
@@ -208,7 +215,14 @@ static void testClass(void)
     c = post(RD_POST_FLARE, 128, 128, 128, 128);
     expect("the glow's paste, skipped by the plan", &c, &glowPaste, 1, RD_LATE_HOLD,
            RD_LATE_WHY_NONE);
-    expect("the glow's paste, drawn", &c, &glowPaste, 0, RD_LATE_FLUSH, RD_LATE_WHY_SCENE);
+    expect("the glow's paste, drawn: its pass", &c, &glowPaste, 0, RD_LATE_LAND_GLOW,
+           RD_LATE_WHY_NONE);
+    RdStateBlock glowPabe = glowPaste;
+    glowPabe.ds.pabe = 1;
+    expect("the glow's paste under PABE", &c, &glowPabe, 0, RD_LATE_FLUSH, RD_LATE_WHY_SCENE);
+    RdStateBlock glowLerp = glowPaste;
+    glowLerp.ds.blend = RD_BLEND_LERP_FIX;
+    expect("a lerp of WORK3 over SCENE", &c, &glowLerp, 0, RD_LATE_FLUSH, RD_LATE_WHY_SCENE);
     expect("the glow's paste in the scan", &c, &glowPaste, -1, RD_LATE_HOLD, RD_LATE_WHY_NONE);
     RdStateBlock fromScene = state(scene, scene, tScene);
     c = post(RD_POST_MOTION_BLUR, 128, 128, 128, 128);
@@ -221,8 +235,28 @@ static void testClass(void)
     expect("the fog", &c, &onScene, 0, RD_LATE_FLUSH, RD_LATE_WHY_POST);
     c = ofType(RDC_SCREEN, 0, 0);
     expect("a screen prim", &c, &onScene, 0, RD_LATE_FLUSH, RD_LATE_WHY_DRAW);
+    /* draws: into another target (the lamps' meshes into WORK2 under a Z
+     * test of SCENE's depth) wait; on SCENE, from SCENE, writing SCENE's
+     * depth, DATE or PRIM.AA1 do not */
+    RdStateBlock lamp = onW2;
+    lamp.ds.test.ztst = RD_ZTST_GEQUAL;
     c = ofType(RDC_MESH, 0, 0);
-    expect("a mesh on WORK2", &c, &onW2, 0, RD_LATE_FLUSH, RD_LATE_WHY_DRAW);
+    expect("a lamp's mesh into WORK2, Z tested", &c, &lamp, 0, RD_LATE_HOLD, RD_LATE_WHY_NONE);
+    c = ofType(RDC_SCREEN, 0, 0);
+    expect("a screen prim into WORK2, Z tested", &c, &lamp, 0, RD_LATE_HOLD, RD_LATE_WHY_NONE);
+    RdStateBlock fan = lamp;
+    fan.ds.zwrite = RD_ZWRITE_ON;
+    expect("a sun's fan into WORK2 writing SCENE's depth", &c, &fan, 0, RD_LATE_FLUSH,
+           RD_LATE_WHY_DEPTH);
+    RdStateBlock lampDate = lamp;
+    lampDate.ds.test.date = RD_DATE_DEST_ALPHA_0;
+    expect("a draw into WORK2 under DATE", &c, &lampDate, 0, RD_LATE_FLUSH, RD_LATE_WHY_DEPTH);
+    RdStateBlock lampAa1 = lamp;
+    lampAa1.aa1 = 1;
+    expect("a draw into WORK2 with PRIM.AA1", &c, &lampAa1, 0, RD_LATE_FLUSH, RD_LATE_WHY_DEPTH);
+    expect("a screen prim into WORK2 from SCENE", &c, &mask, 0, RD_LATE_FLUSH, RD_LATE_WHY_DRAW);
+    c = ofType(RDC_GRID, 0, 0);
+    expect("a grid on SCENE", &c, &onScene, 0, RD_LATE_FLUSH, RD_LATE_WHY_DRAW);
     c = ofType(RDC_SHADOW_STRIP, 0, 0);
     expect("a shadow strip", &c, &onScene, 0, RD_LATE_FLUSH, RD_LATE_WHY_DRAW);
 }
@@ -250,13 +284,14 @@ static int scanAt(const Step *s, int n)
     return -1;
 }
 
-static void testScan(void)
+/* the DARK room's order up to the aura's paste (glow: with the glow's paste
+ * the plan would skip), a screen prim on SCENE before the paste (screen) */
+static int order(Step *s, bool glow, bool screen, int *band, int *glowAt, int *auraAt)
 {
     const uint32_t scene = idOf(RD_TARGET_SCENE), w0 = idOf(RD_TARGET_WORK0);
     const uint32_t w1 = idOf(RD_TARGET_WORK1), w2 = idOf(RD_TARGET_WORK2);
-    const uint32_t pad = idOf(RD_TARGET_WORK2_PAD), w3 = idOf(RD_TARGET_WORK3);
+    const uint32_t pad = idOf(RD_TARGET_WORK2_PAD);
     const uint32_t feed = idOf(RD_TARGET_FEED128), aura = idOf(RD_TARGET_AURA_WORK);
-    Step s[16];
     int n = 0;
     /* cleanUpFB: Cs * As + Cd with RGBAQ 0, 0, 0, 0 (RGB kept, alpha 0),
      * then the background's mark at Z GEQUAL */
@@ -267,62 +302,81 @@ static void testScan(void)
     s[n].st = s[n - 1].st;
     s[n].st.ds.test.ztst = RD_ZTST_GEQUAL;
     s[n++].c = post(RD_POST_FLARE, 0, 0, 0, 192);
-    const int band = n;
+    *band = n;
     s[n].st = state(pad, 0, 0);
     s[n++].c = post(RD_POST_FLARE, 0, 0, 0, 192);
     s[n].st = state(w2, scene, texOf(RD_TARGET_SCENE, RD_VIEW_RGBA));
     s[n++].c = post(RD_POST_FLARE, 0, 0, 0, 128); /* the mask */
+    s[n].st = state(w2, scene, 0);
+    s[n].st.ds.test.ztst = RD_ZTST_GEQUAL;
+    s[n++].c = ofType(RDC_MESH, 0, 0); /* a lamp into WORK2 */
     s[n].st = state(w1, 0, texOf(RD_TARGET_WORK0, RD_VIEW_RGBA));
     s[n++].c = post(RD_POST_FLARE, 128, 128, 128, 0); /* a blur pass */
-    s[n].st = state(scene, scene, texOf(RD_TARGET_WORK3, RD_VIEW_RGBA));
-    s[n].st.ds.abe = 1;
-    s[n].st.ds.blend = RD_BLEND_CS_FIX_ADD_CD;
-    s[n++].c = post(RD_POST_FLARE, 128, 128, 128, 128); /* the glow's paste */
+    *glowAt = -1;
+    if (glow) {
+        *glowAt = n;
+        s[n].st = state(scene, scene, texOf(RD_TARGET_WORK3, RD_VIEW_RGBA));
+        s[n].st.ds.abe = 1;
+        s[n].st.ds.blend = RD_BLEND_CS_FIX_ADD_CD;
+        s[n++].c = post(RD_POST_FLARE, 128, 128, 128, 128); /* the glow's paste */
+    }
     s[n].st = state(aura, scene, 0);
     s[n++].c = post(RD_POST_AURA, 0, 0, 0, 0);
     s[n].st = state(w0, 0, texOf(RD_TARGET_AURA_WORK, RD_VIEW_RGBA));
     s[n++].c = post(RD_POST_AURA, 0, 0, 0, 128);
     s[n].st = state(feed, 0, texOf(RD_TARGET_WORK0, RD_VIEW_RGBA));
     s[n++].c = post(RD_POST_AURA, 0, 0, 0, 128);
-    const int auraPaste = n;
+    if (screen) {
+        s[n].st = state(scene, scene, 0);
+        s[n++].c = ofType(RDC_SCREEN, 0, 0);
+    }
+    *auraAt = n;
     s[n].st = state(scene, scene, texOf(RD_TARGET_FEED128, RD_VIEW_RGBA));
     s[n].st.ds.abe = 1;
     s[n].st.ds.blend = RD_BLEND_LERP_AS_ALT;
     s[n++].c = post(RD_POST_AURA, 64, 64, 64, 128);
     s[n].st = state(scene, scene, 0);
     s[n++].c = ofType(RDC_SCREEN, 0, 0);
-    (void)w3;
+    return n;
+}
+
+static void testScan(void)
+{
+    Step s[20];
+    int band, glowAt, auraAt;
     /* the plan ignored (the tests' frames hold no chain the light plan
-     * reads): the walk holds, the read where the draw lands */
+     * reads, so nothing on SCENE is skipped): held, the read where the
+     * draw lands, the glow's paste (LAMPS, WHOLE) or without it the aura's */
+    int n = order(s, true, false, &band, &glowAt, &auraAt);
     rd__late_pass_force((int)(RD_LATE_FILL | RD_LATE_ANY_PLAN));
-    const int on = scanAt(s, n);
-    /* the plan's (none here: no DARK plan): the walk draws at the band */
+    const int onGlow = scanAt(s, n);
+    /* no plan that holds (none here): the walk draws at the band */
     rd__late_pass_force((int)RD_LATE_FILL);
     const int none = scanAt(s, n);
     rd__late_pass_force(0);
     const int off = scanAt(s, n);
-    /* held to the walk's end: no landing in the frame */
-    rd__late_pass_force((int)(RD_LATE_FILL | RD_LATE_ANY_PLAN));
-    const int end = scanAt(s, auraPaste);
-    printf("  scan: the fill's read at command %d held (the aura's paste %d), %d under no DARK "
-           "plan and %d off (the band %d), %d held with no paste (the walk's end %d)\n",
-           on, auraPaste, none, off, band, end, auraPaste);
-    CHECK(on == auraPaste, "held, the read at %d, the aura's paste %d expected", on, auraPaste);
-    CHECK(none == band, "no DARK plan, the read at %d, the band %d expected", none, band);
+    printf("  scan: the fill's read at command %d held (the glow's paste %d), %d under no plan "
+           "that holds and %d off (the band %d)\n",
+           onGlow, glowAt, none, off, band);
+    CHECK(onGlow == glowAt, "held, the read at %d, the glow's paste %d expected", onGlow, glowAt);
+    CHECK(none == band, "no plan that holds, the read at %d, the band %d expected", none, band);
     CHECK(off == band, "off, the read at %d, the band %d expected", off, band);
-    CHECK(end == auraPaste, "held with no paste, the read at %d, the end %d expected", end,
-          auraPaste);
-    /* a screen prim on SCENE before the aura's paste: the read there */
-    Step t[16];
-    memcpy(t, s, sizeof(Step) * (size_t)auraPaste);
-    t[auraPaste].st = state(scene, scene, 0);
-    t[auraPaste].c = ofType(RDC_SCREEN, 0, 0);
-    t[auraPaste + 1] = s[auraPaste];
+    n = order(s, false, false, &band, &glowAt, &auraAt);
     rd__late_pass_force((int)(RD_LATE_FILL | RD_LATE_ANY_PLAN));
-    const int early = scanAt(t, auraPaste + 2);
+    const int onAura = scanAt(s, n);
+    /* held to the walk's end: no landing in the frame */
+    const int end = scanAt(s, auraAt);
+    printf("  scan: without the glow's paste %d (the aura's paste %d); %d with no paste (the "
+           "walk's end %d)\n",
+           onAura, auraAt, end, auraAt);
+    CHECK(onAura == auraAt, "held, the read at %d, the aura's paste %d expected", onAura, auraAt);
+    CHECK(end == auraAt, "held with no paste, the read at %d, the end %d expected", end, auraAt);
+    /* a screen prim on SCENE before the aura's paste: the read there */
+    n = order(s, false, true, &band, &glowAt, &auraAt);
+    const int early = scanAt(s, n);
     rd__late_pass_force(-1);
-    CHECK(early == auraPaste, "a screen prim before the paste: the read at %d, %d expected", early,
-          auraPaste);
+    CHECK(early == auraAt - 1, "a screen prim before the paste: the read at %d, %d expected", early,
+          auraAt - 1);
 }
 
 static void testAlphaOnly(void)

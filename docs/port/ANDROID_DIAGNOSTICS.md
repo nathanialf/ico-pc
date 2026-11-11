@@ -615,11 +615,12 @@ replays it (`rd_replay_tool --stats` prints `glow: light plan on: <plan> (<reaso
 ### The late passes on SCENE
 
 On a tile-based phone the crack fill of a glow room whose glow draws nothing (the dark plan above)
-is drawn in the aura's paste pass instead of a pass of its own
+is drawn in the aura's paste pass instead of a pass of its own, and in a lamps room in the glow's
+paste pass
 ([RENDER_POST.md](RENDER_POST.md#the-late-passes-on-scene)). The start line `rd: late pass: on (a
 tile-based GPU's default): ...` (or `off (<why>)`) says whether it is in force; the 10 s block's
-`window: late pass: N crack fills held into the aura's paste pass, M drawn early in a pass of their
-own (K <why>, ...); J list 11 draws joined the open pass without SCENE's depth (P passes not
+`window: late pass: N crack fills held into the aura's paste pass, G into the glow's, M drawn early
+in a pass of their own (K <why>, ...); J list 11 draws joined the open pass without SCENE's depth (P passes not
 begun)` counts the pictures it saved a pass in (N), those where something between the glow and the
 aura drew on SCENE first (M, by reason: `a draw`, `a command on SCENE`, `the aura's paste pass could
 not take it`, `SCENE's snapshot taken again`, ...), and the paused or menu pictures whose list 11

@@ -22,13 +22,17 @@
 # there.  Each pair: every PNG the off run writes (SCENE, DISPLAY, PRESENT and
 # every other named target) the on run's byte for byte; the same draws; the
 # off run says "off" and holds and joins nothing; the on run says "on"; its
-# render passes fewer than the off run's by exactly the fills it held into the
-# aura's paste pass and the passes list 11's draws joined, the crack fill's own
-# passes by the fills held; its colour MB loaded and stored each fewer by at
-# least the MB its stats name for the held fills and at most that and the MB it
-# names for the joined passes (within 0.02, the two decimals' rounding: a pass
-# the join saves may have had a render area), its depth and stencil MB not
-# higher, the same without a join, its copies the same; at the phone's setting
+# render passes fewer than the off run's by exactly the fills it held into a
+# paste pass (the aura's or the glow's) and the passes list 11's draws joined,
+# the crack fill's own passes by the fills held; its colour MB loaded and
+# stored each fewer by at least the MB its stats name for the held fills and at
+# most that and the MB it names for the joined passes (within 0.02, the two
+# decimals' rounding: a pass the join saves may have had a render area), its
+# depth and stencil MB loaded not higher, stored not higher but by up to 1.25
+# times the held fills' MB where a fill was held into the glow's paste pass
+# (the lamps' pass keeps its depth store for the fill's read), the same
+# without a join or a fill in the glow's pass, its copies the same; at the
+# phone's setting
 # (and on OpenGL, held or drawn early) a dump the list marks holds that many
 # fills where the off run draws a fill in its own pass, and joins as many passes
 # as it marks.  On Vulkan at least one fill held and one pass joined over the
@@ -98,7 +102,7 @@ else()
 endif()
 
 set(drawsRe "stats: ([0-9]+) draws, ([0-9]+) passes")
-set(lateRe "stats: late pass (on|off|fill|join): ([0-9]+) crack fills held into the aura's paste pass \\(([0-9.]+) MB of colour not loaded and as many not stored\\), ([0-9]+) drawn early")
+set(lateRe "stats: late pass (on|off|fill|join): ([0-9]+) crack fills held into a paste pass \\(([0-9]+) the glow's, ([0-9.]+) MB of colour not loaded and as many not stored\\), ([0-9]+) drawn early")
 set(joinRe ", ([0-9]+) list 11 draws joined the open pass without SCENE's depth \\(([0-9]+) passes not begun, ([0-9.]+) MB of colour at most each way\\)")
 set(crackRe "stats: crack fill (on|off): ([0-9]+) passes")
 set(trafficRe "stats: traffic: colour ([0-9.]+) MB loaded ([0-9.]+) MB stored, depth and stencil ([0-9.]+)/([0-9.]+) MB loaded/stored, [0-9.]+ MB cleared, ([0-9.]+) MB copied")
@@ -162,8 +166,9 @@ foreach(dump IN LISTS dumps)
       string(REGEX MATCH "${lateRe}" m "${flat}")
       set(word_${lp} "${CMAKE_MATCH_1}")
       set(held_${lp} "${CMAKE_MATCH_2}")
-      set(heldMb_${lp} "${CMAKE_MATCH_3}")
-      set(early_${lp} "${CMAKE_MATCH_4}")
+      set(glowHeld_${lp} "${CMAKE_MATCH_3}")
+      set(heldMb_${lp} "${CMAKE_MATCH_4}")
+      set(early_${lp} "${CMAKE_MATCH_5}")
       string(REGEX MATCH "${joinRe}" m "${flat}")
       set(joined_${lp} "${CMAKE_MATCH_1}")
       set(joinPasses_${lp} "${CMAKE_MATCH_2}")
@@ -178,6 +183,7 @@ foreach(dump IN LISTS dumps)
       set(cp_${lp} "${CMAKE_MATCH_5}")
       message(STATUS "${dump} ${s} late pass ${lp}: ${passes_${lp}} passes, ${draws_${lp}} draws, "
                      "${crack_${lp}} crack fill passes; ${held_${lp}} fills held "
+                     "(${glowHeld_${lp}} in the glow's paste pass) "
                      "(${heldMb_${lp}} MB each way), ${early_${lp}} drawn early; ${joined_${lp}} "
                      "list 11 draws joined ${joinPasses_${lp}} passes (${joinMb_${lp}} MB); colour "
                      "${cl_${lp}}/${cs_${lp}} MB, depth and stencil ${dl_${lp}}/${ds_${lp}} MB "
@@ -220,11 +226,22 @@ foreach(dump IN LISTS dumps)
     mb_hundredths(dl1 "${dl_1}")
     mb_hundredths(ds0 "${ds_0}")
     mb_hundredths(ds1 "${ds_1}")
-    if(dl1 GREATER dl0 OR ds1 GREATER ds0 OR NOT cp_1 STREQUAL cp_0 OR
-       (joinPasses_1 EQUAL 0 AND (NOT dl_1 STREQUAL dl_0 OR NOT ds_1 STREQUAL ds_0)))
+    # a fill held into the glow's paste pass reads SCENE's depth after the
+    # lamps' pass, which then keeps its depth store (the last store's cut took
+    # it before): up to 5 bytes a texel more stored a fill (D32F_S8), 1.25
+    # times the colour MB the held fills name
+    set(dsMore 0)
+    if(glowHeld_1 GREATER 0)
+      math(EXPR dsMore "${fall} * 5 / 4 + 2")
+    endif()
+    math(EXPR ds0more "${ds0} + ${dsMore}")
+    if(dl1 GREATER dl0 OR ds1 GREATER ds0more OR NOT cp_1 STREQUAL cp_0 OR
+       (joinPasses_1 EQUAL 0 AND glowHeld_1 EQUAL 0 AND
+        (NOT dl_1 STREQUAL dl_0 OR NOT ds_1 STREQUAL ds_0)))
       message(SEND_ERROR "${dump} ${s}: depth and stencil ${dl_1}/${ds_1} MB, copies ${cp_1} MB "
                          "with the late pass; ${dl_0}/${ds_0} and ${cp_0} without (the hold moves "
-                         "the fill's colour pass only, a join drops a pass's depth)")
+                         "the fill's colour pass only, a join drops a pass's depth, a fill held to "
+                         "the glow's paste keeps the lamps' pass's depth store)")
       math(EXPR failures "${failures} + 1")
     endif()
     set(want "${want_${dump}}")

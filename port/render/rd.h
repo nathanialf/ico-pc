@@ -2955,6 +2955,9 @@ typedef struct RdPerfRecord {
      * latePassJoinTexels texels in all) */
     uint32_t latePassHeld, latePassFlushed, latePassWhy, latePassTexels;
     uint32_t latePassJoined, latePassJoinPasses, latePassJoinTexels;
+    /* of latePassHeld, the fills drawn in the glow's paste pass (a LAMPS or
+     * WHOLE frame), not the aura's */
+    uint32_t latePassGlowHeld;
     /* The aura's read of SCENE into FEED128 in two passes (rd_aura_box.c):
      * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
      * a replay; none while the game is paused) */

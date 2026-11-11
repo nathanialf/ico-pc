@@ -839,6 +839,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   none early, no fill pass of its own; against the late pass off (`rd__late_pass_force(0)`) SCENE's
   colour and depth byte for byte, one render pass fewer, the crack filled and each copy the repeat
   laid of it the filled texel's bytes; the main checks leave out the repeat's outer columns.
+- `rd_crack_heldglow` (`rd_crack_test 2 heldglow`, the same fakes): `rd_crack_held`'s frame with a
+  sprite into WORK2 under a Z GEQUAL test of SCENE's depth after the mask (a lamp's stand-in, no Z
+  write) and the glow's paste (WORK0 added over SCENE, Cs * FIX + Cd at FIX 128, the fx plan's
+  premultiplied add) in place of the aura's: the fill held into the glow's paste pass
+  (`latePassGlowHeld` 1), the same checks.
 - `rd_crack_join` (`rd_crack_test 2 join`, `ICO_VK_FAKE_LIMITS=moltenvk`; `rd_late_pass.cmake`):
   `rd_crack_aura`'s frame with two list 11 commands after the paste (a blended sprite each into
   SCENE, Z ALWAYS, no Z write, right of the slit): with the late pass both drawn in the paste's pass
@@ -854,7 +859,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   byte, the same draws, the passes fewer by exactly the fills held and the passes list 11's draws
   joined, the crack fill's own passes by the fills held, the colour MB loaded and stored each fewer
   by at least the MB the stats name for the held fills and at most that and the joined passes' MB
-  (within 0.02), the depth and stencil MB not higher (the same without a join), the copy MB the same,
+  (within 0.02), the depth and stencil MB loaded not higher, stored not higher but by up to 1.25
+  times the held fills' MB where a fill went into the glow's paste pass (the lamps' pass keeps its
+  depth store), the same without a join or a glow pass fill, the copy MB the same,
   the off run holding and joining nothing; the dumps the list marks hold that many fills at the
   phone's setting (on OpenGL held or drawn early) and join as many passes (`joinN`: the paused frame
   of issue 164); at least one fill held and one pass joined over the list on Vulkan. No device:

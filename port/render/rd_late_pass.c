@@ -49,6 +49,19 @@
  * every pass before that read keeps the depth's store and no other pass
  * keeps more.
  *
+ * Under the LAMPS and WHOLE plans the glow's paste (pasteFullScreenFlare,
+ * WORK3 added over SCENE, the fx plan's premultiplied add: rd_fx_plan.c
+ * fxDraw) is drawn, and is where the held draw lands (RD_LATE_LAND_GLOW,
+ * rd_crack_fill.c glowWhyNot), the first draw of the paste's pass: the fill
+ * before the paste, as without the hold.  Between, the lamps' meshes draw
+ * into WORK2 under a Z test of SCENE's depth (the draws the class waits
+ * past: no SCENE sampled, no depth of SCENE written, no DATE, no PRIM.AA1);
+ * the depth they bind is sampled again by the fill (rd_crack_fill.c takes it
+ * back to its sampled state outside any pass), and the store plan keeps the
+ * lamps' pass's depth store for that read (the scan's place moves to the
+ * paste).  The sun's fans write SCENE's depth: a fill held past them is
+ * drawn before them (WHOLE with the fans on the picture gains nothing).
+ *
  * List 11's draws in the open pass (RD_LATE_JOIN).  A list 11 screen prim
  * binds SCENE's depth wherever SCENE has one (rd_replay.c prepareDrawEx),
  * so after the aura's paste, whose pass has no depth, the pause menu's first
@@ -88,13 +101,13 @@ static int s_force = -1; /* rd__late_pass_force: -1 none, else the bits */
 static struct {
     bool read;
     int bits; /* ICO_RD_LATE_PASS: -1 not given */
-    char said[256];
+    char said[512];
 } s_sw = {false, -1, ""};
 
 /* the 10 s line's counts since its last call (the window's thread reads
  * and clears them; the replay adds) */
 static struct {
-    uint64_t held, flushed, why[RD_LATE_WHY_COUNT], joined, joinPasses;
+    uint64_t held, glowHeld, flushed, why[RD_LATE_WHY_COUNT], joined, joinPasses;
 } s_sum;
 
 /* RD_LATE_JOIN: the command walked now (rd__late_pass_cmd), the pass the
@@ -112,7 +125,7 @@ static const char *const kWhy[RD_LATE_WHY_COUNT] = {
     [RD_LATE_WHY_DEPTH] = "SCENE's depth written or DATE",
     [RD_LATE_WHY_POST] = "the reduction or another post command",
     [RD_LATE_WHY_UPSCALE] = "the upscale point",
-    [RD_LATE_WHY_PASTE] = "the aura's paste pass could not take it",
+    [RD_LATE_WHY_PASTE] = "the paste's pass could not take it",
     [RD_LATE_WHY_SNAP] = "SCENE's snapshot taken again",
     [RD_LATE_WHY_BORDER] = "SCENE's border repeat",
     [RD_LATE_WHY_MSAA] = "the MSAA epoch",
@@ -146,7 +159,8 @@ static void note(unsigned bits, const char *why)
         snprintf(line, sizeof(line), "late pass: %s (%s):%s%s (the same bytes)",
                  bits == RD_LATE_ALL ? "on" : rd__late_pass_bits_text(bits), why,
                  bits & RD_LATE_FILL ? " the crack fill's draw held from its snapshot to the "
-                                       "aura's paste pass in a frame whose glow draws nothing"
+                                       "aura's paste pass in a frame whose glow draws nothing, "
+                                       "to the glow's paste pass in one that draws the paste"
                                      : "",
                  bits & RD_LATE_JOIN ? (bits & RD_LATE_FILL ? "; list 11's draws that use no "
                                                               "depth in the open pass without it"
@@ -245,6 +259,27 @@ int rd__late_pass_class(const RdFrame *f, const RdCmd *c, const RdStateBlock *st
     }
     case RDC_POST_STUB:
         break;
+    case RDC_SCREEN:
+    case RDC_MESH:
+    case RDC_SKINNED:
+    case RDC_GRID:
+    case RDC_PARTICLES: {
+        /* a draw into another target (the lamps' meshes into WORK2) that
+         * samples no SCENE and writes no depth of SCENE: the fill's texels
+         * and inputs untouched (a Z test reads the depth the fill reads);
+         * no DATE, no PRIM.AA1 (their stencil on the depth) */
+        const RdDrawState *d = &st->ds;
+        const RdTexRec *t = d->texEnabled ? rd__tex_rec(st->tex) : NULL;
+        if (!sc || rd__target_rec(st->color) == sc || (d->texEnabled && !t) ||
+            (t && t->kind == RD_TEXKIND_TARGET && rd__target_rec(t->target) == sc)) {
+            return flush(why, RD_LATE_WHY_DRAW);
+        }
+        if (d->test.date != RD_DATE_OFF || st->aa1 ||
+            (rd__target_rec(st->depth) == sc && d->zwrite == RD_ZWRITE_ON)) {
+            return flush(why, RD_LATE_WHY_DEPTH);
+        }
+        return RD_LATE_HOLD;
+    }
     default:
         return flush(why, RD_LATE_WHY_DRAW);
     }
@@ -283,6 +318,16 @@ int rd__late_pass_class(const RdFrame *f, const RdCmd *c, const RdStateBlock *st
     if (skipped != 0) {
         return RD_LATE_HOLD;
     }
+    /* the glow's paste the plan draws (pasteFullScreenFlare: WORK3 added,
+     * no Z test): the fx plan's premultiplied add (rd_fx_plan.c), whose
+     * pass the fill begins */
+    if ((kind == RD_POST_FLARE || kind == RD_POST_BLOOM) && t && t->kind == RD_TEXKIND_TARGET &&
+        d->abe && !d->pabe && d->colclamp &&
+        (d->blend == RD_BLEND_CS_FIX_ADD_CD || d->blend == RD_BLEND_CS_AS_ADD_CD) &&
+        !(d->test.zte && d->test.ztst != RD_ZTST_ALWAYS) &&
+        !(d->test.ate && d->test.afail == RD_AFAIL_RGB_ONLY)) {
+        return RD_LATE_LAND_GLOW;
+    }
     return flush(why, RD_LATE_WHY_SCENE);
 }
 
@@ -302,6 +347,12 @@ bool rd__late_pass_scan(RdLateScan *s, const RdFrame *f, const RdCmd *c, const R
     }
     if (s->held) {
         int why;
+        if (!s->first && rd__late_pass_class(f, c, st, 0, &why) != RD_LATE_HOLD) {
+            s->first = true; /* a plan that skips nothing on SCENE: here */
+            s->firstOrd = ord;
+            s->firstL = l;
+            s->firstI = i;
+        }
         if (rd__late_pass_class(f, c, st, -1, &why) != RD_LATE_HOLD) {
             s->done = true; /* the held draw lands here, or is drawn before c */
             s->landOrd = ord;
@@ -321,11 +372,19 @@ bool rd__late_pass_scan(RdLateScan *s, const RdFrame *f, const RdCmd *c, const R
     return at != RD_CRACK_PLACE_HOLD;
 }
 
-/* the walk holds under the DARK plan (or the tests' any plan) */
+/* the walk holds under the DARK plan (it skips the paste), LAMPS and WHOLE
+ * (the glow's paste drawn: the fill lands in its pass), or the tests' any
+ * plan (none skips a sprite on SCENE in their frames) */
+static bool anyPlan(void)
+{
+    return s_force >= 0 && ((unsigned)s_force & RD_LATE_ANY_PLAN) != 0;
+}
+
 static bool planHolds(void)
 {
-    return (s_force >= 0 && ((unsigned)s_force & RD_LATE_ANY_PLAN) != 0) ||
-           rd__glow_light_plan() == RD_GLOW_LIGHT_DARK;
+    const int plan = rd__glow_light_plan();
+    return anyPlan() || plan == RD_GLOW_LIGHT_DARK || plan == RD_GLOW_LIGHT_LAMPS ||
+           plan == RD_GLOW_LIGHT_WHOLE;
 }
 
 bool rd__late_pass_scan_end(const RdLateScan *s, uint32_t end, int endL, uint32_t *ord, int *l,
@@ -334,14 +393,19 @@ bool rd__late_pass_scan_end(const RdLateScan *s, uint32_t end, int endL, uint32_
     if (!s->held) {
         return false;
     }
+    const bool dark = rd__glow_light_plan() == RD_GLOW_LIGHT_DARK && !anyPlan();
     if (!planHolds()) {
         *ord = s->takeOrd; /* drawn where it is taken, as without the hold */
         *l = s->takeL;
         *i = s->takeI;
-    } else if (s->done) {
-        *ord = s->landOrd;
+    } else if (dark && s->done) {
+        *ord = s->landOrd; /* past the plan's skipped paste */
         *l = s->landL;
         *i = s->landI;
+    } else if (!dark && s->first) {
+        *ord = s->firstOrd; /* the glow's paste (LAMPS, WHOLE) */
+        *l = s->firstL;
+        *i = s->firstI;
     } else {
         *ord = end; /* held to the walk's end (rd__crack_fill_late) */
         *l = endL;
@@ -358,17 +422,20 @@ bool rd__late_pass_hold_wanted(void)
            rd__replay_msaa_want() <= 1u && g_rd.dstMode == RD_BLEND_EXACT_OFF && !g_rdWin.first;
 }
 
-void rd__late_pass_held_drawn(const RdTargetRec *scene)
+void rd__late_pass_held_drawn(const RdTargetRec *scene, bool glow)
 {
     g_rdPerf.latePassHeld++;
+    g_rdPerf.latePassGlowHeld += glow;
     g_rdPerf.latePassTexels += scene ? scene->tw * scene->th : 0u;
-    __atomic_add_fetch(&s_sum.held, 1, __ATOMIC_RELAXED);
-    static bool s_said;
-    if (!s_said) {
-        s_said = true;
-        rd__log("late pass: the crack fill's draw held from its snapshot to the aura's paste "
-                "pass (the glow drew nothing between), not in a pass of its own (reported "
-                "once)");
+    __atomic_add_fetch(glow ? &s_sum.glowHeld : &s_sum.held, 1, __ATOMIC_RELAXED);
+    static bool s_said[2];
+    if (!s_said[glow]) {
+        s_said[glow] = true;
+        rd__log("late pass: the crack fill's draw held from its snapshot to the %s paste pass "
+                "(%s), not in a pass of its own (reported once)",
+                glow ? "glow's" : "aura's",
+                glow ? "the lamps' or the sun's draws into WORK2 between"
+                     : "the glow drew nothing between");
     }
 }
 
@@ -451,6 +518,7 @@ void rd__late_pass_join(Replay *r, DrawSetup *ds)
 void rd_late_pass_line(void)
 {
     const uint64_t held = __atomic_exchange_n(&s_sum.held, 0, __ATOMIC_RELAXED);
+    const uint64_t glowHeld = __atomic_exchange_n(&s_sum.glowHeld, 0, __ATOMIC_RELAXED);
     const uint64_t flushed = __atomic_exchange_n(&s_sum.flushed, 0, __ATOMIC_RELAXED);
     const uint64_t joined = __atomic_exchange_n(&s_sum.joined, 0, __ATOMIC_RELAXED);
     const uint64_t joinPasses = __atomic_exchange_n(&s_sum.joinPasses, 0, __ATOMIC_RELAXED);
@@ -458,7 +526,7 @@ void rd_late_pass_line(void)
     for (int k = 0; k < RD_LATE_WHY_COUNT; k++) {
         w[k] = __atomic_exchange_n(&s_sum.why[k], 0, __ATOMIC_RELAXED);
     }
-    if (held + flushed + joined == 0) {
+    if (held + glowHeld + flushed + joined == 0) {
         return;
     }
     char why[512] = "";
@@ -475,9 +543,9 @@ void rd_late_pass_line(void)
         at += (size_t)m;
     }
     fprintf(stderr,
-            "window: late pass: %llu crack fills held into the aura's paste pass, %llu drawn "
-            "early in a pass of their own%s%s; %llu list 11 draws joined the open pass without "
-            "SCENE's depth (%llu passes not begun)\n",
-            (unsigned long long)held, (unsigned long long)flushed, why, at ? ")" : "",
-            (unsigned long long)joined, (unsigned long long)joinPasses);
+            "window: late pass: %llu crack fills held into the aura's paste pass, %llu into the "
+            "glow's, %llu drawn early in a pass of their own%s%s; %llu list 11 draws joined the "
+            "open pass without SCENE's depth (%llu passes not begun)\n",
+            (unsigned long long)held, (unsigned long long)glowHeld, (unsigned long long)flushed,
+            why, at ? ")" : "", (unsigned long long)joined, (unsigned long long)joinPasses);
 }

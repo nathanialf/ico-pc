@@ -286,6 +286,9 @@ int rd__crack_fill_place(const RdFrame *f, const RdCmd *c, const RdStateBlock *s
 void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen);
 void rd__crack_fill_late(Replay *r, bool msaaOpen);
 bool rd__crack_fill_paste_due(void);
+/* armed for the glow's paste being drawn now (the late pass's held fill:
+ * rd_fx_plan.c takes it in the premultiplied add's pass) */
+bool rd__crack_fill_glow_due(void);
 void rd__crack_fill_in_pass(Replay *r, uint32_t tdId);
 void rd__crack_fill_paste_late(Replay *r, const char *why);
 bool rd__crack_fill_may(const RdStateBlock *st);

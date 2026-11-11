@@ -248,6 +248,12 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
     const uint8_t post = x->c->b[0];
     const bool alone = post != RD_POST_REDUCTION && post != RD_POST_MOTION_BLUR &&
                        !(r->st.ds.texEnabled && (post == RD_POST_FLARE || post == RD_POST_BLOOM));
+    if (kind == FX_ADDITIVE && rd__crack_fill_glow_due()) {
+        /* a crack fill the late pass held for the glow's paste
+         * (rd_late_pass.c): its first draw, the pass (SCENE's colour alone)
+         * begun here as bindDraw would begin it */
+        rd__crack_fill_in_pass(r, ds.tdId);
+    }
     rd__last_store_post(!local && alone);
     if (local) {
         /* the crack fill armed for this pass (the aura's paste): its first
@@ -459,15 +465,36 @@ static bool fxLocalNext(const RdFxDraw *x)
     return g_rd.profile.fxDstLocal && g_rd.fs[RD_FS_FX_LOCAL].id && g_rd.layoutLocal.id;
 }
 
+/* The way fxPlanDraw takes for the glow's paste a held crack fill is armed
+ * for (rd_late_pass.c) is the premultiplied add (the constant fold not
+ * before it): the fill is drawn first in that pass (fxDraw) */
+static bool fxAdditiveNext(const RdFxDraw *x)
+{
+    const RdDrawState *d = x->d;
+    const bool rgbOnly = d->test.ate && d->test.afail == RD_AFAIL_RGB_ONLY;
+    const bool dstAlpha = d->test.date != RD_DATE_OFF || rgbOnly;
+    if (!g_rd.profile.fxPlan || !g_rd.hasDevice || x->selfSample || !x->dstRead ||
+        g_rd.dstMode != RD_BLEND_EXACT_OFF || rd__replay_msaa_want() > 1u) {
+        return false;
+    }
+    uint8_t ident = 0, rgb[3];
+    if (!x->textured && d->abe && !dstAlpha && rd__fx_fold(d, x->p->rgba, &ident, rgb)) {
+        return false; /* the constant fold first */
+    }
+    const int form = d->abe ? fxPremulForm(d->blend) : 0;
+    return form && !d->pabe && d->colclamp && !dstAlpha && g_rd.fs[RD_FS_FX_FRAME].id;
+}
+
 static bool fxPlanDraw(Replay *r, const RdFxDraw *x);
 
 bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x)
 {
     /* the crack fill armed for this sprite's pass (rd_crack_fill.c: the
-     * aura's paste): taken by the local read's pass; drawn any other way
-     * the sprite comes after the fill's own pass */
+     * aura's paste, or the glow's for a fill the late pass held): taken by
+     * the local read's pass or the premultiplied add's; drawn any other
+     * way the sprite comes after the fill's own pass */
     const bool paste = rd__crack_fill_paste_due();
-    if (paste && !fxLocalNext(x)) {
+    if (paste && !fxLocalNext(x) && !(rd__crack_fill_glow_due() && fxAdditiveNext(x))) {
         rd__crack_fill_paste_late(r, "the paste reads its destination through a snapshot");
     }
     const bool drawn = fxPlanDraw(r, x);

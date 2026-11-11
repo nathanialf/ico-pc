@@ -3231,13 +3231,13 @@ int main(int argc, char **argv)
                pr->glowLight == RD_GLOW_LIGHT_WHOLE ? ")" : "", pr->glowLightPasses,
                pr->glowLightLazy);
         /* the late passes on SCENE (rd_late_pass.c) */
-        printf("%s: stats: late pass %s: %u crack fills held into the aura's paste pass "
-               "(%.2f MB of colour not loaded and as many not stored), %u drawn early in a pass "
+        printf("%s: stats: late pass %s: %u crack fills held into a paste pass (%u the glow's; "
+               "%.2f MB of colour not loaded and as many not stored), %u drawn early in a pass "
                "of their own%s%s%s; %u list 11 draws joined the open pass without SCENE's "
                "depth (%u passes not begun, %.2f MB of colour at most each way)\n",
                dump, rd__late_pass_bits_text(rd__late_pass_bits()), pr->latePassHeld,
-               (double)pr->latePassTexels * 4.0 / 1048576.0, pr->latePassFlushed,
-               pr->latePassFlushed ? " (" : "",
+               pr->latePassGlowHeld, (double)pr->latePassTexels * 4.0 / 1048576.0,
+               pr->latePassFlushed, pr->latePassFlushed ? " (" : "",
                pr->latePassFlushed ? rd__late_pass_why_text((int)pr->latePassWhy) : "",
                pr->latePassFlushed ? ")" : "", pr->latePassJoined, pr->latePassJoinPasses,
                (double)pr->latePassJoinTexels * 4.0 / 1048576.0);

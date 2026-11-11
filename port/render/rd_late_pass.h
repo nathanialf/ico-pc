@@ -6,8 +6,9 @@
  *   RD_LATE_FILL  the crack fill's draw held (rd_crack_fill.c): its colour
  *                 snapshot taken where it is taken without the hold, its
  *                 draw made the first draw of the aura's paste pass in a
- *                 frame whose glow plan draws nothing (DARK), so the fill
- *                 has no pass of its own there
+ *                 frame whose glow plan draws nothing (DARK), or of the
+ *                 glow's paste pass in a frame that still draws the paste
+ *                 (LAMPS, WHOLE), so the fill has no pass of its own there
  *   RD_LATE_JOIN  a list 11 screen prim that neither tests nor writes the
  *                 depth and takes no DATE joins the open pass on its target
  *                 that has no depth (the pause menu's draws in the aura's
@@ -45,17 +46,26 @@ const char *rd__late_pass_bits_text(unsigned bits);
  *                      another target that writes no depth of SCENE, takes
  *                      no DATE and samples SCENE only in the alpha-only
  *                      form (rd__fx_alpha_only: the glow's mask, which reads
- *                      the alpha the fill does not write), a sprite on SCENE
- *                      the glow's light plan does not draw (skipped 1), or
- *                      in the scan, where the plan is not known yet
- *                      (skipped -1), the glow's paste
+ *                      the alpha the fill does not write), a draw (screen
+ *                      prims, a VU draw) into another target that samples
+ *                      no SCENE, writes no depth of SCENE (a Z test reads
+ *                      it: the lamps' meshes into WORK2), takes no DATE and
+ *                      no PRIM.AA1, a sprite on SCENE the glow's light plan
+ *                      does not draw (skipped 1), or in the scan, where the
+ *                      plan is not known yet (skipped -1), any sprite on
+ *                      SCENE that samples no SCENE
  *   RD_LATE_LAND_AURA  the aura's paste into SCENE (pasteFeedBackAreaToFB):
  *                      the fill is the first draw of its pass
+ *   RD_LATE_LAND_GLOW  the glow's paste into SCENE (pasteFullScreenFlare:
+ *                      WORK3 added through Cs * FIX + Cd or Cs * As + Cd,
+ *                      no Z test, COLCLAMP 1, no PABE) that the plan draws:
+ *                      the fill is the first draw of its pass (the fx
+ *                      plan's premultiplied add, rd_fx_plan.c fxDraw)
  *   RD_LATE_FLUSH      anything else: the fill drawn before c in a pass of
  *                      its own (*why the reason, RD_LATE_WHY_*)
  * c's frame f gives its payload; skipped: 1 the light plan does not draw
  * c, 0 it does, -1 not known (the scan). */
-enum { RD_LATE_HOLD, RD_LATE_LAND_AURA, RD_LATE_FLUSH };
+enum { RD_LATE_HOLD, RD_LATE_LAND_AURA, RD_LATE_LAND_GLOW, RD_LATE_FLUSH };
 
 /* why a held fill was drawn before the paste (RdPerfRecord.latePassWhy) */
 enum {
@@ -65,7 +75,7 @@ enum {
     RD_LATE_WHY_DEPTH,   /* a sprite that writes SCENE's depth or takes DATE */
     RD_LATE_WHY_POST,    /* the reduction, the fog or another post command */
     RD_LATE_WHY_UPSCALE, /* the upscale point */
-    RD_LATE_WHY_PASTE,   /* the aura's paste could not take the fill (its own pass first) */
+    RD_LATE_WHY_PASTE,   /* the paste's pass could not take the fill (its own pass first) */
     RD_LATE_WHY_SNAP,    /* SCENE's snapshot taken or swapped again */
     RD_LATE_WHY_BORDER,  /* SCENE's border repeat with more blocks than the hold keeps */
     RD_LATE_WHY_MSAA,    /* the MSAA epoch */
@@ -88,15 +98,19 @@ int rd__late_pass_class(const RdFrame *f, const RdCmd *c, const RdStateBlock *st
  * held draw lands at (rd__late_pass_class, the scan not knowing the glow's
  * plan: skipped -1), and rd__late_pass_scan_end, after the glow's plan is
  * decided (rd__glow_light_scan_end), gives the place the walk takes: the
- * landing under the DARK plan (the walk's end when none came: end, endL),
- * the snapshot's place under any other (true; false when nothing is held) */
+ * landing with the plan's skipped sprites waited past under the DARK plan
+ * (land), the first command a plan that skips nothing on SCENE does not
+ * wait past under LAMPS and WHOLE (first: the glow's paste; the walk's end
+ * when none came: end, endL), the snapshot's place under any other (true;
+ * false when nothing is held) */
 typedef struct RdLateScan {
     bool alpha; /* rd__crack_fill_place's */
     bool hold;  /* the fill may be held this replay */
     bool held;  /* past the place where the snapshot is taken */
-    bool done;  /* the held draw's landing found */
-    uint32_t takeOrd, takeI, landOrd, landI;
-    int takeL, landL;
+    bool done;  /* the held draw's landing found (skipped -1) */
+    bool first; /* the first command not waited past with skipped 0 found */
+    uint32_t takeOrd, takeI, landOrd, landI, firstOrd, firstI;
+    int takeL, landL, firstL;
 } RdLateScan;
 
 void rd__late_pass_scan_begin(RdLateScan *s);
@@ -106,11 +120,12 @@ bool rd__late_pass_scan_end(const RdLateScan *s, uint32_t end, int endL, uint32_
                             uint32_t *i);
 
 /* The walk's: whether the crack fill's draw is held this replay (the glow
- * plan's DARK, no MSAA, not under the upscaler's split), and the
- * counters (RdPerfRecord.latePass*, the 10 s line): a held fill drawn in the
- * aura's paste pass, one drawn early (why). */
+ * plan's DARK, LAMPS or WHOLE, no MSAA, not under the upscaler's split),
+ * and the counters (RdPerfRecord.latePass*, the 10 s line): a held fill
+ * drawn in the aura's paste pass or the glow's (glow), one drawn early
+ * (why). */
 bool rd__late_pass_hold_wanted(void);
-void rd__late_pass_held_drawn(const RdTargetRec *scene);
+void rd__late_pass_held_drawn(const RdTargetRec *scene, bool glow);
 void rd__late_pass_flushed(int why);
 
 /* SCENE's border repeat (rd_blur_border.c sceneRepeat): the blocks its last

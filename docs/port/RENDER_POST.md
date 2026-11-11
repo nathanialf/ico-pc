@@ -1374,16 +1374,24 @@ first sprite into another target (the glow's `WORK2_PAD` band), because the glow
 SCENE, follows; so it has a pass of its own (the PowerVR phone's cage rooms at Resolution Auto: 0.9
 passes and 1.8 ms a picture, "after the glow's alpha" in its 10 s line). Under the glow's DARK plan
 ([The glow where it adds light](#the-glow-where-it-adds-light)) the mask and the paste are not
-drawn, and nothing until the aura's paste draws on SCENE or reads its RGB. There
-`rd__crack_fill_place` says TAKE: the fill's snapshot is taken where it was (the same bytes read, the
+drawn, and nothing until the aura's paste draws on SCENE or reads its RGB; under LAMPS and WHOLE
+the glow's paste (WORK3 added over SCENE by the fx plan's premultiplied add) is the next draw on
+SCENE, after the lamps' meshes into `WORK2`. There `rd__crack_fill_place` says TAKE: the fill's snapshot is taken where it was (the same bytes read, the
 detector, reach and arithmetic unchanged) and its draw waits, each command classed by
 `rd__late_pass_class`, until it is the first draw of the aura's paste pass (`rd__crack_fill_in_pass`,
-as in a room without the glow). It waits past: state (not the upscale point), NOPs, overlay text, a
-clear or a copy of another target, a staticBlur sprite into another target that writes no depth of
-SCENE, takes no DATE and samples SCENE only in the alpha-only form (`rd__fx_alpha_only`: MODULATE by
-RGBAQ's RGB 0 without a blend, the glow's mask: the alpha, which the fill, RGB alone after the
-glow's alpha, does not write), and a sprite on SCENE the light plan does not draw
-(`rd__glow_light_skips`: the DARK plan's paste). Anything else has the held fill drawn before it in
+as in a room without the glow) or, where the plan draws the glow's paste (LAMPS, WHOLE), of that
+paste's pass (`RD_LATE_LAND_GLOW`: `rd_fx_plan.c` `fxDraw`'s premultiplied add begins it with the
+fill; `glowWhyNot` refuses it without the fx plan's add, under the exact blend or an MSAA epoch, with
+a pass on SCENE open or a pass area). It waits past: state (not the upscale point), NOPs, overlay
+text, a clear or a copy of another target, a staticBlur sprite into another target that writes no
+depth of SCENE, takes no DATE and samples SCENE only in the alpha-only form (`rd__fx_alpha_only`:
+MODULATE by RGBAQ's RGB 0 without a blend, the glow's mask: the alpha, which the fill, RGB alone
+after the glow's alpha, does not write), a draw (screen prims, a VU draw) into another target that
+samples no SCENE, writes no depth of SCENE and takes no DATE or PRIM.AA1 (the lamps' meshes into
+`WORK2` under a Z test of SCENE's depth, which the fill reads after them: it takes the depth back to
+its sampled state outside any pass), and a sprite on SCENE the light plan does not draw
+(`rd__glow_light_skips`: the DARK plan's paste). The sun's fans write SCENE's depth: a fill held to
+them is drawn before them (a WHOLE frame with the fans on the picture gains nothing). Anything else has the held fill drawn before it in
 a pass of its own (the cost without the hold); so do SCENE's snapshot taken again or swapped
 (`rd_replay.c` `takeSnap`, `blurSwapTarget`), an MSAA epoch, an aura paste whose pass cannot take
 it, and the walk's end. Not held under the upscaler's split (the upscale point, the display layer),
@@ -1403,27 +1411,32 @@ alone there).
 
 The store plan's scan (`rd_store_plan.c`) asks `rd__late_pass_scan` where the fill reads SCENE's
 depth; the glow's plan is decided at the scan's end, so `rd__late_pass_scan_end` then gives the
-place the walk takes (the landing under DARK, the snapshot's place under any other plan) and the
-depth's touch (`PlanDepth.late`) lands there, every pass before it keeping the depth's store.
+place the walk takes (the landing past the skipped paste under DARK, the first command a plan that
+skips nothing on SCENE does not wait past under LAMPS and WHOLE, the snapshot's place under any
+other plan) and the depth's touch (`PlanDepth.late`) lands there, every pass before it keeping the
+depth's store: under LAMPS the lamps' pass keeps the depth store the last store's cut took before
+(up to 5 bytes a texel stored, against the fill pass's 8 of colour loaded and stored).
 
 What it saves: the fill's own pass, SCENE's colour loaded and stored, in each DARK room picture with
 a crack fill and the aura (about 1.2 to 1.5 ms a picture estimated for the phone's cage rooms;
-UNVERIFIED). Counters `RdPerfRecord.latePassHeld`, `latePassTexels`, `latePassFlushed`,
-`latePassWhy` (`RD_LATE_WHY_*`). The lines:
+UNVERIFIED), and in each LAMPS picture less the lamps' depth store. Counters
+`RdPerfRecord.latePassHeld` (`latePassGlowHeld` of them in the glow's paste pass), `latePassTexels`,
+`latePassFlushed`, `latePassWhy` (`RD_LATE_WHY_*`). The lines:
 
 - `rd: late pass: on (a tile-based GPU's default): the crack fill's draw held from its snapshot to
   the aura's paste pass in a frame whose glow draws nothing; list 11's draws that use no depth in
   the open pass without it (the same bytes)`, or `rd: late pass: off (<why>)`, at the start and
   when it changes;
 - `rd: late pass: the crack fill's draw held from its snapshot to the aura's paste pass (the glow
-  drew nothing between), not in a pass of its own (reported once)`;
-- the 10 s `window: late pass: N crack fills held into the aura's paste pass, M drawn early in a
-  pass of their own (K <why>, ...); J list 11 draws joined the open pass without SCENE's depth (P
-  passes not begun)` (when any) and the crack fill's own `..., B held past SCENE's
+  drew nothing between), not in a pass of its own (reported once)`, and the same `to the glow's
+  paste pass (the lamps' or the sun's draws into WORK2 between)`;
+- the 10 s `window: late pass: N crack fills held into the aura's paste pass, G into the glow's, M
+  drawn early in a pass of their own (K <why>, ...); J list 11 draws joined the open pass without
+  SCENE's depth (P passes not begun)` (when any) and the crack fill's own `..., B held past SCENE's
   border repeat (its columns filled from their source columns)`;
-- `--stats`: `<dump>: stats: late pass on|off|fill|join: N crack fills held into the aura's paste
-  pass (X MB of colour not loaded and as many not stored), M drawn early in a pass of their own
-  (<why>); J list 11 draws joined ...`.
+- `--stats`: `<dump>: stats: late pass on|off|fill|join: N crack fills held into a paste pass (G
+  the glow's; X MB of colour not loaded and as many not stored), M drawn early in a pass of their
+  own (<why>); J list 11 draws joined ...`.
 
 **List 11's draws in the open pass** (`join`). List 11's screen prims bind SCENE's depth wherever
 SCENE has one (`rd_replay.c` `prepareDrawEx`), so after the aura's paste, whose pass has no depth
@@ -1448,9 +1461,9 @@ line's `; J list 11 draws joined the open pass without SCENE's depth (P passes n
 `--stats` line's `; J list 11 draws joined the open pass without SCENE's depth (P passes not begun,
 X MB of colour at most each way)`.
 
-`rd_late_pass` (the predicate and the scan, CPU), `rd_crack_held` (a crack in the repeat's source
-column, held against the late pass off), `rd_crack_join` (two list 11 commands after the aura's
-paste), `rd_late_pass_ab` and `rd_late_pass_gl` (dumps) check it
+`rd_late_pass` (the predicate and the scan, CPU), `rd_crack_held` and `rd_crack_heldglow` (a crack
+in the repeat's source column, held to the aura's or the glow's paste against the late pass off),
+`rd_crack_join` (two list 11 commands after the aura's paste), `rd_late_pass_ab` and `rd_late_pass_gl` (dumps) check it
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 `rd_crack_test` (`rd_crack`, `rd_crack_4x`, `rd_crack_frac`, `rd_crack_backdrop`,
