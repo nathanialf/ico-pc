@@ -22,7 +22,7 @@
 #           joined there, rd_late_pass.c);
 # a dump drawn narrower than a setting's aspect cannot show it and is skipped
 # there.  Each pair: every PNG the off run writes (SCENE, DISPLAY, PRESENT and
-# every other named target) the on run's byte for byte; the same draws but
+# every other named target) the on run's byte for byte (but the join's, below); the same draws but
 # those the stats name for the border's blocks (a held fill drawn past SCENE's
 # border repeat: one draw for the middle and one a repeated block); the
 # off run says "off" and holds, defers and joins nothing; the on run says "on"; its
@@ -40,10 +40,14 @@
 # deferred paste, its copies the same; at the
 # phone's setting a dump the list marks holds that many fills where the off
 # run draws a fill in its own pass (on OpenGL none held or drawn early: no
-# paste there takes a fill in these DARK rooms); no list 11 draw joined (=1
-# is the default parts, the join left out: rd_late_pass.h RD_LATE_DEFAULT; a
-# joinN mark is read and not checked).  On Vulkan at least one fill held over
-# the list.  No device: SKIP (77).
+# paste there takes a fill in these DARK rooms), and joins as many passes
+# as it marks.  Where the on run joined list 11's draws to a pass, SCENE,
+# DISPLAY and PRESENT may differ within the accepted bound (DIVERGENCES.md
+# VD-31: at most joinPixels pixels apart by at most joinLevels levels,
+# png_level_diff.py; -DPY, -DDIFF), every other target the same bytes.  On
+# Vulkan at least one fill held and one pass joined over the list.  No
+# device: SKIP (77).
+# -DPY=<python3> -DDIFF=<png_level_diff.py>
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 # -DBACKEND=vulkan|opengl
 set(dumps "")
@@ -117,6 +121,15 @@ set(deferRe ", ([0-9]+) glow pastes in the aura's paste pass \\(([0-9.]+) MB of 
 set(joinRe ", ([0-9]+) list 11 draws joined the open pass without SCENE's depth \\(([0-9]+) passes not begun, ([0-9.]+) MB of colour at most each way\\), ([0-9]+) draws more for the border's blocks")
 set(crackRe "stats: crack fill (on|off): ([0-9]+) passes")
 set(trafficRe "stats: traffic: colour ([0-9.]+) MB loaded ([0-9.]+) MB stored, depth and stencil ([0-9.]+)/([0-9.]+) MB loaded/stored, [0-9.]+ MB cleared, ([0-9.]+) MB copied")
+
+# list 11's join's bound (DIVERGENCES.md VD-31) on SCENE, DISPLAY and PRESENT of
+# a run that joined a pass: measured on lavapipe at the phone's setting, issue
+# 102's v4251 537, 515 and 478 pixels apart by up to 2, 3 and 2 levels, issue
+# 164's v5836 235, 206 and 186 by 1; at Enhanced 2x v5836 92, 44 and 102 by 1:
+# a margin of about half over the largest count, the largest level
+set(joinPixels 800)
+set(joinLevels 3)
+set(diffRe "png_level_diff: ([0-9]+) x ([0-9]+), [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, [0-9]+ more \\(largest ([0-9]+)\\), ([0-9]+) pixels differ")
 
 # v in hundredths of a MB (the stats print two decimals)
 function(mb_hundredths out v)
@@ -282,12 +295,10 @@ foreach(dump IN LISTS dumps)
         math(EXPR failures "${failures} + 1")
       endif()
     endif()
-    # ICO_RD_LATE_PASS=1 is the default parts: list 11's join left out
-    # (rd_late_pass.h RD_LATE_DEFAULT: its A/B differed by a level on the menu's
-    # text), so nothing joins; a joinN mark is not checked
-    if(NOT joined_1 EQUAL 0 OR NOT joinPasses_1 EQUAL 0)
-      message(SEND_ERROR "${dump} ${s}: list 11's draws joined ${joinPasses_1} passes with the "
-                         "default parts: none expected (the join is off by default)")
+    set(wantJoin "${wantJoin_${dump}}")
+    if(NOT wantJoin STREQUAL "" AND s STREQUAL "phone" AND NOT joinPasses_1 EQUAL wantJoin)
+      message(SEND_ERROR "${dump} ${s}: list 11's draws joined ${joinPasses_1} passes, ${wantJoin} "
+                         "expected (the pause menu after the aura's paste)")
       math(EXPR failures "${failures} + 1")
     endif()
     math(EXPR heldTotal "${heldTotal} + ${held_1}")
@@ -306,11 +317,40 @@ foreach(dump IN LISTS dumps)
       math(EXPR compared "${compared} + 1")
       execute_process(COMMAND "${CMAKE_COMMAND}" -E compare_files "${dirOff}/${png}"
                               "${dirOn}/${png}" RESULT_VARIABLE same)
-      if(NOT same EQUAL 0)
-        message(SEND_ERROR "${dump} ${s}: ${png} differs with the late pass on: it must be the "
-                           "same bytes")
-        math(EXPR failures "${failures} + 1")
+      if(same EQUAL 0)
+        continue()
       endif()
+      # list 11's join (DIVERGENCES.md VD-31, accepted): where the run joined
+      # a pass, SCENE and what is made from it (DISPLAY, PRESENT) may differ
+      # within the bound; every other target the same bytes
+      if(joinPasses_1 GREATER 0 AND png MATCHES "^(SCENE|DISPLAY|PRESENT)\\.png$")
+        if("${PY}" STREQUAL "" OR "${DIFF}" STREQUAL "")
+          message(SEND_ERROR "${dump} ${s}: ${png} differs and no -DPY/-DDIFF to measure it")
+          math(EXPR failures "${failures} + 1")
+          continue()
+        endif()
+        execute_process(COMMAND "${PY}" -I "${DIFF}" "${dirOff}/${png}" "${dirOn}/${png}"
+                        OUTPUT_VARIABLE dout RESULT_VARIABLE drc)
+        if(NOT drc EQUAL 0 OR NOT dout MATCHES "${diffRe}")
+          message(SEND_ERROR "${dump} ${s}: ${png}: png_level_diff failed: ${dout}")
+          math(EXPR failures "${failures} + 1")
+          continue()
+        endif()
+        set(largest "${CMAKE_MATCH_3}")
+        set(pixels "${CMAKE_MATCH_4}")
+        message(STATUS "${dump} ${s}: ${png} with list 11 joined: ${pixels} pixels differ, by "
+                       "${largest} levels at most (the bound ${joinPixels}, ${joinLevels})")
+        if(largest GREATER joinLevels OR pixels GREATER joinPixels)
+          message(SEND_ERROR "${dump} ${s}: ${png}: ${pixels} pixels differ by up to ${largest} "
+                             "levels with list 11 joined: the bound is ${joinPixels} pixels and "
+                             "${joinLevels} levels (DIVERGENCES.md VD-31)")
+          math(EXPR failures "${failures} + 1")
+        endif()
+        continue()
+      endif()
+      message(SEND_ERROR "${dump} ${s}: ${png} differs with the late pass on: it must be the "
+                         "same bytes")
+      math(EXPR failures "${failures} + 1")
     endforeach()
   endforeach()
 endforeach()
@@ -320,10 +360,10 @@ endif()
 if(compared EQUAL 0)
   message(FATAL_ERROR "rd_late_pass_ab: no target compared over ${ndumps} dumps")
 endif()
-if(NOT "${BACKEND}" STREQUAL "opengl" AND heldTotal EQUAL 0)
-  message(FATAL_ERROR "rd_late_pass_ab: ${heldTotal} crack fills held over ${ndumps} dumps: one "
-                      "at least expected")
+if(NOT "${BACKEND}" STREQUAL "opengl" AND (heldTotal EQUAL 0 OR joinTotal EQUAL 0))
+  message(FATAL_ERROR "rd_late_pass_ab: ${heldTotal} crack fills held and ${joinTotal} passes "
+                      "joined over ${ndumps} dumps: one of each at least expected")
 endif()
-message(STATUS "rd_late_pass_ab: ${compared} targets the same bytes over ${ndumps} dumps; "
+message(STATUS "rd_late_pass_ab: ${compared} targets the same bytes (or within VD-31's bound) over ${ndumps} dumps; "
                "${heldTotal} crack fills held into the aura's paste pass, ${joinTotal} passes "
                "joined by list 11's draws")
