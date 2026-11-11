@@ -5246,7 +5246,21 @@ typedef struct ShotSeen {
     uint32_t w, h;
 } ShotSeen;
 
-static ShotSeen s_shotA, s_shotB;
+static ShotSeen s_shotA, s_shotB, s_shotC;
+
+/* ICO_RD_SHOT_LATE (rd_shot_late.h): v NULL removes it */
+static void setLate(const char *v)
+{
+#ifdef _WIN32
+    _putenv_s("ICO_RD_SHOT_LATE", v ? v : "");
+#else
+    if (v) {
+        setenv("ICO_RD_SHOT_LATE", v, 1);
+    } else {
+        unsetenv("ICO_RD_SHOT_LATE");
+    }
+#endif
+}
 
 static void shotFn(uint8_t *rgba, uint32_t w, uint32_t h, void *user)
 {
@@ -5267,6 +5281,11 @@ static void shotForget(ShotSeen *seen)
 static void armShotA(void)
 {
     CHECK(rd_capture_shot(shotFn, &s_shotA), "shot: armed in the open frame");
+}
+
+static void armShotB(void)
+{
+    CHECK(rd_capture_shot(shotFn, &s_shotB), "shot: the late one armed in the open frame");
 }
 
 static void armDeferred(void)
@@ -5378,6 +5397,40 @@ static void checkShotAt(const char *dir, int crt)
         CHECK(diff == 0 && alpha == 0,
               "shot (crt %d): the present's pixels in the box (%zu differ, %zu not opaque)", crt,
               diff, alpha);
+    }
+    /* the state picture read at its slot's recycle (rd_shot_late.h, the
+       tile-based GPUs' path, forced here): no answer at its own present,
+       one within the frames in flight, byte for byte the old read's */
+    if (rhi_backend() == RHI_BACKEND_VULKAN && s_shotA.px) {
+        setLate("1");
+        shotForget(&s_shotB);
+        s_afterBegin = armShotB;
+        recordRichFrame(t, 1);
+        s_afterBegin = NULL;
+        const int atOwn = s_shotB.calls;
+        int frames = 1;
+        while (s_shotB.calls == 0 && frames <= RHI_FRAMES_IN_FLIGHT + 1) {
+            recordRichFrame(t, 1);
+            frames++;
+        }
+        CHECK(atOwn == 0 && s_shotB.calls == 1 && s_shotB.px && s_shotB.w == s_shotA.w &&
+                  s_shotB.h == s_shotA.h &&
+                  memcmp(s_shotB.px, s_shotA.px, (size_t)s_shotA.w * s_shotA.h * 4) == 0,
+              "shot (crt %d): read at the slot's recycle: %d at its present, %d calls after %d "
+              "frames, %ux%u, the same bytes as the read with a wait",
+              crt, atOwn, s_shotB.calls, frames, s_shotB.w, s_shotB.h);
+        /* replaced while pending: the pending one told NULL */
+        shotForget(&s_shotB);
+        s_afterBegin = armShotB;
+        recordRichFrame(t, 1);
+        s_afterBegin = NULL;
+        CHECK(s_shotB.calls == 0 && rd_capture_shot(shotFn, &s_shotC) && s_shotB.calls == 1 &&
+                  s_shotB.px == NULL,
+              "shot (crt %d): a pending late read replaced is told NULL", crt);
+        rd_capture_shot_cancel();
+        shotForget(&s_shotB);
+        shotForget(&s_shotC);
+        setLate(NULL);
     }
 
     /* armed before the frame began: the later frame's present drops it */

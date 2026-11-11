@@ -1150,3 +1150,12 @@ counters in the hot path.
   Whether the compositor could preempt the game's queue (issue 123's T2) and whether a stall could
   be placed on the CPU's clock if the polled wait were used again. The calibrated domains are
   listed whatever the submission wait; they are enabled only with the polled wait, as before.
+- **The pause picture without its wait** (`port/render/rd_shot_late.h`, `rd_present.c`): on
+  Vulkan on a tile-based GPU the pause menu's state picture is copied by the present's own list
+  into a readback buffer and read when that frame slot's fence has been waited for by the replay
+  that reuses it, as the skin check reads its readbacks. Issue 179's log had each pause's read-back
+  hold the render thread 77-79 ms (`rd: state picture: ... read back in 77.6 ms`), a one-shot
+  submission and a wait for the queue, after which the GPU idled 56.9 ms. Now: `rd: state picture:
+  1612x720 from the 1612x720 output (the box at 0,0), read at its slot's recycle 2 pictures later,
+  no wait (63.0 ms after its present)`. No new wait of any kind; a photo, a second request while one
+  is pending, and the other backends keep the old read.

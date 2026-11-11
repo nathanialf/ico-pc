@@ -30,6 +30,7 @@
 #include "rd_perf_clock.h"
 #include "rd_perf_gap.h"
 #include "rd_perf_rare.h"
+#include "rd_shot_late.h"
 #include "rd_vis.h"
 
 RdPerfRecord g_rdPerf;
@@ -1385,6 +1386,9 @@ void rd__perf_collect_gpu(void)
        the one rd__perf_end left there the last time the slot was used,
        RHI_FRAMES_IN_FLIGHT frames ago */
     const uint32_t slot = rhi_frame_slot();
+    if (g_rd.hasDevice) {
+        rd__shot_late_collect(slot); /* the state picture this slot copied (rd_shot_late.h) */
+    }
     if (!s_pendingValid[slot]) {
         return;
     }

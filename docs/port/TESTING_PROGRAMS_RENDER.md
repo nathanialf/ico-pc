@@ -1538,7 +1538,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   dropped at the shutdown; `checkShotDeferred`: the state host's deferred answer
   (`rd_capture_shot_arm`, `rd_capture_shot_take`) taken once with the box, no answer for a
   replaced or a cancelled request, a later frame's present dropping it as NULL, here and with the
-  renderer's own thread presenting (not on OpenGL); `checkOverlayThread`: both overlay layers
+  renderer's own thread presenting (not on OpenGL); the state picture read at its slot's recycle
+  (`rd_shot_late.h`, `ICO_RD_SHOT_LATE=1` on Vulkan): no answer at its own present, one within the
+  frames in flight, byte for byte the read with a wait, and a pending one replaced told NULL;
+  `checkOverlayThread`: both overlay layers
   (the main one drawing through port/ui's font in overlay mode) of a picture `rd_present_post`
   hands over are collected on the test's thread before it returns, never in a render-thread job,
   once a layer a present; the test's own text in the font's overlay mode while the picture may
