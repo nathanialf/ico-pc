@@ -12,6 +12,9 @@
  *   estimate   the same without calibrated clocks: the start from the
  *              wait's end; and calibrated clocks read across a counter
  *              restart (the pair older than the stamps) fall back to it;
+ *              the single submission wait's long wait (no trace) is
+ *              reported with its end after the last submit, a short one
+ *              is not;
  *   missing    recorded stamps that came back unwritten (the first one
  *              named), every one unwritten; a list never submitted: its
  *              stamps not recorded, the lists said apart;
@@ -145,13 +148,28 @@ static void testEstimate(void)
     rd_perf_clock_judge(&in, &v);
     /* 1.380 s less the 83 ms span is 1.297 s: 297 ms after the submit */
     CHECK(v.lateValid == 2 && near(v.lateMs, 297.0, 1e-6));
-    CHECK(v.report == false); /* a long wait with no trace, nothing else */
+    /* a long wait with no trace: the single submission wait's, reported */
+    CHECK(v.report == true);
+    CHECK(v.doneValid == 1 && near(v.doneMs, 378.0, 1e-6));
     char line[2048];
     rd_perf_clock_text(&in, &v, line, sizeof line);
     CHECK(strstr(line, "its first stamp about 297.0 ms after its first submit (from its wait's "
                        "end), the counter at 5.0 ms then; 2 submissions; waited 340.0 ms for it "
-                       "from 38.0 ms after its last submit (no trace: the wait did not pass 50 "
-                       "ms); all 6") != NULL);
+                       "from 38.0 ms after its last submit (no trace: the single submission wait "
+                       "reads nothing of its work while it runs); its work done about 378.0 ms "
+                       "after its last submit (the wait's end); all 6") != NULL);
+    /* a wait under the trace's start: not reported, the old words */
+    c.waitEndNs = 1070000000ull;
+    rd_perf_clock_judge(&in, &v);
+    CHECK(v.report == false && v.doneValid == 1 && near(v.doneMs, 68.0, 1e-6));
+    rd_perf_clock_text(&in, &v, line, sizeof line);
+    CHECK(strstr(line, "waited 30.0 ms for it from 38.0 ms after its last submit (no trace: the "
+                       "wait did not pass 50 ms); all 6") != NULL);
+    /* the work finished before the wait: the wait's start bounds its end */
+    c.waitEndNs = c.waitBeginNs;
+    rd_perf_clock_judge(&in, &v);
+    CHECK(v.doneValid == 2 && near(v.doneMs, 38.0, 1e-6) && v.waitMs == 0.0);
+    c.waitEndNs = 1380000000ull;
 
     /* calibrated clocks older than the stamps (the counter restarted after
        the pair): the wait's end instead */
