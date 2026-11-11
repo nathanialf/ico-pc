@@ -1,0 +1,69 @@
+# Dump list for rd_glow_light_ab (port/render/test/rd_glow_light_ab.cmake: the
+# glow's light plan against the chain drawn whole, ICO_RD_GLOW_LIGHT=0, at the
+# phone's setting, Original and Enhanced 2x 4:3).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  Every glow dump present on this machine
+# on 2026-11-11 (rd_replay_tool --list --no-device: a post sprite drawn into
+# WORK2), a .zip left out where its .rddump twin is listed.  Unlike the other
+# lists, a listed dump that is absent FAILS the test (the owner's rule for
+# v0.11.5: use what exists, never list what does not).
+#
+# the issue 163 frames (the lamps' meshes drawn into WORK2 after the mask)
+/primary/dev/ico-dumps/163/blended-750-a200.rddump
+/primary/dev/ico-dumps/163/frame-20261105-195124-v6171-blended.rddump
+/primary/dev/ico-dumps/163/frame-20261106-080033-v3910-blended.rddump
+# the issue 189 frame (the background marked: WORK2 holds the fill the mask kept)
+/primary/dev/ico-dumps/189/frame-20261104-120509-v130039-prev.rddump
+/primary/dev/ico-dumps/189/frame-20261104-120509-v130039.rddump
+# the PowerVR phone's frames (the v0.11.4 perf measurement's is v3677)
+/primary/dev/ico-dumps/phone/frame-20261022-232809-v5601.zip
+/primary/dev/ico-dumps/phone/rc4/frame-20261104-124548-v4861-blended.rddump
+/primary/dev/ico-dumps/phone/rc4/frame-20261104-124548-v4861-prev.rddump
+/primary/dev/ico-dumps/phone/rc4/frame-20261104-124548-v4861.rddump
+/primary/dev/ico-pc/build-host/tmp/v0114/evidence/pixel/frame-20261110-194925-v3677.zip
+# the boot corpus (the sun's fans on and off the picture, the lamps) and the puddle
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps.pre-rpost/boot/rd-00200.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps.pre-rpost/boot/rd-00400.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps.pre-rpost/boot/rd-00600.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps.pre-rpost/puddle/rd-00200.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps.pre-rpost/puddle/rd-00300.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00200.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00400.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00600.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/puddle/rd-00200.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/puddle/rd-00300.rddump
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/ripple/frame-20261024-094512-v13782.zip
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/ripple/frame-20261024-100436-v83439.zip
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/ripple/frame-20261024-100447-v84109.zip
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-off/dumps/rd-00200.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-off/dumps/rd-00250.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-off/dumps/rd-00300.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-off/dumps/rd-00350.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-off/dumps/rd-00400.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-off/dumps/rd-00450.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-off/dumps/rd-00500.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-off/dumps/rd-00550.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00200.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00250.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00300.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00350.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00400.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00450.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00500.rddump
+/primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00550.rddump
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/95/loss-20261015-100428-before.rddump
+/primary/dev/ico-pc/build-host/tmp/evidence-v079/95/loss-20261015-100428-lost.rddump
+/primary/dev/ico-pc/build-host/tmp/handoff-v078/dumps/frame-20261015-211816-v2386.rddump
+/primary/dev/ico-pc/build-host/tmp/handoff-v078/dumps/frame-20261015-222055-v2753.rddump
+/primary/dev/ico-pc/build-host/tmp/handoff-v078/dumps/frame-20261015-223424-v2585.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-123/r1027/loss/loss-20261027-130058-before.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-123/r1027/loss/loss-20261027-130058-lost.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181358-v1279.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/rc1/frame-20261013-181400-v1358.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/v073/frame-20261013-175314-v1881.rddump
+/primary/dev/ico-pc/build-host/tmp/issue-drafts/issue-91/v073/frame-20261013-175316-v1952.rddump
+/primary/dev/ico-pc/build-host/tmp/p/v8447_joined.rddump
+/primary/dev/ico-pc/build-host/tmp/v0114/evidence/211/report/loss-20261111-092901.zip
+/primary/dev/ico-pc/build-host/tmp/v082/evidence/issue-123/loss/loss-20261018-050352-before.rddump
+/primary/dev/ico-pc/build-host/tmp/v082/evidence/issue-123/loss/loss-20261018-050352-lost.rddump

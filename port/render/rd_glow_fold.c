@@ -649,6 +649,9 @@ void rd__glow_fold_scan_end(void)
                 "frame before it left undrawn: the fold is off from now on",
                 s_frameNo);
     }
+    if (rd__glow_light_planned()) {
+        return; /* the glow's light plan draws neither the fill nor the mask's chain (rd_glow_light.c) */
+    }
     const char *verdict = scanVerdict();
     if (verdict && !s_gf.glow) {
         return; /* no glow in the frame: nothing to count */

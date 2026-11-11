@@ -273,6 +273,31 @@ and the `window:` uploaded-KB line's `; N between-tick pictures pasted the tick'
 chain ([dev] glow_redraw)`. ctest `rd_replay_tool_glow_hold` and `build-host/tmp/v094/after/v2-ab.sh`
 are the A/B ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
+## The glow's buffers under the light plan
+
+Above 1x a glow frame without light in its chain is not drawn
+([RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)), so the work buffers are left as
+the chain would have left them in colour:
+
+| buffer | the chain leaves | the plan leaves |
+| --- | --- | --- |
+| WORK2 | RGB 0, the mask's alpha (192 on the marked background) | a lazy clear (0, 0, 0, 0) |
+| WORK2_PAD | the band's fill (0, 0, 0, 192) | a lazy clear of that colour |
+| WORK0 | RGB 0 (the last blur pass covers it), `pasteWork0ToFB`'s alpha | a lazy clear of that colour, drawn first by the next sprite that touches WORK0 (the aura's: the load op of its pass) |
+| WORK1 | RGB 0 over the first blur pass's rect, its glow edge strip and the sun's shrink, the blurred alpha there | that pass and the shrink drawn untextured in their source's colour: RGB 0 there, alpha 0; the rest as it was; the first pass not drawn when a dark plan left that rect zero and nothing wrote WORK1 since |
+| WORK3 | RGB 0 (the eye blur covers it), the eye blur's and the ghosts' alpha | a lazy clear (0, 0, 0, 0); a clear when the glow hold copies it |
+| WORK3_HELD | the hold's copy of WORK3 | the copy of the plan's WORK3 |
+
+A lazy clear (`port/render/rd_glow_light.c`) is drawn only where something could see the
+difference: before a later sprite of the same replay that touches the buffer (as a pending clear,
+so the load op of that sprite's pass when it draws into the buffer), at the start of a later
+replay whose first touch of the buffer is not a write covering it (a covering sprite or a clear:
+the next frame's fill, band, eye blur or reduction), and before a read of the buffer outside a
+replay (the replay tool's `--target` and `--pass-dump`, the
+tests; `rd_pass_cut.c rd__clear_skip_readback`). A replay that covers it first forgets it; a new
+texture or renderer holds none. The alphas differ from the chain's only where WORK2 kept the fill
+(VD-30), and nothing reads them before they are written again.
+
 ## The work clear
 
 `ICO_RD_WORK_CLEAR=RRGGBB` in the environment (the game), or `rd_replay_tool --work-clear RRGGBB`,

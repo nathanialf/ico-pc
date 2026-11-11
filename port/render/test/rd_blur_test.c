@@ -407,9 +407,12 @@ void prim_DispFan2D(Fan2D *f, int mode)
     RdPostParams p;
     memset(&p, 0, sizeof(p));
     const float r16 = s_fanR * 16.0f;
-    p.rect[0] = 32768.0f - r16;
+    /* s_fanWork2 2 (case glow_light): the fan beside the frame, off the
+       picture, as dispSun draws it for a sun just outside the view */
+    const float dx = s_fanWork2 == 2 ? (float)(gsFrame.w + 64) * 16.0f : 0.0f;
+    p.rect[0] = 32768.0f - r16 + dx;
     p.rect[1] = 32768.0f - r16;
-    p.rect[2] = 32768.0f + r16;
+    p.rect[2] = 32768.0f + r16 + dx;
     p.rect[3] = 32768.0f + r16;
     p.rgba[0] = (uint8_t)(s_fanCol >> 24);
     p.rgba[1] = (uint8_t)(s_fanCol >> 16);
@@ -4058,6 +4061,7 @@ static void checkPipelines(void)
 
 #include "rd_blur_aura_box_test.inc"
 #include "rd_blur_glow_fold_test.inc"
+#include "rd_blur_glow_light_test.inc"
 
 /* the weights are each case's seconds in a whole run (255 s at -j2 on 4 cores); the
    aura case (600 frames, each fed by the one before) is the shortest a shard can be */
@@ -4088,6 +4092,7 @@ static const IcoShardCase k_cases[] = {
     {"motion_blur_smooth_scaled", 2},
     {"aura_box", 30},
     {"glow_fold", 40},
+    {"glow_light", 20},
 };
 
 int main(int argc, char **argv)
@@ -4103,6 +4108,10 @@ int main(int argc, char **argv)
         }
     }
     rd__set_not_implemented_fatal(true); /* a stub command replayed stops the test */
+    /* the glow's light plan off but in its own case (glow_light): every other
+       case compares the glow's buffers with the CPU model in every channel,
+       and the plan may change their alpha (rd_blur_glow_light_test.inc) */
+    rd__glow_light_force(0);
     printf("rd_blur_test\n");
     setMatrices();
     systemStatus[0] = 1; /* PAL: 512 lines */
@@ -4267,6 +4276,9 @@ int main(int argc, char **argv)
     }
     if (ico_shard_take("glow_fold")) {
         checkGlowFold(); /* re-initialises rd (1x, 2x, 2364x1080, the 848 frame; rd_blur_glow_fold_test.inc) */
+    }
+    if (ico_shard_take("glow_light")) {
+        checkGlowLight(); /* re-initialises rd (1x, 2x, 2364x1080; rd_blur_glow_light_test.inc) */
     }
     if (ico_shard_finish() != 0) {
         return 1;

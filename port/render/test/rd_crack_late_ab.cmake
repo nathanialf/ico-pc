@@ -45,6 +45,10 @@
 # run whose stats place the fill later ("1 fills in the aura's paste pass" or "1 fills
 # after the glow's alpha") has at least one pass fewer.  A line whose dump
 # or baseline is missing is named and skipped; none compared, or no device: SKIP.
+# Every run sets ICO_RD_GLOW_LIGHT=0 (the glow's chain drawn whole, as the
+# baselines drew it): the light plan (rd_glow_light.c, VD-30) came after them
+# and changes the alpha of the glow's buffers and SCENE in frames with a
+# marked background; rd_glow_light_ab holds it against the chain drawn.
 # -DTOOL=<rd_replay_tool> -DLIST=<the list> -DPY=<python3> -DDIFF=<png_level_diff.py>
 # -DOUT=<a folder the test may write>
 set(MAX_LEVEL 64)
@@ -115,7 +119,7 @@ foreach(run IN LISTS runs)
   set(dir "${OUT}/${index}-${s}")
   file(REMOVE_RECURSE "${dir}")
   file(MAKE_DIRECTORY "${dir}")
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0
                           ICO_RD_CULL=off ${env_${s}} "${TOOL}" "${dump}" - --pass-dump "${dir}"
                           --stats ${args_${s}}
                   RESULT_VARIABLE rc OUTPUT_VARIABLE out ERROR_VARIABLE err)
@@ -144,7 +148,7 @@ foreach(run IN LISTS runs)
     set(pin "${dir}-pin")
     file(REMOVE_RECURSE "${pin}")
     file(MAKE_DIRECTORY "${pin}")
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0
                             ICO_RD_CULL=off ${env_${s}} ICO_RD_CRACK_PLACE=7 "${TOOL}" "${dump}" -
                             --pass-dump "${pin}" --stats ${args_${s}}
                     RESULT_VARIABLE rcPin OUTPUT_VARIABLE outPin ERROR_VARIABLE errPin)
@@ -254,7 +258,7 @@ foreach(run IN LISTS runs)
   set(nofill "${dir}-nofill")
   file(REMOVE_RECURSE "${nofill}")
   file(MAKE_DIRECTORY "${nofill}")
-  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0
                           ICO_RD_CULL=off ${env_${s}} ICO_RD_CRACK_FILL=0 "${TOOL}" "${dump}" -
                           --pass-dump "${nofill}" --stats ${args_${s}}
                   RESULT_VARIABLE rcNo OUTPUT_VARIABLE outNo ERROR_VARIABLE errNo)

@@ -68,6 +68,9 @@
 #     lamps' reason (their meshes draw into WORK2 after the mask in 3 of
 #     the 14 frames): any other reason fails;
 #   - at least one run folded at each setting where any was compared.
+# Every run sets ICO_RD_GLOW_LIGHT=0 (the chain drawn whole, as the
+# baselines and the WORK2 fold need it): the light plan (rd_glow_light.c,
+# VD-30) came after them; rd_glow_light_ab holds it against the chain drawn.
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DBASE_PHONE=<dir> -DBASE_DESK=<dir>
 # -DBASE_REFRESH=<dir> -DPY=<python3> -DDIFF=<png_level_diff.py>
 # -DOUT=<a folder the test may write>
@@ -160,7 +163,7 @@ foreach(dump IN LISTS dumps)
     set(dirNew "${OUT}/${name}-${s}")
     file(REMOVE_RECURSE "${dirNew}")
     file(MAKE_DIRECTORY "${dirNew}")
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0
                             ICO_RD_GLOW_FOLD=0
                             ${env_${s}} "${TOOL}" "${dump}" "${dirNew}/out.png" --pass-dump
                             "${dirNew}" --stats ${args_${s}}
@@ -264,7 +267,7 @@ foreach(dump IN LISTS dumps)
     set(dirFold "${OUT}/${name}-${s}-fold")
     file(REMOVE_RECURSE "${dirFold}")
     file(MAKE_DIRECTORY "${dirFold}")
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_BLEND=fixed ICO_RD_FADES_FOLD=0 ICO_RD_GLOW_LIGHT=0
                             ICO_RD_GLOW_FOLD=1
                             ${env_${s}} "${TOOL}" "${dump}" "${dirFold}/out.png" --pass-dump
                             "${dirFold}" --stats ${args_${s}}

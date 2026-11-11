@@ -79,3 +79,5 @@ if(ICO_RUN_TESTS)
     set_tests_properties(rd_ssaa_shadow_4096 PROPERTIES SKIP_RETURN_CODE 77
                                                         ENVIRONMENT "${_mss_4096}")
 endif()
+
+include(rd_glow_light.cmake) # the glow drawn only where it can add light, its A/B

@@ -134,6 +134,23 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `ICO_RD_GLOW_FOLD=1` and `--glow-fold-default on` (the key folds them); the forced frames as in
   the shard both times. In every shard a replay that folded the mask leaves WORK2 out of
   `compareAll` (the fold does not draw it; WORK0, its reduction, is compared).
+  Case glow_light (`rd_blur_glow_light_test.inc`): the glow drawn only where it can add light
+  ([RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)) at 1x, Enhanced 2x and the
+  phone's 2364 x 1080 with the full height: each frame drawn with the plan off (at 1x and 2x
+  against the CPU model) and replayed with it on (`rd__glow_light_force`), its targets read back
+  (the plan's lazy clears drawn first): dark with the marked background (the scene's top band)
+  and without it, the sun up with its fans off the picture (`s_fanWork2 = 2`: the fans' stand-in
+  beside the frame), the fans on it (whole, the fans' reason), the shine drawn into WORK2 after
+  the mask (lamps), post mode 4's grey fill (whole), a DATE sprite into SCENE after the paste
+  (whole, SCENE's alpha read), each ending with a sprite that rewrites SCENE's alpha; the plan
+  each frame takes checked, RGB of every target the chain's, the alpha too but on WORK1, WORK2,
+  WORK3 and SCENE in frames with the marked background, under dark at most one pass begun by the
+  chain (WORK1's zero draw, after the plan-off replay) and fewer glow passes than the chain's,
+  then the frame replayed with the plan again: no pass begun by the chain (one with the sun's
+  shrink) and the same bytes; one glow pass fewer under lamps; the grey fill refused for its own
+  reason; at 1x the plan off and every byte the chain's. Every other case runs with
+  the plan off (`rd__glow_light_force(0)` in `main`): they compare the glow's buffers with the
+  model in every channel.
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
   constant fold's channels over every blend mode, FIX, COLCLAMP, PABE and a set of RGBAQ against
   `gs_dst_channel` for every Cd and Ad, the premultiplied term through the fixed-function add and
@@ -952,7 +969,23 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   a run whose stats say `glow: WORK2 fold on: 1 folded` has at least one glow pass fewer, a kept
   one (only the lamps drawn into WORK2 after the mask may keep it: any other reason fails) as
   many; the folds reading the sun's fans' WORK2 counted; at each setting that ran, at least
-  one run folded ([RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction)).
+  one run folded ([RENDER_POST.md](RENDER_POST.md#the-glows-mask-in-its-reduction)). Its runs
+  set `ICO_RD_GLOW_LIGHT=0` (the chain drawn whole, as the baselines drew it; so do
+  `rd_crack_late_ab`'s).
+- `rd_glow_light_ab.cmake`: the glow's light plan
+  ([RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)) against the chain drawn whole
+  (`ICO_RD_GLOW_LIGHT=0`) on the 55 glow dumps of `tools/glow_light_dumps.txt` (machine-local,
+  every glow dump on the maintainer's machine; a listed dump that is absent fails), each replayed
+  twice with `--pass-dump --stats` at the PowerVR phone's profile on lavapipe
+  (`ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_PREPASS=0`, 2364x1080, Full height, Full pixel,
+  presented at 2364x1080), at Original 4:3 and at Enhanced 2x 4:3 presented at 1280x960: every
+  PNG's RGB 0 levels apart (`png_level_diff.py --channels RGB`), the alpha 0 levels on DISPLAY,
+  PRESENT and every target but WORK1, WORK2, WORK3, WORK3_HELD and SCENE, and on those too where
+  the whole run's WORK2 holds no alpha 192 (`--count-alpha 192`: no fill the mask kept); at
+  Original every PNG the same bytes and the plan off; under dark the stats' `N passes in the
+  chain` at most 1 (WORK1's zero draw in a fresh renderer) and `glow N passes` fewer than the
+  whole run's, one fewer under lamps, no more otherwise; at least one dark run at the phone's setting and
+  at Enhanced 2x (`rd_glow_light_ab`; SKIP without a device).
 - `rd_dst_usage_test.c`: the blend policy's footprint: by default only the fixed-function blend
   exists (`g_rd.dstModes` OFF, no destination-read layout, shader twin or target usage, no
   readable pass, both exact modes refused); with `ICO_RD_BLEND=attachment` only that mode's

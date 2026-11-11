@@ -324,6 +324,83 @@ between the mask and the reduction, WORK2 drawn or read elsewhere, the chain not
 could not take it. Tests: `rd_blur` (k) and its (r) scan, `rd_glow_cheap_ab`
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS_RENDER.md)).
 
+### The glow where it adds light
+
+List 7's glow (`ico2/sugipon/src/staticBlur.c` `makeFullScreenFlareBefore`, `After`,
+`pasteFullScreenFlare`) fills WORK2 (and its band WORK2_PAD) with RGBAQ (0, 0, 0, 192) in
+postEffect 1, 3, 6 and 7, draws the sun's fans into it when the sun is on screen (`dispSun`), the
+mask (SCENE's alpha, MODULATE by RGB 0), the lamps' meshes in the issue 163 rooms, reduces WORK2
+into WORK0, blurs WORK0 through WORK1 ten times, copies WORK0 into WORK3 (`eyeBlur`, with the
+sun's ghosts, shrink and tint when the sun is up), sets WORK0's alpha (`pasteWork0ToFB`) and adds
+WORK3 to SCENE (Cs * FIX + Cd, FIX 128). Every sprite after the fill is MODULATE or HIGHLIGHT with
+RGBAQ's alpha 0 per channel, so with RGB 0 in WORK2 every buffer's RGB stays 0 and the paste adds
+0. Only the fans and the lamps put light into WORK2. On the PowerVR phone the chain is 11.6 ms of
+a 32 ms picture in such a room (the mask's 2366 x 1080 pass 5.3 ms, the paste 3.1, twelve small
+passes 2.9); with the paste not drawn (`rd_replay_tool --nop 7:311`) the phone's own frame
+replays to the same bytes in every target and the present. What the chain does carry is an
+alpha: WORK2's is the mask's (192 on the background `cleanUpFB` marks, where the mask's alpha
+test keeps the fill; 0 elsewhere), and it reaches WORK1, WORK3 and, through the paste, SCENE.
+
+Above 1x (SCENE at a scale other than 1: the predicate `blurAbove1xSteps` takes; at 1x nothing
+changes, so Original keeps the PS2's bytes in every buffer), on every device class and backend,
+a scan in the store plan's walk of the lists (`port/render/rd_glow_light.c`, file comment) reads
+the chain in its known form, every command from the band's fill to the paste contiguous (band,
+fill, fans, mask, lamps, reduction, the blur pairs, the eye blur, the sun's sprites, the glow
+hold's copy, WORK0's alpha, the paste) and picks one plan:
+
+- **dark** (the fill RGB 0, no fan on the picture, no lamp): nothing of the chain is drawn. Each
+  buffer is left with the RGB the chain leaves: WORK2, its band and WORK3 as lazy clears (their
+  colours kept until something reads them: a later replay that touches them before covering
+  them, or a read outside a replay such as the replay tool's pictures, which draws the clear
+  first), WORK3 a clear instead when the glow hold copies it; WORK1 0 over the first blur pass's
+  rect and its glow edge strip (every later pass into WORK1 lies inside it) and over the sun's
+  shrink, those two sprites drawn untextured in the colour their source holds in the chain
+  (`rd_const_read.c`, the planned source), and not even drawn when a dark plan before left that
+  region zero and no replay wrote WORK1 since (a steady dark room); WORK0 (0, 0, 0, A) as a lazy
+  clear too (the last blur pass covers WORK0), which the first sprite after that touches WORK0
+  (the aura's, in play) draws first as the load op of its own pass. A buffer a command other than
+  a sprite touches later in the frame (the glow hold's copy of WORK3) gets its clear drawn at the
+  chain's place instead. So a dark room's chain begins no render pass once WORK1 is zero, one
+  (WORK1's) after a frame that drew the chain. The fans whose box misses the picture are not
+  drawn. SCENE is as the paste leaves it in RGB; its alpha is `cleanUpFB`'s (0, and 192 on the
+  marked background) where the paste wrote WORK3's;
+- **lamps** (the fill RGB 0, no fan on the picture, lamps drawn into WORK2 after the mask without
+  DATE or a blend on the destination's alpha): the fill drawn as (0, 0, 0, 0) and the mask not
+  drawn (it writes RGB 0 over a fill of RGB 0); the lamps and the rest of the chain as before;
+- **whole** (the chain as before), counted by reason: a grey fill (postEffect 4 and 5, the bloom),
+  any other form, the MSAA epoch, the sun's fans on the picture, the sun's branch with the lamps,
+  the sun's glare onto SCENE, a later command reading WORK1, WORK2 or WORK3, a command reading
+  SCENE's alpha (a texture of SCENE, DATE, a blend on Ad, a copy) before a sprite rewrites it whole
+  (the aura's paste or list 11's full-frame sprite does in every corpus frame), SCENE's alpha not
+  rewritten in the frame.
+
+The fans keep the chain whole: the sun's tint (the eye blur's last sprite, Cs * As + Cd) takes As
+from one texel of WORK1 at the sun, which the shrink copies from WORK3, the eye blur from WORK0,
+the blur pairs from the reduction of WORK2's alpha over their reach: so the mask decides WORK3's
+RGB wherever the blur reaches the sun, not only inside the fans' box, and a mask cut to that box
+would change the tint. The same holds for the lamps with the sun up.
+
+So every target's RGB is the chain's, byte for byte, and the alpha of WORK1, WORK2, WORK3,
+WORK3_HELD and SCENE (until it is rewritten) differs only where WORK2's alpha was not 0: on the
+marked background and its bilinear rim ([DIVERGENCES.md](DIVERGENCES.md), VD-30). A later frame
+that reads WORK1, WORK2 or WORK3 before the chain writes them, after a frame the plan left
+undrawn, turns the plan off from then on (logged). The WORK2 fold (above) stands down in a frame
+the plan takes. Skipping a draw does not move the crack fill, which the list loop places from
+the recorded commands. In the 55 glow dumps on the maintainer's machine the scan's rules, applied to
+their command lists by hand, take dark in 32 (the phone's frame among them), lamps in 6, and
+keep 17 whole: 15 for the sun's fans on the picture, 2 (the issue 189 frame and the one before
+it) because the anti-aliasing's copy reads SCENE before list 11's sprite rewrites its alpha;
+`rd_glow_light_ab` counts the plans the code takes. `ICO_RD_GLOW_LIGHT=0` draws the chain whole, the tests' A/B
+([TESTING.md](TESTING.md#environment-switches)); there is no setting.
+
+Lines: `rd: glow: light plan: above 1x nothing in frame N puts light into the glow ...` and
+`... frame N's light in the glow is the lamps' ...` once each, `rd: glow: light plan: the chain
+drawn whole: <reason> (<detail>; frame N; reported once for this reason)`, `rd: glow: light plan:
+frame N reads WORK1, WORK2 or WORK3 before ...: the plan is off from now on`; the 10 s block's
+`window: glow: light: N dark (P passes in their chains), L lamps (mask not drawn), K whole
+(counts by reason)`; `rd_replay_tool --stats` `stats: glow: light plan on|off: <plan>
+(<reason>); P passes in the chain, N lazy clears drawn`.
+
 ### The fades fold
 
 List 11 ends with the game's full-frame post sprites (`ico2/seki/src/GsBase.c`'s post pass order:

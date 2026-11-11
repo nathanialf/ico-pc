@@ -387,6 +387,10 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
      * touching WORK2; the passes' area, cut and plan read its sprites as
      * drawn, which only keeps more) */
     const bool glow = rd__glow_fold_scan_begin(f);
+    /* and the glow's light plan (rd_glow_light.c: which of the chain is
+     * drawn; the area, cut and plan read its commands as drawn, which only
+     * keeps more) */
+    const bool light = rd__glow_light_scan_begin(f);
     s_plan.n = s_plan.nUndef = 0;
     s_plan.full = false;
     s_plan.anyTouch = 0;
@@ -402,7 +406,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     g_rdPerf.storePlanMode = s_plan.mode;
     s_plan.scanFrame = f->number;
     const bool plan = s_plan.mode != 0;
-    if (!plan && !area && !cut && !glow) {
+    if (!plan && !area && !cut && !glow && !light) {
         return;
     }
     const bool fxDepth = plan && rd__effects_depth_wanted();
@@ -447,6 +451,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
             }
             if (glow) {
                 rd__glow_fold_scan_cmd(f, c, &st, state, ord);
+            }
+            if (light) {
+                rd__glow_light_scan_cmd(f, c, &st, state, ord);
             }
             if (state || !plan) {
                 continue;
@@ -528,6 +535,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     }
     if (cut) {
         rd__pass_cut_scan_end(ord);
+    }
+    if (light) {
+        rd__glow_light_scan_end(); /* the plan (rd_glow_light.c), before the fold's verdict */
     }
     if (glow) {
         rd__glow_fold_scan_end(); /* the verdict (rd_glow_fold.c) */

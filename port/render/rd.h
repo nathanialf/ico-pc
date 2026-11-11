@@ -2910,6 +2910,14 @@ typedef struct RdPerfRecord {
      * when the fold read WORK2 as the fill and the sun's fans left it (only
      * the mask's pass gone) */
     uint32_t glowFolded, glowKept, glowWhy, glowFoldRead;
+    /* The glow drawn only where it can add light (rd_glow_light.c): the
+     * plan of this replay's glow (RD_GLOW_LIGHT_*), why it was drawn whole
+     * (RD_GLOW_LIGHT_WHY_*), the lazy clears of the glow's buffers a plan
+     * left undrawn that were drawn since (read before covered), and the
+     * render passes begun from the chain's first command to its paste under
+     * a plan (dark: WORK1's zero draw where WORK1 is not zero already, and
+     * a clear a non-sprite command reads; 0 in a steady dark room) */
+    uint32_t glowLight, glowLightWhy, glowLightLazy, glowLightPasses;
     /* The aura's read of SCENE into FEED128 in two passes (rd_aura_box.c):
      * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
      * a replay; none while the game is paused) */
@@ -3212,6 +3220,48 @@ enum {
 };
 
 const char *rd_glow_fold_why_text(uint32_t why);
+
+/* RdPerfRecord.glowLight (rd_glow_light.c; docs/port/RENDER_POST.md, "The
+ * glow where it adds light"): NONE no glow in the replay, DARK the chain not
+ * drawn (no light in it), LAMPS the mask not drawn (the lamps' light alone),
+ * WHOLE the chain drawn as before (glowLightWhy says why), OFF a glow at 1x
+ * or with ICO_RD_GLOW_LIGHT=0 (not counted).  rd_glow_light_text and
+ * rd_glow_light_why_text give the words; rd_glow_light_line prints the
+ * window's 10 s clause "window: glow: light: ..." for the replays since its
+ * last call (nothing when none had a glow above 1x). */
+enum {
+    RD_GLOW_LIGHT_NONE,
+    RD_GLOW_LIGHT_DARK,
+    RD_GLOW_LIGHT_LAMPS,
+    RD_GLOW_LIGHT_WHOLE,
+    RD_GLOW_LIGHT_OFF,
+    RD_GLOW_LIGHT_COUNT
+};
+
+enum {
+    RD_GLOW_LIGHT_WHY_NONE,
+    RD_GLOW_LIGHT_WHY_GREY,
+    RD_GLOW_LIGHT_WHY_FORM,
+    RD_GLOW_LIGHT_WHY_MSAA,
+    RD_GLOW_LIGHT_WHY_FANS,
+    RD_GLOW_LIGHT_WHY_SUN,
+    RD_GLOW_LIGHT_WHY_SCENE,
+    RD_GLOW_LIGHT_WHY_WORK,
+    RD_GLOW_LIGHT_WHY_OFF,
+    RD_GLOW_LIGHT_WHY_COUNT
+};
+
+const char *rd_glow_light_text(uint32_t plan);
+const char *rd_glow_light_why_text(uint32_t why);
+void rd_glow_light_line(void);
+/* the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off (the tests' A/B, no config
+ * key); rd__glow_light_force sets it (-1 the environment's) and forgets the
+ * plan's off and the plan frame before */
+bool rd__glow_light_on(void);
+void rd__glow_light_force(int on);
+/* the render passes begun in the last plan's chain, each named after the
+ * command it followed and the pass open then (the tests print it) */
+const char *rd__glow_light_debug(void);
 
 /* The CPU time of the replay finished last (its RdPerfRecord.totalMs,
  * popped or not; a picture handed over is still running when the step
