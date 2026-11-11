@@ -552,6 +552,10 @@ void rd__blur_post_planned(Replay *r, const RdFrame *f, const RdCmd *c);
  * serial there, so the passes the repeat begins are not counted as the
  * glow chain's (RdPerfRecord.glowLightPasses) */
 void rd__glow_light_mark(const Replay *r);
+/* rd_pass_area.c rd__pass_area_begin (every render pass rd_replay.c
+ * beginPass begins): a pass begun in the light plan's chain, named in
+ * rd__glow_light_debug (its target, size, colour load op, the command after) */
+void rd__glow_light_pass(uint32_t cid, const RdTargetRec *t, int load);
 /* rd_const_read.c: fx_tfx of texel t under RGBAQ col and the sprite's
  * flags (TFX in bits 1..2, TCC), the shader's integers */
 void rd__const_tfx(const uint8_t t[4], const uint8_t col[4], uint32_t flags, uint8_t out[4]);

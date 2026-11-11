@@ -190,6 +190,7 @@ static struct {
     uint32_t preSerial; /* rd__glow_light_mark's: before SCENE's border repeat */
     uint32_t preCount;  /* the marks this replay (the hook's own one included) */
     uint8_t spanLastEl;
+    bool inRepeat;         /* between rd__glow_light_mark and the hook */
     uint32_t glowLightOwn; /* the span's passes but SCENE's border repeat */
     /* the plan of this replay */
     uint8_t plan;
@@ -236,21 +237,6 @@ static const char *const kEl[] = {
     "band",        "fill",     "fan",        "mask",   "lamp",      "reduction",     "blur pass 1",
     "blur pass 2", "eye blur", "sun sprite", "shrink", "hold copy", "WORK0's alpha", "paste"};
 
-static void dbgAdd(const Replay *r, uint32_t n, const char *what, uint8_t el)
-{
-    if (!n || s_dbgAt >= sizeof(s_dbg) - 1) {
-        return;
-    }
-    const RdTargetRec *t = r->passOpen ? rd__target_rec(r->passColor) : NULL;
-    const int m =
-        snprintf(s_dbg + s_dbgAt, sizeof(s_dbg) - s_dbgAt, "%s%u %s %s (open now: %s %ux%u)",
-                 s_dbgAt ? "; " : "", n, what, el < sizeof(kEl) / sizeof(kEl[0]) ? kEl[el] : "?",
-                 t ? rd__target_name(r->passColor) : "none", t ? t->tw : 0u, t ? t->th : 0u);
-    if (m > 0) {
-        s_dbgAt += (size_t)m < sizeof(s_dbg) - s_dbgAt ? (size_t)m : sizeof(s_dbg) - 1 - s_dbgAt;
-    }
-}
-
 const char *rd__glow_light_debug(void)
 {
     return s_dbg;
@@ -260,6 +246,26 @@ void rd__glow_light_mark(const Replay *r)
 {
     s_gl.preSerial = r->passSerial;
     s_gl.preCount++;
+    s_gl.inRepeat = true; /* until the hook: SCENE's border repeat */
+}
+
+void rd__glow_light_pass(uint32_t cid, const RdTargetRec *t, int load)
+{
+    if (!s_gl.spanOpen || s_dbgAt >= sizeof(s_dbg) - 1) {
+        return;
+    }
+    const uint8_t el = s_gl.spanLastEl;
+    const int m =
+        snprintf(s_dbg + s_dbgAt, sizeof(s_dbg) - s_dbgAt, "%s%s %ux%u (%s load) %s %s",
+                 s_dbgAt ? "; " : "", rd__target_name(cid), t ? t->tw : 0u, t ? t->th : 0u,
+                 load == RHI_LOAD_CLEAR  ? "clear"
+                 : load == RHI_LOAD_LOAD ? "load"
+                                         : "no",
+                 s_gl.inRepeat ? "in SCENE's border repeat, after the" : "after the",
+                 el < sizeof(kEl) / sizeof(kEl[0]) ? kEl[el] : "?");
+    if (m > 0) {
+        s_dbgAt += (size_t)m < sizeof(s_dbg) - s_dbgAt ? (size_t)m : sizeof(s_dbg) - 1 - s_dbgAt;
+    }
 }
 
 static const char *const kPlan[RD_GLOW_LIGHT_COUNT] = {
@@ -1482,6 +1488,7 @@ static void lazyTouch(Replay *r, const RdFrame *f, const RdCmd *c)
 bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     GlCmd *e = find(c);
+    s_gl.inRepeat = false;
     if (e && e == &s_gl.cmd[0] && !s_gl.spanOpen) {
         s_gl.spanOpen = true; /* the chain's passes counted from here */
         s_gl.spanFrom = s_gl.spanLast = r->passSerial;
@@ -1495,8 +1502,6 @@ bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
          * before this sprite (rd_blur_border.c sceneRepeatDue: SCENE's, not
          * the glow's: not counted) */
         const uint32_t pre = s_gl.preSerial >= s_gl.spanLast ? s_gl.preSerial : s_gl.spanLast;
-        dbgAdd(r, pre - s_gl.spanLast, "after the", s_gl.spanLastEl);
-        dbgAdd(r, r->passSerial - pre, "in SCENE's border repeat before the", e->el);
         s_gl.glowLightOwn += pre - s_gl.spanLast;
         s_gl.spanLast = r->passSerial;
         s_gl.spanLastEl = e->el;
