@@ -1499,7 +1499,12 @@ box has pixels on both axes (never at scale 1), `aa_reduce_ps` box-averages DISP
 EASU and RCAS draw it at the box's size first ([FSR 1.0 upscaling](#fsr-10-upscaling)); with an effects program
 and `effects_depth` `blit_depth_ps` writes the scene's depth beside it (`port/render/rd_present.c`).
 The UI box is the 4:3 part of the presentation box (`port/render/rd_present.c` (`rd_ui_box_of`)).
-Movies draw their own box ([FMV.md](FMV.md#the-picture-on-screen)).
+Movies draw their own box ([FMV.md](FMV.md#the-picture-on-screen)). Where the present from SCENE is on (off by
+default: [RENDER_POST.md](RENDER_POST.md#the-present-from-scene-off-by-default-until-measured)) and
+the replay left the reduction undrawn, the box blit samples SCENE through the reduction's steps
+(`blit_scene_ps`) instead of DISPLAY; any of the steps above that reads DISPLAY itself (the CRT
+filter, Downsampling, the doubled lines, the effects depth, a capture, the reduce, FSR 1.0) has
+DISPLAY drawn from SCENE first (`rd__present_scene_present_why`, `rd__present_scene_draw`).
 
 **The colour adjustment.** Options > Picture's Gamma, Picture brightness, Contrast and Saturation
 (`RdSettings.toneGamma`, `toneBrightness`, `toneContrast`, `toneSaturation`, 1..100) are PCSX2's

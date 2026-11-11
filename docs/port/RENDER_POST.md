@@ -453,6 +453,119 @@ a frame differing from the last only in a fade's level could rerun the reduction
 alone (the still re-present shows a picture again only on an unchanged frame hash,
 `port/render/rd_reshow.c`).
 
+### The present from SCENE (off by default until measured)
+
+Not byte for byte, so committed off: `RD_PRESENT_SCENE_DEFAULT` (`port/render/rd_present_scene.c`,
+the one constant) is 0 and the owner turns it on after seeing the measurement of the corpus
+(`build-host/tmp/v0115/present_scene_measure.sh`, machine-local, its report beside it);
+`ICO_RD_PRESENT_SCENE=0|1` is the A/B's override ([TESTING.md](TESTING.md)), no config key. It
+has no [DIVERGENCES.md](DIVERGENCES.md) row while it is off.
+
+**What it saves.** Above 1x the reduction (list 12: DISPLAY's black clear, then SCENE's textured
+sprite, [The fades fold](#the-fades-fold)) is the hardware sprite (`port/render/rd_blur.c`
+`rd__blur_screen_fallback`), and at a scale that is not whole its sample is moved onto a SCENE
+texel's centre (`rd__blur_snap_verts`). With full height DISPLAY has SCENE's texels, so there the
+reduction stores DISPLAY(x, y) = g(SCENE(x + dx, y + dy)): g its own arithmetic on one texel (the
+fades fold's steps, `sprite.hlsl` `sprite_fold` without bars, then the texture function with the
+tint), (dx, dy) whole texels. Measured on the PowerVR phone's dump at 2364 x 1080 (frame v3677 of
+`build-host/tmp/v0115/evidence/pixel`): (1, 0), on every texel, the edges as the sprite's CLAMP holds
+them, g the brightness's white at 7/128. The present's box blit then samples DISPLAY with the
+hardware filter (2343 texels onto 2364 pixels there). The reduction's pass, 9.7 MB stored at that
+size (1.32 ms a picture in the phone's log of 2026-11-10), is the cost: where nothing but that box blit
+reads DISPLAY before DISPLAY is written again, the reduction is not drawn and the box blit samples
+SCENE through g instead (`port/shaders/blit.hlsl` `blit_scene_ps`): the place in DISPLAY it would
+have sampled, clamped to DISPLAY's texel centres (its CLAMP), moved by (dx, dy), SCENE's taps with
+the same filter, then g. DISPLAY is then owed.
+
+**The map** (`rd__present_scene_axis`, each axis): DISPLAY texel x's centre is GS coordinate
+(x + od) / sd (the exact viewport puts GS coordinate g at texel g sd - od + 1/2, `rd_replay.c`
+`rd__frame_group_ex`); the sprite's U there less the sample shift (sd - 1) / (2 sd) GS pixels
+(`setUvShift`, `snapAxis`) lands at SCENE's texel coordinate u ss - os (`common.hlsli`
+`gs_uv_norm`). For the reduction's pair (corners a quarter pixel before pixel 0, U 0.5 there, one
+GS texel a pixel; V two a row) that is x + round(s / 4) + 1/2 across at a scale s that is not whole
+(x + s / 4 + 1/2 at a whole one: half a texel at 2x, so 2x is not taken) and y + 1/2 down at full
+height (one SCENE row a DISPLAY row; two at half height, not taken). The pair is taken when every
+DISPLAY texel's centre is covered and samples a SCENE centre within 1/1024 of a texel (the float
+error of the corners' UVs is about 2 x 10^-4 there: a neighbour's weight that small moves a sample
+less than a quarter level), the offset the same at both ends.
+
+**The bound.** Today's present is R(sum w_i g(S_i)), the present from SCENE g(R(sum w_i S_i)): R
+the filter's rounding to a level, w_i its weights (summing to 1), S_i SCENE's taps. A step is g(c) =
+A(c) + e(c) with A affine (slope a = 1 - k / 128 for the step's k) and e its rounding, in (-1/2,
+1/2] under the fixed-function blend's nearest level, in (-1, 0] under an exact blend's floor: an
+interval one level long either way. Then the old present is A(x) + e1 + r1 with x = sum w_i S_i, e1
+the weighted mean of the taps' e (in the same interval) and |r1| <= 1/2; the new one is A(x + r2) +
+e2 = A(x) + a r2 + e2 with |r2| <= 1/2 and e2 in the interval. The difference a r2 + (e2 - e1) - r1
+is under a / 2 + 1 + 1/2 < 2: at most one level, wherever the sampler weighs SCENE's taps as it
+weighed DISPLAY's. A step of k 0 or 128 (and the tint 0x80, the texture function's identity) has e 0
+and a 0 or 1: the same level. Above 1x the fades fold takes at most one step between levels a row,
+so the bound holds for every fold it makes. The moved coordinate is computed in floats: where the
+sampler's weight then rounds to another step (8-bit fractions: 1/256 of a texel), the filtered
+value moves by up to |S_i - S_j| / 256, under one more level: two levels at most on such hardware.
+A Picture tone row scales a difference by its slope. `rd_present_scene_test` checks the model (one
+level, every pair of levels and weight; a bilinear's four taps at random weights);
+`rd_present_scene_ab` holds the corpus to two.
+
+The conditions (each keeps the reduction, counted with its reason, `rd_present_scene.h`
+`RD_PS_WHY_*`; when in doubt the reduction is drawn):
+
+- the switch; a device and `blit_scene_ps` in the shader table (`g_rd.fs`); no pass window
+  (`g_rdWin.first`: the tool's bisect reads targets mid-frame);
+- the hardware sprite (scale 1, the Original preset and 1x keep the GS sprite model); no MSAA
+  (`rd_aa_samples`); no GS state as shader data (`rd__uber_on`); no upscaler set
+  (`RdSettings.upscale`: FSR 1.0 reads DISPLAY, a temporal one takes SCENE at the reduction,
+  `rd__upscale_point_on`); not the display layer (`rd__layer_on`);
+- the present reads DISPLAY in its box blit alone (`rd_present.c`
+  `rd__present_scene_present_why`): no CRT filter, no Downsampling, no doubled lines (full height),
+  no effects depth, no capture armed or pending, no box average of DISPLAY into the window
+  (`reduceApplies`);
+- the border open (`rd__replay_border_open`: the scissor the whole target, CLAMP on both axes)
+  without the exact width's repeated outer columns (`rd_blur_border.c` `drawStrips`);
+- the pair's form (`planPair`): the black sprite, then only state, NOPs and deferred text, then
+  the textured sprite into DISPLAY reading SCENE's colour (PSMCT32), MODULATE or DECAL with a flat
+  tint of 0x80, no blend, DATE, alpha test or FBA, the colour mask whole, no Z test or write, no
+  field or UV offset, over every GS pixel (`extendFullFrame` leaves it) and every DISPLAY texel;
+  the map above on both axes; the fades fold, if planned, at the textured sprite and without bars;
+- nothing after the textured sprite in the frame touches DISPLAY or SCENE (a draw into or from
+  either, a copy, a clear, a command not known; the deferred text's quads aside).
+
+**The owed DISPLAY.** Every other reader gets DISPLAY drawn first from the same SCENE by the same
+arithmetic (`blit_scene_ps` one texel a pixel by Load: the reduction's bytes, which
+`rd_present_scene_ab` holds DISPLAY to): a later replay's frame read once at its start
+(`rd__present_scene_begin`, from `replayFrame` after the store plan's scan, `rd__present_scene_settle`)
+draws it in the replay's list when a command reads DISPLAY before DISPLAY is written whole (a keep
+frame's KEEP sprite, the motion blur's DISPLAY, the interpolation's held copy at the head, the
+water's block of FBP 0) or when the frame draws on SCENE without writing DISPLAY again; the
+reduction's black sprite over the whole of DISPLAY, or a clear of it, first drops the debt; a frame
+touching neither (the still re-present's empty keep frame, `rd_reshow.c`) keeps it, and its
+present samples SCENE again. A read outside a replay (`rd__read_target`: the F12 dump, a save
+state's picture, the tests and the replay tool's PNGs; `rd_display_probe`) draws it in a frame of
+its own; a present that cannot read SCENE after all (a capture armed since the replay) draws it in
+the present's list first. SCENE is that frame's then: only a replay draws on it and every replay
+settles the debt before its first command; its texture and generation are checked, and a SCENE
+made again with DISPLAY kept loses the picture (said; the switch off from then on). A new context
+owes nothing (`rd__present_scene_init`). The pipelines (`blit_scene_ps` on both outputs) are in
+the start-up set while the switch is on; every backend draws it from the shared module (SPIR-V on
+Vulkan and MoltenVK, DXIL on Direct3D 12, FXC's run-time compile of `blit.hlsl` on Direct3D 11, the
+SPIRV-Cross GLSL on OpenGL). No new pass kind.
+
+The record counts it (`RdPerfRecord.presentSceneSkipped`, `presentSceneShown`, `presentSceneKept`
+and `presentSceneWhy`, `presentSceneDrawn` and `presentSceneDrawWhy`); `rd_replay_tool --stats`
+prints `stats: present from SCENE on|off: S reductions not drawn, P presents from SCENE, K kept
+(why), D drawn on demand (why)`; the log says:
+
+```
+rd: present from SCENE: off (the default until it is measured): the reduction is drawn into DISPLAY and the present reads DISPLAY
+rd: present from SCENE: the reduction not drawn (frame N): DISPLAY is SCENE through the reduction's steps at a whole offset (1, 0) texels (SCENE 2364x1080 at 2.788x2.411, 2 fold steps); the present samples SCENE, every other reader gets DISPLAY drawn on demand (reported once)
+rd: present from SCENE: the reduction drawn into DISPLAY: <why> (frame N; reported once for this reason)
+rd: present from SCENE: DISPLAY drawn on demand from SCENE (frame N's): <why> (the first 8, then every 100th: K so far)
+rd: present from SCENE: 0.98 a replay (0.98 presents from SCENE), 0.02 through DISPLAY (<n why>, ...); D drawn on demand (<n why>, ...) (M replays, 10 s)
+```
+
+the last every 10 s while the switch is on. Tests: `rd_present_scene` (the map, the bound's model,
+every reason, the debt's verdicts on recorded frames) and `rd_present_scene_ab` (the corpus,
+[TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+
 ### The motion blur under Smooth
 
 Options > Effects > Motion blur: Smooth (`[video] effect_motion_blur_mode = "smooth"` with
