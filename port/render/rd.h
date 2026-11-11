@@ -2965,6 +2965,9 @@ typedef struct RdPerfRecord {
      * drawn there (latePassDeferred, of latePassDeferTexels SCENE texels),
      * drawn early in a pass of its own after all (latePassDeferEarly) */
     uint32_t latePassDeferred, latePassDeferTexels, latePassDeferEarly;
+    /* the targets of glowLightLazy's clears, bit k: WORK2_PAD, WORK2, WORK3,
+     * WORK0 (rd__glow_light_lazy_text's order) */
+    uint32_t glowLightLazyWhich;
     /* The aura's read of SCENE into FEED128 in two passes (rd_aura_box.c):
      * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
      * a replay; none while the game is paused) */
@@ -3361,6 +3364,12 @@ uint32_t rd__date_cut_last_runs(uint32_t *start, uint32_t *end, uint32_t max);
 void rd__date_cut_pop(const RdPerfRecord *r);
 void rd__date_cut_text(char *out, size_t n, size_t *at);
 const char *rd__date_retake_word(int why);
+/* this replay's render passes on WORK2_PAD, WORK2, WORK3 or WORK0 (named,
+ * an RdTargetId), *cleared those that load a CLEAR (the tests) */
+uint32_t rd__glow_light_passes_on(int named, uint32_t *cleared);
+/* "N (WORK2 n, ...)" of the lazy clears drawn per target n[4] (WORK2_PAD,
+ * WORK2, WORK3, WORK0): the 10 s line's and --stats' words */
+void rd__glow_light_lazy_text(char *buf, size_t size, const uint64_t n[4]);
 
 /* The CPU time of the replay finished last (its RdPerfRecord.totalMs,
  * popped or not; a picture handed over is still running when the step
