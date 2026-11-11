@@ -306,4 +306,16 @@ double rd_perf_rank_hist_median(const uint32_t *hist);
 double rd_perf_rank_hist_worst(const uint32_t *hist);
 const char *rd_perf_rank_hist_more(const uint32_t *hist);
 
+/* What the per-pass stamps cost, from the block's own pictures (issue 179:
+   on a job-manager Mali a timestamp may end a job chain): the GPU spans of
+   the pictures timed pass by pass (stamped) against those with the list
+   stamps only (plain), each set's median; the sets are sorted in place.
+   "pass timing's cost: GPU span median 67.4 ms with every pass stamped (37
+   pictures), 64.1 ms with the list stamps only (111 pictures): +3.3 ms (an
+   estimate: different pictures of one block)"; 0 and nothing written when
+   either set has fewer than RD_PERF_RANK_STAMP_MIN */
+#define RD_PERF_RANK_STAMP_MIN 5u
+int rd_perf_rank_stamp_cost_text(float *stamped, uint32_t ns, float *plain, uint32_t np, char *buf,
+                                 size_t n);
+
 #endif /* RD_PERF_RANK_H */

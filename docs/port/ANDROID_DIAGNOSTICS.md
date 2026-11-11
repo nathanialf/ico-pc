@@ -1129,3 +1129,13 @@ counters in the hot path.
   "before list 0" beside a 6.06 ms list 0), so `perf classes`, `perf ranked` and `GPU top passes`
   give `before list 0 + list 0` (the split stays in the CSV), and the ranked line never names
   `uploads` as a saving there. The histogram's top bin prints as `worst 256 ms or more`.
+- **The every-replay pass timing, bounded** (`port/platform/window_stall.c`): a present that
+  blocks over 50 ms still arms it (`window: every replay timed pass by pass from here on ...`), but
+  it now ends at the end of the block in which a stalled replay's passes were compared, or after 3
+  blocks with no present blocking: `window: pass timing: back to one replay every 250 ms (the
+  stalled replay compared; N times of the run); a present that blocks arms it again`. Issue 179's
+  and issue 123's logs had it armed for the rest of the run (19-46 stamps a picture). While both
+  kinds of picture are in a block, its cost is measured from the pictures themselves:
+  `window: pass timing's cost: GPU span median 67.4 ms with every pass stamped (37 pictures), 64.1
+  ms with the list stamps only (111 pictures): +3.3 ms (an estimate: different pictures of one
+  block)`.

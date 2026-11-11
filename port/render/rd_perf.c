@@ -2127,7 +2127,9 @@ int rd_perf_passes_arm_text(uint32_t replay, double presentMs, const char *backe
 {
     return snprintf(buf, n,
                     "every replay timed pass by pass from here on %s (a present blocked %.0f ms "
-                    "at replay %u): the next stalled replay's passes are compared with the block's",
+                    "at replay %u): the next stalled replay's passes are compared with the block's "
+                    "(then one replay every 250 ms again, or after 3 blocks with no present "
+                    "blocking)",
                     backend ? backend : "?", presentMs, replay);
 }
 

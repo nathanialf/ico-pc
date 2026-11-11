@@ -881,6 +881,31 @@ double rd_perf_rank_hist_median(const uint32_t *hist)
     return (double)RD_PERF_RANK_BINS;
 }
 
+static int cmpFloat(const void *a, const void *b);
+
+static double medianOf(float *v, uint32_t n)
+{
+    qsort(v, n, sizeof(v[0]), cmpFloat);
+    return n % 2u ? (double)v[n / 2u] : ((double)v[n / 2u - 1u] + (double)v[n / 2u]) / 2.0;
+}
+
+int rd_perf_rank_stamp_cost_text(float *stamped, uint32_t ns, float *plain, uint32_t np, char *buf,
+                                 size_t n)
+{
+    if (n > 0) {
+        buf[0] = '\0';
+    }
+    if (ns < RD_PERF_RANK_STAMP_MIN || np < RD_PERF_RANK_STAMP_MIN) {
+        return 0;
+    }
+    const double a = medianOf(stamped, ns), b = medianOf(plain, np);
+    return snprintf(buf, n,
+                    "pass timing's cost: GPU span median %.1f ms with every pass stamped (%u "
+                    "pictures), %.1f ms with the list stamps only (%u pictures): %+.1f ms (an "
+                    "estimate: different pictures of one block)",
+                    a, ns, b, np, a - b);
+}
+
 const char *rd_perf_rank_hist_more(const uint32_t *hist)
 {
     return hist[RD_PERF_RANK_BINS - 1] ? " or more" : "";

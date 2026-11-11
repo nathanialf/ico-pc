@@ -311,6 +311,17 @@ static void testGpu(void)
         rd_perf_rank_scene_text(&h, &in, &v, sl, sizeof sl);
         CHECK_IN(sl, "worst 256 ms or more");
     }
+    /* the stamps' cost: two sets' medians, none under 5 pictures */
+    {
+        float st[5] = {68.0f, 66.0f, 67.4f, 70.0f, 65.0f};
+        float pl[6] = {64.0f, 64.2f, 63.0f, 66.0f, 64.0f, 60.0f};
+        char sc[256];
+        CHECK(rd_perf_rank_stamp_cost_text(st, 5, pl, 6, sc, sizeof sc) > 0);
+        CHECK_STR(sc, "pass timing's cost: GPU span median 67.4 ms with every pass stamped (5 "
+                      "pictures), 64.0 ms with the list stamps only (6 pictures): +3.4 ms (an "
+                      "estimate: different pictures of one block)");
+        CHECK(rd_perf_rank_stamp_cost_text(st, 4, pl, 6, sc, sizeof sc) == 0 && sc[0] == '\0');
+    }
 
     rd_perf_rank_rates_text(&b, &rt, line, sizeof line);
     printf("%s\n", line);

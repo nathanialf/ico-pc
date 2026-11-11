@@ -1429,7 +1429,8 @@ static void checkPassTexts(void)
     rd_perf_passes_arm_text(2941, 359.4, "Vulkan", buf, sizeof(buf));
     CHECK(strcmp(buf, "every replay timed pass by pass from here on Vulkan (a present blocked "
                       "359 ms at replay 2941): the next stalled replay's passes are compared "
-                      "with the block's") == 0,
+                      "with the block's (then one replay every 250 ms again, or after 3 blocks "
+                      "with no present blocking)") == 0,
           "arm line: %s", buf);
     /* the arm's backend gate: Vulkan (and MoltenVK) with a present split
        only; never OpenGL (each armed stamp reads the GL clock) or Direct3D */
