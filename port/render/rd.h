@@ -2912,9 +2912,12 @@ typedef struct RdPerfRecord {
     uint32_t glowFolded, glowKept, glowWhy, glowFoldRead;
     /* The glow drawn only where it can add light (rd_glow_light.c): the
      * plan of this replay's glow (RD_GLOW_LIGHT_*), why it was drawn whole
-     * (RD_GLOW_LIGHT_WHY_*), and the lazy clears of the glow's buffers a
-     * plan left undrawn that were drawn since (read before covered) */
-    uint32_t glowLight, glowLightWhy, glowLightLazy;
+     * (RD_GLOW_LIGHT_WHY_*), the lazy clears of the glow's buffers a plan
+     * left undrawn that were drawn since (read before covered), and the
+     * render passes begun from the chain's first command to its paste under
+     * a plan (dark: WORK1's zero draw where WORK1 is not zero already, and
+     * a clear a non-sprite command reads; 0 in a steady dark room) */
+    uint32_t glowLight, glowLightWhy, glowLightLazy, glowLightPasses;
     /* The aura's read of SCENE into FEED128 in two passes (rd_aura_box.c):
      * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
      * a replay; none while the game is paused) */

@@ -18,9 +18,14 @@
 #     marked background, --count-alpha 192), the only place the plan may
 #     change an alpha (rd_glow_light.c's header);
 #   - at orig every PNG the same bytes and the plan said off.
-# The stats ("glow N passes", "glow: light plan on: <plan>"): a dark run at
-# most 2 glow passes, a lamps run at least one fewer than the whole run, any
-# other at most as many; at least one dark run at the phone's setting and at
+# The stats ("glow N passes", "glow: light plan on: <plan>; N passes in the
+# chain"): a dark run's chain begins at most one pass (WORK1's zero draw over
+# the first blur pass's rect, its strip and the sun's shrink: a fresh
+# renderer's WORK1 is not known to be zero; WORK2, WORK2_PAD, WORK3 and WORK0
+# are lazy clears, WORK0's drawn as the load of the aura's pass where the aura
+# runs) and its glow passes are fewer than the whole run's (cleanUpFB's
+# sprites stay: they are SCENE's, in the fog's pass on the phone's profile), a
+# lamps run at least one fewer than the whole run, any other at most as many; at least one dark run at the phone's setting and at
 # Enhanced 2x (the phone's own frame v3677 among them).  No device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DPY=<python3>
 # -DDIFF=<png_level_diff.py> -DOUT=<a folder the test may write>
@@ -59,6 +64,7 @@ set(args_enh2x43 --enhanced --aspect 4:3 --resolution 2x --present 1280x960)
 set(env_enh2x43 "")
 set(glowRe "glow ([0-9]+) passes")
 set(planRe "glow: light plan (on|off): ([a-z]+)")
+set(chainRe "; ([0-9]+) passes in the chain,")
 set(diffRe "png_level_diff: [0-9]+ x [0-9]+, [0-9]+ channels: [0-9]+ equal, [0-9]+ one level apart, [0-9]+ more \\(largest ([0-9]+)\\), ([0-9]+) pixels differ")
 set(keptRe "png_level_diff: [0-9]+ x [0-9]+, ([0-9]+) pixels with alpha 192")
 set(alphaFree WORK1.png WORK2.png WORK3.png WORK3_HELD.png SCENE.png)
@@ -132,11 +138,16 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     set(plan "${CMAKE_MATCH_2}")
+    set(chainP 0)
+    if(pflat MATCHES "${chainRe}")
+      set(chainP "${CMAKE_MATCH_1}")
+    endif()
     # the passes
     if(plan STREQUAL "dark")
       math(EXPR dark_${s} "${dark_${s}} + 1")
-      if(glowP GREATER 2)
-        message(SEND_ERROR "${name} ${s}: dark, ${glowP} glow passes (want at most 2)")
+      if(chainP GREATER 1 OR NOT glowP LESS glowW)
+        message(SEND_ERROR "${name} ${s}: dark, ${chainP} passes in the chain (want at most 1), "
+                           "${glowP} glow passes against ${glowW} whole (want fewer)")
         math(EXPR failures "${failures} + 1")
       endif()
     elseif(plan STREQUAL "lamps")
@@ -211,7 +222,8 @@ foreach(dump IN LISTS dumps)
       endif()
       math(EXPR alphaDiffer "${alphaDiffer} + 1")
     endforeach()
-    message(STATUS "${name} ${s}: plan ${plan}; glow ${glowW} -> ${glowP} passes; ${n} targets, "
+    message(STATUS "${name} ${s}: plan ${plan}; glow ${glowW} -> ${glowP} passes (${chainP} in "
+                   "the chain); ${n} targets, "
                    "RGB the same, ${alphaDiffer} with the alpha changed (WORK2 kept ${kept} fill "
                    "pixels)")
   endforeach()

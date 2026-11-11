@@ -15,7 +15,8 @@
  *   dark, sky      post mode 1, the sun off, the scene's top band left at
  *                  the clear's Z (the background cleanUpFB marks): DARK, RGB
  *                  the chain's in every target, the alpha too but on WORK1,
- *                  WORK2, WORK3 and SCENE; at most 2 glow passes;
+ *                  WORK2, WORK3 and SCENE; at most one pass begun by the
+ *                  chain (WORK1's zero draw), none when replayed again;
  *   dark, no sky   the frame covered at the face's Z: DARK, every byte the
  *                  chain's;
  *   sun, fans off  the sun on (the eye blur's ghosts, shrink and tint), its
@@ -26,7 +27,9 @@
  *   lamps          the shine drawn into WORK2 after the mask (case (e)'s), the
  *                  sun off: LAMPS, as the dark frame with the sky, one glow
  *                  pass fewer;
- *   grey           post mode 4 (the bloom's fill RGB 128): WHOLE, grey;
+ *   grey           post mode 4 (the bloom's fill RGB 128): WHOLE for the grey
+ *                  fill's reason (its blur passes also add RGBAQ's alpha, a
+ *                  form the scan refuses: the fill is judged first);
  *   DATE reader    the dark frame with a DATE sprite into SCENE after the
  *                  paste: WHOLE, SCENE's alpha read;
  * each frame ending with a sprite that rewrites SCENE's alpha whole, as the
@@ -193,9 +196,8 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
     CHECK(rd__replay_frame(f, 0, false), "%s: replay", what);
     rhi_wait_idle();
     const uint32_t plan = g_rdPerf.glowLight, why = g_rdPerf.glowLightWhy;
-    const uint32_t passes = g_rdPerf.glowPasses;
+    const uint32_t passes = g_rdPerf.glowPasses, chainPasses = g_rdPerf.glowLightPasses;
     glRead(0);
-    rd__glow_light_force(-1);
     uint32_t want = RD_GLOW_LIGHT_DARK, wantWhy = RD_GLOW_LIGHT_WHY_NONE;
     if (!above1x) {
         want = RD_GLOW_LIGHT_OFF;
@@ -224,19 +226,52 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
         (plan == RD_GLOW_LIGHT_DARK || plan == RD_GLOW_LIGHT_LAMPS) && k != GL_DARK;
     int rgb = 0, a = 0;
     glDiffer(what, alphaFree, &rgb, &a);
+    uint32_t again = 0;
     if (plan == RD_GLOW_LIGHT_DARK) {
-        CHECK(passes <= 2u, "%s: %u glow passes under DARK (the chain %u)", what, passes,
+        /* the passes the dark chain begins (RdPerfRecord.glowLightPasses):
+         * WORK1's zero draw over the first blur pass's rect, its glow edge
+         * strip and the sun's shrink, in one pass on WORK1, because the
+         * replay before drew the chain whole and WORK1 holds its alpha;
+         * WORK2, WORK2_PAD, WORK3 and WORK0 are lazy clears (no pass: the
+         * reads above draw them).  The other glow passes of the frame are
+         * cleanUpFB's two sprites and the test's SCENE sprite after the
+         * paste, not the chain's: fewer than the chain's in total */
+        CHECK(chainPasses <= 1u, "%s: %u passes in the dark chain (want at most WORK1's)", what,
+              chainPasses);
+        CHECK(passes < passesChain, "%s: %u glow passes under DARK, the chain %u", what, passes,
               passesChain);
+        /* again with the plan: WORK1's region is zero already (no replay
+           wrote WORK1 since), so the chain begins no pass; the sun's shrink
+           (its rect not the first pass's) still one */
+        rhi_wait_idle();
+        CHECK(rd__replay_frame(f, 0, false), "%s: replay again", what);
+        rhi_wait_idle();
+        again = g_rdPerf.glowLightPasses;
+        const uint32_t againPlan = g_rdPerf.glowLight;
+        glRead(0);
+        CHECK(againPlan == RD_GLOW_LIGHT_DARK, "%s again: plan %s", what,
+              rd_glow_light_text(againPlan));
+        CHECK(again <= (k == GL_SUN_OFF ? 1u : 0u),
+              "%s again: %u passes in the dark chain (want %s)", what, again,
+              k == GL_SUN_OFF ? "at most the shrink's" : "none");
+        int rgb2 = 0, a2 = 0;
+        char what2[160];
+        snprintf(what2, sizeof(what2), "%s again", what);
+        glDiffer(what2, alphaFree, &rgb2, &a2);
+        rgb += rgb2;
+        a += a2;
     } else if (plan == RD_GLOW_LIGHT_LAMPS) {
         CHECK(passes + 1u <= passesChain, "%s: %u glow passes under LAMPS, the chain %u", what,
               passes, passesChain);
     } else {
         CHECK(passes <= passesChain, "%s: %u glow passes, the chain %u", what, passes, passesChain);
     }
-    printf("  %s: %s%s%s%s; glow %u -> %u passes; %d RGB and %d alpha bytes apart\n", what,
-           rd_glow_light_text(plan), plan == RD_GLOW_LIGHT_WHOLE ? " (" : "",
+    rd__glow_light_force(-1);
+    printf("  %s: %s%s%s%s; glow %u -> %u passes (%u in the chain, %u replayed again); %d RGB "
+           "and %d alpha bytes apart\n",
+           what, rd_glow_light_text(plan), plan == RD_GLOW_LIGHT_WHOLE ? " (" : "",
            plan == RD_GLOW_LIGHT_WHOLE ? rd_glow_light_why_text(why) : "",
-           plan == RD_GLOW_LIGHT_WHOLE ? ")" : "", passesChain, passes, rgb, a);
+           plan == RD_GLOW_LIGHT_WHOLE ? ")" : "", passesChain, passes, chainPasses, again, rgb, a);
 }
 
 static void checkGlowLight(void)

@@ -42,8 +42,15 @@
  *          and its glow edge strip (the union of every pass into it: their
  *          rects nest) and over the sun's shrink, those sprites drawn with
  *          their source's colour planned (rd_const_read.c: untextured, in
- *          their own coverage); WORK0 (0, 0, 0, A) by pasteWork0ToFB's
- *          sprite drawn as that clear (the last blur pass covered WORK0).
+ *          their own coverage), the first pass not even that when a dark
+ *          plan left its rect zero and nothing wrote WORK1 since (s_w1);
+ *          WORK0 (0, 0, 0, A), pasteWork0ToFB's (the last blur pass covered
+ *          WORK0), a lazy clear too, which the next sprite that touches
+ *          WORK0 draws first (lazyTouch: a pending clear, the load op of
+ *          that sprite's pass: the aura's in play).  A buffer a command
+ *          other than a sprite touches later (the hold's copy of WORK3)
+ *          gets its clear at the chain's place.  So the chain begins no
+ *          pass in a steady dark room (RdPerfRecord.glowLightPasses).
  *          The fans whose box misses the target are not drawn
  *          (rd__glow_light_skip, rd_replay.c doScreen).  SCENE is as the
  *          paste leaves it in RGB; its alpha is cleanUpFB's (0, 192 on the
@@ -145,8 +152,10 @@ enum {
     PH_FAIL
 };
 
-/* the targets a lazy clear may hold (the band, WORK2, WORK3) */
-enum { LZ_PAD, LZ_W2, LZ_W3, LZ_COUNT };
+/* the targets a lazy clear may hold (the band, WORK2, WORK3, WORK0) */
+enum { LZ_PAD, LZ_W2, LZ_W3, LZ_W0, LZ_COUNT };
+
+static uint32_t lazyId(int k);
 
 /* the first touch of a lazy target in the frame: none, a write covering
  * it (a clear, a covering sprite), anything else */
@@ -164,6 +173,18 @@ static struct {
     uint32_t n, pairs, lamps;
     GlCmd cmd[GL_MAX];
     uint8_t first[LZ_COUNT];
+    /* a command the replay does not hand to rd__glow_light_sprite (not a
+     * post sprite: a copy, a screen draw, a mesh) touches lazy target k
+     * after the chain began: its clear cannot wait for a sprite to draw it */
+    bool unhooked[LZ_COUNT];
+    bool w1Before, w1After; /* WORK1 written outside the chain before it, after it */
+    bool chainSeen;         /* the chain's first command was walked */
+    float p1Rect[4];        /* the first blur pass's rect (12.4), its target's GS width */
+    uint32_t p1GsW;
+    /* the replay: the pass serial at the chain's first command, the passes
+     * begun from there to the paste (RdPerfRecord.glowLightPasses) */
+    bool spanOpen;
+    uint32_t spanFrom;
     /* the plan of this replay */
     uint8_t plan;
     uint32_t replay;
@@ -179,7 +200,17 @@ static struct {
     bool on;
     uint32_t id, tex;
     float col[4];
+    uint8_t rgba[4];
 } s_lazy[LZ_COUNT];
+
+/* WORK1's region a dark plan zeroed, still zero: its texture, the first
+ * blur pass's rect and the GS width it was drawn at (no replay wrote WORK1
+ * since but the dark plans' own zero draws) */
+static struct {
+    bool valid;
+    uint32_t tex, gsW;
+    float rect[4];
+} s_w1;
 
 static bool s_off;       /* a frame read the alphas a plan frame left */
 static bool s_stale;     /* the last replay with a glow applied a plan */
@@ -188,6 +219,7 @@ static int s_force = -1; /* rd__glow_light_force: -1 the environment's */
 /* the 10 s line's counts since the last line, per plan and reason */
 static uint64_t s_count[RD_GLOW_LIGHT_COUNT];
 static uint64_t s_whyCount[RD_GLOW_LIGHT_WHY_COUNT];
+static uint64_t s_darkPasses; /* the passes the dark plans' chains began */
 
 static const char *const kPlan[RD_GLOW_LIGHT_COUNT] = {
     [RD_GLOW_LIGHT_NONE] = "no glow",
@@ -561,8 +593,10 @@ static GlCmd *add(const RdCmd *c, uint32_t ord, uint8_t el)
  * anything else) */
 static void noteFirst(const RdFrame *f, const RdCmd *c, const RdStateBlock *st)
 {
-    const uint32_t ids[LZ_COUNT] = {idOf(RD_TARGET_WORK2_PAD), idOf(RD_TARGET_WORK2),
-                                    idOf(RD_TARGET_WORK3)};
+    uint32_t ids[LZ_COUNT];
+    for (int k = 0; k < LZ_COUNT; k++) {
+        ids[k] = lazyId(k);
+    }
     for (int k = 0; k < LZ_COUNT; k++) {
         if (s_gl.first[k] != FT_NONE || !ids[k]) {
             continue;
@@ -593,7 +627,11 @@ bool rd__glow_light_scan_begin(const RdFrame *f)
     s_gl.n = s_gl.pairs = s_gl.lamps = 0;
     for (int k = 0; k < LZ_COUNT; k++) {
         s_gl.first[k] = FT_NONE;
+        s_gl.unhooked[k] = false;
     }
+    s_gl.w1Before = s_gl.w1After = s_gl.chainSeen = s_gl.spanOpen = false;
+    s_gl.p1GsW = 0;
+    g_rdPerf.glowLightPasses = 0;
     g_rdPerf.glowLight = RD_GLOW_LIGHT_NONE;
     g_rdPerf.glowLightWhy = RD_GLOW_LIGHT_WHY_NONE;
     g_rdPerf.glowLightLazy = 0;
@@ -605,13 +643,8 @@ bool rd__glow_light_scan_begin(const RdFrame *f)
     return true;
 }
 
-void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
-                             uint32_t ord)
+static void scanStep(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, uint32_t ord)
 {
-    if (!s_gl.scanning || state || c->type == RDC_NOP || c->type == RDC_OVERLAY_TEXT) {
-        return;
-    }
-    noteFirst(f, c, st);
     const uint32_t w0 = idOf(RD_TARGET_WORK0), w1 = idOf(RD_TARGET_WORK1);
     const uint32_t w2 = idOf(RD_TARGET_WORK2), w3 = idOf(RD_TARGET_WORK3);
     const uint32_t pad = idOf(RD_TARGET_WORK2_PAD), scene = idOf(RD_TARGET_SCENE);
@@ -720,6 +753,10 @@ void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
                 return;
             }
             memcpy(e->rect, p.rect, sizeof(e->rect));
+            if (!s_gl.p1GsW) {
+                memcpy(s_gl.p1Rect, p.rect, sizeof(s_gl.p1Rect));
+                s_gl.p1GsW = st->gsW;
+            }
             s_gl.phase = PH_P1;
             return;
         }
@@ -856,11 +893,70 @@ fill:
         return;
     }
     if (p.rgba[0] || p.rgba[1] || p.rgba[2]) {
-        s_gl.grey = true; /* the bloom: light in the fill */
+        /* the bloom (postEffect 4 and 5): light in the fill, and its blur
+         * passes add RGBAQ's alpha: the chain is drawn whole, said as such
+         * before any later form refuses it */
+        s_gl.grey = true;
+        fail(RD_GLOW_LIGHT_WHY_GREY, "WORK2's fill is grey");
+        return;
     }
     e->target = w2;
     spriteColour(d, &p, e->col);
     s_gl.phase = PH_FILL;
+}
+
+void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
+                             uint32_t ord)
+{
+    if (!s_gl.scanning || state || c->type == RDC_NOP || c->type == RDC_OVERLAY_TEXT) {
+        return;
+    }
+    noteFirst(f, c, st);
+    const uint32_t n0 = s_gl.n;
+    const bool before = !s_gl.chainSeen;
+    scanStep(f, c, st, ord);
+    if (s_gl.n > n0) {
+        s_gl.chainSeen = true;
+        return; /* one of the chain's commands */
+    }
+    if (writesTarget(c, st, idOf(RD_TARGET_WORK1))) {
+        if (before) {
+            s_gl.w1Before = true;
+        } else {
+            s_gl.w1After = true;
+        }
+    }
+    if (!s_gl.chainSeen || (c->type == RDC_POST_STUB && rd__is_blur_kind(c->b[0]))) {
+        return; /* before the chain, or a sprite rd__glow_light_sprite sees */
+    }
+    for (int k = 0; k < LZ_COUNT; k++) {
+        const uint32_t id = lazyId(k);
+        if (readsTarget(c, st, id) || writesTarget(c, st, id) || st->depth == id) {
+            s_gl.unhooked[k] = true;
+        }
+    }
+}
+
+/* WORK1's zero region still zero over this frame's first blur pass */
+static bool w1Zero(void)
+{
+    const RdTargetRec *t = rd__target_rec(idOf(RD_TARGET_WORK1));
+    return s_w1.valid && t && t->color.id == s_w1.tex && !t->clearPending && !s_gl.w1Before &&
+           s_w1.gsW == s_gl.p1GsW && memcmp(s_w1.rect, s_gl.p1Rect, sizeof(s_w1.rect)) == 0;
+}
+
+/* WORK1's state for the replays after this one */
+static void w1Track(uint8_t plan)
+{
+    const RdTargetRec *t = rd__target_rec(idOf(RD_TARGET_WORK1));
+    if (plan == RD_GLOW_LIGHT_DARK && !s_gl.w1After && t && t->color.id && s_gl.p1GsW) {
+        s_w1.valid = true; /* zeroed now, or zero already */
+        s_w1.tex = t->color.id;
+        s_w1.gsW = s_gl.p1GsW;
+        memcpy(s_w1.rect, s_gl.p1Rect, sizeof(s_w1.rect));
+    } else if (plan != RD_GLOW_LIGHT_NONE || s_gl.w1Before || s_gl.w1After) {
+        s_w1.valid = false; /* the chain or another draw wrote WORK1 */
+    }
 }
 
 /* the planned acts of the elements under plan */
@@ -885,15 +981,18 @@ static void planActs(uint8_t plan)
         }
         switch (e->el) {
         case E_PAD:
-            e->act = e->cover ? ACT_LAZY : ACT_DRAW;
+            e->act = !e->cover ? ACT_DRAW : s_gl.unhooked[LZ_PAD] ? ACT_CLEAR : ACT_LAZY;
             break;
         case E_FILL:
-            e->act = ACT_LAZY;
+            e->act = s_gl.unhooked[LZ_W2] ? ACT_CLEAR : ACT_LAZY;
             e->target = w2;
             e->col[3] = 0; /* the mask's alpha where no background is marked */
             break;
         case E_P1:
-            e->act = firstP1 ? ACT_PLAN : ACT_SKIP;
+            /* the first pass zeroes WORK1 over the rect every pass into it
+             * lies in: not drawn when a dark plan before left that region
+             * zero and nothing wrote WORK1 since */
+            e->act = firstP1 && !w1Zero() ? ACT_PLAN : ACT_SKIP;
             e->target = w0;
             firstP1 = false;
             break;
@@ -902,12 +1001,16 @@ static void planActs(uint8_t plan)
             e->target = w3;
             break;
         case E_EYE:
-            e->act = hold ? ACT_CLEAR : ACT_LAZY;
+            e->act = hold || s_gl.unhooked[LZ_W3] ? ACT_CLEAR : ACT_LAZY;
             e->target = w3;
             memset(e->col, 0, sizeof(e->col));
             break;
         case E_W0:
-            e->act = ACT_CLEAR;
+            /* WORK0 (0, 0, 0, A) lazily: the first sprite after that touches
+             * it draws the clear first, as the load of its own pass (the
+             * aura's, in play), else a later replay or a read does */
+            e->act = s_gl.unhooked[LZ_W0] ? ACT_CLEAR : ACT_LAZY;
+            e->target = w0;
             break;
         case E_HOLD:
         case E_LAMP:
@@ -985,12 +1088,14 @@ void rd__glow_light_scan_end(void)
     s_gl.scanned = true;
     s_gl.scanReplay = g_rd.replayCounter;
     if (!s_gl.glow) {
+        w1Track(RD_GLOW_LIGHT_NONE);
         return; /* no glow: nothing planned or counted */
     }
     const RdTargetRec *sc = rd__target_rec(idOf(RD_TARGET_SCENE));
     const bool above1x = sc && (sc->sx != 1.0f || sc->sy != 1.0f);
     if (!above1x || !rd__glow_light_on() || g_rdWin.first) {
         g_rdPerf.glowLight = RD_GLOW_LIGHT_OFF;
+        w1Track(RD_GLOW_LIGHT_OFF);
         return; /* Original at 1x: the PS2's bytes in every buffer */
     }
     if (s_gl.readFirst && s_stale && !s_off) {
@@ -1043,6 +1148,7 @@ void rd__glow_light_scan_end(void)
     if (plan != RD_GLOW_LIGHT_WHOLE) {
         planActs(plan);
     }
+    w1Track(plan);
     logOnce(plan, why, detail);
 }
 
@@ -1067,15 +1173,21 @@ static GlCmd *find(const RdCmd *c)
     return NULL;
 }
 
+static uint32_t lazyId(int k)
+{
+    static const int kNamed[LZ_COUNT] = {RD_TARGET_WORK2_PAD, RD_TARGET_WORK2, RD_TARGET_WORK3,
+                                         RD_TARGET_WORK0};
+    return k >= 0 && k < LZ_COUNT ? idOf(kNamed[k]) : 0u;
+}
+
 static int lazySlot(uint32_t id)
 {
-    if (id == idOf(RD_TARGET_WORK2_PAD)) {
-        return LZ_PAD;
+    for (int k = 0; k < LZ_COUNT; k++) {
+        if (id && lazyId(k) == id) {
+            return k;
+        }
     }
-    if (id == idOf(RD_TARGET_WORK2)) {
-        return LZ_W2;
-    }
-    return id == idOf(RD_TARGET_WORK3) ? LZ_W3 : -1;
+    return -1;
 }
 
 /* a lazy clear noted: target id holds col until it is read; false when it
@@ -1092,6 +1204,7 @@ static bool lazyNote(uint32_t id, const uint8_t col[4])
     s_lazy[k].tex = t->color.id;
     for (int i = 0; i < 4; i++) {
         s_lazy[k].col[i] = (float)col[i] / 255.0f;
+        s_lazy[k].rgba[i] = col[i];
     }
     return true;
 }
@@ -1126,9 +1239,7 @@ static bool planLazies(int k)
     if (!rd__glow_light_planned()) {
         return false;
     }
-    const uint32_t id = k == LZ_PAD  ? idOf(RD_TARGET_WORK2_PAD)
-                        : k == LZ_W2 ? idOf(RD_TARGET_WORK2)
-                                     : idOf(RD_TARGET_WORK3);
+    const uint32_t id = lazyId(k);
     for (uint32_t i = 0; i < s_gl.n; i++) {
         if (s_gl.cmd[i].act == ACT_LAZY && s_gl.cmd[i].target == id) {
             return true;
@@ -1180,6 +1291,7 @@ void rd__glow_light_readback(uint32_t id)
 void rd__glow_light_reset(void)
 {
     memset(s_lazy, 0, sizeof(s_lazy));
+    memset(&s_w1, 0, sizeof(s_w1));
     s_stale = false;
 }
 
@@ -1239,10 +1351,98 @@ static void drawClear(Replay *r, const RdFrame *f, const RdCmd *c, const GlCmd *
     drawAs(r, f, c, p, &st);
 }
 
+/* lazy clear k drawn now as a covering untextured sprite without a blend
+ * (rd_replay.c blurSpriteClears makes it a pending clear: the load op of
+ * the next pass on the target, the sprite's that touches it) */
+static void realise(Replay *r, const RdFrame *f, const RdCmd *c, int k)
+{
+    RdTargetRec *t = rd__target_rec(s_lazy[k].id);
+    s_lazy[k].on = false;
+    if (!t || t->color.id != s_lazy[k].tex || t->clearPending) {
+        return; /* a new texture: cleared before the walk */
+    }
+    RdStateBlock st = r->st;
+    st.ds.texEnabled = 0;
+    st.ds.abe = 0;
+    st.ds.fba = 0;
+    st.ds.test.ate = 0;
+    st.ds.test.date = RD_DATE_OFF;
+    st.ds.test.zte = 0;
+    st.ds.zwrite = RD_ZWRITE_OFF;
+    st.ds.colorMask = 0xF;
+    st.ds.fbmsk = 0;
+    st.tex = 0;
+    st.color = s_lazy[k].id;
+    st.depth = 0;
+    st.gsW = t->w;
+    st.gsH = t->h;
+    st.useOffset = 0;
+    st.scissor[0] = st.scissor[1] = 0;
+    st.scissor[2] = (int32_t)t->w - 1;
+    st.scissor[3] = (int32_t)t->h - 1;
+    int32_t ox16, oy16;
+    origin16(&st, &ox16, &oy16);
+    RdPostRec p;
+    memset(&p, 0, sizeof(p));
+    p.rect[0] = (float)ox16;
+    p.rect[1] = (float)oy16;
+    p.rect[2] = (float)(ox16 + 16 * (int32_t)t->w);
+    p.rect[3] = (float)(oy16 + 16 * (int32_t)t->h);
+    memcpy(p.rgba, s_lazy[k].rgba, sizeof(p.rgba));
+    p.scalar[0] = p.scalar[1] = 1024.0f;
+    p.scalar[2] = 1.0f;
+    p.lutOffset = ~0u;
+    RdCmd sc = *c;
+    sc.type = RDC_POST_STUB;
+    sc.b[0] = RD_POST_FLARE;
+    const int half = r->halfAdded;
+    r->halfAdded = 0; /* a work buffer: no frame head's half pixel */
+    drawAs(r, f, &sc, &p, &st);
+    r->halfAdded = half;
+    g_rdPerf.glowLightLazy++;
+}
+
+/* a sprite the plan draws as recorded (or not a chain's) that touches a
+ * lazy target: a covering write that does not read it forgets the clear,
+ * anything else has it drawn first */
+static void lazyTouch(Replay *r, const RdFrame *f, const RdCmd *c)
+{
+    for (int k = 0; k < LZ_COUNT; k++) {
+        if (!s_lazy[k].on) {
+            continue;
+        }
+        const uint32_t id = s_lazy[k].id;
+        const bool reads =
+            texTarget(&r->st) == id || r->st.depth == id ||
+            (r->st.color == id && (r->st.ds.test.date != RD_DATE_OFF || blendReadsAd(&r->st.ds)));
+        if (!reads && r->st.color != id) {
+            continue;
+        }
+        RdPostRec p;
+        if (!reads && coverWrite(f, c, &r->st, &p)) {
+            s_lazy[k].on = false; /* every texel written again, nothing read */
+            continue;
+        }
+        realise(r, f, c, k);
+    }
+}
+
 bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     GlCmd *e = find(c);
+    if (e && e == &s_gl.cmd[0] && !s_gl.spanOpen) {
+        s_gl.spanOpen = true; /* the chain's passes counted from here */
+        s_gl.spanFrom = r->passSerial;
+    }
+    if (e && e->el == E_PASTE && s_gl.spanOpen) {
+        s_gl.spanOpen = false;
+        g_rdPerf.glowLightPasses = r->passSerial - s_gl.spanFrom;
+        if (s_gl.plan == RD_GLOW_LIGHT_DARK) {
+            s_darkPasses += g_rdPerf.glowLightPasses;
+        }
+    }
     if (!e || e->act == ACT_DRAW) {
+        lazyTouch(r, f, c);
         return false;
     }
     RdPostRec p;
@@ -1286,6 +1486,7 @@ void rd_glow_light_line(void)
     const uint64_t dark = s_count[RD_GLOW_LIGHT_DARK], lamps = s_count[RD_GLOW_LIGHT_LAMPS];
     const uint64_t whole = s_count[RD_GLOW_LIGHT_WHOLE];
     if (dark + lamps + whole == 0) {
+        s_darkPasses = 0;
         memset(s_count, 0, sizeof(s_count));
         memset(s_whyCount, 0, sizeof(s_whyCount));
         return;
@@ -1303,9 +1504,12 @@ void rd_glow_light_line(void)
         }
         at += (size_t)m;
     }
-    fprintf(stderr, "window: glow: light: %llu dark, %llu lamps (mask not drawn), %llu whole%s%s\n",
-            (unsigned long long)dark, (unsigned long long)lamps, (unsigned long long)whole, why,
-            at ? ")" : "");
+    fprintf(stderr,
+            "window: glow: light: %llu dark (%llu passes in their chains), %llu lamps (mask not "
+            "drawn), %llu whole%s%s\n",
+            (unsigned long long)dark, (unsigned long long)s_darkPasses, (unsigned long long)lamps,
+            (unsigned long long)whole, why, at ? ")" : "");
+    s_darkPasses = 0;
     memset(s_count, 0, sizeof(s_count));
     memset(s_whyCount, 0, sizeof(s_whyCount));
 }
