@@ -76,6 +76,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_cache_name.h"
+#include "rd_made_outside.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_pipe_finish.h"
@@ -1866,7 +1867,9 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
     RhiStats st0, st1;
     rhiPipeCounts(&st0);
     const double t0 = rd__now_ms();
+    rd__made_outside_key_begin(); /* its own line below, not rd_made_outside.c's */
     RhiPipeline p = createPipeline(k);
+    rd__made_outside_key_end();
     const float ms = (float)(rd__now_ms() - t0);
     s_createMs += ms;
     if (p.id && s_lazy.on) {

@@ -332,7 +332,10 @@ void rd__vu_skin_twins_set(int on);
  * scheduled probe goes back to every 100 ms on Turnip; a twin event twins
  * every skinned draw again, until RD_SKIN_THIN_REPLAYS more clean replays.
  * Not in mode 2 (every command, the tool's and the A/Bs').  The game's
- * mode (1) only. */
+ * mode (1) only.  On a tile-based phone GPU (RhiLimits.tilePhone) the twins
+ * start thinned (rd_vu_skin_background), the one a picture through the
+ * draw's own pipeline where that is its twin's form, and an event re-arms
+ * them as above. */
 #define RD_SKIN_THIN_REPLAYS 2000u
 /* Under the careful rule (rd_vu_skin_background with a reason: the
  * start-up set stopped for memory on Qualcomm's own driver, issue 123's

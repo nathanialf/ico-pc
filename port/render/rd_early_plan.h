@@ -20,7 +20,8 @@
  * chunk if it still fits.  The bound: half of the free memory above the
  * free-memory floor (port/platform/memory_floor.h) where the system says
  * how much is free (Android), else half of the adapter's free video memory
- * where it says (Direct3D), else none (the record's own limit).  Nothing
+ * where it says (Direct3D; Vulkan through VK_EXT_memory_budget), else none
+ * (the record's own limit).  Nothing
  * under the floor or after the system's low-memory signal: play then grows
  * the record as before.
  *

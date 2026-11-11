@@ -93,6 +93,7 @@ static int vkr_env_switch(const char *name)
 }
 
 static void vkr_tile_rule_apply(void); /* the barrier scopes and the wait, below */
+static void vkr_budget_line(void);     /* VK_EXT_memory_budget's line, below */
 
 /* ------------------------------------------------------------ device loss
  * The report vkr_check prints once, at the first VK_ERROR_DEVICE_LOST
@@ -2279,6 +2280,21 @@ static bool vkr_create_device(void)
                 exts[extCount++] = calib;
             }
         }
+        /* VK_EXT_memory_budget where offered: the device-local heaps'
+         * budget and use for rhi_get_stats (videoMem*, as Direct3D's
+         * adapter memory), read by the start-up's allocations
+         * (rd_vu_rec_early.c: half of what is free) and the window's video
+         * memory lines; a query only, nothing drawn or allocated
+         * differently.  Not on a tile-based phone GPU, whose device is made
+         * as before and whose free memory is the system's own measure
+         * (Android's MemAvailable, window_pipe_finish.c) */
+        g_vkr.memBudget = !g_vkr.tile.phone && vkr_props2_core(g_vkr.phys) &&
+                          VKR_FUNCTION_AVAILABLE(vkGetPhysicalDeviceMemoryProperties2) &&
+                          vkr_device_has_ext(g_vkr.phys, VK_EXT_MEMORY_BUDGET_EXTENSION_NAME) &&
+                          extCount < 47u;
+        if (g_vkr.memBudget) {
+            exts[extCount++] = VK_EXT_MEMORY_BUDGET_EXTENSION_NAME;
+        }
         /* what is on, and whether gpu_robust named it or it is the
            platform's default */
         char robustSay[160];
@@ -2836,6 +2852,7 @@ static bool vkr_create_device(void)
         g_vkr.timestampMask = bits >= 64 ? ~0ull : ((1ull << bits) - 1ull);
         vkr_tsclock_init(bits); /* its line, and the calibrated clocks' entry point */
     }
+    vkr_budget_line(); /* VK_EXT_memory_budget's, or why there is none */
     /* the VkRenderPass path (legacyPasses) records vkCmdBeginRenderPass and
      * leaves these NULL (vk_renderpass.c) */
     g_vkr.cmdBeginRendering = NULL;
@@ -3450,10 +3467,73 @@ bool rhi_gpu_progress(RhiGpuProgress *out)
     return true;
 }
 
+/* The device-local heaps' budget and use (VK_EXT_memory_budget), summed,
+ * read again when the last read is 250 ms old (any thread: a physical
+ * device query, no queue or device object; not after a loss) */
+static void vkr_budget_read(uint64_t *budget, uint64_t *use)
+{
+    const uint64_t now = vkr_now_ns();
+    const uint64_t at = __atomic_load_n(&g_vkr.budgetAtNs, __ATOMIC_ACQUIRE);
+    if (!g_vkr.deviceLost && (at == 0 || now - at >= 250000000ull)) {
+        VkPhysicalDeviceMemoryBudgetPropertiesEXT b = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT,
+        };
+        VkPhysicalDeviceMemoryProperties2 p2 = {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2,
+            .pNext = &b,
+        };
+        vkGetPhysicalDeviceMemoryProperties2(g_vkr.phys, &p2);
+        uint64_t sb = 0, su = 0;
+        const uint32_t n = p2.memoryProperties.memoryHeapCount < VK_MAX_MEMORY_HEAPS
+                               ? p2.memoryProperties.memoryHeapCount
+                               : VK_MAX_MEMORY_HEAPS;
+        for (uint32_t i = 0; i < n; i++) {
+            if (p2.memoryProperties.memoryHeaps[i].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
+                sb += b.heapBudget[i];
+                su += b.heapUsage[i];
+            }
+        }
+        __atomic_store_n(&g_vkr.budgetBytes, sb, __ATOMIC_RELAXED);
+        __atomic_store_n(&g_vkr.budgetUse, su, __ATOMIC_RELAXED);
+        __atomic_store_n(&g_vkr.budgetAtNs, now ? now : 1u, __ATOMIC_RELEASE);
+    }
+    *budget = __atomic_load_n(&g_vkr.budgetBytes, __ATOMIC_RELAXED);
+    *use = __atomic_load_n(&g_vkr.budgetUse, __ATOMIC_RELAXED);
+}
+
+/* the memory budget's line at the device's start (vkr_create_device) */
+static void vkr_budget_line(void)
+{
+    if (!g_vkr.memBudget) {
+        fprintf(stderr,
+                "rhi_vk: memory budget: %s: the start-up's allocations take the record's own "
+                "limit, and no video memory use is in the lines\n",
+                g_vkr.tile.phone ? "not asked (a tile-based phone GPU: the device made as before; "
+                                   "the system's free memory is the measure)"
+                                 : "not offered (no VK_EXT_memory_budget, or a Vulkan 1.0 device)");
+        return;
+    }
+    uint64_t budget = 0, use = 0;
+    vkr_budget_read(&budget, &use);
+    fprintf(stderr,
+            "rhi_vk: memory budget: VK_EXT_memory_budget: the device-local heaps' budget %llu MB, "
+            "%llu MB in use, %llu MB free: the start-up's allocations take at most half of what "
+            "is free; the slow-replay line's video memory and the 90 %% line read it\n",
+            (unsigned long long)(budget >> 20), (unsigned long long)(use >> 20),
+            (unsigned long long)((budget > use ? budget - use : 0u) >> 20));
+}
+
 void rhi_get_stats(RhiStats *out)
 {
     if (out) {
         *out = g_vkr.stats;
+        if (g_vkr.memBudget) {
+            uint64_t budget = 0, use = 0;
+            vkr_budget_read(&budget, &use);
+            out->videoMemBudget = budget;
+            out->videoMemUsage = use;
+            out->videoMemAvailable = budget > use ? budget - use : 0u;
+        }
         /* what a list's end, a submit and a present added, from either
            thread (VkrState.late) */
         out->barriers += __atomic_load_n(&g_vkr.late.barriers, __ATOMIC_RELAXED);

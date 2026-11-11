@@ -1457,7 +1457,10 @@ The renderer's test programs have a page of their own:
   the hazard record kept; narrow: none); the narrow runs the narrow closing barrier. `rhi_vk_clock_arm` (the argument `clock`: the clock cell alone) on Arm faked with
   `ICO_TEST_POLLED_WANT=0`: the single wait, a held wait of 150 ms with no trace point, no
   calibrated pair and no fall (`RhiLimits.polledWait` false); every other run asserts the polled
-  wait's trace as before.
+  wait's trace as before. `rhi_vk_budget` and `rhi_vk_budget_phone` (the argument `budget`):
+  `rhi_get_stats`' video memory read twice (`VK_EXT_memory_budget`): the free part the budget less
+  the use, never above the budget, the two reads in a moment equal; on Arm's phone GPU faked
+  (`ICO_TEST_BUDGET_WANT=0`) all three 0 (not asked).
   Then a pass's own colour read in it with a depth target bound (`rhi_vk_subpass.c`,
   `rhi_vk_subpass_cell`; issue 179; alone with the argument `subpass`, each with the shader access
   analysis on: `rhi_vk_subpass` through dynamic rendering's local read, `_vk11`

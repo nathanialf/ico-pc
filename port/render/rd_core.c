@@ -28,6 +28,8 @@
 #include <string.h>
 #include <time.h>
 #include "../fmv/rd_video.h"
+#include "rd_log_line.h"
+#include "rd_made_outside.h" /* what play makes outside the key cache, named */
 #include "rd_internal.h"
 #include "rd_icon_hold.h" /* rd__icon_pass_drop */
 #include "rd_loss_keep.h" /* rd__loss_keep_recycle */
@@ -116,13 +118,13 @@ static uint32_t s_notImplementedCount;
 
 /* ------------------------------------------------------------ diagnostics */
 
+/* one write a line (rd_log_line.h): the streams are unbuffered, so three
+ * calls let another thread's line land inside this one */
 void rd__log(const char *fmt, ...)
 {
     va_list ap;
     va_start(ap, fmt);
-    fputs("rd: ", stderr);
-    vfprintf(stderr, fmt, ap);
-    fputc('\n', stderr);
+    (void)rd_log_line_write(stderr, "rd: ", NULL, fmt, ap);
     va_end(ap);
 }
 
@@ -332,9 +334,7 @@ void rd__log_once(int bit, const char *fmt, ...)
     g_rd.onceFlags |= 1u << bit;
     va_list ap;
     va_start(ap, fmt);
-    fputs("rd: ", stderr);
-    vfprintf(stderr, fmt, ap);
-    fputs(" (reported once)\n", stderr);
+    (void)rd_log_line_write(stderr, "rd: ", " (reported once)", fmt, ap);
     va_end(ap);
 }
 
@@ -1835,6 +1835,7 @@ bool rd_init(uint32_t gsWidth, uint32_t gsHeight, const RdSettings *settings, vo
         return false;
     }
     g_rd.hasDevice = true;
+    rd__made_outside_init(); /* the RHI's create hook (named in play once the window says) */
     g_rd.windowed = sdlWindow != NULL; /* the game: the desktop's local reads (rd_profile.c) */
     rd__profile_init();                /* the device profile (rd_profile.c) */
     rd__aura_box_init();               /* the aura's read in two passes (rd_aura_box.c) */
@@ -1958,6 +1959,7 @@ void rd_shutdown(void)
             rd__free_pending(t);
         }
     }
+    rd__made_outside_shutdown(); /* the run's line of what play made outside the key cache */
     if (g_rd.hasDevice) {
         rd_video_shutdown(); /* the FMV path's objects (rd_video.c), before the device */
         rd__present_shutdown();

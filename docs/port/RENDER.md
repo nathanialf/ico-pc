@@ -1382,7 +1382,7 @@ pictures right after it grew to 256 rows), and the mesh arena's first 32 MB chun
 both before the game runs (`rd_vu_record_prepare`, called by `window_pipe_early` after the self-tests
 and the start-up set, behind the start-up screen). The bound (`rd_early_plan.h`): half of the free
 memory above the free-memory floor where the system says (Android), half of the adapter's free
-video memory where it says (Direct3D), else the record's own limit (1,024 rows, 48 MB a frame
+video memory where it says (Direct3D, Vulkan's `VK_EXT_memory_budget`), else the record's own limit (1,024 rows, 48 MB a frame
 slot); the record first, the chunk if it still fits; nothing under the floor or after the
 system's low-memory signal. A part that cannot be made is left to play as before. No picture
 changes: the record's slots are placed from texel 0 whatever its size and the chunk is the one the

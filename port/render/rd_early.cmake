@@ -4,6 +4,9 @@
 # its own: port/render/CMakeLists.txt is at the 256 KiB cap,
 # tools/check_no_rom.sh).
 target_sources(ico_render PRIVATE rd_early_plan.c rd_vu_rec_early.c)
+# one log line as one write (rd_log_line.h: rd__log, rd__log_once) and the
+# start-up items of v0.11.5 (docs/port/RENDER_POST.md "Start-up")
+target_sources(ico_render PRIVATE rd_log_line.c rd_made_outside.c rd_made_outside_text.c)
 
 # rd_early_plan_test: the plan's bound with the memory numbers of the two
 # v0.11.3 loss reports (issues 179 and 211), a desktop without a measure,
@@ -12,8 +15,21 @@ target_sources(ico_render PRIVATE rd_early_plan.c rd_vu_rec_early.c)
 add_executable(rd_early_plan_test test/rd_early_plan_test.c rd_early_plan.c)
 target_include_directories(rd_early_plan_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(rd_early_plan_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+# rd_log_line_test: a line handed to an unbuffered stream in one write,
+# short, with a suffix, past the stack's buffer, at its edge (CPU only)
+add_executable(rd_log_line_test test/rd_log_line_test.c rd_log_line.c)
+target_include_directories(rd_log_line_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(rd_log_line_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+# rd_made_outside_test: the made-in-play line (rd_made_outside.h: the
+# pipelines and buffers made outside the key cache, named) and its limiter
+# (CPU only)
+add_executable(rd_made_outside_test test/rd_made_outside_test.c rd_made_outside_text.c)
+target_include_directories(rd_made_outside_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(rd_made_outside_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(ICO_RUN_TESTS)
     add_test(NAME rd_early_plan COMMAND rd_early_plan_test)
+    add_test(NAME rd_log_line COMMAND rd_log_line_test)
+    add_test(NAME rd_made_outside COMMAND rd_made_outside_test)
 
     # rd_vu_rec_early_ab, _compute, _targets (test/rd_vu_env_ab.cmake): the
     # dumps of tools/vustage_dumps.txt with the record grown by the frame as
