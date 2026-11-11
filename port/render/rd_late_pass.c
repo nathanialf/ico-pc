@@ -49,6 +49,19 @@
  * every pass before that read keeps the depth's store and no other pass
  * keeps more.
  *
+ * List 11's draws in the open pass (RD_LATE_JOIN).  A list 11 screen prim
+ * binds SCENE's depth wherever SCENE has one (rd_replay.c prepareDrawEx),
+ * so after the aura's paste, whose pass has no depth, the pause menu's first
+ * draw began a pass of its own with the depth (a paused picture has no
+ * feedback read of SCENE between the paste and list 11).  A draw that uses
+ * no depth (rd__late_pass_join's checks) takes none when the pass open on
+ * its target has none, and joins it: the mirror of rd_fx_plan.c
+ * fxAttachDepth.  The same colour bytes (the key without the depth has the
+ * state's Z ALWAYS and no write, rd_pipeline.c rd__plan_screen_draw_ex), no
+ * depth read or written either way, the key the start-up set's no-depth
+ * twin.  A draw after it that needs the depth begins its pass with it, as
+ * before.
+ *
  * The switch: on by default on a tile-based GPU (RdProfile.tiler) under
  * Vulkan (MoltenVK too), where a pass loads and stores the picture; off on
  * the other classes (a pass costs little there) and on OpenGL.
@@ -81,8 +94,16 @@ static struct {
 /* the 10 s line's counts since its last call (the window's thread reads
  * and clears them; the replay adds) */
 static struct {
-    uint64_t held, flushed, why[RD_LATE_WHY_COUNT];
+    uint64_t held, flushed, why[RD_LATE_WHY_COUNT], joined, joinPasses;
 } s_sum;
+
+/* RD_LATE_JOIN: the command walked now (rd__late_pass_cmd), the pass the
+ * last joined draw was drawn in (its serial and replay) */
+static struct {
+    uint8_t type;
+    uint32_t serial, replay;
+    bool any;
+} s_join;
 
 static const char *const kWhy[RD_LATE_WHY_COUNT] = {
     [RD_LATE_WHY_NONE] = "-",
@@ -106,7 +127,7 @@ const char *rd__late_pass_why_text(int why)
 const char *rd__late_pass_bits_text(unsigned bits)
 {
     bits &= RD_LATE_ALL;
-    return bits == RD_LATE_ALL ? "on" : bits == 0 ? "off" : "fill";
+    return bits == RD_LATE_ALL ? "on" : bits == 0 ? "off" : bits == RD_LATE_FILL ? "fill" : "join";
 }
 
 void rd__late_pass_force(int bits)
@@ -121,11 +142,17 @@ static void note(unsigned bits, const char *why)
         return;
     }
     char line[sizeof(s_sw.said)];
-    if (bits & RD_LATE_FILL) {
-        snprintf(line, sizeof(line),
-                 "late pass: on (%s): the crack fill's draw held from its snapshot to the "
-                 "aura's paste pass in a frame whose glow draws nothing (the same bytes)",
-                 why);
+    if (bits) {
+        snprintf(line, sizeof(line), "late pass: %s (%s):%s%s (the same bytes)",
+                 bits == RD_LATE_ALL ? "on" : rd__late_pass_bits_text(bits), why,
+                 bits & RD_LATE_FILL ? " the crack fill's draw held from its snapshot to the "
+                                       "aura's paste pass in a frame whose glow draws nothing"
+                                     : "",
+                 bits & RD_LATE_JOIN ? (bits & RD_LATE_FILL ? "; list 11's draws that use no "
+                                                              "depth in the open pass without it"
+                                                            : " list 11's draws that use no "
+                                                              "depth in the open pass without it")
+                                     : "");
     } else {
         snprintf(line, sizeof(line), "late pass: off (%s)", why);
     }
@@ -144,9 +171,12 @@ unsigned rd__late_pass_bits(void)
             s_sw.bits = strcmp(e, "0") == 0      ? 0
                         : strcmp(e, "1") == 0    ? (int)RD_LATE_ALL
                         : strcmp(e, "fill") == 0 ? (int)RD_LATE_FILL
+                        : strcmp(e, "join") == 0 ? (int)RD_LATE_JOIN
                                                  : -1;
             if (s_sw.bits < 0) {
-                rd__log("late pass: ICO_RD_LATE_PASS=%.16s is not 0, 1 or fill: the profile's", e);
+                rd__log("late pass: ICO_RD_LATE_PASS=%.16s is not 0, 1, fill or join: the "
+                        "profile's",
+                        e);
             }
         }
     }
@@ -353,17 +383,82 @@ void rd__late_pass_flushed(int why)
     __atomic_add_fetch(&s_sum.why[why], 1, __ATOMIC_RELAXED);
 }
 
+/* ------------------------------------------------------------- the join */
+
+void rd__late_pass_cmd(const RdCmd *c)
+{
+    s_join.type = c->type;
+}
+
+void rd__late_pass_join(Replay *r, DrawSetup *ds)
+{
+    if (!ds->tdId || s_join.type != RDC_SCREEN || rd__replay_list() != 11) {
+        return;
+    }
+    /* the open pass on the draw's target, without a depth (the aura's
+     * paste's, a post sprite's) */
+    if (!r->passOpen || r->passColor != r->st.color || r->passDepth != 0 || r->passStorage ||
+        g_rd.passSamples > 1u || rd__replay_msaa_want() > 1u ||
+        g_rd.dstMode != RD_BLEND_EXACT_OFF || rd__uber_on() ||
+        !(rd__late_pass_bits() & RD_LATE_JOIN)) {
+        return;
+    }
+    /* a draw that uses no depth: no Z test (or ALWAYS), no Z write, no
+     * DATE (its stencil bit or snapshot), no PRIM.AA1 (its stencil
+     * pairs), no depth view sampled, the same Z scale without the depth
+     * (every target's zFormat is RD_ZFMT_32), no shadow window on it */
+    const RdDrawState *d = &r->st.ds;
+    const RdTexRec *t = d->texEnabled ? rd__tex_rec(r->st.tex) : NULL;
+    const RdTargetRec *td = rd__target_rec(ds->tdId);
+    if ((d->test.zte && d->test.ztst != RD_ZTST_ALWAYS) || d->zwrite == RD_ZWRITE_ON ||
+        d->test.date != RD_DATE_OFF || ds->dateStencil || r->dateStNow || r->dateDstNow ||
+        r->st.aa1 || (t && t->kind == RD_TEXKIND_TARGET && t->view == RD_VIEW_DEPTH) || !td ||
+        rd__stencil_live(rd__replay_stencil(), td->depth.id) ||
+        rd__target_z_scale(ds->tdId) != rd__target_z_scale(0)) {
+        return;
+    }
+    /* the key without the depth: rd_pipeline.c rd__plan_screen_draw_ex gives
+     * it Z ALWAYS and no write, the state's own with the depth; its twin is
+     * in the start-up set beside the key with the depth
+     * (rd__enumerate_reachable_screen draws each state with and without
+     * it), so no pipeline is made during play */
+    ds->tdId = 0;
+    ds->depthFmt = RHI_FMT_UNKNOWN;
+    g_rdPerf.latePassJoined++;
+    __atomic_add_fetch(&s_sum.joined, 1, __ATOMIC_RELAXED);
+    if (!s_join.any || s_join.serial != r->passSerial || s_join.replay != g_rd.replayCounter) {
+        /* the first joined draw of this pass: with the depth it began a
+         * pass of its own (bindDrawEx: the pass's depth differs) */
+        s_join.any = true;
+        s_join.serial = r->passSerial;
+        s_join.replay = g_rd.replayCounter;
+        g_rdPerf.latePassJoinPasses++;
+        g_rdPerf.latePassJoinTexels += ds->tc ? ds->tc->tw * ds->tc->th : 0u;
+        __atomic_add_fetch(&s_sum.joinPasses, 1, __ATOMIC_RELAXED);
+        static bool s_said;
+        if (!s_said) {
+            s_said = true;
+            rd__log("late pass: list 11's draws that use no depth drawn in the open pass on %s "
+                    "without its depth (frame's list 11 after the aura's paste: the pause menu, "
+                    "the title), not in a pass of their own with it (reported once)",
+                    rd__target_name(r->st.color));
+        }
+    }
+}
+
 /* ------------------------------------------------------------ the line */
 
 void rd_late_pass_line(void)
 {
     const uint64_t held = __atomic_exchange_n(&s_sum.held, 0, __ATOMIC_RELAXED);
     const uint64_t flushed = __atomic_exchange_n(&s_sum.flushed, 0, __ATOMIC_RELAXED);
+    const uint64_t joined = __atomic_exchange_n(&s_sum.joined, 0, __ATOMIC_RELAXED);
+    const uint64_t joinPasses = __atomic_exchange_n(&s_sum.joinPasses, 0, __ATOMIC_RELAXED);
     uint64_t w[RD_LATE_WHY_COUNT];
     for (int k = 0; k < RD_LATE_WHY_COUNT; k++) {
         w[k] = __atomic_exchange_n(&s_sum.why[k], 0, __ATOMIC_RELAXED);
     }
-    if (held + flushed == 0) {
+    if (held + flushed + joined == 0) {
         return;
     }
     char why[512] = "";
@@ -381,6 +476,8 @@ void rd_late_pass_line(void)
     }
     fprintf(stderr,
             "window: late pass: %llu crack fills held into the aura's paste pass, %llu drawn "
-            "early in a pass of their own%s%s\n",
-            (unsigned long long)held, (unsigned long long)flushed, why, at ? ")" : "");
+            "early in a pass of their own%s%s; %llu list 11 draws joined the open pass without "
+            "SCENE's depth (%llu passes not begun)\n",
+            (unsigned long long)held, (unsigned long long)flushed, why, at ? ")" : "",
+            (unsigned long long)joined, (unsigned long long)joinPasses);
 }

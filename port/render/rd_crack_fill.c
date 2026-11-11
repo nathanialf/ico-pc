@@ -1051,6 +1051,7 @@ void rd__crack_fill_snap(Replay *r, const RdTargetRec *tc)
 
 void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen)
 {
+    rd__late_pass_cmd(c); /* the command walked (rd_late_pass.c's list 11 join) */
     if (!s_late.armed || list < RD_CRACK_LATE_LIST) {
         return;
     }

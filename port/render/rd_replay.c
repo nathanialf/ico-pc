@@ -2730,6 +2730,7 @@ static bool prepareDrawEx(Replay *r, DrawSetup *ds, const RhiRect *dateArea, boo
         }
     }
     rd__date_cut_depth(r, ds, td); /* tdId, depthFmt: none in a DATE pass not using it */
+    rd__late_pass_join(r, ds);     /* list 11's in the open pass without it (rd_late_pass.c) */
     ds->tex = resolveTexture(r, ds->tc, r->st.color, &ds->tw, &ds->th, &ds->tfmt, &ds->textured,
                              &ds->mipmapped);
     ds->texCrop = texCropOf(r, ds->tex);

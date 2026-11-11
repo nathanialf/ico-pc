@@ -1366,8 +1366,8 @@ in G), which is copied into a readback buffer and summed once the GPU is past th
 `port/render/rd_late_pass.c` (`rd_late_pass.h`): fewer full-size passes on SCENE after list 7, the
 same bytes. On by default on a tile-based GPU (`RdProfile.tiler`) under Vulkan (MoltenVK too), where a
 pass loads and stores the whole picture (10 MB each way at 2364 x 1080); off on the other classes and
-on OpenGL. `ICO_RD_LATE_PASS=0|1|fill` (the tests only, [TESTING.md](TESTING.md); no config key)
-switches it off or forces it on anywhere.
+on OpenGL. `ICO_RD_LATE_PASS=0|1|fill|join` (the tests only, [TESTING.md](TESTING.md); no config
+key) switches it off, or every part or one part on anywhere.
 
 **The crack fill's draw held** (`fill`). In a glow room the fill is placed after `cleanUpFB` at the
 first sprite into another target (the glow's `WORK2_PAD` band), because the glow's mask, which samples
@@ -1412,18 +1412,45 @@ UNVERIFIED). Counters `RdPerfRecord.latePassHeld`, `latePassTexels`, `latePassFl
 `latePassWhy` (`RD_LATE_WHY_*`). The lines:
 
 - `rd: late pass: on (a tile-based GPU's default): the crack fill's draw held from its snapshot to
-  the aura's paste pass in a frame whose glow draws nothing (the same bytes)`, or `rd: late pass:
-  off (<why>)`, at the start and when it changes;
+  the aura's paste pass in a frame whose glow draws nothing; list 11's draws that use no depth in
+  the open pass without it (the same bytes)`, or `rd: late pass: off (<why>)`, at the start and
+  when it changes;
 - `rd: late pass: the crack fill's draw held from its snapshot to the aura's paste pass (the glow
   drew nothing between), not in a pass of its own (reported once)`;
 - the 10 s `window: late pass: N crack fills held into the aura's paste pass, M drawn early in a
-  pass of their own (K <why>, ...)` (when any) and the crack fill's own `..., B held past SCENE's
+  pass of their own (K <why>, ...); J list 11 draws joined the open pass without SCENE's depth (P
+  passes not begun)` (when any) and the crack fill's own `..., B held past SCENE's
   border repeat (its columns filled from their source columns)`;
-- `--stats`: `<dump>: stats: late pass on|off|fill: N crack fills held into the aura's paste pass
-  (X MB of colour not loaded and as many not stored), M drawn early in a pass of their own (<why>)`.
+- `--stats`: `<dump>: stats: late pass on|off|fill|join: N crack fills held into the aura's paste
+  pass (X MB of colour not loaded and as many not stored), M drawn early in a pass of their own
+  (<why>); J list 11 draws joined ...`.
+
+**List 11's draws in the open pass** (`join`). List 11's screen prims bind SCENE's depth wherever
+SCENE has one (`rd_replay.c` `prepareDrawEx`), so after the aura's paste, whose pass has no depth
+(the local read), the first of them began a pass of its own with the depth, SCENE's colour loaded
+and stored again: in a paused picture (no feedback read of SCENE between, `staticBlur.c`) the pause
+menu's draws, on the phone 2.8 ms of a picture in a block 70 % paused. A list 11 screen prim whose
+draw uses no depth (its Z test off or ALWAYS, its Z write off, no DATE, no PRIM.AA1, no depth view,
+no shadow window on the depth, the same Z scale without it) takes no depth target
+(`rd__late_pass_join`, after the DATE cut's depth: `tdId` 0, `depthFmt` UNKNOWN) when the pass open on
+its target has none (no MSAA, no exact blend, no GS state as shader data), so it is drawn in that
+pass: the mirror of `fxAttachDepth` (a sprite without a Z test drawn in a pass with the depth it
+does not use). The colour bytes are the same: the key with the depth had Z ALWAYS and no write,
+the key without it is given the same (`rd_pipeline.c` `rd__plan_screen_draw_ex`); the depth is not
+read or written either way. Its keys are the screen family's no-depth twins, in the start-up set
+beside each key with the depth (`rd__enumerate_reachable_screen`): no pipeline is made during play.
+A draw after it that needs the depth begins its pass with the depth (`bindDrawEx`), as before. An
+unpaused picture's list 11 cannot join: the aura's feedback read of SCENE ends the paste's pass.
+Counted: `RdPerfRecord.latePassJoined` (the draws), `latePassJoinPasses` (the passes joined, each one
+the pass the first such draw began before) and `latePassJoinTexels`; once a run `rd: late pass:
+list 11's draws that use no depth drawn in the open pass on SCENE without its depth ...`; the 10 s
+line's `; J list 11 draws joined the open pass without SCENE's depth (P passes not begun)`; the
+`--stats` line's `; J list 11 draws joined the open pass without SCENE's depth (P passes not begun,
+X MB of colour at most each way)`.
 
 `rd_late_pass` (the predicate and the scan, CPU), `rd_crack_held` (a crack in the repeat's source
-column, held against the late pass off), `rd_late_pass_ab` and `rd_late_pass_gl` (dumps) check it
+column, held against the late pass off), `rd_crack_join` (two list 11 commands after the aura's
+paste), `rd_late_pass_ab` and `rd_late_pass_gl` (dumps) check it
 ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 `rd_crack_test` (`rd_crack`, `rd_crack_4x`, `rd_crack_frac`, `rd_crack_backdrop`,

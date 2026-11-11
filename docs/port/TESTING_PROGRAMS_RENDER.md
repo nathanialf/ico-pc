@@ -839,17 +839,26 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   none early, no fill pass of its own; against the late pass off (`rd__late_pass_force(0)`) SCENE's
   colour and depth byte for byte, one render pass fewer, the crack filled and each copy the repeat
   laid of it the filled texel's bytes; the main checks leave out the repeat's outer columns.
+- `rd_crack_join` (`rd_crack_test 2 join`, `ICO_VK_FAKE_LIMITS=moltenvk`; `rd_late_pass.cmake`):
+  `rd_crack_aura`'s frame with two list 11 commands after the paste (a blended sprite each into
+  SCENE, Z ALWAYS, no Z write, right of the slit): with the late pass both drawn in the paste's pass
+  without SCENE's depth (2 draws, 1 pass joined); against the join off
+  (`rd__late_pass_force(RD_LATE_FILL)`) SCENE's colour and depth byte for byte, one render pass
+  fewer.
 - `rd_late_pass_ab.cmake` (`rd_late_pass_ab`, `rd_late_pass_gl`): the dumps of
   `tools/late_pass_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches
   none too) with `ICO_RD_LATE_PASS=0` and `1`, `--pass-dump --stats`, `ICO_RD_VU_PREPASS=0`, at the
   PowerVR phone's Resolution Auto (2364x1080, Full height and pixel) and at Enhanced 2x 4:3, both under
   `ICO_VK_FAKE_LIMITS=moltenvk`; the `_gl` twin the phone's setting on OpenGL (llvmpipe, the aura's
   paste through a snapshot: a held fill drawn early in its own pass). Each pair: every PNG byte for
-  byte, the same draws, the passes and the crack fill's own passes fewer by exactly the fills held,
-  the colour MB loaded and stored each fewer by the MB the stats name for them (within 0.02), the
-  depth and stencil and copy MB the same, the off run holding nothing; the dumps the list marks hold
-  that many fills at the phone's setting (on OpenGL held or drawn early); at least one held over the
-  list on Vulkan. No device: SKIP.
+  byte, the same draws, the passes fewer by exactly the fills held and the passes list 11's draws
+  joined, the crack fill's own passes by the fills held, the colour MB loaded and stored each fewer
+  by at least the MB the stats name for the held fills and at most that and the joined passes' MB
+  (within 0.02), the depth and stencil MB not higher (the same without a join), the copy MB the same,
+  the off run holding and joining nothing; the dumps the list marks hold that many fills at the
+  phone's setting (on OpenGL held or drawn early) and join as many passes (`joinN`: the paused frame
+  of issue 164); at least one fill held and one pass joined over the list on Vulkan. No device:
+  SKIP.
 - `rd_date_cut_ab.cmake` (`rd_date_cut_ab`, `rd_date_cut_ab_gl`): the dumps of
   `tools/date_cut_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches
   none too) with `ICO_RD_DATE_CUT=0` and `1`, `--pass-dump --stats`, under `ICO_RD_BLEND=fixed`,

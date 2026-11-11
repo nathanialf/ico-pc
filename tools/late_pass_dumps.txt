@@ -6,8 +6,10 @@
 # file.  A second field is the crack fills one replay holds into the aura's
 # paste pass at the phone's setting (on OpenGL held or drawn early): the glow's
 # light plan draws nothing in these rooms (DARK) and the fill was drawn after
-# the glow's alpha in a pass of its own; without it, no expectation but the
-# pair's arithmetic.
+# the glow's alpha in a pass of its own; a last field joinN the passes list
+# 11's draws join at the phone's setting (the pause menu drawn in the aura's
+# paste pass, not a pass of its own with SCENE's depth); without them, no
+# expectation but the pair's arithmetic.
 #
 # the Pixel 10 Pro Fold's v0.11.4 F12 frame (stage 4; unzipped)
 /primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump 1
@@ -18,6 +20,6 @@
 # issue 102's frame with the sun's fans
 /primary/dev/ico-pc/build-host/tmp/evidence-v079/102/frame-20261015-161933-v4251.rddump
 # issue 164's paused frame (the pause menu's draws in list 11 after the aura)
-/primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump
+/primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump join1
 # a 2026-10-07 capture (512 GS pixels wide: no border repeat at 4:3)
 /primary/dev/ico-dumps/frame-20261007-200706-v3086.rddump

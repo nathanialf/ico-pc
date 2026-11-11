@@ -2949,8 +2949,12 @@ typedef struct RdPerfRecord {
      * (latePassFlushed; latePassWhy the last one's reason, rd_late_pass.h
      * RD_LATE_WHY_*); latePassTexels SCENE's texels of the held fills drawn
      * in the aura's pass (the colour not loaded or stored by a pass of the
-     * fill's own: 4 bytes a texel each way) */
+     * fill's own: 4 bytes a texel each way); latePassJoined the list 11 screen
+     * prims drawn in the open pass without SCENE's depth, latePassJoinPasses
+     * the passes they joined (each a pass begun with the depth before, of
+     * latePassJoinTexels texels in all) */
     uint32_t latePassHeld, latePassFlushed, latePassWhy, latePassTexels;
+    uint32_t latePassJoined, latePassJoinPasses, latePassJoinTexels;
     /* The aura's read of SCENE into FEED128 in two passes (rd_aura_box.c):
      * the reads drawn so this replay (each one pass more, ROWBOX's: 0 or 1
      * a replay; none while the game is paused) */

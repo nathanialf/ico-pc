@@ -122,7 +122,7 @@ static bool s_backdrop; /* the far plane first (argv[2] backdrop) */
 
 /* argv[2] glow or aura: after the fog the glow's cleanUpFB (list 7) or the
  * aura's paste (list 8) as staticBlur.c draws them */
-enum { AFTER_NONE, AFTER_GLOW, AFTER_AURA, AFTER_HELD };
+enum { AFTER_NONE, AFTER_GLOW, AFTER_AURA, AFTER_HELD, AFTER_JOIN };
 
 static int s_after;
 
@@ -184,7 +184,7 @@ static void recordAfter(RdTarget scene)
      * TEST, ZWRITE on, FBA and TEXA at their heads), so state recorded in
      * list 4 after the fog never reached the sprites: they drew with Z
      * write on, which no room's glow or aura paste does */
-    const int list = s_after == AFTER_AURA ? 8 : 7;
+    const int list = s_after == AFTER_AURA || s_after == AFTER_JOIN ? 8 : 7;
     rd_select_list(list);
     rd_texture_off();
     rd_pabe(0);
@@ -244,6 +244,27 @@ static void recordAfter(RdTarget scene)
     rd_abe(1);
     rd_blend_func(RD_BLEND_LERP_AS_ALT, 0);
     blurSprite(RD_POST_AURA, GW, GH, kPaste, 0, 256.0f, 128.0f);
+    if (s_after == AFTER_JOIN) {
+        /* list 11 after the paste (the paused frame's: no feedback read
+         * between): two commands of an untextured blended sprite into SCENE
+         * under Z ALWAYS without a Z write, SCENE's depth bound */
+        static const uint8_t kMenu[4] = {180, 170, 40, 0x40};
+        rd_select_list(11);
+        rd_set_target(scene, scene, GW, GH, 0);
+        rd_texture_off();
+        rd_pabe(0);
+        rd_fba(0);
+        rd_z_write(0);
+        rd_test_gs(RD_TEST_Z_ALWAYS);
+        rd_abe(1);
+        rd_blend_func(RD_BLEND_LERP_AS, 0);
+        /* two commands (each joins: rd_late_pass.c counts a command), right of
+         * the slit, away from the cracks and the border's columns */
+        RdScreenVtx m[2] = {vtx(605.0, 50.0, 0, kMenu), vtx(620.0, 90.0, 0, kMenu)};
+        rd_screen_prims(RD_PRIM_SPRITES, m, 2, RD_SPACE_WORLD, 1, 0);
+        RdScreenVtx n[2] = {vtx(610.0, 100.0, 0, kMenu), vtx(630.0, 130.0, 0, kMenu)};
+        rd_screen_prims(RD_PRIM_SPRITES, n, 2, RD_SPACE_WORLD, 1, 0);
+    }
 }
 
 static void recordFrame(void)
@@ -343,8 +364,9 @@ typedef struct Picture {
      * the fog's draws by the local read */
     uint32_t passes, countPasses, fogLocal;
     /* the late pass (rd_late_pass.c): fills held into the aura's paste
-     * pass, held fills drawn early in a pass of their own */
-    uint32_t held, early;
+     * pass, held fills drawn early in a pass of their own, list 11's draws
+     * joined without the depth and the passes they joined */
+    uint32_t held, early, joined, joinPasses;
 } Picture;
 
 static bool replay(bool fill, Picture *p)
@@ -357,6 +379,8 @@ static bool replay(bool fill, Picture *p)
     p->fogLocal = g_rdPerf.fogLocalDraws;
     p->held = g_rdPerf.latePassHeld;
     p->early = g_rdPerf.latePassFlushed;
+    p->joined = g_rdPerf.latePassJoined;
+    p->joinPasses = g_rdPerf.latePassJoinPasses;
     rhi_wait_idle();
     const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
     if (!t) {
@@ -507,11 +531,47 @@ static void checkHeld(const Picture *on, bool active)
     free(un.z);
 }
 
+/* join: the aura's frame with two list 11 sprites after the paste (Z
+ * ALWAYS, no Z write): with the late pass's join they are drawn in the
+ * paste's pass without SCENE's depth (the fill its first draw, as aura);
+ * against the join off (rd__late_pass_force(RD_LATE_FILL)): SCENE's colour
+ * and depth byte for byte, one render pass fewer, 2 draws joined in 1 pass,
+ * none with the join off */
+static void checkJoin(const Picture *on)
+{
+    rd__late_pass_force((int)RD_LATE_FILL);
+    Picture un;
+    memset(&un, 0, sizeof(un));
+    const bool ok = replay(true, &un) && un.w == on->w && un.h == on->h;
+    rd__late_pass_force((int)RD_LATE_ALL);
+    CHECK(ok, "SCENE readback with the join off");
+    size_t dPx = 0, dZ = 0;
+    for (size_t i = 0; ok && i < (size_t)on->w * on->h; i++) {
+        dPx += memcmp(&un.px[i * 4], &on->px[i * 4], 4) != 0;
+        dZ += on->z && un.z && memcmp(&un.z[i], &on->z[i], sizeof(float)) != 0;
+    }
+    const int fewer = (int)un.passes - (int)on->passes;
+    printf("  join: %u list 11 draws in %u passes without SCENE's depth (off: %u, %u); against "
+           "the join off %zu texels' colour and %zu depths differ, %u render passes against %u "
+           "(%d fewer)\n",
+           on->joined, on->joinPasses, un.joined, un.joinPasses, dPx, dZ, on->passes, un.passes,
+           fewer);
+    CHECK(on->joined == 2 && on->joinPasses == 1, "%u draws joined in %u passes: 2 and 1 expected",
+          on->joined, on->joinPasses);
+    CHECK(un.joined == 0 && un.joinPasses == 0, "the join off joined %u draws", un.joined);
+    CHECK(dPx == 0 && dZ == 0, "joined against the join off: %zu colours, %zu depths differ", dPx,
+          dZ);
+    CHECK(fewer == 1, "%d render passes fewer than the join off, not 1", fewer);
+    free(un.px);
+    free(un.z);
+}
+
 int main(int argc, char **argv)
 {
     printf("rd_crack_test\n");
     if (argc < 2) {
-        printf("usage: rd_crack_test 2|4|1|frac|original [msaa|backdrop|fold|glow|aura|held]\n");
+        printf("usage: rd_crack_test 2|4|1|frac|original "
+               "[msaa|backdrop|fold|glow|aura|held|join]\n");
         return 2;
     }
     const bool original = strcmp(argv[1], "original") == 0;
@@ -522,11 +582,14 @@ int main(int argc, char **argv)
     s_after = argc > 2 && strcmp(argv[2], "glow") == 0   ? AFTER_GLOW
               : argc > 2 && strcmp(argv[2], "aura") == 0 ? AFTER_AURA
               : argc > 2 && strcmp(argv[2], "held") == 0 ? AFTER_HELD
+              : argc > 2 && strcmp(argv[2], "join") == 0 ? AFTER_JOIN
                                                          : AFTER_NONE;
     if (s_after == AFTER_HELD) {
         /* the late pass's hold whatever the glow's plan (this frame holds
          * no chain the light plan reads; rd_late_pass.c) */
         rd__late_pass_force((int)(RD_LATE_FILL | RD_LATE_ANY_PLAN));
+    } else if (s_after == AFTER_JOIN) {
+        rd__late_pass_force((int)RD_LATE_ALL); /* the tile class's default, said */
     }
     RdSettings st;
     memset(&st, 0, sizeof(st));
@@ -701,8 +764,10 @@ int main(int argc, char **argv)
               "%d filled texels not a neighbour's colour, %d with their depth changed", badFrom,
               badDepth);
         /* in the aura's paste pass: no pass of its own */
-        CHECK(on.fills == (s_after == AFTER_AURA || s_after == AFTER_HELD ? 0u : 1u),
-              "%u fill passes", on.fills);
+        CHECK(
+            on.fills ==
+                (s_after == AFTER_AURA || s_after == AFTER_HELD || s_after == AFTER_JOIN ? 0u : 1u),
+            "%u fill passes", on.fills);
         CHECK(c1.counted - c0.counted == 1 && c1.filled - c0.filled == 1 &&
                   c1.pixels - c0.pixels == (uint64_t)changed,
               "counted %llu pixels over %llu replays (%llu filled), %d texels changed",
@@ -805,6 +870,8 @@ int main(int argc, char **argv)
     }
     if (s_after == AFTER_HELD) {
         checkHeld(&on, active);
+    } else if (s_after == AFTER_JOIN) {
+        checkJoin(&on);
     } else if (s_after != AFTER_NONE) {
         checkPlace(&on, c0, c1, active);
     }

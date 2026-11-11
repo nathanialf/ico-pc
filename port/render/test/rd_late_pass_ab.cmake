@@ -2,8 +2,10 @@
 # (port/render/rd_late_pass.c; docs/port/RENDER_POST.md, "The late passes on
 # SCENE"): the late pass off (ICO_RD_LATE_PASS=0) against on (=1).
 # For every dump the list names (tools/late_pass_dumps.txt: a path, '*' globs
-# allowed, and optionally the crack fills one replay holds at the phone's
-# setting; a listed dump that is absent FAILS), rd_replay_tool's --pass-dump
+# allowed, optionally the crack fills one replay holds at the phone's setting,
+# and optionally joinN, the passes list 11's draws join at the phone's setting
+# instead of beginning one with SCENE's depth; a listed dump that is absent
+# FAILS), rd_replay_tool's --pass-dump
 # with --stats and ICO_RD_VU_PREPASS=0 (the programs' own entries), at:
 #   phone   the PowerVR phone's Resolution Auto (Enhanced, 2364x1080, Full height,
 #           Full pixel, presented at 2364x1080) under the tile class's fakes
@@ -19,14 +21,18 @@
 # a dump drawn narrower than a setting's aspect cannot show it and is skipped
 # there.  Each pair: every PNG the off run writes (SCENE, DISPLAY, PRESENT and
 # every other named target) the on run's byte for byte; the same draws; the
-# off run says "off" and holds nothing; the on run says "on"; its render passes
-# and the crack fill's own passes fewer than the off run's by exactly the fills
-# it held into the aura's paste pass; its colour MB loaded and stored each fewer
-# by the MB its stats name for those fills (within 0.02, the two decimals'
-# rounding), its depth and stencil MB and its copies the same; at the phone's
-# setting (and on OpenGL, held or drawn early) a dump the list marks holds that
-# many fills where the off run draws a fill in its own pass.  On Vulkan at least
-# one fill is held over the list.  No device: SKIP (77).
+# off run says "off" and holds and joins nothing; the on run says "on"; its
+# render passes fewer than the off run's by exactly the fills it held into the
+# aura's paste pass and the passes list 11's draws joined, the crack fill's own
+# passes by the fills held; its colour MB loaded and stored each fewer by at
+# least the MB its stats name for the held fills and at most that and the MB it
+# names for the joined passes (within 0.02, the two decimals' rounding: a pass
+# the join saves may have had a render area), its depth and stencil MB not
+# higher, the same without a join, its copies the same; at the phone's setting
+# (and on OpenGL, held or drawn early) a dump the list marks holds that many
+# fills where the off run draws a fill in its own pass, and joins as many passes
+# as it marks.  On Vulkan at least one fill held and one pass joined over the
+# list.  No device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 # -DBACKEND=vulkan|opengl
 set(dumps "")
@@ -42,6 +48,11 @@ foreach(l IN LISTS lines)
     continue()
   endif()
   set(want "")
+  set(wantJoin "")
+  if(l MATCHES "^(.*[^ \t])[ \t]+join([0-9]+)$")
+    set(l "${CMAKE_MATCH_1}")
+    set(wantJoin "${CMAKE_MATCH_2}")
+  endif()
   if(l MATCHES "^([^ \t]+)[ \t]+([0-9]+)$")
     set(l "${CMAKE_MATCH_1}")
     set(want "${CMAKE_MATCH_2}")
@@ -59,10 +70,12 @@ foreach(l IN LISTS lines)
     foreach(d IN LISTS found)
       list(APPEND dumps "${d}")
       set(want_${d} "${want}")
+      set(wantJoin_${d} "${wantJoin}")
     endforeach()
   elseif(EXISTS "${l}")
     list(APPEND dumps "${l}")
     set(want_${l} "${want}")
+    set(wantJoin_${l} "${wantJoin}")
   else()
     message(SEND_ERROR "${l}: no such dump (a listed dump must exist)")
     math(EXPR failures "${failures} + 1")
@@ -85,7 +98,8 @@ else()
 endif()
 
 set(drawsRe "stats: ([0-9]+) draws, ([0-9]+) passes")
-set(lateRe "stats: late pass (on|off|fill): ([0-9]+) crack fills held into the aura's paste pass \\(([0-9.]+) MB of colour not loaded and as many not stored\\), ([0-9]+) drawn early")
+set(lateRe "stats: late pass (on|off|fill|join): ([0-9]+) crack fills held into the aura's paste pass \\(([0-9.]+) MB of colour not loaded and as many not stored\\), ([0-9]+) drawn early")
+set(joinRe ", ([0-9]+) list 11 draws joined the open pass without SCENE's depth \\(([0-9]+) passes not begun, ([0-9.]+) MB of colour at most each way\\)")
 set(crackRe "stats: crack fill (on|off): ([0-9]+) passes")
 set(trafficRe "stats: traffic: colour ([0-9.]+) MB loaded ([0-9.]+) MB stored, depth and stencil ([0-9.]+)/([0-9.]+) MB loaded/stored, [0-9.]+ MB cleared, ([0-9.]+) MB copied")
 
@@ -98,6 +112,7 @@ endfunction()
 
 set(compared 0)
 set(heldTotal 0)
+set(joinTotal 0)
 set(index 0)
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
@@ -130,7 +145,7 @@ foreach(dump IN LISTS dumps)
       endif()
       string(REPLACE ";" "," flat "${out}")
       set(ok TRUE)
-      foreach(re drawsRe lateRe crackRe trafficRe)
+      foreach(re drawsRe lateRe joinRe crackRe trafficRe)
         if(NOT flat MATCHES "${${re}}")
           message(SEND_ERROR "${dump} ${s} late pass ${lp}: no ${re} line:\n${out}")
           math(EXPR failures "${failures} + 1")
@@ -149,6 +164,10 @@ foreach(dump IN LISTS dumps)
       set(held_${lp} "${CMAKE_MATCH_2}")
       set(heldMb_${lp} "${CMAKE_MATCH_3}")
       set(early_${lp} "${CMAKE_MATCH_4}")
+      string(REGEX MATCH "${joinRe}" m "${flat}")
+      set(joined_${lp} "${CMAKE_MATCH_1}")
+      set(joinPasses_${lp} "${CMAKE_MATCH_2}")
+      set(joinMb_${lp} "${CMAKE_MATCH_3}")
       string(REGEX MATCH "${crackRe}" m "${flat}")
       set(crack_${lp} "${CMAKE_MATCH_2}")
       string(REGEX MATCH "${trafficRe}" m "${flat}")
@@ -159,7 +178,8 @@ foreach(dump IN LISTS dumps)
       set(cp_${lp} "${CMAKE_MATCH_5}")
       message(STATUS "${dump} ${s} late pass ${lp}: ${passes_${lp}} passes, ${draws_${lp}} draws, "
                      "${crack_${lp}} crack fill passes; ${held_${lp}} fills held "
-                     "(${heldMb_${lp}} MB each way), ${early_${lp}} drawn early; colour "
+                     "(${heldMb_${lp}} MB each way), ${early_${lp}} drawn early; ${joined_${lp}} "
+                     "list 11 draws joined ${joinPasses_${lp}} passes (${joinMb_${lp}} MB); colour "
                      "${cl_${lp}}/${cs_${lp}} MB, depth and stencil ${dl_${lp}}/${ds_${lp}} MB "
                      "loaded/stored, ${cp_${lp}} MB copied")
     endforeach()
@@ -168,17 +188,17 @@ foreach(dump IN LISTS dumps)
     endif()
     # the pair
     if(NOT word_0 STREQUAL "off" OR NOT held_0 EQUAL 0 OR NOT early_0 EQUAL 0 OR
-       NOT word_1 STREQUAL "on")
+       NOT joined_0 EQUAL 0 OR NOT word_1 STREQUAL "on")
       message(SEND_ERROR "${dump} ${s}: the late pass says ${word_0} (${held_0} held, ${early_0} "
                          "early) off and ${word_1} on: off holding nothing and on expected")
       math(EXPR failures "${failures} + 1")
     endif()
-    math(EXPR passesWant "${passes_0} - ${held_1}")
+    math(EXPR passesWant "${passes_0} - ${held_1} - ${joinPasses_1}")
     math(EXPR crackWant "${crack_0} - ${held_1}")
     if(NOT draws_1 EQUAL draws_0 OR NOT passes_1 EQUAL passesWant OR NOT crack_1 EQUAL crackWant)
       message(SEND_ERROR "${dump} ${s}: ${draws_1} draws, ${passes_1} passes, ${crack_1} crack "
                          "fill passes with the late pass; ${draws_0}, ${passes_0} and ${crack_0} "
-                         "without, ${held_1} fills held")
+                         "without, ${held_1} fills held, ${joinPasses_1} passes joined")
       math(EXPR failures "${failures} + 1")
     endif()
     mb_hundredths(cl0 "${cl_0}")
@@ -186,17 +206,25 @@ foreach(dump IN LISTS dumps)
     mb_hundredths(cs0 "${cs_0}")
     mb_hundredths(cs1 "${cs_1}")
     mb_hundredths(fall "${heldMb_1}")
+    mb_hundredths(joinFall "${joinMb_1}")
     math(EXPR fallL "${cl0} - ${cl1} - ${fall}")
     math(EXPR fallS "${cs0} - ${cs1} - ${fall}")
-    if(fallL LESS -2 OR fallL GREATER 2 OR fallS LESS -2 OR fallS GREATER 2)
+    math(EXPR fallMax "${joinFall} + 2")
+    if(fallL LESS -2 OR fallL GREATER fallMax OR fallS LESS -2 OR fallS GREATER fallMax)
       message(SEND_ERROR "${dump} ${s}: colour ${cl_0}/${cs_0} -> ${cl_1}/${cs_1} MB loaded/stored: "
-                         "the held fills name ${heldMb_1} MB each way")
+                         "the held fills name ${heldMb_1} MB each way, the joined passes up to "
+                         "${joinMb_1}")
       math(EXPR failures "${failures} + 1")
     endif()
-    if(NOT dl_1 STREQUAL dl_0 OR NOT ds_1 STREQUAL ds_0 OR NOT cp_1 STREQUAL cp_0)
+    mb_hundredths(dl0 "${dl_0}")
+    mb_hundredths(dl1 "${dl_1}")
+    mb_hundredths(ds0 "${ds_0}")
+    mb_hundredths(ds1 "${ds_1}")
+    if(dl1 GREATER dl0 OR ds1 GREATER ds0 OR NOT cp_1 STREQUAL cp_0 OR
+       (joinPasses_1 EQUAL 0 AND (NOT dl_1 STREQUAL dl_0 OR NOT ds_1 STREQUAL ds_0)))
       message(SEND_ERROR "${dump} ${s}: depth and stencil ${dl_1}/${ds_1} MB, copies ${cp_1} MB "
                          "with the late pass; ${dl_0}/${ds_0} and ${cp_0} without (the hold moves "
-                         "the fill's colour pass only)")
+                         "the fill's colour pass only, a join drops a pass's depth)")
       math(EXPR failures "${failures} + 1")
     endif()
     set(want "${want_${dump}}")
@@ -212,7 +240,14 @@ foreach(dump IN LISTS dumps)
         math(EXPR failures "${failures} + 1")
       endif()
     endif()
+    set(wantJoin "${wantJoin_${dump}}")
+    if(NOT wantJoin STREQUAL "" AND s STREQUAL "phone" AND NOT joinPasses_1 EQUAL wantJoin)
+      message(SEND_ERROR "${dump} ${s}: list 11's draws joined ${joinPasses_1} passes, ${wantJoin} "
+                         "expected (the pause menu after the aura's paste)")
+      math(EXPR failures "${failures} + 1")
+    endif()
     math(EXPR heldTotal "${heldTotal} + ${held_1}")
+    math(EXPR joinTotal "${joinTotal} + ${joinPasses_1}")
     set(dirOff "${OUT}/${index}-${s}-0")
     set(dirOn "${OUT}/${index}-${s}-1")
     file(GLOB pngs RELATIVE "${dirOff}" "${dirOff}/*.png")
@@ -241,8 +276,10 @@ endif()
 if(compared EQUAL 0)
   message(FATAL_ERROR "rd_late_pass_ab: no target compared over ${ndumps} dumps")
 endif()
-if(NOT "${BACKEND}" STREQUAL "opengl" AND heldTotal EQUAL 0)
-  message(FATAL_ERROR "rd_late_pass_ab: no crack fill was held over ${ndumps} dumps")
+if(NOT "${BACKEND}" STREQUAL "opengl" AND (heldTotal EQUAL 0 OR joinTotal EQUAL 0))
+  message(FATAL_ERROR "rd_late_pass_ab: ${heldTotal} crack fills held and ${joinTotal} passes "
+                      "joined over ${ndumps} dumps: one of each at least expected")
 endif()
 message(STATUS "rd_late_pass_ab: ${compared} targets the same bytes over ${ndumps} dumps; "
-               "${heldTotal} crack fills held into the aura's paste pass")
+               "${heldTotal} crack fills held into the aura's paste pass, ${joinTotal} passes "
+               "joined by list 11's draws")

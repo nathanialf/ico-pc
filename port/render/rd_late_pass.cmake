@@ -38,6 +38,22 @@ if(ICO_RUN_TESTS AND TARGET rd_crack_test)
                          ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk")
 endif()
 
+# rd_crack_join: rd_crack_test 2 join on the tile class's fakes: the aura's frame
+# (rd_crack_aura's) with two list 11 commands after the paste, each a sprite
+# into SCENE under Z ALWAYS without a Z write: with the late pass both drawn in
+# the paste's pass without SCENE's depth (2 draws, 1 pass), against the join off
+# (rd__late_pass_force(RD_LATE_FILL)) SCENE's colour and depth byte for byte and
+# one render pass fewer
+if(ICO_RUN_TESTS AND TARGET rd_crack_test)
+    add_test(NAME rd_crack_join
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_crack_test> "-DARGS=2|join"
+                     "-DEXPECT=rd: crack fill: on above 1x \\(scale 2x2, reach 1x1"
+                     "-DEXPECT2=rd: late pass: list 11's draws that use no depth drawn in the open pass on SCENE without its depth"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_crack.cmake")
+    set_tests_properties(rd_crack_join PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         ENVIRONMENT "${_dc_env};ICO_VK_FAKE_LIMITS=moltenvk")
+endif()
+
 # rd_late_pass_ab (test/rd_late_pass_ab.cmake): the dumps of
 # tools/late_pass_dumps.txt (machine-local; a listed dump that is absent fails)
 # replayed by rd_replay_tool --pass-dump --stats with ICO_RD_LATE_PASS=0 and =1 at

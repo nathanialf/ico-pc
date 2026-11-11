@@ -8,8 +8,12 @@
  *                 draw made the first draw of the aura's paste pass in a
  *                 frame whose glow plan draws nothing (DARK), so the fill
  *                 has no pass of its own there
+ *   RD_LATE_JOIN  a list 11 screen prim that neither tests nor writes the
+ *                 depth and takes no DATE joins the open pass on its target
+ *                 that has no depth (the pause menu's draws in the aura's
+ *                 paste pass) instead of beginning one with SCENE's depth
  * On by default on a tile-based GPU under Vulkan (MoltenVK too); off on the
- * other classes and on OpenGL.  ICO_RD_LATE_PASS=0|1|fill (the tests'
+ * other classes and on OpenGL.  ICO_RD_LATE_PASS=0|1|fill|join (the tests'
  * A/B only, docs/port/TESTING.md; no config key): off, every part, one
  * part (forced on any device and backend).  rd__late_pass_force is the
  * tests' switch (-1 the environment's or the profile's). */
@@ -22,7 +26,8 @@
 #include "rd_internal.h"
 
 #define RD_LATE_FILL 1u
-#define RD_LATE_ALL RD_LATE_FILL
+#define RD_LATE_JOIN 4u
+#define RD_LATE_ALL (RD_LATE_FILL | RD_LATE_JOIN)
 /* rd__late_pass_force only (the tests' frames, which hold no glow chain the
  * light plan reads): the fill held whatever the glow's plan */
 #define RD_LATE_ANY_PLAN 0x100u
@@ -138,7 +143,20 @@ const RdBorderBlocks *rd__scene_border_blocks(void);
  * nothing when none is held.  rd_blur_border.c's repeat with too many
  * blocks, rd_replay.c's snapshot and swap of SCENE (rd__crack_fill_snap) */
 struct Replay;
+struct DrawSetup;
 void rd__crack_fill_flush_held(struct Replay *r, int why);
 void rd__crack_fill_snap(struct Replay *r, const RdTargetRec *tc);
+
+/* RD_LATE_JOIN.  rd__late_pass_cmd (rd_crack_fill.c rd__crack_fill_at,
+ * before every command the walk replays): the command walked now.
+ * rd__late_pass_join (rd_replay.c prepareDrawEx, after the DATE cut's
+ * depth): a screen prim of list 11 under r's state whose draw needs no
+ * depth (its Z test off or ALWAYS, its Z write off, no DATE, no PRIM.AA1,
+ * no depth view sampled) gets no depth target in ds (tdId 0, depthFmt
+ * UNKNOWN) when the open pass on its target has none, so bindDrawEx draws
+ * it in that pass; counted (RdPerfRecord.latePassJoined, latePassJoinPasses
+ * the passes it joined, each one a pass the draw would have begun) */
+void rd__late_pass_cmd(const RdCmd *c);
+void rd__late_pass_join(struct Replay *r, struct DrawSetup *ds);
 
 #endif
