@@ -324,7 +324,7 @@ void window_stall_gpu_close(void)
 
 void window_stall_gpu_block(void)
 {
-    window_log_cost_part(LOG_COST_OTHER); /* the print before it (log_cost.h) */
+    window_log_cost_mark("the acquire and present lines"); /* before it (log_cost.h) */
 #ifdef __ANDROID__
     const double now = ico_thread_now_ms();
     static int s_thermalSaid;

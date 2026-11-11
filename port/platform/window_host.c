@@ -5047,6 +5047,7 @@ static void perf_log(void)
                      "; pre-pass skipped %u frames under %u slots", (unsigned)skip, (unsigned)minS);
         }
         fprintf(stderr, "window: %s%s%s%s\n", vu, twins, fit, rec);
+        window_log_cost_mark("the replays and VU lines");
     }
     {
         /* Vulkan: whether the display's image was already free when the
@@ -5087,6 +5088,7 @@ static void perf_log(void)
         window_stall_gpu_block(); /* Android: the kernel GPU driver's block */
         window_perf_hint_block();
         window_display_rate_line(s_window);
+        window_log_cost_mark("the hints and display rate lines");
     }
     if (s_perf.gpuN) {
         /* the GPU time per replay by list and by picture effect (each
@@ -5132,6 +5134,7 @@ static void perf_log(void)
 
         rd_perf_pass_agg_text_ex(&s_perf.passAgg, 5, rhi_limits()->tiler, true, top, sizeof(top));
         fprintf(stderr, "window: GPU top passes: %s%s\n", top, window_tiler_words());
+        window_log_cost_mark("the GPU lines");
     }
     {
         /* what a replay begins (the passes' count, for the tilers' fixed
@@ -5596,6 +5599,7 @@ void window_pace_log(Uint64 now)
 
         (void)window_scene_text(&s_sceneShare, layouts, sizeof(layouts));
         fprintf(stderr, "window: %s\n", layouts);
+        window_log_cost_mark("the presents and layout lines");
         s_blockKind = window_scene_dominant(&s_sceneShare);
         window_scene_reset(&s_sceneShare);
     }
@@ -5608,7 +5612,9 @@ void window_pace_log(Uint64 now)
                                  s_perf.ph.n ? s_perf.ph.total / s_perf.ph.n : 0.0,
                                  s_pres.pumpCount ? s_pres.pumpSumMs / s_pres.pumpCount : 0.0);
     /* the audio's 10 s line (out_sdl.c; the pull path's only) */
+    window_log_cost_mark("the hold and game thread lines");
     ico_audio_sdl_log_summary();
+    window_log_cost_mark("the audio line");
     if (s_pres.lockN > 0) {
         disp_log(sec, s_pres.lock.refreshNs);
     }

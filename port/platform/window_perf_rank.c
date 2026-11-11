@@ -125,7 +125,7 @@ static void window_perf_rank_block_lines(const WindowPerfBlock *in);
 
 void window_perf_rank_block(const WindowPerfBlock *in)
 {
-    window_log_cost_part(LOG_COST_OTHER); /* the print before it (log_cost.h) */
+    window_log_cost_mark("the display and slow scene lines"); /* before it (log_cost.h) */
     window_perf_rank_block_lines(in);
     window_log_cost_part(LOG_COST_RANK);
 }

@@ -27,6 +27,23 @@ static void keep(LogCostSpan *s, unsigned *n, unsigned *all, unsigned cap, doubl
     }
 }
 
+void log_cost_other(LogCost *c, const char *name, double ms)
+{
+    for (unsigned i = 0; i < c->otherN; i++) {
+        if (strcmp(c->other[i].name, name) == 0) {
+            c->other[i].ms += ms;
+            return;
+        }
+    }
+    if (c->otherN < LOG_COST_OTHER_NAMES) {
+        c->other[c->otherN].name = name;
+        c->other[c->otherN].ms = ms;
+        c->otherN++;
+    } else {
+        c->other[LOG_COST_OTHER_NAMES - 1u].ms += ms;
+    }
+}
+
 void log_cost_present(LogCost *c, double t0, double t1)
 {
     keep(c->present, &c->presentN, &c->presentAll, LOG_COST_SPANS, t0, t1);
@@ -133,9 +150,13 @@ int log_cost_text(const LogCost *c, char *buf, size_t n)
         if (c->partValid) {
             put(&o,
                 "of it the block's records %.2f, the kernel GPU and thermal reads %.2f, the "
-                "memory reads %.2f, the performance lines %.2f, the other lines %.2f; ",
+                "memory reads %.2f, the performance lines %.2f, the other lines %.2f",
                 c->partMs[LOG_COST_DRAIN], c->partMs[LOG_COST_KERNEL], c->partMs[LOG_COST_MEMORY],
                 c->partMs[LOG_COST_RANK], c->partMs[LOG_COST_OTHER]);
+            for (unsigned i = 0; i < c->otherN; i++) {
+                put(&o, "%s%s %.2f", i ? ", " : " (", c->other[i].name, c->other[i].ms);
+            }
+            put(&o, "%s; ", c->otherN ? ")" : "");
         }
         overlapWords(&o, c, &c->print, 1);
         put(&o, ")");
@@ -163,6 +184,12 @@ int log_cost_text(const LogCost *c, char *buf, size_t n)
         }
     } else {
         put(&o, "; no log thread: each line written on its own thread");
+    }
+    if (c->asks > 0) {
+        put(&o,
+            "; the log thread's asks %u (the thermal state %.2f ms, the memory figures %.2f ms "
+            "the last time)",
+            c->asks, c->askThermalMs, c->askMemoryMs);
     }
     if (c->jobs > 0) {
         put(&o,

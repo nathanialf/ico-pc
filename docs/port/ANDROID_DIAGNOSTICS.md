@@ -1383,3 +1383,17 @@ counters in the hot path.
   asked on the game thread as before (never on both: `ico_host_thermal` keeps statics). At the
   start `window: device: Android R (API N), <manufacturer> <model> (<device>)`, from the system
   properties.
+- **The other lines named, and the log thread kept off the game's core**: the logging line's
+  `the other lines R` is followed by its parts in order, `(the presents and layout lines a, the
+  hold and game thread lines b, the audio line c, the display and slow scene lines d, the replays
+  and VU lines e, the acquire and present lines f, the hints and display rate lines g, the GPU
+  lines h, the passes, walk and pixel lines i, the rest j)`, and by `; the log thread's asks N (the
+  thermal state T ms, the memory figures M ms the last time)`. Read formatter by formatter, those
+  lines only format, except the game thread line's three `/proc/self/task/<tid>/schedstat` reads
+  (kept: they are the block's own deltas). The bucket measured 2-5 ms on the owner's Pixel against
+  well under a millisecond of formatting: each unbuffered line is a pipe write that woke the log
+  thread, which the scheduler tends to put on the writer's core, so its file writes and logcat
+  (1.4-3 ms and 2.4-5.2 ms a block in the same lines) ran beside the print. The log thread now runs
+  at low priority and, once a line wakes it, waits 5 ms before it drains, so a block's burst goes
+  into the pipe without a wake-up a line (inference until a log shows the bucket fall). On a hard
+  kill the pipe may then hold up to 5 ms more of lines; the crash path drains it as before.

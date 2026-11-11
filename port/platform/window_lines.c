@@ -107,7 +107,7 @@ void window_memory_line(void)
     RhiStats st;
     long rss = -1, peak = -1, avail = -1, total = -1;
 
-    window_log_cost_part(LOG_COST_OTHER); /* the print before it (log_cost.h) */
+    window_log_cost_mark("the passes, walk and pixel lines"); /* before it (log_cost.h) */
 
     char gfx[160] = "graphics allocations not counted";
     char dev[96] = "; device memory unknown";
@@ -228,6 +228,17 @@ void window_log_cost_begin(void)
     c->partValid = 1;
 }
 
+void window_log_cost_mark(const char *what)
+{
+    if (s_logPartAt <= 0.0) {
+        return; /* outside the block's print */
+    }
+    const double now = ico_thread_now_ms();
+    s_logCost.partMs[LOG_COST_OTHER] += now - s_logPartAt;
+    log_cost_other(&s_logCost, what, now - s_logPartAt);
+    s_logPartAt = now;
+}
+
 void window_log_cost_part(int part)
 {
     if (s_logPartAt <= 0.0 || part < 0 || part >= LOG_COST_PARTS) {
@@ -244,8 +255,9 @@ void window_log_cost_end(void)
     const double t1 = ico_thread_now_ms();
     char text[1024];
 
-    window_log_cost_part(LOG_COST_OTHER); /* the rest of the print */
+    window_log_cost_mark("the rest"); /* the rest of the print */
     s_logPartAt = 0.0;
+    c->asks = window_stall_asks_take(&c->askThermalMs, &c->askMemoryMs);
     if (s_logPrintT0 > 0.0 && t1 >= s_logPrintT0) {
         c->printValid = 1;
         c->printMs = t1 - s_logPrintT0;
