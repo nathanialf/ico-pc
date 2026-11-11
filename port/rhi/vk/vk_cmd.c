@@ -51,6 +51,55 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* ------------------------------------------------------- the barrier trace
+ * rhi_vk.h vkr_test_barrier_trace: every vkCmdPipelineBarrier of this file
+ * noted while the tests ask (the recording thread's; one branch a barrier
+ * otherwise).  The macro below wraps volk's function pointer of the same
+ * name (not expanded again inside itself); its arguments have no side
+ * effects at any call site. */
+#define VKR_TEST_BARRIERS 64u
+static bool s_barTrace;
+static VkrTestBarrier s_bar[VKR_TEST_BARRIERS];
+static uint32_t s_barN;
+
+void vkr_test_barrier_trace(bool on)
+{
+    s_barTrace = on;
+    s_barN = 0;
+}
+
+uint32_t vkr_test_barrier_get(VkrTestBarrier *out, uint32_t cap)
+{
+    for (uint32_t i = 0; out && i < cap && i < s_barN && i < VKR_TEST_BARRIERS; i++) {
+        out[i] = s_bar[i];
+    }
+    return s_barN;
+}
+
+static void vkr_bar_note(VkPipelineStageFlags src, VkPipelineStageFlags dst, uint32_t nMem,
+                         const VkMemoryBarrier *mb, uint32_t nBuf, uint32_t nImg)
+{
+    if (s_barN < VKR_TEST_BARRIERS) {
+        s_bar[s_barN] = (VkrTestBarrier){(uint32_t)src,
+                                         (uint32_t)dst,
+                                         nMem && mb ? (uint32_t)mb->srcAccessMask : 0u,
+                                         nMem && mb ? (uint32_t)mb->dstAccessMask : 0u,
+                                         nMem,
+                                         nBuf,
+                                         nImg};
+    }
+    s_barN++;
+}
+
+#define vkCmdPipelineBarrier(cb, src, dst, dep, nMem, mb, nBuf, bufs, nImg, imgs)                  \
+    do {                                                                                           \
+        if (s_barTrace) {                                                                          \
+            vkr_bar_note((src), (dst), (nMem), (mb), (nBuf), (nImg));                              \
+        }                                                                                          \
+        vkCmdPipelineBarrier((cb), (src), (dst), (dep), (nMem), (mb), (nBuf), (bufs), (nImg),      \
+                             (imgs));                                                              \
+    } while (0)
+
 /* ------------------------------------------------------------------ frames */
 bool vkr_frames_init(void)
 {
