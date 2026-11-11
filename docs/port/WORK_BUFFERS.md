@@ -1461,7 +1461,8 @@ writes both aspects of a loaded and stored attachment: 4 bytes of depth and 1 of
 (`port/rhi/rhi_traffic.c` charges them apart). The stencil's bits 0-5 hold the shadow count from
 its reset to its resolve, bit 6 is DATE's, made again in each pass that tests it
 (`rd__replay_date_take` writes 0 into it over its area first, then 1 where the alpha's MSB is set;
-the tests read it under mask 0x40 alone), and bit 7 is unused. Outside the shadow window
+the tests read it under mask 0x40 alone), and bit 7 marks the shadow tiles' dead tiles, written and
+read inside one composite's own pass ([RENDER_POST.md](RENDER_POST.md#the-shadow-tiles)). Outside the shadow window
 (`RdStencilWindow`, `port/render/rd_shadow.c`) nothing reads what a pass loads or stores of it:
 `rd__stencil_ops` loads it with the depth and stores it only while the window is open on that depth.
 
@@ -1517,7 +1518,8 @@ before.
 
 **The same bytes.** No draw outside the window reads a stencil bit a pass before it wrote: the
 count's bits are cleared at the reset and read before the resolve's pass ends; DATE's bit is
-written over its area in the pass that tests it; nothing uses bit 7. The depth's own ops do not
+written over its area in the pass that tests it; bit 7 (the shadow tiles) is cleared and written in
+the pass that tests it too. The depth's own ops do not
 change. So no `DIVERGENCES.md` row: the picture is the same bytes on every device and backend.
 
 **The counters and the log.** `rd__stencil_cut_pass` (after the store plan, the pass area and the
@@ -1623,6 +1625,16 @@ and `1` at the PowerVR phone's profile, the Mali's, the B-spline at 2x and MSAA 
 every target byte for byte ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)). The shadow
 count's own self-test (`rd_shadow_selftest`) compares the one draw, now over its box, with the
 seven draws byte for byte on the device at start.
+
+## The shadow tiles' masks
+
+`port/render/rd_shadow_tile.c` keeps up to four RGBA8 textures of its own (not named targets), one
+a shadow level the replay's composites read: `ceil(w / 2) x ceil(h / 2)` texels of a `w x h` level
+(SHADOW0 424 x 256: 212 x 128, 108 KB; SHADOW1 106 x 64; SHADOW2 53 x 32), made again when the
+level's size changes, drawn once a replay before the composites' pass begins (one pass each, its
+colour not loaded: every texel is written) and read by the composites' DATE set-up in that pass
+([RENDER_POST.md](RENDER_POST.md#the-shadow-tiles)). Nothing else reads or keeps them across
+replays.
 
 ## A cleared source read as its colour
 

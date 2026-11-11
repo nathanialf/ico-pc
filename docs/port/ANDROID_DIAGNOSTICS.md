@@ -676,6 +676,25 @@ What the log shows:
   its three SCENE passes) at the same passes; its ms against the last log's at the same scene is
   this device's price of that many MB (issue 179's rates line had no fit for it).
 
+### The shadow tiles
+
+On the PowerVR class (and desktop Vulkan) the shadow composites are culled by the stencil outside a
+GPU tile mask of where a shadow lands ([RENDER_POST.md](RENDER_POST.md#the-shadow-tiles)). What the
+log shows:
+
+- once at start, after the stencil's line: `rd: shadow tiles: on (the PowerVR class; self-test ok:
+  SCENE the same bytes over N texels, L of M mask texels live)`, or `rd: shadow tiles: off (<why>)`
+  (`not the PowerVR or a desktop class`, `DATE by the snapshot here`, `self-test failed: SCENE
+  differs at ...`);
+- once: `rd: shadow tiles: the first composite over the tile mask (command N, SHADOWk WxH, mask
+  WxH, the set-up over WxH texels)`;
+- a composite drawn whole: `rd: shadow tiles: a composite drawn whole: <why>`, the first 8 then
+  every 100th;
+- in each 10 s block's `window: per replay` line, after the shadow box's clause: `; shadow tiles:
+  2.9 composites a replay over the tile mask (2.9 masks), 0.0 whole` with the shadows on screen;
+  the `perf classes` line's list 3 shows what it saved. The live tiles are not counted on the
+  device: `rd_replay_tool --stats` on the player's F12 frame prints them.
+
 ### The shadows over the volumes' box
 
 On every device the shadow count's one draw and the three shadow composites are drawn over the

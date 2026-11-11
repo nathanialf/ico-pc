@@ -937,7 +937,7 @@ decrements (`port/render/rd_shadow.c`; `port/render/rd.h` (`rd_shadow_count_targ
 
 The stencil's bits: 0-5 the count (`RD_SHADOW_STENCIL_MASK`, the only bits the count writes and
 the resolve reads), 6 DATE's (`RD_DATE_STENCIL_BIT`: its setup writes it alone and its draws read
-it alone, [The replay](RENDER.md#the-replay)), 7 unused. A count's INCR_WRAP or DECR_WRAP through the write
+it alone, [The replay](RENDER.md#the-replay)), 7 the shadow tiles' mark (below). A count's INCR_WRAP or DECR_WRAP through the write
 mask 0x3F leaves bit 6 as it was and gives bits 0-5 the same value whatever bit 6 holds, so the
 two never meet; the shadow reset clears the whole stencil, which DATE's setup writes again in the
 pass that needs it (`port/render/rd_pipeline.c` (`shadowStencil`)). So outside the shadow window
@@ -946,6 +946,78 @@ window only, or with the depth on every pass on most tile-based GPUs) is
 [WORK_BUFFERS.md](WORK_BUFFERS.md#the-stencil-outside-the-shadow-window); the count and the
 composites drawn over the volumes' box alone are
 [there too](WORK_BUFFERS.md#the-shadows-over-the-volumes-box).
+
+### The shadow tiles
+
+The volumes' box is the volumes' extent; they sweep open space, so on the owner's phone it is the
+whole picture at the bridge and in the cage while the shadow that lands is small: the bridge
+frame v2809's pass dump (the phone's recipe) has alpha above 0 in SHADOW0 (144,82)-(262,192) of 424 x 256,
+SHADOW1 (72,41)-(130,96) of 212 x 128, SHADOW2 (37,21)-(64,47) of 106 x 64. Where a shadow lands is
+known only on the GPU once the levels are drawn, so `port/render/rd_shadow_tile.c` culls each
+composite there with the stencil:
+
+- **The masks.** Once a replay, at the first composite that takes the tiles and while no pass on
+  its target is open (the levels' passes are on SHADOW0-2), one pass a level the replay's boxed
+  composites read (`shadow_tile_mask_ps`, `port/shaders/blit.hlsl`): a texel per 2 x 2 level
+  texels, 1 where any level texel within 3 texels of the block (5 with the B-spline composites)
+  holds alpha above 0, by integer loads (an 8-bit alpha above 0 reads above 0.0 exactly; 64 loads
+  a mask texel), the indices clamped, or wrapped where the first composite's sampler state repeats
+  (taken as wrapped even where the replay clamps a screen copy: that only widens the mask).
+- **The set-up** (`rd__shadow_tile_take`, in place of `rd__replay_date_take` for such a composite,
+  in its own pass, over the same area): `RD_STENCIL_DATE_CLEAR2` writes 0 into bits 6 and 7;
+  `RD_STENCIL_TILE_MARK` writes 1 into bit 7 where `shadow_tile_mark_ps` finds the mask block of the
+  pixel's UV 0 (the composite's sprite map at the pixel's centre: `g_param`); after the colour
+  barrier `RD_STENCIL_DATE_SET_T` writes 1 into bit 6 where the alpha's MSB is set and bit 7 is 0.
+  The composite's passes test `RD_STENCIL_DATE_TEST0_T` / `TEST1_T` (read mask 0xC0, the reference
+  0x40: GREATER holds for 0 alone, EQUAL for 0x40 alone), which is TEST0's or TEST1's verdict where
+  bit 7 is 0. The set-up is always taken whole and never reused (`dateStFor` 0): every later DATE
+  draw takes its own, which writes bit 6 over its area again.
+
+**The same bytes.** A dead tile's pixel: the mark's UV is the affine the GPU interpolates for the
+composite (up to rounding and FrameCB's half texel, under a level texel); the composite's bilinear
+taps lie within one texel of its UV (two with the B-spline, plus the GS pixel's snap above 1x), all
+inside the block's margin, all alpha 0, so As is 0 and its alpha test (GREATER 0, AFAIL KEEP, no Z
+write: the box's composite form) writes nothing; the stencil culls it, which writes nothing either.
+A live tile's pixel: bit 7 is 0, bit 6 as before, the composite's own geometry, interpolation and
+shader. Bit 6 in a dead tile is 0 rather than the MSB: only that composite reads it, and it is culled
+there. Bits 0-5 are never touched. So no `DIVERGENCES.md` row. The composite's geometry is not
+split into tile quads: interpolated UVs at a pixel are not provably the same bits in another
+triangle, so the cull is the stencil's, before the fragment shader where the device tests early.
+
+**Where.** On by default on the PowerVR class and the desktop classes where the start-up self-test
+passes; off on the Adreno and Mali classes (issues 179, 211, 123), Apple and other tile-based GPUs.
+Only where DATE takes the stencil bit (Vulkan with the local read): the snapshot path's composites
+are drawn whole; the shaders are made on Vulkan alone. A composite whose box is empty, outside the
+MSAA epoch's rule, or not boxed (rd_shadow_box.c refuses it) is drawn as before. Drawn whole and
+counted (`RdPerfRecord.shadowTileWhy`): off on the device, a pass on the composite's target open (no
+mask can be drawn without breaking it), no mask, not one sprite or a degenerate map or another wrap
+than the mask's, the tiled set-up's pipelines missing. `ICO_RD_SHADOW_TILE=0|1`: the tests' switch
+([TESTING.md](TESTING.md)); no setting.
+
+**The self-test** (`rd__shadow_tile_selftest`, from `rd_fog_selftest` once a renderer after the
+stencil's): a frame at SCENE's size: list 0 a ground (its top half's alpha MSB 1, its bottom
+half's 0), list 3 a volume's count on WORK2, SHADOW0 from it, one composite into SCENE (the TEST
+word 0x3400D, LERP_AS FIX 0), list 4 a DATE DATM 1 sprite (a later reader of bit 6); replayed with
+the tiles off and on, MSAA held off: SCENE byte for byte, the composite drawn over a mask with dead
+tiles. A failure keeps the tiles off.
+
+**The lines.** Once at start: `rd: shadow tiles: on (the PowerVR class; self-test ok: ...)` or
+`rd: shadow tiles: off (<why>)`; once: `rd: shadow tiles: the first composite over the tile mask
+(...)`; a composite drawn whole: `rd: shadow tiles: a composite drawn whole: <why> ...` (first 8,
+every 100th). The 10 s `window: per replay` line: `; shadow tiles: C composites a replay over the
+tile mask (M masks), K whole (<why> n)`. `rd_replay_tool --stats`: `stats: shadow tiles on|off: C
+composites over the tile mask (M masks), K whole (...); tiles live SHADOW2 l of n SHADOW1 ...
+SHADOW0 ...` (the masks read back after the replay; the device's own log has no tile count, which
+would need a readback a frame).
+
+**What it saves** (reasoned, not measured): on the bridge frame at most 3717 of SHADOW0's 27136 mask
+texels, 1023 of SHADOW1's 6784 and 289 of SHADOW2's 1696 are live (14 %, 15 %, 17 % of the
+picture's composites and set-ups' bit-6 draws), against the whole picture before; three cheap mark
+draws and three small mask passes are added.
+
+**The tests.** `rd_shadow_tile` and `rd_shadow_tile_selftest` (`port/render/test/rd_shadow_tile_test.c`)
+and `rd_shadow_tile_ab` (`tools/shadow_tile_dumps.txt`, the bridge frame's live texels under the
+bounds above) ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ## Water and render-to-texture blocks
 
