@@ -83,6 +83,7 @@ static void fill(IcoDumpJob *j, const char *dir, const char *stamp, const char *
     j->dumpLen = dlen;
     j->pruneSlow = 1;
     j->gameMs = 2.5;
+    j->drainMs = 1.5;
 }
 
 static void wait_done(IcoDumpDone *d)
@@ -150,7 +151,8 @@ static void test_job(const char *base)
     CHECK(ico_dump_auto_submit(&j) == 0);
     memset(&d, 0, sizeof(d));
     wait_done(&d);
-    CHECK(d.result == 0 && d.workerMs >= 0.0 && d.gameMs == 2.5 && d.bytes == sizeof(dump));
+    CHECK(d.result == 0 && d.workerMs >= 0.0 && d.gameMs == 2.5 && d.drainMs == 1.5 &&
+          d.bytes == sizeof(dump));
     CHECK(strcmp(d.text, "text 20261110-100000") == 0 && strcmp(d.tag, "slow-scene dump") == 0);
     memset(&z, 0, sizeof(z));
     CHECK(mz_zip_reader_init_file(&z, d.zip, 0));

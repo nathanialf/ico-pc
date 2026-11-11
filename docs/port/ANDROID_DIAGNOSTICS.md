@@ -1088,3 +1088,12 @@ counters in the hot path.
 
   A draw that is drawn rarely and hangs the GPU when it is shows as the rare pipeline common to
   every such line. CPU data only; vertex counts are not in it (they are the draw code's).
+- **The automatic captures' game-thread time split** (`port/platform/window_dump_auto.c`): the
+  slow-scene dump's and the skin check's capture line gives the wait for the render thread's work
+  in flight apart from the frame's own bytes: `window: slow-scene dump: 156.1 ms on the game thread
+  (the render thread's work in flight 120.4 ms of it, the frame's bytes 35.7 ms), 1017 ms on the
+  worker (...)`. The frame is serialised on the game thread because the ring frame names textures,
+  meshes and targets the game thread changes from its next call on (`rd_dump.c` `dumpFrame` drains
+  the render and submit threads first); the zip and the file writes were already the worker's. On a
+  GPU-bound phone the drain is the render thread's own slot wait, so most of issue 179's 26-156 ms
+  hitches are expected to be that wait (unmeasured until the next log).

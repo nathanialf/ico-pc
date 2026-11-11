@@ -39,6 +39,10 @@ typedef struct IcoDumpJob {
     int stored;    /* the entries stored, not deflated */
     int pruneSlow; /* keep ICO_SLOW_DUMP_KEEP slow-*.zip beside the zip */
     double gameMs; /* the game thread's cost of this job (the snapshot) */
+    /* of it, the wait for the render and submit threads to finish what was
+       handed to them (rd_thread_drain), before the frame's bytes could be
+       read; -1 not measured apart */
+    double drainMs;
 } IcoDumpJob;
 
 typedef struct IcoDumpDone {
@@ -48,7 +52,8 @@ typedef struct IcoDumpDone {
     char why[160];
     int result; /* 0 both, 1 without the log, -1 not written */
     double gameMs, workerMs;
-    size_t bytes; /* the dump's bytes */
+    double drainMs; /* IcoDumpJob.drainMs */
+    size_t bytes;   /* the dump's bytes */
 } IcoDumpDone;
 
 /* 1 when a job is being written or its result is not yet picked up: the

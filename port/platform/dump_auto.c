@@ -73,6 +73,7 @@ static void write_job(IcoDumpJob *j, IcoDumpDone *d)
     snprintf(d->zip, sizeof(d->zip), "%s", j->zip);
     snprintf(d->text, sizeof(d->text), "%s", j->text);
     d->gameMs = j->gameMs;
+    d->drainMs = j->drainMs;
     d->bytes = j->dumpLen;
     e[n].name = j->dumpName;
     e[n].data = j->dump;

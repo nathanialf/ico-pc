@@ -709,7 +709,7 @@ that stops again writing its own line without the retry mark); a stop at the fre
 - `dump_auto_test.c` (ctest `dump_auto`): the automatic dumps' worker (`dump_auto.h`, issues 123 and
   179) and the zip from memory (`ico_zip_mem_files`, `ico_zip_add_bundle`): the entries and the log
   read back, a missing log leaving the entries alone, nothing deleted; a job written whole (the
-  frame, the tick before, the log byte for byte, the sidecar, both costs in the result, the slow
+  frame, the tick before, the log byte for byte, the sidecar, both costs and the drain's part in the result, the slow
   zips pruned to three); a second job while one is written dropped with its line and counted, never
   queued, its block the caller's, the first finishing whole, a new job taken after the result is
   polled; a zip that cannot be written keeping the frame loose; the join at shutdown with a job in
