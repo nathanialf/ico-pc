@@ -17,7 +17,9 @@
  *   r4  a post sprite, a copy or a clear in a run: undecided; a draw on
  *       another target after a run: depth-free;
  *   r5  no run opens at a DATE draw without a depth target, one that tests
- *       or writes the depth, or a PRIM.AA1 / depth-view draw (depthFree off).
+ *       or writes the depth, or a PRIM.AA1 / depth-view draw (depthFree off);
+ *   r6  the cut takes integer scales only (rd_date_cut_scale_ok: 1x, 2x, 3x
+ *       yes; the PowerVR phone's 2.79 x 2.41, 3 x 2.5 and 0.5 no).
  * On a Vulkan device (77 without one, after the checks above), DATE by the
  * R8 snapshot:
  *   k   every screen-family key with the depth attached, its test ALWAYS,
@@ -194,7 +196,17 @@ static void testRule(void)
     r = runRule(r5, sizeof(r5) / sizeof(r5[0]));
     CHECK(r.n == 0 && r.undecided == 0, "r5: %u runs, %u undecided; none expected", r.n,
           r.undecided);
-    printf("  the rule: r1-r5 checked\n");
+    /* r6: the scales the cut takes (rd_date_cut_scale_ok): whole texels a
+     * GS pixel only; the PowerVR phone's Resolution Auto (2364x1080 for
+     * 848x448: 2.79 x 2.41), where lavapipe drew a composite one level apart
+     * with and without the depth, is refused */
+    CHECK(rd_date_cut_scale_ok(1.0f, 1.0f) && rd_date_cut_scale_ok(2.0f, 2.0f) &&
+              rd_date_cut_scale_ok(3.0f, 3.0f),
+          "r6: an integer scale refused");
+    CHECK(!rd_date_cut_scale_ok(2364.0f / 848.0f, 1080.0f / 448.0f) &&
+              !rd_date_cut_scale_ok(3.0f, 2.5f) && !rd_date_cut_scale_ok(0.5f, 0.5f),
+          "r6: a fractional scale taken");
+    printf("  the rule: r1-r6 checked\n");
 }
 
 /* ------------------------------------------------------ the start-up set */
