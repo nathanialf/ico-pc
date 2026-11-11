@@ -2,6 +2,8 @@
 
 (kept current after every merge; player words only)
 
+- Russian (bob-ttz): more of the menus are translated, among them upscaling, the combat options, the chain speed rows and free movement, and the difficulty screen (thanks, bob-ttz). The hardest difficulty's description stays in English for now.
+
 ## Fixed
 
 (kept current after every merge; player words only)
