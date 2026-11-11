@@ -481,7 +481,7 @@ a phone's.
   40.0 ms tick; a picture's work done 61.0 ms after its last submit (longest 61.0), the slot wait
   blocked 168 times (27.0 ms on average, longest 27.0); passes asked a picture: 20.0 passes, colour
   8.0 MB loaded 9.0 MB stored, depth and stencil 4.0 MB loaded 2.0 MB stored, 3.0 MB cleared, 6.00
-  Mpx of area, copies 1.0 MB (uncompressed; 1.0 passes with an attachment of no known format, at 4
+  Mpx of area, copies 1.0 MB (each copy once: as many read as written; uncompressed; 1.0 passes with an attachment of no known format, at 4
   bytes a texel); 360 draws, 329 pipeline and 458 bind group binds, 46k vertex invocations, 1826 KB
   uploaded (1.0 textures), 3.0 DATE snapshots; GPU a picture: span 60.0 ms, ...; the pictures' GPU
   work median 59.5 ms, worst 63 ms`. Decides the limiting side, from the block alone: below 95 %
@@ -504,6 +504,11 @@ a phone's.
   stores, at the format's bytes a texel times the samples over the render area): Arm's AFBC or
   Qualcomm's UBWC move fewer, and a store nothing reads may be dropped by the driver, so they are
   the ceiling of the tile-memory traffic and the counters a saving scales with.
+- `rd_replay_tool --stats` prints one picture's figures of the same kind for a dump A/B: `<dump>:
+  stats: traffic: colour 50.70 MB loaded 120.50 MB stored, depth and stencil 12.50/24.70 MB
+  loaded/stored, 70.30 MB cleared, 9.90 MB copied (each copy counted once: as many MB read as
+  written), 36 passes (1 with an attachment of no known format, at 4 bytes a texel)` (the example's
+  figures are made up to the shape of a Pixel stage 4 picture).
 - `window: perf classes a picture (12 timed replays): list 3 22.40 ms: 1.0 passes, 61 draws, 61
   binds, colour 1.8/3.6 MB, depth 1.8/0.0 MB loaded/stored, 0.0 MB cleared, 0.47 Mpx; list 0 20.10
   ms: ...; DATE snapshots 3.60 ms: 3.0 passes, ... (6 of 9 classes; all 59.90 ms)`: the timed
@@ -529,7 +534,8 @@ a phone's.
   the scene and classes lines). Never the copies' rate: on a tile-based GPU a copy's piece carries
   the flush of the pass before it (a Pixel 10 Pro Fold's log read 0.01 ms a MB from the copies against
   0.05 to 0.16 from the same phone's fits, five to fifteen times low). `no fit (N, or no spread in
-  their bytes)` where every snapshot moved the same bytes.
+  their bytes)` where every snapshot moved the same bytes. The copies' MB count each copy once (the bytes read, as many
+  written).
 - `window: perf slowest picture: replay 4821 (frame 4820), GPU span 63.1 ms over 20 pieces: list 3
   912x512 24.10 ms (70 draws, 66 binds; loads 4.1 MB, stores 4.1 MB), ... (the top 5 by GPU time;
   GPU time by pipeline is not measured)`: the block's slowest timed picture's costliest pieces.

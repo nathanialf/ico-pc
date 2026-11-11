@@ -276,7 +276,8 @@ static void testGpu(void)
     CHECK_IN(
         line,
         "colour 8.0 MB loaded 9.0 MB stored, depth and stencil 4.0 MB loaded 2.0 MB "
-        "stored, 3.0 MB cleared, 6.00 Mpx of area, copies 1.0 MB (uncompressed; 1.0 passes with an "
+        "stored, 3.0 MB cleared, 6.00 Mpx of area, copies 1.0 MB (each copy once: as many read as "
+        "written; uncompressed; 1.0 passes with an "
         "attachment of no known format, at 4 bytes a texel)");
     CHECK_IN(line, "the pictures' GPU work median 59.5 ms, worst 63 ms");
 

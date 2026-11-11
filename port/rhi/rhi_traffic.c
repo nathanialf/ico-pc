@@ -256,7 +256,9 @@ void rhi_traffic_copy(RhiTexture src, RhiViewAspect aspect, RhiRect region)
     RhiTrafficFmt f;
     const uint32_t b =
         rhi_traffic_format_of(src, &f) ? rhi_traffic_texel_bytes((RhiFormat)f.format, aspect) : 4u;
-    add(&s_copy, 2u * (uint64_t)region.w * (uint64_t)region.h * b);
+    /* once: the bytes read (as many are written); counting both doubled a
+       9.7 MB copy into "copies 19.8 MB" on the 10 s line */
+    add(&s_copy, (uint64_t)region.w * (uint64_t)region.h * b);
 }
 
 void rhi_traffic_forget(void)

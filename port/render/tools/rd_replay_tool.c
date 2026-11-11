@@ -3033,6 +3033,16 @@ int main(int argc, char **argv)
                pr->screenCmds, pr->screenDraws);
         printf("%s: stats: bind cache: %u pipeline, %u bind group and %u state repeats skipped\n",
                dump, pr->pipelineBindsSkipped, pr->bindGroupBindsSkipped, pr->stateSetsSkipped);
+        /* the attachment bytes the passes asked for (rhi_traffic.c, the
+         * 10 s perf scene line's figures for one picture): a dump A/B's MB */
+        printf("%s: stats: traffic: colour %.2f MB loaded %.2f MB stored, depth and stencil "
+               "%.2f/%.2f MB loaded/stored, %.2f MB cleared, %.2f MB copied (each copy counted "
+               "once: as many MB read as written), %u passes (%u with an attachment of no known "
+               "format, at 4 bytes a texel)\n",
+               dump, (double)pr->colorLoadBytes / 1048576.0,
+               (double)pr->colorStoreBytes / 1048576.0, (double)pr->depthLoadBytes / 1048576.0,
+               (double)pr->depthStoreBytes / 1048576.0, (double)pr->clearBytes / 1048576.0,
+               (double)pr->copyBytes / 1048576.0, pr->renderPasses, pr->passUntracked);
         if (pr->backendWriteBytes) {
             printf("%s: stats: Direct3D 11 submits wrote %llu bytes to the GPU\n", dump,
                    (unsigned long long)pr->backendWriteBytes);

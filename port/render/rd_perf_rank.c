@@ -642,7 +642,7 @@ int rd_perf_rank_scene_text(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
     put(&o,
         "; passes asked a picture: %.1f passes, colour %.1f MB loaded %.1f MB stored, depth and "
         "stencil %.1f MB loaded %.1f MB stored, %.1f MB cleared, %.2f Mpx of area, copies %.1f "
-        "MB (uncompressed; %.1f passes with an attachment of no known format, at 4 bytes a "
+        "MB (each copy once: as many read as written; uncompressed; %.1f passes with an attachment of no known format, at 4 bytes a "
         "texel); %.0f draws, %.0f pipeline and %.0f bind group binds, %.0fk vertex "
         "invocations, %.0f KB uploaded (%.1f textures), %.1f DATE snapshots",
         b->passes / N, mb(b->colorLoad) / N, mb(b->colorStore) / N, mb(b->depthLoad) / N,

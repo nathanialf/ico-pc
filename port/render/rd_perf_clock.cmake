@@ -35,3 +35,17 @@ target_compile_options(rd_perf_rank_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_P
 if(ICO_RUN_TESTS)
     add_test(NAME rd_perf_rank COMMAND rd_perf_rank_test)
 endif()
+
+# rd_replay_tool_traffic_stats: --stats names one picture's attachment
+# traffic (rhi_traffic.c, the perf scene line's figures), so a dump A/B can
+# assert MB a picture; a copy counted once (lavapipe, the pixel frame dump)
+if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
+    add_test(NAME rd_replay_tool_traffic_stats
+             COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_traffic.png" --present 640x480
+                     --stats)
+    set_tests_properties(rd_replay_tool_traffic_stats PROPERTIES
+                         PASS_REGULAR_EXPRESSION
+                         "stats: traffic: colour [0-9]+\\.[0-9][0-9] MB loaded [0-9]+\\.[0-9][0-9] MB stored, depth and stencil [0-9.]+/[0-9.]+ MB loaded/stored, [0-9.]+ MB cleared, [0-9.]+ MB copied \\(each copy counted once: as many MB read as written\\), [1-9][0-9]* passes"
+                         SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
+endif()

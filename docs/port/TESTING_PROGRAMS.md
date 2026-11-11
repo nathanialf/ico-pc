@@ -1593,7 +1593,8 @@ The renderer's test programs have a page of their own:
   render area clamped to the size, MSAA 4x, attachments the table does not know (4 bytes, the depth
   as D32F, untracked), a pass with no attachment; the handle table over 3000 handles with every
   third deleted (the backward shift keeps the rest reachable), forget; the sums in `RhiStats`
-  through the pass and copy calls, the window's image counted untracked (`rhi_traffic`).
+  through the pass and copy calls (a copy counted once: its texels times the aspect's bytes, the
+  bytes read, as many written), the window's image counted untracked (`rhi_traffic`).
 - `rhi_vk_spirv_scan_test.c`: `port/rhi/vk/vk_spirv_scan.c`, pure: the RHI tests' ten modules
   (every `ps_*` a fragment module without a storage buffer, `vs_store` and `cs_store` with one,
   `vs_main` neither), `rhi_vk_ps_storage.h`'s fragment shader (a StructuredBuffer: BufferBlock)
