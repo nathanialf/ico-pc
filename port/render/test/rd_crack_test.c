@@ -765,7 +765,8 @@ int main(int argc, char **argv)
          * no chain the light plan reads; rd_late_pass.c) */
         rd__late_pass_force(heldBits());
     } else if (s_after == AFTER_JOIN) {
-        rd__late_pass_force((int)RD_LATE_ALL); /* the tile class's default, said */
+        rd__late_pass_force(
+            (int)RD_LATE_ALL); /* every part, the join among them (off by default) */
     }
     RdSettings st;
     memset(&st, 0, sizeof(st));

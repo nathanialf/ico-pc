@@ -17,10 +17,15 @@
  *                 depth and takes no DATE joins the open pass on its target
  *                 that has no depth (the pause menu's draws in the aura's
  *                 paste pass) instead of beginning one with SCENE's depth
- * On by default on a tile-based GPU under Vulkan (MoltenVK too); off on the
- * other classes and on OpenGL.  ICO_RD_LATE_PASS=0|1|fill|defer|join (the tests'
- * A/B only, docs/port/TESTING.md; no config key): off, every part, one
- * part (forced on any device and backend).  rd__late_pass_force is the
+ * FILL and DEFER on by default on a tile-based GPU under Vulkan (MoltenVK
+ * too; RD_LATE_DEFAULT); off on the other classes and on OpenGL.  JOIN is
+ * off by default everywhere: its A/B (rd_late_pass_ab, issues 102's and
+ * 164's frames) differs by one level on some texels of the menu's text on
+ * lavapipe and llvmpipe, at 2x and at the phone's scale, and nothing proves
+ * the no-depth pipeline twin rounds as its twin with the depth on a device.
+ * ICO_RD_LATE_PASS=0|1|all|fill|defer|join (the tests' A/B only,
+ * docs/port/TESTING.md; no config key): off, the default parts, every part,
+ * one part (forced on any device and backend).  rd__late_pass_force is the
  * tests' switch (-1 the environment's or the profile's). */
 #ifndef PORT_RENDER_RD_LATE_PASS_H
 #define PORT_RENDER_RD_LATE_PASS_H
@@ -34,6 +39,8 @@
 #define RD_LATE_DEFER 2u
 #define RD_LATE_JOIN 4u
 #define RD_LATE_ALL (RD_LATE_FILL | RD_LATE_DEFER | RD_LATE_JOIN)
+/* the profile's parts and ICO_RD_LATE_PASS=1's: the join left out */
+#define RD_LATE_DEFAULT (RD_LATE_FILL | RD_LATE_DEFER)
 /* rd__late_pass_force only (the tests' frames, which hold no glow chain the
  * light plan reads): the fill held whatever the glow's plan */
 #define RD_LATE_ANY_PLAN 0x100u

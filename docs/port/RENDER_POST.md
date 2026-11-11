@@ -1416,10 +1416,12 @@ copied and as many not loaded), M copied (last: <why>); early leave on|off: T dr
 ### The late passes on SCENE
 
 `port/render/rd_late_pass.c` (`rd_late_pass.h`): fewer full-size passes on SCENE after list 7, the
-same bytes. On by default on a tile-based GPU (`RdProfile.tiler`) under Vulkan (MoltenVK too), where a
-pass loads and stores the whole picture (10 MB each way at 2364 x 1080); off on the other classes and
-on OpenGL. `ICO_RD_LATE_PASS=0|1|fill|defer|join` (the tests only, [TESTING.md](TESTING.md); no
-config key) switches it off, or every part or one part on anywhere.
+same bytes. The fill's hold and the deferred glow paste are on by default on a tile-based GPU
+(`RdProfile.tiler`) under Vulkan (MoltenVK too; `RD_LATE_DEFAULT`), where a pass loads and stores the
+whole picture (10 MB each way at 2364 x 1080); off on the other classes and on OpenGL. List 11's join
+is off by default everywhere (below). `ICO_RD_LATE_PASS=0|1|all|fill|defer|join` (the tests only,
+[TESTING.md](TESTING.md); no config key) switches it off, the default parts, every part or one part
+on anywhere.
 
 **The crack fill's draw held** (`fill`). In a glow room the fill is placed after `cleanUpFB` at the
 first sprite into another target (the glow's `WORK2_PAD` band), because the glow's mask, which samples
@@ -1481,10 +1483,10 @@ UNVERIFIED), and in each LAMPS picture less the lamps' depth store. Counters
 `RdPerfRecord.latePassHeld` (`latePassGlowHeld` of them in the glow's paste pass), `latePassTexels`,
 `latePassFlushed`, `latePassWhy` (`RD_LATE_WHY_*`). The lines:
 
-- `rd: late pass: on (a tile-based GPU's default): the crack fill's draw held from its snapshot to
-  the aura's paste pass in a frame whose glow draws nothing, to the glow's paste pass in one that
-  draws the paste; the glow's paste in the aura's paste pass; list 11's draws that use no depth in
-  the open pass without it (the same bytes)`, or `rd: late pass: off (<why>)`, at the start and
+- `rd: late pass: on (a tile-based GPU's default; list 11's join off by default: its A/B differs by
+  a level on the reference drivers): the crack fill's draw held from its snapshot to the aura's
+  paste pass in a frame whose glow draws nothing, to the glow's paste pass in one that draws the
+  paste; the glow's paste in the aura's paste pass (the same bytes)`, or `rd: late pass: off (<why>)`, at the start and
   when it changes;
 - `rd: late pass: the crack fill's draw held from its snapshot to the aura's paste pass (the glow
   drew nothing between), not in a pass of its own (reported once)`, and the same `to the glow's
@@ -1519,7 +1521,16 @@ as drawn early). A held fill armed for the glow's paste waits on to the aura's p
 `; D glow pastes in the aura's paste pass (X MB ...), E drawn early`. The glow's GPU time is then
 counted in the aura's class.
 
-**List 11's draws in the open pass** (`join`). List 11's screen prims bind SCENE's depth wherever
+**List 11's draws in the open pass** (`join`; off by default, `ICO_RD_LATE_PASS=join` or `all`).
+Its A/B is not byte for byte: on issue 164's paused frame the joined replay's SCENE differs from the
+late pass off by one level (colour and alpha) on 235 texels at the phone's setting and on 92 at
+Enhanced 2x 4:3, all inside the pause menu's text sprites (bilinear, blended, the sheet font's
+shaders), the same on issue 102's frame and on OpenGL; lavapipe with `LP_PERF=no_linear,
+no_rast_linear` gives the same texels. The joined draws' keys differ from their own pass's only in
+the depth format and the Z state (`rd_pipeline.c` `rd__plan_screen_draw_ex`), so the driver rounds
+the same shader one level differently in a pipeline without the depth attachment (the DATE cut found
+the same on lavapipe); nothing proves a device does not, so it stays off: a paused picture keeps its
+list 11 pass. As it was when on: list 11's screen prims bind SCENE's depth wherever
 SCENE has one (`rd_replay.c` `prepareDrawEx`), so after the aura's paste, whose pass has no depth
 (the local read), the first of them began a pass of its own with the depth, SCENE's colour loaded
 and stored again: in a paused picture (no feedback read of SCENE between, `staticBlur.c`) the pause

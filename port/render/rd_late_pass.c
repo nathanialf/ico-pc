@@ -166,7 +166,8 @@ const char *rd__late_pass_why_text(int why)
 const char *rd__late_pass_bits_text(unsigned bits)
 {
     bits &= RD_LATE_ALL;
-    return bits == RD_LATE_ALL     ? "on"
+    return bits == RD_LATE_DEFAULT ? "on"
+           : bits == RD_LATE_ALL   ? "all"
            : bits == 0             ? "off"
            : bits == RD_LATE_FILL  ? "fill"
            : bits == RD_LATE_DEFER ? "defer"
@@ -197,7 +198,7 @@ static void note(unsigned bits, const char *why)
             bits & RD_LATE_JOIN ? "list 11's draws that use no depth in the open pass without it"
                                 : NULL};
         int at = snprintf(line, sizeof(line), "late pass: %s (%s):",
-                          bits == RD_LATE_ALL ? "on" : rd__late_pass_bits_text(bits), why);
+                          bits == RD_LATE_DEFAULT ? "on" : rd__late_pass_bits_text(bits), why);
         bool first = true;
         for (int k = 0; k < 3 && at >= 0 && (size_t)at < sizeof(line); k++) {
             if (part[k]) {
@@ -225,14 +226,15 @@ unsigned rd__late_pass_bits(void)
         const char *e = getenv("ICO_RD_LATE_PASS");
         if (e && e[0]) {
             s_sw.bits = strcmp(e, "0") == 0       ? 0
-                        : strcmp(e, "1") == 0     ? (int)RD_LATE_ALL
+                        : strcmp(e, "1") == 0     ? (int)RD_LATE_DEFAULT
+                        : strcmp(e, "all") == 0   ? (int)RD_LATE_ALL
                         : strcmp(e, "fill") == 0  ? (int)RD_LATE_FILL
                         : strcmp(e, "join") == 0  ? (int)RD_LATE_JOIN
                         : strcmp(e, "defer") == 0 ? (int)RD_LATE_DEFER
                                                   : -1;
             if (s_sw.bits < 0) {
-                rd__log("late pass: ICO_RD_LATE_PASS=%.16s is not 0, 1, fill, defer or join: the "
-                        "profile's",
+                rd__log("late pass: ICO_RD_LATE_PASS=%.16s is not 0, 1, all, fill, defer or join: "
+                        "the profile's",
                         e);
             }
         }
@@ -246,8 +248,9 @@ unsigned rd__late_pass_bits(void)
         bits = (unsigned)s_sw.bits;
         why = "ICO_RD_LATE_PASS";
     } else if (g_rd.hasDevice && g_rd.profile.tiler && rhi_backend() == RHI_BACKEND_VULKAN) {
-        bits = RD_LATE_ALL;
-        why = "a tile-based GPU's default";
+        bits = RD_LATE_DEFAULT;
+        why = "a tile-based GPU's default; list 11's join off by default: its A/B differs by a "
+              "level on the reference drivers";
     } else {
         bits = 0;
         why = g_rd.hasDevice && g_rd.profile.tiler ? "not under Vulkan" : "not a tile-based GPU";
