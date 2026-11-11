@@ -745,6 +745,7 @@ static const char *cmdWord(uint8_t type)
 void rd__pass_area_begin(RhiRenderPassDesc *p, const RdTargetRec *c, uint32_t cid, uint32_t serial,
                          bool ms, bool storage)
 {
+    rd__glow_light_pass(cid, c, (int)p->color[0].load); /* the light plan's chain passes named */
     if (s_pa.ended && cid == s_pa.endFor && p->depth.texture.id == s_pa.endDepth && !storage) {
         /* the pass the walk would have kept on: ended at its area's end,
          * begun again (rd__pass_area_due) */
