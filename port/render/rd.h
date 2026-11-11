@@ -3266,7 +3266,8 @@ void rd__glow_light_force(int on);
  * command it followed and the pass open then (the tests print it) */
 const char *rd__glow_light_debug(void);
 /* this replay's render passes on WORK2_PAD, WORK2, WORK3 or WORK0 (named,
- * an RdTargetId), *cleared those that load a CLEAR (the tests) */
+ * an RdTargetId) from the glow chain's first command on (a frame's head
+ * clears not counted), *cleared those that load a CLEAR (the tests) */
 uint32_t rd__glow_light_passes_on(int named, uint32_t *cleared);
 /* "N (WORK2 n, ...)" of the lazy clears drawn per target n[4] (WORK2_PAD,
  * WORK2, WORK3, WORK0): the 10 s line's and --stats' words */

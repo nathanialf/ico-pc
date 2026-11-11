@@ -191,6 +191,7 @@ static struct {
     uint32_t preCount;  /* the marks this replay (the hook's own one included) */
     uint8_t spanLastEl;
     bool inRepeat;         /* between rd__glow_light_mark and the hook */
+    bool chainBegun;       /* the replay reached the chain's first command */
     uint32_t glowLightOwn; /* the span's passes but SCENE's border repeat */
     /* the plan of this replay */
     uint8_t plan;
@@ -232,8 +233,8 @@ static uint64_t s_darkPasses; /* the passes the dark plans' chains began */
  * the tests print it when a bound fails): what came before each */
 static char s_dbg[768];
 static int lazySlot(uint32_t id);
-/* this replay's render passes on WORK2_PAD, WORK2, WORK3, WORK0 (LZ_*), and
- * those with a CLEAR load; the lazy clears drawn per target since the 10 s
+/* this replay's render passes on WORK2_PAD, WORK2, WORK3, WORK0 (LZ_*) from
+ * the chain's first command on, and those with a CLEAR load; the lazy clears drawn per target since the 10 s
  * line */
 static uint32_t s_passOn[LZ_COUNT], s_clearOn[LZ_COUNT];
 static uint64_t s_lazyDrawn[LZ_COUNT];
@@ -267,8 +268,10 @@ void rd__glow_light_mark(const Replay *r)
 void rd__glow_light_pass(uint32_t cid, const RdTargetRec *t, int load)
 {
     const int k = lazySlot(cid);
-    if (k >= 0) {
-        s_passOn[k]++; /* the replay's passes on the glow's buffers (the tests) */
+    if (k >= 0 && s_gl.chainBegun) {
+        /* the passes on the glow's buffers from the chain's first command
+         * on (the tests): a frame's head clears of them are not the plan's */
+        s_passOn[k]++;
         s_clearOn[k] += load == RHI_LOAD_CLEAR;
     }
     if (!s_gl.spanOpen || s_dbgAt >= sizeof(s_dbg) - 1) {
@@ -706,6 +709,7 @@ bool rd__glow_light_scan_begin(const RdFrame *f)
     }
     s_gl.w1Before = s_gl.w1After = s_gl.w1Cleared = s_gl.chainSeen = s_gl.spanOpen = false;
     s_gl.preCount = 0;
+    s_gl.chainBegun = false;
     s_gl.p1GsW = 0;
     g_rdPerf.glowLightPasses = 0;
     g_rdPerf.glowLight = RD_GLOW_LIGHT_NONE;
@@ -1525,6 +1529,7 @@ bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c)
     s_gl.inRepeat = false;
     if (e && e == &s_gl.cmd[0] && !s_gl.spanOpen) {
         s_gl.spanOpen = true; /* the chain's passes counted from here */
+        s_gl.chainBegun = true;
         s_gl.spanFrom = s_gl.spanLast = r->passSerial;
         s_gl.spanLastEl = e->el;
         s_gl.glowLightOwn = 0;

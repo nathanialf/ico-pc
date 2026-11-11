@@ -263,7 +263,9 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
               chainPasses, most, rd__glow_light_debug());
         CHECK(passes < passesChain, "%s: %u glow passes under DARK, the chain %u", what, passes,
               passesChain);
-        /* no pass on WORK2, WORK2_PAD or WORK3 in the replay: their lazy
+        /* from the chain's first command on (clearAll's head clears of every
+         * target, list 0, are passes before it and not counted), no pass on
+         * WORK2, WORK2_PAD or WORK3 in the replay: their lazy
          * clears wait for a read (none in the frame: the reads above draw
          * them).  WORK0's clear is drawn at the chain's place as a pending
          * clear and recorded once as a pass of its own (CLEAR load): where
