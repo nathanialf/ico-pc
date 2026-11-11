@@ -142,6 +142,7 @@ void window_perf_rank_block(const WindowPerfBlock *in)
     static char line[4096], ranked[2400];
     (void)rd_perf_rank_scene_text(&s_block, &info, &v, line, sizeof line);
     fprintf(stderr, "window: %s\n", line);
+    s_block.tiler = info.tiler; /* before list 0 and list 0 as one there */
     (void)rd_perf_rank_classes_text(&s_block, rd_perf_pass_label, 6, line, sizeof line);
     fprintf(stderr, "window: %s\n", line);
     (void)rd_perf_rank_rates_text(&s_block, &rates, line, sizeof line);

@@ -225,8 +225,8 @@ static void testGpu(void)
         "perf ranked: stage 3 play: 16.8 of 25.0 fps (the game 25.0 of 25.0), GPU-bound "
         "(the GPU's work 59.0 ms a picture of the 59.5 ms between presents): 1. list 3 22.4 "
         "ms measured (1.0 passes, 61 draws, 61 binds; loads 3.6 MB, stores 3.6 MB, 0.47 "
-        "Mpx); 2. list 0 20.1 ms measured (1.0 passes, 283 draws, 283 binds; loads 3.6 MB, "
-        "stores 3.6 MB, 0.47 Mpx); 3. DATE breaks est. 7.9 ms (3.0 a picture: 3.6 ms measured "
+        "Mpx); 2. before list 0 + list 0 20.4 ms measured (283 draws; 1826 KB, 1.0 textures "
+        "uploaded; one figure on a tile-based GPU); 3. DATE breaks est. 7.9 ms (3.0 a picture: 3.6 ms measured "
         "for the snapshots + 10.8 MB reloaded after them); no vertex work estimate "
         "(the invocations (40.0k to 52.0k a picture) are under the 2x spread the fit needs) "
         "(each saving alone, they overlap; est. = this block's counters times its own "
@@ -287,6 +287,30 @@ static void testGpu(void)
                    "draws, 61 binds, colour 1.8/3.6 MB, depth 1.8/0.0 MB loaded/stored");
     CHECK_IN(line, "; list 0 20.10 ms");
     CHECK_IN(line, " (4 of 9 classes; all ");
+    /* the piece before each class: list 3 after list 0's full-size pass */
+    CHECK_IN(line,
+             "0.47 Mpx; after list 0 912x512 (a full-size pass in 12 of 12); list 0 20.10 ms");
+    /* a tile-based GPU: the stretch before list 0 and list 0 as one */
+    b.tiler = true;
+    rd_perf_rank_classes_text(&b, label, 4, line, sizeof line);
+    printf("%s\n", line);
+    CHECK_IN(line, "; before list 0 + list 0 20.40 ms: 2.0 passes, 283 draws");
+    CHECK_IN(line, "; before list 0 and list 0 as one: a tile-based GPU)");
+    CHECK(strstr(line, "; list 0 20.10 ms") == NULL);
+    b.tiler = false;
+    /* a picture in the histogram's top bin: "256 ms or more", not 256 */
+    {
+        RdPerfRankBlock h;
+        rd_perf_rank_block_reset(&h);
+        const RdPerfRecord slow = record(7, 300.0);
+        rd_perf_rank_add_record(&h, &slow, 0.0);
+        CHECK(rd_perf_rank_hist_worst(h.hist) == 256.0 &&
+              strcmp(rd_perf_rank_hist_more(h.hist), " or more") == 0);
+        CHECK(strcmp(rd_perf_rank_hist_more(b.hist), "") == 0);
+        char sl[4096];
+        rd_perf_rank_scene_text(&h, &in, &v, sl, sizeof sl);
+        CHECK_IN(sl, "worst 256 ms or more");
+    }
 
     rd_perf_rank_rates_text(&b, &rt, line, sizeof line);
     printf("%s\n", line);
@@ -369,7 +393,9 @@ static void testPixel(void)
     CHECK_IN(line, "GPU-bound (the GPU's work 32.0 ms a picture of the 36.1 ms between presents): "
                    "1. glow 11.6 ms measured (1.0 passes, 19 draws, 19 binds;");
     CHECK_IN(line, "; 2. list 3 5.5 ms measured");
-    CHECK_IN(line, "; 3. aura 2.9 ms measured");
+    /* a tile-based GPU: list 0 with the stretch before it, one entry */
+    CHECK_IN(line, "; 3. before list 0 + list 0 2.9 ms measured (332 draws;");
+    CHECK(strstr(line, "uploads") == NULL);
     CHECK_IN(line, "; no vertex work estimate (the fit's R^2 ");
     CHECK_IN(line, " is under 0.80, the invocations (23.0k to 36.6k a picture) are under the 2x "
                    "spread the fit needs) (each saving alone");
@@ -542,6 +568,7 @@ static void testCap(void)
     rd_perf_rank_add_pieces(&b, &r, p, n);
     RdPerfRankInfo in = info("stage 3 play", 16.8);
     in.earlierMbMs = 0.1;
+    in.tiler = false; /* every class its own entry (a tiler joins list 0 and the uploads) */
     static RdPerfRankVerdict v;
     rd_perf_rank_verdict(&b, &in, &v);
     CHECK(v.count > 34u && v.count <= RD_PERF_RANK_CANDIDATES);

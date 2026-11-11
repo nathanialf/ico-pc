@@ -88,6 +88,12 @@ typedef struct RdPerfRankClass {
     double colorLoadKB, colorStoreKB, depthLoadKB, depthStoreKB, clearKB, copyKB, kTexels;
     RdPerfPass first; /* the class's first piece (its label) */
     bool seen;
+    /* the piece before the class's pieces (the last seen), how many had one
+       and how many of those ended a full-size target (the replay's largest
+       render pass area): on a tile-based GPU a piece after a full-size pass
+       may carry that pass's tile work (issue 123's shadow count) */
+    RdPerfPass prev;
+    double prevN, prevFull;
 } RdPerfRankClass;
 
 /* A 10 s block's sums.  Zero-initialise or rd_perf_rank_block_reset. */
@@ -125,6 +131,11 @@ typedef struct RdPerfRankBlock {
     /* the timed replays' pieces */
     uint32_t timed;
     RdPerfRankClass cls[RD_PERF_RANK_CLASSES];
+    /* a tile-based GPU (set by the caller before the texts, after a reset):
+       the classes line gives the stretch before list 0 and list 0 as one,
+       "before list 0 + list 0" (they trade at a constant sum there, issue
+       179; rd_perf.c rd_perf_pass_kind_display) */
+    bool tiler;
     /* the byte-bound pieces (the DATE snapshots, the render passes with no
        draw): ms against MB moved (least squares) */
     uint32_t smN;
@@ -288,8 +299,11 @@ double rd_perf_rank_partial_fps(const RdPerfRankBlock *b);
 #define RD_PERF_RANK_PROFILE_GAP_NS 1000000000ull
 bool rd_perf_rank_profile_due(uint64_t *lastNs, uint64_t nowNs);
 
-/* the histogram's median and worst picture, ms (0 with none) */
+/* the histogram's median and worst picture, ms (0 with none); the worst
+   is its bin's upper edge, so a picture in the top bin prints as
+   "256 ms or more" (rd_perf_rank_hist_more: " or more" then, else "") */
 double rd_perf_rank_hist_median(const uint32_t *hist);
 double rd_perf_rank_hist_worst(const uint32_t *hist);
+const char *rd_perf_rank_hist_more(const uint32_t *hist);
 
 #endif /* RD_PERF_RANK_H */

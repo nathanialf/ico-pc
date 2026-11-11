@@ -171,6 +171,11 @@ void rd_perf_rank_add_pieces(RdPerfRankBlock *b, const RdPerfRecord *r, const Rd
         return;
     }
     b->timed++;
+    uint32_t full = 0; /* the replay's largest render pass area */
+    for (uint32_t i = 0; i < n; i++) {
+        const uint32_t a = (uint32_t)p[i].w * p[i].h;
+        full = p[i].kind == RD_PERF_PASS_RENDER && a > full ? a : full;
+    }
     for (uint32_t i = 0; i < n; i++) {
         const RdPerfPass *q = &p[i];
         if (q->gpuUs < 0.0f) {
@@ -181,6 +186,14 @@ void rd_perf_rank_add_pieces(RdPerfRankBlock *b, const RdPerfRecord *r, const Rd
         if (!c->seen) {
             c->first = *q;
             c->seen = true;
+        }
+        if (i > 0 && rd_perf_rank_class_of(&p[i - 1]) != rd_perf_rank_class_of(q)) {
+            const RdPerfPass *e = &p[i - 1];
+            c->prev = *e;
+            c->prevN += 1.0;
+            c->prevFull +=
+                e->kind == RD_PERF_PASS_RENDER && full != 0 && (uint32_t)e->w * e->h == full ? 1.0
+                                                                                             : 0.0;
         }
         c->ms += ms;
         c->pieces += 1.0;
@@ -427,6 +440,9 @@ static void gpuCands(const RdPerfRankBlock *b, const RdPerfRankInfo *in, const R
                 k == RD_PERF_RANK_KIND0 + RD_PERF_PASS_UPLOAD) {
                 continue; /* the display wait is no work; the uploads below */
             }
+            if (in->tiler && k == RD_PERF_RANK_LIST0) {
+                continue; /* with the stretch before it, below */
+            }
             className(k, name, sizeof name);
             cand(v, c->ms / t, false,
                  "%s %.1f ms measured (%.1f passes, %.0f draws, %.0f binds; loads %.1f MB, stores "
@@ -437,7 +453,7 @@ static void gpuCands(const RdPerfRankBlock *b, const RdPerfRankInfo *in, const R
         }
     } else if (b->gpuN) {
         /* no pass timing: the records' lists and effects */
-        for (int l = 0; l < RD_LIST_COUNT; l++) {
+        for (int l = in->tiler ? 1 : 0; l < RD_LIST_COUNT; l++) {
             cand(v, b->listMs[l] / g, false, "list %d %.1f ms measured", l, b->listMs[l] / g);
         }
         for (int p = 0; p < RD_PERF_POST_COUNT; p++) {
@@ -446,7 +462,20 @@ static void gpuCands(const RdPerfRankBlock *b, const RdPerfRankInfo *in, const R
                  b->postMs[p] / g);
         }
     }
-    if (b->gpuN) {
+    if (b->gpuN && in->tiler) {
+        /* a tile-based GPU: the stamp that ends the uploads lands inside
+           list 0's work (the two trade at a constant sum, issue 179's
+           128.38 ms "before list 0" beside a 6.06 ms list 0): one entry,
+           never "uploads" as a saving of its own */
+        const RdPerfRankClass *c = &b->cls[RD_PERF_RANK_LIST0];
+        const double t = (double)b->timed;
+        const double l0 = b->timed && c->seen ? c->ms / t : b->listMs[0] / g;
+        cand(v, l0 + b->uploadGpuMs / g, false,
+             "before list 0 + list 0 %.1f ms measured (%.0f draws; %.0f KB, %.1f textures "
+             "uploaded; one figure on a tile-based GPU)",
+             l0 + b->uploadGpuMs / g, b->timed && c->seen ? c->draws / t : 0.0,
+             b->uploadBytes / n / 1024.0, b->texUploads / n);
+    } else if (b->gpuN) {
         cand(v, b->uploadGpuMs / g, false, "uploads %.1f ms measured (%.0f KB, %.1f textures)",
              b->uploadGpuMs / g, b->uploadBytes / n / 1024.0, b->texUploads / n);
     }
@@ -653,10 +682,10 @@ int rd_perf_rank_scene_text(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
         const double g = (double)b->gpuN;
         put(&o,
             "; GPU a picture: span %.1f ms, display wait %.1f, before list 0 %.1f, VU pre-pass "
-            "%.1f, present %.1f; the pictures' GPU work median %.1f ms, worst %.0f ms",
+            "%.1f, present %.1f; the pictures' GPU work median %.1f ms, worst %.0f ms%s",
             b->gpuMs / g, b->displayWaitMs / g, b->uploadGpuMs / g, b->prepassMs / g,
             b->presentGpuMs / g, rd_perf_rank_hist_median(b->hist),
-            rd_perf_rank_hist_worst(b->hist));
+            rd_perf_rank_hist_worst(b->hist), rd_perf_rank_hist_more(b->hist));
     }
     return o.total;
 }
@@ -670,19 +699,43 @@ int rd_perf_rank_classes_text(const RdPerfRankBlock *b, RdPerfRankLabel label, u
         return o.total;
     }
     const double t = (double)b->timed;
+    /* a copy: on a tile-based GPU the stretch before list 0 joins list 0 */
+    static RdPerfRankClass cls[RD_PERF_RANK_CLASSES];
+    memcpy(cls, b->cls, sizeof(cls));
+    const int up = RD_PERF_RANK_KIND0 + RD_PERF_PASS_UPLOAD;
+    const bool merged = b->tiler && cls[up].seen && cls[RD_PERF_RANK_LIST0].seen;
+    if (merged) {
+        RdPerfRankClass *l0 = &cls[RD_PERF_RANK_LIST0];
+        const RdPerfRankClass *u = &cls[up];
+        l0->ms += u->ms;
+        l0->pieces += u->pieces;
+        l0->draws += u->draws;
+        l0->binds += u->binds;
+        l0->colorLoadKB += u->colorLoadKB;
+        l0->colorStoreKB += u->colorStoreKB;
+        l0->depthLoadKB += u->depthLoadKB;
+        l0->depthStoreKB += u->depthStoreKB;
+        l0->clearKB += u->clearKB;
+        l0->copyKB += u->copyKB;
+        l0->kTexels += u->kTexels;
+        l0->prev = u->prev; /* what came before the stretch */
+        l0->prevN = u->prevN;
+        l0->prevFull = u->prevFull;
+        cls[up].seen = false;
+    }
     int order[RD_PERF_RANK_CLASSES];
     int count = 0;
     double all = 0.0;
     for (int k = 0; k < RD_PERF_RANK_CLASSES; k++) {
-        if (b->cls[k].seen) {
+        if (cls[k].seen) {
             order[count++] = k;
-            all += b->cls[k].ms;
+            all += cls[k].ms;
         }
     }
     for (int i = 1; i < count; i++) {
         const int x = order[i];
         int j = i;
-        while (j > 0 && b->cls[order[j - 1]].ms < b->cls[x].ms) {
+        while (j > 0 && cls[order[j - 1]].ms < cls[x].ms) {
             order[j] = order[j - 1];
             j--;
         }
@@ -691,9 +744,11 @@ int rd_perf_rank_classes_text(const RdPerfRankBlock *b, RdPerfRankLabel label, u
     put(&o, "perf classes a picture (%u timed replays): ", b->timed);
     const int shown = (unsigned)count < top ? count : (int)top;
     for (int i = 0; i < shown; i++) {
-        const RdPerfRankClass *c = &b->cls[order[i]];
+        const RdPerfRankClass *c = &cls[order[i]];
         char name[64];
-        if (order[i] >= RD_PERF_RANK_KIND0 || label == NULL) {
+        if (merged && order[i] == RD_PERF_RANK_LIST0) {
+            snprintf(name, sizeof name, "before list 0 + list 0");
+        } else if (order[i] >= RD_PERF_RANK_KIND0 || label == NULL) {
             className(order[i], name, sizeof name);
         } else {
             label(&c->first, name, sizeof name);
@@ -707,8 +762,21 @@ int rd_perf_rank_classes_text(const RdPerfRankBlock *b, RdPerfRankLabel label, u
         if (c->copyKB > 0.0) {
             put(&o, ", copies %.1f MB", c->copyKB / t / 1024.0);
         }
+        if (c->prevN > 0.0) {
+            /* the piece before it: a full-size pass there may have left
+               its tile work to this one's stamps */
+            char before[64];
+            if (c->prev.kind == RD_PERF_PASS_RENDER && label != NULL) {
+                label(&c->prev, before, sizeof before);
+            } else {
+                className(rd_perf_rank_class_of(&c->prev), before, sizeof before);
+            }
+            put(&o, "; after %s %ux%u (a full-size pass in %.0f of %.0f)", before,
+                (unsigned)c->prev.w, (unsigned)c->prev.h, c->prevFull, c->prevN);
+        }
     }
-    put(&o, " (%d of %d classes; all %.2f ms)", shown, count, all / t);
+    put(&o, " (%d of %d classes; all %.2f ms%s)", shown, count, all / t,
+        merged ? "; before list 0 and list 0 as one: a tile-based GPU" : "");
     return o.total;
 }
 
@@ -813,6 +881,11 @@ double rd_perf_rank_hist_median(const uint32_t *hist)
     return (double)RD_PERF_RANK_BINS;
 }
 
+const char *rd_perf_rank_hist_more(const uint32_t *hist)
+{
+    return hist[RD_PERF_RANK_BINS - 1] ? " or more" : "";
+}
+
 double rd_perf_rank_hist_worst(const uint32_t *hist)
 {
     for (int i = RD_PERF_RANK_BINS - 1; i >= 0; i--) {
@@ -901,9 +974,10 @@ int rd_perf_rank_profile_text(const RdPerfRankRun *run, uint32_t i, char *buf, s
     const double med = s->fpsN ? (double)fps[s->fpsN / 2] : 0.0;
     put(&o,
         "performance profile: %s: %u blocks (%.0f s, %u pictures); a picture's GPU work median "
-        "%.1f ms, worst %.0f ms; presented fps median %.1f, lowest block %.1f, of %.1f; ",
+        "%.1f ms, worst %.0f ms%s; presented fps median %.1f, lowest block %.1f, of %.1f; ",
         s->name, s->blocks, s->seconds, s->pictures, rd_perf_rank_hist_median(s->hist),
-        rd_perf_rank_hist_worst(s->hist), med, s->lowFps > 0.0 ? s->lowFps : 0.0, s->targetFps);
+        rd_perf_rank_hist_worst(s->hist), rd_perf_rank_hist_more(s->hist), med,
+        s->lowFps > 0.0 ? s->lowFps : 0.0, s->targetFps);
     bool any = false;
     for (int k = 0; k < RD_PERF_BOUND_COUNT; k++) {
         if (s->bound[k]) {
@@ -942,10 +1016,11 @@ int rd_perf_rank_partial_text(const RdPerfRankBlock *b, const RdPerfRankInfo *in
     const double span = b->lastStartMs > b->firstStartMs ? b->lastStartMs - b->firstStartMs : 0.0;
     put(&o,
         "performance profile: %s (the block in progress): %.1f s, %u pictures (%u keep frames) "
-        "not yet in a 10 s block; a picture's GPU work median %.1f ms, worst %.0f ms; presented "
+        "not yet in a 10 s block; a picture's GPU work median %.1f ms, worst %.0f ms%s; presented "
         "fps about %.1f",
         in->scene, span / 1000.0, b->n, b->keep, rd_perf_rank_hist_median(b->hist),
-        rd_perf_rank_hist_worst(b->hist), rd_perf_rank_partial_fps(b));
+        rd_perf_rank_hist_worst(b->hist), rd_perf_rank_hist_more(b->hist),
+        rd_perf_rank_partial_fps(b));
     const bool known = in->targetFps > 0.0;
     if (known) {
         put(&o, " of %.1f, %s", in->targetFps, rd_perf_bound_name(v->bound));

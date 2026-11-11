@@ -1117,3 +1117,15 @@ counters in the hot path.
   and macOS each line is one `write` on its own thread; on Windows the streams are buffered and
   flushed once a vsync. A late game step is one 10 ms or more past its period; the overlaps say
   whether a slow write or a capture coincided with a stall, not that it caused it.
+- **The piece before each top pass** (`window: GPU top passes:`, `rd_perf.c`
+  `rd_perf_pass_agg_text_ex`; `perf classes`, `rd_perf_rank.c`): each entry is followed by the
+  piece before it and how often that piece was a full-size render pass, e.g. `shadow count 576x448
+  1 draws 3.46 ms after list 0 SCENE 1728x1344 (full size in 349 of 349)` and, in the classes line,
+  `; after list 0 1728x1344 (a full-size pass in 349 of 349)`. On a tile-based GPU a stamp after a
+  full-size pass may carry that pass's tile work (issue 123's 3.46 ms for one 576x448 draw), so a
+  piece that always follows one and shrinks where it does not is carrying it.
+- **Before list 0 and list 0 as one on a tile-based GPU**: the stamp that ends the uploads lands
+  inside list 0's work there (the two trade at a constant sum: issue 179's picture with 128.38 ms
+  "before list 0" beside a 6.06 ms list 0), so `perf classes`, `perf ranked` and `GPU top passes`
+  give `before list 0 + list 0` (the split stays in the CSV), and the ranked line never names
+  `uploads` as a saving there. The histogram's top bin prints as `worst 256 ms or more`.

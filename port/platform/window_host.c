@@ -5121,9 +5121,9 @@ static void perf_log(void)
     if (s_perf.passAgg.replays) {
         /* the timed replays' most expensive passes, each timed between
            stamps outside the render passes (rd_perf.c) */
-        char top[1024];
+        char top[1536];
 
-        rd_perf_pass_agg_text(&s_perf.passAgg, 5, top, sizeof(top));
+        rd_perf_pass_agg_text_ex(&s_perf.passAgg, 5, rhi_limits()->tiler, true, top, sizeof(top));
         fprintf(stderr, "window: GPU top passes: %s%s\n", top, window_tiler_words());
     }
     {

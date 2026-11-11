@@ -1744,6 +1744,12 @@ void rd_perf_pass_agg_reset(RdPerfPassAgg *a)
 void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
 {
     a->replays++;
+    uint32_t full = 0; /* the replay's largest render pass */
+    for (uint32_t k = 0; k < n; k++) {
+        const uint32_t ar = (uint32_t)p[k].w * p[k].h;
+        full = p[k].kind == RD_PERF_PASS_RENDER && ar > full ? ar : full;
+    }
+    RdPerfPassAggEntry *last = NULL; /* the entry of the piece before */
     for (uint32_t k = 0; k < n; k++) {
         const RdPerfPass *q = &p[k];
         const double ms = q->gpuUs >= 0.0f ? (double)q->gpuUs / 1e3 : 0.0;
@@ -1768,6 +1774,7 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
         if (!e) {
             if (a->count == RD_PERF_PASS_AGG_MAX) {
                 a->dropped++;
+                last = NULL;
                 continue;
             }
             e = &a->e[a->count++];
@@ -1783,6 +1790,19 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
         e->draws += q->draws;
         e->gpuMs += ms;
         e->cpuMs += (double)q->cpuUs / 1e3;
+        if (k > 0 && last != e) {
+            const RdPerfPass *b = &p[k - 1];
+            e->prevKind = b->kind;
+            e->prevTarget = b->target;
+            e->prevList = b->list;
+            e->prevPost = b->post;
+            e->prevW = b->w;
+            e->prevH = b->h;
+            e->prevN++;
+            e->prevFull +=
+                b->kind == RD_PERF_PASS_RENDER && full != 0 && (uint32_t)b->w * b->h == full;
+        }
+        last = e;
         if (q->busyValid) {
             e->busyMs += (double)q->gpuBusyUs / 1e3;
             e->busyN++;
@@ -1794,6 +1814,12 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
 
 int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_t n)
 {
+    return rd_perf_pass_agg_text_ex(a, top, false, false, buf, n);
+}
+
+int rd_perf_pass_agg_text_ex(const RdPerfPassAgg *a, unsigned top, bool tiler, bool before,
+                             char *buf, size_t n)
+{
     if (n == 0) {
         return 0;
     }
@@ -1802,22 +1828,63 @@ int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_
         return snprintf(buf, n, "no replay timed");
     }
     const double r = (double)a->replays;
+    /* a tile-based GPU: the uploads' entry joins list 0's largest (a copy;
+       the entries' own sums stay for rd_perf_pass_agg_mean) */
+    static RdPerfPassAggEntry ent[RD_PERF_PASS_AGG_MAX];
+    const uint32_t count = a->count;
+    memcpy(ent, a->e, (size_t)count * sizeof(ent[0]));
     bool used[RD_PERF_PASS_AGG_MAX];
     memset(used, 0, sizeof(used));
+    int joined = -1;
+    if (tiler) {
+        int up = -1;
+        for (uint32_t i = 0; i < count; i++) {
+            if (ent[i].kind == RD_PERF_PASS_UPLOAD) {
+                up = (int)i;
+            } else if (ent[i].kind == RD_PERF_PASS_RENDER && ent[i].list == 0 && ent[i].post < 0 &&
+                       ent[i].target != RD_PERF_TARGET_SHADOW_COUNT &&
+                       (joined < 0 || ent[i].gpuMs > ent[joined].gpuMs)) {
+                joined = (int)i;
+            }
+        }
+        if (up >= 0 && joined >= 0) {
+            ent[joined].gpuMs += ent[up].gpuMs;
+            ent[joined].passes += ent[up].passes;
+            ent[joined].busyMs += ent[up].busyMs;
+            ent[joined].prevKind = ent[up].prevKind; /* what came before the stretch */
+            ent[joined].prevTarget = ent[up].prevTarget;
+            ent[joined].prevList = ent[up].prevList;
+            ent[joined].prevPost = ent[up].prevPost;
+            ent[joined].prevW = ent[up].prevW;
+            ent[joined].prevH = ent[up].prevH;
+            ent[joined].prevN = ent[up].prevN;
+            ent[joined].prevFull = ent[up].prevFull;
+            used[up] = true; /* not listed on its own */
+        } else {
+            joined = -1;
+        }
+    }
     size_t at = 0;
     unsigned shown = 0;
-    for (; shown < top && shown < a->count; shown++) {
+    for (; shown < top && shown < count; shown++) {
         int best = -1;
-        for (uint32_t i = 0; i < a->count; i++) {
-            if (!used[i] && (best < 0 || a->e[i].gpuMs > a->e[best].gpuMs)) {
+        for (uint32_t i = 0; i < count; i++) {
+            if (!used[i] && (best < 0 || ent[i].gpuMs > ent[best].gpuMs)) {
                 best = (int)i;
             }
         }
+        if (best < 0) {
+            break;
+        }
         used[best] = true;
-        const RdPerfPassAggEntry *e = &a->e[best];
+        const RdPerfPassAggEntry *e = &ent[best];
         const RdPerfPass lp = {.kind = e->kind, .list = e->list, .post = e->post};
-        char label[32], passes[32] = "";
-        rd_perf_pass_label(&lp, label, sizeof(label));
+        char label[40], passes[32] = "";
+        if (best == joined) {
+            snprintf(label, sizeof(label), "before list 0 + list 0");
+        } else {
+            rd_perf_pass_label(&lp, label, sizeof(label));
+        }
         const double pr = (double)e->passes / r;
         if (pr < 0.95 || pr > 1.05) {
             snprintf(passes, sizeof(passes), " %.1f passes", pr);
@@ -1830,9 +1897,18 @@ int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_
             /* the display wait: "display wait window 1280x720 38.40 ms" */
             snprintf(draws, sizeof(draws), " %.0f draws", (double)e->draws / r);
         }
-        const int w = snprintf(buf + at, n - at, "%s%s %s %ux%u%s%s %.2f ms%s", shown ? ", " : "",
+        char after[96] = "";
+        if (before && e->prevN) {
+            const RdPerfPass bp = {.kind = e->prevKind, .list = e->prevList, .post = e->prevPost};
+            char bl[32];
+            rd_perf_pass_label(&bp, bl, sizeof(bl));
+            snprintf(after, sizeof(after), " after %s %s %ux%u (full size in %llu of %llu)", bl,
+                     rd_perf_target_name(e->prevTarget), (unsigned)e->prevW, (unsigned)e->prevH,
+                     (unsigned long long)e->prevFull, (unsigned long long)e->prevN);
+        }
+        const int w = snprintf(buf + at, n - at, "%s%s %s %ux%u%s%s %.2f ms%s%s", shown ? ", " : "",
                                label, rd_perf_target_name(e->target), (unsigned)e->w,
-                               (unsigned)e->h, passes, draws, e->gpuMs / r, busy);
+                               (unsigned)e->h, passes, draws, e->gpuMs / r, busy, after);
         if (w < 0 || (size_t)w >= n - at) {
             at = n - 1;
             break;
