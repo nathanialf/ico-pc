@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The game's Game Mode declaration (Android 13 and later; the manifest's
+     android.game_mode_config meta-data): the game supports the battery and
+     performance game modes itself, so the system applies no intervention
+     of its own in them, and in the standard mode it may not lower the
+     resolution or override the frame rate (the port never lets the
+     resolution or the frame rate change by itself). The mode the player
+     chose is read for the log only (IcoActivity.gameMode); nothing in the
+     game changes by it. Older systems ignore the file. -->
+<game-mode-config xmlns:android="http://schemas.android.com/apk/res/android"
+    android:supportsBatteryGameMode="true"
+    android:supportsPerformanceGameMode="true"
+    android:allowGameAngleDriver="false"
+    android:allowGameDownscaling="false"
+    android:allowGameFpsOverride="false" />

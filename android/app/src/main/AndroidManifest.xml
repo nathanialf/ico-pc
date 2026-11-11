@@ -70,6 +70,15 @@
         android:enableOnBackInvokedCallback="false"
         android:theme="@style/IcoTheme">
 
+        <!-- Game Mode (Android 13 and later): the battery and performance
+             modes are the game's own, and the system may not lower the
+             resolution or override the frame rate in any mode
+             (res/xml/game_mode_config.xml); the mode is read for the log
+             only (IcoActivity.gameMode) -->
+        <meta-data
+            android:name="android.game_mode_config"
+            android:resource="@xml/game_mode_config" />
+
         <activity
             android:name=".IcoActivity"
             android:label="@string/app_name"

@@ -21,6 +21,7 @@ target_sources(ico_platform PRIVATE
     kernel_host.c
     log_cost.c
     pace_policy.c
+    perf_hint.c
     memory_floor.c
     display_rate.c
     present_hist.c
@@ -331,6 +332,19 @@ target_include_directories(log_cost_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(log_cost_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(ICO_RUN_TESTS)
     add_test(NAME log_cost COMMAND log_cost_test)
+endif()
+
+# perf_hint_test: Android's performance hints, the pure part (perf_hint.h):
+# the target from what the pacer plans, a picture's work from its record,
+# the session's life against a fake backend (made, reports, target and
+# thread changes, the background, refused, a full ring), the lines word for
+# word, and the hand-over on two real threads (CPU only)
+add_executable(perf_hint_test test/perf_hint_test.c perf_hint.c)
+target_include_directories(perf_hint_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(perf_hint_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(perf_hint_test PRIVATE ico_thread)
+if(ICO_RUN_TESTS)
+    add_test(NAME perf_hint COMMAND perf_hint_test)
 endif()
 
 # The automatic dumps' worker (dump_auto.c, issues 123 and 179): a job written

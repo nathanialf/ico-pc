@@ -141,6 +141,30 @@ public class IcoActivity extends SDLActivity {
         return -1;
     }
 
+    // GameManager.getGameMode: 0 unsupported, 1 standard, 2 performance, 3
+    // battery, 4 custom; -1 before Android 12 (API 31), -2 when the system
+    // gives none. Asked once at the window's open, for the performance
+    // hints' log line only (host_android.c ico_android_game_mode): the port
+    // changes nothing by it (res/xml/game_mode_config.xml says the game
+    // takes no downscaling or frame rate override).
+    public static int gameMode() {
+        if (Build.VERSION.SDK_INT < 31) {
+            return -1;
+        }
+        try {
+            if (sInstance != null) {
+                android.app.GameManager gm = (android.app.GameManager)
+                        sInstance.getSystemService(Context.GAME_SERVICE);
+                if (gm != null) {
+                    return gm.getGameMode();
+                }
+            }
+        } catch (RuntimeException | LinkageError e) {
+            // no answer is the answer
+        }
+        return -2;
+    }
+
     private void pushThermalStatus(int status) {
         if (!SDLActivity.mBrokenLibraries) {
             try {

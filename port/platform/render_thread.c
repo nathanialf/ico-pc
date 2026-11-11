@@ -869,6 +869,11 @@ void ico_render_thread_stop(void)
     SDL_UnlockMutex(s_rt.lock);
     SDL_WaitThread(s_rt.thread, NULL);
     s_rt.thread = NULL;
+    /* both threads ended: their ids are not known until they start again
+       (ico_render_thread_tids: a session must not be given an ended
+       thread's id) */
+    __atomic_store_n(&s_place.renderTid, 0, __ATOMIC_RELEASE);
+    __atomic_store_n(&s_place.submitTid, 0, __ATOMIC_RELEASE);
     SDL_DestroyCondition(s_rt.cond);
     SDL_DestroyMutex(s_rt.lock);
     s_rt.cond = NULL;
@@ -1015,6 +1020,16 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
     s_rt.stepCloseMean = closeMeanNs;
     s_rt.stepCloseDev = closeDevNs;
     s_rt.leftOut += leftOut ? 1u : 0u;
+}
+
+void ico_render_thread_tids(long *render, long *submit)
+{
+    const bool on = s_rt.thread != NULL;
+    const long r = __atomic_load_n(&s_place.renderTid, __ATOMIC_ACQUIRE);
+    const long sub = __atomic_load_n(&s_place.submitTid, __ATOMIC_ACQUIRE);
+
+    *render = !on ? 0 : (r > 0 ? r : -1);
+    *submit = !on || !rd_thread_submit_on() ? 0 : (sub > 0 ? sub : -1);
 }
 
 void ico_render_thread_note_game_core(void)

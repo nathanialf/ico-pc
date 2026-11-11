@@ -293,11 +293,14 @@ if(ICO_LINK_EXE)
         # the system's picker (tested on Linux as iso_import).
         # gpu_sysfs_android.c: the kernel GPU driver's nodes sampled for the
         # log (port/platform/gpu_sysfs.h; its pure part tested everywhere).
+        # perf_hint_android.c: the NDK's performance hint calls, looked up at
+        # run time (port/platform/perf_hint.h; its pure part tested everywhere).
         add_library(ico_pc SHARED ${_ico_pc_sources} port/platform/android/main_android.c
                                   port/platform/android/host_android.c
                                   port/platform/android/android_paths.c
                                   port/platform/android/iso_import.c
-                                  port/platform/android/gpu_sysfs_android.c)
+                                  port/platform/android/gpu_sysfs_android.c
+                                  port/platform/android/perf_hint_android.c)
         set_target_properties(ico_pc PROPERTIES OUTPUT_NAME main)
         target_compile_definitions(ico_pc PRIVATE ICO_HOST_FORCE_PORTABLE=1)
         target_include_directories(ico_pc PRIVATE port/platform/android)
@@ -575,6 +578,7 @@ if(TARGET ico_pc AND NOT ICO_HEADLESS)
                                   port/platform/window_present_fallback.c
                                   port/platform/window_stall.c
                                   port/platform/window_perf_rank.c
+                                  port/platform/window_perf_hint.c
                                   port/platform/window_disc.c port/platform/window_blended.c
                                   port/platform/window_present.c port/platform/render_thread.c
                                   port/platform/window_sweep.c port/platform/dump_zip.c
