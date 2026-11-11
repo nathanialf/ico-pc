@@ -82,6 +82,7 @@
 #include "rd_internal.h"
 #include "rd_replay.h" /* rd__msaa_shadow_selftest */
 #include "rd_stencil_selftest.h"
+#include "rd_shadow_tile.h"
 
 static const char *const s_pathNames[RD_FOG_PATH_COUNT] = {"inplace", "copy", "buffer", "local"};
 
@@ -1464,6 +1465,7 @@ bool rd_fog_selftest(void)
            (rd_stencil_selftest.c): its fogs read the exact entry, no probe */
         s_st.running = true;
         (void)rd__stencil_cut_selftest();
+        (void)rd__shadow_tile_selftest(); /* the shadow tiles (rd_shadow_tile.c) */
         s_st.running = false;
     }
     return ok;

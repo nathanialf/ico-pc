@@ -5,7 +5,8 @@
  * Every target depth is D32F_S8.  The shadow count (bits 0-5) lives from its
  * reset to its resolve; DATE's bit 6 is made again in each pass that tests it
  * (rd_replay_tiler.c rd__replay_date_take clears it over its area first); bit
- * 7 is unused.  So outside the shadow window nothing reads what a pass loads
+ * 7 the shadow tiles' mark, cleared and written in the pass that tests it
+ * (rd_shadow_tile.c).  So outside the shadow window nothing reads what a pass loads
  * or stores of the stencil.  rd__stencil_ops_packed (rd_shadow.c) loads and
  * stores it with the depth on every pass where rd__stencil_cut_forced says
  * so: on every fog path but the one that samples the depth in place

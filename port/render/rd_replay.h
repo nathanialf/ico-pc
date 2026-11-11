@@ -91,6 +91,10 @@ typedef struct Replay {
      * snapshot and no stencil bit taken (prepareDraw); PRIM.AA1's
      * per-primitive DATE draws are not needed then (doScreen) */
     int dateDstNow;
+    /* the shadow tiles (rd_shadow_tile.c): the draw being planned is a
+     * composite over the tile mask (its DATE tests become TEST0_T/TEST1_T,
+     * expandPasses); reset by every prepareDraw */
+    int tileNow;
     uint32_t dateStFor, dateStSerial, dateStPass;
     RhiRect dateStArea;
 } Replay;
@@ -127,6 +131,10 @@ typedef struct DrawSetup {
      * doScreen), DrawCB.scale.w of its sprite_above1x passes; 0 the pixel's
      * footprint */
     uint32_t a1xSteps;
+    /* the shadow tiles (rd_shadow_tile.c): bindDrawEx draws the DATE set-up
+     * over the tile mask (rd__shadow_tile_take) instead of
+     * rd__replay_date_take */
+    int shadowTile;
 } DrawSetup;
 
 /* rd_replay.c: beginPass, bindDrawKeep, bindGroup, s_bindEpoch, dstBind,

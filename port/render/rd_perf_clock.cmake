@@ -70,3 +70,6 @@ include(rd_stencil.cmake)
 
 # the shadows over the volumes' box (rd_shadow_box.c in ico_render) and its tests
 include(rd_shadow_box.cmake)
+
+# the shadow composites over the tile mask (rd_shadow_tile.c in ico_render) and its tests
+include(rd_shadow_tile.cmake)
