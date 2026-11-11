@@ -82,12 +82,18 @@ bool rd_loss_keep_release(uint32_t frame, uint32_t openFrame);
 /* Whether the slot wait has stalled: a wait in progress (waitingFor, as
  * RhiGpuProgress names it) blocked at least RD_LOSS_KEEP_STALL_NS
  * (waitingNs).  A copy is made only then: the losses of issues 179 and 211
- * came after such waits, and issue 179's had its wait fail after about
- * 0.1 s, so a gate at 100 ms could miss the copy altogether.  50 ms: the
- * Pixel 10 Pro Fold's longest slot waits in GPU-bound play were 26.9 to
- * 43.2 ms a 10 s block (v0.11.4 log), and a steady stretch past 50 ms is
- * bounded by the throttle below (4 attempts in any 64 recycled frames) */
-#define RD_LOSS_KEEP_STALL_NS 50000000ull
+ * came after such waits.  100 ms, not 50: one copy is not cheap
+ * (rd_dump.c dumpFrame: the game thread drains the render and submit
+ * threads, so it waits for the render thread's own slot wait and walk,
+ * then serialises the frame, about 7 MB at 2x, into a buffer that grows by
+ * realloc from 1 MiB, four allocations and copies on the way, plus three
+ * 16 KB sets), and the Mali-G52's ordinary slot waits average 35-55 ms and
+ * reach 60-250 ms in most 10 s blocks (issue 179's v0.11.4 log), so at
+ * 50 ms copies would be made in steady play there (4 in every 64 frames,
+ * each a hitch of a whole picture or more).  Issue 179's loss had its
+ * wait fail after about 0.1 s: a copy may be missed there, a hitch-free
+ * steady play is kept */
+#define RD_LOSS_KEEP_STALL_NS 100000000ull
 bool rd_loss_keep_stalled(uint64_t waitingFor, uint64_t waitingNs);
 
 /* The throttle on copies, windowed: at most RD_LOSS_KEEP_PER_WINDOW

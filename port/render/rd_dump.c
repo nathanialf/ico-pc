@@ -1299,7 +1299,7 @@ bool rd_dump_retained_frame(uint32_t number, const char *path, uint32_t *dumped)
  * frames past it.
  *
  * Only while a slot wait has stalled (rd_loss_pick.h rd_loss_keep_stalled:
- * a wait in progress blocked 50 ms or more, RhiGpuProgress.waitingNs; no
+ * a wait in progress blocked 100 ms or more, RhiGpuProgress.waitingNs; no
  * driver call is made for it): a copy drains the render and submit threads
  * and serializes the frame (about 7 MB at 2x), which must not happen in
  * steady play, where a GPU-bound phone still has the recycled frame's

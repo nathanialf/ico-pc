@@ -19,7 +19,7 @@
  *              else the newest held below it
  *   keep       a copy is needed when the first open frame is that frame
  *              or an older one, released two frames behind it, made only
- *              while a slot wait has blocked 50 ms or more (steady play's
+ *              while a slot wait has blocked 100 ms or more (steady play's
  *              open frames without a long wait never copy), throttled to 4
  *              attempts in any 64 recycled frames (a long stalled stretch:
  *              never more in any window), paused for 600 after one too big,
@@ -162,15 +162,16 @@ static void keep(void)
     CHECK(rd_loss_keep_release(10, 0));
     CHECK(rd_loss_keep_release(127, 129) && !rd_loss_keep_release(128, 129) &&
           !rd_loss_keep_release(129, 129));
-    /* the stall: a wait in progress blocked 50 ms or more (issue 179's
-       wait failed after about 0.1 s: a 100 ms gate could miss it; the
-       Pixel's longest steady slot waits, 26.9 to 43.2 ms, stay under) */
-    CHECK(stall == 50000000ull);
+    /* the stall: a wait in progress blocked 100 ms or more (the Mali-G52's
+       steady slot waits, 35-55 ms and often 60-90 ms, stay under: a copy
+       drains the threads and serialises the frame, rd_loss_pick.h) */
+    CHECK(stall == 100000000ull);
     CHECK(!rd_loss_keep_stalled(0, stall * 5));
     CHECK(!rd_loss_keep_stalled(wait, stall - 1));
     CHECK(rd_loss_keep_stalled(wait, stall));
     CHECK(!rd_loss_keep_stalled(wait, 43200000ull));
-    CHECK(rd_loss_keep_stalled(wait, 90000000ull));
+    CHECK(!rd_loss_keep_stalled(wait, 90000000ull));
+    CHECK(rd_loss_keep_stalled(wait, 150000000ull));
     /* the slot: an empty one, else the oldest frame */
     CHECK(rd_loss_keep_slot(slots, 4) == 0);
     slots[0] = 9;
@@ -253,7 +254,7 @@ static void keep(void)
 /* The recycle over a fake history: the game records frames 124..140 (a
  * ring of three) and the GPU is stuck at frame 129 (replay 148): the first
  * open frame is 129 from the time it is submitted, and the slot wait has
- * blocked past 50 ms from frame 131 on (before it the GPU is merely a
+ * blocked past 100 ms from frame 131 on (before it the GPU is merely a
  * frame or two behind: open, no stall, no copy).  Each begin recycles the
  * oldest of the ring. */
 static void history(void)
