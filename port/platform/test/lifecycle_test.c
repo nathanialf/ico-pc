@@ -5,7 +5,9 @@
  * operations that write down each call: the order of every event's steps
  * (the render thread parked before the GPU idles and the surface goes, and
  * going on only after the surface is made again),
- * the settings saved only when changed, a missing operation skipped, a
+ * the settings saved only when changed, the performance profile written
+ * before the log's flush going to the background and ending (the end's
+ * told apart), a missing operation skipped, a
  * failed surface or save logged, unknown events refused, and SDL's event
  * types mapped.
  */
@@ -111,6 +113,11 @@ static void f_park(void *u, int parked)
     note(u, parked ? "park" : "unpark");
 }
 
+static void f_perf(void *u, int terminating)
+{
+    note(u, terminating ? "perf-end" : "perf");
+}
+
 static IcoLifecycleOps ops_for(Fake *f)
 {
     IcoLifecycleOps o;
@@ -130,6 +137,7 @@ static IcoLifecycleOps ops_for(Fake *f)
     o.log = f_log;
     o.log_flush = f_flush;
     o.render_park = f_park;
+    o.perf_profile = f_perf;
     return o;
 }
 
@@ -151,8 +159,8 @@ int main(void)
        surface goes, the watchdog and the sound stopped, the log on the disc
        last */
     o = ops_for(&f);
-    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 7);
-    CHECK_CALLS(f, "log park idle release watchdog-pause audio-pause flush");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 8);
+    CHECK_CALLS(f, "log park idle release watchdog-pause audio-pause perf flush");
     CHECK(strcmp(f.lastLog, "lifecycle: will enter background") == 0);
 
     /* the foreground: the surface first (the render thread still parked),
@@ -173,20 +181,20 @@ int main(void)
        then the flush */
     o = ops_for(&f);
     f.dirty = 1;
-    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_TERMINATING, &o) == 4);
-    CHECK_CALLS(f, "log dirty? save record-close flush");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_TERMINATING, &o) == 5);
+    CHECK_CALLS(f, "log dirty? save record-close perf-end flush");
 
     /* nothing changed: no save */
     o = ops_for(&f);
-    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_TERMINATING, &o) == 3);
-    CHECK_CALLS(f, "log dirty? record-close flush");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_TERMINATING, &o) == 4);
+    CHECK_CALLS(f, "log dirty? record-close perf-end flush");
 
     /* a failed save is logged */
     o = ops_for(&f);
     f.dirty = 1;
     f.saveFails = 1;
-    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_TERMINATING, &o) == 4);
-    CHECK_CALLS(f, "log dirty? save log record-close flush");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_TERMINATING, &o) == 5);
+    CHECK_CALLS(f, "log dirty? save log record-close perf-end flush");
 
     /* low memory */
     o = ops_for(&f);
@@ -198,20 +206,24 @@ int main(void)
     o = ops_for(&f);
     o.surface_release = NULL;
     o.audio_pause = NULL;
-    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 5);
-    CHECK_CALLS(f, "log park idle watchdog-pause flush");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 6);
+    CHECK_CALLS(f, "log park idle watchdog-pause perf flush");
     o = ops_for(&f);
     o.render_park = NULL; /* no render thread's op (a build without one): as before */
-    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 6);
-    CHECK_CALLS(f, "log idle release watchdog-pause audio-pause flush");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 7);
+    CHECK_CALLS(f, "log idle release watchdog-pause audio-pause perf flush");
     CHECK(ico_lifecycle_on(ICO_LIFECYCLE_DID_ENTER_FOREGROUND, &o) == 5);
-    CHECK_CALLS(f, "log idle release watchdog-pause audio-pause flush recreate watchdog-resume "
-                   "audio-resume pace log");
+    CHECK_CALLS(f, "log idle release watchdog-pause audio-pause perf flush recreate "
+                   "watchdog-resume audio-resume pace log");
+    o = ops_for(&f);
+    o.perf_profile = NULL; /* a build without the performance lines: as before */
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_WILL_ENTER_BACKGROUND, &o) == 7);
+    CHECK_CALLS(f, "log park idle release watchdog-pause audio-pause flush");
     o = ops_for(&f);
     o.config_dirty = NULL; /* nothing says the settings changed: no save */
     f.dirty = 1;
-    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_TERMINATING, &o) == 3);
-    CHECK_CALLS(f, "log record-close flush");
+    CHECK(ico_lifecycle_on(ICO_LIFECYCLE_TERMINATING, &o) == 4);
+    CHECK_CALLS(f, "log record-close perf-end flush");
 
     /* outside the table */
     o = ops_for(&f);
@@ -241,6 +253,22 @@ int main(void)
         }
         CHECK(park >= 0 && park < idle && idle < release);
         CHECK(recreate >= 0 && recreate < unpark);
+    }
+    /* the performance profile just before the log's flush, going to the
+       background and ending, and nowhere else */
+    for (int e = ICO_LIFECYCLE_NONE + 1; e < ICO_LIFECYCLE_COUNT; e++) {
+        const IcoLifecycleStep *s = ico_lifecycle_steps((IcoLifecycleEvent)e);
+        int perf = -1, flush = -1;
+
+        for (int i = 0; s != NULL && s[i] != ICO_LC_END; i++) {
+            perf = s[i] == ICO_LC_PERF_PROFILE ? i : perf;
+            flush = s[i] == ICO_LC_LOG_FLUSH ? i : flush;
+        }
+        if (e == ICO_LIFECYCLE_WILL_ENTER_BACKGROUND || e == ICO_LIFECYCLE_TERMINATING) {
+            CHECK(perf >= 0 && perf + 1 == flush);
+        } else {
+            CHECK(perf < 0);
+        }
     }
 
     /* every table ends, and every step in it is a known one */

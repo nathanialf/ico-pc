@@ -76,11 +76,28 @@ void rd_perf_rank_add_record(RdPerfRankBlock *b, const RdPerfRecord *r, double v
 {
     b->n++;
     b->keep += r->keep ? 1u : 0u;
-    const double own = r->interpMs + r->uploadMs + r->walkMs + r->bindMs + r->submitMs;
+    /* the submit thread's submit is its own, not the render thread's
+       (rd_perf.c rd__perf_submit_times hands its times to the record) */
+    const bool onSubmit = r->presentThread == RD_PRESENT_ON_SUBMIT;
+    const double own =
+        r->interpMs + r->uploadMs + r->walkMs + r->bindMs + (onSubmit ? 0.0 : r->submitMs);
     b->cpuMs += r->totalMs;
     b->ownMs += own;
     b->walkMs += r->walkMs;
-    b->submitMs += r->submitMs;
+    if (onSubmit) {
+        b->subN++;
+        b->subSubmitMs += r->submitMs;
+        b->subPresentMs += r->presentMs;
+    } else {
+        b->submitMs += r->submitMs;
+    }
+    if (r->presented) {
+        b->presents++;
+    }
+    if (b->n == 1u) {
+        b->firstStartMs = r->startMs;
+    }
+    b->lastStartMs = r->startMs;
     b->uploadCpuMs += r->uploadMs;
     b->bindMs += r->bindMs;
     b->interpMs += r->interpMs;
@@ -120,13 +137,20 @@ void rd_perf_rank_add_record(RdPerfRankBlock *b, const RdPerfRecord *r, double v
         }
         const int bin = work >= (double)(RD_PERF_RANK_BINS - 1) ? RD_PERF_RANK_BINS - 1 : (int)work;
         b->hist[bin]++;
-        const double x = vuInvocations / 1000.0;
-        b->fitN++;
-        b->fx += x;
-        b->fy += work;
-        b->fxx += x * x;
-        b->fxy += x * work;
-        b->fyy += work * work;
+        if (!r->keep) {
+            /* a keep frame's work is a held picture's: no vertex work */
+            const double x = vuInvocations / 1000.0;
+            if (x > 0.0 && (b->fxMin == 0.0 || x < b->fxMin)) {
+                b->fxMin = x;
+            }
+            b->fxMax = x > b->fxMax ? x : b->fxMax;
+            b->fitN++;
+            b->fx += x;
+            b->fy += work;
+            b->fxx += x * x;
+            b->fxy += x * work;
+            b->fyy += work * work;
+        }
     }
     if (r->gpuSlotWaitMs >= 0.05) {
         b->waitN++;
@@ -217,34 +241,43 @@ static bool fit(uint32_t n, double sx, double sy, double sxx, double sxy, double
     return true;
 }
 
-void rd_perf_rank_rates(const RdPerfRankBlock *b, RdPerfRankRates *out)
+void rd_perf_rank_rates(const RdPerfRankBlock *b, double earlierMbMs, RdPerfRankRates *out)
 {
     memset(out, 0, sizeof(*out));
-    out->mbFrom = "";
+    out->mbFrom = "no rate";
     double a = 0.0, s = 0.0, r2 = 0.0;
     if (fit(b->smN, b->sx, b->sy, b->sxx, b->sxy, b->syy, &a, &s, &r2)) {
         out->smallFit = true;
         out->passMs = a > 0.0 ? a : 0.0;
         out->mbMs = s > 0.0 ? s : 0.0;
         out->smallR2 = r2;
+        out->smallGood = out->mbMs > 0.0 && r2 >= 0.3;
     }
     out->smallN = b->smN;
     if (b->copyPieceKB / 1024.0 >= 0.5) {
         out->copyRate = true;
         out->copyMbMs = b->copyPieceMs / (b->copyPieceKB / 1024.0);
     }
+    out->vuXMin = b->fxMin;
+    out->vuXMax = b->fxMax;
     if (fit(b->fitN, b->fx, b->fy, b->fxx, b->fxy, b->fyy, &a, &s, &r2)) {
         out->vuFit = true;
         out->vuBaseMs = a;
         out->vuPerK = s;
         out->vuR2 = r2;
+        out->vuUsable =
+            s > 0.0 && r2 >= RD_PERF_RANK_VU_R2 && b->fxMin > 0.0 && b->fxMax >= 2.0 * b->fxMin;
     }
-    if (out->smallFit && out->mbMs > 0.0 && out->smallR2 >= 0.3) {
+    /* the attachment traffic's rate: this block's byte-bound fit, else the
+       last that held earlier in the run; never the copies' (on a tile-based
+       GPU a copy's piece carries the pass before it's flush: the PowerVR's
+       0.01 ms a MB against its fits' 0.05 to 0.16) */
+    if (out->smallGood) {
         out->mbRate = out->mbMs;
         out->mbFrom = "the byte-bound passes' fit";
-    } else if (out->copyRate && out->copyMbMs > 0.0) {
-        out->mbRate = out->copyMbMs;
-        out->mbFrom = "the copies' rate";
+    } else if (earlierMbMs > 0.0) {
+        out->mbRate = earlierMbMs;
+        out->mbFrom = "the rate of an earlier block of this run";
     }
 }
 
@@ -268,10 +301,24 @@ const char *rd_perf_bound_name(int bound)
 
 static void cand(RdPerfRankVerdict *v, double ms, bool estimate, const char *fmt, ...)
 {
-    if (v->count >= RD_PERF_RANK_CANDIDATES || !(ms > 0.05)) {
+    if (!(ms > 0.05)) {
         return;
     }
-    RdPerfRankCand *c = &v->c[v->count++];
+    RdPerfRankCand *c;
+    if (v->count < RD_PERF_RANK_CANDIDATES) {
+        c = &v->c[v->count++];
+    } else {
+        /* full: the smallest goes, never a larger one (the table holds
+           every class and estimate today; this keeps it so) */
+        uint32_t low = 0;
+        for (uint32_t i = 1; i < v->count; i++) {
+            low = v->c[i].ms < v->c[low].ms ? i : low;
+        }
+        if (!(ms > v->c[low].ms)) {
+            return;
+        }
+        c = &v->c[low];
+    }
     c->ms = ms;
     c->estimate = estimate;
     va_list ap;
@@ -316,7 +363,58 @@ static void className(int k, char *buf, size_t n)
     }
 }
 
-static void gpuCands(const RdPerfRankBlock *b, const RdPerfRankRates *rt, RdPerfRankVerdict *v)
+/* the vertex estimate, or why there is none (v->vertexWhy) */
+static void vertexCand(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
+                       const RdPerfRankRates *rt, RdPerfRankVerdict *v)
+{
+    const double n = b->n ? (double)b->n : 1.0;
+    if (!rt->vuUsable) {
+        Out o = outOf(v->vertexWhy, sizeof v->vertexWhy);
+        if (!rt->vuFit) {
+            put(&o, "no fit over %u pictures without keep frames", b->fitN);
+        } else {
+            const char *sep = "";
+            if (!(rt->vuPerK > 0.0)) {
+                put(&o, "the fit's slope %.3f ms a thousand is not above 0", rt->vuPerK);
+                sep = ", ";
+            }
+            if (rt->vuR2 < RD_PERF_RANK_VU_R2) {
+                put(&o, "%sthe fit's R^2 %.2f is under %.2f", sep, rt->vuR2, RD_PERF_RANK_VU_R2);
+                sep = ", ";
+            }
+            if (!(rt->vuXMin > 0.0) || rt->vuXMax < 2.0 * rt->vuXMin) {
+                put(&o,
+                    "%sthe invocations (%.1fk to %.1fk a picture) are under the 2x spread "
+                    "the fit needs",
+                    sep, rt->vuXMin, rt->vuXMax);
+            }
+        }
+        return;
+    }
+    const double k = b->vuInv / n / 1000.0;
+    double ms = k * rt->vuPerK;
+    bool capped = false;
+    double cap = 0.0;
+    if (in->prepass) {
+        /* with the pre-pass the vertex work is its pass: no more than it
+           measured (the fit's slope also scales with the pixels the
+           geometry brings) */
+        const int kp = RD_PERF_RANK_KIND0 + RD_PERF_PASS_PREPASS;
+        cap = b->timed && b->cls[kp].seen ? b->cls[kp].ms / (double)b->timed
+                                          : per(b->prepassMs, (double)b->gpuN);
+        if (ms > cap) {
+            ms = cap;
+            capped = true;
+        }
+    }
+    cand(v, ms, true,
+         "vertex work est. %.1f ms (%.0fk vertex invocations a picture at %.3f ms a thousand, R^2 "
+         "%.2f%s)",
+         ms, k, rt->vuPerK, rt->vuR2, capped ? "; capped at the measured VU pre-pass" : "");
+}
+
+static void gpuCands(const RdPerfRankBlock *b, const RdPerfRankInfo *in, const RdPerfRankRates *rt,
+                     RdPerfRankVerdict *v)
 {
     const double n = b->n ? (double)b->n : 1.0;
     const double g = b->gpuN ? (double)b->gpuN : 1.0;
@@ -364,7 +462,7 @@ static void gpuCands(const RdPerfRankBlock *b, const RdPerfRankRates *rt, RdPerf
              "ms a MB)",
              dstore * rt->mbRate, dstore, rt->mbRate);
     }
-    if (rt->smallFit && rt->passMs > 0.0) {
+    if (rt->smallGood && rt->passMs > 0.0) {
         cand(v, b->passes / n * rt->passMs, true,
              "pass count est. %.1f ms (%.1f passes a picture at %.2f ms each, the byte-bound "
              "passes' fit)",
@@ -381,13 +479,7 @@ static void gpuCands(const RdPerfRankBlock *b, const RdPerfRankRates *rt, RdPerf
              dateMs + per * reload * rt->mbRate, per, dateMs, per * reload,
              rt->mbRate > 0.0 ? "" : ", no rate for the reload");
     }
-    if (rt->vuFit && rt->vuPerK > 0.0) {
-        const double k = b->vuInv / n / 1000.0;
-        cand(v, k * rt->vuPerK, true,
-             "vertex work est. %.1f ms (%.0fk vertex invocations a picture at %.3f ms a "
-             "thousand, R^2 %.2f)",
-             k * rt->vuPerK, k, rt->vuPerK, rt->vuR2);
-    }
+    vertexCand(b, in, rt, v);
 }
 
 static void cpuCands(const RdPerfRankBlock *b, RdPerfRankVerdict *v)
@@ -397,6 +489,8 @@ static void cpuCands(const RdPerfRankBlock *b, RdPerfRankVerdict *v)
          "the walk %.1f ms measured (%.0f draws, %.0f pipeline and %.0f "
          "bind group binds a picture)",
          b->walkMs / n, b->draws / n, b->pipeBinds / n, b->groupBinds / n);
+    /* the render thread's own submits only (the submit thread's are not
+       this thread's time) */
     cand(v, b->submitMs / n, false, "the submit %.1f ms measured", b->submitMs / n);
     cand(v, b->uploadCpuMs / n, false, "the uploads' CPU %.1f ms measured (%.0f KB a picture)",
          b->uploadCpuMs / n, b->uploadBytes / n / 1024.0);
@@ -430,7 +524,7 @@ void rd_perf_rank_verdict(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
         out->bound = RD_PERF_BOUND_ELSE;
     }
     RdPerfRankRates rt;
-    rd_perf_rank_rates(b, &rt);
+    rd_perf_rank_rates(b, in->earlierMbMs, &rt);
     if (out->bound == RD_PERF_BOUND_RENDER) {
         cpuCands(b, out);
     } else if (out->bound == RD_PERF_BOUND_GAME) {
@@ -441,9 +535,11 @@ void rd_perf_rank_verdict(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
              b->presentMs / n);
         cand(out, b->fenceMs / n, false,
              "the waits for the GPU %.1f ms measured a picture (the slot waits)", b->fenceMs / n);
-        gpuCands(b, &rt, out);
+        cand(out, b->subSubmitMs / n, false,
+             "the submit thread's submit %.1f ms measured a picture", b->subSubmitMs / n);
+        gpuCands(b, in, &rt, out);
     } else {
-        gpuCands(b, &rt, out);
+        gpuCands(b, in, &rt, out);
     }
     sortCands(out);
 }
@@ -472,14 +568,19 @@ int rd_perf_rank_ranked_text(const RdPerfRankInfo *in, const RdPerfRankVerdict *
     const uint32_t top = v->count < RD_PERF_RANK_TOP ? v->count : RD_PERF_RANK_TOP;
     if (top == 0) {
         put(&o, ": nothing measured to rank");
-        return o.total;
+    } else {
+        put(&o, ":");
+        for (uint32_t i = 0; i < top; i++) {
+            put(&o, "%s %u. %s", i ? ";" : "", i + 1u, v->c[i].text);
+        }
     }
-    put(&o, ":");
-    for (uint32_t i = 0; i < top; i++) {
-        put(&o, "%s %u. %s", i ? ";" : "", i + 1u, v->c[i].text);
+    if (v->vertexWhy[0] != '\0') {
+        put(&o, "; no vertex work estimate (%s)", v->vertexWhy);
     }
-    put(&o, " (each saving alone, they overlap; est. = this block's counters times its own "
-            "rates)");
+    if (top != 0) {
+        put(&o, " (each saving alone, they overlap; est. = this block's counters times its own "
+                "rates)");
+    }
     return o.total;
 }
 
@@ -502,12 +603,32 @@ int rd_perf_rank_scene_text(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
         put(&o, " of the %.1f ms between presents (%.0f %%)", v->periodMs,
             100.0 * v->workMs / v->periodMs);
     }
-    put(&o,
-        "; the render thread's own CPU %.1f ms (walk %.1f, submit %.1f, uploads %.1f, binds "
-        "%.1f, interpolation %.1f), its waits for the GPU %.1f ms, its present calls %.1f ms; "
-        "the game step's CPU %.1f ms",
-        v->ownMs, b->walkMs / N, b->submitMs / N, b->uploadCpuMs / N, b->bindMs / N,
-        b->interpMs / N, b->fenceMs / N, b->presentMs / N, in->stepCpuMs);
+    if (b->subN == 0) {
+        put(&o,
+            "; the render thread's own CPU %.1f ms (walk %.1f, submit %.1f, uploads %.1f, binds "
+            "%.1f, interpolation %.1f), its waits for the GPU %.1f ms, its present calls %.1f ms",
+            v->ownMs, b->walkMs / N, b->submitMs / N, b->uploadCpuMs / N, b->bindMs / N,
+            b->interpMs / N, b->fenceMs / N, b->presentMs / N);
+    } else {
+        /* the submit thread on: its submit and present apart (the render
+           thread's own CPU is not that thread's time) */
+        put(&o,
+            "; the render thread's own CPU %.1f ms (walk %.1f, uploads %.1f, binds %.1f, "
+            "interpolation %.1f",
+            v->ownMs, b->walkMs / N, b->uploadCpuMs / N, b->bindMs / N, b->interpMs / N);
+        if (b->subN < b->n) {
+            put(&o, ", submit %.1f", b->submitMs / N);
+        }
+        put(&o, "), its waits for the GPU %.1f ms", b->fenceMs / N);
+        if (b->subN < b->n) {
+            put(&o, ", its present calls %.1f ms", (b->presentMs - b->subPresentMs) / N);
+        }
+        put(&o,
+            "; the submit thread's submit %.1f ms and present calls %.1f ms (%u of the %u "
+            "pictures)",
+            b->subSubmitMs / N, b->subPresentMs / N, b->subN, b->n);
+    }
+    put(&o, "; the game step's CPU %.1f ms", in->stepCpuMs);
     if (v->tickMs > 0.0) {
         put(&o, " of its %.1f ms tick", v->tickMs);
     }
@@ -521,7 +642,7 @@ int rd_perf_rank_scene_text(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
     put(&o,
         "; passes asked a picture: %.1f passes, colour %.1f MB loaded %.1f MB stored, depth and "
         "stencil %.1f MB loaded %.1f MB stored, %.1f MB cleared, %.2f Mpx of area, copies %.1f "
-        "MB (uncompressed; %.1f passes with an attachment of no known format, at 4 bytes a "
+        "MB (each copy once: as many read as written; uncompressed; %.1f passes with an attachment of no known format, at 4 bytes a "
         "texel); %.0f draws, %.0f pipeline and %.0f bind group binds, %.0fk vertex "
         "invocations, %.0f KB uploaded (%.1f textures), %.1f DATE snapshots",
         b->passes / N, mb(b->colorLoad) / N, mb(b->colorStore) / N, mb(b->depthLoad) / N,
@@ -614,14 +735,20 @@ int rd_perf_rank_rates_text(const RdPerfRankBlock *b, const RdPerfRankRates *r, 
     if (r->vuFit) {
         put(&o,
             "; the GPU's work %.1f ms + %.3f ms a thousand vertex invocations (R^2 %.2f, %u "
-            "pictures)",
-            r->vuBaseMs, r->vuPerK, r->vuR2, b->fitN);
+            "pictures without keep frames, %.1fk to %.1fk invocations%s)",
+            r->vuBaseMs, r->vuPerK, r->vuR2, b->fitN, r->vuXMin, r->vuXMax,
+            r->vuUsable ? "" : "; not used for an estimate");
     } else {
-        put(&o, "; no vertex fit (%u pictures)", b->fitN);
+        put(&o, "; no vertex fit (%u pictures without keep frames)", b->fitN);
     }
-    put(&o, "; the estimates use %s", r->mbRate > 0.0 ? r->mbFrom : "no rate for a MB");
     if (r->mbRate > 0.0) {
-        put(&o, " (%.2f ms a MB)", r->mbRate);
+        put(&o, "; the estimates use %s (%.2f ms a MB)", r->mbFrom, r->mbRate);
+    } else {
+        put(&o, "; the estimates use no rate (no fit in this block or an earlier one of the run: "
+                "the traffic estimates left out)");
+    }
+    if (r->copyRate) {
+        put(&o, "; the copies' rate is never used for attachment traffic");
     }
     return o.total;
 }
@@ -792,4 +919,56 @@ int rd_perf_rank_profile_text(const RdPerfRankRun *run, uint32_t i, char *buf, s
         put(&o, "; %u blocks of further scenes not kept", run->overflow);
     }
     return o.total;
+}
+
+double rd_perf_rank_partial_fps(const RdPerfRankBlock *b)
+{
+    const double span = b->lastStartMs - b->firstStartMs;
+    if (b->n < 2u || !(span > 0.0) || b->presents == 0u) {
+        return 0.0;
+    }
+    /* n records span n - 1 replay periods */
+    const double perRecord = span / (double)(b->n - 1u);
+    return 1000.0 * (double)b->presents / ((double)b->n * perRecord);
+}
+
+int rd_perf_rank_partial_text(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
+                              const RdPerfRankVerdict *v, char *buf, size_t n)
+{
+    Out o = outOf(buf, n);
+    if (b->n == 0) {
+        return 0;
+    }
+    const double span = b->lastStartMs > b->firstStartMs ? b->lastStartMs - b->firstStartMs : 0.0;
+    put(&o,
+        "performance profile: %s (the block in progress): %.1f s, %u pictures (%u keep frames) "
+        "not yet in a 10 s block; a picture's GPU work median %.1f ms, worst %.0f ms; presented "
+        "fps about %.1f",
+        in->scene, span / 1000.0, b->n, b->keep, rd_perf_rank_hist_median(b->hist),
+        rd_perf_rank_hist_worst(b->hist), rd_perf_rank_partial_fps(b));
+    const bool known = in->targetFps > 0.0;
+    if (known) {
+        put(&o, " of %.1f, %s", in->targetFps, rd_perf_bound_name(v->bound));
+    } else {
+        put(&o, " (the target rate not known before the first 10 s block)");
+    }
+    const uint32_t top = v->count < RD_PERF_RANK_TOP ? v->count : RD_PERF_RANK_TOP;
+    if (v->below || !known) {
+        for (uint32_t i = 0; i < top; i++) {
+            put(&o, "%s %u. %s", i ? ";" : ":", i + 1u, v->c[i].text);
+        }
+        if (v->vertexWhy[0] != '\0') {
+            put(&o, "; no vertex work estimate (%s)", v->vertexWhy);
+        }
+    }
+    return o.total;
+}
+
+bool rd_perf_rank_profile_due(uint64_t *lastNs, uint64_t nowNs)
+{
+    if (*lastNs != 0 && nowNs >= *lastNs && nowNs - *lastNs < RD_PERF_RANK_PROFILE_GAP_NS) {
+        return false;
+    }
+    *lastNs = nowNs != 0 ? nowNs : 1u;
+    return true;
 }

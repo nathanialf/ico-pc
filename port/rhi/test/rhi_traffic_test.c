@@ -177,7 +177,8 @@ static void testSums(void)
     CHECK(b.passDepthLoadBytes - a.passDepthLoadBytes == px * 5);
     CHECK(b.passDepthStoreBytes - a.passDepthStoreBytes == px * 5);
     CHECK(b.passPixels - a.passPixels == px && b.passUntracked == a.passUntracked);
-    CHECK(b.copyTextureBytes - a.copyTextureBytes == 2u * 1000u * 4u + 2u * 1000u * 1u);
+    /* each copy once: its texels times the aspect's bytes */
+    CHECK(b.copyTextureBytes - a.copyTextureBytes == 1000u * 4u + 1000u * 1u);
     /* the window's image (never made through the table): untracked */
     RhiRenderPassDesc w;
     memset(&w, 0, sizeof(w));

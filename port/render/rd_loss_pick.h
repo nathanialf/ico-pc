@@ -81,10 +81,13 @@ bool rd_loss_keep_release(uint32_t frame, uint32_t openFrame);
 
 /* Whether the slot wait has stalled: a wait in progress (waitingFor, as
  * RhiGpuProgress names it) blocked at least RD_LOSS_KEEP_STALL_NS
- * (waitingNs).  A copy is made only then: in steady play no wait blocks
- * that long, so no frame is copied and the threads are never drained for
- * one; the losses of issues 179 and 211 came after such waits */
-#define RD_LOSS_KEEP_STALL_NS 100000000ull
+ * (waitingNs).  A copy is made only then: the losses of issues 179 and 211
+ * came after such waits, and issue 179's had its wait fail after about
+ * 0.1 s, so a gate at 100 ms could miss the copy altogether.  50 ms: the
+ * Pixel 10 Pro Fold's longest slot waits in GPU-bound play were 26.9 to
+ * 43.2 ms a 10 s block (v0.11.4 log), and a steady stretch past 50 ms is
+ * bounded by the throttle below (4 attempts in any 64 recycled frames) */
+#define RD_LOSS_KEEP_STALL_NS 50000000ull
 bool rd_loss_keep_stalled(uint64_t waitingFor, uint64_t waitingNs);
 
 /* The throttle on copies, windowed: at most RD_LOSS_KEEP_PER_WINDOW

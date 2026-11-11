@@ -1663,8 +1663,8 @@ typedef struct RhiStats {
      * no backend call): the attachment bytes the render passes ask a
      * tile-based GPU to load (LOAD) and store (STORE), colour and
      * depth-stencil apart, those cleared in tile memory (CLEAR: no read),
-     * the passes' render-area texels, the texture copies' bytes read and
-     * written, and the passes with an attachment the table did not know
+     * the passes' render-area texels, the texture copies' bytes (each copy
+     * once: the bytes read, as many written), and the passes with an attachment the table did not know
      * (counted at 4 bytes a texel).  Uncompressed: a driver that compresses
      * or drops a store moves fewer.  Counts for the whole run (a new device
      * does not set them back) */

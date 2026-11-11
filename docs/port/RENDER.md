@@ -1161,7 +1161,7 @@ submission (`RhiGpuProgress`: `lostReplay`/`lostFrame`, the tag of the submissio
 lists after the newest numbered submission when there is one, else the newest numbered picture (the
 failed submit was none of a picture's: a capture, a readback or a check). The frame before it is the previous replay's in the pass ring's table. To have
 the lost frame, `rd_begin_frame` copies a frame to memory before the ring reuses its slot when the
-backend still has a submission open at or after that frame and a slot wait has blocked 100 ms or
+backend still has a submission open at or after that frame and a slot wait has blocked 50 ms or
 more (`RhiGpuProgress.waitingNs`; `rd__loss_keep_recycle`, an ordinary dump held as bytes). In steady
 play no wait blocks that long, so nothing is copied and no thread is drained for it, even with
 frames in flight; the lost frame is held only when a stall preceded the loss (both reports

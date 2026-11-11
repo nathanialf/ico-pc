@@ -36,13 +36,16 @@
  *                 work): the byte-bound passes' fit (ms a pass + ms a MB
  *                 moved, over the DATE snapshots and the passes with no draw),
  *                 the copies' ms a MB, the vertex fit (ms + ms a thousand
- *                 invocations);
+ *                 invocations, keep frames left out); the rate the
+ *                 estimates use (this block's fit, else an earlier block's,
+ *                 else none);
  *   perf slowest  the block's slowest timed picture's top pieces;
  *   perf ranked   only below the game's rate: the three largest candidate
  *                 savings, each "measured" (a cost that is its own ceiling)
  *                 or "est." (a counter times a rate above).
- * The run's profile ("performance profile", every 300 s of the run and at
- * the end): per scene the blocks, the median and worst picture, the median
+ * The run's profile ("performance profile", every 300 s of the run, at the
+ * end, and as the app goes to the background or ends, with the block in
+ * progress): per scene the blocks, the median and worst picture, the median
  * and lowest presented rate, the limiting side's count and the ranked line
  * of its worst block.
  */
@@ -66,8 +69,12 @@
 #define RD_PERF_RANK_BINS 256
 /* the slowest timed picture's pieces kept */
 #define RD_PERF_RANK_SLOW_MAX 256
-/* the scenes the run's profile tells apart (later ones are counted only) */
-#define RD_PERF_RANK_SCENES 24
+/* the scenes the run's profile tells apart (later ones are counted only):
+   the scene key carries the stage on every kind (window_scene_key), so a
+   run has more of them than one a stage; 32 of about 2.5 KB each */
+#define RD_PERF_RANK_SCENES 32
+/* a scene's key ("stage 4 play (st04a (...))"), its terminator counted */
+#define RD_PERF_RANK_NAME 96
 /* a scene's blocks whose presented rate is kept for the median */
 #define RD_PERF_RANK_FPS_MAX 64
 /* the ranked line's text kept per scene (the worst block's) */
@@ -86,8 +93,18 @@ typedef struct RdPerfRankClass {
 /* A 10 s block's sums.  Zero-initialise or rd_perf_rank_block_reset. */
 typedef struct RdPerfRankBlock {
     uint32_t n, keep, gpuN;
-    /* the CPU's phases a record (RdPerfRecord), ms summed */
+    /* the CPU's phases a record (RdPerfRecord), ms summed; ownMs the
+       render thread's own (its submit only where it submitted itself),
+       submitMs the render thread's submits, presentMs every present call */
     double cpuMs, ownMs, walkMs, submitMs, uploadCpuMs, bindMs, interpMs, presentMs, fenceMs;
+    /* the records whose submit and present ran on the submit thread
+       (RdPerfRecord.presentThread RD_PRESENT_ON_SUBMIT), and those times */
+    uint32_t subN;
+    double subSubmitMs, subPresentMs;
+    /* the records with a present, the first and last replay's start (rd's
+       ms clock): the presented rate of a block in progress */
+    uint32_t presents;
+    double firstStartMs, lastStartMs;
     /* the GPU: span, work (span less the display wait), the parts */
     double gpuMs, workMs, prepassMs, uploadGpuMs, presentGpuMs, displayWaitMs;
     double listMs[RD_LIST_COUNT], postMs[RD_PERF_POST_COUNT];
@@ -98,9 +115,12 @@ typedef struct RdPerfRankBlock {
        a done time, its sum and the longest */
     uint32_t waitN, doneN;
     double waitMs, waitMaxMs, doneMs, doneMaxMs;
-    /* the GPU work against the vertex invocations (least squares) */
+    /* the GPU work against the vertex invocations (least squares), keep
+       frames left out (a held picture's work is no vertex work's); fxMin
+       the smallest x above 0 and fxMax the largest, thousands (the VU
+       line's spread rule, window_scene_vu_fit) */
     uint32_t fitN;
-    double fx, fy, fxx, fxy, fyy;
+    double fx, fy, fxx, fxy, fyy, fxMin, fxMax;
     uint32_t hist[RD_PERF_RANK_BINS]; /* the records' GPU work, 1 ms bins */
     /* the timed replays' pieces */
     uint32_t timed;
@@ -135,6 +155,10 @@ typedef struct RdPerfRankInfo {
     double gameRateFps;  /* the game's own rate (25 or 30) */
     double stepCpuMs;    /* the game step's CPU a step */
     bool tiler;          /* a tile-based GPU (the words on the stamps) */
+    bool prepass;        /* the VU pre-pass on (the vertex estimate capped at its class) */
+    /* the byte-bound passes' fit's ms a MB of an earlier block of this run
+       (window_perf_rank.c keeps the last that held; 0 none) */
+    double earlierMbMs;
 } RdPerfRankInfo;
 
 enum {
@@ -151,25 +175,39 @@ enum {
 const char *rd_perf_bound_name(int bound);
 
 /* The block's device constants (perf rates) */
+/* the vertex estimate's floor on the fit (R^2) */
+#define RD_PERF_RANK_VU_R2 0.8
+
 typedef struct RdPerfRankRates {
-    bool smallFit; /* the byte-bound passes' fit holds (8 pieces or more, a spread) */
-    double passMs; /* its fixed ms a pass (intercept, at least 0) */
-    double mbMs;   /* its ms a MB moved (slope, at least 0) */
+    bool smallFit;  /* the byte-bound passes' fit holds (8 pieces or more, a spread) */
+    bool smallGood; /* and its slope is above 0 with R^2 0.3 or over: its rate is used */
+    double passMs;  /* its fixed ms a pass (intercept, at least 0) */
+    double mbMs;    /* its ms a MB moved (slope, at least 0) */
     double smallR2;
     uint32_t smallN;
     bool copyRate; /* the copies moved 0.5 MB or more */
     double copyMbMs;
     bool vuFit; /* the vertex fit holds (8 replays, a spread) */
     double vuBaseMs, vuPerK, vuR2;
-    double mbRate; /* the rate the estimates use (the fit's, else the copies'; 0 none) */
+    double vuXMin, vuXMax; /* the invocations' range, thousands a picture */
+    /* the fit is good enough for an estimate: a slope above 0, R^2
+       RD_PERF_RANK_VU_R2 or over, the largest x twice the smallest */
+    bool vuUsable;
+    /* the rate the estimates use: this block's fit's, else an earlier
+       block's (earlierMbMs), else 0 (none: the copies' rate is never used
+       for attachment traffic, their pieces carry other passes' flushes) */
+    double mbRate;
     const char *mbFrom;
 } RdPerfRankRates;
 
-void rd_perf_rank_rates(const RdPerfRankBlock *b, RdPerfRankRates *out);
+/* earlierMbMs: RdPerfRankInfo.earlierMbMs */
+void rd_perf_rank_rates(const RdPerfRankBlock *b, double earlierMbMs, RdPerfRankRates *out);
 
 /* The verdict: the bound, below the rate or not, the candidates ranked */
 #define RD_PERF_RANK_TOP 3
-#define RD_PERF_RANK_CANDIDATES 24
+/* every class (34 can qualify) and every estimate fit; were one more to
+   come, the smallest is the one dropped */
+#define RD_PERF_RANK_CANDIDATES 48
 
 typedef struct RdPerfRankCand {
     double ms;      /* a picture */
@@ -183,6 +221,9 @@ typedef struct RdPerfRankVerdict {
     double periodMs, workMs, ownMs, stepCpuMs, tickMs;
     uint32_t count;
     RdPerfRankCand c[RD_PERF_RANK_CANDIDATES]; /* the most first */
+    /* why the GPU's candidates have no vertex estimate ("" when they have
+       one, or the bound is the CPU's) */
+    char vertexWhy[200];
 } RdPerfRankVerdict;
 
 void rd_perf_rank_verdict(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
@@ -209,7 +250,7 @@ int rd_perf_rank_ranked_text(const RdPerfRankInfo *in, const RdPerfRankVerdict *
 
 /* The run's profile by scene.  Zero-initialise. */
 typedef struct RdPerfRankScene {
-    char name[48];
+    char name[RD_PERF_RANK_NAME];
     uint32_t blocks, pictures;
     double seconds, targetFps;
     uint32_t bound[RD_PERF_BOUND_COUNT];
@@ -232,6 +273,20 @@ void rd_perf_rank_run_add(RdPerfRankRun *run, const RdPerfRankBlock *b, const Rd
                           const RdPerfRankVerdict *v, double seconds, const char *ranked);
 /* scene i's profile line (without "window: "), 0 past the count */
 int rd_perf_rank_profile_text(const RdPerfRankRun *run, uint32_t i, char *buf, size_t n);
+/* The block in progress, for a profile written before its 10 s end (the
+   app going to the background or ending, issue 179's runs swiped away):
+   "performance profile: <scene> (the block in progress): ...", its
+   presented rate from its records' starts (in->presentedFps unused), the
+   verdict's top candidates when below the rate; 0 with no records */
+int rd_perf_rank_partial_text(const RdPerfRankBlock *b, const RdPerfRankInfo *in,
+                              const RdPerfRankVerdict *v, char *buf, size_t n);
+/* the block's presented rate from its records' starts (0 under 2 records) */
+double rd_perf_rank_partial_fps(const RdPerfRankBlock *b);
+/* whether a profile at the lifecycle's events is due: not when one was
+   written less than RD_PERF_RANK_PROFILE_GAP_NS before (the background and
+   the end of one swipe); *lastNs the last one's time (0 none), set when due */
+#define RD_PERF_RANK_PROFILE_GAP_NS 1000000000ull
+bool rd_perf_rank_profile_due(uint64_t *lastNs, uint64_t nowNs);
 
 /* the histogram's median and worst picture, ms (0 with none) */
 double rd_perf_rank_hist_median(const uint32_t *hist);

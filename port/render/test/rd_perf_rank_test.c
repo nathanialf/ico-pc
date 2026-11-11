@@ -10,6 +10,18 @@
  *              presents), the scene, classes, rates, slowest and ranked
  *              lines (the ranked line word for word), the small passes' fit
  *              recovering its made-up constants, the DATE breaks' estimate;
+ *              the vertex estimate only from a fit of R^2 0.8 and a 2x spread
+ *              in the invocations, keep frames left out, capped at the
+ *              measured VU pre-pass with the pre-pass on;
+ *   pixel      the Pixel 10 Pro Fold's stage 4 block (v0.11.4's log, :1185):
+ *              R^2 0.27 and 23k to 37k invocations refuse the estimate, the
+ *              glow ranks first, the line says why;
+ *   rate       a block whose byte-bound fit has no spread takes an earlier
+ *              block's rate, never the copies'; with neither, no rate and no
+ *              traffic estimates;
+ *   submit     the submit thread's submit is not the render thread's CPU;
+ *   cap        every class and estimate kept (34 classes qualify);
+ *   partial    the block in progress's profile line, the lifecycle's gate;
  *   cpu        a render-thread-bound block ranks the CPU's phases; a game-
  *              thread-bound one its step; one at the game's rate has no
  *              bound;
@@ -163,7 +175,7 @@ static uint32_t pieces(RdPerfPass *p, uint32_t k)
 
 static RdPerfRankInfo info(const char *scene, double presented)
 {
-    const RdPerfRankInfo in = {scene, presented, 25.0, 25.0, 25.0, 2.9, true};
+    const RdPerfRankInfo in = {scene, presented, 25.0, 25.0, 25.0, 2.9, true, false, 0.0};
     return in;
 }
 
@@ -189,11 +201,13 @@ static void testGpu(void)
     CHECK(b.n == 168 && b.gpuN == 168 && b.timed == 12);
 
     RdPerfRankRates rt;
-    rd_perf_rank_rates(&b, &rt);
-    CHECK(rt.smallFit && near(rt.passMs, 0.10, 1e-3) && near(rt.mbMs, 0.40, 1e-3));
+    rd_perf_rank_rates(&b, 0.0, &rt);
+    CHECK(rt.smallFit && rt.smallGood && near(rt.passMs, 0.10, 1e-3) && near(rt.mbMs, 0.40, 1e-3));
     CHECK(rt.smallR2 > 0.999 && rt.smallN == 12u * 3u);
     CHECK(rt.copyRate && near(rt.copyMbMs, 0.25, 1e-6));
+    /* a perfect fit, but 40k to 52k invocations: under the 2x spread */
     CHECK(rt.vuFit && near(rt.vuPerK, 0.5, 1e-6) && near(rt.vuBaseMs, 36.0, 1e-6));
+    CHECK(!rt.vuUsable && near(rt.vuXMin, 40.0, 1e-9) && near(rt.vuXMax, 52.0, 1e-9));
     CHECK(near(rt.mbRate, 0.40, 1e-3) && strcmp(rt.mbFrom, "the byte-bound passes' fit") == 0);
 
     const RdPerfRankInfo in = info("stage 3 play", 16.8);
@@ -206,14 +220,17 @@ static void testGpu(void)
 
     rd_perf_rank_ranked_text(&in, &v, line, sizeof line);
     printf("%s\n", line);
-    CHECK_STR(line,
-              "perf ranked: stage 3 play: 16.8 of 25.0 fps (the game 25.0 of 25.0), GPU-bound "
-              "(the GPU's work 59.0 ms a picture of the 59.5 ms between presents): 1. vertex work "
-              "est. 23.0 ms (46k vertex invocations a picture at 0.500 ms a thousand, R^2 1.00); "
-              "2. list 3 22.4 ms measured (1.0 passes, 61 draws, 61 binds; loads 3.6 MB, stores "
-              "3.6 MB, 0.47 Mpx); 3. list 0 20.1 ms measured (1.0 passes, 283 draws, 283 binds; "
-              "loads 3.6 MB, stores 3.6 MB, 0.47 Mpx) (each saving alone, they overlap; est. = "
-              "this block's counters times its own rates)");
+    CHECK_STR(
+        line,
+        "perf ranked: stage 3 play: 16.8 of 25.0 fps (the game 25.0 of 25.0), GPU-bound "
+        "(the GPU's work 59.0 ms a picture of the 59.5 ms between presents): 1. list 3 22.4 "
+        "ms measured (1.0 passes, 61 draws, 61 binds; loads 3.6 MB, stores 3.6 MB, 0.47 "
+        "Mpx); 2. list 0 20.1 ms measured (1.0 passes, 283 draws, 283 binds; loads 3.6 MB, "
+        "stores 3.6 MB, 0.47 Mpx); 3. DATE breaks est. 7.9 ms (3.0 a picture: 3.6 ms measured "
+        "for the snapshots + 10.8 MB reloaded after them); no vertex work estimate "
+        "(the invocations (40.0k to 52.0k a picture) are under the 2x spread the fit needs) "
+        "(each saving alone, they overlap; est. = this block's counters times its own "
+        "rates)");
 
     /* the other candidates are there too, with their figures */
     int date = -1, loads = -1, stores = -1, passes = -1;
@@ -259,7 +276,8 @@ static void testGpu(void)
     CHECK_IN(
         line,
         "colour 8.0 MB loaded 9.0 MB stored, depth and stencil 4.0 MB loaded 2.0 MB "
-        "stored, 3.0 MB cleared, 6.00 Mpx of area, copies 1.0 MB (uncompressed; 1.0 passes with an "
+        "stored, 3.0 MB cleared, 6.00 Mpx of area, copies 1.0 MB (each copy once: as many read as "
+        "written; uncompressed; 1.0 passes with an "
         "attachment of no known format, at 4 bytes a texel)");
     CHECK_IN(line, "the pictures' GPU work median 59.5 ms, worst 63 ms");
 
@@ -276,8 +294,9 @@ static void testGpu(void)
         line,
         "the DATE snapshots and passes with no draw 0.10 ms a pass + 0.40 ms a MB loaded "
         "or stored (R^2 1.00, 36 pieces); copies 0.25 ms a MB (24.0 MB in 6.0 ms); the GPU's work 36.0 "
-        "ms + 0.500 ms a thousand vertex invocations (R^2 1.00, 168 pictures); the "
-        "estimates use the byte-bound passes' fit (0.40 ms a MB)");
+        "ms + 0.500 ms a thousand vertex invocations (R^2 1.00, 168 pictures without keep frames, "
+        "40.0k to 52.0k invocations; not used for an estimate); the estimates use the byte-bound "
+        "passes' fit (0.40 ms a MB); the copies' rate is never used for attachment traffic");
 
     rd_perf_rank_slowest_text(&b, label, 3, line, sizeof line);
     printf("%s\n", line);
@@ -286,6 +305,295 @@ static void testGpu(void)
                    "pieces: list 3 912x512 22.40 ms (61 draws, 61 binds; loads 3.6 MB, stores 3.6 "
                    "MB), list 0 912x512 20.10 ms");
     CHECK_IN(line, "(the top 3 by GPU time; GPU time by pipeline is not measured)");
+}
+
+/* the Pixel 10 Pro Fold's stage 4 block (v0.11.4, ico-pc.log:1185-1189):
+   277 pictures, about 32 ms of GPU work each, 23.0k to 36.6k vertex
+   invocations with the work barely following them (R^2 0.27 there), the
+   VU pre-pass 0.9 ms; glow 11.6, list 3 5.5, aura 2.9, list 11 2.8, list 0
+   2.6, crack fill 1.8 (a 9.7 MB copy in 0.1 ms: the copies' 0.01 ms a MB);
+   no DATE snapshot nor pass without a draw: no byte-bound fit */
+static void fillPixel(RdPerfRankBlock *b)
+{
+    rd_perf_rank_block_reset(b);
+    for (uint32_t i = 0; i < 277; i++) {
+        const double x = 23.0 + (double)((i * 13u) % 137u) / 10.0;
+        const double noise = (double)((int)((i * 37u) % 11u) - 5);
+        RdPerfRecord r = record(2400u + i, 32.0 + 0.1 * (x - 30.0) + noise);
+        r.gpuDisplayWaitMs = 0.0;
+        r.gpuPrepassMs = 0.9;
+        r.keep = i == 100u;
+        r.startMs = 1000.0 + 36.1 * (double)i;
+        r.dateSnapshots = 0;
+        rd_perf_rank_add_record(b, &r, x * 1000.0);
+        RdPerfPass p[16];
+        uint32_t n = 0;
+        p[n++] = piece(RD_PERF_PASS_UPLOAD, -1, -1, 0, 0.6, 0, 0);
+        p[n++] = piece(RD_PERF_PASS_PREPASS, -1, -1, 0, 0.9, 0, 0);
+        p[n++] = piece(RD_PERF_PASS_RENDER, 0, -1, 332, 2.6, 0, 9933);
+        p[n++] = piece(RD_PERF_PASS_RENDER, 3, -1, 22, 5.5, 22528, 10547);
+        p[n++] = piece(RD_PERF_PASS_RENDER, 8, RD_PERF_POST_GLOW, 19, 11.6, 13517, 23552);
+        p[n++] = piece(RD_PERF_PASS_RENDER, 8, RD_PERF_POST_AURA, 4, 2.9, 10342, 10854);
+        p[n++] = piece(RD_PERF_PASS_RENDER, 11, -1, 7, 2.8, 7168, 7168);
+        RdPerfPass c = piece(RD_PERF_PASS_COPY, 9, -1, 0, 0.1, 0, 0);
+        c.copyKB = 9933;
+        p[n++] = c;
+        p[n++] = piece(RD_PERF_PASS_RENDER, 9, RD_PERF_POST_CRACK, 1, 1.8, 9933, 9933);
+        p[n++] = piece(RD_PERF_PASS_RENDER, 12, RD_PERF_POST_REDUCTION, 1, 1.2, 0, 912);
+        p[n++] = piece(RD_PERF_PASS_PRESENT, -1, -1, 5, 1.0, 0, 4534);
+        rd_perf_rank_add_pieces(b, &r, p, n);
+    }
+}
+
+static void testPixel(void)
+{
+    static RdPerfRankBlock b;
+    fillPixel(&b);
+    RdPerfRankRates rt;
+    rd_perf_rank_rates(&b, 0.0, &rt);
+    CHECK(rt.vuFit && rt.vuR2 < RD_PERF_RANK_VU_R2 && !rt.vuUsable && b.fitN == 276u);
+    CHECK(near(rt.vuXMin, 23.0, 1e-9) && near(rt.vuXMax, 36.6, 1e-9));
+    CHECK(!rt.smallFit && rt.copyRate && rt.mbRate == 0.0 && strcmp(rt.mbFrom, "no rate") == 0);
+
+    RdPerfRankInfo in = info("stage 4 play (st04a (TEST))", 27.7);
+    in.targetFps = 120.0;
+    in.gameRateFps = 30.0;
+    in.gameFps = 27.1;
+    in.prepass = true;
+    static RdPerfRankVerdict v;
+    rd_perf_rank_verdict(&b, &in, &v);
+    CHECK(v.bound == RD_PERF_BOUND_GPU && v.below);
+    char line[4096];
+    rd_perf_rank_ranked_text(&in, &v, line, sizeof line);
+    printf("%s\n", line);
+    CHECK_IN(line, "GPU-bound (the GPU's work 32.0 ms a picture of the 36.1 ms between presents): "
+                   "1. glow 11.6 ms measured (1.0 passes, 19 draws, 19 binds;");
+    CHECK_IN(line, "; 2. list 3 5.5 ms measured");
+    CHECK_IN(line, "; 3. aura 2.9 ms measured");
+    CHECK_IN(line, "; no vertex work estimate (the fit's R^2 ");
+    CHECK_IN(line, " is under 0.80, the invocations (23.0k to 36.6k a picture) are under the 2x "
+                   "spread the fit needs) (each saving alone");
+    /* no rate: no traffic estimate, whatever the copies moved */
+    for (uint32_t i = 0; i < v.count; i++) {
+        CHECK(strncmp(v.c[i].text, "tile loads", 10) != 0);
+        CHECK(strncmp(v.c[i].text, "depth stores", 12) != 0);
+        CHECK(strncmp(v.c[i].text, "vertex work", 11) != 0);
+    }
+    rd_perf_rank_rates_text(&b, &rt, line, sizeof line);
+    printf("%s\n", line);
+    CHECK_IN(line, "; copies 0.01 ms a MB (2687.0 MB in 27.7 ms)");
+    CHECK_IN(line, "pictures without keep frames, 23.0k to 36.6k invocations; not used for an "
+                   "estimate); the estimates use no rate (no fit in this block or an earlier one "
+                   "of the run: the traffic estimates left out); the copies' rate is never used "
+                   "for attachment traffic");
+
+    /* an earlier block's fit (the same phone's 0.10 ms a MB at :903) */
+    in.earlierMbMs = 0.10;
+    rd_perf_rank_rates(&b, in.earlierMbMs, &rt);
+    CHECK(near(rt.mbRate, 0.10, 1e-12) &&
+          strcmp(rt.mbFrom, "the rate of an earlier block of this run") == 0);
+    rd_perf_rank_rates_text(&b, &rt, line, sizeof line);
+    CHECK_IN(line, "; the estimates use the rate of an earlier block of this run (0.10 ms a MB); "
+                   "the copies' rate is never used for attachment traffic");
+    rd_perf_rank_verdict(&b, &in, &v);
+    int loads = -1;
+    for (uint32_t i = 0; i < v.count; i++) {
+        loads = strncmp(v.c[i].text, "tile loads", 10) == 0 ? (int)i : loads;
+    }
+    CHECK(loads >= 0);
+    if (loads >= 0) {
+        CHECK_IN(v.c[loads].text, "at 0.10 ms a MB, the rate of an earlier block of this run)");
+    }
+    /* this block's own good fit comes first */
+    for (uint32_t k = 0; k < 10; k++) {
+        const RdPerfPass d =
+            piece(RD_PERF_PASS_DATE, 3, -1, 1, 0.16 * (double)(k + 1u), 1024u * (k + 1u), 0);
+        rd_perf_rank_add_pieces(&b, NULL, &d, 1);
+    }
+    rd_perf_rank_rates(&b, 0.10, &rt);
+    CHECK(rt.smallGood && near(rt.mbRate, 0.16, 1e-6) &&
+          strcmp(rt.mbFrom, "the byte-bound passes' fit") == 0);
+}
+
+/* a perfect vertex fit over a 3x spread, the keep frames' work far off the
+   line (left out), with and without the pre-pass */
+static void testVertex(void)
+{
+    static RdPerfRankBlock b;
+    RdPerfPass p[32];
+    rd_perf_rank_block_reset(&b);
+    for (uint32_t i = 0; i < 168; i++) {
+        const bool keep = i % 10u == 9u;
+        const double inv = keep ? 90000.0 : 20000.0 + 6000.0 * (double)(i % 7u);
+        RdPerfRecord r = record(1000u + i, keep ? 5.0 : 37.0 + 0.5 * inv / 1000.0);
+        r.keep = keep;
+        rd_perf_rank_add_record(&b, &r, inv);
+        if (i % 14u == 0u) {
+            const uint32_t n = pieces(p, i / 14u);
+            rd_perf_rank_add_pieces(&b, &r, p, n);
+        }
+    }
+    RdPerfRankRates rt;
+    rd_perf_rank_rates(&b, 0.0, &rt);
+    CHECK(rt.vuUsable && near(rt.vuPerK, 0.5, 1e-6) && rt.vuR2 > 0.999 && b.fitN == 152u);
+    CHECK(near(rt.vuXMin, 20.0, 1e-9) && near(rt.vuXMax, 56.0, 1e-9));
+    RdPerfRankInfo in = info("stage 3 play", 16.8);
+    static RdPerfRankVerdict v;
+    rd_perf_rank_verdict(&b, &in, &v);
+    CHECK(v.vertexWhy[0] == '\0');
+    const double k = b.vuInv / (double)b.n / 1000.0;
+    int at = -1;
+    for (uint32_t i = 0; i < v.count; i++) {
+        at = strncmp(v.c[i].text, "vertex work est.", 16) == 0 ? (int)i : at;
+    }
+    CHECK(at >= 0 && near(v.c[at].ms, 0.5 * k, 1e-6) && strstr(v.c[at].text, "capped") == NULL);
+    /* the pre-pass on: no more than its measured 4.2 ms */
+    in.prepass = true;
+    rd_perf_rank_verdict(&b, &in, &v);
+    at = -1;
+    for (uint32_t i = 0; i < v.count; i++) {
+        at = strncmp(v.c[i].text, "vertex work est.", 16) == 0 ? (int)i : at;
+    }
+    CHECK(at >= 0 && near(v.c[at].ms, 4.2, 1e-6));
+    if (at >= 0) {
+        printf("%s\n", v.c[at].text);
+        CHECK_IN(v.c[at].text, "vertex work est. 4.2 ms (");
+        CHECK_IN(v.c[at].text, "R^2 1.00; capped at the measured VU pre-pass)");
+    }
+    /* a fit under 8 pictures: none, and said */
+    rd_perf_rank_block_reset(&b);
+    for (uint32_t i = 0; i < 5; i++) {
+        const RdPerfRecord r = record(i + 1u, 60.0);
+        rd_perf_rank_add_record(&b, &r, 1000.0 * (double)(i + 1u));
+    }
+    in.prepass = false;
+    rd_perf_rank_verdict(&b, &in, &v);
+    CHECK_STR(v.vertexWhy, "no fit over 5 pictures without keep frames");
+}
+
+/* the submit thread on: its submit and present are not the render thread's */
+static void testSubmit(void)
+{
+    static RdPerfRankBlock b;
+    rd_perf_rank_block_reset(&b);
+    for (uint32_t i = 0; i < 100; i++) {
+        RdPerfRecord r = record(i + 1u, 20.0);
+        r.walkMs = 40.0;
+        r.presentThread = RD_PRESENT_ON_SUBMIT;
+        rd_perf_rank_add_record(&b, &r, 1000.0);
+    }
+    CHECK(b.subN == 100u && near(b.submitMs, 0.0, 1e-12) && near(b.subSubmitMs, 170.0, 1e-9));
+    const RdPerfRankInfo in = info("stage 5 play", 20.0);
+    static RdPerfRankVerdict v;
+    rd_perf_rank_verdict(&b, &in, &v);
+    /* 40 + 2.0 + 0.4: without the submit thread's 1.7 */
+    CHECK(v.bound == RD_PERF_BOUND_RENDER && near(v.ownMs, 42.4, 1e-9));
+    for (uint32_t i = 0; i < v.count; i++) {
+        CHECK(strncmp(v.c[i].text, "the submit ", 11) != 0);
+    }
+    char line[4096];
+    rd_perf_rank_scene_text(&b, &in, &v, line, sizeof line);
+    printf("%s\n", line);
+    CHECK_IN(line, "; the render thread's own CPU 42.4 ms (walk 40.0, uploads 2.0, binds 0.4, "
+                   "interpolation 0.0), its waits for the GPU 27.5 ms; the submit thread's submit "
+                   "1.7 ms and present calls 25.8 ms (100 of the 100 pictures); the game step's");
+    /* half through it: each thread's share named */
+    rd_perf_rank_block_reset(&b);
+    for (uint32_t i = 0; i < 100; i++) {
+        RdPerfRecord r = record(i + 1u, 20.0);
+        r.presentThread = i % 2u ? RD_PRESENT_ON_SUBMIT : RD_PRESENT_ELSEWHERE;
+        rd_perf_rank_add_record(&b, &r, 1000.0);
+    }
+    rd_perf_rank_verdict(&b, &in, &v);
+    rd_perf_rank_scene_text(&b, &in, &v, line, sizeof line);
+    CHECK_IN(line, "interpolation 0.0, submit 0.9), its waits for the GPU 27.5 ms, its present "
+                   "calls 12.9 ms; the submit thread's submit 0.9 ms and present calls 12.9 ms (50 "
+                   "of the 100 pictures)");
+}
+
+/* every class qualifies (34: the display wait and the uploads' pieces are
+   left to their own candidates) and every estimate: none is lost */
+static void testCap(void)
+{
+    static RdPerfRankBlock b;
+    rd_perf_rank_block_reset(&b);
+    RdPerfPass p[64];
+    uint32_t n = 0;
+    double ms = 0.1;
+    for (int l = 0; l < RD_LIST_COUNT; l++, ms += 0.1) {
+        p[n++] = piece(RD_PERF_PASS_RENDER, l, -1, 1, ms, 1024, 1024);
+    }
+    for (int q = 0; q < RD_PERF_POST_COUNT; q++, ms += 0.1) {
+        p[n++] = piece(RD_PERF_PASS_RENDER, 8, q, 1, ms, 1024, 1024);
+    }
+    RdPerfPass sh = piece(RD_PERF_PASS_RENDER, 0, -1, 1, ms, 1024, 1024);
+    sh.target = RD_PERF_TARGET_SHADOW_COUNT;
+    p[n++] = sh;
+    ms += 0.1;
+    for (int k = 0; k < RD_PERF_PASS_KIND_COUNT; k++, ms += 0.1) {
+        p[n++] = piece(k, -1, -1, k == RD_PERF_PASS_RENDER ? 1u : 0u, ms, 2048, 0);
+    }
+    const RdPerfRecord r = record(1, 60.0);
+    for (uint32_t i = 0; i < 20; i++) {
+        RdPerfRecord q = r;
+        q.replay = i + 1u;
+        rd_perf_rank_add_record(&b, &q, 10000.0 * (double)(i % 5u + 1u));
+    }
+    rd_perf_rank_add_pieces(&b, &r, p, n);
+    RdPerfRankInfo in = info("stage 3 play", 16.8);
+    in.earlierMbMs = 0.1;
+    static RdPerfRankVerdict v;
+    rd_perf_rank_verdict(&b, &in, &v);
+    CHECK(v.count > 34u && v.count <= RD_PERF_RANK_CANDIDATES);
+    int smallest = 0, loads = 0;
+    for (uint32_t i = 0; i < v.count; i++) {
+        smallest += strncmp(v.c[i].text, "list 0 0.1 ms", 13) == 0;
+        loads += strncmp(v.c[i].text, "tile loads", 10) == 0;
+    }
+    CHECK(smallest == 1 && loads == 1);
+    /* sorted, the most first */
+    for (uint32_t i = 1; i < v.count; i++) {
+        CHECK(v.c[i - 1].ms >= v.c[i].ms);
+    }
+}
+
+/* the block in progress at the app's background or end, and the gate */
+static void testPartial(void)
+{
+    static RdPerfRankBlock b;
+    fillPixel(&b);
+    CHECK(near(rd_perf_rank_partial_fps(&b), 1000.0 / 36.1, 1e-6));
+    RdPerfRankInfo in = info("stage 4 play (st04a (TEST))", 0.0);
+    in.targetFps = 120.0;
+    in.gameRateFps = 0.0;
+    in.presentedFps = rd_perf_rank_partial_fps(&b);
+    static RdPerfRankVerdict v;
+    rd_perf_rank_verdict(&b, &in, &v);
+    char line[4096];
+    rd_perf_rank_partial_text(&b, &in, &v, line, sizeof line);
+    printf("%s\n", line);
+    CHECK_IN(line, "performance profile: stage 4 play (st04a (TEST)) (the block in progress): 10.0 "
+                   "s, 277 pictures (1 keep frames) not yet in a 10 s block; a picture's GPU work "
+                   "median ");
+    CHECK_IN(line, "; presented fps about 27.7 of 120.0, GPU-bound: 1. glow 11.6 ms measured");
+    CHECK_IN(line, "; no vertex work estimate (");
+    /* before the first 10 s block: no target, the ranking still */
+    in.targetFps = 0.0;
+    rd_perf_rank_verdict(&b, &in, &v);
+    rd_perf_rank_partial_text(&b, &in, &v, line, sizeof line);
+    CHECK_IN(line, "presented fps about 27.7 (the target rate not known before the first 10 s "
+                   "block): 1. glow 11.6 ms measured");
+    rd_perf_rank_block_reset(&b);
+    CHECK(rd_perf_rank_partial_text(&b, &in, &v, line, sizeof line) == 0 && line[0] == '\0');
+    CHECK(rd_perf_rank_partial_fps(&b) == 0.0);
+
+    /* one swipe away: background then terminating 0.3 s later, one profile */
+    uint64_t last = 0;
+    CHECK(rd_perf_rank_profile_due(&last, 5000000000ull));
+    CHECK(!rd_perf_rank_profile_due(&last, 5300000000ull));
+    CHECK(rd_perf_rank_profile_due(&last, 6000000000ull));
+    CHECK(!rd_perf_rank_profile_due(&last, 6999999999ull));
+    CHECK(rd_perf_rank_profile_due(&last, 9000000000ull));
 }
 
 static void testCpu(void)
@@ -426,6 +734,11 @@ static void testShort(void)
 int main(void)
 {
     testGpu();
+    testPixel();
+    testVertex();
+    testSubmit();
+    testCap();
+    testPartial();
     testCpu();
     testClasses();
     testRun();
