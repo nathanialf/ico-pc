@@ -3378,7 +3378,7 @@ int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_
 /* The same for the window's line: tiler, the uploads' entry joined to list
  * 0's largest as "before list 0 + list 0" (they trade at a constant sum on
  * a tile-based GPU, issue 179); before, each entry followed by the piece
- * before it, "after list 0 SCENE 1728x1344 (full size in 12 of 12)" */
+ * before it, "after list 0 SCENE 1728x1344 (the last seen; the piece before was full size in 12 of 12)" */
 int rd_perf_pass_agg_text_ex(const RdPerfPassAgg *a, unsigned top, bool tiler, bool before,
                              char *buf, size_t n);
 /* The block's mean GPU time of one piece like p (same kind, target, list,

@@ -1140,8 +1140,8 @@ counters in the hot path.
 - **The piece before each top pass** (`window: GPU top passes:`, `rd_perf.c`
   `rd_perf_pass_agg_text_ex`; `perf classes`, `rd_perf_rank.c`): each entry is followed by the
   piece before it and how often that piece was a full-size render pass, e.g. `shadow count 576x448
-  1 draws 3.46 ms after list 0 SCENE 1728x1344 (full size in 349 of 349)` and, in the classes line,
-  `; after list 0 1728x1344 (a full-size pass in 349 of 349)`. On a tile-based GPU a stamp after a
+  1 draws 3.46 ms after list 0 SCENE 1728x1344 (the last seen; the piece before was full size in 349 of 349)` and, in the classes line,
+  `; after list 0 1728x1344 (the last seen; the piece before was full size in 349 of 349)`. On a tile-based GPU a stamp after a
   full-size pass may carry that pass's tile work (issue 123's 3.46 ms for one 576x448 draw), so a
   piece that always follows one and shrinks where it does not is carrying it.
 - **Before list 0 and list 0 as one on a tile-based GPU**: the stamp that ends the uploads lands

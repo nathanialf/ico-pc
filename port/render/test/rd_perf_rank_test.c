@@ -288,8 +288,9 @@ static void testGpu(void)
     CHECK_IN(line, "; list 0 20.10 ms");
     CHECK_IN(line, " (4 of 9 classes; all ");
     /* the piece before each class: list 3 after list 0's full-size pass */
-    CHECK_IN(line,
-             "0.47 Mpx; after list 0 912x512 (a full-size pass in 12 of 12); list 0 20.10 ms");
+    CHECK_IN(
+        line,
+        "0.47 Mpx; after list 0 912x512 (the last seen; the piece before was full size in 12 of 12); list 0 20.10 ms");
     /* a tile-based GPU: the stretch before list 0 and list 0 as one */
     b.tiler = true;
     rd_perf_rank_classes_text(&b, label, 4, line, sizeof line);
