@@ -16,6 +16,8 @@
 #include "memory_floor.h"
 #include "pipe_resume.h"
 #include "rd.h"
+#include "rd_early_plan.h"
+#include "rd_vu_rec_early.h"
 #include "rhi.h"
 
 /* this start resumed the set (window_pipe_floor_retry), and the stop it
@@ -97,11 +99,57 @@ void window_pipe_finish_start(void)
     (void)rd_pipelines_background_start(ico_diag_background_memory);
 }
 
+/* window_pipe_early's memory function (rd_vu_rec_early.h RdEarlyMemoryFn) */
+static int early_memory(long *availMb, long *floorMb, char *why, size_t size)
+{
+    char w[128];
+
+    if (ico_diag_background_memory(w, sizeof w) == 2) {
+        snprintf(why, size, "%s", w);
+        return RD_EARLY_MEM_SIGNAL;
+    }
+#ifdef __ANDROID__
+    {
+        long avail_kb, total_kb, total;
+        /* the floor as the start-up set reads it (diag_host.c
+           floor_setting_read: a value that is not a number is the
+           default, its line said there) */
+        long setting = ico_memory_floor_setting(getenv("ICO_PIPELINE_MEMORY_FLOOR_MB"));
+        if (setting == -2) {
+            setting = -1;
+        }
+        if (ico_diag_device_memory(&avail_kb, &total_kb) != 0) {
+            snprintf(why, size, "the device's memory could not be read");
+            return RD_EARLY_MEM_UNKNOWN;
+        }
+        *availMb = avail_kb / 1024;
+        total = total_kb / 1024;
+        *floorMb = ico_memory_floor_mb(total, setting, ico_diag_memory_floor_driver());
+        snprintf(why, size, "%ld MB available of %ld MB, floor %ld MB (%s)", *availMb, total,
+                 *floorMb, setting == 0 ? "the floor off" : "the start-up set's floor");
+        return *availMb < *floorMb ? RD_EARLY_MEM_FLOOR : RD_EARLY_MEM_OK;
+    }
+#else
+    (void)availMb;
+    (void)floorMb;
+    (void)size;
+    return RD_EARLY_MEM_UNKNOWN;
+#endif
+}
+
+void window_pipe_early(void)
+{
+    rd_vu_record_prepare(early_memory);
+}
+
 void window_pipe_skin_check(int pipePolicy)
 {
     const int driver = ico_diag_memory_floor_driver();
     char why[200];
     char logs[ICO_PATH_MAX];
+
+    /* the first 3D pictures' allocations before the game runs */
+    window_pipe_early();
 
     /* the check's capture on failure (issue 123): its sidecar beside the
        log, so the share menu and the frame dump's zip take it */

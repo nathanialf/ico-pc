@@ -387,7 +387,12 @@ to read the next log:
 - With the single wait the stall diagnostics measure less: a stalled replay's `rd: GPU clock`
   line has no trace (which of its stamps were written while the CPU waited, the longest stretch
   with nothing new, its first list's second run), and its start is placed from its wait's end,
-  not on the CPU's clock. Its counter restarts, unwritten stamps and the wait's own time are kept.
+  not on the CPU's clock. Its counter restarts, unwritten stamps and the wait's own time are kept,
+  and a wait of 100 ms or more gets the line without a trace, with the time from the replay's last
+  submit to the wait's return: `waited 340.0 ms for it from 38.0 ms after its last submit (no
+  trace: the single submission wait reads nothing of its work while it runs); its work done about
+  378.0 ms after its last submit (the wait's end)` (`rd_perf_clock.c`; the CPU's clock read around
+  the wait the backend makes anyway, nothing of the slot read while it runs).
 
 The loss ladder, never written to the settings. On a phone a start after one or more lost starts in
 a row draws without the VU pre-pass (the scopes and the wait are already the wide and single ones;
@@ -426,6 +431,115 @@ a readback after the loss had already happened. The stalls themselves are issue 
 Adreno 740 showed them without a loss, with the VU pre-pass off by its device row; the 710 has no
 row and draws through the pre-pass, so after a lost start the ladder turns it off). Whether the
 changes above keep the 710 from losing the device is what its next log says by the lines above.
+
+### The first 3D scene's allocations made at start-up (issues 179 and 211)
+
+Both losses (issues 179 and 211) came in the first pictures after the VU pre-pass's record grew in play (issue
+179: 16 to 256 rows at `report/ico-pc.log:378`; issue 211: 16 to 128 to 256 rows at
+`report/ico-pc.log:530` and `:535`), each growth a new buffer for every frame slot, beside the mesh
+arena's first 32 MB chunk (the third of `3 allocations, 3 buffers` in the slow-replay line of the
+first 3D picture). Not proven as the cause; the start-up loss bisect, which makes the record at its
+full size at once, never lost the device. Both are made before the game runs, after the start-up
+set, in one line:
+`rd: start-up: made before play in T ms: the VU pre-pass's record at R rows (S slots, M MB over
+the 2 frame slots; ...), the mesh arena's first chunk (32 MB); N MB in all; the bound: at most half
+of the A MB above the free-memory floor (V MB available, floor F MB); the system: ...`. The record's
+own line then ends `; made at start-up, before play)`, and a later growth in play
+`; grown in play past the R rows made at start-up)`. With the numbers of the two reports: the Mali
+(815 MB available, floor 641 MB) gets 512 rows and the chunk (80 MB), the Adreno 710 (968 MB,
+floor 908 MB) 256 rows (24 MB, what its first scene grew to) and no chunk. Under the floor or
+after the system's low-memory signal nothing is made (`kept at 16 rows (...)`, the bound's words
+say which) and play grows the record as before. What to read: no `the record holds` line between
+the first 3D picture and a loss means the growth was not there; a loss in the same place with it
+gone rules the growth out.
+
+### The performance lines (issues 179, 211 and 123)
+
+The tile-based phones run the wide barrier scopes and the single wait again, so their next log is
+the measurement the next speed work is chosen from. Five lines in each 10 s block (and the run's
+profile) say where a picture's time goes, which side holds the rate back, and rank the candidate
+savings from the block's own numbers, keyed by scene so one log covers the menus, play, the boat
+and the cage apart (`port/render/rd_perf_rank.c`, `port/platform/window_perf_rank.c`). Nothing is
+asked of the GPU for them: no query, timestamp, barrier or read beyond the timestamps every
+picture writes and the replays already timed pass by pass (one every 250 ms), read where they were
+read before; the attachment bytes are counted on the CPU from each pass's description
+(`port/rhi/rhi_traffic.c`, at `rhi_cmd_begin_render_pass` and the texture copies, a lock and a
+hash lookup a pass). The scene is the block's dominant layout with the stage for play and scenes
+(`stage 3 play`, `stage 3 scene`, `title`, `pause`), `(keep frames)` when most of its pictures
+were keep frames. The figures below are the unit test's made-up block of stage 3 play's shape
+(`rd_perf_rank_test`), not a phone's.
+
+- `window: perf scene: stage 3 play, 168 pictures (0 keep frames): 16.8 of 25.0 fps (the game 25.0
+  of 25.0), GPU-bound; the GPU's work 59.0 ms a picture of the 59.5 ms between presents (99 %); the
+  render thread's own CPU 13.3 ms (walk 9.2, submit 1.7, uploads 2.0, binds 0.4, interpolation
+  0.0), its waits for the GPU 27.5 ms, its present calls 25.8 ms; the game step's CPU 2.9 ms of its
+  40.0 ms tick; a picture's work done 61.0 ms after its last submit (longest 61.0), the slot wait
+  blocked 168 times (27.0 ms on average, longest 27.0); passes asked a picture: 20.0 passes, colour
+  8.0 MB loaded 9.0 MB stored, depth and stencil 4.0 MB loaded 2.0 MB stored, 3.0 MB cleared, 6.00
+  Mpx of area, copies 1.0 MB (uncompressed; 1.0 passes with an attachment of no known format, at 4
+  bytes a texel); 360 draws, 329 pipeline and 458 bind group binds, 46k vertex invocations, 1826 KB
+  uploaded (1.0 textures), 3.0 DATE snapshots; GPU a picture: span 60.0 ms, ...; the pictures' GPU
+  work median 59.5 ms, worst 63 ms`. Decides the limiting side, from the block alone: below 95 %
+  of the target rate (Frame rate Original: the game's 25 or 30; with interpolation the display's
+  refresh) or the game under its own rate, the GPU when its work (the span less the display wait)
+  fills 80 % of the time between presents; else the render thread when its own CPU (interpolation,
+  uploads, walk, binds, submit: not its waits) does; else the game thread when its step's CPU
+  fills 80 % of its tick; else `bound by waits elsewhere` (the present calls, the slot waits).
+  `a picture's work done N ms after its last submit` is the single wait's own return against the
+  picture's last submit: the GPU's latency for a picture where the wait blocked (an upper bound
+  where the work had finished first). The bytes are what the passes ASK for (LOAD loads, STORE
+  stores, at the format's bytes a texel times the samples over the render area): Arm's AFBC or
+  Qualcomm's UBWC move fewer, and a store nothing reads may be dropped by the driver, so they are
+  the ceiling of the tile-memory traffic and the counters a saving scales with.
+- `window: perf classes a picture (12 timed replays): list 3 22.40 ms: 1.0 passes, 61 draws, 61
+  binds, colour 1.8/3.6 MB, depth 1.8/0.0 MB loaded/stored, 0.0 MB cleared, 0.47 Mpx; list 0 20.10
+  ms: ...; DATE snapshots 3.60 ms: 3.0 passes, ... (6 of 9 classes; all 59.90 ms)`: the timed
+  pieces by class (a list, an effect, the shadow count, the DATE snapshots, the copies, the
+  pre-pass, the uploads, the present), each with what its time scales with. Two blocks of the same
+  scene that differ in a counter (another camera, another room) are a free A/B: ms over the
+  counter's change. On a tile-based GPU a pass's stamps can carry the earlier passes' tile work
+  (the top passes line says so): read a class against its own counters, the scene line for the
+  picture.
+- `window: perf rates (this device, from the block's own pictures): the DATE snapshots and passes
+  with no draw 0.10 ms a pass + 0.40 ms a MB loaded or stored (R^2 1.00, 36 pieces); copies 0.25
+  ms a MB (24.0 MB in 6.0 ms); the GPU's work 36.0 ms + 0.500 ms a thousand vertex invocations
+  (R^2 1.00, 168 pictures); the estimates use the byte-bound passes' fit (0.40 ms a MB)`: this
+  device's constants with no extra work: a least-squares fit over the pieces whose time is their
+  bytes (the DATE snapshots, the passes with no draw: a fixed cost a pass and a cost a MB moved),
+  the copies' and snapshots' ms a MB, and the vertex fit of the VU line. The estimates take the
+  fit's ms a MB where it holds (8 pieces, a spread in their bytes, R^2 0.3 or over), else the
+  copies'. `no fit (N, or no spread in their bytes)` where every snapshot moved the same bytes.
+- `window: perf slowest picture: replay 4821 (frame 4820), GPU span 63.1 ms over 20 pieces: list 3
+  912x512 24.10 ms (70 draws, 66 binds; loads 4.1 MB, stores 4.1 MB), ... (the top 5 by GPU time;
+  GPU time by pipeline is not measured)`: the block's slowest timed picture's costliest pieces.
+- `window: perf ranked: stage 3 play: 16.8 of 25.0 fps (the game 25.0 of 25.0), GPU-bound (the
+  GPU's work 59.0 ms a picture of the 59.5 ms between presents): 1. vertex work est. 23.0 ms (46k
+  vertex invocations a picture at 0.500 ms a thousand, R^2 1.00); 2. list 3 22.4 ms measured (1.0
+  passes, 61 draws, 61 binds; loads 3.6 MB, stores 3.6 MB, 0.47 Mpx); 3. list 0 20.1 ms measured
+  (...) (each saving alone, they overlap; est. = this block's counters times its own rates)`:
+  only in a block below the rate. The three largest candidates for the limiting side: for the GPU
+  each class's measured time (its own ceiling), `tile loads est.` (the MB loaded a picture times
+  the rate), `depth stores est.` (the depth and stencil stored), `pass count est.` (the passes
+  times the fit's fixed cost a pass), `DATE breaks est.` (the snapshots' measured time plus the MB
+  a scene pass loads again after each), `vertex work est.` (the invocations times the vertex fit's
+  slope), the uploads; for the render thread its phases with their draws and binds; for the game
+  thread its step. Decides the next release's work: the first entry is the largest measured or
+  estimated saving on this phone in this scene.
+- `window: performance profile (every 300 s of the run, 4 scenes, profile 1 of the run):` then one
+  line a scene, `window: performance profile: stage 3 play: 18 blocks (180 s, 3024 pictures); a
+  picture's GPU work median 47.5 ms, worst 109 ms; presented fps median 16.9, lowest block 12.4,
+  of 25.0; GPU-bound in 18 blocks; the worst block: 12.4 of 25.0 fps ... 1. ...; 2. ...; 3. ...`,
+  every 300 s of blocks and at the run's end (a phone's system often ends the app without one: the
+  report keeps the latest anyway). The bug report's `report.txt` has a section `the performance
+  lines by scene (the latest ranking and profile of each)` built from the log, so one zip carries
+  the ranking of every scene.
+
+What the lines cannot size, and why: overdraw (no fragment count without a query: the area
+texels a pass covers are its floor), GPU time by pipeline or draw (no stamps inside a pass beyond
+the lists' own), the robust-access cost (`gpu_robust` is the player's setting and an A/B would need
+it changed), whether the pre-pass overlaps the picture before on the GPU (the stamps are written
+once the work before them is done), the GPU's clock steps on a Mali whose kernel nodes are closed
+(the kernel GPU driver line says which are readable; the thermal line gives the app's headroom).
 
 ## Issues 123 and 163's lines: the skin check on an Adreno
 

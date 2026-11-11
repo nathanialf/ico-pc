@@ -10,6 +10,11 @@
 static const char *const kKindWords[SCENE_KIND_COUNT] = {"play",  "scene",    "title",
                                                          "pause", "settings", "other"};
 
+const char *window_scene_kind_word(SceneKind kind)
+{
+    return (unsigned)kind < SCENE_KIND_COUNT ? kKindWords[kind] : "other";
+}
+
 SceneKind window_scene_kind(const SceneIds *ids, int layout, int movie)
 {
     if (movie || layout == ids->scene) {

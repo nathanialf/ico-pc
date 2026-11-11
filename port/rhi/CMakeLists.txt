@@ -177,6 +177,20 @@ if(ICO_RUN_TESTS)
     add_test(NAME rhi_vk_tile_rule COMMAND rhi_vk_tile_rule_test)
 endif()
 
+# --- The passes' attachment bytes (CPU only, every target) -------------------
+# rhi_traffic.c: what each render pass asks a tile-based GPU to load, store
+# and clear, from its description and its attachments' formats, and the
+# texture copies' bytes (rhi_traffic.h, issue 179's performance lines): the
+# bytes a texel by format and aspect, the render area clamped, MSAA, a
+# read-only depth, an unknown attachment, the handle table (made, gone, the
+# backward shift keeping a run reachable, forget) and the sums in RhiStats.
+add_executable(rhi_traffic_test test/rhi_traffic_test.c rhi_traffic.c)
+target_include_directories(rhi_traffic_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(rhi_traffic_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+if(ICO_RUN_TESTS)
+    add_test(NAME rhi_traffic COMMAND rhi_traffic_test)
+endif()
+
 # --- The SPIR-V scan (CPU only, every target) --------------------------------
 # vk/vk_spirv_scan.c: whether a module is a fragment shader that declares a
 # storage buffer (the buffer barriers' first scopes, vk_cmd.c), over the RHI
@@ -463,7 +477,7 @@ if(_ico_have_gl)
 endif()
 
 # --- ico_rhi: the dispatcher ----------------------------------------------------
-add_library(ico_rhi STATIC rhi_backend.c)
+add_library(ico_rhi STATIC rhi_backend.c rhi_traffic.c)
 target_include_directories(ico_rhi PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(ico_rhi PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(_ico_have_vk)
@@ -500,7 +514,7 @@ if(_ico_have_vk)
     # Every rhi.h enumeration maps to a Vulkan value (static asserts plus a
     # run over the tables). Needs only the headers.
     # With rhi_backend.c's layer classifiers (no backend linked).
-    add_executable(rhi_vk_enum_test test/rhi_vk_enum_test.c rhi_backend.c)
+    add_executable(rhi_vk_enum_test test/rhi_vk_enum_test.c rhi_backend.c rhi_traffic.c)
     target_include_directories(rhi_vk_enum_test PRIVATE "${ICO_VULKAN_INCLUDE_DIR}")
     target_compile_options(rhi_vk_enum_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 

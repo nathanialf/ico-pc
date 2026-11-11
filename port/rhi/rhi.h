@@ -1659,6 +1659,17 @@ typedef struct RhiStats {
      * compute's bracket).  Counts, summed over both: fragmentHolds; 0 on
      * the other backends */
     uint64_t holdSites[2][8];
+    /* Every backend (rhi_traffic.h, counted in rhi_backend.c's forwarders,
+     * no backend call): the attachment bytes the render passes ask a
+     * tile-based GPU to load (LOAD) and store (STORE), colour and
+     * depth-stencil apart, those cleared in tile memory (CLEAR: no read),
+     * the passes' render-area texels, the texture copies' bytes read and
+     * written, and the passes with an attachment the table did not know
+     * (counted at 4 bytes a texel).  Uncompressed: a driver that compresses
+     * or drops a store moves fewer.  Counts for the whole run (a new device
+     * does not set them back) */
+    uint64_t passColorLoadBytes, passColorStoreBytes, passDepthLoadBytes, passDepthStoreBytes;
+    uint64_t passClearBytes, passPixels, copyTextureBytes, passUntracked;
 } RhiStats;
 
 #define RHI_HOLD_KIND_VERTEX 0

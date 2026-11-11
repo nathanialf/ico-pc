@@ -399,6 +399,11 @@ int main(void)
         CHECK(window_scene_dominant(&s) == SCENE_SCENE);
         window_scene_note(&s, SCENE_PLAY, 3000000000ull);
         CHECK(window_scene_dominant(&s) == SCENE_PLAY); /* 6 s of play against 5 s */
+        /* the kinds' words, for the performance lines' scene names */
+        CHECK(strcmp(window_scene_kind_word(SCENE_PLAY), "play") == 0);
+        CHECK(strcmp(window_scene_kind_word(SCENE_SCENE), "scene") == 0);
+        CHECK(strcmp(window_scene_kind_word(SCENE_SETTINGS), "settings") == 0);
+        CHECK(strcmp(window_scene_kind_word(SCENE_KIND_COUNT), "other") == 0);
 
         memset(&t, 0, sizeof(t));
         t.dominant = SCENE_SCENE;

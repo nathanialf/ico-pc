@@ -68,6 +68,7 @@
 #include "render_thread.h"
 #include "window_present_fallback.h"
 #include "cpu_place.h"
+#include "window_perf_rank.h"
 #include "window_scene.h"
 #include "window_stall.h"
 #include "window_disc.h"
@@ -4538,6 +4539,7 @@ static void perf_passes_add(const RdPerfRecord *r)
     window_stall_passes(r, &s_perf.passAgg, p, n, s_perf.gpuN,
                         s_perf.gpuN ? s_perf.gpu / s_perf.gpuN : 0.0);
     rd_perf_pass_agg_add(&s_perf.passAgg, p, n);
+    window_perf_rank_pieces(r, p, n); /* the performance lines by scene */
     if (!s_perf.passCsvTried) {
         perf_pass_csv_open();
     }
@@ -4929,6 +4931,8 @@ static void perf_drain(void)
         s_perf.fenceWaits += r.fenceWaits;
         s_perf.waitIdles += r.waitIdles;
         s_perf.readbacks += r.readbacks;
+        window_perf_rank_record(
+            &r, (double)window_scene_vu_invocations(r.vuTris, r.vuPreVertices, rd_vu_prepass_on()));
     }
     if (s_perf.csv != NULL) {
         fflush(s_perf.csv);
@@ -5416,6 +5420,7 @@ void window_pace_log(Uint64 now)
         rd_replay_time_max(1, &n);
         perf_drain();
         perf_reset();
+        window_perf_rank_block(NULL); /* the records before the first block dropped */
         return;
     }
     if (now - s_pres.statAt < ico_stats_period_ns(now, s_pres.fastUntil)) {
@@ -5592,6 +5597,21 @@ void window_pace_log(Uint64 now)
     }
     disp_block_reset();
     slow_scene_check();
+    {
+        /* the performance lines by scene (window_perf_rank.h), before
+           perf_log empties the block's step sums */
+        const WindowPerfBlock pb = {sec,
+                                    s_pres.statPresents / sec,
+                                    s_pres.statFrames / sec,
+                                    stage_no,
+                                    s_blockKind,
+                                    s_pres.paceHz,
+                                    !rd_interpolation_active(),
+                                    dm != NULL ? (double)dm->refresh_rate : 0.0,
+                                    s_pres.stepCpuCount ? s_pres.stepCpuSumMs / s_pres.stepCpuCount
+                                                        : 0.0};
+        window_perf_rank_block(&pb);
+    }
     perf_log();
     s_pres.statAt = now;
     s_pres.statPresents = s_pres.statFrames = s_pres.statVsyncs = s_pres.statResyncs = 0;
@@ -5811,6 +5831,7 @@ void ico_window_close(void)
     ico_render_thread_stop();   /* every picture handed over finished, the thread ended */
     window_dump_auto_stop();    /* the dump worker joined, its last zip reported */
     window_stall_run_summary(); /* issue 123: stalls a minute by display rate */
+    window_perf_rank_run_end(); /* the run's performance profile by scene */
     window_display_rate_stop(s_window);
     window_stall_gpu_close(); /* Android: the kernel GPU driver's sampler joined */
     /* a clean exit: a lazy run keeps the start-up activity file, so the
