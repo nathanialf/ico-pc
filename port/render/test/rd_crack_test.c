@@ -266,7 +266,11 @@ static void recordAfter(RdTarget scene)
                 return;
             }
             /* defer: the aura's paste after the glow's (the paste deferred to
-             * its pass, the fill held on to it) */
+             * its pass, the fill held on to it), the aura's own sprite into
+             * WORK1 between them (staticBlur's aura draws into its buffers
+             * before its paste): without the late pass the glow's paste and
+             * the aura's are a pass each, not one pass on SCENE drawn on
+             * across them */
         }
         rd_select_list(8);
         rd_texture_off();
@@ -275,6 +279,11 @@ static void recordAfter(RdTarget scene)
         rd_z_write(0);
         rd_gouraud(0);
         rd_test_gs(RD_TEST_Z_ALWAYS);
+        if (s_after == AFTER_DEFER) {
+            rd_set_target(rd_target(RD_TARGET_WORK1), (RdTarget){0}, 256, 128, 0);
+            rd_abe(0);
+            blurSprite(RD_POST_AURA, 256, 128, kFeed, 0, 0.0f, 0.0f);
+        }
         rd_set_target(scene, scene, GW, GH, 0);
         rd_texture(rd_target_texture(work0, RD_VIEW_RGBA), RD_TEXFN_MODULATE, RD_TCC_RGBA);
         rd_sampler_filter(RD_FILTER_LINEAR, RD_FILTER_LINEAR);

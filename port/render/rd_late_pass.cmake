@@ -54,7 +54,9 @@ if(ICO_RUN_TESTS AND TARGET rd_crack_test)
 endif()
 
 # rd_crack_defer: rd_crack_test 2 defer, rd_crack_heldglow's frame with the aura's
-# paste after the glow's: the glow's paste deferred to the aura's paste pass and
+# paste after the glow's and the aura's own sprite into WORK1 between them
+# (without it the late pass off draws both pastes in one pass on SCENE, and the
+# deferral saves nothing): the glow's paste deferred to the aura's paste pass and
 # the fill held on to it (one held fill, none in the glow's pass, one paste
 # deferred), the same checks with two render passes fewer than the late pass off
 if(ICO_RUN_TESTS AND TARGET rd_crack_test)
