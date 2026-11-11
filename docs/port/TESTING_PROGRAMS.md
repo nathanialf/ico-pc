@@ -913,7 +913,9 @@ that stops again writing its own line without the retry mark); a stop at the fre
 - `memory_floor_test.c`: the start-up set's free-memory floor (`memory_floor.h`) by driver class: on Qualcomm's own driver and a driver not known 17 % of the device's memory, at most 2048 MB on a device of more than 8 GB (696 MB on a 4 GB phone, 522 MB on a 3 GB one, 1392 MB on 8 GB, 1445 MB on 8500 MB, 1915 MB on the Retroid Pocket 6's 11265 MB, 2048 MB on 12288, 15552 and 16384 MB); on any other driver the same up to 8 GB and at most 512 MB above (8500 to 16384 MB); a setting gives the floor for every class, `0` none; the class from the vendor id and the driver text (0x5143 with Qualcomm's own text, with "turnip Mesa driver", "Turnip Mesa 26.3.0", "Mesa 25.1.0"; PowerVR, Mali, vendor 0) and its words; the PowerVR DXT-48 phone's figures (15552 MB, another driver: 1823 MB, where the 2048 MB cap stopped its set, and 2554 MB continue, 512 MB continues, 511 MB stops, a setting of 2048 stops at 1823); the issue 161 start on the Retroid Pocket 6 on Qualcomm's own driver (11265 MB: 3340 MB continues and 1693 MB, where it stalled, stops under 1915 MB; 1915 MB continues, 1914 MB stops; a driver not known stops at 1693 too; a setting of 1900 stops at 1693, 1600 does not; on Turnip 1693 continues); a 4 GB phone at 1200 MB available continues, at 600 MB stops, on every class; an unknown figure never stops; the log lines' words for each class, a setting and off (`ico_memory_floor_rule`); the `[dev] pipeline_memory_floor_mb` text ("" and "auto" unset, "0" off, "2048" a floor, "-1" and "x" not read); issue 123's retry (`ico_memory_floor_retry`): the next start's set again only after a stop at the floor (the activity line's figures tell it from the system's signal), on Qualcomm's own driver, with a cache file that is not empty and that the renderer loaded (a missing or empty one, one the renderer did not load, the system's signal, another driver and a driver not known make no set), not after a start that was itself a retry (the stop line's ` after a retry` mark, `ico_memory_floor_line_retried`), the reporter's 1940 MB of 11453 MB and 1.4 MB file (`memory_floor`).; a renamed Turnip build (issue 209's "PurpleVK public driver" text) is another driver with its Vulkan driver id 18 and Qualcomm's own by the text alone
 - `lifecycle_test.c`: the mobile lifecycle's step tables on fake operations: the render thread
   parked before the GPU idles and the surface goes, going on only after the surface is made again,
-  and the tables as before without that operation (`lifecycle`).
+  and the tables as before without that operation; the performance profile written just before the
+  log's flush going to the background (`perf`) and ending (`perf-end`), in no other table, and the
+  tables as before without its operation (`lifecycle`).
 - `frame_mailbox_test.c`: the game thread's and the render thread's hand-over
   (`port/platform/frame_mailbox.h`) driven from one thread under a fake clock: the latest frame
   wins (two replaced, counted), slot pins, the lock grid, the job queue in order and full, the
@@ -1231,7 +1233,9 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   one names the long one, its time at least 30 ms, the reset empties it, a NULL id).
 - `window_scene_test.c`: the window's scene lines (`window_scene.h`, issue 179; the cost-model fit only over a spread of 2 or more in the vertex invocations, the smallest counted above 0 (a block with keep frames' zero-invocation replays beside narrow scene replays: no fit), else `fit: not enough spread (x N..M ...)`): the layout kinds
   of the European disc's ids (a movie over any layout is a scene, the title's two, the pause menu,
-  the options and button configuration, anything else `other`), the block's layout share over a
+  the options and button configuration, the vibration choice, the memory card's and the Continue
+  screen's file lists, the load and the save's confirmation, anything else `other`; a table without
+  the last five leaves layout 0 `other`), the block's layout share over a
   sequence of steps (`layout: play 6.2 s, scene 3.1 s, pause 0.7 s, other 0.0 s`, the empty block,
   a kind out of range ignored, a reset, a cut buffer), the slow step's game threads part (`game
   threads 199.3 in 39 switches (longest Main 171.2 ms; on core 2)`, the core or the longest switch
@@ -1253,7 +1257,11 @@ only when the Turnip package loaded and the mark carries trial or needed (`bones
   down to 2x, and 4x of 6x at 25 game fps, the largest offered step that fits; a cut buffer; the
   frames not presented counted as late plus render-thread-busy ones (`window_scene_hint_skips`,
   issue 179: 157 busy and no late skip still prints the hint); the kinds' words for the
-  performance lines' scene names, `other` past the kinds (`window_scene`).
+  performance lines' scene names, `other` past the kinds; the scene key (`window_scene_key`): the
+  stage and the game's name of it on every kind once a stage is loaded (`stage 4 scene (st04a
+  (TEST))`, `stage 1 other (st01- logo) (keep frames)` with the name's `:` written `-`, `stage 2
+  title` without a name, `title` before any stage, `stage 0 play`), a cut buffer and none
+  (`window_scene`).
 - `startup_retry_test.c`: the steps after a graphics driver crash while building a pipeline, the
   crash chain to the box, the variable and the relaunch environment, the `dst` field of a
   pipeline's or a start-up batch's note, its VU vertex pre-pass keys and modules, the skin check's

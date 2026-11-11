@@ -684,15 +684,20 @@ static int key_of(const char *l)
 /* The performance lines by scene (window_perf_rank.h, issue 179): the
    latest ranked line and profile line of each scene, in the order the
    scenes first came, so one report carries the run's ranking whatever
-   block was last */
+   block was last.  16 scenes (about 66 KB of the report's 128 KB at their
+   longest); the key carries the stage on every kind (window_scene_key),
+   so a long run has more: a new scene then takes the place of the one
+   seen longest ago (the report keeps the run's latest 16) */
 #define PERF_SCENES 16
 
 static struct {
-    char name[48];
+    char name[96]; /* rd_perf_rank.h RD_PERF_RANK_NAME */
     char ranked[LINE_BYTES], profile[LINE_BYTES];
+    unsigned seen; /* the line count at its last line */
 } s_perf[PERF_SCENES];
 
 static int s_perf_n;
+static unsigned s_perf_lines;
 
 static void perf_line(const char *l)
 {
@@ -716,13 +721,23 @@ static void perf_line(const char *l)
     }
     if (i == s_perf_n) {
         if (s_perf_n == PERF_SCENES) {
-            return;
+            /* full: the scene seen longest ago goes, the rest keep their
+               order and the new one comes last */
+            int old = 0;
+            for (int k = 1; k < s_perf_n; k++) {
+                old = s_perf[k].seen < s_perf[old].seen ? k : old;
+            }
+            memmove(&s_perf[old], &s_perf[old + 1],
+                    (size_t)(s_perf_n - 1 - old) * sizeof(s_perf[0]));
+            s_perf_n--;
+            i = s_perf_n;
         }
         s_perf_n++;
         memcpy(s_perf[i].name, name, len);
         s_perf[i].name[len] = '\0';
         s_perf[i].ranked[0] = s_perf[i].profile[0] = '\0';
     }
+    s_perf[i].seen = ++s_perf_lines;
     snprintf(ranked ? s_perf[i].ranked : s_perf[i].profile, LINE_BYTES, "%s", l);
 }
 
@@ -840,6 +855,7 @@ static void build_text(const IcoReportInputs *in)
 
     memset(s_key, 0, sizeof s_key);
     s_perf_n = 0;
+    s_perf_lines = 0;
     s_ring_n = s_ring_head = s_before_n = s_before_head = 0;
     s_in_block = 0;
     s_block_len = 0;

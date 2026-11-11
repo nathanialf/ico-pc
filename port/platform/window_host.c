@@ -1128,6 +1128,7 @@ static const IcoLifecycleOps k_lifecycle_ops = {
     lc_log,
     lc_log_flush,
     lc_render_park,
+    window_perf_rank_lifecycle,
 };
 
 /* SDL's event watch: the four lifecycle events as they arrive (the queue
@@ -5004,15 +5005,17 @@ static void perf_log(void)
     double cardMs;
     rd_vu_card_counts(&cardStrips, &cardTris, &cardMs);
     const double steps = s_pres.stepCount ? (double)s_pres.stepCount : 1.0;
+    char sub[96]; /* the CPU's sum takes the submit thread's submit and present */
+    (void)window_perf_rank_cpu_note(sub, sizeof(sub));
     fprintf(stderr,
             "window: %u replays: CPU %.2f ms (max %.2f): interp %.2f, wait %.2f, acquire %.2f, "
             "upload %.2f, walk %.2f, bind %.2f, submit %.2f, present %.2f, readback %.2f "
-            "(fence waits %.2f); longest: %s; %s; simulation step %.2f ms (max %.2f); strip "
+            "(fence waits %.2f%s); longest: %s; %s; simulation step %.2f ms (max %.2f); strip "
             "verdicts %.1f strips, %.1f triangles, %.3f ms a step\n",
             b->n, b->total / n, b->totalMax, b->sum[PERF_PH_INTERP] / n, b->sum[PERF_PH_WAIT] / n,
             b->sum[PERF_PH_ACQUIRE] / n, b->sum[PERF_PH_UPLOAD] / n, b->sum[PERF_PH_WALK] / n,
             b->sum[PERF_PH_BIND] / n, b->sum[PERF_PH_SUBMIT] / n, b->sum[PERF_PH_PRESENT] / n,
-            b->sum[PERF_PH_READBACK] / n, b->sum[PERF_PH_FENCE] / n, longest, gpu,
+            b->sum[PERF_PH_READBACK] / n, b->sum[PERF_PH_FENCE] / n, sub, longest, gpu,
             s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0, s_pres.stepMaxMs,
             (double)(cardStrips - s_pres.cardStrips) / steps,
             (double)(cardTris - s_pres.cardTris) / steps, (cardMs - s_pres.cardMs) / steps);
@@ -5389,12 +5392,14 @@ static void disp_block_reset(void)
 static void scene_note_step(double ms)
 {
     const IcoRegionInfo *ri = ico_region_cur();
-    const SceneIds ids = {ri->layout_play,      ri->layout_scene, ri->layout_title_continue,
-                          ri->layout_title_new, ri->layout_pause, ri->layout_options,
-                          ri->layout_key_config};
+    const SceneIds ids = {ri->layout_play,       ri->layout_scene, ri->layout_title_continue,
+                          ri->layout_title_new,  ri->layout_pause, ri->layout_options,
+                          ri->layout_key_config, ri->layout_vibe,  ri->layout_mc_files,
+                          ri->layout_load_files, ri->layout_load,  ri->layout_save_complete};
+    const SceneKind k = window_scene_kind(&ids, current_layout_id, mpegPlay != 0);
 
-    window_scene_note(&s_sceneShare, window_scene_kind(&ids, current_layout_id, mpegPlay != 0),
-                      (uint64_t)(ms * 1e6));
+    window_scene_note(&s_sceneShare, k, (uint64_t)(ms * 1e6));
+    window_perf_rank_step(k, stage_no, (uint64_t)(ms * 1e6));
 }
 
 /* Presents and frames per second, every 10 s of real time, in both

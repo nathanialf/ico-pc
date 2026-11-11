@@ -11,8 +11,10 @@
  *                          has finishes; the pictures are the game
  *                          thread's until it goes on), the GPU idle, the
  *                          window's surface released (the device kept), the
- *                          watchdog paused, the sound paused, the log
- *                          flushed: SDL then blocks the event pump until
+ *                          watchdog paused, the sound paused, the run's
+ *                          performance profile written (with the block in
+ *                          progress: a run swiped away gets no other), the
+ *                          log flushed: SDL then blocks the event pump until
  *                          the app comes back
  *   did enter foreground   the surface and swapchain made again (on the
  *                          game thread, the render thread still parked),
@@ -20,7 +22,9 @@
  *                          queue emptied, the pacer's deadline reset to
  *                          now (the time away is not caught up), a line
  *   terminating            a line, then the settings saved when changed,
- *                          the pad recording closed, the log flushed
+ *                          the pad recording closed, the performance
+ *                          profile (not again within a second of the
+ *                          background's), the log flushed
  *   low memory             the texture pack's read-ahead held at what it
  *                          has, a line, the log flushed
  *
@@ -61,6 +65,7 @@ typedef enum IcoLifecycleStep {
     ICO_LC_LOG_FLUSH,          /* ops.log_flush */
     ICO_LC_RENDER_PARK,        /* ops.render_park(1) */
     ICO_LC_RENDER_UNPARK,      /* ops.render_park(0) */
+    ICO_LC_PERF_PROFILE,       /* ops.perf_profile(terminating) */
     ICO_LC_STEP_COUNT
 } IcoLifecycleStep;
 
@@ -84,6 +89,9 @@ typedef struct IcoLifecycleOps {
     /* the window's render thread held (1) and going on (0)
        (port/platform/render_thread.h) */
     void (*render_park)(void *user, int parked);
+    /* the run's performance profile with the block in progress
+       (window_perf_rank.h); terminating 1 at the end, 0 to the background */
+    void (*perf_profile)(void *user, int terminating);
 } IcoLifecycleOps;
 
 /* Runs the event's table in order. Returns the number of steps run (a

@@ -24,7 +24,10 @@ endif()
 # the bound (GPU, render thread, game thread, at the rate, not measured),
 # the byte-bound passes' fit and the copies' rate recovering their made-up
 # constants, the ranked line word for word, the scene, classes, rates and
-# slowest lines, the profile by scene with a full table (CPU only)
+# slowest lines, the profile by scene with a full table; the Pixel 10 Pro
+# Fold's stage 4 block (the vertex estimate refused, the glow first, an
+# earlier block's rate), the vertex fit's floor and pre-pass cap, the submit
+# thread's CPU apart, every candidate kept, the block in progress (CPU only)
 add_executable(rd_perf_rank_test test/rd_perf_rank_test.c rd_perf_rank.c)
 target_include_directories(rd_perf_rank_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                                      "${CMAKE_SOURCE_DIR}/port/rhi")

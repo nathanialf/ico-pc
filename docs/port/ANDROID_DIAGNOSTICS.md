@@ -464,10 +464,15 @@ asked of the GPU for them: no query, timestamp, barrier or read beyond the times
 picture writes and the replays already timed pass by pass (one every 250 ms), read where they were
 read before; the attachment bytes are counted on the CPU from each pass's description
 (`port/rhi/rhi_traffic.c`, at `rhi_cmd_begin_render_pass` and the texture copies, a lock and a
-hash lookup a pass). The scene is the block's dominant layout with the stage for play and scenes
-(`stage 3 play`, `stage 3 scene`, `title`, `pause`), `(keep frames)` when most of its pictures
-were keep frames. The figures below are the unit test's made-up block of stage 3 play's shape
-(`rd_perf_rank_test`), not a phone's.
+hash lookup a pass). The scene is the block's dominant layout with the stage number and the game's
+name of the stage on every kind once a stage is loaded (`stage 4 play (st04a (...))`, `stage 4
+scene (...)`, `stage 1 other (...)`: the logo's, the attract's and a cutscene's other layouts are told apart by
+their stage; `title` before any stage), the vibration choice, the memory card's file list,
+the Continue screen's file list, the load and the save's confirmation each with a word of its own
+(`vibration setting`, `memory card files`, `Continue files`, `loading`, `save done`; `window_scene_key`,
+`port/platform/window_scene.c`), `(keep frames)` when most of its pictures were keep frames. The
+figures below are the unit test's made-up block of stage 3 play's shape (`rd_perf_rank_test`), not
+a phone's.
 
 - `window: perf scene: stage 3 play, 168 pictures (0 keep frames): 16.8 of 25.0 fps (the game 25.0
   of 25.0), GPU-bound; the GPU's work 59.0 ms a picture of the 59.5 ms between presents (99 %); the
@@ -483,8 +488,16 @@ were keep frames. The figures below are the unit test's made-up block of stage 3
   of the target rate (Frame rate Original: the game's 25 or 30; with interpolation the display's
   refresh) or the game under its own rate, the GPU when its work (the span less the display wait)
   fills 80 % of the time between presents; else the render thread when its own CPU (interpolation,
-  uploads, walk, binds, submit: not its waits) does; else the game thread when its step's CPU
+  uploads, walk, binds, and the submit only where the render thread submitted itself: not its
+  waits) does; else the game thread when its step's CPU
   fills 80 % of its tick; else `bound by waits elsewhere` (the present calls, the slot waits).
+  With the submit thread on (`RdPerfRecord.presentThread`), its submit and present calls are
+  named apart and are not the render thread's CPU: `the render thread's own CPU 42.4 ms (walk 40.0,
+  uploads 2.0, binds 0.4, interpolation 0.0), its waits for the GPU 27.5 ms; the submit thread's
+  submit 1.7 ms and present calls 25.8 ms (100 of the 100 pictures)`. The replays line `window: N replays: CPU ...` sums
+  every phase of a replay whichever thread ran it; with the submit thread on it says so after the
+  fence waits: `(fence waits 15.95; the CPU adds the submit thread's submit and present in 277 of
+  277 replays)`.
   `a picture's work done N ms after its last submit` is the single wait's own return against the
   picture's last submit: the GPU's latency for a picture where the wait blocked (an upper bound
   where the work had finished first). The bytes are what the passes ASK for (LOAD loads, STORE
@@ -503,36 +516,60 @@ were keep frames. The figures below are the unit test's made-up block of stage 3
 - `window: perf rates (this device, from the block's own pictures): the DATE snapshots and passes
   with no draw 0.10 ms a pass + 0.40 ms a MB loaded or stored (R^2 1.00, 36 pieces); copies 0.25
   ms a MB (24.0 MB in 6.0 ms); the GPU's work 36.0 ms + 0.500 ms a thousand vertex invocations
-  (R^2 1.00, 168 pictures); the estimates use the byte-bound passes' fit (0.40 ms a MB)`: this
-  device's constants with no extra work: a least-squares fit over the pieces whose time is their
-  bytes (the DATE snapshots, the passes with no draw: a fixed cost a pass and a cost a MB moved),
-  the copies' and snapshots' ms a MB, and the vertex fit of the VU line. The estimates take the
-  fit's ms a MB where it holds (8 pieces, a spread in their bytes, R^2 0.3 or over), else the
-  copies'. `no fit (N, or no spread in their bytes)` where every snapshot moved the same bytes.
+  (R^2 1.00, 168 pictures without keep frames, 40.0k to 52.0k invocations; not used for an
+  estimate); the estimates use the byte-bound passes' fit (0.40 ms a MB); the copies' rate is never
+  used for attachment traffic`: this device's constants with no extra work: a least-squares fit
+  over the pieces whose time is their bytes (the DATE snapshots, the passes with no draw: a fixed
+  cost a pass and a cost a MB moved), the copies' and snapshots' ms a MB, and the vertex fit (the
+  GPU's work against the vertex invocations, keep frames left out, with the invocations' range).
+  The estimates take this block's fit's ms a MB where it holds (8 pieces, a spread in their bytes,
+  R^2 0.3 or over), else the last fit that held earlier in the run (`the estimates use the rate of
+  an earlier block of this run (0.10 ms a MB)`), else none (`the estimates use no rate (no fit in
+  this block or an earlier one of the run: the traffic estimates left out)`: the MB are still in
+  the scene and classes lines). Never the copies' rate: on a tile-based GPU a copy's piece carries
+  the flush of the pass before it (a Pixel 10 Pro Fold's log read 0.01 ms a MB from the copies against
+  0.05 to 0.16 from the same phone's fits, five to fifteen times low). `no fit (N, or no spread in
+  their bytes)` where every snapshot moved the same bytes.
 - `window: perf slowest picture: replay 4821 (frame 4820), GPU span 63.1 ms over 20 pieces: list 3
   912x512 24.10 ms (70 draws, 66 binds; loads 4.1 MB, stores 4.1 MB), ... (the top 5 by GPU time;
   GPU time by pipeline is not measured)`: the block's slowest timed picture's costliest pieces.
 - `window: perf ranked: stage 3 play: 16.8 of 25.0 fps (the game 25.0 of 25.0), GPU-bound (the
-  GPU's work 59.0 ms a picture of the 59.5 ms between presents): 1. vertex work est. 23.0 ms (46k
-  vertex invocations a picture at 0.500 ms a thousand, R^2 1.00); 2. list 3 22.4 ms measured (1.0
-  passes, 61 draws, 61 binds; loads 3.6 MB, stores 3.6 MB, 0.47 Mpx); 3. list 0 20.1 ms measured
-  (...) (each saving alone, they overlap; est. = this block's counters times its own rates)`:
+  GPU's work 59.0 ms a picture of the 59.5 ms between presents): 1. list 3 22.4 ms measured (1.0
+  passes, 61 draws, 61 binds; loads 3.6 MB, stores 3.6 MB, 0.47 Mpx); 2. list 0 20.1 ms measured
+  (...); 3. DATE breaks est. 7.9 ms (3.0 a picture: 3.6 ms measured for the snapshots + 10.8 MB
+  reloaded after them); no vertex work estimate (the invocations (40.0k to 52.0k a picture) are
+  under the 2x spread the fit needs) (each saving alone, they overlap; est. = this block's counters
+  times its own rates)`:
   only in a block below the rate. The three largest candidates for the limiting side: for the GPU
   each class's measured time (its own ceiling), `tile loads est.` (the MB loaded a picture times
   the rate), `depth stores est.` (the depth and stencil stored), `pass count est.` (the passes
   times the fit's fixed cost a pass), `DATE breaks est.` (the snapshots' measured time plus the MB
   a scene pass loads again after each), `vertex work est.` (the invocations times the vertex fit's
-  slope), the uploads; for the render thread its phases with their draws and binds; for the game
-  thread its step. Decides the next release's work: the first entry is the largest measured or
+  slope, only from a fit of R^2 0.8 or over whose largest invocation count is twice its smallest,
+  the rule of the VU line, keep frames left out; with the VU pre-pass on no more than the measured
+  `VU pre-pass` class, `; capped at the measured VU pre-pass`), the uploads; for the render thread
+  its phases with their draws and binds; for the game thread its step. Without a vertex estimate the
+  line says why: `no vertex work estimate (the fit's R^2 0.27 is under 0.80, the invocations (23.0k
+  to 36.6k a picture) are under the 2x spread the fit needs)` (a weaker rule once ranked a 24.8 ms
+  vertex estimate first from an R^2 0.12 fit in a 31 ms picture whose pre-pass measured 1.5 ms). Every
+  class and estimate is a candidate (34 classes can qualify; the table holds 48 and drops only the
+  smallest past that). Decides the next release's work: the first entry is the largest measured or
   estimated saving on this phone in this scene.
 - `window: performance profile (every 300 s of the run, 4 scenes, profile 1 of the run):` then one
   line a scene, `window: performance profile: stage 3 play: 18 blocks (180 s, 3024 pictures); a
   picture's GPU work median 47.5 ms, worst 109 ms; presented fps median 16.9, lowest block 12.4,
   of 25.0; GPU-bound in 18 blocks; the worst block: 12.4 of 25.0 fps ... 1. ...; 2. ...; 3. ...`,
-  every 300 s of blocks and at the run's end (a phone's system often ends the app without one: the
-  report keeps the latest anyway). The bug report's `report.txt` has a section `the performance
-  lines by scene (the latest ranking and profile of each)` built from the log, so one zip carries
-  the ranking of every scene.
+  every 300 s of blocks, at the run's end, and as the app goes to the background or ends (`(the app
+  going to the background, ...)`, `(the app ending, ...)`: the lifecycle's step before the log's
+  flush, `window_lifecycle.c`; not twice within a second, so one swipe away writes one). Those
+  three add the block in progress, which no 10 s line has yet: `window: performance profile: stage
+  4 play (st04a (...)) (the block in progress): 10.0 s, 277 pictures (1 keep frames) not yet in a 10
+  s block; a picture's GPU work median 31.5 ms, worst 38 ms; presented fps about 27.7 of 120.0,
+  GPU-bound: 1. glow 11.6 ms measured (...); 2. ...; 3. ...` (the rate from its records' starts;
+  `(the target rate not known before the first 10 s block)` in a run swiped away before one). The
+  bug report's `report.txt` has a section `the performance lines by scene (the latest ranking and
+  profile of each)` built from the log, so one zip carries the ranking of every scene: 16 scenes,
+  the one seen longest ago giving its place to a new one (the run's latest 16).
 
 What the lines cannot size, and why: overdraw (no fragment count without a query: the area
 texels a pass covers are its floor), GPU time by pipeline or draw (no stamps inside a pass beyond

@@ -1232,6 +1232,14 @@ static void run_child(const char *mode, const char *log)
         ico_diag_log("window: perf ranked: stage 4 scene: 12.0 of 25.0 fps");
         ico_diag_log("window: perf ranked: stage 3 play: 15.0 of 25.0 fps, the newer one");
         ico_diag_log("window: performance profile (the run's end, 2 scenes, profile 1):");
+        /* 15 scenes more, keyed past 48 bytes (the stage's name on every
+           kind): the table's 16 full, the scene seen longest ago (stage 4
+           scene) gives its place to the last */
+        for (int k = 0; k < 15; k++) {
+            ico_diag_log("window: perf ranked: stage %d other (st%02da (THE LONG NAME OF A ROOM)) "
+                         "(keep frames): 30.0 of 120.0 fps",
+                         10 + k, 10 + k);
+        }
         fn = segv_thread;
     } else if (strcmp(mode, "segvnote") == 0) {
         /* a crash inside the graphics driver's pipeline build; this child
@@ -1891,8 +1899,19 @@ int main(int argc, char **argv)
             CHECK(strstr(txt, "the performance lines by scene (the latest ranking and profile "
                               "of each):\n  window: perf ranked: stage 3 play: 15.0 of 25.0 "
                               "fps, the newer one\n  window: performance profile: stage 3 "
-                              "play: 3 blocks (30 s)\n  window: perf ranked: stage 4 scene: "
-                              "12.0 of 25.0 fps\n") != NULL);
+                              "play: 3 blocks (30 s)\n  window: perf ranked: stage 10 other "
+                              "(st10a (THE LONG NAME OF A ROOM)) (keep frames): 30.0 of 120.0 "
+                              "fps\n") != NULL);
+            {
+                /* the 16 kept: the latest scene in, the one seen longest ago out */
+                const char *sec = strstr(txt, "the performance lines by scene");
+                const char *end = sec != NULL ? strstr(sec, "the last ico_pc:/window:/rd:") : NULL;
+                const char *last =
+                    sec != NULL ? strstr(sec, "perf ranked: stage 24 other (st24a") : NULL;
+                const char *gone = sec != NULL ? strstr(sec, "perf ranked: stage 4 scene") : NULL;
+                CHECK(end != NULL && last != NULL && last < end);
+                CHECK(gone == NULL || gone > end);
+            }
             CHECK(strstr(txt, "the older one") == NULL ||
                   strstr(txt, "the older one") > strstr(txt, "the last ico_pc:/window:/rd:"));
             if (ex != NULL) {

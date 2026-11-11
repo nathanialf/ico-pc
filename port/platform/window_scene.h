@@ -35,14 +35,21 @@ typedef enum SceneKind {
     SCENE_SCENE, /* a scene's empty layout, or a movie playing */
     SCENE_TITLE,
     SCENE_PAUSE,
-    SCENE_SETTINGS, /* the game's options and button configuration */
-    SCENE_OTHER,    /* every other layout (the port's pages, the memory card's) */
+    SCENE_SETTINGS,   /* the game's options and button configuration */
+    SCENE_VIBE,       /* the vibration choice (la_vibe_select) */
+    SCENE_MC_FILES,   /* the memory card's file list (la_mc_file_select) */
+    SCENE_LOAD_FILES, /* the Continue screen's file list (la_mc_load_file_select) */
+    SCENE_LOAD,       /* the load in progress (la_load_processing) */
+    SCENE_SAVE_DONE,  /* the save's confirmation (la_save_confirm_complete) */
+    SCENE_OTHER,      /* every other layout (the logo, the port's pages, none) */
     SCENE_KIND_COUNT
 } SceneKind;
 
-/* The running disc's layout ids (region.h layout_*) */
+/* The running disc's layout ids (region.h layout_*); the last five only
+   when above 0 (a table without them leaves them 0) */
 typedef struct SceneIds {
     int play, scene, titleContinue, titleNew, pause, options, keyConfig;
+    int vibe, mcFiles, loadFiles, load, saveComplete;
 } SceneIds;
 
 /* The kind of the game's state: a movie counts as a scene, whatever the
@@ -50,9 +57,21 @@ typedef struct SceneIds {
 SceneKind window_scene_kind(const SceneIds *ids, int layout, int movie);
 
 /* The kind's word in the layout line ("play", "scene", "title", "pause",
-   "settings", "other"; "other" past the kinds): the performance lines'
-   scene names (window_perf_rank.c) */
+   "settings", "vibration setting", "memory card files", "Continue files",
+   "loading", "save done", "other"; "other" past the kinds): the
+   performance lines' scene names (window_perf_rank.c) */
 const char *window_scene_kind_word(SceneKind kind);
+
+/* The performance lines' scene key (window_perf_rank.c, the report's
+   table): the stage and the game's name of it on every kind once a stage
+   is loaded (stage above 0, or play and a scene whatever the stage), so
+   the logo, the attract and a cutscene's other layouts are told apart:
+   "stage 4 play (st04a (...))", "stage 1 other (...)", "title" before any
+   stage; " (keep frames)" after it when keep; stageName "" or NULL: none;
+   a ':' in the name is written '-' (the report reads the key up to ": ").
+   The length written */
+size_t window_scene_key(char *out, size_t cap, SceneKind kind, int stage, const char *stageName,
+                        bool keep);
 
 /* The block's time by kind, in ns */
 typedef struct SceneShare {

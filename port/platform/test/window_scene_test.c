@@ -45,7 +45,7 @@ static int text_is(const char *got, const char *want)
 int main(void)
 {
     /* the European disc's ids (region_pal.c) */
-    const SceneIds ids = {54, 55, 12, 13, 57, 58, 59};
+    const SceneIds ids = {54, 55, 12, 13, 57, 58, 59, 9, 14, 19, 25, 41};
     SceneShare s;
     char b[640]; /* the slow-scene line passes 256 bytes (window_host.c holds 640) */
 
@@ -57,8 +57,20 @@ int main(void)
     CHECK(window_scene_kind(&ids, 57, 0) == SCENE_PAUSE);
     CHECK(window_scene_kind(&ids, 58, 0) == SCENE_SETTINGS);
     CHECK(window_scene_kind(&ids, 59, 0) == SCENE_SETTINGS);
-    CHECK(window_scene_kind(&ids, 14, 0) == SCENE_OTHER);
+    /* the memory card's, the vibration's and the load's own words (no
+       longer "other") */
+    CHECK(window_scene_kind(&ids, 9, 0) == SCENE_VIBE);
+    CHECK(window_scene_kind(&ids, 14, 0) == SCENE_MC_FILES);
+    CHECK(window_scene_kind(&ids, 19, 0) == SCENE_LOAD_FILES);
+    CHECK(window_scene_kind(&ids, 25, 0) == SCENE_LOAD);
+    CHECK(window_scene_kind(&ids, 41, 0) == SCENE_SAVE_DONE);
+    CHECK(window_scene_kind(&ids, 15, 0) == SCENE_OTHER);
     CHECK(window_scene_kind(&ids, -1, 0) == SCENE_OTHER);
+    {
+        /* a table without the five (0): layout 0 is not one of them */
+        const SceneIds old = {54, 55, 12, 13, 57, 58, 59, 0, 0, 0, 0, 0};
+        CHECK(window_scene_kind(&old, 0, 0) == SCENE_OTHER);
+    }
 
     /* a block: play, a scene, play again, a movie, the pause menu */
     memset(&s, 0, sizeof(s));
@@ -404,6 +416,29 @@ int main(void)
         CHECK(strcmp(window_scene_kind_word(SCENE_SCENE), "scene") == 0);
         CHECK(strcmp(window_scene_kind_word(SCENE_SETTINGS), "settings") == 0);
         CHECK(strcmp(window_scene_kind_word(SCENE_KIND_COUNT), "other") == 0);
+        CHECK(strcmp(window_scene_kind_word(SCENE_MC_FILES), "memory card files") == 0);
+        CHECK(strcmp(window_scene_kind_word(SCENE_LOAD), "loading") == 0);
+        CHECK(strcmp(window_scene_kind_word(SCENE_OTHER), "other") == 0);
+        /* the scene key: the stage and its name on every kind once loaded */
+        {
+            char k[96];
+            const size_t n = window_scene_key(k, sizeof k, SCENE_SCENE, 4, "st04a (TEST)", false);
+            CHECK(text_is(k, "stage 4 scene (st04a (TEST))") && n == strlen(k));
+            window_scene_key(k, sizeof k, SCENE_OTHER, 1, "st01: logo", true);
+            CHECK(text_is(k, "stage 1 other (st01- logo) (keep frames)"));
+            window_scene_key(k, sizeof k, SCENE_TITLE, 2, "", false);
+            CHECK(text_is(k, "stage 2 title"));
+            window_scene_key(k, sizeof k, SCENE_TITLE, 0, "st02", false);
+            CHECK(text_is(k, "title")); /* no stage loaded */
+            window_scene_key(k, sizeof k, SCENE_PLAY, 0, NULL, false);
+            CHECK(text_is(k, "stage 0 play"));
+            window_scene_key(k, sizeof k, SCENE_MC_FILES, 13, "st13b (STAFF)", false);
+            CHECK(text_is(k, "stage 13 memory card files (st13b (STAFF))"));
+            char t[10];
+            const size_t c = window_scene_key(t, sizeof t, SCENE_PLAY, 4, "st04a", false);
+            CHECK(c == sizeof t - 1 && strlen(t) == sizeof t - 1);
+            CHECK(window_scene_key(t, 0, SCENE_PLAY, 4, "st04a", false) == 0);
+        }
 
         memset(&t, 0, sizeof(t));
         t.dominant = SCENE_SCENE;
