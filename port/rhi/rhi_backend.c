@@ -260,6 +260,14 @@ bool rhi_init(const RhiDeviceDesc *desc)
     return s_up;
 }
 
+/* rhi_set_create_hook's (rhi.h) */
+static RhiCreateHook s_createHook;
+
+void rhi_set_create_hook(RhiCreateHook fn)
+{
+    s_createHook = fn;
+}
+
 void rhi_set_wait_hooks(const RhiWaitHooks *hooks)
 {
     s_waitsOn = hooks != NULL;
@@ -407,7 +415,12 @@ bool rhi_recreate_surface(void *window)
 RhiBuffer rhi_create_buffer(const RhiBufferDesc *desc)
 {
     RHI_GUARD();
-    return be()->create_buffer(desc);
+    const RhiBuffer b = be()->create_buffer(desc);
+    const RhiCreateHook hook = s_createHook;
+    if (hook != NULL && b.id && desc != NULL) {
+        hook(RHI_CREATE_BUFFER, desc->debugName, desc->size);
+    }
+    return b;
 }
 
 void rhi_destroy_buffer(RhiBuffer b)
@@ -507,6 +520,10 @@ RhiPipeline rhi_create_pipeline(const RhiPipelineDesc *desc)
     RHI_GUARD();
     const RhiPipeline p = be()->create_pipeline(desc);
     noteMade();
+    const RhiCreateHook hook = s_createHook;
+    if (hook != NULL && p.id && desc != NULL) {
+        hook(RHI_CREATE_PIPELINE, desc->debugName, 0);
+    }
     return p;
 }
 

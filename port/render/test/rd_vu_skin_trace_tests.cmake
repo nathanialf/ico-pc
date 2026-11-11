@@ -34,3 +34,15 @@ set_tests_properties(rd_vu_skin_check_stale_phone PROPERTIES
                      SKIP_REGULAR_EXPRESSION "SKIP:")
 set_tests_properties(rd_vu_skin_check_clean_phone PROPERTIES
                      ENVIRONMENT "${_env};ICO_VK_FAKE_VENDOR=0x13B5" SKIP_REGULAR_EXPRESSION "SKIP:")
+# thin_phone: the twins on a tile-based phone GPU (Arm faked) under the
+# window's rule without a reason (rd_vu_skin_background(memory, NULL)):
+# thinned from the start (one skinned draw a picture, not every skinned draw
+# of the first 3D scene), a twin event re-arming every draw until 4 clean
+# replays (rd__vu_skin_thin_set), then one a picture again
+add_test(NAME rd_vu_skin_check_thin_phone
+         COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_vu_skin_check_test> -DMODE=thinphone
+                 "-DEXTRA=rd: VU skin check: twins on \\(asked \\(the tests' or the tool's\\)\\) at one skinned draw a picture from the start \\(a tile-based phone GPU.*twins differ: .*rd: VU skin check: twins re-armed by a twin event: every skinned draw twinned again until 4 replays with none differing.*rd: VU skin check: twins thinned to one a picture after 4 clean replays"
+                 -P "${_vsk}")
+set_tests_properties(rd_vu_skin_check_thin_phone PROPERTIES
+                     ENVIRONMENT "${_env};ICO_RD_VU_SKIN_INTERVAL_MS=off;ICO_VK_FAKE_VENDOR=0x13B5"
+                     SKIP_REGULAR_EXPRESSION "SKIP:")

@@ -1,7 +1,8 @@
 /* rd_vu_skin_check_test.c: the skinned draws' bone-block check (issue 163;
  * rd_vu_skin_check.h, docs/port/VU_SKIN_CHECK.md).
  *
- *   rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture|thin> [folder]
+ *   rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture|thin|thinphone|stale>
+ *                         [folder]
  *
  * judge (no device): the judgement alone (rd_vu_skin_judge.c) on a skinned
  *   case of 60 bones and 120 vertices through vu1_ref:
@@ -70,6 +71,14 @@
  *   25. the stretches used up (3 more cycles of an event and two replays
  *      under the sabotage), then two replays of one twin each: the
  *      events no longer re-arm them.
+ * thinphone (a device; ICO_VK_FAKE_VENDOR=0x13B5, a tile-based phone GPU):
+ *   the same frame, the window's rule without a reason
+ *   (rd_vu_skin_background(memory, NULL)):
+ *   26. thinned from the start: three replays, one twin each;
+ *   27. the bone at 200 zeroed: the one twin differs, the twins re-armed;
+ *      the next replay twins all three;
+ *   28. the sabotage off, four clean replays (twelve twins): thinned again,
+ *      then one a replay.
  * judge also runs the trace (rd_vu_skin_trace.c; issue 123 v0.11.3):
  *   18. the clear stamp's colour read back as its replay, an earlier
  *      replay's, none;
@@ -705,6 +714,47 @@ static void thinTests(const RdFrame *f)
     rd__vu_skin_thin_set(0);
 }
 
+/* 26.-28.: a tile-based phone GPU: the twins thinned from the start */
+static void thinPhoneTests(const RdFrame *f)
+{
+    RdSkinSummary s, t;
+    rd__vu_skin_thin_set(4);
+    const bool phone = rhi_limits()->tilePhone;
+    rd_vu_skin_background(memoryFine, NULL);
+    const bool start = rd__vu_skin_thinned();
+    int rc = rd__vu_skin_check_replays(f, 0, 3, &s);
+    printf("  26. a tile-based phone GPU %d: thinned at the start %d; three replays %u twins, %u "
+           "differ\n",
+           (int)phone, (int)start, s.twins, s.twinsDiffer);
+    CHECK(phone && start && rc >= 0 && s.twins == 3 && s.twinsDiffer == 0 && rd__vu_skin_thinned(),
+          "phone %d, thinned at the start %d, rc %d, %u twins, %u differ", (int)phone, (int)start,
+          rc, s.twins, s.twinsDiffer);
+    rd__vu_skin_sabotage_set(200);
+    rc = rd__vu_skin_check_replays(f, 0, 1, &s);
+    const bool rearmed = !rd__vu_skin_thinned();
+    int rc2 = rd__vu_skin_check_replays(f, 0, 1, &t);
+    printf("  27. the bone at 200 zeroed: %u twins, %u differ, re-armed %d; the next replay %u "
+           "twins, %u differ\n",
+           s.twins, s.twinsDiffer, (int)rearmed, t.twins, t.twinsDiffer);
+    CHECK(rc >= 0 && rc2 >= 0 && s.twins == 1 && s.twinsDiffer == 1 && rearmed && t.twins == 3 &&
+              t.twinsDiffer == 3,
+          "rc %d/%d, %u twins, %u differ, re-armed %d, then %u twins, %u differ", rc, rc2, s.twins,
+          s.twinsDiffer, (int)rearmed, t.twins, t.twinsDiffer);
+    rd__vu_skin_sabotage_set(0);
+    rc = rd__vu_skin_check_replays(f, 0, 4, &s);
+    const bool thin = rd__vu_skin_thinned();
+    rc2 = rd__vu_skin_check_replays(f, 0, 2, &t);
+    printf("  28. the sabotage off: four replays %u twins, %u differ, thinned %d; then two "
+           "replays %u twins\n",
+           s.twins, s.twinsDiffer, (int)thin, t.twins);
+    CHECK(rc >= 0 && rc2 >= 0 && s.twins == 12 && s.twinsDiffer == 0 && thin && t.twins == 2 &&
+              t.twinsDiffer == 0,
+          "rc %d/%d, %u twins, %u differ, thinned %d, then %u twins", rc, rc2, s.twins,
+          s.twinsDiffer, (int)thin, t.twins);
+    rd_vu_skin_background(NULL, NULL);
+    rd__vu_skin_thin_set(0);
+}
+
 /* 13.: the sidecar's header and sections (path from
  * rd_vu_skin_capture_due) */
 static void captureCheck(const char *path)
@@ -768,7 +818,8 @@ static int deviceTests(const char *mode, const char *folder)
     }
     rd__set_not_implemented_fatal(true);
     rd__vu_skin_check_set(1);
-    const bool thin = strcmp(mode, "thin") == 0;
+    const bool thinPhone = strcmp(mode, "thinphone") == 0;
+    const bool thin = strcmp(mode, "thin") == 0 || thinPhone;
     const bool stale = strcmp(mode, "stale") == 0;
     const bool twins = strcmp(mode, "twin") == 0 || strcmp(mode, "capture") == 0 || thin;
     if (twins) {
@@ -787,7 +838,11 @@ static int deviceTests(const char *mode, const char *folder)
     static RdFrame f;
     CHECK(mesh.id != 0, "the mesh");
     if (mesh.id && thin && buildFrame(&f, mesh, 3)) {
-        thinTests(&f);
+        if (thinPhone) {
+            thinPhoneTests(&f);
+        } else {
+            thinTests(&f);
+        }
         rd__frame_free(&f);
     } else if (mesh.id && stale && buildFrame(&f, mesh, 1)) {
         /* 22. the careful rule (the window's after a start-up set stopped
@@ -913,7 +968,8 @@ static int deviceTests(const char *mode, const char *folder)
 int main(int argc, char **argv)
 {
     if (argc < 2) {
-        printf("usage: rd_vu_skin_check_test <judge|clean|probe|ring|twin|capture|thin|stale> "
+        printf("usage: rd_vu_skin_check_test "
+               "<judge|clean|probe|ring|twin|capture|thin|thinphone|stale> "
                "[folder]\n");
         return 2;
     }
