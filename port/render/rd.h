@@ -3252,6 +3252,9 @@ bool rd__date_cut_on(void);
 /* the tests' switch: -1 ICO_RD_DATE_CUT's and the profile's, 0 off, 1 on
  * (still the snapshot path only) */
 void rd__date_cut_force(int mode);
+/* the tests' view of the last scan's depth-free runs: [start[i], end[i])
+ * ordinals (the store plan's, g_rdStoreOrd), up to max; returns the count */
+uint32_t rd__date_cut_last_runs(uint32_t *start, uint32_t *end, uint32_t max);
 void rd__date_cut_pop(const RdPerfRecord *r);
 void rd__date_cut_text(char *out, size_t n, size_t *at);
 const char *rd__date_retake_word(int why);

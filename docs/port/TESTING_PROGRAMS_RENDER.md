@@ -779,11 +779,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   tests the depth between two DATE draws; a DATE draw after no alpha write in the run; a post
   sprite, a copy, a VU draw elsewhere; no run without a depth target, a depth-using or AA1 draw);
   every screen-family key with an unused depth has its no-depth twin in the start-up set; a frame in
-  the composites' shape (`ICO_RD_DATE_PATH=snapshot`, `ICO_RD_BLEND=fixed`,
-  `ICO_RD_STORE_POISON=1`) with the cut off and on (`rd__date_cut_force`): SCENE byte for byte, 2
-  runs and 2 passes without the depth, none begun again, the same passes and 3 snapshots (1 the
-  first, 2 after an alpha write), the depth and stencil bytes asked lower by 4 to 5 bytes a texel
-  each way of the two passes, the 10 s text's `; DATE: 2.0 passes`; no validation error.
+  the composites' shape and two variants (a Z GEQUAL draw after the third composite in its pass, one
+  between the first two) (`ICO_RD_DATE_PATH=snapshot`, `ICO_RD_BLEND=fixed`,
+  `ICO_RD_STORE_POISON=1`) with the cut off and on (`rd__date_cut_force`): SCENE byte for byte, the
+  scan's runs by ordinal (`rd__date_cut_last_runs`: 2, 2 and 1), a pass without the depth a run,
+  none begun again, the same passes, 3 snapshots (1 the first, 2 after an alpha write) and store-plan
+  drops, the passes with a depth fewer by the runs, the depth and stencil bytes asked lower by 4 to 5
+  bytes a texel each way of each cut pass, the 10 s text's `; DATE: 2.0 passes`; no validation error.
 - `rd_date_cut_ab.cmake` (`rd_date_cut_ab`, `rd_date_cut_ab_gl`): the dumps of
   `tools/date_cut_dumps.txt` (machine-local; a listed dump that is absent FAILS, a glob that matches
   none too) with `ICO_RD_DATE_CUT=0` and `1`, `--pass-dump --stats`, under `ICO_RD_BLEND=fixed`,

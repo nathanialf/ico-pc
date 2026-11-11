@@ -23,9 +23,10 @@
  * Why the bytes are the same: the depth and the stencil are not attached,
  * so the pass neither reads nor writes them, and their memory holds what
  * the last pass that stored them left, which is what a load and a store
- * with no draw touching them in between would have left (the store plan's
- * passes before the run keep their stores: the run's draws are no touch, a
- * later pass's touch keeps them).  The colour bytes are those of the draw
+ * with no draw touching them in between would have left (the store plan is
+ * as with the cut off: a DATE draw counts as a touch, so every pass before
+ * the run keeps its store, list 0's whose stencil the shadow count read
+ * among them).  The colour bytes are those of the draw
  * with the depth attached: its key with the depth has the test ALWAYS and
  * the write off (rd_pipeline.c rd__plan_screen_draw_ex: ztst ALWAYS and
  * zwrite OFF without a depth, the state's ALWAYS and OFF with it), and the
@@ -179,17 +180,38 @@ void rd__date_cut_scan_cmd(const RdCmd *c, const RdStateBlock *st, bool state, u
     } else {
         d.kind = RD_DC_OTHER;
     }
+    /* the step first, then its run's start: as arguments of one call their
+     * order is unspecified (gcc read start before the step had set it: every
+     * run began at command 0, list 0's draws lost their depth) */
     uint32_t start = 0;
-    dcClose(rd_date_cut_step(&s_dc.scan, &d, ord, &start), start, ord);
+    const int did = rd_date_cut_step(&s_dc.scan, &d, ord, &start);
+    dcClose(did, start, ord);
 }
+
+/* the last scan's runs, for the tests (rd__date_cut_last_runs) */
+static uint32_t s_lastN, s_lastStart[DC_RUNS], s_lastEnd[DC_RUNS];
 
 void rd__date_cut_scan_end(uint32_t ord)
 {
+    s_lastN = 0;
     if (!s_dc.on) {
         return;
     }
     uint32_t start = 0;
-    dcClose(rd_date_cut_finish(&s_dc.scan, ord, &start), start, ord);
+    const int did = rd_date_cut_finish(&s_dc.scan, ord, &start);
+    dcClose(did, start, ord);
+    s_lastN = s_dc.n;
+    memcpy(s_lastStart, s_dc.start, sizeof(s_lastStart));
+    memcpy(s_lastEnd, s_dc.end, sizeof(s_lastEnd));
+}
+
+uint32_t rd__date_cut_last_runs(uint32_t *start, uint32_t *end, uint32_t max)
+{
+    for (uint32_t i = 0; i < s_lastN && i < max; i++) {
+        start[i] = s_lastStart[i];
+        end[i] = s_lastEnd[i];
+    }
+    return s_lastN;
 }
 
 void rd__date_cut_end(void)

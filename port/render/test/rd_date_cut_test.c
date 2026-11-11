@@ -29,13 +29,20 @@
  * a depth load the plan leaves undefined clears to 0.5):
  *   d   a frame in the composites' shape (list 0 writes SCENE's depth over
  *       its left half, list 3 draws three DATE composites, list 4 a Z
- *       GEQUAL sprite that shows the depth in the colour) replayed with the
- *       cut off and on (rd__date_cut_force): SCENE's bytes the same; with it
- *       on 2 runs, 2 passes begun without the depth, none begun again, the
- *       same render passes and DATE snapshots, the depth and stencil bytes
- *       asked lower by between 4 and 5 bytes a texel each way of the two
- *       passes; the snapshots' reasons (the first, then an alpha write
- *       since); the 10 s text's "; DATE: 2.0 passes"; no validation error. */
+ *       GEQUAL sprite that shows the depth in the colour), and two variants:
+ *       a Z GEQUAL sprite right after the third composite in its pass, and
+ *       one between the first two; each replayed with the cut off and on
+ *       (rd__date_cut_force): SCENE's bytes the same; the scan's runs exactly
+ *       the rule's, by ordinal (rd__date_cut_last_runs: [c1, c2) and [c2, c3),
+ *       or [c2, c3) alone with the draw between; round 2's defect read every
+ *       run from command 0, so list 0's draws lost their depth and the
+ *       shadow count its stencil); one pass begun without the depth a run,
+ *       none begun again; the same passes and 3 snapshots (1 the first, 2
+ *       after an alpha write); the passes with a depth fewer by the runs (list
+ *       0's and the third composite's keep it), the depth stores the store
+ *       plan dropped the same; the depth and stencil bytes asked lower by 4 to
+ *       5 bytes a texel each way of each cut pass; the 10 s text's
+ *       "; DATE: 2.0 passes" (the first frame); no validation error. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -272,16 +279,31 @@ static bool state(RdFrame *f, int list, uint64_t test, uint8_t zwrite, bool blen
            rd__st_push1(f, list, RDC_ZWRITE, zwrite);
 }
 
+/* the frames' variants: the composites alone; a Z GEQUAL sprite right after
+ * the third composite in list 3 (the same pass: its run ends undecided);
+ * a Z GEQUAL sprite between the first two (the first run undecided, its
+ * pass keeps the depth) */
+enum { V_PLAIN, V_DEPTH_AFTER, V_DEPTH_BETWEEN, V_COUNT };
+
+/* the composites' ordinals (the store plan's: list 0's commands, then list
+ * 3's index; lists 1 and 2 are empty) */
+typedef struct Ords {
+    uint32_t comp[3];
+} Ords;
+
 /* the composites' shape: list 0 clears SCENE and writes its depth (Z 0x1000)
  * and an alpha with the MSB over the left half; list 3 three DATE DATM 0
  * composites over the frame (alpha 0x30, 0x50, 0x90: the right half takes
  * them); list 4 a Z GEQUAL sprite at Z 0x800 (drawn where the depth is
- * under it: the right half, unless the depth was lost) */
-static bool buildComposites(RdFrame *f, uint32_t number, uint32_t scene, uint32_t w, uint32_t h)
+ * under it: the right half, unless the depth was lost); the variant's Z
+ * GEQUAL sprite at Z 0x800 in list 3 */
+static bool buildComposites(RdFrame *f, uint32_t number, uint32_t scene, uint32_t w, uint32_t h,
+                            int variant, Ords *o)
 {
     static const uint8_t kLeft[4] = {0x40, 0x40, 0x40, 0x80};
     static const uint8_t kComp[3][4] = {
         {0x80, 0x20, 0x20, 0x30}, {0x20, 0x80, 0x20, 0x50}, {0x20, 0x20, 0x80, 0x90}};
+    static const uint8_t kMid[4] = {0x60, 0x10, 0x10, 0x20};
     static const uint8_t kLate[4] = {0x10, 0x60, 0x60, 0x80};
     frameBegin(f, number, w, h);
     bool ok = rd__st_target(f, 0, scene, w, h);
@@ -298,7 +320,15 @@ static bool buildComposites(RdFrame *f, uint32_t number, uint32_t scene, uint32_
     ok = ok && rd__st_target(f, 3, scene, w, h) &&
          state(f, 3, RD_TEST_AT_GT0_DATE0, RD_ZWRITE_OFF, true);
     for (int i = 0; i < 3 && ok; i++) {
+        o->comp[i] = f->lists[0].count + f->lists[3].count;
         ok = sprite(f, 3, w, h, 0, w, 0, kComp[i]) && rd__st_push1(f, 3, RDC_ABE, 1);
+        const bool mid =
+            (variant == V_DEPTH_BETWEEN && i == 0) || (variant == V_DEPTH_AFTER && i == 2);
+        if (ok && mid) {
+            ok = state(f, 3, RD_TEST_Z_GEQUAL, RD_ZWRITE_ON, false) &&
+                 sprite(f, 3, w, h, 0, w, 0x800, kMid) &&
+                 state(f, 3, RD_TEST_AT_GT0_DATE0, RD_ZWRITE_OFF, true);
+        }
     }
     ok = ok && rd__st_target(f, 4, scene, w, h) &&
          state(f, 4, RD_TEST_Z_GEQUAL, RD_ZWRITE_ON, false) &&
@@ -344,6 +374,117 @@ static bool replayOnce(const RdFrame *f, int cut, Took *out)
     return ok && out->px != NULL;
 }
 
+/* one variant with the cut off and on: the expectations from the rule
+ * (rd_date_cut.h): a run opens at each composite (DATE, Z ALWAYS, no Z
+ * write, alpha written) and is depth-free when the next composite comes with
+ * nothing but state between (its snapshot retaken: the pass ends); a Z
+ * GEQUAL sprite in a run ends it undecided; list 4's Z GEQUAL sprite ends
+ * the third one undecided.  So: V_PLAIN and V_DEPTH_AFTER the runs [c1, c2)
+ * and [c2, c3); V_DEPTH_BETWEEN [c2, c3) alone.  Each depth-free run is one
+ * pass begun without the depth (its first draw follows a snapshot, which
+ * ended the pass before); the passes and snapshots are the cut off's; the
+ * passes with a depth fewer by those (list 0's and the third composite's
+ * keep it: the count's stencil and the late Z test read it); the depth and
+ * stencil bytes fewer by 4 to 5 a texel each way of each */
+static void testVariant(uint32_t scene, const RdTargetRec *t, uint32_t w, uint32_t h, int variant)
+{
+    static const char *const kName[V_COUNT] = {"the composites", "a depth draw after the third",
+                                               "a depth draw between the first two"};
+    static RdFrame f;
+    Ords o;
+    memset(&o, 0, sizeof(o));
+    CHECK(buildComposites(&f, 1u + (uint32_t)variant, scene, w, h, variant, &o),
+          "%s: the frame built", kName[variant]);
+    uint32_t wantStart[2], wantEnd[2], wantN = 0;
+    if (variant != V_DEPTH_BETWEEN) {
+        wantStart[wantN] = o.comp[0];
+        wantEnd[wantN++] = o.comp[1];
+    }
+    wantStart[wantN] = o.comp[1];
+    wantEnd[wantN++] = o.comp[2];
+    Took off, on;
+    memset(&off, 0, sizeof(off));
+    memset(&on, 0, sizeof(on));
+    printf("  %s (composites at %u, %u, %u):\n", kName[variant], o.comp[0], o.comp[1], o.comp[2]);
+    CHECK(replayOnce(&f, 0, &off), "%s: replayed with the cut off", kName[variant]);
+    CHECK(rd__date_cut_last_runs(NULL, NULL, 0) == 0, "%s: the cut off found runs", kName[variant]);
+    CHECK(replayOnce(&f, 1, &on), "%s: replayed with the cut on", kName[variant]);
+    uint32_t start[4] = {0}, end[4] = {0};
+    const uint32_t n = rd__date_cut_last_runs(start, end, 4);
+    bool same = n == wantN;
+    for (uint32_t i = 0; i < n && i < 4 && same; i++) {
+        same = start[i] == wantStart[i] && end[i] == wantEnd[i];
+    }
+    CHECK(same, "%s: %u runs ([%u,%u) [%u,%u)), %u expected ([%u,%u) [%u,%u))", kName[variant], n,
+          start[0], end[0], start[1], end[1], wantN, wantStart[0], wantEnd[0],
+          wantN > 1 ? wantStart[1] : 0u, wantN > 1 ? wantEnd[1] : 0u);
+    if (off.px && on.px) {
+        CHECK(off.w == on.w && off.h == on.h &&
+                  memcmp(off.px, on.px, (size_t)off.w * off.h * 4u) == 0,
+              "%s: SCENE differs with the cut on", kName[variant]);
+    }
+    CHECK(off.r.dateCutPasses == 0 && off.r.dateCutRuns == 0, "%s: the cut off cut %u passes",
+          kName[variant], off.r.dateCutPasses);
+    CHECK(on.r.dateCutRuns == wantN && on.r.dateCutPasses == wantN && on.r.dateCutAgain == 0,
+          "%s: the cut on: %u runs, %u passes, %u begun again; %u, %u and 0 expected",
+          kName[variant], on.r.dateCutRuns, on.r.dateCutPasses, on.r.dateCutAgain, wantN, wantN);
+    CHECK(on.r.renderPasses == off.r.renderPasses && on.r.dateSnapshots == off.r.dateSnapshots &&
+              on.r.dateSnapshots == 3,
+          "%s: passes %u and %u, snapshots %u and %u (the same, 3 snapshots expected)",
+          kName[variant], off.r.renderPasses, on.r.renderPasses, off.r.dateSnapshots,
+          on.r.dateSnapshots);
+    CHECK(on.r.storeDepthPasses + wantN == off.r.storeDepthPasses,
+          "%s: passes with the depth %u off, %u on: %u fewer expected", kName[variant],
+          off.r.storeDepthPasses, on.r.storeDepthPasses, wantN);
+    CHECK(on.r.storeDepthDropped == off.r.storeDepthDropped,
+          "%s: depth stores dropped %u off, %u on (the store plan's the same)", kName[variant],
+          off.r.storeDepthDropped, on.r.storeDepthDropped);
+    CHECK(on.r.dateRetakeWhy[RD_DATE_RETAKE_FIRST] == 1 &&
+              on.r.dateRetakeWhy[RD_DATE_RETAKE_WRITTEN] == 2 && on.r.dateSnapReused == 0,
+          "%s: the snapshots' reasons: %u first, %u written, %u reused (1, 2, 0 expected)",
+          kName[variant], on.r.dateRetakeWhy[RD_DATE_RETAKE_FIRST],
+          on.r.dateRetakeWhy[RD_DATE_RETAKE_WRITTEN], on.r.dateSnapReused);
+    const uint64_t texels = (uint64_t)t->tw * t->th * wantN;
+    const uint64_t lessLoad = off.r.depthLoadBytes - on.r.depthLoadBytes;
+    const uint64_t lessStore = off.r.depthStoreBytes - on.r.depthStoreBytes;
+    CHECK(on.r.dateCutTexels == texels, "%s: %llu texels counted, %llu expected", kName[variant],
+          (unsigned long long)on.r.dateCutTexels, (unsigned long long)texels);
+    CHECK(off.r.depthLoadBytes > on.r.depthLoadBytes && lessLoad >= texels * 4u &&
+              lessLoad <= texels * 5u,
+          "%s: depth and stencil loads %llu -> %llu bytes: %llu less, %llu to %llu expected",
+          kName[variant], (unsigned long long)off.r.depthLoadBytes,
+          (unsigned long long)on.r.depthLoadBytes, (unsigned long long)lessLoad,
+          (unsigned long long)(texels * 4u), (unsigned long long)(texels * 5u));
+    CHECK(off.r.depthStoreBytes > on.r.depthStoreBytes && lessStore >= texels * 4u &&
+              lessStore <= texels * 5u,
+          "%s: depth and stencil stores %llu -> %llu bytes: %llu less, %llu to %llu expected",
+          kName[variant], (unsigned long long)off.r.depthStoreBytes,
+          (unsigned long long)on.r.depthStoreBytes, (unsigned long long)lessStore,
+          (unsigned long long)(texels * 4u), (unsigned long long)(texels * 5u));
+    if (variant == V_PLAIN) {
+        /* the 10 s text: the records popped with their presents */
+        rd__date_cut_force(1);
+        for (int i = 0; i < RHI_FRAMES_IN_FLIGHT + 1; i++) {
+            (void)rd__replay_frame(&f, 0, true);
+        }
+        while (rd_perf_pop(NULL)) {}
+        (void)rd_perf_backend_text();
+        for (int i = 0; i < 4 + RHI_FRAMES_IN_FLIGHT; i++) {
+            (void)rd__replay_frame(&f, 0, true);
+            while (rd_perf_pop(NULL)) {}
+        }
+        const char *text = rd_perf_backend_text();
+        printf("  10 s text: %s\n", text);
+        CHECK(strstr(text, "; DATE: 2.0 passes a replay begun without the depth") != NULL &&
+                  strstr(text, "an alpha write since 2.0") != NULL,
+              "the 10 s text: %s", text);
+    }
+    free(off.px);
+    free(on.px);
+    rd__date_cut_force(-1);
+    rd__frame_free(&f);
+}
+
 static void testDevice(uint32_t w, uint32_t h)
 {
     const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
@@ -355,69 +496,9 @@ static void testDevice(uint32_t w, uint32_t h)
     if (!t || !t->withDepth) {
         return;
     }
-    static RdFrame f;
-    CHECK(buildComposites(&f, 1, scene, w, h), "the composites' frame built");
-    Took off, on;
-    memset(&off, 0, sizeof(off));
-    memset(&on, 0, sizeof(on));
-    CHECK(replayOnce(&f, 0, &off), "the frame replayed with the cut off");
-    CHECK(replayOnce(&f, 1, &on), "the frame replayed with the cut on");
-    if (off.px && on.px) {
-        CHECK(off.w == on.w && off.h == on.h &&
-                  memcmp(off.px, on.px, (size_t)off.w * off.h * 4u) == 0,
-              "SCENE differs with the cut on");
+    for (int v = 0; v < V_COUNT; v++) {
+        testVariant(scene, t, w, h, v);
     }
-    CHECK(off.r.dateCutPasses == 0 && off.r.dateCutRuns == 0, "the cut off cut %u passes",
-          off.r.dateCutPasses);
-    CHECK(on.r.dateCutRuns == 2 && on.r.dateCutPasses == 2 && on.r.dateCutAgain == 0,
-          "the cut on: %u runs, %u passes, %u begun again; 2, 2 and 0 expected", on.r.dateCutRuns,
-          on.r.dateCutPasses, on.r.dateCutAgain);
-    CHECK(on.r.renderPasses == off.r.renderPasses && on.r.dateSnapshots == off.r.dateSnapshots &&
-              on.r.dateSnapshots == 3,
-          "passes %u and %u, snapshots %u and %u (the same, 3 snapshots expected)",
-          off.r.renderPasses, on.r.renderPasses, off.r.dateSnapshots, on.r.dateSnapshots);
-    CHECK(on.r.dateRetakeWhy[RD_DATE_RETAKE_FIRST] == 1 &&
-              on.r.dateRetakeWhy[RD_DATE_RETAKE_WRITTEN] == 2 && on.r.dateSnapReused == 0,
-          "the snapshots' reasons: %u first, %u written, %u reused (1, 2, 0 expected)",
-          on.r.dateRetakeWhy[RD_DATE_RETAKE_FIRST], on.r.dateRetakeWhy[RD_DATE_RETAKE_WRITTEN],
-          on.r.dateSnapReused);
-    const uint64_t texels = (uint64_t)t->tw * t->th * 2u;
-    const uint64_t lessLoad = off.r.depthLoadBytes - on.r.depthLoadBytes;
-    const uint64_t lessStore = off.r.depthStoreBytes - on.r.depthStoreBytes;
-    CHECK(on.r.dateCutTexels == texels, "%llu texels counted, %llu expected",
-          (unsigned long long)on.r.dateCutTexels, (unsigned long long)texels);
-    CHECK(off.r.depthLoadBytes > on.r.depthLoadBytes && lessLoad >= texels * 4u &&
-              lessLoad <= texels * 5u,
-          "depth and stencil loads %llu -> %llu bytes: %llu less, %llu to %llu expected",
-          (unsigned long long)off.r.depthLoadBytes, (unsigned long long)on.r.depthLoadBytes,
-          (unsigned long long)lessLoad, (unsigned long long)(texels * 4u),
-          (unsigned long long)(texels * 5u));
-    CHECK(off.r.depthStoreBytes > on.r.depthStoreBytes && lessStore >= texels * 4u &&
-              lessStore <= texels * 5u,
-          "depth and stencil stores %llu -> %llu bytes: %llu less, %llu to %llu expected",
-          (unsigned long long)off.r.depthStoreBytes, (unsigned long long)on.r.depthStoreBytes,
-          (unsigned long long)lessStore, (unsigned long long)(texels * 4u),
-          (unsigned long long)(texels * 5u));
-    /* the 10 s text: the records popped with their presents */
-    rd__date_cut_force(1);
-    for (int i = 0; i < RHI_FRAMES_IN_FLIGHT + 1; i++) {
-        (void)rd__replay_frame(&f, 0, true);
-    }
-    while (rd_perf_pop(NULL)) {}
-    (void)rd_perf_backend_text();
-    for (int i = 0; i < 4 + RHI_FRAMES_IN_FLIGHT; i++) {
-        (void)rd__replay_frame(&f, 0, true);
-        while (rd_perf_pop(NULL)) {}
-    }
-    const char *text = rd_perf_backend_text();
-    printf("  10 s text: %s\n", text);
-    CHECK(strstr(text, "; DATE: 2.0 passes a replay begun without the depth") != NULL &&
-              strstr(text, "an alpha write since 2.0") != NULL,
-          "the 10 s text: %s", text);
-    free(off.px);
-    free(on.px);
-    rd__date_cut_force(-1);
-    rd__frame_free(&f);
 }
 
 static void setEnv(const char *k, const char *v)

@@ -14,10 +14,9 @@
  * is
  *   - a draw (screen prims, the VU draws, a post sprite) on the state's
  *     depth with the Z test on (ZTE and not ALWAYS), Z write on, DATE on
- *     where it takes the stencil bit (RdProfile.dateStencil: on the R8
- *     snapshot path it touches no depth) or PRIM.AA1 (its stencil pairs);
- *     the passes DATE's snapshots open without the depth are not begun with
- *     it at all (rd_date_cut.c, the same walk); DATE on a post
+ *     (the stencil bit) or PRIM.AA1 (its stencil pairs); the passes DATE's
+ *     snapshots open without the depth (rd_date_cut.c, the same walk) are
+ *     begun without it and change no load or store here; DATE on a post
  *     sprite other than the reduction's is no touch (planPost: the sprite
  *     tests the destination alpha in its shader, from the snapshot or the
  *     local read, never through the stencil);
@@ -260,15 +259,12 @@ static void planDrawEx(const RdStateBlock *st, uint32_t ord, int l, bool date)
     }
 }
 
-/* DATE takes the stencil bit only where the profile has that path
- * (rd_replay.c dateStencilFor: RdProfile.dateStencil); on the R8 snapshot
- * path a DATE draw tests the snapshot in its shader and touches no depth
- * (PRIM.AA1's stencil pairs under DATE count by st->aa1), so its pass may be
- * begun without the depth (rd_date_cut.c) and the depth's last touch lies
- * before it */
+/* DATE counts as a touch on every path (the stencil bit may hold it), as
+ * before DATE's passes without the depth (rd_date_cut.c): the store plan's
+ * loads and stores are the same with the cut on or off */
 static void planDraw(const RdStateBlock *st, uint32_t ord, int l)
 {
-    planDrawEx(st, ord, l, g_rd.profile.dateStencil);
+    planDrawEx(st, ord, l, true);
 }
 
 /* A scene draw the visibility test skipped (rd_vis.c, an RDC_NOP of the

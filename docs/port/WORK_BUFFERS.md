@@ -1371,9 +1371,9 @@ another target) or the open pass on its target has no depth; `bindDrawEx` then b
 the colour alone, as for any target without a depth. Not taken (the draw keeps its depth): DATE
 through the stencil bit or the shader's read, an MSAA epoch wanted, the exact blend, an open shadow
 window on the depth (`rd__stencil_live`), a pass open on the target with its depth (the draw joins
-it). The store plan counts a DATE draw as a touch of the depth only where it can take the stencil
-bit (`RdProfile.dateStencil`; PRIM.AA1's stencil pairs count by themselves), so the depth's last
-touch lies before the composites when nothing after them uses it.
+it). The store plan is not changed: a DATE draw still counts as a touch of the depth, so every pass
+that keeps its depth loads and stores it as with the cut off (list 0's pass, whose stencil the
+shadow count reads, and every later reader).
 
 **The same bytes.** The depth and stencil are not attached, so the pass neither reads nor writes
 them, and their memory holds what the last pass that stored them left, which is what a load and a
@@ -1416,9 +1416,11 @@ first .., another target .., an alpha write since .., an area not held .., the c
 ..), R reused`. `rd_replay_tool --stats`: `stats: DATE cut on|off: ...`.
 
 **The tests.** `rd_date_cut` (`port/render/test/rd_date_cut_test.c`): the rule on made-up commands,
-the start-up set's pairs, and on lavapipe a frame in the composites' shape with the cut off and on
-(SCENE byte for byte under the store plan's poison, two passes without the depth, the same passes
-and snapshots, the depth and stencil bytes asked lower, the reasons, the 10 s text).
+the start-up set's pairs, and on lavapipe a frame in the composites' shape and two variants (a Z
+GEQUAL draw after the third composite in its pass, one between the first two) with the cut off and
+on: SCENE byte for byte under the store plan's poison, the scan's runs by ordinal, a pass without
+the depth a run, the same passes, snapshots and store-plan drops, the depth and stencil bytes asked
+lower, the reasons, the 10 s text.
 `rd_date_cut_ab` and `rd_date_cut_ab_gl` replay `tools/date_cut_dumps.txt` (the Mali's F12 frame
 and its three slow-scene captures, the Pixel's frame, `tools/date_subpass_dumps.txt`'s frames)
 with the cut off and on at the Mali's, the Adreno's and the PowerVR phone's settings without the
