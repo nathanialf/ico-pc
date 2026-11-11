@@ -1890,7 +1890,9 @@ int rd_perf_pass_agg_text_ex(const RdPerfPassAgg *a, unsigned top, bool tiler, b
         }
         used[best] = true;
         const RdPerfPassAggEntry *e = &ent[best];
-        const RdPerfPass lp = {.kind = e->kind, .list = e->list, .post = e->post};
+        /* with its target: the shadow count's label is "shadow" (rd_perf_pass_label) */
+        const RdPerfPass lp = {
+            .kind = e->kind, .target = e->target, .list = e->list, .post = e->post};
         char label[40], passes[32] = "";
         if (best == joined) {
             snprintf(label, sizeof(label), "before list 0 + list 0");
@@ -1911,7 +1913,10 @@ int rd_perf_pass_agg_text_ex(const RdPerfPassAgg *a, unsigned top, bool tiler, b
         }
         char after[96] = "";
         if (before && e->prevN) {
-            const RdPerfPass bp = {.kind = e->prevKind, .list = e->prevList, .post = e->prevPost};
+            const RdPerfPass bp = {.kind = e->prevKind,
+                                   .target = e->prevTarget,
+                                   .list = e->prevList,
+                                   .post = e->prevPost};
             char bl[32];
             rd_perf_pass_label(&bp, bl, sizeof(bl));
             snprintf(after, sizeof(after), " after %s %s %ux%u (full size in %llu of %llu)", bl,
