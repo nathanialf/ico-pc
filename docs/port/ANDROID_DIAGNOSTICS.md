@@ -507,13 +507,34 @@ writes the pass ring and then the loss dump from the watchdog's thread
 ([RENDER.md](RENDER.md#the-loss-dump)). Each slow step is logged and the log flushed before it
 begins, so the last line says which one a hang of the handler itself is in:
 
-- `window: loss dump: writing frame N to .../logs/loss-<stamp>-lost.rddump`, then `... writing
-  frame M (the one before) to ...-before.rddump`: the frames' writes (the CPU's copies of the
-  commands, texels and meshes, onto the phone's shared storage);
+- `window: loss dump: the lost submission is replay R, frame F (<how the backend named it>; wait
+  failed on frame W, first open frame O, newest numbered frame N); the frame before it is B; held
+  now: frames A..Z (n, c of them copies in memory, K KB)` and `window: loss dump: copies in
+  memory: ...`: which frame the loss belongs to and what the renderer still held. The ring holds
+  the last three frames only; a frame the GPU had not finished when the ring reused its slot is
+  copied to memory first (`rd: loss keep: frame N (replay R) copied to memory ...`, the first eight
+  and every hundredth), at most 4 copies of at most 16 MiB (64 MiB at the worst, normally
+  nothing). A dump taken from the ring alone, for a loss at frame 129, held frames 132 and 131 and
+  so replayed the wrong frame in the next start's bisect; a line `the lost frame F is not held any more ... writing
+  frame X instead ... it is NOT the frame whose submission failed` says the true frame is gone,
+  and the closing line says `NOT the lost one`;
+- `window: loss dump: writing frame N, the lost one (replay R), to .../logs/loss-<stamp>-lost.rddump`,
+  then `... writing frame M (the one replayed before it) to ...-before.rddump`: the frames' writes
+  (the CPU's copies of the commands, texels and meshes, onto the phone's shared storage);
 - `window: loss dump: zipping K MB (the two frames and the log) at store level`: the zip, stored
   (no deflate), K the files' size together;
-- `window: loss dump: frames N and M (the one before) written to <zip> in T s`: done, T from the
-  first step.
+- `window: loss dump: frames N (the lost one) and M (the one before) written to <zip> in T s`:
+  done, T from the first step; then the prune line (`n loss zips ... : d deleted (names)`). The
+  zip just written is never deleted: `the name order alone would have deleted this zip (the clock
+  went back or the zone changed ...); it was kept` says it would have been.
+
+The start after a loss replays the lost frame pass by pass (`ico_pc: loss bisect: ...`), and if
+that runs clean, replays the frame before it and the lost one back to back with no wait for the GPU
+between them, four times each, as the game's pictures overlap (the passes wait after each replay
+and so never do): `window: loss bisect: overlap step: ...` says that it ran and whether the device
+was lost, or `overlap step not run (...)`. When the zip cannot be read the line says which of
+`cannot open <zip>: <errno text> (errno N)`, `<zip> is not a zip: N bytes, ...` and `<zip> is a zip
+(...) with no frame number 1 (.rddump) inside; it holds: ...` it is.
 
 Issue 123's hang log had none of these lines (the zip was deflated then) although the game thread
 went on for 10 s (`0 presents ... 300 game frames`), so the write or the deflate on the watchdog's

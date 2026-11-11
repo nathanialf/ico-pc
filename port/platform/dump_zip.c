@@ -7,6 +7,8 @@
  * is not ended in; issue 123).
  */
 #include "dump_zip.h"
+#include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,14 +23,39 @@ static void say(char *why, size_t why_size, const char *what, const char *detail
     }
 }
 
-/* the file's bytes in a malloc block (NULL when it cannot be read) */
-static void *read_all(const char *path, size_t *size)
+/* say with a format */
+static void say_fmt(char *why, size_t why_size, const char *fmt, ...)
 {
-    FILE *f = ico_fopen(path, "rb");
+    va_list ap;
+
+    if (why == NULL || why_size == 0) {
+        return;
+    }
+    va_start(ap, fmt);
+    vsnprintf(why, why_size, fmt, ap);
+    va_end(ap);
+}
+
+/* the file's bytes in a malloc block (NULL when it cannot be read); when
+   it cannot, *stage says where (1 opening, 2 reading) and *err the errno
+   there (either may be NULL) */
+static void *read_all_ex(const char *path, size_t *size, int *stage, int *err)
+{
+    FILE *f;
     unsigned char *buf = NULL;
     size_t cap = 0, n = 0;
+    int e = 0, st = 0;
 
+    errno = 0;
+    f = ico_fopen(path, "rb");
     if (f == NULL) {
+        e = errno != 0 ? errno : EIO;
+        if (stage != NULL) {
+            *stage = 1;
+        }
+        if (err != NULL) {
+            *err = e;
+        }
         return NULL;
     }
     /* read until the end rather than trusting a size: the log is still
@@ -39,9 +66,9 @@ static void *read_all(const char *path, size_t *size)
             unsigned char *nb = realloc(buf, ncap);
 
             if (nb == NULL) {
-                free(buf);
-                fclose(f);
-                return NULL;
+                e = ENOMEM;
+                st = 2;
+                break;
             }
             buf = nb;
             cap = ncap;
@@ -53,15 +80,28 @@ static void *read_all(const char *path, size_t *size)
             break;
         }
     }
-    const int bad = ferror(f);
-
+    if (st == 0 && ferror(f)) {
+        e = errno != 0 ? errno : EIO;
+        st = 2;
+    }
     fclose(f);
-    if (bad) {
+    if (st != 0) {
         free(buf);
+        if (stage != NULL) {
+            *stage = st;
+        }
+        if (err != NULL) {
+            *err = e;
+        }
         return NULL;
     }
     *size = n;
     return buf;
+}
+
+static void *read_all(const char *path, size_t *size)
+{
+    return read_all_ex(path, size, NULL, NULL);
 }
 
 static const char *base_name(const char *path)
@@ -411,19 +451,60 @@ static int prune_visit(const char *path, const char *name, void *user)
     return 0;
 }
 
-static int prune_zips(const char *dir, const char *prefix, int keep)
+static int prune_zips(const char *dir, const char *prefix, int keep, const char *protect,
+                      IcoPruneInfo *info)
 {
     PruneList l = {NULL, 0, 0, prefix};
-    int removed = 0;
+    int removed = 0, prot = -1;
+    const int k = keep > 0 ? keep : 0;
 
+    if (info != NULL) {
+        memset(info, 0, sizeof(*info));
+    }
     if (ico_dir_walk(dir, 0, prune_visit, &l) < 0) {
         free(l.paths);
         return -1;
     }
     /* the names hold the time (loss-YYYYMMDD-HHMMSS.zip): byte order is
-       oldest first */
-    for (int i = 0; i + (keep > 0 ? keep : 0) < l.count; i++) {
-        removed += ico_remove(l.paths[i]) == 0;
+       oldest first, until the clock goes back (a set clock, a zone, the
+       hour a daylight saving change repeats): then a zip written now can
+       sort before older ones, and by name alone it is the first to go */
+    if (protect != NULL && protect[0] != '\0') {
+        for (int i = 0; i < l.count; i++) {
+            if (strcmp(base_name(l.paths[i]), base_name(protect)) == 0) {
+                prot = i;
+            }
+        }
+    }
+    if (info != NULL) {
+        info->found = l.count;
+        info->saved = prot >= 0 && prot + k < l.count;
+    }
+    {
+        /* the protected zip counts as one of the kept */
+        const int others = l.count - (prot >= 0 ? 1 : 0);
+        const int room = k - (prot >= 0 ? 1 : 0);
+        int seen = 0;
+
+        for (int i = 0; i < l.count && others - seen > (room > 0 ? room : 0); i++) {
+            if (i == prot) {
+                continue;
+            }
+            seen++;
+            if (ico_remove(l.paths[i]) == 0) {
+                const char *b = base_name(l.paths[i]);
+                const size_t used = info != NULL ? strlen(info->names) : 0;
+
+                removed++;
+                if (info != NULL && used + 1 < sizeof(info->names)) {
+                    snprintf(info->names + used, sizeof(info->names) - used, "%s%s",
+                             used ? ", " : "", b);
+                }
+            }
+        }
+    }
+    if (info != NULL) {
+        info->removed = removed;
     }
     free(l.paths);
     return removed;
@@ -431,7 +512,12 @@ static int prune_zips(const char *dir, const char *prefix, int keep)
 
 int ico_loss_dump_prune(const char *dir, int keep)
 {
-    return prune_zips(dir, "loss-", keep);
+    return prune_zips(dir, "loss-", keep, NULL, NULL);
+}
+
+int ico_loss_dump_prune_except(const char *dir, int keep, const char *zip_path, IcoPruneInfo *info)
+{
+    return prune_zips(dir, "loss-", keep, zip_path, info);
 }
 
 int ico_slow_dump_path(char *out, size_t size, const char *dir, const char *stamp)
@@ -445,22 +531,35 @@ int ico_slow_dump_path(char *out, size_t size, const char *dir, const char *stam
 
 int ico_slow_dump_prune(const char *dir, int keep)
 {
-    return prune_zips(dir, "slow-", keep);
+    return prune_zips(dir, "slow-", keep, NULL, NULL);
 }
 
-void *ico_dump_zip_extract_nth(const char *zip_path, int nth, size_t *size, char *name,
-                               size_t name_size)
+void *ico_dump_zip_extract_why(const char *zip_path, int nth, size_t *size, char *name,
+                               size_t name_size, char *why, size_t why_size)
 {
     mz_zip_archive z;
     void *data = NULL, *zip = NULL;
     size_t zip_size = 0;
+    int stage = 0, err = 0, want = nth;
+    char seen[400] = "", fail[240] = "";
+    mz_uint frames = 0;
 
-    zip = read_all(zip_path, &zip_size);
+    if (why != NULL && why_size > 0) {
+        why[0] = '\0';
+    }
+    zip = read_all_ex(zip_path, &zip_size, &stage, &err);
     if (zip == NULL) {
+        /* ENOENT is a file that is gone, EACCES one the app may not read,
+           EIO or ENOMEM a read that broke */
+        say_fmt(why, why_size, "cannot %s %s: %s (errno %d)", stage == 1 ? "open" : "read",
+                zip_path, strerror(err), err);
         return NULL;
     }
     memset(&z, 0, sizeof(z));
-    if (!mz_zip_reader_init_mem(&z, zip, zip_size, 0)) {
+    if (zip_size == 0 || !mz_zip_reader_init_mem(&z, zip, zip_size, 0)) {
+        say_fmt(why, why_size, "%s is not a zip: %zu bytes, %s", zip_path, zip_size,
+                zip_size == 0 ? "an empty file"
+                              : mz_zip_get_error_string(mz_zip_get_last_error(&z)));
         free(zip);
         return NULL;
     }
@@ -472,19 +571,51 @@ void *ico_dump_zip_extract_nth(const char *zip_path, int nth, size_t *size, char
         if (!mz_zip_reader_file_stat(&z, i, &st) || st.m_is_directory) {
             continue;
         }
-        const size_t len = strlen(st.m_filename);
+        const size_t len = strlen(st.m_filename), used = strlen(seen);
+        const int isDump = len >= 7 && strcmp(st.m_filename + len - 7, ".rddump") == 0;
 
-        if (len < 7 || strcmp(st.m_filename + len - 7, ".rddump") != 0 || nth-- > 0) {
+        if (used + 1 < sizeof(seen)) {
+            snprintf(seen + used, sizeof(seen) - used, "%s%.80s (%llu bytes)", used ? ", " : "",
+                     base_name(st.m_filename), (unsigned long long)st.m_uncomp_size);
+        }
+        if (!isDump) {
+            continue;
+        }
+        frames++;
+        if (want-- > 0) {
             continue;
         }
         data = mz_zip_reader_extract_to_heap(&z, i, size, 0);
         if (data != NULL && name != NULL && name_size > 0) {
             snprintf(name, name_size, "%s", base_name(st.m_filename));
         }
+        if (data == NULL) {
+            snprintf(fail, sizeof(fail), "%.80s (%llu bytes) could not be extracted: %s",
+                     base_name(st.m_filename), (unsigned long long)st.m_uncomp_size,
+                     mz_zip_get_error_string(mz_zip_get_last_error(&z)));
+        }
+    }
+    if (data == NULL) {
+        if (fail[0] != '\0') {
+            say_fmt(why, why_size, "%s is a zip (%zu bytes) whose frame entry %s", zip_path,
+                    zip_size, fail);
+        } else {
+            say_fmt(why, why_size,
+                    "%s is a zip (%zu bytes, %u entr%s) with no frame number %d (.rddump) inside "
+                    "(%u found); it holds: %s",
+                    zip_path, zip_size, (unsigned)n, n == 1 ? "y" : "ies", nth + 1,
+                    (unsigned)frames, seen[0] != '\0' ? seen : "nothing");
+        }
     }
     mz_zip_reader_end(&z);
     free(zip);
     return data;
+}
+
+void *ico_dump_zip_extract_nth(const char *zip_path, int nth, size_t *size, char *name,
+                               size_t name_size)
+{
+    return ico_dump_zip_extract_why(zip_path, nth, size, name, name_size, NULL, 0);
 }
 
 void *ico_dump_zip_extract(const char *zip_path, size_t *size, char *name, size_t name_size)

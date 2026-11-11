@@ -5,6 +5,7 @@
  * (window_host.h).
  */
 #include <SDL3/SDL.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,6 +58,7 @@
 #include "video_options.h"
 #include "window_host.h"
 #include "window_lines.h"
+#include "window_loss.h"
 #include "window_pipeline_skip.h"
 #include "window_bones.h"
 #include "window_robust.h"
@@ -1343,38 +1345,10 @@ static int bisect_progress(void *ctx, uint32_t done, uint32_t total)
     return pipeline_progress(ctx, done, total);
 }
 
-/* the loss dump's lost frame taken out of the zip to dump (the zip's path
-   and .rddump) with its size and aspect; false with line saying why */
 static bool bisect_dump_file(const char *zip, char *dump, size_t dumpSize, uint32_t *gw,
                              uint32_t *gh, float *aspect, char *line, size_t size)
 {
-    size_t bytes = 0;
-    void *data = ico_dump_zip_extract(zip, &bytes, NULL, 0);
-
-    if (data == NULL) {
-        snprintf(line, size, "%s cannot be read or holds no frame", zip);
-        return false;
-    }
-    snprintf(dump, dumpSize, "%s.rddump", zip);
-    FILE *f = ico_fopen(dump, "wb");
-    const int wrote = f != NULL && fwrite(data, 1, bytes, f) == bytes;
-
-    if (f != NULL && fclose(f) != 0) {
-        ico_remove(dump);
-        f = NULL;
-    }
-    free(data);
-    if (!wrote || f == NULL) {
-        snprintf(line, size, "the frame could not be written to %s", dump);
-        ico_remove(dump);
-        return false;
-    }
-    if (!rd_dump_frame_size(dump, gw, gh, aspect)) {
-        snprintf(line, size, "%s holds no frame this version reads", zip);
-        ico_remove(dump);
-        return false;
-    }
-    return true;
+    return window_bisect_dump_nth(zip, 0, ".rddump", dump, dumpSize, gw, gh, aspect, line, size);
 }
 
 /* what the first level found, for the second (window_bisect_step) */
@@ -1408,6 +1382,12 @@ static int window_loss_bisect(const char *zip, char *line, size_t size, void *us
     static PipeScreen screen;
     rd_set_pipeline_progress(bisect_progress, &screen);
     rd_loss_bisect(dump, &b);
+    /* the last step, with the renderer still up: the two frames of the zip
+       back to back with no wait between them, as the game's pictures
+       overlap (the passes above each wait for the GPU, so they never do) */
+    RdLossOverlap ov;
+    const bool overlapRan = window_bisect_overlap(zip, dump, &b, gw, gh, &ov);
+
     rd_set_pipeline_progress(NULL, NULL);
     ico_diag_set_pipelines(0, 0, 0);
     rd_shutdown();
@@ -1416,6 +1396,18 @@ static int window_loss_bisect(const char *zip, char *line, size_t size, void *us
             "window: loss bisect: frame %u, %u passes, %u replays in %.1f s; the bisect's "
             "renderer is shut down\n",
             (unsigned)b.frame, (unsigned)b.passes, (unsigned)b.replays, b.ms / 1000.0);
+    if (overlapRan && ov.result == RD_BISECT_LOST) {
+        /* no pass to narrow (the second level has nothing to replay draw by
+           draw: s_bisect1 stays empty) */
+        snprintf(line, size,
+                 "pass by pass with a wait after each, the whole frame (%u passes) did not lose "
+                 "the device, but frames %u%s%u replayed back to back %u times with no wait "
+                 "between them lost it%s (the game's pictures overlap like that)",
+                 (unsigned)b.passes, (unsigned)ov.beforeFrame,
+                 ov.beforeFrame ? " and " : " (alone) ", (unsigned)ov.lostFrame,
+                 (unsigned)ov.rounds, ov.lostAt ? "" : ", at the wait after the last");
+        return ICO_DIAG_BISECT_LOST;
+    }
     switch (b.result) {
     case RD_BISECT_LOST:
         s_bisect1.pass = b.pass;
@@ -1432,8 +1424,11 @@ static int window_loss_bisect(const char *zip, char *line, size_t size, void *us
     case RD_BISECT_CLEAN:
         snprintf(line, size,
                  "the whole frame (%u passes) ran one more pass at a time without losing the "
-                 "device",
-                 (unsigned)b.passes);
+                 "device%s",
+                 (unsigned)b.passes,
+                 overlapRan ? "; then the frames back to back with no wait between them "
+                              "(overlapping like the game's pictures) did not lose it either"
+                            : "; the overlap step did not run (the lines above say why)");
         return ICO_DIAG_BISECT_CLEAN;
     default:
         snprintf(line, size, "%s", b.line);
@@ -2972,106 +2967,6 @@ static void toggle_fullscreen(void)
 #endif
 }
 
-/* The loss dump (docs/port/RENDER.md, "The loss dump"): the frames the
-   renderer still holds, the lost one and the one before it, as one zip in
-   the logs folder, logs/loss-<date>-<time>.zip, with a copy of the log
-   (rd_dump_retained_frames and rd_dump_retained_frame, dump_zip.h
-   ico_loss_dump_zip, stored: no deflate), so a report carries the frame
-   the next start's loss bisect replays and the developers can replay it
-   too. Each slow step is logged and flushed before it begins (the frames'
-   writes, the zip), so a step that never returns names itself (issue 123:
-   after a GPU hang no loss dump line ever followed the pass ring). The
-   oldest loss zips go beyond ICO_LOSS_DUMP_KEEP. Its name (the file name
-   alone) into name, "" when none was written; the activity file notes the
-   loss either way (diag_host.h ico_diag_note_device_loss). */
-static void loss_dump(char *name, size_t name_size)
-{
-    char logs[ICO_PATH_MAX], zip[ICO_PATH_MAX], lost[ICO_PATH_MAX + 64], before[ICO_PATH_MAX + 64],
-        stamp[32], why[160];
-    const time_t now = time(NULL);
-    const struct tm *tm = localtime(&now);
-    const uint64_t t0 = SDL_GetTicksNS();
-    uint32_t lostFrame = 0, beforeFrame = 0;
-    RdRetainedFrame last, prev;
-
-    name[0] = '\0';
-    if (tm == NULL || strftime(stamp, sizeof(stamp), "%Y%m%d-%H%M%S", tm) == 0) {
-        snprintf(stamp, sizeof(stamp), "unknown");
-    }
-    if (ico_host_logs_dir(logs, sizeof(logs)) != 0 ||
-        ico_loss_dump_path(zip, sizeof(zip), logs, stamp) != 0) {
-        fprintf(stderr, "window: loss dump: no usable logs folder\n");
-        ico_diag_note_device_loss(NULL);
-        return;
-    }
-    snprintf(lost, sizeof(lost), "%s/loss-%s-lost.rddump", logs, stamp);
-    snprintf(before, sizeof(before), "%s/loss-%s-before.rddump", logs, stamp);
-    rd_dump_retained_frames(&last, &prev);
-    if (!last.held || !last.closed) {
-        fprintf(stderr, "window: loss dump: the renderer holds no frame to write\n");
-        ico_diag_note_device_loss(NULL);
-        return;
-    }
-    fprintf(stderr, "window: loss dump: writing frame %u to %s\n", (unsigned)last.number, lost);
-    ico_host_log_flush();
-    if (!rd_dump_retained_frame(last.number, lost, &lostFrame)) {
-        fprintf(stderr,
-                "window: loss dump: frame %u not written (no longer held, or the write "
-                "failed)\n",
-                (unsigned)last.number);
-        ico_remove(lost);
-        ico_diag_note_device_loss(NULL);
-        return;
-    }
-    if (prev.held && prev.closed) {
-        fprintf(stderr, "window: loss dump: writing frame %u (the one before) to %s\n",
-                (unsigned)prev.number, before);
-        ico_host_log_flush();
-        if (!rd_dump_retained_frame(prev.number, before, &beforeFrame)) {
-            beforeFrame = 0;
-        }
-    }
-    if (beforeFrame == 0) {
-        ico_remove(before);
-    }
-    {
-        unsigned long long a = 0, b = 0, l = 0;
-
-        (void)ico_path_kind(lost, &a, NULL);
-        if (beforeFrame) {
-            (void)ico_path_kind(before, &b, NULL);
-        }
-        if (ico_diag_log_path() != NULL && ico_diag_log_path()[0] != '\0') {
-            (void)ico_path_kind(ico_diag_log_path(), &l, NULL);
-        }
-        fprintf(stderr, "window: loss dump: zipping %.1f MB (%s and the log) at store level\n",
-                (double)(a + b + l) / (1024.0 * 1024.0),
-                beforeFrame ? "the two frames" : "the frame");
-    }
-    ico_host_log_flush();
-    if (ico_loss_dump_zip(zip, lost, beforeFrame ? before : NULL, ico_diag_log_path(), 1, why,
-                          sizeof(why)) < 0) {
-        fprintf(stderr, "window: loss dump: zip not written: %s\n", why);
-        ico_remove(lost);
-        ico_remove(before);
-        ico_diag_note_device_loss(NULL);
-        return;
-    }
-    const int pruned = ico_loss_dump_prune(logs, ICO_LOSS_DUMP_KEEP);
-    const double secs = (double)(SDL_GetTicksNS() - t0) / 1e9;
-    if (beforeFrame) {
-        fprintf(stderr,
-                "window: loss dump: frames %u and %u (the one before) written to %s in %.1f s%s\n",
-                (unsigned)lostFrame, (unsigned)beforeFrame, zip, secs,
-                pruned > 0 ? "; older loss dumps deleted" : "");
-    } else {
-        fprintf(stderr, "window: loss dump: frame %u written to %s in %.1f s%s\n",
-                (unsigned)lostFrame, zip, secs, pruned > 0 ? "; older loss dumps deleted" : "");
-    }
-    snprintf(name, name_size, "loss-%s.zip", stamp);
-    ico_diag_note_device_loss(zip);
-}
-
 /* The watchdog's GPU hang (diag_host.h ico_diag_set_gpu_hang): the
    backend's submissions as the main thread last saw them (rhi.h
    rhi_gpu_progress: no call into the driver), 0 when it does not track
@@ -3097,7 +2992,7 @@ static int window_gpu_progress(IcoDiagGpu *out)
 
 /* The GPU hang's part of device_lost_quit, on the watchdog thread while
    the main thread is blocked in the driver waiting for the GPU: the index
-   span, the pass ring and the loss dump (loss_dump, which notes the loss
+   span, the pass ring and the loss dump (window_loss_dump, which notes the loss
    for the next start). CPU data only, no call into the device (it is
    hung). Nothing else writes what these read: the renderer's frames, its
    texture and mesh records and the pass ring are written by the main
@@ -3122,7 +3017,7 @@ static void window_gpu_hang(void)
     fprintf(stderr, "window: at the hang: %s\n", span);
     rd_passring_print(stderr, rd_perf_post_name);
     ico_host_log_flush();
-    loss_dump(dumpName, sizeof(dumpName));
+    window_loss_dump(dumpName, sizeof(dumpName));
     ico_host_log_flush();
 }
 
@@ -3131,7 +3026,7 @@ static void window_gpu_hang(void)
    stopped): nothing more can be drawn. The backend logged the reason and
    its loss report (docs/port/RHI.md, "Device loss"); the renderer's pass
    ring follows it here, so the log names what was being drawn
-   (port/render/rd_passring.h). The loss dump follows (loss_dump: the
+   (port/render/rd_passring.h). The loss dump follows (window_loss_dump: the
    frames as a zip in the logs folder, noted in the activity file for the
    next start's loss bisect). Then, when startup_retry.h has a loss step
    left (diag_host.c ico_diag_device_lost_restart), the session ends
@@ -3165,7 +3060,7 @@ static int device_lost_quit(void)
         rd_passring_print(stderr, rd_perf_post_name);
         ico_host_log_flush();
         char dumpName[64];
-        loss_dump(dumpName, sizeof(dumpName));
+        window_loss_dump(dumpName, sizeof(dumpName));
         ico_host_log_flush();
         /* the report file (diag_host.h): the log, the loss dump and the
            settings in one zip, the one file a report needs */

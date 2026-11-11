@@ -217,8 +217,9 @@ static void vkr_wait_value_on(uint64_t value, VkrFrame *poll)
                 (unsigned long long)__atomic_load_n(&g_vkr.timelineValue, __ATOMIC_ACQUIRE),
                 vkr_sync_name(), (unsigned long long)reached,
                 known ? "" : " (the counter read failed too)");
-        if (!g_vkr.lostWaitValue) {
-            g_vkr.lostWaitValue = value;
+        if (!__atomic_load_n(&g_vkr.lostWaitValue, __ATOMIC_RELAXED)) {
+            /* atomic: rhi_gpu_progress reads it from the game thread */
+            __atomic_store_n(&g_vkr.lostWaitValue, value, __ATOMIC_RELAXED);
         }
     }
     VKR_CHECK(r);
@@ -248,6 +249,17 @@ void vkr_note_submit(const VkrFrame *f, uint64_t value, uint32_t lists, bool pre
     g_vkr.submits[i].frame = f->tagFrame;
     g_vkr.submits[i].lists = (uint8_t)(lists > 255u ? 255u : lists);
     g_vkr.submits[i].present = present ? 1u : 0u;
+    {
+        /* the same numbers for rhi_gpu_progress (the loss dump's lost frame,
+         * read from the game thread while this thread submits): atomic words */
+        const uint32_t k =
+            __atomic_load_n(&g_vkr.progTagCount, __ATOMIC_RELAXED) % VKR_SUBMIT_HISTORY;
+
+        __atomic_store_n(&g_vkr.progTagTag[k], ((uint64_t)f->tagReplay << 32) | f->tagFrame,
+                         __ATOMIC_RELAXED);
+        __atomic_store_n(&g_vkr.progTagValue[k], value, __ATOMIC_RELAXED);
+        __atomic_store_n(&g_vkr.progTagCount, g_vkr.submitCount, __ATOMIC_RELEASE);
+    }
 }
 
 /* the recording thread's slot's tag: its submits carry it, wherever they

@@ -57,6 +57,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_vis_hiz_fast.c` | what the occlusion test's collect keeps: the occluder triangles of a draw read as before (the collect cache) and a pending texture's alpha scan once a picture ([Culling](#culling)) |
 | `port/render/rd_occlusion.c` | every GPU draw of a replay (`rd__replay_draw`, `rd__replay_draw_indexed`: the pass window's take) and the hidden-draw measurement around them ([Culling](#culling)) |
 | `port/render/rd_passring.h`, `rd_passring.c` | the pass ring: the last passes recorded, for the device-loss report |
+| `port/render/rd_loss_pick.h`, `rd_loss_pick.c`, `rd_loss_keep.h` | which frame the loss dump writes and the memory copies of frames the GPU may not have finished ([The loss dump](#the-loss-dump)) |
 | `port/render/rd_dump.c`, `rd_png.c` | frame dumps; a minimal PNG writer |
 | `port/render/tools/rd_replay_tool.c` | [the replay tool](ARCHITECTURE.md#terms) |
 | `port/render/tools/rd_replay_region.c` | the replay tool's `--region-stats`: the region rule's verdicts on the CPU |
@@ -1134,29 +1135,54 @@ which the platform layer links)
 
 ### The loss dump
 
-On a device loss the window writes, after the pass ring and before the message, the frames the
-renderer still holds as one zip in the logs folder, `logs/loss-<date>-<time>.zip`: the last
-closed frame (the one the lost replay drew, or the tick it was blended towards) as
-`loss-<date>-<time>-lost.rddump`, then the frame before it as `loss-<date>-<time>-before.rddump`
-when the frame ring still holds it, then a copy of the log. They are ordinary dumps written from the CPU side
-(the commands, the payload, the image texels and VU streams the renderer keeps), with the textures
-as F12 writes them, so the writing needs no device; the lost frame is the zip's first `.rddump`,
-the one `rd_replay_tool` and the loss bisect take. The newest three loss zips are kept, the older
-ones deleted, so a device lost at every start cannot fill a phone. The activity file then records
-the loss with the zip's path (or that none was written) for the next start
-([PLATFORM.md](PLATFORM.md#diagnostics)); the message names the file and asks for it with the log
-(`port/render/rd_dump.c` (`rd_dump_retained_frames` names the two frames, held and closed, and
-`rd_dump_retained_frame` writes one retained frame by number, for the loss dump and the slow-scene
-dump, nothing when that number has left the ring, `rd_frame_retained` says which);
-`port/platform/dump_zip.c` (`ico_loss_dump_zip`, `ico_loss_dump_prune`);
-`port/platform/window_host.c` (`loss_dump`, `device_lost_quit`)). The loss zip's
+On a device loss the window writes, after the pass ring and before the message, the frame of the
+submission that failed and the one replayed before it, as one zip in the logs folder,
+`logs/loss-<date>-<time>.zip`: the lost frame as `loss-<date>-<time>-lost.rddump`, then the frame
+before it as `loss-<date>-<time>-before.rddump`, then a copy of the log. They are ordinary dumps
+written from the CPU side (the commands, the payload, the image texels and VU streams the renderer
+keeps), with the textures as F12 writes them, so the writing needs no device; the lost frame is the
+zip's first `.rddump`, the one `rd_replay_tool` and the loss bisect take. The newest three loss zips
+are kept, the older ones deleted, so a device lost at every start cannot fill a phone; the zip just
+written is never one of those deleted (by name alone a zip written after the clock went back sorts
+first and was the first to go, and the activity file then named a zip that was gone). The activity
+file then records the loss with the zip's path (or that none was written) for the next start
+([PLATFORM.md](PLATFORM.md#diagnostics)); the message names the file and asks for it with the log.
+
+Which frame is the lost one (issue 179). With the render and submit threads on, the game thread
+records ahead of the GPU, so at the loss the three-frame ring can hold only frames newer than the
+lost one (a Mali phone's report lost frame 129 and the dump held 132 and 131). The backend names the
+submission (`RhiGpuProgress`: `lostReplay`/`lostFrame`, the tag of the submission whose wait failed;
+`openReplay`/`openFrame`, the first of the last eight not seen finished), and `rd_loss_pick.c`
+(`rd_loss_choose`) takes, best first, the wait that failed, the first open submission, or, when a
+`vkQueueSubmit` failed (it has no number yet; an Adreno 710's report), the picture the pass ring
+lists after the newest numbered submission when there is one, else the newest numbered picture (the
+failed submit was none of a picture's: a capture, a readback or a check). The frame before it is the previous replay's in the pass ring's table. To have
+the lost frame when the loss is seen, `rd_begin_frame` copies a frame to memory before the ring reuses
+its slot when the backend still has a submission open at or after that frame's replay
+(`rd__loss_keep_recycle`, an ordinary dump held as bytes). The bounds: at most 4 copies of at most
+16 MiB each (64 MiB at the worst; a dump is about 7 MB), made only while the GPU is behind the ring
+(in steady play none is open and nothing is copied), freed once the first open submission is two
+replays past them, at most a quarter of the recycled frames after the first eight, and none on a
+backend that does not track its submissions. The log names what it did: `rd: loss keep: frame N (replay
+R) copied to memory ...` (the first eight copies, then every hundredth) and, at the loss,
+`window: loss dump: the lost submission is replay R, frame F (how it was found; wait failed on frame
+..., first open frame ..., newest numbered frame ...); the frame before it is B; held now: frames
+A..Z (n, c of them copies in memory)`, `window: loss dump: copies in memory: ...`, then for each
+file `writing frame N, the lost one (replay R), ... to <path>`. When the lost frame has left
+the ring and the copies the line says `the lost frame F is not held any more ... writing frame X instead, the nearest
+held ...; it is NOT the frame whose submission failed`, and the closing line says `NOT the lost
+one`. The last line reports the prune: how many loss zips there were, which were deleted, and
+`the name order alone would have deleted this zip ...; it was kept` when the clock had gone back
+(`port/render/rd_dump.c` (`rd_loss_plan`, `rd_loss_plan_text`, `rd_dump_loss_frame`,
+`rd__loss_keep_recycle`; `rd_dump_retained_frames` and `rd_dump_retained_frame` remain for the
+slow-scene dump, nothing when that number has left the ring); `port/platform/dump_zip.c`
+(`ico_loss_dump_zip`, `ico_loss_dump_prune_except`); `port/platform/window_loss.c`
+(`window_loss_dump`); `port/platform/window_host.c` (`device_lost_quit`)). The loss zip's
 entries are stored, not deflated (F12's and the slow scene's keep the deflate; the bug report
 deflates the loss zip when it takes it, [PLATFORM.md](PLATFORM.md#the-report-file)), and each slow step
-is logged and the log flushed before it begins: `window: loss dump: writing frame N to <path>`,
-`window: loss dump: writing frame M (the one before) to <path>`, `window: loss dump: zipping K MB
-(the two frames and the log) at store level`, then `window: loss dump: frames N and M (the one
-before) written to <zip> in T s` (issue 123: after a GPU hang no loss dump line followed the pass
-ring in 10 s of log, so whether a write or the deflate held it could not be told).
+is logged and the log flushed before it begins (issue 123: after a GPU hang no loss dump line
+followed the pass ring in 10 s of log, so whether a write or the deflate held it could not be
+told).
 
 A GPU hang writes the same zip: when the watchdog ends a run whose main thread waits for work the
 GPU never finishes ([PLATFORM.md](PLATFORM.md#diagnostics), "A GPU hang"), the window writes the pass
@@ -1198,7 +1224,24 @@ names the pass, logged in the pass ring's words:
 (640x448), depth 5 (640x448), 14 draws`, with a second line naming the pass whose first command
 the walk stopped at (that command's work before its pass began, a fog depth copy for example, ran
 too). A frame that runs to its end says so (`the whole frame (61 passes) ran one more pass at a
-time without losing the device`). The bisect's renderer is then shut down, lost or not, and the game's
+time without losing the device`). A frame that runs clean gets one more step, with the renderer still
+up (`rd_loss_overlap`, `port/platform/window_loss.c` (`window_bisect_overlap`)): the passes above wait
+for the GPU after every replay, so two pictures never overlap as they do in the game, and a loss that
+needs overlapping pictures could not be reproduced (the Mali phone's bisect ran clean). The
+frame before the lost one is taken out of the zip (its second `.rddump`) and the two frames are
+replayed alternately, four times each, with no wait for the GPU between them (the frame slot's own
+wait, two in flight, as the game's pictures have; nothing is presented, since the start-up has no
+UI to draw), then one wait. The log says that the step ran and how it ended:
+`window: loss bisect: overlap step: replaying the frame before the lost one and the lost frame back
+to back, 4 times each, with no wait for the GPU between them`, then `... overlap step: frames B and
+L, 8 replays in T s: the device was not lost` (or `was lost during the replays` or `at the wait
+after the last replay`, which ends the bisect as a loss with no pass to narrow, and the
+`ico_pc: loss bisect:` line says the whole frame ran clean a pass at a time and lost the device when
+the frames overlapped). When it does not run it says why (`overlap step not run (...)`). A zip that
+cannot give the bisect its frame says which of three things it is: `cannot open <zip>: <the OS's
+text> (errno N)`, `<zip> is not a zip: N bytes, <the reader's error>` (empty, cut short, another
+file's bytes), or `<zip> is a zip (N bytes, k entries) with no frame number 1 (.rddump) inside (0
+found); it holds: <the entries and their sizes>` (`ico_dump_zip_extract_why`). The bisect's renderer is then shut down, lost or not, and the game's
 own starts as at any start: the bisect is diagnostics only. A driver that cannot make a device
 again in the process that lost one ends that start with a box asking to start the game again
 (`ico_window_open` returns -3, `port/platform/main_host.c` (`open_window`)); the bisect is done by
@@ -2911,6 +2954,7 @@ The options:
 | `--overlay-test` | (with `--present`) a test pattern and a popup drawn as a presentation overlay |
 | `--vu-ref L:I` | the CPU mirror's vertices of prelit draw I of list L |
 | `--loss-bisect` | the [loss bisect](#the-loss-bisect) on the dump: the frame one pass longer each time, waiting for the GPU after each |
+| `--loss-overlap BEFORE` | with `--loss-bisect`: after a clean bisect, the [overlap step](#the-loss-bisect): the dump `BEFORE` (`-` for none) and the frame replayed back to back, four times each, with no wait for the GPU between them; prints `loss overlap: clean` (or `lost`) with the replays made |
 | `--keys` | the pipelines the replay asks for against the start-up set, one line a key (`in set` or `MISSING`), exit 1 on a miss ([The start-up set](PIPELINES.md#the-start-up-set)); needs a device, `<out.png>` unused (give `-`) |
 | `--passes A[-B]` | replays passes A..B only (the [pass window](#the-loss-bisect)); A alone is pass A alone |
 

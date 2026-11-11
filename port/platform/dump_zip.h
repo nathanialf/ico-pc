@@ -83,6 +83,20 @@ int ico_loss_dump_path(char *out, size_t size, const char *dir, const char *stam
 #define ICO_LOSS_DUMP_KEEP 3
 int ico_loss_dump_prune(const char *dir, int keep);
 
+/* The same, the zip just written (zip_path, as the walk names it: dir, '/'
+   and the name) counted among the kept and never deleted: by name alone a
+   zip written after the clock went back (a set clock, a time zone, the
+   hour a daylight saving change repeats) sorts before older ones and was
+   the first deleted, and the activity file then named a zip that was gone.
+   info (may be NULL): found zips before, removed, their names (up to what
+   fits), and saved: 1 when the plain name order would have deleted zip_path. */
+typedef struct IcoPruneInfo {
+    int found, removed, saved;
+    char names[400];
+} IcoPruneInfo;
+
+int ico_loss_dump_prune_except(const char *dir, int keep, const char *zip_path, IcoPruneInfo *info);
+
 /* The slow-scene dump (window_host.c slow_scene_write, issue 179): one
    frame and the log, written with ico_loss_dump_zip (no frame before), as
    dir/slow-<stamp>.zip; kept to ICO_SLOW_DUMP_KEEP by the same walk as the
@@ -101,6 +115,17 @@ void *ico_dump_zip_extract(const char *zip_path, size_t *size, char *name, size_
    an F12 or loss zip's tick before) */
 void *ico_dump_zip_extract_nth(const char *zip_path, int nth, size_t *size, char *name,
                                size_t name_size);
+
+/* The same, saying why it returned NULL in why (why_size bytes; may be
+   NULL): "cannot open <zip>: <errno text> (errno N)" (the file is gone or
+   not readable), "cannot read ..." (a read broke), "<zip> is not a zip:
+   <bytes>, <the reader's error>" (empty, truncated or another file's bytes),
+   "<zip> is a zip (...) with no frame number N (.rddump) inside ...; it
+   holds: <the entries and their sizes>", or "... whose frame entry <name>
+   could not be extracted: <error>" (a damaged entry).  why is "" on
+   success.  The bisect's start-up line (window_host.c bisect_dump_file). */
+void *ico_dump_zip_extract_why(const char *zip_path, int nth, size_t *size, char *name,
+                               size_t name_size, char *why, size_t why_size);
 
 /* The aspect sweep (Shift+F12 in photo mode, window_host.c): one paused
    frame captured at ICO_SWEEP_COUNT aspects.  Aspect i has the name

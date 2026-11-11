@@ -2318,7 +2318,12 @@ renderer's [pass ring](RENDER.md#the-pass-ring) after it, before the message box
   command lists and whether it signalled a present; the report marks each finished or not against
   the value the GPU reached, or "state unknown" when that value cannot be read (a failed Vulkan
   counter read; a removed D3D12 device's fence, which reads `UINT64_MAX`); the Vulkan header line
-  names the submission sync (`sync timeline` or `sync fences`). A Vulkan wait that fails first logs
+  names the submission sync (`sync timeline` or `sync fences`). `rhi_gpu_progress` hands the same history
+  to the renderer (issue 179): `lostReplay`/`lostFrame` the tag of the submission whose wait failed and
+  `openReplay`/`openFrame` the tag of the first of the eight above the finished count, which the
+  loss dump takes to name the lost frame ([The loss dump](RENDER.md#the-loss-dump)); a `vkQueueSubmit`
+  that fails has no number yet, so neither names it (Vulkan only; the other backends track nothing).
+  A Vulkan wait that fails first logs
   how long it waited, the submission it waited for, the last one submitted, the sync and the one the
   GPU reached; once the device is lost no wait is
   made again (`port/rhi/vk/vk_cmd.c` (`vkr_wait_value`, `vkr_note_submit`); `port/rhi/vk/vk_device.c`
