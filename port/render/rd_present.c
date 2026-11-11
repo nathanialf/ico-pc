@@ -102,6 +102,7 @@
 #include "rd_upscale_capture.h"
 #include "rd_fsr3.h"
 #include "rd_icon_hold.h"
+#include "rd_present_scene.h"
 #include "shader_consts.h"
 
 typedef struct RdPresentPreset {
@@ -747,6 +748,11 @@ static bool snapWindow(uint32_t sw, float crop, uint32_t boxW, float *u0, float 
     return false;
 }
 
+/* the box blit from SCENE (rd_present_scene.c): src is SCENE's texture, sw
+ * x sh DISPLAY's texels, blit_scene_ps with the owed DISPLAY's DrawCB words;
+ * set by rd__present_record around that one call */
+static bool s_blitScene;
+
 /* src (sw x sh) into box of dst in a pass of its own, crop texels left out
  * at each side of src (sourceCrop; 0: all of it); keepOpen leaves the pass
  * open for the caller to draw more into dst and end it.  sc: the scissor
@@ -771,7 +777,8 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
     RhiViewport vp = {(float)box->x, (float)box->y, (float)box->w, (float)box->h, 0.0f, 1.0f};
     rhi_cmd_set_viewport(cl, &vp);
     rhi_cmd_set_scissor(cl, sc ? sc : box);
-    RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, tone ? RD_FS_BLIT_TONE : RD_FS_BLIT, dstFmt);
+    RdPipeKeyInt k = rd__post_key(
+        RD_VS_BLIT, s_blitScene ? RD_FS_BLIT_SCENE : (tone ? RD_FS_BLIT_TONE : RD_FS_BLIT), dstFmt);
     RhiPipeline pipe = rd__get_pipeline(&k);
     if (pipe.id) {
         IcoDrawCB cb;
@@ -780,6 +787,9 @@ static void blit(RhiCommandList cl, RhiTexture src, uint32_t sw, uint32_t sh, Rh
             cb.col[i] = 0x80; /* modulate by 1.0: identity */
         }
         cb.mode[0] = ICO_DF_TEXTURED | ICO_DF_TCC_RGBA;
+        if (s_blitScene) {
+            rd__present_scene_cb(&cb, tone); /* SCENE through the reduction's steps */
+        }
         if (tone) {
             rd__tone_params(cb.param);
         }
@@ -918,10 +928,9 @@ static bool reduceInto(RhiCommandList cl, ReduceTex *t, const char *name, uint32
     return true;
 }
 
-/* the reduce into s_reduce; false (nothing recorded) when it does not apply
- * or cannot run.  On true *src, *sw, *sh are the reduced texture's */
-static bool reduceRecord(RhiCommandList cl, RhiTexture *src, uint32_t *sw, uint32_t *sh,
-                         const RhiRect *box, float crop)
+/* whether the reduce applies to a source sw x sh into box (reduceRecord;
+ * the present from SCENE asks it too: rd__present_scene_present_why) */
+static bool reduceApplies(uint32_t sw, uint32_t sh, const RhiRect *box, float crop)
 {
     if (box->w == 0 || box->h == 0) {
         return false;
@@ -933,13 +942,22 @@ static bool reduceRecord(RhiCommandList cl, RhiTexture *src, uint32_t *sw, uint3
     if (rd__aa_mode() == RD_AA_OFF && dx == 1.0f && dy == 1.0f) {
         return false;
     }
-    const float ew = (float)*sw - 2.0f * (crop > 0.0f ? crop : 0.0f);
+    const float ew = (float)sw - 2.0f * (crop > 0.0f ? crop : 0.0f);
     float su0, su1;
-    if (snapWindow(*sw, crop, box->w, &su0, &su1)) {
+    if (snapWindow(sw, crop, box->w, &su0, &su1)) {
         return false; /* a texel a pixel: the box blit's whole-texel window */
     }
-    if (!(ew > (float)box->w && (float)*sh > (float)box->h)) {
-        return false; /* one texel a pixel or fewer on an axis: the plain box blit */
+    /* one texel a pixel or fewer on an axis: the plain box blit */
+    return ew > (float)box->w && (float)sh > (float)box->h;
+}
+
+/* the reduce into s_reduce; false (nothing recorded) when it does not apply
+ * or cannot run.  On true *src, *sw, *sh are the reduced texture's */
+static bool reduceRecord(RhiCommandList cl, RhiTexture *src, uint32_t *sw, uint32_t *sh,
+                         const RhiRect *box, float crop)
+{
+    if (!reduceApplies(*sw, *sh, box, crop)) {
+        return false;
     }
     const uint32_t w0 = *sw, h0 = *sh;
     if (!reduceInto(cl, &s_reduce, "rd present reduce", 0u, src, sw, sh, crop, box->w, box->h)) {
@@ -2555,6 +2573,40 @@ static void blankRecord(RhiCommandList cl, RhiTexture out, RhiState *outState)
     outFinish(cl);
 }
 
+/* The present's own reasons to read DISPLAY itself, beside the box blit's
+ * one sample (rd_present_scene.h; 0 none): the steps of rd__present_record
+ * below that read DISPLAY first or instead */
+int rd__present_scene_present_why(void)
+{
+    if (rd__crt_on()) {
+        return RD_PS_WHY_CRT;
+    }
+    if (g_rd.downsample) {
+        return RD_PS_WHY_DOWNSAMPLE;
+    }
+    if (s_present.lineDouble && !g_rd.fullHeight) {
+        return RD_PS_WHY_LINES;
+    }
+    if (depthWanted()) {
+        return RD_PS_WHY_DEPTH;
+    }
+    if (g_rd.settings.upscale != RD_UPSCALE_OFF) {
+        return RD_PS_WHY_UPSCALER; /* FSR 1.0 reads DISPLAY (rd_fsr1.c) */
+    }
+    if (rd__capture_armed() || rd__capture_pending()) {
+        return RD_PS_WHY_CAPTURE;
+    }
+    const RdTargetRec *disp = rd__target_rec(RD_TARGET_DISPLAY + 1);
+    if (disp && s_outW && s_outH) {
+        RhiRect box;
+        outputBox(s_outW, s_outH, &box);
+        if (reduceApplies(disp->tw, disp->th, &box, sourceCrop(disp, disp->tw))) {
+            return RD_PS_WHY_REDUCE;
+        }
+    }
+    return 0;
+}
+
 void rd__present_record(RhiCommandList cl)
 {
     if (s_turnFailed) {
@@ -2572,6 +2624,17 @@ void rd__present_record(RhiCommandList cl)
     const RdPresentPreset *pr = &s_present;
     RhiTexture out = outTex();
     RhiState *outState = outStateOf();
+    /* the present from SCENE (rd_present_scene.c): an owed DISPLAY sampled
+     * from SCENE by the box blit where nothing else here reads DISPLAY,
+     * else drawn from SCENE first, in this list before its first pass */
+    bool fromScene = false;
+    if (rd__present_scene_owed()) {
+        const int why = rd__present_scene_present_why();
+        fromScene = why == 0 && rd__present_scene_ready(s_outFormat);
+        if (!fromScene) {
+            rd__present_scene_draw(cl, why ? why : RD_PS_WHY_DEVICE);
+        }
+    }
 
     RhiTexture src = disp->color;
     uint32_t sw = disp->tw, sh = disp->th;
@@ -2700,8 +2763,16 @@ void rd__present_record(RhiCommandList cl)
                                      scaleFilter, mirror, crop, tone);
         if (!depth) {
             open = !rd__crt_on();
-            blit(cl, src, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box, sc,
+            /* from SCENE: src is still DISPLAY's texture (no reduce, FSR
+             * 1.0 or downsample took it: rd__present_scene_present_why) */
+            s_blitScene = fromScene && src.id == disp->color.id;
+            const RhiTexture from = s_blitScene ? rd__present_scene_texture(cl) : src;
+            blit(cl, from, sw, sh, out, s_outFormat, s_outW, s_outH, RHI_LOAD_CLEAR, &box, sc,
                  scaleFilter, mirror, crop, open, tone);
+            if (s_blitScene) {
+                rd__present_scene_shown();
+            }
+            s_blitScene = false;
         }
     }
     /* the deferred text, drawn in list order with the regions and colours
@@ -2832,6 +2903,7 @@ bool rd_display_probe(uint8_t rgba[RD_DISPLAY_PROBE_POINTS][4])
             return false;
         }
     }
+    rd__present_scene_readback(rd_target(RD_TARGET_DISPLAY).id); /* an owed DISPLAY drawn */
     const uint32_t w = disp->tw, h = disp->th;
     const uint32_t xs[RD_DISPLAY_PROBE_POINTS] = {w / 2, w / 4, 3 * w / 4, w / 4, 3 * w / 4};
     const uint32_t ys[RD_DISPLAY_PROBE_POINTS] = {h / 2, h / 4, h / 4, 3 * h / 4, 3 * h / 4};

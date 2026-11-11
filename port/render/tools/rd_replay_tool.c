@@ -537,6 +537,7 @@
 #include "rd_internal.h"
 #include "rd_jitter.h"
 #include "rd_layer.h"
+#include "rd_present_scene.h" /* --stats: the present from SCENE */
 #include "rd_upscale.h"
 #include "rd_upscale_capture.h" /* --fsr3-dump */
 #include "rd_velocity.h"
@@ -3202,6 +3203,18 @@ int main(int argc, char **argv)
         /* the fades fold (rd_fades_fold.c) */
         printf("%s: stats: fades fold %s: %u sprites folded into the reduction\n", dump,
                rd__fades_fold_on() ? "on" : "off", pr->fadesFolded);
+        /* the present from SCENE (rd_present_scene.c): the reduction not
+           drawn, the present reading SCENE, DISPLAY drawn on demand */
+        printf("%s: stats: present from SCENE %s: %u reductions not drawn, %u presents from "
+               "SCENE, %u kept%s%s%s, %u drawn on demand%s%s%s\n",
+               dump, rd__present_scene_on() ? "on" : "off", pr->presentSceneSkipped,
+               pr->presentSceneShown, pr->presentSceneKept, pr->presentSceneKept ? " (" : "",
+               pr->presentSceneKept ? rd__present_scene_why_text((int)pr->presentSceneWhy) : "",
+               pr->presentSceneKept ? ")" : "", pr->presentSceneDrawn,
+               pr->presentSceneDrawn ? " (" : "",
+               pr->presentSceneDrawn ? rd__present_scene_why_text((int)pr->presentSceneDrawWhy)
+                                     : "",
+               pr->presentSceneDrawn ? ")" : "");
         /* the glow's mask computed in its reduction (rd_glow_fold.c) */
         printf("%s: stats: glow: WORK2 fold %s: %u folded (%u reading the sun's fans' WORK2), %u "
                "kept%s%s%s\n",

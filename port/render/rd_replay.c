@@ -109,7 +109,8 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "fx_sprite_u_ps", "fx_blur2_ps", "date_clear_ps", "date_stencil_ps", "vu_np_ps",
     "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
     "crack_fill_ps", "crack_count_ps", "shadow_count_ps", "crack_fill1_ps", "fx_aura_rows_ps",
-    "fx_aura_sum_ps", "shadow_count_load_ps", "fsr1_easu_ps", "fsr1_rcas_ps", "vu_pre_cs"};
+    "fx_aura_sum_ps", "shadow_count_load_ps", "fsr1_easu_ps", "fsr1_rcas_ps", "vu_pre_cs",
+    "blit_scene_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -5739,6 +5740,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     rd__upload_meshes(f, keep);
     rd__passring_bytes(s_ringOff);
     rd__store_plan_scan(f, keep); /* before the new targets' clears */
+    rd__present_scene_begin(f, keep);
     rd__clear_new_targets();
     g_rdPerf.uploadMs += (t1 = rd__now_ms()) - t;
     t = t1;
@@ -5994,6 +5996,7 @@ bool rd__read_target(RdTarget target, void *dst, size_t dstSize, uint32_t *w, ui
     }
     rd__clear_skip_readback(target.id); /* a clear not drawn, drawn first (rd_pass_cut.c) */
     rd__glow_fold_readback(target.id);  /* WORK2 a fold left undrawn (rd_glow_fold.c) */
+    rd__present_scene_readback(target.id);
     return readTexture(t->color, &t->colorState, t->tw, t->th, dst, dstSize);
 }
 

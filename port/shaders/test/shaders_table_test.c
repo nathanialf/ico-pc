@@ -78,6 +78,9 @@ static const char *const expectedAuraBox[] = {"fx_aura_rows_ps", "fx_aura_sum_ps
  * port/render/rd_tone.h) */
 static const char *const expectedTone[] = {"blit_tone_ps", "blit_depth_tone_ps"};
 
+/* the present from SCENE (blit.hlsl; port/render/rd_present_scene.c) */
+static const char *const expectedPresentScene[] = {"blit_scene_ps"};
+
 /* Upscaling: FSR 1.0's two passes (fsr1.hlsl over port/third_party/fsr1;
  * port/render/rd_fsr1.c) */
 static const char *const expectedFsr1[] = {"fsr1_easu_ps", "fsr1_rcas_ps"};
@@ -522,6 +525,14 @@ int main(void)
             failures++;
         }
     }
+    const size_t nPresentScene = sizeof(expectedPresentScene) / sizeof(expectedPresentScene[0]);
+    for (size_t i = 0; i < nPresentScene; i++) {
+        const IcoShaderBlob *b = ico_find_shader(expectedPresentScene[i]);
+        if (!b || b->stage != ICO_SHADER_STAGE_FRAGMENT) {
+            printf("FAIL %s: not in the table as a fragment shader\n", expectedPresentScene[i]);
+            failures++;
+        }
+    }
     const size_t nVelocity = sizeof(expectedVelocity) / sizeof(expectedVelocity[0]);
     for (size_t i = 0; i < nVelocity; i++) {
         const IcoShaderBlob *b = ico_find_shader(expectedVelocity[i]);
@@ -645,7 +656,7 @@ int main(void)
     const size_t nAll = sizeof(expected) / sizeof(expected[0]) + nAa + nNoDual + nVariants + nDst +
                         nUint + nTiler + nDiet + nPlanes + nPlain + nPrepass + nBatch + nMerge +
                         nSmooth + nCrack + nShadowLoad + nAuraBox + nBaked + nTone + nFsr1 +
-                        nVelocity + nStore + nCompute;
+                        nVelocity + nStore + nCompute + nPresentScene;
     if (g_icoShaderCount != nAll) {
         printf("FAIL table has %u entries, expected %zu\n", g_icoShaderCount, nAll);
         failures++;

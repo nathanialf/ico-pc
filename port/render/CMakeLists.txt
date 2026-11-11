@@ -1061,7 +1061,8 @@ target_include_directories(rd_stream_audit_test PRIVATE ../platform
 target_link_libraries(rd_stream_audit_test PRIVATE ico_render ico_vu1_ref ico_miniz ico_host_fs)
 
 include(rd_perf_clock.cmake) # the slot clock (ico_render) and rd_perf_clock_test
-include(rd_msaa_shadow.cmake) # the shadow count in the MSAA epoch, its tests
+include(rd_msaa_shadow.cmake) # the shadow count in MSAA
+include(rd_present_scene.cmake)
 
 # Windows: SDL3.dll beside the programs
 ico_copy_sdl3_dll(texpack_test texpack_e2e_test texpack_export_test rd_replay_tool rd_state_test

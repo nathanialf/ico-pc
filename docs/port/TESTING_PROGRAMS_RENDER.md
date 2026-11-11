@@ -187,6 +187,19 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   quads leave it), a Z-testing sprite after the letterbox (one before it leaves the letterbox
   folding), the effects depth or a depth read by a later frame (the bars drawn, a fade after them
   folds), a draw into SCENE in list 12, MSAA, a factor above 0x80 (`rd_fades_fold`).
+- `rd_present_scene_test.c`: the present from SCENE
+  ([RENDER_POST.md](RENDER_POST.md#the-present-from-scene-off-by-default-until-measured)) on the
+  CPU, without a device: `rd__present_scene_axis` on the reduction's own hardware pair at the
+  corpus's settings (the PowerVR phone's 2364 x 1080 at full height: SCENE's texel x + 1, y for
+  DISPLAY's x, y, as measured on its dump; mirrored x - 1; a 16:9 window and 4x x + 1; the same
+  Full pixel crop on both x + 1; 2x, half height and a pair leaving a texel refused); the bound's
+  model (one fold step between levels, the brightness, a fade, toward white and black, under the
+  nearest-level and the floor rounding: the filter of the stepped texels and the step of the
+  filtered texel at most one level apart for every pair of levels and weight, a bilinear's four
+  taps at random weights too, steps of 0 and 128 the same level); `rd__present_scene_why` for
+  every reader and condition; `rd__present_scene_settle` on recorded frames (a frame of play drops
+  the debt, a keep frame and the motion blur's held copy draw DISPLAY first, a frame drawing on
+  SCENE alone draws it, the still re-present's empty keep frame keeps it) (`rd_present_scene`).
 - `rd_vis_test.c`: the scene draws' visibility test ([RENDER.md](RENDER.md#culling)) on the CPU,
   without a device (the default mode per device class, `checkProfileDefault`: a tile-based profile takes `frustum`, every other `full`, `ICO_RD_CULL` rules on both, and the 10 s line says `(profile default)` or `([dev] cull)`; also the MSAA epoch, `checkMsaaEpoch`: `rd__vis_msaa_may_close` true for DATE,
   a texture of SCENE's depth (texturing off too), SCENE's colour with another depth and SCENE's
@@ -904,6 +917,18 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   printed per target by `port/render/test/png_level_diff.py`;
   some dump must fold (`rd_fades_fold_ab`; [RENDER_POST.md](RENDER_POST.md#the-fades-fold),
   [DIVERGENCES.md](DIVERGENCES.md) VD-27). SKIP as `rd_vustage_ab`.
+- `rd_present_scene_ab.cmake`: the present from SCENE against the reduction drawn: the dumps of
+  `tools/present_scene_dumps.txt` (the PowerVR phone's F12 zip `frame-20261110-194925-v3677` and
+  its rc dump `v4287`, issue 164's paused frame, the main gate's frame; machine-local; a listed
+  dump that is absent fails) replayed by `--pass-dump --stats` with `ICO_RD_PRESENT_SCENE=0` and
+  `=1` at the phone's Resolution Auto under its profile fakes (`ICO_VK_FAKE_LIMITS=moltenvk
+  ICO_RD_VU_PREPASS=0`), a 16:9 window (1920 x 1080) and Enhanced 2x 4:3: every target's PNG but
+  `PRESENT.png` byte for byte (DISPLAY drawn on demand for its read), `PRESENT.png` within two
+  levels (`port/render/test/png_level_diff.py`, its counts printed), the off run `off` with none
+  skipped, a run with the reduction not drawn one pass and some colour MB stored fewer, 2x kept;
+  on the first dump at the phone's setting the CRT filter, FSR 1.0, the test's temporal upscaler
+  and Downsampling keep the reduction with their reasons and every PNG byte for byte, and the
+  mirror takes it; some run must leave it undrawn (`rd_present_scene_ab`). SKIP without a device.
 - `rd_crack_late_ab.cmake`: the crack fill after lists 4-6 against pass dumps of the build that drew
   it before the fog: each line of `tools/crack_late_dumps.txt` (`<setting> <dump> <baseline
   folder>`, machine-local: six corpus dumps at the gate's Enhanced 2x 4:3 against

@@ -2915,6 +2915,16 @@ typedef struct RdPerfRecord {
     /* The fades fold (rd_fades_fold.c): list 11's last full-frame lerp
      * sprites the reduction applied instead of drawing them into SCENE */
     uint32_t fadesFolded;
+    /* The present from SCENE (rd_present_scene.c; off by default in
+     * v0.11.5): presentSceneSkipped 1 when this replay's reduction was not
+     * drawn (DISPLAY owed, SCENE through the reduction's steps),
+     * presentSceneShown 1 when its present sampled SCENE instead of
+     * DISPLAY, presentSceneKept 1 when the switch was on and the reduction
+     * was drawn (presentSceneWhy why, rd_present_scene.h RD_PS_WHY_*),
+     * presentSceneDrawn the times DISPLAY was drawn on demand from SCENE in
+     * this replay's span (presentSceneDrawWhy the last one's why) */
+    uint32_t presentSceneSkipped, presentSceneShown, presentSceneKept, presentSceneWhy;
+    uint32_t presentSceneDrawn, presentSceneDrawWhy;
     /* The display layer (rd_layer.h): the actions of lists 11-12 drawn into
      * the display-scale composite after a temporal upscaler, 0 without it */
     uint32_t layerDraws;

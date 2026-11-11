@@ -1,0 +1,17 @@
+# Dump list for rd_present_scene_ab (port/render/test/rd_present_scene_ab.cmake:
+# the present from SCENE, port/render/rd_present_scene.c, against the
+# reduction drawn into DISPLAY: every target byte for byte, the presented
+# picture within the derived bound).  MACHINE-LOCAL: these are paths on the
+# maintainer's machine; the dumps themselves are never committed.  A listed
+# dump that is absent FAILS the test (v0.11.5: use what exists, and a list
+# names only what exists).  Relative paths are relative to this file.
+#
+# the Pixel 10 Pro Fold's F12 dump of a stage 4 glow room (v0.11.4, the
+# measurement of docs/port/RENDER_POST.md "The present from SCENE")
+../build-host/tmp/v0115/evidence/pixel/frame-20261110-194925-v3677.zip
+# its rc1 dump: stage 4's cage (st13c)
+../build-host/tmp/v0115/evidence/rc1/frame-20261111-075333-v4287.zip
+# issue 164's paused frame (the pause menu over the picture)
+/primary/dev/ico-dumps/164/frame-20261030-091938-v5836.rddump
+# the main gate's frame (fog, DATE, the shadow count, the crack fill)
+/primary/dev/ico-dumps/maingate/frame-20261104-123603-v10827.rddump

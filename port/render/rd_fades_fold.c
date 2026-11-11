@@ -748,6 +748,20 @@ void rd__fades_fold_screen(const Replay *r, const RdDrawPass *dp, const DrawSetu
     s_applied++;
 }
 
+bool rd__fades_fold_present(uint32_t ord, bool take, RdFadesFold *out)
+{
+    if (!active() || ord != s_fold.reductionOrd) {
+        return false;
+    }
+    if (out) {
+        *out = s_fold;
+    }
+    if (take) {
+        s_applied++; /* the steps reach the picture through the present */
+    }
+    return true;
+}
+
 void rd__fades_fold_end(void)
 {
     if (active() && s_applied == 0) {

@@ -43,7 +43,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_fog_path.c` | how the fog reads the scene depth; the fog probe and self-test |
 | `port/render/rd_fades_fold.c` | the fades fold: list 11's last full-frame lerp sprites applied by the reduction ([The fades fold](RENDER_POST.md#the-fades-fold)) |
 | `port/render/rd_glow_fold.c` | the glow's mask computed in the reduction that reads it: WORK2's fill and mask not drawn ([The glow's mask in its reduction](RENDER_POST.md#the-glows-mask-in-its-reduction)) |
-| `port/render/rd_glow_light.c` | the glow drawn only where it can add light above 1x: its chain left undrawn in rooms without light in it ([The glow where it adds light](RENDER_POST.md#the-glow-where-it-adds-light)) |
+| `port/render/rd_glow_light.c` | the glow's light plan above 1x ([RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)) |
 | `port/render/rd_content_hide.c` | the content table: stage faces the native frame must not show |
 | `port/render/rd_content_extend.c` | the content table's sheets: stage overlays continued to the frame's edges |
 | `port/render/rd_content_chain.c`, `rd_chain.h` | the chains drawn at their links' size |
@@ -53,6 +53,7 @@ commands and [replays](ARCHITECTURE.md#terms) them on the [RHI](ARCHITECTURE.md#
 | `port/render/rd_perf.c` | the per-replay performance records |
 | `port/render/rd_perf_gap.h`, `rd_perf_gap.c` | the GPU's time between two timed replays, across untimed ones (pure) |
 | `port/render/rd_perf_rank.h`, `rd_perf_rank.c` | the 10 s block's performance lines by scene and the run's profile: the bound, the classes, this device's rates, the ranked savings (pure; [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-performance-lines-issues-179-211-and-123)) |
+| `port/render/rd_present_scene.c` | the present from SCENE, off ([RENDER_POST.md](RENDER_POST.md#the-present-from-scene-off-by-default-until-measured)) |
 | `port/render/rd_perf_clock.h`, `rd_perf_clock.c`, `rd_perf_clock.cmake` | a replay's GPU clock against the CPU's: its start after its submit, the wait's trace, unwritten stamps, the line (pure; [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#issue-123-what-the-gpu-did-during-a-stall)) |
 | `port/render/rd_vis.c`, `rd_vis.h` | the scene draws' visibility test: a mesh, skinned or grid command wholly off its target or behind the eye replayed as an `RDC_NOP` of a shadow frame ([Culling](#culling)) |
 | `port/render/rd_vis_hiz.c` | its occlusion test (`[dev] cull = full`): a record of list 0's depth from the opaque draws' exact triangles, and a mesh or grid draw of list 0 wholly behind it replayed as an `RDC_NOP` ([Culling](#culling)) |
@@ -1382,7 +1383,7 @@ pictures right after it grew to 256 rows), and the mesh arena's first 32 MB chun
 both before the game runs (`rd_vu_record_prepare`, called by `window_pipe_early` after the self-tests
 and the start-up set, behind the start-up screen). The bound (`rd_early_plan.h`): half of the free
 memory above the free-memory floor where the system says (Android), half of the adapter's free
-video memory where it says (Direct3D, Vulkan's `VK_EXT_memory_budget`), else the record's own limit (1,024 rows, 48 MB a frame
+video memory where it says (Direct3D, Vulkan's memory budget), else the record's own limit (1,024 rows, 48 MB a frame
 slot); the record first, the chunk if it still fits; nothing under the floor or after the
 system's low-memory signal. A part that cannot be made is left to play as before. No picture
 changes: the record's slots are placed from texel 0 whatever its size and the chunk is the one the
