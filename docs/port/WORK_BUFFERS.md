@@ -32,6 +32,7 @@ sprite model ([RENDER_POST.md](RENDER_POST.md#post-passes), "The staticBlur spri
 | `port/render/rd_interp.c`, `ico2/common/src/layout_texture.c` | the same screen sprite under another key in each tick (`pairSame` in `unmatchedPass`); the load screen's bars (`LT_HOST_KEY`) |
 | `port/render/rd_pass_area.c`, `port/render/rd_replay.c`, `port/rhi/vk/vk_cmd.c` | the pass area: the commands' boxes before the walk (`rd__pass_area_scan`, from `rd__store_plan_scan`), each pass's area (`rd__pass_area_begin` from `beginPass`), the end of its commands (`rd__pass_area_due`), the render area and the cut scissors (`rhi_cmd_begin_render_pass`, `rhi_cmd_set_scissor`) |
 | `port/render/rd_date_cut.c`, `port/render/rd_date_cut.h`, `port/render/rd_store_plan.c` | DATE's passes without the depth: the rule (`rd_date_cut_step`), the scan (`rd__date_cut_scan_cmd`, from `rd__store_plan_scan`), each draw's depth (`rd__date_cut_depth`, from `prepareDrawEx`), the DATE snapshot and its reasons (`rd__date_snapshot`) |
+| `port/render/rd_shadow_box.c`, `port/render/rd_shadow_box.h`, `port/render/rd_shadow_one.c` | the shadows over the volumes' box: the scan's sources and composites (`rd__shadow_box_scan_cmd`, from `rd__store_plan_scan`), the count's box from the strips and the one draw's clear and scissor (`rd__shadow_box_count_area`), the composites' scissor and DATE area (`rd__shadow_box_screen`, from `doScreen`) |
 | `port/render/rd_stencil_selftest.c`, `port/render/rd_stencil_selftest.h`, `port/render/rd_shadow.c` | the stencil outside the shadow window: the decision (`rd__stencil_cut_forced`, read by `rd__stencil_ops_packed`), its start-up self-test (`rd__stencil_cut_selftest`), the passes' counters and the tests' poison (`rd__stencil_cut_pass`) |
 | `port/render/rd_store_plan.c`, `port/render/rd_replay.c`, `port/render/rd_profile.c` | the store plan: the scan before the walk (`rd__store_plan_scan`), each pass's depth ops (`rd__store_plan_pass` from `beginPass`), the walk's command count (`g_rdStoreOrd`), the profile's `storePlan` |
 
@@ -1548,6 +1549,80 @@ passed, the stencil not forced, the counters, the decision by path and switch on
 PowerVR phone's profile and the Mali's under the poison: every target byte for byte, the same draws,
 passes and colour MB, the depth and stencil MB stored and loaded lower by exactly what the stats
 name ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+
+## The shadows over the volumes' box
+
+Shadow.c counts the volumes into the stencil of SCENE's depth, resolves the count into the count
+target at the GS size, blurs it through SHADOW0, 1 and 2 (2:1 sprites, each over its whole level)
+and composites the three levels into SCENE with three full-frame sprites (ATST GREATER 0, AFAIL
+KEEP, Z write off, MODULATE, TCC 1, DATE). On the Pixel's v3677 frame (`--list`) the volumes are
+seven strips; on the cage room's v4287 frame SHADOW0's alpha is above 0 over x 49-237, y 80-255 of 424 x 256,
+about 31 % of it. Outside the volumes' box every one of those reads zero, so the count's one draw
+and the composites are drawn over the box only (`port/render/rd_shadow_box.c`, header comment):
+
+- **The count.** The stencil's bits 0-5 are cleared at the reset (the reset's own pass, a pass's
+  clear load over the whole depth, or the merged pass's clear; the pass area never takes a pass
+  that clears the stencil) and written only by the volumes' INCR/DECR pipelines, inside their
+  triangles; DATE's bit 6 is masked off by the count (`shadow_count_ps`, `& 0x3F`). So outside the
+  triangles the one draw's average is +0.0 and the count's texel is (0, 0, 0, 0). The box is the
+  strips' own 12.4 vertices (`rd__shadow_box_strip_v` / `_f` in `doShadowStripIn`, clamped as
+  `convVtx` clamps them, relative to XYOFFSET), 4 GS pixels wider each side (the half-line offset,
+  the texel centres, the temporal jitter and the reduction's straddling texels stay under 3.5 at a
+  scale of 1 or more). The one draw (`rd__shadow_one_draw`) then clears its colour to 0 at the
+  pass's load and scissors its draw to the box (an empty box: the clear alone).
+- **The levels** are drawn whole: a level texel whose bilinear taps are all (0, 0, 0, 0) is (0, 0,
+  0, 0) under MODULATE or DECAL with TCC 1, no blend, FBA 0, all four channels written, and the
+  sprite covers its whole level at scale 1, so nothing older stays. Their box is the source's
+  through the sprite's UV map (below).
+- **The composites.** A fragment whose taps all hold alpha 0 has As 0 and fails its alpha test,
+  which keeps the destination. Each composite is scissored to its box (texels, `rd__gs_rect_texels`)
+  and its DATE area (the stencil bit's setup or the R8 snapshot, `prepareDrawEx`'s area) is
+  shrunk to it. One with nothing left to draw still takes its DATE snapshot and moves the write
+  serial as the whole draw did, so the DATE cut's prediction (`rd_date_cut.c`, from the scan's
+  commands, not their areas) and its counters stay as they were.
+
+**The map** (`rd_sb_map_sprite`, `rd_sb_map_axis`): a destination pixel may take a texel of the
+source's box only where its UV comes within 3 source texels of it (bilinear taps reach one texel,
+the B-spline two, the above-1x snap a GS pixel); the inverse of the sprite's UV map over that range,
+2 pixels wider, inside the sprite. A clamped axis whose box reaches an edge takes every UV past it
+(the level 0 of v3677 reads rows 0.25 to 512.25 of a 448-row count); a repeated axis that reaches an
+edge, or whose UVs leave the texture, is taken whole. The replayed vertices are the ones mapped
+(after the keep frame's hold and the Full pixel extension).
+
+**Which commands are what** (`rd__shadow_box_scan_cmd`, in the store plan's walk, by its
+ordinals): a resolve makes its colour target a source; a screen sprite textured from a source (its
+RGBA view, RGBA32 texels) in the level's form that covers its whole target at scale 1 makes that
+target a source; one in the composite's form is a composite; any other draw on a source's target,
+a clear of it, a reset or strip on it, and any command the scan does not take apart (a copy, a post
+sprite, an exact blend) end it. At replay a source holds its box only where its producer drew this
+replay at the ordinal the scan named.
+
+**Drawn whole, counted with why** (`RdPerfRecord.shadowBoxWhy`): the count by the seven draws (the
+box is the one draw's), the count in the MSAA epoch, no reset this replay or strips of another
+size or a scale under 1, the chain broken (a source written since or not drawn), the draw's form
+(an alpha test that passes 0, TCC 0, a texture function other than MODULATE or DECAL, a Z write,
+STQ, not a sprite, the frame camera or its ST shift, the mirrored UI, AA1). `ICO_RD_SHADOW_BOX=0`
+draws everything whole ([TESTING.md](TESTING.md)); there is no setting.
+
+**The same bytes, no new GPU work.** A clear load op on the one draw's colour and narrower
+scissors; the passes, the draws and the pipelines are the same. No `DIVERGENCES.md` row.
+
+**The log.** Once: `rd: shadow box: on: the shadow count and its composites drawn over the volumes'
+box (the first: command N, GS pixels x0..x1 x y0..y1 of WxH); the same bytes`; a count or composite
+drawn whole: `rd: shadow box: drawn whole: <why> (command N; ...)`, the first 8 then every 100th.
+The 10 s `window: per replay` line: `; shadow box: C counts and D composites a replay over the
+volumes' box (B % of their picture), K whole (<why> n, ...)`. `rd_replay_tool --stats`: `stats:
+shadow box on|off: C counts and D composites over the volumes' box (E with nothing to draw; X of Y
+texels), K whole (...)`.
+
+**The tests.** `rd_shadow_box` (`port/render/test/rd_shadow_box_test.c`, CPU): the count's box,
+the axis map (level 0 of v3677, a clamped edge, a repeated edge, a box no UV reaches, a constant UV,
+a flipped sprite), a level's cover, a composite's box and the UV offset, the 10 s and `--stats`
+words. `rd_shadow_box_ab` / `_gl` replay `tools/shadow_box_dumps.txt` with `ICO_RD_SHADOW_BOX=0`
+and `1` at the PowerVR phone's profile, the Mali's, the B-spline at 2x and MSAA 4x, and on OpenGL:
+every target byte for byte ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)). The shadow
+count's own self-test (`rd_shadow_selftest`) compares the one draw, now over its box, with the
+seven draws byte for byte on the device at start.
 
 ## A cleared source read as its colour
 

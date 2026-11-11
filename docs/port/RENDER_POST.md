@@ -939,7 +939,9 @@ two never meet; the shadow reset clears the whole stencil, which DATE's setup wr
 pass that needs it (`port/render/rd_pipeline.c` (`shadowStencil`)). So outside the shadow window
 nothing reads a stencil a pass before it stored: where its passes load and store it (inside the
 window only, or with the depth on every pass on most tile-based GPUs) is
-[WORK_BUFFERS.md](WORK_BUFFERS.md#the-stencil-outside-the-shadow-window).
+[WORK_BUFFERS.md](WORK_BUFFERS.md#the-stencil-outside-the-shadow-window); the count and the
+composites drawn over the volumes' box alone are
+[there too](WORK_BUFFERS.md#the-shadows-over-the-volumes-box).
 
 ## Water and render-to-texture blocks
 
