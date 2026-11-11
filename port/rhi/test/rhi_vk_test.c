@@ -1468,6 +1468,59 @@ static int adapterCell(void)
     return failures != 0;
 }
 
+/* rhi_vk_budget, rhi_vk_budget_phone: VK_EXT_memory_budget's numbers in
+ * rhi_get_stats (videoMem*): read twice, the free part the budget less the
+ * use (0 past it), never above the budget; ICO_TEST_BUDGET_WANT=0 none at
+ * all (a tile-based phone GPU faked: not asked), =1 a budget (the device
+ * must list the extension); unset, either.  77 without a device */
+static int budgetCell(void)
+{
+    RhiDeviceDesc dd = {NULL, false, true, "rhi_vk_test budget", NULL};
+    if (!rhi_create_backend("vulkan") || !rhi_init(&dd)) {
+        rhi_test_log("SKIP budget: no Vulkan device\n");
+        return 77;
+    }
+    RhiStats a, b;
+    rhi_get_stats(&a);
+    rhi_get_stats(&b);
+    const char *want = getenv("ICO_TEST_BUDGET_WANT");
+    int fails = 0;
+    rhi_test_log(
+        "budget: %llu MB, %llu MB in use, %llu MB free (again: %llu, %llu, %llu)\n",
+        (unsigned long long)(a.videoMemBudget >> 20), (unsigned long long)(a.videoMemUsage >> 20),
+        (unsigned long long)(a.videoMemAvailable >> 20),
+        (unsigned long long)(b.videoMemBudget >> 20), (unsigned long long)(b.videoMemUsage >> 20),
+        (unsigned long long)(b.videoMemAvailable >> 20));
+    if (want && strcmp(want, "0") == 0 &&
+        (a.videoMemBudget || a.videoMemUsage || a.videoMemAvailable)) {
+        rhi_test_log("FAIL budget: a budget where none is asked\n");
+        fails++;
+    }
+    if (want && strcmp(want, "1") == 0 && a.videoMemBudget == 0) {
+        rhi_test_log("FAIL budget: no budget where the device offers one\n");
+        fails++;
+    }
+    for (int k = 0; k < 2; k++) {
+        const RhiStats *s = k ? &b : &a;
+        const uint64_t left =
+            s->videoMemBudget > s->videoMemUsage ? s->videoMemBudget - s->videoMemUsage : 0u;
+        if (s->videoMemAvailable != left || s->videoMemAvailable > s->videoMemBudget) {
+            rhi_test_log("FAIL budget: read %d: %llu free of a %llu budget with %llu in use\n", k,
+                         (unsigned long long)s->videoMemAvailable,
+                         (unsigned long long)s->videoMemBudget,
+                         (unsigned long long)s->videoMemUsage);
+            fails++;
+        }
+    }
+    if (a.videoMemBudget != b.videoMemBudget) {
+        /* the second read inside 250 ms gives the first's numbers */
+        rhi_test_log("FAIL budget: two reads in a moment differ\n");
+        fails++;
+    }
+    rhi_shutdown();
+    return fails ? 1 : 0;
+}
+
 /* rhi_vk_scope.c: the buffer barriers' scopes (RhiStats.fragmentHolds) */
 int rhi_vk_scope_cell(const RhiTestConfig *cfg);
 /* rhi_vk_subpass.c: the pass's own colour read with a depth target bound */
@@ -1491,6 +1544,10 @@ int main(int argc, char **argv)
         }
         rhi_shutdown();
         return clockCell() ? 1 : 0;
+    }
+    if (argc > 1 && strcmp(argv[1], "budget") == 0) {
+        /* rhi_vk_budget*: VK_EXT_memory_budget's numbers alone */
+        return budgetCell();
     }
     if (argc > 1 && strcmp(argv[1], "subpass") == 0) {
         /* rhi_vk_subpass*: the local read with a depth target alone

@@ -615,7 +615,14 @@ grants this process, its current usage, and what it can still reserve), in bytes
 at most every 250 ms (`d11_video_memory`, `dx_video_memory`: the query is a kernel call, and
 `rhi_get_stats` runs every replay); the adapter is queried for `IDXGIAdapter3` once at start, and
 when it is not offered (or answers a budget of 0) the fields read 0 and the init log says
-`video memory budget: not reported by this adapter`. 0 on Vulkan and OpenGL. The window prints them
+`video memory budget: not reported by this adapter`. On Vulkan the same three come from
+`VK_EXT_memory_budget` where the device offers it (enabled for nothing else; vk_device.c
+`vkr_budget_read`): the budget and the use of the device-local heaps summed, the free part the
+budget less the use, read at most every 250 ms (a physical-device query, not after a loss); not
+asked on a tile-based phone GPU (`RhiLimits.tilePhone`), whose device is made as before and whose
+free memory is the system's own measure. One line at the device's start: `rhi_vk: memory budget:
+VK_EXT_memory_budget: the device-local heaps' budget B MB, U MB in use, F MB free: ...`, or `...:
+not asked (a tile-based phone GPU: ...)` / `not offered (...)`. 0 on OpenGL. The window prints them
 in the 10 s `window: memory:` line, in `window: slow replay` lines whose fence wait is over 50 ms,
 and once a block when the usage reaches 90 % of the budget (`port/platform/window_lines.c`;
 [WORK_BUFFERS.md](WORK_BUFFERS.md#the-upload-ring-shrinks) for the other half of issue 126's

@@ -1644,7 +1644,10 @@ typedef struct RhiStats {
      * (IDXGIAdapter3::QueryVideoMemoryInfo): the budget the system gives
      * this process, what it uses now, and what it can still reserve, bytes.
      * Read at most four times a second.  0 where the adapter does not say
-     * (a Windows without IDXGIAdapter3) and on the other backends */
+     * (a Windows without IDXGIAdapter3).  Vulkan: the device-local heaps'
+     * budget and use from VK_EXT_memory_budget where offered (free = budget
+     * less use), not on a tile-based phone GPU (vk_device.c); 0 there and on
+     * OpenGL */
     uint64_t videoMemBudget, videoMemUsage, videoMemAvailable;
     /* Vulkan: fragmentHolds by kind and site (vk_cmd.c vkr_hold_note):
      * holdSites[RHI_HOLD_KIND_VERTEX] those whose second scope holds vertex or

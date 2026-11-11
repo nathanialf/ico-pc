@@ -39,7 +39,9 @@ void rd_vu_record_prepare(RdEarlyMemoryFn memory)
         RhiStats st;
         memset(&st, 0, sizeof(st));
         rhi_get_stats(&st);
-        in.gpuAvail = st.videoMemAvailable; /* Direct3D's; 0 elsewhere */
+        /* Direct3D's adapter memory, Vulkan's VK_EXT_memory_budget where it is
+           enabled (not on a phone); 0 elsewhere */
+        in.gpuAvail = st.videoMemAvailable;
     }
     in.haveRows = rd__vu_rec_rows();
     in.minRows = rd__vu_rec_rows_min();

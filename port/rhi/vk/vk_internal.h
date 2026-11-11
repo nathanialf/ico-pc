@@ -864,6 +864,12 @@ typedef struct VkrState {
      * renderer's texture uploads before the VU pre-pass); tile.polled the
      * recycle wait's 4 ms steps and the calibrated timestamps (vk_tsclock.c) */
     RhiTileRule tile;
+    /* VK_EXT_memory_budget enabled (vk_device.c: where offered, not on a
+     * tile-based phone GPU): rhi_get_stats' videoMem* from the device-local
+     * heaps' budget and use, read at most four times a second (budgetAtNs,
+     * the last read; the sums atomic words: any thread asks) */
+    bool memBudget;
+    uint64_t budgetAtNs, budgetBytes, budgetUse;
     /* ICO_VK_DEPTH_ALWAYS=1: every depth test compares ALWAYS (the
      * occlusion measurement's run without the depth: what draws nothing
      * whatever the depth says; the picture is not the game's) */
