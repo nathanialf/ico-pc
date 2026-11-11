@@ -917,7 +917,6 @@ const char *const ui_strings_es[UI_STR_COUNT] =
         [UI_STR_DIFF_LINE] = "Dificultad",
         [UI_STR_DIFF_LINK] = "Dificultad",
         [UI_STR_DIFF_TOAST_ENDED] = "Este viaje ha terminado.",
-        [UI_STR_DIFF_TOAST_KNOCK] = "Derribado: %d de %d",
         [UI_STR_DIFF_STATES_LOCKED] =
             "Los estados guardados no se pueden cargar en un viaje con muerte permanente.",
         [UI_STR_DIFF_WORD_PERMADEATH] = "Muerte permanente",

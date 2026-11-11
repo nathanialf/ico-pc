@@ -22,7 +22,7 @@
  *     every row greyed with "Chosen when the journey began", a step changes
  *     nothing, Back returns to Gameplay on the link; the New Game screen's
  *     pages are the draft's again afterwards;
- *   - the pause menu's journey line and the toasts (the difficulty
+ *   - the pause menu's journey line and the listener (no pop-up for a knock-down or the end; the difficulty
  *     listener: the Continue list's refusal, each counted knock-down short of
  *     the limit);
  *   - the screen's notes fit two lines in every table; the moved rows' notes
@@ -435,8 +435,8 @@ static void testReadOnly(void)
     ico_difficulty_reset();
 }
 
-/* the pause menu's journey line text and the listener's toasts */
-static void testToasts(void)
+/* the pause menu's journey line text and the listener's pop-ups (the refusal's alone) */
+static void testNoPopups(void)
 {
     IcoDifficulty d;
     char line[96], want[96];
@@ -452,35 +452,36 @@ static void testToasts(void)
     snprintf(want, sizeof(want), "%s 0 / 3", ui_str(UI_STR_DIFF_HARD));
     CHECK(strcmp(line, want) == 0, "Hard: %s (want %s)", line, want);
     ui_popup_reset();
-    CHECK(!ui_popup_active(), "no toast to begin with");
-    /* a counted knock-down short of the limit: a toast */
+    CHECK(!ui_popup_active(), "no pop-up to begin with");
+    /* a counted knock-down short of the limit: the log line, no pop-up (the
+       only pop-up that appears by itself during play is an achievement) */
     CHECK(ico_difficulty_knockdown(1, 0, 0) == 0, "counted");
-    snprintf(want, sizeof(want), ui_str(UI_STR_DIFF_TOAST_KNOCK), 1, 3);
-    CHECK(ui_popup_active() && strstr(ui_popup_title(), want) != NULL, "the toast \"%s\" (%s)",
-          want, ui_popup_active() ? ui_popup_title() : "");
-    ui_popup_reset();
+    CHECK(!ui_popup_active(), "the first knock-down raises no pop-up (%s)",
+          ui_popup_active() ? ui_popup_title() : "");
+    /* the pause menu's line carries the count instead */
+    ui__diff_line_text(line, sizeof(line));
+    snprintf(want, sizeof(want), "%s 1 / 3", ui_str(UI_STR_DIFF_HARD));
+    CHECK(strcmp(line, want) == 0, "the journey line keeps the count: %s (want %s)", line, want);
     ico_difficulty_tick(1, 0, 0); /* back on his feet */
     CHECK(ico_difficulty_knockdown(1, 0, 0) == 0, "the second is counted");
-    snprintf(want, sizeof(want), ui_str(UI_STR_DIFF_TOAST_KNOCK), 2, 3);
-    CHECK(ui_popup_active() && strstr(ui_popup_title(), want) != NULL, "the toast \"%s\" (%s)",
-          want, ui_popup_active() ? ui_popup_title() : "");
-    ui_popup_reset();
-    /* the one at the limit: no toast, the game over follows */
+    CHECK(!ui_popup_active(), "the second raises no pop-up (%s)",
+          ui_popup_active() ? ui_popup_title() : "");
+    /* the one at the limit: no pop-up, the game over follows */
     ico_difficulty_tick(1, 0, 0);
     CHECK(ico_difficulty_knockdown(1, 0, 0) == 1, "the limit");
-    CHECK(!ui_popup_active(), "no toast at the limit");
+    CHECK(!ui_popup_active(), "no pop-up at the limit");
     ico_difficulty_game_over();
-    /* the Continue list's refusal */
-    ui_popup_reset();
+    CHECK(!ui_popup_active(), "no pop-up at the game over");
+    /* a Permadeath journey ending (its game over, or the knock-down limit
+       reached): none either */
+    ico_difficulty_notify(ICO_DIFF_EV_ENDED, 0, 0);
+    CHECK(!ui_popup_active(), "the end raises no pop-up (%s)",
+          ui_popup_active() ? ui_popup_title() : "");
+    /* the Continue list's refusal answers the player's own choice: its
+       pop-up stays */
     ico_difficulty_notify(ICO_DIFF_EV_REFUSED, 0, 0);
     CHECK(ui_popup_active() && strstr(ui_popup_title(), ui_str(UI_STR_DIFF_TOAST_ENDED)) != NULL,
-          "the refusal's toast (%s)", ui_popup_active() ? ui_popup_title() : "");
-    /* a Permadeath journey ending (its game over, or the knock-down limit
-       reached): the same words */
-    ui_popup_reset();
-    ico_difficulty_notify(ICO_DIFF_EV_ENDED, 0, 0);
-    CHECK(ui_popup_active() && strstr(ui_popup_title(), ui_str(UI_STR_DIFF_TOAST_ENDED)) != NULL,
-          "the end's toast (%s)", ui_popup_active() ? ui_popup_title() : "");
+          "the refusal's pop-up (%s)", ui_popup_active() ? ui_popup_title() : "");
     ui_popup_reset();
     ico_difficulty_reset();
 }
@@ -566,7 +567,7 @@ int main(int argc, char **argv)
     testCustomize();
     testClearedSave();
     testReadOnly();
-    testToasts();
+    testNoPopups();
     testNotes();
     gFlagGameClear = 0;
     ico_opt_set_ui_language(-1);

@@ -764,8 +764,8 @@ the whole journey instead.
   you continue from a save. **Whole journey** keeps one count, saved with each
   save (loading an earlier save brings back the count it had then), and starts
   it again after the game over it causes.
-- Each knock-down short of the limit shows a message, such as
-  "Knocked down 1 of 3". The count is also on the pause screen.
+- The count is on the pause screen (such as "Hard 1 / 3"); no message
+  appears during play when Ico is knocked down.
 - At the limit Ico lies on the ground for two seconds, and cannot be hit
   meanwhile, and then the game is over as for any other game over: Continue,
   or Quit (with Permadeath, only Quit).
