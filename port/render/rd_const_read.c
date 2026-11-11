@@ -73,6 +73,23 @@ static struct {
     uint8_t rgba[4];
 } s_held;
 
+/* the last sprite drawn in a cleared source's colour: its target and the
+ * action it was (rd__const_took, rd_aura_paste.c's chain) */
+static struct {
+    uint32_t replay, actions, id;
+} s_took;
+
+uint32_t rd__const_actions(void)
+{
+    return s_actionsReplay == g_rd.replayCounter ? s_actions : 0u;
+}
+
+bool rd__const_took(uint32_t tcId)
+{
+    return s_took.replay == g_rd.replayCounter && s_actionsReplay == g_rd.replayCounter &&
+           s_took.actions == s_actions && s_took.id == tcId && tcId != 0;
+}
+
 bool rd__const_reads_on(void)
 {
     static int on = -1;
@@ -190,6 +207,9 @@ bool rd__const_read(const RdTargetRec *tc, uint32_t tcId, const RdTargetRec *src
     }
     memcpy(p->rgba, col, sizeof(col));
     g_rdPerf.constReads++;
+    s_took.replay = g_rd.replayCounter;
+    s_took.actions = s_actions;
+    s_took.id = tcId;
     rd__clear_skip_served(srcId); /* the source not read: its clear may go (rd_pass_cut.c) */
     return true;
 }

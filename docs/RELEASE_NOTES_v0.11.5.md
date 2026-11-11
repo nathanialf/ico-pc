@@ -6,6 +6,7 @@
 - Above the Original resolution, the glow is not drawn in rooms where it adds no light (most rooms without the sun or the lamps in view), so those rooms take less work to draw; the picture is the same.
 - Drawing the shadows takes less graphics memory work on phones with Arm Mali or Qualcomm Adreno graphics and on some PCs. The picture is exactly the same.
 - On phones, in most rooms with the glow, the fix for the thin gaps between surfaces is drawn together with the next effect instead of on its own, and in rooms with lamps the glow itself is drawn together with the next effect, so those rooms take less work to draw; the picture is exactly the same.
+- On phones, a room's aura effect takes less work to draw when nothing on screen glows with it; the picture is exactly the same.
 - On phones, the pause menu is drawn together with the picture's last effect instead of on its own, so a paused picture takes less work to draw; the picture is exactly the same.
 
 ## Fixed

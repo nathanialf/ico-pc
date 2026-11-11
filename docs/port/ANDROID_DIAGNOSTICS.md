@@ -631,6 +631,16 @@ classes` line's crack fill class loses its pass (its colour copy stays). Dark ro
 `drawn early` say a command the hold did not expect; the player's F12 dump replays it
 (`rd_replay_tool --stats` prints `late pass on: N crack fills held ..., M drawn early (<why>)`).
 
+### The aura's paste as its constant part
+
+In a room with no aura object on screen the aura's paste is drawn as the alpha alone over all but a
+band of SCENE's bottom rows ([RENDER_POST.md](RENDER_POST.md#the-auras-paste-as-its-constant-part)).
+The 10 s block's `window: aura paste: P drawn as the alpha alone (B band rows each), K read whole
+(why)` says how often (B about 18 at the phone's 1080 rows); `read whole` names why the proof did not
+hold (`its source not proven alpha 0`: an aura object on screen, the usual reason in the aura's own
+rooms; `no local read`: a device that reads the paste's destination by a copy). The `perf classes`
+line's aura class shows the shading it saved.
+
 ### DATE's passes without the depth (issues 179 and 123)
 
 On a phone with `DATE snapshot` in its profile line (Arm, Qualcomm without the in-pass read) the

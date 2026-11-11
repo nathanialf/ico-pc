@@ -1497,6 +1497,51 @@ commands after the aura's paste), `rd_late_pass_ab` and `rd_late_pass_gl` (dumps
 `rd_crack_tiler_fold_mali`), `rd_replay_tool_crack` and `rd_crack_late_ab` check it
 ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
+### The aura's paste as its constant part
+
+`port/render/rd_aura_paste.c` (`rd_aura_paste.h`): in a room with no aura object on screen AURA_WORK
+holds only its clear, and the aura's paste into SCENE (`pasteFeedBackAreaToFB`, list 8 command 55
+in the phone's frames: FEED128 over SCENE through (Cs - Cd) * As + Cd, MODULATE by RGBAQ (64, 64, 64,
+128)) changes SCENE's RGB nowhere but its bottom band: As is 0 wherever its kernel reads FEED128's
+rows 0-111, which hold alpha 0, and FEED128's rows 112-127 hold WORK0's alpha the aura's sprite left
+(measured at 128; the paste's B-spline reaches row 112 near SCENE's last rows). The paste is drawn
+there as the alpha alone (`rd_fx_plan.c` `fxAuraSplit`: the constant fold of the sprite untextured
+with RGBAQ's alpha 0, the blend proved the identity on RGB at every Cd and Ad, the alpha 0 written:
+the bytes the paste writes where As is 0, without its texture's taps or the destination's read) and
+as the paste over the other rows, scissored, both in the paste's own local-read pass (after a held
+crack fill and a deferred glow paste, which the band's first draw takes as the whole paste's draw
+did). No new pipeline: the constant fold's key (the alpha alone, `rd__fx_enumerate`) and the paste's.
+
+The proof is a chain of records, each a target's rows (across every column) proven alpha 0:
+- started by a sprite drawn in a cleared source's colour (`rd_const_read.c` `rd__const_took`: command
+  39, AURA_WORK into WORK0) whose colour's alpha is 0: the rows it covers (fx_sprite_ps's coverage at
+  scale 1, in the scissor, every column);
+- carried by the next action's sprite reading that target at scale 1 (command 47, WORK0 into FEED128:
+  V = 16 y to the bit, the GS's bilinear taps, a fraction of 0 weighing the second tap 0, addressed as
+  `fx_axis` addresses them): the rows whose taps all lie in proven rows;
+- taken by the next action's sprite into SCENE reading it (the paste): each SCENE texel row's window
+  Y a step either way (the float's rounding of (t + 0.5) / scale; a step lower again above the rect),
+  its V, the kernel's taps (`rd__ap_taps`: the box, the B-spline or the GS's taps of FXF_ABOVE1X's
+  steps), addressed (CLAMP to the TEX0 rows then the texture's; a row REPEAT moves proven only when
+  every row is); the longest run of rows reading proven rows only is drawn as the alpha alone.
+Each link needs its alpha written whole (no alpha test, no DATE, FBA 0, the colour mask's A, no
+FBMSK), its alpha 0 at an alpha 0 texel (`rd__const_tfx`), RGBA32; the paste besides RGB kept at As 0
+(`rd__fx_fold`: PABE refuses), the scissor whole and the local read (the profile's fx plan and
+fxDstLocal, no exact blend, no MSAA, no GS state as shader data). Any action between two links (the
+action count of `rd_const_read.c`) ends the chain. Anything not proven: the paste whole, counted by
+reason (`RD_AP_WHY_*`). On the Pixel's frames (both WRAP on CLAMP): FEED128 rows 0-111, SCENE rows
+[0, 1062) of 1080 as the alpha alone, 18 band rows (`rd_aura_paste_test`'s geometry; the cage frame's
+measured band, rows 1072-1079, lies in it). `ICO_RD_AURA_PASTE=0` draws the paste whole (the tests;
+no config key).
+
+Counters `RdPerfRecord.auraPasteSplit`, `auraPasteRows`, `auraPasteBand`, `auraPasteKept`,
+`auraPasteWhy`; once a run `rd: aura paste: the aura's paste drawn as the alpha alone over SCENE's
+rows A-B (...), as the paste over the other N rows`; the 10 s line `window: aura paste: P drawn as
+the alpha alone (B band rows each), K read whole (why)` (when any aura paste was seen); `--stats`
+`stats: aura paste on|off: S split (R rows as the alpha alone, B band rows), K drawn whole (why)`.
+`rd_aura_paste` (CPU) and `rd_aura_paste_ab` (dumps) check it
+([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+
 ## Start-up
 
 What the renderer decides or prepares before play, and the lines that show it, beside
