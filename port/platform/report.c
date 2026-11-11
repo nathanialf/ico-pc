@@ -681,6 +681,51 @@ static int key_of(const char *l)
     return -1;
 }
 
+/* The performance lines by scene (window_perf_rank.h, issue 179): the
+   latest ranked line and profile line of each scene, in the order the
+   scenes first came, so one report carries the run's ranking whatever
+   block was last */
+#define PERF_SCENES 16
+
+static struct {
+    char name[48];
+    char ranked[LINE_BYTES], profile[LINE_BYTES];
+} s_perf[PERF_SCENES];
+
+static int s_perf_n;
+
+static void perf_line(const char *l)
+{
+    static const char *const kRanked = "window: perf ranked: ";
+    static const char *const kProfile = "window: performance profile: ";
+    const int ranked = starts(l, kRanked);
+    if (!ranked && !starts(l, kProfile)) {
+        return;
+    }
+    const char *name = l + strlen(ranked ? kRanked : kProfile);
+    const char *end = strstr(name, ": ");
+    if (end == NULL || end - name >= (long)sizeof s_perf[0].name) {
+        return;
+    }
+    const size_t len = (size_t)(end - name);
+    int i;
+    for (i = 0; i < s_perf_n; i++) {
+        if (strlen(s_perf[i].name) == len && strncmp(s_perf[i].name, name, len) == 0) {
+            break;
+        }
+    }
+    if (i == s_perf_n) {
+        if (s_perf_n == PERF_SCENES) {
+            return;
+        }
+        s_perf_n++;
+        memcpy(s_perf[i].name, name, len);
+        s_perf[i].name[len] = '\0';
+        s_perf[i].ranked[0] = s_perf[i].profile[0] = '\0';
+    }
+    snprintf(ranked ? s_perf[i].ranked : s_perf[i].profile, LINE_BYTES, "%s", l);
+}
+
 #define RING 20
 static char s_ring[RING][LINE_BYTES];
 static int s_ring_n, s_ring_head;
@@ -698,6 +743,7 @@ static void log_line(const char *l, void *user)
     if (k >= 0) {
         snprintf(s_key[k], sizeof s_key[k], "%s", l);
     }
+    perf_line(l);
     if (starts(l, "ico_pc: ======")) {
         /* a report block: the lines before it are the ring's */
         memcpy(s_before, s_ring, sizeof s_ring);
@@ -793,6 +839,7 @@ static void build_text(const IcoReportInputs *in)
             in->memory != NULL && in->memory[0] != '\0' ? in->memory : "(unknown on this system)");
 
     memset(s_key, 0, sizeof s_key);
+    s_perf_n = 0;
     s_ring_n = s_ring_head = s_before_n = s_before_head = 0;
     s_in_block = 0;
     s_block_len = 0;
@@ -807,6 +854,19 @@ static void build_text(const IcoReportInputs *in)
     for (i = 0; i < K_COUNT; i++) {
         if (s_key[i][0] != '\0') {
             text_kv("  ", s_key[i]);
+        }
+    }
+    if (s_perf_n > 0) {
+        /* the run's performance by scene (window_perf_rank.h) */
+        text_line("");
+        text_line("the performance lines by scene (the latest ranking and profile of each):");
+        for (i = 0; i < s_perf_n; i++) {
+            if (s_perf[i].ranked[0] != '\0') {
+                text_kv("  ", s_perf[i].ranked);
+            }
+            if (s_perf[i].profile[0] != '\0') {
+                text_kv("  ", s_perf[i].profile);
+            }
         }
     }
     {

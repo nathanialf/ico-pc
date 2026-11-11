@@ -1225,6 +1225,13 @@ static void run_child(const char *mode, const char *log)
     } else if (strncmp(mode, "pump", 4) == 0) {
         pump_child(mode);
     } else if (strcmp(mode, "segv") == 0) {
+        /* the performance lines the report keeps by scene (report.c
+           perf_line: the latest ranked and profile line of each) */
+        ico_diag_log("window: perf ranked: stage 3 play: 16.8 of 25.0 fps, the older one");
+        ico_diag_log("window: performance profile: stage 3 play: 3 blocks (30 s)");
+        ico_diag_log("window: perf ranked: stage 4 scene: 12.0 of 25.0 fps");
+        ico_diag_log("window: perf ranked: stage 3 play: 15.0 of 25.0 fps, the newer one");
+        ico_diag_log("window: performance profile (the run's end, 2 scenes, profile 1):");
         fn = segv_thread;
     } else if (strcmp(mode, "segvnote") == 0) {
         /* a crash inside the graphics driver's pipeline build; this child
@@ -1879,6 +1886,15 @@ int main(int argc, char **argv)
             CHECK(strstr(txt, "ico_pc: CRASH: SIGSEGV") != NULL);
             CHECK(strstr(txt, "ico_pc: symbols from diag_test.map") != NULL);
             CHECK(strstr(txt, "achievements.toml: (no stages line)") != NULL);
+            /* the performance lines by scene: the newer ranking, the
+               profile, the scenes in the order they came; no header line */
+            CHECK(strstr(txt, "the performance lines by scene (the latest ranking and profile "
+                              "of each):\n  window: perf ranked: stage 3 play: 15.0 of 25.0 "
+                              "fps, the newer one\n  window: performance profile: stage 3 "
+                              "play: 3 blocks (30 s)\n  window: perf ranked: stage 4 scene: "
+                              "12.0 of 25.0 fps\n") != NULL);
+            CHECK(strstr(txt, "the older one") == NULL ||
+                  strstr(txt, "the older one") > strstr(txt, "the last ico_pc:/window:/rd:"));
             if (ex != NULL) {
                 fputs(txt, ex);
                 fclose(ex);
