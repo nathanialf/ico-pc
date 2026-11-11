@@ -984,8 +984,10 @@ there. Bits 0-5 are never touched. So no `DIVERGENCES.md` row. The composite's g
 split into tile quads: interpolated UVs at a pixel are not provably the same bits in another
 triangle, so the cull is the stencil's, before the fragment shader where the device tests early.
 
-**Where.** On by default on the PowerVR class and the desktop classes where the start-up self-test
-passes; off on the Adreno and Mali classes (issues 179, 211, 123), Apple and other tile-based GPUs.
+**Where.** Off on every device by default (`RD_SHADOW_TILE_DEFAULT` 0 in
+`port/render/rd_shadow_tile.c`; no start-up work, no keys, no self-test then). With that constant 1
+it would be on for the PowerVR class and the desktop classes where the start-up self-test passes,
+and off on the Adreno and Mali classes (issues 179, 211, 123), Apple and other tile-based GPUs.
 Only where DATE takes the stencil bit (Vulkan with the local read): the snapshot path's composites
 are drawn whole; the shaders are made on Vulkan alone. A composite whose box is empty, outside the
 MSAA epoch's rule, or not boxed (rd_shadow_box.c refuses it) is drawn as before. Drawn whole and
@@ -1010,10 +1012,20 @@ composites over the tile mask (M masks), K whole (...); tiles live SHADOW2 l of 
 SHADOW0 ...` (the masks read back after the replay; the device's own log has no tile count, which
 would need a readback a frame).
 
-**What it saves** (reasoned, not measured): on the bridge frame at most 3717 of SHADOW0's 27136 mask
-texels, 1023 of SHADOW1's 6784 and 289 of SHADOW2's 1696 are live (14 %, 15 %, 17 % of the
-picture's composites and set-ups' bit-6 draws), against the whole picture before; three cheap mark
-draws and three small mask passes are added.
+**Why it is off.** On the bridge frame at most 3717 of SHADOW0's 27136 mask texels, 1023 of
+SHADOW1's 6784 and 289 of SHADOW2's 1696 are live, so most of the composites' and set-ups'
+fragments are culled. On the owner's PowerVR phone (the self-test passed: `400 of 16384 mask
+texels live`) the bridge's list 3 class was 1.7 ms slower with it. The dead fragments it culls
+were already cheap there: the composite rejects its fragment after one bilinear tap (the alpha
+test), and the set-up's bit-6 draw after one local read, on a GPU whose tiles stay on the chip; the
+cull adds, a composite, a full-area mark draw (a texture load, a discard, a stencil write) and, for
+every fragment of the clear, the set-up and the composite, a stencil test against a value the same
+pass just wrote, and the mask passes. The same tiles drawn as quads whose vertex shader collapses
+the dead ones would remove the fragments instead of testing them, but not exactly: a pixel's
+interpolated UV in a tile's triangle is not provably the bits the whole sprite's triangle gives
+(the interpolator's arithmetic is the implementation's), and a UV computed from the pixel position
+in the fragment shader is not the interpolated one either, so either form can move a bilinear
+weight's last bit. Nothing exact is left to cut here on such a GPU.
 
 **The tests.** `rd_shadow_tile` and `rd_shadow_tile_selftest` (`port/render/test/rd_shadow_tile_test.c`)
 and `rd_shadow_tile_ab` (`tools/shadow_tile_dumps.txt`, the bridge frame's live texels under the
