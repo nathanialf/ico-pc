@@ -424,8 +424,7 @@ int ico_diag_startup_end_count(int kind);
    in a slot of their own ("loss_chain <n>" in the counts file). Set by
    ico_diag_startup_activity_begin and handed to the graphics backend as
    ICO_LOSS_ROW (unset when 0; port/rhi/rhi_tile_rule.h): after one the
-   v0.11.2 barrier scopes, after two the single submission wait too, unless
-   [dev] barrier_scope or polled_wait says otherwise. Logged: "ico_pc: loss
+   v0.11.2 barrier scopes, after two the single submission wait too. Logged: "ico_pc: loss
    ladder: <n> start(s) in a row lost the graphics device before this one
    ...". Never written to the settings. */
 unsigned int ico_diag_startup_loss_row(void);

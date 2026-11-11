@@ -19,7 +19,7 @@ window paces and presents is [DISPLAY.md](DISPLAY.md).
 | `port/rhi/rhi_backend.c` | the real `rhi_*` functions, forwarding to the selected table; the layer classifiers |
 | `port/rhi/rhi_driver_version.h`, `rhi_driver_version.c` | a Vulkan `driverVersion` decoded the way its vendor writes it, for the adapter log line |
 | `port/rhi/rhi_pass_row.h`, `rhi_pass_row.c` | the render pass driver row (Intel's Windows driver at Vulkan 1.3.215 or older takes `VkRenderPass` objects) and the `[dev] legacy_passes` override's words, pure ([Vulkan](#vulkan), **Render passes**) |
-| `port/rhi/rhi_tile_rule.h`, `rhi_tile_rule.c` | the barrier scopes and the submission wait a Vulkan start runs (`[dev] barrier_scope`, `[dev] polled_wait`, a tile-based GPU, the loss ladder) and their lines' words, pure ([Barrier scopes and the submission wait](#barrier-scopes-and-the-submission-wait)) |
+| `port/rhi/rhi_tile_rule.h`, `rhi_tile_rule.c` | the barrier scopes and the submission wait a Vulkan start runs (a tile-based GPU, the loss ladder, the tests' `ICO_VK_FAKE_SCOPES`) and their lines' words, pure ([Barrier scopes and the submission wait](#barrier-scopes-and-the-submission-wait)) |
 | `port/rhi/rhi_pass_crumb.h`, `rhi_pass_crumb.c` | the render pass the backend last began, stored before the driver's begin call and printed by the crash report (library `ico_pass_crumb`; [Device loss](#device-loss), **The crash report's pass**) |
 | `port/rhi/rhi_adapter.h`, `rhi_adapter.c` | the `[video] adapter` name match and the device-list line's text, linked by the Vulkan and Direct3D backends |
 | `port/rhi/CMakeLists.txt` | the libraries, SDL3's prefix per target, the tests |
@@ -244,7 +244,7 @@ release before both ran there. No cause is proven. Those two changes are each a 
 a device is picked and before it is made (`vk_device.c` `vkr_tile_rule_apply`, the pure rule in
 `rhi_tile_rule.c`):
 
-- **The barrier scopes** (`[dev] barrier_scope`, `ICO_VK_BARRIER_SCOPE`; `VkrState.tile.wide`,
+- **The barrier scopes** (`VkrState.tile.wide`,
   `RhiLimits.wideBarriers`). `narrow` is the next section's: each buffer barrier names only the
   stages that can touch the buffer, the opening barrier only attachments, the copies' half of the
   order between lists in the closing barrier, and the renderer's texture uploads and fog table
@@ -259,7 +259,7 @@ a device is picked and before it is made (`vk_device.c` `vkr_tile_rule_apply`, t
   a copy between a texture and a buffer shaders read adds the transfer stage to its first scope
   (`vkr_hz_copy`), which the wide opening barrier holds anyway. The picture is the same either way
   (ordering only; `rd_scope_ab`, `rd_scope_ab_tiler`).
-- **The submission wait** (`[dev] polled_wait`, `ICO_VK_POLLED_WAIT`; `VkrState.tile.polled`,
+- **The submission wait** (`VkrState.tile.polled`,
   `RhiLimits.polledWait`). `on`, the polled wait: a frame slot's recycle wait that blocks past 50 ms
   becomes 4 ms timed waits reading the slot's query results and the submission counter while its
   work is in flight (`vk_tsclock.c`, the trace of issue 123's stalls), and
@@ -272,28 +272,29 @@ a device is picked and before it is made (`vk_device.c` `vkr_tile_rule_apply`, t
   clock. The CPU's times of the wait, the counter restarts and the unwritten stamps are still
   measured.
 
-`auto` (the default of both) is `wide` and the single wait on every tile-based GPU (the vendors
+There is no setting: both are `wide` and the single wait on every tile-based GPU (the vendors
 Arm, Qualcomm, Imagination, Samsung, Apple and Broadcom, MoltenVK, every Android GPU: what `rd:
-profile:` calls tile-based, so Qualcomm's driver and Turnip alike) and `narrow` with the polled
-wait elsewhere. The loss ladder, on every device: a start after a lost one runs the wide scopes,
-after two lost starts in a row the single wait too (`ICO_LOSS_ROW` from `port/platform/diag_host.c`,
-the line `ico_pc: loss ladder: ...`; never written to the settings). A setting other than `auto` is
-never overridden. The lines, one each at the device's start, that the reporter's next log is read
-by:
+profile:` calls tile-based, so Qualcomm's driver and Turnip alike) and `narrow` with the polled wait
+elsewhere. The loss ladder, on every device: a start after a lost one runs the wide scopes, after
+two lost starts in a row the single wait too (`ICO_LOSS_ROW` from `port/platform/diag_host.c`, the
+line `ico_pc: loss ladder: ...`; never written to the settings). The lines, one each at the
+device's start, that the reporter's next log is read by:
 
-    rhi_vk: barriers: wide (a tile-based GPU, Arm, vendor 0x13B5: the default on every such GPU; [dev] barrier_scope = narrow tries the narrow ones): every buffer barrier waits for ...
-    rhi_vk: submission wait: single (a tile-based GPU, Arm, vendor 0x13B5: ...): one wait without a time limit for a frame slot, ... (a stalled replay's start is placed from its wait's end, not on the CPU's clock)
+    rhi_vk: barriers: wide (a tile-based GPU, Arm, vendor 0x13B5): every buffer barrier waits for ...
+    rhi_vk: submission wait: single (a tile-based GPU, Arm, vendor 0x13B5): one wait without a time limit for a frame slot, ... (a stalled replay's start is placed from its wait's end, not on the CPU's clock)
     rhi_vk: timestamps: 48 valid bits, ...; calibrated with the CPU's clock: off (the single submission wait: single (tile-based)) ...
 
-and the summary's profile words end `, barriers wide (tile-based), submission wait single
-(tile-based)`. With both present and no loss, one of the two was the cause; `[dev]
-barrier_scope = narrow` or `polled_wait = on` alone then tells which, if the reporter offers to try.
-`ICO_VK_FAKE_VENDOR=<id>` (the tests: `0x13B5`) is the vendor id the rule reads on any device,
-nothing else (`rhi_vk_scopes_arm`, `rhi_vk_clock_arm`, `rd_scope_ab`).
+(after a lost start on a desktop: `wide (the previous start lost the graphics device: this start
+only, nothing written to the settings)`), and the summary's profile words end `, barriers wide
+(tile-based), submission wait single (tile-based)`. With both present and no loss, one of the two
+was the cause. The tests alone pick a path: `ICO_VK_FAKE_VENDOR=<id>` (`0x13B5`) is the vendor id
+the rule reads on any device, nothing else, and `ICO_VK_FAKE_SCOPES=wide` or `narrow` the scopes
+alone (the wait stays the device's) (`rhi_vk_scopes_arm`, `rhi_vk_scopes_wide`,
+`rhi_vk_scopes_arm_narrow`, `rhi_vk_clock_arm`, `rd_scope_ab`, `rd_scope_ab_tiler`).
 
 ### Buffer barriers' scopes
 
-The narrow scopes (`[dev] barrier_scope = narrow`, the default where the GPU is not tile-based;
+The narrow scopes (where the GPU is not tile-based;
 [the section above](#barrier-scopes-and-the-submission-wait)): every Vulkan buffer barrier names
 only the stages that can have touched that buffer, and a command list's opening barrier only the
 attachment stages (issue 179). A pipeline barrier's

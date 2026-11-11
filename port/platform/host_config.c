@@ -557,12 +557,6 @@ static const struct {
     /* the Vulkan VkRenderPass path's subpass read (an experiment, off by
        default): on tries it, still gated by DATE's self-test */
     {"dev.subpass_read", "subpass_read"},
-    /* the Vulkan barrier scopes and the submission wait (issues 179 and
-       211; port/rhi/rhi_tile_rule.h): auto (the default: v0.11.2's wide
-       scopes and single wait on a tile-based GPU, v0.11.3's narrow scopes
-       and polled wait elsewhere), wide or narrow; auto, on or off */
-    {"dev.barrier_scope", "barrier_scope"},
-    {"dev.polled_wait", "polled_wait"},
     {"dev.storage_pass_merge", "storage_pass_merge"},
     /* retired: the VU vertex shaders' plain variants only and the override
        of the device table (one module set on every device now); read so a
@@ -796,10 +790,6 @@ static const struct {
     /* port/rhi/vk/vk_device.c vkr_subpass_read_decide: 1 the subpass read
        on any VkRenderPass path (an experiment), 0 or unset off */
     {"subpass_read", "ICO_VK_SUBPASS_READ"},
-    /* port/rhi/vk/vk_device.c vkr_tile_rule_apply (port/rhi/rhi_tile_rule.h):
-       auto, wide or narrow; auto, 1 or 0 */
-    {"barrier_scope", "ICO_VK_BARRIER_SCOPE"},
-    {"polled_wait", "ICO_VK_POLLED_WAIT"},
     /* port/render/rd_dst_read.c rd__dst_merge_ok, rd_core.c rd_init */
     {"storage_pass_merge", "ICO_RD_PASS_MERGE"},
     /* port/render/rd_replay_vu.c rd__vu_prepass_init: 0 draws without the
@@ -960,7 +950,6 @@ const char *ico_dev_env_value(const char *key, const char *value)
     static const char *const paths[] = {"local", "inplace", "copy", "buffer", NULL};
     static const char *const blends[] = {"fixed", "attachment", "storage", "exact", NULL};
     static const char *const datePaths[] = {"stencil", "snapshot", NULL};
-    static const char *const scopes[] = {"auto", "wide", "narrow", NULL};
     static const char *const sets[] = {"full", "careful", "lazy", NULL};
     static const char *const fallbacks[] = {"auto", "off", "fifo", NULL};
     static const char *const pins[] = {"auto", "off", NULL};
@@ -1004,13 +993,6 @@ const char *ico_dev_env_value(const char *key, const char *value)
     }
     if (strcmp(key, "date_path") == 0) {
         return value_is(value, datePaths) ? value : NULL;
-    }
-    if (strcmp(key, "barrier_scope") == 0) {
-        /* auto, wide or narrow as they are (no boolean form) */
-        return value_is(value, scopes) ? value : NULL;
-    }
-    if (strcmp(key, "polled_wait") == 0 && strcmp(value, "auto") == 0) {
-        return "auto"; /* else on/off as 1/0 below (rhi_tile_rule.c) */
     }
     if (strcmp(key, "uint_view") == 0 && strcmp(value, "work") == 0) {
         return "work"; /* the work buffers' view only; true both, false none */

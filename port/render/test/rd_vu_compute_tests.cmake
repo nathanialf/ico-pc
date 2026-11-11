@@ -114,14 +114,14 @@ set_tests_properties(rd_vuprepass_selftest_sink_fail
                                 "${_env};ICO_RD_VU_RECORD=stores;ICO_RD_VU_REC_SINK_FAIL=1")
 # rd_scope_ab, rd_scope_ab_tiler (test/rd_vu_env_ab.cmake; issues 179 and
 # 211, port/rhi/rhi_tile_rule.h): the same dumps under v0.11.3's narrow
-# barrier scopes (ICO_VK_BARRIER_SCOPE=narrow: the texture uploads after the
+# barrier scopes (ICO_VK_FAKE_SCOPES=narrow: the texture uploads after the
 # VU pre-pass) and v0.11.2's wide ones with the uploads before it (the
 # tile-based phones' default since v0.11.4): every named target byte for
 # byte.  rd_scope_ab: the wide run by Arm's vendor id faked
-# (ICO_VK_FAKE_VENDOR=0x13B5, the rule's auto), the desktop profile;
+# (ICO_VK_FAKE_VENDOR=0x13B5: the tile rule), the desktop profile;
 # rd_scope_ab_tiler: both runs on a tile-based profile
 # (ICO_VK_FAKE_LIMITS=moltenvk, rd_profile.c's Apple class), the wide run by
-# that profile's auto.  The dumps: rd_pixel's, and tools/scope_dumps.txt's
+# the tile rule, the narrow one faked.  The dumps: rd_pixel's, and tools/scope_dumps.txt's
 # (the VU stage list's and issue 179's two loss frames, machine-local)
 file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/scope_ab" "${CMAKE_CURRENT_BINARY_DIR}/scope_ab_tiler")
 add_test(NAME rd_scope_ab
@@ -129,7 +129,7 @@ add_test(NAME rd_scope_ab
                  "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
                  "-DLIST=${CMAKE_SOURCE_DIR}/tools/scope_dumps.txt"
                  "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/scope_ab"
-                 "-DENV_A=ICO_VK_BARRIER_SCOPE=narrow" "-DENV_B=ICO_VK_FAKE_VENDOR=0x13B5"
+                 "-DENV_A=ICO_VK_FAKE_SCOPES=narrow" "-DENV_B=ICO_VK_FAKE_VENDOR=0x13B5"
                  "-DREQ_A=stats: [0-9]+ draws, [0-9]+ passes" "-DREQ_B=stats: [0-9]+ draws, [0-9]+ passes"
                  -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
 add_test(NAME rd_scope_ab_tiler
@@ -137,8 +137,8 @@ add_test(NAME rd_scope_ab_tiler
                  "-DDUMP=${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
                  "-DLIST=${CMAKE_SOURCE_DIR}/tools/scope_dumps.txt"
                  "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/scope_ab_tiler"
-                 "-DENV_A=ICO_VK_FAKE_LIMITS=moltenvk|ICO_VK_BARRIER_SCOPE=narrow"
-                 "-DENV_B=ICO_VK_FAKE_LIMITS=moltenvk|ICO_VK_BARRIER_SCOPE=auto"
+                 "-DENV_A=ICO_VK_FAKE_LIMITS=moltenvk|ICO_VK_FAKE_SCOPES=narrow"
+                 "-DENV_B=ICO_VK_FAKE_LIMITS=moltenvk"
                  "-DREQ_A=stats: [0-9]+ draws, [0-9]+ passes" "-DREQ_B=stats: [0-9]+ draws, [0-9]+ passes"
                  -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_vu_env_ab.cmake")
 set_tests_properties(rd_scope_ab rd_scope_ab_tiler PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"

@@ -3405,10 +3405,10 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "ico_pc: the previous start lost the graphics device (1 in a row); nothing "
                         "is written to config.toml: robust access is as the settings say ([dev] "
                         "gpu_robust)\n") != NULL);
-        CHECK(strstr(s, "ico_pc: loss ladder: 1 start in a row lost the graphics device before "
-                        "this one: this start runs the wide barrier scopes unless [dev] "
-                        "barrier_scope says otherwise (the graphics backend's barriers line says "
-                        "what ran); nothing is written to the settings\n") != NULL);
+        CHECK(strstr(s,
+                     "ico_pc: loss ladder: 1 start in a row lost the graphics device before "
+                     "this one: this start runs the wide barrier scopes (the graphics backend's "
+                     "barriers line says what ran); nothing is written to the settings\n") != NULL);
         CHECK(strstr(s, "test: loss row 1, ICO_LOSS_ROW 1\n") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(read_file(ends), "loss 1\n") != NULL);
@@ -3420,9 +3420,8 @@ int main(int argc, char **argv)
                         "is written to config.toml") != NULL);
         CHECK(strstr(s, "ico_pc: loss ladder: 2 starts in a row lost the graphics device before "
                         "this one: this start runs the wide barrier scopes and the single "
-                        "submission wait unless [dev] barrier_scope or polled_wait says otherwise "
-                        "(the graphics backend's barriers and submission wait line says what "
-                        "ran); nothing is written to the settings\n") != NULL);
+                        "submission wait (the graphics backend's barriers and submission wait "
+                        "line says what ran); nothing is written to the settings\n") != NULL);
         CHECK(strstr(s, "test: loss row 2, ICO_LOSS_ROW 2\n") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(read_file(ends), "loss 2\n") != NULL);

@@ -499,11 +499,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   device. The same script for the barrier scopes (issues 179 and 211, `port/rhi/rhi_tile_rule.h`;
   registered in `test/rd_vu_compute_tests.cmake`), over rd_pixel's dump and
   `tools/scope_dumps.txt` (the VU stage list's captures and issue 179's two loss frames,
-  machine-local): `rd_scope_ab` the narrow scopes (`ICO_VK_BARRIER_SCOPE=narrow`, the texture
+  machine-local): `rd_scope_ab` the narrow scopes (`ICO_VK_FAKE_SCOPES=narrow`, the texture
   uploads after the VU pre-pass) against the wide ones with the uploads before it (Arm's
   vendor id faked, `ICO_VK_FAKE_VENDOR=0x13B5`: the tile-based rule's default), the desktop
   profile; `rd_scope_ab_tiler` both on a tile-based profile (`ICO_VK_FAKE_LIMITS=moltenvk`), narrow
-  asked against the profile's `auto` (wide): every named target byte for byte.
+  faked (`ICO_VK_FAKE_SCOPES=narrow`) against the tile rule's wide: every named target byte for byte.
 - `rd_vumerge_ab.cmake`: the same dumps twice, every VU draw a GPU draw of its own
   (`ICO_RD_VU_MERGE=0`) and with the draw merge, through the record and through the programs' own
   entries (`ICO_RD_VU_PREPASS=0`, the path after a failed self-test), at Original 4:3 1x, Enhanced 4:3 2x

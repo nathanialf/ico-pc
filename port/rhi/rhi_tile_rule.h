@@ -31,18 +31,16 @@
  *                   Off is v0.11.2's: one wait without a time limit, the
  *                   extension not enabled.
  *
- * The rule, for each: the setting first ([dev] barrier_scope = auto | wide |
- * narrow, ICO_VK_BARRIER_SCOPE; [dev] polled_wait = auto | on | off,
- * ICO_VK_POLLED_WAIT as auto, 1 or 0); auto (or unset, or a value not
- * known, which the reason names) is v0.11.2's on a tile-based GPU (every
+ * The rule, for each, with no setting: v0.11.2's on a tile-based GPU (every
  * class port/render/rd_profile.c calls tile-based: Arm, Qualcomm's driver,
  * Turnip, PowerVR, Apple, any Android GPU), v0.11.3's elsewhere, and the
  * loss ladder on every device: after one lost start in a row the wide
  * scopes, after two or more the single wait too (lossRow: the starts in a
  * row that lost the device before this one, port/platform/diag_host.c's
- * count through ICO_LOSS_ROW; nothing is written to the settings).  A
- * setting other than auto is never overridden: its reason says what auto
- * would have chosen. */
+ * count through ICO_LOSS_ROW; nothing is written to the settings).  The
+ * tests alone pick the scopes on any device with ICO_VK_FAKE_SCOPES=wide or
+ * narrow (fakeScopes; any other value: not faked); the wait has no
+ * override (the tests reach the single wait by ICO_VK_FAKE_VENDOR). */
 #ifndef PORT_RHI_RHI_TILE_RULE_H
 #define PORT_RHI_RHI_TILE_RULE_H
 
@@ -60,12 +58,12 @@ typedef struct RhiTileRule {
     char polledTag[48];
 } RhiTileRule;
 
-/* scope: ICO_VK_BARRIER_SCOPE's value, polled: ICO_VK_POLLED_WAIT's (NULL
- * or "" unset); tiler: the device counts as tile-based; device: its words
- * for the reasons ("Arm's driver", "Qualcomm's driver"; NULL "the GPU");
- * lossRow: the lost starts in a row before this one */
-void rhi_tile_rule(const char *scope, const char *polled, bool tiler, const char *device,
-                   uint32_t lossRow, RhiTileRule *out);
+/* fakeScopes: ICO_VK_FAKE_SCOPES's value (NULL unset); tiler: the device
+ * counts as tile-based; device: its words for the reasons ("Arm, vendor
+ * 0x13B5"; NULL "the GPU"); lossRow: the lost starts in a row before this
+ * one */
+void rhi_tile_rule(const char *fakeScopes, bool tiler, const char *device, uint32_t lossRow,
+                   RhiTileRule *out);
 
 /* the vendor ids rd_profile.c calls tile-based outside Android (Qualcomm,
  * Arm, Imagination, Samsung, Apple, Broadcom) */
