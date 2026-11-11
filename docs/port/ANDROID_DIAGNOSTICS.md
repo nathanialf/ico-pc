@@ -1372,7 +1372,7 @@ counters in the hot path.
   is pending, and the other backends keep the old read.
 - **The thermal and memory asks off the game thread** (`port/platform/window_stall.c`,
   `sys_cell.c`, the log thread's tick in `host_android.c`): the owner's Pixel measured the 10 s
-  print's kernel GPU and thermal part at 1.6-2.8 ms (rc4-rc9): two JNI calls into PowerManager
+  print's kernel GPU and thermal part at 1.6-2.8 ms: two JNI calls into PowerManager
   (binder calls) on the game thread each block. The log thread, which every Android start has
   (`ico-log`; the GPU sampler runs only where a node is readable, the hints' thread only from API
   33), now asks the thermal state and reads `/proc/self/status` and `/proc/meminfo` once a second
