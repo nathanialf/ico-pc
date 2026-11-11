@@ -701,7 +701,7 @@ uint64_t rd__upload_late_reserve(const RdFrame *f, int keep)
     s_lateDone = false;
     if (lim->wideBarriers) {
         /* v0.11.2's order (rhi.h RhiLimits.wideBarriers, rhi_tile_rule.h: a
-           tile-based GPU by default, or a start after a lost one): the
+           tile-based phone GPU by default, or a start after a lost one): the
            texture uploads and the fog's table here, first, before the
            meshes; the same bytes at the same ring offsets as v0.11.2 */
         const uint64_t texOff = rd__ring_alloc(0, 1);

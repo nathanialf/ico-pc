@@ -168,7 +168,7 @@ endif()
 
 # --- The tile-based phones' rule (CPU only, every target) --------------------
 # rhi_tile_rule.c: the barrier scopes and the submission wait a Vulkan start
-# runs (a tile-based GPU, the lost starts in a row before it, the tests'
+# runs (a tile-based phone GPU, the lost starts in a row before it, the tests'
 # ICO_VK_FAKE_SCOPES; issues 179 and 211), and their lines' words.
 add_executable(rhi_vk_tile_rule_test test/rhi_vk_tile_rule_test.c rhi_tile_rule.c)
 target_include_directories(rhi_vk_tile_rule_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")

@@ -39,7 +39,7 @@
  * and counts (vk_cmd.c vkr_hold_note) name each such barrier.
  *
  * Issues 179 and 211 (a Mali-G52 and an Adreno 710 lost the device at the
- * first 3D pictures on v0.11.3): on every tile-based GPU the order is
+ * first 3D pictures on v0.11.3): on every tile-based phone GPU the order is
  * v0.11.2's again, with the barrier scopes (rhi.h RhiLimits.wideBarriers):
  * the texture uploads and the fog's table first, then the meshes and the
  * pre-pass.  Desktops keep the order above.  Either order draws the same

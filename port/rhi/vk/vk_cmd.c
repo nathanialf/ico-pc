@@ -850,7 +850,7 @@ bool vkr_submit_present_signal(VkrFrame *f)
  * for every buffer a copy may touch.  A fragment stage there makes only
  * later fragment work wait for the write, which costs no overlap.
  *
- * The wide scopes (VkrState.tile.wide: a tile-based GPU by default, or a
+ * The wide scopes (VkrState.tile.wide: a tile-based phone GPU by default, or a
  * start after a lost one; rhi_tile_rule.h) are v0.11.2's instead, for every
  * buffer whatever its usage or history: vertex input, the vertex and
  * fragment shaders, the compute shader where the compute record exists and
