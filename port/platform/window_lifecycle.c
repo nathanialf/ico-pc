@@ -12,14 +12,17 @@
    first (no present of its own while the surface goes), then the GPU
    finishes before the surface it presents to goes; the watchdog stops
    counting before SDL
-   blocks the pump; the log is on the disc last, in case the system ends
-   the process while it waits. Coming back, the surface is made before the
+   blocks the pump; the performance profile goes into the log before the
+   flush (Android often ends a process in the background without another
+   word); the log is on the disc last, in case the system ends the process
+   while it waits. Coming back, the surface is made before the
    render thread goes on (made on the game thread, as it was released) and
    before the watchdog counts again (it can take a moment), the sound resumes on an
    empty queue (no stale half second), and the pacer starts from now. */
 static const IcoLifecycleStep k_background[] = {
-    ICO_LC_LOG_LINE,       ICO_LC_RENDER_PARK, ICO_LC_GPU_WAIT_IDLE, ICO_LC_SURFACE_RELEASE,
-    ICO_LC_WATCHDOG_PAUSE, ICO_LC_AUDIO_PAUSE, ICO_LC_LOG_FLUSH,     ICO_LC_END};
+    ICO_LC_LOG_LINE,        ICO_LC_RENDER_PARK,    ICO_LC_GPU_WAIT_IDLE,
+    ICO_LC_SURFACE_RELEASE, ICO_LC_WATCHDOG_PAUSE, ICO_LC_AUDIO_PAUSE,
+    ICO_LC_PERF_PROFILE,    ICO_LC_LOG_FLUSH,      ICO_LC_END};
 
 static const IcoLifecycleStep k_foreground[] = {ICO_LC_SURFACE_RECREATE,
                                                 ICO_LC_RENDER_UNPARK,
@@ -30,8 +33,9 @@ static const IcoLifecycleStep k_foreground[] = {ICO_LC_SURFACE_RECREATE,
                                                 ICO_LC_END};
 
 /* the recording's closing line goes into the log flush that follows */
-static const IcoLifecycleStep k_terminating[] = {ICO_LC_LOG_LINE, ICO_LC_CONFIG_SAVE,
-                                                 ICO_LC_RECORD_CLOSE, ICO_LC_LOG_FLUSH, ICO_LC_END};
+static const IcoLifecycleStep k_terminating[] = {ICO_LC_LOG_LINE,     ICO_LC_CONFIG_SAVE,
+                                                 ICO_LC_RECORD_CLOSE, ICO_LC_PERF_PROFILE,
+                                                 ICO_LC_LOG_FLUSH,    ICO_LC_END};
 
 static const IcoLifecycleStep k_low_memory[] = {ICO_LC_TEXTURE_LOW_MEMORY, ICO_LC_LOG_LINE,
                                                 ICO_LC_LOG_FLUSH, ICO_LC_END};
@@ -150,6 +154,12 @@ static int run_step(IcoLifecycleStep step, IcoLifecycleEvent event, const IcoLif
             return 0;
         }
         o->render_park(u, step == ICO_LC_RENDER_PARK);
+        return 1;
+    case ICO_LC_PERF_PROFILE:
+        if (o->perf_profile == NULL) {
+            return 0;
+        }
+        o->perf_profile(u, event == ICO_LIFECYCLE_TERMINATING);
         return 1;
     case ICO_LC_END:
     case ICO_LC_STEP_COUNT:

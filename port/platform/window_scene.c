@@ -7,8 +7,17 @@
 #include <limits.h>
 #include <stdio.h>
 
-static const char *const kKindWords[SCENE_KIND_COUNT] = {"play",  "scene",    "title",
-                                                         "pause", "settings", "other"};
+static const char *const kKindWords[SCENE_KIND_COUNT] = {"play",
+                                                         "scene",
+                                                         "title",
+                                                         "pause",
+                                                         "settings",
+                                                         "vibration setting",
+                                                         "memory card files",
+                                                         "Continue files",
+                                                         "loading",
+                                                         "save done",
+                                                         "other"};
 
 const char *window_scene_kind_word(SceneKind kind)
 {
@@ -32,7 +41,53 @@ SceneKind window_scene_kind(const SceneIds *ids, int layout, int movie)
     if (layout == ids->options || layout == ids->keyConfig) {
         return SCENE_SETTINGS;
     }
+    if (layout > 0) {
+        if (layout == ids->vibe) {
+            return SCENE_VIBE;
+        }
+        if (layout == ids->mcFiles) {
+            return SCENE_MC_FILES;
+        }
+        if (layout == ids->loadFiles) {
+            return SCENE_LOAD_FILES;
+        }
+        if (layout == ids->load) {
+            return SCENE_LOAD;
+        }
+        if (layout == ids->saveComplete) {
+            return SCENE_SAVE_DONE;
+        }
+    }
     return SCENE_OTHER;
+}
+
+size_t window_scene_key(char *out, size_t cap, SceneKind kind, int stage, const char *stageName,
+                        bool keep)
+{
+    char name[64];
+    size_t i = 0;
+    int w;
+
+    if (cap == 0) {
+        return 0;
+    }
+    for (; stageName != NULL && stageName[i] != '\0' && i + 1 < sizeof(name); i++) {
+        name[i] = stageName[i] == ':' ? '-' : stageName[i];
+    }
+    name[i] = '\0';
+    const char *word = window_scene_kind_word(kind);
+    const char *k = keep ? " (keep frames)" : "";
+    if (stage > 0 || kind == SCENE_PLAY || kind == SCENE_SCENE) {
+        w = name[0] != '\0' ? snprintf(out, cap, "stage %d %s (%s)%s", stage, word, name, k)
+                            : snprintf(out, cap, "stage %d %s%s", stage, word, k);
+    } else {
+        w = snprintf(out, cap, "%s%s", word, k);
+    }
+    if (w < 0) {
+        out[0] = '\0';
+        return 0;
+    }
+    return (size_t)w < cap ? (size_t)w : cap - 1;
 }
 
 void window_scene_note(SceneShare *s, SceneKind kind, uint64_t ns)

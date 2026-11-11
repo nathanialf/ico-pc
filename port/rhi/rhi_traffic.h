@@ -72,8 +72,8 @@ void rhi_traffic_pass_sum(const RhiRenderPassDesc *pass, const RhiTrafficFmt *co
 void rhi_traffic_texture_made(RhiTexture t, const RhiTextureDesc *desc);
 void rhi_traffic_texture_gone(RhiTexture t);
 void rhi_traffic_pass(const RhiRenderPassDesc *pass);
-/* a copy out of src's region: its bytes read and written (2 x the texels
-   times the aspect's bytes) */
+/* a copy out of src's region: its bytes, counted once (the texels times
+   the aspect's bytes: what it reads, as many as it writes) */
 void rhi_traffic_copy(RhiTexture src, RhiViewAspect aspect, RhiRect region);
 /* the table emptied (rhi_shutdown: the handles belong to the device) */
 void rhi_traffic_forget(void);

@@ -24,11 +24,28 @@ endif()
 # the bound (GPU, render thread, game thread, at the rate, not measured),
 # the byte-bound passes' fit and the copies' rate recovering their made-up
 # constants, the ranked line word for word, the scene, classes, rates and
-# slowest lines, the profile by scene with a full table (CPU only)
+# slowest lines, the profile by scene with a full table; the Pixel 10 Pro
+# Fold's stage 4 block (the vertex estimate refused, the glow first, an
+# earlier block's rate), the vertex fit's floor and pre-pass cap, the submit
+# thread's CPU apart, every candidate kept, the block in progress (CPU only)
 add_executable(rd_perf_rank_test test/rd_perf_rank_test.c rd_perf_rank.c)
 target_include_directories(rd_perf_rank_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}"
                                                      "${CMAKE_SOURCE_DIR}/port/rhi")
 target_compile_options(rd_perf_rank_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
 if(ICO_RUN_TESTS)
     add_test(NAME rd_perf_rank COMMAND rd_perf_rank_test)
+endif()
+
+# rd_replay_tool_traffic_stats: --stats names one picture's attachment
+# traffic (rhi_traffic.c, the perf scene line's figures), so a dump A/B can
+# assert MB a picture; a copy counted once (lavapipe, the pixel frame dump)
+if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
+    add_test(NAME rd_replay_tool_traffic_stats
+             COMMAND rd_replay_tool "${CMAKE_CURRENT_BINARY_DIR}/rd_pixel_frame.rddump"
+                     "${CMAKE_CURRENT_BINARY_DIR}/rd_replay_tool_traffic.png" --present 640x480
+                     --stats)
+    set_tests_properties(rd_replay_tool_traffic_stats PROPERTIES
+                         PASS_REGULAR_EXPRESSION
+                         "stats: traffic: colour [0-9]+\\.[0-9][0-9] MB loaded [0-9]+\\.[0-9][0-9] MB stored, depth and stencil [0-9.]+/[0-9.]+ MB loaded/stored, [0-9.]+ MB cleared, [0-9.]+ MB copied \\(each copy counted once: as many MB read as written\\), [1-9][0-9]* passes"
+                         SKIP_RETURN_CODE 77 FIXTURES_REQUIRED rd_dump)
 endif()
