@@ -158,4 +158,9 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
 void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictureCpuMs,
                                   double pumpMs);
 
+/* The log thread's once-a-second tick (Android, window_stall.c asks_tick):
+   the three threads' schedstat into cells and, every tenth, the thread
+   list, which the 10 s block then reads instead of the files */
+void ico_render_thread_tick(void);
+
 #endif /* ICO_PLATFORM_RENDER_THREAD_H */

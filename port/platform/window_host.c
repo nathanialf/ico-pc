@@ -5605,6 +5605,7 @@ void window_pace_log(Uint64 now)
     }
     window_hold_block(s_pres.stepSumMs, s_pres.stepCount, s_pres.stepMaxMs, s_pres.paceHz,
                       s_perf.ph.total, s_perf.ph.n, !rd_interpolation_active(), fr);
+    window_log_cost_mark("the hold line");
     /* the game thread's parts and the render thread's (render_thread.h) */
     ico_render_thread_block_line(s_pres.stepCount ? s_pres.stepSumMs / s_pres.stepCount : 0.0,
                                  s_pres.stepCpuCount ? s_pres.stepCpuSumMs / s_pres.stepCpuCount
@@ -5612,7 +5613,6 @@ void window_pace_log(Uint64 now)
                                  s_perf.ph.n ? s_perf.ph.total / s_perf.ph.n : 0.0,
                                  s_pres.pumpCount ? s_pres.pumpSumMs / s_pres.pumpCount : 0.0);
     /* the audio's 10 s line (out_sdl.c; the pull path's only) */
-    window_log_cost_mark("the hold and game thread lines");
     ico_audio_sdl_log_summary();
     window_log_cost_mark("the audio line");
     if (s_pres.lockN > 0) {

@@ -13,6 +13,7 @@
 #include "present_hist.h"
 #include "present_stall_block.h"
 #include "rd_perf_rare.h"
+#include "render_thread.h" /* ico_render_thread_tick */
 #include "rhi.h"
 #include "thermal_text.h"
 #include "log_cost.h"
@@ -178,6 +179,7 @@ static void asks_tick(void)
     t1 = ico_thread_now_ms();
     const double mv[5] = {(double)rss, (double)peak, (double)avail, (double)total, dev};
     sys_cell_put(&s_memoryCell, t1, t1 - t0, mv, 5);
+    ico_render_thread_tick(); /* the threads' schedstat and list (render_thread.h) */
     __atomic_fetch_add(&s_asksN, 1u, __ATOMIC_RELAXED);
 }
 #endif
