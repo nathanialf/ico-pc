@@ -18,11 +18,18 @@
 #include "host_config.h"
 #include "host_fs.h"
 #include "rd.h"
+#include "rd_loss_pick.h" /* RdLossHow: which picks are guesses */
 #include "rhi.h"
 
 /* the overlap step's rounds of the two frames (rd.h rd_loss_overlap): eight
    replays, a few seconds at the most on a phone */
 #define WINDOW_BISECT_OVERLAP_ROUNDS 4u
+/* a phone (Android, iOS): no overlap step (window_bisect_overlap) */
+#if defined(__ANDROID__) || defined(ICO_IOS)
+#define WINDOW_BISECT_OVERLAP_PHONE 1
+#else
+#define WINDOW_BISECT_OVERLAP_PHONE 0
+#endif
 
 /* the loss dump's frame number `nth` (0 the lost frame, 1 the one before)
    taken out of the zip to dump (the zip's path and `suffix`) with its size
@@ -79,15 +86,29 @@ bool window_bisect_overlap(const char *zip, const char *dump, const RdLossBisect
     } else if (b->result != RD_BISECT_CLEAN || rhi_device_lost()) {
         fprintf(stderr, "window: loss bisect: overlap step not run (the pass-by-pass replay did "
                         "not finish)\n");
+    } else if (WINDOW_BISECT_OVERLAP_PHONE) {
+        /* a phone: a loss the step reproduced would leave this start
+           without a renderer where the driver makes no second device in the
+           process that lost one (window_host.c's "-3" path: the start ends
+           at a message box), and a phone cannot start the game again by
+           itself; the player gets the game, the pass-by-pass result stands */
+        fprintf(stderr, "window: loss bisect: overlap step not run (a phone: a loss it reproduced "
+                        "could end this start, the driver may make no second device after a "
+                        "loss)\n");
     } else {
-        char before[ICO_PATH_MAX + 32], note[480];
+        char before[ICO_PATH_MAX + 32], note[480] = "";
         uint32_t bw = 0, bh = 0;
         float ba = 0.0f;
-        const bool haveBefore =
-            window_bisect_dump_nth(zip, 1, ".before.rddump", before, sizeof(before), &bw, &bh, &ba,
-                                   note, sizeof(note)) &&
-            bw == gw && bh == gh;
+        bool haveBefore = window_bisect_dump_nth(zip, 1, ".before.rddump", before, sizeof(before),
+                                                 &bw, &bh, &ba, note, sizeof(note));
 
+        if (haveBefore && (bw != gw || bh != gh)) {
+            /* written but of another size: removed, and the reason said */
+            snprintf(note, sizeof(note), "its size %ux%u is not the lost frame's %ux%u",
+                     (unsigned)bw, (unsigned)bh, (unsigned)gw, (unsigned)gh);
+            ico_remove(before);
+            haveBefore = false;
+        }
         if (!haveBefore) {
             before[0] = '\0';
             fprintf(stderr,
@@ -182,9 +203,13 @@ void window_loss_dump(char *name, size_t name_size)
         ico_diag_note_device_loss(NULL);
         return;
     }
+    /* a submit that failed outside a picture, or no submission named: the
+       frame is the best guess, not the failed one (rd_loss_pick.h) */
+    const bool guess = plan.how == RD_LOSS_HOW_SIDE || plan.how == RD_LOSS_HOW_NEWEST;
+    const char *lostWords = guess ? "the best guess at the lost one" : "the lost one";
     if (plan.frameHeld) {
-        fprintf(stderr, "window: loss dump: writing frame %u, the lost one (replay %u)%s, to %s\n",
-                (unsigned)plan.writeFrame, (unsigned)plan.replay,
+        fprintf(stderr, "window: loss dump: writing frame %u, %s (replay %u)%s, to %s\n",
+                (unsigned)plan.writeFrame, lostWords, (unsigned)plan.replay,
                 plan.writeFromCopy ? ", from the copy made in memory" : "", lost);
     } else {
         fprintf(stderr,
@@ -258,13 +283,13 @@ void window_loss_dump(char *name, size_t name_size)
                 "window: loss dump: frames %u (%s) and %u (the one before) written to %s in "
                 "%.1f s\n",
                 (unsigned)lostFrame,
-                plan.frameHeld && lostFrame == plan.frame ? "the lost one" : "NOT the lost one",
+                plan.frameHeld && lostFrame == plan.frame ? lostWords : "NOT the lost one",
                 (unsigned)beforeFrame, zip, secs);
     } else {
         fprintf(stderr, "window: loss dump: frame %u (%s) written to %s in %.1f s\n",
                 (unsigned)lostFrame,
-                plan.frameHeld && lostFrame == plan.frame ? "the lost one" : "NOT the lost one",
-                zip, secs);
+                plan.frameHeld && lostFrame == plan.frame ? lostWords : "NOT the lost one", zip,
+                secs);
     }
     (void)lostCopy;
     (void)beforeCopy;

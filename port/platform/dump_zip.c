@@ -565,7 +565,7 @@ void *ico_dump_zip_extract_why(const char *zip_path, int nth, size_t *size, char
     }
     const mz_uint n = mz_zip_reader_get_num_files(&z);
 
-    for (mz_uint i = 0; i < n && data == NULL; i++) {
+    for (mz_uint i = 0; i < n && data == NULL && fail[0] == '\0'; i++) {
         mz_zip_archive_file_stat st;
 
         if (!mz_zip_reader_file_stat(&z, i, &st) || st.m_is_directory) {
@@ -590,6 +590,9 @@ void *ico_dump_zip_extract_why(const char *zip_path, int nth, size_t *size, char
             snprintf(name, name_size, "%s", base_name(st.m_filename));
         }
         if (data == NULL) {
+            /* the nth frame is this entry: a damaged one is said, never
+               passed over for the next .rddump (which would be returned as
+               frame nth with an empty reason) */
             snprintf(fail, sizeof(fail), "%.80s (%llu bytes) could not be extracted: %s",
                      base_name(st.m_filename), (unsigned long long)st.m_uncomp_size,
                      mz_zip_get_error_string(mz_zip_get_last_error(&z)));

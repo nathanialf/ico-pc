@@ -2183,6 +2183,13 @@ open_window:
             ico_diag_loss_bisect2_path(st);
         }
     }
+    /* the bisect's renderers replay under what the lost start ran (the
+       loss ladder's row one less than this start's: rhi_tile_rule.h), this
+       start's row back after them (diag_host.c loss_ladder_export) */
+    const unsigned lossRow = ico_diag_startup_loss_row();
+    char lossRowText[16];
+    snprintf(lossRowText, sizeof(lossRowText), "%u", lossRow > 1u ? lossRow - 1u : 0u);
+    window_setenv("ICO_LOSS_ROW", lossRow > 1u ? lossRowText : "");
     if (retry == STARTUP_RETRY_NONE && ico_diag_loss_bisect2_pending()) {
         /* the second level a start before left unfinished goes first; a
            newer loss dump stays in logs */
@@ -2212,6 +2219,8 @@ open_window:
                          ico_diag_loss_dump());
         }
     }
+    snprintf(lossRowText, sizeof(lossRowText), "%u", lossRow);
+    window_setenv("ICO_LOSS_ROW", lossRow ? lossRowText : "");
     /* the loss order's robust step: the device line says why robust
        access is on (ICO_GPU_ROBUST=1 came from ico_ini_export; the step's
        variable is forgotten above) */
