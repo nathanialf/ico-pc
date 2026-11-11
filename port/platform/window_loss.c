@@ -192,9 +192,10 @@ void window_loss_dump(char *name, size_t name_size)
     } else {
         fprintf(stderr,
                 "window: loss dump: copies in memory (made only while a slot wait had blocked "
-                "100 ms or more): %u held (%u KB; the most %u KB), %llu made in %llu recycled "
+                "%u ms or more): %u held (%u KB; the most %u KB), %llu made in %llu recycled "
                 "frames, %llu too big, %llu failed, %llu held back by the throttle\n",
-                plan.copies, plan.copyKB, plan.copyMaxKB, (unsigned long long)plan.copiesTaken,
+                (unsigned)(RD_LOSS_KEEP_STALL_NS / 1000000ull), plan.copies, plan.copyKB,
+                plan.copyMaxKB, (unsigned long long)plan.copiesTaken,
                 (unsigned long long)plan.copiesSeen, (unsigned long long)plan.copiesBig,
                 (unsigned long long)plan.copiesFailed, (unsigned long long)plan.copiesThrottled);
     }

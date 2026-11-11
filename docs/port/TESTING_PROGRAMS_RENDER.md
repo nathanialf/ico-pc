@@ -1342,7 +1342,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   before from the pass ring's table else the newest held below it, a lost frame older than
   everything held, and a tie taking the newer. The copy rules: needed when the first open frame is
   that frame or an older one, released two frames behind it, made only while a slot wait has
-  blocked 100 ms or more (an open frame without a long wait, steady play, never copies), at most 4
+  blocked 50 ms or more (an open frame without a long wait, steady play, never copies; 43.2 ms no,
+  90 ms yes), at most 4
   attempts in any 64 recycled frames (a 1,024-frame stalled stretch never more in any window, the
   fifth a window after the first), none for 600 recycled frames after one too big, its slot an
   empty one else the oldest; and a recycle run over a fake history (the GPU a frame or two behind

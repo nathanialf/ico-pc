@@ -373,7 +373,7 @@ an attachment ...`), and the skin check issues no ring stamp, no stamp clear val
 own compiles after a memory stop (`... not compiled in the background (<why>; a tile-based phone GPU:
 none, ...)`). What still differs on a phone, all CPU work: the range checks, the hold notes and
 pass crumbs, the timestamp bookkeeping, the SPIR-V scan, the skin check's copy search, and the loss
-keep's gate (one progress read a frame; a copy only after a slot wait blocked 100 ms or more). How
+keep's gate (one progress read a frame; a copy only after a slot wait blocked 50 ms or more). How
 to read the next log:
 
 - Both lines `wide` / `single` and no loss: one of the two changes (or the store passes' targets,
@@ -686,7 +686,7 @@ begins, so the last line says which one a hang of the handler itself is in:
   now: frames A..Z (n, c of them copies in memory, K KB)` and `window: loss dump: copies in
   memory: ...`: which frame the loss belongs to and what the renderer still held. The ring holds
   the last three frames only; a frame the GPU had not finished when the ring reused its slot is
-  copied to memory first while a slot wait has blocked 100 ms or more (`rd: loss keep: frame N
+  copied to memory first while a slot wait has blocked 50 ms or more (`rd: loss keep: frame N
   copied to memory ...`, the first eight and every hundredth), at most 4 copies of at most 16 MiB,
   at most 4 tries in any 64 frames, nothing in steady play. So the lost frame is held only when a
   stall came before the loss (as in both reports); otherwise the frames the ring holds are written,
