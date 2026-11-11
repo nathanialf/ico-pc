@@ -17,6 +17,7 @@
 #include "pipe_resume.h"
 #include "rd.h"
 #include "rd_early_plan.h"
+#include "rd_made_outside.h"
 #include "rd_vu_rec_early.h"
 #include "rhi.h"
 
@@ -164,9 +165,12 @@ void window_pipe_skin_check(int pipePolicy)
                                                                 : "stopped",
                  ico_memory_floor_driver_words(driver));
         rd_vu_skin_background(ico_diag_background_memory, why);
-        return;
+    } else {
+        rd_vu_skin_background(ico_diag_background_memory, NULL);
     }
-    rd_vu_skin_background(ico_diag_background_memory, NULL);
+    /* the start-up's own work done: what is made from here outside the key
+       cache is play's, named (rd_made_outside.h) */
+    rd_made_outside_watch();
 }
 
 /* the cache file's size in bytes, -1 when there is none */

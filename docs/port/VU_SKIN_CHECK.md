@@ -209,7 +209,17 @@ draw for `RD_SKIN_CAREFUL_REARM` (30) replays only, about 1 s at 30 fps (the tar
 an event reads 8 replays: the stretch covers them with room), at most `RD_SKIN_CAREFUL_REARMS` (4)
 times a run; events inside a stretch do not lengthen it, and later events are counted and logged
 with the twins kept at one a picture. So at most 120 replays a run carry the full twins there,
-where the rule above gave about 2,000 (67 s) at every start and after every event. The box check,
+where the rule above gave about 2,000 (67 s) at every start and after every event. On a tile-based phone GPU
+(`RhiLimits.tilePhone`: every Android GPU, iOS) the twins start thinned too, whatever the start-up
+set did (`rd_vu_skin_background`), so a first start does not twin every skinned draw of its first
+3D scene for 2,000 replays (issue 211's Adreno 710 lost the device there with them on); a twin
+event re-arms them as the rule above does (every skinned draw until 2,000 clean replays). The one
+twin a picture goes through the draw's own pipeline where that is its twin's form (the draw reads
+its attachment and writes no Z), else the box check's: fewer draws of the shapes every start
+already draws, no pipeline the start lacks. The first twin says so: `rd: VU skin check: twins on
+(<rule>) at one skinned draw a picture from the start (a tile-based phone GPU: not every skinned
+draw of the first 3D scene; ...); a twin event twins every skinned draw again until 2000 replays
+with none differing`. The box check,
 the stamps and the search are unchanged. The first twin of a run says which rule put the twins on
 and at what rate: `rd: VU skin check: twins on (the probe check's rule: an Adreno with a window) at
 one skinned draw a picture from the start (the careful rule: <why>); a twin event twins every
@@ -655,7 +665,9 @@ compile rule draws a box check; each slot's readback not written again names the
 stamps it holds), `rd_vu_skin_check_stale_phone` and `rd_vu_skin_check_clean_phone` (Arm's phone
 GPU faked: no compile and no box check after the reason, no stamps; the clean frame right without
 the stamp's bytes), `rd_vu_skin_check_thin` (the thinning:
-three twins a replay until the clean replays, one after, re-armed by the zeroed bone), and the
+three twins a replay until the clean replays, one after, re-armed by the zeroed bone),
+`rd_vu_skin_check_thin_phone` (Arm's phone GPU faked: thinned from the start, re-armed by the zeroed
+bone, thinned again after the clean replays), and the
 ladder's `rd_vu_skin_check_probe_c3`, `rd_vu_skin_check_twin_c`, `rd_vu_skin_check_twin_bones_ring`,
 `rd_vu_skin_check_twin_record` (a pre-pass record draw's twins through the ring build)),
 `rd_vuprepass_selftest_skincheck` (`rd_vuprepass_selftest.cmake`: the check on for every skinned

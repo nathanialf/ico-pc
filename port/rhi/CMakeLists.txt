@@ -738,6 +738,17 @@ if(_ico_have_vk)
         add_test(NAME rhi_vk_offer COMMAND rhi_vk_test clock)
         set_tests_properties(rhi_vk_offer PROPERTIES SKIP_RETURN_CODE 77 PASS_REGULAR_EXPRESSION
                              "rhi_vk: offered \\(read only, nothing enabled for it\\): calibrated time domains [^;]+; global queue priority (KHR and EXT|KHR|EXT|not) offered")
+        # VK_EXT_memory_budget's numbers in rhi_get_stats (videoMem*):
+        # rhi_vk_budget on lavapipe (consistent; a budget where offered),
+        # rhi_vk_budget_phone with Arm's phone GPU faked: none (not asked)
+        add_test(NAME rhi_vk_budget COMMAND rhi_vk_test budget)
+        add_test(NAME rhi_vk_budget_phone COMMAND rhi_vk_test budget)
+        set(_ico_vk_budget_env ${_ico_vk_test_env} "ICO_TEST_BUDGET_WANT=")
+        set(_ico_vk_budgetph_env ${_ico_vk_test_env} ${_ico_vk_arm} "ICO_TEST_BUDGET_WANT=0")
+        set_tests_properties(rhi_vk_budget PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_budget_env}")
+        set_tests_properties(rhi_vk_budget_phone PROPERTIES SKIP_RETURN_CODE 77 ENVIRONMENT
+                             "${_ico_vk_budgetph_env}")
         # a pass's own colour read in it with a depth target bound
         # (rhi_vk_subpass.c, DATE's stencil setup's shape) under
         # synchronisation validation with the shader access analysis on:

@@ -506,9 +506,12 @@ static bool skAsBefore(void)
 }
 
 static RdBackgroundMemoryFn s_memFn;
-static char s_noBg[192];  /* why the compiles are careful (none at all on a phone) */
-static bool s_noBgPhone;  /* s_noBg's rule is v0.11.2's: none compiled (skAsBefore) */
-static bool s_memStop;    /* the system's signal: none for the run */
+static char s_noBg[192]; /* why the compiles are careful (none at all on a phone) */
+static bool s_noBgPhone; /* s_noBg's rule is v0.11.2's: none compiled (skAsBefore) */
+static bool s_memStop;   /* the system's signal: none for the run */
+/* a tile-based phone GPU (skAsBefore): the twins thinned from the start
+ * (rd_vu_skin_background), whatever the start-up set did */
+static bool s_phoneThin;
 static bool s_bgSaid[3];  /* the lines said: the rule, the signal, the floor */
 static double s_bgLastMs; /* the careful rule's last begin */
 
@@ -529,6 +532,20 @@ void rd_vu_skin_background(RdBackgroundMemoryFn memory, const char *noBackground
         s_thin.left = 0;
     }
     s_thin.careful = careful;
+    /* on a tile-based phone GPU the twins start thinned too (one skinned
+     * draw a picture, the rate RD_SKIN_THIN_REPLAYS clean replays reach),
+     * so a first start does not twin every skinned draw of its first 3D
+     * scene for 2000 replays (issue 211's Adreno 710 lost the device there
+     * on v0.11.3 with them on); a twin event re-arms them as the rule
+     * above does.  Fewer draws of the shapes every start draws, nothing new
+     * on the GPU (twinDraw: through the draw's own pipeline where that is
+     * the twin's form, so no pipeline is needed that the start lacks) */
+    const bool phone = skAsBefore();
+    if (phone && !s_phoneThin) {
+        s_thin.thin = true;
+        s_thin.clean = 0;
+    }
+    s_phoneThin = phone;
 }
 
 static bool jobBusy(void)
@@ -1104,6 +1121,12 @@ static void twinsOnSay(void)
                 "careful rule: %s); a twin event twins every skinned draw for %u replays, at "
                 "most %u times a run",
                 rule, s_noBg, carefulRearm(), (unsigned)RD_SKIN_CAREFUL_REARMS);
+    } else if (s_phoneThin) {
+        rd__log("VU skin check: twins on (%s) at one skinned draw a picture from the start (a "
+                "tile-based phone GPU: not every skinned draw of the first 3D scene; through the "
+                "draw's own pipeline where it reads its attachment, else the box check's); a "
+                "twin event twins every skinned draw again until %u replays with none differing",
+                rule, rd__vu_skin_thin_after());
     } else {
         rd__log("VU skin check: twins on (%s): every skinned draw until %u replays with none "
                 "differing, then one a picture",
@@ -1422,8 +1445,8 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
         entry && g_rd.vuPreBatch && !g_rd.vuBonesRing && rd__vu_bones_ring_shader(d->vs).id != 0;
     /* thinned, the box check's pipeline (colour and Z writes off): the
      * cheap form once the run has a verdict */
-    const bool own = !entry && !s_thin.thin && dk->dst == RHI_DST_READ_ATTACHMENT &&
-                     dk->gs.zwrite == RD_ZWRITE_OFF;
+    const bool own = !entry && (!s_thin.thin || s_phoneThin) &&
+                     dk->dst == RHI_DST_READ_ATTACHMENT && dk->gs.zwrite == RD_ZWRITE_OFF;
     RdPipeKeyInt key = *dk;
     if (entry) {
         key.vs = d->vs;
@@ -1498,7 +1521,7 @@ static void twinDraw(Replay *r, const RdSkinDraw *d, SkSlot *sl, uint64_t fresh,
     tw->recRing = recRing;
     tw->notOwn = own || entry                         ? 0u
                  : dk->dst != RHI_DST_READ_ATTACHMENT ? 1u
-                 : s_thin.thin                        ? 3u
+                 : s_thin.thin && !s_phoneThin        ? 3u
                                                       : 2u;
     tw->c = pc.id != 0; /* C, the ring read's twin */
     tw->check = check;
@@ -2881,7 +2904,8 @@ void rd__vu_skin_shutdown(void)
          * stretches are a run's */
         const uint32_t used = s_thin.used;
         memset(&s_thin, 0, sizeof(s_thin));
-        s_thin.careful = s_thin.thin = s_noBg[0] != '\0' && !s_noBgPhone;
+        s_thin.careful = s_noBg[0] != '\0' && !s_noBgPhone;
+        s_thin.thin = s_thin.careful || s_phoneThin; /* a phone's from the start too */
         s_thin.used = used;
     }
     s_twinsSaid = false;

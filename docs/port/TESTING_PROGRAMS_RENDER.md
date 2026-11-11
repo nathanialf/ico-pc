@@ -435,7 +435,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   the careful rule thins the twins at once, three replays twin one each; an event re-arms all three
   for two replays (the events in them do not lengthen it), then one a replay again; three more
   cycles use the four stretches, after which two replays under the sabotage twin one each
-  (`rd_vu_skin_check_thin`).
+  (`rd_vu_skin_check_thin`). `thinphone` (`rd_vu_skin_check_thin_phone`, Arm's phone GPU faked,
+  `ICO_VK_FAKE_VENDOR=0x13B5`): the window's rule without a reason (`rd_vu_skin_background(memory,
+  NULL)`) thins the twins at once, three replays twin one each and the first twin's line says `at
+  one skinned draw a picture from the start (a tile-based phone GPU`; the zeroed bone re-arms them
+  (the next replay twins all three), and four clean replays thin them again, two more twin one each.
 - `rd_vustage_ab.cmake`: every dump of `tools/vustage_dumps.txt` (the dump corpus, machine-local
   paths, `*` globs, a missing dump named and skipped, none at all `SKIP`) replayed by
   `rd_replay_tool --pass-dump --stats` under `ICO_RD_BLEND=fixed` the
@@ -1331,6 +1335,16 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   does and prints `early: record 1024 rows, arena made`), under lavapipe's own record write, the
   compute dispatches and the render targets: every named target byte for byte at Original 4:3 1x
   and Enhanced 16:9 2x; a frame without a pre-pass is skipped.
+- `rd_log_line_test.c` (ctest `rd_log_line`, `rd_early.cmake`): a log line handed to an
+  unbuffered stream in one write (`rd_log_line.c`, `rd__log`; [RENDER_POST.md](RENDER_POST.md#start-up)),
+  pure: a short line, one with `rd__log_once`'s suffix, one of 10,000 characters (formatted on the
+  heap), one at the stack buffer's edge and one past it, one without a prefix: the bytes whole and,
+  where glibc lets the test count them (`fopencookie`, the stream unbuffered), one write each.
+- `rd_made_outside_test.c` (ctest `rd_made_outside`, `rd_early.cmake`): the line naming what
+  play makes outside the key cache (`rd_made_outside_text.c`; [RENDER_POST.md](RENDER_POST.md#start-up)),
+  pure: the limiter (a name's first 8, then every 100th), a pipeline's and a buffer's line word for
+  word (the size in KB rounded up, the 8th's "from here every 100th"), the ordinals (1st, 2nd, 3rd,
+  11th to 13th, 21st, 102nd, 111th), an unnamed buffer, and a cut output that does not overrun.
 - `rd_loss_pick_test.c` (ctest `rd_loss_pick`): which frames the device-loss dump writes
   (`rd_loss_pick.c`), pure, with a fake submission history. The two reporters' cases: a Mali
   phone's loss (replay 148 / frame 129 lost its wait while the ring held 130..132: without a copy the
