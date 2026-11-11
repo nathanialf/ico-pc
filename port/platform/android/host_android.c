@@ -297,10 +297,6 @@ static int SDLCALL mirror_main(void *user)
     double tickAt = 0.0;
 
     (void)user;
-    /* below the game's threads: woken by a line, it must not take the
-       game thread's core while the game runs (the scheduler places a
-       woken thread beside its waker) */
-    (void)SDL_SetCurrentThreadPriority(SDL_THREAD_PRIORITY_LOW);
     pf.fd = s_pipe_r;
     pf.events = POLLIN;
     for (;;) {
@@ -319,12 +315,6 @@ static int SDLCALL mirror_main(void *user)
         const int r = poll(&pf, 1, tick != NULL ? (int)ICO_LOG_MIRROR_TICK_MS : -1);
         if (r == 0) {
             continue; /* the tick's time */
-        }
-        if (r > 0 && (pf.revents & POLLIN) != 0) {
-            /* the rest of a burst into the pipe first (a 10 s block's lines:
-               one wake-up and one drain, not one each a line); the pipe
-               holds 64 KiB, so a writer waits only past that */
-            SDL_Delay((Uint32)ICO_LOG_MIRROR_BATCH_MS);
         }
         if (r < 0) {
             if (errno == EINTR) {

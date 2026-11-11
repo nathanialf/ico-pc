@@ -82,9 +82,6 @@ int ico_android_log_mirror_take(IcoLogMirrorStats *out);
    SDL_GetAndroidJNIEnv attaches it.  _running: 1 when the log thread
    exists (the mirror started), so a tick set will run */
 #define ICO_LOG_MIRROR_TICK_MS 1000.0
-/* the log thread waits this long after a line woke it before it drains
-   (the burst's other lines come without a wake-up each); at low priority */
-#define ICO_LOG_MIRROR_BATCH_MS 5
 void ico_android_log_mirror_set_tick(void (*tick)(void));
 int ico_android_log_mirror_running(void);
 /* The error box for the end of a crash or the watchdog (diag_host.h
