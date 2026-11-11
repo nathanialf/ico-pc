@@ -38,6 +38,7 @@ void rd_perf_clock_judge(const RdPerfClockIn *in, RdPerfClockVerdict *v)
 {
     memset(v, 0, sizeof(*v));
     v->firstMissing = -1;
+    v->lastWritten = -1;
     const RhiTimestampClock *c = in->clk;
     if (c == NULL) {
         return;
@@ -61,6 +62,7 @@ void rd_perf_clock_judge(const RdPerfClockIn *in, RdPerfClockVerdict *v)
             }
             continue;
         }
+        v->lastWritten = (int)i;
         if (!haveFirst) {
             first = in->ts[i];
             haveFirst = true;
@@ -98,8 +100,21 @@ void rd_perf_clock_judge(const RdPerfClockIn *in, RdPerfClockVerdict *v)
     /* a long wait with no trace is the single submission wait's (the polled
        one traces every wait past RHI_TS_TRACE_AFTER_MS): its line says when
        the replay ended and where it began, from the wait's own return */
-    v->report =
-        v->waitMs >= RD_PERF_CLOCK_WAIT_MS || v->ranTwice || v->missing > 0 || in->backNs != 0;
+    v->stall = v->waitMs >= RD_PERF_CLOCK_WAIT_MS || v->ranTwice || v->missing > 0;
+    v->report = v->stall || in->backNs != 0;
+}
+
+uint32_t rd_perf_clock_due(RdPerfClockLines *l, const RdPerfClockVerdict *v)
+{
+    if (!v->report) {
+        return 0;
+    }
+    if (v->stall) {
+        const uint32_t k = ++l->stalls;
+        return k <= RD_PERF_CLOCK_STALL_FIRST || k % RD_PERF_CLOCK_STALL_EVERY == 0u ? k : 0u;
+    }
+    const uint32_t k = ++l->restarts;
+    return k <= RD_PERF_CLOCK_RESTART_FIRST || k % RD_PERF_CLOCK_RESTART_EVERY == 0u ? k : 0u;
 }
 
 typedef struct Out {
@@ -150,7 +165,7 @@ int rd_perf_clock_text(const RdPerfClockIn *in, const RdPerfClockVerdict *v, cha
     if (c == NULL) {
         return 0;
     }
-    char nm[96];
+    char nm[192];
     put(&o, "GPU clock: replay %u: ", in->replay);
     if (v->lateValid == 1) {
         put(&o,
@@ -229,11 +244,14 @@ int rd_perf_clock_text(const RdPerfClockIn *in, const RdPerfClockVerdict *v, cha
         name(in, v->firstMissing, nm, sizeof nm);
         put(&o,
             "; %u of %u recorded stamps came back unwritten after its work was signalled "
-            "finished (the first: %s)",
+            "finished (the first: %s",
             v->missing, v->recorded, nm);
         const int firstGot = firstIn(in, c->available, true);
         if (firstGot < 0) {
-            put(&o, ": none written");
+            put(&o, "): none written");
+        } else {
+            name(in, v->lastWritten, nm, sizeof nm);
+            put(&o, "; the last written: %s)", nm);
         }
     } else {
         put(&o, "; all %u recorded stamps written", v->recorded);

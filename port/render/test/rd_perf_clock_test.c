@@ -16,8 +16,13 @@
  *              reported with its end after the last submit, a short one
  *              is not;
  *   missing    recorded stamps that came back unwritten (the first one
- *              named), every one unwritten; a list never submitted: its
- *              stamps not recorded, the lists said apart;
+ *              named, and the last written), every one unwritten; a list
+ *              never submitted: its stamps not recorded, the lists said
+ *              apart;
+ *   limits     the two limiters: eight idle restarts (issue 123's start-up
+ *              had seven) then a stalled replay still gets its line, the
+ *              stalls' 32 then every 10th, the restarts' 8 then every
+ *              100th, each on its own count;
  *   quiet      a replay that had finished when the CPU came to wait: no line
  *              due, the backend's unrecorded indices ignored;
  *   short      a small buffer is cut and terminated.
@@ -202,12 +207,19 @@ static void testMissing(void)
     char line[2048];
     rd_perf_clock_text(&in, &v, line, sizeof line);
     CHECK(strstr(line, "; 2 of 6 recorded stamps came back unwritten after its work was signalled "
-                       "finished (the first: S3)") != NULL);
+                       "finished (the first: S3; the last written: S4)") != NULL);
+    CHECK(v.lastWritten == 4 && v.stall);
+    /* written only up to S2: the stop between S2 and S3 */
+    c.available[0] &= ~(1u << 4);
+    s_ts[4] = 0;
+    rd_perf_clock_judge(&in, &v);
+    rd_perf_clock_text(&in, &v, line, sizeof line);
+    CHECK(strstr(line, "(the first: S3; the last written: S2)") != NULL);
     /* none written */
     memset(c.available, 0, sizeof c.available);
     memset(s_ts, 0, sizeof s_ts);
     rd_perf_clock_judge(&in, &v);
-    CHECK(v.missing == 6 && v.firstMissing == 0 && v.lateValid == 0);
+    CHECK(v.missing == 6 && v.firstMissing == 0 && v.lateValid == 0 && v.lastWritten == -1);
     rd_perf_clock_text(&in, &v, line, sizeof line);
     CHECK(strstr(line, "(the first: S0): none written") != NULL);
     /* a list with stamps recorded and never submitted (vk_cmd.c: its stamps
@@ -243,12 +255,61 @@ static void testQuietAndShort(void)
     CHECK(strncmp(small, "GPU clock: repl", sizeof small - 1) == 0);
 }
 
+static void testLimits(void)
+{
+    RdPerfClockLines l = {0, 0};
+    RdPerfClockVerdict idle, stall, quiet;
+    memset(&idle, 0, sizeof idle);
+    idle.report = true; /* a restart alone */
+    stall = idle;
+    stall.stall = true;
+    memset(&quiet, 0, sizeof quiet);
+    CHECK(rd_perf_clock_due(&l, &quiet) == 0 && l.stalls == 0 && l.restarts == 0);
+    /* eight restarts at start-up use up their own first 8 */
+    for (uint32_t k = 1; k <= 8; k++) {
+        CHECK(rd_perf_clock_due(&l, &idle) == k);
+    }
+    CHECK(rd_perf_clock_due(&l, &idle) == 0);
+    /* the stall after them is still written, as its kind's first */
+    CHECK(rd_perf_clock_due(&l, &stall) == 1);
+    for (uint32_t k = 2; k <= 32; k++) {
+        CHECK(rd_perf_clock_due(&l, &stall) == k);
+    }
+    uint32_t written = 0;
+    for (uint32_t k = 33; k <= 100; k++) {
+        const uint32_t d = rd_perf_clock_due(&l, &stall);
+        CHECK(d == 0 || (d == k && k % 10u == 0u));
+        written += d != 0;
+    }
+    CHECK(written == 7 && l.stalls == 100); /* 40, 50, ..., 100 */
+    /* the restarts' count went on alone: 9 so far, the 100th written */
+    CHECK(l.restarts == 9);
+    for (uint32_t k = 10; k < 100; k++) {
+        CHECK(rd_perf_clock_due(&l, &idle) == 0);
+    }
+    CHECK(rd_perf_clock_due(&l, &idle) == 100);
+    /* a judged verdict: a long wait is a stall, a restart alone is not */
+    RhiTimestampClock c;
+    sixStamps(&c);
+    c.waitBeginNs = c.lastSubmitNs + 1000000ull;
+    c.waitEndNs = c.waitBeginNs + 150000000ull;
+    RdPerfClockIn in = inOf(&c, 0);
+    RdPerfClockVerdict v;
+    rd_perf_clock_judge(&in, &v);
+    CHECK(v.stall && v.report);
+    sixStamps(&c);
+    in = inOf(&c, 2000000ull);
+    rd_perf_clock_judge(&in, &v);
+    CHECK(!v.stall && v.report && v.lastWritten == 5);
+}
+
 int main(void)
 {
     testStall();
     testEstimate();
     testMissing();
     testQuietAndShort();
+    testLimits();
     printf("rd_perf_clock_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

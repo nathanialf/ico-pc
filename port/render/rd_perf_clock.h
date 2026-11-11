@@ -27,7 +27,16 @@
  * The renderer logs the line on any of: a wait of RD_PERF_CLOCK_WAIT_MS or
  * more (with a trace, or under the single submission wait, which has none:
  * the replay's place then from the wait's own end, issues 179 and 211), a
- * second run, a stamp missing, a counter restart.  Every verdict also
+ * second run, a stamp missing, a counter restart.  Two limiters
+ * (rd_perf_clock_due): a stalled replay (the wait, a second run or a stamp
+ * missing) the first RD_PERF_CLOCK_STALL_FIRST then every
+ * RD_PERF_CLOCK_STALL_EVERY-th; a restart alone (an idle GPU's counter
+ * going back, everything written, nothing waited for) the first 8 then
+ * every 100th, on its own count, so start-up's idle restarts never use up
+ * the stalls' lines (issue 123's v0.11.4 log: seven of them at start-up
+ * left stalls 2 and 3 without a line).  A missing stamp is named with the
+ * last one written before it in the recording order, so the line names
+ * both sides of where the GPU stopped.  Every verdict also
  * carries the time from the replay's last submit to the wait's return
  * (doneMs: the GPU's end of the replay when the wait blocked; the 10 s
  * summary's "submit to done" figure, port/render/rd_perf_rank.h).
@@ -47,6 +56,11 @@
 #define RD_PERF_CLOCK_WAIT_MS 100.0
 /* the trace points the line lists one by one */
 #define RD_PERF_CLOCK_POINTS 8u
+/* the limiters' rules (rd_perf_clock_due) */
+#define RD_PERF_CLOCK_STALL_FIRST 32u
+#define RD_PERF_CLOCK_STALL_EVERY 10u
+#define RD_PERF_CLOCK_RESTART_FIRST 8u
+#define RD_PERF_CLOCK_RESTART_EVERY 100u
 
 /* a stamp index's name into buf (a pass, a list's end, ...) */
 typedef void (*RdPerfClockName)(uint32_t index, void *user, char *buf, size_t n);
@@ -66,6 +80,7 @@ typedef struct RdPerfClockIn {
 typedef struct RdPerfClockVerdict {
     uint32_t recorded, missing; /* recorded indices; of them not written */
     int firstMissing;           /* in recording order, -1 none */
+    int lastWritten;            /* the last written in recording order, -1 none */
     int lateValid;              /* 1 calibrated, 2 from the wait's end, 0 not known */
     double lateMs;              /* the first stamp after the first submit */
     double counterMs;           /* the first stamp's value: the counter's age then */
@@ -77,9 +92,22 @@ typedef struct RdPerfClockVerdict {
     int doneValid;
     bool ranTwice;
     bool report; /* a line is due */
+    /* a stalled replay: a wait of RD_PERF_CLOCK_WAIT_MS or more, a second
+       run or a stamp missing (report without it: a counter restart alone) */
+    bool stall;
 } RdPerfClockVerdict;
 
 void rd_perf_clock_judge(const RdPerfClockIn *in, RdPerfClockVerdict *v);
+
+/* the run's two line counts (zeroed at the start) */
+typedef struct RdPerfClockLines {
+    uint32_t stalls, restarts;
+} RdPerfClockLines;
+
+/* A verdict that reports: counted on its own limiter; its line number of
+   that kind when it is to be written, 0 when the limiter holds it back (or
+   nothing is to be reported) */
+uint32_t rd_perf_clock_due(RdPerfClockLines *l, const RdPerfClockVerdict *v);
 
 /* The line (without "rd: ") into buf; returns snprintf's count. */
 int rd_perf_clock_text(const RdPerfClockIn *in, const RdPerfClockVerdict *v, char *buf, size_t n);

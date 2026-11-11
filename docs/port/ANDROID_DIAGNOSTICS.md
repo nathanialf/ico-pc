@@ -985,7 +985,14 @@ The new lines:
 
 - **`rd: GPU clock: replay R: ...`** (`port/render/rd_perf_clock.c`, from the slot's clock,
   [RHI.md](RHI.md#vulkan)) when the CPU's wait for the replay blocked 100 ms or more, its first list
-  ran twice, a stamp came back unwritten, or the counter restarted (the first 8, then every 100th):
+  ran twice, a stamp came back unwritten (a stalled replay: the first 32, then every 10th, ending
+  `(stall line K of the run)`), or the counter restarted alone (the first 8, then every 100th, on
+  its own count, ending `(restart line K of the run)`; start-up's idle restarts never use up
+  the stalls' lines). A stamp that came back unwritten is named with the last one written before it
+  (`(the first: list 0's end; the last written: the start of piece 5 of 35, list 0 SCENE 1728x1344
+  (0 draws before it, 236 in it))`); a piece's name carries its target, size and the draws of the
+  pieces before it. With it, on a stall, the hung list's pipelines (see
+  [The stall and logging lines](#the-stall-and-logging-lines-issues-123-and-179)):
 
       rd: GPU clock: replay 2021: its first stamp 254.6 ms after its first submit (the calibrated
       clocks, within 2.5 us), the counter at 5.0 ms then (it went back 14936.7 ms since the replay
@@ -1056,3 +1063,28 @@ to an app, so a recorder or overlay that does not announce itself through the An
 shows nowhere in the log. Lines: `ico_pc: thermal status changed: MODERATE (2) -> SEVERE (3) (run
 time 212.4 s)` (the first one, at registration, is from `UNKNOWN (-1)`), `ico_pc: screen recording:
 visible (run time 40.1 s)`, and the window's, in [DISPLAY.md](DISPLAY.md#the-stats-lines).
+
+## The stall and logging lines (issues 123 and 179)
+
+What the logs of issues 123 (Adreno 740) and 179 (Mali-G52) on the barrier and wait defaults could
+not say, and the hitches they showed. Every line is automatic (no setting), rate-limited, and costs
+counters in the hot path.
+
+- **The clock line's two limiters** (`port/render/rd_perf_clock.c` `rd_perf_clock_due`): a stalled
+  replay (a slot wait of 100 ms or more, a second run of its first list, a stamp unwritten after its
+  work was signalled finished) is written the first 32 times, then every 10th; a counter restart
+  alone (an idle GPU's counter going back, everything written, nothing waited for) the first 8,
+  then every 100th, each on its own count. Issue 123's start-up had seven idle restarts, which used
+  up the old shared "first 8" and left its second and third stalls without a line.
+- **The hung list's pipelines** (`port/render/rd_perf_rare.c`, kept by `rd_perf.c`): every pipeline
+  list 0 asks for (`rd__get_pipeline`, through the pass ring's note) is kept per replay with its
+  lookups, the window's 10 s block counts the replays each was seen in, and a stalled replay's
+  clock line is followed by:
+
+      rd: GPU clock: replay 2417's list 0 (the stalled replay): 41 pipelines in 236 lookups; seen in
+      under 5 % of the block's 349 replays: pipeline 812 (vu_skin_vs/vu_ps) 3 lookups, in 2
+      replays; the most used: pipeline 12 (vu_prelit_vs/vu_ps) 60 lookups, in 349 replays, ...
+      (stall line 2 of the run)
+
+  A draw that is drawn rarely and hangs the GPU when it is shows as the rare pipeline common to
+  every such line. CPU data only; vertex counts are not in it (they are the draw code's).

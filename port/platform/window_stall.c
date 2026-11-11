@@ -12,6 +12,7 @@
 #include "ico_thread.h"
 #include "present_hist.h"
 #include "present_stall_block.h"
+#include "rd_perf_rare.h"
 #include "rhi.h"
 #include "thermal_text.h"
 #include "window_present.h" /* window_refresh_ns */
@@ -107,6 +108,7 @@ static void stall_block_close(const StallBlockClock *clock)
         fprintf(stderr, "window: %s\n", text);
     }
     s_stallT0 = now;
+    rd_perf_rare_block_end(); /* a stalled replay's rare pipelines: counted per block */
 }
 
 void window_stall_run_summary(void)

@@ -29,6 +29,7 @@
 #include "rd_passring.h"
 #include "rd_perf_clock.h"
 #include "rd_perf_gap.h"
+#include "rd_perf_rare.h"
 #include "rd_vis.h"
 
 RdPerfRecord g_rdPerf;
@@ -809,6 +810,10 @@ static PassTable s_passQueue[RD_PERF_PASS_QUEUE];
 static uint32_t s_passHead, s_passCount;
 static RhiStats s_passStats; /* the RHI's counters at the open piece's start */
 static double s_passCpu0;    /* the CPU clock at the open piece's start */
+/* a stalled replay's list 0 (rd_perf_rare.h; below rd__perf_rare_pipeline) */
+static RdPerfRareReplay s_rareRec, s_rarePending[RHI_FRAMES_IN_FLIGHT];
+static RdPerfRareBlock s_rareBlock;
+static int s_rareBlockNew; /* __atomic: the window's block ended */
 
 void rd__perf_passes_init(void)
 {
@@ -817,6 +822,7 @@ void rd__perf_passes_init(void)
     rd__log("present: the present's pass is a list of its own, submitted after the scene's; only "
             "its submit waits for the display's image (Vulkan: the acquire semaphore at "
             "COLOR_ATTACHMENT_OUTPUT)");
+    rd__passring_pipeline_hook(rd__perf_rare_pipeline); /* list 0's pipelines (rd_perf_rare.h) */
     const char *env = getenv("ICO_RD_PERF_PASSES");
     s_passesMode = env && env[0] == '1';
     const char *lists = getenv("ICO_RD_PERF_LIST_STAMPS");
@@ -1155,6 +1161,7 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
     s_passRec.count = 0;
     s_passRec.closed = false;
     s_passRec.replay = g_rdPerf.replay;
+    rd_perf_rare_replay_reset(&s_rareRec, g_rdPerf.replay);
     s_passOn = false;
 #ifndef ICO_IOS
     if (g_rd.hasDevice && rhi_timestamps_supported() &&
@@ -1255,9 +1262,19 @@ static void clockName(uint32_t index, void *user, char *buf, size_t n)
     if (index >= RD_PERF_TS_PASS0) {
         const uint32_t k = index - RD_PERF_TS_PASS0;
         if (t != NULL && k < t->count) {
+            /* its target and size, and the draws of the pieces before it
+               (a stop inside a list: how far the replay had come) */
             char label[96];
-            rd_perf_pass_label(&t->pass[k], label, sizeof label);
-            snprintf(buf, n, "the start of piece %u of %u, %s", k, t->count, label);
+            const RdPerfPass *q = &t->pass[k];
+            uint32_t before = 0;
+            rd_perf_pass_label(q, label, sizeof label);
+            for (uint32_t j = 0; j < k; j++) {
+                before += t->pass[j].draws;
+            }
+            snprintf(buf, n,
+                     "the start of piece %u of %u, %s %s %ux%u (%u draws before it, %u in it)", k,
+                     t->count, label, rd_perf_target_name(q->target), (unsigned)q->w,
+                     (unsigned)q->h, before, q->draws);
         } else if (t != NULL && k == t->count) {
             snprintf(buf, n, "the end of its last piece (%u)", t->count);
         } else {
@@ -1282,13 +1299,52 @@ static void clockName(uint32_t index, void *user, char *buf, size_t n)
     }
 }
 
+/* ------------------------------------------ a stalled replay's list 0
+ * (rd_perf_rare.h): the replay being recorded keeps list 0's pipelines,
+ * its slot keeps them until its clock is read, and the window's block
+ * counts the replays each was seen in (reset at the block's end) */
+
+void rd__perf_rare_pipeline(uint32_t id, uint8_t vs, uint8_t fs, uint8_t dst)
+{
+    if (s_recOpen && s_inLists && rd__passring_list_now() == 0) {
+        rd_perf_rare_replay_add(&s_rareRec, id, vs, fs, dst);
+    }
+}
+
+void rd_perf_rare_block_end(void)
+{
+    __atomic_store_n(&s_rareBlockNew, 1, __ATOMIC_RELAXED);
+}
+
+/* rd__perf_end's: the replay's list 0 into the block and its slot */
+static void rareEnd(uint32_t slot)
+{
+    if (__atomic_exchange_n(&s_rareBlockNew, 0, __ATOMIC_RELAXED)) {
+        rd_perf_rare_block_reset(&s_rareBlock);
+    }
+    rd_perf_rare_block_add(&s_rareBlock, &s_rareRec);
+    s_rarePending[slot] = s_rareRec;
+}
+
+void rd__perf_rare_stall(uint32_t slot, uint32_t replay, uint32_t k)
+{
+    if (k == 0 || slot >= RHI_FRAMES_IN_FLIGHT || s_rarePending[slot].replay != replay) {
+        return;
+    }
+    char line[1536];
+    rd_perf_rare_text(&s_rareBlock, &s_rarePending[slot], RD_PERF_RARE_PCT, rd__vs_name,
+                      rd__fs_name, line, sizeof line);
+    rd__log("%s (stall line %u of the run)", line, k);
+}
+
 /* the slot's clock against the CPU's into the record, and its line on a
-   long wait with a trace, a second run, a stamp the GPU never wrote or a
-   counter restart (rd_perf_clock.h; first 8, then every 100th) */
+   long wait, a second run, a stamp the GPU never wrote (a stalled replay:
+   the first 32, then every 10th) or a counter restart alone (the first 8,
+   then every 100th, on its own count: rd_perf_clock.h rd_perf_clock_due) */
 static void clockNote(RdPerfRecord *r, uint32_t slot, const RhiTimestampClock *clk,
                       const uint64_t *ts, uint32_t n)
 {
-    static uint32_t s_lines;
+    static RdPerfClockLines s_lines;
     const RdPerfClockIn in = {clk,
                               ts,
                               n,
@@ -1310,11 +1366,14 @@ static void clockNote(RdPerfRecord *r, uint32_t slot, const RhiTimestampClock *c
     if (!v.report) {
         return;
     }
-    const uint32_t k = ++s_lines;
-    if (k <= 8u || k % 100u == 0u) {
+    const uint32_t k = rd_perf_clock_due(&s_lines, &v);
+    if (k != 0) {
         char line[2048];
         rd_perf_clock_text(&in, &v, line, sizeof line);
-        rd__log("%s (line %u of the run)", line, k);
+        rd__log("%s (%s line %u of the run)", line, v.stall ? "stall" : "restart", k);
+    }
+    if (v.stall) {
+        rd__perf_rare_stall(slot, r->replay, k); /* the hung list's pipelines (rd_perf_rare.h) */
     }
 }
 
@@ -1564,6 +1623,7 @@ void rd__perf_end(void)
         memcpy(t->pass, s_passRec.pass, (size_t)s_passRec.count * sizeof(s_passRec.pass[0]));
     }
     s_passOn = false;
+    rareEnd(slot);
     s_pending[slot] = *r;
     s_pendingStamps[slot] = s_stamps;
     memcpy(s_pendingOrd[slot], s_ord, s_ordN);
