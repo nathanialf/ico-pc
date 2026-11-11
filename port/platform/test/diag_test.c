@@ -3343,14 +3343,21 @@ int main(int argc, char **argv)
         CHECK(strstr(read_file(ends), "loss_robust 0\n") != NULL);
         r = run(argv[0], "actlossnext", log);
         s = read_file(log);
-        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 2\n") != NULL);
+        /* the start between ran robust without a loss: for the loss ladder
+           the losses are not in a row (1), for robust access the second (2) */
+        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 1 (2 counted for "
+                        "robust access)\n") != NULL);
+        CHECK(strstr(s, "test: loss row 1, ICO_LOSS_ROW 1\n") != NULL);
         CHECK(strstr(s, "test: config write dev.gpu_robust = true\n") != NULL);
         CHECK(strstr(s, "ico_pc: the graphics device was lost in two starts in a row; this start "
                         "and every start after it check the bounds of every buffer and image "
                         "read ([dev] gpu_robust = true in config.toml); delete that line to turn "
                         "it off again\n") != NULL);
         CHECK(strstr(s, "test: losses 2, robust for good\n") != NULL);
-        CHECK(read_file(ends)[0] == '\0');
+        /* the row stays at the start that wrote the setting (review M5:
+           before v0.11.4 it went back to 0 there) */
+        CHECK(strstr(read_file(ends), "loss 2\n") != NULL);
+        CHECK(strstr(read_file(ends), "loss_row 1\n") != NULL);
         /* ... the robust start itself losing it is the second too */
         setenv("ICO_TEST_THEN", "loss", 1);
         run(argv[0], "actlossnext", log);
@@ -3361,6 +3368,7 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 2\n") != NULL);
         CHECK(strstr(s, "test: losses 2, robust for good\n") != NULL);
+        CHECK(strstr(s, "test: loss row 2, ICO_LOSS_ROW 2\n") != NULL);
         /* ... a start without a loss that did not run robust breaks the
            row: the start after the robust one keeps it (that one ran with
            robust access), the start after that one clears it */
@@ -3405,10 +3413,10 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "ico_pc: the previous start lost the graphics device (1 in a row); nothing "
                         "is written to config.toml: robust access is as the settings say ([dev] "
                         "gpu_robust)\n") != NULL);
-        CHECK(strstr(s,
-                     "ico_pc: loss ladder: 1 start in a row lost the graphics device before "
-                     "this one: this start runs the wide barrier scopes (the graphics backend's "
-                     "barriers line says what ran); nothing is written to the settings\n") != NULL);
+        CHECK(strstr(s, "ico_pc: loss ladder: 1 start in a row lost the graphics device before "
+                        "this one: on Vulkan this start runs the wide barrier scopes (the graphics "
+                        "backend's barriers line says what ran; Direct3D and OpenGL change "
+                        "nothing); nothing is written to the settings\n") != NULL);
         CHECK(strstr(s, "test: loss row 1, ICO_LOSS_ROW 1\n") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(read_file(ends), "loss 1\n") != NULL);
@@ -3419,9 +3427,10 @@ int main(int argc, char **argv)
         CHECK(strstr(s, "ico_pc: the previous start lost the graphics device (2 in a row); nothing "
                         "is written to config.toml") != NULL);
         CHECK(strstr(s, "ico_pc: loss ladder: 2 starts in a row lost the graphics device before "
-                        "this one: this start runs the wide barrier scopes and the single "
-                        "submission wait (the graphics backend's barriers and submission wait "
-                        "line says what ran); nothing is written to the settings\n") != NULL);
+                        "this one: on Vulkan this start runs the wide barrier scopes and the "
+                        "single submission wait (the graphics backend's barriers and submission "
+                        "wait line says what ran; Direct3D and OpenGL change nothing); nothing is "
+                        "written to the settings\n") != NULL);
         CHECK(strstr(s, "test: loss row 2, ICO_LOSS_ROW 2\n") != NULL);
         CHECK(strstr(s, "test: config write") == NULL);
         CHECK(strstr(read_file(ends), "loss 2\n") != NULL);
@@ -3465,6 +3474,82 @@ int main(int argc, char **argv)
         s = read_file(log);
         CHECK(strstr(s, "test: loss row 0, ICO_LOSS_ROW unset\n") != NULL);
         CHECK(read_file(ends)[0] == '\0');
+        /* ... the loss order ran out (review M5): a fresh start after a
+           start and its two restarts all lost it is the third in a row,
+           not the first: the chain's losses count in the row */
+        setenv("ICO_TEST_THEN", "loss", 1);
+        run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        for (int k = 0; k < 2; k++) {
+            run(argv[0], "actrelaunch", log);
+            FILE *af = fopen(act, "wb");
+            CHECK(af != NULL);
+            if (af != NULL) {
+                fputs("test 1\n\ngraphics device lost, no loss dump", af);
+                fclose(af);
+            }
+        }
+        CHECK(strstr(read_file(ends), "loss_chain 2\n") != NULL);
+        r = run(argv[0], "actlossnext", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: starts in a row that lost the graphics device: 3 (1 counted for "
+                        "robust access)\n") != NULL);
+        CHECK(strstr(s, "ico_pc: loss ladder: 3 starts in a row lost the graphics device before "
+                        "this one: ") != NULL);
+        CHECK(strstr(s, "test: loss row 3, ICO_LOSS_ROW 3\n") != NULL);
+        CHECK(strstr(read_file(ends), "loss_row 3\n") != NULL);
+        /* ... a restart of that start counts on from the row */
+        {
+            FILE *af = fopen(act, "wb");
+            CHECK(af != NULL);
+            if (af != NULL) {
+                fputs("test 1\n\ngraphics device lost, no loss dump", af);
+                fclose(af);
+            }
+        }
+        r = run(argv[0], "actrelaunch", log);
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: loss ladder: 4 starts in a row lost the graphics device before "
+                        "this one (this game's restarts after a loss): ") != NULL);
+        remove(act);
+        remove(ends);
+        /* ... the setting written at the second loss (review M5): the start
+           that wrote it losing it too is the third in a row for the ladder,
+           with gpu_robust then set (ICO_TEST_ROBUST_SAID) */
+        run(argv[0], "actlossnext", log);
+        remove(ends);
+        setenv("ICO_TEST_THEN", "loss", 1);
+        run(argv[0], "actlossnext", log);
+        run(argv[0], "actlossnext", log);
+        r = run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        CHECK(strstr(read_file(log), "test: losses 2, robust for good\n") != NULL);
+        setenv("ICO_TEST_ROBUST_SAID", "[dev] gpu_robust", 1);
+        r = run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_ROBUST_SAID");
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: the previous start lost the graphics device (3 in a row); nothing "
+                        "is written to config.toml") != NULL);
+        CHECK(strstr(s, "test: loss row 3, ICO_LOSS_ROW 3\n") != NULL);
+        /* ... the ladder's words on a phone (Android, iOS; faked here): the
+           rung is the VU pre-pass */
+        remove(ends);
+        setenv("ICO_TEST_THEN", "loss", 1);
+        run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_THEN");
+        setenv("ICO_TEST_LADDER_PHONE", "1", 1);
+        r = run(argv[0], "actlossnext", log);
+        unsetenv("ICO_TEST_LADDER_PHONE");
+        s = read_file(log);
+        CHECK(strstr(s, "ico_pc: loss ladder: 1 start in a row lost the graphics device before "
+                        "this one: on Vulkan this start draws without the VU pre-pass (a "
+                        "tile-based phone GPU, whose barrier scopes and submission wait are the "
+                        "wide and single ones already; the graphics backend's VU pre-pass line "
+                        "says what ran; OpenGL ES changes nothing); nothing is written to the "
+                        "settings\n") != NULL);
+        CHECK(strstr(s, "test: loss row 1, ICO_LOSS_ROW 1\n") != NULL);
+        CHECK(strstr(s, "wide barrier scopes (the graphics") == NULL);
+        run(argv[0], "actlossnext", log);
         remove(act);
         remove(ends);
         /* a batch of the vertex pre-pass's: this
