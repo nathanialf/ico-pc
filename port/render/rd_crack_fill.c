@@ -204,6 +204,13 @@ static struct {
 static struct {
     bool armed, resolved, alpha, paste;
     uint32_t replay, pasteOrd;
+    /* the late pass (rd_late_pass.c): the snapshot taken where the fill
+     * would be drawn (rd__crack_fill_place's TAKE), its draw held to the
+     * aura's paste pass; repeats SCENE's border repeats done by then */
+    bool taken;
+    bool glow; /* the paste armed is the glow's (the fx plan's premultiplied add) */
+    uint64_t repeats;
+    int flushWhy; /* why it is drawn in a pass of its own after all (RD_LATE_WHY_*) */
 } s_late;
 
 /* the places taken since start and in the 10 s block: in the aura's paste
@@ -213,6 +220,8 @@ static struct {
 static struct {
     uint64_t pasted, alpha, bPasted, bAlpha;
     uint32_t notPasted, notCovered;
+    /* held fills drawn after SCENE's border repeat, its blocks again */
+    uint64_t border, bBorder;
 } s_place;
 
 /* the replay tool's --no-crack-fill and the tests: -1 none, else the switch */
@@ -407,7 +416,7 @@ void rd__crack_fill_counts(RdCrackCounts *out)
 void rd__crack_fill_block(void)
 {
     note();
-    char fold[192] = "";
+    char fold[320] = "";
     int at = 0;
     if (s_cf.bLate) {
         at = snprintf(fold, sizeof(fold), "; %llu after lists 4-6", (unsigned long long)s_cf.bLate);
@@ -420,6 +429,12 @@ void rd__crack_fill_block(void)
     if (s_place.bAlpha && at >= 0 && (size_t)at < sizeof(fold)) {
         at += snprintf(fold + at, sizeof(fold) - (size_t)at, ", %llu after the glow's alpha",
                        (unsigned long long)s_place.bAlpha);
+    }
+    if (s_place.bBorder && at >= 0 && (size_t)at < sizeof(fold)) {
+        at += snprintf(fold + at, sizeof(fold) - (size_t)at,
+                       ", %llu held past SCENE's border repeat (its columns filled from their "
+                       "source columns)",
+                       (unsigned long long)s_place.bBorder);
     }
     if (s_cf.bAfterMsaa && at >= 0 && (size_t)at < sizeof(fold)) {
         snprintf(fold + at, sizeof(fold) - (size_t)at, "; %llu after the MSAA resolve",
@@ -448,7 +463,7 @@ void rd__crack_fill_block(void)
                 (unsigned long long)k[SKIP_PIPES], (unsigned long long)k[SKIP_MEMORY]);
     }
     s_cf.bFilled = s_cf.bCounted = s_cf.bPixels = s_cf.bLate = s_cf.bAfterMsaa = 0;
-    s_place.bPasted = s_place.bAlpha = 0;
+    s_place.bPasted = s_place.bAlpha = s_place.bBorder = 0;
     s_cf.bMax = 0;
     memset(s_cf.bSkip, 0, sizeof(s_cf.bSkip));
 }
@@ -489,18 +504,21 @@ static bool countEnsure(uint32_t cw, uint32_t ch, uint32_t pitch)
 }
 
 /* one triangle over a w x h pass already begun: the pipeline of key k,
- * t1 and t2 (t1's aspect a1), the reach in DrawCB.param.xy */
-static void fullscreen(RhiCommandList cl, const RdPipeKeyInt *k, RhiPipeline pipe, uint32_t w,
-                       uint32_t h, RhiTexture t1, RhiViewAspect a1, RhiTexture t2)
+ * t1 and t2 (t1's aspect a1), the reach in DrawCB.param.xy; drawn inside
+ * scissor sc, each texel x evaluated at texel x + off of its row
+ * (DrawCB.param.w, crack_fill_ps: a held fill's border blocks, else 0) */
+static void fullscreenAt(RhiCommandList cl, const RdPipeKeyInt *k, RhiPipeline pipe, uint32_t w,
+                         uint32_t h, RhiTexture t1, RhiViewAspect a1, RhiTexture t2, RhiRect sc,
+                         int32_t off)
 {
     rd__replay_viewport(w, h);
-    const RhiRect all = {0, 0, w, h};
-    rhi_cmd_set_scissor(cl, &all);
+    rhi_cmd_set_scissor(cl, &sc);
     IcoDrawCB cb;
     memset(&cb, 0, sizeof(cb));
     cb.param[0] = (float)s_cf.rx;
     cb.param[1] = (float)s_cf.ry;
     cb.param[2] = 1.0f / (float)RD_CRACK_BEHIND;
+    cb.param[3] = (float)off; /* a whole number under 2^24: exact */
     RhiBinding b[3];
     memset(b, 0, sizeof(b));
     b[0].slot = 1;
@@ -523,6 +541,12 @@ static void fullscreen(RhiCommandList cl, const RdPipeKeyInt *k, RhiPipeline pip
     rd__bind_uniform(cl, 1, rd__draw_group(&cb));
     rhi_cmd_set_bind_group(cl, 2, g);
     rd__replay_draw(cl, 3, 0, 1);
+}
+
+static void fullscreen(RhiCommandList cl, const RdPipeKeyInt *k, RhiPipeline pipe, uint32_t w,
+                       uint32_t h, RhiTexture t1, RhiViewAspect a1, RhiTexture t2)
+{
+    fullscreenAt(cl, k, pipe, w, h, t1, a1, t2, (RhiRect){0, 0, w, h}, 0);
 }
 
 /* the count (the tests and --stats only, with none in flight): reads the
@@ -617,8 +641,9 @@ int rd__crack_fill_place(const RdFrame *f, const RdCmd *c, const RdStateBlock *s
     if (st->color != scene) {
         /* another target (the aura's AURA_WORK, WORK0, FEED128): the fill's
          * inputs and its texels untouched; after the glow's alpha the mask
-         * that reads SCENE follows, so no further */
-        return *alpha ? RD_CRACK_PLACE_HERE : RD_CRACK_PLACE_HOLD;
+         * that reads SCENE follows, so no further: here, or the snapshot
+         * here and the draw held (TAKE: rd_late_pass.c) */
+        return *alpha ? RD_CRACK_PLACE_TAKE : RD_CRACK_PLACE_HOLD;
     }
     /* the glow's cleanUpFB: an untextured sprite whose blend keeps RGB for
      * every Cd and Ad (rd__fx_fold), no alpha test: it writes the alpha
@@ -674,15 +699,58 @@ static void fillDraw(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipe
     s_cf.bFilled++;
 }
 
-/* the snapshot, the count and the fill in a pass of SCENE's colour alone,
- * loaded and stored */
-static bool fillWork(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipeKeyInt *kFill,
-                     RhiPipeline pCount, const RdPipeKeyInt *kCount)
+/* A held fill drawn (the pass open on SCENE's colour) after SCENE's border
+ * repeat (rd_blur_border.c sceneRepeat) copied the source columns 2 and
+ * W - 3 over the outer ones: without the hold the fill was drawn first and
+ * the repeat copied the filled columns, its snapshot (taken before the
+ * repeat, as without the hold) holding the outer columns as the fog and
+ * lists 4-6 left them, which the fill reads as neighbours.  So the fill is
+ * drawn over the columns the repeat left (scissored), and each block the
+ * repeat copied is drawn again with the fill evaluated at its source
+ * texel (crack_fill_ps's offset): a crack there writes the source's fill,
+ * any other texel keeps the copy, the source's colour.  RGB alone (after
+ * the glow's alpha): the alpha is the copy's either way.  Without a repeat
+ * since the snapshot, the fill as fillDraw draws it */
+static void fillDrawHeld(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipeKeyInt *kFill,
+                         bool held)
 {
-    if (!fillTake(r, tc, pCount, kCount)) {
-        return false;
+    const RdBorderBlocks *b = rd__scene_border_blocks();
+    if (!held || b->serial <= s_late.repeats || b->replay != g_rd.replayCounter ||
+        b->tex != tc->color.id || b->over) {
+        fillDraw(r, tc, pFill, kFill);
+        return;
     }
     RhiCommandList cl = rd__replay_cl();
+    const uint32_t th = tc->th;
+    if (b->x1 > b->x0) {
+        fullscreenAt(cl, kFill, pFill, tc->tw, th, tc->snap, RHI_ASPECT_COLOR, tc->depth,
+                     (RhiRect){b->x0, 0, (uint32_t)(b->x1 - b->x0), th}, 0);
+    }
+    for (uint32_t k = 0; k < b->n; k++) {
+        fullscreenAt(cl, kFill, pFill, tc->tw, th, tc->snap, RHI_ASPECT_COLOR, tc->depth,
+                     (RhiRect){b->b[k].x, 0, (uint32_t)b->b[k].w, th}, b->b[k].off);
+    }
+    r->writeSerial++; /* SCENE's colour changed (DATE's snapshot) */
+    s_cf.filled++;
+    s_cf.bFilled++;
+    s_place.border++;
+    s_place.bBorder++;
+}
+
+/* the snapshot (or the one a held fill took), the count and the fill in a
+ * pass of SCENE's colour alone, loaded and stored */
+static bool fillWork(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipeKeyInt *kFill,
+                     RhiPipeline pCount, const RdPipeKeyInt *kCount, bool held)
+{
+    RhiCommandList cl = rd__replay_cl();
+    if (held) {
+        /* the snapshot taken where the fill was due; the depth back to its
+         * sampled state (a pass may have bound it since: a test only) */
+        rd__replay_end_pass(r);
+        rd__transition(cl, tc->depth, &tc->depthState, RHI_STATE_DEPTH_READ);
+    } else if (!fillTake(r, tc, pCount, kCount)) {
+        return false;
+    }
     const uint32_t w = tc->tw, h = tc->th, scene = RD_TARGET_SCENE + 1u;
     rd__transition(cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
     rd__perf_pass(cl, RD_PERF_PASS_RENDER, scene, w, h, RD_PERF_POST_CRACK);
@@ -696,7 +764,7 @@ static bool fillWork(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipe
     p.width = w;
     p.height = h;
     rhi_cmd_begin_render_pass(cl, &p);
-    fillDraw(r, tc, pFill, kFill);
+    fillDrawHeld(r, tc, pFill, kFill, held);
     rhi_cmd_end_render_pass(cl);
     g_rdPerf.crackFillPasses++;
     return true;
@@ -722,7 +790,8 @@ void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, int msaa)
         return;
     }
     s_late.armed = true;
-    s_late.alpha = s_late.paste = false;
+    s_late.alpha = s_late.paste = s_late.taken = s_late.glow = false;
+    s_late.flushWhy = 0;
     s_late.replay = g_rd.replayCounter;
     s_late.resolved = msaa == RD_CRACK_MSAA_RESOLVED;
 }
@@ -803,7 +872,16 @@ void rd__crack_fill_late(Replay *r, bool msaaOpen)
     if (!s_late.armed) {
         return;
     }
-    s_late.armed = s_late.paste = false;
+    const bool held = s_late.taken;
+    if (held) {
+        /* the held fill in a pass of its own after all: why (the walk's end
+         * or an armed paste that drew another way unless said) */
+        rd__late_pass_flushed(s_late.flushWhy ? s_late.flushWhy
+                              : s_late.paste  ? RD_LATE_WHY_PASTE
+                                              : RD_LATE_WHY_END);
+    }
+    s_late.flushWhy = 0;
+    s_late.armed = s_late.paste = s_late.taken = s_late.glow = false;
     RdTargetRec *tc = sceneRec();
     if (s_late.replay != g_rd.replayCounter || !tc || !tc->depth.id || !tc->color.id) {
         return; /* armed in another replay (one that ended before list 7) */
@@ -822,7 +900,7 @@ void rd__crack_fill_late(Replay *r, bool msaaOpen)
     const int post = r->perfPost;
     r->perfPost = RD_PERF_POST_CRACK;
     rd__replay_perf_post(r, RD_PERF_POST_CRACK);
-    const bool drawn = fillWork(r, tc, pFill, &kFill, pCount, &kCount);
+    const bool drawn = fillWork(r, tc, pFill, &kFill, pCount, &kCount, held);
     r->perfPost = post;
     rd__replay_perf_post(r, post);
     if (drawn) {
@@ -896,7 +974,138 @@ static bool alphaCovers(const Replay *r, const RdFrame *f, const RdCmd *c)
     return rd__replay_blur_covers(&q, tc, &p, d, &key, useDepth);
 }
 
+/* the glow's paste's pass cannot take a held fill: why (NULL: it can).  The
+ * fx plan draws the paste by its premultiplied add in a pass of SCENE's
+ * colour alone (rd_fx_plan.c fxPlanDraw: the tile class's profile, the
+ * shader, no exact blend, no MSAA epoch), whole (no pass area), no pass on
+ * SCENE open before it */
+static const char *glowWhyNot(const Replay *r, const RdTargetRec *tc)
+{
+    RhiRect a;
+    if (!g_rd.profile.fxPlan || !g_rd.fs[RD_FS_FX_FRAME].id || g_rd.dstMode != RD_BLEND_EXACT_OFF ||
+        rd__uber_on()) {
+        return "the glow's paste is not drawn by the premultiplied add on this device";
+    }
+    if (rd__replay_msaa_want() > 1u) {
+        return "the MSAA epoch";
+    }
+    if (r->passOpen && r->passColor == RD_TARGET_SCENE + 1u) {
+        return "a pass on the scene is open before it";
+    }
+    if (rd__pass_area_on() &&
+        rd__pass_area_rect(RD_TARGET_SCENE + 1u, tc, g_rdStoreOrd, &a, NULL)) {
+        return "the paste's pass holds a part of the picture only";
+    }
+    return NULL;
+}
+
+bool rd__crack_fill_glow_due(void)
+{
+    return rd__crack_fill_paste_due() && s_late.glow;
+}
+
+/* The snapshot taken now and the draw held (rd_late_pass.c): true when
+ * that is done, or when the fill cannot be drawn at all (its pipelines or
+ * the snapshot's memory: skipped, said, as rd__crack_fill_late does) */
+static bool takeHeld(Replay *r, bool msaaOpen)
+{
+    RdTargetRec *tc = sceneRec();
+    if (msaaOpen || s_late.replay != g_rd.replayCounter || !tc || !tc->depth.id || !tc->color.id ||
+        !s_late.alpha || !rd__late_pass_hold_wanted()) {
+        return false;
+    }
+    RdPipeKeyInt kFill, kCount;
+    RhiPipeline pFill, pCount;
+    if (!fillPipes(tc, &kFill, &pFill, &kCount, &pCount)) {
+        s_late.armed = false;
+        return true;
+    }
+    const int post = r->perfPost;
+    r->perfPost = RD_PERF_POST_CRACK;
+    rd__replay_perf_post(r, RD_PERF_POST_CRACK);
+    const bool taken = fillTake(r, tc, pCount, &kCount);
+    r->perfPost = post;
+    rd__replay_perf_post(r, post);
+    if (!taken) {
+        s_late.armed = false;
+        return true;
+    }
+    s_late.taken = true;
+    s_late.repeats = rd__scene_border_repeat_count();
+    return true;
+}
+
+/* command c with the fill held: it waits, it lands in the aura's paste
+ * pass, or it is drawn now in a pass of its own (rd_late_pass.c) */
+static void heldAt(Replay *r, const RdFrame *f, const RdCmd *c, bool msaaOpen)
+{
+    int why = RD_LATE_WHY_NONE;
+    int k = RD_LATE_FLUSH;
+    if (msaaOpen || rd__replay_msaa_want() > 1u) {
+        why = RD_LATE_WHY_MSAA;
+    } else {
+        k = rd__late_pass_class(f, c, &r->st, rd__glow_light_skips(c) ? 1 : 0, &why);
+    }
+    if (k == RD_LATE_HOLD) {
+        return;
+    }
+    if (k == RD_LATE_LAND_AURA || k == RD_LATE_LAND_GLOW) {
+        const RdTargetRec *tc = sceneRec();
+        const bool glow = k == RD_LATE_LAND_GLOW;
+        const char *w = !tc ? "no scene" : glow ? glowWhyNot(r, tc) : pasteWhyNot(r, tc);
+        if (!w) {
+            s_late.paste = true; /* rd__crack_fill_in_pass, from the paste's draw */
+            s_late.glow = glow;
+            s_late.pasteOrd = g_rdStoreOrd;
+            return;
+        }
+        if (!glow) {
+            notPasted(w);
+        }
+        why = RD_LATE_WHY_PASTE;
+    }
+    s_late.flushWhy = why;
+    rd__crack_fill_late(r, msaaOpen);
+}
+
+void rd__crack_fill_flush_held(Replay *r, int why)
+{
+    if (!s_late.armed || !s_late.taken || s_late.replay != g_rd.replayCounter) {
+        return;
+    }
+    s_late.flushWhy = why;
+    rd__crack_fill_late(r, false);
+}
+
+void rd__crack_fill_snap(Replay *r, const RdTargetRec *tc)
+{
+    if (s_late.armed && s_late.taken && tc && tc == sceneRec()) {
+        rd__crack_fill_flush_held(r, RD_LATE_WHY_SNAP);
+    }
+    if (tc && tc == sceneRec() && rd__fx_defer_on()) {
+        rd__fx_defer_draw(r, false); /* the deferred glow paste before SCENE is read */
+    }
+}
+
+void rd__crack_fill_unarm_glow(void)
+{
+    if (s_late.armed && s_late.taken && s_late.paste && s_late.glow) {
+        s_late.paste = s_late.glow = false; /* held on, to the aura's paste */
+    }
+}
+
+static void fillAt(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen);
+
 void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen)
+{
+    rd__late_pass_cmd(c); /* the command walked (rd_late_pass.c's list 11 join) */
+    fillAt(r, f, c, list, msaaOpen);
+    if (list >= RD_CRACK_LATE_LIST) {
+        rd__late_pass_defer_at(r, f, c); /* the deferred glow paste, after the fill */
+    }
+}
+
+static void fillAt(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen)
 {
     if (!s_late.armed || list < RD_CRACK_LATE_LIST) {
         return;
@@ -905,6 +1114,10 @@ void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bo
         /* armed for the paste before: its pass did not take it (the paste
          * drew nothing) */
         rd__crack_fill_late(r, msaaOpen);
+        return;
+    }
+    if (s_late.taken) {
+        heldAt(r, f, c, msaaOpen);
         return;
     }
     int place = RD_CRACK_PLACE_HERE;
@@ -926,6 +1139,12 @@ void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bo
     if (place == RD_CRACK_PLACE_HOLD) {
         s_late.alpha = alpha;
         return;
+    }
+    if (place == RD_CRACK_PLACE_TAKE) {
+        if (takeHeld(r, msaaOpen)) {
+            return; /* the snapshot here, the draw held (rd_late_pass.c) */
+        }
+        place = RD_CRACK_PLACE_HERE;
     }
     if (place == RD_CRACK_PLACE_PASTE) {
         const RdTargetRec *tc = sceneRec();
@@ -965,7 +1184,8 @@ void rd__crack_fill_in_pass(Replay *r, uint32_t tdId)
         rd__crack_fill_paste_late(r, "the paste's pass binds the scene's depth or is open");
         return;
     }
-    s_late.armed = s_late.paste = false;
+    const bool held = s_late.taken, glow = s_late.glow;
+    s_late.armed = s_late.paste = s_late.taken = s_late.glow = false;
     if (s_late.replay != g_rd.replayCounter || !tc->depth.id || !tc->color.id) {
         return;
     }
@@ -974,24 +1194,35 @@ void rd__crack_fill_in_pass(Replay *r, uint32_t tdId)
     if (!fillPipes(tc, &kFill, &pFill, &kCount, &pCount)) {
         return;
     }
-    /* the snapshot and the count are the fill's effect; the pass is the
-     * paste's (the aura's), begun as the paste's bindDraw would begin it:
-     * SCENE's colour loaded, no depth; the paste's draw then lands in it */
-    const int post = r->perfPost;
-    r->perfPost = RD_PERF_POST_CRACK;
-    rd__replay_perf_post(r, RD_PERF_POST_CRACK);
-    const bool taken = fillTake(r, tc, pCount, &kCount);
-    r->perfPost = post;
-    rd__replay_perf_post(r, post);
-    if (!taken) {
-        return;
+    if (held) {
+        /* the snapshot taken where the fill was due (rd_late_pass.c); the
+         * depth back to its sampled state outside any pass */
+        rd__replay_end_pass(r);
+        rd__transition(rd__replay_cl(), tc->depth, &tc->depthState, RHI_STATE_DEPTH_READ);
+    } else {
+        /* the snapshot and the count are the fill's effect; the pass is the
+         * paste's (the aura's), begun as the paste's bindDraw would begin
+         * it: SCENE's colour loaded, no depth; the paste's draw then lands
+         * in it */
+        const int post = r->perfPost;
+        r->perfPost = RD_PERF_POST_CRACK;
+        rd__replay_perf_post(r, RD_PERF_POST_CRACK);
+        const bool taken = fillTake(r, tc, pCount, &kCount);
+        r->perfPost = post;
+        rd__replay_perf_post(r, post);
+        if (!taken) {
+            return;
+        }
     }
     rd__replay_begin_pass(r, tc, NULL, RD_TARGET_SCENE + 1u, 0, RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD,
                           0.0f, false);
-    fillDraw(r, tc, pFill, &kFill);
-    fillCounted(true);
+    fillDrawHeld(r, tc, pFill, &kFill, held);
+    fillCounted(!glow); /* the glow's paste pass is not the aura's */
+    if (held) {
+        rd__late_pass_held_drawn(tc, glow);
+    }
     static bool s_said;
-    if (!s_said) {
+    if (!glow && !s_said) {
         s_said = true;
         rd__log("crack fill: drawn as the first draw of the aura's paste pass on SCENE (the "
                 "paste's own pass, its draw after it), not in a pass of its own (reported once)");

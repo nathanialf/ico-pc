@@ -537,6 +537,7 @@
 #include "rd_internal.h"
 #include "rd_jitter.h"
 #include "rd_layer.h"
+#include "rd_late_pass.h"        /* --stats: the late passes on SCENE */
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
 #include "rd_stencil_selftest.h" /* --stats: the stencil outside the shadow window */
 #include "rd_shadow_box.h"       /* --stats: the shadows over the volumes' box */
@@ -3238,6 +3239,21 @@ int main(int argc, char **argv)
                pr->glowLight == RD_GLOW_LIGHT_WHOLE ? rd_glow_light_why_text(pr->glowLightWhy) : "",
                pr->glowLight == RD_GLOW_LIGHT_WHOLE ? ")" : "", pr->glowLightPasses,
                pr->glowLightLazy);
+        /* the late passes on SCENE (rd_late_pass.c) */
+        printf("%s: stats: late pass %s: %u crack fills held into a paste pass (%u the glow's; "
+               "%.2f MB of colour not loaded and as many not stored), %u drawn early in a pass "
+               "of their own%s%s%s; %u glow pastes in the aura's paste pass (%.2f MB of colour "
+               "not loaded and as many not stored), %u drawn early; %u list 11 draws joined the "
+               "open pass without SCENE's depth (%u passes not begun, %.2f MB of colour at most "
+               "each way)\n",
+               dump, rd__late_pass_bits_text(rd__late_pass_bits()), pr->latePassHeld,
+               pr->latePassGlowHeld, (double)pr->latePassTexels * 4.0 / 1048576.0,
+               pr->latePassFlushed, pr->latePassFlushed ? " (" : "",
+               pr->latePassFlushed ? rd__late_pass_why_text((int)pr->latePassWhy) : "",
+               pr->latePassFlushed ? ")" : "", pr->latePassDeferred,
+               (double)pr->latePassDeferTexels * 4.0 / 1048576.0, pr->latePassDeferEarly,
+               pr->latePassJoined, pr->latePassJoinPasses,
+               (double)pr->latePassJoinTexels * 4.0 / 1048576.0);
         /* the aura's read in two passes (rd_aura_box.c) */
         printf("%s: stats: aura box %s: %u feedback reads in two passes\n", dump,
                rd__aura_box_on() ? "on" : "off", pr->auraBoxDraws);

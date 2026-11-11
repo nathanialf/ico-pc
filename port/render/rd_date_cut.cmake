@@ -71,3 +71,6 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                              ENVIRONMENT "ICO_RHI_BACKEND=opengl;LIBGL_ALWAYS_SOFTWARE=1;SDL_VIDEO_DRIVER=offscreen")
     endif()
 endif()
+
+# the late passes on SCENE (rd_late_pass.c in ico_render) and their tests
+include(rd_late_pass.cmake)

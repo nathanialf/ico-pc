@@ -10,6 +10,7 @@
 #include "rd_passring.h"
 #include "shader_consts.h"
 #include "rd_present_scene.h" /* rd_replay.c and rd_blur_border.c call its hooks */
+#include "rd_late_pass.h"     /* rd_crack_fill.c, rd_store_plan.c and rd_replay.c call it */
 
 /* Consecutive screen-prim commands that bind the same things are one draw
  * (doScreen).  A command whose plan is one draw opens a run or joins the
@@ -251,7 +252,10 @@ bool rd__blur_smooth_sprite(Replay *r, const RdFrame *f, const RdCmd *c);
  *                   alpha alone, *alpha set: the fill then writes RGB
  *                   alone), HERE the fill before it in a pass of its own,
  *                   PASTE the fill as the first draw of its pass (the
- *                   aura's paste into SCENE).  The store plan's scan and
+ *                   aura's paste into SCENE), TAKE as HERE, or its
+ *                   snapshot here and its draw held (another target's
+ *                   sprite after the glow's alpha: rd_late_pass.c, which
+ *                   then says where it lands).  The store plan's scan and
  *                   the walk ask it the same, so the store the fill reads
  *                   is kept up to that command; ICO_RD_CRACK_PLACE=7 (the
  *                   tests' A/B) answers HERE always: the start of list 7
@@ -275,13 +279,16 @@ enum {
     RD_CRACK_MSAA_RESOLVED, /* the epoch closed before the fog (msaaEnd's resolve) */
 };
 
-enum { RD_CRACK_PLACE_HOLD, RD_CRACK_PLACE_HERE, RD_CRACK_PLACE_PASTE };
+enum { RD_CRACK_PLACE_HOLD, RD_CRACK_PLACE_HERE, RD_CRACK_PLACE_PASTE, RD_CRACK_PLACE_TAKE };
 
 void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, int msaa);
 int rd__crack_fill_place(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool *alpha);
 void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen);
 void rd__crack_fill_late(Replay *r, bool msaaOpen);
 bool rd__crack_fill_paste_due(void);
+/* armed for the glow's paste being drawn now (the late pass's held fill:
+ * rd_fx_plan.c takes it in the premultiplied add's pass) */
+bool rd__crack_fill_glow_due(void);
 void rd__crack_fill_in_pass(Replay *r, uint32_t tdId);
 void rd__crack_fill_paste_late(Replay *r, const char *why);
 bool rd__crack_fill_may(const RdStateBlock *st);
@@ -336,6 +343,10 @@ bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x);
  *                    clear of another target kept for that target's next
  *                    pass to take as its load op (the clear carry) */
 bool rd__fx_fold(const RdDrawState *d, const uint8_t rgba[4], uint8_t *identity, uint8_t rgb[3]);
+/* rd__fx_alpha_only  a sprite under d with record p writes RGB 0 whatever
+ *                    its texture's RGB (MODULATE by RGBAQ's RGB 0, no
+ *                    blend): its texture's alpha alone is read */
+bool rd__fx_alpha_only(const RdDrawState *d, const RdPostRec *p);
 uint32_t rd__a1x_sprite_steps(const Replay *r, const DrawSetup *ds, const IcoSpriteVertex *v,
                               uint32_t nv, uint8_t prim);
 int rd__sprite_above1x(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds, uint32_t redId);
@@ -571,6 +582,13 @@ void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
                              uint32_t ord);
 void rd__glow_light_scan_end(void);
 bool rd__glow_light_planned(void);
+/* rd__glow_light_plan  this replay's plan (RD_GLOW_LIGHT_*; NONE before its
+ *                      scan, at 1x and with the plan off); rd__glow_light_skips
+ *                      the plan does not draw command c (walked now:
+ *                      g_rdStoreOrd).  rd_late_pass.c holds the crack fill
+ *                      past a skipped paste of a DARK frame */
+int rd__glow_light_plan(void);
+bool rd__glow_light_skips(const RdCmd *c);
 bool rd__glow_light_sprite(Replay *r, const RdFrame *f, const RdCmd *c);
 bool rd__glow_light_skip(uint32_t ord);
 bool rd__glow_light_src(uint32_t srcId, uint8_t rgba[4]);

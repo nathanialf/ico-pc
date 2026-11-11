@@ -7,6 +7,8 @@
 - Drawing the shadows takes less graphics memory work on phones with Arm Mali or Qualcomm Adreno graphics and on some PCs. The picture is exactly the same.
 - The characters' shadows are drawn only where they fall, so the shadows take less graphics work on every device. The picture is exactly the same.
 - On phones with PowerVR graphics (such as the Pixel 10 Pro Fold), each picture moves less data through graphics memory after a check the game makes on the phone at start. The picture is exactly the same.
+- On phones, in most rooms with the glow, the fix for the thin gaps between surfaces is drawn together with the next effect instead of on its own, and in rooms with lamps the glow itself is drawn together with the next effect, so those rooms take less work to draw; the picture is exactly the same.
+- On phones, the pause menu is drawn together with the picture's last effect instead of on its own, so a paused picture takes less work to draw; the picture is exactly the same.
 
 ## Fixed
 

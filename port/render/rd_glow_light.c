@@ -1216,7 +1216,20 @@ bool rd__glow_light_planned(void)
            (s_gl.plan == RD_GLOW_LIGHT_DARK || s_gl.plan == RD_GLOW_LIGHT_LAMPS);
 }
 
+int rd__glow_light_plan(void)
+{
+    return s_gl.replay == g_rd.replayCounter ? (int)s_gl.plan : RD_GLOW_LIGHT_NONE;
+}
+
 /* --------------------------------------------------------- the replay's */
+
+static GlCmd *find(const RdCmd *c);
+
+bool rd__glow_light_skips(const RdCmd *c)
+{
+    const GlCmd *e = find(c);
+    return e && e->act == ACT_SKIP;
+}
 
 static GlCmd *find(const RdCmd *c)
 {

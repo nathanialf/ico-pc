@@ -169,10 +169,21 @@ static int32_t columnTexel(const RdTargetRec *t, int32_t x)
     return v < 0.0 ? 0 : (v > (double)t->tw ? (int32_t)t->tw : (int32_t)v);
 }
 
+/* the blocks the last repeat copied (rd__scene_border_blocks): each
+ * texel x of a block took SCENE's texel x + off of its row */
+static RdBorderBlocks s_blocks;
+
+const RdBorderBlocks *rd__scene_border_blocks(void)
+{
+    return &s_blocks;
+}
+
 /* tmp's block [m, m + cw) (column 2's or W - 3's texels) copied to dst at
- * x, cut to dst's texels [d0, d1) */
+ * x, cut to dst's texels [d0, d1); base the SCENE column tmp's m holds.
+ * cl 0: counted (n) only.  Each block copied is recorded in s_blocks
+ * while it has room (s_blocks.over past it) */
 static void copyBlock(RhiCommandList cl, RhiTexture dst, int32_t x, int32_t d0, int32_t d1,
-                      int32_t m, int32_t cw, uint32_t th)
+                      int32_t m, int32_t cw, uint32_t th, int32_t base, uint32_t *n)
 {
     int32_t sx = m, w = cw;
     if (x < d0) {
@@ -183,8 +194,18 @@ static void copyBlock(RhiCommandList cl, RhiTexture dst, int32_t x, int32_t d0, 
     if (x + w > d1) {
         w = d1 - x;
     }
-    if (w > 0) {
-        rhi_cmd_copy_texture(cl, s_cols.tex, (RhiRect){sx, 0, w, th}, dst, x, 0);
+    if (w <= 0) {
+        return;
+    }
+    (*n)++;
+    if (!cl.id) {
+        return;
+    }
+    rhi_cmd_copy_texture(cl, s_cols.tex, (RhiRect){sx, 0, w, th}, dst, x, 0);
+    if (s_blocks.n < RD_BORDER_BLOCKS) {
+        s_blocks.b[s_blocks.n++] = (RdBorderBlock){x, w, base + (sx - m) - x};
+    } else {
+        s_blocks.over = true;
     }
 }
 
@@ -192,19 +213,22 @@ static void copyBlock(RhiCommandList cl, RhiTexture dst, int32_t x, int32_t d0, 
  * from the neighbour column outwards: right to left from d1 on the left
  * (the block's last texel next to column 2), left to right from d0 on the
  * right, the outermost copy cut at the edge.  At a whole scale that is the
- * column twice, texel for texel */
-static void fillFrom(RhiCommandList cl, RhiTexture dst, int32_t d0, int32_t d1, int32_t m,
-                     int32_t cw, uint32_t th, int right)
+ * column twice, texel for texel.  The blocks laid: their number (cl 0:
+ * nothing copied, the count alone) */
+static uint32_t fillFrom(RhiCommandList cl, RhiTexture dst, int32_t d0, int32_t d1, int32_t m,
+                         int32_t cw, uint32_t th, int right, int32_t base)
 {
+    uint32_t n = 0;
     if (right) {
         for (int32_t x = d0; x < d1; x += cw) {
-            copyBlock(cl, dst, x, d0, d1, m, cw, th);
+            copyBlock(cl, dst, x, d0, d1, m, cw, th, base, &n);
         }
     } else {
         for (int32_t x = d1 - cw; x + cw > d0; x -= cw) {
-            copyBlock(cl, dst, x, d0, d1, m, cw, th);
+            copyBlock(cl, dst, x, d0, d1, m, cw, th, base, &n);
         }
     }
+    return n;
 }
 
 /* SCENE's GS columns 0, 1 and W - 2, W - 1 made copies of columns 2 and
@@ -240,6 +264,15 @@ static void sceneRepeat(Replay *r)
     if (!colsEnsure((uint32_t)(cwL + cwR), th, t->format)) {
         return;
     }
+    /* a crack fill whose draw is held (rd_crack_fill.c, rd_late_pass.c)
+     * draws each block's texels again from its source column's: more
+     * blocks than s_blocks holds, and it is drawn now, before the copies */
+    const RhiCommandList none = {0};
+    const uint32_t nb = (left ? fillFrom(none, t->color, 0, a2, 0, cwL, th, 0, a2) : 0u) +
+                        (right ? fillFrom(none, t->color, aR, tw, cwL, cwR, th, 1, bR) : 0u);
+    if (nb > RD_BORDER_BLOCKS) {
+        rd__crack_fill_flush_held(r, RD_LATE_WHY_BORDER);
+    }
     /* a pending clear of another target (the glow's WORK2 fill: the mask
      * after it is the post sprite this repeat comes before) stays pending
      * for that target's next pass to take as its load op */
@@ -255,14 +288,21 @@ static void sceneRepeat(Replay *r)
     }
     rd__transition(cl, s_cols.tex, &s_cols.state, RHI_STATE_COPY_SRC);
     rd__transition(cl, t->color, &t->colorState, RHI_STATE_COPY_DST);
+    s_blocks.n = 0;
+    s_blocks.over = false;
     if (left) {
-        fillFrom(cl, t->color, 0, a2, 0, cwL, th, 0);
+        fillFrom(cl, t->color, 0, a2, 0, cwL, th, 0, a2);
     }
     if (right) {
-        fillFrom(cl, t->color, aR, tw, cwL, cwR, th, 1);
+        fillFrom(cl, t->color, aR, tw, cwL, cwR, th, 1, bR);
     }
     r->writeSerial++; /* SCENE's colour changed (DATE's snapshot reuse) */
     s_sceneRepeats++;
+    s_blocks.serial = s_sceneRepeats;
+    s_blocks.replay = g_rd.replayCounter;
+    s_blocks.tex = t->color.id;
+    s_blocks.x0 = left ? a2 : 0;
+    s_blocks.x1 = right ? aR : tw;
     static const char *const kWhere[] = {
         [RD_BORDER_CLOSED] = "the border closed on a wide frame: the glow reads them",
         [RD_BORDER_OPEN] = "the border open: the glow and the present read them",

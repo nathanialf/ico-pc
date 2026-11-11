@@ -193,6 +193,97 @@ static bool fxPassReadable(const Replay *r, const RdFxDraw *x)
     return rd__pass_wants_readable(x->tc);
 }
 
+/* The glow's paste deferred to the aura's paste pass (rd_late_pass.c,
+ * RD_LATE_DEFER): its fxDraw arguments and every input they point at,
+ * copied when the premultiplied add would have drawn it (fxDeferTake), and
+ * drawn by rd__fx_defer_draw under its own state, the command order taken
+ * back to its own (g_rdStoreOrd: the pass area and the store plan read the
+ * pass the draw begins, or joins, as begun at the paste) */
+static struct {
+    bool on, drawing;
+    uint32_t replay, ord;
+    RdFxDraw x;
+    RdPostRec p;
+    RdDrawState d;
+    RdPipeKeyInt key, xkey;
+    float uv[4];
+    RdStateBlock st;
+    uint32_t set, clear;
+} s_def;
+
+static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32_t set,
+                   uint32_t clear, const uint8_t *col, int local, int kind, const uint32_t *words,
+                   RdTargetRec *t2);
+
+/* the paste x copied (its source made readable: nothing touches it until
+ * it is drawn, rd_late_pass.c's class) instead of drawn: true when taken */
+static bool fxDeferTake(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32_t set,
+                        uint32_t clear)
+{
+    if (s_def.drawing || s_def.on || !rd__late_pass_defer_wanted(r, x->f, x->c) ||
+        key->depthFmt != RHI_FMT_UNKNOWN) {
+        return false;
+    }
+    s_def.on = true;
+    s_def.replay = g_rd.replayCounter;
+    s_def.ord = g_rdStoreOrd;
+    s_def.p = *x->p;
+    s_def.d = *x->d;
+    s_def.key = *key;
+    s_def.xkey = *x->key;
+    memcpy(s_def.uv, x->uv, sizeof(s_def.uv));
+    s_def.st = r->st;
+    s_def.set = set;
+    s_def.clear = clear;
+    s_def.x = *x;
+    s_def.x.p = &s_def.p;
+    s_def.x.d = &s_def.d;
+    s_def.x.key = &s_def.xkey;
+    s_def.x.uv = s_def.uv;
+    if (key->gs.colorMask & 8) {
+        r->writeSerial++; /* SCENE's alpha changes here in the order (DATE's snapshot) */
+    }
+    rd__crack_fill_unarm_glow(); /* a held fill waits on to the aura's paste with it */
+    rd__late_pass_deferred_taken();
+    return true;
+}
+
+bool rd__fx_defer_on(void)
+{
+    return s_def.on && s_def.replay == g_rd.replayCounter;
+}
+
+const RdTargetRec *rd__fx_defer_src(void)
+{
+    return s_def.on ? s_def.x.src : NULL;
+}
+
+void rd__fx_defer_draw(Replay *r, bool landed)
+{
+    if (!s_def.on) {
+        return;
+    }
+    s_def.on = false;
+    if (s_def.replay != g_rd.replayCounter) {
+        return; /* taken in another replay (none reaches here: the walk's end draws it) */
+    }
+    const RdStateBlock st = r->st;
+    const int mirror = r->mirror, half = r->halfAdded;
+    const uint32_t ord = g_rdStoreOrd;
+    r->st = s_def.st;
+    r->mirror = 0;
+    g_rdStoreOrd = s_def.ord;
+    s_def.drawing = true;
+    const bool drawn =
+        fxDraw(r, &s_def.x, &s_def.key, s_def.set, s_def.clear, NULL, 0, FX_ADDITIVE, NULL, NULL);
+    s_def.drawing = false;
+    g_rdStoreOrd = ord;
+    r->st = st;
+    r->mirror = mirror;
+    r->halfAdded = half;
+    rd__late_pass_deferred_drawn(landed, drawn);
+}
+
 /* The sprite drawn as doBlurSpriteDraw draws it, through key, without the
  * snapshot: its flags with set added and clear taken away, RGB col (NULL:
  * RGBAQ's), and, with local, the destination as the input attachment.
@@ -248,11 +339,26 @@ static bool fxDraw(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, uint32
     const uint8_t post = x->c->b[0];
     const bool alone = post != RD_POST_REDUCTION && post != RD_POST_MOTION_BLUR &&
                        !(r->st.ds.texEnabled && (post == RD_POST_FLARE || post == RD_POST_BLOOM));
+    if (kind == FX_ADDITIVE && fxDeferTake(r, x, key, set, clear)) {
+        return true; /* the glow's paste deferred to the aura's paste pass (rd_late_pass.c) */
+    }
+    if (kind == FX_ADDITIVE && rd__crack_fill_glow_due()) {
+        /* a crack fill the late pass held for the glow's paste
+         * (rd_late_pass.c): its first draw, the pass (SCENE's colour alone)
+         * begun here as bindDraw would begin it */
+        rd__crack_fill_in_pass(r, ds.tdId);
+    }
     rd__last_store_post(!local && alone);
     if (local) {
         /* the crack fill armed for this pass (the aura's paste): its first
          * draw, the pass begun here as bindDraw would begin it */
         rd__crack_fill_in_pass(r, ds.tdId);
+        /* the glow's paste deferred to it (rd_late_pass.c), after the fill:
+         * the paste's order in the frame */
+        if (rd__fx_defer_on() && rd__late_pass_defer_lands()) {
+            rd__fx_defer_draw(r, true);
+            rd__last_store_post(false);
+        }
     }
     RhiBindGroup g2 = rd__replay_bind_draw(r, &ds);
     rd__last_store_post(false);
@@ -459,20 +565,50 @@ static bool fxLocalNext(const RdFxDraw *x)
     return g_rd.profile.fxDstLocal && g_rd.fs[RD_FS_FX_LOCAL].id && g_rd.layoutLocal.id;
 }
 
+/* The way fxPlanDraw takes for the glow's paste a held crack fill is armed
+ * for (rd_late_pass.c) is the premultiplied add (the constant fold not
+ * before it): the fill is drawn first in that pass (fxDraw) */
+static bool fxAdditiveNext(const RdFxDraw *x)
+{
+    const RdDrawState *d = x->d;
+    const bool rgbOnly = d->test.ate && d->test.afail == RD_AFAIL_RGB_ONLY;
+    const bool dstAlpha = d->test.date != RD_DATE_OFF || rgbOnly;
+    if (!g_rd.profile.fxPlan || !g_rd.hasDevice || x->selfSample || !x->dstRead ||
+        g_rd.dstMode != RD_BLEND_EXACT_OFF || rd__replay_msaa_want() > 1u) {
+        return false;
+    }
+    uint8_t ident = 0, rgb[3];
+    if (!x->textured && d->abe && !dstAlpha && rd__fx_fold(d, x->p->rgba, &ident, rgb)) {
+        return false; /* the constant fold first */
+    }
+    const int form = d->abe ? fxPremulForm(d->blend) : 0;
+    return form && !d->pabe && d->colclamp && !dstAlpha && g_rd.fs[RD_FS_FX_FRAME].id;
+}
+
 static bool fxPlanDraw(Replay *r, const RdFxDraw *x);
 
 bool rd__fx_plan_draw(Replay *r, const RdFxDraw *x)
 {
     /* the crack fill armed for this sprite's pass (rd_crack_fill.c: the
-     * aura's paste): taken by the local read's pass; drawn any other way
-     * the sprite comes after the fill's own pass */
+     * aura's paste, or the glow's for a fill the late pass held): taken by
+     * the local read's pass or the premultiplied add's; drawn any other
+     * way the sprite comes after the fill's own pass */
     const bool paste = rd__crack_fill_paste_due();
-    if (paste && !fxLocalNext(x)) {
+    if (paste && !fxLocalNext(x) && !(rd__crack_fill_glow_due() && fxAdditiveNext(x))) {
         rd__crack_fill_paste_late(r, "the paste reads its destination through a snapshot");
+    }
+    /* the glow's paste deferred to this paste's pass (rd_late_pass.c) and
+     * the pass taken another way: the glow's paste first, in its order */
+    const bool defer = rd__fx_defer_on() && rd__late_pass_defer_lands();
+    if (defer && !fxLocalNext(x)) {
+        rd__fx_defer_draw(r, false);
     }
     const bool drawn = fxPlanDraw(r, x);
     if (paste) {
         rd__crack_fill_paste_late(r, "the paste's local read was not taken");
+    }
+    if (defer && rd__fx_defer_on()) {
+        rd__fx_defer_draw(r, false); /* not drawn in the pass: before the paste's own draw */
     }
     return drawn;
 }
@@ -556,6 +692,18 @@ static bool fxPlanDraw(Replay *r, const RdFxDraw *x)
         return fxDraw(r, x, &k, RD_FXF_ALPHA_ONLY, 0, NULL, 0, FX_ALPHA, NULL, NULL);
     }
     return false;
+}
+
+/* fxPlanDraw's alpha alone from the state and the record: a textured
+ * sprite under MODULATE (no TFX in the record's lines, no DECAL) with
+ * RGBAQ's RGB 0 and no blend writes RGB 0 whatever its texture holds, so
+ * the texture's RGB is read by nothing (the glow's mask: SCENE's alpha
+ * into WORK2).  rd_late_pass.c holds the crack fill past such a read of
+ * SCENE (the fill writes SCENE's RGB alone after the glow's alpha) */
+bool rd__fx_alpha_only(const RdDrawState *d, const RdPostRec *p)
+{
+    return d->texEnabled && !d->abe && (p->lines & 3u) == 0 && d->texFn != RD_TEXFN_DECAL &&
+           p->rgba[0] == 0 && p->rgba[1] == 0 && p->rgba[2] == 0;
 }
 
 uint32_t rd__fx_enumerate(RdPipeKeyInt *out, uint32_t max, uint32_t n)

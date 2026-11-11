@@ -2316,6 +2316,7 @@ static bool snapEnsure(RdTargetRec *tc)
  * a stale texel.  False when there is no snapshot texture. */
 static bool takeSnap(Replay *r, RdTargetRec *tc, RhiRect area)
 {
+    rd__crack_fill_snap(r, tc); /* a held fill first (rd_late_pass.c) */
     endPass(r);
     if (!snapEnsure(tc)) {
         return false;
@@ -2732,6 +2733,7 @@ static bool prepareDrawEx(Replay *r, DrawSetup *ds, const RhiRect *dateArea, boo
         }
     }
     rd__date_cut_depth(r, ds, td); /* tdId, depthFmt: none in a DATE pass not using it */
+    rd__late_pass_join(r, ds);     /* list 11's in the open pass without it (rd_late_pass.c) */
     ds->tex = resolveTexture(r, ds->tc, r->st.color, &ds->tw, &ds->th, &ds->tfmt, &ds->textured,
                              &ds->mipmapped);
     ds->texCrop = texCropOf(r, ds->tex);
@@ -5150,6 +5152,7 @@ static bool blurCoversTarget(const Replay *r, const RdTargetRec *tc, const RdPos
  * SCENE, recording a pending clear) before it is the snapshot. */
 static bool blurSwapTarget(Replay *r, RdTargetRec *tc)
 {
+    rd__crack_fill_snap(r, tc);
     endPass(r);
     if (!snapEnsure(tc)) {
         return false;
@@ -5917,6 +5920,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     }
     if (!g_rdWin.stop) {
         rd__crack_fill_late(&r, s_ms.active); /* held to the end */
+        rd__late_pass_defer_end(&r);          /* a glow paste deferred (rd_late_pass.c) */
     }
     msaaEnd(&r,
             RD_MSAA_CLOSE_END); /* an epoch still open: SCENE resolved before anything reads it */
