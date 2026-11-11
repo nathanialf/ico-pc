@@ -3195,13 +3195,20 @@ int main(int argc, char **argv)
                pr->glowKept, pr->glowKept ? " (" : "",
                pr->glowKept ? rd_glow_fold_why_text(pr->glowWhy) : "", pr->glowKept ? ")" : "");
         /* the glow drawn only where it can add light (rd_glow_light.c) */
-        printf("%s: stats: glow: light plan %s: %s%s%s%s; %u passes in the chain, %u lazy clears "
-               "drawn\n",
-               dump, rd__glow_light_on() ? "on" : "off", rd_glow_light_text(pr->glowLight),
-               pr->glowLight == RD_GLOW_LIGHT_WHOLE ? " (" : "",
-               pr->glowLight == RD_GLOW_LIGHT_WHOLE ? rd_glow_light_why_text(pr->glowLightWhy) : "",
-               pr->glowLight == RD_GLOW_LIGHT_WHOLE ? ")" : "", pr->glowLightPasses,
-               pr->glowLightLazy);
+        {
+            const uint64_t lzn[4] = {
+                (pr->glowLightLazyWhich >> 0) & 1u, (pr->glowLightLazyWhich >> 1) & 1u,
+                (pr->glowLightLazyWhich >> 2) & 1u, (pr->glowLightLazyWhich >> 3) & 1u};
+            char lz[160];
+            rd__glow_light_lazy_text(lz, sizeof(lz), lzn);
+            printf("%s: stats: glow: light plan %s: %s%s%s%s; %u passes in the chain, lazy "
+                   "clears drawn: %s\n",
+                   dump, rd__glow_light_on() ? "on" : "off", rd_glow_light_text(pr->glowLight),
+                   pr->glowLight == RD_GLOW_LIGHT_WHOLE ? " (" : "",
+                   pr->glowLight == RD_GLOW_LIGHT_WHOLE ? rd_glow_light_why_text(pr->glowLightWhy)
+                                                        : "",
+                   pr->glowLight == RD_GLOW_LIGHT_WHOLE ? ")" : "", pr->glowLightPasses, lz);
+        }
         /* the aura's read in two passes (rd_aura_box.c) */
         printf("%s: stats: aura box %s: %u feedback reads in two passes\n", dump,
                rd__aura_box_on() ? "on" : "off", pr->auraBoxDraws);

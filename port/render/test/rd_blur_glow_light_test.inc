@@ -108,10 +108,21 @@ static void glDiffer(const char *what, int alphaFree, int *rgbBad, int *alphaBad
 }
 
 /* the frame's kinds */
-enum { GL_DARK_SKY, GL_DARK, GL_SUN_OFF, GL_FANS_ON, GL_LAMPS, GL_GREY, GL_DATE, GL_KINDS };
+enum {
+    GL_DARK_SKY,
+    GL_DARK,
+    GL_SUN_OFF,
+    GL_FANS_ON,
+    GL_LAMPS,
+    GL_GREY,
+    GL_DATE,
+    GL_AURA,
+    GL_KINDS
+};
 
 static const char *const kGlKind[GL_KINDS] = {
-    "dark, sky", "dark, no sky", "sun, fans off", "fans on", "lamps", "grey", "DATE reader"};
+    "dark, sky", "dark, no sky", "sun, fans off", "fans on",
+    "lamps",     "grey",         "DATE reader",   "dark with the aura"};
 
 /* an untextured full-frame sprite into SCENE: alpha a, the RGB kept
  * (Cs * As + Cd with Cs 0), DATE (DATM 0) when date */
@@ -145,7 +156,7 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
     char what[128];
     snprintf(what, sizeof(what), "(glow_light) %s %s", cfg, kGlKind[k]);
     const int post = k == GL_GREY ? 4 : 1;
-    setStage(post, 0, 64);
+    setStage(post, k == GL_AURA ? 1 : 0, 64); /* the aura's sprites in list 8, as in play */
     makeImage((uint32_t)post, 0);
     rd_update_texture(s_imgTex, s_img);
     if (k == GL_SUN_OFF || k == GL_FANS_ON) {
@@ -176,7 +187,10 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
         putImage(rd_target(RD_TARGET_WORK2), rd_target(RD_TARGET_SCENE), W, H, 200, 260, 0, 0);
     }
     FullScreenEffectAfter();
-    dl_SetDLPriority(8);
+    /* SCENE's alpha rewritten after the paste: in list 7 for the aura's frame
+       (before its sprites read SCENE, as the aura's own paste does in play),
+       in list 8 otherwise */
+    dl_SetDLPriority(k == GL_AURA ? 7 : 8);
     if (k == GL_DATE) {
         glSceneSprite(0, 1); /* reads SCENE's alpha's MSB */
     }
@@ -197,6 +211,13 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
     rhi_wait_idle();
     const uint32_t plan = g_rdPerf.glowLight, why = g_rdPerf.glowLightWhy;
     const uint32_t passes = g_rdPerf.glowPasses, chainPasses = g_rdPerf.glowLightPasses;
+    /* the replay's passes on the glow's buffers (before the reads below,
+       which draw the lazy clears outside any replay) */
+    uint32_t onW0Clear = 0, onPadClear = 0, onW2Clear = 0, onW3Clear = 0;
+    const uint32_t onW0 = rd__glow_light_passes_on(RD_TARGET_WORK0, &onW0Clear);
+    const uint32_t onPad = rd__glow_light_passes_on(RD_TARGET_WORK2_PAD, &onPadClear);
+    const uint32_t onW2 = rd__glow_light_passes_on(RD_TARGET_WORK2, &onW2Clear);
+    const uint32_t onW3 = rd__glow_light_passes_on(RD_TARGET_WORK3, &onW3Clear);
     glRead(0);
     uint32_t want = RD_GLOW_LIGHT_DARK, wantWhy = RD_GLOW_LIGHT_WHY_NONE;
     if (!above1x) {
@@ -242,6 +263,20 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
               chainPasses, most, rd__glow_light_debug());
         CHECK(passes < passesChain, "%s: %u glow passes under DARK, the chain %u", what, passes,
               passesChain);
+        /* no pass on WORK2, WORK2_PAD or WORK3 in the replay: their lazy
+         * clears wait for a read (none in the frame: the reads above draw
+         * them).  WORK0's clear is drawn at the chain's place as a pending
+         * clear and recorded once as a pass of its own (CLEAR load): where
+         * the aura runs, its AURA_WORK clear takes the replay's one pending
+         * clear slot and flushes WORK0's; the aura's WORK0 sprite then loads
+         * WORK0 in a pass of its own */
+        CHECK(onPad == 0 && onW2 == 0 && onW3 == 0,
+              "%s: passes on WORK2_PAD %u, WORK2 %u, WORK3 %u under DARK (want none): %s", what,
+              onPad, onW2, onW3, rd__glow_light_debug());
+        CHECK(k == GL_AURA ? onW0Clear >= 1u : onW0Clear == 1u,
+              "%s: %u of %u passes on WORK0 clear it (want %s: its alpha sprite's clear%s)", what,
+              onW0Clear, onW0, k == GL_AURA ? "at least 1" : "1",
+              k == GL_AURA ? ", and any the aura's own sprites make" : "");
         /* again with the plan: the same (WORK1's region zero, from the
            frame's clear and the replay before) */
         rhi_wait_idle();

@@ -356,12 +356,15 @@ hold's copy, WORK0's alpha, the paste) and picks one plan:
   rect and its glow edge strip (every later pass into WORK1 lies inside it) and over the sun's
   shrink, those two sprites drawn untextured in the colour their source holds in the chain
   (`rd_const_read.c`, the planned source), and not even drawn when a dark plan before left that
-  region zero and no replay wrote WORK1 since (a steady dark room); WORK0 (0, 0, 0, A) as a lazy
-  clear too (the last blur pass covers WORK0), which the first sprite after that touches WORK0
-  (the aura's, in play) draws first as the load op of its own pass. A buffer a command other than
-  a sprite touches later in the frame (the glow hold's copy of WORK3) gets its clear drawn at the
-  chain's place instead. So a dark room's chain begins no render pass once WORK1 is zero, one
-  (WORK1's) after a frame that drew the chain. The fans whose box misses the picture are not
+  region zero and no replay wrote WORK1 since (a steady dark room); WORK0 (0, 0, 0, A) as a
+  small clear at the chain's place (the last blur pass covers WORK0; the aura blends over WORK0 in
+  play, and a lazy clear drawn at its sprite would flush AURA_WORK's clear, which the clear skip
+  keeps undrawn). A lazy clear is drawn only for its own target: before a sprite that reads or
+  partly writes it (as that sprite's pending clear), at a later replay that touches it before
+  covering it, at a read outside a replay; a buffer a command other than a sprite touches later in
+  the frame (the glow hold's copy of WORK3) gets its clear at the chain's place instead (the
+  upscale point reads SCENE alone). So a dark room's chain begins no render pass once WORK1 is
+  zero, one (WORK1's) after a frame that drew the chain. The fans whose box misses the picture are not
   drawn. SCENE is as the paste leaves it in RGB; its alpha is `cleanUpFB`'s (0, and 192 on the
   marked background) where the paste wrote WORK3's;
 - **lamps** (the fill RGB 0, no fan on the picture, lamps drawn into WORK2 after the mask without
@@ -398,8 +401,9 @@ Lines: `rd: glow: light plan: above 1x nothing in frame N puts light into the gl
 drawn whole: <reason> (<detail>; frame N; reported once for this reason)`, `rd: glow: light plan:
 frame N reads WORK1, WORK2 or WORK3 before ...: the plan is off from now on`; the 10 s block's
 `window: glow: light: N dark (P passes in their chains), L lamps (mask not drawn), K whole
-(counts by reason)`; `rd_replay_tool --stats` `stats: glow: light plan on|off: <plan>
-(<reason>); P passes in the chain, N lazy clears drawn`.
+(counts by reason); lazy clears drawn: N (target n, ...)` (0 in a dark room of play);
+`rd_replay_tool --stats` `stats: glow: light plan on|off: <plan> (<reason>); P passes in the
+chain, lazy clears drawn: N (targets)` (the tool's own reads of the targets draw them too).
 
 ### The fades fold
 
