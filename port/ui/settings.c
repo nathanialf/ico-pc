@@ -4641,7 +4641,7 @@ void ui_settings_install(void)
     if (s_origin < 0) {
         s_origin = LAYOUT_PAUSE;
     }
-    ui__diff_listen(); /* the journey's toasts */
+    ui__diff_listen(); /* the journey events' log line */
     /* the port's text in the menu language ([ui] language) */
     ui_settings_apply_language();
     /* [audio] output: an explicit stereo or mono is the game's from the

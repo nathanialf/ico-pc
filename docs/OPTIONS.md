@@ -764,8 +764,8 @@ the whole journey instead.
   you continue from a save. **Whole journey** keeps one count, saved with each
   save (loading an earlier save brings back the count it had then), and starts
   it again after the game over it causes.
-- Each knock-down short of the limit shows a message, such as
-  "Knocked down 1 of 3". The count is also on the pause screen.
+- The count is on the pause screen (such as "Hard 1 / 3"); no message
+  appears during play when Ico is knocked down.
 - At the limit Ico lies on the ground for two seconds, and cannot be hit
   meanwhile, and then the game is over as for any other game over: Continue,
   or Quit (with Permadeath, only Quit).
@@ -774,8 +774,8 @@ the whole journey instead.
 
 **Permadeath** makes any game over the end of that journey. The game over
 screen has no Continue, only Quit. The save of that journey does not load: on
-the title screen's Continue list, choosing it plays the refusal sound and says
-"This journey has ended." The journey ends from the moment a game over cannot
+the title screen's Continue list, choosing it plays the refusal sound and the
+save does not load. The journey ends from the moment a game over cannot
 be avoided, for example once a Shadow has carried Yorda off, or when the knock-down
 limit is reached, so pausing and choosing End Game at that moment does not
 escape it.

@@ -867,9 +867,10 @@ If a state fails to load for any other reason, send a
 [problem report](#send-a-problem-report): the log has lines that start with
 `state:` that say what happened.
 
-## A save says "This journey has ended."
+## A save will not load and the game over screen has no Continue
 
-The save belongs to a journey with Permadeath on that has had its game over.
+The save belongs to a journey with Permadeath on that has had its game over
+(choosing it on the Continue list plays the refusal sound and shows no message).
 The game refuses to load it, and the game over screen of such a journey has
 no Continue. That is the rule, not a fault: Start a New Game to play again.
 The memory card file is not changed. The game keeps the list of ended journeys

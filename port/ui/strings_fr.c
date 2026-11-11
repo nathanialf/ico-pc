@@ -928,8 +928,6 @@ const char *const
             [UI_STR_DIFF_LOCKED_NOTE] = "Choisi au début du voyage",
             [UI_STR_DIFF_LINE] = "Difficulté",
             [UI_STR_DIFF_LINK] = "Difficulté",
-            [UI_STR_DIFF_TOAST_ENDED] = "Ce voyage est terminé.",
-            [UI_STR_DIFF_TOAST_KNOCK] = "Mis à terre : %d sur %d",
             [UI_STR_DIFF_STATES_LOCKED] =
                 "Les états sauvegardés ne peuvent pas être chargés pendant un voyage en mort définitive.",
             [UI_STR_DIFF_WORD_PERMADEATH] = "Mort définitive",

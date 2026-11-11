@@ -19,7 +19,6 @@
 #include <string.h>
 
 #include "options.h"
-#include "popup.h"
 #include "strings.h"
 #include "variants.h"
 #include "../core/region.h" /* ICO_JUN26, ICO_NTSCAUG6JUN26 */
@@ -443,7 +442,7 @@ int ui__diff_dimmed(int opt)
     return opt == UI_OPT_DIFF_KNOCK_SCOPE && draft()->row[ICO_DIFF_KNOCK_LIMIT] <= 0;
 }
 
-/* --- the pause menu's journey line and the toasts ------------------------------- */
+/* --- the pause menu's journey line and the journey events ------------------------------- */
 
 int ui__diff_line_text(char *buf, unsigned size)
 {
@@ -467,28 +466,30 @@ int ui__diff_line_text(char *buf, unsigned size)
     return 1;
 }
 
-static void toast(const char *text)
-{
-    static int shown;
-    if (shown++ < 8 || shown % 100 == 0) {
-        fprintf(stderr, "settings: toast \"%s\" (%d)\n", text, shown);
-    }
-    (void)ui_popup_push(text, "");
-}
-
-/* port/game/difficulty.h's listener: the journey's events as toasts */
+/* port/game/difficulty.h's listener: the journey's events, in the log only.
+   Nothing here raises a pop-up: the only pop-up that appears by itself
+   during play is an achievement. The pause menu's journey line carries the
+   count, and a refused Continue plays the negative sound. */
 static void onDifficulty(IcoDiffEvent ev, int a, int b)
 {
-    char buf[96];
+    static int logged;
+    const char *what = NULL;
 
-    if (ev == ICO_DIFF_EV_REFUSED || ev == ICO_DIFF_EV_ENDED) {
-        /* a save of an ended journey refused, or a Permadeath journey ending
-           now (its game over, or the moment one became certain) */
-        toast(ui_str(UI_STR_DIFF_TOAST_ENDED));
+    if (ev == ICO_DIFF_EV_REFUSED) {
+        what = "a save of an ended journey was refused";
+    } else if (ev == ICO_DIFF_EV_ENDED) {
+        what = "a Permadeath journey ended";
     } else if (ev == ICO_DIFF_EV_KNOCK && b > 0 && a < b) {
         /* not the one at the limit: the game over follows */
-        snprintf(buf, sizeof(buf), ui_str(UI_STR_DIFF_TOAST_KNOCK), a, b);
-        toast(buf);
+        what = "knock-down counted";
+    }
+    if (what == NULL) {
+        return;
+    }
+    logged++;
+    if (logged <= 8 || logged % 100 == 0) {
+        fprintf(stderr, "settings: journey event, no pop-up: %s (%d of %d) (%d)\n", what, a, b,
+                logged);
     }
 }
 

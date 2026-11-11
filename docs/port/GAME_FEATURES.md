@@ -263,7 +263,7 @@ landing of a fall the knock-down began (the European family's mails 55 and 56), 
 he gets up is a new one. Losing his balance at a ledge is a fall, not a knock-down, and Yorda's and the
 Shadows' falls never count. At the limit he lies 2 s, unhittable, as the game's own death lies, then the game
 over comes as any other (Continue, or Quit; with Permadeath the journey has ended at the limit already).
-Each counted knock-down short of the limit shows the toast "Knocked down n of N"; the pause menu's journey
+No message appears at a knock-down (the only pop-up that appears by itself during play is an achievement); the pause menu's journey
 lines show the difficulty with "n / N" (the scope's count) and the Permadeath word, and Options > Gameplay >
 Difficulty (pause menu only) shows the journey's rows read-only ([UI.md](UI.md#customize-the-new-game-drafts-pages)).
 
