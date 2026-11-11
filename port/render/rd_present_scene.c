@@ -32,7 +32,9 @@
  *   - no MSAA (rd_aa_samples), no GS state as shader data (rd__uber_on);
  *   - no upscaler set (RdSettings.upscale: FSR 1.0 reads DISPLAY at the
  *     present, a temporal one takes SCENE at the reduction:
- *     rd__upscale_point_on) and no display layer (rd__layer_on);
+ *     rd__upscale_point_on) and no display layer in force (rd__layer_active:
+ *     SCENE's record lent to the composite this replay; rd__layer_on is only
+ *     its [dev] switch, on everywhere, the layer itself needing the split);
  *   - the present reads DISPLAY in its box blit alone
  *     (rd__present_scene_present_why, rd_present.c: no CRT filter, no
  *     Downsampling, no doubled lines (full height), no effects depth, no
@@ -532,7 +534,10 @@ static int planPair(Replay *r, const RdFrame *f, const RdCmd *c, bool strips, Ps
     in.msaa = rd_aa_samples(rd__aa_mode()) > 1u;
     in.uber = rd__uber_on();
     in.upscaler = g_rd.settings.upscale != RD_UPSCALE_OFF || rd__upscale_point_on();
-    in.layer = rd__layer_on();
+    /* the layer in force (SCENE lent to the composite), not its switch:
+     * rd__layer_on is on on every device, the layer only runs under a
+     * temporal upscaler (the phone's rc6: kept every replay for the switch) */
+    in.layer = rd__layer_active();
     in.borderOpen = rd__replay_border_open();
     in.strips = strips;
     in.presentWhy = rd__present_scene_present_why();
