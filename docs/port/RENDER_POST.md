@@ -1196,7 +1196,8 @@ pipeline made on first use has its own line (`rd: pipelines: made on first use i
 rest had no name: the Mali of issue 179 made 5 pipelines at replay 1 and the Adreno 710 of issue 211
 3 at replay 47 with no first-use line, and one buffer of the Mali's first 3D picture was not the
 upload ring by its size. Once the window says play begins (`rd_made_outside_watch`, at the end of
-`window_pipe_skin_check`: after the start-up set, the self-tests and the start-up allocations), the
+`window_pipe_skin_check`: after the start-up set, its self-tests and the start-up allocations; the
+fog self-test, which follows, is watched too), the
 RHI's create hook (`rhi_set_create_hook`, called after every `rhi_create_pipeline` and
 `rhi_create_buffer` that made one) names each pipeline made one at a time outside the key cache
 and each buffer (`rd_made_outside.c`): `rd: made in play outside the key cache in replay R (list
