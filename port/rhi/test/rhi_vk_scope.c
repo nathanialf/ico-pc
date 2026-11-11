@@ -50,11 +50,11 @@
  *     i, 0x5EED)).
  * Then no validation error.  77 without a Vulkan device.
  *
- * The wide scopes (rhi_tile_rule.h: v0.11.2's, on a tile-based GPU by
- * default since v0.11.4; rhi_vk_scopes_arm fakes Arm's vendor id with
- * ICO_VK_FAKE_VENDOR=0x13B5, rhi_vk_scopes_wide asks with [dev]
- * barrier_scope = wide, rhi_vk_scopes_arm_narrow fakes Arm and asks for the
- * narrow ones): RhiLimits.wideBarriers as ICO_TEST_SCOPE_WANT (wide or
+ * The wide scopes (rhi_tile_rule.h: v0.11.2's, on a tile-based GPU since
+ * v0.11.4; rhi_vk_scopes_arm fakes Arm's vendor id with
+ * ICO_VK_FAKE_VENDOR=0x13B5, rhi_vk_scopes_wide fakes the wide scopes on
+ * lavapipe with ICO_VK_FAKE_SCOPES=wide, rhi_vk_scopes_arm_narrow fakes Arm
+ * and the narrow scopes, ICO_VK_FAKE_SCOPES=narrow): RhiLimits.wideBarriers as ICO_TEST_SCOPE_WANT (wide or
  * narrow) names, and then every list holds fragment work (the opening
  * barrier's colour output reaches the transfer stage, the copy's wait
  * names the fragment stage): B at least 2 (the opening barrier and the

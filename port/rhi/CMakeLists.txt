@@ -168,8 +168,8 @@ endif()
 
 # --- The tile-based phones' rule (CPU only, every target) --------------------
 # rhi_tile_rule.c: the barrier scopes and the submission wait a Vulkan start
-# runs ([dev] barrier_scope, [dev] polled_wait, a tile-based GPU, the lost
-# starts in a row before it; issues 179 and 211), and their lines' words.
+# runs (a tile-based GPU, the lost starts in a row before it, the tests'
+# ICO_VK_FAKE_SCOPES; issues 179 and 211), and their lines' words.
 add_executable(rhi_vk_tile_rule_test test/rhi_vk_tile_rule_test.c rhi_tile_rule.c)
 target_include_directories(rhi_vk_tile_rule_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_compile_options(rhi_vk_tile_rule_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
@@ -684,8 +684,9 @@ if(_ico_have_vk)
         # the wide scopes (port/rhi/rhi_tile_rule.h; issues 179 and 211:
         # v0.11.2's, on every tile-based GPU by default since v0.11.4):
         # _arm on Arm's vendor id faked (ICO_VK_FAKE_VENDOR=0x13B5, the rule's
-        # alone), _wide asked for ([dev] barrier_scope = wide), _arm_narrow
-        # Arm faked with the narrow ones asked for (the setting rules); each
+        # alone), _wide the wide scopes faked on lavapipe
+        # (ICO_VK_FAKE_SCOPES=wide), _arm_narrow Arm faked with the narrow
+        # scopes faked (ICO_VK_FAKE_SCOPES=narrow: the override rules); each
         # under the same synchronisation checks, ICO_TEST_SCOPE_WANT naming
         # the scopes the device must run (rhi_vk_scopes: narrow, lavapipe is
         # not tile-based).  rhi_vk_clock_arm: the recycled slot's clock alone
@@ -693,9 +694,9 @@ if(_ico_have_vk)
         # (ICO_TEST_POLLED_WANT=0)
         set(_ico_vk_arm "ICO_VK_FAKE_VENDOR=0x13B5")
         set(_ico_vk_scopesarm_env ${_ico_vk_scopes_env} ${_ico_vk_arm} "ICO_TEST_SCOPE_WANT=wide")
-        set(_ico_vk_scopesw_env ${_ico_vk_scopes_env} "ICO_VK_BARRIER_SCOPE=wide"
+        set(_ico_vk_scopesw_env ${_ico_vk_scopes_env} "ICO_VK_FAKE_SCOPES=wide"
                                 "ICO_TEST_SCOPE_WANT=wide")
-        set(_ico_vk_scopesan_env ${_ico_vk_scopes_env} ${_ico_vk_arm} "ICO_VK_BARRIER_SCOPE=narrow"
+        set(_ico_vk_scopesan_env ${_ico_vk_scopes_env} ${_ico_vk_arm} "ICO_VK_FAKE_SCOPES=narrow"
                                  "ICO_TEST_SCOPE_WANT=narrow")
         set(_ico_vk_clockarm_env ${_ico_vk_test_env} ${_ico_vk_arm} "ICO_TEST_POLLED_WANT=0")
         add_test(NAME rhi_vk_scopes_arm COMMAND rhi_vk_test scopes)

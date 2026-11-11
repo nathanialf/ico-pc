@@ -2027,8 +2027,7 @@ static void ends_clean(void)
    loss slot, a run of the desktop's loss order (relaunched) from the chain
    slot.  Handed to the graphics backend as ICO_LOSS_ROW (unset when 0):
    after one, the v0.11.2 barrier scopes, after two the single submission
-   wait too, unless [dev] barrier_scope or polled_wait says otherwise; the
-   backend's lines say which ran.  Nothing is written to the settings. */
+   wait too; the backend's lines say which ran.  Nothing is written to the settings. */
 static unsigned int act_loss_row;
 
 static void loss_ladder_export(int relaunched)
@@ -2049,13 +2048,11 @@ static void loss_ladder_export(int relaunched)
     setenv("ICO_LOSS_ROW", v, 1);
 #endif
     ico_diag_log("ico_pc: loss ladder: %u start%s in a row lost the graphics device before this "
-                 "one%s: this start runs the wide barrier scopes%s unless [dev] barrier_scope%s "
-                 "says otherwise (the graphics backend's barriers%s line says what ran); nothing "
-                 "is written to the settings",
+                 "one%s: this start runs the wide barrier scopes%s (the graphics backend's "
+                 "barriers%s line says what ran); nothing is written to the settings",
                  act_loss_row, act_loss_row == 1 ? "" : "s",
                  relaunched ? " (this game's restarts after a loss)" : "",
                  act_loss_row >= 2 ? " and the single submission wait" : "",
-                 act_loss_row >= 2 ? " or polled_wait" : "",
                  act_loss_row >= 2 ? " and submission wait" : "");
 }
 

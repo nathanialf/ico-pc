@@ -1558,8 +1558,9 @@ static bool vkr_is_tiler(uint32_t vendor); /* below, with the vendor table */
  * made (the calibrated timestamps' extension follows the wait, vk_tsclock.c
  * vkr_tsclock_pick).  Tile-based as port/render/rd_profile.c calls it: the
  * vendors rhi_tile_vendor names, MoltenVK, every Android GPU.
- * ICO_VK_FAKE_VENDOR=<id> (the tests: 0x13B5 for Arm) is the vendor id this
- * rule reads, nothing else.  Two lines, each switch's value and why: the
+ * No setting: the tests alone pick, ICO_VK_FAKE_VENDOR=<id> (0x13B5 for Arm)
+ * the vendor id this rule reads, nothing else, and ICO_VK_FAKE_SCOPES=wide or
+ * narrow the scopes alone on any device.  Two lines, each switch's value and why: the
  * reporter's next log is read by them (with them present and no loss, the
  * cause was one of the two). */
 static void vkr_tile_rule_apply(void)
@@ -1587,8 +1588,7 @@ static void vkr_tile_rule_apply(void)
                             : "an Android GPU",
              (unsigned)vendor, faked ? " (ICO_VK_FAKE_VENDOR)" : "");
     const char *row = getenv("ICO_LOSS_ROW");
-    rhi_tile_rule(getenv("ICO_VK_BARRIER_SCOPE"), getenv("ICO_VK_POLLED_WAIT"), tiler, device,
-                  rhi_tile_loss_row(row), &g_vkr.tile);
+    rhi_tile_rule(getenv("ICO_VK_FAKE_SCOPES"), tiler, device, rhi_tile_loss_row(row), &g_vkr.tile);
     VKR_LOG("barriers: %s: %s", g_vkr.tile.wideWhy,
             g_vkr.tile.wide
                 ? "every buffer barrier waits for and is seen by the vertex input, vertex, "

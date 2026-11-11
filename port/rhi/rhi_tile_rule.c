@@ -6,40 +6,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* -1 auto (unset, "", "auto", or a value not known: *unknown set), 1 the
- * first word, 0 the second */
-static int pick(const char *v, const char *const *one, const char *const *zero, bool *unknown)
+void rhi_tile_rule(const char *fakeScopes, bool tiler, const char *device, uint32_t lossRow,
+                   RhiTileRule *out)
 {
-    *unknown = false;
-    if (v == NULL || v[0] == '\0' || strcmp(v, "auto") == 0) {
-        return -1;
-    }
-    for (int i = 0; one[i] != NULL; i++) {
-        if (strcmp(v, one[i]) == 0) {
-            return 1;
-        }
-    }
-    for (int i = 0; zero[i] != NULL; i++) {
-        if (strcmp(v, zero[i]) == 0) {
-            return 0;
-        }
-    }
-    *unknown = true;
-    return -1;
-}
-
-void rhi_tile_rule(const char *scope, const char *polled, bool tiler, const char *device,
-                   uint32_t lossRow, RhiTileRule *out)
-{
-    static const char *const wideWords[] = {"wide", NULL};
-    static const char *const narrowWords[] = {"narrow", NULL};
-    static const char *const onWords[] = {"1", "on", "true", "yes", NULL};
-    static const char *const offWords[] = {"0", "off", "false", "no", NULL};
     const char *dev = device != NULL && device[0] != '\0' ? device : "the GPU";
-    bool badScope = false, badPolled = false;
-    const int s = pick(scope, wideWords, narrowWords, &badScope);
-    const int p = pick(polled, onWords, offWords, &badPolled);
-    char note[96] = "";
+    /* the tests' override of the scopes alone (ICO_VK_FAKE_SCOPES) */
+    const int fake = fakeScopes == NULL                  ? -1
+                     : strcmp(fakeScopes, "wide") == 0   ? 1
+                     : strcmp(fakeScopes, "narrow") == 0 ? 0
+                                                         : -1;
     char lossWords[96] = "";
 
     memset(out, 0, sizeof(*out));
@@ -51,76 +26,43 @@ void rhi_tile_rule(const char *scope, const char *polled, bool tiler, const char
     }
 
     /* the barrier scopes */
-    if (badScope) {
-        snprintf(note, sizeof note, "; \"%.24s\" is none of auto, wide, narrow: auto", scope);
-    }
-    if (s == 1) {
+    if (fake == 1) {
         out->wide = true;
-        snprintf(out->wideWhy, sizeof out->wideWhy, "wide ([dev] barrier_scope = wide)");
-        snprintf(out->wideTag, sizeof out->wideTag, "wide (the setting)");
-    } else if (s == 0) {
-        snprintf(out->wideWhy, sizeof out->wideWhy, "narrow ([dev] barrier_scope = narrow%s%s%s)",
-                 tiler || lossRow ? "; auto would give wide here: " : "",
-                 tiler ? "a tile-based GPU" : "", !tiler && lossRow ? lossWords : "");
-        snprintf(out->wideTag, sizeof out->wideTag, "narrow (the setting)");
+        snprintf(out->wideWhy, sizeof out->wideWhy, "wide (ICO_VK_FAKE_SCOPES=wide, a test)");
+        snprintf(out->wideTag, sizeof out->wideTag, "wide (faked)");
+    } else if (fake == 0) {
+        snprintf(out->wideWhy, sizeof out->wideWhy, "narrow (ICO_VK_FAKE_SCOPES=narrow, a test)");
+        snprintf(out->wideTag, sizeof out->wideTag, "narrow (faked)");
     } else if (tiler) {
         out->wide = true;
-        snprintf(out->wideWhy, sizeof out->wideWhy,
-                 "wide (a tile-based GPU, %s: the default on every such GPU; [dev] "
-                 "barrier_scope = narrow tries the narrow ones%s%s%s)",
-                 dev, lossRow ? "; " : "", lossRow ? lossWords : "", note);
+        snprintf(out->wideWhy, sizeof out->wideWhy, "wide (a tile-based GPU, %s%s%s)", dev,
+                 lossRow ? "; " : "", lossRow ? lossWords : "");
         snprintf(out->wideTag, sizeof out->wideTag, "wide (tile-based)");
     } else if (lossRow) {
         out->wide = true;
         snprintf(out->wideWhy, sizeof out->wideWhy,
-                 "wide (%s: this start only, nothing written to the settings; [dev] "
-                 "barrier_scope = narrow keeps the narrow ones%s)",
-                 lossWords, note);
+                 "wide (%s: this start only, nothing written to the settings)", lossWords);
         snprintf(out->wideTag, sizeof out->wideTag, "wide (a lost start)");
     } else {
-        snprintf(out->wideWhy, sizeof out->wideWhy,
-                 "narrow (the default where the GPU is not tile-based; [dev] barrier_scope = "
-                 "wide gives the wide ones%s)",
-                 note);
-        snprintf(out->wideTag, sizeof out->wideTag, "narrow (the default)");
+        snprintf(out->wideWhy, sizeof out->wideWhy, "narrow (a GPU that is not tile-based)");
+        snprintf(out->wideTag, sizeof out->wideTag, "narrow (not tile-based)");
     }
 
     /* the submission wait */
-    note[0] = '\0';
-    if (badPolled) {
-        snprintf(note, sizeof note, "; \"%.24s\" is none of auto, on, off: auto", polled);
-    }
-    if (p == 1) {
-        out->polled = true;
-        snprintf(out->polledWhy, sizeof out->polledWhy, "polled ([dev] polled_wait = on%s%s%s)",
-                 tiler || lossRow > 1u ? "; auto would give the single wait here: " : "",
-                 tiler ? "a tile-based GPU" : "", !tiler && lossRow > 1u ? lossWords : "");
-        snprintf(out->polledTag, sizeof out->polledTag, "polled (the setting)");
-    } else if (p == 0) {
-        snprintf(out->polledWhy, sizeof out->polledWhy, "single ([dev] polled_wait = off)");
-        snprintf(out->polledTag, sizeof out->polledTag, "single (the setting)");
-    } else if (tiler) {
-        snprintf(out->polledWhy, sizeof out->polledWhy,
-                 "single (a tile-based GPU, %s: the default on every such GPU; [dev] "
-                 "polled_wait = on tries the polled one%s)",
-                 dev, note);
+    if (tiler) {
+        snprintf(out->polledWhy, sizeof out->polledWhy, "single (a tile-based GPU, %s)", dev);
         snprintf(out->polledTag, sizeof out->polledTag, "single (tile-based)");
     } else if (lossRow > 1u) {
         snprintf(out->polledWhy, sizeof out->polledWhy,
-                 "single (%s: this start only, nothing written to the settings; [dev] "
-                 "polled_wait = on keeps the polled one%s)",
-                 lossWords, note);
+                 "single (%s: this start only, nothing written to the settings)", lossWords);
         snprintf(out->polledTag, sizeof out->polledTag, "single (lost starts)");
     } else {
         out->polled = true;
-        snprintf(out->polledWhy, sizeof out->polledWhy,
-                 "polled (the default where the GPU is not tile-based%s; [dev] polled_wait = off "
-                 "gives the single wait%s)",
+        snprintf(out->polledWhy, sizeof out->polledWhy, "polled (a GPU that is not tile-based%s)",
                  lossRow == 1u ? "; one lost start before this one: a second in a row gives the "
                                  "single wait"
-                               : "",
-                 note);
-        snprintf(out->polledTag, sizeof out->polledTag, "polled (the default)");
+                               : "");
+        snprintf(out->polledTag, sizeof out->polledTag, "polled (not tile-based)");
     }
 }
 

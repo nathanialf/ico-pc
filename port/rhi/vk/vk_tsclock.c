@@ -37,8 +37,8 @@
  * timestamp writes across all submissions on the same logical device";
  * without it only writes in the same submission are ordered).
  *
- * The single wait (VkrState.tile.polled false: a tile-based GPU by default
- * since v0.11.4, [dev] polled_wait = off, or two lost starts in a row;
+ * The single wait (VkrState.tile.polled false: a tile-based GPU since
+ * v0.11.4, or two lost starts in a row;
  * port/rhi/rhi_tile_rule.h, issues 179 and 211) is v0.11.2's: one wait
  * without a time limit, no read of the slot's queries or of the counter
  * while its work runs, and the calibrated-timestamps extension not enabled

@@ -359,8 +359,8 @@ tile-based GPU now runs the wide barrier scopes, the texture uploads before the 
 single submission wait by default (RHI.md "Barrier scopes and the submission wait"). The start of a
 log says which ran and why, one line each:
 
-    rhi_vk: barriers: wide (a tile-based GPU, Arm, vendor 0x13B5: the default on every such GPU; [dev] barrier_scope = narrow tries the narrow ones): every buffer barrier waits for ...
-    rhi_vk: submission wait: single (a tile-based GPU, Arm, vendor 0x13B5: the default on every such GPU; [dev] polled_wait = on tries the polled one): one wait without a time limit for a frame slot, ...
+    rhi_vk: barriers: wide (a tile-based GPU, Arm, vendor 0x13B5): every buffer barrier waits for ...
+    rhi_vk: submission wait: single (a tile-based GPU, Arm, vendor 0x13B5): one wait without a time limit for a frame slot, ...
     rhi_vk: timestamps: ...; calibrated with the CPU's clock: off (the single submission wait: single (tile-based)) ...
 
 and the summary's profile words end `, barriers wide (tile-based), submission wait single
@@ -369,22 +369,22 @@ and the summary's profile words end `, barriers wide (tile-based), submission wa
 - Both lines `wide` / `single` and no loss: one of the two changes was the cause, or set off the
   driver's fault (the code reading for issue 179 found no other change to the GPU work of those
   pictures on the Mali; on the Adreno the skin check's twins and readbacks also run there).
-  `[dev] barrier_scope = narrow` alone, then `[dev] polled_wait = on` alone, tells which, only if
-  the reporter offers to try; nothing to ask for otherwise.
+  Which of the two is not told apart by a setting (there is none); nothing to ask for.
 - Both lines present and the device still lost: neither was; the loss dump's lines (below) and
   the stall lines (issue 123's sections) are the evidence then.
-- `narrow (...)` or `polled (...)` with `[dev] ... = ...` in the reason: a setting chose it;
-  `auto would give ... here` names what the default would have been.
+- `narrow (a GPU that is not tile-based)` or `polled (...)` on a phone: the GPU was not taken for
+  a tile-based one (its vendor id and the reason's words say why); `(ICO_VK_FAKE_SCOPES=..., a
+  test)` only ever in a test.
 - With the single wait the stall diagnostics measure less: a stalled replay's `rd: GPU clock`
   line has no trace (which of its stamps were written while the CPU waited, the longest stretch
   with nothing new, its first list's second run), and its start is placed from its wait's end,
   not on the CPU's clock. Its counter restarts, unwritten stamps and the wait's own time are kept.
 
 The loss ladder, on every device (desktops too) and never written to the settings: a start after a
-lost one runs the wide scopes, after two lost starts in a row the single wait too, unless a setting
-says otherwise. Its line, before the backend's:
+lost one runs the wide scopes, after two lost starts in a row the single wait too. Its line,
+before the backend's:
 
-    ico_pc: loss ladder: 2 starts in a row lost the graphics device before this one: this start runs the wide barrier scopes and the single submission wait unless [dev] barrier_scope or polled_wait says otherwise (the graphics backend's barriers and submission wait line says what ran); nothing is written to the settings
+    ico_pc: loss ladder: 2 starts in a row lost the graphics device before this one: this start runs the wide barrier scopes and the single submission wait (the graphics backend's barriers and submission wait line says what ran); nothing is written to the settings
 
 Until this fix a `gpu_robust = true` in the settings (by hand, or written by the game after two
 lost starts) set the row back to 0 every start: both issue 179's and issue 211's logs said `starts in a row

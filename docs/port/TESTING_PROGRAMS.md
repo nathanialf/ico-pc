@@ -1435,10 +1435,10 @@ The renderer's test programs have a page of their own:
   and 211) every list holds fragment work (the next picture's at least 2: the opening barrier's
   colour output reaching the transfer stage, the mesh upload's wait naming the fragment stage), the
   same lists clean under the synchronisation checks and the record read back word for word:
-  `rhi_vk_scopes_arm` on Arm's vendor id faked (`ICO_VK_FAKE_VENDOR=0x13B5`: the tile-based rule's
-  default), `rhi_vk_scopes_wide` asked for (`ICO_VK_BARRIER_SCOPE=wide`), and
-  `rhi_vk_scopes_arm_narrow` Arm faked with the narrow ones asked for (the setting rules: the
-  narrow counts). `rhi_vk_clock_arm` (the argument `clock`: the clock cell alone) on Arm faked with
+  `rhi_vk_scopes_arm` on Arm's vendor id faked (`ICO_VK_FAKE_VENDOR=0x13B5`: the tile rule),
+  `rhi_vk_scopes_wide` the wide scopes faked on lavapipe (`ICO_VK_FAKE_SCOPES=wide`, a test-only
+  switch), and `rhi_vk_scopes_arm_narrow` Arm faked with the narrow scopes faked
+  (`ICO_VK_FAKE_SCOPES=narrow`: the override rules, the narrow counts). `rhi_vk_clock_arm` (the argument `clock`: the clock cell alone) on Arm faked with
   `ICO_TEST_POLLED_WANT=0`: the single wait, a held wait of 150 ms with no trace point, no
   calibrated pair and no fall (`RhiLimits.polledWait` false); every other run asserts the polled
   wait's trace as before.
@@ -1558,16 +1558,14 @@ The renderer's test programs have a page of their own:
   the `[dev] legacy_passes` words (`1`, `true`, `on`, `yes` in any case; `0`, `false`, `off`, `no`;
   anything else, empty and NULL none) (`rhi_vk_pass_row`).
 - `rhi_vk_tile_rule_test.c`: the barrier scopes and the submission wait a Vulkan start runs
-  (`port/rhi/rhi_tile_rule.c`, pure; issues 179 and 211): `auto` (unset, empty, `auto`, or a value
-  not known, which the reason names) the wide scopes and the single wait on a tile-based GPU, the
-  narrow scopes and the polled wait elsewhere; the loss ladder elsewhere (one lost start: the wide
-  scopes, the wait still polled and its reason saying a second gives the single wait; two and
-  nine: both), the reasons saying this start only and nothing written; a setting other than
-  `auto` never overridden, its reason naming what `auto` would have chosen (a tile-based GPU, the
-  lost starts), word for word; the wait's words (`1`, `on`, `true`, `yes`; `0`, `off`, `false`,
-  `no`); the summary's tags; the vendor table (Qualcomm, Arm, Imagination, Samsung, Apple,
-  Broadcom; not lavapipe, AMD, NVIDIA, Intel or 0) and `ICO_LOSS_ROW`'s parse (not a number 0, at
-  most 9) (`rhi_vk_tile_rule`).
+  (`port/rhi/rhi_tile_rule.c`, pure; issues 179 and 211): the wide scopes and the single wait on a
+  tile-based GPU, the narrow scopes and the polled wait elsewhere, the reasons and the summary's
+  tags word for word; the loss ladder elsewhere (one lost start: the wide scopes, the wait still
+  polled and its reason saying a second gives the single wait; two and nine: both), the reasons
+  saying this start only and nothing written; the tests' `ICO_VK_FAKE_SCOPES` (`wide`, `narrow`)
+  picking the scopes alone on any device, another value or an empty one no override; the vendor
+  table (Qualcomm, Arm, Imagination, Samsung, Apple, Broadcom; not lavapipe, AMD, NVIDIA, Intel or
+  0) and `ICO_LOSS_ROW`'s parse (not a number 0, at most 9) (`rhi_vk_tile_rule`).
 - `rhi_vk_spirv_scan_test.c`: `port/rhi/vk/vk_spirv_scan.c`, pure: the RHI tests' ten modules
   (every `ps_*` a fragment module without a storage buffer, `vs_store` and `cs_store` with one,
   `vs_main` neither), `rhi_vk_ps_storage.h`'s fragment shader (a StructuredBuffer: BufferBlock)
