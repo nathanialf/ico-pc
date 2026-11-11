@@ -8,7 +8,8 @@
  *       leaves the second tap out), the B-spline's four, the box's span
  *   t2  rd__ap_v: the GS's V, truncated, above and below the rect's top
  *   t3  rd__ap_proven: CLAMP to the TEX0 rows, REPEAT (a moved row proven only
- *       when every row is), the backing texture's clamp
+ *       when every row is), the backing texture's clamp, a span over 64 rows
+ *       refused
  *   t4  the Pixel's frame v3677 (848 x 448 GS, SCENE 1080 rows at 2.411, the
  *       aura's sprites as its list has them): WORK0 rows 0-111 (8:39's
  *       coverage) carried into FEED128 by 8:47's bilinear at scale 1 (V = 16 y:
@@ -130,7 +131,13 @@ int main(void)
     CHECK(rd__ap_proven(&p, 100, 111, true, 128, 128), "rows 100-111 proven");
     RdApRows all;
     rows(&all, 128, 0, 128);
-    CHECK(rd__ap_proven(&all, -3, 130, false, 128, 128), "every row proven: REPEAT anywhere");
+    /* REPEAT outside the texture's rows, every row proven: proven, within
+     * the 64-row span rd__ap_proven reads at most (a wider kernel is not
+     * proven: the paste drawn whole) */
+    CHECK(rd__ap_proven(&all, -3, 60, false, 128, 128) &&
+              rd__ap_proven(&all, 100, 130, false, 128, 128),
+          "every row proven: REPEAT above and below the texture");
+    CHECK(!rd__ap_proven(&all, -3, 130, false, 128, 128), "a span of 134 rows (over 64) proven");
     CHECK(rd__ap_proven(&p, 115, 120, true, 112, 128),
           "CLAMP at 112 TEX0 rows: rows 115-120 read row 111, proven");
     /* t4 */
