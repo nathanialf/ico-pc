@@ -1201,6 +1201,46 @@ the slot's own pools, reset after its fence; destroyed objects wait for their sl
 The next log's `GPU clock` line on a stalled replay decides between "not begun" and "run twice",
 and in the second case names the piece in flight.
 
+## The performance hints
+
+The window tells Android each picture's work against its time budget through a performance hint
+session ([PLATFORM.md](PLATFORM.md#performance-hints-android) has the mechanism). Three lines are
+read together, from the same 10 s block:
+
+- `window: performance hints: N reports (actual CPU a ms / GPU g ms of the D ms target; over target
+  in K), the report calls c ms in all (longest l ms), target changed J times`: N should be about
+  the block's presented pictures (the `window: N replays` line's count, less the replays that
+  presented nothing); `a` is the render and submit threads' work a picture without their waits,
+  `g` the GPU's (on API 35; the last timed picture's for the pictures between: the `GPU this
+  picture's own in X of N` part says how many were their own), D the pacer's planned time a picture.
+  K close to N says the session asked for more speed all block (expected while GPU-bound at
+  uncapped: 19 ms against 7.81 ms); K at 0 lets the system lower the clocks. `c` and `l` are what
+  the calls cost the hint thread (never the game or render thread); `failed (error 32)` is EPIPE
+  (the system service gone), `error 22` EINVAL. J counts the frame-rate or refresh changes passed
+  on.
+- `window: kernel GPU driver: N samples; CPU clocks: cores 0-1 ..., cores 2-6 ..., core 7 ...`: the
+  measure. With hints the cores the session's threads run on should stay higher for the same scene
+  (on the Pixel 10 Pro Fold one run had core 7 at 2342 MHz throughout and the others 530-880 MHz;
+  see below for why).
+- `window: N replays: CPU ...: interp, upload, walk, ...`: the phases the clocks act on (the walk
+  was 1.3 ms in the run with core 7 and 4.1 ms in the next in the same scene); the picture time
+  follows the GPU line where the GPU is the limit.
+
+Where the render thread runs matters for the clock line. On the Pixel 10 Pro Fold the render
+thread asks for core 7 alone, and in six of the owner's seven runs on it
+the kernel said yes and kept it to cores 2-7 (`window: render thread: ... could not be kept to the
+fastest core 7 alone: the system said yes and keeps it to cores 2-7`; `window: threads: ...; kept
+to cores 2-7: ico render`); one run kept it on core 7 (`kept to core 7: ico render`). The placement code did not
+change between those builds. So core 7's clock is the render thread's clock only in a run whose
+threads line says `kept to core 7`; in the others the render thread's clock is that of cores 2-6,
+which ran at 650-850 MHz on average in those runs' blocks. Read
+the threads line first, then the cores the session's threads are on.
+
+The start line says which calls the phone has (`API N`, `GPU durations reported yes|no`), the
+threads' ids (the same ids the `window: threads:` line counts), the target and its basis, the game
+mode, and the system's update rate; `off (...)` names why there is no session (an Android 12 or
+older phone, a phone without hint support), and then the port runs exactly as before.
+
 ## The thermal state and screen recording
 
 The thermal state and screen recording come from the app's Java side (issue 123;

@@ -67,7 +67,9 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/gpu_driver.c`, `gpu_driver.h` | Android graphics driver packages (pure C, tested everywhere) |
 | `port/platform/thermal_text.c`, `thermal_text.h` | the thermal status names and the thermal and screen recording lines, the pure part (tested everywhere); the Java bridge is `ico_host_thermal` in `android/host_android.c` |
 | `port/platform/gpu_sysfs.c`, `gpu_sysfs.h` | the kernel GPU driver's nodes for the log, the pure part (tested everywhere; [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md)) |
-| `port/platform/android/` | `main_android.c`, `host_android.c`, `android_paths.c`, `iso_import.c`, `gpu_driver_android.c`, `gpu_sysfs_android.c` |
+| `port/platform/perf_hint.c`, `perf_hint.h` | Android's performance hints, the pure part: the target from the pacer's plan, a picture's work, the session's life against a backend, the lines (tested everywhere; [Performance hints](#performance-hints-android)) |
+| `port/platform/window_perf_hint.c`, `window_perf_hint.h` | the window's side of the hints: the hint thread, the target and the threads' ids, the pictures, the lifecycle, the 10 s line (Android; nothing elsewhere) |
+| `port/platform/android/` | `main_android.c`, `host_android.c`, `android_paths.c`, `iso_import.c`, `gpu_driver_android.c`, `gpu_sysfs_android.c`, `perf_hint_android.c` (the NDK's hint calls looked up at run time) |
 | `port/platform/ios/main_ios.c`, `ios/Info.plist.in` | the iOS entry point and bundle |
 | `port/platform/macos/Info.plist.in` | the macOS bundle |
 | `port/platform/win/` | the Windows manifest and resource script (`ico_pc.manifest`, `ico_pc.rc`) |
@@ -1804,7 +1806,8 @@ operations it supplies, so `port/platform/test/lifecycle_test.c` checks the orde
 (`port/platform/window_lifecycle.h` (`ico_lifecycle_on`)):
 
 - will enter background: a line, the [render thread](#the-render-thread) parked (what it has
-  finishes first), the GPU idle, the surface released (the device kept), the watchdog paused, the
+  finishes first; on Android the [performance hint](#performance-hints-android) session is closed
+  by the hint thread at its next step and made again when the render thread is unparked), the GPU idle, the surface released (the device kept), the watchdog paused, the
   sound paused, the log flushed;
 - did enter foreground: the surface and swapchain made again (on the game thread, the render
   thread still parked), the render thread going on, the watchdog running, the sound resumed with
@@ -1831,6 +1834,75 @@ held sideways gets a swapchain in its own turn and the present turns the picture
 phone turned over while the game runs (90 to 270 degrees) gets one made again in the new turn at
 its next suboptimal present; the window's size, the touch coordinates and the box do not change
 with the turn ([DISPLAY.md](DISPLAY.md#the-turned-swapchain)).
+
+## Performance hints (Android)
+
+Android 13 and later can be told how long the work of a frame took against how long it may take,
+and then clocks the CPU (and on some phones the GPU) for that work rather than for how busy the
+threads look (the NDK's `android/performance_hint.h`). The owner's Pixel 10 Pro Fold motivated it:
+between two of its runs the CPU phases took about three times longer (the walk 1.3 against 4.1 ms
+in the same scene) with the render thread's cores at a third of the clock, while the picture took
+the same 19 ms, GPU-bound. Nothing here changes the picture, the resolution or the frame rate, and no call
+waits for the GPU; there is no setting.
+
+- **The calls.** Every symbol is looked up in `libandroid.so` at run time
+  (`port/platform/android/perf_hint_android.c`), so the APK keeps its minSdk (26) and
+  [BUILDING.md](../BUILDING.md)'s requirements do not change. API 33: the session, its target,
+  the plain report (`APerformanceHint_reportActualWorkDuration`: the CPU's time); API 34:
+  `APerformanceHint_setThreads`; API 35: the report with the GPU's time
+  (`APerformanceHint_reportActualWorkDuration2` with one `AWorkDuration` reused).
+  `APerformanceHint_setPreferPowerEfficiency` is not called (its default, off, is wanted).
+- **The session's threads**: the game thread, the render thread and the submit thread (their ids
+  from `ico_render_thread_tids`, `render_thread.h`, once each has started; not the audio thread).
+  The render thread made again (a renderer switch) gives its new ids through `setThreads`, or on API
+  33 the session is closed and made again; `ico_render_thread_stop` sets the ended threads' ids to
+  0 so no session is given an ended thread.
+- **The target** is the pacer's own planned time a picture (`perf_hint_target_ns`, from what
+  `window_present.c` plans with, read each records drain): Frame rate Original's game frame (the
+  steps a frame takes, `frameSteps`, times the period); under the vsync lock the period / n; on the
+  timer path the present gap `pace_present_gap` gives (uncapped in mailbox, as on the phones: a
+  sixteenth of a refresh under one refresh, 7.81 ms at 120 Hz; a numeric cap: 1 / cap); with no gap
+  planned (the FIFO lock, uncapped back to back) the display's refresh. A change is passed on once
+  (`APerformanceHint_updateTargetWorkDuration`).
+- **A picture's work** is taken from its performance record as the window drains it
+  (`perf_drain`, two pictures late, the records' own delay for their GPU times): the CPU time is the
+  record's time (the render thread's replay with the submit thread's submit and present) less the
+  fence waits, the image acquire and the present call (which waits for the compositor's queue); the
+  GPU time (API 35) is the timed record's span less its display wait (`rd_perf_pace_gpu_ms`), the
+  last timed one's for the pictures between (the renderer times one picture in 250 ms unless a
+  present that blocked arms every one; no new GPU queries). On API 35 the report's total is the
+  larger of the two (a pipelined picture is held by its slower side and the target is a rate), on
+  API 33 and 34 the CPU's.
+- **The threading.** The NDK says a session's methods are not thread safe, and its reports may be a
+  binder call, so the game thread only hands each picture over (a ring of 128 written with atomic
+  stores, `perf_hint_push`; the target and the ids the same way: no lock, no system call) and a
+  thread of its own, `ico-perf-hint` (on the process's cores, normal priority), makes every call:
+  it wakes at the system's preferred update rate (`APerformanceHint_getPreferredUpdateRateNanos`,
+  4-50 ms, 16 ms when none is given), reports every picture waiting and times each call into the 10
+  s line. Nothing runs on the render thread. In the background it sleeps until woken.
+- **Off**: before API 33, a missing symbol, no manager, or a session the system refuses
+  (`createSession` answers none on a device without hint support): the port runs exactly as
+  before and says so once; a refused session is not asked again in the run.
+- **Game Mode** (`android/app/src/main/res/xml/game_mode_config.xml`, the manifest's
+  `android.game_mode_config`): the battery and performance modes are declared as the game's own,
+  so the system applies no intervention of its own in them, and no downscaling, frame rate
+  override or ANGLE is allowed in any mode. The mode the player chose (`GameManager.getGameMode`,
+  `IcoActivity.gameMode`) is read once for the line only. The manifest already had
+  `android:appCategory="game"` and `android:isGame="true"`.
+
+The lines (how to read them with the CPU clocks: [ANDROID_DIAGNOSTICS.md](ANDROID_DIAGNOSTICS.md#the-performance-hints)):
+`window: performance hints: on (API 35; session of 3 threads: game 9001, render 9040, submit 9041;
+target 7.81 ms a picture (the pacer's present gap); GPU durations reported yes; game mode standard
+(1); the system's update rate 16.67 ms, the reports made every 16 ms off the game and render
+threads; made in 0.42 ms)`, `... on again (...)` after the background, `window: performance hints:
+session closed (the app in the background; made again on its return)` (both the first 8, then every
+100th), or `window: performance hints: off (<why>; game mode <mode>); the port runs as before`; each
+10 s block `window: performance hints: 612 reports (actual CPU 4.12 ms / GPU 18.40 ms of the 7.81
+ms target; over target in 598), the report calls 3.10 ms in all (longest 0.21 ms), target changed 0
+times` with `; GPU this picture's own in N of M, the last timed one's otherwise`, `; threads
+changed N times`, `; N failed (error E)`, `; N dropped (the queue full)` and `; N not reported (in
+the background)` when they happened. `perf_hint_test` holds the pure part against a fake backend
+([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)); the NDK's side runs only on a phone.
 
 ## The renderer switched from the menu
 

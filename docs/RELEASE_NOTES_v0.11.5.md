@@ -9,6 +9,7 @@
 - On phones with PowerVR graphics (such as the Pixel 10 Pro Fold), each picture moves less data through graphics memory after a check the game makes on the phone at start. The picture is exactly the same.
 - On phones, in most rooms with the glow, the fix for the thin gaps between surfaces is drawn together with the next effect instead of on its own, and in rooms with lamps the glow itself is drawn together with the next effect, so those rooms take less work to draw; the picture is exactly the same.
 - On phones, a room's aura effect takes less work to draw when nothing on screen glows with it; the picture is exactly the same.
+- On Android 13 and later, the game tells the phone how long each picture may take and how long it took, so the phone can set its speed for the game's work. The picture, the resolution and the frame rate are not changed by it.
 - Above the Original resolution, the fix for the thin gaps between surfaces no longer copies the whole picture first where your device passes a check at start-up, and finds the places with no gap sooner, so it takes less work to draw; the picture is exactly the same.
 
 ## Fixed
