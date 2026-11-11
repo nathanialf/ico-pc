@@ -978,8 +978,11 @@ binding. The tick stage stores its one lane (x for tick 0, y for tick 1, by `vu_
 32-bit store in a branch, never the whole texel: the two tick draws of a triangle run in one pass
 with no barrier between them, as the colour masks R and G wrote one channel each. The pipelines
 have no fragment shader and no rasterization (`RhiPipelineDesc.noRaster`; group 1 is
-`g_rdRec.layoutVuPre`: t0, b1, b2, b3, t5 and u6, no t4) and name one colour target, the throwaway
-one their passes begin on (`port/render/rd_vu_rec_sink.h`: 1024 x 1 texels of `R8_UNORM`, loaded and
+`g_rdRec.layoutVuPre`: t0, b1, b2, b3, t5 and u6, no t4). Where `RhiLimits.storePassTarget` says so
+(Vulkan on the Intel driver row, or with the subpass read on) they name one colour target, the
+throwaway one their passes begin on; everywhere else (phones included: issues 179 and 211) none,
+and the passes begin without an attachment, as before the Intel crash's fix (`rd: VU pre-pass: the
+store passes begin without an attachment ...`). The target (`port/render/rd_vu_rec_sink.h`: 1024 x 1 texels of `R8_UNORM`, loaded and
 stored `DONT_CARE`, its write mask 0, never written or read: no fragment runs), so no render pass
 begins without an attachment, the shape the Intel `vkCmdBeginRendering` crash reports share
 ([RHI.md](RHI.md#vulkan), **Render passes**); two such targets, taken in turn, so neither of a
@@ -1124,7 +1127,7 @@ pipelines.
 depth, points, no blend) and the five record stage keys (`rd__vu_stage_key`: the rule, the tick
 stage under the masks R and G, the planes and the sprite stage); under the stores the same fifteen
 keys with `colorFmt` UNKNOWN (the pipeline the store build, no fragment shader,
-`noRaster`, the throwaway `R8_UNORM` target with a write mask of 0; the tick stage's two masks stay two keys of the same pipeline, its lane chosen by
+`noRaster`, the throwaway `R8_UNORM` target with a write mask of 0 where it is wanted, else no target; the tick stage's two masks stay two keys of the same pipeline, its lane chosen by
 `vu_tri.w`), so both writes' pipelines can stand in the cache across the self-test's fallback
 (`rd_pipeline.c` (`rd__vu_pre_key`)); the program entries' keys (with
 the same `vu_ps`, `vu_texa_ps`) are made only for a command drawn the old way.

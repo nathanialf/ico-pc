@@ -268,7 +268,13 @@ twin when its check failed. Until a pipeline exists its part is not drawn: the c
 its box check, twins or c2, said once (`rd: VU skin check: its box check, its twins' pipelines and
 its c2 variant are compiled carefully (<why>): one at a time, each only above the free-memory floor
 and 2 s after the last; until then the check runs without them`, `... no background compile for
-the rest of the run (<why>) ...`, `... a background compile waits for memory (<why>) ...`). The check holds 33 pipelines outside the renderer's cache at most (the probe's 3, c2's 3, column
+the rest of the run (<why>) ...`, `... a background compile waits for memory (<why>) ...`). On a
+tile-based phone GPU (`RhiLimits.tilePhone`: every Android GPU, iOS; issues 179 and 211, where the
+release that brought the careful rule lost the device in the first 3D scene) none of them is
+compiled after such a stop, as before that release (their draws would be GPU work the release
+before never issued; the twins not thinned from the start either): `... are not compiled in the
+background (<why>; a tile-based phone GPU: none, as before the careful rule): the check runs without
+them`. The check holds 33 pipelines outside the renderer's cache at most (the probe's 3, c2's 3, column
 3's 3, 16 box checks and twin C's 8), counted
 in the pool's headroom ([RHI.md](RHI.md)); keys past the 16 box slots are not box-checked.
 
@@ -292,7 +298,10 @@ present blocked 340 ms and whose GPU timestamps restarted (the stall lines of th
 probe's first wrong vertex sits about 19 and 54 GS pixels from the CPU's: a whole block of the same
 shape, not a few bytes. That log could not tell three paths apart: the readback not written by
 the replay (its rows and copy an earlier check's), the GPU reading the ring as an earlier replay
-left it, or the GPU reading other memory. The trace (`rd_vu_skin_trace.c`):
+left it, or the GPU reading other memory. The trace (`rd_vu_skin_trace.c`; on a tile-based phone
+GPU without the two stamps, whose clear value, ring bytes and copy are GPU work the release before
+did not issue: there the readback is laid out as before and taken as its replay's; the copy search
+is CPU work and stays):
 
 - **The clear stamp.** The probe target is cleared to `(0xA5, the replay's number bits 0..7, 8..15,
   16..23)`, not zeros; no probe draws field 15 of a column, so the readback's last texel names the
@@ -643,7 +652,9 @@ the device's wrong read.
 `rd_vu_skin_check_probe_robust`, `rd_vu_skin_check_ring`, `rd_vu_skin_check_twin`,
 `rd_vu_skin_check_twin_nan`, `rd_vu_skin_check_capture`, `rd_vu_skin_check_stale` (the careful
 compile rule draws a box check; each slot's readback not written again names the replay whose
-stamps it holds), `rd_vu_skin_check_thin` (the thinning:
+stamps it holds), `rd_vu_skin_check_stale_phone` and `rd_vu_skin_check_clean_phone` (Arm's phone
+GPU faked: no compile and no box check after the reason, no stamps; the clean frame right without
+the stamp's bytes), `rd_vu_skin_check_thin` (the thinning:
 three twins a replay until the clean replays, one after, re-armed by the zeroed bone), and the
 ladder's `rd_vu_skin_check_probe_c3`, `rd_vu_skin_check_twin_c`, `rd_vu_skin_check_twin_bones_ring`,
 `rd_vu_skin_check_twin_record` (a pre-pass record draw's twins through the ring build)),

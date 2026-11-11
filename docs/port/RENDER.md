@@ -1152,23 +1152,28 @@ Which frame is the lost one (issue 179). With the render and submit threads on, 
 records ahead of the GPU, so at the loss the three-frame ring can hold only frames newer than the
 lost one (a Mali phone's report lost frame 129 and the dump held 132 and 131). The backend names the
 submission (`RhiGpuProgress`: `lostReplay`/`lostFrame`, the tag of the submission whose wait failed;
-`openReplay`/`openFrame`, the first of the last eight not seen finished), and `rd_loss_pick.c`
+`openReplay`/`openFrame`, the first of the newest seven not seen finished), and `rd_loss_pick.c`
 (`rd_loss_choose`) takes, best first, the wait that failed, the first open submission, or, when a
 `vkQueueSubmit` failed (it has no number yet; an Adreno 710's report), the picture the pass ring
 lists after the newest numbered submission when there is one, else the newest numbered picture (the
 failed submit was none of a picture's: a capture, a readback or a check). The frame before it is the previous replay's in the pass ring's table. To have
-the lost frame when the loss is seen, `rd_begin_frame` copies a frame to memory before the ring reuses
-its slot when the backend still has a submission open at or after that frame's replay
-(`rd__loss_keep_recycle`, an ordinary dump held as bytes). The bounds: at most 4 copies of at most
-16 MiB each (64 MiB at the worst; a dump is about 7 MB), made only while the GPU is behind the ring
-(in steady play none is open and nothing is copied), freed once the first open submission is two
-replays past them, at most a quarter of the recycled frames after the first eight, and none on a
-backend that does not track its submissions. The log names what it did: `rd: loss keep: frame N (replay
-R) copied to memory ...` (the first eight copies, then every hundredth) and, at the loss,
+the lost frame, `rd_begin_frame` copies a frame to memory before the ring reuses its slot when the
+backend still has a submission open at or after that frame and a slot wait has blocked 100 ms or
+more (`RhiGpuProgress.waitingNs`; `rd__loss_keep_recycle`, an ordinary dump held as bytes). In steady
+play no wait blocks that long, so nothing is copied and no thread is drained for it, even with
+frames in flight; the lost frame is held only when a stall preceded the loss (both reports
+stalled first), otherwise the pick falls back to the ring's frames as before. The bounds: at most 4
+copies of at most 16 MiB (the build stops there; a dump is about 7 MB), freed once the first open
+submission is two frames past them, at most 4 attempts in any 64 recycled frames (every attempt
+counted), none for 600 after one too big, none on a backend that does not track its submissions.
+The loss dump stops the copies (a copy in progress waited for up to 3 s, else the copies are not
+used). The log names what it did: `rd: loss keep: frame N copied to memory ...` (the first eight
+copies, then every hundredth) and, at the loss,
 `window: loss dump: the lost submission is replay R, frame F (how it was found; wait failed on frame
 ..., first open frame ..., newest numbered frame ...); the frame before it is B; held now: frames
 A..Z (n, c of them copies in memory)`, `window: loss dump: copies in memory: ...`, then for each
-file `writing frame N, the lost one (replay R), ... to <path>`. When the lost frame has left
+file `writing frame N, the lost one (replay R), ... to <path>` (`the best guess at the lost one` when the
+failed submit was outside a picture or none is named). When the lost frame has left
 the ring and the copies the line says `the lost frame F is not held any more ... writing frame X instead, the nearest
 held ...; it is NOT the frame whose submission failed`, and the closing line says `NOT the lost
 one`. The last line reports the prune: how many loss zips there were, which were deleted, and
@@ -1228,7 +1233,8 @@ time without losing the device`). A frame that runs clean gets one more step, wi
 up (`rd_loss_overlap`, `port/platform/window_loss.c` (`window_bisect_overlap`)): the passes above wait
 for the GPU after every replay, so two pictures never overlap as they do in the game, and a loss that
 needs overlapping pictures could not be reproduced (the Mali phone's bisect ran clean). The
-frame before the lost one is taken out of the zip (its second `.rddump`) and the two frames are
+frame before the lost one is taken out of the zip (its second `.rddump`; not used, and its file
+removed, when its size is not the lost frame's) and the two frames are
 replayed alternately, four times each, with no wait for the GPU between them (the frame slot's own
 wait, two in flight, as the game's pictures have; nothing is presented, since the start-up has no
 UI to draw), then one wait. The log says that the step ran and how it ended:
@@ -1237,7 +1243,10 @@ to back, 4 times each, with no wait for the GPU between them`, then `... overlap
 L, 8 replays in T s: the device was not lost` (or `was lost during the replays` or `at the wait
 after the last replay`, which ends the bisect as a loss with no pass to narrow, and the
 `ico_pc: loss bisect:` line says the whole frame ran clean a pass at a time and lost the device when
-the frames overlapped). When it does not run it says why (`overlap step not run (...)`). A zip that
+the frames overlapped). Not on Android or iOS: a loss it reproduced could end the start where the
+driver makes no second device in that process, and a phone cannot restart itself. When it does not
+run it says why (`overlap step not run (...)`). The bisect's renderers run under the lost start's
+loss ladder row ([RHI.md](RHI.md#barrier-scopes-and-the-submission-wait)). A zip that
 cannot give the bisect its frame says which of three things it is: `cannot open <zip>: <the OS's
 text> (errno N)`, `<zip> is not a zip: N bytes, <the reader's error>` (empty, cut short, another
 file's bytes), or `<zip> is a zip (N bytes, k entries) with no frame number 1 (.rddump) inside (0

@@ -396,7 +396,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   draws a box check; then four replays under the game's mode with each slot's
   readback not written again (`rd__vu_skin_sabotage_copy`): four `the readback was not written by
   this replay's copies (the probe target's clear stamp: replay R's ...; the ring's stamp: replay
-  R's)` lines, then two replays without it with both stamps right (`rd_vu_skin_check_stale`). `twin` (issue 123): the same frame
+  R's)` lines, then two replays without it with both stamps right (`rd_vu_skin_check_stale`); on Arm's phone GPU faked (`ICO_VK_FAKE_VENDOR=0x13B5`, `rd_vu_skin_check_stale_phone`) no box check is compiled or drawn after the reason (the line of the release before the careful rule) and no readback is named unwritten (no stamps), and `rd_vu_skin_check_clean_phone` checks the clean frame right without the stamp's bytes. `twin` (issue 123): the same frame
   under the game's mode with the twins on (`rd__vu_skin_twins_set`), the scheduled probe off
   (`ICO_RD_VU_SKIN_INTERVAL_MS=off`) and `ICO_RD_VU_SKIN_SABOTAGE=200,ring`, replayed three times
   through `rd__vu_skin_check_replays`: the first replay's twins differ with nothing probed (`twins
@@ -501,9 +501,15 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `tools/scope_dumps.txt` (the VU stage list's captures and issue 179's two loss frames,
   machine-local): `rd_scope_ab` the narrow scopes (`ICO_VK_FAKE_SCOPES=narrow`, the texture
   uploads after the VU pre-pass) against the wide ones with the uploads before it (Arm's
-  vendor id faked, `ICO_VK_FAKE_VENDOR=0x13B5`: the tile-based rule's default), the desktop
+  phone GPU faked, `ICO_VK_FAKE_VENDOR=0x13B5`: the tile rule's default), the desktop
   profile; `rd_scope_ab_tiler` both on a tile-based profile (`ICO_VK_FAKE_LIMITS=moltenvk`), narrow
-  faked (`ICO_VK_FAKE_SCOPES=narrow`) against the tile rule's wide: every named target byte for byte.
+  faked (`ICO_VK_FAKE_SCOPES=narrow`) against the tile rule's wide (Arm faked too: a Mac is
+  narrow): every named target byte for byte, and each run must print the backend's `rhi_vk:
+  barriers: narrow (...` / `wide (...` line (stderr), so a switch that did nothing fails; the list
+  is strict (`LIST_STRICT`: where any of its files is here, one that is not is an error).
+  `rd_vuprepass_selftest_lossrung` (the phones' loss rung: Arm faked and `ICO_LOSS_ROW=1`, the
+  backend's and the renderer's lines, the pre-pass off for the start, the self-test not run) and
+  `_lossrung_desktop` (lavapipe and `ICO_LOSS_ROW=1`: the wide scopes, the pre-pass on, no rung).
 - `rd_vumerge_ab.cmake`: the same dumps twice, every VU draw a GPU draw of its own
   (`ICO_RD_VU_MERGE=0`) and with the draw merge, through the record and through the programs' own
   entries (`ICO_RD_VU_PREPASS=0`, the path after a failed self-test), at Original 4:3 1x, Enhanced 4:3 2x
@@ -1040,7 +1046,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
 - `rd_display_change_2x_test.c`: a live switch from Original 1x to Enhanced at a whole 2x
   (`rd_display_change_2x`, `_legacy` with `ICO_VK_LEGACY_PASSES=1`: a Vulkan 1.3 device with its
   passes as `VkRenderPass` objects, the Intel driver row's path; `_vk11` with `ICO_VK_FAKE_API=1.1`,
-  label `vk11`), the case of the issue 123 report's Intel HD 530 crash inside `vkCmdBeginRendering`
+  label `vk11`; `_sinks` with `ICO_VK_LEGACY_PASSES=1` and `ICO_VK_SUBPASS_READ=1`, where the store
+  passes begin on their two throwaway targets, `RhiLimits.storePassTarget`; the other three without
+  an attachment, no target made, `ICO_TEST_SINK_WANT` naming which), the case of the issue 123 report's Intel HD 530 crash inside `vkCmdBeginRendering`
   ([RHI.md](RHI.md#vulkan), **Render passes**). The frame: VU meshes through the vertex pre-pass
   with its record stored by the vertex shaders (`ICO_RD_VU_PREPASS=1`, `ICO_RD_VU_RECORD=stores`),
   triangles writing the alpha and a DATE-tested sprite, the shadow count (reset, volume, resolve),
@@ -1049,8 +1057,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   frames. After the switch at least two replays are recorded, the scene is 2x2, and each part is
   drawn (pre-pass passes, a DATE snapshot or stencil draw, a shadow count resolve, a crack fill
   pass; none of the last at 1x); where the record is stored by the vertex shaders every store pass
-  began on the throwaway targets (`rd_vu_rec_sink.h`, none without them; the two targets made and
-  distinct), and the barriers that held later vertex work behind fragment work after the switch
+  began on the throwaway targets where they are wanted (`rd_vu_rec_sink.h`, none without them; the
+  two targets made and distinct), else without an attachment with no target made, and the barriers that held later vertex work behind fragment work after the switch
   are printed (`2x: N barriers holding ...`, `RhiStats.fragmentHolds`); the render pass breadcrumb
   (`rhi_pass_crumb.h`) names the last pass ended, with a pass ring marker and the path asked, every
   target with a view; under the validation layer no validation error from the first frame to the
@@ -1318,11 +1326,14 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   numbered, that one). The order of the sources (the wait
   that failed, the first open submission, the newest numbered, the newest held, none), the frame
   before from the pass ring's table else the newest held below it, a lost frame older than
-  everything held, and a tie taking the newer. The copy rules: needed when the first open replay is
-  that frame's or later, released two replays behind it, throttled after the first eight to a
-  quarter of the recycles, its slot an empty one else the oldest; and a recycle run over a fake
-  history with the GPU stuck at replay 148 (the lost frame survives the ring moving on, at most four
-  copies are ever held, a GPU that finishes everything frees them all).
+  everything held, and a tie taking the newer. The copy rules: needed when the first open frame is
+  that frame or an older one, released two frames behind it, made only while a slot wait has
+  blocked 100 ms or more (an open frame without a long wait, steady play, never copies), at most 4
+  attempts in any 64 recycled frames (a 1,024-frame stalled stretch never more in any window, the
+  fifth a window after the first), none for 600 recycled frames after one too big, its slot an
+  empty one else the oldest; and a recycle run over a fake history (the GPU a frame or two behind
+  with no copy, then stuck at frame 129 with the wait stalled: the lost frame survives the ring
+  moving on, at most four copies are ever held, a GPU that finishes everything frees them all).
 - `rd_passring_test.c`: the pass ring the device-loss report prints: order, wrap, the replay table, the
   replays printed (the last three, whole at 430 passes a replay), the line format (the VU
   vertex pre-pass's entry among them, `testVuPre`) and the loss bisect's line; the pipeline
