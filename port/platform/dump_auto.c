@@ -73,6 +73,7 @@ static void write_job(IcoDumpJob *j, IcoDumpDone *d)
     snprintf(d->zip, sizeof(d->zip), "%s", j->zip);
     snprintf(d->text, sizeof(d->text), "%s", j->text);
     d->gameMs = j->gameMs;
+    d->drainMs = j->drainMs;
     d->bytes = j->dumpLen;
     e[n].name = j->dumpName;
     e[n].data = j->dump;
@@ -130,7 +131,8 @@ static void write_job(IcoDumpJob *j, IcoDumpDone *d)
             (void)ico_slow_dump_prune(dir, ICO_SLOW_DUMP_KEEP);
         }
     }
-    d->workerMs = ico_thread_now_ms() - t0;
+    d->workerEndMs = ico_thread_now_ms();
+    d->workerMs = d->workerEndMs - t0;
 }
 
 static void worker_main(void *arg)

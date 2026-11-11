@@ -29,6 +29,8 @@
 #include "rd_passring.h"
 #include "rd_perf_clock.h"
 #include "rd_perf_gap.h"
+#include "rd_perf_rare.h"
+#include "rd_shot_late.h"
 #include "rd_vis.h"
 
 RdPerfRecord g_rdPerf;
@@ -809,6 +811,10 @@ static PassTable s_passQueue[RD_PERF_PASS_QUEUE];
 static uint32_t s_passHead, s_passCount;
 static RhiStats s_passStats; /* the RHI's counters at the open piece's start */
 static double s_passCpu0;    /* the CPU clock at the open piece's start */
+/* a stalled replay's list 0 (rd_perf_rare.h; below rd__perf_rare_pipeline) */
+static RdPerfRareReplay s_rareRec, s_rarePending[RHI_FRAMES_IN_FLIGHT];
+static RdPerfRareBlock s_rareBlock;
+static int s_rareBlockNew; /* __atomic: the window's block ended */
 
 void rd__perf_passes_init(void)
 {
@@ -817,6 +823,7 @@ void rd__perf_passes_init(void)
     rd__log("present: the present's pass is a list of its own, submitted after the scene's; only "
             "its submit waits for the display's image (Vulkan: the acquire semaphore at "
             "COLOR_ATTACHMENT_OUTPUT)");
+    rd__passring_pipeline_hook(rd__perf_rare_pipeline); /* list 0's pipelines (rd_perf_rare.h) */
     const char *env = getenv("ICO_RD_PERF_PASSES");
     s_passesMode = env && env[0] == '1';
     const char *lists = getenv("ICO_RD_PERF_LIST_STAMPS");
@@ -1155,6 +1162,7 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
     s_passRec.count = 0;
     s_passRec.closed = false;
     s_passRec.replay = g_rdPerf.replay;
+    rd_perf_rare_replay_reset(&s_rareRec, g_rdPerf.replay);
     s_passOn = false;
 #ifndef ICO_IOS
     if (g_rd.hasDevice && rhi_timestamps_supported() &&
@@ -1255,9 +1263,19 @@ static void clockName(uint32_t index, void *user, char *buf, size_t n)
     if (index >= RD_PERF_TS_PASS0) {
         const uint32_t k = index - RD_PERF_TS_PASS0;
         if (t != NULL && k < t->count) {
+            /* its target and size, and the draws of the pieces before it
+               (a stop inside a list: how far the replay had come) */
             char label[96];
-            rd_perf_pass_label(&t->pass[k], label, sizeof label);
-            snprintf(buf, n, "the start of piece %u of %u, %s", k, t->count, label);
+            const RdPerfPass *q = &t->pass[k];
+            uint32_t before = 0;
+            rd_perf_pass_label(q, label, sizeof label);
+            for (uint32_t j = 0; j < k; j++) {
+                before += t->pass[j].draws;
+            }
+            snprintf(buf, n,
+                     "the start of piece %u of %u, %s %s %ux%u (%u draws before it, %u in it)", k,
+                     t->count, label, rd_perf_target_name(q->target), (unsigned)q->w,
+                     (unsigned)q->h, before, q->draws);
         } else if (t != NULL && k == t->count) {
             snprintf(buf, n, "the end of its last piece (%u)", t->count);
         } else {
@@ -1282,13 +1300,52 @@ static void clockName(uint32_t index, void *user, char *buf, size_t n)
     }
 }
 
+/* ------------------------------------------ a stalled replay's list 0
+ * (rd_perf_rare.h): the replay being recorded keeps list 0's pipelines,
+ * its slot keeps them until its clock is read, and the window's block
+ * counts the replays each was seen in (reset at the block's end) */
+
+void rd__perf_rare_pipeline(uint32_t id, uint8_t vs, uint8_t fs, uint8_t dst)
+{
+    if (s_recOpen && s_inLists && rd__passring_list_now() == 0) {
+        rd_perf_rare_replay_add(&s_rareRec, id, vs, fs, dst);
+    }
+}
+
+void rd_perf_rare_block_end(void)
+{
+    __atomic_store_n(&s_rareBlockNew, 1, __ATOMIC_RELAXED);
+}
+
+/* rd__perf_end's: the replay's list 0 into the block and its slot */
+static void rareEnd(uint32_t slot)
+{
+    if (__atomic_exchange_n(&s_rareBlockNew, 0, __ATOMIC_RELAXED)) {
+        rd_perf_rare_block_reset(&s_rareBlock);
+    }
+    rd_perf_rare_block_add(&s_rareBlock, &s_rareRec);
+    s_rarePending[slot] = s_rareRec;
+}
+
+void rd__perf_rare_stall(uint32_t slot, uint32_t replay, uint32_t k)
+{
+    if (k == 0 || slot >= RHI_FRAMES_IN_FLIGHT || s_rarePending[slot].replay != replay) {
+        return;
+    }
+    char line[1536];
+    rd_perf_rare_text(&s_rareBlock, &s_rarePending[slot], RD_PERF_RARE_PCT, rd__vs_name,
+                      rd__fs_name, line, sizeof line);
+    rd__log("%s (stall line %u of the run)", line, k);
+}
+
 /* the slot's clock against the CPU's into the record, and its line on a
-   long wait with a trace, a second run, a stamp the GPU never wrote or a
-   counter restart (rd_perf_clock.h; first 8, then every 100th) */
+   long wait, a second run, a stamp the GPU never wrote (a stalled replay:
+   the first 32, then every 10th) or a counter restart alone (the first 8,
+   then every 100th, on its own count: rd_perf_clock.h rd_perf_clock_due) */
 static void clockNote(RdPerfRecord *r, uint32_t slot, const RhiTimestampClock *clk,
                       const uint64_t *ts, uint32_t n)
 {
-    static uint32_t s_lines;
+    static RdPerfClockLines s_lines;
     const RdPerfClockIn in = {clk,
                               ts,
                               n,
@@ -1310,11 +1367,14 @@ static void clockNote(RdPerfRecord *r, uint32_t slot, const RhiTimestampClock *c
     if (!v.report) {
         return;
     }
-    const uint32_t k = ++s_lines;
-    if (k <= 8u || k % 100u == 0u) {
+    const uint32_t k = rd_perf_clock_due(&s_lines, &v);
+    if (k != 0) {
         char line[2048];
         rd_perf_clock_text(&in, &v, line, sizeof line);
-        rd__log("%s (line %u of the run)", line, k);
+        rd__log("%s (%s line %u of the run)", line, v.stall ? "stall" : "restart", k);
+    }
+    if (v.stall) {
+        rd__perf_rare_stall(slot, r->replay, k); /* the hung list's pipelines (rd_perf_rare.h) */
     }
 }
 
@@ -1326,6 +1386,9 @@ void rd__perf_collect_gpu(void)
        the one rd__perf_end left there the last time the slot was used,
        RHI_FRAMES_IN_FLIGHT frames ago */
     const uint32_t slot = rhi_frame_slot();
+    if (g_rd.hasDevice) {
+        rd__shot_late_collect(slot); /* the state picture this slot copied (rd_shot_late.h) */
+    }
     if (!s_pendingValid[slot]) {
         return;
     }
@@ -1564,6 +1627,7 @@ void rd__perf_end(void)
         memcpy(t->pass, s_passRec.pass, (size_t)s_passRec.count * sizeof(s_passRec.pass[0]));
     }
     s_passOn = false;
+    rareEnd(slot);
     s_pending[slot] = *r;
     s_pendingStamps[slot] = s_stamps;
     memcpy(s_pendingOrd[slot], s_ord, s_ordN);
@@ -1684,6 +1748,12 @@ void rd_perf_pass_agg_reset(RdPerfPassAgg *a)
 void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
 {
     a->replays++;
+    uint32_t full = 0; /* the replay's largest render pass */
+    for (uint32_t k = 0; k < n; k++) {
+        const uint32_t ar = (uint32_t)p[k].w * p[k].h;
+        full = p[k].kind == RD_PERF_PASS_RENDER && ar > full ? ar : full;
+    }
+    RdPerfPassAggEntry *last = NULL; /* the entry of the piece before */
     for (uint32_t k = 0; k < n; k++) {
         const RdPerfPass *q = &p[k];
         const double ms = q->gpuUs >= 0.0f ? (double)q->gpuUs / 1e3 : 0.0;
@@ -1708,6 +1778,7 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
         if (!e) {
             if (a->count == RD_PERF_PASS_AGG_MAX) {
                 a->dropped++;
+                last = NULL;
                 continue;
             }
             e = &a->e[a->count++];
@@ -1723,6 +1794,19 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
         e->draws += q->draws;
         e->gpuMs += ms;
         e->cpuMs += (double)q->cpuUs / 1e3;
+        if (k > 0 && last != e) {
+            const RdPerfPass *b = &p[k - 1];
+            e->prevKind = b->kind;
+            e->prevTarget = b->target;
+            e->prevList = b->list;
+            e->prevPost = b->post;
+            e->prevW = b->w;
+            e->prevH = b->h;
+            e->prevN++;
+            e->prevFull +=
+                b->kind == RD_PERF_PASS_RENDER && full != 0 && (uint32_t)b->w * b->h == full;
+        }
+        last = e;
         if (q->busyValid) {
             e->busyMs += (double)q->gpuBusyUs / 1e3;
             e->busyN++;
@@ -1734,6 +1818,12 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n)
 
 int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_t n)
 {
+    return rd_perf_pass_agg_text_ex(a, top, false, false, buf, n);
+}
+
+int rd_perf_pass_agg_text_ex(const RdPerfPassAgg *a, unsigned top, bool tiler, bool before,
+                             char *buf, size_t n)
+{
     if (n == 0) {
         return 0;
     }
@@ -1742,22 +1832,63 @@ int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_
         return snprintf(buf, n, "no replay timed");
     }
     const double r = (double)a->replays;
+    /* a tile-based GPU: the uploads' entry joins list 0's largest (a copy;
+       the entries' own sums stay for rd_perf_pass_agg_mean) */
+    static RdPerfPassAggEntry ent[RD_PERF_PASS_AGG_MAX];
+    const uint32_t count = a->count;
+    memcpy(ent, a->e, (size_t)count * sizeof(ent[0]));
     bool used[RD_PERF_PASS_AGG_MAX];
     memset(used, 0, sizeof(used));
+    int joined = -1;
+    if (tiler) {
+        int up = -1;
+        for (uint32_t i = 0; i < count; i++) {
+            if (ent[i].kind == RD_PERF_PASS_UPLOAD) {
+                up = (int)i;
+            } else if (ent[i].kind == RD_PERF_PASS_RENDER && ent[i].list == 0 && ent[i].post < 0 &&
+                       ent[i].target != RD_PERF_TARGET_SHADOW_COUNT &&
+                       (joined < 0 || ent[i].gpuMs > ent[joined].gpuMs)) {
+                joined = (int)i;
+            }
+        }
+        if (up >= 0 && joined >= 0) {
+            ent[joined].gpuMs += ent[up].gpuMs;
+            ent[joined].passes += ent[up].passes;
+            ent[joined].busyMs += ent[up].busyMs;
+            ent[joined].prevKind = ent[up].prevKind; /* what came before the stretch */
+            ent[joined].prevTarget = ent[up].prevTarget;
+            ent[joined].prevList = ent[up].prevList;
+            ent[joined].prevPost = ent[up].prevPost;
+            ent[joined].prevW = ent[up].prevW;
+            ent[joined].prevH = ent[up].prevH;
+            ent[joined].prevN = ent[up].prevN;
+            ent[joined].prevFull = ent[up].prevFull;
+            used[up] = true; /* not listed on its own */
+        } else {
+            joined = -1;
+        }
+    }
     size_t at = 0;
     unsigned shown = 0;
-    for (; shown < top && shown < a->count; shown++) {
+    for (; shown < top && shown < count; shown++) {
         int best = -1;
-        for (uint32_t i = 0; i < a->count; i++) {
-            if (!used[i] && (best < 0 || a->e[i].gpuMs > a->e[best].gpuMs)) {
+        for (uint32_t i = 0; i < count; i++) {
+            if (!used[i] && (best < 0 || ent[i].gpuMs > ent[best].gpuMs)) {
                 best = (int)i;
             }
         }
+        if (best < 0) {
+            break;
+        }
         used[best] = true;
-        const RdPerfPassAggEntry *e = &a->e[best];
+        const RdPerfPassAggEntry *e = &ent[best];
         const RdPerfPass lp = {.kind = e->kind, .list = e->list, .post = e->post};
-        char label[32], passes[32] = "";
-        rd_perf_pass_label(&lp, label, sizeof(label));
+        char label[40], passes[32] = "";
+        if (best == joined) {
+            snprintf(label, sizeof(label), "before list 0 + list 0");
+        } else {
+            rd_perf_pass_label(&lp, label, sizeof(label));
+        }
         const double pr = (double)e->passes / r;
         if (pr < 0.95 || pr > 1.05) {
             snprintf(passes, sizeof(passes), " %.1f passes", pr);
@@ -1770,9 +1901,18 @@ int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_
             /* the display wait: "display wait window 1280x720 38.40 ms" */
             snprintf(draws, sizeof(draws), " %.0f draws", (double)e->draws / r);
         }
-        const int w = snprintf(buf + at, n - at, "%s%s %s %ux%u%s%s %.2f ms%s", shown ? ", " : "",
+        char after[96] = "";
+        if (before && e->prevN) {
+            const RdPerfPass bp = {.kind = e->prevKind, .list = e->prevList, .post = e->prevPost};
+            char bl[32];
+            rd_perf_pass_label(&bp, bl, sizeof(bl));
+            snprintf(after, sizeof(after), " after %s %s %ux%u (full size in %llu of %llu)", bl,
+                     rd_perf_target_name(e->prevTarget), (unsigned)e->prevW, (unsigned)e->prevH,
+                     (unsigned long long)e->prevFull, (unsigned long long)e->prevN);
+        }
+        const int w = snprintf(buf + at, n - at, "%s%s %s %ux%u%s%s %.2f ms%s%s", shown ? ", " : "",
                                label, rd_perf_target_name(e->target), (unsigned)e->w,
-                               (unsigned)e->h, passes, draws, e->gpuMs / r, busy);
+                               (unsigned)e->h, passes, draws, e->gpuMs / r, busy, after);
         if (w < 0 || (size_t)w >= n - at) {
             at = n - 1;
             break;
@@ -1991,7 +2131,9 @@ int rd_perf_passes_arm_text(uint32_t replay, double presentMs, const char *backe
 {
     return snprintf(buf, n,
                     "every replay timed pass by pass from here on %s (a present blocked %.0f ms "
-                    "at replay %u): the next stalled replay's passes are compared with the block's",
+                    "at replay %u): the next stalled replay's passes are compared with the block's "
+                    "(then one replay every 250 ms again, or after 3 blocks with no present "
+                    "blocking)",
                     backend ? backend : "?", presentMs, replay);
 }
 

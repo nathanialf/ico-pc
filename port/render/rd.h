@@ -3389,6 +3389,14 @@ typedef struct RdPerfPassAggEntry {
     double gpuMs, cpuMs;
     double busyMs;  /* of gpuMs, the GPU busy time (RdPerfPass.gpuBusyUs) */
     uint64_t busyN; /* the pieces that had one */
+    /* the piece before its pieces (the last seen, when another entry's),
+       how many had one and how many of those were a render pass of the
+       replay's largest area (a full-size target ended just before: on a
+       tile-based GPU its tile work may land in this one's stamps) */
+    uint8_t prevKind, prevTarget;
+    int8_t prevList, prevPost;
+    uint16_t prevW, prevH;
+    uint64_t prevN, prevFull;
 } RdPerfPassAggEntry;
 
 typedef struct RdPerfPassAgg {
@@ -3417,6 +3425,12 @@ void rd_perf_pass_agg_add(RdPerfPassAgg *a, const RdPerfPass *p, uint32_t n);
  * where the pieces bound some); the length of the text in buf (cut to fit
  * n) */
 int rd_perf_pass_agg_text(const RdPerfPassAgg *a, unsigned top, char *buf, size_t n);
+/* The same for the window's line: tiler, the uploads' entry joined to list
+ * 0's largest as "before list 0 + list 0" (they trade at a constant sum on
+ * a tile-based GPU, issue 179); before, each entry followed by the piece
+ * before it, "after list 0 SCENE 1728x1344 (full size in 12 of 12)" */
+int rd_perf_pass_agg_text_ex(const RdPerfPassAgg *a, unsigned top, bool tiler, bool before,
+                             char *buf, size_t n);
 /* The block's mean GPU time of one piece like p (same kind, target, list,
  * effect and size: rd_perf_pass_agg_add's entry), ms a piece; false when
  * the block has none like it */

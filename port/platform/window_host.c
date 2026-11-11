@@ -5121,9 +5121,9 @@ static void perf_log(void)
     if (s_perf.passAgg.replays) {
         /* the timed replays' most expensive passes, each timed between
            stamps outside the render passes (rd_perf.c) */
-        char top[1024];
+        char top[1536];
 
-        rd_perf_pass_agg_text(&s_perf.passAgg, 5, top, sizeof(top));
+        rd_perf_pass_agg_text_ex(&s_perf.passAgg, 5, rhi_limits()->tiler, true, top, sizeof(top));
         fprintf(stderr, "window: GPU top passes: %s%s\n", top, window_tiler_words());
     }
     {
@@ -5432,7 +5432,8 @@ void window_pace_log(Uint64 now)
     if (now - s_pres.statAt < ico_stats_period_ns(now, s_pres.fastUntil)) {
         return;
     }
-    perf_drain(); /* the block's last records, for its replays over a refresh */
+    window_log_cost_begin(); /* the block's prints timed (log_cost.h) */
+    perf_drain();            /* the block's last records, for its replays over a refresh */
     slow_replay_longest();
     const double sec = (double)(now - s_pres.statAt) / 1e9;
     uint32_t replays = 0;
@@ -5630,6 +5631,7 @@ void window_pace_log(Uint64 now)
     s_pres.lateMaxNs = 0;
     s_pres.pumpMaxMs = s_pres.pumpSumMs = 0.0;
     s_pres.pumpCount = 0;
+    window_log_cost_end();
 }
 
 /* The start-up's presents, one log line each: the boot shows black (keep

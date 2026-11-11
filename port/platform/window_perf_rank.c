@@ -35,10 +35,23 @@ static bool s_haveLast;
 /* the last block's records, and those through the submit thread */
 static uint32_t s_lastN, s_lastSubN;
 
+/* the block's presented pictures' GPU spans, timed pass by pass or not
+   (rd_perf_rank_stamp_cost_text: what the stamps cost) */
+#define STAMP_SPANS 1024u
+static float s_stamped[STAMP_SPANS], s_plain[STAMP_SPANS];
+static uint32_t s_stampedN, s_plainN;
+
 void window_perf_rank_record(const RdPerfRecord *r, double vuInvocations)
 {
     SDL_LockSpinlock(&s_lock);
     rd_perf_rank_add_record(&s_block, r, vuInvocations);
+    if (r->presented && r->gpuValid && !r->keep) {
+        if (r->passTimed && s_stampedN < STAMP_SPANS) {
+            s_stamped[s_stampedN++] = (float)r->gpuMs;
+        } else if (!r->passTimed && s_plainN < STAMP_SPANS) {
+            s_plain[s_plainN++] = (float)r->gpuMs;
+        }
+    }
     SDL_UnlockSpinlock(&s_lock);
 }
 
@@ -112,6 +125,7 @@ void window_perf_rank_block(const WindowPerfBlock *in)
     if (in == NULL || s_block.n == 0) {
         rd_perf_rank_block_reset(&s_block);
         window_scene_reset(&s_share);
+        s_stampedN = s_plainN = 0;
         s_lastN = s_lastSubN = 0;
         SDL_UnlockSpinlock(&s_lock);
         return; /* no replays: a movie, a pause in the background */
@@ -142,12 +156,17 @@ void window_perf_rank_block(const WindowPerfBlock *in)
     static char line[4096], ranked[2400];
     (void)rd_perf_rank_scene_text(&s_block, &info, &v, line, sizeof line);
     fprintf(stderr, "window: %s\n", line);
+    s_block.tiler = info.tiler; /* before list 0 and list 0 as one there */
     (void)rd_perf_rank_classes_text(&s_block, rd_perf_pass_label, 6, line, sizeof line);
     fprintf(stderr, "window: %s\n", line);
     (void)rd_perf_rank_rates_text(&s_block, &rates, line, sizeof line);
     fprintf(stderr, "window: %s\n", line);
     (void)rd_perf_rank_slowest_text(&s_block, rd_perf_pass_label, 5, line, sizeof line);
     fprintf(stderr, "window: %s\n", line);
+    if (rd_perf_rank_stamp_cost_text(s_stamped, s_stampedN, s_plain, s_plainN, line, sizeof line) >
+        0) {
+        fprintf(stderr, "window: %s\n", line); /* both kinds in the block */
+    }
     (void)rd_perf_rank_ranked_text(&info, &v, ranked, sizeof ranked);
     if (v.below) {
         /* every block below the rate: the 10 s summaries are the rate limit */
@@ -166,6 +185,7 @@ void window_perf_rank_block(const WindowPerfBlock *in)
     }
     rd_perf_rank_block_reset(&s_block);
     window_scene_reset(&s_share);
+    s_stampedN = s_plainN = 0;
     SDL_UnlockSpinlock(&s_lock);
 }
 

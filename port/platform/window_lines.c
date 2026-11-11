@@ -10,10 +10,18 @@
 #include <stdio.h>
 #include "audio_host.h"
 #include "diag_host.h"
+#include "ico_thread.h"
+#include "log_cost.h"
 #include "pace_policy.h"
 #include "host_loop.h"
 #include "rd_tex.h"
 #include "rhi.h"
+#ifdef __ANDROID__
+#include "host_android.h"
+#elif !defined(_WIN32)
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
 
 /* The adapter's local video memory (RhiStats videoMem*; Direct3D 11 and
    12): usage and budget in whole MB, false when the adapter does not say */
@@ -150,6 +158,99 @@ void window_memory_line(void)
 /* a step this late past its period with sound held back is named */
 #define HOLD_LATE_MS 100.0
 
+/* ------------------------------------------- the logging's own cost
+ * (log_cost.h): the block's events and the log's writes, one line at the
+ * block's end */
+static LogCost s_logCost;
+static int s_logCostInit;
+static double s_logPrintT0;
+static long long s_logBytesAt = -1;
+
+static LogCost *log_cost(void)
+{
+    if (!s_logCostInit) {
+        log_cost_reset(&s_logCost);
+        s_logCostInit = 1;
+    }
+    return &s_logCost;
+}
+
+/* the log's bytes so far, every thread's (-1 not known): the file's
+   offset where stderr is one; Android's are the log thread's count */
+static long long log_bytes_now(void)
+{
+#if defined(__ANDROID__)
+    return -1;
+#elif defined(_WIN32)
+    return (long long)_ftelli64(stderr);
+#else
+    struct stat st;
+
+    if (fstat(STDERR_FILENO, &st) != 0 || !S_ISREG(st.st_mode)) {
+        return -1;
+    }
+    const off_t at = lseek(STDERR_FILENO, 0, SEEK_CUR);
+    return at >= 0 ? (long long)at : -1;
+#endif
+}
+
+static void window_log_cost_late_span(double t0Ms, double t1Ms)
+{
+    log_cost_late(log_cost(), t0Ms, t1Ms);
+}
+
+void window_log_cost_present(double t0Ms, double t1Ms)
+{
+    log_cost_present(log_cost(), t0Ms, t1Ms);
+}
+
+void window_log_cost_job(double gameMs, double t0Ms, double t1Ms)
+{
+    log_cost_job(log_cost(), gameMs, t0Ms, t1Ms);
+}
+
+void window_log_cost_begin(void)
+{
+    (void)log_cost();
+    s_logPrintT0 = ico_thread_now_ms();
+}
+
+void window_log_cost_end(void)
+{
+    LogCost *c = log_cost();
+    const double t1 = ico_thread_now_ms();
+    char text[1024];
+
+    if (s_logPrintT0 > 0.0 && t1 >= s_logPrintT0) {
+        c->printValid = 1;
+        c->printMs = t1 - s_logPrintT0;
+        c->print.t0 = s_logPrintT0;
+        c->print.t1 = t1;
+    }
+#ifdef __ANDROID__
+    IcoLogMirrorStats m;
+
+    if (ico_android_log_mirror_take(&m) == 0) {
+        c->bytes = (long long)m.bytes;
+        log_cost_writes(c, m.writes, m.writeMs, m.longestMs, m.longestFamily, m.logcatMs);
+        for (unsigned i = 0; i < m.slowN; i++) {
+            log_cost_slow_write(c, m.slowT0[i], m.slowT1[i]);
+        }
+        c->slow += m.slow > m.slowN ? m.slow - m.slowN : 0u; /* counted past the kept */
+        log_cost_pipe(c, (m.pipeMax + 1023u) / 1024u, m.pipeCap / 1024u);
+    }
+#else
+    const long long at = log_bytes_now();
+
+    c->bytes = at >= 0 && s_logBytesAt >= 0 && at >= s_logBytesAt ? at - s_logBytesAt : -1;
+#endif
+    log_cost_text(c, text, sizeof(text));
+    fprintf(stderr, "window: %s\n", text);
+    log_cost_reset(c);
+    s_logBytesAt = log_bytes_now(); /* the next block's bytes from here */
+    s_logPrintT0 = 0.0;
+}
+
 void window_hold_line(double lateMs, unsigned long long heldMs, unsigned decodes0, unsigned pipes0)
 {
     static unsigned long long s_held; /* heldMs at the last call */
@@ -158,6 +259,12 @@ void window_hold_line(double lateMs, unsigned long long heldMs, unsigned decodes
     IcoStepProfile p;
 
     s_held = heldMs;
+    if (lateMs >= LOG_COST_LATE_MS) {
+        /* the logging's cost line compares its slow writes with it */
+        const double now = ico_thread_now_ms();
+
+        window_log_cost_late_span(now - lateMs, now);
+    }
     if (lateMs > HOLD_LATE_MS) {
         /* the stopped set's background batches wait (rd.h) */
         rd_pipelines_background_hold();

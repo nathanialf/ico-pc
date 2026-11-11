@@ -18,7 +18,9 @@
 #include "hotkeys.h"
 #include "input_record.h"
 #include "rd.h"
+#include "rd_thread.h" /* rd_thread_drain */
 #include "trace_host.h"
+#include "window_lines.h" /* window_log_cost_job */
 #include "window_present.h"
 
 #define s_pres g_windowPres
@@ -78,6 +80,7 @@ static void skin_capture(const char *sidecar)
     IcoDumpJob *j = &s_job;
 
     memset(j, 0, sizeof(*j));
+    j->drainMs = -1.0;
     snprintf(j->tag, sizeof(j->tag), "skin-check capture");
     stamp_now(stamp, sizeof(stamp));
     ico_host_pref_dir(pref, sizeof(pref));
@@ -92,6 +95,7 @@ static void skin_capture(const char *sidecar)
     }
     use_flush();
     rd_dump_on_demand_log();
+    j->drainMs = (double)rd_thread_drain() / 1e6; /* timed apart, as the slow scene's */
     if (!rd_dump_frame_mem(&j->dump, &j->dumpLen)) {
         fprintf(stderr, "window: skin-check capture: the frame could not be taken\n");
         return;
@@ -157,6 +161,7 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
     uint32_t got = 0;
 
     memset(j, 0, sizeof(*j));
+    j->drainMs = -1.0;
     snprintf(j->tag, sizeof(j->tag), "slow-scene dump");
     if (ico_dump_auto_busy()) {
         (void)ico_dump_auto_submit(j); /* the drop line, counted */
@@ -174,6 +179,14 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
         return 0;
     }
     use_flush();
+    /* The frame's bytes are read here, not on the worker: the ring frame
+       names textures, meshes and targets the game thread changes from its
+       next call on, so they are serialised while nothing else reads or
+       changes them (rd_dump.c dumpFrame drains the render and submit
+       threads first; the zip and the file writes are the worker's).  The
+       drain is timed apart: on a GPU-bound phone it is the render thread's
+       own slot wait (issue 179: 26-156 ms in all) */
+    j->drainMs = (double)rd_thread_drain() / 1e6;
     if (!rd_dump_retained_frame_mem(frame, &j->dump, &j->dumpLen, &got)) {
         fprintf(stderr, "window: slow scene: frame %u not written\n", (unsigned)frame);
         return 0;
@@ -194,6 +207,7 @@ int window_dump_auto_slow(uint32_t frame, const SlowSceneBlock *b, double work, 
 
 static void report_one(const IcoDumpDone *d)
 {
+    window_log_cost_job(d->gameMs, d->workerEndMs - d->workerMs, d->workerEndMs);
     if (d->result < 0) {
         fprintf(stderr,
                 "window: %s: zip not written: %s (%.1f ms on the game thread, %.0f ms on the "
@@ -201,10 +215,16 @@ static void report_one(const IcoDumpDone *d)
                 d->tag, d->why, d->gameMs, d->workerMs);
         return;
     }
+    char drain[96] = "";
+    if (d->drainMs >= 0.0) {
+        snprintf(drain, sizeof(drain),
+                 " (the render thread's work in flight %.1f ms of it, the frame's bytes %.1f ms)",
+                 d->drainMs, d->gameMs > d->drainMs ? d->gameMs - d->drainMs : 0.0);
+    }
     fprintf(stderr,
-            "window: %s: %.1f ms on the game thread, %.0f ms on the worker (%zu bytes of frame "
+            "window: %s: %.1f ms on the game thread%s, %.0f ms on the worker (%zu bytes of frame "
             "into %s%s)\n",
-            d->tag, d->gameMs, d->workerMs, d->bytes, base_of(d->zip),
+            d->tag, d->gameMs, drain, d->workerMs, d->bytes, base_of(d->zip),
             d->result == 1 ? "; the log could not be read" : "");
     if (d->why[0] != '\0') {
         fprintf(stderr, "window: %s: %s\n", d->tag, d->why);

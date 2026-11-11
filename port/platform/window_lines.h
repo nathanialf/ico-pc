@@ -77,6 +77,17 @@ unsigned window_orig_skip_busy(void);
 /* PC port: the end of the 10 s GPU lines on a tile-based GPU (where a pass's time and the
  * display wait land; issues 95, 123), "" elsewhere */
 const char *window_tiler_words(void);
+
+/* The logging's own cost a block (log_cost.h): window_log_cost_begin and
+   _end around the 10 s block's prints (window_host.c window_pace_log), the
+   end writing "window: logging: ..."; the block's events: a present that
+   blocked (its call's span, ms on the monotonic clock), an automatic
+   capture's result (its game-thread ms, its worker's span).  The window's
+   thread only; window_hold_line notes the late steps itself */
+void window_log_cost_begin(void);
+void window_log_cost_end(void);
+void window_log_cost_present(double t0Ms, double t1Ms);
+void window_log_cost_job(double gameMs, double t0Ms, double t1Ms);
 void window_hold_block(double stepSumMs, unsigned steps, double stepMaxMs, int hz,
                        double replaySumMs, unsigned replays, bool original, const char *rateName);
 

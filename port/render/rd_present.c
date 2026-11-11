@@ -93,6 +93,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_internal.h"
+#include "rd_shot_late.h"
 #include "rd_submit.h"
 #include "rd_fsr1.h"
 #include "rd_upscale_temporal.h"
@@ -2033,6 +2034,21 @@ static struct {
     void *user;
 } s_shot;
 
+/* rd_shot_late.h: the state picture copied into a readback buffer by the
+ * present's list and read at its slot's recycle (Vulkan) */
+static struct {
+    RhiBuffer buf;
+    uint64_t size;
+    int pending;         /* copied, not yet read */
+    uint32_t slot;       /* the frame slot of the present that copied it */
+    uint32_t w, h;       /* the box copied (rows w * 4 bytes apart) */
+    RhiRect box;         /* in the output */
+    uint32_t outW, outH; /* the output then */
+    RhiFormat fmt;       /* the output's format */
+    double t0;           /* its recording, rd__now_ms */
+    uint32_t recycles;   /* recycles of other slots since */
+} s_late;
+
 /* the shot's lines (one a pause): the first 8, then every 100th */
 static bool shotLogNow(void)
 {
@@ -2065,6 +2081,10 @@ bool rd_capture_shot(RdShotFn fn, void *user)
     if (s_shot.armed) {
         s_shot.armed = 0;
         shotHand(NULL, 0, 0); /* replaced before a present took it */
+    }
+    if (s_late.pending) {
+        s_late.pending = 0;
+        shotHand(NULL, 0, 0); /* replaced before its slot came round (rd_shot_late.h) */
     }
     s_shot.fn = fn;
     s_shot.user = user;
@@ -2125,8 +2145,9 @@ void rd_capture_shot_cancel(void)
 {
     (void)rd_thread_drain();
     shotDoneForget(); /* an answer not taken goes too */
-    if (s_shot.armed) {
+    if (s_shot.armed || s_late.pending) {
         s_shot.armed = 0;
+        s_late.pending = 0; /* a copy not yet read is not read (rd_shot_late.h) */
         s_shot.fn = NULL;
         s_shot.user = NULL;
     }
@@ -2262,10 +2283,117 @@ static void shotTake(const RhiRect *box)
  * ended before the copy and a pass that loads the output is opened after
  * it, for the overlay to draw in.  box: the presentation box (the shot's
  * crop) */
+/* the state picture alone, on Vulkan, none pending: the box into the
+ * readback buffer in this list, read at the slot's recycle (rd_shot_late.h);
+ * false: the old path */
+static bool shotLateOn(void)
+{
+    /* the tile-based GPUs (rhi_limits()->tiler: the phones, issue 179);
+       ICO_RD_SHOT_LATE=1 or 0 forces it either way (the tests) */
+    const char *env = getenv("ICO_RD_SHOT_LATE");
+    if (env != NULL && (env[0] == '0' || env[0] == '1')) {
+        return env[0] == '1';
+    }
+    return rhi_limits()->tiler;
+}
+
+static bool shotLateRecord(RhiCommandList cl, RhiTexture out, RhiState *outState, bool inPass)
+{
+    if (s_cap.armed || !s_shot.copied || s_late.pending || rhi_backend() != RHI_BACKEND_VULKAN ||
+        !shotLateOn() ||
+        (s_outFormat != RHI_FMT_RGBA8_UNORM && s_outFormat != RHI_FMT_BGRA8_UNORM)) {
+        return false;
+    }
+    const RhiRect b = s_shot.box;
+    const uint64_t need = (uint64_t)b.w * b.h * 4u;
+    if (need == 0) {
+        return false;
+    }
+    if (s_late.buf.id && s_late.size < need) {
+        rhi_destroy_buffer(s_late.buf);
+        s_late.buf = (RhiBuffer){0};
+    }
+    if (!s_late.buf.id) {
+        s_late.buf = rhi_create_buffer(&(RhiBufferDesc){need, RHI_BUF_COPY_DST | RHI_BUF_READBACK,
+                                                        RHI_MEM_READBACK, "rd state picture"});
+        s_late.size = s_late.buf.id ? need : 0;
+        if (!s_late.buf.id) {
+            return false;
+        }
+    }
+    if (inPass) {
+        rhi_cmd_end_render_pass(cl);
+    }
+    rd__transition(cl, out, outState, RHI_STATE_COPY_SRC);
+    rhi_cmd_copy_texture_to_buffer(cl, out, RHI_ASPECT_COLOR, b, s_late.buf, 0, b.w * 4u);
+    rd__transition(cl, out, outState, RHI_STATE_RENDER_TARGET);
+    if (inPass) {
+        RhiRenderPassDesc p;
+        memset(&p, 0, sizeof(p));
+        p.color[0].texture = out;
+        p.color[0].load = RHI_LOAD_LOAD;
+        p.colorCount = 1;
+        p.width = s_outW;
+        p.height = s_outH;
+        rhi_cmd_begin_render_pass(cl, &p);
+    }
+    s_shot.copied = 0;
+    s_late.pending = 1;
+    s_late.slot = rhi_frame_slot();
+    s_late.w = b.w;
+    s_late.h = b.h;
+    s_late.box = b;
+    s_late.outW = s_outW;
+    s_late.outH = s_outH;
+    s_late.fmt = s_outFormat;
+    s_late.t0 = rd__now_ms();
+    s_late.recycles = 0;
+    return true;
+}
+
+void rd__shot_late_collect(uint32_t slot)
+{
+    if (!s_late.pending) {
+        return;
+    }
+    if (slot != s_late.slot) {
+        s_late.recycles++;
+        return;
+    }
+    s_late.pending = 0;
+    const size_t n = (size_t)s_late.w * s_late.h * 4u;
+    const uint8_t *src = s_late.buf.id ? rhi_map_buffer(s_late.buf) : NULL;
+    uint8_t *crop = src ? malloc(n) : NULL;
+    if (crop) {
+        memcpy(crop, src, n);
+        const bool bgra = s_late.fmt == RHI_FMT_BGRA8_UNORM;
+        for (size_t i = 0; i < n; i += 4) {
+            if (bgra) {
+                const uint8_t t = crop[i];
+                crop[i] = crop[i + 2];
+                crop[i + 2] = t;
+            }
+            crop[i + 3] = 255; /* opaque, as the old crop */
+        }
+        if (shotLogNow()) {
+            rd__log("state picture: %ux%u from the %ux%u output (the box at %d,%d), read at its "
+                    "slot's recycle %u pictures later, no wait (%.1f ms after its present)",
+                    s_late.w, s_late.h, s_late.outW, s_late.outH, s_late.box.x, s_late.box.y,
+                    s_late.recycles + 1u, rd__now_ms() - s_late.t0);
+        }
+    } else {
+        rd__log("state picture: not taken: its readback could not be read");
+    }
+    shotHand(crop, crop ? s_late.w : 0, crop ? s_late.h : 0);
+}
+
 static void captureRecord(RhiCommandList cl, RhiTexture out, RhiState *outState, bool inPass,
                           const RhiRect *box)
 {
     shotTake(box);
+    if (shotLateRecord(cl, out, outState, inPass)) {
+        return; /* read at the slot's recycle, no wait (rd_shot_late.h) */
+    }
     if (!s_cap.armed && !s_shot.copied) {
         return;
     }
@@ -2639,6 +2767,10 @@ void rd__present_shutdown(void)
         rhi_destroy_texture(s_cap.tex); /* the capture's texture */
     }
     memset(&s_cap, 0, sizeof(s_cap));
+    if (s_late.buf.id) {
+        rhi_destroy_buffer(s_late.buf); /* the state picture's readback (rd_shot_late.h) */
+    }
+    memset(&s_late, 0, sizeof(s_late)); /* a pending one is answered below, with nothing */
     if (s_shot.armed || s_shot.fn) {
         shotHand(NULL, 0, 0); /* a shot no present took: dropped */
     }

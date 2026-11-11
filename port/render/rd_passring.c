@@ -72,8 +72,18 @@ void rd__passring_pipeline_hold(int on)
     s_pipeHold = on ? 1u : 0u;
 }
 
+static RdPassringPipeHook s_pipeHook;
+
+void rd__passring_pipeline_hook(RdPassringPipeHook fn)
+{
+    s_pipeHook = fn;
+}
+
 void rd__passring_pipeline(uint32_t id, uint8_t vs, uint8_t fs, uint8_t dst)
 {
+    if (s_pipeHook != NULL) {
+        s_pipeHook(id, vs, fs, dst);
+    }
     if (!s_seq || s_pipeHold) {
         return;
     }

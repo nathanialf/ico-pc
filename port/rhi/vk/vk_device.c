@@ -1735,6 +1735,117 @@ static void vkr_subpass_read_decide(void)
     }
 }
 
+/* What the device offers that the stall diagnostics cannot use today, one
+ * line at the device's start (issue 123: whether the compositor can preempt
+ * the game's queue, whether the stalls could be placed on the CPU's clock).
+ * Read-only queries, nothing enabled: the calibrated time domains (the
+ * physical-device query vk_tsclock.c makes before it enables the
+ * extension, here whatever the submission wait), the global queue
+ * priority extensions and the game's queue family's priorities where the
+ * query is offered (VkQueueFamilyGlobalPriorityPropertiesKHR, through the
+ * extended queries), and the priority the game's one queue was made at. */
+static const char *vkr_domain_word(VkTimeDomainKHR d)
+{
+    switch (d) {
+    case VK_TIME_DOMAIN_DEVICE_KHR:
+        return "device";
+    case VK_TIME_DOMAIN_CLOCK_MONOTONIC_KHR:
+        return "CLOCK_MONOTONIC";
+    case VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_KHR:
+        return "CLOCK_MONOTONIC_RAW";
+    case VK_TIME_DOMAIN_QUERY_PERFORMANCE_COUNTER_KHR:
+        return "the performance counter";
+    default:
+        return "another";
+    }
+}
+
+static const char *vkr_priority_word(VkQueueGlobalPriorityKHR p)
+{
+    switch (p) {
+    case VK_QUEUE_GLOBAL_PRIORITY_LOW_KHR:
+        return "low";
+    case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_KHR:
+        return "medium";
+    case VK_QUEUE_GLOBAL_PRIORITY_HIGH_KHR:
+        return "high";
+    case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_KHR:
+        return "realtime";
+    default:
+        return "another";
+    }
+}
+
+static void vkr_offer_line(float queuePriority)
+{
+    const bool props2 = vkr_has_props2(g_vkr.phys);
+    char dom[192] = "not offered";
+    const bool calKhr =
+        props2 && vkr_device_has_ext(g_vkr.phys, VK_KHR_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
+    const bool calExt =
+        props2 && vkr_device_has_ext(g_vkr.phys, VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME);
+    if (calKhr || calExt) {
+        PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR q =
+            (PFN_vkGetPhysicalDeviceCalibrateableTimeDomainsKHR)vkGetInstanceProcAddr(
+                g_vkr.instance, calKhr ? "vkGetPhysicalDeviceCalibrateableTimeDomainsKHR"
+                                       : "vkGetPhysicalDeviceCalibrateableTimeDomainsEXT");
+        VkTimeDomainKHR d[16];
+        uint32_t n = 16u;
+        const VkResult r = q ? q(g_vkr.phys, &n, d) : VK_ERROR_EXTENSION_NOT_PRESENT;
+        if (r == VK_SUCCESS || r == VK_INCOMPLETE) {
+            size_t at = (size_t)snprintf(dom, sizeof dom, "%s:", calKhr ? "KHR" : "EXT");
+            for (uint32_t i = 0; i < n && at < sizeof dom; i++) {
+                at += (size_t)snprintf(dom + at, sizeof dom - at, "%s %s", i ? "," : "",
+                                       vkr_domain_word(d[i]));
+            }
+            if (n == 0) {
+                snprintf(dom, sizeof dom, "offered with no domains");
+            }
+        } else {
+            snprintf(dom, sizeof dom, "offered, its domains not readable");
+        }
+    }
+    const bool gpKhr = vkr_device_has_ext(g_vkr.phys, VK_KHR_GLOBAL_PRIORITY_EXTENSION_NAME);
+    const bool gpExt = vkr_device_has_ext(g_vkr.phys, VK_EXT_GLOBAL_PRIORITY_EXTENSION_NAME);
+    const bool gpQuery =
+        vkr_device_has_ext(g_vkr.phys, VK_EXT_GLOBAL_PRIORITY_QUERY_EXTENSION_NAME);
+    char fam[160] = "not queried (no priority query offered)";
+    if (props2 && (gpKhr || gpQuery) && vkGetPhysicalDeviceQueueFamilyProperties2 != NULL) {
+        uint32_t qn = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties2(g_vkr.phys, &qn, NULL);
+        VkQueueFamilyProperties2 *qp = calloc(qn ? qn : 1, sizeof(*qp));
+        VkQueueFamilyGlobalPriorityPropertiesKHR *gp = calloc(qn ? qn : 1, sizeof(*gp));
+        if (qp && gp && g_vkr.queueFamily < qn) {
+            for (uint32_t i = 0; i < qn; i++) {
+                gp[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_GLOBAL_PRIORITY_PROPERTIES_KHR;
+                qp[i].sType = VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2;
+                qp[i].pNext = &gp[i];
+            }
+            vkGetPhysicalDeviceQueueFamilyProperties2(g_vkr.phys, &qn, qp);
+            const VkQueueFamilyGlobalPriorityPropertiesKHR *g = &gp[g_vkr.queueFamily];
+            size_t at = (size_t)snprintf(fam, sizeof fam, "%u:", g->priorityCount);
+            for (uint32_t i = 0;
+                 i < g->priorityCount && i < VK_MAX_GLOBAL_PRIORITY_SIZE_KHR && at < sizeof fam;
+                 i++) {
+                at += (size_t)snprintf(fam + at, sizeof fam - at, "%s %s", i ? "," : "",
+                                       vkr_priority_word(g->priorities[i]));
+            }
+        }
+        free(qp);
+        free(gp);
+    }
+    const char *gp = gpKhr && gpExt ? "KHR and EXT offered"
+                     : gpKhr        ? "KHR offered"
+                     : gpExt        ? "EXT offered"
+                                    : "not offered";
+    VKR_LOG("offered (read only, nothing enabled for it): calibrated time domains %s; global "
+            "queue priority %s%s (the game's queue family %u's priorities: %s); the game's one "
+            "queue made at priority %.1f with no global priority asked (the driver's default, "
+            "medium)",
+            dom, gp, gpQuery ? ", its query too" : "", g_vkr.queueFamily, fam,
+            (double)queuePriority);
+}
+
 static bool vkr_create_device(void)
 {
     bool core13 = vkr_core13(g_vkr.props.apiVersion);
@@ -2852,7 +2963,8 @@ static bool vkr_create_device(void)
         g_vkr.timestampMask = bits >= 64 ? ~0ull : ((1ull << bits) - 1ull);
         vkr_tsclock_init(bits); /* its line, and the calibrated clocks' entry point */
     }
-    vkr_budget_line(); /* VK_EXT_memory_budget's, or why there is none */
+    vkr_offer_line(prio); /* issue 123: the priorities and time domains on offer */
+    vkr_budget_line();    /* VK_EXT_memory_budget's, or why there is none */
     /* the VkRenderPass path (legacyPasses) records vkCmdBeginRenderPass and
      * leaves these NULL (vk_renderpass.c) */
     g_vkr.cmdBeginRendering = NULL;

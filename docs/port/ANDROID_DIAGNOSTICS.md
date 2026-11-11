@@ -373,7 +373,7 @@ an attachment ...`), and the skin check issues no ring stamp, no stamp clear val
 own compiles after a memory stop (`... not compiled in the background (<why>; a tile-based phone GPU:
 none, ...)`). What still differs on a phone, all CPU work: the range checks, the hold notes and
 pass crumbs, the timestamp bookkeeping, the SPIR-V scan, the skin check's copy search, and the loss
-keep's gate (one progress read a frame; a copy only after a slot wait blocked 50 ms or more). How
+keep's gate (one progress read a frame; a copy only after a slot wait blocked 100 ms or more). How
 to read the next log:
 
 - Both lines `wide` / `single` and no loss: one of the two changes (or the store passes' targets,
@@ -717,7 +717,7 @@ begins, so the last line says which one a hang of the handler itself is in:
   now: frames A..Z (n, c of them copies in memory, K KB)` and `window: loss dump: copies in
   memory: ...`: which frame the loss belongs to and what the renderer still held. The ring holds
   the last three frames only; a frame the GPU had not finished when the ring reused its slot is
-  copied to memory first while a slot wait has blocked 50 ms or more (`rd: loss keep: frame N
+  copied to memory first while a slot wait has blocked 100 ms or more (`rd: loss keep: frame N
   copied to memory ...`, the first eight and every hundredth), at most 4 copies of at most 16 MiB,
   at most 4 tries in any 64 frames, nothing in steady play. So the lost frame is held only when a
   stall came before the loss (as in both reports); otherwise the frames the ring holds are written,
@@ -1016,7 +1016,14 @@ The new lines:
 
 - **`rd: GPU clock: replay R: ...`** (`port/render/rd_perf_clock.c`, from the slot's clock,
   [RHI.md](RHI.md#vulkan)) when the CPU's wait for the replay blocked 100 ms or more, its first list
-  ran twice, a stamp came back unwritten, or the counter restarted (the first 8, then every 100th):
+  ran twice, a stamp came back unwritten (a stalled replay: the first 32, then every 10th, ending
+  `(stall line K of the run)`), or the counter restarted alone (the first 8, then every 100th, on
+  its own count, ending `(restart line K of the run)`; start-up's idle restarts never use up
+  the stalls' lines). A stamp that came back unwritten is named with the last one written before it
+  (`(the first: list 0's end; the last written: the start of piece 5 of 35, list 0 SCENE 1728x1344
+  (0 draws before it, 236 in it))`); a piece's name carries its target, size and the draws of the
+  pieces before it. With it, on a stall, the hung list's pipelines (see
+  [The stall and logging lines](#the-stall-and-logging-lines-issues-123-and-179)):
 
       rd: GPU clock: replay 2021: its first stamp 254.6 ms after its first submit (the calibrated
       clocks, within 2.5 us), the counter at 5.0 ms then (it went back 14936.7 ms since the replay
@@ -1087,3 +1094,99 @@ to an app, so a recorder or overlay that does not announce itself through the An
 shows nowhere in the log. Lines: `ico_pc: thermal status changed: MODERATE (2) -> SEVERE (3) (run
 time 212.4 s)` (the first one, at registration, is from `UNKNOWN (-1)`), `ico_pc: screen recording:
 visible (run time 40.1 s)`, and the window's, in [DISPLAY.md](DISPLAY.md#the-stats-lines).
+
+## The stall and logging lines (issues 123 and 179)
+
+What the logs of issues 123 (Adreno 740) and 179 (Mali-G52) on the barrier and wait defaults could
+not say, and the hitches they showed. Every line is automatic (no setting), rate-limited, and costs
+counters in the hot path.
+
+- **The clock line's two limiters** (`port/render/rd_perf_clock.c` `rd_perf_clock_due`): a stalled
+  replay (a slot wait of 100 ms or more, a second run of its first list, a stamp unwritten after its
+  work was signalled finished) is written the first 32 times, then every 10th; a counter restart
+  alone (an idle GPU's counter going back, everything written, nothing waited for) the first 8,
+  then every 100th, each on its own count. Issue 123's start-up had seven idle restarts, which used
+  up the old shared "first 8" and left its second and third stalls without a line.
+- **The hung list's pipelines** (`port/render/rd_perf_rare.c`, kept by `rd_perf.c`): every pipeline
+  list 0 asks for (`rd__get_pipeline`, through the pass ring's note) is kept per replay with its
+  lookups, the window's 10 s block counts the replays each was seen in, and a stalled replay's
+  clock line is followed by:
+
+      rd: GPU clock: replay 2417's list 0 (the stalled replay): 41 pipelines in 236 lookups; seen in
+      under 5 % of the block's 349 replays: pipeline 812 (vu_skin_vs/vu_ps) 3 lookups, in 2
+      replays; the most used: pipeline 12 (vu_prelit_vs/vu_ps) 60 lookups, in 349 replays, ...
+      (stall line 2 of the run)
+
+  A draw that is drawn rarely and hangs the GPU when it is shows as the rare pipeline common to
+  every such line. CPU data only; vertex counts are not in it (they are the draw code's).
+- **The automatic captures' game-thread time split** (`port/platform/window_dump_auto.c`): the
+  slow-scene dump's and the skin check's capture line gives the wait for the render thread's work
+  in flight apart from the frame's own bytes: `window: slow-scene dump: 156.1 ms on the game thread
+  (the render thread's work in flight 120.4 ms of it, the frame's bytes 35.7 ms), 1017 ms on the
+  worker (...)`. The frame is serialised on the game thread because the ring frame names textures,
+  meshes and targets the game thread changes from its next call on (`rd_dump.c` `dumpFrame` drains
+  the render and submit threads first); the zip and the file writes were already the worker's. On a
+  GPU-bound phone the drain is the render thread's own slot wait, so most of issue 179's 26-156 ms
+  hitches are expected to be that wait (unmeasured until the next log).
+- **The logging's own cost** (`port/platform/log_cost.c`, `window_lines.c`, the log thread's
+  counts in `port/platform/android/host_android.c`), once a 10 s block:
+
+      window: logging: 8.0 KB written to the log in the block (every thread's); the window thread's
+      10 s lines 1.25 ms (formatting and writing; 0 during a present that blocked, 0 during a late
+      game step); the log thread's file writes 42 in 14.5 ms, the longest 9.0 ms (from "rd: GPU
+      clock"), 2 of 8 ms or more (1 during a present that blocked, 1 during a late game step);
+      logcat 1.5 ms; the pipe at most 2 of 64 KB waiting (never full: no writer waited); captures 1:
+      30.8 ms on the game thread (the longest 30.8 ms), 550 ms on the worker (0 during a present
+      that blocked, 1 during a late game step); 1 presents blocked, 1 late game steps in the block
+
+  How the log is written: on Android stdout and stderr are a pipe; each `fprintf` is one `write`
+  into it (a copy into the kernel's pipe buffer) and the `ico-log` thread writes the file and
+  logcat, so a slow file write (the app's external folder is FUSE-backed) holds the log thread, not
+  the game, render or submit thread, until the pipe is full. "never full: no writer waited" is the
+  proof for the block; "full" names the one case where logging can hold a game thread. The file is
+  never synced; on a hard kill what is lost is what the pipe still held (normally nothing). On Linux
+  and macOS each line is one `write` on its own thread; on Windows the streams are buffered and
+  flushed once a vsync. A late game step is one 10 ms or more past its period; the overlaps say
+  whether a slow write or a capture coincided with a stall, not that it caused it.
+- **The piece before each top pass** (`window: GPU top passes:`, `rd_perf.c`
+  `rd_perf_pass_agg_text_ex`; `perf classes`, `rd_perf_rank.c`): each entry is followed by the
+  piece before it and how often that piece was a full-size render pass, e.g. `shadow count 576x448
+  1 draws 3.46 ms after list 0 SCENE 1728x1344 (full size in 349 of 349)` and, in the classes line,
+  `; after list 0 1728x1344 (a full-size pass in 349 of 349)`. On a tile-based GPU a stamp after a
+  full-size pass may carry that pass's tile work (issue 123's 3.46 ms for one 576x448 draw), so a
+  piece that always follows one and shrinks where it does not is carrying it.
+- **Before list 0 and list 0 as one on a tile-based GPU**: the stamp that ends the uploads lands
+  inside list 0's work there (the two trade at a constant sum: issue 179's picture with 128.38 ms
+  "before list 0" beside a 6.06 ms list 0), so `perf classes`, `perf ranked` and `GPU top passes`
+  give `before list 0 + list 0` (the split stays in the CSV), and the ranked line never names
+  `uploads` as a saving there. The histogram's top bin prints as `worst 256 ms or more`.
+- **The every-replay pass timing, bounded** (`port/platform/window_stall.c`): a present that
+  blocks over 50 ms still arms it (`window: every replay timed pass by pass from here on ...`), but
+  it now ends at the end of the block in which a stalled replay's passes were compared, or after 3
+  blocks with no present blocking: `window: pass timing: back to one replay every 250 ms (the
+  stalled replay compared; N times of the run); a present that blocks arms it again`. Issue 179's
+  and issue 123's logs had it armed for the rest of the run (19-46 stamps a picture). While both
+  kinds of picture are in a block, its cost is measured from the pictures themselves:
+  `window: pass timing's cost: GPU span median 67.4 ms with every pass stamped (37 pictures), 64.1
+  ms with the list stamps only (111 pictures): +3.3 ms (an estimate: different pictures of one
+  block)`.
+- **What the device offers** (`port/rhi/vk/vk_device.c` `vkr_offer_line`, once at the device's
+  start, read-only queries, nothing enabled):
+
+      rhi_vk: offered (read only, nothing enabled for it): calibrated time domains KHR: device,
+      CLOCK_MONOTONIC, CLOCK_MONOTONIC_RAW; global queue priority KHR offered, its query too (the
+      game's queue family 0's priorities: 4: low, medium, high, realtime); the game's one queue made
+      at priority 1.0 with no global priority asked (the driver's default, medium)
+
+  Whether the compositor could preempt the game's queue (issue 123's T2) and whether a stall could
+  be placed on the CPU's clock if the polled wait were used again. The calibrated domains are
+  listed whatever the submission wait; they are enabled only with the polled wait, as before.
+- **The pause picture without its wait** (`port/render/rd_shot_late.h`, `rd_present.c`): on
+  Vulkan on a tile-based GPU the pause menu's state picture is copied by the present's own list
+  into a readback buffer and read when that frame slot's fence has been waited for by the replay
+  that reuses it, as the skin check reads its readbacks. Issue 179's log had each pause's read-back
+  hold the render thread 77-79 ms (`rd: state picture: ... read back in 77.6 ms`), a one-shot
+  submission and a wait for the queue, after which the GPU idled 56.9 ms. Now: `rd: state picture:
+  1612x720 from the 1612x720 output (the box at 0,0), read at its slot's recycle 2 pictures later,
+  no wait (63.0 ms after its present)`. No new wait of any kind; a photo, a second request while one
+  is pending, and the other backends keep the old read.

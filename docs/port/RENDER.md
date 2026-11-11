@@ -1161,7 +1161,7 @@ submission (`RhiGpuProgress`: `lostReplay`/`lostFrame`, the tag of the submissio
 lists after the newest numbered submission when there is one, else the newest numbered picture (the
 failed submit was none of a picture's: a capture, a readback or a check). The frame before it is the previous replay's in the pass ring's table. To have
 the lost frame, `rd_begin_frame` copies a frame to memory before the ring reuses its slot when the
-backend still has a submission open at or after that frame and a slot wait has blocked 50 ms or
+backend still has a submission open at or after that frame and a slot wait has blocked 100 ms or
 more (`RhiGpuProgress.waitingNs`; `rd__loss_keep_recycle`, an ordinary dump held as bytes). In steady
 play no wait blocks that long, so nothing is copied and no thread is drained for it, even with
 frames in flight; the lost frame is held only when a stall preceded the loss (both reports
@@ -2162,8 +2162,8 @@ passes").
 Which replays are timed: every replay with `[dev] perf_passes = true` (`ICO_RD_PERF_PASSES=1`,
 [CONFIG.md](CONFIG.md)); otherwise the first replay at least 250 ms after the last timed one
 (`RD_PERF_PASS_EVERY_MS`), at most 40 in a 10 s block, for the window's summary, until the first
-present that blocks over 50 ms on Vulkan (issue 123): from then on every replay is timed for the
-rest of the run (`rd_perf_passes_arm`, no CSV; the window says so once, `window: every replay
+present that blocks over 50 ms on Vulkan (issue 123): from then on every replay is timed until a
+stalled one is compared or 3 blocks pass with none (`rd_perf_passes_arm`, no CSV; the window says so once, `window: every replay
 timed pass by pass from here on Vulkan (a present blocked 359 ms at replay 2941): the next stalled
 replay's passes are compared with the block's`), so the next stalled replay has its pieces. Only a
 record that carries the present split arms it (`rd_perf_passes_arm_backend`: the Vulkan backend,

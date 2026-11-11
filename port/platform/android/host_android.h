@@ -50,6 +50,31 @@ void ico_android_log_mirror_flush(void);
    no stdio, and the mirror's lock only if it comes within half a second
    (the crashing thread may be the reader). */
 void ico_android_log_mirror_try_flush(void);
+
+/* The log thread's own cost since the last take (port/platform/log_cost.h):
+   its file writes (one a chunk read from the pipe), their ms and the
+   longest with the first words of the chunk, those of
+   ICO_LOG_MIRROR_SLOW_MS or more one by one (the first
+   ICO_LOG_MIRROR_SLOW_KEEP; monotonic ms, ico_thread_now_ms's clock), its
+   logcat writes' ms, the bytes read, the most bytes found waiting in the
+   pipe and the pipe's size.  Kept under a spinlock of its own (never the
+   mirror's lock, which is held through the file write): a take never waits
+   for a write. */
+#define ICO_LOG_MIRROR_SLOW_MS 8.0
+#define ICO_LOG_MIRROR_SLOW_KEEP 32
+
+typedef struct IcoLogMirrorStats {
+    unsigned long long bytes;
+    unsigned writes, slow, slowN;
+    double writeMs, longestMs, logcatMs;
+    char longestFamily[48];
+    double slowT0[ICO_LOG_MIRROR_SLOW_KEEP], slowT1[ICO_LOG_MIRROR_SLOW_KEEP];
+    unsigned pipeMax, pipeCap; /* bytes; pipeCap 0 not known */
+} IcoLogMirrorStats;
+
+/* 0 and *out filled (then emptied, the pipe's size kept), -1 without the
+   mirror */
+int ico_android_log_mirror_take(IcoLogMirrorStats *out);
 /* The error box for the end of a crash or the watchdog (diag_host.h
    ico_diag_set_fatal_ui): ico_android_message_box without stdio. */
 void ico_android_fatal_box(const char *text);

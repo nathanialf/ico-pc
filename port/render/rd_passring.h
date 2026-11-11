@@ -85,6 +85,11 @@ const void *rd__passring_push(RdPassKind kind, uint32_t color, uint32_t cw, uint
 /* the newest entry, while it is a render pass, exact blend or VU
  * pre-pass (either): the pipeline asked for (rd_pipeline.c rd__get_pipeline) */
 void rd__passring_pipeline(uint32_t id, uint8_t vs, uint8_t fs, uint8_t dst);
+/* a function told of every pipeline asked for, held or not, before the
+ * entry's note (NULL: none; the renderer's list 0 counts, rd_perf_rare.h);
+ * set once before the render thread starts */
+typedef void (*RdPassringPipeHook)(uint32_t id, uint8_t vs, uint8_t fs, uint8_t dst);
+void rd__passring_pipeline_hook(RdPassringPipeHook fn);
 /* on: rd__passring_pipeline notes nothing until turned off again (a pass
  * that looks its pipeline up before its own entry is pushed: rd_replay.c
  * shadowReduce, rd_shadow_one.c rd__shadow_one_draw; without it the

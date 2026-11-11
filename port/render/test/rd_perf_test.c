@@ -1222,6 +1222,54 @@ static void checkPassTexts(void)
     const int n = rd_perf_pass_agg_text(&agg, 5, small, 20);
     CHECK(n == 19 && small[19] == '\0' && small[20] == 'x', "top passes cut: %d", n);
 
+    /* the window's line (rd_perf_pass_agg_text_ex): each entry after the
+       piece before it, a full-size one counted; on a tile-based GPU the
+       uploads joined to list 0's largest as one entry (issues 123, 179) */
+    {
+        const RdPerfPass tp[3] = {
+            {.kind = RD_PERF_PASS_UPLOAD,
+             .target = RD_PERF_TARGET_NONE,
+             .list = -1,
+             .post = -1,
+             .w = 0,
+             .h = 0,
+             .gpuUs = 9000.0f},
+            {.kind = RD_PERF_PASS_RENDER,
+             .target = RD_TARGET_SCENE,
+             .list = 0,
+             .post = -1,
+             .w = 848,
+             .h = 448,
+             .draws = 420,
+             .gpuUs = 3000.0f},
+            {.kind = RD_PERF_PASS_RENDER,
+             .target = RD_PERF_TARGET_SHADOW_COUNT,
+             .list = 3,
+             .post = -1,
+             .w = 424,
+             .h = 224,
+             .draws = 1,
+             .gpuUs = 3460.0f},
+        };
+        static RdPerfPassAgg ta;
+        rd_perf_pass_agg_reset(&ta);
+        rd_perf_pass_agg_add(&ta, tp, 3);
+        rd_perf_pass_agg_add(&ta, tp, 3);
+        rd_perf_pass_agg_text_ex(&ta, 5, false, true, buf, sizeof(buf));
+        CHECK(strstr(buf, "shadow count 424x224 1 draws 3.46 ms after list 0 SCENE 848x448 "
+                          "(full size in 2 of 2)") != NULL,
+              "top passes, the piece before: %s", buf);
+        CHECK(strstr(buf, "uploads") != NULL && strstr(buf, "before list 0 + list 0") == NULL,
+              "top passes, not a tiler: %s", buf);
+        rd_perf_pass_agg_text_ex(&ta, 5, true, false, buf, sizeof(buf));
+        CHECK(strncmp(buf, "before list 0 + list 0 SCENE 848x448 2.0 passes 420 draws 12.00 ms, ",
+                      67) == 0 &&
+                  strstr(buf, "uploads") == NULL,
+              "top passes on a tiler: %s", buf);
+        rd_perf_pass_agg_text(&ta, 5, buf, sizeof(buf));
+        CHECK(strstr(buf, " after ") == NULL, "top passes, the old line: %s", buf);
+    }
+
     /* issue 123: a stalled replay's pieces against the block's before it
        (rd_perf_pass_grow_text, rd_perf_pass_agg_mean): the block's two
        timed replays of three pieces, the stalled one's list 0 3.1x its
@@ -1381,7 +1429,8 @@ static void checkPassTexts(void)
     rd_perf_passes_arm_text(2941, 359.4, "Vulkan", buf, sizeof(buf));
     CHECK(strcmp(buf, "every replay timed pass by pass from here on Vulkan (a present blocked "
                       "359 ms at replay 2941): the next stalled replay's passes are compared "
-                      "with the block's") == 0,
+                      "with the block's (then one replay every 250 ms again, or after 3 blocks "
+                      "with no present blocking)") == 0,
           "arm line: %s", buf);
     /* the arm's backend gate: Vulkan (and MoltenVK) with a present split
        only; never OpenGL (each armed stamp reads the GL clock) or Direct3D */

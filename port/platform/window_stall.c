@@ -12,8 +12,10 @@
 #include "ico_thread.h"
 #include "present_hist.h"
 #include "present_stall_block.h"
+#include "rd_perf_rare.h"
 #include "rhi.h"
 #include "thermal_text.h"
+#include "window_lines.h"   /* window_log_cost_present */
 #include "window_present.h" /* window_refresh_ns */
 #ifdef __ANDROID__
 #include "gpu_sysfs_android.h"
@@ -92,6 +94,8 @@ static double display_hz_now(void)
     return ns > 0 ? 1e9 / (double)ns : 0.0;
 }
 
+static void arm_block_end(void); /* the bounded pass timing, below */
+
 /* the block's stall line and its join into the run's sums; clock the
    kernel driver's GPU clock in the block, NULL when not read */
 static void stall_block_close(const StallBlockClock *clock)
@@ -107,6 +111,8 @@ static void stall_block_close(const StallBlockClock *clock)
         fprintf(stderr, "window: %s\n", text);
     }
     s_stallT0 = now;
+    rd_perf_rare_block_end(); /* a stalled replay's rare pipelines: counted per block */
+    arm_block_end();
 }
 
 void window_stall_run_summary(void)
@@ -241,22 +247,71 @@ void window_stall_gpu_block(void)
 #endif
 }
 
+/* The every-replay pass timing armed by a present that blocked
+   (rd_perf_passes_arm): held until a stalled replay's passes were compared
+   (window_stall_passes) or ARM_QUIET_BLOCKS blocks passed with no present
+   blocking, then back to one replay every 250 ms; the next blocked present
+   arms it again (issues 179 and 123: armed for the rest of the run) */
+#define ARM_QUIET_BLOCKS 3u
+
+static struct {
+    int on;         /* armed by this file */
+    int compared;   /* a stalled replay's passes compared since */
+    unsigned quiet; /* blocks ended with no present blocking since */
+    unsigned arms, disarms;
+} s_arm;
+
+static void arm_block_end(void)
+{
+    if (!s_arm.on) {
+        return;
+    }
+    const char *why = NULL;
+    if (s_arm.compared) {
+        why = "the stalled replay compared";
+    } else if (++s_arm.quiet >= ARM_QUIET_BLOCKS) {
+        why = "no present blocked in 3 blocks";
+    }
+    if (why == NULL) {
+        return;
+    }
+    (void)rd_perf_passes_arm(false);
+    s_arm.on = s_arm.compared = 0;
+    s_arm.quiet = 0;
+    s_arm.disarms++;
+    if (s_arm.disarms <= 8u || s_arm.disarms % 100u == 0u) {
+        fprintf(stderr,
+                "window: pass timing: back to one replay every 250 ms (%s; %u times of the run); "
+                "a present that blocks arms it again\n",
+                why, s_arm.disarms);
+    }
+}
+
 void window_stall_blocked(const RdPerfRecord *r)
 {
     around_queue(r);
+    if (r->presentEndMs > 0.0) {
+        window_log_cost_present(r->presentEndMs - r->presentMs, r->presentEndMs);
+    }
     s_after.pending = 1;
     s_after.replay = r->replay;
     s_after.ms = r->presentMs;
     /* only where the record carries the present split (the Vulkan
        backend): on OpenGL an armed replay's stamps would each read the GL
        clock, which may hold the CPU (rd.h rd_perf_passes_arm_backend) */
+    s_arm.quiet = 0; /* a present blocked: the arm holds on */
     if (rd_perf_passes_arm_backend(rhi_backend(), r->presentSplit != 0) &&
         rd_perf_passes_arm(true)) {
-        char text[256];
+        char text[320];
 
-        rd_perf_passes_arm_text(r->replay, r->presentMs, rhi_backend_kind_name(rhi_backend()), text,
-                                sizeof(text));
-        fprintf(stderr, "window: %s\n", text);
+        s_arm.on = 1;
+        s_arm.compared = 0;
+        s_arm.arms++;
+        if (s_arm.arms <= 8u || s_arm.arms % 100u == 0u) {
+            rd_perf_passes_arm_text(r->replay, r->presentMs, rhi_backend_kind_name(rhi_backend()),
+                                    text, sizeof(text));
+            fprintf(stderr, "window: %s\n", text);
+        }
     }
 }
 
@@ -309,4 +364,5 @@ void window_stall_passes(const RdPerfRecord *r, const RdPerfPassAgg *agg, const 
     rd_perf_pass_grow_text(agg, p, n, r->replay, r->presentMs, r->gpuValid, r->gpuMs,
                            blockGpuN ? blockGpuMs : -1.0, 5, text, sizeof(text));
     ico_log_limited("window: stalled replay", "window: %s", text);
+    s_arm.compared = s_arm.on; /* the arm's purpose met: off at the block's end */
 }
