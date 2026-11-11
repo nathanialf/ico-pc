@@ -622,7 +622,7 @@ void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
     GlCmd *e;
     switch (s_gl.phase) {
     case PH_IDLE:
-        if (post && !tex && (tgt == pad || tgt == w2)) {
+        if (post && !d->texEnabled && (tgt == pad || tgt == w2)) {
             s_gl.glow = true;
             if (tgt == pad) {
                 if ((e = add(c, ord, E_PAD)) == NULL) {
@@ -643,17 +643,29 @@ void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
         }
         return;
     case PH_PAD:
-        if (post && !tex && tgt == w2) {
+        if (post && !d->texEnabled && tgt == w2) {
             goto fill;
         }
         fail(RD_GLOW_LIGHT_WHY_FORM, "WORK2_PAD's band not followed by WORK2's fill");
         return;
     case PH_FILL:
-        if (c->type == RDC_SCREEN && tgt == w2) {
+        if ((c->type == RDC_SCREEN || (post && !tex)) && tgt == w2) {
+            /* the sun's fans (dispSun: triangle fans; any draw of no target's
+             * texture here is taken as one, the light it may add judged by
+             * its box) */
             if ((e = add(c, ord, E_FAN)) == NULL) {
                 return;
             }
-            if (!screenBox(f, c, e->box) || !boxMisses(rd__target_rec(w2), st, e->box)) {
+            bool boxed = false;
+            if (c->type == RDC_SCREEN) {
+                boxed = screenBox(f, c, e->box);
+            } else if (postRec(f, c, &p)) {
+                for (int k = 0; k < 4; k++) {
+                    e->box[k] = (int32_t)p.rect[k];
+                }
+                boxed = true;
+            }
+            if (!boxed || !boxMisses(rd__target_rec(w2), st, e->box)) {
                 s_gl.fansOn = true;
             }
             return;
@@ -672,8 +684,10 @@ void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
         fail(RD_GLOW_LIGHT_WHY_FORM, "a command between WORK2's fill and the mask");
         return;
     case PH_MASK:
-        if (!post && tgt == w2 &&
-            (c->type == RDC_SCREEN || (c->type >= RDC_MESH && c->type <= RDC_PARTICLES))) {
+        if (tgt == w2 && ((post && !tex) || c->type == RDC_SCREEN ||
+                          (c->type >= RDC_MESH && c->type <= RDC_PARTICLES))) {
+            /* the lamps' meshes (issue 163), or any draw of no target's
+             * texture into WORK2 after the mask */
             if (d->test.date != RD_DATE_OFF || blendReadsAd(d)) {
                 fail(RD_GLOW_LIGHT_WHY_FORM, "a lamp reads WORK2's alpha (DATE or Ad)");
                 return;
@@ -809,7 +823,7 @@ void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBloc
         return;
     case PH_AFTER:
     case PH_DONE:
-        if (post && !tex && (tgt == pad || tgt == w2)) {
+        if (post && !d->texEnabled && (tgt == pad || tgt == w2)) {
             fail(RD_GLOW_LIGHT_WHY_FORM, "a second glow in the frame");
             return;
         }

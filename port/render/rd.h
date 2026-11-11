@@ -3251,6 +3251,11 @@ enum {
 const char *rd_glow_light_text(uint32_t plan);
 const char *rd_glow_light_why_text(uint32_t why);
 void rd_glow_light_line(void);
+/* the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off (the tests' A/B, no config
+ * key); rd__glow_light_force sets it (-1 the environment's) and forgets the
+ * plan's off and the plan frame before */
+bool rd__glow_light_on(void);
+void rd__glow_light_force(int on);
 
 /* The CPU time of the replay finished last (its RdPerfRecord.totalMs,
  * popped or not; a picture handed over is still running when the step

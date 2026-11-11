@@ -515,9 +515,7 @@ void rd__glow_fold_drawn(void);
 void rd__glow_fold_undo(Replay *r, const char *why);
 void rd__glow_fold_end(void);
 /* The glow drawn only where it can add light (rd_glow_light.c).
- * rd__glow_light_on      the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off
- *                        (the tests' A/B); rd__glow_light_force sets it (-1
- *                        the environment's) and forgets the plan's off
+ * rd__glow_light_on, rd__glow_light_force  (rd.h) the switch
  * rd__glow_light_scan_begin, _scan_cmd, _scan_end  rd_store_plan.c
  *                        rd__store_plan_scan's walk: every command (state:
  *                        a state command), then the plan (counted, logged)
@@ -538,8 +536,6 @@ void rd__glow_fold_end(void);
  *                        holds no lazy clear
  * rd__blur_post_planned  rd_blur_border.c: sprite c and its glow edge strip
  *                        drawn (no fold, no border) */
-bool rd__glow_light_on(void);
-void rd__glow_light_force(int on);
 bool rd__glow_light_scan_begin(const RdFrame *f);
 void rd__glow_light_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
                              uint32_t ord);
