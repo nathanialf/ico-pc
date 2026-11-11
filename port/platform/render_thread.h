@@ -75,6 +75,12 @@ typedef struct IcoRtPlan {
     bool submitOn;
 } IcoRtPlan;
 
+/* The threads that make a picture, for Android's performance hint session
+   (window_perf_hint.h): the render thread's and the submit thread's ids (0:
+   not running; -1: running, its id not known yet: a thread stores it at
+   its start, the submit thread at its first job).  The game thread's */
+void ico_render_thread_tids(long *render, long *submit);
+
 /* The game thread, once a step: the core it ran on, for the 10 s line's
    cores (cpu_place.h) */
 void ico_render_thread_note_game_core(void);

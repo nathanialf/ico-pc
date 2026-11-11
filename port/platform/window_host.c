@@ -70,6 +70,7 @@
 #include "window_present_fallback.h"
 #include "cpu_place.h"
 #include "window_perf_rank.h"
+#include "window_perf_hint.h"
 #include "window_scene.h"
 #include "window_stall.h"
 #include "window_disc.h"
@@ -1107,6 +1108,7 @@ static void lc_log_flush(void *u)
 static void lc_render_park(void *u, int parked)
 {
     (void)u;
+    window_perf_hint_active(!parked); /* the hint session closed in the background */
     if (parked) {
         ico_render_thread_park();
     } else {
@@ -2615,6 +2617,7 @@ open_window:
     /* the submits and presents on the render thread from here
        (render_thread.h): the start-up set and its screens ran on this one */
     (void)ico_render_thread_start();
+    window_perf_hint_open(); /* Android's performance hints (window_perf_hint.h) */
     s_deadline = SDL_GetTicksNS();
     s_open = 1;
     /* the port's runtime text and popups (port/ui) */
@@ -4780,7 +4783,9 @@ static void perf_drain(void)
     window_stall_poll();       /* the kernel GPU driver around the presents that blocked */
     window_dump_auto_report(); /* the dump worker's finished zips */
     slow_scene_poll();
+    window_perf_hint_tick(); /* the hints' target and threads */
     while (rd_perf_pop(&r)) {
+        window_perf_hint_picture(&r);
         auto_res_sample(&r);
         if (r.presented && r.gpuValid) {
             /* the present allowance's GPU gate and budget: a timed
@@ -5080,6 +5085,7 @@ static void perf_log(void)
             fprintf(stderr, "window: %s\n", hist);
         }
         window_stall_gpu_block(); /* Android: the kernel GPU driver's block */
+        window_perf_hint_block();
         window_display_rate_line(s_window);
     }
     if (s_perf.gpuN) {
@@ -5841,6 +5847,7 @@ void ico_window_close(void)
     }
     s_open = 0;
     ico_render_thread_stop();   /* every picture handed over finished, the thread ended */
+    window_perf_hint_close();   /* the hint thread joined, its session closed */
     window_dump_auto_stop();    /* the dump worker joined, its last zip reported */
     window_stall_run_summary(); /* issue 123: stalls a minute by display rate */
     window_perf_rank_run_end(); /* the run's performance profile by scene */

@@ -769,6 +769,21 @@ ThermalState ico_host_thermal(const char **why)
     return t;
 }
 
+/* IcoActivity.gameMode ()I: GameManager.getGameMode, for the performance
+   hints' line only (window_perf_hint.c); the same call rules as the thermal
+   asks */
+int ico_android_game_mode(void)
+{
+    static jmethodID s_mid;
+    static int s_failed;
+    int mode = -2;
+
+    if (!call_thermal("gameMode", "()I", &s_mid, &s_failed, 1, NULL, &mode)) {
+        return -2;
+    }
+    return mode;
+}
+
 /* IcoActivity.nativeThermalStatus (a static native method): the system's
    thermal status changed (PowerManager.OnThermalStatusChangedListener,
    Android 10 and later), on the activity's thread. Logged at once. */

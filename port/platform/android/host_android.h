@@ -114,6 +114,13 @@ int ico_android_task_icon(const char *pngPath);
    lookup, then nothing. */
 ThermalState ico_host_thermal(const char **why);
 
+/* The system's game mode (IcoActivity.gameMode: GameManager.getGameMode,
+   Android 12 and later), for the performance hints' line only: 0
+   unsupported, 1 standard, 2 performance, 3 battery, 4 custom; -1 before
+   Android 12; -2 the call could not be made.  On SDL's main thread, as
+   ico_host_vibrate. */
+int ico_android_game_mode(void);
+
 /* The screen as the activity last reported it (IcoActivity.sendScreen,
    from the system's window-layout callbacks and every configuration
    change): densityDpi is the screen's density in dots per inch; fold is
