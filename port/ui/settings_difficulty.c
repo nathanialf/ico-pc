@@ -443,7 +443,7 @@ int ui__diff_dimmed(int opt)
     return opt == UI_OPT_DIFF_KNOCK_SCOPE && draft()->row[ICO_DIFF_KNOCK_LIMIT] <= 0;
 }
 
-/* --- the pause menu's journey line and the toasts ------------------------------- */
+/* --- the pause menu's journey line and the journey events ------------------------------- */
 
 int ui__diff_line_text(char *buf, unsigned size)
 {
@@ -467,28 +467,34 @@ int ui__diff_line_text(char *buf, unsigned size)
     return 1;
 }
 
-static void toast(const char *text)
-{
-    static int shown;
-    if (shown++ < 8 || shown % 100 == 0) {
-        fprintf(stderr, "settings: toast \"%s\" (%d)\n", text, shown);
-    }
-    (void)ui_popup_push(text, "");
-}
-
-/* port/game/difficulty.h's listener: the journey's events as toasts */
+/* port/game/difficulty.h's listener. The only pop-up that appears by itself
+   during play is an achievement: a counted knock-down and a Permadeath
+   journey's end (the game over) raise none, only a log line; the pause
+   menu's journey line carries the count. The one pop-up here answers the
+   player's own menu action: choosing a save of an ended journey on the
+   Continue list (or the load's backstop) says "This journey has ended." */
 static void onDifficulty(IcoDiffEvent ev, int a, int b)
 {
-    char buf[96];
+    static int logged;
+    const char *what = NULL;
 
-    if (ev == ICO_DIFF_EV_REFUSED || ev == ICO_DIFF_EV_ENDED) {
-        /* a save of an ended journey refused, or a Permadeath journey ending
-           now (its game over, or the moment one became certain) */
-        toast(ui_str(UI_STR_DIFF_TOAST_ENDED));
+    if (ev == ICO_DIFF_EV_REFUSED) {
+        what = "a save of an ended journey was refused, pop-up shown";
+    } else if (ev == ICO_DIFF_EV_ENDED) {
+        what = "a Permadeath journey ended, no pop-up";
     } else if (ev == ICO_DIFF_EV_KNOCK && b > 0 && a < b) {
         /* not the one at the limit: the game over follows */
-        snprintf(buf, sizeof(buf), ui_str(UI_STR_DIFF_TOAST_KNOCK), a, b);
-        toast(buf);
+        what = "knock-down counted, no pop-up";
+    }
+    if (what == NULL) {
+        return;
+    }
+    logged++;
+    if (logged <= 8 || logged % 100 == 0) {
+        fprintf(stderr, "settings: journey event: %s (%d of %d) (%d)\n", what, a, b, logged);
+    }
+    if (ev == ICO_DIFF_EV_REFUSED) {
+        (void)ui_popup_push(ui_str(UI_STR_DIFF_TOAST_ENDED), "");
     }
 }
 
