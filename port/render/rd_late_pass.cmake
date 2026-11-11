@@ -95,9 +95,11 @@ endif()
 # fills exactly, the crack fill's own passes fewer by them too, the colour bytes
 # loaded and stored fewer by SCENE's once a held fill each way, the copies the
 # same; the off run holds nothing; the dumps the list marks hold one fill;
-# rd_late_pass_gl: the phone's setting on OpenGL (llvmpipe) with the hold forced
-# (the aura's paste reads a snapshot there: the fill drawn early, after the
-# border repeat, in its own pass): the same bytes and passes.  No device: SKIP.
+# rd_late_pass_gl: the phone's setting on OpenGL (llvmpipe) with the late pass on
+# (the aura's paste reads a snapshot there: no fill held in a DARK room, one
+# held into the glow's paste pass in a LAMPS room, drawn past the border repeat
+# with a draw a repeated block; no list 11 join): the same bytes, the draws more
+# by the blocks' the stats name.  No device: SKIP.
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/late_pass_ab")
     add_test(NAME rd_late_pass_ab

@@ -1,0 +1,22 @@
+# Dump list for rd_crack_work_ab and rd_crack_work_gl (port/render/test/rd_crack_work_ab.cmake:
+# the crack fill's swap and early leave, ICO_RD_CRACK_SWAP=0 ICO_RD_CRACK_TAP2=0
+# against both =1, byte for byte).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  A listed dump that is absent FAILS the test
+# (a '*' glob that matches nothing too).  Relative paths are relative to this
+# file.  Optional fields swapN and tapN: at the phone's setting (Vulkan) one
+# replay's snapshots taken by the swap and draws with the early leave (a fill
+# the late pass holds keeps its copy: swap0); without them, no expectation but
+# the pair's arithmetic.
+#
+# the PowerVR phone's v0.11.5 rc2 frames: the bridge (no glow: the fill the
+# first draw of the aura's paste pass) and the cage under DARK (the fill held)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc2/x/frame-20261111-113349-v4761/frame-20261111-113349-v4761.rddump swap1 tap1
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc2/x/frame-20261111-113455-v7583/frame-20261111-113455-v7583.rddump swap0 tap1
+# its v0.11.5 rc1 F12 frame (the cage) and its v0.11.4 F12 frame (stage 4)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc1/frame-20261111-075333-v4287.zip swap0 tap1
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump swap0 tap1
+# issue 163's lamp rooms
+/primary/dev/ico-dumps/163/*.rddump
+# the corpus (boot, lightning, plain, puddle, queen)
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/*/rd-*.rddump

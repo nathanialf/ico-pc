@@ -1361,6 +1361,58 @@ in G), which is copied into a readback buffer and summed once the GPU is past th
   A fills after the MSAA resolve; K fills in the aura's paste pass; G fills after the glow's
   alpha)` (P counts the fill's own passes: 0 for a fill in the paste's pass).
 
+### The crack fill's snapshot by the swap
+
+`rd_crack_fill.c` (FILLSWAP): where the fill takes its snapshot it does not copy SCENE's colour
+into the snapshot texture: `fillTakeSwap` calls `rd__replay_blur_swap` (`rd_replay.c`
+`blurSwapTarget`, the staticBlur sprites' swap), so the old colour texture is the snapshot (the
+picture before the fill, all of it, as the copy was) and the snapshot texture SCENE's colour. The
+fill's pass (its own, or the aura's paste pass when the fill is that pass's first draw) then begins
+SCENE's colour not loaded (`RHI_LOAD_DONT_CARE`), and the fill writes every texel: `crack_fill_ps`
+and `crack_fill1_ps` with `DrawCB.g_mode.x` bit 0 (COPY) give a texel that is no crack its own
+snapshot texel instead of discarding it, and with bit 1 (KEEP_A, a fill after the glow's alpha,
+which writes RGB alone) every texel's alpha its own snapshot texel's; the pipeline is the fill's
+with the colour mask whole (`rd__crack_fill_key(RD_CRACK_KEY_FILL)` or `FILL1`). The detector, the
+reach, the snapshot's moment, the colour each crack takes and SCENE's depth are unchanged; a texel
+that is no crack is its own value read with `Load` and stored into the RGBA8_UNORM attachment. That
+round trip is exact only where the device keeps a UNORM8 value through the float and the store, so
+the swap is on only where the start-up self-test (`rd__crack_swap_selftest`, run with the other
+self-tests from `rd_fog_selftest`, and by `rd_replay_tool` at its start) passes: a 256 x 2 source of
+every level in every channel (each row a permutation of 0-255 a channel), made with SCENE's usage,
+drawn through both fill shaders' no-crack path (the dummy texture as the depth: no texel a crack)
+with COPY, one with KEEP_A, into targets of the same usage, read back and compared texel for texel;
+any difference or a part that cannot run leaves the copy (`rd: crack fill: swap: off (self-test
+failed at texel N: ... for ...)` or `(self-test not run: <why>)`; passed: `rd: crack fill: swap: on
+(self-test: 256 levels a channel through both fill shaders read back unchanged) ...`).
+
+The snapshot texture has SCENE's usage (`snapEnsure` makes it as `rd__target_create_gpu` makes
+SCENE's colour: the destination-read and input-attachment usage too); `rd_reshow.c` compares SCENE's
+two textures as a pair (the smaller id in `Snap.tex[3]`, the larger in `sceneOther`), so a swap is
+not a recreation; the fill's pass stays whole (it has no pass area; `pasteWhyNot` and `glowWhyNot`
+refuse one). Refused, the snapshot copied, and counted by reason: a draw the late pass holds past
+the snapshot (SCENE's colour would be the stale texture while the border repeat and the mask read
+it), the upscaler's split (the display layer reads SCENE's snapshot), the present from SCENE, an
+MSAA epoch wanted, the exact blend, the whole-mask pipeline missing, `ICO_RD_CRACK_SWAP=0` (the
+tests only, [TESTING.md](TESTING.md); no config key). What it saves where it swaps: the colour copy
+(about 9.7 MB read and as many written at 2364 x 1080) and the fill pass's colour load.
+
+The general shader's early leave (CRACKTAP): at a reach of at most 2 on both axes `crack_fill_ps`
+is drawn with `g_mode.x` bit 2 (EARLY): a texel with neither immediate neighbour in front of it
+(`crack_front`) on an axis whose reach is at least 1 is no crack at once, without the run's other
+taps. The verdict is the same: a run of at most 2 texels with an end at each side has one end at
+distance 1 (l + r - 1 <= 2 with l, r >= 1), so a texel with no neighbour in front on an axis has no
+run on it. The reach-1 shader (`crack_fill1_ps`) reads its four neighbours first already and is not
+changed. `ICO_RD_CRACK_TAP2=0` turns it off (the tests only).
+
+Counters: `RdPerfRecord.crackSwaps`, `crackSwapTexels` (SCENE's texels not copied and as many not
+loaded), `crackSwapCopied`, `crackSwapWhy`, `crackTap2`. The lines: once a run `rd: crack fill:
+SCENE's colour swapped with its snapshot texture where the fill takes its snapshot ...`; the 10 s
+crack fill line's `; N snapshots by the swap, M copied (K <why>)`; `--stats`: `<dump>: stats: crack
+fill swap on|off (self-test passed|failed|not run): N snapshots by the swap (X MB of colour not
+copied and as many not loaded), M copied (last: <why>); early leave on|off: T draws`. `rd_crack_test`
+(every `rd_crack_*` mode where the filler draws: `checkWork`), `rd_crack_work_ab` and
+`rd_crack_work_gl` (dumps) check it ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+
 ### The late passes on SCENE
 
 `port/render/rd_late_pass.c` (`rd_late_pass.h`): fewer full-size passes on SCENE after list 7, the

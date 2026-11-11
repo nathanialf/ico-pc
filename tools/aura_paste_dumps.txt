@@ -8,6 +8,9 @@
 #
 # the PowerVR phone's v0.11.5 rc1 F12 frame (the cage; "constant reads 1.0")
 /primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc1/frame-20261111-075333-v4287.zip 1
+# its v0.11.5 rc2 frames: the bridge and the cage under DARK
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc2/x/frame-20261111-113349-v4761/frame-20261111-113349-v4761.rddump
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc2/x/frame-20261111-113455-v7583/frame-20261111-113455-v7583.rddump
 # its v0.11.4 F12 frame (stage 4)
 /primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump
 # issue 164's paused frame
