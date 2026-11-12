@@ -133,6 +133,17 @@ static PaceRtHold rt_further_hold(Uint64 now, Uint64 refresh, Uint64 period, boo
     if (why == PACE_RT_GO || why == PACE_RT_MISS) {
         ico_render_thread_note_ask(&q, &t, (int)why);
     }
+    if (s_pres.stepEst.backoff != 0 && s_pres.stepEst.judgedFrame == 0) {
+        /* backed off: whether the frame's first further picture, the one
+           the back-off holds, would have fitted under the normal plan: the
+           back-off's evidence (pace_policy.h PaceStepEst,
+           pace_step_normal_fits) */
+        pace_step_est_judge(
+            &s_pres.stepEst,
+            pace_step_normal_fits(&s_pres.stepEst, &q, &s_pres.rtPipe,
+                                  pace_step_closes(s_pres.sinceClose, 1, s_pres.frameSteps),
+                                  pace_step_closes(s_pres.sinceClose, 2, s_pres.frameSteps)));
+    }
     return why;
 }
 
@@ -177,14 +188,98 @@ static void rt_pipe_posted(Uint64 now, Uint64 refresh, Uint64 period)
                       pace_rt_pipe_reads_end(&s_pres.rtPipe, now, &q, pace_rt_pipe_behind(&q)), &q);
 }
 
+/* A miss's GPU time for the lines: "the GPU's longest picture around it
+   X ms against a typical Y ms" (no record: not known) */
+static void step_pic_text(char *out, size_t n, const PaceStepMiss *m)
+{
+    if (m->picNs == 0) {
+        snprintf(out, n, "the GPU's times around it not known");
+    } else if (m->typNs == 0) {
+        snprintf(out, n, "the GPU's longest picture around it %.1f ms, no typical yet",
+                 (double)m->picNs / 1e6);
+    } else {
+        snprintf(out, n, "the GPU's longest picture around it %.1f ms against a typical %.1f ms",
+                 (double)m->picNs / 1e6, (double)m->typNs / 1e6);
+    }
+}
+
+/* What the step rule's note judged, began and ended (pace_policy.h
+   PaceStepEvent): an outlier miss, a counted one, a back-off's start with
+   its three misses and its end, each its own line, the first 8 then every
+   100th */
+static void step_events(const PaceStepEst *e, uint64_t tickNs)
+{
+    const PaceStepEvent *ev = &e->ev;
+    char a[112], b[112], c[112];
+
+    if (ev->judged == PACE_STEP_OUTLIER) {
+        ico_log_limited("window: step rule outlier miss",
+                        "window: step rule: an outlier miss, not counted toward the back-off: the "
+                        "miss %u steps ago (late by %.1f ms) came with a picture the GPU took %.1f "
+                        "ms against a typical %.1f ms (over %u/%u of the median of the %u before "
+                        "it, among the pictures from %u steps before it to %u after); %u outlier "
+                        "misses so far, %u counted",
+                        e->steps - ev->miss.at, (double)ev->miss.lateNs / 1e6,
+                        (double)ev->miss.picNs / 1e6, (double)ev->miss.typNs / 1e6,
+                        PACE_STEP_OUTLIER_NUM, PACE_STEP_OUTLIER_DEN, (unsigned)PACE_HIST_LEN,
+                        PACE_STEP_JUDGE_BEFORE, PACE_STEP_JUDGE_AFTER, e->outliers, e->counted);
+    } else if (ev->judged == PACE_STEP_COUNTED && ev->began) {
+        step_pic_text(a, sizeof(a), &e->cnt[0]);
+        step_pic_text(b, sizeof(b), &e->cnt[1]);
+        step_pic_text(c, sizeof(c), &e->cnt[2]);
+        ico_log_limited("window: step rule back-off",
+                        "window: step rule: back-off of at most %u steps after the third miss the "
+                        "pictures caused within %u steps, each counted (no outlier picture around "
+                        "it): %u steps ago late by %.1f ms (%s), %u steps ago late by %.1f ms "
+                        "(%s), %u steps ago late by %.1f ms (%s): the pictures between frames "
+                        "planned at the whole period until a frame's picture between frames "
+                        "would have fitted the normal plan %u frames in a row; %u such back-offs "
+                        "so far, %u misses of the pictures' (%u under %.0f ms, %u counted, %u "
+                        "outliers), %u the game's own",
+                        PACE_STEP_BACKOFF_STEPS, PACE_STEP_MISS_WINDOW, e->steps - e->cnt[0].at,
+                        (double)e->cnt[0].lateNs / 1e6, a, e->steps - e->cnt[1].at,
+                        (double)e->cnt[1].lateNs / 1e6, b, e->steps - e->cnt[2].at,
+                        (double)e->cnt[2].lateNs / 1e6, c, pace_step_fit_frames(tickNs),
+                        e->backoffs, e->pictureMisses, e->smallMisses,
+                        (double)PACE_STEP_MISS_FLOOR_NS / 1e6, e->counted, e->outliers,
+                        e->gameMisses);
+    } else if (ev->judged == PACE_STEP_COUNTED) {
+        step_pic_text(a, sizeof(a), &ev->miss);
+        ico_log_limited("window: step rule counted miss",
+                        "window: step rule: the miss %u steps ago (late by %.1f ms) counted toward "
+                        "the back-off (%s: no outlier); %u counted in the last %u steps (the "
+                        "third begins it)",
+                        e->steps - ev->miss.at, (double)ev->miss.lateNs / 1e6, a,
+                        pace_step_est_recent(e), PACE_STEP_MISS_WINDOW);
+    }
+    if (ev->ended == PACE_STEP_END_FIT) {
+        ico_log_limited("window: step rule back-off end",
+                        "window: step rule: back-off ended after %u steps: the pictures between "
+                        "frames fitted in %u consecutive frames (half a second of %.1f ms "
+                        "frames); %u ended so, %u at the limit",
+                        ev->endSteps, ev->endFrames, (double)tickNs / 1e6, e->fitEnds,
+                        e->limitEnds);
+    } else if (ev->ended == PACE_STEP_END_LIMIT) {
+        ico_log_limited("window: step rule back-off end",
+                        "window: step rule: back-off ended at its limit of %u steps (the pictures "
+                        "between frames fitted in the last %u consecutive frames of the %u "
+                        "needed); %u ended so, %u by the pictures fitting",
+                        PACE_STEP_BACKOFF_STEPS, ev->endFrames, pace_step_fit_frames(tickNs),
+                        e->limitEnds, e->fitEnds);
+    }
+}
+
 /* The step that ran before this pace (the timer path, s_deadline its
    deadline now): its own time (the step less its waits for a picture's
    reads) into the step's estimate, a miss of its period into the plan
    (pace_policy.h PaceStepEst: nothing under the floor, the margin widened
-   over it, the whole period after the third in the window), both into the
-   10 s line; a miss with the
-   further presents planned by the render thread is named, the first 8 then
-   every 100th */
+   over it, judged two steps on by the GPU's times around it: an outlier
+   miss, or counted, the whole period after the third counted in the
+   window until the pictures between frames fit again), a closed frame's
+   judgement into the back-off's evidence (pace_step_est_frame), all into
+   the 10 s line; with the further presents planned by the render thread
+   each miss and what was judged, begun and ended is named, the first 8
+   then every 100th */
 static void step_note(Uint64 period, bool closed)
 {
     const Uint64 now = SDL_GetTicksNS();
@@ -231,38 +326,40 @@ static void step_note(Uint64 period, bool closed)
     pace_step_typ_note(typ, own, period, load);
     const PaceStepAct act = pace_step_est_note(&s_pres.stepEst, own, missed, late, byPictures);
     const PaceStepEst *e = &s_pres.stepEst;
+    /* the game's frame length (as the pace's tick): the back-off's evidence
+       is half a second of frames */
+    uint64_t tick = s_pres.tickPrev ? s_pres.tickAt - s_pres.tickPrev : 2 * period;
 
+    tick = tick < period ? period : (tick > 4 * period ? 4 * period : tick);
+    if (closed) {
+        (void)pace_step_est_frame(&s_pres.stepEst, tick);
+    }
     ico_render_thread_note_step(
         waited, missed, late, backedOff, pace_step_plan_ns(&s_pres.stepEst, true, period),
         pace_step_plan_ns(&s_pres.stepEst, false, period), e->widenNs, e->typ[1].meanNs,
-        pace_step_typ_dev_ns(&e->typ[1]), typ->skipped != skipped0, (int)act);
-    if (!missed || !rd_interpolation_active() || ico_render_thread_mode() != FM_MODE_ON) {
+        pace_step_typ_dev_ns(&e->typ[1]), typ->skipped != skipped0, (int)act, &e->ev);
+    if (!rd_interpolation_active() || ico_render_thread_mode() != FM_MODE_ON) {
+        return;
+    }
+    step_events(e, tick);
+    if (!missed) {
         return;
     }
     /* what the miss did to the plan (pace_policy.h PaceStepEst) */
-    if (act == PACE_STEP_STRICT) {
-        ico_log_limited("window: step rule back-off",
-                        "window: step rule: back-off %u steps after the third miss the pictures "
-                        "caused within %u steps (late by %.1f ms, %.1f ms of it waiting for a "
-                        "picture, %.1f ms the presents ran past the step's start): the pictures "
-                        "between frames planned at the whole period; %u such fall-backs so far, "
-                        "%u misses of the pictures' (%u under %.0f ms), %u the game's own",
-                        e->backoff, PACE_STEP_MISS_WINDOW, (double)late / 1e6, (double)waited / 1e6,
-                        (double)presentsLate / 1e6, e->backoffs, e->pictureMisses, e->smallMisses,
-                        (double)PACE_STEP_MISS_FLOOR_NS / 1e6, e->gameMisses);
-    } else if (act == PACE_STEP_WIDEN) {
+    if (act == PACE_STEP_WIDEN) {
         ico_log_limited("window: step rule margin",
                         "window: step rule: the margin widened by %.1f ms to %.1f ms after a miss "
                         "the pictures caused (late by %.1f ms, %.1f ms of it waiting for a "
-                        "picture, %.1f ms the presents ran past the step's start; %u of the "
-                        "pictures' over %.0f ms in the last %u steps): the next pictures are "
-                        "held that much earlier, the widening falling an eighth a step; %u "
-                        "misses of the pictures' so far (%u under %.0f ms), %u the game's own",
+                        "picture, %.1f ms the presents ran past the step's start; %u counted "
+                        "toward the back-off in the last %u steps): the next pictures are held "
+                        "that much earlier, the widening falling an eighth a step; whether it "
+                        "counts is judged in %u steps, by the GPU's times of the pictures around "
+                        "it; %u misses of the pictures' so far (%u under %.0f ms), %u the game's "
+                        "own",
                         (double)late / 1e6, (double)e->widenNs / 1e6, (double)late / 1e6,
-                        (double)waited / 1e6, (double)presentsLate / 1e6, e->recent,
-                        (double)PACE_STEP_MISS_FLOOR_NS / 1e6, PACE_STEP_MISS_WINDOW,
-                        e->pictureMisses, e->smallMisses, (double)PACE_STEP_MISS_FLOOR_NS / 1e6,
-                        e->gameMisses);
+                        (double)waited / 1e6, (double)presentsLate / 1e6, pace_step_est_recent(e),
+                        PACE_STEP_MISS_WINDOW, PACE_STEP_JUDGE_AFTER + 1u, e->pictureMisses,
+                        e->smallMisses, (double)PACE_STEP_MISS_FLOOR_NS / 1e6, e->gameMisses);
     } else if (act == PACE_STEP_SMALL) {
         ico_log_limited("window: step rule small miss",
                         "window: step rule: a miss the pictures caused under %.0f ms (late by %.1f "

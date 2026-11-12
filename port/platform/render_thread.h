@@ -111,10 +111,16 @@ void ico_render_thread_note_ask(const struct PaceRtAsk *q, const struct PaceRtTr
    typical time (the game's loading work, an isolated long step:
    pace_step_typ_note); act: what a miss of the pictures' did to the plan
    (pace_policy.h PaceStepAct: PACE_STEP_NONE for none, a miss then the
-   game's own) */
+   game's own); ev: what the step rule judged, began and ended at this
+   step (pace_policy.h PaceStepEvent: a miss two steps old counted toward
+   the back-off or an outlier one, with its picture's GPU time and the
+   typical; a back-off begun, ended by the pictures fitting or at its
+   limit) */
+struct PaceStepEvent;
 void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t missNs, bool backedOff,
                                  uint64_t planCloseNs, uint64_t planBetweenNs, uint64_t widenNs,
-                                 uint64_t closeMeanNs, uint64_t closeDevNs, bool leftOut, int act);
+                                 uint64_t closeMeanNs, uint64_t closeDevNs, bool leftOut, int act,
+                                 const struct PaceStepEvent *ev);
 
 /* The 10 s line (window_host.c window_pace_log): the game thread's mean
    step and pump per call in ms, the step's mean CPU time (stepCpuMs,

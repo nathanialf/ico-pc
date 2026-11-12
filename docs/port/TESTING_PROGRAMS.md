@@ -1012,10 +1012,11 @@ that stops again writing its own line without the retry mark); a stop at the fre
   (`PaceRtTyp`) against their recent longest at a phone's load (each picture's reads from a table
   of 61 with a mean of 10 ms and a deviation of 2.5 ms, its interpolation and its submit with
   them, the closing step 7.5-14.4 ms in turn, 9 on average, the step between about 1 ms), over
-  100 s: 4098 / 3947 / 3814 presents at 24 / 25 / 26 ms GPU pictures where the longest gives 3482
-  / 3435 / 3429; 14 / 22 / 2 steps missing their period, all the pictures', 7 / 8 / 0 over the
-  floor and none later than 3.5 ms; one fall-back of 120 steps at 24 and 25 ms; the game's clock
-  at most 8.3 ms behind; 343 (322) with the driver's back-pressure (320 / 317 while the plan took
+  100 s: 4098 / 3949 / 3814 presents at 24 / 25 / 26 ms GPU pictures where the longest gives 3482
+  / 3435 / 3429; 14 / 21 / 2 steps missing their period, all the pictures', 7 / 7 / 0 over the
+  floor and none later than 3.4 ms; one fall-back of 120 steps at 24 and 25 ms, begun two steps
+  after its third miss (the miss judged first) and ended at its limit; the game's clock at most
+  7.0 ms behind; 343 (322) with the driver's back-pressure (320 / 317 while the plan took
   the picture before's fence) and 397 (341) with the step between calling the renderer, no miss
   (numbers from `build-host/tmp/v098/evidence/pace4/c_cells.py`, `rc11_cells.py`, the
   back-pressure cells re-run in `build-host/tmp/v098/evidence/pace5/c_cells.py`); `testRc12`: a
@@ -1038,9 +1039,23 @@ that stops again writing its own line without the retry mark); a stop at the fre
   reads, a 3.4 ms closing step) 460 presents in 10 s with the rule as that phone's build ran it
   (the job's 0 read as the thread off: the picture before's fence in 747 of 749 asks; the phone
   45.6 fps) and 671 now, 633 with the GPU's time alternating 21.0 / 8.6 ms, 6725 over 100 s with no
-  miss; the Enhanced preset at 848x448 451 / 653 (the phone 45.5) and at 1696x896 302 / 545;
+  miss; the Enhanced preset at 848x448 451 / 657 (the phone 45.5; its one back-off ended after 72
+  steps by the pictures fitting) and at 1696x896 302 / 545;
   `testRc12`'s native blocks 302 / 431, 302 / 458, 301 / 339 (the GPU makes 446 / 461 / 339)
-  (`build-host/tmp/v098/evidence/pace6/c_cells_rc13.py`) (`pace_loop`).
+  (`build-host/tmp/v098/evidence/pace6/c_cells_rc13.py`); `testBackoffEvidence`: the step rule's
+  back-off (`PaceStepEst`: a miss judged two steps on by the GPU's records around it, an outlier
+  miss when one took more than 7/4 of the median of the 8 before it, the third counted in 300 steps
+  the whole period for at most 120 steps, ended by the frames' first further picture fitting the
+  normal plan 15 frames in a row) against the one before it (`RT_RULE_V0114`, `rtV0114Note`), vsync
+  off uncapped on a 120 Hz mailbox at `testStepRule`'s as-made load with the pipe's GPU time from
+  the records: 9 / 12 / 13.5 / 17 / 20 / 25 ms GPU pictures give 1080 / 835 / 743 / 590 / 502 / 401
+  presents in 10 s, what the GPU makes, as before (121 and 124 steps at the whole period at 17 and
+  25 ms where it planned 241 and 484); 13.5 ms with one picture in 20 at 2.5x 6896 over 100 s, what
+  those pictures cost (6898), no back-off (before 6052, 5664 of 6000 steps strict); three misses the
+  plan made one back-off of 29 steps (before 120); 20 ms pictures varying 13-29 ms for 2 s the
+  back-off ended 38 steps after them (before 83); sustained, every back-off at its limit, 2209
+  presents in 40 s (before 2222); a GPU varying 9.1-19.4 ms about 13.5 2751 in 40 s (before 2529);
+  the game's clock within a refresh of the rule before's in every cell (`pace_loop`).
 - `cpu_place_test.c`: which core a thread runs on (`port/platform/cpu_place.h`): the histogram
   (by core, out of range and -1 as not known, the most-run core with the lowest on a tie, the take
   emptying it, the share on a mask), the cores' speeds from a fake sysfs under the build folder on
@@ -1139,8 +1154,15 @@ that stops again writing its own line without the retry mark); a stop at the fre
   every present waiting for the next vblank: 30 presents a second, nothing armed or dropped); the
   clamp of a cap above the refresh in mailbox mode (`testPresentGap`, `testCapEqualsRefresh`),
   and the step rule's answer to a miss (`testStepRule`: under the 2 ms floor nothing, over it the
-  margin widened by the lateness and falling an eighth a step, the third over it within 300 steps
-  the whole period for 120 steps, then 240, 480 at most, halved by 300 clean steps; a phone log's
+  margin widened by the lateness and falling an eighth a step, each judged two steps on (counted
+  with no GPU record around it), the third counted within 300 steps the whole period for 120 steps
+  at its limit and again 120 for a fourth; the evidence: a frame's first ask judged only while
+  backed off, 15 frames of 33.4 ms in a row ending it, a frame that would not have fitted or a
+  counted miss starting the run again, `pace_step_fit_frames` at 33.4 / 40 / 16.7 ms frames; the
+  outlier miss: `pace_step_est_gpu`'s typical only with 8 records, 7/4 of the median not an
+  outlier and a nanosecond over it one, a record 3 steps before or 1 after the miss making it an
+  outlier (its widening taken back), one 4 steps before not; `pace_step_normal_fits` handing over
+  what the whole period holds and holding what runs past the slack or overruns; a phone log's
   sequence of misses with no fall-back; a game's miss changing nothing and counted down inside a back-off
   as a step; `pace_step_start_late` past the later of the due time and the step before's end less
   the pacer's wake; `pace_step_by_pictures`' edges, a hold under the floor the game's), and the

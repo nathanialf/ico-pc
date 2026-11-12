@@ -977,9 +977,9 @@ typical is what the back-off below is for: the floor, the widened margin, the th
 plan. The model at that phone's numbers (reads of 10 ms with a deviation of 2.5 ms, the closing
 step 9 ms, the step between 1 ms, a submit of 8 ms, 24 / 25 / 26 ms GPU pictures, over 100 s)
 gives 41.0 / 39.5 / 38.1 presented fps where the longest gave 34.8 / 34.4 / 34.3 (the GPU makes
-41.7 / 40 / 38.5), 14 / 22 / 2 steps missing their period in 100 s (7 / 8 / 0 over the floor,
-the latest 2.8 / 3.5 / 1.3 ms past it), one fall-back of 120 steps in the first 10 s while the
-means learn, and the game's clock at most 8.3 ms behind, so the sound, up to 120 ms ahead, is
+41.7 / 40 / 38.5), 14 / 21 / 2 steps missing their period in 100 s (7 / 7 / 0 over the floor,
+the latest 2.8 / 3.4 / 1.3 ms past it), one fall-back of 120 steps in the first 10 s while the
+means learn, and the game's clock at most 7.0 ms behind, so the sound, up to 120 ms ahead, is
 never held back (`pace_loop_test` `testRc11`; `build-host/tmp/v098/evidence/pace4/`). The 10 s
 clause shows the plan's inputs: `a picture holds the renderer for R ms typically (its mean M ms and
 half its deviation of D ms; ...)` and `the steps planned at X ms closing a frame (its mean M ms, its
@@ -1015,13 +1015,63 @@ stage's first textures, a burst of slow pictures) is answered in proportion to i
   widening, so the slack is `period - (step + 2 ms + widening)` and the next pictures are held
   that much earlier; the widening falls an eighth a step (gone under 1 us), so a 15 ms miss's
   widening is under 2 ms after 17 steps.
-- Only the third such miss within 300 steps (`PACE_STEP_MISS_WINDOW`) plans the whole period, the
-  rule before it (the reads by the next step's due time), for 120 steps; a further fall-back
-  doubles it, to 480 at most; 300 steps without a miss over the floor halve it, then forget it.
+- A miss over the floor counts toward the back-off only when it was the plan's doing. It is judged
+  two steps after its own (`PACE_STEP_JUDGE_AFTER` + 1), once the GPU's records of the pictures
+  around it are in (a record comes when its frame slot is used again, two pictures later;
+  `pace_step_est_gpu`, from `window_host.c`'s `perf_drain`). If one of the records that came from 3
+  steps before its step to 1 step after it (`PACE_STEP_JUDGE_BEFORE`, `PACE_STEP_JUDGE_AFTER`) took
+  more than 7/4 of the median of the 8 records before it (the GPU's time a picture the rule plans
+  the slot fences by), it is an outlier miss: a picture the GPU took far longer than the ones around
+  it on the same scene, which no plan from typical times can foresee. It is not counted, and its
+  widening of the margin is taken back. Otherwise it counts as before. The 7/4 lies between a real
+  rise in the picture time (20 ms after 13.5 is 1.48x, and it moves the median within about 5
+  records) and the slow pictures of the owner's phone log on the old bridge (26-39 ms against a
+  median of 13.5: 1.9x and more).
+- Only the third counted miss within 300 steps (`PACE_STEP_MISS_WINDOW`) plans the whole period,
+  the rule before it (the reads by the next step's due time), and for 120 steps at most
+  (`PACE_STEP_BACKOFF_STEPS`). The back-off ends on evidence before that. While backed off, the
+  first further present asked for each game frame (the one the back-off holds) is also judged by
+  the normal plan, with the same reads, GPU time and margins (`pace_step_normal_fits`). Once that
+  picture would have fitted for half a second of frames in a row (`PACE_STEP_FIT_NS`, counted in
+  the game's frames: 15 at 30 a second, `pace_step_fit_frames`), the back-off ends
+  (`pace_step_est_frame`). A frame whose picture would not have fitted (the normal plan holds it
+  too, or the picture in progress ran past its estimate) starts the run again, and so does a
+  counted miss. So pictures that do not fit two a frame keep it to its limit, and the rate floats
+  with the picture time either way. Only the frame's first ask is judged. A later ask of the same
+  frame comes only because the first was held, after the hold has drained the GPU, a state the
+  normal plan never reaches. The model's sustained 20 ms overload ended 27 back-offs in 30 s by such
+  asks, each followed by new misses, at 1.3 % fewer pictures than before.
 
-So a wrong estimate costs one late step and a few steps of a wider margin, and a load that keeps
-the pictures' misses coming costs 2, 4, then 8 seconds of the strict rule at most, never the state
-of steps 40 ms late with the sound held back. A phone's log is why: with every miss of the
+Before this, every miss over the floor counted, and the back-off lasted 120 steps, doubled by
+each further one up to 480 (8 s) and halved by 300 steps without one. On the owner's phone on the
+old bridge (stage 6, the render thread on the mid cores) that turned a few misses into 8 s
+at 48 presented fps between stretches at 59: three back-offs of 480 steps covered 590, 32 and 394
+of three blocks' 600 steps. Some of those misses came with single GPU pictures at 26-39 ms where
+the median was 13.5, every pass slower by the same factor, on an unchanged scene
+(`build-host/tmp/v0115/design/BRIDGE_STABILITY.md`). Now a wrong estimate costs one late step and a
+few steps of a wider margin, a slow picture of the GPU's costs its own lateness, and a load that
+keeps the plan's misses coming costs at most 2 s of the strict rule at a time, about half a second
+once the pictures fit again. It is never the state of steps 40 ms late with the sound held back.
+The model (`pace_loop_test` `testBackoffEvidence`; vsync off, uncapped, a 120 Hz mailbox, a 4.5 ms
+step, 6 ms reads) gives these presents in 10 s:
+
+| GPU time a picture | 9 ms | 12 ms | 13.5 ms | 17 ms | 20 ms | 25 ms |
+|---|---|---|---|---|---|---|
+| presents (the GPU makes) | 1080 (1112) | 835 (834) | 743 (741) | 590 (588) | 502 (500) | 401 (400) |
+| steps at the whole period (the back-off before) | 0 (0) | 0 (0) | 0 (0) | 121 (241) | 0 (0) | 124 (484) |
+
+The other cells of the model:
+- 13.5 ms with one picture in 20 at 2.5x: 6896 presents in 100 s, what those pictures cost (6898),
+  with no back-off. The back-off before gave 6052, with 5664 of the 6000 steps strict.
+- Three misses the plan made: one back-off, ended after 29 steps.
+- 20 ms pictures for 2 s, then 13.5 ms: the back-off ended 38 steps (0.63 s) after the overload,
+  where the back-off before held 83 steps.
+- 20 ms pictures from then on: every back-off ends at its limit, with the GPU's rate.
+- A GPU varying from 9.1 to 19.4 ms around 13.5: 2751 presents in 40 s, where the back-off before
+  gave 2529.
+
+In every cell the game's clock is within a refresh of where it was with the back-off before. A
+phone's log is why there is a floor and a count at all: with every miss of the
 pictures' doubling the strict plan up to 1920 steps, misses of 0.0-0.6 ms among them, 478-600 of
 every block's 600 steps ran the rule before at 30-41 presented fps where the GPU made 34-45. The
 model at that phone's numbers (a 4.5 ms step, 13 ms reads,
@@ -1039,13 +1089,29 @@ nothing (`pace_loop_test` `testBackoffCause`). The 10 s line's `game thread:` cl
 holds (`would have made the step miss its period`), the steps started late by the pictures (with
 the longest) and the steps that missed their period: `N (P the pictures': S under 2 ms, W widened
 the margin, B the third in 300 steps; G the game's own; latest L ms past it; Y steps planned at the
-whole period after the pictures')`. Each miss names what it did (each first 8, then every 100th):
+whole period after the pictures')`. The widened ones are followed by `(B counted
+toward the back-off, C outliers at X ms against a typical Y ms)`, X being the block's slowest
+outlier picture, and the steps at the whole period by `(back-offs ended: E by the pictures between
+frames fitting, M at the limit of 120 steps)`. Each miss names what it did (each first 8, then
+every 100th):
 `window: step rule: a miss the pictures caused under 2 ms (late by L ms, R ms of it waiting for a
 picture, P ms the presents ran past the step's start): inside the rule's margin, nothing changed;
 ...`, `window: step rule: the margin widened by L ms to W ms after a miss the pictures caused (...;
-K of the pictures' over 2 ms in the last 300 steps): ...`, `window: step rule: back-off N steps
-after the third miss the pictures caused within 300 steps (...)` and `window: the game step missed
-its period by ... the game's own time, not the pictures' ...`.
+K counted toward the back-off in the last 300 steps): ...; whether it counts is judged in 2 steps,
+by the GPU's times of the pictures around it; ...` and `window: the game step missed its period by
+... the game's own time, not the pictures' ...`. What each judging did has its own line:
+`window: step rule: an outlier miss, not counted toward the back-off: the miss 2 steps ago (late by
+L ms) came with a picture the GPU took X ms against a typical Y ms (...)`, `window: step rule: the
+miss 2 steps ago (late by L ms) counted toward the back-off (the GPU's longest picture around it X
+ms against a typical Y ms: no outlier); K counted in the last 300 steps (the third begins it)`,
+`window: step rule: back-off of at most 120 steps after the third miss the pictures caused within
+300 steps, each counted (no outlier picture around it): 2 steps ago late by L ms (the GPU's longest
+picture around it X ms against a typical Y ms), ...: the pictures between frames planned at the
+whole period until a frame's picture between frames would have fitted the normal plan 15 frames in
+a row; ...`, and its end, `window: step rule: back-off ended after N steps: the pictures between
+frames fitted in 15 consecutive frames (half a second of 33.4 ms frames); ...` or `window: step
+rule: back-off ended at its limit of 120 steps (the pictures between frames fitted in the last K
+consecutive frames of the 15 needed); ...`.
 
 The rule is a rate requirement ([Pacing](#pacing)): `pace_loop_test` (`testStepRule`) asserts the
 presents in 10 s for 300 game frames by the render thread's reads, at a uniform 4.5 ms step with
@@ -1085,7 +1151,7 @@ picture, so the render thread's plan gives it as 0 and says the thread is on bes
 the picture before's fence again: a phone at the Original preset (512x448, the GPU 14.8 ms a
 picture, the reads 8.7 ms, a 3.4 ms closing step, the presents waiting 8.4 ms at the longest)
 predicted it in 595 of 770 asks, held 540 and showed 45.6 presented fps, the Enhanced preset at
-848x448 45.5. The model of those blocks gives 46.0 / 45.1 with that reading and 67.1 / 65.3 with
+848x448 45.5. The model of those blocks gives 46.0 / 45.1 with that reading and 67.1 / 65.7 with
 the thread on, the GPU's own 67.6 / 68.5 (63.3 at the Original preset with the GPU's time
 alternating 21 / 8.6 ms a picture, as that phone's slow replay lines show), 54.5 at 1696x896
 (the GPU's 56.2) and 43.1 / 45.8 / 33.9 at the native blocks above (`pace_loop_test` `testRc13`;
@@ -2341,7 +2407,7 @@ one's pixels: for a measurement, not for play.
 
 | test | checks |
 | --- | --- |
-| `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), the present allowance with the fence (`test120Budget`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`); the render thread's further presents: the step-deadline rule's rates and vsync off's pictures as made (`testStepRule`); the lock with Direct3D 11's wait for room in the present queue on the render thread, made after the picture before's present (`testRoomOffGame`) |
+| `port/platform/test/pace_loop_test.c` | the vsync lock's loop under a fake clock and swapchain (mailbox, FIFO, a FIFO queue, a vblank clock): grid, alphas, phase, drift (`testFifoDrift`), the ratchet (`testFifoRatchet`), D3D12's full queue (`testQueueBlocking`), the skip guard (`testSkipGuard`), the late-present skip under the lock (`testLateSkipLock`), the present allowance with the fence (`test120Budget`), clocks left, off the screen, long steps, pauses; FIFO latest ready (`testLatestReady`), the timer path's FIFO hold (`testFifoHold`), the audio's starting ratio (`testNominalRatio`), the log's trace (`testTrace`); the render thread's further presents: the step-deadline rule's rates and vsync off's pictures as made (`testStepRule`); the back-off's outlier misses and its end on evidence, by rates against the back-off before (`testBackoffEvidence`); the lock with Direct3D 11's wait for room in the present queue on the render thread, made after the picture before's present (`testRoomOffGame`) |
 | `port/platform/test/pace_policy_test.c` | the slow-present rule, Auto resolution's steps, the present gap, cap versus refresh, the limiter grid, the lock's n and alphas, the grid's period check, the lock's pause, the vblank laws, the first-present pause, the display's intervals, the late-present skip and its loop under a fake clock, the present allowance's rule (`testBudgetRule`), the timer path's unbound start (`testBudgetUnbound`), the reporters' sequences (`testBudgetHitch130`, `testBudgetSustained`, `testBudgetGlWait126`), the window's allowance and clock words (`testBudgetLines`), the timer path with a GPU queue (`testBudgetTimerLoop`) and paced by the GPU (`testBudgetPaced`, `testBudgetPacedLoop`), vsync off under the FIFO fallback at 120 Hz (`testBudgetFifo120`), the step-deadline rule's arithmetic, its back-off, the reads' prediction and the as-made line (`testStepRule`) |
 | `port/platform/test/present_fallback_test.c` | the FIFO fallback's decision over the stock driver's blocks (the third within 30 s switches, never a second time), blocks too far apart or too short, Turnip's driver text, `[dev] present_fallback=off`, the window's gate (`ico_present_fallback_gate`: Qualcomm's own yes, Mali, PowerVR, NVIDIA and AMD other, Mesa and Turnip, vsync on, not mailbox, not Vulkan and fifo no, off kept), FIFO from the start on Qualcomm's own driver (auto on Android yes; off, fifo, vsync on, Mesa or Turnip text, other vendors, any other platform no), the lines word for word |
 | `port/platform/test/perf_block_test.c` | a block's sums and maxima, the replays over the threshold, the longest-phase text, a reset |

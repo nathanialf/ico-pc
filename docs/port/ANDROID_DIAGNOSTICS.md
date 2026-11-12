@@ -1322,6 +1322,48 @@ How to read them:
 - The game thread's step beside its cores: a step that stays long (9-14 ms in the cage) on its
   own core is the game's work at that core's clock, not a shared core.
 
+## The step rule's back-off: outlier misses and its end
+
+When the rate swings between two levels for seconds at a time on an unchanged scene (the owner's
+Pixel 10 Pro Fold on the old bridge: 59 and 48 presented fps in turn), read the step rule's lines.
+The rule ([DISPLAY.md](DISPLAY.md#further-presents-and-the-game-step)) holds a picture between
+frames only when it would make a game step miss its period. A miss the plan made widens its margin,
+and the third within 300 steps plans the whole period for at most 120 steps (the back-off).
+
+- `window: step rule: the margin widened by L ms to W ms after a miss the pictures caused (...; K
+  counted toward the back-off in the last 300 steps): ...; whether it counts is judged in 2 steps,
+  by the GPU's times of the pictures around it; ...`: a miss of 2 ms or more.
+- Two steps later one of these two follows:
+  - `window: step rule: an outlier miss, not counted toward the back-off: the miss 2 steps ago
+    (late by L ms) came with a picture the GPU took X ms against a typical Y ms (over 7/4 of the
+    median of the 8 before it, ...)`: the GPU, not the plan. X far over Y on an unchanged scene is
+    the hardware's slow picture (the old bridge on that phone: 26-39 ms against 13.5).
+  - `window: step rule: the miss 2 steps ago (late by L ms) counted toward the back-off (the GPU's
+    longest picture around it X ms against a typical Y ms: no outlier); K counted in the last 300
+    steps (the third begins it)`: the plan's own doing. Without GPU timestamps the part reads `the
+    GPU's times around it not known`, and every miss counts, as before this judging.
+- `window: step rule: back-off of at most 120 steps after the third miss the pictures caused within
+  300 steps, each counted (...): 2 steps ago late by L ms (the GPU's longest picture around it X ms
+  against a typical Y ms), N steps ago ..., M steps ago ...: ...`: the three misses that began it.
+- Its end is one of two lines:
+  - `window: step rule: back-off ended after N steps: the pictures between frames fitted in 15
+    consecutive frames (half a second of 33.4 ms frames); ...`: while backed off, the normal plan
+    would have handed over each frame's first picture between frames for half a second. N near 30
+    (the run itself) says the miss was a passing one.
+  - `window: step rule: back-off ended at its limit of 120 steps (the pictures between frames
+    fitted in the last K consecutive frames of the 15 needed); ...`: the pictures do not fit two a
+    frame at this picture time. That is the scene or the GPU's speed, and the rate follows it.
+- In the game thread's 10 s line, the clause `steps that missed their period: N (P the pictures': S
+  under 2 ms, W widened the margin (B counted toward the back-off, C outliers at X ms against a
+  typical Y ms), F the third in 300 steps; ...; Y steps planned at the whole period after the
+  pictures' (back-offs ended: E by the pictures between frames fitting, M at the limit of 120
+  steps))`. Y is the block's steps under the back-off (with the doubled back-off before this, up to
+  480 in a row: 590 of a block's 600 on the old bridge). C with B near 0 says the misses were the
+  GPU's slow pictures. B steady with M at its count says the pictures do not fit two a frame there.
+
+Each line is rate-limited (the first 8, then every 100th). The counts in the 10 s clause are
+complete.
+
 ## The thermal state and screen recording
 
 The thermal state and screen recording come from the app's Java side (issue 123;

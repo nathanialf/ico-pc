@@ -1047,23 +1047,59 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
  *   - over it, the rule's margin widens by the lateness (widenNs, added to
  *     the step's time the rule plans by: the next pictures are held that
  *     much earlier), decaying an eighth a step (under 1 us: gone);
- *   - only the third such miss within PACE_STEP_MISS_WINDOW steps (300)
+ *   - a miss over it counts toward the back-off only when it was the
+ *     plan's doing: it is judged PACE_STEP_JUDGE_AFTER + 1 steps (2) after
+ *     its own, once the GPU's records of the pictures around it are in (a
+ *     record comes when its frame slot is used again, RHI_FRAMES_IN_FLIGHT
+ *     pictures later: window_host.c perf_drain, pace_step_est_gpu), and is
+ *     an outlier miss, not counted, when one of the records that came from
+ *     PACE_STEP_JUDGE_BEFORE steps (3) before its step to
+ *     PACE_STEP_JUDGE_AFTER steps (1) after it took more than
+ *     PACE_STEP_OUTLIER_NUM / PACE_STEP_OUTLIER_DEN (7/4) of the median of
+ *     the PACE_HIST_LEN (8) records before it (the GPU's time a picture the
+ *     rule plans the slot fences by, PaceRtAsk.gpuNs): a picture the GPU
+ *     took far longer than the ones around it on the same scene, which no
+ *     plan from the typical times can foresee (rc11, the owner's phone on
+ *     the bridge: a median of 13.5 ms, single pictures at 26-39 ms, every
+ *     pass slower by the same factor, and the back-offs they set off held
+ *     the rate at 48 presented fps for 8 s at a time where it was 59);
+ *   - only the third counted miss within PACE_STEP_MISS_WINDOW steps (300)
  *     plans the whole period (the rule before: a further present must end
- *     its reads by the next step's due time) for backoff steps,
- *     PACE_STEP_BACKOFF_MIN (120) at first, doubled by each further
- *     fall-back up to PACE_STEP_BACKOFF_MAX (480), halved again by
- *     PACE_STEP_BACKOFF_CLEAN (300) steps without a miss over the floor
- *     (to none from the least).
+ *     its reads by the next step's due time) for at most
+ *     PACE_STEP_BACKOFF_STEPS steps (120), and the back-off ends on
+ *     evidence before that: while backed off the first further present
+ *     asked for each game frame is judged by the normal plan too
+ *     (pace_step_normal_fits: the same reads, GPU time and margins), and
+ *     once that picture would have fitted for pace_step_fit_frames frames
+ *     in a row (PACE_STEP_FIT_NS, half a second, at the game's frame
+ *     length: 15 at 30 frames a second) the back-off ends
+ *     (pace_step_est_frame).  A frame whose picture would not have fitted
+ *     (the normal plan holds it too, or the picture in progress ran past
+ *     its estimate) or a counted miss starts the run again, so pictures
+ *     that do not fit keep it to its limit.  Before this (v0.11.4) every
+ *     miss over the floor counted and the back-off lasted 120 steps,
+ *     doubled by each further one up to 480 (8 s), halved by 300 steps
+ *     without one.
  * So a wrong estimate costs one late step and a few steps of a wider
- * margin; a load that keeps the pictures' misses coming costs 2 s of the
- * strict plan, then 4, then 8 at most.  misses (every one), pictureMisses,
- * gameMisses, smallMisses (the pictures' under the floor), widens and
- * backoffs count for the 10 s line (the caller clears them). */
+ * margin; a slow picture of the GPU's costs its own lateness; a load that
+ * keeps the pictures' misses coming costs at most 2 s of the strict plan
+ * at a time, and half a second once the pictures fit again.  misses (every
+ * one), pictureMisses, gameMisses, smallMisses (the pictures' under the
+ * floor), widens, counted, outliers, backoffs, fitEnds and limitEnds count
+ * for the log (the run's; the 10 s line keeps its own). */
 #define PACE_STEP_MISS_FLOOR_NS PACE_RT_STEP_MARGIN_NS
 #define PACE_STEP_MISS_WINDOW 300u
-#define PACE_STEP_BACKOFF_MIN 120u
-#define PACE_STEP_BACKOFF_MAX 480u
-#define PACE_STEP_BACKOFF_CLEAN 300u
+#define PACE_STEP_BACKOFF_STEPS 120u
+#define PACE_STEP_JUDGE_BEFORE 3u
+#define PACE_STEP_JUDGE_AFTER 1u
+#define PACE_STEP_OUTLIER_NUM 7u
+#define PACE_STEP_OUTLIER_DEN 4u
+#define PACE_STEP_FIT_NS 500000000ull
+/* the steps whose GPU records the judging keeps (a ring by the step they
+   came after: PACE_STEP_JUDGE_BEFORE + PACE_STEP_JUDGE_AFTER + 2 at least)
+   and the misses waiting to be judged (one a step, each two steps) */
+#define PACE_STEP_PICS 8u
+#define PACE_STEP_PENDING 4u
 /* the most the margin widens to (a long miss plans the whole period while
    it decays) */
 #define PACE_STEP_WIDEN_MAX_NS 100000000ull
@@ -1107,38 +1143,122 @@ uint64_t pace_step_typ_dev_ns(const PaceStepTyp *t);
  * a frame every frameSteps steps (0 or 1: every step) */
 bool pace_step_closes(unsigned sinceClose, unsigned ahead, unsigned frameSteps);
 
+/* A miss of the pictures' over the floor as judged: its step (the note's
+   number, PaceStepEst.steps), its lateness, and the GPU's longest record
+   among the pictures around it with the typical (the median of the 8
+   before it) when it came (0, 0: no record) */
+typedef struct PaceStepMiss {
+    unsigned at;
+    uint64_t lateNs, picNs, typNs;
+} PaceStepMiss;
+
+/* The GPU's records that came after one step's note (PaceStepEst.pic, by
+   the step's number): the longest and the typical when it came, and the
+   longest of those over 7/4 of their typical (0: none) */
+typedef struct PaceStepPic {
+    unsigned at;
+    uint64_t maxNs, maxTypNs;
+    uint64_t overNs, overTypNs;
+} PaceStepPic;
+
+/* What judged a miss (PaceStepEvent.judged) */
+typedef enum PaceStepCount {
+    PACE_STEP_UNJUDGED = 0, /* none judged at this note */
+    PACE_STEP_COUNTED,      /* counted toward the back-off: no outlier around it */
+    PACE_STEP_OUTLIER       /* an outlier miss: a GPU picture far over its typical around it */
+} PaceStepCount;
+
+/* Why a back-off ended (PaceStepEvent.ended) */
+typedef enum PaceStepEnd {
+    PACE_STEP_END_NONE = 0,
+    PACE_STEP_END_FIT, /* the pictures between frames fitted pace_step_fit_frames frames in a row */
+    PACE_STEP_END_LIMIT /* PACE_STEP_BACKOFF_STEPS steps */
+} PaceStepEnd;
+
+/* What the latest note (and the frame's fold after it) did, for the
+   caller's lines (cleared by pace_step_est_note) */
+typedef struct PaceStepEvent {
+    PaceStepCount judged;
+    PaceStepMiss miss; /* the miss judged (judged not PACE_STEP_UNJUDGED) */
+    bool began;        /* a back-off began: its three misses PaceStepEst.cnt, the newest [0] */
+    PaceStepEnd ended;
+    unsigned endSteps;  /* the ended back-off's steps */
+    unsigned endFrames; /* the frames in a row whose picture between frames fitted */
+} PaceStepEvent;
+
 typedef struct PaceStepEst {
     /* the typical time by kind: [0] a step between frames, [1] one that
        closes a frame (pace_step_plan_ns plans by them) */
     PaceStepTyp typ[2];
     uint64_t estNs;      /* pace_rt_estimate of the step's own time (0: none yet) */
     uint64_t widenNs;    /* the margin's widening (0: none) */
-    unsigned backoff;    /* steps left planned at the whole period */
-    unsigned backoffLen; /* the last back-off's length (0: none since a clean spell) */
-    unsigned clean;      /* steps since the last back-off ended without a miss over the floor */
-    unsigned recent;     /* the pictures' misses over the floor in the window (0-2) */
-    unsigned since[2];   /* steps since the latest of them and the one before */
-    unsigned misses;     /* steps that missed their period */
+    unsigned backoff;    /* steps left planned at the whole period (0: not backed off) */
+    unsigned backoffRun; /* steps since the back-off began */
+    unsigned steps;      /* the notes so far (a step's number) */
+    unsigned recent;     /* the counted misses kept in cnt (0-3, newest first) */
+    PaceStepMiss cnt[3]; /* the latest counted misses */
+    PaceStepMiss pend[PACE_STEP_PENDING]; /* misses over the floor waiting to be judged */
+    unsigned pending;
+    PaceStepPic pic[PACE_STEP_PICS]; /* the GPU's records by the step they came after */
+    unsigned judgedFrame; /* the game frame's first further present judged while backed off:
+                             0 not yet, 1 it would have fitted, 2 it would not */
+    unsigned fitRun;      /* frames in a row whose picture between frames would have fitted */
+    unsigned misses;      /* steps that missed their period */
     unsigned pictureMisses, gameMisses; /* of them: the pictures', the game's own */
     unsigned smallMisses;               /* of the pictures': under the floor */
     unsigned widens;                    /* the pictures' over the floor (each widened the margin) */
-    unsigned backoffs;                  /* back-offs begun (each a third miss in the window) */
+    unsigned counted, outliers;         /* of those, judged: counted, outlier misses */
+    unsigned backoffs;                  /* back-offs begun (each a third counted miss) */
+    unsigned fitEnds, limitEnds;        /* back-offs ended by the pictures fitting, at the limit */
     uint64_t missMaxNs;                 /* the latest of them past its deadline */
+    PaceStepEvent ev;
 } PaceStepEst;
 
-/* What one step's note did to the plan (pace_step_est_note) */
+/* What one step's own miss did to the plan (pace_step_est_note) */
 typedef enum PaceStepAct {
     PACE_STEP_NONE = 0, /* no miss of the pictures' */
     PACE_STEP_SMALL,    /* the pictures' miss under the floor: nothing changed */
-    PACE_STEP_WIDEN,    /* the margin widened by its lateness */
-    PACE_STEP_STRICT    /* the third in the window: the whole period for backoff steps */
+    PACE_STEP_WIDEN     /* the margin widened by its lateness; judged two steps on */
 } PaceStepAct;
 
 /* One step: its own time ownNs (0: not known, the estimate kept); missed:
  * it ended lateNs past its deadline; byPictures: the pictures caused it
- * (pace_step_by_pictures), the rule above only then */
+ * (pace_step_by_pictures), the rule above only then.  First the misses
+ * PACE_STEP_JUDGE_AFTER + 1 steps old are judged (e->ev.judged; a third
+ * counted one begins a back-off, e->ev.began), then the step itself (the
+ * back-off counts down: at PACE_STEP_BACKOFF_STEPS it ends,
+ * PACE_STEP_END_LIMIT).  The return is this step's own miss. */
 PaceStepAct pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs,
                                bool byPictures);
+
+/* One GPU record (window_host.c perf_drain: a timed presented replay's
+ * time, rd_perf_pace_gpu_ms) into the history h and the judging's ring
+ * (by the step it came after, e->steps); an outlier when h held
+ * PACE_HIST_LEN records before it and it took more than 7/4 of their
+ * median.  The median with it (the GPU's time a picture the rule plans
+ * by, pace_hist_add's). */
+uint64_t pace_step_est_gpu(PaceStepEst *e, PaceHist *h, uint64_t gpuNs);
+
+/* The counted misses within PACE_STEP_MISS_WINDOW steps of now (0-2: the
+   third begins a back-off) */
+unsigned pace_step_est_recent(const PaceStepEst *e);
+
+/* The game frames in a row whose picture between frames must have fitted
+ * to end a back-off: PACE_STEP_FIT_NS of frames of tickNs (rounded up, at
+ * least 1; tickNs 0: frames of two NTSC steps, 15) */
+unsigned pace_step_fit_frames(uint64_t tickNs);
+
+/* While backed off, the first further present asked for a game frame:
+ * fits, it would have fitted under the normal plan (pace_step_normal_fits);
+ * a later one of the frame, or none backed off, changes nothing */
+void pace_step_est_judge(PaceStepEst *e, bool fits);
+
+/* A game frame closed (window_present.c step_note, after
+ * pace_step_est_note): the frame before's judgement into the run (fitted:
+ * one more; not: none; not judged: unchanged), and the back-off's end when
+ * the run reaches pace_step_fit_frames(tickNs) (e->ev.ended
+ * PACE_STEP_END_FIT).  Returns whether it ended. */
+bool pace_step_est_frame(PaceStepEst *e, uint64_t tickNs);
 
 /* The part of a step's late start the presents made: its start startNs past
  * the later of its due time and the step before's end (a step that ran late
@@ -1168,6 +1288,11 @@ uint64_t pace_step_est_ns(const PaceStepEst *e, uint64_t periodNs);
  * the whole period while backed off; pace_step_est_ns while the kind has
  * no sample yet */
 uint64_t pace_step_plan_ns(const PaceStepEst *e, bool closes, uint64_t periodNs);
+
+/* pace_step_plan_ns as if not backed off (the normal plan: the kind's
+ * typical time and the widening; the estimate and the widening while the
+ * kind has no sample, the whole period before the first step) */
+uint64_t pace_step_plan_normal_ns(const PaceStepEst *e, bool closes, uint64_t periodNs);
 
 /* The render thread's pipeline as the game thread predicts it (PaceRtPipe):
  * a picture handed over makes no graphics call for its interpolation
@@ -1353,6 +1478,15 @@ PaceRtHold pace_rt_further_ask(const PaceRtAsk *q, const PaceRtPipe *p);
 /* pace_rt_further_ask with the rule's working in t (not NULL; zeroed, its
  * test PACE_RT_TEST_NONE when held before the rule or handed over) */
 PaceRtHold pace_rt_further_trace(const PaceRtAsk *q, const PaceRtPipe *p, PaceRtTrace *t);
+
+/* The back-off's evidence (PaceStepEst, pace_step_est_judge): whether the
+ * further present asked as q (planned by the back-off's whole period)
+ * would be handed over by the normal plan, the same ask with the next
+ * step and the step after planned by pace_step_plan_normal_ns (nextCloses,
+ * afterCloses: whether they close a frame) and judged by
+ * pace_rt_further_trace on the pipe p: PACE_RT_GO */
+bool pace_step_normal_fits(const PaceStepEst *e, const PaceRtAsk *q, const PaceRtPipe *p,
+                           bool nextCloses, bool afterCloses);
 
 /* The decision trace of a further present held by the rule (q the ask, t
  * its working; n the hold's number in the 10 s block), every time against
