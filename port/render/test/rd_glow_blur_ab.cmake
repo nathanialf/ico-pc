@@ -35,21 +35,29 @@
 #     SHADOW0..2 and WORK2_PAD the same bytes (WORK2 is drawn before the
 #     chain, but a later sprite of the frame may take SCENE into it); WORK3,
 #     WORK0 (RGB) and
-#     DISPLAY and PRESENT (RGB) at most w3Max, w3Max and dispMax levels
+#     DISPLAY and PRESENT (RGB) at most w3Max, w0Max and dispMax levels
 #     from today's (printed per dump as "glow blur measure: ...", with each
 #     setting's maxima at the end);
 #   - at the phone's setting, 2x, Original 1x and Enhanced 1x, the shimmer (WORK3's change under
 #     --jitter 0.5,0.5, the lamps package's measure) with glowblur at most
 #     shimNum/shimDen of today's plus shimPlus levels;
 #   - at least one chain in two passes over the list at each measured setting.
-# The bounds (the evidence's Python fit, glowblur/design.py and synth.py:
-# WORK3 at most 14 and 18 levels on the title and issue 163's lamps, 18 to
-# 20 on synthetic lamps at the phone's 424 x 128; the shimmer 1.15 times
-# today's at most; at Original 1x WORK3 at most 16 and 16, a mean of 0.11
-# and 0.36): WORK3 and WORK0 24 levels (20 and a margin of 4),
-# DISPLAY and PRESENT 26 (the paste adds WORK3 at FIX 128 through the GS
-# bilinear, the reduction and the present filter average it: at most
-# WORK3's, plus 2 for their roundings); the shimmer 5/4 of today's + 4.
+# The bounds, from measurements (the WORK buffers' and the screen's apart):
+# the fit on the lamps frames (the evidence's Python model, exact against the
+# replay: WORK3 at most 14 and 18 levels on the title and issue 163, 16 and
+# 16 at Original 1x) is not the largest; the phone's sun frame v2278 (a WHOLE
+# plan, the sun's fans saturating WORK0: 168 of its texels at 255 before the
+# blur) is, because the chain clamps every pass 2 at 255 and the two passes
+# clamp only at their end, so the texels around a saturated core come out
+# brighter (texels the chain leaves at 192..254: +10.7 on average): WORK0 at
+# most 45 levels apart (the phone's setting, Vulkan and OpenGL) and 46
+# (Enhanced 2x), WORK3 34 and 33, on 1610 and 1518 of 54272 texels; DISPLAY
+# and PRESENT at most 23 levels on 2.4 % of the picture (the paste's add
+# clamps at 255 over the bright sky there).  The model gives the replay's
+# WORK0 within 3 levels, so it is the fit at saturated light, not the chain's
+# form.  The bounds: WORK0 48, WORK3 36 (the measured 46 and 34, a margin of
+# 2), DISPLAY and PRESENT 26 (23 and 3); the shimmer 5/4 of today's + 4 (the
+# fit's 1.15 times).
 # No device: SKIP (77).
 # -DPY=<python3> -DDIFF=<png_level_diff.py>
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DLIST2=<dump list> -DOUT=<a folder>
@@ -91,7 +99,8 @@ endforeach()
 list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
-set(w3Max 24)
+set(w0Max 48)
+set(w3Max 36)
 set(dispMax 26)
 set(shimNum 5)
 set(shimDen 4)
@@ -294,6 +303,9 @@ foreach(dump IN LISTS dumps)
       endif()
       string(REGEX REPLACE "\\.png$" "" t "${png}")
       set(bound ${w3Max})
+      if(t STREQUAL "WORK0")
+        set(bound ${w0Max})
+      endif()
       if(t STREQUAL "DISPLAY" OR t STREQUAL "PRESENT")
         set(bound ${dispMax})
       endif()

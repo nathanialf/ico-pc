@@ -101,10 +101,13 @@ set(env_desk "")
 set(on_desk ICO_RD_LAMPS=1)
 set(args_mali ${args_phone})
 set(env_mali ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5 ICO_RD_VU_PREPASS=0)
-set(on_mali "")
+# the class's defaults but the glow blur (rd_glow_blur.c, RD_GLOW_BLUR_DEFAULT
+# 1 since v0.11.5: not byte-identical, its own A/B rd_glow_blur_ab), which the
+# off arm (ICO_RD_LAMPS=0) leaves out
+set(on_mali ICO_RD_LAMPS=noglowblur)
 set(args_gl ${args_desk})
 set(env_gl "")
-set(on_gl "")
+set(on_gl ICO_RD_LAMPS=noglowblur)
 # the settings that should take the area somewhere, and those that never do
 set(areaSettings phone phonep desk seqw seqd)
 set(noAreaSettings mali gl)

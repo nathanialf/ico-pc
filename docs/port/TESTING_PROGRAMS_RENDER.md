@@ -918,7 +918,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `tools/lamps_dumps.txt` (machine-local; a listed dump that is absent FAILS: issue 163's two
   frames and the title's castle in four boot runs, 512 x 512 GS, not the phone's 848 x 448), each
   replayed twice in one run (`--repeat 2`: the first lamps replay of a renderer is whole, the area
-  from the second) with `ICO_RD_LAMPS=0` and with the parts on, `--pass-dump --stats`, at the
+  from the second) with `ICO_RD_LAMPS=0` and with the parts on (the Mali and OpenGL rows' "on" the
+  class's defaults as `ICO_RD_LAMPS=noglowblur`: the glow blur, on by default, is not
+  byte-identical and has its own A/B), `--pass-dump --stats`, at the
   PowerVR phone's profile (`ICO_VK_FAKE_LIMITS=moltenvk`, `ICO_RD_VU_PREPASS=0`,
   `ICO_RD_LATE_PASS=1`, Enhanced 2364x1080, Full height and pixel, `ICO_RD_LAMPS=1`), the same
   under `ICO_RD_LAMPS_POISON=1` and `ICO_RD_STORE_POISON=1`, lavapipe's desktop profile at
@@ -962,8 +964,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   Original 4:3 at 1x (`--aspect 4:3`), Enhanced 1x and the poison; a dump the phone's setting leaves as recorded is checked there (every
   PNG the same bytes) and not run at the others. Where a chain was drawn in two passes: the passes
   fewer by the chain's as today draws them less two (2 P less the pairs folded), SHADOW0..2 and
-  WORK2_PAD the same bytes, WORK3 and WORK0 within 24 levels of today's and DISPLAY and PRESENT
-  within 26 (RGB; printed per dump, `glow blur measure:`, and as each setting's maxima), the
+  WORK2_PAD the same bytes, WORK0 within 48 levels of today's, WORK3 within 36, DISPLAY and PRESENT
+  within 26 (RGB; measured: the sun frame v2278 46, 34 and 23; printed per dump, `glow blur measure:`, and as each setting's maxima), the
   shimmer at the phone's setting, 2x, Original 1x and Enhanced 1x (WORK3's change under `--jitter 0.5,0.5`) at most 5/4 of
   today's + 4 (every scale takes it, Original 1x included); the poison every PNG the
   same bytes; a chain in two passes over the list at each measured setting. `rd_glow_blur_gl`:
