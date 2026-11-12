@@ -1635,15 +1635,6 @@ static struct {
     RhiPipeline pipe;
     RdPipeKeyInt key;
     RhiBindGroup group;
-    /* a loading pass: WORK2's copy spread over the samples first (msUp) */
-    bool up;
-    RhiTexture snap;
-    RhiState snapState;
-    uint32_t sw, sh;
-    RhiPipeline upPipe;
-    RdPipeKeyInt upKey;
-    RhiBindGroup upGroup;
-    uint64_t ups;
     uint64_t ms, single;   /* since rd_init */
     uint64_t sMs, sSingle; /* the 10 s sums */
     bool saidSingle, saidOn;
@@ -1666,13 +1657,6 @@ void rd__lamps_ms_counts(uint64_t *ms, uint64_t *single)
 
 static void msFree(void)
 {
-    if (g_rd.hasDevice && s_lms.snap.id) {
-        rd__retire_texture(s_lms.snap);
-    }
-    s_lms.snap = (RhiTexture){0};
-    s_lms.snapState = RHI_STATE_UNDEFINED;
-    s_lms.sw = s_lms.sh = 0;
-    s_lms.up = false;
     if (g_rd.hasDevice) {
         if (s_lms.col.id) {
             rd__retire_texture(s_lms.col);
@@ -1955,7 +1939,7 @@ static bool msEligible(void)
  * (counted, said once) */
 static void msConvert(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
 {
-    s_lms.active = s_lms.fill = s_lms.up = false;
+    s_lms.active = s_lms.fill = false;
     if (s_lms.state != 1 || s_lr.on != 1 || !p || p->colorCount != 1) {
         return;
     }
@@ -1967,28 +1951,11 @@ static void msConvert(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
         return; /* not WORK2, or 1x (nothing changes there) */
     }
     const bool depth = p->depth.texture.id != 0;
-    /* a pass that loads WORK2 (a lamp after the pass of the earlier ones
-     * ended, the mask after the fans): WORK2 copied and spread over the
-     * samples first in the pass (msUp), each sample its pixel's value, so
-     * the resolve gives the loaded pixel back and the pass's own draws are
-     * multisampled too (rc29: 80 of 418 lamps pictures had such a pass) */
-    const bool up = p->color[0].load == RHI_LOAD_LOAD;
-    const char *why = ms || storage          ? "a storage or multisampled pass"
-                      : p->color[0].readable ? "the pass reads its destination"
-                      : !up && p->color[0].load != RHI_LOAD_CLEAR
-                          ? "the pass leaves WORK2 undefined"
+    const char *why = ms || storage                        ? "a storage or multisampled pass"
+                      : p->color[0].readable               ? "the pass reads its destination"
+                      : p->color[0].load != RHI_LOAD_CLEAR ? "the pass loads WORK2"
                       : depth && p->depth.texture.id != w2->depth.id ? "another depth"
                                                                      : NULL;
-    RhiPipeline upPipe = {0};
-    RdPipeKeyInt ku = rd__post_key(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_RGBA8_UNORM);
-    ku.depthFmt = depth ? RHI_FMT_D32F_S8 : RHI_FMT_UNKNOWN;
-    ku.gs.ztst = RD_ZTST_ALWAYS;
-    ku.gs.zwrite = RD_ZWRITE_OFF;
-    ku.gs.msaa = MS_SAMPLES;
-    if (!why && up) {
-        upPipe = rd__get_pipeline(&ku);
-        why = !upPipe.id ? "no pipeline to spread the loaded WORK2 over the samples" : NULL;
-    }
     RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_DEPTH_DOWN_MS, RHI_FMT_RGBA8_UNORM);
     k.depthFmt = RHI_FMT_D32F_S8;
     k.gs.ztst = RD_ZTST_ALWAYS;
@@ -2004,43 +1971,6 @@ static void msConvert(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
         why = "no memory for the 4-sample pair";
     }
     RhiCommandList cl = rd__replay_cl();
-    RhiBindGroup gu = {0};
-    if (!why && up) {
-        /* WORK2 as the previous passes resolved it, copied (the pass both
-         * resolves into WORK2 and reads it: not the same texture) */
-        if (!s_lms.snap.id || s_lms.sw != w2->tw || s_lms.sh != w2->th) {
-            if (s_lms.snap.id && g_rd.hasDevice) {
-                rd__retire_texture(s_lms.snap);
-            }
-            s_lms.snap = rhi_create_texture(&(RhiTextureDesc){
-                w2->tw, w2->th, 1, RHI_FMT_RGBA8_UNORM, RHI_TEX_SAMPLED | RHI_TEX_COPY_DST,
-                "rd lamps WORK2 copy (the samples' load)", 0});
-            s_lms.snapState = RHI_STATE_UNDEFINED;
-            s_lms.sw = w2->tw;
-            s_lms.sh = w2->th;
-        }
-        if (s_lms.snap.id) {
-            rd__transition(cl, w2->color, &w2->colorState, RHI_STATE_COPY_SRC);
-            rd__transition(cl, s_lms.snap, &s_lms.snapState, RHI_STATE_COPY_DST);
-            rhi_cmd_copy_texture(cl, w2->color, (RhiRect){0, 0, w2->tw, w2->th}, s_lms.snap, 0, 0);
-            rd__transition(cl, s_lms.snap, &s_lms.snapState, RHI_STATE_SHADER_READ);
-            rd__transition(cl, w2->color, &w2->colorState, RHI_STATE_RENDER_TARGET);
-            RhiBinding b[3];
-            memset(b, 0, sizeof(b));
-            b[0].slot = 1;
-            b[0].type = RHI_BIND_SAMPLED_TEXTURE;
-            b[0].texture = s_lms.snap;
-            b[1].slot = 1;
-            b[1].type = RHI_BIND_SAMPLER;
-            b[1].sampler =
-                rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
-            b[2].slot = 2;
-            b[2].type = RHI_BIND_SAMPLED_TEXTURE;
-            b[2].texture = g_rd.dummy;
-            gu = rd__replay_bind_group(g_rd.layoutTex, b, 3);
-        }
-        why = !gu.id ? "no copy of WORK2 for its load" : NULL;
-    }
     RhiBindGroup g = {0};
     if (!why && depth) {
         const RhiTexture src = fillSource(cl, sc);
@@ -2082,13 +2012,6 @@ static void msConvert(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
     p->color[0].resolve = w2->color;
     p->color[0].texture = s_lms.col;
     p->color[0].store = RHI_STORE_DONT_CARE;
-    if (up) {
-        p->color[0].load = RHI_LOAD_DONT_CARE; /* every sample written by msUp first */
-    }
-    s_lms.up = up;
-    s_lms.upPipe = upPipe;
-    s_lms.upKey = ku;
-    s_lms.upGroup = gu;
     if (depth) {
         rd__transition(cl, s_lms.dep, &s_lms.depState, RHI_STATE_DEPTH_WRITE);
         const bool poison = rd__lamps_poison();
@@ -2129,40 +2052,12 @@ uint8_t rd__lamps_pass_samples(void)
 void rd__lamps_pass_begun(Replay *r)
 {
     (void)r;
-    if (!s_lms.active || (!s_lms.fill && !s_lms.up)) {
-        return;
-    }
-    RhiCommandList cl = rd__replay_cl();
-    const uint32_t w = s_lms.w2->tw, h = s_lms.w2->th;
-    if (s_lms.up) {
-        /* msUp: WORK2's copy onto every sample (blit_ps, texel for pixel) */
-        s_lms.up = false;
-        IcoDrawCB ub;
-        memset(&ub, 0, sizeof(ub));
-        for (int i = 0; i < 4; i++) {
-            ub.col[i] = 0x80; /* blit_ps: modulate by 1.0 */
-        }
-        ub.mode[0] = ICO_DF_TEXTURED | ICO_DF_TCC_RGBA;
-        ub.uvRect[2] = (float)w;
-        ub.uvRect[3] = (float)h;
-        ub.tex[0] = (float)w;
-        ub.tex[1] = (float)h;
-        ub.tex[2] = 1.0f / (float)w;
-        ub.tex[3] = 1.0f / (float)h;
-        const RhiRect all = {0, 0, w, h};
-        rhi_cmd_set_scissor(cl, &all);
-        rd__set_pipeline(cl, s_lms.upPipe, &s_lms.upKey);
-        rd__bind_uniform(cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
-        rd__bind_uniform(cl, 1, rd__draw_group(&ub));
-        rhi_cmd_set_bind_group(cl, 2, s_lms.upGroup);
-        rd__replay_draw(cl, 3, 0, 1);
-        rd__stats_here()->draws++;
-        s_lms.ups++;
-    }
-    if (!s_lms.fill) {
+    if (!s_lms.active || !s_lms.fill) {
         return;
     }
     s_lms.fill = false;
+    RhiCommandList cl = rd__replay_cl();
+    const uint32_t w = s_lms.w2->tw, h = s_lms.w2->th;
     IcoDrawCB cb;
     fillCB(&cb, s_lms.w2, s_lms.sc);
     const RhiRect all = {0, 0, w, h};

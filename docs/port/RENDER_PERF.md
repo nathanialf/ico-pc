@@ -597,6 +597,7 @@ What was tried for the issue 163 rooms' lamps (`port/render/rd_lamps.c`, [RENDER
 | the crack fill's hold past the lamps (`fillhold`) | a loss: flushed by a later draw, the snapshot copy back | off |
 | WORK2 at the GS size from 4 samples resolved in the pass (`lowresms`) | 22.7 to 24.0, no shimmer seen | on on the PowerVR class (VD-32) |
 | the crack fill drawn in the glow's paste pass (`fillpaste`) | not built | the next release |
+| a WORK2 pass that loads WORK2 drawn with 4 samples after a copy and a spread draw | not built | the next release: some pictures on the phone split the lamps over two WORK2 passes (a pass beginning at a lamp in 80 of 418 pictures of one 10 s block; cause not found, no dump); designed, not shipped: untested for the lamp case, and it costs every mask-begun pass |
 
 ### Culling
 
