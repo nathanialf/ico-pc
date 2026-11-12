@@ -466,9 +466,10 @@ Measured or worked out, not done:
   silhouettes included, extrapolates UVs and depth there and blends a shared edge twice) and the
   fill's copy from the reduced SCENE copy (the half-texel offset found when it was tried). The
   colour swap (SCENE's colour swapped with its snapshot as `blurSwapTarget` does, the fill
-  writing every texel) would save the colour copy too, but every texel would make an RGBA8 round
-  trip through a float output, which the Vulkan specification lets round to either neighbour,
-  and the UINT view that would make it exact is off on tilers.
+  writing every texel) needs that every texel make an RGBA8 round trip through a
+  float output, which the Vulkan specification lets round to either neighbour, so it is taken
+  only where a start-up self-test of all 256 levels passes on the device itself, else the copy stays
+  ([The crack fill's snapshot by the swap](RENDER_POST.md#the-crack-fills-snapshot-by-the-swap)).
   `build-host/tmp/v098/evidence/perf/crack-pass.sh` measures the pass structure with and without
   the fill on lavapipe under the PowerVR and the Qualcomm-driver profiles.
 - **The fog's cost per frame.** On lavapipe the fog of the Mac frame costs several times the

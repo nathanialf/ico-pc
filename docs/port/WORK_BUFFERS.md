@@ -1565,6 +1565,8 @@ KEEP, Z write off, MODULATE, TCC 1, DATE). On the Pixel's v3677 frame (`--list`)
 seven strips; on the cage room's v4287 frame SHADOW0's alpha is above 0 over x 49-237, y 80-255 of 424 x 256,
 about 31 % of it. Outside the volumes' box every one of those reads zero, so the count's one draw
 and the composites are drawn over the box only (`port/render/rd_shadow_box.c`, header comment):
+The box is on by default, byte for byte; on the owner's Pixel it gave nothing measurable at the bridge or in the cage room
+(the volumes' box is nearly the whole picture there; see [The shadow tiles](RENDER_POST.md#the-shadow-tiles), off).
 
 - **The count.** The stencil's bits 0-5 are cleared at the reset (the reset's own pass, a pass's
   clear load over the whole depth, or the merged pass's clear; the pass area never takes a pass

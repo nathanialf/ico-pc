@@ -1009,8 +1009,8 @@ word 0x3400D, LERP_AS FIX 0), list 4 a DATE DATM 1 sprite (a later reader of bit
 the tiles off and on, MSAA held off: SCENE byte for byte, the composite drawn over a mask with dead
 tiles. A failure keeps the tiles off.
 
-**The lines.** Once at start: `rd: shadow tiles: on (the PowerVR class; self-test ok: ...)` or
-`rd: shadow tiles: off (<why>)`; once: `rd: shadow tiles: the first composite over the tile mask
+**The lines.** Once at start: `rd: shadow tiles: off (<why>)` (by default: not measured to help) or,
+with the tests' switch, `rd: shadow tiles: on (ICO_RD_SHADOW_TILE=1; self-test ok: ...)`; once: `rd: shadow tiles: the first composite over the tile mask
 (...)`; a composite drawn whole: `rd: shadow tiles: a composite drawn whole: <why> ...` (first 8,
 every 100th). The 10 s `window: per replay` line: `; shadow tiles: C composites a replay over the
 tile mask (M masks), K whole (<why> n)`. `rd_replay_tool --stats`: `stats: shadow tiles on|off: C
@@ -1286,7 +1286,7 @@ Under the Enhanced preset, with SCENE's scale above 1 on either axis, SCENE's ow
 (`doFog` calls `rd__crack_fill`) and the walk draws it after lists 4-6, from the start of list 7
 on where `rd__crack_fill_place` puts it (`rd__crack_fill_at` before each command of the list loop,
 `port/render/rd_crack_fill.c`; [its place](#the-fills-place-after-list-7)): the pass open there ends
-with SCENE's colour copied into its snapshot texture (`rd__replay_take_snap`), and one triangle is
+with SCENE's colour copied into its snapshot texture (`rd__replay_take_snap`; swapped with it where the start-up self-test passed, [below](#the-crack-fills-snapshot-by-the-swap)), and one triangle is
 drawn over SCENE's colour alone: `crack_fill_ps` (`port/shaders/blit.hlsl`, behind `blit_vs`, key
 `rd__crack_fill_key(RD_CRACK_KEY_FILL)`: no depth attached, no blend) reads that copy and SCENE's depth itself,
 sampled where it is (`RHI_STATE_DEPTH_READ`), and gives a crack the colour of the nearer end of

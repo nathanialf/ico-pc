@@ -292,8 +292,17 @@ pictures in time. It never steps back up while the game runs; the row shows
 where it ended up, for example **Auto (2x)**. The Enhanced preset uses the
 size of your screen; Auto is a choice you make in the Resolution row.
 
+The game also keeps its main threads on the phone's fastest
+processor cores and, on Android 13 and later, tells the phone how long each
+picture may take, so the phone can set its speed for the game. There is
+nothing to switch on. A speed gain has been measured only on a Pixel 10 Pro
+Fold; phones with Mali or Adreno graphics are not measured yet.
+
 If it still stutters, play for a minute and send `ico-pc.log` from `logs`
-with a problem report. On phones with a Qualcomm graphics chip the log says,
+with a problem report. The normal release is all that is needed, with no
+special build or setting. A line starting `window: device:` near the top of
+the log names the Android version and the phone, so it does not need to be
+typed in. On phones with a Qualcomm graphics chip the log says,
 for each picture that was held back, how fast the graphics chip was running
 and how busy it was just before and just after, and whether the phone's
 graphics driver reset it; that tells a graphics chip that slowed down apart

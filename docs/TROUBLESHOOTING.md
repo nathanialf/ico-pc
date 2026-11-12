@@ -420,7 +420,8 @@ does not work, send a [problem report](#send-a-problem-report) with
 3. Say which version of the game you have, and whether you play the
    the European, Japanese, Korean, North American or Asian disc, the August 2001 preview or the June 2001 magazine demo. A downloaded release shows its version
    in the top-right corner of the Options menu's first page, and the log
-   says both at the top.
+   says both at the top. On Android the log
+   also has a `window: device:` line with the Android version and the phone.
 4. Attach the newest file in `logs` that starts with `report-`, when the
    game wrote one for the problem (it already holds the log and your
    settings). Otherwise attach `ico-pc.log`. If the problem is in a
