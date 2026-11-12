@@ -47,7 +47,7 @@ run explain itself. [ARCHITECTURE.md](ARCHITECTURE.md) places this layer among t
 | `port/platform/window_switch.c`, `window_switch.h` | Options > Graphics > Apply: the renderer switched to another backend or graphics card in the process, the Graphics page's host and its card names |
 | `port/platform/window_lifecycle.c`, `window_lifecycle.h` | the steps run when a mobile system moves the app |
 | `port/platform/ico_thread.c`, `ico_thread.h` | one OS thread, mutex and condition wrapper (pthreads, Win32) for code that must not need SDL; the achievements file writer, the texture decode pool, the VFS's per-mount mutex and the disc reader thread ([DATA.md](DATA.md#the-disc-reader-thread)) use it (`ico_thread_test.c`) |
-| `port/platform/cpu_place.c`, `cpu_place.h` | which core a thread runs on (one sample a step, a picture or a submit job, for the 10 s line's cores), the cores' top speeds (Linux and Android), the calling thread's priority and allowed cores, keeping a thread to some cores and who keeps to which (`cpu_place_plan`: Android's game, render and submit threads, `[dev] big_cores`); in `ico_thread`'s library, which the renderer links ([The render thread](#the-render-thread); `cpu_place_test.c`) |
+| `port/platform/cpu_place.c`, `cpu_place.h`, `cpu_keep.c`, `cpu_keep.h` | which core a thread runs on (one sample a step, a picture or a submit job, for the 10 s line's cores), the cores' top speeds (Linux and Android), the calling thread's priority and allowed cores, keeping a thread to some cores and who keeps to which (`cpu_place_plan`: Android's game, render and submit threads, `[dev] big_cores`; `cpu_keep`: kept after the start, ico_platform); in `ico_thread`'s library, which the renderer links ([The render thread](#the-render-thread); `cpu_place_test.c`) |
 | `port/platform/pump_watch.c`, `pump_watch.h` | the event pump's recent window messages and SDL events, the controllers that came and went (name, GUID, SDL driver), SDL's own log ring, and the names of the messages (pure C, tested everywhere) |
 | `port/platform/window_pump_win.c`, `window_pump_win.h` | Windows: the window's messages recorded for the slow-pump lines, the display and the computer kept awake |
 | `port/platform/pace_policy.c`, `pace_policy.h` | the pacing decisions, free of SDL: the vsync lock, slow presents, the gap between presents |
@@ -805,14 +805,14 @@ the submit thread to the next faster cores 2-6, the game thread left to the syst
 threads' lines say `kept to the fastest core 7 alone` and `kept to the next faster cores 2-6`.
 A pin is judged by the cores read back after it (`cpu_place_pin_checked`, `CpuPinResult`), not by
 the call's answer: that phone's kernel said yes to core 7 alone and kept the render thread to 2-7
-(its line ended `may run on cores 2-7`, and every 10 s block had it on core 4 or 6), the cause on
-the kernel's side not known from a log (the Android common kernel lets a vendor's scheduler module
-hook `sched_setaffinity`, the likely one). When the fastest core alone is not kept the render
-thread keeps to the faster cores instead and says so: `could not be kept to the fastest core 7
-alone: the system said yes and keeps it to cores 2-7; kept to the faster cores 2-7 instead`; a
-refused call names its errno (`could not be kept to ... (errno 22: Invalid argument)`). Core 7 is
-not pursued further: an app cannot overrule the kernel's placement, and the gain would be the
-prime core's 20 % clock on 14-20 ms of CPU a picture, about 3 ms.
+in 20 of 25 starts (why is not known from the code: a vendor's scheduler hook on
+`sched_setaffinity` the likely one). The start then keeps it to the faster cores and says so:
+`could not be kept to the fastest core 7 alone: the system said yes and keeps it to cores 2-7;
+kept to the faster cores 2-7 instead` (a refused call names its errno). The keeper asks again
+after the start, at a 3D scene, focus, a return and every 10 s, and gives the game thread a fast
+core of its own (`cpu_keep.h`, the log thread's tick; `[dev] big_cores = false` turns it off with
+the rest): the starts that kept core 7 ran the old bridge evenly at 67-71 fps, the others at 48-59
+with back-offs ([the lines](ANDROID_DIAGNOSTICS.md#the-threads-cores-after-the-start)).
 With exactly two cores faster than the slowest (a Helio G85: `0-5 1.8 GHz, 6-7 2.0 GHz`, whose
 game thread, saturated, ran on the slow cores in 15-62 % of the samples while the render and
 submit threads held both fast ones) the game thread and the render thread both keep to those two

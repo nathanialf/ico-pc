@@ -1064,6 +1064,27 @@ that stops again writing its own line without the retry mark); a stop at the fre
   `cpu_place_thread_free` resets the kept thread itself, then finds it already there, and does
   nothing with no mask kept); issue 179: the thread's CPU time, core lists to masks, the threads
   line from a fake table and a fake `/proc/self/task` (`cpu_place`).
+- `cpu_keep_test.c` (ctest `cpu_keep`): the render, game and submit threads' cores after the start
+  (`port/platform/cpu_keep.h`), every expectation from the rule's words: the rule on
+  `0-1 2.2 GHz, 2-6 3.1 GHz, 7 3.8 GHz` (render 7 alone, game 6 alone, submit 2-5, others 0-5;
+  core 7 refused: 6, 5, `2-4, 7`, `0-4, 7`; 7 not allowed: 6, 5, 2-4, 0-4; the pair 6-7; the
+  start's rule 2-7 with submit 2-6; the game thread's 6 refused: 5; only 7 fast and allowed;
+  every fast core refused: none), a Helio G85 (render 7, game 6, submit with the others on 0-5;
+  the start's rule 6-7 for both), a 4 + 3 + 1 phone and 4 + 4 (7, 6, 4-5), a 1 + 2 + 1 four-core
+  device (3, 2, 1, others 0-1), one speed and one core (off); the keeper against a fake kernel
+  that keeps a mask a thread: every pin kept (the ideal at the start, a scene and the focus
+  asking nothing more, the try and block lines word for word, the system moving the render
+  thread to 2-7 counted once and pinned back), core 7 alone widened to 2-7 as the owner's
+  Pixel did (6 alone, quiet until the 10 s retry, a scene asking at once, the ideal once the
+  kernel keeps it), every one-core pin widened (the pair, the game thread's cores refused one a
+  tick until it joins the others' 0-5, then quiet), a cpuset without core 7 (never asked, then
+  asked when the allowed cores grow), the render thread's id not known yet (the request waits),
+  the submit thread starting later, a new render thread; the reasons' words; and cpu_place's
+  samples by core word for word, a thread's cpuset and its cores from a fake tree under the
+  build folder (`/top-app` and `cpus`, the root set, `effective_cpus`, no such thread: `ENOENT`)
+  and a registered free thread moved back by `cpu_place_refree` (Linux, two or more cores
+  allowed: left alone when skipped, moved, then not touched). CPU only: the kernel's own answers
+  are a phone's.
 - `thread_stat_test.c`: `schedstat` parsed and read from a fake `/proc/self/task`, the block's
   difference, its words (`thread_stat`).
 - `fps_counter_test.c`: the Frame rate counter's number (`port/platform/fps_counter.h`): 0 before
