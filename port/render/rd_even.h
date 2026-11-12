@@ -86,9 +86,10 @@ typedef struct RdEvenWindow {
     uint64_t steps, stepSum2, back, breaks;
     int64_t stepSum;
     uint32_t stepMax, backMax; /* RD_EVEN_UNITS */
-    /* the alpha's sample to the GPU's end (exact ends), the drain */
-    uint32_t lat[RD_EVEN_LAT_BINS];
-    uint64_t latN, drainUs, drainN;
+    /* the alpha's sample to the GPU's end (exact ends), the hand-over to
+     * it, the drain */
+    uint32_t lat[RD_EVEN_LAT_BINS], latHand[RD_EVEN_LAT_BINS];
+    uint64_t latN, latHandN, drainUs, drainN;
     /* the present clock's */
     uint64_t samples, clampLo, clampHi, resetFwd, resetBack, held;
     uint32_t clampLoMax, clampHiMax; /* RD_EVEN_UNITS */

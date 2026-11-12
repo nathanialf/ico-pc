@@ -994,7 +994,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   presents with GPU ends at the middles of their quarter-ms bins (1, 2, 3, 5 and under half a
   refresh of 8 ms apart, one end a bound, one present with none, a frame number that went back),
   their content steps (one back), four handed over (the sample to the GPU's end 10, 18, 20 and 28
-  ms, drains of 1, 2, 1 and 1 ms) and five present-clock notes (clamps below 0 and above 0.999,
+  ms, the hand-over to it 9, 16, 19 and 27, drains of 1, 2, 1 and 1 ms) and five present-clock notes (clamps below 0 and above 0.999,
   resets forward and back): the sums and the line word for word; a short buffer cut and
   terminated; taken twice: no line; one more present with the refresh unknown, word for word; the
   hand-over's stamps taken once.

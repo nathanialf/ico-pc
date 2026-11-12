@@ -9,7 +9,8 @@
  *      restart) and one more 8.125 ms on; contents 10.25 ... (frame +
  *      alpha) stepping 0.25, 0.25, 0.5, -0.125, 0.875, 0.5, 0.25 and 0.25
  *      ticks; four of them handed over (the alpha's sample 10, 18, 20 and
- *      28 ms before their GPU's end, drains of 1, 2, 1 and 1 ms); five
+ *      28 ms before their GPU's end, the hand-over 9, 16, 19 and 27 ms,
+ *      drains of 1, 2, 1 and 1 ms); five
  *      clock notes (two clamps below 0, one above 0.999, a forward reset
  *      and two back, one held 7.5 ms): the line word for word;
  *   2. taken again: nothing, no line;
@@ -76,6 +77,8 @@ int main(void)
     CHECK(s_w.stepSum == 27500 && s_w.stepSum2 == 153125000u && s_w.stepMax == 8750 &&
           s_w.back == 1 && s_w.backMax == 1250);
     CHECK(s_w.lat[10] == 1 && s_w.lat[18] == 1 && s_w.lat[20] == 1 && s_w.lat[28] == 1);
+    CHECK(s_w.latHandN == 4 && s_w.latHand[9] == 1 && s_w.latHand[16] == 1 &&
+          s_w.latHand[19] == 1 && s_w.latHand[27] == 1);
     CHECK(s_w.samples == 5 && s_w.clampLo == 2 && s_w.clampLoMax == 2500 && s_w.clampHi == 1 &&
           s_w.clampHiMax == 2010 && s_w.resetFwd == 1 && s_w.resetBack == 2 && s_w.held == 1 &&
           s_w.heldMaxUs == 7500);
@@ -91,8 +94,9 @@ int main(void)
               "times (the most 0.250 below), at 0.999 1 times (the most 0.201 above); the "
               "present clock: 5 samples, resets 1 forward and 2 back, 1 held instead of going "
               "back within a frame pair (the most 7.50 ms); the alpha's sample to the "
-              "GPU's end over 4 pictures: 10th 10.5, median 18.5, 90th 28.5 ms (the drain before "
-              "the hand-over 1.25 ms on average over 4)");
+              "GPU's end over 4 pictures: 10th 10.5, median 18.5, 90th 28.5 ms, the hand-over to "
+              "it 10th 9.5, median 16.5, 90th 27.5 ms (the drain before the hand-over 1.25 ms on "
+              "average over 4)");
     /* a short buffer: cut, still terminated */
     char small[16];
     CHECK(rd_even_format(&s_w, 8.0, small, sizeof small) && strlen(small) == 15);

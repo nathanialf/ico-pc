@@ -937,7 +937,7 @@ prints after the CPU phases' line (`port/render/rd_even.c`, `rd_even.h`; `port/p
 (`perf_log`)):
 
 ```
-window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exact, B with a bound at one, U without a GPU end) by refreshes of R ms: under half a refresh N0, 1 refresh N1, 2 refreshes N2, 3 refreshes N3, 4 or more N4; the content's step over them in ticks (mean, deviation): under half a refresh M0 (D0), 1 refresh M1 (D1), 2 refreshes M2 (D2), 3 refreshes M3 (D3), 4 or more M4 (D4); every step (S): mean M (deviation D), the largest L, back K times (the most X), C chain restarts; the alpha clamped at 0 Z times (the most A below), at 0.999 T times (the most H above); the present clock: N samples, resets F forward and K back, H held instead of going back within a frame pair (the most X ms); the alpha's sample to the GPU's end over N pictures: 10th A, median B, 90th C ms (the drain before the hand-over D ms on average over N)
+window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exact, B with a bound at one, U without a GPU end) by refreshes of R ms: under half a refresh N0, 1 refresh N1, 2 refreshes N2, 3 refreshes N3, 4 or more N4; the content's step over them in ticks (mean, deviation): under half a refresh M0 (D0), 1 refresh M1 (D1), 2 refreshes M2 (D2), 3 refreshes M3 (D3), 4 or more M4 (D4); every step (S): mean M (deviation D), the largest L, back K times (the most X), C chain restarts; the alpha clamped at 0 Z times (the most A below), at 0.999 T times (the most H above); the present clock: N samples, resets F forward and K back, H held instead of going back within a frame pair (the most X ms); the alpha's sample to the GPU's end over N pictures: 10th A, median B, 90th C ms, the hand-over to it 10th A, median B, 90th C ms (the drain before the hand-over D ms on average over N)
 ```
 
 - **The pictures** are the presents whose GPU record was collected in the block (each frame slot's
@@ -973,7 +973,9 @@ window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exa
   end, by the 1 ms bin's middle; the drain is the wait for the picture before, after the alpha and
   before the hand-over (the game thread's `slot waits` split, fresh and further). A wide 10th to
   90th spread is latency that varies picture to picture: content sampled at even times reaches the
-  GPU's end at uneven ones.
+  GPU's end at uneven ones. The hand-over to the GPU's end is the same without the drain: a spread
+  much narrower than the sample's says the drain is what varies, and that an alpha taken at the
+  hand-over would reach the GPU's end at steadier latencies.
 
 No clock is read for the line: the stamps are the ones the drain, the slot wait and the present
 clock already take. The render thread adds about a dozen relaxed atomic additions a picture, the

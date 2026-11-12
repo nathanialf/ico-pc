@@ -11,8 +11,9 @@
  *     most X below), at 0.999 T times (the most X above); the present clock:
  *     N samples, resets F forward and K back, H held instead of going back
  *     within a frame pair (the most X ms); the alpha's sample to the GPU's
- *     end over N pictures: 10th A, median B, 90th C ms (the drain before the
- *     hand-over D ms on average over N)
+ *     end over N pictures: 10th A, median B, 90th C ms, the hand-over to it
+ *     10th A, median B, 90th C ms (the drain before the hand-over D ms on
+ *     average over N)
  *
  * The sums are atomics (the line runs on the window's thread); the chain
  * (the present before) is the replaying thread's own, as replays never
@@ -120,6 +121,12 @@ void rd_even_picture(const RdEvenPic *p)
             const int bin = b >= (double)(RD_EVEN_LAT_BINS - 1) ? RD_EVEN_LAT_BINS - 1 : (int)b;
             add32(&s_sum.lat[bin], 1u);
             add(&s_sum.latN, 1u);
+            if (p->gpuEndMs >= p->handMs) {
+                const double h = floor((p->gpuEndMs - p->handMs) / RD_EVEN_LAT_BIN_MS);
+                const int hb = h >= (double)(RD_EVEN_LAT_BINS - 1) ? RD_EVEN_LAT_BINS - 1 : (int)h;
+                add32(&s_sum.latHand[hb], 1u);
+                add(&s_sum.latHandN, 1u);
+            }
         }
     }
     s_prev.have = true;
@@ -188,6 +195,7 @@ void rd_even_take(RdEvenWindow *w)
     }
     for (int b = 0; b < RD_EVEN_LAT_BINS; b++) {
         w->lat[b] = take32(&s_sum.lat[b]);
+        w->latHand[b] = take32(&s_sum.latHand[b]);
     }
     w->pictures = take(&s_sum.pictures);
     w->bound = take(&s_sum.bound);
@@ -200,6 +208,7 @@ void rd_even_take(RdEvenWindow *w)
     w->backMax = take32(&s_sum.backMax);
     w->breaks = take(&s_sum.breaks);
     w->latN = take(&s_sum.latN);
+    w->latHandN = take(&s_sum.latHandN);
     w->drainUs = take(&s_sum.drainUs);
     w->drainN = take(&s_sum.drainN);
     w->samples = take(&s_sum.samples);
@@ -333,6 +342,12 @@ bool rd_even_format(const RdEvenWindow *w, double refreshMs, char *out, size_t s
             share(w->lat, RD_EVEN_LAT_BINS, w->latN, RD_EVEN_LAT_BIN_MS, 0.1),
             share(w->lat, RD_EVEN_LAT_BINS, w->latN, RD_EVEN_LAT_BIN_MS, 0.5),
             share(w->lat, RD_EVEN_LAT_BINS, w->latN, RD_EVEN_LAT_BIN_MS, 0.9));
+        if (w->latHandN) {
+            put(&o, ", the hand-over to it 10th %.1f, median %.1f, 90th %.1f ms",
+                share(w->latHand, RD_EVEN_LAT_BINS, w->latHandN, RD_EVEN_LAT_BIN_MS, 0.1),
+                share(w->latHand, RD_EVEN_LAT_BINS, w->latHandN, RD_EVEN_LAT_BIN_MS, 0.5),
+                share(w->latHand, RD_EVEN_LAT_BINS, w->latHandN, RD_EVEN_LAT_BIN_MS, 0.9));
+        }
     } else {
         put(&o, "; the alpha's sample to the GPU's end: not measured (no exact GPU end of a "
                 "picture handed over)");
