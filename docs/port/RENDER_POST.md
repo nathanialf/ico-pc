@@ -595,11 +595,19 @@ samples, `rd__lamps_pass_samples`), its depth filled first per sample (`depth_do
 standard 4-sample locations, sample-rate shading, the depth forms above at each sample's point,
 `rd__lamps_pass_begun`), the colour resolved into WORK2 (each pixel the mean of its 4 samples, as
 today's box averages a GS pixel's scale-squared texels) and reduced by the box. A pass that loads
-WORK2 or reads its destination is drawn single-sampled (counted, said once). Only where the RHI has
+WORK2 or reads its destination is drawn single-sampled (counted, said once), WORK2's own depth then
+filled first by `msConvert`. Under `lowresms` the single-sampled depth fill is not drawn from
+`prepareDrawEx`: that pass of its own ended the open pass and flushed WORK2's pending fill clear into
+a pass of its own, so the lamps' pass loaded WORK2 and stayed single-sampled (round 11: on the gate
+and the title every lamp drawn so, `1 passes with 4 samples, 1 single-sampled`; on the phone 2 a
+picture). `lowresms8`: the same with 8 samples (the standard 8-sample locations; the phone reports
+counts 0xf). Only where the RHI has
 the in-pass resolve, sample-rate shading, the standard locations and 4 samples, on the PowerVR and
 desktop classes (never the Arm, Qualcomm and Apple ones in this release: issues 123, 179, 182, 211),
-the MSAA scene not blocked, and its start-up self-test passed (an 8 x 8 4-sample transient colour and
-depth cleared and resolved in a pass, read back); otherwise the lamps keep today's full-size path,
+the MSAA scene not blocked, and its start-up self-test passed (the lamps' pass in small: a 32 x 16
+depth holding an occluder whose edge cuts a GS pixel of a 16 x 8 WORK2 in half, the per-sample fill
+from it and a lamp quad under GEQUAL in a transient multisampled pass resolved in the pass, read
+back against a CPU reference of each sample's test at its standard location, within a level); otherwise the lamps keep today's full-size path,
 never the aliased one (`rd: lamps: low resolution with 4 samples refused: <why>`). Its 4-sample
 pipelines for the lamps' and fill's draws are made at first use but the depth fill's, which is in the
 start-up set. Traffic at the phone's Auto: WORK2 1.5 MB resolved, nothing loaded or stored for the
@@ -636,7 +644,7 @@ H pictures whose lamps let the crack fill's hold pass (fillhold)`, and `rd_repla
 `stats: lamps lowres on|off: WORK2 WxH under SCENE SWxSH, D draws into WORK2 on its own depth, F
 depth fills, X draws without a depth`.
 
-`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|lowresbox|lowresbias|lowreshy|lowres4|lowresp|lowres2x|lowresms|fillhold` (the tests only,
+`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|lowresbox|lowresbias|lowreshy|lowres4|lowresp|lowres2x|lowresms|lowresms8|fillhold` (the tests only,
 [TESTING.md](TESTING.md#environment-switches); words joined by `,` or `+`) turns every part off,
 every part on, or the parts named on whatever the class (the self-tests still decide the area and
 the fold of two pairs);

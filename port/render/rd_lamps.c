@@ -207,9 +207,10 @@ const char *rd__lamps_box_why_text(int why)
 
 const char *rd__lamps_bits_text(uint32_t bits)
 {
-    static const char *const kWord[14] = {
-        "area",      "pad",        "owed",    "wholepad", "fold4",    "lowres",   "fillhold",
-        "lowresbox", "lowresbias", "lowres4", "lowresp",  "lowreshy", "lowres2x", "lowresms"};
+    static const char *const kWord[15] = {"area",       "pad",      "owed",     "wholepad",
+                                          "fold4",      "lowres",   "fillhold", "lowresbox",
+                                          "lowresbias", "lowres4",  "lowresp",  "lowreshy",
+                                          "lowres2x",   "lowresms", "lowresms8"};
     static char s_text[8][128];
     static unsigned s_next;
     bits &= RD_LAMPS_ALL | RD_LAMPS_FILLHOLD | RD_LAMPS_LOWRES_ANY;
@@ -219,7 +220,7 @@ const char *rd__lamps_bits_text(uint32_t bits)
     char *t = s_text[s_next++ & 7u]; /* a ring: a few calls in one expression */
     t[0] = '\0';
     size_t at = 0;
-    for (int i = 0; i < 14; i++) {
+    for (int i = 0; i < 15; i++) {
         if (bits & (1u << i)) {
             const int m = snprintf(t + at, sizeof(s_text[0]) - at, "%s%s", at ? "+" : "", kWord[i]);
             at += m > 0 && (size_t)m < sizeof(s_text[0]) - at ? (size_t)m : 0;
@@ -275,6 +276,8 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRES2X;
         } else if (n == 8 && strncmp(s, "lowresms", 8) == 0) {
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS;
+        } else if (n == 9 && strncmp(s, "lowresms8", 9) == 0) {
+            b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS | RD_LAMPS_LOWRESMS8;
         } else if (n == 7 && strncmp(s, "lowres4", 7) == 0) {
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRES4;
         } else if (n == 7 && strncmp(s, "lowresp", 7) == 0) {
@@ -1354,8 +1357,12 @@ static struct {
     uint64_t draws, fills, dropped;                 /* since rd_init */
     uint64_t sDraws, sFills, sDropped, sPic, sHold; /* the 10 s sums */
     uint32_t picReplay, holdReplay;
+    Replay *r;             /* the replay of the last draw on WORK2 (msConvert's fill) */
     uint32_t w, h, sw, sh; /* the last sizes (the line) */
 } s_lr = {.on = -1};
+
+/* LOWRESMS's sample count: 4, or 8 with the word lowresms8 (read with LOWRES) */
+static uint32_t s_lmsN = 4u;
 
 static bool msEligible(void);
 
@@ -1388,6 +1395,7 @@ bool rd__lamps_lowres_on(void)
         const bool msAsked =
             s_sw.env == 1 ? (s_sw.envBits & RD_LAMPS_LOWRESMS) != 0u : RD_LAMPS_MS_DEFAULT != 0;
         if (msAsked) {
+            s_lmsN = s_sw.env == 1 && (s_sw.envBits & RD_LAMPS_LOWRESMS8) != 0u ? 8u : 4u;
             s_lr.ss = false;
             s_lr.box = true;
             s_lr.on = msEligible() ? 1 : 0;
@@ -1555,6 +1563,7 @@ static void fillCB(IcoDrawCB *cb, const RdTargetRec *w2, const RdTargetRec *sc)
     cb->uvRect[1] = RD_LAMPS_BIAS_REACH;
     cb->uvRect[2] = 1.0f;
     cb->uvRect[3] = RD_LAMPS_BIAS_UNITS * rd__target_z_scale(idOf(RD_TARGET_SCENE));
+    cb->scale[2] = (float)s_lmsN; /* depth_down_ms_ps's sample table (4 or 8) */
 }
 
 static bool lowresFill(Replay *r, RdTargetRec *w2, RdTargetRec *sc)
@@ -1615,7 +1624,7 @@ static bool lowresFill(Replay *r, RdTargetRec *w2, RdTargetRec *sc)
 /* RD_LAMPS_LOWRESMS (rd_lamps.h): the lamps' pass on WORK2 drawn into a
  * 4-sample colour and depth that live in the pass only, the colour resolved
  * into WORK2 inside it */
-#define MS_SAMPLES 4u
+#define MS_SAMPLES (s_lmsN)
 #define MS_TEST 8u /* the self-test's target */
 
 static struct {
@@ -1688,25 +1697,63 @@ static bool msEnsure(uint32_t w, uint32_t h)
     return true;
 }
 
-/* The start-up self-test: an 8 x 8 4-sample transient colour (and depth)
- * cleared in a pass and resolved inside it into a single-sampled texture,
- * read back: every texel the clear's colour within a level.  It checks the
- * in-pass resolve and the transient attachments, not the lamps' raster
- * (the A/B's pictures do that) */
+/* The start-up self-test: the lamps' pass in small.  A "SCENE" depth of
+ * 32 x 16 texels (scale 2 over a 16 x 8 WORK2) holds 0 (the far end of the
+ * lamps' GEQUAL) left of texel column MS_EDGE and 0.25 from it on: an
+ * occluder whose edge, GS position MS_EDGE / 2, cuts a GS pixel in half.
+ * One 4-sample pass on a transient colour (cleared to 0) and depth: the
+ * per-sample fill (depth_down_ms_ps from that depth, its default form) and
+ * a lamp, a quad over everything at depth 0 under GEQUAL in kTestColour
+ * (blit_ps untextured), the colour resolved in the pass into a
+ * single-sampled texture, read back.  The CPU reference: each sample at its
+ * standard location passes where the fill's bilinear depth there, less its
+ * allowance, is 0 (both taps on the occluder's far side), the pixel the
+ * mean of its samples; every channel within a level.  It checks the
+ * transient pair, the in-pass resolve, the sample locations, the
+ * per-sample fill and its depth test at a sub-pixel occluder edge. */
+#define MS_TW 16u
+#define MS_TH 8u
+#define MS_EDGE 15u
+
 static const char *msSelftest(void)
 {
+    /* Vulkan's standard locations (VkPhysicalDeviceLimits.standardSampleLocations) */
+    static const float kLoc4[4][2] = {
+        {0.375f, 0.125f}, {0.875f, 0.375f}, {0.125f, 0.625f}, {0.625f, 0.875f}};
+    static const float kLoc8[8][2] = {{0.5625f, 0.3125f}, {0.4375f, 0.6875f}, {0.8125f, 0.5625f},
+                                      {0.3125f, 0.1875f}, {0.1875f, 0.8125f}, {0.0625f, 0.4375f},
+                                      {0.6875f, 0.9375f}, {0.9375f, 0.0625f}};
+    const float (*kLoc)[2] = MS_SAMPLES == 8u ? kLoc8 : kLoc4;
     const char *why = NULL;
-    RhiTexture col = rhi_create_texture(&(RhiTextureDesc){MS_TEST, MS_TEST, 1, RHI_FMT_RGBA8_UNORM,
+    RhiTexture col = rhi_create_texture(&(RhiTextureDesc){MS_TW, MS_TH, 1, RHI_FMT_RGBA8_UNORM,
                                                           RHI_TEX_RENDER_TARGET | RHI_TEX_TRANSIENT,
                                                           "rd lamps ms test", MS_SAMPLES});
-    RhiTexture dep = rhi_create_texture(&(RhiTextureDesc){MS_TEST, MS_TEST, 1, RHI_FMT_D32F_S8,
+    RhiTexture dep = rhi_create_texture(&(RhiTextureDesc){MS_TW, MS_TH, 1, RHI_FMT_D32F_S8,
                                                           RHI_TEX_DEPTH_STENCIL | RHI_TEX_TRANSIENT,
                                                           "rd lamps ms test depth", MS_SAMPLES});
     RhiTexture res = rhi_create_texture(&(RhiTextureDesc){
-        MS_TEST, MS_TEST, 1, RHI_FMT_RGBA8_UNORM,
+        MS_TW, MS_TH, 1, RHI_FMT_RGBA8_UNORM,
         RHI_TEX_RENDER_TARGET | RHI_TEX_SAMPLED | RHI_TEX_COPY_SRC, "rd lamps ms test resolve", 0});
-    if (!col.id || !dep.id || !res.id) {
+    RhiTexture src = rhi_create_texture(&(RhiTextureDesc){
+        MS_TW * 2u, MS_TH * 2u, 1, RHI_FMT_D32F_S8, RHI_TEX_DEPTH_STENCIL | RHI_TEX_SAMPLED,
+        "rd lamps ms test scene depth", 0});
+    RdPipeKeyInt kf = rd__post_key(RD_VS_BLIT, RD_FS_DEPTH_DOWN_MS, RHI_FMT_RGBA8_UNORM);
+    kf.depthFmt = RHI_FMT_D32F_S8;
+    kf.gs.ztst = RD_ZTST_ALWAYS;
+    kf.gs.zwrite = RD_ZWRITE_ON;
+    kf.gs.colorMask = 0;
+    kf.gs.msaa = MS_SAMPLES;
+    RdPipeKeyInt kl = rd__post_key(RD_VS_BLIT, RD_FS_BLIT, RHI_FMT_RGBA8_UNORM);
+    kl.depthFmt = RHI_FMT_D32F_S8;
+    kl.gs.ztst = RD_ZTST_GEQUAL;
+    kl.gs.zwrite = RD_ZWRITE_OFF;
+    kl.gs.msaa = MS_SAMPLES;
+    const RhiPipeline pf = rd__get_pipeline(&kf), pl = rd__get_pipeline(&kl);
+    const float allow = RD_LAMPS_BIAS_UNITS * rd__target_z_scale(0);
+    if (!col.id || !dep.id || !res.id || !src.id) {
         why = "its self-test's textures not made";
+    } else if (!pf.id || !pl.id) {
+        why = "its self-test's pipelines not made";
     } else {
         RhiCommandList cl =
             rd__begin_own_frame(64u * 1024u) ? rhi_begin_commands() : (RhiCommandList){0};
@@ -1714,6 +1761,39 @@ static const char *msSelftest(void)
             why = "its self-test had no command list";
         } else {
             RhiState cs = RHI_STATE_UNDEFINED, ds = RHI_STATE_UNDEFINED, rs = RHI_STATE_UNDEFINED;
+            RhiState ss = RHI_STATE_UNDEFINED;
+            /* the occluder: 0 everywhere, then 0.25 from column MS_EDGE */
+            rd__transition(cl, src, &ss, RHI_STATE_DEPTH_WRITE);
+            for (int k = 0; k < 2; k++) {
+                RhiRenderPassDesc q;
+                memset(&q, 0, sizeof(q));
+                q.depth.texture = src;
+                q.depth.depthLoad = RHI_LOAD_CLEAR;
+                q.depth.stencilLoad = RHI_LOAD_CLEAR;
+                q.depth.clearDepth = k ? 0.25f : 0.0f;
+                q.width = MS_TW * 2u;
+                q.height = MS_TH * 2u;
+                if (k) {
+                    q.area = (RhiRect){(int32_t)MS_EDGE, 0, MS_TW * 2u - MS_EDGE, MS_TH * 2u};
+                }
+                rhi_cmd_begin_render_pass(cl, &q);
+                rhi_cmd_end_render_pass(cl);
+            }
+            rd__transition(cl, src, &ss, RHI_STATE_DEPTH_READ);
+            const RhiBindGroup gf = fillGroup(src);
+            RhiBinding b[3];
+            memset(b, 0, sizeof(b));
+            b[0].slot = 1;
+            b[0].type = RHI_BIND_SAMPLED_TEXTURE;
+            b[0].texture = g_rd.dummy;
+            b[1].slot = 1;
+            b[1].type = RHI_BIND_SAMPLER;
+            b[1].sampler =
+                rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+            b[2].slot = 2;
+            b[2].type = RHI_BIND_SAMPLED_TEXTURE;
+            b[2].texture = g_rd.dummy;
+            const RhiBindGroup gl = rd__replay_bind_group(g_rd.layoutTex, b, 3);
             rd__transition(cl, col, &cs, RHI_STATE_RENDER_TARGET);
             rd__transition(cl, dep, &ds, RHI_STATE_DEPTH_WRITE);
             rd__transition(cl, res, &rs, RHI_STATE_RENDER_TARGET);
@@ -1721,52 +1801,103 @@ static const char *msSelftest(void)
             memset(&p, 0, sizeof(p));
             p.color[0].texture = col;
             p.color[0].load = RHI_LOAD_CLEAR;
-            for (int i = 0; i < 4; i++) {
-                p.color[0].clear[i] = (float)kTestColour[i] / 255.0f;
-            }
             p.color[0].store = RHI_STORE_DONT_CARE;
             p.color[0].resolve = res;
             p.colorCount = 1;
             p.depth.texture = dep;
             p.depth.depthLoad = RHI_LOAD_CLEAR;
             p.depth.stencilLoad = RHI_LOAD_CLEAR;
-            p.depth.clearDepth = 0.25f;
+            p.depth.clearDepth = 0.5f;
             p.depth.store = RHI_STORE_DONT_CARE;
             p.depth.stencilStore = RHI_STORE_DONT_CARE;
-            p.width = MS_TEST;
-            p.height = MS_TEST;
-            rhi_cmd_begin_render_pass(cl, &p);
-            rhi_cmd_end_render_pass(cl);
+            p.width = MS_TW;
+            p.height = MS_TH;
+            if (gf.id && gl.id) {
+                g_rd.passSamples = (uint8_t)MS_SAMPLES;
+                rhi_cmd_begin_render_pass(cl, &p);
+                rd__replay_viewport(MS_TW, MS_TH);
+                const RhiRect all = {0, 0, MS_TW, MS_TH};
+                rhi_cmd_set_scissor(cl, &all);
+                IcoDrawCB cb;
+                memset(&cb, 0, sizeof(cb));
+                cb.tex[0] = (float)(MS_TW * 2u);
+                cb.tex[1] = (float)(MS_TH * 2u);
+                cb.tex[2] = 1.0f / (float)(MS_TW * 2u);
+                cb.tex[3] = 1.0f / (float)(MS_TH * 2u);
+                cb.param[0] = cb.param[1] = 2.0f;
+                cb.param[3] = 1.0f;
+                cb.uvRect[0] = 0.0f; /* the default form: bilinear */
+                cb.uvRect[2] = 1.0f;
+                cb.uvRect[3] = allow;
+                cb.scale[2] = (float)MS_SAMPLES;
+                rd__set_pipeline(cl, pf, &kf);
+                rd__bind_uniform(cl, 0, rd__frame_group(MS_TW, MS_TH, 0.0f, 0.0f));
+                rd__bind_uniform(cl, 1, rd__draw_group(&cb));
+                rhi_cmd_set_bind_group(cl, 2, gf);
+                rd__replay_draw(cl, 3, 0, 1);
+                IcoDrawCB lc;
+                memset(&lc, 0, sizeof(lc));
+                for (int c = 0; c < 4; c++) {
+                    lc.col[c] = kTestColour[c];
+                }
+                rd__set_pipeline(cl, pl, &kl);
+                rd__bind_uniform(cl, 1, rd__draw_group(&lc));
+                rhi_cmd_set_bind_group(cl, 2, gl);
+                rd__replay_draw(cl, 3, 0, 1);
+                rhi_cmd_end_render_pass(cl);
+                g_rd.passSamples = 1;
+            } else {
+                why = "its self-test's bind groups not made";
+            }
             rd__transition(cl, res, &rs, RHI_STATE_COPY_SRC);
             rhi_end_commands(cl);
             rhi_submit(cl);
             rhi_wait_idle();
-            static uint8_t back[MS_TEST * MS_TEST * 4u + 4096u];
+            static uint8_t back[MS_TW * MS_TH * 4u + 4096u];
             uint32_t rp = 0;
-            if (!rhi_readback_texture(res, RHI_ASPECT_COLOR, back, sizeof(back), &rp) ||
-                rp < MS_TEST * 4u || (size_t)rp * MS_TEST > sizeof(back)) {
+            if (!why && (!rhi_readback_texture(res, RHI_ASPECT_COLOR, back, sizeof(back), &rp) ||
+                         rp < MS_TW * 4u || (size_t)rp * MS_TH > sizeof(back))) {
                 why = "its self-test's readback failed";
             }
-            for (uint32_t i = 0; !why && i < MS_TEST * MS_TEST; i++) {
-                const uint8_t *t = back + (size_t)(i / MS_TEST) * rp + (i % MS_TEST) * 4u;
+            for (uint32_t i = 0; !why && i < MS_TW * MS_TH; i++) {
+                const uint32_t x = i % MS_TW, y = i / MS_TW;
+                unsigned pass = 0;
+                for (int sm = 0; sm < (int)MS_SAMPLES; sm++) {
+                    /* the fill's bilinear at the sample's point, on x (the
+                     * occluder is the same on every row) */
+                    const float at = ((float)x + kLoc[sm][0] - 0.5f) * 2.0f;
+                    int t0 = (int)floorf(at);
+                    const float f = at - floorf(at);
+                    t0 = t0<0 ? 0 : t0>(int)(MS_TW * 2u - 1u) ? (int)(MS_TW * 2u - 1u) : t0;
+                    const int t1 = t0 + 1 > (int)(MS_TW * 2u - 1u) ? t0 : t0 + 1;
+                    const float d0 = t0 >= (int)MS_EDGE ? 0.25f : 0.0f;
+                    const float d1 = t1 >= (int)MS_EDGE ? 0.25f : 0.0f;
+                    float d = d0 + (d1 - d0) * f - allow;
+                    d = d > 0.0f ? d : 0.0f;
+                    pass += d <= 0.0f ? 1u : 0u;
+                }
+                const uint8_t *t = back + (size_t)y * rp + x * 4u;
                 for (int ch = 0; ch < 4 && !why; ch++) {
-                    const int d = (int)t[ch] - (int)kTestColour[ch];
-                    if (d > 1 || d < -1) {
-                        why = "its self-test failed (the resolved colour is not the clear's)";
+                    const int want =
+                        ((int)kTestColour[ch] * (int)pass + (int)MS_SAMPLES / 2) / (int)MS_SAMPLES;
+                    const int dd = (int)t[ch] - want;
+                    if (dd > 1 || dd < -1) {
+                        why = "its self-test failed (a pixel at the occluder's edge is not the "
+                              "mean of its samples' lamp light)";
+                        rd__log("lamps: multisampled self-test: pixel %u,%u channel %d read %d for "
+                                "%d (%u of %u samples lit)",
+                                x, y, ch, (int)t[ch], want, pass, MS_SAMPLES);
                     }
                 }
             }
         }
     }
     rhi_wait_idle();
-    if (col.id) {
-        rhi_destroy_texture(col);
-    }
-    if (dep.id) {
-        rhi_destroy_texture(dep);
-    }
-    if (res.id) {
-        rhi_destroy_texture(res);
+    const RhiTexture made[4] = {col, dep, res, src};
+    for (int k = 0; k < 4; k++) {
+        if (made[k].id) {
+            rhi_destroy_texture(made[k]);
+        }
     }
     return why;
 }
@@ -1780,7 +1911,7 @@ static bool msEligible(void)
     const char *why = !lim                                  ? "no device when WORK2 is made"
                       : rhi_backend() != RHI_BACKEND_VULKAN ? "not Vulkan"
                       : !lim->resolveInPass ? "no in-pass resolve (a VkRenderPass device)"
-                      : (lim->msaaCounts & MS_SAMPLES) == 0u ? "4 samples not taken"
+                      : (lim->msaaCounts & MS_SAMPLES) == 0u ? "the sample count not taken"
                       : !lim->sampleRateShading              ? "no sample-rate shading"
                       : !lim->standardSampleLocations        ? "no standard sample locations"
                       : cls != 1 && cls != 2                 ? "not the PowerVR or a desktop class"
@@ -1849,6 +1980,15 @@ static void msConvert(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
         why = !g.id ? "no copy of SCENE's depth" : NULL;
     }
     if (why) {
+        /* drawn single-sampled: WORK2's own depth filled first where the
+         * pass has it (the hook leaves the fill to this pass under LOWRESMS) */
+        if (depth && p->depth.texture.id == w2->depth.id && s_lr.r &&
+            !(s_lr.fresh && s_lr.replay == g_rd.replayCounter) && lowresFill(s_lr.r, w2, sc)) {
+            s_lr.fresh = true;
+            s_lr.replay = g_rd.replayCounter;
+            s_lr.fills++;
+            sumAdd(&s_lr.sFills, 1);
+        }
         s_lms.single++;
         sumAdd(&s_lms.sSingle, 1);
         if (!s_lms.saidSingle) {
@@ -1945,7 +2085,14 @@ void rd__lamps_lowres_depth(Replay *r, DrawSetup *ds)
     }
     const bool fresh = s_lr.fresh && s_lr.replay == g_rd.replayCounter;
     bool ok = w2->withDepth && w2->depth.id && !ds->dateStencil && !r->dateStNow;
-    if (ok && !fresh) {
+    s_lr.r = r;
+    /* LOWRESMS: the depth is filled per sample in the 4-sample pass itself
+     * (rd__lamps_pass_begun), or for a pass drawn single-sampled by
+     * msConvert just before it begins: no pass of its own here, which would
+     * end the open pass and flush WORK2's pending fill clear into a pass of
+     * its own, leaving the lamps a pass that loads WORK2 (round 11: every
+     * lamps pass single-sampled so) */
+    if (ok && !fresh && s_lms.state != 1) {
         ok = lowresFill(r, w2, td);
         if (ok) {
             s_lr.fresh = true;

@@ -93,6 +93,7 @@ set(lamps4 "ICO_RD_LAMPS=pad+owed+wholepad+lowres4")
 set(lampsP "ICO_RD_LAMPS=pad+owed+wholepad+lowresp")
 set(lampsSS "ICO_RD_LAMPS=pad+owed+wholepad+lowres2x")
 set(lampsMS "ICO_RD_LAMPS=pad+owed+wholepad+lowresms")
+set(lampsMS8 "ICO_RD_LAMPS=pad+owed+wholepad+lowresms8")
 set(lampsHold "ICO_RD_LAMPS=pad+owed+wholepad+lowres+fillhold")
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(args_enh43 --enhanced --resolution 2x --aspect 1.3333 --present 1280x960)
@@ -121,7 +122,9 @@ set(ssSettings ss_phone ss_enh43 ss_enh25 ss_enh3x ss_enh4x ss_w169)
 # lowresms (4 samples resolved in the pass): ms_<setting>, both arms on
 # lavapipe's own desktop class (no fake: the MoltenVK fake's Apple class
 # keeps today's path), its reference today's picture as lowres2x's
-set(msSettings ms_phone ms_enh43 ms_enh25 ms_enh3x ms_enh4x ms_w169)
+set(msSettings ms_phone ms_enh43 ms_enh25 ms_enh3x ms_enh4x ms_w169 ms8_phone ms8_enh43)
+set(args_ms8_phone ${args_phone})
+set(args_ms8_enh43 ${args_enh43})
 foreach(b phone enh43 enh25 enh3x enh4x w169)
   set(args_ss_${b} ${args_${b}})
   set(args_ms_${b} ${args_${b}})
@@ -136,9 +139,15 @@ endforeach()
 # shift of half a SCENE texel (--jitter 0.5,0.5, everything moved by the same
 # GS distance) with lowres2x at most ssShimmer times today's plus 4 levels,
 # at the phone's setting and 2x (printed with the Original's for information)
-set(ssLevels 32)
-set(ssShimmer 2)
-set(ssShimmerSettings ss_phone ss_enh43 ms_phone ms_enh43)
+# Round 11's measurement (lavapipe, before the fix that keeps every lamp in
+# the 4-sample pass: the lamps were then drawn single-sampled): lowresms's
+# WORK3 at most 39 levels from today's (the gate at the phone's setting),
+# its shimmer 37 against today's 15 (the title, the phone's setting) and 63
+# against 26 (2x).  The bound: 40 levels against today; the shimmer at most
+# 1.5 times today's plus 4 (the target: ssShimmer halves)
+set(ssLevels 40)
+set(ssShimmer 3)
+set(ssShimmerSettings ss_phone ss_enh43 ms_phone ms_enh43 ms8_phone ms8_enh43)
 set(settings phone phonebox phonebias phonehy phone4 phonep enh43 enh25 enh3x enh4x w169
              ${ssSettings} ${msSettings} x1 hold poison msx1 mspoison)
 # msx1: lowresms at Enhanced 1x (nothing changes: every PNG the same bytes);
@@ -205,6 +214,8 @@ foreach(dump IN LISTS dumps)
         list(APPEND env "${lampsBias}")
       elseif(s MATCHES "^ss_" AND arm EQUAL 1)
         list(APPEND env "${lampsSS}")
+      elseif(s MATCHES "^ms8_" AND arm EQUAL 1)
+        list(APPEND env "${lampsMS8}")
       elseif(s MATCHES "^ms_" AND arm EQUAL 1)
         list(APPEND env "${lampsMS}")
       elseif(s STREQUAL "phonehy" AND arm EQUAL 1)
@@ -396,6 +407,10 @@ foreach(dump IN LISTS dumps)
         set(isSS 0)
         set(armWord "${lampsMS}")
         set(formName lowresms)
+        if(s MATCHES "^ms8_")
+          set(armWord "${lampsMS8}")
+          set(formName lowresms8)
+        endif()
         if(NOT flat MATCHES "lowresms on: [1-9]")
           message(SEND_ERROR "${dump} ${s}: lowresms not in force or no pass with 4 samples:\n${flat}")
           math(EXPR failures "${failures} + 1")
@@ -451,10 +466,10 @@ foreach(dump IN LISTS dumps)
           message(STATUS "${formName} shimmer: ${s} ${dump} WORK3 under half a SCENE texel's shift "
                          "(arm 0 today, arm 1 ${formName}):${shimText}")
           if(jMax_0 GREATER -1 AND jMax_1 GREATER -1)
-            math(EXPR shimAllowed "${jMax_0} * ${ssShimmer} + 4")
+            math(EXPR shimAllowed "${jMax_0} * ${ssShimmer} / 2 + 4")
             if(jMax_1 GREATER shimAllowed)
               message(SEND_ERROR "${dump} ${s}: ${formName}'s WORK3 moves ${jMax_1} levels under "
-                                 "the shift, today's ${jMax_0}: at most ${ssShimmer} times "
+                                 "the shift, today's ${jMax_0}: at most ${ssShimmer}/2 times "
                                  "today's + 4 (DIVERGENCES.md VD-32)")
               math(EXPR failures "${failures} + 1")
             endif()

@@ -406,12 +406,18 @@ float depth_down_ps(BlitVSOut i) : SV_Depth
 // location o_s of the pixel (Vulkan's, RhiLimits.standardSampleLocations), GS position
 // p + o_s - 0.5 (a GS integer coordinate is a pixel's centre), so its SCENE texel index is
 // (p + o_s - 0.5) * k - crop, k and the crop as depth_down_ps's; the same forms there.
+// g_scale.z the sample count: 4, or 8 (lowresms8: the standard 8-sample locations).
 static const float2 kDownMs4[4] = {float2(0.375, 0.125), float2(0.875, 0.375),
                                    float2(0.125, 0.625), float2(0.625, 0.875)};
+static const float2 kDownMs8[8] = {float2(0.5625, 0.3125), float2(0.4375, 0.6875),
+                                   float2(0.8125, 0.5625), float2(0.3125, 0.1875),
+                                   float2(0.1875, 0.8125), float2(0.0625, 0.4375),
+                                   float2(0.6875, 0.9375), float2(0.9375, 0.0625)};
 
 float depth_down_ms_ps(BlitVSOut i, uint s : SV_SampleIndex) : SV_Depth
 {
-    const float2 q = floor(i.pos.xy) + kDownMs4[s & 3u] - 0.5;
+    const float2 o = g_scale.z == 8.0 ? kDownMs8[s & 7u] : kDownMs4[s & 3u];
+    const float2 q = floor(i.pos.xy) + o - 0.5;
     return depth_down_at(float2(q.x * g_param.x - g_param.z, q.y * g_param.y) + g_scale.xy);
 }
 

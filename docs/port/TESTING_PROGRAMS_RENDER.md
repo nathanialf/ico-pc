@@ -956,7 +956,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `...+lowres2x` (WORK2 at twice the GS size) at each of those settings against today's: WORK3
   at most 32 levels from today's (`lowres2x today: ...`), and at the phone's setting and 2x its
   WORK3's change under half a SCENE texel's shift (`--jitter 0.5,0.5`) at most twice today's plus 4
-  levels (`lowres2x shimmer: ...`), FAILING otherwise; `...+lowresms` the same at the same settings
+  levels (`lowres2x shimmer: ...`; since round 12 at most 40 levels from today's and 1.5 times
+  today's shimmer plus 4), FAILING otherwise; `...+lowresms` (and `...+lowresms8` at the phone's
+  setting and 2x) the same at the same settings
   on lavapipe's own desktop class (no fake), its stats `lowresms on` with a pass of 4 samples at
   least, and at Enhanced 1x and under `ICO_RD_LAMPS_POISON=1` every PNG the same bytes; the WORK3-against-Original lines printed for
   information only; at the phone's setting `...+lowres` against

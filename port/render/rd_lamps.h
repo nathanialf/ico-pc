@@ -106,6 +106,8 @@ extern "C" {
  * 211), the MSAA scene not blocked, and its start-up self-test passed;
  * elsewhere LOWRES is off (today's full-size path, never the aliased one) */
 #define RD_LAMPS_LOWRESMS 8192u
+/* lowresms8: the same with 8 samples (the standard 8-sample locations) */
+#define RD_LAMPS_LOWRESMS8 16384u
 /* lowresms where ICO_RD_LAMPS names no words of its own: 0 no (the
  * release), 1 yes (a variant build) */
 #ifndef RD_LAMPS_MS_DEFAULT
@@ -118,7 +120,8 @@ extern "C" {
 #endif
 #define RD_LAMPS_LOWRES_ANY                                                                        \
     (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX | RD_LAMPS_LOWRESBIAS | RD_LAMPS_LOWRES4 |               \
-     RD_LAMPS_LOWRESP | RD_LAMPS_LOWRESHY | RD_LAMPS_LOWRES2X | RD_LAMPS_LOWRESMS)
+     RD_LAMPS_LOWRESP | RD_LAMPS_LOWRESHY | RD_LAMPS_LOWRES2X | RD_LAMPS_LOWRESMS |                \
+     RD_LAMPS_LOWRESMS8)
 /* the slope bias's reach past the nearest texel's own distance from the
  * sample point, in GS pixels: the rasteriser's sub-pixel snap (the GS's
  * 1/16).  (Round 7's 0.25 covered a sample point taken (0.5 - 0.5 / scale)
