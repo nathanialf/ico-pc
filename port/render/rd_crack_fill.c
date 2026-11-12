@@ -1605,6 +1605,11 @@ bool rd__crack_swap_selftest(void)
         if (!cl.id) {
             why = "no command list";
         } else {
+            /* the dummy (swapDraw's depth slot) uploaded and in SHADER_READ
+             * first: under FSR 3.1 no replay or self-test before this one has
+             * done it (rd_replay_tool_fsr3: the validation layer's "rd dummy
+             * ... current layout is VK_IMAGE_LAYOUT_UNDEFINED") */
+            rd__upload_textures(cl);
             RhiState ss = RHI_STATE_UNDEFINED, ds[2] = {RHI_STATE_UNDEFINED, RHI_STATE_UNDEFINED};
             rd__transition(cl, src, &ss, RHI_STATE_COPY_DST);
             rhi_cmd_copy_buffer_to_texture(cl, up, 0, pitch, src, 0, (RhiRect){0, 0, SW_W, SW_H});
