@@ -535,7 +535,8 @@ Measured or worked out, not done:
   11's load) fewer a DARK title picture at 2366 x 1080, and list 11's depth load. Not measured on
   the phone (no dump of its current title on this machine; the corpus title's motion blur draws
   into SCENE before list 11); `rd_fill11_ab` asserts the passes and bytes on lavapipe from the
-  code. On the PowerVR and desktop classes only: off on the Arm and Qualcomm phones this release.
+  code. Off by default in this release: on the PowerVR phone the title's right part flickered black
+  with it on (cause not found).
 - **The fog's cost per frame.** On lavapipe the fog of the Mac frame costs several times the
   title frame's at under three times the pixels; the fog pass count (`rd__fog_plan`) and its
   depth source (`rd__fog_source`) are where to look before its shader, which is about 60

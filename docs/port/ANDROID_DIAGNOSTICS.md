@@ -646,7 +646,8 @@ room the late pass holds the fill and the copy stays (`the draw held past the sn
 
 ### The crack fill in list 11's pass
 
-On the PowerVR phone (and desktop GPUs) the crack fill of a picture with no glow and no aura (the
+Off by default in this release (the start line says `off (the default in this release: ...)`):
+with it on (`ICO_RD_FILL11=1`), the crack fill of a picture with no glow and no aura (the
 title's dark pictures) is drawn as the first draw of list 11's pass, over a scratch depth, instead
 of a pass of its own ([RENDER_POST.md](RENDER_POST.md#the-crack-fill-in-list-11s-pass)). The start
 line `rd: crack fill: with list 11: on (self-test passed: ...; the PowerVR class)` (or `off

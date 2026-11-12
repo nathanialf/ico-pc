@@ -1827,14 +1827,18 @@ The walk (`rd__fill11_take`, `rd__fill11_at`, `rd__fill11_draw`):
   depth, the draw itself) and at the walk's end; the pass the fill would have had (`endPassFor`: a
   clear pending on another target keeps its carry), the same bytes as at its place.
 
-The switch: on where the start-up self-test passed and the device's class is the PowerVR phone's or a
+The switch: **off by default in this release** (`RD_FILL11_DEFAULT 0`): on the owner's PowerVR phone
+the right part of the title's picture flickered black from the first picture the fill was drawn in
+list 11's pass, and the cause was not found by reading the code (the start line says so; nothing of
+it runs, not the self-test nor the start-up set's twins, without `ICO_RD_FILL11`). With the default
+on it would be on where the start-up self-test passed and the device's class is the PowerVR phone's or a
 desktop one (`rd__profile_tile_class` 1, or 2 on a GPU that is not a tile-based phone's,
 `RhiLimits.tilePhone`: Vulkan, OpenGL, Direct3D 11 and 12 on a PC); off on the Arm, Qualcomm and
 Apple classes and other tile-based phones in this release (issues 123, 179, 211: no new kind of GPU
 work there). `ICO_RD_FILL11=0|1` (the tests only, [TESTING.md](TESTING.md); no config key) keeps it
 off or tries it on any class (the self-test still decides); `rd__fill11_force` is the tests'. On
-OpenGL it is on where the self-test passes (llvmpipe: `rd_fill11_gl`), as on the other desktop
-classes; the saving there is the passes' work, not tile memory.
+OpenGL it would be on with the default where the self-test passes (llvmpipe: `rd_fill11_gl`), as on
+the other desktop classes; the saving there is the passes' work, not tile memory.
 
 The self-test (`rd__fill11_selftest`, from `rd__crack_swap_selftest`, once a renderer from
 `rd_fog_selftest`; where the class or `ICO_RD_FILL11` lets it be tried): a 256 x 2 source of every

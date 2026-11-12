@@ -11,13 +11,15 @@
 #           the profile's class is Apple's there, so the on run sets
 #           ICO_RD_FILL11=1 (the PowerVR class's default on a device);
 #   desk    Enhanced 2x at 4:3 (the PS2's border: no repeat), lavapipe's own
-#           profile (a desktop class): on by default, the on run sets nothing;
+#           profile (a desktop class); the on run sets ICO_RD_FILL11=1 (off by
+#           default in this release, RD_FILL11_DEFAULT);
 #   mali    the phone's setting on a Mali-G68's limits and an Arm phone's vendor
 #           (ICO_VK_FAKE_LIMITS=mali, ICO_VK_FAKE_VENDOR=0x13B5: a tile-based phone
-#           GPU, RhiLimits.tilePhone): off by default, the on run sets nothing and
-#           must draw no fill in list 11's pass;
-#   gl      -DBACKEND=opengl (rd_fill11_gl): the desk setting on OpenGL (llvmpipe;
-#           a desktop class: on by default);
+#           GPU, RhiLimits.tilePhone): the on run sets nothing and must draw no
+#           fill in list 11's pass, its self-test not run (the default off; the
+#           class off too were the default on);
+#   gl      -DBACKEND=opengl (rd_fill11_gl): the desk setting on OpenGL (llvmpipe),
+#           the on run with ICO_RD_FILL11=1;
 # a dump drawn narrower than a setting's aspect cannot show it and is skipped
 # there.  Each pair: every PNG the off run writes (SCENE, DISPLAY, PRESENT and
 # every other named target) the on run's byte for byte; the same draws; the off
@@ -89,7 +91,7 @@ set(on_phone ICO_RD_FILL11=1)
 set(word_phone on)
 set(args_desk --enhanced --resolution 2x --aspect 1.3333 --present 1280x960)
 set(env_desk "")
-set(on_desk "")
+set(on_desk ICO_RD_FILL11=1)
 set(word_desk on)
 set(args_mali ${args_phone})
 set(env_mali ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5)
@@ -97,7 +99,7 @@ set(on_mali "")
 set(word_mali off)
 set(args_gl ${args_desk})
 set(env_gl "")
-set(on_gl "")
+set(on_gl ICO_RD_FILL11=1)
 set(word_gl on)
 if("${BACKEND}" STREQUAL "opengl")
   set(settings gl)

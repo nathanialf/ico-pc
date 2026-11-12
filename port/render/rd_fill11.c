@@ -73,6 +73,13 @@
 #include "rd_shadow_tile.h" /* rd__profile_tile_class */
 #include "rd_upscale.h"     /* rd__upscale_point_on */
 
+/* Off by default in this release: on the owner's PowerVR phone (rc14, DXT-48-1536) the right
+ * part of the title's picture flickered black from the first picture the fill landed in list
+ * 11's pass, and the cause was not found by reading (docs/port/RENDER_POST.md).
+ * ICO_RD_FILL11=1 turns it on for the tests; 1 here would put it back on the PowerVR and desktop
+ * classes where the self-test passes */
+#define RD_FILL11_DEFAULT 0
+
 /* crack_fill_ps's DrawCB.mode.x (blit.hlsl CRACK_MODE_*, rd_crack_fill.c) */
 #define F11_MODE_COPY 1u
 #define F11_MODE_KEEP_A 2u
@@ -183,18 +190,19 @@ static int classOk(void)
     return c == 2 && lim != NULL && !lim->tilePhone ? 2 : 0;
 }
 
-/* the self-test and the start-up set's twins: wherever the class takes it
- * or ICO_RD_FILL11 is set either way (both runs of an A/B make the same
- * start-up set and frames) */
+/* the self-test and the start-up set's twins: wherever the default and the
+ * class take it or ICO_RD_FILL11 is set either way (both runs of an A/B
+ * make the same start-up set and frames); with the default off nothing new
+ * runs on a device without the variable */
 static bool tried(void)
 {
-    return envSwitch() >= 0 || classOk() != 0;
+    return envSwitch() >= 0 || (RD_FILL11_DEFAULT != 0 && classOk() != 0);
 }
 
 bool rd__fill11_may(void)
 {
     const int e = envSwitch();
-    return e == 1 || (e < 0 && classOk() != 0);
+    return e == 1 || (e < 0 && RD_FILL11_DEFAULT != 0 && classOk() != 0);
 }
 
 bool rd__fill11_on(void)
@@ -229,6 +237,11 @@ static void note(void)
     } else if (e == 0) {
         snprintf(line, sizeof(line), "crack fill: with list 11: off (%s%s; self-test %s)", src,
                  s_sw.force >= 0 ? "" : "=0", s_sw.test ? s_sw.words : "not run");
+    } else if (e < 0 && RD_FILL11_DEFAULT == 0) {
+        snprintf(line, sizeof(line),
+                 "crack fill: with list 11: off (the default in this release: the PowerVR "
+                 "phone's title flickered black with it on, cause not found; ICO_RD_FILL11=1 "
+                 "turns it on for the tests)");
     } else if (!rd__fill11_may()) {
         snprintf(line, sizeof(line),
                  "crack fill: with list 11: off (not the PowerVR or a desktop class: off on the "

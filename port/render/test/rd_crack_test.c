@@ -946,11 +946,13 @@ int main(int argc, char **argv)
     rd_end_frame(0);
     rd__crack_fill_counts(&c0);
     if (fill11() && envOn) {
-        /* the self-test (rd_crack_test runs no rd_fog_selftest: it runs
-         * with the swap's), then the switch on whatever the class */
+        /* the switch on whatever the class and the default (the tile
+         * class's fakes give Apple's class, where the self-test is not even
+         * tried without it), then the self-test (rd_crack_test runs no
+         * rd_fog_selftest: it runs with the swap's) */
         rd__crack_fill_set_enabled(true);
-        (void)rd__crack_swap_selftest();
         rd__fill11_force(1);
+        (void)rd__crack_swap_selftest();
         rd__crack_fill_counts(&c0);
     }
     const RdTargetRec *t = rd__target_rec(rd_target(RD_TARGET_SCENE).id);

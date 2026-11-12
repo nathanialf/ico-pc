@@ -20,7 +20,9 @@
  * use SCENE's depth, or whose pass would hold a part of the picture only
  * (rd_pass_area.c), keeps today's passes.
  *
- * On where the start-up self-test passed (rd__fill11_selftest: the fill's
+ * Off by default in this release (RD_FILL11_DEFAULT 0 in rd_fill11.c: the
+ * PowerVR phone's title flickered black with it on, rc14; cause not found).
+ * With the default on it would be on where the start-up self-test passed (rd__fill11_selftest: the fill's
  * depth twins draw a known source back unchanged) and the device class is
  * the PowerVR phone's or a desktop one (rd__profile_tile_class 1 or 2, not a
  * tile-based phone GPU: RhiLimits.tilePhone); off on the Arm and Qualcomm

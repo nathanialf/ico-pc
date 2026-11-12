@@ -926,12 +926,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   too; a line may give `phoneN`, `deskN`, `glN` and `nop SPEC`, the tool's `--nop` for both runs)
   with `ICO_RD_FILL11=0` against the switch on, `--pass-dump --stats`, `ICO_RD_VU_PREPASS=0`: at the
   PowerVR phone's Resolution Auto (2364x1080, Full height and pixel) under `ICO_VK_FAKE_LIMITS=moltenvk
-  ICO_RD_LATE_PASS=1` (Apple's class to the profile: the on run sets `ICO_RD_FILL11=1`), at Enhanced
-  2x 4:3 on lavapipe's own profile (a desktop class: on by default), and at the phone's setting on a
-  Mali-G68's limits and an Arm phone's vendor (`ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5`: a
-  tile-based phone, off by default: the on run sets nothing and must draw no fill in list 11's pass,
-  its self-test not run); the `_gl` twin Enhanced 2x 4:3 on OpenGL (llvmpipe: a desktop class, on by
-  default). Each pair: every PNG byte for byte, the same draws, the passes and the crack fill's own
+  ICO_RD_LATE_PASS=1`, at Enhanced 2x 4:3 on lavapipe's own profile (both on runs with
+  `ICO_RD_FILL11=1`: off by default in this release), and at the phone's setting on a Mali-G68's
+  limits and an Arm phone's vendor (`ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5`: the on run
+  sets nothing and must draw no fill in list 11's pass, its self-test not run); the `_gl` twin
+  Enhanced 2x 4:3 on OpenGL (llvmpipe, `ICO_RD_FILL11=1`). Each pair: every PNG byte for byte, the same draws, the passes and the crack fill's own
   passes each fewer by the fills drawn in list 11's pass exactly, the colour MB loaded and stored each
   fewer by the MB the stats name for them (within 0.02), the depth and stencil MB not more, the copies
   the same, the off run drawing and holding nothing, the self-test passed in every run that ran it;
