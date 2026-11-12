@@ -416,6 +416,7 @@ endif()
 # every build
 add_executable(capture_trigger_test test/capture_trigger_test.c capture_trigger.c)
 target_compile_options(capture_trigger_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_include_directories(capture_trigger_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 if(ICO_RUN_TESTS)
     add_test(NAME capture_trigger COMMAND capture_trigger_test)
 endif()
