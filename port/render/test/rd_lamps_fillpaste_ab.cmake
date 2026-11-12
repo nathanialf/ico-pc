@@ -122,6 +122,12 @@ foreach(dump IN LISTS dumps)
     endif()
   endif()
   math(EXPR landedTotal "${landedTotal} + ${landed_on}")
+  # the phone's opening LAMPS frame (rc33 v746): the fill lands in the glow
+  # paste drawn at list 11's first draw into SCENE
+  if(dump MATCHES "v746[.]zip$" AND landed_on LESS 1)
+    message(SEND_ERROR "${dump}: the phone's opening lamps frame must land")
+    math(EXPR failures "${failures} + 1")
+  endif()
   foreach(arm on poison)
     file(GLOB pngs RELATIVE "${OUT}/${index}-off" "${OUT}/${index}-off/*.png")
     foreach(png IN LISTS pngs)

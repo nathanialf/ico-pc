@@ -22,3 +22,7 @@
 /primary/dev/ico-pc/build-host/tmp/corpus/dumps.pre-rpost/boot/rd-00400.rddump
 /primary/dev/ico-pc/build-host/tmp/e2e/run-title-off/dumps/rd-00400.rddump
 /primary/dev/ico-pc/build-host/tmp/e2e/run-title-on/dumps/rd-00400.rddump
+# the phone's opening (rc33, 2026-11-12): LAMPS frame 368, DARK frame 768, WHOLE frame 1134
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110824-v746.zip
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110838-v1545.zip
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110852-v2278.zip

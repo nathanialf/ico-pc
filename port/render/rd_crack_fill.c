@@ -1621,6 +1621,12 @@ static void heldAt(Replay *r, const RdFrame *f, const RdCmd *c, bool msaaOpen)
     rd__crack_fill_late(r, msaaOpen);
 }
 
+bool rd__crack_fill_lands_in_defer(void)
+{
+    return s_late.armed && s_late.deferred && s_late.paste && s_late.glow &&
+           s_late.pasteOrd == rd__fx_defer_ord() && s_late.replay == g_rd.replayCounter;
+}
+
 void rd__crack_fill_flush_held(Replay *r, int why)
 {
     if (!s_late.armed || !(s_late.taken || s_late.deferred) ||
@@ -1671,6 +1677,19 @@ void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bo
         s_late.paste = s_late.glow = true;
         s_late.pasteOrd = rd__fx_defer_ord();
         rd__late_pass_defer_at(r, f, c);
+        /* list 11's first draw into SCENE that ends the hold: the deferral
+         * goes on past it (list 11's join draws the paste early in that
+         * draw's own preparation, rd_late_pass.c), but the hold would flush
+         * the fill first (rc33's v746: list 11 command 26, a sprite of the
+         * display layer): the paste drawn here instead, at the same place in
+         * the order (before that draw), with the fill landing first in its
+         * pass; the draw then joins the pass as it would have */
+        if (rd__fx_defer_on() && list == 11 && !rd__cmd_is_state(c->type) && c->type != RDC_NOP) {
+            int why = RD_LATE_WHY_NONE;
+            if (rd__late_pass_class(f, c, &r->st, 0, &why) != RD_LATE_HOLD) {
+                rd__fx_defer_draw(r, false);
+            }
+        }
         if (rd__fx_defer_on()) {
             s_late.paste = s_late.glow = false; /* the deferral goes on */
         }

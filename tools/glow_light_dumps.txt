@@ -67,3 +67,7 @@
 /primary/dev/ico-pc/build-host/tmp/v0114/evidence/211/report/loss-20261111-092901.zip
 /primary/dev/ico-pc/build-host/tmp/v082/evidence/issue-123/loss/loss-20261018-050352-before.rddump
 /primary/dev/ico-pc/build-host/tmp/v082/evidence/issue-123/loss/loss-20261018-050352-lost.rddump
+# the phone's opening (rc33, 2026-11-12): LAMPS frame 368, DARK frame 768, WHOLE frame 1134
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110824-v746.zip
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110838-v1545.zip
+/primary/dev/ico-dumps/v0115-opening/frame-20261112-110852-v2278.zip

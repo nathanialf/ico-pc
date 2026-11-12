@@ -790,8 +790,12 @@ void rd__late_pass_defer_at(Replay *r, const RdFrame *f, const RdCmd *c)
     if (why <= RD_LATE_WHY_NONE || why >= RD_LATE_WHY_COUNT) {
         why = RD_LATE_WHY_SCENE;
     }
-    /* a held fill first (the order of the frame), then the paste */
-    rd__crack_fill_flush_held(r, why);
+    /* a held fill first (the order of the frame), then the paste; a
+     * FILLPASTE fill armed for this paste lands in its pass instead, first
+     * (rd_crack_fill.c rd__crack_fill_in_pass: the same order) */
+    if (!rd__crack_fill_lands_in_defer()) {
+        rd__crack_fill_flush_held(r, why);
+    }
     rd__fx_defer_draw(r, false);
 }
 

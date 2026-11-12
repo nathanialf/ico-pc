@@ -221,6 +221,9 @@ void rd__late_pass_deferred_drawn(bool landed, bool drawn);
 bool rd__fx_defer_on(void);
 /* the deferred glow paste's own command ordinal (rd_fx_plan.c) */
 uint32_t rd__fx_defer_ord(void);
+/* rd_crack_fill.c: a FILLPASTE fill armed for the deferred glow paste (it
+ * lands in the paste's pass, ahead of it, instead of a pass of its own) */
+bool rd__crack_fill_lands_in_defer(void);
 const RdTargetRec *rd__fx_defer_src(void); /* its source target (WORK3) */
 void rd__fx_defer_draw(struct Replay *r, bool landed);
 void rd__crack_fill_unarm_glow(void);
