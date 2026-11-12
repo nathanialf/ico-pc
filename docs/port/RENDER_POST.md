@@ -595,7 +595,9 @@ samples, `rd__lamps_pass_samples`), its depth filled first per sample (`depth_do
 standard 4-sample locations, sample-rate shading, the depth forms above at each sample's point,
 `rd__lamps_pass_begun`), the colour resolved into WORK2 (each pixel the mean of its 4 samples, as
 today's box averages a GS pixel's scale-squared texels) and reduced by the box. A pass that loads
-WORK2 or reads its destination is drawn single-sampled (counted, said once), WORK2's own depth then
+WORK2 is drawn multisampled too: WORK2 copied and spread over the samples first in the pass (`msUp`: on
+the phone 80 of 418 lamps pictures had a lamp begin such a pass). A pass that reads its destination
+is drawn single-sampled (counted, said once), WORK2's own depth then
 filled first by `msConvert`. Under `lowresms` the single-sampled depth fill is not drawn from
 `prepareDrawEx`: that pass of its own ended the open pass and flushed WORK2's pending fill clear into
 a pass of its own, so the lamps' pass loaded WORK2 and stayed single-sampled (round 11: on the gate

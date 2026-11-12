@@ -139,14 +139,16 @@ endforeach()
 # shift of half a SCENE texel (--jitter 0.5,0.5, everything moved by the same
 # GS distance) with lowres2x at most ssShimmer times today's plus 4 levels,
 # at the phone's setting and 2x (printed with the Original's for information)
-# Round 11's measurement (lavapipe, before the fix that keeps every lamp in
-# the 4-sample pass: the lamps were then drawn single-sampled): lowresms's
-# WORK3 at most 39 levels from today's (the gate at the phone's setting),
-# its shimmer 37 against today's 15 (the title, the phone's setting) and 63
-# against 26 (2x).  The bound: 40 levels against today; the shimmer at most
-# 1.5 times today's plus 4 (the target: ssShimmer halves)
-set(ssLevels 40)
-set(ssShimmer 3)
+# Round 13's measurement (lavapipe, desktop class, every lamp in the 4-sample
+# pass): lowresms's WORK3 at most 44 levels from today's (the title at 2x;
+# 23 to 43 elsewhere), DISPLAY at most 24; its shimmer (WORK3's change
+# under the half-texel shift) the title 17 against today's 15 at the phone's
+# setting and 44 against 26 at 2x (1.7 times), the gate 11 against 11 and 13
+# against 12.  The bounds: 48 levels against today (44 and a margin of 4);
+# the shimmer at most twice today's plus 4 (the largest measured ratio 1.7:
+# 1.5 times would fail the title at 2x by one level; ssShimmer halves)
+set(ssLevels 48)
+set(ssShimmer 4)
 set(ssShimmerSettings ss_phone ss_enh43 ms_phone ms_enh43 ms8_phone ms8_enh43)
 set(settings phone phonebox phonebias phonehy phone4 phonep enh43 enh25 enh3x enh4x w169
              ${ssSettings} ${msSettings} x1 hold poison msx1 mspoison)
