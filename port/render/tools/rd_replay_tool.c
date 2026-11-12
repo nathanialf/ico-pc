@@ -539,6 +539,7 @@
 #include "rd_layer.h"
 #include "rd_aura_paste.h"       /* --stats: the aura's paste split */
 #include "rd_late_pass.h"        /* --stats: the late passes on SCENE */
+#include "rd_lamps.h"            /* --stats: the lamps' glow for less */
 #include "rd_fill11.h"           /* --stats: the crack fill in list 11's pass */
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
 #include "rd_stencil_selftest.h" /* --stats: the stencil outside the shadow window */
@@ -3285,6 +3286,27 @@ int main(int argc, char **argv)
                pr->latePassJoined, pr->latePassJoinPasses,
                (double)pr->latePassJoinTexels * 4.0 / 1048576.0, pr->latePassBlockDraws,
                pr->latePassNoLand);
+        /* the lamps' glow for less (rd_lamps.c): the lamps' pass on WORK2
+         * with an area and the bytes it saved against the whole pass, or
+         * why it was whole; WORK2_PAD's bands left lazy (and its size) */
+        {
+            const char *tw = NULL;
+            (void)rd__lamps_test_state(&tw);
+            const RdTargetRec *w2 = rd__target_rec(rd_target(RD_TARGET_WORK2).id);
+            const RdTargetRec *pad = rd__target_rec(rd_target(RD_TARGET_WORK2_PAD).id);
+            printf("%s: stats: lamps %s (self-test %s): %u passes with the lamps' area (%ux%u at "
+                   "%d,%d of %ux%u: %u of %u texels; %u bytes not cleared, %u colour bytes not "
+                   "stored, %u depth bytes not loaded, %u not stored), %u whole%s%s%s; %u bands "
+                   "left lazy (WORK2_PAD %ux%u)\n",
+                   dump, rd__lamps_bits_text(rd__lamps_bits()), tw, pr->lampsAreas, pr->lampsAreaW,
+                   pr->lampsAreaH, pr->lampsAreaX, pr->lampsAreaY, w2 ? w2->tw : 0u,
+                   w2 ? w2->th : 0u, pr->lampsAreaTexels, pr->lampsTexels, pr->lampsSavedClear,
+                   pr->lampsSavedColorStore, pr->lampsSavedDepthLoad, pr->lampsSavedDepthStore,
+                   pr->lampsWhole, pr->lampsWhole ? " (" : "",
+                   pr->lampsWhole ? rd__lamps_why_text((int)pr->lampsWhy) : "",
+                   pr->lampsWhole ? ")" : "", pr->lampsPads, pad ? pad->tw : 0u,
+                   pad ? pad->th : 0u);
+        }
         /* the aura's paste as the alpha alone (rd_aura_paste.c) */
         printf("%s: stats: aura paste %s: %u split (%u rows as the alpha alone, %u band rows), %u "
                "drawn whole%s%s%s\n",

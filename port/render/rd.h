@@ -3305,6 +3305,18 @@ typedef struct RdPerfRecord {
     uint64_t colorLoadBytes, colorStoreBytes, depthLoadBytes, depthStoreBytes, clearBytes;
     uint64_t passTexels, copyBytes;
     uint32_t passUntracked;
+    /* The lamps' glow for less (rd_lamps.c, rd_lamps.h): this replay's
+     * lamps pass on WORK2 drawn with an area (lampsAreas, 0 or 1: the area
+     * lampsAreaX, Y, W, H in texels, lampsAreaTexels of the pass's
+     * lampsTexels) or whole (lampsWhole; lampsWhy its RD_LAMPS_WHY_*), the
+     * bytes the area did not clear, store (colour) and load and store
+     * (depth and stencil) against the whole pass (rhi_traffic_pass_sum's
+     * figures of the two), and WORK2_PAD's bands left a lazy clear
+     * (lampsPads: a pass fewer each) */
+    uint32_t lampsAreas, lampsWhole, lampsWhy, lampsPads;
+    int32_t lampsAreaX, lampsAreaY;
+    uint32_t lampsAreaW, lampsAreaH, lampsAreaTexels, lampsTexels;
+    uint32_t lampsSavedClear, lampsSavedColorStore, lampsSavedDepthLoad, lampsSavedDepthStore;
 } RdPerfRecord;
 
 /* The oldest finished record not yet popped (a queue of 64; the oldest are
@@ -3405,6 +3417,10 @@ void rd_glow_light_line(void);
  * "window: late pass: ..." for the replays since its last call (nothing
  * when no fill was held) */
 void rd_late_pass_line(void);
+/* the lamps' glow for less (rd_lamps.c): the 10 s "window: lamps: N lamps
+ * passes on WORK2 with an area (...), M whole (why); P bands left lazy"
+ * line, nothing in a block without a lamps frame */
+void rd_lamps_line(void);
 /* the aura's paste split (rd_aura_paste.c): the window's 10 s clause
  * "window: aura paste: ..." (nothing when no paste was seen) */
 void rd_aura_paste_line(void);

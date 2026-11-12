@@ -891,6 +891,36 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   differ by at most 3 levels on at most 800 pixels (`png_level_diff.py`; [DIVERGENCES.md](DIVERGENCES.md)
   VD-31, measured at most 537 pixels and 3 levels), every other target the same bytes; at least one
   fill held and one pass joined over the list on Vulkan. No device: SKIP.
+- `rd_lamps_test.c` (`rd_lamps`; `rd_lamps.cmake`, CPU): the lamps' glow for less's pure parts
+  (`rd_lamps.c`): `ICO_RD_LAMPS`'s words, the class's default (the band everywhere, the area on the
+  PowerVR and desktop classes under Vulkan with the pass area, never another class, a faked phone
+  vendor, OpenGL or D3D), the rects' union and 32 x 32 tiles, a GS box's texels on the boot
+  corpus's 512 x 512 frame at 2364 x 1080 and on the phone's 848 x 448 frame under Full pixel's
+  crop (every texel centre of the box inside the rect, a box off the target none), a lamp's box
+  from its stream's bound through an orthographic and a perspective matrix
+  (`rd__vis_hiz_occludee`, then the texels: every vertex's and every point's between two vertices
+  inside; a corner behind the eye refused), and the area's pick (the region unknown, nothing lit,
+  WORK2 but a tile, the tiles round both).
+- `rd_lamps_ab.cmake` (`rd_lamps_ab`, `rd_lamps_gl`; `rd_lamps.cmake`): the lamps dumps of
+  `tools/lamps_dumps.txt` (machine-local; a listed dump that is absent FAILS: issue 163's two
+  frames and the title's castle in four boot runs, 512 x 512 GS, not the phone's 848 x 448), each
+  replayed twice in one run (`--repeat 2`: the first lamps replay of a renderer is whole, the area
+  from the second) with `ICO_RD_LAMPS=0` and with the parts on, `--pass-dump --stats`, at the
+  PowerVR phone's profile (`ICO_VK_FAKE_LIMITS=moltenvk`, `ICO_RD_VU_PREPASS=0`,
+  `ICO_RD_LATE_PASS=1`, Enhanced 2364x1080, Full height and pixel, `ICO_RD_LAMPS=1`), the same
+  under `ICO_RD_LAMPS_POISON=1` and `ICO_RD_STORE_POISON=1`, lavapipe's desktop profile at
+  Enhanced 2x 4:3 (`ICO_RD_LAMPS=1`) and the Mali fakes (`ICO_VK_FAKE_LIMITS=mali`,
+  `ICO_VK_FAKE_VENDOR=0x13B5`, the class's default: no area); and two sequences on the boot
+  corpus (`--prev rd-00200`, a whole frame, then `rd-00400` twice; `--prev rd-00400 --prev
+  rd-00600`, a dark frame between, then `rd-00400`: the area on the last replay of each); the
+  `_gl` twin the desktop setting on OpenGL (llvmpipe, the area off, the band lazy). Each pair:
+  every PNG byte for byte, the same draws, the passes fewer by the bands left lazy exactly, the
+  colour loaded the same, the colour stored and cleared fewer by the stats' saved bytes and the
+  bands' (WORK2_PAD's texels x 4), the depth and stencil loaded and stored fewer by the saved
+  bytes (two hundredths of a MB; not under the poison), the saved colour bytes 4 x the texels the
+  area left; the off run no area and no band; one planned lamps pass a lamps replay, never whole
+  for the region unknown; an area at least once at the phone, poison and desktop settings and in
+  both sequences, none at the Mali and OpenGL settings, a band at every setting. No device: SKIP.
 - `rd_crack_work_ab.cmake` (`rd_crack_work_ab`, `rd_crack_work_gl`; `rd_crack_work.cmake`): the
   crack fill's snapshot by the swap and its early leave (`rd_crack_fill.c` FILLSWAP, CRACKTAP). The
   dumps of `tools/crack_work_dumps.txt` (machine-local; a listed dump that is absent FAILS: the

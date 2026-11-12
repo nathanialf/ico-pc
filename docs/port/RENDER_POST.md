@@ -405,6 +405,67 @@ frame N reads WORK1, WORK2 or WORK3 before ...: the plan is off from now on`; th
 `rd_replay_tool --stats` `stats: glow: light plan on|off: <plan> (<reason>); P passes in the
 chain, lazy clears drawn: N (targets)` (the tool's own reads of the targets draw them too).
 
+### The lamps' glow for less
+
+In a frame whose light plan is lamps (the title's castle, issue 163's rooms) the light is the
+lamps' meshes: list 7 draws them into WORK2 under a GEQUAL test of SCENE's depth (writing it),
+after WORK2's fill drawn as (0, 0, 0, 0). On the PowerVR phone (the opening's first three 10 s
+blocks of its log, 318 of 358 glow pictures lamps) that pass is WORK2 at 2366 x 1080 with its colour
+cleared (the fill: a pending clear taken as the pass's load op, 9.7 MB) and stored (9.7 MB) and
+SCENE's depth loaded (9.6 MB) for a dozen small draws, and WORK2_PAD's band a pass of its own
+(424 x 64, no draw). `port/render/rd_lamps.c` (file comment) cuts both, the same bytes in every
+target:
+
+- **the area** (`RD_LAMPS_AREA`): the lamps' pass gets a render area, the union of the lamps'
+  screen boxes and of the region the last lamps frame left lit, aligned out to 32 x 32 tiles.
+  A lamp's box is the occlusion test's samples' box of its stream's bound through its matrix
+  (`rd_vis_hiz.c rd__vis_hiz_occludee`: every corner in front of the eye, inside the GS region),
+  padded by two GS pixels and taken through the target's texel scale and Full pixel's crop; the
+  RHI cuts every scissor to the area. Outside it WORK2 already holds (0, 0, 0, 0): the tracker
+  holds the region a confirmed lamps pass may have lit (its lamps' boxes), every other texel
+  stored as (0, 0, 0, 0) by that pass, and the area covers that region, so the texels it leaves
+  are the fill's colour before and after. SCENE's depth outside the area is untouched by the
+  lamps: the whole pass loads and stores it unchanged (or drops a store nothing reads), the area
+  pass leaves it as memory holds it. The tracker forgets the region at a new renderer or WORK2
+  texture, after a replay that writes WORK2 any other way (a whole frame's mask, any command
+  into WORK2 but the lamps plan's fill, mask and lamps, or the dark plan's undrawn chain), at any
+  other pass on WORK2's colour, and when the planned pass does not begin with the fill's clear
+  to (0, 0, 0, 0) and a colour store; a dark frame keeps it (its chain draws nothing into WORK2).
+  So the first lamps picture after anything else is drawn whole and the area is taken from the
+  second. A clear over a render area smaller than its attachment is a form no other pass took
+  (the pass area gives none to a clearing pass), so the area is on only where its start-up
+  self-test passed (a 64 x 64 colour target and its depth cleared whole, then a pass over a
+  32 x 32 area with the colour cleared and the depth loaded, read back: the area 0, the rest and
+  the depth as the first clear left them), on the PowerVR and desktop classes under Vulkan where
+  the profile's pass area is on (by default the PowerVR phone alone); off on the Arm, Qualcomm
+  and Apple classes and the other tile-based phones, and on OpenGL, Direct3D 11 and 12, which
+  ignore a render area;
+- **the band** (`RD_LAMPS_PAD`): WORK2_PAD's band (read by nothing) is left a lazy clear, as the
+  dark plan leaves it (drawn where something reads it, at a later replay's begin or a read
+  outside a replay), not a pass of its own: on every class and backend, where the dark plan's
+  lazy clears already run.
+
+The lamps' writes into WORK2 make the crack fill's hold impossible in these frames (the late
+passes above: the fill reads SCENE's depth at its draw and the lamps write it, so a fill moved
+past them would read other depths; `rd: late pass: ... N fills not held (no paste in the frame
+takes them)`), and the glow's paste already shares list 11's pass (drawn early there, list 11's
+draws joined to it).
+
+`ICO_RD_LAMPS=0|1|area|pad` (the tests only, [TESTING.md](TESTING.md#environment-switches)) turns
+both off, both on, or one on whatever the class (the self-test still decides the area);
+`ICO_RD_LAMPS_POISON=1` clears WORK2 to magenta before every lamps pass drawn whole, so a pass
+that relied on WORK2's earlier contents where it should not would show it (`rd_lamps_ab`). Lines:
+`rd: lamps: area on|off (<why>); band lazy on|off: ...` when it changes, `rd: lamps: area
+self-test passed|failed|not run ...`, once `rd: lamps: WORK2's lamps pass loads, clears and
+stores WxH at X,Y of TWxTH ...` and `rd: lamps: the lamps' pass on WORK2 drawn whole: <why>
+(reported once for this reason)`; the 10 s `window: lamps: N lamps passes on WORK2 with an area
+(P % of their texels loaded and stored; X MB not cleared, Y MB of colour and Z MB of depth not
+stored, W MB of depth not loaded), M whole (counts by why); B bands left lazy (WORK2_PAD: a pass
+fewer each)`; `rd_replay_tool --stats` `stats: lamps <bits> (self-test <state>): N passes with
+the lamps' area (WxH at X,Y of TWxTH: A of T texels; C bytes not cleared, S colour bytes not
+stored, L depth bytes not loaded, D not stored), M whole (<why>); B bands left lazy (WORK2_PAD
+WxH)`.
+
 ### The fades fold
 
 List 11 ends with the game's full-frame post sprites (`ico2/seki/src/GsBase.c`'s post pass order:

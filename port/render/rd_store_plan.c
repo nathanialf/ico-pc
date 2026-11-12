@@ -80,6 +80,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_lamps.h"
 #include "rd_layer.h"
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
@@ -427,6 +428,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
      * drawn; the area, cut and plan read its commands as drawn, which only
      * keeps more) */
     const bool light = rd__glow_light_scan_begin(f);
+    /* and the lamps' writes into WORK2 for the lamps' pass area
+     * (rd_lamps.c: read after the light plan's verdict) */
+    rd__lamps_scan_begin(light ? f : NULL);
     /* and DATE's passes without the depth (rd_date_cut.c: the runs a DATE
      * snapshot opens whose draws never touch the depth) */
     const bool dateCut = rd__date_cut_scan_begin(f);
@@ -501,6 +505,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
             }
             if (light) {
                 rd__glow_light_scan_cmd(f, c, &st, state, ord);
+                rd__lamps_scan_cmd(f, c, &st, state, ord);
             }
             if (dateCut) {
                 rd__date_cut_scan_cmd(c, &st, state, ord);
@@ -593,6 +598,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     if (light) {
         rd__glow_light_scan_end(); /* the plan (rd_glow_light.c), before the fold's verdict */
     }
+    rd__lamps_scan_end(); /* the lamps' pass area by the plan (rd_lamps.c) */
     uint32_t lateOrd = 0, lateI = 0;
     int lateL = 0;
     if (plan && s_plan.lateTarget &&

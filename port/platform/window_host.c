@@ -5235,6 +5235,7 @@ static void perf_log(void)
     }
     rd_glow_light_line(); /* the glow drawn where it adds light (rd_glow_light.c) */
     rd_late_pass_line();  /* the crack fill held into the aura's pass (rd_late_pass.c) */
+    rd_lamps_line();      /* the lamps' pass area (rd_lamps.c) */
     rd_aura_paste_line(); /* the aura's paste as the alpha alone (rd_aura_paste.c) */
     rd_cpu_phase_line();  /* the CPU phases a picture (rd_cpu_phase.c) */
     rd_even_line((double)window_refresh_ns(0) / 1e6); /* the evenness (rd_even.c) */
