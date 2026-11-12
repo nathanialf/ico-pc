@@ -937,7 +937,7 @@ prints after the CPU phases' line (`port/render/rd_even.c`, `rd_even.h`; `port/p
 (`perf_log`)):
 
 ```
-window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exact, B with a bound at one, U without a GPU end) by refreshes of R ms: under half a refresh N0, 1 refresh N1, 2 refreshes N2, 3 refreshes N3, 4 or more N4; the content's step over them in ticks (mean, deviation): under half a refresh M0 (D0), 1 refresh M1 (D1), 2 refreshes M2 (D2), 3 refreshes M3 (D3), 4 or more M4 (D4); every step (S): mean M (deviation D), the largest L, back K times (the most X), C chain restarts; the alpha clamped at 0 Z times (the most A below), at 0.999 T times (the most H above); the present clock: N samples, resets F forward and K back; the alpha's sample to the GPU's end over N pictures: 10th A, median B, 90th C ms (the drain before the hand-over D ms on average over N)
+window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exact, B with a bound at one, U without a GPU end) by refreshes of R ms: under half a refresh N0, 1 refresh N1, 2 refreshes N2, 3 refreshes N3, 4 or more N4; the content's step over them in ticks (mean, deviation): under half a refresh M0 (D0), 1 refresh M1 (D1), 2 refreshes M2 (D2), 3 refreshes M3 (D3), 4 or more M4 (D4); every step (S): mean M (deviation D), the largest L, back K times (the most X), C chain restarts; the alpha clamped at 0 Z times (the most A below), at 0.999 T times (the most H above); the present clock: N samples, resets F forward and K back, H held instead of going back within a frame pair (the most X ms); the alpha's sample to the GPU's end over N pictures: 10th A, median B, 90th C ms (the drain before the hand-over D ms on average over N)
 ```
 
 - **The pictures** are the presents whose GPU record was collected in the block (each frame slot's
@@ -965,7 +965,9 @@ window: evenness in 10 s: P pictures; the GPU's ends apart (E with both ends exa
   0.999 (the clock past the newer frame), with the largest amount in ticks.
 - **The present clock** (the timer path only; under the vsync lock the clock is not used and its
   samples are 0): the presents it timed, its resets that moved it forward (or kept it) and those
-  that moved it back. See [DISPLAY.md](DISPLAY.md) "The alpha".
+  that would have moved it back, and the presents where it was held at its last value within a
+  frame pair instead of going back, with the largest amount it would have gone back. See
+  [DISPLAY.md](DISPLAY.md) "The alpha".
 - **The alpha's sample to the GPU's end**: for presents handed over to the render thread with an
   exact GPU end, the time from the drain's start (the alpha is taken just before it) to the GPU's
   end, by the 1 ms bin's middle; the drain is the wait for the picture before, after the alpha and

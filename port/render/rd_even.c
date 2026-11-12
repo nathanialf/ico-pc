@@ -9,7 +9,8 @@
  *     ...; every step (S): mean M (deviation D), the largest L, back K times
  *     (the most X), C chain restarts; the alpha clamped at 0 Z times (the
  *     most X below), at 0.999 T times (the most X above); the present clock:
- *     N samples, resets F forward and K back; the alpha's sample to the GPU's
+ *     N samples, resets F forward and K back, H held instead of going back
+ *     within a frame pair (the most X ms); the alpha's sample to the GPU's
  *     end over N pictures: 10th A, median B, 90th C ms (the drain before the
  *     hand-over D ms on average over N)
  *
@@ -128,7 +129,7 @@ void rd_even_picture(const RdEvenPic *p)
     s_prev.exact = p->gpuExact;
 }
 
-void rd_even_clock_note(double raw, int reset)
+void rd_even_clock_note(double raw, int reset, double heldMs)
 {
     add(&s_sum.samples, 1u);
     if (raw < 0.0) {
@@ -142,6 +143,11 @@ void rd_even_clock_note(double raw, int reset)
         add(&s_sum.resetFwd, 1u);
     } else if (reset < 0) {
         add(&s_sum.resetBack, 1u);
+    }
+    if (heldMs > 0.0) {
+        const double us = floor(heldMs * 1000.0 + 0.5);
+        add(&s_sum.held, 1u);
+        keepMax(&s_sum.heldMaxUs, us >= 4.0e9 ? 4000000000u : (uint32_t)us);
     }
 }
 
@@ -203,6 +209,8 @@ void rd_even_take(RdEvenWindow *w)
     w->clampHiMax = take32(&s_sum.clampHiMax);
     w->resetFwd = take(&s_sum.resetFwd);
     w->resetBack = take(&s_sum.resetBack);
+    w->held = take(&s_sum.held);
+    w->heldMaxUs = take32(&s_sum.heldMaxUs);
 }
 
 typedef struct Out {
@@ -310,11 +318,13 @@ bool rd_even_format(const RdEvenWindow *w, double refreshMs, char *out, size_t s
     }
     put(&o,
         "; the alpha clamped at 0 %llu times (the most %.3f below), at 0.999 %llu times (the "
-        "most %.3f above); the present clock: %llu samples, resets %llu forward and %llu back",
+        "most %.3f above); the present clock: %llu samples, resets %llu forward and %llu back, "
+        "%llu held instead of going back within a frame pair (the most %.2f ms)",
         (unsigned long long)w->clampLo, (double)w->clampLoMax / RD_EVEN_UNITS,
         (unsigned long long)w->clampHi, (double)w->clampHiMax / RD_EVEN_UNITS,
         (unsigned long long)w->samples, (unsigned long long)w->resetFwd,
-        (unsigned long long)w->resetBack);
+        (unsigned long long)w->resetBack, (unsigned long long)w->held,
+        (double)w->heldMaxUs / 1000.0);
     if (w->latN) {
         put(&o,
             "; the alpha's sample to the GPU's end over %llu pictures: 10th %.1f, median %.1f, "

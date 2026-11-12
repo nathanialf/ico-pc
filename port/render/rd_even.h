@@ -61,9 +61,10 @@ void rd_even_picture(const RdEvenPic *p);
 
 /* the present clock's note (rd_present_clock.c rd_present_clock_alpha, a
  * timed call): raw its value before the clamp to [0, 0.999]; reset 0 none,
- * 1 a reset that moved the clock forward (or kept it), -1 one that moved it
- * back */
-void rd_even_clock_note(double raw, int reset);
+ * 1 a reset that moved the clock forward (or kept it), -1 one that would
+ * have moved it back; heldMs > 0 when the clock was held at its last value
+ * within a frame pair instead of going back that much (0 otherwise) */
+void rd_even_clock_note(double raw, int reset, double heldMs);
 
 /* the hand-over's stamps for the picture about to be made on this thread
  * (rd_thread.c presentJob before rd_present, 0 and 0 after it), taken by
@@ -89,8 +90,9 @@ typedef struct RdEvenWindow {
     uint32_t lat[RD_EVEN_LAT_BINS];
     uint64_t latN, drainUs, drainN;
     /* the present clock's */
-    uint64_t samples, clampLo, clampHi, resetFwd, resetBack;
+    uint64_t samples, clampLo, clampHi, resetFwd, resetBack, held;
     uint32_t clampLoMax, clampHiMax; /* RD_EVEN_UNITS */
+    uint32_t heldMaxUs;              /* the largest hold, us */
 } RdEvenWindow;
 
 void rd_even_take(RdEvenWindow *w);

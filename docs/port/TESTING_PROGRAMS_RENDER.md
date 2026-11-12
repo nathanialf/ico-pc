@@ -1612,7 +1612,14 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   first present, the step in the cadence and at most 2 resets in a row; a step already stuck at
   0.5 ms is learnt again at the next present (18 ms, k 2) with the Frame rate's gap and without
   one (Uncapped); a 500 ms pause keeps the step, and without a clock value k is the counted
-  presents. The ticks' eyes
+  presents. The clock within a frame pair (`testPresentClockPair`, 120 Hz mailbox's 7.8125 ms
+  nominal): a steady 14.8 ms cadence, then two presents 2.5 ms apart in one pair (the first pulls
+  the clock 10.09 ms ahead, the second resets): the clock held at its value (alpha not lower), one
+  hold counted in the clock and in the evenness line (7.5 to 7.7 ms, one reset back); 30 s of bursty
+  presents (a quarter 2 to 4 ms apart, the rest 12 to 20): no step back within a pair, the clock
+  within 7/16 of a tick of the measured time, a step at most its interval plus 7/8 of a tick, over
+  every span of a second or more the content within 7/8 of a tick of real time; time gone back in a
+  pair: the clock at the measured time. The ticks' eyes
   (`testEyeTicks`, on a device): alpha 0 carries the ticks' cameras as every present between the
   ticks, alpha 1 none.
 - `rd_layout_test.c`: the layout frame from the game's layout calls (`rd_layout`).

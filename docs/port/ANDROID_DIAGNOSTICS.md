@@ -1434,7 +1434,9 @@ two causes the logs before it could not:
   gap at 2 refreshes.
 - **The clock.** `back K times` above 0, `resets ... K back`, a wide `deviation` of every step, or
   many clamps at 0 with large amounts are the present clock moving the content unevenly by itself.
-  A step back is a later picture showing an earlier moment than the one before it.
+  The clock never moves the content back within a frame pair ([DISPLAY.md](DISPLAY.md) "The
+  alpha"; the clock's `held` count says how often it would have), so a step back is one across
+  frames.
 - **The latency.** The `alpha's sample to the GPU's end` spread (10th to 90th) is how much the time
   from a picture's content to its GPU end varies; the drain before the hand-over is its first part
   (about 1.6 ms before a tick's first picture and 7 ms before a further one on the owner's phone,

@@ -5892,6 +5892,7 @@ static void runCpu(void)
     testPresentClockStep();
     testPresentClockDoubled();
     testPresentClockSlow();
+    testPresentClockPair();
     testSmoothFixDt();
     testSprites();
     testSpriteSnaps();

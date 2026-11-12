@@ -17,3 +17,4 @@
 - Opening the pause menu on a phone no longer waits for the graphics chip to finish the picture it is drawing before it keeps the picture for your save.
 - After a few slow pictures, the game now lowers its picture rate for at most about 2 seconds, and goes back sooner once the pictures fit again. Before, it could stay lowered for several seconds (seen on the old bridge on a phone).
 - On phones with an Adreno graphics chip, the game's own check of how the characters are drawn does less extra drawing in the first minutes of play.
+- Motion between game frames no longer steps backward for a moment after a few quick pictures.

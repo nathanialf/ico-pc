@@ -1221,12 +1221,20 @@ bool rd_display_probe(uint8_t rgba[RD_DISPLAY_PROBE_POINTS][4]);
  * error over half a tick, a pause of more than four steps or time going
  * backwards resets it to the measured time.  alpha = (clock - tickAtMs) /
  * tickMs in [0, 0.999], tickAtMs the simulated time the last frame closed
- * (never a measured close time).  nominalMs: the intended interval (the
+ * (never a measured close time).  While tickAtMs and tickMs stay the same
+ * (one frame pair) the clock never goes back: a reset or the pull that
+ * would move it below its last value keeps that value instead, unless time
+ * went backwards.  nominalMs: the intended interval (the
  * frame rate cap, half a refresh in mailbox), 0 when unknown. */
 typedef struct RdPresentClock {
     double clockMs, stepMs, lastMs;
     uint32_t presents; /* since the last reset; 0 = reset on the next call */
     uint32_t resets;
+    /* the frame pair of the last call (its tickAtMs and tickMs; paired 0
+     * before the first): within a pair the clock never goes back (a reset
+     * or the pull that would move it back holds it, counted in held) */
+    double pairAtMs, pairTickMs;
+    uint32_t paired, held;
 } RdPresentClock;
 
 float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, double tickMs,

@@ -11,7 +11,7 @@
  *      ticks; four of them handed over (the alpha's sample 10, 18, 20 and
  *      28 ms before their GPU's end, drains of 1, 2, 1 and 1 ms); five
  *      clock notes (two clamps below 0, one above 0.999, a forward reset
- *      and two back): the line word for word;
+ *      and two back, one held 7.5 ms): the line word for word;
  *   2. taken again: nothing, no line;
  *   3. one more present with the refresh not known: the gaps not on a
  *      grid, no hand-over, the line word for word;
@@ -63,11 +63,11 @@ int main(void)
     pic(12, 0.75f, 0.0, 0.0, 0.0, false);
     pic(3, 0.5f, 0.0, 0.0, 1200.0, true);
     pic(3, 0.75f, 1180.125, 1181.125, 1208.125, true);
-    rd_even_clock_note(0.5, 0);
-    rd_even_clock_note(-0.1, 1);
-    rd_even_clock_note(-0.25, 0);
-    rd_even_clock_note(1.2, -1);
-    rd_even_clock_note(0.3, -1);
+    rd_even_clock_note(0.5, 0, 0.0);
+    rd_even_clock_note(-0.1, 1, 0.0);
+    rd_even_clock_note(-0.25, 0, 0.0);
+    rd_even_clock_note(1.2, -1, 0.0);
+    rd_even_clock_note(0.3, -1, 7.5);
     rd_even_take(&s_w);
     CHECK(s_w.pictures == 10 && s_w.steps == 8 && s_w.breaks == 1 && s_w.bound == 1 &&
           s_w.noEnd == 1 && s_w.latN == 4 && s_w.drainN == 4 && s_w.drainUs == 5000);
@@ -77,7 +77,8 @@ int main(void)
           s_w.back == 1 && s_w.backMax == 1250);
     CHECK(s_w.lat[10] == 1 && s_w.lat[18] == 1 && s_w.lat[20] == 1 && s_w.lat[28] == 1);
     CHECK(s_w.samples == 5 && s_w.clampLo == 2 && s_w.clampLoMax == 2500 && s_w.clampHi == 1 &&
-          s_w.clampHiMax == 2010 && s_w.resetFwd == 1 && s_w.resetBack == 2);
+          s_w.clampHiMax == 2010 && s_w.resetFwd == 1 && s_w.resetBack == 2 && s_w.held == 1 &&
+          s_w.heldMaxUs == 7500);
     CHECK(rd_even_format(&s_w, 8.0, out, sizeof out));
     CHECK_STR(out,
               "evenness in 10 s: 10 pictures; the GPU's ends apart (6 with both ends exact, 1 "
@@ -88,7 +89,8 @@ int main(void)
               "more 0.875 (0.000); every step (8): mean 0.344 (deviation 0.271), the largest "
               "0.875, back 1 times (the most 0.125), 1 chain restarts; the alpha clamped at 0 2 "
               "times (the most 0.250 below), at 0.999 1 times (the most 0.201 above); the "
-              "present clock: 5 samples, resets 1 forward and 2 back; the alpha's sample to the "
+              "present clock: 5 samples, resets 1 forward and 2 back, 1 held instead of going "
+              "back within a frame pair (the most 7.50 ms); the alpha's sample to the "
               "GPU's end over 4 pictures: 10th 10.5, median 18.5, 90th 28.5 ms (the drain before "
               "the hand-over 1.25 ms on average over 4)");
     /* a short buffer: cut, still terminated */
@@ -113,7 +115,8 @@ int main(void)
               "grid; every step (1): mean 0.250 (deviation 0.000), the largest 0.250, back 0 "
               "times (the most 0.000), 0 chain restarts; the alpha clamped at 0 0 times (the "
               "most 0.000 below), at 0.999 0 times (the most 0.000 above); the present clock: 0 "
-              "samples, resets 0 forward and 0 back; the alpha's sample to the GPU's end: not "
+              "samples, resets 0 forward and 0 back, 0 held instead of going back within a frame "
+              "pair (the most 0.00 ms); the alpha's sample to the GPU's end: not "
               "measured (no exact GPU end of a picture handed over)");
 
     /* 4. the hand-over's stamps */

@@ -8,6 +8,8 @@
  * Smooth").
  *
  * The clock's step is the running mean of the intervals between presents.
+ * Within one frame pair (the same tickAt and tick) the clock never goes
+ * back (below, at the hold).
  * It is held above a quarter of the nominal interval (the frame rate cap's
  * gap, a refresh under FIFO), or without a nominal (Uncapped) a 64th of a
  * tick.  A present less than a quarter of the nominal after the one before
@@ -110,8 +112,12 @@ float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, d
         step = step < lo ? lo : step;
     }
     const double since = nowMs - c->lastMs;
-    const double before = c->clockMs; /* the evenness line's reset direction */
+    const double before = c->clockMs;
     const bool first = c->presents == 0;
+    /* the same frame pair as the call before (the window passes the same
+       tickAt and tick until a frame closes), time not gone back */
+    const bool samePair =
+        c->paired != 0 && tickAtMs == c->pairAtMs && tickMs == c->pairTickMs && since >= 0.0;
     /* a doubled present: neither the mean's nor the step's */
     const bool doubled = nominal && c->presents != 0 && since >= 0.0 && since < lo;
     bool reset = c->presents == 0 || since < 0.0 || !(step > 0.0) || since > 4.0 * step;
@@ -151,6 +157,30 @@ float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, d
         c->resets++;
         __atomic_fetch_add(&s_clockResets, 1u, __ATOMIC_RELAXED);
     }
+    /* the evenness line's reset direction, before the hold below */
+    const int resetDir = !reset ? 0 : (first || c->clockMs >= before ? 1 : -1);
+    /* within a frame pair the content never goes back: a reset (an error
+       over half a tick: the measured time that far behind the prediction,
+       after a burst of quick presents had pulled the clock ahead) or the
+       pull (a clock more than seven steps ahead of the measured time) that
+       would put the clock below its last value keeps that value.  The
+       picture shows the same moment as the one before instead of an
+       earlier one; the next presents' pulls (the measured time is behind
+       the clock) and the next frame's reset or pull bring it back to the
+       measured time.  The clock's lead over the measured time stays under
+       7/16 of a tick as before (a pull leaves at most 7/8 of an error of at
+       most half a tick, and a held clock's lead only shrinks), so over any
+       span the content's speed is real time's within 7/8 of a tick over the
+       span.  No present is moved, held or added: the rate is not touched */
+    double heldMs = 0.0;
+    if (samePair && c->clockMs < before) {
+        heldMs = before - c->clockMs;
+        c->clockMs = before;
+        c->held++;
+    }
+    c->paired = 1u;
+    c->pairAtMs = tickAtMs;
+    c->pairTickMs = tickMs;
     c->presents++;
     c->lastMs = nowMs;
     s_clockTickMs = tickMs; /* Motion blur: Smooth's presents a tick */
@@ -159,9 +189,9 @@ float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, d
     s_clockSinceTickMs = tickMs;
     double a = (c->clockMs - tickAtMs) / tickMs;
     s_clockRaw = a; /* before the clamp: the alpha histogram's "clamped from below" */
-    /* the evenness line (rd_even.h): the clamps and the resets, a reset
-       forward unless it moved a running clock back */
-    rd_even_clock_note(a, !reset ? 0 : (first || c->clockMs >= before ? 1 : -1));
+    /* the evenness line (rd_even.h): the clamps, the resets (forward unless
+       it would have moved a running clock back) and the holds */
+    rd_even_clock_note(a, resetDir, heldMs);
     a = a < 0.0 ? 0.0 : (a > 0.999 ? 0.999 : a);
     return (float)a;
 }
