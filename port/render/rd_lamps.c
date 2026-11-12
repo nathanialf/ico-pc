@@ -126,12 +126,16 @@ typedef struct W2Write {
     uint32_t ord;
     uint8_t type;
     bool ok;     /* box known */
-    RhiRect box; /* the texels it can touch (w 0: none) */
+    uint8_t why; /* not known: RD_LAMPS_BOX_* */
+    uint8_t prog, code, clip;
+    uint32_t verts, behind;
+    char name[24]; /* the mesh's (RdMeshRec.name) */
+    RhiRect box;   /* the texels it can touch (w 0: none) */
 } W2Write;
 
 static struct {
     bool on;
-    uint32_t replay, w2;
+    uint32_t replay, w2, frame;
     bool overflow;
     uint32_t n;
     W2Write w[LAMPS_MAX];
@@ -150,6 +154,24 @@ static struct {
 
 static uint64_t s_totAreas, s_totWhole, s_totPads;
 static bool s_saidWhy[RD_LAMPS_WHY_COUNT], s_saidArea;
+
+/* why a lamp's box is not known (the BOX reason's parts: the 10 s line's
+ * "boxes not known" clause and a line once each, naming the draw) */
+static const char *const kBoxWhy[RD_LAMPS_BOX_COUNT] = {
+    [RD_LAMPS_BOX_NONE] = "-",
+    [RD_LAMPS_BOX_KIND] = "not a mesh or a screen prim (skinned, grid, particles, a sprite)",
+    [RD_LAMPS_BOX_PAYLOAD] = "its payload short or outside the frame",
+    [RD_LAMPS_BOX_CLIP] = "clip mode none (code 34) with a corner where X or Y may wrap",
+    [RD_LAMPS_BOX_PROG] = "not a mesh program",
+    [RD_LAMPS_BOX_MESH] = "no mesh record or stream",
+    [RD_LAMPS_BOX_FINITE] = "a position or matrix not finite",
+    [RD_LAMPS_BOX_BEHIND] = "a vertex at or behind the eye",
+    [RD_LAMPS_BOX_BUDGET] = "past the frame's vertex budget, its corners' box refused",
+    [RD_LAMPS_BOX_SCREEN] = "a screen prim under DATE, the wrap or a full-frame sprite",
+};
+static uint64_t s_boxSum[RD_LAMPS_BOX_COUNT];
+static bool s_saidBox[RD_LAMPS_BOX_COUNT];
+static uint32_t s_budgetUsed;
 
 static void sumAdd(uint64_t *v, uint64_t n)
 {
@@ -175,6 +197,11 @@ static const char *const kWhy[RD_LAMPS_WHY_COUNT] = {
 const char *rd__lamps_why_text(int why)
 {
     return why >= 0 && why < RD_LAMPS_WHY_COUNT && kWhy[why] ? kWhy[why] : "unknown";
+}
+
+const char *rd__lamps_box_why_text(int why)
+{
+    return why >= 0 && why < RD_LAMPS_BOX_COUNT && kBoxWhy[why] ? kBoxWhy[why] : "unknown";
 }
 
 const char *rd__lamps_bits_text(uint32_t bits)
@@ -305,6 +332,76 @@ int rd__lamps_area_pick(bool litKnown, RhiRect lit, RhiRect box, uint32_t tw, ui
     }
     *area = a;
     return RD_LAMPS_WHY_NONE;
+}
+
+int rd__lamps_vertex_box(const float (*m)[4], const float (*stream)[4], uint32_t n, uint32_t qpv,
+                         bool scissor, double box[4], uint32_t *behind)
+{
+    *behind = 0;
+    if (!m || !stream || n == 0 || qpv == 0) {
+        return RD_LAMPS_BOX_MESH;
+    }
+    for (int i = 0; i < 4; i++) {
+        for (int c = 0; c < 4; c++) {
+            if (!isfinite(m[i][c])) {
+                return RD_LAMPS_BOX_FINITE;
+            }
+        }
+    }
+    double x0 = 0.0, y0 = 0.0, x1 = 0.0, y1 = 0.0;
+    bool any = false;
+    const int nw = scissor ? 2 : 1;
+    for (uint32_t i = 0; i < n; i++) {
+        const float *p = stream[(size_t)i * qpv];
+        if (!isfinite(p[0]) || !isfinite(p[1]) || !isfinite(p[2]) || !isfinite(p[3])) {
+            return RD_LAMPS_BOX_FINITE;
+        }
+        for (int j = 0; j < nw; j++) {
+            /* w = 1 (code 32), or under code 36 the vertex's own pos.w and 1
+             * (rd_vis.c: the scissor programs read pos.w) */
+            const double v[4] = {p[0], p[1], p[2], j == 0 && scissor ? (double)p[3] : 1.0};
+            double h[4], tol[4];
+            for (int c = 0; c < 4; c++) {
+                double sum = 0.0, mag = 0.0;
+                for (int k = 0; k < 4; k++) {
+                    sum += (double)m[k][c] * v[k];
+                    mag += fabs((double)m[k][c] * v[k]);
+                }
+                h[c] = sum;
+                tol[c] = RD_VIS_TOL * mag; /* the shader's float h lies within this */
+            }
+            const double wl = h[3] - tol[3], wh = h[3] + tol[3];
+            if (!(wl > 0.0)) {
+                (*behind)++;
+                continue;
+            }
+            /* x / w over x in [h - tol, h + tol], w in [wl, wh], w > 0 */
+            const double xl = h[0] - tol[0], xh = h[0] + tol[0];
+            const double yl = h[1] - tol[1], yh = h[1] + tol[1];
+            const double ax = fmin(xl / wl, xl / wh), bx = fmax(xh / wl, xh / wh);
+            const double ay = fmin(yl / wl, yl / wh), by = fmax(yh / wl, yh / wh);
+            x0 = any ? fmin(x0, ax) : ax;
+            x1 = any ? fmax(x1, bx) : bx;
+            y0 = any ? fmin(y0, ay) : ay;
+            y1 = any ? fmax(y1, by) : by;
+            any = true;
+        }
+    }
+    if (*behind) {
+        return RD_LAMPS_BOX_BEHIND;
+    }
+    if (!any || !isfinite(x0) || !isfinite(x1) || !isfinite(y0) || !isfinite(y1)) {
+        return RD_LAMPS_BOX_FINITE;
+    }
+    /* the divide's rounding, a GS position up to 1/16 left of (above) its
+     * point (ftoi4), the GPU's snap and the GS-to-clip mapping's rounding:
+     * rd_vis_hiz.c rd__vis_hiz_occludee's margins */
+    const double ulp = 1.0 / 1048576.0, snap = 1.0 / 8.0, ndc = 1.0 / 1024.0;
+    box[0] = x0 - fabs(x0) * ulp - 1.0 / 16.0 - snap - ndc;
+    box[1] = y0 - fabs(y0) * ulp - 1.0 / 16.0 - snap - ndc;
+    box[2] = x1 + fabs(x1) * ulp + snap + ndc;
+    box[3] = y1 + fabs(y1) * ulp + snap + ndc;
+    return RD_LAMPS_BOX_NONE;
 }
 
 /* ------------------------------------------------------------- the switch */
@@ -631,42 +728,84 @@ static bool writesW2(const RdCmd *c, const RdStateBlock *st, uint32_t id)
     }
 }
 
-/* a mesh draw's texels on tc: its stream's bound through VU memory 16..19
- * (rd_vis.c cmdVerdict's reading of the payload), the occlusion test's
- * samples' box (rd__vis_hiz_occludee) */
-static bool meshBox(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, const RdTargetRec *tc,
-                    RhiRect *box)
+/* the vertices a frame's lamps may transform one by one (a lamp is a few
+ * dozen; past this the corners' box of the stream's bound is taken) */
+#define LAMPS_VERTEX_BUDGET 16384u
+
+/* a mesh draw's texels on tc (RD_LAMPS_BOX_NONE), or why not: every vertex
+ * of its stream (the draws' batches and a sheet's tiles lie in it,
+ * rd_vis.c) through VU memory 16..19 one by one, each in front of the eye
+ * (rd__lamps_vertex_box: the points the GPU draws of a triangle whose
+ * corners are in front lie in the hull of the corners' x / w, y / w); past
+ * the frame's budget the occlusion test's box of the stream's bound
+ * (rd__vis_hiz_occludee, its 8 corners, which a mesh across the screen near
+ * the eye fails far more often) */
+static int meshBox(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, const RdTargetRec *tc,
+                   W2Write *w)
 {
     const uint64_t after = sizeof(RdVuPayload) + sizeof(RdVuBlock);
     if (!f->payload || c->u[2] < after || (uint64_t)c->u[1] + c->u[2] > f->payloadSize) {
-        return false;
+        return RD_LAMPS_BOX_PAYLOAD;
     }
     const uint8_t *pay = f->payload + c->u[1];
     RdVuPayload p;
     memcpy(&p, pay, sizeof(p));
-    if ((p.clip != RD_VU_CLIP_REGION && p.clip != RD_VU_CLIP_SCISSOR) || p.prog > RD_PROG_REFLECT) {
-        return false; /* code 34 wraps X and Y; not a mesh program */
+    w->prog = p.prog;
+    w->code = p.code;
+    w->clip = p.clip;
+    const bool none = p.clip == RD_VU_CLIP_NONE;
+    if (p.clip != RD_VU_CLIP_REGION && p.clip != RD_VU_CLIP_SCISSOR && !none) {
+        return RD_LAMPS_BOX_CLIP;
+    }
+    if (p.prog > RD_PROG_REFLECT) {
+        return RD_LAMPS_BOX_PROG;
     }
     const RdMeshRec *m = rd__mesh_rec(c->u[0]);
+    if (m) {
+        snprintf(w->name, sizeof(w->name), "%s", m->name);
+        w->verts = m->vertexCount;
+    }
     if (!m || !m->vu || !m->stream || !m->vertexCount || !m->qwPerVertex ||
         p.firstBatch >= m->batchCount) {
-        return false;
+        return RD_LAMPS_BOX_MESH;
     }
     float mem[36][4];
     memcpy(mem, pay + sizeof(RdVuPayload), sizeof(mem));
-    RdVisBox b;
-    if (!rd__vis_box((const float (*)[4])m->stream, m->vertexCount, m->qwPerVertex, &b) || !b.n) {
-        return false;
+    const bool scissor = p.clip == RD_VU_CLIP_SCISSOR;
+    double gb[4];
+    if (s_budgetUsed + m->vertexCount <= LAMPS_VERTEX_BUDGET) {
+        s_budgetUsed += m->vertexCount;
+        const int why =
+            rd__lamps_vertex_box((const float (*)[4]) & mem[16], (const float (*)[4])m->stream,
+                                 m->vertexCount, m->qwPerVertex, scissor, gb, &w->behind);
+        if (why != RD_LAMPS_BOX_NONE) {
+            return why;
+        }
+        /* code 34 (clip mode none) draws every corner at its GS position,
+         * X and Y wrapped to 16 bits (4096 GS pixels): exact, so the same
+         * box, where every corner lies inside (1, 4094) and nothing wraps */
+        if (none && !(gb[0] > 1.0 && gb[1] > 1.0 && gb[2] < 4094.0 && gb[3] < 4094.0)) {
+            return RD_LAMPS_BOX_CLIP;
+        }
+    } else if (none) {
+        return RD_LAMPS_BOX_CLIP;
+    } else {
+        RdVisBox b;
+        RdVisHizBox hb;
+        if (!rd__vis_box((const float (*)[4])m->stream, m->vertexCount, m->qwPerVertex, &b) ||
+            !b.n || !rd__vis_hiz_occludee((const float (*)[4]) & mem[16], &b, scissor, &hb)) {
+            return RD_LAMPS_BOX_BUDGET;
+        }
+        gb[0] = hb.x0;
+        gb[1] = hb.y0;
+        gb[2] = hb.x1;
+        gb[3] = hb.y1;
     }
-    RdVisHizBox hb;
-    if (!rd__vis_hiz_occludee((const float (*)[4]) & mem[16], &b, p.clip == RD_VU_CLIP_SCISSOR,
-                              &hb)) {
-        return false; /* a corner behind the eye, or past the GS region */
+    if (!rd__lamps_box_texels(tc, st->gsW, st->gsH, gb[0], gb[1], gb[2], gb[3], LAMPS_PAD,
+                              &w->box)) {
+        w->box = (RhiRect){0, 0, 0, 0}; /* off the target: nothing drawn on it */
     }
-    if (!rd__lamps_box_texels(tc, st->gsW, st->gsH, hb.x0, hb.y0, hb.x1, hb.y1, LAMPS_PAD, box)) {
-        *box = (RhiRect){0, 0, 0, 0}; /* off the target: nothing drawn on it */
-    }
-    return true;
+    return RD_LAMPS_BOX_NONE;
 }
 
 /* a screen-prim command's texels on tc (rd_pass_area.c screenKind's
@@ -702,6 +841,7 @@ static bool screenBox(const RdFrame *f, const RdCmd *c, const RdStateBlock *st,
 void rd__lamps_scan_begin(const RdFrame *f)
 {
     s_scan.on = f != NULL && g_rd.hasDevice;
+    s_scan.frame = f ? f->number : 0u;
     s_scan.replay = g_rd.replayCounter;
     s_scan.w2 = idOf(RD_TARGET_WORK2);
     s_scan.overflow = false;
@@ -710,6 +850,7 @@ void rd__lamps_scan_begin(const RdFrame *f)
     s_scan.areaRect = s_scan.box = (RhiRect){0, 0, 0, 0};
     s_scan.fillOrd = s_scan.redOrd = UINT32_MAX;
     s_scan.why = RD_LAMPS_WHY_NONE;
+    s_budgetUsed = 0;
 }
 
 void rd__lamps_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st, bool state,
@@ -723,16 +864,39 @@ void rd__lamps_scan_cmd(const RdFrame *f, const RdCmd *c, const RdStateBlock *st
         return;
     }
     W2Write *w = &s_scan.w[s_scan.n++];
+    memset(w, 0, sizeof(*w));
     w->ord = ord;
     w->type = (uint8_t)c->type;
-    w->box = (RhiRect){0, 0, 0, 0};
     const RdTargetRec *tc = rd__target_rec(st->color);
-    w->ok = false;
+    int why = RD_LAMPS_BOX_KIND;
     if (tc && st->color == s_scan.w2 && c->type == RDC_MESH) {
-        w->ok = meshBox(f, c, st, tc, &w->box);
+        why = meshBox(f, c, st, tc, w);
     } else if (tc && st->color == s_scan.w2 && c->type == RDC_SCREEN) {
-        w->ok = screenBox(f, c, st, tc, &w->box);
+        why = screenBox(f, c, st, tc, &w->box) ? RD_LAMPS_BOX_NONE : RD_LAMPS_BOX_SCREEN;
     }
+    w->ok = why == RD_LAMPS_BOX_NONE;
+    w->why = (uint8_t)why;
+}
+
+/* a lamp's box not known: counted by its part, and a line once a part
+ * naming the draw (its command's type and ordinal, the mesh, its program,
+ * code and clip mode, the vertices behind the eye) */
+static void boxNot(const W2Write *w)
+{
+    const int k = w->why < RD_LAMPS_BOX_COUNT ? w->why : RD_LAMPS_BOX_KIND;
+    sumAdd(&s_boxSum[k], 1);
+    g_rdPerf.lampsBoxWhy = (uint32_t)k;
+    if (s_saidBox[k]) {
+        return;
+    }
+    s_saidBox[k] = true;
+    rd__log("lamps: a lamp's screen box not known: %s (command type %u at ordinal %u, mesh "
+            "\"%s\" of %u vertices, program %u code %u clip mode %u, %u vertices behind the "
+            "eye; frame %u): the lamps' pass on WORK2 drawn whole (reported once for this "
+            "reason)",
+            kBoxWhy[k], (unsigned)w->type, w->ord, w->name[0] ? w->name : "-", w->verts,
+            (unsigned)w->prog, (unsigned)w->code, (unsigned)w->clip, w->behind,
+            (unsigned)s_scan.frame);
 }
 
 /* WORK2's texture still the tracker's */
@@ -761,6 +925,9 @@ void rd__lamps_scan_end(void)
         }
         if (plan == RD_GLOW_LIGHT_LAMPS &&
             (role == RD_GLOW_ROLE_LAMP || role == RD_GLOW_ROLE_FAN)) {
+            if (!w->ok && boxOk) {
+                boxNot(w); /* the first lamp refused names the reason */
+            }
             boxOk = boxOk && w->ok;
             box = rd__lamps_union(box, w->box);
             continue;
@@ -1006,13 +1173,28 @@ void rd_lamps_line(void)
         }
         at += (size_t)m;
     }
+    char box[400] = "";
+    size_t bat = 0;
+    for (int i = 1; i < RD_LAMPS_BOX_COUNT; i++) {
+        const uint64_t n = __atomic_exchange_n(&s_boxSum[i], 0, __ATOMIC_RELAXED);
+        if (!n) {
+            continue;
+        }
+        const int m =
+            snprintf(box + bat, sizeof(box) - bat, "%s%llu %s",
+                     bat ? ", " : "; boxes not known: ", (unsigned long long)n, kBoxWhy[i]);
+        if (m < 0 || (size_t)m >= sizeof(box) - bat) {
+            break;
+        }
+        bat += (size_t)m;
+    }
     const double mb = 1.0 / 1048576.0;
     fprintf(stderr,
             "window: lamps: %llu lamps passes on WORK2 with an area (%.1f %% of their texels "
             "loaded and stored; %.1f MB not cleared, %.1f MB of colour and %.1f MB of depth "
             "not stored, %.1f MB of depth not loaded), %llu whole%s%s; %llu bands left lazy "
-            "(WORK2_PAD: a pass fewer each)\n",
+            "(WORK2_PAD: a pass fewer each)%s\n",
             (unsigned long long)v[0], v[4] ? 100.0 * (double)v[3] / (double)v[4] : 0.0,
             (double)v[5] * mb, (double)v[6] * mb, (double)v[8] * mb, (double)v[7] * mb,
-            (unsigned long long)v[1], why, at ? ")" : "", (unsigned long long)v[2]);
+            (unsigned long long)v[1], why, at ? ")" : "", (unsigned long long)v[2], box);
 }

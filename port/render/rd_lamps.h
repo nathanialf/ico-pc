@@ -61,6 +61,21 @@ enum {
     RD_LAMPS_WHY_COUNT
 };
 
+/* why a lamp's screen box is not known (the BOX reason's parts) */
+enum {
+    RD_LAMPS_BOX_NONE = 0,
+    RD_LAMPS_BOX_KIND,    /* not a mesh or a screen prim */
+    RD_LAMPS_BOX_PAYLOAD, /* its payload short or outside the frame */
+    RD_LAMPS_BOX_CLIP,    /* clip mode none (code 34) */
+    RD_LAMPS_BOX_PROG,    /* not a mesh program */
+    RD_LAMPS_BOX_MESH,    /* no mesh record or stream */
+    RD_LAMPS_BOX_FINITE,  /* a position or a matrix lane not finite */
+    RD_LAMPS_BOX_BEHIND,  /* a vertex at or behind the eye */
+    RD_LAMPS_BOX_BUDGET,  /* past the vertex budget, the corners' box refused */
+    RD_LAMPS_BOX_SCREEN,  /* a screen prim under DATE, the wrap or a full-frame sprite */
+    RD_LAMPS_BOX_COUNT
+};
+
 /* The roles of the glow's chain commands the scan asks rd_glow_light.c for
  * (rd__glow_light_role): WORK2's fill, the mask (drawn or skipped), the
  * sun's fans (drawn or skipped), a lamp, the reduction, the band, any
@@ -107,6 +122,22 @@ RhiRect rd__lamps_tile_align(RhiRect r, uint32_t tile, uint32_t w, uint32_t h);
  * rd__gs_rect_texels' (here on the record's fields). */
 bool rd__lamps_box_texels(const RdTargetRec *tc, uint32_t gsW, uint32_t gsH, double x0, double y0,
                           double x1, double y1, int32_t pad, RhiRect *out);
+/* The GS box (box[0..3]: x0, y0, x1, y1, GS primitive coordinates) that
+ * holds every sample a VU mesh draw of the n vertices of stream (qpv qwords
+ * each, the position qword 0) can touch through m (VU memory 16..19, VU
+ * order: h = m[0] x + m[1] y + m[2] z + m[3] w; w = 1, under scissor code
+ * 36 pos.w and 1): each vertex's h in double with the shader's float error
+ * (RD_VIS_TOL of the sum of the absolute products) on every lane, its x / w
+ * and y / w bounded over that interval; every vertex in front of the eye
+ * (w less its error above 0), else RD_LAMPS_BOX_BEHIND with *behind the
+ * count; the hull of the corners' points holds every point the GPU draws of
+ * a triangle whose corners lie in front (its clipped points are convex
+ * combinations with w > 0), widened by rd__vis_hiz_occludee's margins (the
+ * divide, ftoi4's 1/16, the snap, the GS-to-clip mapping).
+ * RD_LAMPS_BOX_NONE, or why not (MESH, FINITE, BEHIND). */
+int rd__lamps_vertex_box(const float (*m)[4], const float (*stream)[4], uint32_t n, uint32_t qpv,
+                         bool scissor, double box[4], uint32_t *behind);
+
 /* The area of a LAMPS frame's pass on WORK2 (tw x th texels): the lamps'
  * box (texels) with the region an earlier frame left lit (lit, when
  * litKnown), aligned out to tiles; RD_LAMPS_WHY_NONE and *area set, or why
@@ -126,6 +157,8 @@ void rd__lamps_force(int bits);
 /* "area+pad", "area", "pad" or "off" */
 const char *rd__lamps_bits_text(uint32_t bits);
 const char *rd__lamps_why_text(int why);
+/* the words of a RD_LAMPS_BOX_* */
+const char *rd__lamps_box_why_text(int why);
 /* the self-test's state: 0 not run, 1 passed, 2 failed or not run for a
  * reason (its words) */
 int rd__lamps_test_state(const char **words);

@@ -647,8 +647,11 @@ self-test's line naming the texel). The 10 s block's `window: lamps: N lamps pas
 an area (P % of their texels loaded and stored; X MB not cleared, ...), M whole (<why>); B bands
 left lazy` counts the pictures that saved the traffic (N) and those drawn whole by reason (`the
 WORK2 an earlier frame left not known`: the first lamps picture after a whole or other one, about
-one a room entry; `a lamp whose screen box is not known`: a lamp behind the eye or past the GS
-region; `another command writes WORK2 in the frame`; `the lamps and the lit region cover WORK2`).
+one a room entry; `a lamp whose screen box is not known`: its part in the line's last clause,
+`boxes not known: k <why>` (`a vertex at or behind the eye`, `not a mesh or a screen prim`, `clip
+mode none ...`), and once a part `rd: lamps: a lamp's screen box not known: <why> (command type
+T at ordinal O, mesh "N" of V vertices, program P code C clip mode M, B vertices behind the eye;
+frame F)` naming the draw; `another command writes WORK2 in the frame`; `the lamps and the lit region cover WORK2`).
 Many whole pictures for one of the last three in a steady lamps room name a frame the player's F12
 dump can replay (`rd_replay_tool --stats` prints `stats: lamps ...`). The `perf classes` line's
 glow class shows the change: its depth loaded and colour cleared and stored fall by about the

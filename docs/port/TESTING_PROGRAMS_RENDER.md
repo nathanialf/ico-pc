@@ -900,8 +900,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   crop (every texel centre of the box inside the rect, a box off the target none), a lamp's box
   from its stream's bound through an orthographic and a perspective matrix
   (`rd__vis_hiz_occludee`, then the texels: every vertex's and every point's between two vertices
-  inside; a corner behind the eye refused), and the area's pick (the region unknown, nothing lit,
-  WORK2 but a tile, the tiles round both).
+  inside; a corner behind the eye refused), the lamps' per-vertex box (`rd__lamps_vertex_box`: a
+  diagonal stream whose bound's corner is behind the eye, which the corners' box refuses, boxed
+  with every point between its vertices inside; a vertex behind the eye and a lane not finite
+  refused), and the area's pick (the region unknown, nothing lit, WORK2 but a tile, the tiles
+  round both).
 - `rd_lamps_ab.cmake` (`rd_lamps_ab`, `rd_lamps_gl`; `rd_lamps.cmake`): the lamps dumps of
   `tools/lamps_dumps.txt` (machine-local; a listed dump that is absent FAILS: issue 163's two
   frames and the title's castle in four boot runs, 512 x 512 GS, not the phone's 848 x 448), each

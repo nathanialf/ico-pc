@@ -23,6 +23,12 @@
  *       perspective one), then rd__lamps_box_texels: the texel of every
  *       vertex of the stream (and of every point between two of them) is in
  *       the rect; a corner behind the eye refuses the box
+ *   t7  rd__lamps_vertex_box (the lamps' box since round 2): a two-vertex
+ *       stream along a diagonal whose bound has a corner behind the eye (the
+ *       corners' box, rd__vis_hiz_occludee, refuses it) gives a box holding
+ *       the texel of every point between its vertices; a stream with a vertex
+ *       behind the eye refused (BEHIND, the count); a matrix lane not
+ *       finite refused (FINITE)
  *   t6  rd__lamps_area_pick: the region unknown (FIRST), nothing lit and no
  *       lamp (EMPTY), an area holding WORK2 but a tile (LARGE), else the
  *       tiles round the lamps' box and the lit region (both inside it) */
@@ -225,6 +231,52 @@ int main(void)
     RdVisHizBox hb;
     CHECK(rd__vis_box(pts, 8, 1, &vb) && !rd__vis_hiz_occludee(behind, &vb, false, &hb),
           "a corner behind the eye refuses the box");
+    /* t7: w = 1 + 0.05 x + 0.05 z: (-10, 0, 30) at w 2, (10, 0, -15) at w
+     * 0.75, the bound's corner (-10, 0, -15) at w -0.25 */
+    static const float diag[4][4] = {
+        {30, 0, 0, 0.05f}, {0, 30, 0, 0}, {0, 0, 100, 0.05f}, {2048, 2048, 1000, 1}};
+    static const float two[2][4] = {{-10, 0, 30, 1}, {10, 0, -15, 1}};
+    {
+        RdVisBox tb;
+        RdVisHizBox thb;
+        CHECK(rd__vis_box(two, 2, 1, &tb) && !rd__vis_hiz_occludee(diag, &tb, false, &thb),
+              "the diagonal's corners' box is refused");
+        double gb[4];
+        uint32_t behind = 99;
+        const int why = rd__lamps_vertex_box(diag, two, 2, 1, false, gb, &behind);
+        CHECK(why == RD_LAMPS_BOX_NONE && behind == 0, "the diagonal's vertices: %d, %u behind",
+              why, behind);
+        RhiRect vr;
+        CHECK(rd__lamps_box_texels(&t512, 512, 512, gb[0], gb[1], gb[2], gb[3], 2, &vr),
+              "the diagonal's texels");
+        int bad = 0;
+        for (int k = 0; k <= 256; k++) {
+            double h[4], q[4];
+            for (int c = 0; c < 4; c++) {
+                q[c] = two[0][c] + (two[1][c] - two[0][c]) * k / 256.0;
+            }
+            for (int c = 0; c < 4; c++) {
+                h[c] = diag[0][c] * q[0] + diag[1][c] * q[1] + diag[2][c] * q[2] + diag[3][c];
+            }
+            int32_t tx, ty;
+            texelOf(&t512, 512, 512, h[0] / h[3], h[1] / h[3], &tx, &ty);
+            if (tx >= 0 && ty >= 0 && tx < (int32_t)t512.tw && ty < (int32_t)t512.th) {
+                bad += !inRect(&vr, tx, ty);
+            }
+        }
+        CHECK(bad == 0, "the diagonal: %d points outside %ux%u at %d,%d", bad, vr.w, vr.h, vr.x,
+              vr.y);
+        static const float back[2][4] = {{-10, 0, 30, 1}, {-10, 0, -15, 1}};
+        CHECK(rd__lamps_vertex_box(diag, back, 2, 1, false, gb, &behind) == RD_LAMPS_BOX_BEHIND &&
+                  behind == 1,
+              "a vertex behind the eye: %u", behind);
+        float bad4[4][4];
+        memcpy(bad4, diag, sizeof(bad4));
+        bad4[1][2] = NAN;
+        CHECK(rd__lamps_vertex_box((const float (*)[4])bad4, two, 2, 1, false, gb, &behind) ==
+                  RD_LAMPS_BOX_FINITE,
+              "a lane not finite");
+    }
     /* t6 */
     RhiRect ar = {0, 0, 0, 0};
     CHECK(rd__lamps_area_pick(false, e, a, 2364, 1080, &ar) == RD_LAMPS_WHY_FIRST, "unknown");
