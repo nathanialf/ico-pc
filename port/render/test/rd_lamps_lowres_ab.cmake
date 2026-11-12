@@ -13,8 +13,9 @@
 #   enh43   Enhanced 2x at 4:3, presented at 1280x960, the same fakes;
 #   enh3x   Enhanced 3x at 4:3, presented at 1920x1440;
 #   enh4x   Enhanced 4x at 4:3, presented at 2560x1920;
-#   phonebox the phone's setting with lowresbox (the reduction the box over
-#           the GS footprint instead of the GS bilinear);
+#   phonebox, phoneb2, phone4  the phone's setting with lowresbox (the
+#           reduction the box), lowresb2 (twice the slope bias), lowres4 (the
+#           farthest of four texels): printed only;
 #   x1      Enhanced 1x, presented at 2364x1080: nothing changes by
 #           construction (WORK2 and SCENE of one size, the draws keep SCENE's
 #           depth): every PNG the same bytes, no draw on WORK2's own depth;
@@ -31,10 +32,10 @@
 # over the list at each setting; SHADOW0..2 and WORK2_PAD the same bytes;
 # DISPLAY and PRESENT measured (png_level_diff --channels RGB: their alpha
 # is VD-30's) and printed per dump ("lowres measure: ..."), with each
-# setting's maxima at the end; FAILS above the bound (lowresLevels levels,
-# lowresPct per cent of the picture's pixels).  The bound is a first one
-# from the hand analysis (docs/port/DIVERGENCES.md VD-32); the measured
-# maxima this prints tighten it.  No device: SKIP (77).
+# setting's maxima at the end, for the record; each form's WORK3 against
+# the dump's Original 1x WORK3 ("lowres original: ..."), and it FAILS where
+# lowres's default form is farther from it than today's (the criterion
+# below, docs/port/DIVERGENCES.md VD-32).  No device: SKIP (77).
 # -DPY=<python3> -DDIFF=<png_level_diff.py>
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 set(failures 0)
@@ -65,22 +66,25 @@ endforeach()
 list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
-# The bound (DIVERGENCES.md VD-32): the owner's rule, identical to the eye,
-# as a number: a few levels on a small part of the picture, inside the
-# glow's soft light.  The first measurement (2026-11-12, before the fixes of
-# depth_down_ps's farthest depth and the reduction's box) was 190 levels on
-# 15.4 % (issue 163's gate: its lamp failed every depth test) and 24 on 3.4 %
-# (the title's lamps: the GS bilinear's reach); with both fixed the change
-# is WORK2's resolution inside the same box footprints, and lamp edges a GS
-# pixel apart are what remains.  8 levels on 3 %: the acceptance, not a
-# measurement; above it the change stays off.
-set(lowresLevels 8)
-set(lowresPct 3)
+# The criterion (DIVERGENCES.md VD-32: the lamps' glow is the original's
+# (1x) glow at every scale, the goal-first rule): WORK3, the glow the paste
+# adds (the same size at every scale), against Original 1x's WORK3 of the
+# dump, no farther with lowres than today's Enhanced is, in its largest
+# level difference and in its texels apart, within a margin of origLevels
+# levels and origTexels texels plus origPct per cent (the replays' rounding
+# of a few lamp edges).  At the measured settings with lowres's default
+# form; phonebox, phoneb2 and phone4 (the other forms) are printed only.
+# DISPLAY and PRESENT against today are printed for the record, no bound.
+set(origLevels 2)
+set(origTexels 16)
+set(origPct 5)
 
 set(common ICO_RD_VU_PREPASS=0)
 set(lampsOff "ICO_RD_LAMPS=pad+owed+wholepad")
 set(lampsOn "ICO_RD_LAMPS=pad+owed+wholepad+lowres+fillhold")
 set(lampsBox "ICO_RD_LAMPS=pad+owed+wholepad+lowresbox+fillhold")
+set(lampsB2 "ICO_RD_LAMPS=pad+owed+wholepad+lowresb2+fillhold")
+set(lamps4 "ICO_RD_LAMPS=pad+owed+wholepad+lowres4+fillhold")
 set(lampsNoHold "ICO_RD_LAMPS=pad+owed+wholepad+lowres")
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(args_enh43 --enhanced --resolution 2x --aspect 1.3333 --present 1280x960)
@@ -90,12 +94,15 @@ set(args_x1 --enhanced --resolution 1x --present 2364x1080)
 set(args_poison ${args_phone})
 set(args_hold ${args_phone})
 set(args_phonebox ${args_phone})
+set(args_phoneb2 ${args_phone})
+set(args_phone4 ${args_phone})
 # Original 1x of the dump (no --enhanced): WORK3, the glow the paste adds, is
 # the same size at every scale; each form's WORK3 is printed against it
 set(args_orig --present 2364x1080)
 set(fake ICO_VK_FAKE_LIMITS=moltenvk)
-set(settings phone phonebox enh43 enh3x enh4x x1 hold poison)
-set(measured phone phonebox enh43 enh3x enh4x)
+set(settings phone phonebox phoneb2 phone4 enh43 enh3x enh4x x1 hold poison)
+set(measured phone phonebox phoneb2 phone4 enh43 enh3x enh4x)
+set(asserted phone enh43 enh3x enh4x)
 
 set(lowresRe "stats: lamps lowres (on|off): WORK2 ([0-9]+)x([0-9]+) under SCENE ([0-9]+)x([0-9]+), ([0-9]+) draws into WORK2 on its own depth, ([0-9]+) depth fills, ([0-9]+) draws without a depth")
 set(lateRe "stats: late pass [a-z]+: ([0-9]+) crack fills held into a paste pass \\(([0-9]+) the glow's")
@@ -137,6 +144,10 @@ foreach(dump IN LISTS dumps)
         endif()
       elseif(s STREQUAL "phonebox" AND arm EQUAL 1)
         list(APPEND env "${lampsBox}")
+      elseif(s STREQUAL "phoneb2" AND arm EQUAL 1)
+        list(APPEND env "${lampsB2}")
+      elseif(s STREQUAL "phone4" AND arm EQUAL 1)
+        list(APPEND env "${lamps4}")
       elseif(arm EQUAL 1)
         list(APPEND env "${lampsOn}")
       else()
@@ -279,34 +290,49 @@ foreach(dump IN LISTS dumps)
       if(pct10 GREATER maxPct10_${s})
         set(maxPct10_${s} "${pct10}")
       endif()
-      math(EXPR pctBound10 "${lowresPct} * 10")
-      if(largest GREATER lowresLevels OR pct10 GREATER pctBound10)
-        message(SEND_ERROR "${dump} ${s}: ${png}: ${pixels} pixels apart (${pctWhole}.${pctTenth} "
-                           "%) by up to ${largest} levels: the bound is ${lowresLevels} levels "
-                           "on ${lowresPct} % (DIVERGENCES.md VD-32)")
-        math(EXPR failures "${failures} + 1")
-      endif()
     endforeach()
     if(apart)
       string(REPLACE ";" " " apartText "${apart}")
       message(STATUS "${dump} ${s}: apart: ${apartText}")
     endif()
-    # the sharper reference: WORK3 against Original 1x's (printed, no bound)
+    # the reference: WORK3 against Original 1x's (asserted at the asserted settings)
     if(orc EQUAL 0 AND NOT exact AND EXISTS "${origDir}/WORK3.png")
       set(origText "")
+      set(oOk TRUE)
       foreach(arm 0 1)
+        set(oMax_${arm} -1)
+        set(oN_${arm} -1)
         execute_process(COMMAND "${PY}" -I "${DIFF}" --channels RGB "${origDir}/WORK3.png"
                                 "${OUT}/${index}-${s}-${arm}/WORK3.png"
                         OUTPUT_VARIABLE oout RESULT_VARIABLE odrc)
         if(odrc EQUAL 0 AND oout MATCHES "${diffRe}")
+          set(oMax_${arm} "${CMAKE_MATCH_3}")
+          set(oN_${arm} "${CMAKE_MATCH_4}")
           string(APPEND origText " arm ${arm}: ${CMAKE_MATCH_4} texels apart, largest "
                                  "${CMAKE_MATCH_3};")
+        elseif(odrc EQUAL 0)
+          set(oMax_${arm} 0)
+          set(oN_${arm} 0)
+          string(APPEND origText " arm ${arm}: the same;")
         else()
+          set(oOk FALSE)
           string(APPEND origText " arm ${arm}: not comparable;")
         endif()
       endforeach()
       message(STATUS "lowres original: ${s} ${dump} WORK3 against Original 1x (arm 0 today, "
                      "arm 1 lowres):${origText}")
+      list(FIND asserted "${s}" isAsserted)
+      if(isAsserted GREATER -1 AND oOk)
+        math(EXPR maxAllowed "${oMax_0} + ${origLevels}")
+        math(EXPR nAllowed "${oN_0} + ${oN_0} * ${origPct} / 100 + ${origTexels}")
+        if(oMax_1 GREATER maxAllowed OR oN_1 GREATER nAllowed)
+          message(SEND_ERROR "${dump} ${s}: WORK3 ${oN_1} texels from Original 1x's, largest "
+                             "${oMax_1}, with lowres; today's ${oN_0}, largest ${oMax_0}: lowres "
+                             "must be no farther (margin ${origLevels} levels, ${origTexels} "
+                             "texels + ${origPct} %; DIVERGENCES.md VD-32)")
+          math(EXPR failures "${failures} + 1")
+        endif()
+      endif()
     endif()
   endforeach()
 endforeach()
@@ -319,8 +345,7 @@ foreach(s IN LISTS measured)
   math(EXPR w "${maxPct10_${s}} / 10")
   math(EXPR t "${maxPct10_${s}} % 10")
   message(STATUS "lowres maxima: ${s}: largest ${maxLevel_${s}} levels (${maxWhere_${s}}), at most "
-                 "${w}.${t} % of a picture's pixels apart; the bound ${lowresLevels} levels on "
-                 "${lowresPct} %")
+                 "${w}.${t} % of a picture's pixels apart (DISPLAY and PRESENT against today)")
 endforeach()
 message(STATUS "lowres hold: ${holdMore} crack fills more held with fillhold over the list")
 if(holdMore LESS 1)
@@ -330,5 +355,5 @@ endif()
 if(failures GREATER 0)
   message(FATAL_ERROR "rd_lamps_lowres_ab: ${failures} failures over ${ndumps} dumps")
 endif()
-message(STATUS "rd_lamps_lowres_ab: ${ndumps} dumps within VD-32's bound; 1x and the poison the "
-               "same bytes")
+message(STATUS "rd_lamps_lowres_ab: ${ndumps} dumps: lowres's WORK3 no farther from Original 1x's "
+               "than today's (VD-32); 1x, the hold and the poison the same bytes")

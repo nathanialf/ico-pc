@@ -75,6 +75,22 @@ extern "C" {
  * above-1x box over each WORK0 texel's GS footprint instead (the scaled
  * WORK2's kernel), for the measurement */
 #define RD_LAMPS_LOWRESBOX 128u
+/* LOWRES's depth (depth_down_ps, rd_lamps.c lowresFill): by default SCENE's
+ * depth at the texel nearest each GS pixel's sample point less the slope
+ * bias (the most a plane can differ over the sample points' mismatch);
+ * lowresb2 twice that bias, lowres4 the farthest of the four texels around
+ * the point (round 6's); each implies lowres, for the measurement */
+#define RD_LAMPS_LOWRESB2 256u
+#define RD_LAMPS_LOWRES4 512u
+#define RD_LAMPS_LOWRES_ANY                                                                        \
+    (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX | RD_LAMPS_LOWRESB2 | RD_LAMPS_LOWRES4)
+/* the sample points' mismatch the slope bias covers past half a SCENE
+ * texel, in GS pixels: the gate's lamp passed the farthest of four taps
+ * whose reach on one side was 0.25 GS pixels (2x) and failed it at 0.125
+ * (4x) and 0 (3x), so the mismatch lies between; the bias takes its top */
+#define RD_LAMPS_BIAS_REACH 0.25f
+/* and a constant, in GS Z units (the depth format's rounding) */
+#define RD_LAMPS_BIAS_UNITS 4.0f
 /* LOWRES where ICO_RD_LAMPS does not name it (unset, or words it does not
  * understand): 0 off, 1 on (with the GS bilinear).  A build define: a
  * variant build or a release flips it; ICO_RD_LAMPS=... with or without

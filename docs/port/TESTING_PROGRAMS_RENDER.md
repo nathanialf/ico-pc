@@ -943,19 +943,19 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `tools/glow_light_dumps.txt` (machine-local; a listed dump that is absent FAILS),
   `ICO_RD_LAMPS=pad+owed+wholepad` against `...+lowres+fillhold`, `--pass-dump --stats`,
   `ICO_RD_VU_PREPASS=0`, `ICO_VK_FAKE_LIMITS=moltenvk`, at the phone's Resolution Auto
-  (2364x1080, Full height and pixel; again with `lowresbox` there) and Enhanced 2x, 3x and 4x at 4:3,
-  each form's WORK3 printed against the dump's Original 1x WORK3 (`lowres original: ...`, no bound): the stats line `lamps
-  lowres on|off`, no draw into WORK2 without a depth, a depth fill where a draw took WORK2's own,
-  one such draw at least over the list at each setting, SHADOW0..2 and WORK2_PAD the same bytes,
-  DISPLAY and PRESENT measured (`png_level_diff.py --channels RGB`) and printed per dump
-  (`lowres measure: <setting> <dump> <png>: P pixels apart (x %), largest L levels`) with each
-  setting's maxima at the end (`lowres maxima: ...`), FAILING above VD-32's bound (8 levels on at
-  most 3 % of a picture's pixels: the owner's acceptance, not a measurement); at Enhanced 1x every PNG the
-  same bytes and no draw on WORK2's own depth (nothing changes by construction); at the phone's
-  setting `...+lowres` against `...+lowres+fillhold` every PNG the same bytes with as many crack
-  fills held at least (one more over the list), and `...+lowres+fillhold` against it under
-  `ICO_RD_LAMPS_POISON=1` (WORK2's own depth cleared to 0.375 before the fill) every PNG the same
-  bytes. No device: SKIP.
+  (2364x1080, Full height and pixel; again with `lowresbox`, `lowresb2` and `lowres4`, printed
+  only) and Enhanced 2x, 3x and 4x at 4:3, and each dump once at Original 1x: the stats line
+  `lamps lowres on|off`, no draw into WORK2 without a depth, a depth fill where a draw took
+  WORK2's own, one such draw at least over the list at each setting, SHADOW0..2 and WORK2_PAD the
+  same bytes; WORK3 (the glow the paste adds, one size at every scale) against Original 1x's
+  (`lowres original: <setting> <dump> WORK3 ...`): with lowres's default form no farther than
+  today's in its largest level difference and texels apart (margin 2 levels, 16 texels and 5 %),
+  FAILING otherwise at the phone's, 2x, 3x and 4x; DISPLAY and PRESENT against today printed per
+  dump (`lowres measure: ...`, `lowres maxima: ...`), no bound; at Enhanced 1x every PNG the
+  same bytes and no draw on WORK2's own depth; at the phone's setting `...+lowres` against
+  `...+lowres+fillhold` every PNG the same bytes with as many crack fills held at least (one
+  more over the list), and `...+lowres+fillhold` against it under `ICO_RD_LAMPS_POISON=1` every
+  PNG the same bytes. No device: SKIP.
 - `rd_crack_work_ab.cmake` (`rd_crack_work_ab`, `rd_crack_work_gl`; `rd_crack_work.cmake`): the
   crack fill's snapshot by the swap and its early leave (`rd_crack_fill.c` FILLSWAP, CRACKTAP). The
   dumps of `tools/crack_work_dumps.txt` (machine-local; a listed dump that is absent FAILS: the

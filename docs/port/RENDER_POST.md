@@ -538,15 +538,24 @@ reference; today's above-1x box over a scaled WORK2 approximates it). The word `
 (`rd__lamps_lowres_box`, from `blurAbove1xSteps`: 2 x 4 GS texels), for the measurement. A draw
 into WORK2 on SCENE's depth takes WORK2's own (`rd__lamps_lowres_depth`, from `prepareDrawEx`):
 before the first such draw of a replay, and again after any draw that wrote SCENE's depth, a
-depth-only pass of WORK2's size writes every texel with the farthest of SCENE's four depths whose
-texel centres surround the GS pixel's centre (`depth_down_ps`, `port/shaders/blit.hlsl`: the
-smallest of the bilinear's taps; the lamps test GEQUAL). A point sample failed issue 163's gate
-(its lamp is the gate's own plane drawn again, an equality at the scaled size, and a texel centre
-off the lamp's lies in front of it on one side of the gradient: every lamp pixel failed, 190
-levels on 15 % of the picture); the smallest over the whole GS footprint passed it but let the
-title's small lamps through occluders up to half a GS pixel away (their WORK2 light doubled, 79
-to 94 levels); the four taps pass a plane (its value at a point is at least its smallest at the
-corners of a square around it) and reach a SCENE texel past the centre at most;
+depth-only pass of WORK2's size writes every texel with SCENE's depth at the texel nearest the
+GS pixel's sample point less a slope bias (`depth_down_ps`, `port/shaders/blit.hlsl`; the lamps
+test GEQUAL, so a smaller depth passes more): per axis the surface's slope there (the smaller of
+the forward and backward differences, so an occluder's edge beside the texel does not count, in
+depth per GS pixel) times the reach of the sample points' mismatch (half a SCENE texel, plus
+`RD_LAMPS_BIAS_REACH`, 0.25 GS pixels), plus `RD_LAMPS_BIAS_UNITS` (4 GS Z units). Issue 163's
+gate needs it: its lamp is the gate's own plane drawn again, which the original passes by the
+equality of the two at the same sample points; at the scaled size the plane's depth was taken
+at other points. A point sample failed every lamp pixel (190 levels on 15 % of the picture); the
+smallest of the whole GS footprint let the title's small lamps through occluders (79 to 94
+levels); the smallest of the four texels around the point passed the gate at 2x only (41,382 of
+its 51,725 pixels; 30,367 at 2.2x, 20,641 at 2.5x, 0 at 3x and 4x): the four taps reach 0.25 GS
+pixels on each side at 2x, 0 on one side at 3x and 0.125 at 4x, so the lamp's and the surface's
+sample points stand between 0.125 and 0.25 GS pixels apart on that side beyond the texel's own
+half, which `RD_LAMPS_BIAS_REACH` covers (where the offset comes from is not found). An occluder
+in front of a lamp hides it unless it lies within the bias of the lamp's depth (a leaf touching
+the lamp). The words `lowresb2` (twice the bias) and `lowres4` (the four taps) are the
+measurement's other forms;
 SCENE's depth sampled in place outside any pass, a copy only where the device cannot sample a
 depth: the fog path's copy on the local read is for reads beside SCENE's own pass), so lamp against lamp and
 lamp against the scene order as the PS2 orders them at its resolution. The fans' and lamps' depth
