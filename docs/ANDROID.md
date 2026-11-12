@@ -319,17 +319,36 @@ pictures at a steady 60 a second can then be shown at an uneven pace, or a
 picture can stop for a third of a second while the screen changes over. When
 **Options > Display > Frame rate** is a number (30, 60, 120, 144 and so
 on), the game asks the phone to hold the screen to that rate, as Android's
-own games do (Android 11 and later; older phones are not asked). It lets go
-of the request when you choose **Uncapped** or **Original**, and when you
-leave the game. Phones that cannot switch the rate without a flash are left as
-they are. `frame_rate_pin = off` under `[dev]` in `config.toml` never asks.
+own games do (Android 11 and later; older phones are not asked).
+
+On phones whose screen changes its refresh rate by itself, **Uncapped** now
+asks the screen for its highest rate (Android 12 and later), so Uncapped is
+not held at 60 when the screen could show more. The game reads the rates
+from the phone's own list for the screen each time, so a phone with 90, 120
+or 144 Hz gets its own highest. The phone can still say no (for example in
+battery saver), and nothing changes on a phone whose screen has one rate.
+
+The game lets go of the request when you choose **Original**, and when you
+leave the game or it goes to the background. Phones that cannot switch the
+rate without a flash are left as they are.
+
+If you would rather the phone chooses the rate under Uncapped, as before:
+**Original** never asks (but it shows only the game's own frames, as on the
+PS2), and a number such as 60 holds that number instead. To have Uncapped
+exactly as before, put `frame_rate_pin = off` under `[dev]` in
+`config.toml`; that turns every request off, the numbers' too.
 
 The log shows what happened:
 
 - `window: frame rate pin: asked 60 Hz (fixed source; the Frame rate row is
   60) with ...: returned 0` (the name after "with" is the system call the
   game used; a return other than 0 says the phone refused it), and `window:
-  frame rate pin: released ...` after Uncapped. The first line of the run says whether the
+  frame rate pin: released ...` after Original. Under Uncapped: `window: frame
+  rate pin: asked 120 Hz (fixed source; the display's highest of 60, 120 at
+  1080x2364; the Frame rate row is Uncapped) ...`, or `window: frame rate pin:
+  Uncapped asks for no rate: ...` with the reason (an Android 11 phone, a
+  screen with one rate, a list the phone did not give, or a refused request).
+  The first line of the run says whether the
   phone offers the call at all. The phone forgets the request when the game
   goes to the background, so the game asks again when you come back:
   `window: frame rate pin: asked again for a new surface: 60 Hz ...`.
@@ -338,7 +357,7 @@ The log shows what happened:
   changed: 144.00 Hz -> 60.00 Hz ...` when the phone reports the screen
   changed its rate (written with the next 10 second block, its run time the
   moment of the change). With the pin working, a Frame rate of 60 should show the
-  screen at 60 Hz.
+  screen at 60 Hz, and Uncapped the screen's highest rate.
 - On phones with a Qualcomm graphics driver and **Vsync** off, pictures go
   to the screen one after another from the start (the log says `window:
   present fifo (Qualcomm's own driver ...`), as the chip maker advises,

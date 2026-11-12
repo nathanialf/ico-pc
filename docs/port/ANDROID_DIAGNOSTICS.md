@@ -1474,6 +1474,36 @@ sample's distance to the GPU's end spread 12 ms (10th to 90th) where the hand-ov
 so the re-based `content's moment to the hand-over` should spread about a ms where `at the sample`
 spreads the drain's 5 ms.
 
+## The refresh rate under Uncapped
+
+The owner's Pixel 10 Pro Fold ran four release candidates under Uncapped: two at 120 Hz and two at
+60 Hz (`window: display refresh: 60.00 Hz, 2364x1080 "1"` from the first line to the last), because
+Uncapped asked the system for nothing. Under Uncapped the game now asks for the highest rate the
+display lists at its current size ([DISPLAY.md](DISPLAY.md#the-refresh-rate-and-the-frame-rate-pin)).
+How to read a log:
+
+- `window: frame rate pin: asked 120 Hz (fixed source; the display's highest of 60, 120 at
+  1080x2364; the Frame rate row is Uncapped) with ANativeWindow_setFrameRateWithChangeStrategy:
+  returned 0`: the ask, the rates it chose from (the display's own list at the current mode's
+  physical size, so it can read 1080x2364 where SDL's line reads 2364x1080) and the call's return.
+  `(refused)` after a return other than 0 is followed by `Uncapped asks for no rate: the system
+  refused the ask (returned R), so it is not made again this run`.
+- `window: frame rate pin: Uncapped asks for no rate: <reason>; the system chooses the refresh rate
+  as before`: today's behaviour, once per reason: an Android 11 phone (no seamless-only call), the
+  list could not be read, no mode at the current size, or one rate only. `Uncapped's ask waits for
+  the window's focus`: no new ask while the window has no focus; the next 10 s block asks.
+- `window: display refresh changed: 60.00 Hz -> 120.00 Hz, ...` after the ask: the panel switched.
+  Its rate comes from the activity's display listener (`IcoActivity` `startDisplayWatch`), not
+  from SDL, whose Android side reads the rate only when the surface changes size; no Android log
+  in the evidence folders from before this listener holds a change line. The `display refresh:` 10 s lines and
+  every pacing figure read the same rate.
+- An ask with no change line after it, and the 10 s line still at 60 Hz: the system did not grant
+  it (an ask is a vote; battery saver, a thermal limit or a vendor's own policy can keep the panel
+  lower; nothing in the log can tell which). A change line with no ask before it: the system
+  changed the rate by itself.
+- What to compare: the presented rate in the 10 s block against the refresh. Under Uncapped with
+  vsync on, presents are one a refresh at most, so at 60 Hz the rate cannot pass 60.
+
 ## The thermal state and screen recording
 
 The thermal state and screen recording come from the app's Java side (issue 123;

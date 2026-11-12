@@ -19,3 +19,4 @@
 - On phones with an Adreno graphics chip, the game's own check of how the characters are drawn does less extra drawing in the first minutes of play.
 - Motion between game frames no longer steps backward for a moment after a few quick pictures.
 - Motion between game frames is now timed from when each picture starts being drawn, not from when it was asked for.
+- On phones whose screen changes its refresh rate by itself, Uncapped now asks the screen for its highest rate instead of being held lower on some starts (Android 12 and later; the phone can still say no).

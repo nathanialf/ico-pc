@@ -1224,7 +1224,14 @@ that stops again writing its own line without the retry mark); a stop at the fre
   again, a new native window or a resume forgetting the ask and the next set made again
   (`DISPLAY_PIN_SET_AGAIN`; none wanted then: nothing asked or said), the pin's lines, the Android
   display timing line (`display_choreo_text`: reachable with `AChoreographer_getInstance` and either
-  callback, not reachable without it or without both) (`display_rate`).
+  callback, not reachable without it or without both); Uncapped's ask (`display_top_rate`,
+  `display_pin_want`, `display_pin_next_uncapped`): the highest rate at the current mode's
+  size (60 and 120, a rate listed twice, 120.00 and 120.02 one rate, one mode, none, a list not read,
+  144 Hz at another size not counted, 59.94 and 119.88 asked as listed with 120 in the state, 59.94
+  and 60.00 two rates, invalid rates, more than 32 rates), the rule's order (a number and Original as
+  before, the pin off, no seamless-only call, refused, the list, focus with and without a held ask),
+  the row 120 then Uncapped at 120 a new ask, a release and a lost surface clearing it, every
+  Uncapped line word for word and a short buffer (`display_rate`).
 - `present_stall_block_test.c`: the present stalls per 10 s block and per run
   (`present_stall_block.h`, issue 123): blocks before the run's first stall write no line and join
   the run's sums; the issue 123 log's stalled block (a 340 ms present 33.4 ms after the replay

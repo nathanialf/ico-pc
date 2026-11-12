@@ -1795,8 +1795,9 @@ rate, so the next log carries it (`port/platform/display_rate.h`, `window_displa
   as a fixed source (`window_frame_rate_pin`, from `video_settings`: `ANativeWindow_setFrameRateWithChangeStrategy`
   with only-if-seamless, or `ANativeWindow_setFrameRate` where that is the only one the phone has;
   both through `dlopen("libandroid.so")` and `dlsym`, so the APK keeps minSdk 29; the ANativeWindow
-  from `SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER`). Original, Uncapped, `[dev] frame_rate_pin = off`
-  and a rate above 1000 ask for none and release an earlier ask; the window closing releases it.
+  from `SDL_PROP_WINDOW_ANDROID_WINDOW_POINTER`). Original, `[dev] frame_rate_pin = off` and a rate
+  above 1000 ask for none and release an earlier ask; the window closing releases it. Uncapped asks
+  for the display's highest rate (the next item).
   A seamless change only: a mode change that blinks the screen is not asked for. The decisions are
   `display_pin_mode`, `display_pin_rate` and `display_pin_next` (pure; `display_rate_test`). The first
   call says `window: frame rate pin: on ([dev] frame_rate_pin = auto); the device offers the call` (or
@@ -1812,6 +1813,72 @@ rate, so the next log carries it (`port/platform/display_rate.h`, `window_displa
   60 Hz (fixed source; the Frame rate row is 60) with <call>: returned 0`. A new surface with no
   rate wanted asks and says nothing. Nothing runs on any other platform. It is a hint to the system's refresh rate governor: it does not
   change the game's own pacing, and nothing about it is measured on a device yet.
+- Android, Uncapped: the owner's phone (Pixel 10 Pro Fold, a panel offering 60 and 120 Hz)
+  ran four Uncapped runs at 120 Hz twice and at 60 Hz twice (the `window: display refresh:` lines),
+  because Uncapped asked for nothing and the system chose; at 60 Hz Uncapped was capped at 60 (the
+  uncapped-under-mailbox gap is one refresh). Under Uncapped the window now asks for the highest rate
+  the display's own mode list offers at the current mode's size: `IcoActivity.displayModes`
+  (`Display.getMode()`'s physical width and height, then each `Display.getSupportedModes()` mode's
+  width, height and rate; `host_android.c` `ico_android_display_modes`, at most 64 modes read), the
+  rates of that size chosen by `display_top_rate` (rates within 0.05 Hz are one; 0, negative and
+  above 1000 Hz are not counted) and the rule by `display_pin_want` (pure; `display_rate_test`). No
+  rate is written anywhere: the list is read again at every call of the pin (the options applied,
+  SDL's display and mode events, a new size, the app coming back, a display report from the
+  activity) and in every 10 s block while the row is Uncapped. The ask is the numbered rows' call
+  with the same arguments: fixed source (the strongest vote the call has, as the numbered rows ask;
+  at the panel's top rate there is no multiple to confuse it with) and
+  `ANATIVEWINDOW_CHANGE_FRAME_RATE_ONLY_IF_SEAMLESS`, with the mode's own rate (119.88 is asked as
+  119.88; the state keeps whole Hz). It is made only with `ANativeWindow_setFrameRateWithChangeStrategy`
+  (Android 12, API 31): the NDK header says the plain call is the same with only-if-seamless, but that
+  sentence was written with API 31 and Android 11's own behaviour is not documented there, so
+  Android 11 keeps today's behaviour under Uncapped. Uncapped asks for none (today's behaviour) and says
+  why once per reason: `window: frame rate pin: Uncapped asks for no rate: <reason>; the system
+  chooses the refresh rate as before`, the reason one of no seamless-only call, `the display's modes
+  could not be read`, `the display lists no mode at the current mode's size WxH (N modes listed)`,
+  `the display offers one rate at WxH (60 Hz, N modes listed)`, and `the system refused the ask
+  (returned R), so it is not made again this run` (after the refused ask's own line). A new ask is
+  never made while the window has no input focus (`SDL_WINDOW_INPUT_FOCUS`; an ask already held is
+  kept): `window: frame rate pin: Uncapped's ask waits for the window's focus (no new ask while the
+  window has none)`; the 10 s block asks once the focus is back. The other guards are the numbered
+  rows': a native window from SDL and a device that offers the call. `[dev] frame_rate_pin = off`
+  turns Uncapped's ask off too (`display_pin_want` checks it before anything else). The ask's line:
+  `window: frame rate pin: asked 120 Hz (fixed source; the display's highest of 60, 120 at 1080x2364;
+  the Frame rate row is Uncapped) with ANativeWindow_setFrameRateWithChangeStrategy: returned 0`
+  (`asked again for a new surface: 120 Hz ...` after the app came back; more than 8 rates: `of N
+  rates, the highest 8: ...`). It is released exactly as the numbered rows' ask: Original, the window
+  closing, and the Surface's end in the background (the vote goes with the Surface; the foreground
+  asks again). The same rate for the other reason (the row 120, then Uncapped at a highest of 120) is
+  a new ask, so the line says which (`DisplayPin.uncapped`). The vsync lock never applies under
+  Uncapped (it needs a cap equal to the refresh), so nothing there changes. Where the highest rate is
+  the one the panel already runs at, nothing visible changes: the ask only keeps the system from
+  lowering it.
+- Android, the refresh the game reads: SDL's Android side passes the display's rate only from
+  `SDLSurface.surfaceChanged` (`mDisplay.getRefreshRate()` with the surface's size, SDL 3.4.18's
+  Java), and a panel that switches rates without a resize leaves SDL's current mode at the old rate:
+  no Android log in the evidence folders shows a `display refresh changed` line, including the
+  issue 211 phone that started at 120 Hz and asked for 60 (its present mode stayed mailbox: the lock
+  saw 120). So `IcoActivity` listens to `DisplayManager.DisplayListener.onDisplayChanged` while the
+  activity is visible (`startDisplayWatch` in `onStart`, `stopDisplayWatch` in `onStop`) and pushes
+  `Display.getRefreshRate()` when the display's rate or mode list changed (`nativeDisplayRate`,
+  `host_android.c` `ico_android_display_hz`). `window_refresh_ns` (`window_host.c`) and the refresh
+  line take that rate over SDL's (`window_display_refresh_hz`), so the pacer's refresh period, the
+  uncapped-under-mailbox gap (`window_present.c`, `pace_present_gap`), the performance hints' target
+  (`window_perf_hint.c`, the gap) and the evenness line (`rd_even_line`) follow the panel: each reads
+  `window_refresh_ns` at its use, none keeps a copy. The pump applies the video settings again
+  after each report (`window_display_rate_pushed`, as for SDL's `SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED`),
+  so the vsync lock is decided again on the rate the panel runs at, and the 10 s block writes
+  `window: display refresh changed: 60.00 Hz -> 120.00 Hz ...` at the report's run time. On a panel
+  whose rate changes after a numbered row's ask this changes the numbered rows too: the lock can now
+  take a row equal to the new rate where SDL's old rate kept it off. Nothing about it is measured on a
+  device yet.
+- Desktop (Windows, Linux, macOS) and iOS: no ask under any row (`window_frame_rate_pin` is empty
+  there); Uncapped presents as fast as the present mode allows (one a refresh under mailbox, back to
+  back with vsync off and an immediate mode), and SDL's display mode events keep the refresh current.
+  A desktop display does not change its refresh rate by itself the way a phone's governor does, and a
+  variable refresh display (the Steam Deck's, a VRR monitor) follows the presents; nothing there is
+  touched. iOS has no frame rate request in the port (no `CADisableMinimumFrameDurationOnPhone` in
+  `port/platform/ios/Info.plist.in`); whether a ProMotion iPhone holds the game at 60 Hz without it is
+  not checked here.
 
 - `window: present stalls: 1 over 250 ms in 10.0 s (340 ms at 120.00 Hz: the replay before began
   33.4 ms earlier, the present held 253.3 ms past the replay's GPU span, GPU idle before it not

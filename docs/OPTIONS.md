@@ -130,7 +130,12 @@ The window, the picture's size and shape, and the speed.
   screen, 120 on a 120 Hz screen) follows the screen, so motion stays
   smooth. On a 144 Hz or 240 Hz screen the 144 or 240 limit counts as equal
   to it, even when the system reports 143 or 239. On phones and tablets it
-  starts at 60. If motion ever looks uneven, check that this limit matches
+  starts at 60. On phones whose screen changes its refresh rate by itself,
+  a number asks the screen to hold that rate, and Uncapped now asks the
+  screen for its highest rate (Android 12 and later; the phone can say no).
+  Original asks for nothing and lets the phone choose
+  ([Android](ANDROID.md#a-fixed-refresh-rate-for-a-frame-rate-you-set)).
+  If motion ever looks uneven, check that this limit matches
   your screen's refresh rate (see your system's display settings). If a
   faint trailing image stays while you move, try another limit, or on
   Windows the Direct3D 12 renderer ([Choosing the renderer](#choosing-the-renderer)).
