@@ -12,7 +12,8 @@
 #           colour cleared to magenta where it loads nothing)
 # Each on run against off: every PNG the same bytes; the stats' "lamps
 # fillpaste on" with L fills drawn in the paste's pass; passes exactly L
-# fewer; colour loaded fewer by about L SCENE textures (printed).  At least
+# fewer; colour loaded never more than off (and fewer by about L SCENE
+# textures, printed).  At least
 # one fill drawn in the paste's pass over the list, and on every corpus title
 # lamps frame (boot rd-00400: the fill lands in the glow paste drawn early at
 # list 11's first draw).  No device: SKIP (77).
@@ -87,6 +88,18 @@ foreach(dump IN LISTS dumps)
     message(SEND_ERROR "${dump}: ${passes_on} passes with fillpaste, ${passes_off} without, "
                        "${landed_on} fills in the paste's pass: exactly that many fewer expected")
     math(EXPR failures "${failures} + 1")
+  endif()
+  # never worse: colour loaded with the word on at most what it is off
+  if(NOT load_on STREQUAL "?" AND NOT load_off STREQUAL "?")
+    string(REGEX REPLACE "[.]" "" lon "${load_on}")
+    string(REGEX REPLACE "[.]" "" loff "${load_off}")
+    math(EXPR lon "${lon}")
+    math(EXPR loff "${loff}")
+    if(lon GREATER loff)
+      message(SEND_ERROR "${dump}: colour loaded ${load_on} MB with fillpaste, ${load_off} MB "
+                         "without: it must never load more")
+      math(EXPR failures "${failures} + 1")
+    endif()
   endif()
   math(EXPR landedTotal "${landedTotal} + ${landed_on}")
   # the corpus title's lamps (no aura): the hold ends at list 11's first

@@ -1462,9 +1462,12 @@ bool rd__lamps_lowres_box(const RdTargetRec *src)
  * the hold able to pass the lamps (LOWRES: WORK2's own depth) */
 bool rd__lamps_fillpaste_on(void)
 {
-    const RhiLimits *lim = g_rd.hasDevice ? rhi_limits() : NULL;
-    return (wanted() & RD_LAMPS_FILLPASTE) != 0u && lim && lim->tiler &&
-           rhi_backend() == RHI_BACKEND_VULKAN && rd__lamps_lowres_on();
+    /* the tile class (the profile's: not a desktop, D3D or OpenGL one; the
+     * class the late pass and the swap run on), under Vulkan, LOWRES in
+     * force (the lamps on WORK2's own depth) */
+    return (wanted() & RD_LAMPS_FILLPASTE) != 0u && g_rd.hasDevice &&
+           rd__profile_tile_class() != 2 && rhi_backend() == RHI_BACKEND_VULKAN &&
+           rd__lamps_lowres_on();
 }
 
 static struct {
@@ -1508,7 +1511,11 @@ bool rd__lamps_own_depth(uint32_t did)
 
 bool rd__lamps_fill_hold_ok(uint32_t color, uint32_t depth)
 {
-    if (s_lr.on != 1 || !(wanted() & (RD_LAMPS_FILLHOLD | RD_LAMPS_FILLPASTE)) ||
+    /* FILLHOLD by its word; FILLPASTE where it is in force under the lamps
+     * plan (it takes the fill's snapshot where it lands: elsewhere the hold
+     * would only copy it, which costs more than drawing it at its place) */
+    const bool paste = rd__lamps_fillpaste_on() && rd__glow_light_plan() == RD_GLOW_LIGHT_LAMPS;
+    if (s_lr.on != 1 || !((wanted() & RD_LAMPS_FILLHOLD) || paste) ||
         color != idOf(RD_TARGET_WORK2)) {
         return false;
     }
