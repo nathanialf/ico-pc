@@ -66,6 +66,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "rd_glow_blur.h"
 #include "rd_replay.h"
 #include "rd_upscale.h"
 
@@ -557,6 +558,9 @@ static void blurPostSprite(Replay *r, const RdFrame *f, const RdCmd *c)
     }
     if (c->b[0] == RD_POST_MOTION_BLUR && rd__blur_smooth_sprite(r, f, c)) {
         return; /* Motion blur: Smooth (rd_blur_smooth.c) */
+    }
+    if (rd__glow_blur_chain(r, f, c)) {
+        return; /* the glow's blur pairs in two passes (rd_glow_blur.c) */
     }
     if (rd__replay_blur_fold(r, f, c)) {
         return; /* a pair folded into one pass (rd_replay_tiler.c) */

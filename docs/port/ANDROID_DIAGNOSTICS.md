@@ -671,6 +671,18 @@ once line `rd: lamps: low resolution: a draw into WORK2 ... drawn without a dept
 the reason; with H the late pass's `N crack fills held ... into the glow's` rises by about one a
 lamps picture and `glow WORK2 ...` in `GPU top passes` falls to the GS size).
 
+Where the glow's blur in two passes is in force (`RD_GLOW_BLUR_DEFAULT` 1 in a variant, or the
+tests' word `glowblur`; [RENDER_POST.md](RENDER_POST.md#the-glows-blur-in-two-passes), VD-33): the
+start line `rd: glow blur: on: ...`, once `rd: glow blur: the glow's 10 blur pairs drawn as two
+passes on WORK0 424x128 (...)` on the phone's Auto, and the 10 s `window: glow blur: N pictures
+with the glow's blur in two passes (P pairs, about Q passes fewer), R chains drawn as recorded
+(<counts by why>)`: N about the lamps and whole pictures of the block, R 0 there (a reason named
+with its count otherwise, and once in the log). In `GPU top passes` `glow WORK0 424x128 N passes`
+falls from about 12 to about 3 a lamps picture (the reduction, the down pass, the alpha sprite),
+`glow WORK1 ...` stays at one (the across pass); the saving to expect is nine small passes, about
+2 ms against the lamps pictures' 23 to 25.5 ms, less the two passes' own cost, which those lines
+show.
+
 ### The crack fill's snapshot by the swap
 
 The crack fill's start-up check prints `rd: crack fill: swap: on (self-test: 256 levels a channel

@@ -651,7 +651,7 @@ H pictures whose lamps let the crack fill's hold pass (fillhold)`, and `rd_repla
 `stats: lamps lowres on|off: WORK2 WxH under SCENE SWxSH, D draws into WORK2 on its own depth, F
 depth fills, X draws without a depth`.
 
-`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|lowresbox|lowresbias|lowreshy|lowres4|lowresp|lowres2x|lowresms|lowresms8|fillhold` (the tests only,
+`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|lowresbox|lowresbias|lowreshy|lowres4|lowresp|lowres2x|lowresms|lowresms8|fillhold|glowblur` (the tests only,
 [TESTING.md](TESTING.md#environment-switches); words joined by `,` or `+`) turns every part off,
 every part on, or the parts named on whatever the class (the self-tests still decide the area and
 the fold of two pairs);
@@ -667,6 +667,86 @@ fewer each)`; `rd_replay_tool --stats` `stats: lamps <bits> (self-test <state>):
 the lamps' area (WxH at X,Y of TWxTH: A of T texels; C bytes not cleared, S colour bytes not
 stored, L depth bytes not loaded, D not stored), M whole (<why>); B bands left lazy (WORK2_PAD
 WxH)`.
+
+### The glow's blur in two passes
+
+Off by default (`RD_GLOW_BLUR_DEFAULT` 0 in `port/render/rd_glow_blur.h`; the tests' word `glowblur`
+of `ICO_RD_LAMPS`); not byte-identical: [DIVERGENCES.md](DIVERGENCES.md) VD-33, "to check".
+
+The glow's ten blur pairs (`ico2/sugipon/src/staticBlur.c` `blur(10)` .. `blur(19)`) are twenty
+dependent passes on WORK0 and WORK1 (424 x 128 on the PowerVR phone; the blur fold draws nine of
+the pairs as one pass each: eleven, `glow WORK0 424x128 11.8 passes` in its log). Each pass is a GS
+bilinear resample (4-bit fractions, every step truncated) whose rect or UVs are shrunk by n + 6
+sixteenths, anchored at the 4:3 part's left edge, and pass 2's colour (139, 136, 132) under
+HIGHLIGHT multiplies by 1.086, 1.0625 and 1.031 a pair (2.28, 1.83 and 1.36 over the chain).
+Measured on the corpus title's and issue 163's frames (the evidence's Python model of the chain,
+which gives the replay's WORK0, WORK1 and WORK3 RGB byte for byte):
+
+- the chain is separable and, but for its truncations, linear: per axis one kernel a position,
+  the composition of the passes' two-tap filters, at most 14 texels wide (a weight above 1e-3);
+- the kernel changes across the picture: at the 4:3 part's left edge and top every fraction is 0
+  (no blur at all), its spread rises to 2.2 texels near column 100 and row 50 and falls to 1.4
+  around column 200 (the shrinks' phases), its centre shifted by up to 1.5 texels; one kernel for
+  every texel misses the chain's WORK3 by up to 81 levels, the per-position kernels by 14 to 18;
+- the truncations leave the chain 20 to 33 levels darker than its float form in a lit texel
+  (about 0.5 a colour multiply and 0.4 a bilinear axis whose fraction is not 0, each carried
+  through the later passes' gains): over the whole buffer WORK3's mean error of the float form is
+  1.6 levels (title) and 4.8 (issue 163), its largest 46 and 45; a constant correction (1.9
+  levels a pair, carried through the gains) takes them to 0.13 and 0.58, at most 17 and 18; a
+  correction per column and row from the fractions' pattern (the model below) to 0.09 and 0.35,
+  at most 14 and 18;
+- the alpha travels with the same kernels and no gain (HIGHLIGHT adds RGBAQ's 0), through the eye
+  blur (MODULATE 128) into WORK3 and, by the paste (alpha ONE, ZERO), into SCENE's alpha.
+
+`port/render/rd_glow_blur.c` draws such a chain as two passes. At the chain's first pass 1
+(`rd_blur_border.c` `blurPostSprite`, before the blur fold) it reads the pairs through to the eye
+blur as the fold reads a pair (`rd_replay_tiler.c` `rd__replay_blur_chain`: the fold's conditions
+on every pass), composes each axis's kernel row per WORK0 position on the CPU in floats from the
+recorded rects, UVs, clamps and coverage (with the glow's edge strip on a wide frame), turns each
+row into 7 hardware-bilinear taps (adjacent texels merged; a row wider than 14 texels keeps its
+heaviest 14 when at most 1 % of its weight is left out), and keeps the loss model's levels per
+column and row and the common part. The taps and losses go into a small RGBA8 table (WORK0's
+width by 18 rows: per axis 7 rows of a 16-bit weight and a 16-bit offset in 1/256 texel, then
+the loss's whole levels and its 1/256ths), uploaded through the ring when the chain's form
+changes (the same every frame of a resolution). `fx_glowblur_ps` then draws across (WORK0 ->
+WORK1, the column's taps; WORK0's height of WORK1) and down (WORK1 -> WORK0, the row's taps, the
+gains, the column's, the row's and the common loss subtracted, at least 0), through the replay's
+own pass set-up (each pass begun with LOAD, the glow's timing class). The eye blur, WORK0's alpha
+sprite and the paste are drawn as recorded. Plain float filtering with 7 taps and 9 table reads a
+texel: no new kind of GPU work, on every class and backend where the module is made.
+
+Neither pass takes a DONT_CARE load: across writes only WORK0's height of WORK1 (256 rows at 4:3);
+down writes every texel of WORK0 (a condition: every pass 2 covers WORK0) and could, but keeps the
+LOAD (0.2 MB on the phone). `ICO_RD_LAMPS_POISON=1` clears WORK0 to magenta between the two
+passes, so a texel the down pass did not write would show.
+
+Where: `RD_LAMPS_GLOWBLUR` asked for; a frame whose glow light plan is lamps, or whole for the
+sun's fans, the sun's branch, a grey fill or the MSAA epoch (a whole plan drawn so for a later
+reader of WORK1, WORK2, WORK3 or SCENE's alpha, or for an unknown form, keeps the chain: WORK1
+ends holding the across pass, not the chain's last pass 1); above 1x (Original 1x keeps the
+game's chain); every pass of the fold's form, pairs crossing WORK0 and WORK1 to the eye blur, pass
+1's colour 128, no constant added, TCC, 32-bit textures, every pass 2 covering WORK0, WORK1 as
+wide; no row weighing WORK1's bytes from before the chain; no pass window. Anything else is drawn
+as recorded, each reason said once.
+
+Expected on the PowerVR phone (not measured): the chain's eleven passes become two, the glow's
+WORK0 group from about 12 passes to 3 (the reduction, down, the alpha sprite) and WORK1's from 1
+to 1 (across): nine passes fewer, about 2.4 ms at the phone's 0.27 ms a small pass, less the two
+passes' own work (7 taps and 9 table reads on 54 K texels each, against the fold's 16 loads and
+integer arithmetic): about 2 ms off a lamps picture's 23 to 25.5 ms. The phone's lines that
+decide: `GPU top passes` `glow WORK0 424x128 N passes ... ms` (N about 3 where it is on) and
+`glow WORK1 ...`, the lamps pictures' ms in their per-class blocks, and the 10 s line below.
+
+Lines: once a run `rd: glow blur: on|off: the glow's blur pairs drawn as two passes ...`, the
+first chain drawn `rd: glow blur: the glow's N blur pairs drawn as two passes on WORK0 WxH
+(fx_glowblur_ps, 7 taps a texel; kernels up to K texels wide, at most L of a row's weight left
+out; colour gains ...; reported once)`, each reason once `rd: glow blur: a chain drawn as
+recorded: <why> (reported once a reason)`; the 10 s `window: glow blur: N pictures with the
+glow's blur in two passes (P pairs, about Q passes fewer), R chains drawn as recorded (counts by
+why)`; `rd_replay_tool --stats` `stats: glow blur on|off: C chains in two passes (P pairs)[,
+drawn as recorded: <why>]; the run: ...`. Tests: `rd_glow_blur` (the operator, the table, the
+two passes emulated against the chain's integers), `rd_glow_blur_ab` and `rd_glow_blur_gl`
+([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
 ### The fades fold
 

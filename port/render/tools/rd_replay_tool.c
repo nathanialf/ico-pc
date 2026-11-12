@@ -540,6 +540,7 @@
 #include "rd_aura_paste.h"       /* --stats: the aura's paste split */
 #include "rd_late_pass.h"        /* --stats: the late passes on SCENE */
 #include "rd_lamps.h"            /* --stats: the lamps' glow for less */
+#include "rd_glow_blur.h"        /* --stats: the glow blur in two passes */
 #include "rd_fill11.h"           /* --stats: the crack fill in list 11's pass */
 #include "rd_present_scene.h"    /* --stats: the present from SCENE */
 #include "rd_stencil_selftest.h" /* --stats: the stencil outside the shadow window */
@@ -3344,6 +3345,21 @@ int main(int argc, char **argv)
                    "the swap, %llu flushed before a paste\n",
                    dump, rd__lamps_fillpaste_on() ? "on" : "off", (unsigned long long)fl,
                    (unsigned long long)ff);
+        }
+        /* the glow's blur pairs in two passes (rd_glow_blur.c): this
+         * replay's chain drawn so (1) or not (0) and its pairs, why not;
+         * the run's chains, pairs and chains drawn as recorded */
+        {
+            uint64_t gc = 0, gp = 0, gr = 0;
+            int gw = 0, rw = 0;
+            uint32_t rc1 = 0, rp = 0;
+            rd__glow_blur_counts(&gc, &gp, &gr, &gw);
+            rd__glow_blur_replay(&rc1, &rp, &rw);
+            printf("%s: stats: glow blur %s: %u chains in two passes (%u pairs)%s%s; the run: "
+                   "%llu chains in two passes (%llu pairs), %llu drawn as recorded\n",
+                   dump, rd__glow_blur_on() ? "on" : "off", rc1, rp,
+                   rw ? ", drawn as recorded: " : "", rw ? rd__glow_blur_why_text(rw) : "",
+                   (unsigned long long)gc, (unsigned long long)gp, (unsigned long long)gr);
         }
         /* the aura's paste as the alpha alone (rd_aura_paste.c) */
         printf("%s: stats: aura paste %s: %u split (%u rows as the alpha alone, %u band rows), %u "

@@ -84,6 +84,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_glow_blur.h"
 #include "rd_lamps.h"
 #include "rd_mesh.h"
 #include "rd_replay.h"
@@ -207,20 +208,21 @@ const char *rd__lamps_box_why_text(int why)
 
 const char *rd__lamps_bits_text(uint32_t bits)
 {
-    static const char *const kWord[16] = {"area",       "pad",      "owed",      "wholepad",
-                                          "fold4",      "lowres",   "fillhold",  "lowresbox",
-                                          "lowresbias", "lowres4",  "lowresp",   "lowreshy",
-                                          "lowres2x",   "lowresms", "lowresms8", "fillpaste"};
-    static char s_text[8][128];
+    static const char *const kWord[17] = {
+        "area",     "pad",       "owed",       "wholepad",  "fold4",   "lowres",
+        "fillhold", "lowresbox", "lowresbias", "lowres4",   "lowresp", "lowreshy",
+        "lowres2x", "lowresms",  "lowresms8",  "fillpaste", "glowblur"};
+    static char s_text[8][160];
     static unsigned s_next;
-    bits &= RD_LAMPS_ALL | RD_LAMPS_FILLHOLD | RD_LAMPS_LOWRES_ANY | RD_LAMPS_FILLPASTE;
+    bits &= RD_LAMPS_ALL | RD_LAMPS_FILLHOLD | RD_LAMPS_LOWRES_ANY | RD_LAMPS_FILLPASTE |
+            RD_LAMPS_GLOWBLUR;
     if (!bits) {
         return "off";
     }
     char *t = s_text[s_next++ & 7u]; /* a ring: a few calls in one expression */
     t[0] = '\0';
     size_t at = 0;
-    for (int i = 0; i < 16; i++) {
+    for (int i = 0; i < 17; i++) {
         if (bits & (1u << i)) {
             const int m = snprintf(t + at, sizeof(s_text[0]) - at, "%s%s", at ? "+" : "", kWord[i]);
             at += m > 0 && (size_t)m < sizeof(s_text[0]) - at ? (size_t)m : 0;
@@ -278,6 +280,8 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS;
         } else if (n == 9 && strncmp(s, "fillpaste", 9) == 0) {
             b |= RD_LAMPS_FILLPASTE;
+        } else if (n == 8 && strncmp(s, "glowblur", 8) == 0) {
+            b |= RD_LAMPS_GLOWBLUR;
         } else if (n == 9 && strncmp(s, "lowresms8", 9) == 0) {
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS | RD_LAMPS_LOWRESMS8;
         } else if (n == 7 && strncmp(s, "lowres4", 7) == 0) {
@@ -314,6 +318,12 @@ uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool
      * tile class where the swap runs; rd__lamps_fillpaste_on checks) */
     if (tileClass == 1 && vulkan && RD_LAMPS_FILLPASTE_DEFAULT) {
         b |= RD_LAMPS_FILLPASTE;
+    }
+    /* the glow's blur in two passes (GLOWBLUR): the build's
+     * RD_GLOW_BLUR_DEFAULT on every class and backend (plain filtering;
+     * rd__glow_blur_on needs the module) */
+    if (RD_GLOW_BLUR_DEFAULT) {
+        b |= RD_LAMPS_GLOWBLUR;
     }
     const bool cls = tileClass == 1 || (tileClass == 2 && !tilePhone);
     if (cls && vulkan && passArea) {
@@ -573,6 +583,7 @@ void rd__lamps_init(void)
     memset(&s_test, 0, sizeof(s_test));
     note();
     lowresNote();
+    rd__glow_blur_init(); /* the glow's blur in two passes (rd_glow_blur.c) */
 }
 
 void rd__lamps_force(int bits)
@@ -1555,7 +1566,8 @@ void rd__lamps_shutdown(void)
     }
     memset(&s_lr.copy, 0, sizeof(s_lr.copy));
     s_lr.fresh = false;
-    msFree(); /* the 4-sample pair (LOWRESMS) */
+    msFree();                 /* the 4-sample pair (LOWRESMS) */
+    rd__glow_blur_shutdown(); /* its table texture (rd_glow_blur.c) */
 }
 
 /* WORK2's own depth (w2) from SCENE's (sc): a depth-only pass of WORK2's
@@ -2289,6 +2301,7 @@ static void lowresLine(void)
 void rd_lamps_line(void)
 {
     lowresLine();
+    rd__glow_blur_line(); /* the glow's blur in two passes (rd_glow_blur.c) */
     uint64_t v[9];
     uint64_t *const src[9] = {&s_sum.areas,      &s_sum.whole,  &s_sum.pads,
                               &s_sum.areaTexels, &s_sum.texels, &s_sum.clear,

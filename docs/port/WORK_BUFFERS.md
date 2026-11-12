@@ -129,6 +129,14 @@ for each of the first four frame widths:
 rd: glow: on a frame 848 GS pixels wide the blur's first pass leaves WORK1's column 0 undrawn (its rect anchored at the 4:3 part) and its second pass reads them: drawn as column 1 of this frame, not kept from an earlier one (issue 129; reported once a width)
 ```
 
+Under the glow's blur in two passes (`port/render/rd_glow_blur.c`, off by default,
+[RENDER_POST.md](RENDER_POST.md#the-glows-blur-in-two-passes), VD-33) no pass 1 and no strip is
+drawn: the across pass writes WORK1's top WORK0-height rows, every column (the kernels the CPU
+composes take the strip's columns as the strip leaves them), and WORK1 ends holding that pass, not
+the chain's last pass 1. Only a lamps plan, or a whole plan the scan saw no later reader of WORK1
+in, takes it; the next frame's chain writes every WORK1 texel its pass 2 weighs before reading it,
+as before.
+
 `rd__set_glow_edge_fill(false)` (tests; `rd_replay_tool --no-glow-edge`) draws the glow as
 recorded; `rd__glow_edge_count` counts the strips (ten a glow frame at a wide frame, less the pairs
 the blur fold draws as one pass: those draw no pass 1 and so no strip).

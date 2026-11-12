@@ -115,6 +115,11 @@ extern "C" {
  * loading and storing SCENE).  Exact; it needs the hold to pass the lamps
  * (WORK2's own depth: LOWRES) and acts on the tile class under Vulkan */
 #define RD_LAMPS_FILLPASTE 32768u
+/* glowblur: the glow's blur pairs drawn as two passes of float filtering
+ * (rd_glow_blur.c; identical to the eye, not byte-identical: DIVERGENCES.md
+ * VD-33); not in RD_LAMPS_ALL.  By its word, or by the build's
+ * RD_GLOW_BLUR_DEFAULT (rd_glow_blur.h) on every class and backend */
+#define RD_LAMPS_GLOWBLUR 65536u
 #ifndef RD_LAMPS_FILLPASTE_DEFAULT
 #define RD_LAMPS_FILLPASTE_DEFAULT 0
 #endif

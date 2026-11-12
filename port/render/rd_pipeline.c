@@ -76,6 +76,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rd_lamps.h"
+#include "rd_glow_blur.h"
 #include "rd_cache_name.h"
 #include "rd_fill11.h"
 #include "rd_made_outside.h"
@@ -3924,6 +3925,7 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     case RD_FS_FX_SPRITE_UINT:
     case RD_FS_FX_BLUR2:
     case RD_FS_FX_BLUR4:
+    case RD_FS_FX_GLOWBLUR:
     case RD_FS_FX_FRAME:
     case RD_FS_FX_LOCAL:
     case RD_FS_FX_AURA_ROWS:
@@ -4821,6 +4823,14 @@ uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t 
             k.fs = RD_FS_FX_BLUR4;
             n = rd__add_pipe_key(out, max, n, &k);
         }
+    }
+    /* the glow's blur chain in two passes (rd_glow_blur.c) where it is asked for: the fold's
+     * key with fx_glowblur_ps */
+    if (rd__glow_blur_on()) {
+        s.ds.test = rd_test_from_gs(RD_TEST_Z_ALWAYS);
+        s.ds.zwrite = RD_ZWRITE_OFF;
+        const RdPipeKeyInt kg = rd__glow_blur_key(&s);
+        n = rd__add_pipe_key(out, max, n, &kg);
     }
     /* the lamps' WORK2 depth at the GS size above 1x (rd_lamps.c LOWRES): a depth-only blit */
     if (g_rd.fs[RD_FS_DEPTH_DOWN].id && rd__lamps_lowres_on()) {
