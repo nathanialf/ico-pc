@@ -554,6 +554,11 @@ void rd__lamps_lowres_depth(Replay *r, DrawSetup *ds);
 /* blurAbove1xSteps: src is WORK2 at the GS size under LOWRES with SCENE
  * scaled, so its reduction keeps the above-1x box over the GS footprint */
 bool rd__lamps_lowres_box(const RdTargetRec *src);
+/* rd_lamps.h RD_LAMPS_LOWRESMS, at beginPass's end: the open pass's sample
+ * count (4 in the lamps' multisampled pass, else 1), and the pass begun
+ * (the per-sample depth fill drawn first in it) */
+uint8_t rd__lamps_pass_samples(void);
+void rd__lamps_pass_begun(Replay *r);
 void rd__fades_fold_end(void);
 bool rd__fades_fold_exact(int mode, uint32_t usage, bool rgba8);
 bool rd__fades_fold_present(uint32_t ord, bool take, RdFadesFold *out);

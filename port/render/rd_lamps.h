@@ -93,6 +93,24 @@ extern "C" {
  * makes it (the original's 1x raster shimmers on thin lamps), at 4/(scale^2)
  * of today's WORK2 texels */
 #define RD_LAMPS_LOWRES2X 4096u
+/* lowresms (implies lowres and the box): WORK2 at the GS frame's size as the
+ * resolve target of a 4-sample colour and depth pair that live inside the
+ * lamps' pass only (RHI_TEX_TRANSIENT, RhiColorAttachment.resolve: resolved
+ * in the pass, never stored): the fill, fans, mask and lamps drawn with 4
+ * samples, the depth per sample (depth_down_ms_ps at the standard sample
+ * locations, drawn first in the pass): the lamps' coverage and occlusion
+ * anti-aliased as today's scaled raster makes them, at the GS size's
+ * traffic.  Only where RhiLimits.resolveInPass, sampleRateShading,
+ * standardSampleLocations, 4 samples, the PowerVR or a desktop class (never
+ * the Arm, Qualcomm or Apple classes in this release: issues 123, 179, 182,
+ * 211), the MSAA scene not blocked, and its start-up self-test passed;
+ * elsewhere LOWRES is off (today's full-size path, never the aliased one) */
+#define RD_LAMPS_LOWRESMS 8192u
+/* lowresms where ICO_RD_LAMPS names no words of its own: 0 no (the
+ * release), 1 yes (a variant build) */
+#ifndef RD_LAMPS_MS_DEFAULT
+#define RD_LAMPS_MS_DEFAULT 0
+#endif
 /* LOWRES's form where the build's default turns it on: 0 the GS size, 1
  * twice it (lowres2x) */
 #ifndef RD_LAMPS_LOWRES_SS_DEFAULT
@@ -100,7 +118,7 @@ extern "C" {
 #endif
 #define RD_LAMPS_LOWRES_ANY                                                                        \
     (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX | RD_LAMPS_LOWRESBIAS | RD_LAMPS_LOWRES4 |               \
-     RD_LAMPS_LOWRESP | RD_LAMPS_LOWRESHY | RD_LAMPS_LOWRES2X)
+     RD_LAMPS_LOWRESP | RD_LAMPS_LOWRESHY | RD_LAMPS_LOWRES2X | RD_LAMPS_LOWRESMS)
 /* the slope bias's reach past the nearest texel's own distance from the
  * sample point, in GS pixels: the rasteriser's sub-pixel snap (the GS's
  * 1/16).  (Round 7's 0.25 covered a sample point taken (0.5 - 0.5 / scale)
@@ -351,6 +369,12 @@ bool rd__lamps_lowres_gs(const RdTargetRec *t);
 /* WORK2's own scale under LOWRES (rd_core.c rd__target_scale_of): 2 with
  * lowres2x, else 1 */
 float rd__lamps_lowres_factor(void);
+/* LOWRESMS in force (latched with LOWRES, its checks and self-test passed) */
+bool rd__lamps_lowres_ms(void);
+/* the run's LOWRESMS counts (the tests): passes drawn with 4 samples and
+ * resolved in the pass; passes on WORK2 drawn single-sampled (a pass that
+ * loads WORK2, reads its destination, or is a storage pass) */
+void rd__lamps_ms_counts(uint64_t *ms, uint64_t *single);
 /* the run's LOWRES counts (the tests): draws on WORK2's own depth, depth
  * fills, draws without a depth */
 void rd__lamps_lowres_counts(uint64_t *draws, uint64_t *fills, uint64_t *dropped);

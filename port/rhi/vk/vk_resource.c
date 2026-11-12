@@ -690,6 +690,24 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
     }
     /* rhi_readback_texture works on any texture */
     usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    /* a transient attachment (rhi.h RHI_TEX_TRANSIENT): its attachment
+     * usage alone with the transient bit (VUID-VkImageCreateInfo-usage-00963:
+     * no other usage beside the attachment ones), never read back */
+    const bool transient = (desc->usage & RHI_TEX_TRANSIENT) != 0u;
+    if (transient) {
+        if (!g_vkr.limits.resolveInPass ||
+            (desc->usage & ~(uint32_t)(RHI_TEX_RENDER_TARGET | RHI_TEX_DEPTH_STENCIL |
+                                       RHI_TEX_TRANSIENT)) != 0u ||
+            !(desc->usage & (RHI_TEX_RENDER_TARGET | RHI_TEX_DEPTH_STENCIL))) {
+            VKR_LOG("rhi_create_texture %s: a transient attachment refused (no in-pass resolve, "
+                    "or a usage beside the attachment's)",
+                    desc->debugName ? desc->debugName : "");
+            return out;
+        }
+        usage = (usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                          VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) |
+                VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT;
+    }
 
     VkrTexture *t = NULL;
     uint32_t id = vkr_pool_alloc(&g_vkr.textures, (void **)&t);
@@ -743,6 +761,20 @@ static RhiTexture createTexture(const RhiTextureDesc *desc)
     }
     VkMemoryRequirements req;
     vkGetImageMemoryRequirements(g_vkr.device, t->image, &req);
+    if (transient) {
+        /* lazily allocated memory where the device has it (a tiler's tile
+         * memory: no backing store is touched); else the device's own */
+        uint32_t lazy = 0;
+        for (uint32_t i = 0; i < g_vkr.memProps.memoryTypeCount && i < 32u; i++) {
+            if ((req.memoryTypeBits & (1u << i)) && (g_vkr.memProps.memoryTypes[i].propertyFlags &
+                                                     VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT)) {
+                lazy |= 1u << i;
+            }
+        }
+        if (lazy) {
+            req.memoryTypeBits = lazy;
+        }
+    }
     if (!vkr_allocate(&req, RHI_MEM_DEVICE, &t->memory, NULL, VKR_H(t->image), desc->debugName) ||
         !VKR_CHECK(vkBindImageMemory(g_vkr.device, t->image, t->memory, 0))) {
         goto fail;

@@ -9,19 +9,20 @@
 #include <string.h>
 
 static const char *const expected[] = {
-    "blend_int_ps",    "blend_int_vs",     "blit_depth_ps",    "blit_ps",
-    "blit_vs",         "box_reduce_ps",    "camera_probe_ps",  "crt_bloom_ps",
-    "crt_blur_ps",     "crt_ps",           "crt_vs",           "date_snap_ps",
-    "fog_lut_ps",      "font_ps",          "font_sheet_ps",    "fx_rect_vs",
-    "fx_sprite_ps",    "sprite_aa1_ps",    "sprite_aa1_ui_vs", "sprite_aa1_world_vs",
-    "sprite_ps",       "sprite_stq_ps",    "sprite_stq_ui_vs", "sprite_stq_world_vs",
-    "sprite_texa_ps",  "sprite_ui_vs",     "sprite_world_vs",  "vu_grid_lit_vs",
-    "vu_grid_spec_vs", "vu_grid_vs",       "vu_lit_spec_vs",   "vu_lit_vs",
-    "vu_particle_vs",  "vu_prelit_vs",     "vu_probe_ps",      "vu_ps",
-    "vu_reflect_vs",   "vu_skin_debug_vs", "vu_skin_spec_vs",  "vu_skin_vs",
-    "vu_texa_ps",      "wrap_acc_ps",      "wrap_resolve_ps",  "yuv_field_ps",
-    "yuv_ps",          "yuv_vs",           "shadow_count_ps", /* the shadow count in one draw (rd_shadow_one.c) */
-    "depth_down_ps", /* the lamps' WORK2 depth at the GS frame's size (rd_lamps.c) */
+    "blend_int_ps",     "blend_int_vs",     "blit_depth_ps",    "blit_ps",
+    "blit_vs",          "box_reduce_ps",    "camera_probe_ps",  "crt_bloom_ps",
+    "crt_blur_ps",      "crt_ps",           "crt_vs",           "date_snap_ps",
+    "fog_lut_ps",       "font_ps",          "font_sheet_ps",    "fx_rect_vs",
+    "fx_sprite_ps",     "sprite_aa1_ps",    "sprite_aa1_ui_vs", "sprite_aa1_world_vs",
+    "sprite_ps",        "sprite_stq_ps",    "sprite_stq_ui_vs", "sprite_stq_world_vs",
+    "sprite_texa_ps",   "sprite_ui_vs",     "sprite_world_vs",  "vu_grid_lit_vs",
+    "vu_grid_spec_vs",  "vu_grid_vs",       "vu_lit_spec_vs",   "vu_lit_vs",
+    "vu_particle_vs",   "vu_prelit_vs",     "vu_probe_ps",      "vu_ps",
+    "vu_reflect_vs",    "vu_skin_debug_vs", "vu_skin_spec_vs",  "vu_skin_vs",
+    "vu_texa_ps",       "wrap_acc_ps",      "wrap_resolve_ps",  "yuv_field_ps",
+    "yuv_ps",           "yuv_vs",           "shadow_count_ps", /* the shadow count in one draw (rd_shadow_one.c) */
+    "depth_down_ps",    /* the lamps' WORK2 depth at the GS frame's size (rd_lamps.c) */
+    "depth_down_ms_ps", /* the same per sample (rd_lamps.c RD_LAMPS_LOWRESMS) */
 };
 
 /* the screen-prim triangles with their colour and STQ planes

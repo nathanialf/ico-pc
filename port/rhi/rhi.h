@@ -199,7 +199,17 @@ typedef enum RhiTextureUsage {
      * integer texel without a float conversion; Vulkan a mutable-format
      * image with a second view, D3D12 a typeless resource).  A backend
      * without the view leaves RhiLimits.uintView false and ignores the bit. */
-    RHI_TEX_UINT_VIEW = 1 << 7
+    RHI_TEX_UINT_VIEW = 1 << 7,
+    /* an attachment that lives inside its passes only: never loaded (its
+     * passes CLEAR or DONT_CARE it), never stored (DONT_CARE), never sampled,
+     * copied or read back (the bits above but RENDER_TARGET and
+     * DEPTH_STENCIL are refused with it), its contents undefined between
+     * passes.  Vulkan: VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT in memory
+     * that is lazily allocated where the device has such (a tile-based GPU
+     * keeps it in tile memory), refused without RhiLimits.resolveInPass;
+     * OpenGL, D3D11 and D3D12 have no such texture (the caller asks for it
+     * only where resolveInPass is true). */
+    RHI_TEX_TRANSIENT = 1 << 8
 } RhiTextureUsage;
 
 typedef struct RhiTextureDesc {
@@ -595,6 +605,15 @@ typedef struct RhiColorAttachment {
      * RHI_DST_READ_ATTACHMENT pipelines read it (Vulkan: the attachment in
      * RENDERING_LOCAL_READ; D3D12 ignores it) */
     bool readable;
+    /* resolve (id 0: none): a multisampled colour texture resolved INSIDE
+     * the pass into this single-sampled texture of the same format and
+     * size, each pixel the mean of its samples, at the pass's end, within
+     * its render area (Vulkan dynamic rendering resolveImageView,
+     * VK_RESOLVE_MODE_AVERAGE_BIT).  The resolve texture is in
+     * RHI_STATE_RENDER_TARGET before and after; the multisampled one
+     * may then be RHI_STORE_DONT_CARE (RHI_TEX_TRANSIENT).  Only where
+     * RhiLimits.resolveInPass; not with readable */
+    RhiTexture resolve;
 } RhiColorAttachment;
 
 typedef struct RhiDepthAttachment {
@@ -720,6 +739,17 @@ typedef struct RhiLimits {
      * sample (Vulkan sampleRateShading; D3D12 always). */
     uint32_t msaaCounts;
     bool sampleRateShading;
+    /* resolveInPass: RhiColorAttachment.resolve and RHI_TEX_TRANSIENT (a
+     * multisampled colour and depth drawn, the colour resolved inside the
+     * pass, neither stored): Vulkan with dynamic rendering and 4 samples
+     * in msaaCounts; false on a VkRenderPass device (the legacy path has no
+     * resolve attachments), OpenGL, D3D11 and D3D12.  standardSampleLocations:
+     * the device places a multisampled pixel's samples where Vulkan's
+     * standard locations say (VkPhysicalDeviceLimits.standardSampleLocations;
+     * 4 samples at (0.375, 0.125), (0.875, 0.375), (0.125, 0.625), (0.625,
+     * 0.875) of the pixel) */
+    bool resolveInPass;
+    bool standardSampleLocations;
     /* The destination read (RhiDstRead), each false where the device
      * lacks it:
      *   fragmentInterlock      Vulkan fragmentShaderPixelInterlock

@@ -453,6 +453,11 @@ typedef struct VkrPassAttach {
     VkAttachmentLoadOp load, stencilLoad;
     VkAttachmentStoreOp store, stencilStore;
     VkClearValue clear;
+    /* a colour attachment's in-pass resolve (rhi.h RhiColorAttachment.resolve):
+     * the single-sampled texture, its view and layout; NULL none */
+    struct VkrTexture *resolveTex;
+    VkImageView resolveView;
+    VkImageLayout resolveLayout;
 } VkrPassAttach;
 
 typedef struct VkrPassDesc {

@@ -36,6 +36,7 @@ ico_add_shader(depth_resolve_ps blit.hlsl depth_resolve_ps fragment)
 ico_add_shader(depth_upsample_ps blit.hlsl depth_upsample_ps fragment)
 # the lamps' WORK2 depth at the GS frame's size above 1x (port/render/rd_lamps.c RD_LAMPS_LOWRES)
 ico_add_shader(depth_down_ps blit.hlsl depth_down_ps fragment)
+ico_add_shader(depth_down_ms_ps blit.hlsl depth_down_ms_ps fragment)
 ico_add_shader(msaa_resolve_ps blit.hlsl msaa_resolve_ps fragment)
 # tests only, rd__camera_probe
 ico_add_shader(camera_probe_ps blit.hlsl camera_probe_ps fragment)

@@ -392,10 +392,31 @@ float depth_down_load(int2 t, int2 size)
     return g_ssDepth.Load(int3(clamp(t, int2(0, 0), size - 1), 0));
 }
 
+float depth_down_at(float2 at);
+
 float depth_down_ps(BlitVSOut i) : SV_Depth
 {
     const float2 p = floor(i.pos.xy);
-    const float2 at = float2(p.x * g_param.x - g_param.z, p.y * g_param.y) + g_scale.xy;
+    return depth_down_at(float2(p.x * g_param.x - g_param.z, p.y * g_param.y) + g_scale.xy);
+}
+
+// depth_down_ms_ps: depth_down_ps per sample, into the lamps' multisampled WORK2 depth
+// (rd_lamps.c RD_LAMPS_LOWRESMS: 4 samples, drawn first in the lamps' pass, sample-rate
+// shading by SV_SampleIndex).  Sample s of WORK2 pixel p lies at the standard 4-sample
+// location o_s of the pixel (Vulkan's, RhiLimits.standardSampleLocations), GS position
+// p + o_s - 0.5 (a GS integer coordinate is a pixel's centre), so its SCENE texel index is
+// (p + o_s - 0.5) * k - crop, k and the crop as depth_down_ps's; the same forms there.
+static const float2 kDownMs4[4] = {float2(0.375, 0.125), float2(0.875, 0.375),
+                                   float2(0.125, 0.625), float2(0.625, 0.875)};
+
+float depth_down_ms_ps(BlitVSOut i, uint s : SV_SampleIndex) : SV_Depth
+{
+    const float2 q = floor(i.pos.xy) + kDownMs4[s & 3u] - 0.5;
+    return depth_down_at(float2(q.x * g_param.x - g_param.z, q.y * g_param.y) + g_scale.xy);
+}
+
+float depth_down_at(float2 at)
+{
     const int2 size = int2(g_tex.xy);
     const float w = g_uvRect.w;
     const int2 n = clamp(int2(floor(at + 0.5)), int2(0, 0), size - 1);

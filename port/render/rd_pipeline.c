@@ -3908,6 +3908,7 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     case RD_FS_DEPTH_RESOLVE:
     case RD_FS_DEPTH_UPSAMPLE:
     case RD_FS_DEPTH_DOWN:
+    case RD_FS_DEPTH_DOWN_MS:
     case RD_FS_MSAA_RESOLVE:
     case RD_FS_CRACK_FILL:
     case RD_FS_CRACK_COUNT:
@@ -4828,6 +4829,17 @@ uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t 
         kd.gs.ztst = RD_ZTST_ALWAYS;
         kd.gs.zwrite = RD_ZWRITE_ON;
         n = rd__add_pipe_key(out, max, n, &kd);
+        /* and per sample in the multisampled lamps pass (LOWRESMS): RGBA8,
+         * no colour written, 4 samples */
+        if (g_rd.fs[RD_FS_DEPTH_DOWN_MS].id && rd__lamps_lowres_ms()) {
+            RdPipeKeyInt km = rd__post_key(RD_VS_BLIT, RD_FS_DEPTH_DOWN_MS, RHI_FMT_RGBA8_UNORM);
+            km.depthFmt = RHI_FMT_D32F_S8;
+            km.gs.ztst = RD_ZTST_ALWAYS;
+            km.gs.zwrite = RD_ZWRITE_ON;
+            km.gs.colorMask = 0;
+            km.gs.msaa = 4;
+            n = rd__add_pipe_key(out, max, n, &km);
+        }
     }
     n = rd__aura_box_keys(out, max, n);   /* the aura's read in two passes (rd_aura_box.c) */
     return rd__fx_enumerate(out, max, n); /* the frame-size post sprites (rd_fx_plan.c) */

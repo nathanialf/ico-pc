@@ -113,7 +113,8 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
     "crack_fill_ps", "crack_count_ps", "shadow_count_ps", "crack_fill1_ps", "fx_aura_rows_ps",
     "fx_aura_sum_ps", "shadow_count_load_ps", "fsr1_easu_ps", "fsr1_rcas_ps", "vu_pre_cs",
-    "blit_scene_ps", "shadow_tile_mask_ps", "shadow_tile_mark_ps", "fx_blur4_ps", "depth_down_ps"};
+    "blit_scene_ps", "shadow_tile_mask_ps", "shadow_tile_mark_ps", "fx_blur4_ps", "depth_down_ps",
+    "depth_down_ms_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -1448,7 +1449,8 @@ static void beginPass(Replay *r, RdTargetRec *c, RdTargetRec *d, uint32_t cid, u
     r->passStorage = storage;
     r->passReadable = readable;
     r->passDepthReadable = depthRead;
-    g_rd.passSamples = ms ? (uint8_t)s_ms.samples : 1;
+    g_rd.passSamples = ms ? (uint8_t)s_ms.samples : rd__lamps_pass_samples();
+    rd__lamps_pass_begun(r); /* the lamps' per-sample depth (rd_lamps.c) */
 }
 
 /* ------------------------------------------------------------ the MSAA epoch

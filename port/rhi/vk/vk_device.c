@@ -3210,6 +3210,10 @@ static void vkr_fill_limits(void)
     /* multisampling (vkr_msaa_counts, at device creation) */
     o->msaaCounts = g_vkr.msaaCounts | 1u;
     o->sampleRateShading = g_vkr.sampleRate;
+    /* the in-pass resolve (rhi.h RhiColorAttachment.resolve): dynamic
+     * rendering's resolve attachments, 4 samples */
+    o->resolveInPass = !g_vkr.legacyPasses && (g_vkr.msaaCounts & 4u) != 0u;
+    o->standardSampleLocations = g_vkr.props.limits.standardSampleLocations == VK_TRUE;
     /* the destination read (vkr_create_device) */
     o->fragmentInterlock = g_vkr.interlock;
     o->rov = false;

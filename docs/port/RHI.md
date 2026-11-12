@@ -172,7 +172,17 @@ formats).
 **Resources.** Buffers have a usage mask and a memory kind: DEVICE (static meshes), UPLOAD (the
 per-frame ring, persistently mapped) or READBACK. Textures take a size, mip levels, a format, a
 usage mask and a sample count (2, 4 or 8 from `RhiLimits.msaaCounts`: multisampled targets are never
-copied or read back, only resolved by `rhi_cmd_resolve_color` or read by a shader). STORAGE and
+copied or read back, only resolved by `rhi_cmd_resolve_color` or read by a shader). **The in-pass
+resolve** (`RhiLimits.resolveInPass`): a colour attachment's `resolve` texture (single-sampled, its
+format and size) takes the mean of each pixel's samples at the pass's end, inside the pass, so the
+multisampled one can be `RHI_STORE_DONT_CARE`; `RHI_TEX_TRANSIENT` makes an attachment that lives in
+its passes only (never loaded, stored, sampled, copied or read back). Vulkan with dynamic rendering
+and 4 samples: `VkRenderingAttachmentInfo.resolveMode` AVERAGE, `VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT`
+in lazily allocated memory where the device has it (`vk_resource.c`); the VkRenderPass path (no
+resolve attachments), OpenGL, Direct3D 11 and 12 say false (the caller asks for neither there).
+`RhiLimits.standardSampleLocations` is Vulkan's `standardSampleLocations`. Used by the lamps'
+`lowresms` alone ([RENDER_POST.md](RENDER_POST.md#the-lamps-glow-for-less)); the scene's MSAA is
+unchanged. STORAGE and
 INPUT_ATTACHMENT usages exist for the destination read and the [local read](#local-read).
 `rhi_buffer_note_written(b, hi)` tells the backend that the CPU wrote nothing at or past byte `hi`
 of an UPLOAD buffer since the frame slot began (the frame's first call sets the mark, later ones

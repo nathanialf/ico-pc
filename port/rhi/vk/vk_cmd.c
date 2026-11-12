@@ -1606,6 +1606,26 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         pa->stencilLoad = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         pa->stencilStore = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         pa->clear = cv;
+        /* the in-pass resolve (rhi.h RhiColorAttachment.resolve): dynamic
+         * rendering only (RhiLimits.resolveInPass), a multisampled colour
+         * into a single-sampled texture of its format and size */
+        if (a->resolve.id) {
+            VkrTexture *rt = vkr_get_texture(a->resolve);
+            if (!g_vkr.limits.resolveInPass || g_vkr.legacyPasses || !rt || rt->samples != 1u ||
+                t->samples <= 1u || rt->format != t->format || rt->width != t->width ||
+                rt->height != t->height || a->readable) {
+                VKR_LOG("render pass: colour target %u's in-pass resolve refused (no in-pass "
+                        "resolve, or not a single-sampled texture of its format and size)",
+                        i);
+                return;
+            }
+            if (!vkr_pass_has_view(rt, "resolve", i)) {
+                return;
+            }
+            pa->resolveTex = rt;
+            pa->resolveView = rt->view;
+            pa->resolveLayout = vkr_texture_layout(RHI_STATE_RENDER_TARGET, rt);
+        }
     }
     if (pass->depth.texture.id) {
         VkrTexture *t = vkr_get_texture(pass->depth.texture);
@@ -1737,6 +1757,15 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
                              VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
                              (rd ? VK_ACCESS_INPUT_ATTACHMENT_READ_BIT : 0u),
                          ~0u);
+            /* the resolve's write: the colour attachment output stage's
+             * (Vulkan: resolves are colour attachment writes) */
+            if (d.color[i].resolveTex) {
+                vkr_hz_image(&h, c, d.color[i].resolveTex, d.color[i].resolveLayout,
+                             VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                             VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
+                                 VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+                             ~0u);
+            }
         }
         /* a read-only depth attachment is only read when it is loaded and
          * not stored; anything else writes it (a DONT_CARE store too: it is
@@ -1760,6 +1789,10 @@ void rhi_cmd_begin_render_pass(RhiCommandList cl, const RhiRenderPassDesc *pass)
         for (uint32_t i = 0; i < pass->colorCount; i++) {
             vkr_hz_touch(c, colorTex[i]);
             colorTex[i]->hzAttach |= VKR_HZ_ATTACH_WRITE;
+            if (d.color[i].resolveTex) {
+                vkr_hz_touch(c, d.color[i].resolveTex);
+                d.color[i].resolveTex->hzAttach |= VKR_HZ_ATTACH_WRITE;
+            }
         }
         if (depthTex) {
             vkr_hz_touch(c, depthTex);

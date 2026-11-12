@@ -448,6 +448,14 @@ bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d)
 {
     vkr_pass_crumb(d);
     if (g_vkr.legacyPasses) {
+        for (uint32_t i = 0; i < d->colorCount; i++) {
+            if (d->color[i].resolveView) {
+                /* no resolve attachments on this path (RhiLimits.resolveInPass
+                 * false): vk_cmd.c refuses such a pass before it comes here */
+                VKR_LOG("render pass: an in-pass resolve on the VkRenderPass path: not begun");
+                return false;
+            }
+        }
         /* the crash report's phase: the objects first, then the begin */
         rhi_pass_crumb_phase(RHI_PASS_CRUMB_OBJECTS);
         const VkRenderPass rp = vkr_renderpass_get(d);
@@ -499,6 +507,11 @@ bool vkr_pass_begin(VkrCmdList *c, const VkrPassDesc *d)
             .sType = VK_STRUCTURE_TYPE_RENDERING_ATTACHMENT_INFO,
             .imageView = a->view,
             .imageLayout = a->layout,
+            /* the in-pass resolve (rhi.h RhiColorAttachment.resolve): each
+             * pixel the mean of its samples */
+            .resolveMode = a->resolveView ? VK_RESOLVE_MODE_AVERAGE_BIT : VK_RESOLVE_MODE_NONE,
+            .resolveImageView = a->resolveView,
+            .resolveImageLayout = a->resolveView ? a->resolveLayout : VK_IMAGE_LAYOUT_UNDEFINED,
             .loadOp = a->load,
             .storeOp = a->store,
             .clearValue = a->clear,

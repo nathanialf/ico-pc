@@ -3324,11 +3324,17 @@ int main(int argc, char **argv)
             rd__lamps_lowres_counts(&ld, &lf, &lx);
             const RdTargetRec *w2 = rd__target_rec(rd_target(RD_TARGET_WORK2).id);
             const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
+            uint64_t mp = 0, ms1 = 0;
+            rd__lamps_ms_counts(&mp, &ms1);
             printf("%s: stats: lamps lowres %s: WORK2 %ux%u under SCENE %ux%u, %llu draws into "
-                   "WORK2 on its own depth, %llu depth fills, %llu draws without a depth\n",
+                   "WORK2 on its own depth, %llu depth fills, %llu draws without a depth; "
+                   "lowresms %s: %llu passes with 4 samples resolved in the pass, %llu "
+                   "single-sampled\n",
                    dump, rd__lamps_lowres_on() ? "on" : "off", w2 ? w2->tw : 0u, w2 ? w2->th : 0u,
                    sc ? sc->tw : 0u, sc ? sc->th : 0u, (unsigned long long)ld,
-                   (unsigned long long)lf, (unsigned long long)lx);
+                   (unsigned long long)lf, (unsigned long long)lx,
+                   rd__lamps_lowres_ms() ? "on" : "off", (unsigned long long)mp,
+                   (unsigned long long)ms1);
         }
         /* the aura's paste as the alpha alone (rd_aura_paste.c) */
         printf("%s: stats: aura paste %s: %u split (%u rows as the alpha alone, %u band rows), %u "

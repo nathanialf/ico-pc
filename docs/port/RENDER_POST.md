@@ -585,7 +585,25 @@ Multisampling WORK2 instead is not built: the RHI resolves a multisampled colour
 pass (`rhi_cmd_resolve_color`), which on a tile-based GPU stores every sample (6.1 MB at 4
 samples, the supersampled size's traffic) and reads them back, the lamps' VU pipelines would need
 four-sample keys, and its per-sample depth sample-rate shading: a new kind of GPU work on the
-phone for no traffic below twice the GS size's;
+phone for no traffic below twice the GS size's (round 10). **Four samples resolved in the pass**
+(`lowresms`, `RD_LAMPS_MS_DEFAULT` for a build's default): the owner saw the GS-size raster shimmer
+on the phone, so WORK2 at the GS size is the resolve target of a 4-sample colour and depth that live
+inside the lamps' pass only (`RHI_TEX_TRANSIENT`, `RhiColorAttachment.resolve`: tile memory on a
+tiler, resolved in the pass, never stored, [RHI.md](RHI.md)): a pass on WORK2 that clears it is drawn
+into the pair (`msConvert`, from `rd__lamps_pass`, before the pass begins; its pipelines with 4
+samples, `rd__lamps_pass_samples`), its depth filled first per sample (`depth_down_ms_ps` at the
+standard 4-sample locations, sample-rate shading, the depth forms above at each sample's point,
+`rd__lamps_pass_begun`), the colour resolved into WORK2 (each pixel the mean of its 4 samples, as
+today's box averages a GS pixel's scale-squared texels) and reduced by the box. A pass that loads
+WORK2 or reads its destination is drawn single-sampled (counted, said once). Only where the RHI has
+the in-pass resolve, sample-rate shading, the standard locations and 4 samples, on the PowerVR and
+desktop classes (never the Arm, Qualcomm and Apple ones in this release: issues 123, 179, 182, 211),
+the MSAA scene not blocked, and its start-up self-test passed (an 8 x 8 4-sample transient colour and
+depth cleared and resolved in a pass, read back); otherwise the lamps keep today's full-size path,
+never the aliased one (`rd: lamps: low resolution with 4 samples refused: <why>`). Its 4-sample
+pipelines for the lamps' and fill's draws are made at first use but the depth fill's, which is in the
+start-up set. Traffic at the phone's Auto: WORK2 1.5 MB resolved, nothing loaded or stored for the
+pair, the GS size's 1.9 MB single-sampled depth fill kept for the single-sampled fallback;
 SCENE's depth sampled in place outside any pass, a copy only where the device cannot sample a
 depth: the fog path's copy on the local read is for reads beside SCENE's own pass), so lamp against lamp and
 lamp against the scene order as the PS2 orders them at its resolution. The fans' and lamps' depth
@@ -618,7 +636,7 @@ H pictures whose lamps let the crack fill's hold pass (fillhold)`, and `rd_repla
 `stats: lamps lowres on|off: WORK2 WxH under SCENE SWxSH, D draws into WORK2 on its own depth, F
 depth fills, X draws without a depth`.
 
-`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|lowresbox|lowresbias|lowreshy|lowres4|lowresp|lowres2x|fillhold` (the tests only,
+`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|lowresbox|lowresbias|lowreshy|lowres4|lowresp|lowres2x|lowresms|fillhold` (the tests only,
 [TESTING.md](TESTING.md#environment-switches); words joined by `,` or `+`) turns every part off,
 every part on, or the parts named on whatever the class (the self-tests still decide the area and
 the fold of two pairs);
