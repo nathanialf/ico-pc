@@ -73,6 +73,7 @@
 
 #include "rd_replay.h"
 #include "rd_shadow_box.h"
+#include "rd_lamps.h" /* rd__lamps_lowres_on */
 #include "rd_shadow_tile.h"
 
 enum { ST_NOT_RUN, ST_OK, ST_FAIL, ST_ERROR };
@@ -701,7 +702,11 @@ static bool readScene(RdTargetRec *t, uint8_t *px, size_t size)
 
 bool rd__shadow_tile_selftest_variant(int variant, char *words, size_t size)
 {
-    const uint32_t scene = rd_target(RD_TARGET_SCENE).id, work = rd_target(RD_TARGET_WORK2).id;
+    /* a frame-sized scratch beside SCENE: WORK2, or AURA_WORK (the same size)
+     * where the lamps' LOWRES makes WORK2 the GS frame's size (rd_lamps.h) */
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
+    const uint32_t work =
+        rd_target(rd__lamps_lowres_on() ? RD_TARGET_AURA_WORK : RD_TARGET_WORK2).id;
     const uint32_t level = rd_target(RD_TARGET_SHADOW0).id;
     RdTargetRec *t = rd__target_rec(scene), *k = rd__target_rec(work), *l = rd__target_rec(level);
     if (!t || !t->withDepth || !t->color.id || !k || !k->color.id || k->w != t->w || k->h != t->h ||

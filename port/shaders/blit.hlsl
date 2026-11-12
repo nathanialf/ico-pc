@@ -360,6 +360,21 @@ float depth_upsample_ps(BlitVSOut i) : SV_Depth
     return g_ssDepth.Load(int3(int2(i.pos.xy), 0));
 }
 
+// depth_down_ps: SCENE's depth (t1, a scaled target) at the GS frame's own size, into the
+// lamps' WORK2 depth above 1x (port/render/rd_lamps.c RD_LAMPS_LOWRES), a depth-only pass:
+// at pixel p (a GS pixel) the depth of the texel holding the GS pixel's centre,
+// floor((p + 0.5) * scale - crop) on x and floor((p + 0.5) * scale) on y (g_param.xy
+// SCENE's scale, g_param.z its Full pixel crop ox), clamped to SCENE (g_tex.xy its size): the
+// depth a 1x picture's draw at that pixel would test against, as the scaled picture holds it
+// at its centre
+float depth_down_ps(BlitVSOut i) : SV_Depth
+{
+    const float2 c = floor(i.pos.xy) + 0.5;
+    int2 t = int2(floor(float2(c.x * g_param.x - g_param.z, c.y * g_param.y)));
+    t = clamp(t, int2(0, 0), int2(int(g_tex.x) - 1, int(g_tex.y) - 1));
+    return g_ssDepth.Load(int3(t, 0));
+}
+
 // The crack filler above 1x (port/render/rd_crack_fill.c; docs/port/RENDER_POST.md,
 // "Crack filling above 1x"), behind blit_vs over SCENE's texels, before the
 // fog. The VU truncates each part's vertices to the GS's 1/16 pixel grid

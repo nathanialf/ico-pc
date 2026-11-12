@@ -53,3 +53,25 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
                              ENVIRONMENT "ICO_RHI_BACKEND=opengl;LIBGL_ALWAYS_SOFTWARE=1;SDL_VIDEO_DRIVER=offscreen")
     endif()
 endif()
+
+# rd_lamps_lowres_ab (test/rd_lamps_lowres_ab.cmake): the lamps' glow at the
+# GS frame's size above 1x (RD_LAMPS_LOWRES, DIVERGENCES.md VD-32) against
+# today's chain on every glow dump of tools/glow_light_dumps.txt at the
+# phone's setting, Enhanced 2x, 3x and 4x at 4:3: DISPLAY and PRESENT
+# measured and printed per dump, FAILS above VD-32's bound; at 1x and under
+# the poison every PNG the same bytes.  No device: SKIP.
+if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lamps_lowres_ab")
+    add_test(NAME rd_lamps_lowres_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/glow_light_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/lamps_lowres_ab"
+                     "-DPY=${Python3_EXECUTABLE}"
+                     "-DDIFF=${CMAKE_CURRENT_SOURCE_DIR}/test/png_level_diff.py"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_lamps_lowres_ab.cmake")
+    set_tests_properties(rd_lamps_lowres_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         TIMEOUT 14400)
+    if(_dc_env)
+        set_tests_properties(rd_lamps_lowres_ab PROPERTIES ENVIRONMENT "${_dc_env}")
+    endif()
+endif()

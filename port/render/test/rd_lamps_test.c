@@ -4,7 +4,7 @@
  *
  *   rd_lamps_test
  *
- *   t1  rd__lamps_parse: 0, 1, all, off, area, pad, area,pad, pad+area, unset,
+ *   t1  rd__lamps_parse: 0, 1, all, off, area, pad, area,pad, pad+area, lowres, unset,
  *       a word it does not know
  *   t2  rd__lamps_default_bits: the band everywhere; the area on the PowerVR
  *       class and a desktop class under Vulkan with the pass area, never on
@@ -173,6 +173,16 @@ int main(void)
     CHECK(rd__lamps_parse("owed", &b) == 1 && b == RD_LAMPS_OWED, "owed: %u", b);
     CHECK(rd__lamps_parse("wholepad,fold4", &b) == 1 && b == (RD_LAMPS_WHOLEPAD | RD_LAMPS_FOLD4),
           "wholepad,fold4: %u", b);
+    /* LOWRES: only its word asks for it (not in 1 or all: not byte-identical) */
+    CHECK(rd__lamps_parse("pad+owed+wholepad+lowres", &b) == 1 &&
+              b == (RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_LOWRES),
+          "pad+owed+wholepad+lowres: %u", b);
+    CHECK((RD_LAMPS_ALL & (RD_LAMPS_LOWRES | RD_LAMPS_FILLHOLD)) == 0u,
+          "lowres and fillhold outside RD_LAMPS_ALL");
+    CHECK(rd__lamps_parse("lowres,fillhold", &b) == 1 && b == (RD_LAMPS_LOWRES | RD_LAMPS_FILLHOLD),
+          "lowres,fillhold: %u", b);
+    CHECK(strcmp(rd__lamps_bits_text(RD_LAMPS_PAD | RD_LAMPS_LOWRES), "pad+lowres") == 0,
+          "lowres's word: %s", rd__lamps_bits_text(RD_LAMPS_PAD | RD_LAMPS_LOWRES));
     b = 77;
     CHECK(rd__lamps_parse("lamps", &b) == -1 && b == 77, "an unknown word");
     CHECK(rd__lamps_parse("area,x", &b) == -1 && b == 77, "an unknown second word");
@@ -181,7 +191,8 @@ int main(void)
               strcmp(rd__lamps_bits_text(0), "off") == 0,
           "the bits' words");
     /* t2 */
-    const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD; /* every class */
+    /* every class (FILLHOLD acts under LOWRES alone) */
+    const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_FILLHOLD;
     CHECK(rd__lamps_default_bits(1, false, true, true, true) == (ev | RD_LAMPS_AREA), "PowerVR");
     CHECK(rd__lamps_default_bits(1, true, true, true, true) == (ev | RD_LAMPS_AREA),
           "PowerVR, a phone");

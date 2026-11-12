@@ -207,15 +207,16 @@ const char *rd__lamps_box_why_text(int why)
 
 const char *rd__lamps_bits_text(uint32_t bits)
 {
-    static const char *const kWord[5] = {"area", "pad", "owed", "wholepad", "fold4"};
-    static char s_text[32][48];
-    bits &= RD_LAMPS_ALL;
+    static const char *const kWord[7] = {"area",  "pad",    "owed",    "wholepad",
+                                         "fold4", "lowres", "fillhold"};
+    static char s_text[128][64];
+    bits &= RD_LAMPS_ALL | RD_LAMPS_LOWRES | RD_LAMPS_FILLHOLD;
     if (!bits) {
         return "off";
     }
-    char *t = s_text[bits & 31u];
+    char *t = s_text[bits & 127u];
     size_t at = 0;
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 7; i++) {
         if (bits & (1u << i)) {
             const int m = snprintf(t + at, sizeof(s_text[0]) - at, "%s%s", at ? "+" : "", kWord[i]);
             at += m > 0 && (size_t)m < sizeof(s_text[0]) - at ? (size_t)m : 0;
@@ -257,6 +258,10 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
             b |= RD_LAMPS_WHOLEPAD;
         } else if (n == 5 && strncmp(s, "fold4", 5) == 0) {
             b |= RD_LAMPS_FOLD4;
+        } else if (n == 6 && strncmp(s, "lowres", 6) == 0) {
+            b |= RD_LAMPS_LOWRES;
+        } else if (n == 8 && strncmp(s, "fillhold", 8) == 0) {
+            b |= RD_LAMPS_FILLHOLD;
         } else {
             return -1;
         }
@@ -269,7 +274,8 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
 uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool passArea,
                                 bool blurFold)
 {
-    uint32_t b = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD;
+    /* FILLHOLD acts only under LOWRES (asked for by its word alone) */
+    uint32_t b = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_FILLHOLD;
     const bool cls = tileClass == 1 || (tileClass == 2 && !tilePhone);
     if (cls && vulkan && passArea) {
         b |= RD_LAMPS_AREA;
@@ -437,7 +443,9 @@ static void envRead(void)
     s_sw.env = k == 1 ? 1 : k == 0 ? 0 : 2;
     s_sw.envBits = b;
     if (k < 0) {
-        rd__log("lamps: ICO_RD_LAMPS=%.24s is not 0, 1, area or pad: the class's default", e);
+        rd__log("lamps: ICO_RD_LAMPS=%.24s is not 0, 1 or words of area, pad, owed, wholepad, "
+                "fold4, lowres and fillhold: the class's default",
+                e);
     }
 }
 
@@ -1246,9 +1254,12 @@ bool rd__lamps_pass(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
         s_w2.th = t2->th;
         s_w2.lit = s_scan.box;
         const RdTargetRec *sc = rd__target_rec(idOf(RD_TARGET_SCENE));
-        const bool depthOk = !p->depth.texture.id || (sc && p->depth.texture.id == sc->depth.id &&
-                                                      p->depth.depthLoad != RHI_LOAD_CLEAR &&
-                                                      p->depth.stencilLoad != RHI_LOAD_CLEAR);
+        /* SCENE's depth, or under LOWRES above 1x WORK2's own (rd__lamps_lowres_depth) */
+        const bool depthOk =
+            !p->depth.texture.id ||
+            (((sc && p->depth.texture.id == sc->depth.id) ||
+              (rd__lamps_lowres_on() && t2->depth.id && p->depth.texture.id == t2->depth.id)) &&
+             p->depth.depthLoad != RHI_LOAD_CLEAR && p->depth.stencilLoad != RHI_LOAD_CLEAR);
         if (known && depthOk) {
             p->area = area;
             savedTraffic(p);
@@ -1291,10 +1302,261 @@ bool rd__lamps_pass(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
     return false;
 }
 
+/* ------------------------------------------------------------ LOWRES */
+
+/* RD_LAMPS_LOWRES (rd_lamps.h): WORK2 at the GS frame's size, its own depth
+ * SCENE's taken down to it before the chain's first draw on it */
+static struct {
+    int on;          /* -1 unread, 0 off, 1 on (read once: WORK2's size) */
+    uint32_t replay; /* the replay whose SCENE depth WORK2's holds */
+    bool fresh;      /* and no draw has written SCENE's depth since */
+    RdDepthCopy copy;
+    bool saidOn, saidDrop;
+    uint64_t draws, fills, dropped;                 /* since rd_init */
+    uint64_t sDraws, sFills, sDropped, sPic, sHold; /* the 10 s sums */
+    uint32_t picReplay, holdReplay;
+    uint32_t w, h, sw, sh; /* the last sizes (the line) */
+} s_lr = {.on = -1};
+
+bool rd__lamps_lowres_on(void)
+{
+    if (s_lr.on < 0) {
+        envRead();
+        s_lr.on = s_sw.env == 1 && (s_sw.envBits & RD_LAMPS_LOWRES) != 0u ? 1 : 0;
+    }
+    return s_lr.on == 1;
+}
+
+bool rd__lamps_own_depth(uint32_t did)
+{
+    return s_lr.on == 1 && did != 0u && did == idOf(RD_TARGET_WORK2);
+}
+
+bool rd__lamps_fill_hold_ok(uint32_t color, uint32_t depth)
+{
+    if (s_lr.on != 1 || !(wanted() & RD_LAMPS_FILLHOLD) || color != idOf(RD_TARGET_WORK2)) {
+        return false;
+    }
+    const RdTargetRec *w2 = rd__target_rec(color), *td = rd__target_rec(depth);
+    if (!w2 || !td || td == w2 || !w2->color.id || !td->depth.id || !w2->withDepth ||
+        (td->tw == w2->tw && td->th == w2->th)) {
+        return false; /* 1x (or a target not made yet): SCENE's depth written, as without LOWRES */
+    }
+    if (s_lr.holdReplay != g_rd.replayCounter) {
+        s_lr.holdReplay = g_rd.replayCounter;
+        sumAdd(&s_lr.sHold, 1);
+    }
+    return true;
+}
+
+void rd__lamps_lowres_counts(uint64_t *draws, uint64_t *fills, uint64_t *dropped)
+{
+    if (draws) {
+        *draws = s_lr.draws;
+    }
+    if (fills) {
+        *fills = s_lr.fills;
+    }
+    if (dropped) {
+        *dropped = s_lr.dropped;
+    }
+}
+
+void rd__lamps_shutdown(void)
+{
+    if (s_lr.copy.tex.id && g_rd.hasDevice) {
+        rd__depth_copy_free(&s_lr.copy);
+    }
+    memset(&s_lr.copy, 0, sizeof(s_lr.copy));
+    s_lr.fresh = false;
+}
+
+/* WORK2's own depth (w2) from SCENE's (sc): a depth-only pass of WORK2's
+ * size, depth_down_ps at every texel (the load a don't-care: every texel is
+ * written; under ICO_RD_LAMPS_POISON a clear to a depth no draw gives, so a
+ * texel it left would show) */
+static bool lowresFill(Replay *r, RdTargetRec *w2, RdTargetRec *sc)
+{
+    RdPipeKeyInt k = rd__post_key(RD_VS_BLIT, RD_FS_DEPTH_DOWN, RHI_FMT_UNKNOWN);
+    k.depthFmt = RHI_FMT_D32F_S8;
+    k.gs.ztst = RD_ZTST_ALWAYS;
+    k.gs.zwrite = RD_ZWRITE_ON;
+    const RhiPipeline pipe = g_rd.fs[RD_FS_DEPTH_DOWN].id ? rd__get_pipeline(&k) : (RhiPipeline){0};
+    if (!pipe.id) {
+        return rd__pipeline_gathering(); /* a gathering replay names the key only */
+    }
+    rd__replay_end_pass(r);
+    RhiCommandList cl = rd__replay_cl();
+    /* SCENE's depth read in place where it can be sampled: outside any
+     * pass, read-only, after the barrier (the fog's in-place path reads it
+     * so); the transition closes an MSAA epoch first (rd__transition: the
+     * depth resolved).  A copy only where the texture cannot be sampled: the
+     * fog path's copy (g_rd.depthCopy on the local read) is for reads beside
+     * SCENE's own pass, and would cost the phone 12.8 MB each way */
+    RhiTexture src = {0};
+    if (sc->depthSampled) {
+        rd__transition(cl, sc->depth, &sc->depthState, RHI_STATE_DEPTH_READ);
+        src = sc->depth;
+    } else {
+        src = rd__depth_copy_take(cl, sc, &s_lr.copy, "rd lamps SCENE depth copy");
+    }
+    if (!src.id) {
+        return false;
+    }
+    RhiBinding b[3];
+    memset(b, 0, sizeof(b));
+    b[0].slot = 1;
+    b[0].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[0].texture = src;
+    b[0].aspect = RHI_ASPECT_DEPTH;
+    b[1].slot = 1;
+    b[1].type = RHI_BIND_SAMPLER;
+    b[1].sampler = rd__sampler(RD_FILTER_NEAREST, RD_FILTER_NEAREST, RD_WRAP_CLAMP, RD_WRAP_CLAMP);
+    b[2].slot = 2;
+    b[2].type = RHI_BIND_SAMPLED_TEXTURE;
+    b[2].texture = g_rd.dummy;
+    const RhiBindGroup g = rd__replay_bind_group(g_rd.layoutTex, b, 3);
+    if (!g.id) {
+        return false;
+    }
+    const uint32_t w = w2->tw, h = w2->th, id = idOf(RD_TARGET_WORK2);
+    const bool poison = rd__lamps_poison();
+    rd__transition(cl, w2->depth, &w2->depthState, RHI_STATE_DEPTH_WRITE);
+    RhiRenderPassDesc p;
+    memset(&p, 0, sizeof(p));
+    p.colorCount = 0;
+    p.depth.texture = w2->depth;
+    p.depth.depthLoad = poison ? RHI_LOAD_CLEAR : RHI_LOAD_DONT_CARE;
+    p.depth.clearDepth = 0.375f; /* poison: far from any GS Z the lamps test */
+    p.depth.stencilLoad = RHI_LOAD_CLEAR;
+    p.depth.clearStencil = 0;
+    p.depth.store = RHI_STORE_STORE;
+    p.depth.stencilStore = RHI_STORE_STORE;
+    p.width = w;
+    p.height = h;
+    rd__perf_pass(cl, RD_PERF_PASS_RENDER, id, w, h, r->perfPost);
+    rhi_cmd_checkpoint(cl, rd__replay_pass_push(RD_PASSK_PASS, id, w, h, id, w, h, 0, r->perfPost));
+    rhi_cmd_begin_render_pass(cl, &p);
+    rd__replay_viewport(w, h);
+    const RhiRect all = {0, 0, w, h};
+    rhi_cmd_set_scissor(cl, &all);
+    IcoDrawCB cb;
+    memset(&cb, 0, sizeof(cb));
+    cb.tex[0] = (float)sc->tw;
+    cb.tex[1] = (float)sc->th;
+    cb.tex[2] = 1.0f / (float)sc->tw;
+    cb.tex[3] = 1.0f / (float)sc->th;
+    cb.param[0] = sc->sx; /* SCENE's texels per GS pixel */
+    cb.param[1] = sc->sy;
+    cb.param[2] = sc->ox; /* its Full pixel crop */
+    rd__set_pipeline(cl, pipe, &k);
+    rd__bind_uniform(cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
+    rd__bind_uniform(cl, 1, rd__draw_group(&cb));
+    rhi_cmd_set_bind_group(cl, 2, g);
+    rd__replay_draw(cl, 3, 0, 1);
+    rd__stats_here()->draws++;
+    rhi_cmd_end_render_pass(cl);
+    return true;
+}
+
+void rd__lamps_lowres_depth(Replay *r, DrawSetup *ds)
+{
+    if (s_lr.on != 1 || !ds || !ds->tdId) {
+        return;
+    }
+    const uint32_t id2 = idOf(RD_TARGET_WORK2);
+    RdTargetRec *w2 = rd__target_rec(id2);
+    RdTargetRec *td = rd__target_rec(ds->tdId);
+    if (!w2 || !td) {
+        return;
+    }
+    if (ds->tc != w2) {
+        if (td != w2 && r->st.ds.zwrite == RD_ZWRITE_ON) {
+            s_lr.fresh = false; /* SCENE's depth written: taken down again before the next */
+        }
+        return;
+    }
+    if (td == w2 || (td->tw == w2->tw && td->th == w2->th)) {
+        return; /* 1x: the draw tests SCENE's own depth, as without LOWRES */
+    }
+    const bool fresh = s_lr.fresh && s_lr.replay == g_rd.replayCounter;
+    bool ok = w2->withDepth && w2->depth.id && !ds->dateStencil && !r->dateStNow;
+    if (ok && !fresh) {
+        ok = lowresFill(r, w2, td);
+        if (ok) {
+            s_lr.fresh = true;
+            s_lr.replay = g_rd.replayCounter;
+            s_lr.fills++;
+            sumAdd(&s_lr.sFills, 1);
+        }
+    }
+    if (!ok) {
+        /* no depth of WORK2's size to test: drawn without one (the pass
+         * cannot pair WORK2 with SCENE's larger depth) */
+        ds->tdId = 0;
+        ds->depthFmt = RHI_FMT_UNKNOWN;
+        s_lr.dropped++;
+        sumAdd(&s_lr.sDropped, 1);
+        if (!s_lr.saidDrop) {
+            s_lr.saidDrop = true;
+            rd__log("lamps: low resolution: a draw into WORK2 %ux%u drawn without a depth (%s; "
+                    "frame %u, reported once)",
+                    w2->tw, w2->th,
+                    !w2->withDepth || !w2->depth.id ? "WORK2 has no depth of its own"
+                    : ds->dateStencil || r->dateStNow
+                        ? "its DATE takes SCENE's stencil"
+                        : "SCENE's depth could not be taken down (no pipeline or no copy)",
+                    (unsigned)s_scan.frame);
+        }
+        return;
+    }
+    w2->zFormat = td->zFormat; /* SCENE's Z format: the draw's FrameCB scale */
+    ds->tdId = id2;
+    s_lr.draws++;
+    sumAdd(&s_lr.sDraws, 1);
+    if (s_lr.picReplay != g_rd.replayCounter) {
+        s_lr.picReplay = g_rd.replayCounter;
+        sumAdd(&s_lr.sPic, 1);
+    }
+    s_lr.w = w2->tw;
+    s_lr.h = w2->th;
+    s_lr.sw = td->tw;
+    s_lr.sh = td->th;
+    if (!s_lr.saidOn) {
+        s_lr.saidOn = true;
+        rd__log("lamps: low resolution: WORK2 %ux%u (the GS frame's size) under SCENE %ux%u: "
+                "the glow's fill, fans, mask and lamps drawn at the PS2's resolution, the "
+                "lamps' and fans' depth WORK2's own (SCENE's taken down, depth_down_ps; "
+                "DIVERGENCES.md VD-32; reported once)",
+                w2->tw, w2->th, td->tw, td->th);
+    }
+}
+
 /* ------------------------------------------------------------ the line */
+
+/* LOWRES's 10 s line (on its own: the lamps' line keeps its words) */
+static void lowresLine(void)
+{
+    const uint64_t pic = __atomic_exchange_n(&s_lr.sPic, 0, __ATOMIC_RELAXED);
+    const uint64_t d = __atomic_exchange_n(&s_lr.sDraws, 0, __ATOMIC_RELAXED);
+    const uint64_t f = __atomic_exchange_n(&s_lr.sFills, 0, __ATOMIC_RELAXED);
+    const uint64_t x = __atomic_exchange_n(&s_lr.sDropped, 0, __ATOMIC_RELAXED);
+    const uint64_t hold = __atomic_exchange_n(&s_lr.sHold, 0, __ATOMIC_RELAXED);
+    if (pic + d + f + x + hold == 0) {
+        return;
+    }
+    fprintf(stderr,
+            "window: lamps low resolution: %llu pictures with WORK2 %ux%u under SCENE %ux%u, %llu "
+            "draws into WORK2 on its own depth, %llu depth fills (depth_down_ps), %llu draws "
+            "without a depth; %llu pictures whose lamps let the crack fill's hold pass "
+            "(fillhold)\n",
+            (unsigned long long)pic, s_lr.w, s_lr.h, s_lr.sw, s_lr.sh, (unsigned long long)d,
+            (unsigned long long)f, (unsigned long long)x, (unsigned long long)hold);
+}
 
 void rd_lamps_line(void)
 {
+    lowresLine();
     uint64_t v[9];
     uint64_t *const src[9] = {&s_sum.areas,      &s_sum.whole,  &s_sum.pads,
                               &s_sum.areaTexels, &s_sum.texels, &s_sum.clear,

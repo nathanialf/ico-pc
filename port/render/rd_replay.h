@@ -548,6 +548,9 @@ bool rd__aura_box_draw(Replay *r, DrawSetup *ds, const RdPipeKeyInt *key, const 
                        const RdTargetRec *src, RhiTexture srcTex, uint32_t steps, int other);
 void rd__fades_fold_screen(const Replay *r, const RdDrawPass *dp, const DrawSetup *ds,
                            IcoDrawCB *cb);
+/* rd_lamps.h RD_LAMPS_LOWRES: a draw into WORK2 above 1x takes WORK2's own
+ * depth (prepareDrawEx, after rd__late_pass_join) */
+void rd__lamps_lowres_depth(Replay *r, DrawSetup *ds);
 void rd__fades_fold_end(void);
 bool rd__fades_fold_exact(int mode, uint32_t usage, bool rgba8);
 bool rd__fades_fold_present(uint32_t ord, bool take, RdFadesFold *out);

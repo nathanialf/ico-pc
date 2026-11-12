@@ -28,6 +28,7 @@
 #include <string.h>
 #include <time.h>
 #include "../fmv/rd_video.h"
+#include "rd_lamps.h"
 #include "rd_log_line.h"
 #include "rd_made_outside.h" /* what play makes outside the key cache, named */
 #include "rd_internal.h"
@@ -705,6 +706,9 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
     if (*w == 0) {
         *w = 1; /* a test's frame narrower than 8 pixels */
     }
+    if (id == RD_TARGET_WORK2 && rd__lamps_lowres_on()) {
+        *depth = 1; /* the lamps' own depth at that size (rd_lamps.c) */
+    }
     /* the scene's scale applies to a scene-class target's texture, not to
      * the GS size: rd__target_scale_of */
 }
@@ -718,9 +722,12 @@ static void namedTargetDesc(int id, uint32_t gsW, uint32_t gsH, uint32_t *w, uin
  * (namedTargetDesc), at those GS sizes (the PS2's) at every scale. */
 static int sceneClass(int id)
 {
-    return id == RD_TARGET_SCENE || id == RD_TARGET_DISPLAY || id == RD_TARGET_WORK2 ||
-           id == RD_TARGET_AURA_WORK || id == RD_TARGET_DATE_SNAPSHOT ||
-           id == RD_TARGET_DISPLAY_HELD;
+    /* WORK2 at the GS frame's size above 1x too under the lamps' LOWRES
+     * (rd_lamps.h: the lamps and the mask drawn at the PS2's own resolution,
+     * the reduction's input), with its own depth (namedTargetDesc) */
+    return id == RD_TARGET_SCENE || id == RD_TARGET_DISPLAY ||
+           (id == RD_TARGET_WORK2 && !rd__lamps_lowres_on()) || id == RD_TARGET_AURA_WORK ||
+           id == RD_TARGET_DATE_SNAPSHOT || id == RD_TARGET_DISPLAY_HELD;
 }
 
 /* DISPLAY and its held copy (the motion blur), of one size and scale */
@@ -1968,6 +1975,7 @@ void rd_shutdown(void)
         rd__present_shutdown();
         rd__crack_fill_shutdown();  /* the crack filler's count target and buffer */
         rd__aura_box_shutdown();    /* the aura's ROWBOX (rd_aura_box.c) */
+        rd__lamps_shutdown();       /* LOWRES's copy of SCENE's depth (rd_lamps.c) */
         rd__shadow_tile_shutdown(); /* the shadow tiles' masks (rd_shadow_tile.c) */
         rd__vu_skin_shutdown();     /* the skin check's probes (rd_vu_skin_check.c) */
         rd__gpu_shutdown();

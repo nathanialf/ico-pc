@@ -1586,6 +1586,7 @@ typedef enum RdFsId {
     RD_FS_SHADOW_TILE_MASK,
     RD_FS_SHADOW_TILE_MARK,
     RD_FS_FX_BLUR4, /* fx_blur4_ps: two staticBlur pairs in one pass (rd_lamps.h RD_LAMPS_FOLD4) */
+    RD_FS_DEPTH_DOWN, /* depth_down_ps: SCENE's depth at the GS size (rd_lamps.h RD_LAMPS_LOWRES) */
     RD_FS_COUNT
 } RdFsId;
 

@@ -669,8 +669,8 @@ void rd__store_plan_pass(const RdTargetRec *d, uint32_t did, RhiLoadOp *depthLoa
         return;
     }
     g_rdPerf.storeDepthPasses++;
-    if (s_plan.mode == 0) {
-        return;
+    if (s_plan.mode == 0 || rd__lamps_own_depth(did)) {
+        return; /* WORK2's own depth under the lamps' LOWRES: not in the scan, kept */
     }
     PlanDepth *p = planDepth(did, true);
     if (!p) {
