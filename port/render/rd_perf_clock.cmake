@@ -79,3 +79,6 @@ include(rd_no_volume.cmake)
 
 # the per-draw lookups' hash (rd_hash.c in ico_render) and its test
 include(rd_hash.cmake)
+
+# the render thread's CPU phases (rd_cpu_phase.c in ico_render) and its test
+include(rd_cpu_phase.cmake)

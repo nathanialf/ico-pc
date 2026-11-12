@@ -14,6 +14,7 @@
 #include "rd_aura_paste.h"    /* rd_fx_plan.c calls it */
 #include "rd_no_volume.h"     /* rd_replay.c, rd_store_plan.c and rd_shadow_merge.c call it */
 #include "rd_hash.h"          /* rd_replay.c uniformOffset */
+#include "rd_cpu_phase.h"     /* rd_replay.c, rd_store_plan.c: the CPU phases */
 
 /* Consecutive screen-prim commands that bind the same things are one draw
  * (doScreen).  A command whose plan is one draw opens a run or joins the

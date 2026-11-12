@@ -811,8 +811,10 @@ static uint64_t uniformOffset(RhiBindGroupLayout layout, const void *data, uint3
     if (size <= RD_UNIFORM_CACHE_BYTES) {
         h = rd__hash_words(data, size, layout.id); /* a slot only (rd_hash.c) */
         e = &s_uniformCache[h % RD_UNIFORM_CACHE];
+        g_rdCpu.uniformLookups++;
         if (e->epoch == s_bindEpoch && e->hash == h && e->layout == layout.id && e->size == size &&
             memcmp(e->data, data, size) == 0) {
+            g_rdCpu.uniformHits++;
             return e->offset;
         }
     }
@@ -5738,7 +5740,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     g_rd.replayCounter++;
     rd__passring_frame(g_rdPerf.replay, f->number, keep); /* the loss report's names */
     rd__diag_frame(NULL, 0);
+    rd_cpu_start();             /* the upload's phases (rd_cpu_phase.c) */
     f = rd__vis_frame(f, keep); /* the scene draws off the target: NOPs (rd_vis.c) */
+    rd_cpu_mark(RD_CPU_U_CULL);
     /* the pass window's count starts again (rd__replay_set_window) */
     g_rdWin.passes = g_rdWin.lastDraws = g_rdWin.drawn = 0;
     memset(&g_rdWin.note, 0, sizeof(g_rdWin.note));
@@ -5756,6 +5760,7 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
         rd__log("could not allocate the upload ring");
         return false;
     }
+    rd_cpu_mark(RD_CPU_U_RING);
     g_rdPerf.uploadMs = (t1 = rd__now_ms()) - t;
     t = t1;
     const bool doPresent = present && rd__present_acquire();
@@ -5775,12 +5780,18 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
        the wide scopes), their ring bytes here, before t5's base
        (rd_upload_late.h) */
     const uint64_t lateWin = rd__upload_late_reserve(f, keep);
+    rd_cpu_mark(RD_CPU_U_BEGIN);
     rd__join_parts(f, keep); /* the card test over a part's packets (rd_join.c) */
+    rd_cpu_mark(RD_CPU_U_JOIN);
     rd__upload_meshes(f, keep);
+    rd_cpu_mark(RD_CPU_U_MESHES);
     rd__passring_bytes(s_ringOff);
     rd__store_plan_scan(f, keep); /* before the new targets' clears */
+    rd_cpu_mark(RD_CPU_U_SCANS);
     rd__present_scene_begin(f, keep);
+    rd_cpu_mark(RD_CPU_U_PRESENT);
     rd__clear_new_targets();
+    rd_cpu_mark(RD_CPU_U_CLEARS);
     g_rdPerf.uploadMs += (t1 = rd__now_ms()) - t;
     t = t1;
     const double bind0 = g_rdPerf.bindMs;
@@ -5788,7 +5799,9 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     rd__thread_phase(RD_READ_WALK);
     rd__perf_stamp(s_cl, RD_PERF_TS_PREPASS);
     rd__vu_prepass(f, keep); /* each mesh and grid vertex once (rd_replay_vu.c) */
+    rd_cpu_mark(RD_CPU_W_PREPASS);
     rd__upload_late(f, keep, lateWin);
+    rd_cpu_mark(RD_CPU_W_LATE);
     rd__perf_stamp(s_cl, RD_PERF_TS_LISTS);
 
     g_rd.frameWExact = f->wExact; /* the present's exact width (rd__frame_wexact) */
@@ -5940,7 +5953,8 @@ static bool replayFrame(const RdFrame *f, int keep, bool present)
     endPass(&r);
     rd__layer_end(&r); /* SCENE's record its own again (rd_layer.c) */
     rd__store_plan_end();
-    rd__vu_skin_end(); /* outside every pass */
+    rd_cpu_picture(f->number); /* the walk's end: the picture's phases folded */
+    rd__vu_skin_end();         /* outside every pass */
     s_ms.r = NULL;
     rd__diag_frame(f, s_ms.want);
     s_vpExact = false; /* the present sets its own viewports */

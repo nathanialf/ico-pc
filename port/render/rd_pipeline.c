@@ -78,6 +78,7 @@
 #include "rd_cache_name.h"
 #include "rd_made_outside.h"
 #include "rd_hash.h"
+#include "rd_cpu_phase.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_pipe_finish.h"
@@ -1861,7 +1862,9 @@ RhiPipeline rd__get_pipeline(const RdPipeKeyInt *k)
     bool found;
     k = drawKey(k, &tmp);
     const uint32_t at = probeKey(k, &found);
+    g_rdCpu.pipeLookups++; /* the CPU phases' count (rd_cpu_phase.c) */
     if (found) {
+        g_rdCpu.pipeHits++;
         /* a failed entry: drawn as nothing, not created again */
         const RhiPipeline p = s_cache[s_hash[at] - 1].pipe;
         if (p.id) {

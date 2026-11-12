@@ -302,6 +302,41 @@ more or once less (`uploadUniformBytes`, the ring's bytes). No `DIVERGENCES.md` 
 an estimate (about 0.3 to 0.7 ms a picture in the cage at the phone's 700-800 MHz, the design's
 C.2) until the CPU phases' line below measures the walk.
 
+### The CPU phases
+
+The 10 s line `window: N replays: CPU ...` splits a picture's render-thread time into interp, upload,
+walk, bind and submit; `port/render/rd_cpu_phase.c` splits the first three further, for the next
+CPU cuts to choose among (the design's C.3), in one line after the late passes' and the aura
+paste's (`rd_cpu_phase_line`, `port/platform/window_host.c` `perf_log`):
+
+```
+window: CPU phases ms a picture over N pictures (R a tick): interp copy C, index I, blend B, morph M, unmatched U, hash H (K of the pictures hashed), the rest F; upload cull X, ring G, acquire and begin A, join J, meshes E, scans: layer L, fades D, the store plan's walk S, present plan P, clears K; walk pre-pass V, late uploads T, lists W; per picture P pipeline look-ups (H hits), B uniform blocks looked up (Z hits); 22.0 clock reads a picture
+```
+
+- interp (`rd_interp.c` `rd__interp_frame`): copy is `copyFrame`, the snap test and the keyed draws'
+  count; index `buildIndex` and `indexCur` (the pairing's tables); blend the cameras' set-up and
+  every draw's `matchOf` and blend (the pairing's per-draw half is inside blend: splitting it would
+  take a clock read a draw); morph the other mesh draws' streams; unmatched `unmatchedPass`; hash
+  `outHash` on a still picture (K: how many took it); the rest `feedback`, the held glow and the
+  velocity's attach;
+- upload (`rd_replay.c` `replayFrame`): cull `rd__vis_frame`; ring the overlay's collection and the
+  ring's size; acquire and begin the present's acquire, the command list and the late uploads'
+  reserve; join `rd__join_parts`; meshes `rd__upload_meshes`; the scans `rd__layer_scan`,
+  `rd__fades_fold_scan` and the store plan's one walk with every consumer (pass area, pass cut, the
+  glow's fold and light plan, DATE's cut, the shadow box, the window with no volume, the late
+  pass, the volumes' merge); present plan `rd__present_scene_begin`; clears
+  `rd__clear_new_targets`;
+- walk: pre-pass `rd__vu_prepass`'s recording, late uploads `rd__upload_late`, lists the lists to
+  `rd__store_plan_end` (bind time inside them, as in the CPU line);
+- the per-draw look-ups: `rd__get_pipeline`'s index probes and hits, `uniformOffset`'s cached
+  blocks (256 bytes or less) and hits; R is pictures over the distinct frames replayed.
+
+The cost of the timers: a clock read (`rd__now_ms`: `clock_gettime(CLOCK_MONOTONIC)`,
+`QueryPerformanceCounter` on Windows) at each group's start and each phase's end: 8 an
+interpolated picture, 11 an upload, 3 a walk, the line's last figure; none a draw. A read is tens of
+nanoseconds on the phones' vDSO clocks [not measured here], so under a microsecond a picture; the
+look-ups are a plain increment each, folded into the 10 s atomics once a picture.
+
 A shadow window with no volume ([RENDER_POST.md](RENDER_POST.md#a-shadow-window-with-no-volume))
 fills `noVolumeKept`, `noVolumeOpen` (with the open pass's `noVolumePassW` x `noVolumePassH` and
 `noVolumePassDepth`), `noVolumeClears`, `noVolumeLevelTexels`, `noVolumeSkipped`, `noVolumeWith`

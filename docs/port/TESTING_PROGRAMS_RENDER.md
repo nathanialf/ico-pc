@@ -955,6 +955,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   at 1x on OpenGL (llvmpipe). Each pair: every PNG byte for byte, the same draws and passes, `=0`
   off with nothing boxed, `=1` on; v3677 at the phone setting 1 count and 3 composites boxed; the
   phone setting boxes at least one of each over the dumps. No device: SKIP.
+- `rd_cpu_phase_test.c` (`rd_cpu_phase`, CPU): the render thread's CPU phases (`rd_cpu_phase.c`):
+  two pictures of one frame folded (2 pictures, 1 tick, 1 hashed, 6 clock reads, the look-ups
+  folded once and `g_rdCpu` emptied), taken twice (empty), no line without a picture, and the
+  line's words from a made-up window, character by character.
 - `rd_hash_test.c` (`rd_hash`, CPU): the per-draw lookups' hash (`rd_hash.c` `rd__hash_words`,
   the uniform blocks' cache and the pipeline index): seven values on a little-endian host worked
   from its steps (no bytes under two seeds, 3, 8, 15 with a seed, a DrawCB's 144 under two seeds;

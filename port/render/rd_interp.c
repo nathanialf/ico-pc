@@ -167,6 +167,7 @@
 #include "rd_velocity.h"
 #include "rd_vu_skin_check.h"
 #include "xxh3.h"
+#include "rd_cpu_phase.h"
 
 /* ------------------------------------------------------------ the result */
 
@@ -5852,6 +5853,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
 {
     RdInterpStats st;
     memset(&st, 0, sizeof(st));
+    rd_cpu_start(); /* the phases (rd_cpu_phase.c) */
     if (!cur || !copyFrame(cur)) {
         if (stats) {
             *stats = st;
@@ -5865,6 +5867,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
             st.keyed += isKeyedDraw(&s_out.lists[l].cmds[i]);
         }
     }
+    rd_cpu_mark(RD_CPU_I_COPY);
     s_scratchUsed = 0;
     s_scratchBytes = 0;
     s_doneCount = 0;
@@ -5884,6 +5887,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
     if (blend) {
         (void)indexCur(); /* false: the ordinal pairing for every key */
     }
+    rd_cpu_mark(RD_CPU_I_INDEX);
     s_cam.on = 0;
     s_camOff = t < 1.0f ? RD_CAM_OFF_NONE : RD_CAM_OFF_ALPHA1;
     s_worldPrevRaw = s_worldCurRaw = 0;
@@ -6033,6 +6037,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
             }
         }
     }
+    rd_cpu_mark(RD_CPU_I_BLEND);
     /* the other mesh draws (unkeyed, unmatched, snapped) take cur's
      * stream when the live one has moved on */
     uint32_t next = 0;
@@ -6049,9 +6054,11 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
             st.morph += morphDraw(c, NULL, NULL, cur, 1.0f);
         }
     }
+    rd_cpu_mark(RD_CPU_I_MORPH);
     if (blend) {
         unmatchedPass(prev, cur, t); /* inserts commands, so after the passes above */
     }
+    rd_cpu_mark(RD_CPU_I_UNMATCHED);
     st.turnFull = s_turnFull;
     st.prevKept = s_umPrevKept;
     st.prevHeld = s_umPrevHeld;
@@ -6078,6 +6085,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
      * between a tick's first present and the later ones */
     s_hashOk = !(blend && s_cam.on && !s_cam.still) && !g_rd.settings.motionBlurSmooth;
     s_hash = s_hashOk ? outHash() : 0;
+    rd_cpu_mark_hash(s_hashOk);
     feedback(firstOfTick);
     /* the glow kept from the tick's first present (rd_glow_hold.c): after
      * the hash too, which the held glow leaves exact */
@@ -6086,6 +6094,7 @@ const RdFrame *rd__interp_frame(const RdFrame *prev, const RdFrame *cur, float a
         rd__velocity_forget_as(RD_UPSCALE_RESET_CAMERA); /* the upscaler's history too */
     }
     rd__velocity_attach(&s_out, 0); /* VuPrevCB: the last present's (rd_velocity.h) */
+    rd_cpu_mark(RD_CPU_I_REST);
     if (stats) {
         *stats = st;
     }

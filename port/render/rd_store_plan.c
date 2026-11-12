@@ -408,8 +408,10 @@ static void planLateAfter(uint32_t ord, int l, uint32_t i)
 
 void rd__store_plan_scan(const RdFrame *f, int keep)
 {
-    rd__layer_scan(f, keep);       /* the display layer's plan (rd_layer.c; the upscaler only) */
-    rd__fades_fold_scan(f, keep);  /* the sprites the reduction draws (rd_fades_fold.c) */
+    rd__layer_scan(f, keep);      /* the display layer's plan (rd_layer.c; the upscaler only) */
+    rd_cpu_mark(RD_CPU_U_LAYER);  /* the upload's phases (rd_cpu_phase.c) */
+    rd__fades_fold_scan(f, keep); /* the sprites the reduction draws (rd_fades_fold.c) */
+    rd_cpu_mark(RD_CPU_U_FADES);
     rd__shadow_merge_scan_begin(); /* the resets the volumes' merge looks for */
     /* one walk of the lists for the passes' areas (after the fold, whose
      * sprites draw nothing: rd_pass_area.c), the passes cut (rd_pass_cut.c)

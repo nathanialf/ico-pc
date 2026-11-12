@@ -5236,6 +5236,7 @@ static void perf_log(void)
     rd_glow_light_line(); /* the glow drawn where it adds light (rd_glow_light.c) */
     rd_late_pass_line();  /* the crack fill held into the aura's pass (rd_late_pass.c) */
     rd_aura_paste_line(); /* the aura's paste as the alpha alone (rd_aura_paste.c) */
+    rd_cpu_phase_line();  /* the CPU phases a picture (rd_cpu_phase.c) */
     window_pipeline_skip_line();
     if (s_perf.msaaSamples) {
         /* the anti-aliasing's cost: its resolves' GPU time is the effects'

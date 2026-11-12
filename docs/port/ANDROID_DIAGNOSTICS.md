@@ -715,6 +715,17 @@ log shows:
   screen; B is the share of the composites' texels still drawn; the `perf classes` line's list 3
   shows what it saved.
 
+### The CPU phases
+
+Every 10 s block has, after the late passes' and the aura paste's lines, `window: CPU phases ms a
+picture over N pictures (R a tick): interp copy ..., index ..., blend ..., ...; upload cull ...,
+...; walk pre-pass ..., late uploads ..., lists ...; per picture P pipeline look-ups (H hits), B
+uniform blocks looked up (Z hits); 22.0 clock reads a picture`
+([RENDER_PERF.md](RENDER_PERF.md#the-cpu-phases)). It says where the CPU line's interp, upload and
+walk go on the device: on the owner's phone the cage's 4.4 ms of interp and 5.3 ms of walk were
+not split before. The look-ups say how many DrawCB blocks and pipeline keys a picture hashes (the
+hash is 8 bytes a step since this release).
+
 ### A shadow window with no volume
 
 On the PowerVR class (and MoltenVK) a shadow window with no volume keeps SCENE's pass open and the

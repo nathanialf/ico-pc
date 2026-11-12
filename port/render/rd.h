@@ -3396,6 +3396,8 @@ void rd_late_pass_line(void);
 /* the aura's paste split (rd_aura_paste.c): the window's 10 s clause
  * "window: aura paste: ..." (nothing when no paste was seen) */
 void rd_aura_paste_line(void);
+/* the CPU phases a picture: "window: CPU phases ms a picture ..." (rd_cpu_phase.c) */
+void rd_cpu_phase_line(void);
 /* the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off (the tests' A/B, no config
  * key); rd__glow_light_force sets it (-1 the environment's) and forgets the
  * plan's off and the plan frame before */
