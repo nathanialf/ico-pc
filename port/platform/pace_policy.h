@@ -43,6 +43,17 @@ bool pace_slow_present(PaceHist *h, uint64_t costNs, uint64_t refreshNs, uint64_
  * time a timed presented replay for the present allowance's GPU gate. */
 uint64_t pace_hist_add(PaceHist *h, uint64_t costNs);
 
+/* The mean of the history's costs (0: none) */
+uint64_t pace_hist_mean(const PaceHist *h);
+
+/* The GPU's time a picture the pipe plans the further pictures by under
+ * the idle ask (pace_rt_fill): the larger of the records' median and their
+ * mean.  The GPU's pictures come at its mean time when it is full, and its
+ * times run longer than the median (rc33 :884: the median 20.5 ms, the mean
+ * 21.9, the worst 37): a pipe planned by the median puts a further
+ * picture where the next new frame's own picture then waits for the GPU. */
+uint64_t pace_rt_fill_gpu_ns(const PaceHist *h);
+
 /* The GPU's time between timed replays in a 10 s block (window_host.c
  * perf_drain; the line 'window: GPU between replays: ...',
  * pace_gpu_gap_text): each replay's GPU span (rd.h RdPerfRecord.gpuMs,
@@ -1212,6 +1223,12 @@ typedef struct PaceStepEst {
     unsigned fitEnds, limitEnds;        /* back-offs ended by the pictures fitting, at the limit */
     uint64_t missMaxNs;                 /* the latest of them past its deadline */
     PaceStepEvent ev;
+    /* the GPU's records (pace_step_est_gpu) as the idle ask plans the further
+       pictures by them (PaceRtAsk.gpuTypNs, gpuLongNs): their typical time
+       (PaceRtTyp: a decaying mean and half its deviation) and their longest
+       lately (pace_rt_gpu_long) */
+    PaceRtTyp gpuTyp;
+    uint64_t gpuLongNs;
 } PaceStepEst;
 
 /* What one step's own miss did to the plan (pace_step_est_note) */
@@ -1334,6 +1351,12 @@ typedef struct PaceRtAsk {
     uint64_t gpuNs;     /* the GPU's time a picture (0: not known) */
     bool paced;         /* vsync off or mailbox (pace_budget_paced_mode) */
     bool asMade;        /* vsync off and uncapped (pace_rt_as_made) */
+    /* The idle ask (slotAhead): the GPU's typical time a picture and its
+       longest lately (PaceStepEst.gpuTyp, gpuLongNs; 0: not known) */
+    uint64_t gpuTypNs, gpuLongNs;
+    bool slotAhead; /* a picture's job ends waiting for the next picture's frame slot
+                           (rd_thread_slot_ahead_on): its end the later of its reads' and the
+                           GPU's end of the picture before it (the idle ask) */
 } PaceRtAsk;
 
 /* When the reads of a picture handed over at postNs end (the pipeline p
@@ -1399,7 +1422,9 @@ uint64_t pace_rt_pipe_reads_end_parts(const PaceRtPipe *p, uint64_t postNs, cons
 typedef enum PaceRtTest {
     PACE_RT_TEST_NONE = 0, /* none: handed over (or held before the rule) */
     PACE_RT_TEST_NEXT,     /* the next step would start past its slack */
-    PACE_RT_TEST_AFTER     /* the step after it, behind the next frame's picture */
+    PACE_RT_TEST_AFTER,    /* the step after it, behind the next frame's picture */
+    PACE_RT_TEST_GPU       /* with the slot ahead: a step between frames behind the GPU's end
+                              of it or of the picture before it (the idle ask) */
 } PaceRtTest;
 
 /* pace_rt_step_miss's working, every input's use and every intermediate
@@ -1420,6 +1445,12 @@ typedef struct PaceRtTrace {
     bool afterAsked;
     uint64_t endANs, endA0Ns, newPostNs, startBNs, startB0Ns;
     PaceRtEnd newReads, newReads0;
+    /* The idle ask's test (gpuAsked: it ran; PACE_RT_TEST_GPU): the further
+       picture's job end, the GPU's end of it at its longest lately, and the
+       latest starts of the steps between frames after the next two new
+       frames' pictures */
+    bool gpuAsked;
+    uint64_t jobEndNs, gpuEndNs, limitANs, limitBNs;
     PaceRtTest test; /* the test that held it */
 } PaceRtTrace;
 
@@ -1511,15 +1542,27 @@ int pace_rt_trace_text(const PaceRtAsk *q, const PaceRtTrace *t, unsigned n, cha
  * the held ones' reads' end, how often the presents were behind and the
  * fence the picture before's; the inputs' sums (means at the line) */
 typedef struct PaceRtTraceSum {
-    unsigned asks, held, byNext, byAfter, behind, fenceBefore;
-    unsigned bound[PACE_RT_BOUNDS];   /* of the held ones */
-    uint64_t overNextNs, overAfterNs; /* past the slack, summed by test */
+    unsigned asks, held, byNext, byAfter, byGpu, behind, fenceBefore;
+    unsigned bound[PACE_RT_BOUNDS];              /* of the held ones */
+    uint64_t overNextNs, overAfterNs, overGpuNs; /* past the slack, summed by test */
+    /* The idle ask: the waits for the render thread before an ask (and those not
+       idle by the step's deadline), their time; the asks whose pipe was
+       corrected by what had ended (pace_rt_pipe_idle), by how much */
+    unsigned fillWaits, fillLate, fixes;
+    uint64_t fillWaitNs, fixNs;
     uint64_t busyLeftNs, readsNs, cpuNs, interpNs, submitNs, gpuNs, presentNs, stepNs, afterNs;
 } PaceRtTraceSum;
 
 /* One ask of the rule (why its answer: PACE_RT_MISS held by t->test) */
 void pace_rt_trace_sum_add(PaceRtTraceSum *s, const PaceRtAsk *q, const PaceRtTrace *t,
                            PaceRtHold why);
+
+/* The idle ask's events into the block's sums: a wait for the render thread
+ * before an ask (waitNs; late: not idle by the step's deadline, no ask), a
+ * pipe corrected at an ask (fixNs: how far pace_rt_pipe_idle moved its ends;
+ * 0 counts nothing) */
+void pace_rt_trace_sum_fill(PaceRtTraceSum *s, uint64_t waitNs, bool late);
+void pace_rt_trace_sum_fix(PaceRtTraceSum *s, uint64_t fixNs);
 
 /* The block's line after "window: step rule: " (nothing asked: the
  * count alone):
@@ -1545,6 +1588,74 @@ int pace_rt_trace_sum_text(const PaceRtTraceSum *s, double seconds, char *out, u
  * pictures in flight at most) is the limit.  Frame rate Original never
  * presents a frame again and vsync on keeps its rules: false there. */
 bool pace_rt_as_made(bool vsync, bool uncapped, bool fifoLock, bool renderThread);
+
+/* Further presents asked of the rule with the render thread idle (the idle ask,
+ * docs/port/DISPLAY.md "Further presents and the game step"; window_present.c
+ * on the timer path with the render thread on, every mode).  A further
+ * present handed over while a picture is in progress waits in its drain for
+ * that picture's whole job, and with the frame slots' wait ahead
+ * (rd_thread.c slotAhead) the job ends only when the GPU has ended the
+ * picture before it: the rule planned that end by the job's typical time
+ * (PaceRtAsk.pictureNs), which mixes jobs that waited for a full GPU with
+ * jobs that did not.  On the owner's Pixel in the opening (rc33 :880-:881, a
+ * GPU of 21 ms a picture) the typical job was 19-23 ms: a picture asked
+ * just after the step between frames was planned to start 2.9 ms past the
+ * next step's due time where the pipe's own fence said its slot would be
+ * free 3.7 ms before it (rc33 :814), and the presents ran up to 12.7 ms past
+ * a step's start (rc33 :820: a hand-over waiting in its drain for a job
+ * longer than planned), the misses that began the back-offs (290 of 600
+ * steps planned at the whole period in that block, rc33 :880).  So the pace asks only with
+ * no picture in progress:
+ *   PACE_FILL_ASK   the render thread idle (sinceNs 0): ask the rule now;
+ *   PACE_FILL_WAIT  a picture in progress: wait for its job's end (at most
+ *                   to deadlineNs: past it, none this step), then ask;
+ *   PACE_FILL_NONE  the deadline passed.
+ * The rule then plans a post at nowNs exactly, and the hand-over never
+ * waits in its drain: a further present never holds the game thread past
+ * the time the rule allowed. */
+typedef enum PaceFill { PACE_FILL_ASK = 0, PACE_FILL_WAIT, PACE_FILL_NONE } PaceFill;
+
+/* The window's build default (window_present.c): 1, the idle ask on every
+ * platform with the render thread on, on the timer path (not under the vsync
+ * lock, not at Frame rate Original); a build with -DPACE_FILL_DEFAULT=0 asks
+ * as before (the variant to compare on a phone).  No config key. */
+#ifndef PACE_FILL_DEFAULT
+#define PACE_FILL_DEFAULT 1
+#endif
+
+PaceFill pace_rt_fill(uint64_t nowNs, uint64_t sinceNs, uint64_t deadlineNs);
+
+/* The GPU's longest picture lately for the idle ask's test (PaceRtAsk.gpuLongNs),
+ * one GPU record (window_host.c perf_drain) at a time: the record when it is
+ * longer, else falling a PACE_RT_GPU_LONG_DECAY-th of the way to it (a
+ * picture 20 ms over the others still counts 5.5 ms over them 40 pictures
+ * later, about a second at the opening's 40 a second).  The phone's GPU
+ * takes single pictures far over its median (rc33 :774: the median 20.5 ms,
+ * the worst 36), and a further picture that leaves the GPU a picture behind
+ * puts the next one on a step: a maximum that forgot them within 8
+ * pictures (pace_rt_estimate) planned the backlog by 31-33 ms where the
+ * model's 50 ms pictures came (pace_loop_test testFill) */
+#define PACE_RT_GPU_LONG_DECAY 32u
+uint64_t pace_rt_gpu_long(uint64_t estNs, uint64_t sampleNs);
+
+/* The pipe (PaceRtPipe) at an ask with the render thread idle (q->nowNs),
+ * corrected by what is known: the render thread's last job ended at
+ * jobEndNs (0, or later than now: now), by its wait for the next picture's
+ * frame slot (byFence: the slot ahead blocked) or by its reads.
+ *   - the picture before's reads (submitFreeNs, when no submit thread's job
+ *     comes before the next picture: q->submitNs 0) ended by then;
+ *   - with the slot ahead (q->slotAhead), byFence: the GPU's end of the
+ *     picture whose slot the next picture takes (gpuDoneNs[0]) was then,
+ *     and the picture after it (gpuDoneNs[1]) ends at least q->gpuNs later;
+ *     not byFence: that GPU end was no later than then.
+ * The pipe predicts by the median GPU time and the typical reads; the
+ * GPU's own times run longer than the median (rc33 :884: the median 20.5
+ * ms, the mean 21.9, the worst 37), so its ends drift early under a
+ * full GPU and late after a hold (rc33 :853: a further picture held by the
+ * submit thread free at +1.7 ms with the render thread idle).  Each ask
+ * starts from the last observed end instead.  Returns how far the ends
+ * moved in all (ns; 0: none moved), for the block's line. */
+uint64_t pace_rt_pipe_idle(PaceRtPipe *p, const PaceRtAsk *q, uint64_t jobEndNs, bool byFence);
 
 /* The counts cleared; last kept, so the interval across two blocks counts
  * in the second (zero the struct to forget it too). */

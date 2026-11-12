@@ -61,6 +61,10 @@ static struct {
     Uint64 cpuEst, interpEst, submitEst;
     /* the reads' mean and deviation, for the 10 s line */
     Uint64 readsMean, readsDev;
+    /* The idle ask: the last picture's job end and whether its slot ahead
+       blocked (ico_render_thread_plan) */
+    Uint64 jobEnd;
+    int jobByFence;
     /* the estimates' state, the render thread's alone: reads, whole job,
        own reads, interpolation, the submit thread's job */
     PaceRtTyp readsTyp, pictureTyp, cpuTyp, interpTyp, submitTyp;
@@ -835,6 +839,14 @@ static int SDLCALL rt_main(void *u)
             uint64_t waits = 0, interp = 0;
 
             rd_thread_take_reads_parts(&waits, &interp);
+            {
+                /* The idle ask: its end, and whether the slot ahead set it */
+                const uint64_t ahead = rd_thread_take_ahead_ns();
+
+                __atomic_store_n(&s_rt.jobByFence, ahead >= ICO_RT_FENCE_WAIT_NS ? 1 : 0,
+                                 __ATOMIC_RELAXED);
+                __atomic_store_n(&s_rt.jobEnd, t1, __ATOMIC_RELAXED);
+            }
             if (sub != 0) {
                 /* the submit thread's job finished since (the picture
                    before's, one picture late) */
@@ -884,7 +896,9 @@ static int SDLCALL rt_main(void *u)
             fm_present_note(&s_rt.mb, &p);
         }
         fm_finish(&s_rt.mb, &job, t1);
-        __atomic_store_n(&s_rt.beatSince, (Uint64)0, __ATOMIC_RELAXED);
+        /* release: the game thread that reads no picture in progress
+           (ico_render_thread_plan's acquire) reads its job's end too */
+        __atomic_store_n(&s_rt.beatSince, (Uint64)0, __ATOMIC_RELEASE);
         __atomic_store_n(&s_rt.beatDone, (unsigned long long)job.seq, __ATOMIC_RELEASE);
         if (fm_idle(&s_rt.mb)) {
             /* what the job wrote is the game thread's once it reads this */
@@ -1092,6 +1106,8 @@ FmMode ico_render_thread_start(void)
         s_rt.readsEst = s_rt.pictureEst = s_rt.presentEst = 0;
         s_rt.cpuEst = s_rt.interpEst = s_rt.submitEst = 0;
         s_rt.readsMean = s_rt.readsDev = 0;
+        s_rt.jobEnd = 0;
+        s_rt.jobByFence = 0;
         memset(&s_rt.readsTyp, 0, sizeof(s_rt.readsTyp));
         memset(&s_rt.pictureTyp, 0, sizeof(s_rt.pictureTyp));
         memset(&s_rt.cpuTyp, 0, sizeof(s_rt.cpuTyp));
@@ -1279,7 +1295,55 @@ bool ico_render_thread_plan(IcoRtPlan *out)
     out->submitNs = rd_thread_submit_on() && !rd_thread_submit_slots_apart()
                         ? __atomic_load_n(&s_rt.submitEst, __ATOMIC_RELAXED)
                         : 0;
+    /* The idle ask: the last job's end (written before the heartbeat's start
+       is cleared, read after it: a picture done is seen with its end) */
+    out->endNs = __atomic_load_n(&s_rt.jobEnd, __ATOMIC_RELAXED);
+    out->byFence = __atomic_load_n(&s_rt.jobByFence, __ATOMIC_RELAXED) != 0;
+    out->slotAhead = rd_thread_slot_ahead_on();
     return true;
+}
+
+bool ico_render_thread_wait_idle(uint64_t untilNs)
+{
+    bool idle;
+
+    if (s_rt.thread == NULL) {
+        return true;
+    }
+    SDL_LockMutex(s_rt.lock);
+    for (;;) {
+        const Uint64 now = SDL_GetTicksNS();
+
+        idle = fm_idle(&s_rt.mb);
+        if (idle || now >= untilNs) {
+            break;
+        }
+        if (untilNs - now < 1000000ull) {
+            /* under a millisecond left: the condition's wait counts whole
+               ms, so the rest is slept and the state read once more */
+            SDL_UnlockMutex(s_rt.lock);
+            SDL_DelayPrecise(untilNs - now);
+            SDL_LockMutex(s_rt.lock);
+            idle = fm_idle(&s_rt.mb);
+            break;
+        }
+        /* woken by the job's end (rt_main broadcasts it), at most the whole
+           ms left */
+        (void)SDL_WaitConditionTimeout(s_rt.cond, s_rt.lock,
+                                       (Sint32)((untilNs - now) / 1000000ull));
+    }
+    SDL_UnlockMutex(s_rt.lock);
+    return idle;
+}
+
+void ico_render_thread_note_fill(uint64_t waitNs, bool late)
+{
+    pace_rt_trace_sum_fill(&s_rt.asks, waitNs, late);
+}
+
+void ico_render_thread_note_fix(uint64_t fixNs)
+{
+    pace_rt_trace_sum_fix(&s_rt.asks, fixNs);
 }
 
 void ico_render_thread_note_held(int why)
@@ -1568,7 +1632,7 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
             tb.freshWaits, tb.freshWaitMs, tb.furtherWaits, tb.furtherWaitMs,
             waits > byPresents ? waits - byPresents : 0u, tb.readWaits, tb.readWaitMs,
             tb.readWaitMaxMs, rw, rt, st, cores);
-    if (s_rt.asks.asks != 0) {
+    if (s_rt.asks.asks != 0 || s_rt.asks.fillWaits != 0) {
         /* the step rule's asks in the block: which test held them, by how
            much, what set the reads' end, the inputs' means */
         char ask[1536];

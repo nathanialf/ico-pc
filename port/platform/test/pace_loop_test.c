@@ -2426,6 +2426,15 @@ static struct {
        the burst) */
     unsigned countFrom;
     bool gpuSeqBurst;
+    /* the slot ahead (rd_thread.c slotAhead, the phone's build): a
+       picture's job ends by waiting for the next picture's frame slot, the
+       GPU's end of the picture before it, so the next post's drain waits
+       for that; fill: the further pictures as the idle ask plans them
+       (pace_policy.h pace_rt_fill: asked of the rule only with the render
+       thread idle, the pace waiting for it up to the deadline, the pipe's
+       ends of the pictures done taken as past, pace_rt_pipe_idle, and the
+       guard's cost the hand-over's without its drain) */
+    bool slotAhead, fill;
 } s_rtGame;
 
 /* The render thread's estimates as render_thread.c keeps them, folded when
@@ -2592,6 +2601,11 @@ typedef struct RtRun {
        (~0u: none), the steps planned at the whole period from step from
        (s_rtGame.countFrom) */
     unsigned counted, outliers, fitEnds, limitEnds, beganAt, endedAt, strictFrom;
+    /* fill: the waits for the render thread before an ask, the asks given
+       up at the deadline; the GPU's work after the first second (its busy
+       share against the time) */
+    unsigned fillWaits, fillGiveUps;
+    uint64_t gpuWorkNs;
 } RtRun;
 
 /* rtTimerLoopSplit with RT_STEP / RT_ASMADE (the window's rule: the step's
@@ -2610,8 +2624,9 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
     const uint64_t gap = s_rtGame.gapNs != 0 ? s_rtGame.gapNs
                          : immediate         ? 0
                                              : pace_present_gap(0, true, true, refresh);
-    uint64_t t = 0, deadline = 0, cost = 0, nextPresent = 0;
+    uint64_t t = 0, deadline = 0, cost = 0, handCost = 0, nextPresent = 0;
     uint64_t rStart = 0, rReadsEnd = 0, rFree = 0;
+    bool rFreeFence = false; /* the slot ahead set the job's end */
     uint64_t rPresent = 0;
     uint64_t sFree = 0, sPresent = 0; /* the submit thread's (interpNs != 0) */
     uint64_t rCpu = 0, rSub = 0, sSub = 0, rInterp = 0;
@@ -2750,8 +2765,34 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                 skipFrame = frame;
                 break;
             }
+            if (!newFrame && s_rtGame.fill && mode >= RT_STEP && E.whole != 0) {
+                /* window_present.c: the idle ask's wait for the render thread
+                   before the ask (pace_policy.h pace_rt_fill) */
+                const PaceFill f = pace_rt_fill(t, rFree > t ? rStart : 0, deadline);
+
+                if (f == PACE_FILL_WAIT) {
+                    if (rFree >= deadline) {
+                        /* not idle by the deadline: none this step */
+                        r.fillGiveUps += k >= 60 ? 1u : 0u;
+                        t = deadline;
+                        break;
+                    }
+                    r.fillWaits += k >= 60 ? 1u : 0u;
+                    t = rFree;
+                    if (!folded) {
+                        rtFold(&E, rReadsEnd - rStart, rFree - rStart, rPresent, rCpu, rSub,
+                               rInterp);
+                        folded = true;
+                    }
+                    continue;
+                }
+            }
             if (!newFrame) {
-                const bool old = t >= deadline || slow || t + cost > deadline;
+                /* The idle ask: the guard's cost the hand-over's alone (its
+                   drain was a wait for the render thread, which the ask
+                   now waits for first) */
+                const bool old =
+                    t >= deadline || slow || t + (s_rtGame.fill ? handCost : cost) > deadline;
                 PaceRtHold why = PACE_RT_GO;
 
                 if (!old && mode >= RT_STEP && E.whole != 0) {
@@ -2797,11 +2838,26 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     q.gpuNs = s_rtGame.gpuRecords
                                   ? rtGpuIn(&se, &gpuHist, gpuRec, &gpuAdded, &gpuMedian, made)
                                   : gpuNs;
+                    if (s_rtGame.fill && s_rtGame.gpuRecords && gpuHist.count != 0) {
+                        q.gpuNs = pace_rt_fill_gpu_ns(&gpuHist);
+                    }
                     q.paced = true;
                     q.asMade = mode == RT_ASMADE;
+                    q.slotAhead = s_rtGame.fill && s_rtGame.slotAhead;
+                    if (q.slotAhead) {
+                        /* window_present.c rt_ask: the records' typical and
+                           longest lately (pace_step_est_gpu, by rtGpuIn) */
+                        q.gpuTypNs = pace_rt_typ_ns(&se.gpuTyp);
+                        q.gpuLongNs = se.gpuLongNs;
+                    }
                     {
                         PaceRtTrace tr;
 
+                        if (s_rtGame.fill && q.sinceNs == 0) {
+                            /* window_present.c rt_further_hold: the pictures
+                               done are past (pace_rt_pipe_idle) */
+                            pace_rt_pipe_idle(&pipe, &q, rFree, rFreeFence);
+                        }
                         why = pace_rt_further_trace(&q, &pipe, &tr);
                         if (s_rtGame.oldHold && !q.asMade && why != PACE_RT_OVERRUN &&
                             pace_rt_behind(q.presentNs, q.refreshNs)) {
@@ -2856,9 +2912,11 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                 continue;
             }
             const uint64_t start = t;
+            uint64_t drained = 0;
 
             if (rFree > t) {
                 /* rd__thread_picture_begin's drain */
+                drained = rFree - t;
                 if (k >= 60) {
                     r.slotWaits++;
                     r.slotWaitNs += rFree - t;
@@ -2952,6 +3010,9 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     q.gpuNs = s_rtGame.gpuRecords
                                   ? rtGpuIn(&se, &gpuHist, gpuRec, &gpuAdded, &gpuMedian, made)
                                   : gpuNs;
+                    if (s_rtGame.fill && s_rtGame.gpuRecords && gpuHist.count != 0) {
+                        q.gpuNs = pace_rt_fill_gpu_ns(&gpuHist);
+                    }
                     q.submitNs = s_rtGame.slots ? 0 : E.sub;
                     q.submitOn = s_rtGame.slots && !s_rtGame.asRun;
                     q.presentNs = E.present;
@@ -2978,11 +3039,20 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
 
                     ready[made % 4] = (prev > gs ? prev : gs) + gi;
                     gpuRec[made % 4] = gi;
+                    rFreeFence = false;
+                    if (s_rtGame.slotAhead && made >= 1 && prev > rFree) {
+                        /* the job ends waiting for the next picture's slot:
+                           the GPU's end of the picture before this one */
+                        rFree = prev;
+                        rFreeFence = true;
+                    }
+                    r.gpuWorkNs += k >= 60 ? gi : 0u;
                 }
             }
             folded = false;
             made++;
             cost = t - start;
+            handCost = cost - drained;
             slow = pace_slow_present(&h, cost, refresh, NTSC, false);
             r.shown += newFrame ? 1u : 0u;
             presented = frame;
@@ -4508,6 +4578,244 @@ static void testDefaults(void)
     CHECK(run[3].blockPresentsMin >= 530u);
 }
 
+/* The idle ask's load (testFill): the phone's opening on the native picture
+   (build-host/tmp/v0115/evidence/rc33/ico-pc.log :880-:1162, the Pixel 10
+   Pro Fold at 120 Hz, vsync off and uncapped: pictures as made, the frame
+   slots apart, the slot ahead): the closing step 3.5-5.8 ms (the block's
+   mean 3.3-4.7, deviation 1.0-1.2), the step between 0.3-0.7 ms with no
+   renderer call, the reads readsMean tenths of a ms (deviation 2.7 ms, the
+   interpolation 3 ms of them, moving with them by half), the submit thread's
+   job 10 ms (deviation 1.5: submit 5.2-5.7 and present 1.5-5.0), the GPU
+   starting a picture 5 ms into it, a GPU time gpuNs a picture: steady, or as
+   the phone's (phone: the median gpuNs, the mean 6 % over it, at most 1.47
+   times it in a second's pictures and 1.76 times it once in 200 pictures:
+   rc33 :884's median 20.5 ms, mean 21.9, worst 37); slotAhead: the job ends
+   waiting for the next picture's slot; fill: the idle ask's asks */
+static RtRun fillRun(unsigned steps, uint64_t gpuNs, int readsMean, bool phone, bool slotAhead,
+                     bool fill, uint64_t gapNs)
+{
+    static const unsigned short closeT[16] = {35, 58, 42, 38, 52, 46, 57, 51,
+                                              45, 51, 40, 44, 43, 43, 40, 45};
+    static const unsigned short fieldT[4] = {3, 5, 4, 7};
+    static uint64_t reads[61], interp[61], rest[61], close[16], field[4], pres[1], gseq[200];
+    uint64_t sum = 0;
+
+    for (unsigned i = 0; i < 61; i++) {
+        const int r = readsMean + ((int)s_rc11ReadsT[i] - 100) * 27 / 25;
+        const int b = 100 + ((int)s_rc11RestT[i] - 80);
+
+        reads[i] = (uint64_t)(r > 1 ? r : 1) * MS / 10u;
+        rest[i] = (uint64_t)(b > 1 ? b : 1) * MS / 10u;
+        sum += reads[i];
+    }
+    for (unsigned i = 0; i < 61; i++) {
+        const int64_t v = (int64_t)(3 * MS) + ((int64_t)reads[i] - (int64_t)(sum / 61u)) / 2;
+
+        interp[i] = v > (int64_t)(MS / 10) ? (uint64_t)v : MS / 10;
+    }
+    for (unsigned i = 0; i < 16; i++) {
+        close[i] = (uint64_t)closeT[i] * MS / 10u;
+    }
+    for (unsigned i = 0; i < 4; i++) {
+        field[i] = (uint64_t)fieldT[i] * MS / 10u;
+    }
+    pres[0] = 5 * MS;
+    if (phone) {
+        /* 1 + 0.08 z + 0.05 z^2 of the median (z the rc11 table's deviate,
+           (t - 100) / 25), the 200th 1.76 */
+        uint64_t f[61], sorted[61];
+
+        for (unsigned i = 0; i < 61; i++) {
+            const int64_t z = (int64_t)s_rc11ReadsT[i] - 100;
+
+            f[i] = (uint64_t)(625000 + 2000 * z + 50 * z * z);
+            sorted[i] = f[i];
+        }
+        for (unsigned i = 1; i < 61; i++) {
+            for (unsigned j = i; j > 0 && sorted[j - 1] > sorted[j]; j--) {
+                const uint64_t x = sorted[j];
+
+                sorted[j] = sorted[j - 1];
+                sorted[j - 1] = x;
+            }
+        }
+        for (unsigned i = 0; i < 200; i++) {
+            gseq[i] = i == 199 ? gpuNs * 176u / 100u : gpuNs * f[i % 61u] / sorted[30];
+        }
+    }
+    const RtLoad L = {9 * MS / 2, MS / 10, 10 * MS, 7 * MS, gpuNs, 0, 0, 0, 0, 0, 0, 0};
+    RtRun r;
+
+    memset(&s_rtGame, 0, sizeof s_rtGame);
+    s_rtGame.frameSeq = close;
+    s_rtGame.frameSeqN = 16;
+    s_rtGame.fieldNs = MS;
+    s_rtGame.fieldSeq = field;
+    s_rtGame.fieldSeqN = 4;
+    s_rtGame.fieldQuiet = true;
+    s_rtGame.readsSeq = reads;
+    s_rtGame.readsSeqN = 61;
+    s_rtGame.interpSeq = interp;
+    s_rtGame.interpSeqN = 61;
+    s_rtGame.restSeq = rest;
+    s_rtGame.restSeqN = 61;
+    s_rtGame.presentSeq = pres;
+    s_rtGame.presentSeqN = 1;
+    s_rtGame.slots = true;
+    s_rtGame.gpuRecords = true;
+    s_rtGame.subPartNs = 5 * MS;
+    s_rtGame.gapNs = gapNs;
+    s_rtGame.slotAhead = slotAhead;
+    s_rtGame.fill = fill;
+    s_rtGame.gpuSeq = phone ? gseq : NULL;
+    s_rtGame.gpuSeqN = phone ? 200u : 0u;
+    r = rtTimerLoopRule(steps, &L, RT_ASMADE, 3 * MS, false);
+    memset(&s_rtGame, 0, sizeof s_rtGame);
+    return r;
+}
+
+/* The idle ask (pace_policy.h pace_rt_fill, pace_rt_pipe_idle, PaceRtAsk.slotAhead;
+   docs/port/DISPLAY.md "Further presents and the game step"): the rule as
+   v0.11.5's first rc builds ran it (rule 0: a further present asked with a
+   picture in progress, its end planned by the job's typical time, handed
+   over to wait in its drain) against the idle ask (rule 1), both with the slot
+   ahead, over 100 s of the phone's opening load (fillRun) on a 120 Hz and a
+   60 Hz mailbox (one present a refresh), a steady and the phone's GPU, GPU
+   times of 13, 17, 21, 25, 30 and 40 ms a picture and reads of 6, 9, 12 and
+   15 ms.  Asserted, per cell: every frame shown, no resync, the presents
+   within 3 of the model's own count (s_fillWant: [display][GPU kind][G][R],
+   before and now) and the idle ask's at least 94 % of the rule before's (the least:
+   25 ms with 15 ms reads, the GPU-full plan); at 40 ms (over a frame: one
+   picture a frame at most) the same presents as before; for each display,
+   GPU kind and GPU time up to 30 ms, over the four reads: the latest step
+   start no later than the rule before's (0.5 ms of rounding), the misses
+   over the floor at most 6 more and the steps planned at the whole period
+   no more; over the grid up to 30 ms the misses over the floor at most half
+   the rule before's, the steps at the whole period at most a tenth; the
+   opening's cells (the phone's GPU at 21 ms, reads of 9 and 12 ms, 120 Hz):
+   the GPU busy 95 % of the time or more, no step planned at the whole
+   period, at most 30 presents (0.3 a second) fewer than before. */
+typedef struct FillWant {
+    unsigned short before, now; /* presents in 100 s */
+} FillWant;
+
+static const FillWant s_fillWant[2][2][6][4] = {
+    {
+        /* 120 Hz, a steady GPU: 13-40 ms by reads 6-15 ms, {before, now} */
+        {
+            {{7464, 7380}, {6852, 6866}, {6001, 6019}, {5337, 5382}},
+            {{5884, 5878}, {5775, 5779}, {5329, 5416}, {4707, 4901}},
+            {{4767, 4767}, {4766, 4766}, {4647, 4648}, {3982, 4448}},
+            {{4005, 4005}, {3902, 4001}, {3725, 3979}, {3390, 3813}},
+            {{3328, 3338}, {3291, 3334}, {3188, 3300}, {3102, 3001}},
+            {{2504, 2504}, {2504, 2504}, {2505, 2505}, {2504, 2504}},
+        },
+        /* 120 Hz, the phone's GPU: 13-40 ms by reads 6-15 ms, {before, now} */
+        {
+            {{7074, 7048}, {6401, 6620}, {5916, 5958}, {5193, 5231}},
+            {{5549, 5513}, {5436, 5425}, {5110, 5198}, {4489, 4698}},
+            {{4499, 4454}, {4418, 4403}, {4214, 4293}, {3716, 4055}},
+            {{3744, 3726}, {3667, 3671}, {3513, 3530}, {3268, 3110}},
+            {{3147, 3118}, {3135, 3094}, {3087, 3038}, {3021, 3001}},
+            {{2366, 2366}, {2366, 2366}, {2366, 2366}, {2366, 2366}},
+        },
+    },
+    {
+        /* 60 Hz, a steady GPU: 13-40 ms by reads 6-15 ms, {before, now} */
+        {
+            {{6336, 6407}, {6349, 6407}, {5987, 6005}, {5339, 5382}},
+            {{5880, 5875}, {5768, 5779}, {5349, 5416}, {4679, 4815}},
+            {{4767, 4767}, {4764, 4766}, {4647, 4648}, {4089, 4448}},
+            {{4005, 4005}, {3931, 4001}, {3731, 3979}, {3433, 3813}},
+            {{3328, 3338}, {3291, 3334}, {3188, 3300}, {3102, 3001}},
+            {{2504, 2504}, {2504, 2504}, {2505, 2505}, {2504, 2504}},
+        },
+        /* 60 Hz, the phone's GPU: 13-40 ms by reads 6-15 ms, {before, now} */
+        {
+            {{6332, 6407}, {6260, 6384}, {5894, 5934}, {5162, 5229}},
+            {{5550, 5512}, {5437, 5423}, {5029, 5180}, {4529, 4688}},
+            {{4499, 4454}, {4440, 4396}, {4242, 4262}, {3749, 4053}},
+            {{3756, 3713}, {3679, 3643}, {3529, 3370}, {3279, 3105}},
+            {{3147, 3103}, {3136, 3082}, {3087, 3001}, {3021, 3001}},
+            {{2366, 2366}, {2366, 2366}, {2366, 2366}, {2366, 2366}},
+        },
+    },
+};
+
+static void testFill(void)
+{
+    static const unsigned gms[6] = {13, 17, 21, 25, 30, 40};
+    static const int readsT[4] = {60, 90, 120, 150};
+    unsigned overAll[2] = {0, 0}, strictAll[2] = {0, 0};
+
+    for (unsigned d = 0; d < 2; d++) {
+        const uint64_t gap = d == 0 ? 0 : pace_present_gap(0, true, true, 16666667ull);
+
+        for (unsigned k = 0; k < 2; k++) {
+            for (unsigned gi = 0; gi < 6; gi++) {
+                const uint64_t g = (uint64_t)gms[gi] * MS;
+                uint64_t lateMax[2] = {0, 0};
+                unsigned over[2] = {0, 0}, strict[2] = {0, 0};
+
+                for (unsigned ri = 0; ri < 4; ri++) {
+                    RtRun run[2];
+
+                    for (unsigned rule = 0; rule < 2; rule++) {
+                        run[rule] = fillRun(6000, g, readsT[ri], k == 1, true, rule == 1, gap);
+                        lateMax[rule] =
+                            run[rule].lateMax > lateMax[rule] ? run[rule].lateMax : lateMax[rule];
+                        over[rule] += run[rule].overFloor;
+                        strict[rule] += run[rule].strict;
+                    }
+                    printf("fill: %s Hz, %s GPU %u ms, reads %.0f ms: %.1f presented fps "
+                           "(before %.1f), the GPU busy %.0f %% (%.0f %%), latest start %.1f ms "
+                           "(%.1f), misses over the floor %u (%u), steps at the whole period %u "
+                           "(%u); %u waits for the render thread, %u held\n",
+                           d == 0 ? "120" : "60", k == 1 ? "the phone's" : "a steady", gms[gi],
+                           readsT[ri] / 10.0, run[1].presents / 100.0, run[0].presents / 100.0,
+                           100.0 * (double)run[1].gpuWorkNs / (5940.0 * (double)NTSC),
+                           100.0 * (double)run[0].gpuWorkNs / (5940.0 * (double)NTSC),
+                           (double)run[1].lateMax / 1e6, (double)run[0].lateMax / 1e6,
+                           run[1].overFloor, run[0].overFloor, run[1].strict, run[0].strict,
+                           run[1].fillWaits, run[1].held);
+                    for (unsigned rule = 0; rule < 2; rule++) {
+                        const FillWant *w = &s_fillWant[d][k][gi][ri];
+                        const unsigned want = rule == 0 ? w->before : w->now;
+
+                        CHECK(run[rule].presents + 3u >= want && run[rule].presents <= want + 3u);
+                    }
+                    if (gms[gi] <= 30) {
+                        CHECK(run[1].shown == run[1].frames && run[1].resyncs == 0);
+                        CHECK(run[1].presents * 100u >= run[0].presents * 94u);
+                    } else {
+                        CHECK(run[1].presents == run[0].presents);
+                    }
+                    if (d == 0 && k == 1 && gms[gi] == 21 && (ri == 1 || ri == 2)) {
+                        /* the opening: as the GPU makes them */
+                        CHECK(run[1].gpuWorkNs * 100u >= 95u * 5940u * NTSC);
+                        CHECK(run[1].strict == 0);
+                        CHECK(run[1].presents >= run[0].presents - 30u);
+                    }
+                }
+                if (gms[gi] <= 30) {
+                    CHECK(lateMax[1] <= lateMax[0] + MS / 2);
+                    CHECK(over[1] <= over[0] + 6u && strict[1] <= strict[0]);
+                    overAll[0] += over[0];
+                    overAll[1] += over[1];
+                    strictAll[0] += strict[0];
+                    strictAll[1] += strict[1];
+                }
+            }
+        }
+    }
+    /* over the grid up to 30 ms: the misses over the floor at most half the
+       rule before's, the steps planned at the whole period at most a tenth */
+    printf("fill: up to 30 ms, misses over the floor %u (before %u), steps at the whole period "
+           "%u (before %u)\n",
+           overAll[1], overAll[0], strictAll[1], strictAll[0]);
+    CHECK(overAll[1] * 2u <= overAll[0] && strictAll[1] * 10u <= strictAll[0]);
+}
+
 int main(void)
 {
     test60();
@@ -4551,6 +4859,7 @@ int main(void)
     testRc13();
     testDefaults();
     testBackoffEvidence();
+    testFill();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;

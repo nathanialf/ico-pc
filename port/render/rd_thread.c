@@ -31,6 +31,9 @@ static _Thread_local uint64_t t_presentNs;
  * and the submit thread, and the acquire) and its interpolation
  * (rd_thread_take_reads_parts; the render thread's own) */
 static _Thread_local uint64_t t_waitNs, t_interpNs;
+/* the slot ahead's wait at the end of the render thread's last job (ns; 0:
+ * none made), for rd_thread_take_ahead_ns */
+static _Thread_local uint64_t t_aheadNs;
 /* a picture's job: the textures to retire still kept for its first
  * graphics call (rd__thread_retire_kept; the render thread's own) */
 static _Thread_local bool t_retireKept;
@@ -216,6 +219,7 @@ static void slotAhead(void)
     rd__bind_epoch_next(); /* as rd__wait_frame's: the slot's bind groups anew */
     s_aheadSlot = (int)rhi_frame_slot();
     const double ms = rd__now_ms() - t0;
+    t_aheadNs = (uint64_t)(ms * 1e6);
     lk();
     s_block.aheads++;
     s_block.aheadMs += ms;
@@ -352,6 +356,7 @@ static void runTramp(Tramp *t, bool picture)
     if (outer) {
         t_jobStartMs = rd__now_ms();
         t_presentNs = 0; /* this job's presents only */
+        t_aheadNs = 0;   /* and its slot ahead */
         t_waitNs = t_interpNs = 0;
         if (picture) {
             /* a picture's interpolation makes no graphics call: the
@@ -622,6 +627,20 @@ uint64_t rd_thread_take_present_ns(void)
     /* and the submit thread's presents finished since (rd_submit_thread.h) */
     const uint64_t sub = rd_thread_submit_take_present_ns();
     return sub > ns ? sub : ns;
+}
+
+uint64_t rd_thread_take_ahead_ns(void)
+{
+    const uint64_t ns = t_aheadNs;
+    t_aheadNs = 0;
+    return ns;
+}
+
+bool rd_thread_slot_ahead_on(void)
+{
+    /* as slotAhead: not under ICO_RD_SLOT_AHEAD=0, and not with the submit
+       thread on and the frame slots not apart */
+    return !s_aheadOff && (!rd_thread_submit_on() || rd_thread_submit_apart());
 }
 
 void rd__thread_note_present(double ms)

@@ -631,13 +631,61 @@ bool pace_rt_step_trace(const PaceRtAsk *q, const PaceRtPipe *p, uint64_t busyLe
     t->fenceBefore = behind;
     const uint64_t readsEnd = pace_rt_pipe_reads_end_parts(p, post, q, behind, &t->reads);
     const uint64_t tail = q->pictureNs > q->readsNs ? q->pictureNs - q->readsNs : 0;
-    const uint64_t pictureEnd = readsEnd + tail;
+    /* The idle ask (q->slotAhead): the picture in flight before the further one
+       (gpuDoneNs[1]) may run past the pipe's plan by the GPU's typical time
+       over it, or, with a GPU that a frame's own pictures fill (a frame of
+       two periods shorter than the typical picture and a slow picture's
+       excess), by its longest lately over it: there a further picture
+       leaves the GPU a picture behind for many frames and a slow picture
+       among them lands on a step (pace_loop_test testFill) */
+    const uint64_t longNs = q->gpuLongNs > q->gpuNs ? q->gpuLongNs : q->gpuNs;
+    const uint64_t typNs = q->gpuTypNs > q->gpuNs ? q->gpuTypNs : q->gpuNs;
+    const bool gpuFull = 2u * period < typNs + (longNs - q->gpuNs);
+    const uint64_t gpuEnd =
+        q->gpuNs != 0 ? p->gpuDoneNs[1] + (gpuFull ? longNs : typNs) - q->gpuNs : 0;
+    /* its job's end: with the slot ahead the later of its reads' and the
+       GPU's end of the picture before it (the wait for the slot the next
+       picture takes), not the typical job's, which mixes jobs that waited
+       for a full GPU with jobs that did not */
+    const uint64_t pictureEnd =
+        q->slotAhead ? (readsEnd > gpuEnd ? readsEnd : gpuEnd) : readsEnd + tail;
 
     t->tailNs = tail;
     /* the next step starts when the reads end */
     if (readsEnd > due + slack) {
         t->test = PACE_RT_TEST_NEXT;
         return true;
+    }
+    if (q->slotAhead && q->gpuNs != 0) {
+        /* The idle ask: with the slot ahead a new frame's present waits in its
+           drain for the job before it, which ends with the GPU's end of the
+           picture before that one.  The further picture's job ends at
+           pictureEnd; the GPU ends the further picture itself at gpuF (at the
+           GPU's longest lately).  The first closing step from here (due, or
+           the one after a step between) posts its new frame's picture after
+           the further picture's job: the step between after it starts no
+           sooner (when the next step is between frames: the test below for
+           a closing next step is the one after it).  The closing step after
+           that posts the next new frame's picture after that picture's job,
+           which ends no sooner than gpuF: the step between after that one
+           starts no sooner.  Each must start within its own slack (the step
+           between's plan).  A GPU nearly full with the new frames' pictures
+           (30 ms of its 33.4) otherwise carries a further picture's 30 ms
+           into the frames after it, and the next slow GPU picture lands on a
+           step (pace_loop_test testFill) */
+        const uint64_t closeAt = q->nextBetween ? due + period : due;
+        const uint64_t slackBetween = q->nextBetween ? slack : slackB;
+        const uint64_t gpuF = pictureEnd + longNs;
+
+        t->gpuAsked = true;
+        t->jobEndNs = pictureEnd;
+        t->gpuEndNs = gpuF;
+        t->limitANs = closeAt + period + slackBetween;
+        t->limitBNs = closeAt + 3u * period + slackBetween;
+        if ((q->nextBetween && pictureEnd > t->limitANs) || gpuF > t->limitBNs) {
+            t->test = PACE_RT_TEST_GPU;
+            return true;
+        }
     }
     if (q->nextBetween) {
         /* the next step closes no frame: no new frame's picture after it,
@@ -822,6 +870,17 @@ int pace_rt_trace_text(const PaceRtAsk *q, const PaceRtTrace *t, unsigned n, cha
     if (t->test == PACE_RT_TEST_NEXT) {
         trace_put(out, len, &at, "; held: its start past that by %.1f ms",
                   rel_ms(t->reads.endNs, due + t->slackNs));
+    } else if (t->test == PACE_RT_TEST_GPU) {
+        trace_put(out, len, &at,
+                  "; its job would end at %+.1f (a new frame's picture after it waits for "
+                  "that), the GPU end it at %+.1f at its longest lately (%.1f ms a picture; the "
+                  "new frame's picture after the next waits for that): the steps between frames "
+                  "after them may start by %+.1f and %+.1f; held: past them by %.1f ms",
+                  rel_ms(t->jobEndNs, due), rel_ms(t->gpuEndNs, due),
+                  ns_ms(q->gpuLongNs > q->gpuNs ? q->gpuLongNs : q->gpuNs),
+                  rel_ms(t->limitANs, due), rel_ms(t->limitBNs, due),
+                  t->gpuEndNs > t->limitBNs ? rel_ms(t->gpuEndNs, t->limitBNs)
+                                            : rel_ms(t->jobEndNs, t->limitANs));
     } else if (t->afterAsked) {
         trace_put(out, len, &at,
                   "; the step after: the next step ends at %+.1f (%+.1f without the "
@@ -875,6 +934,25 @@ void pace_rt_trace_sum_add(PaceRtTraceSum *s, const PaceRtAsk *q, const PaceRtTr
         s->byAfter++;
         s->bound[t->newReads.bound]++;
         s->overAfterNs += t->startBNs - (q->dueNs + q->periodNs + t->slackBNs);
+    } else if (t->test == PACE_RT_TEST_GPU) {
+        s->byGpu++;
+        s->overGpuNs +=
+            t->gpuEndNs > t->limitBNs ? t->gpuEndNs - t->limitBNs : t->jobEndNs - t->limitANs;
+    }
+}
+
+void pace_rt_trace_sum_fill(PaceRtTraceSum *s, uint64_t waitNs, bool late)
+{
+    s->fillWaits++;
+    s->fillLate += late ? 1u : 0u;
+    s->fillWaitNs += waitNs;
+}
+
+void pace_rt_trace_sum_fix(PaceRtTraceSum *s, uint64_t fixNs)
+{
+    if (fixNs != 0) {
+        s->fixes++;
+        s->fixNs += fixNs;
     }
 }
 
@@ -888,6 +966,12 @@ int pace_rt_trace_sum_text(const PaceRtTraceSum *s, double seconds, char *out, u
     }
     trace_put(out, len, &at, "in %.0f s %u further presents asked of the rule", seconds, s->asks);
     if (s->asks == 0) {
+        if (s->fillWaits != 0) {
+            trace_put(out, len, &at,
+                      "; %u waits for the render thread before an ask (%.1f ms on average), "
+                      "%u not idle by the step's deadline",
+                      s->fillWaits, ns_ms(s->fillWaitNs) / s->fillWaits, s->fillLate);
+        }
         return at;
     }
     trace_put(
@@ -909,12 +993,80 @@ int pace_rt_trace_sum_text(const PaceRtTraceSum *s, double seconds, char *out, u
         ns_ms(s->busyLeftNs) / n, ns_ms(s->readsNs) / n, ns_ms(s->cpuNs) / n,
         ns_ms(s->interpNs) / n, ns_ms(s->submitNs) / n, ns_ms(s->gpuNs) / n,
         ns_ms(s->presentNs) / n, ns_ms(s->stepNs) / n, ns_ms(s->afterNs) / n);
+    if (s->byGpu != 0) {
+        /* The idle ask's test (pace_rt_step_trace PACE_RT_TEST_GPU) */
+        trace_put(out, len, &at,
+                  "; %u more held by the GPU's ends behind the next new frames' pictures, by "
+                  "%.1f ms on average",
+                  s->byGpu, ns_ms(s->overGpuNs) / s->byGpu);
+    }
+    if (s->fillWaits != 0 || s->fixes != 0) {
+        /* The idle ask (pace_rt_fill, pace_rt_pipe_idle) */
+        trace_put(out, len, &at,
+                  "; asked with the render thread idle: %u waits for it before an ask (%.1f "
+                  "ms on average; %u not idle by the step's deadline, none asked), the pipe's "
+                  "ends corrected by what had ended in %u asks (%.1f ms on average)",
+                  s->fillWaits, s->fillWaits != 0 ? ns_ms(s->fillWaitNs) / s->fillWaits : 0.0,
+                  s->fillLate, s->fixes, s->fixes != 0 ? ns_ms(s->fixNs) / s->fixes : 0.0);
+    }
     return at;
 }
 
 bool pace_rt_as_made(bool vsync, bool uncapped, bool fifoLock, bool renderThread)
 {
     return !vsync && uncapped && !fifoLock && renderThread;
+}
+
+uint64_t pace_rt_gpu_long(uint64_t estNs, uint64_t sampleNs)
+{
+    if (sampleNs >= estNs) {
+        return sampleNs;
+    }
+    return estNs - (estNs - sampleNs) / PACE_RT_GPU_LONG_DECAY;
+}
+
+PaceFill pace_rt_fill(uint64_t nowNs, uint64_t sinceNs, uint64_t deadlineNs)
+{
+    if (nowNs >= deadlineNs) {
+        return PACE_FILL_NONE;
+    }
+    return sinceNs != 0 ? PACE_FILL_WAIT : PACE_FILL_ASK;
+}
+
+/* |a - b| */
+static uint64_t abs_diff(uint64_t a, uint64_t b)
+{
+    return a > b ? a - b : b - a;
+}
+
+uint64_t pace_rt_pipe_idle(PaceRtPipe *p, const PaceRtAsk *q, uint64_t jobEndNs, bool byFence)
+{
+    const uint64_t end = jobEndNs != 0 && jobEndNs <= q->nowNs ? jobEndNs : q->nowNs;
+    const PaceRtPipe was = *p;
+
+    if (q->submitNs == 0 && p->submitFreeNs > end) {
+        /* the reads of the picture before ended with its job (no submit
+           thread's job before the next picture) */
+        p->submitFreeNs = end;
+    }
+    if (q->slotAhead) {
+        if (byFence) {
+            /* its job ended when the GPU ended the picture whose slot the
+               next picture takes: that end is known, and the picture after
+               it (the one before the next, gpuDoneNs[1]) ends a picture's
+               time later at the earliest */
+            p->gpuDoneNs[0] = end;
+            if (q->gpuNs != 0 && p->gpuDoneNs[1] < end + q->gpuNs) {
+                p->gpuDoneNs[1] = end + q->gpuNs;
+            }
+        } else if (p->gpuDoneNs[0] > end) {
+            /* its slot was free when its reads ended: that GPU end is past */
+            p->gpuDoneNs[0] = end;
+        }
+    }
+    return abs_diff(was.submitFreeNs, p->submitFreeNs) +
+           abs_diff(was.gpuDoneNs[0], p->gpuDoneNs[0]) +
+           abs_diff(was.gpuDoneNs[1], p->gpuDoneNs[1]);
 }
 
 /* the median of n costs (n <= PACE_AUTO_SAMPLES; 0 with none) */
@@ -981,6 +1133,23 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs)
     return median(h);
 }
 
+uint64_t pace_hist_mean(const PaceHist *h)
+{
+    uint64_t sum = 0;
+
+    for (unsigned i = 0; i < h->count; i++) {
+        sum += h->cost[i];
+    }
+    return h->count != 0 ? sum / h->count : 0;
+}
+
+uint64_t pace_rt_fill_gpu_ns(const PaceHist *h)
+{
+    const uint64_t med = median(h), mean = pace_hist_mean(h);
+
+    return mean > med ? mean : med;
+}
+
 uint64_t pace_step_est_gpu(PaceStepEst *e, PaceHist *h, uint64_t gpuNs)
 {
     /* the typical: the median of the full history before this record */
@@ -999,6 +1168,9 @@ uint64_t pace_step_est_gpu(PaceStepEst *e, PaceHist *h, uint64_t gpuNs)
         p->overNs = gpuNs;
         p->overTypNs = typ;
     }
+    /* The idle ask's GPU times (PaceRtAsk.gpuTypNs, gpuLongNs) */
+    pace_rt_typ_note(&e->gpuTyp, gpuNs);
+    e->gpuLongNs = pace_rt_gpu_long(e->gpuLongNs, gpuNs);
     return pace_hist_add(h, gpuNs);
 }
 

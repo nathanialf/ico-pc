@@ -186,6 +186,10 @@ typedef struct WindowPres {
        run closed one) and a frame's length in steps (the last two frames'
        closes apart; 0 not known) */
     unsigned sinceClose, frameSteps;
+    /* the last present's cost less its drain (its wait for the render
+       thread's picture before, rd_submit_waited_ns): the idle ask's guard reads
+       the hand-over's own time (pace_policy.h pace_rt_fill) */
+    Uint64 handCost;
 } WindowPres;
 
 /* the loop's state (window_present.c), and the deadline: when the

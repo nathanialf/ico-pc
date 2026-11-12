@@ -3588,6 +3588,217 @@ static void testFifoFromStart(void)
     CHECK(pace_present_gap(144, false, false, r6000) == 1000000000ull / 144u);
 }
 
+/* The idle ask's parts (pace_policy.h pace_rt_fill, pace_rt_pipe_idle,
+   pace_rt_gpu_long, pace_rt_fill_gpu_ns, PACE_RT_TEST_GPU, the block's
+   line); their rates are pace_loop_test's testFill */
+static PaceRtAsk fillAsk(void)
+{
+    PaceRtAsk q;
+
+    memset(&q, 0, sizeof q);
+    q.nowNs = 90 * MS;
+    q.dueNs = 100 * MS;
+    q.periodNs = 16683333ull;
+    q.stepNs = 5 * MS;
+    q.afterNs = 7 * MS / 10;
+    q.readsNs = 8 * MS;
+    q.pictureNs = 20 * MS;
+    q.cpuNs = 8 * MS;
+    q.interpNs = 3 * MS;
+    q.submitOn = true;
+    q.gpuNs = 20 * MS;
+    q.gpuTypNs = 22 * MS;
+    q.gpuLongNs = 30 * MS;
+    q.slotAhead = true;
+    q.paced = true;
+    q.asMade = true;
+    return q;
+}
+
+static void testFillParts(void)
+{
+    /* the pace's answer before an ask */
+    CHECK(pace_rt_fill(10 * MS, 0, 20 * MS) == PACE_FILL_ASK);
+    CHECK(pace_rt_fill(10 * MS, 5 * MS, 20 * MS) == PACE_FILL_WAIT);
+    CHECK(pace_rt_fill(20 * MS, 0, 20 * MS) == PACE_FILL_NONE);
+    CHECK(pace_rt_fill(25 * MS, 5 * MS, 20 * MS) == PACE_FILL_NONE);
+
+    /* the GPU's longest lately: up at once, down a 32nd of the way a record;
+       20 ms over, 40 records later 5.5-5.7 ms over */
+    {
+        uint64_t e = pace_rt_gpu_long(0, 20 * MS);
+
+        CHECK(e == 20 * MS);
+        e = pace_rt_gpu_long(e, 40 * MS);
+        CHECK(e == 40 * MS);
+        e = pace_rt_gpu_long(e, 20 * MS);
+        CHECK(e == 40 * MS - 20 * MS / 32u);
+        e = 40 * MS;
+        for (unsigned i = 0; i < 40; i++) {
+            e = pace_rt_gpu_long(e, 20 * MS);
+        }
+        CHECK(e >= 20 * MS + 55 * MS / 10 && e <= 20 * MS + 57 * MS / 10);
+    }
+
+    /* the pipe's GPU time: the larger of the records' median and mean */
+    {
+        PaceHist h;
+        static const unsigned a[8] = {20, 20, 20, 20, 20, 20, 20, 36};
+        static const unsigned b[8] = {30, 30, 30, 30, 30, 10, 10, 10};
+
+        memset(&h, 0, sizeof h);
+        CHECK(pace_hist_mean(&h) == 0 && pace_rt_fill_gpu_ns(&h) == 0);
+        for (unsigned i = 0; i < 8; i++) {
+            (void)pace_hist_add(&h, a[i] * MS);
+        }
+        CHECK(pace_hist_mean(&h) == 22 * MS && pace_rt_fill_gpu_ns(&h) == 22 * MS);
+        memset(&h, 0, sizeof h);
+        for (unsigned i = 0; i < 8; i++) {
+            (void)pace_hist_add(&h, b[i] * MS);
+        }
+        CHECK(pace_hist_mean(&h) == 45 * MS / 2 && pace_rt_fill_gpu_ns(&h) == 30 * MS);
+    }
+
+    /* the step rule's GPU records keep the typical and the longest lately */
+    {
+        PaceStepEst e;
+        PaceHist h;
+
+        memset(&e, 0, sizeof e);
+        memset(&h, 0, sizeof h);
+        for (unsigned i = 0; i < 3; i++) {
+            (void)pace_step_est_gpu(&e, &h, 20 * MS);
+        }
+        (void)pace_step_est_gpu(&e, &h, 36 * MS);
+        CHECK(e.gpuLongNs == 36 * MS && e.gpuTyp.n == 4);
+        CHECK(e.gpuTyp.meanNs == 21 * MS); /* a 16th of the way: 20 + 16 / 16 */
+    }
+
+    /* the pipe at an ask with the render thread idle */
+    {
+        PaceRtAsk q = fillAsk();
+        PaceRtPipe p;
+
+        q.nowNs = 100 * MS;
+        q.slotAhead = false;
+        p = (PaceRtPipe){110 * MS, {105 * MS, 130 * MS}};
+        CHECK(pace_rt_pipe_idle(&p, &q, 90 * MS, true) == 20 * MS);
+        CHECK(p.submitFreeNs == 90 * MS && p.gpuDoneNs[0] == 105 * MS &&
+              p.gpuDoneNs[1] == 130 * MS);
+        /* the slot ahead blocked: the GPU's end of the picture before is
+           the job's end, the one after it a picture later at the earliest */
+        q.slotAhead = true;
+        p = (PaceRtPipe){95 * MS, {105 * MS, 108 * MS}};
+        CHECK(pace_rt_pipe_idle(&p, &q, 96 * MS, true) == 17 * MS);
+        CHECK(p.submitFreeNs == 95 * MS && p.gpuDoneNs[0] == 96 * MS && p.gpuDoneNs[1] == 116 * MS);
+        /* it found its slot free: that end is past, the other kept */
+        p = (PaceRtPipe){95 * MS, {105 * MS, 108 * MS}};
+        CHECK(pace_rt_pipe_idle(&p, &q, 96 * MS, false) == 9 * MS);
+        CHECK(p.gpuDoneNs[0] == 96 * MS && p.gpuDoneNs[1] == 108 * MS);
+        /* no job end known (0) or one later than now: now */
+        p = (PaceRtPipe){110 * MS, {105 * MS, 108 * MS}};
+        (void)pace_rt_pipe_idle(&p, &q, 0, false);
+        CHECK(p.submitFreeNs == 100 * MS && p.gpuDoneNs[0] == 100 * MS);
+        p = (PaceRtPipe){110 * MS, {105 * MS, 108 * MS}};
+        (void)pace_rt_pipe_idle(&p, &q, 120 * MS, false);
+        CHECK(p.submitFreeNs == 100 * MS && p.gpuDoneNs[0] == 100 * MS);
+        /* the submit thread's job before the next picture: its end not the
+           render thread's */
+        q.submitNs = 7 * MS;
+        p = (PaceRtPipe){110 * MS, {80 * MS, 108 * MS}};
+        CHECK(pace_rt_pipe_idle(&p, &q, 96 * MS, false) == 0);
+        CHECK(p.submitFreeNs == 110 * MS);
+        /* nothing to move */
+        q.submitNs = 0;
+        p = (PaceRtPipe){90 * MS, {80 * MS, 108 * MS}};
+        CHECK(pace_rt_pipe_idle(&p, &q, 96 * MS, false) == 0);
+    }
+
+    /* the GPU test (PACE_RT_TEST_GPU), the next step closing a frame: the
+       reads end at +98 ms (measured 8 ms from 90), the picture before ends
+       on the GPU at 120 ms, typical 22 ms against the pipe's 20 */
+    {
+        const PaceRtPipe p = {0, {80 * MS, 120 * MS}};
+        const uint64_t period = 16683333ull;
+        const uint64_t slackB = period - 7 * MS / 10 - PACE_RT_STEP_MARGIN_NS;
+        PaceRtAsk q = fillAsk();
+        PaceRtTrace t;
+
+        /* its job ends at 122 (the GPU's end of the picture before at its
+           typical), the GPU ends it at 152 (its longest lately, 30): the
+           steps between after the next two frames' pictures may start by
+           +130.7 and +164.0: passed by this test (the step after's test
+           then: 130 against 130.7, passed) */
+        CHECK(!pace_rt_step_trace(&q, &p, 0, false, &t));
+        CHECK(t.gpuAsked && t.jobEndNs == 122 * MS && t.gpuEndNs == 152 * MS);
+        CHECK(t.limitANs == 100 * MS + period + slackB);
+        CHECK(t.limitBNs == 100 * MS + 3u * period + slackB);
+        CHECK(t.test == PACE_RT_TEST_NONE && t.afterAsked);
+        /* a GPU the frames fill (a frame of 33.4 ms under 22 + 45 - 20): the
+           picture before at its longest lately, 145, the further one 190,
+           past +164.0 */
+        q.gpuLongNs = 45 * MS;
+        CHECK(pace_rt_step_trace(&q, &p, 0, false, &t));
+        CHECK(t.test == PACE_RT_TEST_GPU && t.jobEndNs == 145 * MS && t.gpuEndNs == 190 * MS);
+        {
+            char line[1536];
+            PaceRtTraceSum sum;
+
+            (void)pace_rt_trace_text(&q, &t, 1, line, sizeof(line));
+            CHECK(strstr(line, "; its job would end at +45.0 (a new frame's picture after it "
+                               "waits for that), the GPU end it at +90.0 at its longest lately "
+                               "(45.0 ms a picture; the new frame's picture after the next waits "
+                               "for that): the steps between frames after them may start by "
+                               "+30.7 and +64.0; held: past them by 26.0 ms") != NULL);
+            memset(&sum, 0, sizeof sum);
+            pace_rt_trace_sum_add(&sum, &q, &t, PACE_RT_MISS);
+            CHECK(sum.held == 1 && sum.byGpu == 1 && sum.byNext == 0 && sum.byAfter == 0);
+            pace_rt_trace_sum_fill(&sum, 4 * MS, false);
+            pace_rt_trace_sum_fill(&sum, 2 * MS, true);
+            pace_rt_trace_sum_fix(&sum, 0);
+            pace_rt_trace_sum_fix(&sum, 6 * MS);
+            CHECK(sum.fillWaits == 2 && sum.fillLate == 1 && sum.fixes == 1);
+            (void)pace_rt_trace_sum_text(&sum, 10.0, line, sizeof(line));
+            CHECK(strstr(line,
+                         "; 1 more held by the GPU's ends behind the next new frames' "
+                         "pictures, by 26.0 ms on average; asked with the render thread "
+                         "idle: 2 waits for it before an ask (3.0 ms on average; 1 not "
+                         "idle by the step's deadline, none asked), the pipe's ends "
+                         "corrected by what had ended in 1 asks (6.0 ms on average)") != NULL);
+            memset(&sum, 0, sizeof sum);
+            pace_rt_trace_sum_fill(&sum, 4 * MS, true);
+            (void)pace_rt_trace_sum_text(&sum, 10.0, line, sizeof(line));
+            CHECK(strcmp(line, "in 10 s 0 further presents asked of the rule; 1 waits for the "
+                               "render thread before an ask (4.0 ms on average), 1 not idle by "
+                               "the step's deadline") == 0);
+        }
+        /* without the slot ahead: not asked */
+        q.slotAhead = false;
+        (void)pace_rt_step_trace(&q, &p, 0, false, &t);
+        CHECK(!t.gpuAsked && t.test != PACE_RT_TEST_GPU);
+        /* the next step between frames: the further picture's job before the
+           next frame's own picture, the step between after it by +147.4 (its
+           slack 14.0 ms, the closing step a period on) */
+        q = fillAsk();
+        q.nextBetween = true;
+        q.stepNs = 7 * MS / 10;
+        q.afterNs = 5 * MS;
+        {
+            const PaceRtPipe p2 = {0, {80 * MS, 140 * MS}};
+
+            CHECK(pace_rt_step_trace(&q, &p, 0, false, &t) == false && t.gpuAsked);
+            CHECK(t.limitANs == 100 * MS + 2u * period + slackB);
+            /* its job at 142 (140 and the typical's 2 ms), the GPU's end of
+               it at 172, under +80.7: held by neither; at the longest 45 the
+               GPU's frames full: 165 past +147.4 */
+            CHECK(!pace_rt_step_trace(&q, &p2, 0, false, &t) && t.jobEndNs == 142 * MS);
+            q.gpuLongNs = 45 * MS;
+            CHECK(pace_rt_step_trace(&q, &p2, 0, false, &t) && t.test == PACE_RT_TEST_GPU);
+            CHECK(t.jobEndNs == 165 * MS && t.jobEndNs > t.limitANs);
+        }
+    }
+}
+
 int main(void)
 {
     PaceHist h = {0};
@@ -3728,6 +3939,7 @@ int main(void)
     testLockTable();
     testGridPeriod();
     testVblankLaws();
+    testFillParts();
 
     if (fails) {
         printf("pace_policy_test: %d failures\n", fails);

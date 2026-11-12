@@ -229,6 +229,18 @@ uint64_t rd_thread_take_present_ns(void);
  * taken as above.  The window predicts a further picture's reads by the
  * reads less those waits (render_thread.c, pace_policy.h PaceRtPipe). */
 void rd_thread_take_reads_parts(uint64_t *waitNs, uint64_t *interpNs);
+/* The render thread, after a picture's job: how long its slot ahead waited
+ * (rd_thread.c slotAhead: the next picture's frame slot waited for at the
+ * job's end, the GPU's end of the picture before it), in ns; 0 when none was
+ * made.  Taken as above.  The window takes the job's end for that GPU end
+ * when the wait blocked (render_thread.c, pace_policy.h pace_rt_pipe_idle). */
+uint64_t rd_thread_take_ahead_ns(void);
+/* Whether a picture's job ends with the slot ahead (not under
+ * ICO_RD_SLOT_AHEAD=0, nor with the submit thread on and the frame slots
+ * not apart): a present handed over after it waits in its drain for the
+ * GPU's end of the picture before the one in progress (pace_policy.h
+ * PaceRtAsk.slotAhead) */
+bool rd_thread_slot_ahead_on(void);
 /* The game thread's waits for a picture's reads in all since the start,
  * ns (the 10 s line's read waits, summed): the window takes a step's
  * share out of its own time and counts the steps that started late by

@@ -36,6 +36,11 @@ Uint64 g_windowDeadline;
 
 static int s_pollRestarted; /* the poll's restart at the first game frame, once */
 
+/* The idle ask (pace_policy.h pace_rt_fill, PACE_FILL_DEFAULT): a further present
+   asked of the rule only with the render thread idle, the pipe planned by
+   the GPU's mean and corrected by what has ended, the slot ahead's job end */
+static const bool k_fill = PACE_FILL_DEFAULT != 0;
+
 /* The pacer more than RESYNC_NS behind: the lag is dropped (counted) */
 static void resync(Uint64 now)
 {
@@ -96,6 +101,20 @@ static void rt_ask(PaceRtAsk *q, const IcoRtPlan *p, Uint64 now, Uint64 refresh,
     q->gpuNs = s_pres.gpuNs;
     q->paced = s_pres.budget.paced;
     q->asMade = asMade;
+    if (k_fill) {
+        /* The idle ask: the pipe by the larger of the GPU records' median and
+           mean (pace_rt_fill_gpu_ns); with the slot ahead the jobs' ends by
+           the GPU's (PaceRtAsk.slotAhead) and its typical and longest
+           lately (PaceStepEst.gpuTyp, gpuLongNs) */
+        if (s_pres.gpuHist.count != 0) {
+            q->gpuNs = pace_rt_fill_gpu_ns(&s_pres.gpuHist);
+        }
+        q->slotAhead = p->slotAhead;
+        if (q->slotAhead) {
+            q->gpuTypNs = pace_rt_typ_ns(&s_pres.stepEst.gpuTyp);
+            q->gpuLongNs = s_pres.stepEst.gpuLongNs;
+        }
+    }
 }
 
 /* A further present of a frame already shown, handed to the render thread
@@ -128,6 +147,12 @@ static PaceRtHold rt_further_hold(Uint64 now, Uint64 refresh, Uint64 period, boo
         return PACE_RT_GO;
     }
     rt_ask(&q, &p, now, refresh, period, asMade);
+    if (k_fill && p.sinceNs == 0) {
+        /* The idle ask: asked with the render thread idle (the pace waited for
+           it): the pipe's ends of the pictures done are what is known of
+           them (pace_policy.h pace_rt_pipe_idle), counted for the block */
+        ico_render_thread_note_fix(pace_rt_pipe_idle(&s_pres.rtPipe, &q, p.endNs, p.byFence));
+    }
     const PaceRtHold why = pace_rt_further_trace(&q, &s_pres.rtPipe, &t);
 
     if (why == PACE_RT_GO || why == PACE_RT_MISS) {
@@ -450,6 +475,13 @@ static int present_once(float a, Uint64 refresh, Uint64 period)
         }
         s_pres.cost -= pause; /* the present's own time, a refresh: what the history and the
                                  loop's judgement of the next present see */
+    }
+    {
+        /* The idle ask's guard: the hand-over's own time, less its wait for the
+           render thread's picture before (the drain) */
+        const Uint64 drain = rd_submit_waited_ns() - handWait0;
+
+        s_pres.handCost = s_pres.cost > drain ? s_pres.cost - drain : 0;
     }
     if (!ok) {
         return 0;
@@ -1098,9 +1130,37 @@ void window_present_pace(int hz)
            pictures as made (vsync off, uncapped): there the GPU's own
            back-pressure (the slot fences) is the limit and the allowance
            only measures */
+        if (s_pres.presentedFrame == s_pres.frame && k_fill && now < s_deadline &&
+            !s_pres.paceSlow && !s_pres.offScreen) {
+            /* The idle ask (pace_policy.h pace_rt_fill): with a picture in
+               progress the further present is neither asked nor handed over:
+               the pace waits for the render thread (at most to the deadline;
+               not idle by then, none this step) and asks again, so the rule
+               plans its post at the time it is made and the hand-over never
+               waits in its drain past what the rule allowed */
+            IcoRtPlan fp;
+
+            if (ico_render_thread_plan(&fp) &&
+                pace_rt_fill(now, fp.sinceNs, s_deadline) == PACE_FILL_WAIT) {
+                const bool idle = ico_render_thread_wait_idle(s_deadline);
+                const Uint64 after = SDL_GetTicksNS();
+
+                ico_render_thread_note_fill(after - now, !idle);
+                if (!idle) {
+                    if (after < s_deadline) {
+                        SDL_DelayPrecise(s_deadline - after);
+                    }
+                    break;
+                }
+                continue;
+            }
+        }
         if (s_pres.presentedFrame == s_pres.frame) {
-            const int guard = now >= s_deadline || s_pres.paceSlow || s_pres.offScreen ||
-                              (!s_pres.fifoLock && now + s_pres.cost > s_deadline);
+            /* The idle ask: the guard's cost the hand-over's own (its drain was
+               the wait the pace now makes before the ask) */
+            const int guard =
+                now >= s_deadline || s_pres.paceSlow || s_pres.offScreen ||
+                (!s_pres.fifoLock && now + (k_fill ? s_pres.handCost : s_pres.cost) > s_deadline);
             const PaceRtHold rtWhy =
                 guard ? PACE_RT_GO : rt_further_hold(now, refresh, period, asMade);
             const int rtLate = rtWhy != PACE_RT_GO;

@@ -73,7 +73,30 @@ typedef struct IcoRtPlan {
     uint64_t sinceNs, readsNs, pictureNs, presentNs;
     uint64_t cpuNs, interpNs, submitNs;
     bool submitOn;
+    /* The idle ask (pace_policy.h pace_rt_pipe_idle): the last picture's job
+       ended at endNs (SDL_GetTicksNS's clock; 0: none yet), byFence: by its
+       slot ahead's wait, which blocked (rd_thread_take_ahead_ns at least
+       ICO_RT_FENCE_WAIT_NS); slotAhead: the jobs end with the slot ahead
+       (rd_thread_slot_ahead_on) */
+    uint64_t endNs;
+    bool byFence, slotAhead;
 } IcoRtPlan;
+
+/* A slot ahead that waited this long (0.2 ms) or more blocked for the GPU:
+   one that found the slot free returns in microseconds */
+#define ICO_RT_FENCE_WAIT_NS 200000ull
+
+/* The idle ask (window_present.c, pace_policy.h pace_rt_fill): waits until the
+   render thread has finished every job handed over, or untilNs
+   (SDL_GetTicksNS's clock) passes.  True when it is idle by then; with no
+   thread at once true */
+bool ico_render_thread_wait_idle(uint64_t untilNs);
+/* The idle ask's events for the block's step rule line (pace_policy.h
+   PaceRtTraceSum): a wait for the render thread before an ask (waitNs, late:
+   not idle by the step's deadline), the pipe corrected at an ask (fixNs: how
+   far its ends moved, 0: not moved) */
+void ico_render_thread_note_fill(uint64_t waitNs, bool late);
+void ico_render_thread_note_fix(uint64_t fixNs);
 
 /* The threads that make a picture, for Android's performance hint session
    (window_perf_hint.h): the render thread's and the submit thread's ids (0:
