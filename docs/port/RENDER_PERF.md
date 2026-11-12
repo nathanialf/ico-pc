@@ -596,7 +596,7 @@ What was tried for the issue 163 rooms' lamps (`port/render/rd_lamps.c`, [RENDER
 | WORK2 at the GS size (`lowres`) | 22.8 to 24.5, but the glow shimmers | off |
 | the crack fill's hold past the lamps (`fillhold`) | a loss: flushed by a later draw, the snapshot copy back | off |
 | WORK2 at the GS size from 4 samples resolved in the pass (`lowresms`) | 22.7 to 24.0, no shimmer seen | on on the PowerVR class (VD-32) |
-| the crack fill drawn in the glow's paste pass (`fillpaste`) | not built | the next release |
+| the crack fill drawn in the paste's pass (`fillpaste`) | not measured | built, off by default (`RD_LAMPS_FILLPASTE_DEFAULT` 0): under the lamps plan the fill's snapshot is taken where it lands, by the swap, so the fill, the paste and list 11's draws are one SCENE pass that loads nothing; exact |
 | a WORK2 pass that loads WORK2 drawn with 4 samples after a copy and a spread draw | not built | the next release: some pictures on the phone split the lamps over two WORK2 passes (a pass beginning at a lamp in 80 of 418 pictures of one 10 s block; cause not found, no dump); designed, not shipped: untested for the lamp case, and it costs every mask-begun pass |
 
 ### Culling

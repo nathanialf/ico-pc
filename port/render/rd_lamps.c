@@ -207,20 +207,20 @@ const char *rd__lamps_box_why_text(int why)
 
 const char *rd__lamps_bits_text(uint32_t bits)
 {
-    static const char *const kWord[15] = {"area",       "pad",      "owed",     "wholepad",
-                                          "fold4",      "lowres",   "fillhold", "lowresbox",
-                                          "lowresbias", "lowres4",  "lowresp",  "lowreshy",
-                                          "lowres2x",   "lowresms", "lowresms8"};
+    static const char *const kWord[16] = {"area",       "pad",      "owed",      "wholepad",
+                                          "fold4",      "lowres",   "fillhold",  "lowresbox",
+                                          "lowresbias", "lowres4",  "lowresp",   "lowreshy",
+                                          "lowres2x",   "lowresms", "lowresms8", "fillpaste"};
     static char s_text[8][128];
     static unsigned s_next;
-    bits &= RD_LAMPS_ALL | RD_LAMPS_FILLHOLD | RD_LAMPS_LOWRES_ANY;
+    bits &= RD_LAMPS_ALL | RD_LAMPS_FILLHOLD | RD_LAMPS_LOWRES_ANY | RD_LAMPS_FILLPASTE;
     if (!bits) {
         return "off";
     }
     char *t = s_text[s_next++ & 7u]; /* a ring: a few calls in one expression */
     t[0] = '\0';
     size_t at = 0;
-    for (int i = 0; i < 15; i++) {
+    for (int i = 0; i < 16; i++) {
         if (bits & (1u << i)) {
             const int m = snprintf(t + at, sizeof(s_text[0]) - at, "%s%s", at ? "+" : "", kWord[i]);
             at += m > 0 && (size_t)m < sizeof(s_text[0]) - at ? (size_t)m : 0;
@@ -276,6 +276,8 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRES2X;
         } else if (n == 8 && strncmp(s, "lowresms", 8) == 0) {
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS;
+        } else if (n == 9 && strncmp(s, "fillpaste", 9) == 0) {
+            b |= RD_LAMPS_FILLPASTE;
         } else if (n == 9 && strncmp(s, "lowresms8", 9) == 0) {
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS | RD_LAMPS_LOWRESMS8;
         } else if (n == 7 && strncmp(s, "lowres4", 7) == 0) {
@@ -306,6 +308,12 @@ uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool
      * checks and self-test too) */
     if (tileClass == 1 && vulkan && RD_LAMPS_MS_DEFAULT) {
         b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS;
+    }
+    /* the crack fill in the paste's pass (FILLPASTE): the build's
+     * RD_LAMPS_FILLPASTE_DEFAULT on the PowerVR class under Vulkan (the
+     * tile class where the swap runs; rd__lamps_fillpaste_on checks) */
+    if (tileClass == 1 && vulkan && RD_LAMPS_FILLPASTE_DEFAULT) {
+        b |= RD_LAMPS_FILLPASTE;
     }
     const bool cls = tileClass == 1 || (tileClass == 2 && !tilePhone);
     if (cls && vulkan && passArea) {
@@ -1450,6 +1458,49 @@ bool rd__lamps_lowres_box(const RdTargetRec *src)
     return sc && (sc->sx != 1.0f || sc->sy != 1.0f);
 }
 
+/* FILLPASTE (rd_lamps.h): asked for, on a tile-based GPU under Vulkan, and
+ * the hold able to pass the lamps (LOWRES: WORK2's own depth) */
+bool rd__lamps_fillpaste_on(void)
+{
+    const RhiLimits *lim = g_rd.hasDevice ? rhi_limits() : NULL;
+    return (wanted() & RD_LAMPS_FILLPASTE) != 0u && lim && lim->tiler &&
+           rhi_backend() == RHI_BACKEND_VULKAN && rd__lamps_lowres_on();
+}
+
+static struct {
+    uint64_t landed, flushed;   /* since rd_init */
+    uint64_t sLanded, sFlushed; /* the 10 s sums */
+    bool saidWhy[32];
+} s_fp;
+
+void rd__lamps_fillpaste_counts(uint64_t *landed, uint64_t *flushed)
+{
+    if (landed) {
+        *landed = s_fp.landed;
+    }
+    if (flushed) {
+        *flushed = s_fp.flushed;
+    }
+}
+
+void rd__lamps_fillpaste_noted(bool landed, int why)
+{
+    if (landed) {
+        s_fp.landed++;
+        sumAdd(&s_fp.sLanded, 1);
+        return;
+    }
+    s_fp.flushed++;
+    sumAdd(&s_fp.sFlushed, 1);
+    if (why >= 0 && why < 32 && !s_fp.saidWhy[why]) {
+        s_fp.saidWhy[why] = true;
+        rd__log("lamps: fillpaste: the crack fill flushed before a paste took it (%s; the late "
+                "pass's line names the command): drawn in a pass of its own, its snapshot "
+                "taken there (reported once for this reason)",
+                rd__late_pass_why_text(why));
+    }
+}
+
 bool rd__lamps_own_depth(uint32_t did)
 {
     return s_lr.on == 1 && did != 0u && did == idOf(RD_TARGET_WORK2);
@@ -1457,7 +1508,8 @@ bool rd__lamps_own_depth(uint32_t did)
 
 bool rd__lamps_fill_hold_ok(uint32_t color, uint32_t depth)
 {
-    if (s_lr.on != 1 || !(wanted() & RD_LAMPS_FILLHOLD) || color != idOf(RD_TARGET_WORK2)) {
+    if (s_lr.on != 1 || !(wanted() & (RD_LAMPS_FILLHOLD | RD_LAMPS_FILLPASTE)) ||
+        color != idOf(RD_TARGET_WORK2)) {
         return false;
     }
     const RdTargetRec *w2 = rd__target_rec(color), *td = rd__target_rec(depth);
@@ -2202,6 +2254,15 @@ static void lowresLine(void)
     const uint64_t hold = __atomic_exchange_n(&s_lr.sHold, 0, __ATOMIC_RELAXED);
     const uint64_t msp = __atomic_exchange_n(&s_lms.sMs, 0, __ATOMIC_RELAXED);
     const uint64_t mss = __atomic_exchange_n(&s_lms.sSingle, 0, __ATOMIC_RELAXED);
+    const uint64_t fpl = __atomic_exchange_n(&s_fp.sLanded, 0, __ATOMIC_RELAXED);
+    const uint64_t fpf = __atomic_exchange_n(&s_fp.sFlushed, 0, __ATOMIC_RELAXED);
+    if (fpl + fpf) {
+        fprintf(stderr,
+                "window: lamps fillpaste: %llu crack fills drawn in the paste's pass by the swap "
+                "(a SCENE pass fewer, its colour not loaded), %llu flushed before a paste "
+                "(a pass of their own)\n",
+                (unsigned long long)fpl, (unsigned long long)fpf);
+    }
     if (pic + d + f + x + hold + msp + mss == 0) {
         return;
     }

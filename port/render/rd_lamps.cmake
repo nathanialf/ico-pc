@@ -75,3 +75,22 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
         set_tests_properties(rd_lamps_lowres_ab PROPERTIES ENVIRONMENT "${_dc_env}")
     endif()
 endif()
+
+# rd_lamps_fillpaste_ab (test/rd_lamps_fillpaste_ab.cmake): the crack fill in
+# the paste's pass (RD_LAMPS_FILLPASTE) against it off on the lamps dumps at
+# the phone's setting (the tile class's fakes, the late pass and the swap on,
+# the lamps on WORK2's own depth), with and without the poison: every PNG the
+# same bytes, a SCENE pass fewer for each fill so drawn.  No device: SKIP.
+if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
+    file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/lamps_fillpaste_ab")
+    add_test(NAME rd_lamps_fillpaste_ab
+             COMMAND "${CMAKE_COMMAND}" -DTOOL=$<TARGET_FILE:rd_replay_tool>
+                     "-DLIST=${CMAKE_SOURCE_DIR}/tools/lamps_dumps.txt"
+                     "-DOUT=${CMAKE_CURRENT_BINARY_DIR}/lamps_fillpaste_ab"
+                     -P "${CMAKE_CURRENT_SOURCE_DIR}/test/rd_lamps_fillpaste_ab.cmake")
+    set_tests_properties(rd_lamps_fillpaste_ab PROPERTIES SKIP_REGULAR_EXPRESSION "SKIP:"
+                         TIMEOUT 7200)
+    if(_dc_env)
+        set_tests_properties(rd_lamps_fillpaste_ab PROPERTIES ENVIRONMENT "${_dc_env}")
+    endif()
+endif()

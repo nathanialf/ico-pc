@@ -209,7 +209,8 @@ int main(void)
     const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD |
                         (RD_LAMPS_LOWRES_DEFAULT ? RD_LAMPS_LOWRES : 0u);
     /* the 4-sample lamps on the PowerVR class under Vulkan alone */
-    const uint32_t pv = RD_LAMPS_MS_DEFAULT ? (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS) : 0u;
+    const uint32_t pv = (RD_LAMPS_MS_DEFAULT ? (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS) : 0u) |
+                        (RD_LAMPS_FILLPASTE_DEFAULT ? RD_LAMPS_FILLPASTE : 0u);
     CHECK(rd__lamps_default_bits(1, false, true, true, true) == (ev | pv | RD_LAMPS_AREA),
           "PowerVR");
     CHECK(rd__lamps_default_bits(1, true, true, true, true) == (ev | pv | RD_LAMPS_AREA),

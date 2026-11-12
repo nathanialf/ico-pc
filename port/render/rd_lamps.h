@@ -108,6 +108,16 @@ extern "C" {
 #define RD_LAMPS_LOWRESMS 8192u
 /* lowresms8: the same with 8 samples (the standard 8-sample locations) */
 #define RD_LAMPS_LOWRESMS8 16384u
+/* fillpaste: under the lamps plan the crack fill's snapshot taken where it
+ * lands, the glow's (or the aura's) paste pass (rd_crack_fill.c deferred):
+ * by the swap there, the fill, the paste and list 11's joined draws one pass
+ * on SCENE that loads nothing (today: the fill's own pass, then the paste's,
+ * loading and storing SCENE).  Exact; it needs the hold to pass the lamps
+ * (WORK2's own depth: LOWRES) and acts on the tile class under Vulkan */
+#define RD_LAMPS_FILLPASTE 32768u
+#ifndef RD_LAMPS_FILLPASTE_DEFAULT
+#define RD_LAMPS_FILLPASTE_DEFAULT 0
+#endif
 /* lowresms where ICO_RD_LAMPS names no words of its own: 1 (v0.11.5) on
  * the PowerVR class under Vulkan alone, where the checks and the self-test
  * pass (rd__lamps_default_bits, rd__lamps_lowres_on; every other class keeps
@@ -377,6 +387,11 @@ bool rd__lamps_lowres_gs(const RdTargetRec *t);
 float rd__lamps_lowres_factor(void);
 /* LOWRESMS in force (latched with LOWRES, its checks and self-test passed) */
 bool rd__lamps_lowres_ms(void);
+/* FILLPASTE in force (rd_crack_fill.c), and a deferred fill landed in a
+ * paste pass (landed) or taken where it was flushed (why: RD_LATE_WHY_*) */
+bool rd__lamps_fillpaste_on(void);
+void rd__lamps_fillpaste_noted(bool landed, int why);
+void rd__lamps_fillpaste_counts(uint64_t *landed, uint64_t *flushed);
 /* the run's LOWRESMS counts (the tests): passes drawn with 4 samples and
  * resolved in the pass; passes on WORK2 drawn single-sampled (a pass that
  * loads WORK2, reads its destination, or is a storage pass) */

@@ -210,6 +210,12 @@ static struct {
      * would be drawn (rd__crack_fill_place's TAKE), its draw held to the
      * aura's paste pass; repeats SCENE's border repeats done by then */
     bool taken;
+    /* FILLPASTE (rd_lamps.h): held without the snapshot, which is taken where
+     * the fill lands (by the swap there: the fill, the paste and list 11's
+     * draws one pass) or where it is flushed; the scan proved nothing between
+     * writes SCENE's colour or depth (the lamps plan: the mask skipped, the
+     * lamps on WORK2's own depth) */
+    bool deferred;
     bool glow; /* the paste armed is the glow's (the fx plan's premultiplied add) */
     uint64_t repeats;
     int flushWhy; /* why it is drawn in a pass of its own after all (RD_LATE_WHY_*) */
@@ -1071,7 +1077,7 @@ void rd__crack_fill(Replay *r, RdTargetRec *tc, const RdTargetRec *tz, int msaa)
         return;
     }
     s_late.armed = true;
-    s_late.alpha = s_late.paste = s_late.taken = s_late.glow = false;
+    s_late.alpha = s_late.paste = s_late.taken = s_late.deferred = s_late.glow = false;
     s_late.flushWhy = 0;
     s_late.replay = g_rd.replayCounter;
     s_late.resolved = msaa == RD_CRACK_MSAA_RESOLVED;
@@ -1165,16 +1171,21 @@ void rd__crack_fill_late(Replay *r, bool msaaOpen)
     if (!s_late.armed) {
         return;
     }
-    const bool held = s_late.taken;
-    if (held) {
+    const bool held = s_late.taken, deferred = s_late.deferred;
+    if (held || deferred) {
         /* the held fill in a pass of its own after all: why (the walk's end
          * or an armed paste that drew another way unless said) */
         rd__late_pass_flushed(s_late.flushWhy ? s_late.flushWhy
                               : s_late.paste  ? RD_LATE_WHY_PASTE
                                               : RD_LATE_WHY_END);
     }
+    if (deferred) {
+        /* its snapshot taken here (nothing between wrote SCENE's colour or
+         * depth: the same inputs as at its place) */
+        rd__lamps_fillpaste_noted(false, s_late.flushWhy ? s_late.flushWhy : RD_LATE_WHY_END);
+    }
     s_late.flushWhy = 0;
-    s_late.armed = s_late.paste = s_late.taken = s_late.glow = false;
+    s_late.armed = s_late.paste = s_late.taken = s_late.deferred = s_late.glow = false;
     RdTargetRec *tc = sceneRec();
     if (s_late.replay != g_rd.replayCounter || !tc || !tc->depth.id || !tc->color.id) {
         return; /* armed in another replay (one that ended before list 7) */
@@ -1195,8 +1206,8 @@ void rd__crack_fill_late(Replay *r, bool msaaOpen)
     rd__replay_perf_post(r, RD_PERF_POST_CRACK);
     /* FILL11: the snapshot here, the draw held to list 11's pass
      * (rd_fill11.c), counted when drawn */
-    const bool kept =
-        !held && atList >= 0 && fill11Take(r, tc, pFill, &kFill, pCount, &kCount, atList, atF, atC);
+    const bool kept = !held && !deferred && atList >= 0 &&
+                      fill11Take(r, tc, pFill, &kFill, pCount, &kCount, atList, atF, atC);
     const bool drawn = !kept && fillWork(r, tc, pFill, &kFill, pCount, &kCount, held);
     r->perfPost = post;
     rd__replay_perf_post(r, post);
@@ -1446,6 +1457,16 @@ static bool takeHeld(Replay *r, bool msaaOpen)
         s_late.armed = false;
         return true;
     }
+    /* FILLPASTE: under the lamps plan (the mask skipped: no sprite samples
+     * SCENE before the paste, so no border repeat; the lamps on WORK2's own
+     * depth) nothing between writes SCENE's colour or depth (the hold's
+     * class flushes at any that does): the snapshot is taken where the fill
+     * lands or is flushed, from the same SCENE */
+    if (rd__lamps_fillpaste_on() && rd__glow_light_plan() == RD_GLOW_LIGHT_LAMPS) {
+        s_late.deferred = true;
+        s_late.repeats = rd__scene_border_repeat_count();
+        return true;
+    }
     const int post = r->perfPost;
     r->perfPost = RD_PERF_POST_CRACK;
     rd__replay_perf_post(r, RD_PERF_POST_CRACK);
@@ -1496,7 +1517,8 @@ static void heldAt(Replay *r, const RdFrame *f, const RdCmd *c, bool msaaOpen)
 
 void rd__crack_fill_flush_held(Replay *r, int why)
 {
-    if (!s_late.armed || !s_late.taken || s_late.replay != g_rd.replayCounter) {
+    if (!s_late.armed || !(s_late.taken || s_late.deferred) ||
+        s_late.replay != g_rd.replayCounter) {
         return;
     }
     s_late.flushWhy = why;
@@ -1511,7 +1533,7 @@ void rd__crack_fill_snap(Replay *r, const RdTargetRec *tc)
     if (tc && tc == sceneRec() && rd__crack_fill11_pending()) {
         rd__crack_fill11_own(r, RD_FILL11_WHY_SNAP); /* FILL11's held fill first */
     }
-    if (s_late.armed && s_late.taken && tc && tc == sceneRec()) {
+    if (s_late.armed && (s_late.taken || s_late.deferred) && tc && tc == sceneRec()) {
         rd__crack_fill_flush_held(r, RD_LATE_WHY_SNAP);
     }
     if (tc && tc == sceneRec() && rd__fx_defer_on()) {
@@ -1521,7 +1543,7 @@ void rd__crack_fill_snap(Replay *r, const RdTargetRec *tc)
 
 void rd__crack_fill_unarm_glow(void)
 {
-    if (s_late.armed && s_late.taken && s_late.paste && s_late.glow) {
+    if (s_late.armed && (s_late.taken || s_late.deferred) && s_late.paste && s_late.glow) {
         s_late.paste = s_late.glow = false; /* held on, to the aura's paste */
     }
 }
@@ -1549,7 +1571,7 @@ static void fillAt(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool m
         rd__crack_fill_late(r, msaaOpen);
         return;
     }
-    if (s_late.taken) {
+    if (s_late.taken || s_late.deferred) {
         heldAt(r, f, c, msaaOpen);
         return;
     }
@@ -1621,8 +1643,21 @@ void rd__crack_fill_in_pass(Replay *r, uint32_t tdId)
         rd__crack_fill_paste_late(r, "the paste's pass binds the scene's depth or is open");
         return;
     }
-    const bool held = s_late.taken, glow = s_late.glow;
-    s_late.armed = s_late.paste = s_late.taken = s_late.glow = false;
+    const bool held = s_late.taken, glow = s_late.glow, deferred = s_late.deferred;
+    const uint32_t repeats = s_late.repeats;
+    s_late.armed = s_late.paste = s_late.taken = s_late.deferred = s_late.glow = false;
+    if (deferred) {
+        /* FILLPASTE lands: the snapshot and the count here (by the swap: the
+         * pass below not loaded, the fill writing every texel first, the
+         * paste and list 11's draws after it in the same pass) */
+        rd__lamps_fillpaste_noted(true, 0);
+        if (rd__scene_border_repeat_count() != repeats) {
+            /* not reached by construction (the lamps plan draws no sprite
+             * that samples SCENE before the paste): said */
+            rd__log("crack fill: FILLPASTE: SCENE's border repeated while the fill waited (its "
+                    "snapshot taken after the repeat: not the bytes of the fill at its place)");
+        }
+    }
     if (s_late.replay != g_rd.replayCounter || !tc->depth.id || !tc->color.id) {
         return;
     }
@@ -1656,9 +1691,15 @@ void rd__crack_fill_in_pass(Replay *r, uint32_t tdId)
             return;
         }
     }
+    /* FILLPASTE under ICO_RD_LAMPS_POISON: the pass not loaded cleared to
+     * magenta first, so a texel the swap's fill left would show */
+    static const float kPoison[4] = {1.0f, 0.0f, 1.0f, 1.0f};
+    const bool poison = deferred && swap && rd__lamps_poison();
     rd__replay_begin_pass(r, tc, NULL, RD_TARGET_SCENE + 1u, 0,
-                          swap ? RHI_LOAD_DONT_CARE : RHI_LOAD_LOAD, NULL, RHI_LOAD_LOAD, 0.0f,
-                          false);
+                          poison ? RHI_LOAD_CLEAR
+                          : swap ? RHI_LOAD_DONT_CARE
+                                 : RHI_LOAD_LOAD,
+                          poison ? kPoison : NULL, RHI_LOAD_LOAD, 0.0f, false);
     s_mode =
         tapMode(&kFill) | (swap ? CRACK_MODE_COPY | (s_late.alpha ? CRACK_MODE_KEEP_A : 0u) : 0u);
     fillDrawHeld(r, tc, swap ? pS : pFill, swap ? &kS : &kFill, held);

@@ -3336,6 +3336,15 @@ int main(int argc, char **argv)
                    rd__lamps_lowres_ms() ? "on" : "off", (unsigned long long)mp,
                    (unsigned long long)ms1);
         }
+        /* the crack fill in the paste's pass (rd_lamps.h RD_LAMPS_FILLPASTE) */
+        {
+            uint64_t fl = 0, ff = 0;
+            rd__lamps_fillpaste_counts(&fl, &ff);
+            printf("%s: stats: lamps fillpaste %s: %llu crack fills drawn in the paste's pass by "
+                   "the swap, %llu flushed before a paste\n",
+                   dump, rd__lamps_fillpaste_on() ? "on" : "off", (unsigned long long)fl,
+                   (unsigned long long)ff);
+        }
         /* the aura's paste as the alpha alone (rd_aura_paste.c) */
         printf("%s: stats: aura paste %s: %u split (%u rows as the alpha alone, %u band rows), %u "
                "drawn whole%s%s%s\n",
