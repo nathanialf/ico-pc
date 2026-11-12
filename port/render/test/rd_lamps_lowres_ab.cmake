@@ -13,6 +13,8 @@
 #   enh43   Enhanced 2x at 4:3, presented at 1280x960, the same fakes;
 #   enh3x   Enhanced 3x at 4:3, presented at 1920x1440;
 #   enh4x   Enhanced 4x at 4:3, presented at 2560x1920;
+#   phonebox the phone's setting with lowresbox (the reduction the box over
+#           the GS footprint instead of the GS bilinear);
 #   x1      Enhanced 1x, presented at 2364x1080: nothing changes by
 #           construction (WORK2 and SCENE of one size, the draws keep SCENE's
 #           depth): every PNG the same bytes, no draw on WORK2's own depth;
@@ -78,6 +80,7 @@ set(lowresPct 3)
 set(common ICO_RD_VU_PREPASS=0)
 set(lampsOff "ICO_RD_LAMPS=pad+owed+wholepad")
 set(lampsOn "ICO_RD_LAMPS=pad+owed+wholepad+lowres+fillhold")
+set(lampsBox "ICO_RD_LAMPS=pad+owed+wholepad+lowresbox+fillhold")
 set(lampsNoHold "ICO_RD_LAMPS=pad+owed+wholepad+lowres")
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(args_enh43 --enhanced --resolution 2x --aspect 1.3333 --present 1280x960)
@@ -86,9 +89,13 @@ set(args_enh4x --enhanced --resolution 4x --aspect 1.3333 --present 2560x1920)
 set(args_x1 --enhanced --resolution 1x --present 2364x1080)
 set(args_poison ${args_phone})
 set(args_hold ${args_phone})
+set(args_phonebox ${args_phone})
+# Original 1x of the dump (no --enhanced): WORK3, the glow the paste adds, is
+# the same size at every scale; each form's WORK3 is printed against it
+set(args_orig --present 2364x1080)
 set(fake ICO_VK_FAKE_LIMITS=moltenvk)
-set(settings phone enh43 enh3x enh4x x1 hold poison)
-set(measured phone enh43 enh3x enh4x)
+set(settings phone phonebox enh43 enh3x enh4x x1 hold poison)
+set(measured phone phonebox enh43 enh3x enh4x)
 
 set(lowresRe "stats: lamps lowres (on|off): WORK2 ([0-9]+)x([0-9]+) under SCENE ([0-9]+)x([0-9]+), ([0-9]+) draws into WORK2 on its own depth, ([0-9]+) depth fills, ([0-9]+) draws without a depth")
 set(lateRe "stats: late pass [a-z]+: ([0-9]+) crack fills held into a paste pass \\(([0-9]+) the glow's")
@@ -104,6 +111,12 @@ set(holdMore 0)
 set(index 0)
 foreach(dump IN LISTS dumps)
   math(EXPR index "${index} + 1")
+  set(origDir "${OUT}/${index}-orig")
+  file(REMOVE_RECURSE "${origDir}")
+  file(MAKE_DIRECTORY "${origDir}")
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${common} ${fake} "${lampsOff}"
+                          "${TOOL}" "${dump}" - --pass-dump "${origDir}" ${args_orig}
+                  RESULT_VARIABLE orc OUTPUT_QUIET ERROR_QUIET)
   foreach(s IN LISTS settings)
     set(skipped FALSE)
     foreach(arm 0 1)
@@ -122,6 +135,8 @@ foreach(dump IN LISTS dumps)
         else()
           list(APPEND env "${lampsNoHold}")
         endif()
+      elseif(s STREQUAL "phonebox" AND arm EQUAL 1)
+        list(APPEND env "${lampsBox}")
       elseif(arm EQUAL 1)
         list(APPEND env "${lampsOn}")
       else()
@@ -275,6 +290,23 @@ foreach(dump IN LISTS dumps)
     if(apart)
       string(REPLACE ";" " " apartText "${apart}")
       message(STATUS "${dump} ${s}: apart: ${apartText}")
+    endif()
+    # the sharper reference: WORK3 against Original 1x's (printed, no bound)
+    if(orc EQUAL 0 AND NOT exact AND EXISTS "${origDir}/WORK3.png")
+      set(origText "")
+      foreach(arm 0 1)
+        execute_process(COMMAND "${PY}" -I "${DIFF}" --channels RGB "${origDir}/WORK3.png"
+                                "${OUT}/${index}-${s}-${arm}/WORK3.png"
+                        OUTPUT_VARIABLE oout RESULT_VARIABLE odrc)
+        if(odrc EQUAL 0 AND oout MATCHES "${diffRe}")
+          string(APPEND origText " arm ${arm}: ${CMAKE_MATCH_4} texels apart, largest "
+                                 "${CMAKE_MATCH_3};")
+        else()
+          string(APPEND origText " arm ${arm}: not comparable;")
+        endif()
+      endforeach()
+      message(STATUS "lowres original: ${s} ${dump} WORK3 against Original 1x (arm 0 today, "
+                     "arm 1 lowres):${origText}")
     endif()
   endforeach()
 endforeach()

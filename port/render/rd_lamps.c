@@ -207,16 +207,16 @@ const char *rd__lamps_box_why_text(int why)
 
 const char *rd__lamps_bits_text(uint32_t bits)
 {
-    static const char *const kWord[7] = {"area",  "pad",    "owed",    "wholepad",
-                                         "fold4", "lowres", "fillhold"};
-    static char s_text[128][64];
-    bits &= RD_LAMPS_ALL | RD_LAMPS_LOWRES | RD_LAMPS_FILLHOLD;
+    static const char *const kWord[8] = {"area",  "pad",    "owed",     "wholepad",
+                                         "fold4", "lowres", "fillhold", "lowresbox"};
+    static char s_text[256][80];
+    bits &= RD_LAMPS_ALL | RD_LAMPS_LOWRES | RD_LAMPS_FILLHOLD | RD_LAMPS_LOWRESBOX;
     if (!bits) {
         return "off";
     }
-    char *t = s_text[bits & 127u];
+    char *t = s_text[bits & 255u];
     size_t at = 0;
-    for (int i = 0; i < 7; i++) {
+    for (int i = 0; i < 8; i++) {
         if (bits & (1u << i)) {
             const int m = snprintf(t + at, sizeof(s_text[0]) - at, "%s%s", at ? "+" : "", kWord[i]);
             at += m > 0 && (size_t)m < sizeof(s_text[0]) - at ? (size_t)m : 0;
@@ -262,6 +262,8 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
             b |= RD_LAMPS_LOWRES;
         } else if (n == 8 && strncmp(s, "fillhold", 8) == 0) {
             b |= RD_LAMPS_FILLHOLD;
+        } else if (n == 9 && strncmp(s, "lowresbox", 9) == 0) {
+            b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX;
         } else {
             return -1;
         }
@@ -275,7 +277,8 @@ uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool
                                 bool blurFold)
 {
     /* FILLHOLD acts only under LOWRES (asked for by its word alone) */
-    uint32_t b = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_FILLHOLD;
+    uint32_t b = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_FILLHOLD |
+                 (RD_LAMPS_LOWRES_DEFAULT ? RD_LAMPS_LOWRES : 0u);
     const bool cls = tileClass == 1 || (tileClass == 2 && !tilePhone);
     if (cls && vulkan && passArea) {
         b |= RD_LAMPS_AREA;
@@ -444,7 +447,7 @@ static void envRead(void)
     s_sw.envBits = b;
     if (k < 0) {
         rd__log("lamps: ICO_RD_LAMPS=%.24s is not 0, 1 or words of area, pad, owed, wholepad, "
-                "fold4, lowres and fillhold: the class's default",
+                "fold4, lowres, lowresbox and fillhold: the class's default",
                 e);
     }
 }
@@ -519,6 +522,8 @@ static void note(void)
     }
 }
 
+static void lowresNote(void);
+
 void rd__lamps_init(void)
 {
     const RhiLimits *lim = g_rd.hasDevice ? rhi_limits() : NULL;
@@ -531,6 +536,7 @@ void rd__lamps_init(void)
      * rd_fog_selftest, or rd_replay_tool after rd_init); off until then */
     memset(&s_test, 0, sizeof(s_test));
     note();
+    lowresNote();
 }
 
 void rd__lamps_force(int bits)
@@ -1308,6 +1314,8 @@ bool rd__lamps_pass(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
  * SCENE's taken down to it before the chain's first draw on it */
 static struct {
     int on;          /* -1 unread, 0 off, 1 on (read once: WORK2's size) */
+    bool box;        /* the reduction the box (lowresbox), else the GS bilinear */
+    const char *src; /* who decided: ICO_RD_LAMPS or the build's default */
     uint32_t replay; /* the replay whose SCENE depth WORK2's holds */
     bool fresh;      /* and no draw has written SCENE's depth since */
     RdDepthCopy copy;
@@ -1321,15 +1329,25 @@ static struct {
 bool rd__lamps_lowres_on(void)
 {
     if (s_lr.on < 0) {
+        /* ICO_RD_LAMPS's words where it has words it understands (env 1:
+         * lowres, lowresbox, or neither), else (unset: 0, or not understood:
+         * 2) the build's RD_LAMPS_LOWRES_DEFAULT; read once: WORK2's size */
         envRead();
-        s_lr.on = s_sw.env == 1 && (s_sw.envBits & RD_LAMPS_LOWRES) != 0u ? 1 : 0;
+        if (s_sw.env == 1) {
+            s_lr.on = (s_sw.envBits & (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX)) != 0u ? 1 : 0;
+            s_lr.box = (s_sw.envBits & RD_LAMPS_LOWRESBOX) != 0u;
+        } else {
+            s_lr.on = RD_LAMPS_LOWRES_DEFAULT ? 1 : 0;
+            s_lr.box = false;
+        }
+        s_lr.src = s_sw.env == 1 ? "ICO_RD_LAMPS" : "the build's default";
     }
     return s_lr.on == 1;
 }
 
 bool rd__lamps_lowres_box(const RdTargetRec *src)
 {
-    if (s_lr.on != 1 || !src || src != rd__target_rec(idOf(RD_TARGET_WORK2))) {
+    if (s_lr.on != 1 || !s_lr.box || !src || src != rd__target_rec(idOf(RD_TARGET_WORK2))) {
         return false;
     }
     const RdTargetRec *sc = rd__target_rec(idOf(RD_TARGET_SCENE));
@@ -1356,6 +1374,21 @@ bool rd__lamps_fill_hold_ok(uint32_t color, uint32_t depth)
         sumAdd(&s_lr.sHold, 1);
     }
     return true;
+}
+
+/* the start line: which form is on and who decided */
+static void lowresNote(void)
+{
+    if (!g_rd.hasDevice) {
+        return;
+    }
+    const bool on = rd__lamps_lowres_on();
+    rd__log("lamps: low resolution %s (%s; RD_LAMPS_LOWRES_DEFAULT %d)%s%s", on ? "on" : "off",
+            s_lr.src, RD_LAMPS_LOWRES_DEFAULT,
+            on ? ": above 1x WORK2 at the GS frame's size with its own depth, its reduction " : "",
+            on ? (s_lr.box ? "the box (lowresbox; DIVERGENCES.md VD-32)"
+                           : "the GS bilinear (DIVERGENCES.md VD-32)")
+               : "");
 }
 
 void rd__lamps_lowres_counts(uint64_t *draws, uint64_t *fills, uint64_t *dropped)

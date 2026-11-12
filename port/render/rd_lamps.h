@@ -69,6 +69,19 @@ extern "C" {
  * the fill drawn where it was due, given LOWRES.  On every class (the late
  * pass decides where a hold runs). */
 #define RD_LAMPS_FILLHOLD 64u
+/* LOWRES's reduction WORK2 -> WORK0: by default the PS2's own GS bilinear
+ * (WORK2 at the GS size is the original's WORK2, and so is its reduction:
+ * the original's glow); the word lowresbox (which implies lowres) the
+ * above-1x box over each WORK0 texel's GS footprint instead (the scaled
+ * WORK2's kernel), for the measurement */
+#define RD_LAMPS_LOWRESBOX 128u
+/* LOWRES where ICO_RD_LAMPS does not name it (unset, or words it does not
+ * understand): 0 off, 1 on (with the GS bilinear).  A build define: a
+ * variant build or a release flips it; ICO_RD_LAMPS=... with or without
+ * lowres still decides for the tests */
+#ifndef RD_LAMPS_LOWRES_DEFAULT
+#define RD_LAMPS_LOWRES_DEFAULT 0
+#endif
 #define RD_LAMPS_ALL                                                                               \
     (RD_LAMPS_AREA | RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_FOLD4)
 

@@ -362,34 +362,29 @@ float depth_upsample_ps(BlitVSOut i) : SV_Depth
 
 // depth_down_ps: SCENE's depth (t1, a scaled target) at the GS frame's own size, into the
 // lamps' WORK2 depth above 1x (port/render/rd_lamps.c RD_LAMPS_LOWRES), a depth-only pass:
-// at GS pixel p the farthest depth (the smallest: the lamps test GEQUAL, larger GS Z nearer)
-// of the SCENE texels whose centres p covers, [p * scale - crop, (p + 1) * scale - crop) on x
-// and [p * scale, (p + 1) * scale) on y (g_param.xy SCENE's scale, g_param.z its Full pixel
-// crop ox), clamped to SCENE (g_tex.xy its size), at most DOWN_SPAN_MAX texels an axis.  A
-// lamp drawn over the very surface it lights (issue 163's gate: the same plane, the test an
-// equality at the scaled size) then passes at the GS pixel as it passes at the texels under
-// it: a point sample elsewhere in the footprint can lie in front of the lamp's centre (on
-// that gate every lamp pixel failed).  At scale 1 the one texel, SCENE's depth itself.
-#define DOWN_SPAN_MAX 16
-
+// at GS pixel p, whose centre c = p + 0.5 lies at SCENE texel coordinate c * scale - crop
+// (g_param.xy SCENE's scale, g_param.z its Full pixel crop ox), the farthest depth (the
+// smallest: the lamps test GEQUAL, larger GS Z nearer) of the two by two texels whose
+// centres surround that point (the bilinear's taps), clamped to SCENE (g_tex.xy its size).
+// A lamp drawn over the very surface it lights (issue 163's gate: the same plane, the test
+// an equality at the scaled size) passes: the lamp's depth at c is the plane's there, and a
+// plane's value at a point is at least its smallest at the corners of a square holding the
+// point.  A point sample failed it (a texel centre off c lies in front of the lamp on one
+// side of the gradient: the whole gate dark); the smallest over the whole GS footprint
+// passed it but let the title's small lamps through occluders up to half a GS pixel away
+// (their WORK2 light doubled).  The four taps reach a SCENE texel past c at most.
 float depth_down_ps(BlitVSOut i) : SV_Depth
 {
-    const float2 p = floor(i.pos.xy);
-    const float2 lo = float2(p.x * g_param.x - g_param.z, p.y * g_param.y);
-    const float2 hi = lo + g_param.xy;
+    const float2 c = floor(i.pos.xy) + 0.5;
+    const float2 at = float2(c.x * g_param.x - g_param.z, c.y * g_param.y) - 0.5;
     const int2 size = int2(g_tex.xy);
-    // the texels t whose centre t + 0.5 lies in [lo, hi); one at least (the scale is 1 or more)
-    int2 first = int2(ceil(lo - 0.5));
-    int2 last = int2(ceil(hi - 0.5)) - 1;
-    first = clamp(first, int2(0, 0), size - 1);
-    last = clamp(max(last, first), first, min(size - 1, first + DOWN_SPAN_MAX - 1));
-    float d = g_ssDepth.Load(int3(first, 0));
-    [loop] for (int y = first.y; y <= last.y; y++) {
-        [loop] for (int x = first.x; x <= last.x; x++) {
-            d = min(d, g_ssDepth.Load(int3(x, y, 0)));
-        }
-    }
-    return d;
+    const int2 t0 = clamp(int2(floor(at)), int2(0, 0), size - 1);
+    const int2 t1 = min(t0 + 1, size - 1);
+    const float a = g_ssDepth.Load(int3(t0.x, t0.y, 0));
+    const float b = g_ssDepth.Load(int3(t1.x, t0.y, 0));
+    const float d = g_ssDepth.Load(int3(t0.x, t1.y, 0));
+    const float e = g_ssDepth.Load(int3(t1.x, t1.y, 0));
+    return min(min(a, b), min(d, e));
 }
 
 // The crack filler above 1x (port/render/rd_crack_fill.c; docs/port/RENDER_POST.md,

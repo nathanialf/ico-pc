@@ -531,18 +531,22 @@ VD-32). Above 1x WORK2 is the GS frame's size (848 x 448 at the phone's Auto, no
 work buffer (`rd_core.c` `sceneClass`), with a depth of its own (`namedTargetDesc`): the glow's fill,
 the sun's fans, the mask (SCENE's alpha box-averaged over each GS pixel, the scene-to-work-buffer
 rule of [RENDER.md](RENDER.md#the-replay)) and the lamps' meshes are drawn at the PS2's own
-resolution, and the reduction WORK2 -> WORK0 keeps the above-1x box over each WORK0 texel's GS
-footprint (`rd__lamps_lowres_box`, from `blurAbove1xSteps`: 2 x 4 GS texels, the footprint the box
-of the scaled WORK2 covered; the PS2's own bilinear at 1x reads only part of it, and a lamp a few
-pixels across then shows or vanishes by where it falls: 24 levels apart on the title's lamps). A draw
+resolution, and the reduction WORK2 -> WORK0 is the PS2's own GS bilinear, as at 1x: the GS-size
+WORK2 and its reduction are the original's, so the glow is the original's (the goal-first rule's
+reference; today's above-1x box over a scaled WORK2 approximates it). The word `lowresbox`
+(implying `lowres`) takes the above-1x box over each WORK0 texel's GS footprint instead
+(`rd__lamps_lowres_box`, from `blurAbove1xSteps`: 2 x 4 GS texels), for the measurement. A draw
 into WORK2 on SCENE's depth takes WORK2's own (`rd__lamps_lowres_depth`, from `prepareDrawEx`):
 before the first such draw of a replay, and again after any draw that wrote SCENE's depth, a
-depth-only pass of WORK2's size writes every texel with the farthest of SCENE's depths under the
-GS pixel (`depth_down_ps`, `port/shaders/blit.hlsl`: the smallest over the texels whose centres
-the pixel covers; the lamps test GEQUAL). A point sample failed issue 163's gate: its lamp is the
-gate's own plane drawn again, an equality at the scaled size, and a sample elsewhere in the
-footprint than the lamp's own centre can lie in front of it (on that gate every lamp pixel failed:
-190 levels on 15 % of the picture);
+depth-only pass of WORK2's size writes every texel with the farthest of SCENE's four depths whose
+texel centres surround the GS pixel's centre (`depth_down_ps`, `port/shaders/blit.hlsl`: the
+smallest of the bilinear's taps; the lamps test GEQUAL). A point sample failed issue 163's gate
+(its lamp is the gate's own plane drawn again, an equality at the scaled size, and a texel centre
+off the lamp's lies in front of it on one side of the gradient: every lamp pixel failed, 190
+levels on 15 % of the picture); the smallest over the whole GS footprint passed it but let the
+title's small lamps through occluders up to half a GS pixel away (their WORK2 light doubled, 79
+to 94 levels); the four taps pass a plane (its value at a point is at least its smallest at the
+corners of a square around it) and reach a SCENE texel past the centre at most;
 SCENE's depth sampled in place outside any pass, a copy only where the device cannot sample a
 depth: the fog path's copy on the local read is for reads beside SCENE's own pass), so lamp against lamp and
 lamp against the scene order as the PS2 orders them at its resolution. The fans' and lamps' depth
@@ -560,9 +564,13 @@ that cannot take WORK2's depth (its DATE on SCENE's stencil, no pipeline, no cop
 MB, SCENE's depth (12.8 MB loaded by the lamps' pass) is sampled at 380,000 texels into WORK2's 1.9
 MB depth, the mask's and lamps' fragments 6.7 times fewer; about 33 MB of attachment traffic less a
 lamps picture for one small pass more (the depth fill), about 3 ms at the phone's 1 ms per 10 MB.
-Off by default this round, and asked for by its word alone (not in `ICO_RD_LAMPS=1`): WORK2's size is
-fixed when the target is made, so it is read once (`rd__lamps_lowres_on`); once the measured bound
-is in VD-32 it ships on every class and backend. `ICO_RD_LAMPS_POISON=1` clears WORK2's depth to
+Off by default (`RD_LAMPS_LOWRES_DEFAULT` 0 in `rd_lamps.h`, a build define: 1 turns it on with
+the GS bilinear wherever `ICO_RD_LAMPS` does not name its own words; a variant build or a later
+release flips it), and asked for by its word (not in `ICO_RD_LAMPS=1`): WORK2's size is fixed when
+the target is made, so it is read once (`rd__lamps_lowres_on`); the start line `rd: lamps: low
+resolution on|off (ICO_RD_LAMPS|the build's default; RD_LAMPS_LOWRES_DEFAULT N): ..., its
+reduction the GS bilinear|the box` says which form is on. It ships on every class and backend only
+inside VD-32's acceptance. `ICO_RD_LAMPS_POISON=1` clears WORK2's depth to
 0.375 before the fill writes it. Lines: once `rd: lamps: low resolution: WORK2 WxH (the GS frame's
 size) under SCENE SWxSH: ...`, once `rd: lamps: low resolution: a draw into WORK2 WxH drawn without
 a depth (<why>; ...)`, the 10 s `window: lamps low resolution: N pictures with WORK2 WxH under SCENE
@@ -571,7 +579,7 @@ H pictures whose lamps let the crack fill's hold pass (fillhold)`, and `rd_repla
 `stats: lamps lowres on|off: WORK2 WxH under SCENE SWxSH, D draws into WORK2 on its own depth, F
 depth fills, X draws without a depth`.
 
-`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|fillhold` (the tests only,
+`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|lowresbox|fillhold` (the tests only,
 [TESTING.md](TESTING.md#environment-switches); words joined by `,` or `+`) turns every part off,
 every part on, or the parts named on whatever the class (the self-tests still decide the area and
 the fold of two pairs);

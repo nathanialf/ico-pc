@@ -181,6 +181,8 @@ int main(void)
           "lowres and fillhold outside RD_LAMPS_ALL");
     CHECK(rd__lamps_parse("lowres,fillhold", &b) == 1 && b == (RD_LAMPS_LOWRES | RD_LAMPS_FILLHOLD),
           "lowres,fillhold: %u", b);
+    CHECK(rd__lamps_parse("lowresbox", &b) == 1 && b == (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX),
+          "lowresbox implies lowres: %u", b);
     CHECK(strcmp(rd__lamps_bits_text(RD_LAMPS_PAD | RD_LAMPS_LOWRES), "pad+lowres") == 0,
           "lowres's word: %s", rd__lamps_bits_text(RD_LAMPS_PAD | RD_LAMPS_LOWRES));
     b = 77;
@@ -192,7 +194,8 @@ int main(void)
           "the bits' words");
     /* t2 */
     /* every class (FILLHOLD acts under LOWRES alone) */
-    const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_FILLHOLD;
+    const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_FILLHOLD |
+                        (RD_LAMPS_LOWRES_DEFAULT ? RD_LAMPS_LOWRES : 0u);
     CHECK(rd__lamps_default_bits(1, false, true, true, true) == (ev | RD_LAMPS_AREA), "PowerVR");
     CHECK(rd__lamps_default_bits(1, true, true, true, true) == (ev | RD_LAMPS_AREA),
           "PowerVR, a phone");
