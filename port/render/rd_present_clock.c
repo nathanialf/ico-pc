@@ -33,6 +33,7 @@
 #include <math.h>
 #include <stdint.h>
 
+#include "rd_even.h"
 #include "rd_internal.h"
 
 /* the step's lower bound without a nominal interval: a tick over this */
@@ -109,6 +110,8 @@ float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, d
         step = step < lo ? lo : step;
     }
     const double since = nowMs - c->lastMs;
+    const double before = c->clockMs; /* the evenness line's reset direction */
+    const bool first = c->presents == 0;
     /* a doubled present: neither the mean's nor the step's */
     const bool doubled = nominal && c->presents != 0 && since >= 0.0 && since < lo;
     bool reset = c->presents == 0 || since < 0.0 || !(step > 0.0) || since > 4.0 * step;
@@ -156,6 +159,9 @@ float rd_present_clock_alpha(RdPresentClock *c, double nowMs, double tickAtMs, d
     s_clockSinceTickMs = tickMs;
     double a = (c->clockMs - tickAtMs) / tickMs;
     s_clockRaw = a; /* before the clamp: the alpha histogram's "clamped from below" */
+    /* the evenness line (rd_even.h): the clamps and the resets, a reset
+       forward unless it moved a running clock back */
+    rd_even_clock_note(a, !reset ? 0 : (first || c->clockMs >= before ? 1 : -1));
     a = a < 0.0 ? 0.0 : (a > 0.999 ? 0.999 : a);
     return (float)a;
 }

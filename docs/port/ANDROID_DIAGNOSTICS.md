@@ -1419,6 +1419,30 @@ and the third within 300 steps plans the whole period for at most 120 steps (the
 Each line is rate-limited (the first 8, then every 100th). The counts in the 10 s clause are
 complete.
 
+## The evenness line on a 120 Hz phone
+
+The owner's report on the Pixel 10 Pro Fold (120 Hz, uncapped, mailbox, 45 to 73 pictures a
+second): motion "not always as smooth as the number suggests". The 10 s `window: evenness in 10
+s: ...` line ([PLATFORM_DIAGNOSTICS.md](PLATFORM_DIAGNOSTICS.md#the-evenness-line)) separates the
+two causes the logs before it could not:
+
+- **The glass grid.** At 67 pictures a second on 120 Hz the GPU's ends fall 1 or 2 refreshes apart
+  in a mix. When the `1 refresh` and `2 refreshes` classes carry about the same mean content step,
+  the 1-refresh pictures move about twice as far a refresh as the 2-refresh ones: the speed on the
+  glass jumps picture to picture although the clock steps evenly. Many 1-refresh gaps with equal
+  steps while the rate is high is this cause; a frame rate that divides 120 (60) puts nearly every
+  gap at 2 refreshes.
+- **The clock.** `back K times` above 0, `resets ... K back`, a wide `deviation` of every step, or
+  many clamps at 0 with large amounts are the present clock moving the content unevenly by itself.
+  A step back is a later picture showing an earlier moment than the one before it.
+- **The latency.** The `alpha's sample to the GPU's end` spread (10th to 90th) is how much the time
+  from a picture's content to its GPU end varies; the drain before the hand-over is its first part
+  (about 1.6 ms before a tick's first picture and 7 ms before a further one on the owner's phone,
+  the game thread's `slot waits` split).
+
+Read it beside the presented rate and the step rule's lines: a block whose rate swings with the
+back-off (the section above) is the rate's unevenness, not the glass grid's.
+
 ## The thermal state and screen recording
 
 The thermal state and screen recording come from the app's Java side (issue 123;

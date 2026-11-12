@@ -2818,6 +2818,10 @@ typedef struct RdPerfRecord {
     double startMs;      /* the replay's start (rd's monotonic ms clock) */
     float alpha;         /* rd_present's alpha; -1 for a replay that is not one */
     uint8_t firstOfTick; /* the first present of its frame */
+    /* a present handed over to the render thread: the alpha's sample (its
+     * drain's start) and the hand-over (the drain's end), startMs's clock;
+     * 0 and 0 for one made where it was asked (rd_even.h) */
+    double evenAskMs, evenHandMs;
     /* the replay changed effect more often than there were timestamps:
        the later changes were not timed apart (their time stayed with the
        effect, or the scene, before them) */
@@ -3398,6 +3402,9 @@ void rd_late_pass_line(void);
 void rd_aura_paste_line(void);
 /* the CPU phases a picture: "window: CPU phases ms a picture ..." (rd_cpu_phase.c) */
 void rd_cpu_phase_line(void);
+/* the pictures' evenness: "window: evenness in 10 s: ..." (rd_even.c); refreshMs the
+ * display's refresh, 0 unknown */
+void rd_even_line(double refreshMs);
 /* the plan's switch: on, ICO_RD_GLOW_LIGHT=0 off (the tests' A/B, no config
  * key); rd__glow_light_force sets it (-1 the environment's) and forgets the
  * plan's off and the plan frame before */

@@ -990,6 +990,14 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   at 1x on OpenGL (llvmpipe). Each pair: every PNG byte for byte, the same draws and passes, `=0`
   off with nothing boxed, `=1` on; v3677 at the phone setting 1 count and 3 composites boxed; the
   phone setting boxes at least one of each over the dumps. No device: SKIP.
+- `rd_even_test.c` (`rd_even`, CPU): the pictures' evenness line (`rd_even.c`): ten made-up
+  presents with GPU ends at the middles of their quarter-ms bins (1, 2, 3, 5 and under half a
+  refresh of 8 ms apart, one end a bound, one present with none, a frame number that went back),
+  their content steps (one back), four handed over (the sample to the GPU's end 10, 18, 20 and 28
+  ms, drains of 1, 2, 1 and 1 ms) and five present-clock notes (clamps below 0 and above 0.999,
+  resets forward and back): the sums and the line word for word; a short buffer cut and
+  terminated; taken twice: no line; one more present with the refresh unknown, word for word; the
+  hand-over's stamps taken once.
 - `rd_cpu_phase_test.c` (`rd_cpu_phase`, CPU): the render thread's CPU phases (`rd_cpu_phase.c`):
   two pictures of one frame folded (2 pictures, 1 tick, 1 hashed, 6 clock reads, the look-ups
   folded once and `g_rdCpu` emptied), taken twice (empty), no line without a picture, and the

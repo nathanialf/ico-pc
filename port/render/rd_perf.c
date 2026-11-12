@@ -25,6 +25,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ico_thread.h"
+#include "rd_even.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_perf_clock.h"
@@ -1151,6 +1152,10 @@ void rd__perf_begin(const RdFrame *f, int keep, bool present)
     g_rdPerf.interpMs = s_interpMs;
     g_rdPerf.readbackMs = s_readbackMs; /* since the previous replay */
     g_rdPerf.alpha = s_alpha;
+    if (s_alpha >= 0.0f) {
+        /* a present handed over: its drain's stamps (rd_even.h) */
+        rd_even_hand_take(&g_rdPerf.evenAskMs, &g_rdPerf.evenHandMs);
+    }
     g_rdPerf.firstOfTick = s_first;
     g_rdPerf.reshown = s_reshownNext;
     g_rdPerf.glowHeld = s_glowHeldNext;
@@ -1476,8 +1481,21 @@ void rd__perf_collect_gpu(void)
     }
     /* the slot's clock (Vulkan) */
     RhiTimestampClock clk;
+    double endMs = 0.0;
     if (g_rd.hasDevice && rhi_read_timestamp_clock(&clk)) {
         clockNote(r, slot, &clk, ts, n);
+        if (r->gpuDoneValid != 0) {
+            /* the GPU's end on the CPU's clock (rd__now_ms's): the slot
+               wait's end when it blocked, its start (a bound) when it
+               blocked under 0.05 ms (rd_perf_clock.c); none when not */
+            endMs = (double)(r->gpuDoneValid == 1 ? clk.waitEndNs : clk.waitBeginNs) / 1e6;
+        }
+    }
+    if (r->alpha >= 0.0f) {
+        /* a present into the evenness line (rd_even.h): no clock read */
+        const RdEvenPic ep = {r->frame,      r->alpha, r->evenAskMs,
+                              r->evenHandMs, endMs,    r->gpuDoneValid == 1};
+        rd_even_picture(&ep);
     }
     /* no stamps: the next timed record's gap is measured across this one
        (gpuGapSkipped) */
