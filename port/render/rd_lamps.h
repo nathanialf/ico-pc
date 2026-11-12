@@ -55,6 +55,20 @@ extern "C" {
 #define RD_LAMPS_OWED 4u
 #define RD_LAMPS_WHOLEPAD 8u
 #define RD_LAMPS_FOLD4 16u
+/* Round 4 (owner's choice B: identical to the eye, not byte-identical,
+ * DIVERGENCES.md VD-32): above 1x WORK2 at the GS frame's size, the glow's
+ * fill, the sun's fans, the mask and the lamps drawn into it at the PS2's
+ * own resolution, the lamps' and the fans' depth WORK2's own (SCENE's
+ * depth taken down to that size, depth_down_ps).  Not in RD_LAMPS_ALL (not
+ * a byte-identical item): only the word lowres asks for it, read once
+ * (rd__lamps_lowres_on: WORK2's size is fixed when it is made). */
+#define RD_LAMPS_LOWRES 32u
+/* Under LOWRES above 1x the lamps' meshes write WORK2's own depth, never
+ * SCENE's, so the late pass (rd_late_pass.c) may hold the crack fill past
+ * them (the fill reads SCENE's depth and writes none): the same bytes as
+ * the fill drawn where it was due, given LOWRES.  On every class (the late
+ * pass decides where a hold runs). */
+#define RD_LAMPS_FILLHOLD 64u
 #define RD_LAMPS_ALL                                                                               \
     (RD_LAMPS_AREA | RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_FOLD4)
 
@@ -261,6 +275,34 @@ void rd__lamps_scan_end(void);
  * draws into WORK0 and so begins the next pass.  ms, storage: as
  * rd__pass_area_begin's. */
 bool rd__lamps_pass(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage);
+
+/* RD_LAMPS_LOWRES: asked for (ICO_RD_LAMPS with the word lowres), read
+ * once and kept for the run (rd_core.c sceneClass and namedTargetDesc: WORK2
+ * at the GS frame's size with its own depth at every scale) */
+bool rd__lamps_lowres_on(void);
+/* prepareDrawEx (rd_replay.c, after rd__late_pass_join): a draw into WORK2
+ * on SCENE's depth where the two differ in size (above 1x under LOWRES)
+ * takes WORK2's own depth, which holds SCENE's taken down to the GS size
+ * (depth_down_ps, a depth-only pass of its own before the draw's: once a
+ * replay, again after a draw that wrote SCENE's depth).  Where it cannot
+ * (DATE's stencil, no pipeline, no copy of SCENE's depth) the draw goes
+ * without a depth (counted, said once).  At 1x nothing changes. */
+struct Replay;
+struct DrawSetup;
+void rd__lamps_lowres_depth(struct Replay *r, struct DrawSetup *ds);
+/* rd_late_pass.c: true when a draw into color on depth is drawn on WORK2's
+ * own depth (LOWRES and FILLHOLD on, color WORK2, depth another size), so it
+ * writes no depth of SCENE (counted once a replay for the 10 s line) */
+bool rd__lamps_fill_hold_ok(uint32_t color, uint32_t depth);
+/* rd_store_plan.c: did is WORK2's own depth under LOWRES (the scan sees
+ * the lamps' draws on SCENE's depth, so the plan keeps this one's loads and
+ * stores as the pass asks) */
+bool rd__lamps_own_depth(uint32_t did);
+/* the run's LOWRES counts (the tests): draws on WORK2's own depth, depth
+ * fills, draws without a depth */
+void rd__lamps_lowres_counts(uint64_t *draws, uint64_t *fills, uint64_t *dropped);
+/* the depth copy LOWRES samples SCENE's depth through (rd_shutdown) */
+void rd__lamps_shutdown(void);
 
 /* the counts since rd_init (the tests): passes with the lamps' area, drawn
  * whole, bands left lazy */

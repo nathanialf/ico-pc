@@ -484,8 +484,12 @@ passes, the same bytes in every target:
   covered pixel (`rd__lamps_fold4_axis`, the shader's index arithmetic on the CPU). WORK1 is
   written by neither pair either way, WORK0 whole by the last pass. A chain of ten pairs at 4:3
   and 16:9 (nine fold) draws four passes of two pairs, one of one pair and the last pair as two
-  passes: four render passes fewer. The PowerVR class under Vulkan where the blur fold is on, a
-  desktop class by `ICO_RD_LAMPS` only, after its start-up self-test (two pairs of the chain's
+  passes: four render passes fewer. **Off by default on every class and backend**: on the owner's
+  PowerVR phone (2026-11-12) it made the lamps pictures slower, 28.3 to 30.9 ms of GPU work
+  against 25.7 to 26.0 ms without, and `GPU top passes` gave `glow WORK0 424x128 9.0 passes 9 draws
+  8.80 ms` against 12 passes in 3.2 ms: a small pass costs about 0.27 ms there, and the folded
+  shader's loads (about 64 a texel) cost far more than the passes it removes. `ICO_RD_LAMPS=...+fold4`
+  turns it on (the tests), on Vulkan only, after its start-up self-test (two pairs of the chain's
   form on a 64 x 32 WORK0 of random bytes as two `fx_blur2_ps` passes and as one `fx_blur4_ps`
   pass, read back, every texel compared); never on the Arm, Qualcomm and Apple classes, OpenGL,
   Direct3D (the module is made on Vulkan alone). The fold measured 8 ms worse a picture on the
@@ -494,9 +498,8 @@ passes, the same bytes in every target:
   reduction" above), not the blur fold, which is on there and which this extends: `fx_blur2_ps`
   and `fx_blur4_ps` both run on the 424 x 128 WORK0 and read only WORK0's snapshot, about 32
   loads a texel for two passes of one pair (16 each) against about 64 for one pass of two at the
-  chain's drift (pass 1A's window 4 x 4 typically); whether the pass saved pays for those loads
-  on the phone is not known from the code and is the measurement (`glow WORK0 ... passes ... ms` in
-  `GPU top passes`, the 10 s `window: lamps: ... N blur passes of two pairs`). Its 1 pipeline
+  chain's drift (pass 1A's window 4 x 4 typically); the phone's measurement above says the pass
+  saved does not pay for those loads there. Its 1 pipeline
   key (`fx_blur4_ps` over RGBA8 at the fold's state) is in the start-up set where it is asked
   for. `ICO_RD_LAMPS_POISON=1` clears WORK0's swapped-in colour to magenta before each such pass;
 - **the band under the whole plan** (`RD_LAMPS_WHOLEPAD`): WORK2_PAD's band left a lazy clear in
@@ -518,9 +521,50 @@ The lamps' writes into WORK2 make the crack fill's hold impossible in these fram
 passes above: the fill reads SCENE's depth at its draw and the lamps write it, so a fill moved
 past them would read other depths; `rd: late pass: ... N fills not held (no paste in the frame
 takes them)`), and the glow's paste already shares list 11's pass (drawn early there, list 11's
-draws joined to it).
+draws joined to it). Under the low resolution below the lamps write WORK2's own depth instead, so
+the hold passes them (`RD_LAMPS_FILLHOLD`, `rd__lamps_fill_hold_ok`): the same bytes as the fill
+drawn where it was due, given the low resolution (the fill reads SCENE's depth and writes none).
 
-`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4` (the tests only,
+**The lamps' glow at the PS2's resolution** (`RD_LAMPS_LOWRES`, `ICO_RD_LAMPS=...+lowres`; the
+owner's choice for this release: identical to the eye, not byte-identical, [DIVERGENCES.md](DIVERGENCES.md)
+VD-32). Above 1x WORK2 is the GS frame's size (848 x 448 at the phone's Auto, not 2366 x 1080), a
+work buffer (`rd_core.c` `sceneClass`), with a depth of its own (`namedTargetDesc`): the glow's fill,
+the sun's fans, the mask (SCENE's alpha box-averaged over each GS pixel, the scene-to-work-buffer
+rule of [RENDER.md](RENDER.md#the-replay)) and the lamps' meshes are drawn at the PS2's own
+resolution, and the reduction WORK2 -> WORK0 reads it through the GS bilinear, as at 1x. A draw
+into WORK2 on SCENE's depth takes WORK2's own (`rd__lamps_lowres_depth`, from `prepareDrawEx`):
+before the first such draw of a replay, and again after any draw that wrote SCENE's depth, a
+depth-only pass of WORK2's size writes every texel with SCENE's depth at the texel holding the GS
+pixel's centre (`depth_down_ps`, `port/shaders/blit.hlsl`: `floor((p + 0.5) * scale - crop)`,
+SCENE's depth sampled in place outside any pass, a copy only where the device cannot sample a
+depth: the fog path's copy on the local read is for reads beside SCENE's own pass), so lamp against lamp and
+lamp against the scene order as the PS2 orders them at its resolution. The fans' and lamps' depth
+writes stay in WORK2's depth: under the lamps plan nothing reads SCENE's depth after them by value
+(the store plan dropped that store), under the whole plan a later Z test of SCENE (the aura's
+sprites) no longer sees the sun's fans' depth. What differs is the glow's light alone: WORK0's
+texels are the PS2's reduction of a GS-size mask and lamps, not the box of a scaled one, and the
+ten blur pairs, the eye blur and the paste (all unchanged) carry the difference to SCENE; the
+measured bound is VD-32's (`rd_lamps_lowres_ab`). At 1x nothing changes by construction: WORK2
+and SCENE are one size, the draws keep SCENE's depth, no fill is drawn (the test's 1x row, every
+PNG the same bytes). The self-tests that used WORK2 as a frame-sized scratch beside SCENE (the
+stencil cut's, the shadow count's under MSAA, the shadow tiles') take AURA_WORK instead. A draw
+that cannot take WORK2's depth (its DATE on SCENE's stencil, no pipeline, no copy) goes without one
+(counted, said once). The saving at the phone's Auto: WORK2's colour 10.2 MB each way becomes 1.5
+MB, SCENE's depth (12.8 MB loaded by the lamps' pass) is sampled at 380,000 texels into WORK2's 1.9
+MB depth, the mask's and lamps' fragments 6.7 times fewer; about 33 MB of attachment traffic less a
+lamps picture for one small pass more (the depth fill), about 3 ms at the phone's 1 ms per 10 MB.
+Off by default this round, and asked for by its word alone (not in `ICO_RD_LAMPS=1`): WORK2's size is
+fixed when the target is made, so it is read once (`rd__lamps_lowres_on`); once the measured bound
+is in VD-32 it ships on every class and backend. `ICO_RD_LAMPS_POISON=1` clears WORK2's depth to
+0.375 before the fill writes it. Lines: once `rd: lamps: low resolution: WORK2 WxH (the GS frame's
+size) under SCENE SWxSH: ...`, once `rd: lamps: low resolution: a draw into WORK2 WxH drawn without
+a depth (<why>; ...)`, the 10 s `window: lamps low resolution: N pictures with WORK2 WxH under SCENE
+SWxSH, D draws into WORK2 on its own depth, F depth fills (depth_down_ps), X draws without a depth;
+H pictures whose lamps let the crack fill's hold pass (fillhold)`, and `rd_replay_tool --stats`
+`stats: lamps lowres on|off: WORK2 WxH under SCENE SWxSH, D draws into WORK2 on its own depth, F
+depth fills, X draws without a depth`.
+
+`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|fillhold` (the tests only,
 [TESTING.md](TESTING.md#environment-switches); words joined by `,` or `+`) turns every part off,
 every part on, or the parts named on whatever the class (the self-tests still decide the area and
 the fold of two pairs);

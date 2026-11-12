@@ -660,8 +660,16 @@ whole pictures), `O WORK0 alpha sprites owed (dark pictures: a pass fewer each)`
 two pairs (a pass fewer each), P pairs drawn alone (k <why>)` (about one `the chain's last pair
 next` a chain is expected; any other reason says what kept two pairs apart); the start lines `rd:
 blur fold: two pairs a pass: self-test passed (...)` (or `failed at texel N` / `not run (...)`,
-then one pair a pass) say whether that fold is in force. Whether it paid shows in `GPU top
-passes`: `glow WORK0 ... N passes ... ms` falls by about four passes a lamps picture.
+then one pair a pass) say whether that fold is in force. It is off by default: on the
+PowerVR phone (2026-11-12) it made the lamps pictures 28.3 to 30.9 ms against 25.7 to 26.0 without (`GPU top
+passes`: `glow WORK0 424x128 9.0 passes 9 draws 8.80 ms` against 12 passes in 3.2 ms). Under the
+tests' `ICO_RD_LAMPS=...+lowres` a line of its own follows: `window: lamps low resolution: N
+pictures with WORK2 WxH under SCENE SWxSH, D draws into WORK2 on its own depth, F depth fills
+(depth_down_ps), X draws without a depth; H pictures whose lamps let the crack fill's hold pass
+(fillhold)` (WxH the GS frame's size, 848x448 at the phone's Auto; X is 0 in a healthy run, the
+once line `rd: lamps: low resolution: a draw into WORK2 ... drawn without a depth (<why>)` names
+the reason; with H the late pass's `N crack fills held ... into the glow's` rises by about one a
+lamps picture and `glow WORK2 ...` in `GPU top passes` falls to the GS size).
 
 ### The crack fill's snapshot by the swap
 

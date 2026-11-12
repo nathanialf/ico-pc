@@ -3907,6 +3907,7 @@ RdKeyFamily rd__pipe_key_family(const RdPipeKeyInt *k)
     case RD_FS_FOG_LOCAL:
     case RD_FS_DEPTH_RESOLVE:
     case RD_FS_DEPTH_UPSAMPLE:
+    case RD_FS_DEPTH_DOWN:
     case RD_FS_MSAA_RESOLVE:
     case RD_FS_CRACK_FILL:
     case RD_FS_CRACK_COUNT:
@@ -4819,6 +4820,14 @@ uint32_t rd__enumerate_reachable_blur(RdPipeKeyInt *out, uint32_t max, uint32_t 
             k.fs = RD_FS_FX_BLUR4;
             n = rd__add_pipe_key(out, max, n, &k);
         }
+    }
+    /* the lamps' WORK2 depth at the GS size above 1x (rd_lamps.c LOWRES): a depth-only blit */
+    if (g_rd.fs[RD_FS_DEPTH_DOWN].id && rd__lamps_lowres_on()) {
+        RdPipeKeyInt kd = rd__post_key(RD_VS_BLIT, RD_FS_DEPTH_DOWN, RHI_FMT_UNKNOWN);
+        kd.depthFmt = RHI_FMT_D32F_S8;
+        kd.gs.ztst = RD_ZTST_ALWAYS;
+        kd.gs.zwrite = RD_ZWRITE_ON;
+        n = rd__add_pipe_key(out, max, n, &kd);
     }
     n = rd__aura_box_keys(out, max, n);   /* the aura's read in two passes (rd_aura_box.c) */
     return rd__fx_enumerate(out, max, n); /* the frame-size post sprites (rd_fx_plan.c) */

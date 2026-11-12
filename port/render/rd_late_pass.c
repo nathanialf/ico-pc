@@ -110,6 +110,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_lamps.h" /* rd__lamps_fill_hold_ok */
 #include "rd_replay.h"
 #include "rd_upscale.h"
 
@@ -336,8 +337,11 @@ int rd__late_pass_class(const RdFrame *f, const RdCmd *c, const RdStateBlock *st
             (t && t->kind == RD_TEXKIND_TARGET && rd__target_rec(t->target) == sc)) {
             return flush(why, RD_LATE_WHY_DRAW);
         }
+        /* under the lamps' LOWRES above 1x a draw into WORK2 writes WORK2's
+         * own depth, not SCENE's (rd_lamps.h RD_LAMPS_FILLHOLD) */
         if (d->test.date != RD_DATE_OFF || st->aa1 ||
-            (rd__target_rec(st->depth) == sc && d->zwrite == RD_ZWRITE_ON)) {
+            (rd__target_rec(st->depth) == sc && d->zwrite == RD_ZWRITE_ON &&
+             !rd__lamps_fill_hold_ok(st->color, st->depth))) {
             return flush(why, RD_LATE_WHY_DEPTH);
         }
         return RD_LATE_HOLD;

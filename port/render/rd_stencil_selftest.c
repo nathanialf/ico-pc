@@ -63,6 +63,7 @@
 
 #include "rd_internal.h"
 #include "rd_stencil_selftest.h"
+#include "rd_lamps.h"         /* rd__lamps_lowres_on */
 #include "rd_vu_skin_check.h" /* rd__profile_adreno */
 
 #define SC_SAMPLES 4 /* a target */
@@ -438,7 +439,11 @@ static void hex(char out[9], const uint8_t *c)
 /* the test itself: s_sc.test and its words */
 static void runTest(void)
 {
-    const uint32_t scene = rd_target(RD_TARGET_SCENE).id, work = rd_target(RD_TARGET_WORK2).id;
+    /* a frame-sized scratch beside SCENE: WORK2, or AURA_WORK (the same size)
+     * where the lamps' LOWRES makes WORK2 the GS frame's size (rd_lamps.h) */
+    const uint32_t scene = rd_target(RD_TARGET_SCENE).id;
+    const uint32_t work =
+        rd_target(rd__lamps_lowres_on() ? RD_TARGET_AURA_WORK : RD_TARGET_WORK2).id;
     RdTargetRec *t = rd__target_rec(scene), *k = rd__target_rec(work);
     if (!t || !t->withDepth || !t->color.id || !t->depth.id || t->format != RHI_FMT_RGBA8_UNORM ||
         !k || !k->color.id || k->tw != t->tw || k->th != t->th || k->w != t->w || k->h != t->h ||

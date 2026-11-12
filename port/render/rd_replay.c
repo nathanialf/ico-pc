@@ -113,7 +113,7 @@ static const char *const s_fsNames[RD_FS_COUNT] = {
     "vu_texa_np_ps", "fx_frame_ps", "fx_local_ps", "fx_acc_ps", "fx_acc_resolve_ps",
     "crack_fill_ps", "crack_count_ps", "shadow_count_ps", "crack_fill1_ps", "fx_aura_rows_ps",
     "fx_aura_sum_ps", "shadow_count_load_ps", "fsr1_easu_ps", "fsr1_rcas_ps", "vu_pre_cs",
-    "blit_scene_ps", "shadow_tile_mask_ps", "shadow_tile_mark_ps", "fx_blur4_ps"};
+    "blit_scene_ps", "shadow_tile_mask_ps", "shadow_tile_mark_ps", "fx_blur4_ps", "depth_down_ps"};
 
 const char *rd__fs_name(uint8_t fs)
 {
@@ -2734,6 +2734,7 @@ static bool prepareDrawEx(Replay *r, DrawSetup *ds, const RhiRect *dateArea, boo
     }
     rd__date_cut_depth(r, ds, td); /* tdId, depthFmt: none in a DATE pass not using it */
     rd__late_pass_join(r, ds);     /* list 11's in the open pass without it (rd_late_pass.c) */
+    rd__lamps_lowres_depth(r, ds); /* WORK2's own depth above 1x (rd_lamps.c) */
     ds->tex = resolveTexture(r, ds->tc, r->st.color, &ds->tw, &ds->th, &ds->tfmt, &ds->textured,
                              &ds->mipmapped);
     ds->texCrop = texCropOf(r, ds->tex);

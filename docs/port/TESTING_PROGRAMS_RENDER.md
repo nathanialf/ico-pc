@@ -904,9 +904,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   crop (every texel centre of the box inside the rect, a box off the target none), a lamp's box
   from its stream's bound through an orthographic and a perspective matrix
   (`rd__vis_hiz_occludee`, then the texels: every vertex's and every point's between two vertices
-  inside; a corner behind the eye refused), the switch's words (owed, wholepad, fold4) and the
-  defaults of round 3 (the band, owed and wholepad everywhere; the fold of two pairs on the
-  PowerVR class alone), the lamps' per-vertex box (`rd__lamps_vertex_box`: a
+  inside; a corner behind the eye refused), the switch's words (owed, wholepad, fold4, lowres,
+  fillhold; lowres and fillhold outside `1` and `all`) and the defaults (the band, owed, wholepad
+  and fillhold everywhere; the fold of two pairs nowhere since the phone's 2026-11-12 measurement;
+  lowres asked for by its word alone), the lamps' per-vertex box (`rd__lamps_vertex_box`: a
   diagonal stream whose bound's corner is behind the eye, which the corners' box refuses, boxed
   with every point between its vertices inside; a vertex behind the eye and a lane not finite
   refused), and the area's pick (the region unknown, nothing lit, WORK2 but a tile, the tiles
@@ -937,6 +938,23 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   phone, poison, desktop settings and the sequences; none at Mali and OpenGL), the colour loaded
   fewer by a WORK0 a pass of two pairs and stored fewer by that and the owed sprites' WORK0, an
   owed sprite at every setting. No device: SKIP.
+- `rd_lamps_lowres_ab.cmake` (`rd_lamps_lowres_ab`; `rd_lamps.cmake`): the lamps' glow at the GS
+  frame's size above 1x (`RD_LAMPS_LOWRES`, DIVERGENCES.md VD-32) on every glow dump of
+  `tools/glow_light_dumps.txt` (machine-local; a listed dump that is absent FAILS),
+  `ICO_RD_LAMPS=pad+owed+wholepad` against `...+lowres+fillhold`, `--pass-dump --stats`,
+  `ICO_RD_VU_PREPASS=0`, `ICO_VK_FAKE_LIMITS=moltenvk`, at the phone's Resolution Auto
+  (2364x1080, Full height and pixel) and Enhanced 2x, 3x and 4x at 4:3: the stats line `lamps
+  lowres on|off`, no draw into WORK2 without a depth, a depth fill where a draw took WORK2's own,
+  one such draw at least over the list at each setting, SHADOW0..2 and WORK2_PAD the same bytes,
+  DISPLAY and PRESENT measured (`png_level_diff.py --channels RGB`) and printed per dump
+  (`lowres measure: <setting> <dump> <png>: P pixels apart (x %), largest L levels`) with each
+  setting's maxima at the end (`lowres maxima: ...`), FAILING above VD-32's bound (48 levels on at
+  most 60 % of a picture's pixels, the first, hand-derived bound); at Enhanced 1x every PNG the
+  same bytes and no draw on WORK2's own depth (nothing changes by construction); at the phone's
+  setting `...+lowres` against `...+lowres+fillhold` every PNG the same bytes with as many crack
+  fills held at least (one more over the list), and `...+lowres+fillhold` against it under
+  `ICO_RD_LAMPS_POISON=1` (WORK2's own depth cleared to 0.375 before the fill) every PNG the same
+  bytes. No device: SKIP.
 - `rd_crack_work_ab.cmake` (`rd_crack_work_ab`, `rd_crack_work_gl`; `rd_crack_work.cmake`): the
   crack fill's snapshot by the swap and its early leave (`rd_crack_fill.c` FILLSWAP, CRACKTAP). The
   dumps of `tools/crack_work_dumps.txt` (machine-local; a listed dump that is absent FAILS: the

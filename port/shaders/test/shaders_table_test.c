@@ -21,6 +21,7 @@ static const char *const expected[] = {
     "vu_reflect_vs",   "vu_skin_debug_vs", "vu_skin_spec_vs",  "vu_skin_vs",
     "vu_texa_ps",      "wrap_acc_ps",      "wrap_resolve_ps",  "yuv_field_ps",
     "yuv_ps",          "yuv_vs",           "shadow_count_ps", /* the shadow count in one draw (rd_shadow_one.c) */
+    "depth_down_ps", /* the lamps' WORK2 depth at the GS frame's size (rd_lamps.c) */
 };
 
 /* the screen-prim triangles with their colour and STQ planes
