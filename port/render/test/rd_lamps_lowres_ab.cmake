@@ -4,7 +4,7 @@
 # docs/port/DIVERGENCES.md VD-32) against today's chain, both arms with the
 # byte-identical items pad+owed+wholepad (the tile class's default but the
 # area, which the MoltenVK fake's Apple class leaves off; the lowres arm with
-# fillhold, its shipping form), on every glow
+# no fillhold: off by default), on every glow
 # dump of tools/glow_light_dumps.txt (machine-local; a listed dump that is
 # absent FAILS), rd_replay_tool --pass-dump --stats, ICO_RD_VU_PREPASS=0, at:
 #   phone   the PowerVR phone's Resolution Auto (Enhanced 2364x1080, Full
@@ -13,10 +13,13 @@
 #   enh43   Enhanced 2x at 4:3, presented at 1280x960, the same fakes;
 #   enh3x   Enhanced 3x at 4:3, presented at 1920x1440;
 #   enh4x   Enhanced 4x at 4:3, presented at 2560x1920;
-#   phonebox, phoneb2, phone4, phonep  the phone's setting with lowresbox
-#           (the reduction the box), lowresb2 (twice the slope bias), lowres4
-#           (the farthest of four texels), lowresp (a point compare): printed
-#           only;
+#   phonebox, phonebias, phonehy, phone4, phonep  the phone's setting with
+#           lowresbox (the reduction the box), lowresbias (the slope bias at a
+#           fractional sample point), lowreshy (bilinear on a plane, the
+#           nearest texel off it), lowres4 (the farthest of four texels),
+#           lowresp (a point compare everywhere): printed only;
+#   enh25   Enhanced 2.5x at 4:3 (1440x1280); w169 the phone's Full height
+#           and Full pixel on a 16:9 window (1920x1080): fractional scales;
 #   x1      Enhanced 1x, presented at 2364x1080: nothing changes by
 #           construction (WORK2 and SCENE of one size, the draws keep SCENE's
 #           depth): every PNG the same bytes, no draw on WORK2's own depth;
@@ -82,12 +85,13 @@ set(origPct 5)
 
 set(common ICO_RD_VU_PREPASS=0)
 set(lampsOff "ICO_RD_LAMPS=pad+owed+wholepad")
-set(lampsOn "ICO_RD_LAMPS=pad+owed+wholepad+lowres+fillhold")
-set(lampsBox "ICO_RD_LAMPS=pad+owed+wholepad+lowresbox+fillhold")
-set(lampsB2 "ICO_RD_LAMPS=pad+owed+wholepad+lowresb2+fillhold")
-set(lamps4 "ICO_RD_LAMPS=pad+owed+wholepad+lowres4+fillhold")
-set(lampsP "ICO_RD_LAMPS=pad+owed+wholepad+lowresp+fillhold")
-set(lampsNoHold "ICO_RD_LAMPS=pad+owed+wholepad+lowres")
+set(lampsOn "ICO_RD_LAMPS=pad+owed+wholepad+lowres")
+set(lampsBox "ICO_RD_LAMPS=pad+owed+wholepad+lowresbox")
+set(lampsBias "ICO_RD_LAMPS=pad+owed+wholepad+lowresbias")
+set(lampsHy "ICO_RD_LAMPS=pad+owed+wholepad+lowreshy")
+set(lamps4 "ICO_RD_LAMPS=pad+owed+wholepad+lowres4")
+set(lampsP "ICO_RD_LAMPS=pad+owed+wholepad+lowresp")
+set(lampsHold "ICO_RD_LAMPS=pad+owed+wholepad+lowres+fillhold")
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(args_enh43 --enhanced --resolution 2x --aspect 1.3333 --present 1280x960)
 set(args_enh3x --enhanced --resolution 3x --aspect 1.3333 --present 1920x1440)
@@ -96,16 +100,22 @@ set(args_x1 --enhanced --resolution 1x --present 2364x1080)
 set(args_poison ${args_phone})
 set(args_hold ${args_phone})
 set(args_phonebox ${args_phone})
-set(args_phoneb2 ${args_phone})
+set(args_phonebias ${args_phone})
+set(args_phonehy ${args_phone})
+# two more fractional scales: Enhanced 2.5x at 4:3, the phone's Full height
+# and Full pixel on a 16:9 window
+set(args_enh25 --enhanced --resolution 1440x1280 --aspect 1.3333 --present 1280x960)
+set(args_w169 --enhanced --resolution 1920x1080 --full-height --full-pixel --present 1920x1080)
 set(args_phone4 ${args_phone})
 set(args_phonep ${args_phone})
 # Original 1x of the dump (no --enhanced): WORK3, the glow the paste adds, is
 # the same size at every scale; each form's WORK3 is printed against it
 set(args_orig --present 2364x1080)
 set(fake ICO_VK_FAKE_LIMITS=moltenvk)
-set(settings phone phonebox phoneb2 phone4 phonep enh43 enh3x enh4x x1 hold poison)
-set(measured phone phonebox phoneb2 phone4 phonep enh43 enh3x enh4x)
-set(asserted phone enh43 enh3x enh4x)
+set(settings phone phonebox phonebias phonehy phone4 phonep enh43 enh25 enh3x enh4x w169 x1 hold
+             poison)
+set(measured phone phonebox phonebias phonehy phone4 phonep enh43 enh25 enh3x enh4x w169)
+set(asserted phone enh43 enh25 enh3x enh4x w169)
 
 set(lowresRe "stats: lamps lowres (on|off): WORK2 ([0-9]+)x([0-9]+) under SCENE ([0-9]+)x([0-9]+), ([0-9]+) draws into WORK2 on its own depth, ([0-9]+) depth fills, ([0-9]+) draws without a depth")
 set(lateRe "stats: late pass [a-z]+: ([0-9]+) crack fills held into a paste pass \\(([0-9]+) the glow's")
@@ -141,14 +151,16 @@ foreach(dump IN LISTS dumps)
         endif()
       elseif(s STREQUAL "hold")
         if(arm EQUAL 1)
-          list(APPEND env "${lampsOn}")
+          list(APPEND env "${lampsHold}")
         else()
-          list(APPEND env "${lampsNoHold}")
+          list(APPEND env "${lampsOn}")
         endif()
       elseif(s STREQUAL "phonebox" AND arm EQUAL 1)
         list(APPEND env "${lampsBox}")
-      elseif(s STREQUAL "phoneb2" AND arm EQUAL 1)
-        list(APPEND env "${lampsB2}")
+      elseif(s STREQUAL "phonebias" AND arm EQUAL 1)
+        list(APPEND env "${lampsBias}")
+      elseif(s STREQUAL "phonehy" AND arm EQUAL 1)
+        list(APPEND env "${lampsHy}")
       elseif(s STREQUAL "phone4" AND arm EQUAL 1)
         list(APPEND env "${lamps4}")
       elseif(s STREQUAL "phonep" AND arm EQUAL 1)

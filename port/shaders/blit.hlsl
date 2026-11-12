@@ -364,22 +364,28 @@ float depth_upsample_ps(BlitVSOut i) : SV_Depth
 // lamps' WORK2 depth above 1x (port/render/rd_lamps.c RD_LAMPS_LOWRES), a depth-only pass.
 // The GS samples pixel p at its integer coordinate; the port draws a GS integer coordinate
 // on a pixel's centre at 1x and on the centre of its block's first texel on a scaled target
-// (rd_replay.c rd__frame_group_ex: origin 0.5 / scale), so GS pixel p's sample point is
-// SCENE texel index at = p * scale - crop (g_param.xy SCENE's scale, g_param.z its Full pixel
-// crop ox; g_tex.xy SCENE's size): an integer at an integer scale, the very sample the 1x
-// lamp is drawn at.  (Round 7 took (p + 0.5) * scale - 0.5: (0.5 - 0.5 / scale) GS pixels off,
-// 0.25 at 2x, 0.375 at 4x.)  The lamps test GEQUAL (a larger depth is nearer:
-// gs_z_to_depth), so a smaller depth passes more.  g_uvRect.x picks the form:
-//   0  the slope bias: the depth at the texel nearest at, less per axis the surface's slope
-//      there (the smaller of the forward and backward differences, so an edge beside the
-//      texel does not count, in depth per GS pixel) times the reach (the nearest texel's
-//      distance from at, at most half a texel: 0.5 / scale GS pixels, plus g_uvRect.y GS
-//      pixels for the rasteriser's sub-pixel snap), all times g_uvRect.z, plus g_uvRect.w
-//      (a few GS Z units in depth).  A lamp drawn over the very surface it lights (issue
-//      163's gate, its own plane drawn again) passes; an occluder in front of a lamp hides
-//      it unless it lies within that bias of the lamp's depth;
-//   1  the farthest of the four texels around at (the bilinear's taps);
-//   2  the depth at the texel nearest at, less g_uvRect.w alone (a point compare).
+// (rd_replay.c rd__frame_group_ex: origin 0.5 / scale), and a jittered frame moves SCENE's
+// content by its jitter in texels (g_vpo), so GS pixel p's sample point is SCENE texel
+// index at = p * scale - crop + jitter (g_param.xy SCENE's scale, g_param.z its Full pixel
+// crop ox, g_scale.xy the jitter in texels, 0 without; g_tex.xy SCENE's size).  The lamps
+// test GEQUAL (a larger depth is nearer: gs_z_to_depth), so a smaller depth passes more.
+// Where at is a texel's own centre on both axes (a whole-number scale and crop, no jitter)
+// and g_param.w is 1, that texel's depth: the 1x lamp's own sample point, the original's
+// own test (exact).  Elsewhere g_uvRect.x picks the form, g_uvRect.w a constant allowance
+// (a few GS Z units in depth):
+//   0  bilinear: SCENE's depth interpolated at at (a plane's depth interpolates exactly, so
+//      a lamp drawn over the very surface it lights, issue 163's gate, compares equal up to
+//      rounding), less the allowance; at an occluder's edge the four taps mix two surfaces
+//      over less than one SCENE texel (under 1 / scale GS pixels): a lamp behind the
+//      occluder there passes only where it lies nearer than the mixed depth;
+//   1  the slope bias: the depth at the texel nearest at, less per axis the surface's slope
+//      there (the smaller of the forward and backward differences, in depth per GS pixel)
+//      times that texel's distance from at plus g_uvRect.y GS pixels, all times g_uvRect.z,
+//      less the allowance;
+//   2  the farthest of the four texels around at;
+//   3  the depth at the texel nearest at, less the allowance (a point compare);
+//   4  bilinear where the texels around at lie on one plane (their second differences
+//      within twice the allowance), else the nearest texel's, less the allowance.
 float depth_down_load(int2 t, int2 size)
 {
     return g_ssDepth.Load(int3(clamp(t, int2(0, 0), size - 1), 0));
@@ -388,29 +394,42 @@ float depth_down_load(int2 t, int2 size)
 float depth_down_ps(BlitVSOut i) : SV_Depth
 {
     const float2 p = floor(i.pos.xy);
-    const float2 at = float2(p.x * g_param.x - g_param.z, p.y * g_param.y);
+    const float2 at = float2(p.x * g_param.x - g_param.z, p.y * g_param.y) + g_scale.xy;
     const int2 size = int2(g_tex.xy);
-    if (g_uvRect.x == 1.0) {
-        const int2 t0 = clamp(int2(floor(at)), int2(0, 0), size - 1);
-        const int2 t1 = min(t0 + 1, size - 1);
-        const float a = depth_down_load(t0, size);
-        const float b = depth_down_load(int2(t1.x, t0.y), size);
-        const float d = depth_down_load(int2(t0.x, t1.y), size);
-        const float e = depth_down_load(t1, size);
+    const float w = g_uvRect.w;
+    const int2 n = clamp(int2(floor(at + 0.5)), int2(0, 0), size - 1);
+    const float zn = depth_down_load(n, size);
+    const uint form = uint(g_uvRect.x);
+    if (form == 3u || (g_param.w != 0.0 && all(at == floor(at)))) {
+        return max(zn - w, 0.0);
+    }
+    const int2 t0 = int2(floor(at));
+    const float2 f = at - floor(at);
+    const float a = depth_down_load(t0, size);
+    const float b = depth_down_load(t0 + int2(1, 0), size);
+    const float d = depth_down_load(t0 + int2(0, 1), size);
+    const float e = depth_down_load(t0 + int2(1, 1), size);
+    if (form == 2u) {
         return min(min(a, b), min(d, e));
     }
-    const int2 t = clamp(int2(floor(at + 0.5)), int2(0, 0), size - 1);
-    const float z = depth_down_load(t, size);
-    if (g_uvRect.x == 2.0) {
-        return max(z - g_uvRect.w, 0.0);
+    const float bil = lerp(lerp(a, b, f.x), lerp(d, e, f.x), f.y);
+    if (form == 0u) {
+        return max(bil - w, 0.0);
     }
-    const float gx = min(abs(depth_down_load(t + int2(1, 0), size) - z),
-                         abs(z - depth_down_load(t - int2(1, 0), size))) * g_param.x;
-    const float gy = min(abs(depth_down_load(t + int2(0, 1), size) - z),
-                         abs(z - depth_down_load(t - int2(0, 1), size))) * g_param.y;
-    const float2 reach = abs(float2(t) - at) / g_param.xy + g_uvRect.y;
-    const float bias = (gx * reach.x + gy * reach.y) * g_uvRect.z + g_uvRect.w;
-    return max(z - bias, 0.0);
+    const float l = depth_down_load(n - int2(1, 0), size);
+    const float r = depth_down_load(n + int2(1, 0), size);
+    const float u = depth_down_load(n - int2(0, 1), size);
+    const float v = depth_down_load(n + int2(0, 1), size);
+    if (form == 4u) {
+        const bool plane = abs(l - 2.0 * zn + r) <= 2.0 * w && abs(u - 2.0 * zn + v) <= 2.0 * w &&
+                           abs(a - b - d + e) <= 2.0 * w;
+        return max((plane ? bil : zn) - w, 0.0);
+    }
+    const float gx = min(abs(r - zn), abs(zn - l)) * g_param.x;
+    const float gy = min(abs(v - zn), abs(zn - u)) * g_param.y;
+    const float2 reach = abs(float2(n) - at) / g_param.xy + g_uvRect.y;
+    const float bias = (gx * reach.x + gy * reach.y) * g_uvRect.z + w;
+    return max(zn - bias, 0.0);
 }
 
 // The crack filler above 1x (port/render/rd_crack_fill.c; docs/port/RENDER_POST.md,

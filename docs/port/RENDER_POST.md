@@ -522,8 +522,11 @@ passes above: the fill reads SCENE's depth at its draw and the lamps write it, s
 past them would read other depths; `rd: late pass: ... N fills not held (no paste in the frame
 takes them)`), and the glow's paste already shares list 11's pass (drawn early there, list 11's
 draws joined to it). Under the low resolution below the lamps write WORK2's own depth instead, so
-the hold passes them (`RD_LAMPS_FILLHOLD`, `rd__lamps_fill_hold_ok`): the same bytes as the fill
-drawn where it was due, given the low resolution (the fill reads SCENE's depth and writes none).
+the hold may pass them (`RD_LAMPS_FILLHOLD`, `rd__lamps_fill_hold_ok`, the word `fillhold`): the same
+bytes as the fill drawn where it was due, given the low resolution (the fill reads SCENE's depth and
+writes none). Off by default: on the PowerVR phone every held fill was then flushed by a later draw
+before the paste's pass (the glow's paste deferred to list 11's aura pass), drawn early in a pass of
+its own with the snapshot copy back (`423 drawn early in a pass of their own (423 a draw)`), a loss.
 
 **The lamps' glow at the PS2's resolution** (`RD_LAMPS_LOWRES`, `ICO_RD_LAMPS=...+lowres`; the
 owner's choice for this release: identical to the eye, not byte-identical, [DIVERGENCES.md](DIVERGENCES.md)
@@ -543,11 +546,21 @@ GS pixel's sample point less a slope bias (`depth_down_ps`, `port/shaders/blit.h
 test GEQUAL, so a smaller depth passes more). The sample point: the port draws a GS integer
 coordinate on a pixel's centre at 1x and on the centre of its block's first texel on a scaled
 target (`rd__frame_group_ex`, origin 0.5 / scale), so GS pixel p is SCENE texel index p x scale
-less the crop (an exact texel at an integer scale). The bias: per axis the surface's slope there
-(the smaller of the forward and backward differences, so an occluder's edge beside the texel
-does not count, in depth per GS pixel) times that texel's distance from the point plus
-`RD_LAMPS_BIAS_REACH` (1/16 GS pixel, the rasteriser's snap), plus `RD_LAMPS_BIAS_UNITS` (4 GS
-Z units). With every depth test passing, the GS-size WORK2 is the Original 1x WORK2 byte for
+less the crop, plus a jittered frame's jitter in texels (an upscaler's: SCENE's content moves by
+it while WORK2 at the GS size is not jittered, `rd__lamps_lowres_gs` in `rd__frame_jitter_of`, so the
+lamps keep the original's sample points). Where that is a texel's own centre on both axes (a
+whole-number scale and crop, no jitter) the texel's depth is the original's test exactly (round 8:
+WORK3 the Original 1x's byte for byte at 2x, 3x and 4x on issue 163's gate and the title). At a
+fractional point (the phone's 2.81 x 2.41) by default SCENE's depth interpolated bilinearly there
+(a plane interpolates exactly, so a lamp on its own surface compares equal but for rounding; at an
+occluder's edge the taps mix two surfaces over under one SCENE texel), less `RD_LAMPS_BIAS_UNITS`
+(4 GS Z units). The measurement's other forms there: `lowresbias` the nearest texel less a slope
+bias (the surface's slope, the smaller of the forward and backward differences, times that
+texel's distance plus `RD_LAMPS_BIAS_REACH`, 1/16 GS pixel; round 8 at the phone: the gate 290
+texels from the Original, largest 4, the title 1256, largest 98, today's 1458, 69), `lowreshy`
+bilinear where the texels around lie on one plane (second differences within 8 GS Z units) and
+the nearest texel off it, `lowres4` the farthest of the four texels around, `lowresp` the nearest
+texel everywhere (round 8 at the phone: the gate's lamp lost, 5763 texels, largest 166). With every depth test passing, the GS-size WORK2 is the Original 1x WORK2 byte for
 byte (issue 163's gate at 2x and 3x): the raster is the original's, only the depth differs. Issue 163's
 gate needs it: its lamp is the gate's own plane drawn again, which the original passes by the
 equality of the two at the same sample points; at the scaled size the plane's depth was taken
@@ -557,10 +570,7 @@ levels); the smallest of the four texels around the point passed the gate at 2x 
 its 51,725 pixels; 30,367 at 2.2x, 20,641 at 2.5x, 0 at 3x and 4x): the four taps reach 0.25 GS
 pixels on each side at 2x, 0 on one side at 3x and 0.125 at 4x: those forms took the sample point
 at (p + 0.5) x scale - 0.5, (0.5 - 0.5 / scale) GS pixels off the true one, which a bias of
-0.25 GS pixels past the half texel then covered (round 7). An occluder
-in front of a lamp hides it unless it lies within the bias of the lamp's depth (a leaf touching
-the lamp). The words `lowresb2` (twice the bias), `lowres4` (the four taps) and `lowresp`
-(the nearest texel alone) are the measurement's other forms;
+0.25 GS pixels past the half texel then covered (round 7);
 SCENE's depth sampled in place outside any pass, a copy only where the device cannot sample a
 depth: the fog path's copy on the local read is for reads beside SCENE's own pass), so lamp against lamp and
 lamp against the scene order as the PS2 orders them at its resolution. The fans' and lamps' depth
@@ -593,7 +603,7 @@ H pictures whose lamps let the crack fill's hold pass (fillhold)`, and `rd_repla
 `stats: lamps lowres on|off: WORK2 WxH under SCENE SWxSH, D draws into WORK2 on its own depth, F
 depth fills, X draws without a depth`.
 
-`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|lowresbox|fillhold` (the tests only,
+`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|lowresbox|lowresbias|lowreshy|lowres4|lowresp|fillhold` (the tests only,
 [TESTING.md](TESTING.md#environment-switches); words joined by `,` or `+`) turns every part off,
 every part on, or the parts named on whatever the class (the self-tests still decide the area and
 the fold of two pairs);

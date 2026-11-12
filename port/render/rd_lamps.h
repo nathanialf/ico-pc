@@ -66,8 +66,8 @@ extern "C" {
 /* Under LOWRES above 1x the lamps' meshes write WORK2's own depth, never
  * SCENE's, so the late pass (rd_late_pass.c) may hold the crack fill past
  * them (the fill reads SCENE's depth and writes none): the same bytes as
- * the fill drawn where it was due, given LOWRES.  On every class (the late
- * pass decides where a hold runs). */
+ * the fill drawn where it was due, given LOWRES.  By its word alone (off by
+ * default: rd__lamps_default_bits) */
 #define RD_LAMPS_FILLHOLD 64u
 /* LOWRES's reduction WORK2 -> WORK0: by default the PS2's own GS bilinear
  * (WORK2 at the GS size is the original's WORK2, and so is its reduction:
@@ -75,19 +75,21 @@ extern "C" {
  * above-1x box over each WORK0 texel's GS footprint instead (the scaled
  * WORK2's kernel), for the measurement */
 #define RD_LAMPS_LOWRESBOX 128u
-/* LOWRES's depth (depth_down_ps, rd_lamps.c lowresFill; see lowresp below): by default SCENE's
- * depth at the texel nearest each GS pixel's sample point less the slope
- * bias (the most a plane can differ over the sample points' mismatch);
- * lowresb2 twice that bias, lowres4 the farthest of the four texels around
- * the point (round 6's); each implies lowres, for the measurement */
-#define RD_LAMPS_LOWRESB2 256u
+/* LOWRES's depth (depth_down_ps, rd_lamps.c lowresFill): where a GS pixel's
+ * sample point is a SCENE texel's own centre (a whole-number scale and crop,
+ * no jitter) that texel's depth, the original's own test; elsewhere by
+ * default SCENE's depth interpolated bilinearly at the point.  For the
+ * measurement, each implying lowres: lowresbias the slope bias there instead,
+ * lowreshy bilinear where the texels around lie on one plane and the
+ * nearest texel's elsewhere, lowres4 the farthest of the four texels around
+ * the point everywhere, lowresp the nearest texel everywhere */
+#define RD_LAMPS_LOWRESBIAS 256u
 #define RD_LAMPS_LOWRES4 512u
-/* lowresp: the depth at the texel nearest the sample point, no slope bias
- * (a point compare: exact at an integer scale, where that texel's centre
- * is the 1x lamp's own sample point) */
 #define RD_LAMPS_LOWRESP 1024u
+#define RD_LAMPS_LOWRESHY 2048u
 #define RD_LAMPS_LOWRES_ANY                                                                        \
-    (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX | RD_LAMPS_LOWRESB2 | RD_LAMPS_LOWRES4 | RD_LAMPS_LOWRESP)
+    (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX | RD_LAMPS_LOWRESBIAS | RD_LAMPS_LOWRES4 |               \
+     RD_LAMPS_LOWRESP | RD_LAMPS_LOWRESHY)
 /* the slope bias's reach past the nearest texel's own distance from the
  * sample point, in GS pixels: the rasteriser's sub-pixel snap (the GS's
  * 1/16).  (Round 7's 0.25 covered a sample point taken (0.5 - 0.5 / scale)
@@ -331,6 +333,10 @@ bool rd__lamps_fill_hold_ok(uint32_t color, uint32_t depth);
  * the lamps' draws on SCENE's depth, so the plan keeps this one's loads and
  * stores as the pass asks) */
 bool rd__lamps_own_depth(uint32_t did);
+/* t is WORK2 at the GS size under LOWRES with SCENE scaled (rd_jitter.c:
+ * not jittered: its lamps are drawn at the original's 1x sample points, and
+ * depth_down_ps moves SCENE's sample point by the jitter instead) */
+bool rd__lamps_lowres_gs(const RdTargetRec *t);
 /* the run's LOWRES counts (the tests): draws on WORK2's own depth, depth
  * fills, draws without a depth */
 void rd__lamps_lowres_counts(uint64_t *draws, uint64_t *fills, uint64_t *dropped);

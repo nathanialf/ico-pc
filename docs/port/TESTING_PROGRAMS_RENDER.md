@@ -905,8 +905,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   from its stream's bound through an orthographic and a perspective matrix
   (`rd__vis_hiz_occludee`, then the texels: every vertex's and every point's between two vertices
   inside; a corner behind the eye refused), the switch's words (owed, wholepad, fold4, lowres,
-  fillhold; lowres and fillhold outside `1` and `all`) and the defaults (the band, owed, wholepad
-  and fillhold everywhere; the fold of two pairs nowhere since the phone's 2026-11-12 measurement;
+  fillhold; lowres and fillhold outside `1` and `all`) and the defaults (the band, owed and wholepad
+  everywhere, fillhold nowhere; the fold of two pairs nowhere since the phone's 2026-11-12 measurement;
   lowres asked for by its word alone), the lamps' per-vertex box (`rd__lamps_vertex_box`: a
   diagonal stream whose bound's corner is behind the eye, which the corners' box refuses, boxed
   with every point between its vertices inside; a vertex behind the eye and a lane not finite
@@ -941,10 +941,10 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
 - `rd_lamps_lowres_ab.cmake` (`rd_lamps_lowres_ab`; `rd_lamps.cmake`): the lamps' glow at the GS
   frame's size above 1x (`RD_LAMPS_LOWRES`, DIVERGENCES.md VD-32) on every glow dump of
   `tools/glow_light_dumps.txt` (machine-local; a listed dump that is absent FAILS),
-  `ICO_RD_LAMPS=pad+owed+wholepad` against `...+lowres+fillhold`, `--pass-dump --stats`,
+  `ICO_RD_LAMPS=pad+owed+wholepad` against `...+lowres`, `--pass-dump --stats`,
   `ICO_RD_VU_PREPASS=0`, `ICO_VK_FAKE_LIMITS=moltenvk`, at the phone's Resolution Auto
-  (2364x1080, Full height and pixel; again with `lowresbox`, `lowresb2`, `lowres4` and `lowresp`,
-  printed only) and Enhanced 2x, 3x and 4x at 4:3, and each dump once at Original 1x: the stats line
+  (2364x1080, Full height and pixel; again with `lowresbox`, `lowresbias`, `lowreshy`, `lowres4` and `lowresp`,
+  printed only) Enhanced 2x, 2.5x (1440x1280), 3x and 4x at 4:3 and the Full height on a 16:9 window (1920x1080), and each dump once at Original 1x: the stats line
   `lamps lowres on|off`, no draw into WORK2 without a depth, a depth fill where a draw took
   WORK2's own, one such draw at least over the list at each setting, SHADOW0..2 and WORK2_PAD the
   same bytes; WORK3 (the glow the paste adds, one size at every scale) against Original 1x's
@@ -954,7 +954,7 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   dump (`lowres measure: ...`, `lowres maxima: ...`), no bound; at Enhanced 1x every PNG the
   same bytes and no draw on WORK2's own depth; at the phone's setting `...+lowres` against
   `...+lowres+fillhold` every PNG the same bytes with as many crack fills held at least (one
-  more over the list), and `...+lowres+fillhold` against it under `ICO_RD_LAMPS_POISON=1` every
+  more over the list), and `...+lowres` against it under `ICO_RD_LAMPS_POISON=1` every
   PNG the same bytes. No device: SKIP.
 - `rd_crack_work_ab.cmake` (`rd_crack_work_ab`, `rd_crack_work_gl`; `rd_crack_work.cmake`): the
   crack fill's snapshot by the swap and its early leave (`rd_crack_fill.c` FILLSWAP, CRACKTAP). The

@@ -183,9 +183,9 @@ int main(void)
           "lowres,fillhold: %u", b);
     CHECK(rd__lamps_parse("lowresbox", &b) == 1 && b == (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX),
           "lowresbox implies lowres: %u", b);
-    CHECK(rd__lamps_parse("lowresb2+lowres4", &b) == 1 &&
-              b == (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESB2 | RD_LAMPS_LOWRES4),
-          "lowresb2, lowres4 imply lowres: %u", b);
+    CHECK(rd__lamps_parse("lowresbias+lowres4+lowreshy", &b) == 1 &&
+              b == (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBIAS | RD_LAMPS_LOWRES4 | RD_LAMPS_LOWRESHY),
+          "lowresbias, lowres4, lowreshy imply lowres: %u", b);
     CHECK(rd__lamps_parse("lowresp", &b) == 1 && b == (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESP),
           "lowresp implies lowres: %u", b);
     CHECK(strcmp(rd__lamps_bits_text(RD_LAMPS_PAD | RD_LAMPS_LOWRES), "pad+lowres") == 0,
@@ -198,8 +198,8 @@ int main(void)
               strcmp(rd__lamps_bits_text(0), "off") == 0,
           "the bits' words");
     /* t2 */
-    /* every class (FILLHOLD acts under LOWRES alone) */
-    const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_FILLHOLD |
+    /* every class (FILLHOLD by its word alone) */
+    const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD |
                         (RD_LAMPS_LOWRES_DEFAULT ? RD_LAMPS_LOWRES : 0u);
     CHECK(rd__lamps_default_bits(1, false, true, true, true) == (ev | RD_LAMPS_AREA), "PowerVR");
     CHECK(rd__lamps_default_bits(1, true, true, true, true) == (ev | RD_LAMPS_AREA),

@@ -24,6 +24,7 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_lamps.h"
 #include "rd_layer.h"
 
 static float s_jitter[2];
@@ -150,6 +151,9 @@ const float *rd__frame_jitter_of(const struct RdTargetRec *tc)
     if (tc != &g_rd.targets[RD_TARGET_SCENE] && tc != &g_rd.targets[RD_TARGET_WORK2] &&
         tc != &g_rd.targets[RD_TARGET_AURA_WORK]) {
         return NULL;
+    }
+    if (rd__lamps_lowres_gs(tc)) {
+        return NULL; /* WORK2 at the GS size (rd_lamps.h LOWRES): the original's sample points */
     }
     /* SCENE's record holding the display layer's composite (rd_layer.h):
      * the display-scale 2D after the upscale, never moved */

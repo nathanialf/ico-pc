@@ -84,6 +84,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_jitter.h" /* rd__frame_jitter_get: depth_down_ps's sample point */
 #include "rd_lamps.h"
 #include "rd_mesh.h"
 #include "rd_replay.h"
@@ -207,9 +208,9 @@ const char *rd__lamps_box_why_text(int why)
 
 const char *rd__lamps_bits_text(uint32_t bits)
 {
-    static const char *const kWord[11] = {"area",     "pad",     "owed",     "wholepad",
-                                          "fold4",    "lowres",  "fillhold", "lowresbox",
-                                          "lowresb2", "lowres4", "lowresp"};
+    static const char *const kWord[12] = {"area",       "pad",     "owed",     "wholepad",
+                                          "fold4",      "lowres",  "fillhold", "lowresbox",
+                                          "lowresbias", "lowres4", "lowresp",  "lowreshy"};
     static char s_text[8][112];
     static unsigned s_next;
     bits &= RD_LAMPS_ALL | RD_LAMPS_FILLHOLD | RD_LAMPS_LOWRES_ANY;
@@ -219,7 +220,7 @@ const char *rd__lamps_bits_text(uint32_t bits)
     char *t = s_text[s_next++ & 7u]; /* a ring: a few calls in one expression */
     t[0] = '\0';
     size_t at = 0;
-    for (int i = 0; i < 11; i++) {
+    for (int i = 0; i < 12; i++) {
         if (bits & (1u << i)) {
             const int m = snprintf(t + at, sizeof(s_text[0]) - at, "%s%s", at ? "+" : "", kWord[i]);
             at += m > 0 && (size_t)m < sizeof(s_text[0]) - at ? (size_t)m : 0;
@@ -267,8 +268,10 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
             b |= RD_LAMPS_FILLHOLD;
         } else if (n == 9 && strncmp(s, "lowresbox", 9) == 0) {
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX;
-        } else if (n == 8 && strncmp(s, "lowresb2", 8) == 0) {
-            b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESB2;
+        } else if (n == 10 && strncmp(s, "lowresbias", 10) == 0) {
+            b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBIAS;
+        } else if (n == 8 && strncmp(s, "lowreshy", 8) == 0) {
+            b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRESHY;
         } else if (n == 7 && strncmp(s, "lowres4", 7) == 0) {
             b |= RD_LAMPS_LOWRES | RD_LAMPS_LOWRES4;
         } else if (n == 7 && strncmp(s, "lowresp", 7) == 0) {
@@ -285,8 +288,11 @@ int rd__lamps_parse(const char *e, uint32_t *bits)
 uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool passArea,
                                 bool blurFold)
 {
-    /* FILLHOLD acts only under LOWRES (asked for by its word alone) */
-    uint32_t b = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD | RD_LAMPS_FILLHOLD |
+    /* FILLHOLD by its word alone: on the PowerVR phone (rc24) every held
+     * fill was flushed by a later draw on SCENE before the paste's pass (the
+     * glow's paste deferred to list 11), drawn early in a pass of its own
+     * with the snapshot copy back: a loss */
+    uint32_t b = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD |
                  (RD_LAMPS_LOWRES_DEFAULT ? RD_LAMPS_LOWRES : 0u);
     const bool cls = tileClass == 1 || (tileClass == 2 && !tilePhone);
     if (cls && vulkan && passArea) {
@@ -1324,7 +1330,7 @@ bool rd__lamps_pass(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
 static struct {
     int on;          /* -1 unread, 0 off, 1 on (read once: WORK2's size) */
     bool box;        /* the reduction the box (lowresbox), else the GS bilinear */
-    int depthForm;   /* 0 the slope bias, 1 twice it, 2 four taps, 3 a point (lowresp) */
+    int depthForm;   /* depth_down_ps's: 0 bilinear, 1 bias, 2 four taps, 3 a point, 4 hybrid */
     const char *src; /* who decided: ICO_RD_LAMPS or the build's default */
     uint32_t replay; /* the replay whose SCENE depth WORK2's holds */
     bool fresh;      /* and no draw has written SCENE's depth since */
@@ -1346,10 +1352,12 @@ bool rd__lamps_lowres_on(void)
         if (s_sw.env == 1) {
             s_lr.on = (s_sw.envBits & RD_LAMPS_LOWRES_ANY) != 0u ? 1 : 0;
             s_lr.box = (s_sw.envBits & RD_LAMPS_LOWRESBOX) != 0u;
-            s_lr.depthForm = (s_sw.envBits & RD_LAMPS_LOWRESP)    ? 3
-                             : (s_sw.envBits & RD_LAMPS_LOWRES4)  ? 2
-                             : (s_sw.envBits & RD_LAMPS_LOWRESB2) ? 1
-                                                                  : 0;
+            const uint32_t e = s_sw.envBits;
+            s_lr.depthForm = (e & RD_LAMPS_LOWRESP)      ? 3
+                             : (e & RD_LAMPS_LOWRES4)    ? 2
+                             : (e & RD_LAMPS_LOWRESHY)   ? 4
+                             : (e & RD_LAMPS_LOWRESBIAS) ? 1
+                                                         : 0;
         } else {
             s_lr.on = RD_LAMPS_LOWRES_DEFAULT ? 1 : 0;
             s_lr.box = false;
@@ -1360,13 +1368,18 @@ bool rd__lamps_lowres_on(void)
     return s_lr.on == 1;
 }
 
-bool rd__lamps_lowres_box(const RdTargetRec *src)
+bool rd__lamps_lowres_gs(const RdTargetRec *t)
 {
-    if (s_lr.on != 1 || !s_lr.box || !src || src != rd__target_rec(idOf(RD_TARGET_WORK2))) {
+    if (s_lr.on != 1 || !t || t != rd__target_rec(idOf(RD_TARGET_WORK2))) {
         return false;
     }
     const RdTargetRec *sc = rd__target_rec(idOf(RD_TARGET_SCENE));
-    return sc && (sc->sx != 1.0f || sc->sy != 1.0f) && (src->tw != sc->tw || src->th != sc->th);
+    return sc && (sc->sx != 1.0f || sc->sy != 1.0f) && (t->tw != sc->tw || t->th != sc->th);
+}
+
+bool rd__lamps_lowres_box(const RdTargetRec *src)
+{
+    return s_lr.box && rd__lamps_lowres_gs(src);
 }
 
 bool rd__lamps_own_depth(uint32_t did)
@@ -1398,9 +1411,11 @@ static void lowresNote(void)
         return;
     }
     const bool on = rd__lamps_lowres_on();
-    static const char *const kDepth[4] = {"the slope bias", "twice the slope bias (lowresb2)",
-                                          "the farthest of four texels (lowres4)",
-                                          "a point compare (lowresp)"};
+    static const char *const kDepth[5] = {
+        "the texel at a whole-number sample point, else bilinear",
+        "the texel at a whole-number sample point, else the slope bias (lowresbias)",
+        "the farthest of four texels (lowres4)", "a point compare (lowresp)",
+        "the texel at a whole-number sample point, else bilinear on a plane (lowreshy)"};
     rd__log("lamps: low resolution %s (%s; RD_LAMPS_LOWRES_DEFAULT %d)%s%s%s%s", on ? "on" : "off",
             s_lr.src, RD_LAMPS_LOWRES_DEFAULT,
             on ? ": above 1x WORK2 at the GS frame's size with its own depth (" : "",
@@ -1513,9 +1528,17 @@ static bool lowresFill(Replay *r, RdTargetRec *w2, RdTargetRec *sc)
     /* the form (depth_down_ps): x 0 the slope bias, 1 the four taps; y the
      * mismatch past half a texel (GS pixels); z the bias's factor; w its
      * constant in depth (GS Z units times SCENE's Z scale) */
-    cb.uvRect[0] = s_lr.depthForm == 2 ? 1.0f : s_lr.depthForm == 3 ? 2.0f : 0.0f;
+    cb.uvRect[0] = (float)s_lr.depthForm;
     cb.uvRect[1] = RD_LAMPS_BIAS_REACH;
-    cb.uvRect[2] = s_lr.depthForm == 1 ? 2.0f : 1.0f;
+    cb.uvRect[2] = 1.0f;
+    cb.param[3] = 1.0f; /* the texel itself at a whole-number sample point */
+    /* a jittered frame's SCENE content moved by its jitter in texels
+     * (rd_jitter.c; WORK2 at the GS size is not jittered: rd__frame_jitter_of) */
+    float jit[2] = {0.0f, 0.0f};
+    if (rd__frame_jitter_get(jit)) {
+        cb.scale[0] = jit[0];
+        cb.scale[1] = jit[1];
+    }
     cb.uvRect[3] = RD_LAMPS_BIAS_UNITS * rd__target_z_scale(idOf(RD_TARGET_SCENE));
     rd__set_pipeline(cl, pipe, &k);
     rd__bind_uniform(cl, 0, rd__frame_group(w, h, 0.0f, 0.0f));
