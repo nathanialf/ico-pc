@@ -4792,8 +4792,10 @@ static void perf_drain(void)
                replay's GPU span less its display wait (two replays late;
                gpuIsSpan true; rd.h rd_perf_pace_gpu_ms: the present's own
                list waits for the window's image inside the span), the
-               median of the last 8 (not the replays line's block mean) */
-            s_pres.gpuNs = pace_hist_add(&s_pres.gpuHist, (Uint64)(rd_perf_pace_gpu_ms(&r) * 1e6));
+               median of the last 8 (not the replays line's block mean); the step
+               rule's judging of its misses (pace_policy.h pace_step_est_gpu) */
+            s_pres.gpuNs = pace_step_est_gpu(&s_pres.stepEst, &s_pres.gpuHist,
+                                             (Uint64)(rd_perf_pace_gpu_ms(&r) * 1e6));
         }
         if (r.presented) {
             present_hist_add(&s_perf.presentHist, r.presentMs);

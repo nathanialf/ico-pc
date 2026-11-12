@@ -175,26 +175,123 @@ PaceRtHold pace_rt_further_hold(uint64_t nowNs, uint64_t deadlineNs, uint64_t st
                : PACE_RT_GO;
 }
 
+/* A record over 7/4 of its typical (the median of the 8 before it) */
+static bool step_outlier(uint64_t ns, uint64_t typNs)
+{
+    return typNs != 0 && ns * PACE_STEP_OUTLIER_DEN > typNs * PACE_STEP_OUTLIER_NUM;
+}
+
+/* The latest two counted misses within PACE_STEP_MISS_WINDOW steps of
+   step now (0-2) */
+static unsigned step_recent_at(const PaceStepEst *e, unsigned now)
+{
+    unsigned n = 0;
+
+    for (unsigned i = 0; i < e->recent && i < 2u; i++) {
+        n += now - e->cnt[i].at <= PACE_STEP_MISS_WINDOW ? 1u : 0u;
+    }
+    return n;
+}
+
+unsigned pace_step_est_recent(const PaceStepEst *e)
+{
+    return step_recent_at(e, e->steps);
+}
+
+/* Judge the pending miss m (its step's records from PACE_STEP_JUDGE_BEFORE
+   steps before to PACE_STEP_JUDGE_AFTER after are in): an outlier miss, or
+   counted (a third within the window begins a back-off) */
+static void step_judge(PaceStepEst *e, PaceStepMiss m)
+{
+    uint64_t overNs = 0, overTyp = 0;
+
+    m.picNs = m.typNs = 0;
+    for (unsigned d = 0; d <= PACE_STEP_JUDGE_BEFORE + PACE_STEP_JUDGE_AFTER; d++) {
+        /* the steps m.at - BEFORE .. m.at + AFTER (none before the first) */
+        if (m.at + d < PACE_STEP_JUDGE_BEFORE) {
+            continue;
+        }
+        const unsigned at = m.at + d - PACE_STEP_JUDGE_BEFORE;
+        const PaceStepPic *p = &e->pic[at % PACE_STEP_PICS];
+
+        if (p->at != at) {
+            continue; /* no record came after that step */
+        }
+        if (p->maxNs > m.picNs) {
+            m.picNs = p->maxNs;
+            m.typNs = p->maxTypNs;
+        }
+        if (p->overNs > overNs) {
+            overNs = p->overNs;
+            overTyp = p->overTypNs;
+        }
+    }
+    e->ev.miss = m;
+    if (overNs != 0) {
+        /* a picture the GPU took far longer than the ones before it: not
+           the plan's doing */
+        e->ev.judged = PACE_STEP_OUTLIER;
+        e->ev.miss.picNs = overNs;
+        e->ev.miss.typNs = overTyp;
+        e->outliers++;
+        {
+            /* nor the margin: its widening by this miss taken back, as it
+               decayed since (an eighth a step) */
+            uint64_t left = m.lateNs;
+
+            for (unsigned i = m.at; i != e->steps; i++) {
+                left -= left / 8u;
+            }
+            e->widenNs = e->widenNs > left ? e->widenNs - left : 0;
+            e->widenNs = e->widenNs < 1000u ? 0u : e->widenNs;
+        }
+        return;
+    }
+    e->ev.judged = PACE_STEP_COUNTED;
+    e->counted++;
+    /* the plan's doing: evidence against the pictures fitting */
+    e->fitRun = 0;
+    /* the two before it within the window of its own step */
+    const bool third = step_recent_at(e, m.at) == 2u;
+
+    e->cnt[2] = e->cnt[1];
+    e->cnt[1] = e->cnt[0];
+    e->cnt[0] = m;
+    e->recent = e->recent < 3u ? e->recent + 1u : 3u;
+    if (third) {
+        /* the third counted within the window: the whole period, at most
+           PACE_STEP_BACKOFF_STEPS steps (again from the start when backed
+           off already) */
+        e->backoffs++;
+        e->backoff = PACE_STEP_BACKOFF_STEPS;
+        e->backoffRun = 0;
+        e->judgedFrame = 0;
+        e->ev.began = true;
+    }
+}
+
 PaceStepAct pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint64_t lateNs,
                                bool byPictures)
 {
     const bool over = missed && byPictures && lateNs >= PACE_STEP_MISS_FLOOR_NS;
-    bool third = false;
 
+    memset(&e->ev, 0, sizeof(e->ev));
+    e->steps++;
     if (ownNs != 0) {
         e->estNs = pace_rt_estimate(e->estNs, ownNs);
     }
-    /* the widening decays an eighth a step; the misses in the window age */
+    /* the widening decays an eighth a step */
     e->widenNs -= e->widenNs / 8u;
     e->widenNs = e->widenNs < 1000u ? 0u : e->widenNs;
-    for (unsigned i = 0; i < 2u && i < e->recent; i++) {
-        e->since[i] += e->since[i] <= PACE_STEP_MISS_WINDOW ? 1u : 0u; /* saturated past it */
-    }
-    if (e->recent == 2u && e->since[1] > PACE_STEP_MISS_WINDOW) {
-        e->recent = 1u;
-    }
-    if (e->recent == 1u && e->since[0] > PACE_STEP_MISS_WINDOW) {
-        e->recent = 0u;
+    /* the misses whose records are in: the oldest first (one a step, so at
+       most one is due; a full queue judges its oldest early) */
+    while (e->pending != 0 &&
+           (e->steps - e->pend[0].at > PACE_STEP_JUDGE_AFTER || e->pending == PACE_STEP_PENDING)) {
+        const PaceStepMiss m = e->pend[0];
+
+        e->pending--;
+        memmove(&e->pend[0], &e->pend[1], e->pending * sizeof(e->pend[0]));
+        step_judge(e, m);
     }
     if (missed) {
         e->misses++;
@@ -207,35 +304,78 @@ PaceStepAct pace_step_est_note(PaceStepEst *e, uint64_t ownNs, bool missed, uint
         }
     }
     if (over) {
-        /* the margin wider by the lateness; the third in the window falls
-           back to the whole period */
+        /* the margin wider by the lateness at once; whether it counts
+           toward the back-off once the records around it are in */
         e->widens++;
         e->widenNs += lateNs;
         e->widenNs = e->widenNs > PACE_STEP_WIDEN_MAX_NS ? PACE_STEP_WIDEN_MAX_NS : e->widenNs;
-        third = e->recent == 2u;
-        e->since[1] = e->since[0];
-        e->since[0] = 0;
-        e->recent = e->recent < 2u ? e->recent + 1u : 2u;
-        e->clean = 0;
+        e->pend[e->pending].at = e->steps;
+        e->pend[e->pending].lateNs = lateNs;
+        e->pend[e->pending].picNs = e->pend[e->pending].typNs = 0;
+        e->pending++;
     }
-    if (third) {
-        e->backoffs++;
-        e->backoffLen = e->backoffLen == 0                           ? PACE_STEP_BACKOFF_MIN
-                        : e->backoffLen >= PACE_STEP_BACKOFF_MAX / 2 ? PACE_STEP_BACKOFF_MAX
-                                                                     : 2u * e->backoffLen;
-        e->backoff = e->backoffLen;
-        return PACE_STEP_STRICT;
-    }
-    if (e->backoff != 0) {
-        /* a step, the game's own misses and the small ones among them: the
-           back-off counts down */
-        e->backoff--;
-    } else if (!over && ++e->clean >= PACE_STEP_BACKOFF_CLEAN && e->backoffLen != 0) {
-        /* a clean spell: the next back-off shorter, from the least none */
-        e->backoffLen = e->backoffLen > PACE_STEP_BACKOFF_MIN ? e->backoffLen / 2u : 0u;
-        e->clean = 0;
+    if (e->backoff != 0 && !e->ev.began) {
+        /* a step of the back-off: at its limit it ends */
+        e->backoffRun++;
+        if (--e->backoff == 0) {
+            e->limitEnds++;
+            e->ev.ended = PACE_STEP_END_LIMIT;
+            e->ev.endSteps = e->backoffRun;
+            e->ev.endFrames = e->fitRun;
+            e->fitRun = 0;
+            e->judgedFrame = 0;
+        }
     }
     return over ? PACE_STEP_WIDEN : missed && byPictures ? PACE_STEP_SMALL : PACE_STEP_NONE;
+}
+
+unsigned pace_step_fit_frames(uint64_t tickNs)
+{
+    const uint64_t t = tickNs != 0 ? tickNs : 33366667ull; /* two NTSC steps */
+    const uint64_t n = (PACE_STEP_FIT_NS + t - 1u) / t;
+
+    return n != 0 ? (unsigned)n : 1u;
+}
+
+void pace_step_est_judge(PaceStepEst *e, bool fits)
+{
+    if (e->backoff != 0 && e->judgedFrame == 0) {
+        /* the frame's first: the picture the back-off holds.  A later ask
+           of the same frame comes only because it was held, with the GPU
+           drained by the hold, a state the normal plan never reaches: the
+           model's sustained 20 ms overload ended 27 back-offs in 30 s by
+           such asks, each followed by new misses, 1.3 % fewer pictures than
+           v0.11.4 (pace_loop_test testBackoffEvidence) */
+        e->judgedFrame = fits ? 1u : 2u;
+    }
+}
+
+bool pace_step_est_frame(PaceStepEst *e, uint64_t tickNs)
+{
+    const unsigned v = e->judgedFrame;
+
+    e->judgedFrame = 0;
+    if (e->backoff == 0) {
+        e->fitRun = 0;
+        return false;
+    }
+    if (v == 1u) {
+        e->fitRun++;
+    } else if (v == 2u) {
+        e->fitRun = 0;
+    }
+    if (e->fitRun < pace_step_fit_frames(tickNs)) {
+        return false;
+    }
+    /* the pictures between frames would have fitted half a second of
+       frames in a row: the normal plan again */
+    e->fitEnds++;
+    e->ev.ended = PACE_STEP_END_FIT;
+    e->ev.endSteps = e->backoffRun;
+    e->ev.endFrames = e->fitRun;
+    e->backoff = 0;
+    e->fitRun = 0;
+    return true;
 }
 
 uint64_t pace_step_start_late(uint64_t startNs, uint64_t dueNs, uint64_t prevEndNs)
@@ -381,10 +521,18 @@ bool pace_step_closes(unsigned sinceClose, unsigned ahead, unsigned frameSteps)
 
 uint64_t pace_step_plan_ns(const PaceStepEst *e, bool closes, uint64_t periodNs)
 {
+    if (e->backoff != 0) {
+        return pace_step_est_ns(e, periodNs);
+    }
+    return pace_step_plan_normal_ns(e, closes, periodNs);
+}
+
+uint64_t pace_step_plan_normal_ns(const PaceStepEst *e, bool closes, uint64_t periodNs)
+{
     const PaceStepTyp *t = &e->typ[closes ? 1 : 0];
 
-    if (t->n == 0 || e->backoff != 0) {
-        return pace_step_est_ns(e, periodNs);
+    if (t->n == 0) {
+        return e->estNs == 0 ? periodNs : e->estNs + e->widenNs;
     }
     return pace_step_typ_ns(t) + e->widenNs;
 }
@@ -558,6 +706,17 @@ PaceRtHold pace_rt_further_ask(const PaceRtAsk *q, const PaceRtPipe *p)
     PaceRtTrace t;
 
     return pace_rt_further_trace(q, p, &t);
+}
+
+bool pace_step_normal_fits(const PaceStepEst *e, const PaceRtAsk *q, const PaceRtPipe *p,
+                           bool nextCloses, bool afterCloses)
+{
+    PaceRtAsk n = *q;
+    PaceRtTrace t;
+
+    n.stepNs = pace_step_plan_normal_ns(e, nextCloses, q->periodNs);
+    n.afterNs = pace_step_plan_normal_ns(e, afterCloses, q->periodNs);
+    return pace_rt_further_trace(&n, p, &t) == PACE_RT_GO;
 }
 
 /* the trace's text: a time against the due time, signed ms */
@@ -820,6 +979,27 @@ uint64_t pace_hist_add(PaceHist *h, uint64_t costNs)
         h->count++;
     }
     return median(h);
+}
+
+uint64_t pace_step_est_gpu(PaceStepEst *e, PaceHist *h, uint64_t gpuNs)
+{
+    /* the typical: the median of the full history before this record */
+    const uint64_t typ = h->count >= PACE_HIST_LEN ? median(h) : 0;
+    PaceStepPic *p = &e->pic[e->steps % PACE_STEP_PICS];
+
+    if (p->at != e->steps) {
+        memset(p, 0, sizeof(*p));
+        p->at = e->steps;
+    }
+    if (gpuNs > p->maxNs) {
+        p->maxNs = gpuNs;
+        p->maxTypNs = typ;
+    }
+    if (step_outlier(gpuNs, typ) && gpuNs > p->overNs) {
+        p->overNs = gpuNs;
+        p->overTypNs = typ;
+    }
+    return pace_hist_add(h, gpuNs);
 }
 
 void pace_gpu_gap_add(PaceGpuGap *g, uint64_t spanNs, int64_t gapNs, unsigned skipped)

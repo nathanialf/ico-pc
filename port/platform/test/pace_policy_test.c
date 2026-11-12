@@ -2564,87 +2564,225 @@ static void testStepRule(void)
 
     /* the step's estimate: up at once, down an eighth a step.  A miss of
        the pictures' under the floor (2 ms) changes nothing; over it the
-       margin widens by its lateness, falling an eighth a step; the third
-       over it within 300 steps plans the whole period for 120 steps, the
-       next fall-back 240, then 480 at most; 300 steps without one over
-       the floor halve it, then forget it */
+       margin widens by its lateness at once, falling an eighth a step, and
+       the miss is judged two steps on, once the GPU's records around it
+       are in (none here: counted); the third counted within 300 steps
+       plans the whole period for at most 120 steps (PACEBACK: no doubling
+       to 480, no halving by clean spells; v0.11.4 began it at the third
+       miss's own step) */
     {
         PaceStepEst e;
 
         memset(&e, 0, sizeof e);
         CHECK(pace_step_est_ns(&e, P) == P); /* none yet: the whole period */
+        CHECK(pace_step_plan_normal_ns(&e, true, P) == P);
         CHECK(pace_step_est_note(&e, step, false, 0, false) == PACE_STEP_NONE);
-        CHECK(e.estNs == step && pace_step_est_ns(&e, P) == step);
+        CHECK(e.estNs == step && pace_step_est_ns(&e, P) == step && e.steps == 1);
         pace_step_est_note(&e, 10 * MS, false, 0, false);
         CHECK(e.estNs == 10 * MS);
         pace_step_est_note(&e, step, false, 0, false);
         CHECK(e.estNs == 9312500ull);
-        /* under the floor (rc9: 0.0-0.6 ms): nothing changed */
+        /* under the floor (rc9: 0.0-0.6 ms): nothing changed, nothing to judge */
         CHECK(pace_step_est_note(&e, 0, true, MS, true) == PACE_STEP_SMALL);
         CHECK(pace_step_est_note(&e, 0, true, PACE_STEP_MISS_FLOOR_NS - 1, true) ==
               PACE_STEP_SMALL);
-        CHECK(e.widenNs == 0 && e.backoff == 0 && e.recent == 0 && e.backoffs == 0);
+        CHECK(e.widenNs == 0 && e.backoff == 0 && e.pending == 0 && e.backoffs == 0);
         CHECK(e.misses == 2 && e.pictureMisses == 2 && e.smallMisses == 2 && e.widens == 0);
         CHECK(pace_step_est_ns(&e, P) == 9312500ull);
-        /* over it: the margin wider by the lateness, an eighth less a step */
+        /* over it (step 6): the margin wider by the lateness at once, an
+           eighth less a step; judged at step 8 */
         CHECK(pace_step_est_note(&e, 0, true, 3 * MS, true) == PACE_STEP_WIDEN);
-        CHECK(e.widenNs == 3 * MS && e.recent == 1 && e.widens == 1 && e.backoff == 0);
+        CHECK(e.widenNs == 3 * MS && e.pending == 1 && e.widens == 1 && e.backoff == 0);
+        CHECK(e.ev.judged == PACE_STEP_UNJUDGED && e.pend[0].at == 6u);
         CHECK(pace_step_est_ns(&e, P) == 9312500ull + 3 * MS);
         CHECK(pace_step_est_note(&e, 0, false, 0, false) == PACE_STEP_NONE);
         CHECK(e.widenNs == 2625000ull && pace_step_est_ns(&e, P) == 11937500ull);
-        /* the game's own miss widens nothing */
+        CHECK(e.pending == 1 && e.ev.judged == PACE_STEP_UNJUDGED);
+        /* the game's own miss widens nothing; the miss at step 6 judged:
+           counted (no record came: no outlier) */
         CHECK(pace_step_est_note(&e, 0, true, 13 * MS, false) == PACE_STEP_NONE);
-        CHECK(e.widenNs == 2296875ull && e.gameMisses == 1 && e.recent == 1);
-        /* a second over the floor: wider again */
+        CHECK(e.widenNs == 2296875ull && e.gameMisses == 1 && e.pending == 0);
+        CHECK(e.ev.judged == PACE_STEP_COUNTED && e.ev.miss.at == 6u && e.ev.miss.lateNs == 3 * MS);
+        CHECK(e.ev.miss.picNs == 0 && e.counted == 1 && pace_step_est_recent(&e) == 1u);
+        /* a second over the floor (step 9): wider again */
         CHECK(pace_step_est_note(&e, 0, true, 4 * MS, true) == PACE_STEP_WIDEN);
-        CHECK(e.widenNs == 6009766ull && e.recent == 2 && e.backoff == 0);
-        /* the third within the window: the whole period for 120 steps */
-        CHECK(pace_step_est_note(&e, 0, true, 2 * MS, true) == PACE_STEP_STRICT);
-        CHECK(e.backoff == PACE_STEP_BACKOFF_MIN && e.backoffs == 1 && e.widens == 3);
+        CHECK(e.widenNs == 6009766ull && e.backoff == 0);
+        /* the third (step 10): the back-off begins once it is judged, at
+           step 12; step 11 judges step 9's */
+        CHECK(pace_step_est_note(&e, 0, true, 2 * MS, true) == PACE_STEP_WIDEN);
+        CHECK(e.ev.judged == PACE_STEP_UNJUDGED && e.pending == 2 && e.backoff == 0);
+        CHECK(pace_step_est_note(&e, 0, false, 0, false) == PACE_STEP_NONE);
+        CHECK(e.ev.judged == PACE_STEP_COUNTED && !e.ev.began && e.backoff == 0);
+        CHECK(pace_step_est_recent(&e) == 2u && e.pending == 1);
+        CHECK(pace_step_est_note(&e, 0, false, 0, false) == PACE_STEP_NONE);
+        CHECK(e.ev.judged == PACE_STEP_COUNTED && e.ev.began && e.ev.miss.at == 10u);
+        CHECK(e.backoff == PACE_STEP_BACKOFF_STEPS && e.backoffs == 1 && e.widens == 3);
+        CHECK(e.cnt[0].at == 10u && e.cnt[1].at == 9u && e.cnt[2].at == 6u && e.recent == 3u);
+        CHECK(e.cnt[2].lateNs == 3 * MS && e.cnt[1].lateNs == 4 * MS && e.cnt[0].lateNs == 2 * MS);
         CHECK(pace_step_est_ns(&e, P) == P && e.missMaxNs == 13 * MS);
-        for (unsigned i = 0; i < PACE_STEP_BACKOFF_MIN; i++) {
+        /* backed off: the plan the whole period, the normal plan beside it */
+        CHECK(pace_step_plan_ns(&e, true, P) == P && pace_step_plan_ns(&e, false, P) == P);
+        CHECK(pace_step_plan_normal_ns(&e, true, P) == e.estNs + e.widenNs);
+        /* at its limit of 120 steps it ends */
+        for (unsigned i = 1; i < PACE_STEP_BACKOFF_STEPS; i++) {
             pace_step_est_note(&e, step, false, 0, false);
         }
+        CHECK(e.backoff == 1 && e.ev.ended == PACE_STEP_END_NONE);
+        pace_step_est_note(&e, step, false, 0, false);
+        CHECK(e.backoff == 0 && e.ev.ended == PACE_STEP_END_LIMIT && e.limitEnds == 1);
+        CHECK(e.ev.endSteps == PACE_STEP_BACKOFF_STEPS && e.ev.endFrames == 0 && e.fitEnds == 0);
         /* the widening gone, the estimate back down */
-        CHECK(e.backoff == 0 && e.estNs == 4500007ull && e.widenNs == 0);
-        CHECK(pace_step_est_ns(&e, P) == 4500007ull);
-        CHECK(e.recent == 2 && e.since[0] == 120u && e.since[1] == 121u);
-        /* a fourth inside the window: 240 */
-        CHECK(pace_step_est_note(&e, step, true, 3 * MS, true) == PACE_STEP_STRICT);
-        CHECK(e.backoff == 2 * PACE_STEP_BACKOFF_MIN && e.backoffLen == 2 * PACE_STEP_BACKOFF_MIN);
-        for (unsigned i = 0; i < 2 * PACE_STEP_BACKOFF_MIN; i++) {
-            pace_step_est_note(&e, step, false, 0, false);
-        }
-        /* the one before it out of the window: the next widens only */
-        CHECK(e.backoff == 0 && e.recent == 1 && e.since[0] == 240u);
+        CHECK(e.estNs == 4500007ull && e.widenNs == 0 && pace_step_est_ns(&e, P) == 4500007ull);
+        CHECK(e.steps == 132u && pace_step_est_recent(&e) == 2u);
+        /* a fourth inside the window of the two before it (step 133): 120
+           steps again, not 240 */
         CHECK(pace_step_est_note(&e, step, true, 3 * MS, true) == PACE_STEP_WIDEN);
-        CHECK(e.recent == 2);
-        CHECK(pace_step_est_note(&e, step, true, 3 * MS, true) == PACE_STEP_STRICT);
-        CHECK(e.backoff == PACE_STEP_BACKOFF_MAX); /* 240 doubled */
-        /* at most PACE_STEP_BACKOFF_MAX */
-        CHECK(pace_step_est_note(&e, step, true, 3 * MS, true) == PACE_STEP_STRICT);
-        CHECK(e.backoff == PACE_STEP_BACKOFF_MAX && e.backoffLen == PACE_STEP_BACKOFF_MAX);
-        CHECK(e.backoffs == 4 && e.pictureMisses == 9 && e.gameMisses == 1);
-        for (unsigned i = 0; i < PACE_STEP_BACKOFF_MAX; i++) {
+        pace_step_est_note(&e, step, false, 0, false);
+        CHECK(e.backoff == 0);
+        pace_step_est_note(&e, step, false, 0, false);
+        CHECK(e.ev.began && e.backoff == PACE_STEP_BACKOFF_STEPS && e.backoffs == 2);
+        /* the evidence: a judgement only while backed off, the frame's
+           first ask (a later one changes nothing), fifteen frames in a row
+           of 33.4 ms (half a second) */
+        CHECK(pace_step_fit_frames(2u * 16683333ull) == 15u);
+        CHECK(pace_step_fit_frames(0) == 15u);
+        CHECK(pace_step_fit_frames(40 * MS) == 13u); /* PAL: 12.5 rounded up */
+        CHECK(pace_step_fit_frames(16683333ull) == 30u);
+        CHECK(pace_step_fit_frames(2000 * MS) == 1u);
+        for (unsigned f = 0; f < 14; f++) {
+            pace_step_est_note(&e, step, false, 0, false);
+            pace_step_est_judge(&e, true);
+            pace_step_est_judge(&e, false); /* a later one: the frame still fitted */
+            pace_step_est_note(&e, step, false, 0, false);
+            CHECK(!pace_step_est_frame(&e, 2u * 16683333ull));
+        }
+        CHECK(e.fitRun == 14u && e.backoff == PACE_STEP_BACKOFF_STEPS - 28u);
+        /* a frame whose picture between frames would not have fitted: the
+           run again from none; a frame with no ask judged: unchanged */
+        pace_step_est_judge(&e, false);
+        pace_step_est_judge(&e, true); /* a later one: still not */
+        CHECK(!pace_step_est_frame(&e, 2u * 16683333ull) && e.fitRun == 0);
+        pace_step_est_judge(&e, true);
+        CHECK(!pace_step_est_frame(&e, 2u * 16683333ull) && e.fitRun == 1u);
+        CHECK(!pace_step_est_frame(&e, 2u * 16683333ull) && e.fitRun == 1u);
+        /* a counted miss is evidence against: the run again from none */
+        CHECK(pace_step_est_note(&e, step, true, 3 * MS, true) == PACE_STEP_WIDEN);
+        pace_step_est_note(&e, step, false, 0, false);
+        pace_step_est_note(&e, step, false, 0, false);
+        CHECK(e.ev.judged == PACE_STEP_COUNTED && e.ev.began && e.fitRun == 0);
+        CHECK(e.backoffs == 3 && e.backoff == PACE_STEP_BACKOFF_STEPS);
+        for (unsigned f = 0; f < 15; f++) {
+            pace_step_est_note(&e, step, false, 0, false);
+            pace_step_est_judge(&e, true);
+            pace_step_est_note(&e, step, false, 0, false);
+            CHECK(pace_step_est_frame(&e, 2u * 16683333ull) == (f == 14u));
+        }
+        CHECK(e.backoff == 0 && e.ev.ended == PACE_STEP_END_FIT && e.ev.endFrames == 15u);
+        CHECK(e.ev.endSteps == 30u && e.fitEnds == 1 && e.limitEnds == 1 && e.fitRun == 0);
+        CHECK(pace_step_plan_ns(&e, true, P) == pace_step_plan_normal_ns(&e, true, P));
+        /* not backed off: no judgement, no run */
+        pace_step_est_judge(&e, true);
+        CHECK(e.judgedFrame == 0 && !pace_step_est_frame(&e, 2u * 16683333ull) && e.fitRun == 0);
+    }
+
+    /* an outlier miss (pace_step_est_gpu): a GPU record over 7/4 of the
+       median of the 8 before it, from 3 steps before the miss to 1 after
+       it, makes the miss an outlier one: not counted, its widening taken
+       back; a record at exactly 7/4, or one 4 steps before, or the first 8
+       (no typical yet), does not */
+    {
+        PaceStepEst e;
+        PaceHist h;
+        const uint64_t g = 13500000ull;
+
+        memset(&e, 0, sizeof e);
+        memset(&h, 0, sizeof h);
+        CHECK(pace_step_est_gpu(&e, &h, 40 * MS) == 40 * MS); /* no typical yet */
+        CHECK(e.pic[0].maxNs == 40 * MS && e.pic[0].maxTypNs == 0 && e.pic[0].overNs == 0);
+        for (unsigned i = 0; i < 8; i++) {
+            pace_step_est_gpu(&e, &h, g);
+        }
+        CHECK(h.count == PACE_HIST_LEN && pace_step_est_gpu(&e, &h, g) == g);
+        for (unsigned i = 0; i < 4; i++) {
             pace_step_est_note(&e, step, false, 0, false);
         }
-        CHECK(e.backoff == 0 && e.recent == 0 && e.clean == 0);
-        /* clean spells of 300 steps: 480, 240, 120, none */
-        for (unsigned i = 0; i < PACE_STEP_BACKOFF_CLEAN; i++) {
-            pace_step_est_note(&e, step, false, 0, false);
+        /* after step 4's note: 7/4 of the median, then just over */
+        CHECK(pace_step_est_gpu(&e, &h, g * 7u / 4u) == g);
+        CHECK(e.pic[4].at == 4u && e.pic[4].maxNs == g * 7u / 4u && e.pic[4].overNs == 0);
+        CHECK(e.pic[4].maxTypNs == g);
+        pace_step_est_gpu(&e, &h, g * 7u / 4u + 1u);
+        CHECK(e.pic[4].maxNs == g * 7u / 4u + 1u && e.pic[4].overNs == g * 7u / 4u + 1u);
+        CHECK(e.pic[4].overTypNs == g);
+        /* a miss at step 5 (the record one step before): an outlier at 7 */
+        CHECK(pace_step_est_note(&e, 0, true, 5 * MS, true) == PACE_STEP_WIDEN);
+        pace_step_est_note(&e, 0, false, 0, false);
+        CHECK(e.widenNs == 4375000ull && e.ev.judged == PACE_STEP_UNJUDGED);
+        pace_step_est_note(&e, 0, false, 0, false);
+        CHECK(e.ev.judged == PACE_STEP_OUTLIER && e.ev.miss.at == 5u);
+        CHECK(e.ev.miss.picNs == g * 7u / 4u + 1u && e.ev.miss.typNs == g);
+        CHECK(e.outliers == 1 && e.counted == 0 && e.widenNs == 0 && e.recent == 0);
+        for (unsigned i = 0; i < 8; i++) {
+            pace_step_est_gpu(&e, &h, g); /* the median back to 13.5 */
         }
-        CHECK(e.backoffLen == PACE_STEP_BACKOFF_MAX / 2 && e.clean == 0);
-        /* a miss under the floor or the game's breaks no clean spell */
-        pace_step_est_note(&e, step, true, MS, true);
-        pace_step_est_note(&e, step, true, 30 * MS, false);
-        for (unsigned i = 2; i < PACE_STEP_BACKOFF_CLEAN; i++) {
+        /* a record after step 9's note, a miss at step 13 (4 steps on):
+           counted, its longest record around it a typical one */
+        pace_step_est_note(&e, step, false, 0, false);
+        pace_step_est_note(&e, step, false, 0, false);
+        CHECK(e.steps == 9u);
+        pace_step_est_gpu(&e, &h, 40 * MS);
+        for (unsigned i = 0; i < 3; i++) {
             pace_step_est_note(&e, step, false, 0, false);
+            pace_step_est_gpu(&e, &h, g);
         }
-        CHECK(e.backoffLen == PACE_STEP_BACKOFF_MIN);
-        for (unsigned i = 0; i < PACE_STEP_BACKOFF_CLEAN; i++) {
-            pace_step_est_note(&e, step, false, 0, false);
-        }
-        CHECK(e.backoffLen == 0 && e.backoff == 0);
+        CHECK(pace_step_est_note(&e, step, true, 3 * MS, true) == PACE_STEP_WIDEN);
+        CHECK(e.steps == 13u);
+        pace_step_est_note(&e, step, false, 0, false);
+        pace_step_est_note(&e, step, false, 0, false);
+        CHECK(e.ev.judged == PACE_STEP_COUNTED && e.ev.miss.picNs == g && e.ev.miss.typNs == g);
+        CHECK(e.counted == 1 && e.outliers == 1);
+        /* a miss at step 16 whose record comes one step after it (after
+           step 17's note): an outlier, judged at 18 */
+        CHECK(pace_step_est_note(&e, step, true, 3 * MS, true) == PACE_STEP_WIDEN);
+        pace_step_est_note(&e, step, false, 0, false);
+        CHECK(e.steps == 17u);
+        pace_step_est_gpu(&e, &h, 40 * MS);
+        pace_step_est_note(&e, step, false, 0, false);
+        CHECK(e.ev.judged == PACE_STEP_OUTLIER && e.ev.miss.picNs == 40 * MS);
+        CHECK(e.outliers == 2 && e.counted == 1 && pace_step_est_recent(&e) == 1u);
+    }
+
+    /* the back-off's evidence (pace_step_normal_fits): a further present
+       the whole period holds (its reads past the next step's due time),
+       the normal plan by the kinds' typical times hands over while its
+       reads end within the slack (16.683 - 4.5 - 2 ms) */
+    {
+        PaceStepEst e;
+        const PaceRtPipe none = {0, {0, 0}};
+
+        memset(&e, 0, sizeof e);
+        pace_step_typ_note(&e.typ[0], step, P, false);
+        pace_step_typ_note(&e.typ[1], step, P, false);
+        e.estNs = step;
+        e.backoff = PACE_STEP_BACKOFF_STEPS;
+        memset(&q, 0, sizeof q);
+        q.nowNs = 10 * MS;
+        q.dueNs = 10 * MS;
+        q.periodNs = P;
+        q.stepNs = pace_step_plan_ns(&e, true, P);
+        q.afterNs = pace_step_plan_ns(&e, false, P);
+        q.nextBetween = false;
+        q.readsNs = q.pictureNs = 10 * MS;
+        CHECK(q.stepNs == P && pace_rt_further_ask(&q, &none) == PACE_RT_MISS);
+        CHECK(pace_step_normal_fits(&e, &q, &none, true, false));
+        q.readsNs = q.pictureNs = slack;
+        CHECK(pace_step_normal_fits(&e, &q, &none, true, false));
+        q.readsNs = q.pictureNs = slack + 1;
+        CHECK(!pace_step_normal_fits(&e, &q, &none, true, false));
+        /* the picture in progress past its estimate: held by the normal plan too */
+        q.readsNs = q.pictureNs = 5 * MS;
+        q.paced = true;
+        q.sinceNs = 1;
+        CHECK(!pace_step_normal_fits(&e, &q, &none, true, false));
     }
 
     /* rc9's pattern (build-host/tmp/v098/evidence/rc9/ico-pc.log): 15.1 ms,
@@ -2696,9 +2834,13 @@ static void testStepRule(void)
         for (unsigned i = 0; i < 3; i++) {
             pace_step_est_note(&e, step, true, 2 * MS, true);
         }
-        CHECK(e.backoff == PACE_STEP_BACKOFF_MIN && e.backoffs == 1 && e.pictureMisses == 3);
+        /* the third judged two steps on */
+        CHECK(e.backoff == 0 && e.backoffs == 0 && e.pictureMisses == 3);
+        pace_step_est_note(&e, step, false, 0, false);
+        pace_step_est_note(&e, step, false, 0, false);
+        CHECK(e.backoff == PACE_STEP_BACKOFF_STEPS && e.backoffs == 1 && e.ev.began);
         pace_step_est_note(&e, 30 * MS, true, 13 * MS, false); /* inside the back-off */
-        CHECK(e.backoff == PACE_STEP_BACKOFF_MIN - 1 && e.backoffs == 1 && e.gameMisses == 2);
+        CHECK(e.backoff == PACE_STEP_BACKOFF_STEPS - 1 && e.backoffs == 1 && e.gameMisses == 2);
         CHECK(e.misses == 5);
     }
     /* which miss is the pictures': the presents' run past the later of the

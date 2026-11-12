@@ -73,8 +73,14 @@ static struct {
     unsigned lateStarts, misses, backoffSteps;
     unsigned pictureMisses; /* of the misses, the pictures' (the rest the game's own) */
     /* of the pictures': under the floor (nothing changed), the margin
-       widened, the third in the window (the whole period) */
+       widened, the third counted in the window (the whole period) */
     unsigned smallMisses, widens, fallbacks;
+    /* the misses judged in the block (pace_policy.h PaceStepEvent): counted
+       toward the back-off, outliers (the longest outlier picture's GPU time
+       and its typical); the back-offs ended by the pictures fitting, at
+       the limit */
+    unsigned counted, outliers, fitEnds, limitEnds;
+    Uint64 outlierNs, outlierTypNs;
     Uint64 lateStartMaxNs, missMaxNs, stepPlanNs;
     /* the plan's parts as last noted: a step between frames, the margin's
        widening; the steps left out of the typical times in the block */
@@ -1099,9 +1105,24 @@ void ico_render_thread_note_ask(const struct PaceRtAsk *q, const struct PaceRtTr
 
 void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t missNs, bool backedOff,
                                  uint64_t planCloseNs, uint64_t planBetweenNs, uint64_t widenNs,
-                                 uint64_t closeMeanNs, uint64_t closeDevNs, bool leftOut, int act)
+                                 uint64_t closeMeanNs, uint64_t closeDevNs, bool leftOut, int act,
+                                 const struct PaceStepEvent *ev)
 {
     const bool byPictures = act != PACE_STEP_NONE;
+
+    if (ev != NULL) {
+        s_rt.counted += ev->judged == PACE_STEP_COUNTED ? 1u : 0u;
+        s_rt.fallbacks += ev->began ? 1u : 0u;
+        s_rt.fitEnds += ev->ended == PACE_STEP_END_FIT ? 1u : 0u;
+        s_rt.limitEnds += ev->ended == PACE_STEP_END_LIMIT ? 1u : 0u;
+        if (ev->judged == PACE_STEP_OUTLIER) {
+            s_rt.outliers++;
+            if (ev->miss.picNs > s_rt.outlierNs) {
+                s_rt.outlierNs = ev->miss.picNs;
+                s_rt.outlierTypNs = ev->miss.typNs;
+            }
+        }
+    }
 
     if (readWaitNs != 0) {
         s_rt.lateStarts++;
@@ -1112,7 +1133,6 @@ void ico_render_thread_note_step(uint64_t readWaitNs, bool missed, uint64_t miss
         s_rt.pictureMisses += byPictures ? 1u : 0u;
         s_rt.smallMisses += act == PACE_STEP_SMALL ? 1u : 0u;
         s_rt.widens += act == PACE_STEP_WIDEN ? 1u : 0u;
-        s_rt.fallbacks += act == PACE_STEP_STRICT ? 1u : 0u;
         s_rt.missMaxNs = missNs > s_rt.missMaxNs ? missNs : s_rt.missMaxNs;
     }
     s_rt.backoffSteps += backedOff ? 1u : 0u;
@@ -1150,6 +1170,10 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
     const unsigned pictureMisses = s_rt.pictureMisses;
     const unsigned smallMisses = s_rt.smallMisses, widens = s_rt.widens;
     const unsigned fallbacks = s_rt.fallbacks;
+    const unsigned counted = s_rt.counted, outliers = s_rt.outliers;
+    const unsigned fitEnds = s_rt.fitEnds, limitEnds = s_rt.limitEnds;
+    const double outlierMs = (double)s_rt.outlierNs / 1e6;
+    const double outlierTypMs = (double)s_rt.outlierTypNs / 1e6;
     const unsigned backoffSteps = s_rt.backoffSteps;
     const unsigned leftOut = s_rt.leftOut;
     const double lateStartMaxMs = (double)s_rt.lateStartMaxNs / 1e6;
@@ -1164,6 +1188,8 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
     s_rt.held = s_rt.heldMiss = s_rt.heldOverrun = s_rt.heldBehind = 0;
     s_rt.lateStarts = s_rt.misses = s_rt.backoffSteps = s_rt.pictureMisses = 0;
     s_rt.smallMisses = s_rt.widens = s_rt.fallbacks = 0;
+    s_rt.counted = s_rt.outliers = s_rt.fitEnds = s_rt.limitEnds = 0;
+    s_rt.outlierNs = s_rt.outlierTypNs = 0;
     s_rt.lateStartMaxNs = s_rt.missMaxNs = 0;
     s_rt.leftOut = 0;
 
@@ -1249,8 +1275,11 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
                  "ms of it the margin widened after a miss; %u long steps of the game's own left "
                  "out)); steps started late by the pictures: %u (longest %.1f ms); steps "
                  "that missed their period: %u (%u the pictures': %u under %.0f ms, %u widened "
-                 "the margin, %u the third in %u steps; %u the game's own; latest %.1f ms past "
-                 "it; %u steps planned at the whole period after the pictures')",
+                 "the margin (%u counted toward the back-off, %u outliers at %.1f ms against a "
+                 "typical %.1f ms), %u the third in %u steps; %u the game's own; latest %.1f ms "
+                 "past it; %u steps planned at the whole period after the pictures' (back-offs "
+                 "ended: %u by the pictures between frames fitting, %u at the limit of %u "
+                 "steps))",
                  pictureCpuMs, b.idlePercent, b.waitMaxMs, b.busyMaxMs, b.pictures,
                  s_rt.mode == FM_MODE_SYNC ? ", sync" : "", tb.interpMs, tb.walkMs, tb.submitMs,
                  tb.waitMs, tb.retired, held, heldMiss, heldOverrun, heldBehind,
@@ -1265,8 +1294,10 @@ void ico_render_thread_block_line(double stepMs, double stepCpuMs, double pictur
                  (double)s_rt.stepPlanNs / 1e6, (double)s_rt.stepCloseMean / 1e6,
                  (double)s_rt.stepCloseDev / 1e6, (double)s_rt.stepPlanBetweenNs / 1e6,
                  (double)s_rt.stepWidenNs / 1e6, leftOut, lateStarts, lateStartMaxMs, misses,
-                 pictureMisses, smallMisses, (double)PACE_STEP_MISS_FLOOR_NS / 1e6, widens,
-                 fallbacks, PACE_STEP_MISS_WINDOW, misses - pictureMisses, missMaxMs, backoffSteps);
+                 pictureMisses, smallMisses, (double)PACE_STEP_MISS_FLOOR_NS / 1e6, widens, counted,
+                 outliers, outlierMs, outlierTypMs, fallbacks, PACE_STEP_MISS_WINDOW,
+                 misses - pictureMisses, missMaxMs, backoffSteps, fitEnds, limitEnds,
+                 PACE_STEP_BACKOFF_STEPS);
     } else {
         snprintf(rt, sizeof(rt), "render thread: off (CPU %.1f ms a picture on the game thread)",
                  pictureCpuMs);

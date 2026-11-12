@@ -2351,8 +2351,12 @@ typedef struct RtLoad {
    plan), RT_RULE_HANDOVER the one before FIX-BACKOFF (every miss of the
    pictures' planned the whole period, 120 steps doubled to 1920, halved by
    1920 clean ones; a hold of any size the pictures'), RT_RULE_ANYMISS that
-   with every miss arming it, as before the rule asked whose miss it was */
-enum { RT_RULE_NOW = 0, RT_RULE_HANDOVER, RT_RULE_ANYMISS };
+   with every miss arming it, as before the rule asked whose miss it was,
+   RT_RULE_V0114 the back-off before PACEBACK (rtV0114Note: every miss of
+   the pictures' over the floor counted, the third in 300 steps planning the
+   whole period for 120 steps, doubled up to 480, halved by 300 steps
+   without one; no outlier misses, no end on evidence) */
+enum { RT_RULE_NOW = 0, RT_RULE_HANDOVER, RT_RULE_ANYMISS, RT_RULE_V0114 };
 
 static struct {
     unsigned slowAt;
@@ -2416,6 +2420,12 @@ static struct {
        on or off; else pace_rt_further_trace's, with it off only) */
     uint64_t gapNs;
     bool oldHold;
+    /* the step from which RtRun.strictFrom counts (0: every step); the
+       GPU's sequence in the burst only (scaled by burstGpu / gpuNs; every
+       picture of the load the load's gpuNs), else everywhere (scaled so in
+       the burst) */
+    unsigned countFrom;
+    bool gpuSeqBurst;
 } s_rtGame;
 
 /* The render thread's estimates as render_thread.c keeps them, folded when
@@ -2489,15 +2499,57 @@ static void rtOldBackoffNote(RtOldBackoff *o, bool missed, bool byPictures)
     }
 }
 
+/* RT_RULE_V0114's back-off (v0.11.4's pace_step_est_note: the margin's
+   widening is the window's own, so only the back-off is kept here) */
+typedef struct RtV0114 {
+    unsigned backoff, len, clean, recent, since[2], backoffs;
+} RtV0114;
+
+static void rtV0114Note(RtV0114 *o, bool missed, uint64_t lateNs, bool byPictures)
+{
+    const bool over = missed && byPictures && lateNs >= PACE_STEP_MISS_FLOOR_NS;
+    bool third = false;
+
+    for (unsigned i = 0; i < 2u && i < o->recent; i++) {
+        o->since[i] += o->since[i] <= 300u ? 1u : 0u;
+    }
+    if (o->recent == 2u && o->since[1] > 300u) {
+        o->recent = 1u;
+    }
+    if (o->recent == 1u && o->since[0] > 300u) {
+        o->recent = 0u;
+    }
+    if (over) {
+        third = o->recent == 2u;
+        o->since[1] = o->since[0];
+        o->since[0] = 0;
+        o->recent = o->recent < 2u ? o->recent + 1u : 2u;
+        o->clean = 0;
+    }
+    if (third) {
+        o->backoffs++;
+        o->len = o->len == 0 ? 120u : o->len >= 240u ? 480u : 2u * o->len;
+        o->backoff = o->len;
+        return;
+    }
+    if (o->backoff != 0) {
+        o->backoff--;
+    } else if (!over && ++o->clean >= 300u && o->len != 0) {
+        o->len = o->len > 120u ? o->len / 2u : 0u;
+        o->clean = 0;
+    }
+}
+
 /* The pipe's GPU time a picture for the picture made next (s_rtGame.
    gpuRecords): the median of the last 8 records of the pictures up to two
    before it (window_host.c perf_drain: a record comes two pictures late;
-   0 before the first) */
-static uint64_t rtGpuIn(PaceHist *h, const uint64_t *rec, unsigned *added, uint64_t *median,
-                        unsigned made)
+   0 before the first), each into the step rule's judging of its misses
+   (pace_step_est_gpu, by the step it came after) */
+static uint64_t rtGpuIn(PaceStepEst *se, PaceHist *h, const uint64_t *rec, unsigned *added,
+                        uint64_t *median, unsigned made)
 {
     while (*added + 2u <= made) {
-        *median = pace_hist_add(h, rec[*added % 4u]);
+        *median = pace_step_est_gpu(se, h, rec[*added % 4u]);
         (*added)++;
     }
     return *median;
@@ -2534,6 +2586,12 @@ typedef struct RtRun {
        holds by its test, the asks whose pipe waited for the picture
        before's fence */
     unsigned asks, byNext, byAfter, fenceBefore;
+    /* the misses judged (PaceStepEst: counted toward the back-off,
+       outliers), the back-offs ended by the pictures fitting and at the
+       limit, the steps the first back-off began and the last one ended at
+       (~0u: none), the steps planned at the whole period from step from
+       (s_rtGame.countFrom) */
+    unsigned counted, outliers, fitEnds, limitEnds, beganAt, endedAt, strictFrom;
 } RtRun;
 
 /* rtTimerLoopSplit with RT_STEP / RT_ASMADE (the window's rule: the step's
@@ -2574,6 +2632,7 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
     uint64_t subEnd[4] = {0, 0, 0, 0}, gpuRec[4] = {0, 0, 0, 0}, gpuMedian = 0;
     unsigned gpuAdded = 0;
     PaceHist gpuHist;
+    RtV0114 v0114;
 
     memset(&h, 0, sizeof h);
     memset(&r, 0, sizeof r);
@@ -2582,8 +2641,10 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
     memset(&pipe, 0, sizeof pipe);
     memset(&E, 0, sizeof E);
     memset(&gpuHist, 0, sizeof gpuHist);
+    memset(&v0114, 0, sizeof v0114);
     E.typ = mode >= RT_STEP && !s_rtGame.maxEst;
     r.blockPresentsMin = ~0u;
+    r.beganAt = r.endedAt = ~0u;
     for (unsigned k = 0; k < steps; k++) {
         const bool burst = k >= L->burstFrom && k < L->burstFrom + L->burstLen;
         const uint64_t readsNs = burst ? L->burstReads : L->readsNs;
@@ -2648,16 +2709,31 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                 /* window_present.c step_note: the step's kind's typical time */
                 pace_step_typ_note(&se.typ[closes ? 1 : 0], own, NTSC, false);
             }
-            if (s_rtGame.rule == RT_RULE_NOW) {
+            if (s_rtGame.rule == RT_RULE_NOW || s_rtGame.rule == RT_RULE_V0114) {
                 pace_step_est_note(&se, own, missed, late, byPictures);
+                if (s_rtGame.rule == RT_RULE_V0114) {
+                    rtV0114Note(&v0114, missed, late, byPictures);
+                } else if (closes) {
+                    /* window_present.c step_note: the frame's judgement */
+                    (void)pace_step_est_frame(&se, 2u * NTSC);
+                }
+                if (se.ev.began && r.beganAt == ~0u) {
+                    r.beganAt = k;
+                }
+                if (se.ev.ended != PACE_STEP_END_NONE) {
+                    r.endedAt = k;
+                }
             } else {
                 /* the estimate alone, the back-off the old one's */
                 pace_step_est_note(&se, own, missed, late, false);
                 rtOldBackoffNote(&oldBo, missed, byPictures);
             }
-            const bool strict = s_rtGame.rule == RT_RULE_NOW ? se.backoff != 0 : oldBo.backoff != 0;
+            const bool strict = s_rtGame.rule == RT_RULE_NOW     ? se.backoff != 0
+                                : s_rtGame.rule == RT_RULE_V0114 ? v0114.backoff != 0
+                                                                 : oldBo.backoff != 0;
 
             r.strict += strict ? 1u : 0u;
+            r.strictFrom += strict && k >= s_rtGame.countFrom ? 1u : 0u;
             blockStrict += strict ? 1u : 0u;
         }
         for (;;) {
@@ -2686,7 +2762,16 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     q.nowNs = t;
                     q.dueNs = deadline;
                     q.periodNs = NTSC;
-                    if (s_rtGame.rule != RT_RULE_NOW && oldBo.backoff != 0) {
+                    if (s_rtGame.rule == RT_RULE_V0114) {
+                        /* v0.11.4's plan: the whole period while its own
+                           back-off holds, else the normal one */
+                        q.stepNs = v0114.backoff != 0
+                                       ? (se.estNs > NTSC ? se.estNs : NTSC)
+                                       : pace_step_plan_normal_ns(&se, (k + 1u) % 2u == 0, NTSC);
+                        q.afterNs = v0114.backoff != 0
+                                        ? q.stepNs
+                                        : pace_step_plan_normal_ns(&se, (k + 2u) % 2u == 0, NTSC);
+                    } else if (s_rtGame.rule != RT_RULE_NOW && oldBo.backoff != 0) {
                         q.stepNs = se.estNs > NTSC ? se.estNs : NTSC;
                         q.afterNs = s_rtGame.blind ? 0 : q.stepNs;
                     } else if (s_rtGame.blind) {
@@ -2710,7 +2795,7 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     q.submitNs = s_rtGame.slots ? 0 : E.sub;
                     q.submitOn = s_rtGame.slots && !s_rtGame.asRun;
                     q.gpuNs = s_rtGame.gpuRecords
-                                  ? rtGpuIn(&gpuHist, gpuRec, &gpuAdded, &gpuMedian, made)
+                                  ? rtGpuIn(&se, &gpuHist, gpuRec, &gpuAdded, &gpuMedian, made)
                                   : gpuNs;
                     q.paced = true;
                     q.asMade = mode == RT_ASMADE;
@@ -2730,6 +2815,14 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                                       pace_rt_behind(q.presentNs, q.refreshNs), &tr)
                                       ? PACE_RT_MISS
                                       : PACE_RT_GO;
+                        }
+                        if (s_rtGame.rule == RT_RULE_NOW && !s_rtGame.blind && !s_rtGame.maxEst &&
+                            se.backoff != 0 && se.judgedFrame == 0) {
+                            /* window_present.c rt_further_hold: the frame's
+                               first further picture judged by the normal plan */
+                            pace_step_est_judge(&se, pace_step_normal_fits(&se, &q, &pipe,
+                                                                           (k + 1u) % 2u == 0,
+                                                                           (k + 2u) % 2u == 0));
                         }
                         if (why == PACE_RT_GO || why == PACE_RT_MISS) {
                             r.asks++;
@@ -2857,7 +2950,7 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     q.cpuNs = E.cpu;
                     q.interpNs = s_rtGame.interpSeqN != 0 ? E.interp : interpNs;
                     q.gpuNs = s_rtGame.gpuRecords
-                                  ? rtGpuIn(&gpuHist, gpuRec, &gpuAdded, &gpuMedian, made)
+                                  ? rtGpuIn(&se, &gpuHist, gpuRec, &gpuAdded, &gpuMedian, made)
                                   : gpuNs;
                     q.submitNs = s_rtGame.slots ? 0 : E.sub;
                     q.submitOn = s_rtGame.slots && !s_rtGame.asRun;
@@ -2877,7 +2970,9 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
                     /* the GPU's time for this picture, from its submit
                        with the frame slots apart */
                     const uint64_t gi =
-                        s_rtGame.gpuSeqN != 0 ? s_rtGame.gpuSeq[made % s_rtGame.gpuSeqN] : gpuNs;
+                        s_rtGame.gpuSeqN == 0 || (s_rtGame.gpuSeqBurst && !burst) ? gpuNs
+                        : !burst ? s_rtGame.gpuSeq[made % s_rtGame.gpuSeqN]
+                                 : s_rtGame.gpuSeq[made % s_rtGame.gpuSeqN] * gpuNs / L->gpuNs;
                     const uint64_t gs =
                         s_rtGame.slots && interpNs != 0 ? sBegin + s_rtGame.subPartNs : rReadsEnd;
 
@@ -2896,6 +2991,10 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
             blockPresents++;
             nextPresent = gap ? pace_next_present(nextPresent, start, gap) : 0;
         }
+        if (s_rtGame.gpuRecords && mode >= RT_STEP) {
+            /* window_host.c perf_drain after the pace: the records in */
+            (void)rtGpuIn(&se, &gpuHist, gpuRec, &gpuAdded, &gpuMedian, made);
+        }
         if ((k + 1u) % 600u == 0) {
             /* a 10 s block's end */
             r.strictBlockMax = blockStrict > r.strictBlockMax ? blockStrict : r.strictBlockMax;
@@ -2908,8 +3007,14 @@ static RtRun rtTimerLoopRule(unsigned steps, const RtLoad *L, int mode, uint64_t
             deadline = t;
         }
     }
-    r.backoffs = s_rtGame.rule == RT_RULE_NOW ? se.backoffs : oldBo.backoffs;
+    r.backoffs = s_rtGame.rule == RT_RULE_NOW     ? se.backoffs
+                 : s_rtGame.rule == RT_RULE_V0114 ? v0114.backoffs
+                                                  : oldBo.backoffs;
     r.widens = se.widens;
+    r.counted = se.counted;
+    r.outliers = se.outliers;
+    r.fitEnds = se.fitEnds;
+    r.limitEnds = se.limitEnds;
     return r;
 }
 
@@ -2933,6 +3038,14 @@ static void rtPrint(const char *what, const RtRun *r)
            (double)r->readWaitNs / 1e6, r->slotWaits, (double)r->slotWaitNs / 1e6,
            (double)r->lateMax / 1e6, r->resyncs, r->blocked, r->subWaits,
            (double)r->subWaitNs / 1e6);
+    if (r->asks != 0 && r->counted + r->outliers + r->backoffs != 0) {
+        /* the step rule's back-off (PaceStepEst) */
+        printf("  the back-off: %u misses counted, %u outliers; %u begun (the first at step %d), "
+               "%u ended by the pictures fitting, %u at the limit (the last at step %d); %u steps "
+               "at the whole period\n",
+               r->counted, r->outliers, r->backoffs, r->beganAt == ~0u ? -1 : (int)r->beganAt,
+               r->fitEnds, r->limitEnds, r->endedAt == ~0u ? -1 : (int)r->endedAt, r->strict);
+    }
 }
 
 /* The further presents planned by the render thread's times
@@ -3617,12 +3730,17 @@ static const unsigned short s_rc11RestT[61] = {
      GPU 24 / 25 / 26 ms: 4098 / 3947 / 3814 presents (41.0 / 39.5 / 38.1
      a second) where the recent maxima give 3482 / 3435 / 3429 (34.8 /
      34.4 / 34.3; the GPU makes 41.7 / 40 / 38.5);
-     the steps that missed their period, all the pictures': 14 / 22 / 2
-     (7 / 8 / 0 over the 2 ms floor, each widening the margin; the latest
-     2.8 / 3.5 / 1.3 ms past it), one fall-back of 120 steps at 24 and 25
-     ms, in the first 10 s while the means learn the load; the recent
-     maxima none;
-     the lag (a step's start past its due time) at most 8.3 / 7.0 / 6.7 ms
+     the steps that missed their period, all the pictures': 14 / 21 / 2
+     (7 / 7 / 0 over the 2 ms floor, each widening the margin; the latest
+     2.8 / 3.4 / 1.3 ms past it), one fall-back of 120 steps at 24 and 25
+     ms, in the first 10 s while the means learn the load, ended at its
+     limit (two pictures a frame do not fit there, so the normal plan
+     holds some frames' first further picture too and PaceStepEst's
+     evidence never reaches 15 frames in a row; PACEBACK: the back-off
+     begins two steps after its third miss, once that miss is judged, so
+     25 ms has 3949 presents and 21 misses where it had 3947 and 22, and
+     the lag at 24 ms is 6.9 ms where it was 8.3); the recent maxima none;
+     the lag (a step's start past its due time) at most 6.9 / 7.0 / 6.7 ms
      (the maxima 4.2 / 6.5 / 3.5): the sound, which the game feeds up to
      120 ms ahead (docs/port/AUDIO.md: about 78-100 ms late before a hold),
      is never held back by it.
@@ -3639,8 +3757,8 @@ static void testRc11(void)
         uint64_t gpuNs;
         unsigned presents, misses, overFloor, backoffs, strict, before;
         uint64_t missMax, lateMax, beforeLate;
-    } cells[] = {{24 * MS, 4098, 14, 7, 1, 120, 3482, 2790001u, 8333334u, 4153334u},
-                 {25 * MS, 3947, 22, 8, 1, 120, 3435, 3456669u, 7033334u, 6533334u},
+    } cells[] = {{24 * MS, 4098, 14, 7, 1, 120, 3482, 2790001u, 6933334u, 4153334u},
+                 {25 * MS, 3949, 21, 7, 1, 120, 3435, 3370001u, 7033334u, 6533334u},
                  {26 * MS, 3814, 2, 0, 0, 0, 3429, 1270003u, 6693334u, 3493334u}};
 
     static uint64_t reads[61], interp[61], rest[61], close[16], field[4];
@@ -3901,6 +4019,219 @@ static void testRc12(void)
     }
 }
 
+/* testBackoffEvidence's runs: the window's rule (RT_RULE_NOW) or v0.11.4's
+   back-off (RT_RULE_V0114) at load L, vsync off and uncapped on a 120 Hz
+   mailbox (the pictures as made, the 7.8 ms gap), the pipe's GPU time the
+   median of the records (gpuRecords: each record two pictures late, into
+   the step rule's judging), the GPU's time a picture gpuSeq (cycled by the
+   picture's number; NULL: the load's) everywhere or (burstOnly) in the
+   load's burst only, the burst scaling it by burstGpu / gpuNs; read spikes
+   as s_rtGame's.  RtRun.strictFrom counts from the burst's end */
+static RtRun rtEvidenceRun(unsigned steps, const RtLoad *L, int rule, const uint64_t *gpuSeq,
+                           unsigned gpuSeqN, bool burstOnly, const unsigned *spikeAt,
+                           const uint64_t *spikeNs, unsigned spikes)
+{
+    RtRun r;
+
+    memset(&s_rtGame, 0, sizeof s_rtGame);
+    s_rtGame.rule = rule;
+    s_rtGame.gpuRecords = true;
+    s_rtGame.gpuSeq = gpuSeq;
+    s_rtGame.gpuSeqN = gpuSeqN;
+    s_rtGame.gpuSeqBurst = burstOnly;
+    s_rtGame.spikeAt = spikeAt;
+    s_rtGame.spikeNs = spikeNs;
+    s_rtGame.spikes = spikes;
+    s_rtGame.countFrom = L->burstFrom + L->burstLen;
+    r = rtTimerLoopRule(steps, L, RT_ASMADE, 2 * MS, false);
+    memset(&s_rtGame, 0, sizeof s_rtGame);
+    return r;
+}
+
+/* PACEBACK: the step rule's back-off counts only the misses that were the
+   plan's doing and ends on evidence (pace_policy.h PaceStepEst; the
+   owner's rc11 log of the bridge: 59 and 48 presented fps in turn, the
+   back-off doubled to 480 steps by misses that came with single GPU
+   pictures at 2-3x a median of 13.5 ms).  The rule is a throughput
+   limiter, so every cell asserts presents in 10 s against what the GPU
+   makes.  The load: testStepRule's as made (a 4.5 ms step, 6 ms reads, 2
+   ms interpolation, 2 ms on the submit thread, its present 0.5 ms), vsync
+   off uncapped on a 120 Hz mailbox, the game's frame two NTSC steps (33.4
+   ms), the pipe's GPU time the median of the records.
+   1. A steady GPU time of 9 / 12 / 13.5 / 17 / 20 / 25 ms: about 600 *
+      16.683 / G presents in 10 s (two a step at most): 1080 / 835 / 743
+      / 590 / 502 / 401 (the GPU makes 1112 / 834 / 741 / 588 / 500 / 400);
+      v0.11.4's back-off gives the same counts (a back-off in the first
+      second at 17 and 25 ms: 121 and 124 steps planned at the whole
+      period, where v0.11.4's doubling planned 241 and 484), no step
+      missing its period after the first second, no step later than the
+      slack and the margin past its due time.
+   2. 13.5 ms with one picture in 20 at 2.5x (33.75 ms; the GPU's mean
+      14.51 ms), 100 s: 6896 presents, what those pictures cost (the steady
+      13.5 ms run's 7416 times 13.5 / 14.5125: 6898), every miss over the
+      floor judged an outlier miss but 2, no back-off, and the margin's
+      widening by each outlier miss taken back; v0.11.4's back-off 6052
+      (5664 of the 6000 steps at the whole period, 14 back-offs).  The lag
+      30.3 ms after the slowest pictures (v0.11.4's 28.3): within a refresh
+      of it.
+   3. Three misses the plan made (a picture's reads 20 ms longer at steps
+      300, 400 and 500, no GPU outlier) begin one back-off, two steps after
+      the third; it ends by the pictures between frames fitting the normal
+      plan 15 frames in a row (29 steps), where v0.11.4's held 120.
+   4. 20 ms pictures (varying as rc11's submit table, 13-29 ms) for 2 s
+      from step 600, then 13.5 ms: the misses of the overload begin a
+      back-off, and it ends 38 steps after the overload's end (the median
+      relearns 13.5 ms in about 7 records, then 15 frames: 0.63 s), where
+      v0.11.4's held 120 (83 after the end).
+   5. The same 20 ms pictures from step 600 on (sustained): every back-off
+      ends at its limit of 120 steps (two pictures a frame do not fit, so
+      some frames' pictures between frames would not have fitted the
+      normal plan either), 1466 of the 1800 steps at the whole period, the
+      rate the GPU's: 2209 presents in 40 s where v0.11.4 gave 2222.
+   6. A GPU whose time a picture varies as rc11's submit table about 13.5
+      ms everywhere (8.9-19.4 ms, under 7/4 of the median: no outliers,
+      rc11's bridge median 13.5 against a mean of 14.5), 40 s: 2751
+      presents where v0.11.4 gave 2529, 953 steps at the whole period
+      where it planned 1858 (28 of the 33 back-offs ended by the evidence).
+   Every cell: every frame shown, no resync, and the lag (a step's start
+   past its due time) at most a refresh past v0.11.4's in the same run. */
+static void testBackoffEvidence(void)
+{
+    static const unsigned gpuT[6] = {90, 120, 135, 170, 200, 250};
+    static const unsigned rate[6] = {1080, 835, 743, 590, 502, 401};
+    const uint64_t refresh = 8333333ull;
+    const uint64_t slack = NTSC - 9 * MS / 2 - PACE_RT_STEP_MARGIN_NS;
+    const uint64_t g135 = 135 * MS / 10u;
+    static uint64_t jitter[61];
+
+    for (unsigned i = 0; i < 61; i++) {
+        jitter[i] = g135 * s_rc11RestT[i] / 80u;
+    }
+    for (unsigned i = 0; i < 6; i++) {
+        const uint64_t g = (uint64_t)gpuT[i] * MS / 10u;
+        const RtLoad L = {9 * MS / 2, MS / 10, 6 * MS, 2 * MS, g, 0, 0, 0, 0, 0, 0, MS / 2};
+        const RtRun now = rtEvidenceRun(600, &L, RT_RULE_NOW, NULL, 0, false, NULL, NULL, 0);
+        const RtRun before = rtEvidenceRun(600, &L, RT_RULE_V0114, NULL, 0, false, NULL, NULL, 0);
+        const uint64_t gpuMakes = 600u * NTSC / g;
+        char what[96];
+
+        snprintf(what, sizeof what, "the back-off's evidence: %.1f ms GPU pictures",
+                 (double)g / 1e6);
+        rtPrint(what, &now);
+        printf("  v0.11.4's back-off: %u presents, %u steps at the whole period\n", before.presents,
+               before.strict);
+        CHECK(now.presents + 3u >= rate[i] && now.presents <= rate[i] + 3u);
+        CHECK(now.presents == before.presents && now.strict <= before.strict);
+        /* what the GPU makes (two a step at most), never more */
+        CHECK((uint64_t)now.presents * 100u >= 97u * (gpuMakes < 1200u ? gpuMakes : 1200u));
+        CHECK((uint64_t)now.presents <= gpuMakes + 3u);
+        CHECK(now.shown == now.frames && now.resyncs == 0 && now.outliers == 0);
+        CHECK(now.overFloor == 0);
+        /* inside the slack and the margin, 20 ms: a refresh more (v0.11.4's
+           the same) */
+        CHECK(now.lateMax <= slack + PACE_RT_STEP_MARGIN_NS + (g == 20 * MS ? refresh : 0));
+        CHECK(now.lateMax <= before.lateMax + refresh);
+    }
+    {
+        static uint64_t seq[20];
+        const RtLoad L = {9 * MS / 2, MS / 10, 6 * MS, 2 * MS, g135, 0, 0, 0, 0, 0, 0, MS / 2};
+
+        for (unsigned i = 0; i < 20; i++) {
+            seq[i] = i == 7 ? g135 * 5u / 2u : g135;
+        }
+        const RtRun base = rtEvidenceRun(6000, &L, RT_RULE_NOW, NULL, 0, false, NULL, NULL, 0);
+        const RtRun now = rtEvidenceRun(6000, &L, RT_RULE_NOW, seq, 20, false, NULL, NULL, 0);
+        const RtRun before = rtEvidenceRun(6000, &L, RT_RULE_V0114, seq, 20, false, NULL, NULL, 0);
+        /* the steady run less what the slow pictures cost: 13.5 against
+           the mean of 14.5125 ms */
+        const unsigned cost = (unsigned)((uint64_t)base.presents * 1080u / 1161u);
+
+        rtPrint("the back-off's evidence: 13.5 ms, one picture in 20 at 2.5x, 100 s", &now);
+        printf("  steady 13.5 ms: %u presents (less the slow pictures' cost %u); v0.11.4's "
+               "back-off: %u presents, %u back-offs, %u steps at the whole period, the lag %.1f "
+               "ms\n",
+               base.presents, cost, before.presents, before.backoffs, before.strict,
+               (double)before.lateMax / 1e6);
+        CHECK(base.presents + 3u >= 7416u && base.presents <= 7419u && base.backoffs == 0);
+        CHECK(now.presents + 3u >= cost && now.presents <= cost + 3u);
+        CHECK(now.presents + 3u >= 6896u && now.presents <= 6899u);
+        CHECK(now.backoffs == 0 && now.strict == 0 && now.outliers >= 400u && now.counted <= 2u);
+        CHECK(before.backoffs >= 10u && before.strict > 5000u &&
+              before.presents + 600u < now.presents);
+        CHECK(now.lateMax <= before.lateMax + refresh);
+        CHECK(now.shown == now.frames && now.resyncs == 0);
+    }
+    {
+        static const unsigned at[3] = {300, 400, 500};
+        static const uint64_t ns[3] = {20 * MS, 20 * MS, 20 * MS};
+        const RtLoad L = {9 * MS / 2, MS / 10, 6 * MS, 2 * MS, g135, 0, 0, 0, 0, 0, 0, MS / 2};
+        const RtRun now = rtEvidenceRun(900, &L, RT_RULE_NOW, NULL, 0, false, at, ns, 3);
+        const RtRun before = rtEvidenceRun(900, &L, RT_RULE_V0114, NULL, 0, false, at, ns, 3);
+
+        rtPrint("the back-off's evidence: three misses the plan made", &now);
+        printf("  v0.11.4's back-off: %u presents, %u steps at the whole period\n", before.presents,
+               before.strict);
+        /* the three spikes' misses over the floor (a miss in the first
+           second counted too, out of the window by step 300) */
+        CHECK(now.backoffs == 1 && now.outliers == 0 && now.overFloor == 3u && now.counted == 4u);
+        CHECK(now.fitEnds == 1 && now.limitEnds == 0 && now.beganAt >= 500u && now.beganAt < 510u);
+        /* the frame it began in and 14 more */
+        CHECK(now.strict >= 2u * (pace_step_fit_frames(2u * NTSC) - 1u) && now.strict < 40u);
+        CHECK(before.backoffs == 1 && before.strict == 120u && now.presents > before.presents);
+        CHECK(now.lateMax <= before.lateMax + refresh);
+    }
+    for (unsigned c = 0; c < 2; c++) {
+        /* 20 ms pictures varying as rc11's submit table: 2 s, sustained */
+        const RtLoad L = {
+            9 * MS / 2, MS / 10, 6 * MS, 2 * MS, g135, 6 * MS, 2 * MS, 600, c == 0 ? 120u : 1800u,
+            20 * MS,    0,       MS / 2};
+        const RtRun now = rtEvidenceRun(2400, &L, RT_RULE_NOW, jitter, 61, true, NULL, NULL, 0);
+        const RtRun before =
+            rtEvidenceRun(2400, &L, RT_RULE_V0114, jitter, 61, true, NULL, NULL, 0);
+
+        rtPrint(c == 0 ? "the back-off's evidence: 20 ms pictures for 2 s, then 13.5 ms, 40 s"
+                       : "the back-off's evidence: 20 ms pictures from 10 s on, 40 s",
+                &now);
+        printf(
+            "  %u steps at the whole period after the overload; v0.11.4's back-off: %u presents, "
+            "%u steps at the whole period (%u after it)\n",
+            now.strictFrom, before.presents, before.strict, before.strictFrom);
+        CHECK(now.shown == now.frames && now.resyncs == 0);
+        CHECK(now.beganAt >= 600u && now.beganAt < 720u);
+        CHECK(now.lateMax <= before.lateMax + refresh);
+        if (c == 0) {
+            /* ended by the evidence: 15 frames once the median relearns
+               13.5 ms (half the 8 records and the two a record comes
+               late: 7 pictures, at two a frame or more 4 frames), within a
+               frame of the frame's close */
+            CHECK(now.fitEnds >= 1u && now.endedAt >= 720u);
+            CHECK(now.endedAt - 720u <= 2u * (pace_step_fit_frames(2u * NTSC) + 4u + 1u));
+            CHECK(now.presents + 3u >= 2909u && now.presents <= 2912u);
+            CHECK(now.presents >= before.presents && before.strictFrom > now.strictFrom);
+        } else {
+            /* stays backed off: no end by the evidence, the GPU's rate */
+            CHECK(now.fitEnds == 0 && now.limitEnds >= 5u && now.strict >= 1400u);
+            CHECK(now.presents + 3u >= 2209u && now.presents <= 2212u);
+            CHECK(now.presents * 100u >= before.presents * 99u);
+        }
+    }
+    {
+        const RtLoad L = {9 * MS / 2, MS / 10, 6 * MS, 2 * MS, g135, 0, 0, 0, 0, 0, 0, MS / 2};
+        const RtRun now = rtEvidenceRun(2400, &L, RT_RULE_NOW, jitter, 61, false, NULL, NULL, 0);
+        const RtRun before =
+            rtEvidenceRun(2400, &L, RT_RULE_V0114, jitter, 61, false, NULL, NULL, 0);
+
+        rtPrint("the back-off's evidence: a GPU varying about 13.5 ms (rc11's submit table), 40 s",
+                &now);
+        printf("  v0.11.4's back-off: %u presents, %u back-offs, %u steps at the whole period\n",
+               before.presents, before.backoffs, before.strict);
+        CHECK(now.outliers == 0 && now.fitEnds >= 20u);
+        CHECK(now.presents + 3u >= 2751u && now.presents <= 2754u);
+        CHECK(before.presents + 3u >= 2529u && before.presents <= 2532u);
+        CHECK(now.strict + 600u < before.strict && now.lateMax <= before.lateMax + refresh);
+    }
+}
+
 /* PACE6: rc13's blocks (build-host/tmp/v098/evidence/rc13/ico-pc.log, the
    PowerVR phone, stage 6, vsync off uncapped on a 120 Hz mailbox) in
    VKSLOTS' world (s_rtGame.slots: the frame slots apart, the pipe's GPU
@@ -3919,13 +4250,16 @@ static void testRc12(void)
    waiting 5 ms (half the refresh or more): 46.0 / 45.1 / 30.2 presented
    fps, the phone's 45.6 / 45.5 (X's block changed resolution inside it);
    now (render_thread.h IcoRtPlan.submitOn, handed on by window_present.c
-   rt_ask) 67.1 / 65.3 / 54.5 and 43.1 / 45.8 / 33.9 for rc12's, about the
+   rt_ask) 67.1 / 65.7 / 54.5 and 43.1 / 45.8 / 33.9 for rc12's, about the
    GPU's own rate (67.6 / 68.5 / 56.2, 44.6 / 46.1 / 33.9): the Original
    preset past the display's 60.  With the GPU's time alternating 21.0 /
    8.6 ms by the picture (the slow replay lines :768-:779: 21.2, 8.2, 21.1,
    8.1 on consecutive replays, the same mean) 63.3.  Numbers from
    build-host/tmp/v098/evidence/pace6/c_cells_rc13.py (.out), the loop's
-   port */
+   port; E's one back-off (its third miss at step 418) now ends after 72
+   steps, the pictures between frames fitting the normal plan 15 frames in
+   a row (PACEBACK, PaceStepEst), where it held 120: 657 presents where it
+   gave 653 */
 static void testRc13(void)
 {
     /* O, E, X (rc13_load.py frame); rc12's from s_rc12CloseT */
@@ -3945,7 +4279,7 @@ static void testRc13(void)
     } cells[6] = {{"O (rc13 :572, the Original preset, 512x448)", 14800000u, 2200000u, 4600000u, 78,
                    26, 72, 15, 45.6, 0.5, 460, 671, 0, 0, 0, 0},
                   {"E (rc13 :977, Enhanced, 848x448)", 14600000u, 2500000u, 4300000u, 76, 24, 69,
-                   15, 45.5, 0.5, 451, 653, 6, 3, 120, 1},
+                   15, 45.5, 0.5, 451, 657, 6, 3, 72, 1},
                   {"X (rc13 :909, Enhanced, 1696x896)", 17800000u, 2900000u, 4500000u, 79, 25, 69,
                    15, 34.3, 4.5, 302, 545, 3, 1, 0, 0},
                   {"rc12 A (:601, 2364x1080)", 22400000u, 4800000u, 4600000u, 110, 28, 70, 15, 0.0,
@@ -4215,6 +4549,7 @@ int main(void)
     testRc12();
     testRc13();
     testDefaults();
+    testBackoffEvidence();
     if (fails) {
         printf("pace_loop_test: %d failures\n", fails);
         return 1;
