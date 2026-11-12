@@ -38,6 +38,7 @@
 #include "modelpack.h"    /* the model pack switch */
 #include "rd_mesh.h"
 #include "rd_present_scene.h"
+#include "rd_shadow_tile.h" /* rd__shadow_tile_shutdown */
 #include "rd_tex.h"
 #include "rd_tex_decode.h"
 #include "rd_tone.h"
@@ -1965,9 +1966,10 @@ void rd_shutdown(void)
     if (g_rd.hasDevice) {
         rd_video_shutdown(); /* the FMV path's objects (rd_video.c), before the device */
         rd__present_shutdown();
-        rd__crack_fill_shutdown(); /* the crack filler's count target and buffer */
-        rd__aura_box_shutdown();   /* the aura's ROWBOX (rd_aura_box.c) */
-        rd__vu_skin_shutdown();    /* the skin check's probes (rd_vu_skin_check.c) */
+        rd__crack_fill_shutdown();  /* the crack filler's count target and buffer */
+        rd__aura_box_shutdown();    /* the aura's ROWBOX (rd_aura_box.c) */
+        rd__shadow_tile_shutdown(); /* the shadow tiles' masks (rd_shadow_tile.c) */
+        rd__vu_skin_shutdown();     /* the skin check's probes (rd_vu_skin_check.c) */
         rd__gpu_shutdown();
     }
     rd__pipeline_cache_clear();

@@ -810,6 +810,22 @@ bool rd__shadow_tile_test_ok(void)
     return s_t.test == ST_OK;
 }
 
+void rd__shadow_tile_shutdown(void)
+{
+    for (int i = 0; i < RD_ST_MASKS; i++) {
+        if (s_t.mask[i].tex.id && g_rd.hasDevice) {
+            rhi_destroy_texture(s_t.mask[i].tex);
+        }
+    }
+    /* g_rd.replayCounter starts again at rd_init: a kept slot would match a
+     * replay of the next renderer and hand it the old device's handle */
+    memset(s_t.mask, 0, sizeof(s_t.mask));
+    s_t.test = ST_NOT_RUN;
+    s_t.words[0] = '\0';
+    s_t.curOrd = UINT32_MAX;
+    s_t.curMask = 0;
+}
+
 /* ------------------------------------------------------------ the lines */
 
 static struct {

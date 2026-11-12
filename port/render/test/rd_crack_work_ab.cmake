@@ -7,8 +7,11 @@
 # rd_replay_tool's --pass-dump with --stats and ICO_RD_VU_PREPASS=0, at:
 #   phone   the PowerVR phone's Resolution Auto (Enhanced, 2364x1080, Full height,
 #           Full pixel, presented at 2364x1080; scale about 2.8 x 2.4, reach 2x2)
-#           under the tile class's fakes (ICO_VK_FAKE_LIMITS=moltenvk: the fill
-#           in the aura's paste pass, or held by the late pass);
+#           under the tile class's fakes (ICO_VK_FAKE_LIMITS=moltenvk) and the
+#           late pass the phone takes by default (ICO_RD_LATE_PASS=1: the fake
+#           leaves RhiLimits.tiler false on lavapipe, so the profile alone
+#           would give list 11's join only and no hold): the fill in the
+#           aura's paste pass, or held by the late pass;
 #   desk21  a desktop window of 1344x1008 at 4:3 (scale 2.1 for a frame 640 GS
 #           pixels wide, 2.625 for 512; reach 2x2 or 2x2), lavapipe's own profile
 #           (the fill in a pass of its own);
@@ -81,7 +84,7 @@ list(LENGTH dumps ndumps)
 
 set(common ICO_RD_VU_PREPASS=0)
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
-set(env_phone ICO_VK_FAKE_LIMITS=moltenvk)
+set(env_phone ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_LATE_PASS=1)
 set(args_desk21 --enhanced --resolution 1344x1008 --aspect 1.3333 --present 1344x1008)
 set(env_desk21 "")
 set(args_desk3x --enhanced --resolution 3x --aspect 1.3333 --present 1920x1440)
