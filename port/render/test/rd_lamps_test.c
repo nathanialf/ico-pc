@@ -182,8 +182,9 @@ int main(void)
           "the bits' words");
     /* t2 */
     const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD; /* every class */
-    CHECK(rd__lamps_default_bits(1, false, true, true, true) == RD_LAMPS_ALL, "PowerVR");
-    CHECK(rd__lamps_default_bits(1, true, true, true, true) == RD_LAMPS_ALL, "PowerVR, a phone");
+    CHECK(rd__lamps_default_bits(1, false, true, true, true) == (ev | RD_LAMPS_AREA), "PowerVR");
+    CHECK(rd__lamps_default_bits(1, true, true, true, true) == (ev | RD_LAMPS_AREA),
+          "PowerVR, a phone");
     CHECK(rd__lamps_default_bits(2, false, true, true, true) == (ev | RD_LAMPS_AREA),
           "a desktop, pass area (the fold of two pairs by the switch alone)");
     CHECK(rd__lamps_default_bits(2, false, true, false, true) == ev, "a desktop, no area");

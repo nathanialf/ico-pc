@@ -274,12 +274,13 @@ uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool
     if (cls && vulkan && passArea) {
         b |= RD_LAMPS_AREA;
     }
-    /* the PowerVR class alone by default (a desktop class only by
-     * ICO_RD_LAMPS: the A/Bs and stored baselines of lavapipe's desktop
-     * profile keep the pass counts they were made with) */
-    if (tileClass == 1 && vulkan && blurFold) {
-        b |= RD_LAMPS_FOLD4;
-    }
+    /* the fold of two blur pairs is off by default on every class in this
+     * release: on the owner's PowerVR phone (rc20) the lamps pictures took
+     * 28.3 to 30.9 ms of GPU work with it against 25.7 to 26.0 without
+     * (glow WORK0: 9 passes in 8.8 ms against 12 in 3.2 ms): the folded
+     * shader costs more than the passes it removes. ICO_RD_LAMPS=...,fold4
+     * turns it on (tests) */
+    (void)blurFold;
     return b;
 }
 
