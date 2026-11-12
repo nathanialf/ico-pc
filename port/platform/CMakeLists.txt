@@ -9,6 +9,7 @@ target_sources(ico_platform PRIVATE
     backup.c
     bones_ladder.c
     code_hash.c
+    cpu_keep.c
     diag_host.c
     fiber.c
     fps_counter.c
@@ -357,6 +358,22 @@ target_compile_options(perf_hint_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT
 target_link_libraries(perf_hint_test PRIVATE ico_thread)
 if(ICO_RUN_TESTS)
     add_test(NAME perf_hint COMMAND perf_hint_test)
+endif()
+
+# cpu_keep_test: the render, game and submit threads' cores kept after the
+# start (cpu_keep.h): the rule from the cores' top speeds (the owner's
+# Pixel, a Helio G85, a 4 + 3 + 1 phone, 4 + 4, a 4-core device, one speed,
+# one core), the keeper against a fake kernel (all kept, core 7 alone
+# widened to 2-7 as on the Pixel, the system changing the cores, every
+# one-core pin widened, a cpuset without core 7, ids not known yet), the
+# lines word for word; cpu_place's samples by core, a fake cpuset under the
+# build folder and the registered free threads moved back (Linux)
+add_executable(cpu_keep_test test/cpu_keep_test.c cpu_keep.c)
+target_include_directories(cpu_keep_test PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_compile_options(cpu_keep_test PRIVATE ${ICO_SEMANTIC_OPTIONS} ${ICO_PORT_WARNINGS})
+target_link_libraries(cpu_keep_test PRIVATE ico_thread)
+if(ICO_RUN_TESTS)
+    add_test(NAME cpu_keep COMMAND cpu_keep_test "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 
 # The automatic dumps' worker (dump_auto.c, issues 123 and 179): a job written
