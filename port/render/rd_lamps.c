@@ -107,6 +107,10 @@ static struct {
     int force; /* rd__lamps_force: -1 none */
     int env;   /* -1 unread, 0 unset, 1 set (envBits), 2 not understood */
     uint32_t envBits;
+    /* the glow's blur in two passes pinned off (ICO_RD_LAMPS=noglowblur, or
+     * rd__lamps_glowblur_pin: the tests that compare with the game's exact
+     * chain), the rest as the class's default or the words */
+    bool noGlowBlur;
     uint32_t def; /* the class's (rd__lamps_init) */
     char said[200];
 } s_sw = {.force = -1, .env = -1};
@@ -487,6 +491,12 @@ static void envRead(void)
         return;
     }
     const char *e = getenv("ICO_RD_LAMPS"); /* the tests only: no config key */
+    if (e && strcmp(e, "noglowblur") == 0) {
+        s_sw.noGlowBlur = true; /* the class's default without the glow blur */
+        s_sw.env = 0;
+        s_sw.envBits = 0;
+        return;
+    }
     uint32_t b = 0;
     const int k = rd__lamps_parse(e, &b);
     s_sw.env = k == 1 ? 1 : k == 0 ? 0 : 2;
@@ -512,7 +522,14 @@ static uint32_t wanted(void)
         return (uint32_t)s_sw.force & RD_LAMPS_ALL;
     }
     envRead();
-    return s_sw.env == 1 ? s_sw.envBits : s_sw.def;
+    const uint32_t b = s_sw.env == 1 ? s_sw.envBits : s_sw.def;
+    return s_sw.noGlowBlur ? b & ~RD_LAMPS_GLOWBLUR : b;
+}
+
+void rd__lamps_glowblur_pin(bool off)
+{
+    envRead();
+    s_sw.noGlowBlur = off;
 }
 
 uint32_t rd__lamps_bits(void)

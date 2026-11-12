@@ -23,10 +23,11 @@ endif()
 # tools/glow_light_dumps.txt and tools/lamps_dumps.txt (machine-local; a
 # listed dump that is absent fails) with the glow's blur in two passes against
 # today's chain at the phone's setting, Enhanced 2x, 3x and 4x at 4:3 and the
-# Mali fakes: WORK3, WORK0, DISPLAY and PRESENT within VD-33's bounds, the
-# passes fewer by the chain's as today draws them less two, the shimmer at
-# the phone's setting and 2x; at 1x and under the poison every PNG the same
-# bytes; rd_glow_blur_gl the phone's setting on OpenGL (llvmpipe).  No device: SKIP.
+# Mali fakes, Original 4:3 at 1x and Enhanced 1x: WORK3, WORK0, DISPLAY and
+# PRESENT within VD-33's bounds, the passes fewer by the chain's as today
+# draws them less two, the shimmer at the phone's setting, 2x and both 1x
+# rows; under the poison every PNG the same bytes; rd_glow_blur_gl the phone's
+# setting on OpenGL (llvmpipe).  No device: SKIP.
 if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
     file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/glow_blur_ab")
     add_test(NAME rd_glow_blur_ab

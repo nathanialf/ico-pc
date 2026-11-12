@@ -120,6 +120,11 @@ extern "C" {
  * VD-33); not in RD_LAMPS_ALL.  By its word, or by the build's
  * RD_GLOW_BLUR_DEFAULT (rd_glow_blur.h) on every class and backend */
 #define RD_LAMPS_GLOWBLUR 65536u
+/* the tests that compare the glow with the game's exact chain (the CPU GS
+ * model, the native-frame manifest, the light plan's A/B): the glow blur
+ * off whatever RD_GLOW_BLUR_DEFAULT says, every other bit as before
+ * (ICO_RD_LAMPS=noglowblur does the same for a tool run) */
+void rd__lamps_glowblur_pin(bool off);
 #ifndef RD_LAMPS_FILLPASTE_DEFAULT
 #define RD_LAMPS_FILLPASTE_DEFAULT 0
 #endif

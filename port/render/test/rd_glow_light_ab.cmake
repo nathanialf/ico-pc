@@ -76,6 +76,11 @@ set(settings phone orig enh2x43 phonedef enh1x mali1x origdef)
 # are pinned for the same reason (each plans by the passes around it).
 set(pins ICO_RD_LATE_PASS=0 ICO_RD_AURA_PASTE=0 ICO_RD_CRACK_SWAP=0 ICO_RD_PRESENT_SCENE=0
          ICO_RD_SHADOW_BOX=0 ICO_RD_STENCIL_PACKED=0)
+# Every run, the defaults' ones too, sets ICO_RD_LAMPS=noglowblur: the glow
+# blur in two passes (rd_glow_blur.c, VD-33: not byte-identical) takes lamps
+# and whole plans but not the chain drawn whole (ICO_RD_GLOW_LIGHT=0), so a
+# build with RD_GLOW_BLUR_DEFAULT 1 would put its difference between the
+# arms; the lamps' other parts stay at the class's default
 # phonedef: the phone's setting with every switch at its default, the
 # interaction itself pinned: SCENE, DISPLAY and PRESENT within VD-31's bound
 # (at most 3 levels on at most 800 pixels), every other target's RGB the same
@@ -144,7 +149,7 @@ foreach(dump IN LISTS dumps)
     if(s MATCHES "def$")
       set(pin "")
     endif()
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_GLOW_LIGHT=0 ${pin} ${env_${s}} "${TOOL}"
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_GLOW_LIGHT=0 ICO_RD_LAMPS=noglowblur ${pin} ${env_${s}} "${TOOL}"
                             "${dump}" "${dirW}/out.png" --pass-dump "${dirW}" --stats
                             ${args_${s}}
                     RESULT_VARIABLE rc OUTPUT_VARIABLE wout ERROR_VARIABLE werr)
@@ -152,7 +157,7 @@ foreach(dump IN LISTS dumps)
       message(STATUS "SKIP: no device: ${werr}")
       return()
     endif()
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${pin} ${env_${s}} "${TOOL}" "${dump}"
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_LAMPS=noglowblur ${pin} ${env_${s}} "${TOOL}" "${dump}"
                             "${dirP}/out.png" --pass-dump "${dirP}" --stats ${args_${s}}
                     RESULT_VARIABLE prc OUTPUT_VARIABLE pout ERROR_VARIABLE perr)
     if(NOT rc EQUAL 0 OR NOT prc EQUAL 0)

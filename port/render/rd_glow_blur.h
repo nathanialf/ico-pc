@@ -39,8 +39,8 @@
  * RD_GLOW_BLUR_DEFAULT is 1, on every class and backend with the shader,
  * only in a frame whose glow light plan is LAMPS or WHOLE (rd_glow_light.c;
  * a WHOLE plan drawn whole because a later command reads WORK1, WORK2,
- * WORK3 or SCENE's alpha, or for an unknown form, is refused), above 1x
- * (Original 1x keeps the game's chain), and where the chain has the
+ * WORK3 or SCENE's alpha, or for an unknown form, is refused), at every
+ * scale and preset, Original 1x included, and where the chain has the
  * recognised form (rd_replay_tiler.c rd__replay_blur_chain: the fold's
  * conditions on every pass, pairs of WORK0 <-> WORK1, the eye blur next,
  * pass 2 covering WORK0, pass 1's colour 128 and no constant added).
@@ -117,7 +117,6 @@ enum {
     RD_GLOW_BLUR_WHY_NONE,
     RD_GLOW_BLUR_WHY_PLAN,   /* the glow light plan is not LAMPS or WHOLE */
     RD_GLOW_BLUR_WHY_READER, /* WHOLE: a later command reads WORK1, WORK2, WORK3 or SCENE's alpha */
-    RD_GLOW_BLUR_WHY_ONE,    /* Original 1x (SCENE at scale 1) */
     RD_GLOW_BLUR_WHY_FORM,   /* a pass not of the fold's form, or no eye blur after the pairs */
     RD_GLOW_BLUR_WHY_COLOUR, /* a constant added, pass 1's colour not 128, no TCC, not RGBA32 */
     RD_GLOW_BLUR_WHY_COVER,  /* a pass 2 leaves texels of WORK0, or WORK1 of another width */

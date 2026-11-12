@@ -38,7 +38,6 @@ static const char *const kWhy[RD_GLOW_BLUR_WHY_COUNT] = {
     "drawn in two passes",
     "the glow's light plan is not lamps or whole",
     "a later command reads WORK1, WORK2, WORK3 or SCENE's alpha, or the chain's form is unknown",
-    "Original 1x: the game's chain",
     "a pass not of the blur pair's form, or no eye blur after the pairs",
     "a pass adds a constant, a pass 1's colour is not 128, or its alpha is not the texture's",
     "a pass 2 leaves texels of WORK0, or WORK1 is of another width",
@@ -402,7 +401,7 @@ void rd__glow_blur_init(void)
         rd__log("glow blur: %s: the glow's blur pairs drawn as two passes (fx_glowblur_ps: %d "
                 "bilinear taps a texel across, then down, the chain's kernel per column and "
                 "row; identical to the eye, DIVERGENCES.md VD-33) in lamps and whole pictures "
-                "above 1x%s",
+                "at every scale%s",
                 on ? "on" : "off", RD_GLOW_BLUR_TAPS,
                 on ? "" : " (asked for, but the module is not made on this device)");
     }
@@ -462,7 +461,7 @@ static bool refuse(int why)
     return false;
 }
 
-/* the plan and the scale: why not (NONE: go on) */
+/* the plan: why not (NONE: go on) */
 static int planWhy(void)
 {
     if (g_rdWin.first) {
@@ -479,10 +478,8 @@ static int planWhy(void)
     } else if (plan != RD_GLOW_LIGHT_LAMPS) {
         return RD_GLOW_BLUR_WHY_PLAN;
     }
-    const RdTargetRec *sc = rd__target_rec(rd_target(RD_TARGET_SCENE).id);
-    if (!sc || (sc->sx == 1.0f && sc->sy == 1.0f)) {
-        return RD_GLOW_BLUR_WHY_ONE;
-    }
+    /* every scale, Original 1x included (the owner's rule: no visible
+     * difference, faster), as the glow's light plan */
     return RD_GLOW_BLUR_WHY_NONE;
 }
 

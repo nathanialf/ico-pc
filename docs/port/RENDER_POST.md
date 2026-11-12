@@ -723,8 +723,10 @@ passes, so a texel the down pass did not write would show.
 Where: `RD_LAMPS_GLOWBLUR` asked for; a frame whose glow light plan is lamps, or whole for the
 sun's fans, the sun's branch, a grey fill or the MSAA epoch (a whole plan drawn so for a later
 reader of WORK1, WORK2, WORK3 or SCENE's alpha, or for an unknown form, keeps the chain: WORK1
-ends holding the across pass, not the chain's last pass 1); above 1x (Original 1x keeps the
-game's chain); every pass of the fold's form, pairs crossing WORK0 and WORK1 to the eye blur, pass
+ends holding the across pass, not the chain's last pass 1); every scale and preset, Original
+1x included (the owner's rule: not a difference a player sees, and faster; as the light plan,
+which applies at 1x too; at Original 1x the model is as exact and the fit the same: WORK3 at most
+16 levels on the title and on issue 163's frame, a mean of 0.11 and 0.36); every pass of the fold's form, pairs crossing WORK0 and WORK1 to the eye blur, pass
 1's colour 128, no constant added, TCC, 32-bit textures, every pass 2 covering WORK0, WORK1 as
 wide; no row weighing WORK1's bytes from before the chain; no pass window. Anything else is drawn
 as recorded, each reason said once.

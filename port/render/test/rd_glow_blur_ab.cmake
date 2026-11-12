@@ -13,8 +13,10 @@
 #   enh4x   Enhanced 4x at 4:3, presented at 2560x1920;
 #   mali    the phone's setting under the Mali fakes (no blur fold: the
 #           chain's twenty passes against two);
-#   x1      Enhanced 1x: Original's scale keeps the game's chain: every PNG
-#           the same bytes, no chain in two passes;
+#   orig    Original 4:3 at 1x (--aspect 4:3, lavapipe's own class): the glow
+#           blur applies at every scale and preset (the owner's rule), so
+#           Original's 1x is measured as the others;
+#   enh1x   Enhanced 1x presented at 2364x1080 under the MoltenVK fake;
 #   poison  the phone's setting, glowblur against glowblur under
 #           ICO_RD_LAMPS_POISON=1 (WORK0 magenta before the down pass): every
 #           PNG the same bytes (the down pass writes every texel of WORK0).
@@ -36,14 +38,15 @@
 #     DISPLAY and PRESENT (RGB) at most w3Max, w3Max and dispMax levels
 #     from today's (printed per dump as "glow blur measure: ...", with each
 #     setting's maxima at the end);
-#   - at the phone's setting and 2x, the shimmer (WORK3's change under
+#   - at the phone's setting, 2x, Original 1x and Enhanced 1x, the shimmer (WORK3's change under
 #     --jitter 0.5,0.5, the lamps package's measure) with glowblur at most
 #     shimNum/shimDen of today's plus shimPlus levels;
 #   - at least one chain in two passes over the list at each measured setting.
 # The bounds (the evidence's Python fit, glowblur/design.py and synth.py:
 # WORK3 at most 14 and 18 levels on the title and issue 163's lamps, 18 to
 # 20 on synthetic lamps at the phone's 424 x 128; the shimmer 1.15 times
-# today's at most): WORK3 and WORK0 24 levels (20 and a margin of 4),
+# today's at most; at Original 1x WORK3 at most 16 and 16, a mean of 0.11
+# and 0.36): WORK3 and WORK0 24 levels (20 and a margin of 4),
 # DISPLAY and PRESENT 26 (the paste adds WORK3 at FIX 128 through the GS
 # bilinear, the reduction and the present filter average it: at most
 # WORK3's, plus 2 for their roundings); the shimmer 5/4 of today's + 4.
@@ -95,7 +98,8 @@ set(args_enh43 --enhanced --resolution 2x --aspect 1.3333 --present 1280x960)
 set(args_enh3x --enhanced --resolution 3x --aspect 1.3333 --present 1920x1440)
 set(args_enh4x --enhanced --resolution 4x --aspect 1.3333 --present 2560x1920)
 set(args_mali ${args_phone})
-set(args_x1 --enhanced --resolution 1x --present 2364x1080)
+set(args_orig --aspect 4:3)
+set(args_enh1x --enhanced --resolution 1x --present 2364x1080)
 set(args_poison ${args_phone})
 set(args_gl ${args_phone})
 set(fake_phone ICO_VK_FAKE_LIMITS=moltenvk)
@@ -103,7 +107,8 @@ set(fake_enh43 ${fake_phone})
 set(fake_enh3x ${fake_phone})
 set(fake_enh4x ${fake_phone})
 set(fake_mali ICO_VK_FAKE_LIMITS=mali ICO_VK_FAKE_VENDOR=0x13B5)
-set(fake_x1 ${fake_phone})
+set(fake_orig "")
+set(fake_enh1x ${fake_phone})
 set(fake_poison ${fake_phone})
 set(fake_gl "")
 if("${BACKEND}" STREQUAL "opengl")
@@ -111,9 +116,9 @@ if("${BACKEND}" STREQUAL "opengl")
   set(measured gl)
   set(shimSettings "")
 else()
-  set(settings phone enh43 enh3x enh4x mali x1 poison)
-  set(measured phone enh43 enh3x enh4x mali)
-  set(shimSettings phone enh43)
+  set(settings phone enh43 enh3x enh4x mali orig enh1x poison)
+  set(measured phone enh43 enh3x enh4x mali orig enh1x)
+  set(shimSettings phone enh43 orig enh1x)
 endif()
 
 set(blurRe "stats: glow blur (on|off): ([0-9]+) chains in two passes \\(([0-9]+) pairs\\)")
@@ -230,11 +235,6 @@ foreach(dump IN LISTS dumps)
       message(SEND_ERROR "${dump} ${s}: ${chain_0} chains in two passes with glowblur off")
       math(EXPR failures "${failures} + 1")
     endif()
-    if(s STREQUAL "x1" AND NOT chain_1 EQUAL 0)
-      message(SEND_ERROR "${dump} x1: ${chain_1} chains in two passes at 1x (Original's scale "
-                         "keeps the game's chain)")
-      math(EXPR failures "${failures} + 1")
-    endif()
     if(s STREQUAL "poison" AND NOT chain_0 EQUAL chain_1)
       message(SEND_ERROR "${dump} poison: ${chain_0} chains in two passes, ${chain_1} poisoned")
       math(EXPR failures "${failures} + 1")
@@ -256,7 +256,7 @@ foreach(dump IN LISTS dumps)
       continue()
     endif()
     set(exact FALSE)
-    if(s STREQUAL "x1" OR s STREQUAL "poison" OR chain_1 EQUAL 0)
+    if(s STREQUAL "poison" OR chain_1 EQUAL 0)
       set(exact TRUE)
     endif()
     if(NOT exact)
@@ -366,4 +366,4 @@ if(failures GREATER 0)
   message(FATAL_ERROR "rd_glow_blur_ab: ${failures} failures over ${ndumps} dumps")
 endif()
 message(STATUS "rd_glow_blur_ab: ${ndumps} dumps: the glow's blur in two passes within VD-33's "
-               "bounds; 1x and the poison the same bytes")
+               "bounds; every scale, Original 1x included; the poison the same bytes")

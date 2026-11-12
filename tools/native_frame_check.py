@@ -182,6 +182,10 @@ def tool_env():
     pictures; tools/region_camera_report.py measures the camera rule against it)."""
     env = os.environ.copy()
     env.setdefault("ICO_RD_REGION_RULE", "ps2")
+    # the glow's exact chain: the glow blur in two passes (port/render/rd_glow_blur.c,
+    # docs/port/DIVERGENCES.md VD-33) pinned off whatever the build's default, the
+    # lamps' other parts at the class's default
+    env.setdefault("ICO_RD_LAMPS", "noglowblur")
     if BACKEND in ("opengl", "gl"):
         env.setdefault("LIBGL_ALWAYS_SOFTWARE", "1")
         env.setdefault("SDL_VIDEO_DRIVER", "offscreen")

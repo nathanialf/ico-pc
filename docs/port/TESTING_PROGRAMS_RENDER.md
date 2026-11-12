@@ -65,7 +65,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   particles (a mesh's span kept for its replay when its record has no stream serial, across
   replays while its serial holds, read again under a new one), and `rdtex_alpha_range` against
   every texel and two- and three-texel blends (`rd_alpha_plan`).
-- `rd_blur_test.c`: `staticBlur.c`'s full-screen effects on rd (`rd_blur`, sharded); its CPU
+- `rd_blur_test.c`: `staticBlur.c`'s full-screen effects on rd (`rd_blur`, sharded; the glow
+  blur in two passes pinned off in every case, `rd__lamps_glowblur_pin`: the CPU model is the
+  game's exact chain, DIVERGENCES.md VD-33); its CPU
   part checks the open border's strips (`checkBorderStrips`: pixels 0, 1 and W - 2, W - 1 alone,
   each with column 2's or W - 3's U, plain and mirrored, the hardware sprite's S the same); the
   `above1x` shard runs the aura's chain at Enhanced 4x against the CPU model with the above-1x
@@ -957,13 +959,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   `ICO_RD_LAMPS=pad+owed+wholepad` against `...+glowblur`, `--pass-dump --stats`,
   `ICO_RD_VU_PREPASS=0 ICO_RD_LATE_PASS=1`, at the phone's Resolution Auto under
   `ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2x, 3x and 4x at 4:3, the Mali fakes (no blur fold),
-  Enhanced 1x and the poison; a dump the phone's setting leaves as recorded is checked there (every
+  Original 4:3 at 1x (`--aspect 4:3`), Enhanced 1x and the poison; a dump the phone's setting leaves as recorded is checked there (every
   PNG the same bytes) and not run at the others. Where a chain was drawn in two passes: the passes
   fewer by the chain's as today draws them less two (2 P less the pairs folded), SHADOW0..2 and
   WORK2_PAD the same bytes, WORK3 and WORK0 within 24 levels of today's and DISPLAY and PRESENT
   within 26 (RGB; printed per dump, `glow blur measure:`, and as each setting's maxima), the
-  shimmer at the phone's setting and 2x (WORK3's change under `--jitter 0.5,0.5`) at most 5/4 of
-  today's + 4; at 1x no chain in two passes and every PNG the same bytes; the poison every PNG the
+  shimmer at the phone's setting, 2x, Original 1x and Enhanced 1x (WORK3's change under `--jitter 0.5,0.5`) at most 5/4 of
+  today's + 4 (every scale takes it, Original 1x included); the poison every PNG the
   same bytes; a chain in two passes over the list at each measured setting. `rd_glow_blur_gl`:
   the phone's setting on OpenGL (llvmpipe). No device: SKIP.
 - `rd_lamps_lowres_ab.cmake` (`rd_lamps_lowres_ab`; `rd_lamps.cmake`): the lamps' glow at the GS

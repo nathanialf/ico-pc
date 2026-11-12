@@ -4146,6 +4146,10 @@ int main(int argc, char **argv)
        case compares the glow's buffers with the CPU model in every channel,
        and the plan may change their alpha (rd_blur_glow_light_test.inc) */
     rd__glow_light_force(0);
+    /* the glow's chain as the game draws it in every case (the CPU GS model
+       is its reference): the glow blur in two passes pinned off whatever the
+       build's RD_GLOW_BLUR_DEFAULT (rd_glow_blur.c, DIVERGENCES.md VD-33) */
+    rd__lamps_glowblur_pin(true);
     printf("rd_blur_test\n");
     setMatrices();
     systemStatus[0] = 1; /* PAL: 512 lines */
