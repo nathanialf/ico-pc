@@ -278,7 +278,7 @@ are the A/B ([TESTING_PROGRAMS.md](TESTING_PROGRAMS.md)).
 
 ## The glow's buffers under the light plan
 
-Above 1x a glow frame without light in its chain is not drawn
+At every scale (Original's 1x included) a glow frame without light in its chain is not drawn
 ([RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)), so the work buffers are left as
 the chain would have left them in colour:
 

@@ -595,9 +595,9 @@ once the work before them is done), the GPU's clock steps on a Mali whose kernel
 
 ### The glow's light plan
 
-Above 1x the glow's chain is not drawn where it adds no light
+At every scale the glow's chain is not drawn where it adds no light
 ([RENDER_POST.md](RENDER_POST.md#the-glow-where-it-adds-light)). The 10 s block says how each
-glow picture was drawn: `window: glow: light: 412 dark (3 passes in their chains), 0 lamps (mask not drawn), 37 whole
+glow picture was drawn: `window: glow: light (every scale): 412 dark (3 passes in their chains), 0 lamps (mask not drawn), 37 whole
 (37 the sun's fans on the picture); lazy clears drawn: 0` (a lazy clear drawn in play means
 something read a glow buffer the plan left undrawn: the targets are named): the passes in the dark chains are WORK1's zero draws after a
 picture that drew the chain (0 a picture in a steady dark room); the dark ones skip the mask's full-frame pass, the paste and the
@@ -605,13 +605,13 @@ small passes (on the PowerVR phone 11.6 ms of a 32 ms picture in the measured ro
 ones the mask's pass; the whole ones name their reason (`a grey fill (the bloom)`, `the sun's
 fans on the picture`, `SCENE's alpha read before it is rewritten`, `WORK1, WORK2 or WORK3 read
 outside the chain`, `the chain not in its known form`, `anti-aliasing (MSAA)`, `the sun's tint or
-glare with light in the chain`, `off since a frame read a planned frame's alpha`). No line at 1x,
-where the plan is off. A block of play whose glow rooms say whole for any reason but the fans or
+glare with light in the chain`, `off since a frame read a planned frame's alpha`), at 1x as at
+any other scale. A block of play whose glow rooms say whole for any reason but the fans or
 the bloom names a form the scan did not expect: the once lines `rd: glow: light plan: the chain
 drawn whole: <reason> (<detail>; frame N; ...)` say which command, and the player's F12 dump
 replays it (`rd_replay_tool --stats` prints `glow: light plan on: <plan> (<reason>)`). The
 `perf classes` line's glow class shows what the plan saved; the first dark frame is logged once
-(`rd: glow: light plan: above 1x nothing in frame N puts light into the glow ...`).
+(`rd: glow: light plan: at every scale nothing in frame N puts light into the glow ...`).
 
 ### The late passes on SCENE
 

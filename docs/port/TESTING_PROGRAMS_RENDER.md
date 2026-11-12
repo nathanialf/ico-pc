@@ -148,7 +148,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   chain (WORK1's zero draw, after the plan-off replay) and fewer glow passes than the chain's,
   then the frame replayed with the plan again: no pass begun by the chain (one with the sun's
   shrink) and the same bytes; one glow pass fewer under lamps; the grey fill refused for its own
-  reason; at 1x the plan off and every byte the chain's. Every other case runs with
+  reason; at 1x the same plans and rules (the plan applies at every scale; the plan-off run is the
+  CPU model's there, so the plan's RGB is the model's). Every other case runs with
   the plan off (`rd__glow_light_force(0)` in `main`): they compare the glow's buffers with the
   model in every channel.
 - `rd_fx_frame_test.c`: the frame-size sprites' plan on the CPU against `gs_math.hlsli`: the
@@ -1264,8 +1265,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   800 pixels) and every other target's RGB not at all: every
   PNG's RGB 0 levels apart (`png_level_diff.py --channels RGB`), the alpha 0 levels on DISPLAY,
   PRESENT and every target but WORK1, WORK2, WORK3, WORK3_HELD and SCENE, and on those too where
-  the whole run's WORK2 holds no alpha 192 (`--count-alpha 192`: no fill the mask kept); at
-  Original every PNG the same bytes and the plan off; under dark the stats' `N passes in the
+  the whole run's WORK2 holds no alpha 192 (`--count-alpha 192`: no fill the mask kept), at every
+  row (Original 4:3 at 1x, Enhanced 1x at the phone's profile, Enhanced 1x under a Mali device's
+  identity `ICO_VK_FAKE_VENDOR=0x13B5 ICO_VK_FAKE_LIMITS=mali`, and an Original 1x row at the
+  defaults with the VD-31 bound, besides the phone's and Enhanced 2x); at least one dark run at
+  every row but the defaults'; under dark the stats' `N passes in the
   chain` at most 1 (WORK1's zero draw in a fresh renderer) and `glow N passes` fewer than the
   whole run's, one fewer under lamps, no more otherwise; at least one dark run at the phone's setting and
   at Enhanced 2x (`rd_glow_light_ab`; SKIP without a device).

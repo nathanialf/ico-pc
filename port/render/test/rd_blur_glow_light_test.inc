@@ -34,7 +34,8 @@
  *                  paste: WHOLE, SCENE's alpha read;
  * each frame ending with a sprite that rewrites SCENE's alpha whole, as the
  * aura's paste does in play (else the plan refuses: SCENE's alpha not
- * rewritten).  At 1x the plan is off and every byte the chain's. */
+ * rewritten).  At 1x the same plans and the same rules: the plan applies at
+ * every scale (Original's 1x included, the owner's choice). */
 
 static uint8_t *s_glBuf[2][RD_TARGET_COUNT];
 static size_t s_glSize[2][RD_TARGET_COUNT];
@@ -219,10 +220,17 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
     const uint32_t onW2 = rd__glow_light_passes_on(RD_TARGET_WORK2, &onW2Clear);
     const uint32_t onW3 = rd__glow_light_passes_on(RD_TARGET_WORK3, &onW3Clear);
     glRead(0);
+    /* the same plan at every scale, 1x included: nothing in the plan reads
+       the scale (at 1x the chain's sprites take the GS's point and bilinear
+       filters, weighted sums of RGB 0 texels; the scan's refusals are the
+       same).  At 1x and 2x the plan-off run is the CPU GS model's in every
+       channel (runFrame) and the plan's RGB is the plan-off run's byte for
+       byte (glDiffer): so the plan's RGB is the model's; its alpha may differ
+       only on WORK1, WORK2, WORK3 and SCENE in a frame with the marked
+       background */
+    (void)above1x;
     uint32_t want = RD_GLOW_LIGHT_DARK, wantWhy = RD_GLOW_LIGHT_WHY_NONE;
-    if (!above1x) {
-        want = RD_GLOW_LIGHT_OFF;
-    } else if (k == GL_FANS_ON) {
+    if (k == GL_FANS_ON) {
         want = RD_GLOW_LIGHT_WHOLE;
         wantWhy = RD_GLOW_LIGHT_WHY_FANS;
     } else if (k == GL_LAMPS) {
@@ -235,7 +243,7 @@ static void glFrame(const char *cfg, int k, int model, int above1x)
         wantWhy = RD_GLOW_LIGHT_WHY_SCENE;
     }
     if (k == GL_FANS_ON && s_fanDraws == 0) {
-        want = above1x ? RD_GLOW_LIGHT_DARK : RD_GLOW_LIGHT_OFF; /* no sun on screen: no fans */
+        want = RD_GLOW_LIGHT_DARK; /* no sun on screen: no fans */
         wantWhy = RD_GLOW_LIGHT_WHY_NONE;
     }
     CHECK(plan == want && (want != RD_GLOW_LIGHT_WHOLE || why == wantWhy),

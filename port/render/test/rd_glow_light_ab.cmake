@@ -8,7 +8,11 @@
 #   phone   the PowerVR phone's profile on lavapipe (ICO_VK_FAKE_LIMITS=moltenvk,
 #           ICO_RD_VU_PREPASS=0) at 2364x1080, Full height, Full pixel,
 #           presented at 2364x1080;
-#   orig    Original 4:3 (scene scale 1: the plan off);
+#   orig    Original 4:3 at 1x (the plan applies at every scale);
+#   enh1x   Enhanced 1x at the phone's profile (moltenvk), presented at 2364x1080;
+#   mali1x  Enhanced 1x under a Mali device's identity (ICO_VK_FAKE_VENDOR=0x13B5,
+#           ICO_VK_FAKE_LIMITS=mali: issue 179's phone runs at 1x), presented at
+#           1600x720;
 #   enh2x43 Enhanced 2x 4:3 presented at 1280x960.
 # Every PNG of the whole run against the plan's (png_level_diff.py):
 #   - RGB 0 levels on every target and the present (--channels RGB);
@@ -17,7 +21,8 @@
 #     whole run's WORK2 holds no alpha 192 (no fill kept by the mask: no
 #     marked background, --count-alpha 192), the only place the plan may
 #     change an alpha (rd_glow_light.c's header);
-#   - at orig every PNG the same bytes and the plan said off.
+#   - at every row, 1x included, the same rules (RGB 0 levels, the alpha only
+#     where the fill was kept).
 # A fourth row, phonedef, the phone's setting with every other package's
 # switch at its default (above: the late pass's join, VD-31, within its bound).
 # The stats ("glow N passes", "glow: light plan on: <plan>; N passes in the
@@ -57,7 +62,7 @@ endif()
 list(REMOVE_DUPLICATES dumps)
 list(LENGTH dumps ndumps)
 
-set(settings phone orig enh2x43 phonedef)
+set(settings phone orig enh2x43 phonedef enh1x mali1x origdef)
 # The plan alone: every run but phonedef pins the other packages' switches
 # whose work depends on which pass is open or which passes the frame has, off
 # in both runs.  Without the glow's chain (the dark plan) another pass is open
@@ -76,6 +81,9 @@ set(pins ICO_RD_LATE_PASS=0 ICO_RD_AURA_PASTE=0 ICO_RD_CRACK_SWAP=0 ICO_RD_PRESE
 # (at most 3 levels on at most 800 pixels), every other target's RGB the same
 set(args_phonedef ${args_phone})
 set(env_phonedef ${env_phone})
+# origdef: Original 4:3 at 1x at the defaults, the same bound
+set(args_origdef ${args_orig})
+set(env_origdef ${env_orig})
 set(defMaxLevel 3)
 set(defMaxPixels 800)
 set(defTargets SCENE.png DISPLAY.png PRESENT.png)
@@ -83,6 +91,10 @@ set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --pr
 set(env_phone ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_PREPASS=0)
 set(args_orig --aspect 4:3)
 set(env_orig "")
+set(args_enh1x --enhanced --resolution 1x --present 2364x1080)
+set(env_enh1x ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_VU_PREPASS=0)
+set(args_mali1x --enhanced --resolution 1x --present 1600x720)
+set(env_mali1x ICO_VK_FAKE_VENDOR=0x13B5 ICO_VK_FAKE_LIMITS=mali ICO_RD_VU_PREPASS=0)
 set(args_enh2x43 --enhanced --aspect 4:3 --resolution 2x --present 1280x960)
 set(env_enh2x43 "")
 set(glowRe "glow ([0-9]+) passes")
@@ -95,7 +107,10 @@ set(runs 0)
 set(dark_phone 0)
 set(dark_enh2x43 0)
 set(dark_orig 0)
+set(dark_enh1x 0)
+set(dark_mali1x 0)
 set(dark_phonedef 0)
+set(dark_origdef 0)
 set(lamps 0)
 set(whole 0)
 
@@ -126,7 +141,7 @@ foreach(dump IN LISTS dumps)
     file(REMOVE_RECURSE "${dirW}" "${dirP}")
     file(MAKE_DIRECTORY "${dirW}" "${dirP}")
     set(pin ${pins})
-    if(s STREQUAL "phonedef")
+    if(s MATCHES "def$")
       set(pin "")
     endif()
     execute_process(COMMAND "${CMAKE_COMMAND}" -E env ICO_RD_GLOW_LIGHT=0 ${pin} ${env_${s}} "${TOOL}"
@@ -195,10 +210,6 @@ foreach(dump IN LISTS dumps)
         math(EXPR failures "${failures} + 1")
       endif()
     endif()
-    if(s STREQUAL "orig" AND NOT plan STREQUAL "off" AND NOT plan STREQUAL "no")
-      message(SEND_ERROR "${name} orig: the plan applied at 1x (${plan})")
-      math(EXPR failures "${failures} + 1")
-    endif()
     # a fill the mask kept: the alphas the plan may change
     set(kept 0)
     if(EXISTS "${dirW}/WORK2.png")
@@ -226,14 +237,9 @@ foreach(dump IN LISTS dumps)
       if(same EQUAL 0)
         continue()
       endif()
-      if(s STREQUAL "orig")
-        message(SEND_ERROR "${name} orig: ${png} differs at 1x")
-        math(EXPR failures "${failures} + 1")
-        continue()
-      endif()
       level_diff("${dirW}/${png}" "${dirP}/${png}" RGB lv px)
       list(FIND defTargets "${png}" isDef)
-      if(s STREQUAL "phonedef" AND NOT isDef EQUAL -1 AND px GREATER -1 AND
+      if(s MATCHES "def$" AND NOT isDef EQUAL -1 AND px GREATER -1 AND
          NOT px GREATER defMaxPixels AND NOT lv GREATER defMaxLevel)
         if(px GREATER 0)
           message(STATUS "${name} ${s}: ${png}: RGB ${px} pixels within ${lv} levels (the late "
@@ -266,7 +272,7 @@ foreach(dump IN LISTS dumps)
   endforeach()
 endforeach()
 if(runs GREATER 0)
-  foreach(s phone enh2x43)
+  foreach(s phone enh2x43 orig enh1x mali1x)
     if(dark_${s} EQUAL 0)
       message(SEND_ERROR "rd_glow_light_ab: no dark run at ${s}")
       math(EXPR failures "${failures} + 1")

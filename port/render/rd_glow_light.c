@@ -1,8 +1,8 @@
 /* rd_glow_light.c: the glow drawn only where it can add light
  * (docs/port/RENDER_POST.md, "The glow where it adds light";
  * docs/port/WORK_BUFFERS.md, "The glow's buffers under the light plan";
- * DIVERGENCES.md VD-30).  Above 1x on every device class and backend, no
- * switch; ICO_RD_GLOW_LIGHT=0 draws the chain as before (the tests' A/B,
+ * DIVERGENCES.md VD-30).  At every scale, Original's 1x included, on
+ * every device class and backend, no switch; ICO_RD_GLOW_LIGHT=0 draws the chain as before (the tests' A/B,
  * TESTING.md).
  *
  * List 7's glow (staticBlur.c makeFullScreenFlareBefore/After,
@@ -75,9 +75,12 @@
  * fill kept by the mask's alpha test) and its bilinear rim.  No command
  * reads those alphas before they are rewritten (the scan); a later frame
  * that reads WORK1, WORK2 or WORK3 before writing them turns the plan off
- * from then on (logged).  At 1x (the predicate rd_replay.c
- * blurAbove1xSteps takes: SCENE at scale 1) nothing changes: Original keeps
- * the PS2's bytes in every buffer.
+ * from then on (logged).  Nothing in the plan depends on the scale: at 1x
+ * the chain's sprites take the GS's own filters (point, bilinear), each a
+ * weighted sum of texels of RGB 0, so 0, and the scan's refusals and the
+ * SCENE alpha rule are the same at every scale; so the PS2's bytes are kept
+ * in every target's RGB at 1x too, and the alphas above differ from the
+ * PS2's there as well (the owner's choice, VD-30).
  *
  * The replay: rd_blur_border.c blurPostSprite asks rd__glow_light_sprite
  * for every post sprite (after SCENE's border repeat, before the WORK2
@@ -87,7 +90,7 @@
  * list loop from the recorded commands, rd_replay.c rd__crack_fill_at).
  *
  * Counted (RdPerfRecord.glowLight, glowLightWhy): the 10 s line
- * "window: glow: light: N dark, L lamps (mask not drawn), K whole (why)"
+ * "window: glow: light (every scale): N dark, L lamps (mask not drawn), K whole (why)"
  * (rd_glow_light_line) and rd_replay_tool --stats; the log says each plan's
  * first frame and each reason once. */
 #include <math.h>
@@ -296,7 +299,7 @@ static const char *const kPlan[RD_GLOW_LIGHT_COUNT] = {
     [RD_GLOW_LIGHT_DARK] = "dark (the chain not drawn)",
     [RD_GLOW_LIGHT_LAMPS] = "lamps (the mask not drawn)",
     [RD_GLOW_LIGHT_WHOLE] = "whole (the chain drawn)",
-    [RD_GLOW_LIGHT_OFF] = "off (1x, or switched off)",
+    [RD_GLOW_LIGHT_OFF] = "off (switched off)",
 };
 
 static const char *const kWhy[RD_GLOW_LIGHT_WHY_COUNT] = {
@@ -1157,17 +1160,19 @@ static void logOnce(uint8_t plan, uint8_t why, const char *detail)
     }
     saidPlan[plan] = true;
     if (plan == RD_GLOW_LIGHT_DARK) {
-        rd__log("glow: light plan: above 1x nothing in frame %u puts light into the glow (WORK2's "
-                "fill RGB 0, no sun fans on the picture, no lamps): its chain not drawn (%u "
-                "commands), its buffers left with the chain's colours (WORK0's alpha sprite as "
-                "its clear, WORK1's first blur pass in its colour, WORK2, its band and WORK3 "
-                "cleared where read); reported once",
-                s_gl.frameNo, s_gl.n);
+        rd__log(
+            "glow: light plan: at every scale nothing in frame %u puts light into the glow (WORK2's "
+            "fill RGB 0, no sun fans on the picture, no lamps): its chain not drawn (%u "
+            "commands), its buffers left with the chain's colours (WORK0's alpha sprite as "
+            "its clear, WORK1's first blur pass in its colour, WORK2, its band and WORK3 "
+            "cleared where read); reported once",
+            s_gl.frameNo, s_gl.n);
     } else if (plan == RD_GLOW_LIGHT_LAMPS) {
-        rd__log("glow: light plan: above 1x frame %u's light in the glow is the lamps' (%u draws "
-                "into WORK2 after the mask): the fill drawn as (0, 0, 0, 0), the mask not drawn, "
-                "the rest of the chain as before; reported once",
-                s_gl.frameNo, s_gl.lamps);
+        rd__log(
+            "glow: light plan: at every scale frame %u's light in the glow is the lamps' (%u draws "
+            "into WORK2 after the mask): the fill drawn as (0, 0, 0, 0), the mask not drawn, "
+            "the rest of the chain as before; reported once",
+            s_gl.frameNo, s_gl.lamps);
     }
 }
 
@@ -1183,12 +1188,10 @@ void rd__glow_light_scan_end(void)
         w1Track(RD_GLOW_LIGHT_NONE);
         return; /* no glow: nothing planned or counted */
     }
-    const RdTargetRec *sc = rd__target_rec(idOf(RD_TARGET_SCENE));
-    const bool above1x = sc && (sc->sx != 1.0f || sc->sy != 1.0f);
-    if (!above1x || !rd__glow_light_on() || g_rdWin.first) {
+    if (!rd__glow_light_on() || g_rdWin.first) {
         g_rdPerf.glowLight = RD_GLOW_LIGHT_OFF;
         w1Track(RD_GLOW_LIGHT_OFF);
-        return; /* Original at 1x: the PS2's bytes in every buffer */
+        return; /* switched off (the tests' A/B), or a pass window reads mid-frame */
     }
     if (s_gl.readFirst && s_stale && !s_off) {
         s_off = true;
@@ -1667,11 +1670,12 @@ void rd_glow_light_line(void)
     }
     char lz[160];
     rd__glow_light_lazy_text(lz, sizeof(lz), s_lazyDrawn);
-    fprintf(stderr,
-            "window: glow: light: %llu dark (%llu passes in their chains), %llu lamps (mask not "
-            "drawn), %llu whole%s%s; lazy clears drawn: %s\n",
-            (unsigned long long)dark, (unsigned long long)s_darkPasses, (unsigned long long)lamps,
-            (unsigned long long)whole, why, at ? ")" : "", lz);
+    fprintf(
+        stderr,
+        "window: glow: light (every scale): %llu dark (%llu passes in their chains), %llu lamps (mask not "
+        "drawn), %llu whole%s%s; lazy clears drawn: %s\n",
+        (unsigned long long)dark, (unsigned long long)s_darkPasses, (unsigned long long)lamps,
+        (unsigned long long)whole, why, at ? ")" : "", lz);
     s_darkPasses = 0;
     memset(s_lazyDrawn, 0, sizeof(s_lazyDrawn));
     memset(s_count, 0, sizeof(s_count));

@@ -341,8 +341,9 @@ replays to the same bytes in every target and the present. What the chain does c
 alpha: WORK2's is the mask's (192 on the background `cleanUpFB` marks, where the mask's alpha
 test keeps the fill; 0 elsewhere), and it reaches WORK1, WORK3 and, through the paste, SCENE.
 
-Above 1x (SCENE at a scale other than 1: the predicate `blurAbove1xSteps` takes; at 1x nothing
-changes, so Original keeps the PS2's bytes in every buffer), on every device class and backend,
+At every scale, Original's 1x included (the owner's choice: at 1x too the picture is the PS2's
+byte for byte in RGB and only the glow's buffers' alpha differs, VD-30), on every device class
+and backend,
 a scan in the store plan's walk of the lists (`port/render/rd_glow_light.c`, file comment) reads
 the chain in its known form, every command from the band's fill to the paste contiguous (band,
 fill, fans, mask, lamps, reduction, the blur pairs, the eye blur, the sun's sprites, the glow
@@ -396,11 +397,24 @@ it) because the anti-aliasing's copy reads SCENE before list 11's sprite rewrite
 `rd_glow_light_ab` counts the plans the code takes. `ICO_RD_GLOW_LIGHT=0` draws the chain whole, the tests' A/B
 ([TESTING.md](TESTING.md#environment-switches)); there is no setting.
 
-Lines: `rd: glow: light plan: above 1x nothing in frame N puts light into the glow ...` and
+Nothing in the plan reads the scale. At 1x the chain's sprites take the GS's own filters (the
+reduction and the blur pairs the GS bilinear, the eye blur and its sun sprites point or bilinear at
+GS resolution): each still a weighted sum of texels of RGB 0 under MODULATE or HIGHLIGHT with
+RGBAQ's alpha 0, so 0, which the scan checks per sprite (`tfxRgbZero`) as above 1x. The readers
+the plan refuses are found by the same scan at every scale: the aura's feedback (its copy of SCENE
+comes after its paste rewrote SCENE's alpha), the motion blur (it reads DISPLAY), the depth of
+field (it writes WORK0 and WORK1 before it reads them), the present's own paths (CRT, softening,
+the Original presenter, the display layer: they read DISPLAY or SCENE's RGB, never the work
+buffers; FSR is off at 1x) and keep frames (lists 11 and 12 only: no glow chain). No crack fill
+is drawn at 1x, and the plan never depended on it. Measured at Original 1x with the paste not
+drawn (`--nop 7:311`, the chain drawn otherwise): the phone's frame v3677 and the issue 189 frame
+(its marked background) replay to the same bytes in every target and the present, all channels.
+
+Lines: `rd: glow: light plan: at every scale nothing in frame N puts light into the glow ...` and
 `... frame N's light in the glow is the lamps' ...` once each, `rd: glow: light plan: the chain
 drawn whole: <reason> (<detail>; frame N; reported once for this reason)`, `rd: glow: light plan:
 frame N reads WORK1, WORK2 or WORK3 before ...: the plan is off from now on`; the 10 s block's
-`window: glow: light: N dark (P passes in their chains), L lamps (mask not drawn), K whole
+`window: glow: light (every scale): N dark (P passes in their chains), L lamps (mask not drawn), K whole
 (counts by reason); lazy clears drawn: N (target n, ...)` (0 in a dark room of play);
 `rd_replay_tool --stats` `stats: glow: light plan on|off: <plan> (<reason>); P passes in the
 chain, lazy clears drawn: N (targets)` (the tool's own reads of the targets draw them too).

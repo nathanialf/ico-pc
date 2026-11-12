@@ -3371,11 +3371,12 @@ const char *rd_glow_fold_why_text(uint32_t why);
 /* RdPerfRecord.glowLight (rd_glow_light.c; docs/port/RENDER_POST.md, "The
  * glow where it adds light"): NONE no glow in the replay, DARK the chain not
  * drawn (no light in it), LAMPS the mask not drawn (the lamps' light alone),
- * WHOLE the chain drawn as before (glowLightWhy says why), OFF a glow at 1x
- * or with ICO_RD_GLOW_LIGHT=0 (not counted).  rd_glow_light_text and
- * rd_glow_light_why_text give the words; rd_glow_light_line prints the
- * window's 10 s clause "window: glow: light: ..." for the replays since its
- * last call (nothing when none had a glow above 1x). */
+ * WHOLE the chain drawn as before (glowLightWhy says why), OFF a glow with
+ * ICO_RD_GLOW_LIGHT=0 or under a pass window (not counted); at every scale.
+ * rd_glow_light_text and rd_glow_light_why_text give the words;
+ * rd_glow_light_line prints the window's 10 s clause "window: glow: light
+ * (every scale): ..." for the replays since its last call (nothing when none
+ * had a glow). */
 enum {
     RD_GLOW_LIGHT_NONE,
     RD_GLOW_LIGHT_DARK,
