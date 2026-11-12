@@ -1560,11 +1560,22 @@ counters in the hot path.
       rhi_vk: offered (read only, nothing enabled for it): calibrated time domains KHR: device,
       CLOCK_MONOTONIC, CLOCK_MONOTONIC_RAW; global queue priority KHR offered, its query too (the
       game's queue family 0's priorities: 4: low, medium, high, realtime); the game's one queue made
-      at priority 1.0 with no global priority asked (the driver's default, medium)
+      at priority 1.0 with no global priority asked (the driver's default, medium); display timing:
+      VK_GOOGLE_display_timing yes, VK_EXT_present_timing no, VK_KHR_present_id yes,
+      VK_KHR_present_wait yes
 
   Whether the compositor could preempt the game's queue (issue 123's T2) and whether a stall could
   be placed on the CPU's clock if the polled wait were used again. The calibrated domains are
-  listed whatever the submission wait; they are enabled only with the polled wait, as before.
+  listed whatever the submission wait; they are enabled only with the polled wait, as before. The
+  display timing clause (the values above an example) says which of the means of learning when a
+  picture reached the screen the device offers, for the evenness line's next step
+  ([the evenness line on a 120 Hz phone](#the-evenness-line-on-a-120-hz-phone)); none is enabled
+  for it (the present wait is enabled only with `ICO_VK_PRESENT_WAIT=1`). On Android the first
+  frame rate pin line is followed by `window: display timing on Android (read only, nothing
+  called): AChoreographer frame callbacks reachable (AChoreographer_getInstance yes,
+  AChoreographer_postFrameCallback64 yes, AChoreographer_postVsyncCallback yes)`: whether
+  libandroid.so has those functions (`dlsym` only; `port/platform/window_display_rate.c`,
+  `display_rate.c` (`display_choreo_text`)).
 - **The pause picture without its wait** (`port/render/rd_shot_late.h`, `rd_present.c`): on
   Vulkan on a tile-based GPU the pause menu's state picture is copied by the present's own list
   into a readback buffer and read when that frame slot's fence has been waited for by the replay

@@ -120,6 +120,8 @@ static int s_pinResumed; /* window_frame_rate_pin_resumed's call */
 static int s_pinLooked;
 static SetRateStrategyFn s_withStrategy;
 static SetRateFn s_plain;
+/* Android's display timing on offer, looked up only (display_choreo_text) */
+static int s_choreo[3];
 
 static void pin_lookup(void)
 {
@@ -134,6 +136,9 @@ static void pin_lookup(void)
         s_withStrategy =
             (SetRateStrategyFn)dlsym(lib, "ANativeWindow_setFrameRateWithChangeStrategy");
         s_plain = (SetRateFn)dlsym(lib, "ANativeWindow_setFrameRate");
+        s_choreo[0] = dlsym(lib, "AChoreographer_getInstance") != NULL;
+        s_choreo[1] = dlsym(lib, "AChoreographer_postFrameCallback64") != NULL;
+        s_choreo[2] = dlsym(lib, "AChoreographer_postVsyncCallback") != NULL;
     }
 }
 
@@ -183,6 +188,8 @@ void window_frame_rate_pin(SDL_Window *window, int framerate)
                     mode == DISPLAY_PIN_OFF ? "turned off" : "on",
                     mode == DISPLAY_PIN_OFF ? "off" : "auto", offers ? "offers" : "does not offer",
                     nw == NULL ? " (no native window from SDL)" : "");
+            display_choreo_text(s_choreo[0], s_choreo[1], s_choreo[2], line, sizeof line);
+            fprintf(stderr, "window: %s\n", line);
         }
         /* a new native window (the app came back: Android made the surface
        again) holds no vote: the ask is made again */

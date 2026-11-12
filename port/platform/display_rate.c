@@ -138,6 +138,17 @@ void display_pin_failed(DisplayPin *p)
     p->asked = 0;
 }
 
+int display_choreo_text(int getInstance, int frame64, int vsync, char *buf, size_t size)
+{
+    return snprintf(
+        buf, size,
+        "display timing on Android (read only, nothing called): AChoreographer frame "
+        "callbacks %s (AChoreographer_getInstance %s, AChoreographer_postFrameCallback64 "
+        "%s, AChoreographer_postVsyncCallback %s)",
+        getInstance && (frame64 || vsync) ? "reachable" : "not reachable",
+        getInstance ? "yes" : "no", frame64 ? "yes" : "no", vsync ? "yes" : "no");
+}
+
 int display_pin_text(DisplayPinAct act, int rate, int framerate, const char *call, int ret,
                      char *buf, size_t size)
 {

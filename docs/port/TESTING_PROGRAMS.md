@@ -1222,8 +1222,9 @@ that stops again writing its own line without the retry mark); a stop at the fre
   Frame rate row (60, 120, 144; Original, Uncapped, off and above 1000 none), the sequence set,
   nothing, set, release, nothing, a device without the call never asked, a refused ask tried
   again, a new native window or a resume forgetting the ask and the next set made again
-  (`DISPLAY_PIN_SET_AGAIN`; none wanted then: nothing asked or said), the pin's lines
-  (`display_rate`).
+  (`DISPLAY_PIN_SET_AGAIN`; none wanted then: nothing asked or said), the pin's lines, the Android
+  display timing line (`display_choreo_text`: reachable with `AChoreographer_getInstance` and either
+  callback, not reachable without it or without both) (`display_rate`).
 - `present_stall_block_test.c`: the present stalls per 10 s block and per run
   (`present_stall_block.h`, issue 123): blocks before the run's first stall write no line and join
   the run's sums; the issue 123 log's stalled block (a 340 ms present 33.4 ms after the replay
@@ -1499,7 +1500,7 @@ The renderer's test programs have a page of their own:
   its visibility and the closing barrier, each with the masks of the release before the narrowing), a texture copied into the
   arena (the copy's wait the shader stages and vertex input alone, no transfer stage, no memory
   barrier), and texture copy, buffer copy, texture copy (the second's barrier with a buffer barrier:
-  the hazard record kept; narrow: none); the narrow runs the narrow closing barrier. `rhi_vk_offer` (the same `clock` run, passing on the device start's `rhi_vk: offered (read only, nothing enabled for it): calibrated time domains ...; global queue priority ... offered` line, issue 123). `rhi_vk_clock_arm` (the argument `clock`: the clock cell alone) on Arm faked with
+  the hazard record kept; narrow: none); the narrow runs the narrow closing barrier. `rhi_vk_offer` (the same `clock` run, passing on the device start's `rhi_vk: offered (read only, nothing enabled for it): calibrated time domains ...; global queue priority ... offered` line, issue 123). `rhi_vk_offer_timing` (the same run, passing on that line's `display timing: VK_GOOGLE_display_timing yes|no, VK_EXT_present_timing yes|no, VK_KHR_present_id yes|no, VK_KHR_present_wait yes|no` clause: nothing enabled for them). `rhi_vk_clock_arm` (the argument `clock`: the clock cell alone) on Arm faked with
   `ICO_TEST_POLLED_WANT=0`: the single wait, a held wait of 150 ms with no trace point, no
   calibrated pair and no fall (`RhiLimits.polledWait` false); every other run asserts the polled
   wait's trace as before. `rhi_vk_budget` and `rhi_vk_budget_phone` (the argument `budget`):

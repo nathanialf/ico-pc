@@ -184,6 +184,19 @@ static void testPin(void)
     CHECK(strstr(line, "Original") != NULL && strstr(line, "(no call)") != NULL);
     display_pin_text(DISPLAY_PIN_NOTHING, 0, 0, NULL, 0, line, sizeof line);
     CHECK_STR(line, "");
+
+    /* Android's display timing on offer (read only) */
+    display_choreo_text(1, 1, 0, line, sizeof line);
+    CHECK_STR(line, "display timing on Android (read only, nothing called): AChoreographer frame "
+                    "callbacks reachable (AChoreographer_getInstance yes, "
+                    "AChoreographer_postFrameCallback64 yes, AChoreographer_postVsyncCallback no)");
+    display_choreo_text(0, 1, 1, line, sizeof line);
+    CHECK(strstr(line, "callbacks not reachable (AChoreographer_getInstance no,") != NULL);
+    display_choreo_text(1, 0, 0, line, sizeof line);
+    CHECK(strstr(line, "callbacks not reachable") != NULL);
+    display_choreo_text(1, 0, 1, line, sizeof line);
+    CHECK(strstr(line, "callbacks reachable") != NULL &&
+          strstr(line, "AChoreographer_postVsyncCallback yes)") != NULL);
 }
 
 int main(void)

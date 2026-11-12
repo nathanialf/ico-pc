@@ -738,6 +738,12 @@ if(_ico_have_vk)
         add_test(NAME rhi_vk_offer COMMAND rhi_vk_test clock)
         set_tests_properties(rhi_vk_offer PROPERTIES SKIP_RETURN_CODE 77 PASS_REGULAR_EXPRESSION
                              "rhi_vk: offered \\(read only, nothing enabled for it\\): calibrated time domains [^;]+; global queue priority (KHR and EXT|KHR|EXT|not) offered")
+        # rhi_vk_offer_timing: the same line's display timing clause (the
+        # evenness line's next design, rd_even.h): whether the device offers
+        # the four extensions, nothing enabled for them
+        add_test(NAME rhi_vk_offer_timing COMMAND rhi_vk_test clock)
+        set_tests_properties(rhi_vk_offer_timing PROPERTIES SKIP_RETURN_CODE 77 PASS_REGULAR_EXPRESSION
+                             "rhi_vk: offered \\(read only, nothing enabled for it\\): calibrated time domains [^;]+; global queue priority [^;]+; the game's one queue made at priority [^;]+; display timing: VK_GOOGLE_display_timing (yes|no), VK_EXT_present_timing (yes|no), VK_KHR_present_id (yes|no), VK_KHR_present_wait (yes|no)")
         # VK_EXT_memory_budget's numbers in rhi_get_stats (videoMem*):
         # rhi_vk_budget on lavapipe (consistent; a budget where offered),
         # rhi_vk_budget_phone with Arm's phone GPU faked: none (not asked)
