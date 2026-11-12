@@ -405,6 +405,14 @@ void rd__late_pass_scan_begin(RdLateScan *s)
     s->hold = (rd__late_pass_bits() & RD_LATE_FILL) != 0 && !rd__upscale_point_on();
 }
 
+/* the last scan's command that ended a hold without a paste (the
+ * not-held line names it, once per reason) */
+static struct {
+    int l, why;
+    uint32_t i, type, color, replay;
+    bool zw;
+} s_stop;
+
 bool rd__late_pass_scan(RdLateScan *s, const RdFrame *f, const RdCmd *c, const RdStateBlock *st,
                         uint32_t ord, int l, uint32_t i)
 {
@@ -423,6 +431,16 @@ bool rd__late_pass_scan(RdLateScan *s, const RdFrame *f, const RdCmd *c, const R
         }
         k = rd__late_pass_class(f, c, st, -1, &why);
         if (k != RD_LATE_HOLD) {
+            if (k != RD_LATE_LAND_AURA && k != RD_LATE_LAND_GLOW) {
+                /* the command that ends the hold, for the not-held line */
+                s_stop.l = l;
+                s_stop.i = i;
+                s_stop.type = c->type;
+                s_stop.why = why;
+                s_stop.color = st->color;
+                s_stop.zw = st->depth == RD_TARGET_SCENE + 1u && st->ds.zwrite == RD_ZWRITE_ON;
+                s_stop.replay = g_rd.replayCounter;
+            }
             s->done = true; /* the held draw lands here, or is drawn before c */
             s->doneLands = k == RD_LATE_LAND_AURA || k == RD_LATE_LAND_GLOW;
             s->landOrd = ord;
@@ -553,6 +571,16 @@ void rd__late_pass_not_held(void)
         rd__log("late pass: the crack fill not held in a frame where no paste takes it (no aura, "
                 "a draw or the walk's end first): drawn where it is due, its snapshot by the swap "
                 "where allowed (reported once)");
+    }
+    /* the command that ended it, once per reason */
+    static bool s_saidWhy[RD_LATE_WHY_COUNT];
+    const int w = s_stop.why;
+    if (s_stop.replay == g_rd.replayCounter && w >= 0 && w < RD_LATE_WHY_COUNT && !s_saidWhy[w]) {
+        s_saidWhy[w] = true;
+        rd__log("late pass: the hold ended without a paste at list %d command %u (type %u, into "
+                "%s%s): %s (reported once for this reason)",
+                s_stop.l, s_stop.i, s_stop.type, rd__target_name(s_stop.color),
+                s_stop.zw ? ", writing SCENE's depth" : "", rd__late_pass_why_text(w));
     }
 }
 

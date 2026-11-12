@@ -1929,8 +1929,10 @@ static bool msEligible(void)
                 "scene's size (today's path)",
                 why);
     } else {
-        rd__log("lamps: low resolution with 4 samples: self-test passed (an 8x8 4-sample "
-                "transient colour and depth cleared and resolved in the pass)");
+        rd__log("lamps: low resolution with %u samples: self-test passed (the lamps' pass in "
+                "small: an occluder edge cutting a GS pixel, the per-sample depth fill, a lamp "
+                "quad, the colour resolved in the pass, against a CPU reference)",
+                MS_SAMPLES);
     }
     return why == NULL;
 }
@@ -1991,11 +1993,22 @@ static void msConvert(RhiRenderPassDesc *p, uint32_t cid, bool ms, bool storage)
         }
         s_lms.single++;
         sumAdd(&s_lms.sSingle, 1);
-        if (!s_lms.saidSingle) {
+        /* once per kind of draw: the light plan's role of the command the
+         * pass begins at (rd_glow_light.c: the fans, the mask, a lamp...) */
+        static const char *const kRole[] = {
+            "no role",  "the band",           "the fill", "the sun's fans", "the fans (skipped)",
+            "the mask", "the mask (skipped)", "a lamp",   "the reduction",  "another draw"};
+        const int role = rd__glow_light_role(g_rdStoreOrd);
+        const int rk = role >= 0 && role < (int)(sizeof(kRole) / sizeof(kRole[0])) ? role : 0;
+        static bool s_saidRole[16];
+        if (!s_saidRole[rk & 15]) {
+            s_saidRole[rk & 15] = true;
             s_lms.saidSingle = true;
-            rd__log("lamps: low resolution with 4 samples: a pass on WORK2 drawn single-sampled "
-                    "(%s; frame %u, reported once)",
-                    why, (unsigned)s_scan.frame);
+            rd__log("lamps: low resolution with %u samples: a pass on WORK2 drawn single-sampled "
+                    "(%s; it begins at list %d command ordinal %u, %s; frame %u, reported once "
+                    "for each kind of draw)",
+                    MS_SAMPLES, why, rd__replay_list(), g_rdStoreOrd, kRole[rk],
+                    (unsigned)s_scan.frame);
         }
         return;
     }

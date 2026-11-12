@@ -600,7 +600,11 @@ filled first by `msConvert`. Under `lowresms` the single-sampled depth fill is n
 `prepareDrawEx`: that pass of its own ended the open pass and flushed WORK2's pending fill clear into
 a pass of its own, so the lamps' pass loaded WORK2 and stayed single-sampled (round 11: on the gate
 and the title every lamp drawn so, `1 passes with 4 samples, 1 single-sampled`; on the phone 2 a
-picture). `lowresms8`: the same with 8 samples (the standard 8-sample locations; the phone reports
+picture), and the clear carry (`rd_pass_cut.c`, exact, on on the tile class) is on wherever
+`lowresms` is (`rd__pass_cut_on`): without it the mask's and SCENE's border repeat's ends of the open
+pass flushed WORK2's fill clear on lavapipe's desktop class (round 12's measurement there: every lamp
+still single-sampled). The once-line of a pass drawn single-sampled names the light plan's role of
+its first command (the fans, the mask, a lamp). `lowresms8`: the same with 8 samples (the standard 8-sample locations; the phone reports
 counts 0xf). Only where the RHI has
 the in-pass resolve, sample-rate shading, the standard locations and 4 samples, on the PowerVR and
 desktop classes (never the Arm, Qualcomm and Apple ones in this release: issues 123, 179, 182, 211),

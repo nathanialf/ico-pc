@@ -150,6 +150,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_lamps.h" /* rd__lamps_lowres_ms */
 #include "rd_replay.h"
 
 static const char *const kEnv[RD_CUT_COUNT] = {"ICO_RD_CLEAR_CARRY", "ICO_RD_CLEAR_SKIP",
@@ -280,6 +281,15 @@ void rd__pass_cut_init(void)
 
 bool rd__pass_cut_on(int which)
 {
+    /* the clear carry (exact by its own argument, on on the tile class)
+     * also wherever the lamps' 4-sample pass is in force (rd_lamps.h
+     * RD_LAMPS_LOWRESMS): WORK2's pending fill clear must reach the lamps'
+     * pass as its load op through the mask's and SCENE's border repeat's
+     * ends of the open pass, or the lamps' pass loads WORK2 and is drawn
+     * single-sampled (lavapipe's desktop class: every lamp so in round 12) */
+    if (which == RD_CUT_CARRY && rd__lamps_lowres_ms()) {
+        return true;
+    }
     return which >= 0 && which < RD_CUT_COUNT && s_cut.on[which];
 }
 
