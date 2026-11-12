@@ -65,8 +65,23 @@ static int plan_of(uint32_t glowLight)
     }
 }
 
+/* 1: an rc build saves the opening's frames by itself. 0 now: the phone's
+   frames are in (2026-11-12) and each dump holds the game for about 1.5 s;
+   a later round that needs new frames sets it to 1 in its own variant */
+#ifndef WINDOW_CAPTURE_DEFAULT
+#define WINDOW_CAPTURE_DEFAULT 0
+#endif
+
 void window_capture_start(void)
 {
+    if (!WINDOW_CAPTURE_DEFAULT) {
+        if (s_runStart < 0) {
+            s_runStart = (long long)time(NULL);
+            fprintf(stderr, "window: capture: off (WINDOW_CAPTURE_DEFAULT 0: the opening's frames "
+                            "are not saved by themselves in this build)\n");
+        }
+        return;
+    }
     if (s_runStart >= 0) {
         return; /* once a process: a window opened again keeps the run's count and start */
     }
@@ -78,12 +93,18 @@ void window_capture_start(void)
 
 void window_capture_picture(const struct RdPerfRecord *r)
 {
+    if (!WINDOW_CAPTURE_DEFAULT) {
+        return;
+    }
     (void)ico_capture_trigger_picture(&s_trig, in_opening(), plan_of(r->glowLight), r->frame,
                                       SDL_GetTicksNS());
 }
 
 int window_capture_due(void)
 {
+    if (!WINDOW_CAPTURE_DEFAULT) {
+        return 0;
+    }
     /* an earlier dump's presented picture (or the player's own) still owed:
        frame_dump would take its place */
     const int busy = s_pres.presentPng[0] != '\0' || s_pres.reportZip[0] != '\0';
