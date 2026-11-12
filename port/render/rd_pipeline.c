@@ -77,6 +77,7 @@
 #include <string.h>
 #include "rd_cache_name.h"
 #include "rd_made_outside.h"
+#include "rd_hash.h"
 #include "rd_internal.h"
 #include "rd_passring.h"
 #include "rd_pipe_finish.h"
@@ -1011,14 +1012,11 @@ static RhiPipeline createPipeline(const RdPipeKeyInt *k)
 static uint16_t s_hash[RD_PIPE_HASH];
 _Static_assert(RD_PIPELINE_CACHE_MAX < 65535, "s_hash holds a cache slot + 1 in 16 bits");
 
+/* the key's bytes (every field a uint8_t: no padding), 8 at a time
+ * (rd_hash.c); the slot only: a hit is keyEqual's */
 static uint32_t keyHash(const RdPipeKeyInt *k)
 {
-    const uint8_t *b = (const uint8_t *)k;
-    uint32_t h = 2166136261u;
-    for (size_t i = 0; i < sizeof(*k); i++) {
-        h = (h ^ b[i]) * 16777619u;
-    }
-    return h;
+    return rd__hash_words(k, sizeof(*k), 0u);
 }
 
 static RdActivityFn s_activityFn;

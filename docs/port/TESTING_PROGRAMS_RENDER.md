@@ -955,6 +955,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   at 1x on OpenGL (llvmpipe). Each pair: every PNG byte for byte, the same draws and passes, `=0`
   off with nothing boxed, `=1` on; v3677 at the phone setting 1 count and 3 composites boxed; the
   phone setting boxes at least one of each over the dumps. No device: SKIP.
+- `rd_hash_test.c` (`rd_hash`, CPU): the per-draw lookups' hash (`rd_hash.c` `rd__hash_words`,
+  the uniform blocks' cache and the pipeline index): seven values on a little-endian host worked
+  from its steps (no bytes under two seeds, 3, 8, 15 with a seed, a DrawCB's 144 under two seeds;
+  a big-endian host skips them), the same 144 bytes at every alignment 0..7 the same value, the
+  bytes past the length never read (lengths 0..40), two seeds two values.
 - `rd_no_volume_test.c` (`rd_no_volume`, CPU): a shadow window with no volume (`rd_no_volume.c`):
   the scan on the corpus title frame rd-00400's list 3 (taken; the three levels and three
   composites left undrawn, nothing else), a strip in the window (a volume), a foreign reader of

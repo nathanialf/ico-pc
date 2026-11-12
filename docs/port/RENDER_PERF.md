@@ -292,6 +292,16 @@ modules grow (each REPEAT coordinate keeps both forms behind its branch) while a
 fewer instructions: no `OpSDiv` in `fx_sprite_ps` (a division is 19 straight-line instructions,
 one of them a float divide), no `OpSRem` on a power-of-two size, no float divide at scale 1.
 
+The two per-draw lookups hash 8 bytes a step (`port/render/rd_hash.c` `rd__hash_words`: the
+uniform blocks' cache, `rd_replay.c` `uniformOffset`, every DrawCB of 144 bytes; the pipeline
+index, `rd_pipeline.c` `keyHash`, every draw's key): a 64-bit multiply and xorshift a word where
+FNV-1a took a multiply a byte, 18 dependent steps for a DrawCB in place of 144. The hash only picks
+a slot (a hit is still `memcmp` or `keyEqual`), so the bytes every draw reads are the same on every
+device; which blocks share a slot moves, so a replay may write a repeated block to the ring once
+more or once less (`uploadUniformBytes`, the ring's bytes). No `DIVERGENCES.md` row. Its saving is
+an estimate (about 0.3 to 0.7 ms a picture in the cage at the phone's 700-800 MHz, the design's
+C.2) until the CPU phases' line below measures the walk.
+
 A shadow window with no volume ([RENDER_POST.md](RENDER_POST.md#a-shadow-window-with-no-volume))
 fills `noVolumeKept`, `noVolumeOpen` (with the open pass's `noVolumePassW` x `noVolumePassH` and
 `noVolumePassDepth`), `noVolumeClears`, `noVolumeLevelTexels`, `noVolumeSkipped`, `noVolumeWith`

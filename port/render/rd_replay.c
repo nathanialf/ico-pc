@@ -737,16 +737,6 @@ void rd__bind_epoch_next(void)
     s_bindEpoch++;
 }
 
-/* FNV-1a over a uniform block's bytes */
-static uint32_t hashBytes(const void *p, uint32_t n, uint32_t h)
-{
-    const uint8_t *b = p;
-    for (uint32_t i = 0; i < n; i++) {
-        h = (h ^ b[i]) * 16777619u;
-    }
-    return h;
-}
-
 /* The uniform layouts' groups.  FrameCB, DrawCB, VuCB and
  * VuBoneCB are RHI_BIND_UNIFORM_BUFFER_DYNAMIC slots: a group binds the
  * ring at offset 0 with the block's size, and each draw passes its block's
@@ -819,7 +809,7 @@ static uint64_t uniformOffset(RhiBindGroupLayout layout, const void *data, uint3
     UniformEntry *e = NULL;
     uint32_t h = 0;
     if (size <= RD_UNIFORM_CACHE_BYTES) {
-        h = hashBytes(data, size, 2166136261u ^ layout.id);
+        h = rd__hash_words(data, size, layout.id); /* a slot only (rd_hash.c) */
         e = &s_uniformCache[h % RD_UNIFORM_CACHE];
         if (e->epoch == s_bindEpoch && e->hash == h && e->layout == layout.id && e->size == size &&
             memcmp(e->data, data, size) == 0) {
