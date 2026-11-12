@@ -953,6 +953,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   FAILING otherwise at the phone's, 2x, 3x and 4x; DISPLAY and PRESENT against today printed per
   dump (`lowres measure: ...`, `lowres maxima: ...`), no bound; at Enhanced 1x every PNG the
   same bytes and no draw on WORK2's own depth; at the phone's setting `...+lowres` against
+  `...+lowres2x` (WORK2 at twice the GS size) at each of those settings against today's: WORK3
+  at most 32 levels from today's (`lowres2x today: ...`), and at the phone's setting and 2x its
+  WORK3's change under half a SCENE texel's shift (`--jitter 0.5,0.5`) at most twice today's plus 4
+  levels (`lowres2x shimmer: ...`), FAILING otherwise; the WORK3-against-Original lines printed for
+  information only; at the phone's setting `...+lowres` against
   `...+lowres+fillhold` every PNG the same bytes with as many crack fills held at least (one
   more over the list), and `...+lowres` against it under `ICO_RD_LAMPS_POISON=1` every
   PNG the same bytes. No device: SKIP.

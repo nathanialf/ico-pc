@@ -87,9 +87,20 @@ extern "C" {
 #define RD_LAMPS_LOWRES4 512u
 #define RD_LAMPS_LOWRESP 1024u
 #define RD_LAMPS_LOWRESHY 2048u
+/* lowres2x (implies lowres and the box): WORK2 at twice the GS frame's size
+ * (at most SCENE's scale), four samples a GS pixel by supersampling, the box
+ * reducing them: the lamps' coverage anti-aliased as today's scaled raster
+ * makes it (the original's 1x raster shimmers on thin lamps), at 4/(scale^2)
+ * of today's WORK2 texels */
+#define RD_LAMPS_LOWRES2X 4096u
+/* LOWRES's form where the build's default turns it on: 0 the GS size, 1
+ * twice it (lowres2x) */
+#ifndef RD_LAMPS_LOWRES_SS_DEFAULT
+#define RD_LAMPS_LOWRES_SS_DEFAULT 0
+#endif
 #define RD_LAMPS_LOWRES_ANY                                                                        \
     (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESBOX | RD_LAMPS_LOWRESBIAS | RD_LAMPS_LOWRES4 |               \
-     RD_LAMPS_LOWRESP | RD_LAMPS_LOWRESHY)
+     RD_LAMPS_LOWRESP | RD_LAMPS_LOWRESHY | RD_LAMPS_LOWRES2X)
 /* the slope bias's reach past the nearest texel's own distance from the
  * sample point, in GS pixels: the rasteriser's sub-pixel snap (the GS's
  * 1/16).  (Round 7's 0.25 covered a sample point taken (0.5 - 0.5 / scale)
@@ -337,6 +348,9 @@ bool rd__lamps_own_depth(uint32_t did);
  * not jittered: its lamps are drawn at the original's 1x sample points, and
  * depth_down_ps moves SCENE's sample point by the jitter instead) */
 bool rd__lamps_lowres_gs(const RdTargetRec *t);
+/* WORK2's own scale under LOWRES (rd_core.c rd__target_scale_of): 2 with
+ * lowres2x, else 1 */
+float rd__lamps_lowres_factor(void);
 /* the run's LOWRES counts (the tests): draws on WORK2's own depth, depth
  * fills, draws without a depth */
 void rd__lamps_lowres_counts(uint64_t *draws, uint64_t *fills, uint64_t *dropped);

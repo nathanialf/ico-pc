@@ -153,7 +153,16 @@ const float *rd__frame_jitter_of(const struct RdTargetRec *tc)
         return NULL;
     }
     if (rd__lamps_lowres_gs(tc)) {
-        return NULL; /* WORK2 at the GS size (rd_lamps.h LOWRES): the original's sample points */
+        /* WORK2 at its own scale under the lamps' LOWRES (rd_lamps.h: the GS
+         * size or twice it): moved by the same GS distance as SCENE, the
+         * jitter in its own texels (SCENE's times its scale over SCENE's),
+         * so depth_down_ps's sample point needs no jitter of its own */
+        static float s_w2Jitter[2];
+        const RdTargetRec *sc = &g_rd.targets[RD_TARGET_SCENE];
+        s_w2Jitter[0] = sc->sx > 0.0f ? s_jitter[0] * tc->sx / sc->sx : 0.0f;
+        s_w2Jitter[1] = sc->sy > 0.0f ? s_jitter[1] * tc->sy / sc->sy : 0.0f;
+        s_groups++;
+        return s_w2Jitter;
     }
     /* SCENE's record holding the display layer's composite (rd_layer.h):
      * the display-scale 2D after the upscale, never moved */

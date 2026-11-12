@@ -810,6 +810,12 @@ void rd__target_scale_of(RdTargetRec *t, int named)
     } else if (scene) {
         sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;
         sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;
+    } else if (named == RD_TARGET_WORK2 && rd__lamps_lowres_factor() > 1.0f) {
+        /* the lamps' lowres2x (rd_lamps.h): twice the GS size, at most the
+         * scene's scale (1 at 1x: nothing changes there) */
+        const float k = rd__lamps_lowres_factor();
+        sx = g_rd.sceneSx > k ? k : (g_rd.sceneSx > 1.0f ? g_rd.sceneSx : 1.0f);
+        sy = g_rd.sceneSy > k ? k : (g_rd.sceneSy > 1.0f ? g_rd.sceneSy : 1.0f);
     } else if (named < 0 && t->block && g_rd.settings.waterSharp) {
         sx = g_rd.sceneSx > 0.0f ? g_rd.sceneSx : 1.0f;
         sy = g_rd.sceneSy > 0.0f ? g_rd.sceneSy : 1.0f;

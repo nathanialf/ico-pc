@@ -91,6 +91,7 @@ set(lampsBias "ICO_RD_LAMPS=pad+owed+wholepad+lowresbias")
 set(lampsHy "ICO_RD_LAMPS=pad+owed+wholepad+lowreshy")
 set(lamps4 "ICO_RD_LAMPS=pad+owed+wholepad+lowres4")
 set(lampsP "ICO_RD_LAMPS=pad+owed+wholepad+lowresp")
+set(lampsSS "ICO_RD_LAMPS=pad+owed+wholepad+lowres2x")
 set(lampsHold "ICO_RD_LAMPS=pad+owed+wholepad+lowres+fillhold")
 set(args_phone --enhanced --resolution 2364x1080 --full-height --full-pixel --present 2364x1080)
 set(args_enh43 --enhanced --resolution 2x --aspect 1.3333 --present 1280x960)
@@ -112,10 +113,32 @@ set(args_phonep ${args_phone})
 # the same size at every scale; each form's WORK3 is printed against it
 set(args_orig --present 2364x1080)
 set(fake ICO_VK_FAKE_LIMITS=moltenvk)
-set(settings phone phonebox phonebias phonehy phone4 phonep enh43 enh25 enh3x enh4x w169 x1 hold
-             poison)
+# lowres2x (WORK2 at twice the GS size): its reference is today's picture
+# (the original's 1x raster shimmers on thin lamps, which the owner saw on
+# the phone); ss_<setting> runs it at each measured setting
+set(ssSettings ss_phone ss_enh43 ss_enh25 ss_enh3x ss_enh4x ss_w169)
+foreach(b phone enh43 enh25 enh3x enh4x w169)
+  set(args_ss_${b} ${args_${b}})
+endforeach()
+# The bound against today's WORK3 (largest level difference): a lamp edge's
+# GS pixel is covered by 4 samples where today's raster gives it
+# scale^2 (4 to 16): its coverage at most a quarter of a lamp texel's light
+# apart, 64 levels in WORK2; the box of 2 x 4 GS pixels a WORK0 texel
+# averages 8 of them, an edge crossing at most 4 of one sign: 32 in WORK0;
+# the blur pairs spread it before the paste.  32 levels: a first bound, the
+# measured maxima tighten it.  And the shimmer: WORK3's change under a
+# shift of half a SCENE texel (--jitter 0.5,0.5, everything moved by the same
+# GS distance) with lowres2x at most ssShimmer times today's plus 4 levels,
+# at the phone's setting and 2x (printed with the Original's for information)
+set(ssLevels 32)
+set(ssShimmer 2)
+set(ssShimmerSettings ss_phone ss_enh43)
+set(settings phone phonebox phonebias phonehy phone4 phonep enh43 enh25 enh3x enh4x w169
+             ${ssSettings} x1 hold poison)
 set(measured phone phonebox phonebias phonehy phone4 phonep enh43 enh25 enh3x enh4x w169)
-set(asserted phone enh43 enh25 enh3x enh4x w169)
+# the WORK3-against-Original criterion is information now (printed): the
+# lowres2x criteria below decide
+set(asserted "")
 
 set(lowresRe "stats: lamps lowres (on|off): WORK2 ([0-9]+)x([0-9]+) under SCENE ([0-9]+)x([0-9]+), ([0-9]+) draws into WORK2 on its own depth, ([0-9]+) depth fills, ([0-9]+) draws without a depth")
 set(lateRe "stats: late pass [a-z]+: ([0-9]+) crack fills held into a paste pass \\(([0-9]+) the glow's")
@@ -159,6 +182,8 @@ foreach(dump IN LISTS dumps)
         list(APPEND env "${lampsBox}")
       elseif(s STREQUAL "phonebias" AND arm EQUAL 1)
         list(APPEND env "${lampsBias}")
+      elseif(s MATCHES "^ss_" AND arm EQUAL 1)
+        list(APPEND env "${lampsSS}")
       elseif(s STREQUAL "phonehy" AND arm EQUAL 1)
         list(APPEND env "${lampsHy}")
       elseif(s STREQUAL "phone4" AND arm EQUAL 1)
@@ -338,6 +363,64 @@ foreach(dump IN LISTS dumps)
       endforeach()
       message(STATUS "lowres original: ${s} ${dump} WORK3 against Original 1x (arm 0 today, "
                      "arm 1 lowres):${origText}")
+      # lowres2x against today's WORK3, and its shimmer
+      list(FIND ssSettings "${s}" isSS)
+      if(isSS GREATER -1)
+        execute_process(COMMAND "${PY}" -I "${DIFF}" --channels RGB
+                                "${OUT}/${index}-${s}-0/WORK3.png" "${OUT}/${index}-${s}-1/WORK3.png"
+                        OUTPUT_VARIABLE tout RESULT_VARIABLE tdrc)
+        set(tMax 0)
+        set(tN 0)
+        if(tdrc EQUAL 0 AND tout MATCHES "${diffRe}")
+          set(tMax "${CMAKE_MATCH_3}")
+          set(tN "${CMAKE_MATCH_4}")
+        endif()
+        message(STATUS "lowres2x today: ${s} ${dump} WORK3 against today's: ${tN} texels apart, "
+                       "largest ${tMax} (the bound ${ssLevels})")
+        if(tMax GREATER ssLevels)
+          message(SEND_ERROR "${dump} ${s}: lowres2x's WORK3 ${tMax} levels from today's: the "
+                             "bound is ${ssLevels} (DIVERGENCES.md VD-32)")
+          math(EXPR failures "${failures} + 1")
+        endif()
+        list(FIND ssShimmerSettings "${s}" isShim)
+        if(isShim GREATER -1)
+          set(shimText "")
+          foreach(arm 0 1)
+            set(jdir "${OUT}/${index}-${s}-${arm}-j")
+            file(REMOVE_RECURSE "${jdir}")
+            file(MAKE_DIRECTORY "${jdir}")
+            set(jenv ${common} ${fake} "${lampsOff}")
+            if(arm EQUAL 1)
+              set(jenv ${common} ${fake} "${lampsSS}")
+            endif()
+            execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${jenv} "${TOOL}" "${dump}" -
+                                    --pass-dump "${jdir}" ${args_${s}} --jitter 0.5,0.5
+                            RESULT_VARIABLE jrc OUTPUT_QUIET ERROR_QUIET)
+            set(jMax_${arm} -1)
+            if(jrc EQUAL 0)
+              execute_process(COMMAND "${PY}" -I "${DIFF}" --channels RGB
+                                      "${OUT}/${index}-${s}-${arm}/WORK3.png" "${jdir}/WORK3.png"
+                              OUTPUT_VARIABLE jout RESULT_VARIABLE jdrc)
+              if(jdrc EQUAL 0 AND jout MATCHES "${diffRe}")
+                set(jMax_${arm} "${CMAKE_MATCH_3}")
+                string(APPEND shimText " arm ${arm}: ${CMAKE_MATCH_4} texels change, largest "
+                                       "${CMAKE_MATCH_3};")
+              endif()
+            endif()
+          endforeach()
+          message(STATUS "lowres2x shimmer: ${s} ${dump} WORK3 under half a SCENE texel's shift "
+                         "(arm 0 today, arm 1 lowres2x):${shimText}")
+          if(jMax_0 GREATER -1 AND jMax_1 GREATER -1)
+            math(EXPR shimAllowed "${jMax_0} * ${ssShimmer} + 4")
+            if(jMax_1 GREATER shimAllowed)
+              message(SEND_ERROR "${dump} ${s}: lowres2x's WORK3 moves ${jMax_1} levels under "
+                                 "the shift, today's ${jMax_0}: at most ${ssShimmer} times "
+                                 "today's + 4 (DIVERGENCES.md VD-32)")
+              math(EXPR failures "${failures} + 1")
+            endif()
+          endif()
+        endif()
+      endif()
       list(FIND asserted "${s}" isAsserted)
       if(isAsserted GREATER -1 AND oOk)
         math(EXPR maxAllowed "${oMax_0} + ${origLevels}")

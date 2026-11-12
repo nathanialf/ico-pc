@@ -570,7 +570,22 @@ levels); the smallest of the four texels around the point passed the gate at 2x 
 its 51,725 pixels; 30,367 at 2.2x, 20,641 at 2.5x, 0 at 3x and 4x): the four taps reach 0.25 GS
 pixels on each side at 2x, 0 on one side at 3x and 0.125 at 4x: those forms took the sample point
 at (p + 0.5) x scale - 0.5, (0.5 - 0.5 / scale) GS pixels off the true one, which a bias of
-0.25 GS pixels past the half texel then covered (round 7);
+0.25 GS pixels past the half texel then covered (round 7). **Twice the GS size**
+(`lowres2x`, `RD_LAMPS_LOWRES_SS_DEFAULT` for a build's default): the original's 1x raster shimmers
+on thin lamps (a quarter GS pixel's move changed the title's glow by up to 134 levels at Original
+1x, 26 with today's scaled raster), so WORK2 at twice the GS size (at most the scene's scale;
+`rd__target_scale_of`), four samples a GS pixel by supersampling, reduced by the above-1x box as
+today's scaled WORK2 is: the lamps' coverage anti-aliased as today's, its depth SCENE's at each
+WORK2 texel's sample point (SCENE's texels per WORK2 texel, scale over 2). At the phone's Auto WORK2
+is 1696 x 896 (6.1 MB a load or store, today's 10.2, the GS size's 1.5) with a 7.6 MB depth of its
+own: about 35 MB of attachment traffic a lamps picture against today's 43, so little saving there.
+A jittered frame (an upscaler's) moves WORK2 at either size by the same GS distance as SCENE
+(`rd__frame_jitter_of`: the jitter in WORK2's own texels), so the sample point needs none.
+Multisampling WORK2 instead is not built: the RHI resolves a multisampled colour only outside a
+pass (`rhi_cmd_resolve_color`), which on a tile-based GPU stores every sample (6.1 MB at 4
+samples, the supersampled size's traffic) and reads them back, the lamps' VU pipelines would need
+four-sample keys, and its per-sample depth sample-rate shading: a new kind of GPU work on the
+phone for no traffic below twice the GS size's;
 SCENE's depth sampled in place outside any pass, a copy only where the device cannot sample a
 depth: the fog path's copy on the local read is for reads beside SCENE's own pass), so lamp against lamp and
 lamp against the scene order as the PS2 orders them at its resolution. The fans' and lamps' depth
@@ -603,7 +618,7 @@ H pictures whose lamps let the crack fill's hold pass (fillhold)`, and `rd_repla
 `stats: lamps lowres on|off: WORK2 WxH under SCENE SWxSH, D draws into WORK2 on its own depth, F
 depth fills, X draws without a depth`.
 
-`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|lowresbox|lowresbias|lowreshy|lowres4|lowresp|fillhold` (the tests only,
+`ICO_RD_LAMPS=0|1|area|pad|owed|wholepad|fold4|lowres|lowresbox|lowresbias|lowreshy|lowres4|lowresp|lowres2x|fillhold` (the tests only,
 [TESTING.md](TESTING.md#environment-switches); words joined by `,` or `+`) turns every part off,
 every part on, or the parts named on whatever the class (the self-tests still decide the area and
 the fold of two pairs);

@@ -364,10 +364,11 @@ float depth_upsample_ps(BlitVSOut i) : SV_Depth
 // lamps' WORK2 depth above 1x (port/render/rd_lamps.c RD_LAMPS_LOWRES), a depth-only pass.
 // The GS samples pixel p at its integer coordinate; the port draws a GS integer coordinate
 // on a pixel's centre at 1x and on the centre of its block's first texel on a scaled target
-// (rd_replay.c rd__frame_group_ex: origin 0.5 / scale), and a jittered frame moves SCENE's
-// content by its jitter in texels (g_vpo), so GS pixel p's sample point is SCENE texel
-// index at = p * scale - crop + jitter (g_param.xy SCENE's scale, g_param.z its Full pixel
-// crop ox, g_scale.xy the jitter in texels, 0 without; g_tex.xy SCENE's size).  The lamps
+// (rd_replay.c rd__frame_group_ex: origin 0.5 / scale), so WORK2 texel p's sample point is
+// SCENE texel index at = p * k - crop + g_scale.xy (g_param.xy k, SCENE's texels per WORK2
+// texel: SCENE's scale over WORK2's, WORK2 at the GS size or twice it (lowres2x); g_param.z
+// SCENE's Full pixel crop ox; g_scale.xy 0: a jittered frame moves WORK2 by the same GS
+// distance as SCENE, rd_jitter.c; g_tex.xy SCENE's size).  The lamps
 // test GEQUAL (a larger depth is nearer: gs_z_to_depth), so a smaller depth passes more.
 // Where at is a texel's own centre on both axes (a whole-number scale and crop, no jitter)
 // and g_param.w is 1, that texel's depth: the 1x lamp's own sample point, the original's
