@@ -207,7 +207,8 @@ int main(void)
     /* t2 */
     /* every class (FILLHOLD by its word alone) */
     const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD |
-                        (RD_LAMPS_LOWRES_DEFAULT ? RD_LAMPS_LOWRES : 0u);
+                        (RD_LAMPS_LOWRES_DEFAULT ? RD_LAMPS_LOWRES : 0u) |
+                        (RD_GLOW_BLUR_DEFAULT ? RD_LAMPS_GLOWBLUR : 0u);
     /* the 4-sample lamps on the PowerVR class under Vulkan alone */
     const uint32_t pv = (RD_LAMPS_MS_DEFAULT ? (RD_LAMPS_LOWRES | RD_LAMPS_LOWRESMS) : 0u) |
                         (RD_LAMPS_FILLPASTE_DEFAULT ? RD_LAMPS_FILLPASTE : 0u);
