@@ -3173,7 +3173,7 @@ static int gpuTests(void)
 
         RhiRenderPassDesc rp = {0};
         rp.color[0] =
-            (RhiColorAttachment){probe, RHI_LOAD_CLEAR, {0, 0, 0, 0}, RHI_STORE_STORE, false};
+            (RhiColorAttachment){probe, RHI_LOAD_CLEAR, {0, 0, 0, 0}, RHI_STORE_STORE, false, {0}};
         rp.colorCount = 1;
         rp.width = ICO_VU_PROBE_FIELDS;
         rp.height = MAXV;
@@ -3193,7 +3193,8 @@ static int gpuTests(void)
                                                RHI_LOAD_CLEAR,
                                                {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
                                                RHI_STORE_STORE,
-                                               false};
+                                               false,
+                                               {0}};
             dp.colorCount = 1;
             dp.width = dp.height = RT;
             rhi_cmd_begin_render_pass(cl, &dp);
@@ -3254,11 +3255,9 @@ static int gpuTests(void)
             rhi_cmd_end_render_pass(ql);
             for (int pass = 0; pass < 2; pass++) {
                 RhiRenderPassDesc dp = {0};
-                dp.color[0] = (RhiColorAttachment){pass ? imgPort : imgVu,
-                                                   RHI_LOAD_CLEAR,
-                                                   {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
-                                                   RHI_STORE_STORE,
-                                                   false};
+                dp.color[0] = (RhiColorAttachment){
+                    pass ? imgPort : imgVu, RHI_LOAD_CLEAR, {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
+                    RHI_STORE_STORE,        false,          {0}};
                 dp.colorCount = 1;
                 dp.width = dp.height = RT;
                 rhi_cmd_begin_render_pass(ql, &dp);
@@ -3331,7 +3330,8 @@ static int gpuTests(void)
                                                        RHI_LOAD_CLEAR,
                                                        {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
                                                        RHI_STORE_STORE,
-                                                       false};
+                                                       false,
+                                                       {0}};
                     dp.colorCount = 1;
                     dp.width = dp.height = RT;
                     rhi_cmd_begin_render_pass(rl, &dp);
@@ -3428,7 +3428,7 @@ static int gpuTests(void)
                 RhiRenderPassDesc rr = {0};
                 for (uint32_t k = 0; k < ICO_VU_REC_PLANES; k++) {
                     rr.color[k] = (RhiColorAttachment){
-                        recTex[k], RHI_LOAD_DONT_CARE, {0, 0, 0, 0}, RHI_STORE_STORE, false};
+                        recTex[k], RHI_LOAD_DONT_CARE, {0, 0, 0, 0}, RHI_STORE_STORE, false, {0}};
                 }
                 rr.colorCount = ICO_VU_REC_PLANES;
                 rr.width = ICO_VU_REC_W;
@@ -3498,11 +3498,9 @@ static int gpuTests(void)
             const RhiPipeline pt = sprite ? pSpriteMainDraw : pMainDraw;
             for (int pass = 0; pass < 2; pass++) {
                 RhiRenderPassDesc dp = {0};
-                dp.color[0] = (RhiColorAttachment){pass ? imgPort : imgVu,
-                                                   RHI_LOAD_CLEAR,
-                                                   {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
-                                                   RHI_STORE_STORE,
-                                                   false};
+                dp.color[0] = (RhiColorAttachment){
+                    pass ? imgPort : imgVu, RHI_LOAD_CLEAR, {16 / 255.f, 32 / 255.f, 48 / 255.f, 1},
+                    RHI_STORE_STORE,        false,          {0}};
                 dp.colorCount = 1;
                 dp.width = dp.height = RT;
                 rhi_cmd_begin_render_pass(tl, &dp);

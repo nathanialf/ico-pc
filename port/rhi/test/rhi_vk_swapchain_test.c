@@ -91,7 +91,8 @@ static int frame(SDL_Window *win, RhiFormat fmt, int n)
                              RHI_LOAD_CLEAR,
                              {(float)r / 255.0f, (float)g / 255.0f, (float)bl / 255.0f, 1.0f},
                              RHI_STORE_STORE,
-                             false};
+                             false,
+                             {0}};
     rp.colorCount = 1;
     rp.width = w;
     rp.height = h;
@@ -260,8 +261,8 @@ static int followSize(SDL_Window *win, RhiFormat fmt)
     RhiTextureBarrier b0 = {bb, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
     rhi_cmd_barrier(cl, &b0, 1);
     RhiRenderPassDesc rp = {0};
-    rp.color[0] =
-        (RhiColorAttachment){bb, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 1.0f}, RHI_STORE_STORE, false};
+    rp.color[0] = (RhiColorAttachment){
+        bb, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 1.0f}, RHI_STORE_STORE, false, {0}};
     rp.colorCount = 1;
     rp.width = aw;
     rp.height = ah;
@@ -320,8 +321,8 @@ static int presentAtSwapSize(int n)
     RhiTextureBarrier b0 = {bb, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
     rhi_cmd_barrier(cl, &b0, 1);
     RhiRenderPassDesc rp = {0};
-    rp.color[0] =
-        (RhiColorAttachment){bb, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 1.0f}, RHI_STORE_STORE, false};
+    rp.color[0] = (RhiColorAttachment){
+        bb, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 1.0f}, RHI_STORE_STORE, false, {0}};
     rp.colorCount = 1;
     rp.width = sw;
     rp.height = sh;
@@ -383,7 +384,7 @@ static void offscreenList(RhiTexture off, RhiState *state)
     rhi_cmd_barrier(cl, &b0, 1);
     RhiRenderPassDesc rp = {0};
     rp.color[0] = (RhiColorAttachment){
-        off, RHI_LOAD_CLEAR, {0.25f, 0.5f, 0.75f, 1.0f}, RHI_STORE_STORE, false};
+        off, RHI_LOAD_CLEAR, {0.25f, 0.5f, 0.75f, 1.0f}, RHI_STORE_STORE, false, {0}};
     rp.colorCount = 1;
     rp.width = 16;
     rp.height = 16;
@@ -446,8 +447,8 @@ static int acquireWaits(SDL_Window *win, RhiFormat fmt)
     RhiTextureBarrier b0 = {bb, RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
     rhi_cmd_barrier(cl, &b0, 1);
     RhiRenderPassDesc rp = {0};
-    rp.color[0] =
-        (RhiColorAttachment){bb, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 1.0f}, RHI_STORE_STORE, false};
+    rp.color[0] = (RhiColorAttachment){
+        bb, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 1.0f}, RHI_STORE_STORE, false, {0}};
     rp.colorCount = 1;
     rp.width = sw;
     rp.height = sh;

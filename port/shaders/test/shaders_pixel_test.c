@@ -662,7 +662,7 @@ static void checkAbove1xSteps(RhiBindGroupLayout l0, RhiBindGroupLayout l1, RhiB
         RhiTextureBarrier b = {rt[i], RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
         rhi_cmd_barrier(cl, &b, 1);
         RhiRenderPassDesc rp = {0};
-        rp.color[0] = (RhiColorAttachment){rt[i], RHI_LOAD_CLEAR, {0}, RHI_STORE_STORE, false};
+        rp.color[0] = (RhiColorAttachment){rt[i], RHI_LOAD_CLEAR, {0}, RHI_STORE_STORE, false, {0}};
         rp.colorCount = 1;
         rp.width = A1W;
         rp.height = A1H;
@@ -857,7 +857,7 @@ static void checkTurns(RhiBindGroupLayout l0, RhiBindGroupLayout l1, RhiBindGrou
         RhiTextureBarrier b = {rt[i], RHI_STATE_UNDEFINED, RHI_STATE_RENDER_TARGET};
         rhi_cmd_barrier(cl, &b, 1);
         RhiRenderPassDesc rp = {0};
-        rp.color[0] = (RhiColorAttachment){rt[i], RHI_LOAD_CLEAR, {0}, RHI_STORE_STORE, false};
+        rp.color[0] = (RhiColorAttachment){rt[i], RHI_LOAD_CLEAR, {0}, RHI_STORE_STORE, false, {0}};
         rp.colorCount = 1;
         rp.width = kWant[i].w;
         rp.height = kWant[i].h;
@@ -1199,11 +1199,9 @@ int main(int argc, char **argv)
         for (int build = 0; build < 2; build++) {
             const SpritePipes *P = build ? &pp : &sp;
             RhiRenderPassDesc rp = {0};
-            rp.color[0] = (RhiColorAttachment){build ? AP : A,
-                                               RHI_LOAD_CLEAR,
-                                               {64 / 255.f, 64 / 255.f, 64 / 255.f, 64 / 255.f},
-                                               RHI_STORE_STORE,
-                                               false};
+            rp.color[0] = (RhiColorAttachment){
+                build ? AP : A,  RHI_LOAD_CLEAR, {64 / 255.f, 64 / 255.f, 64 / 255.f, 64 / 255.f},
+                RHI_STORE_STORE, false,          {0}};
             rp.colorCount = 1;
             rp.width = W;
             rp.height = H;
@@ -1251,8 +1249,8 @@ int main(int argc, char **argv)
         /* pass 2: blit A to B (identity tint) and to C (tinted) */
         for (int k = 0; k < 2; k++) {
             RhiRenderPassDesc bp = {0};
-            bp.color[0] =
-                (RhiColorAttachment){k ? C : B, RHI_LOAD_DONT_CARE, {0}, RHI_STORE_STORE, false};
+            bp.color[0] = (RhiColorAttachment){
+                k ? C : B, RHI_LOAD_DONT_CARE, {0}, RHI_STORE_STORE, false, {0}};
             bp.colorCount = 1;
             bp.width = W;
             bp.height = H;
@@ -1269,7 +1267,7 @@ int main(int argc, char **argv)
         for (int k = 0; k < 3; k++) {
             RhiRenderPassDesc ip = {0};
             ip.color[0] =
-                (RhiColorAttachment){uout[k], RHI_LOAD_DONT_CARE, {0}, RHI_STORE_STORE, false};
+                (RhiColorAttachment){uout[k], RHI_LOAD_DONT_CARE, {0}, RHI_STORE_STORE, false, {0}};
             ip.colorCount = 1;
             ip.width = 4;
             ip.height = 4;

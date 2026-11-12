@@ -341,8 +341,8 @@ static void bcCell(const Ctx *c)
                                {bc3, RHI_STATE_COPY_DST, RHI_STATE_SHADER_READ}};
     rhi_cmd_barrier(cl, rd, 2);
     RhiRenderPassDesc rp = {0};
-    rp.color[0] =
-        (RhiColorAttachment){tgt, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 0.0f}, RHI_STORE_STORE, false};
+    rp.color[0] = (RhiColorAttachment){
+        tgt, RHI_LOAD_CLEAR, {0.0f, 0.0f, 0.0f, 0.0f}, RHI_STORE_STORE, false, {0}};
     rp.colorCount = 1;
     rp.width = BW;
     rp.height = BH;
@@ -2603,8 +2603,8 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
                                  RHI_STORE_STORE,
                                  false};
         rp.colorCount = 1;
-        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR,  RHI_LOAD_CLEAR,  0.0f, 0,
-                                        false, RHI_STORE_STORE, RHI_STORE_STORE, false};
+        rp.depth = (RhiDepthAttachment){depth, RHI_LOAD_CLEAR,  RHI_LOAD_CLEAR,  0.0f,  0,
+                                        false, RHI_STORE_STORE, RHI_STORE_STORE, false, {0}};
         rp.width = W;
         rp.height = H;
         rhi_cmd_begin_label(cl, "scene");
@@ -2655,7 +2655,7 @@ int rhi_test_run_cells(const RhiTestConfig *cfg)
 
         RhiRenderPassDesc up2 = {0};
         up2.color[0] = (RhiColorAttachment){
-            utex, RHI_LOAD_CLEAR, {1.0f, 2.0f, 3.0f, 4.0f}, RHI_STORE_STORE, false};
+            utex, RHI_LOAD_CLEAR, {1.0f, 2.0f, 3.0f, 4.0f}, RHI_STORE_STORE, false, {0}};
         up2.colorCount = 1;
         up2.width = 4;
         up2.height = 4;

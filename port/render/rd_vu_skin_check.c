@@ -1839,7 +1839,7 @@ void rd__vu_skin_end(void)
     /* cleared to the replay's stamp: field 15 of every column is never
      * drawn (the probes write fields 0..2), so the harvest reads which
      * replay's copy wrote the rows (rd_vu_skin_trace.c) */
-    rp.color[0] = (RhiColorAttachment){sl->tex, RHI_LOAD_CLEAR, {0}, RHI_STORE_STORE, false};
+    rp.color[0] = (RhiColorAttachment){sl->tex, RHI_LOAD_CLEAR, {0}, RHI_STORE_STORE, false, {0}};
     if (!asBefore) {
         rd__skin_clear_stamp(g_rd.replayCounter, rp.color[0].clear);
     }

@@ -298,8 +298,8 @@ bool rd__vu_skin_selftest(void)
             rd__transition(cl, tex, &texState, RHI_STATE_RENDER_TARGET);
             RhiRenderPassDesc rp;
             memset(&rp, 0, sizeof(rp));
-            rp.color[0] =
-                (RhiColorAttachment){tex, RHI_LOAD_CLEAR, {0, 0, 0, 0}, RHI_STORE_STORE, false};
+            rp.color[0] = (RhiColorAttachment){
+                tex, RHI_LOAD_CLEAR, {0, 0, 0, 0}, RHI_STORE_STORE, false, {0}};
             rp.colorCount = 1;
             rp.width = w;
             rp.height = h;
