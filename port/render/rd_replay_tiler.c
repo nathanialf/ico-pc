@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rd_glow_blur.h"
 #include "rd_lamps.h"
 #include "rd_replay.h"
 
@@ -1079,4 +1080,109 @@ bool rd__replay_blur_fold(Replay *r, const RdFrame *f, const RdCmd *c)
                                                              : g_rd.profile.cls);
     }
     return true;
+}
+
+/* ------------------------------------------- the glow's chain (rd_glow_blur.c)
+ * The pairs from pass 1 at c (the command the loop replays) to the eye blur,
+ * each pass taken as the blur fold takes it (blurFoldPass: the fold's
+ * conditions; blurFoldPair: the two targets crossed, the same flags, TEXA,
+ * TEX0 size and origin; blurFoldFirst: where the glow's edge strip leaves a
+ * pass 1's bytes), every pair on the first one's targets, the sprites of
+ * one kind; the state after the last pass 2 kept for
+ * rd__replay_blur_chain_take. */
+static Replay s_chainQ; /* the state after the chain's last pass 2 (large) */
+
+static void chainPass(const BlurFoldPass *b, uint8_t toWork1, RdBlurChainPass *o)
+{
+    memset(o, 0, sizeof(*o));
+    for (int k = 0; k < 4; k++) {
+        o->rect[k] = (int32_t)b->p.rect[k];
+        o->uv[k] = (int32_t)b->uv[k];
+        o->rgba[k] = b->p.rgba[k];
+    }
+    o->lsz[0] = (int32_t)rintf(b->p.scalar[0]);
+    o->lsz[1] = (int32_t)rintf(b->p.scalar[1]);
+    o->asz[0] = (int32_t)b->src->tw;
+    o->asz[1] = (int32_t)b->src->th;
+    o->o[0] = b->ox;
+    o->o[1] = b->oy;
+    o->c0[0] = b->cx0;
+    o->c0[1] = b->cy0;
+    o->c1[0] = b->cx1;
+    o->c1[1] = b->cy1;
+    o->first = b->first;
+    o->toWork1 = toWork1;
+    o->flags = b->flags;
+    o->texfmt = b->mode1 >> 8;
+}
+
+int rd__replay_blur_chain(Replay *r, const RdFrame *f, const RdCmd *c, RdBlurChain *ch)
+{
+    memset(ch, 0, sizeof(*ch));
+    if (!s_loop.cmds || s_loop.index >= s_loop.count || &s_loop.cmds[s_loop.index] != c) {
+        return RD_GLOW_BLUR_WHY_FORM;
+    }
+    static Replay q, q3; /* a replay's fields: large */
+    q = *r;
+    q.mirror = 0; /* as doBlurSpriteDraw: no previous draw's flip in the scissor */
+    BlurFoldPass a, b, a3;
+    if (!blurFoldPass(&q, f, c, &a)) {
+        return RD_GLOW_BLUR_WHY_FORM;
+    }
+    blurFoldFirst(&q, f, c, &a);
+    const RdTargetRec *w1 = a.tc, *w0 = a.src;
+    ch->kind = c->b[0];
+    uint32_t i = s_loop.index;
+    for (;;) {
+        if (ch->n + 2 > RD_GLOW_BLUR_PASSES_MAX) {
+            return RD_GLOW_BLUR_WHY_FORM;
+        }
+        const uint32_t i2 = blurFoldAhead(&q, i);
+        if (i2 >= s_loop.count || s_loop.cmds[i2].b[0] != c->b[0] ||
+            !blurFoldPass(&q, f, &s_loop.cmds[i2], &b) || !blurFoldPair(&a, &b)) {
+            return RD_GLOW_BLUR_WHY_FORM;
+        }
+        chainPass(&a, 1, &ch->p[ch->n++]);
+        chainPass(&b, 0, &ch->p[ch->n++]);
+        ch->last = i2;
+        s_chainQ = q;
+        q3 = q;
+        const uint32_t i3 = blurFoldAhead(&q3, i2);
+        if (i3 >= s_loop.count) {
+            return RD_GLOW_BLUR_WHY_FORM;
+        }
+        const RdCmd *x = &s_loop.cmds[i3];
+        if (x->b[0] == c->b[0] && blurFoldPass(&q3, f, x, &a3) && a3.tc == w1 && a3.src == w0) {
+            blurFoldFirst(&q3, f, x, &a3);
+            q = q3;
+            a = a3;
+            i = i3;
+            continue;
+        }
+        /* the chain's end: the eye blur reads WORK0 next */
+        if (x->type != RDC_POST_STUB || x->b[0] != RD_POST_EYE_BLUR) {
+            return RD_GLOW_BLUR_WHY_FORM;
+        }
+        break;
+    }
+    ch->w0 = w0->tw;
+    ch->h0 = w0->th;
+    ch->w1 = w1->tw;
+    ch->h1 = w1->th;
+    ch->work0 = s_chainQ.st.color;
+    ch->work1 = r->st.color;
+    return ch->n >= 4 ? RD_GLOW_BLUR_WHY_NONE : RD_GLOW_BLUR_WHY_FORM;
+}
+
+void rd__replay_blur_chain_take(Replay *r, const RdBlurChain *ch)
+{
+    r->st = s_chainQ.st;
+    r->halfAdded = s_chainQ.halfAdded;
+    r->perfTargetEffect = s_chainQ.perfTargetEffect;
+    /* the effect the last pass 2's POST_STUB sets in the loop (the glow), as
+     * the fold's: the passes are begun and timed as the effect's */
+    const int post2 = rd__perf_post_of_kind(s_loop.cmds[ch->last].b[0]);
+    r->perfPost = post2 >= 0 ? post2 : s_chainQ.perfPost;
+    s_loop.skip = ch->last - s_loop.index;
+    rd__replay_perf_post(r, r->perfPost);
 }

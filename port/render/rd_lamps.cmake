@@ -94,3 +94,6 @@ if(ICO_RUN_TESTS AND TARGET rd_replay_tool)
         set_tests_properties(rd_lamps_fillpaste_ab PROPERTIES ENVIRONMENT "${_dc_env}")
     endif()
 endif()
+
+# the glow's blur pairs in two passes (rd_glow_blur.c)
+include("${CMAKE_CURRENT_LIST_DIR}/rd_glow_blur.cmake")

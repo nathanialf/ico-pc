@@ -295,6 +295,10 @@ ico_add_shader(fx_blur2_ps fx_sprite.hlsl fx_blur2_ps fragment)
 # Vulkan only in use (rd_replay.c makes the module on Vulkan alone), its DXIL and GLSL plain
 # builds, never used
 ico_add_shader(fx_blur4_ps fx_sprite.hlsl fx_blur4_ps fragment)
+# The glow's blur chain in two passes (port/render/rd_glow_blur.c, the lamps' RD_LAMPS_GLOWBLUR):
+# a few hardware-bilinear taps a texel across, then down, behind fx_rect_vs; used on every
+# backend where it is asked for
+ico_add_shader(fx_glowblur_ps fx_glowblur.hlsl fx_glowblur_ps fragment)
 # Motion blur: Smooth's accumulator (port/render/rd_blur_smooth.c): its step
 # and its resolve into the RGBA8 target the motion blur's sprite reads, behind
 # blit_vs; used on both backends

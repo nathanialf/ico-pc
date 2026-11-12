@@ -938,6 +938,34 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   phone, poison, desktop settings and the sequences; none at Mali and OpenGL), the colour loaded
   fewer by a WORK0 a pass of two pairs and stored fewer by that and the owed sprites' WORK0, an
   owed sprite at every setting. No device: SKIP.
+- `rd_glow_blur_test.c` (`rd_glow_blur`; `rd_glow_blur.cmake`, CPU): the glow's blur in two
+  passes, its pure parts (`rd_glow_blur.c`): the word `glowblur` of `ICO_RD_LAMPS` (alone, with
+  others, not in `1`), its text, the default bits by `RD_GLOW_BLUR_DEFAULT`, every reason's text;
+  the operator of the ten pairs as recorded at 4:3 (the boot corpus's `rd-00400`, WORK0 256 x 128)
+  and on the phone's 848 x 448 (`v3677`, 424 x 128): rows summing to 1, offsets within 8 texels,
+  nothing above 1 % left out of a row's taps, the gains (139/128)^10, (136/128)^10,
+  (132/128)^10 and 1, the texel itself on the top row and (4:3) the left column, a spread above
+  1 texel somewhere, the table's round trip; the two passes emulated as the shader computes them
+  (the table decoded, hardware bilinear with 8-bit fractions, the across pass stored to 8 bits,
+  the gains and the loss) against the chain in the GS's integers on a fixed picture of lamp-like
+  blobs: WORK0's RGB at most 25 levels apart and 0.40 on average, alpha at most 8 (the evidence's
+  Python mirror gave 21, 0.12 and 5); the refusals (a pass 1's colour, a pass 2 not covering
+  WORK0, one pair, a constant added).
+- `rd_glow_blur_ab.cmake` (`rd_glow_blur_ab`, `rd_glow_blur_gl`; `rd_glow_blur.cmake`): the glow's
+  blur in two passes (DIVERGENCES.md VD-33) on every dump of `tools/glow_light_dumps.txt` and
+  `tools/lamps_dumps.txt` (machine-local; a listed dump that is absent FAILS),
+  `ICO_RD_LAMPS=pad+owed+wholepad` against `...+glowblur`, `--pass-dump --stats`,
+  `ICO_RD_VU_PREPASS=0 ICO_RD_LATE_PASS=1`, at the phone's Resolution Auto under
+  `ICO_VK_FAKE_LIMITS=moltenvk`, Enhanced 2x, 3x and 4x at 4:3, the Mali fakes (no blur fold),
+  Enhanced 1x and the poison; a dump the phone's setting leaves as recorded is checked there (every
+  PNG the same bytes) and not run at the others. Where a chain was drawn in two passes: the passes
+  fewer by the chain's as today draws them less two (2 P less the pairs folded), SHADOW0..2 and
+  WORK2_PAD the same bytes, WORK3 and WORK0 within 24 levels of today's and DISPLAY and PRESENT
+  within 26 (RGB; printed per dump, `glow blur measure:`, and as each setting's maxima), the
+  shimmer at the phone's setting and 2x (WORK3's change under `--jitter 0.5,0.5`) at most 5/4 of
+  today's + 4; at 1x no chain in two passes and every PNG the same bytes; the poison every PNG the
+  same bytes; a chain in two passes over the list at each measured setting. `rd_glow_blur_gl`:
+  the phone's setting on OpenGL (llvmpipe). No device: SKIP.
 - `rd_lamps_lowres_ab.cmake` (`rd_lamps_lowres_ab`; `rd_lamps.cmake`): the lamps' glow at the GS
   frame's size above 1x (`RD_LAMPS_LOWRES`, DIVERGENCES.md VD-32) on every glow dump of
   `tools/glow_light_dumps.txt` (machine-local; a listed dump that is absent FAILS),

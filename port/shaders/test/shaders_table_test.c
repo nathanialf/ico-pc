@@ -23,6 +23,7 @@ static const char *const expected[] = {
     "yuv_ps",           "yuv_vs",           "shadow_count_ps", /* the shadow count in one draw (rd_shadow_one.c) */
     "depth_down_ps",    /* the lamps' WORK2 depth at the GS frame's size (rd_lamps.c) */
     "depth_down_ms_ps", /* the same per sample (rd_lamps.c RD_LAMPS_LOWRESMS) */
+    "fx_glowblur_ps",   /* the glow's blur chain in two passes (rd_glow_blur.c) */
 };
 
 /* the screen-prim triangles with their colour and STQ planes
