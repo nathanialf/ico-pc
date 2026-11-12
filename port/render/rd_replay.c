@@ -1212,7 +1212,8 @@ static void endPass(Replay *r)
     /* whoever ends a pass is about to record something else (a copy,
      * another pass): a pending clear goes first, unless beginPass took it */
     flushClear();
-    flushStencilClear(); /* and a pending shadow reset (never both pending) */
+    flushStencilClear();   /* and a pending shadow reset (never both pending) */
+    rd__no_volume_flush(); /* a window's zeros (rd_no_volume.c) */
 }
 
 /* endPass before texture tex is made readable outside a pass: a pending
@@ -3465,7 +3466,8 @@ static RdUniform msaaFrame(const Replay *r, const DrawSetup *ds)
 static void doScreen(Replay *r, const RdFrame *f, const RdCmd *c)
 {
     DrawSetup ds;
-    if ((g_rd.deferText && c->b[3] == RD_SCREEN_TEXT_QUADS) || rd__glow_light_skip(g_rdStoreOrd)) {
+    if ((g_rd.deferText && c->b[3] == RD_SCREEN_TEXT_QUADS) || rd__glow_light_skip(g_rdStoreOrd) ||
+        rd__no_volume_skip(r)) {
         flushScreenRun(r); /* a skipped text item (a folded fade) ends the run */
         return;            /* the item is drawn on the output (the reduction) instead */
     }
@@ -4339,6 +4341,9 @@ static void doShadowReset(Replay *r)
     s_shadowRedFor = 0; /* a new count starts */
     s_shadowCountFor = 0;
     rd__shadow_box_reset(r->st.color); /* the volumes' box (rd_shadow_box.c) */
+    if (rd__no_volume_reset(r)) {
+        return; /* a window with no volume (rd_no_volume.c): nothing, the pass open */
+    }
     if (rd__msaa_shadow_reset(r, tc, td)) {
         return; /* in the MSAA epoch (rd_msaa_shadow.c) */
     }
@@ -4575,6 +4580,13 @@ static void doShadowResolve(Replay *r, const RdCmd *c)
         return;
     }
     s_shadowRedFor = 0;
+    if (rd__no_volume_active()) {
+        const bool red = (tc->tw != tc->w || tc->th != tc->h) && shadowRedMake(tc);
+        rd__no_volume_resolve(r, tc, red ? &s_shadowRed : NULL, &s_shadowRedState);
+        s_shadowRedFor = red ? r->st.color : 0;
+        s_shadowCountFor = r->st.color;
+        return;
+    }
     const uint32_t step = rd__shadow_step(c); /* rd_shadow.c "The step" */
     const bool ms = rd__msaa_shadow_pass(r);  /* the count in the MSAA epoch */
     if (g_rd.profile.shadowOne && !ms && shadowCountOne(r, tc, td, step)) {

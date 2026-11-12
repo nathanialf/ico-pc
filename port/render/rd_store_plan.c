@@ -430,6 +430,9 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     const bool dateCut = rd__date_cut_scan_begin(f);
     /* and the shadows' sources and composites (rd_shadow_box.c) */
     const bool box = rd__shadow_box_scan_begin(f);
+    /* and a shadow window with no volume (rd_no_volume.c: after the box's
+     * roles, which it reads) */
+    rd__no_volume_scan_begin(f, keep);
     s_plan.n = s_plan.nUndef = 0;
     s_plan.full = false;
     s_plan.anyTouch = 0;
@@ -503,6 +506,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
             if (box) {
                 rd__shadow_box_scan_cmd(f, c, &st, state, ord);
             }
+            rd__no_volume_scan_cmd(f, c, &st, state, ord);
             if (state || !plan) {
                 continue;
             }
@@ -602,6 +606,7 @@ void rd__store_plan_scan(const RdFrame *f, int keep)
     if (box) {
         rd__shadow_box_scan_end();
     }
+    rd__no_volume_scan_end();
     if (!plan) {
         return;
     }

@@ -73,3 +73,6 @@ include(rd_shadow_box.cmake)
 
 # the shadow composites over the tile mask (rd_shadow_tile.c in ico_render) and its tests
 include(rd_shadow_tile.cmake)
+
+# a shadow window with no volume (rd_no_volume.c in ico_render) and its tests
+include(rd_no_volume.cmake)

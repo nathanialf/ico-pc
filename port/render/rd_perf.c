@@ -32,6 +32,7 @@
 #include "rd_perf_rare.h"
 #include "rd_shadow_box.h"
 #include "rd_shadow_tile.h"
+#include "rd_no_volume.h"
 #include "rd_shot_late.h"
 #include "rd_stencil_selftest.h"
 #include "rd_vis.h"
@@ -326,6 +327,7 @@ bool rd_perf_pop(RdPerfRecord *out)
     rd__stencil_cut_pop(&s_queue[s_head]); /* the stencil outside the window */
     rd__shadow_box_pop(&s_queue[s_head]);  /* the shadows over the volumes' box */
     rd__shadow_tile_pop(&s_queue[s_head]); /* the shadow composites over the tile mask */
+    rd__no_volume_pop(&s_queue[s_head]);   /* a shadow window with no volume */
     s_storePlanned += s_queue[s_head].storePlanMode != 0;
     if (s_queue[s_head].storeWhy < RD_STORE_WHY_COUNT) {
         s_storeWhy[s_queue[s_head].storeWhy]++;
@@ -705,6 +707,7 @@ const char *rd_perf_backend_text(void)
     rd__stencil_cut_text(s_text, sizeof(s_text), &at); /* "; stencil: ..." */
     rd__shadow_box_text(s_text, sizeof(s_text), &at);  /* "; shadow box: ..." */
     rd__shadow_tile_text(s_text, sizeof(s_text), &at); /* "; shadow tiles: ..." */
+    rd__no_volume_text(s_text, sizeof(s_text), &at);   /* "; no volume: ..." */
     rd__date_cut_text(s_text, sizeof(s_text), &at);    /* "; DATE: ..." (rd_date_cut.c) */
     if (s_backendReplays &&
         (s_cutCarried || s_cutSkipped || s_cutLast || rd__pass_cut_on(RD_CUT_CARRY) ||

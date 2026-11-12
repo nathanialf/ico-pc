@@ -543,6 +543,7 @@
 #include "rd_stencil_selftest.h" /* --stats: the stencil outside the shadow window */
 #include "rd_shadow_box.h"       /* --stats: the shadows over the volumes' box */
 #include "rd_shadow_tile.h"      /* --stats: the shadow composites over the tile mask */
+#include "rd_no_volume.h"        /* --stats: a shadow window with no volume */
 #include "rd_upscale.h"
 #include "rd_upscale_capture.h" /* --fsr3-dump */
 #include "rd_velocity.h"
@@ -3221,6 +3222,8 @@ int main(int argc, char **argv)
             rd__shadow_box_stats(pr, sc, sizeof sc); /* rd_shadow_box.c */
             printf("%s: stats: %s\n", dump, sc);
             rd__shadow_tile_stats(pr, sc, sizeof sc); /* rd_shadow_tile.c */
+            printf("%s: stats: %s\n", dump, sc);
+            rd__no_volume_stats(pr, sc, sizeof sc); /* rd_no_volume.c */
             printf("%s: stats: %s\n", dump, sc);
         }
         /* a cleared source read as its colour (rd_const_read.c) */

@@ -1037,6 +1037,81 @@ weight's last bit. Nothing exact is left to cut here on such a GPU.
 and `rd_shadow_tile_ab` (`tools/shadow_tile_dumps.txt`, the bridge frame's live texels under the
 bounds above) ([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
 
+### A shadow window with no volume
+
+Many title pictures hold a shadow window with no volume in it: the corpus boot frames rd-00400 and
+rd-00600 (the castle behind the title menu) reset the stencil at list 3 command 6 and resolve it at
+command 13 with no `RDC_SHADOW_STRIP` between, then draw the three levels and the three composites
+as every frame does. Drawn as they are, the resolve ends SCENE's pass (the count's own pass, the
+three levels' passes) and the first composite begins it again: SCENE's colour, depth and stencil
+stored and loaded again for nothing. On rd-00400 at the phone's recipe (lavapipe,
+`ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_LATE_PASS=1`, Enhanced 2364x1080), the chain left out by
+`--nop` measured 4 passes and about 44 MB a picture (colour 9.7 MB stored and 10.1 loaded, depth
+and stencil 12.2 each way), every pass-dump target byte for byte
+(`build-host/tmp/v0115/design/OPENING_SPLIT.md` A.4). `port/render/rd_no_volume.c` keeps the pass
+open there:
+
+- **The scan** (the store plan's walk, after the box's roles: `rd__no_volume_scan_cmd`): one window
+  in the replay (a reset, then its resolve on the same count target and depth, nothing but state
+  between), no strip in it; after the resolve, the levels and composites
+  [the box's scan](WORK_BUFFERS.md#the-shadows-over-the-volumes-box) named (a level also writing no
+  depth), and nothing else touching the count target or a level: no draw on them, no texture of
+  them (a screen-prim command's with TME on, any other command's on or off), no clear, copy, exact
+  blend, upscale point or post record naming them, no second window, no command the scan does not
+  know; neither the count target nor a level cleared earlier in the replay (a clear still pending
+  would land after the zero).
+- **The walk.** The reset and the resolve record nothing and end nothing (`rd__no_volume_reset`,
+  `rd__no_volume_resolve`); the levels and composites are not drawn (`rd__no_volume_skip`, at the
+  top of `doScreen`: the open screen run flushed, the write serial moved as a drawn one's may); the
+  count (the reduced count above 1x, the count target at 1x) and each level's target are owed a
+  zero, recorded at the next end of a pass the walk makes anyway (`rd__no_volume_flush` from
+  `endPass`, after the pending clears, and at the walk's end) as a pass with a CLEAR (0, 0, 0, 0)
+  load and no draw, each target then put in SHADER_READ. The volumes' merge does not arm a pass
+  for such a window ([WORK_BUFFERS.md](WORK_BUFFERS.md#the-shadow-volumes-in-the-scenes-pass): its
+  stencil store, 2.4 MB at 2364x1080, reads nothing). Lists 0 to 6 then draw in one pass on SCENE
+  where they drew in two.
+
+**The same bytes.** With no strip the stencil's bits 0-5 are what the reset left, 0, so every count
+texel is (0, 0, 0, 0) on every path (the one draw's average, the boxed one draw's CLEAR, the seven
+draws' CLEAR with no texel passing, the reduction of a zero count). A level in the box's form (one
+sprite over its whole target at scale 1, no blend, FBA 0, every channel, MODULATE or DECAL with TCC
+1, no alpha test, DATE or Z test, no depth written) whose taps all read 0 writes (0, 0, 0, 0)
+everywhere: (0 x Cv) >> 7, or 0. A composite (an alpha test failing on As 0, AFAIL KEEP, no Z
+write) whose taps read alpha 0 writes nothing. So the chain's whole effect is those targets at 0
+and SCENE untouched, which the zero clears write; nothing reads those targets between the resolve
+and the clears (the scan), so every reader after (the pass dumps, the readbacks, the next replay)
+sees the same bytes. Skipping the reset leaves the stencil's bits 0-5 unwritten; only a window's
+volumes and resolve read them, and the next window resets them first (DATE's set-ups and AA1's
+pairs write bit 6 alone). The next DATE draw takes its own snapshot or set-up (the write serial
+moved), from the alpha as it is. No `DIVERGENCES.md` row.
+
+**Where.** On by default on the PowerVR class and MoltenVK under Vulkan, where a pass's load and
+store cost; off on the Mali and Adreno classes (issues 123, 179, 211: their pass structure stays as
+it shipped), Direct3D, OpenGL and the desktop. Not taken where a composite's DATE would take the R8
+snapshot or the shader's read (DATE's passes without the depth,
+[WORK_BUFFERS.md](WORK_BUFFERS.md#dates-passes-without-the-depth), predict their runs from the
+composites), under MSAA, the tool's pass window, the exact blend or GS state as shader data.
+`ICO_RD_NO_VOLUME=0|1`: the tests' switch ([TESTING.md](TESTING.md)); no setting. No start-up
+self-test: it adds no kind of GPU work (a colour pass with a CLEAR load and no draw is what
+`flushClear` and the boxed empty count record on every device today) and otherwise begins fewer
+passes of the kinds already drawn.
+
+**The lines.** Once a renderer: `rd: shadows: no volume: on|off (<why>): a shadow window without a
+volume keeps SCENE's pass open, ...`; once: `rd: shadows: no volume: frame F, the window at commands
+R..S has no volume: its count (the reduced count) and levels owed as zero clears, SCENE's pass kept
+open (the same bytes; reported once)`; a window not taken (other than off or the class):
+`rd: shadows: no volume: a window not taken in frame F (reset at command N): <why> (...)`, the first
+8 then every 100th. The 10 s `window: per replay` line: `; no volume: K windows a replay without a
+volume kept SCENE's pass open (O with it open, up to M MB not stored and loaded again), V with
+volumes, R not taken (<why> n)` (M: the open pass's colour and depth and stencil at 4 + 5 bytes a
+texel each way, a bound). `rd_replay_tool --stats`: `stats: no volume on|off: K kept (O with the
+pass open over WxH, depth yes|no; C zero clears, L level texels; D draws not drawn), V with
+volumes, R not taken (...)`.
+
+**The tests.** `rd_no_volume` (`port/render/test/rd_no_volume_test.c`, the scan, the gate and the
+lines on the CPU) and `rd_no_volume_ab` / `_gl` (`tools/no_volume_dumps.txt`)
+([TESTING_PROGRAMS_RENDER.md](TESTING_PROGRAMS_RENDER.md)).
+
 ## Water and render-to-texture blocks
 
 `puddle.c`, `pool.c` and `queen_barrier_disp.c` draw into the VRAM block `tex_AllocVramAuto` hands

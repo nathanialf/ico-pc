@@ -340,8 +340,8 @@ void rd__shadow_merge_arm(RhiRenderPassDesc *p, uint32_t cid, uint32_t did, uint
         if (s_sm.resetOrd[i] <= k) {
             continue;
         }
-        if (s_sm.resetDepth[i] != did) {
-            continue;
+        if (s_sm.resetDepth[i] != did || rd__no_volume_owns(s_sm.resetOrd[i])) {
+            continue; /* a window with no volume reads no stencil (rd_no_volume.c) */
         }
         p->depth.stencilStore = RHI_STORE_STORE;
         s_sm.armed = true;

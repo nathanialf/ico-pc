@@ -715,6 +715,27 @@ log shows:
   screen; B is the share of the composites' texels still drawn; the `perf classes` line's list 3
   shows what it saved.
 
+### A shadow window with no volume
+
+On the PowerVR class (and MoltenVK) a shadow window with no volume keeps SCENE's pass open and the
+count and levels are written as zero clears
+([RENDER_POST.md](RENDER_POST.md#a-shadow-window-with-no-volume)). What the log shows:
+
+- once a renderer, at the first replay with a window: `rd: shadows: no volume: on (the PowerVR or
+  MoltenVK class): ...` (or `off (not the PowerVR or MoltenVK class under Vulkan)`, `off (the
+  composites' DATE by the R8 snapshot or the shader's read)`, ...);
+- once: `rd: shadows: no volume: frame F, the window at commands R..S has no volume: its count
+  (the reduced count) and levels owed as zero clears, SCENE's pass kept open (the same bytes;
+  reported once)`;
+- a window not taken: `rd: shadows: no volume: a window not taken in frame F (reset at command
+  N): <why>`, the first 8 then every 100th;
+- in each 10 s block's `window: per replay` line, after the shadow tiles' clause: `; no volume:
+  0.9 windows a replay without a volume kept SCENE's pass open (0.9 with it open, up to 39.4 MB not
+  stored and loaded again), 0.1 with volumes, 0.0 not taken` at the title (made-up figures: the
+  owner's phone has not run it); the share of title pictures with volumes was not known before
+  (the design's A1.5); the `perf classes` line's list 3 and the passes per replay show what it
+  saved.
+
 ### The stencil outside the shadow window (the PowerVR phone)
 
 On the PowerVR class with the fog's local read (`fog local on` in the profile line, `rd: fog: depth

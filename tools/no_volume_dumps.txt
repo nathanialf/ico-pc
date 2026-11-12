@@ -1,0 +1,22 @@
+# Dump list for rd_no_volume_ab and rd_no_volume_ab_gl (port/render/test/rd_no_volume_ab.cmake:
+# a shadow window with no volume drawn as before against SCENE's pass kept open and the
+# count and levels written as zero clears, byte for byte).
+# MACHINE-LOCAL: these are paths on the maintainer's machine; the dumps
+# themselves are never committed.  A listed dump that is absent FAILS the test
+# (a '*' glob that matches nothing too).  Relative paths are relative to this
+# file.  The second field: the windows one replay takes at the phone setting
+# (and at dstencil): 1 for a window with no volume, 0 for a frame whose window
+# has volumes (nothing may change there).
+#
+# the title's castle scene, 2026-10-06 corpus boot frames (512x512 GS): a reset
+# at 3:6 and the resolve at 3:13 with no strip between, levels 3:24/29/34,
+# composites 3:42/47/52 (the design's A/B frame, rd-00400), and the same form
+# in rd-00600
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00400.rddump 1
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00600.rddump 1
+# the same scene with the sun's volumes (two strips, 3:15 and 3:19)
+/primary/dev/ico-pc/build-host/tmp/corpus/dumps/boot/rd-00200.rddump 0
+# the Pixel 10 Pro Fold's v0.11.4 F12 frame (stage 4: one reset, seven strips)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/datecut/pixel/frame-20261110-194925-v3677.rddump 0
+# its v0.11.5 rc8 frame (the cage: one reset, six strips)
+/primary/dev/ico-pc/build-host/tmp/v0115/evidence/rc8/x/frame-20261111-135423-v4651/frame-20261111-135423-v4651.rddump 0

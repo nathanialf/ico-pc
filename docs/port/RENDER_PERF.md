@@ -292,6 +292,15 @@ modules grow (each REPEAT coordinate keeps both forms behind its branch) while a
 fewer instructions: no `OpSDiv` in `fx_sprite_ps` (a division is 19 straight-line instructions,
 one of them a float divide), no `OpSRem` on a power-of-two size, no float divide at scale 1.
 
+A shadow window with no volume ([RENDER_POST.md](RENDER_POST.md#a-shadow-window-with-no-volume))
+fills `noVolumeKept`, `noVolumeOpen` (with the open pass's `noVolumePassW` x `noVolumePassH` and
+`noVolumePassDepth`), `noVolumeClears`, `noVolumeLevelTexels`, `noVolumeSkipped`, `noVolumeWith`
+and `noVolumeWhy[]` (`RD_NV_WHY_*`, `port/render/rd_no_volume.h`); the window's `; no volume:` clause
+and the tool's `stats: no volume ...` line read them. On the corpus title frame rd-00400 at the
+phone's recipe the window it takes is 4 passes and about 44 MB of attachment traffic a picture in
+the design's `--nop` measurement (a pass less with the four zero clears the code records: see the
+section); the owner's phone has not measured it.
+
 ### Performance notes
 
 **The render thread's reads.** On the PowerVR phone a picture's interpolation, upload and walk took

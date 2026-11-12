@@ -955,6 +955,34 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   at 1x on OpenGL (llvmpipe). Each pair: every PNG byte for byte, the same draws and passes, `=0`
   off with nothing boxed, `=1` on; v3677 at the phone setting 1 count and 3 composites boxed; the
   phone setting boxes at least one of each over the dumps. No device: SKIP.
+- `rd_no_volume_test.c` (`rd_no_volume`, CPU): a shadow window with no volume (`rd_no_volume.c`):
+  the scan on the corpus title frame rd-00400's list 3 (taken; the three levels and three
+  composites left undrawn, nothing else), a strip in the window (a volume), a foreign reader of
+  SHADOW1, a sprite of the chain the box scan named neither a level nor a composite, a clear of
+  SHADOW2 and a draw into the count target after the resolve, a level into a chain target twice
+  (the chain); a draw inside the window, a second window, a resolve on another target, a window
+  never resolved, a resolve with no reset, a level writing a depth (the form); a composite's DATE by
+  the snapshot (DATE); an unknown command after the resolve (unknown) and before the window (no
+  matter); SHADOW0 or the count target cleared before the window (the chain); no window; the gate
+  (the class, `ICO_RD_NO_VOLUME=0|1`, MSAA, the pass window, the exact blend, GS state as shader
+  data, DATE); the 10 s clause and the `--stats` words from made-up records.
+- `rd_no_volume_ab.cmake` (`rd_no_volume_ab`, `rd_no_volume_ab_gl`): the dumps of
+  `tools/no_volume_dumps.txt` (machine-local; a listed dump that is absent FAILS: the corpus boot
+  frames rd-00400 and rd-00600, a window with no volume, and rd-00200, the Pixel's v3677 and the
+  cage frame v4651, windows with volumes) with `ICO_RD_NO_VOLUME=0` and `1`, `--pass-dump --stats`,
+  under `ICO_RD_STORE_PLAN=1`, `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's profile with its late
+  passes (`ICO_VK_FAKE_LIMITS=moltenvk ICO_RD_LATE_PASS=1`, Enhanced 2364x1080, Full height and
+  pixel), lavapipe at 1x (DATE by the snapshot: not taken), lavapipe at 1x with
+  `ICO_RD_DATE_PATH=stencil` (taken, the count target at scale 1) and the Mali-G52's
+  (`ICO_VK_FAKE_LIMITS=mali`, `ICO_VK_FAKE_NO_DST=1`: not taken); the `_gl` twin at 1x on OpenGL
+  (llvmpipe: not taken). Each pair: every PNG byte for byte; `=0` off with none kept; where nothing
+  is taken the same passes and traffic figures; where a window is taken, from the code: a pass less
+  a window at the phone setting (the count's, the three levels' and list 3's SCENE pass not begun,
+  four zero clears begun) and two at the stencil row (the reset's own stencil pass too), the colour
+  stored down by the kept pass's W x H x 4, the colour loaded by that and the levels' texels x 4,
+  at the phone setting the cleared up by the levels' and the depth and stencil each way down by W x
+  H x 5 (the Apple class loads and stores the stencil with the depth), each within the 0.01 MB
+  rounding of two printed figures; the phone setting takes at least one window. No device: SKIP.
 - `rd_stencil_selftest_test.c` (`rd_stencil_selftest`, `rd_stencil_selftest_poison`, lavapipe with
   `ICO_RD_FOG_PATH=local` and `ICO_RD_STENCIL_PACKED=0`, the second also `ICO_RD_STORE_POISON=1`;
   77 without a device or the local read, after its CPU cases): the stencil outside the shadow window

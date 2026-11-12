@@ -2736,6 +2736,8 @@ enum { RD_PRESENT_ELSEWHERE = 0, RD_PRESENT_ON_SUBMIT = 1, RD_PRESENT_IN_STEP = 
 #define RD_SHADOW_BOX_WHYS 8
 /* the reasons rd_shadow_tile.c counts (RdPerfRecord.shadowTileWhy) */
 #define RD_SHADOW_TILE_WHYS 8
+/* the reasons rd_no_volume.c counts (RdPerfRecord.noVolumeWhy) */
+#define RD_NO_VOLUME_WHYS 8
 
 typedef struct RdPerfRecord {
     uint32_t replay; /* 1, 2, ... */
@@ -3185,6 +3187,18 @@ typedef struct RdPerfRecord {
      * (shadowTileWhy, rd_shadow_tile.h RD_ST_WHY_*) */
     uint32_t shadowTileComposites, shadowTileMasks;
     uint16_t shadowTileWhy[RD_SHADOW_TILE_WHYS];
+    /* A shadow window with no volume (rd_no_volume.c): the windows taken
+     * (noVolumeKept), of them those with a pass open at the resolve
+     * (noVolumeOpen: that pass's texels noVolumePassW x noVolumePassH, its
+     * depth bound noVolumePassDepth), the zero clears owed, the level
+     * targets' texels among them, the levels and composites not drawn
+     * (noVolumeSkipped), the windows with a volume (noVolumeWith) and the
+     * windows not taken by why (noVolumeWhy, rd_no_volume.h RD_NV_WHY_*) */
+    uint16_t noVolumeKept, noVolumeOpen, noVolumeWith, noVolumeClears, noVolumeSkipped;
+    uint16_t noVolumePassW, noVolumePassH;
+    uint8_t noVolumePassDepth;
+    uint32_t noVolumeLevelTexels;
+    uint16_t noVolumeWhy[RD_NO_VOLUME_WHYS];
     /* DATE's passes without the depth (rd_date_cut.c; docs/port/
      * WORK_BUFFERS.md "DATE's passes without the depth"): the runs the
      * scan found depth-free, the passes begun without the depth and the
