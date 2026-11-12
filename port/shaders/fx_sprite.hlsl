@@ -1077,7 +1077,7 @@ float4 fx_blur4_ps(float4 pos : SV_Position) : SV_Target0
     const int2 g2lo = fx2_addr(int2(min(kx0, kx1), min(ky0, ky1)), flags, w0);
     const int2 g2hi = fx2_addr(int2(max(kx0, kx1) + 1, max(ky0, ky1) + 1), flags, w0);
     // G1's range: pass 2A's WORK1 taps at G2's texels
-    int2 g1lo = int2(0x7FFFFFFF, 0x7FFFFFFF), g1hi = int2(-0x7FFFFFFF, -0x7FFFFFFF);
+    int2 g1lo = int2(2147483647, 2147483647), g1hi = int2(-2147483647, -2147483647);
     int mx[FX4_W2], my[FX4_W2];
     uint fx[FX4_W2], fy[FX4_W2];
     [unroll] for (int i = 0; i < FX4_W2; i++) {
