@@ -815,12 +815,28 @@ static void fillDraw(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipe
  * any other texel keeps the copy, the source's colour.  RGB alone (after
  * the glow's alpha): the alpha is the copy's either way.  Without a repeat
  * since the snapshot, the fill as fillDraw draws it */
+/* FILLPASTE: the fill whose snapshot was deferred is being drawn (landed or
+ * flushed), and its snapshot taken by the swap: SCENE's border blocks repeated
+ * since the fill's place are on the snapshot's texture, not SCENE's */
+static bool s_drawDeferred, s_drawSwapped;
+
 static void fillDrawHeld(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipeKeyInt *kFill,
                          bool held)
 {
     const RdBorderBlocks *b = rd__scene_border_blocks();
-    if (!held || b->serial <= s_late.repeats || b->replay != g_rd.replayCounter ||
-        b->tex != tc->color.id || b->over) {
+    /* the blocks repeated since the fill's place: drawn from their source
+     * columns (the fill's value there, as the repeat after the fill gives
+     * them); for a deferred fill taken by the swap the repeat wrote the
+     * texture that is now the snapshot */
+    const uint32_t blockTex = s_drawDeferred && s_drawSwapped ? tc->snap.id : tc->color.id;
+    if (!(held || s_drawDeferred) || b->serial <= s_late.repeats ||
+        b->replay != g_rd.replayCounter || b->tex != blockTex || b->over) {
+        if (s_drawDeferred && b->replay == g_rd.replayCounter && b->serial > s_late.repeats &&
+            (b->over || b->tex != blockTex)) {
+            rd__log("crack fill: FILLPASTE: SCENE's border repeated while the fill waited and its "
+                    "blocks not known (%s): the border's texels not the fill's at its place",
+                    b->over ? "too many blocks" : "another texture");
+        }
         fillDraw(r, tc, pFill, kFill);
         return;
     }
@@ -1035,6 +1051,7 @@ static bool fillWork(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipe
     } else if (swap ? !fillTakeSwap(r, tc, pCount, kCount) : !fillTake(r, tc, pCount, kCount)) {
         return false;
     }
+    s_drawSwapped = swap;
     const uint32_t w = tc->tw, h = tc->th, scene = RD_TARGET_SCENE + 1u;
     rd__transition(cl, tc->color, &tc->colorState, RHI_STATE_RENDER_TARGET);
     rd__perf_pass(cl, RD_PERF_PASS_RENDER, scene, w, h, RD_PERF_POST_CRACK);
@@ -1052,6 +1069,7 @@ static bool fillWork(Replay *r, RdTargetRec *tc, RhiPipeline pFill, const RdPipe
         tapMode(kFill) | (swap ? CRACK_MODE_COPY | (s_late.alpha ? CRACK_MODE_KEEP_A : 0u) : 0u);
     fillDrawHeld(r, tc, swap ? pS : pFill, swap ? &kS : kFill, held);
     s_mode = 0;
+    s_drawDeferred = s_drawSwapped = false;
     rhi_cmd_end_render_pass(cl);
     g_rdPerf.crackFillPasses++;
     return true;
@@ -1172,6 +1190,7 @@ void rd__crack_fill_late(Replay *r, bool msaaOpen)
         return;
     }
     const bool held = s_late.taken, deferred = s_late.deferred;
+    s_drawDeferred = deferred;
     if (held || deferred) {
         /* the held fill in a pass of its own after all: why (the walk's end
          * or an armed paste that drew another way unless said) */
@@ -1209,6 +1228,7 @@ void rd__crack_fill_late(Replay *r, bool msaaOpen)
     const bool kept = !held && !deferred && atList >= 0 &&
                       fill11Take(r, tc, pFill, &kFill, pCount, &kCount, atList, atF, atC);
     const bool drawn = !kept && fillWork(r, tc, pFill, &kFill, pCount, &kCount, held);
+    s_drawDeferred = s_drawSwapped = false;
     r->perfPost = post;
     rd__replay_perf_post(r, post);
     if (drawn) {
@@ -1660,19 +1680,12 @@ void rd__crack_fill_in_pass(Replay *r, uint32_t tdId)
         return;
     }
     const bool held = s_late.taken, glow = s_late.glow, deferred = s_late.deferred;
-    const uint32_t repeats = s_late.repeats;
     s_late.armed = s_late.paste = s_late.taken = s_late.deferred = s_late.glow = false;
     if (deferred) {
         /* FILLPASTE lands: the snapshot and the count here (by the swap: the
          * pass below not loaded, the fill writing every texel first, the
          * paste and list 11's draws after it in the same pass) */
         rd__lamps_fillpaste_noted(true, 0);
-        if (rd__scene_border_repeat_count() != repeats) {
-            /* not reached by construction (the lamps plan draws no sprite
-             * that samples SCENE before the paste): said */
-            rd__log("crack fill: FILLPASTE: SCENE's border repeated while the fill waited (its "
-                    "snapshot taken after the repeat: not the bytes of the fill at its place)");
-        }
     }
     if (s_late.replay != g_rd.replayCounter || !tc->depth.id || !tc->color.id) {
         return;
@@ -1718,7 +1731,10 @@ void rd__crack_fill_in_pass(Replay *r, uint32_t tdId)
                           poison ? kPoison : NULL, RHI_LOAD_LOAD, 0.0f, false);
     s_mode =
         tapMode(&kFill) | (swap ? CRACK_MODE_COPY | (s_late.alpha ? CRACK_MODE_KEEP_A : 0u) : 0u);
+    s_drawDeferred = deferred;
+    s_drawSwapped = swap;
     fillDrawHeld(r, tc, swap ? pS : pFill, swap ? &kS : &kFill, held);
+    s_drawDeferred = s_drawSwapped = false;
     s_mode = 0;
     fillCounted(!glow); /* the glow's paste pass is not the aura's */
     if (held) {
