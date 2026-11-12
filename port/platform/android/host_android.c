@@ -874,8 +874,9 @@ int ico_android_display_modes(float *out, int cap)
 static SDL_AtomicU32 s_displayHzBits;
 static SDL_AtomicInt s_displaySerial;
 static SDL_AtomicU32 s_displayMs;
+static SDL_AtomicInt s_displayModes;
 
-float ico_android_display_hz(int *serial, unsigned *ms)
+float ico_android_display_hz(int *serial, unsigned *ms, int *modes)
 {
     const Uint32 bits = SDL_GetAtomicU32(&s_displayHzBits);
     float hz;
@@ -886,6 +887,9 @@ float ico_android_display_hz(int *serial, unsigned *ms)
     if (ms != NULL) {
         *ms = (unsigned)SDL_GetAtomicU32(&s_displayMs);
     }
+    if (modes != NULL) {
+        *modes = SDL_GetAtomicInt(&s_displayModes);
+    }
     memcpy(&hz, &bits, sizeof hz);
     return hz;
 }
@@ -893,11 +897,12 @@ float ico_android_display_hz(int *serial, unsigned *ms)
 /* IcoActivity.nativeDisplayRate (a static native method): the display the
    activity is on has this refresh rate now, or its mode list changed
    (DisplayManager.DisplayListener.onDisplayChanged, filtered on the Java
-   side to a change of the rate or the list), on the activity's thread.
-   Counted; the window's pump applies the video settings again and the 10 s
-   refresh line writes the change (window_display_rate.c). */
+   side to a change of the rate or the list; modes the list's hash), on
+   the activity's thread.  Counted; under Uncapped the window's pump asks
+   the frame rate pin again and the 10 s refresh line writes the change
+   (window_display_rate.c). */
 JNIEXPORT void JNICALL Java_com_defnf_icopc_IcoActivity_nativeDisplayRate(JNIEnv *env, jclass cls,
-                                                                          jfloat hz)
+                                                                          jfloat hz, jint modes)
 {
     const float f = (float)hz;
     Uint32 bits;
@@ -906,6 +911,7 @@ JNIEXPORT void JNICALL Java_com_defnf_icopc_IcoActivity_nativeDisplayRate(JNIEnv
     (void)cls;
     memcpy(&bits, &f, sizeof bits);
     SDL_SetAtomicU32(&s_displayMs, (Uint32)SDL_GetTicks());
+    SDL_SetAtomicInt(&s_displayModes, (int)modes);
     SDL_SetAtomicU32(&s_displayHzBits, bits);
     (void)SDL_AddAtomicInt(&s_displaySerial, 1);
 }

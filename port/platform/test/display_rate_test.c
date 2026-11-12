@@ -39,11 +39,24 @@
  *            pin off, no seamless-only call, refused, the list, focus with
  *            and without a held ask); the state: the row 120 then Uncapped
  *            at 120 is a new ask, a release clears it, a lost surface asks
- *            again; every line word for word and a small buffer.
+ *            again; every line word for word and a small buffer;
+ *   pick     the refresh the game paces by (display_refresh_pick) and the
+ *            vsync lock's inputs from it as window_host.c video_settings
+ *            computes them (window_refresh_ns's period, then
+ *            pace_cap_equals_refresh, pace_lock_presents,
+ *            pace_grid_period_ok): a number or Original with any reported
+ *            rate decides exactly as with no report (the default 60 on a
+ *            stale 120 or 60 with the panel at 60 or 120, 120 and 144 rows,
+ *            Original); Uncapped takes the reported period and never the
+ *            lock; reports out of range are SDL's; the report guard
+ *            (display_report_new): the same report twice does nothing, a
+ *            new rate or a new mode list is new, 0 nothing.
  */
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 #include "display_rate.h"
+#include "pace_policy.h"
 
 static int failures;
 #define CHECK(cond)                                                                                \
@@ -443,11 +456,101 @@ static void testTop(void)
     }
 }
 
+/* the vsync lock's inputs as window_host.c video_settings computes them:
+   window_refresh_ns's period ((Uint64)(1e9 / hz) above 1 Hz, else 0), the
+   cap equal to the refresh with vsync on, the presents a step and the grid
+   (the mailbox choice follows from these and the device's present timing,
+   which a report does not touch) */
+typedef struct LockIn {
+    uint64_t refresh;
+    int capEq;
+    unsigned n;
+    int grid;
+} LockIn;
+
+static LockIn lock_in(int framerate, double sdlHz, double reportedHz)
+{
+    const double hz = display_refresh_pick(framerate, sdlHz, reportedHz);
+    const uint64_t sim = 16683333ull;
+    LockIn L;
+
+    L.refresh = hz > 1.0 ? (uint64_t)(1e9 / hz) : 0;
+    L.capEq = pace_cap_equals_refresh(framerate, L.refresh);
+    L.n = L.capEq ? pace_lock_presents(framerate, sim) : 0;
+    L.grid = L.n > 0 && pace_grid_period_ok(L.n, L.refresh, sim);
+    return L;
+}
+
+static int lock_same(LockIn a, LockIn b)
+{
+    return a.refresh == b.refresh && a.capEq == b.capEq && a.n == b.n && a.grid == b.grid;
+}
+
+static void testPick(void)
+{
+    static const int rows[] = {60, 120, 144, 30, 0};
+    static const double sdl[] = {120.0, 60.0, 90.0, 144.0, 59.94};
+    static const double reports[] = {60.0, 120.0, 90.0, 144.0, 59.94, 1.0, 1001.0};
+
+    /* a number or Original: whatever the activity reports, the decision is
+       the one made with no report (SDL's rate) */
+    for (size_t r = 0; r < sizeof rows / sizeof rows[0]; r++) {
+        for (size_t s = 0; s < sizeof sdl / sizeof sdl[0]; s++) {
+            const LockIn before = lock_in(rows[r], sdl[s], 0.0);
+
+            CHECK(display_refresh_pick(rows[r], sdl[s], 0.0) == sdl[s]);
+            for (size_t k = 0; k < sizeof reports / sizeof reports[0]; k++) {
+                CHECK(display_refresh_pick(rows[r], sdl[s], reports[k]) == sdl[s]);
+                CHECK(lock_same(lock_in(rows[r], sdl[s], reports[k]), before));
+            }
+        }
+    }
+    /* the default (60, vsync on) on a 120 Hz start whose panel the pin
+       moved to 60 and a touch to 120: SDL's 120 throughout, no lock, as
+       before the listener */
+    CHECK(!lock_in(60, 120.0, 60.0).capEq && !lock_in(60, 120.0, 120.0).capEq);
+    /* a 60 Hz start: the lock as before, whatever the panel does after */
+    CHECK(lock_in(60, 60.0, 120.0).capEq &&
+          lock_same(lock_in(60, 60.0, 120.0), lock_in(60, 60.0, 0.0)));
+
+    /* Uncapped: the reported period, never the lock */
+    for (size_t s = 0; s < sizeof sdl / sizeof sdl[0]; s++) {
+        for (size_t k = 0; k < 5; k++) {
+            const LockIn L = lock_in(-1, sdl[s], reports[k]);
+
+            CHECK(display_refresh_pick(-1, sdl[s], reports[k]) == reports[k]);
+            CHECK(L.refresh == (uint64_t)(1e9 / reports[k]));
+            CHECK(!L.capEq && L.n == 0 && !L.grid);
+        }
+        /* no report yet, or one out of range: SDL's */
+        CHECK(display_refresh_pick(-1, sdl[s], 0.0) == sdl[s]);
+        CHECK(display_refresh_pick(-1, sdl[s], 1.0) == sdl[s]);
+        CHECK(display_refresh_pick(-1, sdl[s], 1001.0) == sdl[s]);
+        CHECK(!lock_in(-1, sdl[s], 0.0).capEq);
+    }
+    CHECK(lock_in(-1, 60.0, 120.0).refresh == 8333333ull);
+
+    /* the report guard */
+    {
+        DisplayReportSeen s = {0};
+
+        CHECK(display_report_new(&s, 0.0, 5) == 0 && !s.have);
+        CHECK(display_report_new(&s, 60.0, 5) == 1);
+        CHECK(display_report_new(&s, 60.0, 5) == 0);
+        CHECK(display_report_new(&s, 60.03, 5) == 0); /* within 0.05 Hz */
+        CHECK(display_report_new(&s, 120.0, 5) == 1);
+        CHECK(display_report_new(&s, 120.0, 5) == 0);
+        CHECK(display_report_new(&s, 120.0, 6) == 1); /* the list changed */
+        CHECK(display_report_new(&s, -1.0, 7) == 0 && s.modes == 6);
+    }
+}
+
 int main(void)
 {
     testWatch();
     testPin();
     testTop();
+    testPick();
     printf("display_rate_test: %s\n", failures ? "FAILED" : "ok");
     return failures ? 1 : 0;
 }

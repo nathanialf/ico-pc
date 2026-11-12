@@ -27,9 +27,14 @@
  *     on the next best alone, the submit thread on the rest.
  *   FAST (a pair widened too): the start's rule as before this keeper
  *     (cpu_place_plan on the allowed cores, the render thread on all of F).
- * It applies where two or more cores are faster than the slowest (the
- * Pixel, the Helio G85's 2 + 6, a 4 + 3 + 1 phone); with one faster core
- * or one speed the start's rule stands and nothing is kept after it.  The
+ * It applies where three or more cores are faster than the slowest (the
+ * Pixel's 1 + 5 over 2, a 4 + 3 + 1 phone, 4 bigs over 4 littles): the
+ * render and game threads alone still leave the submit thread a faster
+ * core.  With two faster cores (the Helio G85's 2 + 6, issue 179's class)
+ * the two alone would leave the submit thread and every worker on the
+ * slow cores, where the start's rule leaves the submit thread to the
+ * system; with two, one or one speed the start's rule stands as before
+ * this keeper and nothing is kept after it (the start line says so).  The
  * game thread is SDL's "ico-main" (main_android.c), not Android's UI
  * thread: input and the lifecycle's callbacks arrive on the UI thread,
  * which the keeper never moves.
@@ -72,7 +77,10 @@ typedef struct CpuKeepSets {
     uint64_t others; /* every other thread of the game's (the free mask) */
 } CpuKeepSets;
 
-/* two or more cores faster than the slowest: the keeper's rule applies */
+/* three or more cores faster than the slowest: the keeper's rule applies
+   (CPU_KEEP_MIN_FAST) */
+enum { CPU_KEEP_MIN_FAST = 3 };
+
 bool cpu_keep_applies(const CpuClasses *c);
 /* the sets at a level from the allowed cores (0: every core with a speed),
    the refused ones (the render thread's one-core pins the system did not

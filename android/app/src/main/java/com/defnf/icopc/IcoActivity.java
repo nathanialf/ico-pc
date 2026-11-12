@@ -208,10 +208,14 @@ public class IcoActivity extends SDLActivity {
     // (host_android.c nativeDisplayRate): SDL's Java side passes the rate
     // only in SDLSurface.surfaceChanged, and a panel that switches rates
     // (the frame rate pin's ask, or the system's own choice) does not
-    // resize the surface, so SDL's mode keeps the old rate. Android 11 and
+    // resize the surface, so SDL's mode keeps the old rate; the game paces by
+    // the reported rate only under Uncapped (display_rate.h
+    // display_refresh_pick). A report equal to the last one sent is not
+    // sent (Arrays.equals), and the native side ignores one it already acted
+    // on (display_report_new). Android 11 and
     // later (displayModes); the listener field is an Object, as the thermal
     // listener's is, and any failure only means SDL's rate is used.
-    private static native void nativeDisplayRate(float hz);
+    private static native void nativeDisplayRate(float hz, int modes);
     private Object mDisplayListener;
     private float[] mDisplaySent;
 
@@ -223,7 +227,7 @@ public class IcoActivity extends SDLActivity {
         }
         mDisplaySent = modes;
         try {
-            nativeDisplayRate(modes[2]);
+            nativeDisplayRate(modes[2], java.util.Arrays.hashCode(modes));
         } catch (UnsatisfiedLinkError e) {
             // libmain.so without the method
         }

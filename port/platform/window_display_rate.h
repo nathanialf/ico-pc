@@ -26,17 +26,20 @@ void window_frame_rate_pin(SDL_Window *window, int framerate);
    ("frame rate pin: asked again for a new surface") */
 void window_frame_rate_pin_resumed(SDL_Window *window, int framerate);
 /* The display's refresh rate in Hz from SDL's (sdlHz, 0 or less unknown):
-   on Android the rate the activity's display listener last reported
-   (IcoActivity.watchDisplay: SDL's Android side reads the rate only when
-   the surface changes size, so a panel that switched rates after the
-   frame rate pin's ask kept the old rate in SDL's mode), else sdlHz.  Any
-   thread (window_host.c window_refresh_ns). */
+   on Android under the Frame rate row Uncapped, the rate the activity's
+   display listener last reported (IcoActivity.startDisplayWatch: SDL's
+   Android side reads the rate only when the surface changes size, so a
+   panel that switched rates after the frame rate pin's ask kept the old
+   rate in SDL's mode); under a number or Original, and on every other
+   platform, sdlHz (display_rate.h display_refresh_pick).  Any thread
+   (window_host.c window_refresh_ns). */
 double window_display_refresh_hz(double sdlHz);
-/* Android: 1 once after each display report from the activity since the
-   last call (the main thread's pump then applies the video settings again
-   as for SDL's display mode event: the refresh, the vsync lock, the pin);
-   every other platform 0 */
-int window_display_rate_pushed(void);
+/* The main thread's pump: Android, after a display report from the
+   activity that differs from the last one acted on, and only under
+   Uncapped, asks the frame rate pin again (the mode list may have changed);
+   nothing else (no video settings applied, no swapchain made); every other
+   platform nothing */
+void window_display_rate_pump(SDL_Window *window);
 /* At exit: the ask released, the watch removed */
 void window_display_rate_stop(SDL_Window *window);
 

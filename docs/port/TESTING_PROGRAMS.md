@@ -1084,9 +1084,9 @@ that stops again writing its own line without the retry mark); a stop at the fre
   `0-1 2.2 GHz, 2-6 3.1 GHz, 7 3.8 GHz` (render 7 alone, game 6 alone, submit 2-5, others 0-5;
   core 7 refused: 6, 5, `2-4, 7`, `0-4, 7`; 7 not allowed: 6, 5, 2-4, 0-4; the pair 6-7; the
   start's rule 2-7 with submit 2-6; the game thread's 6 refused: 5; only 7 fast and allowed;
-  every fast core refused: none), a Helio G85 (render 7, game 6, submit with the others on 0-5;
-  the start's rule 6-7 for both), a 4 + 3 + 1 phone and 4 + 4 (7, 6, 4-5), a 1 + 2 + 1 four-core
-  device (3, 2, 1, others 0-1), one speed and one core (off); the keeper against a fake kernel
+  every fast core refused: none), a Helio G85 (two faster cores: the keeper off, nothing chosen
+  at any level), the Pixel, a 4 + 3 + 1 phone and 4 + 4 applying (7, 6, 4-5), a 1 + 2 + 1
+  four-core device (3, 2, 1, others 0-1), one speed (4 and 8 cores) and one core (off); the keeper against a fake kernel
   that keeps a mask a thread: every pin kept (the ideal at the start, a scene and the focus
   asking nothing more, the try and block lines word for word, the system moving the render
   thread to 2-7 counted once and pinned back), core 7 alone widened to 2-7 as the owner's

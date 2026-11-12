@@ -1860,17 +1860,27 @@ rate, so the next log carries it (`port/platform/display_rate.h`, `window_displa
   saw 120). So `IcoActivity` listens to `DisplayManager.DisplayListener.onDisplayChanged` while the
   activity is visible (`startDisplayWatch` in `onStart`, `stopDisplayWatch` in `onStop`) and pushes
   `Display.getRefreshRate()` when the display's rate or mode list changed (`nativeDisplayRate`,
-  `host_android.c` `ico_android_display_hz`). `window_refresh_ns` (`window_host.c`) and the refresh
-  line take that rate over SDL's (`window_display_refresh_hz`), so the pacer's refresh period, the
+  `host_android.c` `ico_android_display_hz`, with the mode list's hash). The game paces by that rate
+  only while the Frame rate row is Uncapped (`display_refresh_pick`, pure; `display_rate_test`):
+  `window_refresh_ns` (`window_host.c`) and the refresh line take it over SDL's there
+  (`window_display_refresh_hz`), so under Uncapped the pacer's refresh period, the
   uncapped-under-mailbox gap (`window_present.c`, `pace_present_gap`), the performance hints' target
   (`window_perf_hint.c`, the gap) and the evenness line (`rd_even_line`) follow the panel: each reads
-  `window_refresh_ns` at its use, none keeps a copy. The pump applies the video settings again
-  after each report (`window_display_rate_pushed`, as for SDL's `SDL_EVENT_DISPLAY_CURRENT_MODE_CHANGED`),
-  so the vsync lock is decided again on the rate the panel runs at, and the 10 s block writes
-  `window: display refresh changed: 60.00 Hz -> 120.00 Hz ...` at the report's run time. On a panel
-  whose rate changes after a numbered row's ask this changes the numbered rows too: the lock can now
-  take a row equal to the new rate where SDL's old rate kept it off. Nothing about it is measured on a
-  device yet.
+  `window_refresh_ns` at its use, none keeps a copy. A number and Original keep SDL's rate, so the
+  vsync lock and the present mode are decided exactly as before the listener: at Android's default
+  (60 with vsync on) a phone whose panel the pin moves to 60 and a touch boost back to 120 would
+  otherwise flip the lock and remake the swapchain twice a touch. Under Uncapped a report cannot
+  flip either: the lock needs a cap above 0 (`pace_cap_equals_refresh`, `pace_policy.c`, false for a
+  cap of 0 or less), so `video_settings`' fifo is 0 and the mailbox choice does not read the
+  refresh. The pump does no more than ask the pin again after a report under Uncapped
+  (`window_display_rate_pump`: the mode list may have changed); it applies no video settings and
+  makes no swapchain. A report equal to the last one is not sent (`IcoActivity.sendDisplay`,
+  `Arrays.equals`) and one equal to the last one acted on does nothing (`display_report_new`: the
+  rate within 0.05 Hz and the list's hash). The pin sets the row before `video_settings` decides the
+  lock, so a change between Uncapped and a number decides on the new row's rate. The 10 s block writes
+  `window: display refresh changed: 60.00 Hz -> 120.00 Hz ...` at the report's run time under
+  Uncapped; a change of the row between Uncapped and a number can show as a change line too (the
+  rate read switches between the report and SDL's). Nothing about it is measured on a device yet.
 - Desktop (Windows, Linux, macOS) and iOS: no ask under any row (`window_frame_rate_pin` is empty
   there); Uncapped presents as fast as the present mode allows (one a refresh under mailbox, back to
   back with vsync off and an immediate mode), and SDL's display mode events keep the refresh current.

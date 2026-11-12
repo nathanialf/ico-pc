@@ -1358,10 +1358,15 @@ once-a-second tick) keeps three threads apart after the start, by the cores' top
 | one-core pins widened (the pair) | 6-7 | 5 alone, or 0-5 when every one-core pin is widened | 2-4 | 0-4 |
 | a pair widened too (the start's rule) | 2-7 | 0-7 | 2-6 | 0-7 |
 
-A Helio G85 (`0-5 1.8 GHz, 6-7 2.0 GHz`): the render thread on 7 alone, the game thread on 6
-alone, the submit thread with the others on 0-5 (at the start both on 6-7, the submit thread free).
-A 4 + 3 + 1 phone: 7, 6, 4-5. With one core faster than the slowest, or one speed, the keeper is off
-and the start's placement stands. The game thread is SDL's `ico-main` thread, not Android's UI
+The keeper needs three or more cores faster than the slowest (`CPU_KEEP_MIN_FAST`): the Pixel's
+six, a 4 + 3 + 1 phone's four (7, 6, 4-5), 4 bigs over 4 littles. A Helio G85 (`0-5 1.8 GHz, 6-7
+2.0 GHz`, issue 179's class) has two: the render and game threads alone on them would leave the
+submit thread and every worker on the slow cores, where the start's rule leaves the submit thread
+to the system, so there, as with one faster core or one speed, the keeper is off and the start's
+placement stands (both on 6-7, the submit thread free). The start says `window: cores after the
+start: not kept (2 cores faster than the slowest; the keeper needs 3): the start's placement only,
+as before this keeper`, and the 10 s block's keeper text reads `off (fewer than three cores faster
+than the slowest)`. The game thread is SDL's `ico-main` thread, not Android's UI
 thread: the touches, keys and the activity's lifecycle arrive on the UI thread, which is never
 moved, and are queued for the game thread to take. Threads the game or render thread makes start
 on their creator's cores (pthread_create(3)); the workers put themselves back on the others' cores
@@ -1512,8 +1517,9 @@ How to read a log:
 - `window: display refresh changed: 60.00 Hz -> 120.00 Hz, ...` after the ask: the panel switched.
   Its rate comes from the activity's display listener (`IcoActivity` `startDisplayWatch`), not
   from SDL, whose Android side reads the rate only when the surface changes size; no Android log
-  in the evidence folders from before this listener holds a change line. The `display refresh:` 10 s lines and
-  every pacing figure read the same rate.
+  in the evidence folders from before this listener holds a change line. Under Uncapped the
+  `display refresh:` 10 s lines and every pacing figure read that rate; under a number or Original
+  they read SDL's, as before the listener, so a numbered row's log is read as it always was.
 - An ask with no change line after it, and the 10 s line still at 60 Hz: the system did not grant
   it (an ask is a vote; battery saver, a thermal limit or a vendor's own policy can keep the panel
   lower; nothing in the log can tell which). A change line with no ask before it: the system
