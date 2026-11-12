@@ -73,6 +73,13 @@ bool rd__shadow_tile_selftest(void);
 bool rd__shadow_tile_selftest_variant(int variant, char *words, size_t size);
 bool rd__shadow_tile_test_ok(void);
 
+/* rd_core.c rd_shutdown, before the device goes: the masks' textures freed
+ * and their slots forgotten (a mask of an earlier renderer is no texture of
+ * the next one: rd_replay_tool's present renderer, a Graphics API swap, a
+ * resume), the self-test's verdict with them (the next renderer runs its
+ * own) */
+void rd__shadow_tile_shutdown(void);
+
 /* rd_profile.c: 1 the Imagination (PowerVR) class, 2 a desktop class
  * (desktop Vulkan, Direct3D 12, Direct3D 11, OpenGL), 0 any other (the
  * Adreno and Mali classes, Apple, another tile-based GPU) */
