@@ -22,13 +22,15 @@
  * the attachment as stored); off on the Arm, Qualcomm and Apple classes and
  * other tile-based phones (issues 123, 179, 211), on OpenGL, D3D11 and D3D12
  * (they ignore a render area).  PAD on every class and backend (the DARK
- * plan's lazy clears run there already).  ICO_RD_LAMPS=0|1|area|pad|area,pad
- * (the tests only, docs/port/TESTING.md; no config key): off, both, one
- * (forced on any class; the self-test still decides AREA).
+ * plan's lazy clears run there already).  ICO_RD_LAMPS=0, 1, or the words
+ * area, pad, owed, wholepad, fold4 joined by ',' or '+' (the tests only,
+ * docs/port/TESTING.md; no config key): off, every part, the parts named
+ * (forced on any class; the self-tests still decide AREA and FOLD4).
  * ICO_RD_LAMPS_POISON=1 (the tests): before every planned lamps pass drawn
  * over the whole of WORK2 its colour is cleared to magenta first, so a pass
  * that relied on WORK2's earlier contents where it should not would show
- * the magenta (rd_lamps_ab). */
+ * the magenta, and before every pass of two blur pairs WORK0's swapped-in
+ * colour, so a texel that pass does not write would (rd_lamps_ab). */
 #ifndef PORT_RENDER_RD_LAMPS_H
 #define PORT_RENDER_RD_LAMPS_H
 
@@ -119,8 +121,9 @@ uint32_t rd__glow_light_role_ord(int role);
 int rd__lamps_parse(const char *e, uint32_t *bits);
 /* the bits on by default: PAD, OWED and WHOLEPAD everywhere; AREA on tile
  * class 1 (PowerVR) or 2 (a desktop class) that is not a tile-based phone,
- * under Vulkan, where the profile's pass area is on; FOLD4 on the same
- * classes under Vulkan where the profile's blur fold is on */
+ * under Vulkan, where the profile's pass area is on; FOLD4 on tile class 1
+ * under Vulkan where the profile's blur fold is on (a desktop class takes it
+ * by ICO_RD_LAMPS only) */
 uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool passArea,
                                 bool blurFold);
 /* the union of a and b (an empty rect, w or h 0, adds nothing) */
@@ -192,6 +195,55 @@ bool rd__lamps_owed_on(void);
 void rd__lamps_owed_noted(void);
 /* WORK2_PAD's band left a lazy clear under WHOLE (RD_LAMPS_WHOLEPAD) */
 bool rd__lamps_wholepad_on(void);
+
+/* ------------------------------------------- the fold of two blur pairs
+ * (RD_LAMPS_FOLD4; rd_replay_tiler.c, fx_sprite.hlsl fx_blur4_ps) */
+
+/* why a pair that folds was drawn alone, not with the next one */
+enum {
+    RD_LAMPS_F4_NONE = 0,
+    RD_LAMPS_F4_PAIR,   /* the next pair does not fold as a pair does */
+    RD_LAMPS_F4_STRIP,  /* the glow's edge strip follows the next pair's pass 2 */
+    RD_LAMPS_F4_LAST,   /* no pair after the next one holding its pass 1's texels */
+    RD_LAMPS_F4_FORM,   /* the pairs differ in more than the shrink's six values */
+    RD_LAMPS_F4_WINDOW, /* a window wider than fx_blur4_ps holds (rd__lamps_fold4_axis) */
+    RD_LAMPS_F4_COUNT
+};
+
+const char *rd__lamps_f4_why_text(int why);
+
+/* One axis of two folded pairs, as fx_blur4_ps computes it: o the origin
+ * (12.4), c0 .. c1 pass 2B's covered pixels, pass 2B's rect and UVs on the
+ * axis (b2x0, b2x1, b2u0, b2u1; pass 2A's rect is pass 2B's), pass 1B's
+ * (b1*), pass 2A's UVs (a2u0, a2u1), pass 1A's rect (a1x0, a1x1; its UVs
+ * pass 1B's), lsz the TEX0 size, w0 and w1 WORK0's and WORK1's sizes, loB
+ * and loA passes 1B's and 1A's first drawn WORK1 column (0 on y). */
+typedef struct RdFold4Axis {
+    int32_t o, c0, c1;
+    int32_t b2x0, b2x1, b2u0, b2u1;
+    int32_t b1x0, b1x1, b1u0, b1u1;
+    int32_t a2u0, a2u1, a1x0, a1x1;
+    int32_t lsz, w0, w1, loB, loA;
+} RdFold4Axis;
+
+/* Every pixel c0 .. c1: pass 2B's taps j (CLAMP to lsz then w1, at least
+ * loB), pass 1B's WORK0 taps there (G2: their range, clamped to lsz then
+ * w0), pass 2A's WORK1 taps at G2's texels (G1: their range, at least loA),
+ * the divides truncated (the GS's; fx_blur4_ps's gs_div_trunc and its
+ * reciprocal form).  *w2 and *w1 raised to the widest G2 and G1 seen;
+ * false when one is wider than fx_blur4_ps's FX4_W2 (4) or FX4_W1 (6), or
+ * a divisor is 0. */
+bool rd__lamps_fold4_axis(const RdFold4Axis *a, int32_t *w2, int32_t *w1);
+/* the switch's bits before the self-tests (the fold's self-test reads it) */
+uint32_t rd__lamps_wanted(void);
+/* a pass of two pairs drawn; a pair drawn alone (why) */
+void rd__lamps_fold4_noted(void);
+void rd__lamps_fold4_refused(int why);
+/* rd_replay_tiler.c: the fold of two pairs' start-up self-test (called with
+ * rd__lamps_selftest) and its state (0 not run, 1 passed, 2 failed or not
+ * run for a reason, its words) */
+bool rd__blur_fold4_selftest(void);
+int rd__blur_fold4_test_state(const char **words);
 
 /* the scan (rd_store_plan.c's one walk; rd__lamps_scan_end after
  * rd__glow_light_scan_end) */

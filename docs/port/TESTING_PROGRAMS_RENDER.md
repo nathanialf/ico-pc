@@ -113,7 +113,11 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   flare at 512, 688, 2048 and 2560 GS pixels wide with the blur fold on: 9, 9, 8 and 8 pairs
   folded, every target against the CPU model (the strip in it), the same frame replayed with the
   fold off against the model again (the folded and unfolded chains the same bytes at every
-  width), and with the strip off every target still the model's (`checkBlurFoldWide`;
+  width), then with two pairs a pass forced (`rd__lamps_force(RD_LAMPS_FOLD4)`, its self-test
+  run first and required to pass where `fx_blur4_ps` exists) against the model again, the same
+  pairs folded, four passes of two where nine pairs fold, three or four where eight do, and
+  with the strip off every target still the model's, the fold of two pairs still forced
+  (`checkBlurFoldWide`;
   [WORK_BUFFERS.md](WORK_BUFFERS.md#the-blur-fold-on-a-wide-frame)). The `glow_fold` shard
   (`rd_blur_glow_fold_test.inc`) runs the seven post modes without the shine into WORK2 at
   Original, Enhanced 2x, the phone's 2364 x 1080 with the full height, and the phone's 848-pixel
@@ -900,7 +904,9 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   crop (every texel centre of the box inside the rect, a box off the target none), a lamp's box
   from its stream's bound through an orthographic and a perspective matrix
   (`rd__vis_hiz_occludee`, then the texels: every vertex's and every point's between two vertices
-  inside; a corner behind the eye refused), the lamps' per-vertex box (`rd__lamps_vertex_box`: a
+  inside; a corner behind the eye refused), the switch's words (owed, wholepad, fold4) and the
+  defaults of round 3 (the band, owed and wholepad everywhere; the fold of two pairs on the
+  PowerVR class alone), the lamps' per-vertex box (`rd__lamps_vertex_box`: a
   diagonal stream whose bound's corner is behind the eye, which the corners' box refuses, boxed
   with every point between its vertices inside; a vertex behind the eye and a lane not finite
   refused), and the area's pick (the region unknown, nothing lit, WORK2 but a tile, the tiles
@@ -924,7 +930,13 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   bytes (two hundredths of a MB; not under the poison), the saved colour bytes 4 x the texels the
   area left; the off run no area and no band; one planned lamps pass a lamps replay, never whole
   for the region unknown; an area at least once at the phone, poison and desktop settings and in
-  both sequences, none at the Mali and OpenGL settings, a band at every setting. No device: SKIP.
+  both sequences, none at the Mali and OpenGL settings, a band at every setting. Round 3 adds the
+  corpus's dark (`rd-00600`) and whole (`rd-00200`) title frames: the passes fewer also by the dark
+  plan's WORK0 alpha sprites owed and by the passes of two blur pairs (`fx_blur4_ps`), the same
+  pairs folded as the off run, four passes of two where the off run folded nine pairs (at the
+  phone, poison, desktop settings and the sequences; none at Mali and OpenGL), the colour loaded
+  fewer by a WORK0 a pass of two pairs and stored fewer by that and the owed sprites' WORK0, an
+  owed sprite at every setting. No device: SKIP.
 - `rd_crack_work_ab.cmake` (`rd_crack_work_ab`, `rd_crack_work_gl`; `rd_crack_work.cmake`): the
   crack fill's snapshot by the swap and its early leave (`rd_crack_fill.c` FILLSWAP, CRACKTAP). The
   dumps of `tools/crack_work_dumps.txt` (machine-local; a listed dump that is absent FAILS: the

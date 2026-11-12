@@ -1585,6 +1585,7 @@ typedef enum RdFsId {
      * and the dead tiles' mark in the stencil's bit 7, behind blit_vs */
     RD_FS_SHADOW_TILE_MASK,
     RD_FS_SHADOW_TILE_MARK,
+    RD_FS_FX_BLUR4, /* fx_blur4_ps: two staticBlur pairs in one pass (rd_lamps.h RD_LAMPS_FOLD4) */
     RD_FS_COUNT
 } RdFsId;
 

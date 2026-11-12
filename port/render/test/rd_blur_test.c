@@ -163,6 +163,7 @@
 #include <string.h>
 
 #include "rd_internal.h"
+#include "rd_lamps.h"
 #include "shader_consts.h"
 #include "vk/rhi_vk.h"
 /* the game's side */
@@ -3836,6 +3837,38 @@ static void checkBlurFoldWide(void)
         const int dOff = compareAll(again, failures < 10);
         CHECK(off == 0, "%s: %u pairs folded", again, off);
 
+        /* the same frame, two pairs a pass where they fold (rd_lamps.c
+         * RD_LAMPS_FOLD4, fx_blur4_ps behind its self-test; on to the end of
+         * the width, the strip-off run below with it): the model's
+         * bytes, the same pairs folded, nine folded pairs four passes of two
+         * (pairs 1-8; the ninth's next is the chain's last), eight three or
+         * four (the pair the next-pair rule refuses splits a run) */
+        g_rd.profile.blurFold = true;
+        rd__lamps_force((int)RD_LAMPS_FOLD4);
+        (void)rd__blur_fold4_selftest();
+        const char *f4words = NULL;
+        const int f4state = rd__blur_fold4_test_state(&f4words);
+        CHECK(f4state == 1 || !g_rd.fs[RD_FS_FX_BLUR4].id,
+              "%s: the fold of two pairs' self-test: %s", what, f4words);
+        uint32_t f4 = 0, f4pairs = 0;
+        int d4 = 0;
+        if (f4state == 1) {
+            snprintf(again, sizeof(again), "%s, two pairs a pass", what);
+            rhi_wait_idle();
+            CHECK(rd__replay_frame(f, 0, false), "%s: replay", again);
+            rhi_wait_idle();
+            f4 = g_rdPerf.lampsFold4;
+            f4pairs = g_rdPerf.blurFolds;
+            d4 = compareAll(again, failures < 10);
+            CHECK(f4pairs == kF[r].folds, "%s: %u pairs folded, %u expected", again, f4pairs,
+                  kF[r].folds);
+            CHECK(kF[r].folds == 9u ? f4 == 4u : (f4 >= 3u && f4 <= 4u),
+                  "%s: %u passes of two pairs (want %s)", again, f4,
+                  kF[r].folds == 9u ? "4" : "3 or 4");
+        }
+        printf("  %s: %u passes of two pairs, %u pairs folded (max difference %d)\n", what, f4,
+               f4pairs, d4);
+
         /* the strip off: the true pairs are refused on a wide frame */
         g_rd.profile.blurFold = true;
         rd__set_glow_edge_fill(false);
@@ -3857,7 +3890,8 @@ static void checkBlurFoldWide(void)
         printf("  %s: %u pairs folded (max difference %d), %u with the fold off (%d), %u without "
                "the glow's edge strip (%d)\n",
                what, on, dOn, off, dOff, bare, dBare);
-        checkPipelines(); /* the fold's key enumerated while the profile folds */
+        checkPipelines(); /* the fold's keys enumerated while the profile folds (and two pairs) */
+        rd__lamps_force(-1);
         CHECK(rhi_vk_validation_error_count() == 0, "%s: %u validation errors", what,
               rhi_vk_validation_error_count());
         g_rd.profile.blurFold = was;

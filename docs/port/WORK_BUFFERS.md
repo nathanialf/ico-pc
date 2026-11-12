@@ -138,7 +138,9 @@ the blur fold draws as one pass: those draw no pass 1 and so no strip).
 The blur fold (`RdProfile.blurFold`: every device class but Mali; `[dev] blur_fold` overrides) draws a pair of `blur(n)` as one pass into WORK0 through `fx_blur2_ps`, which computes
 each WORK1 texel pass 2 weighs from WORK0 as pass 1 writes it ([RENDER.md](RENDER.md#the-replay),
 "The blur pair fold"; `port/render/rd_replay_tiler.c` (`rd__replay_blur_fold`, `blurFoldFirst`,
-`blurFoldOk`), `port/shaders/fx_sprite.hlsl` (`fx_blur2_ps`)). On a frame wider than 512 GS
+`blurFoldOk`), `port/shaders/fx_sprite.hlsl` (`fx_blur2_ps`); two pairs a pass where the next
+pair folds too, `fx_blur4_ps`, under the lamps' `RD_LAMPS_FOLD4`:
+[RENDER_POST.md](RENDER_POST.md#the-lamps-glow-for-less)). On a frame wider than 512 GS
 pixels pass 1's rect starts `d` sixteenths right of WORK1's pixel 0, so it covers from column
 `cx0 = ceil(d / 16)` (1 at 16:9), while pass 2's first pixel weighs column 0 (13/16 at 16:9): a
 fold that took only taps inside pass 1's coverage would fold no pair there.

@@ -48,9 +48,11 @@ static const char *const expectedPlanes[] = {
 /* the staticBlur sprites' UINT-view twin (fx_sprite.hlsl ICO_UINT_SRC; rd_replay.c doBlurSpriteDraw) */
 static const char *const expectedUint[] = {"fx_sprite_u_ps"};
 
-/* the tiler passes (rd_replay_tiler.c): DATE's stencil bit, the fog's local read and the folded blur pair */
-static const char *const expectedTiler[] = {"date_clear_ps", "date_stencil_ps", "fog_lut_local_ps",
-                                            "fog_lut_local_ps_nodual", "fx_blur2_ps"};
+/* the tiler passes (rd_replay_tiler.c): DATE's stencil bit, the fog's local read, the folded blur
+ * pair and two pairs in one pass */
+static const char *const expectedTiler[] = {"date_clear_ps",    "date_stencil_ps",
+                                            "fog_lut_local_ps", "fog_lut_local_ps_nodual",
+                                            "fx_blur2_ps",      "fx_blur4_ps"};
 
 /* the pixel-diet builds: vu_ps and vu_texa_ps without the planes' inputs
  * (ICO_VU_NO_PLANES, with their two-pass twins, and vu_np_ps's attachment

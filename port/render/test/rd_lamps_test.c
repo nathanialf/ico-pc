@@ -29,6 +29,11 @@
  *       the texel of every point between its vertices; a stream with a vertex
  *       behind the eye refused (BEHIND, the count); a matrix lane not
  *       finite refused (FINITE)
+ *   t8  rd__lamps_fold4_axis on the chain's first two pairs at 4:3 (list
+ *       7:114, 7:124, 7:134, 7:144 of the boot corpus's rd-00400: WORK0 256 x
+ *       128 at origin (30720, 31744), WORK1 256 x 256): windows 4 and 5 on x,
+ *       4 and 5 on y (a Python mirror of the shader's index arithmetic gave
+ *       them); a drift too steep for the windows refused; a divisor 0 refused
  *   t6  rd__lamps_area_pick: the region unknown (FIRST), nothing lit and no
  *       lamp (EMPTY), an area holding WORK2 but a tile (LARGE), else the
  *       tiles round the lamps' box and the lit region (both inside it) */
@@ -179,10 +184,9 @@ int main(void)
     const uint32_t ev = RD_LAMPS_PAD | RD_LAMPS_OWED | RD_LAMPS_WHOLEPAD; /* every class */
     CHECK(rd__lamps_default_bits(1, false, true, true, true) == RD_LAMPS_ALL, "PowerVR");
     CHECK(rd__lamps_default_bits(1, true, true, true, true) == RD_LAMPS_ALL, "PowerVR, a phone");
-    CHECK(rd__lamps_default_bits(2, false, true, true, true) == RD_LAMPS_ALL,
-          "a desktop, pass area");
-    CHECK(rd__lamps_default_bits(2, false, true, false, true) == (ev | RD_LAMPS_FOLD4),
-          "a desktop, no area");
+    CHECK(rd__lamps_default_bits(2, false, true, true, true) == (ev | RD_LAMPS_AREA),
+          "a desktop, pass area (the fold of two pairs by the switch alone)");
+    CHECK(rd__lamps_default_bits(2, false, true, false, true) == ev, "a desktop, no area");
     CHECK(rd__lamps_default_bits(2, true, true, true, true) == ev, "a faked phone vendor");
     CHECK(rd__lamps_default_bits(0, true, true, true, true) == ev, "Arm, Qualcomm, Apple");
     CHECK(rd__lamps_default_bits(1, false, false, true, true) == ev, "not Vulkan");
@@ -287,6 +291,29 @@ int main(void)
         CHECK(rd__lamps_vertex_box((const float (*)[4])bad4, two, 2, 1, false, gb, &behind) ==
                   RD_LAMPS_BOX_FINITE,
               "a lane not finite");
+    }
+    /* t8 */
+    {
+        RdFold4Axis ax = {30720, 0, 255,  30720, 34816, 8,   4087, 30720, 34799, 8,
+                          4104,  8, 4088, 30720, 34800, 256, 256,  256,   0,     0};
+        RdFold4Axis ay = {31744, 0, 127,  31744, 33792, 8,   2039, 31744, 33775, 8,
+                          2056,  8, 2040, 31744, 33776, 128, 128,  256,   0,     0};
+        int32_t w2 = 0, w1 = 0;
+        CHECK(rd__lamps_fold4_axis(&ax, &w2, &w1) && w2 == 4 && w1 == 5,
+              "the chain's x: windows %d and %d (want 4 and 5)", (int)w2, (int)w1);
+        w2 = w1 = 0;
+        CHECK(rd__lamps_fold4_axis(&ay, &w2, &w1) && w2 == 4 && w1 == 5,
+              "the chain's y: windows %d and %d (want 4 and 5)", (int)w2, (int)w1);
+        RdFold4Axis steep = ax;
+        steep.b1u1 = 4104 * 3; /* pass 1B reads three WORK0 texels a WORK1 texel */
+        w2 = w1 = 0;
+        CHECK(!rd__lamps_fold4_axis(&steep, &w2, &w1), "a steep drift refused (windows %d, %d)",
+              (int)w2, (int)w1);
+        RdFold4Axis zero = ax;
+        zero.b1x1 = zero.b1x0;
+        CHECK(!rd__lamps_fold4_axis(&zero, &w2, &w1), "a divisor 0 refused");
+        CHECK(strcmp(rd__lamps_f4_why_text(RD_LAMPS_F4_LAST), "the chain's last pair next") == 0,
+              "the reasons' words");
     }
     /* t6 */
     RhiRect ar = {0, 0, 0, 0};

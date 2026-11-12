@@ -148,7 +148,8 @@ static struct {
 
 /* the 10 s sums (the window thread reads them) */
 static struct {
-    uint64_t areas, whole, pads, areaTexels, texels, clear, store, dload, dstore, owed;
+    uint64_t areas, whole, pads, areaTexels, texels, clear, store, dload, dstore, owed, fold4;
+    uint64_t f4why[RD_LAMPS_F4_COUNT];
     uint64_t why[RD_LAMPS_WHY_COUNT];
 } s_sum;
 
@@ -273,7 +274,10 @@ uint32_t rd__lamps_default_bits(int tileClass, bool tilePhone, bool vulkan, bool
     if (cls && vulkan && passArea) {
         b |= RD_LAMPS_AREA;
     }
-    if (cls && vulkan && blurFold) {
+    /* the PowerVR class alone by default (a desktop class only by
+     * ICO_RD_LAMPS: the A/Bs and stored baselines of lavapipe's desktop
+     * profile keep the pass counts they were made with) */
+    if (tileClass == 1 && vulkan && blurFold) {
         b |= RD_LAMPS_FOLD4;
     }
     return b;
@@ -437,6 +441,13 @@ static void envRead(void)
 }
 
 /* the bits asked for, before the self-test and the backend */
+static uint32_t wanted(void);
+
+uint32_t rd__lamps_wanted(void)
+{
+    return wanted();
+}
+
 static uint32_t wanted(void)
 {
     if (s_sw.force >= 0) {
@@ -452,6 +463,10 @@ uint32_t rd__lamps_bits(void)
     if ((b & RD_LAMPS_AREA) &&
         (s_test.state != 1 || !g_rd.hasDevice || rhi_backend() != RHI_BACKEND_VULKAN)) {
         b &= ~RD_LAMPS_AREA;
+    }
+    if ((b & RD_LAMPS_FOLD4) && (rd__blur_fold4_test_state(NULL) != 1 || !g_rd.hasDevice ||
+                                 rhi_backend() != RHI_BACKEND_VULKAN)) {
+        b &= ~RD_LAMPS_FOLD4;
     }
     return b;
 }
@@ -557,6 +572,98 @@ void rd__lamps_owed_noted(void)
     sumAdd(&s_sum.owed, 1);
 }
 
+static const char *const kF4Why[RD_LAMPS_F4_COUNT] = {
+    [RD_LAMPS_F4_NONE] = "-",
+    [RD_LAMPS_F4_PAIR] = "the next pair does not fold",
+    [RD_LAMPS_F4_STRIP] = "the glow's edge strip follows the next pair",
+    [RD_LAMPS_F4_LAST] = "the chain's last pair next",
+    [RD_LAMPS_F4_FORM] = "the pairs differ past the shrink",
+    [RD_LAMPS_F4_WINDOW] = "a window wider than the shader holds",
+};
+
+const char *rd__lamps_f4_why_text(int why)
+{
+    return why >= 0 && why < RD_LAMPS_F4_COUNT && kF4Why[why] ? kF4Why[why] : "unknown";
+}
+
+void rd__lamps_fold4_noted(void)
+{
+    g_rdPerf.lampsFold4++;
+    sumAdd(&s_sum.fold4, 1);
+}
+
+void rd__lamps_fold4_refused(int why)
+{
+    if (why <= RD_LAMPS_F4_NONE || why >= RD_LAMPS_F4_COUNT) {
+        return;
+    }
+    g_rdPerf.lampsFold4Why = (uint32_t)why;
+    sumAdd(&s_sum.f4why[why], 1);
+    static bool s_said[RD_LAMPS_F4_COUNT];
+    if (!s_said[why]) {
+        s_said[why] = true;
+        rd__log("blur fold: a pair drawn alone, not with the next one: %s (reported once for this "
+                "reason)",
+                kF4Why[why]);
+    }
+}
+
+static int32_t f4Floor16(int32_t v)
+{
+    return v >= 0 ? v / 16 : -((-v + 15) / 16);
+}
+
+static int32_t f4Clamp(int32_t c, int32_t lsz, int32_t asz)
+{
+    c = c < 0 ? 0 : (c > lsz - 1 ? lsz - 1 : c);
+    return c < 0 ? 0 : (c > asz - 1 ? asz - 1 : c);
+}
+
+/* t0 + (X - a0) (t1 - t0) / (a1 - a0), truncated toward zero */
+static int32_t f4U(int32_t X, int32_t a0, int32_t a1, int32_t t0, int32_t t1)
+{
+    return t0 + (int32_t)(((int64_t)(X - a0) * (t1 - t0)) / (a1 - a0));
+}
+
+bool rd__lamps_fold4_axis(const RdFold4Axis *a, int32_t *w2, int32_t *w1)
+{
+    if (a->b2x1 == a->b2x0 || a->b1x1 == a->b1x0 || a->a1x1 == a->a1x0 || a->lsz < 1 || a->w0 < 1 ||
+        a->w1 < 1 || a->c1 < a->c0) {
+        return false;
+    }
+    for (int32_t p = a->c0; p <= a->c1; p++) {
+        const int32_t i = f4Floor16(f4U(a->o + 16 * p, a->b2x0, a->b2x1, a->b2u0, a->b2u1) - 8);
+        int32_t jA = f4Clamp(i, a->lsz, a->w1), jB = f4Clamp(i + 1, a->lsz, a->w1);
+        jA = jA > a->loB ? jA : a->loB;
+        jB = jB > a->loB ? jB : a->loB;
+        const int32_t k0 = f4Floor16(f4U(a->o + 16 * jA, a->b1x0, a->b1x1, a->b1u0, a->b1u1) - 8);
+        const int32_t k1 = f4Floor16(f4U(a->o + 16 * jB, a->b1x0, a->b1x1, a->b1u0, a->b1u1) - 8);
+        const int32_t lo2 = f4Clamp(k0 < k1 ? k0 : k1, a->lsz, a->w0);
+        const int32_t hi2 = f4Clamp((k0 > k1 ? k0 : k1) + 1, a->lsz, a->w0);
+        const int32_t g2 = hi2 - lo2 + 1;
+        *w2 = g2 > *w2 ? g2 : *w2;
+        if (g2 > 4) {
+            return false;
+        }
+        int32_t lo1 = INT32_MAX, hi1 = INT32_MIN;
+        for (int32_t t = lo2; t <= hi2; t++) {
+            /* pass 2A: pass 2B's rect, its own UVs */
+            const int32_t m = f4Floor16(f4U(a->o + 16 * t, a->b2x0, a->b2x1, a->a2u0, a->a2u1) - 8);
+            int32_t m0 = f4Clamp(m, a->lsz, a->w1), m1 = f4Clamp(m + 1, a->lsz, a->w1);
+            m0 = m0 > a->loA ? m0 : a->loA;
+            m1 = m1 > a->loA ? m1 : a->loA;
+            lo1 = m0 < lo1 ? m0 : lo1;
+            hi1 = m1 > hi1 ? m1 : hi1;
+        }
+        const int32_t g1 = hi1 - lo1 + 1;
+        *w1 = g1 > *w1 ? g1 : *w1;
+        if (g1 > 6) {
+            return false;
+        }
+    }
+    return true;
+}
+
 bool rd__lamps_wholepad_on(void)
 {
     return (rd__lamps_bits() & RD_LAMPS_WHOLEPAD) != 0;
@@ -607,7 +714,17 @@ static bool testPass(RhiCommandList cl, RhiTexture col, RhiTexture dep, bool rea
     return true;
 }
 
+static bool areaSelftest(void);
+
 bool rd__lamps_selftest(void)
+{
+    const bool area = areaSelftest();
+    (void)rd__blur_fold4_selftest(); /* the fold of two pairs (rd_replay_tiler.c), logged there */
+    note();
+    return area;
+}
+
+static bool areaSelftest(void)
 {
     if (!g_rd.inited || !g_rd.hasDevice || !(wanted() & RD_LAMPS_AREA) ||
         rhi_backend() != RHI_BACKEND_VULKAN) {
@@ -1189,7 +1306,24 @@ void rd_lamps_line(void)
         w[i] = __atomic_exchange_n(&s_sum.why[i], 0, __ATOMIC_RELAXED);
     }
     const uint64_t owed = __atomic_exchange_n(&s_sum.owed, 0, __ATOMIC_RELAXED);
-    if (v[0] + v[1] + v[2] + owed == 0) {
+    const uint64_t fold4 = __atomic_exchange_n(&s_sum.fold4, 0, __ATOMIC_RELAXED);
+    char f4[300] = "";
+    size_t fat = 0;
+    uint64_t alone = 0;
+    for (int i = 1; i < RD_LAMPS_F4_COUNT; i++) {
+        const uint64_t n = __atomic_exchange_n(&s_sum.f4why[i], 0, __ATOMIC_RELAXED);
+        if (!n) {
+            continue;
+        }
+        alone += n;
+        const int m = snprintf(f4 + fat, sizeof(f4) - fat, "%s%llu %s", fat ? ", " : " (",
+                               (unsigned long long)n, kF4Why[i]);
+        if (m < 0 || (size_t)m >= sizeof(f4) - fat) {
+            break;
+        }
+        fat += (size_t)m;
+    }
+    if (v[0] + v[1] + v[2] + owed + fold4 + alone == 0) {
         return;
     }
     char why[512] = "";
@@ -1226,9 +1360,11 @@ void rd_lamps_line(void)
             "loaded and stored; %.1f MB not cleared, %.1f MB of colour and %.1f MB of depth "
             "not stored, %.1f MB of depth not loaded), %llu whole%s%s; %llu bands left lazy "
             "(WORK2_PAD: a pass fewer each); %llu WORK0 alpha sprites owed (dark pictures: a "
-            "pass fewer each)%s\n",
+            "pass fewer each); %llu blur passes of two pairs (a pass fewer each), %llu pairs "
+            "drawn alone%s%s%s\n",
             (unsigned long long)v[0], v[4] ? 100.0 * (double)v[3] / (double)v[4] : 0.0,
             (double)v[5] * mb, (double)v[6] * mb, (double)v[8] * mb, (double)v[7] * mb,
             (unsigned long long)v[1], why, at ? ")" : "", (unsigned long long)v[2],
-            (unsigned long long)owed, box);
+            (unsigned long long)owed, (unsigned long long)fold4, (unsigned long long)alone, f4,
+            fat ? ")" : "", box);
 }

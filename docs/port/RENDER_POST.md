@@ -427,8 +427,8 @@ after WORK2's fill drawn as (0, 0, 0, 0). On the PowerVR phone (the opening's fi
 blocks of its log, 318 of 358 glow pictures lamps) that pass is WORK2 at 2366 x 1080 with its colour
 cleared (the fill: a pending clear taken as the pass's load op, 9.7 MB) and stored (9.7 MB) and
 SCENE's depth loaded (9.6 MB) for a dozen small draws, and WORK2_PAD's band a pass of its own
-(424 x 64, no draw). `port/render/rd_lamps.c` (file comment) cuts both, the same bytes in every
-target:
+(424 x 64, no draw). `port/render/rd_lamps.c` (file comment) cuts them, with three more cuts of the chain's
+passes, the same bytes in every target:
 
 - **the area** (`RD_LAMPS_AREA`): the lamps' pass gets a render area, the union of the lamps'
   screen boxes and of the region the last lamps frame left lit, aligned out to 32 x 32 tiles.
@@ -468,6 +468,37 @@ target:
   outside a replay), not a pass of its own: on every class and backend, where the dark plan's
   lazy clears already run.
 
+- **two blur pairs a pass** (`RD_LAMPS_FOLD4`, every plan that draws the chain): the blur fold
+  draws each `blur(n)` pair but a chain's last as one WORK0 pass through `fx_blur2_ps`; where the
+  next pair folds too, `fx_blur4_ps` (`port/shaders/fx_sprite.hlsl`) draws both as one pass: for
+  a pixel of pair B's pass 2 it computes pair B's pass 1 at its four WORK1 taps, each of those
+  from pair A's pass 2 at its four WORK0 taps, each of those from pair A's pass 1 at its four
+  WORK1 taps from WORK0 as it was before pair A; every texel by `fx_blur2_ps`'s own functions,
+  the passes' integers in their order, each evaluated once over two windows (pass 1A's texels a
+  window of at most 6 x 6, pass 2A's at most 4 x 4); a WORK0 texel pass 2A does not cover keeps
+  the snapshot's, as without the fold. `rd_replay_tiler.c` takes two pairs only where each folds
+  as a pair does (`blurFoldPair`, `blurFoldOk`, no glow edge strip after pass 2B, the pair after
+  B holding pass 1B's texels so WORK1 ends as the chain leaves it), where pair A differs from
+  pair B in no more than the chain's shrink (pass 1A's x0, x1, y1, pass 2A's u0, u1, v1: packed
+  in the DrawCB's blend words, which a fold does not read) and where the windows hold at every
+  covered pixel (`rd__lamps_fold4_axis`, the shader's index arithmetic on the CPU). WORK1 is
+  written by neither pair either way, WORK0 whole by the last pass. A chain of ten pairs at 4:3
+  and 16:9 (nine fold) draws four passes of two pairs, one of one pair and the last pair as two
+  passes: four render passes fewer. The PowerVR class under Vulkan where the blur fold is on, a
+  desktop class by `ICO_RD_LAMPS` only, after its start-up self-test (two pairs of the chain's
+  form on a 64 x 32 WORK0 of random bytes as two `fx_blur2_ps` passes and as one `fx_blur4_ps`
+  pass, read back, every texel compared); never on the Arm, Qualcomm and Apple classes, OpenGL,
+  Direct3D (the module is made on Vulkan alone). The fold measured 8 ms worse a picture on the
+  PowerVR phone and kept off there is the WORK2 fold (the mask computed inside the reduction from
+  SCENE's alpha: about 70 taps a WORK0 texel over a full-size source; "The glow's mask in its
+  reduction" above), not the blur fold, which is on there and which this extends: `fx_blur2_ps`
+  and `fx_blur4_ps` both run on the 424 x 128 WORK0 and read only WORK0's snapshot, about 32
+  loads a texel for two passes of one pair (16 each) against about 64 for one pass of two at the
+  chain's drift (pass 1A's window 4 x 4 typically); whether the pass saved pays for those loads
+  on the phone is not known from the code and is the measurement (`glow WORK0 ... passes ... ms` in
+  `GPU top passes`, the 10 s `window: lamps: ... N blur passes of two pairs`). Its 1 pipeline
+  key (`fx_blur4_ps` over RGBA8 at the fold's state) is in the start-up set where it is asked
+  for. `ICO_RD_LAMPS_POISON=1` clears WORK0's swapped-in colour to magenta before each such pass;
 - **the band under the whole plan** (`RD_LAMPS_WHOLEPAD`): WORK2_PAD's band left a lazy clear in
   whole pictures too (the sun's fans), the same argument (nothing reads it; drawn where something
   does): one small pass fewer each;
