@@ -81,7 +81,73 @@ static void add_newest(IcoShareReport *out, const char *dir, const char *prefix,
     }
 }
 
+/* this run's zips: the newest ICO_SHARE_REPORT_RUN_ZIPS modified at the
+   run's start or later, kept newest first */
+typedef struct RunZips {
+    long long since;
+    int n;
+    char path[ICO_SHARE_REPORT_RUN_ZIPS][ICO_SHARE_REPORT_PATH];
+    long long mtime[ICO_SHARE_REPORT_RUN_ZIPS];
+} RunZips;
+
+/* 1 when (ta, a) is newer than (tb, b): the later time, then the greater name */
+static int newer(long long ta, const char *a, long long tb, const char *b)
+{
+    return ta > tb || (ta == tb && strcmp(base_name(a), base_name(b)) > 0);
+}
+
+static int run_visit(const char *path, const char *name, void *user)
+{
+    RunZips *z = (RunZips *)user;
+    long long mtime = 0;
+
+    if (!ends_with(name, ".zip") || strlen(path) >= ICO_SHARE_REPORT_PATH ||
+        ico_path_kind(path, NULL, &mtime) != 0 || mtime < z->since) {
+        return 0;
+    }
+    int at = z->n;
+    while (at > 0 && newer(mtime, path, z->mtime[at - 1], z->path[at - 1])) {
+        at--;
+    }
+    if (at >= ICO_SHARE_REPORT_RUN_ZIPS) {
+        return 0; /* older than the ones kept */
+    }
+    const int last = z->n < ICO_SHARE_REPORT_RUN_ZIPS ? z->n : ICO_SHARE_REPORT_RUN_ZIPS - 1;
+    for (int i = last; i > at; i--) {
+        memcpy(z->path[i], z->path[i - 1], sizeof(z->path[i]));
+        z->mtime[i] = z->mtime[i - 1];
+    }
+    snprintf(z->path[at], sizeof(z->path[at]), "%s", path);
+    z->mtime[at] = mtime;
+    if (z->n < ICO_SHARE_REPORT_RUN_ZIPS) {
+        z->n++;
+    }
+    return 0;
+}
+
+/* this run's zips, oldest first; 0 when the run has none */
+static int add_run_zips(IcoShareReport *out, const char *dir, long long since)
+{
+    RunZips z;
+
+    memset(&z, 0, sizeof(z));
+    z.since = since;
+    if (ico_dir_walk(dir, 0, run_visit, &z) < 0) {
+        return 0;
+    }
+    for (int i = z.n - 1; i >= 0; i--) {
+        add_path(out, z.path[i]);
+    }
+    return z.n;
+}
+
 int ico_share_report_collect(const char *logs_dir, const char *dumps_dir, IcoShareReport *out)
+{
+    return ico_share_report_collect_run(logs_dir, dumps_dir, -1, out);
+}
+
+int ico_share_report_collect_run(const char *logs_dir, const char *dumps_dir, long long run_start,
+                                 IcoShareReport *out)
 {
     memset(out, 0, sizeof(*out));
     const int logs = logs_dir != NULL && logs_dir[0] != '\0';
@@ -92,7 +158,9 @@ int ico_share_report_collect(const char *logs_dir, const char *dumps_dir, IcoSha
         add_named(out, logs_dir, "ico-pc-previous.log");
     }
     if (dumps) {
-        add_newest(out, dumps_dir, "", ".zip");
+        if (run_start < 0 || add_run_zips(out, dumps_dir, run_start) == 0) {
+            add_newest(out, dumps_dir, "", ".zip");
+        }
         add_newest(out, dumps_dir, "", "-present.png");
     }
     if (logs) {
