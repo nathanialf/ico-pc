@@ -1553,6 +1553,22 @@ static void fillAt(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool m
 void rd__crack_fill_at(Replay *r, const RdFrame *f, const RdCmd *c, int list, bool msaaOpen)
 {
     rd__late_pass_cmd(c); /* the command walked (rd_late_pass.c's list 11 join) */
+    /* FILLPASTE: the command that ends the fill's hold also draws the
+     * deferred glow paste early (list 11's first draw into SCENE, rc30):
+     * the fill armed for that paste first, so it lands in the paste's pass
+     * ahead of it (rd__fx_defer_draw: the paste drawn at its own ordinal,
+     * rd__crack_fill_in_pass at its first draw) instead of a pass of its
+     * own before it; the order fill, paste, list 11 as before.  Where this
+     * command does not end the deferral the fill waits on unarmed */
+    if (list >= RD_CRACK_LATE_LIST && s_late.armed && s_late.deferred && !s_late.paste &&
+        rd__fx_defer_on()) {
+        s_late.paste = s_late.glow = true;
+        s_late.pasteOrd = rd__fx_defer_ord();
+        rd__late_pass_defer_at(r, f, c);
+        if (rd__fx_defer_on()) {
+            s_late.paste = s_late.glow = false; /* the deferral goes on */
+        }
+    }
     fillAt(r, f, c, list, msaaOpen);
     if (list >= RD_CRACK_LATE_LIST) {
         rd__fill11_at(r, f, c, list);    /* a held fill waits, lands or is drawn (rd_fill11.c) */

@@ -256,6 +256,11 @@ static bool fxDeferTake(Replay *r, const RdFxDraw *x, const RdPipeKeyInt *key, u
     return true;
 }
 
+uint32_t rd__fx_defer_ord(void)
+{
+    return s_def.ord;
+}
+
 bool rd__fx_defer_on(void)
 {
     return s_def.on && s_def.replay == g_rd.replayCounter;

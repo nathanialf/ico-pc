@@ -13,7 +13,9 @@
 # Each on run against off: every PNG the same bytes; the stats' "lamps
 # fillpaste on" with L fills drawn in the paste's pass; passes exactly L
 # fewer; colour loaded fewer by about L SCENE textures (printed).  At least
-# one fill drawn in the paste's pass over the list.  No device: SKIP (77).
+# one fill drawn in the paste's pass over the list, and on every corpus title
+# lamps frame (boot rd-00400: the fill lands in the glow paste drawn early at
+# list 11's first draw).  No device: SKIP (77).
 # -DTOOL=<rd_replay_tool> -DLIST=<dump list> -DOUT=<a folder the test may write>
 set(failures 0)
 set(dumps "")
@@ -87,6 +89,14 @@ foreach(dump IN LISTS dumps)
     math(EXPR failures "${failures} + 1")
   endif()
   math(EXPR landedTotal "${landedTotal} + ${landed_on}")
+  # the corpus title's lamps (no aura): the hold ends at list 11's first
+  # draw into SCENE, where the deferred glow paste is drawn early: the fill
+  # must land in that paste's pass (rc30's opening has the same shape)
+  if(dump MATCHES "/boot/rd-00400[.]rddump$" AND landed_on LESS 1)
+    message(SEND_ERROR "${dump}: no crack fill drawn in the paste's pass: the title's lamps "
+                       "frame must land")
+    math(EXPR failures "${failures} + 1")
+  endif()
   foreach(arm on poison)
     file(GLOB pngs RELATIVE "${OUT}/${index}-off" "${OUT}/${index}-off/*.png")
     foreach(png IN LISTS pngs)
