@@ -862,11 +862,25 @@ gh release create <tag> dist/ico-pc-<tag>-win.zip dist/ico-pc-<tag>-win-portable
 ## Release candidate tools
 
 A release candidate (a label ending in `-rcN`) carries tooling a release never does. Today that is
-one row: on Android, Settings > Main > **Share a bug report**, directly below Save a picture for a
-bug report, which opens the system's share menu with `logs/ico-pc.log`, `logs/ico-pc-previous.log`,
-the newest `dumps/*.zip` and `dumps/*-present.png` and the newest `logs/report-*.zip`, each when it
-is there (`port/platform/share_report.c`; a phone's files folder cannot be reached without a
-computer). The gate is mechanical at every step:
+two things, both on Android alone:
+
+- Settings > Main > **Share a bug report**, directly below Save a picture for a bug report, which
+  opens the system's share menu with `logs/ico-pc.log`, `logs/ico-pc-previous.log`, every
+  `dumps/*.zip` written or changed since the run began (the newest four, oldest first; the newest
+  zip of any run when this one has none), the newest `dumps/*-present.png` and the newest
+  `logs/report-*.zip`, each when it is there (`port/platform/share_report.c`
+  `ico_share_report_collect_run`; a phone's files folder cannot be reached without a computer).
+- **The opening's frames, saved by themselves.** The game's opening (stage 1 with the disc's scene
+  layout in front, menu screen 55 on the European disc) plays for about 80 s before the title and
+  cannot be paused, so no picture can be asked for there. The rc build takes the bug-report
+  picture's dump itself at up to three moments a run, read from the glow's light plan of each
+  replay: the first LAMPS picture after 60 in a row, the first WHOLE picture after 20 in a row (the
+  sun's fans), and the first DARK picture after 60 in a row counted from the first dump
+  (`port/platform/capture_trigger.c` decides, `window_capture.c` takes it; the lines and the cost
+  are in [ANDROID_DIAGNOSTICS.md](port/ANDROID_DIAGNOSTICS.md#the-openings-frames-in-a-release-candidate)).
+  Share a bug report then sends all of them.
+
+The gate is mechanical at every step:
 
 - The switch is CMake's `ICO_RC_TOOLS` (default `OFF`) and Gradle's `icoRcTools` (default `false`;
   it passes `-DICO_RC_TOOLS` to the native build, sets `BuildConfig.RC_TOOLS` and enables the
@@ -884,11 +898,17 @@ computer). The gate is mechanical at every step:
   checked the same way with the label `ci`.
 - In the sources, the row, its strings in all seven tables, the host's handler and the JNI call are
   inside `#if ICO_RC_TOOLS` (`port/ui/settings.h` and `strings.h` default it to 0);
-  `ui_settings_set_share_report_handler` exists in every build and keeps nothing at 0.
+  `ui_settings_set_share_report_handler` exists in every build and keeps nothing at 0. The
+  opening's capture is all inside `#if ICO_RC_TOOLS && defined(__ANDROID__)` (`window_capture.c`
+  and `.h`, and each of its calls in `window_host.c`), and `CMakeLists.txt` adds
+  `window_capture.c` and `capture_trigger.c` to the program inside `if(ICO_RC_TOOLS AND ANDROID)`
+  alone; its start line holds the row's text, so the binary check covers it too.
 - ctests: `rc_tools_gate` (the checker's own cases, and the scripts, `CMakeLists.txt`,
   `build.gradle` and the manifest using it), `rc_tools_binary` (this build's `ico_pc` holds the text
   exactly when `ICO_RC_TOOLS` is on), `settings_extra` (`testShareReport`: at 0 the Main page has
-  its sixteen rows and no string is the row's text) and `share_report` (the files picked).
+  its sixteen rows and no string is the row's text), `share_report` (the files picked) and
+  `capture_trigger` (the capture's moments); `rc_tools_gate` also scans the capture's sources and
+  CMake lines for anything outside the rc conditions.
 
 The other settings tests pin the Main page's sixteen rows of the default build; ctest is run on a
 build with `ICO_RC_TOOLS` off.
