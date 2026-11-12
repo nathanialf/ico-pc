@@ -373,3 +373,25 @@ int display_pin_skip_text(DisplayTopSkip skip, const DisplayTop *top, int ret, c
     }
     return 0;
 }
+
+double display_refresh_pick(int framerate, double sdlHz, double reportedHz)
+{
+    if (framerate < 0 && reportedHz > 1.0 && reportedHz <= 1000.0) {
+        return reportedHz;
+    }
+    return sdlHz;
+}
+
+int display_report_new(DisplayReportSeen *s, double hz, int modes)
+{
+    if (!(hz > 0.0)) {
+        return 0;
+    }
+    if (s->have && fabs(hz - s->hz) <= 0.05 && modes == s->modes) {
+        return 0;
+    }
+    s->have = 1;
+    s->hz = hz;
+    s->modes = modes;
+    return 1;
+}

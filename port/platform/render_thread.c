@@ -573,6 +573,14 @@ static void place_init(void)
                (cpu_keep.h), from the log thread's first tick */
             cpu_keep_init(&s_keep, &s_place.classes);
             __atomic_store_n(&s_keepOn, 1, __ATOMIC_RELEASE);
+        } else {
+            /* two faster cores: the render and game threads alone would
+               leave the submit thread on the slow ones (cpu_keep.h) */
+            fprintf(stderr,
+                    "window: cores after the start: not kept (%d core%s faster than the slowest; "
+                    "the keeper needs %d): the start's placement only, as before this keeper\n",
+                    s_place.plan.fastCount, s_place.plan.fastCount == 1 ? "" : "s",
+                    (int)CPU_KEEP_MIN_FAST);
         }
     }
 #else

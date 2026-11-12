@@ -155,9 +155,11 @@ static void around_queue(const RdPerfRecord *r)
  * answers and their age.  Without the log thread they are asked where they
  * were, on the game thread (never both: ico_host_thermal keeps statics). */
 static SysCell s_thermalCell, s_memoryCell;
-static const char *s_thermalWhy; /* __atomic: a static string */
-static int s_asksOn;             /* the tick is set: the game thread asks nothing */
-static uint32_t s_asksN;         /* __atomic: the tick's runs since the window took them */
+#ifdef __ANDROID__
+static const char *s_thermalWhy; /* __atomic: a static string (Android's asks only) */
+#endif
+static int s_asksOn;     /* the tick is set: the game thread asks nothing */
+static uint32_t s_asksN; /* __atomic: the tick's runs since the window took them */
 
 #ifdef __ANDROID__
 static void asks_tick(void)
@@ -320,6 +322,17 @@ void window_stall_gpu_open(void)
 void window_stall_gpu_close(void)
 {
 #ifdef __ANDROID__
+    if (s_asksOn) {
+        /* the log thread's asks end with the window (the thermal JNI calls
+           and the /proc reads once a second); first, before the sampler
+           stops.  A tick already running ends on its own: asks_tick reads
+           only statics (sys_cell.h cells, render_thread.c's), none freed
+           here or by ico_render_thread_stop, which ran before */
+        ico_android_log_mirror_set_tick(NULL);
+        s_asksOn = 0;
+        fprintf(stderr, "window: the log thread's thermal and memory asks stopped with the "
+                        "window\n");
+    }
     gpu_sysfs_android_stop();
 #endif
 }

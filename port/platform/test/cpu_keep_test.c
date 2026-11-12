@@ -7,7 +7,9 @@
  *     GHz, 7 3.8 GHz): the ideal, core 7 refused, core 7 forbidden by the
  *     allowed cores, the pair, the start's rule, the game thread's core
  *     refused, only core 7 fast and allowed, every fast core refused; a
- *     Helio G85 (0-5 1.8 GHz, 6-7 2.0 GHz) alone and at the start's rule;
+ *     Helio G85 (0-5 1.8 GHz, 6-7 2.0 GHz): two faster cores, the keeper
+ *     off (it needs three); the Pixel, 4 + 3 + 1, 4 + 4 applying, 8 cores
+ *     of one speed not;
  *     a 4 + 3 + 1 Mali phone (0-3 1.8, 4-6 2.6, 7 3.0); 4 bigs of one
  *     speed and 4 littles; a 4-core 1 + 2 + 1 device; a 4-core device of
  *     one speed and a one-core device (the rule does not apply);
@@ -77,6 +79,7 @@ static const unsigned MALI[8] = {1800, 1800, 1800, 1800, 2600, 2600, 2600, 3000}
 static const unsigned BIG4[8] = {1800, 1800, 1800, 1800, 2400, 2400, 2400, 2400};
 static const unsigned SMALL4[4] = {1800, 2400, 2400, 3000};
 static const unsigned SAME4[4] = {2000, 2000, 2000, 2000};
+static const unsigned SAME8[8] = {2000, 2000, 2000, 2000, 2000, 2000, 2000, 2000};
 static const unsigned ONE[1] = {2000};
 
 static int sets_are(const CpuKeepSets *s, CpuKeepLevel lv, uint64_t r, uint64_t g, uint64_t sub,
@@ -130,15 +133,38 @@ static void test_choose(void)
     /* every fast core refused: nothing alone */
     CHECK(!cpu_keep_choose(&c, 0xff, 0xfc, 0, CPU_KEEP_ALONE, &s));
 
+    /* two faster cores (2 + 6): the keeper does not apply (the render and
+       game threads alone would leave the submit thread and every worker on
+       the slow cores); the start's rule stands, nothing chosen at any
+       level, and the keeper is off */
     classes(&c, 8, HELIO);
+    CHECK(!cpu_keep_applies(&c));
+    CHECK(!cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_ALONE, &s));
+    CHECK(!cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_FAST, &s));
+    {
+        CpuKeep k2;
+
+        cpu_keep_init(&k2, &c);
+        CHECK(!k2.on);
+    }
+    /* the Pixel (1 + 5 over 2): applies, its placement as measured good
+       (render 7 alone, game 6 alone, submit 2-5) */
+    classes(&c, 8, PIXEL);
     CHECK(cpu_keep_applies(&c));
-    /* two faster cores: one each for the render and game threads, the
-       submit thread on the others' 0-5 */
     CHECK(cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_ALONE, &s));
-    CHECK(sets_are(&s, CPU_KEEP_ALONE, 0x80, 0x40, 0, 0x3f));
-    /* the start's rule: game and render on 6-7, the submit thread free */
-    CHECK(cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_FAST, &s));
-    CHECK(sets_are(&s, CPU_KEEP_FAST, 0xc0, 0xc0, 0, 0xff));
+    CHECK(sets_are(&s, CPU_KEEP_ALONE, 0x80, 0x40, 0x3c, 0x3f));
+    /* 4 + 3 + 1 (MALI) and 4 + 4 (BIG4): four faster cores, applies */
+    classes(&c, 8, MALI);
+    CHECK(cpu_keep_applies(&c));
+    classes(&c, 8, BIG4);
+    CHECK(cpu_keep_applies(&c));
+    /* 8 cores of one speed: none faster, off */
+    classes(&c, 8, SAME8);
+    CHECK(!cpu_keep_applies(&c));
+    CHECK(!cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_ALONE, &s));
+    /* 1 + 2 + 1 over 4 cores: three faster, applies */
+    classes(&c, 4, SMALL4);
+    CHECK(cpu_keep_applies(&c));
 
     classes(&c, 8, MALI);
     CHECK(cpu_keep_choose(&c, 0xff, 0, 0, CPU_KEEP_ALONE, &s));
@@ -403,7 +429,7 @@ static void test_keep_waits(void)
     cpu_keep_init(&k, &c);
     CHECK(!k.on && !cpu_keep_tick(&k, &ops, 0.0, CPU_KEEP_WHY_START, 0x0f, 101, 102, 100));
     (void)cpu_keep_block_text(&k, "", t, sizeof(t));
-    CHECK_STR(t, "off (fewer than two cores faster than the slowest)");
+    CHECK_STR(t, "off (fewer than three cores faster than the slowest)");
 }
 
 static void test_words(void)

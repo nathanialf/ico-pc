@@ -196,4 +196,31 @@ int display_pin_top_text(DisplayPinAct act, const DisplayTop *top, const char *c
 int display_pin_skip_text(DisplayTopSkip skip, const DisplayTop *top, int ret, char *buf,
                           size_t size);
 
+/* --- the refresh the game paces by (Android) ----------------------------- */
+
+/* SDL's Android side reads the display's rate only when the surface changes
+   size, so after a panel switch SDL's mode keeps the old rate; the
+   activity's display listener reports the rate itself.  The rate the game
+   paces by: reportedHz (0 or less: none yet) only while the Frame rate row
+   is Uncapped (framerate < 0) and the report is above 1 and at most 1000
+   Hz; else sdlHz.  A number or Original keeps SDL's rate, so the vsync lock
+   and the present mode are decided on the rate they were decided on before
+   the listener existed (a phone's touch boost moving the panel cannot flip
+   them); Uncapped never takes the lock (pace_cap_equals_refresh is false
+   for a cap of 0 or less), so there only the period follows the panel. */
+double display_refresh_pick(int framerate, double sdlHz, double reportedHz);
+
+/* The activity's reports as the window last acted on them */
+typedef struct DisplayReportSeen {
+    int have;
+    double hz;
+    int modes; /* the mode list's hash (IcoActivity: Arrays.hashCode) */
+} DisplayReportSeen;
+
+/* 1 when a report (its rate and its mode list's hash) differs from the last
+   one acted on (a rate within 0.05 Hz is the same rate) and is noted; 0
+   for a report the window already acted on (a storm of the same report
+   does nothing) or a rate of 0 or less */
+int display_report_new(DisplayReportSeen *s, double hz, int modes);
+
 #endif /* ICO_PLATFORM_DISPLAY_RATE_H */

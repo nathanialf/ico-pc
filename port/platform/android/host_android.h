@@ -144,8 +144,9 @@ int ico_android_display_modes(float *out, int cap);
    (IcoActivity.watchDisplay: at the start of each visible stretch and at
    every change of the display's rate or mode list), 0 before the first;
    *serial (when not NULL) the reports so far, *ms (when not NULL) SDL's
-   ticks in ms (SDL_GetTicks) at the last.  Any thread. */
-float ico_android_display_hz(int *serial, unsigned *ms);
+   ticks in ms (SDL_GetTicks) at the last, *modes (when not NULL) the last
+   report's mode list hash.  Any thread. */
+float ico_android_display_hz(int *serial, unsigned *ms, int *modes);
 
 /* The screen as the activity last reported it (IcoActivity.sendScreen,
    from the system's window-layout callbacks and every configuration

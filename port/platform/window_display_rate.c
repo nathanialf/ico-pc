@@ -27,11 +27,14 @@ static SDL_AtomicInt s_events;
 static SDL_AtomicU32 s_eventMs;
 #ifdef __ANDROID__
 /* the activity's display reports (ico_android_display_hz's count) the 10 s
-   poll and the pump have seen */
+   poll and the pump have seen, and the last one the pump acted on */
 static int s_lineSerial, s_pumpSerial;
+static DisplayReportSeen s_seen;
 /* the Frame rate row's value the pin was last called with (the 10 s poll
    asks again under Uncapped) */
 static int s_pinFramerate;
+/* the same for window_display_refresh_hz on any thread */
+static SDL_AtomicInt s_rowFramerate;
 #endif
 
 static double run_seconds(void)
@@ -45,14 +48,13 @@ double window_display_refresh_hz(double sdlHz)
     /* SDL's Android side learns the rate only in SDLSurface.surfaceChanged
        (mDisplay.getRefreshRate() with the size), and a refresh change
        does not resize the surface: the activity's display listener reports
-       every change (IcoActivity.watchDisplay) */
-    const float hz = ico_android_display_hz(NULL, NULL);
-
-    if (hz > 1.0f && hz <= 1000.0f) {
-        return (double)hz;
-    }
-#endif
+       every change (IcoActivity.startDisplayWatch), and the game paces by
+       it under Uncapped only (display_refresh_pick) */
+    return display_refresh_pick(SDL_GetAtomicInt(&s_rowFramerate), sdlHz,
+                                (double)ico_android_display_hz(NULL, NULL, NULL));
+#else
     return sdlHz;
+#endif
 }
 
 /* the display's current mode into s_w, s_h, s_name and the rate (0 when SDL
@@ -101,8 +103,14 @@ void window_display_rate_start(SDL_Window *window)
     s_startNs = SDL_GetTicksNS();
 #ifdef __ANDROID__
     /* the reports before the window are the starting rate, not changes */
-    (void)ico_android_display_hz(&s_lineSerial, NULL);
-    s_pumpSerial = s_lineSerial;
+    {
+        int modes = 0;
+        const float rep = ico_android_display_hz(&s_lineSerial, NULL, &modes);
+
+        s_pumpSerial = s_lineSerial;
+        s_seen = (DisplayReportSeen){0};
+        (void)display_report_new(&s_seen, (double)rep, modes);
+    }
 #endif
     hz = read_mode(window != NULL ? SDL_GetDisplayForWindow(window) : 0);
     SDL_SetAtomicInt(&s_events, 0);
@@ -116,18 +124,24 @@ void window_display_rate_start(SDL_Window *window)
     }
 }
 
-int window_display_rate_pushed(void)
+void window_display_rate_pump(SDL_Window *window)
 {
 #ifdef __ANDROID__
-    int serial = 0;
+    int serial = 0, modes = 0;
+    const float hz = ico_android_display_hz(&serial, NULL, &modes);
 
-    (void)ico_android_display_hz(&serial, NULL);
-    if (serial != s_pumpSerial) {
-        s_pumpSerial = serial;
-        return 1;
+    if (serial == s_pumpSerial) {
+        return; /* no report since the last pump: one atomic read */
     }
+    s_pumpSerial = serial;
+    /* a report already acted on does nothing; under a number or Original
+       nothing at all (their rate is SDL's: display_refresh_pick) */
+    if (display_report_new(&s_seen, (double)hz, modes) && s_pinFramerate < 0) {
+        window_frame_rate_pin(window, s_pinFramerate);
+    }
+#else
+    (void)window;
 #endif
-    return 0;
 }
 
 void window_display_rate_line(SDL_Window *window)
@@ -145,7 +159,7 @@ void window_display_rate_line(SDL_Window *window)
         int serial = 0;
         unsigned ms = 0;
 
-        (void)ico_android_display_hz(&serial, &ms);
+        (void)ico_android_display_hz(&serial, &ms, NULL);
         if (serial != s_lineSerial) {
             const double at = (double)ms / 1000.0 - (double)s_startNs / 1e9;
 
@@ -284,6 +298,9 @@ void window_frame_rate_pin(SDL_Window *window, int framerate)
     int want, offers, ret;
 
     s_pinFramerate = framerate;
+    /* before the caller's vsync lock decision reads window_refresh_ns
+       (video_settings: the pin, then the lock) */
+    SDL_SetAtomicInt(&s_rowFramerate, framerate);
     /* does the device offer the call (api 30 and later)? */
     pin_lookup();
     offers = nw != NULL && (s_withStrategy != NULL || s_plain != NULL);

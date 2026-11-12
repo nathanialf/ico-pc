@@ -4026,9 +4026,7 @@ int ico_window_pump(void)
         static int s_screenGen;
         const int gen = ico_android_screen(NULL);
 
-        if (window_display_rate_pushed()) {
-            video_apply(1); /* the display's rate or modes changed, as SDL's mode event */
-        }
+        window_display_rate_pump(s_window); /* Uncapped: the pin after a display report */
         if (gen != s_screenGen) {
             s_screenGen = gen;
             touch_layout_update();

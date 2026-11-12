@@ -49,7 +49,7 @@ static uint64_t known_mask(const CpuClasses *c)
 
 bool cpu_keep_applies(const CpuClasses *c)
 {
-    return popcount64(cpu_place_fast_mask(c)) >= 2;
+    return popcount64(cpu_place_fast_mask(c)) >= CPU_KEEP_MIN_FAST;
 }
 
 bool cpu_keep_choose(const CpuClasses *c, uint64_t allowed, uint64_t refused, uint64_t gameRefused,
@@ -475,7 +475,7 @@ size_t cpu_keep_block_text(const CpuKeep *k, const char *sys, char *out, size_t 
         out[0] = '\0';
     }
     if (!k->on) {
-        put(out, cap, &len, "off (fewer than two cores faster than the slowest)");
+        put(out, cap, &len, "off (fewer than three cores faster than the slowest)");
         return done(out, cap, len);
     }
     if (!k->have) {
