@@ -6,7 +6,8 @@
 # (a '*' glob that matches nothing too).  Relative paths are relative to this
 # file.  Optional fields swapN and tapN: at the phone's setting (Vulkan) one
 # replay's snapshots taken by the swap and draws with the early leave (a fill
-# the late pass holds keeps its copy: swap0); without them, no expectation but
+# the late pass holds keeps its copy: swap0; the phone's row runs with
+# ICO_RD_LATE_PASS=1, the phone's default); without them, no expectation but
 # the pair's arithmetic.
 #
 # the PowerVR phone's v0.11.5 rc2 frames: the bridge (no glow: the fill the

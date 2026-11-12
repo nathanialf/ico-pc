@@ -896,7 +896,8 @@ default, is tested by `vu1`, `rd_native` (`checkStripCamera`), `rd_region_stats`
   dumps of `tools/crack_work_dumps.txt` (machine-local; a listed dump that is absent FAILS: the
   phone's bridge frame and three cage frames, issue 163's rooms, the corpus)
   with `ICO_RD_CRACK_SWAP` and `ICO_RD_CRACK_TAP2` both `0` and both `1`, `--pass-dump --stats`,
-  `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's Resolution Auto (`ICO_VK_FAKE_LIMITS=moltenvk`) and
+  `ICO_RD_VU_PREPASS=0`, at the PowerVR phone's Resolution Auto (`ICO_VK_FAKE_LIMITS=moltenvk` and `ICO_RD_LATE_PASS=1`, the
+  phone's default: the fake leaves `RhiLimits.tiler` false on lavapipe) and
   on lavapipe's own profile at 1344x1008, 3x and 4x (4:3; scales 2.1 to 4, the fill in a pass of its
   own); the `_gl` twin the phone's setting on OpenGL. Each pair: every PNG byte for byte, the same
   draws, passes, fill passes and pixels filled, the off run swapping and leaving early nothing, the
